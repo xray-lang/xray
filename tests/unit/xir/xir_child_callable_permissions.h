@@ -1,3 +1,4 @@
+#include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
@@ -233,7 +234,7 @@ static void cp_build(CpFixture *f) {
         entries[i].release = cp_release;
     }
     const XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, entries, XRCP_FUNCTIONS,
-        module->declarations, {f, cp_code_drop}, module->types, xr_xir_compile_program_proof(f->lowered)};
+        module->declarations, {f, cp_code_drop}, module->types, xir_program_packet_borrow(f->lowered)};
     XrXirProgramSpec retired=spec;retired.abi_version=29;
     size_t attempts=runtime_attempts;XrXirProgram *refused=NULL;
     CHECK(xr_xir_compile_program_seal(f->context,&retired,&refused)==XR_XIR_BAD_LAYOUT);

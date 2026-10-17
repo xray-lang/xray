@@ -10,6 +10,7 @@
  * KEY CONCEPT:
  *   Source-free consumers require independent 41 results and physical release.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -56,11 +57,11 @@ int main(int argc,char **argv){LibraryCompileOwner compiler={0};CHECK(library_co
 #else
  XrXirProgramSpec spec=source_library_program;
 #if CONSUMER_KIND==2
- CHECK(xr_xir_compile_checked_read(&compiler.context,spec.proof.bytes,spec.proof.length,&checked,NULL)==XR_XIR_OK);
+ CHECK(xr_xir_compile_checked_read(&compiler.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
  CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);checked=NULL;
  XrXirCallEntry entries[8];XrXirVmBinding bindings[8];CHECK(spec.entry_count==8);
  for(uint32_t f=0;f<8;++f){CHECK(xr_xir_compile_vm_bind(lowered,f,&bindings[f],&entries[f])==XR_XIR_OK);if(f%2)entries[f]=spec.entries[f];}
- spec.entries=entries;const XrXirModule *module=xr_xir_compile_artifact_module(lowered);spec.types=module->types;spec.declarations=module->declarations;spec.proof=xr_xir_compile_program_proof(lowered);
+ spec.entries=entries;const XrXirModule *module=xr_xir_compile_artifact_module(lowered);spec.types=module->types;spec.declarations=module->declarations;spec.packet=xir_program_packet_borrow(lowered);
 #endif
  CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program)==XR_XIR_OK);
 #endif

@@ -17,6 +17,7 @@
 #include "xxir_vm.h"
 #include "xxir_call_observer_internal.h"
 #include "xxir_internal.h"
+#include "xxir_program_internal.h"
 #include "xxir_tuple.h"
 #include "xxir_atomic.h"
 #include "xxir_task.h"
@@ -911,37 +912,91 @@ typedef struct VmProgramOwner {
 } VmProgramOwner;
 static void vm_program_release(void *pointer) {
     VmProgramOwner *owner = pointer;
-    xr_xir_compile_artifact_free(owner->artifact);
+    if (!owner) return;
+    /* The Program input owns the artifact; this lease owns binding storage. */
     xr_compile_resources_free(owner->bindings);
     xr_compile_resources_free(owner);
 }
+/* Dispatch identity checks wiring, never execution authority. Complete body,
+ * descriptor and layout correspondence still consume the independently proved input. */
+static XrXirStatus vm_program_match(const XrXirCompileContext *context,
+    const XrXirArtifact *artifact, const VmProgramOwner *owner, const XrXirProgram *program) {
+    XrXirStatus status=xr_xir_compile_program_body_match(context,program->permissions,artifact);
+    if (status!=XR_XIR_OK) return status;
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    if (!owner->bindings || program->entry_count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t f=0;f<program->entry_count;++f) {
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        const XrXirCallEntry *entry=&program->entries[f];
+        const XrXirVmBinding *binding=&owner->bindings[f];
+        const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(artifact,f);
+        uint64_t bytes=sizeof(VmState)+(uint64_t)layout->frame_bytes+
+            (uint64_t)layout->outgoing_count*sizeof(XrXirValue)+
+            (uint64_t)layout->path_count*sizeof(XrXirValuePathStep);
+        if (bytes>UINT32_MAX || entry->abi_version!=XR_XIR_CALL_ABI_VERSION ||
+            entry->state_bytes!=bytes || entry->resume!=vm_resume || entry->release!=vm_release ||
+            entry->environment!=binding || binding->artifact!=artifact || binding->function!=f ||
+            (entry->parameter_count && !entry->parameters)) return XR_XIR_BAD_STRUCTURE;
+    }
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,program->permissions->target,
+        program->entries,program->entry_count,program->declarations,{0},program->types,{0}};
+    return xr_xir_compile_program_match(context,&spec,program->permissions->layouts,artifact);
+}
+
 XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
     XrXirProgram **output) {
     if (!output || *output || !artifact) return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *module = xr_xir_compile_artifact_module(*artifact);
     if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
     if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
-    const XrXirCompileContext *context = xr_xir_compile_artifact_context(*artifact);
-    XrXirStatus status = xr_xir_compile_artifact_verify(*artifact, NULL);
-    if (status != XR_XIR_OK) return status;
+    XrXirCompileContext current_context=*xr_xir_compile_artifact_context(*artifact);
+    const XrXirCompileContext *context=&current_context;
+    XrXirArtifact *original=*artifact;
+    XrXirProgramInput *input=NULL;XrXirArtifact *owned=original;
+    XrXirProgram *program=NULL;
+    XrXirStatus status=xir_program_input_take(context,&owned,&input);
+    if (status!=XR_XIR_OK) return status;
+    uint32_t entry_count=module->function_count;
     VmProgramOwner *owner = xir_compile_calloc(context, 1, sizeof(*owner), &status);
-    if (!owner) return status;
-    owner->bindings = xir_compile_calloc(context, module->function_count, sizeof(*owner->bindings), &status);
-    XrXirCallEntry *entries = xir_compile_calloc(context, module->function_count, sizeof(*entries), &status);
+    if (!owner) { input->artifact=NULL;xir_program_input_free(input);return status; }
+    owner->bindings = xir_compile_calloc(context, entry_count, sizeof(*owner->bindings), &status);
+    XrXirCallEntry *entries = xir_compile_calloc(context, entry_count, sizeof(*entries), &status);
     if (status != XR_XIR_OK) goto finish;
-    for (uint32_t i = 0; i < module->function_count; ++i) {
+    for (uint32_t i = 0; i < entry_count; ++i) {
         status = bind_verified(*artifact, i, &owner->bindings[i], &entries[i]);
         if (status != XR_XIR_OK) goto finish;
+        const XrXirType *parameters=entries[i].parameters;
+        entries[i].parameters=NULL;
+        uint64_t bytes=(uint64_t)entries[i].parameter_count*sizeof(*parameters);
+        if (bytes>SIZE_MAX) { status=XR_XIR_BUDGET;goto finish; }
+        entries[i].parameters=xir_compile_copy(context,parameters,(size_t)bytes,&status);
+        if (status!=XR_XIR_OK) goto finish;
     }
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_compile_artifact_target(*artifact),
-        entries, module->function_count, module->declarations, {owner, vm_program_release}, module->types,
-        xr_xir_compile_program_proof(*artifact)};
-    status = xr_xir_compile_program_seal(context, &spec, output);
-    if (status == XR_XIR_OK) { owner->artifact = *artifact; *artifact = NULL; }
+        entries, entry_count, module->declarations, {owner, vm_program_release}, module->types,
+        {0}};
+    status = xir_program_receive(context,&spec,&input,&entries,&program);
 finish:
+    if (entries) for (uint32_t i=0;i<entry_count;++i)
+        xr_compile_resources_free((void *)entries[i].parameters);
     xr_compile_resources_free(entries);
-    if (status != XR_XIR_OK) vm_program_release(owner);
-    return status;
+    if (status==XR_XIR_OK && (*output || *artifact!=original)) status=XR_XIR_BAD_STRUCTURE;
+
+    /* No allocating or releasing operation follows successful correspondence.
+     * The original artifact remains caller-owned on every failed preparation. */
+    if (status==XR_XIR_OK) status=vm_program_match(context,*artifact,owner,program);
+    if (status!=XR_XIR_OK) {
+        if (program) {
+            program->permissions->input->artifact=NULL;
+            xr_xir_compile_program_drop(program);
+        } else {
+            if (input) { input->artifact=NULL;xir_program_input_free(input); }
+            vm_program_release(owner);
+        }
+        return status;
+    }
+    owner->artifact=*artifact;*artifact=NULL;*output=program;
+    return XR_XIR_OK;
 }
 XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint32_t function,
                            XrXirRunContext *context, const XrXirValue *arguments,

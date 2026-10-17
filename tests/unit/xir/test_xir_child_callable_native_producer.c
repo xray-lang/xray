@@ -39,7 +39,7 @@ static void cp_release(XrXirCallView *view, XrXirCallStatus reason) {
 }
 
 int main(int argc, char **argv) {
-    CHECK(argc == 2 && XR_XIR_CHECKED_CONTRACT == 73u);
+    CHECK(argc == 2 && XR_XIR_CHECKED_SCHEMA == 30u && XR_XIR_CHECKED_CONTRACT == 76u);
     CHECK(!effects_compile_live && !effects_compile_bytes && !runtime_live && !runtime_bytes);
     CpFixture fixture;
     cp_build(&fixture);

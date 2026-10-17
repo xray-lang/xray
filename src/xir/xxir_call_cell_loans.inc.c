@@ -93,13 +93,13 @@ static XrXirCallStatus frame_cell_prepare(XrXirCall *call, CallFrame *frame,
     uint32_t captures, XrXirFaultDetail *fault) {
     if (!frame->cell_capacity) return XR_XIR_CALL_READY;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(call->config.admission.arena);
-    uint32_t entry = (uint32_t)(frame->entry - frame->metadata.entries);
+    uint32_t entry = (uint32_t)(frame->entry - frame->metadata->entries);
     XrXirCellAuthority parent = frame_cell_authority(call, frame->parent);
     for (uint32_t p = 0; p < frame->entry->parameter_count; ++p) {
         if (!call_cell_work(call, 1)) return XR_XIR_CALL_LIMIT;
         if (!xr_xir_type_is_cell(types, frame->entry->parameters[p])) continue;
-        if (!frame->metadata.cell_role) return XR_XIR_CALL_BAD_ARGUMENT;
-        XrXirCellParameterRole role = frame->metadata.cell_role(frame->metadata.cell_context, entry, p);
+        if (!frame->metadata->cell_role) return XR_XIR_CALL_BAD_ARGUMENT;
+        XrXirCellParameterRole role = frame->metadata->cell_role(frame->metadata->cell_context, entry, p);
         const XrXirValue *cell = &frame->arguments[p];
         if (role == XR_XIR_CELL_ROLE_OWNED_CAPTURE) {
             if (p >= captures || !xr_xir_cell_unborrowed(cell) || xr_xir_cell_module_storage(cell))
@@ -110,7 +110,7 @@ static XrXirCallStatus frame_cell_prepare(XrXirCall *call, CallFrame *frame,
             return XR_XIR_CALL_BAD_ARGUMENT;
         if (role == XR_XIR_CELL_ROLE_LEXICAL_CLEANUP) {
             if (!frame->parent || frame->entry->cleanup_owner !=
-                    (uint32_t)(frame->parent->entry - frame->parent->metadata.entries) + 1 || !frame->parent->exiting)
+                    (uint32_t)(frame->parent->entry - frame->parent->metadata->entries) + 1 || !frame->parent->exiting)
                 return XR_XIR_CALL_BAD_ARGUMENT;
         } else if (frame->entry->cleanup_owner) return XR_XIR_CALL_BAD_ARGUMENT;
         for (uint32_t prior = 0; prior < p; ++prior) {

@@ -5,6 +5,7 @@
  *
  * task_closed_result_cases.h - Owned terminal panic and reflected message edges
  */
+#include "xir/xxir_program_packet_internal.h"
 #ifndef TASK_CLOSED_RESULT_CASES_H
 #define TASK_CLOSED_RESULT_CASES_H
 static XrXirAction task_closed_assertion(XrXirCallView *view) {
@@ -44,7 +45,7 @@ static void task_closed_fixture_new(TaskFixture *fixture) {
     XrXirStatus proof_status = native_metadata_fixture(&fixture->compiler.context, &spec, &proof);
     if (proof_status != XR_XIR_OK) fprintf(stderr, "metadata proof status=%d\n", (int)proof_status);
     CHECK(proof_status == XR_XIR_OK);
-    spec.proof = xr_xir_compile_program_proof(proof);
+    spec.packet = xir_program_packet_borrow(proof);
     CHECK(xr_xir_compile_program_seal(&fixture->compiler.context, &spec, &fixture->program) == XR_XIR_OK);
     xr_xir_compile_artifact_free(proof);
     const XrXirTypeNode nodes[] = {{.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64},

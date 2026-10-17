@@ -12,6 +12,7 @@
  */
 #ifndef XIR_INVOCATION_FUNCTION_CELL_OWNER_CASES_H
 #define XIR_INVOCATION_FUNCTION_CELL_OWNER_CASES_H
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_task.h"
 #include "xir/xxir_instance_function_internal.h"
 typedef struct FunctionCellRuntimeFixture {
@@ -305,7 +306,7 @@ static XrXirStatus function_cell_runtime_seal(FunctionCellRuntimeWitness *w,XrXi
             for (uint32_t p=0;p<6;++p)
                 CHECK(w->entries[p]<module->function_count && sources[w->entries[p]]==p);
             XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,target,entries,module->function_count,
-                module->declarations,{w,function_cell_runtime_code_drop},module->types,xr_xir_compile_program_proof(lowered)};
+                module->declarations,{w,function_cell_runtime_code_drop},module->types,xir_program_packet_borrow(lowered)};
             status=xr_xir_compile_program_seal(&owner.context,&spec,output);
         }
     }

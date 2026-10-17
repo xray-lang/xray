@@ -50,7 +50,7 @@ typedef struct CallCellLoan {
 typedef struct CallFrame {
     struct CallFrame *parent;
     const XrXirCallEntry *entry;
-    XrXirCallMetadata metadata;
+    const XrXirCallMetadata *metadata;
     XrXirCallResult inbox, pending;
     uint64_t allocation_bytes;
     void *state;
@@ -152,7 +152,7 @@ XR_FUNCDEF bool xr_xir_call_panic_payload(XrXirCallStatus status, const XrXirPan
 uint32_t xr_xir_call_current_entry(const XrXirCall *call) {
     if (!call_owner_current(call)) return UINT32_MAX;
     return call && call->driving && !call->cleaning && !call_observing(call) && call->top ?
-        (uint32_t) (call->top->entry - call->top->metadata.entries) : UINT32_MAX;
+        (uint32_t) (call->top->entry - call->top->metadata->entries) : UINT32_MAX;
 }
 XrXirCallStatus xr_xir_call_state(const XrXirCall *call) {
     if (!call_owner_current(call)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -433,8 +433,19 @@ static XrXirCallStatus frame_class_recheck(XrXirCall *call, const CallFrame *fra
     uint32_t captures = binding ? binding->capture_count : 0;
     if (captures > frame->entry->parameter_count) return XR_XIR_CALL_BAD_STATE;
     return xr_xir_instance_call_entry_recheck(call->active_view,
-        (uint32_t)(frame->entry - frame->metadata.entries), preparation->function,
+        (uint32_t)(frame->entry - frame->metadata->entries), preparation->function,
         frame->arguments + captures, frame->entry->parameter_count - captures, &frame->invocation);
+}
+/* Equal coordinates borrow the immutable activation or ancestor storage.
+ * Only an actual generation transition needs a private copy in its frame;
+ * nested frames retire before the ancestor that owns their coordinates. */
+static const XrXirCallMetadata *frame_metadata_borrow(const XrXirCall *call,
+    const XrXirCallMetadata *metadata) {
+    const XrXirCallMetadata *current=call->top?call->top->metadata:&call->metadata;
+    return current->entries==metadata->entries && current->entry_count==metadata->entry_count &&
+        current->arena==metadata->arena && current->admission_context==metadata->admission_context &&
+        current->cell_role==metadata->cell_role && current->cell_context==metadata->cell_context?
+        current:NULL;
 }
 static XrXirCallStatus push_frame_owned(XrXirCall *call, uint32_t id,
     const XrXirValue *arguments, uint32_t count, const XrXirFunctionBinding *binding,
@@ -460,6 +471,9 @@ static XrXirCallStatus push_frame_owned(XrXirCall *call, uint32_t id,
     uint64_t loans_offset = arguments_offset + (uint64_t)entry->parameter_count * sizeof(XrXirValue);
     uint32_t cells = frame_cell_count(call, entry);
     uint64_t bytes = loans_offset + (uint64_t)cells * sizeof(CallCellLoan);
+    const XrXirCallMetadata *borrowed_metadata=frame_metadata_borrow(call,metadata);
+    uint64_t metadata_offset=bytes;
+    if (!borrowed_metadata) bytes+=sizeof(*metadata);
     if (cells && !call_cell_work(call, (uint64_t)entry->parameter_count + (uint64_t)cells *
             (sizeof(CallCellLoan) + 16))) return XR_XIR_CALL_LIMIT;
     XrXirCallStatus status = XR_XIR_CALL_READY;
@@ -469,7 +483,11 @@ static XrXirCallStatus push_frame_owned(XrXirCall *call, uint32_t id,
     frame->in_cleanup = cleanup_active(call);
     frame->parent = call->top;
     frame->entry = entry;
-    frame->metadata = *metadata;
+    frame->metadata = borrowed_metadata;
+    if (!borrowed_metadata) {
+        XrXirCallMetadata *owned=(XrXirCallMetadata *)((unsigned char *)frame+(size_t)metadata_offset);
+        *owned=*metadata;frame->metadata=owned;
+    }
     frame->epoch = epoch;
     frame->depth = frame->parent ? frame->parent->depth + 1 : 1;
     frame->cell_capacity = cells;
@@ -498,8 +516,8 @@ static XrXirCallStatus push_frame_owned(XrXirCall *call, uint32_t id,
     }
     status = frame_cell_prepare(call, frame, captures, fault);
     /* The authentic parent view stays current during its final actual-loan check. */
-    call->config.admission.arena=frame->parent?frame->parent->metadata.arena:call->metadata.arena;
-    call->config.admission.context=frame->parent?frame->parent->metadata.admission_context:call->metadata.admission_context;
+    call->config.admission.arena=frame->parent?frame->parent->metadata->arena:call->metadata.arena;
+    call->config.admission.context=frame->parent?frame->parent->metadata->admission_context:call->metadata.admission_context;
     if (status == XR_XIR_CALL_READY) status = frame_class_recheck(call, frame, preparation);
     if (status != XR_XIR_CALL_READY) {
         frame_cell_abort(frame);
@@ -529,7 +547,7 @@ static XrXirCallStatus push_frame(XrXirCall *call,uint32_t id,
     if (!preparation || !preparation->metadata) return XR_XIR_CALL_BAD_STATE;
     frame_metadata_apply(call,preparation->metadata);
     XrXirCallStatus status=push_frame_owned(call,id,arguments,count,binding,preparation);
-    frame_metadata_apply(call,call->top?&call->top->metadata:&call->metadata);
+    frame_metadata_apply(call,call->top?call->top->metadata:&call->metadata);
     return status;
 }
 static XrXirCallView frame_view(XrXirCall *call) {
@@ -563,7 +581,7 @@ static void pop_frame(XrXirCall *call, XrXirCallStatus reason) {
     xr_xir_call_result_drop(&frame->pending);
     --call->config.accounting->depth;
     frame_release(call, frame);
-    frame_metadata_apply(call,call->top?&call->top->metadata:&call->metadata);
+    frame_metadata_apply(call,call->top?call->top->metadata:&call->metadata);
 }
 
 static void abort_frames(XrXirCall *call, XrXirCallStatus reason) {
@@ -745,7 +763,7 @@ static void accept_output_action(XrXirCall *call, XrXirAction action) {
 static void accept_child_action(XrXirCall *call, XrXirAction action) {
     bool cleanup = (action.flags & XR_XIR_ACTION_CLEANUP) != 0;
     CallFrame *parent = call->top;
-    XrXirCallMetadata metadata=parent->metadata;
+    XrXirCallMetadata metadata=*parent->metadata;
     XrXirCallStatus status=xr_xir_instance_call_target(call->active_view,&action.value,action.callee,&metadata);
     if (status!=XR_XIR_CALL_READY) {
         if (status==XR_XIR_CALL_OOM || status==XR_XIR_CALL_LIMIT) request_execution_failure(call,status);
@@ -754,9 +772,9 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
     }
     if (action.callee >= metadata.entry_count ||
         (cleanup ? (!parent->exiting || action.flags != XR_XIR_ACTION_CLEANUP ||
-            !boundary_value(action.value, XR_XIR_UNIT) || metadata.entries!=parent->metadata.entries ||
+            !boundary_value(action.value, XR_XIR_UNIT) || metadata.entries!=parent->metadata->entries ||
             metadata.entries[action.callee].cleanup_owner !=
-                (uint32_t)(parent->entry - parent->metadata.entries) + 1) :
+                (uint32_t)(parent->entry - parent->metadata->entries) + 1) :
             (parent->exiting || metadata.entries[action.callee].cleanup_owner != 0))) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE); return;
     }

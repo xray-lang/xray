@@ -10,6 +10,7 @@
  *   One real generated C image and full Closed proof select actual native and VM
  *   delegates. Observers preserve each admitted view and return through the product.
  */
+#include "xir/xxir_program_packet_internal.h"
 #ifndef TYPED_LIBRARY_CURRENT_NATIVE_MIXED_SUPPORT_H
 #define TYPED_LIBRARY_CURRENT_NATIVE_MIXED_SUPPORT_H
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
@@ -17,8 +18,8 @@ static void emit_native_material(ReceiverRun *run, char **argv) {
     CHECK(completed(run, xr_xir_compile_emit_c(run->lowered, "source_typed_library_current_native",
         16777216, &run->emitted), "writer-real-Lowered-C11-emission"));
     CHECK(run->emitted.text && run->emitted.length);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
-    CHECK(proof.bytes && proof.identity && proof.layouts && proof.length == run->expected_closed.length);
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
+    CHECK(proof.bytes && proof.identity && xr_xir_compile_artifact_layout(run->lowered, 0) && proof.length == run->expected_closed.length);
     CHECK(!memcmp(proof.bytes, run->expected_closed.bytes, proof.length));
     uint8_t digest[32]; char hex[65], binding[256];
     xr_sha256((const uint8_t *)run->emitted.text, run->emitted.length, digest);
@@ -139,13 +140,13 @@ static void seal_receiver_native(ReceiverRun *run, const char *c_path) {
     const XrXirModule *module = xr_xir_compile_artifact_module(run->lowered);
     const XrXirProgramSpec *compiled = &source_typed_library_current_native_program;
     const XrXirTarget *target = xr_xir_compile_artifact_target(run->lowered);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
     CHECK(module && module->stage == XR_XIR_LOWERED && compiled->entry_count == module->function_count);
     CHECK(target && compiled->abi_version == XR_XIR_PROGRAM_ABI_VERSION && compiled->target.architecture == target->architecture &&
         compiled->target.abi_version == target->abi_version);
-    CHECK(compiled->entries && proof.bytes && proof.identity && proof.layouts && compiled->proof.bytes && compiled->proof.identity && compiled->proof.layouts);
-    CHECK(proof.length == compiled->proof.length && !memcmp(proof.bytes, compiled->proof.bytes, proof.length));
-    CHECK(!memcmp(proof.identity, compiled->proof.identity, 32)); native_material_file_digest(run, c_path);
+    CHECK(compiled->entries && proof.bytes && proof.identity && xr_xir_compile_artifact_layout(run->lowered, 0) && compiled->packet.bytes && compiled->packet.identity);
+    CHECK(proof.length == compiled->packet.length && !memcmp(proof.bytes, compiled->packet.bytes, proof.length));
+    CHECK(!memcmp(proof.identity, compiled->packet.identity, 32)); native_material_file_digest(run, c_path);
     ReceiverNativeOwner *owner = owned_allocate(run->context, 1, sizeof(*owner)); run->pending_native_owner = owner;
     owner->count = module->function_count; owner->mode = run->mode; owner->child = run->roles.child;
     CHECK(run->roles.constructor < owner->count && owner->child < owner->count && run->roles.constructor != owner->child);

@@ -169,7 +169,7 @@ static XrXirStatus effect_invocation_copy_origins(EffectInvocationCertificate *c
         if (terms->status!=XR_XIR_OK || (parent!=UINT32_MAX && parent>=count))
             return terms->status!=XR_XIR_OK?terms->status:XR_XIR_BAD_STRUCTURE;
         certificate->origins[f]=origin;certificate->owners[f]=parent;
-        const XrXirFunctionEffectContract *contract=&equations->effects->contracts[f];
+        const XrXirFunctionEffectContract *contract=&effect_contracts_read(equations->effects)[f];
         uint32_t parameters=certificate->body->functions[f].parameter_count;
         if (contract->parameter_count!=parameters || (parameters && !contract->parameters)) return XR_XIR_BAD_STRUCTURE;
         uint8_t *kinds=effect_terms_alloc(terms,parameters,sizeof(*kinds));
@@ -302,19 +302,39 @@ static XrXirStatus effect_invocation_input_seed(const XrXirCompileContext *work,
         }
     }
     EffectBodyRead read=effect_body_compile_read(work);
-    for (uint32_t i=0;i<head->instruction_count;++i) {
-        XrXirInstruction op;XrXirStatus status=effect_body_instruction_get(&read,head,i,&op);
+    if (!xir_compile_work(work,sizeof(EffectBodyRecordCursor)+sizeof(uint32_t))) return XR_XIR_BUDGET;
+    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
+    for (uint32_t r=0;r<head->run_count;++r) {
+        const EffectBodyRun *run=NULL;
+        XrXirStatus status=effect_body_range_ref(&read,head,&cursor,&run);
         if (status!=XR_XIR_OK) return status;
-        if (op.op==XR_XIR_CALL_INDIRECT || op.op==XR_XIR_INVOKE_INDIRECT) continue;
-        if (op.op==XR_XIR_SLOT_LOAD || op.op==XR_XIR_SLOT_PLACE || op.op==XR_XIR_SLOT_STORE) {
-            if (!decls || !decls->slots || op.immediate<0 || (uint64_t)op.immediate>=decls->slot_count)
-                return XR_XIR_BAD_STRUCTURE;
+        uint32_t opcode=XR_XIR_INVALID;
+        status=effect_body_run_word(&read,run,run->first,0,&opcode);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+        /* This is a primitive contribution from current owned Input. All
+         * selected deltas and boundaries were checked above. Complete physical
+         * correspondence still reads unused fields and signed immediate bits. */
+        if (!(run->mask&UINT32_C(1)) && effect_root_seed_local((XrXirOp)opcode)) continue;
+        if (!xir_compile_work(work,sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t visits=run->mask?run->count:1;
+        for (uint32_t offset=0;offset<visits;++offset) {
+            if (!xir_compile_work(work,sizeof(uint32_t)+1)) return XR_XIR_BUDGET;
+            uint32_t i=run->first+offset;XrXirInstruction op;
+            status=effect_body_instruction_ref_value(&read,run,i,&op);
+            if (status!=XR_XIR_OK) return status;
+            if (op.op==XR_XIR_CALL_INDIRECT || op.op==XR_XIR_INVOKE_INDIRECT) continue;
+            if (op.op==XR_XIR_SLOT_LOAD || op.op==XR_XIR_SLOT_PLACE || op.op==XR_XIR_SLOT_STORE) {
+                if (!decls || !decls->slots || op.immediate<0 || (uint64_t)op.immediate>=decls->slot_count)
+                    return XR_XIR_BAD_STRUCTURE;
+            }
+            const EffectRootSeedRecord request={&body->domain,&op,function,i,XR_XIR_UNIT};
+            status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work);
+            if (status!=XR_XIR_OK) return status;
+            if (op.op==XR_XIR_CALL_REQUIREMENT) { facts.unresolved=false;witnesses[1]=(XrXirRootEffectWitness){0}; }
         }
-        const EffectRootSeedRecord request={&body->domain,&op,function,i,XR_XIR_UNIT};
-        status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work);
-        if (status!=XR_XIR_OK) return status;
-        if (op.op==XR_XIR_CALL_REQUIREMENT) { facts.unresolved=false;witnesses[1]=(XrXirRootEffectWitness){0}; }
     }
+    if (cursor.first!=head->instruction_count || cursor.run!=head->run_count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
     *output=facts;return XR_XIR_OK;
 }
@@ -335,7 +355,23 @@ static XrXirStatus effect_invocation_input_seeds_match(const XrXirCompileContext
         if (status!=XR_XIR_OK) return status;
         uint32_t mask=(input.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
             (input.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
-        if ((node->intrinsic_mask&mask)!=mask || (summary->functions[f].formula.constant_mask&mask)!=mask)
+        if ((node->intrinsic_mask&mask)!=mask || (node->local_mask&mask)!=mask ||
+            (summary->functions[f].formula.constant_mask&mask)!=mask)
+            return XR_XIR_BAD_STRUCTURE;
+    }
+    /* Each genuine environment executes the same body's primitive Input.
+     * An intact symbolic root cannot qualify a different erased call key. */
+    for (uint32_t n=0;n<final->count;++n) {
+        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+        const EffectInvocationNode *node=&final->nodes[n];
+        if (node->body>=count) return XR_XIR_BAD_STRUCTURE;
+        if (final->roots[node->body]==n) continue;
+        XrXirRootEffects input={0};
+        XrXirStatus status=effect_invocation_input_seed(work,certificate->body,node->body,&input);
+        if (status!=XR_XIR_OK) return status;
+        uint32_t mask=(input.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
+            (input.unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
+        if ((node->intrinsic_mask&mask)!=mask || (node->local_mask&mask)!=mask)
             return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
@@ -351,8 +387,8 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         !*request->equations || !request->result || !*request->result) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationWorkspace *owner=*request->equations;EffectFinalFunctions *result=*request->result;
     EffectFinalFunctions *staged=result;bool summary_moved=false;
-    if (!effect_body_request_owned_matches(owner->work,&owner->body,owner->final.material) ||
-        owner->work->resources!=work->resources || result->resources!=work->resources ||
+    if (!effect_body_request_owned_matches(owner->read.work,&owner->read.body,owner->final.material) ||
+        owner->read.work->resources!=work->resources || result->resources!=work->resources ||
         result->count!=effect_body_count(owner->final.material) ||
         !effect_invocation_projection_sink_matches(work,sink,effect_body_count(owner->final.material)))
         return XR_XIR_BAD_STRUCTURE;
@@ -360,11 +396,14 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     EffectInvocationLocalInput *local_inputs=NULL;
     if (status==XR_XIR_OK) status=effect_invocation_local_inputs(work,owner->final.material,&local_inputs);
     if (status==XR_XIR_OK && local_inputs) {
-        if (!owner->consumers || owner->pending || owner->front || owner->back ||
-            owner->producer_enabled || owner->class_enabled || owner->edge_index || owner->edge_index_capacity)
+        if (!owner->read.consumers || !owner->states || owner->pending || owner->front || owner->back ||
+            owner->read.producer_enabled || owner->read.class_enabled || owner->edge_index || owner->edge_index_capacity)
             status=XR_XIR_BAD_STRUCTURE;
-        for (uint32_t f=0;status==XR_XIR_OK && f<owner->final.count;++f)
-            if (owner->consumers[f]!=UINT32_MAX) status=XR_XIR_BAD_STRUCTURE;
+        for (uint32_t f=0;status==XR_XIR_OK && f<owner->final.count;++f) {
+            if (!xir_compile_work(work,3)) status=XR_XIR_BUDGET;
+            else if (owner->read.consumers[f]!=UINT32_MAX || !owner->states[f].expanded || owner->states[f].queued)
+                status=XR_XIR_BAD_STRUCTURE;
+        }
         if (status==XR_XIR_OK) status=effect_invocation_local_equations_match(work,&owner->final,local_inputs);
         if (status==XR_XIR_OK) status=effect_invocation_local_result_match(work,&owner->final,local_inputs,result);
     } else if (status==XR_XIR_OK) {
@@ -372,7 +411,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         if (status==XR_XIR_OK) status=effect_invocation_coverage_verify(owner);
         if (status==XR_XIR_OK) status=effect_invocation_class_verify(owner);
         if (status==XR_XIR_OK) status=effect_invocation_closed(owner);
-        if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(owner);
+        if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner->read);
         if (status==XR_XIR_OK) status=effect_invocation_result_match(owner,result);
         if (status==XR_XIR_OK) status=effect_invocation_causes(owner);
     }
@@ -384,7 +423,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         certificate->resources=work->resources;certificate->terms.remaining=work;
         status=effect_invocation_bind_bodies(certificate,owner);
     }
-    if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(certificate,owner->declared,owner->final.physical);
+    if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(certificate,owner->read.declared,owner->final.physical);
     if (status==XR_XIR_OK) status=effect_invocation_copy_origins(certificate,owner,request->dense);
     if (status==XR_XIR_OK) status=effect_body_owned_types_verify(work,certificate->body);
     if (status==XR_XIR_OK) {

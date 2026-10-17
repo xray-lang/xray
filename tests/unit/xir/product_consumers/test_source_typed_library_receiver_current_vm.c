@@ -10,6 +10,7 @@
  *   An authentic Library packet supplies import after its owned Source is removed.
  *   The original receiver survives two real yields and returns a full owned I64.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_library_catalog.h"
@@ -57,7 +58,7 @@ static void record_failure(const char *domain, const char *operation, bool has_s
 _Static_assert(XR_XIR_CHECKED_SCHEMA == 30u && XR_XIR_CHECKED_CONTRACT == 76u, "Formal Checked identity");
 _Static_assert(XR_XIR_LIBRARY_C_INTERFACE_VERSION == 2u, "Actual owned Catalog interface");
 _Static_assert(XR_XIR_VALUE_ABI_VERSION == 24u && XR_XIR_CALL_ABI_VERSION == 29u &&
-    XR_XIR_PROGRAM_ABI_VERSION == 32u, "Formal public runtime identity");
+    XR_XIR_PROGRAM_ABI_VERSION == 33u, "Formal public runtime identity");
 
 typedef struct ReceiverRoles {
     uint32_t entry, answer, private_answer, child, constructor, nominal, library_module;
@@ -558,8 +559,8 @@ static bool detach_program(ReceiverRun *run) {
     ReceiverRoles actual = receiver_shape(run->lowered);
     /* Specialization may renumber functions. Runtime uses current Lowered roles. */
     run->roles = actual;
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
-    CHECK(proof.bytes && proof.identity && proof.layouts && proof.length == run->expected_closed.length);
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
+    CHECK(proof.bytes && proof.identity && xr_xir_compile_artifact_layout(run->lowered, 0) && proof.length == run->expected_closed.length);
     CHECK(!memcmp(proof.bytes, run->expected_closed.bytes, proof.length));
     uint8_t identity[32]; xr_sha256(run->expected_closed.bytes, run->expected_closed.length, identity);
     CHECK(!memcmp(identity, proof.identity, sizeof(identity)));
@@ -634,7 +635,7 @@ static void seal_receiver_vm(ReceiverRun *run) {
     }
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_compile_artifact_target(run->lowered),
         owner->entries, owner->count, module->declarations, {owner, receiver_vm_release}, module->types,
-        xr_xir_compile_program_proof(run->lowered)};
+        xir_program_packet_borrow(run->lowered)};
     XrXirStatus status = xr_xir_compile_program_seal(run->context, &spec, &run->program);
     CHECK(completed(run, status, "public-VM-Program-seal"));
     CHECK(run->program);

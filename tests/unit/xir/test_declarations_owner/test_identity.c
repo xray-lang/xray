@@ -6,6 +6,8 @@
  *
  * test_identity.c - Roles are verified semantics and proof-bound identity
  */
+#include "../xir_program_input_fixture.h"
+#include "xir/xxir_program_packet_internal.h"
 #include "../xir_construction_fixture.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_generic.h"
@@ -46,7 +48,7 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
     CHECK(xr_xir_compile_artifact_module(roundtrip)->declarations->functions[2].test_timeout_seconds==timeout);
     uint8_t current_digest[32];memcpy(current_digest,packet.bytes+32,32);
     /* Rehashed header rejection is separate from the full historical models. */
-    CHECK(packet.bytes[8]==27 && packet.bytes[12]==72);packet.bytes[12]=62;
+    CHECK(packet.bytes[8]==30 && packet.bytes[12]==76);packet.bytes[12]=62;
     XrSHA256Context hash;xr_sha256_init(&hash);xr_sha256_update(&hash,packet.bytes,32);
     xr_sha256_update(&hash,packet.bytes+64,packet.length-64);xr_sha256_final(&hash,packet.bytes+32);
     XrCompileResourceStats old_before={0},old_after={0};
@@ -60,7 +62,7 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
     CHECK(xr_compile_resources_stats(context->resources,&old_after)==XR_COMPILE_RESOURCE_OK);
     CHECK(old_after.allocation_count==old_before.allocation_count && old_after.allocated_bytes==old_before.allocated_bytes &&
         old_after.live_bytes==old_before.live_bytes && old_after.peak_bytes==old_before.peak_bytes);
-    packet.bytes[12]=72;memcpy(packet.bytes+32,current_digest,32);
+    packet.bytes[12]=76;memcpy(packet.bytes+32,current_digest,32);
     for(uint32_t field=0;field<2;++field) {
         size_t offset=field?12:8;uint8_t saved=packet.bytes[offset];packet.bytes[offset]=(uint8_t)(saved-1);
         XrXirArtifact *sentinel=NULL;
@@ -68,7 +70,7 @@ static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint
         CHECK(!sentinel);packet.bytes[offset]=saved;
     }
     if(packet_directory){
-        const char *history[]={"old24-62","old24-63","old25-64","old25-65","old25-70","old26-71"};
+        const char *history[]={"old24-62","old24-63","old25-64","old25-65","old25-70","old26-71","old27-72","old28-73"};
         for(size_t h=0;h<sizeof(history)/sizeof(*history);++h){
             char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%u-%u-%s.chk",packet_directory,role,timeout,history[h])>0);
             FILE *file=fopen(path,"rb");CHECK(file&&!fseek(file,0,SEEK_END));long length=ftell(file);CHECK(length>64&&length<16384&&!fseek(file,0,SEEK_SET));
@@ -103,14 +105,16 @@ static void match(const XrXirCompileContext *context,uint32_t role_a,uint32_t ti
     identities[2].test_role=role_b;identities[2].test_timeout_seconds=timeout_b;
     XrXirDeclarations declarations=*module->declarations;declarations.functions=identities;
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,*xr_xir_compile_artifact_target(a),entries,3,
-        &declarations,{0},module->types,xr_xir_compile_program_proof(b)};
+        &declarations,{0},module->types,xir_program_packet_borrow(b)};
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(context,&spec,&program)==XR_XIR_OK);
     xr_xir_compile_program_drop(program);program=NULL;
-    spec.proof=xr_xir_compile_program_proof(a);
-    CHECK(xr_xir_compile_program_match(context,&spec,spec.proof.layouts,a)==XR_XIR_BAD_STRUCTURE);
+    spec.packet=xir_program_packet_borrow(a);
+    CHECK(xr_xir_compile_program_match(context,&spec,xr_xir_compile_artifact_layout(a, 0),a)==XR_XIR_BAD_STRUCTURE);
     XrXirProgramPermissions *permissions=NULL;
-    CHECK(xr_xir_compile_program_proof_verify(context,&spec,&spec.proof,&permissions)==XR_XIR_BAD_STRUCTURE && !permissions);
+    XrXirProgramInput *program_input=NULL;
+    CHECK(program_fixture_decode_prepare(context,&spec,&spec.packet,&program_input,&permissions)==XR_XIR_BAD_STRUCTURE && !permissions);
+    xir_program_input_free(program_input);
     CHECK(xr_xir_compile_program_seal(context,&spec,&program)==XR_XIR_BAD_STRUCTURE && !program);
     xr_xir_compile_artifact_free(a);xr_xir_compile_artifact_free(b);
 }

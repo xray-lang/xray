@@ -127,7 +127,7 @@ static void invocation_class_rows_fixture(InvocationClassRowsFixture *f,uint32_t
 static XrXirStatus conditional_class_rows_replay(const XrXirCompileContext *context,
     XrXirEffects *effects) {
     EffectInvocationCertificate *certificate=effects->invocations;
-    EffectInvocationWorkspace replay={0};
+    EffectInvocationRead replay={0};
     XrXirStatus opening=effect_invocation_read_open(context,effects,certificate->declared,certificate->final,&replay);
     if (opening!=XR_XIR_OK) return opening;
     if (!effect_body_material_shape(certificate->body) ||

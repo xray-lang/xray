@@ -181,8 +181,8 @@ static void cn_build(CnFixture *f) {
     f->context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
     CHECK(child_callable_native_program.entry_count == CN_FUNCTIONS);
     CHECK(child_callable_native_program.entries == child_callable_native_entries);
-    CHECK(child_callable_native_program.proof.bytes && child_callable_native_program.proof.length);
-    CHECK(child_callable_native_program.proof.identity && child_callable_native_program.proof.layouts);
+    CHECK(child_callable_native_program.packet.bytes && child_callable_native_program.packet.length);
+    CHECK(child_callable_native_program.packet.identity);
     CHECK(child_callable_native_program.declarations->entry_function == CN_ENTRY);
     CHECK(child_callable_native_program.types && child_callable_native_program.types->count == 6);
     CHECK(child_callable_native_program.types->nodes[5].kind == XR_XIR_TYPE_CELL &&
@@ -213,7 +213,7 @@ static void cn_build(CnFixture *f) {
             !spec.declarations->functions[i].test_timeout_seconds);
     CHECK(xr_xir_compile_program_seal(f->context, &spec, &f->program) == XR_XIR_OK);
     const XrXirProgramPermissions *permissions = f->program->permissions;
-    CHECK(permissions && permissions->function_count == CN_FUNCTIONS);
+    CHECK(permissions && permissions->function_count == CN_FUNCTIONS && permissions->layouts);
     CHECK(!permissions->entries[CN_PURE].requires_root && !permissions->entries[CN_PURE].unresolved);
     CHECK(!permissions->entries[CN_RELAY].requires_root && !permissions->entries[CN_RELAY].unresolved);
     CHECK(permissions->entries[CN_RELAY].worker == XR_XIR_BAD_TYPE);

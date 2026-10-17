@@ -17,6 +17,16 @@ struct EffectContextOwner {
     EffectRefinementBounds *refinement;
 };
 
+/* Publication removes the ordinary classifier's real allocations and its
+ * construction identity. Surviving descriptors belong to this Final owner. */
+static bool effect_context_owner_published(XrCompileResources *resources,const EffectContextOwner *owner) {
+    return resources && owner && owner->ordinary && owner->dense && owner->forest &&
+        owner->ordinary->resources==resources && owner->dense->resources==resources &&
+        owner->forest->resources==resources && !owner->ordinary->dense && owner->dense->dense &&
+        !owner->refinement && !owner->ordinary->terms.remaining && !owner->dense->terms.remaining &&
+        !owner->forest->terms.remaining && effect_ordinary_work_empty(owner->ordinary);
+}
+
 static void effect_context_owner_free(EffectContextOwner *owner) {
     if (!owner) return;
     /* Retire summary views while the forest still owns their Result.
@@ -28,12 +38,7 @@ static void effect_context_owner_free(EffectContextOwner *owner) {
 }
 
 static void effect_context_summary_clear(EffectOrdinaryContexts *contexts) {
-    effect_parameters_free(&contexts->uses);
-    xr_compile_resources_free(contexts->uses.functions);
-    xr_compile_resources_free(contexts->uses.task_creation);
-    xr_compile_resources_free(contexts->uses.root);
-    xr_compile_resources_free(contexts->uses.root_witnesses);
-    xr_compile_resources_free(contexts->uses.unresolved_witnesses);
+    effect_ordinary_results_free(contexts);
     contexts->uses=(XrXirEffects){.resources=contexts->terms.remaining->resources,.count=contexts->count};
 }
 
@@ -421,10 +426,10 @@ static XrXirStatus effect_context_dense_actuals(EffectContextOwner *owner,
             }
         }
         if (v<function->parameter_count)
-            fixed[v]=(uint8_t)(owner->ordinary->uses.contracts[dense->nodes[index].ordinary].parameters[v].kind!=
+            fixed[v]=(uint8_t)(owner->ordinary->uses.outcomes_work.contracts[dense->nodes[index].ordinary].parameters[v].kind!=
                 XR_XIR_EFFECT_PARAMETER_VARIABLE);
     }
-    if (dense->uses.root && index<dense->uses.count) {
+    if (dense->uses.outcomes_work.root && index<dense->uses.count) {
         EffectScalarFlow flow={&dense->terms,function,dense,declared,values,fixed,(uint32_t)count,false,source->declarations};
         XrXirStatus status=effect_scalar_flow(&flow);
         if (status!=XR_XIR_OK) return status;
@@ -455,6 +460,9 @@ static XrXirStatus effect_context_dense_expand(EffectContextOwner *owner,
         if (ordinary>=owner->ordinary->count) { status=XR_XIR_BAD_STRUCTURE;break; }
         const XrXirFunction *caller=&dense->functions[index];
         XrXirInstruction actual=caller->instructions[i];actual.op=original.op;
+        /* Default identity fields are metadata, not physical operands. The
+         * resolved initializer receives no caller arguments. */
+        if (original.op==XR_XIR_INVOKE_DEFAULT) actual.args[0]=actual.args[1]=0;
         EffectDenseRequest request={.contexts=owner->ordinary,.execution=dense,.selected=ordinary,
             .caller_index=index,.actual_types=&dense->terms.types,.caller=caller,.instruction=&actual,
             .fixed=fixed,.value_count=caller->parameter_count+caller->instruction_count};
@@ -531,6 +539,7 @@ static XrXirStatus effect_context_owner_build(const XrXirCompileContext *context
     if (status==XR_XIR_OK) {
         owner->dense=xir_compile_calloc(context,1,sizeof(*owner->dense),&status);
         if (!owner->dense) { effect_context_owner_free(owner);return status; }
+        owner->dense->resources=context->resources;
         owner->dense->terms.remaining=context;owner->dense->dense=true;
         owner->dense->source_type_count=source->types->count;owner->dense->base_count=source->function_count;
         status=effect_terms_seed(&owner->dense->terms,&owner->ordinary->terms.types);

@@ -7182,6 +7182,25 @@ fetchAdd遵循原子合同，fetchAdd返回旧值并按二进制补码环绕。�
 恢复必须匹配执行epoch和wake，防止跨调用迟到恢复。首版仅准入单宿主线程独占驱动。
 精确准入、预算与租约责任由 `test_xir_instances` 验证；这不授予源码或缓存格式资格。
 
+内部 VM 接收把真实 Lowered Artifact 及其规范 Input/Final 转交给 Program，
+不借内部 packet 重新解码或重新 Lower。外部 native 描述只携带
+`XrXirProgramPacket` 的 bytes、length、identity，边界解码一次后进入同一拥有型接收核；
+packet 不携带调用者提供的布局权限。接收核独立检查当前语义、body、声明、布局和接线，
+成功才转交 Input、入口表及代码租约，失败保全调用者输入且不发表 Program。
+准备期只借用调用者拥有的入口表和参数块；失败保留同一 Input、表与参数，可在不重置账本下重试，成功无回调提交时才一并清空拥有槽。VM失败清理按实际分配的固定数量遍历，不能采用末次回调改变的模块计数。
+拥有型 Input、Artifact、入口表和非空参数块须分别位于原账本中的存活分配起点，不能将可读的内部区间当成可释放的拥有指针。拥有表及其参数在深读前检查物理范围，发布前再检查当前表、参数、数量及归属；零参数行的拥有指针须为空，多个拥有行不能重复转交同一参数块。失败不分配新的接收对象来修补畸形的物理输入，检查所用 work 仍计入原账本。
+内部载体转交核验原账本拥有、规范 body 与布局对应，使后续绑定可安全读取；载体本身不授语义或执行权限。完整当前 Input/Final 语义核验由统一 receiver 在准备期和末次回调后承担，不能把载体构造时的重复核验或保存的 PASS 当作权限依据。物理 body/布局不对应时不转交；语义事实被篡改的物理载体仍必须在发表 Program 前拒绝并保全输入。
+Program直接使用所转交规范Input拥有的不可变声明；不再深复制另一份声明，失败销毁Program时也不释放调用者仍拥有的Input声明。运行时类型arena仍独立拥有其类型，以支持逃逸值寿命。
+内部 packet 先死亡、外部 packet/spec 随后死亡均不能使成功 Program 借用失效存储。
+旧 Program ABI 及旧 Proof/getter 接口拒绝，不保留适配分支。
+
+末次准备回调后的 Error 检查，若从完整当前 Input 证明所有操作只有空逃逸传递和
+内部直接调用，则其最小解必须全空，包括无种子递归调用环；当前 Error 行及
+throws/task_errors 公开投影须同时匹配。此检查不分配或释放，按真实读取收费，
+拒绝联合伪造行与两个公开字段。即使其他函数有真实Error种子，完整无调用且无deferred cleanup的叶子函数仍须从当前Input独立证明Error行及两个公开投影全空；此局部检查不为其他函数授予权限。含真实错误种子、精确间接调用或一般泛型绑定的
+完整当前 Error V 仍有独立责任；拥有型载体不代表一般 Final 证明、全部构造
+Workspace 退役或完整故障/资源/安全资格已经完成。
+
 ### 17.9 新 XIR 源码准入边界
 
 新 source owner 复用实际 parser 与模块 resolver/graph，直接检查声明和构造 Built，
@@ -7224,6 +7243,12 @@ Lowered 或旧格式读取器。
 
 该子集（含§17.11的标记约束模板）不代表完整成员约束/见证、效应、诊断来源序列化、包链接、native 缓存配对、
 installer 发布或完整无源码标准库分发已经验收。
+
+Program 在所有准备分配及释放回调结束后，将当前描述和拥有副本分别与独立检查的规范类型、声明、签名及物理布局比较；VM 拥有权交接还将实际执行 body 和绑定接线对应到同一输入。最终比较不分配或释放存储。摘要仅检查 packet 漂移，不授语义权限。失败不取得调用者 artifact 或代码租约，不发表 Program；此边界不认证任意 native 回调行为，也不替代一般 Final 独立验证与全部构造 Workspace 退役要求。
+
+准备阶段从独立规范输入复制语义元数据，避免把被准备回调失效的调用者表作为拥有副本的来源。最终比较先拒绝所有非空表缺失的存储，再逐项遍历，包括模块表及函数表。恢复原调用者存储后，可在同一累计账本重试；拒绝不退还工作量或分配费用。
+
+Program 的当前 body 对应检查在读取前，用同一累计账本的实际活分配范围核验规范 body 和 Lowered 投影的头、名称、签名、块、指令、操作数、压缩记录及默认记录；按所读类型检查对齐和完整范围，并拒绝记录计数越过容量。检查不分配，实际扫描仍计费。合法物理范围不证明字段对应、语义、历史分配代际或完整 Final；最后准备回调后的当前字段仍须独立比较，拒绝保全输入与空输出。
 
 ### 17.11 定义处检查与 Checked 泛型特化
 
@@ -7646,6 +7671,14 @@ Pending 只返回 BAD_STATE，不分配结果外壳、不推进、等待、取�
 显式输入长度中的 NUL 和实际源文件中的 NUL 在解析前被拒绝，合法宿主请求返回 INVALID。诊断使用真实验证位置的一基行号和字节列、固定消息 `source text contains an embedded NUL` 以及拥有型失败文件路径；MEMORY 根路径为 NULL。导入错误指向该被导入文件。诊断可在源字节、路径、AST、Compiler 和 REPL 销毁后继续使用，同 owner 后续合法输入仍可成功。
 
 NUL 验证具有独立的 SOURCE_INPUT 来源，不伪称 parser 回调。根文本、rooted overlay、真实文件和 AST/REPL 扫描继续使用各自原累计账本；诊断或路径接收失败保真实 OOM/BUDGET。不可表示的行列返回 BUDGET。失败不发布 Program、新声明或 authority，不回退 SCRIPT，不在清理时分配。run、check、check --syntax-only 和 REPL .load 报告实际失败位置；语法检查仍只检查被指定文件。
+
+### 17.54 公共 Source 的拥有型 Program 接收
+
+公共 Source/REPL 的 Program 构造消费真实 Lowered Input 与 Final 的共同拥有型接收者。内部转交只移动实际物理 owner，不保存语义验证结果、不授执行权限；外部 packet 只借用当前同步输入，由 reader 解码成同一种拥有型 Input。接收者在准备前和准备回调完成后独立验证当前语义、完整声明、body、layout 与实际描述符，成功才一起转交 Input、入口及参数表，失败保全调用者 owner 和空输出。Program 直接保活所接 Input 的规范声明，销毁和失败清理不申请新资源。
+
+出生函数的 Source 对应关系通过真实特化映射及新 Lowered body/layout 与 Program 所拥有的 Input/Final 比对建立，不以 wire 摘要相同代替该接收证明。模块 lexical_scope、storage 和既有出生身份继续逐字段核验；函数、成员、ref、Task 的执行权限仍来自真实 Program/Instance/Call。
+
+此接收布局使用 Program ABI33；Value24/Call29 和 Checked30/semantic76 不变。旧 Program32 及更早前缀拒绝，不保留借用 Proof/layout reader 或兼容别名。SDK 的 Packet/ProgramSpec 真实布局由独立声明模型和宿主 C11 核验；完整旧 SDK 向量继续保存为拒例。全部复制、深读、比对、失败与寿命继续使用原累计账本及既有首错状态。
 
 ---
 

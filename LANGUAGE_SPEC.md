@@ -7263,6 +7263,53 @@ The initial instance interface admits exclusive driving by one host thread only.
 The precise internal interface is verified by `test_xir_instances`; source and
 serialized/cache admission require separate qualification.
 
+Internal VM reception transfers the actual Lowered Artifact and its canonical
+Input/Final into the Program, without decoding an internal packet or lowering
+it again. External native descriptors carry only the bytes, length and identity
+of `XrXirProgramPacket`; one boundary decode enters the same owning receiver.
+Packets carry no caller-supplied layout authority. Reception independently
+checks current semantics, bodies, declarations, layouts and wiring before
+transferring the Input, entry table and code lease. Failure preserves caller
+inputs and publishes no Program. Preparation borrows a caller-owned entry table
+and its parameter blocks. Refusal retains the same Input, table and parameters
+for retry without ledger refill; only the final callback-free commit clears both
+owning slots. VM failure cleanup uses the actual fixed allocation count rather
+than a module count changed by a preparation callback. Owning Input, Artifact,
+entry tables and nonempty parameter blocks must start at live allocations on
+the receiving ledger; a readable interior extent cannot transfer a releasable
+owner. Check table and parameter storage before deep reads and again before
+publication, including current pointers and counts. Empty parameter rows have
+null owning pointers, and rows cannot transfer the same parameter block twice.
+Malformed physical input creates no new receiving objects; its actual checking
+work remains charged to the original ledger. Internal carrier transfer checks
+ledger ownership and canonical body/layout correspondence for bounded binding
+reads, without granting semantic or execution authority. The sole receiver
+independently verifies current Input/Final semantics during preparation and
+after the last callback; neither a duplicate constructor verification nor a
+saved PASS grants permission. Mismatched physical bodies/layouts do not move.
+A physically valid carrier with forged semantic facts must still reject before
+Program publication and retain its inputs. The Program uses the immutable declarations
+owned by its transferred canonical Input without a second deep clone. Failed
+Program disposal leaves caller-owned Input declarations live. The runtime type
+arena keeps its independent ownership for escaping values. Internal packet destruction before reception
+and external packet/spec destruction afterwards cannot invalidate a successful
+Program. Old Program ABIs and the old Proof/getter interface reject without an
+adapter path.
+
+After the last preparation callback, a complete current Input containing only
+empty escaping transfers and internal direct calls has the least empty Error
+solution, including recursive call components without a seed. Current Error
+rows and both public throws/task_errors projections must match that solution.
+This check allocates and releases nothing, charges actual reads, and rejects a
+joint forgery of a row and its two projections. Inputs with real error seeds,
+precise indirect calls or general generic bindings retain the separate complete
+current Error verification obligation. Even when another function has a real Error seed,
+a complete leaf without calls or deferred cleanup independently proves its Error row and
+both public projections empty from current Input; this local check grants no authority to
+other functions. An owning carrier does not qualify the
+general Final proof, retirement of every construction Workspace, or complete
+fault, resource and safety gates.
+
 ### 17.9 New XIR Source Admission Boundary
 
 The source owner reuses the real parser and module resolver/graph, checks source
@@ -7324,6 +7371,34 @@ rules are verified by `test_xir_checked`.
 This subset (including §17.11 marker templates) does not qualify full member constraints/witnesses,
 effects, diagnostic provenance, package linking, Checked library publication, installer
 publication or complete source-free standard-library distribution.
+
+Program publication compares the current descriptors and their owned copies
+against independently checked canonical types, declarations, signatures and
+physical layouts after all preparation allocator callbacks have finished. VM
+ownership transfer additionally compares the actual executable body and binding
+wiring to that same input. These final comparisons allocate and release no
+storage. A content digest only detects packet drift; it grants no semantic
+permission. Failure leaves the caller's artifact and code lease unconsumed and
+publishes no Program. This boundary does not authenticate arbitrary native
+callback behavior or replace general independent Final verification and
+retirement of every construction Workspace.
+
+Preparation copies semantic metadata from the independent canonical input,
+so a caller metadata table invalidated by a preparation callback is never used
+as the source of an owned copy. The final comparison rejects missing storage
+for every nonempty table before traversing it, including module and function
+tables. Restoring the caller's original storage permits a retry on the same
+cumulative ledger; rejection does not refund work or allocation charges.
+
+Before reading either canonical body or Lowered projection storage, current
+Program body correspondence checks the actual live allocation ranges on the
+same cumulative ledger for headers, names, signatures, blocks, instructions,
+operands, compressed records and default records. Each typed read requires its
+alignment and complete range; record counts cannot exceed capacity. These
+checks allocate nothing and charge actual scans. A valid range proves neither
+field correspondence, semantics, historical allocation generation nor a
+complete Final. Current fields still require independent comparison after the
+last preparation callback; rejection preserves inputs and the empty output.
 
 ### 17.11 Definition Checking and Checked Generic Specialization
 
@@ -7809,6 +7884,14 @@ Invalid host requests still return BAD_ARGUMENT. Actual OOM/BUDGET/IO during par
 A NUL within an explicit input span or an actual source file is rejected before parsing; a valid host request returns INVALID. Diagnostics report the actual validator's one-based line and byte column, the fixed message `source text contains an embedded NUL`, and the owned failing file path. A MEMORY root has a NULL path. Import failure identifies the imported file. Diagnostic data survives caller bytes, paths, AST, Compiler and REPL destruction, and the same owner can accept subsequent valid input.
 
 NUL validation carries a distinct SOURCE_INPUT origin. Root text, rooted overlays, actual files and AST/REPL scans retain their original cumulative ledgers. Diagnostic or path receiving retains actual OOM/BUDGET failures; an unrepresentable location returns BUDGET. Failure publishes no Program, declaration or authority, performs no SCRIPT fallback, and allocates nothing during cleanup. Run, check, check --syntax-only and REPL .load report the actual failing location; syntax-only checking still examines only the selected file.
+
+### 17.54 Owned Program receiving for public Source
+
+Public Source and REPL Program construction use the common owning receiver for the actual Lowered Input and Final. Internal transport moves physical ownership without saving semantic verification or granting execution permission. An external packet borrows only its synchronous input; the reader decodes the same kind of owned Input. Before preparation and again after its callbacks, the receiver independently verifies current semantics, complete declarations, body, layouts and actual descriptors. Only success transfers Input, entries and parameter tables together; refusal preserves caller ownership and an empty output. Program retains the received Input's canonical declarations directly. Destruction and failure cleanup request no fresh resources.
+
+A birth function's Source correspondence follows the authentic specialization map and compares the new Lowered body and layouts against Program's owned Input and Final. Equal wire digests do not replace that receiving proof. Module lexical scope, storage and existing birth identities remain part of complete field comparison. Function, member, ref and Task execution permission still comes from the real Program, Instance and Call.
+
+This receiving layout uses Program ABI33; Value24, Call29 and Checked30/semantic76 are unchanged. Program32 and earlier prefixes are rejected without a borrowed Proof/layout reader or compatibility alias. An independent declaration model and host C11 verify the actual Packet and ProgramSpec SDK layout; complete historical SDK vectors remain rejection inputs. Copies, deep reads, comparisons, failures and lifetimes continue to use the original cumulative ledger and first-failure state.
 
 ---
 

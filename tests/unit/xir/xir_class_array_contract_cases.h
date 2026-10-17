@@ -11,13 +11,13 @@
  *   Digest-valid old semantics reject before artifact allocation. Class field
  *   values use the same owned failure carrier as every other runtime value.
  */
-_Static_assert(XR_XIR_CHECKED_SCHEMA==25 && XR_XIR_CHECKED_CONTRACT==65,
+_Static_assert(XR_XIR_CHECKED_SCHEMA==30 && XR_XIR_CHECKED_CONTRACT==76,
     "class Array fields use the current default-binding schema and semantic contract");
-_Static_assert(XR_XIR_PROGRAM_ABI_VERSION==29 && XR_XIR_VALUE_ABI_VERSION==21 &&
-    XR_XIR_CALL_ABI_VERSION==26,"class field values use the current carrier ABIs");
+_Static_assert(XR_XIR_PROGRAM_ABI_VERSION==33 && XR_XIR_VALUE_ABI_VERSION==24 &&
+    XR_XIR_CALL_ABI_VERSION==29,"class field values use the current carrier ABIs");
 static uint8_t *class_array_old_contract(const uint8_t *bytes,size_t length,uint8_t revision) {
-    C(length>=64 && bytes[8]==25 && !bytes[9] && !bytes[10] && !bytes[11]);
-    C(bytes[12]==65 && !bytes[13] && !bytes[14] && !bytes[15]);
+    C(length>=64 && bytes[8]==30 && !bytes[9] && !bytes[10] && !bytes[11]);
+    C(bytes[12]==76 && !bytes[13] && !bytes[14] && !bytes[15]);
     C((revision>=47 && revision<=59)||revision==64);
     uint8_t *old=malloc(length);C(old);memcpy(old,bytes,length);old[12]=revision;
     old[8]=revision==64?25:revision==59?22:23;

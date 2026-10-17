@@ -48,7 +48,10 @@ static void panics_execution(const char *directory,const char *path,const char *
     const int64_t expected[]={445,445,445,445,445,0,11,11,420,420,123,3,19,445};
     XrXirSourceResult result=panics_source(directory,path,source,true);XrXirArtifact *lowered=panics_lower(&result);
     uint32_t entries[14];for (uint32_t i=0;i<14;++i) entries[i]=panics_find(xr_xir_compile_artifact_module(lowered),names[i]);
-    XrXirCSource generated={0};CHECK(xr_xir_compile_emit_c(lowered,"panics_matrix",16777216,&generated)==XR_XIR_OK);
+    XrXirCSource generated={0};
+    XrXirStatus emitted=xr_xir_compile_emit_c(lowered,"panics_matrix",16777216,&generated);
+    if (emitted!=XR_XIR_OK) fprintf(stderr,"panics matrix emit status=%u\n",(unsigned)emitted);
+    CHECK(emitted==XR_XIR_OK);
     CHECK(!strstr(generated.text,"({"));
     char output_path[2048];CHECK(snprintf(output_path,sizeof(output_path),"%s.matrix.c",generated_path)>0);
     FILE *output=fopen(output_path,"wb");CHECK(output);

@@ -11,6 +11,7 @@
  */
 #ifndef XIR_ARRAY_FILL_PIPELINE_H
 #define XIR_ARRAY_FILL_PIPELINE_H
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_types.h"
 #include "base/xsha256.h"
 #ifndef XR_FILL_COMPONENT
@@ -46,9 +47,9 @@ static XrXirStatus fill_allocate(const XrXirCompileContext *context, size_t coun
 static XrXirStatus fill_seal(FillCompile *run, unsigned mode) {
     if (!mode) return xr_xir_compile_vm_program_take(&run->lowered, &run->program);
 #if defined(XR_FILL_NATIVE)
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
-    CHECK(proof.length == array_fill_program.proof.length && !memcmp(proof.identity, array_fill_program.proof.identity, 32));
-    CHECK(!memcmp(proof.bytes, array_fill_program.proof.bytes, proof.length));
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
+    CHECK(proof.length == array_fill_program.packet.length && !memcmp(proof.identity, array_fill_program.packet.identity, 32));
+    CHECK(!memcmp(proof.bytes, array_fill_program.packet.bytes, proof.length));
     if (mode == 1) return xr_xir_compile_program_seal(&run->context, &array_fill_program, &run->program);
     FillMixed *owner = NULL;
     XrXirStatus status = fill_allocate(&run->context, 1, sizeof(*owner), (void **)&owner);
@@ -69,7 +70,7 @@ static XrXirStatus fill_seal(FillCompile *run, unsigned mode) {
         CHECK(native && vm);
         XrXirProgramSpec spec = array_fill_program;
         spec.entries = owner->entries; spec.types = module->types; spec.declarations = module->declarations;
-        spec.proof = xr_xir_compile_program_proof(artifact); spec.code = (XrXirCodeLease){owner, fill_mixed_free};
+        spec.packet = xir_program_packet_borrow(artifact); spec.code = (XrXirCodeLease){owner, fill_mixed_free};
         status = xr_xir_compile_program_seal(&run->context, &spec, &run->program);
     }
     if (status != XR_XIR_OK) { CHECK(!run->program); fill_mixed_free(owner); }
@@ -176,7 +177,7 @@ static FillCompile fill_build(size_t failure, XrCompileResourceLimits limits, un
     run.prefix_references = run.context.resources->references;
     run.prefix_blocks = instance_compile_live; run.prefix_bytes = instance_compile_bytes;
     if (fill_compiler_digest) {
-        XrXirProgramProof proof = xr_xir_compile_program_proof(run.lowered);
+        XrXirProgramPacket proof = xir_program_packet_borrow(run.lowered);
         fill_digest(source.text, source.length, run.c_sha); fill_digest(proof.bytes, proof.length, run.proof_sha);
     }
     run.c_bytes = source.length;

@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "xir/xxir_instance_binding.h"
+#include "xir/xxir_program_packet_internal.h"
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "xir_instance_compile_observer.h"
 #include "xir_runtime_allocations.h"
@@ -92,7 +93,7 @@ static void binding_program(bool boolean,int64_t answer,bool exported,unsigned *
         entries[i].resume=binding_resume;entries[i].environment=&image->entries[i];
     }
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,target,entries,4,lowered->declarations,
-        {image,binding_image_free},lowered->types,xr_xir_compile_program_proof(image->artifact)};
+        {image,binding_image_free},lowered->types,xir_program_packet_borrow(image->artifact)};
     CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,output)==XR_XIR_OK);
     native_fixture_owner_free(&compiler);*borrow=image;
 }

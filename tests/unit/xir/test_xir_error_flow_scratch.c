@@ -96,7 +96,8 @@ static void owner_free(XrXirCompileContext *c,uint64_t baseline){
 }
 static void golden(const XrXirEffects *e){
     static const XrXirEffect expected[]={XR_XIR_EFFECT_NONE,XR_XIR_EFFECT_MAY,XR_XIR_EFFECT_NONE,XR_XIR_EFFECT_NONE,XR_XIR_EFFECT_MAY};
-    for(uint32_t f=0;f<5;++f){const XrXirFunctionEffects *v=xr_xir_effects_function(e,f);CHECK(v && v->suspend==XR_XIR_EFFECT_NONE && v->throws==expected[f]);
+    for(uint32_t f=0;f<5;++f){XrXirEffectFacts v_read=xr_xir_effects_read(e,f);
+        const XrXirFunctionEffects *v=(v_read.status==XR_XIR_OK?&v_read.control:NULL);CHECK(v && v->suspend==XR_XIR_EFFECT_NONE && v->throws==expected[f]);
         CHECK(!xr_xir_effects_error_unknown(e,f));CHECK(xr_xir_effects_error_unidentified(e,f)==(f==1 || f==4));}
 }
 static XrXirStatus whole(const XrXirCompileContext *context){
@@ -128,7 +129,7 @@ static void storage_freshness(void){
     ErrorFixture f;fixture(&f);XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     XrXirFunctionEffects functions[5]={{0}};uint64_t errors[5]={0};XrXirEffects effects={0};
-    effects.count=5;effects.words=1;effects.functions=functions;effects.errors=errors;
+    effects.count=5;effects.outcomes_work.words=1;effects.outcomes_work.functions=functions;effects.outcomes_work.errors=errors;
     EffectTerms terms={0};terms.remaining=&c;ErrorFlow flow={0};flow.body=effect_body_raw_request(&c,&f.module);
     flow.effects=&effects;flow.remaining=&c;flow.terms=&terms;
     attempts=0;CHECK(error_function(&flow,1)==XR_XIR_OK && errors[1]==2);CHECK(attempts==1);

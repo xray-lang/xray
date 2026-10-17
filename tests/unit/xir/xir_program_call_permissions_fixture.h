@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Real checked bodies and bound VM entries survive source and packet destruction.
  */
+#include "xir/xxir_program_packet_internal.h"
 #ifndef XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H
 #define XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H
 
@@ -54,7 +55,7 @@ typedef struct PceWitness {
     bool empty_preserved, occupied_preserved;
     XrXirValue borrowed, taken, advertised;
     unsigned carrier_created, carrier_dropped;
-    XrXirValue slot_before;
+    XrXirValue slot_before, slot_value_before;
     XrXirInstanceState finished_state;
     XrXirCallStatus outcome, take_empty, take_occupied, stop, freed;
 } PceWitness;
@@ -194,7 +195,8 @@ static void pce_build(PceFixture *f, PceMode mode) {
     const XrXirModule *m = xr_xir_compile_artifact_module(f->lowered);
     CHECK(m->function_count <= PCE_MAX_FUNCTIONS && m->declarations->module_count == 1);
     CHECK(m->declarations->slot_count == 1 && m->declarations->slots[0].mutable == 1);
-    CHECK(m->declarations->slots[0].type == XR_XIR_I64);
+    CHECK(xr_xir_type_is_cell(m->types, m->declarations->slots[0].type));
+    CHECK(xr_xir_cell_element(m->types, m->declarations->slots[0].type) == XR_XIR_I64);
     f->functions = m->function_count;
     f->module = m->declarations->root_module;
     f->initializer = m->declarations->modules[f->module].initializer;
@@ -220,7 +222,7 @@ static void pce_build(PceFixture *f, PceMode mode) {
     }
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     const XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, entries, f->functions,
-        m->declarations, {f,pce_code_release}, m->types, xr_xir_compile_program_proof(f->lowered)};
+        m->declarations, {f,pce_code_release}, m->types, xir_program_packet_borrow(f->lowered)};
     CHECK(xr_xir_compile_program_seal(&f->compiler, &spec, &f->program) == XR_XIR_OK);
     pce_check_facts(f);
 }

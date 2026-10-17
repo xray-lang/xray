@@ -1,6 +1,7 @@
 /* Real Source and owned Checked round trips feed one target-bound Lowered image. */
 #ifndef ORDINARY_LIVE_LIMIT_COMPILE_H
 #define ORDINARY_LIVE_LIMIT_COMPILE_H
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_internal.h"
@@ -77,16 +78,16 @@ static XrXirArtifact *oll_lower(const XrXirCompileContext *context, XrXirArtifac
     CHECK(xr_xir_compile_artifact_verify(lowered, NULL) == XR_XIR_OK);
 #ifdef OLL_READY_GRAPH
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(lowered);
-    CHECK(proof.layouts); uint32_t answers = 0, thick = 0;
+    const XrXirFunctionLayout *layouts = xr_xir_compile_artifact_layout(lowered, 0);
+    CHECK(layouts); uint32_t answers = 0, thick = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *fn = &module->functions[f];
         if (fn->name_length != 6 || memcmp(fn->name, "answer", 6)) continue;
         ++answers; CHECK(fn->parameter_count == 1 && fn->parameters[0] == XR_XIR_I64 && fn->result == XR_XIR_I64);
         bool calls = false;
         for (uint32_t op = 0; op < fn->instruction_count; ++op) if (fn->instructions[op].op == XR_XIR_CALL) calls = true;
-        CHECK(!proof.layouts[f].owned_count);
-        if (calls) { CHECK(proof.layouts[f].frame_bytes >= 128 && proof.layouts[f].outgoing_count == 1); ++thick; }
+        CHECK(!layouts[f].owned_count);
+        if (calls) { CHECK(layouts[f].frame_bytes >= 128 && layouts[f].outgoing_count == 1); ++thick; }
     }
     CHECK(answers == 16 && thick == 15);
 #endif

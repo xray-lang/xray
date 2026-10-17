@@ -11,6 +11,7 @@
  *   Receiving owners preserve complete facts across producer destruction.
  *   Failure paths retain output ownership and charged resource limits.
  */
+#include "xir/xxir_program_packet_internal.h"
 #ifndef XIR_CONSTRUCTION_OWNER_CASES_H
 #define XIR_CONSTRUCTION_OWNER_CASES_H
 static void construction_dense_owner(void) {
@@ -95,7 +96,7 @@ static void construction_cross_owner(void) {
         reset_observer();
         XrXirCompileContext producer=context_new(UINT64_MAX);
         XrXirArtifact *lowered=owner_lowered(&producer),*checked=NULL;
-        XrXirProgramProof proof=xr_xir_compile_program_proof(lowered);
+        XrXirProgramPacket proof=xir_program_packet_borrow(lowered);
         CHECK(xr_xir_compile_checked_read(&producer,proof.bytes,proof.length,&checked,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(lowered);lowered=NULL;
         const XrXirConstruction *facts=xr_xir_compile_artifact_construction(checked);

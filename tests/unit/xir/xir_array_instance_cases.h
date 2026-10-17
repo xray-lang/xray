@@ -12,6 +12,7 @@
  */
 #ifndef XIR_ARRAY_INSTANCE_CASES_H
 #define XIR_ARRAY_INSTANCE_CASES_H
+#include "xir/xxir_program_packet_internal.h"
 #include "xir_native_metadata_fixture.h"
 #include "xir/xxir_instance_value.h"
 
@@ -226,7 +227,7 @@ static void array_instance_cases(void) {
         NativeFixtureOwner compiler = {0}; CHECK(native_fixture_owner_new(&compiler) == XR_XIR_OK);
         XrXirArtifact *proof = NULL;
         CHECK(native_metadata_fixture(&compiler.context, &spec, &proof) == XR_XIR_OK);
-        spec.proof = xr_xir_compile_program_proof(proof);
+        spec.packet = xir_program_packet_borrow(proof);
         XrXirProgram *program = NULL; XrXirInstance *instance = NULL;
         CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, &program) == XR_XIR_OK);
         xr_xir_compile_artifact_free(proof); proof = NULL; native_fixture_owner_free(&compiler);

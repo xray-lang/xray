@@ -11,6 +11,7 @@
  */
 #ifndef XIR_ROOT_PARAMETER_VISIBILITY_RUNTIME_H
 #define XIR_ROOT_PARAMETER_VISIBILITY_RUNTIME_H
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_program_internal.h"
 /* Match the existing program_root_permissions test: exercise the private key
@@ -128,7 +129,7 @@ static void visibility_runtime(void) {
                 entries[f].environment = NULL; entries[f].state_bytes = 0;
             }
             XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,target,entries,m->function_count,
-                m->declarations,{0},m->types,xr_xir_compile_program_proof(lowered)};
+                m->declarations,{0},m->types,xir_program_packet_borrow(lowered)};
             CHECK(xr_xir_compile_program_seal(&c, &spec, &program) == XR_XIR_OK);
             xr_xir_compile_artifact_free(lowered); lowered = NULL;
             memset(bindings, 0xa5, sizeof(bindings)); memset(entries, 0xa5, sizeof(entries));

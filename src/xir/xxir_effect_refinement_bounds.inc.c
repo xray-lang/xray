@@ -35,7 +35,7 @@ XR_FUNC XrXirStatus xir_effects_refinement_capture(const XrXirCompileContext *co
     const XrXirModule *source, const XrXirEffects *effects) {
     if (!xir_effects_context_matches(context,effects,source ? source->function_count : 0) ||
         !source || !source->declarations || !source->declarations->functions ||
-        effects->refinement || effects->contexts) return XR_XIR_BAD_STRUCTURE;
+        effects->refinement || effect_contexts_read(effects)) return XR_XIR_BAD_STRUCTURE;
     XrXirModule normalized=*source;
     if (!normalized.types) normalized.types=&effect_empty_types;
     source=&normalized;

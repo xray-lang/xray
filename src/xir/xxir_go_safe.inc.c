@@ -40,7 +40,7 @@ static XrXirStatus effect_go_safe(const XrXirModule *module, XrXirEffects *effec
          * A safe lexical cleanup body may execute inside an ordinary worker. */
         XrXirStatus qualified = effect_go_shape(module,f,graph,work);
         if (qualified != XR_XIR_OK && qualified != XR_XIR_BAD_TYPE) return qualified;
-        effects->go_safe[f] = qualified;
+        effects->outcomes_work.go_safe[f] = qualified;
         if (qualified != XR_XIR_OK) graph->queue[back++] = f;
     }
     /* Only the independent borrow shape propagates here. The shared solver
@@ -51,15 +51,15 @@ static XrXirStatus effect_go_safe(const XrXirModule *module, XrXirEffects *effec
         for (uint32_t e = graph->heads[callee]; e != UINT32_MAX; e = graph->edges[e].next) {
             if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
             uint32_t caller = graph->edges[e].caller;
-            if (effects->go_safe[caller] == XR_XIR_OK) {
-                effects->go_safe[caller] = XR_XIR_BAD_TYPE; graph->queue[back++] = caller;
+            if (effects->outcomes_work.go_safe[caller] == XR_XIR_OK) {
+                effects->outcomes_work.go_safe[caller] = XR_XIR_BAD_TYPE; graph->queue[back++] = caller;
             }
         }
     }
     for (uint32_t f = 0; f < effects->count; ++f) {
         if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
-        if (effects->root[f].requires_root || effects->root[f].unresolved)
-            effects->go_safe[f] = XR_XIR_BAD_TYPE;
+        if (effect_roots_read(effects)->root[f].requires_root || effect_roots_read(effects)->root[f].unresolved)
+            effects->outcomes_work.go_safe[f] = XR_XIR_BAD_TYPE;
     }
     return XR_XIR_OK;
 }

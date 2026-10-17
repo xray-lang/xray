@@ -37,8 +37,8 @@ static void scalar_control_build(ScalarControl *control, const char *backend) {
     const XrXirModule *module = xr_xir_compile_artifact_module(fixture->lowered);
     const XrXirProgramSpec *native = &task_scalar_native_program;
     CHECK(module->function_count <= SCALAR_FUNCTIONS && module->function_count == native->entry_count);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(fixture->lowered);
-    CHECK(proof.length == native->proof.length && !memcmp(proof.bytes, native->proof.bytes, proof.length));
+    XrXirProgramPacket packet = xir_program_packet_borrow(fixture->lowered);
+    CHECK(packet.length == native->packet.length && !memcmp(packet.bytes, native->packet.bytes, packet.length));
     bool vm = !strcmp(backend, "vm"), all_native = !strcmp(backend, "native"), root_native = !strcmp(backend, "native-vm");
     CHECK(vm || all_native || root_native || !strcmp(backend, "vm-native"));
     for (uint32_t f = 0; f < module->function_count; ++f) {
@@ -50,7 +50,7 @@ static void scalar_control_build(ScalarControl *control, const char *backend) {
         fixture->entries[f] = control->selected[f]; fixture->entries[f].resume = scalar_control_resume;
     }
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, native->target, fixture->entries, module->function_count,
-        module->declarations, {fixture, scalar_code_drop}, module->types, proof};
+        module->declarations, {fixture, scalar_code_drop}, module->types, packet};
     CHECK(xr_xir_compile_program_seal(context, &spec, &fixture->program) == XR_XIR_OK);
 }
 static bool scalar_control_frontier(ScalarControl *control, unsigned instance, unsigned frontier) {

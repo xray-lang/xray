@@ -30,6 +30,55 @@ struct XrXirCellProvenance {
     XrXirCellClassRoot *class_roots;
     uint64_t *class_dependencies;
 };
+
+static XrXirStatus cell_proof_storage_range(const XrXirCompileContext *context,
+    const void *memory,size_t count,size_t element,size_t alignment) {
+    if (!count) return XR_XIR_OK;
+    if ((uintptr_t)memory%alignment) return XR_XIR_BAD_STRUCTURE;
+    if (count>SIZE_MAX/element) return XR_XIR_BUDGET;
+    XrCompileResourceStatus status=xr_compile_resources_extent(context->resources,memory,count*element);
+    return status==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
+        status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+}
+#define CELL_STORAGE(pointer,count,type) do { \
+    XrXirStatus range_status=cell_proof_storage_range(context,pointer,count,sizeof(type),_Alignof(type)); \
+    if (range_status!=XR_XIR_OK) return range_status; \
+} while (0)
+XR_FUNC XrXirStatus xir_cell_provenance_storage(const XrXirCompileContext *context,
+    const XrXirCellProvenance *proof,uint32_t functions) {
+    if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
+    CELL_STORAGE(proof,1,XrXirCellProvenance);
+    if (proof->resources!=context->resources || proof->function_count!=functions)
+        return XR_XIR_BAD_STRUCTURE;
+    CELL_STORAGE(proof->functions,functions,CellProofFunction);
+    CELL_STORAGE(proof->origins,proof->value_count,uint8_t);
+    CELL_STORAGE(proof->roles,proof->value_count,uint8_t);
+    CELL_STORAGE(proof->tracked,proof->value_count,uint8_t);
+    CELL_STORAGE(proof->value_functions,proof->value_count,uint32_t);
+    CELL_STORAGE(proof->scope_parameters,proof->scope_count,uint32_t);
+    CELL_STORAGE(proof->class_roots,proof->class_count,XrXirCellClassRoot);
+    CELL_STORAGE(proof->class_dependencies,proof->class_dependency_count,uint64_t);
+    size_t dependencies=0;
+    for (uint32_t f=0;f<functions;++f) {
+        if (!xir_compile_work(context,12)) return XR_XIR_BUDGET;
+        const CellProofFunction *function=&proof->functions[f];
+        if (function->parameters>function->count || function->stored>function->count ||
+            function->begin>proof->value_count || function->stored>proof->value_count-function->begin ||
+            function->scope_begin>proof->scope_count || function->scopes>proof->scope_count-function->scope_begin ||
+            function->class_begin>proof->class_count || function->class_count>proof->class_count-function->class_begin ||
+            function->class_dependency_begin>proof->class_dependency_count ||
+            (function->class_words && function->stored>
+                (proof->class_dependency_count-function->class_dependency_begin)/function->class_words))
+            return XR_XIR_BAD_STRUCTURE;
+        if (function->words && function->stored>(SIZE_MAX-function->dependency_begin)/function->words)
+            return XR_XIR_BUDGET;
+        size_t end=function->dependency_begin+(size_t)function->stored*function->words;
+        if (end>dependencies) dependencies=end;
+    }
+    CELL_STORAGE(proof->dependencies,dependencies,uint64_t);
+    return XR_XIR_OK;
+}
+#undef CELL_STORAGE
 typedef struct CellProofEdge {
     uint32_t from, to, next, reverse;
     bool identity;
@@ -1143,6 +1192,8 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_provenance_body_matches(const XrXirCompi
         return XR_XIR_BAD_STRUCTURE;
     XrXirCellProvenance *fresh=NULL;XrXirDiagnostic location={0};
     XrXirStatus status=cell_proof_derive(context,body,&fresh,&location);
+    if (status==XR_XIR_OK) status=xir_cell_provenance_storage(context,proof,body->domain.function_count);
+    if (status==XR_XIR_OK) status=xir_cell_provenance_storage(context,fresh,body->domain.function_count);
     if (status==XR_XIR_OK) status=cell_proof_matches(context,proof,fresh);
     xr_xir_compile_cell_provenance_free(fresh);
     location.status=status;if (diagnostic) *diagnostic=location;

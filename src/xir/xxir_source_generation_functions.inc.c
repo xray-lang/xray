@@ -37,14 +37,8 @@ static XrXirStatus generation_actual_program(GenerationOrdinaryFunctions *receiv
     XrXirArtifact *closed=NULL,*lowered=NULL;
     const XrXirSpecializationReceiver receiver={receive,generation_ordinary_receive};
     XrXirStatus status=xr_xir_compile_specialize_receive(receive->source,&receiver,&closed,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&program->target,&lowered,NULL);
-    if (status==XR_XIR_OK && !xir_compile_work(receive->context,sizeof(program->checked_identity)))
-        status=XR_XIR_BUDGET;
-    if (status==XR_XIR_OK) {
-        XrXirProgramProof proof=xr_xir_compile_program_proof(lowered);
-        if (!proof.identity || memcmp(proof.identity,program->checked_identity,sizeof(program->checked_identity)))
-            status=XR_XIR_BAD_STRUCTURE;
-    }
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&program->permissions->target,&lowered,NULL);
+    if (status==XR_XIR_OK) status=xr_xir_compile_program_body_match(receive->context,program->permissions,lowered);
     if (status==XR_XIR_OK) {receive->closed=closed;closed=NULL;}
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(closed);
     return status;

@@ -249,7 +249,7 @@ static XrXirValueStatus instance_function_admission_state(XrXirInstance *receive
     if (receiver->stopping || root->stopping) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirInstance *states[]={root,root->prepared_generation};
     for (unsigned i=0;i<2;++i) {
-        if (!states[i]) continue;
+        if (!states[i] || states[i]==receiver) continue;
         if (!*work || !xr_xir_domain_work(root->domain,1)) return XR_XIR_VALUE_LIMIT;
         --*work;
         if (states[i]->function_gate==owner && !states[i]->stopping) {

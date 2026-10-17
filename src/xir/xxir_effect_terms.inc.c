@@ -93,14 +93,55 @@ static void *effect_terms_alloc(EffectTerms *pool, uint64_t count, size_t size) 
     memset(output,0,bytes);return output;
 }
 
+/* Only constructor capacity lives here. Semantic descriptors and their
+ * arena survive publication; type frames and matching stacks do not. */
+static void effect_terms_scratch_free(EffectTerms *pool) {
+    if (pool->match.memory || pool->match.resources) {
+        xr_xir_type_match_scratch_free(&pool->match);pool->match.resources=NULL;
+    }
+    for (uint32_t i=0;i<pool->stack_capacity;++i)
+        xr_compile_resources_free(pool->stack[i].children);
+    if (pool->stack) { xr_compile_resources_free(pool->stack);pool->stack=NULL; }
+    if (pool->cache) pool->cache=NULL;
+    if (pool->stack_capacity) pool->stack_capacity=0;
+    if (pool->stack_claimed) pool->stack_claimed=false;
+}
+
+static inline bool effect_terms_scratch_retired(const EffectTerms *pool) {
+    return pool && !pool->remaining && !pool->stack && !pool->cache &&
+        !pool->stack_capacity && !pool->stack_claimed && !pool->match.memory && !pool->match.resources;
+}
+
+/* Backbone holders borrow the original arena and its constructor pointers.
+ * They drop those pointer views; only the actual root frees the allocations. */
+static inline XrXirStatus effect_terms_retire(const XrXirCompileContext *work,EffectTerms *pool,bool owns_scratch) {
+    if (!xir_compile_context_valid(work) || !pool ||
+        (owns_scratch && (pool->stack_claimed || !!pool->stack!=!!pool->stack_capacity ||
+            (!!pool->cache!=!!pool->stack)))) return XR_XIR_BAD_STRUCTURE;
+    uint64_t units=(owns_scratch?pool->stack_capacity:0)+
+        sizeof(pool->remaining)*(pool->remaining!=NULL)+sizeof(pool->stack)*(pool->stack!=NULL)+
+        sizeof(pool->cache)*(pool->cache!=NULL)+sizeof(pool->stack_capacity)*(pool->stack_capacity!=0)+
+        sizeof(pool->stack_claimed)*(pool->stack_claimed!=false)+
+        sizeof(pool->match.memory)*(pool->match.memory!=NULL)+
+        sizeof(pool->match.resources)*(pool->match.resources!=NULL);
+    if (units && !xir_compile_work(work,units)) return XR_XIR_BUDGET;
+    if (owns_scratch) effect_terms_scratch_free(pool);
+    else {
+        if (pool->stack) pool->stack=NULL;
+        if (pool->cache) pool->cache=NULL;
+        if (pool->stack_capacity) pool->stack_capacity=0;
+        if (pool->stack_claimed) pool->stack_claimed=false;
+        if (pool->match.memory) pool->match.memory=NULL;
+        if (pool->match.resources) pool->match.resources=NULL;
+    }
+    if (pool->remaining) pool->remaining=NULL;
+    return XR_XIR_OK;
+}
+
 static void effect_terms_free(EffectTerms *pool) {
     xr_xir_compile_nominal_free(pool->owned_nominals);pool->owned_nominals=NULL;
     xr_xir_compile_interfaces_free(pool->owned_interfaces);pool->owned_interfaces=NULL;
-    xr_xir_type_match_scratch_free(&pool->match);
-    for (uint32_t i=0;i<pool->stack_capacity;++i)
-        xr_compile_resources_free(pool->stack[i].children);
-    xr_compile_resources_free(pool->stack);pool->stack=NULL;pool->cache=NULL;
-    pool->stack_capacity=0;pool->stack_claimed=false;
+    effect_terms_scratch_free(pool);
     while (pool->memory) {
         EffectTermMemory *memory=pool->memory;pool->memory=memory->next;
         xr_compile_resources_free(memory);

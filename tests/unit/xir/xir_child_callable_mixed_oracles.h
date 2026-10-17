@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Observe authentic callback bodies without replacing their active environments.
  */
+#include "xir/xxir_program_packet_internal.h"
 #ifndef XIR_CHILD_CALLABLE_MIXED_ORACLES_H
 #define XIR_CHILD_CALLABLE_MIXED_ORACLES_H
 
@@ -177,17 +178,17 @@ static void cm_build(CmFixture *f, bool root_native) {
     const XrXirProgramSpec *native = &child_callable_native_program;
     CHECK(native->entry_count == CN_FUNCTIONS && native->entries == child_callable_native_entries);
     CHECK(native->declarations && native->declarations->entry_function == CN_ENTRY);
-    CHECK(native->proof.bytes && native->proof.length && native->proof.identity && native->proof.layouts);
+    CHECK(native->packet.bytes && native->packet.length && native->packet.identity);
     XrXirArtifact *checked = NULL, *closed = NULL;
     XrXirDiagnostic diagnostic = {0};
-    CHECK(xr_xir_compile_checked_read(f->base.context, native->proof.bytes, native->proof.length,
+    CHECK(xr_xir_compile_checked_read(f->base.context, native->packet.bytes, native->packet.length,
         &checked, &diagnostic) == XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked, &closed, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_artifact_verify(closed, &diagnostic) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(closed, &packet, &diagnostic) == XR_XIR_OK);
-    CHECK(packet.length == native->proof.length && !memcmp(packet.bytes, native->proof.bytes, packet.length));
+    CHECK(packet.length == native->packet.length && !memcmp(packet.bytes, native->packet.bytes, packet.length));
     memset(packet.bytes, 0xa5, packet.length);
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_lower(closed, &native->target, &f->lowered, &diagnostic) == XR_XIR_OK);
@@ -204,13 +205,12 @@ static void cm_build(CmFixture *f, bool root_native) {
         CHECK(module->types->nodes[i + 1].kind == XR_XIR_TYPE_CALLABLE);
         CHECK(module->types->nodes[i + 1].flags == advertised[i]);
     }
-    XrXirProgramProof proof = xr_xir_compile_program_proof(f->lowered);
-    CHECK(proof.bytes && proof.identity && proof.layouts && proof.length == native->proof.length);
-    CHECK(!memcmp(proof.bytes, native->proof.bytes, proof.length) && !memcmp(proof.identity, native->proof.identity, 32));
+    XrXirProgramPacket proof = xir_program_packet_borrow(f->lowered);
+    CHECK(proof.bytes && proof.identity && xr_xir_compile_artifact_layout(f->lowered, 0) && proof.length == native->packet.length);
+    CHECK(!memcmp(proof.bytes, native->packet.bytes, proof.length) && !memcmp(proof.identity, native->packet.identity, 32));
     const unsigned root_provider = root_native ? CM_NATIVE : CM_VM;
     for (uint32_t i = 0; i < CN_FUNCTIONS; ++i) {
         CHECK(xr_xir_compile_vm_bind(f->lowered, i, &f->vm_bindings[i], &f->vm_entries[i]) == XR_XIR_OK);
-        cm_layout_equal(&proof.layouts[i], &native->proof.layouts[i], module->functions[i].parameter_count);
         f->providers[i] = root_provider;
         if (i == CN_CHILD || i == CN_PURE) f->providers[i] = 1u - root_provider;
         const XrXirCallEntry *selected = f->providers[i] == CM_NATIVE ? &native->entries[i] : &f->vm_entries[i];
@@ -234,6 +234,10 @@ static void cm_build(CmFixture *f, bool root_native) {
     CHECK(xr_xir_compile_program_seal(f->base.context, &spec, &f->base.program) == XR_XIR_OK);
     const XrXirProgramPermissions *permissions = f->base.program->permissions;
     CHECK(permissions && permissions->function_count == CN_FUNCTIONS);
+    CHECK(permissions->layouts);
+    for (uint32_t i = 0; i < CN_FUNCTIONS; ++i)
+        cm_layout_equal(xr_xir_compile_artifact_layout(f->lowered, i),
+            &permissions->layouts[i], module->functions[i].parameter_count);
     CHECK(!permissions->entries[CN_PURE].requires_root && !permissions->entries[CN_PURE].unresolved);
     CHECK(!permissions->entries[CN_RELAY].requires_root && !permissions->entries[CN_RELAY].unresolved);
     CHECK(permissions->entries[CN_RELAY].worker == XR_XIR_BAD_TYPE && permissions->entries[CN_CHILD].worker == XR_XIR_OK);

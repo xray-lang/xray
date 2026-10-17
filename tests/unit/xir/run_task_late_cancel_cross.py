@@ -60,7 +60,7 @@ def run(tag,args):
                 except json.JSONDecodeError as e:row['malformed'].append({'line':number,'raw':line,'error':str(e)})
         assert not row['malformed'] and not timed_out and code==0,row
         assert len(row['facts']['CENSUS_FINAL'])==1
-        final=row['facts']['CENSUS_FINAL'][0];assert final['physical']==[0,0] and final['semantic']==73
+        final=row['facts']['CENSUS_FINAL'][0];assert final['physical']==[0,0] and final['semantic']==76
         assert row['facts']['CENSUS_LAYOUT']==[{'string':104,'enum_one_field':104,'admission_frame':40,'call_result':72}]
         assert len(row['facts']['CROSS_RESULT'])==2
         assert all(x['epoch']==1 and x['limits']==LIMITS for x in row['facts']['CROSS_RESULT'])

@@ -12,6 +12,7 @@
  *   The VM process owns decoded facts after all borrowed packet inputs die.
  */
 #if defined(XR_SOURCE_STATIC_PACKET_WRITER)
+#include "xir/xxir_program_packet_internal.h"
 #include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #endif
@@ -28,7 +29,7 @@
 #include "static_methods_source_shape.h"
 _Static_assert(XR_XIR_CHECKED_SCHEMA == 30u && XR_XIR_CHECKED_CONTRACT == 76u, "Exact formal Checked identity");
 _Static_assert(XR_XIR_VALUE_ABI_VERSION == 24u && XR_XIR_CALL_ABI_VERSION == 29u &&
-    XR_XIR_PROGRAM_ABI_VERSION == 32u, "Exact formal public runtime identity");
+    XR_XIR_PROGRAM_ABI_VERSION == 33u, "Exact formal public runtime identity");
 
 /* Observe an actual owner. Complete admission belongs to the public verifier. */
 static void construction_owner(const XrXirArtifact *artifact, const XrXirCompileContext *caller) {
@@ -188,8 +189,8 @@ static int write_source_packet(char **argv) {
         StaticEntries actual = source_entries(xr_xir_compile_artifact_module(lowered));
         CHECK(actual.entry == entries.entry && actual.answer == entries.answer && actual.private_answer == entries.private_answer);
         CHECK(actual.value_methods[0] == entries.value_methods[0] && actual.value_methods[1] == entries.value_methods[1]);
-        XrXirProgramProof proof = xr_xir_compile_program_proof(lowered);
-        CHECK(proof.bytes && proof.length && proof.identity && proof.layouts);
+        XrXirProgramPacket proof = xir_program_packet_borrow(lowered);
+        CHECK(proof.bytes && proof.length && proof.identity && xr_xir_compile_artifact_layout(lowered, 0));
         CHECK(proof.length == exported_closed.length &&
             !memcmp(proof.bytes, exported_closed.bytes, proof.length));
         uint8_t identity[32]; xr_sha256(exported_closed.bytes, exported_closed.length, identity);
@@ -302,7 +303,7 @@ static XrXirProgram *packet_vm_seal(const XrXirCompileContext *context, XrXirArt
     }
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_compile_artifact_target(*lowered),
         owner->entries, owner->count, module->declarations, {owner, packet_vm_release}, module->types,
-        xr_xir_compile_program_proof(*lowered)};
+        xir_program_packet_borrow(*lowered)};
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(context, &spec, &program) == XR_XIR_OK && program);
     owner->lowered = *lowered; *lowered = NULL; packet_vm_owner = owner;
@@ -384,11 +385,11 @@ static int run_source_free_packet(char **argv) {
     StaticEntries actual = source_entries(xr_xir_compile_artifact_module(lowered));
     CHECK(actual.entry == entries.entry && actual.answer == entries.answer && actual.private_answer == entries.private_answer);
     CHECK(actual.value_methods[0] == entries.value_methods[0] && actual.value_methods[1] == entries.value_methods[1]);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(lowered);
-    CHECK(proof.bytes && proof.length && proof.identity && proof.layouts && !memcmp(identity, proof.identity, sizeof(identity)));
+    XrXirProgramPacket proof = xir_program_packet_borrow(lowered);
+    CHECK(proof.bytes && proof.length && proof.identity && xr_xir_compile_artifact_layout(lowered, 0) && !memcmp(identity, proof.identity, sizeof(identity)));
     CHECK(proof.length == expected_closed.length && !memcmp(proof.bytes, expected_closed.bytes, proof.length));
     xr_xir_compile_checked_packet_free(&expected_closed);
-    packet_poison(identity, sizeof(identity)); proof = (XrXirProgramProof){0};
+    packet_poison(identity, sizeof(identity)); proof = (XrXirProgramPacket){0};
     XrXirProgram *program = packet_vm_seal(context, &lowered);
     CHECK(!lowered && program && packet_vm_owner);
     run_packet_instances(&program, entries);

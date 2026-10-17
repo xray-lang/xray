@@ -6,6 +6,7 @@
  *
  * test_xir_assert_equal_native.c - Actual native and mixed typed equality outcomes
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_source_query.h"
@@ -42,7 +43,7 @@ static void equal_native_cases(XrXirProgram *program) {
     CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);equal_held_messages(held);
 }
 static void equal_native_mixed(const XrXirProgramSpec *native,bool root_native) {
-    XrXirArtifact *checked=NULL;CHECK(xr_xir_compile_checked_read(assert_compile_context,native->proof.bytes,native->proof.length,&checked,NULL)==XR_XIR_OK);
+    XrXirArtifact *checked=NULL;CHECK(xr_xir_compile_checked_read(assert_compile_context,native->packet.bytes,native->packet.length,&checked,NULL)==XR_XIR_OK);
     EqualNativeOwner *owner=xr_calloc(1,sizeof(*owner));CHECK(owner);
     CHECK(xr_xir_compile_lower(checked,&native->target,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(owner->artifact);CHECK(module->function_count==native->entry_count);
@@ -56,17 +57,17 @@ static void equal_native_mixed(const XrXirProgramSpec *native,bool root_native) 
     }
     CHECK(native_count && vm_count);
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,native->target,owner->entries,module->function_count,
-        module->declarations,{owner,equal_native_release},module->types,xr_xir_compile_program_proof(owner->artifact)};
+        module->declarations,{owner,equal_native_release},module->types,xir_program_packet_borrow(owner->artifact)};
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(assert_compile_context,&spec,&program)==XR_XIR_OK);
     equal_native_cases(program);
 }
 int main(void) {
     assert_compile_begin();
     _Static_assert(sizeof(XrXirGeneric)==40 && sizeof(XrXirSourceDeclaration)==120,"internal result-role metadata requires fresh consumers");
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==21 && sizeof(XrXirValue)==16,"public value ABI");
-    _Static_assert(XR_XIR_CALL_ABI_VERSION==26 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==24 && sizeof(XrXirValue)==16,"public value ABI");
+    _Static_assert(XR_XIR_CALL_ABI_VERSION==29 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
         sizeof(XrXirCallView)==216 && sizeof(XrXirCallEntry)==64,"public call ABI");
-    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==29 && sizeof(XrXirProgramSpec)==96,"public program ABI");
+    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==33 && sizeof(XrXirProgramSpec)==88,"public program ABI");
     const XrXirProgramSpec *spec=&equal_checked_program;
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(assert_compile_context,spec,&program)==XR_XIR_OK);
     equal_native_cases(program);CHECK(!runtime_live && !runtime_bytes);

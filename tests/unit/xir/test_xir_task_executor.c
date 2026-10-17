@@ -6,6 +6,7 @@
  *
  * test_xir_task_executor.c - Typed queued owners and complete physical release
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_task_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -105,7 +106,7 @@ static void task_fixture_new(TaskFixture *fixture) {
     XrXirStatus proof_status = native_metadata_fixture(&fixture->compiler.context, &spec, &proof);
     if (proof_status != XR_XIR_OK) fprintf(stderr, "metadata proof status=%d\n", (int)proof_status);
     CHECK(proof_status == XR_XIR_OK);
-    spec.proof = xr_xir_compile_program_proof(proof);
+    spec.packet = xir_program_packet_borrow(proof);
     CHECK(xr_xir_compile_program_seal(&fixture->compiler.context, &spec, &fixture->program) == XR_XIR_OK);
     xr_xir_compile_artifact_free(proof);
     const XrXirTypeNode nodes[] = {{.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64},

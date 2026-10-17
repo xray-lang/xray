@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Every selected entry shares the sealed Program's exact proof and declarations.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "base/xsha256.h"
@@ -72,14 +73,14 @@ static void nested_reject_old_contract(SourceFixtureOwner *owner, const XrXirPro
     CHECK(spec->target.abi_version==XR_XIR_VALUE_ABI_VERSION && spec->abi_version==XR_XIR_PROGRAM_ABI_VERSION);
     CHECK(xr_xir_compile_checked_read(&owner->context,nested_old_single_packet,
         sizeof(nested_old_single_packet),&read,NULL)==XR_XIR_BAD_STRUCTURE && !read);
-    malformed.proof.bytes=nested_old_single_packet;
-    malformed.proof.length=sizeof(nested_old_single_packet);
-    malformed.proof.identity=nested_old_single_identity;
+    malformed.packet.bytes=nested_old_single_packet;
+    malformed.packet.length=sizeof(nested_old_single_packet);
+    malformed.packet.identity=nested_old_single_identity;
     CHECK(xr_xir_compile_program_seal(&owner->context,&malformed,&program)==XR_XIR_BAD_STRUCTURE && !program);
     /* Reconstruct old62/59 from the independently preserved old63 body. Both
      * packet digest and full proof identity are independently verified below. */
     uint8_t old_nested[1689];uint8_t identity[32];XrSHA256Context sha;
-    CHECK(spec->proof.length==sizeof(old_nested));memcpy(old_nested,spec->proof.bytes,sizeof(old_nested));
+    CHECK(spec->packet.length==sizeof(old_nested));memcpy(old_nested,spec->packet.bytes,sizeof(old_nested));
     CHECK(old_nested[8]==25 && old_nested[12]==65 && !old_nested[13] && !old_nested[14] && !old_nested[15]);
     /* Preserve the genuine complete prior body. Current opcodes moved, so
      * relabeling the current body would not reconstruct old62/59 packets. */
@@ -87,7 +88,7 @@ static void nested_reject_old_contract(SourceFixtureOwner *owner, const XrXirPro
     memcpy(old_nested,nested_nullable_golden,sizeof(old_nested));
     CHECK(xr_xir_compile_checked_read(&owner->context,old_nested,sizeof(old_nested),&read,NULL)==XR_XIR_BAD_STRUCTURE && !read);
     xr_sha256(old_nested,sizeof(old_nested),identity);
-    malformed=*spec;malformed.proof.bytes=old_nested;malformed.proof.length=sizeof(old_nested);malformed.proof.identity=identity;
+    malformed=*spec;malformed.packet.bytes=old_nested;malformed.packet.length=sizeof(old_nested);malformed.packet.identity=identity;
     CHECK(xr_xir_compile_program_seal(&owner->context,&malformed,&program)==XR_XIR_BAD_STRUCTURE && !program);
     old_nested[12]=62;
     xr_sha256_init(&sha);xr_sha256_update(&sha,old_nested,32);
@@ -98,7 +99,7 @@ static void nested_reject_old_contract(SourceFixtureOwner *owner, const XrXirPro
         0x7d,0xd3,0x40,0xd5,0x9e,0xf4,0x99,0xe8,0xac,0xe8,0xc7,0xe4,0xbd,0x9d,0x78,0x2b};
     CHECK(!memcmp(identity,old62_identity,sizeof(identity)));
     CHECK(xr_xir_compile_checked_read(&owner->context,old_nested,sizeof(old_nested),&read,NULL)==XR_XIR_BAD_STRUCTURE && !read);
-    malformed=*spec;malformed.proof.bytes=old_nested;malformed.proof.length=sizeof(old_nested);malformed.proof.identity=old62_identity;
+    malformed=*spec;malformed.packet.bytes=old_nested;malformed.packet.length=sizeof(old_nested);malformed.packet.identity=old62_identity;
     CHECK(xr_xir_compile_program_seal(&owner->context,&malformed,&program)==XR_XIR_BAD_STRUCTURE && !program);
     old_nested[8]=23;old_nested[12]=59;
     xr_sha256_init(&sha);xr_sha256_update(&sha,old_nested,32);
@@ -106,8 +107,8 @@ static void nested_reject_old_contract(SourceFixtureOwner *owner, const XrXirPro
     xr_sha256(old_nested,sizeof(old_nested),identity);
     CHECK(!memcmp(identity,nested_old_nested_identity,sizeof(identity)));
     CHECK(xr_xir_compile_checked_read(&owner->context,old_nested,sizeof(old_nested),&read,NULL)==XR_XIR_BAD_STRUCTURE && !read);
-    malformed=*spec;malformed.proof.bytes=old_nested;malformed.proof.length=sizeof(old_nested);
-    malformed.proof.identity=nested_old_nested_identity;
+    malformed=*spec;malformed.packet.bytes=old_nested;malformed.packet.length=sizeof(old_nested);
+    malformed.packet.identity=nested_old_nested_identity;
     CHECK(xr_xir_compile_program_seal(&owner->context,&malformed,&program)==XR_XIR_BAD_STRUCTURE && !program);
 }
 
@@ -116,8 +117,8 @@ static void nested_native_program(bool direction) {
     XrXirProgramSpec spec=nested_nullable_program;XrXirArtifact *checked=NULL,*lowered=NULL;
     XrXirCallEntry *entries=NULL;XrXirVmBinding *bindings=NULL;
     CHECK(nested_built.function_count==8);
-    CHECK(spec.entry_count==8 && spec.declarations && spec.types && spec.proof.bytes && spec.proof.identity);
-    CHECK(xr_xir_compile_checked_read(&owner.context,spec.proof.bytes,spec.proof.length,&checked,NULL)==XR_XIR_OK);
+    CHECK(spec.entry_count==8 && spec.declarations && spec.types && spec.packet.bytes && spec.packet.identity);
+    CHECK(xr_xir_compile_checked_read(&owner.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
     if(XR_NESTED_NULLABLE_MIXED){
         CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);
         CHECK(xr_compile_resources_calloc(owner.context.resources,8,sizeof(*entries),(void**)&entries)==XR_COMPILE_RESOURCE_OK);
@@ -133,10 +134,10 @@ static void nested_native_program(bool direction) {
         CHECK(vm && native);
         const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
         spec.entries=entries;spec.types=module->types;spec.declarations=module->declarations;
-        XrXirProgramProof proof=xr_xir_compile_program_proof(lowered);
-        CHECK(proof.identity && proof.length==spec.proof.length &&
-            !memcmp(proof.identity,spec.proof.identity,32) && !memcmp(proof.bytes,spec.proof.bytes,proof.length));
-        spec.proof=proof;
+        XrXirProgramPacket proof=xir_program_packet_borrow(lowered);
+        CHECK(proof.identity && proof.length==spec.packet.length &&
+            !memcmp(proof.identity,spec.packet.identity,32) && !memcmp(proof.bytes,spec.packet.bytes,proof.length));
+        spec.packet=proof;
     }
     xr_xir_compile_artifact_free(checked);
     nested_reject_old_contract(&owner,&spec);

@@ -58,7 +58,8 @@ TEST(product_profiles_install_exact_authority_and_reject_missing_profile) {
             ASSERT_TRUE(original_eval("var xs=[1,2,3]\nvar n=len(xs)\nfn count()->i64{return n}\nprint(42)\n"));
             ASSERT_TRUE(original_eval("const answer=count()\n"));ASSERT_TRUE(original_integer("answer",3));ASSERT_TRUE(original_integer("n",3));
             XrXirInstance *actual=instance_current(fixture.owner->submission->runtime);
-            ASSERT_TRUE(original_target(actual->program->target));ASSERT_NOT_NULL(actual->program->permissions);
+            ASSERT_NOT_NULL(actual->program->permissions);
+            ASSERT_TRUE(original_target(actual->program->permissions->target));
             ASSERT_NOT_NULL(actual->function_gate);ASSERT_EQ_INT(actual->config.abi_version,XR_XIR_CALL_ABI_VERSION);
             ASSERT_NOT_NULL(actual->config.time.clock);ASSERT_NULL(actual->config.trace);
         } else {
@@ -70,7 +71,8 @@ TEST(product_profiles_install_exact_authority_and_reject_missing_profile) {
             } else built=xray_source_compile_file(fixture.owner->compiler,
                 mode==0?XR_ORIGINAL_REPL_HOSTED "/program.xr":XR_ORIGINAL_REPL_HOSTED "/test.xr",&fixture.program,&fixture.diagnostic);
             ASSERT_EQ_INT(built,XR_SOURCE_OK);ASSERT_EQ_INT(api_program_code(fixture.program),XR_SOURCE_OK);
-            ASSERT_TRUE(original_target(fixture.program->code->target));ASSERT_NOT_NULL(fixture.program->code->permissions);
+            ASSERT_NOT_NULL(fixture.program->code->permissions);
+            ASSERT_TRUE(original_target(fixture.program->code->permissions->target));
             ASSERT_NOT_NULL(fixture.program->code->permissions->effects);
             XrSourceCallOptions options;original_host_options(&options);
             if(mode==2) {

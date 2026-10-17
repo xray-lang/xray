@@ -1,3 +1,4 @@
+#include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
@@ -79,7 +80,7 @@ static void program_fixture(PanicProgramFixture *f) {
     f->entries[1] = (XrXirCallEntry){XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_I64,
         sizeof(CarrierFrame), program_entry, program_release, f, 0, 0};
     f->spec = (XrXirProgramSpec){XR_XIR_PROGRAM_ABI_VERSION, target, f->entries, 2,
-        owned->declarations, {0}, NULL, xr_xir_compile_program_proof(f->lowered)};
+        owned->declarations, {0}, NULL, xir_program_packet_borrow(f->lowered)};
 }
 static void abi_cases(void) {
     PanicProgramFixture fixture; program_fixture(&fixture);
@@ -110,7 +111,7 @@ static void abi_cases(void) {
     XrXirProgram *refused = NULL; runtime_attempts = 0;
     CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(fixture.lowered), &fixture.spec, &refused) == XR_XIR_BAD_LAYOUT);
     CHECK(!refused && !runtime_attempts && !old_provider_callbacks()); fixture.entries[0] = saved;
-    const XrXirProgramProof proof = fixture.spec.proof;
+    const XrXirProgramPacket proof = fixture.spec.packet;
     CHECK(proof.length >= 64);
     uint8_t *old = xr_malloc(proof.length); CHECK(old);
     memcpy(old, proof.bytes, proof.length); old[12] = 53; old[13] = old[14] = old[15] = 0;

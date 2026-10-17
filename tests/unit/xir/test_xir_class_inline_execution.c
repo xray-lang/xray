@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   One Checked source graph feeds independent VM and native expected results.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_class.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
@@ -45,17 +46,17 @@ int main(void){
  C(xr_xir_compile_program_seal(&owner.context,&old,&program)==XR_XIR_BAD_LAYOUT && !program);
  old=spec;old.target.abi_version=13;old.declarations=(const XrXirDeclarations *)(uintptr_t)1;
  C(xr_xir_compile_program_seal(&owner.context,&old,&program)==XR_XIR_BAD_LAYOUT && !program);
- uint8_t *packet=malloc(spec.proof.length);C(packet);memcpy(packet,spec.proof.bytes,spec.proof.length);
- for(unsigned mode=0;mode<2;++mode){memcpy(packet,spec.proof.bytes,spec.proof.length);packet[mode?12:8]=mode?46:18;
- XrSHA256Context sha;xr_sha256_init(&sha);xr_sha256_update(&sha,packet,32);xr_sha256_update(&sha,packet+64,spec.proof.length-64);xr_sha256_final(&sha,packet+32);
- XrXirArtifact *rejected=NULL;C(xr_xir_compile_checked_read(&owner.context,packet,spec.proof.length,&rejected,NULL)==XR_XIR_BAD_STRUCTURE && !rejected);}free(packet);
+ uint8_t *packet=malloc(spec.packet.length);C(packet);memcpy(packet,spec.packet.bytes,spec.packet.length);
+ for(unsigned mode=0;mode<2;++mode){memcpy(packet,spec.packet.bytes,spec.packet.length);packet[mode?12:8]=mode?46:18;
+ XrSHA256Context sha;xr_sha256_init(&sha);xr_sha256_update(&sha,packet,32);xr_sha256_update(&sha,packet+64,spec.packet.length-64);xr_sha256_final(&sha,packet+32);
+ XrXirArtifact *rejected=NULL;C(xr_xir_compile_checked_read(&owner.context,packet,spec.packet.length,&rejected,NULL)==XR_XIR_BAD_STRUCTURE && !rejected);}free(packet);
  XrXirArtifact *checked=NULL,*lowered=NULL;XrXirCallEntry entries[32];XrXirVmBinding bindings[32];
- if(argc>1){C(spec.entry_count<=32);C(xr_xir_compile_checked_read(&owner.context,spec.proof.bytes,spec.proof.length,&checked,NULL)==XR_XIR_OK);
+ if(argc>1){C(spec.entry_count<=32);C(xr_xir_compile_checked_read(&owner.context,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
  C(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
  const XrXirModule *m=xr_xir_compile_artifact_module(lowered);unsigned native=0,vm=0;
  for(uint32_t f=0;f<spec.entry_count;++f){C(xr_xir_compile_vm_bind(lowered,f,&bindings[f],&entries[f])==XR_XIR_OK);
  if((f%2)==1){entries[f]=spec.entries[f];++native;}else{C(entries[f].resume!=spec.entries[f].resume);++vm;}}
- C(native && vm);spec.entries=entries;spec.declarations=m->declarations;spec.types=m->types;spec.proof=xr_xir_compile_program_proof(lowered);
+ C(native && vm);spec.entries=entries;spec.declarations=m->declarations;spec.types=m->types;spec.packet=xir_program_packet_borrow(lowered);
  }
  C(xr_xir_compile_program_seal(&owner.context,&spec,&program)==XR_XIR_OK);
  class_runtime_faults(program);

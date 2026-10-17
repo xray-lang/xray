@@ -11,6 +11,7 @@
  *   Native insertion sort retains its state while a real Lowered comparator
  *   returns to the host, resumes, throws, or is cancelled.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 #include "xir/xxir_call.h"
 #include "xir/xxir_vm.h"
@@ -299,8 +300,8 @@ static XrXirProgram *call_fixture_program(const XrXirCompileContext *context,
     XrXirProgramSpec spec={.abi_version=XR_XIR_PROGRAM_ABI_VERSION,
         .target=*xr_xir_compile_artifact_target(artifact),.entries=code->entries,.entry_count=5,
         .declarations=module->declarations,.code={code,call_fixture_code_drop},.types=module->types,
-        .proof=xr_xir_compile_program_proof(artifact)};
-    CHECK(spec.proof.bytes && spec.proof.length && spec.proof.identity && spec.proof.layouts);
+        .packet=xir_program_packet_borrow(artifact)};
+    CHECK(spec.packet.bytes && spec.packet.length && spec.packet.identity && xr_xir_compile_artifact_layout(artifact, 0));
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(context,&spec,&program)==XR_XIR_OK && program);
     return program;

@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Instance code owns its artifact and matches independent expected effects.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_program_internal.h"
 #include "base/xmalloc.h"
@@ -90,7 +91,7 @@ static void descriptor_correspondence(void) {
     for (uint32_t i = 0; i < 9; ++i)
         CHECK(xr_xir_compile_vm_bind(b, i, &bindings[i], &entries[i]) == XR_XIR_OK);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_compile_artifact_target(b),
-        entries, 9, module->declarations, {0}, module->types, xr_xir_compile_program_proof(b)};
+        entries, 9, module->declarations, {0}, module->types, xir_program_packet_borrow(b)};
     XrCompileResourceStats before=consumer_context_stats(&pair);
     CHECK(xr_xir_compile_program_match(&pair,&spec,b->layouts,a)==XR_XIR_OK);
     XrCompileResourceStats complete=consumer_context_stats(&pair);
@@ -233,7 +234,7 @@ static void capture_mixed(void) {
             (owner->entries[5].resume == native->entries[5].resume));
         XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,
             {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,6,module->declarations,
-            {owner,capture_mixed_release},module->types,xr_xir_compile_program_proof(owner->artifact)};
+            {owner,capture_mixed_release},module->types,xir_program_packet_borrow(owner->artifact)};
         XrXirProgram *program = NULL;
         CHECK(xr_xir_compile_program_seal(suite_context, &spec, &program) == XR_XIR_OK);
         capture_cases(program,throwing != 0); CHECK(mixed_releases == throwing*2+parity+1);
@@ -265,7 +266,7 @@ static void array_mixed(void) {
                 (owner->entries[3].resume == native[mode]->entries[3].resume));
             XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION,
                 {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,8,module->declarations,
-                {owner,array_mixed_release},module->types,xr_xir_compile_program_proof(owner->artifact)};
+                {owner,array_mixed_release},module->types,xir_program_packet_borrow(owner->artifact)};
             XrXirProgram *program = NULL;
             CHECK(xr_xir_compile_program_seal(suite_context, &spec, &program) == XR_XIR_OK);
             array_program_cases(program,mode != 0);

@@ -48,7 +48,7 @@ static void pc_unit_cell_controls(void) {
         CHECK(flow.cell_count==2 && flow.slots[first]!=UINT32_MAX && flow.slots[alias]!=UINT32_MAX);
         CHECK(error_read(&flow,flow.work,first)[0]==expected);
         CHECK(error_read(&flow,flow.work,alias)[0]==expected);
-        CHECK(flow.roots[alias]==flow.roots[first] && !e.errors[1]);
+        CHECK(flow.roots[alias]==flow.roots[first] && !e.outcomes_work.errors[1]);
         CHECK(flow.zero[0]==0 && flow.zero!=flow.work && flow.zero!=flow.snapshot);
         pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
     }

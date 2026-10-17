@@ -6,6 +6,7 @@
  *
  * test_xir_tuple_destructure_mixed.c - Owned grouped bindings across backend calls
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -34,7 +35,7 @@ static XrXirProgram *destructure_mixed_build(unsigned mode) {
     const XrXirProgramSpec *native=&tuple_destructure_program;
     const XrXirCompileContext *context=effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
     XrXirArtifact *checked=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_checked_read(context,native->proof.bytes,native->proof.length,&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context,native->packet.bytes,native->packet.length,&checked,NULL)==XR_XIR_OK);
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(checked,&target,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
@@ -47,7 +48,7 @@ static XrXirProgram *destructure_mixed_build(unsigned mode) {
     CHECK(xr_compile_resources_calloc(context->resources,1,sizeof(*owner),(void **)&owner)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_calloc(context->resources,module->function_count,sizeof(*owner->entries),
         (void **)&owner->entries)==XR_COMPILE_RESOURCE_OK);
-    XrXirProgramProof proof=xr_xir_compile_program_proof(lowered);
+    XrXirProgramPacket proof=xir_program_packet_borrow(lowered);
     CHECK(xr_xir_compile_vm_program_take(&lowered,&owner->vm_program)==XR_XIR_OK && !lowered);
     CHECK(owner->vm_program->entry_count==module->function_count);
     unsigned native_count=0,vm_count=0;

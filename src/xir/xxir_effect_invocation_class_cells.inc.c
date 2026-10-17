@@ -9,20 +9,20 @@
  * The same provider proves each true place subject. Only the exact equation's
  * complete masks and descending ranks substitute its conservative Class bit.
  */
-static XrXirStatus effect_invocation_class_cells_match(EffectInvocationWorkspace *owner,
+static XrXirStatus effect_invocation_class_cells_match(const EffectInvocationRead *owner,
     const EffectBodyRequest *body) {
-    if (!owner || !body || !owner->work || !owner->effects || !owner->final.cells ||
+    if (!owner || !body || !owner->work || !owner->effects || !owner->final->cells ||
         !xir_effects_context_matches(owner->work,owner->effects,body->domain.function_count))
         return XR_XIR_BAD_STRUCTURE;
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};
     XrXirStatus status=effect_cell_body_request(owner->work,body,&adapter,&read);
     if (status!=XR_XIR_OK) return status;
-    return xr_xir_compile_cell_provenance_body_matches(owner->work,owner->final.cells,&read,NULL);
+    return xr_xir_compile_cell_provenance_body_matches(owner->work,owner->final->cells,&read,NULL);
 }
 
 static XrXirStatus effect_invocation_class_cell_subject(EffectInvocationFlow *flow,
     const XrXirCellClassRoot *root,uint32_t *mask) {
-    EffectInvocationWorkspace *owner=flow->owner;
+    const EffectInvocationRead *owner=flow->read;
     if (!root || !mask || root->place<flow->function->parameter_count ||
         root->place>=flow->values || root->value>=flow->values) return XR_XIR_BAD_STRUCTURE;
     XrXirInstruction storage={0};const XrXirInstruction *place=NULL;
@@ -36,10 +36,10 @@ static XrXirStatus effect_invocation_class_cell_subject(EffectInvocationFlow *fl
         place->type!=subject || !xr_xir_type_is_class(flow->body.domain.types,subject))
         return XR_XIR_BAD_STRUCTURE;
     uint32_t selected=0;
-    status=effect_invocation_class_find(owner->work,&owner->final.nodes[flow->node],root->value,&selected);
+    status=effect_invocation_class_find(owner->work,&owner->final->nodes[flow->node],root->value,&selected);
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
-    const EffectInvocationClassFact *fact=&owner->final.nodes[flow->node].classes[selected];
+    const EffectInvocationClassFact *fact=&owner->final->nodes[flow->node].classes[selected];
     if (!fact->mask) return XR_XIR_UNRESOLVED;
     if ((fact->mask&~EFFECT_CLASS_VALID) || !(fact->mask&EFFECT_CLASS_KNOWN) ||
         (fact->mask==EFFECT_CLASS_KNOWN ? !fact->rank : fact->rank!=0))
@@ -51,12 +51,12 @@ static XrXirStatus effect_invocation_class_cell_subject(EffectInvocationFlow *fl
  * UNKNOWN seed and cannot certify None. Quiet residual filling stays intact. */
 static XrXirStatus effect_invocation_class_cell_view(EffectInvocationFlow *flow,
     uint32_t value,XrXirCellOriginView *output) {
-    EffectInvocationWorkspace *owner=flow->owner;
-    if (!output || !owner || !owner->work || !owner->effects || !owner->final.cells ||
-        flow->node>=owner->final.count || value>=flow->values) return XR_XIR_BAD_STRUCTURE;
+    const EffectInvocationRead *owner=flow->read;
+    if (!output || !owner || !owner->work || !owner->effects || !owner->final->cells ||
+        flow->node>=owner->final->count || value>=flow->values) return XR_XIR_BAD_STRUCTURE;
     XrXirCellClassOriginView view={0};
-    XrXirStatus status=xr_xir_compile_cell_class_origin_view(owner->work,owner->final.cells,
-        owner->final.nodes[flow->node].body,value,&view);
+    XrXirStatus status=xr_xir_compile_cell_class_origin_view(owner->work,owner->final->cells,
+        owner->final->nodes[flow->node].body,value,&view);
     if (status!=XR_XIR_OK) return status;
     uint32_t intrinsic=view.residual_intrinsic_mask;
     for (uint32_t w=0;w<view.word_count;++w) {
@@ -86,7 +86,7 @@ static XrXirStatus effect_invocation_cell(EffectInvocationFlow *flow,
 static XrXirStatus effect_invocation_cell_mask(EffectInvocationFlow *flow,
     const uint64_t *row,uint32_t *output) {
     if (!flow || !row || !output) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(flow->owner->work,4)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(flow->read->work,4)) return XR_XIR_BUDGET;
     uint32_t known=flow->basis.parameters+2,mask=0;
     if (!(row[known/64]&(UINT64_C(1)<<(known%64))))
         mask|=XR_XIR_CALLABLE_ROOT_UNRESOLVED;
@@ -107,11 +107,11 @@ static bool effect_invocation_cell_terminal(XrXirOp op) {
  * cannot replace an earlier real terminal with a later or forged witness. */
 static XrXirStatus effect_invocation_class_terminal_cause(EffectInvocationFlow *flow,
     uint32_t atom,XrXirRootEffectWitness witness,uint64_t *confirmed) {
-    EffectInvocationNode *node=&flow->owner->final.nodes[flow->node];
+    EffectInvocationNode *node=&flow->read->final->nodes[flow->node];
     if (!confirmed || atom>=node->cause_count || !effect_invocation_atom(node,
         flow->basis.parameters,atom,true)) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationCause *local=&effect_invocation_local_causes(node)[atom];
-    if (!xir_compile_work(flow->owner->work,6)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(flow->read->work,6)) return XR_XIR_BUDGET;
     if (!local->witness.cause || local->distance || local->witness.distance ||
         local->next!=UINT32_MAX || local->edge!=UINT32_MAX ||
         effect_root_cause_before(&witness,&local->witness)) return XR_XIR_BAD_STRUCTURE;
@@ -119,17 +119,17 @@ static XrXirStatus effect_invocation_class_terminal_cause(EffectInvocationFlow *
         local->witness.callee!=witness.callee || local->witness.slot!=witness.slot)
         return XR_XIR_OK;
     uint32_t bit=atom<2 ? atom : atom-flow->basis.parameters;
-    if (!xir_compile_work(flow->owner->work,2)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(flow->read->work,2)) return XR_XIR_BUDGET;
     confirmed[bit/64]|=UINT64_C(1)<<(bit%64);return XR_XIR_OK;
 }
 
 static XrXirStatus effect_invocation_class_terminals_match(EffectInvocationFlow *flow) {
-    EffectInvocationWorkspace *owner=flow->owner;
-    if (!owner || flow->node>=owner->final.count || !flow->physical || !flow->basis.cell_words)
+    const EffectInvocationRead *owner=flow->read;
+    if (!owner || flow->node>=owner->final->count || !flow->physical || !flow->basis.cell_words)
         return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationNode *node=&owner->final.nodes[flow->node];
+    const EffectInvocationNode *node=&owner->final->nodes[flow->node];
     if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-    if (!node->expanded || !effect_invocation_node_shape(node,flow->basis.parameters,
+    if (!effect_invocation_node_shape(node,flow->basis.parameters,
         flow->function->instruction_count)) return XR_XIR_BAD_STRUCTURE;
     uint64_t bytes=(uint64_t)flow->basis.cell_words*sizeof(uint64_t);
     if (bytes>SIZE_MAX/2) return XR_XIR_BUDGET;
@@ -191,14 +191,14 @@ static XrXirStatus effect_invocation_class_terminals_match(EffectInvocationFlow 
  * precision. Child joins cannot be copied back and called local evidence. */
 static XrXirStatus effect_invocation_cell_local(EffectInvocationFlow *flow,
     uint32_t atom,XrXirRootEffectWitness witness,bool *changed) {
-    EffectInvocationWorkspace *owner=flow->owner;
-    if (!flow->precision) return effect_invocation_local(owner,flow->node,atom,witness);
-    if (!changed || flow->node>=owner->final.count || witness.distance ||
+    const EffectInvocationRead *owner=flow->read;
+    if (!flow->precision) return effect_invocation_local(flow->owner,flow->node,atom,witness);
+    if (!changed || flow->node>=owner->final->count || witness.distance ||
         witness.instruction!=flow->instruction || witness.callee!=UINT32_MAX ||
         flow->instruction>=flow->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationNode *node=&owner->final.nodes[flow->node];
+    EffectInvocationNode *node=&owner->final->nodes[flow->node];
     if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-    if (!node->expanded || atom>=node->cause_count ||
+    if (!flow->owner->states || !flow->owner->states[flow->node].expanded || atom>=node->cause_count ||
         !effect_invocation_node_shape(node,flow->basis.parameters,flow->function->instruction_count))
         return XR_XIR_BAD_STRUCTURE;
     XrXirInstruction storage={0};const XrXirInstruction *op=NULL;

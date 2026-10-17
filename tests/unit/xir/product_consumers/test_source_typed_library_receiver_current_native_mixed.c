@@ -15,6 +15,7 @@
 #error "Writer and cancellation receiver are mutually exclusive"
 #endif
 #if defined(XR_SOURCE_TYPED_LIBRARY_NATIVE_PACKET_WRITER)
+#include "xir/xxir_program_packet_internal.h"
 #include "program/xr_xir_source_product.h"
 #include "toolchain/xcompiler_session.h"
 #include "xir/xxir_library_catalog.h"
@@ -67,7 +68,7 @@ _Static_assert(XR_XIR_CHECKED_SCHEMA == 30u && XR_XIR_CHECKED_CONTRACT == 76u, "
 _Static_assert(XR_XIR_LIBRARY_C_INTERFACE_VERSION == 2u, "Actual owned Catalog interface");
 #endif
 _Static_assert(XR_XIR_VALUE_ABI_VERSION == 24u && XR_XIR_CALL_ABI_VERSION == 29u &&
-    XR_XIR_PROGRAM_ABI_VERSION == 32u, "Formal public runtime identity");
+    XR_XIR_PROGRAM_ABI_VERSION == 33u, "Formal public runtime identity");
 
 typedef struct ReceiverRoles {
     uint32_t entry, answer, private_answer, child, constructor, nominal, library_module;
@@ -627,8 +628,8 @@ static bool detach_program(ReceiverRun *run, char **argv) {
     ReceiverRoles actual = receiver_shape(run->lowered);
     /* Specialization may renumber functions. Runtime uses current Lowered roles. */
     run->roles = actual;
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
-    CHECK(proof.bytes && proof.identity && proof.layouts && proof.length == run->expected_closed.length);
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
+    CHECK(proof.bytes && proof.identity && xr_xir_compile_artifact_layout(run->lowered, 0) && proof.length == run->expected_closed.length);
     CHECK(!memcmp(proof.bytes, run->expected_closed.bytes, proof.length));
     uint8_t identity[32]; xr_sha256(run->expected_closed.bytes, run->expected_closed.length, identity);
     CHECK(!memcmp(identity, proof.identity, sizeof(identity)));
@@ -696,12 +697,12 @@ static bool admit_packet(ReceiverRun *run, char **argv) {
     CHECK(completed(run, xr_xir_compile_artifact_verify(run->lowered, NULL), "receiver-Closed-dead-Lowered-full-verify"));
     construction_owner(run, run->lowered, "receiver-Lowered-real-Construction-full-v2");
     run->roles = receiver_shape(run->lowered);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
-    CHECK(proof.bytes && proof.identity && proof.layouts && proof.length == run->expected_closed.length);
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
+    CHECK(proof.bytes && proof.identity && xr_xir_compile_artifact_layout(run->lowered, 0) && proof.length == run->expected_closed.length);
     CHECK(!memcmp(proof.bytes, run->expected_closed.bytes, proof.length));
     CHECK(!memcmp(proof.identity, run->proof_identity, sizeof(run->proof_identity)));
     free_poisoned_packet(&run->expected_closed); poison(run->proof_identity, sizeof(run->proof_identity));
-    proof = (XrXirProgramProof){0};
+    proof = (XrXirProgramPacket){0};
     puts("receiver-input-poisoned-freed=1 Closed-owner-dead=1 same-wire-rewrite=1 full-Lowered-proof=1; independent-semantic-oracle=Worker40-child2-two-yields-I64-42");
     return true;
 }

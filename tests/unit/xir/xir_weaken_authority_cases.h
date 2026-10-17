@@ -6,6 +6,7 @@
  *
  * xir_weaken_authority_cases.h - Captured private bindings retain revocable authority
  */
+#include "xir/xxir_program_packet_internal.h"
 #ifndef XIR_WEAKEN_AUTHORITY_CASES_H
 #define XIR_WEAKEN_AUTHORITY_CASES_H
 typedef struct WeakenWitness {
@@ -67,7 +68,7 @@ static void weaken_authority_cases(void) {
         entries, 7, &declarations, {&witness.releases, function_case_release}, &types, {0}};
     NativeFixtureOwner compiler = {0}; CHECK(native_fixture_owner_new(&compiler) == XR_XIR_OK);
     XrXirArtifact *proof = NULL; CHECK(native_metadata_fixture(&compiler.context, &spec, &proof) == XR_XIR_OK);
-    spec.proof = xr_xir_compile_program_proof(proof);
+    spec.packet = xir_program_packet_borrow(proof);
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, &program) == XR_XIR_OK);
     xr_xir_compile_artifact_free(proof); proof = NULL; native_fixture_owner_free(&compiler);

@@ -6,6 +6,8 @@
  *
  * test_xir_root_go_consumption.c - Root permission and independent GO obligations
  */
+#include "xir_program_input_fixture.h"
+#include "xir/xxir_program_packet_internal.h"
 #include "base/xmalloc.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_effects.h"
@@ -86,10 +88,10 @@ static void go_proof(const XrXirArtifact *lowered,bool resources) {
     XrXirVmBinding *bindings=NULL;XrXirCallEntry *entries=NULL;
     CHECK(xr_xir_compile_vm_bind_table(lowered,&bindings,&entries)==XR_XIR_OK);
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,*xr_xir_compile_artifact_target(lowered),
-        entries,module->function_count,module->declarations,{0},module->types,xr_xir_compile_program_proof(lowered)};
-    XrXirProgramPermissions *authority=NULL;EffectMark mark=effect_mark();
-    CHECK(xr_xir_compile_program_proof_verify(&effect_context,&spec,&spec.proof,&authority)==XR_XIR_OK&&authority);
-    go_authority_oracles(module,authority);xir_program_permissions_free(authority);effect_mark_check(mark);
+        entries,module->function_count,module->declarations,{0},module->types,xir_program_packet_borrow(lowered)};
+    XrXirProgramPermissions *authority=NULL;XrXirProgramInput *program_input=NULL;EffectMark mark=effect_mark();
+    CHECK(program_fixture_decode_prepare(&effect_context,&spec,&spec.packet,&program_input,&authority)==XR_XIR_OK&&authority);
+    go_authority_oracles(module,authority);xir_program_permissions_free(authority);xir_program_input_free(program_input);effect_mark_check(mark);
     if(resources)go_authority_failures(&spec);
     xr_compile_resources_free(entries);xr_compile_resources_free(bindings);
 }
@@ -116,7 +118,7 @@ static void go_shape_cases(bool resources) {
         checked=go_replay(checked);XrXirEffects *effects=NULL;CHECK(effect_analyze(checked,&effects)==XR_XIR_OK);
         root_fact(effects,2,expected[mode].root,expected[mode].unknown);
         CHECK(xr_xir_effects_go_safe(effects,2)==expected[mode].status);
-        if(mode>=3)CHECK(xr_xir_effects_function(effects,2)->suspend==XR_XIR_EFFECT_NONE);
+        if(mode>=3)CHECK(xr_xir_effects_read(effects,2).control.suspend==XR_XIR_EFFECT_NONE);
         effect_summary_free(effects);effect_artifact_free(checked);
         XrXirDiagnostic diagnostic={0};checked=NULL;
         CHECK(go_shape_check(&effect_context,mode,true,&checked,&diagnostic)==expected[mode].status);

@@ -162,7 +162,7 @@ static void abi_code_release(void *owner) {
 static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     DWORD initial=handles();XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_measurement_limits);
     XrXirRuntimeSdk *sdk=admit(&request);XrXirCompileContext compile=context(request.resources);
-    CHECK(compile_owner_program.abi_version==30 && compile_owner_program.target.abi_version==24);
+    CHECK(compile_owner_program.abi_version==31 && compile_owner_program.target.abi_version==24);
     CHECK(compile_owner_program.entry_count==3 && compile_owner_program.entries);
     CHECK(!compile_owner_program.code.owner && !compile_owner_program.code.release);
     CHECK(compile_owner_program.entries[1].result==XR_XIR_I64 && !compile_owner_program.entries[1].parameter_count);
@@ -179,11 +179,13 @@ static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     XrXirProgram *program=NULL;XrCompileResourceStats before=sdk_stats(request.resources);
     SdkAbiPhysicalSnapshot physical=abi_physical();
     /* Retired Program and Value prefixes reject before entry traversal. */
-    XrXirProgramSpec old_program=spec;old_program.abi_version=29;
-    CHECK(xr_xir_compile_program_seal(&compile,&old_program,&program)==XR_XIR_BAD_LAYOUT && !program);
-    abi_refusal_stats(request.resources,before,0,physical);
-    CHECK(!sdk_abi_observation.resumes && !sdk_abi_observation.releases && !sdk_abi_observation.leases);
-    CHECK(!old_callback_count() && !old_release_count());
+    for (uint32_t retired_program=29;retired_program<=30;++retired_program) {
+        XrXirProgramSpec old_program=spec;old_program.abi_version=retired_program;
+        CHECK(xr_xir_compile_program_seal(&compile,&old_program,&program)==XR_XIR_BAD_LAYOUT && !program);
+        abi_refusal_stats(request.resources,before,0,physical);
+        CHECK(!sdk_abi_observation.resumes && !sdk_abi_observation.releases && !sdk_abi_observation.leases);
+        CHECK(!old_callback_count() && !old_release_count());
+    }
     const uint32_t old_values[]={20,22,23};
     for (uint32_t v=0;v<3;++v) {
         XrXirProgramSpec old_value=spec;old_value.target.abi_version=old_values[v];
@@ -234,7 +236,7 @@ static void current_entry_version(const XrXirRuntimeSdkRequest *original) {
     xr_compile_resources_free(entries);sdk_abi_observation=(SdkAbiObservation){0};
     xr_xir_runtime_sdk_free(sdk);xr_compile_resources_release(request.resources);
     CHECK(!runtime_live && !runtime_bytes && handles()==initial);
-    puts("SDK current Program30 rejects Program29, Value20/22/23 and entries Call24/25/26/27/28; standalone Call29 rejects Call24/25/26/27/28; real42/lease controls PASS");
+    puts("SDK current Program31 rejects Program29/30, Value20/22/23 and entries Call24/25/26/27/28; standalone Call29 rejects Call24/25/26/27/28; real42/lease controls PASS");
 }
 static void positive(const XrXirRuntimeSdkRequest *original) {
     DWORD initial=handles();XrXirRuntimeSdkRequest request=*original;request.resources=sdk_ledger(&sdk_measurement_limits);

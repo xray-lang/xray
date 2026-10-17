@@ -217,7 +217,7 @@ typedef struct GenerationInput {
     const XrXirSourceReplInput *repl;
     bool readers, interactive, type_query;
 } GenerationInput;
-static XrXirStatus generation_prepare(XrXirSourceGenerations *owner,
+static XrXirStatus source_generation_prepare(XrXirSourceGenerations *owner,
     const GenerationInput *input,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
     if (!owner || !input || ((input->text==NULL)==(input->ast==NULL)) || !serial || *serial)
         return XR_XIR_BAD_STRUCTURE;
@@ -289,27 +289,27 @@ done:
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare(XrXirSourceGenerations *owner,
     const XrXirSourceText *text,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
     const GenerationInput input={.text=text};
-    return generation_prepare(owner,&input,serial,diagnostic);
+    return source_generation_prepare(owner,&input,serial,diagnostic);
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_bindings(XrXirSourceGenerations *owner,
     const XrXirSourceText *text,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
     const GenerationInput input={.text=text,.readers=true};
-    return generation_prepare(owner,&input,serial,diagnostic);
+    return source_generation_prepare(owner,&input,serial,diagnostic);
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_ast_bindings(XrXirSourceGenerations *owner,
     const XrXirSourceAstOwner *ast,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
     const GenerationInput input={.ast=ast,.readers=true};
-    return generation_prepare(owner,&input,serial,diagnostic);
+    return source_generation_prepare(owner,&input,serial,diagnostic);
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_ast_bindings(XrXirSourceGenerations *owner,
     const XrXirSourceReplInput *repl,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
     const GenerationInput input={.ast=repl?repl->ast:NULL,.repl=repl,.readers=true,.interactive=true};
-    return generation_prepare(owner,&input,serial,diagnostic);
+    return source_generation_prepare(owner,&input,serial,diagnostic);
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare_repl_type_ast_bindings(XrXirSourceGenerations *owner,
     const XrXirSourceReplInput *repl,uint64_t *serial,XrXirSourceDiagnostic *diagnostic) {
     const GenerationInput input={.ast=repl?repl->ast:NULL,.repl=repl,.readers=true,.interactive=true,.type_query=true};
-    return generation_prepare(owner,&input,serial,diagnostic);
+    return source_generation_prepare(owner,&input,serial,diagnostic);
 }
 /* Common specialization preserves module and slot ordinals. Complete code
  * matching above those tables binds the actual closed pools; no name search
@@ -333,8 +333,8 @@ static XrXirStatus generation_program_correspondence(const XrXirCompileContext *
         map->function_count!=before->function_count ||
         after->declarations->module_count!=program->declarations->module_count ||
         after->declarations->slot_count!=program->declarations->slot_count) return XR_XIR_BAD_STRUCTURE;
-    if (prior->target.architecture!=program->target.architecture ||
-        prior->target.abi_version!=program->target.abi_version) return XR_XIR_BAD_LAYOUT;
+    if (prior->permissions->target.architecture!=program->permissions->target.architecture ||
+        prior->permissions->target.abi_version!=program->permissions->target.abi_version) return XR_XIR_BAD_LAYOUT;
     for (uint32_t m=0;m<map->module_count;++m) {
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
         if (map->modules[m]>=after->declarations->module_count ||

@@ -6,6 +6,7 @@
  *
  * test_xir_effects_mixed.c - Qualified callbacks across both backend directions
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "base/xmalloc.h"
@@ -35,7 +36,7 @@ static void effect_mixed(bool callback_native, bool methods) {
     const XrXirCompileContext context=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
     const XrXirProgramSpec *native = methods ? &method_source_program : &effect_source_program;
     XrXirArtifact *checked = NULL;
-    CHECK(xr_xir_compile_checked_read(&context, native->proof.bytes, native->proof.length, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&context, native->packet.bytes, native->packet.length, &checked, NULL) == XR_XIR_OK);
     EffectMixed *owner=NULL;
     CHECK(xr_compile_resources_calloc(context.resources,1,sizeof(*owner),(void **)&owner)==XR_COMPILE_RESOURCE_OK);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
@@ -44,7 +45,7 @@ static void effect_mixed(bool callback_native, bool methods) {
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->artifact);
     CHECK(module->function_count == native->entry_count);
     CHECK(xr_compile_resources_calloc(context.resources,module->function_count,sizeof(*owner->entries),(void **)&owner->entries)==XR_COMPILE_RESOURCE_OK);
-    XrXirProgramProof proof=xr_xir_compile_program_proof(owner->artifact);
+    XrXirProgramPacket proof=xir_program_packet_borrow(owner->artifact);
     CHECK(xr_xir_compile_vm_program_take(&owner->artifact,&owner->vm_program)==XR_XIR_OK && !owner->artifact);
     CHECK(owner->vm_program && owner->vm_program->entry_count==module->function_count);
     CHECK(owner->entries);

@@ -19,6 +19,7 @@
 #include "xxir_implementation_verify.h"
 #include "xxir_type_match_internal.h"
 #include "../base/xmalloc.h"
+#include "../base/xhash.h"
 #include <stdio.h>
 typedef struct SpecMemory { struct SpecMemory *next; } SpecMemory;
 typedef struct SpecInstance {
@@ -29,6 +30,7 @@ typedef struct SpecInstance {
     const XrXirEffectArgument *effects;
     uint32_t effect_count, owner;
 } SpecInstance;
+typedef struct SpecIndexEntry { uint32_t ordinal, hash; } SpecIndexEntry;
 typedef struct SpecTypeFrame { uint32_t index, next; XrXirTypeNode node; } SpecTypeFrame;
 typedef struct SpecContext {
     const XrXirModule *source;
@@ -42,6 +44,8 @@ typedef struct SpecContext {
     XrXirFunctionIdentity *identities;
     bool has_cleanup;
     SpecInstance *instances;
+    SpecIndexEntry *instance_index;
+    uint32_t index_capacity;
     uint32_t *ordinary;
     uint32_t count, capacity, cleanup_owner;
     XrXirTypes types;
@@ -183,6 +187,84 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
 }
 
 #include "xxir_effect_instance_key.inc.c"
+/* Hash only selects candidates in this request's destination type pool.
+ * Explicit scalar fields exclude padding; ordered vectors retain every element. */
+static bool spec_instance_hash(SpecContext *c, const SpecInstance *key, uint32_t *output) {
+    uint32_t header[] = {key->declaration, key->count, key->effect_count, key->owner};
+    if (!spec_work(c, 4 + 3 * sizeof(header))) return false;
+    uint32_t hash = xr_hash_bytes(header, sizeof(header));
+    if (key->count) {
+        uint64_t bytes = (uint64_t)key->count * sizeof(*key->arguments);
+        if (bytes > SIZE_MAX || !spec_work(c, key->count + 3 * bytes + 3 * sizeof(uint32_t) * 2)) return false;
+        uint32_t pair[] = {hash, xr_hash_bytes(key->arguments, (size_t)bytes)};
+        hash = xr_hash_bytes(pair, sizeof(pair));
+    }
+    for (uint32_t a = 0; a < key->effect_count; ++a) {
+        uint32_t row[] = {hash, key->effects[a].parameter, (uint32_t)key->effects[a].type};
+        if (!spec_work(c, 2 + 3 * sizeof(row))) return false;
+        hash = xr_hash_bytes(row, sizeof(row));
+    }
+    if (!spec_work(c, sizeof(*output))) return false;
+    *output = hash; return true;
+}
+static bool spec_instance_equal(SpecContext *c, const SpecInstance *a, const SpecInstance *b) {
+    if (!spec_work(c, 4)) return false;
+    if (a->declaration != b->declaration || a->count != b->count ||
+        a->effect_count != b->effect_count || a->owner != b->owner) return false;
+    for (uint32_t i = 0; i < a->count; ++i) {
+        if (!spec_work(c, 1)) return false;
+        if (a->arguments[i] != b->arguments[i]) return false;
+    }
+    return spec_effect_same(c, a, b->effects, b->effect_count);
+}
+static uint32_t spec_index_find(SpecContext *c, const SpecInstance *key, uint32_t hash) {
+    if (!c->index_capacity) return UINT32_MAX;
+    if (!spec_work(c, 2)) return UINT32_MAX;
+    uint32_t slot = hash & (c->index_capacity - 1);
+    for (uint32_t probe = 0; probe < c->index_capacity; ++probe) {
+        if (!spec_work(c, 4)) return UINT32_MAX;
+        SpecIndexEntry entry = c->instance_index[slot];
+        if (!entry.ordinal) return UINT32_MAX;
+        if (entry.hash == hash && spec_instance_equal(c, key, &c->instances[entry.ordinal - 1]))
+            return entry.ordinal - 1;
+        if (c->diagnostic.status != XR_XIR_OK || !spec_work(c, 3)) return UINT32_MAX;
+        slot = (slot + 1) & (c->index_capacity - 1);
+    }
+    c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return UINT32_MAX;
+}
+/* Existing entries already have distinct complete keys. Rehashing moves only
+ * cached hashes and ordinals, never element pointers or semantic identities. */
+static bool spec_index_place(SpecContext *c, SpecIndexEntry *table, uint32_t capacity, SpecIndexEntry entry) {
+    if (!spec_work(c, 2)) return false;
+    uint32_t slot = entry.hash & (capacity - 1);
+    for (uint32_t probe = 0; probe < capacity; ++probe) {
+        if (!spec_work(c, 2)) return false;
+        if (!table[slot].ordinal) {
+            if (!spec_work(c, sizeof(entry))) return false;
+            table[slot] = entry; return true;
+        }
+        if (!spec_work(c, 3)) return false;
+        slot = (slot + 1) & (capacity - 1);
+    }
+    c->diagnostic.status = XR_XIR_BAD_STRUCTURE; return false;
+}
+static bool spec_index_reserve(SpecContext *c) {
+    if (c->index_capacity && c->count < c->index_capacity / 2) return true;
+    if (c->index_capacity > UINT32_MAX / 2) { c->diagnostic.status = XR_XIR_BUDGET; return false; }
+    uint32_t capacity = c->index_capacity ? c->index_capacity * 2 : 8;
+    SpecIndexEntry *table = spec_alloc(c, capacity, sizeof(*table));
+    if (!table) return false;
+    /* Allocation clears the table through the same finite ledger. Prior tables
+     * remain on the request's memory chain and count toward live/peak limits. */
+    for (uint32_t slot = 0; slot < c->index_capacity; ++slot) {
+        if (!spec_work(c, 2)) return false;
+        SpecIndexEntry entry = c->instance_index[slot];
+        if (entry.ordinal && !spec_index_place(c, table, capacity, entry)) return false;
+    }
+    if (!spec_work(c, sizeof(c->instance_index) + sizeof(c->index_capacity))) return false;
+    c->instance_index = table; c->index_capacity = capacity; return true;
+}
+
 
 static bool spec_name(SpecContext *c, XrXirFunction *function, const SpecInstance *instance) {
     if (!instance->count && !instance->effect_count) return true;
@@ -216,19 +298,17 @@ static bool spec_name(SpecContext *c, XrXirFunction *function, const SpecInstanc
 }
 static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirType *types,
     uint32_t count, const XrXirEffectArgument *effects, uint32_t effect_count) {
-    for (uint32_t i = 0; i < c->count; ++i) {
-        if (!spec_work(c, (uint64_t) count + 1)) return UINT32_MAX;
-        if (c->instances[i].declaration == declaration && c->instances[i].count == count &&
-            (!count || !memcmp(c->instances[i].arguments, types, count * sizeof(*types))) &&
-            spec_effect_same(c,&c->instances[i],effects,effect_count) &&
-            c->instances[i].owner==c->cleanup_owner) return i;
-        if (c->diagnostic.status!=XR_XIR_OK) return UINT32_MAX;
-    }
+    SpecInstance key = {declaration, types, count, NULL, effects, effect_count, c->cleanup_owner};
+    uint32_t hash = 0;
+    if (!spec_instance_hash(c, &key, &hash)) return UINT32_MAX;
+    uint32_t existing = spec_index_find(c, &key, hash);
+    if (existing != UINT32_MAX || c->diagnostic.status != XR_XIR_OK) return existing;
     const XrXirFunction *source = &c->source->functions[declaration];
     if (c->count == c->capacity || source->parameter_count > c->remaining.limits.parameters ||
         source->instruction_count > c->remaining.limits.instructions || source->block_count > c->remaining.limits.blocks) {
         c->diagnostic.status = XR_XIR_BUDGET; return UINT32_MAX;
     }
+    if (!spec_index_reserve(c)) return UINT32_MAX;
     c->remaining.limits.parameters -= source->parameter_count;
     c->remaining.limits.instructions -= source->instruction_count;
     c->remaining.limits.blocks -= source->block_count;
@@ -284,6 +364,7 @@ static uint32_t spec_intern(SpecContext *c, uint32_t declaration, const XrXirTyp
             }
         }
     }
+    if (!spec_index_place(c, c->instance_index, c->index_capacity, (SpecIndexEntry){index + 1, hash})) return UINT32_MAX;
     return index;
 }
 static bool spec_calls(SpecContext *c, uint32_t index) {

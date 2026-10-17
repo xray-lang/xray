@@ -11,6 +11,7 @@
  */
 #ifndef XIR_CLASS_OWNED_ALLOCATIONS_H
 #define XIR_CLASS_OWNED_ALLOCATIONS_H
+#include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 #include "xir_class_owned_fixture.h"
 typedef struct ClassOwnedStages {
@@ -49,7 +50,7 @@ static XrXirStatus class_owned_stages_init(const XrXirCompileContext *context,Cl
     if(status==XR_XIR_OK) {
         const XrXirModule *m=xr_xir_compile_artifact_module(s->lowered);
         s->spec=(XrXirProgramSpec){XR_XIR_PROGRAM_ABI_VERSION,fixture_target,s->entries,5,m->declarations,
-            {NULL,NULL},m->types,xr_xir_compile_program_proof(s->lowered)};
+            {NULL,NULL},m->types,xir_program_packet_borrow(s->lowered)};
     }
     return status;
 }

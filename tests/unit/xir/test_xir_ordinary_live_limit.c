@@ -1,4 +1,5 @@
 /* Fixed live storage rejection after all module initializers became READY. */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_program.h"
 #include "xir/xxir_vm.h"
 #include <inttypes.h>
@@ -136,14 +137,14 @@ static XrXirProgram *oll_build(OllOwner *owner, const char *mode) {
 #ifdef OLL_VM
     XrXirArtifact *checked = NULL;
     if (!strcmp(mode, "source") || !strcmp(mode, "vm")) checked = oll_source(&context);
-    else CHECK(xr_xir_compile_checked_read(&context, spec.proof.bytes, spec.proof.length, &checked, NULL) == XR_XIR_OK);
+    else CHECK(xr_xir_compile_checked_read(&context, spec.packet.bytes, spec.packet.length, &checked, NULL) == XR_XIR_OK);
     owner->lowered = oll_lower(&context, checked, &spec.target, &owner->fixture);
     CHECK(owner->fixture.entry == ordinary_live_limit_fixture.entry && owner->fixture.run == ordinary_live_limit_fixture.run &&
         owner->fixture.recovery == ordinary_live_limit_fixture.recovery && owner->fixture.root == ordinary_live_limit_fixture.root);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(owner->lowered);
-    CHECK(proof.length == spec.proof.length && !memcmp(proof.bytes, spec.proof.bytes, proof.length) &&
-        !memcmp(proof.identity, spec.proof.identity, 32));
-    spec.proof = proof;
+    XrXirProgramPacket proof = xir_program_packet_borrow(owner->lowered);
+    CHECK(proof.length == spec.packet.length && !memcmp(proof.bytes, spec.packet.bytes, proof.length) &&
+        !memcmp(proof.identity, spec.packet.identity, 32));
+    spec.packet = proof;
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->lowered);
     spec.declarations = module->declarations; spec.types = module->types;
 #else

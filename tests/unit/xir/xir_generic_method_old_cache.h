@@ -17,30 +17,30 @@
 #include <stddef.h>
 #include <string.h>
 static void generic_method_old_cache(const XrXirCompileContext *context,const XrXirProgramSpec *native) {
-    CHECK(native && native->proof.bytes && native->proof.length >= 64);
+    CHECK(native && native->packet.bytes && native->packet.length >= 64);
     CHECK(!native->code.owner && !native->code.release);
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(context,native, &program) == XR_XIR_OK);
     xr_xir_compile_program_drop(program);
-    uint8_t *bytes=NULL; CHECK(xr_compile_resources_alloc(context->resources,native->proof.length,(void **)&bytes)==XR_COMPILE_RESOURCE_OK);
+    uint8_t *bytes=NULL; CHECK(xr_compile_resources_alloc(context->resources,native->packet.length,(void **)&bytes)==XR_COMPILE_RESOURCE_OK);
     for (uint32_t mode = 0; mode < 2; ++mode) {
-        memcpy(bytes,native->proof.bytes,native->proof.length);
+        memcpy(bytes,native->packet.bytes,native->packet.length);
         size_t offset = mode ? 12 : 8;
         uint32_t old = mode ? 45 : 17;
         for (uint32_t b = 0; b < 4; ++b) bytes[offset+b] = (uint8_t)(old >> (b*8));
         XrSHA256Context sha; xr_sha256_init(&sha);
         xr_sha256_update(&sha,bytes,32);
-        xr_sha256_update(&sha,bytes+64,native->proof.length-64);
+        xr_sha256_update(&sha,bytes+64,native->packet.length-64);
         xr_sha256_final(&sha,bytes+32);
-        uint8_t identity[32]; xr_sha256(bytes,native->proof.length,identity);
-        XrXirProgramSpec stale = *native; stale.proof.bytes = bytes; stale.proof.identity = identity;
+        uint8_t identity[32]; xr_sha256(bytes,native->packet.length,identity);
+        XrXirProgramSpec stale = *native; stale.packet.bytes = bytes; stale.packet.identity = identity;
         program = NULL;
         CHECK(xr_xir_compile_program_seal(context,&stale, &program) == XR_XIR_BAD_STRUCTURE);
         CHECK(!program);
     }
     xr_compile_resources_free(bytes);
 }
-_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 29,"runtime program metadata ABI");
+_Static_assert(XR_XIR_PROGRAM_ABI_VERSION == 33,"runtime program metadata ABI");
 _Static_assert(sizeof(void *) != 8 || sizeof(XrXirNominalIdentity) == 112,"runtime nominal identity stride");
 _Static_assert(sizeof(void *) != 8 || offsetof(XrXirNominalIdentity,flags) == 68,"runtime nominal final fact offset");
 _Static_assert(sizeof(XrXirFunctionIdentity) == 36,"runtime test role identity stride");

@@ -11,6 +11,7 @@
  */
 #ifndef XIR_ARRAY_CAPACITY_PIPELINE_H
 #define XIR_ARRAY_CAPACITY_PIPELINE_H
+#include "xir/xxir_program_packet_internal.h"
 #include "base/xsha256.h"
 #ifndef XR_CAPACITY_COMPONENT
 #define XR_CAPACITY_COMPONENT "transaction"
@@ -45,9 +46,9 @@ static XrXirStatus capacity_allocate(const XrXirCompileContext *context, size_t 
 static XrXirStatus capacity_seal(CapacityCompile *run, unsigned mode) {
     if (!mode) return xr_xir_compile_vm_program_take(&run->lowered, &run->program);
 #if defined(XR_CAPACITY_NATIVE)
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
-    CHECK(proof.length == array_capacity_program.proof.length && !memcmp(proof.identity, array_capacity_program.proof.identity, 32));
-    CHECK(!memcmp(proof.bytes, array_capacity_program.proof.bytes, proof.length));
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
+    CHECK(proof.length == array_capacity_program.packet.length && !memcmp(proof.identity, array_capacity_program.packet.identity, 32));
+    CHECK(!memcmp(proof.bytes, array_capacity_program.packet.bytes, proof.length));
     if (mode == 1) return xr_xir_compile_program_seal(&run->context, &array_capacity_program, &run->program);
     CapacityMixed *owner = NULL;
     XrXirStatus status = capacity_allocate(&run->context, 1, sizeof(*owner), (void **)&owner);
@@ -68,7 +69,7 @@ static XrXirStatus capacity_seal(CapacityCompile *run, unsigned mode) {
         CHECK(native && vm);
         XrXirProgramSpec spec = array_capacity_program;
         spec.entries = owner->entries; spec.types = module->types; spec.declarations = module->declarations;
-        spec.proof = xr_xir_compile_program_proof(artifact); spec.code = (XrXirCodeLease){owner, capacity_mixed_free};
+        spec.packet = xir_program_packet_borrow(artifact); spec.code = (XrXirCodeLease){owner, capacity_mixed_free};
         status = xr_xir_compile_program_seal(&run->context, &spec, &run->program);
     }
     if (status != XR_XIR_OK) { CHECK(!run->program); capacity_mixed_free(owner); }
@@ -152,7 +153,7 @@ static CapacityCompile capacity_build(size_t failure, XrCompileResourceLimits li
     run.prefix_references = run.context.resources->references;
     run.prefix_blocks = instance_compile_live; run.prefix_bytes = instance_compile_bytes;
     if (capacity_compiler_digest) {
-        XrXirProgramProof proof = xr_xir_compile_program_proof(run.lowered);
+        XrXirProgramPacket proof = xir_program_packet_borrow(run.lowered);
         capacity_digest(source.text, source.length, run.c_sha); capacity_digest(proof.bytes, proof.length, run.proof_sha);
     }
     run.c_bytes = source.length;

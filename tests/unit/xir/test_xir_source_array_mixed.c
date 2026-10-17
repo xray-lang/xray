@@ -6,6 +6,7 @@
  *
  * test_xir_source_array_mixed.c - Both directions of Array calls across VM/native
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -49,10 +50,10 @@ static void source_array_mixed(bool root_native, const char *packet_path,
     owner->artifact = source_array_lower(checked);
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->artifact);
     CHECK(module->function_count == native_program->entry_count && function_count <= ARRAY_FUNCTION_COUNT);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(owner->artifact);
-    CHECK(proof.identity && native_program->proof.identity && proof.length == native_program->proof.length);
-    CHECK(!memcmp(proof.identity, native_program->proof.identity, 32));
-    CHECK(!memcmp(proof.bytes, native_program->proof.bytes, proof.length));
+    XrXirProgramPacket proof = xir_program_packet_borrow(owner->artifact);
+    CHECK(proof.identity && native_program->packet.identity && proof.length == native_program->packet.length);
+    CHECK(!memcmp(proof.identity, native_program->packet.identity, 32));
+    CHECK(!memcmp(proof.bytes, native_program->packet.bytes, proof.length));
     uint32_t functions[ARRAY_FUNCTION_COUNT]; find(module, functions);
     CHECK(!memcmp(functions, native_functions, function_count * sizeof(functions[0])));
     CHECK(xr_compile_resources_calloc(compiler.context.resources, module->function_count,
@@ -69,7 +70,7 @@ static void source_array_mixed(bool root_native, const char *packet_path,
     }
     CHECK(native && vm);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
-        owner->entries, module->function_count, module->declarations, {owner, source_array_mixed_free}, module->types, xr_xir_compile_program_proof(owner->artifact)};
+        owner->entries, module->function_count, module->declarations, {owner, source_array_mixed_free}, module->types, xir_program_packet_borrow(owner->artifact)};
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(&compiler.context, &spec, &program) == XR_XIR_OK);
     run_cases(program, functions); program = NULL;

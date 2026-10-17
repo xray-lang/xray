@@ -16,21 +16,22 @@
 #include "xxir_call.h"
 #include "xxir_class_observation.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 32u
+#define XR_XIR_PROGRAM_ABI_VERSION 33u
 typedef struct XrXirProgram XrXirProgram;
+typedef struct XrXirProgramInput XrXirProgramInput;
 typedef struct XrXirInstance XrXirInstance;
 typedef struct XrXirCodeLease {
     void *owner;
     void (*release)(void *owner);
 } XrXirCodeLease;
-typedef struct XrXirProgramProof {
+/* External bytes borrow only their synchronous receiving call. They carry
+ * no layout pointers or permission bit; decoding creates the real owner. */
+typedef struct XrXirProgramPacket {
     const uint8_t *bytes;
     size_t length;
     const uint8_t *identity;
-    const XrXirFunctionLayout *layouts;
-} XrXirProgramProof;
-/* Borrowed until the source artifact is destroyed. */
-XR_FUNC XrXirProgramProof xr_xir_compile_program_proof(const XrXirArtifact *artifact);
+} XrXirProgramPacket;
+
 typedef struct XrXirProgramSpec {
     uint32_t abi_version;
     XrXirTarget target;
@@ -39,7 +40,7 @@ typedef struct XrXirProgramSpec {
     const XrXirDeclarations *declarations;
     XrXirCodeLease code;
     const XrXirTypes *types;
-    XrXirProgramProof proof;
+    XrXirProgramPacket packet;
 } XrXirProgramSpec;
 typedef enum XrXirInstanceState {
     XR_XIR_INSTANCE_NEW, XR_XIR_INSTANCE_INITIALIZING, XR_XIR_INSTANCE_READY,

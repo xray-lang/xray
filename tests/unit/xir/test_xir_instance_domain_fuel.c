@@ -11,6 +11,7 @@
  *   Real checked bodies supply Program permissions. Actual active callbacks
  *   spend the live Domain bank, while poll counts only bound resumes.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "base/xmalloc.h"
 #include "xir/xxir_program.h"
 #include "xir/xxir_value_internal.h"
@@ -176,8 +177,8 @@ static XrXirProgram *fuel_program(const XrXirCompileContext *context, FuelObserv
     XrXirProgramSpec spec={.abi_version=XR_XIR_PROGRAM_ABI_VERSION,
         .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.entries=entries,.entry_count=2,
         .declarations=module->declarations,.code={observation,fuel_code_release},
-        .types=module->types,.proof=xr_xir_compile_program_proof(lowered)};
-    CHECK(spec.proof.bytes && spec.proof.length && spec.proof.identity && spec.proof.layouts);
+        .types=module->types,.packet=xir_program_packet_borrow(lowered)};
+    CHECK(spec.packet.bytes && spec.packet.length && spec.packet.identity && xr_xir_compile_artifact_layout(lowered, 0));
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(context,&spec,&program)==XR_XIR_OK && program);
     xr_xir_compile_artifact_free(lowered);CHECK(!observation->releases);return program;

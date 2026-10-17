@@ -11,6 +11,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_program_packet_internal.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,8 +47,8 @@ static void constructed_build(ConstructedFixture *fixture, const char *backend) 
     const XrXirModule *module = xr_xir_compile_artifact_module(fixture->lowered);
     const XrXirProgramSpec *native = &task_constructed_native_program;
     CHECK(module->function_count <= CONSTRUCTED_FUNCTIONS && module->function_count == native->entry_count);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(fixture->lowered);
-    CHECK(proof.length == native->proof.length && !memcmp(proof.bytes, native->proof.bytes, proof.length));
+    XrXirProgramPacket packet = xir_program_packet_borrow(fixture->lowered);
+    CHECK(packet.length == native->packet.length && !memcmp(packet.bytes, native->packet.bytes, packet.length));
     bool vm = !strcmp(backend, "vm"), all_native = !strcmp(backend, "native");
     bool root_native = !strcmp(backend, "native-vm");
     CHECK(vm || all_native || root_native || !strcmp(backend, "vm-native"));
@@ -59,7 +60,7 @@ static void constructed_build(ConstructedFixture *fixture, const char *backend) 
         fixture->entries[f] = use_native ? native->entries[f] : entry;
     }
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, native->target, fixture->entries, module->function_count,
-        module->declarations, {fixture, constructed_code_drop}, module->types, proof};
+        module->declarations, {fixture, constructed_code_drop}, module->types, packet};
     CHECK(xr_xir_compile_program_seal(context, &spec, &fixture->program) == XR_XIR_OK);
     for (unsigned n = 0; n < CONSTRUCTED_CASES; ++n) for (unsigned mode = 0; mode < 2; ++mode)
         CHECK(fixture->entry[n][mode] == constructed_entries[n][mode]);

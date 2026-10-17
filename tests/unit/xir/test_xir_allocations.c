@@ -124,6 +124,7 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_task_budget.c"
 #include "xir/xxir_task.c"
 #include "xir/xxir_program_match.c"
+#include "xir/xxir_program_input.c"
 #include "xir/xxir_program.c"
 static void string_instance_retiring(void *pointer);
 static void allocation_instance_metadata_free(XrXirDomain *domain,void *pointer,uint64_t bytes);
