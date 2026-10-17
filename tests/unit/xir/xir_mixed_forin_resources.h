@@ -117,8 +117,21 @@ static bool forin_resource_value_status(ForinResourceRun *run,XrXirValueStatus s
     CHECK(status==(run->fault==XR_XIR_CALL_LIMIT?XR_XIR_VALUE_LIMIT:XR_XIR_VALUE_OOM));
     forin_resource_fault(run);return false;
 }
+/* A resource failure is accepted before its cleanup publishes a terminal result. */
+static void forin_resource_call_failure(ForinResourceRun *run,const XrXirCall *call,const XirTaskActivation *activation) {
+    if(!call)return;const XrXirTaskExecutor *executor=run->traces[run->owner].instance->executor;
+    CHECK(activation->call==call);
+    const XrXirExecutorBinding binding={executor,(void *)activation,executor->generation,activation->ticket};
+    XrXirCallStatus accepted=XR_XIR_CALL_READY;CHECK(xr_xir_call_driver_failure(call,&binding,&accepted));
+    if(accepted==run->fault)forin_resource_fault(run);
+    else CHECK(accepted==XR_XIR_CALL_READY || accepted==XR_XIR_CALL_BOUNDS || accepted==XR_XIR_CALL_CANCELLED);
+}
 static XrXirInstanceResult forin_resource_tick(ForinResourceRun *run,unsigned owner) {
     run->owner=owner;XrXirInstanceResult event=forin_tick(run->traces,owner);run->last[owner]=event;
+    const XrXirTaskExecutor *executor=run->traces[owner].instance->executor;
+    forin_resource_call_failure(run,executor->root.call,&executor->root);
+    for(const XirGenerator *g=executor->generators;g;g=g->active_next)forin_resource_call_failure(run,g->call,&g->activation);
+    if(executor->first_failure==run->fault)forin_resource_fault(run);
     if(event.outcome.status==run->fault)forin_resource_fault(run);
     else CHECK(event.outcome.status==XR_XIR_CALL_READY || event.outcome.status==XR_XIR_CALL_SUSPENDED || event.outcome.status==XR_XIR_CALL_RETURNED || event.outcome.status==XR_XIR_CALL_BOUNDS || event.outcome.status==XR_XIR_CALL_CANCELLED);
     CHECK(xr_xir_call_result_valid(&event.outcome));return event;

@@ -4,7 +4,7 @@ endif()
 
 function(xir_forin_resource_case name cost)
     add_test(NAME ${name} COMMAND test_xir_mixed_forin_resources ${ARGN})
-    set_tests_properties(${name} PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE COST ${cost}
+    set_tests_properties(${name} PROPERTIES TIMEOUT 120 PROCESSORS 1 COST ${cost}
         LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;forin;resource")
 endfunction()
 
