@@ -500,6 +500,25 @@ static XrXirStatus effect_body_instruction_ref_value(const EffectBodyRead *read,
     return XR_XIR_OK;
 }
 
+/* The first or constant canonical row is complete immutable storage. Borrowing
+ * it avoids a decoder copy; no row, domain or semantic permission is cached.
+ * Other varying rows keep the full decoder and caller-owned scratch lifetime. */
+static XrXirStatus effect_body_instruction_ref_borrow(const EffectBodyRead *read,
+    const EffectBodyRun *ref,uint32_t instruction,XrXirInstruction *storage,const XrXirInstruction **output) {
+    if (!read || !storage || !output || !ref || (ref->mask&~EFFECT_BODY_MASK) ||
+        (ref->count==1 && ref->mask) || instruction<ref->first || instruction-ref->first>=ref->count)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!ref->mask || instruction==ref->first) {
+        if (!effect_body_read_work(read,6+sizeof(*output))) return XR_XIR_BUDGET;
+        if (ref->base.op<=XR_XIR_INVALID || ref->base.op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        *output=&ref->base;return XR_XIR_OK;
+    }
+    XrXirStatus status=effect_body_instruction_ref_value(read,ref,instruction,storage);
+    if (status!=XR_XIR_OK) return status;
+    if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=storage;return XR_XIR_OK;
+}
+
 static inline XrXirStatus effect_body_instruction_words_publish(const EffectBodyRead *read,
     const uint32_t *words,XrXirInstruction *output) {
     if (!words || !output) return XR_XIR_BAD_STRUCTURE;

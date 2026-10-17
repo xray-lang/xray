@@ -124,10 +124,9 @@ static XrXirStatus effect_body_owned_instruction(const EffectBodyRequest *reques
     if (!effect_body_material_shape(material) || !storage || !output || f>=effect_body_count(material))
         return XR_XIR_BAD_STRUCTURE;
     if (fields) return effect_body_instruction_fields_get(&request->read,&material->functions[f],i,fields);
-    XrXirStatus status=effect_body_instruction_get(&request->read,&material->functions[f],i,storage);
-    if (status!=XR_XIR_OK) return status;
-    if (!effect_body_read_work(&request->read,sizeof(*output))) return XR_XIR_BUDGET;
-    *output=storage;return XR_XIR_OK;
+    const EffectBodyRun *ref=NULL;
+    XrXirStatus status=effect_body_record_ref(&request->read,&material->functions[f],i,&ref);
+    return status==XR_XIR_OK?effect_body_instruction_ref_borrow(&request->read,ref,i,storage,output):status;
 }
 static XrXirStatus effect_body_owned_type(const EffectBodyRequest *request,uint32_t f,
     uint32_t value,XrXirType *output) {
@@ -235,7 +234,8 @@ static XrXirStatus effect_body_request_sequence_begin(const EffectBodyRequest *r
 
 /* Only numeric location survives one ascending pass. Failed scratch is
  * discarded by that pass; no decoded value or permission is retained. The
- * unique full-row decoder also reads all unused and signed physical fields. */
+ * row reader preserves all unused and signed physical fields, borrowing only
+ * complete stored base rows that remain owned by this immutable material. */
 static XrXirStatus effect_body_request_sequence_instruction(const EffectBodyRequest *request,
     uint32_t f,uint32_t i,EffectBodyRecordCursor *cursor,XrXirInstruction *storage,
     const XrXirInstruction **output) {
@@ -251,10 +251,7 @@ static XrXirStatus effect_body_request_sequence_instruction(const EffectBodyRequ
     if (!effect_body_read_work(&request->read,2)) return XR_XIR_BUDGET;
     const EffectBodyRun *ref=NULL;
     status=effect_body_record_cursor_ref(&request->read,&material->functions[f],i,cursor,&ref);
-    if (status==XR_XIR_OK) status=effect_body_instruction_ref_value(&request->read,ref,i,storage);
-    if (status!=XR_XIR_OK) return status;
-    if (!effect_body_read_work(&request->read,sizeof(*output))) return XR_XIR_BUDGET;
-    *output=storage;return XR_XIR_OK;
+    return status==XR_XIR_OK?effect_body_instruction_ref_borrow(&request->read,ref,i,storage,output):status;
 }
 
 /* Re-read the current final run and exact EOF independently of the cursor.
