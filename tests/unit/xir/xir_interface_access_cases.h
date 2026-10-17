@@ -32,8 +32,8 @@ static void interface_access_cases(void) {
         XrXirNominalTable nominals = {&nominal,1,NULL};
         XrXirTypeNode nodes[3] = {0};
         nodes[0].kind = XR_XIR_TYPE_NOMINAL;
-        nodes[1].kind = XR_XIR_TYPE_CALLABLE; nodes[1].result = (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
-        nodes[2].kind = XR_XIR_TYPE_CALLABLE; nodes[2].result = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
+        nodes[1].kind = XR_XIR_TYPE_CALLABLE; nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[1].result = (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
+        nodes[2].kind = XR_XIR_TYPE_CALLABLE; nodes[2].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[2].result = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
         XrXirType argument = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 1);
         XrXirConstraint constraint = {0};
         XrXirInterfaceMethod method = {{"get",3},(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE + 2),0,0,NULL};
