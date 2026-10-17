@@ -75,6 +75,12 @@ static void generation_range_build(const XrXirCompileContext *context,
     RootParameterMark held=rp_mark();uint64_t held_live=rp_stats(context).live_bytes;
     XrXirStatus status=effect_graph_build_material(source,&trial->effects,&trial->graph,
         (XrXirCompileContext *)context);
+    if (status!=expected) {
+        XrCompileResourceStats stats=rp_stats(context);
+        fprintf(stderr,"Current generation graph status%u expected%u allocated%llu peak%llu work%llu write%u target%u\n",
+            (unsigned)status,(unsigned)expected,(unsigned long long)stats.allocated_bytes,
+            (unsigned long long)stats.peak_bytes,(unsigned long long)stats.work,write_failure,target);
+    }
     CHECK(status==expected);
     if (write_failure) CHECK(trial->graph.heads && trial->graph.queue && trial->graph.queued);
     if (status==XR_XIR_OK && target!=UINT32_MAX) {
@@ -278,7 +284,7 @@ static void generation_range_dispatch_same(EffectInvocationFlow *flow,const XrXi
 static void generation_range_dispatch_faults(EffectInvocationFlow *flow) {
     EffectInvocationWorkspace *owner=flow->owner;EffectBodyMaterial *material=owner->final.material;
     uint32_t f=owner->final.nodes[flow->node].body;EffectBodyFunction *body=&material->functions[f];
-    CHECK(flow->physical->count>1 && body->run_count>1 && body->runs);
+    CHECK(flow->physical->count>1 && body->run_count && body->runs);
     uint32_t capacity=body->run_capacity,count=owner->final.count,edges=owner->final.edge_count;
     for (uint32_t precision=0;precision<2;++precision) {
         flow->precision=precision!=0;bool changed=false;XrCompileResourceStats before=rp_stats(owner->work);
@@ -303,17 +309,23 @@ static void generation_range_dispatch_faults(EffectInvocationFlow *flow) {
         ++selected;
     }
     CHECK(selected==2 && first==2 && call==4);const EffectBodyRun *ref=NULL;
-    /* The genuine CALL and RETURN are the final complete literal pair. The
-     * first selected FnRef is earlier; only the second selected CALL changes. */
+    /* The first selected FnRef is earlier. Locate the genuine complete CALL
+     * row inside its current literal block; only that second selection changes. */
     CHECK(effect_body_record_ref(&flow->body.read,body,call,&ref)==XR_XIR_OK &&
-        ref->first==call && ref->count==2 && ref->base.op==XR_XIR_CALL &&
-        ref->mask==EFFECT_BODY_LITERAL_PAIR && ref->second.op==XR_XIR_RETURN);
-    XrXirInstruction *base=(XrXirInstruction *)&ref->base;int64_t saved=base->immediate;
+        ref->mask==EFFECT_BODY_LITERAL_ROWS && effect_body_literal_row(ref,call)->op==XR_XIR_CALL &&
+        call+1<ref->first+ref->count && effect_body_literal_row(ref,call+1)->op==XR_XIR_RETURN);
+    XrXirInstruction *base=(XrXirInstruction *)effect_body_literal_row(ref,call);int64_t saved=base->immediate;
     base->immediate=effect_body_count(material);
     for (uint32_t precision=0;precision<2;++precision) {
         flow->precision=precision!=0;flow->instruction=UINT32_MAX;
         XrCompileResourceStats before=rp_stats(owner->work);bool changed=false;
-        CHECK(effect_invocation_dispatch(flow,&changed)==XR_XIR_BAD_STRUCTURE && !changed &&
+        XrXirStatus status=effect_invocation_dispatch(flow,&changed);
+        if(status!=XR_XIR_BAD_STRUCTURE || changed || flow->instruction!=call || owner->final.count!=count ||
+            owner->final.edge_count!=edges || owner->pending || rp_stats(owner->work).live_bytes!=before.live_bytes)
+            fprintf(stderr,"Current CALL refusal status%u changed%u instruction%u/%u nodes%u/%u edges%u/%u pending%u live%llu/%llu\n",
+                (unsigned)status,changed,flow->instruction,call,owner->final.count,count,owner->final.edge_count,edges,
+                owner->pending,(unsigned long long)rp_stats(owner->work).live_bytes,(unsigned long long)before.live_bytes);
+        CHECK(status==XR_XIR_BAD_STRUCTURE && !changed &&
             flow->instruction==call && owner->final.count==count && owner->final.edge_count==edges &&
             !owner->pending && rp_stats(owner->work).live_bytes==before.live_bytes);
     }
@@ -399,7 +411,7 @@ static void generation_range_dispatch_other(const XrXirCompileContext *context,
             material->declared,&owner)==XR_XIR_OK && effect_invocations_solve(owner)==XR_XIR_OK);
     EffectInvocationFlow flow={.owner=owner,.node=owner->final.roots[0],.instruction=UINT32_MAX};
     CHECK(effect_invocation_origins(&flow)==XR_XIR_OK && !flow.changed &&
-        flow.physical->count>1 && material->functions[0].run_count>1);
+        flow.physical->count>1 && material->functions[0].run_count && material->functions[0].instruction_count>1);
     generation_range_dispatch_same(&flow,source);generation_range_dispatch_singleton(owner);
     xr_compile_resources_free(flow.memory);effect_invocation_free(owner);effect_graph_free(&trial->graph);
     trial->graph=(EffectGraph){.material=material,.physical=material->physical};

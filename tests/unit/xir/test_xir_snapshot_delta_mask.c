@@ -249,7 +249,7 @@ static void mask_cell_values(const XrXirCompileContext *context) {
     for(uint32_t mask=0;mask<1024;++mask) {
         XrXirCellProofRun run;memset(&run,0xa5,sizeof(run));
         const XrXirInstruction base=mask_expected(0);
-        run.first=7;run.count=3;run.varying=mask;run.operation=&base;run.second=NULL;
+        run.first=7;run.count=3;run.varying=mask;run.operation=&base;run.literal_tail=NULL;
         const uint32_t delta[10]={2,6,10,UINT32_MAX,18,32,4,4,40,62};
         for(unsigned w=0;w<10;++w)if(mask&(1u<<w))run.delta[w]=delta[w];
         CellProofBuild build={.context=context,.status=XR_XIR_OK};
@@ -276,6 +276,7 @@ static void mask_cell_values(const XrXirCompileContext *context) {
     fprintf(stderr,"Cell local physical range: all1024 masks/5120 selected zero deltas, poisoned inactive words and exact full instruction oracle PASS\n");
 }
 #include "xir_snapshot_literal_pair_cases.h"
+#include "xir_snapshot_literal_block_cell_cases.h"
 int main(void) {
     const XrCompileResourceLimits caps={8388608,4194304,4000000};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
@@ -284,6 +285,7 @@ int main(void) {
     mask_matrix(&context);mask_boundaries(&context);mask_work_bounds(&context);mask_cell_values(&context);mask_visit_walks(&context);
     class_view_data_controls(&context);
     literal_pair_controls();
+    mask_literal_cell_blocks(&context);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK &&
         after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);
     fprintf(stderr,"Snapshot no-allocation read matrix work%llu cap4000000 live%llu/%llu\n",

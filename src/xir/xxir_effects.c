@@ -391,6 +391,17 @@ typedef struct EffectGraphDependencyCounts {
     uint32_t edges,references;
 } EffectGraphDependencyCounts;
 
+/* Encoding intervals can contain several real records. Their physical
+ * ordinal order is independent of those intervals and is checked on each
+ * complete count and write pass, including every parameter prefix. */
+static XrXirStatus effect_graph_record_order(const XrXirCompileContext *work,
+    const EffectPhysicalFunction *physical,uint32_t index,uint32_t value) {
+    if (!physical || !physical->records || index>=physical->count) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,1+(index?1+sizeof(uint32_t):0))) return XR_XIR_BUDGET;
+    if (index && physical->records[index-1].value>=value) return XR_XIR_BAD_STRUCTURE;
+    return XR_XIR_OK;
+}
+
 /* Every dependency replay starts at the current owning body and reaches its
  * exact canonical EOF. A constant physical opcode avoids unused row copies;
  * each real dependency still enters the original semantic handler. */
@@ -409,14 +420,17 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
     if (!xir_compile_work(remaining,sizeof(cursor)+sizeof(r))) return XR_XIR_BUDGET;
     while (r<physical->count && physical->records[r].value<function->parameter_count) {
         if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
-        if (physical->records[r++].mask&(EFFECT_PHYSICAL_CONTROL|EFFECT_PHYSICAL_DIRECT|
+        EffectPhysicalRecord record=physical->records[r++];
+        status=effect_graph_record_order(remaining,physical,r-1,record.value);
+        if (status!=XR_XIR_OK) return status;
+        if (record.mask&(EFFECT_PHYSICAL_CONTROL|EFFECT_PHYSICAL_DIRECT|
             EFFECT_PHYSICAL_GO|EFFECT_PHYSICAL_REFERENCE)) return XR_XIR_BAD_STRUCTURE;
     }
     for (uint32_t run=0;run<owned->run_count;++run) {
         const EffectBodyRun *ref;uint32_t opcode=XR_XIR_INVALID;
         status=effect_body_range_ref(&request.read,owned,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
-        if (!(ref->mask&(UINT32_C(1)|EFFECT_BODY_LITERAL_PAIR))) {
+        if (!(ref->mask&(UINT32_C(1)|EFFECT_BODY_LITERAL_ROWS))) {
             status=effect_body_run_word(&request.read,ref,ref->first,0,&opcode);
             if (status!=XR_XIR_OK) return status;
             if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
@@ -424,11 +438,13 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
         while (r<physical->count && physical->records[r].value-function->parameter_count<ref->first+ref->count) {
             if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
             EffectPhysicalRecord record=physical->records[r++];
+            status=effect_graph_record_order(remaining,physical,r-1,record.value);
+            if (status!=XR_XIR_OK) return status;
             if (record.value<function->parameter_count || record.value>=physical->values ||
                 record.value-function->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
             if (!(record.mask&(EFFECT_PHYSICAL_CONTROL|EFFECT_PHYSICAL_DIRECT|
                 EFFECT_PHYSICAL_GO|EFFECT_PHYSICAL_REFERENCE))) continue;
-            if (ref->mask&(UINT32_C(1)|EFFECT_BODY_LITERAL_PAIR)) {
+            if (ref->mask&(UINT32_C(1)|EFFECT_BODY_LITERAL_ROWS)) {
                 status=effect_body_run_word(&request.read,ref,record.value-function->parameter_count,0,&opcode);
                 if (status!=XR_XIR_OK) return status;
                 if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
@@ -507,7 +523,10 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
         if (!xir_compile_work(remaining,sizeof(cursor)+sizeof(r))) return XR_XIR_BUDGET;
         while (r<physical->count && physical->records[r].value<function->parameter_count) {
             if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
-            if (physical->records[r++].mask&EFFECT_PHYSICAL_DIRECT) return XR_XIR_BAD_STRUCTURE;
+            EffectPhysicalRecord record=physical->records[r++];
+            status=effect_graph_record_order(remaining,physical,r-1,record.value);
+            if (status!=XR_XIR_OK) return status;
+            if (record.mask&EFFECT_PHYSICAL_DIRECT) return XR_XIR_BAD_STRUCTURE;
         }
         for (uint32_t run=0;run<owned->run_count;++run) {
             const EffectBodyRun *ref;XrXirInstruction constant={0};bool decoded=false;
@@ -517,6 +536,8 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
             while (r<physical->count && physical->records[r].value-function->parameter_count<ref->first+ref->count) {
                 if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
                 EffectPhysicalRecord record=physical->records[r++];
+                status=effect_graph_record_order(remaining,physical,r-1,record.value);
+                if (status!=XR_XIR_OK) return status;
                 if (record.value<function->parameter_count || record.value>=physical->values ||
                     record.value-function->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
                 if (!(record.mask&EFFECT_PHYSICAL_DIRECT)) continue;

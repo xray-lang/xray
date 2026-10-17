@@ -69,7 +69,7 @@ static XrXirStatus effect_invocation_flow_types(EffectInvocationFlow *flow) {
         for (uint32_t i=ref->first;i<ref->first+ref->count;++i) {
             const XrXirInstruction *operation=NULL;
             if (flow->instruction_refs) {
-                bool expanded=ref->mask && !(ref->mask&EFFECT_BODY_LITERAL_PAIR) && i!=ref->first;
+                bool expanded=ref->mask && !(ref->mask&EFFECT_BODY_LITERAL_ROWS) && i!=ref->first;
                 XrXirInstruction temporary,*storage=&temporary;
                 if (expanded) {
                     if (stored>=flow->instruction_storage_count) return XR_XIR_BAD_STRUCTURE;

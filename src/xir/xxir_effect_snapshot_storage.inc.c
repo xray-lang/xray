@@ -329,6 +329,8 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(sink.span))) status=XR_XIR_BUDGET;
         if (status==XR_XIR_OK) status=effect_body_records_write(work,&source->functions[f],function,&sink);
         if (status==XR_XIR_OK) status=xir_cell_proof_builder_function(cells,f);
+        if (status==XR_XIR_OK) status=effect_body_short_literals_pack(work,function);
+        if (status==XR_XIR_OK) status=effect_body_runs_finish(work,function);
     }
     if (status==XR_XIR_OK) status=effect_cell_body_project(&adapter);
     if (status==XR_XIR_OK) status=xir_cell_proof_builder_finish(&cells,&body->cells);
@@ -522,15 +524,15 @@ static XrXirStatus effect_body_physical_run(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,uint32_t function,const EffectPhysicalFunction *physical,const EffectBodyRun *run,
     EffectBodyPhysicalReplay *state) {
     const EffectBodyFunction *body=&material->functions[function];
-    bool constant=!(run->mask&(UINT32_C(3)|EFFECT_BODY_LITERAL_PAIR));
+    bool constant=!(run->mask&(UINT32_C(3)|EFFECT_BODY_LITERAL_ROWS));
     if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
     uint32_t points=constant?1:run->count;
     for (uint32_t offset=0;offset<points;++offset) {
         if (!xir_compile_work(work,4+(constant?0:6))) return XR_XIR_BUDGET;
         uint32_t opcode=run->base.op,type=run->base.type,mask=0;
-        if (!constant && (run->mask&EFFECT_BODY_LITERAL_PAIR)) {
+        if (!constant && (run->mask&EFFECT_BODY_LITERAL_ROWS)) {
             if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-            const XrXirInstruction *row=offset?&run->second:&run->base;
+            const XrXirInstruction *row=offset?&run->literal_tail[offset-1]:&run->base;
             opcode=row->op;type=row->type;
         } else if (!constant) {
             if (run->mask&UINT32_C(1)) opcode+=run->delta[0]*offset;

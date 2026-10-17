@@ -48,7 +48,7 @@ static void conditional_compact_directory_damage(const XrXirCompileContext *cont
     EffectBodyRead read=effect_body_compile_read(context);
     uint32_t index=body->run_count/2;EffectBodyRun *middle=&body->runs[index];
     uint32_t first=middle->first,count=middle->count,mask=middle->mask;
-    bool pair=!!(mask&EFFECT_BODY_LITERAL_PAIR);uint32_t word=0;
+    bool pair=!!(mask&EFFECT_BODY_LITERAL_ROWS);uint32_t word=0;
     while (!pair && word<EFFECT_BODY_WORDS && !(mask&(UINT32_C(1)<<word))) ++word;
     CHECK(pair || word<EFFECT_BODY_WORDS);uint32_t delta=pair?0:middle->delta[word];
     for (uint32_t damage=0;damage<4;++damage) {

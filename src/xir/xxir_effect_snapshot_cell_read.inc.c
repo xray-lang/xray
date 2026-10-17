@@ -84,6 +84,56 @@ static XrXirStatus effect_cell_body_shape(const XrXirCompileContext *work,const 
     if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
     *output=(XrXirCellProofInstructionShape){shape.op,shape.type};return XR_XIR_OK;
 }
+typedef struct EffectCellLiteralSpan {
+    const XrXirCompileContext *work;
+    uint32_t first,count,run,old_run,old_next,next_run,seen;
+    bool bound;
+    XrXirCellProofInstructionShape shape;
+} EffectCellLiteralSpan;
+
+static XrXirStatus effect_cell_literal_span_run(void *owner,const EffectBodyRun *ref) {
+    EffectCellLiteralSpan *input=owner;EffectBodyRead read=effect_body_compile_read(input->work);
+    if (!xir_compile_work(input->work,8+sizeof(uint32_t))) return XR_XIR_BUDGET;
+    uint32_t end=ref->first+ref->count,wanted=input->first+input->count;
+    if (input->old_next>=ref->first && input->old_next<end) input->bound=input->old_run==input->run;
+    if (wanted>ref->first && wanted<=end) input->next_run=wanted==end?input->run+1:input->run;
+    if (input->count) {
+        uint32_t begin=input->first>ref->first?input->first:ref->first,limit=wanted<end?wanted:end;
+        for (uint32_t i=begin;i<limit;++i) {
+            uint32_t opcode=0,type=0;
+            XrXirStatus status=effect_body_run_word(&read,ref,i,0,&opcode);
+            if (status==XR_XIR_OK) status=effect_body_run_word(&read,ref,i,1,&type);
+            if (status!=XR_XIR_OK) return status;
+            if (!xir_compile_work(input->work,5+sizeof(input->shape))) return XR_XIR_BUDGET;
+            if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+            if (!input->seen) input->shape=(XrXirCellProofInstructionShape){(XrXirOp)opcode,(XrXirType)type};
+            else if (input->shape.op!=(XrXirOp)opcode || input->shape.type!=(XrXirType)type)
+                return input->first==ref->first?XR_XIR_BAD_TYPE:XR_XIR_BAD_STRUCTURE;
+            ++input->seen;
+        }
+    }
+    ++input->run;return XR_XIR_OK;
+}
+
+/* A sealed literal block can contain several independently requested scalar
+ * spans. Re-read its complete current canonical directory before any shape
+ * consumer, compare every actual requested row, and publish only on success. */
+static XrXirStatus effect_cell_literal_span(const XrXirCompileContext *work,
+    const EffectBodyFunction *function,uint32_t first,uint32_t count,XrXirCellProofSpanCursor *cursor) {
+    if (!xir_compile_work(work,sizeof(EffectCellLiteralSpan)+sizeof(EffectBodyRunVisitor))) return XR_XIR_BUDGET;
+    EffectCellLiteralSpan input={.work=work,.first=first,.count=count,.old_run=cursor->run,.old_next=cursor->next,
+        .bound=cursor->next==function->instruction_count && cursor->run==function->run_count};
+    EffectBodyRunVisitor visitor={&input,effect_cell_literal_span_run};EffectBodyRead read=effect_body_compile_read(work);
+    XrXirStatus status=effect_body_runs_visit(&read,function,&visitor);
+    if (status!=XR_XIR_OK) return status;
+    if (!input.bound || input.seen!=count || input.run!=function->run_count) return XR_XIR_BAD_STRUCTURE;
+    XrXirCellProofSpanCursor current=*cursor;current.next=first+count;
+    current.run=count?input.next_run:function->run_count;
+    if (count) current.shape=input.shape;
+    if (!xir_compile_work(work,sizeof(current))) return XR_XIR_BUDGET;
+    *cursor=current;return XR_XIR_OK;
+}
+
 /* A prefix is an unfinished inventory, never a complete body proof. Count
  * zero is the independent end request: every row, run and stream word must
  * then agree with the complete owned head, including the last EOF boundary. */
@@ -101,10 +151,14 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
     if (first>function->instruction_count || count>function->instruction_count-first ||
         (!count && first!=function->instruction_count) || cursor->next>first ||
         cursor->run>function->run_count || function->run_count>function->instruction_count ||
-        function->run_count>function->run_capacity) return XR_XIR_BAD_STRUCTURE;
+        function->run_count>function->run_capacity || (function->run_count && !function->runs))
+        return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,14+sizeof(*cursor))) return XR_XIR_BUDGET;
     XrXirCellProofSpanCursor current=*cursor;
     while (current.run<function->run_count) {
+        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        if ((function->runs[current.run].mask&EFFECT_BODY_LITERAL_ROWS) && function->runs[current.run].count>2)
+            return effect_cell_literal_span(work,function,first,count,cursor);
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         const EffectBodyRun *ref;
         XrXirStatus status=effect_body_run_ref(&adapter->request.read,function,current.run,current.next,&ref);
@@ -116,9 +170,12 @@ static XrXirStatus effect_cell_body_span(const XrXirCompileContext *work,const v
         }
         if (count && current.next==first) {
             if (ref->count!=count) return XR_XIR_BAD_TYPE;
-            if (ref->mask&EFFECT_BODY_LITERAL_PAIR) {
-                if (!xir_compile_work(work,6)) return XR_XIR_BUDGET;
-                if (ref->base.op!=ref->second.op || ref->base.type!=ref->second.type) return XR_XIR_BAD_TYPE;
+            if (ref->mask&EFFECT_BODY_LITERAL_ROWS) {
+                for (uint32_t i=1;i<ref->count;++i) {
+                    if (!xir_compile_work(work,6)) return XR_XIR_BUDGET;
+                    if (ref->base.op!=ref->literal_tail[i-1].op || ref->base.type!=ref->literal_tail[i-1].type)
+                        return XR_XIR_BAD_TYPE;
+                }
             } else if (ref->mask&UINT32_C(3)) return XR_XIR_BAD_TYPE;
             if (ref->base.op<=XR_XIR_INVALID || ref->base.op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             if (!xir_compile_work(work,2+sizeof(current.shape))) return XR_XIR_BUDGET;
@@ -169,11 +226,11 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     if (!xir_compile_work(work,1+sizeof(uint32_t)+sizeof(const XrXirInstruction *))) return XR_XIR_BUDGET;
     const XrXirInstruction *operation=&ref->base;
     if (operation->op<=XR_XIR_INVALID || operation->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-    if (ref->mask&EFFECT_BODY_LITERAL_PAIR) {
+    if (ref->mask&EFFECT_BODY_LITERAL_ROWS) {
         if (!xir_compile_work(work,sizeof(*output)-sizeof(output->delta)+2*sizeof(uint32_t)))
             return XR_XIR_BUDGET;
         output->first=ref->first;output->count=ref->count;
-        output->varying=0;output->operation=operation;output->second=&ref->second;
+        output->varying=0;output->operation=operation;output->literal_tail=ref->literal_tail;
         cursor->next=position.first;cursor->run=position.run;return XR_XIR_OK;
     }
     uint32_t delta[10];
@@ -186,7 +243,7 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     }
     if (!xir_compile_work(work,publication)) return XR_XIR_BUDGET;
     output->first=ref->first;output->count=ref->count;output->varying=ref->mask;output->operation=operation;
-    output->second=NULL;
+    output->literal_tail=NULL;
     for (uint32_t selected=ref->mask;selected;selected&=selected-1)
         output->delta[(uint32_t)__builtin_ctz(selected)]=delta[(uint32_t)__builtin_ctz(selected)];
     cursor->next=position.first;cursor->run=position.run;return XR_XIR_OK;

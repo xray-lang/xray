@@ -51,14 +51,15 @@ typedef struct XrXirCellProofSpanCursor {
 typedef struct XrXirCellProofRunCursor {
     uint32_t function,next,run;
 } XrXirCellProofRunCursor;
+enum { XR_XIR_CELL_PROOF_LITERAL_CAPACITY=8 };
 typedef struct XrXirCellProofRun {
     uint32_t first,count,varying;
     /* The current complete body-read call retains the immutable row owner.
      * This view never enters a published proof, Artifact or Program. */
     const XrXirInstruction *operation;
-    /* A complete literal second row makes no constant-column claim. */
-    const XrXirInstruction *second;
-    /* Selected affine deltas belong to this request when second is NULL. */
+    /* Complete remaining literal rows make no constant-column claim. */
+    const XrXirInstruction *literal_tail;
+    /* Selected affine deltas belong to this request when the tail is NULL. */
     uint32_t delta[10];
 } XrXirCellProofRun;
 

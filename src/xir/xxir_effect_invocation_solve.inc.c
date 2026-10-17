@@ -185,7 +185,9 @@ static XrXirStatus effect_invocation_dispatch(EffectInvocationFlow *flow,bool *c
         flow->physical->values!=(uint64_t)body->parameter_count+body->instruction_count ||
         flow->values!=flow->physical->values || flow->physical->count>flow->physical->capacity ||
         (flow->physical->count && !flow->physical->records)) return XR_XIR_BAD_STRUCTURE;
-    if (flow->physical->count<=1 || body->run_count<=1)
+    /* One encoding block can contain several independent physical sites.
+     * Only actual physical cardinality selects the scalar request below. */
+    if (flow->physical->count<=1)
         return effect_invocation_dispatch_scalar(flow,changed);
     bool selected=false;
     if (!xir_compile_work(owner->work,sizeof(selected))) return XR_XIR_BUDGET;
@@ -591,7 +593,7 @@ static XrXirStatus effect_invocation_local_run(EffectInvocationLocalRead *read,
     if (run->base.op==XR_XIR_SLOT_LOAD) semantic|=UINT32_C(192);
     if (effect_physical_opcode(run->base.op)&EFFECT_PHYSICAL_BARRIER)
         semantic|=UINT32_C(12)|UINT32_C(192);
-    uint32_t points=(run->mask&(semantic|EFFECT_BODY_LITERAL_PAIR))?run->count:1;
+    uint32_t points=(run->mask&(semantic|EFFECT_BODY_LITERAL_ROWS))?run->count:1;
     for (uint32_t offset=0;offset<points;++offset) {
         if (!xir_compile_work(work,2+sizeof(void *))) return XR_XIR_BUDGET;
         XrXirInstruction storage;const XrXirInstruction *op=&run->base;

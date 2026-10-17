@@ -106,7 +106,7 @@ static void conditional_compact_malformed(const XrXirCompileContext *context,
     EffectBodyRead read=effect_body_compile_read(context);
     CHECK(function->runs && function->run_count==2 && function->run_capacity==2);
     EffectBodyRun *first=&function->runs[0],*second=&function->runs[1];
-    bool pair=!!(first->mask&EFFECT_BODY_LITERAL_PAIR);uint32_t column=0;
+    bool pair=!!(first->mask&EFFECT_BODY_LITERAL_ROWS);uint32_t column=0;
     while (!pair && column<EFFECT_BODY_WORDS && !(first->mask&(UINT32_C(1)<<column))) ++column;
     CHECK(pair || column<EFFECT_BODY_WORDS);
     uint32_t begin=first->first,count=first->count,mask=first->mask,delta=pair?0:first->delta[column];

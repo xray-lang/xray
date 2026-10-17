@@ -12,17 +12,17 @@
  */
 #include "xxir_metadata_domain_internal.h"
 
-enum { EFFECT_BODY_WORDS=10, EFFECT_BODY_MASK=1023 };
-#define EFFECT_BODY_LITERAL_PAIR UINT32_C(2147483648)
-/* A changing two-row record owns both complete instructions. Longer affine
- * records own only selected deltas. The two physical payloads share storage;
- * neither carries a semantic summary or a generating Module pointer. */
+enum { EFFECT_BODY_WORDS=10, EFFECT_BODY_MASK=1023, EFFECT_BODY_LITERAL_CAPACITY=XR_XIR_CELL_PROOF_LITERAL_CAPACITY };
+#define EFFECT_BODY_LITERAL_ROWS UINT32_C(2147483648)
+/* A literal record owns up to eight complete instructions. Affine records
+ * own only selected deltas. These physical payloads share storage; neither
+ * carries a semantic summary or a generating Module pointer. */
 typedef struct EffectBodyRun {
     uint32_t first,count,mask;
     XrXirInstruction base;
     union {
         uint32_t delta[EFFECT_BODY_WORDS];
-        XrXirInstruction second;
+        XrXirInstruction literal_tail[EFFECT_BODY_LITERAL_CAPACITY-1];
     };
 } EffectBodyRun;
 /* This request borrows the actual generating contexts only during construction.

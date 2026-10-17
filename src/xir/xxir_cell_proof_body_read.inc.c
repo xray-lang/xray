@@ -83,6 +83,21 @@ static const XrXirInstruction *cell_proof_instruction(CellProofBuild *build,uint
 
 /* One owned walker receives one canonical run at a time. Raw and custom
  * callbacks retain scalar requests to the same semantic row receivers. */
+static bool cell_proof_literal_run(CellProofBuild *build,uint32_t f,uint32_t i,
+    const XrXirCellProofRun *run) {
+    if (!run->literal_tail || run->count<2 || run->count>XR_XIR_CELL_PROOF_LITERAL_CAPACITY || run->varying)
+        return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+    if (!cell_proof_work(build,2)) return false;
+    if (run->operation->op<=XR_XIR_INVALID || run->operation->op>=XR_XIR_OP_COUNT)
+        return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+    for (uint32_t r=1;r<run->count;++r) {
+        if (!cell_proof_work(build,2)) return false;
+        if (run->literal_tail[r-1].op<=XR_XIR_INVALID || run->literal_tail[r-1].op>=XR_XIR_OP_COUNT)
+            return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+    }
+    return true;
+}
+
 static bool cell_proof_run(CellProofBuild *build,const XrXirCellProofBodyHead *head,
     XrXirCellProofRunCursor *cursor,XrXirCellProofRun *output) {
     if (build->status!=XR_XIR_OK) return false;
@@ -99,12 +114,8 @@ static bool cell_proof_run(CellProofBuild *build,const XrXirCellProofBodyHead *h
         (output->count==1 && output->varying) ||
         !output->operation || output->operation->op<=XR_XIR_INVALID || output->operation->op>=XR_XIR_OP_COUNT)
         return cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);
-    if (output->second) {
-        if (output->count!=2 || output->varying) return cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);
-        if (!cell_proof_work(build,2)) return false;
-        if (output->second->op<=XR_XIR_INVALID || output->second->op>=XR_XIR_OP_COUNT)
-            return cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);
-        return true;
+    if (output->literal_tail) {
+        return cell_proof_literal_run(build,f,first,output);
     }
     if (output->count==2 && output->varying) return cell_proof_error(build,f,first,XR_XIR_BAD_STRUCTURE);
     for (uint32_t selected=output->varying;selected;selected&=selected-1) {
@@ -119,20 +130,18 @@ static bool cell_proof_run(CellProofBuild *build,const XrXirCellProofBodyHead *h
 static const XrXirInstruction *cell_proof_run_operation(CellProofBuild *build,uint32_t f,
     const XrXirCellProofRun *run,uint32_t i,XrXirInstruction *storage) {
     if (!run || !run->operation || !storage || !run->count || run->varying&~UINT32_C(1023) ||
-        (run->count==1 && run->varying) || (run->second && (run->count!=2 || run->varying)) ||
-        (!run->second && run->count==2 && run->varying) ||
+        (run->count==1 && run->varying) ||
+        (run->literal_tail && (run->count<2 || run->count>XR_XIR_CELL_PROOF_LITERAL_CAPACITY || run->varying)) ||
+        (!run->literal_tail && run->count==2 && run->varying) ||
         i<run->first || i-run->first>=run->count) {
         cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
     }
-    if (i==run->first) return run->operation;
-    if (run->second) {
+    if (run->literal_tail) {
+        if (!cell_proof_literal_run(build,f,i,run)) return NULL;
         if (!cell_proof_work(build,4+sizeof(const XrXirInstruction *))) return NULL;
-        if (run->operation->op<=XR_XIR_INVALID || run->operation->op>=XR_XIR_OP_COUNT ||
-            run->second->op<=XR_XIR_INVALID || run->second->op>=XR_XIR_OP_COUNT) {
-            cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
-        }
-        return run->second;
+        return i==run->first?run->operation:&run->literal_tail[i-run->first-1];
     }
+    if (i==run->first) return run->operation;
     if (run->count==2 && run->varying) {
         cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);return NULL;
     }

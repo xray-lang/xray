@@ -117,7 +117,7 @@ static void cell_owned_run_malformed(const XrXirCompileContext *context,
     EffectBodyFunction *body=(EffectBodyFunction *)&material->functions[1];
     CHECK(body->runs && body->run_count>1 && body->run_capacity==body->run_count);
     EffectBodyRun *first=&body->runs[0],*second=&body->runs[1];
-    bool pair=!!(first->mask&EFFECT_BODY_LITERAL_PAIR);
+    bool pair=!!(first->mask&EFFECT_BODY_LITERAL_ROWS);
     uint32_t count=body->run_count,column=0;
     while (!pair && column<EFFECT_BODY_WORDS && !(first->mask&(UINT32_C(1)<<column))) ++column;
     CHECK(pair || column<EFFECT_BODY_WORDS);

@@ -38,7 +38,7 @@ static void row_data_reuse_controls(EffectInvocationFlow *flow,EffectInvocationR
             actual==data->instruction_refs[i] && conditional_compact_same(actual,&expected[i]));
         const EffectBodyRun *run=NULL;
         CHECK(effect_body_record_ref(&flow->body.read,&rows->material->functions[body],i,&run)==XR_XIR_OK);
-        CHECK(actual==((run->mask&EFFECT_BODY_LITERAL_PAIR) && i!=run->first?&run->second:&run->base));}
+        CHECK(actual==((run->mask&EFFECT_BODY_LITERAL_ROWS) && i!=run->first?&run->literal_tail[i-run->first-1]:&run->base));}
     EffectInvocationFlow reuse=*flow;reuse.types_ready=false;reuse.types=NULL;reuse.instructions=NULL;
     reuse.instruction_refs=NULL;reuse.instruction_storage_count=0;
     reuse.write_heads=NULL;reuse.write_next=NULL;reuse.memory=NULL;

@@ -14,9 +14,10 @@
 #include "xir_invocation_row_phase_cases.h"
 #include "xir_invocation_final_vector_cases.h"
 #include "xir_snapshot_run_extent_cases.h"
+#include "xir_snapshot_literal_block_cases.h"
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--codec-literals")) {
-        conditional_compact_literals();snapshot_run_extent_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
+        snapshot_literal_block_controls();conditional_compact_literals();snapshot_run_extent_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if(argc==2 && !strcmp(argv[1],"--final-vectors")) {
         invocation_final_vector_controls();CHECK(!rp_live && !rp_live_bytes);return 0;

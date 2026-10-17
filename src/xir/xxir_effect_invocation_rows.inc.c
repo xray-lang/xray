@@ -73,7 +73,7 @@ static XrXirStatus effect_invocation_rows_expanded(EffectInvocationFlow *flow,ui
         const EffectBodyRun *run=&body->runs[r];
         if (!run->count || run->first>=body->instruction_count ||
             run->count>body->instruction_count-run->first) return XR_XIR_BAD_STRUCTURE;
-        if (run->mask && !(run->mask&EFFECT_BODY_LITERAL_PAIR)) expanded+=run->count-1;
+        if (run->mask && !(run->mask&EFFECT_BODY_LITERAL_ROWS)) expanded+=run->count-1;
         if (expanded>body->instruction_count) return XR_XIR_BAD_STRUCTURE;
     }
     *output=(uint32_t)expanded;return XR_XIR_OK;
