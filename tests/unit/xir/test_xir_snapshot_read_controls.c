@@ -31,11 +31,13 @@
 #include "xir_invocation_root_parameter_projection_cases.h"
 #include "xir_invocation_driver_lookup_lifetime_cases.h"
 #include "xir_cell_head_projection_cases.h"
+#include "xir_flow_literal_type_cases.h"
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--queued-child-producers")) {
         invocation_queued_child_returned_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if(argc==2 && !strcmp(argv[1],"--codec-literals")) {
+        flow_literal_type_controls();
         cell_head_projection_controls();
         invocation_driver_lookup_lifetime_controls();invocation_root_parameter_projection_controls();invocation_class_body_rows_controls();invocation_coverage_head_controls();invocation_node_quarter_controls();invocation_node_occupancy_controls();invocation_edge_occupancy_controls();invocation_edge_reservation_controls();invocation_cause_directory_controls();invocation_new_child_front_controls();invocation_queued_child_controls();snapshot_record_owner_controls();snapshot_exact_writer_controls();snapshot_streaming_writer_controls();snapshot_literal_block_controls();conditional_compact_literals();snapshot_run_extent_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
     }

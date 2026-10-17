@@ -75,7 +75,17 @@ static XrXirStatus effect_invocation_flow_types(EffectInvocationFlow *flow) {
                     if (stored>=flow->instruction_storage_count) return XR_XIR_BAD_STRUCTURE;
                     storage=&flow->instructions[stored++];
                 }
-                status=effect_body_instruction_ref_read(&flow->body.read,ref,i,storage,&operation);
+                /* The current complete range and first selected literal read
+                 * checked the same immutable extent. Later rows still read
+                 * and charge their actual opcode before any field is used. */
+                if ((ref->mask&EFFECT_BODY_LITERAL_ROWS) && i!=ref->first) {
+                    if (!xir_compile_work(flow->owner->work,4+sizeof(operation))) status=XR_XIR_BUDGET;
+                    else {
+                        operation=effect_body_literal_row(ref,i);
+                        if (operation->op<=XR_XIR_INVALID || operation->op>=XR_XIR_OP_COUNT)
+                            status=XR_XIR_BAD_STRUCTURE;
+                    }
+                } else status=effect_body_instruction_ref_read(&flow->body.read,ref,i,storage,&operation);
                 if (status==XR_XIR_OK && operation==&temporary) return XR_XIR_BAD_STRUCTURE;
                 if (status==XR_XIR_OK && !xir_compile_work(flow->owner->work,
                     1+sizeof(*flow->instruction_refs))) status=XR_XIR_BUDGET;
