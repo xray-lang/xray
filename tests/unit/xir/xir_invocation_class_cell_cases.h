@@ -64,24 +64,29 @@ static void conditional_class_cell_controls(const XrXirCompileContext *context,
     EffectInvocationFlow flow={.owner=&replay,.node=replay.final.roots[3]};
     EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
     CHECK(effect_invocation_origins_read(&flow,&body)==XR_XIR_OK);
-    XrXirCellOriginView legacy={0},actual={0};
+    XrXirCellOriginView legacy={0},empty={0};XrXirCellClassOriginView scratch={0};
+    const XrXirCellOriginView *actual=&empty;
     CHECK(xr_xir_compile_cell_origin_view(context,effects->cells,3,project,&legacy)==XR_XIR_OK &&
         (legacy.intrinsic_mask&XR_XIR_CELL_ACCESS_UNKNOWN));
-    CHECK(effect_invocation_class_cell_view(&flow,project,&actual)==XR_XIR_OK &&
-        actual.intrinsic_mask==(mode<3?0u:XR_XIR_CELL_ACCESS_UNKNOWN));
-    XrXirCellOriginView sentinel={.intrinsic_mask=9};uint64_t before=rp_stats(context).work;
-    CHECK(effect_invocation_class_cell_view(&flow,UINT32_MAX,&sentinel)==XR_XIR_BAD_STRUCTURE &&
-        sentinel.intrinsic_mask==9 && rp_stats(context).work==before);
+    CHECK(effect_invocation_class_cell_view(&flow,project,&scratch,&actual)==XR_XIR_OK &&
+        actual==&scratch.cells &&
+        actual->intrinsic_mask==(mode<3?0u:XR_XIR_CELL_ACCESS_UNKNOWN));
+    XrXirCellOriginView sentinel={.intrinsic_mask=9};const XrXirCellOriginView *held=&sentinel;
+    uint64_t before=rp_stats(context).work;
+    CHECK(effect_invocation_class_cell_view(&flow,UINT32_MAX,&scratch,&held)==XR_XIR_BAD_STRUCTURE &&
+        held==&sentinel && sentinel.intrinsic_mask==9 && rp_stats(context).work==before);
     XrXirInstruction storage={0};const XrXirInstruction *op=NULL;
     CHECK(effect_invocation_flow_instruction(&flow,place,&storage,&op)==XR_XIR_OK);
     uint32_t at=0;CHECK(op->op==XR_XIR_OBJECT_PLACE &&
         effect_invocation_class_find(context,&replay.final.nodes[flow.node],op->args[0],&at)==XR_XIR_OK);
     EffectInvocationClassFact *fact=&replay.final.nodes[flow.node].classes[at],saved=*fact;
-    fact->mask=0;fact->rank=0;actual=(XrXirCellOriginView){0};
-    CHECK(effect_invocation_class_cell_view(&flow,project,&actual)==XR_XIR_UNRESOLVED &&
-        !actual.intrinsic_mask && !actual.dependencies && !actual.parameter_count);*fact=saved;
-    fact->mask=1;fact->rank=0;actual=(XrXirCellOriginView){0};
-    CHECK(effect_invocation_class_cell_view(&flow,project,&actual)==XR_XIR_BAD_STRUCTURE);*fact=saved;
+    fact->mask=0;fact->rank=0;actual=&empty;scratch=(XrXirCellClassOriginView){0};
+    CHECK(effect_invocation_class_cell_view(&flow,project,&scratch,&actual)==XR_XIR_UNRESOLVED &&
+        actual==&empty &&
+        !actual->intrinsic_mask && !actual->dependencies && !actual->parameter_count);*fact=saved;
+    fact->mask=1;fact->rank=0;actual=&empty;scratch=(XrXirCellClassOriginView){0};
+    CHECK(effect_invocation_class_cell_view(&flow,project,&scratch,&actual)==XR_XIR_BAD_STRUCTURE &&
+        actual==&empty);*fact=saved;
     CHECK(effect_invocation_class_terminals_match(&flow)==XR_XIR_OK);
     EffectInvocationNode *node=&replay.final.nodes[flow.node];
     uint32_t local_mask=node->local_mask,intrinsic_mask=node->intrinsic_mask;

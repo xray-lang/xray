@@ -17,6 +17,7 @@
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#c);exit(1);}}while(0)
 #include "xir/xxir_verify.c"
 #include "xir/xxir_effects.c"
+#include "xir_cell_class_view_data_cases.h"
 
 typedef struct MaskRead {const XrXirCompileContext *context;uint64_t calls,reject;} MaskRead;
 static bool mask_read_work(const void *owner,uint64_t units) {
@@ -270,6 +271,7 @@ int main(void) {
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
     mask_matrix(&context);mask_boundaries(&context);mask_work_bounds(&context);mask_cell_values(&context);mask_visit_walks(&context);
+    class_view_data_controls(&context);
     CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK &&
         after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);
     fprintf(stderr,"Snapshot no-allocation read matrix work%llu cap4000000 live%llu/%llu\n",

@@ -1177,6 +1177,30 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_origin_view(const XrXirCompileContext *c
         f->words,f->scopes ? proof->scope_parameters+f->scope_begin : NULL,f->scopes};
     return XR_XIR_OK;
 }
+#define CELL_CLASS_VIEW_OUTPUT_FIELDS(X) \
+    X(cells.intrinsic_mask) X(cells.dependencies) X(cells.word_count) \
+    X(cells.parameters) X(cells.parameter_count) X(residual_intrinsic_mask) \
+    X(dependencies) X(word_count) X(roots) X(root_count)
+
+/* The caller has checked every target field is empty. Publish only actual
+ * nonzero fields after all charges succeed; zero fields already have their
+ * exact value. Padding and redundant zero stores carry no semantic facts. */
+static XrXirStatus cell_class_view_publish(const XrXirCompileContext *context,
+    const XrXirCellClassOriginView *view,XrXirCellClassOriginView *output) {
+    if (!xir_compile_context_valid(context) || !view || !output) return XR_XIR_BAD_STRUCTURE;
+    uint64_t units=1;
+    /* Each field is tested once for sizing and once for publication. */
+#define CELL_CLASS_VIEW_SIZE(member) units+=2+(view->member?sizeof(view->member):0);
+    CELL_CLASS_VIEW_OUTPUT_FIELDS(CELL_CLASS_VIEW_SIZE)
+#undef CELL_CLASS_VIEW_SIZE
+    if (!xir_compile_work(context,units)) return XR_XIR_BUDGET;
+#define CELL_CLASS_VIEW_STORE(member) if (view->member) output->member=view->member;
+    CELL_CLASS_VIEW_OUTPUT_FIELDS(CELL_CLASS_VIEW_STORE)
+#undef CELL_CLASS_VIEW_STORE
+    return XR_XIR_OK;
+}
+#undef CELL_CLASS_VIEW_OUTPUT_FIELDS
+
 /* The legacy view remains conservative. Only the unique equation replay
  * may substitute every real Class subject and retain actual MODULE checks. */
 XR_FUNC XrXirStatus xr_xir_compile_cell_class_origin_view(const XrXirCompileContext *context,
@@ -1222,8 +1246,7 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_class_origin_view(const XrXirCompileCont
         (origin&XR_XIR_CELL_ORIGIN_UNKNOWN ? XR_XIR_CELL_ACCESS_UNKNOWN:0);
     view.dependencies=row;view.word_count=f->class_words;
     view.roots=f->class_count ? proof->class_roots+f->class_begin : NULL;view.root_count=f->class_count;
-    if (!xir_compile_work(context,sizeof(view))) return XR_XIR_BUDGET;
-    *output=view;return XR_XIR_OK;
+    return cell_class_view_publish(context,&view,output);
 }
 XR_FUNC XrXirStatus xr_xir_compile_cell_access(const XrXirCompileContext *context,
     const XrXirCellProvenance *proof, const XrXirCellAccessRequest *request, uint32_t *output) {

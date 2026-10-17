@@ -819,35 +819,41 @@ static XrXirStatus effect_invocation_cell(EffectInvocationFlow *flow,
     if (!xir_compile_work(owner->work,sizeof(uint32_t)+sizeof(const uint64_t *))) return XR_XIR_BUDGET;
     uint32_t key_body=owner->final.nodes[flow->node].body;
     const uint64_t *key_input=owner->final.nodes[flow->node].input;
-    XrXirCellOriginView view={0};
-    XrXirStatus status=owner->class_enabled ? effect_invocation_class_cell_view(flow,value,&view) :
-        xr_xir_compile_cell_origin_view(owner->work,owner->final.cells,key_body,value,&view);
+    XrXirCellOriginView legacy={0};XrXirCellClassOriginView storage={0};
+    const XrXirCellOriginView *view=NULL;XrXirStatus status=XR_XIR_OK;
+    if (owner->class_enabled) status=effect_invocation_class_cell_view(flow,value,&storage,&view);
+    else {
+        status=xr_xir_compile_cell_origin_view(owner->work,owner->final.cells,key_body,value,&legacy);
+        if (status==XR_XIR_OK && !xir_compile_work(owner->work,sizeof(view))) status=XR_XIR_BUDGET;
+        if (status==XR_XIR_OK) view=&legacy;
+    }
     if (status!=XR_XIR_OK) return status;
-    if (view.word_count!=((uint64_t)view.parameter_count+63)/64 ||
-        (!!view.dependencies!=!!view.word_count) ||
-        (!!view.parameters!=!!view.parameter_count) ||
-        (view.intrinsic_mask&~(XR_XIR_CELL_ACCESS_ROOT|XR_XIR_CELL_ACCESS_UNKNOWN)))
+    if (!view) return XR_XIR_BAD_STRUCTURE;
+    if (view->word_count!=((uint64_t)view->parameter_count+63)/64 ||
+        (!!view->dependencies!=!!view->word_count) ||
+        (!!view->parameters!=!!view->parameter_count) ||
+        (view->intrinsic_mask&~(XR_XIR_CELL_ACCESS_ROOT|XR_XIR_CELL_ACCESS_UNKNOWN)))
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
     uint32_t known=flow->basis.parameters+2;
     uint64_t known_bit=UINT64_C(1)<<(known%64);
     if (changed && !(output[known/64]&known_bit)) *changed=true;
     output[known/64]|=known_bit;
-    if (view.intrinsic_mask&XR_XIR_CELL_ACCESS_ROOT) {
+    if (view->intrinsic_mask&XR_XIR_CELL_ACCESS_ROOT) {
         uint64_t root_bit=UINT64_C(1)<<(flow->basis.parameters%64);
         if (changed && !(output[flow->basis.parameters/64]&root_bit)) *changed=true;
         output[flow->basis.parameters/64]|=root_bit;
     }
-    if (view.intrinsic_mask&XR_XIR_CELL_ACCESS_UNKNOWN) {
+    if (view->intrinsic_mask&XR_XIR_CELL_ACCESS_UNKNOWN) {
         uint32_t bit=flow->basis.parameters+1;
         uint64_t unknown_bit=UINT64_C(1)<<(bit%64);
         if (changed && !(output[bit/64]&unknown_bit)) *changed=true;
         output[bit/64]|=unknown_bit;
     }
-    for (uint32_t bit=0;bit<view.parameter_count;++bit) {
+    for (uint32_t bit=0;bit<view->parameter_count;++bit) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-        if (!(view.dependencies[bit/64]&(UINT64_C(1)<<(bit%64)))) continue;
-        uint32_t parameter=view.parameters[bit];
+        if (!(view->dependencies[bit/64]&(UINT64_C(1)<<(bit%64)))) continue;
+        uint32_t parameter=view->parameters[bit];
         if (parameter>=flow->function->parameter_count ||
             !xr_xir_type_is_cell(flow->body.domain.types,flow->function->parameters[parameter]))
             return XR_XIR_BAD_STRUCTURE;
