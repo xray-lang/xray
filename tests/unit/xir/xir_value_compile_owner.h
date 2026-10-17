@@ -20,6 +20,7 @@ static ValueCompileBlock value_compile_blocks[65536];
 static size_t value_compile_calls, value_compile_live, value_compile_bytes;
 static size_t value_compile_fail_at = SIZE_MAX;
 static bool value_compile_injected;
+static void (*value_compile_allocation_observer)(size_t bytes);
 static void *value_compile_malloc(size_t bytes) {
     if (value_compile_calls++ == value_compile_fail_at) { value_compile_injected = true; return NULL; }
     void *p = xr_malloc(bytes);
@@ -27,6 +28,7 @@ static void *value_compile_malloc(size_t bytes) {
         CHECK(value_compile_live < 65536 && bytes <= SIZE_MAX - value_compile_bytes);
         value_compile_blocks[value_compile_live++] = (ValueCompileBlock){p, bytes};
         value_compile_bytes += bytes;
+        if (value_compile_allocation_observer) value_compile_allocation_observer(bytes);
     }
     return p;
 }

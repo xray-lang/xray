@@ -44,7 +44,6 @@ typedef struct CellProofBuild {
     uint8_t *queued, *uses;
     CellProofEdge *edges;
     uint32_t edge_count, edge_capacity, queue_read, queue_write, queue_count;
-    bool counting_edges;
 } CellProofBuild;
 
 static bool cell_proof_work(CellProofBuild *build, uint64_t units) {
@@ -107,18 +106,33 @@ static bool cell_proof_seed(CellProofBuild *build, uint32_t node, uint8_t mask) 
     build->proof->origins[node] = next;
     return cell_proof_enqueue(build,node);
 }
+/* Only initialized complete edges move. Growth retains every numeric forward
+ * and reverse link, and no solver runs until the full physical walk ends. */
+static bool cell_proof_edge_reserve(CellProofBuild *build) {
+    if (build->edge_count<build->edge_capacity) return true;
+    if (build->edge_count!=build->edge_capacity || build->edge_count==UINT32_MAX)
+        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
+    uint32_t capacity=build->edge_capacity?build->edge_capacity:1;
+    if (build->edge_capacity) capacity=capacity>UINT32_MAX/2?UINT32_MAX:capacity*2;
+    if ((uint64_t)capacity>SIZE_MAX/sizeof(*build->edges))
+        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
+    CellProofEdge *edges=xir_compile_alloc(build->context,(size_t)capacity*sizeof(*edges),&build->status);
+    if (!edges) return false;
+    if (!cell_proof_work(build,(uint64_t)build->edge_count*sizeof(*edges)+3)) {
+        xr_compile_resources_free(edges);return false;
+    }
+    for (uint32_t e=0;e<build->edge_count;++e) {
+        const CellProofEdge *source=&build->edges[e];
+        edges[e]=(CellProofEdge){source->from,source->to,source->next,source->reverse,source->identity};
+    }
+    xr_compile_resources_free(build->edges);build->edges=edges;build->edge_capacity=capacity;return true;
+}
+
 static bool cell_proof_edge(CellProofBuild *build, uint32_t from, uint32_t to, bool identity) {
     if (!cell_proof_work(build,3)) return false;
     if (from >= build->proof->value_count || to >= build->proof->value_count)
         return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
-    if (build->counting_edges) {
-        if (build->edge_count == UINT32_MAX)
-            return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
-        if (!cell_proof_work(build,1)) return false;
-        ++build->edge_count; return true;
-    }
-    if (build->edge_count == build->edge_capacity)
-        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    if (!cell_proof_edge_reserve(build)) return false;
     if (!cell_proof_work(build,9)) return false;
     uint32_t id = build->edge_count++;
     build->edges[id] = (CellProofEdge){from,to,build->heads[from],build->reverse_heads[to],identity};
@@ -603,7 +617,7 @@ static bool cell_proof_local_uninit(CellProofBuild *build,uint32_t f,uint32_t i)
     return op && op->op==XR_XIR_LOCAL_UNINIT;
 }
 
-/* This exact row receiver is shared by edge count and edge write. */
+/* Every current row reaches this sole seed and complete-edge receiver. */
 static bool cell_proof_edge_row(CellProofBuild *build,uint32_t f,uint32_t i,
     const XrXirCellProofBodyHead *function,const XrXirInstruction *op) {
     XrXirCellProvenance *proof=build->proof;const XirMetadataDomain *module=&build->body->domain;
@@ -740,28 +754,13 @@ static bool cell_proof_build_edges(CellProofBuild *build) {
     return true;
 }
 
-static bool cell_proof_edge_storage_bytes(size_t count, size_t *bytes) {
-    if (count > SIZE_MAX/sizeof(CellProofEdge)) return false;
-    *bytes = count*sizeof(CellProofEdge); return true;
-}
-/* The same complete walker seeds one proof and counts every actual edge.
- * Replaying it appends the exact ordered graph; seed OR operations are idempotent.
- * No solver or output observes the proof before both finite passes complete. */
+/* Complete physical intake seeds the proof and appends each real edge once.
+ * The graph remains private until all rows and canonical boundaries pass;
+ * origin solving and independent sink validation still follow this walk. */
 static bool cell_proof_prepare_edges(CellProofBuild *build) {
-    build->counting_edges = true;
-    bool counted = cell_proof_build_edges(build);
-    build->counting_edges = false;
-    if (!counted) return false;
-    build->edge_capacity = build->edge_count; build->edge_count = 0;
-    size_t bytes = 0;
-    if (!cell_proof_edge_storage_bytes(build->edge_capacity,&bytes))
-        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
-    if (!cell_proof_work(build,4)) return false;
-    build->edges = xir_compile_alloc(build->context,bytes,&build->status);
-    if (build->status != XR_XIR_OK || !cell_proof_build_edges(build)) return false;
-    if (!cell_proof_work(build,1)) return false;
-    return build->edge_count == build->edge_capacity ||
-        cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    if (build->edges || build->edge_count || build->edge_capacity)
+        return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
+    return cell_proof_build_edges(build);
 }
 
 static bool cell_proof_join(CellProofBuild *build, uint32_t from, uint32_t to) {
