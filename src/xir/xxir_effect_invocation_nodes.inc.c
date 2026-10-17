@@ -372,8 +372,14 @@ static XrXirStatus effect_invocation_edge(EffectInvocationWorkspace *owner,
         owner->final.nodes[caller].edge_head,owner->consumers[target],latent};
     owner->final.nodes[caller].edge_head=at;owner->consumers[target]=at;
     ++owner->final.edge_count;owner->edge_index[position]=at+1;
-    /* A completed child's producer can predate a newly linked real edge. */
-    return owner->producer_enabled || owner->class_enabled ? effect_invocation_enqueue(owner,caller) : XR_XIR_OK;
+    if (!owner->producer_enabled && !owner->class_enabled) return XR_XIR_OK;
+    if (!owner->states) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+    /* A queued child's first result change wakes this new consumer through
+     * the existing chain. A completed or active child can predate the edge,
+     * so its caller still receives the original independent queue request. */
+    if (owner->states[target].queued && !owner->states[target].expanded) return XR_XIR_OK;
+    return effect_invocation_enqueue(owner,caller);
 }
 
 static XrXirStatus effect_invocation_join(EffectInvocationWorkspace *owner,

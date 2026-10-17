@@ -186,6 +186,10 @@ static void invocation_returned_environment_owned(const XrXirCompileContext *con
     CHECK(effect_invocation_read_open(context,published,certificate->declared,owner,&replay)==XR_XIR_OK);replay.work=context;replay.effects=published;
     replay.declared=certificate->declared;
     EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
+    CHECK(replay.body.owner==certificate->body && replay.body.read.owner==context);
+    /* Read-open binds the current owned input. Disable its implicit reader
+     * so this independent replay must consume the explicit request instead. */
+    replay.body.read=(EffectBodyRead){0};
     CHECK(!replay.body.read.owner && effect_invocation_producers_verify_read(&replay,&request)==XR_XIR_OK);
     uint32_t factory=owner->roots[1],entry=owner->roots[0];
     InvocationReturnedLedger ledger={context};
