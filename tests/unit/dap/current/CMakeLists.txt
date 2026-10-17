@@ -23,6 +23,29 @@ endif()
 add_test(NAME test_dap_native_throw_boundary COMMAND test_dap_native_throw_boundary)
 set_tests_properties(test_dap_native_throw_boundary PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;ownership;execution")
 
+add_executable(test_dap_native_task_producer test_native_task_producer.c)
+target_link_libraries(test_dap_native_task_producer PRIVATE xray_xir_source xray_xir_cgen)
+target_compile_definitions(test_dap_native_task_producer PRIVATE
+    XR_NATIVE_TASK_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}" XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set(XR_DAP_NATIVE_TASK_DIR "${CMAKE_CURRENT_BINARY_DIR}/native-task")
+add_custom_command(OUTPUT "${XR_DAP_NATIVE_TASK_DIR}/native_task.c" "${XR_DAP_NATIVE_TASK_DIR}/native_task.h"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${XR_DAP_NATIVE_TASK_DIR}"
+    COMMAND $<TARGET_FILE:test_dap_native_task_producer> "${XR_DAP_NATIVE_TASK_DIR}"
+    DEPENDS test_dap_native_task_producer "${CMAKE_CURRENT_SOURCE_DIR}/native_task_throw.xr" VERBATIM)
+add_executable(test_dap_native_task_hold test_native_task_hold.c
+    "${XR_DAP_NATIVE_TASK_DIR}/native_task.c" "${XR_DAP_NATIVE_TASK_DIR}/native_task.h")
+target_link_libraries(test_dap_native_task_hold PRIVATE xray_xir_vm xray_xir_scalar)
+target_include_directories(test_dap_native_task_hold PRIVATE "${XR_DAP_NATIVE_TASK_DIR}")
+foreach(XR_DAP_NATIVE_TASK_TARGET test_dap_native_task_producer test_dap_native_task_hold)
+    if(MSVC)
+        target_compile_options(${XR_DAP_NATIVE_TASK_TARGET} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${XR_DAP_NATIVE_TASK_TARGET} PRIVATE -Wall -Wextra -Werror)
+    endif()
+endforeach()
+add_test(NAME test_dap_native_task_hold COMMAND test_dap_native_task_hold)
+set_tests_properties(test_dap_native_task_hold PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;task;ownership;execution")
+
 add_executable(test_xir_effects_compile_prefix test_effects_compile_prefix.c)
 target_link_libraries(test_xir_effects_compile_prefix PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 target_compile_definitions(test_xir_effects_compile_prefix PRIVATE

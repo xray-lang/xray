@@ -17,7 +17,7 @@ XR_FUNC XrXirCallStatus xir_call_native_observer_bind(const XrXirCallView *view,
     if (!xr_xir_domain_work(budget->work_domain,1)) return XR_XIR_CALL_LIMIT;
     budget->native_instance=call->config.instance;budget->native_observer=observer;return XR_XIR_CALL_READY;
 }
-static XrXirCallStatus call_native_throw_offer(XrXirCall *call,XrXirCallResult *result,bool *held) {
+static XrXirCallStatus call_native_throw_offer(XrXirCall *call,XrXirCallResult *result,bool scope,bool *held) {
     XrXirCallBudget *budget=call->budget;CallFrame *frame=call->top;
     if (!budget || !budget->native_observer) return XR_XIR_CALL_READY;
     if (budget->native_instance!=call->config.instance || !call->executor_owner ||
@@ -28,13 +28,14 @@ static XrXirCallStatus call_native_throw_offer(XrXirCall *call,XrXirCallResult *
     XirCallNativeThrowEvent event={{{call->executor_owner,call->executor_activation,
         call->executor_generation,call->executor_ticket},call->config.instance,frame->epoch,
         frame->parent ? frame->parent->epoch : 0,(uint32_t)(frame->entry-call->config.entries),frame->depth,
-        XR_XIR_CALL_NORMAL},&result->value};
+        XR_XIR_CALL_NORMAL,scope},&result->value};
     bool pause=false;XrXirCallView *active=call->active_view;
     call->active_view=NULL;budget->notifying=true;
     XrXirCallStatus status=budget->native_observer->throwing(budget->native_observer->owner,&event,&pause);
     budget->notifying=false;call->active_view=active;
     if (status!=XR_XIR_CALL_READY || !pause) return status;
     xr_xir_call_result_move(result,&frame->pending);frame->native_pending=true;
+    frame->scope_exit=scope;
     budget->native_hold=call;*held=true;return XR_XIR_CALL_READY;
 }
 static XrXirCallStatus call_native_throw_current(XrXirCall *call,const XrXirExecutorBinding *binding,uint64_t identity) {
@@ -55,7 +56,7 @@ XR_FUNC XrXirCallStatus xir_call_native_throw_copy(XrXirCall *call,const XrXirEx
     CallFrame *frame=call->top;XirCallNativeThrow fresh={{{call->executor_owner,call->executor_activation,
         call->executor_generation,call->executor_ticket},call->config.instance,frame->epoch,
         frame->parent ? frame->parent->epoch : 0,(uint32_t)(frame->entry-call->config.entries),frame->depth,
-        XR_XIR_CALL_NORMAL},{0}};
+        XR_XIR_CALL_NORMAL,frame->scope_exit},{0}};
     if (xr_xir_value_copy(&frame->pending.value,&fresh.value)!=XR_XIR_VALUE_OK) return XR_XIR_CALL_LIMIT;
     *output=fresh;return XR_XIR_CALL_READY;
 }

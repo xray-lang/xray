@@ -126,5 +126,15 @@ static void accept_scope_exit(XrXirCall *call, XrXirAction action, bool panic) {
     } else if (action.flags || !boundary_value(action.value, XR_XIR_UNIT)) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE); return;
     }
+    if (result.status==XR_XIR_CALL_THROWN && call->top->code_kind==XR_XIR_CALL_CODE_NATIVE && !cleanup_active(call)) {
+        bool held=false;XrXirCallStatus observed=call_native_throw_offer(call,&result,true,&held);
+        if (observed!=XR_XIR_CALL_READY) {
+            xr_xir_call_result_drop(&result);
+            if (observed==XR_XIR_CALL_OOM || observed==XR_XIR_CALL_LIMIT) request_execution_failure(call,observed);
+            else abort_frames(call,XR_XIR_CALL_BAD_STATE);
+            return;
+        }
+        if (held) return;
+    }
     request_exit(call, &result, true);
 }

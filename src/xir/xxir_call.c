@@ -576,8 +576,8 @@ static void abort_frames(XrXirCall *call, XrXirCallStatus reason) {
     call->aborting = true;
     if (call->abort_reason == XR_XIR_CALL_READY) call->abort_reason = reason;
 }
-#include "xxir_call_exit.inc.c"
 #include "xxir_call_native_observer.inc.c"
+#include "xxir_call_exit.inc.c"
 
 XrXirCallStatus xr_xir_call_config_init(XrXirCallConfig *config, size_t size) {
     if (!config) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -944,7 +944,7 @@ static void accept_action(XrXirCall *call, XrXirAction action) {
         return;
     }
     if (!returning && call->top->code_kind==XR_XIR_CALL_CODE_NATIVE && !cleanup_active(call)) {
-        bool held=false;XrXirCallStatus observed=call_native_throw_offer(call,&result,&held);
+        bool held=false;XrXirCallStatus observed=call_native_throw_offer(call,&result,false,&held);
         if (observed!=XR_XIR_CALL_READY) {
             xr_xir_call_result_drop(&result);
             if (observed==XR_XIR_CALL_OOM || observed==XR_XIR_CALL_LIMIT) request_execution_failure(call,observed);
@@ -1016,8 +1016,9 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
             request_exit_status(call, XR_XIR_CALL_CANCELLED);
         if (call->top->native_pending) {
             --quantum;XrXirCallResult original=call_result(XR_XIR_CALL_READY);
+            bool scope=call->top->scope_exit;
             xr_xir_call_result_move(&call->top->pending,&original);
-            call->top->native_pending=false;request_exit(call,&original,false);continue;
+            call->top->native_pending=false;request_exit(call,&original,scope);continue;
         }
         if (call->top->exiting && (call->top->exit_done || !call->top->entered ||
             !(call->top->entry->flags & XR_XIR_ENTRY_EXIT))) {
