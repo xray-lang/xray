@@ -375,10 +375,10 @@ done:
  * construction-only pointers are then removed from the published certificate. */
 #include "xxir_effect_invocation_final_vectors.inc.c"
 
-/* All solver flows have returned before this independent receiving pass.
- * Retire their physical data before rebuilding Cell evidence; subsequent
- * Class replay receives complete current rows in the same request owner. */
-static XrXirStatus effect_invocation_class_verify_released_rows(EffectInvocationWorkspace *owner) {
+/* Every caller has ended all borrows from this one request's physical data.
+ * Only its matching material, ledger and complete directory can be retired;
+ * later independent replay receives fresh rows rather than a saved proof. */
+static XrXirStatus effect_invocation_rows_retire(EffectInvocationWorkspace *owner) {
     if (!owner || !xir_compile_context_valid(owner->work) || owner->pending ||
         !effect_body_material_shape(owner->final.material)) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationRows *rows=owner->physical_rows;
@@ -390,7 +390,24 @@ static XrXirStatus effect_invocation_class_verify_released_rows(EffectInvocation
         if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
         effect_invocation_rows_drop(rows);
     }
-    return effect_invocation_class_verify(owner);
+    return XR_XIR_OK;
+}
+
+static XrXirStatus effect_invocation_class_verify_released_rows(EffectInvocationWorkspace *owner) {
+    XrXirStatus status=effect_invocation_rows_retire(owner);
+    return status==XR_XIR_OK?effect_invocation_class_verify(owner):status;
+}
+
+/* All terminal replay consumers have returned. Their data directory cannot
+ * enter the receiving Final, whose numeric vectors and child owners retain
+ * the original independent correspondence and rollback transaction. */
+static XrXirStatus effect_invocation_final_vectors_receive(const XrXirCompileContext *work,
+    EffectInvocationWorkspace *owner,EffectInvocationFinal *target) {
+    if (!owner || !xir_compile_context_valid(owner->work) || !xir_compile_context_valid(work) ||
+        owner->work->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_invocation_final_vectors_binding(work,&owner->final,target);
+    if (status==XR_XIR_OK) status=effect_invocation_rows_retire(owner);
+    return status==XR_XIR_OK?effect_invocation_final_vectors_copy(work,&owner->final,target):status;
 }
 
 static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
@@ -444,7 +461,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(*certificate->final))) status=XR_XIR_BUDGET;
         if (status==XR_XIR_OK) {
             *certificate->final=owner->final;final_copied=true;
-            status=effect_invocation_final_vectors_copy(work,&owner->final,certificate->final);
+            status=effect_invocation_final_vectors_receive(work,owner,certificate->final);
         }
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(certificate->final->summary)+2*sizeof(void *)))
             status=XR_XIR_BUDGET;

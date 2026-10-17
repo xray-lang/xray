@@ -16,7 +16,7 @@ static void effect_invocation_final_vectors_release(const EffectInvocationFinal 
     if (discard->edges!=keep->edges) xr_compile_resources_free(discard->edges);
 }
 
-static XrXirStatus effect_invocation_final_vectors_copy(const XrXirCompileContext *work,
+static XrXirStatus effect_invocation_final_vectors_binding(const XrXirCompileContext *work,
     const EffectInvocationFinal *source,EffectInvocationFinal *target) {
     if (!xir_compile_context_valid(work) || !source || !target || source==target ||
         !source->material || source->material->resources!=work->resources ||
@@ -28,7 +28,14 @@ static XrXirStatus effect_invocation_final_vectors_copy(const XrXirCompileContex
         return XR_XIR_BAD_STRUCTURE;
     if ((uint64_t)source->count>SIZE_MAX/sizeof(*source->nodes) ||
         (uint64_t)source->edge_count>SIZE_MAX/sizeof(*source->edges)) return XR_XIR_BUDGET;
-    EffectInvocationFinal copied=*source;XrXirStatus status=XR_XIR_OK;
+    return XR_XIR_OK;
+}
+
+static XrXirStatus effect_invocation_final_vectors_copy(const XrXirCompileContext *work,
+    const EffectInvocationFinal *source,EffectInvocationFinal *target) {
+    XrXirStatus status=effect_invocation_final_vectors_binding(work,source,target);
+    if (status!=XR_XIR_OK) return status;
+    EffectInvocationFinal copied=*source;
     if (!xir_compile_work(work,sizeof(copied))) return XR_XIR_BUDGET;
     if (source->count<source->capacity) {
         size_t bytes=(size_t)source->count*sizeof(*source->nodes);
