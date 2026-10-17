@@ -49,7 +49,7 @@ static XrXirStatus effect_invocation_closed(EffectInvocationOwner *owner) {
     if (!owner || !effect_body_material_shape(owner->material) || !owner->graph || owner->pending || !owner->count)
         return XR_XIR_BAD_STRUCTURE;
     uint64_t *expected=NULL;size_t capacity=0;
-    XrXirStatus status=XR_XIR_OK;uint64_t linked=0;
+    XrXirStatus status=effect_invocation_node_index_verify(owner->work,owner);uint64_t linked=0;
     for (uint32_t n=0;n<owner->count && status==XR_XIR_OK;++n) {
         const EffectInvocationNode *node=&owner->nodes[n];
         if (!node->expanded || node->queued || node->body>=owner->body.domain.function_count) {

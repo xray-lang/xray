@@ -99,6 +99,7 @@ static XrXirStatus effect_invocation_basis(const EffectInvocationOwner *owner,
 }
 
 #include "xxir_effect_invocation_zero_inputs.inc.c"
+#include "xxir_effect_invocation_node_index.inc.c"
 
 static void effect_invocation_free(EffectInvocationOwner *owner) {
     if (!owner) return;
@@ -121,6 +122,7 @@ static void effect_invocation_free(EffectInvocationOwner *owner) {
     xr_compile_resources_free(owner->consumers);
     xr_compile_resources_free(owner->sites);
     xr_compile_resources_free(owner->roots);xr_compile_resources_free(owner->root_spaces);
+    xr_compile_resources_free(owner->body_heads);
     /* Local seeds, physical rows and Cell proof share the material lifetime. */
     xr_compile_resources_free(owner);
 }
@@ -189,7 +191,10 @@ static XrXirStatus effect_invocation_enqueue(EffectInvocationOwner *owner,uint32
  * physical origin rows are copied into this owner before the node is linked. */
 static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     uint32_t root,uint32_t body,const uint64_t *input,uint32_t *output) {
-    if (body>=owner->body.domain.function_count || !output) return XR_XIR_BAD_STRUCTURE;
+    if (!owner || !owner->body_heads || !output ||
+        owner->body_head_count!=owner->body.domain.function_count ||
+        body>=owner->body_head_count || owner->count>owner->capacity ||
+        (owner->count && !owner->nodes)) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationBasis basis={0};XrXirStatus status=effect_invocation_basis(owner,root,&basis);
     if (status!=XR_XIR_OK) return status;
     EffectBodyFunctionDimensions head={0};status=effect_invocation_dimensions(owner,body,&head);
@@ -197,10 +202,16 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     uint32_t parameters=head.parameter_count;
     uint64_t words=(uint64_t)parameters*basis.row_words;
     if (words>SIZE_MAX/sizeof(*input) || (words && !input)) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t n=0;n<owner->count;++n) {
-        if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-        const EffectInvocationNode *node=&owner->nodes[n];
-        if (node->root!=root || node->body!=body || node->parameter_count!=parameters) continue;
+    if (!xir_compile_work(owner->work,sizeof(uint32_t))) return XR_XIR_BUDGET;
+    uint32_t previous=UINT32_MAX;
+    for (uint32_t n=owner->body_heads[body];n!=UINT32_MAX;n=owner->nodes[n].key_next) {
+        if (!xir_compile_work(owner->work,7)) return XR_XIR_BUDGET;
+        if (n>=owner->count || n>=previous) return XR_XIR_BAD_STRUCTURE;
+        const EffectInvocationNode *node=&owner->nodes[n];previous=n;
+        if (node->body!=body || (node->key_next!=UINT32_MAX && node->key_next>=n))
+            return XR_XIR_BAD_STRUCTURE;
+        if (node->root!=root || node->parameter_count!=parameters) continue;
+        if (words && !node->input) return XR_XIR_BAD_STRUCTURE;
         bool same=true;
         for (size_t w=0;w<(size_t)words;++w) {
             if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
@@ -250,7 +261,7 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     for (uint32_t a=0;a<(uint32_t)cause_count;++a) {
         causes[a].next=causes[a].edge=causes[a].distance=UINT32_MAX;
     }
-    if (!xir_compile_work(owner->work,input_bytes+sizeof(EffectInvocationNode))) {
+    if (!xir_compile_work(owner->work,input_bytes+sizeof(EffectInvocationNode)+sizeof(uint32_t))) {
         xr_compile_resources_free(causes);return XR_XIR_BUDGET;
     }
     if (input_bytes) memcpy(owned,input,input_bytes);
@@ -260,10 +271,11 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     uint32_t at=owner->count;
     owner->nodes[at]=(EffectInvocationNode){.root=root,.body=body,
         .parameter_count=parameters,.instruction_count=head.instruction_count,
+        .key_next=owner->body_heads[body],
         .input=shared?shared:owned,.cells=outputs,
         .causes=causes,.cause_count=(uint32_t)cause_count,.local_cells=local_cells,
         .parameter_coverage=coverage,.edge_head=UINT32_MAX,.classes=classes,.class_count=class_count};
-    ++owner->count;
+    owner->body_heads[body]=at;++owner->count;
     status=effect_invocation_enqueue(owner,at);
     if (status!=XR_XIR_OK) return status;
     *output=at;return XR_XIR_OK;

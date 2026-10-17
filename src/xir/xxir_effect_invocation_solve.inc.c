@@ -595,7 +595,7 @@ static XrXirStatus effect_invocation_local_node_write(EffectInvocationOwner *own
     EffectInvocationCause *causes=xir_compile_alloc(owner->work,bytes,&status);
     if (!causes) return status;
     if (!xir_compile_work(owner->work,bytes+sizeof(EffectInvocationNode)+
-        3*sizeof(uint32_t)+sizeof(owner->count))) {
+        4*sizeof(uint32_t)+sizeof(owner->count))) {
         xr_compile_resources_free(causes);return XR_XIR_BUDGET;
     }
     uint32_t mask=(input->facts.requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
@@ -615,8 +615,9 @@ static XrXirStatus effect_invocation_local_node_write(EffectInvocationOwner *own
     owner->nodes[function]=(EffectInvocationNode){.root=0,.body=function,
         .instruction_count=head->instruction_count,.intrinsic_mask=mask,.local_mask=mask,
         .cause_count=3,.causes=causes,.cells=values,.local_cells=values?values+words:NULL,
-        .edge_head=UINT32_MAX,.expanded=true};
+        .edge_head=UINT32_MAX,.key_next=UINT32_MAX,.expanded=true};
     owner->roots[function]=function;owner->root_spaces[function]=0;
+    owner->body_heads[function]=function;
     owner->consumers[function]=UINT32_MAX;++owner->count;return XR_XIR_OK;
 }
 
@@ -639,6 +640,8 @@ static XrXirStatus effect_invocation_local_nodes(EffectInvocationOwner *owner,
         sizeof(owner->local_roots)+sizeof(owner->local_witnesses))) return XR_XIR_BUDGET;
     owner->capacity=count;owner->local_roots=owner->material->local_roots;
     owner->local_witnesses=owner->material->local_witnesses;
+    status=effect_invocation_node_index_new(owner);
+    if (status!=XR_XIR_OK) return status;
     for (uint32_t f=0;f<count;++f) {
         if (!xir_compile_work(owner->work,2+2*5)) return XR_XIR_BUDGET;
         if (inputs[f].facts.requires_root!=owner->local_roots[f].requires_root ||
@@ -703,6 +706,8 @@ static XrXirStatus effect_invocation_local_equations_match(const XrXirCompileCon
         owner->site_count || owner->binding_count || owner->sites || owner->deferred_count ||
         owner->deferred_capacity || owner->deferred_calls || owner->edge_count || owner->edge_capacity || owner->edges ||
         owner->edge_index_capacity || owner->edge_index) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus index_status=effect_invocation_node_index_verify(work,owner);
+    if (index_status!=XR_XIR_OK) return index_status;
     for (uint32_t f=0;f<count;++f) {
         XrXirStatus status=effect_invocation_local_node_match(work,owner,f,&inputs[f]);
         if (status!=XR_XIR_OK) return status;
@@ -779,6 +784,7 @@ static XrXirStatus effect_invocations_create(const XrXirCompileContext *work,
         else owner->roots=xir_compile_alloc(work,(size_t)functions*sizeof(*owner->roots),&status);
         if (status==XR_XIR_OK && !owner->roots) status=XR_XIR_OUT_OF_MEMORY;
     }
+    if (status==XR_XIR_OK) status=effect_invocation_node_index_new(owner);
     for (uint32_t f=0;status==XR_XIR_OK && f<functions;++f) {
         uint64_t *input=NULL;
         status=effect_invocation_root_input(owner,f,&input);

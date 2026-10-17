@@ -42,7 +42,7 @@ typedef struct EffectInvocationClassFact {
 
 typedef struct EffectInvocationNode {
     uint32_t root,body,parameter_count,instruction_count;
-    uint32_t intrinsic_mask,local_mask,cause_count;
+    uint32_t intrinsic_mask,local_mask,cause_count,key_next;
     EffectInvocationCause *causes;
     const uint64_t *input;
     uint64_t *cells,*local_cells;
@@ -129,7 +129,8 @@ typedef struct EffectInvocationOwner {
     EffectInvocationSite *sites;
     EffectInvocationDeferred *deferred_calls;
     uint32_t *consumers;
-    uint32_t *roots,*root_spaces;
+    uint32_t *roots,*root_spaces,*body_heads;
+    uint32_t body_head_count;
     const XrXirRootEffects *local_roots;
     const XrXirRootEffectWitness *local_witnesses;
     uint32_t site_count,binding_count;
