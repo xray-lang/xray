@@ -109,3 +109,21 @@ static XrXirStatus error_finite_context_body(const XrXirCompileContext *work,
     if(status==XR_XIR_OK) *output=function;
     return status;
 }
+
+/* Receiving owns one freshly framed stack identity. Rows and node identities
+ * are still read from the actual proof; no semantic inventory is copied.
+ * Construction lacks this view and reopens current ranges after callbacks. */
+static XrXirStatus error_finite_context_read(const EffectErrorFiniteRead *read,
+    uint32_t context,uint32_t *output) {
+    if(!read || !read->proof || !read->work || !output) return XR_XIR_BAD_STRUCTURE;
+    if(!read->current) return error_finite_context_body(read->work,read->proof,context,output);
+    const EffectErrorFiniteView *current=read->current;const EffectErrorFinite *proof=read->proof;
+    if(current->work!=read->work || current->proof!=proof || current->material!=proof->material ||
+        proof->resources!=read->work->resources || context>=proof->contexts) return XR_XIR_BAD_STRUCTURE;
+    const EffectInvocationFinal *final=proof->invocations;uint32_t node=proof->rows[context].node;
+    if(final->material!=current->material || node>=final->count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t function=final->nodes[node].body;
+    if(function>=proof->functions) return XR_XIR_BAD_STRUCTURE;
+    if(!xir_compile_work(read->work,7+sizeof(*output))) return XR_XIR_BUDGET;
+    *output=function;return XR_XIR_OK;
+}

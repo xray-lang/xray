@@ -11,7 +11,7 @@ static void carrier_domain(unsigned mode) {
     CHECK(effect_errors_seed(&material->domain,&seed,&context)==XR_XIR_OK);
     EffectErrorFinite *proof=finite_prepare(&context,&fixture.module,seed.outcomes_work.atoms,seed.outcomes_work.atom_count);
     CHECK(error_finite_derive(&context,proof)==XR_XIR_OK);finite_verify(&context,proof,XR_XIR_OK);
-    EffectErrorFiniteRead read={proof,&context,UINT32_MAX};uint64_t result=UINT64_MAX;
+    EffectErrorFiniteRead read={proof,&context,UINT32_MAX,NULL};uint64_t result=UINT64_MAX;
     CHECK(error_finite_word(&read,proof->rows[1].end-64,64,&result)==XR_XIR_OK && !result);
     uint32_t at=0;CHECK(error_finite_lower(&read,proof->rows[1].first,&at)==XR_XIR_OK);
     CHECK(at==proof->count || proof->facts[at].coordinate>=proof->rows[1].end);
