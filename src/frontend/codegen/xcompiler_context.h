@@ -15,7 +15,6 @@
 #define XCOMPILER_CONTEXT_H
 
 #include "xcompiler.h"
-#include "../../base/xarena.h"
 #include "../../runtime/object/xstring.h"
 #include "../analyzer/xanalyzer.h"
 
@@ -25,25 +24,6 @@ struct XrModuleGraph;
 
 typedef void (*XrCompilerPostAnalyzeHook)(struct XrCompilerContext *ctx, AstNode *ast,
                                           void *user_data);
-
-typedef enum {
-    CONST_INT,
-    CONST_FLOAT,
-    CONST_STRING,
-    CONST_BOOL,
-    CONST_NULL
-} ConstValueType;
-
-typedef struct ConstEntry {
-    XrString *name;
-    ConstValueType type;
-    union {
-        int64_t int_val;
-        double float_val;
-        XrString *str_val;
-        bool bool_val;
-    } value;
-} ConstEntry;
 
 #include "../../base/xglobal_indices.h"
 #include "../../base/xdefs.h"
@@ -74,13 +54,7 @@ struct XrCompilerContext {
     int graph_module_count;
     int max_globals;
 
-    // Enum type names for type inference
-    char **enum_type_names;
-    int enum_type_count;
-    int enum_type_capacity;
-
     XaAnalyzer *analyzer;  // Static type analyzer (unified type system)
-    XrArena arena;
 
     const char *current_operator;        // Current operator method being compiled
     uint8_t current_storage_mode;        // 0=normal, 1=shared
@@ -91,10 +65,6 @@ struct XrCompilerContext {
     XrClassDescriptor *current_class_desc;
     void *current_class_node;
     bool is_compiling_struct;  // true when compiling AST_STRUCT_DECL
-
-    ConstEntry *const_entries;
-    int const_entry_count;
-    int const_entry_capacity;
 
     /* Analyzer ownership.  When true, context_free destroys the analyzer
      * and its type pool; when false the analyzer outlives the context
@@ -120,14 +90,5 @@ XR_FUNC int xr_compiler_ctx_find_global(XrCompilerContext *ctx, XrString *name);
 
 XR_FUNC void xr_compiler_ctx_set_error(XrCompilerContext *ctx);
 XR_FUNC bool xr_compiler_ctx_has_error(XrCompilerContext *ctx);
-
-XR_FUNC void xr_compiler_ctx_register_enum_type(XrCompilerContext *ctx, const char *enum_name);
-XR_FUNC bool xr_compiler_ctx_is_enum_type(XrCompilerContext *ctx, const char *var_name);
-
-XR_FUNC void xr_compiler_ctx_add_const_int(XrCompilerContext *ctx, XrString *name, int64_t value);
-XR_FUNC void xr_compiler_ctx_add_const_float(XrCompilerContext *ctx, XrString *name, double value);
-XR_FUNC void xr_compiler_ctx_add_const_string(XrCompilerContext *ctx, XrString *name,
-                                              XrString *value);
-XR_FUNC ConstEntry *xr_compiler_ctx_find_const(XrCompilerContext *ctx, XrString *name);
 
 #endif  // XCOMPILER_CONTEXT_H

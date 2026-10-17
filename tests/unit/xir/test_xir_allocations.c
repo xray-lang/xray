@@ -15,19 +15,27 @@
 #include "xir_construction_fixture.h"
 #include "base/xmalloc.h"
 #include "xir/xxir.h"
+#include <stdio.h>
 #include <stdlib.h>
 
 static const XrXirTarget fixture_target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
 
+static size_t allocation_calls, live, class_live_bytes, fail_at = SIZE_MAX;
+static const char *allocation_case_name = "selection", *allocation_stage = "arguments";
+static unsigned allocation_case_scalar, allocation_case_mode;
+
 #define CHECK(condition) do { \
     if (!(condition)) { \
         fprintf(stderr, "allocation check failed at line %d: %s\n", __LINE__, #condition); \
+        fprintf(stderr, "family=%s scalar=%u mode=%u stage=%s calls=%zu fault_enabled=%u fault_ordinal=%zu\n", \
+            allocation_case_name, allocation_case_scalar, allocation_case_mode, allocation_stage, \
+            allocation_calls, (unsigned)(fail_at != SIZE_MAX), fail_at == SIZE_MAX ? 0 : fail_at); \
         exit(1); \
     } \
 } while (0)
 
-static size_t allocation_calls, live, class_live_bytes, fail_at = SIZE_MAX;
 typedef struct AllocationRecord { void *pointer; size_t bytes; uint64_t identity; } AllocationRecord;
+#include "xir_allocation_request_trace.h"
 static AllocationRecord *allocation_records;
 static size_t allocation_capacity;
 #include "xir_segment_lifetime_probe.h"
@@ -44,10 +52,12 @@ static void allocation_record(void *pointer, size_t bytes) {
     allocation_records[live++]=(AllocationRecord){pointer,bytes,new_allocation_identity()};class_live_bytes+=bytes;
 }
 static void *counted_malloc(size_t size) {
+    allocation_request_record(0,size,0,false);
     if (allocation_calls++ == fail_at) return NULL;
     void *pointer=xr_malloc(size);allocation_record(pointer,size);return pointer;
 }
 static void *counted_calloc(size_t count, size_t size) {
+    allocation_request_record(1,count,size,false);
     if (allocation_calls++ == fail_at) return NULL;
     CHECK(!size || count<=SIZE_MAX/size);
     void *pointer=xr_calloc(count,size);allocation_record(pointer,count*size);return pointer;
@@ -65,6 +75,7 @@ static void counted_free(void *pointer) {
     if (!live) {xr_free(allocation_records);allocation_records=NULL;allocation_capacity=0;CHECK(!class_live_bytes);}
 }
 static void *counted_realloc(void *pointer, size_t size) {
+    allocation_request_record(2,size,0,pointer==NULL);
     if (allocation_calls++ == fail_at) return NULL;
     size_t index=0;while(index<live && allocation_records[index].pointer!=pointer)++index;
     CHECK(!pointer || index<live);
@@ -81,6 +92,8 @@ static void *counted_realloc(void *pointer, size_t size) {
     }
     return replacement;
 }
+
+#include "xir_allocation_bookkeeping_cases.h"
 
 #undef xr_malloc
 #undef xr_calloc
@@ -121,13 +134,26 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir/xxir_task.c"
 #include "xir/xxir_program_match.c"
 #include "xir/xxir_program.c"
+static void string_instance_retiring(void *pointer);
+static void allocation_instance_metadata_free(XrXirDomain *domain,void *pointer,uint64_t bytes);
+#define xr_xir_domain_metadata_deallocate(domain,pointer,bytes) allocation_instance_metadata_free(domain,pointer,bytes)
 #include "xir/xxir_instance.c"
+#undef xr_xir_domain_metadata_deallocate
+static void allocation_instance_metadata_free(XrXirDomain *domain,void *pointer,uint64_t bytes) {
+    string_instance_retiring(pointer);
+    xr_xir_domain_metadata_deallocate(domain,pointer,bytes);
+}
+#define XIR_STRING_INSTANCE_IMPLEMENTATION_PRESENT
+#include "xir_string_instance_probe.c"
+#undef XIR_STRING_INSTANCE_IMPLEMENTATION_PRESENT
+#define XIR_INSTANCE_IMPLEMENTATION_PRESENT
+#include "xir_instance_retirement_probe.c"
+#undef XIR_INSTANCE_IMPLEMENTATION_PRESENT
 #include "xir/xxir_output.c"
 
 #include "xir_allocation_compile_owner.h"
 #include "xir_string_fixture.h"
 #include "xir_call_fixture.h"
-#include "xir_output_fixture.h"
 #include "xir_local_fixture.h"
 #include "xir_segment_cases.h"
 #include "xir_function_cases.h"
@@ -147,20 +173,6 @@ static void *counted_realloc(void *pointer, size_t size) {
 #include "xir_implementation_allocations.h"
 #include "xir_implementation_packet_allocations.h"
 #include "xir_generic_method_allocations.h"
-static void function_allocation_failures(void) {
-    for (unsigned cancel = 0; cancel < 2; ++cancel) {
-        allocation_calls = 0; fail_at = SIZE_MAX;
-        CHECK(function_case_run(cancel != 0) && !live);
-        size_t sites = allocation_calls;
-        for (size_t i = 0; i < sites; ++i) {
-            allocation_calls = 0; fail_at = i;
-            CHECK(!function_case_run(cancel != 0) && !live);
-        }
-        fail_at = SIZE_MAX;
-        printf("Function value physical release: %zu allocation failure sites (cancel=%u)\n", sites, cancel);
-    }
-}
-
 static void phi_snapshot_failure(void) {
     SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
     XrXirArtifact *checked = local_fixture(&owner.context), *lowered = NULL;
@@ -210,38 +222,82 @@ static XrXirOutputStatus allocation_bytes(void *context, XrXirOutputStream strea
     CHECK(stream == XR_XIR_STDERR && length == 1 && bytes[0] == 'x');
     ++*published; return XR_XIR_OUTPUT_OK;
 }
+static void allocation_instance_config(XrXirInstanceConfig *config) {
+    CHECK(xr_xir_instance_config_init(config,sizeof(*config))==XR_XIR_CALL_READY);
+    config->metadata_limit=65536;config->value_limit=65536;config->call_limit=65536;
+    config->poll_limit=100;config->depth_limit=10;config->work_limit=1000000;
+}
+static XrXirStatus allocation_write_program(const XrXirCompileContext *context,XrXirProgram **output) {
+    const XrXirType parameter=XR_XIR_STRING;
+    const XrXirInstruction init={.op=XR_XIR_RETURN};
+    const XrXirInstruction write[]={
+        {.op=XR_XIR_WRITE_STREAM,.type=XR_XIR_BOOL,.args={0},.immediate=2},
+        {.op=XR_XIR_RETURN,.args={1}}};
+    const XrXirInstruction main[]={
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64},
+        {.op=XR_XIR_RETURN,.args={0}}};
+    const XrXirBlock blocks[]={{.count=1},{.count=2},{.count=2}};
+    const XrXirFunction functions[]={
+        {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[0],.block_count=1,
+            .instructions=&init,.instruction_count=1},
+        {.name="write",.name_length=5,.parameters=&parameter,.parameter_count=1,.result=XR_XIR_BOOL,
+            .blocks=&blocks[1],.block_count=1,.instructions=write,.instruction_count=2},
+        {.name="main",.name_length=4,.result=XR_XIR_I64,.blocks=&blocks[2],.block_count=1,
+            .instructions=main,.instruction_count=2}};
+    const XrXirSourceModule source={.name="output",.name_length=6,.initializer=0};
+    const XrXirFunctionIdentity identities[]={{0},{.exported=1},{0}};
+    const XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
+        .root_module=0,.entry_function=2};
+    const XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
+        .declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM};
+    XrXirArtifact *checked=NULL,*lowered=NULL;
+    XrXirStatus status=xir_fixture_check(context,&built,&checked,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_lower(checked,&fixture_target,&lowered,NULL);
+    if(status==XR_XIR_OK)status=xr_xir_compile_vm_program_take(&lowered,output);
+    if(status==XR_XIR_OK)CHECK(*output && !lowered);
+    xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(checked);return status;
+}
 static size_t write_allocation_failures(void) {
-    SourceFixtureOwner owner = {0};
-    source_fixture_owner_new(&owner);
-    XrXirArtifact *artifact = output_fixture(&owner.context);
-    XrXirCallEntry entry; XrXirVmBinding binding;
-    CHECK(xr_xir_compile_vm_bind(artifact, 1, &binding, &entry) == XR_XIR_OK);
-    XrXirDomain *domain = NULL; XrXirValue argument = {0};
-    CHECK(xr_xir_domain_new(65536, &domain) == XR_XIR_VALUE_OK);
-    CHECK(xr_xir_string_new(domain, "x", 1, &argument) == XR_XIR_VALUE_OK);
-    size_t baseline = live, sites = 0;
-    for (size_t attempt = 0; attempt <= sites; ++attempt) {
-        size_t published = 0;
-        XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, allocation_bytes, &published, 65536};
-        XrXirCallAccounting accounting = {0};
-        XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = &entry; config.entry_count = 1; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink}; config.admission = (XrXirValueAdmission) {0};
-        XrXirCall *call = NULL;
-        allocation_calls = 0; fail_at = attempt ? attempt - 1 : SIZE_MAX;
-        XrXirCallStatus status = xr_xir_call_new(&config, 0, &argument, 1, &call);
-        if (status == XR_XIR_CALL_READY) {
-            XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
-            if (attempt) CHECK(result.status == XR_XIR_CALL_OOM && result.value.type == XR_XIR_UNIT);
-            else CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_BOOL && result.value.payload == 1);
-        } else CHECK(attempt && status == XR_XIR_CALL_OOM && !call);
-        if (!attempt) sites = allocation_calls;
-        CHECK(published == (attempt ? 0u : 1u));
-        CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
-        CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees && live == baseline);
+    SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
+    XrXirProgram *program=NULL;
+    CHECK(allocation_write_program(&owner.context,&program)==XR_XIR_OK);
+    XrXirDomain *domain=NULL;XrXirValue argument={0};
+    CHECK(xr_xir_domain_new(65536,&domain)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_string_new(domain,"x",1,&argument)==XR_XIR_VALUE_OK);
+    size_t baseline=live,sites=0;XrCompileResourceStats prefix=allocation_compile_stats(&owner.context);
+    for(size_t attempt=0;attempt<=sites;++attempt) {
+        size_t published=0;
+        XrXirOutputSink sink={XR_XIR_CALL_ABI_VERSION,0,allocation_bytes,&published,65536};
+        XrXirInstanceConfig config;allocation_instance_config(&config);
+        config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,&sink};
+        XrXirInstance *instance=NULL;XrXirDomain *runtime_domain=NULL;
+        XrXirCallStatus retirement=XR_XIR_CALL_READY;
+        allocation_calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
+        XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
+        if(status==XR_XIR_CALL_READY) {
+            runtime_domain=xr_string_instance_domain(instance);
+            status=xr_xir_instance_start(instance,1,&argument,1);
+            if(status==XR_XIR_CALL_READY) {
+                XrXirCallResult result=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome;
+                if(attempt) {
+                    CHECK(result.status==XR_XIR_CALL_OOM && result.value.type==XR_XIR_UNIT);
+                    retirement=XR_XIR_CALL_OOM;
+                } else CHECK(result.status==XR_XIR_CALL_RETURNED && result.value.type==XR_XIR_BOOL && result.value.payload==1);
+            } else CHECK(attempt && status==XR_XIR_CALL_OOM);
+        } else CHECK(attempt && status==XR_XIR_CALL_OOM && !instance);
+        if(!attempt)sites=allocation_calls;
+        CHECK(published==(attempt?0u:1u));
+        if(instance) {
+            XirStringRetirement record=xr_string_instance_retire(instance,retirement,config.poll_limit);
+            CHECK(record.domain==runtime_domain);xr_xir_domain_drop(record.domain);
+        }
+        CHECK(live==baseline);
     }
-    fail_at = SIZE_MAX;
-    xr_xir_value_drop(&argument); xr_xir_domain_drop(domain); xr_xir_compile_artifact_free(artifact);
-    source_fixture_owner_free(&owner);
-    CHECK(!live); return sites;
+    XrCompileResourceStats retired=allocation_compile_stats(&owner.context);
+    CHECK(retired.work==prefix.work && retired.allocated_bytes==prefix.allocated_bytes && retired.live_bytes==prefix.live_bytes);
+    fail_at=SIZE_MAX;
+    xr_xir_value_drop(&argument);xr_xir_domain_drop(domain);xr_xir_compile_program_drop(program);
+    source_fixture_owner_free(&owner);CHECK(!live);return sites;
 }
 
 static XrXirOutputStatus allocation_output(void *context, const XrXirOutputGroup *group) {
@@ -251,120 +307,121 @@ static XrXirOutputStatus allocation_output(void *context, const XrXirOutputGroup
     (void) context; (void) stream;
     return (value->type == XR_XIR_STRING) ? XR_XIR_OUTPUT_OK : XR_XIR_OUTPUT_ERROR;
 }
-static void managed_allocation_run(const XrXirCompileContext *context, XrXirArtifact *artifact, bool throwing) {
-    XrXirDomain *domain = NULL; XrXirTypeArena *arena=NULL;
-    XrXirValue arguments[2] = {{0}, {0}}, owned = {0};
-    XrXirCall *call = NULL;
-    XrXirCallEntry entries[3];
-    XrXirVmBinding bindings[3];
-    XrXirCallAccounting accounting = {0};
-    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 3; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, allocation_output, NULL}; config.admission = (XrXirValueAdmission) {0};
-    for (uint32_t i = 0; i < 3; ++i) {
-        XrXirStatus status = xr_xir_compile_vm_bind(artifact, i, &bindings[i], &entries[i]);
-        if (status != XR_XIR_OK) { CHECK(status == XR_XIR_OUT_OF_MEMORY); goto done; }
+static bool managed_allocation_run(XrXirProgram *program,bool throwing) {
+    XrXirDomain *domain=NULL,*runtime_domain=NULL;
+    XrXirValue arguments[2]={{0},{0}},owned={0};XrXirInstance *instance=NULL;
+    XrXirCallStatus retirement=XR_XIR_CALL_READY;bool completed=false;
+    XrXirInstanceConfig config;allocation_instance_config(&config);
+    config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,allocation_output,NULL};
+    XrXirCallStatus admitted=xr_xir_instance_new(program,&config,&instance);
+    if(admitted!=XR_XIR_CALL_READY) { CHECK(admitted==XR_XIR_CALL_OOM && !instance);goto done; }
+    runtime_domain=xr_string_instance_domain(instance);
+    XrXirValueStatus status=xr_xir_domain_new(65536,&domain);
+    if(status!=XR_XIR_VALUE_OK) { CHECK(status==XR_XIR_VALUE_OOM);goto done; }
+    for(uint32_t i=0;i<2;++i) {
+        status=xr_xir_string_new(domain,"x",1,&arguments[i]);
+        if(status!=XR_XIR_VALUE_OK) { CHECK(status==XR_XIR_VALUE_OOM);goto done; }
     }
-    XrXirValueStatus status = xr_xir_domain_new(65536, &domain);
-    if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
-    status=xr_xir_compile_type_arena_new(context,xr_xir_compile_artifact_module(artifact)->types,&arena);
-    if (status!=XR_XIR_VALUE_OK) { CHECK(status==XR_XIR_VALUE_OOM); goto done; }
-    config.admission=error_fixture_admission(domain,arena);
-    for (uint32_t i = 0; i < 2; ++i) {
-        status = xr_xir_string_new(domain, "x", 1, &arguments[i]);
-        if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
+    admitted=xr_xir_instance_start(instance,0,arguments,2);
+    if(admitted!=XR_XIR_CALL_READY) { CHECK(admitted==XR_XIR_CALL_OOM);goto done; }
+    XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance,UINT64_MAX);
+    XrXirCallResult result=polled.outcome;
+    if(result.status==XR_XIR_CALL_SUSPENDED) {
+        CHECK(xr_xir_instance_resume(instance,polled.epoch,result.wake)==XR_XIR_CALL_READY);
+        result=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome;
     }
-    XrXirCallStatus admitted = xr_xir_call_new(&config, 0, arguments, 2, &call);
-    if (admitted != XR_XIR_CALL_READY) { CHECK(admitted == XR_XIR_CALL_OOM); goto done; }
-    XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
-    if (result.status == XR_XIR_CALL_SUSPENDED) {
-        CHECK(xr_xir_call_resume(call, result.wake) == XR_XIR_CALL_READY);
-        result = xr_xir_call_poll_bounded(call, UINT64_MAX);
-    }
-    if (result.status == (throwing ? XR_XIR_CALL_THROWN : XR_XIR_CALL_RETURNED)) {
-        CHECK(xr_xir_call_take_result(call,&owned)==result.status);
-        if (throwing) {
-            uint32_t variant=99; CHECK(xr_xir_enum_variant(&owned,&variant)==XR_XIR_VALUE_OK && variant==1);
+    if(result.status==(throwing?XR_XIR_CALL_THROWN:XR_XIR_CALL_RETURNED)) {
+        CHECK(xr_xir_instance_take_result(instance,&owned)==result.status);
+        if(throwing) {
+            uint32_t variant=99;CHECK(xr_xir_enum_variant(&owned,&variant)==XR_XIR_VALUE_OK && variant==1);
         }
-    }
-    else CHECK(result.status == XR_XIR_CALL_OOM);
+        completed=true;
+    } else { CHECK(result.status==XR_XIR_CALL_OOM);retirement=XR_XIR_CALL_OOM; }
  done:
-    CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
-    CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees);
-    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
-    xr_xir_value_drop(&arguments[0]); xr_xir_value_drop(&arguments[1]); xr_xir_value_drop(&owned);
-}
-static bool invoke_allocation_run(XrXirArtifact *artifact, uint32_t mode, uint32_t cancel_at) {
-    XrXirDomain *domain = NULL; XrXirTypeArena *arena = NULL;
-    XrXirCall *call = NULL; XrXirValue owned = {0};
-    XrXirCallEntry entries[5]; XrXirVmBinding bindings[5];
-    XrXirCallAccounting accounting = {0}; bool completed = false;
-    XrXirCallConfig config; CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY); config.entries = entries; config.entry_count = 5; config.instance = NULL; config.byte_limit = 65536; config.poll_limit = 100; config.depth_limit = 10; config.accounting = &accounting; config.output = (XrXirOutputProvider) {0}; config.admission = (XrXirValueAdmission) {0};
-    for (uint32_t i = 0; i < 5; ++i) {
-        XrXirStatus status = xr_xir_compile_vm_bind(artifact,i,&bindings[i],&entries[i]);
-        if (status != XR_XIR_OK) { CHECK(status == XR_XIR_OUT_OF_MEMORY); goto done; }
+    if(instance) {
+        XirStringRetirement record=xr_string_instance_retire(instance,retirement,config.poll_limit);
+        CHECK(record.domain==runtime_domain);xr_xir_domain_drop(record.domain);
     }
-    XrXirValueStatus status = xr_xir_domain_new(65536,&domain);
-    if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
-    status = xr_xir_compile_type_arena_new(xr_xir_compile_artifact_context(artifact),
-        xr_xir_compile_artifact_module(artifact)->types, &arena);
-    if (status != XR_XIR_VALUE_OK) { CHECK(status == XR_XIR_VALUE_OOM); goto done; }
-    config.admission = error_fixture_admission(domain,arena);
-    XrXirValue args[] = {{XR_XIR_I64,0,9},{XR_XIR_I64,0,4}};
-    XrXirCallStatus admitted = xr_xir_call_new(&config,0,args,2,&call);
-    if (admitted != XR_XIR_CALL_READY) { CHECK(admitted == XR_XIR_CALL_OOM); goto done; }
-    XrXirCallResult result = xr_xir_call_poll_bounded(call, UINT64_MAX);
-    uint32_t suspensions = 0;
-    while (result.status == XR_XIR_CALL_SUSPENDED) {
-        CHECK(++suspensions <= 2);
-        if (suspensions == cancel_at) { CHECK(xr_xir_call_request_cancel(call) == XR_XIR_CALL_CANCEL_REQUESTED); CHECK(xr_xir_call_poll_bounded(call, UINT64_MAX).status == XR_XIR_CALL_CANCELLED); }
-        else CHECK(xr_xir_call_resume(call,result.wake) == XR_XIR_CALL_READY);
-        result = xr_xir_call_poll_bounded(call, UINT64_MAX);
-    }
-    if (result.status == XR_XIR_CALL_OOM) goto done;
-    if (cancel_at && suspensions == cancel_at) CHECK(result.status == XR_XIR_CALL_CANCELLED);
-    else if (mode == 9) {
-        CHECK(result.status == XR_XIR_CALL_THROWN);
-        CHECK(xr_xir_call_take_result(call,&owned) == XR_XIR_CALL_THROWN);
-    } else CHECK(result.status == XR_XIR_CALL_RETURNED && result.value.type == XR_XIR_I64 &&
-        result.value.payload == (mode == 10 ? 44 : 77));
-    completed = true;
- done:
-    CHECK(xr_xir_call_free(call) == XR_XIR_CALL_READY);
-    CHECK(!accounting.live_bytes && accounting.allocations == accounting.frees && !accounting.depth);
-    xr_xir_compile_type_arena_drop(arena); xr_xir_domain_drop(domain);
-    xr_xir_value_drop(&owned);
+    xr_xir_domain_drop(domain);
+    xr_xir_value_drop(&arguments[0]);xr_xir_value_drop(&arguments[1]);xr_xir_value_drop(&owned);
     return completed;
 }
+static bool invoke_allocation_run(XrXirProgram *program,uint32_t mode,uint32_t cancel_at) {
+    XrXirInstance *instance=NULL;XrXirValue owned={0};XrXirDomain *runtime_domain=NULL;
+    XrXirCallStatus retirement=XR_XIR_CALL_READY;bool completed=false;
+    XrXirInstanceConfig config;allocation_instance_config(&config);
+    XrXirCallStatus admitted=xr_xir_instance_new(program,&config,&instance);
+    if(admitted!=XR_XIR_CALL_READY) { CHECK(admitted==XR_XIR_CALL_OOM && !instance);goto done; }
+    runtime_domain=xr_string_instance_domain(instance);
+    XrXirValue args[]={{XR_XIR_I64,0,9},{XR_XIR_I64,0,4}};
+    admitted=xr_xir_instance_start(instance,0,args,2);
+    if(admitted!=XR_XIR_CALL_READY) { CHECK(admitted==XR_XIR_CALL_OOM);goto done; }
+    XrXirInstanceResult polled=xr_xir_instance_poll_bounded(instance,UINT64_MAX);
+    XrXirCallResult result=polled.outcome;uint32_t suspensions=0;
+    while(result.status==XR_XIR_CALL_SUSPENDED) {
+        CHECK(++suspensions<=2);
+        if(suspensions==cancel_at) {
+            CHECK(xr_xir_instance_cancel_current(instance)==XR_XIR_CALL_CANCEL_REQUESTED);
+            CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_CANCELLED);
+        } else CHECK(xr_xir_instance_resume(instance,polled.epoch,result.wake)==XR_XIR_CALL_READY);
+        polled=xr_xir_instance_poll_bounded(instance,UINT64_MAX);result=polled.outcome;
+    }
+    if(result.status==XR_XIR_CALL_OOM) { retirement=XR_XIR_CALL_OOM;goto done; }
+    if(cancel_at && suspensions==cancel_at)CHECK(result.status==XR_XIR_CALL_CANCELLED);
+    else if(mode==9) {
+        CHECK(result.status==XR_XIR_CALL_THROWN);
+        CHECK(xr_xir_instance_take_result(instance,&owned)==XR_XIR_CALL_THROWN);
+    } else CHECK(result.status==XR_XIR_CALL_RETURNED && result.value.type==XR_XIR_I64 &&
+        result.value.payload==(mode==10?44:77));
+    completed=true;
+ done:
+    if(instance) {
+        XirStringRetirement record=xr_string_instance_retire(instance,retirement,config.poll_limit);
+        CHECK(record.domain==runtime_domain);xr_xir_domain_drop(record.domain);
+    }
+    xr_xir_value_drop(&owned);return completed;
+}
 static void invoke_allocation_failures(void) {
-    SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
-    const uint32_t modes[] = {5,9,10,11};
-    for (uint32_t m = 0; m < 4; ++m) for (uint32_t cancel = 0; cancel < 3; ++cancel) {
-        fail_at = SIZE_MAX;
-        XrXirArtifact *artifact = call_fixture(&compiler.context, modes[m]); size_t baseline = live;
-        allocation_calls = 0; CHECK(invoke_allocation_run(artifact,modes[m],cancel)); size_t sites = allocation_calls;
-        CHECK(live == baseline && sites);
-        for (size_t i = 0; i < sites; ++i) {
-            fail_at = i; allocation_calls = 0;
-            CHECK(!invoke_allocation_run(artifact,modes[m],cancel) && live == baseline);
+    SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
+    const uint32_t modes[]={5,9,10,11};
+    for(uint32_t m=0;m<4;++m)for(uint32_t cancel=0;cancel<3;++cancel) {
+        fail_at=SIZE_MAX;
+        XrXirArtifact *artifact=call_fixture(&compiler.context,modes[m]);XrXirProgram *program=NULL;
+        CHECK(xr_xir_compile_vm_program_take(&artifact,&program)==XR_XIR_OK && program && !artifact);
+        size_t baseline=live;XrCompileResourceStats prefix=allocation_compile_stats(&compiler.context);
+        allocation_calls=0;CHECK(invoke_allocation_run(program,modes[m],cancel));size_t sites=allocation_calls;
+        CHECK(live==baseline && sites);
+        for(size_t i=0;i<sites;++i) {
+            fail_at=i;allocation_calls=0;
+            CHECK(!invoke_allocation_run(program,modes[m],cancel) && live==baseline);
         }
-        fail_at=SIZE_MAX;xr_xir_compile_artifact_free(artifact);CHECK(live==1);
+        XrCompileResourceStats retired=allocation_compile_stats(&compiler.context);
+        CHECK(retired.work==prefix.work && retired.allocated_bytes==prefix.allocated_bytes &&
+            retired.live_bytes==prefix.live_bytes);
+        fail_at=SIZE_MAX;xr_xir_compile_program_drop(program);CHECK(live==1);
         printf("Invoke physical release: mode=%u cancel=%u allocation failure sites=%zu\n",modes[m],cancel,sites);
     }
     source_fixture_owner_free(&compiler);
 }
-
 static size_t managed_allocation_failures(void) {
     size_t total=0;
-    for (uint32_t mode=0;mode<2;++mode) {
+    for(uint32_t mode=0;mode<2;++mode) {
         fail_at=SIZE_MAX;
-        SourceFixtureOwner owner={0}; source_fixture_owner_new(&owner);
-        XrXirArtifact *artifact=string_fixture(&owner.context,mode); size_t baseline=live;
-        allocation_calls=0; managed_allocation_run(&owner.context,artifact,mode!=0); size_t sites=allocation_calls;
-        CHECK(live==baseline);
-        for (size_t i=0;i<sites;++i) {
-            fail_at=i; allocation_calls=0; managed_allocation_run(&owner.context,artifact,mode!=0); CHECK(live==baseline);
+        SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
+        XrXirArtifact *artifact=string_fixture(&owner.context,mode);XrXirProgram *program=NULL;
+        CHECK(xr_xir_compile_vm_program_take(&artifact,&program)==XR_XIR_OK && program && !artifact);
+        size_t baseline=live;XrCompileResourceStats prefix=allocation_compile_stats(&owner.context);
+        allocation_calls=0;CHECK(managed_allocation_run(program,mode!=0));size_t sites=allocation_calls;
+        CHECK(live==baseline && sites);
+        for(size_t i=0;i<sites;++i) {
+            fail_at=i;allocation_calls=0;
+            CHECK(!managed_allocation_run(program,mode!=0) && live==baseline);
         }
-        fail_at=SIZE_MAX; xr_xir_compile_artifact_free(artifact);
-        source_fixture_owner_free(&owner); CHECK(!live); total+=sites;
+        XrCompileResourceStats retired=allocation_compile_stats(&owner.context);
+        CHECK(retired.work==prefix.work && retired.allocated_bytes==prefix.allocated_bytes &&
+            retired.live_bytes==prefix.live_bytes);
+        fail_at=SIZE_MAX;xr_xir_compile_program_drop(program);
+        source_fixture_owner_free(&owner);CHECK(!live);total+=sites;
         printf("Managed call release: throw=%u allocation failure sites=%zu\n",mode,sites);
     }
     return total;
@@ -433,12 +490,18 @@ static size_t program_allocation_failures(void) {
             XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
             if (status != XR_XIR_CALL_READY) CHECK(attempt && status == XR_XIR_CALL_OOM && !instance);
             else {
+                XrXirDomain *runtime_domain=xr_string_instance_domain(instance);
                 status = xr_xir_instance_start(instance, 3, NULL, 0);
-                if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+                bool executed=status==XR_XIR_CALL_READY;
+                if (executed) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
                 CHECK(status == (attempt ? XR_XIR_CALL_OOM : XR_XIR_CALL_RETURNED));
                 if (xr_xir_instance_state(instance) == XR_XIR_INSTANCE_FAILED)
                     CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_OOM);
-                CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+                /* Uncommitted start rejection leaves no execution failure.
+                 * A driven OOM is the executor's sticky retirement result. */
+                XrXirCallStatus retirement=executed && status==XR_XIR_CALL_OOM?XR_XIR_CALL_OOM:XR_XIR_CALL_READY;
+                XirStringRetirement record=xr_string_instance_retire(instance,retirement,config.poll_limit);
+                CHECK(record.domain==runtime_domain);xr_xir_domain_drop(record.domain);
             }
             xr_xir_compile_program_drop(program);
         }
@@ -517,7 +580,10 @@ static XrXirStatus allocation_check_operation(const XrXirCompileContext *context
 
 #include "xir_class_owned_allocations.h"
 #include "xir_default_invoke_allocations.h"
-int main(void) {
+#include "xir_allocation_phase_cases.h"
+static void allocation_remaining_resources(void) {
+    allocation_case_name="resources";allocation_stage="complete-resource-cases";
+    allocation_case_scalar=0;allocation_case_mode=0;
     default_invoke_allocation_cases();
     class_owned_allocations();
     type_temporary_budget_cases();
@@ -640,66 +706,60 @@ int main(void) {
     printf("Write-result activation and renderer physical release: %zu allocation sites\n", write_allocation_failures());
     invoke_allocation_failures();
     phi_snapshot_failure();
-    function_allocation_failures();
-    allocation_calls=0;fail_at=SIZE_MAX;CHECK(function_producer_owner_run() && !live);
-    size_t producer_sites=allocation_calls;CHECK(producer_sites && producer_sites<10000);
-    for (size_t p=0;p<producer_sites;++p) {
-        allocation_calls=0;fail_at=p;CHECK(!function_producer_owner_run() && !live);
-    }
-    fail_at=SIZE_MAX;
-    printf("Real callable producer physical release: %zu complete allocation sites\n",producer_sites);
-    for (unsigned mode=0;mode<8;++mode) {
-        allocation_calls=0;fail_at=SIZE_MAX;CHECK(invocation_runtime_owner_run(mode,NULL,NULL) && !live);
-        size_t edge_sites=allocation_calls;CHECK(edge_sites && edge_sites<10000);
-        for (size_t p=0;p<edge_sites;++p) {
-            allocation_calls=0;fail_at=p;CHECK(!invocation_runtime_owner_run(mode,NULL,NULL) && !live);
-        }
-        printf("Authentic child invocation mode%u physical release: %zu complete allocation sites\n",mode,edge_sites);
-    }
-    fail_at=SIZE_MAX;invocation_runtime_owner_axes();CHECK(!live);
-    for (unsigned mode=0;mode<8;++mode) {
-        allocation_calls=0;fail_at=SIZE_MAX;CHECK(invocation_direct_owner_run(mode,NULL,NULL) && !live);
-        size_t direct_sites=allocation_calls;CHECK(direct_sites && direct_sites<10000);
-        for (size_t p=0;p<direct_sites;++p) {
-            allocation_calls=0;fail_at=p;CHECK(!invocation_direct_owner_run(mode,NULL,NULL) && !live);
-        }
-        printf("Authentic direct context mode%u physical release: %zu complete allocation sites\n",mode,direct_sites);
-    }
-    fail_at=SIZE_MAX;invocation_direct_owner_axes();CHECK(!live);
-    for (unsigned scalar=0;scalar<2;++scalar) {
-        for (unsigned mode=0;mode<8;++mode) {
-            allocation_calls=0;fail_at=SIZE_MAX;CHECK(invocation_capture_owner_run(mode,scalar!=0,NULL,NULL) && !live);
-            size_t capture_sites=allocation_calls;CHECK(capture_sites && capture_sites<10000);
-            for (size_t p=0;p<capture_sites;++p) {
-                allocation_calls=0;fail_at=p;CHECK(!invocation_capture_owner_run(mode,scalar!=0,NULL,NULL) && !live);
-            }
-            printf("Authentic captured prefix scalar%u mode%u physical release: %zu complete allocation sites\n",scalar,mode,capture_sites);
-        }
-        fail_at=SIZE_MAX;invocation_capture_owner_axes(scalar!=0);CHECK(!live);
-    }
-    for (unsigned scalar=0;scalar<2;++scalar) {
-        for (unsigned mode=0;mode<8;++mode) {
-            allocation_calls=0;fail_at=SIZE_MAX;CHECK(invocation_return_capture_owner_run(mode,scalar!=0,NULL,NULL) && !live);
-            size_t capture_sites=allocation_calls;CHECK(capture_sites && capture_sites<10000);
-            for (size_t p=0;p<capture_sites;++p) {
-                allocation_calls=0;fail_at=p;CHECK(!invocation_return_capture_owner_run(mode,scalar!=0,NULL,NULL) && !live);
-            }
-            printf("Authentic captured prefix scalar%u mode%u physical release: %zu complete allocation sites\n",scalar,mode,capture_sites);
-        }
-        fail_at=SIZE_MAX;invocation_return_capture_owner_axes(scalar!=0);CHECK(!live);
-    }
-    for (unsigned scalar=0;scalar<2;++scalar) {
-        for (unsigned mode=0;mode<8;++mode) {
-            allocation_calls=0;fail_at=SIZE_MAX;CHECK(invocation_function_cell_owner_run(mode,scalar!=0,NULL,NULL) && !live);
-            size_t capture_sites=allocation_calls;CHECK(capture_sites && capture_sites<10000);
-            for (size_t p=0;p<capture_sites;++p) {
-                allocation_calls=0;fail_at=p;CHECK(!invocation_function_cell_owner_run(mode,scalar!=0,NULL,NULL) && !live);
-            }
-            printf("Returned HOF actual scalar%u mode%u physical release: %zu complete allocation sites\n",scalar,mode,capture_sites);
-        }
-        fail_at=SIZE_MAX;invocation_function_cell_owner_axes(scalar!=0);CHECK(!live);
-    }
     instance_admission_cases();
     initialization_region_allocations();
-    return 0;
+}
+
+static void allocation_phase_matrix(bool axes) {
+    function_allocation_phase_case(false);function_allocation_phase_case(true);
+    function_producer_allocation_phase_case();
+    for(unsigned mode=0;mode<8;++mode)invocation_runtime_allocation_phase_case(mode);
+    if(axes) {
+        allocation_phase_case_begin("runtime",0,0);allocation_stage="resource-axes";
+        invocation_runtime_owner_axes();CHECK(!live);
+    }
+    for(unsigned mode=0;mode<8;++mode)invocation_direct_allocation_phase_case(mode);
+    if(axes) {
+        allocation_phase_case_begin("direct",0,0);allocation_stage="resource-axes";
+        invocation_direct_owner_axes();CHECK(!live);
+    }
+    for(unsigned scalar=0;scalar<2;++scalar) {
+        for(unsigned mode=0;mode<8;++mode)invocation_capture_allocation_phase_case(mode,scalar!=0);
+        if(axes) {
+            allocation_phase_case_begin("capture",scalar,0);allocation_stage="resource-axes";
+            invocation_capture_owner_axes(scalar!=0);CHECK(!live);
+        }
+        for(unsigned mode=0;mode<8;++mode)invocation_return_capture_allocation_phase_case(mode,scalar!=0);
+        if(axes) {
+            allocation_phase_case_begin("return_capture",scalar,0);allocation_stage="resource-axes";
+            invocation_return_capture_owner_axes(scalar!=0);CHECK(!live);
+        }
+        for(unsigned mode=0;mode<8;++mode)invocation_function_cell_allocation_phase_case(mode,scalar!=0);
+        if(axes) {
+            allocation_phase_case_begin("function_cell",scalar,0);allocation_stage="resource-axes";
+            invocation_function_cell_owner_axes(scalar!=0);CHECK(!live);
+        }
+    }
+    CHECK(allocation_phase_cases==67);
+    printf("FI map total: cases=%zu original_ordinals=%zu compiler=%zu runtime=%zu bridge=%zu axes=%u\n",
+        allocation_phase_cases,allocation_phase_ordinals,allocation_phase_compiler_ordinals,
+        allocation_phase_runtime_ordinals,allocation_phase_bridge_ordinals,axes?88u:0u);
+}
+#include "xir_allocation_case_workers.h"
+int main(int argc,char **argv) {
+    if(allocation_worker_dispatch(argc,argv))return 0;
+    CHECK(argc<=2);
+    if(argc==2) {
+        if(!strcmp(argv[1],"--bookkeeping")) {allocation_bookkeeping_cases();return 0;}
+        else if(!strcmp(argv[1],"--semantics"))allocation_phase_selection=0;
+        else if(!strcmp(argv[1],"--producer"))allocation_phase_selection=ALLOCATION_PHASE_COMPILER;
+        else if(!strcmp(argv[1],"--runtime"))allocation_phase_selection=ALLOCATION_PHASE_RUNTIME;
+        else if(!strcmp(argv[1],"--first-case")) {
+            function_allocation_phase_case(false);CHECK(allocation_phase_cases==1);return 0;
+        } else if(!strcmp(argv[1],"--resources")) { allocation_remaining_resources();return 0; }
+        else {fprintf(stderr,"unknown allocation test selection: %s\n",argv[1]);return 2;}
+    }
+    if(argc==1)allocation_remaining_resources();
+    allocation_phase_matrix(true);
+    CHECK(!live && !class_live_bytes);return 0;
 }

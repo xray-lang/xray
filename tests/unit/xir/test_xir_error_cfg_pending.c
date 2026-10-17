@@ -664,7 +664,7 @@ static void pc_empty_cost(void) {
         uint64_t before=pc_stats(&c).work;
         CHECK(xr_xir_compile_effects_infer_verified(&c,owned,&e)==XR_XIR_OK);
         pc_empty_golden(e,reverse);uint64_t cost=pc_stats(&c).work-before;
-        printf("empty inference actual reverse%u work%llu current_limit65000 target20000 current_met%u target_met%u\n",
+        printf("empty inference actual reverse%u work%llu current_limit65000 original_target20000 current_met%u target_met%u\n",
             reverse,(unsigned long long)cost,(unsigned)(cost<UINT64_C(65000)),(unsigned)(cost<UINT64_C(20000)));
         fflush(stdout);
         CHECK(cost<UINT64_C(65000));
