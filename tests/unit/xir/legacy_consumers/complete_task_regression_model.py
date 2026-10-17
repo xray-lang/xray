@@ -659,7 +659,7 @@ def expected_rows():
         if name=='1114_select_after':row['required_runtime_timing_predicates']=[{'expression':'elapsed >= 20','required':True},{'expression':'elapsed < 500','required':True}]
         if name=='1128_yield':row['required_original_yield_checkpoints']=1+2+3+len([i for i in range(5) if i%2==0])+3*10
         rows.append(row)
-    return rows+[stack_entry_expected_row(),plain_scope_entry_expected_row()]+coro_boundary_entry_expected_rows()
+    return rows+[stack_entry_expected_row(),plain_scope_entry_expected_row()]+coro_boundary_entry_expected_rows()+[task_link_entry_expected_row()]
 
 
 def named_expected_rows():
@@ -674,7 +674,7 @@ def named_expected_rows():
             'required_original_assertion_results':body.get('assertion_results',[]),
             'model':'Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.'})
         if name in _NAMED_CHANNEL_PROGRAMS or name in _CANCEL_NAMED:rows[-1]['required_semantic_trace']=body['semantic_trace']
-    return rows+[stack_named_expected_row(),plain_scope_named_expected_row(),coro_handoff_named_expected_row()]
+    return rows+[stack_named_expected_row(),plain_scope_named_expected_row(),coro_handoff_named_expected_row(),task_link_named_expected_row()]
 
 _STACK_SOURCE = 'tests/regression/11_coroutine/1149_module_call_stack_grow.xr'
 _STACK_HELPER = 'tests/regression/11_coroutine/modules/big_stack.xr'
@@ -1120,3 +1120,115 @@ def coro_handoff_named_expected_row():
                 'per_test_observations':{_CORO_HANDOFF_TEST:{'values':values}}},
             'observation_count':3,'required_semantic_trace':trace,
             'model':'Complete unchanged named handoff wrapper andallthreehelpers:slow200ms,eightfastworkers each100iterations,ninetasks/channelcapacity9/ninereceives retained. All9! report permutations produce8/true/passed aggregates;even slow-first gives the same output. These outputs do not prove actual progress of fast workers during slow sleep,physical P handoff,fairness,FI,timer/resource/lifetime/safety/provider/mixed behavior;original progress duty remains OPEN.'}
+
+_TASK_LINK_SOURCE = 'tests/regression/11_coroutine/1136_task_link.xr'
+_TASK_LINK_FIXTURE = 'tests/unit/xir/legacy_consumers/fixtures/task_link_results_observed/root.xr'
+_TASK_LINK_TEST = 'test_task_link'
+_TASK_LINK_ENTRY_ID = 'complete_task_link_results_run'
+_TASK_LINK_NAMED_ID = 'complete_task_link_results_named'
+_TASK_LINK_AUTHORITIES = ('spec/source/sections/003-2-type-system.md',
+ 'spec/source/sections/005-4-statements.md',
+ 'spec/source/sections/006-5-declarations.md',
+ 'spec/source/sections/009-8-error-handling.md',
+ 'spec/source/sections/011-10-concurrency-and-coroutines.md',
+ 'spec/source/sections/014-13-built-in-functions.md',
+ 'spec/source/sections/015-14-built-in-type-methods.md',
+ 'stdlib/types/coroutine.xr',
+ 'stdlib/time/time.xr')
+_TASK_LINK_TRANSFORMS = [('    match (r) {\n        TaskResult.Cancelled ->',
+  '    print(match (r) {\n'
+  '        TaskResult.Cancelled -> true\n'
+  '        _ -> false\n'
+  '    })\n'
+  '    match (r) {\n'
+  '        TaskResult.Cancelled ->'),
+ ('    match (r) {\n        TaskResult.Failed { error: _ } ->',
+  '    print(match (r) {\n'
+  '        TaskResult.Failed { error: _ } -> true\n'
+  '        _ -> false\n'
+  '    })\n'
+  '    match (r) {\n'
+  '        TaskResult.Failed { error: _ } ->'),
+ ('    assert(r1 == 42)', '    print(r1)\n    assert(r1 == 42)'),
+ ('    assert(r2 == 42)', '    print(r2)\n    assert(r2 == 42)')]
+_TASK_LINK_INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
+ 'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915',
+ 'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d',
+ 'spec/source/sections/009-8-error-handling.md': '3679ded015ad0222df39070b598fe26c8099247f9e410305a3f1527b9e63161b',
+ 'spec/source/sections/011-10-concurrency-and-coroutines.md': '27c232a9575d0d40e800ea5730e5d2b96e8f2e62e646731a3d9de2e0eea35aea',
+ 'spec/source/sections/014-13-built-in-functions.md': '2a4af98d2d429babb3cdcd875279f0d798efcabb852afd2c366e69a12ca50380',
+ 'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e',
+ 'stdlib/time/time.xr': 'd2ab56ef604ba773bf9625efd67450d343e2da2b0a9ec2f179d01ab07cc2bc72',
+ 'stdlib/types/coroutine.xr': 'f85c868bf12b2b90988ead5cf746fd8e522d5c2d6398a64882b47637c72dc7a6',
+ 'tests/regression/11_coroutine/1136_task_link.xr': 'b2341bab8f0caf95f7bb8de9fea87b7ab3cd5b1e9de2c385bb6433298a079ab1',
+ 'tests/unit/xir/legacy_consumers/fixtures/task_link_results_observed/root.xr': '4ad5e3b35fead6bbed57757015f75f7adf8c04a13b95f250196a0ec486291ab5'}
+
+
+def task_link_result_trace(cancel_position='not_started',cancel_tag='Cancelled',
+                           failed_tag='Failed',completion_order=(0,1),success_values=(42,42)):
+    """Complete wrapper postconditions; no physical clock or Error layout model."""
+    if cancel_position not in ('not_started','sleeping'):
+        raise ValueError('The pending cancellation diagram does not prove an arbitrary wall-clock schedule')
+    if len(completion_order)!=2 or set(completion_order)!={0,1} or len(success_values)!=2:
+        raise ValueError('Both complete success workers and their original awaits are required')
+    if cancel_tag not in ('Cancelled','Success','Failed','Pending','Timeout') or failed_tag not in ('Cancelled','Success','Failed','Pending','Timeout'):
+        raise ValueError('Unknown TaskResult tag')
+    completed={index:success_values[index] for index in completion_order}
+    observations=[cancel_tag=='Cancelled',failed_tag=='Failed',completed[0],completed[1]]
+    assertions=[observations[0],observations[1],completed[0]==42,completed[1]==42]
+    return {'values':observations,'semantic_postconditions':assertions,
+        'root_can_terminate':all(assertions),'cancel_position':cancel_position,
+        'all_original_workers':4,'original_success_workers':2,
+        'original_plain_awaits':2,'original_awaitResult_calls':2,
+        'original_cancel_calls':1,'original_slow_sleep_ms':50,
+        'original_static_assertions':6,'original_positive_assertion_executions':4,
+        'original_failure_assertion_branches_avoided':2,
+        'source_error_before_runtime_projection':'LinkErr.Msg(link error)',
+        'TaskResult_Failed_payload_Error_PanicInfo_layout_qualified':False,
+        'actual_cancel_before_completion_for_arbitrary_parent_delays_qualified':False,
+        'real_cleanup_FI_resources_lifetime_safety_provider_mixed_qualified':False,
+        'filename_does_not_prove_linked_go_or_Task_link_operation':True}
+
+
+def validate_task_link_result_inputs():
+    required=set(_TASK_LINK_AUTHORITIES)|{_TASK_LINK_SOURCE,_TASK_LINK_FIXTURE}
+    if set(_TASK_LINK_INPUTS)!=required or len(_TASK_LINK_TRANSFORMS)!=4:
+        raise ValueError('Task result observations lost a complete source,authority or insertion')
+    for name,digest in _TASK_LINK_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Complete task-result input changed: '+name)
+    original=(ROOT/_TASK_LINK_SOURCE).read_text(encoding='utf-8')
+    observed=original
+    for before,after in _TASK_LINK_TRANSFORMS:
+        if observed.count(before)!=1:
+            raise ValueError('Task-result observer lost its exact original match or assertion')
+        observed=observed.replace(before,after,1)
+    if observed!=(ROOT/_TASK_LINK_FIXTURE).read_text(encoding='utf-8'):
+        raise ValueError('Task-result observer changed original work beyond pure observations')
+    if re.findall(r'@test\s+fn\s+([A-Za-z_][A-Za-z_0-9]*)\s*\(',original)!=[_TASK_LINK_TEST]:
+        raise ValueError('The full original wrapper or named identity changed')
+
+
+def task_link_entry_expected_row():
+    validate_task_link_result_inputs()
+    return {'id':_TASK_LINK_ENTRY_ID,'source':_TASK_LINK_SOURCE,
+        'original_source':_TASK_LINK_SOURCE,'required_target':None,
+        'expected':{'exit_code':0,'stdout_utf8':'','stderr_utf8':''},'observation_count':0,
+        'separate_named_body_obligation':{'names':[_TASK_LINK_TEST],'executed_by_run':False,
+            'qualification':'OPEN_REQUIRES_COMPLETE_ORIGINAL_WRAPPER_SIX_HELPERS_AND4_VALUES'},
+        'model':'Complete unchanged original declares its named wrapper and all six helpers without a root call. Empty run success cannot qualify cancellation,failure,success,any original assertion or a linked operation.'}
+
+
+def task_link_named_expected_row():
+    validate_task_link_result_inputs()
+    trace=task_link_result_trace()
+    if not trace['root_can_terminate']:
+        raise ValueError('Complete task-result postconditions do not hold')
+    return {'id':_TASK_LINK_NAMED_ID,'source':_TASK_LINK_FIXTURE,
+        'original_source':_TASK_LINK_SOURCE,'required_target':None,
+        'expected':{'exit_code':0,'stdout_utf8':''.join(render(value)+'\n' for value in trace['values']),
+            'stderr_utf8':'','required_test_names':[_TASK_LINK_TEST],
+            'per_test_observations':{_TASK_LINK_TEST:{'values':trace['values']}}},
+        'observation_count':4,'required_semantic_trace':trace,
+        'required_original_assertion_results':trace['semantic_postconditions'],
+        'model':'Complete original wrapper and six helpers;four go,two plain awaits,two awaitResult calls,one cancel,sleep50 and all six original assertions remain. Four pure observations inspect existing immutable result tags or existing r1/r2 exactly once without repeating stateful calls. Pending cancellation before start or while sleeping,explicit Failed tag and both pure success workers independently yield true/true/42/42 for both completion orders;four positive assertions execute and two assert(false) branches are avoided. Actual timer/cancellation progress under arbitrary parent delays,Failed Error/PanicInfo payload layout,cleanup/FI/resources/lifetime/safety/provider/mixed remain separate open obligations. The filename does not qualify linked go or a Task.link operation.'}

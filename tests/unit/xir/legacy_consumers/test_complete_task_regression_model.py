@@ -82,7 +82,7 @@ class TaskRegressionTraces(unittest.TestCase):
         self.assertEqual(rows['complete_task_regression_1128_yield']['required_original_yield_checkpoints'],39)
 
     def test_declaration_only_modules_have_separate_full_named_body_requirements(self):
-        entries={x['id']:x for x in model.expected_rows()};named=[row for row in model.named_expected_rows() if row['id'] not in {model._STACK_NAMED_ID,model._PLAIN_SCOPE_NAMED_ID,model._CORO_HANDOFF_NAMED_ID}];self.assertEqual(len(named),13)
+        entries={x['id']:x for x in model.expected_rows()};named=[row for row in model.named_expected_rows() if row['id'] not in {model._STACK_NAMED_ID,model._PLAIN_SCOPE_NAMED_ID,model._CORO_HANDOFF_NAMED_ID,model._TASK_LINK_NAMED_ID}];self.assertEqual(len(named),13)
         for row in named:
             name=row['id'].removeprefix('complete_task_named_')
             self.assertEqual(entries['complete_task_regression_'+name]['expected']['stdout_utf8'],'')
@@ -107,7 +107,7 @@ class TaskRegressionTraces(unittest.TestCase):
 
     def test_complete_entries_and_named_bodies_use_their_own_real_routes(self):
         cases={row['id']:row for row in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}
-        for named,rows in [(False,model.expected_rows()),(True,[row for row in model.named_expected_rows() if row['id'] not in {model._STACK_NAMED_ID,model._PLAIN_SCOPE_NAMED_ID,model._CORO_HANDOFF_NAMED_ID}])]:
+        for named,rows in [(False,model.expected_rows()),(True,[row for row in model.named_expected_rows() if row['id'] not in {model._STACK_NAMED_ID,model._PLAIN_SCOPE_NAMED_ID,model._CORO_HANDOFF_NAMED_ID,model._TASK_LINK_NAMED_ID}])]:
             for expected in rows:
                 with self.subTest(case=expected['id']):
                     case=cases[expected['id']]
@@ -555,5 +555,81 @@ class TaskRegressionTraces(unittest.TestCase):
         for pending in model._CORO_BOUNDARY_PENDING_PROGRAMS:
             self.assertNotIn(pending,{row['source'] for row in rows})
             self.assertIn('var local = Coro.Local<string>()',(model.ROOT/pending).read_text(encoding='utf-8'))
+
+
+    def test_complete_task_result_tags_and_both_success_workers_keep_original_await_order(self):
+        import itertools
+        for position in ('not_started','sleeping'):
+            for order in itertools.permutations(range(2)):
+                trace=model.task_link_result_trace(position,completion_order=order)
+                self.assertEqual(trace['values'],[True,True,42,42])
+                self.assertTrue(trace['root_can_terminate'])
+                self.assertEqual(trace['semantic_postconditions'],[True]*4)
+                self.assertEqual((trace['original_static_assertions'],trace['original_positive_assertion_executions'],trace['original_failure_assertion_branches_avoided']),(6,4,2))
+                self.assertFalse(trace['TaskResult_Failed_payload_Error_PanicInfo_layout_qualified'])
+                self.assertFalse(trace['actual_cancel_before_completion_for_arbitrary_parent_delays_qualified'])
+
+    def test_wrong_task_result_tags_or_one_wrong_success_cannot_qualify_normal_wrapper(self):
+        for key in ('cancel_tag','failed_tag'):
+            normal='Cancelled' if key=='cancel_tag' else 'Failed'
+            for tag in ('Success','Cancelled','Failed','Pending','Timeout'):
+                if tag!=normal:
+                    trace=model.task_link_result_trace(**{key:tag})
+                    self.assertFalse(trace['root_can_terminate'])
+                    self.assertIn(False,trace['semantic_postconditions'])
+        for values in ((41,42),(42,41)):
+            trace=model.task_link_result_trace(success_values=values)
+            self.assertFalse(trace['root_can_terminate'])
+        for kwargs in ({'cancel_position':'already_completed'},{'completion_order':(0,)},
+                       {'completion_order':(0,0)},{'success_values':(42,)},{'failed_tag':'Unknown'}):
+            with self.assertRaises(ValueError):model.task_link_result_trace(**kwargs)
+
+    def test_task_result_observer_preserves_all_helpers_calls_assertions_and_sleep(self):
+        original=(model.ROOT/model._TASK_LINK_SOURCE).read_text(encoding='utf-8')
+        observed=(model.ROOT/model._TASK_LINK_FIXTURE).read_text(encoding='utf-8')
+        restored=observed
+        for before,after in reversed(model._TASK_LINK_TRANSFORMS):
+            self.assertEqual(restored.count(after),1)
+            restored=restored.replace(after,before,1)
+        self.assertEqual(restored,original)
+        self.assertEqual(original.count('assert('),6)
+        for token,count in (('go ',4),('awaitResult()',2),('await t',2),('t.cancel()',1),('time.sleep(50)',1),('assert(',6)):
+            self.assertEqual(original.count(token),count)
+            self.assertEqual(observed.count(token),count)
+        self.assertEqual(original.count('print('),0)
+        self.assertEqual(observed.count('print('),4)
+        self.assertEqual(original.count('fn '),7)
+        self.assertIn('throw LinkErr.Msg { message: "link error" }',observed)
+        self.assertFalse(original.rstrip().endswith('test_task_link()'))
+
+    def test_task_result_source_fixture_and_authorities_cannot_drift_or_be_dropped(self):
+        saved=Path.read_bytes
+        for name in model._TASK_LINK_INPUTS:
+            def changed(path):return saved(path)+b'changed' if path==model.ROOT/name else saved(path)
+            with self.subTest(path=name),mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):
+                model.validate_task_link_result_inputs()
+        with mock.patch.object(model,'_TASK_LINK_INPUTS',{}),self.assertRaises(ValueError):
+            model.validate_task_link_result_inputs()
+        with mock.patch.object(model,'_TASK_LINK_TRANSFORMS',[]),self.assertRaises(ValueError):
+            model.validate_task_link_result_inputs()
+
+    def test_task_result_original_entry_and_observed_named_body_are_registered_separately(self):
+        cases={row['id']:row for row in json.loads((model.ROOT/'tests/unit/xir/legacy_consumers/product_driver_cases.json').read_bytes())['cases']}
+        entry=model.task_link_entry_expected_row();named=model.task_link_named_expected_row()
+        self.assertEqual((cases[entry['id']]['source'],cases[entry['id']]['source_context']),(model._TASK_LINK_SOURCE,'original_absolute'))
+        self.assertEqual(entry['expected']['stdout_utf8'],'')
+        self.assertFalse(entry['separate_named_body_obligation']['executed_by_run'])
+        self.assertEqual((cases[named['id']]['source'],cases[named['id']]['entry']),(model._TASK_LINK_FIXTURE,'test'))
+        self.assertEqual(named['expected']['required_test_names'],[model._TASK_LINK_TEST])
+        self.assertEqual(named['expected']['stdout_utf8'],'true\ntrue\n42\n42\n')
+
+    def test_task_result_tag_observations_do_not_claim_payload_timing_or_linked_semantics(self):
+        row=model.task_link_named_expected_row();trace=row['required_semantic_trace']
+        self.assertEqual(trace['source_error_before_runtime_projection'],'LinkErr.Msg(link error)')
+        self.assertEqual((trace['all_original_workers'],trace['original_success_workers'],trace['original_plain_awaits'],trace['original_awaitResult_calls']),(4,2,2,2))
+        self.assertEqual(trace['original_slow_sleep_ms'],50)
+        self.assertTrue(trace['filename_does_not_prove_linked_go_or_Task_link_operation'])
+        self.assertFalse(trace['real_cleanup_FI_resources_lifetime_safety_provider_mixed_qualified'])
+        self.assertNotIn('linked go',(model.ROOT/model._TASK_LINK_SOURCE).read_text(encoding='utf-8'))
 
 if __name__=='__main__':unittest.main()

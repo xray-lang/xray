@@ -33880,6 +33880,100 @@
           }
         ]
       }
+    },
+    {
+      "id": "complete_task_link_results_run",
+      "oracle_id": "complete_task_link_results_run",
+      "source": "tests/regression/11_coroutine/1136_task_link.xr",
+      "source_lf_sha256": "b2341bab8f0caf95f7bb8de9fea87b7ab3cd5b1e9de2c385bb6433298a079ab1",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original declares its named wrapper and all six helpers without a root call. Empty run success cannot qualify cancellation,failure,success,any original assertion or a linked operation.",
+      "remaining_gates": [
+        "Complete original wrapper/six helpers/fourgo/twoawait/twoawaitResult/cancel/sleep50/all six assertions and actual four observations;empty entry not named execution",
+        "Actual Source/outcome/cancellation timing;Failed Error/PanicInfo payload layout;full cleanup/FI/resources/lifetime/safety/provider/mixed;filename doesnot prove linked operation"
+      ]
+    },
+    {
+      "id": "complete_task_link_results_named",
+      "oracle_id": "complete_task_link_results_named",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/task_link_results_observed/root.xr",
+      "source_lf_sha256": "4ad5e3b35fead6bbed57757015f75f7adf8c04a13b95f250196a0ec486291ab5",
+      "entry": "test",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "true\ntrue\n42\n42\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete original wrapper and six helpers;four go,two plain awaits,two awaitResult calls,one cancel,sleep50 and all six original assertions remain. Four pure observations inspect existing immutable result tags or existing r1/r2 exactly once without repeating stateful calls. Pending cancellation before start or while sleeping,explicit Failed tag and both pure success workers independently yield true/true/42/42 for both completion orders;four positive assertions execute and two assert(false) branches are avoided. Actual timer/cancellation progress under arbitrary parent delays,Failed Error/PanicInfo payload layout,cleanup/FI/resources/lifetime/safety/provider/mixed remain separate open obligations. The filename does not qualify linked go or a Task.link operation.",
+      "remaining_gates": [
+        "Complete original wrapper/six helpers/fourgo/twoawait/twoawaitResult/cancel/sleep50/all six assertions and actual four observations;empty entry not named execution",
+        "Actual Source/outcome/cancellation timing;Failed Error/PanicInfo payload layout;full cleanup/FI/resources/lifetime/safety/provider/mixed;filename doesnot prove linked operation"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/11_coroutine/1136_task_link.xr",
+        "selected_complete_source": "tests/unit/xir/legacy_consumers/fixtures/task_link_results_observed/root.xr",
+        "selected_source_lf_sha256": "4ad5e3b35fead6bbed57757015f75f7adf8c04a13b95f250196a0ec486291ab5",
+        "method": "Only four pure print insertions before original matches/assertions. Inspect existing immutable awaitResult tags and existing r1/r2 without repeating go/await/cancel or changing any original assertion.",
+        "values": [
+          {
+            "test": "test_task_link",
+            "expression": "existing r matches Cancelled",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_task_link",
+            "expression": "existing r matches Failed",
+            "expected": true,
+            "projection": null
+          },
+          {
+            "test": "test_task_link",
+            "expression": "r1",
+            "expected": 42,
+            "projection": null
+          },
+          {
+            "test": "test_task_link",
+            "expression": "r2",
+            "expected": 42,
+            "projection": null
+          }
+        ]
+      }
     }
   ]
 }
