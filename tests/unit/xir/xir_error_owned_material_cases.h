@@ -83,7 +83,7 @@ static void owned_error_source_controls(const XrXirCompileContext *context,
  * The published Final remains owned and unchanged throughout this probe. */
 static XrXirStatus owned_error_replay_begin(const XrXirCompileContext *context,
     const XrXirEffects *effects,XrXirEffects *replay) {
-    XrXirStatus status=effect_source_outcomes_prepare(context,effects,replay);
+    XrXirStatus status=effect_legacy_error_oracle_prepare(context,effects,replay);
     XrXirCompileContext remaining=*context;
     if (status==XR_XIR_OK) status=effect_errors_seed(&effects->invocations->body->domain,replay,&remaining);
     return status;
@@ -117,7 +117,7 @@ static XrXirStatus conditional_owned_error(const XrXirCompileContext *context,
         CHECK((effects->invocations->final->material!=NULL) && (effects->invocations->final->material!=NULL));
     }
     error_storage_free(&flow);error_invocation_contexts_free(flow.invocations);
-    effect_terms_free(&terms);effect_source_outcomes_free(&replay);xr_xir_compile_effects_free(effects);return status;
+    effect_terms_free(&terms);effect_legacy_error_oracle_free(&replay);xr_xir_compile_effects_free(effects);return status;
 }
 
 /* Each scan starts at physical zero. The independent literal rows retain
@@ -508,7 +508,7 @@ static XrXirStatus conditional_owned_error_cells(const XrXirCompileContext *cont
     }
     error_storage_free(&flow);
     CHECK(!flow.cell_types && !flow.cell_material && !flow.cell_type_count);
-    effect_terms_free(&terms);effect_source_outcomes_free(&replay);xr_xir_compile_effects_free(effects);return status;
+    effect_terms_free(&terms);effect_legacy_error_oracle_free(&replay);xr_xir_compile_effects_free(effects);return status;
 }
 
 /* The original two recipes retain their complete loops unchanged. These two

@@ -128,11 +128,11 @@ static XrXirStatus conditional_class_rows_replay(const XrXirCompileContext *cont
     XrXirEffects *effects) {
     EffectInvocationCertificate *certificate=effects->invocations;
     EffectInvocationRead replay={0};
-    XrXirStatus opening=effect_invocation_read_open(context,effects,certificate->declared,certificate->final,&replay);
+    XrXirStatus opening=effect_invocation_read_open(context,certificate,certificate->final,&replay);
     if (opening!=XR_XIR_OK) return opening;
     if (!effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
-    replay.work=context;replay.effects=effects;
+    replay.work=context;replay.roles=(EffectInvocationRoles){.sealed=certificate};
     replay.declared=certificate->declared;
     EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
     XrXirStatus status=effect_invocation_class_verify_read(&replay,&body);

@@ -1,0 +1,66 @@
+function(xray_effect_final_proof_executable target source)
+    add_executable(${target} "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/${source}")
+    target_include_directories(${target} PRIVATE ${XRAY_COMMON_INCLUDES})
+    target_link_libraries(${target} PRIVATE xray_xir xray_xir_scalar xray_xir_source)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+endfunction()
+
+foreach(proof_kind IN ITEMS control_finite_proof effect_input_selector error_carrier_domain error_finite_proof
+        error_finite_source error_late_admission invocation_edges invocation_inventory root_input_seeds)
+    xray_effect_final_proof_executable(test_xir_${proof_kind} test_xir_${proof_kind}.c)
+endforeach()
+
+set(final_proof_tests)
+foreach(proof_kind IN ITEMS control_finite_proof effect_input_selector error_finite_source error_late_admission)
+    add_test(NAME test_xir_${proof_kind} COMMAND test_xir_${proof_kind})
+    list(APPEND final_proof_tests test_xir_${proof_kind})
+endforeach()
+foreach(mode RANGE 0 7)
+    add_test(NAME test_xir_error_carrier_domain_${mode} COMMAND test_xir_error_carrier_domain ${mode})
+    list(APPEND final_proof_tests test_xir_error_carrier_domain_${mode})
+endforeach()
+foreach(mode RANGE 0 30)
+    add_test(NAME test_xir_error_finite_proof_${mode} COMMAND test_xir_error_finite_proof ${mode})
+    list(APPEND final_proof_tests test_xir_error_finite_proof_${mode})
+endforeach()
+foreach(mode RANGE 0 13)
+    add_test(NAME test_xir_invocation_inventory_${mode} COMMAND test_xir_invocation_inventory ${mode})
+    list(APPEND final_proof_tests test_xir_invocation_inventory_${mode})
+endforeach()
+foreach(shape RANGE 0 15)
+    foreach(attack RANGE 0 5)
+        add_test(NAME test_xir_root_input_seeds_${shape}_${attack} COMMAND test_xir_root_input_seeds ${shape} ${attack})
+        list(APPEND final_proof_tests test_xir_root_input_seeds_${shape}_${attack})
+    endforeach()
+endforeach()
+foreach(mode RANGE 0 56)
+    add_test(NAME test_xir_invocation_edges_${mode} COMMAND test_xir_invocation_edges ${mode})
+    list(APPEND final_proof_tests test_xir_invocation_edges_${mode})
+endforeach()
+foreach(mode RANGE 0 30)
+    add_test(NAME test_xir_invocation_edges_no_return_${mode} COMMAND test_xir_invocation_edges ${mode} no-return)
+    list(APPEND final_proof_tests test_xir_invocation_edges_no_return_${mode})
+endforeach()
+set_tests_properties(${final_proof_tests} PROPERTIES
+    LABELS "unit;xir;ownership;metadata;final-proof;partial-feedback"
+    TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_control_finite_proof_resources COMMAND test_xir_control_finite_proof resources)
+set_tests_properties(test_xir_control_finite_proof_resources PROPERTIES
+    LABELS "unit;xir;ownership;metadata;final-proof;compiler-fault;resources"
+    TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+
+foreach(mode IN ITEMS 0 31 48 49)
+    foreach(variant IN ITEMS proof-fi proof-fi-large large)
+        string(REPLACE "-" "_" suffix "${variant}")
+        add_test(NAME test_xir_invocation_edges_${suffix}_${mode}
+            COMMAND test_xir_invocation_edges ${mode} ${variant})
+        set_tests_properties(test_xir_invocation_edges_${suffix}_${mode} PROPERTIES
+            LABELS "unit;xir;ownership;metadata;final-proof;compiler-fault;resources"
+            TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1)
+    endforeach()
+endforeach()

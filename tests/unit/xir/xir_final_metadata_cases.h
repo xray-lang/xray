@@ -40,9 +40,9 @@ static void pc_outcome_metadata_literals(void) {
     CHECK(xir_effects_contract(effects,1)==&final->contracts[1] &&
         final->contracts[1].parameter_count==1 && final->contracts[1].parameters==roles &&
         final->contracts[1].formula.term_count==1 && final->contracts[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_CELL_PARAMETER);
-    XrXirEffects fresh={0};CHECK(effect_source_outcomes_prepare(&context,effects,&fresh)==XR_XIR_OK);
+    XrXirEffects fresh={0};CHECK(effect_legacy_error_oracle_prepare(&context,effects,&fresh)==XR_XIR_OK);
     CHECK(fresh.root_input==final && !fresh.outcomes_work.contracts &&
         effect_contracts_read(&fresh)==final->contracts && !fresh.outcomes_work.entry_roots);
-    effect_source_outcomes_free(&fresh);
+    effect_legacy_error_oracle_free(&fresh);
     xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
 }

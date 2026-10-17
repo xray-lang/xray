@@ -49,6 +49,7 @@ static void pc_free(void *p) {
 #pragma pop_macro("xr_free")
 #pragma pop_macro("xr_malloc")
 #include "xir/xxir_effects.c"
+#include "xir_legacy_error_oracle.h"
 #include "xir_error_cfg_pending_fixture.h"
 static XrCompileResourceLimits pc_caps(void) { return (XrCompileResourceLimits){8388608,4194304,8000000}; }
 static XrXirCompileContext pc_owner(XrCompileResourceLimits caps) {
@@ -445,7 +446,6 @@ static void pc_erase_initializer_root(const EffectInvocationCertificate *certifi
     EffectFinalFunctions *result) {
     EffectInvocationNode *node=&certificate->final->nodes[0];
     node->intrinsic_mask=node->local_mask=0;result->functions[0].formula.constant_mask=0;
-    result->facts[0]=(XrXirRootEffects){0};
     for (uint32_t domain=0;domain<4;++domain) {
         size_t at=(size_t)domain*result->count;
         result->witnesses[at]=(XrXirRootEffectWitness){0};
@@ -714,12 +714,12 @@ static void pc_empty_nonempty_summary(void) {
     CHECK(xr_xir_compile_effects_analyze(checked,&e)==XR_XIR_OK);pc_empty_golden(e,1);
     const XrXirModule *owned=xr_xir_compile_artifact_module(checked);
     /* Only fresh constructor rows carry this monotonicity counterfact. */
-    XrXirEffects replay={0};CHECK(effect_source_outcomes_prepare(&c,e,&replay)==XR_XIR_OK);
+    XrXirEffects replay={0};CHECK(effect_legacy_error_oracle_prepare(&c,e,&replay)==XR_XIR_OK);
     CHECK(effect_errors_seed(&e->invocations->body->domain,&replay,&c)==XR_XIR_OK);
     replay.outcomes_work.errors[1]=4;
     EffectGraph graph={.material=e->invocations->body,.physical=e->invocations->body->physical};
-    EffectControlCheck input={0};CHECK(effect_final_control_prepare(&c,e,&input)==XR_XIR_OK);
-    CHECK(effect_control_dependencies_move(&c,&input,&graph)==XR_XIR_OK);
+    EffectControlCheck input={0};CHECK(effect_legacy_control_prepare(&c,e,&input)==XR_XIR_OK);
+    CHECK(effect_legacy_error_dependencies_move(&c,&input,&graph)==XR_XIR_OK);
     EffectTerms terms={0};terms.remaining=&c;terms.types=*owned->types;
     ErrorFlow flow={0};flow.body=effect_body_owned_request(&c,graph.material);
     flow.effects=&replay;flow.remaining=&c;flow.terms=&terms;
@@ -727,7 +727,7 @@ static void pc_empty_nonempty_summary(void) {
     CHECK(replay.outcomes_work.errors[1]==4 && flow.storage_capacity==4684 &&
         effect_final_outcomes(e)->errors[1]==0);
     error_storage_free(&flow);effect_terms_free(&terms);effect_graph_free(&graph);effect_control_check_free(&input);
-    effect_source_outcomes_free(&replay);
+    effect_legacy_error_oracle_free(&replay);
     xr_xir_compile_effects_free(e);xr_xir_compile_artifact_free(checked);pc_release(&c,baseline);
 }
 static void pc_empty_faults(void) {

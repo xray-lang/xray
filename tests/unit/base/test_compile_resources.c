@@ -315,7 +315,12 @@ static void counter_overflow_guards(void) {
     CHECK(!live_count && !physical_bytes);
 }
 
+#include "compile_resources_extent_cases.h"
+#include "compile_resources_locality_cases.h"
+
 int main(void) {
+    allocation_extent_cases();
+    allocation_locality_cases();
     creation_and_arguments();
     exact_and_faults();
     resize_and_transfer();

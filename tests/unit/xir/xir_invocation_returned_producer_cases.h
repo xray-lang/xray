@@ -183,7 +183,7 @@ static void invocation_returned_environment_owned(const XrXirCompileContext *con
     const EffectInvocationCertificate *certificate,XrXirEffects *published) {
     const EffectInvocationFinal *owner=certificate->final;EffectInvocationBasis basis={0};
     EffectInvocationRead replay={0};
-    CHECK(effect_invocation_read_open(context,published,certificate->declared,owner,&replay)==XR_XIR_OK);replay.work=context;replay.effects=published;
+    CHECK(effect_invocation_read_open(context,certificate,owner,&replay)==XR_XIR_OK);replay.work=context;replay.roles=(EffectInvocationRoles){.sealed=certificate};
     replay.declared=certificate->declared;
     EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
     CHECK(replay.final==certificate->final && replay.body.owner==certificate->body &&
@@ -345,7 +345,7 @@ static XrXirStatus conditional_invocation_returned(const XrXirCompileContext *co
     effect_invocation_bounds_free(bounds);effect_graph_free(&graph);invocation_core_storage_free(&effects);
     if (status==XR_XIR_OK && mode>=5) status=invocation_returned_lowered(context,checked,oracle);
     xr_xir_compile_artifact_free(checked);checked=NULL;memset(&fixture,0,sizeof(fixture));
-    if (status==XR_XIR_OK && read_extent) final_read_allocation_bounds(context,certificate,published);
+    if (status==XR_XIR_OK && read_extent) final_read_allocation_bounds(context,certificate);
     if (status==XR_XIR_OK && oracle) {
         const EffectInvocationFinal *owned=certificate->final;
         CHECK(owned->material==certificate->body && owned->physical==certificate->body->physical &&

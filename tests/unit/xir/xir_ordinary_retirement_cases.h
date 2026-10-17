@@ -37,9 +37,10 @@ static void pc_ordinary_observe_free(void *memory,size_t bytes) {
         if (pc_ordinary_mutate) pc_ordinary_current->type=XR_XIR_BOOL;
     }
 }
-static void pc_ordinary_resurrection(const XrXirCompileContext *context,const XrXirModule *source,
-    XrXirEffects *effects) {
-    EffectOrdinaryContexts *ordinary=effects->invocations->final->outcomes->contexts->ordinary;
+static void pc_context_resurrection(const XrXirCompileContext *context,const XrXirModule *source,
+    XrXirEffects *effects,bool select_dense) {
+    EffectContextOwner *owner=effects->invocations->final->outcomes->contexts;
+    EffectOrdinaryContexts *ordinary=select_dense?owner->dense:owner->ordinary;
     CHECK(effect_ordinary_work_empty(ordinary));
     for (uint32_t field=0;field<32;++field) {
         XrXirEffects *uses=&ordinary->uses;EffectFinalOutcomes *out=&uses->outcomes_work;
@@ -161,7 +162,7 @@ static void pc_ordinary_retirement_literals(void) {
         CHECK(status==(mutation?XR_XIR_BAD_STRUCTURE:XR_XIR_OK) && pc_ordinary_callbacks==1);
         CHECK(effect_ordinary_work_empty(ordinary));
         for (uint32_t i=0;i<pc_ordinary_block_count;++i) CHECK(pc_ordinary_freed[i]==1);
-        if (!mutation) pc_ordinary_resurrection(&context,&current,effects);
+        if (!mutation) pc_context_resurrection(&context,&current,effects,false);
         else CHECK(effects->outcomes_owner && !effects->invocations->final->outcomes && !effect_final_outcomes(effects));
         rows[0].type=XR_XIR_I64;
         fprintf(stderr,"ordinary retirement mutation%u actual_freed%u callback%u status%u\n",

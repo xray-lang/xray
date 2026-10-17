@@ -123,7 +123,7 @@ static XrXirStatus effect_invocation_deferred_needed(const EffectInvocationRead 
  * All records, including missing and duplicate frontiers, are consumed before
  * any certificate ownership transfer. A failure leaves every producer owned. */
 static XrXirStatus effect_invocation_deferred_verify(const EffectInvocationRead *owner) {
-    if (!owner || !effect_body_material_shape(owner->final->material) || !owner->effects || !owner->work ||
+    if (!owner || !effect_body_material_shape(owner->final->material) || !effect_invocation_roles_shape(owner) || !owner->work ||
         owner->final->deferred_count>owner->final->deferred_capacity ||
         (owner->final->deferred_count && !owner->final->deferred_calls)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t d=0;d<owner->final->deferred_count;++d) {

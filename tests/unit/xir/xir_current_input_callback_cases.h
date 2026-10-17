@@ -41,7 +41,9 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;EffectGraph graph={0};
     XrXirModule source={0};XrXirFunction functions[3];XrXirInstruction rows[EE_MAX_OPS];
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
+    fprintf(stderr,"DIAG xir_current_input_callback_cases.h:7 status%u XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=effect_infer_construct(context,xr_xir_compile_artifact_module(checked),NULL,&effects);
+    fprintf(stderr,"DIAG xir_current_input_callback_cases.h:9 status%u if (status==XR_XIR_OK) status=effect_infer_construct(context,xr_xir_compile_artifact_module(checked),NULL,&effects);\n",(unsigned)status);
     if (status==XR_XIR_OK) {
         const XrXirModule *original=xr_xir_compile_artifact_module(checked);
         CHECK(original->function_count==3 && original->functions[1].instruction_count<=EE_MAX_OPS);
@@ -50,8 +52,10 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
         source.functions=functions;functions[1].instructions=rows;
         CHECK(rows[4].type==XR_XIR_I64);
         XrXirCompileContext copy=*context;status=effect_graph_build(&source,effects,&graph,&copy);
+    fprintf(stderr,"DIAG xir_current_input_callback_cases.h:18 status%u XrXirCompileContext copy=*context;status=effect_graph_build(&source,effects,&graph,&copy);\n",(unsigned)status);
     }
     if (status==XR_XIR_OK) status=effect_body_source_match(context,graph.material,&source);
+    fprintf(stderr,"DIAG xir_current_input_callback_cases.h:21 status%u if (status==XR_XIR_OK) status=effect_body_source_match(context,graph.material,&source);\n",(unsigned)status);
     if (status==XR_XIR_OK) {
         XrXirInstruction saved=rows[4];XrXirEffects old=*effects;
         XrXirRootEffects facts[3];XrXirRootEffectWitness witnesses[6];
@@ -63,6 +67,7 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
         pc_current_input_row=&rows[4];pc_current_input_mutation=mutation;pc_current_input_calls=0;
         if (mutation) pc_allocate_hook=pc_current_input_mutate;
         status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL);
+    fprintf(stderr,"DIAG xir_current_input_callback_cases.h:33 status%u status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL);\n",(unsigned)status);
         pc_allocate_hook=NULL;pc_current_input_row=NULL;rows[4]=saved;
         if (oracle) fprintf(stderr,"current raw publication mutation%u callbacks%u status%u retained%u\n",
             mutation,pc_current_input_calls,status,effects->invocations==old.invocations);
@@ -74,20 +79,52 @@ static XrXirStatus pc_current_input_operation(const XrXirCompileContext *context
             CHECK(pc_stats(context).work>before.work &&
                 pc_stats(context).allocated_bytes>before.allocated_bytes);
             status=XR_XIR_OK;
+    fprintf(stderr,"DIAG xir_current_input_callback_cases.h:45 status%u status=XR_XIR_OK;\n",(unsigned)status);
         } else if (status==XR_XIR_OK) {
             CHECK(!mutation && !pc_current_input_calls && effects->invocations!=old.invocations);
         } else CHECK(status==XR_XIR_OUT_OF_MEMORY || status==XR_XIR_BUDGET);
+    fprintf(stderr,"DIAG xir_current_input_callback_cases.h:49 status%u } else CHECK(status==XR_XIR_OUT_OF_MEMORY || status==XR_XIR_BUDGET);\n",(unsigned)status);
         effect_graph_free(&graph);graph=(EffectGraph){0};
         if (status==XR_XIR_OK) {
             XrXirCompileContext copy=*context;status=effect_graph_build(&source,effects,&graph,&copy);
+    fprintf(stderr,"DIAG xir_current_input_callback_cases.h:53 status%u XrXirCompileContext copy=*context;status=effect_graph_build(&source,effects,&graph,&copy);\n",(unsigned)status);
         }
         if (status==XR_XIR_OK) status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL);
+    fprintf(stderr,"DIAG xir_current_input_callback_cases.h:56 status%u if (status==XR_XIR_OK) status=effect_invocation_publish(context,&source,effects,&graph,NULL,NULL);\n",(unsigned)status);
         if (status==XR_XIR_OK) CHECK(effect_roots_read(effects)->root[0].requires_root &&
             pc_stats(context).work>before.work && pc_stats(context).allocated_bytes>before.allocated_bytes);
+        /* Building a new graph initializes provisional control rows. Complete
+         * every original effect derivation again before the sole outcome move. */
+        XrXirCompileContext final=*context;
+        if(status==XR_XIR_OK) status=effect_propagate(effects,&graph,&final);
+        if(status==XR_XIR_OK) status=effect_go_safe(&source,effects,&graph,&final);
+        if(status==XR_XIR_OK) status=effect_witnesses(&source,effects,&graph,&final);
+        if(status==XR_XIR_OK) {
+            /* The retry owns the previous unpublished Error allocations. Retire
+             * them before the original one-shot seeder creates fresh rows. */
+            CHECK(!effects->outcomes_work.error_proof);
+            xr_compile_resources_free(effects->outcomes_work.atoms);
+            xr_compile_resources_free(effects->outcomes_work.errors);
+            effects->outcomes_work.atoms=NULL;effects->outcomes_work.errors=NULL;
+            effects->outcomes_work.atom_count=effects->outcomes_work.atom_capacity=0;
+            effects->outcomes_work.words=effects->outcomes_work.error_rows=0;
+            effects->outcomes_work.source_type_count=0;
+            status=effect_errors_analyze(effects,&graph,&final);
+        }
+        if(status==XR_XIR_OK) {
+            const XirEffectEntryRootView *sealed=effects->outcomes_work.entry_roots;
+            size_t allocations=attempts;XrCompileResourceStats retained=pc_stats(context);
+            CHECK(sealed && effect_entry_roots_seal(&source,effects,&final)==XR_XIR_BAD_STRUCTURE &&
+                effects->outcomes_work.entry_roots==sealed && attempts==allocations &&
+                pc_stats(context).work==retained.work);
+        }
+
     }
     effect_graph_free(&graph);
     if (status==XR_XIR_OK) status=effect_outcomes_publish(context,&source,effects);
+    fprintf(stderr,"DIAG xir_current_input_callback_cases.h:62 status%u if (status==XR_XIR_OK) status=effect_outcomes_publish(context,&source,effects);\n",(unsigned)status);
     if (status==XR_XIR_OK) pc_empty_golden(effects,0);
+    fprintf(stderr,"DIAG xir_current_input_callback_cases.h:64 status%u if (status==XR_XIR_OK) pc_empty_golden(effects,0);\n",(unsigned)status);
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);
     CHECK(!pc_allocate_hook && !pc_current_input_row);return status;
 }

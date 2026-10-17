@@ -21,7 +21,7 @@ static void invocation_nonroot_slot_erasure(const XrXirCompileContext *work,
     EffectInvocationNode source=final->nodes[target],parent=final->nodes[caller];
     EffectInvocationCause source_causes[2]={source.causes[0],effect_invocation_local_causes(&source)[0]};
     EffectInvocationCause parent_causes[2]={parent.causes[0],effect_invocation_local_causes(&parent)[0]};
-    EffectFinalFunctions *summary=&final->summary;XrXirRootEffects facts=summary->facts[0];
+    EffectFinalFunctions *summary=&final->summary;
     uint32_t mask=summary->functions[0].formula.constant_mask;
     XrXirRootEffectWitness witnesses[4];
     for (uint32_t d=0;d<4;++d) {
@@ -35,7 +35,6 @@ static void invocation_nonroot_slot_erasure(const XrXirCompileContext *work,
     final->nodes[caller].intrinsic_mask&=~XR_XIR_CALLABLE_ROOT_REQUIRED;
     final->nodes[caller].causes[0]=absent;
     summary->functions[0].formula.constant_mask&=~XR_XIR_CALLABLE_ROOT_REQUIRED;
-    summary->facts[0].requires_root=false;
     CHECK(final->nodes[symbolic].intrinsic_mask&XR_XIR_CALLABLE_ROOT_REQUIRED);
     CHECK(certificate->body->local_roots[1].requires_root &&
         certificate->body->declarations->slots[0].mutable);
@@ -49,7 +48,7 @@ static void invocation_nonroot_slot_erasure(const XrXirCompileContext *work,
     final->nodes[target]=source;final->nodes[caller]=parent;
     final->nodes[target].causes[0]=source_causes[0];effect_invocation_local_causes(&final->nodes[target])[0]=source_causes[1];
     final->nodes[caller].causes[0]=parent_causes[0];effect_invocation_local_causes(&final->nodes[caller])[0]=parent_causes[1];
-    summary->facts[0]=facts;summary->functions[0].formula.constant_mask=mask;
+    summary->functions[0].formula.constant_mask=mask;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count]=witnesses[d];
     CHECK(effect_invocation_publication_match(work,certificate,summary)==XR_XIR_OK);
 }

@@ -24,7 +24,8 @@ static bool effect_context_owner_published(XrCompileResources *resources,const E
         owner->ordinary->resources==resources && owner->dense->resources==resources &&
         owner->forest->resources==resources && !owner->ordinary->dense && owner->dense->dense &&
         !owner->refinement && !owner->ordinary->terms.remaining && !owner->dense->terms.remaining &&
-        !owner->forest->terms.remaining && effect_ordinary_work_empty(owner->ordinary);
+        !owner->forest->terms.remaining && effect_ordinary_work_empty(owner->ordinary) &&
+        effect_ordinary_work_empty(owner->dense);
 }
 
 static void effect_context_owner_free(EffectContextOwner *owner) {
