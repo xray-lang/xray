@@ -36,8 +36,51 @@ static XrXirStatus effect_body_run_payload_check(const EffectBodyRead *read,
     return XR_XIR_OK;
 }
 
-/* Unused capacity is never read or traversed. A failed growth retains the
- * previous allocation so the unique material destructor can release it. */
+/* Both growth and immutable receiving copy initialized fields only. Inactive
+ * delta words and unused slots are not data and never enter either copy. */
+static XrXirStatus effect_body_runs_copy(const XrXirCompileContext *work,
+    const EffectBodyFunction *function,EffectBodyRun *storage) {
+    for (uint32_t r=0;r<function->run_count;++r) {
+        const EffectBodyRun *source=&function->runs[r];EffectBodyRun *target=&storage[r];
+        if (!xir_compile_work(work,3*sizeof(uint32_t)+sizeof(source->base))) {
+            return XR_XIR_BUDGET;
+        }
+        target->first=source->first;target->count=source->count;target->mask=source->mask;
+        target->base=source->base;
+        if (source->mask&EFFECT_BODY_LITERAL_PAIR) {
+            if (!xir_compile_work(work,sizeof(source->second))) {
+                return XR_XIR_BUDGET;
+            }
+            target->second=source->second;continue;
+        }
+        for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
+            if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+            if (!(source->mask&(UINT32_C(1)<<w))) continue;
+            if (!xir_compile_work(work,sizeof(uint32_t))) {
+                return XR_XIR_BUDGET;
+            }
+            target->delta[w]=source->delta[w];
+        }
+    }
+    return XR_XIR_OK;
+}
+
+/* Unused capacity is never read or traversed. A failed replacement retains
+ * the previous allocation so the unique material destructor can release it. */
+static XrXirStatus effect_body_runs_replace(const XrXirCompileContext *work,
+    EffectBodyFunction *function,uint32_t capacity) {
+    if (capacity<function->run_count || (uint64_t)capacity>SIZE_MAX/sizeof(*function->runs))
+        return XR_XIR_BUDGET;
+    XrXirStatus status=XR_XIR_OK;
+    EffectBodyRun *storage=xir_compile_alloc(work,(size_t)capacity*sizeof(*storage),&status);
+    if (!storage) return status;
+    if (!xir_compile_work(work,3)) { xr_compile_resources_free(storage);return XR_XIR_BUDGET; }
+    status=effect_body_runs_copy(work,function,storage);
+    if (status!=XR_XIR_OK) { xr_compile_resources_free(storage);return status; }
+    xr_compile_resources_free(function->runs);function->runs=storage;
+    function->run_capacity=capacity;return XR_XIR_OK;
+}
+
 static XrXirStatus effect_body_runs_reserve(const XrXirCompileContext *work,
     EffectBodyFunction *function) {
     if (!function || function->run_count>function->run_capacity ||
@@ -49,37 +92,18 @@ static XrXirStatus effect_body_runs_reserve(const XrXirCompileContext *work,
         capacity=capacity>UINT32_MAX/2?function->instruction_count:capacity*2;
     }
     if (capacity>function->instruction_count) capacity=function->instruction_count;
-    if ((uint64_t)capacity>SIZE_MAX/sizeof(*function->runs)) return XR_XIR_BUDGET;
-    XrXirStatus status=XR_XIR_OK;
-    EffectBodyRun *storage=xir_compile_alloc(work,(size_t)capacity*sizeof(*storage),&status);
-    if (!storage) return status;
-    if (!xir_compile_work(work,3)) { xr_compile_resources_free(storage);return XR_XIR_BUDGET; }
-    /* Only initialized base fields and mask-selected deltas move. No unused
-     * slot, inactive delta or capacity tail is copied or observed. */
-    for (uint32_t r=0;r<function->run_count;++r) {
-        const EffectBodyRun *source=&function->runs[r];EffectBodyRun *target=&storage[r];
-        if (!xir_compile_work(work,3*sizeof(uint32_t)+sizeof(source->base))) {
-            xr_compile_resources_free(storage);return XR_XIR_BUDGET;
-        }
-        target->first=source->first;target->count=source->count;target->mask=source->mask;
-        target->base=source->base;
-        if (source->mask&EFFECT_BODY_LITERAL_PAIR) {
-            if (!xir_compile_work(work,sizeof(source->second))) {
-                xr_compile_resources_free(storage);return XR_XIR_BUDGET;
-            }
-            target->second=source->second;continue;
-        }
-        for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
-            if (!xir_compile_work(work,1)) { xr_compile_resources_free(storage);return XR_XIR_BUDGET; }
-            if (!(source->mask&(UINT32_C(1)<<w))) continue;
-            if (!xir_compile_work(work,sizeof(uint32_t))) {
-                xr_compile_resources_free(storage);return XR_XIR_BUDGET;
-            }
-            target->delta[w]=source->delta[w];
-        }
-    }
-    xr_compile_resources_free(function->runs);function->runs=storage;
-    function->run_capacity=capacity;return XR_XIR_OK;
+    return effect_body_runs_replace(work,function,capacity);
+}
+
+static XrXirStatus effect_body_runs_finish(const XrXirCompileContext *work,
+    EffectBodyFunction *function) {
+    if (!function || function->run_count>function->run_capacity ||
+        function->run_capacity>function->instruction_count ||
+        !!function->runs!=!!function->run_capacity ||
+        (!function->run_count && function->run_capacity)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,sizeof(function->run_capacity))) return XR_XIR_BUDGET;
+    if (function->run_count==function->run_capacity) return XR_XIR_OK;
+    return effect_body_runs_replace(work,function,function->run_count);
 }
 
 static inline XrXirStatus effect_body_run_append(const XrXirCompileContext *work,
@@ -115,8 +139,7 @@ static inline XrXirStatus effect_body_run_append(const XrXirCompileContext *work
     }
     ++function->run_count;
     if (run->first+run->count==function->instruction_count) {
-        if (!xir_compile_work(work,sizeof(function->run_capacity))) return XR_XIR_BUDGET;
-        function->run_capacity=function->run_count;
+        return effect_body_runs_finish(work,function);
     }
     return XR_XIR_OK;
 }
@@ -266,10 +289,9 @@ static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
     }
     XrXirStatus status=effect_body_run_submit(work,source,target,run,sink);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(work,sizeof(target->run_capacity))) return XR_XIR_BUDGET;
-    /* Only initialized records are readable after final publication. The
-     * resource allocation retains its actual larger charged byte size. */
-    target->run_capacity=target->run_count;return XR_XIR_OK;
+    /* Immutable receiving retires the real construction tail. Only complete
+     * initialized records move, and failure leaves the original owner intact. */
+    return effect_body_runs_finish(work,target);
 }
 
 /* Literal codec construction does not publish a semantic generation. */
