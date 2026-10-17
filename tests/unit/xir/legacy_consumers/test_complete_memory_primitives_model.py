@@ -15,7 +15,7 @@ class CompleteMemoryPrimitives(unittest.TestCase):
             'mem_volatile_shared_core':[305419896,120,255,43981,72623859790382856,'ok']}
         self.assertEqual({name:m.observations()[name] for name in expected},expected)
         self.assertEqual(sum(map(len,expected.values())),82)
-        self.assertEqual(len([row for row in m.expected_rows() if row['id']!=m._UNALIGNED_ID and row['original_source'] not in m._LAYOUT_PROGRAMS.values()]),5)
+        self.assertEqual(len([row for row in m.expected_rows() if row['id'] not in {m._UNALIGNED_ID,m._ALLOCATION_ID} and row['original_source'] not in m._LAYOUT_PROGRAMS.values()]),5)
 
     def test_uninitialized_and_dead_bytes_never_supply_observations(self):
         memory=m.Region(4)
@@ -106,7 +106,7 @@ class CompleteMemoryPrimitives(unittest.TestCase):
           '3e9 is i32=false is i64=true','3e9 as i32?=null','-5 is u8=false is i16=true',
           '1.5 is f32=true is f64=true','1.5 as f32?=1.5','0.1 is f32=false is f64=true','0.1 as f32?=null','"s" is i32=false is f32=false']}
         self.assertEqual(sum(map(len,expected.values())),35);self.assertEqual(m.fixed_layout_observations(),expected)
-        self.assertEqual(len([row for row in m.expected_rows() if row['id']!=m._UNALIGNED_ID]),10);self.assertEqual(sum(map(len,m.observations().values())),117)
+        self.assertEqual(len([row for row in m.expected_rows() if row['id'] not in {m._UNALIGNED_ID,m._ALLOCATION_ID}]),10);self.assertEqual(sum(map(len,m.observations().values())),117)
 
     def test_packing_and_requested_alignment_do_not_change_member_order(self):
         fields=[(1,1),(4,4)]
@@ -206,5 +206,56 @@ class CompleteMemoryPrimitives(unittest.TestCase):
         self.assertEqual((row['source'],row['original_source'],row['required_target']),(m._UNALIGNED_SOURCE,m._UNALIGNED_SOURCE,None))
         self.assertEqual((case['expected_exit_code'],case['stderr_utf8'],case['stdout_utf8']),(0,'',row['expected']['stdout_utf8']))
         self.assertEqual(len(case['stdout_utf8'].splitlines()),11)
+
+
+    def test_complete_managed_buffer_original_all_nineteen_observations(self):
+        trace=m.buffer_allocation_trace()
+        self.assertEqual(trace['observations'],[16,42,99,16,42,43,43,128,5,5,8,0,0,11,True,64,43,99,'ok'])
+        self.assertEqual((trace['original_print_expressions'],trace['original_alloc_calls'],trace['original_resize_calls']),(19,3,1))
+        self.assertEqual((trace['original_borrow_pointer_calls'],trace['original_with_slice_mut_calls'],trace['original_asBytes_calls'],trace['original_bulk_set_calls']),(5,1,1,1))
+        self.assertEqual([row for row in trace['events'] if row[0] in ('alloc','alloc_aligned','alloc_zeroed','resize')],[('alloc',16),('alloc_aligned',128,64),('alloc_zeroed',8),('resize','p',64,True)])
+        self.assertFalse(trace['actual_borrow_lifetime_FI_resource_failure_reclamation_provider_safety_qualified'])
+
+    def test_buffer_views_share_bytes_andlogical_scoped_view_ends(self):
+        buffer=m.BufferAllocation(4,zeroed=True);pointer=buffer.borrow_pointer();readonly=buffer.readonly_bytes()
+        self.assertEqual(readonly.read(0),0)
+        with self.assertRaises(ValueError):readonly.write(0,9)
+        readonly.close();escaped=[]
+        def update(view):view.write(0,9);escaped.append(view)
+        m.buffer_mutable_slice(pointer,4,buffer,update)
+        self.assertEqual(pointer.read(1),bytes([9]))
+        with self.assertRaises(ValueError):escaped[0].read(0)
+        class DetachedWindow(m.BufferWindow):
+            def __init__(self,region,count,writable=False,loan=None):
+                copied=m.Region(len(region.bytes));copied.bytes[:]=region.bytes;copied.initialized[:]=region.initialized
+                super().__init__(copied,count,writable,loan)
+        wrong=m.buffer_allocation_trace(DetachedWindow)['observations']
+        self.assertEqual(wrong[5],43);self.assertEqual(wrong[6],42);self.assertNotEqual(wrong,m.buffer_allocation_trace()['observations'])
+
+    def test_successful_resize_keeps_initialized_prefix_without_invented_zero_fill_oraddresses(self):
+        buffer=m.BufferAllocation(16);pointer=buffer.borrow_pointer()
+        pointer.write(bytes([43]));pointer.offset(15).write(bytes([99]))
+        self.assertTrue(buffer.resize_success(64));self.assertEqual(len(buffer),64)
+        fresh=buffer.borrow_pointer();self.assertEqual((fresh.read(1),fresh.offset(15).read(1)),(bytes([43]),bytes([99])))
+        self.assertEqual(buffer.region.initialized[:16],[True]+[False]*14+[True])
+        self.assertFalse(any(buffer.region.initialized[16:]))
+        with self.assertRaises(ValueError):fresh.offset(16).read(1)
+        trace=m.buffer_allocation_trace();self.assertEqual(trace['q_requested_alignment'],64);self.assertTrue(trace['q_all_128_bytes_are5'])
+        self.assertEqual(trace['z_final_bytes'],[0,0,0,11,0,0,0,0])
+        self.assertFalse(trace['physical_address_orallocation_count_inferred'])
+
+    def test_complete_buffer_source_authorities_andproduct_keep_all_calls(self):
+        import json
+        saved=Path.read_bytes
+        for name in m._ALLOCATION_INPUTS:
+            with self.subTest(input=name):
+                def changed(path):return saved(path)+b'changed' if path==m.ROOT/name else saved(path)
+                with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):m.expected_rows()
+        with mock.patch.object(m,'_ALLOCATION_INPUTS',{}),self.assertRaises(ValueError):m.expected_rows()
+        row=m.allocation_expected_row();case=next(x for x in json.loads((m.ROOT/'tests/unit/xir/legacy_consumers/product_driver_cases.json').read_bytes())['cases'] if x['id']==row['id'])
+        self.assertEqual((case['source'],case['entry'],case['source_context']),(m._ALLOCATION_SOURCE,'run','original_absolute'))
+        self.assertEqual((case['arguments'],case['stdin_hex'],case['companions']),([],'',[]))
+        self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8']);self.assertEqual(len(case['stdout_utf8'].splitlines()),19)
+        self.assertEqual((case['expected_exit_code'],case['stderr_utf8']),(0,''))
 
 if __name__=='__main__':unittest.main()

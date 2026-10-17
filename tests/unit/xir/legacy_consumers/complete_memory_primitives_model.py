@@ -387,7 +387,7 @@ def expected_rows():
     for row in rows:
         if row['original_source'] in _LAYOUT_PROGRAMS.values():
             row['model']='Complete unchanged original;independent nominal scalar/nested struct values,by-value aggregate calls,explicit packed/aligned x64 layout,unsafe fixed union bytes and fixed-array logical copies,erased numeric exact representability and optional casts. No product ABI,physical ownership,lifetime,FI,safety or provider qualification.'
-    return rows+[unaligned_expected_row()]
+    return rows+[unaligned_expected_row(),allocation_expected_row()]
 
 _UNALIGNED_SOURCE = 'tests/diff/cases/semantics/stdlib/mem_load_store_unaligned_shared_core.xr'
 _UNALIGNED_ID = 'complete_memory_primitives_mem_load_store_unaligned_shared_core'
@@ -432,3 +432,114 @@ def unaligned_expected_row():
                 'stdout_utf8':''.join(str(x)+chr(10) for x in trace['observations'])},
             'observation_count':11,'required_semantic_trace':trace,
             'model':'Complete unchanged 16-byte array/Slice/MutPtr original;all three unsafe stores and three loads with explicit LE,including offset1 u16,then all eight original backing-array byte reads. Independent initialized shared-region bytes yield all11outputs without host address,ABI,provider orXray queries. Logical alias andbyte semantics do not qualify real borrow lifetime,alignment fault handling,physical ownership,FI,resources,safety,providers or mixed execution.'}
+
+_ALLOCATION_SOURCE = 'tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr'
+_ALLOCATION_ID = 'complete_memory_primitives_mem_alloc_shared_core'
+_ALLOCATION_INPUTS = {'tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr': '6b90e1fff1515cbec0eef2bc2d98d60e1cf3b2448f2715618b2cdea5ea9caac8', 'stdlib/mem/mem.xr': '9750e120d6b22f5c2caffd2d59d13238393ac6939c17827090a3829c33fa9dab', 'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677', 'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915'}
+
+
+class BufferWindow:
+    def __init__(self,region,count,writable=False,loan=None):
+        self.region=region;self.count=count;self.writable=writable;self.loan=loan;self.closed=False
+
+    def active(self):
+        if self.closed or self.loan is not None and not self.loan['active']:
+            raise ValueError('Logical scoped Buffer view has ended')
+
+    def read(self,index):
+        self.active()
+        if not 0<=index<self.count:raise ValueError('Logical Buffer view index outside its extent')
+        return self.region.read(index,1)[0]
+
+    def write(self,index,value):
+        self.active()
+        if not self.writable:raise ValueError('Read-only Buffer byte view')
+        if not 0<=index<self.count:raise ValueError('Logical Buffer view index outside its extent')
+        self.region.write(index,bytes([value]))
+
+    def close(self):self.closed=True
+
+
+class BufferAllocation:
+    def __init__(self,count,*,zeroed=False,alignment=0):
+        if type(count) is not int or type(alignment) is not int:raise ValueError('Explicit integral Buffer request required')
+        if alignment and (alignment<8 or alignment&(alignment-1)):raise ValueError('Invalid public Buffer alignment request')
+        self.region=Region(max(0,count),zeroed=zeroed);self.alignment_requested=alignment;self.storage_epoch=0
+
+    def __len__(self):return len(self.region.bytes)
+
+    def borrow_pointer(self):return Pointer(Address(self.region),'u8',True)
+
+    def readonly_bytes(self):return BufferWindow(self.region,len(self))
+
+    def resize_success(self,count):
+        if type(count) is not int:raise ValueError('Explicit integral Buffer resize required')
+        previous=self.region;following=Region(max(0,count));keep=min(len(previous.bytes),len(following.bytes))
+        following.bytes[:keep]=previous.bytes[:keep]
+        following.initialized[:keep]=previous.initialized[:keep]
+        previous.freed=True;self.region=following;self.storage_epoch+=1
+        return True
+
+
+def buffer_mutable_slice(pointer,count,owner,callback,view_class=BufferWindow):
+    if (not pointer.mutable or pointer.address.region is not owner.region or pointer.address.offset!=0
+            or type(count) is not int or not 0<=count<=len(owner)):
+        raise ValueError('Scoped Buffer byte view lost its explicit owner or extent')
+    loan={'active':True};view=view_class(owner.region,count,True,loan)
+    try:return callback(view)
+    finally:loan['active']=False
+
+
+def buffer_allocation_trace(view_class=BufferWindow):
+    out=[];events=[]
+    p=BufferAllocation(16);events.append(('alloc',16));out.append(len(p))
+    pp=p.borrow_pointer();events.append(('borrow_ptr','p'))
+    pp.offset(0).write(bytes([42]));pp.offset(15).write(bytes([99]))
+    events.extend([('store','p',0,42),('store','p',15,99)])
+    out.extend([pp.read(1)[0],pp.offset(15).read(1)[0]])
+    ro=p.readonly_bytes();events.append(('as_bytes','p'))
+    out.extend([ro.count,ro.read(0)]);ro.close();events.append(('readonly_scope_end',))
+    callback_pointer=p.borrow_pointer();events.append(('borrow_ptr','p'))
+    def update(rw):
+        rw.write(0,43);out.append(rw.read(0));events.append(('loan_store_and_read',0,43))
+    events.append(('with_slice_mut_enter','p',len(p)))
+    buffer_mutable_slice(callback_pointer,len(p),p,update,view_class)
+    events.append(('with_slice_mut_end',));out.append(pp.read(1)[0])
+    q=BufferAllocation(128,alignment=64);events.append(('alloc_aligned',128,64));out.append(len(q))
+    qp=q.borrow_pointer();events.append(('borrow_ptr','q'));bulk_set(qp,5,128);events.append(('set','q',5,128))
+    out.extend([qp.read(1)[0],qp.offset(127).read(1)[0]])
+    z=BufferAllocation(8,zeroed=True);events.append(('alloc_zeroed',8));out.append(len(z))
+    zp=z.borrow_pointer();events.append(('borrow_ptr','z'));out.extend([zp.read(1)[0],zp.offset(7).read(1)[0]])
+    zp.offset(3).write(bytes([11]));events.append(('store','z',3,11));out.append(zp.offset(3).read(1)[0])
+    before_prefix=list(p.region.bytes);before_initialized=list(p.region.initialized)
+    out.append(p.resize_success(64));events.append(('resize','p',64,True));out.append(len(p))
+    rp=p.borrow_pointer();events.append(('borrow_ptr','p'));out.extend([rp.read(1)[0],rp.offset(15).read(1)[0]])
+    out.append('ok')
+    return {'observations':out,'events':events,'original_print_expressions':19,
+            'original_alloc_calls':3,'original_resize_calls':1,'original_borrow_pointer_calls':5,
+            'original_with_slice_mut_calls':1,'original_asBytes_calls':1,'original_bulk_set_calls':1,
+            'p_prefix_before_resize':before_prefix,'p_initialized_before_resize':before_initialized,
+            'p_prefix_after_resize':list(p.region.bytes[:16]),'p_initialized_after_resize':list(p.region.initialized),
+            'p_logical_length_after_resize':len(p),'p_storage_epoch_after_resize':p.storage_epoch,
+            'q_requested_alignment':q.alignment_requested,'q_all_128_bytes_are5':q.region.read(0,128)==bytes([5])*128,
+            'z_final_bytes':list(z.region.bytes),'physical_address_orallocation_count_inferred':False,
+            'normal_preconditions':['All three original allocations succeed','The original resize succeeds',
+                                    'The original64-byte alignment request is supported'],
+            'actual_borrow_lifetime_FI_resource_failure_reclamation_provider_safety_qualified':False}
+
+
+def allocation_expected_row():
+    required={_ALLOCATION_SOURCE,'stdlib/mem/mem.xr','spec/source/sections/003-2-type-system.md',
+              'spec/source/sections/005-4-statements.md'}
+    if set(_ALLOCATION_INPUTS)!=required or _ALLOCATION_SOURCE!=BASE+'mem_alloc_shared_core.xr':
+        raise ValueError('Complete Buffer allocation original or authorities changed')
+    for name,digest in _ALLOCATION_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Complete Buffer allocation input changed: '+name)
+    trace=buffer_allocation_trace()
+    if len(trace['observations'])!=19:raise ValueError('Complete Buffer allocation observations lost')
+    return {'id':_ALLOCATION_ID,'source':_ALLOCATION_SOURCE,'original_source':_ALLOCATION_SOURCE,
+            'required_target':None,'expected':{'exit_code':0,'stderr_utf8':'',
+                'stdout_utf8':''.join(render({'expected':value})+chr(10) for value in trace['observations'])},
+            'observation_count':19,'required_semantic_trace':trace,
+            'model':'Complete unchanged managed Buffer original:three allocations16/128aligned64/8zeroed,all five borrowPtr calls,readonly byte-view scope,one scoped mutable loan andpost-loan alias read,all128-byte set,zeroed bytes andwrite,resize64 with preserved initialized prefix andfresh reborrow,all19prints. Independent symbolic bytes under the original successful allocation/resize prerequisites;new bytes remain uninitialized andno physical pointer movement,allocation count,reclamation,real borrow lifetime,FI/resource failure,safety,provider or mixed qualification is inferred.'}

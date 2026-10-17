@@ -33264,6 +33264,36 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 11
+    },
+    {
+      "id": "complete_memory_primitives_mem_alloc_shared_core",
+      "oracle_id": "complete_memory_primitives_mem_alloc_shared_core",
+      "source": "tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr",
+      "source_lf_sha256": "6b90e1fff1515cbec0eef2bc2d98d60e1cf3b2448f2715618b2cdea5ea9caac8",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "16\n42\n99\n16\n42\n43\n43\n128\n5\n5\n8\n0\n0\n11\ntrue\n64\n43\n99\nok\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P09",
+        "P10",
+        "P13",
+        "P08",
+        "P07"
+      ],
+      "independent_execution_model": "Complete unchanged managed Buffer original:three allocations16/128aligned64/8zeroed,all five borrowPtr calls,readonly byte-view scope,one scoped mutable loan andpost-loan alias read,all128-byte set,zeroed bytes andwrite,resize64 with preserved initialized prefix andfresh reborrow,all19prints. Independent symbolic bytes under the original successful allocation/resize prerequisites;new bytes remain uninitialized andno physical pointer movement,allocation count,reclamation,real borrow lifetime,FI/resource failure,safety,provider or mixed qualification is inferred.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/mem_alloc_shared_core.xr",
+        "source_lf_sha256": "6b90e1fff1515cbec0eef2bc2d98d60e1cf3b2448f2715618b2cdea5ea9caac8"
+      },
+      "remaining_gates": [
+        "Complete three-allocation/readonly/mutable-loan/resize original andall19outputs;legalSourcefailure stayspositivefailure. Symbolic bytes andsuccessfulnormalpreconditionsdoNOTqualifyactualborrow/lifetime,allocationfailure,reclamation,FI,resources,safety,providersormixed."
+      ],
+      "independent_observation_count": 19
     }
   ]
 }
