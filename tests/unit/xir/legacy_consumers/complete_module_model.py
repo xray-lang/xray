@@ -304,4 +304,34 @@ def expected_rows():
             'observation_count':len(values[name]),'companions':list(_COMPANIONS[name]),
             'required_runtime_counter_predicates':[{'name':'liveBytes-beforeBytes','comparison':'<','limit':4096},{'name':'liveObjects-beforeObjects','comparison':'<','limit':100}] if name=='value_struct_return_release' else []})
         if name in _REACHABILITY_PROGRAMS:rows[-1]['required_semantic_trace']={k:v for k,v in reachability_traces()[name].items() if k!='outputs'}
-    return rows
+    return rows+[simd_reexport_expected_row()]
+
+_REEXPORT_SOURCE = 'tests/diff/cases/semantics/stdlib/_simd_intrinsic_reexport.xr'
+_REEXPORT_ID = 'complete_module__simd_intrinsic_reexport'
+_REEXPORT_INPUTS = {'tests/diff/cases/semantics/stdlib/_simd_intrinsic_reexport.xr': '4820dcaff14a5f03b1058ee12379a98b8e75faf3beb9cfd3ae456b06577fddb7', 'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677', 'spec/source/sections/012-11-modules.md': '3c32493b1e22d29c459362a9f465a6f5316856b5b375c3d1c1e06025756eecd8', 'stdlib/simd/simd.xr': '35c745eb6a37f37a0c7a2d2daf4d4bb953582e930929970d330a2cd3469696d9'}
+
+def renamed_export_identity(exports, requests):
+    bound={}
+    for source,alias in requests:
+        if source not in exports or alias in bound:raise ValueError('Unresolved or duplicate re-export')
+        bound[alias]=exports[source]
+    return bound
+
+
+def simd_reexport_expected_row():
+    expected={_REEXPORT_SOURCE,'spec/source/sections/003-2-type-system.md',
+              'spec/source/sections/012-11-modules.md','stdlib/simd/simd.xr'}
+    if set(_REEXPORT_INPUTS)!=expected:raise ValueError('Whole SIMD re-export identities changed')
+    for name,digest in _REEXPORT_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Whole SIMD re-export input changed: '+name)
+    identity=('stdlib/simd/simd.xr','U32x4')
+    bound=renamed_export_identity({'U32x4':identity},[('U32x4','ReexportedWords')])
+    return {'id':_REEXPORT_ID,'source':_REEXPORT_SOURCE,'original_source':_REEXPORT_SOURCE,
+            'required_target':None,'expected':{'exit_code':0,'stdout_utf8':'','stderr_utf8':''},
+            'observation_count':0,'companions':[],
+            'required_semantic_trace':{'reexported_names':bound,'canonical_target_identity':identity,
+                'original_print_expressions':0,'original_entry_vector_constructions':0,
+                'original_entry_SIMD_calls':0,'declaration_only':True,
+                'export_use_orSIMD_provider_qualified':False},
+            'model':'Complete unchanged one-declaration SIMD re-export original;ReexportedWords retains canonical simd.U32x4 declaration identity. Original standalone entry has no prints,vector constructions orSIMD calls;empty output is only declaration/module-load acceptance,not export-use,vector arithmetic,layout/ABI,metadata lifetime,FI,safety orprovider qualification.'}

@@ -1,3 +1,4 @@
+from pathlib import Path
 """Pin complete imported observations and initialization failure boundaries."""
 import unittest
 import complete_module_model as model
@@ -59,5 +60,39 @@ class ModuleTraces(unittest.TestCase):
                 case=cases['complete_module_'+name]
                 self.assertEqual(case['companions'],[{'path':path,'lf_sha256':model._INPUTS[path]} for path in model._COMPANIONS[name]])
                 self.assertEqual(case['source'],model._PROGRAMS[name]);self.assertEqual(case['source_context'],'original_absolute')
+
+
+    def test_SIMD_reexport_whole_original_keeps_zero_output_declaration_entry(self):
+        row=model.simd_reexport_expected_row();trace=row['required_semantic_trace']
+        self.assertEqual(row['expected'],{'exit_code':0,'stdout_utf8':'','stderr_utf8':''})
+        self.assertEqual((row['observation_count'],trace['original_print_expressions'],trace['original_entry_vector_constructions'],trace['original_entry_SIMD_calls']),(0,0,0,0))
+        self.assertTrue(trace['declaration_only']);self.assertFalse(trace['export_use_orSIMD_provider_qualified'])
+        self.assertEqual((model.ROOT/model._REEXPORT_SOURCE).read_text().strip(),'export { U32x4 as ReexportedWords } from simd')
+
+    def test_renamed_exports_preserve_canonical_identity_instead_ofnew_types(self):
+        identity=('stdlib/simd/simd.xr','U32x4')
+        aliases=model.renamed_export_identity({'U32x4':identity},[('U32x4','ReexportedWords'),('U32x4','AnotherName')])
+        self.assertIs(aliases['ReexportedWords'],identity);self.assertIs(aliases['AnotherName'],identity)
+        self.assertEqual(model.simd_reexport_expected_row()['required_semantic_trace']['reexported_names']['ReexportedWords'],identity)
+        for requests in ([('Unknown','ReexportedWords')],[('U32x4','Same'),('U32x4','Same')]):
+            with self.assertRaises(ValueError):model.renamed_export_identity({'U32x4':identity},requests)
+
+    def test_whole_SIMD_reexport_andauthorities_cannot_silently_change(self):
+        from unittest.mock import patch
+        saved=Path.read_bytes
+        for name in model._REEXPORT_INPUTS:
+            with self.subTest(input=name):
+                def changed(path):return saved(path)+b'changed' if path==model.ROOT/name else saved(path)
+                with patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):model.expected_rows()
+        with patch.object(model,'_REEXPORT_INPUTS',{}),self.assertRaises(ValueError):model.expected_rows()
+
+    def test_SIMD_reexport_public_product_has_original_context_without_adapters(self):
+        import json
+        row=next(row for row in model.expected_rows() if row['id']==model._REEXPORT_ID)
+        case=next(case for case in json.loads((model.ROOT/'tests/unit/xir/legacy_consumers/product_driver_cases.json').read_text())['cases'] if case['id']==row['id'])
+        self.assertEqual((row['source'],row['original_source']),(model._REEXPORT_SOURCE,model._REEXPORT_SOURCE))
+        self.assertEqual((case['source'],case['entry'],case['source_context']),(model._REEXPORT_SOURCE,'run','original_absolute'))
+        self.assertEqual((case['arguments'],case['stdin_hex'],case['companions']),([],'',[]))
+        self.assertEqual((case['stdout_utf8'],case['stderr_utf8'],case['expected_exit_code']),('','',0))
 
 if __name__=='__main__':unittest.main()

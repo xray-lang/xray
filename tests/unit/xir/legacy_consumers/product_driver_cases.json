@@ -33176,6 +33176,64 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 39
+    },
+    {
+      "id": "complete_coordination_1172_enum_descriptor_erased_transfer",
+      "oracle_id": "complete_coordination_1172_enum_descriptor_erased_transfer",
+      "source": "tests/regression/11_coroutine/1172_enum_descriptor_erased_transfer.xr",
+      "source_lf_sha256": "eeb2b8e6f903113c9b188d0b6d0b720b2343fbeda2b108eb6b8962705865cba5",
+      "entry": "run",
+      "stdout_utf8": "1\n-1\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P10",
+        "P13",
+        "P08",
+        "P07"
+      ],
+      "independent_execution_model": "Complete unchanged erased enum-descriptor transfer original;both enums including Busy payload andunused union alias,full recv helper,capacity2,two go/send/await pairs andfinalclose. Independent canonical module/declaration/ordinal identity andfinite completion order yield1/-1. Reference arrival scenarios are not actual scheduling,metadata lifetime,Sendable,FI,resource,safety orprovider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1172_enum_descriptor_erased_transfer.xr",
+        "source_lf_sha256": "eeb2b8e6f903113c9b188d0b6d0b720b2343fbeda2b108eb6b8962705865cba5"
+      },
+      "remaining_gates": [
+        "Whole original/declarations/calls/prints preserved;legal Source refusal remains positive failure. Declaration-only zero output isnotexportuse orSIMD qualification;symbolic descriptor transfer isnotactualmetadata lifetime,Sendable,scheduling/FI/safety/provider/mixed qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 2
+    },
+    {
+      "id": "complete_module__simd_intrinsic_reexport",
+      "oracle_id": "complete_module__simd_intrinsic_reexport",
+      "source": "tests/diff/cases/semantics/stdlib/_simd_intrinsic_reexport.xr",
+      "source_lf_sha256": "4820dcaff14a5f03b1058ee12379a98b8e75faf3beb9cfd3ae456b06577fddb7",
+      "entry": "run",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P10",
+        "P13",
+        "P08",
+        "P07"
+      ],
+      "independent_execution_model": "Complete unchanged one-declaration SIMD re-export original;ReexportedWords retains canonical simd.U32x4 declaration identity. Original standalone entry has no prints,vector constructions orSIMD calls;empty output is only declaration/module-load acceptance,not export-use,vector arithmetic,layout/ABI,metadata lifetime,FI,safety orprovider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/_simd_intrinsic_reexport.xr",
+        "source_lf_sha256": "4820dcaff14a5f03b1058ee12379a98b8e75faf3beb9cfd3ae456b06577fddb7"
+      },
+      "remaining_gates": [
+        "Whole original/declarations/calls/prints preserved;legal Source refusal remains positive failure. Declaration-only zero output isnotexportuse orSIMD qualification;symbolic descriptor transfer isnotactualmetadata lifetime,Sendable,scheduling/FI/safety/provider/mixed qualification."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 0
     }
   ]
 }

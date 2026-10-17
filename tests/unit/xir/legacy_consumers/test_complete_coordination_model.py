@@ -7,7 +7,7 @@ import complete_coordination_model as m
 
 class CompleteCoordination(unittest.TestCase):
     def test_six_legacy_and_four_system_entries_keep_five_named_bodies(self):
-        rows=m.expected_rows();named=m.named_expected_rows()
+        rows=[row for row in m.expected_rows() if row['id']!=m._DESCRIPTOR_ID];named=m.named_expected_rows()
         self.assertEqual((len(rows),len(named)),(10,5));self.assertEqual(sum(x['observation_count'] for x in rows),28)
         traces=m.body_traces();self.assertEqual({k:len(v['assertions']) for k,v in traces.items()},
             {'work_queue_native_methods':17,'1157_work_queue_generic_class':4,'1158_work_queue_native':33,
@@ -228,5 +228,58 @@ class CompleteSynchronization(unittest.TestCase):
         with mock.patch.dict(m._SYSTEM_PROGRAMS,{},clear=True),self.assertRaises(ValueError):m.expected_rows()
         with mock.patch.dict(m._SYSTEM_INPUTS,{},clear=True),self.assertRaises(ValueError):m.expected_rows()
 
+
+
+    def test_whole_descriptor_transfer_keeps_both_tasks_andfinal_close(self):
+        trace=m.descriptor_transfer_trace()
+        self.assertEqual(trace['outputs'],[1,-1])
+        self.assertEqual((trace['capacity'],trace['original_go_calls'],trace['original_send_calls'],trace['original_await_calls'],trace['joined_tasks']),(2,2,2,2,2))
+        self.assertEqual((trace['pending_tasks_at_close'],trace['queued_descriptors_at_close'],trace['original_close_calls']),(0,0,1))
+        self.assertEqual([event[0] for event in trace['events']],['channel','go','send','recv_value','await','go','send','recv_value','await','close'])
+        self.assertFalse(trace['actual_schedule_metadata_lifetime_Sendable_FI_provider_qualified'])
+
+    def test_descriptor_identity_survives_erasure_with_equal_ordinals(self):
+        red=m.enum_descriptor('TransferHue',0);idle=m.enum_descriptor('TransferState',0)
+        self.assertEqual(red['ordinal'],idle['ordinal'])
+        self.assertTrue(m.descriptor_is(red,'TransferHue'));self.assertFalse(m.descriptor_is(idle,'TransferHue'))
+        self.assertEqual(m.recv_descriptor_variant(red),0);self.assertEqual(m.recv_descriptor_variant(idle),-1)
+        self.assertEqual(m.recv_descriptor_variant(status='Closed'),-2)
+        self.assertEqual(m.enum_descriptor('TransferState',1)['payloads'],(('value','i64'),))
+        for owner,index in (('Other',0),('TransferHue',-1),('TransferState',2),('TransferHue',True)):
+            with self.assertRaises(ValueError):m.enum_descriptor(owner,index)
+        with mock.patch.object(m,'descriptor_is',lambda value,owner:value['ordinal'] in (0,1)),self.assertRaisesRegex(ValueError,'concrete declaration identity'):
+            m.descriptor_transfer_trace()
+
+    def test_descriptor_completion_order_retains_both_arrival_scenarios(self):
+        for choices in __import__('itertools').product((False,True),repeat=2):
+            trace=m.descriptor_transfer_trace(choices)
+            self.assertEqual(trace['outputs'],[1,-1])
+            self.assertEqual([e[1] for e in trace['events'] if e[0]=='await'],['hueTask','stateTask'])
+            self.assertEqual(sum(e[0]=='recv_wait' for e in trace['events']),sum(choices))
+            self.assertEqual(trace['pending_tasks_at_close'],0)
+        with self.assertRaises(ValueError):m.descriptor_transfer_trace((False,))
+
+    def test_descriptor_original_andall_authorities_reject_changed_inputs(self):
+        saved=Path.read_bytes
+        for name in m._DESCRIPTOR_INPUTS:
+            with self.subTest(input=name):
+                def changed(path):return saved(path)+b'changed' if path==m.ROOT/name else saved(path)
+                with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):m.expected_rows()
+        for attribute in ('_DESCRIPTOR_INPUTS','_DESCRIPTOR_DECLARATIONS'):
+            with mock.patch.object(m,attribute,{}),self.assertRaises(ValueError):m.expected_rows()
+
+    def test_descriptor_whole_original_andpublic_entry_preserve_all_declarations(self):
+        text=(m.ROOT/m._DESCRIPTOR_SOURCE).read_text(encoding='utf-8')
+        self.assertEqual(text.count('print('),2);self.assertEqual(text.count('go recv_variant('),2)
+        self.assertEqual(text.count('descriptorChannel.send('),2);self.assertEqual(text.count('await '),2)
+        self.assertEqual(text.count('descriptorChannel.close()'),1);self.assertIn('Channel(2)',text)
+        self.assertIn('type TransferVariant =',text);self.assertIn('Busy { value: i64 }',text)
+        self.assertIn('value is EnumVariant<TransferHue>',text)
+        row=next(row for row in m.expected_rows() if row['id']==m._DESCRIPTOR_ID)
+        self.assertEqual(row['expected'],{'exit_code':0,'stdout_utf8':'1'+chr(10)+'-1'+chr(10),'stderr_utf8':''})
+        cases=json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases'];case=next(case for case in cases if case['id']==row['id'])
+        self.assertEqual((case['source'],case['entry'],case['source_context']),(m._DESCRIPTOR_SOURCE,'run','original_absolute'))
+        self.assertEqual((case['arguments'],case['stdin_hex'],case['companions']),([],'',[]))
+        self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8'])
 
 if __name__=='__main__':unittest.main()

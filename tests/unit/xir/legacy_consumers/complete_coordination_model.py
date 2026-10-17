@@ -218,7 +218,7 @@ def expected_rows():
         else:row['required_semantic_trace']=traces[name]
         if name in {'work_queue_native_methods','1158_work_queue_native'}:row['current_source_policy_witness']=fifo_source_witness()
         rows.append(row)
-    return rows+system_expected_rows()
+    return rows+system_expected_rows()+[descriptor_expected_row()]
 
 
 def named_expected_rows():
@@ -436,3 +436,75 @@ def system_expected_rows():
             'required_semantic_trace':traces[name],
             'model':'Complete unchanged synchronization program with all imports,threads,4x200 iterations,joins,waits and callbacks. Independent finite completion/value algebra and failure-state cleanup;no claim of host scheduling,progress,memory-order,FI,resource,lifetime,sanitizer or provider qualification.'})
     return rows
+
+_DESCRIPTOR_SOURCE = 'tests/regression/11_coroutine/1172_enum_descriptor_erased_transfer.xr'
+_DESCRIPTOR_ID = 'complete_coordination_1172_enum_descriptor_erased_transfer'
+_DESCRIPTOR_INPUTS = {'tests/regression/11_coroutine/1172_enum_descriptor_erased_transfer.xr': 'eeb2b8e6f903113c9b188d0b6d0b720b2343fbeda2b108eb6b8962705865cba5', 'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677', 'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d', 'spec/source/sections/011-10-concurrency-and-coroutines.md': '27c232a9575d0d40e800ea5730e5d2b96e8f2e62e646731a3d9de2e0eea35aea', 'stdlib/types/channel.xr': 'ff2be02bcc28be44f7927b746d316eec7fef4e815f2693207ef07176bbbf1284'}
+
+_DESCRIPTOR_DECLARATIONS = {
+    'TransferHue':(('Red',()),('Blue',())),
+    'TransferState':(('Idle',()),('Busy',(('value','i64'),)))}
+
+
+def enum_descriptor(owner, ordinal):
+    if owner not in _DESCRIPTOR_DECLARATIONS or type(ordinal) is not int:
+        raise ValueError('Unreviewed descriptor identity')
+    variants=_DESCRIPTOR_DECLARATIONS[owner]
+    if not 0<=ordinal<len(variants):raise ValueError('Descriptor index outside declaration')
+    name,payloads=variants[ordinal]
+    return {'module':_DESCRIPTOR_SOURCE,'declaration':owner,'type_arguments':[],
+            'ordinal':ordinal,'name':name,'payloads':payloads}
+
+
+def descriptor_is(value, owner):
+    # The ordinal alone never proves which enum owns the descriptor.
+    return (value['module'],value['declaration'],value['type_arguments'])==(_DESCRIPTOR_SOURCE,owner,[])
+
+
+def recv_descriptor_variant(value=None, status='Value'):
+    if status!='Value':return -2
+    if value is None:raise ValueError('Recv.Value lost its descriptor')
+    return value['ordinal'] if descriptor_is(value,'TransferHue') else -1
+
+
+def descriptor_transfer_trace(receiver_first=(False,False)):
+    if len(receiver_first)!=2:raise ValueError('The original creates two tasks')
+    capacity=2;queue=deque();events=[('channel',capacity)];outputs=[];joined=0;pending=0
+    for task,(owner,index),early in zip(('hueTask','stateTask'),(('TransferHue',1),('TransferState',0)),receiver_first):
+        events.append(('go',task));pending+=1
+        if early:events.append(('recv_wait',task))
+        value=enum_descriptor(owner,index)
+        if len(queue)>=capacity:raise ValueError('Original channel overflow')
+        queue.append(value);events.append(('send',owner,index))
+        received=queue.popleft();events.append(('recv_value',task,received['declaration'],received['ordinal']))
+        result=recv_descriptor_variant(received)
+        pending-=1;joined+=1;events.append(('await',task));outputs.append(result)
+    events.append(('close',))
+    if outputs!=[1,-1]:raise ValueError('Erased descriptor lost its concrete declaration identity')
+    return {'outputs':outputs,'events':events,'capacity':capacity,'original_go_calls':2,
+            'original_send_calls':2,'original_await_calls':2,'joined_tasks':joined,
+            'pending_tasks_at_close':pending,'queued_descriptors_at_close':len(queue),
+            'original_close_calls':1,'original_print_expressions':2,
+            'first_descriptor':enum_descriptor('TransferHue',1),
+            'second_descriptor':enum_descriptor('TransferState',0),
+            'reference_receiver_first':list(receiver_first),
+            'actual_schedule_metadata_lifetime_Sendable_FI_provider_qualified':False}
+
+
+def descriptor_expected_row():
+    expected={_DESCRIPTOR_SOURCE,'spec/source/sections/003-2-type-system.md',
+              'spec/source/sections/006-5-declarations.md',
+              'spec/source/sections/011-10-concurrency-and-coroutines.md','stdlib/types/channel.xr'}
+    declarations={'TransferHue':(('Red',()),('Blue',())),
+                  'TransferState':(('Idle',()),('Busy',(('value','i64'),)))}
+    if set(_DESCRIPTOR_INPUTS)!=expected or _DESCRIPTOR_DECLARATIONS!=declarations:
+        raise ValueError('Whole descriptor source, declarations or authorities changed')
+    for name,digest in _DESCRIPTOR_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Whole erased descriptor input changed: '+name)
+    trace=descriptor_transfer_trace()
+    return {'id':_DESCRIPTOR_ID,'source':_DESCRIPTOR_SOURCE,'original_source':_DESCRIPTOR_SOURCE,
+            'required_target':None,'expected':{'exit_code':0,'stderr_utf8':'',
+                'stdout_utf8':''.join(str(x)+chr(10) for x in trace['outputs'])},
+            'observation_count':2,'required_semantic_trace':trace,
+            'model':'Complete unchanged erased enum-descriptor transfer original;both enums including Busy payload andunused union alias,full recv helper,capacity2,two go/send/await pairs andfinalclose. Independent canonical module/declaration/ordinal identity andfinite completion order yield1/-1. Reference arrival scenarios are not actual scheduling,metadata lifetime,Sendable,FI,resource,safety orprovider qualification.'}
