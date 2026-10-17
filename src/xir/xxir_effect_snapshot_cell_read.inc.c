@@ -31,6 +31,19 @@ static XrXirStatus effect_cell_body_head(const XrXirCompileContext *work,const v
     const EffectCellBodyAdapter *adapter=owner;
     if (!effect_cell_body_adapter_valid(work,adapter) || !output) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,11)) return XR_XIR_BUDGET;
+    /* Copy only the consumed fields after the same complete current head
+     * presence gates. Callback identity selects physical layout, not facts. */
+    if (effect_body_request_sequence_owned(&adapter->request)) {
+        if (f>=adapter->request.domain.function_count) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus binding=effect_body_request_sequence_binding(&adapter->request);
+        if (binding!=XR_XIR_OK) return binding;
+        const EffectBodyMaterial *material=adapter->request.owner;
+        const EffectBodyFunction *function=&material->functions[f];
+        if (!effect_body_function_head_shape(function)) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(work,17+sizeof(*output))) return XR_XIR_BUDGET;
+        *output=(XrXirCellProofBodyHead){function->parameters,function->parameter_count,function->result,
+            function->instruction_count,function->operands,function->operand_count};return XR_XIR_OK;
+    }
     EffectBodyFunctionHead head={0};
     XrXirStatus status=effect_body_request_head(&adapter->request,f,&head);
     if (status!=XR_XIR_OK) return status;
