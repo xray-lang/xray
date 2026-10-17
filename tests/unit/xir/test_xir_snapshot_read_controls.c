@@ -21,12 +21,13 @@
 #include "xir_snapshot_record_owner_cases.h"
 #include "xir_invocation_queued_child_cases.h"
 #include "xir_invocation_new_child_front_cases.h"
+#include "xir_invocation_cause_directory_cases.h"
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--queued-child-producers")) {
         invocation_queued_child_returned_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if(argc==2 && !strcmp(argv[1],"--codec-literals")) {
-        invocation_new_child_front_controls();invocation_queued_child_controls();snapshot_record_owner_controls();snapshot_exact_writer_controls();snapshot_streaming_writer_controls();snapshot_literal_block_controls();conditional_compact_literals();snapshot_run_extent_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
+        invocation_cause_directory_controls();invocation_new_child_front_controls();invocation_queued_child_controls();snapshot_record_owner_controls();snapshot_exact_writer_controls();snapshot_streaming_writer_controls();snapshot_literal_block_controls();conditional_compact_literals();snapshot_run_extent_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if(argc==2 && !strcmp(argv[1],"--final-vectors")) {
         invocation_final_vector_controls();invocation_final_row_lifetime_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
