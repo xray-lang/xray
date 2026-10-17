@@ -7,7 +7,7 @@ import complete_parallel_workload_model as m
 
 class CompleteParallelWorkloads(unittest.TestCase):
     def test_seven_complete_originals_and_all_thirteen_named_bodies(self):
-        rows=m.expected_rows();named=m.named_expected_rows();bodies=m.bodies()
+        rows=[row for row in m.expected_rows() if row['source'] not in m._PLAN_PROGRAMS.values()];named=m.named_expected_rows();bodies=m.bodies()
         self.assertEqual((len(rows),len(named),len(bodies)),(7,5,13))
         self.assertEqual(sum(x['observation_count'] for x in rows),2)
         self.assertEqual(sum(len(x['required_original_assertions']) for x in named),219)
@@ -133,5 +133,75 @@ class CompleteParallelWorkloads(unittest.TestCase):
             else:self.assertEqual(case['source_context'],'original_absolute')
             self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8'])
 
+
+    def test_complete_nested_plan_error_reuses_both_original_plans(self):
+        trace=m.nested_plan_cleanup_trace()
+        self.assertEqual(trace['observations'],['seq-concurrent',True,'vm-concurrent',True])
+        self.assertEqual(trace['original_requested_workers'],[1,2]);self.assertEqual(trace['original_print_expressions'],10)
+        self.assertEqual([x['requested_outer_range_count'] for x in trace['scenarios']],[4,20000])
+        self.assertEqual([x['trigger_index'] for x in trace['scenarios']],[0,10000])
+        for row in trace['scenarios']:
+            self.assertEqual(row['inner_callback_calls'],0);self.assertEqual(row['reference_post_failure_indices'],[0,1,2,3])
+            self.assertEqual(row['reference_dispatch_ends'],2);self.assertFalse(row['reference_active_after_reuse'])
+        self.assertFalse(trace['runtime_scheduling_ownership_release_cancellation_FI_provider_qualified'])
+
+    def test_complete_map_andmapInto_panics_keep_both_full20000_ranges_and_reuse(self):
+        trace=m.panic_plan_cleanup_trace()
+        self.assertEqual(trace['observations'],[True]*6);self.assertEqual(trace['original_map_andmapInto_range_count'],20000)
+        self.assertEqual(trace['original_total_declared_work_items'],40008);self.assertEqual(trace['original_print_expressions'],9)
+        self.assertEqual([x['method'] for x in trace['failures']],['map','mapInto'])
+        self.assertEqual([x['failing_index'] for x in trace['failures']],[10000,10000])
+        self.assertEqual(trace['post_failure_callback_counts'],[4,4]);self.assertEqual(trace['reference_dispatch_ends'],4)
+        self.assertFalse(trace['reference_active_after_reuse']);self.assertEqual(trace['unobserved_mapInto_partial_output_contents_or_rollback'],'NOT_ASSERTED')
+
+    def test_plan_cleanup_observations_do_not_depend_on_reference_order_or_lane_count(self):
+        for reverse in (False,True):
+            for lanes in (1,2):
+                with self.subTest(reverse=reverse,lanes=lanes):
+                    self.assertEqual(m.nested_plan_cleanup_trace(reverse,lanes)['observations'],['seq-concurrent',True,'vm-concurrent',True])
+                    self.assertEqual(m.panic_plan_cleanup_trace(reverse,lanes)['observations'],[True]*6)
+        for lanes in (0,3,True,1.0):
+            with self.subTest(lanes=lanes),self.assertRaises(ValueError):m.LogicalCleanupPlan(lanes)
+
+    def test_rejected_nested_begin_cannot_end_the_still_active_outer_dispatch(self):
+        plan=m.LogicalCleanupPlan(1);inside=[]
+        def outer(state,index):
+            try:plan.dispatch('forEach',1,lambda state,index:inside.append('bad'))
+            except m.PlanDispatchFailure as error:self.assertEqual(error.variant,'ConcurrentDispatch')
+            self.assertTrue(plan.active);self.assertEqual(plan.completed_ends,0)
+        plan.dispatch('forEach',1,outer);self.assertEqual(inside,[]);self.assertFalse(plan.active);self.assertEqual(plan.completed_ends,1)
+
+    def test_plan_ordinary_error_and_panic_channels_are_distinct_and_both_unwind(self):
+        self.assertTrue(issubclass(m.PlanDispatchFailure,Exception));self.assertFalse(issubclass(m.PlanDivisionPanic,Exception))
+        for error in (m.PlanDispatchFailure('ConcurrentDispatch'),m.plan_division_panic()):
+            plan=m.LogicalCleanupPlan(2)
+            def fail(state,index):raise error
+            with self.assertRaises(type(error)):plan.dispatch('map',20000,fail)
+            self.assertFalse(plan.active);self.assertEqual(plan.completed_ends,1)
+            self.assertEqual(plan.dispatch('map',4,lambda state,index:index),[0,1,2,3])
+
+    def test_plan_mapInto_clears_only_after_a_successful_begin(self):
+        plan=m.LogicalCleanupPlan(1);out=[99];plan.active=True
+        with self.assertRaises(m.PlanDispatchFailure):plan.dispatch('mapInto',4,lambda state,index:index,output=out)
+        self.assertEqual(out,[99]);self.assertTrue(plan.active);self.assertEqual(plan.completed_ends,0)
+        plan.active=False;plan.dispatch('mapInto',4,lambda state,index:index,output=out);self.assertEqual(out,[0,1,2,3])
+
+    def test_plan_cleanup_keeps_all_original_source_prints_and_registered_observations(self):
+        rows={row['original_source']:row for row in m.expected_rows() if row['source'] in m._PLAN_PROGRAMS.values()}
+        for name,source in m._PLAN_PROGRAMS.items():
+            text=(m.ROOT/source).read_text(encoding='utf-8');row=rows[source]
+            self.assertEqual(row['source'],source);self.assertIsNone(row['required_target']);self.assertEqual(row['expected']['exit_code'],0)
+            self.assertEqual(text.count('print('),10 if 'nested' in name else 9)
+            self.assertIn('0..20000',text);self.assertIn('i == 10000',text)
+            self.assertEqual(text.count('plan.mapInto('),0 if 'nested' in name else 1)
+            self.assertEqual(row['observation_count'],4 if 'nested' in name else 6)
+
+    def test_plan_panic_predicates_follow_pinned_code_and_message_and_independent_trace(self):
+        with mock.patch.object(m,'plan_division_panic',lambda:m.PlanDivisionPanic(421,'changed')):
+            self.assertEqual(m.panic_plan_cleanup_trace()['observations'],[False,False,True,False,False,True])
+        saved=m.nested_plan_cleanup_trace
+        with mock.patch.object(m,'nested_plan_cleanup_trace',lambda:{**saved(),'observations':['changed']}):
+            row=next(x for x in m.expected_rows() if 'nested_dispatch' in x['source'])
+            self.assertEqual(row['expected']['stdout_utf8'],'changed\n')
 
 if __name__=='__main__':unittest.main()

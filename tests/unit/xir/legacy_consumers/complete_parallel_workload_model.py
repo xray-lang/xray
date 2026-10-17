@@ -186,7 +186,15 @@ def _validate():
 
 def expected_rows():
     _validate();all_bodies=bodies();tuples=tuple_traces();rows=[]
+    plan_traces=plan_cleanup_traces()
     for name in _NAMES:
+        if name in _PLAN_PROGRAMS:
+            trace=plan_traces[name]
+            rows.append({'id':'complete_parallel_workload_'+name,'source':_PROGRAMS[name],'original_source':_PROGRAMS[name],'required_target':None,
+                'expected':{'exit_code':0,'stdout_utf8':''.join(render({'expected':x})+'\n' for x in trace['observations']),'stderr_utf8':''},
+                'observation_count':len(trace['observations']),'required_semantic_trace':trace,
+                'model':'Complete unchanged Plan cleanup original,allcallbacks/imports/prints/ranges retained;independent logical active-state unwind for ordinary nested-dispatch errors andE0420panic,thenall4post-failureitems. Reference forward/reverse andlanechoices are proof scenarios,not actual scheduling/startcounts/outputrollback/release/cancel/FI/provider qualification.'})
+            continue
         row={'id':'complete_parallel_workload_'+name,'source':_PROGRAMS[name],'required_target':None,
             'expected':{'exit_code':0,'stdout_utf8':tuples[name]['stdout_utf8'] if name in tuples else '','stderr_utf8':''},
             'observation_count':1 if name in tuples else 0,
@@ -208,3 +216,108 @@ def named_expected_rows():
             'required_semantic_trace':{fn:all_bodies[fn] for fn in names},
             'model':'Every complete original annotated body in source order;requires real CLI discovery of all names plus whole-source VM/C/native adapters. All219 assertions across the five files retained. Symbolic values are not real stress/scheduling/physical/resource/cancellation qualification.'})
     return rows
+
+
+_PLAN_PROGRAMS={'parallel_plan_nested_dispatch_cleanup': 'tests/diff/cases/semantics/stdlib/parallel_plan_nested_dispatch_cleanup.xr', 'parallel_plan_map_cleanup_after_panic': 'tests/diff/cases/semantics/stdlib/parallel_plan_map_cleanup_after_panic.xr'}
+_NAMES += tuple(_PLAN_PROGRAMS)
+_PROGRAMS.update(_PLAN_PROGRAMS)
+_AUTHORITIES += ('stdlib/parallel/parallel.xr', 'spec/source/sections/019-18-error-codes.md', 'src/shared/xr_error_messages.h')
+_INPUTS.update({'stdlib/parallel/parallel.xr': '013000e9964fa136e73f47210f4afadf0f27798dea74baff6761ea93fbcc7cad', 'spec/source/sections/019-18-error-codes.md': '2c4416085d5d38f37fb0e434d863cba1ff5d5758d44efb29402fa5158282d9ad', 'src/shared/xr_error_messages.h': '9cb2a61e702eb0f768e4a9e7fb1a1a3d7176cc603dfb955ca1e2415e6e8c615c', 'tests/diff/cases/semantics/stdlib/parallel_plan_nested_dispatch_cleanup.xr': 'cb170a48f9a7cfbb7bb19f6096b90e7d35c2aa6e22263aa273899b39d9113ffc', 'tests/diff/cases/semantics/stdlib/parallel_plan_map_cleanup_after_panic.xr': '3928ffed38bfd8ee2f2637b5b15715e2124cf78d7d1a18c3a70b0ff9ff793733'})
+
+
+class PlanDispatchFailure(Exception):
+    def __init__(self,variant):self.variant=variant
+
+
+class PlanDivisionPanic(BaseException):
+    def __init__(self,code,message):self.code=code;self.message=message
+
+
+def plan_division_panic():
+    codes=(ROOT/'spec/source/sections/019-18-error-codes.md').read_text(encoding='utf-8')
+    messages=(ROOT/'src/shared/xr_error_messages.h').read_text(encoding='utf-8')
+    if 'E0420' not in codes or 'XR_ERR_DIV_BY_ZERO' not in codes:raise ValueError('Division panic code authority changed')
+    match=re.search(r'^#define XR_ERROR_CORE_DIVISION_BY_ZERO_MSG "([^"\n]+)"$',messages,re.M)
+    if match is None:raise ValueError('Division panic message authority changed')
+    return PlanDivisionPanic(420,match[1])
+
+
+class LogicalCleanupPlan:
+    """Model public dispatch guard/unwind only; no physical scheduler or owner."""
+    def __init__(self,lane_count):
+        if type(lane_count) is not int or lane_count not in (1,2):raise ValueError('Unreviewed admitted lane-count scenario')
+        self.states=list(range(lane_count));self.active=False;self.closed=False;self.completed_ends=0
+
+    def begin(self):
+        if self.closed:raise PlanDispatchFailure('ClosedPlan')
+        if self.active:raise PlanDispatchFailure('ConcurrentDispatch')
+        self.active=True
+
+    def dispatch(self,kind,count,body,reverse=False,output=None):
+        if kind not in ('forEach','map','mapInto') or type(count) is not int or count<0 or not callable(body):
+            raise ValueError('Unreviewed complete Plan dispatch')
+        if kind=='mapInto' and type(output) is not list:raise ValueError('mapInto requires the original output place')
+        # A rejected nested begin must not clear the outer dispatch's active bit.
+        self.begin()
+        try:
+            values=[] if output is None else output
+            if kind=='mapInto':values.clear()
+            indices=reversed(range(count)) if reverse else range(count)
+            for index in indices:
+                value=body(self.states[index%len(self.states)],index)
+                if kind!='forEach':values.append(value)
+            return values if kind=='map' else None
+        finally:
+            self.active=False;self.completed_ends+=1
+
+
+def nested_plan_cleanup_trace(reverse=False,multilane_count=2):
+    outputs=[];scenarios=[]
+    for label,lane_count,count,trigger in [('seq',1,4,0),('vm',multilane_count,20000,10000)]:
+        plan=LogicalCleanupPlan(lane_count);inner_calls=[];visited=[]
+        def outer(state,index):
+            visited.append(index)
+            if index==trigger:
+                plan.dispatch('forEach',1,lambda inner,j:inner_calls.append((inner,j)))
+        try:plan.dispatch('forEach',count,outer,reverse=reverse);outputs.append(label+'-miss')
+        except PlanDispatchFailure as error:outputs.append(label+'-concurrent' if error.variant=='ConcurrentDispatch' else label+'-other')
+        touched=[];plan.dispatch('forEach',4,lambda state,index:touched.append(index),reverse=reverse)
+        outputs.append(len(touched)==4)
+        scenarios.append({'label':label,'requested_outer_range_count':count,'nested_range_count':1,'trigger_index':trigger,
+            'reference_failure_trigger_visited':trigger in visited,'inner_callback_calls':len(inner_calls),
+            'required_post_failure_range_count':4,'reference_post_failure_indices':sorted(touched),
+            'reference_dispatch_ends':plan.completed_ends,'reference_active_after_reuse':plan.active})
+    return {'observations':outputs,'scenarios':scenarios,'original_requested_workers':[1,2],
+        'original_print_expressions':10,'original_helpers_and_callback_bodies_preserved':True,
+        'model_lane_counts_and_order':'FORWARD_OR_REVERSE_REFERENCE_SCENARIOS_ONLY;actual_lane_count_schedule_and_started_prefix_NOT_PREDICTED',
+        'runtime_scheduling_ownership_release_cancellation_FI_provider_qualified':False}
+
+
+def panic_plan_cleanup_trace(reverse=False,lane_count=2):
+    plan=LogicalCleanupPlan(lane_count);outputs=[];failures=[];output=[];post_counts=[]
+    for kind in ('map','mapInto'):
+        visited=[]
+        def body(state,index):
+            visited.append(index)
+            if index==10000:raise plan_division_panic()
+            return state+index
+        try:
+            result=plan.dispatch(kind,20000,body,reverse=reverse,output=output if kind=='mapInto' else None)
+            if kind=='map':outputs.append(len(result));outputs.append('map-miss')
+            else:outputs.append('mapinto-miss')
+        except PlanDivisionPanic as panic:
+            outputs.extend([panic.code==420,'division by zero' in panic.message]);failures.append({'method':kind,
+                'requested_range_count':20000,'failing_index':10000,'reference_failure_trigger_visited':10000 in visited,
+                'caught_channel':'panic','code':panic.code,'message_contains_division_by_zero':'division by zero' in panic.message})
+        touched=[];plan.dispatch('forEach',4,lambda state,index:touched.append(index),reverse=reverse);post_counts.append(len(touched));outputs.append(len(touched)==4)
+    return {'observations':outputs,'failures':failures,'post_failure_callback_counts':post_counts,
+        'original_requested_workers':2,'original_map_andmapInto_range_count':20000,'original_total_declared_work_items':40008,
+        'original_print_expressions':9,'reference_dispatch_ends':plan.completed_ends,'reference_active_after_reuse':plan.active,
+        'unobserved_mapInto_partial_output_contents_or_rollback':'NOT_ASSERTED',
+        'model_lane_counts_and_order':'FORWARD_OR_REVERSE_REFERENCE_SCENARIOS_ONLY;actual_lane_count_schedule_and_started_prefix_NOT_PREDICTED',
+        'runtime_scheduling_ownership_release_cancellation_FI_provider_qualified':False}
+
+
+def plan_cleanup_traces():
+    return {'parallel_plan_nested_dispatch_cleanup':nested_plan_cleanup_trace(),
+        'parallel_plan_map_cleanup_after_panic':panic_plan_cleanup_trace()}

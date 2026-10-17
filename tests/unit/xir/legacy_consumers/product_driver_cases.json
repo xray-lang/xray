@@ -33002,6 +33002,64 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 3
+    },
+    {
+      "id": "complete_parallel_workload_parallel_plan_nested_dispatch_cleanup",
+      "oracle_id": "complete_parallel_workload_parallel_plan_nested_dispatch_cleanup",
+      "source": "tests/diff/cases/semantics/stdlib/parallel_plan_nested_dispatch_cleanup.xr",
+      "source_lf_sha256": "cb170a48f9a7cfbb7bb19f6096b90e7d35c2aa6e22263aa273899b39d9113ffc",
+      "entry": "run",
+      "stdout_utf8": "seq-concurrent\ntrue\nvm-concurrent\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P13",
+        "P08",
+        "P07",
+        "P10"
+      ],
+      "independent_execution_model": "Complete unchanged Plan cleanup original,allcallbacks/imports/prints/ranges retained;independent logical active-state unwind for ordinary nested-dispatch errors andE0420panic,thenall4post-failureitems. Reference forward/reverse andlanechoices are proof scenarios,not actual scheduling/startcounts/outputrollback/release/cancel/FI/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/parallel_plan_nested_dispatch_cleanup.xr",
+        "source_lf_sha256": "cb170a48f9a7cfbb7bb19f6096b90e7d35c2aa6e22263aa273899b39d9113ffc"
+      },
+      "remaining_gates": [
+        "Complete unchanged original execution;legal Source refusal remains failure;all20000ranges/callbacks andpost-failuredispatches retained,no actual scheduling/cancellation/physical release/runtimeFI/safety/provider/mixed qualification inferred."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 4
+    },
+    {
+      "id": "complete_parallel_workload_parallel_plan_map_cleanup_after_panic",
+      "oracle_id": "complete_parallel_workload_parallel_plan_map_cleanup_after_panic",
+      "source": "tests/diff/cases/semantics/stdlib/parallel_plan_map_cleanup_after_panic.xr",
+      "source_lf_sha256": "3928ffed38bfd8ee2f2637b5b15715e2124cf78d7d1a18c3a70b0ff9ff793733",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P13",
+        "P08",
+        "P07",
+        "P10"
+      ],
+      "independent_execution_model": "Complete unchanged Plan cleanup original,allcallbacks/imports/prints/ranges retained;independent logical active-state unwind for ordinary nested-dispatch errors andE0420panic,thenall4post-failureitems. Reference forward/reverse andlanechoices are proof scenarios,not actual scheduling/startcounts/outputrollback/release/cancel/FI/provider qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/parallel_plan_map_cleanup_after_panic.xr",
+        "source_lf_sha256": "3928ffed38bfd8ee2f2637b5b15715e2124cf78d7d1a18c3a70b0ff9ff793733"
+      },
+      "remaining_gates": [
+        "Complete unchanged original execution;legal Source refusal remains failure;all20000ranges/callbacks andpost-failuredispatches retained,no actual scheduling/cancellation/physical release/runtimeFI/safety/provider/mixed qualification inferred."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 6
     }
   ]
 }
