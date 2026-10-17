@@ -27,7 +27,6 @@ with tempfile.TemporaryDirectory(prefix='source-input-中文 ',dir=a.record.pare
     for name,data in inputs.items():(directory/name).write_bytes(data)
     bad=directory/'坏 库.xr'
     entry=directory/'entry.xr'
-    expected=f'{bad.as_posix()}:2:1: error: source text contains an embedded NUL\n'.encode()
     cases=[('run-root',['run',str(bad)],None),('run-import',['run',str(entry)],None),
            ('check-root',['check',str(bad)],None),('check-import',['check',str(entry)],None),
            ('syntax-root',['check','--syntax-only',str(bad)],None),
@@ -40,6 +39,8 @@ with tempfile.TemporaryDirectory(prefix='source-input-中文 ',dir=a.record.pare
         # Canonical Windows paths can use either separator; diagnostic bytes otherwise stay exact.
         stderr=result.stderr.replace(b'\\',b'/')
         interactive=name.startswith('repl-')
+        label='' if interactive else 'error: '
+        expected=f'{bad.as_posix()}:2:1: {label}source text contains an embedded NUL\n'.encode()
         good=(result.returncode==(0 if interactive else 1) and stderr==expected and
               (result.stdout.count(b'42\n')==1 if interactive else result.stdout==b''))
         rows.append({'name':name,'arguments':args,'stdin_hex':data.hex() if data is not None else None,
