@@ -22,7 +22,7 @@ typedef struct XirInstanceDebugActivation {
     uint32_t driver;
     uint64_t epoch;
 } XirInstanceDebugActivation;
-/* Exact active VM ingress only. Root/Task identity comes from the real executor,
+/* Exact active normal callback only. Root/Task identity comes from the real executor,
  * and a root driver is checked against its actual private entry. No state or
  * value borrow is returned; failure preserves the complete output. */
 XR_FUNC XrXirCallStatus xir_instance_debug_activation(XrXirCallView *,XirInstanceDebugActivation *);

@@ -4471,9 +4471,9 @@ throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚�
 - 正常路径不分配对象、不展开栈；在需传播或捕获错误的调用边界只经过可预测的错误标志分支
 - 未捕获的顶层错误打印 `[Uncaught Error] <enum value>`，退出码 = 1
 
-调试器对值返回错误的 caught／uncaught 分类以当前逻辑执行流的同步调用链为边界：选中本流中的 catch 为 caught，错误逃出真实 Instance 根入口或当前 Task 根入口为 uncaught。Task 保存的错误随后经另一执行流 await 再抛出时，在该 await 所在流重新分类；这不把 Task 失败等同于整个程序失败。观察点位于实际 throw 交付、handler 和清理效果执行之前。分类要求完整的 Source 路由事实及经过认证的执行边界；native 或缺失事实保持未知，不能据此报告 uncaught。
+调试器对值返回错误的 caught／uncaught 分类以当前逻辑执行流的同步调用链为边界：选中本流中的 catch 为 caught，错误逃出真实 Instance 根入口或当前 Task 根入口为 uncaught。Task 保存的错误随后经另一执行流 await 再抛出时，在该 await 所在流重新分类；这不把 Task 失败等同于整个程序失败。观察点位于实际 throw 交付、handler 和清理效果执行之前。分类要求完整的 Source 路由事实及经过认证的执行边界；缺失事实或未经认证的 native 边界保持未知，不能据此报告 uncaught。
 
-同源混合调试 Program 必须接收生成器发布的现行观察协议描述符，核对所选 native 回调及帧偏移并拥有复制注册元数据；缺失或旧协议在执行前拒绝。完整认证 Source 映射下，生成 native 的 `all` 停点位于原始 Source throw 对应指令执行之前，包括降为局部跳转或词法错误退出的 throw；native Source 覆盖不完整时，`all` 配置保持原值并明确拒绝。继续执行时该指令只运行一次；传播返回和内部 dispatcher 不被当作新的 Source throw。拥有型异常快照保留真实 native 帧身份、Source 指令和枚举值，不暴露 native locals 或执行状态。native 的 caught／uncaught 分类、无映射的 native 来源及公开 native 调试载入仍须独立验证；本观察点不授予任意 native 源码单步能力。
+同源混合调试 Program 必须接收生成器发布的现行观察协议描述符，核对所选 native 回调及帧偏移并拥有复制注册元数据；缺失或旧协议在执行前拒绝。协议同时提供 Source 原点的指令前观察及普通 CALL 准备后的已解析 callee、指令序号和 invoke 位。接收方拥有这些原始事实后，仍须以实际 child ENTER、完整 executor binding、frame、thread 和深度证明调用已获准；不得读取祖先执行状态或借出祖先 CallView。完整认证 Source 路由及原点覆盖下，all、caught 和 uncaught 可沿真实 VM/native 同步链分类；递归使用实际 frame 身份，Task 根边界不跨越到未来 await 的接收者。原点覆盖不完整时拒绝 all，handler 路由不完整时拒绝 caught／uncaught，配置失败均保留旧过滤值。已经准入的 all 遇到缺失 handler 路由时仍报告 UNKNOWN，不猜测未捕获。生成 native 的停点位于原始 Source throw 对应指令执行之前，包括降为局部跳转或词法错误退出的 throw；继续执行时该指令只运行一次，传播返回和内部 dispatcher 不被当作新的 Source throw。拥有型异常快照保留真实 native 帧身份、Source 指令和枚举值，不暴露 native locals 或执行状态，也不保证后续 cleanup 或 handler 一定完成。无映射的 native 来源、公开 native 调试载入及 native JSON 注册链仍须独立验证；本观察点不授予任意 native 源码单步能力。
 
 #### 8.1.2 `try` / `catch`
 

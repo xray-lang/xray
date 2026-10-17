@@ -89,6 +89,10 @@ static XrXirAction task_resume(XrXirCallView *view) {
     if(f==NT_FAIL && native_tasks->backend!=NT_NATIVE_VM && view->phase==XR_XIR_CALL_NORMAL) {
         bool unchanged=true;XrXirCallView copy=*view;
         CHECK(xir_call_native_source_before(&copy,0,view->state,0,&unchanged)==XR_XIR_CALL_BAD_ARGUMENT && unchanged);
+        CHECK(xir_call_native_source_call(&copy,0,0,false)==XR_XIR_CALL_BAD_ARGUMENT);
+        uint32_t saved_entry=123;XrXirCallCodeKind saved_code=XR_XIR_CALL_CODE_NATIVE;
+        CHECK(xir_call_debug_frame_entry(&copy,1,&saved_entry,&saved_code)==XR_XIR_CALL_BAD_ARGUMENT &&
+            saved_entry==123 && saved_code==XR_XIR_CALL_CODE_NATIVE);
         const unsigned char *outside=(const unsigned char *)((uintptr_t)view->state-1);
         CHECK(xir_call_native_source_before(view,0,outside,0,&unchanged)==XR_XIR_CALL_BAD_STATE && unchanged);
         CHECK(xir_call_native_source_before(view,0,view->state,UINT32_MAX,&unchanged)==XR_XIR_CALL_BAD_STATE && unchanged);

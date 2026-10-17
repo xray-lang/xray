@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_vm_debug_route.inc.c - Match only authenticated synchronous VM ancestors
+ * xxir_vm_debug_route.inc.c - Match authenticated synchronous VM and native ancestors
  */
 static XrXirValueStatus debug_route_error(XrXirVmDebug *debug,XrXirCallView *view,
     const XrXirValue *input,XrXirValue *output) {
@@ -52,25 +52,32 @@ static XrXirValueStatus debug_exception_route(XrXirVmDebug *debug,XrXirCallView 
         if (!parent || parent->event.entry==debug->calls.functions) {
             status=debug_route_escape(debug,view,call,parent,&result,ancestors);break;
         }
-        if (parent->event.code!=XR_XIR_CALL_CODE_VM) break;
         if (parent->thread!=call->thread || parent->event.depth+1!=call->event.depth || ancestors>=debug->capacity) {
             status=XR_XIR_VALUE_BAD_ARGUMENT;break;
         }
-        const DebugFrame *live=find_id(debug,parent->id);uint32_t instruction=UINT32_MAX;
-        if (!live || live->point.binding->artifact!=debug->artifact || live->point.binding->function!=parent->event.entry) {
-            status=XR_XIR_VALUE_BAD_ARGUMENT;break;
-        }
-        uint32_t function=UINT32_MAX;
-        XrXirCallStatus authenticated=xir_call_vm_frame_entry(view,parent->event.frame,&function);
+        uint32_t function=UINT32_MAX,instruction=UINT32_MAX,callee=UINT32_MAX;
+        XrXirCallCodeKind code=XR_XIR_CALL_CODE_UNKNOWN;bool invoked=false;
+        XrXirCallStatus authenticated=xir_call_debug_frame_entry(view,parent->event.frame,&function,&code);
         if (authenticated==XR_XIR_CALL_BAD_STATE) break;
         if (authenticated!=XR_XIR_CALL_READY) { status=authenticated==XR_XIR_CALL_LIMIT ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;break; }
-        if (function!=parent->event.entry || !live->waiting || live->pending.callee!=call->event.entry ||
-            live->pending.instruction!=live->point.instruction) { status=XR_XIR_VALUE_BAD_ARGUMENT;break; }
-        instruction=live->pending.instruction;
+        if (function!=parent->event.entry || code!=parent->event.code) { status=XR_XIR_VALUE_BAD_ARGUMENT;break; }
+        if (code==XR_XIR_CALL_CODE_VM) {
+            const DebugFrame *live=find_id(debug,parent->id);
+            if (!live || live->point.binding->artifact!=debug->artifact || live->point.binding->function!=function ||
+                !live->waiting || live->pending.instruction!=live->point.instruction) { status=XR_XIR_VALUE_BAD_ARGUMENT;break; }
+            instruction=live->pending.instruction;callee=live->pending.callee;invoked=live->pending.invoked;
+        } else if (code==XR_XIR_CALL_CODE_NATIVE) {
+            if (!debug->native_code || function>=debug->native_code->count ||
+                debug->native_code->offsets[function]==UINT32_MAX || !parent->native_waiting) break;
+            instruction=parent->native_instruction;callee=parent->native_callee;invoked=parent->native_invoked;
+        } else break;
         const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
+        if (function>=module->function_count || instruction>=module->functions[function].instruction_count ||
+            callee!=call->event.entry) { status=XR_XIR_VALUE_BAD_ARGUMENT;break; }
         XrXirOp op=module->functions[function].instructions[instruction].op;
-        if (live->pending.invoked!=(op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_INDIRECT)) { status=XR_XIR_VALUE_BAD_ARGUMENT;break; }
-        /* The original VM callback owned the pending ordinal and resolved
+        if (invoked!=(op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_INDIRECT) ||
+            (!invoked && op!=XR_XIR_CALL && op!=XR_XIR_CALL_INDIRECT)) { status=XR_XIR_VALUE_BAD_ARGUMENT;break; }
+        /* The original callback owned the pending ordinal and resolved
          * callee. This real child ENTER now proves that proposal was admitted. */
         status=debug_exception_function(debug,view,(XrXirVmDebugLocation){parent->event.entry,instruction},error,&selection);
         if (status!=XR_XIR_VALUE_OK) break;

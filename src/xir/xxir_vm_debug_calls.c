@@ -48,7 +48,7 @@ static void calls_event(void *owner,const XrXirCallEvent *event) {
             if (!other->active && !frame) frame=other;
         }
         if (!thread) thread=++calls->next_thread;
-        *frame=(XirDebugCallFrame){*event,++calls->next_id,thread,true};++calls->count;
+        *frame=(XirDebugCallFrame){.event=*event,.id=++calls->next_id,.thread=thread,.active=true};++calls->count;
         if (event->kind==XR_XIR_CALL_FRAME_PRESENT && calls->installing &&
             xr_xir_call_executor_member(calls->installing,&event->binding) &&
             (calls->current==UINT32_MAX || calls->frames[calls->current].event.depth<event->depth))
@@ -62,7 +62,9 @@ static void calls_event(void *owner,const XrXirCallEvent *event) {
     if (event->kind==XR_XIR_CALL_FRAME_LEAVE) {
         frame->active=false;--calls->count;
         if (calls->current==(uint32_t)(frame-calls->frames)) calls->current=UINT32_MAX;
-    } else if (event->kind==XR_XIR_CALL_DISPATCH_BEGIN) calls->current=(uint32_t)(frame-calls->frames);
+    } else if (event->kind==XR_XIR_CALL_DISPATCH_BEGIN) {
+        frame->native_waiting=false;calls->current=(uint32_t)(frame-calls->frames);
+    }
     else if (event->kind==XR_XIR_CALL_DISPATCH_END) calls->current=UINT32_MAX;
 }
 XR_FUNC XrXirValueStatus xir_debug_calls_new(XirDebugCalls *calls,XrXirDomain *domain,uint32_t capacity) {
@@ -120,4 +122,15 @@ XR_FUNC const XirDebugCallFrame *xir_debug_calls_id(const XirDebugCalls *calls,u
     if (!calls || !id) return NULL;
     for (uint32_t i=0;i<calls->capacity;++i) if (calls->frames[i].active && calls->frames[i].id==id) return &calls->frames[i];
     return NULL;
+}
+XR_FUNC XrXirValueStatus xir_debug_calls_native_pending(XirDebugCalls *calls,const XrXirCallView *view,
+    uint32_t instruction,uint32_t callee,bool invoked) {
+    const XirDebugCallFrame *current=xir_debug_calls_current(calls);
+    if (!current || !xr_xir_call_admission(view) || calls->target!=view->instance ||
+        current->event.code!=XR_XIR_CALL_CODE_NATIVE || current->event.phase!=XR_XIR_CALL_NORMAL ||
+        current->event.entry!=xr_xir_call_current_entry(view->activation) || callee>=calls->functions) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!xr_xir_domain_work(calls->domain,sizeof(*current)+1)) return XR_XIR_VALUE_LIMIT;
+    XirDebugCallFrame *owned=&calls->frames[calls->current];
+    owned->native_instruction=instruction;owned->native_callee=callee;
+    owned->native_invoked=invoked;owned->native_waiting=true;return XR_XIR_VALUE_OK;
 }

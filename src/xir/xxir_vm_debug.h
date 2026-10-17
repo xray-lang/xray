@@ -90,12 +90,12 @@ typedef enum XrXirVmDebugExceptionFilter {
     XR_XIR_VM_DEBUG_EXCEPTION_CAUGHT=2, XR_XIR_VM_DEBUG_EXCEPTION_UNCAUGHT=4
 } XrXirVmDebugExceptionFilter;
 /* Select first-chance language throws in the current logical execution flow.
- * Caught/uncaught require complete Source facts and a pure observed VM Program;
- * a Task escape is uncaught in that flow, regardless of a future await. Faults
- * are not language throws. Mixed native entries with generated source hooks
- * and an authenticated Source map support ALL at the actual authored throw;
- * incomplete native source coverage rejects ALL before changing the filters.
- * native caught/uncaught remain unsupported rather than guessed at return.
+ * Caught/uncaught require complete Source routes and authenticated synchronous
+ * VM/native frames. Generated native code supplies owned resolved-call facts;
+ * actual child ENTER proves admission before ancestor selection. A Task escape
+ * is uncaught in that flow, regardless of a future await. Faults are not throws.
+ * Missing native origin coverage rejects ALL; missing handler routes reject
+ * caught/uncaught atomically. ALL retains UNKNOWN for an incomplete route.
  * Source-owned throw sites include local jumps and cleanup error continuations;
  * an unmapped IR function observes its actual THROW operation. */
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_break_on_throw(XrXirVmDebug *,uint32_t filters);

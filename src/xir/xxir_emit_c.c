@@ -520,6 +520,9 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
             " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
             "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};\n",
             (uint32_t)(op-function->instructions),op->args[1]?"state->arguments":"NULL",op->args[1]);
+    append(buffer," XrXirCallStatus observed = xir_call_native_source_call(view,%uu,callee,%s);\n"
+        " if (observed != XR_XIR_CALL_READY) return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,observed}};\n",
+        (uint32_t)(op-function->instructions),(op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT) ? "true" : "false");
     append(buffer, " return (XrXirAction) {XR_XIR_ACTION_CALL, callee, %s, %uu, target, {0}, %s}; }\n",
         op->args[1] ? "state->arguments" : "NULL", op->args[1], protected_call ? "XR_XIR_ACTION_PROTECTED" : "0u");
 }

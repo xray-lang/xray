@@ -104,7 +104,7 @@ static void mixed_source_protocol_rejections(void) {
         uint32_t offsets[MIX_FUNCTIONS];memcpy(offsets,code.offsets,sizeof(offsets));
         XrXirCallEntry entries[MIX_FUNCTIONS];memcpy(entries,native.entries,sizeof(entries));
         if(damage==0) input.source=NULL;
-        else if(damage==1) code.version=0;
+        else if(damage==1) code.version=XIR_CALL_NATIVE_SOURCE_VERSION-1u;
         else if(damage==2) ++code.version;
         else if(damage==3) --code.count;
         else if(damage==4) code.entries=NULL;

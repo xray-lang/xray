@@ -39,7 +39,7 @@ typedef enum XirVmDebugExceptionRouteKind {
 } XirVmDebugExceptionRouteKind;
 /* Selection and escape refer to the current authenticated execution flow.
  * Task escape stores an outcome and does not predict a future await handler.
- * UNKNOWN retains native or missing-source boundaries without guessing. */
+ * UNKNOWN retains unregistered native or missing-source boundaries without guessing. */
 typedef struct XirVmDebugExceptionRoute {
     XirVmDebugExceptionRouteKind kind;
     uint32_t function,handler,accepted;
@@ -65,7 +65,7 @@ XR_FUNC void xir_vm_debug_release(XrXirVmDebug *debug, void *state);
 XR_FUNC void xir_vm_debug_faulted(XrXirVmDebug *,const XrXirCallView *);
 /* Between driver quanta only. Copies authenticated live activation identities,
  * never frame state or values. Failure preserves both outputs. Before the first
- * admitted VM ingress there is no complete Call observer inventory. */
+ * authenticated VM/native observation there is no complete Call inventory. */
 XR_FUNC XrXirValueStatus xir_vm_debug_threads(XrXirVmDebug *,uint64_t *,uint32_t,uint32_t *);
 /* Before target construction only. Verify Source selector correspondence with
  * the exact artifact and copy coordinates/routes on its original finite compiler

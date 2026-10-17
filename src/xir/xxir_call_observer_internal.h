@@ -53,6 +53,9 @@ XR_FUNC bool xir_call_vm_view_current(const XrXirCallView *view);
 /* Only at exact VM ingress. Resolve an entered VM frame on this activation's
  * actual live ancestor chain without lending a view, state or invocation. */
 XR_FUNC XrXirCallStatus xir_call_vm_frame_entry(const XrXirCallView *,uint64_t,uint32_t *);
+/* Metadata only at an authentic normal callback: resolve a live VM/native
+ * ancestor identity without borrowing its state or widening VM write grants. */
+XR_FUNC XrXirCallStatus xir_call_debug_frame_entry(const XrXirCallView *,uint64_t,uint32_t *,XrXirCallCodeKind *);
 /* The owning executor may visit only this exact already-entered VM frame.
  * This check lends no view and does not execute a callback. */
 XR_FUNC XrXirCallStatus xir_call_vm_visit_ready(XrXirCall *,const XrXirExecutorBinding *,uint64_t);

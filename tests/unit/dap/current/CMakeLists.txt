@@ -1009,3 +1009,40 @@ foreach(XR_DAP_CONTEXT_KIND scalar nullable array)
     add_test(NAME test_dap_contextual_write_${XR_DAP_CONTEXT_KIND}_resources COMMAND test_dap_contextual_write --${XR_DAP_CONTEXT_KIND}-resources)
     set_tests_properties(test_dap_contextual_write_${XR_DAP_CONTEXT_KIND}_resources PROPERTIES TIMEOUT 120 LABELS "dap;mutation;source;ownership;types;resources;fault-injection")
 endforeach()
+
+add_executable(test_dap_native_routes_producer test_native_routes_producer.c)
+target_link_libraries(test_dap_native_routes_producer PRIVATE xray_xir_source xray_xir_cgen)
+target_compile_definitions(test_dap_native_routes_producer PRIVATE
+    XR_NATIVE_TASK_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/native-routes" XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set(XR_DAP_NATIVE_ROUTES_DIR "${CMAKE_CURRENT_BINARY_DIR}/native-routes")
+add_custom_command(OUTPUT "${XR_DAP_NATIVE_ROUTES_DIR}/native_task.c" "${XR_DAP_NATIVE_ROUTES_DIR}/native_task.h"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${XR_DAP_NATIVE_ROUTES_DIR}"
+    COMMAND $<TARGET_FILE:test_dap_native_routes_producer> "${XR_DAP_NATIVE_ROUTES_DIR}"
+    DEPENDS test_dap_native_routes_producer "${CMAKE_CURRENT_SOURCE_DIR}/native-routes/native_task_throw.xr" VERBATIM)
+add_executable(test_dap_native_routes test_native_routes.c
+    "${XR_DAP_NATIVE_ROUTES_DIR}/native_task.c" "${XR_DAP_NATIVE_ROUTES_DIR}/native_task.h")
+target_link_libraries(test_dap_native_routes PRIVATE xray_dap_current xray_xir_source)
+target_include_directories(test_dap_native_routes PRIVATE "${XR_DAP_NATIVE_ROUTES_DIR}")
+target_compile_definitions(test_dap_native_routes PRIVATE
+    XR_NATIVE_TASK_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/native-routes" XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+if(MSVC)
+    target_compile_options(test_dap_native_routes PRIVATE /W4 /WX /utf-8)
+    target_compile_options(test_dap_native_routes_producer PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_dap_native_routes PRIVATE -Wall -Wextra -Werror)
+    target_compile_options(test_dap_native_routes_producer PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_dap_native_routes COMMAND test_dap_native_routes)
+set_tests_properties(test_dap_native_routes PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;exceptions")
+
+add_test(NAME test_dap_native_routes_census COMMAND test_dap_native_routes --census)
+add_test(NAME test_dap_native_routes_boundary COMMAND test_dap_native_routes --boundary)
+add_test(NAME test_dap_native_routes_resources COMMAND test_dap_native_routes --resources)
+set_tests_properties(test_dap_native_routes_census test_dap_native_routes_boundary PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;resources;boundary")
+set_tests_properties(test_dap_native_routes_resources PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;resources;fault-injection")
+
+add_test(NAME test_dap_native_routes_lifecycle COMMAND test_dap_native_routes --lifecycle)
+set_tests_properties(test_dap_native_routes_lifecycle PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;lifecycle")
+
+add_test(NAME test_dap_native_routes_controls COMMAND test_dap_native_routes --controls)
+set_tests_properties(test_dap_native_routes_controls PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;source;ownership;filters")

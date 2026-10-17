@@ -102,7 +102,10 @@ static void source_case(unsigned backend,unsigned finish,bool mapped,bool enable
     NativeSourceFixture f;source_new(&f,backend,mapped);
     CHECK(xdap_current_break_on_throw(f.session,enabled ? XR_XIR_VM_DEBUG_EXCEPTION_ALL : XR_XIR_VM_DEBUG_EXCEPTION_NONE)==
         (enabled && !mapped ? XR_XIR_VALUE_UNSUPPORTED : XR_XIR_VALUE_OK));
-    CHECK(xdap_current_break_on_throw(f.session,XR_XIR_VM_DEBUG_EXCEPTION_CAUGHT)==XR_XIR_VALUE_UNSUPPORTED);
+    CHECK(xdap_current_break_on_throw(f.session,XR_XIR_VM_DEBUG_EXCEPTION_CAUGHT)==
+        (mapped ? XR_XIR_VALUE_OK : XR_XIR_VALUE_UNSUPPORTED));
+    CHECK(xdap_current_break_on_throw(f.session,enabled ? XR_XIR_VM_DEBUG_EXCEPTION_ALL : XR_XIR_VM_DEBUG_EXCEPTION_NONE)==
+        (enabled && !mapped ? XR_XIR_VALUE_UNSUPPORTED : XR_XIR_VALUE_OK));
     CHECK(xdap_current_start(f.session,root ? NT_FAIL : NT_AWAITING,NULL,0)==XR_XIR_CALL_READY);
     XrXirVmDebugSnapshot *escaped=NULL;unsigned stops=0;bool ended=false;
     for(unsigned i=0;i<64;++i) {

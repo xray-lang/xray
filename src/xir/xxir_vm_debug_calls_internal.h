@@ -15,6 +15,8 @@ typedef struct XirDebugCallFrame {
     XrXirCallEvent event;
     uint64_t id, thread;
     bool active;
+    uint32_t native_instruction,native_callee;
+    bool native_waiting,native_invoked;
 } XirDebugCallFrame;
 typedef struct XirDebugCalls {
     XrXirCallObserver observer;
@@ -34,4 +36,5 @@ XR_FUNC XrXirValueStatus xir_debug_calls_pay(XirDebugCalls *);
 XR_FUNC const XirDebugCallFrame *xir_debug_calls_current(const XirDebugCalls *);
 XR_FUNC const XirDebugCallFrame *xir_debug_calls_parent(const XirDebugCalls *,const XirDebugCallFrame *);
 XR_FUNC const XirDebugCallFrame *xir_debug_calls_id(const XirDebugCalls *,uint64_t);
+XR_FUNC XrXirValueStatus xir_debug_calls_native_pending(XirDebugCalls *,const XrXirCallView *,uint32_t,uint32_t,bool);
 #endif // XXIR_VM_DEBUG_CALLS_INTERNAL_H

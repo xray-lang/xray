@@ -126,6 +126,7 @@ struct XrXirVmDebug {
     DebugWrite write;
 };
 static XrXirCallStatus debug_native_source_before(void *,const XirCallNativeSourcePoint *,bool *);
+static XrXirCallStatus debug_native_source_call(void *,const XirCallNativeSourcePending *);
 static bool debug_unit_value(const XrXirValue *value) {
     return value && value->type==XR_XIR_UNIT && !value->reserved && !value->payload;
 }
@@ -160,7 +161,7 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_new(XrXirDomain *domain, uint32_t capac
     debug->domain = domain;
     atomic_init(&debug->references, 1);
     debug->capacity = capacity;
-    debug->native_source=(XirCallNativeSourceObserver){debug,debug_native_source_before};
+    debug->native_source=(XirCallNativeSourceObserver){debug,debug_native_source_before,debug_native_source_call};
     debug->frames = debug_allocate(domain, (uint64_t)capacity * sizeof(*debug->frames), &status);
     if (!debug->frames) {
         debug_deallocate(domain, debug, sizeof(*debug));
@@ -518,7 +519,9 @@ static XrXirValueStatus capture_frame(XrXirVmDebug *debug,const XirDebugCallFram
     const DebugFrame *live=call->event.code==XR_XIR_CALL_CODE_VM ? find_id(debug,call->id) : NULL;
     bool values=view && live && call->thread==snapshot->stopped_thread;
     frame->info=(XrXirVmDebugFrameInfo){.id=call->id,.epoch=debug->epoch+1,.function=call->event.entry,
-        .instruction=live ? live->point.instruction : UINT32_MAX,
+        .instruction=live ? live->point.instruction : call->native_waiting &&
+            (debug_source_point(debug,call->event.entry,call->native_instruction).flags&DEBUG_SOURCE_AUTHORED) ?
+            call->native_instruction : UINT32_MAX,
         .value_count=values ? live->point.layout->slot_count : 0,.thread=call->thread,
         .code=call->event.code==XR_XIR_CALL_CODE_VM ? XR_XIR_VM_DEBUG_VM :
             call->event.code==XR_XIR_CALL_CODE_NATIVE ? XR_XIR_VM_DEBUG_NATIVE : XR_XIR_VM_DEBUG_PENDING};

@@ -24,7 +24,10 @@ static XrXirValueStatus debug_native_source_coverage(XrXirVmDebug *debug) {
     return XR_XIR_VALUE_OK;
 }
 static XrXirValueStatus debug_exception_coverage(XrXirVmDebug *debug) {
-    if (debug->mixed || !debug->source_memory) return XR_XIR_VALUE_UNSUPPORTED;
+    if (!debug->source_memory) return XR_XIR_VALUE_UNSUPPORTED;
+    if (debug->mixed) {
+        XrXirValueStatus status=debug_native_source_coverage(debug);if (status!=XR_XIR_VALUE_OK) return status;
+    }
     const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
     uint64_t instructions=debug->source_offsets[debug->source_functions],throws=debug->source_throw_offsets[debug->source_functions];
     if (!xr_xir_domain_work(debug->domain,instructions*35+throws*33+debug->source_functions)) return XR_XIR_VALUE_LIMIT;
@@ -46,7 +49,7 @@ static XrXirValueStatus debug_exception_coverage(XrXirVmDebug *debug) {
 }
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_break_on_throw(XrXirVmDebug *debug,uint32_t filters) {
     if (!debug_valid(debug) || !debug->artifact || debug->disabled || (filters&~7u) ||
-        (debug->count && !xr_xir_vm_debug_paused(debug))) return XR_XIR_VALUE_BAD_ARGUMENT;
+        ((debug->count || debug->calls.count) && !xr_xir_vm_debug_paused(debug))) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!xr_xir_domain_work(debug->domain,1)) return XR_XIR_VALUE_LIMIT;
     if (debug->mixed && (filters&XR_XIR_VM_DEBUG_EXCEPTION_ALL)) {
         XrXirValueStatus status=debug_native_source_coverage(debug);if (status!=XR_XIR_VALUE_OK) return status;

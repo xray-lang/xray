@@ -380,7 +380,7 @@ XrXirInstanceState xr_xir_instance_state(const XrXirInstance *instance) {
 }
 XR_FUNC XrXirCallStatus xir_instance_native_source_bind(XrXirInstance *instance,XrXirProgram *program,
     const XirCallNativeSourceObserver *observer) {
-    if (!instance || !program || !observer || !observer->owner || !observer->before || !instance_owner_current(instance))
+    if (!instance || !program || !observer || !observer->owner || !observer->before || !observer->call || !instance_owner_current(instance))
         return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance->driving || instance_observing(instance)) return XR_XIR_CALL_BUSY;
     if (instance->program!=program || instance->state!=XR_XIR_INSTANCE_NEW || instance->stopping ||
