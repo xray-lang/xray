@@ -20,6 +20,8 @@ typedef struct EffectInvocationFlow {
     uint64_t *fixed,*certified;
     XrXirType *types;
     XrXirInstruction *instructions;
+    const XrXirInstruction **instruction_refs;
+    uint32_t instruction_storage_count;
     uint32_t *write_heads,*write_next;
     void *memory;
     bool changed,precision,types_ready;
@@ -35,9 +37,11 @@ static XrXirStatus effect_invocation_flow_instruction(EffectInvocationFlow *flow
         if (binding!=XR_XIR_OK) return binding;
         if (flow->body.owner!=flow->owner->final.material) return XR_XIR_BAD_STRUCTURE;
         if (!storage || !output || !flow->function || i>=flow->function->instruction_count ||
-            !flow->instructions) return XR_XIR_BAD_STRUCTURE;
+            (!flow->instruction_refs && !flow->instructions)) return XR_XIR_BAD_STRUCTURE;
         if (!xir_compile_work(flow->owner->work,1+sizeof(*output))) return XR_XIR_BUDGET;
-        *output=&flow->instructions[i];return XR_XIR_OK;
+        const XrXirInstruction *row=flow->instruction_refs?flow->instruction_refs[i]:&flow->instructions[i];
+        if (!row) return XR_XIR_BAD_STRUCTURE;
+        *output=row;return XR_XIR_OK;
     }
     return effect_body_request_instruction(&flow->body,flow->owner->final.nodes[flow->node].body,i,storage,output);
 }
@@ -111,6 +115,7 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     flow->certified=flag_words?flow->fixed+(size_t)flag_words:NULL;
     flow->types=type_bytes?(XrXirType *)((uint8_t *)flow->memory+(size_t)type_offset):NULL;
     flow->instructions=instruction_bytes?(XrXirInstruction *)((uint8_t *)flow->memory+(size_t)instruction_offset):NULL;
+    flow->instruction_storage_count=owned?function->instruction_count:0;flow->instruction_refs=NULL;
     flow->write_heads=owned && values?(uint32_t *)((uint8_t *)flow->memory+(size_t)write_offset):NULL;
     flow->write_next=owned && function->instruction_count?flow->write_heads+(size_t)values:NULL;
     if (words) memset(flow->rows,0,(size_t)words*sizeof(*flow->rows));

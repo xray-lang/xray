@@ -31,14 +31,22 @@ static void row_data_reuse_controls(EffectInvocationFlow *flow,EffectInvocationR
     uint32_t body=flow->owner->final.nodes[flow->node].body;
     CHECK(body==3 && body<rows->count && flow->function->instruction_count==11);
     EffectInvocationRowData *data=&rows->functions[body];
-    CHECK(data->memory && data->instructions==flow->instructions && data->types==flow->types);
-    for(unsigned i=0;i<11;++i)CHECK(conditional_compact_same(&flow->instructions[i],&expected[i]));
+    CHECK(data->memory && data->instructions==flow->instructions && data->types==flow->types &&
+        data->instruction_refs==flow->instruction_refs && !data->instructions && !data->instruction_storage_count);
+    for(unsigned i=0;i<11;++i){XrXirInstruction scratch;const XrXirInstruction *actual=NULL;
+        CHECK(effect_invocation_flow_instruction(flow,i,&scratch,&actual)==XR_XIR_OK &&
+            actual==data->instruction_refs[i] && conditional_compact_same(actual,&expected[i]));
+        const EffectBodyRun *run=NULL;
+        CHECK(effect_body_record_ref(&flow->body.read,&rows->material->functions[body],i,&run)==XR_XIR_OK);
+        CHECK(actual==((run->mask&EFFECT_BODY_LITERAL_PAIR) && i!=run->first?&run->second:&run->base));}
     EffectInvocationFlow reuse=*flow;reuse.types_ready=false;reuse.types=NULL;reuse.instructions=NULL;
+    reuse.instruction_refs=NULL;reuse.instruction_storage_count=0;
     reuse.write_heads=NULL;reuse.write_next=NULL;reuse.memory=NULL;
     RootParameterMark mark=rp_mark();XrCompileResourceStats before=rp_stats(context);size_t attempts=rp_attempts;
     rp_fail_at=attempts;rp_injected=false;
     CHECK(effect_invocation_flow_rows(&reuse)==XR_XIR_OK && !rp_injected && rp_attempts==attempts &&
-        reuse.types==data->types && reuse.instructions==data->instructions && reuse.write_heads==data->write_heads &&
+        reuse.types==data->types && reuse.instructions==data->instructions && reuse.instruction_refs==data->instruction_refs &&
+        reuse.instruction_storage_count==data->instruction_storage_count && reuse.write_heads==data->write_heads &&
         reuse.write_next==data->write_next && reuse.types_ready);
     rp_fail_at=SIZE_MAX;XrCompileResourceStats after=rp_stats(context);
     CHECK(after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);rp_balanced(mark);
@@ -47,12 +55,14 @@ static void row_data_reuse_controls(EffectInvocationFlow *flow,EffectInvocationR
     xr_compile_resources_free(flow->memory);flow->memory=NULL;
     XrXirType type=XR_XIR_UNIT;CHECK(effect_invocation_flow_type(&reuse,0,&type)==XR_XIR_OK && type==XR_XIR_I64);
     XrXirInstruction storage={0};const XrXirInstruction *row=NULL;
-    CHECK(effect_invocation_flow_instruction(&reuse,0,&storage,&row)==XR_XIR_OK && row==&data->instructions[0] &&
+    CHECK(effect_invocation_flow_instruction(&reuse,0,&storage,&row)==XR_XIR_OK && row==data->instruction_refs[0] &&
         conditional_compact_same(row,&expected[0]));
     EffectInvocationFlow refused=reuse;refused.types_ready=false;refused.types=NULL;refused.instructions=NULL;
+    refused.instruction_refs=NULL;refused.instruction_storage_count=0;
     refused.write_heads=NULL;refused.write_next=NULL;
     uint32_t values=data->values;++data->values;
-    CHECK(effect_invocation_flow_rows(&refused)==XR_XIR_BAD_STRUCTURE && !refused.types_ready && !refused.types && !refused.instructions);
+    CHECK(effect_invocation_flow_rows(&refused)==XR_XIR_BAD_STRUCTURE && !refused.types_ready &&
+        !refused.types && !refused.instructions && !refused.instruction_refs);
     data->values=values;CHECK(effect_invocation_flow_rows(&refused)==XR_XIR_OK);
     for(unsigned missing=0;missing<8;++missing) {
         refused=reuse;refused.types_ready=false;
@@ -68,6 +78,7 @@ static void row_data_reuse_controls(EffectInvocationFlow *flow,EffectInvocationR
             !refused.types_ready && rp_attempts==attempts);
     }
     refused=reuse;refused.types_ready=false;refused.types=NULL;refused.instructions=NULL;
+    refused.instruction_refs=NULL;refused.instruction_storage_count=0;
     refused.write_heads=NULL;refused.write_next=NULL;refused.body.type=row_data_refuse_type;row_data_delegated_calls=0;
     CHECK(effect_invocation_flow_rows(&refused)==XR_XIR_OK && !refused.types_ready);
     type=XR_XIR_BOOL;CHECK(effect_invocation_flow_type(&refused,0,&type)==XR_XIR_IO &&

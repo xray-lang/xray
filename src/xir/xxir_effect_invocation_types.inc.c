@@ -12,7 +12,8 @@
  * individually by the unchanged semantic consumer. */
 static XrXirStatus effect_invocation_flow_write_index(EffectInvocationFlow *flow) {
     if (!flow || !flow->owner || !flow->function || (flow->values && !flow->write_heads) ||
-        (flow->function->instruction_count && (!flow->instructions || !flow->write_next)))
+        (flow->function->instruction_count &&
+            ((!flow->instructions && !flow->instruction_refs) || !flow->write_next)))
         return XR_XIR_BAD_STRUCTURE;
     uint64_t bytes=((uint64_t)flow->values+flow->function->instruction_count)*sizeof(uint32_t);
     if (!xir_compile_work(flow->owner->work,bytes)) return XR_XIR_BUDGET;
@@ -21,7 +22,8 @@ static XrXirStatus effect_invocation_flow_write_index(EffectInvocationFlow *flow
         memset(flow->write_next,0xff,(size_t)flow->function->instruction_count*sizeof(uint32_t));
     for (uint32_t i=flow->function->instruction_count;i;--i) {
         if (!xir_compile_work(flow->owner->work,3)) return XR_XIR_BUDGET;
-        const XrXirInstruction *op=&flow->instructions[i-1];
+        const XrXirInstruction *op=flow->instruction_refs?flow->instruction_refs[i-1]:&flow->instructions[i-1];
+        if (!op) return XR_XIR_BAD_STRUCTURE;
         if (op->op!=XR_XIR_LOCAL_WRITE && op->op!=XR_XIR_SCALAR_LOCAL_WRITE &&
             op->op!=XR_XIR_OWNED_LOCAL_WRITE) continue;
         uint32_t destination=op->args[0];
@@ -45,7 +47,9 @@ static XrXirStatus effect_invocation_flow_types(EffectInvocationFlow *flow) {
     const EffectBodyMaterial *material=flow->body.owner;
     if (material!=flow->owner->final.material || f>=effect_body_count(material) ||
         !material->functions || (flow->values && !flow->types) ||
-        (flow->function->instruction_count && !flow->instructions)) return XR_XIR_BAD_STRUCTURE;
+        (flow->function->instruction_count && !flow->instructions && !flow->instruction_refs) ||
+        (flow->instruction_storage_count && !flow->instructions) ||
+        flow->instruction_storage_count>flow->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *body=&material->functions[f];
     if (body->parameter_count!=flow->function->parameter_count ||
         body->instruction_count!=flow->function->instruction_count ||
@@ -56,19 +60,37 @@ static XrXirStatus effect_invocation_flow_types(EffectInvocationFlow *flow) {
         flow->types[p]=body->parameters[p];
     }
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
+    uint32_t stored=0;
     if (!xir_compile_work(flow->owner->work,sizeof(cursor))) return XR_XIR_BUDGET;
     for (uint32_t r=0;r<body->run_count;++r) {
         const EffectBodyRun *ref=NULL;
         status=effect_body_range_ref(&flow->body.read,body,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
         for (uint32_t i=ref->first;i<ref->first+ref->count;++i) {
-            status=effect_body_instruction_ref_value(&flow->body.read,ref,i,&flow->instructions[i]);
+            const XrXirInstruction *operation=NULL;
+            if (flow->instruction_refs) {
+                bool expanded=ref->mask && !(ref->mask&EFFECT_BODY_LITERAL_PAIR) && i!=ref->first;
+                XrXirInstruction temporary,*storage=&temporary;
+                if (expanded) {
+                    if (stored>=flow->instruction_storage_count) return XR_XIR_BAD_STRUCTURE;
+                    storage=&flow->instructions[stored++];
+                }
+                status=effect_body_instruction_ref_read(&flow->body.read,ref,i,storage,&operation);
+                if (status==XR_XIR_OK && operation==&temporary) return XR_XIR_BAD_STRUCTURE;
+                if (status==XR_XIR_OK && !xir_compile_work(flow->owner->work,
+                    1+sizeof(*flow->instruction_refs))) status=XR_XIR_BUDGET;
+                if (status==XR_XIR_OK) flow->instruction_refs[i]=operation;
+            } else {
+                status=effect_body_instruction_ref_value(&flow->body.read,ref,i,&flow->instructions[i]);
+                operation=&flow->instructions[i];
+            }
             if (status!=XR_XIR_OK) return status;
             if (!xir_compile_work(flow->owner->work,1+sizeof(*flow->types))) return XR_XIR_BUDGET;
-            flow->types[body->parameter_count+i]=flow->instructions[i].type;
+            flow->types[body->parameter_count+i]=operation->type;
         }
     }
-    if (cursor.first!=body->instruction_count || cursor.run!=body->run_count)
+    if (cursor.first!=body->instruction_count || cursor.run!=body->run_count ||
+        (flow->instruction_refs && stored!=flow->instruction_storage_count))
         return XR_XIR_BAD_STRUCTURE;
     status=effect_invocation_flow_write_index(flow);
     if (status!=XR_XIR_OK) return status;
