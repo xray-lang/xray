@@ -14,27 +14,32 @@ static void complete_verify(const XrXirCompileContext *work,const EffectInvocati
     CHECK(status==expected && attempts==before && live_bytes==physical);
 }
 
-/* The dense test oracle solves raw value flow independently of the sparse
- * receiving relation. Its legacy arrays are deliberately corrupted only after
- * this comparison, to establish that the receiver does not consult them. */
-static void complete_oracle(const XrXirCompileContext *work,const EffectInvocationCertificate *certificate) {
-    const EffectInvocationFinal *final=certificate->final;
-    EffectBodyRequest body=effect_body_owned_request(work,final->material);
-    EffectInvocationRead read={0};CHECK(effect_invocation_read_open(work,certificate,final,&read)==XR_XIR_OK);
-    read.roles=(EffectInvocationRoles){.sealed=certificate};read.declared=certificate->declared;
+/* Literal SSA coordinates are specific to these ten fixture recipes and do
+ * not call a production flow solver or derive their expectation from facts. */
+static void complete_literal_coordinates(const XrXirCompileContext *work,
+    const EffectInvocationFinal *final,uint32_t mode) {
+    static const uint32_t factory[10]={1u,3u,1u,11u,1u,20u,20u,84u,20u,1u};
+    bool known=mode==0 || mode==1 || mode==3 || mode==6 || mode==7;
+    EffectCaptureRead read={.work=work,.final=final,.body=effect_body_owned_request(work,final->material)};
     for(uint32_t n=0;n<final->count;++n) {
-        EffectInvocationFlow flow={.read=&read,.node=n,.instruction=UINT32_MAX};EffectInvocationCoverage coverage={0};
-        CHECK(effect_invocation_origins_read(&flow,&body)==XR_XIR_OK);
-        CHECK(effect_invocation_coverage_values(&flow,&coverage)==XR_XIR_OK);
-        EffectCaptureRead sparse={.work=work,.final=final,.body=body};
-        for(uint32_t value=0;value<flow.values;++value) {
-            const EffectCaptureFact *complete=NULL;
-            CHECK(effect_capture_find(&sparse,(EffectCaptureFact){n,value,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_COMPLETE,0},&complete)==XR_XIR_OK);
-            CHECK(!!complete==!!coverage.ranks[value]);
+        EffectCaptureNode node={0};CHECK(effect_capture_node(&read,n,&node)==XR_XIR_OK);
+        uint32_t body=final->nodes[n].body;
+        for(uint32_t value=0;value<=node.values+node.head.parameter_count;++value) {
+            bool expected=false;
+            if(body==0 && !value) expected=known;
+            if(body==1) expected=value<node.values?!!(factory[mode]&(UINT32_C(1)<<value)):value==node.values && known;
+            if(body==3 && (value==0 || value==node.values+1)) {
+                CHECK(final->site_count<64 && final->nodes[n].input);
+                uint64_t sites=(UINT64_C(1)<<final->site_count)-1;
+                expected=n!=final->roots[3] && known && !!(final->nodes[n].input[0]&sites);
+            }
+            bool actual=false;CHECK(effect_final_callable_complete(work,final,n,value,&actual)==XR_XIR_OK);
+            if(actual!=expected) fprintf(stderr,"complete literal mode%u node%u body%u value%u expected%u actual%u root%u input%llu\n",
+                mode,n,body,value,expected,actual,final->roots[body],
+                (unsigned long long)(final->nodes[n].input?final->nodes[n].input[0]:0));
+            CHECK(actual==expected);
         }
-        xr_compile_resources_free(coverage.memory);xr_compile_resources_free(flow.memory);
     }
-    effect_invocation_read_close(&read);
 }
 
 static EffectBodyFunction *complete_growth_head;
@@ -153,14 +158,9 @@ static void complete_case(uint32_t mode) {
     if(status!=XR_XIR_OK) fprintf(stderr,"complete mode%u analysis%u work%llu\n",mode,status,(unsigned long long)pc_stats(&work).work);
     CHECK(status==XR_XIR_OK);EffectInvocationFinal *final=effects->invocations->final;
     CHECK(xr_xir_effects_error_unknown(effects,0)==(mode==2 || mode==4 || mode==5 || mode==8 || mode==9));
-    CHECK(xr_xir_effects_error_unknown(effects,3));complete_oracle(&work,effects->invocations);
+    CHECK(xr_xir_effects_error_unknown(effects,3));complete_literal_coordinates(&work,final,mode);
     if(!mode) complete_growth_boundary(&work,final);
     xr_xir_compile_artifact_free(checked);memset(factory,0xCC,sizeof(factory));memset(functions,0xCC,sizeof(functions));
-    complete_verify(&work,final,XR_XIR_OK);
-    for(uint32_t n=0;n<final->count;++n) {
-        final->nodes[n].return_coverage=UINT64_MAX;
-        for(uint32_t p=0;p<final->nodes[n].parameter_count;++p) final->nodes[n].parameter_coverage[p]=UINT64_MAX;
-    }
     complete_verify(&work,final,XR_XIR_OK);
     CHECK(final->capture.count<512 && final->capture.count+2<=final->capture.capacity);
     EffectCaptureFact saved[512];uint32_t count=final->capture.count;
@@ -189,7 +189,7 @@ static void complete_case(uint32_t mode) {
     }
     complete_verify(&work,final,XR_XIR_OK);
     xr_xir_compile_effects_free(effects);pc_release(&work,baseline);
-    printf("complete mode%u: literal Error, dense oracle, dead producer, ignored legacy ranks, erasure and forged ranks\n",mode);
+    printf("complete mode%u: literal Error, literal SSA coordinates, dead producer, erasure and forged ranks\n",mode);
 }
 
 static void complete_cases(void) { for(uint32_t mode=0;mode<10;++mode) complete_case(mode); }

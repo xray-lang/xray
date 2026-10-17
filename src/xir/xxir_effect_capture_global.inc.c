@@ -104,6 +104,9 @@ static XrXirStatus effect_capture_node(const EffectCaptureRead *read,uint32_t in
         return XR_XIR_BAD_STRUCTURE;
     EffectCaptureNode local={.node=index};EffectBodyFunctionDimensions root={0};
     XrXirStatus status=effect_body_request_head(&read->body,node->body,&local.head);
+    if(status==XR_XIR_OK && !xir_compile_work(read->work,2)) status=XR_XIR_BUDGET;
+    if(status==XR_XIR_OK && (node->parameter_count!=local.head.parameter_count ||
+        node->instruction_count!=local.head.instruction_count)) status=XR_XIR_BAD_STRUCTURE;
     if(status==XR_XIR_OK) status=effect_body_request_dimensions(&read->body,node->root,&root);
     if(status==XR_XIR_OK) status=effect_invocation_basis_parameters_read(read->work,read->final,root.parameter_count,&local.basis);
     if(status!=XR_XIR_OK) return status;
@@ -245,6 +248,12 @@ static XrXirStatus effect_capture_frame(EffectCaptureRead *read) {
     if(status==XR_XIR_OK) status=effect_role_range(read->work,final->roots,effect_body_count(final->material),sizeof(*final->roots));
     if(status==XR_XIR_OK) status=effect_role_range(read->work,final->root_spaces,effect_body_count(final->material),sizeof(*final->root_spaces));
     if(status!=XR_XIR_OK) return status;
+    for(uint32_t f=0;f<effect_body_count(final->material);++f) {
+        if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+        uint32_t root=final->roots[f],space=final->root_spaces[f];
+        if(root>=final->count || space>=effect_body_count(final->material) ||
+            final->nodes[root].body!=f || final->nodes[root].root!=space) return XR_XIR_BAD_STRUCTURE;
+    }
     read->body=effect_body_owned_request(read->work,final->material);
     status=effect_final_inventory_sites(read->work,final->material,final);if(status!=XR_XIR_OK) return status;
     status=effect_capture_domain(read);if(status!=XR_XIR_OK) return status;

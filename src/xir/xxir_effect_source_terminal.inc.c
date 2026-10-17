@@ -164,7 +164,9 @@ static XrXirStatus effect_source_projections(const XrXirCompileContext *work,
 /* Verification borrows the actual Final and its sole immutable Input.
  * Request scratch contains only the fresh incoming index; no construction
  * owner, queue or copied semantic inventory participates in this proof. */
-static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
+/* Constructor relations grant no final admission. The terminal inventory
+ * pass checks the sole finite source relation after all cleanup callbacks. */
+static XrXirStatus effect_source_relations(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const XrXirEffects *summary) {
     if (!certificate) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
@@ -212,7 +214,6 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_body_physical_match(work,owner.final->physical,owner.final->material);
     if (status==XR_XIR_OK) status=effect_role_proof_match(work,certificate->body,&certificate->final->role_proof);
     if (status==XR_XIR_OK) status=effect_invocation_producers_verify_read(&owner,&owner.body);
-    if (status==XR_XIR_OK) status=effect_invocation_coverage_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_class_verify_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_closed_read(work,certificate->final);
     if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner);
@@ -248,7 +249,7 @@ static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,
     EffectTerms dense={.types=owner->dense->terms.types,.remaining=work};
     const EffectInvocationCertificate *certificate=owner->forest->invocations;
     XrXirStatus status=effect_context_dense_stable_read(work,owner,source,certificate,&ordinary,&dense);
-    if (status==XR_XIR_OK) status=effect_source_certificate(work,certificate,NULL);
+    if (status==XR_XIR_OK) status=effect_source_relations(work,certificate,NULL);
     if (status==XR_XIR_OK) status=effect_invocation_forest_match(work,owner->forest);
     effect_terms_free(&dense);effect_terms_free(&ordinary);return status;
 }
@@ -335,7 +336,7 @@ XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *work,
         !effect_final_outcomes(effects) || !source || source->stage!=XR_XIR_CHECKED || !source->provenance ||
         source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE || !effects->invocations ||
         effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_source_certificate(work,effects->invocations,effects);
+    XrXirStatus status=effect_source_relations(work,effects->invocations,effects);
     if (status==XR_XIR_OK) status=effect_source_contexts(work,source,effects);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);

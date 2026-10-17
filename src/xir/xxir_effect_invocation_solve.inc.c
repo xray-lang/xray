@@ -282,7 +282,7 @@ static XrXirStatus effect_invocations_solve(EffectInvocationWorkspace *owner) {
         if (!xir_compile_work(owner->read.work,2)) return XR_XIR_BUDGET;
         if (!owner->states[n].expanded || owner->states[n].queued) return XR_XIR_BAD_STRUCTURE;
     }
-    return effect_invocation_coverage_solve(owner);
+    return XR_XIR_OK;
 }
 
 /* This is the existing exhaustive local opcode classifier. Only indirect
@@ -707,8 +707,8 @@ static XrXirStatus effect_invocation_local_node_match(const XrXirCompileContext 
     if (head->parameter_count || node->root || node->body!=f || node->parameter_count ||
         node->instruction_count!=head->instruction_count || owner->roots[f]!=f || owner->root_spaces[f] ||
         node->deferred || node->local_deferred ||
-        node->intrinsic_mask!=mask || node->local_mask!=mask || node->input || node->parameter_coverage ||
-        node->producer_count || node->producer_capacity || node->producers || node->return_coverage ||
+        node->intrinsic_mask!=mask || node->local_mask!=mask || node->input ||
+        node->producer_count || node->producer_capacity || node->producers ||
         node->class_count || node->classes || node->class_return_mask || node->class_return_rank ||
         node->edge_head!=UINT32_MAX || !effect_invocation_node_shape(node,0,head->instruction_count))
         return XR_XIR_BAD_STRUCTURE;

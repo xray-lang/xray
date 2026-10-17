@@ -54,6 +54,14 @@ add_test(NAME test_xir_root_conditional_parameter_coverage
 set_tests_properties(test_xir_root_conditional_parameter_coverage PROPERTIES
     LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
 
+# Each complete-source recipe also runs without unrelated earlier literals.
+foreach(_parameter_case RANGE 0 4)
+    add_test(NAME test_xir_root_conditional_parameter_case_${_parameter_case}
+        COMMAND test_xir_root_conditional_helpers --parameter-case ${_parameter_case})
+    set_tests_properties(test_xir_root_conditional_parameter_case_${_parameter_case} PROPERTIES
+        LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+endforeach()
+
 # Existing producer identities must follow actual Source normalization.
 add_executable(test_xir_source_effect_value_refine
     ${CMAKE_CURRENT_LIST_DIR}/test_xir_source_effect_value_refine.c)

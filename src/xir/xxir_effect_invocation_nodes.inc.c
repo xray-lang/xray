@@ -250,21 +250,15 @@ static XrXirStatus effect_invocation_intern(EffectInvocationWorkspace *owner,
     size_t cause_bytes=(size_t)cause_count*2*sizeof(EffectInvocationCause);
     if (input_bytes>SIZE_MAX-cause_bytes || output_bytes>SIZE_MAX-cause_bytes-input_bytes)
         return XR_XIR_BUDGET;
-    uint64_t coverage_words=parameters;
-    if (coverage_words>SIZE_MAX/sizeof(uint64_t)) return XR_XIR_BUDGET;
-    size_t coverage_bytes=(size_t)coverage_words*sizeof(uint64_t);
-    if (coverage_bytes>SIZE_MAX-cause_bytes-input_bytes-output_bytes) return XR_XIR_BUDGET;
     /* These rows share exactly one equation lifetime. The cause pointer is
      * the allocation root; every input and output pointer is an interior view. */
     EffectInvocationCause *causes=xir_compile_calloc(owner->read.work,1,
-        cause_bytes+input_bytes+output_bytes+coverage_bytes,&status);
+        cause_bytes+input_bytes+output_bytes,&status);
     if (!causes) return status;
     uint8_t *memory=(uint8_t *)causes;
     uint64_t *owned=words ? (uint64_t *)(memory+cause_bytes) : NULL;
     uint64_t *outputs=output_words ? (uint64_t *)(memory+cause_bytes+input_bytes) : NULL;
     uint64_t *local_cells=outputs ? outputs+(size_t)output_words : NULL;
-    uint64_t *coverage=parameters ?
-        (uint64_t *)(memory+cause_bytes+input_bytes+output_bytes) : NULL;
     if (!xir_compile_work(owner->read.work,cause_count)) {
         xr_compile_resources_free(causes);return XR_XIR_BUDGET;
     }
@@ -283,7 +277,7 @@ static XrXirStatus effect_invocation_intern(EffectInvocationWorkspace *owner,
         .parameter_count=parameters,.instruction_count=head.instruction_count,
         .input=owned,.cells=outputs,
         .causes=causes,.cause_count=(uint32_t)cause_count,.local_cells=local_cells,
-        .parameter_coverage=coverage,.edge_head=UINT32_MAX,.classes=classes,.class_count=class_count};
+        .edge_head=UINT32_MAX,.classes=classes,.class_count=class_count};
     ++owner->final.count;
     status=effect_invocation_enqueue(owner,at);
     if (status!=XR_XIR_OK) return status;

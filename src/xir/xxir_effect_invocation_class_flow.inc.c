@@ -16,7 +16,7 @@ typedef struct EffectInvocationClassSources {
     bool complete;
 } EffectInvocationClassSources;
 
-static XrXirStatus effect_invocation_coverage_input(EffectInvocationFlow *flow,
+static XrXirStatus effect_invocation_arguments_match(EffectInvocationFlow *flow,
     uint32_t edge,bool *matched);
 
 static XrXirStatus effect_invocation_class_input(const EffectInvocationFlow *flow,
@@ -143,7 +143,7 @@ static XrXirStatus effect_invocation_class_call(EffectInvocationFlow *flow,
         if (e>=owner->final->edge_count || ++walked>owner->final->edge_count) return XR_XIR_BAD_STRUCTURE;
         EffectInvocationEdge edge=owner->final->edges[e];
         if (edge.instruction!=frontier || edge.latent) continue;
-        bool matched=false;XrXirStatus status=effect_invocation_coverage_input(flow,e,&matched);
+        bool matched=false;XrXirStatus status=effect_invocation_arguments_match(flow,e,&matched);
         if (status==XR_XIR_UNRESOLVED) { sources->complete=false;continue; }
         if (status!=XR_XIR_OK) return status;
         if (!matched) continue;

@@ -95,7 +95,7 @@ static XrXirStatus pc_source_terminal_operation(const XrXirCompileContext *conte
     current.functions=functions;functions[2].instructions=rows;
     CHECK(!pc_free_hook);pc_source_terminal_free_count=0;pc_free_hook=pc_source_terminal_count_free;
     size_t before=attempts;
-    CHECK(effect_source_certificate(context,effects->invocations,effects)==XR_XIR_OK);
+    CHECK(effect_source_relations(context,effects->invocations,effects)==XR_XIR_OK);
     CHECK(effect_source_contexts(context,&current,effects)==XR_XIR_OK);
     CHECK(effect_source_publication_match(context,&current,effects)==XR_XIR_OK);
     size_t prefix_allocations=attempts-before,prefix_frees=pc_source_terminal_free_count;pc_free_hook=NULL;

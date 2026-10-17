@@ -493,7 +493,6 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         if (status==XR_XIR_OK) status=effect_invocation_local_result_match(work,&owner->final,local_inputs,result);
     } else if (status==XR_XIR_OK) {
         status=effect_invocation_producers_verify(owner);
-        if (status==XR_XIR_OK) status=effect_invocation_coverage_verify(owner);
         if (status==XR_XIR_OK) status=effect_invocation_class_verify(owner);
         if (status==XR_XIR_OK) status=effect_invocation_closed(owner);
         if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner->read);

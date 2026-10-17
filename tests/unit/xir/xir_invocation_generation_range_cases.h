@@ -481,7 +481,7 @@ static void generation_sequence_eof(const XrXirCompileContext *context,
 
 /* The existing returned-callback recipe supplies genuine producer and rank
  * equations. Replaying canonical and delegated requests must preserve their
- * complete stored input, settled producers and returned coverage. */
+ * complete stored input and settled producer causes. */
 static void generation_sequence_producers(void) {
     RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).live_bytes;
@@ -509,13 +509,9 @@ static void generation_sequence_producers(void) {
         bool changed=false;
         CHECK(effect_invocation_producer_step(&flow,&changed,true)==XR_XIR_OK && !changed &&
             owner->final.count==nodes && owner->final.edge_count==edges && !owner->pending);
-        uint64_t returned=UINT64_MAX;
-        CHECK(effect_invocation_coverage_return_read(&owner->read,&request,n,&returned)==XR_XIR_OK &&
-            returned==owner->final.nodes[n].return_coverage);
         xr_compile_resources_free(flow.memory);
     }
-    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_OK &&
-        effect_invocation_coverage_verify(owner)==XR_XIR_OK);
+    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_OK);
     effect_invocation_free(owner);effect_invocation_bounds_free(bounds);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);
     xr_xir_compile_artifact_free(checked);rp_owner_free(&context,baseline);rp_balanced(held);

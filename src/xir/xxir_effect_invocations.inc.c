@@ -47,8 +47,6 @@ typedef struct EffectInvocationNode {
     uint64_t *input,*cells,*local_cells;
     EffectInvocationProducer *producers;
     uint32_t producer_count,producer_capacity;
-    uint64_t return_coverage;
-    uint64_t *parameter_coverage;
     EffectInvocationClassFact *classes;
     uint32_t class_count,class_return_mask;
     uint64_t class_return_rank;
@@ -91,8 +89,7 @@ static bool effect_invocation_node_shape(const EffectInvocationNode *node,
     uint64_t words=dependencies*2+contexts;
     return node->instruction_count==instructions &&
         node->cause_count==(uint64_t)parameters*2+3 && node->causes &&
-        !!node->cells==!!words && !!node->local_cells==!!words &&
-        !!node->parameter_coverage==!!node->parameter_count;
+        !!node->cells==!!words && !!node->local_cells==!!words;
 }
 
 typedef struct EffectInvocationEdge {
@@ -197,9 +194,9 @@ static XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effe
 static inline XrXirStatus effect_invocation_producer_column(const EffectInvocationWorkspace *owner,
     const EffectInvocationBasis *basis,uint32_t site,uint32_t atom,uint32_t *word,uint32_t *bit);
 
-static XrXirStatus effect_invocation_coverage_verify(EffectInvocationWorkspace *owner);
-static XrXirStatus effect_invocation_coverage_solve(EffectInvocationWorkspace *owner);
 static XrXirStatus effect_invocation_class_verify(EffectInvocationWorkspace *owner);
+static XrXirStatus effect_final_callable_complete(const XrXirCompileContext *work,
+    const EffectInvocationFinal *final,uint32_t node,uint32_t value,bool *complete);
 
 typedef struct EffectInvocationColumn { uint32_t word,bit; } EffectInvocationColumn;
 static XrXirStatus effect_invocation_producer_column_read(const EffectInvocationRead *owner,
@@ -261,7 +258,7 @@ static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
 #include "xxir_effect_invocation_deferred_verify.inc.c"
 #include "xxir_effect_invocation_seal.inc.c"
 #include "xxir_effect_invocation_query.inc.c"
-#include "xxir_effect_invocation_coverage.inc.c"
+#include "xxir_effect_invocation_input_match.inc.c"
 #include "xxir_effect_invocation_class_verify.inc.c"
 #include "xxir_effect_invocation_projection.inc.c"
 #include "xxir_effect_invocation_trace.inc.c"
