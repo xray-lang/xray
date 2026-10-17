@@ -49,7 +49,17 @@ static XrXirStatus effect_invocation_coverage_input(EffectInvocationFlow *flow,
     uint64_t *input=NULL;flow->instruction=edge.instruction;
     if (op->op==XR_XIR_FUNCTION_REF)
         status=effect_invocation_latent_input(flow,edge.instruction,edge.producer,op,&input);
-    else status=effect_invocation_arguments(flow,op,target->body,edge.producer,closure,&input);
+    else if (effect_body_request_sequence_owned(&flow->body)) {
+        /* This complete head was read above in the same immutable request.
+         * Only the synchronous argument call borrows it; no queue retains it. */
+        status=effect_body_request_sequence_binding(&flow->body);
+        if (status==XR_XIR_OK && flow->body.owner!=owner->final.material) status=XR_XIR_BAD_STRUCTURE;
+        if (status==XR_XIR_OK && !xir_compile_work(owner->work,sizeof(EffectInvocationActual))) status=XR_XIR_BUDGET;
+        if (status==XR_XIR_OK) {
+            EffectInvocationActual actual={target->body,edge.producer,closure};
+            status=effect_invocation_arguments_read(flow,op,&actual,&target_head,&input);
+        }
+    } else status=effect_invocation_arguments(flow,op,target->body,edge.producer,closure,&input);
     uint64_t words=(uint64_t)target->parameter_count*flow->basis.row_words;
     if (status==XR_XIR_OK && words>SIZE_MAX/sizeof(*input)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK && words && (!input || !target->input)) status=XR_XIR_BAD_STRUCTURE;
