@@ -375,6 +375,24 @@ done:
  * construction-only pointers are then removed from the published certificate. */
 #include "xxir_effect_invocation_final_vectors.inc.c"
 
+/* All solver flows have returned before this independent receiving pass.
+ * Retire their physical data before rebuilding Cell evidence; subsequent
+ * Class replay receives complete current rows in the same request owner. */
+static XrXirStatus effect_invocation_class_verify_released_rows(EffectInvocationWorkspace *owner) {
+    if (!owner || !xir_compile_context_valid(owner->work) || owner->pending ||
+        !effect_body_material_shape(owner->final.material)) return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationRows *rows=owner->physical_rows;
+    if (rows) {
+        if (rows->functions) {
+            if (rows->resources!=owner->work->resources || rows->material!=owner->final.material ||
+                rows->count!=effect_body_count(owner->final.material)) return XR_XIR_BAD_STRUCTURE;
+        } else if (rows->resources || rows->material || rows->count) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
+        effect_invocation_rows_drop(rows);
+    }
+    return effect_invocation_class_verify(owner);
+}
+
 static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     const EffectInvocationSealRequest *request,EffectInvocationCertificate **output,
     const EffectInvocationProjectionSink *sink) {
@@ -404,7 +422,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     } else if (status==XR_XIR_OK) {
         status=effect_invocation_producers_verify(owner);
         if (status==XR_XIR_OK) status=effect_invocation_coverage_verify(owner);
-        if (status==XR_XIR_OK) status=effect_invocation_class_verify(owner);
+        if (status==XR_XIR_OK) status=effect_invocation_class_verify_released_rows(owner);
         if (status==XR_XIR_OK) status=effect_invocation_closed(owner);
         if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(owner);
         if (status==XR_XIR_OK) status=effect_invocation_result_match(owner,result);

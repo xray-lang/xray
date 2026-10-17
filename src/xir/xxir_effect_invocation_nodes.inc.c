@@ -137,6 +137,22 @@ static void effect_invocation_free(EffectInvocationWorkspace *owner) {
     xr_compile_resources_free(owner);
 }
 
+/* Mutable vectors keep half their old extent as spare capacity. Hash indices
+ * retain their independent power-of-two layout and exact-key comparisons. */
+static XrXirStatus effect_invocation_vector_capacity(const XrXirCompileContext *work,
+    uint32_t current,uint32_t maximum,uint32_t *output) {
+    if (!output || current>maximum) return XR_XIR_BAD_STRUCTURE;
+    if (current==maximum) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+    uint32_t capacity=current ? current : 8;
+    if (capacity>maximum) capacity=maximum;
+    else if (current) {
+        uint32_t increment=current/2+(current==1);
+        capacity=increment>maximum-current ? maximum : current+increment;
+    }
+    *output=capacity;return XR_XIR_OK;
+}
+
 /* The formula graph's queue is shared by every invocation equation. All
  * live entries retain source order during growth; no second queue solves ROOT. */
 static XrXirStatus effect_invocation_capacity(EffectInvocationWorkspace *owner) {
@@ -145,15 +161,14 @@ static XrXirStatus effect_invocation_capacity(EffectInvocationWorkspace *owner) 
         return XR_XIR_BAD_STRUCTURE;
     if (owner->final.count<owner->final.capacity) return XR_XIR_OK;
     if (owner->final.count>=owner->maximum) return XR_XIR_BUDGET;
-    uint32_t capacity=owner->final.capacity ? owner->final.capacity : 8;
-    if (capacity>owner->maximum) capacity=owner->maximum;
-    else if (owner->final.capacity) capacity=capacity>owner->maximum/2 ?
-        owner->maximum : capacity*2;
+    uint32_t capacity=0;
+    XrXirStatus status=effect_invocation_vector_capacity(owner->work,
+        owner->final.capacity,owner->maximum,&capacity);
+    if (status!=XR_XIR_OK) return status;
     uint64_t node_bytes=(uint64_t)capacity*sizeof(*owner->final.nodes);
     uint64_t index_bytes=(uint64_t)capacity*(sizeof(*owner->consumers)+sizeof(*owner->states));
     if (capacity<=owner->final.count || node_bytes>SIZE_MAX ||
         index_bytes>SIZE_MAX) return XR_XIR_BUDGET;
-    XrXirStatus status=XR_XIR_OK;
     /* Each admitted slot receives a complete value in intern. Unused capacity
      * has no initialized node and is never visited by lookup or destruction. */
     EffectInvocationNode *nodes=xir_compile_alloc(owner->work,(size_t)node_bytes,&status);
@@ -337,11 +352,11 @@ static XrXirStatus effect_invocation_edge(EffectInvocationWorkspace *owner,
     if (owner->final.edge_count==owner->final.edge_capacity) {
         uint32_t maximum=owner->maximum;
         if ((uint64_t)maximum>SIZE_MAX/sizeof(*owner->final.edges)) return XR_XIR_BUDGET;
-        uint32_t capacity=owner->final.edge_capacity ? owner->final.edge_capacity : 8;
-        if (capacity>maximum) capacity=maximum;
-        else if (owner->final.edge_capacity) capacity=capacity>maximum/2 ? maximum : capacity*2;
+        uint32_t capacity=0;
+        XrXirStatus status=effect_invocation_vector_capacity(owner->work,
+            owner->final.edge_capacity,maximum,&capacity);
+        if (status!=XR_XIR_OK) return status;
         if (capacity<=owner->final.edge_count) return XR_XIR_BUDGET;
-        XrXirStatus status=XR_XIR_OK;
         EffectInvocationEdge *edges=xir_compile_alloc(owner->work,
             (size_t)capacity*sizeof(*edges),&status);
         if (!edges) return status;

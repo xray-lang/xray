@@ -11,6 +11,7 @@
 #undef main
 #include "xir_invocation_row_data_cases.h"
 #include "xir_invocation_row_reference_cases.h"
+#include "xir_invocation_row_phase_cases.h"
 #include "xir_invocation_final_vector_cases.h"
 #include "xir_snapshot_run_extent_cases.h"
 int main(int argc,char **argv) {
@@ -21,7 +22,8 @@ int main(int argc,char **argv) {
         invocation_final_vector_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if(argc==2 && !strcmp(argv[1],"--row-data")) {
-        invocation_row_data_controls();invocation_row_reference_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
+        invocation_row_data_controls();invocation_row_reference_controls();invocation_row_phase_controls();
+        CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if(argc==2 && !strcmp(argv[1],"--class-literals")) {
         conditional_class_rows_literals();conditional_class_cell_literals();
