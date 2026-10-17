@@ -1,0 +1,477 @@
+{
+  "package": "P14",
+  "status": "PREPARED_WAITING_DEPENDENCY",
+  "kind": "Independent behavioral expectations and fixture preparation; not a CTest registration or product result",
+  "binding_policy": "Do not bind unpublished API symbols, ABI numbers or new CLI options. Materialize production tests only after fixed dependencies.",
+  "cases": [
+    {
+      "id": "C01",
+      "entry": "run/implicit-run/build-native",
+      "basis": "Multi-module arithmetic, independent literal",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "exit": 0,
+        "stdout_hex": "34320a",
+        "stderr_hex": ""
+      },
+      "sources": {
+        "library.xr": "export fn answer() -> i64 { return 40 + 2 }\n",
+        "root.xr": "import {answer} from \"./library\"\nprint(answer())\n"
+      },
+      "checks": [
+        "VM and native each compare with the literal, never only with one another",
+        "Repeat in a new process",
+        "Unicode and spaces in containing path"
+      ]
+    },
+    {
+      "id": "C02",
+      "entry": "run/build-native",
+      "basis": "NUL and Unicode preservation",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "exit": 0,
+        "stdout_hex": "4100420ae4b8ade696870a",
+        "stderr_hex": ""
+      },
+      "sources": {
+        "root.xr": "print(\"A\\0B\")\nprint(\"中文\")\n"
+      }
+    },
+    {
+      "id": "C03",
+      "entry": "run/check/build",
+      "basis": "Located semantic failure",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "exit": 1,
+        "stdout_hex": "",
+        "stderr_contains": [
+          "root.xr:1:13:",
+          "name is not an initialized value"
+        ]
+      },
+      "sources": {
+        "root.xr": "var value = missing_symbol\n"
+      },
+      "checks": [
+        "No ANSI in redirected output",
+        "Do not infer a source location from the entry when failure belongs to a dependency"
+      ]
+    },
+    {
+      "id": "C04",
+      "entry": "check",
+      "basis": "Syntax-only does not grant semantic execution authority",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "syntax_only_exit": 0,
+        "semantic_exit": 1,
+        "run_exit": 1
+      },
+      "sources": {
+        "root.xr": "var value = missing_symbol\n"
+      }
+    },
+    {
+      "id": "C05",
+      "entry": "run/build-native",
+      "basis": "Typed uncaught Error after producer death; existing run owner oracle",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "exit": 1,
+        "stdout_hex": "6265666f72650a",
+        "stderr_hex": "5b556e636175676874204572726f725d204661696c7572652e4661696c656428226f776e65642d6572726f72222c202d372c20312e35290a"
+      },
+      "sources": {
+        "root.xr": "enum Failure { Failed { text:string, code:i64, real:f64 } }\nfn fail() { throw Failure.Failed { text:\"owned\"+\"-error\", code:-7, real:1.5 } }\nprint(\"before\")\nfail()\n"
+      }
+    },
+    {
+      "id": "C06",
+      "entry": "run/build-native",
+      "basis": "Panic is distinct from Error and resource failure",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "exit": 1,
+        "stdout_hex": "",
+        "stderr_hex": "5b556e6361756768742050616e69635d2045303434353a2072756e2d70616e69630a"
+      },
+      "sources": {
+        "root.xr": "assert(false, \"run\"+\"-panic\")\n"
+      }
+    },
+    {
+      "id": "C07",
+      "entry": "run/build-native",
+      "basis": "Uncatchable cleanup error preserves fatal exit",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "exit": 70,
+        "stdout_hex": "",
+        "stderr_hex": "45303434333a206572726f722065736361706564206120646566657220626f64793a2045303434353a20636c65616e75700a20206120646566657220626f6479206d757374206e6f74206c6574206572726f72732065736361706520287370656320382e332e31293b2074686973206973206e6f7420636174636861626c650a"
+      },
+      "sources": {
+        "root.xr": "fn bad() { defer { assert(false, \"cleanup\") } }\nbad()\n"
+      }
+    },
+    {
+      "id": "C08",
+      "entry": "run",
+      "basis": "File-backed source authority remains required",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "exit": 1,
+        "stdout_hex": "",
+        "stderr_hex": "58525f52554e5f363031313a2063616e6f6e6963616c2072756e20726571756972657320612066696c652d6261636b656420736f7572636520617574686f726974790a"
+      },
+      "argv": [
+        "run",
+        "-"
+      ],
+      "stdin_hex": "7072696e74283432290a",
+      "checks": [
+        "stdin source text must not execute; distinguish this from program stdin"
+      ]
+    },
+    {
+      "id": "C09",
+      "entry": "run",
+      "basis": "Module initializer has no script arguments",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "exit": 1,
+        "stdout_hex": "",
+        "stderr_hex": "58525f52554e5f363031303a2061206d6f64756c6520696e697469616c697a657220646f6573206e6f742061636365707420617267756d656e74730a"
+      },
+      "argv": [
+        "run",
+        "root.xr",
+        "--",
+        "argument"
+      ],
+      "sources": {
+        "root.xr": "print(42)\n"
+      }
+    },
+    {
+      "id": "C10",
+      "entry": "run/build-native",
+      "basis": "Binary program stdin, existing fixture",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "exit": 0,
+        "stdout_hex": "747275650a747275650a747275650a",
+        "stderr_hex": ""
+      },
+      "stdin_hex": "0001ff410a",
+      "dependencies": [
+        "P13"
+      ],
+      "checks": [
+        "Read sizes 3,2,0 at EOF; bytes 0 and 255 survive",
+        "Program stdin is distinct from forbidden stdin source; P13 must provide this existing IO surface"
+      ],
+      "sources": {
+        "root.xr": "import io\nvar file = io.File.stdin()\nvar first = file.read(3)\nvar second = file.read(3)\nvar third = file.read(3)\nprint(first != null && len(first!) == 3 && first![0] == 0 && first![2] == 255)\nprint(second != null && len(second!) == 2 && second![0] == 65 && second![1] == 10)\nprint(third != null && len(third!) == 0)\n"
+      }
+    },
+    {
+      "id": "C11",
+      "entry": "run/build-native",
+      "basis": "Independent stdout and stderr with NUL, module state and await",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "exit": 0,
+        "stdout_hex": "41004234312034322034322074727565207472756520312e350a",
+        "stderr_hex": "450052"
+      },
+      "fixture": "tests/fixtures/xir_cli_product/main.xr",
+      "checks": [
+        "Existing fixture label cached_state_go is historical; cache route must be removed by P05",
+        "Do not confuse preserved expected bytes with cache permission"
+      ]
+    },
+    {
+      "id": "C12",
+      "entry": "build/deps",
+      "basis": "Fail-before-publication preserves exact prior file",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "invalid_source_exit": 1,
+        "output_canary_hex": "5031342d6578697374696e67007075626c69636174696f6e",
+        "output_after_equals_before": true
+      },
+      "sources": {
+        "root.xr": "var value = missing_symbol\n"
+      },
+      "checks": [
+        "Actual native and c-only output files",
+        "Deps output remains untouched on source admission failure",
+        "No residual temporary workspace after finite cleanup"
+      ]
+    },
+    {
+      "id": "C13",
+      "entry": "test",
+      "basis": "Typed declarations/hooks/skip/import scope",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "passed": 2,
+        "skipped": 1,
+        "exit": 0,
+        "imported_test_executed": false,
+        "final_root_counter": 45
+      },
+      "fixture": "tests/cli/run_program_test_entry_tests.py",
+      "test_function": "test_module_state_hooks_skip_and_import_discovery"
+    },
+    {
+      "id": "C14",
+      "entry": "test",
+      "basis": "Filter/failure and stable report order",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "filtered_exit": 1,
+        "filtered_stderr": "Error: 0 tests executed across 1 file(s)\n",
+        "parallel_paths": [
+          "test_fail.xr",
+          "test_root.xr"
+        ],
+        "parallel_counts": [
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            0,
+            0
+          ]
+        ]
+      },
+      "fixture": "tests/unit/cli/test_public_source_program.py",
+      "checks": [
+        "Report fields tests/passed/failed/skipped/errors/timeouts/cases independently checked",
+        "Fail-fast still runs teardown; hook error cannot become PASS"
+      ]
+    },
+    {
+      "id": "C15",
+      "entry": "test/API",
+      "basis": "Cancellation and timeout drain use same Instance/ledger",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "status": "accurate cancelled/timeout/error category from fixed P08 API",
+        "fresh_budget_on_resume": false,
+        "late_wake_has_effect": false,
+        "physical_live_after_all_owners_drop": 0
+      },
+      "checks": [
+        "Cancel before start, while yielded/waiting, after result ready and during cleanup",
+        "Original parent deadline and all FI ordinals remain; cancellation is not assertPanics success"
+      ],
+      "dependencies": [
+        "P08"
+      ]
+    },
+    {
+      "id": "C16",
+      "entry": "deps",
+      "basis": "Actual graph, not a reparse side route",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "entry_count": 1,
+        "dependency_paths": [
+          "root.xr",
+          "library.xr"
+        ],
+        "repeat_edges_duplicate": false,
+        "entry_initializer_runs": 0
+      },
+      "sources": {
+        "library.xr": "export fn answer() -> i64 { return 42 }\n",
+        "root.xr": "import {answer} from \"./library\"\nprint(answer())\n"
+      },
+      "checks": [
+        "Formats JSON/list/shell and output failures",
+        "Compare own source paths separately from stdlib closure; no invented JSON schema"
+      ]
+    },
+    {
+      "id": "C17",
+      "entry": "API owned results",
+      "basis": "Receiving owner must outlive producer/Instance as specified",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "owned_string_bytes_hex": "410042",
+        "length": 3,
+        "read_after_producer_drop": true,
+        "read_after_instance_stop": true,
+        "invoke_after_instance_stop": "rejected",
+        "physical_live_after_result_drop": 0
+      },
+      "checks": [
+        "Obtain value/Error/Panic through fixed public ownership API",
+        "Do not read borrowed views after documented owner dies",
+        "Two Instances must not share mutable state accidentally"
+      ],
+      "dependencies": [
+        "P06",
+        "P08"
+      ]
+    },
+    {
+      "id": "C18",
+      "entry": "API resources",
+      "basis": "One real finite ledger, fail-closed outputs",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "cli_compile_limits": {
+          "allocated_bytes": 1073741824,
+          "live_bytes": 268435456,
+          "work": 8589934592
+        },
+        "manifest_limits": {
+          "bytes": 1048576,
+          "depth": 64
+        },
+        "failure_output_unchanged": true,
+        "new_ledger_per_stage": false,
+        "physical_live_after_release": 0
+      },
+      "checks": [
+        "OOM distinct from budget and semantic Error/Panic",
+        "Exact-instance retry cannot reset cumulative lifetime cost",
+        "Host defaults and full runtime limits taken from fixed owner, never copied from compile limits"
+      ]
+    },
+    {
+      "id": "C19",
+      "entry": "REPL",
+      "basis": "Old callee pins original typed generation",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "old_i64": 42,
+        "latest_string": "later"
+      },
+      "inputs": [
+        "fn value() -> i64 { return 40 }\n",
+        "fn before() -> i64 { return value() + 2 }\n",
+        "fn value() -> string { return \"later\" }\n",
+        "var old = before()\n",
+        "var latest = value()\n"
+      ]
+    },
+    {
+      "id": "C20",
+      "entry": "REPL",
+      "basis": "Failed compile does not publish or shadow",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "answer": 5,
+        "published_generations": 2,
+        "abandoned_generations": 1
+      },
+      "inputs": [
+        "fn value() -> i64 { return 5 }\n",
+        "fn value() -> string { return 1 }\n",
+        "var answer = value()\n"
+      ]
+    },
+    {
+      "id": "C21",
+      "entry": "REPL",
+      "basis": "Failed runtime does not replace binding; ordinary side effects persist",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "old_value_after_failed_redefinition": 5,
+        "x_after_increment_then_failure": 12,
+        "transient_decl_visible": false
+      },
+      "checks": [
+        "Use separate sessions for original value()=5 and x=11 scenarios",
+        "Retain actual failed-callable test whose old target returns 11",
+        "No whole-heap rollback claim"
+      ]
+    },
+    {
+      "id": "C22",
+      "entry": "REPL",
+      "basis": "Initialization once and cross-generation generics",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "initializer_stdout": "init\n",
+        "first": 41,
+        "answer": 42,
+        "cross_input_Point_7_8_x": 7
+      },
+      "checks": [
+        "Keep all current REPL tests, including it typed snapshots, Unit behavior and missing identity rejections",
+        "Publication staging full OOM sweeps, exact Session rejection and source lifetime required",
+        "Preserve disabled repl_class_instantiation_cross_input; 46 registered REPL tests alone are not the full REPL denominator"
+      ]
+    },
+    {
+      "id": "C23",
+      "entry": "help/version/info",
+      "basis": "Fresh CLI identity",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "product": "xray-lang",
+        "target": "windows-x86_64",
+        "exit": 0,
+        "stderr_hex": "",
+        "source_identity": "must equal actual accepted Git/dirty inputs"
+      },
+      "checks": [
+        "Use absolute build/xray.exe; record path and hash before/after",
+        "No production release claim from local version query"
+      ]
+    },
+    {
+      "id": "C24",
+      "entry": "retired/withheld commands",
+      "basis": "No silent legacy fallback; source closure differs from feature retirement",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "unknown_command_exit": 2,
+        "names": [
+          "plan",
+          "verify",
+          "compile"
+        ],
+        "repl_completion_from_absence": false
+      },
+      "checks": [
+        "No new CLI mixed option",
+        "Restore retained REPL/explain/etc only through fixed new owner",
+        "Command list must reflect final frozen disposition, not blindly freeze the seed list"
+      ]
+    },
+    {
+      "id": "C25",
+      "entry": "library-state admission",
+      "basis": "Target P13 permits qualified library state; seed rejection is not final semantics",
+      "product_status": "NOT_RUN",
+      "expected": {
+        "current_seed_negative": "library mutable or exported state is not admitted",
+        "target": "qualified legal library state succeeds; illegal permission crossing still rejects",
+        "mechanical_expected_refresh": false
+      },
+      "fixture": "tests/cli/run_xir_public_cli_product.py",
+      "dependencies": [
+        "P13",
+        "P06",
+        "P08"
+      ],
+      "checks": [
+        "Keep old source/permission failure evidence",
+        "Replace outdated temporary restriction only with actual capability and independent accepting/rejecting programs"
+      ]
+    }
+  ]
+}
