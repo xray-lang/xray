@@ -659,7 +659,7 @@ def expected_rows():
         if name=='1114_select_after':row['required_runtime_timing_predicates']=[{'expression':'elapsed >= 20','required':True},{'expression':'elapsed < 500','required':True}]
         if name=='1128_yield':row['required_original_yield_checkpoints']=1+2+3+len([i for i in range(5) if i%2==0])+3*10
         rows.append(row)
-    return rows+[stack_entry_expected_row(),plain_scope_entry_expected_row()]+coro_boundary_entry_expected_rows()+[task_link_entry_expected_row()]
+    return rows+[stack_entry_expected_row(),plain_scope_entry_expected_row()]+coro_boundary_entry_expected_rows()+[task_link_entry_expected_row()]+task_status_entry_expected_rows()
 
 
 def named_expected_rows():
@@ -1232,3 +1232,8 @@ def task_link_named_expected_row():
         'observation_count':4,'required_semantic_trace':trace,
         'required_original_assertion_results':trace['semantic_postconditions'],
         'model':'Complete original wrapper and six helpers;four go,two plain awaits,two awaitResult calls,one cancel,sleep50 and all six original assertions remain. Four pure observations inspect existing immutable result tags or existing r1/r2 exactly once without repeating stateful calls. Pending cancellation before start or while sleeping,explicit Failed tag and both pure success workers independently yield true/true/42/42 for both completion orders;four positive assertions execute and two assert(false) branches are avoided. Actual timer/cancellation progress under arbitrary parent delays,Failed Error/PanicInfo payload layout,cleanup/FI/resources/lifetime/safety/provider/mixed remain separate open obligations. The filename does not qualify linked go or a Task.link operation.'}
+
+
+def task_status_entry_expected_rows():
+    import complete_task_status_model
+    return complete_task_status_model.expected_rows()

@@ -2,6 +2,7 @@
 from pathlib import Path
 import hashlib
 import complete_network_model
+import complete_task_status_model
 
 
 def digest(data):
@@ -129,6 +130,11 @@ def observation_status(selection, oracle, vm, native, projection, original_sidec
     if selection['rejection_oracle_required']:
         return 'EXECUTED_FROZEN_TARGET_REJECTION_ORACLE_PENDING'
     if oracle:
+        if (oracle.get('id')==complete_task_status_model.IDENTITY or
+                oracle.get('expected',{}).get('stdout_expectation_kind')==complete_task_status_model.KIND):
+            return ('PASS_INDEPENDENT_SELECTED_RUN_BYTE_SCOPE'
+                    if projection and complete_task_status_model.matches(oracle,vm) and complete_task_status_model.matches(oracle,native)
+                    else 'FAIL_INDEPENDENT_SELECTED_CONSUMER')
         if (oracle.get('id','').startswith('complete_network_') or
                 any(key in oracle.get('expected',{}) for key in ('stdout_expectation_kind','stdout_utf8_options'))):
             return ('PASS_INDEPENDENT_SELECTED_RUN_BYTE_SCOPE'

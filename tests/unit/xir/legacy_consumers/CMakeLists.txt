@@ -5,6 +5,9 @@ if(NOT CMAKE_GENERATOR STREQUAL "Ninja")
 endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 enable_testing()
+add_test(NAME legacy_consumer_complete_task_status_model_controls
+    COMMAND "${Python3_EXECUTABLE}" -X utf8 -B "${CMAKE_CURRENT_SOURCE_DIR}/test_complete_task_status_model.py")
+set_tests_properties(legacy_consumer_complete_task_status_model_controls PROPERTIES LABELS "preparation-only" TIMEOUT 60)
 add_test(NAME legacy_consumer_pending_noarg_provider_controls
     COMMAND "${Python3_EXECUTABLE}" -X utf8 -B "${CMAKE_CURRENT_SOURCE_DIR}/test_pending_noarg_crt_provider_model.py")
 set_tests_properties(legacy_consumer_pending_noarg_provider_controls PROPERTIES LABELS "preparation-only" TIMEOUT 60)
@@ -190,6 +193,17 @@ if(XRAY_LEGACY_PRODUCT_BINARY)
         set_tests_properties("legacy_product_${identity}" PROPERTIES
             TIMEOUT 120 LABELS "actual-product-consumer;cli;vm;native" PROCESSORS 1 RUN_SERIAL TRUE)
     endforeach()
+
+    set(XRAY_LEGACY_TASK_STATUS_PRODUCT_INPUTS "" CACHE FILEPATH "Closed product input for complete Task status consumers")
+    if(XRAY_LEGACY_TASK_STATUS_PRODUCT_INPUTS AND XRAY_LEGACY_PRODUCT_COMPILER)
+        add_test(NAME legacy_product_complete_task_status_1116
+            COMMAND "${Python3_EXECUTABLE}" -X utf8 -B "${CMAKE_CURRENT_SOURCE_DIR}/run_task_status_driver.py"
+                --binary "${XRAY_LEGACY_PRODUCT_BINARY}" --product-inputs "${XRAY_LEGACY_TASK_STATUS_PRODUCT_INPUTS}"
+                --compiler "${XRAY_LEGACY_PRODUCT_COMPILER}" --case complete_task_status_1116
+                --output "${CMAKE_CURRENT_BINARY_DIR}/task-status-product-evidence")
+        set_tests_properties(legacy_product_complete_task_status_1116 PROPERTIES
+            TIMEOUT 120 LABELS "actual-product-consumer;cli;vm;native;task-status" PROCESSORS 1 RUN_SERIAL TRUE)
+    endif()
 
     set(XRAY_LEGACY_NETWORK_PRODUCT_INPUTS "" CACHE FILEPATH "Closed public product input for complete network consumers")
     if(XRAY_LEGACY_NETWORK_PRODUCT_INPUTS AND XRAY_LEGACY_PRODUCT_COMPILER)

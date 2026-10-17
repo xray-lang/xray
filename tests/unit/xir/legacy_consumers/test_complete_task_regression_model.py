@@ -107,6 +107,7 @@ class TaskRegressionTraces(unittest.TestCase):
 
     def test_complete_entries_and_named_bodies_use_their_own_real_routes(self):
         cases={row['id']:row for row in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}
+        cases.update({row['id']:row for row in json.loads((Path(__file__).parent/'task_status_driver_cases.json').read_text())['cases']})
         for named,rows in [(False,model.expected_rows()),(True,[row for row in model.named_expected_rows() if row['id'] not in {model._STACK_NAMED_ID,model._PLAIN_SCOPE_NAMED_ID,model._CORO_HANDOFF_NAMED_ID,model._TASK_LINK_NAMED_ID}])]:
             for expected in rows:
                 with self.subTest(case=expected['id']):
