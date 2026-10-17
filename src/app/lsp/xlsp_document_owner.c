@@ -8,6 +8,7 @@
  */
 #include "xlsp_document_owner.h"
 #include "xlsp_source_open.h"
+#include "xlsp_diagnostic_owner.h"
 #include "xlsp_document_store.h"
 #include "xlsp_cache.h"
 #include "xlsp_imports.h"
@@ -16,6 +17,8 @@
 #include "../../os/os_time.h"
 #include <limits.h>
 #include <string.h>
+static const XrCompileResourceLimits document_limits={UINT64_C(64)*1024*1024,
+    UINT64_C(8)*1024*1024,UINT64_C(128000000)};
 
 static void document_detach_diagnostics(XrLspDocument *doc) {
     XrLspServer *server = doc->server;
@@ -85,6 +88,7 @@ done:
 static void document_commit_owner(XrLspDocument *doc,XlspSourceOpen *fresh) {
     ++doc->server->source_revision;
     XlspSourceOpen *old_open=doc->source_open;XlspSourceBuffer *old_buffer=doc->source_buffer;
+    xlsp_source_open_rebind_publication(fresh,old_open,doc->server->source_revision);
     XlspSyntaxSnapshot *old_syntax=doc->syntax_snapshot;char *old_uri=doc->uri,*old_text=doc->content;
     uint32_t *old_lines=doc->line_offsets;
     doc->source_open=fresh;doc->uri=(char *)xlsp_source_open_uri(fresh);
@@ -106,7 +110,7 @@ static void document_commit_owner(XrLspDocument *doc,XlspSourceOpen *fresh) {
 XR_FUNC XrLspDocument *xlsp_document_open(XrLspServer *server,const XlspSourceDocument *input) {
     if(!server||!server->doc_table||!input||!input->uri||!input->text||
         input->uri_length==SIZE_MAX||server->source_revision==UINT64_MAX)return NULL;
-    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
+    XrCompileResourceLimits limits=document_limits;
     XrCompileResources *resources=NULL;XlspSourceOpen *fresh=NULL;XrLspDocument *doc=NULL;
     XlspDocumentInsertion insertion={0};
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
@@ -128,7 +132,7 @@ done:
 XR_FUNC XrXirStatus xlsp_document_apply_changes(XrLspDocument *doc,const XrJsonValue *changes,int version) {
     if(!doc||!doc->server||!doc->content||!doc->uri)return XR_XIR_BAD_STRUCTURE;
     if(doc->server->source_revision==UINT64_MAX)return XR_XIR_BUDGET;
-    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
+    XrCompileResourceLimits limits=document_limits;
     XrCompileResources *resources=NULL;XlspSourceBuffer *buffer=NULL;XlspSourceOpen *fresh=NULL;
     XrCompileResourceStatus created=xr_compile_resources_new(&limits,&resources);
     if(created!=XR_COMPILE_RESOURCE_OK)return created==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
@@ -147,6 +151,9 @@ done:
 XR_FUNC void xlsp_document_close(XrLspServer *server, const char *uri) {
     if(!server||!uri||!server->doc_table||server->source_revision==UINT64_MAX||
        !xlsp_document_store_get(server->doc_table,uri))return;
+    XrLspDocument *doc=xlsp_document_store_get(server->doc_table,uri);
+    XrXirStatus cleared=xlsp_diagnostic_document_close(server,doc);
+    if(cleared!=XR_XIR_OK){server->exit_received=true;lsp_log("Diagnostic clear failed: status %u",(unsigned)cleared);return;}
     ++server->source_revision;
     lsp_log("Closed document: %s", uri);
     xlsp_document_store_remove(server->doc_table, uri);

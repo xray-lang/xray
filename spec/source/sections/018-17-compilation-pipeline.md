@@ -546,6 +546,20 @@ FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owne
 
 COPY/PHI/local Cell、闭合 capture、Nullable 包装、只读 Tuple/Array 构造和投影同步身份。PHI 和同元素 Array 的外层 callable 输入按唯一弱化规则归一化，根两事实分别求闭合。固定复合的嵌套身份不能协变；无法表达嵌套弱化的共享、元素变更或 Nullable 分支合流保守保留上界或拒绝，有限高阶依赖及容器别名流后继仍未完成。NO_SUSPEND、GO 借用形状、错误和 Sendable 义务独立保留。准备、闭合及查询复制共用原有限资源账本，不增加 wire 字段、schema、semantic 或公开 ABI。这一实现候选仍须鲜编和两配置资源、安全资格；runtime 许可与 VM/native 执行资格未由此取得。
 
+
+Source失败诊断的原始line/column始终为一基字节位置，原诊断结构及SourceContext/Final布局不为编辑器坐标改变。可选失败输出使用独立拥有型XrXirSourceFailure：空输出在真实已定位失败时接收规范模块路径，parser来源和可用的零基UTF-16标量；该参数原子切换为此类型，没有旧路径输出签名别名。路径转移及清理不补做分配或work，显式free释放接收拥有权。
+
+模块图在实际parser callback期间复制首个真实消息、模块及原始位置，并在当次文本仍有效时按原ledger投影UTF-16。CRLF是一个编辑器换行，独立CR遵守既有编译器字节列与编辑器行规则；非法边界不夹取、半UTF8/半CRLF不作为位置。Source corpus随后纳入模块的parse错误同样保留真实来源，资源失败不得改报为语言错误或部分成功。
+
+LSP仅消费该失败事实：开放文本核对真实模块与投影并保留版本，关闭依赖使用规范路径编码URI及null版本，不重读已变化的磁盘，也不对入口文本转换依赖字节位置。选中编辑器的独立syntax诊断仍优先；未知来源或坐标保持失败，不生成虚构零位置或空成功。这些事实只有显示权威，不授类型、调用、效果或执行权限。
+
+
+LSP文档打开、编辑与诊断使用既定64MiB累计分配、8MiB存活量和128000000 work额度，不借用CLI默认额度。发布校验Source文本快照的服务器修订和开放目标版本；真实关闭依赖保留null版本，不能仅因没有编辑器bucket就丢弃已有解析事实。
+
+成功发布者拥有该URI的完整空诊断清除参数；该JSON独立拥有字符串，在文档Source替换时显式转移，不借用已死亡的源文本或ledger。相同URI被新的发布者接管后，原发布者不得再清除它。编辑后目标URI变化先清除旧接收者再发布新结果，两份JSON和序列化体均在首字节写出前准备；准备失败不花费发送拥有权，已被操作系统接受的字节不可回滚，写失败终止发送。
+
+文档关闭清除自身和指向关闭编辑器的既有发布；清除全部诊断同时覆盖关闭依赖与开放文档。无法定位的新语言错误只撤销已过期的自有发布，不伪造当前文本的空成功。清理拥有权不再补做分配或资源work；显式清除准备与传输失败保持原拥有权或进入终止状态，不制造部分JSON帧。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1202,5 +1216,19 @@ This flags meaning uses the sole Checked semantic70; schema25 retains its existi
 Prepared ordinary reference refinement records owned INFERRED/FIXED value identities before region recipes are released. Ordinary direct references and closure sites close against authentic targets on the existing effects owner. Explicit callable parameters, annotations, results and conversion contexts remain fixed upper bounds; equal provisional UNKNOWN identities do not erase a boundary. A private COPY preserves it and becomes the sole ordinary FUNCTION_WEAKEN when closed identities differ. Private structure/SSA/constraint/access preparation publishes no Checked. The common complete Checker verifies all effects and permissions on both construction memory and its independent owned copy before publishing only that copy.
 
 COPY/PHI/local Cell, closed captures, Nullable wrappers and readonly Tuple/Array construction and projection synchronize identities. Callable PHI and uniform Array inputs use the sole outer weakening relation; the two root facts close independently. Fixed composite nested identities cannot vary. Unsupported nested weakening, shared mutation, element updates or Nullable branch joins retain a conservative bound or reject; finite higher-order dependencies and container alias flow remain incomplete. NO_SUSPEND, GO borrow shapes, errors and Sendable obligations remain independent. Preparation, closure and query copying share the original finite ledger without wire, schema, semantic or public ABI additions. This implementation candidate still requires fresh builds and both configurations' resource and safety gates; it grants no runtime or VM/native execution qualification.
+
+
+Source failure diagnostics retain one-based byte line/column coordinates. Editor positions do not change the original diagnostic or SourceContext/Final layout. The optional failure output uses an independently owned XrXirSourceFailure: an empty receiver obtains the canonical module path for an actual located failure, parser provenance and available zero-based UTF-16 scalars. The parameter cuts over atomically to this type without a legacy path-output signature alias. Path transfer and cleanup allocate no memory or work; explicit free releases receiving ownership.
+
+The module graph copies the first actual parser callback message, module and original location, and projects UTF-16 while that exact text is alive on the original ledger. CRLF is one editor newline; standalone CR follows the existing compiler-byte and editor-row rules. Invalid boundaries are not clamped, and half-UTF8 or half-CRLF boundaries are not positions. Parse failures in later corpus inclusions retain their actual producer too. Resource failure never becomes a language error or partial success.
+
+LSP only consumes those failure facts: open text authenticates its actual module and projection and retains its version; a closed dependency uses the canonical path encoded as a URI and a null version. It neither rereads changed disk bytes nor converts dependency bytes against entry text. The selected editor's independent syntax diagnostics keep precedence. Unknown provenance or coordinates fail rather than inventing position zero or empty success. These are display facts, with no type, call, effect or execution authority.
+
+
+LSP document open, edit and diagnostics use the established limits of 64 MiB cumulative allocation, 8 MiB live storage and 128000000 work, without borrowing CLI defaults. Publication checks the server revision of the Source text snapshot and the open target version. An actual closed dependency retains a null version; an absent editor bucket does not discard existing parser facts.
+
+The successful publisher owns complete empty-diagnostic params for that URI. This JSON independently owns its strings and explicitly transfers when the document Source owner is replaced, without borrowing dead source text or ledgers. A later publisher taking the same URI revokes the previous publisher's clearing right. A changed target URI clears the former recipient before publishing the new result. Both JSON envelopes and serialized bodies are ready before the first byte write. Preparation failure does not spend publication ownership. Bytes accepted by the operating system cannot be rolled back; a failed write terminates publication.
+
+Document close clears its own publication and existing publications targeting that editor. Clear-all covers closed dependencies and open documents. A new language error without an authentic position only revokes the obsolete owned publication; it does not invent an empty successful result for current text. Ownership cleanup allocates and charges no further work. Explicit clear preparation and transport failures preserve prior ownership or enter terminal state, without creating partial JSON frames.
 
 <!-- /xr-spec:en -->

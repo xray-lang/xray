@@ -64,3 +64,30 @@ XR_FUNC XrXirStatus xlsp_protocol_send_request(XrLspServer *server, const char *
 XR_FUNC XrXirStatus xlsp_protocol_send_notification(XrLspServer *server, const char *method, XrJsonValue *params) {
     return output_call(server, method, params, false);
 }
+
+/* Prepare both envelopes and serialized bodies before the first stream write.
+ * Preparation failures preserve server state. A failed write is terminal;
+ * bytes already accepted by the operating system cannot be rolled back. */
+XR_FUNC XrXirStatus xlsp_protocol_send_notification_pair(XrLspServer *server,
+    const char *method,XrJsonValue *first,XrJsonValue *second) {
+    if(first&&first==second){xjson_free(first);return XR_XIR_BAD_STRUCTURE;}
+    XrXirStatus status=(!first||!method)?XR_XIR_BAD_STRUCTURE:output_ready(server);
+    XrJsonValue *params[2]={first,second},*messages[2]={0};
+    char *bodies[2]={0};size_t lengths[2]={0};unsigned count=second?2u:1u;
+    for(unsigned i=0;i<count&&status==XR_XIR_OK;++i) {
+        XlspProtocolStatus built=xlsp_protocol_call(NULL,method,&params[i],&messages[i]);
+        status=built==XLSP_PROTOCOL_OK?XR_XIR_OK:built==XLSP_PROTOCOL_OUT_OF_MEMORY?
+            XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+        if(status==XR_XIR_OK) {
+            bodies[i]=xjson_stringify(messages[i],&lengths[i]);
+            if(!bodies[i])status=XR_XIR_OUT_OF_MEMORY;
+            else if(lengths[i]>XLSP_FRAME_MAX_BODY)status=XR_XIR_BUDGET;
+        }
+    }
+    for(unsigned i=0;i<count&&status==XR_XIR_OK;++i) {
+        xlsp_transport_write(server->transport,bodies[i],lengths[i]);
+        if(!xlsp_transport_is_connected(server->transport)){server->exit_received=true;status=XR_XIR_IO;}
+    }
+    for(unsigned i=0;i<2;++i){xr_free(bodies[i]);xjson_free(messages[i]);xjson_free(params[i]);}
+    return status;
+}

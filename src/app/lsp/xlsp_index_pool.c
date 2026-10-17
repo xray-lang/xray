@@ -40,32 +40,15 @@ static XrXirStatus pool_copy(XrCompileResources *r,const char *text,char **out) 
     s=pool_resource(xr_compile_resources_alloc(r,n+1,(void **)&copy));
     if(s==XR_XIR_OK){memcpy(copy,text,n+1);*out=copy;}return s;
 }
-static bool pool_letter(unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z');}
+
 static unsigned char pool_separator(unsigned char c) {
 #ifdef XR_OS_WINDOWS
     if(c=='\\')return '/';
 #endif
     return c;
 }
-static bool pool_unreserved(unsigned char c){return pool_letter(c)||(c>='0'&&c<='9')||c=='-'||c=='_'||c=='.'||c=='~'||c=='/'||c==':';}
-XR_FUNC XrXirStatus xlsp_index_file_uri(XrCompileResources *r,const char *path,char **out) {
-    if(!r||!path||!out||*out)return XR_XIR_BAD_STRUCTURE;
-    size_t n=0;XrXirStatus s=pool_length(r,path,&n);if(s!=XR_XIR_OK)return s;
-    if(!n||n>(SIZE_MAX-9)/3)return XR_XIR_BAD_STRUCTURE;
-    bool drive=n>=3&&pool_letter((unsigned char)path[0])&&path[1]==':'&&pool_separator((unsigned char)path[2])=='/';
-    bool unc=n>=3&&pool_separator((unsigned char)path[0])=='/'&&pool_separator((unsigned char)path[1])=='/';
-    if(!drive&&!unc&&path[0]!='/')return XR_XIR_BAD_STRUCTURE;
-    s=pool_work(r,n);if(s!=XR_XIR_OK)return s;if(!xr_utf8_validate(path,n))return XR_XIR_BAD_STRUCTURE;
-    const char *prefix=drive?"file:///":unc?"file:":"file://";size_t used=strlen(prefix);char *uri=NULL;
-    s=pool_resource(xr_compile_resources_alloc(r,used+n*3+1,(void **)&uri));if(s!=XR_XIR_OK)return s;
-    s=pool_work(r,used);if(s==XR_XIR_OK)memcpy(uri,prefix,used);const char hex[]="0123456789ABCDEF";
-    for(size_t i=0;i<n&&s==XR_XIR_OK;++i){s=pool_work(r,1);if(s!=XR_XIR_OK)break;
-        unsigned char c=pool_separator((unsigned char)path[i]);size_t width=pool_unreserved(c)?1:3;
-        s=pool_work(r,width);if(s!=XR_XIR_OK)break;
-        if(width==1)uri[used++]=(char)c;else{uri[used++]='%';uri[used++]=hex[c>>4];uri[used++]=hex[c&15];}}
-    if(s==XR_XIR_OK)s=pool_work(r,1);
-    if(s==XR_XIR_OK){uri[used]=0;*out=uri;}else xr_compile_resources_free(uri);return s;
-}
+
+
 XR_FUNC void xlsp_index_result_free(XrLspIndexResult *n) {
     if(!n)return;xlsp_source_index_free(n->index);xr_compile_resources_free(n->path);xr_compile_resources_free(n->uri);xr_compile_resources_free(n);
 }

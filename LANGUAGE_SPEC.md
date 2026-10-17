@@ -7750,6 +7750,20 @@ Prepared ordinary reference refinement records owned INFERRED/FIXED value identi
 
 COPY/PHI/local Cell, closed captures, Nullable wrappers and readonly Tuple/Array construction and projection synchronize identities. Callable PHI and uniform Array inputs use the sole outer weakening relation; the two root facts close independently. Fixed composite nested identities cannot vary. Unsupported nested weakening, shared mutation, element updates or Nullable branch joins retain a conservative bound or reject; finite higher-order dependencies and container alias flow remain incomplete. NO_SUSPEND, GO borrow shapes, errors and Sendable obligations remain independent. Preparation, closure and query copying share the original finite ledger without wire, schema, semantic or public ABI additions. This implementation candidate still requires fresh builds and both configurations' resource and safety gates; it grants no runtime or VM/native execution qualification.
 
+
+Source failure diagnostics retain one-based byte line/column coordinates. Editor positions do not change the original diagnostic or SourceContext/Final layout. The optional failure output uses an independently owned XrXirSourceFailure: an empty receiver obtains the canonical module path for an actual located failure, parser provenance and available zero-based UTF-16 scalars. The parameter cuts over atomically to this type without a legacy path-output signature alias. Path transfer and cleanup allocate no memory or work; explicit free releases receiving ownership.
+
+The module graph copies the first actual parser callback message, module and original location, and projects UTF-16 while that exact text is alive on the original ledger. CRLF is one editor newline; standalone CR follows the existing compiler-byte and editor-row rules. Invalid boundaries are not clamped, and half-UTF8 or half-CRLF boundaries are not positions. Parse failures in later corpus inclusions retain their actual producer too. Resource failure never becomes a language error or partial success.
+
+LSP only consumes those failure facts: open text authenticates its actual module and projection and retains its version; a closed dependency uses the canonical path encoded as a URI and a null version. It neither rereads changed disk bytes nor converts dependency bytes against entry text. The selected editor's independent syntax diagnostics keep precedence. Unknown provenance or coordinates fail rather than inventing position zero or empty success. These are display facts, with no type, call, effect or execution authority.
+
+
+LSP document open, edit and diagnostics use the established limits of 64 MiB cumulative allocation, 8 MiB live storage and 128000000 work, without borrowing CLI defaults. Publication checks the server revision of the Source text snapshot and the open target version. An actual closed dependency retains a null version; an absent editor bucket does not discard existing parser facts.
+
+The successful publisher owns complete empty-diagnostic params for that URI. This JSON independently owns its strings and explicitly transfers when the document Source owner is replaced, without borrowing dead source text or ledgers. A later publisher taking the same URI revokes the previous publisher's clearing right. A changed target URI clears the former recipient before publishing the new result. Both JSON envelopes and serialized bodies are ready before the first byte write. Preparation failure does not spend publication ownership. Bytes accepted by the operating system cannot be rolled back; a failed write terminates publication.
+
+Document close clears its own publication and existing publications targeting that editor. Clear-all covers closed dependencies and open documents. A new language error without an authentic position only revokes the obsolete owned publication; it does not invent an empty successful result for current text. Ownership cleanup allocates and charges no further work. Explicit clear preparation and transport failures preserve prior ownership or enter terminal state, without creating partial JSON frames.
+
 ---
 
 ## 18. Error Codes

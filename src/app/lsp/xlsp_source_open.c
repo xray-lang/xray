@@ -1,5 +1,7 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
 #include "xlsp_source_open.h"
+#include "xlsp_diagnostic_owner.h"
+#include "../../base/xchecks.h"
 #include <limits.h>
 #include <string.h>
 struct XlspSourceOpen {
@@ -15,7 +17,9 @@ struct XlspSourceOpen {
     size_t diagnostic_uri_length;
     XlspSourceBuffer *diagnostic_buffer;
     int diagnostic_version;
-    bool diagnostic_resolved;
+    bool diagnostic_resolved,diagnostic_known_version;
+    XrJsonValue *published_clear;
+    uint64_t diagnostic_revision;
 };
 static XrXirStatus open_status(XrCompileResourceStatus s) {
     return s==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:s==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:
@@ -23,6 +27,7 @@ static XrXirStatus open_status(XrCompileResourceStatus s) {
 }
 void xlsp_source_open_free(XlspSourceOpen *o) {
     if(!o)return;
+    xjson_free(o->published_clear);
     xlsp_source_buffer_free(o->buffer);xlsp_source_syntax_free(o->syntax);
     xlsp_source_workspace_free(o->workspace);xlsp_source_workspace_failure_free(&o->failure);
     xlsp_source_buffer_free(o->diagnostic_buffer);xr_compile_resources_free(o->diagnostic_uri);
@@ -69,10 +74,21 @@ static XrXirStatus open_capture_diagnostic(XlspSourceOpen *o,const XlspSourceDoc
             if(status!=XR_XIR_OK)return status;
             memcpy(o->diagnostic_uri,input->uri,input->uri_length);o->diagnostic_uri[input->uri_length]=0;
         }
-        o->diagnostic_resolved=true;break;
+        o->diagnostic_resolved=true;o->diagnostic_known_version=true;break;
     }
-    /* A closed dependency has no retained editor text. Keep its real failure,
-     * but never convert its byte positions against the entry's source. */
+    if(!o->diagnostic_resolved&&o->failure.source.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE&&
+        o->failure.source.has_utf16_position) {
+        if(o->failure.source.utf16_line>INT32_MAX||o->failure.source.utf16_column>INT32_MAX)return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=xlsp_index_file_uri(o->resources,o->failure.source.path,&o->diagnostic_uri);
+        if(status!=XR_XIR_OK)return status;
+        for(size_t length=0;;++length) {
+            status=open_status(xr_compile_resources_work(o->resources,1));if(status!=XR_XIR_OK)return status;
+            if(!o->diagnostic_uri[length]){o->diagnostic_uri_length=length;break;}
+        }
+        /* The graph projected the actual read before freeing it. No second
+         * disk read or conversion against unrelated editor text is allowed. */
+        o->diagnostic_resolved=true;
+    }
     return XR_XIR_OK;
 }
 XrXirStatus xlsp_source_open_prepare(const XrXirCompileContext *context,const XlspSourceDocument *documents,size_t count,size_t entry,XlspSourceOpen **out) {
@@ -148,7 +164,20 @@ XrXirStatus xlsp_source_open_diagnostics_json(const XlspSourceOpen *o,const Xlsp
             text=xlsp_source_buffer_text(o->diagnostic_buffer);length=xlsp_source_buffer_length(o->diagnostic_buffer);
         }
         XrLspPosition point={0};
-        status=xlsp_source_position(o->resources,text,length,o->failure.diagnostic.line,o->failure.diagnostic.column,&point);
+        const XrXirSourceFailure *failure=&o->failure.source;
+        if(failure->origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE) {
+            if(!failure->has_utf16_position||failure->utf16_line>INT32_MAX||failure->utf16_column>INT32_MAX) {
+                status=XR_XIR_UNRESOLVED;goto done;
+            }
+            point=(XrLspPosition){failure->utf16_line,failure->utf16_column};
+            if(o->diagnostic_known_version) {
+                XrLspPosition checked={0};
+                status=xlsp_source_position(o->resources,text,length,o->failure.diagnostic.line,o->failure.diagnostic.column,&checked);
+                if(status==XR_XIR_OK&&(checked.line!=point.line||checked.character!=point.character))status=XR_XIR_BAD_STRUCTURE;
+            }
+        }else if(failure->origin==XR_XIR_SOURCE_DIAGNOSTIC_DEFAULT&&!failure->has_utf16_position)
+            status=xlsp_source_position(o->resources,text,length,o->failure.diagnostic.line,o->failure.diagnostic.column,&point);
+        else status=XR_XIR_BAD_STRUCTURE;
         if(status==XR_XIR_OK)status=open_add_diagnostic(array,point,point,o->failure.diagnostic.message);
         if(status!=XR_XIR_OK)goto done;
     }
@@ -168,9 +197,29 @@ XR_FUNC XrXirStatus xlsp_source_open_diagnostics_params_json(const XlspSourceOpe
     XrJsonValue *params=xjson_new_object();
     if(!params){xjson_free(diagnostics);return XR_XIR_OUT_OF_MEMORY;}
     if(!open_member(params,"uri",xjson_new_string(imported?o->diagnostic_uri:o->uri))||
-        !open_member(params,"version",xjson_new_number(imported?o->diagnostic_version:xlsp_source_buffer_version(buffer)))) {
+        !open_member(params,"version",imported&&!o->diagnostic_known_version?xjson_new_null():
+            xjson_new_number(imported?o->diagnostic_version:xlsp_source_buffer_version(buffer)))) {
         xjson_free(diagnostics);xjson_free(params);return XR_XIR_OUT_OF_MEMORY;
     }
     if(!open_member(params,"diagnostics",diagnostics)){xjson_free(params);return XR_XIR_OUT_OF_MEMORY;}
     *out=params;return XR_XIR_OK;
+}
+
+XR_FUNC const XrJsonValue *xlsp_source_open_published_clear(const XlspSourceOpen *open) {
+    return open?open->published_clear:NULL;
+}
+XR_FUNC uint64_t xlsp_source_open_diagnostic_revision(const XlspSourceOpen *open) {
+    return open?open->diagnostic_revision:0;
+}
+XR_FUNC XrXirStatus xlsp_source_open_diagnostic_work(const XlspSourceOpen *open,uint64_t amount) {
+    return open?open_status(xr_compile_resources_work(open->resources,amount)):XR_XIR_BAD_STRUCTURE;
+}
+XR_FUNC void xlsp_source_open_rebind_publication(XlspSourceOpen *fresh,XlspSourceOpen *old,uint64_t revision) {
+    XR_CHECK(fresh&&fresh!=old&&!fresh->published_clear,"Publication rebind requires an empty new Source owner");
+    fresh->diagnostic_revision=revision;
+    if(old){fresh->published_clear=old->published_clear;old->published_clear=NULL;}
+}
+XR_FUNC void xlsp_source_open_publication_commit(XlspSourceOpen *open,XrJsonValue **clear) {
+    XR_CHECK(open&&clear,"Publication commit requires its Source owner and receiving slot");
+    xjson_free(open->published_clear);open->published_clear=*clear;*clear=NULL;
 }

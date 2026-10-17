@@ -17,4 +17,7 @@
 XR_FUNC XrXirStatus xlsp_protocol_write_owned(XrLspServer *, XrJsonValue *message);
 XR_FUNC XrXirStatus xlsp_protocol_send_request(XrLspServer *, const char *, XrJsonValue *params);
 XR_FUNC XrXirStatus xlsp_protocol_send_notification(XrLspServer *, const char *, XrJsonValue *params);
+/* Both bodies are complete before any byte write. Always consumes both params;
+ * second may be NULL. A transport failure is terminal after any accepted bytes. */
+XR_FUNC XrXirStatus xlsp_protocol_send_notification_pair(XrLspServer *,const char *,XrJsonValue *,XrJsonValue *);
 #endif // XLSP_PROTOCOL_OUTPUT_H

@@ -47,7 +47,7 @@ target_include_directories(xray_xir_source PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/ge
 target_include_directories(xray_xir_source PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(xray_xir_source PUBLIC xray_xir xray_xir_scalar xray_xir_ctfe xray_compiler_parser)
 # The LSP query owner consumes the same Source pipeline without legacy VM/analyzer.
-add_library(xray_lsp_source_query STATIC ../app/lsp/xlsp_source_query.c
+add_library(xray_lsp_source_query STATIC ../app/lsp/xlsp_source_query.c ../app/lsp/xlsp_source_file_uri.c
     ../app/lsp/xlsp_source_navigation.c ../base/xjson.c)
 target_link_libraries(xray_lsp_source_query PUBLIC xray_xir_source)
 if(MSVC)

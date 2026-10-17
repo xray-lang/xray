@@ -56,6 +56,7 @@ XR_FUNC void xlsp_source_locations_free(XlspSourceLocations *locations);
 /* Common bounded URI decoder; output is compiler-owned, independently pinned. */
 XR_FUNC XrXirStatus xlsp_source_uri_path(XrCompileResources *,const char *,size_t,char **);
 /* Same-ledger UTF-8 native path encoding; failure preserves output. */
+XR_FUNC XrXirStatus xlsp_index_file_uri(XrCompileResources *,const char *,char **);
 /* Each document has its real independently discovered authority. The Source
  * resolver performs all cross-authority and Catalog admission. */
 XR_FUNC XrXirStatus xlsp_source_snapshot_build_authorities(const XrXirSourceRequest *,

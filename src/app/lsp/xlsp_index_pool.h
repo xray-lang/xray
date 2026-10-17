@@ -34,7 +34,6 @@ XR_FUNC void xlsp_index_pool_free(XrLspIndexPool *);
 XR_FUNC XrXirStatus xlsp_index_pool_submit(XrLspIndexPool *,const char *,const char *,uint64_t);
 /* One batch publishes every captured node or none. */
 XR_FUNC XrXirStatus xlsp_index_pool_submit_batch(XrLspIndexPool *,char *const *,size_t,uint64_t);
-XR_FUNC XrXirStatus xlsp_index_file_uri(XrCompileResources *,const char *,char **);
 XR_FUNC void xlsp_index_pool_cancel_all(XrLspIndexPool *);
 /* Exact decoded path spelling, with only Windows separator normalization.
  * Mark every queued/running/completed match without fresh resource admission. */
