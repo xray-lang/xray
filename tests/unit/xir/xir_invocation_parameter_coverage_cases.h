@@ -119,9 +119,9 @@ static void invocation_parameter_rejections(EffectInvocationOwner *owner,uint32_
         owner->consumers[n]=UINT32_MAX;
         invocation_parameter_expect_rejection(owner,mode,"missing-incoming");
         owner->consumers[n]=head;
-        uint64_t input=node->input[0];node->input[0]^=UINT64_C(1);
+        uint64_t input=node->input[0];((uint64_t *)node->input)[0]^=UINT64_C(1);
         invocation_parameter_expect_rejection(owner,mode,"changed-key");
-        node->input[0]=input;
+        ((uint64_t *)node->input)[0]=input;
         const EffectInvocationEdge *edge=&owner->edges[head];
         uint32_t caller=edge->caller;uint64_t returned=owner->nodes[caller].return_coverage;
         /* The real caller returns I64, so coverage must come from its CALL

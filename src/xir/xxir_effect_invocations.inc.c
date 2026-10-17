@@ -44,7 +44,8 @@ typedef struct EffectInvocationNode {
     uint32_t root,body,parameter_count,instruction_count;
     uint32_t intrinsic_mask,local_mask,cause_count;
     EffectInvocationCause *causes;
-    uint64_t *input,*cells,*local_cells;
+    const uint64_t *input;
+    uint64_t *cells,*local_cells;
     EffectInvocationProducer *producers;
     uint32_t producer_count,producer_capacity;
     uint64_t return_coverage;
@@ -102,6 +103,14 @@ typedef struct EffectInvocationSite {
     uint32_t function,instruction,target,captures,binding;
 } EffectInvocationSite;
 
+typedef struct EffectInvocationZeroInput {
+    struct EffectInvocationZeroInput *next;
+    size_t words;
+} EffectInvocationZeroInput;
+
+_Static_assert(sizeof(EffectInvocationZeroInput)%_Alignof(uint64_t)==0,
+    "Zero input payloads preserve word alignment");
+
 typedef struct EffectInvocationOwner {
     const XrXirCompileContext *work;
     XrXirEffects *effects;
@@ -113,6 +122,7 @@ typedef struct EffectInvocationOwner {
     const XrXirCellProvenance *cells;
     EffectInvocationNode *nodes;
     EffectInvocationResult *prepared_result;
+    EffectInvocationZeroInput *zero_inputs;
     EffectInvocationEdge *edges;
     uint32_t *edge_index;
     size_t edge_index_capacity;

@@ -98,6 +98,8 @@ static XrXirStatus effect_invocation_basis(const EffectInvocationOwner *owner,
     return status==XR_XIR_OK?effect_invocation_basis_parameters(owner,head.parameter_count,output):status;
 }
 
+#include "xxir_effect_invocation_zero_inputs.inc.c"
+
 static void effect_invocation_free(EffectInvocationOwner *owner) {
     if (!owner) return;
     effect_invocation_result_free(owner->prepared_result);
@@ -108,6 +110,10 @@ static void effect_invocation_free(EffectInvocationOwner *owner) {
     }
     for (uint32_t d=0;d<owner->deferred_count;++d)
         xr_compile_resources_free(owner->deferred_calls[d].arguments);
+    while (owner->zero_inputs) {
+        EffectInvocationZeroInput *row=owner->zero_inputs;owner->zero_inputs=row->next;
+        xr_compile_resources_free(row);
+    }
     xr_compile_resources_free(owner->deferred_calls);
     xr_compile_resources_free(owner->nodes);
     xr_compile_resources_free(owner->edges);
@@ -214,7 +220,10 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     uint64_t cause_count=(uint64_t)basis.parameters*2+3;
     if (output_words>SIZE_MAX/(2*sizeof(uint64_t)) || cause_count>UINT32_MAX ||
         cause_count>SIZE_MAX/(2*sizeof(EffectInvocationCause))) return XR_XIR_BUDGET;
-    size_t input_bytes=(size_t)words*sizeof(uint64_t);
+    const uint64_t *shared=NULL;
+    status=effect_invocation_zero_input(owner,input,words,&shared);
+    if (status!=XR_XIR_OK) return status;
+    size_t input_bytes=shared ? 0 : (size_t)words*sizeof(uint64_t);
     size_t output_bytes=(size_t)output_words*2*sizeof(uint64_t);
     size_t cause_bytes=(size_t)cause_count*2*sizeof(EffectInvocationCause);
     if (input_bytes>SIZE_MAX-cause_bytes || output_bytes>SIZE_MAX-cause_bytes-input_bytes)
@@ -224,12 +233,13 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     size_t coverage_bytes=(size_t)coverage_words*sizeof(uint64_t);
     if (coverage_bytes>SIZE_MAX-cause_bytes-input_bytes-output_bytes) return XR_XIR_BUDGET;
     /* These rows share exactly one equation lifetime. The cause pointer is
-     * the allocation root; every input and output pointer is an interior view. */
+     * the allocation root for private outputs and nonzero inputs. Immutable
+     * zero inputs have the same parent lifetime in a separate owned row. */
     EffectInvocationCause *causes=xir_compile_calloc(owner->work,1,
         cause_bytes+input_bytes+output_bytes+coverage_bytes,&status);
     if (!causes) return status;
     uint8_t *memory=(uint8_t *)causes;
-    uint64_t *owned=words ? (uint64_t *)(memory+cause_bytes) : NULL;
+    uint64_t *owned=words && !shared ? (uint64_t *)(memory+cause_bytes) : NULL;
     uint64_t *outputs=output_words ? (uint64_t *)(memory+cause_bytes+input_bytes) : NULL;
     uint64_t *local_cells=outputs ? outputs+(size_t)output_words : NULL;
     uint64_t *coverage=parameters ?
@@ -240,17 +250,17 @@ static XrXirStatus effect_invocation_intern(EffectInvocationOwner *owner,
     for (uint32_t a=0;a<(uint32_t)cause_count;++a) {
         causes[a].next=causes[a].edge=causes[a].distance=UINT32_MAX;
     }
-    if (!xir_compile_work(owner->work,words*sizeof(*owned)+sizeof(EffectInvocationNode))) {
+    if (!xir_compile_work(owner->work,input_bytes+sizeof(EffectInvocationNode))) {
         xr_compile_resources_free(causes);return XR_XIR_BUDGET;
     }
-    if (words) memcpy(owned,input,(size_t)words*sizeof(*owned));
+    if (input_bytes) memcpy(owned,input,input_bytes);
     EffectInvocationClassFact *classes=NULL; uint32_t class_count=0;
     status=effect_invocation_class_storage(owner,body,&classes,&class_count);
     if (status!=XR_XIR_OK) { xr_compile_resources_free(causes);return status; }
     uint32_t at=owner->count;
     owner->nodes[at]=(EffectInvocationNode){.root=root,.body=body,
         .parameter_count=parameters,.instruction_count=head.instruction_count,
-        .input=owned,.cells=outputs,
+        .input=shared?shared:owned,.cells=outputs,
         .causes=causes,.cause_count=(uint32_t)cause_count,.local_cells=local_cells,
         .parameter_coverage=coverage,.edge_head=UINT32_MAX,.classes=classes,.class_count=class_count};
     ++owner->count;
