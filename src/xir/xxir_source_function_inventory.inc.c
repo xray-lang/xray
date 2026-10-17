@@ -50,6 +50,11 @@ static bool count_closures(AstNode *node, void *pointer) {
             return source_fail(scan->ctx,node,XR_XIR_BUDGET,"generator factory inventory exhausted");
         ++scan->count;
     }
+    if(node->type==AST_METHOD_DECL && scan->yielded) {
+        if(scan->helpers==UINT32_MAX)
+            return source_fail(scan->ctx,node,XR_XIR_BUDGET,"generator method factory inventory exhausted");
+        ++scan->helpers;
+    }
     if(function) scan->yielded=outer_yield;
     return ok || source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"unknown source declaration shape");
 }
