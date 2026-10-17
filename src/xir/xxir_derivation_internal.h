@@ -62,6 +62,10 @@ XR_FUNC XrXirStatus xir_derivations_copy(const XrXirCompileContext *,
 XR_FUNC XrXirStatus xir_derivations_structure_verify(const XrXirCompileContext *,
     const XrXirDerivationTable *);
 XR_FUNC void xir_derivations_free(XrXirDerivationTable *);
+/* Exact initialized data correspondence; NULL same rejects any difference.
+ * Private change detection never suppresses malformed storage or budget errors. */
+XR_FUNC XrXirStatus xir_derivations_match(const XrXirCompileContext *,
+    const XrXirDerivationTable *, const XrXirDerivationTable *, bool *same);
 XR_FUNC XrXirStatus xir_derivations_verify(const XrXirCompileContext *,
     const XrXirModule *);
 /* Validate one authentic definition before its generated methods exist.

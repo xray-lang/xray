@@ -10,3 +10,17 @@ add_test(NAME test_xir_source_product_vm
     COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_LIST_DIR}/source_product_vm_test.py
         $<TARGET_FILE:test_xir_source_product_vm> ${PROJECT_SOURCE_DIR}/stdlib)
 set_tests_properties(test_xir_source_product_vm PROPERTIES TIMEOUT 60 LABELS "unit;xir;ownership;stdlib;execution")
+
+# Retained immutable Source data must match the newly decoded proof in full.
+add_test(NAME test_xir_program_proof_source_facts
+    COMMAND test_xir_source_generic_callable_context --proof-source-facts)
+set_tests_properties(test_xir_program_proof_source_facts PROPERTIES
+    TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;source;ownership;compiler")
+add_test(NAME test_xir_program_proof_source_facts_controls
+    COMMAND test_xir_source_generic_callable_context --proof-source-facts-resource-controls)
+set_tests_properties(test_xir_program_proof_source_facts_controls PROPERTIES
+    TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;source;ownership;compiler-fault")
+add_test(NAME test_xir_program_proof_source_facts_resources
+    COMMAND test_xir_source_generic_callable_context --proof-source-facts-resources)
+set_tests_properties(test_xir_program_proof_source_facts_resources PROPERTIES
+    TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;source;ownership;compiler-fault")

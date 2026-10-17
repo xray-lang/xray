@@ -110,7 +110,7 @@ static void match(const XrXirCompileContext *context,uint32_t role_a,uint32_t ti
     spec.proof=xr_xir_compile_program_proof(a);
     CHECK(xr_xir_compile_program_match(context,&spec,spec.proof.layouts,a)==XR_XIR_BAD_STRUCTURE);
     XrXirProgramPermissions *permissions=NULL;
-    CHECK(xr_xir_compile_program_proof_verify(context,&spec,&spec.proof,&permissions)==XR_XIR_BAD_STRUCTURE && !permissions);
+    CHECK(xr_xir_compile_program_proof_verify(context,&spec,&spec.proof,NULL,&permissions)==XR_XIR_BAD_STRUCTURE && !permissions);
     CHECK(xr_xir_compile_program_seal(context,&spec,&program)==XR_XIR_BAD_STRUCTURE && !program);
     xr_xir_compile_artifact_free(a);xr_xir_compile_artifact_free(b);
 }

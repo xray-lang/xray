@@ -54,6 +54,9 @@ static void packet_free(void *p) {
 #include "xir/xxir_interface.c"
 #include "xir/xxir_interface_members.c"
 #include "xir/xxir_type_layout.c"
+#include "xir/xxir_derivation.c"
+#include "xir/xxir_derivation_verify.c"
+#include "xir/xxir_input_owned.c"
 #include "xir/xxir_generic.c"
 #include "xir/xxir_defaults.c"
 #include "xir/xxir.c"
@@ -383,7 +386,7 @@ static void native_packet_proof(void) {
         XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,16000001});
         XrCompileResourceStats before=consumer_context_stats(&probe);
         packet_allocation_calls=0;fail_at=attempt?attempt-1:SIZE_MAX;
-        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==(attempt?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK));
+        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,NULL,&permissions)==(attempt?XR_XIR_OUT_OF_MEMORY:XR_XIR_OK));
         CHECK((permissions!=NULL)==!attempt);
         if(!attempt){sites=packet_allocation_calls;required=consumer_context_stats(&probe);}
         xir_program_permissions_free(permissions);permissions=NULL;
@@ -399,7 +402,7 @@ static void native_packet_proof(void) {
         if(!attack)artifact->checked_packet.bytes[0]^=1;
         if(attack==1)artifact->checked_identity[0]^=1;
         if(attack==4)entries[0].result=XR_XIR_BOOL;
-        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==((attack==2||attack==3)?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE));
+        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,NULL,&permissions)==((attack==2||attack==3)?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE));
         CHECK(!permissions);
         if(!attack)artifact->checked_packet.bytes[0]^=1;
         if(attack==1)artifact->checked_identity[0]^=1;
@@ -410,7 +413,7 @@ static void native_packet_proof(void) {
         for(unsigned minus=0;minus<2;++minus){
             XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){cap*7-minus,cap*7-minus,16000001});
             XrCompileResourceStats before=consumer_context_stats(&probe);
-            XrXirStatus status=xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions);
+            XrXirStatus status=xr_xir_compile_program_proof_verify(&probe,&spec,&proof,NULL,&permissions);
             CHECK(status==XR_XIR_OK || status==XR_XIR_BUDGET);
             CHECK((permissions!=NULL)==(status==XR_XIR_OK));
             XrCompileResourceStats actual=consumer_context_stats(&probe);
@@ -426,16 +429,16 @@ static void native_packet_proof(void) {
         if(axis==1)limits.live_bytes=required.peak_bytes-minus;
         if(axis==2)limits.work=required.work-minus;
         XrXirCompileContext probe=consumer_context_ephemeral(limits);XrCompileResourceStats before=consumer_context_stats(&probe);
-        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,NULL,&permissions)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
         CHECK((permissions!=NULL)==!minus);xir_program_permissions_free(permissions);permissions=NULL;
         consumer_context_ephemeral_free(&probe,before);CHECK(live==baseline && live_bytes==baseline_bytes);
     }
     XrXirCompileContext probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,16000001});
     XrCompileResourceStats before=consumer_context_stats(&probe);XrXirProgramProof overflowing=proof;overflowing.length=SIZE_MAX;
-    packet_allocation_calls=0;CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&overflowing,&permissions)==XR_XIR_BUDGET && !packet_allocation_calls && !permissions);
+    packet_allocation_calls=0;CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&overflowing,NULL,&permissions)==XR_XIR_BUDGET && !packet_allocation_calls && !permissions);
     consumer_context_ephemeral_free(&probe,before);
     probe=consumer_context_ephemeral((XrCompileResourceLimits){67108864,8388608,proof.length});before=consumer_context_stats(&probe);
-    CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,&permissions)==XR_XIR_BUDGET && !permissions);
+    CHECK(xr_xir_compile_program_proof_verify(&probe,&spec,&proof,NULL,&permissions)==XR_XIR_BUDGET && !permissions);
     consumer_context_ephemeral_free(&probe,before);CHECK(live==baseline && live_bytes==baseline_bytes);
     xr_xir_compile_artifact_free(artifact);artifact=NULL;
     CHECK(live==consumer_context_owner_count && live_bytes==consumer_context_ledger_bytes());

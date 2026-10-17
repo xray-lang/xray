@@ -8,9 +8,11 @@
  *
  * KEY CONCEPT:
  *   The private certificate owns one packed declaration block. The common
- *   implementation-table owner and every copied value retain their own rules.
+ *   implementation and derivation table owners keep their own nested storage;
+ *   no borrowed input table escapes into the immutable snapshot.
  */
 #include "xxir_implementation.h"
+#include "xxir_derivation_internal.h"
 
 _Static_assert(sizeof(XrXirDeclarations)%_Alignof(XrXirSourceModule)==0 &&
     sizeof(XrXirSourceModule)%_Alignof(XrXirLiteral)==0 &&
@@ -81,6 +83,7 @@ static void *effect_invocation_declaration_copy(const XrXirCompileContext *work,
 static void effect_invocation_declarations_free(XrXirDeclarations *declarations) {
     if (!declarations) return;
     xr_xir_compile_implementations_free((XrXirImplementationTable *)declarations->implementations);
+    xir_derivations_free((XrXirDerivationTable *)declarations->derivations);
     xr_compile_resources_free(declarations);
 }
 
@@ -109,7 +112,7 @@ static XrXirStatus effect_invocation_declarations_clone(const XrXirCompileContex
     if (!copy) return status;
     if (!xir_compile_work(work,sizeof(*copy))) { xr_compile_resources_free(copy);return XR_XIR_BUDGET; }
     memset(copy,0,sizeof(*copy));
-    *copy=*source;copy->implementations=NULL;
+    *copy=*source;copy->implementations=NULL;copy->derivations=NULL;
     uint8_t *storage=(uint8_t *)copy;
     XrXirSourceModule *modules=(XrXirSourceModule *)(storage+layout.modules);
     XrXirLiteral *literals=source->literal_count ? (XrXirLiteral *)(storage+layout.literals):NULL;
@@ -142,7 +145,15 @@ static XrXirStatus effect_invocation_declarations_clone(const XrXirCompileContex
     XrXirImplementationTable *implementations=NULL;
     status=xr_xir_compile_implementations_copy_verified(work,source->implementations,&implementations);
     if (status!=XR_XIR_OK) goto failed;
-    copy->implementations=implementations;*output=copy;return XR_XIR_OK;
+    copy->implementations=implementations;
+    if (source->derivations) {
+        XrXirDerivationTable *derivations=NULL;
+        if (!xir_compile_work(work,sizeof(copy->derivations))) { status=XR_XIR_BUDGET;goto failed; }
+        status=xir_derivations_copy(work,source->derivations,&derivations);
+        if (status!=XR_XIR_OK) goto failed;
+        copy->derivations=derivations;
+    }
+    *output=copy;return XR_XIR_OK;
 failed:
     effect_invocation_declarations_free(copy);return status;
 }

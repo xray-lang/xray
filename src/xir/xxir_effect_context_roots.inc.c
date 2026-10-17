@@ -10,6 +10,7 @@
  *   Ordinary views derive equations with the existing body solver. This helper
  *   neither admits an executable module nor grants worker authority.
  */
+#include "xxir_derivation_internal.h"
 static XrXirStatus effect_ordinary_op_match(const EffectOrdinaryContexts *contexts,
     const XrXirModule *source, uint32_t function, uint32_t instruction, EffectTerms *terms) {
     EffectOrdinaryNode identity=contexts->nodes[function];
@@ -95,8 +96,9 @@ static XrXirStatus effect_ordinary_implementations_match(const EffectOrdinaryCon
     if (!!a!=!!b || (a && a->count!=b->count)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=0;a && i<a->count;++i) {
         const XrXirImplementation *left=&a->records[i],*right=&b->records[i];
-        if (!xir_compile_work(terms->remaining,2)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(terms->remaining,3)) return XR_XIR_BUDGET;
         if (left->nominal_declaration!=right->nominal_declaration || left->binding_count!=right->binding_count ||
+            left->derivation_policy!=right->derivation_policy ||
             !terms->types.nominals || left->nominal_declaration>=terms->types.nominals->count)
             return XR_XIR_BAD_STRUCTURE;
         uint32_t scope=terms->types.nominals->declarations[left->nominal_declaration].parameter_count;
@@ -166,7 +168,11 @@ static XrXirStatus effect_ordinary_declarations_match(const EffectOrdinaryContex
     if (!xir_compile_work(context,(uint64_t)count*sizeof(XrXirDefaultBinding))) return XR_XIR_BUDGET;
     if (count && (!source->defaults->records || memcmp(contexts->source_defaults.records,
         source->defaults->records,(size_t)count*sizeof(XrXirDefaultBinding)))) return XR_XIR_BAD_STRUCTURE;
-    return effect_ordinary_implementations_match(contexts,source,terms);
+    XrXirStatus status=effect_ordinary_implementations_match(contexts,source,terms);
+    /* This owned snapshot preserves the original Source type ordinals. */
+    if (status==XR_XIR_OK) status=xir_derivations_match(context,
+        a?a->derivations:NULL,b?b->derivations:NULL,NULL);
+    return status;
 }
 
 static XrXirStatus effect_ordinary_bodies_match(const EffectOrdinaryContexts *contexts,

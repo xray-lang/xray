@@ -131,13 +131,13 @@ static XrXirStatus program_copy_entries(XrXirProgram *program, const XrXirProgra
     }
     return status;
 }
-XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec, XrXirProgram **output) {
+XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec, const XrXirArtifact *source_owner, XrXirProgram **output) {
     if (!output || *output || !xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = program_shape(context, spec);
     if (status != XR_XIR_OK) return status;
     XrXirProgramPermissions *permissions = NULL;
-    status = xr_xir_compile_program_proof_verify(context, spec, &spec->proof, &permissions);
+    status = xr_xir_compile_program_proof_verify(context, spec, &spec->proof, source_owner, &permissions);
     if (status != XR_XIR_OK) return status;
     if (spec->types) for (uint32_t i = 0; i < spec->types->count; ++i) {
         if (!xir_compile_work(context, 1)) { xir_program_permissions_free(permissions); return XR_XIR_BUDGET; }
@@ -179,6 +179,10 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
 failed:
     program_dispose(program);
     return status;
+}
+XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec, XrXirProgram **output) {
+    return xir_program_receive(context,spec,NULL,output);
 }
 XR_FUNC bool xr_xir_compile_program_retain(XrXirProgram *program) {
     if (!program) return false;

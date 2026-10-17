@@ -111,7 +111,16 @@ XR_FUNC void xir_source_facts_release(XirSourceFacts *facts);
 XR_FUNC const XrXirEffects *xir_source_facts_effects(const XirSourceFacts *facts);
 /* Only the private decoder calls this on its unpublished complete EOF owner. */
 XR_FUNC XrXirStatus xir_source_facts_prepare_decoded(XrXirArtifact *artifact,
-    XrXirDiagnostic *diagnostic);
+    const XrXirArtifact *source_owner, XrXirDiagnostic *diagnostic);
+/* The optional owner supplies immutable data, never a successful admission.
+ * The sole byte decoder still matches its entire freshly reconstructed Source. */
+typedef struct XirCheckedInput {
+    const void *bytes;
+    size_t length;
+    const XrXirArtifact *source_owner;
+} XirCheckedInput;
+XR_FUNC XrXirStatus xir_checked_receive(const XrXirCompileContext *context,
+    const XirCheckedInput *input, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
 /* Unpublished fresh Source collector only; independent terminal follows. */
 XR_FUNC XrXirStatus xir_effects_source_retire_generation(const XrXirCompileContext *context,
     const XrXirModule *source,XrXirEffects *effects);
@@ -204,7 +213,7 @@ typedef struct XirLoweredEffects {
     XrXirEffects *effects;
 } XirLoweredEffects;
 XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower_effects(const XrXirCompileContext *context,
-    const void *bytes, size_t length, const XrXirTarget *target,
+    const XirCheckedInput *input, const XrXirTarget *target,
     XirLoweredEffects *output, XrXirDiagnostic *diagnostic);
 
 #endif // XXIR_INTERNAL_H

@@ -84,33 +84,13 @@ static XrXirStatus match_types(const XrXirTypes *a, const XrXirTypes *b, const X
     }
     return XR_XIR_OK;
 }
-static XrXirStatus match_derivation_origin(const XrXirGeneratedOrigin *a,
-    const XrXirGeneratedOrigin *b,const XrXirCompileContext *context) {
-    MATCH(a->line,b->line);MATCH(a->column,b->column);
-    TRY(match_literal((XrXirLiteral){a->module.bytes,a->module.length},
-        (XrXirLiteral){b->module.bytes,b->module.length},context));
-    TRY(match_literal((XrXirLiteral){a->file.bytes,a->file.length},
-        (XrXirLiteral){b->file.bytes,b->file.length},context));
-    return match_literal((XrXirLiteral){a->field_path.bytes,a->field_path.length},
-        (XrXirLiteral){b->field_path.bytes,b->field_path.length},context);
-}
 static XrXirStatus match_derivations(const XrXirDerivationTable *a,
     const XrXirDerivationTable *b,const XrXirCompileContext *context) {
     MATCH(!!a,!!b);
     if (!a) return XR_XIR_OK;
     TRY(xir_derivations_structure_verify(context,b));
     if (a->policy_count || b->policy_count) return XR_XIR_BAD_STAGE;
-    MATCH(a->count,b->count);
-    for (uint32_t i=0; i<a->count; ++i) {
-        const XrXirDerivationGrant *x=&a->records[i],*y=&b->records[i];
-        MATCH(x->function,y->function);MATCH(x->policy,y->policy);
-        MATCH(x->source_row,y->source_row);MATCH(x->root,y->root);MATCH(x->target,y->target);
-        MATCH(x->origins.instruction_count,y->origins.instruction_count);
-        TRY(match_derivation_origin(&x->origins.entry,&y->origins.entry,context));
-        for (uint32_t n=0; n<x->origins.instruction_count; ++n)
-            TRY(match_derivation_origin(&x->origins.instructions[n],&y->origins.instructions[n],context));
-    }
-    return XR_XIR_OK;
+    return xir_derivations_match(context,a,b,NULL);
 }
 static XrXirStatus match_declarations(const XrXirDeclarations *a,
     const XrXirDeclarations *b, uint32_t functions, const XrXirCompileContext *context) {
@@ -322,7 +302,8 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
     return XR_XIR_OK;
 }
 XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec, const XrXirProgramProof *proof, XrXirProgramPermissions **permissions) {
+    const XrXirProgramSpec *spec, const XrXirProgramProof *proof,
+    const XrXirArtifact *source_owner, XrXirProgramPermissions **permissions) {
     if (!xir_compile_context_valid(context) || !spec || !proof || !proof->bytes ||
         proof->length < 64 || !proof->identity || !proof->layouts || !permissions || *permissions)
         return XR_XIR_BAD_STRUCTURE;
@@ -333,7 +314,8 @@ XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContex
     if (memcmp(digest, proof->identity, sizeof(digest))) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context, sizeof(XirLoweredEffects))) return XR_XIR_BUDGET;
     XirLoweredEffects lowered = {0};
-    XrXirStatus status = xr_xir_compile_checked_read_lower_effects(context, proof->bytes, proof->length,
+    const XirCheckedInput input={proof->bytes,proof->length,source_owner};
+    XrXirStatus status = xr_xir_compile_checked_read_lower_effects(context, &input,
         &spec->target, &lowered, NULL);
     if (status == XR_XIR_OK)
         status = xr_xir_compile_program_match(context, spec, proof->layouts, lowered.artifact);

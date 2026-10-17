@@ -402,7 +402,7 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower(const XrXirCompileContext 
 /* Both outputs remain private until packet, type, source, effects and every
  * physical layout check finish. Only the decoded owner can reach this path. */
 XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower_effects(const XrXirCompileContext *context,
-    const void *bytes, size_t length, const XrXirTarget *target,
+    const XirCheckedInput *input, const XrXirTarget *target,
     XirLoweredEffects *output, XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !output || output->artifact || output->effects)
         return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
@@ -410,7 +410,7 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower_effects(const XrXirCompile
         return transition_error(XR_XIR_BUDGET, diagnostic);
     XirLoweredEffects result = {0};
     XrXirArtifact *checked = NULL;
-    XrXirStatus status = xr_xir_compile_checked_read(context, bytes, length, &checked, diagnostic);
+    XrXirStatus status = xir_checked_receive(context, input, &checked, diagnostic);
     if (status == XR_XIR_OK)
         status = transition_shape(&checked->module, XR_XIR_CHECKED, &checked->context, target, diagnostic);
     const TransitionInputProof proof = {checked_encode, &checked, &result.effects};

@@ -35,11 +35,17 @@ XrXirStatus xr_xir_compile_checked_write(const XrXirArtifact *artifact, XrXirChe
     return checked_encode(artifact, output, diagnostic);
 }
 XR_FUNC XrXirStatus xr_xir_compile_checked_read(const XrXirCompileContext *compile_context, const void *bytes, size_t length, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
+    const XirCheckedInput input={bytes,length,NULL};
+    return xir_checked_receive(compile_context,&input,output,diagnostic);
+}
+XR_FUNC XrXirStatus xir_checked_receive(const XrXirCompileContext *compile_context,
+    const XirCheckedInput *input, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     XrXirStatus allocation_status = XR_XIR_OK;
-    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_context_valid(compile_context) || !input) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *budget = &compile_state;
     if (!output || *output) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
+    const void *bytes=input->bytes;size_t length=input->length;
 
     XrXirCompileContext limits = *budget;
     if (!bytes || length < 64) return checked_error(XR_XIR_BAD_STRUCTURE, diagnostic);
@@ -69,7 +75,7 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read(const XrXirCompileContext *compi
     if (c.status!=XR_XIR_OK) goto decode_failure;
     /* Decoding and semantic verification share the allocation owner. */
 
-    c.status=xir_source_facts_prepare_decoded(artifact,diagnostic);
+    c.status=xir_source_facts_prepare_decoded(artifact,input->source_owner,diagnostic);
     if (c.status==XR_XIR_OK) c.status=xr_xir_compile_artifact_verify(artifact,diagnostic);
 
     if (c.status!=XR_XIR_OK) { xr_xir_compile_artifact_free(artifact); return c.status; }

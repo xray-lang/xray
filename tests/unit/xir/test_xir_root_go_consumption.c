@@ -88,7 +88,7 @@ static void go_proof(const XrXirArtifact *lowered,bool resources) {
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,*xr_xir_compile_artifact_target(lowered),
         entries,module->function_count,module->declarations,{0},module->types,xr_xir_compile_program_proof(lowered)};
     XrXirProgramPermissions *authority=NULL;EffectMark mark=effect_mark();
-    CHECK(xr_xir_compile_program_proof_verify(&effect_context,&spec,&spec.proof,&authority)==XR_XIR_OK&&authority);
+    CHECK(xr_xir_compile_program_proof_verify(&effect_context,&spec,&spec.proof,NULL,&authority)==XR_XIR_OK&&authority);
     go_authority_oracles(module,authority);xir_program_permissions_free(authority);effect_mark_check(mark);
     if(resources)go_authority_failures(&spec);
     xr_compile_resources_free(entries);xr_compile_resources_free(bindings);

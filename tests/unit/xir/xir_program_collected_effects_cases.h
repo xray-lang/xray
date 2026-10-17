@@ -20,18 +20,19 @@ static void program_collected_effects_reject(const XrXirCompileContext *context,
         XirLoweredEffects sentinel=output;
         XrCompileResourceStats before=consumer_context_stats(context);
         size_t attempts_before=source_program_compile_attempts;
-        CHECK(xr_xir_compile_checked_read_lower_effects(context,(const void *)(uintptr_t)1,
-            SIZE_MAX,target,&output,NULL)==XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_xir_compile_checked_read_lower_effects(context,
+            &(XirCheckedInput){(const void *)(uintptr_t)1,SIZE_MAX,NULL},target,&output,NULL)==XR_XIR_BAD_STRUCTURE);
         XrCompileResourceStats after=consumer_context_stats(context);
         CHECK(!memcmp(&before,&after,sizeof(before)) && source_program_compile_attempts==attempts_before);
         CHECK(!memcmp(&output,&sentinel,sizeof(output)));
     }
     XirLoweredEffects output={0};
     XrCompileResourceStats before=consumer_context_stats(context);
-    CHECK(xr_xir_compile_checked_read_lower_effects(context,proof->bytes,32,target,&output,NULL)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_checked_read_lower_effects(context,
+        &(XirCheckedInput){proof->bytes,32,NULL},target,&output,NULL)==XR_XIR_BAD_STRUCTURE);
     CHECK(!output.artifact && !output.effects && consumer_context_stats(context).live_bytes==before.live_bytes);
     XrXirTarget bad=*target;bad.abi_version=0;
-    CHECK(xr_xir_compile_checked_read_lower_effects(context,proof->bytes,proof->length,
+    CHECK(xr_xir_compile_checked_read_lower_effects(context,&(XirCheckedInput){proof->bytes,proof->length,NULL},
         &bad,&output,NULL)==XR_XIR_BAD_LAYOUT);
     CHECK(!output.artifact && !output.effects && consumer_context_stats(context).live_bytes==before.live_bytes);
 }
@@ -47,7 +48,7 @@ static void program_collected_effects_cases(void) {
     size_t ordinal=source_program_compile_attempts;
     source_program_compile_fail_at=ordinal;source_program_compile_injected=false;
     XirLoweredEffects failed={0};
-    CHECK(xr_xir_compile_checked_read_lower_effects(&context,proof.bytes,proof.length,
+    CHECK(xr_xir_compile_checked_read_lower_effects(&context,&(XirCheckedInput){proof.bytes,proof.length,NULL},
         &target,&failed,NULL)==XR_XIR_OUT_OF_MEMORY);
     CHECK(source_program_compile_injected && !failed.artifact && !failed.effects);
     CHECK(consumer_context_stats(&context).live_bytes==retained.live_bytes);
@@ -55,7 +56,7 @@ static void program_collected_effects_cases(void) {
     source_program_compile_fail_at=SIZE_MAX;source_program_compile_injected=false;
     XrCompileResourceStats failed_stats=consumer_context_stats(&context);
     XirLoweredEffects actual={0};
-    CHECK(xr_xir_compile_checked_read_lower_effects(&context,proof.bytes,proof.length,
+    CHECK(xr_xir_compile_checked_read_lower_effects(&context,&(XirCheckedInput){proof.bytes,proof.length,NULL},
         &target,&actual,NULL)==XR_XIR_OK && actual.artifact && actual.effects);
     CHECK(consumer_context_stats(&context).work>failed_stats.work && context.resources==actual.artifact->context.resources);
     const XrXirModule *module=xr_xir_compile_artifact_module(actual.artifact);

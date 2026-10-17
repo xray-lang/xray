@@ -196,8 +196,21 @@ static XrXirStatus source_facts_prepare(XrXirArtifact *artifact,XrXirDiagnostic 
 }
 
 XR_FUNC XrXirStatus xir_source_facts_prepare_decoded(XrXirArtifact *artifact,
-    XrXirDiagnostic *diagnostic) {
-    return source_facts_prepare(artifact,diagnostic);
+    const XrXirArtifact *source_owner, XrXirDiagnostic *diagnostic) {
+    if (!source_owner) return source_facts_prepare(artifact,diagnostic);
+    if (!artifact || artifact->module.stage!=XR_XIR_CHECKED ||
+        !artifact->module.provenance || artifact->module.provenance->kind!=XR_XIR_EVIDENCE_INSTANCE ||
+        !artifact->module.provenance->source) return XR_XIR_BAD_STRUCTURE;
+    XrXirArtifact *source=(XrXirArtifact *)artifact->module.provenance->source;
+    if (source->source_facts || !source_owner->source_facts) return XR_XIR_BAD_STRUCTURE;
+    /* Retention keeps only immutable data alive. Fresh Source shape, every
+     * body field, contracts, permissions, terminal and layout decide its use.
+     * A mismatched owner is refused without deriving replacement permission. */
+    XrXirStatus status=source_facts_input_match(&artifact->context,source,source_owner->source_facts);
+    if (status==XR_XIR_OK) status=source_facts_retain(&artifact->context,
+        source_owner->source_facts,&source->source_facts);
+    if (status==XR_XIR_OK) status=source_facts_match(&artifact->context,source,diagnostic);
+    return status;
 }
 
 XR_FUNC XrXirStatus xir_source_facts_acquire(const XrXirArtifact *artifact,

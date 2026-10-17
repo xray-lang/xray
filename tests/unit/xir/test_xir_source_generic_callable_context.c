@@ -236,6 +236,16 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
 #include "xir_generic_compiler_fault_shards.h"
 
 int main(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"--proof-source-facts")) {
+        proof_source_facts_controls();library_compile_observer_free();return 0;
+    }
+    if(argc==2 && !strcmp(argv[1],"--proof-source-facts-resource-controls")) {
+        proof_source_facts_resources(false);library_compile_observer_free();return 0;
+    }
+    if(argc==2 && !strcmp(argv[1],"--proof-source-facts-resources")) {
+        proof_source_facts_resources(true);
+        library_compile_observer_free();return 0;
+    }
     if(generic_fault_dispatch(argc,argv))return 0;
     if (argc==2 && !strcmp(argv[1],"--spec-key-controls")) {
         spec_key_source_controls();library_compile_observer_free();return 0;

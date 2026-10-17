@@ -191,7 +191,7 @@ static void program_method_kind_match(void) {
             altered.proof.layouts, lowered[side]);
         XrXirProgramPermissions *permissions = NULL;
         XrXirStatus proof = xr_xir_compile_program_proof_verify(&context, &altered,
-            &altered.proof, &permissions);
+            &altered.proof, NULL,&permissions);
         CHECK(!permissions);
         program = NULL;
         XrXirStatus sealed = xr_xir_compile_program_seal(&context, &altered, &program);

@@ -16,6 +16,7 @@
 
 #include "xxir_vm.h"
 #include "xxir_internal.h"
+#include "xxir_program_internal.h"
 #include "xxir_tuple.h"
 #include "xxir_atomic.h"
 #include "xxir_task.h"
@@ -935,7 +936,11 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_compile_artifact_target(*artifact),
         entries, module->function_count, module->declarations, {owner, vm_program_release}, module->types,
         xr_xir_compile_program_proof(*artifact)};
-    status = xr_xir_compile_program_seal(context, &spec, output);
+    const XrXirArtifact *source=module->provenance && module->provenance->kind==XR_XIR_EVIDENCE_INSTANCE ?
+        module->provenance->source:NULL;
+    if (source && (!source->module.provenance ||
+        source->module.provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE)) source=NULL;
+    status = xir_program_receive(context, &spec, source, output);
     if (status == XR_XIR_OK) { owner->artifact = *artifact; *artifact = NULL; }
 finish:
     xr_compile_resources_free(entries);

@@ -179,3 +179,5 @@ XR_FUNC XrXirStatus xir_derivations_copy(const XrXirCompileContext *context,
     *output=table;
     return XR_XIR_OK;
 }
+
+#include "xxir_derivation_match.inc.c"

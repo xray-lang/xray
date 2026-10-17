@@ -64,7 +64,12 @@ XR_FUNC XrXirStatus xr_xir_compile_program_match(const XrXirCompileContext *cont
 /* Decode, lowering and comparison consume the same owner. Successful
  * verification retains neither the packet nor temporary artifacts. */
 XR_FUNC XrXirStatus xr_xir_compile_program_proof_verify(const XrXirCompileContext *context,
-    const XrXirProgramSpec *spec, const XrXirProgramProof *proof, XrXirProgramPermissions **permissions);
+    const XrXirProgramSpec *spec, const XrXirProgramProof *proof,
+    const XrXirArtifact *source_owner, XrXirProgramPermissions **permissions);
+/* Both compiler-owned and external code enter this same complete seal. The
+ * optional Source owner is data for fresh byte correspondence, not authority. */
+XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
+    const XrXirProgramSpec *spec, const XrXirArtifact *source_owner, XrXirProgram **output);
 XR_FUNC bool xr_xir_compile_program_retain(XrXirProgram *program);
 /* Only the real synthetic initializer can report missing publication after
  * its owned module initializer returned Unit. This is not a host-fault waiver. */

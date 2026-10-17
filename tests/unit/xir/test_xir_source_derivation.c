@@ -29,6 +29,7 @@
 #include "xir_source_derivation_runtime.h"
 #include "xir_generated_schema.h"
 #include "xir_source_derivation_parser.h"
+#include "xir_derivation_source_snapshot_cases.h"
 static const char generator_format[]=
     "%s"
     "type MethodInfo=(string,i64,i64,i64,i64)\n"
@@ -136,9 +137,10 @@ int main(int argc,char **argv) {
     bool generator_packet=argc==3 && !strcmp(argv[1],"--emit-generator");
     bool emit=argc==4 && !strcmp(argv[1],"--emit-native");
     bool faults=argc==2 && !strcmp(argv[1],"--runtime-resources");
+    bool snapshot=argc==2 && !strcmp(argv[1],"--snapshot-facts");
     bool compiler=argc==2 && (!strcmp(argv[1],"--compiler-resources") || !strcmp(argv[1],"--compiler-controls"));
-    CHECK(argc==1 || emit || faults || compiler || generator_packet);
-    if (!emit && !faults && !compiler && !generator_packet) derive_parser_cases();
+    CHECK(argc==1 || emit || faults || compiler || generator_packet || snapshot);
+    if (!emit && !faults && !compiler && !generator_packet && !snapshot) derive_parser_cases();
     XrCompileResourceLimits caps={67108864,8388608,128000000};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline={0};
@@ -168,7 +170,7 @@ int main(int argc,char **argv) {
         xr_xir_compile_checked_packet_free(&packet);xr_compile_resources_release(context.resources);
         CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);return 0;
     }
-    if (!emit && !faults) derive_negative_cases(&packet,user_path);derive_absent(library_path);
+    if (!emit && !faults && !snapshot) derive_negative_cases(&packet,user_path);derive_absent(library_path);
     XrXirLibraryModuleInput binding={{XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_DERIVATION_WORK},"generator.xr"};
     XrXirLibraryInput input={packet.bytes,packet.length,{0},&binding,1};xr_sha256(packet.bytes,packet.length,input.sha256);
     XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(&context,&input,1,&catalog)==XR_XIR_OK);
@@ -176,13 +178,18 @@ int main(int argc,char **argv) {
     memset(&binding,0xa5,sizeof(binding));memset(&input,0xa5,sizeof(input));
     derive_write(user_path,user_source);XrXirSourceResult user={0};
     derive_source(&context,user_path,XR_XIR_PROGRAM,catalog,&user);derive_absent(library_path);
-    CHECK(!remove(user_path));derive_absent(user_path);if (!emit && !faults) derive_lsp(&context,user_path,catalog);
+    CHECK(!remove(user_path));derive_absent(user_path);if (!emit && !faults && !snapshot) derive_lsp(&context,user_path,catalog);
     xr_xir_compile_library_catalog_free(catalog);derive_absent(user_path);
     XrXirArtifact *checked=user.checked;user.checked=NULL;xr_xir_compile_source_result_free(&user);
-    derive_run(&context,checked,emit?argv[2]:NULL,emit?argv[3]:NULL,faults);XrCompileResourceStats spent={0};
+    bool snapshot_refused=true;
+    if(snapshot){snapshot_refused=derive_snapshot_source_facts(checked);xr_xir_compile_artifact_free(checked);}
+    else derive_run(&context,checked,emit?argv[2]:NULL,emit?argv[3]:NULL,faults);
+    XrCompileResourceStats spent={0};
     CHECK(xr_compile_resources_stats(context.resources,&spent)==XR_COMPILE_RESOURCE_OK && spent.live_bytes==baseline.live_bytes);
-    fprintf(stderr,"automatic ordinary derivation/explicit policy/private helper/second Source/packet death/VM=42; allocated=%llu peak=%llu work=%llu\n",
+    fprintf(stderr,snapshot?"real Source policy snapshot: allocated=%llu peak=%llu work=%llu\n":
+        "automatic ordinary derivation/explicit policy/private helper/second Source/packet death/VM=42; allocated=%llu peak=%llu work=%llu\n",
         (unsigned long long)spent.allocated_bytes,(unsigned long long)spent.peak_bytes,(unsigned long long)spent.work);
     xr_compile_resources_release(context.resources);
-    CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);return 0;
+    CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes && !runtime_live && !runtime_bytes);
+    CHECK(!snapshot || snapshot_refused);return 0;
 }

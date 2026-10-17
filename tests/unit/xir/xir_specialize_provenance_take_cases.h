@@ -458,6 +458,7 @@ static void provenance_source_controls(void) {
 }
 
 #include "xir_source_facts_cases.h"
+#include "xir_proof_source_facts_cases.h"
 
 static void provenance_take_controls(void) {
     source_facts_case_lifetime();

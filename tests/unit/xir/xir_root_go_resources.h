@@ -54,15 +54,15 @@ static void go_authority_oracles(const XrXirModule *module,const XrXirProgramPer
 static void go_authority_failures(const XrXirProgramSpec *spec) {
     EffectMark mark=effect_mark();XrXirCompileContext context=effect_owner_new(effect_caps());
     uint64_t baseline=effect_stats(&context).live_bytes;XrXirProgramPermissions *authority=NULL;
-    attempts=0;CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,&authority)==XR_XIR_OK&&authority);
+    attempts=0;CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,NULL,&authority)==XR_XIR_OK&&authority);
     size_t sites=attempts;CHECK(sites);xir_program_permissions_free(authority);authority=NULL;
     XrCompileResourceStats measured=effect_stats(&context);effect_owner_free(&context,baseline);effect_mark_check(mark);
     for(size_t point=0;point<sites;++point){
         context=effect_owner_new(effect_caps());baseline=effect_stats(&context).live_bytes;
         authority=NULL;attempts=0;injected=false;fail_at=point;
-        CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,&authority)==XR_XIR_OUT_OF_MEMORY&&!authority&&injected);
+        CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,NULL,&authority)==XR_XIR_OUT_OF_MEMORY&&!authority&&injected);
         XrCompileResourceStats paid=effect_stats(&context);fail_at=SIZE_MAX;
-        CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,&authority)==XR_XIR_OK&&authority);
+        CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,NULL,&authority)==XR_XIR_OK&&authority);
         XrCompileResourceStats retried=effect_stats(&context);
         CHECK(retried.allocated_bytes>paid.allocated_bytes&&retried.work>paid.work);
         xir_program_permissions_free(authority);effect_owner_free(&context,baseline);effect_mark_check(mark);
@@ -72,13 +72,13 @@ static void go_authority_failures(const XrXirProgramSpec *spec) {
         uint64_t *limit=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;
         *limit=(axis==0?measured.allocated_bytes:axis==1?measured.peak_bytes:measured.work)-minus;
         context=effect_owner_new(limits);baseline=effect_stats(&context).live_bytes;authority=NULL;
-        CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,&authority)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+        CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,NULL,&authority)==(minus?XR_XIR_BUDGET:XR_XIR_OK));
         CHECK(minus?!authority:authority!=NULL);xir_program_permissions_free(authority);
         effect_owner_free(&context,baseline);effect_mark_check(mark);
     }
     context=effect_owner_new(effect_caps());baseline=effect_stats(&context).live_bytes;
     authority=(XrXirProgramPermissions *)(uintptr_t)1;attempts=0;XrCompileResourceStats occupied=effect_stats(&context);
-    CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,&authority)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_program_proof_verify(&context,spec,&spec->proof,NULL,&authority)==XR_XIR_BAD_STRUCTURE);
     XrCompileResourceStats after=effect_stats(&context);
     CHECK(authority==(XrXirProgramPermissions *)(uintptr_t)1&&!attempts&&occupied.work==after.work&&occupied.allocated_bytes==after.allocated_bytes);
     effect_owner_free(&context,baseline);effect_mark_check(mark);
