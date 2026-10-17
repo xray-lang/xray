@@ -31,7 +31,8 @@ static XrXirStatus effect_root_slot(const EffectRootSeedRecord *request,XrXirRoo
     XrXirRootEffectCause cause=XR_XIR_ROOT_CAUSE_MUTABLE_SLOT;
     if (!slot->mutable) {
         XirMetadataProofContext proof={request->domain,{XR_XIR_CONTEXT_FUNCTION,request->function,0}};
-        XrXirStatus status=xir_metadata_type_markers_prove(work,&proof,slot->type,XR_XIR_CONSTRAINT_SENDABLE);
+        if(!request->memory) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=xir_metadata_type_markers_read(work,&proof,slot->type,XR_XIR_CONSTRAINT_SENDABLE,request->memory);
         if (status==XR_XIR_OK) return XR_XIR_OK;
         if (status!=XR_XIR_BAD_TYPE) return status;
         cause=XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST;
@@ -188,28 +189,6 @@ static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,X
         return effect_root_callable(request,facts,required,unresolved,work);
     default: return XR_XIR_BAD_STRUCTURE;
     }
-}
-/* Array ownership and the single receiving-row kernel are separate. Both
- * constructors and independent replay use the same exhaustive authority rule. */
-static XrXirStatus effect_root_seed_record(const EffectRootSeedRecord *request,XrXirEffects *effects,
-    const XrXirCompileContext *work) {
-    if (!request || !effects || request->function>=effects->count || !effects->outcomes_work.root ||
-        !effects->outcomes_work.root_witnesses || !effects->outcomes_work.unresolved_witnesses) return XR_XIR_BAD_STRUCTURE;
-    return effect_root_seed_output(request,&effects->outcomes_work.root[request->function],
-        &effects->outcomes_work.root_witnesses[request->function],&effects->outcomes_work.unresolved_witnesses[request->function],work);
-}
-
-static inline XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effects,
-    uint32_t f,uint32_t i,const XrXirCompileContext *work) {
-    if (!module || !module->functions || f>=module->function_count ||
-        i>=module->functions[f].instruction_count || !module->functions[f].instructions)
-        return XR_XIR_BAD_STRUCTURE;
-    const XrXirInstruction *op=&module->functions[f].instructions[i];
-    XirMetadataDomain domain=xir_metadata_domain_from_module(module);
-    EffectRootSeedRecord request={&domain,op,f,i,XR_XIR_UNIT};
-    if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT)
-        request.callable_type=xr_xir_operand_type(&module->functions[f],(uint32_t)op->immediate);
-    return effect_root_seed_record(&request,effects,work);
 }
 /* Each node is queued once. Equal-distance parent choices can improve without
  * requeueing because descendants refer to the same node and fixed distance. */

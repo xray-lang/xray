@@ -15,6 +15,7 @@
 #define XXIR_CONSTRAINT_PROOF_INTERNAL_H
 #include "xxir_constraint_proof.h"
 #include "xxir_metadata_domain_internal.h"
+#include "xxir_read_scratch.h"
 struct ConstraintProofMemory;
 typedef struct XirConstraintScratch {
     XrCompileResources *resources;
@@ -40,6 +41,10 @@ XR_FUNC XrXirStatus xir_metadata_context_constraints_verify(const XrXirCompileCo
     const XirMetadataProofContext *proof);
 XR_FUNC XrXirStatus xir_metadata_type_markers_prove(const XrXirCompileContext *context,
     const XirMetadataProofContext *proof,XrXirType type,uint32_t markers);
+/* Missing capacity unwinds the complete read. The owner grows storage and
+ * reframes actual Input before retrying; no proof fact survives the attempt. */
+XR_FUNC XrXirStatus xir_metadata_type_markers_read(const XrXirCompileContext *context,
+    const XirMetadataProofContext *proof,XrXirType type,uint32_t markers,XirReadScratch *memory);
 XR_FUNC XrXirStatus xir_metadata_constraint_arguments_prove(const XrXirCompileContext *context,
     const XirMetadataProofContext *proof,const XirMetadataArguments *use);
 XR_FUNC void xr_xir_constraint_scratch_free(XirConstraintScratch *scratch);

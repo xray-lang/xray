@@ -479,6 +479,13 @@ static XrXirStatus effect_invocation_local_operation(EffectInvocationLocalRead *
         if (!xir_compile_work(work,sizeof(*empty))) return XR_XIR_BUDGET;
         *empty=false;return XR_XIR_OK;
     }
+    if(op->op==XR_XIR_SLOT_LOAD && body->declarations && body->declarations->slots &&
+        op->immediate>=0 && (uint64_t)op->immediate<body->declarations->slot_count) {
+        const XrXirSlot *slot=&body->declarations->slots[op->immediate];uint32_t type=(uint32_t)slot->type;
+        if(!slot->mutable && type>=XR_XIR_CONSTRUCTED_TYPE_BASE && type<XR_XIR_CONSTRUCTED_TYPE_LIMIT) {
+            *empty=false;return XR_XIR_OK;
+        }
+    }
     if (mask&EFFECT_PHYSICAL_BARRIER) {
         const EffectBodyFunction *head=&body->functions[f];
         if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
@@ -520,7 +527,8 @@ static XrXirStatus effect_invocation_local_run(EffectInvocationLocalRead *read,
             op->immediate<0 || (uint64_t)op->immediate>=body->declarations->slot_count))
             return XR_XIR_BAD_STRUCTURE;
         if (!xir_compile_work(work,sizeof(EffectRootSeedRecord))) return XR_XIR_BUDGET;
-        EffectRootSeedRecord seed={&body->domain,op,f,run->first+offset,XR_XIR_UNIT};
+        XirReadScratch memory={.resources=work->resources};
+        EffectRootSeedRecord seed={&body->domain,op,f,run->first+offset,XR_XIR_UNIT,&memory};
         if (op->op==XR_XIR_SLOT_LOAD && !xir_compile_work(work,
             sizeof(output->facts)+sizeof(output->witnesses[0]))) return XR_XIR_BUDGET;
         status=effect_root_seed_output(&seed,&output->facts,&output->witnesses[0],

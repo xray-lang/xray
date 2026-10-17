@@ -19,18 +19,21 @@ typedef struct TypeMatchMemory {
     uint32_t capacity;
     bool claimed;
 } TypeMatchMemory;
-XR_FUNC void xr_xir_type_match_scratch_free(XrXirTypeMatchScratch *scratch) {
+static void type_match_scratch_free(XrXirTypeMatchScratch *scratch,XirReadScratch *read) {
     if (!scratch) return;
     TypeMatchMemory *memory = scratch->memory;
     while (memory) {
         TypeMatchMemory *next = memory->next;
-        xr_compile_resources_free(memory);
+        xir_read_scratch_release(read,memory);
         memory = next;
     }
     *scratch = (XrXirTypeMatchScratch) {0};
 }
+XR_FUNC void xr_xir_type_match_scratch_free(XrXirTypeMatchScratch *scratch) {
+    type_match_scratch_free(scratch,NULL);
+}
 static XrXirStatus type_match_stack_claim(const XrXirCompileContext *context,
-    XrXirTypeMatchScratch *scratch, uint32_t count, TypeMatchMemory **output) {
+    XrXirTypeMatchScratch *scratch, uint32_t count, TypeMatchMemory **output,XirReadScratch *read) {
     for (TypeMatchMemory *memory = scratch->memory; memory; memory = memory->next) {
         if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
         if (!memory->claimed && memory->capacity >= count) {
@@ -42,7 +45,7 @@ static XrXirStatus type_match_stack_claim(const XrXirCompileContext *context,
     uint64_t bytes = sizeof(TypeMatchMemory) + (uint64_t) count * sizeof(TypeMatchFrame);
     if (!count || bytes > SIZE_MAX) return XR_XIR_BUDGET;
     XrXirStatus status = XR_XIR_OK;
-    TypeMatchMemory *memory = xir_compile_alloc(context, (size_t) bytes, &status);
+    TypeMatchMemory *memory = xir_read_scratch_alloc(context,read,(size_t)bytes,false,&status);
     if (!memory) return status;
     *memory = (TypeMatchMemory) {scratch->memory, (TypeMatchFrame *) (memory + 1), count, true};
     scratch->memory = memory;
@@ -53,9 +56,9 @@ static XrXirStatus type_match_stack_claim(const XrXirCompileContext *context,
  * separate blocks; no live frame may alias a reused scratch reservation. */
 static XrXirStatus type_match_stack_grow(const XrXirCompileContext *context,
     XrXirTypeMatchScratch *scratch, TypeMatchMemory **current, uint32_t capacity,
-    uint32_t used) {
+    uint32_t used,XirReadScratch *read) {
     TypeMatchMemory *next = NULL;
-    XrXirStatus status = type_match_stack_claim(context, scratch, capacity, &next);
+    XrXirStatus status = type_match_stack_claim(context, scratch, capacity, &next,read);
     if (status != XR_XIR_OK) return status;
     uint64_t bytes = (uint64_t)used * sizeof(*next->frames);
     if (!xir_compile_work(context, bytes)) {
@@ -73,7 +76,11 @@ typedef struct TypeMatchContext {
     uint32_t count;
     XrXirCompileContext *remaining;
     XrXirTypeMatchScratch *scratch;
+    XirReadScratch *read;
 } TypeMatchContext;
+static XrXirStatus type_match_run(const XrXirCompileContext *context,
+    const XirTypeMatchRead *request,XrXirTypeMatchScratch *scratch);
+
 static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
                                   XrXirType actual, TypeMatchFrame *frame) {
     frame->from = NULL;
@@ -87,7 +94,7 @@ static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
         if (c->arguments[index] == actual) return XR_XIR_OK;
         /* Substituted expressions belong to the destination environment. The
          * nested matcher has no substitution, so this branch cannot recur. */
-        return xr_xir_compile_type_substitution_matches_between_scratch(c->remaining, c->types, c->types, NULL, 0, c->arguments[index], actual, c->scratch);
+        return type_match_run(c->remaining,&(XirTypeMatchRead){c->types,c->types,NULL,0,c->arguments[index],actual,c->read},c->scratch);
     }
     const XrXirTypeNode *from = xr_xir_type_node(c->source_types, expected);
     if (!from) return expected == actual ? XR_XIR_OK : XR_XIR_BAD_TYPE;
@@ -104,19 +111,25 @@ static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
         return XR_XIR_BAD_TYPE;
     *frame = (TypeMatchFrame) {from, to, 0}; return XR_XIR_OK;
 }
-XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between_scratch(const XrXirCompileContext *compile_context, const XrXirTypes *source_types, const XrXirTypes *types, const XrXirType *arguments, uint32_t count, XrXirType expected, XrXirType actual, XrXirTypeMatchScratch *scratch) {
+static XrXirStatus type_match_run(const XrXirCompileContext *compile_context,
+    const XirTypeMatchRead *request,XrXirTypeMatchScratch *scratch) {
+    if(!request) return XR_XIR_BAD_STRUCTURE;
+    const XrXirTypes *source_types=request->source_types,*types=request->actual_types;
+    const XrXirType *arguments=request->arguments;uint32_t count=request->argument_count;
+    XrXirType expected=request->expected,actual=request->actual;
+    XirReadScratch *read=request->memory;
     if (!xir_compile_context_valid(compile_context) || !scratch ||
         scratch->resources != compile_context->resources) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
     if (!remaining || (count && !arguments)) return XR_XIR_BAD_STRUCTURE;
-    TypeMatchContext c = {source_types, types, arguments, count, remaining, scratch};
+    TypeMatchContext c = {source_types, types, arguments, count, remaining, scratch,read};
     TypeMatchFrame root = {0};
     XrXirStatus status = type_match_pair(&c, expected, actual, &root);
     if (status != XR_XIR_OK || !root.from) return status;
     TypeMatchMemory *claimed = NULL;
     uint32_t initial = source_types->count < 8 ? source_types->count : 8;
-    status = type_match_stack_claim(remaining, scratch, initial, &claimed);
+    status = type_match_stack_claim(remaining, scratch, initial, &claimed,read);
     if (status != XR_XIR_OK) return status;
     TypeMatchFrame *stack = claimed->frames;
     uint32_t depth = 1; stack[0] = root;
@@ -149,13 +162,17 @@ XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between_scratch(con
         if (depth == claimed->capacity) {
             uint32_t capacity = claimed->capacity > source_types->count / 2 ?
                 source_types->count : claimed->capacity * 2;
-            status = type_match_stack_grow(remaining, scratch, &claimed, capacity, depth);
+            status = type_match_stack_grow(remaining, scratch, &claimed, capacity, depth,read);
             if (status != XR_XIR_OK) break;
             stack = claimed->frames;
         }
         stack[depth++] = child;
     }
     claimed->claimed = false; return status;
+}
+XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between_scratch(const XrXirCompileContext *context,const XrXirTypes *source,const XrXirTypes *actual,const XrXirType *arguments,uint32_t count,XrXirType expected,XrXirType value,XrXirTypeMatchScratch *scratch) {
+    XirTypeMatchRead request={source,actual,arguments,count,expected,value,NULL};
+    return type_match_run(context,&request,scratch);
 }
 XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between(const XrXirCompileContext *compile_context, const XrXirTypes *source_types, const XrXirTypes *types, const XrXirType *arguments, uint32_t count, XrXirType expected, XrXirType actual) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
@@ -164,6 +181,12 @@ XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches_between(const XrXir
         compile_context, source_types, types, arguments, count, expected, actual, &scratch);
     xr_xir_type_match_scratch_free(&scratch);
     return status;
+}
+XR_FUNC XrXirStatus xir_type_match_read(const XrXirCompileContext *context,const XirTypeMatchRead *request) {
+    if(!xir_compile_context_valid(context) || !request) return XR_XIR_BAD_STRUCTURE;
+    XrXirTypeMatchScratch scratch={context->resources,NULL};
+    XrXirStatus status=type_match_run(context,request,&scratch);
+    type_match_scratch_free(&scratch,request->memory);return status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_type_substitution_matches(const XrXirCompileContext *compile_context, const XrXirTypes *types, const XrXirType *arguments, uint32_t count, XrXirType expected, XrXirType actual) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;

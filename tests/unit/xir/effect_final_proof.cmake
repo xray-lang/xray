@@ -10,11 +10,15 @@ function(xray_effect_final_proof_executable target source)
 endfunction()
 
 foreach(proof_kind IN ITEMS control_finite_proof effect_input_selector error_carrier_domain error_finite_proof
-        error_finite_source error_late_admission invocation_edges invocation_inventory root_input_seeds)
+        error_finite_source error_late_admission invocation_edges invocation_inventory root_input_seeds root_marker_read)
     xray_effect_final_proof_executable(test_xir_${proof_kind} test_xir_${proof_kind}.c)
 endforeach()
 
 set(final_proof_tests)
+foreach(mode RANGE 0 3)
+    add_test(NAME test_xir_root_marker_read_${mode} COMMAND test_xir_root_marker_read ${mode})
+    list(APPEND final_proof_tests test_xir_root_marker_read_${mode})
+endforeach()
 add_test(NAME test_xir_control_input_terminals COMMAND test_xir_control_finite_proof input-terminals)
 list(APPEND final_proof_tests test_xir_control_input_terminals)
 add_test(NAME test_xir_invocation_edges_complete COMMAND test_xir_invocation_edges complete)
