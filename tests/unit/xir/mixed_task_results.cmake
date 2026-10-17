@@ -889,3 +889,105 @@ foreach(iterator_pull_case IN ITEMS
             TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;resource;timer;cleanup;cache;nth;fault_injection")
     endforeach()
 endforeach()
+
+add_executable(test_xir_mixed_iterator_index_boundaries xir/test_xir_mixed_iterator_index_boundaries.c "${XIR_MIXED_ITERATOR_LIFETIME_C}")
+target_link_libraries(test_xir_mixed_iterator_index_boundaries PRIVATE xray_xir_vm xray_xir_scalar)
+set_target_properties(test_xir_mixed_iterator_index_boundaries PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_mixed_iterator_index_boundaries PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_mixed_iterator_index_boundaries PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(iterator_index_backend IN ITEMS 0 1 vm native)
+    foreach(iterator_index_mode IN ITEMS baseline axes)
+        add_test(NAME test_xir_mixed_iterator_index_boundaries_${iterator_index_backend}_${iterator_index_mode}
+            COMMAND test_xir_mixed_iterator_index_boundaries ${iterator_index_backend} ${iterator_index_mode})
+        set_tests_properties(test_xir_mixed_iterator_index_boundaries_${iterator_index_backend}_${iterator_index_mode} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;resource;timer;cleanup;nth;bounds")
+    endforeach()
+endforeach()
+
+foreach(iterator_index_case IN ITEMS
+    "0,0,0,0,96"
+    "0,0,0,1,96"
+    "0,0,1,0,102"
+    "0,0,1,1,102"
+    "0,0,2,0,105"
+    "0,0,2,1,105"
+    "0,0,3,0,114"
+    "0,0,3,1,114"
+    "0,1,0,0,96"
+    "0,1,0,1,96"
+    "0,1,1,0,102"
+    "0,1,1,1,102"
+    "0,1,2,0,105"
+    "0,1,2,1,105"
+    "0,1,3,0,114"
+    "0,1,3,1,114"
+    "1,0,0,0,96"
+    "1,0,0,1,96"
+    "1,0,1,0,102"
+    "1,0,1,1,102"
+    "1,0,2,0,105"
+    "1,0,2,1,105"
+    "1,0,3,0,114"
+    "1,0,3,1,114"
+    "1,1,0,0,96"
+    "1,1,0,1,96"
+    "1,1,1,0,102"
+    "1,1,1,1,102"
+    "1,1,2,0,105"
+    "1,1,2,1,105"
+    "1,1,3,0,114"
+    "1,1,3,1,114"
+    "vm,0,0,0,96"
+    "vm,0,0,1,96"
+    "vm,0,1,0,102"
+    "vm,0,1,1,102"
+    "vm,0,2,0,105"
+    "vm,0,2,1,105"
+    "vm,0,3,0,114"
+    "vm,0,3,1,114"
+    "vm,1,0,0,96"
+    "vm,1,0,1,96"
+    "vm,1,1,0,102"
+    "vm,1,1,1,102"
+    "vm,1,2,0,105"
+    "vm,1,2,1,105"
+    "vm,1,3,0,114"
+    "vm,1,3,1,114"
+    "native,0,0,0,96"
+    "native,0,0,1,96"
+    "native,0,1,0,102"
+    "native,0,1,1,102"
+    "native,0,2,0,105"
+    "native,0,2,1,105"
+    "native,0,3,0,114"
+    "native,0,3,1,114"
+    "native,1,0,0,96"
+    "native,1,0,1,96"
+    "native,1,1,0,102"
+    "native,1,1,1,102"
+    "native,1,2,0,105"
+    "native,1,2,1,105"
+    "native,1,3,0,114"
+    "native,1,3,1,114"
+)
+    string(REPLACE "," ";" iterator_index_fields "${iterator_index_case}")
+    list(GET iterator_index_fields 0 iterator_index_backend)
+    list(GET iterator_index_fields 1 iterator_index_victim)
+    list(GET iterator_index_fields 2 iterator_index_stage)
+    list(GET iterator_index_fields 3 iterator_index_maximum)
+    list(GET iterator_index_fields 4 iterator_index_sites)
+    math(EXPR iterator_index_last "${iterator_index_sites} - 1")
+    foreach(iterator_index_begin RANGE 0 ${iterator_index_last} 64)
+        math(EXPR iterator_index_end "${iterator_index_begin} + 64")
+        if(iterator_index_end GREATER iterator_index_sites)
+            set(iterator_index_end ${iterator_index_sites})
+        endif()
+        add_test(NAME test_xir_mixed_iterator_index_boundaries_${iterator_index_backend}_fi_${iterator_index_victim}_${iterator_index_stage}_${iterator_index_maximum}_${iterator_index_begin}_${iterator_index_end}
+            COMMAND test_xir_mixed_iterator_index_boundaries ${iterator_index_backend} fi ${iterator_index_victim} ${iterator_index_stage} ${iterator_index_maximum} ${iterator_index_begin} ${iterator_index_end} ${iterator_index_sites})
+        set_tests_properties(test_xir_mixed_iterator_index_boundaries_${iterator_index_backend}_fi_${iterator_index_victim}_${iterator_index_stage}_${iterator_index_maximum}_${iterator_index_begin}_${iterator_index_end} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;resource;timer;cleanup;nth;bounds;fault_injection")
+    endforeach()
+endforeach()
