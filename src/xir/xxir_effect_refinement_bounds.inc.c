@@ -10,11 +10,18 @@
  *   Temporary mathematical bottom is distinct from a real declaration bound.
  *   This owner exists only while Source refines; final checking discards it.
  */
+typedef struct EffectRefinementCopy {
+    uint32_t instruction;
+    XrXirInstruction operation;
+} EffectRefinementCopy;
+
 typedef struct EffectRefinementFunction {
     const XrXirType *parameters, *instructions;
     uint32_t parameter_count, instruction_count, name_length;
     const char *name;
     XrXirFunctionIdentity identity;
+    const EffectRefinementCopy *copies;
+    uint32_t copy_count;
 } EffectRefinementFunction;
 
 struct EffectRefinementBounds {
@@ -29,6 +36,45 @@ static void effect_refinement_free(EffectRefinementBounds *bounds) {
     if (!bounds) return;
     xr_xir_compile_generics_free(bounds->generics,bounds->count);
     effect_terms_free(&bounds->terms);xr_compile_resources_free(bounds);
+}
+
+/* Retain actual typed propagation copies, excluding real fixed barriers and
+ * consuming CALL_BIND declarations. A later normalization must keep this exact
+ * producer edge; its current source operand still proves every weakening. */
+static XrXirStatus effect_refinement_copies(EffectRefinementBounds *bounds,
+    const XrXirModule *source,uint32_t function,EffectRefinementFunction *output) {
+    const XrXirProvenance *provenance=source->provenance;
+    if (!provenance || provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_OK;
+    if (!provenance->contracts || provenance->contract_count!=source->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *body=&source->functions[function];
+    const XrXirFunctionEffectContract *contract=&provenance->contracts[function];
+    XrXirStatus status=effect_contract_values(bounds->terms.remaining,source,function,contract);
+    if (status!=XR_XIR_OK) return status;
+    uint32_t count=0;
+    for (uint32_t v=0;v<contract->value_count;++v) {
+        if (!xir_compile_work(bounds->terms.remaining,3)) return XR_XIR_BUDGET;
+        const XrXirRootValueIdentity *value=&contract->values[v];
+        const XrXirInstruction *op=&body->instructions[value->instruction];
+        if (value->mode==XR_XIR_EFFECT_VALUE_PROPAGATE && op->op==XR_XIR_COPY &&
+            op->type==value->declared_type) ++count;
+    }
+    EffectRefinementCopy *copies=count?effect_terms_alloc(&bounds->terms,count,sizeof(*copies)):NULL;
+    if (count && !copies) return bounds->terms.status;
+    uint32_t at=0;
+    for (uint32_t v=0;v<contract->value_count;++v) {
+        if (!xir_compile_work(bounds->terms.remaining,3)) return XR_XIR_BUDGET;
+        const XrXirRootValueIdentity *value=&contract->values[v];
+        const XrXirInstruction *op=&body->instructions[value->instruction];
+        if (value->mode!=XR_XIR_EFFECT_VALUE_PROPAGATE || op->op!=XR_XIR_COPY ||
+            op->type!=value->declared_type) continue;
+        if ((uint64_t)op->args[0]>=(uint64_t)body->parameter_count+body->instruction_count ||
+            xr_xir_operand_type(body,op->args[0])!=op->type || at>=count) return XR_XIR_BAD_TYPE;
+        if (!xir_compile_work(bounds->terms.remaining,sizeof(*copies)+sizeof(*op))) return XR_XIR_BUDGET;
+        copies[at++]=(EffectRefinementCopy){value->instruction,*op};
+    }
+    if (at!=count) return XR_XIR_BAD_STRUCTURE;
+    output->copies=copies;output->copy_count=count;return XR_XIR_OK;
 }
 
 XR_FUNC XrXirStatus xir_effects_refinement_capture(const XrXirCompileContext *context,
@@ -67,8 +113,10 @@ XR_FUNC XrXirStatus xir_effects_refinement_capture(const XrXirCompileContext *co
         for (uint32_t p=0;p<body->parameter_count;++p) parameters[p]=body->parameters[p];
         for (uint32_t i=0;i<body->instruction_count;++i) instructions[i]=body->instructions[i].type;
         if (body->name_length) memcpy(name,body->name,body->name_length);
-        bounds->functions[f]=(EffectRefinementFunction){parameters,instructions,body->parameter_count,
-            body->instruction_count,body->name_length,name,source->declarations->functions[f]};
+        bounds->functions[f]=(EffectRefinementFunction){.parameters=parameters,.instructions=instructions,
+            .parameter_count=body->parameter_count,.instruction_count=body->instruction_count,
+            .name_length=body->name_length,.name=name,.identity=source->declarations->functions[f]};
+        status=effect_refinement_copies(bounds,source,f,&bounds->functions[f]);
     }
     if (status!=XR_XIR_OK) { effect_refinement_free(bounds);return status; }
     bounds->terms.remaining=NULL;((XrXirEffects *)effects)->refinement=bounds;

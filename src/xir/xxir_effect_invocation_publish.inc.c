@@ -53,7 +53,7 @@ static inline XrXirStatus effect_invocation_publication_bounds(const XrXirCompil
             original.parameters=refinement->functions[f].parameters;
             instructions=refinement->functions[f].instructions;
         }
-        status=effect_invocation_source_declarations(work,module,f,instructions,&source_types);
+        status=effect_invocation_source_declarations(work,module,f,refinement?&refinement->functions[f]:NULL,&source_types);
         if (source_types) instructions=source_types;
         if (status==XR_XIR_OK)
             status=effect_invocation_bounds_capture(work,bounds,module->types,&original,f,instructions);
