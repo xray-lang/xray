@@ -115,6 +115,10 @@ static bool cell_proof_edge(CellProofBuild *build, uint32_t from, uint32_t to, b
         if (build->edge_count == UINT32_MAX)
             return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
         if (!cell_proof_work(build,1)) return false;
+        if (build->edge_count<build->edge_capacity) {
+            if (!cell_proof_work(build,sizeof(*build->edges)+3)) return false;
+            build->edges[build->edge_count]=(CellProofEdge){from,to,0,0,identity};
+        }
         ++build->edge_count; return true;
     }
     if (build->edge_count == build->edge_capacity)
@@ -744,23 +748,34 @@ static bool cell_proof_edge_storage_bytes(size_t count, size_t *bytes) {
     if (count > SIZE_MAX/sizeof(CellProofEdge)) return false;
     *bytes = count*sizeof(CellProofEdge); return true;
 }
-/* The same complete walker seeds one proof and counts every actual edge.
- * Replaying it appends the exact ordered graph; seed OR operations are idempotent.
- * No solver or output observes the proof before both finite passes complete. */
+/* The complete first walk records small exact edge sequences on bounded
+ * local storage. Final heap storage still has the exact physical count.
+ * Larger graphs replay the same walker; no solver sees a partial graph.
+ * Always detach the local buffer before failure can reach owner cleanup. */
 static bool cell_proof_prepare_edges(CellProofBuild *build) {
-    build->counting_edges = true;
-    bool counted = cell_proof_build_edges(build);
-    build->counting_edges = false;
+    enum { EDGE_RECORDS=64 };
+    CellProofEdge local[EDGE_RECORDS];
+    if (!cell_proof_work(build,sizeof(local)+4)) return false;
+    build->counting_edges=true;build->edges=local;build->edge_capacity=EDGE_RECORDS;
+    bool counted=cell_proof_build_edges(build);
+    build->edges=NULL;build->counting_edges=false;
     if (!counted) return false;
-    build->edge_capacity = build->edge_count; build->edge_count = 0;
-    size_t bytes = 0;
-    if (!cell_proof_edge_storage_bytes(build->edge_capacity,&bytes))
+    uint32_t count=build->edge_count;
+    build->edge_capacity=count;build->edge_count=0;
+    size_t bytes=0;
+    if (!cell_proof_edge_storage_bytes(count,&bytes))
         return cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BUDGET);
     if (!cell_proof_work(build,4)) return false;
-    build->edges = xir_compile_alloc(build->context,bytes,&build->status);
-    if (build->status != XR_XIR_OK || !cell_proof_build_edges(build)) return false;
+    build->edges=xir_compile_alloc(build->context,bytes,&build->status);
+    if (build->status!=XR_XIR_OK) return false;
+    if (count<=EDGE_RECORDS) {
+        for (uint32_t i=0;i<count;++i) {
+            if (!cell_proof_work(build,3)) return false;
+            if (!cell_proof_edge(build,local[i].from,local[i].to,local[i].identity)) return false;
+        }
+    } else if (!cell_proof_build_edges(build)) return false;
     if (!cell_proof_work(build,1)) return false;
-    return build->edge_count == build->edge_capacity ||
+    return build->edge_count==build->edge_capacity ||
         cell_proof_error(build,UINT32_MAX,UINT32_MAX,XR_XIR_BAD_STRUCTURE);
 }
 
