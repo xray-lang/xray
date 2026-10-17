@@ -4638,3 +4638,4 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_rename_task/CMakeLists.txt")
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/lsp_parse_diagnostics/CMakeLists.txt")
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/lsp_diagnostic_publication/CMakeLists.txt")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/lsp_document_owner/CMakeLists.txt")
