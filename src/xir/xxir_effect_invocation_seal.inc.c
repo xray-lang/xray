@@ -370,9 +370,9 @@ done:
     xr_compile_resources_free(directory);return status;
 }
 
-/* All failure paths keep both input owners and the occupied output intact.
- * Ownership moves only after complete copied correspondence and closure proof;
- * construction-only pointers are then removed from the published certificate. */
+/* Direct seal preserves both input owners on a failed vector transaction.
+ * Private drivers may consume complete vector prefixes after all borrows end;
+ * both use the same correspondence, closure proof and final publication. */
 #include "xxir_effect_invocation_final_vectors.inc.c"
 
 /* Every caller has ended all borrows from this one request's physical data.
@@ -401,19 +401,37 @@ static XrXirStatus effect_invocation_class_verify_released_rows(EffectInvocation
 /* All terminal replay consumers have returned. Their data directory cannot
  * enter the receiving Final, whose numeric vectors and child owners retain
  * the original independent correspondence and rollback transaction. */
-static XrXirStatus effect_invocation_final_vectors_receive(const XrXirCompileContext *work,
+static XrXirStatus effect_invocation_final_vectors_prepare(const XrXirCompileContext *work,
     EffectInvocationWorkspace *owner,EffectInvocationFinal *target) {
     if (!owner || !xir_compile_context_valid(owner->work) || !xir_compile_context_valid(work) ||
         owner->work->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_invocation_final_vectors_binding(work,&owner->final,target);
     if (status==XR_XIR_OK) status=effect_invocation_rows_retire(owner);
+    return status;
+}
+
+static XrXirStatus effect_invocation_final_vectors_receive(const XrXirCompileContext *work,
+    EffectInvocationWorkspace *owner,EffectInvocationFinal *target) {
+    XrXirStatus status=effect_invocation_final_vectors_prepare(work,owner,target);
     return status==XR_XIR_OK?effect_invocation_final_vectors_copy(work,&owner->final,target):status;
 }
 
-static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
+static XrXirStatus effect_invocation_final_vectors_driver_receive(const XrXirCompileContext *work,
+    EffectInvocationWorkspace *owner,EffectInvocationFinal *target) {
+    if (!owner || owner->node_index || owner->node_index_capacity || owner->edge_index || owner->edge_index_capacity)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_invocation_final_vectors_prepare(work,owner,target);
+    return status==XR_XIR_OK?effect_invocation_final_vectors_consume(work,&owner->final,target):status;
+}
+
+typedef XrXirStatus (*EffectInvocationVectorReceiver)(const XrXirCompileContext *,
+    EffectInvocationWorkspace *,EffectInvocationFinal *);
+
+static XrXirStatus effect_invocation_seal_receive(const XrXirCompileContext *work,
     const EffectInvocationSealRequest *request,EffectInvocationCertificate **output,
-    const EffectInvocationProjectionSink *sink) {
-    if (!xir_compile_context_valid(work) || !request || !output || *output || !request->equations ||
+    const EffectInvocationProjectionSink *sink,EffectInvocationVectorReceiver receiver) {
+    if ((receiver!=effect_invocation_final_vectors_receive &&
+         receiver!=effect_invocation_final_vectors_driver_receive) || !xir_compile_context_valid(work) || !request || !output || *output || !request->equations ||
         !*request->equations || !request->result || !*request->result) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationWorkspace *owner=*request->equations;EffectFinalFunctions *result=*request->result;
     EffectFinalFunctions *staged=result;bool summary_moved=false,final_copied=false;
@@ -461,7 +479,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(*certificate->final))) status=XR_XIR_BUDGET;
         if (status==XR_XIR_OK) {
             *certificate->final=owner->final;final_copied=true;
-            status=effect_invocation_final_vectors_receive(work,owner,certificate->final);
+            status=receiver(work,owner,certificate->final);
         }
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(certificate->final->summary)+2*sizeof(void *)))
             status=XR_XIR_BUDGET;
@@ -496,6 +514,13 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     xr_compile_resources_free(staged);
     *request->result=NULL;
     *request->equations=NULL;*output=certificate;return XR_XIR_OK;
+}
+
+/* Direct owners retain the original both-vector rollback transaction. */
+static inline XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
+    const EffectInvocationSealRequest *request,EffectInvocationCertificate **output,
+    const EffectInvocationProjectionSink *sink) {
+    return effect_invocation_seal_receive(work,request,output,sink,effect_invocation_final_vectors_receive);
 }
 
 /* Replaying an immutable certificate uses the same constructor and role

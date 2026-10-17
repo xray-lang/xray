@@ -117,7 +117,8 @@ static inline XrXirStatus effect_invocation_derive(const EffectInvocationDriverI
     if (status==XR_XIR_OK) status=effect_invocation_stage(equations,receiving);
     if (status==XR_XIR_OK) status=effect_invocation_driver_lookups_retire(equations);
     EffectInvocationSealRequest request={&equations,receiving,input->dense};
-    if (status==XR_XIR_OK) status=effect_invocation_seal(input->work,&request,output,sink);
+    if (status==XR_XIR_OK) status=effect_invocation_seal_receive(input->work,&request,output,sink,
+        effect_invocation_final_vectors_driver_receive);
     effect_invocation_rows_drop(&physical_rows);effect_invocation_free(equations);
     return status;
 }
