@@ -35,6 +35,19 @@ static bool effect_invocation_frontier(XrXirOp op) {
 /* Compare the exact union of local contributions and executing children.
  * An inflated OR result is rejected, including an unrooted recursive fact.
  * Certificate forests separately prove a genuine local terminal for every bit. */
+/* The synchronous closure consumes one count from each complete current
+ * head. Keep all physical presence gates without copying its unused count. */
+static XrXirStatus effect_invocation_closed_count(const XrXirCompileContext *work,
+    const EffectBodyMaterial *material,uint32_t f,bool parameters,uint32_t *output) {
+    if (!xir_compile_context_valid(work) || !effect_body_material_shape(material) ||
+        material->resources!=work->resources || !output || f>=effect_body_count(material))
+        return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyFunction *head=&material->functions[f];
+    if (!effect_body_function_head_shape(head)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,11+sizeof(*output))) return XR_XIR_BUDGET;
+    *output=parameters?head->parameter_count:head->instruction_count;return XR_XIR_OK;
+}
+
 static XrXirStatus effect_invocation_closed_read(const XrXirCompileContext *work,
     const EffectInvocationFinal *final) {
     if (!xir_compile_context_valid(work) || !final || !effect_body_material_shape(final->material) ||
@@ -49,15 +62,14 @@ static XrXirStatus effect_invocation_closed_read(const XrXirCompileContext *work
         if (node->body>=input.domain.function_count) {
             status=XR_XIR_BAD_STRUCTURE;break;
         }
-        EffectBodyFunctionDimensions root={0};
-        status=effect_body_request_dimensions(&input,node->root,&root);
+        uint32_t root_parameters=0;
+        status=effect_invocation_closed_count(work,final->material,node->root,true,&root_parameters);
         EffectInvocationBasis basis={0};
-        if (status==XR_XIR_OK) status=effect_invocation_basis_parameters_read(work,final,root.parameter_count,&basis);
+        if (status==XR_XIR_OK) status=effect_invocation_basis_parameters_read(work,final,root_parameters,&basis);
         if (status!=XR_XIR_OK) break;
         uint32_t dependencies=(uint32_t)(((uint64_t)basis.parameters+63)/64);
-        EffectBodyFunctionDimensions head={0};status=effect_body_request_dimensions(&input,node->body,&head);
+        uint32_t instructions=0;status=effect_invocation_closed_count(work,final->material,node->body,false,&instructions);
         if (status!=XR_XIR_OK) break;
-        uint32_t instructions=head.instruction_count;
         uint32_t contexts=(uint32_t)(((uint64_t)instructions+63)/64);
         uint64_t words=(uint64_t)dependencies*2+contexts;
         if (!xir_compile_work(work,9)) { status=XR_XIR_BUDGET;break; }
@@ -87,11 +99,11 @@ static XrXirStatus effect_invocation_closed_read(const XrXirCompileContext *work
             if (edge.latent) continue;
             const EffectInvocationNode *child=&final->nodes[edge.target];
             if (!xir_compile_work(work,9)) { status=XR_XIR_BUDGET;break; }
-            EffectBodyFunctionDimensions child_head={0};
-            status=effect_body_request_dimensions(&input,child->body,&child_head);
+            uint32_t child_instructions=0;
+            status=effect_invocation_closed_count(work,final->material,child->body,false,&child_instructions);
             if (status!=XR_XIR_OK) break;
             if (child->body>=input.domain.function_count ||
-                !effect_invocation_node_shape(child,basis.parameters,child_head.instruction_count)) {
+                !effect_invocation_node_shape(child,basis.parameters,child_instructions)) {
                 status=XR_XIR_BAD_STRUCTURE;break;
             }
             mask|=child->intrinsic_mask;deferred|=child->deferred;
