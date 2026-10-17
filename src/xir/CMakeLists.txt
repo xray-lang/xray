@@ -96,6 +96,7 @@ add_library(xray_lsp_document_open STATIC ../app/lsp/xlsp_source_open.c ../app/l
 target_link_libraries(xray_lsp_document_open PUBLIC xray_lsp_source_workspace xray_lsp_source_syntax)
 target_compile_features(xray_lsp_document_open PUBLIC c_std_11)
 add_library(xray_lsp_source_hierarchy STATIC ../app/lsp/xlsp_source_call_hierarchy.c ../app/lsp/xlsp_source_type_hierarchy.c ../app/lsp/xlsp_source_bindings.c)
+target_sources(xray_lsp_source_hierarchy PRIVATE ../app/lsp/xlsp_source_rename.c)
 target_link_libraries(xray_lsp_source_hierarchy PUBLIC xray_lsp_source_workspace)
 target_compile_features(xray_lsp_source_hierarchy PUBLIC c_std_11)
 add_library(xray_lsp_hierarchy_handlers STATIC ../app/lsp/xlsp_hierarchy_handlers.c ../app/lsp/xlsp_source_scope.c

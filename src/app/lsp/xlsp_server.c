@@ -39,7 +39,6 @@
 #include "xlsp_code_action.h"
 #include "xlsp_call_hierarchy.h"
 #include "xlsp_extra_handlers.h"
-#include "xlsp_rename.h"
 #include "xlsp_utils.h"
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../base/xhash.h"
@@ -436,6 +435,8 @@ static int source_request_mode(const char *method) {
     if(!strcmp(method,"textDocument/documentSymbol"))return 19;
     if(!strcmp(method,"textDocument/formatting"))return 20;
     if(!strcmp(method,"textDocument/onTypeFormatting"))return 21;
+    if(!strcmp(method,"textDocument/rename"))return 23;
+    if(!strcmp(method,"textDocument/prepareRename"))return 24;
     if(!strcmp(method,"workspace/symbol"))return 22;
     return -1;
 }

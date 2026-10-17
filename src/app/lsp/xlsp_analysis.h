@@ -47,8 +47,6 @@ XR_FUNC void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server);
  * down: the graph outlives a single parse on purpose, so nothing else frees
  * it at shutdown. */
 
-// Rename (moved to xlsp_rename.h / xlsp_rename.c)
-
 // Format (moved to xlsp_format.h / xlsp_format.c)
 #include "xlsp_format.h"
 

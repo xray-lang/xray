@@ -1,0 +1,5 @@
+enable_testing()
+function(rename_task_gate)
+    include("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/CMakeLists.txt")
+endfunction()
+cmake_language(DEFER CALL rename_task_gate)

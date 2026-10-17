@@ -20,7 +20,6 @@
 #include "xlsp_on_type.h"
 #include "xlsp_document_notification.h"
 #include "xlsp_workspace.h"
-#include "xlsp_rename.h"
 #include "xlsp_semantic_tokens.h"
 #include "xlsp_inlay_hints.h"
 #include "xlsp_utils.h"
@@ -199,38 +198,11 @@ XrJsonValue *xlsp_handle_td_references(XrLspServer *server, XrJsonValue *params)
 }
 
 XrJsonValue *xlsp_handle_td_rename(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
-    XrJsonValue *position = xjson_get_object(params, "position");
-    const char *new_name = xjson_get_string(params, "newName");
-    if (!textDocument || !position || !new_name)
-        return xjson_new_null();
-
-    const char *uri = xjson_get_string(textDocument, "uri");
-    XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc)
-        return xjson_new_null();
-
-    XrLspPosition pos = {.line = (uint32_t) xjson_get_int(position, "line"),
-                         .character = (uint32_t) xjson_get_int(position, "character")};
-
-    return xlsp_analyze_rename(server, doc, pos, new_name);
+    return xlsp_source_scope_query(server,params,0,XLSP_SOURCE_RENAME);
 }
 
 XrJsonValue *xlsp_handle_td_prepare_rename(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
-    XrJsonValue *position = xjson_get_object(params, "position");
-    if (!textDocument || !position)
-        return xjson_new_null();
-
-    const char *uri = xjson_get_string(textDocument, "uri");
-    XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc)
-        return xjson_new_null();
-
-    XrLspPosition pos = {.line = (uint32_t) xjson_get_int(position, "line"),
-                         .character = (uint32_t) xjson_get_int(position, "character")};
-
-    return xlsp_analyze_prepare_rename(doc, pos);
+    return xlsp_source_scope_query(server,params,0,XLSP_SOURCE_PREPARE_RENAME);
 }
 
 XrJsonValue *xlsp_handle_td_formatting(XrLspServer *server,XrJsonValue *params) {

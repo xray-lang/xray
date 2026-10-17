@@ -231,10 +231,16 @@ static int run(int argc, char **argv) {
 #ifdef XLSP_EDIT_TASK
 #include "../lsp_edit_task/task_cases.h"
 #endif
+#ifdef XLSP_RENAME_TASK
+#include "../lsp_rename_task/task_cases.h"
+#endif
 #ifdef XLSP_SYNTAX_TASK
 #include "../lsp_syntax_task/task_cases.h"
 #endif
 static int dispatch_run(int argc, char **argv) {
+#ifdef XLSP_RENAME_TASK
+    if(argc>=3&&!strcmp(argv[2],"--rename-task"))return rename_task_main(argc,argv);
+#endif
 #ifdef XLSP_WORKSPACE_SYMBOL_TASK
     if(argc>=3&&!strcmp(argv[2],"--workspace-symbol"))return workspace_main(argc,argv);
 #endif
