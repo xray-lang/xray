@@ -251,7 +251,7 @@ static XrXirStatus effect_capture_frame(EffectCaptureRead *read) {
     uint64_t maximum=0;
     for(uint32_t n=0;n<final->count;++n) {
         EffectCaptureNode node={0};status=effect_capture_node(read,n,&node);if(status!=XR_XIR_OK) return status;
-        uint64_t width=(uint64_t)node.basis.row_words*64+3;
+        uint64_t width=(uint64_t)node.basis.row_words*64+3+final->binding_count;
         uint64_t values=(uint64_t)node.values+node.head.parameter_count+1;
         if(width && values>(UINT32_MAX-maximum)/width) maximum=UINT32_MAX;else maximum+=values*width;
         status=effect_role_range(read->work,final->nodes[n].input,(uint64_t)node.head.parameter_count*node.basis.row_words,sizeof(uint64_t));
@@ -280,7 +280,8 @@ static XrXirStatus effect_capture_frame(EffectCaptureRead *read) {
         }
         if(fact->word==EFFECT_CAPTURE_FLAGS) {
             bool callable=kind==EFFECT_CAPTURE_CALLABLE &&
-                ((fact->value<node.values && fact->bit<=EFFECT_CAPTURE_RAW) || fact->bit==EFFECT_CAPTURE_COMPLETE);
+                ((fact->value<node.values && fact->bit<=EFFECT_CAPTURE_RAW) ||
+                 (fact->bit>=EFFECT_CAPTURE_COMPLETE && fact->bit-EFFECT_CAPTURE_COMPLETE<=final->binding_count));
             bool object=kind==EFFECT_CAPTURE_CLASS && fact->value<=node.values && fact->bit==EFFECT_CAPTURE_RAW;
             if(!callable && !object) return XR_XIR_BAD_STRUCTURE;
         } else {
@@ -416,7 +417,7 @@ static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const Ef
         status=effect_capture_clauses(&read);if(status!=XR_XIR_OK) return status;
         for(uint32_t p=0;p<final->capture.count;++p) {
             const EffectCaptureFact *fact=&final->capture.facts[p];
-            if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit==EFFECT_CAPTURE_COMPLETE) continue;
+            if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit>=EFFECT_CAPTURE_COMPLETE) continue;
             if(read.fixed_only && (fact->word!=EFFECT_CAPTURE_FLAGS || fact->bit!=EFFECT_CAPTURE_FIXED)) continue;
             /* This head is borrowed only within one uninterrupted, allocation-
              * free receiving request. Construction never retains this view. */

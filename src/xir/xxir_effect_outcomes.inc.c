@@ -56,6 +56,7 @@ static XrXirStatus effect_outcomes_publish(const XrXirCompileContext *work,
         !!records->atoms!=!!records->atom_capacity || records->words!=((uint64_t)records->atom_count+65)/64)
         return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=error_finite_construct(work,effects->invocations,records,&records->error_proof);
+    if(status==XR_XIR_OK) status=error_finite_outcomes_project(work,effects);
     if(status==XR_XIR_OK) status=effect_control_proof_build(work,effects->invocations,records,&records->control_proof);
     if(status==XR_XIR_OK) status=effect_final_retire_construction(work,effects);
     if(status==XR_XIR_OK) status=effect_final_inventories_match(work,effects->invocations,records);

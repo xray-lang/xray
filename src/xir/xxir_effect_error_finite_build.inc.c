@@ -103,6 +103,44 @@ static XrXirStatus error_finite_construct(const XrXirCompileContext *work,const 
     if(status!=XR_XIR_OK) { error_finite_release(proof);return status; }
     *output=proof;return XR_XIR_OK;
 }
+/* Only unpublished constructor storage accepts this projection. The current
+ * finite relation supplies every Error word and Task permission; old graph
+ * rows do not override a more precise authentic callable environment. */
+static XrXirStatus error_finite_outcomes_project(const XrXirCompileContext *work,XrXirEffects *effects) {
+    if(!effects || !xir_effects_context_matches(work,effects,effects->count) || !effects->outcomes_owner ||
+        effects->root_input || !effects->invocations || !effects->invocations->final ||
+        effects->invocations->final->outcomes) return XR_XIR_BAD_STRUCTURE;
+    EffectFinalOutcomes *outcomes=&effects->outcomes_work;
+    if(outcomes->resources || outcomes->count) return XR_XIR_BAD_STRUCTURE;
+    const EffectErrorFinite *proof=outcomes->error_proof;
+    XrXirStatus status=error_finite_check(work,proof);if(status!=XR_XIR_OK) return status;
+    if(proof->atoms!=outcomes->atoms || proof->atom_count!=outcomes->atom_count ||
+        proof->words!=outcomes->words || proof->contexts!=outcomes->error_rows) return XR_XIR_BAD_STRUCTURE;
+    status=effect_role_range(work,outcomes->errors,(uint64_t)proof->contexts*proof->words,sizeof(*outcomes->errors));
+    if(status==XR_XIR_OK) status=effect_role_range(work,outcomes->functions,proof->functions,sizeof(*outcomes->functions));
+    if(status==XR_XIR_OK) status=effect_role_range(work,outcomes->task_errors,proof->functions,sizeof(*outcomes->task_errors));
+    if(status!=XR_XIR_OK) return status;
+    status=error_marker_permissions_fold(work,proof,NULL,outcomes->task_errors);if(status!=XR_XIR_OK) return status;
+    EffectErrorFiniteRead read={proof,work,UINT32_MAX,NULL};
+    for(uint32_t f=0;f<proof->contexts;++f) {
+        XrXirEffect throws=XR_XIR_EFFECT_NONE;
+        for(uint32_t word=0;word<proof->words;++word) {
+            uint64_t row=0;status=error_finite_word(&read,proof->rows[f].end-(uint64_t)proof->words*64+
+                (uint64_t)word*64,64,&row);if(status!=XR_XIR_OK) return status;
+            if(!xir_compile_work(work,sizeof(row))) return XR_XIR_BUDGET;
+            outcomes->errors[(size_t)f*proof->words+word]=row;
+            if(!word) {
+                if(row&1) throws=XR_XIR_EFFECT_UNKNOWN;
+                if(row&~UINT64_C(1)) throws=XR_XIR_EFFECT_MAY;
+            } else if(row) throws=XR_XIR_EFFECT_MAY;
+        }
+        if(f<proof->functions) {
+            if(!xir_compile_work(work,sizeof(throws))) return XR_XIR_BUDGET;
+            outcomes->functions[f].throws=throws;
+        }
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus error_finite_outcomes_match(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,const EffectFinalOutcomes *outcomes) {
     if(!outcomes) return XR_XIR_BAD_STRUCTURE;
