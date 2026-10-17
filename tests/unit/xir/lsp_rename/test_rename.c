@@ -11,6 +11,7 @@
 #include "xir_sdk_resource_test.h"
 #include "lsp_open_json_owner.h"
 static const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+#include "import_required.h"
 static const char *const texts[]={
     "fn first(value:i64)->i64{return value+value}\nfn second(value:i64)->i64{return value}\n",
     "var counter = 0\n",
@@ -80,7 +81,7 @@ static void rejected(const char *uri,const char *library) {
     const size_t lengths[]={1,6,1,3,7,7,7,7,1};
     const XrLspPosition positions[]={{0,7},{0,8},{0,8},{0,8},{0,4},{1,22},{0,11},{0,0},{2,5}};
     const XrXirStatus expected[]={XR_XIR_BAD_TYPE,XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_STRUCTURE,
-        XR_XIR_BAD_STRUCTURE,XR_XIR_UNSUPPORTED,XR_XIR_BAD_STRUCTURE,XR_XIR_UNRESOLVED,XR_XIR_BAD_TYPE};
+        XR_XIR_BAD_STRUCTURE,XR_XIR_OK,XR_XIR_OK,XR_XIR_UNRESOLVED,XR_XIR_BAD_TYPE};
     const char child[]="export fn target(value:i64)->i64{return value}";
     for(unsigned i=0;i<sizeof(programs)/sizeof(*programs);++i) {
         XrCompileResources *r=sdk_ledger(&limits);XrXirCompileContext context={r,xr_xir_compile_default_limits()};
@@ -90,9 +91,11 @@ static void rejected(const char *uri,const char *library) {
         XlspSourceRenameInput input={i==6?1:0,positions[i],names[i],lengths[i],i==7,NULL};XrJsonValue *result=NULL;
         XrXirStatus status=xlsp_source_rename_json(&context,documents,count,&input,&result);
         if(status!=expected[i])fprintf(stderr,"Rename rejection case=%u actual=%u expected=%u\n",i,(unsigned)status,(unsigned)expected[i]);
-        CHECK(status==expected[i]&&!result);xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes&&!lsp_json_live&&!lsp_json_bytes);
+        CHECK(status==expected[i]);if(i==5){CHECK(result);import_result_fact(result,uri,library,0,"changed");}
+        else if(i==6){CHECK(result);import_result_fact(result,uri,library,3,"changed");}
+        else CHECK(!result);xjson_free(result);xr_compile_resources_release(r);CHECK(!runtime_live&&!runtime_bytes&&!lsp_json_live&&!lsp_json_bytes);
     }
-    printf("Source rename9 baseline-checked rejections; capture collision/keyword/UTF8/NUL/surrogate/import facts physical0/0\n");
+    printf("Source rename9 baseline-checked admission cases; capture collision/keyword/UTF8/NUL/surrogate/import facts physical0/0\n");
 }
 static int enum_required(const char *uri) {
     const char *text="enum Result {\n"
@@ -126,12 +129,15 @@ static int enum_required(const char *uri) {
 }
 #include "synthetic_probe.h"
 #include "rename_resources.h"
+#include "import_resources.h"
 static int run(int argc,char **argv) {
     (void)sdk_fixture_malloc;(void)sdk_fixture_free;(void)sdk_ledger;(void)sdk_unlimited;
+    int imported=import_resource_command(argc,argv);if(imported>=0)return imported;
     int resource=rename_resource_command(argc,argv);if(resource>=0)return resource;
     CHECK(argc==5);
     if(!strcmp(argv[4],"--enum-required"))return enum_required(argv[1]);
     if(!strcmp(argv[4],"--synthetic-required"))return synthetic_probe(argv[1]);
+    if(!strcmp(argv[4],"--import-required"))return import_required(argv[1],argv[2]);
     CHECK(!strcmp(argv[4],"--normal"));
     for(unsigned mode=0;mode<8;++mode){
         XrCompileResourceStats stats={0};runtime_attempts=0;runtime_fail_at=SIZE_MAX;

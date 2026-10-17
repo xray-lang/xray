@@ -31,3 +31,12 @@ set_tests_properties(test_lsp_source_rename_normal PROPERTIES TIMEOUT 300 RUN_SE
 add_test(NAME test_lsp_source_rename_synthetic_required COMMAND "${Python3_EXECUTABLE}" -X utf8
     "${CMAKE_CURRENT_LIST_DIR}/test_synthetic.py" "$<TARGET_FILE:test_lsp_source_rename>" "${PROJECT_SOURCE_DIR}/stdlib")
 set_tests_properties(test_lsp_source_rename_synthetic_required PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;source;required;ownership")
+add_test(NAME test_lsp_source_import_required COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_import.py" "$<TARGET_FILE:test_lsp_source_rename>" "${PROJECT_SOURCE_DIR}/stdlib")
+set_tests_properties(test_lsp_source_import_required PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;source;required;ownership")
+add_test(NAME test_lsp_source_import_resources COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_import_resources.py" "$<TARGET_FILE:test_lsp_source_rename>" "${PROJECT_SOURCE_DIR}/stdlib")
+set_tests_properties(test_lsp_source_import_resources PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 8 COST 290 LABELS "unit;lsp;source;ownership;allocation")
+add_test(NAME test_lsp_source_import_resource_probe COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_import_resources.py" "$<TARGET_FILE:test_lsp_source_rename>" "${PROJECT_SOURCE_DIR}/stdlib" --probe)
+set_tests_properties(test_lsp_source_import_resource_probe PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;lsp;source;ownership;allocation")

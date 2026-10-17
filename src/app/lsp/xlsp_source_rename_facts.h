@@ -45,14 +45,17 @@ static XrXirStatus rename_fact_range(RenameWork *w,const XlspSourceBindings *que
     if(status==XR_XIR_OK)status=xlsp_source_position(w->resources,d->text,d->length,range.end_line,range.end_column,&result.end);
     if(status==XR_XIR_OK)*out=(RenameEdit){.document=document,.range=result};return status;
 }
+#include "xlsp_source_rename_imports.h"
 static XrXirStatus rename_symbol(RenameWork *w,const XlspSourceBindings *queries,const XlspSourceDocument *documents,
     size_t root,uint32_t id,RenameSymbol *out) {
     const XrXirSourceView *view=xlsp_source_bindings_view(queries,root);const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(queries,root);
     if(!view||!syntax||!id||id>view->declaration_count)return XR_XIR_BAD_STRUCTURE;
     const XrXirSourceDeclaration *d=&view->declarations[id-1];const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[id-1];
-    if(fact->role==XR_XIR_SOURCE_SYNTAX_NONE||fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED||rename_absent(fact->name))return XR_XIR_UNSUPPORTED;
+    bool implicit=d->kind==XR_XIR_SOURCE_MODULE&&fact->role==XR_XIR_SOURCE_SYNTAX_NONE;
+    if(!implicit&&(fact->role==XR_XIR_SOURCE_SYNTAX_NONE||fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED||rename_absent(fact->name)))return XR_XIR_UNSUPPORTED;
     if(fact->name.module!=d->range.module)return XR_XIR_BAD_STRUCTURE;
-    RenameSymbol symbol={0};XrXirStatus status=rename_fact_range(w,queries,documents,view,(RenameSpelling){fact->name,d->name},&symbol.declared);if(status!=XR_XIR_OK)return status;
+    RenameSymbol symbol={0};XrXirStatus status=implicit?rename_import_insertion(w,queries,documents,root,id,&symbol.declared):
+        rename_fact_range(w,queries,documents,view,(RenameSpelling){fact->name,d->name},&symbol.declared);if(status!=XR_XIR_OK)return status;
     symbol.kind=d->kind;symbol.name=d->name;symbol.identity=view->modules[fact->name.module].identity;
     status=rename_fact_length(w,symbol.name,&symbol.name_length);if(status==XR_XIR_OK)status=rename_fact_length(w,symbol.identity,&symbol.identity_length);
     if(status==XR_XIR_OK)*out=symbol;return status;
@@ -83,7 +86,8 @@ static XrXirStatus rename_choose(RenameWork *w,const XlspSourceBindings *queries
 static XrXirStatus rename_pattern_edit(RenameWork *w,const XrXirSourceView *view,const XrXirSourceSyntaxView *syntax,
     XrXirSourceRange span,uint32_t selected,RenameEdit *edit) {
     XlspSourcePatternBinding pattern={0};XrXirStatus status=xlsp_source_pattern_binding(w->resources,view,syntax,span,&pattern);
-    if(status!=XR_XIR_OK||!pattern.binding)return status;
+    if(status!=XR_XIR_OK)return status;
+    if(!pattern.binding)return rename_import_edit(w,view,syntax,span,selected,edit);
     if(selected==pattern.binding){edit->preserved=view->declarations[pattern.field-1].name;edit->prefix=true;}
     else if(selected==pattern.field){edit->preserved=view->declarations[pattern.binding-1].name;edit->prefix=false;}
     return XR_XIR_OK;
@@ -102,6 +106,8 @@ static XrXirStatus rename_symbol_at(RenameWork *w,const XlspSourceBindings *quer
             if(rename_contains(occurrence.range,input->position)) {
                 XlspSourcePatternBinding pattern={0};status=xlsp_source_pattern_binding(w->resources,view,syntax,span,&pattern);if(status!=XR_XIR_OK)return status;
                 if(pattern.binding==i+1)continue;
+                uint32_t imported=0;status=rename_import_binding(w,syntax,span,&imported);if(status!=XR_XIR_OK)return status;
+                if(imported==i+1&&view->declarations[i].kind==XR_XIR_SOURCE_IMPORT)continue;
                 status=rename_choose(w,queries,documents,root,i+1,&chosen);if(status!=XR_XIR_OK)return status;
             }
         }
@@ -136,7 +142,8 @@ static XrXirStatus rename_collect(RenameWork *w,const XlspSourceBindings *querie
         const XrXirSourceView *view=xlsp_source_bindings_view(queries,root);const XrXirSourceSyntaxView *syntax=xlsp_source_bindings_syntax(queries,root);
         for(uint32_t i=0;i<view->declaration_count;++i) {
             status=rename_work(w,sizeof(XrXirSourceDeclaration));if(status!=XR_XIR_OK)return status;const XrXirSourceDeclaration *d=&view->declarations[i];
-            if(d->kind!=selected->kind||syntax->declarations[i].role==XR_XIR_SOURCE_SYNTAX_NONE||rename_absent(syntax->declarations[i].name))continue;
+            if(d->kind!=selected->kind)continue;
+            if(d->kind!=XR_XIR_SOURCE_MODULE&&(syntax->declarations[i].role==XR_XIR_SOURCE_SYNTAX_NONE||rename_absent(syntax->declarations[i].name)))continue;
             size_t name_length=0;status=rename_fact_length(w,d->name,&name_length);if(status!=XR_XIR_OK)return status;bool same=false;
             status=rename_equal(w,d->name,name_length,selected->name,selected->name_length,&same);if(status!=XR_XIR_OK)return status;if(!same)continue;
             size_t document=0;status=rename_text_document(w,queries,view,d->range.module,&document);if(status==XR_XIR_UNRESOLVED)continue;if(status!=XR_XIR_OK)return status;if(document!=selected->declared.document)continue;

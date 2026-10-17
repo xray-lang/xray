@@ -251,7 +251,8 @@ XrXirStatus xlsp_source_semantic_tokens(const XlspSourceSnapshot *s,const char *
     }
     for(uint32_t i=0;i<syntax->marker_count&&status==XR_XIR_OK;++i) {
         const XrXirSourceMarker *marker=&syntax->markers[i];
-        if(marker->role==XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING)continue;
+        if(marker->role!=XR_XIR_SOURCE_MARKER_REF&&marker->role!=XR_XIR_SOURCE_MARKER_MOVE&&
+            marker->role!=XR_XIR_SOURCE_MARKER_REF_ARGUMENT)continue;
         bool matches=false;
         status=lsp_text_has_module(s,text,marker->range.module,&matches);if(status!=XR_XIR_OK)break;if(!matches)continue;
         status=semantic_range(s,text,marker->range,16,0,tokens);

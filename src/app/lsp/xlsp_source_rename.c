@@ -24,7 +24,7 @@
 
 typedef struct RenameEdit {
     size_t document;XrLspRange range;
-    const char *preserved;
+    const char *preserved,*separator;
     bool prefix;
     char *replacement;
     size_t replacement_length;
@@ -152,18 +152,19 @@ static XrXirStatus rename_replacements(RenameWork *w) {
     for(size_t i=0;i<w->edit_count;++i) {
         RenameEdit *edit=&w->edits[i];if(!edit->preserved)continue;
         size_t kept=0;XrXirStatus status=rename_fact_length(w,edit->preserved,&kept);if(status!=XR_XIR_OK)return status;
-        if(w->new_length>SIZE_MAX-3||kept>SIZE_MAX-w->new_length-3)return XR_XIR_BUDGET;
-        size_t length=w->new_length+2+kept;
+        const char *separator=edit->separator?edit->separator:": ";size_t gap=strlen(separator);
+        if(w->new_length>SIZE_MAX-gap-1||kept>SIZE_MAX-w->new_length-gap-1)return XR_XIR_BUDGET;
+        size_t length=w->new_length+gap+kept;
         uint32_t width=edit->range.end.character-edit->range.start.character;
-        if(w->new_width>INT32_MAX-2||width>INT32_MAX-w->new_width-2)return XR_XIR_BUDGET;
+        if(w->new_width>INT32_MAX-gap||width>INT32_MAX-w->new_width-gap)return XR_XIR_BUDGET;
         status=rename_resource(xr_compile_resources_alloc(w->resources,length+1,(void **)&edit->replacement));if(status!=XR_XIR_OK)return status;
         status=rename_work(w,length+1);if(status!=XR_XIR_OK)return status;
         const char *first=edit->prefix?edit->preserved:w->new_name,*last=edit->prefix?w->new_name:edit->preserved;
         size_t first_length=edit->prefix?kept:w->new_length,last_length=edit->prefix?w->new_length:kept;
-        memcpy(edit->replacement,first,first_length);memcpy(edit->replacement+first_length,": ",2);
-        memcpy(edit->replacement+first_length+2,last,last_length);edit->replacement[length]=0;
-        edit->replacement_length=length;edit->replacement_width=w->new_width+2+width;
-        edit->name_offset=edit->prefix?width+2:0;edit->preserved=NULL;
+        memcpy(edit->replacement,first,first_length);memcpy(edit->replacement+first_length,separator,gap);
+        memcpy(edit->replacement+first_length+gap,last,last_length);edit->replacement[length]=0;
+        edit->replacement_length=length;edit->replacement_width=w->new_width+(uint32_t)gap+width;
+        edit->name_offset=edit->prefix?width+(uint32_t)gap:0;edit->preserved=NULL;
     }
     return XR_XIR_OK;
 }
@@ -219,7 +220,8 @@ static XrXirStatus rename_mapped(RenameWork *w,RenameEdit edit,XrLspRange *out) 
     int64_t column=(int64_t)edit.range.start.character+edit.name_offset;
     for(size_t i=0;i<w->edit_count;++i) {
         XrXirStatus status=rename_work(w,sizeof(RenameEdit));if(status!=XR_XIR_OK)return status;RenameEdit before=w->edits[i];
-        if(before.document!=edit.document||before.range.start.line!=edit.range.start.line||before.range.end.character>edit.range.start.character)continue;
+        if(before.document!=edit.document||before.range.start.line!=edit.range.start.line||
+            rename_same(before.range,edit.range)||before.range.end.character>edit.range.start.character)continue;
         uint32_t width=before.replacement?before.replacement_width:w->new_width;
         column+=(int64_t)width-(before.range.end.character-before.range.start.character);
         if(column<0||column>INT32_MAX)return XR_XIR_BUDGET;
