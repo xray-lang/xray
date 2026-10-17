@@ -240,11 +240,18 @@ static XrXirStatus effect_body_record_count(const XrXirCompileContext *work,
         census->tail>EFFECT_BODY_LITERAL_CAPACITY) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,6+sizeof(uint32_t))) return XR_XIR_BUDGET;
     if (run->count==1 || (run->mask&EFFECT_BODY_LITERAL_ROWS)) {
-        for (uint32_t i=0;i<run->count;++i) {
-            if (!xir_compile_work(work,6+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
-            if (census->tail && census->tail<EFFECT_BODY_LITERAL_CAPACITY) ++census->tail;
-            else { if (census->count>=source->instruction_count) return XR_XIR_BAD_STRUCTURE;
-                ++census->count;census->tail=1; }
+        /* A prepared literal has at most eight rows, so filling the current
+         * tail can require only one new record. This counts capacity only;
+         * the same scanner still reads every current physical word twice. */
+        if (!xir_compile_work(work,3+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t room=census->tail?EFFECT_BODY_LITERAL_CAPACITY-census->tail:0;
+        if (run->count<=room) {
+            if (!xir_compile_work(work,1+sizeof(census->tail))) return XR_XIR_BUDGET;
+            census->tail+=run->count;
+        } else {
+            if (census->count>=source->instruction_count) return XR_XIR_BAD_STRUCTURE;
+            if (!xir_compile_work(work,2+sizeof(census->count)+sizeof(census->tail))) return XR_XIR_BUDGET;
+            ++census->count;census->tail=run->count-room;
         }
     } else {
         if (census->count>=source->instruction_count) return XR_XIR_BAD_STRUCTURE;
