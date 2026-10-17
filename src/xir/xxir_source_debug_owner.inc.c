@@ -81,7 +81,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_debug_copy(XrXirSourceSnapsho
         }
         XrXirStatus throws=source_debug_throw_validate(&copy,function,module,f);
         if (throws!=XR_XIR_OK) return throws;
-        XrXirStatus handlers=source_debug_handler_validate(&copy,function,&module->functions[f]);
+        XrXirStatus handlers=source_debug_handler_validate(snapshot->context.resources,function,&module->functions[f]);
         if (handlers!=XR_XIR_OK) return handlers;
         if (!function->points) continue;
         for (uint32_t i=0;i<function->instruction_count;++i) {

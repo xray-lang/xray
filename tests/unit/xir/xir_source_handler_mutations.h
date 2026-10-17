@@ -95,7 +95,7 @@ static void handler_mutations(const XrXirCompileContext *context,const XrXirSour
     XrXirSourceSnapshot *snapshot=NULL;
     CHECK(xr_xir_compile_source_snapshot_copy_v2(context,xr_xir_compile_source_snapshot_view(source->snapshot),
         xr_xir_compile_source_snapshot_construction(source->snapshot),&snapshot)==XR_XIR_OK);
-    for (uint32_t variant=0;variant<13;++variant) {
+    for (uint32_t variant=0;variant<18;++variant) {
         HandlerMutable copy={0};CHECK(handler_mutable(context,debug,f,&copy)==XR_XIR_OK);
         XrXirSourceDebugFunction *function=&copy.functions[f];
         switch (variant) {
@@ -112,6 +112,11 @@ static void handler_mutations(const XrXirCompileContext *context,const XrXirSour
         case 10:copy.routes[0].handler=0;break;
         case 11:copy.routes[1]=copy.routes[0];break;
         case 12:copy.routes[0].instruction=copy.handlers[0].error-function->parameter_count;break;
+        case 13:copy.routes[0].error=UINT32_MAX;break;
+        case 14:copy.routes[0].edge=UINT32_MAX;break;
+        case 15:copy.routes[0].input=UINT32_MAX;break;
+        case 16:copy.routes[0].handler=2;break;
+        case 17:CHECK(copy.handlers[0].propagation_input<2);copy.handlers[0].propagation_input^=1;break;
         }
         XrXirSourceDebugView input=*debug;input.functions=copy.functions;
         uint64_t live=library_compile_stats(context).live_bytes;

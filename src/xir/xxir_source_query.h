@@ -57,14 +57,18 @@ typedef struct XrXirSourceDebugSelector {
 
 /* Handler identities are one-based within one function. A nonzero parent is
  * the later-built outer propagation route. The Error operand is its existing
- * join value; a consumed route has no propagation instruction or parent. */
+ * join value; a consumed route has no propagation instruction or parent.
+ * Propagation input is a zero-based PHI pair, or UINT32_MAX without a parent. */
 typedef struct XrXirSourceDebugHandler {
     uint32_t error, parent, propagation;
     const XrXirSourceDebugSelector *selectors;
     uint32_t selector_count;
+    uint32_t propagation_input;
 } XrXirSourceDebugHandler;
 
-typedef struct XrXirSourceDebugRoute { uint32_t instruction, handler; } XrXirSourceDebugRoute;
+/* The explicit error edge, value and zero-based PHI pair prove which join receives this site;
+ * pending invoke/await routes never infer a handler from nearby code. */
+typedef struct XrXirSourceDebugRoute { uint32_t instruction, handler, edge, error, input; } XrXirSourceDebugRoute;
 
 typedef struct XrXirSourceDebugFunction {
     uint32_t function, declaration, parameter_count, instruction_count;

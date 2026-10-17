@@ -15,6 +15,7 @@
 #include "xxir_vm_debug_calls_internal.h"
 #include "xxir_error.h"
 #include "xxir_enum.h"
+#include "xxir_equal.h"
 #include "xxir_type_arena.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_instance_debug_internal.h"
@@ -36,6 +37,9 @@ typedef struct DebugBreakpoint {
     uint32_t counter,group;
 } DebugBreakpoint;
 typedef struct DebugSourcePoint { uint32_t module,statement,line,flags; } DebugSourcePoint;
+typedef struct DebugSourceHandler {
+    uint32_t error,parent,propagation,first,count;
+} DebugSourceHandler;
 enum { DEBUG_SOURCE_AUTHORED=4u };
 typedef struct DebugWrite {
     XrXirValue value;
@@ -73,6 +77,7 @@ struct XrXirVmDebugSnapshot {
     XrXirDomain *domain;
     SnapshotFrame *frames;
     XrXirValue exception;
+    XirVmDebugExceptionLocal exception_local;
     XirVmDebugStopCause cause;
 };
 struct XrXirVmDebug {
@@ -93,7 +98,11 @@ struct XrXirVmDebug {
     uint32_t source_functions;
     uint32_t *source_offsets;
     uint32_t *source_throw_offsets;
+    uint32_t *source_handler_offsets,*source_route_offsets;
     XrXirSourceDebugThrow *source_throws;
+    DebugSourceHandler *source_handlers;
+    XrXirSourceDebugSelector *source_selectors;
+    XrXirSourceDebugRoute *source_routes;
     DebugSourcePoint *source_points,step_source;
     bool skip_once, disabled, faulted, break_throw;
     _Atomic unsigned mode;
@@ -122,6 +131,7 @@ static void *debug_allocate(XrXirDomain *domain, uint64_t bytes, XrXirValueStatu
     if (memory) memset(memory, 0, (size_t)bytes);
     return memory;
 }
+#include "xxir_vm_debug_selector.inc.c"
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_new(XrXirDomain *domain, uint32_t capacity,
     XrXirVmDebug **output) {
     if (!output || *output || !capacity || capacity==UINT32_MAX || !xr_xir_domain_current(domain))
@@ -552,6 +562,8 @@ static XrXirValueStatus capture_prepare(XrXirVmDebug *debug,XrXirCallView *view,
         }
         if (!xr_xir_domain_work(debug->domain,1)) { status=XR_XIR_VALUE_LIMIT;goto fail; }
         status=xr_xir_value_copy(&concrete,&snapshot->exception);if (status!=XR_XIR_VALUE_OK) goto fail;
+        status=debug_exception_local(debug,view,frame,operand,&snapshot->exception_local);
+        if (status!=XR_XIR_VALUE_OK) goto fail;
     }
     *output=snapshot;
     return XR_XIR_VALUE_OK;
@@ -739,6 +751,13 @@ XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_exception(const XrXirVmDebugSn
     if (!snapshot->exception.type) return XR_XIR_VALUE_UNSUPPORTED;
     if (!xr_xir_domain_work(snapshot->domain,1)) return XR_XIR_VALUE_LIMIT;
     return xr_xir_value_copy(&snapshot->exception,output);
+}
+XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_exception_local(const XrXirVmDebugSnapshot *snapshot,
+    XirVmDebugExceptionLocal *output) {
+    if (!snapshot_valid(snapshot) || !output) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!snapshot->exception.type) return XR_XIR_VALUE_UNSUPPORTED;
+    if (!xr_xir_domain_work(snapshot->domain,1)) return XR_XIR_VALUE_LIMIT;
+    *output=snapshot->exception_local;return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_vm_debug_snapshot_member(const XrXirVmDebugSnapshot *snapshot,
     uint32_t frame,const XrXirValue *value,uint32_t field,bool *allowed) {

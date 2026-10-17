@@ -27,6 +27,6 @@ static bool source_throw(SourceContext *ctx,AstNode *node) {
     SourceThrowRecipe *site=source_alloc(ctx,1,sizeof(*site));if (!site) return false;
     *site=(SourceThrowRecipe){body->throw_recipes,body->count-1,value.id};
     body->throw_recipes=site;++body->throw_count;
-    if (!source_handler_site(ctx,body->count-1)) return false;
+    if (!source_handler_site(ctx,body->count-1,value.id)) return false;
     ctx->returned=true;return true;
 }

@@ -200,6 +200,7 @@ static bool source_catch_dispatch(SourceContext *ctx,const SourceCatchDispatch *
         route->parent=body->error_context ? body->error_context->route : NULL;
         if (body->error_context) {
             if (!source_error_edge(ctx,error)) return false;
+            route->propagation_edge=body->error_context->edges;
         } else if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{error.id},{0},0,{0}},NULL)) return false;
     }
     return true;
@@ -293,7 +294,7 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
         for (SourceErrorEdge *edge = handler.edges; edge; edge = edge->next) {
             if (!source_work(ctx,node)) return false;
             body->recipes[edge->jump].instruction.targets[0] = target;
-            --at; inputs[at*2] = (SourceValue){edge->block,XR_XIR_UNIT}; inputs[at*2+1] = edge->value;
+            --at;edge->input=at;inputs[at*2] = (SourceValue){edge->block,XR_XIR_UNIT}; inputs[at*2+1] = edge->value;
         }
         SourceValue error;
         if (!source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,XR_XIR_ERROR,{0},{0},0,{0}},inputs,handler.count*2,&error)) return false;

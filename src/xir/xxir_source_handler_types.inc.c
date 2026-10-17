@@ -11,10 +11,12 @@ typedef struct SourceHandlerRecipe {
     uint32_t identity, error, propagation;
     XrXirSourceDebugSelector *selectors;
     uint32_t selector_count;
+    SourceErrorEdge *propagation_edge;
 } SourceHandlerRecipe;
 
 typedef struct SourceRouteRecipe {
     struct SourceRouteRecipe *next;
     SourceHandlerRecipe *handler;
-    uint32_t instruction;
+    uint32_t instruction,edge,error;
+    SourceErrorEdge *flow;
 } SourceRouteRecipe;

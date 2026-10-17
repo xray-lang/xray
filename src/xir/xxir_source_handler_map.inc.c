@@ -48,6 +48,8 @@ static bool source_handler_map(SourceContext *ctx,const uint32_t *map,uint32_t c
             (recipe->parent && (recipe->parent->identity<=recipe->identity || recipe->parent->identity>body->handler_count))) goto invalid;
         XrXirSourceDebugHandler *handler=&handlers[recipe->identity-1];
         handler->parent=recipe->parent ? recipe->parent->identity : 0;handler->propagation=UINT32_MAX;
+        handler->propagation_input=recipe->propagation_edge ? recipe->propagation_edge->input : UINT32_MAX;
+        if (recipe->parent && handler->propagation_input==UINT32_MAX) goto invalid;
         if (!source_region_id(map,count,recipe->error,&handler->error) ||
             (recipe->propagation!=UINT32_MAX && !source_handler_instruction(&mapping,recipe->propagation,&handler->propagation))) goto invalid;
         XrXirSourceDebugSelector *selectors=source_alloc(ctx,recipe->selector_count,sizeof(*selectors));if (!selectors) return false;
@@ -59,16 +61,18 @@ static bool source_handler_map(SourceContext *ctx,const uint32_t *map,uint32_t c
     used=0;
     for (const SourceRouteRecipe *recipe=body->route_recipes;recipe;recipe=recipe->next) {
         if (!source_work_units(ctx,NULL,sizeof(*recipe))) return false;
-        uint32_t instruction=0;
-        if (used==body->route_count || !recipe->handler || !recipe->handler->identity ||
-            recipe->handler->identity>body->handler_count || !source_handler_instruction(&mapping,recipe->instruction,&instruction)) goto invalid;
+        uint32_t instruction=0,edge=0,error=0;
+        if (used==body->route_count || !recipe->handler || !recipe->handler->identity || !recipe->flow ||
+            recipe->flow->input==UINT32_MAX || recipe->flow->jump!=recipe->edge || recipe->flow->value.id!=recipe->error ||
+            recipe->handler->identity>body->handler_count || !source_handler_instruction(&mapping,recipe->instruction,&instruction) ||
+            !source_handler_instruction(&mapping,recipe->edge,&edge) || !source_region_id(map,count,recipe->error,&error)) goto invalid;
         uint32_t at=used;
         while (at && routes[at-1].instruction>instruction) {
             if (!source_work(ctx,NULL)) return false;
             routes[at]=routes[at-1];--at;
         }
         if (at && routes[at-1].instruction==instruction) goto invalid;
-        routes[at]=(XrXirSourceDebugRoute){instruction,recipe->handler->identity};++used;
+        routes[at]=(XrXirSourceDebugRoute){instruction,recipe->handler->identity,edge,error,recipe->flow->input};++used;
     }
     if (used!=body->route_count) goto invalid;
     body->debug_handlers=handlers;body->debug_routes=routes;return true;

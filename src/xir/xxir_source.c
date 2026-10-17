@@ -81,6 +81,7 @@ static bool source_name_ready(const SourceName *name) {
         (name->kind == SOURCE_LOCAL && name->mutable && name->type == XR_XIR_UNIT));
 }
 typedef struct SourceErrorContext SourceErrorContext;
+typedef struct SourceErrorEdge SourceErrorEdge;
 /* `infer_result` leaves a callable context's result open so a closure's own body decides it. */
 typedef struct SourceExpectedType { bool present; XrXirType type; bool infer_result, inferred; } SourceExpectedType;
 typedef struct SourceConversionRecipe {
@@ -197,11 +198,12 @@ typedef struct SourceFunction {
 } SourceFunction;
 typedef struct SourcePatch { struct SourcePatch *next; uint32_t instruction; } SourcePatch;
 typedef struct SourceLoop { struct SourceLoop *parent; SourcePatch *breaks, *continues; uint32_t frontier; } SourceLoop;
-typedef struct SourceErrorEdge {
+struct SourceErrorEdge {
     struct SourceErrorEdge *next;
     uint32_t block, jump;
     SourceValue value;
-} SourceErrorEdge;
+    uint32_t input;
+};
 struct SourceErrorContext {
     SourceErrorEdge *edges;
     uint32_t count, frontier;

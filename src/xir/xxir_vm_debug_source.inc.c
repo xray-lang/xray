@@ -6,10 +6,18 @@
  *
  * xxir_vm_debug_source.inc.c - Immutable source boundaries at actual VM hooks
  */
+#include "xxir_source_handler_validate.inc.c"
+_Static_assert(_Alignof(DebugSourceHandler)<=_Alignof(uint32_t) &&
+    _Alignof(DebugSourcePoint)<=_Alignof(uint32_t) &&
+    _Alignof(XrXirSourceDebugThrow)<=_Alignof(uint32_t) &&
+    _Alignof(XrXirSourceDebugSelector)<=_Alignof(uint32_t) &&
+    _Alignof(XrXirSourceDebugRoute)<=_Alignof(uint32_t),"source table rows require four-byte alignment");
 static void debug_source_clear(XrXirVmDebug *debug) {
     xr_compile_resources_free(debug->source_memory);
     debug->source_memory=NULL;debug->source_offsets=NULL;debug->source_points=NULL;debug->source_functions=0;
     debug->source_throw_offsets=NULL;debug->source_throws=NULL;
+    debug->source_handler_offsets=NULL;debug->source_route_offsets=NULL;
+    debug->source_handlers=NULL;debug->source_selectors=NULL;debug->source_routes=NULL;
     debug->step_source=(DebugSourcePoint){0};
 }
 static void debug_source_throw(const XrXirVmDebug *debug,uint32_t function,uint32_t instruction,uint32_t *operand) {
@@ -48,7 +56,7 @@ XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *debug,const XrXirCompi
         return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *module=xr_xir_compile_artifact_module(debug->artifact);
     if (source->function_count!=module->function_count || source->function_count==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-    uint64_t instructions=0,throws=0;
+    uint64_t instructions=0,throws=0,handlers=0,routes=0,selectors=0;
     for (uint32_t f=0;f<source->function_count;++f) {
         if (xr_compile_resources_work(context->resources,1)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
         const XrXirSourceDebugFunction *function=&source->functions[f];
@@ -56,24 +64,45 @@ XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *debug,const XrXirCompi
             function->instruction_count!=module->functions[f].instruction_count ||
             function->throw_count>function->instruction_count || (!!function->throw_count!=!!function->throw_sites) ||
             (function->throw_count && !function->points)) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus checked=source_debug_handler_validate(context->resources,function,&module->functions[f]);
+        if (checked!=XR_XIR_OK) return checked;
         instructions+=function->instruction_count;throws+=function->throw_count;
-        if (instructions>UINT32_MAX || throws>UINT32_MAX) return XR_XIR_BUDGET;
+        handlers+=function->handler_count;routes+=function->route_count;
+        for (uint32_t h=0;h<function->handler_count;++h) selectors+=function->handlers[h].selector_count;
+        if (instructions>UINT32_MAX || throws>UINT32_MAX || handlers>UINT32_MAX || routes>UINT32_MAX || selectors>UINT32_MAX)
+            return XR_XIR_BUDGET;
     }
     uint64_t offsets=((uint64_t)source->function_count+1)*sizeof(uint32_t);
-    uint64_t bytes=offsets*2+instructions*sizeof(DebugSourcePoint)+throws*sizeof(XrXirSourceDebugThrow);
-    uint64_t work=bytes+instructions*(sizeof(XrXirSourceDebugPoint)+1)+throws*sizeof(XrXirSourceDebugThrow);
+    uint64_t bytes=offsets*4+instructions*sizeof(DebugSourcePoint)+throws*sizeof(XrXirSourceDebugThrow)+
+        handlers*sizeof(DebugSourceHandler)+routes*sizeof(XrXirSourceDebugRoute)+selectors*sizeof(XrXirSourceDebugSelector);
+    uint64_t work=bytes+instructions*(sizeof(XrXirSourceDebugPoint)+1)+throws*sizeof(XrXirSourceDebugThrow)+
+        handlers*sizeof(XrXirSourceDebugHandler)+routes*sizeof(XrXirSourceDebugRoute)+selectors*sizeof(XrXirSourceDebugSelector);
     if (bytes>SIZE_MAX || xr_compile_resources_work(context->resources,work)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_BUDGET;
     void *memory=NULL;
     XrCompileResourceStatus allocated=xr_compile_resources_alloc(context->resources,(size_t)bytes,&memory);
     if (allocated!=XR_COMPILE_RESOURCE_OK) return allocated==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
     uint32_t *starts=memory,*throw_starts=(uint32_t *)((unsigned char *)memory+(size_t)offsets);
-    DebugSourcePoint *points=(DebugSourcePoint *)((unsigned char *)memory+(size_t)offsets*2);
+    uint32_t *handler_starts=(uint32_t *)((unsigned char *)memory+(size_t)offsets*2);
+    uint32_t *route_starts=(uint32_t *)((unsigned char *)memory+(size_t)offsets*3);
+    DebugSourcePoint *points=(DebugSourcePoint *)((unsigned char *)memory+(size_t)offsets*4);
     XrXirSourceDebugThrow *sites=(XrXirSourceDebugThrow *)(points+instructions);
-    uint32_t at=0,throw_at=0;
+    DebugSourceHandler *handler_rows=(DebugSourceHandler *)(sites+throws);
+    XrXirSourceDebugRoute *route_rows=(XrXirSourceDebugRoute *)(handler_rows+handlers);
+    XrXirSourceDebugSelector *selector_rows=(XrXirSourceDebugSelector *)(route_rows+routes);
+    uint32_t at=0,throw_at=0,handler_at=0,route_at=0,selector_at=0;
     for (uint32_t f=0;f<source->function_count;++f) {
         starts[f]=at;
         const XrXirSourceDebugFunction *function=&source->functions[f];
         throw_starts[f]=throw_at;
+        handler_starts[f]=handler_at;route_starts[f]=route_at;
+        for (uint32_t h=0;h<function->handler_count;++h) {
+            const XrXirSourceDebugHandler *handler=&function->handlers[h];
+            handler_rows[handler_at++]=(DebugSourceHandler){handler->error,handler->parent,handler->propagation,selector_at,handler->selector_count};
+            memcpy(selector_rows+selector_at,handler->selectors,(size_t)handler->selector_count*sizeof(*selector_rows));
+            selector_at+=handler->selector_count;
+        }
+        if (function->route_count) memcpy(route_rows+route_at,function->routes,(size_t)function->route_count*sizeof(*route_rows));
+        route_at+=function->route_count;
         for (uint32_t t=0;t<function->throw_count;++t) {
             const XrXirSourceDebugThrow *site=&function->throw_sites[t];const XrXirFunction *body=&module->functions[f];
             if (site->instruction>=body->instruction_count ||
@@ -101,7 +130,10 @@ XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *debug,const XrXirCompi
     }
     starts[source->function_count]=at;
     throw_starts[source->function_count]=throw_at;
+    handler_starts[source->function_count]=handler_at;route_starts[source->function_count]=route_at;
     debug->source_memory=memory;debug->source_offsets=starts;debug->source_points=points;
     debug->source_throw_offsets=throw_starts;debug->source_throws=sites;
+    debug->source_handler_offsets=handler_starts;debug->source_route_offsets=route_starts;
+    debug->source_handlers=handler_rows;debug->source_routes=route_rows;debug->source_selectors=selector_rows;
     debug->source_functions=source->function_count;return XR_XIR_OK;
 }

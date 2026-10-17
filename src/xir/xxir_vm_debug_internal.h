@@ -20,6 +20,17 @@ typedef struct XirVmDebugPoint {
     uint32_t instruction;
 } XirVmDebugPoint;
 typedef struct XirVmDebugStopCause { uint32_t groups;bool unfiltered; } XirVmDebugStopCause;
+typedef enum XirVmDebugExceptionLocalKind {
+    XIR_VM_DEBUG_EXCEPTION_LOCAL_UNKNOWN,
+    XIR_VM_DEBUG_EXCEPTION_LOCAL_MATCH,
+    XIR_VM_DEBUG_EXCEPTION_LOCAL_PROPAGATE
+} XirVmDebugExceptionLocalKind;
+/* A selector result in the throwing function. It predicts neither cleanup
+ * completion nor caller/native/Task propagation and grants no frame authority. */
+typedef struct XirVmDebugExceptionLocal {
+    XirVmDebugExceptionLocalKind kind;
+    uint32_t function,handler,accepted;
+} XirVmDebugExceptionLocal;
 XR_FUNC bool xir_vm_debug_retain(XrXirVmDebug *debug);
 XR_FUNC bool xir_vm_debug_bind(XrXirVmDebug *debug, const XrXirArtifact *artifact);
 XR_FUNC void xir_vm_debug_program(XrXirVmDebug *debug, XrXirProgram *program);
@@ -35,12 +46,14 @@ XR_FUNC void xir_vm_debug_faulted(XrXirVmDebug *,const XrXirCallView *);
  * never frame state or values. Failure preserves both outputs. Before the first
  * admitted VM ingress there is no complete Call observer inventory. */
 XR_FUNC XrXirValueStatus xir_vm_debug_threads(XrXirVmDebug *,uint64_t *,uint32_t,uint32_t *);
-/* Before target construction only. Copy display identities on the exact
- * artifact's original finite compiler ledger; no parser or product borrow. */
+/* Before target construction only. Verify Source selector correspondence with
+ * the exact artifact and copy coordinates/routes on its original finite compiler
+ * ledger. No parser/product borrow or execution authority comes from the map. */
 XR_FUNC XrXirStatus xir_vm_debug_source_map(XrXirVmDebug *,const XrXirCompileContext *,const XrXirSourceDebugView *);
 /* Only actual matching logical rule groups are captured. A pause, step, throw
  * or ungrouped breakpoint is unfiltered and cannot be silently discarded. */
 XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_cause(const XrXirVmDebugSnapshot *,XirVmDebugStopCause *);
+XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_exception_local(const XrXirVmDebugSnapshot *,XirVmDebugExceptionLocal *);
 /* Copies only the captured payload of a published, admitted module slot. A
  * retained snapshot never supplies a live frame or module permission. */
 XR_FUNC XrXirValueStatus xir_vm_debug_snapshot_slot(const XrXirVmDebugSnapshot *,uint32_t,uint32_t,XrXirValue *);
