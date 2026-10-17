@@ -35,7 +35,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
             XrXirOp op = module->functions[f].instructions[i].op;
             if (op == XR_XIR_GO || op == XR_XIR_TASK_AWAIT || op == XR_XIR_FUNCTION_REF ||
-                op==XR_XIR_GENERATOR_NEW || op==XR_XIR_ITERATOR_HAS_NEXT || (op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH)) present = true;
+                op==XR_XIR_GENERATOR_NEW || op==XR_XIR_ITERATOR_HAS_NEXT || (op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH || op==XR_XIR_ITERATOR_CLOSE)) present = true;
         }
         if (!owner) continue;
         present = true;

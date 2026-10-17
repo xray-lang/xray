@@ -1129,12 +1129,15 @@ static bool instance_admission_work(void *owner, uint64_t units) {
     *remaining -= units;
     return true;
 }
-XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
-    XrXirType type, const XrXirValue *input, XrXirValue *output) {
+XR_FUNC XrXirCallStatus xr_xir_instance_argument_weakening_admit(XrXirCallView *view,
+    XrXirType type, const XrXirValue *input) {
+    XrXirValueAdmission *admission=xr_xir_call_admission(view);
+    if(!admission || admission->function!=admit_function_binding) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirInstance *instance = view_instance(view);
-    if (!instance || !input) return XR_XIR_CALL_BAD_STATE;
-    XrXirValueAdmission *admission = xr_xir_call_admission(view);
+    if (!instance || !input) return XR_XIR_CALL_BAD_ARGUMENT;
+    if(!xr_xir_callable_signature(instance->program->types,type) ||
+        !xr_xir_callable_signature(instance->program->types,(XrXirType)input->type)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallStatus status = admit_instance_value(admission, input, (XrXirType)input->type);
     if (status != XR_XIR_CALL_READY) return status;
     XrXirStatus match = xr_xir_callable_weakening_admit(instance->program->types,
@@ -1143,6 +1146,17 @@ XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
     const XrXirFunctionBinding *binding = xr_xir_function_binding(input);
     if (!binding || !function_bound_admitted(instance->program, binding->entry,
         xr_xir_callable_signature(instance->program->types, type))) return XR_XIR_CALL_BAD_ARGUMENT;
+    return XR_XIR_CALL_READY;
+}
+
+XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
+    XrXirType type, const XrXirValue *input, XrXirValue *output) {
+    XrXirValueAdmission *admission=xr_xir_call_admission(view);
+    if(!input || !admission || admission->function!=admit_function_binding) return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus status=xr_xir_instance_argument_weakening_admit(view,type,input);
+    if(status!=XR_XIR_CALL_READY) return status;
+    XrXirInstance *instance=view_instance(view);
+    const XrXirFunctionBinding *binding=xr_xir_function_binding(input);
     if (!function_gate_retain(instance->function_gate)) return XR_XIR_CALL_LIMIT;
     status = value_call_status(xr_xir_function_new(instance->domain, instance->program->arena,
         type, binding, admission, output));

@@ -19,7 +19,8 @@ XR_FUNC bool xr_xir_call_iterator_wait_token(const XrXirCall *call,XrXirTaskWait
 static bool iterator_wait_matches(const XrXirCall *call,const XrXirTaskWaitToken *token) {
     if(!call || !token) return false;
     const XrXirWaitRequest *wait=&token->request;
-    return xr_xir_call_executor_member(call,&token->binding) && call->top && !call->cancel_requested &&
+    return xr_xir_call_executor_member(call,&token->binding) && call->top &&
+        (!call->cancel_requested || (wait->kind==XR_XIR_WAIT_ITERATOR_CLOSE && cleanup_active(call))) &&
         call->result.status==XR_XIR_CALL_SUSPENDED && token->wake && call->result.wake==token->wake &&
         iterator_wait_kind(wait->kind) && call->wait.kind==wait->kind && !wait->reserved && call->wait.after_ms==wait->after_ms &&
         (wait->kind==XR_XIR_WAIT_ITERATOR_NTH || !wait->after_ms) &&
@@ -37,6 +38,9 @@ XR_FUNC XrXirCallStatus xr_xir_call_link_iterator_wait(XrXirCall *call,const XrX
     bool terminal=atomic_load_explicit(&generator->state,memory_order_acquire)==XIR_GENERATOR_TERMINAL;
     if(!terminal && generator->executor!=token->binding.owner) return XR_XIR_CALL_BAD_STATE;
     generator->consumer=call;call->wait_linked=true;
+    if(token->request.kind==XR_XIR_WAIT_ITERATOR_CLOSE && !terminal) {
+        atomic_store_explicit(&generator->orphaned,true,memory_order_release);return XR_XIR_CALL_SUSPENDED;
+    }
     return terminal || xr_xir_call_state(generator->call)==XR_XIR_CALL_YIELDED ?
         XR_XIR_CALL_RETURNED : XR_XIR_CALL_SUSPENDED;
 }
@@ -49,11 +53,15 @@ XR_FUNC XrXirCallStatus xr_xir_call_complete_iterator_wait(XrXirCall *call,const
         generator->identity!=token->request.ticket) return XR_XIR_CALL_BAD_STATE;
     XrXirCallResult outcome={0};
     bool terminal=atomic_load_explicit(&generator->state,memory_order_acquire)==XIR_GENERATOR_TERMINAL;
+    if(!terminal && token->request.kind==XR_XIR_WAIT_ITERATOR_CLOSE) return XR_XIR_CALL_BAD_STATE;
     if(terminal) {
+        if(token->request.kind==XR_XIR_WAIT_ITERATOR_CLOSE && generator->outcome.status==XR_XIR_CALL_THROWN)
+            return XR_XIR_CALL_BAD_STATE;
         if(generator->outcome.status!=XR_XIR_CALL_RETURNED && generator->outcome.status!=XR_XIR_CALL_CANCELLED) {
             XrXirValueStatus copied=xr_xir_call_result_copy(&generator->outcome,&outcome);
             if(copied!=XR_XIR_VALUE_OK) return copied==XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_LIMIT;
-        } else if(token->request.kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT) {
+        } else if(token->request.kind==XR_XIR_WAIT_ITERATOR_CLOSE) outcome.status=XR_XIR_CALL_RETURNED;
+        else if(token->request.kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT) {
             outcome.status=XR_XIR_CALL_RETURNED;outcome.value=(XrXirValue){XR_XIR_BOOL,0,0};
         }
         else {

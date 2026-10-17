@@ -327,7 +327,13 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *op = &function->instructions[i];
             if(op->op==XR_XIR_GENERATOR_NEW) {
-                if(generator_at>=generators) {status=XR_XIR_BAD_STRUCTURE;break;}
+                XirEffectProducerView real={0};
+                status=xir_effects_producer(context,effects,f,i,&real);
+                if(status!=XR_XIR_OK) break;
+                if(generator_at>=generators || real.function!=f || real.instruction!=i ||
+                    real.target!=(uint64_t)op->immediate || real.capture_count!=op->args[1] || real.type!=op->type) {
+                    status=XR_XIR_BAD_STRUCTURE;break;
+                }
                 permissions->generators[generator_at++]=(XrXirProgramGeneratorSite){
                     (uint32_t)op->immediate,op->args[1],i,op->type};
                 ++permissions->entries[f].generator_count;

@@ -23,14 +23,14 @@ typedef struct WaitResourceFixture {
     XrXirVmBinding *bindings;
     XrXirCallEntry *vm;
     XrXirProgram *program;
-    XrXirCallEntry entries[64];
-    const XrXirCallEntry *selected[64];
-    unsigned native[64],steps[2],code_releases;
+    XrXirCallEntry entries[128];
+    const XrXirCallEntry *selected[128];
+    unsigned native[128],steps[2],code_releases;
 } WaitResourceFixture;
 static WaitResourceFixture *resource_fixture;
 static XrXirAction resource_resume(XrXirCallView *view) {
     uint32_t entry=xr_xir_call_current_entry(view->activation);
-    CHECK(resource_fixture && entry<64 && resource_fixture->selected[entry]);
+    CHECK(resource_fixture && entry<128 && resource_fixture->selected[entry]);
     ++resource_fixture->steps[resource_fixture->native[entry]];
     return resource_fixture->selected[entry]->resume(view);
 }
@@ -46,7 +46,7 @@ static void resource_fixture_new(WaitResourceFixture *fixture,const char *provid
     fixture->ids=input ? input->ids : generator_wait_ids;
     fixture->factory=input ? input->factory : generator_wait_ids[0];
     fixture->nth=input ? input->nth : 0;
-    CHECK(native->entry_count<=64);
+    CHECK(native->entry_count<=128);
     bool all_native=!strcmp(provider,"native"),all_vm=!strcmp(provider,"vm");
     bool root_native=!strcmp(provider,"native-vm");
     CHECK(all_native || all_vm || root_native || !strcmp(provider,"vm-native"));

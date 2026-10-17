@@ -11,6 +11,7 @@
  */
 #include "xxir_task_internal.h"
 #include "xxir_generator_internal.h"
+#include "xxir_instance_generator_internal.h"
 #include "xxir_task_result_internal.h"
 #include "xxir_error.h"
 #include "xxir_effects.h"
@@ -476,7 +477,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, u
                 task_core_enqueue(executor, activation);
             }
             else if (wait.kind == XR_XIR_WAIT_TASK) task_core_register_wait(executor, activation->call);
-            else if(wait.kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT || wait.kind==XR_XIR_WAIT_ITERATOR_NEXT || wait.kind==XR_XIR_WAIT_ITERATOR_NTH)
+            else if(wait.kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT || wait.kind==XR_XIR_WAIT_ITERATOR_NEXT || wait.kind==XR_XIR_WAIT_ITERATOR_NTH || wait.kind==XR_XIR_WAIT_ITERATOR_CLOSE)
                 generator_core_register_consumer(executor,activation->call);
         } else if (task) task_core_finish_task(executor, task);
         else if(generator) {
@@ -565,7 +566,9 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_cancel_root(XrXirTaskExecutor *exec
     /* A host wake belongs to the current root operation even when a producer
      * or child owns its external request. Cancellation revokes that selection. */
     executor->external = NULL; executor->external_call_wake = 0;
-    if (!executor->root.queued) task_core_enqueue(executor, &executor->root);
+    /* A close waiter stays parked until its producer finishes cleanup. */
+    if (!executor->root.queued && xr_xir_call_state(executor->root.call)!=XR_XIR_CALL_SUSPENDED)
+        task_core_enqueue(executor, &executor->root);
     return status;
 }
 XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor) {
@@ -578,7 +581,8 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor) {
     if (executor->root.call) {
         XrXirCallStatus status = xr_xir_call_request_cancel(executor->root.call);
         if (status == XR_XIR_CALL_BUSY) final = status;
-        if (status == XR_XIR_CALL_CANCEL_REQUESTED && !executor->root.queued && executor->current != &executor->root)
+        if (status == XR_XIR_CALL_CANCEL_REQUESTED && !executor->root.queued && executor->current != &executor->root &&
+            xr_xir_call_state(executor->root.call)!=XR_XIR_CALL_SUSPENDED)
             task_core_enqueue(executor, &executor->root);
     }
     for (XirTask *task = executor->active; task; task = task->active_next) {
@@ -586,7 +590,8 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor) {
         XR_CHECK(status == XR_XIR_CALL_CANCEL_REQUESTED || status == XR_XIR_CALL_BAD_STATE || status == XR_XIR_CALL_BUSY,
             "a stopped executor only cancels its own canonical calls");
         if (status == XR_XIR_CALL_BUSY) final = status;
-        if (!task->activation.queued && executor->current != &task->activation)
+        if (!task->activation.queued && executor->current != &task->activation &&
+            xr_xir_call_state(task->call)!=XR_XIR_CALL_SUSPENDED)
             task_core_enqueue(executor, &task->activation);
     }
     for(XirGenerator *generator=executor->generators;generator;generator=generator->active_next)

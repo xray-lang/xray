@@ -47,6 +47,8 @@ XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,uint32_t *
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,uint32_t instruction);
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
     const XirEffectInvocationSelection *selection);
+XR_FUNC XrXirCallStatus xr_xir_call_generator_bind_context(XrXirCall *call,
+    const XirEffectInvocationSelection *selection);
 typedef struct XrXirCallClassAccess {
     const XrXirValue *value;
     XrXirCellAuthority authority;

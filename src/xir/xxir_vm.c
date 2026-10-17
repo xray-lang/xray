@@ -424,7 +424,7 @@ static XrXirRunStatus vm_await_step(ScalarRun *run, VmState *state, const XrXirI
     const XrXirTypeNode *task_type = xr_xir_type_node(run->module->types, (XrXirType)task.type);
     if (!task_type || task_type->kind != (uint32_t)(op->op==XR_XIR_TASK_AWAIT ? XR_XIR_TYPE_TASK : XR_XIR_TYPE_ITERATOR))
         return XR_XIR_RUN_BAD_ARTIFACT;
-    XrXirType element = op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : task_type->element;
+    XrXirType element = op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_UNIT : task_type->element;
     bool nth=op->op==XR_XIR_ITERATOR_NTH;
     if(nth) {
         if(!run->layout->outgoing_count) return XR_XIR_RUN_BAD_ARTIFACT;
@@ -439,7 +439,7 @@ static XrXirRunStatus vm_await_step(ScalarRun *run, VmState *state, const XrXirI
     /* The frame owns this handle until the driver prepares its wait lease. */
     *action = (XrXirAction){op->op==XR_XIR_TASK_AWAIT ? XR_XIR_ACTION_AWAIT_TASK : XR_XIR_ACTION_AWAIT_ITERATOR,
         op->op==XR_XIR_TASK_AWAIT ? 0 : op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_WAIT_ITERATOR_HAS_NEXT :
-        nth ? XR_XIR_WAIT_ITERATOR_NTH : XR_XIR_WAIT_ITERATOR_NEXT,
+        nth ? XR_XIR_WAIT_ITERATOR_NTH : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_WAIT_ITERATOR_CLOSE : XR_XIR_WAIT_ITERATOR_NEXT,
         nth ? state->arguments : NULL, nth ? 1u : 0u, task, {0},
         state->panic ? XR_XIR_ACTION_PROTECTED : 0};
     return XR_XIR_RUN_OK;
@@ -655,7 +655,7 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
         return vm_generator_new(run,state,op,action,run->layout->offsets[result_id]);
     case XR_XIR_GO:
         return vm_go_step(run, state, op, action, run->layout->offsets[result_id]);
-    case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH:
+    case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
         return vm_await_step(run, state, op, action);
     case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE: {
         if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;

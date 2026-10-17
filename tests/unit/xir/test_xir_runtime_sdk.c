@@ -148,6 +148,13 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #undef current_sdk_kat_preimage
 #undef current_sdk_kat_file_digest
 #undef current_sdk_kat_digest
+#define current_sdk_kat_preimage previous88_sdk_kat_preimage
+#define current_sdk_kat_file_digest previous88_sdk_kat_file_digest
+#define current_sdk_kat_digest previous88_sdk_kat_digest
+#include "sdk_previous88_identity_golden.h"
+#undef current_sdk_kat_preimage
+#undef current_sdk_kat_file_digest
+#undef current_sdk_kat_digest
 #include "sdk_current_identity_golden.h"
 
 static void sdk_reject_retired_prefix(XrCompileResources *resources,XrXirSdkManifest *manifest,const uint8_t digest[32]) {
@@ -161,16 +168,20 @@ static void sdk_reject_retired_prefix(XrCompileResources *resources,XrXirSdkMani
     CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes &&
         after.live_bytes==before.live_bytes);
 }
-static void sdk_reject_previous87(XrCompileResources *resources,XrXirSdkManifest *manifest) {
-    _Static_assert(sizeof(previous87_sdk_kat_preimage)==3186,"complete retired87 SDK preimage");
-    uint8_t hash[32];xr_sha256(previous87_sdk_kat_preimage,sizeof(previous87_sdk_kat_preimage),hash);
-    CHECK(!memcmp(hash,previous87_sdk_kat_digest,32));
-    manifest->prefix[2]=87;manifest->prefix[3]=27;manifest->prefix[4]=32;
-    sdk_reject_retired_prefix(resources,manifest,previous87_sdk_kat_digest);
+static void sdk_reject_retired_generators(XrCompileResources *resources,XrXirSdkManifest *manifest) {
+    _Static_assert(sizeof(previous87_sdk_kat_preimage)==3186 && sizeof(previous88_sdk_kat_preimage)==3186,
+        "complete retired generator SDK preimages");
+    const uint8_t *images[]={previous87_sdk_kat_preimage,previous88_sdk_kat_preimage};
+    const uint8_t *digests[]={previous87_sdk_kat_digest,previous88_sdk_kat_digest};
+    for(unsigned i=0;i<2;++i) {
+        uint8_t hash[32];xr_sha256(images[i],3186,hash);CHECK(!memcmp(hash,digests[i],32));
+        manifest->prefix[2]=87+i;manifest->prefix[3]=27;manifest->prefix[4]=32+i;
+        sdk_reject_retired_prefix(resources,manifest,digests[i]);
+    }
 }
 static void sdk_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==88 &&
-        XR_XIR_VALUE_ABI_VERSION==27 && XR_XIR_CALL_ABI_VERSION==33 && XR_XIR_PROGRAM_ABI_VERSION==30,
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==89 &&
+        XR_XIR_VALUE_ABI_VERSION==27 && XR_XIR_CALL_ABI_VERSION==34 && XR_XIR_PROGRAM_ABI_VERSION==30,
         "SDK known bytes require the independently framed public contract");
     _Static_assert(sizeof(previous_call29_sdk_kat_preimage)==3186,"complete retired Call29 SDK preimage");
     uint8_t old_hash[32];
@@ -227,7 +238,7 @@ static void sdk_known_bytes(void) {
         previous70_sdk_kat_preimage[semantic_offset]==70 && previous72_sdk_kat_preimage[semantic_offset]==72);
     xr_sha256((const uint8_t *)"hi",2,old_hash);CHECK(!memcmp(old_hash,previous66_sdk_kat_file_digest,32) &&
         !memcmp(old_hash,previous67_sdk_kat_file_digest,32) && !memcmp(old_hash,previous68_sdk_kat_file_digest,32) && !memcmp(old_hash,previous69_sdk_kat_file_digest,32) && !memcmp(old_hash,previous70_sdk_kat_file_digest,32) && !memcmp(old_hash,previous71_sdk_kat_file_digest,32));
-    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,28,88,27,33,30,1,1,1,11,2,0,1,0,3,1,1};
+    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,28,89,27,34,30,1,1,1,11,2,0,1,0,3,1,1};
     memcpy(manifest.prefix,prefix,sizeof(prefix));
     manifest.target_triple="x86_64-windows-msvc";manifest.abi_recipe="xray:xir-runtime-abi-measurements:v1";
     manifest.closure_recipe="xray:xir-runtime-recipe:windows-x86_64-hosted:v1";
@@ -245,7 +256,7 @@ static void sdk_known_bytes(void) {
      * tables; the current identity encoder only emits the current table.
      * Prefix admission is allocation-free; the complete loader still owns its
      * finite manifest allocations and physical-file authentication. */
-    sdk_reject_previous87(resources,&manifest);
+    sdk_reject_retired_generators(resources,&manifest);
     manifest.prefix[2]=86;manifest.prefix[3]=27;manifest.prefix[4]=31;
     sdk_reject_retired_prefix(resources,&manifest,previous86_sdk_kat_digest);
     manifest.prefix[2]=85;manifest.prefix[3]=26;manifest.prefix[4]=30;

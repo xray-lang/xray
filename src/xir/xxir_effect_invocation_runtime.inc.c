@@ -137,15 +137,17 @@ static XrXirStatus effect_runtime_original_none(const EffectInvocationCertificat
     *output=!provided->mask || (fixed && !ref && !expected->mask);return XR_XIR_OK;
 }
 
+#include "xxir_effect_invocation_runtime_capture.inc.c"
+
 typedef struct EffectRuntimeFunctionRow {
     const XirEffectInvocationRequest *request;
     const EffectInvocationBasis *basis;
     uint32_t parameter,producer;
 } EffectRuntimeFunctionRow;
 
-/* Every real owned Cell prefix has a distinct flat column. The complete
- * actual row is compared with the immutable equation input, never a subset
- * or a smaller mask selected from one captured environment. */
+/* Every owned Cell or Class prefix has a distinct flat column. The complete
+ * current relation and actual publication are compared with immutable inputs,
+ * never a subset or an older smaller captured environment. */
 static XrXirStatus effect_runtime_function_word(const EffectInvocationCertificate *certificate,
     const EffectRuntimeFunctionRow *row,uint32_t word,uint64_t *output) {
     const EffectInvocationFinal *owner=certificate->final;
@@ -162,14 +164,35 @@ static XrXirStatus effect_runtime_function_word(const EffectInvocationCertificat
         if (status!=XR_XIR_OK) return status;
         XrXirType type=function->parameters[c];
         bool cell=xr_xir_type_is_cell(&certificate->terms.types,type);
-        if (!cell) {
-            if (xr_xir_type_node(&certificate->terms.types,type)) return XR_XIR_BAD_TYPE;
+        bool is_class=xr_xir_type_is_class(&certificate->terms.types,type);
+        if (!cell && !is_class) {
+            if (xr_xir_callable_signature(&certificate->terms.types,type)) return XR_XIR_BAD_TYPE;
             continue;
         }
         uint64_t column=(uint64_t)basis->origin_words+
             ((uint64_t)site->binding+c)*(basis->origin_words+basis->cell_words)+basis->origin_words;
         if (column+basis->cell_words>basis->fn_words) return XR_XIR_BAD_STRUCTURE;
         if (word<column || word-column>=basis->cell_words) continue;
+        if(is_class) {
+            uint32_t relative=(uint32_t)(word-column);
+            if(relative!=basis->parameters/64 && relative!=(basis->parameters+2)/64) continue;
+            if(!row->request->read.capture_class_value) return XR_XIR_BAD_TYPE;
+            uint32_t value=UINT32_MAX,mask=0,publication=UINT32_MAX;
+            status=effect_runtime_callable_operand(certificate,row->request,row->parameter,&value);
+            if(status==XR_XIR_OK) status=effect_runtime_capture_class_mask(certificate,row->request,
+                value,row->producer,c,&mask);
+            if(status==XR_XIR_OK) status=row->request->read.capture_class_value(row->request->read.owner,
+                row->parameter,c,row->producer,&publication);
+            if(status!=XR_XIR_OK) return status;
+            if(publication>1) return XR_XIR_BAD_TYPE;
+            if(publication) mask|=EFFECT_CLASS_ROOT;
+            for(uint32_t bit=0;bit<3;++bit) {
+                uint32_t flag=bit==0?EFFECT_CLASS_ROOT:bit==1?EFFECT_CLASS_UNKNOWN:EFFECT_CLASS_KNOWN;
+                uint32_t index=basis->parameters+bit;
+                if((mask&flag) && relative==index/64) expected|=UINT64_C(1)<<(index%64);
+            }
+            continue;
+        }
         if (!row->request->read.capture_cell) return XR_XIR_BAD_TYPE;
         uint32_t actual=UINT32_MAX;
         status=row->request->read.capture_cell(row->request->read.owner,row->parameter,c,row->producer,&actual);
@@ -188,8 +211,22 @@ static XrXirStatus effect_runtime_function_word(const EffectInvocationCertificat
 static XrXirStatus effect_runtime_class(const EffectInvocationCertificate *certificate,
     const XirEffectInvocationRequest *request,const EffectInvocationNode *node,
     uint32_t parameter,uint32_t *output) {
-    if (!output || !request->read.class_value || parameter<request->captures ||
-        parameter>=request->count) return XR_XIR_BAD_TYPE;
+    if (!output || !request->read.class_value || parameter>=request->count) return XR_XIR_BAD_TYPE;
+    if(parameter<request->captures) {
+        const EffectBodyFunction *caller=&certificate->body->functions[request->caller];
+        EffectBodyRead read=effect_body_runtime_read(&request->read);XrXirInstruction op;
+        XrXirStatus status=effect_body_instruction_get(&read,caller,request->instruction,&op);
+        uint32_t mask=0,publication=UINT32_MAX;
+        if(status!=XR_XIR_OK) return status;
+        if((op.op!=XR_XIR_CALL_INDIRECT && op.op!=XR_XIR_INVOKE_INDIRECT) || op.immediate<0 ||
+            (uint64_t)op.immediate>=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+        status=effect_runtime_capture_class_mask(certificate,request,(uint32_t)op.immediate,
+            request->producer,parameter,&mask);
+        if(status==XR_XIR_OK) status=request->read.class_value(request->read.owner,parameter,&publication);
+        if(status!=XR_XIR_OK) return status;
+        if(publication>1) return XR_XIR_BAD_TYPE;
+        *output=mask|(publication?EFFECT_CLASS_ROOT:0);return XR_XIR_OK;
+    }
     const EffectInvocationFinal *owner=certificate->final;
     uint32_t parent=request->contextual?request->node:owner->roots[request->caller];
     if (parent>=owner->count || owner->nodes[parent].body!=request->caller ||
@@ -324,7 +361,7 @@ XR_FUNC XrXirStatus xir_effects_execution_edge(const XrXirEffects *effects,
     if (request->captures>request->count || op->args[1]!=request->count-request->captures)
         return XR_XIR_BAD_STRUCTURE;
     if (request->producer==UINT32_MAX) {
-        if (request->captures || (op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) ||
+        if (request->captures || (op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_GENERATOR_NEW) ||
             op->immediate!=(int64_t)request->target) return XR_XIR_BAD_STRUCTURE;
     } else {
         const EffectInvocationSite *site=&owner->sites[request->producer];
@@ -351,7 +388,8 @@ XR_FUNC XrXirStatus xir_effects_execution_edge(const XrXirEffects *effects,
         if (e>=owner->edge_count || ++walked>owner->edge_count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationEdge *edge=&owner->edges[e];
         if (edge->caller!=parent || edge->target>=owner->count) return XR_XIR_BAD_STRUCTURE;
-        if (edge->instruction!=request->instruction || edge->producer!=request->producer || edge->latent ||
+        if (edge->instruction!=request->instruction || edge->producer!=request->producer ||
+            edge->latent!=(op->op==XR_XIR_GENERATOR_NEW) ||
             owner->nodes[edge->target].body!=request->target) continue;
         const EffectInvocationNode *node=&owner->nodes[edge->target];
         if (node->root!=owner->nodes[parent].root) return XR_XIR_BAD_STRUCTURE;

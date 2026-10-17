@@ -128,7 +128,8 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
         if (p<captures) {
             const uint64_t *captured=closure+flow->basis.origin_words+
                 (size_t)(binding+p)*(flow->basis.origin_words+flow->basis.cell_words);
-            if (xr_xir_type_is_cell(flow->body.domain.types,expected)) {
+            if (xr_xir_type_is_cell(flow->body.domain.types,expected) ||
+                xr_xir_type_is_class(flow->body.domain.types,expected)) {
                 if (!xir_compile_work(owner->work,(uint64_t)flow->basis.cell_words*sizeof(*row))) {
                     status=XR_XIR_BUDGET;break;
                 }
@@ -144,9 +145,11 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
                 status=effect_invocation_captured_leaf(flow,row);
                 if(status==XR_XIR_OK) status=effect_invocation_bound_row(flow,target,p,callee,row);
             }
-            if (xr_xir_type_is_class(flow->body.domain.types,expected))
-                status=effect_invocation_class_encode(flow,EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN,
-                    row+flow->basis.fn_words);
+            if (xr_xir_type_is_class(flow->body.domain.types,expected)) {
+                uint32_t known=flow->basis.parameters+2;
+                if(!(row[flow->basis.fn_words+known/64]&(UINT64_C(1)<<(known%64))))
+                    status=XR_XIR_UNRESOLVED;
+            }
             continue;
         }
         uint32_t suffix=p-captures,actual=flow->function->operands[op->args[0]+suffix];
@@ -431,8 +434,12 @@ static XrXirStatus effect_invocation_latent_input(EffectInvocationFlow *flow,
         if (!xir_compile_work(owner->work,2)) { status=XR_XIR_BUDGET;break; }
         uint64_t *row=input+(size_t)p*flow->basis.row_words;
         if (xr_xir_type_is_class(flow->body.domain.types,target->parameters[p])) {
-            status=effect_invocation_class_encode(flow,EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN,
-                row+flow->basis.fn_words);continue;
+            if(p<site.captures) {
+                uint32_t actual=flow->function->operands[op->args[0]+p];
+                status=effect_invocation_class_word(flow,actual,row+flow->basis.fn_words);
+            } else status=effect_invocation_class_encode(flow,EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN,
+                row+flow->basis.fn_words);
+            continue;
         }
         if (p<site.captures) {
             uint32_t actual=flow->function->operands[op->args[0]+p];
@@ -486,7 +493,7 @@ static XrXirStatus effect_invocation_latent(EffectInvocationFlow *flow,
     if (status==XR_XIR_OK) status=effect_invocation_intern(flow->owner,root,owner->final->sites[selected].target,input,&node);
     xr_compile_resources_free(input);
     if (status==XR_XIR_OK) status=effect_invocation_edge(flow->owner,flow->node,node,instruction,selected,true);
-    return status;
+    return status==XR_XIR_UNRESOLVED?XR_XIR_OK:status;
 }
 
 static XrXirStatus effect_invocation_closed_arguments(EffectInvocationFlow *flow,

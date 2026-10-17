@@ -10,7 +10,7 @@
  *   The existing error CFG interprets exact sealed inputs. Unknown callable
  *   alternatives remain unknown errors independently of their ROOT bound.
  */
-typedef struct ErrorInvocationNode { uint32_t body,summary,calls; } ErrorInvocationNode;
+typedef struct ErrorInvocationNode { uint32_t body,summary,calls,returned; } ErrorInvocationNode;
 typedef struct ErrorInvocationCall { uint32_t head; bool unknown,handled,frontier; } ErrorInvocationCall;
 typedef struct ErrorInvocationLink { uint32_t caller,target,producer,next,consumer_next; } ErrorInvocationLink;
 struct ErrorInvocationContexts {
@@ -70,7 +70,7 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
     uint32_t at=0;
     for (uint32_t n=0;n<owner->count;++n) {
         if (!xir_compile_work(flow->remaining,4)) { status=XR_XIR_BUDGET;break; }
-        contexts->nodes[n]=(ErrorInvocationNode){owner->nodes[n].body,UINT32_MAX,at};
+        contexts->nodes[n]=(ErrorInvocationNode){owner->nodes[n].body,UINT32_MAX,at,UINT32_MAX};
         contexts->consumers[n]=UINT32_MAX;
         EffectBodyFunctionDimensions head={0};
         status=effect_body_request_dimensions(&flow->body,owner->nodes[n].body,&head);
@@ -96,6 +96,23 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
         if (contexts->nodes[n].summary!=UINT32_MAX) continue;
         if (contexts->summaries==UINT32_MAX) { status=XR_XIR_BUDGET;break; }
         contexts->nodes[n].summary=contexts->summaries++;
+    }
+    /* Returned Task and Iterator values carry latent Error sets separately
+     * from errors escaping the factory invocation. Both use the same CFG. */
+    for (uint32_t n=0;status==XR_XIR_OK && n<owner->count;++n) {
+        if (!xir_compile_work(flow->remaining,6)) { status=XR_XIR_BUDGET;break; }
+        uint32_t body=contexts->nodes[n].body;
+        const XrXirDeclarations *declarations=flow->body.domain.declarations;
+        if (declarations && declarations->functions &&
+            (declarations->functions[body].promises&XR_XIR_FUNCTION_GENERATOR)) continue;
+        EffectBodyFunctionHead head={0};
+        status=effect_body_request_head(&flow->body,body,&head);
+        if (status!=XR_XIR_OK) break;
+        const XrXirTypeNode *type=xr_xir_type_node(flow->body.domain.types,head.result);
+        if (!type || (type->kind!=XR_XIR_TYPE_TASK && type->kind!=XR_XIR_TYPE_ITERATOR)) continue;
+        if (contexts->summaries==UINT32_MAX) { status=XR_XIR_BUDGET;break; }
+        if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }
+        contexts->nodes[n].returned=contexts->summaries++;
     }
     if (status!=XR_XIR_OK) { error_invocation_contexts_free(contexts);return status; }
     *output=contexts;return XR_XIR_OK;
@@ -479,6 +496,8 @@ static XrXirStatus error_invocation_call(ErrorFlow *flow,const XrXirInstruction 
     return XR_XIR_OK;
 }
 
+#include "xxir_effect_error_returns.inc.c"
+
 static XrXirStatus error_invocation_enqueue(ErrorFlow *flow,uint32_t n) {
     ErrorInvocationContexts *contexts=flow->invocations;
     if (n>=contexts->count || contexts->pending>contexts->count) return XR_XIR_BAD_STRUCTURE;
@@ -509,12 +528,12 @@ static XrXirStatus error_invocation_functions(ErrorFlow *flow) {
             --contexts->pending;contexts->queued[n]=0;flow->invocation=n;flow->summary_changed=false;
             bool empty=false;uint32_t f=contexts->nodes[n].body;
             status=error_empty_escaping_read(&flow->body,f,flow->remaining,&empty);
-            if (status==XR_XIR_OK && empty) {
+            if (status==XR_XIR_OK && empty && contexts->nodes[n].returned==UINT32_MAX) {
                 if (!xir_compile_work(flow->remaining,flow->effects->outcomes_work.words)) return XR_XIR_BUDGET;
                 empty=!error_any(flow->effects->outcomes_work.errors+(size_t)contexts->nodes[n].summary*
                     flow->effects->outcomes_work.words,flow->effects->outcomes_work.words);
             }
-            if (status==XR_XIR_OK && !empty) status=error_function(flow,f);
+            if (status==XR_XIR_OK && (!empty || contexts->nodes[n].returned!=UINT32_MAX)) status=error_function(flow,f);
             if (status!=XR_XIR_OK || flow->restart || !flow->summary_changed) continue;
             for (uint32_t e=contexts->consumers[n];e!=UINT32_MAX;e=contexts->links[e].consumer_next) {
                 if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;

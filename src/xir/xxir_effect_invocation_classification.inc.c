@@ -22,7 +22,8 @@ enum {
     EFFECT_PHYSICAL_CONTROL=256,
     EFFECT_PHYSICAL_GO=512,
     EFFECT_PHYSICAL_SLOT_PLACE=1024,
-    EFFECT_PHYSICAL_ERROR_ESCAPE=2048
+    EFFECT_PHYSICAL_ERROR_ESCAPE=2048,
+    EFFECT_PHYSICAL_GENERATOR=4096
 };
 
 typedef struct EffectPhysicalRecord { uint32_t value,mask; } EffectPhysicalRecord;
@@ -75,7 +76,7 @@ static bool effect_physical_error_empty_opcode(XrXirOp op) {
     case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP: case XR_XIR_CONST_RUNE: case XR_XIR_RUNE_TO_INTEGER:
     case XR_XIR_INTEGER_TO_RUNE: case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING:
     case XR_XIR_GE_STRING: case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_SLOT_GROUP_INIT:
-    case XR_XIR_RANGE_CHECK: case XR_XIR_ARRAY_CAPACITY: case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE:
+    case XR_XIR_ITERATOR_CLOSE: case XR_XIR_RANGE_CHECK: case XR_XIR_ARRAY_CAPACITY: case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE:
         return true;
     default: return false;
     }
@@ -86,6 +87,7 @@ static bool effect_physical_error_empty_opcode(XrXirOp op) {
 static uint32_t effect_physical_opcode(XrXirOp op) {
     uint32_t mask=0;
     if (op==XR_XIR_FUNCTION_REF) mask|=EFFECT_PHYSICAL_REFERENCE;
+    if (op==XR_XIR_GENERATOR_NEW) mask|=EFFECT_PHYSICAL_GENERATOR;
     if (op==XR_XIR_RETURN) mask|=EFFECT_PHYSICAL_RETURN;
     if (op==XR_XIR_SLOT_PLACE) mask|=EFFECT_PHYSICAL_SLOT_PLACE;
     if (!effect_physical_error_empty_opcode(op)) mask|=EFFECT_PHYSICAL_ERROR_ESCAPE;
@@ -115,7 +117,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     }
     switch (op) {
     case XR_XIR_CALL: case XR_XIR_CALL_DEFAULT: case XR_XIR_CALL_INDIRECT:
-    case XR_XIR_INVOKE_RESULT: case XR_XIR_FUNCTION_REF:
+    case XR_XIR_INVOKE_RESULT: case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_READ:
     case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
     case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:

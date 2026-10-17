@@ -14,7 +14,7 @@ static bool source_iteration_binding(SourceContext *ctx, AstNode *node,
     if (source_text_same(ctx, NULL, name, "_")) return true;
     SourceName *symbol = source_alloc(ctx,1,sizeof(*symbol));
     if (!symbol) return false;
-    *symbol = (SourceName){ctx->locals,name,NULL,node,SOURCE_LOCAL,value.id,ctx->module,
+    *symbol = (SourceName){ctx->locals,name,NULL,node,value.type==XR_XIR_UNIT ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,value.id,ctx->module,
         value.type,false,false,0, false, false};
     ctx->locals = symbol;
     if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,
@@ -33,6 +33,9 @@ static bool source_for_in_body(SourceContext *ctx, AstNode *node,
     ctx->locals = saved; ctx->scope = scope;
     return ok;
 }
+#include "xxir_source_iterator_loop.inc.c"
+#include "xxir_source_iterable.inc.c"
+
 /* A counting loop over [first, bound) or [first, bound] on an i64 cursor cell. The emitter is left in the
  * body block with the loop registered for break and continue; the body reads `index` once per iteration. */
 typedef struct SourceCounter {
@@ -109,7 +112,7 @@ static bool source_for_in(SourceContext *ctx, AstNode *node) {
     ForInStmtNode *syntax = &node->as.for_in_stmt;
     if (syntax->label || syntax->is_tuple_head || syntax->item_type)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,
-            "Array for-in requires an unlabelled single or direct pair binding without annotation");
+            "for-in requires an unlabelled single or direct pair binding without annotation");
     if (!syntax->item_name || (syntax->is_keyvalue && !syntax->value_name) || !syntax->body)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"for-in binding shape is invalid");
     if (syntax->is_keyvalue && !source_text_same(ctx, NULL, syntax->item_name, "_") && source_text_same(ctx, NULL, syntax->item_name, syntax->value_name))
@@ -123,9 +126,13 @@ static bool source_for_in(SourceContext *ctx, AstNode *node) {
     if (counting) {
         if (!source_range_bounds(ctx,node,&first,&bound)) return false;
     } else {
-        if (!expression(ctx,syntax->collection,&array)) return false;
-        if (!xr_xir_type_is_array(&ctx->types,array.type))
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"for-in requires a proved built-in Array value");
+        if (!source_iteration_receiver(ctx,node,&array)) return false;
+        const XrXirTypeNode *iter=xr_xir_type_node(&ctx->types,array.type);
+        if(iter && iter->kind==XR_XIR_TYPE_ITERATOR) return source_iterator_loop(ctx,node,array);
+        if (!xr_xir_type_is_array(&ctx->types,array.type)) {
+            SourceValue iterator;
+            return source_iteration_factory(ctx,node,array,&iterator) && source_iterator_loop(ctx,node,iterator);
+        }
         element_type = xr_xir_array_element(&ctx->types,array.type);
         if (!source_native_array_declaration(ctx) ||
             !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_LEN,XR_XIR_I64,{array.id},{0},0,{0}},&bound) ||

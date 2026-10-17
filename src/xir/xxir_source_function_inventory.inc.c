@@ -6,7 +6,7 @@
  *
  * xxir_source_function_inventory.inc.c - Complete nested Source function inventory
  */
-typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth, defaults, members, comptime; bool yielded; } SourceClosureCount;
+typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth, defaults, helpers, comptime; bool yielded; } SourceClosureCount;
 static bool count_closures(AstNode *node, void *pointer) {
     SourceClosureCount *scan = pointer;
     if (!node) return true;
@@ -25,10 +25,10 @@ static bool count_closures(AstNode *node, void *pointer) {
             return source_fail(scan->ctx,node,XR_XIR_BUDGET,"comptime helper capacity exhausted");
         ++scan->comptime;
     }
-    if (node->type == AST_MEMBER_ACCESS) {
-        if (scan->members == UINT32_MAX)
-            return source_fail(scan->ctx,node,XR_XIR_BUDGET,"member helper capacity exhausted");
-        ++scan->members;
+    if (node->type == AST_MEMBER_ACCESS || node->type == AST_FOR_IN_STMT) {
+        if (scan->helpers == UINT32_MAX)
+            return source_fail(scan->ctx,node,XR_XIR_BUDGET,"synthetic helper capacity exhausted");
+        ++scan->helpers;
     }
     XrParamNode **parameters = node->type == AST_FUNCTION_DECL ? node->as.function_decl.params :
         node->type == AST_METHOD_DECL ? node->as.method_decl.params : NULL;
@@ -49,6 +49,11 @@ static bool count_closures(AstNode *node, void *pointer) {
         if(scan->count==scan->ctx->compile.limits.functions)
             return source_fail(scan->ctx,node,XR_XIR_BUDGET,"generator factory inventory exhausted");
         ++scan->count;
+    }
+    if(node->type==AST_METHOD_DECL && scan->yielded) {
+        if(scan->helpers==UINT32_MAX)
+            return source_fail(scan->ctx,node,XR_XIR_BUDGET,"generator method factory inventory exhausted");
+        ++scan->helpers;
     }
     if(function) scan->yielded=outer_yield;
     return ok || source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"unknown source declaration shape");

@@ -66,7 +66,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_generator_take(XrXirCall *call,XrXirValue *o
 }
 
 static bool iterator_wait_kind(uint32_t kind) {
-    return kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT || kind==XR_XIR_WAIT_ITERATOR_NEXT || kind==XR_XIR_WAIT_ITERATOR_NTH;
+    return kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT || kind==XR_XIR_WAIT_ITERATOR_NEXT || kind==XR_XIR_WAIT_ITERATOR_NTH || kind==XR_XIR_WAIT_ITERATOR_CLOSE;
 }
 static void accept_iterator_wait(XrXirCall *call,XrXirAction action) {
     const XrXirTypeNode *type=xr_xir_type_node(
@@ -78,7 +78,8 @@ static void accept_iterator_wait(XrXirCall *call,XrXirAction action) {
         !type || type->kind!=XR_XIR_TYPE_ITERATOR ||
         !xr_xir_value_argument(&action.value,call->config.admission.arena,(XrXirType)action.value.type) ||
         call->next_wake==UINT64_MAX) {abort_frames(call,XR_XIR_CALL_BAD_STATE);return;}
-    if(cleanup_active(call)) {
+    bool closing=action.callee==XR_XIR_WAIT_ITERATOR_CLOSE;
+    if(cleanup_active(call) && !closing) {
         XrXirCallResult result=call_result(XR_XIR_CALL_DEFER_ASYNC);
         result.panic.detail.code=XR_XIR_PANIC_DEFER_ASYNC;request_exit(call,&result,false);return;
     }
@@ -99,6 +100,10 @@ static void accept_iterator_wait(XrXirCall *call,XrXirAction action) {
         bounds.panic.detail=(XrXirFaultDetail){XR_XIR_PANIC_BOUNDS,0,action.arguments[0].payload,0};
         (void)complete_owned_wait(call,&bounds);return;
     }
+    if(closing && state==XIR_GENERATOR_TERMINAL) {
+        XrXirCallResult complete=call_result(XR_XIR_CALL_RETURNED);
+        (void)complete_owned_wait(call,&complete);return;
+    }
     XrXirValue prepared={0};XrXirValueStatus copied=xr_xir_value_copy(&action.value,&prepared);
     if(copied!=XR_XIR_VALUE_OK) {
         if(copied==XR_XIR_VALUE_OOM || copied==XR_XIR_VALUE_LIMIT || copied==XR_XIR_VALUE_REFCOUNT_LIMIT)
@@ -106,9 +111,28 @@ static void accept_iterator_wait(XrXirCall *call,XrXirAction action) {
         else abort_frames(call,XR_XIR_CALL_BAD_STATE);
         return;
     }
-    if(call->cancel_requested) {xr_xir_value_drop(&prepared);request_exit_status(call,XR_XIR_CALL_CANCELLED);return;}
+    if(call->cancel_requested && !closing) {xr_xir_value_drop(&prepared);request_exit_status(call,XR_XIR_CALL_CANCELLED);return;}
     XR_CHECK(!call->waiting_task.type,"one activation owns one pending execution dependency");
     call->waiting_task=prepared;call->top->protected_call=(action.flags & XR_XIR_ACTION_PROTECTED)!=0;
     call->result=call_result(XR_XIR_CALL_SUSPENDED);call->result.wake=++call->next_wake;
     call->wait=(XrXirWaitRequest){action.callee,0,nth ? (uint64_t)action.arguments[0].payload : 0,generator,generator->generation,generator->identity};
+}
+
+/* A prepared producer receives its actual latent edge before executor binding.
+ * No selection is inferred from the callee's nominal worker eligibility. */
+XR_FUNC XrXirCallStatus xr_xir_call_generator_bind_context(XrXirCall *call,
+    const XirEffectInvocationSelection *selection) {
+    if (!call || !call_owner_current(call) || !selection || !selection->owner)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    if (call->driving || call_observing(call)) return XR_XIR_CALL_BUSY;
+    CallFrame *frame=call->top;
+    if (!frame || frame->parent || frame->invocation.owner || call->executor_owner ||
+        call->result.status!=XR_XIR_CALL_READY || !generator_signature(&call->config,frame->entry) ||
+        selection->target!=(uint32_t)(frame->entry-call->config.entries) ||
+        selection->producer!=UINT32_MAX || selection->caller==UINT32_MAX ||
+        selection->instruction==UINT32_MAX || selection->parent==UINT32_MAX ||
+        selection->node==UINT32_MAX || selection->edge==UINT32_MAX)
+        return XR_XIR_CALL_BAD_STATE;
+    if (!xr_xir_domain_work(call->config.admission.domain,sizeof(*selection)+8)) return XR_XIR_CALL_LIMIT;
+    frame->invocation=*selection;return XR_XIR_CALL_READY;
 }

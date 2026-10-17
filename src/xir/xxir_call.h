@@ -16,7 +16,7 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 33u
+#define XR_XIR_CALL_ABI_VERSION 34u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -174,7 +174,7 @@ static inline bool xr_xir_time_provider_valid(const XrXirTimeProvider *provider)
 /* A suspension asks its host for nothing (YIELD) or for a duration (TIMER). The
  * request is published only for the exact pending wake token. */
 typedef enum XrXirWaitKind { XR_XIR_WAIT_NONE, XR_XIR_WAIT_YIELD, XR_XIR_WAIT_TIMER_MS, XR_XIR_WAIT_TASK,
-    XR_XIR_WAIT_ITERATOR_HAS_NEXT, XR_XIR_WAIT_ITERATOR_NEXT, XR_XIR_WAIT_ITERATOR_NTH } XrXirWaitKind;
+    XR_XIR_WAIT_ITERATOR_HAS_NEXT, XR_XIR_WAIT_ITERATOR_NEXT, XR_XIR_WAIT_ITERATOR_NTH, XR_XIR_WAIT_ITERATOR_CLOSE } XrXirWaitKind;
 #define XR_XIR_TIMER_MAX_MS UINT64_C(86400000)
 typedef struct XrXirWaitRequest {
     uint32_t kind, reserved;

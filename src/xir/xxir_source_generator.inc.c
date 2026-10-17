@@ -15,7 +15,7 @@ static bool source_generator_scan(AstNode *node,void *opaque) {
     SourceGeneratorScan *scan=opaque;
     if (!node) return true;
     if (!source_work(scan->ctx,node)) return false;
-    if (node->type==AST_FUNCTION_DECL || node->type==AST_FUNCTION_EXPR) return true;
+    if (node->type==AST_FUNCTION_DECL || node->type==AST_FUNCTION_EXPR || node->type==AST_METHOD_DECL) return true;
     if (node->type==AST_YIELD_STMT) scan->found=true;
     if (scan->depth>=128) return source_fail(scan->ctx,node,XR_XIR_BUDGET,"generator body depth exhausted");
     ++scan->depth;
@@ -29,7 +29,8 @@ static bool source_generator_declaration(SourceContext *ctx,AstNode *node,uint32
     const XrXirTypeNode *result=xr_xir_type_node(&ctx->types,function->result);
     if (!result || result->kind!=XR_XIR_TYPE_ITERATOR) return true;
     SourceGeneratorScan scan={ctx,0,false};
-    if (!source_generator_scan(node->as.function_decl.body,&scan)) return false;
+    AstNode *body=node->type==AST_METHOD_DECL ? node->as.method_decl.body : node->as.function_decl.body;
+    if (!source_generator_scan(body,&scan)) return false;
     if (!scan.found) return true;
     if (identity->test_role || identity->cleanup_owner)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"generator cannot be a test or cleanup body");

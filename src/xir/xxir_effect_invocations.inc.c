@@ -23,7 +23,7 @@ typedef struct EffectInvocationCause {
  * its natural alignment without padding or another allocation owner. */
 _Static_assert((2*sizeof(EffectInvocationCause))%_Alignof(uint64_t)==0,
     "Invocation cause rows preserve word alignment");
-/* One fact identifies a genuine site or one bit of its real Cell capture
+/* One fact identifies a genuine site or one bit of its real Cell/Class capture
  * relation at an SSA or return vertex. Descending authentic causes cannot
  * manufacture either identity or an environment in an unrooted SCC. */
 typedef struct EffectInvocationProducer {

@@ -200,6 +200,7 @@ static XrXirStatus effect_invocation_expand(EffectInvocationWorkspace *owner,
             (owner->final.local_roots[body].requires_root ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0)|
             (owner->final.local_roots[body].unresolved ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0),changed);
     }
+    if (status==XR_XIR_OK) status=effect_invocation_class_origins(&flow);
     if (status==XR_XIR_OK) status=effect_invocation_dispatch(&flow,changed);
     if (status==XR_XIR_OK && owner->read.producer_enabled)
         status=effect_invocation_producer_step(&flow,changed,false);
@@ -231,6 +232,7 @@ static XrXirStatus effect_invocation_precision(EffectInvocationWorkspace *owner,
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=node,.instruction=UINT32_MAX,.precision=true};
     XrXirStatus status=effect_invocation_origins(&flow);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
+    if (status==XR_XIR_OK) status=effect_invocation_class_origins(&flow);
     if (status==XR_XIR_OK) status=effect_invocation_dispatch(&flow,changed);
     if (status==XR_XIR_OK && owner->read.producer_enabled) status=effect_invocation_producer_step(&flow,changed,false);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
@@ -842,7 +844,7 @@ static XrXirStatus effect_invocations_create(const XrXirCompileContext *work,
         *output=owner;return XR_XIR_OK;
     }
     for (uint32_t f=0;status==XR_XIR_OK && f<functions;++f) {
-        bool supported=false;status=effect_invocation_producer_return(owner,f,&supported);
+        bool supported=false;status=effect_invocation_producer_required_read(&owner->read,body_request,f,&supported);
         owner->read.producer_enabled|=supported;
     }
 
@@ -899,8 +901,10 @@ static XrXirStatus effect_invocation_read_open(const XrXirCompileContext *work,
     if (!xir_compile_work(work,sizeof(*read))) return XR_XIR_BUDGET;
     *read=(EffectInvocationRead){.work=work,.effects=effects,.declared=declared,.final=final,
         .body=effect_body_owned_request(work,final->material)};
+    XrXirStatus sites=effect_invocation_sites_match(read);
+    if(sites!=XR_XIR_OK) return sites;
     for (uint32_t f=0;f<effect_body_count(final->material);++f) {
-        bool supported=false;XrXirStatus status=effect_invocation_producer_return_read(read,&read->body,f,&supported);
+        bool supported=false;XrXirStatus status=effect_invocation_producer_required_read(read,&read->body,f,&supported);
         if (status!=XR_XIR_OK) return status;
         read->producer_enabled|=supported;
         read->class_enabled|=final->physical->functions[f].classes!=0 ||

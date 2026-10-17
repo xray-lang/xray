@@ -23,6 +23,7 @@
 #include "xir_iterator_types_previous74_golden.h"
 #include "xir_iterator_types_previous86_golden.h"
 #include "xir_iterator_types_previous87_golden.h"
+#include "xir_iterator_types_previous88_golden.h"
 #include "xir/xxir_effect_terms.inc.c"
 
 typedef struct IteratorFixture {
@@ -105,6 +106,13 @@ static void iterator_rejections(void) {
     for (uint32_t old=0;old<5;++old) {
         XrXirArtifact *output=NULL;size_t before_attempts=attempts;XrCompileResourceStats before=stats(&c);
         CHECK(xr_xir_compile_checked_read(&c,previous87[old],sizeof(iterator_types_previous87_golden),&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
+        CHECK(attempts==before_attempts && stats(&c).allocated_bytes==before.allocated_bytes && stats(&c).live_bytes==baseline);
+    }
+    const uint8_t *previous88[]={iterator_types_previous88_golden,iterator_types_previous88_unit,
+        iterator_types_previous88_cycle,iterator_types_previous88_unknown,iterator_types_previous88_duplicate};
+    for (uint32_t old=0;old<5;++old) {
+        XrXirArtifact *output=NULL;size_t before_attempts=attempts;XrCompileResourceStats before=stats(&c);
+        CHECK(xr_xir_compile_checked_read(&c,previous88[old],sizeof(iterator_types_previous88_golden),&output,NULL)==XR_XIR_BAD_STRUCTURE && !output);
         CHECK(attempts==before_attempts && stats(&c).allocated_bytes==before.allocated_bytes && stats(&c).live_bytes==baseline);
     }
     for (uint32_t mutation=0;mutation<16;++mutation) {
