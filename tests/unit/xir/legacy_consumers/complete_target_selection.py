@@ -2,6 +2,7 @@
 from pathlib import Path
 import hashlib
 import complete_network_model
+import complete_await_timeout_model
 import complete_task_status_model
 import complete_parallel_api_model
 
@@ -131,6 +132,11 @@ def observation_status(selection, oracle, vm, native, projection, original_sidec
     if selection['rejection_oracle_required']:
         return 'EXECUTED_FROZEN_TARGET_REJECTION_ORACLE_PENDING'
     if oracle:
+        if (oracle.get('id')==complete_await_timeout_model.IDENTITY or
+                oracle.get('expected',{}).get('stdout_expectation_kind')==complete_await_timeout_model.KIND):
+            return ('PASS_INDEPENDENT_SELECTED_RUN_BYTE_SCOPE'
+                    if projection and complete_await_timeout_model.matches(oracle,vm) and complete_await_timeout_model.matches(oracle,native)
+                    else 'FAIL_INDEPENDENT_SELECTED_CONSUMER')
         if (oracle.get('id') in complete_parallel_api_model.IDENTITIES or
                 oracle.get('expected',{}).get('stdout_expectation_kind')==complete_parallel_api_model.KIND):
             return ('PASS_INDEPENDENT_SELECTED_RUN_BYTE_SCOPE'
