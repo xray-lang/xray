@@ -981,7 +981,23 @@ static XrXirStatus effect_body_records_compare(const EffectBodyRead *read,
             status=effect_body_single_column(read,ref->mask,&column);
             if (status!=XR_XIR_OK) return status;
         }
-        if (column<=EFFECT_BODY_WORDS) {
+        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
+        if (ref->mask&EFFECT_BODY_LITERAL_ROWS) {
+            /* The same canonical record selects one complete physical row.
+             * Layout dispatch never replaces any current word comparison. */
+            for (uint32_t i=first;i-first<ref->count;++i) {
+                if (!effect_body_read_work(read,2+sizeof(const XrXirInstruction *))) return XR_XIR_BUDGET;
+                const XrXirInstruction *row=effect_body_literal_row(ref,i);
+                for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
+                    if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
+                    if (xir_instruction_word(row,w)!=xir_instruction_word(&source->instructions[i],w)) {
+                        if (!same) return XR_XIR_BAD_STRUCTURE;
+                        if (!effect_body_read_work(read,sizeof(*same))) return XR_XIR_BUDGET;
+                        *same=false;
+                    }
+                }
+            }
+        } else if (column<=EFFECT_BODY_WORDS) {
             status=effect_body_column_match(read,ref,source,column,same);
             if (status!=XR_XIR_OK) return status;
         } else for (uint32_t i=first;i-first<ref->count;++i) {
