@@ -12110,3 +12110,6 @@ foreach(forin_compiler_backend IN ITEMS 0 1 vm native)
     set_tests_properties(test_xir_mixed_forin_source_compiler_${forin_compiler_backend}_axes PROPERTIES
         TIMEOUT 120 RUN_SERIAL TRUE COST 10 LABELS "unit;xir;mixed;ownership;generated-c;lifecycle;generator;iterator;forin;compiler;resource")
 endforeach()
+
+include("${CMAKE_CURRENT_LIST_DIR}/mixed_forin_resources.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/mixed_atomic.cmake")
