@@ -86,7 +86,9 @@ static XrXirStatus library_comptime_known(XrXirCompileContext *context,XrXirArti
     }
     xr_compile_resources_free(ops);xr_compile_resources_free(functions);xr_xir_compile_source_result_free(&source);return status;
 }
+#include "library_foreign.h"
 static XrXirStatus library_comptime_operation(XrXirCompileContext *context,const char *kind,XrXirArtifact **output) {
+    if (!strcmp(kind,"foreign")) return library_comptime_foreign_operation(context,output);
     XrXirSourceResult source={0};XrXirCheckedPacket packet={0},second={0};XrXirLibraryCatalog *catalog=NULL;
     XrXirStatus status=!strcmp(kind,"known")?library_comptime_known(context,&source.checked):
         library_comptime_source(context,library_comptime_text(kind),true,NULL,&source);
