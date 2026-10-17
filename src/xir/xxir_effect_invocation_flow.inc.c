@@ -913,7 +913,10 @@ static XrXirStatus effect_invocation_cell_project(const EffectInvocationCellProj
 static XrXirStatus effect_invocation_cell_class_receive(void *owner,const XrXirCellClassOriginView *view) {
     EffectInvocationCellProjection *projection=owner;uint32_t intrinsic=0;
     XrXirStatus status=effect_invocation_class_cell_intrinsic(projection->flow,view,&intrinsic);
-    return status==XR_XIR_OK?effect_invocation_cell_project(projection,&view->cells,intrinsic):status;
+    if (status!=XR_XIR_OK) return status;
+    /* This receiver writes a scalar mask and publishes no view pointer. */
+    if (!xir_compile_work(projection->flow->owner->work,sizeof(intrinsic))) return XR_XIR_BUDGET;
+    return effect_invocation_cell_project(projection,&view->cells,intrinsic);
 }
 
 static XrXirStatus effect_invocation_cell(EffectInvocationFlow *flow,

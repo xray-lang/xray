@@ -75,6 +75,65 @@ static void invocation_cell_borrow_work_cuts(EffectInvocationFlow *flow,uint32_t
         context->resources->limits.work=limit;
     }
 }
+static bool invocation_cell_borrow_view_same(const XrXirCellClassOriginView *a,const XrXirCellClassOriginView *b) {
+    return a->cells.intrinsic_mask==b->cells.intrinsic_mask && a->cells.dependencies==b->cells.dependencies &&
+        a->cells.word_count==b->cells.word_count && a->cells.parameters==b->cells.parameters &&
+        a->cells.parameter_count==b->cells.parameter_count && a->residual_intrinsic_mask==b->residual_intrinsic_mask &&
+        a->dependencies==b->dependencies && a->word_count==b->word_count && a->roots==b->roots && a->root_count==b->root_count;
+}
+/* The copied receiver retains its original single mask-and-pointer charge.
+ * Failure cannot replace its output pointer or the physical scratch mask. */
+static void invocation_cell_copied_finish(EffectInvocationFlow *flow,uint32_t value) {
+    EffectInvocationWorkspace *owner=flow->owner;const XrXirCompileContext *context=owner->work;
+    uint32_t body=owner->final.nodes[flow->node].body;XrXirCellClassOriginView physical={0};
+    uint64_t entry=rp_stats(context).work;
+    CHECK(xr_xir_compile_cell_class_origin_view(context,owner->final.cells,body,value,&physical)==XR_XIR_OK);
+    uint64_t read=rp_stats(context).work-entry;uint32_t intrinsic=0;entry=rp_stats(context).work;
+    CHECK(effect_invocation_class_cell_intrinsic(flow,&physical,&intrinsic)==XR_XIR_OK);
+    uint64_t compute=rp_stats(context).work-entry;
+    const XrXirCellOriginView sentinel={.intrinsic_mask=9},*output=&sentinel;
+    uint64_t finish=sizeof(output)+sizeof(intrinsic),limit=context->resources->limits.work;
+    RootParameterMark held=rp_mark();size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
+    for(uint64_t cut=0;cut<=finish;++cut){XrXirCellClassOriginView scratch={0};output=&sentinel;entry=rp_stats(context).work;
+        CHECK(read+compute+finish<=limit-entry);context->resources->limits.work=entry+read+compute+cut;
+        CHECK(effect_invocation_class_cell_view(flow,value,&scratch,&output)==(cut==finish?XR_XIR_OK:XR_XIR_BUDGET));
+        if(cut<finish){CHECK(output==&sentinel && sentinel.intrinsic_mask==9 &&
+                invocation_cell_borrow_view_same(&scratch,&physical) && rp_stats(context).work-entry==read+compute);
+            scratch=(XrXirCellClassOriginView){0};
+            CHECK(effect_invocation_class_cell_view(flow,value,&scratch,&output)==XR_XIR_BUDGET && output==&sentinel);
+        }else CHECK(output==&scratch.cells && scratch.cells.intrinsic_mask==intrinsic &&
+            rp_stats(context).work-entry==read+compute+finish);
+        context->resources->limits.work=limit;
+    }
+    CHECK(rp_attempts==attempts && rp_stats(context).allocated_bytes==before.allocated_bytes &&
+        rp_stats(context).live_bytes==before.live_bytes);rp_balanced(held);
+}
+/* The scalar finish must succeed before the original row projector can
+ * even charge its first operation. Every earlier cut leaves rows untouched. */
+static void invocation_cell_borrowed_finish(EffectInvocationFlow *flow,uint32_t value) {
+    EffectInvocationWorkspace *owner=flow->owner;const XrXirCompileContext *context=owner->work;
+    XrXirCellClassOriginView physical={0};
+    CHECK(xr_xir_compile_cell_class_origin_view(context,owner->final.cells,owner->final.nodes[flow->node].body,value,&physical)==XR_XIR_OK);
+    uint32_t intrinsic=0;uint64_t entry=rp_stats(context).work;
+    CHECK(effect_invocation_class_cell_intrinsic(flow,&physical,&intrinsic)==XR_XIR_OK);
+    uint64_t compute=rp_stats(context).work-entry,finish=sizeof(intrinsic),limit=context->resources->limits.work;
+    RootParameterMark held=rp_mark();size_t attempts=rp_attempts;XrCompileResourceStats before=rp_stats(context);
+    for(uint64_t cut=0;cut<=finish;++cut){uint64_t row[8]={UINT64_C(1)<<40},original[8];memcpy(original,row,sizeof(row));bool changed=false;
+        EffectInvocationCellProjection projection={flow,owner->final.nodes[flow->node].input,row,&changed};
+        entry=rp_stats(context).work;CHECK(compute+finish+4<=limit-entry);context->resources->limits.work=entry+compute+cut;
+        CHECK(effect_invocation_cell_class_receive(&projection,&physical)==XR_XIR_BUDGET && !changed && !memcmp(row,original,sizeof(row)) &&
+            rp_stats(context).work-entry==compute+(cut==finish?finish:0));
+        CHECK(effect_invocation_cell_class_receive(&projection,&physical)==XR_XIR_BUDGET && !changed && !memcmp(row,original,sizeof(row)));
+        context->resources->limits.work=limit;
+    }
+    uint64_t row[8]={0},expected[8]={0};bool changed=false,expected_changed=false;
+    EffectInvocationCellProjection projection={flow,owner->final.nodes[flow->node].input,row,&changed};
+    CHECK(effect_invocation_cell_class_receive(&projection,&physical)==XR_XIR_OK);
+    projection.output=expected;projection.changed=&expected_changed;
+    CHECK(effect_invocation_cell_project(&projection,&physical.cells,intrinsic)==XR_XIR_OK && changed==expected_changed &&
+        !memcmp(row,expected,sizeof(row)) && rp_attempts==attempts && rp_stats(context).allocated_bytes==before.allocated_bytes &&
+        rp_stats(context).live_bytes==before.live_bytes);rp_balanced(held);
+}
 /* Real source checking and complete effects derivation precede the death
  * of every caller-owned byte. No private literal table supplies authority. */
 static XrXirStatus invocation_cell_borrow_run(const XrXirCompileContext *context,uint32_t mode,bool controls) {
@@ -95,7 +154,8 @@ static XrXirStatus invocation_cell_borrow_run(const XrXirCompileContext *context
                 status=invocation_cell_borrow_query(&flow,value,row,&changed);
                 if(status==XR_XIR_OK){CHECK(changed && row[0]==(root==5?UINT64_C(9):mode<3?UINT64_C(4):UINT64_C(6)));
                     if(controls){invocation_cell_borrow_compare(&flow);if(root==3)invocation_cell_borrow_subject_faults(&flow,place,project);
-                        invocation_cell_borrow_work_cuts(&flow,value);}}
+                        invocation_cell_borrow_work_cuts(&flow,value);invocation_cell_copied_finish(&flow,value);
+                        invocation_cell_borrowed_finish(&flow,value);}}
             }
             xr_compile_resources_free(flow.memory);
         }
@@ -115,6 +175,8 @@ static void invocation_cell_borrow_controls(void) {
         context=rp_owner(limits);baseline=rp_stats(&context).live_bytes;
         CHECK(invocation_cell_borrow_run(&context,6,false)==(minus?XR_XIR_BUDGET:XR_XIR_OK));rp_owner_free(&context,baseline);rp_balanced(physical);}
     CHECK(invocation_cell_borrow_values && invocation_cell_borrow_callbacks);
+    fprintf(stderr,"Cell mask receiving: all7 genuine certificates/two actual roots, copied mask-pointer atomic%zu all cuts preserve exact prefix debit and sentinel/scratch before publication; borrowed scalar%zu all cuts before original row effects, admitted scalar then row Budget, same finite-owner retries and complete row/changed oracle, no allocation PASS\n",
+        sizeof(const XrXirCellOriginView *)+sizeof(uint32_t),sizeof(uint32_t));
     fprintf(stderr,"Cell borrowed receivers: all7 genuine Class/Cell certificates after Checked/producer death, two real root contexts and literal pure/UNKNOWN/scoped rows, all%zu actual values match original copied and delegated projections including changed and retained bits, real Class subject bottom/invalid mask/rank and IO retries before row effects, every work unit through exact and same finite-owner retry, no allocation, fresh independent Class verification; whole genuine-fixture six axes%llu/%llu/%llu exact/minusone PASS\n",
         invocation_cell_borrow_values,(unsigned long long)measured.allocated_bytes,(unsigned long long)measured.peak_bytes,(unsigned long long)measured.work);
 }

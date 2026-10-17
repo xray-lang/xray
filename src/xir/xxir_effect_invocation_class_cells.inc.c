@@ -70,8 +70,7 @@ static XrXirStatus effect_invocation_class_cell_intrinsic(EffectInvocationFlow *
             if (mask&EFFECT_CLASS_UNKNOWN) intrinsic|=XR_XIR_CELL_ACCESS_UNKNOWN;
         }
     }
-    if (!xir_compile_work(owner->work,sizeof(const XrXirCellOriginView *)+sizeof(*output)))
-        return XR_XIR_BUDGET;
+    /* The caller charges its actual receiving fields before publication. */
     *output=intrinsic;return XR_XIR_OK;
 }
 
@@ -85,6 +84,8 @@ static XrXirStatus effect_invocation_class_cell_view(EffectInvocationFlow *flow,
     if (status!=XR_XIR_OK) return status;
     uint32_t intrinsic=0;status=effect_invocation_class_cell_intrinsic(flow,storage,&intrinsic);
     if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(owner->work,sizeof(*output)+sizeof(storage->cells.intrinsic_mask)))
+        return XR_XIR_BUDGET;
     storage->cells.intrinsic_mask=intrinsic;*output=&storage->cells;return XR_XIR_OK;
 }
 
