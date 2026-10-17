@@ -18,6 +18,14 @@ typedef struct SourceInput {
     const size_t *included;
     size_t included_count;
 } SourceInput;
+static bool source_graph_fail(SourceContext *ctx,XrModuleStatus status,const char *message) {
+    const XrModuleParseDiagnostic *parse=ctx->graph?&ctx->graph->parse_diagnostic:NULL;
+    source_module_fail(ctx,NULL,status,parse&&parse->present&&parse->message[0]?parse->message:message);
+    if(parse&&parse->present) {
+        ctx->diagnostic.module=parse->module;ctx->diagnostic.line=parse->line;ctx->diagnostic.column=parse->column;
+    }
+    return false;
+}
 static bool source_include_corpus(SourceContext *ctx, SourceInput input, char **error) {
     for (size_t i = 0; i < input.included_count; ++i) {
         if (!source_work(ctx, NULL)) return false;
@@ -35,12 +43,12 @@ static bool source_include_corpus(SourceContext *ctx, SourceInput input, char **
             ctx->graph, &source->authority, logical, source->source_path, owned->source.text, error);
         xr_compile_resources_free(canonical); xr_compile_resources_free(logical);
         if (status != XR_MODULE_OK)
-            return source_module_fail(ctx, NULL, status, "source corpus inclusion failed");
+            return source_graph_fail(ctx,status,"source corpus inclusion failed");
     }
     return true;
 }
 static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceInput input,
-    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
+    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
     const bool supplied = input.supplied;
     const char *logical_path = input.text.logical_path, *text = input.text.text;
     const size_t length = input.text.length, overlay_count = input.overlay_count;
@@ -54,7 +62,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
         (!supplied && !request->entry_path) || !request->authority ||
         (supplied && !text) || !output || output->checked || output->snapshot ||
         (input.included_count && (!input.included || !overlays)) ||
-        (failure_path && *failure_path)) {
+        !xr_xir_compile_source_failure_empty(failure)) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source request is incomplete"); goto done;
     }
     ctx.compile = *request->context;
@@ -114,7 +122,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
         module_status = xr_compile_module_graph_build(ctx.graph, request->entry_path, request->authority, &error);
     }
     if (module_status != XR_MODULE_OK) {
-        source_module_fail(&ctx, NULL, module_status, error ? error : "module graph build failed"); goto done;
+        source_graph_fail(&ctx,module_status,error?error:"module graph build failed");goto done;
     }
     if (!source_include_corpus(&ctx, input, &error)) goto done;
     if (input.prelude_factory) ctx.prelude_module=(uint32_t)ctx.graph->entry_index+1;
@@ -133,11 +141,17 @@ done:
     /* A comptime receiver has already copied the complete final query from its
      * own construction. The original context publishes only its own result. */
     if (!result.snapshot) source_query_publish(&ctx, &result);
-    if (failure_path && semantic_started && ctx.diagnostic.status != XR_XIR_OK &&
+    const XrModuleParseDiagnostic *parse=ctx.graph?&ctx.graph->parse_diagnostic:NULL;
+    if (failure && (semantic_started||(parse&&parse->present)) && ctx.diagnostic.status != XR_XIR_OK &&
         ctx.diagnostic.line > 0 && ctx.graph &&
         ctx.diagnostic.module < (uint32_t)ctx.graph->spec_count) {
         XrModuleSpec *module = &ctx.graph->specs[ctx.diagnostic.module];
-        *failure_path = module->source_path;
+        XrXirSourceFailure owned={.path=module->source_path};
+        if(parse&&parse->present) {
+            owned.origin=XR_XIR_SOURCE_DIAGNOSTIC_PARSE;owned.has_utf16_position=parse->has_utf16_position;
+            if(parse->has_utf16_position){owned.utf16_line=parse->utf16_position.line;owned.utf16_column=parse->utf16_position.column;}
+        }
+        *failure=owned;
         module->source_path = NULL;
     }
     xr_compile_resources_free(error);
@@ -153,29 +167,29 @@ done:
 }
 
 XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,
-    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
-    return source_check_input(request, (SourceInput){0}, output, diagnostic, failure_path);
+    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
+    return source_check_input(request, (SourceInput){0}, output, diagnostic, failure);
 }
 XrXirStatus xr_xir_compile_source_check_text(const XrXirSourceRequest *request,
     const XrXirSourceText *text,
-    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
+    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
     SourceInput input = {.supplied=true, .text=text ? *text : (XrXirSourceText){0}};
-    return source_check_input(request, input, output, diagnostic, failure_path);
+    return source_check_input(request, input, output, diagnostic, failure);
 }
 
 XrXirStatus xr_xir_compile_source_check_overlay(const XrXirSourceRequest *request,
     const XrModuleOverlayInput *overlays, size_t count, XrXirSourceResult *output,
-    XrXirSourceDiagnostic *diagnostic, char **failure_path) {
+    XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
     SourceInput input = {.overlays=overlays, .overlay_count=count};
-    return source_check_input(request, input, output, diagnostic, failure_path);
+    return source_check_input(request, input, output, diagnostic, failure);
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_check_corpus(const XrXirSourceCorpusRequest *request,
-    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
+    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
     SourceInput input = {0};
     if (request) input = (SourceInput){.overlays=request->overlays,
         .overlay_count=request->overlay_count, .included=request->included,
         .included_count=request->included_count};
-    return source_check_input(request ? request->entry : NULL, input, output, diagnostic, failure_path);
+    return source_check_input(request ? request->entry : NULL, input, output, diagnostic, failure);
 }
 
 XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *context,

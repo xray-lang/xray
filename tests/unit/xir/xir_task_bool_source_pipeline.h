@@ -8,13 +8,13 @@ static XrXirArtifact *go_bool_source_lower(const XrXirCompileContext *context, u
     XrXirSourceRequest request = {session, XR_GO_BOOL_FIXTURES "/bool_native.xr", &authority,
         context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic source_diagnostic = {0};
-    XrXirDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirArtifact *decoded = NULL, *closed = NULL, *lowered = NULL;
     XrXirCheckedPacket packet = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &source_diagnostic, &failure);
     xr_compile_session_free(session);
     if (status != XR_XIR_OK) fprintf(stderr, "go_bool check=%u %s\n", status, source_diagnostic.message);
-    CHECK(status == XR_XIR_OK && result.checked && !failure);
+    CHECK(status == XR_XIR_OK && result.checked && !failure.path);
     CHECK(xr_xir_compile_checked_write(result.checked, &packet, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_source_result_free(&result);
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &decoded, &diagnostic) == XR_XIR_OK);

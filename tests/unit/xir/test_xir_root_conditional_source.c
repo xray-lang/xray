@@ -159,7 +159,7 @@ static XrXirStatus conditional_operation(const XrXirCompileContext *context, voi
     if (created!=XR_COMPILER_SESSION_OK) return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"root-conditional",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirDiagnostic xir_diagnostic={0};
     XrXirArtifact *read=NULL,*instance=NULL,*reloaded=NULL,*lowered=NULL;XrXirCheckedPacket first={0},second={0};
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
@@ -188,7 +188,7 @@ static XrXirStatus conditional_operation(const XrXirCompileContext *context, voi
     }
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(reloaded);xr_xir_compile_artifact_free(instance);
     xr_xir_compile_artifact_free(read);xr_xir_compile_checked_packet_free(&first);xr_xir_compile_checked_packet_free(&second);
-    xr_compile_resources_free(failure);conditional_stage_observe(context,operation,9,status,&observation);
+    xr_xir_compile_source_failure_free(&failure);conditional_stage_observe(context,operation,9,status,&observation);
     if(conditional_parallel_identity)conditional_parallel_identity->phase=phase;return status;
 }
 #include "xir_root_conditional_compiler_parallel.h"

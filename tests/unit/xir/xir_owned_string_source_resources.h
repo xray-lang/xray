@@ -85,13 +85,13 @@ static void cs_source_checked(CsFixture *f, CsMetrics *m, XrXirArtifact **checke
         NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0};
     XrXirSourceDiagnostic diagnostic = {0};
-    char *failure = NULL;
+    XrXirSourceFailure failure={0};
     begin = instance_compile_attempts;
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     if (status != XR_XIR_OK)
         fprintf(stderr, "C2 Source status=%u line=%d column=%d message=%s\n",
             status, diagnostic.line, diagnostic.column, diagnostic.message);
-    CHECK(status == XR_XIR_OK && result.checked && result.snapshot && !failure);
+    CHECK(status == XR_XIR_OK && result.checked && result.snapshot && !failure.path);
     const XrXirModule *module = xr_xir_compile_artifact_module(result.checked);
     CHECK(module->stage == XR_XIR_CHECKED && module->generics);
     unsigned templates = 0;

@@ -22,10 +22,10 @@ static XrXirStatus source_facts_case_fixture(const XrXirCompileContext *context,
         return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-facts",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult result={0};char *failure=NULL;
+    XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult result={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,NULL,&failure);
     if (status==XR_XIR_OK) { *output=result.checked;result.checked=NULL; }
-    xr_xir_compile_source_result_free(&result);xr_compile_resources_free(failure);
+    xr_xir_compile_source_result_free(&result);xr_xir_compile_source_failure_free(&failure);
     xr_compile_session_free(session);return status;
 }
 

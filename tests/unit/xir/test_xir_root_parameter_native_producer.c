@@ -87,12 +87,12 @@ static void h1n_emit(const RootParameterSourceOracle *oracle, unsigned index, co
     CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ROOT_PARAMETER_NATIVE_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirSourceResult source = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirSourceResult source = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &source, &diagnostic, &failure);
     if (status != XR_XIR_OK)
         fprintf(stderr, "H1 native producer Source file=%s status=%u line=%d column=%d message=%s\n",
             oracle->file, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
-    h1n_ok(status, oracle, "Source"); CHECK(source.checked && source.snapshot && !failure);
+    h1n_ok(status, oracle, "Source"); CHECK(source.checked && source.snapshot && !failure.path);
     XrXirArtifact *checked = source.checked; source.checked = NULL;
     xr_xir_compile_source_result_free(&source); xr_compile_session_free(session); session = NULL;
     CHECK(xr_os_io_remove(&io, path) == XR_OS_IO_OK);

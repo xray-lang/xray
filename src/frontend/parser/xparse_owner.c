@@ -207,7 +207,8 @@ static XrParseStatus parse_owned(XrCompilerSession *session, const char *source,
     AstNode *program = parse_body(&parser, expression, trivia);
     status = xr_compile_parser_status(&parser);
     if (status == XR_PARSE_OK && !program) status = XR_PARSE_SYNTAX;
-    if (status == XR_PARSE_SYNTAX && !trivia && !expression && parser.error_count)
+    if (status == XR_PARSE_SYNTAX && !trivia && !expression && parser.error_count &&
+        (!diagnostics || !diagnostics->callback))
         xr_parser_diagnostic_summary(&parser);
     status = xr_compile_parser_status(&parser);
     xr_compile_parser_close(&parser);
@@ -235,6 +236,11 @@ XrParseStatus xr_compile_parse_repl_unit(XrCompilerSession *session, const char 
 XrParseStatus xr_compile_parse_with_source(XrCompilerSession *session, const char *source,
                                    const char *file, AstNode **output) {
     return parse_owned(session, source, file, false, false, false, NULL, output);
+}
+
+XR_FUNC XrParseStatus xr_compile_parse_with_diagnostics(XrCompilerSession *session, const char *source,
+    const char *file, const XrParseDiagnostics *diagnostics, AstNode **output) {
+    return parse_owned(session, source, file, false, false, false, diagnostics, output);
 }
 
 XrParseStatus xr_compile_parse_with_trivia(XrCompilerSession *session, const char *source,

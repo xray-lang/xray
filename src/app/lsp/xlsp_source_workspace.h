@@ -7,7 +7,7 @@ typedef struct XlspSourceWorkspace XlspSourceWorkspace;
 typedef struct XlspSourceWorkspaceFailure {
     bool present;
     XrXirSourceDiagnostic diagnostic;
-    char *path; /* Owned exact diagnostic module path, if Source supplies it. */
+    XrXirSourceFailure source; /* Owns the exact Source path and scalar display facts. */
 } XlspSourceWorkspaceFailure;
 XR_FUNC void xlsp_source_workspace_failure_free(XlspSourceWorkspaceFailure *);
 /* One synchronous transaction and one ledger for real stdlib selection,

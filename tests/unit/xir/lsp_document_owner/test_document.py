@@ -9,6 +9,8 @@ import tempfile
 exe, stdlib = map(Path, sys.argv[1:3])
 env = {**os.environ, 'XRAY_STDLIB_PATH': str(stdlib.resolve())}
 rows = []
+logs = Path.cwd() / 'logs'
+logs.mkdir(exist_ok=True)
 
 
 def unpack(data):

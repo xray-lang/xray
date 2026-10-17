@@ -114,11 +114,11 @@ static XrXirArtifact *rn_lower_source(const XrXirCompileContext *context, unsign
     XrXirSourceRequest request = {session, path, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult source = {0};
     XrXirSourceDiagnostic diagnostic = {0};
-    char *failure_path = NULL;
+    XrXirSourceFailure failure_path={0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &source, &diagnostic, &failure_path);
     if (status != XR_XIR_OK) fprintf(stderr, "ROOT_NATIVE_SOURCE fixture=%s status=%u %d:%d %s path=%s\n",
         rn_fixture_names[fixture], (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message,
-        failure_path ? failure_path : "none");
+        failure_path.path ? failure_path.path : "none");
     CHECK(status == XR_XIR_OK);
     rn_query_boundary(&source, fixture);
     XrXirCheckedPacket packet = {0};
@@ -129,7 +129,7 @@ static XrXirArtifact *rn_lower_source(const XrXirCompileContext *context, unsign
     xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_source_result_free(&source);
     xr_compile_session_free(session);
-    xr_compile_resources_free(failure_path);
+    xr_xir_compile_source_failure_free(&failure_path);
     XrXirDiagnostic checked = {0};
     status = xr_xir_compile_specialize(replay, &closed, &checked);
     if (status != XR_XIR_OK) fprintf(stderr, "ROOT_NATIVE_SPECIALIZE fixture=%s status=%u function=%u block=%u instruction=%u reason=%u\n",

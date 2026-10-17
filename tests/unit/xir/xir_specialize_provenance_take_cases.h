@@ -24,11 +24,11 @@ static XrXirStatus provenance_take_fixture(const XrXirCompileContext *context,
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"provenance-take",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,provenance_take_text,sizeof(provenance_take_text)-1};
-    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,&failure);
     xr_compile_session_free(session);
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(source.checked,output,NULL);
-    xr_xir_compile_source_result_free(&source);xr_compile_resources_free(failure);
+    xr_xir_compile_source_result_free(&source);xr_xir_compile_source_failure_free(&failure);
     return status;
 }
 
@@ -418,9 +418,9 @@ static void provenance_source_types_controls(void) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"provenance-source-types",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult result={0};char *failure=NULL;
+    XrXirSourceText input={NULL,text,sizeof(text)-1};XrXirSourceResult result={0};XrXirSourceFailure failure={0};
     CHECK(xr_xir_compile_source_check_text(&request,&input,&result,NULL,&failure)==XR_XIR_OK && result.checked);
-    xr_compile_session_free(session);xr_compile_resources_free(failure);
+    xr_compile_session_free(session);xr_xir_compile_source_failure_free(&failure);
     XrXirEffects *effects=NULL;CHECK(xr_xir_compile_artifact_verify_owned_effects(result.checked,&effects,NULL)==XR_XIR_OK);
     XrCompileResourceStats baseline=library_compile_stats(&owner.context);
     XrXirTypes *types=NULL;CHECK(xr_xir_compile_types_clone(&owner.context,result.checked->module.types,&types)==XR_XIR_OK && types);

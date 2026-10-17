@@ -12,6 +12,7 @@
  */
 
 #include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include "xparse_internal.h"
@@ -1468,6 +1469,16 @@ rollback:
 
 // Parse variable reference: x
 // Supports generic call syntax: foo<int, string>(arg1, arg2)
+static AstNode *parse_variable_leaf(Parser *parser,const char *name,Token token) {
+    if(token.column<=0||token.length<=0||token.length>INT_MAX-token.column) {
+        xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_BUDGET);return NULL;
+    }
+    AstNode *node=xr_ast_variable(parser->compiler_session,name,token.line);
+    if(!xr_parser_healthy(parser))return NULL;
+    /* The consumed identifier is complete independently of later lookahead. */
+    node->column=token.column;node->end_line=token.line;node->end_column=token.column+token.length;
+    return node;
+}
 AstNode *xr_parse_variable(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     // Context keyword intercept: "linked go" as expression.
@@ -1629,10 +1640,7 @@ AstNode *xr_parse_variable(Parser *parser) {
     }
 
     // Regular variable reference
-    AstNode *node = xr_ast_variable(parser->compiler_session, name, line);
-    if (!xr_parser_healthy(parser)) return NULL;
-    node->column = column;
-    return node;
+    return parse_variable_leaf(parser,name,prev);
 }
 
 // Parse assignment: x = expression

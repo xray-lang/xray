@@ -28,7 +28,7 @@ void xlsp_source_workspace_free(XlspSourceWorkspace *w) {
 }
 XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
     const XlspSourceDocument *documents,size_t count,XlspSourceWorkspace **output,unsigned *stage,XlspSourceWorkspaceFailure *failure) {
-    if(!context||!context->resources||!documents||!count||!output||*output||(failure&&(failure->present||failure->path))||
+    if(!context||!context->resources||!documents||!count||!output||*output||(failure&&(failure->present||!xr_xir_compile_source_failure_empty(&failure->source)))||
         count>SIZE_MAX/sizeof(XrModuleIdentityAuthority))return XR_XIR_BAD_STRUCTURE;
     XlspSourceWorkspace *w=NULL;XrModuleIdentityAuthority *identities=NULL;char *path=NULL;
     XrXirStatus status=workspace_resource(xr_compile_resources_calloc(context->resources,1,sizeof(*w),(void **)&w));
@@ -84,18 +84,18 @@ XrXirStatus xlsp_source_workspace_build(const XrXirCompileContext *context,
         XrXirSourceRequest request={w->session,xr_source_authority_source_path(w->authorities[i]),
             &identities[i],&w->context,w->stdlib.path,xr_source_authority_lockfile(w->authorities[i]),
             XR_XIR_PROGRAM,w->catalog};
-        XrXirSourceDiagnostic diagnostic={0};char *failure_path=NULL;
-        status=xlsp_source_snapshot_build_authorities(&request,documents,identities,count,i,&w->snapshots[i],&diagnostic,&failure_path);
+        XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure source_failure={0};
+        status=xlsp_source_snapshot_build_authorities(&request,documents,identities,count,i,&w->snapshots[i],&diagnostic,&source_failure);
         if(status!=XR_XIR_OK) {
             if(failure&&diagnostic.status==status&&diagnostic.message[0]&&
                 status!=XR_XIR_BUDGET&&status!=XR_XIR_OUT_OF_MEMORY&&status!=XR_XIR_IO) {
                 XrXirStatus copied=workspace_resource(xr_compile_resources_work(context->resources,sizeof(*failure)));
-                if(copied==XR_XIR_OK){*failure=(XlspSourceWorkspaceFailure){true,diagnostic,failure_path};failure_path=NULL;}
+                if(copied==XR_XIR_OK){*failure=(XlspSourceWorkspaceFailure){true,diagnostic,source_failure};source_failure=(XrXirSourceFailure){0};}
                 else status=copied;
             }
-            xr_compile_resources_free(failure_path);goto done;
+            xr_xir_compile_source_failure_free(&source_failure);goto done;
         }
-        xr_compile_resources_free(failure_path);
+        xr_xir_compile_source_failure_free(&source_failure);
     }
     *output=w;w=NULL;if(stage)*stage=0;
 done:
@@ -115,7 +115,7 @@ XrXirStatus xlsp_source_workspace_navigation(XlspSourceWorkspace *w,const char *
 }
 
 void xlsp_source_workspace_failure_free(XlspSourceWorkspaceFailure *failure) {
-    if(!failure)return;xr_compile_resources_free(failure->path);*failure=(XlspSourceWorkspaceFailure){0};
+    if(!failure)return;xr_xir_compile_source_failure_free(&failure->source);*failure=(XlspSourceWorkspaceFailure){0};
 }
 
 XrXirStatus xlsp_source_workspace_tokens(XlspSourceWorkspace *w,const char *uri,size_t length,

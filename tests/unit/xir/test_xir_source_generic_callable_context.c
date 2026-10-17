@@ -47,11 +47,11 @@ static void source_generic_definition_source_negative(const XrXirCompileContext 
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-generic-definition-negative",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,strlen(text)};XrXirSourceResult result={0};
-    XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
+    XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,&failure);
     xr_compile_session_free(session);
     CHECK(status==XR_XIR_BAD_TYPE && !result.checked);
-    xr_xir_compile_source_result_free(&result);xr_compile_resources_free(failure);
+    xr_xir_compile_source_result_free(&result);xr_xir_compile_source_failure_free(&failure);
     CHECK(library_compile_stats(context).live_bytes==baseline.live_bytes);
 }
 
@@ -168,7 +168,7 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-generic-callable-context",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,source_generic_definition_text,sizeof(source_generic_definition_text)-1};
-    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirArtifact *read=NULL,*instance=NULL,*reloaded=NULL,*lowered=NULL;
     XrXirCheckedPacket first={0},second={0};XrXirDiagnostic location={0};uint32_t phase=1;
     sgm_begin(context);
@@ -229,7 +229,7 @@ static XrXirStatus source_generic_definition_operation(const XrXirCompileContext
     sgm_begin(context);
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(reloaded);xr_xir_compile_artifact_free(instance);
     xr_xir_compile_artifact_free(read);xr_xir_compile_checked_packet_free(&first);xr_xir_compile_checked_packet_free(&second);
-    xr_compile_resources_free(failure); sgm_end(context,"final-packets-artifacts-free","drop",status);return status;
+    xr_xir_compile_source_failure_free(&failure); sgm_end(context,"final-packets-artifacts-free","drop",status);return status;
 }
 
 #include "xir_generic_compiler_fault_shards.h"

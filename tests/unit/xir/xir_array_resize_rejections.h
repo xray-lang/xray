@@ -28,14 +28,14 @@ static void resize_rejections(void) {
         char name[1024];CHECK(snprintf(name,sizeof(name),"%s/rejected/%s/root.xr",XR_RESIZE_FIXTURES,cases[n])>0);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_RESIZE_FIXTURES};
         XrXirSourceRequest request={session,name,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *path=NULL;
+        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure path={0};
         XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&path);
         if(status!=XR_XIR_BAD_TYPE||strcmp(diagnostic.message,reasons[n]))
             fprintf(stderr,"rejection %s status%u line%d reason=%s\n",cases[n],status,diagnostic.line,diagnostic.message);
         CHECK(status==XR_XIR_BAD_TYPE&&diagnostic.status==status&&!result.checked&&!result.snapshot);
         CHECK(!strcmp(diagnostic.message,reasons[n]));
         printf("resize negative%u %s status%u reason=%s\n",n,cases[n],status,diagnostic.message);
-        xr_compile_resources_free(path);xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
+        xr_xir_compile_source_failure_free(&path);xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
         CHECK(resize_stats(&context).live_bytes==baseline);xr_compile_resources_release(context.resources);
         instance_compile_zero();CHECK(!runtime_live&&!runtime_bytes);
     }

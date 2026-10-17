@@ -102,12 +102,12 @@ static XrXirArtifact *oll_source(const XrXirCompileContext *context) {
     CHECK(length > 0 && (size_t)length < sizeof(entry));
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, OLL_FIXTURE_DIRECTORY};
     XrXirSourceRequest request = {session, entry, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
-    if (status != XR_XIR_OK) fprintf(stderr, "ordinary Source status=%u path=%s\n", (unsigned)status, failure ? failure : "");
-    CHECK(status == XR_XIR_OK && diagnostic.status == status && result.checked && result.snapshot && !failure);
+    if (status != XR_XIR_OK) fprintf(stderr, "ordinary Source status=%u path=%s\n", (unsigned)status, failure.path ? failure.path : "");
+    CHECK(status == XR_XIR_OK && diagnostic.status == status && result.checked && result.snapshot && !failure.path);
     XrXirArtifact *checked = result.checked; result.checked = NULL;
-    xr_xir_compile_source_result_free(&result); xr_compile_resources_free(failure);
+    xr_xir_compile_source_result_free(&result); xr_xir_compile_source_failure_free(&failure);
     xr_compile_session_free(session);
     memset(entry, 0xa5, sizeof(entry)); memset(&authority, 0xa5, sizeof(authority));
     memset(&request, 0xa5, sizeof(request));

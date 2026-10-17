@@ -100,12 +100,12 @@ static XrXirStatus h1c_source(H1Compiler *c) {
     XrXirSourceRequest request = {c->session, c->path, &authority, &c->context, NULL, NULL, XR_XIR_PROGRAM, NULL};
     unsigned char before[sizeof(request)]; memcpy(before, &request, sizeof(request));
     XrXirSourceResult result = {0}, empty = {0};
-    XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     CHECK(!memcmp(&request, before, sizeof(request)) && diagnostic.status == status);
-    if (status == XR_XIR_OK) { CHECK(result.checked && result.snapshot && !failure); c->checked = result.checked; result.checked = NULL; }
+    if (status == XR_XIR_OK) { CHECK(result.checked && result.snapshot && !failure.path); c->checked = result.checked; result.checked = NULL; }
     else CHECK(!memcmp(&result, &empty, sizeof(result)) && !c->checked);
-    xr_compile_resources_free(failure); xr_xir_compile_source_result_free(&result);
+    xr_xir_compile_source_failure_free(&failure); xr_xir_compile_source_result_free(&result);
     xr_compile_session_free(c->session); c->session = NULL;
     if (status != XR_XIR_OK) return status;
     XrOsIoPolicy io = xr_compile_io_policy(c->context.resources);

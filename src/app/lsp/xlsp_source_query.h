@@ -32,7 +32,7 @@ typedef struct XlspSourceLocations {
  * Failure preserves output and forwards the real Source diagnostic/path. */
 XR_FUNC XrXirStatus xlsp_source_snapshot_build(const XrXirSourceRequest *request,
     const XlspSourceDocument *documents, size_t count, size_t entry,
-    XlspSourceSnapshot **output, XrXirSourceDiagnostic *diagnostic, char **failure_path);
+    XlspSourceSnapshot **output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure);
 XR_FUNC void xlsp_source_snapshot_free(XlspSourceSnapshot *snapshot);
 /* Pure owner identity check before any query can charge a foreign ledger. */
 XR_FUNC bool xlsp_source_snapshot_uses_resources(const XlspSourceSnapshot *,const XrCompileResources *);
@@ -55,11 +55,12 @@ XR_FUNC XrXirStatus xlsp_source_references(const XlspSourceSnapshot *snapshot,
 XR_FUNC void xlsp_source_locations_free(XlspSourceLocations *locations);
 /* Common bounded URI decoder; output is compiler-owned, independently pinned. */
 XR_FUNC XrXirStatus xlsp_source_uri_path(XrCompileResources *,const char *,size_t,char **);
+/* Same-ledger UTF-8 native path encoding; failure preserves output. */
 /* Each document has its real independently discovered authority. The Source
  * resolver performs all cross-authority and Catalog admission. */
 XR_FUNC XrXirStatus xlsp_source_snapshot_build_authorities(const XrXirSourceRequest *,
     const XlspSourceDocument *,const XrModuleIdentityAuthority *,size_t,size_t,
-    XlspSourceSnapshot **,XrXirSourceDiagnostic *,char **);
+    XlspSourceSnapshot **,XrXirSourceDiagnostic *,XrXirSourceFailure *);
 XR_FUNC XrXirStatus xlsp_source_snapshot_contains(const XlspSourceSnapshot *,
     const char *,size_t,bool *);
 /* Shared strict Source-byte to LSP UTF-16 conversion; text is bounded. */

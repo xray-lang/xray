@@ -22,11 +22,11 @@ static void shadow_rejections(void) {
         char input[1024];CHECK(snprintf(input,sizeof(input),"%s/shadow_rejected/%s/root.xr",XR_REMOVE_FIXTURES,names[n])>0);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_REMOVE_FIXTURES};
         XrXirSourceRequest request={session,input,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *path=NULL;
+        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure path={0};
         const XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&path);
         printf("shadow negative%u %s status%u line%d:%d %s\n",n,names[n],status,diagnostic.line,diagnostic.column,diagnostic.message);
         CHECK(status==expected[n] && diagnostic.status==status && !result.checked && !result.snapshot);
-        xr_compile_resources_free(path);xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
+        xr_xir_compile_source_failure_free(&path);xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
         CHECK(remove_stats(&context).live_bytes==baseline);xr_compile_resources_release(context.resources);
         instance_compile_zero();CHECK(!runtime_live && !runtime_bytes);
     }

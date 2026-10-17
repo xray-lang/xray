@@ -129,10 +129,10 @@ static void text_null_descriptor(const XrXirSourceRequest *prototype) {
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrXirSourceRequest request=*prototype;request.context=&context;request.session=session;
-    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     size_t attempts=source_fixture_compile_attempts,live=source_fixture_compile_live,bytes=source_fixture_compile_bytes;
     CHECK(xr_xir_compile_source_check_text(&request,NULL,&result,&diagnostic,&failure)==XR_XIR_BAD_STRUCTURE);
-    CHECK(diagnostic.status==XR_XIR_BAD_STRUCTURE&&!result.checked&&!result.snapshot&&!failure);
+    CHECK(diagnostic.status==XR_XIR_BAD_STRUCTURE&&!result.checked&&!result.snapshot&&!failure.path);
     CHECK(source_fixture_compile_attempts==attempts&&source_fixture_compile_live==live&&source_fixture_compile_bytes==bytes);
     xr_compile_session_free(session);xr_compile_resources_release(context.resources);text_physical_zero();
 }

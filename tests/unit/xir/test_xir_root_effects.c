@@ -26,14 +26,14 @@ static XrXirArtifact *root_source(const char *file,XrXirStatus expected) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(effect_context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ROOT_EFFECT_FIXTURES};
     XrXirSourceRequest request={session,path,&authority,&effect_context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};char *failure_path=NULL;
+    XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure_path={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,&failure_path);
     if(status!=expected)fprintf(stderr,"root source %s status%u %d:%d %s\n",
         file,status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==expected);
     CHECK(expected==XR_XIR_OK?(source.checked!=NULL):(!source.checked&&!source.snapshot));
     XrXirArtifact *checked=source.checked;source.checked=NULL;
-    xr_compile_resources_free(failure_path);xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);
+    xr_xir_compile_source_failure_free(&failure_path);xr_xir_compile_source_result_free(&source);xr_compile_session_free(session);
     return checked;
 }
 static XrXirArtifact *root_replay(XrXirArtifact *source) {

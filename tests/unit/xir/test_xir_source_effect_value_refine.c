@@ -103,7 +103,7 @@ static XrXirStatus source_effect_value_operation(const XrXirCompileContext *cont
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-effect-value-refine",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,source_effect_value_text,sizeof(source_effect_value_text)-1};
-    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirArtifact *read=NULL,*instance=NULL,*reloaded=NULL,*lowered=NULL;
     XrXirCheckedPacket first={0},second={0};XrXirDiagnostic location={0};uint32_t phase=1;
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,&failure);
@@ -126,7 +126,7 @@ static XrXirStatus source_effect_value_operation(const XrXirCompileContext *cont
             diagnostic.line,diagnostic.column,diagnostic.message,location.function,location.block,location.instruction);
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(reloaded);xr_xir_compile_artifact_free(instance);
     xr_xir_compile_artifact_free(read);xr_xir_compile_checked_packet_free(&first);xr_xir_compile_checked_packet_free(&second);
-    xr_compile_resources_free(failure);return status;
+    xr_xir_compile_source_failure_free(&failure);return status;
 }
 
 int main(int argc, char **argv) {

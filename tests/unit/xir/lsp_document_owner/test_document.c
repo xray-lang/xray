@@ -130,6 +130,13 @@ static int run(int argc,char **argv) {
         fprintf(stderr,"CLEAR JSON=%zu failed=%u\n",lsp_json_calls-attempts,server.exit_received?1u:0u);
         xlsp_transport_free(server.transport);server.transport=NULL;
     }
+    if(mode==5){
+        xlsp_schedule_diagnostics(&server,doc);
+        CHECK(server.exit_received&&!server.pending_diag_count&&!lib->diag_pending&&!doc->diag_pending);
+        /* The independent queue-lifetime checks below start a fresh event
+         * fixture only after terminal failure and admission are verified. */
+        server.exit_received=false;
+    }
     if(mode==0)edits(&server,doc);
     if(mode==1)faults(&server,argv[3]);
     if(mode==2){

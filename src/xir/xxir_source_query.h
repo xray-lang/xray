@@ -13,12 +13,25 @@
 #define XXIR_SOURCE_QUERY_H
 #include "xxir.h"
 #include "../base/xstable_id.h"
+typedef enum XrXirSourceDiagnosticOrigin {
+    XR_XIR_SOURCE_DIAGNOSTIC_DEFAULT, XR_XIR_SOURCE_DIAGNOSTIC_PARSE
+} XrXirSourceDiagnosticOrigin;
 typedef struct XrXirSourceDiagnostic {
     XrXirStatus status;
     uint32_t module;
     int line, column;
     char message[192];
 } XrXirSourceDiagnostic;
+/* Separate failure ownership leaves the diagnostic and semantic owner layouts
+ * unchanged. Coordinates project actual parser text before teardown. */
+typedef struct XrXirSourceFailure {
+    char *path;
+    XrXirSourceDiagnosticOrigin origin;
+    bool has_utf16_position;
+    uint32_t utf16_line,utf16_column;
+} XrXirSourceFailure;
+XR_FUNC bool xr_xir_compile_source_failure_empty(const XrXirSourceFailure *);
+XR_FUNC void xr_xir_compile_source_failure_free(XrXirSourceFailure *);
 typedef struct XrXirSourceRange {
     uint32_t module;
     int line, column, end_line, end_column;

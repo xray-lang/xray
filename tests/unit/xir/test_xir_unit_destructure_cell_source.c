@@ -27,7 +27,7 @@ static void unit_destructure_cell_observe_cases(const char *name,LibraryCompileO
     ++unit_destructure_cell_scans;library_compile_operation_cases(name,operation,fixture);
 }
 static XrXirStatus unit_destructure_cell_observe_source(const XrXirSourceRequest *request,
-    XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic,char **failure_path) {
+    XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic,XrXirSourceFailure *failure_path) {
     ++unit_destructure_cell_source_calls;
     return xr_xir_compile_source_check(request,output,diagnostic,failure_path);
 }

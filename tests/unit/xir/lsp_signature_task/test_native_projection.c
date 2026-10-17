@@ -37,10 +37,10 @@ static void projection(XlspSourceWorkspace *w,const XlspSourceDocument *document
     }
     XrXirSourceRequest request={w->session,paths[0],&inputs[0].authority,&w->context,w->stdlib.path,
         xr_source_authority_lockfile(w->authorities[0]),XR_XIR_PROGRAM,w->catalog};
-    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure_path=NULL;
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure_path={0};
     XrXirStatus status=xr_xir_compile_source_check_overlay(&request,inputs,2,&result,&diagnostic,&failure_path);
     if(status!=XR_XIR_OK)fprintf(stderr,"projection: %u %s\n",status,diagnostic.message);
-    CHECK(status==XR_XIR_OK&&result.checked&&result.snapshot&&!failure_path);
+    CHECK(status==XR_XIR_OK&&result.checked&&result.snapshot&&!failure_path.path);
     const XrXirModule *module=xr_xir_compile_artifact_module(result.checked);
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result.snapshot);
     CHECK(module&&module->types&&view&&view->complete&&view->types);

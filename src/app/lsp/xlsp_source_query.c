@@ -212,10 +212,10 @@ void xlsp_source_snapshot_free(XlspSourceSnapshot *s) {
 }
 XrXirStatus xlsp_source_snapshot_build_authorities(const XrXirSourceRequest *request,
     const XlspSourceDocument *documents, const XrModuleIdentityAuthority *authorities, size_t count, size_t entry,
-    XlspSourceSnapshot **output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
+    XlspSourceSnapshot **output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
     if (!request || !request->context || !request->context->resources || !request->session ||
         !request->authority || request->authority->kind == XR_MODULE_IDENTITY_MEMORY ||
-        !documents || !count || entry >= count || !output || *output || (failure_path && *failure_path) ||
+        !documents || !count || entry >= count || !output || *output || !xr_xir_compile_source_failure_empty(failure) ||
         count > SIZE_MAX / sizeof(LspSourceText) || count > SIZE_MAX / sizeof(XrModuleOverlayInput)) return XR_XIR_BAD_STRUCTURE;
     XlspSourceSnapshot *s = NULL; XrModuleOverlayInput *inputs = NULL; XrXirSourceResult result = {0};
     XrXirStatus status = lsp_resource_status(xr_compile_resources_calloc(request->context->resources, 1, sizeof(*s), (void **)&s));
@@ -250,7 +250,7 @@ XrXirStatus xlsp_source_snapshot_build_authorities(const XrXirSourceRequest *req
     }
     {
         XrXirSourceRequest selected = *request; selected.entry_path = s->texts[entry].path;
-        status = xr_xir_compile_source_check_overlay(&selected, inputs, count, &result, diagnostic, failure_path);
+        status = xr_xir_compile_source_check_overlay(&selected, inputs, count, &result, diagnostic, failure);
         if (status != XR_XIR_OK) goto done;
         const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
         if (!view || !view->complete) { status = XR_XIR_BAD_STRUCTURE; goto done; }
@@ -508,8 +508,8 @@ done:
 
 XrXirStatus xlsp_source_snapshot_build(const XrXirSourceRequest *request,
     const XlspSourceDocument *documents,size_t count,size_t entry,
-    XlspSourceSnapshot **output,XrXirSourceDiagnostic *diagnostic,char **failure_path) {
-    return xlsp_source_snapshot_build_authorities(request,documents,NULL,count,entry,output,diagnostic,failure_path);
+    XlspSourceSnapshot **output,XrXirSourceDiagnostic *diagnostic,XrXirSourceFailure *failure) {
+    return xlsp_source_snapshot_build_authorities(request,documents,NULL,count,entry,output,diagnostic,failure);
 }
 XrXirStatus xlsp_source_uri_path(XrCompileResources *resources,const char *uri,size_t length,char **out) {
     if(!resources||!uri||length==SIZE_MAX||!out||*out)return XR_XIR_BAD_STRUCTURE;

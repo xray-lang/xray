@@ -48,11 +48,11 @@ static XrXirStatus open_path_equal(XrCompileResources *resources,const char *a,c
     }
 }
 static XrXirStatus open_capture_diagnostic(XlspSourceOpen *o,const XlspSourceDocument *documents,size_t count,size_t entry) {
-    if(!o->failure.present||!o->failure.path)return XR_XIR_OK;
+    if(!o->failure.present||!o->failure.source.path)return XR_XIR_OK;
     for(size_t i=0;i<count;++i) {
         bool equal=false;char *path=NULL;
         XrXirStatus status=xlsp_source_uri_path(o->resources,documents[i].uri,documents[i].uri_length,&path);
-        if(status==XR_XIR_OK)status=open_path_equal(o->resources,path,o->failure.path,&equal);
+        if(status==XR_XIR_OK)status=open_path_equal(o->resources,path,o->failure.source.path,&equal);
         xr_compile_resources_free(path);
         if(status!=XR_XIR_OK)return status;
         if(!equal)continue;

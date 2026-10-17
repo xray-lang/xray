@@ -24,5 +24,5 @@ typedef struct XrXirSourceCorpusRequest {
  * borrows; results own their facts on the original cumulative ledger. Overlay
  * validation and failure publication are identical to source_check_overlay. */
 XR_FUNC XrXirStatus xr_xir_compile_source_check_corpus(const XrXirSourceCorpusRequest *,
-    XrXirSourceResult *, XrXirSourceDiagnostic *, char **failure_path);
+    XrXirSourceResult *, XrXirSourceDiagnostic *, XrXirSourceFailure *failure);
 #endif /* XXIR_SOURCE_CORPUS_H */

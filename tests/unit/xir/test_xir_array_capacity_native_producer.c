@@ -38,7 +38,7 @@ int main(int argc,char **argv) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CAP_NATIVE_FIXTURES};
     XrXirSourceRequest request={session,XR_CAP_NATIVE_FIXTURES "/root.xr",&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *path=NULL;
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure path={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&path);
     if(status!=XR_XIR_OK)fprintf(stderr,"native capacity Source status%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK);
@@ -46,7 +46,7 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_checked_write(result.checked,&packet,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&replay,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_source_result_free(&result);
-    xr_compile_session_free(session);xr_compile_resources_free(path);
+    xr_compile_session_free(session);xr_xir_compile_source_failure_free(&path);
     CHECK(xr_xir_compile_specialize(replay,&specialized,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(replay);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

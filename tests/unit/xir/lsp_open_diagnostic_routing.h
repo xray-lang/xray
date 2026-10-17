@@ -12,6 +12,13 @@ static void routing_facts(XrJsonValue *params,const char *root_uri,const char *l
     CHECK(array&&array->type==XR_JSON_ARRAY&&array->as.array.count==1);
     XrJsonValue *diagnostic=array->as.array.items[0],*range=xjson_get_object(diagnostic,"range");
     XrJsonValue *start=xjson_get_object(range,"start"),*end=xjson_get_object(range,"end");
+    if(mode==3) {
+        CHECK(xjson_get_int(start,"line")==0&&xjson_get_int(end,"line")==0);
+        CHECK(xjson_get_int(start,"character")==13&&xjson_get_int(end,"character")==13);
+        CHECK(!strcmp(xjson_get_string(diagnostic,"message"),"expected variable name"));
+        CHECK(xjson_get_int(diagnostic,"severity")==1&&!strcmp(xjson_get_string(diagnostic,"source"),"xray"));
+        return;
+    }
     CHECK(xjson_get_int(start,"line")==1&&xjson_get_int(end,"line")==1);
     /* The invalid boolean follows 28 ASCII units, a two-unit emoji, four
      * comment-tail units and seven units of "return ". CRLF is one line. */
@@ -46,7 +53,7 @@ static XrXirStatus routing_once(const char *root_uri,const char *lib_uri,unsigne
     buffer=xlsp_source_open_take_buffer(open);syntax=xlsp_source_open_take_syntax(open);
     CHECK(buffer&&syntax&&!xlsp_source_open_take_workspace(open));
     status=xlsp_source_open_diagnostics_params_json(open,buffer,syntax,&params);
-    if(status==XR_XIR_OK){CHECK(mode!=3);routing_facts(params,root_uri,lib_uri,mode);}
+    if(status==XR_XIR_OK)routing_facts(params,root_uri,lib_uri,mode);
     else CHECK(!params);
 done:
     if(stats)*stats=sdk_stats(resources);
@@ -83,7 +90,7 @@ static void routing_json_cases(const char *root_uri,const char *lib_uri) {
 static void routing_run(const char *root_uri,const char *lib_uri,bool faults) {
     XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     for(unsigned mode=0;mode<4;++mode) {
-        XrXirStatus expected=mode==3?XR_XIR_UNRESOLVED:XR_XIR_OK;
+        XrXirStatus expected=XR_XIR_OK;
         size_t sites=0;XrCompileResourceStats stats={0};
         for(size_t probe=0;probe<=sites;++probe) {
             runtime_attempts=0;runtime_fail_at=probe?probe-1:SIZE_MAX;
