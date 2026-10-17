@@ -784,7 +784,8 @@ XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue 
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
     instance = instance_current(instance);
-    if (!instance || !output) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!instance || !output || output->type != XR_XIR_UNIT || output->reserved || output->payload)
+        return XR_XIR_CALL_BAD_ARGUMENT;
     if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
     if (instance->state == XR_XIR_INSTANCE_FAILED) return XR_XIR_CALL_BAD_STATE;
     if (!instance->call) return XR_XIR_CALL_BAD_STATE;
