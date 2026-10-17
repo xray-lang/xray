@@ -7266,7 +7266,11 @@ of `XrXirProgramPacket`; one boundary decode enters the same owning receiver.
 Packets carry no caller-supplied layout authority. Reception independently
 checks current semantics, bodies, declarations, layouts and wiring before
 transferring the Input, entry table and code lease. Failure preserves caller
-inputs and publishes no Program. The Program uses the immutable declarations
+inputs and publishes no Program. Preparation borrows a caller-owned entry table
+and its parameter blocks. Refusal retains the same Input, table and parameters
+for retry without ledger refill; only the final callback-free commit clears both
+owning slots. VM failure cleanup uses the actual fixed allocation count rather
+than a module count changed by a preparation callback. The Program uses the immutable declarations
 owned by its transferred canonical Input without a second deep clone. Failed
 Program disposal leaves caller-owned Input declarations live. The runtime type
 arena keeps its independent ownership for escaping values. Internal packet destruction before reception

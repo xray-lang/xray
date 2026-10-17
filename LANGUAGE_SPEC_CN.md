@@ -7183,6 +7183,7 @@ fetchAdd遵循原子合同，fetchAdd返回旧值并按二进制补码环绕。�
 `XrXirProgramPacket` 的 bytes、length、identity，边界解码一次后进入同一拥有型接收核；
 packet 不携带调用者提供的布局权限。接收核独立检查当前语义、body、声明、布局和接线，
 成功才转交 Input、入口表及代码租约，失败保全调用者输入且不发表 Program。
+准备期只借用调用者拥有的入口表和参数块；失败保留同一 Input、表与参数，可在不重置账本下重试，成功无回调提交时才一并清空拥有槽。VM失败清理按实际分配的固定数量遍历，不能采用末次回调改变的模块计数。
 Program直接使用所转交规范Input拥有的不可变声明；不再深复制另一份声明，失败销毁Program时也不释放调用者仍拥有的Input声明。运行时类型arena仍独立拥有其类型，以支持逃逸值寿命。
 内部 packet 先死亡、外部 packet/spec 随后死亡均不能使成功 Program 借用失效存储。
 旧 Program ABI 及旧 Proof/getter 接口拒绝，不保留适配分支。

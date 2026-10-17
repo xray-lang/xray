@@ -102,3 +102,22 @@ foreach(seeded_callback seeded-untyped-free seeded-untyped-alloc seeded-unknown-
     set_tests_properties(test_xir_program_owned_callback_${seeded_callback} PROPERTIES
         TIMEOUT 60 LABELS "unit;xir;program;ownership;current-error")
 endforeach()
+
+add_executable(test_xir_program_owned_entries "${CMAKE_CURRENT_LIST_DIR}/test_xir_program_owned_entries.c")
+target_include_directories(test_xir_program_owned_entries PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_LIST_DIR}")
+target_link_libraries(test_xir_program_owned_entries PRIVATE xray_xir_vm)
+target_compile_features(test_xir_program_owned_entries PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_xir_program_owned_entries PRIVATE /W4 /WX /utf-8)
+endif()
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(test_xir_program_owned_entries PRIVATE /experimental:c11atomics)
+endif()
+foreach(entry_axis free alloc)
+    add_test(NAME test_xir_program_owned_entries_${entry_axis}
+        COMMAND test_xir_program_owned_entries ${entry_axis})
+    add_test(NAME test_xir_program_owned_count_${entry_axis}
+        COMMAND test_xir_program_owned_callbacks entry-count-${entry_axis})
+    set_tests_properties(test_xir_program_owned_entries_${entry_axis} test_xir_program_owned_count_${entry_axis}
+        PROPERTIES TIMEOUT 60 LABELS "unit;xir;program;ownership;atomic-receive")
+endforeach()

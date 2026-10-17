@@ -42,7 +42,8 @@ static void correspondence_callback(bool allocation) {
         ((XrXirFunction *)module->functions)[1].blocks=(const XrXirBlock *)(uintptr_t)1;
     if (probe_attack==9)
         ((XrXirFunction *)module->functions)[1].instructions=(const XrXirInstruction *)(uintptr_t)1;
-    if (probe_attack>=10) final_callback(probe_attack);
+    if (probe_attack==18) ++module->function_count;
+    if (probe_attack>=10 && probe_attack<=17) final_callback(probe_attack);
     probe_injected=true;
 }
 static void correspondence_free(void *memory) {
@@ -120,7 +121,7 @@ static void final_callback(unsigned attack) {
     }
 }
 static void final_restore(void) {
-    if (probe_attack<10) return;
+    if (probe_attack<10 || probe_attack>17) return;
     uint32_t function=probe_attack==17?2:1;
     XrXirEffects *effects=probe_artifact->program_final;
     EffectFinalOutcomes *final=(EffectFinalOutcomes *)effect_final_outcomes(effects);
@@ -271,6 +272,7 @@ static bool callback_refusal(const XrXirCompileContext *context,unsigned attack,
     XrXirModule *module=(XrXirModule *)xr_xir_compile_artifact_module(artifact);
     XrXirFunction saved_function=module->functions[1];
     uint32_t frame=artifact->layouts[1].frame_bytes;
+    uint32_t saved_function_count=module->function_count;
     probe_artifact=artifact;probe_at=frees-1;probe_calls=0;probe_injected=false;probe_armed=true;
     program=NULL;
     XrXirStatus status=xr_xir_compile_vm_program_take(&artifact,&program);
@@ -285,6 +287,7 @@ static bool callback_refusal(const XrXirCompileContext *context,unsigned attack,
         return false;
     }
     CHECK(status==XR_XIR_BAD_STRUCTURE && !program && artifact==original);
+    module->function_count=saved_function_count;
     final_restore();
     ((XrXirFunction *)module->functions)[1]=saved_function;
     ((XrXirInstruction *)module->functions[1].instructions)[0].immediate=42;
@@ -438,6 +441,11 @@ int main(int argc,char **argv) {
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    if(argc==2 && (!strcmp(argv[1],"entry-count-free") || !strcmp(argv[1],"entry-count-alloc"))) {
+        CHECK(callback_refusal(&context,18,!strcmp(argv[1],"entry-count-alloc")));
+        CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==before.live_bytes);
+        xr_compile_resources_release(context.resources);return 0;
+    }
     if(argc==2 && (!strncmp(argv[1],"seeded-",7) || !strncmp(argv[1],"seed-erase-",11))) {
         const char *cases[]={"seeded-untyped-free","seeded-untyped-alloc",
             "seeded-unknown-free","seeded-unknown-alloc","seed-erase-free","seed-erase-alloc"};

@@ -951,12 +951,13 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
     XrXirProgram *program=NULL;
     XrXirStatus status=xir_program_input_take(context,&owned,&input);
     if (status!=XR_XIR_OK) return status;
+    uint32_t entry_count=module->function_count;
     VmProgramOwner *owner = xir_compile_calloc(context, 1, sizeof(*owner), &status);
     if (!owner) { input->artifact=NULL;xir_program_input_free(input);return status; }
-    owner->bindings = xir_compile_calloc(context, module->function_count, sizeof(*owner->bindings), &status);
-    XrXirCallEntry *entries = xir_compile_calloc(context, module->function_count, sizeof(*entries), &status);
+    owner->bindings = xir_compile_calloc(context, entry_count, sizeof(*owner->bindings), &status);
+    XrXirCallEntry *entries = xir_compile_calloc(context, entry_count, sizeof(*entries), &status);
     if (status != XR_XIR_OK) goto finish;
-    for (uint32_t i = 0; i < module->function_count; ++i) {
+    for (uint32_t i = 0; i < entry_count; ++i) {
         status = bind_verified(*artifact, i, &owner->bindings[i], &entries[i]);
         if (status != XR_XIR_OK) goto finish;
         const XrXirType *parameters=entries[i].parameters;
@@ -967,11 +968,11 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
         if (status!=XR_XIR_OK) goto finish;
     }
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, *xr_xir_compile_artifact_target(*artifact),
-        entries, module->function_count, module->declarations, {owner, vm_program_release}, module->types,
+        entries, entry_count, module->declarations, {owner, vm_program_release}, module->types,
         {0}};
     status = xir_program_receive(context,&spec,&input,&entries,&program);
 finish:
-    if (entries) for (uint32_t i=0;i<module->function_count;++i)
+    if (entries) for (uint32_t i=0;i<entry_count;++i)
         xr_compile_resources_free((void *)entries[i].parameters);
     xr_compile_resources_free(entries);
     if (status==XR_XIR_OK && (*output || *artifact!=original)) status=XR_XIR_BAD_STRUCTURE;

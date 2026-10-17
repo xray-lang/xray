@@ -178,7 +178,7 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
         }
         /* The same current descriptor proof checks both copied and moved rows.
          * This slot transfers physical storage only; it grants no permission. */
-        program->entries=*owned_entries;*owned_entries=NULL;
+        program->entries=*owned_entries;
     } else status = program_copy_entries(program, &physical);
     program->order = xir_compile_calloc(context, declarations->module_count, sizeof(*program->order), &status);
     program->active_modules = xir_compile_calloc(context, declarations->module_count, 1, &status);
@@ -217,6 +217,15 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
         original_artifact->program_final!=permissions->effects || original_artifact->layouts!=permissions->layouts))
         status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK) status=xr_xir_compile_program_body_match(context,permissions,original_artifact);
+    if (status==XR_XIR_OK && owned_entries) {
+        if (*owned_entries!=physical.entries) status=XR_XIR_BAD_STRUCTURE;
+        else {
+            XrCompileResourceStatus extent=xr_compile_resources_extent(context->resources,
+                *owned_entries,(size_t)physical.entry_count*sizeof(**owned_entries));
+            if (extent!=XR_COMPILE_RESOURCE_OK)
+                status=extent==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+        }
+    }
     if (status==XR_XIR_OK) status=xr_xir_compile_program_descriptor_match(context,spec,permissions);
     if (status==XR_XIR_OK) status=xr_xir_compile_program_descriptor_match(context,&owned,permissions);
     if (status==XR_XIR_OK && (packet.bytes || packet.length || packet.identity)) {
@@ -231,10 +240,14 @@ XR_FUNC XrXirStatus xir_program_receive(const XrXirCompileContext *context,
     }
     if (status!=XR_XIR_OK) goto failed;
     permissions->input=*input;*input=NULL;
+    if (owned_entries) *owned_entries=NULL;
     program->code = code;
     *output = program;
     return XR_XIR_OK;
 failed:
+    /* A provisional descriptor borrows the caller's physical table. Only
+     * successful publication moves that owner; failure leaves it live. */
+    if (owned_entries) program->entries=NULL;
     program_dispose(program);
     return status;
 }
