@@ -161,6 +161,8 @@ static void conditional_class_finite_remove(EffectCaptureProof *proof,EffectCapt
 static void conditional_class_finite_mask(const XrXirCompileContext *work,
     XrXirEffects *effects,uint32_t index,uint32_t value,uint32_t mask) {
     EffectInvocationFinal *final=effects->invocations->final;
+    EffectCaptureFact *known=conditional_class_finite_fact(work,effects,index,value,2);
+    uint64_t known_rank=known?known->rank:0;
     for(uint32_t flag=0;flag<3;++flag) {
         EffectCaptureFact *fact=conditional_class_finite_fact(work,effects,index,value,flag);
         if(fact) conditional_class_finite_remove(&final->capture,fact);
@@ -171,7 +173,7 @@ static void conditional_class_finite_mask(const XrXirCompileContext *work,
         uint32_t present=flag==0?EFFECT_CLASS_ROOT:flag==1?EFFECT_CLASS_UNKNOWN:EFFECT_CLASS_KNOWN;
         if(!(mask&present)) continue;
         uint32_t bit=node.basis.parameters+flag,at=0;
-        EffectCaptureFact fact={index,value,node.basis.fn_words+bit/64,bit%64,0};
+        EffectCaptureFact fact={index,value,node.basis.fn_words+bit/64,bit%64,flag==2?known_rank:0};
         CHECK(final->capture.count<final->capture.capacity && effect_capture_lower(&read,&fact,&at)==XR_XIR_OK);
         memmove(final->capture.facts+at+1,final->capture.facts+at,(size_t)(final->capture.count-at)*sizeof(fact));
         final->capture.facts[at]=fact;++final->capture.count;
@@ -187,6 +189,8 @@ static void conditional_class_rows_rejections(const XrXirCompileContext *context
     memcpy(facts,saved.facts,(size_t)saved.count*sizeof(*facts));
     final->capture=(EffectCaptureProof){facts,saved.count,saved.count+1};
     conditional_class_finite_mask(context,effects,node,value,expected==1?5:1);
+    uint32_t candidate_mask=0;
+    CHECK(effect_final_class_mask(context,final,node,value,&candidate_mask)==XR_XIR_OK && candidate_mask==(expected==1?5u:1u));
     CHECK(conditional_class_rows_replay(context,effects)==XR_XIR_BAD_STRUCTURE);
     memcpy(facts,saved.facts,(size_t)saved.count*sizeof(*facts));final->capture.count=saved.count;
     EffectCaptureFact *fact=conditional_class_finite_fact(context,effects,node,value,2);CHECK(fact);
