@@ -1,13 +1,13 @@
-"""Encode complete scalar and generic-method consumer packets independently.
+"""Verify frozen scalar and generic-method packets from complete field models.
 
-The models contain all definition fields. Historical literals are comparison
-inputs only; no compiler writer or existing generator is imported or invoked.
+These identities are historical rejection inputs for current consumers. Their
+model hash and literal bytes do not follow the current compiler protocol. No
+compiler writer or existing generator is imported or invoked.
 """
 import argparse, copy, hashlib, json, re, struct, sys
 from pathlib import Path
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[2]
 MODEL_SHA = 'c32b9c85a8194ababd69079b9ca5ced8d44c7295ec4120b56ccebacba4b39550'
 MODELS = {'8': {'linkage': 0,
        'functions': [{'name': 'n',
@@ -177,16 +177,15 @@ def main():
     mode.add_argument('--write', action='store_true')
     mode.add_argument('--verify', action='store_true')
     args = parser.parse_args()
-    raw = (HERE / 'product_consumers/semantic67_named/semantic67_named_manifest.json').read_bytes()
+    raw = (HERE / 'checked_reference_models.json').read_bytes()
     assert hashlib.sha256(raw.replace(b'\r\n', b'\n')).hexdigest() == MODEL_SHA
-    declared = {str(item['index']): item['model'] for item in json.loads(raw)['families'] if item['index'] in (8, 14)}
+    reference = json.loads(raw)
+    assert (reference['wire'], reference['semantic_contract'], reference['opcode_count']) == (25, 67, 148)
+    declared = {str(item['index']): item['model'] for item in reference['families'] if item['index'] in (8, 14)}
     assert declared == MODELS, 'Frozen independent field model differs'
-    checked = (ROOT / 'src/xir/xxir_checked.h').read_text('utf-8')
-    assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+25u', checked) and re.search(r'XR_XIR_CHECKED_CONTRACT\s+70u', checked)
-    public = (ROOT / 'src/xir/xxir.h').read_text('utf-8')
-    assert re.search(r'XR_XIR_CALLABLE_ROOT_UNRESOLVED\s+8u', public)
-    operations = re.findall(r'^XR_XIR_OP\((\w+)', (ROOT / 'src/xir/xxir_ops.def').read_text('utf-8'), re.M)
-    assert len(operations) == 151 and operations[1] == 'CONST_INT' and operations[32] == 'RETURN'
+    for item in reference['families']:
+        if item['index'] in (8, 14):
+            assert item['used_opcodes'] == [2, 33]
     histories = []
     for filename, symbol, schema, semantic, model in [
         ('xir_checked_scalar57_golden.h', 'checked_scalar57_golden', 22, 57, MODELS['8']),
@@ -222,11 +221,11 @@ def main():
     output(HERE / 'xir_generic_method70_golden.h', header('XIR_GENERIC_METHOD70_GOLDEN_H', [
         ('generic_method70_golden', generic), ('generic_method_previous69_constructed', generic69),
         ('generic_method70_invalid_flags0', invalid0), ('generic_method70_invalid_flags1', invalid1)]), args.write)
-    print(json.dumps({'status': 'INDEPENDENT_FULL_CONSUMER_MODELS_VERIFIED', 'semantic': 70, 'schema': 25,
-                      'op_count': 152, 'scalar221_sha256': hashlib.sha256(scalar).hexdigest(),
+    print(json.dumps({'status': 'INDEPENDENT_FULL_HISTORICAL_CONSUMER_MODELS_VERIFIED', 'semantic': 70, 'schema': 25,
+                      'model_source_sha256': MODEL_SHA, 'scalar221_sha256': hashlib.sha256(scalar).hexdigest(),
                       'generic616_sha256': hashlib.sha256(generic).hexdigest(), 'generic_flags_offset': 437,
-                      'current70_fn_flags': 8, 'historical_complete_reproduced': histories,
-                      'constructed69_expired_identity': 2, 'current70_fn0_fn1_TYPED_BAD_TYPE_NOT_RUN': 2,
+                      'historical70_fn_flags': 8, 'historical_complete_reproduced': histories,
+                      'constructed69_expired_identity': 2, 'historical70_invalid_flags_vectors': 2,
                       'producer_writer_outputs_used': False, 'runtime_qualification': 'NOT_RUN'}, indent=2))
 if __name__ == '__main__':
     main()

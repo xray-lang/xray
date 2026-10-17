@@ -1,4 +1,4 @@
-# Verify independent complete current packets and exact historical models.
+# Verify complete frozen packet models without binding them to current protocol headers.
 if(NOT TARGET Python3::Interpreter)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
 endif()
