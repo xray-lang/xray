@@ -222,9 +222,26 @@ static XrXirStatus effect_invocation_intern(EffectInvocationWorkspace *owner,
     if (words>SIZE_MAX/sizeof(*input) || (words && !input)) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationNodeKey key={root,body,parameters,head.instruction_count,words,0,input};size_t slot=0;
     status=effect_invocation_node_key_hash(owner,&key);
-    if (status==XR_XIR_OK) status=effect_invocation_node_index_reserve(owner);
-    if (status==XR_XIR_OK) status=effect_invocation_node_slot(owner,owner->node_index,owner->node_index_capacity,&key,&slot);
     if (status!=XR_XIR_OK) return status;
+    if (!!owner->node_index!=!!owner->node_index_capacity ||
+        (owner->node_index_capacity&(owner->node_index_capacity-1)) ||
+        (owner->final.count && !owner->final.nodes)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,4+sizeof(size_t))) return XR_XIR_BUDGET;
+    if (owner->node_index) {
+        status=effect_invocation_node_slot(owner,owner->node_index,owner->node_index_capacity,&key,&slot);
+        if (status!=XR_XIR_OK) return status;
+        if (owner->node_index[slot]) { *output=owner->node_index[slot]-1;return XR_XIR_OK; }
+    }
+    /* A settled key never grows its construction index. Only a real missing
+     * equation reserves space; rebuilding the table invalidates its slot. */
+    size_t previous_capacity=owner->node_index_capacity;
+    status=effect_invocation_node_index_reserve(owner);
+    if (status!=XR_XIR_OK) return status;
+    if (previous_capacity!=owner->node_index_capacity) {
+        status=effect_invocation_node_slot(owner,owner->node_index,owner->node_index_capacity,&key,&slot);
+        if (status!=XR_XIR_OK) return status;
+        if (previous_capacity && owner->node_index[slot]) return XR_XIR_BAD_STRUCTURE;
+    }
     if (owner->node_index[slot]) { *output=owner->node_index[slot]-1;return XR_XIR_OK; }
     status=effect_invocation_capacity(owner);
     if (status!=XR_XIR_OK) return status;

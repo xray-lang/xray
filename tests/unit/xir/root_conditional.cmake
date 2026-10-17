@@ -43,6 +43,14 @@ foreach(_root_conditional_gate helpers source)
 endforeach()
 
 # These literals remain reachable before the complete helper cost gate.
+add_test(NAME test_xir_root_conditional_existing_node
+    COMMAND test_xir_root_conditional_helpers --existing-node-literals)
+set_tests_properties(test_xir_root_conditional_existing_node PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_root_conditional_origin_operands
+    COMMAND test_xir_root_conditional_helpers --origin-operand-literals)
+set_tests_properties(test_xir_root_conditional_origin_operands PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
 add_test(NAME test_xir_root_conditional_cell_type_projection
     COMMAND test_xir_root_conditional_helpers --cell-type-projection)
 set_tests_properties(test_xir_root_conditional_cell_type_projection PROPERTIES

@@ -48,6 +48,8 @@
 #include "xir_invocation_compact_snapshot_cases.h"
 #include "xir_invocation_early_generation_cases.h"
 #include "xir_invocation_generation_range_cases.h"
+#include "xir_invocation_origin_operand_cases.h"
+#include "xir_invocation_existing_node_cases.h"
 #include "xir_ordinary_initial_role_cases.h"
 #include "xir_ordinary_instruction_copy_cases.h"
 #include "xir_ordinary_material_continuation_cases.h"
@@ -1747,6 +1749,14 @@ static void conditional_ordinary_environment_keys(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--existing-node-literals")) {
+        invocation_existing_node_literals();generation_range_controls();
+        CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--origin-operand-literals")) {
+        invocation_origin_operand_literals();generation_range_controls();
+        CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--cell-type-projection")) {
         cell_type_projection_literals();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
