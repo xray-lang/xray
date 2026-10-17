@@ -55,3 +55,21 @@ else()
 endif()
 add_test(NAME test_xir_decimal_parse_admission COMMAND test_xir_decimal_parse_admission)
 set_tests_properties(test_xir_decimal_parse_admission PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;numeric;source;authority")
+add_executable(test_xir_decimal_parse_resources "${CMAKE_CURRENT_LIST_DIR}/test_xir_decimal_parse_resources.c")
+target_link_libraries(test_xir_decimal_parse_resources PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+target_compile_definitions(test_xir_decimal_parse_resources PRIVATE XR_DECIMAL_PARSE_WORK="${XR_DECIMAL_PARSE_WORK}")
+set_target_properties(test_xir_decimal_parse_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_decimal_parse_resources PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_decimal_parse_resources PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_decimal_parse_compiler_controls COMMAND test_xir_decimal_parse_resources
+    --census "${CMAKE_CURRENT_BINARY_DIR}/decimal-parse-census.json")
+set_tests_properties(test_xir_decimal_parse_compiler_controls PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    LABELS "unit;xir;numeric;source;ctfe;ownership;compiler-fault;resources")
+add_test(NAME test_xir_decimal_parse_compiler_resources COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_LIST_DIR}/run_decimal_source_compiler_faults.py" --exe $<TARGET_FILE:test_xir_decimal_parse_resources>
+    --output "${CMAKE_CURRENT_BINARY_DIR}/decimal-parse-compiler-fi")
+set_tests_properties(test_xir_decimal_parse_compiler_resources PROPERTIES TIMEOUT 600 COST 600 PROCESSORS 8 RUN_SERIAL TRUE
+    LABELS "unit;xir;numeric;source;ctfe;ownership;compiler-fault;resources")

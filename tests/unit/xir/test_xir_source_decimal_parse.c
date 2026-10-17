@@ -18,6 +18,7 @@
 #include "xir_source_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_decimal_parse_runtime.h"
+#include "xir_decimal_parse_source.h"
 static uint32_t decimal_function(const XrXirModule *module,const char *name) {
     uint32_t found=UINT32_MAX;
     for(uint32_t i=0;i<module->function_count;++i)if(module->functions[i].name_length==strlen(name) &&
@@ -31,12 +32,7 @@ int main(int argc,char **argv) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_DECIMAL_PARSE_WORK};
     XrXirSourceRequest request={session,XR_DECIMAL_PARSE_WORK "/decimal-parse.xr",&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
-    char text[]=
-        "export fn inspect(text:string)->f64? {return f64.tryParse(text)}\n"
-        "export fn main()->i64 {const folded=comptime inspect(\"1.7976931348623157e308\");"
-        "const ordinary=inspect(\"1.7976931348623157e308\");"
-        "return (folded!=null && ordinary!=null && folded! == 1.7976931348623157e308 && ordinary! == folded! && inspect(\"bad\")==null)?42:0}\n"
-        "export fn observed()->f64? {return inspect(\"1.7976931348623157e308\")}\n";
+    char text[sizeof(decimal_parse_source)];memcpy(text,decimal_parse_source,sizeof(text));
     XrXirSourceText input={"decimal-parse.xr",text,strlen(text)};XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,NULL);
     XrCompileResourceStats spent={0};CHECK(xr_compile_resources_stats(context.resources,&spent)==XR_COMPILE_RESOURCE_OK);
