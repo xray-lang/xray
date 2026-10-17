@@ -36,3 +36,13 @@ add_test(NAME test_xir_default_gap_native COMMAND test_xir_default_gap_native)
 add_test(NAME test_xir_default_gap_mixed COMMAND test_xir_default_gap_mixed)
 set_tests_properties(test_xir_default_gap_source test_xir_default_gap_packet test_xir_default_gap_native test_xir_default_gap_mixed
     PROPERTIES LABELS "unit;xir;execution;ownership;abi")
+
+add_test(NAME test_xir_default_gap_mixed_owned_recovery COMMAND test_xir_default_gap_mixed --owned-recovery)
+set_tests_properties(test_xir_default_gap_mixed_owned_recovery PROPERTIES
+    LABELS "unit;xir;execution;ownership;abi;owned-program" TIMEOUT 60)
+foreach(binding_attack IN ITEMS artifact function)
+    add_test(NAME test_xir_default_gap_mixed_owned_binding_${binding_attack}
+        COMMAND test_xir_default_gap_mixed --owned-binding-${binding_attack})
+    set_tests_properties(test_xir_default_gap_mixed_owned_binding_${binding_attack} PROPERTIES
+        LABELS "unit;xir;execution;ownership;abi;owned-program" TIMEOUT 60)
+endforeach()

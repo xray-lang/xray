@@ -8,6 +8,7 @@
  */
 #ifndef XIR_CLASS_OWNED_RECEIVE_H
 #define XIR_CLASS_OWNED_RECEIVE_H
+#include "xir_mixed_binding_projection.h"
 typedef struct ClassMixedCode {
     XrXirCallEntry *entries;
     XrXirVmBinding *bindings;
@@ -57,9 +58,12 @@ static XrXirStatus class_owned_retry(const XrXirCompileContext *context,
 
 static XrXirStatus class_owned_program(const XrXirCompileContext *context,
     const XrXirProgramSpec *definition,bool retry,XrXirProgram **output) {
+    if (!output || *output) return XR_XIR_BAD_STRUCTURE;
     C(definition->entry_count<=32 && !*output);
     XrXirArtifact *checked=NULL,*lowered=NULL;
     XrXirProgramInput *input=NULL;
+    XrXirProgram *received=NULL;
+    XirMixedProjection projection;
     ClassMixedCode *code=NULL;
     XrCompileResourceStatus made=xr_compile_resources_calloc(context->resources,1,sizeof(*code),(void **)&code);
     XrXirStatus status=made==XR_COMPILE_RESOURCE_OK?XR_XIR_OK:
@@ -71,23 +75,31 @@ static XrXirStatus class_owned_program(const XrXirCompileContext *context,
     const XrXirModule *module=status==XR_XIR_OK?xr_xir_compile_artifact_module(lowered):NULL;
     if (status==XR_XIR_OK && module->function_count!=definition->entry_count) status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK) status=xr_xir_compile_vm_bind_table(lowered,&code->bindings,&code->entries);
+    if (status==XR_XIR_OK) status=xir_mixed_projection_prepare(context,lowered,code->bindings,
+        code->entries,definition->entry_count,&projection);
     if (status==XR_XIR_OK) {
         unsigned native=0,vm=0;
-        for (uint32_t f=0;f<definition->entry_count;++f) {
+        for (uint32_t f=0;status==XR_XIR_OK && f<definition->entry_count;++f) {
             C(code->bindings[f].artifact==lowered && code->bindings[f].function==f);
             C(code->entries[f].environment==&code->bindings[f]);
-            if (f%2) { code->entries[f]=definition->entries[f];++native; }
+            if (f%2) { status=xir_mixed_projection_native(context,&projection,f,&definition->entries[f]);
+                if (status==XR_XIR_OK) { code->entries[f]=definition->entries[f];++native; } }
             else { C(code->entries[f].resume!=definition->entries[f].resume);++vm; }
         }
+        if (status!=XR_XIR_OK) goto finish;
         C(native && vm);
         XrXirProgramSpec spec=*definition;
         spec.entries=code->entries;spec.declarations=module->declarations;spec.types=module->types;
-        spec.packet=(XrXirProgramPacket){0};spec.code=(XrXirCodeLease){code,class_code_release};
+        spec.packet=(XrXirProgramPacket){0};spec.code=(XrXirCodeLease){0};
         status=xir_program_input_take(context,&lowered,&input);
-        if (status==XR_XIR_OK) status=retry?class_owned_retry(context,&spec,code,&input,output):
-            xir_program_receive(context,&spec,&input,NULL,output);
-        if (status==XR_XIR_OK) { C(!input && !lowered && *output);code=NULL; }
+        if (status==XR_XIR_OK) status=retry?class_owned_retry(context,&spec,code,&input,&received):
+            xir_program_receive(context,&spec,&input,NULL,&received);
+        if (status==XR_XIR_OK) status=xir_mixed_projection_match(context,received,&projection);
+        if (status==XR_XIR_OK) { C(!input && !lowered && received);
+            received->code=(XrXirCodeLease){code,class_code_release};*output=received;received=NULL;code=NULL; }
     }
+finish:
+    xr_xir_compile_program_drop(received);
     xir_program_input_free(input);
     xr_xir_compile_artifact_free(lowered);
     class_code_free(code);
