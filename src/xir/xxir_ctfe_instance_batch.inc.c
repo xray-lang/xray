@@ -51,8 +51,8 @@ static XrXirCtfeStatus instance_batch_receive(const XirCtfeInstanceBatchRequest 
     if (status==XR_XIR_OK && !xir_compile_work(&input->context,(uint64_t)request->count*sizeof(uint32_t))) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) memcpy(owner->functions,request->functions,(size_t)request->count*sizeof(uint32_t));
     XrXirCheckedPacket packet={0};
-    if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(input,&packet,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(&owner->context,packet.bytes,packet.length,&owner->checked,NULL);
+    if (status==XR_XIR_OK) status=instance_packet_write(input,&packet);
+    if (status==XR_XIR_OK) status=instance_packet_read(&owner->context,input,&packet,&owner->checked);
     xr_xir_compile_checked_packet_free(&packet);
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(owner->checked,&request->target,&owner->lowered,NULL);
     if (status!=XR_XIR_OK) { xr_xir_compile_ctfe_instance_batch_free(owner);return instance_compile_status(status); }

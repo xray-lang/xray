@@ -666,7 +666,7 @@ static void checked_effect_proofs(CheckedCursor *c, XrXirProvenance *p) {
 static void checked_provenance(CheckedCursor *c, XrXirModule *m, uint32_t evidence_limit) {
     uint32_t kind = checked_u32(c, m->provenance ? m->provenance->kind : XR_XIR_EVIDENCE_ABSENT);
     if (c->status != XR_XIR_OK) return;
-    if (kind > evidence_limit || kind > XR_XIR_EVIDENCE_INSTANCE) {
+    if (kind > evidence_limit || kind > XR_XIR_EVIDENCE_EVALUATION) {
         c->status = XR_XIR_BAD_STRUCTURE; return;
     }
     if (kind == XR_XIR_EVIDENCE_ABSENT) return;
@@ -730,7 +730,8 @@ static XrXirStatus checked_error(XrXirStatus status, XrXirDiagnostic *diagnostic
     if (diagnostic) *diagnostic = (XrXirDiagnostic) {status, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     return status;
 }
-static XrXirStatus checked_encode(const XrXirArtifact *artifact, XrXirCheckedPacket *output, XrXirDiagnostic *diagnostic) {
+static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,
+    XrXirDiagnostic *diagnostic,bool evaluation) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = artifact->context;
@@ -739,12 +740,14 @@ static XrXirStatus checked_encode(const XrXirArtifact *artifact, XrXirCheckedPac
 
     if (!artifact || artifact->module.stage != XR_XIR_CHECKED)
         return checked_error(XR_XIR_BAD_STAGE, diagnostic);
+    if (evaluation?(!artifact->evaluation_only || !xir_effect_evidence_is_evaluation(&artifact->module)):
+        xir_artifact_is_evaluation(artifact)) return checked_error(XR_XIR_BAD_STAGE,diagnostic);
     XrXirCompileContext limits = *budget;
     size_t capacity = SIZE_MAX;
-    CheckedCursor c = {NULL, NULL, 64, capacity, limits.limits, limits, XR_XIR_OK, false};
+    CheckedCursor c = {NULL, NULL, evaluation?76u:64u, capacity, limits.limits, limits, XR_XIR_OK, false};
     XrXirModule module = artifact->module;
     XrXirConstruction *construction = artifact->construction;
-    checked_module(&c, &module, &construction, XR_XIR_EVIDENCE_INSTANCE);
+    checked_module(&c,&module,&construction,evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE);
     if (c.status != XR_XIR_OK) return checked_error(c.status, diagnostic);
     size_t size = c.position;
     uint8_t *bytes = xir_compile_calloc(&artifact->context, size, 1, &allocation_status);
@@ -752,13 +755,17 @@ static XrXirStatus checked_encode(const XrXirArtifact *artifact, XrXirCheckedPac
     if (!xir_compile_work(&limits, 8)) {
         xr_compile_resources_free(bytes); return checked_error(XR_XIR_BUDGET, diagnostic);
     }
-    memcpy(bytes, "XRCHK\0\0\0", 8);
+    memcpy(bytes,evaluation?"XRCEV\0\0\0":"XRCHK\0\0\0",8);
     c = (CheckedCursor) {NULL, bytes, 8, size, limits.limits, limits, XR_XIR_OK, false};
-    checked_u32(&c, XR_XIR_CHECKED_SCHEMA); checked_u32(&c, XR_XIR_CHECKED_CONTRACT);
+    checked_u32(&c,evaluation?1u:XR_XIR_CHECKED_SCHEMA); checked_u32(&c, XR_XIR_CHECKED_CONTRACT);
     checked_u32(&c, XR_XIR_CHECKED); checked_u32(&c, 0);
     checked_integer(&c, size - 64, 8);
     c.position = 64; module = artifact->module;
-    checked_module(&c, &module, &construction, XR_XIR_EVIDENCE_INSTANCE);
+    if (evaluation) {
+        const XirEvaluationRoot *root=&artifact->module.provenance->evaluation;
+        checked_u32(&c,root->caller);checked_u32(&c,root->instruction);checked_u32(&c,root->callee);
+    }
+    checked_module(&c,&module,&construction,evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE);
     if (c.status != XR_XIR_OK || c.position != size) {
         xr_compile_resources_free(bytes); return checked_error(c.status != XR_XIR_OK ? c.status : XR_XIR_BAD_STRUCTURE, diagnostic);
     }
@@ -768,6 +775,12 @@ static XrXirStatus checked_encode(const XrXirArtifact *artifact, XrXirCheckedPac
     checked_digest(bytes, size, bytes + 32);
     *output = (XrXirCheckedPacket) {bytes, size};
     return XR_XIR_OK;
+}
+static XrXirStatus checked_encode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,XrXirDiagnostic *diagnostic) {
+    return checked_encode_mode(artifact,output,diagnostic,false);
+}
+static inline XrXirStatus checked_evaluation_encode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,XrXirDiagnostic *diagnostic) {
+    return checked_encode_mode(artifact,output,diagnostic,true);
 }
 
 #endif // XXIR_CHECKED_CODEC_INC_C

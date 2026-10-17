@@ -34,15 +34,25 @@ static bool instance_limits_valid(const XirCtfeInstanceRequest *request) {
         request->limits.output_bytes<=XR_XIR_CTFE_MAX_OUTPUT_BYTES &&
         request->call_depth<=XR_XIR_CTFE_MAX_CALL_DEPTH;
 }
+static XrXirStatus instance_packet_write(const XrXirArtifact *artifact,XrXirCheckedPacket *packet) {
+    return artifact->evaluation_only?xir_evaluation_write(artifact,packet,NULL):
+        xr_xir_compile_checked_write(artifact,packet,NULL);
+}
+static XrXirStatus instance_packet_read(const XrXirCompileContext *context,const XrXirArtifact *input,
+    const XrXirCheckedPacket *packet,XrXirArtifact **output) {
+    return input->evaluation_only?xir_evaluation_read(context,packet->bytes,packet->length,output,NULL):
+        xr_xir_compile_checked_read(context,packet->bytes,packet->length,output,NULL);
+}
 /* Full artifact admission precedes this physical correspondence observation.
  * Concrete equality never repairs missing symbolic constraints or witnesses. */
 static XrXirCtfeStatus instance_definition(const XrXirArtifact *artifact,uint32_t function,
     const XrXirArtifact **definition,uint32_t *declaration) {
     if (!xir_compile_work(&artifact->context,sizeof(XrXirOrigin)+8)) return XR_XIR_CTFE_BUDGET;
     const XrXirModule *module=&artifact->module;const XrXirProvenance *proof=module->provenance;
+    if (artifact->evaluation_only && (!proof || function!=proof->evaluation.callee)) return XR_XIR_CTFE_NOT_SUPPORTED;
     if (module->stage!=XR_XIR_CHECKED || module->generics || !module->declarations ||
         function>=module->function_count ||
-        !proof || proof->kind!=XR_XIR_EVIDENCE_INSTANCE || !proof->source ||
+        !proof || !xir_effect_kind_is_closed(proof->kind) || !proof->source ||
         !proof->origins || proof->count!=module->function_count) return XR_XIR_CTFE_BAD_ARTIFACT;
     const XrXirOrigin *origin=&proof->origins[function];const XrXirModule *source=&proof->source->module;
     if (module->functions[function].parameter_count || !origin->argument_count || !origin->arguments || !source->generics ||
@@ -55,7 +65,7 @@ static XrXirStatus instance_inputs_match(const XrXirCompileContext *context,
     const XrXirArtifact *checked,const XrXirArtifact *lowered) {
     if (checked->context.resources!=context->resources ||
         lowered->context.resources!=context->resources) return XR_XIR_BAD_STRUCTURE;
-    XrXirCheckedPacket current={0};XrXirStatus status=xr_xir_compile_checked_write(checked,&current,NULL);
+    XrXirCheckedPacket current={0};XrXirStatus status=instance_packet_write(checked,&current);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,NULL);
     if (status==XR_XIR_OK) {
         const XrXirCheckedPacket *original=&lowered->checked_packet;
@@ -90,8 +100,8 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_instance(const XirCtfeInstanceReques
         xr_xir_compile_ctfe_instance_free(owner);return XR_XIR_CTFE_BUDGET;
     }
     owner->context=input->context;owner->function=request->function;
-    XrXirCheckedPacket packet={0};status=xr_xir_compile_checked_write(input,&packet,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(&owner->context,packet.bytes,packet.length,&owner->checked,NULL);
+    XrXirCheckedPacket packet={0};status=instance_packet_write(input,&packet);
+    if (status==XR_XIR_OK) status=instance_packet_read(&owner->context,input,&packet,&owner->checked);
     xr_xir_compile_checked_packet_free(&packet);
     if (status==XR_XIR_OK) status=xr_xir_compile_lower(owner->checked,&request->target,&owner->lowered,NULL);
     if (status!=XR_XIR_OK) { xr_xir_compile_ctfe_instance_free(owner);return instance_compile_status(status); }

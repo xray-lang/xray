@@ -11,7 +11,7 @@
  *   Receiving owners copy complete keys and retain no borrowed producer vector.
  */
 #include "xxir_type_match_internal.h"
-static int comptime_key_order(const XrXirComptimeBinding *a,const XrXirComptimeBinding *b) {
+XR_FUNC int xir_comptime_key_order(const XrXirComptimeBinding *a,const XrXirComptimeBinding *b) {
     if (a->site!=b->site) return a->site<b->site?-1:1;
     uint32_t count=a->argument_count<b->argument_count?a->argument_count:b->argument_count;
     for (uint32_t i=0;i<count;++i)
@@ -41,7 +41,7 @@ static XrXirStatus comptime_storage_shape(const XrXirCompileContext *context,con
         status=xir_compile_resource_status(xr_compile_resources_admit(context->resources,bytes,bytes));
         if (status!=XR_XIR_OK) return status;
         if (!xir_compile_work(context,bytes*2+4)) return XR_XIR_BUDGET;
-        if (b && comptime_key_order(&table->bindings[b-1],row)>=0) return XR_XIR_BAD_STRUCTURE;
+        if (b && xir_comptime_key_order(&table->bindings[b-1],row)>=0) return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
 }

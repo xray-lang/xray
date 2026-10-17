@@ -814,6 +814,7 @@ static XrXirStatus provenance_match_scoped(void *data,XirEffectContextScope *sco
     if (status==XR_XIR_OK) status=provenance_effect_proofs(match);
     if (status==XR_XIR_OK) status=provenance_declarations(match);
     if (status==XR_XIR_OK) status=provenance_reachable(match);
+    if (status==XR_XIR_OK) status=provenance_evaluation_root(match);
     match->selection_scope=NULL;return status;
 }
 
@@ -826,7 +827,7 @@ static XrXirStatus provenance_functions_match_owned(const XrXirCompileContext *c
     XrXirDiagnostic location = {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status = XR_XIR_OK;
     const XrXirOrigin *origins = instance ? instance->origins : NULL;
-    if (!instance || instance->kind != XR_XIR_EVIDENCE_INSTANCE ||
+    if (!instance || !xir_effect_kind_is_closed(instance->kind) ||
         !destination || instance->count != destination->function_count ||
         !source || !origins || !remaining || !source->functions ||
         !destination->functions || !destination->function_count || destination->generics || destination->defaults ||
@@ -881,7 +882,7 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *
     const XrXirModule *destination, const XrXirProvenance *instance,
     const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !instance ||
-        instance->kind!=XR_XIR_EVIDENCE_INSTANCE || !instance->source) {
+        !xir_effect_kind_is_closed(instance->kind) || !instance->source) {
         if (diagnostic) *diagnostic=(XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,
             UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
         return XR_XIR_BAD_STRUCTURE;

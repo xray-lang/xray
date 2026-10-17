@@ -62,6 +62,8 @@ typedef struct SpecContext {
     SpecInstance closed;
     SpecTypeFrame *type_stack;
     SpecPendingPoint *pending;
+    XirEvaluationRoot *evaluation;
+    bool evaluation_found;
 } SpecContext;
 static void *spec_alloc(SpecContext *c, uint64_t count, size_t size) {
     XrXirStatus allocation_status = XR_XIR_OK;
@@ -440,6 +442,13 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         XirComptimeSelection selection={c->source,&c->types,instance->declaration,i,types,count};
         const XrXirComptimeBinding *constant=NULL;
         XrXirStatus selected=xir_comptime_select(&c->remaining,c->source_artifact->construction,&selection,&constant);
+        bool evaluation_root=false;
+        if (c->evaluation && selected==XR_XIR_BAD_TYPE) {
+            const XrXirComptimeSite *site=xir_comptime_site(c->source_artifact->construction,instance->declaration,i);
+            if (site && site->helper==declaration) {
+                selected=XR_XIR_OK;evaluation_root=!c->evaluation_found;
+            }
+        }
         if (c->pending && selected==XR_XIR_BAD_TYPE) {
             const XrXirComptimeSite *site=xir_comptime_site(c->source_artifact->construction,instance->declaration,i);
             if (site && site->helper==declaration) {
@@ -457,6 +466,10 @@ static bool spec_calls(SpecContext *c, uint32_t index) {
         uint32_t target = spec_intern(c, declaration, types, count,effect.arguments,effect.count);
         c->cleanup_owner=UINT32_MAX;
         if (target == UINT32_MAX) return false;
+        if (evaluation_root) {
+            if (!spec_work(c,sizeof(*c->evaluation))) return false;
+            *c->evaluation=(XirEvaluationRoot){index,i,target};c->evaluation_found=true;
+        }
         op->immediate = target; op->type_arguments[0] = op->type_arguments[1] = 0;
     }
     return true;
@@ -559,8 +572,9 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
     for (uint32_t f = 0; f < c->count; ++f)
         origins[f] = (XrXirOrigin) {c->instances[f].declaration, c->instances[f].arguments,
             c->instances[f].count,c->instances[f].effects,c->instances[f].effect_count};
-    XrXirProvenance evidence = {XR_XIR_EVIDENCE_INSTANCE, (XrXirArtifact *)c->source_artifact, origins, c->count,
-        NULL, 0, NULL, 0};
+    XrXirProvenance evidence = {c->evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE,
+        (XrXirArtifact *)c->source_artifact,origins,c->count,NULL,0,NULL,0,{0}};
+    if (c->evaluation) evidence.evaluation=*c->evaluation;
     if (!spec_effect_proofs(c,&evidence.bindings,&evidence.binding_count)) {
         xr_compile_resources_free(origins);return c->diagnostic.status;
     }
@@ -573,7 +587,7 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
 #include "xxir_specialize_materialization.inc.c"
 #include "xxir_pending_prepare.inc.c"
 static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
-    XrXirDiagnostic *diagnostic,SpecPendingPoint *pending) {
+    XrXirDiagnostic *diagnostic,SpecPendingPoint *pending,XirEvaluationRoot *evaluation) {
     if (!checked || !output || *output) {
         if (diagnostic) *diagnostic = (XrXirDiagnostic){XR_XIR_BAD_STRUCTURE,
             UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
@@ -585,10 +599,11 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     c.diagnostic = (XrXirDiagnostic) {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     c.source = xr_xir_compile_artifact_module(checked);c.source_artifact=checked;c.cleanup_owner=UINT32_MAX;
     c.remaining = *budget;
-    c.pending=pending;
+    c.pending=pending;c.evaluation=evaluation;
     XrXirCompileContext limits = c.remaining;
 
-    if (!c.source || c.source->stage != XR_XIR_CHECKED || c.source->linkage_kind != XR_XIR_PROGRAM) { c.diagnostic.status = XR_XIR_BAD_STAGE; goto done; }
+    if (!c.source || c.source->stage != XR_XIR_CHECKED || c.source->linkage_kind != XR_XIR_PROGRAM ||
+        xir_artifact_is_evaluation(checked)) { c.diagnostic.status = XR_XIR_BAD_STAGE; goto done; }
     bool templated=c.source->provenance && c.source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
     c.diagnostic.status = templated ?
         xir_source_facts_acquire(checked,&c.source_facts,&c.diagnostic) :
@@ -644,6 +659,7 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     if (!c.count) { c.diagnostic.status = XR_XIR_BAD_STRUCTURE; goto done; }
     for (uint32_t f = 0; f < c.count; ++f) if (!spec_calls(&c, f)) goto done;
     if (pending) { pending->complete=true;goto done; }
+    if (evaluation && !c.evaluation_found) { c.diagnostic.status=XR_XIR_BAD_TYPE;goto done; }
     XrXirDeclarations declarations = {0};
     if (!spec_declarations(&c, &declarations)) goto done;
     c.diagnostic.status = spec_nominal_fields(&c);
@@ -676,6 +692,6 @@ done:
     return c.diagnostic.status;
 }
 XR_FUNC XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
-    return spec_run(checked,output,diagnostic,NULL);
+    return spec_run(checked,output,diagnostic,NULL,NULL);
 }
 #include "xxir_comptime_pending.inc.c"

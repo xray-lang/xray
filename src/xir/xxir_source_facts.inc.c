@@ -186,7 +186,7 @@ static XrXirStatus source_facts_prepare(XrXirArtifact *artifact,XrXirDiagnostic 
     const XrXirProvenance *provenance=artifact->module.provenance;
     if (!provenance) return artifact->source_facts?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     if (provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) return source_facts_build(artifact,diagnostic);
-    if (provenance->kind!=XR_XIR_EVIDENCE_INSTANCE || !provenance->source || artifact->source_facts)
+    if (!xir_effect_kind_is_closed(provenance->kind) || !provenance->source || artifact->source_facts)
         return XR_XIR_BAD_STRUCTURE;
     XrXirArtifact *source=provenance->source;
     if (!source->module.provenance) return source->source_facts?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;

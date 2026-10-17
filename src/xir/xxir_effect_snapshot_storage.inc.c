@@ -439,7 +439,7 @@ static XrXirStatus effect_body_rows_match(const XrXirCompileContext *work,
     uint32_t kind=source->provenance?source->provenance->kind:0;
     if (status==XR_XIR_OK && !xir_compile_work(work,1)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK && kind!=body->evidence_kind) status=XR_XIR_BAD_STRUCTURE;
-    bool variables=kind==XR_XIR_EVIDENCE_TEMPLATE || kind==XR_XIR_EVIDENCE_INSTANCE;
+    bool variables=kind==XR_XIR_EVIDENCE_TEMPLATE || xir_effect_kind_is_closed(kind);
     for (uint32_t f=0;status==XR_XIR_OK && f<source->function_count;++f) {
         status=effect_body_function_match(work,&body->functions[f],&source->functions[f]);
         const EffectBodyFunction *function=&body->functions[f];

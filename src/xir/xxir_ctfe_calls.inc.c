@@ -194,6 +194,8 @@ static XrXirCtfeStatus ctfe_call_prepare_received(const XrXirCtfeCallRequest *re
     XrXirCtfeStatus status=XR_XIR_CTFE_OK;
     if (artifact->module.stage!=XR_XIR_LOWERED || input->function>=artifact->module.function_count)
         return XR_XIR_CTFE_BAD_ARTIFACT;
+    if (artifact->evaluation_only && input->function!=artifact->module.provenance->evaluation.callee)
+        return XR_XIR_CTFE_BAD_ARGUMENT;
     if (artifact->module.declarations && artifact->module.declarations->functions &&
         (artifact->module.declarations->functions[input->function].cleanup_owner ||
          artifact->module.declarations->functions[input->function].method_kind==XR_XIR_MATERIALIZER)) return XR_XIR_CTFE_NOT_SUPPORTED;

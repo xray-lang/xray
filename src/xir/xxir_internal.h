@@ -116,7 +116,20 @@ struct XrXirArtifact {
     XrXirCheckedPacket checked_packet;
     uint8_t checked_identity[32];
     XirSourceFacts *source_facts;
+    uint32_t evaluation_only;
 };
+
+/* Purpose is a grammar fence, never a proof. Current full correspondence and
+ * the unique evaluation root are independently verified on every operation. */
+static inline bool xir_artifact_is_evaluation(const XrXirArtifact *artifact) {
+    return artifact && (artifact->evaluation_only || xir_effect_evidence_is_evaluation(&artifact->module));
+}
+/* The private packet grammar cannot enter ordinary Checked transport or a
+ * runtime Program. It owns the same complete current semantic field traversal. */
+XR_FUNC XrXirStatus xir_evaluation_write(const XrXirArtifact *artifact,
+    XrXirCheckedPacket *output,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_evaluation_read(const XrXirCompileContext *context,
+    const void *bytes,size_t length,XrXirArtifact **output,XrXirDiagnostic *diagnostic);
 
 /* Immutable Source inputs are owned only by a genuine final Checked Template.
  * Acquisition repeats full current field/permission and independent terminal

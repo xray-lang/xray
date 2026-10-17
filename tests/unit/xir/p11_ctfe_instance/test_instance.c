@@ -175,8 +175,19 @@ static void instance_limits(void) {
 #include "pending_cases.h"
 #include "pending_controls.h"
 #include "pending_resources.h"
+#include "evaluation_cases.h"
+#include "evaluation_controls.h"
+#include "resolution_cases.h"
+#include "resolution_controls.h"
+#include "resolution_resources.h"
 int main(int argc,char **argv) {
     CHECK(argc>=2 && argc<=4);
+    if (!strcmp(argv[1],"resolution")) { CHECK(argc==3);resolution_normal(argv[2]);return 0; }
+    if (!strcmp(argv[1],"resolution-controls")) { CHECK(argc==2);resolution_controls();return 0; }
+    if (!strcmp(argv[1],"resolution-prefix")) { CHECK(argc==3);resolution_resources(argv[2],false);return 0; }
+    if (!strcmp(argv[1],"resolution-faults")) { CHECK(argc==3);resolution_resources(argv[2],true);return 0; }
+    if (!strcmp(argv[1],"evaluation")) { CHECK(argc==3);evaluation_normal(argv[2]);return 0; }
+    if (!strcmp(argv[1],"evaluation-controls")) { CHECK(argc==2);evaluation_controls();return 0; }
     if (!strcmp(argv[1],"pending")) { CHECK(argc==3);pending_normal(argv[2]);return 0; }
     if (!strcmp(argv[1],"pending-controls")) { CHECK(argc==2);pending_controls();return 0; }
     if (!strcmp(argv[1],"pending-prefix")) { CHECK(argc==3);pending_resources(argv[2],false);return 0; }

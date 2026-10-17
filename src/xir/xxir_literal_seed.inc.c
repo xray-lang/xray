@@ -13,7 +13,7 @@
  */
 static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint32_t count) {
     const XrXirModule *module=&definition->module;const XrXirDeclarations *d=module->declarations;
-    if (module->stage!=XR_XIR_CHECKED || !module->generics || !d || xir_effect_evidence_is_instance(module))
+    if (module->stage!=XR_XIR_CHECKED || !module->generics || !d || xir_effect_evidence_is_closed(module))
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"literal receiving requires a genuine generic definition inventory");
     if (module->function_count>ctx->compile.limits.functions || count>ctx->compile.limits.functions-module->function_count)
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"literal receiving function inventory exhausted");

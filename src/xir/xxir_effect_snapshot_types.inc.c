@@ -197,7 +197,7 @@ static inline bool effect_body_material_shape(const EffectBodyMaterial *body) {
  * physical-use derivation. This says nothing about the resulting ROOT equation. */
 static inline bool effect_body_variable_roles(const EffectBodyMaterial *body) {
     return body->ordinary_identities || body->evidence_kind==XR_XIR_EVIDENCE_TEMPLATE ||
-        body->evidence_kind==XR_XIR_EVIDENCE_INSTANCE;
+        xir_effect_kind_is_closed(body->evidence_kind);
 }
 static XrXirStatus effect_body_initial_roles_match(const XrXirCompileContext *work,
     const EffectBodyMaterial *body,uint32_t function) {

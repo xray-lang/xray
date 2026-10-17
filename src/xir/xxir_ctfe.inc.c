@@ -167,6 +167,8 @@ XR_FUNC XrXirCtfeStatus xr_xir_compile_ctfe_leaf(const XrXirCtfeRequest *request
     if (status != XR_XIR_CTFE_OK) return status;
     if (artifact->module.stage != XR_XIR_LOWERED || request->function >= artifact->module.function_count)
         return XR_XIR_CTFE_BAD_ARTIFACT;
+    if (artifact->evaluation_only && request->function!=artifact->module.provenance->evaluation.callee)
+        return XR_XIR_CTFE_BAD_ARGUMENT;
     if (!xir_compile_work(&artifact->context, 1)) return XR_XIR_CTFE_BUDGET;
     const XrXirTarget *target = xr_xir_compile_artifact_target(artifact);
     if (!target || target->architecture != XR_XIR_ARCH_X86_64 ||

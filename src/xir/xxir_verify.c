@@ -334,7 +334,7 @@ static XrXirStatus type_use_context(VerifyContext *context, uint32_t function, X
     XrXirStatus status = xr_xir_compile_type_use_verify_scratch(&context->remaining, &proof, type, &context->scratch);
     /* Naming checks for substituted types are discharged by original-definition
      * verification and complete correspondence before this module can publish. */
-    if (status != XR_XIR_OK || xir_effect_evidence_is_instance(context->module)) return status;
+    if (status != XR_XIR_OK || xir_effect_evidence_is_closed(context->module)) return status;
     return xr_xir_compile_type_access_scratch(&context->remaining, context->module, function, type, &context->pending);
 }
 
@@ -344,7 +344,7 @@ static XrXirStatus signature_type_use_context(VerifyContext *context, uint32_t f
     XrXirType type, bool constraints_proved) {
     if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
     if (!constraints_proved) return type_use_context(context, function, type);
-    if (xir_effect_evidence_is_instance(context->module)) return XR_XIR_OK;
+    if (xir_effect_evidence_is_closed(context->module)) return XR_XIR_OK;
     return xr_xir_compile_type_access_scratch(&context->remaining, context->module,
         function, type, &context->pending);
 }
@@ -705,7 +705,7 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
     if (op->op == XR_XIR_CELL_PLACE && xr_xir_type_is_nominal(types, array))
         return role_operand(function, graph, context, instruction, 0, cell);
     XrXirType element = xr_xir_array_element(types, array);
-    XrXirStatus status = xir_effect_evidence_is_instance(context->module) ?
+    XrXirStatus status = xir_effect_evidence_is_closed(context->module) ?
         xr_xir_compile_type_constraints(&context->remaining, context->module, context->location.function, element, (XrXirConstraint){0}) :
         xr_xir_compile_type_satisfies(&context->remaining, context->module, context->location.function, element, (XrXirConstraint){0});
     if (status != XR_XIR_OK) return status;
@@ -1157,7 +1157,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
     else if (module->linkage_kind != XR_XIR_PROGRAM && module->linkage_kind != XR_XIR_LIBRARY)
         status = XR_XIR_BAD_STRUCTURE;
     else if (module->linkage_kind == XR_XIR_LIBRARY &&
-             (module->stage == XR_XIR_LOWERED || xir_effect_evidence_is_instance(module)))
+             (module->stage == XR_XIR_LOWERED || xir_effect_evidence_is_closed(module)))
         status = XR_XIR_BAD_STAGE;
     else if (module->stage != XR_XIR_BUILT && module->stage != XR_XIR_CHECKED &&
              module->stage != XR_XIR_LOWERED)
@@ -1277,7 +1277,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompi
     const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     if (!source_effects) return xr_xir_compile_verify_v2(context,module,construction,diagnostic);
     if (!xir_compile_context_valid(context) || !module || !module->provenance ||
-        module->provenance->kind!=XR_XIR_EVIDENCE_INSTANCE) return XR_XIR_BAD_STRUCTURE;
+        !xir_effect_kind_is_closed(module->provenance->kind)) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status=structure_verify_source(context,module,construction,source_effects,&location);
     if (status==XR_XIR_OK) {
@@ -1340,7 +1340,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_receiving_effects_v2(const XrXirCompil
     const XrXirModule *module,const XrXirConstruction *construction,
     const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic) {
     if (source_effects && (!module || !module->provenance ||
-        module->provenance->kind!=XR_XIR_EVIDENCE_INSTANCE)) return XR_XIR_BAD_STRUCTURE;
+        !xir_effect_kind_is_closed(module->provenance->kind))) return XR_XIR_BAD_STRUCTURE;
     return verify_collected_effects(context,module,construction,source_effects,output,diagnostic);
 }
 XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *context,

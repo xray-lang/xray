@@ -7984,7 +7984,19 @@ Array、Nullable、Tuple、struct/enum、标量、String和Unit继续使用原�
 
 接收方独立拥有完整Source、必要新增关闭类型和完整有序实参；类型ID原前缀保持，新生描述符随完整共同Checker重新检查。每次查询重新完整验证当前Source及其逐字packet对应，再重复真实普通专化发现并核对站点和完整有序类型结构。原生产者、session和packet字节死亡后仍可查询；修改当前body、类型、名称或实参不能凭缓存PASS获得视图。实参必须关闭并满足原helper的完整约束，不按实例解释AST，不清空规范表或TEMPLATE，不把已有绑定重新求值。
 
-所有准备、复制、复验和重试共用原有限compiler ledger；预算或OOM原子失败，最后释放不分配。17.78的缺键普通特化拒绝保持。本接点尚不执行待求值helper，也不授予Library表重定位、未来实例求值或完整P11资格。原schema30/contract75、construction接口3、Value24/Call29/Program30、opcode和所有预算保持。
+所有准备、复制、复验和重试共用原有限compiler ledger；预算或OOM原子失败，最后释放不分配。17.78的缺键普通特化拒绝保持。本观察接点不执行helper；17.80另行提供真实helper求值及Source键接回。Library表重定位与完整P11资格仍未完成。原schema30/contract75、construction接口3、Value24/Call29/Program30、opcode和所有预算保持。
+
+### 17.80 编译器专用求值与无AST的Source规范键闭合
+
+内部待求值专化入口从17.79的真实拥有观察构造完整关闭图。它复用普通specializer、完整原Source及TEMPLATE，保留真实Program entry、全部module initializer、原泛型/约束/requirement/private witness及已有绑定。已有键始终选原literal provider；当前缺键仅在编译器专用EVALUATION来源角色中展开真实helper body。共同Checker逐指令证明替换、调用/效果/私有权限与完整实例可达性，并证明固定caller/instruction/callee确属真实站点、关闭有序实参及尚无绑定的实际调用。目的标记仅选择语法，不能代替任何证明。
+
+该角色不进入普通Checked/Library运输、普通再特化、VM绑定/运行/Program或native C发射。它经原完整Lowered流程进入唯一CTFE；原调用、函数值、cleanup、数据和所有执行准入仍生效，只有固定缺键helper可以作为执行根。生产者死亡后的拥有式批次和普通literal writer独立接收真实结果，保留原定义、词法owner、完整约束与全部模板契约，不按实例解释AST、不接收调用方Value或虚假初始化函数。非根选择及当前根、目的、body、来源或packet篡改必须拒绝。
+
+编译器私有packet采用独立XRCEV语法和版本1，普通XRCHK仍严格为schema30/contract75且拒绝EVALUATION。私有头仍为64字节，payload先存little-endian caller/instruction/callee三个u32，再按共同模块遍历存储完整关闭图、EVALUATION来源及完整Source；Source递归的来源至多为普通TEMPLATE，禁止关闭或EVALUATION来源链。长度为完整payload，SHA256覆盖头前32字节与全部payload。独立私有读取完成EOF、所有权、类型、约束、body、可达性及根证明后才发布；Lowered身份绑定整个私有packet，并逐次核对固定根前缀。私有格式不能通过改magic/头、移除前缀或改变来源种类获得普通运输或运行权限。
+
+内部Source接回入口只接受真实Checked Program Source，以原ledger独立接收输入，反复收集实际缺键、构造编译器专用关闭图、按原限额执行唯一CTFE，再由普通无AST literal核接收provider。新键以共同规范顺序插入原construction，有序类型向量完整拥有，原所有站点和已有键/provider意义保持。完整共同Checker复验新增Source后才继续收集；无实际缺键、未实例化或已由外层literal消除的内层调用不制造求值。已有provider可与当前helper body不同，甚至helper当前会陷阱，仍不得清表或重新求值已有键。最终Source仍保留原泛型和TEMPLATE，按普通packet、严格INSTANCE特化、Lowered及VM/AOT管线继续。
+
+任意准备、接收、执行、重定位或预算/OOM失败均不发布部分Source，不退款或重置原账本。真实根局部CTFE失败报告原站点及实际状态，不执行重试猜位置；全局失败不虚构根索引。原work128M、allocated64MiB、live8MiB、steps/frame65536、depth128、policy2/output8MiB以及Value24/Call29/Program30、153opcodes保持；最后释放不分配。此入口实现无AST的Program Source缺键求值与接回，尚不授予完整Library表重定位/公开导入、全FI、VM/native/mixed或正式安全资格。
 
 ---
 

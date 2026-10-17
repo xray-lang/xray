@@ -10,7 +10,7 @@ static bool source_instance_selected(SourceContext *ctx,const XrXirArtifact *clo
     const XirSourceInstanceSelection *selection,uint32_t *output) {
     const XrXirModule *module=&closed->module;const XrXirProvenance *proof=module->provenance;
     if (!source_work_units(ctx,NULL,sizeof(XrXirOrigin)+16)) return false;
-    if (!proof || proof->kind!=XR_XIR_EVIDENCE_INSTANCE || !proof->source || !proof->origins ||
+    if (!proof || !xir_effect_kind_is_closed(proof->kind) || !proof->source || !proof->origins ||
         proof->count!=module->function_count || selection->definition>=proof->source->module.function_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"instance selection has no actual generic definition");
     if (selection->function>=module->function_count)

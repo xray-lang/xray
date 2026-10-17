@@ -34,4 +34,9 @@ XR_FUNC XrXirStatus xr_xir_compile_comptime_pending(const XrXirArtifact *definit
 XR_FUNC XrXirStatus xr_xir_compile_comptime_pending_view(const XirComptimePending *owner,
     XirComptimePendingView *output,XrXirDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_comptime_pending_free(XirComptimePending *owner);
+/* Full ordinary closure and independent correspondence produce a compiler-only
+ * evaluation artifact. Its fixed missing helper is the sole evaluation root;
+ * ordinary transport and runtime consumers cannot accept this purpose. */
+XR_FUNC XrXirStatus xr_xir_compile_comptime_pending_specialize(const XirComptimePending *owner,
+    XrXirArtifact **output,XrXirDiagnostic *diagnostic);
 #endif // XXIR_COMPTIME_PENDING_INTERNAL_H

@@ -46,7 +46,7 @@ static XrXirStatus nominal_initializer_target(const XrXirCompileContext *context
     if (!encoded) return XR_XIR_OK;
     const XrXirNominalDeclaration *owner = &m->types->nominals->declarations[declaration];
     if (owner->kind == XR_XIR_NOMINAL_ENUM || owner->native.native_id ||
-        xir_effect_evidence_is_instance(m)) return XR_XIR_BAD_STAGE;
+        xir_effect_evidence_is_closed(m)) return XR_XIR_BAD_STAGE;
     uint32_t function = encoded-1;
     const XrXirDeclarations *d = m->declarations;
     if (function >= m->function_count || !d || !d->functions || !d->modules)
@@ -96,7 +96,7 @@ XR_FUNC XrXirStatus xir_construction_verify(
     const XrXirNominalTable *table = m->types ? m->types->nominals : NULL;
     if (!table || m->stage == XR_XIR_LOWERED) return XR_XIR_OK;
     if (table->count && !table->declarations) return XR_XIR_BAD_STRUCTURE;
-    bool instance = xir_effect_evidence_is_instance(m);
+    bool instance = xir_effect_evidence_is_closed(m);
     for (uint32_t n = 0; n < table->count; ++n) {
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
         const XrXirNominalDeclaration *owner = &table->declarations[n];

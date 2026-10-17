@@ -58,7 +58,7 @@ XR_FUNC XrXirStatus xir_comptime_verify(const XrXirCompileContext *context,
     const XrXirComptimeTable *table=&owner->comptime;
     if (!table->site_count) return table->binding_count?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     if (module->stage==XR_XIR_LOWERED || !module->generics || !module->declarations ||
-        !module->declarations->functions || xir_effect_evidence_is_instance(module)) return XR_XIR_BAD_STAGE;
+        !module->declarations->functions || xir_effect_evidence_is_closed(module)) return XR_XIR_BAD_STAGE;
     XrXirStatus storage=comptime_body_storage(context,module);
     if (storage!=XR_XIR_OK) return storage;
     for (uint32_t s=0;s<table->site_count;++s) {

@@ -47,6 +47,9 @@ typedef struct XirComptimeSelection {
     const XrXirType *arguments;
     uint32_t argument_count;
 } XirComptimeSelection;
+/* Current verified key storage and prepaid vector reads are prerequisites.
+ * This order compares metadata only and grants no substitution authority. */
+XR_FUNC int xir_comptime_key_order(const XrXirComptimeBinding *a,const XrXirComptimeBinding *b);
 XR_FUNC const XrXirComptimeSite *xir_comptime_site(const XrXirConstruction *construction,
     uint32_t caller,uint32_t instruction);
 /* Full current module/construction checking precedes selection. No site means
