@@ -153,6 +153,41 @@ static XrXirStatus effect_invocation_vector_capacity(const XrXirCompileContext *
     *output=capacity;return XR_XIR_OK;
 }
 
+/* Size spare storage before the single real allocation. Admission is a
+ * read-only bound query, not an allocation attempt or a semantic result.
+ * Existing live edges and their complete copy remain charged throughout. */
+static XrXirStatus effect_invocation_edge_capacity(const XrXirCompileContext *work,
+    uint32_t current,uint32_t maximum,uint32_t *output) {
+    if (!xir_compile_context_valid(work) || !output ||
+        (uint64_t)maximum>SIZE_MAX/sizeof(EffectInvocationEdge)) return XR_XIR_BAD_STRUCTURE;
+    uint32_t preferred=0;XrXirStatus status=effect_invocation_vector_capacity(work,current,maximum,&preferred);
+    if (status!=XR_XIR_OK) return status;
+    uint64_t copy=(uint64_t)current*sizeof(EffectInvocationEdge);
+    if (!xir_compile_work(work,8+sizeof(uint32_t))) return XR_XIR_BUDGET;
+    status=xir_compile_resource_status(xr_compile_resources_admit(work->resources,
+        (size_t)preferred*sizeof(EffectInvocationEdge),copy));
+    if (status==XR_XIR_OK) {
+        if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+        *output=preferred;return XR_XIR_OK;
+    }
+    /* The initial fixed chunk remains the minimum construction extent.
+     * Only growth of an existing vector can reduce geometric spare. */
+    if (status!=XR_XIR_BUDGET || !current) return status;
+    uint32_t low=current+1,high=preferred-1,chosen=0;
+    while (low<=high) {
+        if (!xir_compile_work(work,8+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t middle=low+(high-low)/2;
+        status=xir_compile_resource_status(xr_compile_resources_admit(work->resources,
+            (size_t)middle*sizeof(EffectInvocationEdge),copy));
+        if (status==XR_XIR_OK) { chosen=middle;low=middle+1; }
+        else if (status==XR_XIR_BUDGET) high=middle-1;
+        else return status;
+    }
+    if (!chosen) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=chosen;return XR_XIR_OK;
+}
+
 /* The formula graph's queue is shared by every invocation equation. All
  * live entries retain source order during growth; no second queue solves ROOT. */
 static XrXirStatus effect_invocation_capacity(EffectInvocationWorkspace *owner) {
@@ -367,7 +402,7 @@ static XrXirStatus effect_invocation_edge(EffectInvocationWorkspace *owner,
         uint32_t maximum=owner->maximum;
         if ((uint64_t)maximum>SIZE_MAX/sizeof(*owner->final.edges)) return XR_XIR_BUDGET;
         uint32_t capacity=0;
-        XrXirStatus status=effect_invocation_vector_capacity(owner->work,
+        XrXirStatus status=effect_invocation_edge_capacity(owner->work,
             owner->final.edge_capacity,maximum,&capacity);
         if (status!=XR_XIR_OK) return status;
         if (capacity<=owner->final.edge_count) return XR_XIR_BUDGET;
