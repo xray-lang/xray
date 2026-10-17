@@ -314,6 +314,22 @@ static void generation_range_dispatch_faults(EffectInvocationFlow *flow) {
     CHECK(effect_body_record_ref(&flow->body.read,body,call,&ref)==XR_XIR_OK &&
         ref->mask==EFFECT_BODY_LITERAL_ROWS && effect_body_literal_row(ref,call)->op==XR_XIR_CALL &&
         call+1<ref->first+ref->count && effect_body_literal_row(ref,call+1)->op==XR_XIR_RETURN);
+    /* The genuine complete walk must reject even an unselected late opcode
+     * before any current semantic handler or queue mutation can run. */
+    for (uint32_t i=ref->first;i-ref->first<ref->count;++i) {
+        XrXirInstruction *row=(XrXirInstruction *)effect_body_literal_row(ref,i);XrXirOp saved_op=row->op;
+        for (uint32_t high=0;high<2;++high) for (uint32_t precision=0;precision<2;++precision) {
+            row->op=high?XR_XIR_OP_COUNT:XR_XIR_INVALID;flow->precision=precision!=0;
+            flow->instruction=UINT32_MAX;bool changed=false;size_t attempts=rp_attempts;
+            XrCompileResourceStats before=rp_stats(owner->work);
+            CHECK(effect_invocation_dispatch_range(flow,0,&changed)==XR_XIR_BAD_STRUCTURE &&
+                !changed && flow->instruction==UINT32_MAX && owner->final.count==count &&
+                owner->final.edge_count==edges && !owner->pending && rp_attempts==attempts &&
+                rp_stats(owner->work).live_bytes==before.live_bytes);
+        }
+        row->op=saved_op;
+    }
+    fprintf(stderr,"Current literal dispatch: every opcode including unselected RETURN rejects before any handler in expansion and precision; independent current CALL target gate retained PASS\n");
     XrXirInstruction *base=(XrXirInstruction *)effect_body_literal_row(ref,call);int64_t saved=base->immediate;
     base->immediate=effect_body_count(material);
     for (uint32_t precision=0;precision<2;++precision) {

@@ -98,36 +98,49 @@ static XrXirStatus effect_invocation_dispatch_run(void *owner,const EffectBodyRu
     const XrXirCompileContext *work=flow->owner->work;
     if (!xir_compile_work(work,2+sizeof(r))) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
+    while (r<flow->physical->count &&
+        flow->physical->records[r].value-body->parameter_count<ref->first+ref->count &&
+        !(flow->physical->records[r].mask&EFFECT_PHYSICAL_INVOCATION)) {
+        if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+        uint32_t value=flow->physical->records[r++].value;
+        if (value<body->parameter_count || value>=flow->values ||
+            value-body->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
+    }
     if (!ref->mask) {
-        while (r<flow->physical->count &&
-            flow->physical->records[r].value-body->parameter_count<ref->first+ref->count &&
-            !(flow->physical->records[r].mask&EFFECT_PHYSICAL_INVOCATION)) {
-            if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
-            uint32_t value=flow->physical->records[r++].value;
-            if (value<body->parameter_count || value>=flow->values ||
-                value-body->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
-        }
         if (r<flow->physical->count &&
             flow->physical->records[r].value-body->parameter_count<ref->first+ref->count)
             status=effect_invocation_dispatch_constant(flow,ref,&r,input->changed);
-    } else while (r<flow->physical->count &&
+    } else if (r<flow->physical->count &&
         flow->physical->records[r].value-body->parameter_count<ref->first+ref->count) {
-        if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
-        EffectPhysicalRecord record=flow->physical->records[r++];
-        if (record.value<body->parameter_count || record.value>=flow->values ||
-            record.value-body->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
-        if (!(record.mask&EFFECT_PHYSICAL_INVOCATION)) continue;
-        uint32_t i=record.value-body->parameter_count;
-        if (!flow->precision && !xir_compile_work(work,1)) return XR_XIR_BUDGET;
-        XrXirInstruction storage;const XrXirInstruction *op=NULL;
-        status=effect_body_instruction_ref_read(&flow->body.read,ref,i,&storage,&op);
-        if (status!=XR_XIR_OK) return status;
-        if (flow->precision) {
-            if (!effect_invocation_dispatch_precision(op->op)) continue;
-            if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        /* This synchronous literal walk checks every current opcode before
+         * its first handler. Each actual selection then borrows its complete
+         * native row; independent selected-row reads keep their own checks. */
+        if (ref->mask&EFFECT_BODY_LITERAL_ROWS) {
+            status=effect_body_run_payload_check(&flow->body.read,ref);
+            if (status!=XR_XIR_OK) return status;
         }
-        flow->instruction=i;status=effect_invocation_instruction_decoded(flow,i,op,input->changed);
-        if (status!=XR_XIR_OK) return status;
+        while (r<flow->physical->count &&
+            flow->physical->records[r].value-body->parameter_count<ref->first+ref->count) {
+            if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+            EffectPhysicalRecord record=flow->physical->records[r++];
+            if (record.value<body->parameter_count || record.value>=flow->values ||
+                record.value-body->parameter_count<ref->first) return XR_XIR_BAD_STRUCTURE;
+            if (!(record.mask&EFFECT_PHYSICAL_INVOCATION)) continue;
+            uint32_t i=record.value-body->parameter_count;
+            if (!flow->precision && !xir_compile_work(work,1)) return XR_XIR_BUDGET;
+            XrXirInstruction storage;const XrXirInstruction *op=NULL;
+            if (ref->mask&EFFECT_BODY_LITERAL_ROWS) {
+                if (!xir_compile_work(work,2+sizeof(op))) return XR_XIR_BUDGET;
+                op=effect_body_literal_row(ref,i);
+            } else status=effect_body_instruction_ref_read(&flow->body.read,ref,i,&storage,&op);
+            if (status!=XR_XIR_OK) return status;
+            if (flow->precision) {
+                if (!effect_invocation_dispatch_precision(op->op)) continue;
+                if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+            }
+            flow->instruction=i;status=effect_invocation_instruction_decoded(flow,i,op,input->changed);
+            if (status!=XR_XIR_OK) return status;
+        }
     }
     if (status!=XR_XIR_OK) return status;
     if (r!=input->record) {
