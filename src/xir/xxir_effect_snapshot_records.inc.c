@@ -141,8 +141,7 @@ static XrXirStatus effect_body_short_literals_append(const XrXirCompileContext *
                 last->literal_tail[last->count-1]=*row;++last->count;last->mask=EFFECT_BODY_LITERAL_ROWS;continue;
             }
         } else if (first) return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=effect_body_runs_reserve(work,function);
-        if (status!=XR_XIR_OK) return status;
+        if (function->run_count>=function->run_capacity || !function->runs) return XR_XIR_BAD_STRUCTURE;
         if (!xir_compile_work(work,3*sizeof(uint32_t)+sizeof(*row)+1)) return XR_XIR_BUDGET;
         EffectBodyRun *target=&function->runs[function->run_count];
         target->first=first;target->count=1;target->mask=0;target->base=*row;++function->run_count;
@@ -204,6 +203,57 @@ typedef struct EffectBodyWriteSink {
     XrXirStatus (*span)(void *,uint32_t,uint32_t);
 } EffectBodyWriteSink;
 
+typedef struct EffectBodyRecordSink {
+    void *owner;
+    XrXirStatus (*run)(const XrXirCompileContext *,const XrXirFunction *,EffectBodyRun *,void *);
+} EffectBodyRecordSink;
+typedef struct EffectBodyRecordCensus { uint32_t next,count,tail; } EffectBodyRecordCensus;
+typedef struct EffectBodyRecordReceiver {
+    EffectBodyFunction *target;
+    const EffectBodyWriteSink *semantic;
+} EffectBodyRecordReceiver;
+
+static XrXirStatus effect_body_record_prepare(const XrXirCompileContext *work,
+    const XrXirFunction *source,EffectBodyRun *run) {
+    if (!source || !run || !source->instructions || !run->count || run->first>=source->instruction_count ||
+        run->count>source->instruction_count-run->first ||
+        (run->mask&~(EFFECT_BODY_MASK|EFFECT_BODY_LITERAL_ROWS)) || (run->count==1 && run->mask) ||
+        ((run->mask&EFFECT_BODY_LITERAL_ROWS) && (run->mask&EFFECT_BODY_MASK))) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+    if (run->count==2 && run->mask) {
+        if (!xir_compile_work(work,2+sizeof(run->literal_tail[0])+sizeof(run->mask))) return XR_XIR_BUDGET;
+        run->literal_tail[0]=source->instructions[run->first+1];run->mask=EFFECT_BODY_LITERAL_ROWS;
+    }
+    EffectBodyRead read=effect_body_compile_read(work);
+    return effect_body_run_payload_check(&read,run);
+}
+
+/* This pass measures only physical capacity. The same scanner runs afresh
+ * for receiving, and neither its count nor its discarded payload proves IR,
+ * permission, semantic shape or correspondence to the current source. */
+static XrXirStatus effect_body_record_count(const XrXirCompileContext *work,
+    const XrXirFunction *source,EffectBodyRun *run,void *owner) {
+    EffectBodyRecordCensus *census=owner;
+    XrXirStatus status=effect_body_record_prepare(work,source,run);
+    if (status!=XR_XIR_OK) return status;
+    if (!census || census->next!=run->first || census->count>census->next ||
+        census->tail>EFFECT_BODY_LITERAL_CAPACITY) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,6+sizeof(uint32_t))) return XR_XIR_BUDGET;
+    if (run->count==1 || (run->mask&EFFECT_BODY_LITERAL_ROWS)) {
+        for (uint32_t i=0;i<run->count;++i) {
+            if (!xir_compile_work(work,6+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+            if (census->tail && census->tail<EFFECT_BODY_LITERAL_CAPACITY) ++census->tail;
+            else { if (census->count>=source->instruction_count) return XR_XIR_BAD_STRUCTURE;
+                ++census->count;census->tail=1; }
+        }
+    } else {
+        if (census->count>=source->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(work,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+        ++census->count;census->tail=0;
+    }
+    census->next+=run->count;return XR_XIR_OK;
+}
+
 /* Semantic intake follows the complete physical comparison and append.
  * A constant-column mask chooses only the private range reader. That reader
  * independently checks the real fields; all other rows retain scalar intake. */
@@ -221,17 +271,12 @@ static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
     if (target->runs && address>=begin && (address-begin)/sizeof(*run)<target->run_capacity)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t first=run->first,count=run->count,mask=run->mask;
-    if (count==2 && mask) {
-        if (!xir_compile_work(work,2+sizeof(run->literal_tail[0])+sizeof(run->mask))) return XR_XIR_BUDGET;
-        run->literal_tail[0]=source->instructions[first+1];run->mask=EFFECT_BODY_LITERAL_ROWS;
-    }
-    EffectBodyRead read=effect_body_compile_read(work);
-    XrXirStatus status=effect_body_run_payload_check(&read,run);
+    XrXirStatus status=effect_body_record_prepare(work,source,run);
     if (status!=XR_XIR_OK) return status;
     if (count==1 || (run->mask&EFFECT_BODY_LITERAL_ROWS)) status=effect_body_short_literals_append(work,target,run);
     else {
-        status=effect_body_runs_reserve(work,target);
-        if (status==XR_XIR_OK) status=effect_body_run_copy_initialized(work,run,&target->runs[target->run_count]);
+        if (target->run_count>=target->run_capacity || !target->runs) return XR_XIR_BAD_STRUCTURE;
+        status=effect_body_run_copy_initialized(work,run,&target->runs[target->run_count]);
         if (status==XR_XIR_OK && !xir_compile_work(work,1)) status=XR_XIR_BUDGET;
         if (status==XR_XIR_OK) ++target->run_count;
     }
@@ -246,6 +291,13 @@ static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
         if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
+}
+
+static XrXirStatus effect_body_record_receive(const XrXirCompileContext *work,
+    const XrXirFunction *source,EffectBodyRun *run,void *owner) {
+    const EffectBodyRecordReceiver *receiver=owner;
+    if (!receiver) return XR_XIR_BAD_STRUCTURE;
+    return effect_body_run_submit(work,source,receiver->target,run,receiver->semantic);
 }
 
 /* A zero or single varying column selects only an encoding comparison.
@@ -268,10 +320,9 @@ static XrXirStatus effect_body_single_column(const EffectBodyRead *read,uint32_t
  * varying opcode and every new row still pass the same range gate. On a
  * field mismatch the new seed copies all ten words before semantic intake;
  * partial comparisons never publish an instruction or authority product. */
-static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
-    const XrXirFunction *source,EffectBodyFunction *target,const EffectBodyWriteSink *sink) {
-    if (!source || !target || source->instruction_count!=target->instruction_count ||
-        target->run_count || (source->instruction_count && !source->instructions))
+static XrXirStatus effect_body_records_scan(const XrXirCompileContext *work,
+    const XrXirFunction *source,const EffectBodyRecordSink *sink) {
+    if (!source || !sink || !sink->owner || !sink->run || (source->instruction_count && !source->instructions))
         return XR_XIR_BAD_STRUCTURE;
     if (!source->instruction_count) return XR_XIR_OK;
     if (!xir_compile_work(work,sizeof(uint32_t)+sizeof(EffectBodyRun *))) return XR_XIR_BUDGET;
@@ -336,20 +387,42 @@ static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
                 if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
                 if (op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
             }
-            XrXirStatus status=effect_body_run_submit(work,source,target,run,sink);
+            XrXirStatus status=sink->run(work,source,run,sink->owner);
             if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(run))) status=XR_XIR_BUDGET;
             if (status==XR_XIR_OK) { run=&pending;
                 status=effect_body_run_seed(work,run,op,i); }
             if (status!=XR_XIR_OK) return status;
         }
     }
-    XrXirStatus status=effect_body_run_submit(work,source,target,run,sink);
+    return sink->run(work,source,run,sink->owner);
+}
+
+/* Capacity is measured before allocation, then every current source word
+ * is read again by the same scanner. An altered count cannot grow receiving
+ * storage or publish a body. Independent semantic EOF remains with its owner. */
+static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
+    const XrXirFunction *source,EffectBodyFunction *target,const EffectBodyWriteSink *sink) {
+    if (!source || !target || source->instruction_count!=target->instruction_count || target->run_count ||
+        target->run_capacity || target->runs || (source->instruction_count && !source->instructions))
+        return XR_XIR_BAD_STRUCTURE;
+    if (!source->instruction_count) return XR_XIR_OK;
+    if (!xir_compile_work(work,sizeof(EffectBodyRecordCensus)+2*sizeof(EffectBodyRecordSink)+sizeof(EffectBodyRecordReceiver)))
+        return XR_XIR_BUDGET;
+    EffectBodyRecordCensus census={0};EffectBodyRecordSink counter={&census,effect_body_record_count};
+    XrXirStatus status=effect_body_records_scan(work,source,&counter);
     if (status!=XR_XIR_OK) return status;
-    /* Semantic span boundaries are already stable. Their independent
-     * function EOF still precedes final immutable storage replacement. */
+    if (!census.count || census.next!=source->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    status=effect_body_runs_replace(work,target,census.count);
+    if (status!=XR_XIR_OK) return status;
+    EffectBodyRecordReceiver receiver={target,sink};EffectBodyRecordSink receiving={&receiver,effect_body_record_receive};
+    status=effect_body_records_scan(work,source,&receiving);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+    if (target->run_count!=census.count) return XR_XIR_BAD_STRUCTURE;
+    /* The independent semantic function EOF still precedes publication of
+     * its complete owner. A physical census cannot replace that operation. */
     if (sink) return XR_XIR_OK;
-    /* Immutable receiving retires the real construction tail. Only complete
-     * initialized records move, and failure leaves the original owner intact. */
+    /* The same immutable extent gate now verifies an already exact allocation. */
     return effect_body_runs_finish(work,target);
 }
 
