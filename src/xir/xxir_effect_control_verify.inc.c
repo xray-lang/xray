@@ -44,11 +44,6 @@ static XrXirStatus effect_control_target(const EffectBodyRequest *input,uint32_t
     return *target<count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 
-static bool effect_control_direct(XrXirOp opcode) {
-    return opcode==XR_XIR_CALL || opcode==XR_XIR_INVOKE || opcode==XR_XIR_CALL_DEFAULT ||
-        opcode==XR_XIR_INVOKE_DEFAULT || opcode==XR_XIR_CLEANUP_REGISTER;
-}
-
 static XrXirStatus effect_control_entry(const XrXirCompileContext *work,
     const EffectBodyRequest *input,const EffectFinalOutcomes *final,uint32_t f) {
     EffectBodyFunctionHead head={0};XrXirStatus status=effect_body_request_head(input,f,&head);

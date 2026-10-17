@@ -97,7 +97,6 @@ typedef struct EffectBodyMaterial {
     EffectPhysicalDomain *physical;
     XrXirCellProvenance *cells;
     EffectInvocationDeclaredBounds *declared;
-    XrXirFunctionEffects *control;
 } EffectBodyMaterial;
 static XrXirStatus effect_body_ordinary_basis(const XrXirCompileContext *work,
     const EffectBodyOrdinaryInput *input,EffectBodyMaterial **output);
@@ -141,7 +140,6 @@ static inline bool effect_body_parent_shape(const EffectBodyMaterial *body,
         body->terms.types.interfaces==parent->terms.types.interfaces &&
         body->terms.memory==parent->terms.memory && body->owned_types==parent->owned_types &&
         body->physical==parent->physical && body->cells==parent->cells &&
-        body->control==parent->control &&
         !!body->domain.defaults==!!parent->domain.defaults &&
         body->defaults.records==parent->defaults.records && body->defaults.count==parent->defaults.count;
 }

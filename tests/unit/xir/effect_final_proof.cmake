@@ -15,6 +15,8 @@ foreach(proof_kind IN ITEMS control_finite_proof effect_input_selector error_car
 endforeach()
 
 set(final_proof_tests)
+add_test(NAME test_xir_control_input_terminals COMMAND test_xir_control_finite_proof input-terminals)
+list(APPEND final_proof_tests test_xir_control_input_terminals)
 add_test(NAME test_xir_invocation_edges_complete COMMAND test_xir_invocation_edges complete)
 list(APPEND final_proof_tests test_xir_invocation_edges_complete)
 add_test(NAME test_xir_invocation_edges_captured COMMAND test_xir_invocation_edges captured)

@@ -25,11 +25,9 @@ static inline void effect_control_check_free(EffectControlCheck *check) {
 }
 
 static XrXirStatus effect_control_seed_apply(EffectControlCheck *check,uint32_t f,
-    uint32_t instruction,XrXirOp opcode,uint32_t count,XrXirFunctionEffects local,
-    XrXirFunctionEffects *aggregate) {
+    uint32_t instruction,XrXirOp opcode,uint32_t count,XrXirFunctionEffects local) {
     const XrXirCompileContext *work=check->input.read.owner;XrXirEffect actual=check->final->functions[f].suspend;
     if (!xir_compile_work(work,12)) return XR_XIR_BUDGET;
-    if (local.suspend>aggregate->suspend) aggregate->suspend=local.suspend;
     if (local.suspend>actual) return XR_XIR_BAD_STRUCTURE;
     if (actual && local.suspend==actual && !(check->seen[f]&1)) {
         XrXirEffectCause cause=actual==XR_XIR_EFFECT_MAY?XR_XIR_EFFECT_CAUSE_SUSPEND:XR_XIR_EFFECT_CAUSE_INDIRECT;
@@ -53,7 +51,7 @@ static XrXirStatus effect_control_seed_apply(EffectControlCheck *check,uint32_t 
  * are counted here and receive their real targets in the incoming index. */
 static XrXirStatus effect_control_seeds(EffectControlCheck *check,uint32_t f) {
     const EffectBodyMaterial *body=check->input.owner;const EffectBodyFunction *owned=&body->functions[f];
-    XrXirEffect actual=check->final->functions[f].suspend;XrXirFunctionEffects aggregate={0};
+    XrXirEffect actual=check->final->functions[f].suspend;
     if (actual<XR_XIR_EFFECT_NONE || actual>XR_XIR_EFFECT_MAY ||
         (check->final->task_creation[f]!=XR_XIR_EFFECT_NONE && check->final->task_creation[f]!=XR_XIR_EFFECT_MAY))
         return XR_XIR_BAD_STRUCTURE;
@@ -65,7 +63,7 @@ static XrXirStatus effect_control_seeds(EffectControlCheck *check,uint32_t f) {
         if (status!=XR_XIR_OK) return status;
         XrXirFunctionEffects local={0};EffectSeedProjection projection=effect_seed_opcode((XrXirOp)opcode,&local);
         if (!(run->mask&UINT32_C(1)) && projection==EFFECT_SEED_LOCAL) {
-            status=effect_control_seed_apply(check,f,run->first,(XrXirOp)opcode,run->count,local,&aggregate);
+            status=effect_control_seed_apply(check,f,run->first,(XrXirOp)opcode,run->count,local);
             if (status!=XR_XIR_OK) return status;
             continue;
         }
@@ -88,12 +86,11 @@ static XrXirStatus effect_control_seeds(EffectControlCheck *check,uint32_t f) {
                 }
                 if (!effect_seed_type(check->input.domain.types,callable,&op,&local)) return XR_XIR_BAD_STRUCTURE;
             }
-            status=effect_control_seed_apply(check,f,i,(XrXirOp)opcode,1,local,&aggregate);
+            status=effect_control_seed_apply(check,f,i,(XrXirOp)opcode,1,local);
             if (status!=XR_XIR_OK) return status;
         }
     }
-    if (cursor.first!=owned->instruction_count || cursor.run!=owned->run_count ||
-        !body->control || body->control[f].suspend!=aggregate.suspend) return XR_XIR_BAD_STRUCTURE;
+    if (cursor.first!=owned->instruction_count || cursor.run!=owned->run_count) return XR_XIR_BAD_STRUCTURE;
     if (!actual && !effect_control_cause_is(&check->final->witnesses[f],XR_XIR_EFFECT_CAUSE_NONE,0,0,0))
         return XR_XIR_BAD_STRUCTURE;
     return XR_XIR_OK;

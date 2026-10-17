@@ -49,7 +49,6 @@ static XrXirStatus effect_control_constructor_frame(const XrXirCompileContext *w
     EFFECT_CONTROL_CONSTRUCTOR_RANGE(task_creation);EFFECT_CONTROL_CONSTRUCTOR_RANGE(root);
     EFFECT_CONTROL_CONSTRUCTOR_RANGE(go_safe);EFFECT_CONTROL_CONSTRUCTOR_RANGE(contracts);EFFECT_CONTROL_CONSTRUCTOR_RANGE(entry_roots);
 #undef EFFECT_CONTROL_CONSTRUCTOR_RANGE
-    if(status==XR_XIR_OK) status=effect_role_range(work,material->control,functions,sizeof(*material->control));
     if(status!=XR_XIR_OK) return status;
     const XrXirDefaultTable *defaults=material->domain.defaults;
     if(defaults) {
@@ -81,39 +80,11 @@ typedef struct EffectControlRead {
     uint32_t functions;
 } EffectControlRead;
 typedef struct EffectControlLocal {
-    XrXirFunctionEffects aggregate;
     uint32_t instruction;
     XrXirEffectCause cause;
     bool suspend,task,shape;
 } EffectControlLocal;
 
-/* Only field-dependent seeds and actual call identities decode a full row.
- * The same opcode/type kernels are used by the real constructor. */
-static XrXirStatus effect_control_primitive(const EffectBodyRequest *input,uint32_t function,
-    const EffectBodyRun *run,uint32_t instruction,XrXirInstruction *operation,XrXirFunctionEffects *local) {
-    uint32_t opcode=XR_XIR_INVALID;
-    XrXirStatus status=effect_body_run_word(&input->read,run,instruction,0,&opcode);
-    if(status!=XR_XIR_OK) return status;
-    *local=(XrXirFunctionEffects){0};*operation=(XrXirInstruction){.op=(XrXirOp)opcode};
-    EffectSeedProjection projection=effect_seed_opcode((XrXirOp)opcode,local);
-    if(projection==EFFECT_SEED_INVALID) return XR_XIR_BAD_STRUCTURE;
-    if(projection==EFFECT_SEED_FIELDS || effect_control_direct((XrXirOp)opcode)) {
-        status=effect_body_instruction_ref_value(&input->read,run,instruction,operation);
-        if(status!=XR_XIR_OK) return status;
-    }
-    if(projection==EFFECT_SEED_FIELDS) {
-        XrXirType callable=XR_XIR_UNIT;
-        if(operation->op==XR_XIR_CALL_INDIRECT || operation->op==XR_XIR_INVOKE_INDIRECT) {
-            const EffectBodyMaterial *body=input->owner;const EffectBodyFunction *head=&body->functions[function];
-            if(operation->immediate<0 || (uint64_t)operation->immediate>=(uint64_t)head->parameter_count+head->instruction_count)
-                return XR_XIR_BAD_STRUCTURE;
-            status=effect_body_request_type(input,function,(uint32_t)operation->immediate,&callable);
-            if(status!=XR_XIR_OK) return status;
-        }
-        if(!effect_seed_type(input->domain.types,callable,operation,local)) return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
-}
 static XrXirStatus effect_control_local_read(const EffectControlRead *read,uint32_t function,
     EffectControlLocal *output) {
     const EffectBodyMaterial *body=read->input.owner;const EffectBodyFunction *head=&body->functions[function];
@@ -134,6 +105,8 @@ static XrXirStatus effect_control_local_read(const EffectControlRead *read,uint3
             XrXirFunctionEffects projection_seed={0};
             if(constant && !direct && effect_seed_opcode(op.op,&projection_seed)==EFFECT_SEED_LOCAL) points=1;
             if(direct) {
+                status=effect_body_instruction_ref_value(&read->input.read,run,run->first+i,&op);
+                if(status!=XR_XIR_OK) return status;
                 bool found=false,cleanup=false;uint32_t target=UINT32_MAX;
                 status=effect_control_target(&read->input,read->functions,&op,&found,&target,&cleanup);
                 if(status!=XR_XIR_OK || !found) return status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:status;
@@ -141,7 +114,6 @@ static XrXirStatus effect_control_local_read(const EffectControlRead *read,uint3
                     read->claims->task_creation[function]<read->claims->task_creation[target])) return XR_XIR_BAD_STRUCTURE;
             }
             if(!xir_compile_work(read->work,12)) return XR_XIR_BUDGET;
-            if(seed.suspend>local.aggregate.suspend) local.aggregate.suspend=seed.suspend;
             if(seed.suspend>actual) return XR_XIR_BAD_STRUCTURE;
             if(actual && seed.suspend==actual && !local.suspend) {
                 local.suspend=true;local.instruction=run->first+i;
@@ -150,8 +122,7 @@ static XrXirStatus effect_control_local_read(const EffectControlRead *read,uint3
             local.task|=op.op==XR_XIR_GO;local.shape|=op.op==XR_XIR_SLOT_PLACE;
         }
     }
-    if(cursor.first!=head->instruction_count || cursor.run!=head->run_count ||
-        body->control[function].suspend!=local.aggregate.suspend) return XR_XIR_BAD_STRUCTURE;
+    if(cursor.first!=head->instruction_count || cursor.run!=head->run_count) return XR_XIR_BAD_STRUCTURE;
     if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
     *output=local;return XR_XIR_OK;
 }
