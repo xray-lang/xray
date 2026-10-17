@@ -771,6 +771,25 @@ XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
 
 #include "xxir_effect_source_terminal.inc.c"
 
+/* This constructor alone owns its unpublished effects and destroys them on
+ * any failure. The current invocation certificate independently owns Input;
+ * old execution contexts have no borrower across the next fresh constructor.
+ * Public refresh keeps its original old-owner rollback transaction. */
+static XrXirStatus effect_context_owner_private_refresh(const XrXirCompileContext *work,
+    const XrXirModule *source,XrXirEffects *effects) {
+    if (!xir_compile_context_valid(work) || !source || !effects ||
+        effects->resources!=work->resources || effects->count!=source->function_count ||
+        !effects->invocations || !effect_body_material_shape(effects->invocations->body) ||
+        effects->invocations->body->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
+    if (source->provenance && source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE &&
+        source->declarations && source->declarations->functions && effects->contexts) {
+        if (!xir_compile_work(work,2*sizeof(effects->contexts))) return XR_XIR_BUDGET;
+        EffectContextOwner *old=effects->contexts;effects->contexts=NULL;
+        effect_context_owner_free(old);
+    }
+    return effect_context_owner_refresh(work,source,effects,effects->invocations->body);
+}
+
 static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
     const XrXirModule *module, const XrXirRootRefiner *refiner, XrXirEffects **output) {
     XrXirStatus allocation_status = XR_XIR_OK;
@@ -805,7 +824,7 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
     if (status == XR_XIR_OK) status = effect_parameters_derive(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_invocation_publish(remaining,module,effects,&graph,NULL,NULL);
     if (status == XR_XIR_OK) status = effect_propagate(effects, &graph, remaining);
-    if (status == XR_XIR_OK) status = effect_context_owner_refresh(remaining,module,effects,effects->invocations->body);
+    if (status == XR_XIR_OK) status = effect_context_owner_private_refresh(remaining,module,effects);
     while (status == XR_XIR_OK && refiner) {
         changed = false;
         status = refiner->update(refiner->context,effects,&changed);
@@ -818,7 +837,7 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
              * stable. Seal it before Source copies the canonical contracts. */
             status=effect_graph_physical_refresh(remaining,module,&graph,effects->refinement);
             if (status==XR_XIR_OK) status=effect_invocation_publish(remaining,module,effects,&graph,NULL,NULL);
-            if (status==XR_XIR_OK) status=effect_context_owner_refresh(remaining,module,effects,effects->invocations->body);
+            if (status==XR_XIR_OK) status=effect_context_owner_private_refresh(remaining,module,effects);
             if (status!=XR_XIR_OK) break;
             status=refiner->update(refiner->context,effects,&changed);
         }
@@ -827,7 +846,7 @@ static XrXirStatus effect_infer(const XrXirCompileContext *compile_context,
         if (status == XR_XIR_OK) status = effect_parameters_derive(module, effects, &graph, remaining);
         if (status == XR_XIR_OK) status = effect_invocation_publish(remaining,module,effects,&graph,NULL,NULL);
         if (status == XR_XIR_OK) status = effect_propagate(effects,&graph,remaining);
-        if (status == XR_XIR_OK) status = effect_context_owner_refresh(remaining,module,effects,effects->invocations->body);
+        if (status == XR_XIR_OK) status = effect_context_owner_private_refresh(remaining,module,effects);
     }
     if (status == XR_XIR_OK) status = effect_go_safe(module, effects, &graph, remaining);
     if (status == XR_XIR_OK) status = effect_witnesses(module, effects, &graph, remaining);

@@ -98,9 +98,11 @@ static void allocation_effect_work_report(void) {
     memset(allocation_effect_work_items,0,sizeof(allocation_effect_work_items));
     allocation_effect_work_count=0;
 }
+static void (*allocation_effect_work_observer)(const XrXirCompileContext *,uint64_t,const char *,bool);
 static bool allocation_effect_work(const XrXirCompileContext *context,
                                    uint64_t fee, const char *function) {
     bool accepted = xir_compile_work(context, fee);
+    if(allocation_effect_work_observer)allocation_effect_work_observer(context,fee,function,accepted);
     if (!allocation_transition_observed) return accepted;
     size_t index = 0;
     while (index < allocation_effect_work_count &&
@@ -137,6 +139,7 @@ typedef struct AllocationRefinementProbe {
     unsigned calls;
     uint64_t first_before, last_before, last_after;
 } AllocationRefinementProbe;
+static void (*allocation_refinement_observer)(const XrXirEffects *,bool);
 static XrXirStatus allocation_refinement_update(void *opaque,
     const XrXirEffects *effects, bool *changed) {
     AllocationRefinementProbe *probe = opaque;
@@ -145,7 +148,9 @@ static XrXirStatus allocation_refinement_update(void *opaque,
     if (!probe->calls) probe->first_before = before.work;
     ++probe->calls;
     probe->last_before = before.work;
+    if(allocation_refinement_observer)allocation_refinement_observer(effects,false);
     XrXirStatus status = probe->original->update(probe->original->context, effects, changed);
+    if(allocation_refinement_observer)allocation_refinement_observer(effects,true);
     CHECK(xr_compile_resources_stats(probe->context->resources, &after) == XR_COMPILE_RESOURCE_OK);
     probe->last_after = after.work;
     return status;
@@ -513,6 +518,7 @@ static void method_promise_allocations(void) {
 #include "xir_query_coalloc_cases.h"
 #include "xir_call_storage_cases.h"
 #include "xir_source_compact_receiving_cases.h"
+#include "xir_source_private_context_cases.h"
 static void source_root_allocations(void) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_SOURCE_FIXTURES};
     XrXirSourceRequest request = {NULL, XR_SOURCE_FIXTURES "/root.xr", &authority, NULL, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
@@ -585,6 +591,7 @@ static void allocation_effect_observer_control(void) {
 }
 int main(int argc,char **argv) {
     if (argc==2 && !strcmp(argv[1],"--private-storage-control")) {
+        source_private_context_cases();
         source_compact_receiving_cases();
         source_call_storage_cases();source_region_output_cases();source_plan_context_cases();
         source_plan_conversion_budget_cases();

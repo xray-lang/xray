@@ -32,6 +32,7 @@
 #include "xir_invocation_driver_lookup_lifetime_cases.h"
 #include "xir_invocation_sequential_vector_cases.h"
 #include "xir_invocation_input_seed_cursor_cases.h"
+#include "xir_invocation_private_context_cases.h"
 #include "xir_cell_head_projection_cases.h"
 #include "xir_flow_literal_type_cases.h"
 #include "xir_invocation_native_barrier_cases.h"
@@ -44,6 +45,7 @@ int main(int argc,char **argv) {
         invocation_queued_child_returned_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if(argc==2 && !strcmp(argv[1],"--codec-literals")) {
+        invocation_private_context_controls();
         invocation_input_seed_cursor_controls();
         invocation_cause_empty_controls();
         invocation_closed_count_controls();
