@@ -142,6 +142,26 @@ static void edges_free(void *memory,size_t bytes) {
         CHECK(final->capture.count>1);EffectCaptureFact first=final->capture.facts[0];
         final->capture.facts[0]=final->capture.facts[1];final->capture.facts[1]=first;break;
     }
+    case 57:
+        for(uint32_t p=0;p<final->capture.count;) {
+            EffectCaptureFact *fact=&final->capture.facts[p];
+            if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit==EFFECT_CAPTURE_COMPLETE) {
+                --final->capture.count;memmove(fact,fact+1,(size_t)(final->capture.count-p)*sizeof(*fact));
+            } else ++p;
+        }
+        break;
+    case 58: {
+        bool found=false;
+        for(uint32_t p=0;p<final->capture.count;++p) {
+            EffectCaptureFact *fact=&final->capture.facts[p];
+            if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit==EFFECT_CAPTURE_COMPLETE && fact->rank) {
+                fact->rank=0;found=true;break;
+            }
+        }
+        CHECK(found);break;
+    }
+    case 59: edges_capture_fake(final,(EffectCaptureFact){final->roots[5],0,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_COMPLETE,0});break;
+    case 60: edges_capture_fake(final,(EffectCaptureFact){final->roots[4],2,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_COMPLETE,0});break;
     default: CHECK(false);
     }
 }
@@ -295,10 +315,12 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
     xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
     CHECK(status==(mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));return frees;
 }
+#include "xir_capture_complete_cases.h"
 int main(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"complete")) { complete_cases();return 0; }
     CHECK(argc==2 || argc==3);
     if(argc==3) CHECK(!strcmp(argv[2],"no-return") || !strcmp(argv[2],"proof-fi") || !strcmp(argv[2],"proof-fi-large") || !strcmp(argv[2],"large"));
-    edges_no_return=argc==3 && !strcmp(argv[2],"no-return");edges_large=argc==3 && (!strcmp(argv[2],"proof-fi-large") || !strcmp(argv[2],"large"));edges_faults=argc==3 && (!strcmp(argv[2],"proof-fi-large") || !strcmp(argv[2],"proof-fi"));unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<=56);edges_opaque=mode>=31;
+    edges_no_return=argc==3 && !strcmp(argv[2],"no-return");edges_large=argc==3 && (!strcmp(argv[2],"proof-fi-large") || !strcmp(argv[2],"large"));edges_faults=argc==3 && (!strcmp(argv[2],"proof-fi-large") || !strcmp(argv[2],"proof-fi"));unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<=60);edges_opaque=mode>=31;
     edges_mask=(mode==48 || mode==51)?XR_XIR_CALLABLE_ROOT_UNRESOLVED:
         (mode==49 || mode==50)?(XR_XIR_CALLABLE_ROOT_REQUIRED|XR_XIR_CALLABLE_ROOT_UNRESOLVED):XR_XIR_CALLABLE_ROOT_REQUIRED;
     uint32_t frees=edges_source_once(UINT32_MAX,0);CHECK(frees);
