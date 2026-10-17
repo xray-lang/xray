@@ -221,6 +221,20 @@ static XrXirStatus effect_invocation_enqueue(EffectInvocationWorkspace *owner,ui
     ++owner->pending;owner->states[node].queued=true;return XR_XIR_OK;
 }
 
+/* New equations run before waiting consumers. Existing result notifications
+ * keep their original FIFO insertion, so late child results still coalesce
+ * behind the same bounded queue entry rather than recursively replaying it. */
+static XrXirStatus effect_invocation_enqueue_first(EffectInvocationWorkspace *owner,uint32_t node) {
+    if (node>=owner->final.count || !owner->states) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+    if (owner->states[node].queued) return XR_XIR_OK;
+    if (owner->pending>=owner->final.capacity) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+    owner->front=owner->front ? owner->front-1 : owner->final.capacity-1;
+    owner->graph->queue[owner->front]=node;
+    ++owner->pending;owner->states[node].queued=true;return XR_XIR_OK;
+}
+
 #include "xxir_effect_invocation_node_index.inc.c"
 
 /* Neither a producer pointer nor a numeric target alone is a key. Exact
@@ -307,7 +321,7 @@ static XrXirStatus effect_invocation_intern(EffectInvocationWorkspace *owner,
         .parameter_coverage=coverage,.edge_head=UINT32_MAX,.classes=classes,.class_count=class_count};
     ++owner->final.count;
     owner->node_index[slot]=at+1;
-    status=effect_invocation_enqueue(owner,at);
+    status=effect_invocation_enqueue_first(owner,at);
     if (status!=XR_XIR_OK) return status;
     *output=at;return XR_XIR_OK;
 }
