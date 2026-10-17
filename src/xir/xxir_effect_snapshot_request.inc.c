@@ -124,9 +124,10 @@ static XrXirStatus effect_body_owned_instruction(const EffectBodyRequest *reques
     if (!effect_body_material_shape(material) || !storage || !output || f>=effect_body_count(material))
         return XR_XIR_BAD_STRUCTURE;
     if (fields) return effect_body_instruction_fields_get(&request->read,&material->functions[f],i,fields);
-    const EffectBodyRun *ref=NULL;
-    XrXirStatus status=effect_body_record_ref(&request->read,&material->functions[f],i,&ref);
-    return status==XR_XIR_OK?effect_body_instruction_ref_borrow(&request->read,ref,i,storage,output):status;
+    XrXirStatus status=effect_body_instruction_get(&request->read,&material->functions[f],i,storage);
+    if (status!=XR_XIR_OK) return status;
+    if (!effect_body_read_work(&request->read,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=storage;return XR_XIR_OK;
 }
 static XrXirStatus effect_body_owned_type(const EffectBodyRequest *request,uint32_t f,
     uint32_t value,XrXirType *output) {
@@ -221,6 +222,39 @@ static XrXirStatus effect_body_request_sequence_binding(const EffectBodyRequest 
         request->domain.function_count!=material->domain.function_count) return XR_XIR_BAD_STRUCTURE;
     return effect_body_read_work(&request->read,6)?XR_XIR_OK:XR_XIR_BUDGET;
 }
+/* Only this finite metadata operation may borrow immutable owned storage.
+ * The ordinary getter retains its caller-scratch contract. Layout identity
+ * and complete domain correspondence select storage, never permission. */
+static XrXirStatus effect_body_request_borrow_instruction(const EffectBodyRequest *request,
+    uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
+    if (!request || !request->owner || !storage || !output || !request->domain.types ||
+        f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+    if (request->instruction==effect_body_raw_instruction) {
+        if (request->head!=effect_body_raw_head || request->type!=effect_body_raw_type ||
+            request->shape!=effect_body_raw_shape) return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(&request->read,sizeof(XirMetadataDomain)+6)) return XR_XIR_BUDGET;
+        XirMetadataDomain actual=xir_metadata_domain_from_module(request->owner);
+        if (!actual.types) actual.types=&effect_empty_types;
+        if (request->domain.types!=actual.types || request->domain.declarations!=actual.declarations ||
+            request->domain.generics!=actual.generics || request->domain.defaults!=actual.defaults ||
+            request->domain.function_count!=actual.function_count) return XR_XIR_BAD_STRUCTURE;
+        return effect_body_request_instruction(request,f,i,storage,output);
+    }
+    if (request->head!=effect_body_owned_head || request->instruction!=effect_body_owned_instruction ||
+        request->type!=effect_body_owned_type || request->shape!=effect_body_owned_shape)
+        return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyMaterial *material=request->owner;
+    if (!effect_body_material_shape(material) || request->domain.types!=material->domain.types ||
+        request->domain.function_count!=effect_body_count(material) ||
+        request->domain.declarations!=material->domain.declarations ||
+        request->domain.generics!=material->domain.generics || request->domain.defaults!=material->domain.defaults)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(&request->read,10)) return XR_XIR_BUDGET;
+    const EffectBodyRun *ref=NULL;
+    XrXirStatus status=effect_body_record_ref(&request->read,&material->functions[f],i,&ref);
+    return status==XR_XIR_OK?effect_body_instruction_ref_borrow(&request->read,ref,i,storage,output):status;
+}
+
 static XrXirStatus effect_body_request_sequence_begin(const EffectBodyRequest *request,
     EffectBodyRecordCursor *cursor) {
     if (!request || !request->owner || !request->instruction || !request->domain.types || !cursor)
@@ -234,8 +268,8 @@ static XrXirStatus effect_body_request_sequence_begin(const EffectBodyRequest *r
 
 /* Only numeric location survives one ascending pass. Failed scratch is
  * discarded by that pass; no decoded value or permission is retained. The
- * row reader preserves all unused and signed physical fields, borrowing only
- * complete stored base rows that remain owned by this immutable material. */
+ * full-row decoder retains all unused and signed physical fields in caller
+ * scratch. Only the raw adapter returns its current actual row. */
 static XrXirStatus effect_body_request_sequence_instruction(const EffectBodyRequest *request,
     uint32_t f,uint32_t i,EffectBodyRecordCursor *cursor,XrXirInstruction *storage,
     const XrXirInstruction **output) {
@@ -251,7 +285,10 @@ static XrXirStatus effect_body_request_sequence_instruction(const EffectBodyRequ
     if (!effect_body_read_work(&request->read,2)) return XR_XIR_BUDGET;
     const EffectBodyRun *ref=NULL;
     status=effect_body_record_cursor_ref(&request->read,&material->functions[f],i,cursor,&ref);
-    return status==XR_XIR_OK?effect_body_instruction_ref_borrow(&request->read,ref,i,storage,output):status;
+    if (status==XR_XIR_OK) status=effect_body_instruction_ref_value(&request->read,ref,i,storage);
+    if (status!=XR_XIR_OK) return status;
+    if (!effect_body_read_work(&request->read,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=storage;return XR_XIR_OK;
 }
 
 /* Re-read the current final run and exact EOF independently of the cursor.

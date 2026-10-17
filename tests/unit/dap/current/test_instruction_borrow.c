@@ -41,7 +41,7 @@ static void borrow_words(const XrXirCompileContext *context,EffectBodyMaterial *
         borrow_fields_change(&function->runs[0].base,word);
         XrXirInstruction strict={0},storage={0};const XrXirInstruction *observed=NULL;
         CHECK(effect_body_instruction_get(&request.read,function,0,&strict)==XR_XIR_OK);
-        CHECK(effect_body_request_instruction(&request,0,0,&storage,&observed)==XR_XIR_OK);
+        CHECK(effect_body_request_borrow_instruction(&request,0,0,&storage,&observed)==XR_XIR_OK);
         CHECK(observed==&function->runs[0].base && borrow_same(observed,&strict));
         CHECK(effect_body_function_match(context,function,source)!=XR_XIR_OK);
         function->runs[0].base=preserved;
@@ -49,7 +49,7 @@ static void borrow_words(const XrXirCompileContext *context,EffectBodyMaterial *
     CHECK(effect_body_function_match(context,function,source)==XR_XIR_OK);
     uint32_t mask=function->runs[0].mask;function->runs[0].mask=UINT32_C(1024);
     XrXirInstruction sentinel={.op=XR_XIR_CONST_INT,.immediate=71},storage={0};const XrXirInstruction *out=&sentinel;
-    CHECK(effect_body_request_instruction(&request,0,0,&storage,&out)==XR_XIR_BAD_STRUCTURE && out==&sentinel);
+    CHECK(effect_body_request_borrow_instruction(&request,0,0,&storage,&out)==XR_XIR_BAD_STRUCTURE && out==&sentinel);
     function->runs[0].mask=mask;
 }
 static void borrow_sequences(const XrXirCompileContext *context,EffectBodyMaterial *material) {
@@ -62,7 +62,7 @@ static void borrow_sequences(const XrXirCompileContext *context,EffectBodyMateri
             CHECK(effect_body_request_sequence_instruction(&request,f,i,&cursor,&storage,&observed)==XR_XIR_OK);
             CHECK(effect_body_record_ref(&request.read,&material->functions[f],i,&ref)==XR_XIR_OK);
             CHECK(borrow_same(observed,&strict));
-            CHECK(observed==(!ref->mask || i==ref->first?&ref->base:&storage));
+            CHECK(observed==&storage);
         }
         CHECK(effect_body_request_sequence_finish(&request,f,&cursor)==XR_XIR_OK);
     }
@@ -74,14 +74,14 @@ static void borrow_work_prefixes(const XrXirCompileContext *context,EffectBodyMa
         XrXirInstruction strict={0},storage={0},marker={.op=XR_XIR_CONST_INT,.immediate=71};const XrXirInstruction *out=NULL;
         EffectBodyRead original=effect_body_compile_read(context);
         CHECK(effect_body_instruction_get(&original,&material->functions[0],i,&strict)==XR_XIR_OK);
-        CHECK(effect_body_request_instruction(&request,0,i,&storage,&out)==XR_XIR_OK);uint64_t full=budget.used;CHECK(full);
+        CHECK(effect_body_request_borrow_instruction(&request,0,i,&storage,&out)==XR_XIR_OK);uint64_t full=budget.used;CHECK(full);
         for (uint64_t limit=0;limit<=full;++limit) {
             budget=(BorrowReadBudget){limit,0};out=&marker;
-            XrXirStatus status=effect_body_request_instruction(&request,0,i,&storage,&out);
+            XrXirStatus status=effect_body_request_borrow_instruction(&request,0,i,&storage,&out);
             CHECK(status==(limit==full?XR_XIR_OK:XR_XIR_BUDGET));
             if (limit<full) CHECK(out==&marker);else CHECK(borrow_same(out,&strict));
             budget=(BorrowReadBudget){UINT64_MAX,0};
-            CHECK(effect_body_request_instruction(&request,0,i,&storage,&out)==XR_XIR_OK && borrow_same(out,&strict));
+            CHECK(effect_body_request_borrow_instruction(&request,0,i,&storage,&out)==XR_XIR_OK && borrow_same(out,&strict));
         }
     }
 }
@@ -89,7 +89,7 @@ static void borrow_read(const XrXirCompileContext *context,EffectBodyMaterial *m
     EffectBodyRequest request=effect_body_owned_request(context,material);XrXirInstruction storage={0},strict={0};
     const XrXirInstruction *observed=NULL;uint64_t start=rp_stats(context).work;
     for (uint32_t i=0;i<32;++i) {
-        CHECK(effect_body_request_instruction(&request,0,0,&storage,&observed)==XR_XIR_OK);
+        CHECK(effect_body_request_borrow_instruction(&request,0,0,&storage,&observed)==XR_XIR_OK);
         CHECK(observed && observed->op==XR_XIR_CONST_INT && observed->type==XR_XIR_I64 && observed->immediate==42);
     }
     uint64_t borrowed=rp_stats(context).work-start;start=rp_stats(context).work;
@@ -98,6 +98,25 @@ static void borrow_read(const XrXirCompileContext *context,EffectBodyMaterial *m
     CHECK(borrow_same(observed,&strict));printf("Owned instruction 32 reads: borrow=%llu decode=%llu\n",(unsigned long long)borrowed,(unsigned long long)decoded);
     CHECK(borrowed<decoded && observed==&material->functions[0].runs[0].base);
     CHECK(borrow_same(&storage,&(XrXirInstruction){0}));
+}
+static void borrow_layout_guards(const XrXirCompileContext *context,const OrdinaryMaterialFixture *fixture,
+    const EffectBodyMaterial *material) {
+    EffectBodyRequest owned=effect_body_owned_request(context,material),mixed=owned;
+    XrXirInstruction storage={0},marker={.op=XR_XIR_RETURN,.immediate=71};const XrXirInstruction *out=&marker;
+    mixed.head=effect_body_raw_head;
+    CHECK(effect_body_request_borrow_instruction(&mixed,0,0,&storage,&out)==XR_XIR_BAD_STRUCTURE && out==&marker);
+    mixed=owned;++mixed.domain.function_count;
+    CHECK(effect_body_request_borrow_instruction(&mixed,0,0,&storage,&out)==XR_XIR_BAD_STRUCTURE && out==&marker);
+    mixed=owned;mixed.domain.declarations=NULL;
+    CHECK(owned.domain.declarations && effect_body_request_borrow_instruction(&mixed,0,0,&storage,&out)==XR_XIR_BAD_STRUCTURE && out==&marker);
+    EffectBodyRequest raw=effect_body_raw_request(context,&fixture->source);
+    CHECK(effect_body_request_borrow_instruction(&raw,0,0,&storage,&out)==XR_XIR_OK &&
+        out==fixture->functions[0].instructions && borrow_same(out,&material->functions[0].runs[0].base));
+    out=&marker;mixed=raw;++mixed.domain.function_count;
+    CHECK(effect_body_request_borrow_instruction(&mixed,0,0,&storage,&out)==XR_XIR_BAD_STRUCTURE && out==&marker);
+    out=NULL;
+    CHECK(effect_body_request_instruction(&owned,0,0,&storage,&out)==XR_XIR_OK && out==&storage &&
+        borrow_same(out,&material->functions[0].runs[0].base));
 }
 static XrXirStatus borrow_operation(const XrXirCompileContext *context) {
     OrdinaryMaterialFixture fixture;initial_ordinary_fixture(&fixture,0);
@@ -113,6 +132,7 @@ static XrXirStatus borrow_operation(const XrXirCompileContext *context) {
         memcpy(rows,original.instructions,sizeof(rows));
         if (original.block_count) memcpy(blocks,original.blocks,sizeof(blocks));
         original.name=original.name_length?name:NULL;original.instructions=rows;original.blocks=original.block_count?blocks:NULL;
+        borrow_layout_guards(context,&fixture,material);
         effect_ordinary_free(ordinary);ordinary=NULL;xr_xir_compile_effects_free(effects);effects=NULL;
         borrow_words(context,material,&original);borrow_sequences(context,material);borrow_work_prefixes(context,material);
         memset(&fixture,0xCE,sizeof(fixture));borrow_read(context,material);
