@@ -223,6 +223,12 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
     *output=XR_XIR_UNIT;
     if (pool->status!=XR_XIR_OK) return pool->status;
     if (!xr_xir_type_span(&pool->types,type)) { *output=type;return XR_XIR_OK; }
+    /* A bare binder is a vector lookup. It has no constructed child that
+     * could need traversal storage; the original reader still checks bounds. */
+    if (!xir_compile_work(pool->remaining,2)) return XR_XIR_BUDGET;
+    if ((uint32_t)type>=XR_XIR_TYPE_PARAMETER_BASE && (uint32_t)type<XR_XIR_TYPE_PARAMETER_LIMIT) {
+        return effect_term_ready(pool,type,arguments,NULL,output)?XR_XIR_OK:pool->status;
+    }
     uint32_t size=pool->types.count;
     XrXirStatus status=effect_term_stack(pool,size);
     if (status!=XR_XIR_OK) return status;
