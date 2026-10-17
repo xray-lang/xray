@@ -82,7 +82,7 @@ class TaskRegressionTraces(unittest.TestCase):
         self.assertEqual(rows['complete_task_regression_1128_yield']['required_original_yield_checkpoints'],39)
 
     def test_declaration_only_modules_have_separate_full_named_body_requirements(self):
-        entries={x['id']:x for x in model.expected_rows()};named=[row for row in model.named_expected_rows() if row['id'] not in {model._STACK_NAMED_ID,model._PLAIN_SCOPE_NAMED_ID}];self.assertEqual(len(named),13)
+        entries={x['id']:x for x in model.expected_rows()};named=[row for row in model.named_expected_rows() if row['id'] not in {model._STACK_NAMED_ID,model._PLAIN_SCOPE_NAMED_ID,model._CORO_HANDOFF_NAMED_ID}];self.assertEqual(len(named),13)
         for row in named:
             name=row['id'].removeprefix('complete_task_named_')
             self.assertEqual(entries['complete_task_regression_'+name]['expected']['stdout_utf8'],'')
@@ -107,7 +107,7 @@ class TaskRegressionTraces(unittest.TestCase):
 
     def test_complete_entries_and_named_bodies_use_their_own_real_routes(self):
         cases={row['id']:row for row in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}
-        for named,rows in [(False,model.expected_rows()),(True,[row for row in model.named_expected_rows() if row['id'] not in {model._STACK_NAMED_ID,model._PLAIN_SCOPE_NAMED_ID}])]:
+        for named,rows in [(False,model.expected_rows()),(True,[row for row in model.named_expected_rows() if row['id'] not in {model._STACK_NAMED_ID,model._PLAIN_SCOPE_NAMED_ID,model._CORO_HANDOFF_NAMED_ID}])]:
             for expected in rows:
                 with self.subTest(case=expected['id']):
                     case=cases[expected['id']]
@@ -453,5 +453,107 @@ class TaskRegressionTraces(unittest.TestCase):
         self.assertEqual(named['expected']['stdout_utf8'],'111\ntrue\n5\ntrue\n')
         self.assertEqual(named['expected']['required_test_names'],[model._PLAIN_SCOPE_TEST])
         self.assertEqual([x['expected'] for x in cases[named['id']]['independent_observations']['values']],[111,True,5,True])
+
+
+    def test_sync_coro_local_has_distinct_typed_keys_and_current_context(self):
+        trace=model.coro_sync_trace()
+        self.assertEqual(trace['values'],[True,'main',7])
+        self.assertTrue(trace['distinct_keys'])
+        self.assertEqual(trace['key_types'],['string','i64'])
+        self.assertFalse(trace['actual_local_opcodes_storage_and_lifetime_qualified'])
+
+    def test_local_logical_identity_absence_and_type_are_not_coerced(self):
+        local=model.LogicalCoroLocals()
+        a,b=local.key(str),local.key(int)
+        self.assertIsNone(local.get('root',a))
+        local.set('root',a,'main')
+        local.set('root',b,0)
+        self.assertEqual(local.get('root',b),0)
+        self.assertIsNone(local.get('child',a))
+        self.assertEqual(local.get('root',a),'main')
+        for key,value in ((a,7),(b,True),(b,'7')):
+            with self.assertRaises(ValueError):local.set('root',key,value)
+        with self.assertRaises(ValueError):local.get('root',99)
+        with self.assertRaises(ValueError):local.key(bool)
+
+    def test_pending_pool_logical_interleavings_do_not_grant_capture_or_shell_reuse(self):
+        import itertools
+        actions=('first-set','first-get','second-set','second-get')
+        valid=[order for order in itertools.permutations(actions)
+               if order.index('first-set')<order.index('first-get') and order.index('second-set')<order.index('second-get')]
+        self.assertEqual(len(valid),6)
+        for order in valid:
+            trace=model.pending_pool_local_trace(order)
+            self.assertEqual(trace['values'],['first','second',True])
+            self.assertFalse(trace['registered_for_current_positive_qualification'])
+            self.assertFalse(trace['mutable_module_capture_and_CoroLocal_Sendable_plan_qualified'])
+        wrong=model.pending_pool_local_trace(('first-set','second-set','first-get','second-get'),shared_slots=True)
+        self.assertEqual(wrong['values'],['second','second',False])
+        clean=model.pending_shell_local_trace()
+        self.assertEqual(clean['values'],['one','clean|two',True])
+        self.assertFalse(clean['physical_shell_or_arena_reuse_count_inferred'])
+        self.assertEqual(model.pending_shell_local_trace(reuse_logical_context=True)['values'],['one','dirty|two',True])
+
+    def test_typed_diagnostic_predicates_do_not_choose_physical_counter_values(self):
+        for total,created in ((0,0),(1,7),((1<<63)-1,(1<<63)-1)):
+            self.assertEqual(model.coro_diagnostic_values(total,created,range(8),range(2),('group',)),[True,True,True,'Blocked'])
+        self.assertEqual(model.coro_diagnostic_values(-1,0),[False,True,True,'Blocked'])
+        for value in (True,1.0,'1',1<<63):
+            with self.assertRaises(ValueError):model.coro_diagnostic_values(value,0)
+        row=next(x for x in model.coro_boundary_entry_expected_rows() if x['id']==model._CORO_DIAG_ID)
+        trace=row['required_semantic_trace']
+        self.assertEqual((trace['original_list_limit'],trace['original_top_limit']),(8,2))
+        self.assertTrue(trace['counter_values_are_not_predicted'])
+        self.assertFalse(trace['actual_snapshot_contents_or_ranking_qualified'])
+
+    def test_all_nine_factorial_handoff_report_orders_preserve_exact_aggregates(self):
+        import itertools
+        count=0
+        for order in itertools.permutations((-1,0,1,2,3,4,5,6,7)):
+            if model.handoff_counts(order)!=(8,True):
+                self.fail('A complete report permutation changed the original aggregate')
+            count+=1
+        self.assertEqual(count,362880)
+        for invalid in ((-1,*range(7)),(-1,0,0,1,2,3,4,5,6),(-1,True,1,2,3,4,5,6,7)):
+            with self.assertRaises(ValueError):model.handoff_counts(invalid)
+
+    def test_handoff_counts_do_not_prove_fast_workers_progress_during_sleep(self):
+        first=model.handoff_trace((-1,0,1,2,3,4,5,6,7))
+        last=model.handoff_trace((0,1,2,3,4,5,6,7,-1))
+        self.assertEqual(first['values'],last['values'])
+        self.assertEqual(first['values'],['fast completed: 8','slow completed: true','handoff test passed'])
+        self.assertEqual((first['slow_report_position'],last['slow_report_position']),(0,8))
+        self.assertFalse(first['progress_predicate_proved_by_aggregate_output'])
+        self.assertFalse(first['actual_scheduler_P_handoff_fairness_timer_FI_cleanup_resource_lifetime_provider_mixed_qualified'])
+        self.assertEqual((first['original_fast_iterations_per_worker'],first['unobserved_logical_fast_sum']),(100,4950))
+        self.assertEqual((first['original_slow_sleep_ms'],first['original_Channel_capacity'],first['original_go_tasks'],first['original_receives']),(200,9,9,9))
+
+    def test_coro_boundary_all_complete_originals_and_authorities_are_pinned(self):
+        saved=Path.read_bytes
+        for name in {**model._CORO_BOUNDARY_INPUTS,**model._CORO_BOUNDARY_PENDING_INPUTS}:
+            def changed(path):return saved(path)+b'changed' if path==model.ROOT/name else saved(path)
+            with self.subTest(path=name),mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):
+                model.validate_coro_boundary_inputs(include_pending=True)
+        with mock.patch.object(model,'_CORO_BOUNDARY_INPUTS',{}),self.assertRaises(ValueError):
+            model.validate_coro_boundary_inputs()
+        with mock.patch.object(model,'_CORO_BOUNDARY_PENDING_INPUTS',{}),self.assertRaises(ValueError):
+            model.validate_coro_boundary_inputs(include_pending=True)
+
+    def test_coro_boundary_exact_original_routes_and_pending_capture_obligations_remain(self):
+        cases={row['id']:row for row in json.loads((model.ROOT/'tests/unit/xir/legacy_consumers/product_driver_cases.json').read_bytes())['cases']}
+        rows=model.coro_boundary_entry_expected_rows()
+        self.assertEqual(len(rows),3)
+        for row in rows:
+            self.assertEqual((cases[row['id']]['source'],cases[row['id']]['source_context']),(row['source'],'original_absolute'))
+        named=model.coro_handoff_named_expected_row()
+        self.assertEqual((cases[named['id']]['source'],cases[named['id']]['entry']),(model._CORO_HANDOFF_SOURCE,'test'))
+        self.assertEqual(named['expected']['required_test_names'],[model._CORO_HANDOFF_TEST])
+        self.assertEqual(named['expected']['stdout_utf8'],'fast completed: 8\nslow completed: true\nhandoff test passed\n')
+        handoff=next(row for row in rows if row['id']==model._CORO_HANDOFF_ENTRY_ID)
+        self.assertFalse(handoff['separate_named_body_obligation']['executed_by_run'])
+        self.assertEqual(handoff['expected']['stdout_utf8'],'')
+        for pending in model._CORO_BOUNDARY_PENDING_PROGRAMS:
+            self.assertNotIn(pending,{row['source'] for row in rows})
+            self.assertIn('var local = Coro.Local<string>()',(model.ROOT/pending).read_text(encoding='utf-8'))
 
 if __name__=='__main__':unittest.main()

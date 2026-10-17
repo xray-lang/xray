@@ -33734,6 +33734,152 @@
           }
         ]
       }
+    },
+    {
+      "id": "complete_coro_boundary_local_sync",
+      "oracle_id": "complete_coro_boundary_local_sync",
+      "source": "tests/diff/cases/semantics/stdlib/coro_typed_local_sync.xr",
+      "source_lf_sha256": "40104117260bdc28ff173bfd8d100911f4fdc5b384de366bd032a8eb62fef043",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "true\nmain\n7\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original. Logical per-context typed Local keys and nonnegative typed snapshot predicates;no guessed counters,IDs,physical storage or product-output oracle. Handoff standalone is declaration-only and doesnotexecute its named body. All runtime/type/capture/lifetime/FI/safety/provider and fairness duties remain separate.",
+      "remaining_gates": [
+        "Complete original statements/helpers/calls/outputs and termination;empty handoff entry is not named-body execution",
+        "Actual typed Local and diagnostics admission,go/Task/Channel/runtime/FI/resources/lifetime/safety/provider/mixed;original scheduler progress during slow sleep not proved by aggregate output"
+      ]
+    },
+    {
+      "id": "complete_coro_boundary_diagnostics",
+      "oracle_id": "complete_coro_boundary_diagnostics",
+      "source": "tests/diff/cases/semantics/stdlib/coro_typed_diagnostics_direct.xr",
+      "source_lf_sha256": "084d26f378129aff1b6964474a19db444ea85153e1ecc834e424ac0d59783ea6",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "true\ntrue\ntrue\nBlocked\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original. Logical per-context typed Local keys and nonnegative typed snapshot predicates;no guessed counters,IDs,physical storage or product-output oracle. Handoff standalone is declaration-only and doesnotexecute its named body. All runtime/type/capture/lifetime/FI/safety/provider and fairness duties remain separate.",
+      "remaining_gates": [
+        "Complete original statements/helpers/calls/outputs and termination;empty handoff entry is not named-body execution",
+        "Actual typed Local and diagnostics admission,go/Task/Channel/runtime/FI/resources/lifetime/safety/provider/mixed;original scheduler progress during slow sleep not proved by aggregate output"
+      ]
+    },
+    {
+      "id": "complete_coro_boundary_handoff_run",
+      "oracle_id": "complete_coro_boundary_handoff_run",
+      "source": "tests/regression/11_coroutine/1143_syscall_handoff.xr",
+      "source_lf_sha256": "ab421c9f371003ebbfa3a3ab6996d129080f2039aea883a595b7a2a11040cbb0",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "stdout_utf8": "",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged original. Logical per-context typed Local keys and nonnegative typed snapshot predicates;no guessed counters,IDs,physical storage or product-output oracle. Handoff standalone is declaration-only and doesnotexecute its named body. All runtime/type/capture/lifetime/FI/safety/provider and fairness duties remain separate.",
+      "remaining_gates": [
+        "Complete original statements/helpers/calls/outputs and termination;empty handoff entry is not named-body execution",
+        "Actual typed Local and diagnostics admission,go/Task/Channel/runtime/FI/resources/lifetime/safety/provider/mixed;original scheduler progress during slow sleep not proved by aggregate output"
+      ]
+    },
+    {
+      "id": "complete_coro_boundary_handoff_named",
+      "oracle_id": "complete_coro_boundary_handoff_named",
+      "source": "tests/regression/11_coroutine/1143_syscall_handoff.xr",
+      "source_lf_sha256": "ab421c9f371003ebbfa3a3ab6996d129080f2039aea883a595b7a2a11040cbb0",
+      "entry": "test",
+      "source_context": "materialized_complete_source",
+      "stdout_utf8": "fast completed: 8\nslow completed: true\nhandoff test passed\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "independent_execution_model": "Complete unchanged named handoff wrapper andallthreehelpers:slow200ms,eightfastworkers each100iterations,ninetasks/channelcapacity9/ninereceives retained. All9! report permutations produce8/true/passed aggregates;even slow-first gives the same output. These outputs do not prove actual progress of fast workers during slow sleep,physical P handoff,fairness,FI,timer/resource/lifetime/safety/provider/mixed behavior;original progress duty remains OPEN.",
+      "remaining_gates": [
+        "Complete original statements/helpers/calls/outputs and termination;empty handoff entry is not named-body execution",
+        "Actual typed Local and diagnostics admission,go/Task/Channel/runtime/FI/resources/lifetime/safety/provider/mixed;original scheduler progress during slow sleep not proved by aggregate output"
+      ],
+      "independent_observations": {
+        "original_case": "tests/regression/11_coroutine/1143_syscall_handoff.xr",
+        "selected_complete_source": "tests/regression/11_coroutine/1143_syscall_handoff.xr",
+        "selected_source_lf_sha256": "ab421c9f371003ebbfa3a3ab6996d129080f2039aea883a595b7a2a11040cbb0",
+        "method": "All original prints and calls are already present;no observation fixture or duplicated work. Verify their entire output strings against order-invariant complete report counts;keep actual progress-during-sleep as a separate mandatory proof.",
+        "values": [
+          {
+            "test": "test_syscall_handoff",
+            "expression": "fast completed: + fast_done",
+            "expected": "fast completed: 8",
+            "projection": null
+          },
+          {
+            "test": "test_syscall_handoff",
+            "expression": "slow completed: + slow_done",
+            "expected": "slow completed: true",
+            "projection": null
+          },
+          {
+            "test": "test_syscall_handoff",
+            "expression": "normal branch literal",
+            "expected": "handoff test passed",
+            "projection": null
+          }
+        ]
+      }
     }
   ]
 }

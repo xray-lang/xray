@@ -659,7 +659,7 @@ def expected_rows():
         if name=='1114_select_after':row['required_runtime_timing_predicates']=[{'expression':'elapsed >= 20','required':True},{'expression':'elapsed < 500','required':True}]
         if name=='1128_yield':row['required_original_yield_checkpoints']=1+2+3+len([i for i in range(5) if i%2==0])+3*10
         rows.append(row)
-    return rows+[stack_entry_expected_row(),plain_scope_entry_expected_row()]
+    return rows+[stack_entry_expected_row(),plain_scope_entry_expected_row()]+coro_boundary_entry_expected_rows()
 
 
 def named_expected_rows():
@@ -674,7 +674,7 @@ def named_expected_rows():
             'required_original_assertion_results':body.get('assertion_results',[]),
             'model':'Independent complete named body, all original internal asserts and exact body output;requires real CLI test discovery plus separately invoked VM/native body. No scheduler, resource, lifetime or provider qualification inferred.'})
         if name in _NAMED_CHANNEL_PROGRAMS or name in _CANCEL_NAMED:rows[-1]['required_semantic_trace']=body['semantic_trace']
-    return rows+[stack_named_expected_row(),plain_scope_named_expected_row()]
+    return rows+[stack_named_expected_row(),plain_scope_named_expected_row(),coro_handoff_named_expected_row()]
 
 _STACK_SOURCE = 'tests/regression/11_coroutine/1149_module_call_stack_grow.xr'
 _STACK_HELPER = 'tests/regression/11_coroutine/modules/big_stack.xr'
@@ -910,3 +910,213 @@ def plain_scope_named_expected_row():
         'observation_count':4,'required_semantic_trace':trace,
         'required_original_assertion_results':trace['semantic_postconditions'],
         'model':'Complete original wrapper and all seven helpers;all fivego/twoawaitResult/three plain scopes,four sends/four receives/two closes and originalslow sleep1000 remain. Plain-scope joining keeps successful siblings after a failure;state observations use existing immutable TaskResult values. Two channel-draining recv_sum expressions are evaluated once before the unchanged assertions and prints. Six complete report permutations yield111/true/5/true. Failed payload layout,Error/PanicInfo representation,actual cancellation/scheduler/cleanup/FI/resources/lifetime/safety/provider/mixed remain unqualified.'}
+
+_CORO_SYNC_SOURCE = 'tests/diff/cases/semantics/stdlib/coro_typed_local_sync.xr'
+_CORO_DIAG_SOURCE = 'tests/diff/cases/semantics/stdlib/coro_typed_diagnostics_direct.xr'
+_CORO_HANDOFF_SOURCE = 'tests/regression/11_coroutine/1143_syscall_handoff.xr'
+_CORO_HANDOFF_TEST = 'test_syscall_handoff'
+_CORO_SYNC_ID = 'complete_coro_boundary_local_sync'
+_CORO_DIAG_ID = 'complete_coro_boundary_diagnostics'
+_CORO_HANDOFF_ENTRY_ID = 'complete_coro_boundary_handoff_run'
+_CORO_HANDOFF_NAMED_ID = 'complete_coro_boundary_handoff_named'
+_CORO_BOUNDARY_PROGRAMS = (_CORO_SYNC_SOURCE,_CORO_DIAG_SOURCE,_CORO_HANDOFF_SOURCE)
+_CORO_BOUNDARY_PENDING_PROGRAMS = (
+    'tests/diff/cases/semantics/stdlib/coro_typed_local_pool.xr',
+    'tests/diff/cases/semantics/stdlib/coro_typed_local_shell_reuse.xr')
+_CORO_BOUNDARY_AUTHORITIES = ('spec/source/sections/003-2-type-system.md',
+ 'spec/source/sections/005-4-statements.md',
+ 'spec/source/sections/006-5-declarations.md',
+ 'spec/source/sections/009-8-error-handling.md',
+ 'spec/source/sections/011-10-concurrency-and-coroutines.md',
+ 'spec/source/sections/014-13-built-in-functions.md',
+ 'spec/source/sections/015-14-built-in-type-methods.md',
+ 'stdlib/types/coro.xr',
+ 'stdlib/types/coroutine.xr',
+ 'stdlib/time/time.xr')
+_CORO_BOUNDARY_INPUTS = {'spec/source/sections/003-2-type-system.md': 'b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677',
+ 'spec/source/sections/005-4-statements.md': 'c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915',
+ 'spec/source/sections/006-5-declarations.md': '17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d',
+ 'spec/source/sections/009-8-error-handling.md': '3679ded015ad0222df39070b598fe26c8099247f9e410305a3f1527b9e63161b',
+ 'spec/source/sections/011-10-concurrency-and-coroutines.md': '27c232a9575d0d40e800ea5730e5d2b96e8f2e62e646731a3d9de2e0eea35aea',
+ 'spec/source/sections/014-13-built-in-functions.md': '2a4af98d2d429babb3cdcd875279f0d798efcabb852afd2c366e69a12ca50380',
+ 'spec/source/sections/015-14-built-in-type-methods.md': '0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e',
+ 'stdlib/time/time.xr': 'd2ab56ef604ba773bf9625efd67450d343e2da2b0a9ec2f179d01ab07cc2bc72',
+ 'stdlib/types/coro.xr': '51a94626288d0d5361a8d10563a7dd00987cdc96d8625fb54beff7912a96d51f',
+ 'stdlib/types/coroutine.xr': 'f85c868bf12b2b90988ead5cf746fd8e522d5c2d6398a64882b47637c72dc7a6',
+ 'tests/diff/cases/semantics/stdlib/coro_typed_diagnostics_direct.xr': '084d26f378129aff1b6964474a19db444ea85153e1ecc834e424ac0d59783ea6',
+ 'tests/diff/cases/semantics/stdlib/coro_typed_local_sync.xr': '40104117260bdc28ff173bfd8d100911f4fdc5b384de366bd032a8eb62fef043',
+ 'tests/regression/11_coroutine/1143_syscall_handoff.xr': 'ab421c9f371003ebbfa3a3ab6996d129080f2039aea883a595b7a2a11040cbb0'}
+_CORO_BOUNDARY_PENDING_INPUTS = {'tests/diff/cases/semantics/stdlib/coro_typed_local_pool.xr': '5886377f718113108d60909d0819ec4e72d56264866193ffa6b39f78712158f3',
+ 'tests/diff/cases/semantics/stdlib/coro_typed_local_shell_reuse.xr': '6ea6e7e20f52185ef29d172b11674ab805a80ccef993e6672488058b028f9b0f'}
+
+
+class LogicalCoroLocals:
+    """Logical context/key pairs; no runtime address, arena or shell model."""
+    def __init__(self,shared_slots=False):
+        self.kinds={}
+        self.slots={}
+        self.shared_slots=shared_slots
+
+    def key(self,kind):
+        if kind not in (str,int):
+            raise ValueError('Selected Local keys are closed string or i64')
+        key=len(self.kinds)
+        self.kinds[key]=kind
+        return key
+
+    def _slot(self,context,key):
+        if key not in self.kinds:
+            raise ValueError('Unknown logical Local key')
+        return ('shared' if self.shared_slots else context,key)
+
+    def get(self,context,key):
+        return self.slots.get(self._slot(context,key))
+
+    def set(self,context,key,value):
+        slot=self._slot(context,key)
+        if type(value) is not self.kinds[key]:
+            raise ValueError('Logical Local value must retain its exact selected type')
+        self.slots[slot]=value
+
+
+def coro_sync_trace():
+    local=LogicalCoroLocals()
+    string_key=local.key(str)
+    before=local.get('root',string_key)
+    local.set('root',string_key,'main')
+    after=local.get('root',string_key)
+    count_key=local.key(int)
+    local.set('root',count_key,7)
+    count=local.get('root',count_key)
+    return {'values':[before is None,after if after is not None else 'missing',
+                      count if count is not None else -1],
+            'key_types':['string','i64'],'distinct_keys':string_key!=count_key,
+            'current_context':'root','actual_local_opcodes_storage_and_lifetime_qualified':False}
+
+
+def pending_pool_local_trace(order=('first-set','first-get','second-set','second-get'),shared_slots=False):
+    expected={'first-set','first-get','second-set','second-get'}
+    if (len(order)!=4 or set(order)!=expected or
+            order.index('first-set')>order.index('first-get') or
+            order.index('second-set')>order.index('second-get')):
+        raise ValueError('Pool logical trace must retain both complete callback bodies')
+    local=LogicalCoroLocals(shared_slots)
+    key=local.key(str)
+    results={}
+    for step in order:
+        context,operation=step.split('-')
+        if operation=='set':
+            local.set(context,key,context)
+        else:
+            got=local.get(context,key)
+            results[context]=got if got is not None else 'missing'
+    return {'values':[results['first'],results['second'],local.get('root',key) is None],
+            'registered_for_current_positive_qualification':False,
+            'mutable_module_capture_and_CoroLocal_Sendable_plan_qualified':False}
+
+
+def pending_shell_local_trace(reuse_logical_context=False):
+    local=LogicalCoroLocals()
+    key=local.key(str)
+    local.set('first-logical-task',key,'one')
+    first=local.get('first-logical-task',key)
+    context='first-logical-task' if reuse_logical_context else 'second-logical-task'
+    before=local.get(context,key)
+    local.set(context,key,'two')
+    after=local.get(context,key)
+    return {'values':[first,('clean' if before is None else 'dirty')+'|'+after,
+                      local.get('root',key) is None],
+            'registered_for_current_positive_qualification':False,
+            'physical_shell_or_arena_reuse_count_inferred':False,
+            'mutable_module_capture_and_CoroLocal_Sendable_plan_qualified':False}
+
+
+def coro_diagnostic_values(total=0,created=0,infos=(),top=(),grouped=()):
+    if any(type(value) is not int or not -(1<<63)<=value<(1<<63) for value in (total,created)):
+        raise ValueError('Coro counters must keep the declared i64 field type')
+    return [total>=0 and created>=0 and len(infos)>=0,len(top)>=0,len(grouped)>=0,'Blocked']
+
+
+def handoff_counts(order):
+    if (len(order)!=9 or any(type(value) is not int for value in order) or
+            set(order)!={-1,*range(8)}):
+        raise ValueError('Complete handoff must retain the one slow and eight distinct fast reports')
+    return sum(value>=0 for value in order),-1 in order
+
+
+def handoff_trace(order=(-1,0,1,2,3,4,5,6,7)):
+    fast,slow=handoff_counts(order)
+    passed=fast==8 and slow
+    values=['fast completed: '+str(fast),'slow completed: '+render(slow)]
+    if passed:
+        values.append('handoff test passed')
+    return {'values':values,'normal_branch':passed,
+            'original_fast_worker_ids':list(range(8)),
+            'original_fast_iterations_per_worker':100,
+            'unobserved_logical_fast_sum':sum(range(100)),
+            'original_slow_sleep_ms':200,'original_Channel_capacity':9,
+            'original_go_tasks':9,'original_receives':9,
+            'slow_report_position':order.index(-1),
+            'required_runtime_progress_predicate':'Fast workers progress while the slow worker sleeps',
+            'progress_predicate_proved_by_aggregate_output':False,
+            'actual_scheduler_P_handoff_fairness_timer_FI_cleanup_resource_lifetime_provider_mixed_qualified':False}
+
+
+def validate_coro_boundary_inputs(include_pending=False):
+    if set(_CORO_BOUNDARY_INPUTS)!=set(_CORO_BOUNDARY_AUTHORITIES)|set(_CORO_BOUNDARY_PROGRAMS):
+        raise ValueError('Coro boundary lost a whole program or authority')
+    for name,digest in _CORO_BOUNDARY_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Complete Coro boundary input changed: '+name)
+    if include_pending:
+        if set(_CORO_BOUNDARY_PENDING_INPUTS)!=set(_CORO_BOUNDARY_PENDING_PROGRAMS):
+            raise ValueError('Pending pool/shell source obligation changed')
+        for name,digest in _CORO_BOUNDARY_PENDING_INPUTS.items():
+            if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+                raise ValueError('Pending pool/shell original changed: '+name)
+    source=(ROOT/_CORO_HANDOFF_SOURCE).read_text(encoding='utf-8')
+    if re.findall(r'@test\s+fn\s+([A-Za-z_][A-Za-z_0-9]*)\s*\(',source)!=[_CORO_HANDOFF_TEST]:
+        raise ValueError('Handoff original named body changed')
+    schema=(ROOT/'stdlib/types/coro.xr').read_text(encoding='utf-8')
+    enum=re.search(r'enum CoroState\s*\{([^}]+)\}',schema)
+    if not enum or [value.strip().split(',')[0] for value in enum[1].strip().splitlines()]!=['Unknown','Ready','Blocked','Running','Done']:
+        raise ValueError('Typed CoroState declaration changed')
+
+
+def coro_boundary_entry_expected_rows():
+    validate_coro_boundary_inputs()
+    records=[(_CORO_SYNC_ID,_CORO_SYNC_SOURCE,coro_sync_trace()['values']),
+             (_CORO_DIAG_ID,_CORO_DIAG_SOURCE,coro_diagnostic_values()),
+             (_CORO_HANDOFF_ENTRY_ID,_CORO_HANDOFF_SOURCE,[])]
+    rows=[]
+    for identity,source,values in records:
+        row={'id':identity,'source':source,'original_source':source,'required_target':None,
+             'expected':{'exit_code':0,'stdout_utf8':''.join(render(value)+'\n' for value in values),'stderr_utf8':''},
+             'observation_count':len(values),
+             'model':'Complete unchanged original. Logical per-context typed Local keys and nonnegative typed snapshot predicates;no guessed counters,IDs,physical storage or product-output oracle. Handoff standalone is declaration-only and doesnotexecute its named body. All runtime/type/capture/lifetime/FI/safety/provider and fairness duties remain separate.'}
+        if identity==_CORO_HANDOFF_ENTRY_ID:
+            row['separate_named_body_obligation']={'names':[_CORO_HANDOFF_TEST],'executed_by_run':False,
+                'qualification':'OPEN_REQUIRES_COMPLETE_NAMED_BODY_ANDTHREE_AGGREGATE_OUTPUTS_PLUS_PROGRESS_PROOF'}
+        elif identity==_CORO_SYNC_ID:
+            row['required_semantic_trace']=coro_sync_trace()
+        else:
+            row['required_semantic_trace']={'original_list_limit':8,'original_state_filter':'Running',
+                'original_top_limit':2,'original_metric':'Reductions','original_group_key':'State',
+                'counter_values_are_not_predicted':True,'actual_snapshot_contents_or_ranking_qualified':False}
+        rows.append(row)
+    return rows
+
+
+def coro_handoff_named_expected_row():
+    validate_coro_boundary_inputs()
+    trace=handoff_trace()
+    if not trace['normal_branch']:
+        raise ValueError('Independent complete handoff aggregate postcondition failed')
+    values=trace['values']
+    return {'id':_CORO_HANDOFF_NAMED_ID,'source':_CORO_HANDOFF_SOURCE,
+            'original_source':_CORO_HANDOFF_SOURCE,'required_target':None,
+            'expected':{'exit_code':0,'stdout_utf8':''.join(render(value)+'\n' for value in values),
+                'stderr_utf8':'','required_test_names':[_CORO_HANDOFF_TEST],
+                'per_test_observations':{_CORO_HANDOFF_TEST:{'values':values}}},
+            'observation_count':3,'required_semantic_trace':trace,
+            'model':'Complete unchanged named handoff wrapper andallthreehelpers:slow200ms,eightfastworkers each100iterations,ninetasks/channelcapacity9/ninereceives retained. All9! report permutations produce8/true/passed aggregates;even slow-first gives the same output. These outputs do not prove actual progress of fast workers during slow sleep,physical P handoff,fairness,FI,timer/resource/lifetime/safety/provider/mixed behavior;original progress duty remains OPEN.'}
