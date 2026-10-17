@@ -385,13 +385,15 @@ static void frame_release(XrXirCall *call, CallFrame *frame) {
 }
 
 static XrXirCallStatus entry_arguments(const XrXirCallEntry *entry, const XrXirValue *arguments,
-    uint32_t count, const XrXirFunctionBinding *binding, XrXirValueAdmission *admission) {
+    uint32_t count, const XrXirFunctionBinding *binding, XrXirValueAdmission *admission, XrXirCallView *view) {
     uint32_t captures = binding ? binding->capture_count : 0;
     if (captures > entry->parameter_count || count != entry->parameter_count - captures || (count && !arguments))
         return XR_XIR_CALL_BAD_ARGUMENT;
     for (uint32_t i = 0; i < entry->parameter_count; ++i) {
         const XrXirValue *value = i < captures ? &binding->captures[i] : &arguments[i - captures];
         XrXirCallStatus status = admit_value(value, entry->parameters[i], admission);
+        if(status==XR_XIR_CALL_BAD_ARGUMENT && view && value && value->type!=(uint32_t)entry->parameters[i])
+            status=xr_xir_instance_argument_weakening_admit(view,entry->parameters[i],value);
         if (status != XR_XIR_CALL_READY) return status;
     }
     return XR_XIR_CALL_READY;
@@ -446,7 +448,7 @@ static XrXirCallStatus push_frame(XrXirCall *call, uint32_t id,
         return XR_XIR_CALL_BAD_ARGUMENT;
     const XrXirCallEntry *entry = &call->config.entries[id];
     if (!admitted) {
-        XrXirCallStatus status = entry_arguments(entry, arguments, count, binding, &call->config.admission);
+        XrXirCallStatus status = entry_arguments(entry, arguments, count, binding, &call->config.admission,call->active_view);
         if (status != XR_XIR_CALL_READY) return status;
     }
     XrXirCallAccounting *accounting = call->config.accounting;
@@ -478,10 +480,16 @@ static XrXirCallStatus push_frame(XrXirCall *call, uint32_t id,
     uint32_t captures = binding ? binding->capture_count : 0;
     for (uint32_t i = 0; i < entry->parameter_count; ++i) {
         const XrXirValue *value = i < captures ? &binding->captures[i] : &arguments[i - captures];
-        if (xr_xir_value_copy(value, &frame->arguments[i]) != XR_XIR_VALUE_OK) {
+        /* The prepared frame owns the converted carrier before publication;
+         * the caller retains its original value and advertisement. */
+        status=value->type==(uint32_t)entry->parameters[i] ?
+            (xr_xir_value_copy(value,&frame->arguments[i])==XR_XIR_VALUE_OK ? XR_XIR_CALL_READY : XR_XIR_CALL_LIMIT) :
+            call->active_view ? xr_xir_instance_weaken_function(call->active_view,entry->parameters[i],value,&frame->arguments[i]) :
+            XR_XIR_CALL_BAD_ARGUMENT;
+        if(status!=XR_XIR_CALL_READY) {
             for (uint32_t p = 0; p < i; ++p) xr_xir_value_drop(&frame->arguments[p]);
             frame_release(call, frame);
-            return XR_XIR_CALL_LIMIT;
+            return status;
         }
     }
     if (preparation->invocation) {
@@ -624,7 +632,7 @@ static XrXirCallStatus call_new(const XrXirCallConfig *config, uint32_t entry,
         ((config->entries[entry].flags & XR_XIR_ENTRY_GENERATOR)!=0)!=generator)
         return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirValueAdmission admission = config->admission;
-    status = entry_arguments(&config->entries[entry], arguments, count, NULL, &admission);
+    status = entry_arguments(&config->entries[entry], arguments, count, NULL, &admission,NULL);
     if (status != XR_XIR_CALL_READY) return status;
     XrXirTypeArena *arena = (XrXirTypeArena *) admission.arena;
     if (arena && !xr_xir_compile_type_arena_retain(arena)) return XR_XIR_CALL_LIMIT;
@@ -752,7 +760,7 @@ static void accept_child_action(XrXirCall *call, XrXirAction action) {
         &call->config.admission) : XR_XIR_CALL_READY;
     if (status == XR_XIR_CALL_READY)
         status = entry_arguments(&call->config.entries[action.callee], action.arguments,
-            action.argument_count, binding, &call->config.admission);
+            action.argument_count, binding, &call->config.admission,call->active_view);
     call->admitting = false;
     XrXirFaultDetail preparation_fault = {0};
     CallFramePreparation preparation = {.admitted=true, .fault=&preparation_fault,
