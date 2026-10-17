@@ -107,18 +107,23 @@ static XrXirStatus effect_capture_class_intrinsic(EffectCaptureRead *read,const 
 /* These are untrusted constructor proposals with deliberately non-authoritative
  * ranks. Only actual Input clauses may lower them into a finite proof. The
  * receiving matcher never reads this retired construction inventory. */
-static XrXirStatus effect_capture_class_proposals(EffectCaptureRead *read) {
+static XrXirStatus effect_capture_class_proposals(EffectCaptureRead *read,
+    const EffectInvocationWorkspace *discovery) {
     if(!read->active) return XR_XIR_OK;
+    if(!discovery || read->final->nodes!=discovery->final.nodes ||
+        read->final->count!=discovery->final.count || !discovery->states) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus frame=effect_role_range(read->work,discovery->states,discovery->final.capacity,sizeof(*discovery->states));
+    if(frame!=XR_XIR_OK) return frame;
     for(uint32_t n=0;n<read->final->count;++n) {
-        const EffectInvocationNode *source=&read->final->nodes[n];
+        const EffectInvocationClassDiscovery *source=&discovery->states[n].classes;
         if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
-        if(!source->class_count && !source->class_return_mask) continue;
+        if(!source->count && !source->return_mask) continue;
         EffectCaptureNode node={0};XrXirStatus status=effect_capture_node(read,n,&node);if(status!=XR_XIR_OK) return status;
-        status=effect_role_range(read->work,source->classes,source->class_count,sizeof(*source->classes));
+        status=effect_role_range(read->work,source->facts,source->count,sizeof(*source->facts));
         if(status!=XR_XIR_OK) return status;
-        for(uint32_t c=0;c<=source->class_count;++c) {
-            uint32_t value=c==source->class_count?node.values:source->classes[c].value;
-            uint32_t mask=c==source->class_count?source->class_return_mask:source->classes[c].mask;
+        for(uint32_t c=0;c<=source->count;++c) {
+            uint32_t value=c==source->count?node.values:source->facts[c].value;
+            uint32_t mask=c==source->count?source->return_mask:source->facts[c].mask;
             if(!mask) continue;
             uint32_t kind=0;status=effect_capture_kind(read,&node,value,&kind,NULL);if(status!=XR_XIR_OK) return status;
             if(kind!=EFFECT_CAPTURE_CLASS || (mask&~EFFECT_CLASS_VALID)) return XR_XIR_BAD_STRUCTURE;

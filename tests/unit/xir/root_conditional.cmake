@@ -194,3 +194,20 @@ add_test(NAME test_xir_root_conditional_canonical_run_storage
     COMMAND test_xir_root_conditional_helpers --canonical-run-storage)
 set_tests_properties(test_xir_root_conditional_canonical_run_storage PROPERTIES
     LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# Original Class literals and terminal counterfactuals execute independently.
+foreach(mode RANGE 0 3)
+    add_test(NAME test_xir_root_conditional_class_discovery_lifetime_${mode}
+        COMMAND test_xir_root_conditional_helpers --class-discovery-lifetime ${mode})
+    set_tests_properties(test_xir_root_conditional_class_discovery_lifetime_${mode} PROPERTIES
+        LABELS "unit;xir;root-effects;compiler;ownership;retirement" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+endforeach()
+foreach(kind class class-cell)
+    foreach(mode RANGE 0 6)
+        string(REPLACE "-" "_" name "${kind}")
+        add_test(NAME test_xir_root_conditional_${name}_case_${mode}
+            COMMAND test_xir_root_conditional_helpers --${kind}-case ${mode})
+        set_tests_properties(test_xir_root_conditional_${name}_case_${mode} PROPERTIES
+            LABELS "unit;xir;root-effects;higher-order;compiler;ownership;retirement" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+    endforeach()
+endforeach()

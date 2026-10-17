@@ -35,16 +35,7 @@ static XrXirStatus effect_invocation_class_cell_subject(EffectInvocationFlow *fl
     if (!place || place->op!=XR_XIR_OBJECT_PLACE || place->args[0]!=root->value ||
         place->type!=subject || !xr_xir_type_is_class(flow->body.domain.types,subject))
         return XR_XIR_BAD_STRUCTURE;
-    uint32_t selected=0;
-    status=effect_invocation_class_find(owner->work,&owner->final->nodes[flow->node],root->value,&selected);
-    if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
-    const EffectInvocationClassFact *fact=&owner->final->nodes[flow->node].classes[selected];
-    if (!fact->mask) return XR_XIR_UNRESOLVED;
-    if ((fact->mask&~EFFECT_CLASS_VALID) || !(fact->mask&EFFECT_CLASS_KNOWN) ||
-        (fact->mask==EFFECT_CLASS_KNOWN ? !fact->rank : fact->rank!=0))
-        return XR_XIR_BAD_STRUCTURE;
-    *mask=fact->mask;return XR_XIR_OK;
+    return effect_invocation_class_mask(owner,flow->node,root->value,mask);
 }
 
 /* A bottom delays this real terminal on the one equation queue. It is not an

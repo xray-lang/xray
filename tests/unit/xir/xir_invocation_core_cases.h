@@ -33,6 +33,7 @@ static void *invocation_retired_blocks[3];
 static uint32_t invocation_retired_counts[3];
 static void *invocation_discovery_blocks[8192];
 static uint32_t invocation_discovery_counts[8192],invocation_discovery_count;
+static uint32_t invocation_discovery_class_count;
 static bool invocation_discovery_reused[8192];
 /* A new physical allocation can reuse an already released discovery address.
  * Its later release belongs to a different lifetime, not to the retired row. */
@@ -60,16 +61,19 @@ static void *invocation_retired_block(const void *payload) {
     CHECK(false);return NULL;
 }
 static void invocation_discovery_begin(const EffectInvocationWorkspace *workspace) {
-    invocation_discovery_count=0;
+    invocation_discovery_count=0;invocation_discovery_class_count=0;
     for(uint32_t n=0;n<workspace->final.count;++n) {
-        const EffectInvocationProducerSet *records=&workspace->states[n].producers;
-        if(!records->facts) continue;
-        CHECK(invocation_discovery_count<8192);
-        void *block=invocation_retired_block(records->facts);
-        for(uint32_t i=0;i<invocation_discovery_count;++i) CHECK(block!=invocation_discovery_blocks[i]);
-        invocation_discovery_blocks[invocation_discovery_count]=block;
-        invocation_discovery_reused[invocation_discovery_count]=false;
-        invocation_discovery_counts[invocation_discovery_count++]=0;
+        const void *payloads[2]={workspace->states[n].producers.facts,workspace->states[n].classes.facts};
+        for(uint32_t kind=0;kind<2;++kind) {
+            if(!payloads[kind]) continue;
+            if(kind) ++invocation_discovery_class_count;
+            CHECK(invocation_discovery_count<8192);
+            void *block=invocation_retired_block(payloads[kind]);
+            for(uint32_t i=0;i<invocation_discovery_count;++i) CHECK(block!=invocation_discovery_blocks[i]);
+            invocation_discovery_blocks[invocation_discovery_count]=block;
+            invocation_discovery_reused[invocation_discovery_count]=false;
+            invocation_discovery_counts[invocation_discovery_count++]=0;
+        }
     }
 }
 static void invocation_discovery_finished(bool retired) {

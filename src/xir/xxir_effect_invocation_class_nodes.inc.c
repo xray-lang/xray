@@ -46,18 +46,37 @@ static XrXirStatus effect_invocation_class_storage(EffectInvocationWorkspace *ow
 /* A missing Class row is a malformed physical relation, never a None fact.
  * Its lookup belongs to this exact body/input equation and is fully charged. */
 static XrXirStatus effect_invocation_class_find(const XrXirCompileContext *work,
-    const EffectInvocationNode *node,uint32_t value,uint32_t *output) {
-    if (!output || !node || (node->class_count && !node->classes)) return XR_XIR_BAD_STRUCTURE;
-    uint32_t low=0,high=node->class_count;
+    const EffectInvocationClassDiscovery *node,uint32_t value,uint32_t *output) {
+    if (!output || !node || (node->count && !node->facts)) return XR_XIR_BAD_STRUCTURE;
+    uint32_t low=0,high=node->count;
     while (low<high) {
         if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
         uint32_t middle=low+(high-low)/2;
-        if (node->classes[middle].value<value) low=middle+1;
+        if (node->facts[middle].value<value) low=middle+1;
         else high=middle;
     }
     if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-    if (low>=node->class_count || node->classes[low].value!=value) return XR_XIR_BAD_STRUCTURE;
+    if (low>=node->count || node->facts[low].value!=value) return XR_XIR_BAD_STRUCTURE;
     *output=low;return XR_XIR_OK;
+}
+
+/* Constructor bottoms are private. A sealed reader projects only the current
+ * finite relation, never a retained solver row or a fabricated pure rank. */
+static XrXirStatus effect_invocation_class_mask(const EffectInvocationRead *owner,
+    uint32_t node,uint32_t value,uint32_t *output) {
+    if(!owner || !output || *output || node>=owner->final->count) return XR_XIR_BAD_STRUCTURE;
+    if(!owner->discovery) {
+        if(owner->roles.construction) return XR_XIR_BAD_STRUCTURE;
+        return effect_final_class_mask(owner->work,owner->final,node,value,output);
+    }
+    const EffectInvocationClassDiscovery *rows=effect_invocation_class_discovery(owner,node);
+    uint32_t at=0;XrXirStatus status=effect_invocation_class_find(owner->work,rows,value,&at);
+    if(status!=XR_XIR_OK) return status;
+    EffectInvocationClassFact fact=rows->facts[at];
+    if(!fact.mask) return XR_XIR_UNRESOLVED;
+    if((fact.mask&~EFFECT_CLASS_VALID) || !(fact.mask&EFFECT_CLASS_KNOWN) ||
+        (fact.mask==EFFECT_CLASS_KNOWN?!fact.rank:fact.rank!=0)) return XR_XIR_BAD_STRUCTURE;
+    *output=fact.mask;return XR_XIR_OK;
 }
 
 /* The true full graph bounds a descending certificate. Growing the existing
@@ -70,10 +89,11 @@ static XrXirStatus effect_invocation_class_rank_limit_count(const EffectInvocati
     for (uint32_t n=0;n<owner->final->count;++n) {
         if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
         const EffectInvocationNode *node=&owner->final->nodes[n];
-        if (node->body>=owner->final->physical->count ||
-            node->class_count!=owner->final->physical->functions[node->body].classes ||
-            (uint64_t)node->class_count+1>UINT64_MAX-maximum) return XR_XIR_BAD_STRUCTURE;
-        maximum+=(uint64_t)node->class_count+1;
+        const EffectInvocationClassDiscovery *rows=effect_invocation_class_discovery(owner,n);
+        if (!rows || node->body>=owner->final->physical->count ||
+            rows->count!=owner->final->physical->functions[node->body].classes ||
+            (uint64_t)rows->count+1>UINT64_MAX-maximum) return XR_XIR_BAD_STRUCTURE;
+        maximum+=(uint64_t)rows->count+1;
     }
     *output=maximum;return XR_XIR_OK;
 }

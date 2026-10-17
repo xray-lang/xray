@@ -116,7 +116,6 @@ static void effect_invocation_final_clear(EffectInvocationFinal *final) {
     effect_invocation_result_clear(&final->summary);
     for (uint32_t n=0;n<final->count;++n) {
         xr_compile_resources_free(final->nodes[n].causes);
-        xr_compile_resources_free(final->nodes[n].classes);
     }
     for (uint32_t d=0;d<final->deferred_count;++d)
         xr_compile_resources_free(final->deferred_calls[d].arguments);
@@ -139,10 +138,17 @@ static void effect_invocation_discovery_clear(EffectInvocationWorkspace *owner) 
     }
     owner->read.discovery=NULL;
 }
+static void effect_invocation_class_discovery_clear(EffectInvocationWorkspace *owner) {
+    if(owner->states) for(uint32_t n=0;n<owner->final.count;++n) {
+        xr_compile_resources_free(owner->states[n].classes.facts);
+        owner->states[n].classes=(EffectInvocationClassDiscovery){0};
+    }
+}
 static void effect_invocation_free(EffectInvocationWorkspace *owner) {
     if (!owner) return;
     effect_invocation_result_free(owner->prepared_result);
     effect_invocation_discovery_clear(owner);
+    effect_invocation_class_discovery_clear(owner);
     effect_invocation_final_clear(&owner->final);
     xr_compile_resources_free(owner->edge_index);xr_compile_resources_free(owner->read.consumers);
     xr_compile_resources_free(owner);
@@ -285,7 +291,8 @@ static XrXirStatus effect_invocation_intern(EffectInvocationWorkspace *owner,
         .parameter_count=parameters,.instruction_count=head.instruction_count,
         .input=owned,.cells=outputs,
         .causes=causes,.cause_count=(uint32_t)cause_count,.local_cells=local_cells,
-        .edge_head=UINT32_MAX,.classes=classes,.class_count=class_count};
+        .edge_head=UINT32_MAX};
+    owner->states[at].classes=(EffectInvocationClassDiscovery){.facts=classes,.count=class_count};
     ++owner->final.count;
     status=effect_invocation_enqueue(owner,at);
     if (status!=XR_XIR_OK) return status;

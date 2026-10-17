@@ -524,7 +524,10 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         if (status==XR_XIR_OK) status=effect_role_contracts_match(work,certificate->body,
             &certificate->final->role_proof,effect_contracts_read(owner->effects),owner->effects->count);
         if (status==XR_XIR_OK) effect_invocation_discovery_clear(owner);
-        if (status==XR_XIR_OK) status=effect_capture_build(work,certificate->final);
+        if (status==XR_XIR_OK) {
+            status=effect_capture_build(work,certificate->final,owner);
+            effect_invocation_class_discovery_clear(owner);
+        }
         if (status==XR_XIR_OK) status=effect_invocation_certificate_project(work,certificate,result,sink);
     }
     if (status==XR_XIR_OK && !xir_compile_work(work,9+sizeof(*request->result)+

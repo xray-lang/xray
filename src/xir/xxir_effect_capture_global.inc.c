@@ -444,8 +444,12 @@ static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const Ef
     status=effect_capture_complete_clauses(&read);if(status!=XR_XIR_OK) return status;
     return effect_capture_inputs_match(&read);
 }
-static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectInvocationFinal *final) {
-    if(!final || final->capture.facts || final->capture.count || final->capture.capacity) return XR_XIR_BAD_STRUCTURE;
+static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectInvocationFinal *final,
+    const EffectInvocationWorkspace *discovery) {
+    if(!final || !discovery || !discovery->read.work || work->resources!=discovery->read.work->resources ||
+        final->material!=discovery->final.material || final->nodes!=discovery->final.nodes ||
+        final->count!=discovery->final.count || final->capacity!=discovery->final.capacity ||
+        final->capture.facts || final->capture.count || final->capture.capacity) return XR_XIR_BAD_STRUCTURE;
     EffectCaptureRead read={.work=work,.final=final,.fixed_only=true};XrXirStatus status=effect_capture_frame(&read);
     /* The fresh actual-input negative proof admits only an empty relation.
      * No callback occurs before returning these empty construction bytes. */
@@ -457,14 +461,14 @@ static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectIn
                 bool proposed=false;
                 for(uint32_t n=0;n<final->count;++n) {
                     if(!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
-                    proposed|=final->nodes[n].class_count!=0 || final->nodes[n].class_return_mask!=0;
+                    proposed|=discovery->states[n].classes.count!=0 || discovery->states[n].classes.return_mask!=0;
                 }
                 /* Builder proposals select work only. The complete receiving
                  * clauses below still require every current Class result. */
                 if(status!=XR_XIR_OK || !proposed) break;
             }
             read.fixed_only=domain==0;read.fallback=domain>=2;read.class_results=domain==3;
-            if(domain==1) status=effect_capture_class_proposals(&read);
+            if(domain==1) status=effect_capture_class_proposals(&read,discovery);
             if(status!=XR_XIR_OK) break;
             do { read.changed=false;status=effect_capture_clauses(&read); } while(status==XR_XIR_OK && read.changed);
         }

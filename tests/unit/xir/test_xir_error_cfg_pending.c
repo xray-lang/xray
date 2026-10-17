@@ -357,7 +357,7 @@ static void pc_local_final_mutations(const XrXirCompileContext *c,
         if (mode==3) node->parameter_count=1;
         if (mode==4) --node->cause_count;
         if (mode==5) node->input=(void *)(uintptr_t)1;
-        if (mode==6) node->class_return_mask=EFFECT_CLASS_ROOT;
+        if (mode==6) node->root=UINT32_MAX;
         if (mode==7) node->edge_head=0;
         if (mode==8) node->deferred=true;
         if (mode==9) node->local_deferred=true;

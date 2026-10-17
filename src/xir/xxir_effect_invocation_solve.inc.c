@@ -709,7 +709,6 @@ static XrXirStatus effect_invocation_local_node_match(const XrXirCompileContext 
         node->instruction_count!=head->instruction_count || owner->roots[f]!=f || owner->root_spaces[f] ||
         node->deferred || node->local_deferred ||
         node->intrinsic_mask!=mask || node->local_mask!=mask || node->input ||
-        node->class_count || node->classes || node->class_return_mask || node->class_return_rank ||
         node->edge_head!=UINT32_MAX || !effect_invocation_node_shape(node,0,head->instruction_count))
         return XR_XIR_BAD_STRUCTURE;
     uint64_t words=((uint64_t)head->instruction_count+63)/64;

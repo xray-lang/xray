@@ -181,27 +181,31 @@ static void edges_capture_equal(const EffectInvocationFinal *actual,const Effect
 static void edges_capture_faults(const XrXirCompileContext *work,EffectInvocationFinal *final) {
     uint64_t outer_live=pc_stats(work).live_bytes;size_t outer_physical=live_bytes,outer_blocks=live;
     XrXirStatus allocated_status=XR_XIR_OK;
-    EffectInvocationFinal *staged=xir_compile_alloc(work,sizeof(*staged),&allocated_status);
-    CHECK(staged && allocated_status==XR_XIR_OK);*staged=*final;staged->capture=(EffectCaptureProof){0};
+    EffectInvocationWorkspace *proposal=xir_compile_calloc(work,1,sizeof(*proposal),&allocated_status);
+    CHECK(proposal && allocated_status==XR_XIR_OK);proposal->final=*final;
+    proposal->read.work=work;proposal->read.final=&proposal->final;
+    proposal->states=xir_compile_calloc(work,final->capacity,sizeof(*proposal->states),&allocated_status);
+    CHECK(proposal->states && allocated_status==XR_XIR_OK);
+    EffectInvocationFinal *staged=&proposal->final;staged->capture=(EffectCaptureProof){0};
     uint64_t baseline=pc_stats(work).live_bytes;size_t physical=live_bytes,blocks=live,before=attempts;
-    CHECK(effect_capture_build(work,staged)==XR_XIR_OK);
+    CHECK(effect_capture_build(work,staged,proposal)==XR_XIR_OK);
     size_t sites=attempts-before;CHECK(sites && sites<=UINT32_MAX);
     edges_capture_equal(staged,final);
     xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
     CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
     for(size_t cut=0;cut<sites;++cut) {
         fail_at=attempts+cut;injected=false;
-        XrXirStatus status=effect_capture_build(work,staged);
+        XrXirStatus status=effect_capture_build(work,staged,proposal);
         fail_at=SIZE_MAX;CHECK(injected && status==XR_XIR_OUT_OF_MEMORY);
         xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
         CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
-        CHECK(effect_capture_build(work,staged)==XR_XIR_OK);
+        CHECK(effect_capture_build(work,staged,proposal)==XR_XIR_OK);
         edges_capture_equal(staged,final);
         xr_compile_resources_free(staged->capture.facts);staged->capture=(EffectCaptureProof){0};
         CHECK(pc_stats(work).live_bytes==baseline && live_bytes==physical && live==blocks);
     }
     fprintf(stderr,"actual global capture builder all%zu allocation faults and same-owner retry passed (focused only)\n",sites);
-    xr_compile_resources_free(staged);
+    xr_compile_resources_free(proposal->states);xr_compile_resources_free(proposal);
     CHECK(pc_stats(work).live_bytes==outer_live && live_bytes==outer_physical && live==outer_blocks);
 }
 static uint32_t edges_source_once(uint32_t cut,unsigned mode) {

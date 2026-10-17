@@ -43,15 +43,17 @@ typedef struct EffectInvocationClassFact {
     uint32_t value,mask;
     uint64_t rank;
 } EffectInvocationClassFact;
+typedef struct EffectInvocationClassDiscovery {
+    EffectInvocationClassFact *facts;
+    uint32_t count,return_mask;
+    uint64_t return_rank;
+} EffectInvocationClassDiscovery;
 
 typedef struct EffectInvocationNode {
     uint32_t root,body,parameter_count,instruction_count;
     uint32_t intrinsic_mask,local_mask,cause_count;
     EffectInvocationCause *causes;
     uint64_t *input,*cells,*local_cells;
-    EffectInvocationClassFact *classes;
-    uint32_t class_count,class_return_mask;
-    uint64_t class_return_rank;
     uint32_t edge_head;
     bool deferred,local_deferred;
 } EffectInvocationNode;
@@ -60,6 +62,7 @@ typedef struct EffectInvocationNode {
  * It cannot qualify any receiving Final fact or survive publication. */
 typedef struct EffectInvocationState {
     EffectInvocationProducerSet producers;
+    EffectInvocationClassDiscovery classes;
     bool queued,expanded;
 } EffectInvocationState;
 static uint64_t effect_invocation_state_offset(uint32_t capacity) {
@@ -210,6 +213,18 @@ static const EffectInvocationProducerSet *effect_invocation_discovery_read(
     return &owner->states[node].producers;
 }
 
+static const EffectInvocationClassDiscovery *effect_invocation_class_discovery(
+    const EffectInvocationRead *read,uint32_t node) {
+    const EffectInvocationWorkspace *owner=read?read->discovery:NULL;
+    if(!owner || read->roles.sealed || !read->roles.construction ||
+        read->final!=&owner->final || !owner->states || node>=owner->final.count ||
+        !read->work || read->work->resources!=owner->read.work->resources) return NULL;
+    return &owner->states[node].classes;
+}
+
+static XrXirStatus effect_final_class_mask(const XrXirCompileContext *work,
+    const EffectInvocationFinal *final,uint32_t node,uint32_t value,uint32_t *output);
+
 static XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effects,
     uint32_t function,uint32_t instruction,const XrXirCompileContext *work);
 
@@ -226,7 +241,7 @@ typedef struct EffectInvocationColumn { uint32_t word,bit; } EffectInvocationCol
 static XrXirStatus effect_invocation_producer_column_read(const EffectInvocationRead *owner,
     const EffectBodyRequest *request,const EffectInvocationBasis *basis,
     uint32_t index,uint32_t atom,EffectInvocationColumn *output);
-static XrXirStatus effect_invocation_class_verify_read(const EffectInvocationRead *owner,
+static XrXirStatus effect_invocation_cell_terminals_read(const EffectInvocationRead *owner,
     const EffectBodyRequest *request);
 static XrXirStatus effect_invocation_edge_shape_read(const XrXirCompileContext *work,
     const EffectInvocationFinal *equations,const EffectBodyRequest *body,
@@ -262,7 +277,8 @@ static XrXirStatus effect_invocation_shape(const EffectInvocationRead *owner,uin
     return effect_body_request_shape(&request,function,instruction,output);
 }
 
-static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectInvocationFinal *final);
+static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectInvocationFinal *final,
+    const EffectInvocationWorkspace *discovery);
 static void effect_invocation_result_clear(EffectFinalFunctions *result);
 static void effect_invocation_result_free(EffectFinalFunctions *result);
 static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
