@@ -87,14 +87,20 @@ static XrXirStatus effect_invocation_node_index_reserve(EffectInvocationWorkspac
         (owner->node_index_capacity&(owner->node_index_capacity-1)) ||
         (owner->final.count && !owner->final.nodes))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
-    if (owner->node_index_capacity && owner->final.count<owner->node_index_capacity/2)
+    if (!xir_compile_work(owner->work,4+sizeof(size_t))) return XR_XIR_BUDGET;
+    /* Spare buckets bound collision walks without reserving a second half
+     * of a large table. Small tables retain at least eight vacant slots. */
+    size_t vacant=owner->node_index_capacity/4;
+    if (vacant<8) vacant=8;
+    if (owner->node_index_capacity>=vacant && owner->final.count<owner->node_index_capacity-vacant)
         return XR_XIR_OK;
     size_t capacity=owner->node_index_capacity?owner->node_index_capacity:8;
     do {
         if (capacity>SIZE_MAX/2) return XR_XIR_BUDGET;
         capacity*=2;
-    } while (owner->final.count>=capacity/2);
+        if (!xir_compile_work(owner->work,4+sizeof(size_t))) return XR_XIR_BUDGET;
+        vacant=capacity/4;if (vacant<8) vacant=8;
+    } while (capacity<vacant || owner->final.count>=capacity-vacant);
     if (capacity>SIZE_MAX/sizeof(uint32_t)) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     uint32_t *slots=xir_compile_calloc(owner->work,capacity,sizeof(*slots),&status);
