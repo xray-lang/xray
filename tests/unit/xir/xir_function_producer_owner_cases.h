@@ -12,6 +12,7 @@
  */
 #ifndef XIR_FUNCTION_PRODUCER_OWNER_CASES_H
 #define XIR_FUNCTION_PRODUCER_OWNER_CASES_H
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_program_internal.h"
 #include "xir/xxir_instance_function_internal.h"
 #include "xir/xxir_value_internal.h"
@@ -195,7 +196,7 @@ static XrXirStatus producer_runtime_seal(ProducerRuntimeWitness *witness,XrXirPr
             CHECK(*make!=UINT32_MAX && *nested!=UINT32_MAX);
             XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,target,entries,module->function_count,
                 module->declarations,{witness,producer_runtime_code_release},module->types,
-                xr_xir_compile_program_proof(lowered)};
+                xir_program_packet_borrow(lowered)};
             status=xr_xir_compile_program_seal(&owner.context,&spec,output);
         }
     }

@@ -11,6 +11,7 @@
  */
 #ifndef XIR_ARRAY_RESIZE_PIPELINE_H
 #define XIR_ARRAY_RESIZE_PIPELINE_H
+#include "xir/xxir_program_packet_internal.h"
 #include "base/xsha256.h"
 #ifndef XR_RESIZE_COMPONENT
 #define XR_RESIZE_COMPONENT "transaction"
@@ -45,9 +46,9 @@ static XrXirStatus resize_allocate(const XrXirCompileContext *context, size_t co
 static XrXirStatus resize_seal(ResizeCompile *run, unsigned mode) {
     if (!mode) return xr_xir_compile_vm_program_take(&run->lowered, &run->program);
 #if defined(XR_RESIZE_NATIVE)
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
-    CHECK(proof.length == array_resize_program.proof.length && !memcmp(proof.identity, array_resize_program.proof.identity, 32));
-    CHECK(!memcmp(proof.bytes, array_resize_program.proof.bytes, proof.length));
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
+    CHECK(proof.length == array_resize_program.packet.length && !memcmp(proof.identity, array_resize_program.packet.identity, 32));
+    CHECK(!memcmp(proof.bytes, array_resize_program.packet.bytes, proof.length));
     if (mode == 1) return xr_xir_compile_program_seal(&run->context, &array_resize_program, &run->program);
     ResizeMixed *owner = NULL;
     XrXirStatus status = resize_allocate(&run->context, 1, sizeof(*owner), (void **)&owner);
@@ -68,7 +69,7 @@ static XrXirStatus resize_seal(ResizeCompile *run, unsigned mode) {
         CHECK(native && vm);
         XrXirProgramSpec spec = array_resize_program;
         spec.entries = owner->entries; spec.types = module->types; spec.declarations = module->declarations;
-        spec.proof = xr_xir_compile_program_proof(artifact); spec.code = (XrXirCodeLease){owner, resize_mixed_free};
+        spec.packet = xir_program_packet_borrow(artifact); spec.code = (XrXirCodeLease){owner, resize_mixed_free};
         status = xr_xir_compile_program_seal(&run->context, &spec, &run->program);
     }
     if (status != XR_XIR_OK) { CHECK(!run->program); resize_mixed_free(owner); }
@@ -179,7 +180,7 @@ static ResizeCompile resize_build(size_t failure, XrCompileResourceLimits limits
     run.prefix_references = run.context.resources->references;
     run.prefix_blocks = instance_compile_live; run.prefix_bytes = instance_compile_bytes;
     if (resize_compiler_digest) {
-        XrXirProgramProof proof = xr_xir_compile_program_proof(run.lowered);
+        XrXirProgramPacket proof = xir_program_packet_borrow(run.lowered);
         resize_digest(source.text, source.length, run.c_sha); resize_digest(proof.bytes, proof.length, run.proof_sha);
     }
     run.c_bytes = source.length;

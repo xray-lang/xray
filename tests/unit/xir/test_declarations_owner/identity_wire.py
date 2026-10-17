@@ -8,7 +8,7 @@ import json
 
 sys.dont_write_bytecode = True
 CASES = ((1, 0), (3, 0), (1, 7), (1, 8))
-HISTORY = ((24, 62), (24, 63), (25, 64), (25, 65), (25, 70), (26, 71))
+HISTORY = ((24, 62), (24, 63), (25, 64), (25, 65), (25, 70), (26, 71), (27, 72))
 # Frozen complete original models, including the former current65 fixture.
 HISTORICAL_PACKET_SHA256 = {'1-0-24-62': '3657f024cd5a37d8620c832cae45d28ff3bf6bf7cf34bd9ab0673db068eb0e12', '1-0-24-63': '6c797ded75d6c180287dbb8d5b8ccdb97aacea99a9f16b289930a2a379d6b257', '1-0-25-64': '08e70683780cec431870470779644ba510a4488e924d6be943249d49fe285f5c', '1-0-25-65': 'd813aa30e0f3fd434a0e454956129b9af51fd2faeed5a4580cc0d210bf00d53d', '3-0-24-62': '74c24f4bb8fb52fb217265b9cfe7c61edfb3928a2947da9b99583d2e461745d9', '3-0-24-63': '9b5d10209cd157518c7a1ef0bbbec937ddc384de04e75e22809b7dcfa66d62e6', '3-0-25-64': '2ddef4890da5f9e331c0fec992746ef597bbd733177496b6a0852fb3a46c4078', '3-0-25-65': 'cf43fc8a09297696bda19fad7fc6e1703f86a1b490cae03433da18f8f96507c9', '1-7-24-62': 'e66d889414a1dc7c8d9547e976e71a342acb97ace2325cd4627376506f3fefbe', '1-7-24-63': '1f9c9f2683b59fec4dc02bf62dcbf95d07bc3bde23e185e49b2b860535dd8abb', '1-7-25-64': '7f2d0cae3d6ef511cae074bca5746e2270504177c43717774f7dc48dbf494dae', '1-7-25-65': '82ee0d01301118c85abf7d54a3ff56e3fa5e50c4f6dc2a12cee08e5529fd889a', '1-8-24-62': 'b41538fd92840a7bbcefcbb1a736c9c2b6d6fe2423c0f743b70c33919c6d42f7', '1-8-24-63': 'a9fbe04b02ab140c5b52a7a2054ba55a0f3607fab1808d094186f899e8f251f8', '1-8-25-64': '8a29770860aff23f0538b2e9950818413c0216f4e68ad8c903a4fec8d2572116', '1-8-25-65': '4679fb8c2ffb39d592636dfdc4c88fa2541097afa9b0c9da9ee4e18603cb40a3'}
 # Preserve the previous positive models as complete retired inputs.
@@ -31,8 +31,8 @@ def function(name, result, instructions):
             b''.join(instructions)+words(0))
 
 
-def packet(role, timeout, wire=27, semantic=72):
-    assert (wire,semantic) in HISTORY + ((27,72),)
+def packet(role, timeout, wire=28, semantic=73):
+    assert (wire,semantic) in HISTORY + ((28,73),)
     return_opcode=33 if wire>=25 else 25
     unit = [instruction(return_opcode)]
     body = words(0, 4, 1)
@@ -55,6 +55,14 @@ def packet(role, timeout, wire=27, semantic=72):
 
 
 def verify_models():
+    frozen72=json.loads(Path(__file__).with_name('identity72_complete_packets.json').read_text())
+    assert len(frozen72['packets'])==4 and {(r['role'],r['timeout']) for r in frozen72['packets']}==set(CASES)
+    for row in frozen72['packets']:
+        assert (row['wire'],row['semantic'])==(27,72)
+        encoded=packet(row['role'],row['timeout'],27,72)
+        assert len(encoded)==row['bytes']==730 and encoded.hex()==row['packet_hex']
+        assert hashlib.sha256(encoded).hexdigest()==row['sha256']
+        HISTORICAL_PACKET_SHA256[f"{row['role']}-{row['timeout']}-27-72"]=row['sha256']
     records = []
     for role, timeout in CASES:
         previous = packet(role, timeout, 25, 70)
@@ -70,15 +78,19 @@ def verify_models():
         for wire, semantic in HISTORY:
             retired = packet(role, timeout, wire, semantic)
             key = f'{role}-{timeout}-{wire}-{semantic}'
-            assert len(retired) == 726
+            assert len(retired) == (730 if wire >= 27 else 726)
             assert hashlib.sha256(retired).hexdigest() == HISTORICAL_PACKET_SHA256[key], key
-            if wire >= 25:
+            if wire >= 27:
+                # This graph has no type nodes or callable Error-marker bounds;
+                # its complete declaration payload is unchanged under 28/73.
+                assert retired[64:] == current[64:]
+            elif wire >= 25:
                 assert retired[64:] == previous[64:]
             records.append({'role': role, 'timeout': timeout, 'wire': wire,
                             'semantic': semantic, 'bytes': len(retired),
                             'sha256': hashlib.sha256(retired).hexdigest()})
-        records.append({'role': role, 'timeout': timeout, 'wire': 27,
-                        'semantic': 72, 'bytes': len(current),
+        records.append({'role': role, 'timeout': timeout, 'wire': 28,
+                        'semantic': 73, 'bytes': len(current),
                         'sha256': hashlib.sha256(current).hexdigest(),
                         'body_sha256': hashlib.sha256(current[64:]).hexdigest(),
                         'construction_count_offset': insertion})
@@ -89,7 +101,7 @@ def main(argv):
     models = verify_models()
     if argv == ['--verify-models']:
         print(json.dumps({'status': 'INDEPENDENT_FULL_IDENTITY_MODELS_VERIFIED',
-                          'models': models, 'retired_complete': 24, 'current72': 4,
+                          'models': models, 'retired_complete': 28, 'current73': 4,
                           'callable_nodes': 0, 'driver_executed': False,
                           'runtime_qualification': 'NOT_RUN'}, indent=2))
         return 0
@@ -107,8 +119,8 @@ def main(argv):
         actual = (output/f'{role}-{timeout}.chk').read_bytes()
         expected = packet(role, timeout)
         assert actual == expected, (role, timeout, len(actual), len(expected))
-    print('four independent complete Checked27/72 identity packets; '
-          'old24/62,24/63,25/64,25/65,25/70,26/71 zero-allocation rejection PASS')
+    print('four independent complete Checked28/73 identity packets; '
+          'old24/62,24/63,25/64,25/65,25/70,26/71,27/72 zero-allocation rejection PASS')
     return 0
 
 

@@ -169,6 +169,7 @@ XR_FUNC bool xr_xir_domain_work(XrXirDomain *domain,uint64_t work) {
 #include "xir/xxir_verify.c"
 #include "xir/xxir_layout.c"
 #include "xir/xxir_program_match.c"
+#include "xir/xxir_program_input.c"
 #include "xir/xxir_program.c"
 #include "xir/xxir_instance.c"
 #include "xir/xxir_output.c"

@@ -11,6 +11,7 @@
  *   Mixed selection must contain a real caller-to-callee edge, and both entry
  *   directions retain the same checked proof rather than a saved verdict.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -50,7 +51,7 @@ static void execute_profile(int64_t expected, bool direction) {
     SourceFixtureOwner owner = {0}; source_fixture_owner_new(&owner);
     XrXirProgramSpec spec = language_reference_program;
     XrXirArtifact *checked = NULL, *lowered = NULL;
-    CHECK(xr_xir_compile_checked_read(&owner.context, spec.proof.bytes, spec.proof.length, &checked, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&owner.context, spec.packet.bytes, spec.packet.length, &checked, NULL) == XR_XIR_OK);
     const XrXirModule *module = xr_xir_compile_artifact_module(checked);
     CHECK(module->function_count == spec.entry_count);
     uint32_t answer = UINT32_MAX;
@@ -81,10 +82,10 @@ static void execute_profile(int64_t expected, bool direction) {
         }
         CHECK(vm && native && crossing);
         spec.entries = entries; spec.types = module->types; spec.declarations = module->declarations;
-        XrXirProgramProof matching = xr_xir_compile_program_proof(lowered);
-        CHECK(matching.identity && matching.length == spec.proof.length &&
-              !memcmp(matching.identity, spec.proof.identity, 32) && !memcmp(matching.bytes, spec.proof.bytes, matching.length));
-        spec.proof = matching;
+        XrXirProgramPacket matching = xir_program_packet_borrow(lowered);
+        CHECK(matching.identity && matching.length == spec.packet.length &&
+              !memcmp(matching.identity, spec.packet.identity, 32) && !memcmp(matching.bytes, spec.packet.bytes, matching.length));
+        spec.packet = matching;
         printf("mixed direction=%u vm=%u native=%u direct_cross_edges=%u\n", (unsigned)direction, vm, native, crossing);
     }
     xr_xir_compile_artifact_free(checked);

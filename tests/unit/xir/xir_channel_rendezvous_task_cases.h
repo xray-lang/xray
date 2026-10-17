@@ -1,3 +1,4 @@
+#include "xir/xxir_program_packet_internal.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -37,7 +38,7 @@ static void rendezvous_task_new_mode(RendezvousTask *f,bool receive_first) {
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},entries,4,
         &declarations,{f,rendezvous_task_code_drop},&types,{0}};
     XrXirArtifact *proof=NULL;CHECK(native_metadata_fixture(&f->owner.context,&spec,&proof)==XR_XIR_OK);
-    spec.proof=xr_xir_compile_program_proof(proof);
+    spec.packet=xir_program_packet_borrow(proof);
     CHECK(xr_xir_compile_program_seal(&f->owner.context,&spec,&f->program)==XR_XIR_OK);xr_xir_compile_artifact_free(proof);
     XrXirTypeNode task={.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64};XrXirTypes task_types={&task,1,NULL,NULL};
     CHECK(xr_xir_compile_type_arena_new(&f->owner.context,&task_types,&f->tasks)==XR_XIR_VALUE_OK);

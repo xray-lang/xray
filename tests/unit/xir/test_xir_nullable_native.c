@@ -6,6 +6,7 @@
  *
  * test_xir_nullable_native.c - Actual typed sums across native and VM entries
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -61,7 +62,7 @@ static void nullable_native_run(const XrXirCompileContext *context,const XrXirPr
 }
 static void nullable_native_mixed(const XrXirCompileContext *context,const XrXirProgramSpec *native,bool root_native) {
     XrXirArtifact *checked=NULL;
-    CHECK(xr_xir_compile_checked_read(context,native->proof.bytes,native->proof.length,&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context,native->packet.bytes,native->packet.length,&checked,NULL)==XR_XIR_OK);
     NullableNativeOwner *owner=xr_calloc(1,sizeof(*owner));CHECK(owner);
     CHECK(xr_xir_compile_lower(checked,&native->target,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(owner->artifact);CHECK(module->function_count==native->entry_count);
@@ -75,7 +76,7 @@ static void nullable_native_mixed(const XrXirCompileContext *context,const XrXir
     }
     CHECK(native_count && vm_count);
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,native->target,owner->entries,module->function_count,
-        module->declarations,{owner,nullable_native_release},module->types,xr_xir_compile_program_proof(owner->artifact)};
+        module->declarations,{owner,nullable_native_release},module->types,xir_program_packet_borrow(owner->artifact)};
     nullable_native_run(context,&spec);
 }
 static XrXirStatus nullable_native_seal_operation(const XrXirCompileContext *context,void *opaque) {
@@ -91,8 +92,8 @@ int main(void) {
     LibraryCompileOwner compiler={0};
     CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
     const XrXirCompileContext *context=&compiler.context;
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==21 && XR_XIR_CALL_ABI_VERSION==26 &&
-        XR_XIR_PROGRAM_ABI_VERSION==29,"sum values require current consumers");
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==24 && XR_XIR_CALL_ABI_VERSION==29 &&
+        XR_XIR_PROGRAM_ABI_VERSION==31,"sum values require current consumers");
     const XrXirProgramSpec *spec=&nullable_checked_program;XrXirProgramSpec old=*spec;
     old.target.abi_version=16;XrXirProgram *program=(XrXirProgram *)(uintptr_t)1;
     size_t before=source_program_compile_attempts;

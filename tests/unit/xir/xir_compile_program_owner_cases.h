@@ -8,6 +8,8 @@
  */
 #ifndef XIR_COMPILE_PROGRAM_OWNER_CASES_H
 #define XIR_COMPILE_PROGRAM_OWNER_CASES_H
+#include "xir_program_input_fixture.h"
+#include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 #include "xir_compile_program_fixture.h"
 #include "xir_class_owned_fixture.h"
@@ -97,13 +99,13 @@ static void program_abi_and_owner(void) {
         CHECK(xr_xir_compile_vm_bind(lowered,i,bindings+i,entries+i)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,*xr_xir_compile_artifact_target(lowered),
-        entries,3,module->declarations,{0},module->types,xr_xir_compile_program_proof(lowered)};
+        entries,3,module->declarations,{0},module->types,xir_program_packet_borrow(lowered)};
     entries[0].abi_version=21;
     spec.declarations=(const XrXirDeclarations *)(uintptr_t)1;
     CHECK(xr_xir_compile_program_seal(&context,&spec,&out)==XR_XIR_BAD_LAYOUT && !out);
     entries[0].abi_version=XR_XIR_CALL_ABI_VERSION; spec.declarations=module->declarations;
     XrXirCompileContext foreign=context_new(UINT64_MAX);
-    CHECK(xr_xir_compile_program_match(&foreign,&spec,spec.proof.layouts,lowered)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_program_match(&foreign,&spec,xr_xir_compile_artifact_layout(lowered, 0),lowered)==XR_XIR_BAD_STRUCTURE);
     xr_compile_resources_release(foreign.resources);
     XrXirVmBinding binding={lowered,99},saved_binding=binding;
     XrXirCallEntry entry=entries[0],saved_entry=entry;
@@ -162,9 +164,9 @@ static void program_method_kind_match(void) {
         specs[side] = (XrXirProgramSpec) {XR_XIR_PROGRAM_ABI_VERSION,
             *xr_xir_compile_artifact_target(lowered[side]), entries[side], 5,
             module->declarations, {0}, module->types,
-            xr_xir_compile_program_proof(lowered[side])};
+            xir_program_packet_borrow(lowered[side])};
         CHECK(xr_xir_compile_program_match(&context, &specs[side],
-            specs[side].proof.layouts, lowered[side]) == XR_XIR_OK);
+            xr_xir_compile_artifact_layout(lowered[side], 0), lowered[side]) == XR_XIR_OK);
         XrXirProgram *program = NULL;
         CHECK(xr_xir_compile_program_seal(&context, &specs[side], &program) == XR_XIR_OK);
         program_method_result(program, module->declarations->entry_function);
@@ -178,21 +180,22 @@ static void program_method_kind_match(void) {
         declarations.functions = identities;
         XrXirProgramSpec altered = specs[side];
         altered.declarations = &declarations;
-        /* The other independently verified proof admits this exact descriptor.
-         * A legal member role must still match the selected proof's authority. */
-        altered.proof = specs[1 - side].proof;
+        /* Each receive checks the selected Packet against the actual descriptor,
+         * including a legal member role that differs from the other producer. */
+        altered.packet = specs[1 - side].packet;
         XrXirProgram *program = NULL;
         CHECK(xr_xir_compile_program_seal(&context, &altered, &program) == XR_XIR_OK);
         program_method_result(program, declarations.entry_function);
         xr_xir_compile_program_drop(program);
-        altered.proof = specs[side].proof;
+        altered.packet = specs[side].packet;
         XrCompileResourceStats before = stats(&context);
         XrXirStatus matched = xr_xir_compile_program_match(&context, &altered,
-            altered.proof.layouts, lowered[side]);
+            xr_xir_compile_artifact_layout(lowered[side], 0), lowered[side]);
         XrXirProgramPermissions *permissions = NULL;
-        XrXirStatus proof = xr_xir_compile_program_proof_verify(&context, &altered,
-            &altered.proof, &permissions);
+        XrXirProgramInput *program_input = NULL;
+        XrXirStatus proof = program_fixture_decode_prepare(&context,&altered,&altered.packet,&program_input,&permissions);
         CHECK(!permissions);
+        xir_program_input_free(program_input); program_input = NULL;
         program = NULL;
         XrXirStatus sealed = xr_xir_compile_program_seal(&context, &altered, &program);
         bool empty = !program;

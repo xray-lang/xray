@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   A String result has a Domain lease independent from immutable program code.
  */
+#include "xir/xxir_program_packet_internal.h"
 #ifndef XIR_OWNED_STRING_SOURCE_RESOURCES_H
 #define XIR_OWNED_STRING_SOURCE_RESOURCES_H
 
@@ -164,7 +165,7 @@ static void cs_seal(CsFixture *f, CsMetrics *m) {
     cs_compiler_step(m, 8, begin);
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     const XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, f->entries, module->function_count,
-        d, {f, cs_code_release}, module->types, xr_xir_compile_program_proof(f->lowered)};
+        d, {f, cs_code_release}, module->types, xir_program_packet_borrow(f->lowered)};
     begin = instance_compile_attempts;
     CHECK(xr_xir_compile_program_seal(&f->compiler, &spec, &f->program) == XR_XIR_OK);
     cs_compiler_step(m, 9, begin);

@@ -76,8 +76,9 @@ static void timed_wire_positive(LibraryCompileOwner *owner,unsigned variant) {
     CHECK(packet.length==lengths[variant] && !memcmp(packet.bytes,expected[variant],packet.length));
     CHECK(xr_xir_compile_checked_read(&owner->context,expected[variant],lengths[variant],&read,NULL)==XR_XIR_OK);
     XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_analyze(checked,&effects)==XR_XIR_OK && effects);
-    const XrXirFunctionEffects *effect=xr_xir_effects_function(effects,1);const XrXirRootEffects *root=xr_xir_effects_root(effects,1);
-    CHECK(effect && effect->suspend==XR_XIR_EFFECT_MAY && effect->throws==XR_XIR_EFFECT_NONE && root && !root->requires_root && !root->unresolved);
+    XrXirEffectFacts facts=xr_xir_effects_read(effects,1);
+    CHECK(facts.status==XR_XIR_OK && facts.control.suspend==XR_XIR_EFFECT_MAY &&
+        facts.control.throws==XR_XIR_EFFECT_NONE && !facts.root.requires_root && !facts.root.unresolved);
     xr_xir_compile_effects_free(effects);
     memset(&f,0xcc,sizeof(f));memset(packet.bytes,0xcc,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK && xr_xir_compile_artifact_verify(read,NULL)==XR_XIR_OK);

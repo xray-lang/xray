@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   One code lease owns VM environments while native entries use the same slots.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_generic.h"
@@ -58,8 +59,8 @@ int main(void) {
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->artifact);
     CHECK(module->function_count == fixture_source_program.entry_count);
     CHECK(xr_compile_resources_calloc(context.resources,module->function_count,sizeof(*owner->entries),(void **)&owner->entries)==XR_COMPILE_RESOURCE_OK);
-    XrXirProgramProof proof=xr_xir_compile_program_proof(owner->artifact);
-    CHECK(proof.length==fixture_source_program.proof.length && !memcmp(proof.bytes,fixture_source_program.proof.bytes,proof.length));
+    XrXirProgramPacket proof=xir_program_packet_borrow(owner->artifact);
+    CHECK(proof.length==fixture_source_program.packet.length && !memcmp(proof.bytes,fixture_source_program.packet.bytes,proof.length));
     CHECK(xr_xir_compile_vm_program_take(&owner->artifact,&owner->vm_program)==XR_XIR_OK && !owner->artifact);
     CHECK(owner->entries && owner->vm_program && owner->vm_program->entry_count==module->function_count);
     unsigned native_resumes = 0, vm_pauses = 0, pause_types = 0;

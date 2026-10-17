@@ -137,6 +137,24 @@ fetchAdd遵循原子合同，fetchAdd返回旧值并按二进制补码环绕。�
 恢复必须匹配执行epoch和wake，防止跨调用迟到恢复。首版仅准入单宿主线程独占驱动。
 精确准入、预算与租约责任由 `test_xir_instances` 验证；这不授予源码或缓存格式资格。
 
+内部 VM 接收把真实 Lowered Artifact 及其规范 Input/Final 转交给 Program，
+不借内部 packet 重新解码或重新 Lower。外部 native 描述只携带
+`XrXirProgramPacket` 的 bytes、length、identity，边界解码一次后进入同一拥有型接收核；
+packet 不携带调用者提供的布局权限。接收核独立检查当前语义、body、声明、布局和接线，
+成功才转交 Input、入口表及代码租约，失败保全调用者输入且不发表 Program。
+准备期只借用调用者拥有的入口表和参数块；失败保留同一 Input、表与参数，可在不重置账本下重试，成功无回调提交时才一并清空拥有槽。VM失败清理按实际分配的固定数量遍历，不能采用末次回调改变的模块计数。
+拥有型 Input、Artifact、入口表和非空参数块须分别位于原账本中的存活分配起点，不能将可读的内部区间当成可释放的拥有指针。拥有表及其参数在深读前检查物理范围，发布前再检查当前表、参数、数量及归属；零参数行的拥有指针须为空，多个拥有行不能重复转交同一参数块。失败不分配新的接收对象来修补畸形的物理输入，检查所用 work 仍计入原账本。
+Program直接使用所转交规范Input拥有的不可变声明；不再深复制另一份声明，失败销毁Program时也不释放调用者仍拥有的Input声明。运行时类型arena仍独立拥有其类型，以支持逃逸值寿命。
+内部 packet 先死亡、外部 packet/spec 随后死亡均不能使成功 Program 借用失效存储。
+旧 Program ABI 及旧 Proof/getter 接口拒绝，不保留适配分支。
+
+末次准备回调后的 Error 检查，若从完整当前 Input 证明所有操作只有空逃逸传递和
+内部直接调用，则其最小解必须全空，包括无种子递归调用环；当前 Error 行及
+throws/task_errors 公开投影须同时匹配。此检查不分配或释放，按真实读取收费，
+拒绝联合伪造行与两个公开字段。即使其他函数有真实Error种子，完整无调用且无deferred cleanup的叶子函数仍须从当前Input独立证明Error行及两个公开投影全空；此局部检查不为其他函数授予权限。含真实错误种子、精确间接调用或一般泛型绑定的
+完整当前 Error V 仍有独立责任；拥有型载体不代表一般 Final 证明、全部构造
+Workspace 退役或完整故障/资源/安全资格已经完成。
+
 ### 17.9 新 XIR 源码准入边界
 
 新 source owner 复用实际 parser 与模块 resolver/graph，直接检查声明和构造 Built，
@@ -179,6 +197,12 @@ Lowered 或旧格式读取器。
 
 该子集（含§17.11的标记约束模板）不代表完整成员约束/见证、效应、诊断来源序列化、包链接、native 缓存配对、
 installer 发布或完整无源码标准库分发已经验收。
+
+Program 在所有准备分配及释放回调结束后，将当前描述和拥有副本分别与独立检查的规范类型、声明、签名及物理布局比较；VM 拥有权交接还将实际执行 body 和绑定接线对应到同一输入。最终比较不分配或释放存储。摘要仅检查 packet 漂移，不授语义权限。失败不取得调用者 artifact 或代码租约，不发表 Program；此边界不认证任意 native 回调行为，也不替代一般 Final 独立验证与全部构造 Workspace 退役要求。
+
+准备阶段从独立规范输入复制语义元数据，避免把被准备回调失效的调用者表作为拥有副本的来源。最终比较先拒绝所有非空表缺失的存储，再逐项遍历，包括模块表及函数表。恢复原调用者存储后，可在同一累计账本重试；拒绝不退还工作量或分配费用。
+
+Program 的当前 body 对应检查在读取前，用同一累计账本的实际活分配范围核验规范 body 和 Lowered 投影的头、名称、签名、块、指令、操作数、压缩记录及默认记录；按所读类型检查对齐和完整范围，并拒绝记录计数越过容量。检查不分配，实际扫描仍计费。合法物理范围不证明字段对应、语义、历史分配代际或完整 Final；最后准备回调后的当前字段仍须独立比较，拒绝保全输入与空输出。
 
 ### 17.11 定义处检查与 Checked 泛型特化
 
@@ -706,6 +730,46 @@ The initial instance interface admits exclusive driving by one host thread only.
 The precise internal interface is verified by `test_xir_instances`; source and
 serialized/cache admission require separate qualification.
 
+Internal VM reception transfers the actual Lowered Artifact and its canonical
+Input/Final into the Program, without decoding an internal packet or lowering
+it again. External native descriptors carry only the bytes, length and identity
+of `XrXirProgramPacket`; one boundary decode enters the same owning receiver.
+Packets carry no caller-supplied layout authority. Reception independently
+checks current semantics, bodies, declarations, layouts and wiring before
+transferring the Input, entry table and code lease. Failure preserves caller
+inputs and publishes no Program. Preparation borrows a caller-owned entry table
+and its parameter blocks. Refusal retains the same Input, table and parameters
+for retry without ledger refill; only the final callback-free commit clears both
+owning slots. VM failure cleanup uses the actual fixed allocation count rather
+than a module count changed by a preparation callback. Owning Input, Artifact,
+entry tables and nonempty parameter blocks must start at live allocations on
+the receiving ledger; a readable interior extent cannot transfer a releasable
+owner. Check table and parameter storage before deep reads and again before
+publication, including current pointers and counts. Empty parameter rows have
+null owning pointers, and rows cannot transfer the same parameter block twice.
+Malformed physical input creates no new receiving objects; its actual checking
+work remains charged to the original ledger. The Program uses the immutable declarations
+owned by its transferred canonical Input without a second deep clone. Failed
+Program disposal leaves caller-owned Input declarations live. The runtime type
+arena keeps its independent ownership for escaping values. Internal packet destruction before reception
+and external packet/spec destruction afterwards cannot invalidate a successful
+Program. Old Program ABIs and the old Proof/getter interface reject without an
+adapter path.
+
+After the last preparation callback, a complete current Input containing only
+empty escaping transfers and internal direct calls has the least empty Error
+solution, including recursive call components without a seed. Current Error
+rows and both public throws/task_errors projections must match that solution.
+This check allocates and releases nothing, charges actual reads, and rejects a
+joint forgery of a row and its two projections. Inputs with real error seeds,
+precise indirect calls or general generic bindings retain the separate complete
+current Error verification obligation. Even when another function has a real Error seed,
+a complete leaf without calls or deferred cleanup independently proves its Error row and
+both public projections empty from current Input; this local check grants no authority to
+other functions. An owning carrier does not qualify the
+general Final proof, retirement of every construction Workspace, or complete
+fault, resource and safety gates.
+
 ### 17.9 New XIR Source Admission Boundary
 
 The source owner reuses the real parser and module resolver/graph, checks source
@@ -767,6 +831,34 @@ rules are verified by `test_xir_checked`.
 This subset (including §17.11 marker templates) does not qualify full member constraints/witnesses,
 effects, diagnostic provenance, package linking, Checked library publication, installer
 publication or complete source-free standard-library distribution.
+
+Program publication compares the current descriptors and their owned copies
+against independently checked canonical types, declarations, signatures and
+physical layouts after all preparation allocator callbacks have finished. VM
+ownership transfer additionally compares the actual executable body and binding
+wiring to that same input. These final comparisons allocate and release no
+storage. A content digest only detects packet drift; it grants no semantic
+permission. Failure leaves the caller's artifact and code lease unconsumed and
+publishes no Program. This boundary does not authenticate arbitrary native
+callback behavior or replace general independent Final verification and
+retirement of every construction Workspace.
+
+Preparation copies semantic metadata from the independent canonical input,
+so a caller metadata table invalidated by a preparation callback is never used
+as the source of an owned copy. The final comparison rejects missing storage
+for every nonempty table before traversing it, including module and function
+tables. Restoring the caller's original storage permits a retry on the same
+cumulative ledger; rejection does not refund work or allocation charges.
+
+Before reading either canonical body or Lowered projection storage, current
+Program body correspondence checks the actual live allocation ranges on the
+same cumulative ledger for headers, names, signatures, blocks, instructions,
+operands, compressed records and default records. Each typed read requires its
+alignment and complete range; record counts cannot exceed capacity. These
+checks allocate nothing and charge actual scans. A valid range proves neither
+field correspondence, semantics, historical allocation generation nor a
+complete Final. Current fields still require independent comparison after the
+last preparation callback; rejection preserves inputs and the empty output.
 
 ### 17.11 Definition Checking and Checked Generic Specialization
 

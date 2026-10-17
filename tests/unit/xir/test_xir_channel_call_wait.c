@@ -173,7 +173,7 @@ static void channel_call_registration(bool oom,bool changed) {
 #include "xir_channel_task_wait_cases.h"
 #include "xir_channel_call_wait_controls.h"
 int main(void) {
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==29 && XR_XIR_CALL_ABI_VERSION==33 && XR_XIR_PROGRAM_ABI_VERSION==34,
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==29 && XR_XIR_CALL_ABI_VERSION==33 && XR_XIR_PROGRAM_ABI_VERSION==35,
         "Owned Channel waits require the exact driver and Program generation");
     for (unsigned event=0;event<3;++event) channel_call_event(event);
     channel_call_reject(CALL_WATCH_FORGED);channel_call_reject(CALL_WATCH_WRONG_ACTION);channel_call_reject(CALL_WATCH_CANCEL);

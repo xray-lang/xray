@@ -6,6 +6,7 @@
  *
  * test_xir_tuple_slot_group.c - Actual publication, admission and cancellation boundaries
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -191,7 +192,7 @@ static void group_run(XrXirArtifact *lowered,GroupMode mode,bool vm,size_t fail_
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_I64,0,group_entry,NULL,NULL,0,0}};
     if(vm)for(uint32_t i=0;i<2;++i)CHECK(xr_xir_compile_vm_bind(lowered,i,&bindings[i],&entries[i])==XR_XIR_OK);
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
-            entries,2,module->declarations,{0},module->types,xr_xir_compile_program_proof(lowered)};
+            entries,2,module->declarations,{0},module->types,xir_program_packet_borrow(lowered)};
     CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(lowered),&spec,&program)==XR_XIR_OK);
     size_t live=runtime_live,bytes=runtime_bytes;runtime_attempts=0;runtime_fail_at=fail_at;
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);

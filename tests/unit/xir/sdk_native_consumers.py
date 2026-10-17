@@ -1,12 +1,31 @@
 """Execute original Source inputs against a production-held same-source SDK."""
 from pathlib import Path
-import argparse, json, re, subprocess, sys, tempfile
+import argparse, contextlib, json, os, re, shutil, subprocess, sys, tempfile
+
+COMMANDS=[]
 
 
 def checked(command,**kwargs):
     result=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=120,**kwargs)
+    COMMANDS.append({'command':[str(value) for value in command],'exit':result.returncode,
+                     'stdout':result.stdout.decode('utf-8',errors='replace'),
+                     'stderr':result.stderr.decode('utf-8',errors='replace')})
     assert not result.returncode,(command,(result.stdout+result.stderr).decode(errors='replace'))
     return result.stdout
+
+@contextlib.contextmanager
+def native_workspace(provider):
+    with tempfile.TemporaryDirectory(prefix='xir-sdk-native-') as temporary:
+        work=Path(temporary)
+        try:
+            yield work
+        finally:
+            destination=os.environ.get('XR_XIR_SDK_CONSUMER_EVIDENCE')
+            if destination:
+                target=Path(destination)/provider
+                assert not target.exists(),'Use a fresh consumer evidence epoch'
+                (work/'commands.json').write_text(json.dumps(COMMANDS,indent=2)+'\n',encoding='utf-8')
+                shutil.copytree(work,target)
 
 
 def compile_source(args,sdk,source,object_file,program_symbol=None):
@@ -45,8 +64,8 @@ def main():
         ready=lease.stdout.readline().strip().split();assert ready[0]=='READY' and ready[1:3]==['29','2'],ready
         sdk=Path(lease.stdout.readline().strip());libraries=[lease.stdout.readline().strip() for _ in range(5)]
         assert sdk.is_dir() and all(Path(name).is_file() for name in libraries)
-        with tempfile.TemporaryDirectory(prefix='xir-sdk-native-') as temporary:
-            work=Path(temporary);consumer=root/'tests/unit/xir/xir_sdk_consumer.c'
+        with native_workspace(args.provider) as work:
+            consumer=root/'tests/unit/xir/xir_sdk_consumer.c'
             sys.path.insert(0,str(root/'scripts'))
             from derive_xir_sdk_abi import prepare
             proof=work/'abi';prepare(proof);probe_object=proof/'abi.obj';probe_exe=proof/'abi.exe'

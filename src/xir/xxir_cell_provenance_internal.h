@@ -27,6 +27,9 @@ typedef enum XrXirCellProofRole {
     XR_XIR_CELL_PROOF_SCOPED_REF, XR_XIR_CELL_PROOF_LEXICAL_CLEANUP
 } XrXirCellProofRole;
 typedef struct XrXirCellProvenance XrXirCellProvenance;
+/* Readable current storage precedes semantic Cell proof comparison. */
+XR_FUNC XrXirStatus xir_cell_provenance_storage(const XrXirCompileContext *context,
+    const XrXirCellProvenance *proof,uint32_t functions);
 typedef struct XrXirCellProofBodyHead {
     const XrXirType *parameters;
     uint32_t parameter_count;

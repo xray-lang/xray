@@ -77,9 +77,19 @@ int main(int argc,char **argv) {
     CHECK(argc==1 || argc==2);ClassPipelineOwner owner={0};CHECK(class_pipeline_new(&owner,&class_pipeline_limits)==XR_XIR_OK);
     XrXirArtifact *owned=NULL;CHECK(class_source_owned(&owner.context,&owned)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(owned,&packet,NULL)==XR_XIR_OK && packet.length<=262144);
-    if(argc==2){FILE *file=fopen(argv[1],"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));}
     XrXirArtifact *decoded=NULL;CHECK(xr_xir_compile_checked_read(&owner.context,packet.bytes,packet.length,&decoded,NULL)==XR_XIR_OK);
-    xr_xir_compile_artifact_free(decoded);xr_xir_compile_checked_packet_free(&packet);
+    xr_xir_compile_artifact_free(decoded);
+    /* Packet generation has its own lifetime. The registered no-argument
+     * test below still performs every original compiler fault and axis. */
+    if(argc==2) {
+        xr_xir_compile_artifact_free(owned);owned=NULL;
+        FILE *file=fopen(argv[1],"wb");
+        CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));
+        xr_xir_compile_checked_packet_free(&packet);
+        class_pipeline_drop(&owner);class_pipeline_final_zero();
+        puts("inline class Checked packet generated; producer retired; physical0");return 0;
+    }
+    xr_xir_compile_checked_packet_free(&packet);
     /* The original first Checked owner is retained while independent complete fault replays destroy all their producers. */
     size_t blocks=source_program_compile_live,bytes=source_program_compile_bytes;
     class_pipeline_faults("Class inline whole Source/Checked/VM",class_source_operation,NULL);

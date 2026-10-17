@@ -17,10 +17,13 @@
 #include <stdatomic.h>
 #include <string.h>
 
+typedef union CompileAllocation CompileAllocation;
+
 struct XrCompileResources {
     XrCompileResourceLimits limits;
     XrCompileResourceStats stats;
     uint64_t references;
+    CompileAllocation *allocations;
     atomic_bool locked;
 };
 
@@ -56,13 +59,14 @@ typedef union CompileMaxAlignment {
 typedef max_align_t CompileMaxAlignment;
 #endif
 
-typedef union CompileAllocation {
+union CompileAllocation {
     struct {
         XrCompileResources *resources;
         size_t bytes;
+        CompileAllocation *previous, *next;
     } info;
     CompileMaxAlignment alignment;
-} CompileAllocation;
+};
 
 _Static_assert(sizeof(size_t) <= sizeof(uint64_t), "Allocation sizes must fit the ledger");
 _Static_assert(sizeof(CompileAllocation) % _Alignof(CompileMaxAlignment) == 0,
@@ -79,6 +83,7 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_new(
     resources->limits = *limits;
     resources->stats = (XrCompileResourceStats) {1, sizeof(*resources), sizeof(*resources), sizeof(*resources), 1};
     resources->references = 1;
+    resources->allocations = NULL;
     atomic_init(&resources->locked, false);
     *output = resources;
     return XR_COMPILE_RESOURCE_OK;
@@ -126,6 +131,38 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *re
     XrCompileResourceStatus status = compile_work_locked(resources, units);
     compile_unlock(resources);
     return status;
+}
+
+static XrCompileResourceStatus compile_storage(XrCompileResources *resources,
+    const void *memory, size_t bytes, bool owning) {
+    if (!resources || !memory || !bytes) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    uintptr_t address = (uintptr_t)memory;
+    XrCompileResourceStatus status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    compile_lock(resources);
+    for (const CompileAllocation *allocation = resources->allocations; allocation;
+         allocation = allocation->info.next) {
+        status = compile_work_locked(resources, 1);
+        if (status != XR_COMPILE_RESOURCE_OK) break;
+        uintptr_t start = (uintptr_t)(allocation + 1);
+        if ((!owning || address == start) && address >= start && address - start <= allocation->info.bytes &&
+            bytes <= allocation->info.bytes - (size_t)(address - start)) {
+            status = XR_COMPILE_RESOURCE_OK;
+            break;
+        }
+        status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    }
+    compile_unlock(resources);
+    return status;
+}
+
+XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
+    const void *memory, size_t bytes) {
+    return compile_storage(resources, memory, bytes, false);
+}
+
+XR_FUNC XrCompileResourceStatus xr_compile_resources_allocation(XrCompileResources *resources,
+    const void *memory, size_t bytes) {
+    return compile_storage(resources, memory, bytes, true);
 }
 
 XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileResources *resources,
@@ -185,6 +222,10 @@ static XrCompileResourceStatus compile_allocate_locked(
     if (!allocation) return XR_COMPILE_RESOURCE_OUT_OF_MEMORY;
     allocation->info.resources = resources;
     allocation->info.bytes = bytes;
+    allocation->info.previous = NULL;
+    allocation->info.next = resources->allocations;
+    if (resources->allocations) resources->allocations->info.previous = allocation;
+    resources->allocations = allocation;
     ++resources->references;
     ++resources->stats.allocation_count;
     resources->stats.allocated_bytes += charged;
@@ -224,6 +265,9 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_calloc(
 static bool compile_free_locked(XrCompileResources *resources, CompileAllocation *allocation) {
     size_t charged = sizeof(*allocation) + allocation->info.bytes;
     XR_CHECK(resources->stats.live_bytes >= charged, "Compiler live bytes must cover the released allocation");
+    if (allocation->info.previous) allocation->info.previous->info.next = allocation->info.next;
+    else resources->allocations = allocation->info.next;
+    if (allocation->info.next) allocation->info.next->info.previous = allocation->info.previous;
     xr_free(allocation);
     resources->stats.live_bytes -= charged;
     return compile_release_locked(resources);

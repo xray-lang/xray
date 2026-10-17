@@ -10,13 +10,14 @@
 #define main channel_blocking_reference_main
 #include "test_xir_channel_blocking_source.c"
 #undef main
+#include "xir/xxir_program_internal.h"
+#include "xir/xxir_program_packet_internal.h"
 extern const XrXirProgramSpec channel_blocking_program;
 typedef struct BlockingMixed {
     XrXirArtifact *lowered;XrXirCallEntry *entries,*vm_entries;XrXirVmBinding *bindings;unsigned releases;
 } BlockingMixed;
 static void blocking_mixed_drop(void *opaque) {
-    BlockingMixed *owner=opaque;CHECK(!owner->releases++ && owner->lowered);
-    xr_xir_compile_artifact_free(owner->lowered);owner->lowered=NULL;
+    BlockingMixed *owner=opaque;CHECK(!owner->releases++ && !owner->lowered);
     xr_compile_resources_free(owner->bindings);xr_compile_resources_free(owner->vm_entries);xr_free(owner->entries);
     owner->bindings=NULL;owner->vm_entries=NULL;owner->entries=NULL;
 }
@@ -26,8 +27,8 @@ int main(int argc,char **argv) {
     LibraryCompileOwner compiler={0};CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
     BlockingPipeline capture={.keep_lowered=true};CHECK(blocking_pipeline(&compiler.context,&capture)==XR_XIR_OK && capture.lowered && !capture.program);
     BlockingMixed owner={.lowered=capture.lowered};const XrXirModule *module=xr_xir_compile_artifact_module(owner.lowered);
-    XrXirProgramProof proof=xr_xir_compile_program_proof(owner.lowered);const XrXirProgramSpec *native=&channel_blocking_program;
-    CHECK(module->function_count==native->entry_count && proof.length==native->proof.length && !memcmp(proof.bytes,native->proof.bytes,proof.length));
+    XrXirProgramPacket packet=xir_program_packet_borrow(owner.lowered);const XrXirProgramSpec *native=&channel_blocking_program;
+    CHECK(module->function_count==native->entry_count && packet.length==native->packet.length && !memcmp(packet.bytes,native->packet.bytes,packet.length));
     owner.entries=xr_calloc(module->function_count,sizeof(*owner.entries));CHECK(owner.entries);
     XrCompileResourceStats before_bind=library_compile_stats(&compiler.context);
     CHECK(xr_xir_compile_vm_bind_table(owner.lowered,&owner.bindings,&owner.vm_entries)==XR_XIR_OK && owner.bindings && owner.vm_entries);
@@ -49,8 +50,11 @@ int main(int argc,char **argv) {
     }
     CHECK(workers==8);
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,native->target,owner.entries,module->function_count,
-        module->declarations,{&owner,blocking_mixed_drop},module->types,proof};
-    XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program)==XR_XIR_OK);
+        module->declarations,{&owner,blocking_mixed_drop},module->types,{0}};
+    XrXirProgramInput *input=NULL;
+    CHECK(xir_program_input_take(&compiler.context,&owner.lowered,&input)==XR_XIR_OK && !owner.lowered);
+    XrXirProgram *program=NULL;
+    CHECK(xir_program_receive(&compiler.context,&spec,&input,NULL,&program)==XR_XIR_OK && !input);
     if (argc==3) blocking_runtime_faults(program,capture.entry);
     else { blocking_lifecycle_cases(program,capture.endpoints);blocking_execute(program,capture.entry); }
     CHECK(owner.releases==1 && !owner.lowered);library_compile_owner_drop(&compiler);library_compile_observer_free();

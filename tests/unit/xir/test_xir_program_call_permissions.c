@@ -34,7 +34,8 @@ static XrXirInstanceResult pce_drive(PceWitness *w) {
         if (w->boundary_captured && !w->boundary_checked) {
             w->after_call = pce_ledger(w);
             w->fee_preserved = pce_same_fee(&w->before_call, &w->after_call);
-            w->slot_preserved = !memcmp(&w->slot_before, &w->instance->slots[0], sizeof(w->slot_before));
+            w->slot_preserved = !memcmp(&w->slot_before, &w->instance->slots[0], sizeof(w->slot_before)) &&
+                !memcmp(&w->slot_value_before, pce_slot_value(w->instance), sizeof(w->slot_value_before));
             w->boundary_checked = true;
             pce_print_ledger(w, "before_action_accept", &w->before_call);
             pce_print_ledger(w, "after_one_quantum", &w->after_call);
@@ -55,8 +56,8 @@ static void pce_initialize(PceFixture *f, PceWitness *w) {
     CHECK(w->init_entered && w->module_begins == 1 && w->module_ready == 1 && w->published == 1);
     CHECK(w->entry_releases[f->entry] == 1 && !w->entry_releases[f->entries[PCE_MAIN]]);
     CHECK(!w->child_callbacks && !w->call_requests && !w->target_entered && !w->typed_groups);
-    CHECK(w->instance->slots[0].type == XR_XIR_I64 && !w->instance->slots[0].reserved &&
-        w->instance->slots[0].payload == 91);
+    const XrXirValue *state = pce_slot_value(w->instance);
+    CHECK(state->type == XR_XIR_I64 && !state->reserved && state->payload == 91);
     XrXirValue taken = {0};
     CHECK(xr_xir_instance_take_result(w->instance, &taken) == XR_XIR_CALL_RETURNED);
     CHECK(taken.type == XR_XIR_I64 && !taken.reserved && !taken.payload);
@@ -111,8 +112,8 @@ static void pce_peer_unchanged(PceWitness *peer, const PceLedger *before) {
     /* Global provider attempts include the active peer; this owner's fees do not. */
     after.runtime_attempts = before->runtime_attempts;
     CHECK(pce_same_fee(before, &after));
-    CHECK(peer->instance->slots[0].type == XR_XIR_I64 && !peer->instance->slots[0].reserved &&
-        peer->instance->slots[0].payload == 91);
+    const XrXirValue *state = pce_slot_value(peer->instance);
+    CHECK(state->type == XR_XIR_I64 && !state->reserved && state->payload == 91);
 }
 
 static void pce_close_pair(PceFixture *f) {
@@ -196,11 +197,12 @@ static void pce_run(PceMode mode) {
     for (unsigned i = 0; i < PCE_INSTANCES; ++i) {
         PceWitness *w = &fixture.witnesses[i], *peer = &fixture.witnesses[1 - i];
         PceLedger before = pce_ledger(peer);
-        XrXirValue slot = peer->instance->slots[0];
+        XrXirValue slot = peer->instance->slots[0], value = *pce_slot_value(peer->instance);
         pce_initialize(&fixture, w);
         PceLedger after = pce_ledger(peer);
         after.runtime_attempts = before.runtime_attempts;
-        CHECK(pce_same_fee(&before, &after) && !memcmp(&slot, &peer->instance->slots[0], sizeof(slot)));
+        CHECK(pce_same_fee(&before, &after) && !memcmp(&slot, &peer->instance->slots[0], sizeof(slot)) &&
+            !memcmp(&value, pce_slot_value(peer->instance), sizeof(value)));
     }
     for (unsigned i = 0; i < PCE_INSTANCES; ++i) {
         PceWitness *w = &fixture.witnesses[i], *peer = &fixture.witnesses[1 - i];

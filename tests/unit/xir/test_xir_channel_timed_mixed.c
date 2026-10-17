@@ -10,24 +10,25 @@
 #define main channel_timed_source_reference_main
 #include "test_xir_channel_timed_source.c"
 #undef main
+#include "xir/xxir_program_internal.h"
+#include "xir/xxir_program_packet_internal.h"
 extern const XrXirProgramSpec channel_timed_program;
 typedef struct TimedSourceMixed {
     XrXirArtifact *lowered;XrXirCallEntry *entries,*vm_entries;XrXirVmBinding *bindings;unsigned releases;
 } TimedSourceMixed;
 static void timed_source_mixed_drop(void *opaque) {
-    TimedSourceMixed *owner=opaque;CHECK(!owner->releases++ && owner->lowered);
-    xr_xir_compile_artifact_free(owner->lowered);owner->lowered=NULL;
+    TimedSourceMixed *owner=opaque;CHECK(!owner->releases++ && !owner->lowered);
     xr_compile_resources_free(owner->bindings);xr_compile_resources_free(owner->vm_entries);xr_free(owner->entries);
     owner->bindings=NULL;owner->vm_entries=NULL;owner->entries=NULL;
 }
 int main(int argc,char **argv) {
-    CHECK(argc==2 || (argc==3 && (!strcmp(argv[2],"--runtime-faults") || !strcmp(argv[2],"--host"))));
+    CHECK(argc==2 || (argc==3 && (!strcmp(argv[2],"--runtime-faults") || !strcmp(argv[2],"--host") || !strcmp(argv[2],"--same-consumer") || !strcmp(argv[2],"--same-consumer-faults") || !strcmp(argv[2],"--same-consumer-controls") || !strcmp(argv[2],"--same-consumer-budgets"))));
     bool root_native=!strcmp(argv[1],"native-vm");CHECK(root_native || !strcmp(argv[1],"vm-native"));
     LibraryCompileOwner compiler={0};CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
     TimedSourcePipeline capture={.keep_lowered=true};CHECK(timed_source_pipeline(&compiler.context,&capture)==XR_XIR_OK && capture.lowered && !capture.program);
     TimedSourceMixed owner={.lowered=capture.lowered};const XrXirModule *module=xr_xir_compile_artifact_module(owner.lowered);
-    XrXirProgramProof proof=xr_xir_compile_program_proof(owner.lowered);const XrXirProgramSpec *native=&channel_timed_program;
-    CHECK(module->function_count==native->entry_count && proof.length==native->proof.length && !memcmp(proof.bytes,native->proof.bytes,proof.length));
+    XrXirProgramPacket packet=xir_program_packet_borrow(owner.lowered);const XrXirProgramSpec *native=&channel_timed_program;
+    CHECK(module->function_count==native->entry_count && packet.length==native->packet.length && !memcmp(packet.bytes,native->packet.bytes,packet.length));
     owner.entries=xr_calloc(module->function_count,sizeof(*owner.entries));CHECK(owner.entries);
     XrCompileResourceStats before_bind=library_compile_stats(&compiler.context);
     CHECK(xr_xir_compile_vm_bind_table(owner.lowered,&owner.bindings,&owner.vm_entries)==XR_XIR_OK && owner.bindings && owner.vm_entries);
@@ -44,9 +45,15 @@ int main(int argc,char **argv) {
     }
     CHECK(workers==2);
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,native->target,owner.entries,module->function_count,
-        module->declarations,{&owner,timed_source_mixed_drop},module->types,proof};
-    XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program)==XR_XIR_OK);
+        module->declarations,{&owner,timed_source_mixed_drop},module->types,{0}};
+    XrXirProgramInput *input=NULL;
+    CHECK(xir_program_input_take(&compiler.context,&owner.lowered,&input)==XR_XIR_OK && !owner.lowered);
+    XrXirProgram *program=NULL;
+    CHECK(xir_program_receive(&compiler.context,&spec,&input,NULL,&program)==XR_XIR_OK && !input);
     if (argc==3 && !strcmp(argv[2],"--runtime-faults")) timed_source_runtime_faults(program,capture.entry);
+    else if (argc==3 && !strcmp(argv[2],"--same-consumer-budgets")) { timed_consumer_budget_cases(program,capture.endpoints);xr_xir_compile_program_drop(program);CHECK(!runtime_live && !runtime_bytes); }
+    else if (argc==3 && (!strcmp(argv[2],"--same-consumer-faults") || !strcmp(argv[2],"--same-consumer-controls"))) { timed_consumer_fault_cases(program,capture.endpoints,!strcmp(argv[2],"--same-consumer-faults"));if (!strcmp(argv[2],"--same-consumer-faults")) timed_consumer_budget_cases(program,capture.endpoints);xr_xir_compile_program_drop(program);CHECK(!runtime_live && !runtime_bytes); }
+    else if (argc==3 && !strcmp(argv[2],"--same-consumer")) { timed_same_consumer_cases(program,capture.endpoints);xr_xir_compile_program_drop(program);CHECK(!runtime_live && !runtime_bytes); }
     else if (argc==3) timed_source_host_execute(program,capture.entry);
     else { timed_life_cases(program,capture.endpoints);timed_source_execute(program,capture.entry); }
     CHECK(owner.releases==1 && !owner.lowered);library_compile_owner_drop(&compiler);library_compile_observer_free();

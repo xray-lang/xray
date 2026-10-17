@@ -20,6 +20,9 @@
 #include "xir_runtime_allocations.h"
 #include "xir_channel_timed_execution_cases.h"
 #include "xir_channel_timed_lifecycle_cases.h"
+#include "xir_channel_timed_same_consumer_cases.h"
+#include "xir_channel_timed_consumer_faults.h"
+#include "xir_channel_timed_consumer_budgets.h"
 #include "xir_channel_timed_runtime_faults.h"
 typedef struct TimedSourcePipeline { XrXirProgram *program;uint32_t entry;const char *output;XrXirArtifact *lowered;bool keep_lowered;uint32_t endpoints[4]; } TimedSourcePipeline;
 static XrXirStatus timed_source_pipeline(const XrXirCompileContext *context,void *opaque) {
@@ -82,8 +85,14 @@ int main(int argc,char **argv) {
     }
     LibraryCompileOwner owner={0};CHECK(library_compile_owner_new(&owner,&library_compile_limits)==XR_XIR_OK);TimedSourcePipeline capture={0};
     bool faults=argc==2 && !strcmp(argv[1],"--runtime-faults"),host=argc==2 && !strcmp(argv[1],"--host");
-    if (argc==2 && !faults && !host) capture.output=argv[1];CHECK(timed_source_pipeline(&owner.context,&capture)==XR_XIR_OK && capture.program);
+    bool same=argc==2 && (!strcmp(argv[1],"--same-consumer") || !strcmp(argv[1],"--same-consumer-faults") || !strcmp(argv[1],"--same-consumer-controls") || !strcmp(argv[1],"--same-consumer-budgets"));
+    if (argc==2 && !faults && !host && !same) capture.output=argv[1];CHECK(timed_source_pipeline(&owner.context,&capture)==XR_XIR_OK && capture.program);
     if (faults) timed_source_runtime_faults(capture.program,capture.entry);
+    else if (same) {
+        if (!strcmp(argv[1],"--same-consumer")) timed_same_consumer_cases(capture.program,capture.endpoints);
+        else if (!strcmp(argv[1],"--same-consumer-budgets")) timed_consumer_budget_cases(capture.program,capture.endpoints);
+        else { timed_consumer_fault_cases(capture.program,capture.endpoints,!strcmp(argv[1],"--same-consumer-faults"));
+            if (!strcmp(argv[1],"--same-consumer-faults")) timed_consumer_budget_cases(capture.program,capture.endpoints); }xr_xir_compile_program_drop(capture.program);CHECK(!runtime_live && !runtime_bytes); }
     else if (host) timed_source_host_execute(capture.program,capture.entry);
     else if (argc==1) { timed_life_cases(capture.program,capture.endpoints);timed_source_execute(capture.program,capture.entry); }
     else xr_xir_compile_program_drop(capture.program);

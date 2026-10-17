@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Source, wire replay, specialization, emission and sealing share one ledger.
  */
+#include "xir/xxir_program_packet_internal.h"
 #ifndef XIR_ARRAY_REMOVE_PIPELINE_H
 #define XIR_ARRAY_REMOVE_PIPELINE_H
 #ifndef XR_REMOVE_COMPONENT
@@ -40,9 +41,9 @@ static XrXirStatus remove_allocate(const XrXirCompileContext *context, size_t co
 static XrXirStatus remove_seal(RemoveCompile *run, unsigned mode) {
     if (!mode) return xr_xir_compile_vm_program_take(&run->lowered, &run->program);
 #if defined(XR_REMOVE_NATIVE)
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
-    CHECK(proof.length == array_remove_program.proof.length && !memcmp(proof.identity, array_remove_program.proof.identity, 32));
-    CHECK(!memcmp(proof.bytes, array_remove_program.proof.bytes, proof.length));
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
+    CHECK(proof.length == array_remove_program.packet.length && !memcmp(proof.identity, array_remove_program.packet.identity, 32));
+    CHECK(!memcmp(proof.bytes, array_remove_program.packet.bytes, proof.length));
     if (mode == 1) return xr_xir_compile_program_seal(&run->context, &array_remove_program, &run->program);
     RemoveMixed *owner = NULL;
     XrXirStatus status = remove_allocate(&run->context, 1, sizeof(*owner), (void **)&owner);
@@ -63,7 +64,7 @@ static XrXirStatus remove_seal(RemoveCompile *run, unsigned mode) {
         CHECK(native && vm);
         XrXirProgramSpec spec = array_remove_program;
         spec.entries = owner->entries; spec.types = module->types; spec.declarations = module->declarations;
-        spec.proof = xr_xir_compile_program_proof(artifact); spec.code = (XrXirCodeLease){owner, remove_mixed_free};
+        spec.packet = xir_program_packet_borrow(artifact); spec.code = (XrXirCodeLease){owner, remove_mixed_free};
         status = xr_xir_compile_program_seal(&run->context, &spec, &run->program);
     }
     if (status != XR_XIR_OK) { CHECK(!run->program); remove_mixed_free(owner); }

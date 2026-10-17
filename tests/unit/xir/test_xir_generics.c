@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Malformed templates fail before a concrete instance can hide their mistakes.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_types.h"
@@ -88,7 +89,14 @@ static void nominal_field_closure(void) {
         xr_xir_compile_artifact_free(prefix);
         XrXirCompileContext bounded=mode==2?generic_work_context(prefix_work+10000):consumer_context_default();
         XrXirArtifact *checked = nominal_field_closure_fixture(&bounded, mode), *closed = NULL;
-        CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
+        XrCompileResourceStats before_verify=consumer_context_stats(&bounded);
+        XrXirStatus rechecked=xr_xir_compile_artifact_verify(checked, NULL);
+        if (rechecked!=XR_XIR_OK)
+            fprintf(stderr,"nominal field current verify mode=%u status=%u prefix=%llu before=%llu after=%llu\n",
+                mode,(unsigned)rechecked,(unsigned long long)prefix_work,
+                (unsigned long long)before_verify.work,
+                (unsigned long long)consumer_context_stats(&bounded).work);
+        CHECK(rechecked == XR_XIR_OK);
         XrXirStatus expected = !mode ? XR_XIR_OK : mode == 1 ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
         CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == expected);
         xr_xir_compile_artifact_free(checked); checked=NULL;
@@ -383,8 +391,8 @@ static void generic_runtime_retiring(void *pointer) {
 }
 static XrXirProgram *generic_result_program(XrXirArtifact *original) {
     XrXirCompileContext context = consumer_context_default();
-    XrXirProgramProof proof = xr_xir_compile_program_proof(original);
-    CHECK(proof.bytes && proof.length && proof.identity && proof.layouts);
+    XrXirProgramPacket proof = xir_program_packet_borrow(original);
+    CHECK(proof.bytes && proof.length && proof.identity && xr_xir_compile_artifact_layout(original, 0));
     XrXirArtifact *decoded = NULL, *checked = NULL, *closed = NULL, *lowered = NULL;
     CHECK(xr_xir_compile_checked_read(&context, proof.bytes, proof.length, &decoded, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_verify(decoded, NULL) == XR_XIR_OK);

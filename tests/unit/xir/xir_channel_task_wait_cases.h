@@ -1,3 +1,4 @@
+#include "xir/xxir_program_packet_internal.h"
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
@@ -57,7 +58,7 @@ static void channel_task_new(ChannelTaskFixture *f) {
     XrXirArtifact *proof=NULL;XrXirStatus proof_status=native_metadata_fixture(&f->owner.context,&spec,&proof);
     if (proof_status!=XR_XIR_OK) fprintf(stderr,"Channel Task metadata status=%u\n",proof_status);
     CHECK(proof_status==XR_XIR_OK);
-    spec.proof=xr_xir_compile_program_proof(proof);
+    spec.packet=xir_program_packet_borrow(proof);
     CHECK(xr_xir_compile_program_seal(&f->owner.context,&spec,&f->program)==XR_XIR_OK);
     xr_xir_compile_artifact_free(proof);
     XrXirTypeNode task={.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64};XrXirTypes types={&task,1,NULL,NULL};

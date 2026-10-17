@@ -75,3 +75,44 @@ add_test(NAME test_xir_semantic76_retained_vectors COMMAND ${Python3_EXECUTABLE}
 set_tests_properties(test_xir_semantic76_retained_vectors PROPERTIES LABELS "unit;xir;checked;metadata" TIMEOUT 30)
 add_test(NAME test_xir_assert_panics_core_identity COMMAND test_xir_assert_panics "${CMAKE_CURRENT_BINARY_DIR}/generated/assert-panics-source" "${CMAKE_CURRENT_BINARY_DIR}/generated/core-identity-unused.c" --core-only)
 set_tests_properties(test_xir_assert_panics_core_identity PROPERTIES LABELS "unit;xir;checked;metadata;ownership" TIMEOUT 60)
+
+add_test(NAME test_xir_channel_timed_same_consumer_vm COMMAND test_xir_channel_timed_source --same-consumer)
+add_test(NAME test_xir_channel_timed_same_consumer_native COMMAND test_xir_channel_timed_source_native --same-consumer)
+foreach(direction vm-native native-vm)
+    string(REPLACE "-" "_" suffix "${direction}")
+    add_test(NAME test_xir_channel_timed_same_consumer_mixed_${suffix}
+        COMMAND test_xir_channel_timed_mixed ${direction} --same-consumer)
+endforeach()
+set_tests_properties(test_xir_channel_timed_same_consumer_vm test_xir_channel_timed_same_consumer_native
+    test_xir_channel_timed_same_consumer_mixed_vm_native test_xir_channel_timed_same_consumer_mixed_native_vm
+    PROPERTIES LABELS "unit;xir;channel;ownership;execution;budget;lifetime;generated-c" TIMEOUT 60 RUN_SERIAL TRUE)
+
+foreach(mode controls faults)
+    add_test(NAME test_xir_channel_timed_consumer_${mode}_vm COMMAND test_xir_channel_timed_source --same-consumer-${mode})
+    add_test(NAME test_xir_channel_timed_consumer_${mode}_native COMMAND test_xir_channel_timed_source_native --same-consumer-${mode})
+    foreach(direction vm-native native-vm)
+        string(REPLACE "-" "_" suffix "${direction}")
+        add_test(NAME test_xir_channel_timed_consumer_${mode}_mixed_${suffix}
+            COMMAND test_xir_channel_timed_mixed ${direction} --same-consumer-${mode})
+    endforeach()
+    set(timeout 60)
+    set(consumer_labels "unit;xir;channel;ownership;runtime;resources")
+    if(mode STREQUAL "faults")
+        set(timeout 300)
+        list(APPEND consumer_labels faults)
+    endif()
+    set_tests_properties(test_xir_channel_timed_consumer_${mode}_vm test_xir_channel_timed_consumer_${mode}_native
+        test_xir_channel_timed_consumer_${mode}_mixed_vm_native test_xir_channel_timed_consumer_${mode}_mixed_native_vm
+        PROPERTIES LABELS "${consumer_labels}" TIMEOUT ${timeout} RUN_SERIAL TRUE)
+endforeach()
+
+add_test(NAME test_xir_channel_timed_consumer_budgets_vm COMMAND test_xir_channel_timed_source --same-consumer-budgets)
+add_test(NAME test_xir_channel_timed_consumer_budgets_native COMMAND test_xir_channel_timed_source_native --same-consumer-budgets)
+foreach(direction vm-native native-vm)
+    string(REPLACE "-" "_" suffix "${direction}")
+    add_test(NAME test_xir_channel_timed_consumer_budgets_mixed_${suffix}
+        COMMAND test_xir_channel_timed_mixed ${direction} --same-consumer-budgets)
+endforeach()
+set_tests_properties(test_xir_channel_timed_consumer_budgets_vm test_xir_channel_timed_consumer_budgets_native
+    test_xir_channel_timed_consumer_budgets_mixed_vm_native test_xir_channel_timed_consumer_budgets_mixed_native_vm
+    PROPERTIES LABELS "unit;xir;channel;ownership;runtime;resources;budget" TIMEOUT 60 RUN_SERIAL TRUE)

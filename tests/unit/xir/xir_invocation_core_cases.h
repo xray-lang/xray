@@ -11,19 +11,19 @@ static XrXirStatus invocation_core_storage(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirEffects *effects) {
     *effects=(XrXirEffects){.resources=context->resources,.count=module->function_count};
     XrXirStatus status=XR_XIR_OK;uint32_t count=effects->count;
-    effects->functions=xir_compile_calloc(context,count,sizeof(*effects->functions),&status);
-    if (status==XR_XIR_OK) effects->task_creation=xir_compile_calloc(context,count,sizeof(*effects->task_creation),&status);
-    if (status==XR_XIR_OK) effects->root=xir_compile_calloc(context,count,sizeof(*effects->root),&status);
-    if (status==XR_XIR_OK) effects->root_witnesses=xir_compile_calloc(context,count,sizeof(*effects->root_witnesses),&status);
-    if (status==XR_XIR_OK) effects->unresolved_witnesses=xir_compile_calloc(context,count,sizeof(*effects->unresolved_witnesses),&status);
+    effects->outcomes_work.functions=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.functions),&status);
+    if (status==XR_XIR_OK) effects->outcomes_work.task_creation=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.task_creation),&status);
+    if (status==XR_XIR_OK) effects->outcomes_work.root=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.root),&status);
+    if (status==XR_XIR_OK) effects->outcomes_work.root_witnesses=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.root_witnesses),&status);
+    if (status==XR_XIR_OK) effects->outcomes_work.unresolved_witnesses=xir_compile_calloc(context,count,sizeof(*effects->outcomes_work.unresolved_witnesses),&status);
     return status;
 }
 
 static void invocation_core_storage_free(XrXirEffects *effects) {
     effect_parameters_free(effects);
-    xr_compile_resources_free(effects->functions);xr_compile_resources_free(effects->task_creation);
-    xr_compile_resources_free(effects->root);xr_compile_resources_free(effects->root_witnesses);
-    xr_compile_resources_free(effects->unresolved_witnesses);*effects=(XrXirEffects){0};
+    xr_compile_resources_free(effects->outcomes_work.functions);xr_compile_resources_free(effects->outcomes_work.task_creation);
+    xr_compile_resources_free(effects->outcomes_work.root);xr_compile_resources_free(effects->outcomes_work.root_witnesses);
+    xr_compile_resources_free(effects->outcomes_work.unresolved_witnesses);*effects=(XrXirEffects){0};
 }
 
 /* Full construction and Artifact checking precede the same-owner equation
@@ -55,8 +55,11 @@ static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *in
     if (status==XR_XIR_OK) {
         CHECK(!rp_release_observer);
         invocation_retired_blocks[0]=invocation_retired_block(workspace);
-        invocation_retired_blocks[1]=invocation_retired_block(workspace->consumers);
+        invocation_retired_blocks[1]=invocation_retired_block(workspace->read.consumers);
         invocation_retired_blocks[2]=invocation_retired_block(workspace->edge_index);
+        CHECK(workspace->states && invocation_retired_block(workspace->states)==invocation_retired_blocks[1]);
+        for (uint32_t n=0;n<workspace->final.count;++n)
+            CHECK(workspace->states[n].expanded && !workspace->states[n].queued);
         memset(invocation_retired_counts,0,sizeof(invocation_retired_counts));
         rp_release_observer=invocation_retired_observe;
         EffectInvocationSealRequest request={&workspace,receiving,input->dense};
@@ -141,20 +144,22 @@ static void invocation_final_trace_callback(const XrXirCompileContext *work,
     RootParameterMark retained=rp_mark();XrCompileResourceStats before=rp_stats(work);
     invocation_trace_callback_target=certificate;invocation_trace_callback_count=0;
     rp_allocation_observer=invocation_trace_allocation_erase;XrXirRootCauseTrace *output=NULL;
-    CHECK(effect_invocation_public_trace(work,certificate,summary->count,3,&facts,&output)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocation_public_trace(work,certificate,3,&facts,&output)==XR_XIR_BAD_STRUCTURE &&
         !output && !rp_allocation_observer && invocation_trace_callback_count==1);
     invocation_trace_callback_target=NULL;rp_balanced(retained);
     XrCompileResourceStats paid=rp_stats(work);CHECK(paid.work>before.work && paid.allocated_bytes>before.allocated_bytes);
     *node=saved;memcpy(node->causes,causes,sizeof(causes));
     summary->facts[3]=facts;summary->functions[3].formula.constant_mask=constant;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+3]=witnesses[d];
-    CHECK(effect_invocation_public_trace(work,certificate,summary->count,3,&facts,&output)==XR_XIR_OK && output);
+    CHECK(effect_invocation_public_trace(work,certificate,3,&facts,&output)==XR_XIR_OK && output);
     CHECK(output->counts[0]==1 && !output->counts[1] && output->facts.requires_root);
     CHECK(rp_stats(work).allocated_bytes>paid.allocated_bytes && rp_stats(work).work>paid.work);
     xr_xir_compile_root_cause_trace_free(output);rp_balanced(retained);
 }
 
-static XrXirStatus conditional_invocation_core(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
+#include "xir_invocation_nonroot_seed_cases.h"
+static XrXirStatus conditional_invocation_core(const XrXirCompileContext *context,uint32_t mode,
+    bool oracle,bool primitive_slot) {
     if (mode>=4) return XR_XIR_BAD_STRUCTURE;
     RootParameterBindingFixture fixture;rp_binding_fixture(&fixture,context,(mode&1)!=0);
     uint32_t self_operand=0;
@@ -168,6 +173,22 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
         fixture.functions[1].instructions=recursive;fixture.functions[1].instruction_count=3;
         fixture.functions[1].blocks=&recursive_block;fixture.functions[1].operands=&self_operand;
         fixture.functions[1].operand_count=1;fixture.contracts[1].parameters=&recursive_parameter;
+    }
+    XrXirTypeNode types[3];XrXirInstruction slot_ops[4];XrXirBlock slot_block={0};
+    XrXirSlot slot={.type=(XrXirType)258,.mutable=1};
+    if (primitive_slot) {
+        memcpy(types,fixture.nodes,sizeof(fixture.nodes));
+        types[2]=(XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
+        fixture.types.nodes=types;fixture.types.count=3;
+        uint32_t count=fixture.functions[1].instruction_count;
+        memcpy(slot_ops,fixture.functions[1].instructions,(size_t)count*sizeof(*slot_ops));
+        slot_ops[count]=slot_ops[count-1];
+        slot_ops[count-1]=(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)258};
+        slot_block.count=count+1;fixture.functions[1].blocks=&slot_block;
+        fixture.functions[1].instructions=slot_ops;fixture.functions[1].instruction_count=count+1;
+        fixture.declarations.slots=&slot;fixture.declarations.slot_count=1;
+        fixture.contracts[1].formula.constant_mask|=XR_XIR_CALLABLE_ROOT_REQUIRED;
+        if (!(mode&1)) fixture.contracts[0].formula.constant_mask|=XR_XIR_CALLABLE_ROOT_REQUIRED;
     }
     XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,&diagnostic);
@@ -201,39 +222,46 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
     EffectInvocationCauseTrace *trace=NULL;
     XrXirRootCauseTrace *public_trace=NULL,*root_trace=NULL;
     if (status==XR_XIR_OK) {
+        status=effect_invocation_closed_read(context,certificate->final);
         uint32_t caller_mask=UINT32_MAX,formal_mask=UINT32_MAX,edge_mask=UINT32_MAX;
-        status=effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[0],&caller_mask);
+        if (status==XR_XIR_OK) status=effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[0],&caller_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_node_mask(context,certificate,
             certificate->final->roots[1],&formal_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_edge_mask(context,certificate,0,2,1,&edge_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_trace(context,certificate,1,&trace);
-        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,
-            certificate->final->summary.count,1,&certificate->final->summary.facts[1],&public_trace);
-        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,
-            certificate->final->summary.count,3,&certificate->final->summary.facts[3],&root_trace);
+        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,1,&certificate->final->summary.facts[1],&public_trace);
+        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,3,&certificate->final->summary.facts[3],&root_trace);
         if (status==XR_XIR_OK && oracle) {
+            if (primitive_slot) invocation_nonroot_slot_erasure(context,certificate);
             invocation_final_initializer_erasure(context,certificate);
             invocation_final_trace_callback(context,certificate);
             EffectInvocationFinal damaged=*certificate->final;
-            damaged.physical=NULL;EffectInvocationWorkspace refused={0};size_t admission_attempts=rp_attempts;
+            damaged.physical=NULL;EffectInvocationRead refused={0};size_t admission_attempts=rp_attempts;
             XrCompileResourceStats before=rp_stats(context);
             CHECK(effect_invocation_read_open(context,NULL,certificate->declared,&damaged,&refused)==XR_XIR_BAD_STRUCTURE &&
-                !refused.work && !refused.consumers && !refused.final.nodes && rp_attempts==admission_attempts &&
+                !refused.work && !refused.consumers && !refused.final && rp_attempts==admission_attempts &&
                 rp_stats(context).work==before.work);
             refused.work=context;
             CHECK(effect_invocation_read_open(context,NULL,certificate->declared,certificate->final,&refused)==XR_XIR_BAD_STRUCTURE &&
                 refused.work==context && !refused.consumers && rp_attempts==admission_attempts &&
                 rp_stats(context).work==before.work);
-            CHECK(!caller_mask && formal_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED && !edge_mask);
+            CHECK(caller_mask==(primitive_slot && !(mode&1)?XR_XIR_CALLABLE_ROOT_REQUIRED:0) &&
+                formal_mask==(XR_XIR_CALLABLE_ROOT_UNRESOLVED|(primitive_slot?XR_XIR_CALLABLE_ROOT_REQUIRED:0)) &&
+                edge_mask==(primitive_slot?XR_XIR_CALLABLE_ROOT_REQUIRED:0));
             CHECK(certificate->final->summary.functions[1].formula.term_count==1 &&
                 certificate->final->summary.functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_PARAMETER &&
                 certificate->final->summary.functions[1].formula.terms[0].index==0);
-            CHECK(trace && !trace->counts[0] && trace->counts[1]==1 &&
-                trace->steps[0].function==1 && trace->steps[0].witness.cause==XR_XIR_ROOT_CAUSE_PARAMETER &&
-                !trace->steps[0].witness.distance && trace->steps[0].witness.slot==0);
-            CHECK(public_trace && !public_trace->counts[0] && public_trace->counts[1]==1 &&
-                public_trace->facts.unresolved && effect_root_trace_storage(public_trace)[0].cause==XR_XIR_ROOT_CAUSE_PARAMETER &&
-                effect_root_trace_storage(public_trace)[0].function==1 && effect_root_trace_storage(public_trace)[0].slot==0);
+            CHECK(trace && trace->counts[0]==(primitive_slot?1u:0u) && trace->counts[1]==1 &&
+                trace->steps[trace->counts[0]].function==1 &&
+                trace->steps[trace->counts[0]].witness.cause==XR_XIR_ROOT_CAUSE_PARAMETER &&
+                !trace->steps[trace->counts[0]].witness.distance && trace->steps[trace->counts[0]].witness.slot==0);
+            CHECK(public_trace && public_trace->counts[0]==(primitive_slot?1u:0u) && public_trace->counts[1]==1 &&
+                public_trace->facts.unresolved && effect_root_trace_storage(public_trace)[public_trace->counts[0]].cause==XR_XIR_ROOT_CAUSE_PARAMETER &&
+                effect_root_trace_storage(public_trace)[public_trace->counts[0]].function==1 &&
+                effect_root_trace_storage(public_trace)[public_trace->counts[0]].slot==0);
+            if (primitive_slot) CHECK(trace->facts.requires_root && public_trace->facts.requires_root &&
+                trace->steps[0].witness.cause==XR_XIR_ROOT_CAUSE_MUTABLE_SLOT && trace->steps[0].witness.slot==0 &&
+                effect_root_trace_storage(public_trace)[0].cause==XR_XIR_ROOT_CAUSE_MUTABLE_SLOT);
             CHECK(root_trace && root_trace->counts[0]==1 && !root_trace->counts[1] && root_trace->facts.requires_root &&
                 effect_root_trace_storage(root_trace)[0].function==3 &&
                 effect_root_trace_storage(root_trace)[0].cause==XR_XIR_ROOT_CAUSE_INITIALIZER);
@@ -259,7 +287,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
     }
     effect_invocation_certificate_free(certificate);
     if (status==XR_XIR_OK && oracle) CHECK(trace && trace->counts[1]==1 &&
-        trace->facts.unresolved && trace->steps[0].witness.cause==XR_XIR_ROOT_CAUSE_PARAMETER);
+        trace->facts.unresolved && trace->steps[trace->counts[0]].witness.cause==XR_XIR_ROOT_CAUSE_PARAMETER);
     xr_xir_compile_root_cause_trace_free(public_trace);xr_xir_compile_root_cause_trace_free(root_trace);
     effect_invocation_trace_free(trace);return status;
 }

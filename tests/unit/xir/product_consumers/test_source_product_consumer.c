@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Fixed source results survive producer destruction in independent backends.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "base/xmalloc.h"
 #include "base/xsha256.h"
 #include "program/xr_xir_source_product.h"
@@ -121,11 +122,11 @@ static XrXirStatus seal(Consumer *run, XrXirSourceProduct *product, XrXirArtifac
     if (status != XR_XIR_OK)
         goto failed;
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->lowered);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(owner->lowered);
+    XrXirProgramPacket proof = xir_program_packet_borrow(owner->lowered);
     CHECK(module->function_count == product_consumer_program.entry_count);
-    CHECK(proof.length == product_consumer_program.proof.length);
-    CHECK(!memcmp(proof.bytes, product_consumer_program.proof.bytes, proof.length));
-    CHECK(!memcmp(proof.identity, product_consumer_program.proof.identity, 32));
+    CHECK(proof.length == product_consumer_program.packet.length);
+    CHECK(!memcmp(proof.bytes, product_consumer_program.packet.bytes, proof.length));
+    CHECK(!memcmp(proof.identity, product_consumer_program.packet.identity, 32));
     status = allocate(&run->context, module->function_count, sizeof(*owner->entries), (void **)&owner->entries);
     if (status != XR_XIR_OK)
         goto failed;
@@ -149,7 +150,7 @@ static XrXirStatus seal(Consumer *run, XrXirSourceProduct *product, XrXirArtifac
     spec.entries = owner->entries;
     spec.declarations = module->declarations;
     spec.types = module->types;
-    spec.proof = proof;
+    spec.packet = proof;
     spec.code = (XrXirCodeLease){owner, mixed_free};
     status = xr_xir_compile_program_seal(&run->context, &spec, &run->program);
     if (status == XR_XIR_OK)

@@ -137,7 +137,7 @@ static void rendezvous_cancel_race(void) {
 #include "xir_channel_timed_call_cases.h"
 #include "xir_channel_timed_call_fault_cases.h"
 int main(int argc,char **argv) {
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==29 && XR_XIR_CALL_ABI_VERSION==33 && XR_XIR_PROGRAM_ABI_VERSION==34,
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==29 && XR_XIR_CALL_ABI_VERSION==33 && XR_XIR_PROGRAM_ABI_VERSION==35,
         "Owned pending payloads require the exact current shared storage generation");
     if (argc==2 && !strcmp(argv[1],"--timed-normal")) { channel_timed_call_cases();return 0; }
     if (argc==2 && !strcmp(argv[1],"--timed-resources")) { channel_timed_call_fault_cases();return 0; }

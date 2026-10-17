@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Frozen Checked bytes feed independent source-free runtime expectations.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
@@ -29,7 +30,7 @@ XrXirArtifact *checked=NULL,*lowered=NULL;
 XrXirCallEntry *entries=NULL;
 XrXirVmBinding *bindings=NULL;
 
- if(XR_INITIALIZATION_MIXED){CHECK(xr_xir_compile_checked_read(&compile,spec.proof.bytes,spec.proof.length,&checked,NULL)==XR_XIR_OK);
+ if(XR_INITIALIZATION_MIXED){CHECK(xr_xir_compile_checked_read(&compile,spec.packet.bytes,spec.packet.length,&checked,NULL)==XR_XIR_OK);
 CHECK(xr_xir_compile_lower(checked,&spec.target,&lowered,NULL)==XR_XIR_OK);
 xr_xir_compile_artifact_free(checked);
 CHECK(xr_compile_resources_calloc(compile.resources,spec.entry_count,sizeof(*entries),(void **)&entries)==XR_COMPILE_RESOURCE_OK);
@@ -51,7 +52,7 @@ CHECK(entries[m->declarations->modules[init_modules.root].initializer].resume!=s
 spec.entries=entries;
 spec.types=m->types;
 spec.declarations=m->declarations;
-spec.proof=xr_xir_compile_program_proof(lowered);
+spec.packet=xir_program_packet_borrow(lowered);
 }
  XrXirProgram *program=NULL;
 CHECK(xr_xir_compile_program_seal(&compile,&spec,&program)==XR_XIR_OK);

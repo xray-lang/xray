@@ -14,6 +14,7 @@ typedef struct AccessGeneratedFixture {
     CellSourceEntries entries;
     uint32_t count;
 } AccessGeneratedFixture;
+#include "xir/xxir_program_packet_internal.h"
 #include "class_access_generated.h"
 
 typedef struct AccessMixedBinding {
@@ -70,8 +71,8 @@ static void access_mixed_release(XrXirCallView *view,XrXirCallStatus reason) {
 static void access_mixed_prepare(const XrXirCompileContext *context,const AccessGeneratedFixture *generated,
     XrXirProgramSpec *spec) {
     XrXirArtifact *checked=NULL;
-    CHECK(xr_xir_compile_checked_read(context,generated->program->proof.bytes,
-        generated->program->proof.length,&checked,NULL)==XR_XIR_OK && checked);
+    CHECK(xr_xir_compile_checked_read(context,generated->program->packet.bytes,
+        generated->program->packet.length,&checked,NULL)==XR_XIR_OK && checked);
     CHECK(xr_xir_compile_lower(checked,&generated->program->target,&access_native_owner.lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(access_native_owner.lowered);
@@ -109,7 +110,7 @@ static void access_mixed_prepare(const XrXirCompileContext *context,const Access
     }
     spec->entries=access_native_owner.entries;spec->entry_count=module->function_count;
     spec->types=module->types;spec->declarations=module->declarations;
-    spec->proof=xr_xir_compile_program_proof(access_native_owner.lowered);
+    spec->packet=xir_program_packet_borrow(access_native_owner.lowered);
 }
 #endif
 static XrXirStatus access_native_program(const XrXirCompileContext *context,const char *name,
