@@ -659,7 +659,7 @@ def expected_rows():
         if name=='1114_select_after':row['required_runtime_timing_predicates']=[{'expression':'elapsed >= 20','required':True},{'expression':'elapsed < 500','required':True}]
         if name=='1128_yield':row['required_original_yield_checkpoints']=1+2+3+len([i for i in range(5) if i%2==0])+3*10
         rows.append(row)
-    return rows+[stack_entry_expected_row(),plain_scope_entry_expected_row()]+coro_boundary_entry_expected_rows()+[task_link_entry_expected_row()]+task_status_entry_expected_rows()+await_timeout_entry_expected_rows()
+    return rows+[stack_entry_expected_row(),plain_scope_entry_expected_row()]+coro_boundary_entry_expected_rows()+[task_link_entry_expected_row()]+task_status_entry_expected_rows()+await_timeout_entry_expected_rows()+channel_timeout_entry_expected_rows()
 
 
 def named_expected_rows():
@@ -1242,3 +1242,8 @@ def task_status_entry_expected_rows():
 def await_timeout_entry_expected_rows():
     import complete_await_timeout_model
     return complete_await_timeout_model.expected_rows()
+
+
+def channel_timeout_entry_expected_rows():
+    import complete_channel_timeout_model
+    return complete_channel_timeout_model.expected_rows()
