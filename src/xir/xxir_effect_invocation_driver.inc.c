@@ -78,6 +78,27 @@ static inline XrXirStatus effect_invocations_receive(const XrXirCompileContext *
     return status;
 }
 
+/* This enclosing driver destroys its private workspace on every failure.
+ * Lookup buckets have no remaining consumer after solve and stage; semantic
+ * vectors, reverse links, states and the graph queue remain for full seal.
+ * Direct seal callers retain their original old-owner retry transaction. */
+static XrXirStatus effect_invocation_driver_lookups_retire(EffectInvocationWorkspace *owner) {
+    if (!owner || !xir_compile_context_valid(owner->work) || owner->pending ||
+        !effect_body_request_owned_matches(owner->work,&owner->body,owner->final.material) ||
+        !owner->graph || owner->graph->material!=owner->final.material ||
+        owner->final.count>owner->final.capacity || owner->final.edge_count>owner->final.edge_capacity ||
+        !!owner->node_index!=!!owner->node_index_capacity || !!owner->edge_index!=!!owner->edge_index_capacity ||
+        (owner->node_index_capacity&(owner->node_index_capacity-1)) ||
+        (owner->edge_index_capacity&(owner->edge_index_capacity-1)) ||
+        (!!owner->final.edge_count!=!!owner->edge_index)) return XR_XIR_BAD_STRUCTURE;
+    if (!owner->node_index && !owner->edge_index) return XR_XIR_OK;
+    if (!xir_compile_work(owner->work,16+sizeof(owner->node_index)+sizeof(owner->node_index_capacity)+
+        sizeof(owner->edge_index)+sizeof(owner->edge_index_capacity))) return XR_XIR_BUDGET;
+    xr_compile_resources_free(owner->node_index);xr_compile_resources_free(owner->edge_index);
+    owner->node_index=NULL;owner->node_index_capacity=0;owner->edge_index=NULL;owner->edge_index_capacity=0;
+    return XR_XIR_OK;
+}
+
 /* The existing graph owns the only queue. The driver performs no legacy
  * ROOT solve and never lowers a precomputed permission. A success transfers
  * a completely sealed computation; publication belongs to the common caller. */
@@ -94,6 +115,7 @@ static inline XrXirStatus effect_invocation_derive(const EffectInvocationDriverI
         equations->physical_rows=&physical_rows;status=effect_invocations_solve(equations);
     }
     if (status==XR_XIR_OK) status=effect_invocation_stage(equations,receiving);
+    if (status==XR_XIR_OK) status=effect_invocation_driver_lookups_retire(equations);
     EffectInvocationSealRequest request={&equations,receiving,input->dense};
     if (status==XR_XIR_OK) status=effect_invocation_seal(input->work,&request,output,sink);
     effect_invocation_rows_drop(&physical_rows);effect_invocation_free(equations);
