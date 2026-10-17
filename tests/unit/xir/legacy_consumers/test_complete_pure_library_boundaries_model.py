@@ -102,7 +102,7 @@ class CompletePureLibraryBoundaries(unittest.TestCase):
 
     def test_real_routes_retain_whole_original_source_and_exact_stdin(self):
         cases={row['id']:row for row in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}
-        for expected in m.expected_rows():
+        for expected in [row for row in m.expected_rows() if row['source'] in m._PROGRAMS.values()]:
             row=cases[expected['id']]
             self.assertEqual(row['entry'],'run');self.assertEqual(row['source_context'],'original_absolute')
             self.assertEqual(row['source'],expected['original_source'])
@@ -117,7 +117,7 @@ class CompletePureLibraryBoundaries(unittest.TestCase):
          'rounding_boundary':['0.30000000000000004','5.551115123125783e-17','-2.7755575615628914e-17','1.4142135623730951','2.0000000000000004','0.010000000000000002','0.3333333333333333','0.6666666666666666'],
          'crypto_random_system_direct':[True]*11,'runtime_domain_bytes':[True]*3}
         self.assertEqual(sum(map(len,expected.values())),67);self.assertEqual(m.system_observations(),expected)
-        self.assertEqual(sum(map(len,m.observations().values())),115);self.assertEqual(len(m.expected_rows()),8)
+        self.assertEqual(sum(map(len,m.observations().values())),115);self.assertEqual(len([row for row in m.expected_rows() if row['source'] in m._PROGRAMS.values()]),8)
 
     def test_binary64_literals_and_left_associative_residual_known_bits(self):
         f=m.FloatValue.literal;fraction=m.Fraction

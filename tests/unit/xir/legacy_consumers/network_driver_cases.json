@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "scope": "COMPLETE_NETWORK_ORIGINALS_SPECIALIZED_DRIVER_NO_COMPATIBILITY_OR_SOURCE_ADAPTATION",
+  "development_input_only": true,
+  "cases": [
+    {
+      "id": "complete_network_net_copy_bidirectional_error_enum",
+      "oracle_id": "complete_network_net_copy_bidirectional_error_enum",
+      "source": "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_error_enum.xr",
+      "source_lf_sha256": "d5721a088c492bd1955688222dbda4b6128c33260d2af7533e0a119708b5ed1e",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "remaining_gates": [
+        "All original network operations and termination with exact complete independent output domain",
+        "All applicable FI/resources/lifetime/cancel/physical/safety/provider/mixed and final integrated-tree qualification"
+      ]
+    },
+    {
+      "id": "complete_network_net_copy_bidirectional_cancel",
+      "oracle_id": "complete_network_net_copy_bidirectional_cancel",
+      "source": "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_cancel.xr",
+      "source_lf_sha256": "ea22dbb3597261b0a23a2b66467d5dffa2800258c108ad23641944ba8a19eeae",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "remaining_gates": [
+        "All original network operations and termination with exact complete independent output domain",
+        "All applicable FI/resources/lifetime/cancel/physical/safety/provider/mixed and final integrated-tree qualification"
+      ]
+    },
+    {
+      "id": "complete_network_net_copy_bidirectional_transfer",
+      "oracle_id": "complete_network_net_copy_bidirectional_transfer",
+      "source": "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_transfer.xr",
+      "source_lf_sha256": "8b685559aa923b24aaac01682fa0ff09677d5d81b63c504e47820bff357882d6",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P02",
+        "P06",
+        "P07",
+        "P09",
+        "P10",
+        "P12",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "remaining_gates": [
+        "All original network operations and termination with exact complete independent output domain",
+        "All applicable FI/resources/lifetime/cancel/physical/safety/provider/mixed and final integrated-tree qualification"
+      ]
+    }
+  ]
+}

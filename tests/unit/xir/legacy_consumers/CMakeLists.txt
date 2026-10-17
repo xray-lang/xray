@@ -5,6 +5,9 @@ if(NOT CMAKE_GENERATOR STREQUAL "Ninja")
 endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 enable_testing()
+add_test(NAME legacy_consumer_complete_network_model_controls
+    COMMAND "${Python3_EXECUTABLE}" -X utf8 -B "${CMAKE_CURRENT_SOURCE_DIR}/test_complete_network_model.py")
+set_tests_properties(legacy_consumer_complete_network_model_controls PROPERTIES LABELS "preparation-only" TIMEOUT 60)
 add_test(NAME legacy_consumer_fixed_source_owner_controls
     COMMAND "${Python3_EXECUTABLE}" -X utf8 -B "${CMAKE_CURRENT_SOURCE_DIR}/test_fixed_source_rejection_owner.py")
 set_tests_properties(legacy_consumer_fixed_source_owner_controls PROPERTIES LABELS "preparation-only" TIMEOUT 60)
@@ -184,6 +187,25 @@ if(XRAY_LEGACY_PRODUCT_BINARY)
         set_tests_properties("legacy_product_${identity}" PROPERTIES
             TIMEOUT 120 LABELS "actual-product-consumer;cli;vm;native" PROCESSORS 1 RUN_SERIAL TRUE)
     endforeach()
+
+    set(XRAY_LEGACY_NETWORK_PRODUCT_INPUTS "" CACHE FILEPATH "Closed public product input for complete network consumers")
+    if(XRAY_LEGACY_NETWORK_PRODUCT_INPUTS AND XRAY_LEGACY_PRODUCT_COMPILER)
+        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/network_driver_cases.json" network_manifest)
+        string(JSON network_count LENGTH "${network_manifest}" cases)
+        math(EXPR network_last "${network_count}-1")
+        foreach(index RANGE 0 ${network_last})
+            string(JSON identity GET "${network_manifest}" cases ${index} id)
+            add_test(NAME "legacy_product_${identity}"
+                COMMAND "${Python3_EXECUTABLE}" -X utf8 -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/run_network_driver.py"
+                    --binary "${XRAY_LEGACY_PRODUCT_BINARY}"
+                    --product-inputs "${XRAY_LEGACY_NETWORK_PRODUCT_INPUTS}"
+                    --compiler "${XRAY_LEGACY_PRODUCT_COMPILER}"
+                    --case "${identity}" --output "${CMAKE_CURRENT_BINARY_DIR}/network-product-evidence/${identity}")
+            set_tests_properties("legacy_product_${identity}" PROPERTIES
+                TIMEOUT 120 LABELS "actual-product-consumer;cli;vm;native;network" PROCESSORS 1 RUN_SERIAL TRUE)
+        endforeach()
+    endif()
 
     # Retain the existing aggregate budgets of the original corpus gates.
     add_test(NAME legacy_original_named_files

@@ -551,4 +551,5 @@ def expected_rows():
             row['required_companions']=[{'path':_FFI_MANIFEST,'lf_sha256':_INPUTS[_FFI_MANIFEST]}]
             row['required_semantic_trace']=extern_libm_requirements()
             row['model']='Complete unchanged three-C-function math original and full native manifest;exact rational binary64 nearest-root,2^10 and signed abs plus shortest-decimal output. This is a Windows x64 reference expectation;actual ABI,default foreign fenv,symbol resolution,generatedC,provider and complete safety require product evidence.'
-    return rows
+    import complete_network_model
+    return rows+complete_network_model.expected_rows()

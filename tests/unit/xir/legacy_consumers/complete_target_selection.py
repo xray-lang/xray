@@ -1,6 +1,7 @@
 """Choose one reviewed source and one exact independent oracle per original input."""
 from pathlib import Path
 import hashlib
+import complete_network_model
 
 
 def digest(data):
@@ -108,7 +109,8 @@ def expected_for(selection, preserved, models):
     if not candidates:
         return None
     first = candidates[0]
-    keys = ('exit_code', 'stdout_utf8', 'stderr_utf8', 'diagnostic_code')
+    keys = ('exit_code', 'stdout_utf8', 'stderr_utf8', 'diagnostic_code',
+            'stdout_expectation_kind', 'stdout_utf8_options')
     for row in candidates[1:]:
         if any(first['expected'].get(key, '') != row['expected'].get(key, '') for key in keys):
             raise ValueError('independent selected-source consumer oracles disagree: ' + identity)
@@ -127,6 +129,11 @@ def observation_status(selection, oracle, vm, native, projection, original_sidec
     if selection['rejection_oracle_required']:
         return 'EXECUTED_FROZEN_TARGET_REJECTION_ORACLE_PENDING'
     if oracle:
+        if (oracle.get('id','').startswith('complete_network_') or
+                any(key in oracle.get('expected',{}) for key in ('stdout_expectation_kind','stdout_utf8_options'))):
+            return ('PASS_INDEPENDENT_SELECTED_RUN_BYTE_SCOPE'
+                    if projection and complete_network_model.matches(oracle,vm) and complete_network_model.matches(oracle,native)
+                    else 'FAIL_INDEPENDENT_SELECTED_CONSUMER')
         expected = oracle['expected']
         def match(result):
             if (result is None or result.timed_out or result.returncode != expected['exit_code']
