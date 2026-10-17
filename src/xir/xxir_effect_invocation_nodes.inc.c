@@ -200,6 +200,13 @@ static XrXirStatus effect_invocation_capacity(EffectInvocationWorkspace *owner) 
     XrXirStatus status=effect_invocation_vector_capacity(owner->work,
         owner->final.capacity,owner->maximum,&capacity);
     if (status!=XR_XIR_OK) return status;
+    /* Nodes own larger records than edges. Beyond the initial small chunks,
+     * reserve a quarter of the old extent and keep the same copy transaction. */
+    if (owner->final.capacity>=16) {
+        if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
+        uint32_t increment=owner->final.capacity/4;
+        capacity=increment>owner->maximum-owner->final.capacity ? owner->maximum : owner->final.capacity+increment;
+    }
     uint64_t node_bytes=(uint64_t)capacity*sizeof(*owner->final.nodes);
     uint64_t index_bytes=(uint64_t)capacity*(sizeof(*owner->consumers)+sizeof(*owner->states));
     if (capacity<=owner->final.count || node_bytes>SIZE_MAX ||
