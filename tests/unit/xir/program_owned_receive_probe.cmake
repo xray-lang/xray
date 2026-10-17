@@ -53,6 +53,28 @@ foreach(storage_case valid table-short table-interior parameter-pointer paramete
         PROPERTIES TIMEOUT 60 LABELS "unit;xir;program;ownership;physical-storage")
 endforeach()
 
+add_executable(test_xir_program_input_carrier "${CMAKE_CURRENT_LIST_DIR}/test_xir_program_input_carrier.c")
+target_include_directories(test_xir_program_input_carrier PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_LIST_DIR}")
+target_link_libraries(test_xir_program_input_carrier PRIVATE xray_xir_vm)
+target_compile_features(test_xir_program_input_carrier PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_xir_program_input_carrier PRIVATE /W4 /WX /utf-8)
+endif()
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(test_xir_program_input_carrier PRIVATE /experimental:c11atomics)
+endif()
+foreach(carrier_case valid semantic body layout)
+    add_test(NAME test_xir_program_input_carrier_${carrier_case}
+        COMMAND test_xir_program_input_carrier ${carrier_case})
+    set_tests_properties(test_xir_program_input_carrier_${carrier_case}
+        PROPERTIES TIMEOUT 60 LABELS "unit;xir;program;ownership;carrier")
+endforeach()
+
+add_test(NAME test_xir_cleanup_source_compile
+    COMMAND test_xir_cleanup_source "${CMAKE_CURRENT_BINARY_DIR}/xir_cleanup_compile_probe.c")
+set_tests_properties(test_xir_cleanup_source_compile PROPERTIES
+    TIMEOUT 60 LABELS "unit;xir;program;ownership;compile;resource")
+
 add_executable(test_xir_program_owned_suspension "${CMAKE_CURRENT_LIST_DIR}/test_xir_program_owned_suspension.c")
 target_include_directories(test_xir_program_owned_suspension PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_LIST_DIR}")
 target_link_libraries(test_xir_program_owned_suspension PRIVATE xray_xir_vm)

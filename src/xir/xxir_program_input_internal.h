@@ -18,6 +18,9 @@ struct XrXirProgramInput {
     XrXirCompileContext context;
     XrXirArtifact *artifact;
 };
+/* Move physically owned matching body/layout storage, without granting a
+ * semantic permission or retaining a verification result. Every receiver
+ * independently verifies the same current Input and Final before execution. */
 XR_FUNC XrXirStatus xir_program_input_take(const XrXirCompileContext *context,
     XrXirArtifact **artifact,XrXirProgramInput **output);
 XR_FUNC XrXirStatus xir_program_input_read(const XrXirCompileContext *context,

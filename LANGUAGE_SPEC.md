@@ -7283,7 +7283,14 @@ owner. Check table and parameter storage before deep reads and again before
 publication, including current pointers and counts. Empty parameter rows have
 null owning pointers, and rows cannot transfer the same parameter block twice.
 Malformed physical input creates no new receiving objects; its actual checking
-work remains charged to the original ledger. The Program uses the immutable declarations
+work remains charged to the original ledger. Internal carrier transfer checks
+ledger ownership and canonical body/layout correspondence for bounded binding
+reads, without granting semantic or execution authority. The sole receiver
+independently verifies current Input/Final semantics during preparation and
+after the last callback; neither a duplicate constructor verification nor a
+saved PASS grants permission. Mismatched physical bodies/layouts do not move.
+A physically valid carrier with forged semantic facts must still reject before
+Program publication and retain its inputs. The Program uses the immutable declarations
 owned by its transferred canonical Input without a second deep clone. Failed
 Program disposal leaves caller-owned Input declarations live. The runtime type
 arena keeps its independent ownership for escaping values. Internal packet destruction before reception
