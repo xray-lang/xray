@@ -216,6 +216,18 @@ set_tests_properties(test_dap_values PROPERTIES TIMEOUT 120 LABELS "dap;values;j
 
 if(XR_BUILD_DAP)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_stdio.py ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test_full_session.py ${CMAKE_CURRENT_BINARY_DIR}/test_full_session.py COPYONLY)
+    foreach(XR_DAP_FULL_TRANSPORT stdio tcp)
+        set(XR_DAP_FULL_START launch)
+        if(XR_DAP_FULL_TRANSPORT STREQUAL "tcp")
+            set(XR_DAP_FULL_START attach)
+        endif()
+        add_test(NAME dap_current_full_${XR_DAP_FULL_TRANSPORT}_${XR_DAP_FULL_START} COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
+            --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/full_session.xr --transport ${XR_DAP_FULL_TRANSPORT}
+            --scenario full-session --start-request ${XR_DAP_FULL_START} --transcript ${CMAKE_CURRENT_BINARY_DIR}/full-session-${XR_DAP_FULL_TRANSPORT}.json)
+        set_tests_properties(dap_current_full_${XR_DAP_FULL_TRANSPORT}_${XR_DAP_FULL_START} PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "dap;cli;source;execution;ownership;full-session")
+    endforeach()
     add_test(NAME dap_current_stdio COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_BINARY_DIR}/test_stdio.py
         --xray $<TARGET_FILE:xray> --fixture ${XR_DAP_FIXTURE_DIR}/wire_fixture.xr)
     set_tests_properties(dap_current_stdio PROPERTIES TIMEOUT 120 LABELS "dap;cli;stdio;execution;ownership")

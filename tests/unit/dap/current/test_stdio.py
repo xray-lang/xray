@@ -16,11 +16,12 @@ parser.add_argument('--fixture',type=Path,required=True)
 parser.add_argument('--start-request',choices=('launch','attach'),default='launch')
 parser.add_argument('--transport',choices=('stdio','tcp'),default='stdio')
 parser.add_argument('--scenario',choices=('legacy','disconnect-clean','stop-on-entry','line-breakpoint','logpoint','mutate-oracle','owned-oracle',
-    'source-step-in','source-next','source-step-out','condition-oracle','hit-oracle','replace-oracle',
+    'full-session','source-step-in','source-next','source-step-out','condition-oracle','hit-oracle','replace-oracle',
     'detach-running','detach-stopped','detach-unstarted','detach-timer','detach-attach','detach-output-closed'),default='legacy')
 parser.add_argument('--oracle',type=Path)
+parser.add_argument('--transcript',type=Path)
 args=parser.parse_args()
-if args.scenario not in ('legacy','disconnect-clean') and not args.scenario.startswith('detach-'):assert args.oracle
+if args.scenario not in ('legacy','disconnect-clean','full-session') and not args.scenario.startswith('detach-'):assert args.oracle
 
 if args.transport=='tcp':
     for flags in [('--stdio','--port','0'),('--port','65536'),('--port','4294967296'),('--port','-1')]:
@@ -64,6 +65,7 @@ class Client:
         self.events=[]
         self.replies=[]
         self.read_seq=0
+        self.transcript=[]
         self.reader=threading.Thread(target=self.read,daemon=True)
         self.reader.start()
     def read(self):
@@ -91,6 +93,7 @@ class Client:
         assert value is not None,'unexpected EOF'
         self.read_seq+=1
         assert value['seq']==self.read_seq
+        self.transcript.append({'direction':'receive','message':value})
         if value['type']=='event':self.events.append(value)
         else:self.replies.append(value)
         return value
@@ -98,6 +101,7 @@ class Client:
         self.seq+=1
         value={'seq':self.seq,'type':'request','command':command}
         if arguments is not None:value['arguments']=arguments
+        self.transcript.append({'direction':'send','message':value})
         data=wire(value)
         if fragment:
             for byte in data:self.input.write(bytes([byte]));self.input.flush()
@@ -116,7 +120,7 @@ class Client:
     def close(self,expected=0):
         if not self.input.closed:self.input.close()
         self.process.wait(timeout=20)
-        stderr=self.process.stderr.read()
+        stderr=self.process.stderr.read();self.stderr=stderr
         assert self.process.returncode==expected,(self.process.returncode,stderr)
         self.reader.join(timeout=2)
         if self.peer:
@@ -488,7 +492,10 @@ def detached_tcp_wire():
             client.process.kill();client.process.wait(timeout=20)
 
 
-if args.scenario.startswith('detach-'):detached_tcp_wire()
+if args.scenario=='full-session':
+    from test_full_session import full_session
+    full_session(Client,args)
+elif args.scenario.startswith('detach-'):detached_tcp_wire()
 elif args.scenario=='legacy':legacy_wire()
 elif args.scenario.startswith('source-') or args.scenario in ('condition-oracle','hit-oracle','replace-oracle'):original_control_wire()
 else:original_wire()

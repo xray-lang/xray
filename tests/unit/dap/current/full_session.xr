@@ -1,0 +1,24 @@
+var shared:u16=2
+var hold:bool=true
+enum SessionFailure{Bad}
+fn fail()->i64{throw SessionFailure.Bad}
+fn leaf(value:i64)->i64{
+    var small:i8=1
+    var items:Array<i16>=[1,2]
+    var optional:i32?=4
+    var text:string="old\0value"
+    const tag="leaf"
+    print(small) // DAP_STOP: leaf_read
+    print(text)
+    print(shared)
+    print(len(items))
+    return value+3
+}
+fn outer(value:i64)->i64{
+    const input=value+1
+    const result=leaf(input) // DAP_STOP: outer_call
+    return result+3 // DAP_STOP: outer_return
+}
+while(hold){Coro.yield()} // DAP_STOP: hold_loop
+print(outer(19))
+try{fail()}catch(error:SessionFailure){print("caught")}
