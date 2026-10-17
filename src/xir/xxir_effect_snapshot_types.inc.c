@@ -67,15 +67,21 @@ typedef struct EffectBodyOrdinaryOverlay {
     EffectBodyOrdinaryIdentity *ordinary_identities;
     XrXirDeclarations declarations;
 } EffectBodyOrdinaryOverlay;
+enum { EFFECT_BODY_RECORDS_OWNED, EFFECT_BODY_RECORDS_SHARED, EFFECT_BODY_HEAD_OVERLAY };
 typedef struct EffectBodyMaterial {
     XrCompileResources *resources;
     /* Only private compiler owners acquire/release these prepaid references. */
     uint32_t references;
+    /* This tag selects only the union's release responsibility, never proof. */
+    uint32_t storage_kind;
     /* A thin generation owns its mutable advertisement overlay and retains
      * the complete immutable backbone. It never frees borrowed child owners. */
     struct EffectBodyMaterial *backbone;
     /* Only an initial ordinary holder owns these transformed heads. */
-    EffectBodyOrdinaryOverlay *overlay;
+    union {
+        EffectBodyOrdinaryOverlay *overlay;
+        struct EffectBodyMaterial *records_owner;
+    };
     EffectTerms terms;
     XrXirTypes *owned_types;
     XirMetadataDomain domain;
@@ -145,6 +151,19 @@ static inline bool effect_body_parent_shape(const EffectBodyMaterial *body,
         body->defaults.records==parent->defaults.records && body->defaults.count==parent->defaults.count;
 }
 
+static inline bool effect_body_record_storage_shape(const EffectBodyMaterial *body) {
+    if (body->backbone) return
+        (body->storage_kind==EFFECT_BODY_RECORDS_OWNED && !body->overlay) ||
+        (body->storage_kind==EFFECT_BODY_HEAD_OVERLAY && body->overlay);
+    if (body->storage_kind==EFFECT_BODY_RECORDS_OWNED) return !body->records_owner;
+    if (body->storage_kind!=EFFECT_BODY_RECORDS_SHARED) return false;
+    const EffectBodyMaterial *parent=body->records_owner;
+    return parent && parent!=body && parent->resources==body->resources && parent->references &&
+        !parent->backbone && parent->storage_kind==EFFECT_BODY_RECORDS_OWNED && !parent->records_owner &&
+        parent->domain.function_count==body->domain.function_count &&
+        parent->domain.types==&parent->terms.types &&
+        (!!parent->domain.function_count==!!parent->functions);
+}
 static inline bool effect_body_overlay_shape(const EffectBodyMaterial *body) {
     const EffectBodyOrdinaryOverlay *overlay=body->overlay;
     return overlay && overlay->count==body->domain.function_count &&
@@ -160,19 +179,20 @@ static inline bool effect_body_overlay_shape(const EffectBodyMaterial *body) {
  * ordinary owners remain valid parents. Neither self-links nor a third edge
  * are storage; no recursion or public source comparison is replaced here. */
 static inline bool effect_body_backbone_shape(const EffectBodyMaterial *body) {
+    if (!effect_body_record_storage_shape(body)) return false;
     const EffectBodyMaterial *parent=body->backbone;
-    if (!parent) return !body->overlay;
+    if (!parent) return true;
     if (!effect_body_parent_shape(body,parent) || !body->ordinary_identities || body->evidence_kind)
         return false;
-    if (body->overlay) return effect_body_overlay_shape(body) && !parent->backbone &&
-        !parent->overlay && !parent->ordinary_identities;
+    if (body->storage_kind==EFFECT_BODY_HEAD_OVERLAY) return effect_body_overlay_shape(body) && !parent->backbone &&
+        effect_body_record_storage_shape(parent) && !parent->ordinary_identities;
     if (body->functions!=parent->functions || body->declarations!=parent->declarations ||
         body->generics!=parent->generics || body->ordinary_identities!=parent->ordinary_identities ||
         body->ordinary_source_count!=parent->ordinary_source_count || parent->evidence_kind)
         return false;
-    if (!parent->backbone) return !parent->overlay && parent->ordinary_identities;
+    if (!parent->backbone) return effect_body_record_storage_shape(parent) && parent->ordinary_identities;
     const EffectBodyMaterial *initial=parent->backbone;
-    return initial!=body && !initial->backbone && !initial->overlay && !initial->ordinary_identities &&
+    return initial!=body && !initial->backbone && effect_body_record_storage_shape(initial) && !initial->ordinary_identities &&
         effect_body_overlay_shape(parent) && effect_body_parent_shape(parent,initial);
 }
 

@@ -99,7 +99,7 @@ static XrXirStatus initial_ordinary_operation(const XrXirCompileContext *context
             if (status==XR_XIR_OK && mode==3) status=xir_effects_refinement_capture(context,&view.module,&refinement);
             EffectBodyMaterial *fresh=NULL;
             if (status==XR_XIR_OK) status=effect_body_material_generation_input(context,&view.module,
-                refinement.refinement,&view.input,&fresh);
+                refinement.refinement,&view.input,NULL,&fresh);
             if (status==XR_XIR_OK) {
                 CHECK(fresh && !fresh->backbone && fresh->cells!=initial->cells && initial->references==references+1);
                 effect_body_material_free(material);material=fresh;
@@ -410,13 +410,13 @@ static void initial_ordinary_controls(void) {
             case 9: fixture.operations[0].type_arguments[1]=17;break;
         }
         EffectBodyMaterial *empty=NULL;uint64_t live=rp_stats(&context).live_bytes;
-        CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE &&
+        CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,NULL,&empty)==XR_XIR_BAD_STRUCTURE &&
             !empty && initial->references==2 && rp_stats(&context).live_bytes==live);
         fixture.operations[0]=original;
     }
     uint32_t block_count=fixture.blocks[0].count;fixture.blocks[0].count=1;
     EffectBodyMaterial *empty=NULL;
-    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE && !empty);
+    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,NULL,&empty)==XR_XIR_BAD_STRUCTURE && !empty);
     fixture.blocks[0].count=block_count;
     CHECK(effect_body_material_shape(holder) && effect_body_source_match(&context,initial,&fixture.source)==XR_XIR_OK);
     effect_ordinary_free(ordinary);xr_xir_compile_effects_free(effects);

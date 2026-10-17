@@ -132,7 +132,7 @@ static XrXirStatus effect_body_material_initial(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_body_initial_bounds(work,current,&declared);
     if (status==XR_XIR_OK) holder=xir_compile_calloc(work,1,sizeof(*holder),&status);
     if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(*holder)+13*sizeof(void *)+
-        4*sizeof(uint32_t)+5)) status=XR_XIR_BUDGET;
+        5*sizeof(uint32_t)+5)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) status=effect_body_material_retain(work,ordinary->initial);
     if (status!=XR_XIR_OK) {
         effect_body_ordinary_overlay_free(overlay);effect_invocation_bounds_free(declared);
@@ -142,6 +142,7 @@ static XrXirStatus effect_body_material_initial(const XrXirCompileContext *work,
      * afterwards; failure cleanup cannot release any parent child pointer. */
     *holder=*ordinary->initial;holder->references=1;holder->backbone=ordinary->initial;
     holder->overlay=overlay;holder->declared=declared;holder->evidence_kind=0;
+    holder->storage_kind=EFFECT_BODY_HEAD_OVERLAY;
     holder->functions=overlay->functions;holder->declarations=&overlay->declarations;
     holder->generics=overlay->generics;holder->ordinary_identities=overlay->ordinary_identities;
     holder->ordinary_source_count=ordinary->source->function_count;

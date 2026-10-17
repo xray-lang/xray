@@ -137,8 +137,8 @@ static XrXirStatus effect_graph_physical_refresh(const XrXirCompileContext *work
     EffectBodyMaterial *fresh=NULL;
     if (!!graph->ordinary.contexts!=!!graph->ordinary.source) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=graph->ordinary.contexts ?
-        effect_body_material_generation_input(work,module,refinement,&graph->ordinary,&fresh) :
-        effect_body_material_generation(work,module,refinement,&fresh);
+        effect_body_material_generation_input(work,module,refinement,&graph->ordinary,NULL,&fresh) :
+        effect_body_material_generation_input(work,module,refinement,NULL,graph->material,&fresh);
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(work,3)) { effect_body_material_free(fresh);return XR_XIR_BUDGET; }
     if (graph->physical_owned) effect_body_material_free(graph->material);

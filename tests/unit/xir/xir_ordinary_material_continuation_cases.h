@@ -103,7 +103,7 @@ static XrXirStatus ordinary_material_operation(const XrXirCompileContext *contex
                 (XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42};
         }
         if (status==XR_XIR_OK)
-            status=effect_body_material_generation_input(context,&view.module,refinement.refinement,&view.input,&material);
+            status=effect_body_material_generation_input(context,&view.module,refinement.refinement,&view.input,NULL,&material);
     }
     if (status==XR_XIR_OK) {
         CHECK(material!=basis && (mode?basis->references==1 && !material->backbone:
@@ -254,26 +254,26 @@ static void ordinary_material_controls(void) {
     EffectOrdinaryView view={0};CHECK(effect_ordinary_view(dense,&f.source,&view)==XR_XIR_OK);
     view.input.basis=ordinary;EffectBodyMaterial *basis=ordinary->uses.generation,*empty=NULL,*occupied=basis;
     XrCompileResourceStats initial=rp_stats(&context);size_t attempts=rp_attempts;
-    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&occupied)==XR_XIR_BAD_STRUCTURE && occupied==basis);
+    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,NULL,&occupied)==XR_XIR_BAD_STRUCTURE && occupied==basis);
     CHECK(rp_stats(&context).work==initial.work && rp_attempts==attempts && basis->references==1);
     const XrXirInstruction *instructions=dense->functions[0].instructions;
     dense->functions[0].instructions=NULL;
-    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE && !empty && basis->references==1);
+    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,NULL,&empty)==XR_XIR_BAD_STRUCTURE && !empty && basis->references==1);
     dense->functions[0].instructions=instructions;
     uint32_t declaration=dense->nodes[0].declaration;dense->nodes[0].declaration=2;
-    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE && !empty && basis->references==1);
+    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,NULL,&empty)==XR_XIR_BAD_STRUCTURE && !empty && basis->references==1);
     dense->nodes[0].declaration=declaration;
     XrXirCompileContext foreign=rp_owner(rp_caps());XrCompileResourceStats foreign_before=rp_stats(&foreign);
-    CHECK(effect_body_material_generation_input(&foreign,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE && !empty);
+    CHECK(effect_body_material_generation_input(&foreign,&view.module,NULL,&view.input,NULL,&empty)==XR_XIR_BAD_STRUCTURE && !empty);
     CHECK(rp_stats(&foreign).work==foreign_before.work && rp_stats(&foreign).live_bytes==foreign_before.live_bytes);
     rp_owner_free(&foreign,foreign_before.live_bytes);
     ordinary_material_word_controls(&context,&view,basis);
     ordinary_material_metadata_controls(&context,&view,basis);
     f.operations[0].immediate=99;
-    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,NULL,&empty)==XR_XIR_BAD_STRUCTURE &&
         !empty && basis->references==1);
     f.operations[0].immediate=42;
-    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,&empty)==XR_XIR_OK &&
+    CHECK(effect_body_material_generation_input(&context,&view.module,NULL,&view.input,NULL,&empty)==XR_XIR_OK &&
         empty!=basis && empty->backbone==basis && basis->references==2 &&
         empty->declared!=basis->declared && empty->functions==basis->functions);
     effect_body_material_free(empty);CHECK(basis->references==1);

@@ -254,6 +254,22 @@ static XrXirStatus effect_body_record_count(const XrXirCompileContext *work,
     census->next+=run->count;return XR_XIR_OK;
 }
 
+static XrXirStatus effect_body_run_deliver(const XrXirCompileContext *work,
+    const XrXirFunction *source,const EffectBodyRun *run,const EffectBodyWriteSink *sink) {
+    if (!sink) return XR_XIR_OK;
+    if (!sink->owner || !sink->row || !sink->span) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,5+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    uint32_t first=run->first,count=run->count,mask=run->mask;
+    if (count>1 && !(mask&EFFECT_BODY_LITERAL_ROWS) && !(mask&UINT32_C(3)))
+        return sink->span(sink->owner,first,count);
+    for (uint32_t i=first;i<first+count;++i) {
+        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        XrXirStatus status=sink->row(sink->owner,i,&source->instructions[i]);
+        if (status!=XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
+
 /* Semantic intake follows the complete physical comparison and append.
  * A constant-column mask chooses only the private range reader. That reader
  * independently checks the real fields; all other rows retain scalar intake. */
@@ -266,11 +282,11 @@ static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
         (run->mask&~(EFFECT_BODY_MASK|EFFECT_BODY_LITERAL_ROWS)) || (run->count==1 && run->mask) ||
         ((run->mask&EFFECT_BODY_LITERAL_ROWS) && (run->mask&EFFECT_BODY_MASK)))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,3+3*sizeof(uint32_t)+2*sizeof(uintptr_t))) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,3+sizeof(uint32_t)+2*sizeof(uintptr_t))) return XR_XIR_BUDGET;
     uintptr_t address=(uintptr_t)run,begin=(uintptr_t)target->runs;
     if (target->runs && address>=begin && (address-begin)/sizeof(*run)<target->run_capacity)
         return XR_XIR_BAD_STRUCTURE;
-    uint32_t first=run->first,count=run->count,mask=run->mask;
+    uint32_t count=run->count;
     XrXirStatus status=effect_body_record_prepare(work,source,run);
     if (status!=XR_XIR_OK) return status;
     if (count==1 || (run->mask&EFFECT_BODY_LITERAL_ROWS)) status=effect_body_short_literals_append(work,target,run);
@@ -280,17 +296,7 @@ static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
         if (status==XR_XIR_OK && !xir_compile_work(work,1)) status=XR_XIR_BUDGET;
         if (status==XR_XIR_OK) ++target->run_count;
     }
-    if (status!=XR_XIR_OK || !sink) return status;
-    if (!sink->owner || !sink->row || !sink->span) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
-    if (count>1 && !(run->mask&EFFECT_BODY_LITERAL_ROWS) && !(mask&UINT32_C(3)))
-        return sink->span(sink->owner,first,count);
-    for (uint32_t i=first;i<first+count;++i) {
-        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
-        status=sink->row(sink->owner,i,&source->instructions[i]);
-        if (status!=XR_XIR_OK) return status;
-    }
-    return XR_XIR_OK;
+    return status==XR_XIR_OK?effect_body_run_deliver(work,source,run,sink):status;
 }
 
 static XrXirStatus effect_body_record_receive(const XrXirCompileContext *work,
@@ -941,4 +947,31 @@ static XrXirStatus effect_body_records_compare(const EffectBodyRead *read,
 static XrXirStatus effect_body_records_match(const EffectBodyRead *read,
     const EffectBodyFunction *function,const XrXirFunction *source) {
     return effect_body_records_compare(read,function,source,NULL);
+}
+
+static XrXirStatus effect_body_record_replay(const XrXirCompileContext *work,
+    const XrXirFunction *source,EffectBodyRun *run,void *owner) {
+    const EffectBodyRecordReceiver *receiver=owner;
+    if (!receiver) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_body_record_prepare(work,source,run);
+    return status==XR_XIR_OK?effect_body_run_deliver(work,source,run,receiver->semantic):status;
+}
+
+/* The retained array is immutable data only. Fresh complete correspondence
+ * precedes its attachment, then the original current-source scanner performs
+ * every semantic intake again. Its independent function EOF remains separate. */
+static XrXirStatus effect_body_records_receive(const XrXirCompileContext *work,
+    const XrXirFunction *source,EffectBodyFunction *target,const EffectBodyFunction *retained,
+    const EffectBodyWriteSink *sink) {
+    if (!source || !target || !retained || target->run_count || target->run_capacity || target->runs ||
+        target->instruction_count!=source->instruction_count || retained->run_count!=retained->run_capacity)
+        return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRead read=effect_body_compile_read(work);
+    XrXirStatus status=effect_body_records_match(&read,retained,source);
+    if (status!=XR_XIR_OK) return status;
+    if (!xir_compile_work(work,sizeof(EffectBodyRun *)+2*sizeof(uint32_t)+sizeof(EffectBodyRecordReceiver)+sizeof(EffectBodyRecordSink)))
+        return XR_XIR_BUDGET;
+    target->runs=retained->runs;target->run_count=retained->run_count;target->run_capacity=retained->run_capacity;
+    EffectBodyRecordReceiver receiver={target,sink};EffectBodyRecordSink receiving={&receiver,effect_body_record_replay};
+    return effect_body_records_scan(work,source,&receiving);
 }

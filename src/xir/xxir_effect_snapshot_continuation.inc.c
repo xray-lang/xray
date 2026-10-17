@@ -33,7 +33,7 @@ static XrXirStatus effect_body_material_holder(const XrXirCompileContext *work,
     EffectBodyMaterial *holder=status==XR_XIR_OK?xir_compile_calloc(work,1,sizeof(*holder),&status):NULL;
     /* Count the full holder copy, pointer rebinding, local reference write and
      * the future holder branch, independent bound release and backbone drop. */
-    uint64_t writes=sizeof(*holder)+8*sizeof(void *)+3*sizeof(uint32_t)+4;
+    uint64_t writes=sizeof(*holder)+8*sizeof(void *)+4*sizeof(uint32_t)+4;
     if (status==XR_XIR_OK && !xir_compile_work(work,writes)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) status=effect_body_material_retain(work,basis);
     if (status!=XR_XIR_OK) {
@@ -42,6 +42,7 @@ static XrXirStatus effect_body_material_holder(const XrXirCompileContext *work,
     /* No fallible operation follows the ownership edge acquisition. Domain
      * pointers refer to this holder's own structures, never parent bookkeeping. */
     *holder=*basis;holder->references=1;holder->backbone=basis;holder->overlay=NULL;holder->declared=declared;
+    holder->storage_kind=EFFECT_BODY_RECORDS_OWNED;
     holder->domain.types=&holder->terms.types;
     if (basis->domain.defaults) holder->domain.defaults=&holder->defaults;
     *output=holder;return XR_XIR_OK;

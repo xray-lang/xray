@@ -12,6 +12,7 @@
 
 #include "xxir_effect_snapshot_metadata_match.inc.c"
 #include "xxir_effect_snapshot_types_compare.inc.c"
+#include "xxir_effect_snapshot_record_source.inc.c"
 static XrXirStatus effect_body_material_continue(const XrXirCompileContext *work,
     const XrXirModule *source,const EffectBodyOrdinaryInput *ordinary,EffectBodyMaterial **output);
 
@@ -30,7 +31,8 @@ static void effect_body_material_free(EffectBodyMaterial *body) {
         effect_body_material_free(body->backbone);
         xr_compile_resources_free(body);return;
     }
-    if (body->functions) for (uint32_t f=0;f<effect_body_count(body);++f)
+    EffectBodyMaterial *records=body->storage_kind==EFFECT_BODY_RECORDS_SHARED?body->records_owner:NULL;
+    if (!records && body->functions) for (uint32_t f=0;f<effect_body_count(body);++f)
         xr_compile_resources_free(body->functions[f].runs);
     effect_physical_free(body->physical);
     xr_xir_compile_cell_provenance_free(body->cells);
@@ -39,6 +41,7 @@ static void effect_body_material_free(EffectBodyMaterial *body) {
     xr_xir_compile_generics_free(body->generics,effect_body_count(body));
     effect_terms_free(&body->terms);
     xr_xir_compile_types_free(body->owned_types);
+    effect_body_material_free(records);
     xr_compile_resources_free(body);
 }
 
@@ -217,9 +220,9 @@ static XrXirStatus effect_body_writer_span(void *owner,uint32_t first,uint32_t c
  * role product. No provenance alias or verified flag survives as admission. */
 static XrXirStatus effect_body_material_generation_input(const XrXirCompileContext *work,
     const XrXirModule *source,EffectRefinementBounds *refinement,
-    const EffectBodyOrdinaryInput *ordinary,EffectBodyMaterial **output) {
+    const EffectBodyOrdinaryInput *ordinary,EffectBodyMaterial *prior,EffectBodyMaterial **output) {
     if (!xir_compile_context_valid(work) || !source || !output || *output ||
-        (!!source->function_count!=!!source->functions)) return XR_XIR_BAD_STRUCTURE;
+        (!!source->function_count!=!!source->functions) || (ordinary && prior)) return XR_XIR_BAD_STRUCTURE;
     if (source->function_count>work->limits.functions) return XR_XIR_BUDGET;
     XrXirStatus status=ordinary ? effect_body_ordinary_input_verify(work,source,ordinary) :
         xir_effect_contract_shape_verify(work,source);
@@ -234,14 +237,22 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
         status=effect_body_material_initial(work,source,ordinary,output);
         if (status!=XR_XIR_OK || *output) return status;
     }
+    EffectBodyMaterial *records=NULL;
+    status=effect_body_records_source(work,source,prior,&records);
+    if (status!=XR_XIR_OK) return status;
     /* Prepay the initial reference write and its unavoidable release. */
     if (!xir_compile_work(work,3*sizeof(uint32_t)+2*sizeof(void *)+3)) return XR_XIR_BUDGET;
     EffectBodyMaterial *body=xir_compile_calloc(work,1,sizeof(*body),&status);
     if (!body) return status;
     body->resources=work->resources;body->references=1;body->terms.remaining=work;
     body->domain.function_count=source->function_count;
+    if (records) {
+        if (!xir_compile_work(work,sizeof(body->records_owner)+sizeof(body->storage_kind))) status=XR_XIR_BUDGET;
+        if (status==XR_XIR_OK) status=effect_body_material_retain(work,records);
+        if (status==XR_XIR_OK) { body->records_owner=records;body->storage_kind=EFFECT_BODY_RECORDS_SHARED; }
+    }
     body->stage=source->stage;body->linkage_kind=source->linkage_kind;
-    if (!xir_compile_work(work,sizeof(body->evidence_kind))) status=XR_XIR_BUDGET;
+    if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(body->evidence_kind))) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) body->evidence_kind=source->provenance?source->provenance->kind:0;
     if (status==XR_XIR_OK) status=effect_body_types_copy(body,source);
     if (status==XR_XIR_OK) status=effect_body_metadata_copy(body,source);
@@ -327,7 +338,9 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
         }
         EffectBodyWriter writer={work,source,body,cells,advertisements,f};EffectBodyWriteSink sink={&writer,effect_body_writer_row,effect_body_writer_span};
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(sink.span))) status=XR_XIR_BUDGET;
-        if (status==XR_XIR_OK) status=effect_body_records_write(work,&source->functions[f],function,&sink);
+        if (status==XR_XIR_OK) status=records ?
+            effect_body_records_receive(work,&source->functions[f],function,&records->functions[f],&sink) :
+            effect_body_records_write(work,&source->functions[f],function,&sink);
         if (status==XR_XIR_OK) status=xir_cell_proof_builder_function(cells,f);
         if (status==XR_XIR_OK) status=effect_body_runs_finish(work,function);
     }
@@ -344,7 +357,7 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
 /* Public raw construction preserves the complete original evidence admission. */
 static XrXirStatus effect_body_material_generation(const XrXirCompileContext *work,
     const XrXirModule *source,EffectRefinementBounds *refinement,EffectBodyMaterial **output) {
-    return effect_body_material_generation_input(work,source,refinement,NULL,output);
+    return effect_body_material_generation_input(work,source,refinement,NULL,NULL,output);
 }
 
 /* Literal construction uses the same writer without a Source refiner. */
