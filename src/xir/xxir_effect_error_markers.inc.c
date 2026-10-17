@@ -311,8 +311,9 @@ static XrXirStatus error_marker_nodes_match(const XrXirCompileContext *work,cons
     }
     return XR_XIR_OK;
 }
-static XrXirStatus error_marker_permissions_match(const XrXirCompileContext *work,const EffectErrorFinite *proof,
-    const XrXirStatus *permissions) {
+static XrXirStatus error_marker_permissions_fold(const XrXirCompileContext *work,const EffectErrorFinite *proof,
+    const XrXirStatus *permissions,XrXirStatus *projection) {
+    if(!!permissions==!!projection) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=error_marker_nodes_match(work,proof);if(status!=XR_XIR_OK) return status;
     const EffectErrorMarkers *markers=proof->markers;EffectErrorFiniteRead read={proof,work,UINT32_MAX,NULL};
     uint32_t root=0,next=0;
@@ -333,7 +334,16 @@ static XrXirStatus error_marker_permissions_match(const XrXirCompileContext *wor
             if(!node->value) permission=XR_XIR_BAD_TYPE;
             next=node->end;++root;
         }
-        if(f<proof->functions && permissions[f]!=permission) return XR_XIR_BAD_STRUCTURE;
+        if(f<proof->functions) {
+            if(projection) {
+                if(!xir_compile_work(work,sizeof(*projection))) return XR_XIR_BUDGET;
+                projection[f]=permission;
+            } else if(permissions[f]!=permission) return XR_XIR_BAD_STRUCTURE;
+        }
     }
     return root==markers->root_count && next==markers->count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
+static XrXirStatus error_marker_permissions_match(const XrXirCompileContext *work,const EffectErrorFinite *proof,
+    const XrXirStatus *permissions) {
+    return error_marker_permissions_fold(work,proof,permissions,NULL);
 }

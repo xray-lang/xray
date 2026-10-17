@@ -316,7 +316,10 @@ static uint32_t edges_source_once(uint32_t cut,unsigned mode) {
     CHECK(status==(mode?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));return frees;
 }
 #include "xir_capture_complete_cases.h"
+#include "xir_capture_callable_cases.h"
 int main(int argc,char **argv) {
+    if(argc==2 && !strcmp(argv[1],"captured")) { complete_captured_case(0);complete_captured_case(1);return 0; }
+    if(argc==2 && !strcmp(argv[1],"captured-nested")) { complete_captured_case(2);complete_captured_case(3);return 0; }
     if(argc==2 && !strcmp(argv[1],"complete")) { complete_cases();return 0; }
     CHECK(argc==2 || argc==3);
     if(argc==3) CHECK(!strcmp(argv[2],"no-return") || !strcmp(argv[2],"proof-fi") || !strcmp(argv[2],"proof-fi-large") || !strcmp(argv[2],"large"));
