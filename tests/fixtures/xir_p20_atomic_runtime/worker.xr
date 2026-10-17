@@ -1,0 +1,1 @@
+export fn localI64()->i64 {var value=Atomic<i64>(40);value.add(1,Ordering.Relaxed);return value.load(Ordering.Acquire)}
