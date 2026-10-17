@@ -103,9 +103,9 @@ static XrXirStatus error_finite_construct(const XrXirCompileContext *work,const 
     if(status!=XR_XIR_OK) { error_finite_release(proof);return status; }
     *output=proof;return XR_XIR_OK;
 }
-/* Only unpublished constructor storage accepts this projection. The current
- * finite relation supplies every Error word and Task permission; old graph
- * rows do not override a more precise authentic callable environment. */
+/* Only unpublished constructor storage accepts these framed proposals. They
+ * grant no permission: complete closure, support and output correspondence
+ * remain mandatory after the final callback and before publication. */
 static XrXirStatus error_finite_outcomes_project(const XrXirCompileContext *work,XrXirEffects *effects) {
     if(!effects || !xir_effects_context_matches(work,effects,effects->count) || !effects->outcomes_owner ||
         effects->root_input || !effects->invocations || !effects->invocations->final ||
@@ -113,7 +113,7 @@ static XrXirStatus error_finite_outcomes_project(const XrXirCompileContext *work
     EffectFinalOutcomes *outcomes=&effects->outcomes_work;
     if(outcomes->resources || outcomes->count) return XR_XIR_BAD_STRUCTURE;
     const EffectErrorFinite *proof=outcomes->error_proof;
-    XrXirStatus status=error_finite_check(work,proof);if(status!=XR_XIR_OK) return status;
+    XrXirStatus status=error_finite_geometry(work,proof);if(status!=XR_XIR_OK) return status;
     if(proof->atoms!=outcomes->atoms || proof->atom_count!=outcomes->atom_count ||
         proof->words!=outcomes->words || proof->contexts!=outcomes->error_rows) return XR_XIR_BAD_STRUCTURE;
     status=effect_role_range(work,outcomes->errors,(uint64_t)proof->contexts*proof->words,sizeof(*outcomes->errors));
