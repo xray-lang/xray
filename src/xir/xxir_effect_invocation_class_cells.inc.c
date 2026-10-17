@@ -141,7 +141,26 @@ static XrXirStatus effect_invocation_class_terminals_match(EffectInvocationFlow 
     if (!storage) return status;
     uint64_t *row=storage,*confirmed=storage+flow->basis.cell_words;
     EffectBodyFunctionHead root={0};
-    status=effect_invocation_flow_head(flow,node->root,&root);
+    /* This immutable synchronous walk shares only its current storage binding.
+     * Every Cell query and semantic cause, subject and witness still runs. */
+    bool native=flow->types_ready && effect_body_request_sequence_owned(&flow->body);
+    if (native) {
+        status=effect_body_request_sequence_binding(&flow->body);
+        if (status==XR_XIR_OK && !xir_compile_work(owner->work,8)) status=XR_XIR_BUDGET;
+        const EffectBodyMaterial *material=flow->body.owner;
+        if (status==XR_XIR_OK && (material!=owner->final.material || node->root>=effect_body_count(material) ||
+            !flow->function || flow->values!=flow->physical->values ||
+            (uint64_t)flow->function->parameter_count+flow->function->instruction_count!=flow->values ||
+            (flow->function->instruction_count && !flow->instruction_refs && !flow->instructions)))
+            status=XR_XIR_BAD_STRUCTURE;
+        if (status==XR_XIR_OK) {
+            const EffectBodyFunction *head=&material->functions[node->root];
+            if (!effect_body_function_head_shape(head)) status=XR_XIR_BAD_STRUCTURE;
+            else if (!xir_compile_work(owner->work,12+sizeof(root.parameters)+sizeof(root.parameter_count)))
+                status=XR_XIR_BUDGET;
+            else { root.parameters=head->parameters;root.parameter_count=head->parameter_count; }
+        }
+    } else status=effect_invocation_flow_head(flow,node->root,&root);
     for (uint32_t r=0;status==XR_XIR_OK && r<flow->physical->count;++r) {
         if (!xir_compile_work(owner->work,1)) { status=XR_XIR_BUDGET;break; }
         EffectPhysicalRecord record=flow->physical->records[r];
@@ -151,7 +170,13 @@ static XrXirStatus effect_invocation_class_terminals_match(EffectInvocationFlow 
         }
         uint32_t i=record.value-flow->function->parameter_count;
         XrXirInstruction op_storage={0};const XrXirInstruction *op=NULL;
-        status=effect_invocation_flow_instruction(flow,i,&op_storage,&op);
+        if (native) {
+            if (!xir_compile_work(owner->work,1+sizeof(op))) status=XR_XIR_BUDGET;
+            else {
+                op=flow->instruction_refs?flow->instruction_refs[i]:&flow->instructions[i];
+                if (!op) status=XR_XIR_BAD_STRUCTURE;
+            }
+        } else status=effect_invocation_flow_instruction(flow,i,&op_storage,&op);
         if (status!=XR_XIR_OK) break;
         if (!effect_invocation_cell_terminal(op->op)) continue;
         if (!xir_compile_work(owner->work,bytes)) { status=XR_XIR_BUDGET;break; }
