@@ -12,49 +12,83 @@ static void error_finite_release(EffectErrorFinite *proof) {
     xr_compile_resources_free(proof->rows);xr_compile_resources_free(proof->facts);
     xr_compile_resources_free(proof);
 }
+/* Growth is outside every borrowed equation walk. Both allocation and release
+ * can call client code, so current ranges are reopened after each boundary. */
+static XrXirStatus error_finite_grow(const XrXirCompileContext *work,EffectErrorFinite *proof,
+    EffectErrorFiniteView *current) {
+    if(!current || current->work!=work || current->proof!=proof || current->material!=proof->material ||
+        current->input.work!=work || current->input.material!=proof->material) return XR_XIR_BAD_STRUCTURE;
+    if(proof->count!=proof->capacity || proof->capacity>UINT32_MAX/2) return XR_XIR_BUDGET;
+    uint32_t count=proof->count,old_capacity=proof->capacity,capacity=old_capacity?old_capacity*2:32;
+    if((uint64_t)capacity>SIZE_MAX/sizeof(*proof->facts)) return XR_XIR_BUDGET;
+    EffectErrorFiniteFact *old=proof->facts;
+    *current=(EffectErrorFiniteView){0};XrXirStatus status=XR_XIR_OK;
+    EffectErrorFiniteFact *facts=xir_compile_alloc(work,(size_t)capacity*sizeof(*facts),&status);
+    if(!facts) return status;
+    status=error_finite_geometry(work,proof);
+    if(status==XR_XIR_OK && (proof->facts!=old || proof->count!=count || proof->capacity!=old_capacity))
+        status=XR_XIR_BAD_STRUCTURE;
+    if(status==XR_XIR_OK) status=effect_role_range(work,facts,capacity,sizeof(*facts));
+    if(status==XR_XIR_OK && !xir_compile_work(work,(uint64_t)count*sizeof(*facts))) status=XR_XIR_BUDGET;
+    if(status!=XR_XIR_OK) { xr_compile_resources_free(facts);return status; }
+    if(count) memcpy(facts,old,(size_t)count*sizeof(*facts));
+    if(old) {
+        proof->facts=NULL;proof->count=0;proof->capacity=0;
+        xr_compile_resources_free(old);
+        status=error_finite_geometry(work,proof);
+        if(status==XR_XIR_OK && (proof->facts || proof->count || proof->capacity)) status=XR_XIR_BAD_STRUCTURE;
+        if(status==XR_XIR_OK) status=effect_role_range(work,facts,capacity,sizeof(*facts));
+        if(status!=XR_XIR_OK) { xr_compile_resources_free(facts);return status; }
+    }
+    proof->facts=facts;proof->count=count;proof->capacity=capacity;
+    return XR_XIR_OK;
+}
 static XrXirStatus error_finite_insert(const XrXirCompileContext *work,EffectErrorFinite *proof,
-    uint64_t coordinate,uint32_t rank,bool *changed) {
+    uint64_t coordinate,uint32_t rank,bool *changed,bool *paused) {
     EffectErrorFiniteRead read={proof,work,UINT32_MAX,NULL};uint32_t at=0;
     XrXirStatus status=error_finite_lower(&read,coordinate,&at);if(status!=XR_XIR_OK) return status;
     if(at<proof->count && proof->facts[at].coordinate==coordinate) return XR_XIR_OK;
-    if(proof->count==proof->capacity) {
-        if(proof->capacity>UINT32_MAX/2) return XR_XIR_BUDGET;
-        uint32_t capacity=proof->capacity?proof->capacity*2:32;
-        if((uint64_t)capacity>SIZE_MAX/sizeof(*proof->facts)) return XR_XIR_BUDGET;
-        EffectErrorFiniteFact *facts=xir_compile_alloc(work,(size_t)capacity*sizeof(*facts),&status);
-        if(!facts) return status;
-        if(!xir_compile_work(work,(uint64_t)proof->count*sizeof(*facts))) {
-            xr_compile_resources_free(facts);return XR_XIR_BUDGET;
-        }
-        if(proof->count) memcpy(facts,proof->facts,(size_t)proof->count*sizeof(*facts));
-        xr_compile_resources_free(proof->facts);proof->facts=facts;proof->capacity=capacity;
-    }
+    if(proof->count==proof->capacity) { *paused=true;return XR_XIR_OK; }
     if(!xir_compile_work(work,(uint64_t)(proof->count-at)*sizeof(*proof->facts)+sizeof(*proof->facts)))
         return XR_XIR_BUDGET;
     memmove(proof->facts+at+1,proof->facts+at,(size_t)(proof->count-at)*sizeof(*proof->facts));
     proof->facts[at]=(EffectErrorFiniteFact){coordinate,rank};++proof->count;*changed=true;return XR_XIR_OK;
 }
-typedef struct ErrorFiniteDerive { EffectErrorFinite *proof;uint32_t rank;bool *changed; } ErrorFiniteDerive;
+typedef struct ErrorFiniteDerive {
+    EffectErrorFinite *proof;
+    uint32_t rank;
+    bool *changed,full;
+} ErrorFiniteDerive;
 static XrXirStatus error_finite_derive_coordinate(const EffectErrorFiniteRead *read,
-    uint32_t function,uint64_t coordinate,void *owner) {
+    uint32_t function,uint64_t coordinate,void *owner,bool *paused) {
     ErrorFiniteDerive *derive=owner;uint64_t result=0;uint32_t bits=0;
     XrXirStatus status=error_finite_rhs(read,function,coordinate,&result,&bits);
     if(status!=XR_XIR_OK) return status;
     for(uint32_t bit=0;bit<bits;++bit) if(result&(UINT64_C(1)<<bit)) {
-        status=error_finite_insert(read->work,derive->proof,coordinate+bit,derive->rank,derive->changed);
+        status=error_finite_insert(read->work,derive->proof,coordinate+bit,derive->rank,derive->changed,paused);
         if(status!=XR_XIR_OK) return status;
+        if(*paused) { derive->full=true;return XR_XIR_OK; }
     }
     return XR_XIR_OK;
 }
 static XrXirStatus error_finite_derive(const XrXirCompileContext *work,EffectErrorFinite *proof) {
-    bool changed=true;
+    bool changed=true;EffectErrorFiniteView current={0};
     for(uint32_t rank=1;changed;++rank) {
         if(rank==UINT32_MAX) return XR_XIR_BUDGET;
-        changed=false;EffectErrorFiniteRead read={proof,work,rank,NULL};
-        ErrorFiniteDerive derive={proof,rank,&changed};
-        for(uint32_t f=0;f<proof->contexts;++f) {
-            bool empty=false;XrXirStatus status=error_finite_walk(&read,f,error_finite_derive_coordinate,&derive,&empty);
+        changed=false;ErrorFiniteDerive derive={proof,rank,&changed,false};
+        for(uint32_t f=0;f<proof->contexts;) {
+            XrXirStatus status=XR_XIR_OK;
+            if(!current.work) status=error_finite_view_open(work,proof,&current);
             if(status!=XR_XIR_OK) return status;
+            {
+                EffectErrorFiniteRead read={proof,work,rank,&current};bool empty=false;
+                status=error_finite_walk(&read,f,error_finite_derive_coordinate,&derive,&empty);
+            }
+            if(status!=XR_XIR_OK) return status;
+            if(derive.full) {
+                status=error_finite_grow(work,proof,&current);if(status!=XR_XIR_OK) return status;
+                derive.full=false;
+            } else ++f;
         }
     }
     return XR_XIR_OK;
@@ -96,7 +130,6 @@ static XrXirStatus error_finite_construct(const XrXirCompileContext *work,const 
         if(!xir_compile_work(work,sizeof(*proof->rows))) { status=XR_XIR_BUDGET;break; }
         proof->rows[f]=(EffectErrorFiniteRow){at,at+size,head->block_count,(uint32_t)values,node};at+=size;
     }
-    if(status==XR_XIR_OK) status=error_finite_geometry(work,proof);
     if(status==XR_XIR_OK) status=error_finite_derive(work,proof);
     if(status==XR_XIR_OK) status=error_finite_geometry(work,proof);
     if(status==XR_XIR_OK) status=error_marker_build(work,proof,&proof->markers);

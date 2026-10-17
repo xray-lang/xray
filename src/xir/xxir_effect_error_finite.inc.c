@@ -30,12 +30,13 @@ typedef struct EffectErrorFinite {
     bool contextual;
 } EffectErrorFinite;
 /* This identity belongs only to the current callback-free receiving walk.
- * It retains no rows, computed facts or admission result. Construction never
- * carries it through an allocator or release callback. */
+ * It retains no rows, computed facts or admission result. A full construction
+ * buffer unwinds its walk before allocating and opens a fresh view afterward. */
 typedef struct EffectErrorFiniteView {
     const XrXirCompileContext *work;
     const EffectErrorFinite *proof;
     const EffectBodyMaterial *material;
+    EffectBodyCurrentRead input;
 } EffectErrorFiniteView;
 typedef struct EffectErrorFiniteRead {
     const EffectErrorFinite *proof;
@@ -91,6 +92,7 @@ static XrXirStatus error_finite_equation(const EffectErrorFiniteRead *read,
         .work=read->work,.atoms=read->proof->atoms,.context=function,.function=body,
         .atom_count=read->proof->atom_count,.words=read->proof->words,.owner=read,
         .entry=error_finite_entry,.call=error_finite_call};
+    if(read->current) output->body.current=&read->current->input;
     return effect_body_request_head(&output->body,output->function,&output->head);
 }
 static XrXirStatus error_finite_reachable(const EffectErrorFiniteRead *read,
@@ -292,8 +294,10 @@ static XrXirStatus error_finite_view_open(const XrXirCompileContext *work,
     const EffectErrorFinite *proof,EffectErrorFiniteView *output) {
     if(!output || output->work || output->proof || output->material) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=error_finite_geometry(work,proof);if(status!=XR_XIR_OK) return status;
+    EffectBodyCurrentRead input={0};
+    status=effect_body_current_open(work,proof->material,&input);if(status!=XR_XIR_OK) return status;
     if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
-    *output=(EffectErrorFiniteView){work,proof,proof->material};return XR_XIR_OK;
+    *output=(EffectErrorFiniteView){work,proof,proof->material,input};return XR_XIR_OK;
 }
 static XrXirStatus error_finite_check_current(const EffectErrorFiniteView *current) {
     const EffectErrorFinite *proof=current->proof;const XrXirCompileContext *work=current->work;

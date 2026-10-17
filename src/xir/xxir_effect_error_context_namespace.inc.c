@@ -110,9 +110,9 @@ static XrXirStatus error_finite_context_body(const XrXirCompileContext *work,
     return status;
 }
 
-/* Receiving owns one freshly framed stack identity. Rows and node identities
- * are still read from the actual proof; no semantic inventory is copied.
- * Construction lacks this view and reopens current ranges after callbacks. */
+/* A callback-free walk owns one freshly framed stack identity. Rows and node
+ * identities are still read from the actual proof; no semantic inventory is
+ * copied. A construction walk ends before a buffer can grow. */
 static XrXirStatus error_finite_context_read(const EffectErrorFiniteRead *read,
     uint32_t context,uint32_t *output) {
     if(!read || !read->proof || !read->work || !output) return XR_XIR_BAD_STRUCTURE;

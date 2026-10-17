@@ -11,7 +11,7 @@
  *   membership claim or previous successful read can omit an equation.
  */
 
-typedef XrXirStatus (*ErrorFiniteVisit)(const EffectErrorFiniteRead *,uint32_t,uint64_t,void *);
+typedef XrXirStatus (*ErrorFiniteVisit)(const EffectErrorFiniteRead *,uint32_t,uint64_t,void *,bool *);
 
 /* An actual complete opcode walk proves zero escaping without interpreting
  * irrelevant local states. Every unknown operation retains the full domain. */
@@ -43,12 +43,12 @@ static XrXirStatus error_finite_empty(const EffectErrorFiniteRead *read,
     *empty=true;return XR_XIR_OK;
 }
 static XrXirStatus error_finite_carrier(const EffectErrorFiniteRead *read,
-    uint32_t function,uint32_t value,ErrorFiniteVisit visit,void *owner) {
+    uint32_t function,uint32_t value,ErrorFiniteVisit visit,void *owner,bool *paused) {
     const EffectErrorFiniteRow *row=&read->proof->rows[function];
     for(uint32_t b=0;b<row->blocks;++b) for(uint32_t w=0;w<read->proof->words;++w) {
         if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
-        XrXirStatus status=visit(read,function,error_finite_entry_coordinate(read->proof,function,b,value,w),owner);
-        if(status!=XR_XIR_OK) return status;
+        XrXirStatus status=visit(read,function,error_finite_entry_coordinate(read->proof,function,b,value,w),owner,paused);
+        if(status!=XR_XIR_OK || *paused) return status;
     }
     return XR_XIR_OK;
 }
@@ -66,6 +66,7 @@ static XrXirStatus error_finite_fields_active(ErrorFlow *view,const EffectBodyRe
 }
 static XrXirStatus error_finite_walk(const EffectErrorFiniteRead *read,
     uint32_t function,ErrorFiniteVisit visit,void *owner,bool *empty) {
+    bool paused=false;
     XrXirStatus status=error_finite_empty(read,function,empty);
     if(status!=XR_XIR_OK || *empty) return status;
     EffectErrorEquationRead equation;status=error_finite_equation(read,function,&equation);
@@ -75,12 +76,12 @@ static XrXirStatus error_finite_walk(const EffectErrorFiniteRead *read,
     XrXirCompileContext current=*read->work;
     ErrorFlow view={.body=equation.body,.function=&equation.head,.function_index=equation.function,.remaining=&current};
     for(uint32_t b=0;b<row->blocks;++b) {
-        status=visit(read,function,row->first+b,owner);if(status!=XR_XIR_OK) return status;
+        status=visit(read,function,row->first+b,owner,&paused);if(status!=XR_XIR_OK || paused) return status;
     }
     for(uint32_t p=0;p<head->parameter_count;++p) {
         bool active=false;status=error_type_active(&view,head->parameters[p],&active);
         if(status!=XR_XIR_OK) return status;
-        if(active) { status=error_finite_carrier(read,function,p,visit,owner);if(status!=XR_XIR_OK) return status; }
+        if(active) { status=error_finite_carrier(read,function,p,visit,owner,&paused);if(status!=XR_XIR_OK || paused) return status; }
     }
     EffectBodyRead body=effect_body_compile_read(read->work);
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
@@ -99,21 +100,21 @@ static XrXirStatus error_finite_walk(const EffectErrorFiniteRead *read,
                 if(status!=XR_XIR_OK) return status;
             }
             if(!active) continue;
-            status=error_finite_carrier(read,function,head->parameter_count+ref->first+i,visit,owner);
-            if(status!=XR_XIR_OK) return status;
+            status=error_finite_carrier(read,function,head->parameter_count+ref->first+i,visit,owner,&paused);
+            if(status!=XR_XIR_OK || paused) return status;
         }
     }
     if(cursor.first!=head->instruction_count || cursor.run!=head->run_count)
         return XR_XIR_BAD_STRUCTURE;
     for(uint32_t w=0;w<read->proof->words;++w) {
-        status=visit(read,function,row->end-(uint64_t)read->proof->words*64+(uint64_t)w*64,owner);
-        if(status!=XR_XIR_OK) return status;
+        status=visit(read,function,row->end-(uint64_t)read->proof->words*64+(uint64_t)w*64,owner,&paused);
+        if(status!=XR_XIR_OK || paused) return status;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus error_finite_compare(const EffectErrorFiniteRead *read,
-    uint32_t function,uint64_t coordinate,void *owner) {
-    (void)owner;uint64_t expected=0,actual=0;uint32_t bits=0;
+    uint32_t function,uint64_t coordinate,void *owner,bool *paused) {
+    (void)owner;*paused=false;uint64_t expected=0,actual=0;uint32_t bits=0;
     XrXirStatus status=error_finite_rhs(read,function,coordinate,&expected,&bits);
     if(status==XR_XIR_OK) status=error_finite_word(read,coordinate,bits,&actual);
     if(status!=XR_XIR_OK) return status;

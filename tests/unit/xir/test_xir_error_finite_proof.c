@@ -225,11 +225,14 @@ static void finite_cycle(void) {
     puts("finite Error direct recursion: empty least solution; jointly consistent fake positive cycle rejected");
 }
 #include "error_marker_type_cases.h"
+#include "xir_error_finite_growth_cases.h"
 #ifndef FINITE_PROOF_ENTRY
 #define FINITE_PROOF_ENTRY main
 #endif
 int FINITE_PROOF_ENTRY(int argc,char **argv) {
     CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);
-    if(mode>=15) { CHECK(mode<31);marker_case(mode-15); } else if(mode==14) finite_cycle();else { CHECK(mode<14);finite_cfg(mode,false);finite_cfg(mode,true); }
+    if(mode>=31) { CHECK(mode<35);finite_growth_case(mode-31); }
+    else if(mode>=15) marker_case(mode-15);
+    else if(mode==14) finite_cycle();else { CHECK(mode<14);finite_cfg(mode,false);finite_cfg(mode,true); }
     return 0;
 }
