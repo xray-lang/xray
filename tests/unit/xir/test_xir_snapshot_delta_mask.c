@@ -281,6 +281,7 @@ static void mask_cell_values(const XrXirCompileContext *context) {
 #include "xir_cell_complete_run_walk_cases.h"
 #include "xir_cell_literal_inventory_cases.h"
 #include "xir_cell_received_run_walk_cases.h"
+#include "xir_cell_range_field_cases.h"
 int main(void) {
     const XrCompileResourceLimits caps={8388608,4194304,4000000};XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);
@@ -289,6 +290,7 @@ int main(void) {
     mask_matrix(&context);mask_boundaries(&context);mask_work_bounds(&context);mask_cell_values(&context);mask_visit_walks(&context);
     class_view_data_controls(&context);
     cell_borrow_view_controls();
+    cell_range_fields_controls();
     literal_pair_controls();
     mask_literal_cell_blocks(&context);
     complete_cell_run_walk_controls(&context);

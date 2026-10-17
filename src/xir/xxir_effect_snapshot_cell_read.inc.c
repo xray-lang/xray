@@ -233,8 +233,10 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     const EffectBodyFunction *function=&body->functions[cursor->function];
     if (cursor->next>function->instruction_count || cursor->run>function->run_count ||
         (!cursor->run && cursor->next)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,18+sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
-    EffectBodyRecordCursor position={cursor->next,cursor->run,UINT32_MAX};
+    if (!xir_compile_work(work,18+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    /* The complete range reader uses only first and run. Its independent
+     * selected-row reader owns last; no unused cursor word is copied here. */
+    EffectBodyRecordCursor position;position.first=cursor->next;position.run=cursor->run;
     const EffectBodyRun *ref;
     XrXirStatus status=effect_body_range_ref(&adapter->request.read,function,&position,&ref);
     if (status!=XR_XIR_OK) return status;
@@ -243,15 +245,17 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     if (!xir_compile_work(work,1+sizeof(uint32_t)+sizeof(const XrXirInstruction *))) return XR_XIR_BUDGET;
     const XrXirInstruction *operation=&ref->base;
     if (operation->op<=XR_XIR_INVALID || operation->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    /* Padding and inactive delta words are not descriptor data. Charge the
+     * actual fields, then publish all of them only after atomic admission. */
+    uint64_t publication=sizeof(output->first)+sizeof(output->count)+sizeof(output->varying)+
+        sizeof(output->operation)+sizeof(output->literal_tail)+sizeof(cursor->next)+sizeof(cursor->run);
     if (ref->mask&EFFECT_BODY_LITERAL_ROWS) {
-        if (!xir_compile_work(work,sizeof(*output)-sizeof(output->delta)+2*sizeof(uint32_t)))
-            return XR_XIR_BUDGET;
+        if (!xir_compile_work(work,publication)) return XR_XIR_BUDGET;
         output->first=ref->first;output->count=ref->count;
         output->varying=0;output->operation=operation;output->literal_tail=ref->literal_tail;
         cursor->next=position.first;cursor->run=position.run;return XR_XIR_OK;
     }
     uint32_t delta[10];
-    uint64_t publication=sizeof(*output)-sizeof(output->delta)+2*sizeof(uint32_t);
     for (uint32_t selected=ref->mask;selected;selected&=selected-1) {
         if (!xir_compile_work(work,3+sizeof(uint32_t))) return XR_XIR_BUDGET;
         uint32_t w=(uint32_t)__builtin_ctz(selected);
