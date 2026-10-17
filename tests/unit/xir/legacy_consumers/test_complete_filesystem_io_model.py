@@ -17,7 +17,7 @@ class CompleteFilesystemIO(unittest.TestCase):
             'io_system_direct':[True]*10+[5,True,True,2,'hello','world',True,1,'alpha',True,3,'a',True,'b',True,3,65,0,255]+[True]*32}
         self.assertEqual(sum(map(len,expected.values())),141)
         self.assertEqual({k:v['observations'] for k,v in traces.items()},expected)
-        rows=[row for row in m.expected_rows() if row['id']!=m._DYLIB_ID];self.assertEqual(len(rows),8);self.assertEqual(sum(x['observation_count'] for x in rows),141)
+        rows=[row for row in m.expected_rows() if row['id']!=m._DYLIB_ID and row['id'] not in m._SYSTEM_QUERY_IDS];self.assertEqual(len(rows),8);self.assertEqual(sum(x['observation_count'] for x in rows),141)
         for row in rows:
             name=Path(row['source']).stem
             self.assertEqual(row['expected']['stdout_utf8'],''.join(m.render({'expected':x})+'\n' for x in expected[name]))
@@ -127,7 +127,7 @@ class CompleteFilesystemIO(unittest.TestCase):
 
     def test_actual_products_keep_whole_original_sources_and_all_arguments(self):
         folder=Path(__file__).parent;cases={x['id']:x for x in json.loads((folder/'product_driver_cases.json').read_text())['cases']}
-        for row in (row for row in m.expected_rows() if row['id']!=m._DYLIB_ID):
+        for row in (row for row in m.expected_rows() if row['id']!=m._DYLIB_ID and row['id'] not in m._SYSTEM_QUERY_IDS):
             case=cases[row['id']];self.assertEqual(case['source'],row['source']);self.assertEqual(case['source'],case['preserved_original_identity']['source'])
             self.assertEqual(case['entry'],'run');self.assertEqual(case['source_context'],'original_absolute')
             self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8']);self.assertEqual(case['arguments'],[]);self.assertEqual(case['stdin_hex'],'')
@@ -183,5 +183,83 @@ class CompleteFilesystemIO(unittest.TestCase):
         self.assertEqual((case['source'],case['entry'],case['source_context']),(m._DYLIB_SOURCE,'run','original_absolute'))
         self.assertEqual((case['arguments'],case['stdin_hex'],case['companions']),([],'',[]))
         self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8'])
+
+
+    def test_whole_OS_query_has_all39_outputs_andboth_environment_snapshots(self):
+        trace=m.system_query_trace()
+        self.assertEqual(trace['observations'],[True]*39)
+        self.assertEqual((trace['map_snapshot_nonempty'],trace['map_snapshot_empty']),('map-aot',''))
+        self.assertEqual(trace['environment_before'],trace['environment_after'])
+        self.assertTrue(trace['fallback_bindings_restored'])
+        self.assertEqual(trace['owned_test_bindings_remaining'],[])
+        self.assertEqual((trace['cwd_change_target'],trace['cwd_after']),('/working','/working'))
+        self.assertEqual(trace['clock_sample_count'],1)
+        self.assertFalse(trace['host_provider_IO_resource_lifetime_qualified'])
+
+    def test_OS_original_restore_branches_keep_absent_empty_andnonempty_distinct(self):
+        names=('TMPDIR','TMP','TEMP','HOME')
+        for choices in itertools.product((None,'','original'),repeat=4):
+            initial={name:value for name,value in zip(names,choices) if value is not None}
+            initial['UNRELATED']='keep';initial['USERPROFILE']='/profile'
+            trace=m.system_query_trace(initial)
+            self.assertEqual(trace['observations'],[True]*39)
+            self.assertEqual(trace['environment_after'],initial)
+            self.assertTrue(trace['fallback_bindings_restored'])
+            self.assertEqual(trace['owned_test_bindings_remaining'],[])
+        self.assertEqual(m.system_query_trace()['saved_fallback_bindings'],dict.fromkeys(names))
+
+    def test_OS_empty_binding_is_required_andCRT_removal_cannot_bea_passing_prefix(self):
+        env=m.SystemEnvironment();env.set('key','')
+        self.assertEqual(env.environ(),{'key':''});self.assertEqual(env.get('key'),'')
+        env.unset('key');self.assertIsNone(env.get('key'))
+        self.assertNotIn('key',env.environ())
+        def plain_crt(initial):return m.SystemEnvironment(initial,'crt_remove')
+        with self.assertRaises(KeyError):m.system_query_trace(environment_class=plain_crt)
+        with self.assertRaises(ValueError):m.SystemEnvironment(empty_policy='ignore')
+
+    def test_OS_host_predicate_failures_are_not_silently_normalized_to_true(self):
+        for change in ({'platform':''},{'arch':''},{'sep':''},{'eol':''},{'pid':0},{'uid':-1},
+                       {'gid':-1},{'cpu_count':0},{'ppid':0},{'signal_zero_ok':False},
+                       {'total_memory':0},{'free_memory':0},{'uptime':-1},{'loadavg':[-1,0,0]},
+                       {'clock':-1},{'cwd':''},{'chdir_ok':False},{'hostname':''},{'username':None},
+                       {'system_home':None}):
+            with self.subTest(change=change):self.assertNotEqual(m.system_query_trace(facts=change)['observations'],[True]*39)
+        self.assertFalse(m.system_query_trace({'XRAY_TEST_NONEXISTENT_VAR_12345':'occupied'})['observations'][18])
+
+    def test_two_offset_readings_keep_only_the_three_original_predicates(self):
+        for first,second in itertools.product((-1441,-1440,-1,0,1,1440,1441),repeat=2):
+            trace=m.timezone_offset_trace(first,second)
+            self.assertEqual(trace['observations'],[first>=-1440,first<=1440,second>=-1440])
+            self.assertEqual(trace['original_offset_call_count'],2)
+            self.assertFalse(trace['requires_same_timestamp_or_offset'])
+            self.assertFalse(trace['exact_offset_value_asserted'])
+        self.assertEqual(m.timezone_offset_trace(-1440,100000)['observations'],[True]*3)
+        self.assertEqual(m.timezone_offset_trace(1440,-1440)['observations'],[True]*3)
+
+    def test_system_query_whole_sources_andnew_authorities_fail_closed(self):
+        saved=Path.read_bytes
+        for name in m._SYSTEM_QUERY_INPUTS:
+            with self.subTest(input=name):
+                def changed(path):return saved(path)+b'changed' if path==m.ROOT/name else saved(path)
+                with mock.patch.object(Path,'read_bytes',changed),self.assertRaises(ValueError):m.expected_rows()
+        for attribute in ('_SYSTEM_PROGRAMS','_SYSTEM_QUERY_IDS','_SYSTEM_QUERY_INPUTS'):
+            with mock.patch.object(m,attribute,{}),self.assertRaises(ValueError):m.expected_rows()
+
+    def test_both_whole_system_originals_have_exact_public_products_andall_calls(self):
+        cases={case['id']:case for case in json.loads((Path(__file__).parent/'product_driver_cases.json').read_text())['cases']}
+        for name,prints,imports in (('os_query_system_direct',39,4),('datetime_offset_system_direct',3,1)):
+            source=m._SYSTEM_PROGRAMS[name];text=(m.ROOT/source).read_text(encoding='utf-8')
+            self.assertEqual(text.count('print('),prints);self.assertEqual(text.count('import '),imports)
+            row=next(row for row in m.expected_rows() if row['source']==source);case=cases[row['id']]
+            self.assertEqual(row['expected'],{'exit_code':0,'stdout_utf8':('true'+chr(10))*prints,'stderr_utf8':''})
+            self.assertEqual((row['source'],row['original_source'],row['observation_count']),(source,source,prints))
+            self.assertEqual((case['source'],case['entry'],case['source_context']),(source,'run','original_absolute'))
+            self.assertEqual((case['arguments'],case['stdin_hex'],case['companions']),([],'',[]))
+            self.assertEqual(case['stdout_utf8'],row['expected']['stdout_utf8'])
+        text=(m.ROOT/m._SYSTEM_PROGRAMS['os_query_system_direct']).read_text()
+        self.assertEqual(text.count('os.setenv('),11);self.assertEqual(text.count('os.unsetenv('),7)
+        self.assertEqual(text.count('os.environ()'),2);self.assertEqual(text.count('io.chdir('),1)
+        text=(m.ROOT/m._SYSTEM_PROGRAMS['datetime_offset_system_direct']).read_text()
+        self.assertEqual(text.count('datetime.offset()'),2)
 
 if __name__=='__main__':unittest.main()

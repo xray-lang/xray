@@ -33118,6 +33118,64 @@
       ],
       "source_context": "original_absolute",
       "independent_observation_count": 10
+    },
+    {
+      "id": "complete_filesystem_io_datetime_offset_system_direct",
+      "oracle_id": "complete_filesystem_io_datetime_offset_system_direct",
+      "source": "tests/diff/cases/semantics/stdlib/datetime_offset_system_direct.xr",
+      "source_lf_sha256": "3c101428c24c856ebd125816094102692a1ee850f22edc349e9e7c9fe8450581",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P13",
+        "P08",
+        "P07",
+        "P10"
+      ],
+      "independent_execution_model": "Complete unchanged timezone-offset original andtwo calls;first sample lower/upper bounds,second sample onlylower bound. No exact offset,+480,currenttimestamp/equality requirement,hostclock/timezone/provider/failure/lifetime qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/datetime_offset_system_direct.xr",
+        "source_lf_sha256": "3c101428c24c856ebd125816094102692a1ee850f22edc349e9e7c9fe8450581"
+      },
+      "remaining_gates": [
+        "Whole original andallobservations/effects retained;legal Source refusal remains positive failure. Host conditions,empty-binding provider conflict,clock/FI/resource/lifetime/safety/provider/mixed duties remain OPEN."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 3
+    },
+    {
+      "id": "complete_filesystem_io_os_query_system_direct",
+      "oracle_id": "complete_filesystem_io_os_query_system_direct",
+      "source": "tests/diff/cases/semantics/stdlib/os_query_system_direct.xr",
+      "source_lf_sha256": "17b634ce318e4f5f1300590cbb3da392d8120ac4c02c3dcbb6ed2b2748dba565",
+      "entry": "run",
+      "stdout_utf8": "true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+      "stderr_utf8": "",
+      "expected_exit_code": 0,
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "owners": [
+        "P13",
+        "P08",
+        "P07",
+        "P10"
+      ],
+      "independent_execution_model": "Complete unchanged OS query original,all four imports and39prints. Independent symbolic environment distinguishes absent/empty,keeps both map snapshots,all owned writes/unsets,cwd observation,TMPDIR/TMP/TEMP andHOME restoration. All system predicates remain normal host prerequisites;Windows CRT empty-binding projection remains OPEN,no actual I/O/clock/metadata/provider/FI/lifetime qualification.",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/os_query_system_direct.xr",
+        "source_lf_sha256": "17b634ce318e4f5f1300590cbb3da392d8120ac4c02c3dcbb6ed2b2748dba565"
+      },
+      "remaining_gates": [
+        "Whole original andallobservations/effects retained;legal Source refusal remains positive failure. Host conditions,empty-binding provider conflict,clock/FI/resource/lifetime/safety/provider/mixed duties remain OPEN."
+      ],
+      "source_context": "original_absolute",
+      "independent_observation_count": 39
     }
   ]
 }

@@ -236,7 +236,7 @@ def expected_rows():
             'VM_source_clears_readonly':True,'legacy_AOT_source_clears_readonly':False,
             'qualification':'SOURCE_AND_HOST_OPERATION_ONLY;current_generated_native_route_not_proved'}
         rows.append(row)
-    return rows + [dylib_expected_row()]
+    return rows + [dylib_expected_row()] + system_query_expected_rows()
 
 _DYLIB_SOURCE = 'tests/diff/cases/semantics/stdlib/sys_dylib_direct.xr'
 _DYLIB_ID = 'complete_filesystem_io_sys_dylib_direct'
@@ -321,3 +321,130 @@ def dylib_expected_row():
                 'stdout_utf8':''.join(render({'expected':value})+'\n' for value in trace['observations'])},
             'model':'Complete unchanged Windows dynamic-library original; all five imports and ten print expressions retained. Symbolic handle and symbol availability, missing-name errors, first close and idempotent true second close, closed-symbol null. Host normal-operation preconditions remain runtime duties; no foreign function invocation, failure injection, physical release, lifetime, safety or provider qualification.',
             'observation_count':len(trace['observations']),'required_semantic_trace':trace}
+
+_SYSTEM_PROGRAMS = {'os_query_system_direct': 'tests/diff/cases/semantics/stdlib/os_query_system_direct.xr', 'datetime_offset_system_direct': 'tests/diff/cases/semantics/stdlib/datetime_offset_system_direct.xr'}
+_SYSTEM_QUERY_IDS = frozenset('complete_filesystem_io_'+name for name in _SYSTEM_PROGRAMS)
+_SYSTEM_QUERY_INPUTS = {'tests/diff/cases/semantics/stdlib/os_query_system_direct.xr': '17b634ce318e4f5f1300590cbb3da392d8120ac4c02c3dcbb6ed2b2748dba565', 'tests/diff/cases/semantics/stdlib/datetime_offset_system_direct.xr': '3c101428c24c856ebd125816094102692a1ee850f22edc349e9e7c9fe8450581', 'stdlib/os/os.xr': '32733efee3a175b97087a6750d7c37447b58ede1aa0359d04877b81462331098', 'stdlib/io/io.xr': 'cbb670fe3a25e42a3fa96a3bf3460f9696f459c0fac059b82ba8bc99c4d17096', 'stdlib/path/path.xr': 'c6d1721f27e93a385053105cfbf33d88dae8e038c79e29085b11dd70e08225a1', 'stdlib/time/time.xr': 'd2ab56ef604ba773bf9625efd67450d343e2da2b0a9ec2f179d01ab07cc2bc72', 'stdlib/datetime/datetime.xr': 'cd05dfebf4afb1d5a1bf2326aa84afd2dbe17825d90ca6f9a340751db596197d', 'stdlib/os/os.c': '0ac1a21b27d996c97268ebeb0bd41205e5687473feda760d7f7b88485fbb2996', 'stdlib/time/time.c': '71bae1e19f5f0d74fac3065562f90c5ea159ef8505d2b2b8e4101f56cc7b8e42', 'src/aot/xrt_os.h': 'c28f5d0067589be7d7df7d07e06030d9a81b2757524175a52937a6938c0ca2b6', 'src/aot/xrt_time.h': 'f4e38e81e6bb62b0286e722cdd9b4a334c0587ca968fcb0f9bebb4a05c5c01ac', 'src/shared/xr_os_core.h': 'd453e8f88f12d48030e115ef7de091ee73f79f956635e049839f32fc7045b9ca', 'src/shared/xr_time_offset.h': 'df5ee669531c5c252d2604f8cfea1c433148feb59070822eb70f1ec04eb7ff1c'}
+
+class SystemEnvironment:
+    """Keep absent and empty bindings distinct; no process environment changes."""
+    def __init__(self, initial=None, empty_policy='preserve'):
+        if empty_policy not in ('preserve','crt_remove'):raise ValueError('Unreviewed empty environment policy')
+        self.bindings=dict(initial or {});self.events=[];self.empty_policy=empty_policy
+
+    def get(self, name):
+        self.events.append(('getenv',name))
+        return self.bindings.get(name)
+
+    def set(self, name, value):
+        self.events.append(('setenv',name,value))
+        if self.empty_policy=='crt_remove' and value=='':self.bindings.pop(name,None)
+        else:self.bindings[name]=value
+        return True
+
+    def unset(self, name):
+        self.events.append(('unsetenv',name));self.bindings.pop(name,None);return True
+
+    def environ(self):
+        self.events.append(('environ',))
+        return dict(self.bindings)
+
+    def restore(self, name, value):
+        if value is None:self.unset(name)
+        else:self.set(name,value)
+
+    def tmpdir(self):
+        for name in ('TMPDIR','TMP','TEMP'):
+            value=self.get(name)
+            if value is not None and len(value)>0:return value
+        return 'C:\\Windows\\Temp'
+
+    def homedir(self, system):
+        for name in ('HOME','USERPROFILE'):
+            value=self.get(name)
+            if value is not None and len(value)>0:return value
+        return system if system is not None and len(system)>0 else None
+
+
+def system_query_trace(initial=None, facts=None, environment_class=SystemEnvironment):
+    required={'platform':'windows','arch':'x64','sep':'\\','eol':'\r\n','pid':1,'ppid':2,
+              'uid':0,'gid':0,'cpu_count':1,'signal_zero_ok':True,'total_memory':16,'free_memory':8,
+              'uptime':0.0,'loadavg':[0.0,0.0,0.0],'clock':0,'cwd':'/working',
+              'chdir_ok':True,'hostname':'host','username':'user','system_home':'/profile'}
+    required.update(facts or {});f=required;environment=environment_class(initial)
+    before=dict(environment.bindings)
+    out=[len(f['platform'])>0,len(f['arch'])>0,len(f['sep'])>0,len(f['eol'])>=1,
+         f['pid']>0,f['uid']>=0,f['gid']>=0,f['cpu_count']>=1,f['ppid']>0,
+         f['signal_zero_ok'],f['total_memory']>0,f['free_memory']>0,f['uptime']>=0.0,
+         len(f['loadavg'])==3,*[f['loadavg'][i]>=0.0 for i in range(3)],f['clock']>=0]
+    out.append(environment.get('XRAY_TEST_NONEXISTENT_VAR_12345') is None)
+    out.extend([environment.set('XRAY_AOT_OS_QUERY_TMP','hello-aot'),
+                environment.get('XRAY_AOT_OS_QUERY_TMP')=='hello-aot',
+                environment.unset('XRAY_AOT_OS_QUERY_TMP'),
+                environment.get('XRAY_AOT_OS_QUERY_TMP') is None])
+    out.append(environment.set('XRAY_AOT_OS_QUERY_ENV','map-aot'))
+    populated=environment.environ();out.append(populated['XRAY_AOT_OS_QUERY_ENV']=='map-aot')
+    out.append(environment.unset('XRAY_AOT_OS_QUERY_ENV'))
+    out.append(environment.set('XRAY_AOT_OS_QUERY_EMPTY',''))
+    empty=environment.environ();out.append(empty['XRAY_AOT_OS_QUERY_EMPTY']=='')
+    out.append(environment.unset('XRAY_AOT_OS_QUERY_EMPTY'))
+    cwd=f['cwd'];out.extend([len(cwd)>0,f['chdir_ok'],f['cwd']==cwd,len(f['hostname'])>0,len(environment.tmpdir())>0])
+    snapshots={name:environment.get(name) for name in ('TMPDIR','TMP','TEMP')}
+    environment.set('TMPDIR','')
+    environment.set('TMP','/tmp/xray_diff_tmpdir_fallback')
+    environment.set('TEMP','/tmp/xray_diff_tmpdir_wrong')
+    out.append(environment.tmpdir()=='/tmp/xray_diff_tmpdir_fallback')
+    for name,value in snapshots.items():environment.restore(name,value)
+    out.extend([f['username'] is not None,environment.homedir(f['system_home']) is not None])
+    old_home=environment.get('HOME');environment.set('HOME','')
+    fallback_home=environment.homedir(f['system_home'])
+    out.extend([fallback_home is not None,len(fallback_home or '')>0])
+    environment.restore('HOME',old_home)
+    owned=['XRAY_AOT_OS_QUERY_TMP','XRAY_AOT_OS_QUERY_ENV','XRAY_AOT_OS_QUERY_EMPTY']
+    return {'observations':out,'environment_before':before,'environment_after':dict(environment.bindings),
+            'events':environment.events,'map_snapshot_nonempty':populated['XRAY_AOT_OS_QUERY_ENV'],
+            'map_snapshot_empty':empty['XRAY_AOT_OS_QUERY_EMPTY'],
+            'saved_fallback_bindings':dict(snapshots,HOME=old_home),
+            'fallback_bindings_restored':all(environment.bindings.get(name)==value and
+                (name in environment.bindings)==(value is not None) for name,value in dict(snapshots,HOME=old_home).items()),
+            'owned_test_bindings_remaining':[name for name in owned if name in environment.bindings],
+            'cwd_change_target':cwd,'cwd_after':f['cwd'],'clock_sample_count':1,
+            'original_print_expressions':39,'host_provider_IO_resource_lifetime_qualified':False,
+            'normal_host_requirements':['All original OS predicates succeed',
+                'Reserved nonexistent name and three owned test names start absent',
+                'All original set/unset/chdir operations succeed;empty strings remain present bindings',
+                'Nonempty host username and home fallback exist']}
+
+
+def timezone_offset_trace(first=0, second=0):
+    # The second original call observes only its lower bound, not equality.
+    return {'observations':[first>=-1440,first<=1440,second>=-1440],
+            'original_offset_call_count':2,'first_read_used_twice':True,
+            'requires_same_timestamp_or_offset':False,'exact_offset_value_asserted':False,
+            'timezone_provider_orclock_failure_qualified':False}
+
+
+def system_query_expected_rows():
+    programs={name:'tests/diff/cases/semantics/stdlib/'+name+'.xr'
+              for name in ('os_query_system_direct','datetime_offset_system_direct')}
+    authorities={'stdlib/os/os.xr','stdlib/io/io.xr','stdlib/path/path.xr','stdlib/time/time.xr',
+                 'stdlib/datetime/datetime.xr','stdlib/os/os.c','stdlib/time/time.c',
+                 'src/aot/xrt_os.h','src/aot/xrt_time.h','src/shared/xr_os_core.h','src/shared/xr_time_offset.h'}
+    if _SYSTEM_PROGRAMS!=programs or set(_SYSTEM_QUERY_INPUTS)!=set(programs.values())|authorities:
+        raise ValueError('Whole system query identities or required authorities changed')
+    if _SYSTEM_QUERY_IDS!=frozenset('complete_filesystem_io_'+name for name in programs):
+        raise ValueError('System query product identities changed')
+    for name,digest in _SYSTEM_QUERY_INPUTS.items():
+        if hashlib.sha256((ROOT/name).read_bytes().replace(b'\r\n',b'\n')).hexdigest()!=digest:
+            raise ValueError('Whole system query source or authority changed: '+name)
+    traces={'os_query_system_direct':system_query_trace(),'datetime_offset_system_direct':timezone_offset_trace()}
+    rows=[]
+    for name,source in sorted(programs.items()):
+        trace=traces[name]
+        rows.append({'id':'complete_filesystem_io_'+name,'source':source,'original_source':source,
+                     'required_target':'windows-x86_64','expected':{'exit_code':0,'stderr_utf8':'',
+                         'stdout_utf8':''.join(render({'expected':value})+'\n' for value in trace['observations'])},
+                     'observation_count':len(trace['observations']),'required_semantic_trace':trace,
+                     'model':('Complete unchanged OS query original,all four imports and39prints. Independent symbolic environment distinguishes absent/empty,keeps both map snapshots,all owned writes/unsets,cwd observation,TMPDIR/TMP/TEMP andHOME restoration. All system predicates remain normal host prerequisites;Windows CRT empty-binding projection remains OPEN,no actual I/O/clock/metadata/provider/FI/lifetime qualification.' if name=='os_query_system_direct' else
+                         'Complete unchanged timezone-offset original andtwo calls;first sample lower/upper bounds,second sample onlylower bound. No exact offset,+480,currenttimestamp/equality requirement,hostclock/timezone/provider/failure/lifetime qualification.')})
+    return rows
