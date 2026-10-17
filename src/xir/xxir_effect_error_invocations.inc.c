@@ -280,7 +280,7 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
         certificate,sealed,&owner);
     for (uint32_t n=0;status==XR_XIR_OK && n<owner.final->count;++n) {
         EffectInvocationFlow replay={.read=&owner,.node=n,.instruction=UINT32_MAX};
-        status=effect_invocation_origins(&replay);
+        status=effect_invocation_final_view(&replay);
         uint32_t walked=0;
         for (uint32_t e=owner.final->nodes[n].edge_head;status==XR_XIR_OK && e!=UINT32_MAX;e=owner.final->edges[e].next) {
             if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }

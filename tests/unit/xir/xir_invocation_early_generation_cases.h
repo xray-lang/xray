@@ -98,7 +98,7 @@ static XrXirStatus conditional_generation_counted_callee_head(const EffectBodyRe
 static XrXirStatus conditional_generation_decoded_controls(const XrXirCompileContext *context,
     EffectInvocationWorkspace *owner) {
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
-    XrXirStatus status=effect_invocation_origins(&flow);
+    XrXirStatus status=effect_invocation_discovery_origins(&flow);
     if (status!=XR_XIR_OK) { xr_compile_resources_free(flow.memory);return status; }
     uint32_t body=owner->final.nodes[flow.node].body,call=UINT32_MAX,reference=UINT32_MAX;
     for (uint32_t i=0;i<flow.function->instruction_count;++i) {
@@ -253,11 +253,11 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
     }
     CHECK(expected && body==0);
     conditional_generation_shape_reads=0;conditional_generation_shape_refused=false;
-    CHECK(effect_invocation_origins_read(&flow,&read)==XR_XIR_OK &&
+    CHECK(effect_invocation_discovery_origins_read(&flow,&read)==XR_XIR_OK &&
         conditional_generation_shape_reads==expected);
     xr_compile_resources_free(flow.memory);flow.memory=NULL;
     conditional_generation_shape_refused=true;conditional_generation_shape_reads=0;
-    CHECK(effect_invocation_origins_read(&flow,&read)==XR_XIR_BAD_STRUCTURE &&
+    CHECK(effect_invocation_discovery_origins_read(&flow,&read)==XR_XIR_BAD_STRUCTURE &&
         conditional_generation_shape_reads==1);
     xr_compile_resources_free(flow.memory);flow.memory=NULL;
     conditional_generation_shape_refused=false;

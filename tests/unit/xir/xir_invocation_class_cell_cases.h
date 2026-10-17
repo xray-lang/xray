@@ -63,7 +63,7 @@ static void conditional_class_cell_controls(const XrXirCompileContext *context,
     replay.work=context;replay.roles=(EffectInvocationRoles){.sealed=certificate};replay.declared=certificate->declared;
     EffectInvocationFlow flow={.read=&replay,.node=replay.final->roots[3]};
     EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
-    CHECK(effect_invocation_origins_read(&flow,&body)==XR_XIR_OK);
+    CHECK(effect_invocation_final_head(&flow,&body)==XR_XIR_OK);
     XrXirCellOriginView legacy={0},actual={0};
     CHECK(xr_xir_compile_cell_origin_view(context,effects->cells,3,project,&legacy)==XR_XIR_OK &&
         (legacy.intrinsic_mask&XR_XIR_CELL_ACCESS_UNKNOWN));

@@ -18,12 +18,15 @@ typedef struct EffectInvocationFlow {
     uint32_t *row_indices;
     const EffectPhysicalFunction *physical;
     uint64_t *rows;
+    /* Receiving scratch has fixed bits only; certified identity seeds belong
+     * exclusively to constructor discovery and cannot be requested sealed. */
     uint64_t *fixed,*certified;
     void *memory;
     bool changed,precision;
 } EffectInvocationFlow;
-static XrXirStatus effect_invocation_final_return_join(EffectInvocationFlow *flow,
-    uint32_t node,uint32_t returned,uint32_t destination);
+static XrXirStatus effect_invocation_final_head(EffectInvocationFlow *flow,
+    const EffectBodyRequest *request);
+static XrXirStatus effect_invocation_final_view(EffectInvocationFlow *flow);
 
 /* Requests borrow only for this one replay. Every failed field read is
  * returned before it can be interpreted as a type, origin or permission. */
@@ -100,7 +103,7 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
 }
 
 
-/* Both finite flags still represent every actual SSA, including non-callable
+/* Both constructor flags represent every actual SSA, including non-callable
  * barrier/alias facts. A compressed bit is never interpreted as a ROOT,
  * producer, Cell or Class permission. The full independent gates remain. */
 static XrXirStatus effect_invocation_flags_match(EffectInvocationFlow *flow) {
@@ -124,7 +127,8 @@ static XrXirStatus effect_invocation_flag_get(EffectInvocationFlow *flow,
     uint32_t value,bool certified,bool *output) {
     if (!flow || !flow->read || !output || value>=flow->values ||
         !flow->physical || flow->values!=flow->physical->values ||
-        !flow->fixed || !flow->certified) return XR_XIR_BAD_STRUCTURE;
+        !flow->fixed || (flow->read->roles.construction && !flow->certified) ||
+        (certified && (!flow->read->roles.construction || !flow->certified))) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(flow->read->work,4+sizeof(*output))) return XR_XIR_BUDGET;
     const uint64_t *flags=certified?flow->certified:flow->fixed;
     *output=(flags[value/64]&(UINT64_C(1)<<(value%64)))!=0;return XR_XIR_OK;
@@ -442,15 +446,6 @@ static XrXirStatus effect_invocation_return_origins(EffectInvocationFlow *flow,
         if (head_status!=XR_XIR_OK) return head_status;
         const EffectBodyFunctionHead *target=&target_head;
         uint64_t returned=(uint64_t)target->parameter_count+target->instruction_count;
-        if(!owner->discovery) {
-            if(owner->roles.construction || returned>UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-            bool supported=false;
-            XrXirStatus status=effect_invocation_return_supported(owner->work,flow->body.domain.types,target->result,&supported);
-            if(status!=XR_XIR_OK) return status;
-            if(supported) status=effect_invocation_final_return_join(flow,edge.target,(uint32_t)returned,destination);
-            if(status!=XR_XIR_OK) return status;
-            continue;
-        }
         const EffectInvocationProducerSet *records=effect_invocation_discovery_read(owner,edge.target);
         if(!records) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p=0;p<records->count;++p) {
@@ -654,10 +649,11 @@ static XrXirStatus effect_invocation_initial_origins(EffectInvocationFlow *flow)
     return status;
 }
 
-static XrXirStatus effect_invocation_origins_read(EffectInvocationFlow *flow,
+static XrXirStatus effect_invocation_discovery_origins_read(EffectInvocationFlow *flow,
     const EffectBodyRequest *request) {
     const EffectInvocationRead *owner=flow->read;
-    if (!request || flow->node>=owner->final->count) return XR_XIR_BAD_STRUCTURE;
+    if (!request || !owner->roles.construction || owner->roles.sealed ||
+        !owner->discovery || flow->node>=owner->final->count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(owner->work,sizeof(flow->body))) return XR_XIR_BUDGET;
     flow->body=*request;
     if (!xir_compile_work(owner->work,2*sizeof(uint32_t)+sizeof(const uint64_t *))) return XR_XIR_BUDGET;
@@ -728,10 +724,10 @@ static XrXirStatus effect_invocation_origins_read(EffectInvocationFlow *flow,
 /* One replay consumes the sole immutable owning representation. Complete
  * rows may be shared only within the current request; no queue visit retains
  * its stack instruction or derives authority from a previous read. */
-static XrXirStatus effect_invocation_origins(EffectInvocationFlow *flow) {
+static XrXirStatus effect_invocation_discovery_origins(EffectInvocationFlow *flow) {
     if (!flow || !flow->read || !effect_body_material_shape(flow->read->final->material)) return XR_XIR_BAD_STRUCTURE;
     EffectBodyRequest request=effect_body_owned_request(flow->read->work,flow->read->final->material);
-    return effect_invocation_origins_read(flow,&request);
+    return effect_invocation_discovery_origins_read(flow,&request);
 }
 
 #include "xxir_effect_invocation_class_cells.inc.c"

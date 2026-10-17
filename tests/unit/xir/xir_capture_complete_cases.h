@@ -85,6 +85,8 @@ static void complete_growth_boundary(const XrXirCompileContext *work,EffectInvoc
     complete_growth_head=NULL;complete_growth_facts=NULL;
 }
 
+#include "xir_capture_final_view_cases.h"
+
 static void complete_case(uint32_t mode) {
     CHECK(mode<10);XrXirType callback=256;
     XrXirTypeNode type={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=XR_XIR_CALLABLE_ROOT_NONE};
@@ -161,6 +163,7 @@ static void complete_case(uint32_t mode) {
     CHECK(xr_xir_effects_error_unknown(effects,3));complete_literal_coordinates(&work,final,mode);
     if(!mode) complete_growth_boundary(&work,final);
     xr_xir_compile_artifact_free(checked);memset(factory,0xCC,sizeof(factory));memset(functions,0xCC,sizeof(functions));
+    if(!mode) complete_final_view_boundary(&work,effects->invocations);
     complete_verify(&work,final,XR_XIR_OK);
     CHECK(final->capture.count<512 && final->capture.count+2<=final->capture.capacity);
     EffectCaptureFact saved[512];uint32_t count=final->capture.count;

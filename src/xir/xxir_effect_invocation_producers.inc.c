@@ -686,7 +686,7 @@ static XrXirStatus effect_invocation_discovery_verify(const EffectInvocationWork
     if (!enabled) return XR_XIR_OK;
     for (uint32_t n=0;n<owner->final->count;++n) {
         EffectInvocationFlow flow={.read=owner,.node=n,.instruction=UINT32_MAX};
-        XrXirStatus status=effect_invocation_origins_read(&flow,request);
+        XrXirStatus status=effect_invocation_discovery_origins_read(&flow,request);
         const EffectInvocationProducerSet *records=effect_invocation_discovery_read(owner,n);
         if(!records) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p=0;status==XR_XIR_OK && p<records->count;++p) {

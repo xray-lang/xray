@@ -191,7 +191,7 @@ static XrXirStatus effect_invocation_expand(EffectInvocationWorkspace *owner,
     if (!changed || node>=owner->final.count || !owner->states || owner->states[node].expanded)
         return XR_XIR_BAD_STRUCTURE;
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=node,.instruction=UINT32_MAX};
-    XrXirStatus status=effect_invocation_origins(&flow);
+    XrXirStatus status=effect_invocation_discovery_origins(&flow);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
     if (status==XR_XIR_OK) {
         uint32_t body=owner->final.nodes[node].body;
@@ -229,7 +229,7 @@ static XrXirStatus effect_invocation_expand(EffectInvocationWorkspace *owner,
 static XrXirStatus effect_invocation_precision(EffectInvocationWorkspace *owner,
     uint32_t node,bool *changed) {
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=node,.instruction=UINT32_MAX,.precision=true};
-    XrXirStatus status=effect_invocation_origins(&flow);
+    XrXirStatus status=effect_invocation_discovery_origins(&flow);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
     if (status==XR_XIR_OK) status=effect_invocation_dispatch(&flow,changed);
     if (status==XR_XIR_OK && owner->read.producer_enabled) status=effect_invocation_producer_step(&flow,changed,false);

@@ -135,7 +135,7 @@ static XrXirStatus effect_invocation_class_discovery_verify(const EffectInvocati
             status=XR_XIR_BAD_STRUCTURE;break;
         }
         EffectInvocationFlow flow={.read=owner,.node=n,.instruction=UINT32_MAX,.precision=true};
-        status=effect_invocation_origins_read(&flow,request);
+        status=effect_invocation_discovery_origins_read(&flow,request);
         if (status==XR_XIR_OK) status=effect_invocation_class_body_match(&flow,limit);
         if (status==XR_XIR_OK) status=effect_invocation_class_terminals_match(&flow);
         xr_compile_resources_free(flow.memory);
@@ -171,9 +171,8 @@ static XrXirStatus effect_invocation_cell_terminals_read(const EffectInvocationR
             status=XR_XIR_BAD_STRUCTURE;break;
         }
         EffectInvocationFlow flow={.read=owner,.node=n,.instruction=UINT32_MAX,.precision=true};
-        status=effect_invocation_origins_read(&flow,request);
+        status=effect_invocation_final_head(&flow,request);
         if (status==XR_XIR_OK) status=effect_invocation_class_terminals_match(&flow);
-        xr_compile_resources_free(flow.memory);
     }
     return status;
 }
