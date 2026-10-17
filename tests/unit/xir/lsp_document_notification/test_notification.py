@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix='xray-notification-文档-',dir=os.getcw
         print('Exact predecessor counterexample observed: '+expected.decode().strip())
     else:
         assert mode in ['--normal','--resources'];result=invoke(root,['--normal'])
-        expected=("error: expected '}'\n  --> "+(root/'root.xr').as_posix()+":2:1\n   |\n 2 | \n   | ^\n\nerror: aborting due to 1 previous error\n").encode()
+        expected=b''
         assert result.returncode==0 and result.stderr.replace(b'\r\n',b'\n')==expected,(result.returncode,result.stdout,result.stderr)
         assert b'Notification cases=55 mutations=3 rejected_no_Source_work=47' in result.stdout,result.stdout
         print(result.stdout.decode().strip());print(result.stderr.decode().replace('\r\n','\n'),end='');measured=[]
