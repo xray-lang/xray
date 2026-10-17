@@ -29,12 +29,28 @@ static XrXirStatus effect_invocation_class_body_match(EffectInvocationFlow *flow
     uint64_t limit) {
     EffectInvocationWorkspace *owner=flow->owner;
     const EffectInvocationNode *node=&owner->final.nodes[flow->node];
+    /* Only this synchronous walk shares its current immutable storage binding.
+     * Every type and return row is still read before its original semantic use. */
+    bool native=flow->types_ready && effect_body_request_sequence_owned(&flow->body);
+    if (native) {
+        XrXirStatus status=effect_body_request_sequence_binding(&flow->body);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(owner->work,6)) return XR_XIR_BUDGET;
+        if (flow->body.owner!=owner->final.material || !flow->function ||
+            (flow->values && !flow->types) || (flow->function->instruction_count &&
+                !flow->instruction_refs && !flow->instructions)) return XR_XIR_BAD_STRUCTURE;
+    }
     uint32_t at=0;
     for (uint32_t v=0;v<flow->values;++v) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
         XrXirType actual_type=0;
-        XrXirStatus type_status=effect_invocation_flow_type(flow,v,&actual_type);
-        if (type_status!=XR_XIR_OK) return type_status;
+        if (native) {
+            if (!xir_compile_work(owner->work,1+sizeof(actual_type))) return XR_XIR_BUDGET;
+            actual_type=flow->types[v];
+        } else {
+            XrXirStatus type_status=effect_invocation_flow_type(flow,v,&actual_type);
+            if (type_status!=XR_XIR_OK) return type_status;
+        }
         bool is_class=xr_xir_type_is_class(flow->body.domain.types,actual_type);
         if (!is_class) {
             if (at<node->class_count && node->classes[at].value<=v) return XR_XIR_BAD_STRUCTURE;
@@ -55,8 +71,14 @@ static XrXirStatus effect_invocation_class_body_match(EffectInvocationFlow *flow
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
         XrXirInstruction body_op_1;const XrXirInstruction *op=NULL;
-        XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,i,&body_op_1,&op);
-        if (body_read_1!=XR_XIR_OK) return body_read_1;
+        if (native) {
+            if (!xir_compile_work(owner->work,1+sizeof(op))) return XR_XIR_BUDGET;
+            op=flow->instruction_refs?flow->instruction_refs[i]:&flow->instructions[i];
+            if (!op) return XR_XIR_BAD_STRUCTURE;
+        } else {
+            XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,i,&body_op_1,&op);
+            if (body_read_1!=XR_XIR_OK) return body_read_1;
+        }
         if (op->op!=XR_XIR_RETURN) continue;
         ++returns;XrXirStatus status=effect_invocation_class_source(flow,op->args[0],&sources);
         if (status!=XR_XIR_OK) return status;
