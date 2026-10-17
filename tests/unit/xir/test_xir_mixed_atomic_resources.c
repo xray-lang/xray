@@ -21,7 +21,7 @@ static void atomic_resource_early_work(unsigned backend) {
             backend,owner,r.fault,r.fault_step,r.fault_entry,r.fault_observed,r.published_mask,r.disposals,(unsigned)r.unaffected[1-owner],(unsigned long long)r.cost[0].requested_bytes,(unsigned long long)r.cost[0].requested_call_bytes,(unsigned long long)r.cost[0].work,(unsigned long long)r.cost[1].requested_bytes,(unsigned long long)r.cost[1].requested_call_bytes,(unsigned long long)r.cost[1].work);fflush(stdout);
     }
 }
-int main(int argc,char **argv) {
+int main(int argc,char **argv) {(void)atomic_runtime_before_free;
     CHECK(argc==3 || argc==5 || argc==8);(void)atomic_resource_original_main;
     const char *names[]={"0","1","vm","native"};unsigned backend=0;
     while(backend<4 && strcmp(argv[1],names[backend]))++backend;CHECK(backend<4);

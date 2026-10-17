@@ -7,7 +7,7 @@
  * test_xir_mixed_atomic_source_compiler.c - Single-owner Atomic Source and code preparation
  */
 #include "xir_mixed_atomic_fixture.h"
-int main(int argc,char **argv) {
+int main(int argc,char **argv) {(void)atomic_runtime_cost;
     CHECK(argc==2);const char *names[]={"0","1","vm","native"};unsigned backend=0;
     while(backend<4 && strcmp(argv[1],names[backend]))++backend;CHECK(backend<4);
     AtomicRuntimeFixture fixture={0};XrXirProgram *program=NULL;

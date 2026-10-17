@@ -90,7 +90,7 @@ static void atomic_compiler_axes(unsigned backend,const AtomicCompilerResult *no
 static size_t atomic_compiler_number(const char *text) {
     char *end=NULL;unsigned long n=strtoul(text,&end,10);CHECK(text[0] && end && !*end && n<20000);return (size_t)n;
 }
-int main(int argc,char **argv) {
+int main(int argc,char **argv) {(void)atomic_runtime_cost;(void)atomic_runtime_prepare;
     CHECK(argc==3 || argc==6);const char *names[]={"0","1","vm","native"};unsigned backend=0;
     while(backend<4 && strcmp(argv[1],names[backend]))++backend;CHECK(backend<4);
     AtomicCompilerResult normal=atomic_compiler_transaction(backend,atomic_compiler_caps(),SIZE_MAX);

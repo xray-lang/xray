@@ -17,7 +17,7 @@ static void atomic_control_peer(const AtomicControlSpec *spec,const AtomicResour
 static AtomicResourceResult atomic_control_baseline(AtomicControlSpec spec) {
     spec.victim=0;spec.call=0;spec.entry=0;spec.prefix=0;spec.polls=48;spec.mode=3;return atomic_control_transaction(&spec);
 }
-int main(int argc,char **argv) {
+int main(int argc,char **argv) {(void)atomic_runtime_before_free;(void)atomic_resource_baseline;
     CHECK(argc==10 || argc==11);(void)atomic_resource_original_main;(void)atomic_resource_axes;
     const char *names[]={"0","1","vm","native"};unsigned backend=0;
     while(backend<4 && strcmp(argv[1],names[backend]))++backend;CHECK(backend<4);
