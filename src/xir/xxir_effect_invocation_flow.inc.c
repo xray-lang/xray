@@ -904,14 +904,30 @@ static XrXirStatus effect_invocation_cell_consume(EffectInvocationFlow *flow,
         XrXirStatus status=effect_invocation_cell_local(flow,unknown_bit,witness,changed);
         if (status!=XR_XIR_OK) return status;
     }
-    EffectBodyFunctionHead root_head={0};
-    read_status=effect_invocation_flow_head(flow,node->root,&root_head);
-    if (read_status!=XR_XIR_OK) return read_status;
+    /* Only parameter types are consumed here. The current owned head still
+     * passes every full-head presence gate, including for an empty root. */
+    const XrXirType *root_parameters=NULL;
+    if (effect_body_request_sequence_owned(&flow->body)) {
+        read_status=effect_body_request_sequence_binding(&flow->body);
+        if (read_status!=XR_XIR_OK) return read_status;
+        const EffectBodyMaterial *material=flow->body.owner;
+        if (material!=owner->final.material || node->root>=effect_body_count(material)) return XR_XIR_BAD_STRUCTURE;
+        const EffectBodyFunction *root=&material->functions[node->root];
+        if (!effect_body_function_head_shape(root) || root->parameter_count!=flow->basis.parameters)
+            return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(owner->work,12+sizeof(root_parameters))) return XR_XIR_BUDGET;
+        root_parameters=root->parameters;
+    } else {
+        EffectBodyFunctionHead root_head={0};
+        read_status=effect_invocation_flow_head(flow,node->root,&root_head);
+        if (read_status!=XR_XIR_OK) return read_status;
+        root_parameters=root_head.parameters;
+    }
     for (uint32_t p=0;p<flow->basis.parameters;++p) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
         uint64_t bit=UINT64_C(1)<<(p%64);
         if (!(row[p/64]&bit)) continue;
-        if (!xr_xir_type_is_cell(flow->body.domain.types,root_head.parameters[p]))
+        if (!xr_xir_type_is_cell(flow->body.domain.types,root_parameters[p]))
             return XR_XIR_BAD_STRUCTURE;
         if (!(node->cells[p/64]&bit)) { node->cells[p/64]|=bit;*changed=true; }
         XrXirRootEffectWitness witness={XR_XIR_ROOT_CAUSE_CELL_PARAMETER,flow->instruction,UINT32_MAX,p,0};

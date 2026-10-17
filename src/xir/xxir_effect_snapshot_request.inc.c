@@ -97,6 +97,16 @@ static XrXirStatus effect_body_raw_shape(const EffectBodyRequest *request,uint32
     if (!effect_body_read_work(&request->read,sizeof(*output))) return XR_XIR_BUDGET;
     *output=(EffectBodyInstructionShape){opcode,type};return XR_XIR_OK;
 }
+/* Full heads and narrower physical projections retain the same complete
+ * current presence checks before exposing any field of the owned body. */
+static bool effect_body_function_head_shape(const EffectBodyFunction *function) {
+    return function && !((function->name_length && !function->name) ||
+        (function->parameter_count && !function->parameters) ||
+        (function->block_count && !function->blocks) ||
+        (function->operand_count && !function->operands) ||
+        (function->instruction_count && (!function->runs || !function->run_count)) ||
+        function->run_count>function->run_capacity);
+}
 static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint32_t f,
     EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions) {
     const EffectBodyMaterial *material=request->owner;
@@ -104,10 +114,7 @@ static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint3
         f>=effect_body_count(material))
         return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *a=&material->functions[f];
-    if ((a->name_length && !a->name) || (a->parameter_count && !a->parameters) ||
-        (a->block_count && !a->blocks) || (a->operand_count && !a->operands) ||
-        (a->instruction_count && (!a->runs || !a->run_count)) ||
-        a->run_count>a->run_capacity) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_function_head_shape(a)) return XR_XIR_BAD_STRUCTURE;
     if (dimensions) {
         if (!effect_body_read_work(&request->read,11+sizeof(*dimensions))) return XR_XIR_BUDGET;
         *dimensions=(EffectBodyFunctionDimensions){a->parameter_count,a->instruction_count};return XR_XIR_OK;
