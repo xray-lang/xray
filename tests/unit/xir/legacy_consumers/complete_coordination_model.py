@@ -218,7 +218,7 @@ def expected_rows():
         else:row['required_semantic_trace']=traces[name]
         if name in {'work_queue_native_methods','1158_work_queue_native'}:row['current_source_policy_witness']=fifo_source_witness()
         rows.append(row)
-    return rows+system_expected_rows()+[descriptor_expected_row()]
+    return rows+system_expected_rows()+[descriptor_expected_row()]+parallel_api_expected_rows()
 
 
 def named_expected_rows():
@@ -508,3 +508,10 @@ def descriptor_expected_row():
                 'stdout_utf8':''.join(str(x)+chr(10) for x in trace['outputs'])},
             'observation_count':2,'required_semantic_trace':trace,
             'model':'Complete unchanged erased enum-descriptor transfer original;both enums including Busy payload andunused union alias,full recv helper,capacity2,two go/send/await pairs andfinalclose. Independent canonical module/declaration/ordinal identity andfinite completion order yield1/-1. Reference arrival scenarios are not actual scheduling,metadata lifetime,Sendable,FI,resource,safety orprovider qualification.'}
+
+
+_PARALLEL_API_IDS=frozenset({'complete_parallel_api_reference','complete_parallel_plan_close_lifecycle'})
+
+def parallel_api_expected_rows():
+    import complete_parallel_api_model
+    return complete_parallel_api_model.expected_rows()

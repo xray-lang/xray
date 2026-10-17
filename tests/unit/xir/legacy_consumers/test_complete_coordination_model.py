@@ -7,7 +7,7 @@ import complete_coordination_model as m
 
 class CompleteCoordination(unittest.TestCase):
     def test_six_legacy_and_four_system_entries_keep_five_named_bodies(self):
-        rows=[row for row in m.expected_rows() if row['id']!=m._DESCRIPTOR_ID];named=m.named_expected_rows()
+        rows=[row for row in m.expected_rows() if row['id']!=m._DESCRIPTOR_ID and row['id'] not in m._PARALLEL_API_IDS];named=m.named_expected_rows()
         self.assertEqual((len(rows),len(named)),(10,5));self.assertEqual(sum(x['observation_count'] for x in rows),28)
         traces=m.body_traces();self.assertEqual({k:len(v['assertions']) for k,v in traces.items()},
             {'work_queue_native_methods':17,'1157_work_queue_generic_class':4,'1158_work_queue_native':33,
@@ -101,6 +101,7 @@ class CompleteCoordination(unittest.TestCase):
 
     def test_product_entries_keep_unmodified_run_and_separate_real_test_routes(self):
         folder=Path(__file__).parent;cases={x['id']:x for x in json.loads((folder/'product_driver_cases.json').read_text())['cases']}
+        cases.update({x['id']:x for x in json.loads((folder/'parallel_api_driver_cases.json').read_text())['cases']})
         for row in m.expected_rows()+m.named_expected_rows():
             case=cases[row['id']];self.assertEqual(case['source'],row['source'])
             self.assertEqual(case['source'],case['preserved_original_identity']['source'])
