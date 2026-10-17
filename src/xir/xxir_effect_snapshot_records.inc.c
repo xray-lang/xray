@@ -12,6 +12,22 @@
  */
 #include "xxir_instruction_words_internal.h"
 
+/* Owned literals and a synchronous census view use the same current opcode
+ * gate. A count-only view never materializes or publishes physical rows. */
+static XrXirStatus effect_body_literal_opcodes_check(const EffectBodyRead *read,uint32_t count,
+    const XrXirInstruction *base,const XrXirInstruction *tail) {
+    if (!read || !base || !tail || count<2 || count>EFFECT_BODY_LITERAL_CAPACITY)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
+    if (base->op<=XR_XIR_INVALID || base->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t i=1;i<count;++i) {
+        if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
+        if (tail[i-1].op<=XR_XIR_INVALID || tail[i-1].op>=XR_XIR_OP_COUNT)
+            return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
+}
+
 /* A literal tag selects complete physical rows, never constant columns. All
  * actual opcodes are bounded here; full correspondence reads every word. */
 static XrXirStatus effect_body_run_payload_check(const EffectBodyRead *read,
@@ -22,15 +38,7 @@ static XrXirStatus effect_body_run_payload_check(const EffectBodyRead *read,
     uint32_t selected=run->mask&EFFECT_BODY_MASK;
     if (run->mask&EFFECT_BODY_LITERAL_ROWS) {
         if (run->count<2 || run->count>EFFECT_BODY_LITERAL_CAPACITY || selected) return XR_XIR_BAD_STRUCTURE;
-        if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
-        if (run->base.op<=XR_XIR_INVALID || run->base.op>=XR_XIR_OP_COUNT)
-            return XR_XIR_BAD_STRUCTURE;
-        for (uint32_t i=1;i<run->count;++i) {
-            if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
-            if (run->literal_tail[i-1].op<=XR_XIR_INVALID || run->literal_tail[i-1].op>=XR_XIR_OP_COUNT)
-                return XR_XIR_BAD_STRUCTURE;
-        }
-        return XR_XIR_OK;
+        return effect_body_literal_opcodes_check(read,run->count,&run->base,run->literal_tail);
     }
     if (run->count==2 && selected) return XR_XIR_BAD_STRUCTURE;
     for (;selected;selected&=selected-1) {
@@ -213,12 +221,16 @@ typedef struct EffectBodyRecordReceiver {
     const EffectBodyWriteSink *semantic;
 } EffectBodyRecordReceiver;
 
+static bool effect_body_record_shape(const XrXirFunction *source,const EffectBodyRun *run) {
+    return source && run && source->instructions && run->count && run->first<source->instruction_count &&
+        run->count<=source->instruction_count-run->first &&
+        !(run->mask&~(EFFECT_BODY_MASK|EFFECT_BODY_LITERAL_ROWS)) && !(run->count==1 && run->mask) &&
+        !((run->mask&EFFECT_BODY_LITERAL_ROWS) && (run->mask&EFFECT_BODY_MASK));
+}
+
 static XrXirStatus effect_body_record_prepare(const XrXirCompileContext *work,
     const XrXirFunction *source,EffectBodyRun *run) {
-    if (!source || !run || !source->instructions || !run->count || run->first>=source->instruction_count ||
-        run->count>source->instruction_count-run->first ||
-        (run->mask&~(EFFECT_BODY_MASK|EFFECT_BODY_LITERAL_ROWS)) || (run->count==1 && run->mask) ||
-        ((run->mask&EFFECT_BODY_LITERAL_ROWS) && (run->mask&EFFECT_BODY_MASK))) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_record_shape(source,run)) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
     if (run->count==2 && run->mask) {
         if (!xir_compile_work(work,2+sizeof(run->literal_tail[0])+sizeof(run->mask))) return XR_XIR_BUDGET;
@@ -228,19 +240,35 @@ static XrXirStatus effect_body_record_prepare(const XrXirCompileContext *work,
     return effect_body_run_payload_check(&read,run);
 }
 
+/* The full scanner has read every current word. Capacity needs the same
+ * literal opcode gate but no discarded native copy or tag write. The view
+ * borrows only this synchronous Source row; receiving still scans afresh. */
+static XrXirStatus effect_body_record_census_check(const XrXirCompileContext *work,
+    const XrXirFunction *source,const EffectBodyRun *run) {
+    if (!effect_body_record_shape(source,run)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+    EffectBodyRead read=effect_body_compile_read(work);
+    if (run->count==2 && run->mask) {
+        if (!xir_compile_work(work,2+sizeof(const XrXirInstruction *))) return XR_XIR_BUDGET;
+        const XrXirInstruction *tail=&source->instructions[run->first+1];
+        return effect_body_literal_opcodes_check(&read,2,&run->base,tail);
+    }
+    return effect_body_run_payload_check(&read,run);
+}
+
 /* This pass measures only physical capacity. The same scanner runs afresh
  * for receiving, and neither its count nor its discarded payload proves IR,
  * permission, semantic shape or correspondence to the current source. */
 static XrXirStatus effect_body_record_count(const XrXirCompileContext *work,
     const XrXirFunction *source,EffectBodyRun *run,void *owner) {
     EffectBodyRecordCensus *census=owner;
-    XrXirStatus status=effect_body_record_prepare(work,source,run);
+    XrXirStatus status=effect_body_record_census_check(work,source,run);
     if (status!=XR_XIR_OK) return status;
     if (!census || census->next!=run->first || census->count>census->next ||
         census->tail>EFFECT_BODY_LITERAL_CAPACITY) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,6+sizeof(uint32_t))) return XR_XIR_BUDGET;
-    if (run->count==1 || (run->mask&EFFECT_BODY_LITERAL_ROWS)) {
-        /* A prepared literal has at most eight rows, so filling the current
+    if (!xir_compile_work(work,8+sizeof(uint32_t))) return XR_XIR_BUDGET;
+    if (run->count==1 || (run->mask&EFFECT_BODY_LITERAL_ROWS) || (run->count==2 && run->mask)) {
+        /* A literal view has at most eight rows, so filling the current
          * tail can require only one new record. This counts capacity only;
          * the same scanner still reads every current physical word twice. */
         if (!xir_compile_work(work,3+sizeof(uint32_t))) return XR_XIR_BUDGET;
