@@ -54,6 +54,8 @@ typedef struct XrXirCellProofRunCursor {
 typedef struct XrXirCellProofRun {
     uint32_t first,count,varying;
     XrXirInstruction operation;
+    /* Actual selected physical deltas belong to this stack-local request. */
+    uint32_t delta[10];
 } XrXirCellProofRun;
 
 static inline bool xir_cell_proof_scalar_shape(XrXirOp opcode,XrXirType type) {

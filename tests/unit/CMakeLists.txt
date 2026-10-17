@@ -4409,6 +4409,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_vm.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/source_product_vm.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/derivation_snapshot_match.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/snapshot_delta_mask.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/stdlib_resources.cmake")
 

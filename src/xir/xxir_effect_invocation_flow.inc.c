@@ -499,31 +499,51 @@ static XrXirStatus effect_invocation_return_origins(EffectInvocationFlow *flow,
     return XR_XIR_OK;
 }
 
+/* Canonical run projections and delegated full rows use this one transfer
+ * rule. The numeric operands are current physical fields, never a saved effect. */
+static bool effect_invocation_origin_transfer_opcode(XrXirOp op) {
+    switch (op) {
+    case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
+    case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
+    case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:
+    case XR_XIR_LOCAL_WRITE: case XR_XIR_SCALAR_LOCAL_WRITE: case XR_XIR_OWNED_LOCAL_WRITE:
+    case XR_XIR_PHI:return true;
+    default:return false;
+    }
+}
+static XrXirStatus effect_invocation_origin_transfer(EffectInvocationFlow *flow,
+    uint32_t instruction,XrXirOp op,uint32_t first,uint32_t second) {
+    uint32_t destination=flow->function->parameter_count+instruction;
+    switch (op) {
+    case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
+    case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
+    case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:
+        return effect_invocation_transfer(flow,destination,first);
+    case XR_XIR_LOCAL_WRITE: case XR_XIR_SCALAR_LOCAL_WRITE: case XR_XIR_OWNED_LOCAL_WRITE:
+        return effect_invocation_transfer(flow,first,second);
+    case XR_XIR_PHI:
+        if (!second || second%2 || !flow->function->operands ||
+            first>flow->function->operand_count || second>flow->function->operand_count-first)
+            return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t a=1;a<second;a+=2) {
+            XrXirStatus status=effect_invocation_transfer(flow,destination,flow->function->operands[first+a]);
+            if (status!=XR_XIR_OK) return status;
+        }
+        return XR_XIR_OK;
+    default:return XR_XIR_BAD_STRUCTURE;
+    }
+}
+
 static XrXirStatus effect_invocation_origins_decoded(EffectInvocationFlow *flow,
     uint32_t instruction,const XrXirInstruction *op) {
-    uint32_t destination=flow->function->parameter_count+instruction;
+    if (effect_invocation_origin_transfer_opcode(op->op))
+        return effect_invocation_origin_transfer(flow,instruction,op->op,op->args[0],op->args[1]);
     switch (op->op) {
     case XR_XIR_CALL: case XR_XIR_CALL_DEFAULT: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_RESULT:
         return effect_invocation_return_origins(flow,instruction,op);
     case XR_XIR_FUNCTION_REF:
         return effect_invocation_capture(flow,instruction,op);
-    case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
-    case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
-    case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:
-        return effect_invocation_transfer(flow,destination,op->args[0]);
-    case XR_XIR_LOCAL_WRITE: case XR_XIR_SCALAR_LOCAL_WRITE: case XR_XIR_OWNED_LOCAL_WRITE:
-        return effect_invocation_transfer(flow,op->args[0],op->args[1]);
-    case XR_XIR_PHI:
-        if (!op->args[1] || op->args[1]%2 || !flow->function->operands ||
-            op->args[0]>flow->function->operand_count ||
-            op->args[1]>flow->function->operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
-        for (uint32_t a=1;a<op->args[1];a+=2) {
-            XrXirStatus status=effect_invocation_transfer(flow,destination,
-                flow->function->operands[op->args[0]+a]);
-            if (status!=XR_XIR_OK) return status;
-        }
-        return XR_XIR_OK;
-    default: return XR_XIR_OK;
+    default:return XR_XIR_OK;
     }
 }
 
@@ -631,9 +651,20 @@ static XrXirStatus effect_invocation_origins_pass(EffectInvocationFlow *flow) {
                 unused=effect_invocation_origins_unused(flow,(XrXirOp)opcode,(XrXirType)type);
             }
             if (unused) continue;
-            XrXirInstruction op;
-            status=effect_body_instruction_ref_value(&flow->body.read,ref,i,&op);
-            if (status==XR_XIR_OK) status=effect_invocation_origins_decoded(flow,i,&op);
+            if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+            if (effect_invocation_origin_transfer_opcode((XrXirOp)opcode)) {
+                /* Every pass retains current canonical range, mask, delta and
+                 * EOF checks. A transfer consumes only its two operand words;
+                 * full Source/physical correspondence remains independent. */
+                uint32_t first=0,second=0;
+                status=effect_body_run_word(&flow->body.read,ref,i,2,&first);
+                if (status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,i,3,&second);
+                if (status==XR_XIR_OK) status=effect_invocation_origin_transfer(flow,i,(XrXirOp)opcode,first,second);
+            } else {
+                XrXirInstruction op;
+                status=effect_body_instruction_ref_value(&flow->body.read,ref,i,&op);
+                if (status==XR_XIR_OK) status=effect_invocation_origins_decoded(flow,i,&op);
+            }
             if (status!=XR_XIR_OK) return status;
         }
     }

@@ -162,9 +162,19 @@ static XrXirStatus effect_cell_body_range(const XrXirCompileContext *work,
     if (status!=XR_XIR_OK) return status;
     status=effect_body_instruction_ref_prepare(&adapter->request.read,ref,ref->first);
     if (status!=XR_XIR_OK) return status;
-    XrXirInstruction operation=effect_body_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,0);
-    if (!xir_compile_work(work,sizeof(*output)+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
-    *output=(XrXirCellProofRun){ref->first,ref->count,ref->mask,operation};
+    XrXirInstruction operation=xir_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,0);
+    uint32_t delta[10];
+    uint64_t publication=sizeof(*output)-sizeof(output->delta)+2*sizeof(uint32_t);
+    for (uint32_t selected=ref->mask;selected;selected&=selected-1) {
+        if (!xir_compile_work(work,3+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t w=(uint32_t)__builtin_ctz(selected);
+        if (!ref->delta[w]) return XR_XIR_BAD_STRUCTURE;
+        delta[w]=ref->delta[w];publication+=2+sizeof(uint32_t);
+    }
+    if (!xir_compile_work(work,publication)) return XR_XIR_BUDGET;
+    output->first=ref->first;output->count=ref->count;output->varying=ref->mask;output->operation=operation;
+    for (uint32_t selected=ref->mask;selected;selected&=selected-1)
+        output->delta[(uint32_t)__builtin_ctz(selected)]=delta[(uint32_t)__builtin_ctz(selected)];
     cursor->next=position.first;cursor->run=position.run;return XR_XIR_OK;
 }
 
