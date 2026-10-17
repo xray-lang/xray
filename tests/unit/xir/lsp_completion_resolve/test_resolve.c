@@ -65,6 +65,12 @@ static size_t one(unsigned mode,size_t fault) {
     server.source_revision=UINT64_C(991);XrLspServer saved=server;semantic_lookups=document_lookups=unsupported_lookups=0;
     clone_fault(fault);XrJsonValue *result=xlsp_handle_td_completion_resolve(&server,params);CloneStats observed=clone_stats();
     size_t prefixes=observed.attempts;clone_fault(SIZE_MAX);
+#ifndef RESOLVE_BEFORE
+    if (fault != SIZE_MAX) {
+        CHECK(server.source_failure.stage == 23 && server.source_failure.status == XR_XIR_OUT_OF_MEMORY);
+        saved.source_failure = server.source_failure;
+    }
+#endif
     CHECK(!memcmp(&server,&saved,sizeof(server)));
     CHECK(!unsupported_lookups);
 #ifdef RESOLVE_BEFORE

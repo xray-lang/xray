@@ -105,8 +105,25 @@ XrJsonValue *xlsp_handle_td_completion(XrLspServer *server, XrJsonValue *params)
 /* Completion producers include display fields in each item. Resolve copies
  * those fields without borrowing mutable editor or analyzer state. */
 XR_FUNC XrJsonValue *xlsp_handle_td_completion_resolve(XrLspServer *server, XrJsonValue *params) {
-    (void)server;
-    return xjson_clone(params);
+    if (!server) return NULL;
+    server->source_failure.stage = 23;
+    server->source_failure.status = XR_XIR_BAD_STRUCTURE;
+    if (!params || params->type != XR_JSON_OBJECT || params->as.object.count < 0 ||
+        params->as.object.capacity < params->as.object.count ||
+        (params->as.object.count && !params->as.object.members)) return NULL;
+    const XrJsonValue *label = NULL;
+    for (int i = 0; i < params->as.object.count; ++i) {
+        const XrJsonMember *member = &params->as.object.members[i];
+        if (!member->key || !member->value) return NULL;
+        if (member->key_len != 5 || memcmp(member->key, "label", 5)) continue;
+        if (label) return NULL;
+        label = member->value;
+    }
+    if (!label || label->type != XR_JSON_STRING) return NULL;
+    XrJsonValue *result = xjson_clone(params);
+    server->source_failure.status = result ? XR_XIR_OK : XR_XIR_OUT_OF_MEMORY;
+    if (result) server->source_failure.stage = 0;
+    return result;
 }
 
 XrJsonValue *xlsp_handle_td_hover(XrLspServer *server, XrJsonValue *params) {

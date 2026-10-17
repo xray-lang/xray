@@ -1,0 +1,11 @@
+{
+  "commit": "2b7c1b401f67ac193d3dbd6033c894342609293a",
+  "handler": "src/app/lsp/xlsp_handlers_textdoc.c",
+  "handler_sha256": "aec028bceb21a22de071faa2a08393ad32fa409c64e2316eaf813feab10b9f1d",
+  "server": "src/app/lsp/xlsp_server.c",
+  "server_sha256": "992dae49ab926731d5d1f70e0f304a976570d9d3a9be272a26f41cac28fad8b1",
+  "resolve_function_sha256": "8174f7c38c2e089034da84a4442b562a48e157595cf6cfd54c701cd58f1cb2a5",
+  "finish_body_sha256": "81faa157232fa3069ccfcbc7efef0c5ef9344de2f2b5a653168839a080a5e34d",
+  "finish_original_segment_sha256": "f7c31e62747d8bf19340c80d09d5c97f95591787039485fd3f1f7175adbf844a",
+  "wrapper_changes": "Dedent exact branch; rename entry->request_handler to handler and &id to id for standalone invocation; no policy changes"
+}

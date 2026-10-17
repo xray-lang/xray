@@ -567,6 +567,37 @@ static void flush_pending_diagnostics(XrLspServer *server) {
 // Method Dispatch Table (O(1) lookup instead of if-else chain)
 // ============================================================================
 
+static void finish_request_handler(XrLspServer *server, const XlspRequestId *id,
+    LspRequestHandler handler, XrJsonValue *result) {
+    // Check if cancelled during execution
+    if (pending_request_is_cancelled(server, id)) {
+        lsp_log("Request %s was cancelled during execution",
+                xlsp_request_id_debug(id));
+        send_error(server, id, LSP_ERROR_REQUEST_CANCELLED, "Request cancelled");
+        if (result)
+            xjson_free(result);
+    } else if (server->source_failure.stage) {
+        char message[128];
+        int code = (handler == xlsp_handle_lc_shutdown ||
+                handler == xlsp_handle_td_completion_resolve) &&
+            server->source_failure.status == XR_XIR_BAD_STRUCTURE ? -32602 : -32603;
+        snprintf(message, sizeof(message), "%s failed (stage=%u status=%u)",
+            handler == xlsp_handle_td_completion_resolve ? "Completion resolve" : "Source query",
+            server->source_failure.stage, server->source_failure.status);
+        send_error(server, id, code, message);
+        xjson_free(result);
+    } else if (handler == xlsp_handle_td_formatting &&
+               server->formatting_failure.stage) {
+        char message[128];
+        snprintf(message, sizeof(message), "Formatting failed (stage=%u status=%u)",
+            server->formatting_failure.stage, server->formatting_failure.status);
+        send_error(server, id, -32603, message);
+        xjson_free(result);
+    } else {
+        send_response(server, id, result);
+    }
+}
+
 // Method dispatch table (sorted by frequency for cache locality)
 static const LspMethodEntry lsp_methods[] = {
     // High-frequency methods first
@@ -735,31 +766,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
                 send_error(server, &id, LSP_ERROR_REQUEST_CANCELLED, "Request cancelled");
             } else {
                 XrJsonValue *result = entry->request_handler(server, params);
-                // Check if cancelled during execution
-                if (pending_request_is_cancelled(server, &id)) {
-                    lsp_log("Request %s was cancelled during execution",
-                            xlsp_request_id_debug(&id));
-                    send_error(server, &id, LSP_ERROR_REQUEST_CANCELLED, "Request cancelled");
-                    if (result)
-                        xjson_free(result);
-                } else if (server->source_failure.stage) {
-                    char message[128];
-                    int code = entry->request_handler == xlsp_handle_lc_shutdown &&
-                        server->source_failure.status == XR_XIR_BAD_STRUCTURE ? -32602 : -32603;
-                    snprintf(message, sizeof(message), "Source query failed (stage=%u status=%u)",
-                        server->source_failure.stage, server->source_failure.status);
-                    send_error(server, &id, code, message);
-                    xjson_free(result);
-                } else if (entry->request_handler == xlsp_handle_td_formatting &&
-                           server->formatting_failure.stage) {
-                    char message[128];
-                    snprintf(message, sizeof(message), "Formatting failed (stage=%u status=%u)",
-                        server->formatting_failure.stage, server->formatting_failure.status);
-                    send_error(server, &id, -32603, message);
-                    xjson_free(result);
-                } else {
-                    send_response(server, &id, result);
-                }
+                finish_request_handler(server, &id, entry->request_handler, result);
             }
             pending_request_remove(server, &id);
         } else if (entry->notification_handler) {
