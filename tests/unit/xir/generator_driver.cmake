@@ -570,3 +570,34 @@ endforeach()
 set_tests_properties(test_xir_generator_receiver_cell_source test_xir_generator_receiver_cell_native
     test_xir_generator_receiver_cell_mixed_vm-native test_xir_generator_receiver_cell_mixed_native-vm
     PROPERTIES LABELS "unit;xir;generator;ownership;runtime" TIMEOUT 120 PROCESSORS 1)
+
+add_executable(test_xir_generator_receiver_compiler xir/test_xir_generator_receiver_compiler.c)
+target_link_libraries(test_xir_generator_receiver_compiler PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+target_compile_definitions(test_xir_generator_receiver_compiler PRIVATE XR_SOURCE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+if(MSVC)
+    target_compile_options(test_xir_generator_receiver_compiler PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_generator_receiver_compiler PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_generator_receiver_compiler COMMAND test_xir_generator_receiver_compiler)
+set_tests_properties(test_xir_generator_receiver_compiler PROPERTIES
+    LABELS "unit;xir;generator;compiler;ownership" TIMEOUT 120 PROCESSORS 1)
+if(WIN32)
+    add_test(NAME test_xir_generator_receiver_compiler_faults
+        COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/run_receiver_compiler_faults.py"
+            --executable "$<TARGET_FILE:test_xir_generator_receiver_compiler>"
+            --source-root "${PROJECT_SOURCE_DIR}" --build-root "${CMAKE_BINARY_DIR}")
+    set_tests_properties(test_xir_generator_receiver_compiler_faults PROPERTIES
+        LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 8 COST 600)
+endif()
+
+add_test(NAME test_xir_generator_receiver_compiler_history_reports
+    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_receiver_compiler_history_reports.py")
+set_tests_properties(test_xir_generator_receiver_compiler_history_reports PROPERTIES
+    LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 30 PROCESSORS 1)
+
+add_test(NAME test_xir_generator_receiver_compiler_allocator_audit
+    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_receiver_compiler_history_reports.py"
+        --allocator-audit "$<TARGET_FILE:test_xir_generator_receiver_compiler>")
+set_tests_properties(test_xir_generator_receiver_compiler_allocator_audit PROPERTIES
+    LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 30 PROCESSORS 1)
