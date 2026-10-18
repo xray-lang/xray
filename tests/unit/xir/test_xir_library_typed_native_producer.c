@@ -126,15 +126,15 @@ static XrXirStatus typed_source_request(H1Compiler *c,const char *path,XrXirLink
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ROOT_PARAMETER_NATIVE_FIXTURES};
     XrXirSourceRequest request={c->session,path,&authority,&c->context,NULL,NULL,kind,catalog};
     unsigned char saved[sizeof(request)];memcpy(saved,&request,sizeof(request));
-    XrXirSourceResult result={0},empty={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
+    XrXirSourceResult result={0},empty={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&failure);
     if(status!=XR_XIR_OK && status!=XR_XIR_BUDGET && status!=XR_XIR_OUT_OF_MEMORY)
         fprintf(stderr,"typed Source status=%u kind=%u module=%u line=%d message=%s path=%s\n",
             (unsigned)status,(unsigned)kind,diagnostic.module,diagnostic.line,diagnostic.message,path);
     CHECK(!memcmp(saved,&request,sizeof(request)) && diagnostic.status==status);
-    if(status==XR_XIR_OK){CHECK(result.checked&&result.snapshot&&!failure&&!*output);*output=result.checked;result.checked=NULL;}
+    if(status==XR_XIR_OK){CHECK(result.checked&&result.snapshot&&!failure.path&&!*output);*output=result.checked;result.checked=NULL;}
     else CHECK(!memcmp(&result,&empty,sizeof(result)) && !*output);
-    xr_compile_resources_free(failure);xr_xir_compile_source_result_free(&result);
+    xr_xir_compile_source_failure_free(&failure);xr_xir_compile_source_result_free(&result);
     xr_compile_session_free(c->session);c->session=NULL;return status;
 }
 static XrXirStatus h1c_source(H1Compiler *c) {

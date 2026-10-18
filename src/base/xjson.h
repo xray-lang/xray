@@ -81,6 +81,9 @@ XR_FUNC void xjson_free(XrJsonValue *value);
 
 /* ========== Deep Clone ========== */
 
+/* Preserve explicit byte lengths, duplicate keys and integer representation.
+ * Failure returns NULL without publishing a partial tree or consuming input.
+ * Container depth follows the parser's XJSON_MAX_DEPTH boundary. */
 XR_FUNC XrJsonValue *xjson_clone(XrJsonValue *value);
 
 /* ========== Object Accessors ========== */
@@ -117,11 +120,12 @@ XR_FUNC XrJsonValue *xjson_new_string_n(const char *value, size_t len);
 XR_FUNC XrJsonValue *xjson_new_array(void);
 XR_FUNC XrJsonValue *xjson_new_object(void);
 
+/* A successful append transfers value. On failure, count and ownership stay unchanged. */
 XR_FUNC void xjson_array_push(XrJsonValue *arr, XrJsonValue *value);
 XR_FUNC void xjson_array_truncate(XrJsonValue *arr, int max_len);
 XR_FUNC void xjson_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value);
 
-/* Fast append: skip key dedup check (use when building new objects with unique keys) */
+/* Append without key deduplication. Failure retains the caller's value. */
 XR_FUNC void xjson_object_set_new(XrJsonValue *obj, const char *key, XrJsonValue *value);
 
 /* ========== Serialization ========== */

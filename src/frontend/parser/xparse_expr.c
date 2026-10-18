@@ -1320,6 +1320,7 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_fn_expression: NULL parser");
     int line = parser->previous.line;
+    int column = parser->previous.column;
 
     XrTypeScope *saved_scope = parser->type_scope;
     int type_param_count = 0;
@@ -1393,6 +1394,9 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
     func_expr->as.function_expr.return_type = return_type;
     func_expr->as.function_expr.type_params = type_params;
     func_expr->as.function_expr.type_param_count = type_param_count;
+    func_expr->column = column;
+    func_expr->end_line = body->end_line;
+    func_expr->end_column = body->end_column;
 
     if (type_param_count > 0) {
         parser->type_scope = saved_scope;
@@ -1690,44 +1694,7 @@ AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee) {
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);  // consume '('
 
-    AstNode **arguments = NULL;
-    XrCallArgAccess *arg_accesses = NULL;
-    int arg_count = 0;
-    int arg_capacity = 0;
-    int access_count = 0;
-    int access_capacity = 0;
-
-    if (!xr_parser_check(parser, TK_RPAREN)) {
-        do {
-            XrCallArgAccess access = XR_CALL_ARG_PLAIN;
-            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
-            if (!xr_parser_healthy(parser)) return NULL;
-            do {
-                XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            do {
-                XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
-    }
-
-    do {
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
-        if (!xr_parser_healthy(parser)) return NULL;
-    } while (0);
-
-    // `Map<K,V>()` / `Array<T>()` / `Channel<T>(n)` etc. construct built-in
-    // heap types directly (no `new`); route to the construction node so the
-    // generic type arguments drive element/key/value layout.
-    if (callee->type == AST_VARIABLE && xr_is_construct_only_type_name(parser, callee->as.variable.name)) {
-        return xr_ast_new_expr(parser->compiler_session, NULL, callee->as.variable.name, arguments,
-                               arg_accesses, arg_count, type_args, type_arg_count, line);
-    }
-
-    return xr_ast_call_expr_generic(parser->compiler_session, callee, arguments, arg_accesses,
-                                    arg_count, type_args, type_arg_count, line);
+    return xr_parse_call_with_types(parser, callee, type_args, type_arg_count);
 }
 
 // Parse '<' which could be comparison or generic call

@@ -42,6 +42,12 @@ static bool source_pattern_bindings(SourceContext *ctx, SourceMatchPattern *patt
             symbol->index=alternative+1;
             if (!source_query_target_reference(ctx,source_query_range(ctx,node,name),symbol->declaration,XR_XIR_SOURCE_WRITE)) return false;
         }
+        XrXirSourceDeclaration *record=(XrXirSourceDeclaration *)&ctx->query.declarations[symbol->declaration-1];
+        uint32_t target=!alternative?pattern->field_declaration:
+            record->target==pattern->field_declaration?record->target:0;
+        if (!source_copy_bytes(ctx,node,&record->target,&target,sizeof(target))) return false;
+        if (pattern->field_declaration && !source_query_pattern_binding(ctx,symbol->declaration,
+            source_query_range(ctx,node,name))) return false;
         pattern->symbol=symbol;
     }
     for (uint32_t i=0;i<pattern->count;++i)

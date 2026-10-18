@@ -1,0 +1,17 @@
+if(TARGET test_lsp_format_owner)
+    return()
+endif()
+add_executable(test_lsp_format_owner "${CMAKE_CURRENT_LIST_DIR}/test_format.c"
+    "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_format.c")
+target_link_libraries(test_lsp_format_owner PRIVATE xray_lsp_source_syntax xray_frontend_format)
+target_include_directories(test_lsp_format_owner PRIVATE "${PROJECT_SOURCE_DIR}/tests/unit/xir")
+target_compile_features(test_lsp_format_owner PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_lsp_format_owner PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_lsp_format_owner PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_lsp_format_owner COMMAND test_lsp_format_owner)
+set_tests_properties(test_lsp_format_owner PROPERTIES TIMEOUT 30 LABELS "unit;lsp;ownership;metadata;allocation")
+
+include("${CMAKE_CURRENT_LIST_DIR}/../lsp_on_type/CMakeLists.txt")

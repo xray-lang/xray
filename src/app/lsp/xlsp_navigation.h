@@ -14,13 +14,18 @@
 
 #include "../../base/xjson.h"
 #include "xlsp_types.h"
+#include "../../xir/xxir.h"
 
 typedef struct XrLspServer XrLspServer;
 typedef struct XrLspDocument XrLspDocument;
+typedef struct XlspSourceRequest XlspSourceRequest;
+XR_FUNC XrXirStatus xlsp_navigation_capture(XrLspServer *,XrJsonValue *,unsigned,XlspSourceRequest **);
 
 // Go to definition
 XR_FUNC XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc,
                                              XrLspPosition pos);
+
+XR_FUNC XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *,XrLspPosition);
 
 // Find references (cross-file, scope-aware)
 XR_FUNC XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc,
@@ -33,5 +38,6 @@ XR_FUNC XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspD
 XR_FUNC XrJsonValue *xlsp_navigation_handle(XrLspServer *, XrJsonValue *, unsigned mode);
 
 XR_FUNC XrJsonValue *xlsp_semantic_handle(XrLspServer *,XrJsonValue *,unsigned mode);
+XR_FUNC XrJsonValue *xlsp_code_lens_handle(XrLspServer *,XrJsonValue *);
 
 #endif  // XLSP_NAVIGATION_H

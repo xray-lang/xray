@@ -112,7 +112,7 @@ static bool source_array_join_piece(SourceContext *ctx, AstNode *node, SourceVal
 }
 /* contains, indexOf and join walk the snapshot; clear rebinds the named root to an empty Array. */
 static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
-    const SourceValue *evaluated, SourceValue *value) {
+    const SourceValue *evaluated, SourceValue *value, SourceNativeCallShape *shape) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
     int most = recipe == SOURCE_ARRAY_CLEAR ? 0 : 1, fewest = recipe == SOURCE_ARRAY_JOIN || recipe == SOURCE_ARRAY_CLEAR ? 0 : 1;
@@ -130,6 +130,7 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
         if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_NEW, place.type, {0}, {0}, 0, {0}}, NULL, 0, &empty) ||
             !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_WRITE, XR_XIR_UNIT, {place.id, empty.id}, {0}, 0, {0}}, NULL))
             return false;
+        if(!source_native_call_shape(ctx,shape,place.type,NULL,0))return false;
         *value = (SourceValue) {UINT32_MAX, XR_XIR_UNIT};
         return true;
     }
@@ -153,6 +154,8 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "searched value must have the element type");
         if (!source_equal_admitted(ctx, node, element_type)) return false;
     }
+    XrXirType shown=recipe==SOURCE_ARRAY_JOIN?separator.type:argument.type;
+    if(!source_native_call_shape(ctx,shape,array.type,&shown,1))return false;
     XrXirType store_type = recipe == SOURCE_ARRAY_CONTAINS ? XR_XIR_BOOL : recipe == SOURCE_ARRAY_INDEX_OF ? XR_XIR_I64 : XR_XIR_STRING;
     SourceValue seed, store;
     XrXirType store_cell;
@@ -200,7 +203,7 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
 }
 /* REF recipes prepare an owned replacement before publishing the current root once. */
 static bool source_array_reorder_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
-    SourceValue *value) {
+    SourceValue *value, SourceNativeCallShape *shape) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
     int arity = recipe == SOURCE_ARRAY_UNSHIFT ? 1 : 0;
@@ -231,6 +234,7 @@ static bool source_array_reorder_call(SourceContext *ctx, AstNode *node, SourceA
         {candidate.id, input.id}, {0}, 0, {0}}, NULL)) return false;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_LEN, XR_XIR_I64, {array.id}, {0}, 0, {0}}, &length) ||
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &zero)) return false;
+    if(!source_native_call_shape(ctx,shape,root.type,arity?&input.type:NULL,(uint32_t)arity))return false;
     SourceValue last = {0};
     if (recipe == SOURCE_ARRAY_REVERSE) {
         SourceValue one;
@@ -258,7 +262,7 @@ static bool source_array_reorder_call(SourceContext *ctx, AstNode *node, SourceA
 
 /* Every result and replacement read precedes the only conditional publication. */
 static bool source_array_remove_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
-    SourceValue *value) {
+    SourceValue *value, SourceNativeCallShape *shape) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
     if (call->type_arg_count || call->default_arg_count || call->arg_count)
@@ -269,6 +273,7 @@ static bool source_array_remove_call(SourceContext *ctx, AstNode *node, SourceAr
     if (!source_value_place(ctx, access->object, &root)) return false;
     if (!xr_xir_type_is_array(&ctx->types, root.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array removal receiver is not an Array place");
+    if(!source_native_call_shape(ctx,shape,root.type,NULL,0))return false;
     element_type = xr_xir_array_element(&ctx->types, root.type);
     if (!source_nullable_type(ctx, element_type, &result_type) ||
         !source_cell_type(ctx, root.type, &array_cell) || !source_cell_type(ctx, result_type, &result_cell) ||
@@ -283,6 +288,11 @@ static bool source_array_remove_call(SourceContext *ctx, AstNode *node, SourceAr
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_NEW, array_cell, {empty.id}, {0}, 0, {0}}, &candidate_store) ||
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_PLACE, root.type, {candidate_store.id}, {0}, 0, {0}}, &candidate))
         return false;
+    /* Native temporaries retain the checked receiver element type. They are
+     * declared storage bounds, rather than inferred user cells. */
+    uint32_t parameters=ctx->functions[ctx->function].parameter_count;
+    ctx->bodies[ctx->function].recipes[result_store.id-parameters].root.kind=1;
+    ctx->bodies[ctx->function].recipes[candidate_store.id-parameters].root.kind=1;
     SourceGuard prepare;
     SourceValue last, removed, some;
     if (!source_guard_open(ctx, nonempty, false, &prepare) ||
@@ -312,7 +322,7 @@ static bool source_array_remove_call(SourceContext *ctx, AstNode *node, SourceAr
 }
 
 /* Resize prepares the exact-length replacement and owned result before one root write. */
-static bool source_array_resize_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
+static bool source_array_resize_call(SourceContext *ctx, AstNode *node, SourceValue *value, SourceNativeCallShape *shape) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
     if (call->type_arg_count || call->default_arg_count || call->arg_count != 2 || !call->arguments)
@@ -329,6 +339,7 @@ static bool source_array_resize_call(SourceContext *ctx, AstNode *node, SourceVa
         !source_plan_expression(ctx, call->arguments[1], (SourceExpectedType) {true, element_type, false, false}, &fill)) return false;
     if (length.type != XR_XIR_I64 || fill.type != element_type)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array resize arguments differ from length and element types");
+    if(!source_native_call_shape(ctx,shape,root.type,(XrXirType[]){length.type,fill.type},2))return false;
     if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_PLACE_READ, root.type, {root.id}, {0}, 0, {0}}, &array) ||
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_REPEAT, root.type, {length.id, fill.id}, {0}, 0, {0}}, &replacement) ||
         !source_cell_type(ctx, root.type, &array_cell) ||
@@ -360,7 +371,7 @@ static bool source_array_resize_call(SourceContext *ctx, AstNode *node, SourceVa
 }
 
 /* Bind once, evaluate inputs, check the current range, then publish the owned replacement. */
-static bool source_array_fill_call(SourceContext *ctx, AstNode *node, SourceValue *value) {
+static bool source_array_fill_call(SourceContext *ctx, AstNode *node, SourceValue *value, SourceNativeCallShape *shape) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
     if (call->type_arg_count || call->default_arg_count || call->arg_count < 1 || call->arg_count > 3 || !call->arguments)
@@ -388,6 +399,7 @@ static bool source_array_fill_call(SourceContext *ctx, AstNode *node, SourceValu
     if (call->arg_count < 2 &&
         !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &start)) return false;
     if (call->arg_count < 3) end = length;
+    if(!source_native_call_shape(ctx,shape,root.type,(XrXirType[]){fill.type,start.type,end.type},3))return false;
     SourceValue bounds[3] = {start, end, length};
     if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_RANGE_CHECK, XR_XIR_UNIT, {0}, {0}, 0, {0}}, bounds, 3, NULL)) return false;
     SourceValue store, candidate;
@@ -408,7 +420,7 @@ static bool source_array_fill_call(SourceContext *ctx, AstNode *node, SourceValu
 
 /* The immutable receiver snapshot owns every element until the completed result is retained. */
 static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
-    const SourceValue *evaluated, SourceValue *value) {
+    const SourceValue *evaluated, SourceValue *value, SourceNativeCallShape *shape) {
     CallExprNode *call = &node->as.call_expr;
     if (call->type_arg_count || call->default_arg_count || call->arg_count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array entries takes no arguments");
@@ -417,6 +429,7 @@ static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
     else if (!expression(ctx, call->callee->as.member_access.object, &array)) return false;
     if (!xr_xir_type_is_array(&ctx->types, array.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array entries receiver is not an Array");
+    if(!source_native_call_shape(ctx,shape,array.type,NULL,0))return false;
     XrXirType element = xr_xir_array_element(&ctx->types, array.type), tuple, result_type, cell_type;
     XrXirCallableParameter *fields = source_alloc(ctx, 2, sizeof(*fields));
     if (!fields) return false;
@@ -449,7 +462,7 @@ static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
 
 /* Capture every input before constructing output so later argument effects cannot replace a snapshot. */
 static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
-    const SourceValue *evaluated, SourceValue *value) {
+    const SourceValue *evaluated, SourceValue *value, SourceNativeCallShape *shape) {
     CallExprNode *call = &node->as.call_expr;
     if (call->type_arg_count || call->default_arg_count || call->arg_count < 0 ||
         (call->arg_count && !call->arguments))
@@ -472,6 +485,7 @@ static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
         if (arrays[i].type != receiver.type)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat argument type differs from its receiver");
     }
+    if(!source_native_call_shape(ctx,shape,receiver.type,&receiver.type,1))return false;
     XrXirType element = xr_xir_array_element(&ctx->types, receiver.type), cell_type;
     SourceValue seed, store, candidate, zero;
     if (!source_cell_type(ctx, receiver.type, &cell_type) ||
@@ -495,17 +509,8 @@ static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
         {store.id}, {0}, 0, {0}}, value);
 }
 
-static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
-    const SourceValue *evaluated, SourceValue *value) {
-    if (recipe == SOURCE_ARRAY_CONCAT) return source_array_concat_call(ctx, node, evaluated, value);
-    if (recipe == SOURCE_ARRAY_ENTRIES) return source_array_entries_call(ctx, node, evaluated, value);
-    if (recipe == SOURCE_ARRAY_RESIZE) return source_array_resize_call(ctx, node, value);
-    if (recipe == SOURCE_ARRAY_FILL) return source_array_fill_call(ctx, node, value);
-    if (recipe == SOURCE_ARRAY_POP || recipe == SOURCE_ARRAY_SHIFT)
-        return source_array_remove_call(ctx, node, recipe, value);
-    if (recipe == SOURCE_ARRAY_REVERSE || recipe == SOURCE_ARRAY_UNSHIFT)
-        return source_array_reorder_call(ctx, node, recipe, value);
-    if (recipe >= SOURCE_ARRAY_CONTAINS) return source_array_query_call(ctx, node, recipe, evaluated, value);
+static bool source_array_recipe_callbacks(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
+    const SourceValue *evaluated, SourceValue *value,SourceNativeCallShape *observed) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
     int expected_arguments = recipe == SOURCE_ARRAY_REDUCE ? 2 : 1;
@@ -547,6 +552,8 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
         if (!source_array_callback(ctx, node, call->arguments[0], &shape, &callback)) return false;
     }
     const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types, callback.value.type);
+    if(!source_native_call_shape(ctx,observed,array.type,(XrXirType[]){callback.value.type,initial.type},
+        recipe==SOURCE_ARRAY_REDUCE?2u:1u))return false;
     XrXirType result_type = signature->result, store_type = XR_XIR_UNIT, store_cell = XR_XIR_UNIT;
     /* The accumulating cell holds the output array, the running value, or the lookup result. */
     SourceValue store = {0};
@@ -634,4 +641,20 @@ static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceAr
     if (!source_counter_close(ctx, &counter)) return false;
     if (store_type == XR_XIR_UNIT) { *value = called; return true; }
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, store_type, {store.id, 0}, {0}, 0, {0}}, value);
+}
+
+static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
+    const SourceValue *evaluated, SourceValue *value) {
+    SourceNativeCallShape shape={0};bool ok=false;
+    switch(recipe) {
+    case SOURCE_ARRAY_CONCAT:ok=source_array_concat_call(ctx,node,evaluated,value,&shape);break;
+    case SOURCE_ARRAY_ENTRIES:ok=source_array_entries_call(ctx,node,evaluated,value,&shape);break;
+    case SOURCE_ARRAY_RESIZE:ok=source_array_resize_call(ctx,node,value,&shape);break;
+    case SOURCE_ARRAY_FILL:ok=source_array_fill_call(ctx,node,value,&shape);break;
+    case SOURCE_ARRAY_POP:case SOURCE_ARRAY_SHIFT:ok=source_array_remove_call(ctx,node,recipe,value,&shape);break;
+    case SOURCE_ARRAY_REVERSE:case SOURCE_ARRAY_UNSHIFT:ok=source_array_reorder_call(ctx,node,recipe,value,&shape);break;
+    default:ok=recipe>=SOURCE_ARRAY_CONTAINS?source_array_query_call(ctx,node,recipe,evaluated,value,&shape):
+        source_array_recipe_callbacks(ctx,node,recipe,evaluated,value,&shape);break;
+    }
+    return ok&&source_array_call_signature(ctx,node,&shape,value->type);
 }

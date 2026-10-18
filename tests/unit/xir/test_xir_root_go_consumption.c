@@ -35,7 +35,7 @@ static XrXirArtifact *go_source(const char *file,bool query,XrXirStatus expected
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(effect_context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,base};
     XrXirSourceRequest request={session,path,&authority,&effect_context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&failure);
     if(status!=expected||(message&&strcmp(message,diagnostic.message)))
         fprintf(stderr,"GO source %s status%u expected%u %d:%d %s\n",file,status,expected,
@@ -43,9 +43,9 @@ static XrXirArtifact *go_source(const char *file,bool query,XrXirStatus expected
     CHECK(status==expected);if(message)CHECK(!strcmp(message,diagnostic.message));
     else if(expected!=XR_XIR_OK)CHECK(strcmp(go_required,diagnostic.message)&&strcmp(go_unresolved,diagnostic.message));
     if(expected!=XR_XIR_OK)CHECK(!result.checked&&!result.snapshot);
-    else CHECK(result.checked&&!failure);
+    else CHECK(result.checked&&!failure.path);
     XrXirArtifact *checked=result.checked;result.checked=NULL;
-    xr_compile_resources_free(failure);xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
+    xr_xir_compile_source_failure_free(&failure);xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
     return checked;
 }
 static XrXirArtifact *go_replay(XrXirArtifact *checked) {

@@ -38,11 +38,11 @@ static void hover_text(LspHoverBuilder *b,const char *text) {
 }
 static const char *hover_builtin(XrXirType type) {
     switch(type) {
-    case XR_XIR_UNIT:return "Unit";case XR_XIR_BOOL:return "bool";
+    case XR_XIR_UNIT:return "()";case XR_XIR_BOOL:return "bool";
     case XR_XIR_I8:return "i8";case XR_XIR_I16:return "i16";case XR_XIR_I32:return "i32";case XR_XIR_I64:return "i64";
     case XR_XIR_U8:return "u8";case XR_XIR_U16:return "u16";case XR_XIR_U32:return "u32";case XR_XIR_U64:return "u64";
-    case XR_XIR_F32:return "f32";case XR_XIR_F64:return "f64";case XR_XIR_STRING:return "String";
-    case XR_XIR_ERROR:return "Error";case XR_XIR_PANIC_INFO:return "PanicInfo";case XR_XIR_RUNE:return "Rune";
+    case XR_XIR_F32:return "f32";case XR_XIR_F64:return "f64";case XR_XIR_STRING:return "string";
+    case XR_XIR_ERROR:return "Error";case XR_XIR_PANIC_INFO:return "PanicInfo";case XR_XIR_RUNE:return "rune";
     default:return NULL;
     }
 }
@@ -52,6 +52,7 @@ static const XrXirTypeNode *hover_node(const XrXirSourceView *v,XrXirType type) 
         raw-XR_XIR_CONSTRUCTED_TYPE_BASE<v->types->count?v->types->nodes+raw-XR_XIR_CONSTRUCTED_TYPE_BASE:NULL;
 }
 static void hover_mode(LspHoverBuilder *b,uint32_t mode) {
+    if(b->status!=XR_XIR_OK)return;
     if(mode==XR_PARAM_REF)hover_text(b,"ref ");
     else if(mode==XR_PARAM_MOVE)hover_text(b,"move ");
     else if(mode!=XR_PARAM_READ)b->status=XR_XIR_BAD_TYPE;
@@ -59,7 +60,8 @@ static void hover_mode(LspHoverBuilder *b,uint32_t mode) {
 typedef struct LspHoverTypeFrame {XrXirType type;uint32_t stage,index;} LspHoverTypeFrame;
 /* Explicit traversal stack: no native recursion and no guessed depth bound.
  * A verified type graph is acyclic; an active path cannot exceed pool+1. */
-static void hover_type(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceType source) {
+static void hover_type_named(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceType source,
+    const char *const *names,uint32_t name_count,uint32_t name_owner) {
     if(b->status!=XR_XIR_OK)return;
     if(!source.known){b->status=XR_XIR_UNRESOLVED;return;}
     LspHoverTypeFrame *stack=NULL;size_t count=0,capacity=0;
@@ -80,15 +82,31 @@ static void hover_type(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceTy
         LspHoverTypeFrame *f=&stack[count-1];
         const char *builtin=hover_builtin(f->type);
         if(builtin){hover_text(b,builtin);--count;continue;}
-        if((uint32_t)f->type>=XR_XIR_TYPE_PARAMETER_BASE){b->status=XR_XIR_UNSUPPORTED;break;}
+        if((uint32_t)f->type>=XR_XIR_TYPE_PARAMETER_BASE) {
+            uint32_t ordinal=(uint32_t)f->type-XR_XIR_TYPE_PARAMETER_BASE;
+            if(!source.generic_owner||source.generic_owner!=name_owner||ordinal>=name_count||!names||!names[ordinal]) {
+                b->status=XR_XIR_UNSUPPORTED;break;
+            }
+            hover_text(b,names[ordinal]);--count;continue;
+        }
         const XrXirTypeNode *n=hover_node(v,f->type);
         if(!n){b->status=XR_XIR_BAD_TYPE;break;}
         if(n->kind==XR_XIR_TYPE_ARRAY||n->kind==XR_XIR_TYPE_CELL||n->kind==XR_XIR_TYPE_ATOMIC||n->kind==XR_XIR_TYPE_TASK||n->kind==XR_XIR_TYPE_NULLABLE) {
             if(!f->stage) {
-                hover_text(b,n->kind==XR_XIR_TYPE_ARRAY?"Array<":n->kind==XR_XIR_TYPE_CELL?"Cell<":
+                if(n->kind==XR_XIR_TYPE_NULLABLE) {
+                    const XrXirTypeNode *child=hover_node(v,n->element);
+                    if(child&&(child->kind==XR_XIR_TYPE_CALLABLE||child->kind==XR_XIR_TYPE_NULLABLE))hover_text(b,"(");
+                } else hover_text(b,n->kind==XR_XIR_TYPE_ARRAY?"Array<":n->kind==XR_XIR_TYPE_CELL?"Cell<":
                     n->kind==XR_XIR_TYPE_ATOMIC?"Atomic<":n->kind==XR_XIR_TYPE_TASK?"Task<":"Nullable<");
                 f->stage=1;next=n->element;push=true;
-            } else {hover_text(b,">");--count;}
+            } else {
+                if(n->kind==XR_XIR_TYPE_NULLABLE) {
+                    const XrXirTypeNode *child=hover_node(v,n->element);
+                    if(child&&(child->kind==XR_XIR_TYPE_CALLABLE||child->kind==XR_XIR_TYPE_NULLABLE))hover_text(b,")");
+                    hover_text(b,"?");
+                } else hover_text(b,">");
+                --count;
+            }
             continue;
         }
         if(n->kind==XR_XIR_TYPE_NOMINAL) {
@@ -133,17 +151,42 @@ static void hover_type(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceTy
     }
     xr_compile_resources_free(stack);
 }
+static void hover_type(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceType source) {
+    if(b->status!=XR_XIR_OK)return;
+    const XrXirSourceSyntaxView *syntax=xr_xir_compile_source_snapshot_syntax(b->snapshot->query);
+    if(source.generic_owner) {
+        if(!syntax||source.generic_owner>syntax->declaration_count){b->status=XR_XIR_UNRESOLVED;return;}
+        const XrXirSourceDeclarationSyntax *owner=&syntax->declarations[source.generic_owner-1];
+        hover_type_named(b,v,source,owner->type_parameters,owner->type_parameter_count,source.generic_owner);
+    } else hover_type_named(b,v,source,NULL,0,0);
+}
 static void hover_qualified_name(LspHoverBuilder *b,const XrXirSourceView *v,const XrXirSourceDeclaration *d) {
-    /* A member's actual immediate owner supplies the qualifier. Do not invent
-     * namespace paths, overload indices or missing generic parameter names. */
-    if(d->parent) {
-        if(d->parent>v->declaration_count){b->status=XR_XIR_BAD_STRUCTURE;return;}
-        const XrXirSourceDeclaration *parent=&v->declarations[d->parent-1];
-        if(parent->kind==XR_XIR_SOURCE_TYPE){hover_text(b,parent->name);hover_text(b,".");}
+    /* Only canonical member ancestry rooted in a type supplies a qualifier.
+     * Rewalk the bounded chain to emit outer names without retaining pointers
+     * in an unaccounted temporary allocation or using recursive stack depth. */
+    uint32_t owner=d->parent,depth=0;
+    while(owner&&b->status==XR_XIR_OK) {
+        b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)return;
+        if(owner>v->declaration_count||depth>=v->declaration_count){b->status=XR_XIR_BAD_STRUCTURE;return;}
+        const XrXirSourceDeclaration *parent=&v->declarations[owner-1];
+        ++depth;
+        if(parent->kind==XR_XIR_SOURCE_TYPE)break;
+        if(parent->kind!=XR_XIR_SOURCE_MEMBER){owner=0;break;}
+        owner=parent->parent;
+    }
+    if(!owner)depth=0;
+    while(depth&&b->status==XR_XIR_OK) {
+        owner=d->parent;
+        for(uint32_t i=1;i<depth;++i) {
+            b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)return;
+            owner=v->declarations[owner-1].parent;
+        }
+        hover_text(b,v->declarations[owner-1].name);hover_text(b,".");--depth;
     }
     hover_text(b,d->name);
 }
 static void hover_declaration(LspHoverBuilder *b,const XrXirSourceView *v,const XrXirSourceDeclaration *d) {
+    if(b->status!=XR_XIR_OK)return;
     /* Governed native signature is already an owned Source fact. */
     if(d->signature&&*d->signature){hover_text(b,d->signature);return;}
     if(d->generic_parameter_count||d->generic_parent_count){b->status=XR_XIR_UNSUPPORTED;return;}
@@ -153,6 +196,7 @@ static void hover_declaration(LspHoverBuilder *b,const XrXirSourceView *v,const 
     if(fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED){b->status=XR_XIR_UNSUPPORTED;return;}
     if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD&&d->kind!=XR_XIR_SOURCE_FUNCTION){b->status=XR_XIR_UNSUPPORTED;return;}
     if(d->exported)hover_text(b,"export ");
+    if(b->status!=XR_XIR_OK)return;
     if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD) {
         if(fact->flags&XR_XIR_SOURCE_SYNTAX_STATIC)hover_text(b,"static ");
         for(uint32_t i=0;i<syntax->marker_count&&b->status==XR_XIR_OK;++i) {

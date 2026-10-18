@@ -32,8 +32,10 @@ typedef struct XlspSourceLocations {
  * Failure preserves output and forwards the real Source diagnostic/path. */
 XR_FUNC XrXirStatus xlsp_source_snapshot_build(const XrXirSourceRequest *request,
     const XlspSourceDocument *documents, size_t count, size_t entry,
-    XlspSourceSnapshot **output, XrXirSourceDiagnostic *diagnostic, char **failure_path);
+    XlspSourceSnapshot **output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure);
 XR_FUNC void xlsp_source_snapshot_free(XlspSourceSnapshot *snapshot);
+/* Pure owner identity check before any query can charge a foreign ledger. */
+XR_FUNC bool xlsp_source_snapshot_uses_resources(const XlspSourceSnapshot *,const XrCompileResources *);
 /* Exact input comparison, including ordering, entry index and every version.
  * Same version with changed bytes is stale too. Failure preserves matches. */
 XR_FUNC XrXirStatus xlsp_source_snapshot_matches(const XlspSourceSnapshot *snapshot,
@@ -43,21 +45,30 @@ XR_FUNC XrXirStatus xlsp_source_snapshot_matches(const XlspSourceSnapshot *snaps
  * All calls charge the snapshot's original live compiler ledger. */
 XR_FUNC XrXirStatus xlsp_source_definition(const XlspSourceSnapshot *snapshot,
     const char *uri, size_t uri_length, XrLspPosition position, XlspSourceLocation *output);
+/* The actual lexical declaration kind, without following an import target.
+ * Failure preserves output; selector navigation remains independent. */
+XR_FUNC XrXirStatus xlsp_source_declaration_kind(const XlspSourceSnapshot *,
+    const char *,size_t,XrLspPosition,XrXirSourceDeclarationKind *);
 XR_FUNC XrXirStatus xlsp_source_references(const XlspSourceSnapshot *snapshot,
     const char *uri, size_t uri_length, XrLspPosition position, bool include_declaration,
     XlspSourceLocations *output);
 XR_FUNC void xlsp_source_locations_free(XlspSourceLocations *locations);
 /* Common bounded URI decoder; output is compiler-owned, independently pinned. */
 XR_FUNC XrXirStatus xlsp_source_uri_path(XrCompileResources *,const char *,size_t,char **);
+/* Same-ledger UTF-8 native path encoding; failure preserves output. */
+XR_FUNC XrXirStatus xlsp_index_file_uri(XrCompileResources *,const char *,char **);
 /* Each document has its real independently discovered authority. The Source
  * resolver performs all cross-authority and Catalog admission. */
 XR_FUNC XrXirStatus xlsp_source_snapshot_build_authorities(const XrXirSourceRequest *,
     const XlspSourceDocument *,const XrModuleIdentityAuthority *,size_t,size_t,
-    XlspSourceSnapshot **,XrXirSourceDiagnostic *,char **);
+    XlspSourceSnapshot **,XrXirSourceDiagnostic *,XrXirSourceFailure *);
 XR_FUNC XrXirStatus xlsp_source_snapshot_contains(const XlspSourceSnapshot *,
     const char *,size_t,bool *);
 /* Shared strict Source-byte to LSP UTF-16 conversion; text is bounded. */
 XR_FUNC XrXirStatus xlsp_source_position(XrCompileResources *,const char *,size_t,int,int,XrLspPosition *);
+typedef struct XlspSourceCursor {int line,column;size_t offset;} XlspSourceCursor;
+/* Inverse strict UTF-16 conversion; failure leaves the cursor untouched. */
+XR_FUNC XrXirStatus xlsp_source_cursor(XrCompileResources *,const char *,size_t,XrLspPosition,XlspSourceCursor *);
 /* Complete owned plain-text rendering of available Checked declaration facts.
  * The returned allocation pins the original ledger and survives snapshot death.
  * No invented generic names/docs/enum payload expressions; missing facts return
@@ -66,6 +77,13 @@ typedef struct XlspSourceHover {char *text;size_t length;} XlspSourceHover;
 XR_FUNC XrXirStatus xlsp_source_hover(const XlspSourceSnapshot *,const char *,size_t,
     XrLspPosition,XlspSourceHover *);
 XR_FUNC void xlsp_source_hover_free(XlspSourceHover *);
+/* Compare the selected canonical declarations on the same resource ledger.
+ * Owned module identity/content, captured versions and Source coordinates authenticate
+ * equality without requiring definition text for LSP position conversion.
+ * Missing facts fail closed; errors preserve the supplied boolean. */
+XR_FUNC XrXirStatus xlsp_source_same_symbol(const XlspSourceSnapshot *,const XlspSourceSnapshot *,
+    const char *,size_t,XrLspPosition,bool *);
+
 /* Token numbers use the unchanged semanticTokens legend; ranges are exact
  * UTF16 units. Opaque owner pins its ledger after every Source producer dies.
  * Missing admitted display facts reject the complete response, never silently
@@ -76,4 +94,6 @@ XR_FUNC XrXirStatus xlsp_source_semantic_tokens(const XlspSourceSnapshot *,const
 XR_FUNC XrXirStatus xlsp_source_semantic_range(const XlspSourceSnapshot *,const char *,size_t,XrLspRange);
 XR_FUNC const XlspSourceToken *xlsp_source_tokens_items(const XlspSourceTokens *,size_t *);
 XR_FUNC void xlsp_source_tokens_free(XlspSourceTokens *);
+/* Copy immutable cache data onto the current request's original ledger. */
+XR_FUNC XrXirStatus xlsp_source_tokens_clone(XrCompileResources *,const XlspSourceTokens *,XlspSourceTokens **);
 #endif

@@ -1,0 +1,44 @@
+if(TARGET test_source_field_facts)
+    return()
+endif()
+add_executable(test_source_field_facts "${CMAKE_CURRENT_LIST_DIR}/test_fields.c"
+    "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_bindings.c")
+target_link_libraries(test_source_field_facts PRIVATE xray_lsp_source_workspace)
+if(WIN32)
+    target_link_libraries(test_source_field_facts PRIVATE bcrypt)
+endif()
+target_include_directories(test_source_field_facts PRIVATE "${PROJECT_SOURCE_DIR}/src"
+    "${PROJECT_SOURCE_DIR}/src/base" "${PROJECT_SOURCE_DIR}/tests/unit/xir")
+target_compile_features(test_source_field_facts PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_source_field_facts PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_source_field_facts PRIVATE -Wall -Wextra -Werror)
+endif()
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME test_source_field_facts COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_fields.py" "$<TARGET_FILE:test_source_field_facts>" "${PROJECT_SOURCE_DIR}/stdlib")
+set_tests_properties(test_source_field_facts PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "source;ownership;metadata")
+
+add_executable(test_source_pattern_rename "${CMAKE_CURRENT_LIST_DIR}/test_pattern_rename.c"
+    "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_rename.c"
+    "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_source_bindings.c")
+target_link_libraries(test_source_pattern_rename PRIVATE xray_lsp_document_open)
+target_include_directories(test_source_pattern_rename PRIVATE "${PROJECT_SOURCE_DIR}/tests/unit/xir")
+target_compile_features(test_source_pattern_rename PRIVATE c_std_11)
+if(WIN32)
+    target_link_libraries(test_source_pattern_rename PRIVATE bcrypt)
+endif()
+if(MSVC)
+    target_compile_options(test_source_pattern_rename PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_source_pattern_rename PRIVATE -Wall -Wextra -Werror)
+endif()
+foreach(mode RANGE 0 5)
+    add_test(NAME test_source_pattern_rename_${mode} COMMAND "${Python3_EXECUTABLE}" -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_pattern_rename.py" "$<TARGET_FILE:test_source_pattern_rename>" "${PROJECT_SOURCE_DIR}/stdlib" ${mode})
+    set_tests_properties(test_source_pattern_rename_${mode} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "source;lsp;ownership;metadata")
+    add_test(NAME test_source_pattern_rename_full_${mode} COMMAND "${Python3_EXECUTABLE}" -X utf8
+        "${CMAKE_CURRENT_LIST_DIR}/test_pattern_rename.py" "$<TARGET_FILE:test_source_pattern_rename>" "${PROJECT_SOURCE_DIR}/stdlib" ${mode} --full)
+    set_tests_properties(test_source_pattern_rename_full_${mode} PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "source;lsp;ownership;metadata;allocation")
+endforeach()

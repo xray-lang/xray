@@ -35,6 +35,7 @@ static XrOsIoStatus compile_status(XrCompileResourceStatus status) {
     case XR_COMPILE_RESOURCE_OK: return XR_OS_IO_OK;
     case XR_COMPILE_RESOURCE_BUDGET: return XR_OS_IO_BUDGET;
     case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_OS_IO_OUT_OF_MEMORY;
+    case XR_COMPILE_RESOURCE_CANCELLED:
     case XR_COMPILE_RESOURCE_BAD_ARGUMENT: return XR_OS_IO_BAD_ARGUMENT;
     }
     return XR_OS_IO_BAD_ARGUMENT;

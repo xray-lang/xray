@@ -170,7 +170,7 @@ static RemoveCompile remove_build(size_t failure, XrCompileResourceLimits limits
     remove_profile_stage(&run, "resource-new");
     XrCompilerSession *session = NULL; XrXirSourceResult result = {0};
     XrXirArtifact *read = NULL, *specialized = NULL;
-    XrXirSourceDiagnostic diagnostic = {0}; XrXirCheckedPacket bytes = {0}; XrXirCSource source = {0}; char *path = NULL;
+    XrXirSourceDiagnostic diagnostic = {0}; XrXirCheckedPacket bytes = {0}; XrXirCSource source = {0}; XrXirSourceFailure path={0};
     XrCompilerSessionStatus session_status = xr_compile_session_new(run.context.resources, &session);
     if (session_status != XR_COMPILER_SESSION_OK) {
         run.status = session_status == XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BUDGET;
@@ -225,7 +225,7 @@ done:
     }
     xr_xir_compile_c_source_free(&source); xr_xir_compile_checked_packet_free(&bytes);
     xr_xir_compile_artifact_free(specialized); xr_xir_compile_artifact_free(read);
-    xr_xir_compile_source_result_free(&result); xr_compile_session_free(session); xr_compile_resources_free(path);
+    xr_xir_compile_source_result_free(&result); xr_compile_session_free(session); xr_xir_compile_source_failure_free(&path);
     remove_profile_stage(&run, "temporary-drop");
     run.sites = instance_compile_attempts; instance_compile_fail_at = SIZE_MAX;
     run.stats = remove_stats(&run.context);

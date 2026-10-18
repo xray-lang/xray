@@ -12,7 +12,7 @@
  *   No runtime type dependencies — only xdefs.h + xmalloc.h.
  */
 
-#include "xjson.h"
+#include "xjson_parse.h"
 #include "xmalloc.h"
 #include "xchecks.h"
 #include "xutf8.h"
@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <math.h>
+#include <limits.h>
 
 /* ========== Parser State ========== */
 
@@ -30,6 +31,7 @@ typedef struct {
     const char *end;
     const char *pos;
     int depth;
+    XrJsonParseStatus status;
 } JsonParser;
 
 /* ========== Parser Helpers ========== */
@@ -55,12 +57,18 @@ static XrJsonValue *alloc_value(XrJsonType type) {
     return v;
 }
 
+static XrJsonValue *parse_alloc_value(JsonParser *parser,XrJsonType type) {
+    XrJsonValue *value=alloc_value(type);
+    if(!value)parser->status=XR_JSON_PARSE_OUT_OF_MEMORY;
+    return value;
+}
+
 /* ========== Parse Null ========== */
 
 static XrJsonValue *parse_null(JsonParser *p) {
-    if (p->pos + 4 <= p->end && strncmp(p->pos, "null", 4) == 0) {
+    if ((size_t)(p->end-p->pos) >= 4 && strncmp(p->pos, "null", 4) == 0) {
         p->pos += 4;
-        return alloc_value(XR_JSON_NULL);
+        return parse_alloc_value(p,XR_JSON_NULL);
     }
     return NULL;
 }
@@ -68,16 +76,16 @@ static XrJsonValue *parse_null(JsonParser *p) {
 /* ========== Parse Bool ========== */
 
 static XrJsonValue *parse_bool(JsonParser *p) {
-    if (p->pos + 4 <= p->end && strncmp(p->pos, "true", 4) == 0) {
+    if ((size_t)(p->end-p->pos) >= 4 && strncmp(p->pos, "true", 4) == 0) {
         p->pos += 4;
-        XrJsonValue *v = alloc_value(XR_JSON_BOOL);
+        XrJsonValue *v = parse_alloc_value(p,XR_JSON_BOOL);
         if (v)
             v->as.boolean = true;
         return v;
     }
-    if (p->pos + 5 <= p->end && strncmp(p->pos, "false", 5) == 0) {
+    if ((size_t)(p->end-p->pos) >= 5 && strncmp(p->pos, "false", 5) == 0) {
         p->pos += 5;
-        XrJsonValue *v = alloc_value(XR_JSON_BOOL);
+        XrJsonValue *v = parse_alloc_value(p,XR_JSON_BOOL);
         if (v)
             v->as.boolean = false;
         return v;
@@ -149,13 +157,12 @@ static XrJsonValue *parse_number(JsonParser *p) {
     char *numbuf = stack_numbuf;
     if (tok_len + 1 > sizeof(stack_numbuf)) {
         numbuf = (char *) xr_malloc(tok_len + 1);
-        if (!numbuf)
-            return NULL;
+        if (!numbuf) {p->status=XR_JSON_PARSE_OUT_OF_MEMORY;return NULL;}
     }
     memcpy(numbuf, start, tok_len);
     numbuf[tok_len] = '\0';
 
-    XrJsonValue *v = alloc_value(XR_JSON_NUMBER);
+    XrJsonValue *v = parse_alloc_value(p,XR_JSON_NUMBER);
     if (v) {
         if (is_float) {
             v->is_integer = false;
@@ -202,13 +209,11 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
     if (p->pos >= p->end || *p->pos != '"')
         return NULL;
     p->pos++; /* skip opening quote */
-
     /* Stack buffer for common case; heap for long strings */
     char stack_buf[256];
     size_t cap = sizeof(stack_buf);
     char *buf = stack_buf;
     size_t len = 0;
-
 #define STR_ENSURE(n)                                                                              \
     do {                                                                                           \
         if (len + (n) >= cap) {                                                                    \
@@ -216,7 +221,7 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
             while (new_cap < len + (n) + 1)                                                        \
                 new_cap *= 2;                                                                      \
             char *nb = (char *) xr_malloc(new_cap);                                                \
-            if (!nb) {                                                                             \
+            if (!nb) {p->status=XR_JSON_PARSE_OUT_OF_MEMORY;                                                                             \
                 if (buf != stack_buf)                                                              \
                     xr_free(buf);                                                                  \
                 return NULL;                                                                       \
@@ -228,7 +233,6 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
             cap = new_cap;                                                                         \
         }                                                                                          \
     } while (0)
-
     while (p->pos < p->end && *p->pos != '"') {
         if (*p->pos == '\\') {
             p->pos++;
@@ -270,17 +274,16 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
                     break;
                 case 'u': {
                     p->pos++;
-                    if (p->pos + 4 > p->end)
+                    if ((size_t)(p->end-p->pos) < 4)
                         goto bad_escape;
                     int cp = parse_hex4(p->pos);
                     if (cp < 0)
                         goto bad_escape;
                     p->pos += 4;
-
                     /* UTF-16 surrogate pair handling */
                     if (cp >= 0xD800 && cp <= 0xDBFF) {
                         /* High surrogate: expect \uDCxx */
-                        if (p->pos + 6 <= p->end && p->pos[0] == '\\' && p->pos[1] == 'u') {
+                        if ((size_t)(p->end-p->pos) >= 6 && p->pos[0] == '\\' && p->pos[1] == 'u') {
                             int low = parse_hex4(p->pos + 2);
                             if (low >= 0xDC00 && low <= 0xDFFF) {
                                 unsigned int full = 0x10000 + ((unsigned) (cp - 0xD800) << 10) +
@@ -300,7 +303,6 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
                         len += xr_utf8_encode((uint32_t) cp, buf + len);
                     }
                     break;
-
                 bad_escape:
                     /* Invalid unicode escape: free and fail */
                     if (buf != stack_buf)
@@ -314,13 +316,12 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
                     return NULL;
             }
         } else {
+            if((unsigned char)*p->pos<0x20) {if(buf!=stack_buf)xr_free(buf);return NULL;}
             STR_ENSURE(1);
             buf[len++] = *p->pos++;
         }
     }
-
 #undef STR_ENSURE
-
     if (p->pos >= p->end || *p->pos != '"') {
         /* Unterminated string */
         if (buf != stack_buf)
@@ -328,10 +329,11 @@ static char *parse_string_content(JsonParser *p, size_t *out_len) {
         return NULL;
     }
     p->pos++; /* skip closing quote */
-
+    if(!xr_utf8_validate(buf,len)) {if(buf!=stack_buf)xr_free(buf);return NULL;}
     /* Copy result to heap */
     char *result = (char *) xr_malloc(len + 1);
     if (!result) {
+        p->status=XR_JSON_PARSE_OUT_OF_MEMORY;
         if (buf != stack_buf)
             xr_free(buf);
         return NULL;
@@ -351,7 +353,7 @@ static XrJsonValue *parse_string(JsonParser *p) {
     if (!str)
         return NULL;
 
-    XrJsonValue *v = alloc_value(XR_JSON_STRING);
+    XrJsonValue *v = parse_alloc_value(p,XR_JSON_STRING);
     if (!v) {
         xr_free(str);
         return NULL;
@@ -367,7 +369,7 @@ static XrJsonValue *parse_array(JsonParser *p) {
     XR_DCHECK(p->pos < p->end && *p->pos == '[', "parse_array: expected '['");
     p->pos++;
 
-    XrJsonValue *arr = alloc_value(XR_JSON_ARRAY);
+    XrJsonValue *arr = parse_alloc_value(p,XR_JSON_ARRAY);
     if (!arr)
         return NULL;
     arr->as.array.items = NULL;
@@ -388,7 +390,15 @@ static XrJsonValue *parse_array(JsonParser *p) {
             return NULL;
         }
 
+        if(arr->as.array.count==INT_MAX) {
+            xjson_free(elem);xjson_free(arr);return NULL;
+        }
+        int previous=arr->as.array.count;
         xjson_array_push(arr, elem);
+        if(arr->as.array.count!=previous+1) {
+            p->status=XR_JSON_PARSE_OUT_OF_MEMORY;
+            xjson_free(elem);xjson_free(arr);return NULL;
+        }
 
         skip_whitespace(p);
         if (p->pos < p->end && *p->pos == ']') {
@@ -411,7 +421,7 @@ static XrJsonValue *parse_object(JsonParser *p) {
     XR_DCHECK(p->pos < p->end && *p->pos == '{', "parse_object: expected '{'");
     p->pos++;
 
-    XrJsonValue *obj = alloc_value(XR_JSON_OBJECT);
+    XrJsonValue *obj = parse_alloc_value(p,XR_JSON_OBJECT);
     if (!obj)
         return NULL;
     obj->as.object.members = NULL;
@@ -453,10 +463,15 @@ static XrJsonValue *parse_object(JsonParser *p) {
 
         /* Append member: transfer ownership of key (no strdup needed) */
         if (obj->as.object.count >= obj->as.object.capacity) {
-            int new_cap = obj->as.object.capacity < 8 ? 8 : obj->as.object.capacity * 2;
+            int capacity=obj->as.object.capacity;
+            int new_cap=capacity<8?8:capacity>INT_MAX/2?INT_MAX:capacity*2;
+            if(obj->as.object.count==INT_MAX||sizeof(XrJsonMember)>SIZE_MAX/(size_t)new_cap) {
+                xr_free(key);xjson_free(val);xjson_free(obj);return NULL;
+            }
             XrJsonMember *tmp = (XrJsonMember *) xr_realloc(
                 obj->as.object.members, (size_t) new_cap * sizeof(XrJsonMember));
             if (!tmp) {
+                p->status=XR_JSON_PARSE_OUT_OF_MEMORY;
                 xr_free(key);
                 xjson_free(val);
                 xjson_free(obj);
@@ -529,24 +544,18 @@ static XrJsonValue *parse_value(JsonParser *p) {
 
 /* ========== Public Parse API ========== */
 
-XR_FUNC XrJsonValue *xjson_parse(const char *json, size_t len) {
-    if (!json)
-        return NULL;
-
-    JsonParser p = {.src = json, .end = json + len, .pos = json, .depth = 0};
-
-    XrJsonValue *result = parse_value(&p);
-    if (!result)
-        return NULL;
-
-    /* RFC 8259: no trailing content after valid value */
-    skip_whitespace(&p);
-    if (p.pos != p.end) {
-        xjson_free(result);
-        return NULL;
-    }
-
-    return result;
+XR_FUNC XrJsonParseStatus xjson_parse_status(const char *json,size_t len,XrJsonValue **out) {
+    if(!json||!out||*out||len>PTRDIFF_MAX)return XR_JSON_PARSE_BAD_ARGUMENT;
+    JsonParser parser={.src=json,.end=json+len,.pos=json,.status=XR_JSON_PARSE_INVALID_JSON};
+    XrJsonValue *result=parse_value(&parser);
+    if(!result)return parser.status;
+    skip_whitespace(&parser);
+    if(parser.pos!=parser.end) {xjson_free(result);return XR_JSON_PARSE_INVALID_JSON;}
+    *out=result;return XR_JSON_PARSE_OK;
+}
+XR_FUNC XrJsonValue *xjson_parse(const char *json,size_t len) {
+    XrJsonValue *result=NULL;
+    return xjson_parse_status(json,len,&result)==XR_JSON_PARSE_OK?result:NULL;
 }
 
 /* ========== Free ========== */
@@ -580,10 +589,44 @@ XR_FUNC void xjson_free(XrJsonValue *value) {
 
 /* ========== Clone ========== */
 
-XR_FUNC XrJsonValue *xjson_clone(XrJsonValue *value) {
-    if (!value)
-        return NULL;
+static bool object_append_n(XrJsonValue *, const char *, size_t, XrJsonValue *);
+static XrJsonValue *clone_value(const XrJsonValue *, unsigned);
 
+static XrJsonValue *clone_array(const XrJsonValue *value, unsigned depth) {
+    if (value->as.array.count < 0 || value->as.array.capacity < value->as.array.count ||
+        (value->as.array.capacity && !value->as.array.items)) return NULL;
+    XrJsonValue *arr = xjson_new_array();
+    if (!arr) return NULL;
+    for (int i = 0; i < value->as.array.count; ++i) {
+        XrJsonValue *child = clone_value(value->as.array.items[i], depth + 1);
+        if (!child) { xjson_free(arr); return NULL; }
+        int count = arr->as.array.count;
+        xjson_array_push(arr, child);
+        if (arr->as.array.count != count + 1) {
+            xjson_free(child); xjson_free(arr); return NULL;
+        }
+    }
+    return arr;
+}
+
+static XrJsonValue *clone_object(const XrJsonValue *value, unsigned depth) {
+    if (value->as.object.count < 0 || value->as.object.capacity < value->as.object.count ||
+        (value->as.object.capacity && !value->as.object.members)) return NULL;
+    XrJsonValue *obj = xjson_new_object();
+    if (!obj) return NULL;
+    for (int i = 0; i < value->as.object.count; ++i) {
+        const XrJsonMember *member = &value->as.object.members[i];
+        XrJsonValue *child = clone_value(member->value, depth + 1);
+        if (!child) { xjson_free(obj); return NULL; }
+        if (!object_append_n(obj, member->key, member->key_len, child)) {
+            xjson_free(child); xjson_free(obj); return NULL;
+        }
+    }
+    return obj;
+}
+
+static XrJsonValue *clone_value(const XrJsonValue *value, unsigned depth) {
+    if (!value || depth >= XJSON_MAX_DEPTH) return NULL;
     switch (value->type) {
         case XR_JSON_NULL:
             return xjson_new_null();
@@ -601,37 +644,18 @@ XR_FUNC XrJsonValue *xjson_clone(XrJsonValue *value) {
             return n;
         }
         case XR_JSON_STRING:
+            if (!value->as.string || value->string_len == SIZE_MAX) return NULL;
             return xjson_new_string_n(value->as.string, value->string_len);
-        case XR_JSON_ARRAY: {
-            XrJsonValue *arr = xjson_new_array();
-            if (!arr)
-                return NULL;
-            for (int i = 0; i < value->as.array.count; i++) {
-                XrJsonValue *child = xjson_clone(value->as.array.items[i]);
-                if (!child) {
-                    xjson_free(arr);
-                    return NULL;
-                }
-                xjson_array_push(arr, child);
-            }
-            return arr;
-        }
-        case XR_JSON_OBJECT: {
-            XrJsonValue *obj = xjson_new_object();
-            if (!obj)
-                return NULL;
-            for (int i = 0; i < value->as.object.count; i++) {
-                XrJsonValue *child = xjson_clone(value->as.object.members[i].value);
-                if (!child) {
-                    xjson_free(obj);
-                    return NULL;
-                }
-                xjson_object_set_new(obj, value->as.object.members[i].key, child);
-            }
-            return obj;
-        }
+        case XR_JSON_ARRAY:
+            return clone_array(value, depth);
+        case XR_JSON_OBJECT:
+            return clone_object(value, depth);
     }
     return NULL;
+}
+
+XR_FUNC XrJsonValue *xjson_clone(XrJsonValue *value) {
+    return clone_value(value, 0);
 }
 
 /* ========== Object Accessors ========== */
@@ -754,6 +778,7 @@ XR_FUNC XrJsonValue *xjson_new_string(const char *value) {
 }
 
 XR_FUNC XrJsonValue *xjson_new_string_n(const char *value, size_t len) {
+    if (len == SIZE_MAX || (!value && len)) return NULL;
     XrJsonValue *v = alloc_value(XR_JSON_STRING);
     if (!v)
         return NULL;
@@ -778,11 +803,15 @@ XR_FUNC XrJsonValue *xjson_new_object(void) {
 }
 
 XR_FUNC void xjson_array_push(XrJsonValue *arr, XrJsonValue *value) {
-    if (!arr || arr->type != XR_JSON_ARRAY || !value)
+    if (!arr || arr->type != XR_JSON_ARRAY || !value || arr->as.array.count < 0 ||
+        arr->as.array.capacity < arr->as.array.count || arr->as.array.count == INT_MAX ||
+        (arr->as.array.capacity && !arr->as.array.items))
         return;
 
     if (arr->as.array.count >= arr->as.array.capacity) {
-        int new_cap = arr->as.array.capacity < 8 ? 8 : arr->as.array.capacity * 2;
+        int old_cap = arr->as.array.capacity;
+        int new_cap = old_cap < 8 ? 8 : old_cap > INT_MAX / 2 ? INT_MAX : old_cap * 2;
+        if (sizeof(XrJsonValue *) > SIZE_MAX / (size_t)new_cap) return;
         XrJsonValue **tmp = (XrJsonValue **) xr_realloc(arr->as.array.items,
                                                         (size_t) new_cap * sizeof(XrJsonValue *));
         if (!tmp)
@@ -802,55 +831,46 @@ XR_FUNC void xjson_array_truncate(XrJsonValue *arr, int max_len) {
     }
 }
 
-XR_FUNC void xjson_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value) {
-    if (!obj || obj->type != XR_JSON_OBJECT || !key)
-        return;
-
-    /* Check for existing key (dedup) */
-    for (int i = 0; i < obj->as.object.count; i++) {
-        if (strcmp(obj->as.object.members[i].key, key) == 0) {
-            xjson_free(obj->as.object.members[i].value);
-            obj->as.object.members[i].value = value;
-            return;
-        }
-    }
-
-    /* Append new member */
+static bool object_append_n(XrJsonValue *obj, const char *key, size_t length, XrJsonValue *value) {
+    if (!obj || obj->type != XR_JSON_OBJECT || !key || !value || length == SIZE_MAX ||
+        obj->as.object.count < 0 || obj->as.object.capacity < obj->as.object.count ||
+        obj->as.object.count == INT_MAX || (obj->as.object.capacity && !obj->as.object.members)) return false;
+    /* Finish every fallible allocation before publishing the new member. */
+    char *copy = xr_malloc(length + 1);
+    if (!copy) return false;
+    memcpy(copy, key, length); copy[length] = '\0';
     if (obj->as.object.count >= obj->as.object.capacity) {
-        int new_cap = obj->as.object.capacity < 8 ? 8 : obj->as.object.capacity * 2;
+        int old_cap = obj->as.object.capacity;
+        int new_cap = old_cap < 8 ? 8 : old_cap > INT_MAX / 2 ? INT_MAX : old_cap * 2;
+        if (sizeof(XrJsonMember) > SIZE_MAX / (size_t)new_cap) { xr_free(copy); return false; }
         XrJsonMember *tmp = (XrJsonMember *) xr_realloc(obj->as.object.members,
                                                         (size_t) new_cap * sizeof(XrJsonMember));
-        if (!tmp)
-            return;
+        if (!tmp) { xr_free(copy); return false; }
         obj->as.object.members = tmp;
         obj->as.object.capacity = new_cap;
     }
+    obj->as.object.members[obj->as.object.count++] = (XrJsonMember){copy, length, value};
+    return true;
+}
 
-    XrJsonMember *m = &obj->as.object.members[obj->as.object.count++];
-    m->key = xr_strdup(key);
-    m->key_len = strlen(key);
-    m->value = value;
+XR_FUNC void xjson_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value) {
+    if (!obj || obj->type != XR_JSON_OBJECT || !key || !value || obj->as.object.count < 0 ||
+        obj->as.object.capacity < obj->as.object.count || (obj->as.object.capacity && !obj->as.object.members))
+        return;
+    size_t length = strlen(key);
+    for (int i = 0; i < obj->as.object.count; ++i) {
+        XrJsonMember *member = &obj->as.object.members[i];
+        if (!member->key) return;
+        if (member->key_len == length && !memcmp(member->key, key, length)) {
+            if (member->value != value) xjson_free(member->value);
+            member->value = value; return;
+        }
+    }
+    (void)object_append_n(obj, key, length, value);
 }
 
 XR_FUNC void xjson_object_set_new(XrJsonValue *obj, const char *key, XrJsonValue *value) {
-    if (!obj || obj->type != XR_JSON_OBJECT || !key)
-        return;
-
-    /* No dedup check — caller guarantees unique keys */
-    if (obj->as.object.count >= obj->as.object.capacity) {
-        int new_cap = obj->as.object.capacity < 8 ? 8 : obj->as.object.capacity * 2;
-        XrJsonMember *tmp = (XrJsonMember *) xr_realloc(obj->as.object.members,
-                                                        (size_t) new_cap * sizeof(XrJsonMember));
-        if (!tmp)
-            return;
-        obj->as.object.members = tmp;
-        obj->as.object.capacity = new_cap;
-    }
-
-    XrJsonMember *m = &obj->as.object.members[obj->as.object.count++];
-    m->key = xr_strdup(key);
-    m->key_len = strlen(key);
-    m->value = value;
+    if (key) (void)object_append_n(obj, key, strlen(key), value);
 }
 
 /* ========== Serialization ========== */

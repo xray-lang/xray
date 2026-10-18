@@ -3817,11 +3817,14 @@ if(XR_BUILD_LSP)
     add_test(NAME test_lsp_stdlib COMMAND test_lsp_stdlib)
 
     file(GLOB LSP_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
+    list(FILTER LSP_SOURCES EXCLUDE REGEX "\\.inc\\.c$")
     list(REMOVE_ITEM LSP_SOURCES
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_main.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_query.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_navigation.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_workspace.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_request.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_code_lens.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_syntax.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_buffer.c
         ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_source_open.c
@@ -4501,6 +4504,16 @@ if(WIN32)
         $<TARGET_FILE:test_lsp_source_workspace> ${PROJECT_SOURCE_DIR}/stdlib)
     set_tests_properties(test_lsp_source_workspace PROPERTIES TIMEOUT 300 COST 40
         RUN_SERIAL TRUE LABELS "unit;lsp;xir;ownership;budget")
+    add_subdirectory(xir/lsp_source_index)
+    add_subdirectory(xir/lsp_source_index_store)
+    add_subdirectory(xir/lsp_index_pool)
+    add_subdirectory(xir/lsp_code_lens)
+    add_subdirectory(xir/lsp_semantic_consumers)
+    add_subdirectory(xir/lsp_selection)
+    add_subdirectory(xir/lsp_format)
+    add_subdirectory(xir/lsp_imports)
+    add_subdirectory(xir/lsp_links)
+    add_subdirectory(xir/lsp_rename)
 endif()
 
 add_executable(test_lsp_document_store xir/test_lsp_document_store.c)
@@ -4519,6 +4532,25 @@ if(WIN32)
     add_test(NAME test_lsp_source_open COMMAND ${XRAY_PYTHON} -X utf8
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_lsp_source_open.py $<TARGET_FILE:test_lsp_source_open> ${PROJECT_SOURCE_DIR}/stdlib)
     set_tests_properties(test_lsp_source_open PROPERTIES TIMEOUT 300 COST 40 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;metadata;allocation")
+    add_test(NAME test_lsp_source_diagnostic_routing COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_lsp_source_open.py $<TARGET_FILE:test_lsp_source_open> ${PROJECT_SOURCE_DIR}/stdlib --diagnostic-routing-faults)
+    set_tests_properties(test_lsp_source_diagnostic_routing PROPERTIES TIMEOUT 300 COST 40 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;metadata;allocation")
+    add_test(NAME test_lsp_source_request COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_lsp_source_open.py $<TARGET_FILE:test_lsp_source_open> ${PROJECT_SOURCE_DIR}/stdlib --source-request-faults)
+    set_tests_properties(test_lsp_source_request PROPERTIES TIMEOUT 300 COST 80 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;metadata;allocation")
+    add_executable(test_lsp_async_owner xir/test_lsp_async_owner.c)
+    target_include_directories(test_lsp_async_owner PRIVATE ${XRAY_COMMON_INCLUDES})
+    target_compile_options(test_lsp_async_owner PRIVATE /W4 /WX /utf-8)
+    add_test(NAME test_lsp_async_owner COMMAND test_lsp_async_owner)
+    set_tests_properties(test_lsp_async_owner PROPERTIES TIMEOUT 30 LABELS "unit;lsp;ownership;allocation")
+    add_executable(test_lsp_source_worker xir/test_lsp_source_worker.c
+        ${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_async.c ${PROJECT_SOURCE_DIR}/src/os/win/thread_win.c)
+    target_link_libraries(test_lsp_source_worker PRIVATE xray_lsp_document_open bcrypt)
+    target_include_directories(test_lsp_source_worker PRIVATE ${XRAY_COMMON_INCLUDES})
+    target_compile_options(test_lsp_source_worker PRIVATE /W4 /WX /utf-8)
+    add_test(NAME test_lsp_source_worker COMMAND ${XRAY_PYTHON} -X utf8
+        ${CMAKE_CURRENT_SOURCE_DIR}/xir/test_lsp_source_open.py $<TARGET_FILE:test_lsp_source_worker> ${PROJECT_SOURCE_DIR}/stdlib --source-request)
+    set_tests_properties(test_lsp_source_worker PROPERTIES TIMEOUT 30 LABELS "unit;lsp;ownership;metadata")
 endif()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/source_dependencies.cmake")
@@ -4544,6 +4576,8 @@ add_test(NAME test_xir_cell_provenance COMMAND test_xir_cell_provenance)
 set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" TIMEOUT 120)
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
+include(xir/effect_ordinary_environment.cmake)
+include(xir/source_function_boundary.cmake)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_read.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_proof.cmake")
@@ -4583,3 +4617,52 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_owned_receive_probe.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/error_equation_current.cmake)
 
 add_subdirectory(xir/p11_ctfe_reference)
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_document_position/CMakeLists.txt")
+include(xir/lsp_reexports/CMakeLists.txt)
+include(xir/source_calls/CMakeLists.txt)
+include(xir/lsp_calls/CMakeLists.txt)
+include(xir/lsp_scope/CMakeLists.txt)
+include(xir/source_types/CMakeLists.txt)
+include(xir/lsp_types/CMakeLists.txt)
+include(xir/lsp_alias_spans/CMakeLists.txt)
+
+include(xir/source_cancel/CMakeLists.txt)
+include(xir/lsp_source_task/CMakeLists.txt)
+include(xir/lsp_json_clone/CMakeLists.txt)
+
+include(xir/lsp_hierarchy_task/CMakeLists.txt)
+
+include(xir/lsp_semantic_task/CMakeLists.txt)
+include(xir/lsp_links_task/CMakeLists.txt)
+include(xir/lsp_navigation_admission/CMakeLists.txt)
+
+include(xir/lsp_call_syntax/CMakeLists.txt)
+
+include(xir/lsp_signature_task/CMakeLists.txt)
+include(xir/lsp_parameter_task/CMakeLists.txt)
+
+include(xir/lsp_envelope/CMakeLists.txt)
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_document_notification/CMakeLists.txt")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_diagnostic_queue/CMakeLists.txt")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_folding_task/CMakeLists.txt")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_json_decode/CMakeLists.txt")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_syntax_task/CMakeLists.txt")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_edit_task/CMakeLists.txt")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_workspace_symbol_task/CMakeLists.txt")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_rename_task/CMakeLists.txt")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/lsp_parse_diagnostics/CMakeLists.txt")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/lsp_diagnostic_publication/CMakeLists.txt")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/lsp_document_owner/CMakeLists.txt")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_completion_resolve/CMakeLists.txt")
+
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_completion_resolve_errors/CMakeLists.txt")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_enum_payload/CMakeLists.txt")

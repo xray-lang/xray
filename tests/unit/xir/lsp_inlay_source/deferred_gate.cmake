@@ -1,0 +1,5 @@
+enable_testing()
+function(xray_inlay_source_gate)
+    include("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/CMakeLists.txt")
+endfunction()
+cmake_language(DEFER CALL xray_inlay_source_gate)

@@ -189,16 +189,7 @@ XlspImportInfo *xlsp_parse_imports(const char *content, const char *doc_uri) {
     return head;
 }
 
-void xlsp_free_imports(XlspImportInfo *imports) {
-    while (imports) {
-        XlspImportInfo *next = imports->next;
-        xr_free(imports->module_name);
-        xr_free(imports->import_path);
-        xr_free(imports->resolved_path);
-        xr_free(imports);
-        imports = next;
-    }
-}
+
 
 // ============================================================================
 // Path Resolution
@@ -529,17 +520,6 @@ static XlspImportInfo *get_document_imports(XrLspDocument *doc) {
     doc->imports_content_hash = doc->content_hash;
 
     return doc->cached_imports;
-}
-
-// Invalidate import cache (call when document content changes)
-void xlsp_invalidate_import_cache(XrLspDocument *doc) {
-    if (!doc)
-        return;
-    if (doc->cached_imports) {
-        xlsp_free_imports(doc->cached_imports);
-        doc->cached_imports = NULL;
-    }
-    doc->imports_content_hash = XLSP_CONTENT_HASH_UNINITIALIZED;
 }
 
 // ============================================================================

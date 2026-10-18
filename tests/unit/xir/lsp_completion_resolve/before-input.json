@@ -1,0 +1,6 @@
+{
+  "commit": "05bbf0922213b2fdb15270c0b5486db60a1cf060",
+  "path": "src/app/lsp/xlsp_handlers_textdoc.c",
+  "function": "xlsp_handle_td_completion_resolve",
+  "sha256": "d09f8f1e7577ef86f7a041f54f0825d709917b210bffa290e03b0e4fa0e2f11e"
+}

@@ -10,25 +10,13 @@
 
 #include "xlsp_async.h"
 #include "../../base/xmalloc.h"
+#include "../../base/xchecks.h"
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <stdio.h>
 
-#ifdef XR_OS_WINDOWS
-#if defined(_MSC_VER)
-#include <corecrt_io.h>
-#else
-#include <io.h>
-#endif
-#include <fcntl.h>
-#define xr_pipe(fds) _pipe((fds), 4096, _O_BINARY)
-#define xr_pipe_read(fd, buf, n) _read((fd), (buf), (unsigned) (n))
-#define xr_pipe_write(fd, buf, n) _write((fd), (buf), (unsigned) (n))
-#define xr_pipe_close(fd) _close(fd)
-#define xr_pipe_set_nonblocking(fd) /* Windows _pipe fds are not waitable; polling drains eagerly  \
-                                     */
-#else
+#ifndef XR_OS_WINDOWS
 #include <unistd.h>
 #include <fcntl.h>
 #define xr_pipe(fds) pipe(fds)
@@ -36,106 +24,53 @@
 #define xr_pipe_write(fd, buf, n) write((fd), (buf), (n))
 #define xr_pipe_close(fd) close(fd)
 static inline void xr_pipe_set_nonblocking(int fd) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    int flags=fcntl(fd,F_GETFL,0);
+    fcntl(fd,F_SETFL,flags|O_NONBLOCK);
 }
 #endif
 
 // ============================================================================
-// Task Queue (Lock-free MPSC with cancellation support)
+// Task queues preserve task identity until the completion callback returns.
 // ============================================================================
 
 static void queue_init(XrLspTaskQueue *q) {
-    // Stub node for simpler implementation
-    XrLspTask *stub = xr_calloc(1, sizeof(XrLspTask));
-    stub->next = NULL;
-    atomic_store(&q->head, stub);
-    q->tail = stub;
-    xr_mutex_init(&q->consumer_lock);
-    xr_rwlock_init(&q->traverse_lock);
+    q->head=NULL;q->tail=NULL;xr_mutex_init(&q->consumer_lock);
 }
-
 static void queue_destroy(XrLspTaskQueue *q) {
-    // Free stub and any remaining tasks
-    XrLspTask *node = q->tail;
-    while (node) {
-        XrLspTask *next = node->next;
-        xr_free(node);
-        node = next;
-    }
+    XR_CHECK(!q->head&&!q->tail,"Task owners must be drained before queue destruction");
     xr_mutex_destroy(&q->consumer_lock);
-    xr_rwlock_destroy(&q->traverse_lock);
 }
-
-// Push (thread-safe, lock-free)
-static void queue_push(XrLspTaskQueue *q, XrLspTask *task) {
-    task->next = NULL;
-    XrLspTask *prev = atomic_exchange(&q->head, task);
-    prev->next = task;
+static void queue_push(XrLspTaskQueue *q,XrLspTask *task) {
+    task->next=NULL;xr_mutex_lock(&q->consumer_lock);
+    if(q->tail)q->tail->next=task;else q->head=task;
+    q->tail=task;xr_mutex_unlock(&q->consumer_lock);
 }
-
-// Pop (single consumer, needs lock if multiple consumers)
 static XrLspTask *queue_pop(XrLspTaskQueue *q) {
-    xr_mutex_lock(&q->consumer_lock);
-
-    XrLspTask *tail = q->tail;
-    XrLspTask *next = tail->next;
-
-    if (next) {
-        // Advance tail: old stub (tail) is freed, next becomes new stub
-        // but first we return a copy of next's data
-        // Use tail's memory to hold the result (reuse allocation)
-        XrLspTask *result = tail;
-        *result = *next;
-        result->next = NULL;
-
-        // next becomes the new stub (clear its task fields)
-        next->execute = NULL;
-        next->complete = NULL;
-        next->data = NULL;
-        next->result = NULL;
-        next->task_id = 0;
-        next->request_id = 0;
-        q->tail = next;
-
-        xr_mutex_unlock(&q->consumer_lock);
-        return result;
-    }
-
-    xr_mutex_unlock(&q->consumer_lock);
-    return NULL;
+    xr_mutex_lock(&q->consumer_lock);XrLspTask *task=q->head;
+    if(task){q->head=task->next;if(!q->head)q->tail=NULL;task->next=NULL;}
+    xr_mutex_unlock(&q->consumer_lock);return task;
 }
-
-// Mark tasks as cancelled by filter (traverses queue safely)
-// Returns count of tasks marked for cancellation
-static int queue_cancel_if(XrLspTaskQueue *q, bool (*filter)(XrLspTask *task, void *ctx),
-                           void *ctx) {
-    int cancelled = 0;
-
-    xr_rwlock_wrlock(&q->traverse_lock);
-    xr_mutex_lock(&q->consumer_lock);
-
-    // Traverse from tail (oldest) to head
-    XrLspTask *node = q->tail;
-    while (node) {
-        XrLspTask *next = node->next;
-        if (next && next->execute) {  // Skip stub nodes
-            if (filter(next, ctx)) {
-                // Mark for cancellation
-                int expected = XLSP_TASK_PENDING;
-                if (atomic_compare_exchange_strong(&next->state, &expected, XLSP_TASK_CANCELLED)) {
-                    atomic_store(&next->cancel_requested, true);
-                    cancelled++;
-                }
-            }
+static int queue_cancel_if(XrLspTaskQueue *q,bool (*filter)(XrLspTask *,void *),void *ctx) {
+    int cancelled=0;xr_mutex_lock(&q->consumer_lock);
+    for(XrLspTask *task=q->head;task;task=task->next) {
+        int expected=XLSP_TASK_PENDING;
+        if(filter(task,ctx)&&atomic_compare_exchange_strong(&task->state,&expected,XLSP_TASK_CANCELLED)) {
+            atomic_store(&task->cancel_requested,true);++cancelled;
         }
-        node = next;
     }
-
-    xr_mutex_unlock(&q->consumer_lock);
-    xr_rwlock_wrunlock(&q->traverse_lock);
-
-    return cancelled;
+    xr_mutex_unlock(&q->consumer_lock);return cancelled;
+}
+static void task_completed(XrLspAsync *async,XrLspTask *task) {
+    XrLspTaskQueue *q=&async->completed;task->next=NULL;
+    xr_mutex_lock(&q->consumer_lock);
+    int previous=atomic_fetch_add(&async->completed_count,1);
+    if(q->tail)q->tail->next=task;else q->head=task;
+    q->tail=task;xr_mutex_unlock(&q->consumer_lock);
+#ifndef XR_OS_WINDOWS
+    if(!previous){char byte=1;(void)xr_pipe_write(async->notify_fd[1],&byte,1);}
+#else
+    (void)previous;
+#endif
 }
 
 // ============================================================================
@@ -164,9 +99,12 @@ static void *worker_thread(void *arg) {
             break;
 
         // Pop task from pending queue
-        XrLspTask *task = queue_pop(&async->pending);
-        if (!task)
-            continue;
+        // Cancellation holds this lock across both current and pending owners.
+        xr_mutex_lock(&async->current_task_mutex);
+        XrLspTask *task=queue_pop(&async->pending);
+        async->current_task=task;
+        xr_mutex_unlock(&async->current_task_mutex);
+        if(!task)continue;
 
         // Check if already cancelled before starting
         if (atomic_load(&task->cancel_requested)) {
@@ -174,11 +112,10 @@ static void *worker_thread(void *arg) {
             atomic_fetch_sub(&async->pending_count, 1);
             atomic_fetch_add(&async->cancelled_tasks, 1);
             // Push to completed queue so complete handler can free task->data
-            queue_push(&async->completed, task);
-            atomic_fetch_add(&async->completed_count, 1);
-            char byte = 1;
-            ssize_t n = xr_pipe_write(async->notify_fd[1], &byte, 1);
-            (void) n;
+            xr_mutex_lock(&async->current_task_mutex);
+            async->current_task=NULL;
+            xr_mutex_unlock(&async->current_task_mutex);
+            task_completed(async,task);
             continue;
         }
 
@@ -189,21 +126,14 @@ static void *worker_thread(void *arg) {
             atomic_fetch_sub(&async->pending_count, 1);
             atomic_fetch_add(&async->cancelled_tasks, 1);
             // Push to completed queue so complete handler can free task->data
-            queue_push(&async->completed, task);
-            atomic_fetch_add(&async->completed_count, 1);
-            char byte = 1;
-            ssize_t n = xr_pipe_write(async->notify_fd[1], &byte, 1);
-            (void) n;
+            xr_mutex_lock(&async->current_task_mutex);
+            async->current_task=NULL;
+            xr_mutex_unlock(&async->current_task_mutex);
+            task_completed(async,task);
             continue;
         }
 
         atomic_fetch_sub(&async->pending_count, 1);
-
-        // Set as current task (for cancellation while running)
-        // Protected by mutex to prevent TOCTOU race in cancel functions
-        xr_mutex_lock(&async->current_task_mutex);
-        async->current_task = task;
-        xr_mutex_unlock(&async->current_task_mutex);
 
         // Execute task
         if (task->execute) {
@@ -227,13 +157,7 @@ static void *worker_thread(void *arg) {
         }
 
         // Push to completed queue
-        queue_push(&async->completed, task);
-        atomic_fetch_add(&async->completed_count, 1);
-
-        // Notify main thread
-        char byte = 1;
-        ssize_t n = xr_pipe_write(async->notify_fd[1], &byte, 1);
-        (void) n;  // Ignore write errors
+        task_completed(async,task);
     }
 
     return NULL;
@@ -248,7 +172,9 @@ XrLspAsync *xlsp_async_new(void (*thread_init)(void *), void *thread_init_ctx) {
     if (!async)
         return NULL;
 
-    // Create notification pipe
+    async->notify_fd[0]=-1;async->notify_fd[1]=-1;
+#ifndef XR_OS_WINDOWS
+    // Windows polls the completion queue; CRT anonymous pipe reads can block.
     if (xr_pipe(async->notify_fd) < 0) {
         xr_free(async);
         return NULL;
@@ -256,6 +182,8 @@ XrLspAsync *xlsp_async_new(void (*thread_init)(void *), void *thread_init_ctx) {
 
     // Set read end to non-blocking
     xr_pipe_set_nonblocking(async->notify_fd[0]);
+    xr_pipe_set_nonblocking(async->notify_fd[1]);
+#endif
 
     // Initialize queues
     queue_init(&async->pending);
@@ -277,12 +205,14 @@ XrLspAsync *xlsp_async_new(void (*thread_init)(void *), void *thread_init_ctx) {
     // Start worker thread
     atomic_store(&async->running, true);
     if (!xr_thread_create(&async->worker, worker_thread, async)) {
-        xr_pipe_close(async->notify_fd[0]);
-        xr_pipe_close(async->notify_fd[1]);
+#ifndef XR_OS_WINDOWS
+        xr_pipe_close(async->notify_fd[0]);xr_pipe_close(async->notify_fd[1]);
+#endif
         queue_destroy(&async->pending);
         queue_destroy(&async->completed);
         xr_mutex_destroy(&async->pending_mutex);
         xr_cond_destroy(&async->pending_cond);
+        xr_mutex_destroy(&async->current_task_mutex);
         xr_free(async);
         return NULL;
     }
@@ -294,6 +224,7 @@ void xlsp_async_free(XrLspAsync *async) {
     if (!async)
         return;
 
+    (void)xlsp_async_cancel_all(async);
     // Signal shutdown
     atomic_store(&async->running, false);
 
@@ -303,11 +234,12 @@ void xlsp_async_free(XrLspAsync *async) {
     xr_mutex_unlock(&async->pending_mutex);
 
     // Wait for worker to exit
-    xr_thread_join(async->worker, NULL);
+    XR_CHECK(xr_thread_join(async->worker,NULL)==0,"Worker must stop before its task owners are released");
 
     // Cleanup
-    xr_pipe_close(async->notify_fd[0]);
-    xr_pipe_close(async->notify_fd[1]);
+#ifndef XR_OS_WINDOWS
+    xr_pipe_close(async->notify_fd[0]);xr_pipe_close(async->notify_fd[1]);
+#endif
 
     // Drain remaining tasks, calling complete handlers to free task->data
     XrLspTask *task;
@@ -335,25 +267,30 @@ void xlsp_async_free(XrLspAsync *async) {
 }
 
 uint64_t xlsp_async_submit(XrLspAsync *async, XrLspTask *task) {
-    if (!async || !task)
+    if (!async || !task || !atomic_load(&async->running))
         return 0;
 
     // Assign task ID
-    task->task_id = atomic_fetch_add(&async->next_task_id, 1);
+    uint64_t next=atomic_load(&async->next_task_id);
+    for(;;) {
+        if(!next||next==UINT64_MAX)return 0;
+        if(atomic_compare_exchange_weak(&async->next_task_id,&next,next+1))break;
+    }
+    task->task_id=next;
     atomic_store(&task->state, XLSP_TASK_PENDING);
     atomic_store(&task->cancel_requested, false);
 
     // Push to pending queue
-    queue_push(&async->pending, task);
-    atomic_fetch_add(&async->pending_count, 1);
+    xr_mutex_lock(&async->pending_mutex);
+    atomic_fetch_add(&async->pending_count,1);
+    queue_push(&async->pending,task);
     atomic_fetch_add(&async->total_tasks, 1);
 
     // Wake worker thread
-    xr_mutex_lock(&async->pending_mutex);
     xr_cond_signal(&async->pending_cond);
     xr_mutex_unlock(&async->pending_mutex);
 
-    return task->task_id;
+    return next;
 }
 
 XrLspTask *xlsp_task_new(XrLspTaskFn execute, XrLspCompleteFn complete, void *data,
@@ -390,12 +327,14 @@ int xlsp_async_poll(XrLspAsync *async) {
     if (!async)
         return 0;
 
+#ifndef XR_OS_WINDOWS
     // Drain notification pipe
     char buf[64];
     while (xr_pipe_read(async->notify_fd[0], buf, sizeof(buf)) > 0) {
         // Consume all notifications
     }
 
+#endif
     int processed = 0;
     XrLspTask *task;
 
@@ -472,11 +411,8 @@ bool xlsp_async_cancel_task(XrLspAsync *async, uint64_t task_id) {
         xr_mutex_unlock(&async->current_task_mutex);
         return true;
     }
-    xr_mutex_unlock(&async->current_task_mutex);
-
-    // Try to cancel in pending queue
-    int cancelled = queue_cancel_if(&async->pending, filter_by_task_id, &ctx);
-    return cancelled > 0;
+    int cancelled=queue_cancel_if(&async->pending,filter_by_task_id,&ctx);
+    xr_mutex_unlock(&async->current_task_mutex);return cancelled>0;
 }
 
 // Cancel by LSP request ID
@@ -494,10 +430,9 @@ int xlsp_async_cancel_request(XrLspAsync *async, int64_t request_id) {
         atomic_store(&current->cancel_requested, true);
         cancelled++;
     }
+    cancelled+=queue_cancel_if(&async->pending,filter_by_request_id, &ctx);
     xr_mutex_unlock(&async->current_task_mutex);
 
-    // Cancel in pending queue
-    cancelled += queue_cancel_if(&async->pending, filter_by_request_id, &ctx);
     return cancelled;
 }
 
@@ -516,10 +451,9 @@ int xlsp_async_cancel_type(XrLspAsync *async, XrLspTaskType type) {
         atomic_store(&current->cancel_requested, true);
         cancelled++;
     }
+    cancelled+=queue_cancel_if(&async->pending,filter_by_type, &ctx);
     xr_mutex_unlock(&async->current_task_mutex);
 
-    // Cancel in pending queue
-    cancelled += queue_cancel_if(&async->pending, filter_by_type, &ctx);
     return cancelled;
 }
 
@@ -537,10 +471,9 @@ int xlsp_async_cancel(XrLspAsync *async, bool (*filter)(XrLspTask *task, void *c
         atomic_store(&current->cancel_requested, true);
         cancelled++;
     }
+    cancelled+=queue_cancel_if(&async->pending,filter, ctx);
     xr_mutex_unlock(&async->current_task_mutex);
 
-    // Cancel in pending queue
-    cancelled += queue_cancel_if(&async->pending, filter, ctx);
     return cancelled;
 }
 
@@ -558,9 +491,8 @@ int xlsp_async_cancel_all(XrLspAsync *async) {
         atomic_store(&current->cancel_requested, true);
         cancelled++;
     }
+    cancelled+=queue_cancel_if(&async->pending,filter_all, NULL);
     xr_mutex_unlock(&async->current_task_mutex);
 
-    // Cancel all in pending queue
-    cancelled += queue_cancel_if(&async->pending, filter_all, NULL);
     return cancelled;
 }

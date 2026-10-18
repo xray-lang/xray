@@ -3,12 +3,28 @@
 #include "../../toolchain/xcompiler_arena_backing.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../xir/xxir_interface.h"
+#include "xlsp_source_pattern_facts.h"
 struct XlspSourceTokens {XrCompileResources *resources;XlspSourceToken *items;size_t count,capacity;};
 void xlsp_source_tokens_free(XlspSourceTokens *tokens) {
     if(tokens){xr_compile_resources_free(tokens->items);xr_compile_resources_free(tokens);}
 }
 const XlspSourceToken *xlsp_source_tokens_items(const XlspSourceTokens *tokens,size_t *count) {
     if(count)*count=tokens?tokens->count:0;return tokens?tokens->items:NULL;
+}
+XR_FUNC XrXirStatus xlsp_source_tokens_clone(XrCompileResources *resources,const XlspSourceTokens *input,XlspSourceTokens **out) {
+    if(!resources||!input||!out||*out||input->count>input->capacity||(input->count&&!input->items))return XR_XIR_BAD_STRUCTURE;
+    if(input->count>SIZE_MAX/sizeof(*input->items))return XR_XIR_BUDGET;
+    XlspSourceTokens *tokens=NULL;
+    XrXirStatus status=lsp_resource_status(xr_compile_resources_calloc(resources,1,sizeof(*tokens),(void **)&tokens));
+    if(status!=XR_XIR_OK)return status;
+    tokens->resources=resources;size_t bytes=input->count*sizeof(*input->items);
+    if(bytes){
+        status=lsp_resource_status(xr_compile_resources_alloc(resources,bytes,(void **)&tokens->items));
+        if(status==XR_XIR_OK)status=lsp_resource_status(xr_compile_resources_work(resources,bytes));
+        if(status!=XR_XIR_OK){xlsp_source_tokens_free(tokens);return status;}
+        memcpy(tokens->items,input->items,bytes);
+    }
+    tokens->count=tokens->capacity=input->count;*out=tokens;return XR_XIR_OK;
 }
 static XrXirStatus semantic_append(const XlspSourceSnapshot *s,XlspSourceTokens *out,XlspSourceToken token) {
     if(!token.length||token.column>INT32_MAX||token.line>INT32_MAX||token.length>INT32_MAX-token.column||token.type>=22)return XR_XIR_BAD_STRUCTURE;
@@ -210,6 +226,8 @@ XrXirStatus xlsp_source_semantic_tokens(const XlspSourceSnapshot *s,const char *
         const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[i];
         if(fact->role==XR_XIR_SOURCE_SYNTAX_NONE||fact->role==XR_XIR_SOURCE_SYNTAX_CLOSURE||fact->role==XR_XIR_SOURCE_SYNTAX_RECEIVER)continue;
         if(fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED){status=XR_XIR_UNSUPPORTED;break;}
+        XlspSourcePatternBinding pattern={0};status=xlsp_source_pattern_binding(s->resources,view,syntax,fact->name,&pattern);if(status!=XR_XIR_OK)break;
+        if(pattern.binding==decl->id)continue;
         uint32_t target=decl->id;status=lsp_target(s,view,&target);if(status!=XR_XIR_OK)break;
         uint32_t kind=0,mods=0;status=semantic_kind(s,view,&view->declarations[target-1],&kind,&mods);if(status!=XR_XIR_OK)break;
         mods|=1;if(kind==12||kind==13||kind==2||kind==3||kind==4||kind==5)mods|=2;
@@ -220,6 +238,8 @@ XrXirStatus xlsp_source_semantic_tokens(const XlspSourceSnapshot *s,const char *
         status=lsp_text_has_module(s,text,ref->range.module,&matches);if(status!=XR_XIR_OK)break;if(!matches)continue;
         XrXirSourceRange selection=syntax->references[i];
         if(!selection.line&&!selection.column&&!selection.end_line&&!selection.end_column)continue;
+        XlspSourcePatternBinding pattern={0};status=xlsp_source_pattern_binding(s->resources,view,syntax,selection,&pattern);if(status!=XR_XIR_OK)break;
+        if(pattern.binding==ref->declaration)continue;
         uint32_t target=ref->target?ref->target:ref->declaration;status=lsp_target(s,view,&target);if(status!=XR_XIR_OK)break;
         uint32_t kind=0,mods=0;status=semantic_kind(s,view,&view->declarations[target-1],&kind,&mods);if(status!=XR_XIR_OK)break;
         if(view->declarations[target-1].kind==XR_XIR_SOURCE_INTRINSIC&&
@@ -230,7 +250,10 @@ XrXirStatus xlsp_source_semantic_tokens(const XlspSourceSnapshot *s,const char *
         status=semantic_range(s,text,selection,kind,mods,tokens);
     }
     for(uint32_t i=0;i<syntax->marker_count&&status==XR_XIR_OK;++i) {
-        const XrXirSourceMarker *marker=&syntax->markers[i];bool matches=false;
+        const XrXirSourceMarker *marker=&syntax->markers[i];
+        if(marker->role!=XR_XIR_SOURCE_MARKER_REF&&marker->role!=XR_XIR_SOURCE_MARKER_MOVE&&
+            marker->role!=XR_XIR_SOURCE_MARKER_REF_ARGUMENT)continue;
+        bool matches=false;
         status=lsp_text_has_module(s,text,marker->range.module,&matches);if(status!=XR_XIR_OK)break;if(!matches)continue;
         status=semantic_range(s,text,marker->range,16,0,tokens);
     }

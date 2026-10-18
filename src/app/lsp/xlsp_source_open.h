@@ -18,4 +18,7 @@ XR_FUNC XlspSourceBuffer *xlsp_source_open_take_buffer(XlspSourceOpen *);
 XR_FUNC XlspSyntaxSnapshot *xlsp_source_open_take_syntax(XlspSourceOpen *);
 XR_FUNC XlspSourceWorkspace *xlsp_source_open_take_workspace(XlspSourceOpen *);
 XR_FUNC XrXirStatus xlsp_source_open_diagnostics_json(const XlspSourceOpen *,const XlspSourceBuffer *,const XlspSyntaxSnapshot *,XrJsonValue **);
+/* Owns the complete publishDiagnostics params, including the exact overlay URI
+ * and version of an imported failure. Missing retained source is UNRESOLVED. */
+XR_FUNC XrXirStatus xlsp_source_open_diagnostics_params_json(const XlspSourceOpen *,const XlspSourceBuffer *,const XlspSyntaxSnapshot *,XrJsonValue **);
 #endif

@@ -72,10 +72,9 @@ typedef struct XrLspCancelToken {
 
 // Task queue with cancellation support
 typedef struct XrLspTaskQueue {
-    _Atomic(XrLspTask *) head;
+    XrLspTask *head;
     XrLspTask *tail;
     xr_mutex_t consumer_lock;
-    xr_rwlock_t traverse_lock;  // For safe traversal during cancellation
 } XrLspTaskQueue;
 
 // Async worker pool

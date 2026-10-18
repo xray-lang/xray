@@ -16,11 +16,12 @@
 typedef struct SourceQuerySyntaxExpectation {
     const char *reason;
     unsigned count;
+    int line,column;
 } SourceQuerySyntaxExpectation;
 static void source_query_syntax_diagnostic(void *data, int line, int column,
     int end_line, int end_column, const char *message) {
     SourceQuerySyntaxExpectation *expected = data;
-    ++expected->count;
+    ++expected->count;expected->line=line;expected->column=column;
     if (!(line > 0 && column > 0 && end_line == line && end_column >= column))
         fprintf(stderr, "parser rejection range: %d:%d..%d:%d %s\n", line, column, end_line, end_column, message);
     /* EOF has a zero-width insertion point; ordinary tokens span their bytes. */
@@ -29,11 +30,11 @@ static void source_query_syntax_diagnostic(void *data, int line, int column,
         fprintf(stderr, "parser rejection %u: expected %s; got %s\n", expected->count, expected->reason, message);
     CHECK(!strcmp(message, expected->reason));
 }
-static void source_query_syntax_boundary(const XrXirSourceRequest *request,
+static SourceQuerySyntaxExpectation source_query_syntax_boundary(const XrXirSourceRequest *request,
     const char *source, const char *reason) {
     XrCompileResourceStats before = {0}, after = {0};
     CHECK(xr_compile_resources_stats(request->context->resources, &before) == XR_COMPILE_RESOURCE_OK);
-    SourceQuerySyntaxExpectation expected = {reason, 0};
+    SourceQuerySyntaxExpectation expected = {reason, 0, 0, 0};
     XrParseDiagnostics diagnostics = {source_query_syntax_diagnostic, &expected, 1};
     AstNode *ast = NULL;
     CHECK(xr_compile_parse_with_trivia(request->session, source, request->entry_path,
@@ -43,11 +44,12 @@ static void source_query_syntax_boundary(const XrXirSourceRequest *request,
     CHECK(xr_compile_resources_stats(request->context->resources, &after) == XR_COMPILE_RESOURCE_OK);
     CHECK(after.live_bytes == before.live_bytes && after.work > before.work &&
         after.allocated_bytes > before.allocated_bytes);
+    return expected;
 }
-static void source_query_syntax_graph_diagnostic(const XrXirSourceDiagnostic *diagnostic) {
+static void source_query_syntax_graph_diagnostic(const XrXirSourceDiagnostic *diagnostic, const SourceQuerySyntaxExpectation *expected) {
     CHECK(diagnostic->status == XR_XIR_BAD_STRUCTURE && diagnostic->module == 0 &&
-        !diagnostic->line && !diagnostic->column);
-    CHECK(!strcmp(diagnostic->message, "module graph build failed"));
+        expected->count == 1 && diagnostic->line == expected->line && diagnostic->column == expected->column);
+    CHECK(!strcmp(diagnostic->message, expected->reason));
 }
 static void source_generic_requirement_run(XrXirSourceRequest *request, const char *source) {
     write_source(request->entry_path,source);
@@ -186,7 +188,7 @@ static void source_generic_requirement_rejections(XrXirSourceRequest *request) {
     };
     const char *reasons[] = {
         "method type argument does not prove", "implementation witness definition obligations failed",
-        "implementation witness definition obligations failed", "duplicates or shadows", "module graph build failed",
+        "implementation witness definition obligations failed", "duplicates or shadows", "duplicate type parameter name 'U'",
         "matching own parameters", "cannot infer all method type arguments", "exact explicit type arguments",
         "implementation witness definition obligations failed", "source declaration type structure is invalid",
         "source declaration type structure is invalid"
@@ -201,14 +203,15 @@ static void source_generic_requirement_rejections(XrXirSourceRequest *request) {
     _Static_assert(sizeof(reasons)/sizeof(*reasons)==sizeof(rejected)/sizeof(*rejected),
         "Every rejection requires an independent diagnostic expectation");
     for (uint32_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i) {
-        if (i == 4) source_query_syntax_boundary(request, rejected[i], "duplicate type parameter name 'U'");
+        SourceQuerySyntaxExpectation syntax={0};
+        if (i == 4) syntax=source_query_syntax_boundary(request, rejected[i], "duplicate type parameter name 'U'");
         write_source(request->entry_path,rejected[i]);
         XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
         if (status!=statuses[i] || !strstr(diagnostic.message,reasons[i]))
             fprintf(stderr,"generic requirement rejection %u: %u %s\n",i,status,diagnostic.message);
         CHECK(status==statuses[i] && !result.checked && !result.snapshot && strstr(diagnostic.message,reasons[i]));
-        if (i == 4) source_query_syntax_graph_diagnostic(&diagnostic);
+        if (i == 4) source_query_syntax_graph_diagnostic(&diagnostic,&syntax);
         CHECK(!result.snapshot);
         xr_xir_compile_source_result_free(&result);
     }

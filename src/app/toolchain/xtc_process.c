@@ -198,6 +198,7 @@ struct XrToolchainProcess {
 static XrProcessStatus process_resource(XrCompileResourceStatus s) {
     switch (s) {
     case XR_COMPILE_RESOURCE_OK: return XTC_PROCESS_OK;
+    case XR_COMPILE_RESOURCE_CANCELLED:
     case XR_COMPILE_RESOURCE_BAD_ARGUMENT: return XTC_PROCESS_INVALID;
     case XR_COMPILE_RESOURCE_BUDGET: return XTC_PROCESS_BUDGET;
     case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XTC_PROCESS_OUT_OF_MEMORY;
@@ -219,6 +220,7 @@ static XrProcessStatus process_os(XrOsProcStatus s) {
 static XrOsProcStatus process_os_resource(XrCompileResourceStatus s) {
     switch (s) {
     case XR_COMPILE_RESOURCE_OK: return XR_PROC_OK;
+    case XR_COMPILE_RESOURCE_CANCELLED:
     case XR_COMPILE_RESOURCE_BAD_ARGUMENT: return XR_PROC_INVALID_ARGUMENT;
     case XR_COMPILE_RESOURCE_BUDGET: return XR_PROC_BUDGET;
     case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_PROC_OUT_OF_MEMORY;

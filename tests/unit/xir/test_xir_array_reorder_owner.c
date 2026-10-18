@@ -95,7 +95,7 @@ static ReorderCompile source_compile(size_t failure, uint64_t work) {
     XrCompilerSession *session=NULL;
     XrXirSourceResult result={0}; XrXirSourceDiagnostic source_diagnostic={0};
     XrXirArtifact *specialized=NULL;
-    char *failure_path=NULL;
+    XrXirSourceFailure failure_path={0};
     XrCompilerSessionStatus session_status=xr_compile_session_new(run.context.resources,&session);
     if (session_status!=XR_COMPILER_SESSION_OK) {
         CHECK(!session);
@@ -135,7 +135,7 @@ static ReorderCompile source_compile(size_t failure, uint64_t work) {
     if (run.status!=XR_XIR_OK) CHECK(!run.lowered);
     else CHECK(xr_xir_compile_artifact_context(run.lowered)->resources==run.context.resources);
 done:
-    xr_compile_resources_free(failure_path);
+    xr_xir_compile_source_failure_free(&failure_path);
     xr_xir_compile_artifact_free(specialized);
     xr_xir_compile_source_result_free(&result);
     xr_compile_session_free(session);

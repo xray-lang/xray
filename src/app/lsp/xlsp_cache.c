@@ -11,7 +11,6 @@
 #include "xlsp_cache.h"
 #include "xlsp_analysis.h"
 #include "../../base/xhash.h"
-#include "../../frontend/analyzer/xanalyzer.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,18 +38,6 @@ void xlsp_invalidate_semantic_cache(XrLspDocument *doc) {
     if (!doc)
         return;
     doc->dirty = true;
-}
-
-// Free all document caches
-void xlsp_free_document_cache(XrLspDocument *doc) {
-    if (!doc)
-        return;
-
-    // Free diagnostics cache
-    if (doc->cached_diagnostics) {
-        xjson_free((XrJsonValue *) doc->cached_diagnostics);
-        doc->cached_diagnostics = NULL;
-    }
 }
 
 // Smart reparse - only if content changed

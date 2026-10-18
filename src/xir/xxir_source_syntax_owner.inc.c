@@ -10,12 +10,80 @@
  *   Deep-own display facts without construction or execution authority.
  */
 #include "xxir_types.h"
-/* Scalar syntax facts are copied after the semantic/construction owner exists,
+/* Display facts are copied after the semantic/construction owner exists,
  * before publication. A failed attachment leaves that owner unchanged. */
 static bool query_syntax_range(const XrXirSourceView *view,XrXirSourceRange range,bool absent) {
     if(range.module>=view->module_count)return false;
     if(absent)return !range.line&&!range.column&&!range.end_line&&!range.end_column;
     return range.line>0&&range.column>0&&range.end_line==range.line&&range.end_column>range.column;
+}
+static bool query_syntax_same_range(XrXirSourceRange a,XrXirSourceRange b) {
+    return a.module==b.module&&a.line==b.line&&a.column==b.column&&a.end_line==b.end_line&&a.end_column==b.end_column;
+}
+static XrXirStatus query_syntax_names(SourceQueryCopy *copy,const XrXirSourceDeclarationSyntax *fact,
+    const XrXirSourceDeclaration *decl) {
+    if((!!fact->type_parameters!=!!fact->type_parameter_count)||fact->type_parameter_count>65536)
+        return XR_XIR_BAD_STRUCTURE;
+    if(!fact->type_parameter_count)return XR_XIR_OK;
+    if(fact->type_parameter_count!=decl->generic_parameter_count||
+        (decl->kind!=XR_XIR_SOURCE_FUNCTION&&decl->kind!=XR_XIR_SOURCE_TYPE&&
+            decl->kind!=XR_XIR_SOURCE_MEMBER&&decl->kind!=XR_XIR_SOURCE_INTRINSIC))return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t p=0;p<fact->type_parameter_count;++p) {
+        if(!query_work(copy,sizeof(*fact->type_parameters)))return copy->status;
+        if(!fact->type_parameters[p]||!*fact->type_parameters[p])return XR_XIR_BAD_STRUCTURE;
+    }
+    return XR_XIR_OK;
+}
+static XrXirStatus query_syntax_pattern_binding(SourceQueryCopy *copy,const XrXirSourceSyntaxView *syntax,
+    const XrXirSourceMarker *marker) {
+    const XrXirSourceView *view=&copy->snapshot->view;
+    const XrXirSourceDeclaration *binding=&view->declarations[marker->declaration-1];
+    if(binding->kind!=XR_XIR_SOURCE_BINDING||syntax->declarations[marker->declaration-1].role!=XR_XIR_SOURCE_SYNTAX_NAME)
+        return XR_XIR_BAD_STRUCTURE;
+    bool field=false,declared=query_syntax_same_range(syntax->declarations[marker->declaration-1].name,marker->range);
+    for(uint32_t i=0;i<view->reference_count;++i) {
+        if(!query_work(copy,sizeof(view->references[i])+sizeof(syntax->references[i])))return copy->status;
+        if(!query_syntax_same_range(syntax->references[i],marker->range))continue;
+        const XrXirSourceReference *reference=&view->references[i];
+        if(reference->declaration==marker->declaration&&reference->access==XR_XIR_SOURCE_WRITE)declared=true;
+        if(reference->declaration&&reference->declaration<=view->declaration_count&&
+            reference->declaration==reference->target&&view->declarations[reference->declaration-1].kind==XR_XIR_SOURCE_MEMBER)
+            field=true;
+    }
+    return field&&declared?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
+static XrXirStatus query_syntax_import(SourceQueryCopy *copy,const XrXirSourceSyntaxView *syntax,
+    const XrXirSourceMarker *marker) {
+    const XrXirSourceView *view=&copy->snapshot->view;
+    const XrXirSourceDeclaration *decl=&view->declarations[marker->declaration-1];
+    const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[marker->declaration-1];
+    for(uint32_t i=0;i<syntax->marker_count;++i) {
+        if(!query_work(copy,sizeof(syntax->markers[i])))return copy->status;
+        const XrXirSourceMarker *other=&syntax->markers[i];
+        if(other!=marker&&(other->declaration==marker->declaration||query_syntax_same_range(other->range,marker->range))&&
+            (other->role==XR_XIR_SOURCE_MARKER_IMPORT_BINDING||other->role==XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT))
+            return XR_XIR_BAD_STRUCTURE;
+    }
+    if(marker->role==XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT) {
+        return decl->kind==XR_XIR_SOURCE_MODULE&&fact->role==XR_XIR_SOURCE_SYNTAX_NONE&&
+            query_syntax_range(view,fact->name,true)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    }
+    if(fact->role!=XR_XIR_SOURCE_SYNTAX_NAME||!query_syntax_same_range(fact->name,marker->range))
+        return XR_XIR_BAD_STRUCTURE;
+    if(decl->kind==XR_XIR_SOURCE_MODULE)return XR_XIR_OK;
+    if(decl->kind!=XR_XIR_SOURCE_IMPORT||!decl->target||decl->target>view->declaration_count||
+        !view->declarations[decl->target-1].exported)
+        return XR_XIR_BAD_STRUCTURE;
+    bool selected=false;
+    for(uint32_t i=0;i<view->reference_count;++i) {
+        if(!query_work(copy,sizeof(view->references[i])+sizeof(syntax->references[i])))return copy->status;
+        const XrXirSourceReference *ref=&view->references[i];
+        if(!query_syntax_same_range(syntax->references[i],marker->range))continue;
+        if(ref->declaration!=decl->target||ref->target!=decl->target||ref->access!=XR_XIR_SOURCE_IMPORT_SELECTOR)
+            return XR_XIR_BAD_STRUCTURE;
+        selected=true;
+    }
+    return selected?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapshot *snapshot,
     const XrXirSourceSyntaxView *syntax) {
@@ -32,8 +100,12 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
         bool absent=fact->role==XR_XIR_SOURCE_SYNTAX_NONE||fact->role==XR_XIR_SOURCE_SYNTAX_CLOSURE||fact->role==XR_XIR_SOURCE_SYNTAX_RECEIVER;
         if((uint32_t)fact->role>XR_XIR_SOURCE_SYNTAX_UNRESOLVED||fact->name.module!=decl->range.module||fact->name.module>=view->module_count||
             (fact->role!=XR_XIR_SOURCE_SYNTAX_UNRESOLVED&&!query_syntax_range(view,fact->name,absent))||
-            (fact->flags&~XR_XIR_SOURCE_SYNTAX_STATIC)||
-            (fact->flags&&fact->role!=XR_XIR_SOURCE_SYNTAX_METHOD))return XR_XIR_BAD_STRUCTURE;
+            (fact->flags&~(XR_XIR_SOURCE_SYNTAX_STATIC|XR_XIR_SOURCE_SYNTAX_INFERRED_BINDING))||
+            ((fact->flags&XR_XIR_SOURCE_SYNTAX_STATIC)&&fact->role!=XR_XIR_SOURCE_SYNTAX_METHOD)||
+            ((fact->flags&XR_XIR_SOURCE_SYNTAX_INFERRED_BINDING)&&
+                (fact->role!=XR_XIR_SOURCE_SYNTAX_NAME||decl->kind!=XR_XIR_SOURCE_BINDING)))return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus names_status=query_syntax_names(&copy,fact,decl);
+        if(names_status!=XR_XIR_OK)return names_status;
         if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD&&
             ((decl->kind!=XR_XIR_SOURCE_FUNCTION&&decl->kind!=XR_XIR_SOURCE_MEMBER)||!decl->parent||decl->parent>view->declaration_count||
                 view->declarations[decl->parent-1].kind!=XR_XIR_SOURCE_TYPE))return XR_XIR_BAD_STRUCTURE;
@@ -56,11 +128,27 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
         if(!query_work(&copy,sizeof(syntax->markers[i])))return copy.status;
         const XrXirSourceMarker *marker=&syntax->markers[i];
         if(!marker->declaration||marker->declaration>view->declaration_count||
-            (marker->role!=XR_XIR_SOURCE_MARKER_REF&&marker->role!=XR_XIR_SOURCE_MARKER_MOVE&&marker->role!=XR_XIR_SOURCE_MARKER_REF_ARGUMENT)||
+            (marker->role!=XR_XIR_SOURCE_MARKER_REF&&marker->role!=XR_XIR_SOURCE_MARKER_MOVE&&marker->role!=XR_XIR_SOURCE_MARKER_REF_ARGUMENT&&
+                marker->role!=XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING&&
+                marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_BINDING&&marker->role!=XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT))
+            return XR_XIR_BAD_STRUCTURE;
+        bool insertion=marker->role==XR_XIR_SOURCE_MARKER_IMPORT_IMPLICIT;
+        if(insertion?marker->range.module>=view->module_count||marker->range.line<=0||marker->range.column<=0||
+            marker->range.end_line!=marker->range.line||marker->range.end_column!=marker->range.column:
             !query_syntax_range(view,marker->range,false))return XR_XIR_BAD_STRUCTURE;
         const XrXirSourceDeclaration *decl=&view->declarations[marker->declaration-1];
         const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[marker->declaration-1];
         if(marker->range.module!=decl->range.module)return XR_XIR_BAD_STRUCTURE;
+        if(marker->role==XR_XIR_SOURCE_MARKER_IMPORT_BINDING||insertion) {
+            XrXirStatus status=query_syntax_import(&copy,syntax,marker);
+            if(status!=XR_XIR_OK)return status;
+            continue;
+        }
+        if(marker->role==XR_XIR_SOURCE_MARKER_PATTERN_FIELD_BINDING) {
+            XrXirStatus status=query_syntax_pattern_binding(&copy,syntax,marker);
+            if(status!=XR_XIR_OK)return status;
+            continue;
+        }
         if(marker->role==XR_XIR_SOURCE_MARKER_REF_ARGUMENT) {
             /* A readonly Class binding may name an exclusive field projection.
              * This marker is observational; the checked place still authenticates
@@ -75,6 +163,13 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
     SourceQueryMemory *previous=snapshot->memory;
     XrXirSourceSyntaxView owned=*syntax;
     owned.declarations=query_copy(&copy,syntax->declarations,syntax->declaration_count,sizeof(*syntax->declarations));
+    for(uint32_t i=0;owned.declarations&&i<syntax->declaration_count&&query_work(&copy,1);++i) {
+        const XrXirSourceDeclarationSyntax *source=&syntax->declarations[i];
+        const char **names=query_allocate(&copy,source->type_parameter_count,sizeof(*names));
+        ((XrXirSourceDeclarationSyntax *)owned.declarations)[i].type_parameters=names;
+        for(uint32_t p=0;names&&p<source->type_parameter_count&&copy.status==XR_XIR_OK;++p)
+            names[p]=query_string(&copy,source->type_parameters[p]);
+    }
     owned.references=query_copy(&copy,syntax->references,syntax->reference_count,sizeof(*syntax->references));
     owned.markers=query_copy(&copy,syntax->markers,syntax->marker_count,sizeof(*syntax->markers));
     (void)query_work(&copy,sizeof(owned)+sizeof(snapshot->syntax_ready));

@@ -20,7 +20,9 @@
 #include "xlsp_imports.h"
 #include "xlsp_builtins.h"
 #include "xlsp_workspace.h"
-#include "xlsp_symbol_index.h"
+#include "xlsp_source_index_store.h"
+#include "xlsp_index_json.h"
+#include "xlsp_source_syntax.h"
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "../../frontend/analyzer/xanalyzer_builtins.h"
 #include "../../frontend/parser/xast_nodes.h"
@@ -248,87 +250,6 @@ static const char *find_module_prefix(XrLspDocument *doc, XrLspPosition pos, cha
 }
 
 // Convert XrType to XrTypeId (delegates to unified analyzer function)
-static XlspBuiltinType xr_type_to_builtin(XrType *type) {
-    return XR_TYPE_IS_JSON(type) ? XLSP_TYPE_JSON : (XlspBuiltinType) xr_type_to_builtin_id(type);
-}
-
-// Fallback: infer type by scanning source text (used when analyzer unavailable)
-static XlspBuiltinType infer_type_from_source(const char *content, const char *var_name) {
-    if (!content || !var_name)
-        return XLSP_TYPE_UNRESOLVED;
-
-    size_t var_len = strlen(var_name);
-    const char *p = content;
-
-    while ((p = strstr(p, var_name)) != NULL) {
-        const char *line_start = p;
-        while (line_start > content && line_start[-1] != '\n')
-            line_start--;
-        while (*line_start == ' ' || *line_start == '\t')
-            line_start++;
-
-        if (strncmp(line_start, "var ", 4) == 0 || strncmp(line_start, "const ", 6) == 0) {
-            const char *after = p + var_len;
-            while (*after == ' ' || *after == '\t')
-                after++;
-
-            if (*after == ':') {
-                after++;
-                while (*after == ' ' || *after == '\t')
-                    after++;
-                if (strncmp(after, TYPE_NAME_I64, 3) == 0)
-                    return XLSP_TYPE_I64;
-                if (strncmp(after, TYPE_NAME_F64, 5) == 0)
-                    return XLSP_TYPE_F64;
-                if (strncmp(after, TYPE_NAME_STRING, 6) == 0)
-                    return XLSP_TYPE_STRING;
-                if (strncmp(after, TYPE_NAME_BOOL, 4) == 0)
-                    return XLSP_TYPE_BOOL;
-                if (strncmp(after, TYPE_NAME_ARRAY, 5) == 0)
-                    return XLSP_TYPE_ARRAY;
-                if (strncmp(after, TYPE_NAME_MAP, 3) == 0)
-                    return XLSP_TYPE_MAP;
-                if (strncmp(after, TYPE_NAME_SET, 3) == 0)
-                    return XLSP_TYPE_SET;
-                if (strncmp(after, TYPE_NAME_CHANNEL, 7) == 0)
-                    return XLSP_TYPE_CHANNEL;
-                if (strncmp(after, TYPE_NAME_JSON, 4) == 0)
-                    return XLSP_TYPE_JSON;
-            }
-            if (*after == '=' && after[1] != '=') {
-                after++;
-                while (*after == ' ' || *after == '\t')
-                    after++;
-                return xlsp_infer_literal_type(after);
-            }
-        }
-        p++;
-    }
-    return XLSP_TYPE_UNRESOLVED;
-}
-
-// Infer variable type: prioritize XaAnalyzer, fallback to source scanning
-XlspBuiltinType xlsp_infer_variable_type(XrLspServer *server, XrLspDocument *doc,
-                                         const char *var_name) {
-    if (!doc || !var_name)
-        return XLSP_TYPE_UNRESOLVED;
-
-    // Use XaAnalyzer if available (preferred: accurate type from AST)
-    XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
-    if (analyzer) {
-        XaSymbol *sym = xa_analyzer_lookup(analyzer, var_name);
-        if (sym) {
-            XrType *type = xa_analyzer_get_type(analyzer, sym);
-            XlspBuiltinType bt = xr_type_to_builtin(type);
-            if (bt != XLSP_TYPE_UNRESOLVED)
-                return bt;
-        }
-    }
-
-    // Fallback: scan source text
-    return infer_type_from_source(doc->content, var_name);
-}
-
 // Map a shallow-index symbol kind to an LSP CompletionItemKind.
 static int shallow_symbol_completion_kind(XrLspSymbolKind kind) {
     switch (kind) {
@@ -363,33 +284,40 @@ typedef struct {
     int added;
 } ShallowCompletionCtx;
 
-static void shallow_completion_collect(const XlspIndexEntry *entry, void *ctx_) {
-    ShallowCompletionCtx *ctx = (ShallowCompletionCtx *) ctx_;
-    if (ctx->added >= XLSP_COMPLETION_SHALLOW_LIMIT)
-        return;
-    if (!entry->name || !entry->is_exported)
-        return;
-    // Same-file symbols already came from the analyzer scope above.
-    if (ctx->doc_uri && entry->uri && strcmp(entry->uri, ctx->doc_uri) == 0)
-        return;
-    if (ctx->seen && xr_hashmap_has(ctx->seen, entry->name))
-        return;
-    if (ctx->seen)
-        xr_hashmap_set(ctx->seen, entry->name, (void *) (uintptr_t) 1);
-
-    XrJsonValue *item =
-        make_completion_item(entry->name, shallow_symbol_completion_kind(entry->kind), NULL);
-    xjson_object_set(item, "sortText", xjson_new_string("4"));
-    xjson_array_push(ctx->items, item);
-    ctx->added++;
+static XrXirStatus completion_index_io(XrOsIoStatus status) {
+    return status==XR_OS_IO_OK?XR_XIR_OK:status==XR_OS_IO_BUDGET?XR_XIR_BUDGET:
+        status==XR_OS_IO_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE;
+}
+static XrJsonValue *completion_index_failed(XrLspServer *server,XrJsonValue *items,XrHashMap *seen,XrXirStatus status) {
+    xr_hashmap_owned_free(seen);xjson_free(items);if(server){server->source_failure.stage=2;server->source_failure.status=(unsigned)status;}return NULL;
+}
+static XrXirStatus shallow_completion_collect(const XlspIndexedSymbol *view,void *context) {
+    ShallowCompletionCtx *ctx=context;const XlspSourceIndexSymbol *symbol=view->symbol;
+    if(ctx->added>=XLSP_COMPLETION_SHALLOW_LIMIT||!symbol->exported)return XR_XIR_OK;
+    if(ctx->doc_uri&&!strcmp(ctx->doc_uri,view->uri))return XR_XIR_OK;
+    bool known=false;XrXirStatus status=completion_index_io(xr_hashmap_owned_has(ctx->seen,symbol->name,&known));
+    if(status!=XR_XIR_OK||known)return status;
+    status=completion_index_io(xr_hashmap_owned_set(ctx->seen,symbol->name,(void *)(uintptr_t)1));if(status!=XR_XIR_OK)return status;
+    XrJsonValue *item=xjson_new_object();if(!item)return XR_XIR_OUT_OF_MEMORY;
+    if(!index_json_member(item,"label",xjson_new_string(symbol->name))||
+       !index_json_member(item,"kind",xjson_new_number(shallow_symbol_completion_kind(symbol->kind)))||
+       !index_json_member(item,"sortText",xjson_new_string("4"))){xjson_free(item);return XR_XIR_OUT_OF_MEMORY;}
+    int before=ctx->items->as.array.count;xjson_array_push(ctx->items,item);
+    if(ctx->items->as.array.count!=before+1){xjson_free(item);return XR_XIR_OUT_OF_MEMORY;}
+    ++ctx->added;return XR_XIR_OK;
 }
 
 static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
+    if(server&&server->index_failure!=XR_XIR_OK){server->source_failure.stage=2;server->source_failure.status=(unsigned)server->index_failure;return NULL;}
     XrJsonValue *items = xjson_new_array();
 
     // Tracks names already emitted from the analyzer scope so the shallow
     // workspace-index augmentation below does not duplicate them.
-    XrHashMap *seen = xr_hashmap_new();
+    XrHashMap *seen=NULL;
+    if(!server||!server->index_resources||!items)return completion_index_failed(server,items,seen,XR_XIR_OUT_OF_MEMORY);
+    XrOsIoPolicy seen_policy=xr_compile_io_policy(server->index_resources);
+    XrXirStatus seen_status=completion_index_io(xr_hashmap_owned_new(&seen_policy,&seen));
+    if(seen_status!=XR_XIR_OK)return completion_index_failed(server,items,seen,seen_status);
 
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
     if (doc && analyzer) {
@@ -475,8 +403,8 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             XrJsonValue *item = make_completion_item(sym->name, kind, detail);
             xjson_object_set(item, "sortText", xjson_new_string("0"));
             xjson_array_push(items, item);
-            if (seen)
-                xr_hashmap_set(seen, sym->name, (void *) (uintptr_t) 1);
+            seen_status=completion_index_io(xr_hashmap_owned_set(seen,sym->name,(void *)(uintptr_t)1));
+            if(seen_status!=XR_XIR_OK){xr_free(symbols);return completion_index_failed(server,items,seen,seen_status);}
         }
         xr_free(symbols);
     }
@@ -537,13 +465,14 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
 
     // Augment with exported top-level symbols from other workspace files
     // (Approach A: closed files are shallow-indexed, not fully analyzed).
-    if (doc && server && server->symbol_index) {
+    if (doc && server && server->source_index) {
         ShallowCompletionCtx sctx = {.items = items, .seen = seen, .doc_uri = doc->uri, .added = 0};
-        xlsp_symbol_index_foreach(server->symbol_index, shallow_completion_collect, &sctx);
+        XrXirStatus status=xlsp_source_index_store_visit(server->source_index,server->index_resources,shallow_completion_collect,&sctx);
+        if(status!=XR_XIR_OK){if(seen)xr_hashmap_owned_free(seen);xjson_free(items);server->source_failure.stage=2;server->source_failure.status=(unsigned)status;return NULL;}
     }
 
     if (seen)
-        xr_hashmap_free(seen);
+        xr_hashmap_owned_free(seen);
 
     return items;
 }
@@ -682,10 +611,33 @@ static void completion_buffer_append(char *buffer, size_t capacity, size_t *leng
     *length += (size_t) written >= available ? available - 1 : (size_t) written;
 }
 
-static void set_enum_payload_completion(XrJsonValue *item, const EnumMemberNode *member,
+static XrJsonValue *enum_completion_item(const char *label,int kind,const char *detail,const char *sort) {
+    XrJsonValue *item=xjson_new_object(),*documentation=xjson_new_object();
+    if(!item||!documentation){xjson_free(item);xjson_free(documentation);return NULL;}
+    char markdown[XLSP_MAX_PATH];snprintf(markdown,sizeof(markdown),"```xray\n%s\n```",detail);
+    if(!index_json_member(documentation,"kind",xjson_new_string("markdown"))||
+        !index_json_member(documentation,"value",xjson_new_string(markdown))||
+        !index_json_member(item,"label",xjson_new_string(label))||
+        !index_json_member(item,"kind",xjson_new_number(kind))||
+        !index_json_member(item,"detail",xjson_new_string(detail))) {
+        xjson_free(documentation);xjson_free(item);return NULL;
+    }
+    XrJsonValue *child=documentation;documentation=NULL;
+    if(!index_json_member(item,"documentation",child)){xjson_free(item);return NULL;}
+    if(sort&&!index_json_member(item,"sortText",xjson_new_string(sort))){xjson_free(item);return NULL;}
+    return item;
+}
+static XrJsonValue *enum_completion_failed(XrLspServer *server,XrJsonValue *items,XrXirStatus status,XrXirStatus *outcome) {
+    xjson_free(items);
+    *outcome=status;
+    if(server){server->source_failure.stage=24;server->source_failure.status=(unsigned)status;}
+    return NULL;
+}
+static XrXirStatus set_enum_payload_completion(XrCompileState *state,XrJsonValue *item,const EnumMemberNode *member,
                                         bool pattern_context) {
-    if (!item || !member || member->payload_count <= 0 || !member->name || !member->payload_names)
-        return;
+    if(!state||!item||!member||!member->name)return XR_XIR_BAD_STRUCTURE;
+    if(member->payload_count<=0)return XR_XIR_OK;
+    if(!member->payload_names||!member->payload_types)return XR_XIR_BAD_STRUCTURE;
 
     char insertion[1024];
     char detail[1024];
@@ -708,40 +660,58 @@ static void set_enum_payload_completion(XrJsonValue *item, const EnumMemberNode 
                                      field_name, i + 1);
         }
         char type_name[160];
-        xr_tref_to_string_buf(member->payload_types[i], type_name, (int) sizeof(type_name));
+        if(xr_compile_tref_to_string_buf(state,member->payload_types[i],type_name,(int)sizeof(type_name))<0) {
+            XrCompileResourceStatus status=xr_compile_state_status(state);
+            return status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:
+                status==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
+        }
         completion_buffer_append(detail, sizeof(detail), &detail_len, "%s: %s", field_name,
                                  type_name);
     }
     completion_buffer_append(insertion, sizeof(insertion), &insert_len, " }");
     completion_buffer_append(detail, sizeof(detail), &detail_len, " }");
-    xjson_object_set(item, "insertText", xjson_new_string(insertion));
-    if (!pattern_context)
-        xjson_object_set(item, "insertTextFormat", xjson_new_number(2));
-    xjson_object_set(item, "detail", xjson_new_string(detail));
+    if(!index_json_member(item,"insertText",xjson_new_string(insertion))||
+        (!pattern_context&&!index_json_member(item,"insertTextFormat",xjson_new_number(2))))return XR_XIR_OUT_OF_MEMORY;
+    XrJsonValue *replacement=xjson_new_string(detail);if(!replacement)return XR_XIR_OUT_OF_MEMORY;
+    /* The complete item already owns this key, so replacement cannot allocate. */
+    xjson_object_set(item,"detail",replacement);
+    if(xjson_get(item,"detail")!=replacement){xjson_free(replacement);return XR_XIR_BAD_STRUCTURE;}
+    return XR_XIR_OK;
 }
 
-static XrJsonValue *complete_enum_decl(XrLspDocument *doc, XrLspPosition pos, const char *prefix) {
+static XrJsonValue *complete_enum_decl(XrLspServer *server,XrLspDocument *doc,XrLspPosition pos,const char *prefix,XrXirStatus *outcome) {
+    *outcome=XR_XIR_OK;
     if (!doc->ast)
         return NULL;
+    if(!doc->syntax_snapshot||doc->ast!=xlsp_source_syntax_ast(doc->syntax_snapshot))
+        return enum_completion_failed(server,NULL,XR_XIR_BAD_STRUCTURE,outcome);
     AstNode *enum_node = find_enum_in_ast(doc->ast, prefix);
     if (!enum_node)
         return NULL;
-    XrJsonValue *items = xjson_new_array();
+    XrCompileState *state=xlsp_source_syntax_state(doc->syntax_snapshot);
+    XrJsonValue *items=xjson_new_array();
+    if(!items)return enum_completion_failed(server,NULL,XR_XIR_OUT_OF_MEMORY,outcome);
     bool pattern_context = enum_completion_is_pattern_context(doc, pos);
     char detail_buf[256];
     snprintf(detail_buf, sizeof(detail_buf), "%s.variants: EnumVariants<%s>", prefix, prefix);
-    XrJsonValue *variants = make_completion_item("variants", XR_COMPLETION_PROPERTY, detail_buf);
-    xjson_object_set(variants, "sortText", xjson_new_string("1"));
-    xjson_array_push(items, variants);
+    XrJsonValue *variants=enum_completion_item("variants",XR_COMPLETION_PROPERTY,detail_buf,"1");
+    if(!variants)return enum_completion_failed(server,items,XR_XIR_OUT_OF_MEMORY,outcome);
+    int before=items->as.array.count;xjson_array_push(items,variants);
+    if(items->as.array.count!=before+1){xjson_free(variants);return enum_completion_failed(server,items,XR_XIR_OUT_OF_MEMORY,outcome);}
     for (int i = 0; i < enum_node->as.enum_decl.member_count; i++) {
         AstNode *member = enum_node->as.enum_decl.members[i];
         if (member && member->type == AST_ENUM_MEMBER && member->as.enum_member.name) {
             snprintf(detail_buf, sizeof(detail_buf), "%s.%s", prefix, member->as.enum_member.name);
-            XrJsonValue *item = make_completion_item(member->as.enum_member.name,
-                                                     XR_COMPLETION_ENUM_MEMBER, detail_buf);
-            set_enum_payload_completion(item, &member->as.enum_member, pattern_context);
-            xjson_object_set(item, "sortText", xjson_new_string("0"));
-            xjson_array_push(items, item);
+            XrCompileResourceStatus paid=xr_compile_state_work(state,1);
+            if(paid!=XR_COMPILE_RESOURCE_OK)return enum_completion_failed(server,items,
+                paid==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:paid==XR_COMPILE_RESOURCE_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_STRUCTURE,outcome);
+            XrJsonValue *item=enum_completion_item(member->as.enum_member.name,XR_COMPLETION_ENUM_MEMBER,detail_buf,NULL);
+            if(!item)return enum_completion_failed(server,items,XR_XIR_OUT_OF_MEMORY,outcome);
+            XrXirStatus status=set_enum_payload_completion(state,item,&member->as.enum_member,pattern_context);
+            if(status!=XR_XIR_OK){xjson_free(item);return enum_completion_failed(server,items,status,outcome);}
+            if(!index_json_member(item,"sortText",xjson_new_string("0"))){xjson_free(item);return enum_completion_failed(server,items,XR_XIR_OUT_OF_MEMORY,outcome);}
+            before=items->as.array.count;xjson_array_push(items,item);
+            if(items->as.array.count!=before+1){xjson_free(item);return enum_completion_failed(server,items,XR_XIR_OUT_OF_MEMORY,outcome);}
         }
     }
     if (xjson_array_len(items) > 0)
@@ -1250,6 +1220,7 @@ static XrJsonValue *complete_variable_from_enum_assignment(XrLspDocument *doc, c
 
 XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
     lsp_log("xlsp_analyze_completion_with_server: start");
+    if(server)server->source_failure.stage=server->source_failure.status=0;
 
     // Return empty list immediately if document has parse error - don't crash
     if (!doc || !doc->content) {
@@ -1279,8 +1250,10 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
         return r;
     if ((r = complete_import_namespace(doc, prefix)))
         return r;
-    if ((r = complete_enum_decl(doc, pos, prefix)))
+    XrXirStatus enum_outcome=XR_XIR_OK;
+    if ((r = complete_enum_decl(server, doc, pos, prefix,&enum_outcome)))
         return r;
+    if(enum_outcome!=XR_XIR_OK)return NULL;
 
     // Class-instance path via text scan for `var`/`const`/`shared` bindings.
     // scan_binding_assignment() handles literal RHS directly and extracts

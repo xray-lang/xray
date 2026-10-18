@@ -15,6 +15,7 @@
 #define XLSP_SERVER_H
 
 #include "xlsp_transport.h"
+#include "xlsp_protocol_message.h"
 #include "../../base/xjson.h"
 #include "xlsp_types.h"
 #include "xlsp_source_buffer.h"
@@ -105,30 +106,13 @@ typedef struct XrLspIndexPool XrLspIndexPool;
 // Maximum pending requests to track (for cancellation support)
 #define MAX_PENDING_REQUESTS 64
 
-// JSON-RPC 2.0 request id. The spec allows either a number OR a string
-// (null is reserved and we treat it as "notification"). Existing LSP
-// clients like VS Code always use integers, but correctness-wise we
-// MUST echo back the exact shape the client sent us.
-typedef enum {
-    XLSP_ID_NONE = 0,  // Notification (no id field / id == null)
-    XLSP_ID_NUMBER,    // Integer or real id
-    XLSP_ID_STRING,    // String id (owned, xr_free on clear)
-} XlspRequestIdKind;
-
-typedef struct XlspRequestId {
-    XlspRequestIdKind kind;
-    union {
-        double number;
-        char *string;  // xr_strdup'd when kind == XLSP_ID_STRING
-    } as;
-} XlspRequestId;
-
 // Pending request entry (for $/cancelRequest support)
 typedef struct XlspPendingRequest {
     XlspRequestId id;     // Request id (number or string, owned)
     const char *method;   // Method name (static, for logging)
     bool cancelled;       // Whether this request was cancelled
     uint64_t start_time;  // Start time (monotonic ms)
+    uint64_t source_task_id;
 } XlspPendingRequest;
 
 // Pending requests tracker (ring buffer)
@@ -208,6 +192,7 @@ struct XrLspServer {
     /* Last successfully published modern query transaction. It owns every
      * producer and immutable version; requests never consult an old AST. */
     struct XlspSourceWorkspace *source_workspace;
+    uint64_t source_revision;
     struct { unsigned stage, status; } source_failure;
 
     // Workspace-level static analyzer (unified index for all cross-file features)
@@ -281,13 +266,15 @@ struct XrLspServer {
     // the live parse path for open documents. Powers workspace/symbol, the
     // go-to-definition fallback for closed files, and completion augmentation
     // without forcing full main-thread analysis of every workspace file.
-    struct XlspSymbolIndex *symbol_index;
+    struct XlspSourceIndexStore *source_index;
+    XrCompileResources *index_resources;
+    XrXirStatus index_failure; /* Sticky failed display-index transaction; never publish stale success. */
 
     // Request cancellation support ($/cancelRequest)
     XlspPendingRequests pending_requests;
 
     // Counter for server-initiated request IDs
-    int64_t next_request_id;
+    int32_t next_request_id;
 
     // Progress reporting token (for workspace indexing)
     char *index_progress_token;
@@ -302,13 +289,12 @@ struct XrLspServer {
      * NULL when no report exists. */
     struct XlspCycleReport *cycle_report;
 
-    // Long-session memory bound for the workspace analyzer's type pool.
-    // Holds the pool size (bytes) measured right after the last clean
-    // (re)build/index once the server settled to idle. 0 means "not yet
-    // established". xlsp_workspace_maybe_rebuild_analyzer() rebuilds the
-    // analyzer when the live pool grows past an adaptive multiple of this.
-    size_t analyzer_pool_baseline_bytes;
 };
+
+/* Preserve the first failed display transaction until this server owner dies. */
+static inline void xlsp_index_record_failure(XrLspServer *server,XrXirStatus status) {
+    if(status!=XR_XIR_OK&&server->index_failure==XR_XIR_OK)server->index_failure=status;
+}
 
 // Create and destroy server
 XR_FUNC XrLspServer *xlsp_server_new(void);
@@ -323,11 +309,8 @@ XR_FUNC XrXirStatus xlsp_document_apply_changes(XrLspDocument *doc, const XrJson
 XR_FUNC void xlsp_document_close(XrLspServer *server, const char *uri);
 XR_FUNC XrLspDocument *xlsp_document_get(XrLspServer *server, const char *uri);
 
-// On-demand document loading (for unopened files)
-XR_FUNC XrLspDocument *xlsp_document_get_or_load(XrLspServer *server, const char *uri);
-XR_FUNC void xlsp_document_free_temp(XrLspDocument *doc);
-
-// Position utilities
+/* Display positions clamp to complete scalar boundaries within a line.
+ * Semantic query and editor-edit positions use strict Source conversion. */
 XR_FUNC uint32_t xlsp_position_to_offset(XrLspDocument *doc, XrLspPosition pos);
 XR_FUNC XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset);
 

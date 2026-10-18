@@ -28,13 +28,13 @@ typedef struct XrXirSourceRequest {
     XrXirLinkageKind linkage_kind;
     const struct XrXirLibraryCatalog *libraries;
 } XrXirSourceRequest;
-/* Failure preserves output. Optional failure_path must point to NULL. A
- * semantic failure with a known location transfers its already-owned UTF-8
- * module path without allocating or consuming work during failure cleanup.
- * Release that path with xr_compile_resources_free. Graph and parse failures
- * without an exact semantic location leave failure_path unchanged. */
+/* Failure preserves result output. Optional failure must be empty. A located
+ * parser or semantic failure transfers its owned UTF-8 path without allocation
+ * or work during cleanup. Parser failures also carry independently owned
+ * origin and exact UTF-16 display scalars. Diagnostic line/column remain
+ * one-based compiler bytes. Release failure with source_failure_free. */
 XR_FUNC XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,
-    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path);
+    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure);
 /* Borrowed only for one synchronous check; the result owns all published data. */
 typedef struct XrXirSourceText {
     const char *logical_path;
@@ -51,10 +51,10 @@ typedef struct XrXirSourceText {
  * Imports still use the ordinary resolver; this is not a multi-file overlay.
  * Results own their data independently of text, authority, path and session.
  * A NULL input struct is invalid. Failure preserves output and uses the same
- * failure_path contract above. */
+ * failure contract above. */
 XR_FUNC XrXirStatus xr_xir_compile_source_check_text(const XrXirSourceRequest *request,
     const XrXirSourceText *text,
-    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path);
+    XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure);
 /* Synchronously check a rooted entry with an immutable set of unsaved sources.
  * Entries are deep copied to the request ledger before discovery. The entry
  * may itself be absent on disk. Relative imports select each .xr or /index.xr
@@ -64,5 +64,5 @@ XR_FUNC XrXirStatus xr_xir_compile_source_check_text(const XrXirSourceRequest *r
  * publication follow source_check; all input borrows end on return. */
 XR_FUNC XrXirStatus xr_xir_compile_source_check_overlay(const XrXirSourceRequest *request,
     const XrModuleOverlayInput *overlays, size_t count, XrXirSourceResult *output,
-    XrXirSourceDiagnostic *diagnostic, char **failure_path);
+    XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure);
 #endif // XXIR_SOURCE_H

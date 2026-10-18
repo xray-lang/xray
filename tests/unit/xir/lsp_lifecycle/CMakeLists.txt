@@ -1,0 +1,15 @@
+if(TARGET test_lsp_lifecycle)
+    return()
+endif()
+add_executable(test_lsp_lifecycle "${CMAKE_CURRENT_LIST_DIR}/test_state.c"
+    "${PROJECT_SOURCE_DIR}/src/base/xutf8.c")
+target_include_directories(test_lsp_lifecycle PRIVATE "${PROJECT_SOURCE_DIR}/src"
+    "${PROJECT_SOURCE_DIR}/src/base" "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/tests/unit/xir")
+target_compile_features(test_lsp_lifecycle PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_lsp_lifecycle PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_lsp_lifecycle PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_lsp_lifecycle COMMAND test_lsp_lifecycle)
+set_tests_properties(test_lsp_lifecycle PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;allocation")

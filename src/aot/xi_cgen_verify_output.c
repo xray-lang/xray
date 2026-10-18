@@ -41,6 +41,7 @@ static bool verify_resource(VerifyContext *ctx, XrCompileResourceStatus status) 
             case XR_COMPILE_RESOURCE_OK: break;
             case XR_COMPILE_RESOURCE_BUDGET: ctx->status = XI_CGEN_VERIFY_BUDGET; break;
             case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: ctx->status = XI_CGEN_VERIFY_OUT_OF_MEMORY; break;
+            case XR_COMPILE_RESOURCE_CANCELLED:
             case XR_COMPILE_RESOURCE_BAD_ARGUMENT: ctx->status = XI_CGEN_VERIFY_BAD_ARGUMENT; break;
         }
     }

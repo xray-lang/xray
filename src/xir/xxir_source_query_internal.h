@@ -13,9 +13,13 @@
 #define XXIR_SOURCE_QUERY_INTERNAL_H
 #include "xxir_source_query.h"
 #include "xxir_source_dependencies.h"
+#include "xxir_source_calls.h"
+#include "xxir_source_type_facts.h"
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_copy_v2(const XrXirCompileContext *context,
     const XrXirSourceView *view, const XrXirConstruction *construction, XrXirSourceSnapshot **output);
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapshot *, const XrXirSourceSyntaxView *);
+XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_calls_copy(XrXirSourceSnapshot *, const XrXirSourceCalls *);
+XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_type_facts_copy(XrXirSourceSnapshot *, const XrXirSourceTypeFacts *);
 /* Internal pre-publication attachment only. Failure preserves existing facts;
  * it never authorizes execution or mutates the checked construction owner. */
 XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_dependencies_copy(

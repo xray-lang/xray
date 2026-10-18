@@ -52,21 +52,21 @@ static void source_cleanup_admission(XrXirSourceRequest *request, const char *pa
         write_source(path, cases[i].source);
         XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
         char canonical[XR_TEST_PATH_MAX];CHECK(xr_test_realpath_buf(path,canonical,sizeof(canonical)));
-        char *failure_path=NULL;
+        XrXirSourceFailure failure_path={0};
         admission_case_begin(request,&case_owner);
         XrXirStatus status = xr_xir_compile_source_check(&case_owner.request, &result, &diagnostic,&failure_path);
         bool valid = cases[i].code == NULL;
         bool correct = valid ? status == XR_XIR_OK && result.checked && result.snapshot :
             status != XR_XIR_OK && !result.checked && !result.snapshot &&
-            diagnostic.status == status && failure_path && !strcmp(failure_path,canonical) &&
+            diagnostic.status == status && failure_path.path && !strcmp(failure_path.path,canonical) &&
             diagnostic.line > 0 && strstr(diagnostic.message, cases[i].code) != NULL;
         if (!correct) {
             fprintf(stderr, "cleanup source case %u: %u at %d:%d: %s\n", i, status,
                 diagnostic.line, diagnostic.column, diagnostic.message);
-            fprintf(stderr,"failure path actual=%s expected=%s\n",failure_path?failure_path:"NULL",path);
+            fprintf(stderr,"failure path actual=%s expected=%s\n",failure_path.path?failure_path.path:"NULL",path);
             ++failures;
         }
-        xr_compile_resources_free(failure_path);
+        xr_xir_compile_source_failure_free(&failure_path);
         xr_xir_compile_source_result_free(&result);
     }
     CHECK(!failures);

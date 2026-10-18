@@ -134,12 +134,12 @@ static void pce_source_check(PceFixture *f, XrXirArtifact **checked) {
     XrXirSourceRequest request = {session, f->file, &authority, &f->compiler, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult result = {0};
     XrXirSourceDiagnostic diagnostic = {0};
-    char *failure = NULL;
+    XrXirSourceFailure failure={0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     if (status != XR_XIR_OK)
         fprintf(stderr, "PCE Source status=%u line=%d column=%d message=%s\n",
             status, diagnostic.line, diagnostic.column, diagnostic.message);
-    CHECK(status == XR_XIR_OK && result.checked && result.snapshot && !failure);
+    CHECK(status == XR_XIR_OK && result.checked && result.snapshot && !failure.path);
     *checked = result.checked;
     result.checked = NULL;
     xr_xir_compile_source_result_free(&result);

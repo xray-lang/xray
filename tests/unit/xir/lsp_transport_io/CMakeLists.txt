@@ -1,0 +1,37 @@
+if(TARGET test_lsp_transport_io)
+    return()
+endif()
+add_executable(test_lsp_transport_io "${CMAKE_CURRENT_LIST_DIR}/test_transport.c"
+    "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_framing.c")
+if(WIN32)
+    target_sources(test_lsp_transport_io PRIVATE "${PROJECT_SOURCE_DIR}/src/os/win/fd_win.c"
+        "${PROJECT_SOURCE_DIR}/src/os/win/pipe_win.c" "${PROJECT_SOURCE_DIR}/src/os/win/time_win.c")
+else()
+    target_sources(test_lsp_transport_io PRIVATE "${PROJECT_SOURCE_DIR}/src/os/unix/fd_unix.c"
+        "${PROJECT_SOURCE_DIR}/src/os/unix/pipe_unix.c" "${PROJECT_SOURCE_DIR}/src/os/unix/time_unix.c")
+endif()
+target_include_directories(test_lsp_transport_io PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/src/base")
+target_compile_features(test_lsp_transport_io PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_lsp_transport_io PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_lsp_transport_io PRIVATE -Wall -Wextra -Werror)
+endif()
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME test_lsp_transport_io COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_transport.py" "$<TARGET_FILE:test_lsp_transport_io>")
+set_tests_properties(test_lsp_transport_io PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;lsp;ownership;allocation")
+add_test(NAME test_lsp_transport_strict_framing_requirement COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/test_transport.py" "$<TARGET_FILE:test_lsp_transport_io>" --strict)
+set_tests_properties(test_lsp_transport_strict_framing_requirement PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE LABELS "unit;lsp;protocol")
+add_executable(test_lsp_framing "${CMAKE_CURRENT_LIST_DIR}/test_framing.c"
+    "${PROJECT_SOURCE_DIR}/src/app/lsp/xlsp_framing.c")
+target_include_directories(test_lsp_framing PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(test_lsp_framing PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(test_lsp_framing PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_lsp_framing PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_lsp_framing COMMAND test_lsp_framing)
+set_tests_properties(test_lsp_framing PROPERTIES TIMEOUT 30 LABELS "unit;lsp;protocol")

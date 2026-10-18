@@ -161,12 +161,15 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
     const XrXirCompileContext *context = request->source.context;
     if (diagnostic) memset(diagnostic,0,sizeof(*diagnostic));
     XrXirSourceResult source={0};XrXirArtifact *closed=NULL,*lowered=NULL;
+    XrXirSourceFailure failure={0};
     XrXirCheckedPacket source_packet={0},closed_packet={0};
     XrXirStatus status = has_text ?
         xr_xir_compile_source_check_text(&request->source, text, &source,
-            diagnostic ? &diagnostic->source : NULL, diagnostic ? &diagnostic->source_path : NULL) :
+            diagnostic ? &diagnostic->source : NULL, diagnostic ? &failure : NULL) :
         xr_xir_compile_source_check(&request->source, &source,
-            diagnostic ? &diagnostic->source : NULL, diagnostic ? &diagnostic->source_path : NULL);
+            diagnostic ? &diagnostic->source : NULL, diagnostic ? &failure : NULL);
+    if(diagnostic){diagnostic->source_path=failure.path;failure.path=NULL;}
+    xr_xir_compile_source_failure_free(&failure);
     XrXirSourceProductStage stage=XR_XIR_SOURCE_PRODUCT_CHECK;
     if (status==XR_XIR_OK) {
         stage=XR_XIR_SOURCE_PRODUCT_SOURCE_PACKET;

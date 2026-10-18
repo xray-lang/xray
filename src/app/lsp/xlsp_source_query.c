@@ -1,5 +1,7 @@
 /* xray - Copyright (c) 2026 Xinglei Xu. Licensed under the MIT License. */
 #include "xlsp_source_query.h"
+#include "xlsp_source_signature.h"
+#include "../../xir/xxir_source_calls.h"
 #include "../../module/xmodule_overlay.h"
 #include "../../shared/xr_utf8_core.h"
 #include <limits.h>
@@ -25,6 +27,9 @@ static XrXirStatus lsp_resource_status(XrCompileResourceStatus status) {
 }
 static XrXirStatus lsp_work(const XlspSourceSnapshot *s, size_t bytes) {
     return lsp_resource_status(xr_compile_resources_work(s->resources, bytes));
+}
+XR_FUNC bool xlsp_source_snapshot_uses_resources(const XlspSourceSnapshot *s,const XrCompileResources *resources) {
+    return s&&resources&&s->resources==resources;
 }
 static XrXirStatus lsp_copy(const XlspSourceSnapshot *s, const char *bytes, size_t length, char **out) {
     if (!bytes || length == SIZE_MAX) return XR_XIR_BAD_STRUCTURE;
@@ -207,10 +212,10 @@ void xlsp_source_snapshot_free(XlspSourceSnapshot *s) {
 }
 XrXirStatus xlsp_source_snapshot_build_authorities(const XrXirSourceRequest *request,
     const XlspSourceDocument *documents, const XrModuleIdentityAuthority *authorities, size_t count, size_t entry,
-    XlspSourceSnapshot **output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
+    XlspSourceSnapshot **output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
     if (!request || !request->context || !request->context->resources || !request->session ||
         !request->authority || request->authority->kind == XR_MODULE_IDENTITY_MEMORY ||
-        !documents || !count || entry >= count || !output || *output || (failure_path && *failure_path) ||
+        !documents || !count || entry >= count || !output || *output || !xr_xir_compile_source_failure_empty(failure) ||
         count > SIZE_MAX / sizeof(LspSourceText) || count > SIZE_MAX / sizeof(XrModuleOverlayInput)) return XR_XIR_BAD_STRUCTURE;
     XlspSourceSnapshot *s = NULL; XrModuleOverlayInput *inputs = NULL; XrXirSourceResult result = {0};
     XrXirStatus status = lsp_resource_status(xr_compile_resources_calloc(request->context->resources, 1, sizeof(*s), (void **)&s));
@@ -245,7 +250,7 @@ XrXirStatus xlsp_source_snapshot_build_authorities(const XrXirSourceRequest *req
     }
     {
         XrXirSourceRequest selected = *request; selected.entry_path = s->texts[entry].path;
-        status = xr_xir_compile_source_check_overlay(&selected, inputs, count, &result, diagnostic, failure_path);
+        status = xr_xir_compile_source_check_overlay(&selected, inputs, count, &result, diagnostic, failure);
         if (status != XR_XIR_OK) goto done;
         const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
         if (!view || !view->complete) { status = XR_XIR_BAD_STRUCTURE; goto done; }
@@ -389,6 +394,50 @@ static XrXirStatus lsp_symbol(const XlspSourceSnapshot *s, const char *uri, size
     }
     return *id?XR_XIR_OK:XR_XIR_UNRESOLVED;
 }
+static XrXirStatus lsp_symbol_text_equal(const XlspSourceSnapshot *s,const char *a,const char *b,bool *equal) {
+    if(!a||!b)return XR_XIR_BAD_STRUCTURE;
+    for(;;++a,++b) {
+        XrXirStatus status=lsp_work(s,2);if(status!=XR_XIR_OK)return status;
+        if(*a!=*b){*equal=false;return XR_XIR_OK;}
+        if(!*a){*equal=true;return XR_XIR_OK;}
+    }
+}
+static XrXirStatus lsp_symbol_version(const XlspSourceSnapshot *s,uint32_t module,bool *known,int64_t *version) {
+    bool found=false;int64_t selected=0;
+    for(size_t i=0;i<s->count;++i) {
+        XrXirStatus status=lsp_work(s,1);if(status!=XR_XIR_OK)return status;
+        bool matches=false;status=lsp_text_has_module(s,&s->texts[i],module,&matches);if(status!=XR_XIR_OK)return status;
+        if(!matches)continue;
+        if(found&&selected!=s->texts[i].version)return XR_XIR_BAD_STRUCTURE;
+        found=true;selected=s->texts[i].version;
+    }
+    *known=found;*version=selected;return XR_XIR_OK;
+}
+XrXirStatus xlsp_source_same_symbol(const XlspSourceSnapshot *left,const XlspSourceSnapshot *right,
+    const char *uri,size_t length,XrLspPosition position,bool *equal) {
+    if(!left||!right||!uri||length==SIZE_MAX||!equal||left->resources!=right->resources)return XR_XIR_BAD_STRUCTURE;
+    uint32_t a_id=0,b_id=0;XrXirStatus status=lsp_symbol(left,uri,length,position,&a_id);
+    if(status!=XR_XIR_OK)return status;
+    status=lsp_symbol(right,uri,length,position,&b_id);if(status!=XR_XIR_OK)return status;
+    const XrXirSourceView *a_view=xr_xir_compile_source_snapshot_view(left->query);
+    const XrXirSourceView *b_view=xr_xir_compile_source_snapshot_view(right->query);
+    const XrXirSourceDeclaration *a=&a_view->declarations[a_id-1],*b=&b_view->declarations[b_id-1];
+    if(a->range.module>=a_view->module_count||b->range.module>=b_view->module_count)return XR_XIR_BAD_STRUCTURE;
+    const XrXirSourceQueryModule *a_module=&a_view->modules[a->range.module],*b_module=&b_view->modules[b->range.module];
+    status=lsp_work(left,sizeof(*a)+sizeof(*b)+sizeof(*a_module)+sizeof(*b_module));if(status!=XR_XIR_OK)return status;
+    bool same=a->kind==b->kind&&a->native_identity==b->native_identity&&a->range.line==b->range.line&&
+        a->range.column==b->range.column&&a->range.end_line==b->range.end_line&&a->range.end_column==b->range.end_column&&
+        !memcmp(a_module->fingerprint.bytes,b_module->fingerprint.bytes,sizeof(a_module->fingerprint.bytes));
+    if(same){status=lsp_symbol_text_equal(left,a_module->identity,b_module->identity,&same);if(status!=XR_XIR_OK)return status;}
+    if(same){status=lsp_symbol_text_equal(left,a->name,b->name,&same);if(status!=XR_XIR_OK)return status;}
+    if(same) {
+        bool a_known=false,b_known=false;int64_t a_version=0,b_version=0;
+        status=lsp_symbol_version(left,a->range.module,&a_known,&a_version);if(status!=XR_XIR_OK)return status;
+        status=lsp_symbol_version(right,b->range.module,&b_known,&b_version);if(status!=XR_XIR_OK)return status;
+        same=a_known==b_known&&(!a_known||a_version==b_version);
+    }
+    *equal=same;return XR_XIR_OK;
+}
 static XrXirStatus lsp_location(const XlspSourceSnapshot *s, XrXirSourceRange r,const char *name, XlspSourceLocation *out) {
     for (size_t i = 0; i < s->count; ++i) {
         XrXirStatus status = lsp_work(s, 1); if (status != XR_XIR_OK) return status;
@@ -404,6 +453,37 @@ static XrXirStatus lsp_location(const XlspSourceSnapshot *s, XrXirSourceRange r,
         return status;
     }
     return XR_XIR_UNRESOLVED;
+}
+XR_FUNC XrXirStatus xlsp_source_declaration_kind(const XlspSourceSnapshot *s,const char *uri,
+    size_t length,XrLspPosition position,XrXirSourceDeclarationKind *out) {
+    if(!s||!uri||length==SIZE_MAX||!out)return XR_XIR_BAD_STRUCTURE;
+    const LspSourceText *text=NULL;XrXirStatus status=XR_XIR_OK;
+    for(size_t i=0;i<s->count;++i) {
+        status=lsp_work(s,1);if(status!=XR_XIR_OK)return status;
+        if(s->texts[i].uri_length!=length)continue;
+        bool same=false;status=lsp_equal(s,s->texts[i].uri,uri,length,&same);if(status!=XR_XIR_OK)return status;
+        if(same){text=&s->texts[i];break;}
+    }
+    if(!text||text->module==UINT32_MAX)return XR_XIR_UNRESOLVED;
+    int line=0,column=0;status=lsp_position(s,text,true,&position,&line,&column);if(status!=XR_XIR_OK)return status;
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(s->query);
+    const XrXirSourceSyntaxView *syntax=lsp_syntax(s,view);if(!syntax)return XR_XIR_UNRESOLVED;
+    bool found=false;XrXirSourceDeclarationKind kind=XR_XIR_SOURCE_FUNCTION;
+    for(uint32_t i=0;i<view->declaration_count;++i) {
+        status=lsp_work(s,sizeof(syntax->declarations[i]));if(status!=XR_XIR_OK)return status;
+        const XrXirSourceDeclaration *decl=&view->declarations[i];
+        const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[i];
+        if(lsp_absent_selection(fact->name))continue;
+        bool matches=false;status=lsp_text_has_module(s,text,decl->range.module,&matches);
+        if(status!=XR_XIR_OK)return status;
+        if(!matches||!lsp_contains(fact->name,fact->name.module,line,column))continue;
+        if((uint32_t)decl->kind>XR_XIR_SOURCE_INTRINSIC)return XR_XIR_BAD_STRUCTURE;
+        if(fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED)return XR_XIR_UNSUPPORTED;
+        status=lsp_name_selection(s,text,fact->name,decl->name);if(status!=XR_XIR_OK)return status;
+        if(found&&kind!=decl->kind)return XR_XIR_BAD_STRUCTURE;
+        kind=decl->kind;found=true;
+    }
+    if(!found)return XR_XIR_UNRESOLVED;*out=kind;return XR_XIR_OK;
 }
 XrXirStatus xlsp_source_definition(const XlspSourceSnapshot *s, const char *uri,
     size_t length, XrLspPosition position, XlspSourceLocation *output) {
@@ -430,6 +510,7 @@ XrXirStatus xlsp_source_references(const XlspSourceSnapshot *s, const char *uri,
     size_t count = declaration_visible ? 1 : 0;
     for (uint32_t i = 0; i < view->reference_count; ++i) {
         status = lsp_work(s, 1); if (status != XR_XIR_OK) return status;
+        if(view->references[i].access==XR_XIR_SOURCE_IMPORT_SELECTOR)continue;
         if(lsp_absent_selection(syntax->references[i]))continue;
         uint32_t target = view->references[i].target ? view->references[i].target : view->references[i].declaration;
         status = lsp_target(s, view, &target); if (status != XR_XIR_OK) return status;
@@ -452,6 +533,7 @@ XrXirStatus xlsp_source_references(const XlspSourceSnapshot *s, const char *uri,
     }
     for (uint32_t i = 0; i < view->reference_count; ++i) {
         status = lsp_work(s, 1); if (status != XR_XIR_OK) goto done;
+        if(view->references[i].access==XR_XIR_SOURCE_IMPORT_SELECTOR)continue;
         if(lsp_absent_selection(syntax->references[i]))continue;
         const XrXirSourceReference *r = &view->references[i]; uint32_t target = r->target ? r->target : r->declaration;
         status = lsp_target(s, view, &target); if (status != XR_XIR_OK) goto done;
@@ -470,8 +552,8 @@ done:
 
 XrXirStatus xlsp_source_snapshot_build(const XrXirSourceRequest *request,
     const XlspSourceDocument *documents,size_t count,size_t entry,
-    XlspSourceSnapshot **output,XrXirSourceDiagnostic *diagnostic,char **failure_path) {
-    return xlsp_source_snapshot_build_authorities(request,documents,NULL,count,entry,output,diagnostic,failure_path);
+    XlspSourceSnapshot **output,XrXirSourceDiagnostic *diagnostic,XrXirSourceFailure *failure) {
+    return xlsp_source_snapshot_build_authorities(request,documents,NULL,count,entry,output,diagnostic,failure);
 }
 XrXirStatus xlsp_source_uri_path(XrCompileResources *resources,const char *uri,size_t length,char **out) {
     if(!resources||!uri||length==SIZE_MAX||!out||*out)return XR_XIR_BAD_STRUCTURE;
@@ -503,6 +585,21 @@ XrXirStatus xlsp_source_position(XrCompileResources *resources,const char *text,
     return status;
 }
 
+XR_FUNC XrXirStatus xlsp_source_cursor(XrCompileResources *resources,const char *text,size_t length,
+    XrLspPosition position,XlspSourceCursor *out) {
+    if(!resources||!text||length==SIZE_MAX||!out)return XR_XIR_BAD_STRUCTURE;
+    XlspSourceSnapshot s={0};s.resources=resources;
+    LspSourceText d={0};d.text=(char *)text;d.length=length;
+    XlspSourceCursor cursor={0};
+    XrXirStatus status=lsp_position_at(&s,&d,true,&position,&cursor.line,&cursor.column,&cursor.offset);
+    if(status==XR_XIR_OK)*out=cursor;
+    return status;
+}
+
 #include "xlsp_source_hover_impl.h"
+#include "xlsp_source_signature_query.inc.c"
 
 #include "xlsp_source_semantic_impl.h"
+#include "xlsp_source_type_identity.inc.c"
+#include "xlsp_source_inlay_query.inc.c"
+#include "xlsp_source_parameter_hints.inc.c"

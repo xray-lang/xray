@@ -98,7 +98,7 @@ static XrXirStatus spec_index_source_operation(const XrXirCompileContext *contex
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"spec-index-scale",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText source_text={NULL,text,strlen(text)};XrXirSourceResult source={0};
-    XrXirSourceDiagnostic source_diagnostic={0};char *failure=NULL;XrXirDiagnostic diagnostic={0};
+    XrXirSourceDiagnostic source_diagnostic={0};XrXirSourceFailure failure={0};XrXirDiagnostic diagnostic={0};
     XrXirArtifact *read=NULL,*instance=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&source_text,&source,&source_diagnostic,&failure);
     xr_compile_session_free(session);
@@ -124,7 +124,7 @@ static XrXirStatus spec_index_source_operation(const XrXirCompileContext *contex
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(instance,&diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_lower_take(&instance,&target,&lowered,&diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,&diagnostic);
-    xr_xir_compile_artifact_free(instance);xr_xir_compile_artifact_free(lowered);xr_compile_resources_free(failure);
+    xr_xir_compile_artifact_free(instance);xr_xir_compile_artifact_free(lowered);xr_xir_compile_source_failure_free(&failure);
     XrCompileResourceStats final=library_compile_stats(context);CHECK(final.live_bytes==start.live_bytes);
     if (status==XR_XIR_OK && input->report) fprintf(stderr,
         "SPEC_INDEX_SCALE N%u ordinary%u effects%u stampKeyElements%llu totalKeyElements%llu origins%u functions%u rows%llu blocks%llu sourceFunctions%u sourceTypes%u sourceBytes%zu specializeWork%llu specializeAllocated%llu specializeSites%llu wholeWork%llu wholeAllocated%llu wholeSites%zu live%llu peak%llu\n",

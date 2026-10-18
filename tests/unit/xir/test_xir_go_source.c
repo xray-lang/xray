@@ -71,7 +71,7 @@ static XrXirStatus source_task_graph(const XrXirCompileContext *context, void *o
     CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_GO_SOURCE_FIXTURES, fixture->name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_GO_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirCheckedPacket packet = {0}; XrXirArtifact *read = NULL, *specialized = NULL;
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     xr_compile_session_free(session); session = NULL;
@@ -82,7 +82,7 @@ static XrXirStatus source_task_graph(const XrXirCompileContext *context, void *o
                 diagnostic.line, diagnostic.column, diagnostic.message);
         goto done;
     }
-    CHECK(result.checked && result.snapshot && !failure);
+    CHECK(result.checked && result.snapshot && !failure.path);
     source_task_shape(xr_xir_compile_artifact_module(result.checked), fixture);
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(result.snapshot);
     CHECK(view && view->complete);
@@ -115,7 +115,7 @@ static XrXirStatus source_task_graph(const XrXirCompileContext *context, void *o
     xr_xir_compile_source_result_free(&result);
     status = xr_xir_compile_verify_v2(context, xr_xir_compile_artifact_module(specialized), xr_xir_compile_artifact_construction(specialized), NULL);
 done:
-    xr_compile_resources_free(failure);
+    xr_xir_compile_source_failure_free(&failure);
     xr_xir_compile_source_result_free(&result);
     xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(read); xr_xir_compile_artifact_free(specialized);
@@ -130,13 +130,13 @@ static void source_task_reject(const char *name, XrXirStatus expected) {
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_GO_SOURCE_FIXTURES, name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_GO_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, &owner.context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     fprintf(stderr, "reject %s status=%u location=%d:%d message=%s\n", name, status,
         diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == expected && !result.checked && !result.snapshot);
     if (!strcmp(name, "private_import")) CHECK(strstr(diagnostic.message, "requires an exported declaration"));
-    xr_compile_resources_free(failure); xr_xir_compile_source_result_free(&result);
+    xr_xir_compile_source_failure_free(&failure); xr_xir_compile_source_result_free(&result);
     xr_compile_session_free(session); library_compile_owner_drop(&owner);
 }
 int main(int argc, char **argv) {
