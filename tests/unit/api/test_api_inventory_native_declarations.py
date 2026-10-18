@@ -131,10 +131,13 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             self.assertEqual(entry["column"], member.column)
             self.assertEqual(entry["source"], "stdlib/types/string.xr")
             self.assertEqual(entry["operation"], member.operation)
-            self.assertEqual(entry["xir_admitted"], member.name in {"contains", "startsWith", "endsWith", "indexOf", "lastIndexOf"})
+            self.assertEqual(entry["xir_admitted"], member.name in {
+                "contains", "startsWith", "endsWith", "indexOf", "lastIndexOf", "toString", "repeat"})
             if entry["xir_admitted"]:
-                self.assertEqual(entry["allocation"], "no_heap")
-                self.assertEqual(entry["failures"], ["bounds", "limit"] if member.name == "indexOf" else ["limit"] if member.name == "lastIndexOf" else [])
+                self.assertEqual(entry["allocation"], "may_heap" if member.name == "repeat" else "no_heap")
+                failures = {"indexOf": ["bounds", "limit"], "lastIndexOf": ["limit"],
+                            "toString": ["retain"], "repeat": ["allocation", "retain", "limit"]}
+                self.assertEqual(entry["failures"], failures.get(member.name, []))
                 self.assertEqual(entry["ownership"], "owned")
         with self.assertRaises(ValueError):
             inventory.collect_native_declaration(ROOT, path,
@@ -152,7 +155,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
     def test_collector_uses_shared_parser_and_rejects_invalid_admission(self) -> None:
         with patch.object(declarations, "parse_source", wraps=declarations.parse_source) as parse:
             inventory.collect_native_types(ROOT)
-        self.assertEqual(parse.call_count, 2)
+        self.assertEqual(parse.call_count, 8)
         parse.assert_any_call(self.source, self.prelude)
         parse.assert_any_call((ROOT / "stdlib/types/string.xr").read_text(encoding="utf-8"), self.prelude)
         for source in (self.source.replace("struct Array", "class Array"),
@@ -160,6 +163,25 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
                        self.source.replace("ARRAY_PUSH", "UNKNOWN_OP")):
             with self.subTest(source=source[:80]), self.assertRaises(ValueError):
                 inventory.collect_native_declaration(ROOT, self.path, source, "stdlib", "array")
+
+    def test_combined_container_and_scalar_owners(self) -> None:
+        entries = inventory.collect_native_types(ROOT)
+        cases = (("Map", 10, 13, "struct"), ("Set", 11, 15, "struct"),
+                 ("i64", 12, 29, "class"), ("f64", 13, 12, "class"),
+                 ("bool", 14, 1, "class"), ("rune", 15, 6, "class"))
+        for name, identity, member_count, kind in cases:
+            with self.subTest(name=name):
+                rows = [row for row in entries if row["namespace"] == name]
+                declaration = next(row for row in rows if row["kind"] == "type")
+                self.assertEqual(declaration["native_type_id"], identity)
+                self.assertEqual(declaration["declaration_kind"], kind)
+                self.assertEqual(len(rows), member_count + 1)
+                source = ROOT / "stdlib/types" / (name.lower() + ".xr")
+                self.assertTrue(all(row["source"] == source.relative_to(ROOT).as_posix()
+                                    for row in rows))
+                with self.assertRaises(ValueError):
+                    inventory.collect_native_declaration(ROOT, source.with_name("imposter.xr"),
+                        source.read_text(encoding="utf-8"), "", "")
 
 
 if __name__ == "__main__":
