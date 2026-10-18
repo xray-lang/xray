@@ -16,6 +16,7 @@
  *   - xray://stdlib/{module}    Stdlib module detail (template)
  */
 
+#include "xmcp_json.h"
 #include "xmcp_resources.h"
 #include "xmcp_protocol.h"
 #include "xmcp_server.h"
@@ -169,7 +170,7 @@ static const char *read_stdlib_resource(XmcpServer *server, const char *module, 
  * resources/list handler
  * -------------------------------------------------------------------------- */
 
-XrJsonValue *xmcp_handle_resources_list(XmcpServer *server, XmcpRpcError *error) {
+XR_FUNC XrJsonValue *xmcp_handle_resources_list(XmcpServer *server, XmcpRpcError *error) {
     XR_DCHECK(server != NULL, "xmcp_handle_resources_list: NULL server");
     (void) error;
 
@@ -179,22 +180,22 @@ XrJsonValue *xmcp_handle_resources_list(XmcpServer *server, XmcpRpcError *error)
     for (size_t i = 0; i < server->registry.resource_count; i++) {
         const XmcpResourceDef *resource = xmcp_registry_resource_at(&server->registry, i);
         XrJsonValue *res = xjson_new_object();
-        XJSON_SET_STRING(res, "uri", resource->uri);
-        XJSON_SET_STRING(res, "name", resource->name);
-        XJSON_SET_STRING(res, "description", resource->description);
-        XJSON_SET_STRING(res, "mimeType", resource->mime_type);
-        xjson_array_push(resources, res);
+        XMCP_JSON_STRING(res, "uri", resource->uri);
+        XMCP_JSON_STRING(res, "name", resource->name);
+        XMCP_JSON_STRING(res, "description", resource->description);
+        XMCP_JSON_STRING(res, "mimeType", resource->mime_type);
+        xmcp_json_push(resources, res);
     }
 
-    xjson_object_set(result, "resources", resources);
-    return result;
+    xmcp_json_set(result, "resources", resources);
+    return xmcp_json_finish(result);
 }
 
 /* --------------------------------------------------------------------------
  * resources/templates/list handler
  * -------------------------------------------------------------------------- */
 
-XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server, XmcpRpcError *error) {
+XR_FUNC XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server, XmcpRpcError *error) {
     XR_DCHECK(server != NULL, "xmcp_handle_resource_templates_list: NULL server");
     (void) error;
 
@@ -205,22 +206,22 @@ XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server, XmcpRpcErro
         const XmcpResourceTemplateDef *resource_template =
             xmcp_registry_resource_template_at(&server->registry, i);
         XrJsonValue *t = xjson_new_object();
-        XJSON_SET_STRING(t, "uriTemplate", resource_template->uri_template);
-        XJSON_SET_STRING(t, "name", resource_template->name);
-        XJSON_SET_STRING(t, "description", resource_template->description);
-        XJSON_SET_STRING(t, "mimeType", resource_template->mime_type);
-        xjson_array_push(templates, t);
+        XMCP_JSON_STRING(t, "uriTemplate", resource_template->uri_template);
+        XMCP_JSON_STRING(t, "name", resource_template->name);
+        XMCP_JSON_STRING(t, "description", resource_template->description);
+        XMCP_JSON_STRING(t, "mimeType", resource_template->mime_type);
+        xmcp_json_push(templates, t);
     }
 
-    xjson_object_set(result, "resourceTemplates", templates);
-    return result;
+    xmcp_json_set(result, "resourceTemplates", templates);
+    return xmcp_json_finish(result);
 }
 
 /* --------------------------------------------------------------------------
  * resources/read handler (static + template URIs)
  * -------------------------------------------------------------------------- */
 
-XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params,
+XR_FUNC XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params,
                                         XmcpRpcError *error) {
     XR_DCHECK(server != NULL, "xmcp_handle_resources_read: NULL server");
     XR_DCHECK(error != NULL, "xmcp_handle_resources_read: NULL error");
@@ -276,10 +277,10 @@ XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params,
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *contents = xjson_new_array();
     XrJsonValue *item = xjson_new_object();
-    XJSON_SET_STRING(item, "uri", uri);
-    XJSON_SET_STRING(item, "mimeType", mime);
-    xjson_object_set(item, "text", xjson_new_string(text));
-    xjson_array_push(contents, item);
-    xjson_object_set(result, "contents", contents);
-    return result;
+    XMCP_JSON_STRING(item, "uri", uri);
+    XMCP_JSON_STRING(item, "mimeType", mime);
+    xmcp_json_set(item, "text", xjson_new_string(text));
+    xmcp_json_push(contents, item);
+    xmcp_json_set(result, "contents", contents);
+    return xmcp_json_finish(result);
 }

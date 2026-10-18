@@ -49,7 +49,7 @@
 #ifndef XCHANNEL_H
 #define XCHANNEL_H
 
-#include "../runtime/core/xr_channel_buffer.h"
+#include "../shared/xr_channel_buffer.h"
 
 #include <stdint.h>
 #include <stdbool.h>

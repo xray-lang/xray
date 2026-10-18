@@ -87,13 +87,13 @@ def main():
             assert code != 0 and len(unresolved) == 1 and re.search(r'\b' + re.escape(symbol) + r'\b', unresolved[0]), (symbol, unresolved, text)
             outcomes[symbol] = 'exact retired symbol unresolved; no other missing symbol'
     manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
-    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [28, 73, 24, 29, 31]
+    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [28, 76, 29, 33, 35]
     sys.path.insert(0,str(root/'scripts'))
     from derive_xir_sdk_abi import prepare
     with tempfile.TemporaryDirectory(prefix='sdk-owner-independent-abi-') as temporary:
         facts=Path(temporary)/'facts';prepare(facts)
         expected=json.loads((facts/'EXPECTED.json').read_text())['rows']
-    assert len(expected)==361 and len({row['id'] for row in expected})==361
+    assert len(expected)==362 and len({row['id'] for row in expected})==362
     assert manifest['abi_measurements']==[dict(id=row['id'],value=row['value']) for row in expected]
     assert [row['path'] for row in manifest['files'] if row['kind'] == 5] == sorted('lib/' + name + '.lib' for name in ARCHIVES)
     def status(name, document, expected, sdk_root=bundle):
@@ -108,7 +108,9 @@ def main():
                        ('value_abi',20),('call_abi',25),('program_abi',28),
                        ('semantic',65),('value_abi',21),('call_abi',26),('call_abi',27),('semantic',66),('semantic',67),('semantic',68),('semantic',69),
                        ('semantic',70),('wire',25),('semantic',71),('wire',26),
-                       ('wire',27),('semantic',72),('value_abi',22),('value_abi',23),('call_abi',28),('program_abi',29)]:
+                       ('wire',27),('semantic',72),('value_abi',22),('value_abi',23),('call_abi',28),('program_abi',29),
+                       ('semantic',73),('semantic',74),('value_abi',24),('value_abi',25),('value_abi',26),('value_abi',27),('value_abi',28),
+                       ('call_abi',29),('call_abi',30),('call_abi',31),('call_abi',32),('program_abi',30),('program_abi',31),('program_abi',32),('program_abi',33)]:
         changed = json.loads(json.dumps(manifest)); changed[name] = value
         status('old-' + name+'-'+str(value), changed, 1)
     # Reject the complete previous 25/70 pair as well as each crossed prefix above.
@@ -118,6 +120,14 @@ def main():
     status('old-wire26-semantic71',changed,1)
     changed=json.loads(json.dumps(manifest));changed.update(wire=27,semantic=72,value_abi=22,call_abi=28,program_abi=29)
     status('old-complete27-72-22-28-29',changed,1)
+    changed=json.loads(json.dumps(manifest));changed.update(wire=28,semantic=73,value_abi=24,call_abi=29,program_abi=30)
+    status('old-complete28-73-24-29-30',changed,1)
+    changed=json.loads(json.dumps(manifest));changed.update(wire=28,semantic=74,value_abi=29,call_abi=32,program_abi=33)
+    status('old-complete28-74-29-32-33',changed,1)
+    changed=json.loads(json.dumps(manifest));changed.update(wire=28,semantic=75,value_abi=29,call_abi=32,program_abi=34)
+    status('old-complete28-75-29-32-34',changed,1)
+    changed=json.loads(json.dumps(manifest));changed.update(wire=28,semantic=76,value_abi=29,call_abi=33,program_abi=34)
+    status('old-complete28-76-29-33-34',changed,1)
     changed = json.loads(json.dumps(manifest)); changed['abi_measurements'] = changed['abi_measurements'][:197]
     status('old-layout-recipe', changed, 1)
     changed=json.loads(json.dumps(manifest));changed['abi_measurements']=changed['abi_measurements'][:233]

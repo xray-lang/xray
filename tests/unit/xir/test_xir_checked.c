@@ -30,7 +30,7 @@
 #include "xir_checked_scalar72_golden.h"
 #include "xir_checked_scalar73_golden.h"
 #include "xir_checked_scalar74_golden.h"
-#include "xir_checked_scalar75_golden.h"
+#include "xir_checked_scalar77_golden.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
@@ -188,7 +188,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 30 && XR_XIR_CHECKED_CONTRACT == 75 && XR_XIR_OP_COUNT == 153, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 30 && XR_XIR_CHECKED_CONTRACT == 77 && XR_XIR_OP_COUNT == 164, "packet revision");
     _Static_assert(XR_XIR_NULLABLE_NONE == 126 && XR_XIR_NULLABLE_SOME == 127, "typed nullable operations");
     _Static_assert(XR_XIR_EQUAL == 125, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 124, "typed normal result discard operation");
@@ -228,8 +228,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[144] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
-    CHECK(!memcmp(packet.bytes + 32, checked_scalar75_digest, 32));
-    CHECK(packet.length==sizeof(checked_scalar75_golden) && !memcmp(packet.bytes,checked_scalar75_golden,packet.length));
+    CHECK(!memcmp(packet.bytes + 32, checked_scalar77_digest, 32));
+    CHECK(packet.length==sizeof(checked_scalar77_golden) && !memcmp(packet.bytes,checked_scalar77_golden,packet.length));
     checked_previous_identity_rejected(checked_scalar74_golden,sizeof(checked_scalar74_golden));
     checked_previous_identity_rejected(checked_scalar73_golden,sizeof(checked_scalar73_golden));
     checked_previous_identity_rejected(checked_scalar72_golden,sizeof(checked_scalar72_golden));
@@ -242,7 +242,7 @@ static void byte_order(void) {
     checked_previous_identity_rejected(checked_scalar58_golden,sizeof(checked_scalar58_golden));
     checked_previous_identity_rejected(checked_scalar59_golden,sizeof(checked_scalar59_golden));
     checked_previous_identity_rejected(checked_scalar60_golden,sizeof(checked_scalar60_golden));
-    uint8_t original[sizeof(checked_scalar75_golden)]; memcpy(original, packet.bytes, sizeof(original));
+    uint8_t original[sizeof(checked_scalar77_golden)]; memcpy(original, packet.bytes, sizeof(original));
     for (unsigned offset = 145; offset <= 149; offset += 4) {
         put32(packet.bytes + offset, 1); digest_packet(&packet);
         rejected(packet.bytes, packet.length);
@@ -874,10 +874,10 @@ static void uninitialized_packet(void) {
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    CHECK(packet.length == sizeof(checked_scalar75_golden)+4+2*40 && packet.bytes[117] == XR_XIR_LOCAL_UNINIT && packet.bytes[157] == XR_XIR_LOCAL_WRITE);
+    CHECK(packet.length == sizeof(checked_scalar77_golden)+4+2*40 && packet.bytes[117] == XR_XIR_LOCAL_UNINIT && packet.bytes[157] == XR_XIR_LOCAL_WRITE);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
-    uint8_t original[sizeof(checked_scalar75_golden)+4+2*40]; memcpy(original, packet.bytes, sizeof(original));
+    uint8_t original[sizeof(checked_scalar77_golden)+4+2*40]; memcpy(original, packet.bytes, sizeof(original));
     /* A second write is valid for mutable storage, but not initialize-once. */
     put32(packet.bytes + 197, XR_XIR_LOCAL_WRITE); put32(packet.bytes + 201, XR_XIR_UNIT);
     put32(packet.bytes + 209, 0); put32(packet.bytes + 245, 0); digest_packet(&packet);

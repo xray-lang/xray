@@ -9,3 +9,6 @@ foreach(target test_xir_bounded_call test_xir_bounded_call_injected)
     set_tests_properties(${target} PROPERTIES LABELS "unit;xir;ownership;bounded-call" TIMEOUT 60)
 endforeach()
 target_compile_definitions(test_xir_bounded_call_injected PRIVATE XR_BOUNDED_INJECTED=1)
+
+# The nested executable directory needs its own Windows sanitizer runtime.
+xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")

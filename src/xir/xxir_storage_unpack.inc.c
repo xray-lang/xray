@@ -90,7 +90,11 @@ static XrXirValueStatus storage_unpack_walk(StorageUnpack *unpack,
                 span = (StorageSpan){nullable ? frame->node->element : frame->node->nominal.fields[field],
                     frame->bytes ? frame->bytes +
                         (nullable ? frame->layout->value.alignment : frame->layout->field_offsets[field]) : NULL};
-                status = storage_unpack_enter(unpack, span, &ready);
+                if (span.type==XR_XIR_UNIT && xr_xir_nominal_native_recv(
+                    xr_xir_compile_type_arena_types(unpack->admission->arena),frame->record->object.type,XR_XIR_UNIT)) {
+                    /* A logical Unit field is initialized without reading payload bytes. */
+                    frame->record->fields[frame->next++]=(XrXirValue){0};
+                } else status=storage_unpack_enter(unpack,span,&ready);
             }
         }
         if (status != XR_XIR_VALUE_OK) return status;

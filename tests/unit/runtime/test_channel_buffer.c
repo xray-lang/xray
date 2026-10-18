@@ -9,7 +9,7 @@
  */
 
 #include "../test_framework.h"
-#include "runtime/core/xr_channel_buffer.h"
+#include "shared/xr_channel_buffer.h"
 
 typedef struct Message {
     uint64_t sequence;

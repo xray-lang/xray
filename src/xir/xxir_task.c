@@ -10,6 +10,8 @@
  *   A public handle never drives or cancels the executor that owns pending work.
  */
 #include "xxir_task_internal.h"
+#include "xxir_task_result_internal.h"
+#include "xxir_call_time_internal.h"
 #include "xxir_error.h"
 #include <string.h>
 
@@ -24,9 +26,12 @@ struct XrXirTaskExecutor {
     uint64_t generation, next_identity;
     XrXirCallStatus shutdown_status;
     XrXirCallStatus first_failure;
-    bool driving, stopping, cleanup_incomplete;
+    bool driving, stopping, cleanup_incomplete, channel_waiting;
 };
 /* The unchanged executor config carries its mandatory original domain. */
+static bool task_executor_observing(const XrXirTaskExecutor *executor) {
+    return executor->budget && executor->budget->notifying;
+}
 static bool task_executor_owner_current(const XrXirTaskExecutor *executor) {
     return !executor || (xr_xir_domain_current(executor->config.domain) &&
         (!executor->config.admission.domain || xr_xir_domain_current(executor->config.admission.domain)) &&
@@ -45,24 +50,37 @@ static XrXirValue task_core_task_value(XirTask *task) {
     return (XrXirValue){(uint32_t)task->object.type, 0, (int64_t)(uintptr_t)task};
 }
 XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task) {
-    if (!task || task->object.kind != XR_XIR_TYPE_TASK || !xr_xir_domain_current(task->object.domain)) return false;
-    const XrXirTypes *types = xr_xir_compile_type_arena_types(task->object.arena);
-    const XrXirTypeNode *node = xr_xir_type_node(types, task->object.type);
-    if (!node || node->kind != XR_XIR_TYPE_TASK) return false;
-    XrXirType result = node->element;
-    if (result != XR_XIR_UNIT && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING)
-        return false;
-    XirTaskState state = atomic_load_explicit(&task->state, memory_order_acquire);
-    if (state == XIR_TASK_PREPARING)
-        return !task->generation && !task->identity && !task->executor && !task->call && xr_xir_call_result_empty(&task->outcome);
-    /* Pending handles may cross threads. Only the driver touches execution
-     * pointers and the uncommitted outcome until release publication. */
-    if (state == XIR_TASK_PENDING || state == XIR_TASK_RUNNING) return task->generation && task->identity;
-    return state == XIR_TASK_TERMINAL && !task->executor && !task->call && task->generation && task->identity &&
-        xr_xir_call_result_valid(&task->outcome) &&
-        task->outcome.status != XR_XIR_CALL_READY && task->outcome.status != XR_XIR_CALL_SUSPENDED &&
-        task->outcome.status != XR_XIR_CALL_CONSUMED &&
-        (task->outcome.status != XR_XIR_CALL_RETURNED || task->outcome.value.type == (uint32_t)result);
+    for (;;) {
+        if (!task || task->object.kind != XR_XIR_TYPE_TASK || !task->object.domain ||
+            !xr_xir_domain_current(task->object.domain)) return false;
+        const XrXirTypes *types = xr_xir_compile_type_arena_types(task->object.arena);
+        const XrXirTypeNode *node = xr_xir_type_node(types, task->object.type);
+        if (!node || node->kind != XR_XIR_TYPE_TASK || node->parameter_span ||
+            !xr_xir_task_result_supported(types, node->element)) return false;
+        XirTaskState state = atomic_load_explicit(&task->state, memory_order_acquire);
+        if (state == XIR_TASK_PREPARING)
+            return !task->generation && !task->identity && !task->executor && !task->call && xr_xir_call_result_empty(&task->outcome);
+        /* Only the driver reads unpublished outcomes or execution pointers. */
+        if (state == XIR_TASK_PENDING || state == XIR_TASK_RUNNING) return task->generation && task->identity;
+        if (state != XIR_TASK_TERMINAL || task->executor || task->call || !task->generation || !task->identity ||
+            task->outcome.status == XR_XIR_CALL_READY || task->outcome.status == XR_XIR_CALL_SUSPENDED ||
+            task->outcome.status == XR_XIR_CALL_CONSUMED) return false;
+        const XrXirValue *value = &task->outcome.value;
+        if (task->outcome.status == XR_XIR_CALL_RETURNED && value->type != (uint32_t)node->element) return false;
+        const XrXirTypeNode *element = xr_xir_type_node(types, node->element);
+        if (task->outcome.status != XR_XIR_CALL_RETURNED || !element || element->kind != XR_XIR_TYPE_TASK)
+            return xr_xir_call_result_valid(&task->outcome);
+        /* A nested Task uses the same canonical header checks without recursive
+         * value validation. Strict descriptor descent rejects cycles and bounds
+         * the chain by the immutable pool, independently of the C stack. */
+        if (value->reserved || !value->payload || task->outcome.wake || !xr_xir_panic_empty(&task->outcome.panic) ||
+            value->type >= (uint32_t)task->object.type) return false;
+        const XirTask *inner = (const XirTask *)(uintptr_t)value->payload;
+        if (inner->object.type != (XrXirType)value->type || inner->object.arena != task->object.arena ||
+            inner->object.kind != XR_XIR_TYPE_TASK ||
+            !atomic_load_explicit(&inner->object.references, memory_order_relaxed)) return false;
+        task = inner;
+    }
 }
 XR_FUNC XrXirCallStatus xr_xir_task_copy_outcome(const XrXirValue *value, XrXirCallResult *output) {
     if (!value || !xr_xir_value_valid(value) || !xr_xir_call_result_empty(output)) return XR_XIR_CALL_BAD_ARGUMENT;
@@ -94,7 +112,7 @@ static XirTaskActivation *task_core_dequeue(XrXirTaskExecutor *executor) {
 }
 XR_FUNC bool xr_xir_task_executor_root_idle(const XrXirTaskExecutor *executor) {
     if (!task_executor_owner_current(executor)) return false;
-    if (!executor || executor->driving || executor->active || executor->ready_head) return false;
+    if (!executor || executor->driving || task_executor_observing(executor) || executor->active || executor->ready_head) return false;
     if (!executor->root.call) return true;
     XrXirCallStatus state = xr_xir_call_state(executor->root.call);
     return state != XR_XIR_CALL_READY && state != XR_XIR_CALL_SUSPENDED;
@@ -123,14 +141,14 @@ static XrXirCallStatus task_core_completion_status(const XrXirTaskExecutor *exec
 XR_FUNC XrXirCallStatus xr_xir_task_executor_completion_status(const XrXirTaskExecutor *executor) {
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (executor->driving) return XR_XIR_CALL_BUSY;
+    if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     if (!xr_xir_task_executor_root_idle(executor)) return XR_XIR_CALL_BAD_STATE;
     return task_core_completion_status(executor);
 }
 XR_FUNC XrXirCallStatus xr_xir_task_executor_attach_root(XrXirTaskExecutor *executor, XrXirCall *call, uint64_t epoch) {
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor || !call || !epoch) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (executor->driving) return XR_XIR_CALL_BUSY;
+    if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     if (!xr_xir_task_executor_root_idle(executor)) return XR_XIR_CALL_BUSY;
     if (executor->stopping || executor->budget->exhausted || executor->cleanup_incomplete ||
         xr_xir_call_cleanup_incomplete(executor->root.call) || executor->next_identity == UINT64_MAX)
@@ -236,6 +254,7 @@ static XrXirValueStatus task_core_task_prepare(XrXirTaskExecutor *executor, XrXi
 static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirCallView *view, XrXirType type,
     const XrXirCallRequest *request, XrXirValue *output) {
     if (!executor || !request || !task_core_empty_value(output)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     if (executor->driving) {
         bool child = false;
         if (!view || !xr_xir_task_executor_view_member(executor, view, &child)) return XR_XIR_CALL_BUSY;
@@ -246,14 +265,19 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(executor->config.task_arena), type);
     if (!node || node->kind != XR_XIR_TYPE_TASK) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirType result = node->element;
-    if ((result != XR_XIR_UNIT && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING) ||
+    if (!xr_xir_task_result_supported(program->types, result) ||
         request->entry >= program->entry_count ||
         program->entries[request->entry].result != result || program->entries[request->entry].cleanup_owner)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!program->permissions || program->permissions->function_count != program->entry_count ||
+        program->permissions->entries[request->entry].worker != XR_XIR_OK)
         return XR_XIR_CALL_BAD_ARGUMENT;
     for (uint32_t p = 0; p < program->entries[request->entry].parameter_count; ++p) {
         XrXirType parameter = program->entries[request->entry].parameters[p];
         if (!xr_xir_task_parameter_supported(program->types, parameter)) return XR_XIR_CALL_UNSUPPORTED;
     }
+    XrXirTimeProvider time={0};const XrXirCall *parent=view ? view->activation : executor->root.call;
+    if (parent && !xr_xir_call_time_provider(parent,&time)) return XR_XIR_CALL_BAD_STATE;
     XirTask *task = NULL;
     XrXirValueStatus prepared = task_core_task_prepare(executor, type, &task);
     if (prepared != XR_XIR_VALUE_OK) return task_core_value_status(prepared);
@@ -261,7 +285,7 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
     XR_CHECK(xr_xir_call_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY, "canonical call configuration fits");
     config.entries = executor->config.entries ? executor->config.entries : program->entries;
     config.entry_count = executor->config.entries ? executor->config.entry_count : program->entry_count;
-    config.instance = executor->config.instance; config.output = executor->config.output;
+    config.instance = executor->config.instance; config.output = executor->config.output; config.time=time;
     config.byte_limit = executor->config.call_limit; config.poll_limit = executor->config.poll_limit;
     config.depth_limit = executor->config.depth_limit; config.accounting = &task->accounting;
     config.admission = (XrXirValueAdmission){program->arena, executor->config.domain, NULL, NULL,
@@ -424,11 +448,13 @@ static void task_core_reject_closed_wait(XrXirTaskExecutor *executor) {
         task_core_enqueue(executor, &task->activation);
     }
 }
+#include "xxir_task_channel.inc.c"
 XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, uint64_t quantum) {
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor || !quantum) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (executor->driving) return XR_XIR_CALL_BUSY;
+    if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     executor->driving = true;
+    task_core_scan_channels(executor);
     while (quantum-- && executor->ready_head) {
         XirTaskActivation *activation = task_core_dequeue(executor);
         XirTask *task = activation->task;
@@ -449,8 +475,10 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_poll(XrXirTaskExecutor *executor, u
                 task_core_enqueue(executor, activation);
             }
             else if (wait.kind == XR_XIR_WAIT_TASK) task_core_register_wait(executor, activation->call);
+            else if (wait.kind == XR_XIR_WAIT_CHANNEL) executor->channel_waiting = true;
         } else if (task) task_core_finish_task(executor, task);
     }
+    if (!executor->ready_head) task_core_scan_channels(executor);
     task_core_reject_closed_wait(executor);
     executor->driving = false;
     bool root_waiting = executor->root.call && xr_xir_call_state(executor->root.call) == XR_XIR_CALL_SUSPENDED;
@@ -460,15 +488,17 @@ static bool task_core_external_pending(const XrXirTaskExecutor *executor) {
     if (!executor->external || !executor->external->call) return false;
     XrXirWaitRequest request = {0};
     return xr_xir_call_wait_request(executor->external->call, executor->external_call_wake, &request) == XR_XIR_CALL_READY &&
-        (request.kind == XR_XIR_WAIT_YIELD || request.kind == XR_XIR_WAIT_TIMER_MS) &&
+        (request.kind == XR_XIR_WAIT_YIELD || request.kind == XR_XIR_WAIT_TIMER_MS || request.kind == XR_XIR_WAIT_CHANNEL) &&
         !request.subject && !request.generation && !request.ticket;
 }
 static bool task_core_select_external(XrXirTaskExecutor *executor, XirTaskActivation *activation) {
     if (!activation->call || xr_xir_call_state(activation->call) != XR_XIR_CALL_SUSPENDED) return false;
     XrXirCallResult state = xr_xir_call_poll_bounded(activation->call, 1);
+    if (state.status == XR_XIR_CALL_READY) { task_core_enqueue(executor, activation); return false; }
     XrXirWaitRequest request = {0};
     if (xr_xir_call_wait_request(activation->call, state.wake, &request) != XR_XIR_CALL_READY ||
-        (request.kind != XR_XIR_WAIT_YIELD && request.kind != XR_XIR_WAIT_TIMER_MS)) return false;
+        (request.kind != XR_XIR_WAIT_YIELD && request.kind != XR_XIR_WAIT_TIMER_MS &&
+            request.kind != XR_XIR_WAIT_CHANNEL)) return false;
     if (executor->host_wake == UINT64_MAX) return false;
     executor->external = activation; executor->external_call_wake = state.wake; ++executor->host_wake;
     return true;
@@ -491,6 +521,7 @@ XR_FUNC XrXirCallResult xr_xir_task_executor_poll_root(XrXirTaskExecutor *execut
                 if (task_core_select_external(executor, &task->activation)) break;
         }
     }
+    if (executor->ready_head) return (XrXirCallResult){.status = XR_XIR_CALL_READY};
     if (!executor->external) return (XrXirCallResult){.status = XR_XIR_CALL_BAD_STATE};
     return (XrXirCallResult){.status = XR_XIR_CALL_SUSPENDED, .wake = executor->host_wake};
 }
@@ -498,7 +529,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_root_wait(const XrXirTaskExecutor *
     XrXirWaitRequest *output) {
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor || !output) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (executor->driving) return XR_XIR_CALL_BUSY;
+    if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     if (!epoch || epoch != executor->root_epoch || !wake || wake != executor->host_wake ||
         !task_core_external_pending(executor)) return XR_XIR_CALL_BAD_STATE;
     return xr_xir_call_wait_request(executor->external->call, executor->external_call_wake, output);
@@ -506,7 +537,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_root_wait(const XrXirTaskExecutor *
 XR_FUNC XrXirCallStatus xr_xir_task_executor_resume_root(XrXirTaskExecutor *executor, uint64_t epoch, uint64_t wake) {
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (executor->driving) return XR_XIR_CALL_BUSY;
+    if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     if (executor->stopping || !epoch || epoch != executor->root_epoch || !wake || wake != executor->host_wake ||
         !task_core_external_pending(executor))
         return XR_XIR_CALL_BAD_STATE;
@@ -520,7 +551,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_resume_root(XrXirTaskExecutor *exec
 XR_FUNC XrXirCallStatus xr_xir_task_executor_cancel_root(XrXirTaskExecutor *executor) {
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor || !executor->root.call) return XR_XIR_CALL_BAD_ARGUMENT;
-    if (executor->driving) return XR_XIR_CALL_BUSY;
+    if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     XrXirCallStatus status = xr_xir_call_request_cancel(executor->root.call);
     if (status != XR_XIR_CALL_CANCEL_REQUESTED) return status;
     if (executor->external == &executor->root) {
@@ -532,6 +563,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_cancel_root(XrXirTaskExecutor *exec
 XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor) {
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     executor->stopping = true;
     executor->external = NULL; executor->external_call_wake = 0;
     XrXirCallStatus final = XR_XIR_CALL_CANCEL_REQUESTED;
@@ -554,7 +586,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor) {
 XR_FUNC XrXirCallStatus xr_xir_task_executor_free(XrXirTaskExecutor *executor, XrXirCallBudget *accounting) {
     if (!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!executor) return XR_XIR_CALL_READY;
-    if (executor->driving) return XR_XIR_CALL_BUSY;
+    if (executor->driving || task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
     (void)xr_xir_task_executor_stop(executor);
     XrXirDomainBudgetStats work = xr_xir_domain_budget_stats(executor->config.domain);
     uint64_t tasks = 0;

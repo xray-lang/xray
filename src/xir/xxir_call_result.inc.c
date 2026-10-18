@@ -54,8 +54,8 @@ XR_FUNCDEF void xr_xir_call_result_drop(XrXirCallResult *result) {
     xr_xir_panic_drop(&result->panic);
     *result = call_result(XR_XIR_CALL_READY);
 }
-XR_FUNCDEF XrXirCallStatus xr_xir_call_discard_inbox(XrXirCallView *view, XrXirType expected) {
-    if (!(!view || call_owner_current(view->activation))) return XR_XIR_CALL_BAD_ARGUMENT;
+static XrXirCallStatus call_inbox_frame(XrXirCallView *view,XrXirType expected,CallFrame **output) {
+    if (view && !call_owner_current(view->activation)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!xr_xir_call_admission(view) || view->phase != XR_XIR_CALL_NORMAL || view->scope_exit)
         return XR_XIR_CALL_BAD_STATE;
     CallFrame *frame = view->activation->top;
@@ -67,7 +67,19 @@ XR_FUNCDEF XrXirCallStatus xr_xir_call_discard_inbox(XrXirCallView *view, XrXirT
         owner->value.payload != view->inbox.value.payload ||
         (expected == XR_XIR_UNIT ? !boundary_value(owner->value,expected) :
             !xr_xir_value_argument(&owner->value,view->arena,expected))) return XR_XIR_CALL_BAD_STATE;
-    xr_xir_call_result_drop(&frame->inbox);
-    view->inbox = call_result(XR_XIR_CALL_READY);
+    *output=frame;return XR_XIR_CALL_READY;
+}
+XR_FUNCDEF XrXirCallStatus xr_xir_call_discard_inbox(XrXirCallView *view, XrXirType expected) {
+    CallFrame *frame=NULL;XrXirCallStatus status=call_inbox_frame(view,expected,&frame);
+    if (status!=XR_XIR_CALL_READY) return status;
+    xr_xir_call_result_drop(&frame->inbox);view->inbox=call_result(XR_XIR_CALL_READY);
+    return XR_XIR_CALL_READY;
+}
+XR_FUNCDEF XrXirCallStatus xr_xir_call_take_inbox(XrXirCallView *view,XrXirType expected,XrXirValue *output) {
+    if (!output || !boundary_value(*output,XR_XIR_UNIT) || (view && output==&view->inbox.value)) return XR_XIR_CALL_BAD_ARGUMENT;
+    CallFrame *frame=NULL;XrXirCallStatus status=call_inbox_frame(view,expected,&frame);
+    if (status!=XR_XIR_CALL_READY) return status;
+    if (output==&frame->inbox.value) return XR_XIR_CALL_BAD_ARGUMENT;
+    *output=frame->inbox.value;frame->inbox=call_result(XR_XIR_CALL_READY);view->inbox=call_result(XR_XIR_CALL_READY);
     return XR_XIR_CALL_READY;
 }

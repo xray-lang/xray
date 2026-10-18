@@ -19,6 +19,7 @@
 #include "xxir_program.h"
 #include "xxir_program_packet_internal.h"
 #include "xxir_atomic.h"
+#include "xxir_channel_call_internal.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_value_place.h"
@@ -740,9 +741,13 @@ static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
             emit_value(buffer, function, layout, function->operands[op->args[0] + i]);
             EMIT_LITERAL(buffer, ";\n");
         }
-        if (op->op == XR_XIR_ENUM_NEW)
+        if (op->op == XR_XIR_ENUM_NEW) {
+            bool unit_payload=!op->immediate && xr_xir_nominal_native_recv(buffer->types,op->type,XR_XIR_UNIT);
+            if (unit_payload) append(buffer," XrXirValue unit = {0};\n");
             append(buffer, " status = xr_xir_enum_new((XrXirType) %uu, %uu, %s, %uu, xr_xir_call_admission(view), &value);\n",
-                (uint32_t) op->type, (uint32_t) op->immediate, op->args[1] ? "state->arguments" : "NULL", op->args[1]);
+                (uint32_t) op->type, (uint32_t) op->immediate, unit_payload ? "&unit" : op->args[1] ? "state->arguments" : "NULL",
+                unit_payload ? 1u : op->args[1]);
+        }
         else EMIT_FORMAT(buffer, et_66d586947c701acc, " status = xr_xir_struct_new((XrXirType) %uu, %s, %uu, xr_xir_call_admission(view), &value);\n",
             (uint32_t) op->type, op->args[1] ? "state->arguments" : "NULL", op->args[1]);
     } else {
@@ -769,11 +774,12 @@ static void emit_nominal_step(CBuffer *buffer, const XrXirFunction *function,
         " status == XR_XIR_VALUE_UNSUPPORTED \? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n");
     if (xr_xir_type_is_owned(buffer->types, op->type))
         EMIT_FORMAT(buffer, et_47856f87172c63ea, " xr_xir_owned_slot_move(state->frame, %uu, &value);\n", destination);
-    else EMIT_FORMAT(buffer, et_2ab808f49ceeebf8, " xr_xir_scalar_store(state->frame, %uu, value.payload);\n", destination);
+    else if (op->type!=XR_XIR_UNIT) EMIT_FORMAT(buffer, et_2ab808f49ceeebf8, " xr_xir_scalar_store(state->frame, %uu, value.payload);\n", destination);
     EMIT_STATIC(buffer, es_babd64ba6b0681db, " }\n return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n");
 }
 
 #include "xxir_emit_atomic.inc.c"
+#include "xxir_emit_channel.inc.c"
 #include "xxir_emit_cleanup.inc.c"
 
 static void emit_io_step(CBuffer *buffer, const XrXirFunction *function,
@@ -889,6 +895,9 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     }
     if (op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_CLASS_GET || op->op == XR_XIR_CLASS_SET) {
         emit_class_step(buffer,function,op,layout,destination); return;
+    }
+    if (xr_xir_op_is_channel(op->op)) {
+        emit_channel_step(buffer,function,op,layout,destination,index);return;
     }
     if (xr_xir_op_is_atomic(op->op)) {
         emit_atomic_step(buffer, function, op, layout, destination, index); return;
@@ -1240,7 +1249,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     const XrXirFunction *function = &module->functions[index];
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(artifact, index);
     if ((uint64_t) layout->frame_bytes + (uint64_t) layout->outgoing_count * sizeof(XrXirValue) +
-        (uint64_t) layout->path_count * sizeof(XrXirValuePathStep) > UINT32_MAX - 128u - sizeof(XrXirAtomicProgress)) {
+        (uint64_t) layout->path_count * sizeof(XrXirValuePathStep) > UINT32_MAX - 128u - sizeof(XrXirAtomicProgress) - sizeof(XrXirChannelCallState)) {
         emit_reject(buffer, XR_XIR_BUDGET);
         return;
     }
@@ -1248,6 +1257,7 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
            "    uint32_t pc, destination, expected, normal_pc, error_pc, error_destination, panic_pc, panic_destination;\n"
            "    bool initialized, waiting, invoking, discard;\n"
            "    XrXirAtomicProgress atomic;\n", prefix, index);
+    append(buffer,"    XrXirChannelCallState channel;\n");
     if (!emit_work(buffer, 1)) return;
     bool has_cleanup = emit_has_cleanup(buffer, function);
     if (!emit_work(buffer, 1)) return;
@@ -1579,10 +1589,11 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     const char *symbol_prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     emit_checked_identity(buffer);
-    EMIT_FORMAT(buffer, et_9ba6727bb474d42c, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
+    EMIT_FORMAT(buffer, et_cf4e352edfef925a, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"
+           "#include \"xir/xxir_channel.h\"\n"
            "#include \"xir/xxir_task.h\"\n"
            "#include \"xir/xxir_types.h\"\n#include \"xir/xxir_type_arena.h\"\n"
            "#if !defined(XR_ARCH_X86_64)\n#error XIR_target_mismatch\n#endif\n"
@@ -1592,6 +1603,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n",
            XR_XIR_CALL_ABI_VERSION, XR_XIR_VALUE_ABI_VERSION);
+    append(buffer,"#include \"xir/xxir_channel_call_internal.h\"\n");
     EMIT_STATIC(buffer, es_fc644a73452330e2,
            "_Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8, \"XIR fault layout\");\n"
            "_Static_assert(offsetof(XrXirFaultDetail, index) == 8 && offsetof(XrXirFaultDetail, length) == 16, \"XIR fault offsets\");\n"

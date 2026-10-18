@@ -14,9 +14,13 @@
 static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t module);
 typedef struct SourcePreludeScan { SourceContext *ctx; uint32_t depth; bool needed; } SourcePreludeScan;
 static bool source_prelude_word(SourcePreludeScan *scan,const char *name) {
-    if (name && (source_text_same(scan->ctx,NULL,name,"Atomic") ||
-        source_text_same(scan->ctx,NULL,name,"Ordering") ||
-        source_text_same(scan->ctx,NULL,name,"CryptoError"))) scan->needed=true;
+    if (!name) return true;
+    if (source_text_same(scan->ctx,NULL,name,"Atomic") || source_text_same(scan->ctx,NULL,name,"Channel"))
+        scan->needed=true;
+    for (uint32_t e=0;e<xir_prelude_source.enum_count && !scan->needed;++e) {
+        if (!source_work(scan->ctx,NULL)) return false;
+        if (source_text_same(scan->ctx,NULL,name,xir_prelude_source.enums[e].name)) scan->needed=true;
+    }
     return scan->ctx->diagnostic.status==XR_XIR_OK;
 }
 static bool source_prelude_ref(SourcePreludeScan *scan,const XrTypeRef *ref) {
@@ -165,8 +169,13 @@ static bool source_prelude_discover(SourceContext *ctx) {
 }
 
 static SourceName *source_prelude_name(SourceContext *ctx,const char *name) {
-    if (!ctx->prelude_module || !ctx->names || !name || (!source_text_same(ctx,NULL,name,"Ordering") &&
-        !source_text_same(ctx,NULL,name,"CryptoError"))) return NULL;
+    if (!ctx->prelude_module || !ctx->names || !name) return NULL;
+    bool known=false;
+    for (uint32_t e=0;e<xir_prelude_source.enum_count && !known;++e) {
+        if (!source_work(ctx,NULL)) return NULL;
+        known=source_text_same(ctx,NULL,name,xir_prelude_source.enums[e].name);
+    }
+    if (!known) return NULL;
     uint32_t module=ctx->prelude_module-1;
     if (module>=ctx->module_count) return NULL;
     bool dependency=ctx->module==module;
@@ -192,11 +201,11 @@ static bool source_prelude_bind(SourceContext *ctx,SourceName *symbol,XrXirNomin
         if (source_text_same(ctx,symbol->node,symbol->name,xir_prelude_source.enums[e].name)) expected=&xir_prelude_source.enums[e];
     }
     if (!owned || !expected || symbol->node->type!=AST_ENUM_DECL ||
-        symbol->node->as.enum_decl.type_param_count || record->kind!=XR_XIR_NOMINAL_ENUM || record->exported!=1)
+        symbol->node->as.enum_decl.type_param_count!=(int)expected->parameter_count || record->kind!=XR_XIR_NOMINAL_ENUM || record->exported!=1)
         return source_fail(ctx,symbol->node,XR_XIR_BAD_STRUCTURE,"canonical prelude enum owner is invalid");
     /* CryptoError remains an ordinary owned enum with no native privileges. */
     if (!expected->native_id) return true;
-    const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ORDERING);
+    const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(expected->native_id);
     if (!source_native_admit(ctx,native) || !native || native->id!=expected->native_id ||
         !source_text_same(ctx,symbol->node,symbol->name,native->name) ||
         !source_span_same(ctx,symbol->node,(const char *)native->source_fingerprint.bytes,

@@ -12,6 +12,8 @@
 #include <string.h>
 #define CHECK(test) do { if (!(test)) { fprintf(stderr,"check failed at %d: %s\n",__LINE__,#test); abort(); } } while (0)
 typedef struct Work { uint64_t limit, used, calls; } Work;
+static const char *const native_names[]={"Array","string","Atomic","Ordering","Task","Channel","Recv","SendResult"};
+static const uint32_t native_members[]={32,19,10,5,6,10,4,4};
 static bool charge(void *context, uint64_t units) {
     Work *work=context; ++work->calls;
     if (units>work->limit-work->used) return false;
@@ -32,11 +34,11 @@ static uint64_t expected_admission(const XrNativeTypeDeclaration *declaration) {
     return units;
 }
 static void complete_declarations(void) {
-    for (uint32_t id=1;id<=2;++id) {
+    for (uint32_t id=1;id<=sizeof(native_names)/sizeof(*native_names);++id) {
         const XrNativeTypeDeclaration *declaration=xr_native_declaration_by_id(id);
         CHECK(declaration && xr_native_declaration_validate(declaration));
-        CHECK(!strcmp(declaration->name,id==1?"Array":"string"));
-        CHECK(declaration->member_count==(id==1?32u:19u));
+        CHECK(!strcmp(declaration->name,native_names[id-1]));
+        CHECK(declaration->member_count==native_members[id-1]);
         uint64_t needed=expected_admission(declaration);
         for (uint64_t limit=0;limit<=needed;++limit) {
             Work ledger={limit,0,0};XrNativeDeclarationWork work={&ledger,charge};
@@ -65,10 +67,15 @@ static void lookup_boundaries(void) {
             (limit==12?XR_NATIVE_DECLARATION_OK:XR_NATIVE_DECLARATION_WORK_LIMIT));
         CHECK(limit==12 ? out==xr_native_declaration_by_id(1) : !out);
     }
-    Work ledger={4,0,0};XrNativeDeclarationWork work={&ledger,charge};
+    const uint64_t missing_work=2*sizeof(native_names)/sizeof(*native_names);
+    Work ledger={missing_work,0,0};XrNativeDeclarationWork work={&ledger,charge};
     const XrNativeTypeDeclaration *out=NULL;
     CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_NOT_FOUND);
-    CHECK(!out && ledger.used==4 && ledger.calls==2);
+    CHECK(!out && ledger.used==missing_work && ledger.calls==sizeof(native_names)/sizeof(*native_names));
+    for (uint64_t limit=0;limit<missing_work;++limit) {
+        ledger=(Work){limit,0,0};
+        CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_WORK_LIMIT && !out);
+    }
     ledger=(Work){0,0,0};
     CHECK(xr_native_declaration_find(&work,(const char *)(uintptr_t)1,&out)==XR_NATIVE_DECLARATION_WORK_LIMIT);
     CHECK(!out && !ledger.used && ledger.calls==1);
@@ -92,4 +99,20 @@ static void lookup_boundaries(void) {
         CHECK(!member);
     }
 }
-int main(void) { complete_declarations();lookup_boundaries();return 0; }
+static void complete_lookup_boundaries(void) {
+    for (uint32_t selected=0;selected<sizeof(native_names)/sizeof(*native_names);++selected) {
+        uint64_t needed=0;
+        for (uint32_t candidate=0;candidate<=selected;++candidate) {
+            size_t prefix=0;
+            while (native_names[selected][prefix] && native_names[selected][prefix]==native_names[candidate][prefix]) ++prefix;
+            needed+=2*(prefix+1);
+        }
+        for (uint64_t limit=0;limit<=needed;++limit) {
+            Work ledger={limit,0,0}; XrNativeDeclarationWork work={&ledger,charge}; const XrNativeTypeDeclaration *out=NULL;
+            CHECK(xr_native_declaration_find(&work,native_names[selected],&out)==
+                (limit==needed ? XR_NATIVE_DECLARATION_OK : XR_NATIVE_DECLARATION_WORK_LIMIT));
+            CHECK(limit==needed ? out==xr_native_declaration_by_id(selected+1) && ledger.used==needed : !out);
+        }
+    }
+}
+int main(void) { complete_declarations();lookup_boundaries();complete_lookup_boundaries();return 0; }

@@ -121,12 +121,12 @@ XR_FUNC XrJsonValue *xjson_new_array(void);
 XR_FUNC XrJsonValue *xjson_new_object(void);
 
 /* A successful append transfers value. On failure, count and ownership stay unchanged. */
-XR_FUNC void xjson_array_push(XrJsonValue *arr, XrJsonValue *value);
+XR_FUNC bool xjson_array_push(XrJsonValue *arr, XrJsonValue *value);
 XR_FUNC void xjson_array_truncate(XrJsonValue *arr, int max_len);
-XR_FUNC void xjson_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value);
+XR_FUNC bool xjson_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value);
 
 /* Append without key deduplication. Failure retains the caller's value. */
-XR_FUNC void xjson_object_set_new(XrJsonValue *obj, const char *key, XrJsonValue *value);
+XR_FUNC bool xjson_object_set_new(XrJsonValue *obj, const char *key, XrJsonValue *value);
 
 /* ========== Serialization ========== */
 

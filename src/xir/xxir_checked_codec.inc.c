@@ -449,7 +449,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
                 if (c->reading) fields[p] = (XrXirCallableParameter){field,0};
             }
         } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_CELL ||
-                   s.kind == XR_XIR_TYPE_NULLABLE || s.kind == XR_XIR_TYPE_ATOMIC || s.kind == XR_XIR_TYPE_TASK) {
+                   s.kind == XR_XIR_TYPE_NULLABLE || s.kind == XR_XIR_TYPE_ATOMIC || s.kind == XR_XIR_TYPE_TASK || s.kind == XR_XIR_TYPE_CHANNEL) {
             s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
         } else if (s.kind == XR_XIR_TYPE_NOMINAL) {
             s.nominal.declaration = checked_u32(c, s.nominal.declaration);

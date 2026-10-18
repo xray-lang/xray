@@ -3950,6 +3950,9 @@ endif()
 # ============================================================================
 
 if(XR_BUILD_MCP)
+    include(mcp/knowledge.cmake)
+    include(mcp/source_tools.cmake)
+
     add_executable(test_mcp_transport
         mcp/test_mcp_transport.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_transport_stdio.c
@@ -3959,33 +3962,11 @@ if(XR_BUILD_MCP)
         ${CMAKE_SOURCE_DIR}/src/app/mcp
         ${CMAKE_SOURCE_DIR}/src/base
     )
-    target_link_libraries(test_mcp_transport PRIVATE xray_core)
     add_test(NAME test_mcp_transport COMMAND test_mcp_transport)
 
-    add_executable(test_mcp_protocol
-        mcp/test_mcp_protocol.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_jsonrpc.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_protocol.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_registry.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_schema.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_lang.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_run.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_kb.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_resources.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_prompts.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_knowledge.c
-        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_knowledge_generated.c
-        ${CMAKE_SOURCE_DIR}/src/base/xjson.c
-        ${CMAKE_SOURCE_DIR}/src/base/xutf8.c
-    )
-    target_include_directories(test_mcp_protocol PRIVATE
-        ${XRAY_COMMON_INCLUDES}
-        ${CMAKE_SOURCE_DIR}/src/app/mcp
-        ${CMAKE_SOURCE_DIR}/src/base
-        ${CMAKE_SOURCE_DIR}/src/runtime/object
-    )
-    target_link_libraries(test_mcp_protocol PRIVATE xray_core)
+    add_executable(test_mcp_protocol mcp/test_mcp_protocol.c)
+    target_link_libraries(test_mcp_protocol PRIVATE xray_mcp)
+    target_include_directories(test_mcp_protocol PRIVATE ${XRAY_COMMON_INCLUDES})
     set(XR_MCP_PROTOCOL_TEST_GROUPS
         core
         tools
@@ -4005,7 +3986,6 @@ if(XR_BUILD_MCP)
         resources
         resource_templates
         prompts
-        knowledge
         dispatch
     )
     foreach(group IN LISTS XR_MCP_PROTOCOL_TEST_GROUPS)
@@ -4018,6 +3998,10 @@ if(XR_BUILD_MCP)
             LABELS "unit;mcp-protocol;sharded"
         )
     endforeach()
+    foreach(group IN LISTS XR_MCP_PROTOCOL_TEST_GROUPS)
+        set_tests_properties(test_mcp_protocol_${group} PROPERTIES
+            ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
+    endforeach()
     add_test(NAME test_mcp_knowledge_generation
         COMMAND ${XRAY_PYTHON}
             ${CMAKE_SOURCE_DIR}/tests/mcp/test_knowledge_generation.py
@@ -4029,6 +4013,8 @@ if(XR_BUILD_MCP)
             ${CMAKE_SOURCE_DIR}/tests/mcp/test_protocol_transcript.py
             --xray $<TARGET_FILE:xray>
     )
+    set_tests_properties(test_mcp_knowledge_generation test_mcp_protocol_transcript
+        PROPERTIES ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
 endif()
 
 # ============================================================================
@@ -4427,6 +4413,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/range_check.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_fill.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_concat.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_late_cancel_cross.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_array_error.cmake")
 include(xir/task_array_admission.cmake)
 
 add_executable(test_xir_array_capacity_core xir/test_xir_array_capacity_core.c)
@@ -4487,6 +4474,10 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/error_edge_snapshot.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_call_permissions.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/child_callable_native.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/child_callable_mixed.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/mixed_task_faults.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/call_observation.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_scalar_results.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_constructed_results.cmake")
 include(xir/error_dependency_worklist.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/error_cfg_pending.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameters.cmake)
@@ -4614,6 +4605,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_dominance_order.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/error_cfg_scheduling.cmake")
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/stdlib_families.cmake)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_correspondence.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_input_storage.cmake)

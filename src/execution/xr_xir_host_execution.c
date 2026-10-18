@@ -13,6 +13,7 @@
  */
 #include "xr_xir_host_execution.h"
 #include "xr_xir_host_time.h"
+#include "../os/os_time.h"
 #include "../base/xmalloc.h"
 
 struct XrXirHostCall {
@@ -131,6 +132,13 @@ XR_FUNC XrXirCallStatus xr_xir_host_execute(const XrXirHostExecutionRequest *req
             XrXirWaitRequest wait_request = {0};
             XrXirHostWait wait = {0};
             status = xr_xir_host_call_wait_request(call, observed.epoch, observed.outcome.wake, &wait_request);
+            if (status==XR_XIR_CALL_READY && wait_request.kind==XR_XIR_WAIT_CHANNEL) {
+                /* The activation arbitrates its owned peer intent and deadline.
+                 * Sleeping only paces observation and never authorizes a resume. */
+                xr_time_sleep_ms(1);
+                observed=xr_xir_host_call_step_bounded(call,256);
+                continue;
+            }
             XrXirHostWaitStatus waiting = status == XR_XIR_CALL_READY ?
                 xr_xir_host_wait_begin(&wait, &wait_request) : XR_XIR_HOST_WAIT_BAD_ARGUMENT;
             while (waiting == XR_XIR_HOST_WAIT_PENDING)

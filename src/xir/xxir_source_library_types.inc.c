@@ -216,7 +216,7 @@ static bool source_library_intern_types(SourceContext *ctx, SourceLibraryUnit *u
             out.parameters=parameters;
             if (!source_library_type(ctx,unit,in->result,&out.result)) return false;
         } else if (in->kind==XR_XIR_TYPE_ARRAY || in->kind==XR_XIR_TYPE_CELL ||
-            in->kind==XR_XIR_TYPE_NULLABLE || in->kind==XR_XIR_TYPE_ATOMIC || in->kind==XR_XIR_TYPE_TASK) {
+            in->kind==XR_XIR_TYPE_NULLABLE || in->kind==XR_XIR_TYPE_ATOMIC || in->kind==XR_XIR_TYPE_TASK || in->kind==XR_XIR_TYPE_CHANNEL) {
             if (!source_library_type(ctx,unit,in->element,&out.element)) return false;
         } else return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library type remapping is not admitted");
         if (!source_intern_type(ctx,out,&unit->types[t])) return false;

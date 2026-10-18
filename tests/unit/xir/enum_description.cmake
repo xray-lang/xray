@@ -23,3 +23,8 @@ include("${CMAKE_CURRENT_LIST_DIR}/generated_built.cmake")
 add_test(NAME test_xir_nominal_authority COMMAND test_xir_checked --nominal-authority)
 set_tests_properties(test_xir_nominal_authority PROPERTIES TIMEOUT 30
     LABELS "unit;xir;metadata;ownership;authority")
+
+add_executable(test_xir_combined_identity ${CMAKE_CURRENT_LIST_DIR}/test_xir_combined_identity.c)
+target_link_libraries(test_xir_combined_identity PRIVATE xray_xir_source)
+add_test(NAME test_xir_combined_identity COMMAND test_xir_combined_identity)
+set_tests_properties(test_xir_combined_identity PROPERTIES TIMEOUT 30 LABELS "unit;xir;ownership;identity")

@@ -6,8 +6,9 @@
  *
  * xir_assert_panics_execution.inc.c - Independent typed outcomes and effect boundaries
  */
-static XrXirArtifact *panics_lower(XrXirSourceResult *source) {
+static XrXirArtifact *panics_lower(XrXirSourceResult *source,bool default_control) {
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(source->checked,&packet,NULL)==XR_XIR_OK);
+    if (default_control) panics_default_identity_gate(source->checked,&packet);
     xr_xir_compile_source_result_free(source);
     XrXirArtifact *read=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_read(assert_compile_context,packet.bytes,packet.length,&read,NULL)==XR_XIR_OK);
@@ -22,7 +23,14 @@ static XrXirArtifact *panics_lower(XrXirSourceResult *source) {
     }
     CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);return lowered;
+    diagnostic=(XrXirDiagnostic){0};status=xr_xir_compile_lower(closed,&target,&lowered,&diagnostic);
+    if (status!=XR_XIR_OK) {
+        XrCompileResourceStats stats=library_compile_stats(assert_compile_context);
+        fprintf(stderr,"panics lower=%u f=%u b=%u i=%u cumulative_work=%llu allocated=%llu live=%llu\n",status,
+            diagnostic.function,diagnostic.block,diagnostic.instruction,(unsigned long long)stats.work,
+            (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.live_bytes);
+    }
+    CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(closed);return lowered;
 }
 static void panics_execution(const char *directory,const char *path,const char *generated_path) {
     const char *source=
@@ -46,7 +54,8 @@ static void panics_execution(const char *directory,const char *path,const char *
     const char *names[]={"arrayNormal","structNormal","enumNormal","classNormal","callableNormal","defaultEmpty",
         "innerAssertion","typedError","actionExpression","messageExpression","orderOnce","cleanupOnce","suspendPanic","suspendNormal"};
     const int64_t expected[]={445,445,445,445,445,0,11,11,420,420,123,3,19,445};
-    XrXirSourceResult result=panics_source(directory,path,source,true);XrXirArtifact *lowered=panics_lower(&result);
+    XrXirSourceResult result=panics_source(directory,path,source,true);
+    XrXirArtifact *lowered=panics_lower(&result,true);
     uint32_t entries[14];for (uint32_t i=0;i<14;++i) entries[i]=panics_find(xr_xir_compile_artifact_module(lowered),names[i]);
     XrXirCSource generated={0};CHECK(xr_xir_compile_emit_c(lowered,"panics_matrix",16777216,&generated)==XR_XIR_OK);
     CHECK(!strstr(generated.text,"({"));

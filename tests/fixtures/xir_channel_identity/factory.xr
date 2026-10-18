@@ -1,0 +1,4 @@
+export fn make<T: Sendable>(capacity: i64) -> Channel<T> {
+    return Channel<T>(capacity)
+}
+export fn alias(value: Channel<i64>) -> Channel<i64> { return value }

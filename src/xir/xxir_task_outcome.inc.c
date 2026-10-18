@@ -9,6 +9,23 @@
  * KEY CONCEPT:
  *   Erasing an error does not hide its complete underlying enum type.
  */
+/* Array value semantics preserve the scalar/string Sendable leaf contract. */
+static XrXirCallStatus task_core_error_field_admit(XrXirTaskExecutor *executor,
+    const XrXirTypes *types, XrXirType field) {
+    uint32_t arrays = 0;
+    for (;;) {
+        if (field == XR_XIR_BOOL || field == XR_XIR_RUNE || xr_xir_type_is_number(field) || field == XR_XIR_STRING)
+            return XR_XIR_CALL_READY;
+        const XrXirTypeNode *node = xr_xir_type_node(types, field);
+        if (field == XR_XIR_ERROR || field == XR_XIR_PANIC_INFO || !node || node->parameter_span ||
+            node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_CALLABLE || xr_xir_type_is_class(types, field))
+            return XR_XIR_CALL_BAD_STATE;
+        if (node->kind != XR_XIR_TYPE_ARRAY) return XR_XIR_CALL_UNSUPPORTED;
+        if (++arrays > types->count) return XR_XIR_CALL_BAD_STATE;
+        if (!xr_xir_domain_work(executor->config.domain, 1)) return XR_XIR_CALL_LIMIT;
+        field = node->element;
+    }
+}
 static XrXirCallStatus task_core_error_admit(XrXirTaskExecutor *executor, const XrXirValue *error) {
     XrXirValue underlying = {0};
     const XrXirTypeArena *arena = executor->config.program->arena;
@@ -37,16 +54,8 @@ static XrXirCallStatus task_core_error_admit(XrXirTaskExecutor *executor, const 
     if (end != identity->field_count) return XR_XIR_CALL_BAD_STATE;
     for (uint32_t f = 0; f < identity->field_count; ++f) {
         if (!xr_xir_domain_work(executor->config.domain, 1)) return XR_XIR_CALL_LIMIT;
-        XrXirType field = node->nominal.fields[f];
-        if (field == XR_XIR_BOOL || field == XR_XIR_RUNE || xr_xir_type_is_number(field) || field == XR_XIR_STRING)
-            continue;
-        /* Closed scalar/string errors are executable. Further immutable
-         * payload families need their own complete runtime capability. */
-        const XrXirTypeNode *nested = xr_xir_type_node(types, field);
-        if (field == XR_XIR_ERROR || field == XR_XIR_PANIC_INFO || !nested ||
-            nested->kind == XR_XIR_TYPE_CELL || nested->kind == XR_XIR_TYPE_CALLABLE ||
-            xr_xir_type_is_class(types, field)) return XR_XIR_CALL_BAD_STATE;
-        return XR_XIR_CALL_UNSUPPORTED;
+        XrXirCallStatus field = task_core_error_field_admit(executor, types, node->nominal.fields[f]);
+        if (field != XR_XIR_CALL_READY) return field;
     }
     XrXirValueAdmission admission = {arena, executor->config.domain, NULL, NULL,
         executor->config.poll_limit, executor->config.call_limit};
@@ -56,7 +65,14 @@ static XrXirCallStatus task_core_error_admit(XrXirTaskExecutor *executor, const 
 }
 static XrXirCallStatus task_core_outcome_admit(XrXirTaskExecutor *executor, const XrXirCallResult *outcome) {
     if (outcome->status == XR_XIR_CALL_THROWN) return task_core_error_admit(executor, &outcome->value);
-    /* Canonical Call admission already checked i64/string returns and the
+    if (outcome->status == XR_XIR_CALL_RETURNED && !xr_xir_task_scalar_result_supported((XrXirType)outcome->value.type)) {
+        XrXirValueAdmission admission = {executor->config.program->arena, executor->config.domain, NULL, NULL,
+            executor->config.poll_limit, executor->config.call_limit};
+        XrXirValueStatus status = xr_xir_value_admit(&outcome->value, (XrXirType)outcome->value.type, &admission);
+        return status == XR_XIR_VALUE_OK ? XR_XIR_CALL_READY : status == XR_XIR_VALUE_LIMIT ? XR_XIR_CALL_LIMIT :
+            status == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_BAD_STATE;
+    }
+    /* Canonical Call admission already checked typed scalar/string returns and the
      * exact scalar FaultDetail plus immutable string panic representation. */
     return XR_XIR_CALL_READY;
 }
