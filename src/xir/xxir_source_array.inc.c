@@ -310,8 +310,10 @@ static bool source_length(SourceContext *ctx, AstNode *node,
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "len requires one ordinary value operand");
     SourceValue array;
     if (!source_array_receiver(ctx, call->arguments[0], NULL, false, &array)) return false;
+    uint32_t view_kind=0;XrXirType view_element=XR_XIR_UNIT;
+    bool view=source_view_shape(ctx,array.type,&view_kind,&view_element);
     if (array.type != XR_XIR_STRING && !xr_xir_type_is_array(&ctx->types, array.type) &&
-        !xr_xir_type_is_map(&ctx->types, array.type) && !xr_xir_type_is_set(&ctx->types, array.type))
+        !xr_xir_type_is_map(&ctx->types, array.type) && !xr_xir_type_is_set(&ctx->types, array.type) && !view)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "len receiver family is not admitted");
     if (!ctx->length_declaration) {
         XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
@@ -332,7 +334,7 @@ static bool source_length(SourceContext *ctx, AstNode *node,
         record->type = (XrXirSourceType) {XR_XIR_I64, 0, true};
         record->parameters = parameter; record->parameter_count = 1;
     }
-    return source_recipe_record(ctx, (XrXirInstruction) {array.type == XR_XIR_STRING ? XR_XIR_STRING_LEN : xr_xir_type_is_array(&ctx->types, array.type) ? XR_XIR_ARRAY_LEN : XR_XIR_HASH_LEN, XR_XIR_I64, {array.id, 0}, {0}, 0, {0}}, value) &&
+    return source_recipe_record(ctx, (XrXirInstruction) {view ? XR_XIR_VIEW_LEN : array.type == XR_XIR_STRING ? XR_XIR_STRING_LEN : xr_xir_type_is_array(&ctx->types, array.type) ? XR_XIR_ARRAY_LEN : XR_XIR_HASH_LEN, XR_XIR_I64, {array.id, 0}, {0}, 0, {0}}, value) &&
         source_query_target_token_reference(ctx,call->callee,
             ctx->length_declaration, XR_XIR_SOURCE_CALL);
 }

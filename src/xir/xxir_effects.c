@@ -255,6 +255,11 @@ static bool effect_seed_type(const XrXirTypes *types,XrXirType callable,
     const XrXirInstruction *instruction,XrXirFunctionEffects *effect) {
     XrXirOp op = instruction->op;
     switch (op) {
+    /* View operations use panic faults and cannot suspend or create tasks. */
+    case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN:
+    case XR_XIR_VIEW_GET: case XR_XIR_VIEW_SET: case XR_XIR_VIEW_COPY:
+    case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
+        return true;
     case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT:
         effect->suspend = XR_XIR_EFFECT_MAY; return true;
     case XR_XIR_GO: return true;

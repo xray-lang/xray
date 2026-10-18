@@ -4,16 +4,18 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xxir_view_affine.c - Independent affine SSA availability over actual CFG edges
+ * xxir_view_affine.c - Borrowed owner availability and affine SSA transfers
  *
  * KEY CONCEPT:
- *   Logical transfers kill their source on every path. This check grants no
+ *   Explicit END kills Shared and Mut owners; affine transfers kill sources.
+ *   Copyable Shared values keep their independent owners. This grants no
  *   root lifetime, reborrow permission or executable move implementation.
  */
 #include "xxir_view_types_internal.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_compile_memory.h"
+#include "../base/xchecks.h"
 
 typedef struct AffineRule { uint8_t operands,edges; } AffineRule;
 static const AffineRule affine_rules[XR_XIR_OP_COUNT]={
@@ -34,35 +36,19 @@ typedef struct AffineCheck {
     uint32_t count,words;
 } AffineCheck;
 
-static bool affine_type(const XrXirTypes *types,const uint8_t *flags,XrXirType type) {
-    return xr_xir_type_node(types,type) && flags[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]!=0;
+static uint32_t affine_flags(const AffineCheck *a,XrXirType type) {
+    return xr_xir_type_node(a->module->types,type) ?
+        a->types[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]&3u : 0;
 }
-/* Recompute only affine storage from the immutable descriptor DAG. Neither
- * producer flags nor the separate return-origin traversal are certificates. */
-static XrXirStatus affine_types(const XrXirCompileContext *c,const XrXirTypes *types,uint8_t **out) {
-    if (!types) return XR_XIR_OK;
-    if (!!types->count!=!!types->nodes) return XR_XIR_BAD_STRUCTURE;
-    bool present=false;
-    for (uint32_t i=0;i<types->count;++i) {
-        if (!xir_compile_work(c,1)) return XR_XIR_BUDGET;
-        present|=types->nodes[i].kind==XR_XIR_TYPE_MUT_SLICE;
+static bool affine_owner(const AffineCheck *a,uint32_t value) {
+    if (value>=a->function->parameter_count) {
+        XrXirOp op=a->function->instructions[value-a->function->parameter_count].op;
+        if (op==XR_XIR_INVOKE || op==XR_XIR_INVOKE_INDIRECT || op==XR_XIR_INVOKE_DEFAULT) return false;
     }
-    if (!present) return XR_XIR_OK;
-    XrXirStatus status=XR_XIR_OK;
-    uint8_t *flags=xir_compile_calloc(c,types->count,sizeof(*flags),&status);
-    if (!flags) return status;
-    for (uint32_t i=0;i<types->count && status==XR_XIR_OK;++i) {
-        if (!xir_compile_work(c,1)) {status=XR_XIR_BUDGET;break;}
-        const XrXirTypeNode *n=&types->nodes[i];
-        flags[i]=(uint8_t)(n->kind==XR_XIR_TYPE_MUT_SLICE);
-        if (n->kind==XR_XIR_TYPE_NULLABLE) flags[i]=(uint8_t)affine_type(types,flags,n->element);
-        if (n->kind==XR_XIR_TYPE_TUPLE) for (uint32_t p=0;p<n->parameter_count;++p) {
-            if (!xir_compile_work(c,1)) {status=XR_XIR_BUDGET;break;}
-            flags[i]|=(uint8_t)affine_type(types,flags,n->parameters[p].type);
-        }
-    }
-    if (status==XR_XIR_OK) *out=flags;else xr_compile_resources_free(flags);
-    return status;
+    return affine_flags(a,xr_xir_operand_type(a->function,value))!=0;
+}
+static bool affine_mutable(const AffineCheck *a,uint32_t value) {
+    return (affine_flags(a,xr_xir_operand_type(a->function,value))&XR_XIR_VIEW_MUTABLE)!=0;
 }
 static uint32_t affine_index(const AffineCheck *a,uint32_t value) { return a->indices[value]; }
 static bool affine_has(const uint64_t *bits,uint32_t id) {
@@ -85,7 +71,7 @@ static XrXirStatus affine_allocate(AffineCheck *a) {
     if (values>UINT32_MAX || values>SIZE_MAX/sizeof(uint32_t)) return XR_XIR_BUDGET;
     for (uint32_t v=0;v<(uint32_t)values;++v) {
         if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
-        a->count+=affine_type(a->module->types,a->types,xr_xir_operand_type(f,v));
+        a->count+=affine_owner(a,v);
     }
     if (!a->count) return XR_XIR_OK;
     a->words=(uint32_t)(((uint64_t)a->count+63)/64);
@@ -102,8 +88,9 @@ static XrXirStatus affine_allocate(AffineCheck *a) {
     uint32_t index=0;
     for (uint32_t v=0;v<(uint32_t)values;++v) {
         if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
-        a->indices[v]=affine_type(a->module->types,a->types,xr_xir_operand_type(f,v)) ? index++ : UINT32_MAX;
+        a->indices[v]=affine_owner(a,v) ? index++ : UINT32_MAX;
     }
+    XR_CHECK(index==a->count,"borrowed owner inventory stays immutable during CFG checking");
     a->inputs=a->storage;a->current=a->inputs+(size_t)f->block_count*a->words;
     a->edge=a->current+a->words;a->borrowed=a->edge+a->words;a->initial=a->borrowed+a->words;
     for (uint32_t p=0;p<f->parameter_count;++p) {
@@ -158,10 +145,23 @@ static XrXirStatus affine_use(AffineCheck *a,uint32_t value,bool consume,bool bo
 static XrXirStatus affine_instruction(AffineCheck *a,uint32_t i,bool check) {
     const XrXirFunction *f=a->function;const XrXirInstruction *op=&f->instructions[i];
     uint32_t result=affine_index(a,f->parameter_count+i);a->location.instruction=i;
-    bool call=affine_call(op->op),consume=op->op==XR_XIR_NULLABLE_SOME ||
-        op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_RETURN;
+    if (op->op==XR_XIR_VIEW_CLEANUP) {
+        for (uint32_t p=0;p<op->args[1];++p) {
+            if (!xir_compile_work(a->context,1)) return XR_XIR_BUDGET;
+            uint32_t id=affine_index(a,f->operands[op->args[0]+p]);
+            if (id==UINT32_MAX) return XR_XIR_BAD_TYPE;
+            affine_set(a->current,id,false);
+        }
+        return XR_XIR_OK;
+    }
+    bool call=affine_call(op->op),aggregate=op->op==XR_XIR_NULLABLE_SOME || op->op==XR_XIR_TUPLE_NEW;
+    bool consume=op->op==XR_XIR_RETURN || op->op==XR_XIR_VIEW_END;
+    bool shared_copy=op->op==XR_XIR_COPY || op->op==XR_XIR_OWNED_RETAIN ||
+        op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP;
     bool definition=op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME ||
-        op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_PHI || call || op->op==XR_XIR_INVOKE_RESULT;
+        op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_PHI || call || op->op==XR_XIR_INVOKE_RESULT ||
+        op->op==XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW ||
+        (shared_copy && !affine_mutable(a,f->parameter_count+i));
     if (check && result!=UINT32_MAX && !definition) return XR_XIR_BAD_VALUE;
     if (call) {
         if (!xir_compile_work(a->context,a->words)) return XR_XIR_BUDGET;
@@ -169,9 +169,12 @@ static XrXirStatus affine_instruction(AffineCheck *a,uint32_t i,bool check) {
     }
     if (op->op!=XR_XIR_PHI) for (uint32_t p=0;p<affine_operands(a,op);++p) {
         uint32_t v=xr_xir_op_uses_operand_table(op->op) ? f->operands[op->args[0]+p] : op->args[p];
-        if (check && affine_index(a,v)!=UINT32_MAX && !consume && !call && op->op!=XR_XIR_NULLABLE_IS_SOME)
+        bool mutable=affine_mutable(a,v),take=consume || (aggregate && mutable);
+        bool view_read=op->op>=XR_XIR_VIEW_REBORROW && op->op<=XR_XIR_VIEW_COPY;
+        bool copy=!mutable && (shared_copy || aggregate);
+        if (check && affine_index(a,v)!=UINT32_MAX && !take && !call && !copy && !view_read && op->op!=XR_XIR_NULLABLE_IS_SOME)
             return XR_XIR_BAD_VALUE;
-        XrXirStatus status=affine_use(a,v,consume,call,check);if (status!=XR_XIR_OK) return status;
+        XrXirStatus status=affine_use(a,v,take,call && mutable,check);if (status!=XR_XIR_OK) return status;
     }
     /* The callee of an indirect call is an owned callable, whose signature
      * never makes the callable payload itself an affine borrowed value. */
@@ -188,8 +191,8 @@ static XrXirStatus affine_transfer(AffineCheck *a,uint32_t b,bool check) {
     }
     return status;
 }
-/* Every PHI input is consumed simultaneously on its normal predecessor edge.
- * No target PHI definition is generated until all edge inputs have been killed. */
+/* Mut PHI inputs transfer simultaneously on their normal predecessor edge.
+ * Shared PHIs copy an independent owner and preserve the source's availability. */
 static XrXirStatus affine_phi_edge(AffineCheck *a,uint32_t from,uint32_t target,bool check) {
     const XrXirFunction *f=a->function;const XrXirBlock *block=&f->blocks[target];
     for (uint32_t i=block->first;i<block->first+block->count;++i) {
@@ -203,7 +206,7 @@ static XrXirStatus affine_phi_edge(AffineCheck *a,uint32_t from,uint32_t target,
                 if (check && !affine_has(a->edge,id)) {
                     a->location.block=target;a->location.instruction=i;return XR_XIR_BAD_VALUE;
                 }
-                affine_set(a->edge,id,false);
+                if (affine_mutable(a,f->operands[op->args[0]+p+1])) affine_set(a->edge,id,false);
             }
         }
     }
@@ -258,7 +261,7 @@ XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *
     const XrXirModule *module,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context) || !module || !module->function_count || !module->functions)
         return XR_XIR_BAD_STRUCTURE;
-    uint8_t *types=NULL;XrXirStatus status=affine_types(context,module->types,&types);
+    uint8_t *types=NULL;XrXirStatus status=xir_compile_view_flags_new(context,module->types,&types);
     if (status!=XR_XIR_OK || !types) return status;
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
         if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
@@ -270,3 +273,7 @@ XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *
     }
     xr_compile_resources_free(types);return status;
 }
+
+#include "xxir_view_liveness.inc.c"
+#include "xxir_view_normalize.inc.c"
+#include "xxir_view_may_owned.inc.c"

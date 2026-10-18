@@ -17,6 +17,7 @@
 #include "xxir_operand_roles.h"
 #include "xxir_library_catalog.h"
 #include "xxir_constraint_proof.h"
+#include "xxir_view_types_internal.h"
 #include "xxir_implementation.h"
 #include "xxir_implementation_verify.h"
 #include "xxir_interface_members.h"
@@ -521,8 +522,11 @@ static bool source_query_reference(SourceContext *ctx, AstNode *node, SourceName
     if (!records) return false;
     ctx->query.references = records;
     XrXirSourceReference *record = &records[ctx->query.reference_count - 1];
-    *record = (XrXirSourceReference) {source_query_range(ctx, node, NULL), binding->declaration, target->declaration, access};
-    return source_query_syntax_reference(ctx, source_query_token_range(ctx, node));
+    XrXirSourceRange selection=source_query_token_range(ctx,node);
+    /* Variable leaves carry a start token but need no parser-owned end span. */
+    *record = (XrXirSourceReference) {node && node->type==AST_VARIABLE ? selection : source_query_range(ctx,node,NULL),
+        binding->declaration,target->declaration,access};
+    return source_query_syntax_reference(ctx,selection);
 }
 static bool source_query_expression(SourceContext *ctx, AstNode *node, XrXirType type) {
     XrXirSourceExpression *records = source_query_append(ctx, ctx->query.expressions,
@@ -561,6 +565,7 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
 #include "xxir_source_hash_type.inc.c"
 #include "xxir_source_atomic.inc.c"
 #include "xxir_source_task_type.inc.c"
+#include "xxir_source_view_type.inc.c"
 #include "xxir_source_ordering.inc.c"
 typedef struct SourceSubstitution { const XrXirType *types; uint32_t count; } SourceSubstitution;
 static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
@@ -709,6 +714,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
             return source_native_atomic_type(ctx,ref,type);
         if (ref->name && source_text_same(ctx,NULL,ref->name,"Task"))
             return source_native_task_type(ctx,ref,type);
+        if (ref->name && (source_text_same(ctx,NULL,ref->name,"Slice") || source_text_same(ctx,NULL,ref->name,"MutSlice")))
+            return source_view_type_ref(ctx,ref,type);
         if (ref->name && (source_text_same(ctx,NULL,ref->name,"Map") || source_text_same(ctx,NULL,ref->name,"Set")))
             return source_native_hash_type(ctx,ref,type);
         if (ref->name && source_native_find(ctx,ref->name))
@@ -1645,6 +1652,7 @@ static bool source_explicit_reference(SourceContext *ctx, AstNode *node, SourceE
 static bool source_comptime_expression(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value);
 static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value);
 static bool source_defer(SourceContext *ctx, AstNode *node);
+#include "xxir_source_view.inc.c"
 static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedType context, SourceValue *value) {
     switch (node->type) {
     case AST_LITERAL_NULL:
@@ -1664,6 +1672,7 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
             context.type=xr_xir_nullable_element(&ctx->types,context.type);
         return source_tuple_literal(ctx,node,context,value);
     case AST_INDEX_GET: return source_index_get(ctx, node, value);
+    case AST_SLICE_EXPR: return source_slice(ctx,node,context,value);
     case AST_INDEX_SET: return source_index_set(ctx, node, value);
     case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING: case AST_LITERAL_RUNE:
         return source_literal(ctx, node, value);

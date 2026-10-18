@@ -13,6 +13,8 @@
 struct CallViewBinding {
     CallViewBinding *next;
     XrXirViewOriginPin pin;
+    const XrXirCellLoan *root_loan;
+    bool returned;
 };
 static XrXirValueStatus call_view_status(XrXirCallStatus status) {
     return status==XR_XIR_CALL_OOM ? XR_XIR_VALUE_OOM : status==XR_XIR_CALL_LIMIT ?
@@ -55,6 +57,7 @@ typedef struct CallViewCreation {
     XrXirViewStorageSpec spec;
     const XrXirValue *parent;
     XrXirCellAuthority parent_authority;
+    const XrXirCellLoan *root_loan;
 } CallViewCreation;
 static XrXirValueStatus call_view_parent_authorize(void *context,const XrXirValue *value,bool writable,
     XrXirValueAdmission *admission,XrXirCellAuthority *output) {
@@ -69,6 +72,7 @@ static XrXirValueStatus call_view_prepare(XrXirCallView *view,XrXirType type,
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
     if (!admission || !admission->domain || view->phase!=XR_XIR_CALL_NORMAL || view->activation->admitting ||
         xr_xir_call_execution_status(view)!=XR_XIR_CALL_READY ||
+        view->activation->top->return_staged ||
         !call_view_slot(view->activation->top,output) || output->type || output->reserved || output->payload)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena),type);
@@ -89,7 +93,7 @@ static XrXirValueStatus call_view_collect(XrXirCall *call,bool charge) {
 }
 XR_FUNC XrXirValueStatus xr_xir_call_view_drop(XrXirCallView *view,XrXirValue *value) {
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
-    if (!admission || view->activation->admitting || xr_xir_call_execution_status(view)!=XR_XIR_CALL_READY ||
+    if (!admission || view->activation->admitting || view->activation->top->return_staged || xr_xir_call_execution_status(view)!=XR_XIR_CALL_READY ||
         !call_view_slot(view->activation->top,value) || !xr_xir_value_valid(value) ||
         !xr_xir_compile_type_arena_borrowed(admission->arena,(XrXirType)value->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirCall *call=view->activation;
@@ -100,11 +104,7 @@ XR_FUNC XrXirValueStatus xr_xir_call_view_drop(XrXirCallView *view,XrXirValue *v
     call->admitting=false;
     XR_CHECK(status==XR_XIR_VALUE_OK,"prepaid binding retirement cannot fail");return status;
 }
-static XrXirValueStatus call_view_reserve(CallViewCreation *c) {
-    c->call->admitting=true;
-    XrXirValueStatus collected=call_view_collect(c->call,true);
-    c->call->admitting=false;
-    if (collected!=XR_XIR_VALUE_OK) return collected;
+static XrXirValueStatus call_view_allocate(CallViewCreation *c) {
     /* The pin, registry write, terminal traversal and revocation never need
      * a fresh allocation or quota after the view constructor commits its COW. */
     if (!call_cell_work(c->call,sizeof(CallViewBinding)+sizeof(XrXirViewOriginPin)+2*sizeof(void *)+16))
@@ -112,7 +112,19 @@ static XrXirValueStatus call_view_reserve(CallViewCreation *c) {
     XrXirCallStatus status=XR_XIR_CALL_READY;
     c->binding=call_allocate(&c->call->config,c->call->budget,sizeof(*c->binding),&status);
     if (!c->binding) return call_view_status(status);
-    *c->binding=(CallViewBinding){0};return XR_XIR_VALUE_OK;
+    *c->binding=(CallViewBinding){0};
+    c->binding->root_loan=c->root_loan;
+    /* A stable binding remains distinct when an interpreter reuses one owned
+     * scratch slot for several simultaneously live mutable view results. */
+    if (c->spec.kind==XR_XIR_TYPE_MUT_SLICE)
+        c->spec.authority=(XrXirCellAuthority){c->call,c->binding,c->frame->epoch};
+    return XR_XIR_VALUE_OK;
+}
+static XrXirValueStatus call_view_reserve(CallViewCreation *c) {
+    c->call->admitting=true;
+    XrXirValueStatus collected=call_view_collect(c->call,true);
+    c->call->admitting=false;
+    return collected==XR_XIR_VALUE_OK ? call_view_allocate(c) : collected;
 }
 static void call_view_finish(CallViewCreation *c,XrXirValueStatus status,XrXirValue *created,XrXirValue *output) {
     if (status==XR_XIR_VALUE_OK) {
@@ -127,10 +139,10 @@ XR_FUNC XrXirValueStatus xr_xir_call_view_new(XrXirCallView *view,XrXirType type
     CallViewCreation c={0};XrXirValueStatus status=call_view_prepare(view,type,output,&c);
     if (status!=XR_XIR_VALUE_OK) return status;
     if (parameter>=c.frame->entry->parameter_count || offset<0 || length<0) return XR_XIR_VALUE_BAD_ARGUMENT;
-    bool root=false;
+    const XrXirCellLoan *root=NULL;
     for (uint32_t i=0;i<c.frame->loan_count;++i) {
         if (!call_cell_work(c.call,1)) return XR_XIR_VALUE_LIMIT;
-        root|=c.frame->loans[i].parameter==parameter;
+        if (c.frame->loans[i].parameter==parameter) root=&c.frame->loans[i].loan;
     }
     if (!root || xr_xir_cell_is_projection(&c.frame->arguments[parameter])) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirTypes *types=xr_xir_compile_type_arena_types(c.call->config.admission.arena);
@@ -142,6 +154,7 @@ XR_FUNC XrXirValueStatus xr_xir_call_view_new(XrXirCallView *view,XrXirType type
         (string ? c.spec.kind!=XR_XIR_TYPE_SLICE || result->element!=XR_XIR_U8 :
          !array || array->kind!=XR_XIR_TYPE_ARRAY || result->element!=array->element)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirCellAuthority parent=frame_cell_authority(c.call,c.frame);
+    c.root_loan=root;
     c.spec.authority=c.spec.kind==XR_XIR_TYPE_SLICE ? parent : (XrXirCellAuthority){c.call,output,c.frame->epoch};
     c.spec.offset=offset;c.spec.length=length;status=call_view_reserve(&c);
     if (status!=XR_XIR_VALUE_OK) return status;
@@ -159,6 +172,7 @@ XR_FUNC XrXirValueStatus xr_xir_call_view_reborrow(XrXirCallView *view,XrXirType
     if (!source_type || (c.spec.kind==XR_XIR_TYPE_MUT_SLICE && source_type->kind!=XR_XIR_TYPE_MUT_SLICE))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     CallViewBinding *source=call_view_binding(c.call,parent,&status);if (!source) return status;
+    c.root_loan=source->root_loan;
     if (!xr_xir_view_scope_active(&source->pin)) return XR_XIR_VALUE_BAD_ARGUMENT;
     c.spec.authority=c.spec.kind==XR_XIR_TYPE_SLICE ? source->pin.authority :
         (XrXirCellAuthority){c.call,output,c.frame->epoch};

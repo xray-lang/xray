@@ -31,7 +31,7 @@
 #include "xir_checked_scalar73_golden.h"
 #include "xir_checked_scalar74_golden.h"
 #include "xir_checked_scalar75_golden.h"
-#include "xir_checked_scalar84_golden.h"
+#include "xir_checked_scalar85_golden.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
@@ -188,7 +188,10 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 28 && XR_XIR_CHECKED_CONTRACT == 84 && XR_XIR_OP_COUNT == 176, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 28 && XR_XIR_CHECKED_CONTRACT == 85 && XR_XIR_OP_COUNT == 184, "packet revision");
+    _Static_assert(XR_XIR_VIEW_NEW==176 && XR_XIR_VIEW_REBORROW==177 && XR_XIR_VIEW_LEN==178 &&
+        XR_XIR_VIEW_GET==179 && XR_XIR_VIEW_SET==180 && XR_XIR_VIEW_COPY==181 && XR_XIR_VIEW_END==182 &&
+        XR_XIR_VIEW_CLEANUP==183,"storage view wire operations");
     _Static_assert(XR_XIR_NULLABLE_NONE == 126 && XR_XIR_NULLABLE_SOME == 127, "typed nullable operations");
     _Static_assert(XR_XIR_EQUAL == 125, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 124, "typed normal result discard operation");
@@ -228,8 +231,8 @@ static void byte_order(void) {
     CHECK(packet.bytes[144] == 128);
     /* Independent fixed little-endian fixture, including the signed minimum
      * and the block's zero panic handler and cleanup frontier. */
-    CHECK(!memcmp(packet.bytes + 32, checked_scalar84_digest, 32));
-    CHECK(packet.length==sizeof(checked_scalar84_golden) && !memcmp(packet.bytes,checked_scalar84_golden,packet.length));
+    CHECK(!memcmp(packet.bytes + 32, checked_scalar85_digest, 32));
+    CHECK(packet.length==sizeof(checked_scalar85_golden) && !memcmp(packet.bytes,checked_scalar85_golden,packet.length));
     checked_previous_identity_rejected(checked_scalar75_golden,sizeof(checked_scalar75_golden));
     checked_previous_identity_rejected(checked_scalar74_golden,sizeof(checked_scalar74_golden));
     checked_previous_identity_rejected(checked_scalar73_golden,sizeof(checked_scalar73_golden));

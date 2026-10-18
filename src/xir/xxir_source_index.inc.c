@@ -16,6 +16,13 @@ static bool source_index_get(SourceContext *ctx, AstNode *node, SourceValue *val
     AstNode *receiver = node->as.index_get.array, *index = node->as.index_get.index;
     SourceValue container = {0}, key = {0};
     if (!source_array_receiver(ctx, receiver, index, false, &container)) return false;
+    uint32_t view_kind=0;XrXirType view_element=XR_XIR_UNIT;
+    if (source_view_shape(ctx,container.type,&view_kind,&view_element)) {
+        if (!source_plan_expression(ctx,index,(SourceExpectedType){true,XR_XIR_I64,false,false},&key)) return false;
+        if (key.type!=XR_XIR_I64) return source_fail(ctx,index,XR_XIR_BAD_TYPE,"view index requires exact i64");
+        return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_VIEW_GET,view_element,
+            {container.id,key.id},{0},0,{0}},value);
+    }
     if (!xr_xir_type_is_map(&ctx->types, container.type))
         return source_array_get(ctx, node, receiver, index, &container, NULL, value);
     const XrXirTypeNode *map = xr_xir_type_node(&ctx->types, container.type);

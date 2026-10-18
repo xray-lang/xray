@@ -94,6 +94,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
             status = type_access_edge(types, node->element, i, pending, remaining);
             if (status == XR_XIR_OK) status = type_access_edge(types, node->result, i, pending, remaining);
         } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_SET || node->kind == XR_XIR_TYPE_CELL ||
+                   node->kind == XR_XIR_TYPE_SLICE || node->kind == XR_XIR_TYPE_MUT_SLICE ||
                    node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK)
             status = type_access_edge(types, node->element, i, pending, remaining);
         else status = XR_XIR_BAD_TYPE;

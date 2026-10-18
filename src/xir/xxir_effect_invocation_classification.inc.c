@@ -40,6 +40,11 @@ typedef struct EffectPhysicalDomain {
  * Call identity, ROOT or NO_SUSPEND never substitute for its answer. */
 static bool effect_physical_error_empty_opcode(XrXirOp op) {
     switch (op) {
+    /* View faults enter the panic protocol; none throws a language Error. */
+    case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN:
+    case XR_XIR_VIEW_GET: case XR_XIR_VIEW_SET: case XR_XIR_VIEW_COPY:
+    case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
+        return true;
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING: case XR_XIR_SLOT_LOAD:
     case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE: case XR_XIR_ATOMIC_NEW: case XR_XIR_ATOMIC_LOAD:
     case XR_XIR_ATOMIC_STORE: case XR_XIR_ATOMIC_ADD: case XR_XIR_ATOMIC_SUB: case XR_XIR_ATOMIC_FETCH_ADD:

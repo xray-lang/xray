@@ -31,6 +31,7 @@ static XrXirStatus view_flags_build(const XrXirCompileContext *context,
         present|=types->nodes[i].kind==XR_XIR_TYPE_SLICE || types->nodes[i].kind==XR_XIR_TYPE_MUT_SLICE;
     }
     if (!present) return XR_XIR_OK;
+    if (types->count>context->limits.frame_bytes) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
     uint8_t *flags=xir_compile_calloc(context,types->count,sizeof(*flags),&status);
     if (!flags) return status;
@@ -130,6 +131,8 @@ XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileConte
 }
 
 #include "xxir_view_origins.inc.c"
+#include "xxir_view_liveness_internal.h"
+#include "xxir_view_roots.inc.c"
 
 XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *context,
     const XrXirModule *module,XrXirDiagnostic *diagnostic) {
@@ -139,6 +142,8 @@ XR_FUNC XrXirStatus xir_compile_view_module_boundary(const XrXirCompileContext *
     if (status!=XR_XIR_OK || !flags) return status;
     status=view_origins_verify(context,module,flags,diagnostic);
     if (status==XR_XIR_OK) status=xir_compile_view_affine_verified(context,module,diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_liveness_verified(context,module,NULL,NULL,diagnostic);
+    if (status==XR_XIR_OK) status=xir_compile_view_roots_verified(context,module,NULL,NULL,diagnostic);
     for (uint32_t f=0;f<module->function_count && status==XR_XIR_OK;++f) {
         const XrXirFunction *body=&module->functions[f];
         if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}

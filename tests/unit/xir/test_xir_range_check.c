@@ -25,10 +25,10 @@
 #include "xir_checked_range72_golden.h"
 #include "xir_checked_range73_golden.h"
 #include "xir_checked_range74_golden.h"
-#include "xir_checked_range84_golden.h"
+#include "xir_checked_range85_golden.h"
 _Static_assert(XR_XIR_RANGE_CHECK == 148 && XR_XIR_GO == 146 && XR_XIR_TASK_AWAIT == 147,
     "The range instruction preserves existing operation ordinals");
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 28 && XR_XIR_CHECKED_CONTRACT == 84,
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 28 && XR_XIR_CHECKED_CONTRACT == 85,
     "The unchanged wire schema carries the range semantic revision");
 
 typedef struct RangeView {
@@ -137,9 +137,9 @@ static size_t range_pipeline(size_t failure, bool execute) {
     XrXirStatus status = xir_fixture_check(&context, &view.module, &checked, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(checked,&packet,NULL);
     if (status == XR_XIR_OK) {
-        CHECK(packet.length == sizeof(checked_range84_golden));
-        CHECK(!memcmp(packet.bytes,checked_range84_golden,packet.length));
-        status = xr_xir_compile_checked_read(&context,checked_range84_golden,sizeof(checked_range84_golden),&decoded,NULL);
+        CHECK(packet.length == sizeof(checked_range85_golden));
+        CHECK(!memcmp(packet.bytes,checked_range85_golden,packet.length));
+        status = xr_xir_compile_checked_read(&context,checked_range85_golden,sizeof(checked_range85_golden),&decoded,NULL);
     }
     const XrXirTarget target = {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     if (status == XR_XIR_OK) status = xr_xir_compile_lower(decoded,&target,&lowered,NULL);

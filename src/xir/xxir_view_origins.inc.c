@@ -180,6 +180,10 @@ static XrXirStatus view_origin_step(ViewOriginQuery *q,ViewOriginPair task) {
         return task.first==q->candidate ? XR_XIR_OK : XR_XIR_BAD_VALUE;
     const XrXirInstruction *op=&q->function->instructions[task.first-q->function->parameter_count];
     switch (op->op) {
+    case XR_XIR_VIEW_NEW:case XR_XIR_VIEW_REBORROW:
+        if (task.second || op->args[1]!=3 || op->args[0]>q->function->operand_count ||
+            3u>q->function->operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
+        return view_origin_push(q,q->function->operands[op->args[0]],0);
     case XR_XIR_COPY:case XR_XIR_OWNED_RETAIN:case XR_XIR_CELL_PROJECT:
     case XR_XIR_CELL_PLACE:case XR_XIR_CELL_READ:case XR_XIR_FIELD_PLACE:
     case XR_XIR_INDEX_PLACE:case XR_XIR_OBJECT_PLACE:

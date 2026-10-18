@@ -34,4 +34,11 @@ XR_FUNC XrXirValueStatus xr_xir_call_view_access(const XrXirCallView *view,XrXir
 /* Consumes an actual owned borrowed-value slot after all fallible work. Closed
  * registry entries are reclaimed; live aliases keep their existing scope. */
 XR_FUNC XrXirValueStatus xr_xir_call_view_drop(XrXirCallView *view,XrXirValue *value);
+/* Moves one prepared borrowed argument into an actual owned frame state slot.
+ * Cell/ref arguments stay in the driver until their committed loans retire. */
+XR_FUNC XrXirValueStatus xr_xir_call_view_argument_take(XrXirCallView *view,
+    uint32_t parameter,XrXirValue *output);
+/* Takes the already adopted returned owner without copying a mutable view. */
+XR_FUNC XrXirValueStatus xr_xir_call_view_inbox_take(XrXirCallView *view,
+    XrXirType type,XrXirValue *output);
 #endif // XXIR_CALL_VIEW_INTERNAL_H

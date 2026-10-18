@@ -37,7 +37,8 @@ XR_FUNC XrXirStatus xr_xir_compile_view_return_candidate(const XrXirCompileConte
 XR_FUNC XrXirStatus xir_compile_view_return_origins_verified(const XrXirCompileContext *context,
     const XrXirModule *module, XrXirDiagnostic *diagnostic);
 /* Requires ordinary type, structure and SSA admission. Independently checks
- * logical affine transfers, simultaneous PHIs and availability on all CFG paths.
+ * Shared/Mut owner availability after END, logical affine transfers and PHIs.
+ * Shared copies retain independent owners; calls temporarily borrow inputs.
  * This grants neither root/NLL permissions nor executable move semantics. */
 XR_FUNC XrXirStatus xir_compile_view_affine_verified(const XrXirCompileContext *context,
     const XrXirModule *module, XrXirDiagnostic *diagnostic);

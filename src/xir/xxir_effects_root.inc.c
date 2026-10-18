@@ -237,6 +237,11 @@ static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,X
     uint32_t i=request->ordinal;
     const XrXirInstruction *op=request->instruction;
     switch (op->op) {
+    /* Root authority comes from the admitted Cell/place or borrowed input. */
+    case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN:
+    case XR_XIR_VIEW_GET: case XR_XIR_VIEW_SET: case XR_XIR_VIEW_COPY:
+    case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
+        return XR_XIR_OK;
     case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_PLACE: case XR_XIR_SLOT_STORE:
         return effect_root_slot(request,facts,required,work);
     case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_GROUP_INIT: {

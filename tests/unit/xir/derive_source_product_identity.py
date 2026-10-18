@@ -37,7 +37,7 @@ def main():
     args=parser.parse_args()
     records=list(frames().items())
     for version in (25,26,27):
-        arrays={name:data for group in frames(version,84).values() for name,data in group.items()}
+        arrays={name:data for group in frames(version,85 if version==27 else 84).values() for name,data in group.items()}
         records.append(('xir_hash84_identity.h' if version==25 else 'xir_view_value'+str(version)+'_identity.h',arrays))
     for filename,arrays in records:
         path=ROOT/filename
@@ -54,7 +54,7 @@ def main():
                 assert actual==expected,(filename,name,actual.hex(),expected.hex())
         if args.write and filename not in ('xir_hash84_identity.h','xir_view_value26_identity.h'):
             path.write_text(source,encoding='utf-8')
-    print('Independent SourceProduct complete Value24, retired84/Value25 and retired84/Value26 and current84/Value27 frames: PASS')
+    print('Independent SourceProduct complete Value24, retired84/Value25 and retired84/Value26 and current85/Value27 frames: PASS')
 
 if __name__=='__main__':
     main()

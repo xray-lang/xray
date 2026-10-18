@@ -21,6 +21,7 @@
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_value_place.h"
+#include "xxir_view_types_internal.h"
 #include "xxir_scalar.h"
 #include "xxir_compile_memory.h"
 #include "../aot/xi_cgen_verify_output.h"
@@ -186,9 +187,17 @@ static void emit_constant(CBuffer *buffer, int64_t value) {
         EMIT_ULL_SHAPE(buffer, et_42b80bce7e8ab13e, "INT64_C(%llu)", "INT64_C(", ")", (unsigned long long) value);
 }
 
+static uint32_t emit_borrowed_flags(const CBuffer *buffer,XrXirType type) {
+    return buffer->borrowed_flags && xr_xir_type_node(buffer->types,type) ?
+        buffer->borrowed_flags[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]&3u:0;
+}
+#include "xxir_emit_view_phi.inc.c"
 static void emit_edge(CBuffer *buffer, const XrXirFunction *function,
                       const XrXirFunctionLayout *layout, uint32_t instruction,
                       uint32_t target, bool resumable) {
+    if (resumable && emit_view_phi_target(buffer,function,target)) {
+        emit_view_phi_edge(buffer,function,layout,instruction,target);return;
+    }
     uint32_t low = 0, high = function->block_count;
     while (low + 1 < high && emit_work(buffer, 1)) {
         uint32_t middle = low + (high - low) / 2;
@@ -600,6 +609,8 @@ static void emit_value_receiver(CBuffer *buffer, const XrXirFunction *function,
 }
 #include "xxir_emit_path.inc.c"
 #include "xxir_emit_hash.inc.c"
+#include "xxir_emit_view.inc.c"
+#include "xxir_emit_view_aggregate.inc.c"
 static void emit_array_step(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t destination, uint32_t index) {
     EMIT_STATIC(buffer, es_0eecdf36a03e6314, " { XrXirCallStatus status; XrXirFaultDetail fault = {0};\n");
@@ -703,6 +714,9 @@ static void emit_class_step(CBuffer *buffer, const XrXirFunction *function,
 
 static void emit_tuple_step(CBuffer *buffer,const XrXirFunction *function,
     const XrXirInstruction *op,const XrXirFunctionLayout *layout,uint32_t destination) {
+    if (op->op==XR_XIR_TUPLE_NEW && emit_borrowed_flags(buffer,op->type)) {
+        emit_view_aggregate(buffer,function,op,layout,destination);return;
+    }
     EMIT_STATIC(buffer, es_74e4c9ff5e4a5422," { XrXirValue value = {0}; XrXirValueStatus status;\n");
     if (op->op==XR_XIR_TUPLE_NEW) {
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(buffer->types,op->type);
@@ -875,160 +889,14 @@ static void emit_time_step(CBuffer *buffer, const XrXirFunction *function,
         " if (time_status != XR_XIR_CALL_READY) goto invalid;\n"
         " xr_xir_scalar_store(state->frame, %uu, reading); }\n", destination);
 }
-static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
-                            const XrXirFunction *function, const XrXirFunctionLayout *layout,
-                            uint32_t index) {
-    const XrXirInstruction *op = &function->instructions[index];
-    uint32_t destination = layout->offsets[function->parameter_count + index];
-    append(buffer, "    case %uu:\n state->pc = %uu;\n", index, index + 1);
-    if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
-        (op->op >= XR_XIR_STRING_CONTAINS && op->op <= XR_XIR_STRING_ENDS_WITH) ||
-        op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
-        (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
-        op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT) {
-        emit_io_step(buffer, function, layout, index); return;
-    }
-    if (op->op == XR_XIR_CLEANUP_REGISTER || op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
-        emit_cleanup_step(buffer, function, layout, index); return;
-    }
-    if (op->op >= XR_XIR_MAP_NEW && op->op <= XR_XIR_MAP_VALUE_AT) {
-        emit_hash_step(buffer, function, op, layout, destination, index);
-        return;
-    }
-    if (xr_xir_op_uses_value_path(function, op)) {
-        emit_path_step(buffer, function, op, layout, destination, index); return;
-    }
-    if (op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_CLASS_GET || op->op == XR_XIR_CLASS_SET) {
-        emit_class_step(buffer,function,op,layout,destination); return;
-    }
-    if (xr_xir_op_is_atomic(op->op)) {
-        emit_atomic_step(buffer, function, op, layout, destination, index); return;
-    }
-    if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
-        emit_tuple_step(buffer,function,op,layout,destination);return;
-    }
-    if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
-        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
-        op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
-        emit_nominal_step(buffer, function, op, layout, destination); return;
-    }
-    if (op->op == XR_XIR_ARRAY_CAPACITY || op->op == XR_XIR_ARRAY_WITH_CAPACITY || op->op == XR_XIR_ARRAY_RESERVE) {
-        emit_array_capacity_step(buffer, function, op, layout, destination, index);
-        return;
-    }
-    if (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN) {
-        emit_array_step(buffer, function, op, layout, destination, index);
-        return;
-    }
-    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_SLOT_GROUP_INIT || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
-        op->op == XR_XIR_TO_STRING ||
-        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
-        op->op == XR_XIR_CELL_STRING_APPEND) {
-        emit_instance_step(buffer, module, function, op, layout, destination);
-        return;
-    }
+static bool emit_resume_value_step(CBuffer *buffer,const XrXirFunction *function,
+    const XrXirFunctionLayout *layout,uint32_t destination,uint32_t index) {
+    const XrXirInstruction *op=&function->instructions[index];
     switch (op->op) {
-    case XR_XIR_PHI: case XR_XIR_CELL_PLACE: case XR_XIR_SLOT_PLACE: case XR_XIR_OBJECT_PLACE:
-    case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE: break;
-    case XR_XIR_CONST_RUNE:
-    case XR_XIR_CONST_BOOL:
-    case XR_XIR_CONST_FLOAT:
-    case XR_XIR_CONST_INT:
-        EMIT_U_SHAPE(buffer, et_7f85c2fe011fd9bb, " xr_xir_scalar_store(state->frame, %uu, ", " xr_xir_scalar_store(state->frame, ", "u, ", destination);
-        emit_constant(buffer, op->immediate);
-        EMIT_LITERAL(buffer, ");\n");
-        break;
-    case XR_XIR_LOCAL_UNINIT:
-        if (xr_xir_type_is_owned(module->types, op->type))
-            EMIT_FORMAT(buffer, et_c9e912cff3f8b971, " xr_xir_owned_slot_clear(state->frame, %uu);\n", destination);
-        break;
-    case XR_XIR_SCALAR_LOCAL_NEW:
-    case XR_XIR_SCALAR_LOCAL_READ:
-    case XR_XIR_SCALAR_COPY:
-        EMIT_FORMAT(buffer, et_1557fbd5fb261af8, " xr_xir_scalar_store(state->frame, %uu, "
-               "xr_xir_scalar_load(state->frame, %uu));\n", destination, layout->offsets[op->args[0]]);
-        break;
-    case XR_XIR_SCALAR_LOCAL_WRITE:
-        EMIT_FORMAT(buffer, et_1557fbd5fb261af8, " xr_xir_scalar_store(state->frame, %uu, xr_xir_scalar_load(state->frame, %uu));\n",
-               layout->offsets[op->args[0]], layout->offsets[op->args[1]]);
-        break;
-    case XR_XIR_OWNED_LOCAL_WRITE:
-        EMIT_FORMAT(buffer, et_b11835152af6333f, " if (xr_xir_owned_slot_copy(state->frame, %uu, view->arena, (XrXirType) %u, "
-               "xr_xir_scalar_load(state->frame, %uu)) != XR_XIR_VALUE_OK) goto limit;\n",
-               layout->offsets[op->args[0]], (uint32_t) function->instructions[op->args[0] - function->parameter_count].type,
-               layout->offsets[op->args[1]]);
-        break;
-    case XR_XIR_OWNED_LOCAL_NEW:
-    case XR_XIR_OWNED_LOCAL_READ:
-    case XR_XIR_OWNED_RETAIN:
-    case XR_XIR_CONCAT_STRING:
-        append(buffer, " { XrXirValueStatus status = %s(state->frame, %uu, ",
-               op->op != XR_XIR_CONCAT_STRING ? "xr_xir_owned_slot_copy" : "xr_xir_string_slot_concat", destination);
-        if (op->op != XR_XIR_CONCAT_STRING) EMIT_U_SHAPE(buffer, et_0dd5db27fc786018, "view->arena, (XrXirType) %u, ", "view->arena, (XrXirType) ", ", ", (uint32_t) op->type);
-        else EMIT_STATIC(buffer, es_6005496ddebcbb24, "xr_xir_call_admission(view), ");
-        EMIT_U_SHAPE(buffer, et_1cf00b902a57630a, "xr_xir_scalar_load(state->frame, %uu)", "xr_xir_scalar_load(state->frame, ", "u)", layout->offsets[op->args[0]]);
-        if (op->op == XR_XIR_CONCAT_STRING)
-            EMIT_U_SHAPE(buffer, et_76e8bc034350cedc, ", xr_xir_scalar_load(state->frame, %uu)", ", xr_xir_scalar_load(state->frame, ", "u)", layout->offsets[op->args[1]]);
-        EMIT_STATIC(buffer, es_b86876a72c91e6ec, ");\n if (status != XR_XIR_VALUE_OK)\n"
-               " return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
-               "{XR_XIR_I64, 0, status == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_LIMIT}, {0}, 0}; }\n");
-        break;
-    case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
-    case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
-    case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
-    case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
-    case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
-    case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
-    case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
-    case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
-    case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
-    case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
-    case XR_XIR_CONVERT_NUMBER:
-        emit_numeric_step(buffer, function, layout, index, true);
-        break;
-    case XR_XIR_JUMP:
-        emit_edge(buffer, function, layout, index, op->targets[0], true);
-        break;
-    case XR_XIR_BRANCH:
-        emit_branch(buffer, function, layout, index, true);
-        break;
-    case XR_XIR_GO:
-        emit_resume_go(buffer, function, op, layout, destination);
-        return;
-    case XR_XIR_TASK_AWAIT:
-        emit_resume_await(buffer, function, op, layout, index);
-        return;
-    case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
-        emit_resume_call(buffer, function, op, layout, destination);
-        return;
-    case XR_XIR_INVOKE_RESULT: case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD: case XR_XIR_PANIC_CATCH:
-        EMIT_LITERAL(buffer, " goto invalid;\n"); return;
-    case XR_XIR_PANIC_CODE:
-        EMIT_LITERAL(buffer, " { XrXirValue info = "); emit_value(buffer, function, layout, op->args[0]);
-        EMIT_FORMAT(buffer, et_5983beda6e3f1912, ";\n XrXirFaultDetail detail;\n if (!xr_xir_panic_info_detail(&info, &detail)) goto invalid;\n"
-            " xr_xir_scalar_store(state->frame, %uu, (int64_t) detail.code); }\n", destination);
-        break;
-    case XR_XIR_PANIC_MESSAGE:
-        EMIT_LITERAL(buffer, " { XrXirValue info = "); emit_value(buffer, function, layout, op->args[0]);
-        EMIT_FORMAT(buffer, et_6510d1d41c8bd61c, ";\n XrXirValue message = {0};\n"
-            " XrXirValueStatus status = xr_xir_panic_info_message(&info, &message);\n"
-            " if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
-            " status == XR_XIR_VALUE_OOM \? XR_XIR_RUN_OUT_OF_MEMORY :\n"
-            " status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT \? XR_XIR_RUN_FRAME_LIMIT :\n"
-        " status == XR_XIR_VALUE_UNSUPPORTED \? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
-            " xr_xir_owned_slot_move(state->frame, %uu, &message); }\n", destination);
-        break;
-    case XR_XIR_SUSPEND:
-        EMIT_STATIC(buffer, es_8f684e666599ad6f, " return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
-        return;
-    case XR_XIR_TIMER_AFTER_MS:
-        EMIT_FORMAT(buffer, et_cfbbb6c5fd275aba, " return (XrXirAction) {XR_XIR_ACTION_TIMER, 0, NULL, 0, "
-            "{XR_XIR_I64, 0, xr_xir_scalar_load(state->frame, %uu)}, {0}, 0};\n", layout->offsets[op->args[0]]);
-        return;
-    case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
-        emit_time_step(buffer, function, layout, index);
-        break;
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
+        if (op->op==XR_XIR_NULLABLE_SOME && emit_borrowed_flags(buffer,op->type)) {
+            emit_view_aggregate(buffer,function,op,layout,destination);return true;
+        }
         EMIT_STATIC(buffer, es_ff1a07ada386851d," { XrXirValue output = {0};\n");
         if (op->op == XR_XIR_NULLABLE_SOME) {
             EMIT_LITERAL(buffer," XrXirValue payload = "); emit_value(buffer,function,layout,op->args[0]);
@@ -1111,24 +979,196 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         EMIT_LITERAL(buffer, " ");
         emit_fault_return(buffer, function, layout, index, "xr_xir_call_match_failure()");
         EMIT_LITERAL(buffer, "\n");
-        return;
-    case XR_XIR_THROW:
-    case XR_XIR_RETURN: {
+        return true;
+    case XR_XIR_PANIC_CODE:
+        EMIT_LITERAL(buffer, " { XrXirValue info = "); emit_value(buffer, function, layout, op->args[0]);
+        EMIT_FORMAT(buffer, et_5983beda6e3f1912, ";\n XrXirFaultDetail detail;\n if (!xr_xir_panic_info_detail(&info, &detail)) goto invalid;\n"
+            " xr_xir_scalar_store(state->frame, %uu, (int64_t) detail.code); }\n", destination);
+        break;
+    case XR_XIR_PANIC_MESSAGE:
+        EMIT_LITERAL(buffer, " { XrXirValue info = "); emit_value(buffer, function, layout, op->args[0]);
+        EMIT_FORMAT(buffer, et_6510d1d41c8bd61c, ";\n XrXirValue message = {0};\n"
+            " XrXirValueStatus status = xr_xir_panic_info_message(&info, &message);\n"
+            " if (status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
+            " status == XR_XIR_VALUE_OOM \? XR_XIR_RUN_OUT_OF_MEMORY :\n"
+            " status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT \? XR_XIR_RUN_FRAME_LIMIT :\n"
+        " status == XR_XIR_VALUE_UNSUPPORTED \? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
+            " xr_xir_owned_slot_move(state->frame, %uu, &message); }\n", destination);
+        break;
+    default:return false;
+    }
+    EMIT_STATIC(buffer, es_74f0ebdc2c9ae1a6, " return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
+    return true;
+}
+static bool emit_resume_exit(CBuffer *buffer,const XrXirModule *module,
+    const XrXirFunction *function,const XrXirFunctionLayout *layout,uint32_t index) {
+    const XrXirInstruction *op=&function->instructions[index];
+    if (op->op!=XR_XIR_THROW && op->op!=XR_XIR_RETURN) return false;
         uint32_t type = op->op == XR_XIR_THROW ? (uint32_t) xr_xir_operand_type(function, op->args[0]) : (uint32_t) function->result;
+        uint32_t view_flags=0;
+        if (op->op==XR_XIR_RETURN) {
+            buffer->status=xr_xir_compile_view_type_flags(buffer->context,module->types,function->result,&view_flags);
+            if (buffer->status!=XR_XIR_OK) return true;
+        }
+        if (view_flags) {emit_view_return(buffer,function,op,layout);return true;}
         if (op->op == XR_XIR_THROW && type == XR_XIR_ERROR) {
             EMIT_LITERAL(buffer, " { XrXirValue erased = "); emit_value(buffer, function, layout, op->args[0]);
             EMIT_STATIC(buffer, es_6425bce0e09f44b7, "; XrXirValue concrete = {0};\n"
                 " if (!xr_xir_error_borrow(&erased, &concrete)) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);\n"
                 " return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, concrete, {0}, 0}; }\n");
-            return;
+            return true;
         }
         append(buffer, " return (XrXirAction) {%s, 0, NULL, 0, {%uu, 0, ",
                op->op == XR_XIR_THROW ? "XR_XIR_ACTION_THROW" : "XR_XIR_ACTION_RETURN", type);
         if (type == XR_XIR_UNIT) EMIT_LITERAL(buffer, "0");
         else EMIT_U_SHAPE(buffer, et_1cf00b902a57630a, "xr_xir_scalar_load(state->frame, %uu)", "xr_xir_scalar_load(state->frame, ", "u)", layout->offsets[op->args[0]]);
         EMIT_LITERAL(buffer, "}, {0}, 0};\n");
+        return true;
+}
+static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
+                            const XrXirFunction *function, const XrXirFunctionLayout *layout,
+                            uint32_t index) {
+    const XrXirInstruction *op = &function->instructions[index];
+    uint32_t destination = layout->offsets[function->parameter_count + index];
+    append(buffer, "    case %uu:\n state->pc = %uu;\n", index, index + 1);
+    if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
+        (op->op >= XR_XIR_STRING_CONTAINS && op->op <= XR_XIR_STRING_ENDS_WITH) ||
+        op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
+        (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
+        op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT) {
+        emit_io_step(buffer, function, layout, index); return;
+    }
+    if (op->op == XR_XIR_CLEANUP_REGISTER || op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
+        emit_cleanup_step(buffer, function, layout, index); return;
+    }
+    if (op->op==XR_XIR_VIEW_CLEANUP) {emit_view_cleanup(buffer,function,op,layout,index);return;}
+    if (op->op>=XR_XIR_VIEW_NEW && op->op<=XR_XIR_VIEW_END) {
+        emit_view_step(buffer,function,op,layout,destination,index);return;
+    }
+    if (op->op >= XR_XIR_MAP_NEW && op->op <= XR_XIR_MAP_VALUE_AT) {
+        emit_hash_step(buffer, function, op, layout, destination, index);
         return;
     }
+    if (xr_xir_op_uses_value_path(function, op)) {
+        emit_path_step(buffer, function, op, layout, destination, index); return;
+    }
+    if (op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_CLASS_GET || op->op == XR_XIR_CLASS_SET) {
+        emit_class_step(buffer,function,op,layout,destination); return;
+    }
+    if (xr_xir_op_is_atomic(op->op)) {
+        emit_atomic_step(buffer, function, op, layout, destination, index); return;
+    }
+    if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_TUPLE_FIELD) {
+        emit_tuple_step(buffer,function,op,layout,destination);return;
+    }
+    if ((op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) ||
+        (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) || op->op == XR_XIR_ERROR_ERASE ||
+        op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
+        emit_nominal_step(buffer, function, op, layout, destination); return;
+    }
+    if (op->op == XR_XIR_ARRAY_CAPACITY || op->op == XR_XIR_ARRAY_WITH_CAPACITY || op->op == XR_XIR_ARRAY_RESERVE) {
+        emit_array_capacity_step(buffer, function, op, layout, destination, index);
+        return;
+    }
+    if (op->op >= XR_XIR_ARRAY_NEW && op->op <= XR_XIR_ARRAY_LEN) {
+        emit_array_step(buffer, function, op, layout, destination, index);
+        return;
+    }
+    if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_SLOT_GROUP_INIT || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
+        op->op == XR_XIR_TO_STRING ||
+        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
+        op->op == XR_XIR_CELL_STRING_APPEND) {
+        emit_instance_step(buffer, module, function, op, layout, destination);
+        return;
+    }
+    if (emit_resume_value_step(buffer,function,layout,destination,index)) return;
+    if (emit_resume_exit(buffer,module,function,layout,index)) return;
+    switch (op->op) {
+    case XR_XIR_PHI: case XR_XIR_CELL_PLACE: case XR_XIR_SLOT_PLACE: case XR_XIR_OBJECT_PLACE:
+    case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE: break;
+    case XR_XIR_CONST_RUNE:
+    case XR_XIR_CONST_BOOL:
+    case XR_XIR_CONST_FLOAT:
+    case XR_XIR_CONST_INT:
+        EMIT_U_SHAPE(buffer, et_7f85c2fe011fd9bb, " xr_xir_scalar_store(state->frame, %uu, ", " xr_xir_scalar_store(state->frame, ", "u, ", destination);
+        emit_constant(buffer, op->immediate);
+        EMIT_LITERAL(buffer, ");\n");
+        break;
+    case XR_XIR_LOCAL_UNINIT:
+        if (xr_xir_type_is_owned(module->types, op->type))
+            EMIT_FORMAT(buffer, et_c9e912cff3f8b971, " xr_xir_owned_slot_clear(state->frame, %uu);\n", destination);
+        break;
+    case XR_XIR_SCALAR_LOCAL_NEW:
+    case XR_XIR_SCALAR_LOCAL_READ:
+    case XR_XIR_SCALAR_COPY:
+        EMIT_FORMAT(buffer, et_1557fbd5fb261af8, " xr_xir_scalar_store(state->frame, %uu, "
+               "xr_xir_scalar_load(state->frame, %uu));\n", destination, layout->offsets[op->args[0]]);
+        break;
+    case XR_XIR_SCALAR_LOCAL_WRITE:
+        EMIT_FORMAT(buffer, et_1557fbd5fb261af8, " xr_xir_scalar_store(state->frame, %uu, xr_xir_scalar_load(state->frame, %uu));\n",
+               layout->offsets[op->args[0]], layout->offsets[op->args[1]]);
+        break;
+    case XR_XIR_OWNED_LOCAL_WRITE:
+        EMIT_FORMAT(buffer, et_b11835152af6333f, " if (xr_xir_owned_slot_copy(state->frame, %uu, view->arena, (XrXirType) %u, "
+               "xr_xir_scalar_load(state->frame, %uu)) != XR_XIR_VALUE_OK) goto limit;\n",
+               layout->offsets[op->args[0]], (uint32_t) function->instructions[op->args[0] - function->parameter_count].type,
+               layout->offsets[op->args[1]]);
+        break;
+    case XR_XIR_OWNED_LOCAL_NEW:
+    case XR_XIR_OWNED_LOCAL_READ:
+    case XR_XIR_OWNED_RETAIN:
+    case XR_XIR_CONCAT_STRING:
+        append(buffer, " { XrXirValueStatus status = %s(state->frame, %uu, ",
+               op->op != XR_XIR_CONCAT_STRING ? "xr_xir_owned_slot_copy" : "xr_xir_string_slot_concat", destination);
+        if (op->op != XR_XIR_CONCAT_STRING) EMIT_U_SHAPE(buffer, et_0dd5db27fc786018, "view->arena, (XrXirType) %u, ", "view->arena, (XrXirType) ", ", ", (uint32_t) op->type);
+        else EMIT_STATIC(buffer, es_6005496ddebcbb24, "xr_xir_call_admission(view), ");
+        EMIT_U_SHAPE(buffer, et_1cf00b902a57630a, "xr_xir_scalar_load(state->frame, %uu)", "xr_xir_scalar_load(state->frame, ", "u)", layout->offsets[op->args[0]]);
+        if (op->op == XR_XIR_CONCAT_STRING)
+            EMIT_U_SHAPE(buffer, et_76e8bc034350cedc, ", xr_xir_scalar_load(state->frame, %uu)", ", xr_xir_scalar_load(state->frame, ", "u)", layout->offsets[op->args[1]]);
+        EMIT_STATIC(buffer, es_b86876a72c91e6ec, ");\n if (status != XR_XIR_VALUE_OK)\n"
+               " return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
+               "{XR_XIR_I64, 0, status == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_LIMIT}, {0}, 0}; }\n");
+        break;
+    case XR_XIR_ADD_INT: case XR_XIR_SUB_INT: case XR_XIR_MUL_INT:
+    case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT:
+    case XR_XIR_SHL_INT: case XR_XIR_SHR_INT:
+    case XR_XIR_DIV_INT: case XR_XIR_REM_INT:
+    case XR_XIR_EQ_INT: case XR_XIR_NE_INT: case XR_XIR_LT_INT:
+    case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
+    case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
+    case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
+    case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
+    case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
+    case XR_XIR_CONVERT_NUMBER:
+        emit_numeric_step(buffer, function, layout, index, true);
+        break;
+    case XR_XIR_JUMP:
+        emit_edge(buffer, function, layout, index, op->targets[0], true);
+        break;
+    case XR_XIR_BRANCH:
+        emit_branch(buffer, function, layout, index, true);
+        break;
+    case XR_XIR_GO:
+        emit_resume_go(buffer, function, op, layout, destination);
+        return;
+    case XR_XIR_TASK_AWAIT:
+        emit_resume_await(buffer, function, op, layout, index);
+        return;
+    case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
+        emit_resume_call(buffer, function, op, layout, destination);
+        return;
+    case XR_XIR_INVOKE_RESULT: case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD: case XR_XIR_PANIC_CATCH:
+        EMIT_LITERAL(buffer, " goto invalid;\n"); return;
+    case XR_XIR_SUSPEND:
+        EMIT_STATIC(buffer, es_8f684e666599ad6f, " return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
+        return;
+    case XR_XIR_TIMER_AFTER_MS:
+        EMIT_FORMAT(buffer, et_cfbbb6c5fd275aba, " return (XrXirAction) {XR_XIR_ACTION_TIMER, 0, NULL, 0, "
+            "{XR_XIR_I64, 0, xr_xir_scalar_load(state->frame, %uu)}, {0}, 0};\n", layout->offsets[op->args[0]]);
+        return;
+    case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
+        emit_time_step(buffer, function, layout, index);
+        break;
     default:
         emit_reject(buffer, XR_XIR_BAD_STAGE);
         return;
@@ -1170,8 +1210,8 @@ static void emit_resume_chunks(CBuffer *buffer, const XrXirArtifact *artifact,
 }
 
 static void emit_resume_inbox_helper(CBuffer *buffer, const char *prefix) {
-    EMIT_FORMAT(buffer, et_3b878960216ac760,
-        "static XR_NOINLINE bool %s_accept_inbox(XrXirCallView *view, unsigned char *frame,\n"
+    EMIT_FORMAT(buffer, et_bd14f382927d41d5,
+        "static XR_NOINLINE bool %s_accept_inbox(XrXirCallView *view, unsigned char *frame, XrXirValue *scratch,\n"
         "    uint32_t *pc, uint32_t *destination, uint32_t *expected, uint32_t normal_pc,\n"
         "    uint32_t error_pc, uint32_t error_destination, bool *invoking, bool discard,\n"
         "    XrXirAction *terminal) {\n"
@@ -1202,7 +1242,13 @@ static void emit_resume_inbox_helper(CBuffer *buffer, const char *prefix) {
         " if (inbox.type || inbox.reserved || inbox.payload) goto invalid;\n"
         " } else if (!xr_xir_value_argument(&inbox, view->arena, (XrXirType)*expected))\n"
         " goto invalid;\n"
-        " if (xr_xir_type_is_owned(xr_xir_compile_type_arena_types(view->arena), (XrXirType)*expected)) {\n"
+        " if (xr_xir_compile_type_arena_borrowed(view->arena,(XrXirType)*expected)) {\n"
+        " if (!scratch) goto invalid;\n"
+        " scratch[0]=(XrXirValue){0};\n"
+        " XrXirValueStatus status=xr_xir_call_view_inbox_take(view,(XrXirType)*expected,scratch);\n"
+        " if (status!=XR_XIR_VALUE_OK) { *terminal=xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0}); return true; }\n"
+        " xr_xir_owned_slot_move(frame,*destination,scratch);\n"
+        " } else if (xr_xir_type_is_owned(xr_xir_compile_type_arena_types(view->arena), (XrXirType)*expected)) {\n"
         " if (xr_xir_owned_slot_copy(frame, *destination, view->arena,\n"
         " (XrXirType)*expected, inbox.payload) != XR_XIR_VALUE_OK) goto limit;\n"
         " } else if (*destination != UINT32_MAX) {\n"
@@ -1222,8 +1268,8 @@ static void emit_resume_inbox_helper(CBuffer *buffer, const char *prefix) {
 }
 
 static void emit_resume_waiting_helper(CBuffer *buffer, const char *prefix) {
-    EMIT_FORMAT(buffer, et_c88f31405d4316a8,
-        "static XR_NOINLINE bool %s_accept_waiting(XrXirCallView *view, unsigned char *frame,\n"
+    EMIT_FORMAT(buffer, et_2acdf7af96a18b81,
+        "static XR_NOINLINE bool %s_accept_waiting(XrXirCallView *view, unsigned char *frame, XrXirValue *scratch,\n"
         "    bool *waiting, uint32_t *pc, uint32_t *panic_pc, uint32_t panic_destination,\n"
         "    uint32_t *destination, uint32_t *expected, uint32_t normal_pc, uint32_t error_pc,\n"
         "    uint32_t error_destination, bool *invoking, bool discard, XrXirAction *terminal) {\n"
@@ -1241,7 +1287,7 @@ static void emit_resume_waiting_helper(CBuffer *buffer, const char *prefix) {
         " panic_destination, handler_pc, pc);\n"
         " return true;\n"
         "    }\n"
-        "    return %s_accept_inbox(view, frame, pc, destination, expected, normal_pc,\n"
+        "    return %s_accept_inbox(view, frame, scratch, pc, destination, expected, normal_pc,\n"
         " error_pc, error_destination, invoking, discard, terminal);\n"
         "}\n", prefix, prefix);
 }
@@ -1293,7 +1339,15 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     for (uint32_t p = 0; p < function->parameter_count && emit_work(buffer, 1); ++p) {
         EMIT_FORMAT(buffer, et_f071ff59bedce009, " if (!xr_xir_value_argument(&view->arguments[%u], view->arena, (XrXirType) %u)) goto invalid;\n",
                p, (uint32_t) function->parameters[p]);
-        if (xr_xir_type_is_owned(module->types, function->parameters[p]))
+        uint32_t view_flags=0;
+        buffer->status=xr_xir_compile_view_type_flags(buffer->context,module->types,function->parameters[p],&view_flags);
+        if (buffer->status!=XR_XIR_OK) return;
+        if (view_flags)
+            append(buffer," state->arguments[0]=(XrXirValue){0};\n"
+                " { XrXirValueStatus status=xr_xir_call_view_argument_take(view,%uu,state->arguments);\n"
+                " if (status!=XR_XIR_VALUE_OK) return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0}); }\n"
+                " xr_xir_owned_slot_move(state->frame,%uu,state->arguments);\n",p,layout->offsets[p]);
+        else if (xr_xir_type_is_owned(module->types, function->parameters[p]))
             EMIT_FORMAT(buffer, et_6743ad1a0cb6e9cf, " if (xr_xir_owned_slot_copy(state->frame, %uu, view->arena, (XrXirType) %u, view->arguments[%u].payload) "
                    "!= XR_XIR_VALUE_OK) goto limit;\n", layout->offsets[p], (uint32_t) function->parameters[p], p);
         else
@@ -1303,14 +1357,14 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
     EMIT_STATIC(buffer, es_24e6ebb65fe128b5, " state->initialized = true;\n    }\n");
     if (!emit_work(buffer, 1)) return;
     if (!has_cleanup) {
-        EMIT_FORMAT(buffer, et_5e00adb8692c0077,
+        append(buffer,
             "    if (state->waiting) {\n"
             " XrXirAction waiting_action = {0};\n"
-            " if (%s_accept_waiting(view, state->frame, &state->waiting,\n"
+            " if (%s_accept_waiting(view, state->frame, %s, &state->waiting,\n"
             " &state->pc, &state->panic_pc, state->panic_destination, &state->destination,\n"
             " &state->expected, state->normal_pc, state->error_pc, state->error_destination,\n"
             " &state->invoking, state->discard, &waiting_action)) return waiting_action;\n"
-            "    }\n", prefix);
+            "    }\n", prefix,layout->outgoing_count?"state->arguments":"NULL");
     } else {
         EMIT_STATIC(buffer, es_7a9d018f2c32598a, "    if (state->waiting) {\n state->waiting = false;\n"
                " uint32_t panic_pc = state->panic_pc; state->panic_pc = 0;\n"
@@ -1323,14 +1377,14 @@ static void emit_resume_function(CBuffer *buffer, const XrXirArtifact *artifact,
                " state->exit_destination = state->panic_destination; state->leaving = true;\n"
                " return (XrXirAction){XR_XIR_ACTION_LEAVE, 0, NULL, 0, {XR_XIR_I64, 0, view->inbox.status},\n"
                " view->inbox.panic, XR_XIR_ACTION_LEAVE_PANIC};\n }\n");
-        EMIT_FORMAT(buffer, et_753fdc350ab3f86a, " return xr_xir_instance_panic_land(view, state->frame, (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
+        append(buffer, " return xr_xir_instance_panic_land(view, state->frame, (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, "
                "{XR_XIR_I64, 0, view->inbox.status}, view->inbox.panic, 0}, state->panic_destination, panic_pc, &state->pc);\n"
                " }\n"
                " XrXirAction inbox_action = {0};\n"
-               " if (%s_accept_inbox(view, state->frame, &state->pc, &state->destination,\n"
+               " if (%s_accept_inbox(view, state->frame, %s, &state->pc, &state->destination,\n"
                " &state->expected, state->normal_pc, state->error_pc, state->error_destination,\n"
                " &state->invoking, state->discard, &inbox_action)) return inbox_action;\n"
-               "    }\n", prefix);
+               "    }\n", prefix,layout->outgoing_count?"state->arguments":"NULL");
     }
     if (chunked) {
         EMIT_U_SHAPE(buffer, et_0e0214996c2baf94, "    switch (state->pc / %uu) {\n", "    switch (state->pc / ", "u) {\n", EMIT_RESUME_CHUNK_INSTRUCTIONS);
@@ -1634,6 +1688,8 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
            "_Static_assert(_Alignof(XrXirValue) == 8, \"XIR scalar alignment\");\n"
            "_Static_assert(offsetof(XrXirValue, payload) == 8, \"XIR payload offset\");\n",
            XR_XIR_CALL_ABI_VERSION, XR_XIR_VALUE_ABI_VERSION);
+    append(buffer,"#include \"xir/xxir_call_view_operation_internal.h\"\n");
+    append(buffer,"#include \"xir/xxir_call_view_moves_internal.h\"\n");
     EMIT_STATIC(buffer, es_fc644a73452330e2,
            "_Static_assert(sizeof(XrXirFaultDetail) == 24 && _Alignof(XrXirFaultDetail) == 8, \"XIR fault layout\");\n"
            "_Static_assert(offsetof(XrXirFaultDetail, index) == 8 && offsetof(XrXirFaultDetail, length) == 16, \"XIR fault offsets\");\n"
@@ -1681,18 +1737,23 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_c(const XrXirArtifact *artifact, const c
         return buffer.status == XR_XIR_OK ? XR_XIR_BAD_STRUCTURE : buffer.status;
     XrXirStatus status = xr_xir_compile_artifact_verify(artifact, NULL);
     if (status != XR_XIR_OK) return status;
+    uint8_t *borrowed_flags=NULL;
+    status=xir_compile_view_flags_new(buffer.context,module->types,&borrowed_flags);
+    if (status!=XR_XIR_OK) return status;
+    buffer.borrowed_flags=borrowed_flags;
     CBuffer measured = buffer;
     measured.measuring = true;
     emit_native_unit(&measured, artifact, symbol_prefix);
-    if (measured.status != XR_XIR_OK) return measured.status;
+    if (measured.status != XR_XIR_OK) {xr_compile_resources_free(borrowed_flags);return measured.status;}
     size_t planned = measured.length;
     void *memory = NULL;
     buffer.status = xir_compile_resource_status(
         xr_compile_resources_alloc(buffer.context->resources, planned + 1, &memory));
-    if (buffer.status != XR_XIR_OK) return buffer.status;
+    if (buffer.status != XR_XIR_OK) {xr_compile_resources_free(borrowed_flags);return buffer.status;}
     buffer.text = memory;
     buffer.capacity = planned + 1;
     emit_native_unit(&buffer, artifact, symbol_prefix);
+    xr_compile_resources_free(borrowed_flags);buffer.borrowed_flags=NULL;
     if (!emit_work(&buffer, 1) || buffer.length != planned) {
         if (buffer.status == XR_XIR_OK) buffer.status = XR_XIR_BAD_STRUCTURE;
     }

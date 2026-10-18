@@ -103,8 +103,12 @@ static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
         op == XR_XIR_STRUCT_NEW || op == XR_XIR_ENUM_NEW || op == XR_XIR_CLASS_NEW || op == XR_XIR_STRING_INDEX_OF ||
         op == XR_XIR_TUPLE_NEW || op == XR_XIR_SLOT_GROUP_INIT || op == XR_XIR_RANGE_CHECK ||
         op == XR_XIR_MAP_NEW || op == XR_XIR_SET_NEW || op == XR_XIR_MAP_SET ||
+        op == XR_XIR_VIEW_NEW || op == XR_XIR_VIEW_REBORROW || op == XR_XIR_VIEW_SET || op == XR_XIR_VIEW_CLEANUP ||
         (xr_xir_op_is_atomic(op) && op != XR_XIR_ATOMIC_NEW);
 }
+/* These are physical owned-slot identities, not SSA reads or place accesses.
+ * Their bounds and types require independent verification. */
+static inline bool xr_xir_op_uses_owner_slots(XrXirOp op) { return op==XR_XIR_VIEW_CLEANUP; }
 static inline bool xr_xir_op_uses_type_arguments(XrXirOp op) {
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_DEFAULT || op == XR_XIR_INVOKE_DEFAULT;
 }

@@ -16,6 +16,7 @@
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_value_place.h"
+#include "xxir_view_types_internal.h"
 #include "../base/xmalloc.h"
 
 static bool layout_equal(XrXirLayout left, XrXirLayout right) {
@@ -93,7 +94,7 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
                (!function->parameter_count && layout->parameters)) {
         return XR_XIR_BAD_LAYOUT;
     }
-    uint32_t bytes = 0, owned = 0;
+    uint32_t bytes = 0, owned = 0, outgoing = 0;
     for (uint32_t slot = 0; slot < slots; ++slot) {
         if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
         XrXirPlaceKind place = xr_xir_place_kind(function, slot);
@@ -134,6 +135,10 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             }
         }
         if (slot < function->parameter_count) {
+            uint32_t flags=0;
+            status=xr_xir_compile_view_type_flags(budget,artifact->module.types,type,&flags);
+            if (status!=XR_XIR_OK) return status;
+            if (flags) outgoing=2;
             status = xr_xir_compile_layout(budget, artifact->module.types, type, &artifact->target, XR_XIR_LAYOUT_PARAMETER, &physical);
             if (status != XR_XIR_OK)
                 return status;
@@ -144,7 +149,11 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
         }
     }
     XrXirLayout result;
-    uint32_t outgoing = 0;
+    uint32_t result_flags=0;
+    XrXirStatus result_status=xr_xir_compile_view_type_flags(budget,artifact->module.types,function->result,&result_flags);
+    if (result_status!=XR_XIR_OK) return result_status;
+    if (result_flags) outgoing=2;
+    uint32_t phi_count=0;bool borrowed_phi=false;
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
         if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
@@ -157,6 +166,22 @@ static XrXirStatus function_layout(XrXirArtifact *artifact, uint32_t index,
             if (!tuple) return XR_XIR_BAD_TYPE;
             count=tuple->parameter_count;
         }
+        if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_NULLABLE_SOME || op->op==XR_XIR_PHI) {
+            uint32_t flags=0;
+            XrXirStatus borrowed=xr_xir_compile_view_type_flags(budget,artifact->module.types,op->type,&flags);
+            if (borrowed!=XR_XIR_OK) return borrowed;
+            if (op->op==XR_XIR_PHI) {phi_count+=op->type!=XR_XIR_UNIT;borrowed_phi|=flags!=0;}
+            else if (flags) {
+                if (count==UINT32_MAX) return XR_XIR_BUDGET;
+                count=op->op==XR_XIR_TUPLE_NEW?count+1u:2u;
+            }
+        }
+        if (borrowed_phi && phi_count>outgoing) outgoing=phi_count;
+        if (op->op!=XR_XIR_PHI || (i+1u<function->instruction_count && function->instructions[i+1u].op!=XR_XIR_PHI)) {
+            phi_count=0;borrowed_phi=false;
+        }
+        if (op->op==XR_XIR_VIEW_CLEANUP) count=op->args[1];
+        else if (op->op>=XR_XIR_VIEW_NEW && op->op<=XR_XIR_VIEW_END && count<2) count=2;
         if (count > outgoing) outgoing = count;
     }
     uint32_t paths = 0;

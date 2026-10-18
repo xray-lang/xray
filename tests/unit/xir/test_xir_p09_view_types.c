@@ -18,8 +18,9 @@
 #include "xir/xxir_interface.h"
 #include "xir/xxir_type_arena.h"
 #include "tuple_owner_observer.h"
-#include "xir_view_types84_golden.h"
-#include "xir_checked_scalar83_golden.h"
+#include "xir_view_types85_golden.h"
+#include "xir_view_ops85_golden.h"
+#include "xir_checked_scalar84_golden.h"
 
 static XrXirType view_type(uint32_t index) {return (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+index);}
 typedef struct ViewTypes {
@@ -131,9 +132,9 @@ static void view_types_pipeline(const XrXirCompileContext *c) {
     XrXirArtifact *checked=NULL,*decoded=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
     CHECK(xir_fixture_check(c,&module,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.bytes[12]==84 && packet.bytes[8]==28);
-    CHECK(packet.length==sizeof(view_types84_golden) && !memcmp(packet.bytes,view_types84_golden,packet.length));
-    CHECK(xr_xir_compile_checked_read(c,view_types84_golden,sizeof(view_types84_golden),&decoded,NULL)==XR_XIR_OK);
+    CHECK(packet.bytes[12]==85 && packet.bytes[8]==28);
+    CHECK(packet.length==sizeof(view_types85_golden) && !memcmp(packet.bytes,view_types85_golden,packet.length));
+    CHECK(xr_xir_compile_checked_read(c,view_types85_golden,sizeof(view_types85_golden),&decoded,NULL)==XR_XIR_OK);
     memset(&f,0xcc,sizeof(f));
     CHECK(xr_xir_compile_artifact_verify(checked,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
@@ -141,9 +142,33 @@ static void view_types_pipeline(const XrXirCompileContext *c) {
     CHECK(xr_xir_compile_lower(decoded,&(XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);xr_xir_compile_artifact_free(lowered);
     xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_checked_read(c,checked_scalar83_golden,sizeof(checked_scalar83_golden),&checked,NULL)==XR_XIR_BAD_STRUCTURE && !checked);
+    CHECK(xr_xir_compile_checked_read(c,checked_scalar84_golden,sizeof(checked_scalar84_golden),&checked,NULL)==XR_XIR_BAD_STRUCTURE && !checked);
     view_types_init(&f);body.parameters=(XrXirType[]){view_type(0)};body.parameter_count=1;
     CHECK(xir_fixture_check(c,&module,&checked,NULL)==XR_XIR_BAD_TYPE && !checked);
+}
+static void view_ops_pipeline(const XrXirCompileContext *c) {
+    const struct {const uint8_t *bytes;size_t length;XrXirStatus expected;} cases[]={
+#define VIEW_PACKET(name,status) {view_ops85_##name,sizeof(view_ops85_##name),status}
+        VIEW_PACKET(empty_cleanup,XR_XIR_OK),
+        VIEW_PACKET(scalar_176,XR_XIR_BAD_TYPE),VIEW_PACKET(scalar_177,XR_XIR_BAD_TYPE),
+        VIEW_PACKET(scalar_178,XR_XIR_BAD_TYPE),VIEW_PACKET(scalar_179,XR_XIR_BAD_TYPE),
+        VIEW_PACKET(scalar_180,XR_XIR_BAD_TYPE),VIEW_PACKET(scalar_181,XR_XIR_BAD_TYPE),
+        VIEW_PACKET(scalar_182,XR_XIR_BAD_TYPE),VIEW_PACKET(scalar_183,XR_XIR_BAD_TYPE),
+        VIEW_PACKET(invalid_new_flag,XR_XIR_BAD_STRUCTURE)
+#undef VIEW_PACKET
+    };
+    for(uint32_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
+        uint64_t baseline=stats(c).live_bytes;XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
+        XrXirStatus status=xr_xir_compile_checked_read(c,cases[i].bytes,cases[i].length,&artifact,NULL);
+        printf("view wire85 case=%u status=%u expected=%u\n",i,status,cases[i].expected);
+        CHECK(status==cases[i].expected && (artifact!=NULL)==(status==XR_XIR_OK));
+        if(artifact) {
+            CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL)==XR_XIR_OK);
+            CHECK(packet.length==cases[i].length && !memcmp(packet.bytes,cases[i].bytes,packet.length));
+            xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(artifact);
+        }
+        CHECK(stats(c).live_bytes==baseline);
+    }
 }
 static uint64_t view_types_dag(const XrXirCompileContext *c) {
     XrXirTypeNode nodes[49]={0};XrXirCallableParameter fields[48][2]={0};
@@ -182,7 +207,7 @@ static void view_types_bounds(void) {
 }
 int main(void) {
     XrXirCompileContext c=owner_new(caps());uint64_t baseline=stats(&c).live_bytes;
-    view_types_rules(&c);view_types_generic(&c);view_types_pipeline(&c);
+    view_types_rules(&c);view_types_generic(&c);view_types_pipeline(&c);view_ops_pipeline(&c);
     uint64_t work=view_types_dag(&c);owner_free(&c,baseline);view_types_bounds();
     printf("view descriptor rules, candidate origin, generic exclusion, owned replay and DAG work=%llu PASS\n",
         (unsigned long long)work);return 0;

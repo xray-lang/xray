@@ -82,14 +82,17 @@ static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirTyp
             source_type_name_append(name, ">", 1);
         }
         return true;
-    case XR_XIR_TYPE_ARRAY:
-        source_type_name_append(name, TYPE_NAME_ARRAY, strlen(TYPE_NAME_ARRAY));
+    case XR_XIR_TYPE_ARRAY: case XR_XIR_TYPE_SLICE: case XR_XIR_TYPE_MUT_SLICE: {
+        const char *spelling=shape->kind==XR_XIR_TYPE_ARRAY ? TYPE_NAME_ARRAY :
+            shape->kind==XR_XIR_TYPE_SLICE ? "Slice" : "MutSlice";
+        source_type_name_append(name, spelling, strlen(spelling));
         if (!top) {
             source_type_name_append(name, "<", 1);
             if (!source_type_name_collect(ctx, node, shape->element, false, depth + 1, name)) return false;
             source_type_name_append(name, ">", 1);
         }
         return true;
+    }
     case XR_XIR_TYPE_NULLABLE:
         if (!source_type_name_collect(ctx, node, shape->element, false, depth + 1, name)) return false;
         source_type_name_append(name, "?", 1);

@@ -8,15 +8,15 @@
  */
 #ifndef P09_HASH_PROJECTION_PACKETS_H
 #define P09_HASH_PROJECTION_PACKETS_H
-#include "xir_hash_projection84_golden.h"
+#include "xir_hash_projection85_golden.h"
 #include "xir_map_index77_golden.h"
 _Static_assert(XR_XIR_HASH_KEYS == 164 && XR_XIR_HASH_VALUES == 165 && XR_XIR_MAP_ENTRIES == 166 &&
-    XR_XIR_OP_COUNT == 176 && XR_XIR_CHECKED_CONTRACT == 84, "ordered projection wire identities");
+    XR_XIR_OP_COUNT == 184 && XR_XIR_CHECKED_CONTRACT == 85, "ordered projection wire identities");
 static void projection_packets(const XrXirCompileContext *context) {
-    const uint8_t *valid[] = {hash_projection84_keys, hash_projection84_values,
-        hash_projection84_entries, hash_projection84_set_values};
-    const size_t sizes[] = {sizeof(hash_projection84_keys), sizeof(hash_projection84_values),
-        sizeof(hash_projection84_entries), sizeof(hash_projection84_set_values)};
+    const uint8_t *valid[] = {hash_projection85_keys, hash_projection85_values,
+        hash_projection85_entries, hash_projection85_set_values};
+    const size_t sizes[] = {sizeof(hash_projection85_keys), sizeof(hash_projection85_values),
+        sizeof(hash_projection85_entries), sizeof(hash_projection85_set_values)};
     for (uint32_t i = 0; i < 4; ++i) {
         XrXirArtifact *artifact = NULL; XrXirCheckedPacket packet = {0};
         CHECK(xr_xir_compile_checked_read(context, valid[i], sizes[i], &artifact, NULL) == XR_XIR_OK);
@@ -24,10 +24,10 @@ static void projection_packets(const XrXirCompileContext *context) {
         CHECK(packet.length == sizes[i] && !memcmp(packet.bytes, valid[i], sizes[i]));
         xr_xir_compile_artifact_free(artifact); xr_xir_compile_checked_packet_free(&packet);
     }
-    const uint8_t *invalid[] = {hash_projection84_bad_keys, hash_projection84_bad_values,
-        hash_projection84_bad_set_keys, hash_projection84_bad_entries, hash_projection84_bad_entry_fields};
-    const size_t bad_sizes[] = {sizeof(hash_projection84_bad_keys), sizeof(hash_projection84_bad_values),
-        sizeof(hash_projection84_bad_set_keys), sizeof(hash_projection84_bad_entries), sizeof(hash_projection84_bad_entry_fields)};
+    const uint8_t *invalid[] = {hash_projection85_bad_keys, hash_projection85_bad_values,
+        hash_projection85_bad_set_keys, hash_projection85_bad_entries, hash_projection85_bad_entry_fields};
+    const size_t bad_sizes[] = {sizeof(hash_projection85_bad_keys), sizeof(hash_projection85_bad_values),
+        sizeof(hash_projection85_bad_set_keys), sizeof(hash_projection85_bad_entries), sizeof(hash_projection85_bad_entry_fields)};
     for (uint32_t i = 0; i < 5; ++i) {
         XrXirArtifact *artifact = NULL;
         CHECK(xr_xir_compile_checked_read(context, invalid[i], bad_sizes[i], &artifact, NULL) == XR_XIR_BAD_TYPE && !artifact);

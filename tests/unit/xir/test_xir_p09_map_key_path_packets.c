@@ -13,9 +13,12 @@
 #include "xir_source_fixture_owner.h"
 #include "xir/xxir_checked.h"
 #include "xir_map_key_path82_golden.h"
-#include "xir_map_key_path84_golden.h"
+#include "xir_map_key_path85_golden.h"
 #include "p09_hash_retired82_packet_table.h"
+#include "p09_hash_current85_packet_table.h"
+#define CurrentHashPacket RetiredViewPacket
 #include "p09_hash_current84_packet_table.h"
+#undef CurrentHashPacket
 
 typedef struct KeyPacketCase {
     const char *name;
@@ -23,9 +26,9 @@ typedef struct KeyPacketCase {
     size_t length;
     XrXirStatus expected;
 } KeyPacketCase;
-#define PACKET_CASE(name,status) {#name,map_key_path84_##name,sizeof(map_key_path84_##name),status}
+#define PACKET_CASE(name,status) {#name,map_key_path85_##name,sizeof(map_key_path85_##name),status}
 int main(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==84 && XR_XIR_OP_COUNT==176,"typed key path identity");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==85 && XR_XIR_OP_COUNT==184,"typed key path identity");
     SourceFixtureOwner owner={0}; source_fixture_owner_new(&owner);
     const KeyPacketCase cases[]={
         PACKET_CASE(path_i64,XR_XIR_OK),PACKET_CASE(path_string,XR_XIR_OK),
@@ -46,9 +49,9 @@ int main(void) {
             xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(artifact);
         }
     }
-    _Static_assert(sizeof(current_hash84_packets)/sizeof(current_hash84_packets[0])==60,"complete field sample count");
+    _Static_assert(sizeof(current_hash85_packets)/sizeof(current_hash85_packets[0])==60,"complete field sample count");
     for(unsigned i=0;i<60;++i) {
-        const CurrentHashPacket *row=&current_hash84_packets[i];
+        const CurrentHashPacket *row=&current_hash85_packets[i];
         XrCompileResourceStats baseline={0},after={0};
         CHECK(xr_compile_resources_stats(owner.context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
         XrXirArtifact *artifact=NULL;
@@ -85,9 +88,16 @@ int main(void) {
         CHECK(xr_xir_compile_checked_read(&owner.context,retired_hash82_packets[i].bytes,
             retired_hash82_packets[i].length,&artifact,NULL)==XR_XIR_BAD_STRUCTURE && artifact==saved);
     }
+    _Static_assert(sizeof(current_hash84_packets)/sizeof(current_hash84_packets[0])==60,"complete retired view predecessor count");
+    for(unsigned i=0;i<60;++i)for(unsigned occupied=0;occupied<2;++occupied) {
+        XrXirArtifact *artifact=occupied?(XrXirArtifact *)(uintptr_t)1:NULL,*saved=artifact;
+        CHECK(xr_xir_compile_checked_read(&owner.context,current_hash84_packets[i].bytes,
+            current_hash84_packets[i].length,&artifact,NULL)==XR_XIR_BAD_STRUCTURE && artifact==saved);
+    }
     CHECK(xr_compile_resources_stats(owner.context.resources,&after)==XR_COMPILE_RESOURCE_OK);
     CHECK(before.allocation_count==after.allocation_count && before.allocated_bytes==after.allocated_bytes &&
-        before.live_bytes==after.live_bytes && before.peak_bytes==after.peak_bytes);
+        before.live_bytes==after.live_bytes && before.peak_bytes==after.peak_bytes &&
+        after.work-before.work==32u*(3u+60u+60u));
     source_fixture_owner_free(&owner);
     puts("Typed Map path and worker packet fields; complete retired worker frames rejected before allocation PASS");return 0;
 }

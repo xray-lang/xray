@@ -144,5 +144,12 @@ static void frame_cell_abort(CallFrame *frame) {
     while (frame->loan_count) xr_xir_cell_loan_abort(&frame->loans[--frame->loan_count].loan);
 }
 static void frame_cell_release(CallFrame *frame) {
-    while (frame->loan_count) xr_xir_cell_loan_release(&frame->loans[--frame->loan_count].loan);
+    while (frame->loan_count) {
+        CallCellLoan *record=&frame->loans[--frame->loan_count];
+        if (record->adopted) {
+            XR_CHECK(!record->loan.cell && !record->loan.scope && !record->loan.previous && !record->loan.child &&
+                !record->loan.authority.activation && !record->loan.authority.frame && !record->loan.authority.epoch,
+                "adopted inline loans were detached exactly once before frame reclamation");
+        } else xr_xir_cell_loan_release(&record->loan);
+    }
 }
