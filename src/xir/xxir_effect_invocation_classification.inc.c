@@ -59,6 +59,7 @@ static bool effect_physical_error_empty_opcode(XrXirOp op) {
     case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN:
     case XR_XIR_VIEW_GET: case XR_XIR_VIEW_SET: case XR_XIR_VIEW_COPY:
     case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
+    case XR_XIR_STRING_COPY_BYTES: case XR_XIR_STRING_REPLACE:
         return true;
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING: case XR_XIR_SLOT_LOAD:
     case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE: case XR_XIR_CHANNEL_TRY_SEND: case XR_XIR_CHANNEL_TRY_RECV:

@@ -78,12 +78,13 @@ static void all_parents(void) {
     CHECK(fgetc(file)==EOF && !fclose(file));
 }
 int main(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==90,"shared wire identity");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==91,"shared wire identity");
     _Static_assert(XR_XIR_TYPE_MAP==9 && XR_XIR_TYPE_SET==10 && XR_XIR_TYPE_SLICE==11 &&
         XR_XIR_TYPE_MUT_SLICE==12 && XR_XIR_TYPE_ITERATOR==13 && XR_XIR_TYPE_CHANNEL==14,"unique type tags");
     _Static_assert(XR_XIR_CELL_STRING_APPEND==153 && XR_XIR_MAP_NEW==154 && XR_XIR_VIEW_NEW==176 &&
         XR_XIR_GENERATOR_YIELD==184 && XR_XIR_GENERATOR_NEW==185 && XR_XIR_ITERATOR_HAS_NEXT==186 &&
-        XR_XIR_ITERATOR_NEXT==187 && XR_XIR_CHANNEL_NEW==190 && XR_XIR_OP_COUNT==201,"unique operation tags");
+        XR_XIR_ITERATOR_NEXT==187 && XR_XIR_CHANNEL_NEW==190 && XR_XIR_STRING_COPY_BYTES==201 &&
+        XR_XIR_STRING_REPLACE==202 && XR_XIR_OP_COUNT==203,"unique operation tags");
     current(shared_channel_int,sizeof(shared_channel_int));
     current(shared_channel_unit,sizeof(shared_channel_unit));all_parents();
     puts("Independent current Channel bytes and 1284 complete parent packets: bounded reception PASS");return 0;

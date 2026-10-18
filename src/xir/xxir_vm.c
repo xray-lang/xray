@@ -133,6 +133,16 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
         status = xr_xir_instance_scalar_text(run->view, &scalar, &value); break;
     }
+    case XR_XIR_STRING_COPY_BYTES: {
+        XrXirValue receiver=vm_value_operand(run,op->args[0]);
+        status=xr_xir_instance_string_copy_bytes(run->view,op->type,&receiver,&value);break;
+    }
+    case XR_XIR_STRING_REPLACE: {
+        const uint32_t *ids=run->function->operands+op->args[0];
+        XrXirValue receiver=vm_value_operand(run,ids[0]),search=vm_value_operand(run,ids[1]);
+        XrXirValue replacement=vm_value_operand(run,ids[2]);
+        status=xr_xir_instance_string_replace(run->view,&receiver,&search,&replacement,op->immediate!=0,&value);break;
+    }
     case XR_XIR_SLOT_LOAD:
         status = xr_xir_instance_slot_read(run->view, (uint32_t) op->immediate, &value); break;
     case XR_XIR_SLOT_INIT:
@@ -658,7 +668,7 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         return vm_array_step(run, state, op, run->layout->offsets[result_id], action);
     }
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
-        op->op == XR_XIR_TO_STRING ||
+        op->op == XR_XIR_TO_STRING || op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
         op->op == XR_XIR_CELL_STRING_APPEND) {
         state->instruction = next;

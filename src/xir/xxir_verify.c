@@ -256,7 +256,15 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         if (op->args[1] < required || op->args[1] > maximum) return XR_XIR_BAD_STRUCTURE;
     }
     if (op->op == XR_XIR_PHI && (!op->args[1] || op->args[1] % 2)) return XR_XIR_BAD_STRUCTURE;
-    if ((op->op == XR_XIR_MAP_SET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_RANGE_CHECK) && op->args[1] != 3) return XR_XIR_BAD_STRUCTURE;
+    if ((op->op == XR_XIR_MAP_SET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_REPLACE || op->op == XR_XIR_RANGE_CHECK) && op->args[1] != 3) return XR_XIR_BAD_STRUCTURE;
+    if (op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE) {
+        if (op->targets[0] || op->targets[1] || op->type_arguments[0] || op->type_arguments[1] ||
+            op->immediate<0 || op->immediate>(op->op==XR_XIR_STRING_REPLACE ? 1 : 0) ||
+            (op->op==XR_XIR_STRING_COPY_BYTES && op->args[1])) return XR_XIR_BAD_STRUCTURE;
+        if (op->op==XR_XIR_STRING_COPY_BYTES &&
+            (!xr_xir_type_is_array(module->types,op->type) || xr_xir_array_element(module->types,op->type)!=XR_XIR_U8))
+            return XR_XIR_BAD_TYPE;
+    }
     uint32_t caller_id = (uint32_t) (function - module->functions);
     if (op->op == XR_XIR_CALL_DEFAULT || op->op == XR_XIR_INVOKE_DEFAULT) {
         XrXirStatus status = xr_xir_compile_default_call_verify(remaining, module, caller_id, op);
@@ -332,7 +340,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
             return XR_XIR_BAD_STRUCTURE;
     } else if (op->op == XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW) {
         if (op->immediate!=0 && op->immediate!=1) return XR_XIR_BAD_STRUCTURE;
-    } else if (op->op == XR_XIR_CELL_STRING_APPEND) {
+    } else if (op->op == XR_XIR_CELL_STRING_APPEND || op->op==XR_XIR_STRING_REPLACE) {
         if (op->immediate != 0 && op->immediate != 1) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         if (op->immediate < 0 || (uint64_t)op->immediate > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
@@ -1056,6 +1064,7 @@ static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyConte
         if (op->type != XR_XIR_I64 && op->type != XR_XIR_U32) return XR_XIR_BAD_TYPE;
         expected = XR_XIR_RUNE;
     }
+    if (op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE) expected=XR_XIR_STRING;
     if (op->op == XR_XIR_INTEGER_TO_RUNE) expected = XR_XIR_I64;
     if (op->op == XR_XIR_TO_STRING) {
         expected = xr_xir_operand_type(function, op->args[0]);
@@ -1156,7 +1165,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 if (operand_type == XR_XIR_UNIT) return XR_XIR_BAD_VALUE;
                 if (operand_type != XR_XIR_BOOL && operand_type != XR_XIR_RUNE && !xr_xir_type_is_number(operand_type) && operand_type != XR_XIR_STRING) return XR_XIR_BAD_TYPE;
             }
-            uint32_t id = xr_xir_op_references_function(op->op) || op->op == XR_XIR_CALL_REQUIREMENT || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_RANGE_CHECK ?
+            uint32_t id = xr_xir_op_references_function(op->op) || op->op == XR_XIR_CALL_REQUIREMENT || op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_PRINT || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_REPLACE || op->op == XR_XIR_RANGE_CHECK ?
                 function->operands[op->args[0] + a] : op->args[a];
             XrXirStatus status = local_operand(context->module->types, function, op, id, a);
             if (status == XR_XIR_OK) status = value_use(function, graph, i, id, operand_type);

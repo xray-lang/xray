@@ -152,6 +152,13 @@ typedef struct XrXirValueAdmission {
     uint64_t work, scratch_bytes;
 } XrXirValueAdmission;
 
+/* Owned immutable String operations publish only complete receiving values. */
+XR_FUNC XrXirValueStatus xr_xir_string_copy_bytes(const XrXirValue *receiver,
+    XrXirType array_type, XrXirValueAdmission *admission, XrXirValue *output);
+XR_FUNC XrXirValueStatus xr_xir_string_replace(const XrXirValue *receiver,
+    const XrXirValue *search, const XrXirValue *replacement, bool all,
+    XrXirValueAdmission *admission, XrXirValue *output);
+
 /* A derived String is charged to the receiving admission Domain. */
 XR_FUNC XrXirValueStatus xr_xir_string_slot_concat(void *frame, uint32_t offset,
     XrXirValueAdmission *admission, int64_t left, int64_t right);

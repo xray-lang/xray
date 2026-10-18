@@ -1,0 +1,6 @@
+fn makeText() -> string { return "é\0é".replaceAll("é", "🙂") }
+fn makeBytes() -> Array<u8> { return "A\0é🙂".copyBytes() }
+export fn retainedText() -> string { return makeText() }
+export fn retainedBytes() -> Array<u8> { return makeBytes() }
+fn normal() -> i64 { return 42 }
+export fn referenceAnswer() -> i64 { return normal() }

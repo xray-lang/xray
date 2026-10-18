@@ -35,6 +35,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_ADD_INT:
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONCAT_STRING:
+    case XR_XIR_STRING_COPY_BYTES: case XR_XIR_STRING_REPLACE:
     case XR_XIR_WRITE_STREAM:
     case XR_XIR_CLOCK_NANOS:
     case XR_XIR_UTC_OFFSET_AT:

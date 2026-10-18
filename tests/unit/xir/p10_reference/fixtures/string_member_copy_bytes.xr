@@ -1,0 +1,12 @@
+export fn probe(s: string) -> i64 { var bytes = s.copyBytes(); return len(bytes) }
+export fn heldBytes() -> Array<u8> { return "A\0é🙂".copyBytes() }
+export fn referenceAnswer() -> i64 {
+    const text = "A\0é🙂"
+    var bytes = text.copyBytes()
+    if (len(bytes) != 8 || bytes[0] != 65 || bytes[1] != 0 || bytes[2] != 195 || bytes[3] != 169) { return 0 }
+    if (bytes[4] != 240 || bytes[5] != 159 || bytes[6] != 153 || bytes[7] != 130) { return 0 }
+    const alias = bytes
+    bytes[0] = 90
+    if (alias[0] != 65 || text != "A\0é🙂" || probe(text) != 8) { return 0 }
+    return 42
+}

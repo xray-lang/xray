@@ -156,6 +156,8 @@ def simple_term(term, binder):
         return 'F64'
     if term == ('name', 'u32', ()):
         return 'U32'
+    if term == ('name', 'Array', (('name', 'u8', ()),)):
+        return 'ARRAY_U8'
     if term == ('name', 'string', ()):
         return 'STRING'
     if term == ('name', 'bool', ()):
@@ -443,6 +445,9 @@ def parse_source(source, prelude):
             'STRING_ENDS_WITH': ('endsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_TO_STRING': ('toString', 'READ', (), 'STRING', 'no_heap', 'retain', 'owned'),
             'STRING_REPEAT': ('repeat', 'READ', ('I64',), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
+            'STRING_COPY_BYTES': ('copyBytes', 'READ', (), 'ARRAY_U8', 'may_heap', 'allocation,retain,limit', 'owned'),
+            'STRING_REPLACE': ('replace', 'READ', ('STRING', 'STRING'), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
+            'STRING_REPLACE_ALL': ('replaceAll', 'READ', ('STRING', 'STRING'), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
         }.get(member.operation)
         optional = tuple(p[3] for p in member.parameters)
         expected_optional = (False, True) if member.operation == 'STRING_INDEX_OF' else (False,) * len(member.parameters)
@@ -452,7 +457,7 @@ def parse_source(source, prelude):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
     required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(recipes) if header[0] == 1 else {
         'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF',
-        'STRING_TO_STRING', 'STRING_REPEAT'}
+        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES', 'STRING_REPLACE', 'STRING_REPLACE_ALL'}
     if used != required:
         raise ValueError('incorrect admitted native operation set')
     return header, members

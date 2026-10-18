@@ -73,6 +73,7 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET: case XR_XIR_STRUCT_SET:
     case XR_XIR_ENUM_NEW: case XR_XIR_ENUM_TAG: case XR_XIR_ENUM_GET: *work = 8; return true;
     case XR_XIR_CONST_STRING: case XR_XIR_CONCAT_STRING: case XR_XIR_STRING_LEN: case XR_XIR_TO_STRING:
+    case XR_XIR_STRING_COPY_BYTES: case XR_XIR_STRING_REPLACE:
     case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING:
     case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
     case XR_XIR_STRING_CONTAINS: case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH:

@@ -8,6 +8,7 @@
  *
  * KEY CONCEPT: Repetition doubles complete UTF-8 strings in at most 64 rounds.
  */
+#include "xxir_source_string_value.inc.c"
 static bool source_string_repeat(SourceContext *ctx,AstNode *node,
     SourceValue receiver,SourceValue count,SourceValue *value) {
     XrXirType text_cell,number_cell;

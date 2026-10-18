@@ -64,6 +64,11 @@ XR_FUNC XrXirCallStatus xr_xir_instance_path_capacity(XrXirCallView *view,
 
 XR_FUNC XrXirCallStatus xr_xir_instance_array_new(XrXirCallView *view, XrXirType type,
     const XrXirValue *values, uint32_t count, XrXirValue *output);
+XR_FUNC XrXirCallStatus xr_xir_instance_string_copy_bytes(XrXirCallView *view,
+    XrXirType type, const XrXirValue *receiver, XrXirValue *output);
+XR_FUNC XrXirCallStatus xr_xir_instance_string_replace(XrXirCallView *view,
+    const XrXirValue *receiver, const XrXirValue *search,
+    const XrXirValue *replacement, bool all, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_array_capacity(XrXirCallView *view,
     const XrXirValueReceiver *receiver, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_array_with_capacity(XrXirCallView *view,

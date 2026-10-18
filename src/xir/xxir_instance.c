@@ -1174,6 +1174,7 @@ static XrXirCallStatus value_place(XrXirCallView *view, XrXirInstance *instance,
 }
 #include "xxir_instance_path.inc.c"
 #include "xxir_instance_class_path.inc.c"
+#include "xxir_instance_string_owned.inc.c"
 XrXirCallStatus xr_xir_instance_array_new(XrXirCallView *view, XrXirType type,
     const XrXirValue *values, uint32_t count, XrXirValue *output) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;

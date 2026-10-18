@@ -9,6 +9,8 @@
  * KEY CONCEPT:
  *   The receiver snapshot survives argument effects and suspension.
  */
+static bool source_string_value_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
+    const XrNativeMemberDeclaration *member,SourceValue *value);
 static bool source_string_declaration(SourceContext *ctx) {
     if (ctx->string_declaration) return true;
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
@@ -63,6 +65,9 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
     const XrNativeMemberDeclaration *member = source_native_member(ctx,native,call->callee->as.member_access.name);
     if (!source_work(ctx, node)) return false;
+    if (member && (member->operation==XR_NATIVE_OPERATION_STRING_COPY_BYTES ||
+        member->operation==XR_NATIVE_OPERATION_STRING_REPLACE || member->operation==XR_NATIVE_OPERATION_STRING_REPLACE_ALL))
+        return source_string_value_call(ctx,node,receiver,member,value);
     if (member && (member->operation==XR_NATIVE_OPERATION_STRING_TO_STRING ||
         member->operation==XR_NATIVE_OPERATION_STRING_REPEAT))
         return source_string_owned_call(ctx,node,receiver,member,value);

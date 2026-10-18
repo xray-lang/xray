@@ -1,0 +1,19 @@
+export fn probe(s: string, old: string, replacement: string) -> i64 { return len(s.replace(old, replacement)) }
+var trace: i64 = 0
+var original: string = "aba"
+fn receiver() -> string { trace = trace * 10 + 1; return original }
+fn search() -> string { trace = trace * 10 + 2; original = "other"; return "a" }
+fn replacement() -> string { trace = trace * 10 + 3; return "é\0" }
+fn emptySearch() -> string { trace = trace * 10 + 2; original = "other"; return "" }
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    original = "aba"
+    const result = receiver().replace(search(), replacement())
+    if (result != "é\0ba" || original != "other" || trace != 123) { return 0 }
+    if (probe("aa", "a", "bb") != 3) { return 0 }
+    trace = 0
+    original = "aba"
+    const unchanged = receiver().replaceAll(emptySearch(), replacement())
+    if (unchanged != "aba" || original != "other" || trace != 123) { return 0 }
+    return 42
+}
