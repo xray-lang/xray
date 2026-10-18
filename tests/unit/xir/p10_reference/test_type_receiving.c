@@ -110,7 +110,11 @@ int main(void) {
     CHECK(!xir_type_arena_local_type(unrelated,source,type(1),&mapped) && mapped==type(2));
     XrXirValue replacement={0};values[0].payload=51;values[1].payload=52;
     CHECK(xr_xir_array_new(type(1),values,2,&admission,&replacement)==XR_XIR_VALUE_OK);
-    CHECK(xr_xir_cell_write(&cell,&replacement,&admission)==XR_XIR_VALUE_OK && xr_xir_value_valid(&cell));
+    XrXirValueStatus write_status=xr_xir_cell_write(&cell,&replacement,&admission);
+    if (write_status!=XR_XIR_VALUE_OK || !xr_xir_value_valid(&cell))
+        fprintf(stderr,"received Cell write status=%d valid=%d work=%llu\n",write_status,
+            xr_xir_value_valid(&cell),(unsigned long long)admission.work);
+    CHECK(write_status==XR_XIR_VALUE_OK && xr_xir_value_valid(&cell));
     XrXirValue read={0};CHECK(xr_xir_cell_read(&cell,&read)==XR_XIR_VALUE_OK);
     CHECK(read.type==replacement.type && read.payload==replacement.payload && xr_xir_value_arena(&read)==target);
     CHECK(xr_xir_value_admit(&cell,type(2),&admission)==XR_XIR_VALUE_OK);
