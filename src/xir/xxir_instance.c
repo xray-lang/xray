@@ -977,8 +977,7 @@ static bool instance_view_member(XrXirInstance *instance,XrXirCallView *view,boo
     return instance && instance_owner_current(instance) && instance_root(instance)==view->instance &&
         active && active->driving && !instance_observing(active) &&
         (!active->stopping || instance_cleanup_grant(active)) &&
-        xr_xir_task_executor_view_member(active->executor,view,child) &&
-        (*child || view->activation==active->call);
+        xr_xir_task_executor_view_member(active->executor,view,child);
 }
 static XrXirInstance *view_instance(XrXirCallView *view) {
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
