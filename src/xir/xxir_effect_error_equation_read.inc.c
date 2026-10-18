@@ -19,7 +19,13 @@ typedef struct EffectErrorEquationRead {
     const void *owner;
     XrXirStatus (*entry)(const struct EffectErrorEquationRead *,uint32_t,uint32_t,uint32_t,uint64_t *);
     XrXirStatus (*call)(const struct EffectErrorEquationRead *,uint32_t,uint32_t,uint64_t *);
+    XrXirStatus (*result)(const struct EffectErrorEquationRead *,uint32_t,uint32_t,uint64_t *);
 } EffectErrorEquationRead;
+
+static inline bool error_equation_result_call(XrXirOp op) {
+    return op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_CALL_DEFAULT ||
+        op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT;
+}
 
 static inline XrXirStatus error_equation_operation(const EffectErrorEquationRead *read,
     uint32_t i,XrXirInstruction *storage) {
@@ -146,6 +152,10 @@ static inline XrXirStatus error_equation_value(const EffectErrorEquationRead *re
                 }
                 *output=result;return XR_XIR_OK;
             }
+            const XrXirTypeNode *carrier=xr_xir_type_node(read->body.domain.types,type);
+            if(read->result && carrier && (carrier->kind==XR_XIR_TYPE_TASK || carrier->kind==XR_XIR_TYPE_ITERATOR) &&
+                (error_equation_result_call(op.op) || op.op==XR_XIR_INVOKE_RESULT ||
+                 op.op==XR_XIR_GO || op.op==XR_XIR_GENERATOR_NEW)) return read->result(read,i,word,output);
             if (op.op==XR_XIR_GO) return read->call(read,i,word,output);
             if (op.op==XR_XIR_INVOKE_ERROR) {
                 if (op.immediate<0 || (uint64_t)op.immediate>=read->head.instruction_count)
@@ -153,7 +163,11 @@ static inline XrXirStatus error_equation_value(const EffectErrorEquationRead *re
                 uint32_t call=(uint32_t)op.immediate;XrXirInstruction producer;
                 status=error_equation_operation(read,call,&producer);
                 if (status!=XR_XIR_OK) return status;
-                if (producer.op==XR_XIR_TASK_AWAIT) { value=producer.args[0];follow=true;break; }
+                if (producer.op==XR_XIR_ITERATOR_CLOSE) { *output=0;return XR_XIR_OK; }
+                if (producer.op==XR_XIR_TASK_AWAIT || producer.op==XR_XIR_ITERATOR_HAS_NEXT ||
+                    producer.op==XR_XIR_ITERATOR_NEXT || producer.op==XR_XIR_ITERATOR_NTH) {
+                    value=producer.args[0];follow=true;break;
+                }
                 return read->call(read,call,word,output);
             }
             return error_equation_type_word(read,type,word,output);
@@ -249,7 +263,9 @@ static inline XrXirStatus error_equation_edge_classify(const EffectErrorEquation
         return error_equation_filter_read(read,terminal,!alternate,filter);
     }
     if(terminal->op==XR_XIR_INVOKE || terminal->op==XR_XIR_INVOKE_DEFAULT ||
-        terminal->op==XR_XIR_INVOKE_INDIRECT || terminal->op==XR_XIR_TASK_AWAIT) {
+        terminal->op==XR_XIR_INVOKE_INDIRECT || terminal->op==XR_XIR_TASK_AWAIT ||
+        terminal->op==XR_XIR_ITERATOR_HAS_NEXT || terminal->op==XR_XIR_ITERATOR_NEXT ||
+        terminal->op==XR_XIR_ITERATOR_NTH || terminal->op==XR_XIR_ITERATOR_CLOSE) {
         *exceptional=alternate;
         return terminal->targets[alternate?1:0]==edge->to?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     }
@@ -284,8 +300,10 @@ static inline XrXirStatus error_equation_edge_possible(const EffectErrorEquation
         uint64_t row=0;
         if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
         if(exceptional) {
-            if(terminal.op==XR_XIR_TASK_AWAIT)
+            if(terminal.op==XR_XIR_TASK_AWAIT || terminal.op==XR_XIR_ITERATOR_HAS_NEXT ||
+                terminal.op==XR_XIR_ITERATOR_NEXT || terminal.op==XR_XIR_ITERATOR_NTH)
                 status=error_equation_value(read,edge->from,edge->cursor,terminal.args[0],word,&row);
+            else if(terminal.op==XR_XIR_ITERATOR_CLOSE) row=0;
             else status=read->call(read,edge->cursor-1,word,&row);
         } else status=error_equation_edge_source(read,edge,filter,filter->value,word,&row);
         if(status!=XR_XIR_OK) return status;

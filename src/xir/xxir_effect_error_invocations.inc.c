@@ -101,15 +101,10 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
      * from errors escaping the factory invocation. Both use the same CFG. */
     for (uint32_t n=0;status==XR_XIR_OK && n<owner->count;++n) {
         if (!xir_compile_work(flow->remaining,6)) { status=XR_XIR_BUDGET;break; }
-        uint32_t body=contexts->nodes[n].body;
-        const XrXirDeclarations *declarations=flow->body.domain.declarations;
-        if (declarations && declarations->functions &&
-            (declarations->functions[body].promises&XR_XIR_FUNCTION_GENERATOR)) continue;
-        EffectBodyFunctionHead head={0};
-        status=effect_body_request_head(&flow->body,body,&head);
+        bool returned=false;
+        status=error_finite_returned_node(flow->remaining,certificate->body,owner,n,&returned);
         if (status!=XR_XIR_OK) break;
-        const XrXirTypeNode *type=xr_xir_type_node(flow->body.domain.types,head.result);
-        if (!type || (type->kind!=XR_XIR_TYPE_TASK && type->kind!=XR_XIR_TYPE_ITERATOR)) continue;
+        if (!returned) continue;
         if (contexts->summaries==UINT32_MAX) { status=XR_XIR_BUDGET;break; }
         if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }
         contexts->nodes[n].returned=contexts->summaries++;

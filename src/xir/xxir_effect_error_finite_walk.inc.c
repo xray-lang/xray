@@ -20,6 +20,8 @@ static XrXirStatus error_finite_empty(const EffectErrorFiniteRead *read,
     uint32_t actual=UINT32_MAX;
     XrXirStatus status=error_finite_context_read(read,function,&actual);
     if(status!=XR_XIR_OK) return status;
+    /* No escaping errors does not prove the returned carrier has no errors. */
+    if(read->proof->rows[function].returned) { *empty=false;return XR_XIR_OK; }
     const EffectBodyFunction *head=&read->proof->material->functions[actual];
     EffectBodyRead body=effect_body_compile_read(read->work);
     if(!read->current) status=effect_role_range(read->work,head->runs,head->run_capacity,sizeof(*head->runs));
