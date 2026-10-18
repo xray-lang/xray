@@ -203,7 +203,7 @@ static void sdk_combined_previous_prefix(XrCompileResources *resources,XrXirSdkM
         memcpy(manifest->digest,old_digests[prior],32);
         XrXirSdkManifest saved=*manifest;size_t attempts=runtime_attempts;
         json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
-        CHECK(!sdk_json_prefix(&json,&manifest) && json.status==XR_JSON_CURSOR_INVALID);
+        CHECK(!sdk_json_prefix(&json,manifest) && json.status==XR_JSON_CURSOR_INVALID);
         CHECK(!memcmp(manifest,&saved,sizeof(manifest)) && runtime_attempts==attempts);
     }
     memcpy(manifest->prefix,prefix,sizeof(manifest->prefix));
