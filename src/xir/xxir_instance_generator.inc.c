@@ -46,7 +46,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_generator_at(XrXirCallView *view,uint32_
 XR_FUNC XrXirCallStatus xr_xir_instance_iterator_at(XrXirCallView *view,uint32_t instruction) {
     if(!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
     if(!view_instance(view)) return XR_XIR_CALL_BAD_STATE;
-    return xr_xir_call_invocation_stage(view,instruction);
+    return xr_xir_call_iterator_stage(view,instruction);
 }
 
 /* The exact linked waiter owns these borrowed inputs throughout this read.

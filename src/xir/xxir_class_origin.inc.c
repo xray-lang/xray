@@ -71,8 +71,13 @@ static bool class_publication_edge(const XrXirValue *value, void *payload, void 
         if (object_pointer(&publication->values[i]) == object) return true;
     }
     bool identity = object->kind == XIR_OBJECT_CLASS;
-    if (identity && (!class_allocation_valid(object) || !admission_owner(admission, object->arena, object->domain))) {
-        scan->status = XR_XIR_VALUE_BAD_ARGUMENT; return false;
+    if (identity) {
+        XrXirValueAdmission local={0};
+        scan->status=storage_admission_begin(value,admission,&local);
+        if (scan->status!=XR_XIR_VALUE_OK) return false;
+        if (!class_allocation_valid(object) || !admission_owner(&local,object->arena,object->domain)) {
+            scan->status=XR_XIR_VALUE_BAD_ARGUMENT;return false;
+        }
     }
     /* Own-slot write, drop, commit classification and atomic write are prepaid;
      * Class additionally pays reservation CAS and possible rollback. The unused
@@ -144,8 +149,13 @@ static XrXirValueStatus class_publication_prepare_route(const XrXirValue *values
             !xr_xir_value_valid(&values[i])) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirClassPublication publication = {.admission = admission, .operation = true};
     if (borrow_owner) {
+        XrXirValue root={(uint32_t)borrow_owner->type,0,0};
+        memcpy(&root.payload,&borrow_owner,sizeof(borrow_owner));
+        XrXirValueAdmission local={0};
+        XrXirValueStatus status=storage_admission_begin(&root,admission,&local);
+        if (status!=XR_XIR_VALUE_OK) return status;
         if (borrow_owner->kind != XIR_OBJECT_CLASS || !class_allocation_valid(borrow_owner) ||
-            !admission_owner(admission, borrow_owner->arena, borrow_owner->domain))
+            !admission_owner(&local,borrow_owner->arena,borrow_owner->domain))
             return XR_XIR_VALUE_BAD_ARGUMENT;
         publication.borrow_owner = borrow_owner;
         publication.borrow_loan = ((const XirClassObject *)borrow_owner)->borrow_top;

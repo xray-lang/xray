@@ -9,6 +9,17 @@
  * KEY CONCEPT:
  *   Only an exact owner, activation and wake can transfer one producer result.
  */
+XR_FUNC XrXirCallStatus xr_xir_call_iterator_stage(XrXirCallView *view,uint32_t instruction) {
+    if (!(!view || call_owner_current(view->activation))) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (!xr_xir_call_admission(view) || instruction==UINT32_MAX) return XR_XIR_CALL_BAD_STATE;
+    CallFrame *frame=view->activation->top;
+    if (frame->effect_pending || frame->pending_invocation.owner) return XR_XIR_CALL_BAD_STATE;
+    if (!call_invocation_work(view,sizeof(XrXirCallFrontier)+2)) return XR_XIR_CALL_LIMIT;
+    /* The parked waiter authenticates the actual producer later. These sentinel
+     * IDs cannot pass ordinary call frontier acceptance in the meantime. */
+    frame->pending_invocation=(XirEffectInvocationSelection){.target=UINT32_MAX,.producer=UINT32_MAX};
+    frame->effect_instruction=instruction;frame->effect_pending=true;return XR_XIR_CALL_READY;
+}
 XR_FUNC bool xr_xir_call_iterator_wait_token(const XrXirCall *call,XrXirTaskWaitToken *output) {
     if(!call_owner_current(call) || !call || !output || call->driving || call_observing(call) ||
         call->result.status!=XR_XIR_CALL_SUSPENDED || !iterator_wait_kind(call->wait.kind) ||

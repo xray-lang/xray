@@ -533,7 +533,7 @@ static void cell_life_runtime_resources(const char *const *fixtures, size_t fixt
         else if (!strcmp(operation,"--runtime-prepare")) cell_runtime_preparation(program, entries, mode, &baseline, events);
         else CHECK(!strcmp(operation,"--runtime-normal"));
         cell_runtime_fault_count = 0; cell_runtime_observer_free(events);
-        xr_xir_compile_program_drop(program); source_fixture_owner_free(&owner);
+        xr_xir_compile_program_drop(program); cell_life_program_release(); source_fixture_owner_free(&owner);
         cell_life_zero(); CHECK(!cell_runtime_observer_live);
     }
 }

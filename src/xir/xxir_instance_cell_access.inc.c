@@ -34,6 +34,16 @@ static XrXirCallStatus instance_received_value(XrXirValueAdmission *admission,co
     XrXirCallStatus status=instance_received_type(admission,value,type);
     return status==XR_XIR_CALL_READY ? admit_instance_value(admission,value,*type) : status;
 }
+static XrXirCallStatus instance_slot_scope(XrXirCallView *view,const XrXirInstance *instance,
+    uint32_t function,uint32_t module) {
+    const XrXirDeclarations *d=instance->program->declarations;
+    if (function>=instance->program->entry_count || module>=d->module_count) return XR_XIR_CALL_BAD_STATE;
+    uint32_t from=d->functions[function].module;
+    if (from==module) return XR_XIR_CALL_READY;
+    if (!xr_xir_module_same_scope(d,from,module)) return XR_XIR_CALL_BAD_STATE;
+    if (!instance_cell_work(view,(uint64_t)d->modules[from].dependency_count+1)) return XR_XIR_CALL_LIMIT;
+    return xr_xir_module_imports(d,from,module) ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
+}
 static bool instance_cell_published(const XrXirInstance *instance, uint32_t slot,
     const XrXirValue *cell) {
     const XrXirDeclarations *d = instance->program->declarations;
@@ -55,9 +65,13 @@ static XrXirCallStatus instance_cell_access(XrXirCallView *view,
         view_is_child(instance,view)) return XR_XIR_CALL_BAD_STATE;
     if (!xr_xir_cell_module_storage(cell)) return XR_XIR_CALL_READY;
     if (view_is_child(instance, view)) return XR_XIR_CALL_BAD_STATE;
-    if (root && xr_xir_type_is_class(root_types, (XrXirType)root->type))
-        return xr_xir_value_argument(root, instance->program->arena, (XrXirType)root->type) &&
-            xr_xir_class_module_storage(root) ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
+    if (root && xr_xir_type_is_class(root_types,(XrXirType)root->type)) {
+        XrXirType type=XR_XIR_UNIT;
+        XrXirCallStatus status=instance_received_type(xr_xir_call_admission(view),root,&type);
+        if (status!=XR_XIR_CALL_READY)
+            return status==XR_XIR_CALL_BAD_ARGUMENT ? XR_XIR_CALL_BAD_STATE : status;
+        return xr_xir_class_module_storage(root) ? XR_XIR_CALL_READY : XR_XIR_CALL_BAD_STATE;
+    }
     const XrXirDeclarations *d = instance->program->declarations;
     for (uint32_t slot = 0; slot < d->slot_count; ++slot) {
         if (!instance_cell_work(view, 1)) return XR_XIR_CALL_LIMIT;

@@ -4784,3 +4784,5 @@ endif()
 
 add_test(NAME test_xir_combined_wire_smoke COMMAND test_xir_checked --wire-smoke)
 set_tests_properties(test_xir_combined_wire_smoke PROPERTIES TIMEOUT 120 LABELS "unit;xir;checked;independent")
+
+include(xir/source_history_class.cmake)

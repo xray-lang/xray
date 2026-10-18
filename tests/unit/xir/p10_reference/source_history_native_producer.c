@@ -17,10 +17,16 @@
 #include "../xir_source_fixture_owner.h"
 #include "source_history_cell_fixture.h"
 #include "source_history_function_fixture.h"
+static void history_ref_string(const XrXirValue *value,unsigned calls) {
+    CHECK(calls==1 || calls==2 || calls==4);
+    static const char *const expected[]={"ax1","ax1x1","ax1x1x1x1"};
+    const char *text=expected[calls==1 ? 0 : calls==2 ? 1 : 2],*bytes=NULL;size_t length=0;
+    CHECK(xr_xir_string_view(value,&bytes,&length) && length==strlen(text) && !memcmp(bytes,text,length));
+}
 static const char *history_mode_name(unsigned kind) {
-    static const char *const names[]={"read","write","array","array_const"};
-    CHECK(kind<4 || kind==9 || kind==10);
-    return kind<4 ? names[kind] : kind==9 ? "function_call" : "function_value";
+    static const char *const names[]={"read","write","array","array_const","class","class_array","class_ref","class_inline_ref"};
+    CHECK(kind<8 || kind==9 || kind==10);
+    return kind<8 ? names[kind] : kind==9 ? "function_call" : "function_value";
 }
 static XrXirOutputStatus output_once(void *context,const XrXirOutputGroup *group) {
     unsigned *calls=context;
@@ -28,7 +34,7 @@ static XrXirOutputStatus output_once(void *context,const XrXirOutputGroup *group
     ++*calls;return XR_XIR_OUTPUT_OK;
 }
 static void produce_mode(const char *directory,FILE *header,unsigned kind) {
-    bool mutating=kind==1 || kind==2 || kind==9;
+    bool mutating=kind==1 || kind==2 || (kind>=4 && kind<=7) || kind==9;
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     XrXirSourceGenerationConfig config={compiler.context,kind==9 ? "birth-closure-probe" :
         kind==10 ? "birth-function-value" : "history-check-test",NULL,NULL,NULL};
@@ -83,7 +89,8 @@ static void produce_mode(const char *directory,FILE *header,unsigned kind) {
             if (kind==10 && generation>1) {
                 const XrXirFunctionBinding *binding=xr_xir_function_binding(&value);
                 CHECK(binding && binding->capture_count==1);
-            } else CHECK(value.type==XR_XIR_I64 && value.payload==(generation==1 ? 0 : mutating && generation==3 ? 43 : 42));
+            } else if (kind==6 && generation>1) history_ref_string(&value,generation==2 ? 1 : 2);
+            else CHECK(value.type==XR_XIR_I64 && value.payload==(generation==1 ? 0 : mutating && generation==3 ? 43 : 42));
             xr_xir_value_drop(&value);
             CHECK(xr_xir_instance_generation_publish(instance,candidate)==XR_XIR_CALL_READY);
             CHECK(xr_xir_compile_source_generation_publish(owner,serial)==XR_XIR_OK);
@@ -98,15 +105,15 @@ int main(int argc,char **argv) {
     CHECK(argc==2);char path[4096];int n=snprintf(path,sizeof(path),"%s/source_history_native_generated.h",argv[1]);
     CHECK(n>0 && (size_t)n<sizeof(path));FILE *header=fopen(path,"wb");CHECK(header);
     CHECK(fputs("#ifndef SOURCE_HISTORY_NATIVE_GENERATED_H\n#define SOURCE_HISTORY_NATIVE_GENERATED_H\n#include \"xir/xxir_program.h\"\n",header)>=0);
-    const unsigned modes[]={0,1,2,3,9,10};
-    for (unsigned i=0;i<6;++i) produce_mode(argv[1],header,modes[i]);
-    CHECK(fputs("static const XrXirProgramSpec *const source_history_native_programs[6][4]={\n",header)>=0);
-    for (unsigned i=0;i<6;++i) {
+    const unsigned modes[]={0,1,2,3,9,10,4,5,6,7};
+    for (unsigned i=0;i<10;++i) produce_mode(argv[1],header,modes[i]);
+    CHECK(fputs("static const XrXirProgramSpec *const source_history_native_programs[10][4]={\n",header)>=0);
+    for (unsigned i=0;i<10;++i) {
         unsigned mode=modes[i];
         CHECK(fputs("{",header)>=0);
         for (unsigned generation=1;generation<=4;++generation)
             CHECK(fprintf(header,"%s&source_history_%s_%u_program",generation==1 ? "" : ",",history_mode_name(mode),generation)>0);
-        CHECK(fputs(i==5 ? "}\n" : "},\n",header)>=0);
+        CHECK(fputs(i==9 ? "}\n" : "},\n",header)>=0);
     }
     CHECK(fputs("};\n#endif\n",header)>=0 && !fclose(header));
     return 0;

@@ -1044,14 +1044,16 @@ static XrXirCallStatus instance_call_entry_check(XrXirCallView *view, uint32_t e
     if (!target->ready[module] && target->current_module != module) return XR_XIR_CALL_BAD_STATE;
     if (!child) return XR_XIR_CALL_READY;
     if (!function) return XR_XIR_CALL_BAD_STATE;
-    uint32_t instruction=UINT32_MAX;
-    if (xr_xir_call_invocation_pending(view,&instruction)) {
+    XrXirCallFrontier frontier={0};
+    if (xr_xir_call_invocation_pending(view,&frontier)) {
+        if (entry!=frontier.target ||
+            (function->type!=XR_XIR_UNIT)!=(frontier.producer!=UINT32_MAX)) return XR_XIR_CALL_BAD_STATE;
         XirEffectInvocationSelection selection={0};
         XrXirCallStatus selected=function->type!=XR_XIR_UNIT ?
-            instance_invocation_select(view,instruction,function,arguments,count,&selection) :
-            instance_invocation_direct(view,instruction,entry,arguments,count,&selection);
+            instance_invocation_select(view,frontier.instruction,function,arguments,count,&selection) :
+            instance_invocation_direct(view,frontier.instruction,entry,arguments,count,&selection);
         if (selected!=XR_XIR_CALL_READY) return selected;
-        if (selection.target!=entry) return XR_XIR_CALL_BAD_STATE;
+        if (selection.target!=entry || selection.producer!=frontier.producer) return XR_XIR_CALL_BAD_STATE;
         if (prepared) {
             if (selection.owner != prepared->owner || selection.caller != prepared->caller ||
                 selection.instruction != prepared->instruction || selection.target != prepared->target ||
@@ -1144,11 +1146,12 @@ static XrXirCallStatus value_place(XrXirCallView *view, XrXirInstance *instance,
     if (writable || d->slots[slot].mutable) return XR_XIR_CALL_BAD_STATE;
     if (view_is_child(instance, view) && (writable || !worker_slot_read(instance, slot)))
         return XR_XIR_CALL_BAD_STATE;
-    uint32_t function = xr_xir_call_current_entry(view->activation);
+    XrXirCallStatus scoped=instance_slot_scope(view,instance,xr_xir_call_current_entry(view->activation),module);
+    if (scoped!=XR_XIR_CALL_READY) return scoped;
     if (instance->slot_origins && instance->slot_origins[slot].owner) {
         InstanceStorageRoute route=instance->slot_origins[slot];XrXirInstance *birth=route.owner;
         if (d->slots[slot].type!=receiver->type || !instance->ready[module] ||
-            d->functions[function].module!=module || route.index>=birth->program->declarations->slot_count ||
+            route.index>=birth->program->declarations->slot_count ||
             !birth->published[route.index] || !birth->ready[birth->program->declarations->slots[route.index].module])
             return XR_XIR_CALL_BAD_STATE;
         XrXirCallStatus status=admit_instance_value(admission,&birth->slots[route.index],receiver->type);
@@ -1157,7 +1160,6 @@ static XrXirCallStatus value_place(XrXirCallView *view, XrXirInstance *instance,
         return XR_XIR_CALL_READY;
     }
     if (d->slots[slot].type != receiver->type || !instance->published[slot] ||
-        d->functions[function].module != module ||
         (!instance->ready[module] && instance->current_module != module) ||
         (writable && !d->slots[slot].mutable))
         return XR_XIR_CALL_BAD_STATE;
@@ -1245,7 +1247,8 @@ XrXirCallStatus xr_xir_instance_array_read(XrXirCallView *view,
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
     XrXirValue borrowed = {0}, held = {0};
     if (receiver->kind == XR_XIR_ROOT_VALUE) {
-        if (receiver->local_payload || receiver->slot || receiver->value.type != (uint32_t) receiver->type)
+        if (receiver->local_payload || receiver->slot ||
+            !xr_xir_value_argument(&receiver->value,instance->program->arena,receiver->type))
             return XR_XIR_CALL_BAD_STATE;
         borrowed = receiver->value;
     } else {
@@ -1254,6 +1257,8 @@ XrXirCallStatus xr_xir_instance_array_read(XrXirCallView *view,
         if (status != XR_XIR_CALL_READY) return status;
         borrowed.type = (uint32_t) place.type;
         memcpy(&borrowed.payload, place.payload, sizeof(borrowed.payload));
+        if (!xr_xir_value_from_payload(admission->arena,place.type,borrowed.payload,&borrowed))
+            return XR_XIR_CALL_BAD_STATE;
         if (!length) {
             XrXirValueStatus copied = xr_xir_value_copy(&borrowed, &held);
             if (copied != XR_XIR_VALUE_OK) return value_call_status(copied);
@@ -1358,10 +1363,12 @@ static XrXirCallStatus instance_slot_copy(XrXirCallView *view,XrXirInstance *ins
     const XrXirDeclarations *d = instance->program->declarations;
     uint32_t module = d->slots[slot].module;
     if (view_is_child(instance, view) && !worker_slot_read(instance, slot)) return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus scoped=instance_slot_scope(view,instance,function,module);
+    if (scoped!=XR_XIR_CALL_READY) return scoped;
     if (instance->slot_origins && instance->slot_origins[slot].owner) {
         InstanceStorageRoute route=instance->slot_origins[slot];
         XrXirInstance *birth=route.owner;
-        if (!instance->ready[module] || d->functions[function].module!=module ||
+        if (!instance->ready[module] ||
             route.index>=birth->program->declarations->slot_count || !birth->published[route.index] ||
             !birth->ready[birth->program->declarations->slots[route.index].module]) return XR_XIR_CALL_BAD_STATE;
         XrXirValueAdmission *admission=xr_xir_call_admission(view);
@@ -1371,7 +1378,7 @@ static XrXirCallStatus instance_slot_copy(XrXirCallView *view,XrXirInstance *ins
             !xr_xir_cell_unborrowed(&birth->slots[route.index]))) return XR_XIR_CALL_BAD_STATE;
         return value_call_status(xr_xir_value_copy(&birth->slots[route.index],output));
     }
-    if (!instance->published[slot] || d->functions[function].module != module ||
+    if (!instance->published[slot] ||
         (!instance->ready[module] && instance->current_module != module)) return XR_XIR_CALL_BAD_STATE;
     if (d->slots[slot].mutable &&
         (!instance_cell_published(instance, slot, &instance->slots[slot]) ||
@@ -1568,7 +1575,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_call_at(XrXirCallView *view,uint32_t ins
     if (!view_is_child(instance,view)) return XR_XIR_CALL_READY;
     XirEffectInvocationSelection selected={0};
     XrXirCallStatus status=instance_invocation_direct(view,instruction,entry,arguments,count,&selected);
-    return status==XR_XIR_CALL_READY?xr_xir_call_invocation_stage(view,instruction):status;
+    return status==XR_XIR_CALL_READY?xr_xir_call_invocation_stage(view,&selected):status;
 }
 XR_FUNC XrXirCallStatus xr_xir_instance_resolve_function_at(XrXirCallView *view,
     uint32_t instruction,const XrXirValue *function,const XrXirValue *arguments,
@@ -1581,7 +1588,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_resolve_function_at(XrXirCallView *view,
     XirEffectInvocationSelection selected={0};
     XrXirCallStatus status=instance_invocation_select(view,instruction,function,arguments,count,&selected);
     if (status!=XR_XIR_CALL_READY) return status;
-    status=xr_xir_call_invocation_stage(view,instruction);
+    status=xr_xir_call_invocation_stage(view,&selected);
     if (status!=XR_XIR_CALL_READY) return status;
     *entry=selected.target;return XR_XIR_CALL_READY;
 }
