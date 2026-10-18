@@ -1,0 +1,18 @@
+struct Piece { count:i64; text:string; const stable:i64 }
+struct Parcel { items:Array<Piece>; const sibling:i64 }
+fn modify() {
+    var root:Array<Parcel>=[Parcel{items:[Piece{count:11,text:"old",stable:13}],sibling:37}]
+    const before:Array<Parcel>=root
+    var twin:Array<Parcel>=root
+    const leaf:Piece=Piece{count:23,text:"replacement",stable:13}
+    const incoming:Array<Piece>=[leaf]
+    const next:string="owned\0new"
+    print(root[0].items[0].count)
+    print(root[0].items[0].text)
+    print(before[0].items[0].count)
+    print(twin[0].items[0].count)
+    print(root[0].sibling)
+    print(leaf.count)
+    print(incoming[0].count)
+}
+modify()

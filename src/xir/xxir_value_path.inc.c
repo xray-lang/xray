@@ -299,3 +299,23 @@ XR_FUNC XrXirValueStatus xr_xir_value_path_push(const XrXirValuePlace *root,
     xr_xir_value_graph_end();
     return graph_outcome;
 }
+XR_FUNC XrXirValueStatus xir_value_path_replacement(const XrXirValue *root,const XrXirValuePath *path,
+    const XrXirValue *replacement,XrXirValueAdmission *admission,XrXirValue *output,XrXirFaultDetail *fault) {
+    if (!admission || !admission->arena || !admission->domain || !admission_domain_current(admission) ||
+        !root || !replacement || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValue borrowed=*root;XrXirValuePlace place={(XrXirType)root->type,&borrowed.payload};ValuePathSlot slot={0};
+    xr_xir_value_graph_begin();XrXirValueStatus status=path_begin(&place,path,admission,&slot,fault);
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);
+    for (uint32_t i=0;status==XR_XIR_VALUE_OK && i<path->count;++i) {
+        if (xr_xir_type_is_class(types,slot.type)) { status=XR_XIR_VALUE_UNSUPPORTED;break; }
+        status=path_step(&slot,&path->steps[i],admission,NULL,fault,NULL);
+    }
+    XrXirValue owned={0};
+    if (status==XR_XIR_VALUE_OK) status=xr_xir_value_copy(root,&owned);
+    if (status==XR_XIR_VALUE_OK) {
+        place=(XrXirValuePlace){(XrXirType)owned.type,&owned.payload};
+        status=xr_xir_value_path_write_graph_operation(&place,path,replacement,admission,fault);
+    }
+    if (status==XR_XIR_VALUE_OK) { *output=owned;owned=(XrXirValue){0}; }
+    xr_xir_value_drop(&owned);xr_xir_value_graph_end();return status;
+}

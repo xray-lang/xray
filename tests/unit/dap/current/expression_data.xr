@@ -1,0 +1,17 @@
+fn data()->i64 {
+    const words:Array<string>=["a","b"]
+    const empty:Array<i64>=[]
+    const record:(f64,rune,string)=(1.25,'界',"s\0x")
+    const none:i64?=null
+    const nested:i64??=none
+    const filled:i64?=7
+    const wide:u64=18446744073709551615
+    const negative:f64=-0.0; const small:f32=1.25
+    const units:((),string)=((),"unit")
+    const _dap_observed_0:string="shadow"
+    var value:i64=11
+    value=value+1
+    print(words[1])
+    return value
+}
+print(data())

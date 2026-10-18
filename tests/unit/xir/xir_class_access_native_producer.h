@@ -54,7 +54,7 @@ static uint8_t *access_native_routes(const XrXirCompileContext *context,const Xr
     return routes;
 }
 static void access_generated_prepare(unsigned fixture,AccessGeneratedOutput *output) {
-    CHECK(fixture<5 && !output->owner.context.resources && !output->source.text);
+    CHECK(fixture<ACCESS_SOURCE_CASE_COUNT && !output->owner.context.resources && !output->source.text);
     const AccessSourceCase *input=&access_source_cases[fixture];
     source_fixture_owner_new(&output->owner);
     XrXirArtifact *lowered=NULL;
@@ -76,17 +76,26 @@ static void access_generated_prepare(unsigned fixture,AccessGeneratedOutput *out
     CHECK(xr_xir_compile_emit_c(lowered,prefix,4194304,&output->source)==XR_XIR_OK);
     CHECK(output->source.text && output->source.length && !output->source.text[output->source.length]);
     CHECK(!strstr(output->source.text,"({") && strstr(output->source.text,"xr_xir_instance_cell_project_at("));
-    CHECK(strstr(output->source.text,"xr_xir_instance_cell_read_at(") &&
-        strstr(output->source.text,"xr_xir_instance_cell_write_at("));
+    CHECK(strstr(output->source.text,"xr_xir_instance_cell_read_at("));
+    if (fixture==5) {
+        const char *operations[]={"read","write","push","length"};
+        for (unsigned i=0;i<sizeof(operations)/sizeof(operations[0]);++i) {
+            char name[96];CHECK(snprintf(name,sizeof(name),"xr_xir_instance_path_%s_at(",operations[i])>0);
+            if (!strstr(output->source.text,name)) fprintf(stderr,"Missing genuine generated operation: %s\n",name);
+            CHECK(strstr(output->source.text,name));
+        }
+        /* Source capacity first reads the Cell into an ordinary Array value. */
+        CHECK(strstr(output->source.text,"xr_xir_instance_array_capacity("));
+    } else CHECK(strstr(output->source.text,"xr_xir_instance_cell_write_at("));
     /* The snapshot is an ordinary Array value, read after the Class field. */
     if (fixture==1) CHECK(strstr(output->source.text,"xr_xir_class_get(") &&
         strstr(output->source.text,"xr_xir_instance_array_read("));
     xr_xir_compile_artifact_free(lowered);
     CHECK(!runtime_live && !runtime_bytes && !runtime_owned);
 }
-static void access_generated_header(FILE *file,const AccessGeneratedOutput outputs[5]) {
+static void access_generated_header(FILE *file,const AccessGeneratedOutput outputs[ACCESS_SOURCE_CASE_COUNT]) {
     CHECK(fputs("/* Authentic CGen specifications and dynamically resolved Source entries. */\n",file)>=0);
-    for (unsigned i=0;i<5;++i) if (!access_source_cases[i].rejected) {
+    for (unsigned i=0;i<ACCESS_SOURCE_CASE_COUNT;++i) if (!access_source_cases[i].rejected) {
         const AccessGeneratedOutput *output=&outputs[i];
         CHECK(fprintf(file,"XR_DATA const XrXirProgramSpec class_access_generated_%u_program;\n"
             "static const uint8_t class_access_generated_%u_native[%u]={",i,i,output->count)>0);
@@ -94,8 +103,8 @@ static void access_generated_header(FILE *file,const AccessGeneratedOutput outpu
             CHECK(fprintf(file,"%s%uu",f?",":"",(unsigned)output->native[f])>0);
         CHECK(fputs("};\n",file)>=0);
     }
-    CHECK(fputs("static const AccessGeneratedFixture access_generated_fixtures[5]={\n",file)>=0);
-    for (unsigned i=0;i<5;++i) {
+    CHECK(fputs("static const AccessGeneratedFixture access_generated_fixtures[ACCESS_SOURCE_CASE_COUNT]={\n",file)>=0);
+    for (unsigned i=0;i<ACCESS_SOURCE_CASE_COUNT;++i) {
         const AccessGeneratedOutput *output=&outputs[i];
         if (access_source_cases[i].rejected) CHECK(fputs("    {NULL,NULL,{UINT32_MAX,UINT32_MAX,UINT32_MAX},0},\n",file)>=0);
         else CHECK(fprintf(file,"    {&class_access_generated_%u_program,class_access_generated_%u_native,"
@@ -104,9 +113,9 @@ static void access_generated_header(FILE *file,const AccessGeneratedOutput outpu
     CHECK(fputs("};\n",file)>=0);
 }
 static int access_write_c(int argc,char **argv) {
-    if (argc!=6 || strcmp(argv[1],"--write-c")) return 2;
-    const char *names[4]={"class_access_0.c","class_access_1.c","class_access_3.c","class_access_generated.h"};
-    for (unsigned i=2;i<6;++i) {
+    if (argc!=7 || strcmp(argv[1],"--write-c")) return 2;
+    const char *names[5]={"class_access_0.c","class_access_1.c","class_access_3.c","class_access_5.c","class_access_generated.h"};
+    for (unsigned i=2;i<7;++i) {
         if (!argv[i][0]) return 2;
         const char *name=argv[i];
         for (const char *at=name;*at;++at) if (*at=='/' || *at=='\\') name=at+1;
@@ -114,17 +123,17 @@ static int access_write_c(int argc,char **argv) {
         for (unsigned prior=2;prior<i;++prior) if (!strcmp(argv[i],argv[prior])) return 2;
     }
     CHECK(!access_compile_recording && !cell_runtime_recording && !cell_runtime_fault_count);
-    AccessGeneratedOutput outputs[5]={0};
+    AccessGeneratedOutput outputs[ACCESS_SOURCE_CASE_COUNT]={0};
     /* Every admission and emission succeeds before any declared output opens. */
-    for (unsigned i=0;i<5;++i) access_generated_prepare(i,&outputs[i]);
+    for (unsigned i=0;i<ACCESS_SOURCE_CASE_COUNT;++i) access_generated_prepare(i,&outputs[i]);
     unsigned path=2;
-    for (unsigned i=0;i<5;++i) if (!access_source_cases[i].rejected) {
+    for (unsigned i=0;i<ACCESS_SOURCE_CASE_COUNT;++i) if (!access_source_cases[i].rejected) {
         FILE *file=fopen(argv[path++],"wb");CHECK(file);
         CHECK(fwrite(outputs[i].source.text,1,outputs[i].source.length,file)==outputs[i].source.length && !fclose(file));
     }
-    CHECK(path==5);
-    FILE *header=fopen(argv[5],"wb");CHECK(header);access_generated_header(header,outputs);CHECK(!fclose(header));
-    for (unsigned i=0;i<5;++i) if (!access_source_cases[i].rejected) {
+    CHECK(path==6);
+    FILE *header=fopen(argv[6],"wb");CHECK(header);access_generated_header(header,outputs);CHECK(!fclose(header));
+    for (unsigned i=0;i<ACCESS_SOURCE_CASE_COUNT;++i) if (!access_source_cases[i].rejected) {
         printf("CLASS_ACCESS_GENERATE fixture=%s functions=%u Cbytes=%zu Source=1 CheckedWrite=1 CheckedRead=1 Specialize=1 Lower=1 Emit=1 fullFI=NOT_RUN runtimeExecution=NOT_RUN\n",
             access_source_cases[i].name,outputs[i].count,outputs[i].source.length);
         xr_compile_resources_free(outputs[i].native);xr_xir_compile_c_source_free(&outputs[i].source);

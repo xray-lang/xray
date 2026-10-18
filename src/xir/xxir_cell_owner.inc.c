@@ -106,6 +106,12 @@ XR_FUNC const XrXirValue *xr_xir_cell_canonical_root(const XrXirValue *value) {
     XirCell *cell = cell_owner(value);
     return cell ? (cell->projection_count ? &cell->value : value) : NULL;
 }
+XR_FUNC XrXirValueStatus xir_cell_path_view(const XrXirValue *value,XrXirValuePath *output) {
+    XirCell *cell=cell_owner(value);
+    if (!cell || !output) return XR_XIR_VALUE_BAD_ARGUMENT;
+    *output=(XrXirValuePath){cell->projection_count ? (const XrXirValuePathStep *)(cell+1) : NULL,cell->projection_count};
+    return XR_XIR_VALUE_OK;
+}
 static bool cell_loan_empty(const XrXirCellLoan *loan) {
     return loan && !loan->cell && !loan->scope && !loan->previous &&
         !loan->authority.activation && !loan->authority.frame && !loan->authority.epoch;

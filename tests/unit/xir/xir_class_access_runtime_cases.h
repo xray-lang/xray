@@ -25,7 +25,7 @@ static void access_runtime_census(const AccessRuntimeTrial *trial,const AccessRu
     }
 }
 static void access_runtime_cases(const char *operation) {
-    for (unsigned i=0;i<5;++i) {
+    for (unsigned i=0;i<ACCESS_SOURCE_CASE_COUNT;++i) {
         const AccessSourceCase *fixture=&access_source_cases[i];
         if (fixture->rejected) continue;
         access_physical_zero();CHECK(!cell_runtime_observer_live);

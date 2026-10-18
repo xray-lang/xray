@@ -49,6 +49,8 @@ static XrXirRunStatus vm_path_step(ScalarRun *run, VmState *state,
             status = xr_xir_instance_path_read_at(run->view, (uint32_t)(op-run->function->instructions), &receiver, &path, &output, &fault);
         else if (op->op == XR_XIR_ARRAY_LEN)
             status = xr_xir_instance_path_length_at(run->view, (uint32_t)(op-run->function->instructions), &receiver, &path, &output, &fault);
+        else if (op->op == XR_XIR_ARRAY_CAPACITY)
+            status = xr_xir_instance_path_capacity_at(run->view, (uint32_t)(op-run->function->instructions), &receiver, &path, &output, &fault);
         else {
             uint32_t id = op->op == XR_XIR_ARRAY_SET ? run->function->operands[op->args[0] + 2] : op->args[1];
             XrXirValue value = vm_value_operand(run, id);

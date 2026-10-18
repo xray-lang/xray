@@ -1,0 +1,10 @@
+fn inspect() {
+    var values: Array<i64> = [10, 20, 30]
+    const snapshot: Array<i64> = values
+    const title: string = "owned\0value"
+    values[1] = 42
+    print(values[1]) // DAP_STOP: owned_values
+    print(snapshot[1])
+    print(title)
+}
+inspect()

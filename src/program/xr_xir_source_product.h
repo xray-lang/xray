@@ -17,6 +17,7 @@
 #include "../xir/xxir_checked.h"
 #include "../xir/xxir_emit_c.h"
 #include "../xir/xxir_program.h"
+#include "../xir/xxir_ctfe.h"
 
 typedef struct XrXirSourceProduct XrXirSourceProduct;
 typedef struct XrXirSourceTestEntry {
@@ -99,6 +100,9 @@ XR_FUNC const XrXirSourceTests *xr_xir_compile_source_product_tests(const XrXirS
 XR_FUNC XrXirStatus xr_xir_compile_source_product_packet(const XrXirSourceProduct *product,
     XrXirSourceProductPacketKind kind,XrXirSourceProductPacketView *output);
 XR_FUNC const XrXirSourceView *xr_xir_compile_source_product_view(const XrXirSourceProduct *product);
+/* Closed function indexes and instructions are projected through authentic
+ * specialization origins. Points remain product-owned after VM transfer. */
+XR_FUNC const XrXirSourceDebugView *xr_xir_compile_source_product_debug(const XrXirSourceProduct *product);
 XR_FUNC const XrXirConstruction *xr_xir_compile_source_product_construction(const XrXirSourceProduct *product);
 /* Layout borrows end when the Lowered artifact transfers to a VM program. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_layout(const XrXirSourceProduct *product,
@@ -109,6 +113,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_verify(const XrXirSourceProduc
 /* Successful VM projection transfers code ownership and leaves queries owned. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_vm_take(XrXirSourceProduct *product,
     XrXirProgram **output);
+/* Before VM transfer only. The owner's exact target and closed packet digest
+ * feed ordinary scalar CTFE admission on its original cumulative ledger.
+ * This grants no runtime, root, native or mutation authority. */
+XR_FUNC XrXirCtfeStatus xr_xir_compile_source_product_scalar(const XrXirSourceProduct *,uint32_t,
+    const XrXirValue *,uint32_t,XrXirCtfeLimits,XrXirValue *);
 XR_FUNC XrXirStatus xr_xir_compile_source_product_emit(const XrXirSourceProduct *product,
     const char *prefix,size_t byte_limit,XrXirCSource *output);
 /* Same-source dependency observation remains owned after executable transfer. */

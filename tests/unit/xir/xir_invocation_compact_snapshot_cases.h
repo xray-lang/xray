@@ -159,7 +159,7 @@ static void conditional_compact_pending_state(const XrXirCompileContext *context
     CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_BAD_STRUCTURE && body.run_capacity==capacity && body.run_count==runs);
     run.count=2;run.delta[0]=0;body.instruction_count=2;
     CHECK(effect_body_run_append(context,&body,&run)==XR_XIR_BAD_STRUCTURE && body.run_capacity==capacity && body.run_count==runs);
-    xr_compile_resources_free(body.runs);CHECK(rp_stats(context).live_bytes==held_bytes);
+    effect_body_runs_release(body.runs);CHECK(rp_stats(context).live_bytes==held_bytes);
 }
 
 #include "xir_invocation_single_column_cases.h"
@@ -202,7 +202,7 @@ static XrXirStatus conditional_compact_codec(const XrXirCompileContext *context,
         if (mode) conditional_compact_malformed(context,&body,&expected);
         else conditional_compact_pending_state(context,&original[0]);
     }
-    xr_compile_resources_free(body.runs);return status;
+    effect_body_runs_release(body.runs);return status;
 }
 
 static void conditional_compact_null_body(const XrXirCompileContext *context,XrXirEffects *effects) {

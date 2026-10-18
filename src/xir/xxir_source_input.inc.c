@@ -165,6 +165,7 @@ done:
     for (SourceManifest *manifest = ctx.manifests; manifest; manifest = manifest->next)
         xr_compile_declaration_manifest_free(manifest->declarations);
     xr_xir_compile_construction_free(ctx.construction);
+    source_release_retired_arrays(&ctx);
     while (ctx.memory) { SourceMemory *next = ctx.memory->next; xr_compile_resources_free(ctx.memory); ctx.memory = next; }
     xr_compile_module_graph_free(ctx.graph); xr_compile_module_resolver_free(resolver);
     if (ctx.diagnostic.status == XR_XIR_OK) *output = result;

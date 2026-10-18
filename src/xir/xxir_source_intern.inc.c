@@ -75,6 +75,7 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
         XrXirTypeNode *table = source_alloc(ctx, capacity, sizeof(*table));
         if (!table) return false;
         if (!source_copy_bytes(ctx, NULL, table, ctx->types.nodes, ctx->types.count * sizeof(*table))) return false;
+        source_retire_array(ctx,ctx->types.nodes);
         ctx->types.nodes = table; ctx->type_capacity = capacity;
     }
     XrXirTypeNode *table = (XrXirTypeNode *) ctx->types.nodes;

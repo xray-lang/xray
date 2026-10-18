@@ -1,0 +1,2 @@
+const shared:i64=19
+export fn imported()->i64 { return shared }

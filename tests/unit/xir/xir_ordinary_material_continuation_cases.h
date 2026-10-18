@@ -85,7 +85,7 @@ static XrXirStatus ordinary_material_operation(const XrXirCompileContext *contex
     EffectOrdinaryContexts *ordinary=NULL,*dense=NULL;
     EffectBodyMaterial *material=NULL;EffectOrdinaryView view={0};
     XrXirEffects refinement={.resources=context->resources,.count=2};
-    XrXirStatus status=effect_ordinary_build(context,&f.source,NULL,&ordinary);
+    XrXirStatus status=effect_ordinary_build(context,&f.source,NULL,NULL,&ordinary);
     if (status==XR_XIR_OK) status=ordinary_material_dense(context,&f,ordinary,&dense);
     if (status==XR_XIR_OK) status=effect_ordinary_view(dense,&f.source,&view);
     EffectBodyMaterial *basis=ordinary?ordinary->uses.generation:NULL;
@@ -249,7 +249,7 @@ static void ordinary_material_controls(void) {
     RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).live_bytes;OrdinaryMaterialFixture f;ordinary_material_fixture(&f);
     EffectOrdinaryContexts *ordinary=NULL,*dense=NULL;
-    CHECK(effect_ordinary_build(&context,&f.source,NULL,&ordinary)==XR_XIR_OK);
+    CHECK(effect_ordinary_build(&context,&f.source,NULL,NULL,&ordinary)==XR_XIR_OK);
     CHECK(ordinary_material_dense(&context,&f,ordinary,&dense)==XR_XIR_OK);
     EffectOrdinaryView view={0};CHECK(effect_ordinary_view(dense,&f.source,&view)==XR_XIR_OK);
     view.input.basis=ordinary;EffectBodyMaterial *basis=ordinary->uses.generation,*empty=NULL,*occupied=basis;

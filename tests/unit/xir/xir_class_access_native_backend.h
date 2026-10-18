@@ -116,8 +116,8 @@ static void access_mixed_prepare(const XrXirCompileContext *context,const Access
 static XrXirStatus access_native_program(const XrXirCompileContext *context,const char *name,
     XrXirProgram **output,CellSourceEntries *entries,bool unit) {
     CHECK(!unit && output && !*output && !access_native_owner.lowered && !access_native_owner.entries);
-    unsigned i=0;while (i<5 && strcmp(name,access_source_cases[i].name)) ++i;
-    CHECK(i<5 && !access_source_cases[i].rejected);
+    unsigned i=0;while (i<ACCESS_SOURCE_CASE_COUNT && strcmp(name,access_source_cases[i].name)) ++i;
+    CHECK(i<ACCESS_SOURCE_CASE_COUNT && !access_source_cases[i].rejected);
     const AccessGeneratedFixture *generated=&access_generated_fixtures[i];
     CHECK(generated->program && generated->native && generated->count==generated->program->entry_count);
     CHECK(generated->entries.run<generated->count && generated->entries.factory==UINT32_MAX);

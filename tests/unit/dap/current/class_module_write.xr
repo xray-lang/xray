@@ -1,0 +1,16 @@
+class ModuleBox {
+    value:i64
+    init() { this.value=11 }
+}
+const global:ModuleBox=ModuleBox()
+fn worker()->i64 {
+    var box:ModuleBox=ModuleBox()
+    const marker:i64=11
+    return marker
+}
+fn run()->i64 {
+    const outside:ModuleBox=global
+    const job=go worker()
+    return await job
+}
+print(run())

@@ -90,6 +90,13 @@ struct XrXirCellProofBodyRead {
      * The callback reads the actual first row, never a semantic permission. */
     XrXirStatus (*range)(const XrXirCompileContext *,const XrXirCellProofBodyRead *,
         XrXirCellProofRunCursor *,XrXirCellProofRun *);
+    /* A row of the current complete range is decoded afresh. The numeric
+     * cursor selects storage only; the provider rechecks the actual run. */
+    XrXirStatus (*range_row)(const XrXirCompileContext *,const XrXirCellProofBodyRead *,
+        const XrXirCellProofRunCursor *,uint32_t,uint32_t,XrXirInstruction *);
+    /* Shape reads share the same current owner and complete range checks. */
+    XrXirStatus (*range_shape)(const XrXirCompileContext *,const XrXirCellProofBodyRead *,
+        const XrXirCellProofRunCursor *,uint32_t,uint32_t,XrXirCellProofInstructionShape *);
 };
 
 /* One construction-local provider builder consumes actual writer rows. It

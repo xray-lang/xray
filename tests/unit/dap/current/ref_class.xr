@@ -1,0 +1,25 @@
+class RefBox {
+    values:Array<i64>
+    sibling:i64
+    init() { this.values=[11,13]; this.sibling=37 }
+}
+fn edit(values:ref Array<i64>)->i64 {
+    const before:Array<i64>=values
+    const incoming:Array<i64>=[100,13]
+    const right:i64=17
+    print(values[0])
+    print(before[0])
+    print(incoming[1])
+    return values[0]+values[1]
+}
+fn run() {
+    const box:RefBox=RefBox()
+    const alias:RefBox=box
+    const saved:Array<i64>=box.values
+    print(edit(ref box.values))
+    print(box.values[0])
+    print(box.sibling)
+    print(saved[0])
+    print(alias.values[0])
+}
+run()

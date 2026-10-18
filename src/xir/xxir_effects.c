@@ -23,6 +23,13 @@
 #include "xxir_cell_provenance_internal.h"
 #include "../base/xmalloc.h"
 
+/* Private execution contexts share the existing equation-ID bound. Repeated
+ * environments do not add declarations to the admitted source function table. */
+static uint32_t effect_equation_maximum(const XrXirCompileContext *work) {
+    uint64_t maximum=(uint64_t)work->limits.functions*work->limits.instructions;
+    return maximum>UINT32_MAX ? UINT32_MAX : (uint32_t)maximum;
+}
+
 #include "xxir_effect_contract.inc.c"
 
 typedef struct EffectContextOwner EffectContextOwner;
@@ -379,7 +386,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     case XR_XIR_SHL_INT: case XR_XIR_SHR_INT: case XR_XIR_PHI:
     case XR_XIR_FUNCTION_WEAKEN:
     case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ:
-    case XR_XIR_CELL_WRITE: case XR_XIR_CELL_PROJECT:
+    case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND: case XR_XIR_CELL_PROJECT:
     case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT:
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT:

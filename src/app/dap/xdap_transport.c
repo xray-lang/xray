@@ -45,11 +45,12 @@ static int set_nonblock(int fd) {
 static ssize_t read_nonblock(int fd, char *buf, size_t len) {
     ssize_t n = xr_socket_recv(fd, buf, len);
     if (n < 0) {
-        if (xr_socket_err_is_again(xr_get_socket_error()))
+        int error = xr_get_socket_error();
+        if (error == XR_EINTR || xr_socket_err_is_again(error))
             return 0;
         return -1;
     }
-    return n;
+    return n == 0 ? -1 : n;
 }
 
 // Non-blocking single-shot write.
@@ -399,42 +400,10 @@ int xdap_transport_poll(XdapTransport *t, int timeout_ms) {
 // Forward decl — drain lives below try_read.
 static bool try_drain_write(XdapTransport *t);
 
-char *xdap_transport_try_read(XdapTransport *t, size_t *out_len, bool *would_block) {
-    if (!t || !t->connected) {
-        if (would_block)
-            *would_block = false;
-        return NULL;
-    }
-
-    // Opportunistic write drain on every read tick. Keeps queued
-    // outbound bytes flowing even when the DAP protocol layer is
-    // quiet, and piggybacks on poll events the main loop already
-    // delivers for stdin — so there's no extra timer needed.
-    if (!try_drain_write(t)) {
-        if (would_block)
-            *would_block = false;
-        return NULL;
-    }
-
-    // Try to read more data into buffer
-    if (!ensure_capacity(&t->read_buf, &t->read_cap, t->read_len + 1024)) {
-        // OOM - treat as error
-        if (would_block)
-            *would_block = false;
-        return NULL;
-    }
-
-    ssize_t n = read_nonblock(t->read_fd, t->read_buf + t->read_len, t->read_cap - t->read_len - 1);
-    if (n > 0) {
-        t->read_len += (size_t) n;
-        t->read_buf[t->read_len] = '\0';  // Null-terminate for string search
-    } else if (n < 0) {
-        // Connection closed or error
-        t->connected = false;
-        if (would_block)
-            *would_block = false;
-        return NULL;
-    }
+/* Buffered frames remain deliverable after the peer closes its stream. */
+static char *extract_message(XdapTransport *t, size_t *out_len, bool *would_block,
+                             bool *needs_input) {
+    *needs_input = true;
 
     // Try to parse header via shared framing module
     if (t->pending_content_length < 0) {
@@ -442,6 +411,7 @@ char *xdap_transport_try_read(XdapTransport *t, size_t *out_len, bool *would_blo
             xr_frame_parse(t->read_buf, t->read_len, &t->header_end, &t->pending_content_length);
         if (fs == XR_FRAME_ERROR) {
             t->connected = false;
+            *needs_input = false;
             if (would_block)
                 *would_block = false;
             return NULL;
@@ -453,6 +423,7 @@ char *xdap_transport_try_read(XdapTransport *t, size_t *out_len, bool *would_blo
         size_t total_needed = t->header_end + (size_t) t->pending_content_length;
 
         if (t->read_len >= total_needed) {
+            *needs_input = false;
             // Extract message content
             int content_len = t->pending_content_length;
             char *content = xr_malloc((size_t) content_len + 1);
@@ -489,6 +460,46 @@ char *xdap_transport_try_read(XdapTransport *t, size_t *out_len, bool *would_blo
     if (would_block)
         *would_block = true;
     return NULL;
+}
+
+char *xdap_transport_try_read(XdapTransport *t, size_t *out_len, bool *would_block) {
+    if (!t || !t->connected) {
+        if (would_block)
+            *would_block = false;
+        return NULL;
+    }
+
+    if (!try_drain_write(t)) {
+        if (would_block)
+            *would_block = false;
+        return NULL;
+    }
+
+    bool needs_input = false;
+    char *content = extract_message(t, out_len, would_block, &needs_input);
+    if (!needs_input)
+        return content;
+
+    if (!ensure_capacity(&t->read_buf, &t->read_cap, t->read_len + 1024)) {
+        if (would_block)
+            *would_block = false;
+        return NULL;
+    }
+
+    ssize_t n = read_nonblock(t->read_fd, t->read_buf + t->read_len,
+                              t->read_cap - t->read_len - 1);
+    if (n < 0) {
+        t->connected = false;
+        if (would_block)
+            *would_block = false;
+        return NULL;
+    }
+    if (n > 0) {
+        t->read_len += (size_t) n;
+        t->read_buf[t->read_len] = '\0';
+    }
+
+    return extract_message(t, out_len, would_block, &needs_input);
 }
 
 // Try to flush as much of write_buf as the kernel will take without

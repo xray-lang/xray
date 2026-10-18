@@ -1,0 +1,2 @@
+enum Hidden { Bad { code:i64 } }
+export fn raise()->i64 { throw Hidden.Bad{code:41} }

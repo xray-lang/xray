@@ -109,6 +109,8 @@ static inline bool xr_xir_op_uses_value_path(const XrXirFunction *function, cons
         op->op != XR_XIR_ARRAY_LEN && op->op != XR_XIR_ARRAY_CAPACITY && op->op != XR_XIR_STRUCT_SET) return false;
     uint32_t id = xr_xir_op_uses_operand_table(op->op) ? function->operands[op->args[0]] : op->args[0];
     XrXirPlaceKind kind = xr_xir_place_kind(function, id);
-    return kind == XR_XIR_PLACE_FIELD || kind == XR_XIR_PLACE_INDEX;
+    /* A direct Cell may be a scoped Class projection. Its operations need
+     * the same genuine instruction proof as a longer logical path. */
+    return kind == XR_XIR_PLACE_CELL || kind == XR_XIR_PLACE_FIELD || kind == XR_XIR_PLACE_INDEX;
 }
 #endif // XXIR_OPERAND_ROLES_H

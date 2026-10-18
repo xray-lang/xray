@@ -1,0 +1,19 @@
+enum FilterFailure { RootHandled, ChildHandled, ChildStored, Last }
+fn local()->i64 {
+    try { throw FilterFailure.RootHandled } // FILTER_SITE: RootHandled
+    catch(FilterFailure.RootHandled) { return 1 }
+}
+fn worker()->i64 {
+    try { throw FilterFailure.ChildHandled } // FILTER_SITE: ChildHandled
+    catch(FilterFailure.ChildHandled) { return 2 }
+}
+fn failed()->i64 {
+    throw FilterFailure.ChildStored // FILTER_SITE: ChildStored
+}
+print(local())
+const value=go worker()
+print(await value)
+const stored=go failed()
+try { print(await stored) }
+catch(FilterFailure.ChildStored) { print(3) }
+throw FilterFailure.Last // FILTER_SITE: Last

@@ -34,7 +34,7 @@ static bool ctfe_opcode_work(XrXirOp op, uint64_t *work) {
     case XR_XIR_SHR_INT: case XR_XIR_EQ_INT: case XR_XIR_NE_INT:
     case XR_XIR_LT_INT: case XR_XIR_LE_INT: case XR_XIR_GT_INT:
     case XR_XIR_GE_INT: *work = 3; return true;
-    case XR_XIR_JUMP: case XR_XIR_PHI: *work = 0; return true;
+    case XR_XIR_JUMP: case XR_XIR_PHI: case XR_XIR_LOCAL_UNINIT: *work = 0; return true;
     case XR_XIR_BRANCH: case XR_XIR_RETURN: *work = 1; return true;
     default: return false;
     }

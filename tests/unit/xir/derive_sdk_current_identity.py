@@ -4,7 +4,7 @@ import argparse,hashlib,json,struct,sys,tempfile
 root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root/'scripts'))
 from derive_xir_sdk_abi import prepare
 
-def current_preimage(rows, semantic=73, value_abi=24, call_abi=29, wire=28, program_abi=31):
+def current_preimage(rows, semantic=74, value_abi=24, call_abi=29, wire=28, program_abi=31):
     word=lambda value:struct.pack('<I',value)
     def text(value):
         data=value.encode('utf-8');return word(len(data))+data
@@ -67,12 +67,17 @@ def main():
     for name,data in (('current_sdk_kat_preimage',value23_image),('current_sdk_kat_file_digest',value23_file),('current_sdk_kat_digest',value23_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',value23_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired Value23 SDK KAT changed'
+    retired31,retired31_file,retired31_digest=current_preimage(rows,73,24,29,28,31)
+    retired31_text=Path(__file__).with_name('sdk_previous_program31_sem73_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',retired31),('current_sdk_kat_file_digest',retired31_file),('current_sdk_kat_digest',retired31_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',retired31_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired Program31 semantic73 KAT changed'
     image,file_digest,digest=current_preimage(rows)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows,73,24,29,28,30)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(28,73,24,29,31)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(28,74,24,29,31)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
     retired_image,retired_file,retired_digest=current_preimage(retired_rows,73,24,29,28,30)
     retired_text=Path(__file__).with_name('sdk_previous_program30_identity_golden.h').read_text()

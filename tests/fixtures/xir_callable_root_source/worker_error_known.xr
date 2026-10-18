@@ -1,0 +1,4 @@
+enum Failure{Bad}
+fn plain()->i64{throw Failure.Bad}
+fn worker()->i64{const f=plain;return f()}
+fn main()->i64{return await go worker()}

@@ -2624,7 +2624,16 @@ else()
     message(STATUS "readline: not found (REPL will use basic input)")
 endif()
 
+if(XR_BUILD_DAP)
+    list(APPEND XRAY_CLI_SOURCES ${XRAY_CLI_ROOT}/xcmd_dap.c)
+    if(WIN32)
+        list(APPEND XRAY_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/os/win/random_win.c)
+    endif()
+endif()
 add_executable(xray ${XRAY_CLI_SOURCES})
+if(XR_BUILD_DAP)
+    target_link_libraries(xray PRIVATE xray_dap_current)
+endif()
 
 # The compiler's recursive IR/AOT passes can exceed the PE/COFF default 1 MiB
 # stack on larger programs. Match the usual Unix main-thread allowance so

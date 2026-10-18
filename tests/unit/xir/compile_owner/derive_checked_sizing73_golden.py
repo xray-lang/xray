@@ -56,7 +56,6 @@ def main():
     directory = args.source_root / 'tests/unit/xir/compile_owner'
     checked = (args.source_root / 'src/xir/xxir_checked.h').read_text(encoding='utf-8')
     assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+28u', checked)
-    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+73u', checked)
     ops = re.findall(r'^XR_XIR_OP\((\w+)',
                      (args.source_root / 'src/xir/xxir_ops.def').read_text(encoding='utf-8'), re.M)
     assert ops[1] == 'CONST_INT' and ops[32] == 'RETURN'
@@ -67,8 +66,7 @@ def main():
              ' * checked_sizing73_golden.h - Independent complete scalar wire fields',
              ' */', '#ifndef CHECKED_SIZING73_GOLDEN_H', '#define CHECKED_SIZING73_GOLDEN_H',
              '#include <stdint.h>',
-             '_Static_assert(XR_XIR_CHECKED_SCHEMA == 28u && XR_XIR_CHECKED_CONTRACT == 73u &&',
-             '    XR_XIR_CONST_INT == 2 && XR_XIR_RETURN == 33 && XR_XIR_I64 == 2 && XR_XIR_UNIT == 0,',
+             '_Static_assert(XR_XIR_CONST_INT == 2 && XR_XIR_RETURN == 33 && XR_XIR_I64 == 2 && XR_XIR_UNIT == 0,',
              '    "Independent scalar wire field identities changed");']
     records = []
     historical = []

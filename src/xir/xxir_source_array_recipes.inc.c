@@ -177,17 +177,13 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
         return false;
     SourceGuard guard;
     if (recipe == SOURCE_ARRAY_JOIN) {
-        SourceValue later, current, joined, piece, extended;
+        SourceValue later, piece;
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LT_INT, XR_XIR_BOOL, {zero.id, counter.index.id}, {0}, 0, {0}}, &later) ||
             !source_guard_open(ctx, later, false, &guard) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, XR_XIR_STRING, {store.id, 0}, {0}, 0, {0}}, &current) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {current.id, separator.id}, {0}, 0, {0}}, &joined) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {store.id, joined.id}, {0}, 0, {0}}, NULL) ||
+            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_STRING_APPEND, XR_XIR_UNIT, {store.id, separator.id}, {0}, 0, {0}}, NULL) ||
             !source_guard_close(ctx, &guard) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, XR_XIR_STRING, {store.id, 0}, {0}, 0, {0}}, &current) ||
             !source_array_join_piece(ctx, node, element, &piece) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {current.id, piece.id}, {0}, 0, {0}}, &extended) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {store.id, extended.id}, {0}, 0, {0}}, NULL)) return false;
+            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_STRING_APPEND, XR_XIR_UNIT, {store.id, piece.id}, {0}, 0, {0}}, NULL)) return false;
     } else {
         SourceValue same, decided;
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_EQUAL, XR_XIR_BOOL, {element.id, argument.id}, {0}, 0, {0}}, &same) ||

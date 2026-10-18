@@ -58,6 +58,34 @@ static XrXirStatus effect_class_access_root(const EffectInvocationCertificate *c
     return XR_XIR_BAD_STRUCTURE;
 }
 
+/* Observer scope uses the same sealed Final and exact active parent. It never
+ * treats a retired construction workspace as a source of Class authority. */
+static const EffectInvocationCertificate *effect_class_access_certificate(const XrXirEffects *effects,
+    uint32_t caller,uint32_t node,bool contextual,XrXirType root_type) {
+    if (!effects || !effects->invocations) return NULL;
+    const EffectInvocationCertificate *certificate=effects->invocations;
+    const EffectInvocationFinal *owner=certificate->final;
+    if (!effect_body_material_shape(certificate->body) || !owner ||
+        certificate->resources!=effects->resources || certificate->body->resources!=certificate->resources ||
+        owner->material!=certificate->body || caller>=effect_body_count(certificate->body) ||
+        !xr_xir_type_is_class(certificate->body->domain.types,root_type) ||
+        (contextual && (node>=owner->count || owner->nodes[node].body!=caller))) return NULL;
+    return certificate;
+}
+XR_FUNC XrXirStatus xir_effects_class_scope(const XrXirEffects *effects,
+    const XirEffectClassScopeRequest *request) {
+    if (!request || !request->read.work) return XR_XIR_BAD_STRUCTURE;
+    const EffectInvocationCertificate *certificate=effect_class_access_certificate(effects,
+        request->caller,request->node,request->contextual,request->root_type);
+    if (!certificate) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_runtime_work(&request->read,12);
+    if (status!=XR_XIR_OK || !request->pure) return status;
+    XirEffectInvocationRequest parent={.caller=request->caller,.node=request->node,
+        .contextual=request->contextual,.read=request->read};
+    uint32_t selected=UINT32_MAX;
+    return effect_runtime_parent(certificate,&parent,&selected);
+}
+
 XR_FUNC XrXirStatus xir_effects_class_access(const XrXirEffects *effects,
     const XirEffectClassAccessRequest *request) {
     if (!effects || !effects->invocations || !request || !request->read.work)

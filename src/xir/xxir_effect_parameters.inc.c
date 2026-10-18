@@ -115,7 +115,7 @@ static XrXirStatus effect_parameter_type(EffectParameterFlow *flow,uint32_t valu
 
 static XrXirStatus effect_parameter_operation(EffectParameterFlow *flow,uint32_t instruction,
     XrXirInstruction *storage,const XrXirInstruction **output) {
-    return effect_body_request_instruction(&flow->body,flow->function_index,instruction,storage,output);
+    return effect_body_request_borrow_instruction(&flow->body,flow->function_index,instruction,storage,output);
 }
 
 /* Only a write after a consumer has run can require another ascending pass.

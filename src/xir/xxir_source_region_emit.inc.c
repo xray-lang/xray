@@ -22,6 +22,8 @@ static bool source_region_id(const uint32_t *map,uint32_t count,uint32_t id,uint
     if (id>=count || map[id]==UINT32_MAX) return false;
     *out=map[id]; return true;
 }
+#include "xxir_source_throw_map.inc.c"
+#include "xxir_source_handler_map.inc.c"
 /* Dead catch bindings have no runtime predecessor. Their sentinel is retained
  * only in the private initialization snapshot; executable sealing never accepts
  * it. Control edges and recipe definitions always require real identities. */
@@ -42,23 +44,27 @@ static bool source_region_span(size_t *bytes,uint32_t count,size_t element,
 _Static_assert(_Alignof(SourceMemory)>=_Alignof(XrXirInstruction) &&
     _Alignof(SourceMemory)>=_Alignof(XrXirBlock) &&
     _Alignof(SourceMemory)>=_Alignof(uint32_t) &&
+    _Alignof(SourceMemory)>=_Alignof(XrXirSourceDebugPoint) &&
     sizeof(SourceMemory)%_Alignof(XrXirInstruction)==0,
     "source arena must align instruction storage");
 typedef struct SourceRegionOutput {
     XrXirInstruction *instructions;
     XrXirBlock *blocks;
     uint32_t *operands;
+    XrXirSourceDebugPoint *points;
 } SourceRegionOutput;
 static bool source_region_output_allocate(SourceContext *ctx,
     const SourceFunction *body,SourceRegionOutput *output) {
     /* All published arrays share one arena owner and retain distinct views. */
-    size_t output_bytes=0,instruction_offset=0,block_offset=0,operand_offset=0;
+    size_t output_bytes=0,instruction_offset=0,block_offset=0,operand_offset=0,point_offset=0;
     if (!source_region_span(&output_bytes,body->count,sizeof(XrXirInstruction),
             _Alignof(XrXirInstruction),&instruction_offset) ||
         !source_region_span(&output_bytes,body->block_count,sizeof(XrXirBlock),
             _Alignof(XrXirBlock),&block_offset) ||
         !source_region_span(&output_bytes,body->operand_count,sizeof(uint32_t),
-            _Alignof(uint32_t),&operand_offset)) {
+            _Alignof(uint32_t),&operand_offset) ||
+        !source_region_span(&output_bytes,body->count,sizeof(XrXirSourceDebugPoint),
+            _Alignof(XrXirSourceDebugPoint),&point_offset)) {
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"source region output size exhausted");
     }
     unsigned char *storage=output_bytes ? source_alloc(ctx,1,output_bytes) : NULL;
@@ -66,32 +72,16 @@ static bool source_region_output_allocate(SourceContext *ctx,
     output->instructions=body->count ? (XrXirInstruction *)(storage+instruction_offset) : NULL;
     output->blocks=body->block_count ? (XrXirBlock *)(storage+block_offset) : NULL;
     output->operands=body->operand_count ? (uint32_t *)(storage+operand_offset) : NULL;
+    output->points=body->count ? (XrXirSourceDebugPoint *)(storage+point_offset) : NULL;
     return true;
 }
+#include "xxir_source_region_seal.inc.c"
 static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool seal) {
     SourceFunction *body=&ctx->bodies[ctx->function];
     uint32_t parameters=ctx->functions[ctx->function].parameter_count;
     if (body->region_sealed || body->count>UINT32_MAX-parameters)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source region is not open");
-    uint32_t expressions=0;
-    for (SourceExpressionStorage *storage=body->expressions;storage;storage=storage->next) {
-        if (!source_work(ctx,NULL)) return false;
-        if (!storage->count || storage->count>32 || storage->count>body->expression_count-expressions)
-            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"expression region storage is invalid");
-        for (uint32_t e=0;e<storage->count;++e) {
-            if (!source_work(ctx,NULL)) return false;
-            SourceExpressionPlan *plan=&storage->expressions[e];
-            if (plan->owner!=ctx->function || (seal && plan->state!=SOURCE_TERM_GROUND && plan->state!=SOURCE_TERM_DISCARDED) ||
-                plan->identity>=body->expression_count || plan->entry.owner!=ctx->function ||
-                (plan->state==SOURCE_TERM_GROUND && (plan->exit.owner!=ctx->function ||
-                 plan->entry.identity>=body->block_count || plan->exit.identity>=body->block_count)) ||
-                (plan->parent && plan->parent->owner!=ctx->function))
-                return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"expression region is unresolved or has a foreign owner");
-        }
-        expressions+=storage->count;
-    }
-    if (expressions!=body->expression_count)
-        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"expression region count is invalid");
+    if (!source_region_expressions(ctx,seal)) return false;
     uint32_t value_count=parameters+body->count;
     uint64_t cells=(uint64_t)value_count+(uint64_t)body->block_count*2;
     if (cells>SIZE_MAX/sizeof(uint32_t))
@@ -99,8 +89,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     uint32_t *map=cells ? source_scratch(ctx,(size_t)cells,sizeof(*map),true) : NULL;
     bool ok=false;
     if (cells && !map) goto done;
-    uint32_t *blocks=map ? map+value_count : NULL;
-    uint32_t *layout=blocks ? blocks+body->block_count : NULL;
+    uint32_t *blocks=map ? map+value_count : NULL,*layout=blocks ? blocks+body->block_count : NULL;
     for (uint32_t i=0;i<value_count;++i) {
         if (!source_work(ctx,NULL)) goto done;
         map[i]=i<parameters ? i : UINT32_MAX;
@@ -143,6 +132,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     if (emitted!=body->count) goto invalid;
     SourceRegionOutput views={0};
     if (!source_region_output_allocate(ctx,body,&views)) goto done;
+    if (!source_work_units(ctx,NULL,(uint64_t)body->count*sizeof(*views.points))) goto done;
     XrXirInstruction *instructions=views.instructions;
     XrXirBlock *emitted_blocks=views.blocks;
     uint32_t *operands=views.operands;
@@ -221,6 +211,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
             if (root_values[emitted].peer != UINT32_MAX &&
                 !source_region_id(map,value_count,root_values[emitted].peer,&root_values[emitted].peer)) goto invalid;
         }
+        views.points[emitted]=body->recipes[i].debug;
         instructions[emitted++]=op;
       }
     }
@@ -228,19 +219,7 @@ static bool source_region_emit(SourceContext *ctx,XrXirFunction *output,bool sea
     output->instructions=instructions;output->instruction_count=body->count;
     output->blocks=emitted_blocks;output->block_count=body->block_count;
     output->operands=operands;output->operand_count=body->operand_count;
-    if (seal) {
-        for (SourceRootQuery *query = ctx->root_queries; query; query = query->next) {
-            if (!source_work(ctx,NULL)) goto done;
-            if (query->function == ctx->function && !source_region_id(map,value_count,query->value,&query->value)) goto invalid;
-        }
-        body->region_sealed=true; body->root_values=root_values;
-        while (body->recipe_storage) {
-            SourceRecipeStorage *storage=body->recipe_storage;body->recipe_storage=storage->next;
-            source_release_private(storage);
-        }
-        body->expressions=NULL;body->expression_count=0;
-        body->recipes=NULL;body->blocks=NULL;body->capacity=0;body->block_capacity=0;
-    }
+    if (seal && !source_region_seal(ctx,map,value_count,root_values,views.points)) goto done;
     ok=true;goto done;
 invalid:
     source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source region identity is invalid");

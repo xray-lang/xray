@@ -87,6 +87,7 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
 /* This destructor owns declaration/recipe data, never the borrowed input graph
  * or immutable manifest rows held by the original synchronous Source owner. */
 static void source_comptime_context_free(SourceContext *ctx) {
+    source_release_retired_arrays(ctx);
     xr_xir_compile_construction_free(ctx->construction);
     while (ctx->memory) { SourceMemory *next=ctx->memory->next;xr_compile_resources_free(ctx->memory);ctx->memory=next; }
 }

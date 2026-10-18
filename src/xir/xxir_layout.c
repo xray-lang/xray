@@ -25,6 +25,7 @@ static bool layout_equal(XrXirLayout left, XrXirLayout right) {
 
 #include "xxir_layout_input.inc.c"
 
+
 static XrXirStatus layout_function_bounds(const XrXirModule *module, const XrXirCompileContext *context) {
     for (uint32_t f = 0; f < module->function_count; ++f) {
         if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;

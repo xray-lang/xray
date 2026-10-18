@@ -113,10 +113,17 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #undef current_sdk_kat_preimage
 #undef current_sdk_kat_file_digest
 #undef current_sdk_kat_digest
+#define current_sdk_kat_preimage previous_program31_sem73_sdk_kat_preimage
+#define current_sdk_kat_file_digest previous_program31_sem73_sdk_kat_file_digest
+#define current_sdk_kat_digest previous_program31_sem73_sdk_kat_digest
+#include "sdk_previous_program31_sem73_identity_golden.h"
+#undef current_sdk_kat_preimage
+#undef current_sdk_kat_file_digest
+#undef current_sdk_kat_digest
 #include "sdk_current_identity_golden.h"
 
 static void sdk_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==73 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==74 &&
         XR_XIR_VALUE_ABI_VERSION==24 && XR_XIR_CALL_ABI_VERSION==29 && XR_XIR_PROGRAM_ABI_VERSION==31,
         "SDK known bytes require the independently framed public contract");
     uint8_t old_hash[32];xr_sha256(sdk_kat_preimage,sizeof(sdk_kat_preimage),old_hash);
@@ -162,7 +169,13 @@ static void sdk_known_bytes(void) {
     _Static_assert(sizeof(previous_program30_sdk_kat_preimage)==3186,"complete retired Program30 SDK preimage");
     xr_sha256(previous_program30_sdk_kat_preimage,sizeof(previous_program30_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous_program30_sdk_kat_digest,32));
-    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,28,73,24,29,31,1,1,1,11,2,0,1,0,3,1,1};
+    _Static_assert(sizeof(previous_program31_sem73_sdk_kat_preimage)==3178,"Complete retired Program31 semantic73 SDK preimage");
+    xr_sha256(previous_program31_sem73_sdk_kat_preimage,sizeof(previous_program31_sem73_sdk_kat_preimage),old_hash);
+    CHECK(!memcmp(old_hash,previous_program31_sem73_sdk_kat_digest,32));
+    CHECK(previous_program31_sem73_sdk_kat_preimage[semantic_offset]==73 && current_sdk_kat_preimage[semantic_offset]==74);
+    CHECK(memcmp(previous_program31_sem73_sdk_kat_digest,current_sdk_kat_digest,32));
+
+    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,28,74,24,29,31,1,1,1,11,2,0,1,0,3,1,1};
     memcpy(manifest.prefix,prefix,sizeof(prefix));
     manifest.target_triple="x86_64-windows-msvc";manifest.abi_recipe="xray:xir-runtime-abi-measurements:v1";
     manifest.closure_recipe="xray:xir-runtime-recipe:windows-x86_64-hosted:v1";

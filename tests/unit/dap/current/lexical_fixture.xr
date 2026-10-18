@@ -1,0 +1,13 @@
+fn leaf(value:i64)->i64 {
+    const outer=value+1
+    var total=outer
+    {
+        const outer=value+2
+        const text="owned\0lexical"
+        const nothing=print("")
+        total=outer
+    }
+    const done=total
+    return done
+}
+print(leaf(20))

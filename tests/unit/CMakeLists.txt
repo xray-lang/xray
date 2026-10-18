@@ -272,6 +272,10 @@ else()
 endif()
 add_test(NAME test_xir_effects_source COMMAND test_xir_effects_source)
 set_tests_properties(test_xir_effects_source PROPERTIES LABELS "unit;xir;metadata;ownership")
+add_test(NAME test_xir_source_fixed_callable_boundary COMMAND test_xir_effects_source --qualified-boundary)
+set_tests_properties(test_xir_source_fixed_callable_boundary PROPERTIES LABELS "unit;xir;metadata;ownership" TIMEOUT 60)
+add_test(NAME test_xir_source_qualified_forwarding COMMAND test_xir_effects_source --qualified-forwarding)
+set_tests_properties(test_xir_source_qualified_forwarding PROPERTIES LABELS "unit;xir;metadata;ownership" TIMEOUT 60)
 set(XIR_EFFECT_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_effect_fixture.c)
 add_custom_command(OUTPUT ${XIR_EFFECT_GENERATED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
@@ -440,6 +444,9 @@ set_tests_properties(test_xir_array_grow_budget PROPERTIES TIMEOUT 120 LABELS "u
 add_executable(test_xir_value_allocations xir/test_xir_value_allocations.c)
 target_include_directories(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_xir_value_allocations PRIVATE xray_xir_scalar)
+add_test(NAME test_xir_value_path_replacement COMMAND test_xir_value_allocations --path-replacement-normal)
+add_test(NAME test_xir_value_path_replacement_resources COMMAND test_xir_value_allocations --path-replacement)
+set_tests_properties(test_xir_value_path_replacement test_xir_value_path_replacement_resources PROPERTIES TIMEOUT 120 LABELS "unit;xir;ownership;resources;fault-injection")
 # Owned close/copy tests use the production thread wrapper and join every handle.
 target_include_directories(test_xir_value_allocations PRIVATE ${CMAKE_SOURCE_DIR}/src/base)
 target_include_directories(test_xir_array_grow_budget PRIVATE ${CMAKE_SOURCE_DIR}/src/base)
@@ -589,6 +596,9 @@ set_tests_properties(test_xir_package_native PROPERTIES LABELS "unit;xir;executi
 
 
 target_link_libraries(test_xir_source_query PRIVATE xray_xir_source xray_xir_vm)
+add_test(NAME test_xir_source_class_definitions COMMAND test_xir_source_query --class-definitions)
+set_tests_properties(test_xir_source_class_definitions PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    LABELS "unit;xir;ownership;metadata;class")
 add_test(NAME test_xir_source_core_syntax COMMAND test_xir_source_query --core-syntax)
 set_tests_properties(test_xir_source_core_syntax PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
     LABELS "unit;xir;ownership;metadata")
@@ -639,7 +649,7 @@ endif()
 add_test(NAME test_xir_source_text COMMAND test_xir_source_text)
 set_tests_properties(test_xir_source_text PROPERTIES LABELS "unit;xir;ownership;metadata" TIMEOUT 60)
 
-target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source xray_frontend_format)
+target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source xray_frontend_format xray_xir_vm)
 target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)
 add_executable(test_xir_source_allocations xir/test_xir_source_allocations.c)
 target_link_libraries(test_xir_source_allocations PRIVATE xray_xir_source xray_xir xray_xir_scalar)
@@ -3902,6 +3912,7 @@ endif()
 # ============================================================================
 
 if(XR_BUILD_DAP)
+    add_subdirectory(dap/current)
     add_executable(test_dap_server
         dap/test_dap_server.c
         ${CMAKE_SOURCE_DIR}/src/base/xjson.c
@@ -4423,12 +4434,18 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/range_check.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_fill.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_concat.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_late_cancel_cross.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_array_error.cmake")
 include(xir/task_array_admission.cmake)
 
 add_executable(test_xir_array_capacity_core xir/test_xir_array_capacity_core.c)
 target_include_directories(test_xir_array_capacity_core PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(test_xir_array_capacity_core PRIVATE xray_xir_scalar)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_reserve_cow.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_compile_domain.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_return_copy.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_probe.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_performance.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_mutation.cmake")
 add_executable(test_xir_array_capacity_checked xir/test_xir_array_capacity_checked.c)
 target_link_libraries(test_xir_array_capacity_checked PRIVATE xray_xir)
 foreach(capacity_core_target test_xir_array_capacity_core test_xir_array_capacity_checked)
@@ -4464,6 +4481,10 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/root_execution_native.cmake")
 include(xir/callable_root_bounds.cmake)
 
 include(xir/callable_root_source.cmake)
+include(xir/source_copy_refinement.cmake)
+include(xir/invocation_zero_inputs.cmake)
+include(xir/effect_term_scratch.cmake)
+include(xir/refinement_context_lifetime.cmake)
 
 include(xir/program_root_permissions.cmake)
 
@@ -4482,6 +4503,8 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/error_edge_snapshot.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_call_permissions.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/child_callable_native.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/child_callable_mixed.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/mixed_task_faults.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/call_observation.cmake")
 include(xir/error_dependency_worklist.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/error_cfg_pending.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameters.cmake)
@@ -4666,3 +4689,8 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_completion_resolve/CMakeLists.txt")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_completion_resolve_errors/CMakeLists.txt")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_enum_payload/CMakeLists.txt")
+
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/xir/error_contract_source.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/source_handler_facts.cmake)

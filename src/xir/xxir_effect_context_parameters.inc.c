@@ -294,6 +294,8 @@ static XrXirStatus effect_body_ordinary_input_verify(const XrXirCompileContext *
     if (source->function_count>work->limits.functions ||
         contexts->count>effect_body_entry_limit(work)) return XR_XIR_BUDGET;
     if (!xir_compile_work(work,13)) return XR_XIR_BUDGET;
+    if (source->function_count>work->limits.functions || contexts->count>effect_equation_maximum(work))
+        return XR_XIR_BUDGET;
     const XrXirDeclarations *expected=source->declarations,*actual=module->declarations;
     if (actual->modules!=expected->modules || actual->module_count!=expected->module_count ||
         actual->slots!=expected->slots || actual->slot_count!=expected->slot_count ||
@@ -403,6 +405,29 @@ static XrXirStatus effect_body_ordinary_basis(const XrXirCompileContext *work,
     *output=basis->uses.generation;return XR_XIR_OK;
 }
 
+static XrXirStatus effect_body_ordinary_record_parent(const XrXirCompileContext *work,
+    const EffectBodyOrdinaryInput *input,EffectBodyMaterial **output) {
+    if (!xir_compile_context_valid(work) || !input || !output || *output ||
+        (input->basis && input->initial)) return XR_XIR_BAD_STRUCTURE;
+    if (input->basis) return effect_body_ordinary_basis(work,input,output);
+    EffectBodyMaterial *source=input->record_source?input->record_source:input->initial;
+    if (!source) return XR_XIR_OK;
+    if (!effect_body_material_shape(source) || source->resources!=work->resources)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,3+sizeof(*output))) return XR_XIR_BUDGET;
+    *output=source;return XR_XIR_OK;
+}
+
+static XrXirStatus effect_body_ordinary_record_index(const XrXirCompileContext *work,
+    const EffectBodyOrdinaryInput *input,uint32_t function,uint32_t *output) {
+    if (!xir_compile_context_valid(work) || !input || !input->contexts || !output ||
+        function>=input->contexts->count || !input->contexts->nodes ||
+        (!!input->basis==!!(input->initial || input->record_source))) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,5+sizeof(*output))) return XR_XIR_BUDGET;
+    const EffectOrdinaryNode *node=&input->contexts->nodes[function];
+    *output=input->basis?node->ordinary:node->declaration;return XR_XIR_OK;
+}
+
 typedef struct EffectOrdinaryView {
     XrXirModule module;
     XrXirDeclarations declarations;
@@ -507,7 +532,8 @@ static XrXirStatus effect_ordinary_classify(const XrXirCompileContext *context,
 #endif
 
 static XrXirStatus effect_ordinary_build(const XrXirCompileContext *context,
-    const XrXirModule *source,EffectBodyMaterial *initial,EffectOrdinaryContexts **output) {
+    const XrXirModule *source,EffectBodyMaterial *initial,EffectRefinementBounds *refinement,
+    EffectOrdinaryContexts **output) {
     if (!xir_compile_context_valid(context) || !source || !source->types ||
         !source->functions || !source->function_count || !output || *output ||
         (initial && (!effect_body_material_shape(initial) || initial->resources!=context->resources)))
@@ -534,9 +560,10 @@ static XrXirStatus effect_ordinary_build(const XrXirCompileContext *context,
     EffectGraph graph={0};EffectOrdinaryView view={0};
     contexts->uses.resources=context->resources;contexts->uses.count=contexts->count;
     if (status==XR_XIR_OK) status=effect_ordinary_view(contexts,source,&view);
-    if (status==XR_XIR_OK && !xir_compile_work(context,sizeof(view.input.initial))) status=XR_XIR_BUDGET;
+    if (status==XR_XIR_OK && !xir_compile_work(context,
+        sizeof(view.input.initial)+sizeof(view.input.record_source))) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK) {
-        view.input.initial=initial;graph.ordinary=view.input;
+        view.input.initial=refinement?NULL:initial;view.input.record_source=initial;graph.ordinary=view.input;
         status=effect_parameters_derive(&view.module,&contexts->uses,&graph,context);
     }
     effect_graph_free(&graph);

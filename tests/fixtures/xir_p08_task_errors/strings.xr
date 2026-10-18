@@ -1,0 +1,4 @@
+enum Problem { Failed { values: Array<string> } }
+fn worker() -> () { throw Problem.Failed{values: ["owned","array"]} }
+export fn handle() -> Task<null> { return go worker() }
+export fn main() -> i64 { return 7 }

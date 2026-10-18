@@ -1,0 +1,10 @@
+struct Piece { count:i64; const stable:i64 }
+struct Parcel { items:Array<Piece>; const sibling:i64 }
+fn project() {
+    var root:Array<Parcel>=[Parcel{items:[Piece{count:11,stable:13}],sibling:37}]
+    const before:Array<Parcel>=root
+    print(root[0].items[0].count)
+    print(before[0].items[0].count)
+    print(root[0].sibling)
+}
+project()

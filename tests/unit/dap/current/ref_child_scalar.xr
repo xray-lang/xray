@@ -1,0 +1,17 @@
+fn edit(value:ref i64)->i64 {
+    const before:i64=value
+    const incoming:i64=100
+    return before+value
+}
+class ChildScalarBox {
+    value:i64
+    init() { this.value=11 }
+}
+fn worker()->i64 {
+    const box:ChildScalarBox=ChildScalarBox()
+    const alias:ChildScalarBox=box
+    const result:i64=edit(ref box.value)
+    return result+box.value+alias.value
+}
+const job=go worker()
+print(await job)

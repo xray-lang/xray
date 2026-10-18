@@ -1,0 +1,39 @@
+enum Problem { Failed { value: string } }
+
+export fn fail() -> i64 {
+    defer { print(91) }
+    var n = 0
+    while(n < 32) { n += 1 }
+    try {
+        defer { print(89) }
+        throw Problem.Failed{value: "child\0α"}
+    } catch(problem: Problem) { throw problem }
+}
+
+fn sibling() -> i64 {
+    defer { print(73) }
+    var n = 0
+    while(n < 256) { n += 1 }
+    print(17)
+    return 17
+}
+
+export fn awaiting() -> i64 {
+    defer { print(95) }
+    const task = go fail()
+    const other = go sibling()
+    try { return await task }
+    catch(problem: Problem) { return await other }
+}
+
+export fn busy() -> i64 {
+    defer { print(95) }
+    const task = go fail()
+    const other = go sibling()
+    var n = 0
+    while(n < 256) { n += 1 }
+    return 8
+}
+
+export fn escaping() -> Task<i64> { return go fail() }
+export fn main() -> i64 { return 0 }

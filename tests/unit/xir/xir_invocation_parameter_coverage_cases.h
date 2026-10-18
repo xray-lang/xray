@@ -96,6 +96,17 @@ static void invocation_parameter_rejections(const XrXirCompileContext *work,
     PARAMETER_RESET();
     invocation_parameter_insert(final,(EffectCaptureFact){formal,0,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_COMPLETE,0});
     invocation_parameter_expect_rejection(work,final,mode,"external-formal-complete");PARAMETER_RESET();
+    const EffectBodyFunction *formal_body=&final->material->functions[final->nodes[formal].body];
+    uint32_t returned=formal_body->parameter_count+formal_body->instruction_count;
+    invocation_parameter_insert(final,(EffectCaptureFact){formal,returned,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_COMPLETE,0});
+    invocation_parameter_expect_rejection(work,final,mode,"noncallable-formal-return");PARAMETER_RESET();
+    uint32_t formal_count=final->nodes[formal].parameter_count;
+    final->nodes[formal].parameter_count=formal_count+1;
+    invocation_parameter_expect_rejection(work,final,mode,"formal-dimension");
+    final->nodes[formal].parameter_count=formal_count;
+    final->capture.facts=NULL;
+    invocation_parameter_expect_rejection(work,final,mode,"missing-capture-storage");
+    final->capture.facts=facts;
     bool erased=false;
     for(uint32_t p=0;p<final->capture.count;++p) {
         EffectCaptureFact *fact=&facts[p];
