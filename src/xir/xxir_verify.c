@@ -1452,7 +1452,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_source_effects_v2(const XrXirCompileCo
     if (status==XR_XIR_OK) status=xir_effects_source_body_match(context,source,effects);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(source,&remaining,&location,effects,NULL);
+        status=declaration_effects_verify(source,&remaining,&location,effects,NULL,true);
     }
     location.status=status;if (diagnostic) *diagnostic=location;
     return status;
@@ -1469,7 +1469,7 @@ XR_FUNC XrXirStatus xir_compile_verify_raw_source_effects(const XrXirCompileCont
     if(status==XR_XIR_OK) status=xir_effects_source_body_match(context,source,effects);
     if(status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(source,&remaining,&location,effects,NULL);
+        status=declaration_effects_verify(source,&remaining,&location,effects,NULL,true);
     }
     if(status==XR_XIR_OK) status=xir_effects_raw_source_terminal(context,source,effects);
     location.status=status;if(diagnostic) *diagnostic=location;
@@ -1488,7 +1488,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompi
     XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,NULL,NULL);
+        status=declaration_effects_verify(module,&remaining,&location,NULL,NULL,true);
     }
     location.status=status;if (diagnostic) *diagnostic=location;
     return status;
@@ -1506,7 +1506,7 @@ static XrXirStatus verify_effects_body(const XrXirCompileContext *context,
         status=xir_effects_program_body_match(context,module,program_effects);
     if (status == XR_XIR_OK) {
         XrXirCompileContext remaining = *context;
-        status = declaration_effects_verify(module,&remaining,&location,effects,NULL);
+        status = declaration_effects_verify(module,&remaining,&location,effects,NULL,true);
     }
     location.status = status;
     if (diagnostic) *diagnostic = location;
@@ -1535,7 +1535,7 @@ static XrXirStatus verify_collected_effects(const XrXirCompileContext *context,
     XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
-        status=declaration_effects_verify(module,&remaining,&location,NULL,&owned);
+        status=declaration_effects_verify(module,&remaining,&location,NULL,&owned,true);
     }
     if (status==XR_XIR_OK && !owned) status=XR_XIR_BAD_STRUCTURE;
     location.status=status;if (diagnostic) *diagnostic=location;
@@ -1566,4 +1566,73 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_receiving_effects_v2(const XrXirCompil
 XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic) {
     return xr_xir_compile_verify_effects_v2(context,module,construction,NULL,diagnostic);
+}
+
+/* Keep an already required destination derivation only for this operation.
+ * Inputs without effect obligations retain their original no-inference path. */
+static XrXirStatus verify_optional_effects(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic) {
+    if(!xir_compile_context_valid(context) || !output || *output || !module) return XR_XIR_BAD_STRUCTURE;
+    XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    XrXirEffects *owned=NULL;
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
+    if(status==XR_XIR_OK) {
+        XrXirCompileContext remaining=*context;
+        status=declaration_effects_verify(module,&remaining,&location,NULL,&owned,false);
+    }
+    location.status=status;if(diagnostic) *diagnostic=location;
+    if(status!=XR_XIR_OK) { xr_xir_compile_effects_free(owned);return status; }
+    *output=owned;return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xir_compile_verify_receiving_collect(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic) {
+    if(!module || module->stage!=XR_XIR_CHECKED || !module->provenance ||
+        !xir_effect_kind_is_closed(module->provenance->kind)) return XR_XIR_BAD_STRUCTURE;
+    return verify_optional_effects(context,module,construction,source_effects,output,diagnostic);
+}
+XR_FUNC XrXirStatus xir_compile_verify_built_collect(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    XrXirEffects **output,XrXirDiagnostic *diagnostic) {
+    if(!module || module->stage!=XR_XIR_BUILT || module->provenance) return XR_XIR_BAD_STRUCTURE;
+    return verify_optional_effects(context,module,construction,NULL,output,diagnostic);
+}
+
+/* The copy is a new current input. The owned relation supplies data only;
+ * structure, provenance, permissions and every finite equation are replayed. */
+XR_FUNC XrXirStatus xir_compile_verify_receiving_replay(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *source_effects,const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    if(!xir_compile_context_valid(context) || !module || module->stage!=XR_XIR_CHECKED ||
+        !module->provenance || !xir_effect_kind_is_closed(module->provenance->kind) || !effects)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
+    if(status==XR_XIR_OK) status=xir_effects_source_body_match(context,module,effects);
+    if(status==XR_XIR_OK) {
+        XrXirCompileContext remaining=*context;
+        status=declaration_effects_verify(module,&remaining,&location,effects,NULL,true);
+    }
+    if(status==XR_XIR_OK) status=xir_effects_receiving_terminal(context,module,effects);
+    location.status=status;if(diagnostic) *diagnostic=location;
+    return status;
+}
+
+XR_FUNC XrXirStatus xir_compile_verify_built_replay(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    if(!xir_compile_context_valid(context) || !module || module->stage!=XR_XIR_CHECKED ||
+        module->provenance || !effects) return XR_XIR_BAD_STRUCTURE;
+    XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    XrXirStatus status=structure_verify_source(context,module,construction,NULL,NULL,&location);
+    if(status==XR_XIR_OK) status=xir_effects_built_copy_match(context,module,effects);
+    if(status==XR_XIR_OK) {
+        XrXirCompileContext remaining=*context;
+        status=declaration_effects_verify(module,&remaining,&location,effects,NULL,true);
+    }
+    if(status==XR_XIR_OK) status=xir_effects_built_copy_terminal(context,module,effects);
+    location.status=status;if(diagnostic) *diagnostic=location;
+    return status;
 }

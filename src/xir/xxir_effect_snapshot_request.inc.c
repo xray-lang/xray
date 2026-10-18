@@ -357,7 +357,7 @@ static XrXirStatus effect_body_request_sequence_begin(const EffectBodyRequest *r
  * discarded by that pass; no decoded value or permission is retained. The
  * full-row decoder retains all unused and signed physical fields in caller
  * scratch. Only the raw adapter returns its current actual row. */
-static XrXirStatus effect_body_request_sequence_instruction(const EffectBodyRequest *request,
+static inline XrXirStatus effect_body_request_sequence_instruction(const EffectBodyRequest *request,
     uint32_t f,uint32_t i,EffectBodyRecordCursor *cursor,XrXirInstruction *storage,
     const XrXirInstruction **output) {
     if (!request || !request->owner || !request->instruction || !request->domain.types ||

@@ -12,11 +12,11 @@
 #include "xxir_constraints.h"
 #include "xxir_callable_root_obligations.inc.c"
 static XrXirStatus declaration_effects_verify(const XrXirModule *module,
-    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output) {
+    XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic, const XrXirEffects *prepared, XrXirEffects **output, bool require_owned) {
     bool templated = module->provenance && module->provenance->kind == XR_XIR_EVIDENCE_TEMPLATE;
     if (output && (*output || prepared)) return XR_XIR_BAD_STRUCTURE;
     if (!module->declarations) {
-        if (!templated && !output) return XR_XIR_OK;
+        if (!templated && (!output || !require_owned)) return XR_XIR_OK;
         XrXirEffects *owned = NULL;
         XrXirStatus status = prepared ? XR_XIR_OK :
             xr_xir_compile_effects_infer_verified(remaining, module, &owned);
@@ -51,7 +51,7 @@ static XrXirStatus declaration_effects_verify(const XrXirModule *module,
             }
         }
     }
-    if (!present) return output ? xr_xir_compile_effects_infer_verified(remaining, module, output) : XR_XIR_OK;
+    if (!present) return output && require_owned ? xr_xir_compile_effects_infer_verified(remaining, module, output) : XR_XIR_OK;
     XrXirEffects *effects = NULL;
     XrXirStatus status = prepared ? XR_XIR_OK : xr_xir_compile_effects_infer_verified(remaining, module, &effects);
     const XrXirEffects *facts = prepared ? prepared : effects;

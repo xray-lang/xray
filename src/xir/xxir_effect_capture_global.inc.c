@@ -19,18 +19,25 @@ typedef struct EffectCaptureNode {
     EffectInvocationBasis basis;
     uint32_t node,values;
 } EffectCaptureNode;
+typedef struct EffectCaptureSchedule EffectCaptureSchedule;
+typedef struct EffectCaptureActualRead EffectCaptureActualRead;
 typedef struct EffectCaptureRead {
     const XrXirCompileContext *work;
     const EffectInvocationFinal *final;
     EffectBodyRequest body;
     EffectCaptureProof *builder;
+    EffectCaptureSchedule *schedule;
     const EffectCaptureFact *selected;
     uint32_t selected_count;
     uint64_t selected_mask;
-    const EffectCaptureNode *node_view;
-    uint32_t maximum;
-    bool fixed_only,fallback,class_results,active,changed,supported;
+    const EffectCaptureNode *node_view,*node_views,*edge_views;
+    EffectCaptureActualRead *actuals;
+    const uint32_t *fact_nodes;
+    uint32_t node_view_count,edge_view_count,maximum;
+    bool fixed_only,fallback,class_results,active,changed,supported,complete_scope;
 } EffectCaptureRead;
+
+static XrXirStatus effect_capture_schedule_changed(EffectCaptureRead *read,uint32_t node);
 
 static bool effect_capture_before(const EffectCaptureFact *a,const EffectCaptureFact *b) {
     return a->node<b->node || (a->node==b->node && (a->value<b->value ||
@@ -38,6 +45,11 @@ static bool effect_capture_before(const EffectCaptureFact *a,const EffectCapture
 }
 static XrXirStatus effect_capture_lower(const EffectCaptureRead *read,const EffectCaptureFact *key,uint32_t *output) {
     const EffectCaptureProof *proof=&read->final->capture;uint32_t lo=0,hi=proof->count;
+    if(read->fact_nodes && key->node<read->final->count) {
+        if(read->builder || !xir_compile_work(read->work,2*sizeof(uint32_t))) return read->builder?XR_XIR_BAD_STRUCTURE:XR_XIR_BUDGET;
+        lo=read->fact_nodes[key->node];hi=read->fact_nodes[key->node+1];
+        if(lo>hi || hi>proof->count) return XR_XIR_BAD_STRUCTURE;
+    }
     while(lo<hi) {
         if(!xir_compile_work(read->work,6)) return XR_XIR_BUDGET;
         uint32_t mid=lo+(hi-lo)/2;
@@ -78,6 +90,7 @@ static XrXirStatus effect_capture_support_emit(EffectCaptureRead *read,const Eff
     return XR_XIR_OK;
 }
 static XrXirStatus effect_capture_emit(EffectCaptureRead *read,EffectCaptureFact fact) {
+    if(read->complete_scope && (fact.word!=EFFECT_CAPTURE_FLAGS || fact.bit<EFFECT_CAPTURE_COMPLETE)) return XR_XIR_BAD_STRUCTURE;
     if(read->fixed_only && (fact.word!=EFFECT_CAPTURE_FLAGS || fact.bit!=EFFECT_CAPTURE_FIXED)) return XR_XIR_OK;
     if(read->selected) return effect_capture_support_emit(read,&fact);
     uint32_t at=0;XrXirStatus status=effect_capture_lower(read,&fact,&at);if(status!=XR_XIR_OK) return status;
@@ -90,6 +103,7 @@ static XrXirStatus effect_capture_emit(EffectCaptureRead *read,EffectCaptureFact
         if(fact.rank<found->rank) {
             if(!xir_compile_work(read->work,sizeof(fact.rank))) return XR_XIR_BUDGET;
             proof->facts[at].rank=fact.rank;read->changed=true;
+            return effect_capture_schedule_changed(read,fact.node);
         }
         return XR_XIR_OK;
     }
@@ -101,6 +115,9 @@ static XrXirStatus effect_capture_emit(EffectCaptureRead *read,EffectCaptureFact
         if(capacity>read->maximum) capacity=read->maximum;
         if(proof->capacity) capacity=capacity>read->maximum/2?read->maximum:capacity*2;
         if(capacity<=proof->count || (uint64_t)capacity>SIZE_MAX/sizeof(fact)) return XR_XIR_BUDGET;
+        /* Lookup loans never cross either allocator or release callbacks. */
+        read->edge_views=NULL;read->edge_view_count=0;read->node_view=NULL;
+        if(read->complete_scope) { read->node_views=NULL;read->node_view_count=0;read->actuals=NULL; }
         EffectCaptureFact *facts=xir_compile_alloc(read->work,(size_t)capacity*sizeof(*facts),&status);
         if(!facts) return status;
         if(!xir_compile_work(read->work,(uint64_t)proof->count*sizeof(*facts))) {
@@ -111,10 +128,22 @@ static XrXirStatus effect_capture_emit(EffectCaptureRead *read,EffectCaptureFact
     }
     if(!xir_compile_work(read->work,((uint64_t)proof->count-at+1)*sizeof(fact))) return XR_XIR_BUDGET;
     memmove(proof->facts+at+1,proof->facts+at,(size_t)(proof->count-at)*sizeof(fact));
-    proof->facts[at]=fact;++proof->count;read->changed=true;return XR_XIR_OK;
+    proof->facts[at]=fact;++proof->count;read->changed=true;
+    return effect_capture_schedule_changed(read,fact.node);
 }
 static XrXirStatus effect_capture_node(const EffectCaptureRead *read,uint32_t index,EffectCaptureNode *output) {
     if(index>=read->final->count) return XR_XIR_BAD_STRUCTURE;
+    if(read->node_views && index<read->node_view_count) {
+        if(read->node_views[index].node!=index) return XR_XIR_BAD_STRUCTURE;
+        if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
+        *output=read->node_views[index];return XR_XIR_OK;
+    }
+    for(uint32_t n=0;read->edge_views && n<read->edge_view_count;++n) {
+        if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+        if(read->edge_views[n].node!=index) continue;
+        if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
+        *output=read->edge_views[n];return XR_XIR_OK;
+    }
     if(read->node_view && read->node_view->node==index) {
         if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
         *output=*read->node_view;return XR_XIR_OK;
@@ -136,10 +165,22 @@ static XrXirStatus effect_capture_node(const EffectCaptureRead *read,uint32_t in
     if(!xir_compile_work(read->work,sizeof(local))) return XR_XIR_BUDGET;
     *output=local;return XR_XIR_OK;
 }
-/* A receiving clause may borrow its current stack head. Construction has no
- * such view: an emit can allocate and invalidate every mutable array address. */
+/* Receiving borrows current heads within its uninterrupted read. A constructor
+ * edge loan is shorter: every possible fact growth drops it before callbacks. */
 static XrXirStatus effect_capture_node_borrow(const EffectCaptureRead *read,uint32_t index,
     EffectCaptureNode *storage,const EffectCaptureNode **output) {
+    if(index>=read->final->count) return XR_XIR_BAD_STRUCTURE;
+    if(read->node_views && index<read->node_view_count) {
+        if(read->node_views[index].node!=index) return XR_XIR_BAD_STRUCTURE;
+        if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
+        *output=&read->node_views[index];return XR_XIR_OK;
+    }
+    for(uint32_t n=0;read->edge_views && n<read->edge_view_count;++n) {
+        if(!xir_compile_work(read->work,1)) return XR_XIR_BUDGET;
+        if(read->edge_views[n].node!=index) continue;
+        if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
+        *output=&read->edge_views[n];return XR_XIR_OK;
+    }
     if(read->node_view && read->node_view->node==index) {
         if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
         *output=read->node_view;return XR_XIR_OK;
@@ -345,7 +386,7 @@ static XrXirStatus effect_capture_selected_node(EffectCaptureRead *read,const Ef
     uint32_t own=UINT32_MAX;
     if(value>=node->head.parameter_count && value<node->values) {
         own=value-node->head.parameter_count;XrXirInstruction storage;const XrXirInstruction *op=NULL;
-        status=effect_body_request_instruction(&read->body,read->final->nodes[node->node].body,own,&storage,&op);
+        status=effect_body_request_operation(&read->body,read->final->nodes[node->node].body,own,&storage,&op);
         if(status==XR_XIR_OK) status=effect_capture_instruction(read,node,own,op);
         if(status!=XR_XIR_OK || read->supported) return status;
     }
@@ -380,6 +421,63 @@ static XrXirStatus effect_capture_selected_node(EffectCaptureRead *read,const Ef
     }
     return status;
 }
+static XrXirStatus effect_capture_node_body(EffectCaptureRead *read,const EffectCaptureNode *node,bool seeds_only) {
+    XrXirStatus status=effect_capture_parameters(read,node);
+    if(status!=XR_XIR_OK) return status;
+    /* Empty fixed relations have no alias causes. Actual storage barriers
+     * are their only seeds; finding one makes the next build round use
+     * the full transfer rules. Receiving still checks every real seed. */
+    if(seeds_only) {
+        EffectFinalInputSelect barriers;
+        status=effect_final_input_select_begin(&read->body,EFFECT_FINAL_SELECT_BARRIER,&barriers);
+        if(status!=XR_XIR_OK) return status;
+        for(;;) {
+            XrXirInstruction op;uint32_t i=0;bool found=false;
+            status=effect_final_input_select_next(&read->body,read->final->nodes[node->node].body,&barriers,&i,&op,&found);
+            if(status!=XR_XIR_OK) return status;
+            if(!found) break;
+            status=effect_capture_barrier(read,node,&op);if(status!=XR_XIR_OK) return status;
+        }
+        return XR_XIR_OK;
+    }
+    EffectBodyRecordCursor cursor;status=effect_body_request_sequence_begin(&read->body,&cursor);
+    if(status!=XR_XIR_OK) return status;
+    bool returned=false;
+    for(uint32_t i=0;i<node->head.instruction_count;++i) {
+        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+        XrXirInstruction storage;const XrXirInstruction *op=NULL;
+        status=effect_body_request_sequence_operation(&read->body,read->final->nodes[node->node].body,i,&cursor,&storage,&op);
+        if(status==XR_XIR_OK) {
+            if(op->op==XR_XIR_RETURN) returned=true;
+            status=effect_capture_instruction(read,node,i,op);
+        }
+        if(status!=XR_XIR_OK) return status;
+    }
+    status=effect_body_request_sequence_finish(&read->body,read->final->nodes[node->node].body,&cursor);
+    if(status!=XR_XIR_OK) return status;
+    if(!read->fixed_only && !returned && xr_xir_type_is_class(read->body.domain.types,node->head.result)) {
+        status=effect_capture_bit(read,node,node->values,node->basis.fn_words,node->basis.parameters+2,0);
+        if(status==XR_XIR_OK) status=effect_capture_bit(read,node,node->values,node->basis.fn_words,node->basis.parameters+1,0);
+        if(status==XR_XIR_OK) status=effect_capture_emit(read,(EffectCaptureFact){node->node,node->values,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_RAW,0});
+    }
+    return status;
+}
+static XrXirStatus effect_capture_node_clauses(EffectCaptureRead *read,uint32_t n,bool seeds_only) {
+    if(n>=read->final->count) return XR_XIR_BAD_STRUCTURE;
+    if(read->selected && read->selected->node!=n) return XR_XIR_OK;
+    EffectCaptureNode node={0};XrXirStatus status=effect_capture_node(read,n,&node);
+    if(status!=XR_XIR_OK) return status;
+    if(read->selected) {
+        const EffectCaptureNode *saved=read->node_view;read->node_view=&node;
+        status=effect_capture_selected_node(read,&node);read->node_view=saved;
+        return status;
+    }
+    bool loan=read->builder && !read->node_view && !read->node_views;
+    if(loan) read->node_view=&node;
+    status=effect_capture_node_body(read,&node,seeds_only);
+    if(loan) read->node_view=NULL;
+    return status;
+}
 static XrXirStatus effect_capture_clauses(EffectCaptureRead *read) {
     if(!read->active) return XR_XIR_OK;
     if(read->selected && read->node_view && read->selected->node==read->node_view->node) {
@@ -394,58 +492,29 @@ static XrXirStatus effect_capture_clauses(EffectCaptureRead *read) {
         if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit==EFFECT_CAPTURE_FIXED) { seeds_only=false;break; }
     }
     for(uint32_t n=0;n<read->final->count;++n) {
-        if(read->selected && read->selected->node!=n) continue;
-        EffectCaptureNode node={0};XrXirStatus status=effect_capture_node(read,n,&node);
-        if(status==XR_XIR_OK && read->selected) {
-            const EffectCaptureNode *saved=read->node_view;read->node_view=&node;
-            status=effect_capture_selected_node(read,&node);read->node_view=saved;
-            if(status!=XR_XIR_OK) return status;
-            if(read->supported) return XR_XIR_OK;
-            continue;
-        }
-        if(status==XR_XIR_OK) status=effect_capture_parameters(read,&node);
-        if(status!=XR_XIR_OK) return status;
-        /* Empty fixed relations have no alias causes. Actual storage barriers
-         * are their only seeds; finding one makes the next build round use
-         * the full transfer rules. Receiving still checks every real seed. */
-        if(seeds_only) {
-            EffectFinalInputSelect barriers;
-            status=effect_final_input_select_begin(&read->body,EFFECT_FINAL_SELECT_BARRIER,&barriers);
-            if(status!=XR_XIR_OK) return status;
-            for(;;) {
-                XrXirInstruction op;uint32_t i=0;bool found=false;
-                status=effect_final_input_select_next(&read->body,read->final->nodes[n].body,&barriers,&i,&op,&found);
-                if(status!=XR_XIR_OK) return status;
-                if(!found) break;
-                status=effect_capture_barrier(read,&node,&op);if(status!=XR_XIR_OK) return status;
-            }
-            continue;
-        }
-        EffectBodyRecordCursor cursor;status=effect_body_request_sequence_begin(&read->body,&cursor);
-        if(status!=XR_XIR_OK) return status;
-        bool returned=false;
-        for(uint32_t i=0;i<node.head.instruction_count;++i) {
-            if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
-            XrXirInstruction storage;const XrXirInstruction *op=NULL;
-            status=effect_body_request_sequence_instruction(&read->body,read->final->nodes[n].body,i,&cursor,&storage,&op);
-            if(status==XR_XIR_OK) {
-                if(op->op==XR_XIR_RETURN) returned=true;
-                status=effect_capture_instruction(read,&node,i,op);
-            }
-            if(status!=XR_XIR_OK) return status;
-        }
-        status=effect_body_request_sequence_finish(&read->body,read->final->nodes[n].body,&cursor);
-        if(status!=XR_XIR_OK) return status;
-        if(!read->fixed_only && !returned && xr_xir_type_is_class(read->body.domain.types,node.head.result)) {
-            status=effect_capture_bit(read,&node,node.values,node.basis.fn_words,node.basis.parameters+2,0);
-            if(status==XR_XIR_OK) status=effect_capture_bit(read,&node,node.values,node.basis.fn_words,node.basis.parameters+1,0);
-            if(status==XR_XIR_OK) status=effect_capture_emit(read,(EffectCaptureFact){n,node.values,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_RAW,0});
-            if(status!=XR_XIR_OK) return status;
-        }
+        XrXirStatus status=effect_capture_node_clauses(read,n,seeds_only);
+        if(status!=XR_XIR_OK || read->supported) return status;
     }
     return read->fixed_only?XR_XIR_OK:effect_capture_edges(read);
 }
+/* Fallback adds only local sources to the preceding positive fixed point.
+ * An unchanged local pass cannot change any already closed edge. Once a
+ * source changes, preserve the original edge pass and ordered full sweeps. */
+static XrXirStatus effect_capture_fallback_build(EffectCaptureRead *read) {
+    if(!read->builder || read->selected || read->fixed_only || !read->fallback || read->class_results)
+        return XR_XIR_BAD_STRUCTURE;
+    read->changed=false;XrXirStatus status=XR_XIR_OK;
+    for(uint32_t n=0;n<read->final->count && status==XR_XIR_OK;++n)
+        status=effect_capture_node_clauses(read,n,false);
+    if(status!=XR_XIR_OK || !read->changed) return status;
+    status=effect_capture_edges(read);
+    while(status==XR_XIR_OK && read->changed) {
+        read->changed=false;status=effect_capture_clauses(read);
+    }
+    return status;
+}
 #include "xxir_effect_capture_scalar.inc.c"
+#include "xxir_effect_capture_schedule.inc.c"
 static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const EffectInvocationFinal *final) {
     if(!final) return XR_XIR_BAD_STRUCTURE;
     EffectCaptureRead read={.work=work,.final=final,.fallback=true,.fixed_only=true,.class_results=true};
@@ -456,11 +525,38 @@ static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const Ef
     bool scalar=false;status=effect_capture_scalar_domain(&read,&scalar);
     if(status!=XR_XIR_OK) return status;
     if(scalar) return final->capture.count?XR_XIR_BAD_STRUCTURE:effect_capture_inputs_match(&read);
+    /* These are fresh projections of the actual framed Input. The complete
+     * request is allocation-free; no borrowed projection survives a callback
+     * or this call, and every semantic closure/support check still runs. */
+    EffectCaptureNode views[32];EffectCaptureActualRead actuals;uint32_t fact_nodes[33];
+    if(final->count<=XR_COUNTOF(views)) {
+        uint32_t at=0;
+        for(uint32_t n=0;n<final->count;++n) {
+            if(!xir_compile_work(work,sizeof(uint32_t))) return XR_XIR_BUDGET;
+            fact_nodes[n]=at;
+            while(at<final->capture.count) {
+                if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+                if(final->capture.facts[at].node!=n) break;
+                ++at;
+            }
+        }
+        if(at!=final->capture.count) return XR_XIR_BAD_STRUCTURE;
+        if(!xir_compile_work(work,sizeof(uint32_t)+sizeof(read.fact_nodes))) return XR_XIR_BUDGET;
+        fact_nodes[final->count]=at;read.fact_nodes=fact_nodes;
+        for(uint32_t n=0;n<final->count;++n) {
+            status=effect_capture_node(&read,n,&views[n]);if(status!=XR_XIR_OK) return status;
+        }
+        read.node_views=views;read.node_view_count=final->count;
+    }
     /* Fixedness is independent of origins, so negative fixed queries consume
      * its complete local closure and positive support before origin clauses. */
     EffectCaptureNode node={0};
     for(uint32_t domain=0;domain<2;++domain) {
         read.fixed_only=domain==0;read.selected=NULL;read.node_view=NULL;
+        if(domain) {
+            status=effect_capture_actuals_read(&read,&actuals);if(status!=XR_XIR_OK) return status;
+            if(actuals.edges) read.actuals=&actuals;
+        }
         status=effect_capture_clauses(&read);if(status!=XR_XIR_OK) return status;
         for(uint32_t p=0;p<final->capture.count;) {
             const EffectCaptureFact *fact=&final->capture.facts[p];
@@ -506,6 +602,9 @@ static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectIn
     if(status==XR_XIR_OK) status=effect_capture_scalar_domain(&read,&scalar);
     if(status!=XR_XIR_OK) return status;
     if(scalar) return effect_capture_inputs_match(&read);
+    EffectCaptureSchedule *schedule=NULL;
+    status=effect_capture_schedule_create(&read,&schedule);
+    if(status==XR_XIR_OK) status=effect_capture_frame(&read);
     if(status==XR_XIR_OK) {
         read.builder=&final->capture;
         for(uint32_t domain=0;domain<4 && status==XR_XIR_OK;++domain) {
@@ -522,12 +621,18 @@ static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectIn
             read.fixed_only=domain==0;read.fallback=domain>=2;read.class_results=domain==3;
             if(domain==1) status=effect_capture_class_proposals(&read,discovery);
             if(status!=XR_XIR_OK) break;
-            do { read.changed=false;status=effect_capture_clauses(&read); } while(status==XR_XIR_OK && read.changed);
+            if(domain==1) {
+                status=effect_capture_schedule_run(&read,schedule);
+            } else if(domain==2) status=effect_capture_fallback_build(&read);
+            else do { read.changed=false;status=effect_capture_clauses(&read); } while(status==XR_XIR_OK && read.changed);
         }
     }
+    read.schedule=NULL;
+    xr_compile_resources_free(schedule);
+    if(status==XR_XIR_OK) status=effect_capture_frame(&read);
     if(status==XR_XIR_OK) {
         read.fixed_only=false;
-        do { read.changed=false;status=effect_capture_complete_clauses(&read); } while(status==XR_XIR_OK && read.changed);
+        status=effect_capture_complete_construct(&read);
     }
     if(status==XR_XIR_OK) status=effect_capture_match(work,final);
     if(status!=XR_XIR_OK) { xr_compile_resources_free(final->capture.facts);final->capture=(EffectCaptureProof){0}; }
