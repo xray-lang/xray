@@ -73,7 +73,7 @@ static void prefix_domain_reject_execution(XrXirDomain *domain) {
         executor == (XrXirTaskExecutor *)(uintptr_t)1);
 }
 static void prefix_domain_current_identity(XrXirDomain *domain) {
-    const unsigned char identity[8] = {0x58,0x52,0x44,0x4d,0x18,0,0,1};
+    const unsigned char identity[8] = {0x58,0x52,0x44,0x4d,0x1b,0,0,1};
     _Static_assert(offsetof(XrXirDomain,identity) == 0 && offsetof(XrXirDomain,references) == 8 &&
         offsetof(XrXirDomain,locked) == 12, "independently selected Domain prefix offsets");
     CHECK(xr_xir_domain_current(domain) && !memcmp(domain,identity,sizeof(identity)));

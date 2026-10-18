@@ -32,6 +32,10 @@ static bool source_nominal_arguments(SourceContext *ctx, const char *name, XrTyp
 static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType *type) {
     uint32_t span = xr_xir_type_span(&ctx->types,
         node.kind == XR_XIR_TYPE_CALLABLE ? node.result : node.element);
+    if (node.kind == XR_XIR_TYPE_MAP) {
+        uint32_t value_span = xr_xir_type_span(&ctx->types, node.result);
+        if (value_span > span) span = value_span;
+    }
     for (uint32_t p = 0; p < node.parameter_count; ++p) {
         if (!source_work(ctx, NULL)) return false;
         if (!node.parameters[p].type && node.kind != XR_XIR_TYPE_TUPLE)

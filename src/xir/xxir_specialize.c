@@ -166,12 +166,14 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         const XrXirTypeNode *source = &c->source->types->nodes[frame->index];
         uint32_t components = source->kind == XR_XIR_TYPE_NOMINAL ? source->nominal.argument_count :
             source->kind == XR_XIR_TYPE_CALLABLE ? source->parameter_count + 1 :
-            source->kind == XR_XIR_TYPE_TUPLE ? source->parameter_count : 1;
+            source->kind == XR_XIR_TYPE_TUPLE ? source->parameter_count :
+            source->kind == XR_XIR_TYPE_MAP ? 2 : 1;
         if (frame->next == components) {
             *spec_type_cache(c, instance, frame->index) = spec_node(c, frame->node);
             --count; continue;
         }
         XrXirType child = source->element;
+        if (source->kind == XR_XIR_TYPE_MAP && frame->next) child = source->result;
         if (source->kind == XR_XIR_TYPE_NOMINAL) child = source->nominal.arguments[frame->next];
         if (source->kind == XR_XIR_TYPE_TUPLE) child = source->parameters[frame->next].type;
         if (source->kind == XR_XIR_TYPE_CALLABLE)
@@ -185,6 +187,7 @@ static XrXirType spec_type(SpecContext *c, const SpecInstance *instance, XrXirTy
         }
         if (source->kind == XR_XIR_TYPE_NOMINAL)
             ((XrXirType *) frame->node.nominal.arguments)[frame->next] = result;
+        else if (source->kind == XR_XIR_TYPE_MAP && frame->next) frame->node.result = result;
         else if (source->kind != XR_XIR_TYPE_CALLABLE && source->kind != XR_XIR_TYPE_TUPLE) frame->node.element = result;
         else if (source->kind == XR_XIR_TYPE_CALLABLE && frame->next == source->parameter_count) frame->node.result = result;
         else {

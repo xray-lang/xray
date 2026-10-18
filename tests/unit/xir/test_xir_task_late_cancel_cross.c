@@ -142,7 +142,7 @@ int main(int argc,char **argv) {
     cross_expected_instance=argc>3?(unsigned)strtoul(argv[3],NULL,10):UINT32_MAX;
     CHECK(argc==1||argc==2||argc==4);
     if(fail_at!=SIZE_MAX)CHECK(prefix>=5&&prefix<=11&&cross_expected_instance<2);
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==73, "The cross observer binds the current complete packet");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==30 && XR_XIR_CHECKED_CONTRACT==73, "The cross observer binds the current complete packet");
     uint32_t entry=UINT32_MAX;oc_phase=0;
     XrXirProgram *program=unit_program(&unit_oracles[7],&entry);
     XrXirInstance *instances[2]={0};XrXirDomain *leases[2]={0};XrXirValue early[2]={{0}};

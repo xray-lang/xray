@@ -69,7 +69,7 @@ static void panics_native_mixed(const XrXirProgramSpec *native,bool matrix,bool 
 int main(void) {
     assert_compile_begin();
     _Static_assert(sizeof(XrXirGeneric)==40 && sizeof(XrXirSourceDeclaration)==120,"internal result-role metadata requires fresh consumers");
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==24 && XR_XIR_CALL_ABI_VERSION==29 &&
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==27 && XR_XIR_CALL_ABI_VERSION==29 &&
         XR_XIR_PROGRAM_ABI_VERSION==31,"current typed execution ABI");
     _Static_assert(sizeof(XrXirValue)==16 && _Alignof(XrXirValue)==8 &&
         offsetof(XrXirValue,type)==0 && offsetof(XrXirValue,reserved)==4 &&

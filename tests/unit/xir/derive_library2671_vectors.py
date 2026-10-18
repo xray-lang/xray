@@ -148,7 +148,7 @@ def main():
     parser=argparse.ArgumentParser();parser.add_argument('--source-root',type=Path,required=True)
     parser.add_argument('--write',action='store_true');args=parser.parse_args()
     root=args.source_root;historical=root/'tests/unit/xir'
-    model_bytes=(HERE/'library2671_models.json').read_bytes()
+    model_bytes=(HERE/'library2671_models.json').read_bytes().replace(b'\r\n',b'\n').replace(b'\n',b'\r\n')
     assert hashlib.sha256(model_bytes).hexdigest()==MODEL_SHA
     models=json.loads(model_bytes);records=[];headers={}
     checked=(root/'src/xir/xxir_checked.h').read_text('utf-8')

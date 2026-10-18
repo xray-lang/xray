@@ -120,8 +120,10 @@ def encode_body(model, root_upper):
             payload += words(result)
             offsets.append(64 + len(payload))
             payload += words(root_upper)
-        elif kind in (2, 3, 5, 7, 8):
+        elif kind in (2, 3, 5, 7, 8, 10, 11, 12):
             payload += words(node[2])
+        elif kind == 9:
+            payload += words(node[2], node[3])
         elif kind == 6:
             payload += vector(node[2])
         elif kind == 4:

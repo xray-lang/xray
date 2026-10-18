@@ -72,7 +72,7 @@ static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *ar
     if (literal && literal->type == AST_FUNCTION_EXPR) {
         uint32_t count = (uint32_t) literal->as.function_expr.param_count;
         if (count < shape->shortest || count > shape->longest)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array callback takes a different number of parameters");
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback takes a different number of parameters");
         XrXirCallableParameter *parameters = count ? source_alloc(ctx, count, sizeof(*parameters)) : NULL;
         if (count && !parameters) return false;
         for (uint32_t i = 0; i < count; ++i) parameters[i] = (XrXirCallableParameter) {shape->parameters[i], XR_PARAM_READ};
@@ -84,16 +84,16 @@ static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *ar
         if (!expression(ctx, argument, callback)) return false;
         const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types, callback->type);
         if (!signature || signature->parameter_count < shape->shortest || signature->parameter_count > shape->longest)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array callback requires a function of the declared shape");
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback requires a function of the declared shape");
         output->arity = signature->parameter_count;
     }
     const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types, callback->type);
-    if (!signature) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array callback is not callable");
+    if (!signature) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback is not callable");
     for (uint32_t i = 0; i < signature->parameter_count; ++i)
         if (signature->parameters[i].type != shape->parameters[i] || signature->parameters[i].mode != XR_PARAM_READ)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array callback parameter type differs from the element");
+            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback parameter type differs from the element");
     if (result.present && signature->result != result.type)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array callback result differs from its declared result");
+        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback result differs from its declared result");
     return true;
 }
 static bool source_equal_admitted(SourceContext *ctx, AstNode *node, XrXirType type) {
@@ -177,17 +177,13 @@ static bool source_array_query_call(SourceContext *ctx, AstNode *node, SourceArr
         return false;
     SourceGuard guard;
     if (recipe == SOURCE_ARRAY_JOIN) {
-        SourceValue later, current, joined, piece, extended;
+        SourceValue later, piece;
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_LT_INT, XR_XIR_BOOL, {zero.id, counter.index.id}, {0}, 0, {0}}, &later) ||
             !source_guard_open(ctx, later, false, &guard) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, XR_XIR_STRING, {store.id, 0}, {0}, 0, {0}}, &current) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {current.id, separator.id}, {0}, 0, {0}}, &joined) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {store.id, joined.id}, {0}, 0, {0}}, NULL) ||
+            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_STRING_APPEND, XR_XIR_UNIT, {store.id, separator.id}, {0}, 0, {0}}, NULL) ||
             !source_guard_close(ctx, &guard) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_READ, XR_XIR_STRING, {store.id, 0}, {0}, 0, {0}}, &current) ||
             !source_array_join_piece(ctx, node, element, &piece) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONCAT_STRING, XR_XIR_STRING, {current.id, piece.id}, {0}, 0, {0}}, &extended) ||
-            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_WRITE, XR_XIR_UNIT, {store.id, extended.id}, {0}, 0, {0}}, NULL)) return false;
+            !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CELL_STRING_APPEND, XR_XIR_UNIT, {store.id, piece.id}, {0}, 0, {0}}, NULL)) return false;
     } else {
         SourceValue same, decided;
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_EQUAL, XR_XIR_BOOL, {element.id, argument.id}, {0}, 0, {0}}, &same) ||

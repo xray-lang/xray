@@ -64,7 +64,7 @@ static void equal_native_mixed(const XrXirProgramSpec *native,bool root_native) 
 int main(void) {
     assert_compile_begin();
     _Static_assert(sizeof(XrXirGeneric)==40 && sizeof(XrXirSourceDeclaration)==120,"internal result-role metadata requires fresh consumers");
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==24 && sizeof(XrXirValue)==16,"public value ABI");
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==27 && sizeof(XrXirValue)==16,"public value ABI");
     _Static_assert(XR_XIR_CALL_ABI_VERSION==29 && sizeof(XrXirAction)==88 && sizeof(XrXirCallResult)==72 &&
         sizeof(XrXirCallView)==216 && sizeof(XrXirCallEntry)==64,"public call ABI");
     _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==31 && sizeof(XrXirProgramSpec)==88,"public program ABI");

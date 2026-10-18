@@ -43,6 +43,7 @@ static bool source_construction_prepare(SourceContext *ctx) {
     XrXirStatus status=xr_xir_compile_construction_new_v3(&ctx->compile,&ctx->types,&input,&ctx->construction);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"source construction ownership failed");
 }
+#include "xxir_source_view_prepare.inc.c"
 static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     ctx->query_ready = true;
     ctx->declarations_building = true;
@@ -50,7 +51,8 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     ctx->declarations_building = false;
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
         source_implementations_bind(ctx) && build_bodies(ctx) && source_instance_literals_finish(ctx) &&
-        source_materialization_finish(ctx) && source_class_carriers(ctx) && source_effect_prepare(ctx) && source_construction_prepare(ctx)) {
+        source_materialization_finish(ctx) && source_class_carriers(ctx) && source_view_prepare(ctx) &&
+        source_effect_prepare(ctx) && source_construction_ready(ctx)) {
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(ctx,&declarations);
         XrXirDiagnostic location = {0};

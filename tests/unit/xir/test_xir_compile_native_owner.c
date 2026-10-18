@@ -31,6 +31,7 @@ static void packet_rejections(const XrXirCompileContext *context) {
     CHECK(xr_xir_compile_program_seal(context,&changed,&output)==XR_XIR_BAD_STRUCTURE && !output);
     CHECK(ledger_stats(context->resources).live_bytes==before.live_bytes);
 }
+extern const XrXirProgramSpec zero_scratch_cleanup_program;
 int main(void) {
     const XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
     XrXirCompileContext context={0}; context.limits=xr_xir_compile_default_limits();
@@ -39,6 +40,8 @@ int main(void) {
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(&context,&compile_owner_program,&program)==XR_XIR_OK);
     XrCompileResources *ledger=context.resources;
+    XrXirProgram *cleanup=NULL;
+    CHECK(xr_xir_compile_program_seal(&context,&zero_scratch_cleanup_program,&cleanup)==XR_XIR_OK);
     XrCompileResourceStats sealed=ledger_stats(ledger);CHECK(sealed.live_bytes>0);
     xr_compile_resources_release(context.resources);
     CHECK(ledger_stats(ledger).live_bytes==sealed.live_bytes);
@@ -62,6 +65,13 @@ int main(void) {
     CHECK(xr_xir_string_view(&value,&bytes,&length));
     CHECK(length==5 && !memcmp(bytes,"A\0\xe4\xb8\xad",5));
     xr_xir_value_drop(&value);
-    puts("Native compiler owner: 42 and owned UTF-8 with embedded NUL");
+    instance=NULL;
+    CHECK(xr_xir_instance_new(cleanup,&config,&instance)==XR_XIR_CALL_READY);
+    xr_xir_compile_program_drop(cleanup);
+    CHECK(xr_xir_instance_start(instance,1,NULL,0)==XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status==XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED && value.type==XR_XIR_I64 && !value.payload);
+    CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_value_drop(&value);
+    puts("Native compiler owner: 42, owned UTF-8 with embedded NUL and zero-slot cleanup");
     return 0;
 }

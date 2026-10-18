@@ -893,6 +893,24 @@ static bool cell_proof_solve(CellProofBuild *build) {
     return true;
 }
 
+static bool cell_proof_view_root(CellProofBuild *build,uint32_t f,uint32_t i,uint32_t source) {
+    XrXirCellProvenance *proof=build->proof;const CellProofFunction *function=&proof->functions[f];
+    const uint64_t *dependencies=cell_proof_dependencies(proof,source);
+    if (!dependencies && function->scopes) return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+    for (uint32_t p=0;p<function->scopes;++p) {
+        if (!cell_proof_work(build,2)) return false;
+        if (!(dependencies[p/64u]&(UINT64_C(1)<<(p%64u)))) continue;
+        uint32_t parameter=proof->scope_parameters[function->scope_begin+p];
+        if (parameter>=function->parameters) return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+        uint8_t role=proof->roles[function->begin+parameter];
+        /* A scoped origin bit alone includes unbound definition parameters.
+         * Only actual call/reference or lexical-cleanup edges bind a scope. */
+        if (role==XR_XIR_CELL_PROOF_UNKNOWN) return cell_proof_error(build,f,i,XR_XIR_UNRESOLVED);
+        if (role!=XR_XIR_CELL_PROOF_SCOPED_REF && role!=XR_XIR_CELL_PROOF_LEXICAL_CLEANUP)
+            return cell_proof_error(build,f,i,XR_XIR_BAD_STRUCTURE);
+    }
+    return true;
+}
 static bool cell_proof_sink(CellProofBuild *build, uint32_t f, uint32_t i,
     uint32_t ordinal, uint32_t source,const XrXirInstruction *op) {
     if (!op) return false;
@@ -901,6 +919,9 @@ static bool cell_proof_sink(CellProofBuild *build, uint32_t f, uint32_t i,
     if (!(origin & (XR_XIR_CELL_ORIGIN_OWNED | XR_XIR_CELL_ORIGIN_SCOPED | XR_XIR_CELL_ORIGIN_MODULE)) ||
         (origin & XR_XIR_CELL_ORIGIN_UNKNOWN)) return cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
     if (cell_proof_identity_producer(op->op)) return true;
+    if (op->op==XR_XIR_VIEW_NEW && !ordinal) return cell_proof_view_root(build,f,i,source);
+    if (op->op == XR_XIR_CELL_STRING_APPEND && !ordinal)
+        return !(origin & XR_XIR_CELL_ORIGIN_SCOPED) || cell_proof_error(build,f,i,XR_XIR_BAD_VALUE);
     if ((op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE ||
         op->op == XR_XIR_CELL_PLACE || op->op == XR_XIR_CELL_LOCAL_WRITE) && !ordinal) return true;
     if (op->op == XR_XIR_LOCAL_WRITE || op->op == XR_XIR_OWNED_LOCAL_WRITE) return true;
@@ -991,6 +1012,23 @@ static bool cell_proof_validate(CellProofBuild *build) {
     return true;
 }
 
+static XrXirStatus cell_proof_resident_bytes(const XrXirCompileContext *context,
+    const XrXirCellProvenance *proof,uint64_t *output) {
+    uint64_t words=0,total=sizeof(*proof);
+    for (uint32_t f=0;f<proof->function_count;++f) {
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        const CellProofFunction *function=proof->functions+f;
+        if (function->words && function->stored>(UINT64_MAX-words)/function->words) return XR_XIR_BUDGET;
+        words+=(uint64_t)function->stored*function->words;
+    }
+    uint64_t count[]={proof->function_count,proof->value_count,proof->scope_count,words,proof->class_count,proof->class_dependency_count};
+    uint64_t stride[]={sizeof(*proof->functions),3u+sizeof(uint32_t),sizeof(uint32_t),sizeof(uint64_t),sizeof(*proof->class_roots),sizeof(uint64_t)};
+    for (uint32_t p=0;p<6;++p) {
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        if (count[p]>(UINT64_MAX-total)/stride[p]) return XR_XIR_BUDGET;total+=count[p]*stride[p];
+    }
+    *output=total;return XR_XIR_OK;
+}
 XR_FUNC void xr_xir_compile_cell_provenance_free(XrXirCellProvenance *proof) {
     if (!proof) return;
     xr_compile_resources_free(proof->functions); xr_compile_resources_free(proof->origins);

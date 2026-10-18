@@ -9,6 +9,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 get_filename_component(XR_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
 add_library(compile_owner_core STATIC
     "${XR_ROOT}/src/xir/xxir.c"
+    "${XR_ROOT}/src/xir/xxir_input_owned.c"
     "${XR_ROOT}/src/xir/xxir_verify.c"
     "${XR_ROOT}/src/xir/xxir_defaults.c"
     "${XR_ROOT}/src/xir/xxir_effects.c"
@@ -18,6 +19,7 @@ add_library(compile_owner_core STATIC
     "${XR_ROOT}/src/xir/xxir_specialize.c"
     "${XR_ROOT}/src/xir/xxir_declarations.c"
     "${XR_ROOT}/src/xir/xxir_types.c"
+    "${XR_ROOT}/src/xir/xxir_view_affine.c"
     "${XR_ROOT}/src/xir/xxir_constraints.c"
     "${XR_ROOT}/src/xir/xxir_constraint_proof.c"
     "${XR_ROOT}/src/xir/xxir_interface.c"
@@ -49,9 +51,14 @@ add_test(NAME test_compile_owner COMMAND test_compile_owner)
 set_tests_properties(test_compile_owner PROPERTIES LABELS "unit;xir;compiler;ownership;budget" TIMEOUT 120)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME test_root_construction72_vectors
-    COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/derive_root_comptime75_vectors.py"
+    COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/derive_root_construction72_vectors.py"
         --source-root "${XR_ROOT}" --output-root "${XR_ROOT}")
 set_tests_properties(test_root_construction72_vectors PROPERTIES
+    LABELS "unit;xir;compiler;wire;independent;retired" TIMEOUT 120)
+add_test(NAME test_root_construction75_vectors
+    COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/derive_root_comptime75_vectors.py"
+        --source-root "${XR_ROOT}" --output-root "${XR_ROOT}")
+set_tests_properties(test_root_construction75_vectors PROPERTIES
     LABELS "unit;xir;compiler;wire;independent" TIMEOUT 120)
 include("${CMAKE_CURRENT_LIST_DIR}/../compile_runtime_owner.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../../aot/cgen_compile_resources.cmake")

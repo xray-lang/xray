@@ -61,7 +61,7 @@ static XrXirCallStatus instance_class_path_operate(XrXirCallView *view,uint32_t 
     if (result==XR_XIR_VALUE_OK && measure) result=kind==XIR_EFFECT_ACCESS_LENGTH?
         xr_xir_array_len(&array,admission,&number):xr_xir_array_capacity(&array,admission,&number);
     xr_xir_value_drop(&array);
-    status=value_call_status(result);
+    status=value_path_call_status(result,operation->fault);
     xr_xir_call_class_access_finish(&access);
     if (status==XR_XIR_CALL_READY && measure) *operation->output=(XrXirValue){XR_XIR_I64,0,number};
     return status;

@@ -7621,7 +7621,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "## Collections\n"
             "\n"
             "### Array\n"
-            "The new-XIR source subset in spec \xc2\xa7""17.26 admits typed and homogeneous literals, contextual empty literals, ordinary logical copies, parameters/returns, index reads/writes, get/set/push and global len. Array is a value struct; COW preserves independent copies without explicit copy/move. Its source-derived inventory contains 32 members, but only get/set/push have admitted member operations; the other 29 remain inventory-only. Constructor calls, capacity, slices, pointers, iteration and higher-order methods require separate admission.\n"
+            "The new-XIR Array subset admits typed and homogeneous literals, contextual empty literals, ordinary logical copies, parameters/returns, index reads/writes and the26 structured member operations listed in spec \xc2\xa7""14.7. Its complete32-member inventory consists of30 instance methods, withCapacity and capacity. The six unadmitted instance methods are sort, iterator, entriesIterator, ptr, mutPtr and toString. Array is a value struct; COW preserves independent copies. Borrowed slices and pointer/iterator protocols require their own admission and lifetime validation. Member admission does not replace full safety, resource or performance qualification.\n"
             "```xray\n"
             "var a: Array<i64> = [1, 2, 3]\n"
             "var b = a                        // b is a logical copy\n"

@@ -44,6 +44,12 @@ static XrXirValueStatus cell_projection_shape(const XrXirValuePath *path,
         if (step->kind == XR_XIR_PATH_INDEX) {
             if (!xr_xir_type_is_array(types, current)) return XR_XIR_VALUE_BAD_ARGUMENT;
             current = xr_xir_array_element(types, current);
+        } else if (step->kind == XR_XIR_PATH_KEY) {
+            if (!xr_xir_type_is_map(types, current)) return XR_XIR_VALUE_BAD_ARGUMENT;
+            XrXirValue key = path_key_value(step, admission->arena);
+            XrXirValueStatus status = xr_xir_value_admit(&key, (XrXirType)key.type, admission);
+            if (status != XR_XIR_VALUE_OK) return status;
+            current = xr_xir_map_element(types, current);
         } else if (step->kind == XR_XIR_PATH_FIELD) {
             const XrXirTypeNode *node = xr_xir_type_node(types, current);
             bool identity_root = i == 0 && xr_xir_type_is_class(types, start);
@@ -119,6 +125,22 @@ static XrXirValueStatus cell_project_operation(XrXirType type,
     XrXirValuePathStep *steps = (XrXirValuePathStep *)(projection + 1);
     if (prefix) memcpy(steps, cell + 1, (size_t)prefix * sizeof(*steps));
     memcpy(steps + prefix, path->steps, (size_t)path->count * sizeof(*steps));
+    /* Each flattened descriptor owns its keys independently of its caller and
+     * any parent descriptor. Retention finishes before the object is visible. */
+    uint32_t acquired = 0;
+    for (; acquired < count; ++acquired) {
+        XrXirValue key = path_key_value(&steps[acquired], admission->arena), owned = {0};
+        status = xr_xir_value_copy(&key, &owned);
+        if (status != XR_XIR_VALUE_OK) break;
+    }
+    if (status != XR_XIR_VALUE_OK) {
+        while (acquired) {
+            XrXirValue key = path_key_value(&steps[--acquired], admission->arena);
+            xr_xir_value_drop(&key);
+        }
+        xr_xir_value_drop(&projection->value);
+        constructed_discard(&projection->object, bytes); return status;
+    }
     projection->initialized = true;
     xr_xir_value_object_publish(&projection->object);
     output->type = (uint32_t)type;
@@ -158,7 +180,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare_path(const XrXirValue *value,
     /* The finite scope comparison is charged before the ordinary authority check. */
     if (cell->projection_count && !cell_projection_work(admission, cell->projection_count))
         return XR_XIR_VALUE_LIMIT;
-    XrXirValueStatus status = xr_xir_cell_loan_prepare(value, parent, output);
+    XrXirValueStatus status = cell_loan_prepare_operation(value, parent, output, admission);
     if (status != XR_XIR_VALUE_OK || !cell->projection_count) return status;
     xr_xir_value_graph_begin();
     XirObject *owner = cell_root_object(cell);
@@ -188,7 +210,8 @@ static XrXirValueStatus cell_path_operation(const XrXirValue *value,
     const CellPathOperation *operation) {
     const XrXirValuePath *suffix = operation->suffix;
     XirCell *cell = cell_owner(value);
-    if (!cell || !suffix || !cell_access(cell, authority) ||
+    if (!cell || !suffix || !(operation->output ? cell_access(cell,authority) :
+            cell_write_access(cell,authority)) ||
         !admission_owner(admission, cell->object.arena, cell->object.domain))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     /* Descriptor selectors add real traversal to every access. */

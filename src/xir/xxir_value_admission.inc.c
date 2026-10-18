@@ -49,22 +49,23 @@ static XrXirValueStatus admission_push(ValueAdmissionStack *stack, ValueAdmissio
     stack->frames[stack->depth++] = frame;
     return XR_XIR_VALUE_OK;
 }
-static XrXirValueStatus array_needs_admission(const XirArray *array,
+static XrXirValueStatus type_needs_admission(const XrXirTypes *types, XrXirType type,
     XrXirValueAdmission *admission, bool *needed) {
-    XrXirType type = array->object.type;
-    const XrXirTypes *types = xr_xir_compile_type_arena_types(array->object.arena);
     for (;;) {
         if (!admission->work) return XR_XIR_VALUE_LIMIT;
         --admission->work;
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
         if (!node) { *needed = type == XR_XIR_ERROR; return XR_XIR_VALUE_OK; }
         if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
-            node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
+            node->kind == XR_XIR_TYPE_TUPLE ||
             node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK) {
             *needed = true; return XR_XIR_VALUE_OK;
         }
-        if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE) return XR_XIR_VALUE_BAD_ARGUMENT;
-        type = node->element;
+        if (node->kind == XR_XIR_TYPE_SET) { *needed = false; return XR_XIR_VALUE_OK; }
+        /* Nullable adds no execution authority beyond its element type. */
+        if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_MAP &&
+            node->kind != XR_XIR_TYPE_NULLABLE) return XR_XIR_VALUE_BAD_ARGUMENT;
+        type = node->kind == XR_XIR_TYPE_MAP ? node->result : node->element;
     }
 }
 static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *arena,
@@ -86,6 +87,12 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
         *span = (StorageSpan){node->kind == XR_XIR_TYPE_NULLABLE ? node->element : node->nominal.fields[field],
             frame->storage.bytes ? frame->storage.bytes +
                 (node->kind == XR_XIR_TYPE_NULLABLE ? layout->value.alignment : layout->field_offsets[field]) : NULL};
+    } else if (frame->object->kind == XR_XIR_TYPE_MAP || frame->object->kind == XR_XIR_TYPE_SET) {
+        const XirHash *map = (const XirHash *)frame->object;
+        bool map_value = map->object.kind == XR_XIR_TYPE_MAP && (index & 1);
+        *span = hash_span(map, map->object.kind == XR_XIR_TYPE_MAP ? index / 2 : index, map_value);
+        *inlined = span->type != XR_XIR_UNIT;
+        if (!*inlined) { *tuple_field = true; *value = (XrXirValue){0}; }
     } else if (*inlined) {
         const XirArray *array = (const XirArray *)frame->object;
         *span = (StorageSpan){array->element, array->data ? array->data + index * array->stride : NULL};
@@ -119,6 +126,7 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (domain_sensitive) *domain_sensitive = false;
     if (!admission || !value) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (xr_xir_compile_type_arena_borrowed(admission->arena,type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     ValueAdmissionStack stack = {0}; XrXirValue current = *value;
     StorageSpan span = {0}; bool inlined = false, tuple_field=false;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
@@ -175,9 +183,17 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     count = ((XirNominalValue *) object)->count;
                 } else if (object->kind == XR_XIR_TYPE_ARRAY) {
                     bool needed = false;
-                    status = array_needs_admission((XirArray *) object, admission, &needed);
+                    status = type_needs_admission(xr_xir_compile_type_arena_types(object->arena),
+                        object->type, admission, &needed);
                     if (status != XR_XIR_VALUE_OK) break;
                     if (needed) count = ((XirArray *) object)->length;
+                } else if (object->kind == XR_XIR_TYPE_MAP || object->kind == XR_XIR_TYPE_SET) {
+                    XirHash *map = (XirHash *)object;
+                    bool needed = false;
+                    status = type_needs_admission(xr_xir_compile_type_arena_types(object->arena),
+                        object->type, admission, &needed);
+                    if (status != XR_XIR_VALUE_OK) break;
+                    if (needed) count = map->length * (object->kind == XR_XIR_TYPE_MAP ? 2u : 1u);
                 } else if (object->kind == XR_XIR_TYPE_TASK || object->kind == XR_XIR_TYPE_ATOMIC) {
                     if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 } else if (object->kind) {

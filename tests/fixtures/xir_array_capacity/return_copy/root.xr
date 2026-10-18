@@ -1,0 +1,20 @@
+import "./producer" as producer
+var from_dead = producer.buildReversed()
+export fn main()->i64{return 0}
+export fn scenario()->i64{
+    var a=[1,2,3]
+    var result=producer.reverse(ref a)
+    a.push(4)
+    result[0]=9
+    var total=0
+    var i=0
+    while(i<20){
+        var receiver=[1,2,3]
+        var returned=producer.reverse(ref receiver)
+        total+=returned[0]
+        i+=1
+    }
+    return from_dead[0]*100000+from_dead[2]*10000+len(a)*1000+
+        len(result)*100+a[0]*10+result[0]+total
+}
+export fn escaped()->Array<i64>{return producer.buildReversed()}

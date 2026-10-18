@@ -15,6 +15,7 @@
  */
 
 #include "xxir_vm.h"
+#include "xxir_map.h"
 #include "xxir_internal.h"
 #include "xxir_program_internal.h"
 #include "xxir_tuple.h"
@@ -25,8 +26,13 @@
 #include "xxir_nullable.h"
 #include "xxir_float.h"
 #include "xxir_types.h"
+#include "xxir_type_arena.h"
 #include "xxir_operand_roles.h"
+#include "xxir_call_view_operation_internal.h"
+#include "xxir_call_view_moves_internal.h"
+#include "xxir_view_types_internal.h"
 #include "xxir_instance_value.h"
+#include "xxir_instance_hash.h"
 #include "xxir_instance_function_internal.h"
 #include "xxir_struct.h"
 #include "xxir_class.h"
@@ -81,6 +87,14 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
             if (status == XR_XIR_CALL_READY) xr_xir_owned_slot_move(run->frame, offset, &value);
         }
         break;
+    }
+    case XR_XIR_CELL_STRING_APPEND: {
+        XrXirValue cell = {(uint32_t)xr_xir_operand_type(run->function, op->args[0]), 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
+        XrXirValue suffix = {(uint32_t)xr_xir_operand_type(run->function, op->args[1]), 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
+        status = op->immediate ? xr_xir_instance_cell_string_append_scalar(run->view, &cell, &suffix) :
+            xr_xir_instance_cell_string_append(run->view, &cell, &suffix); break;
     }
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: {
         XrXirType cell = op->op == XR_XIR_CELL_NEW ? op->type : xr_xir_operand_type(run->function, op->args[0]);
@@ -169,6 +183,9 @@ static XrXirValueReceiver vm_value_receiver(const ScalarRun *run, uint32_t id) {
 }
 #include "xxir_vm_atomic.inc.c"
 #include "xxir_vm_path.inc.c"
+#include "xxir_vm_hash.inc.c"
+#include "xxir_vm_view.inc.c"
+#include "xxir_vm_view_moves.inc.c"
 static XrXirRunStatus vm_array_capacity_step(ScalarRun *run, VmState *state,
     const XrXirInstruction *op, uint32_t destination, XrXirAction *action) {
     if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
@@ -259,6 +276,8 @@ static XrXirRunStatus vm_class_step(ScalarRun *run, VmState *state,
 
 static XrXirRunStatus vm_tuple_step(ScalarRun *run,VmState *state,
     const XrXirInstruction *op,uint32_t destination) {
+    if (op->op==XR_XIR_TUPLE_NEW && run->view && xr_xir_compile_type_arena_borrowed(run->view->arena,op->type))
+        return vm_view_aggregate(run,state,op,destination);
     XrXirValue output={0};XrXirValueStatus status;
     if (op->op==XR_XIR_TUPLE_NEW) {
         const XrXirTypeNode *tuple=xr_xir_tuple_signature(run->module->types,op->type);
@@ -338,6 +357,7 @@ static XrXirAction vm_panic_land(ScalarRun *run, VmState *state, uint32_t handle
     return xr_xir_instance_panic_land(run->view, run->frame, action, destination, first + 1, &state->instruction);
 }
 static XrXirRunStatus scalar_edge(ScalarRun *run,uint32_t instruction,uint32_t target) {
+    if (vm_view_phi_target(run,target)) return vm_view_phi_edge(run,vm_block(run->function,instruction),target);
     XirScalarCoreRun core={run->module,run->function,run->layout,run->frame,
         run->view ? run->view->arena : NULL,run->compile_resources};
     return xir_scalar_core_edge(&core,instruction,target);
@@ -534,13 +554,21 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
         op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_PRINT)
         return vm_io_step(run, state, action);
+    if (run->view && (op->op==XR_XIR_JUMP || op->op==XR_XIR_BRANCH)) {
+        uint32_t edge=op->op==XR_XIR_BRANCH && !xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]])?1u:0u;
+        XrXirRunStatus status=scalar_edge(run,instruction,op->targets[edge]);
+        if (status==XR_XIR_RUN_OK) state->instruction=run->function->blocks[op->targets[edge]].first;
+        return status;
+    }
     if (xir_scalar_core_opcode(op->op)) {
         XirScalarCoreRun core={run->module,run->function,run->layout,run->frame,
             run->view ? run->view->arena : NULL,run->compile_resources};
         XirScalarCoreAction result;
         XrXirRunStatus status=xir_scalar_core_step(&core,&state->instruction,&result);
         if (status==XR_XIR_RUN_OK && result.kind==XIR_SCALAR_RETURN) {
-            action->kind=XR_XIR_ACTION_RETURN;action->value=result.value;
+            if (run->view && xr_xir_compile_type_arena_borrowed(run->view->arena,run->function->result))
+                *action=vm_view_return(run,state,op);
+            else {action->kind=XR_XIR_ACTION_RETURN;action->value=result.value;}
         }
         return status;
     }
@@ -555,6 +583,17 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
         op->op == XR_XIR_ARRAY_RESERVE) {
         state->instruction = next;
         return vm_array_capacity_step(run, state, op, run->layout->offsets[result_id], action);
+    }
+    if (op->op==XR_XIR_VIEW_CLEANUP) {
+        state->instruction=next;return vm_view_cleanup(run,state,op,action);
+    }
+    if (op->op>=XR_XIR_VIEW_NEW && op->op<=XR_XIR_VIEW_END) {
+        state->instruction=next;
+        return vm_view_step(run,state,op,run->layout->offsets[result_id],action);
+    }
+    if (op->op >= XR_XIR_MAP_NEW && op->op <= XR_XIR_MAP_VALUE_AT) {
+        state->instruction = next;
+        return vm_hash_step(run, state, op, run->layout->offsets[result_id], action);
     }
     if (xr_xir_op_uses_value_path(run->function, op)) {
         state->instruction = next;
@@ -582,7 +621,8 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
     }
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         op->op == XR_XIR_TO_STRING ||
-        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
+        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
+        op->op == XR_XIR_CELL_STRING_APPEND) {
         state->instruction = next;
         return instance_step(run, state, op, run->layout->offsets[result_id], action);
     }
@@ -663,6 +703,8 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME: {
         if (!run->view) return XR_XIR_RUN_BAD_ARTIFACT;
         state->instruction = next;
+        if (op->op==XR_XIR_NULLABLE_SOME && xr_xir_compile_type_arena_borrowed(run->view->arena,op->type))
+            return vm_view_aggregate(run,state,op,run->layout->offsets[result_id]);
         XrXirValue payload = {0}, output = {0};
         if (op->op == XR_XIR_NULLABLE_SOME) payload = vm_value_operand(run, op->args[0]);
         XrXirValueStatus status = xr_xir_nullable_new(op->type,
@@ -764,7 +806,12 @@ static XrXirAction vm_resume(XrXirCallView *view) {
             if (!xr_xir_value_argument(&view->arguments[i], view->arena, function->parameters[i]))
                 return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};
         for (uint32_t i = 0; i < view->argument_count; ++i) {
-            if (xr_xir_type_is_owned(module->types, function->parameters[i])) {
+            if (xr_xir_compile_type_arena_borrowed(view->arena,function->parameters[i])) {
+                state->arguments[0]=(XrXirValue){0};
+                XrXirValueStatus status=xr_xir_call_view_argument_take(view,i,state->arguments);
+                if (status!=XR_XIR_VALUE_OK) return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0});
+                xr_xir_owned_slot_move(run.frame,layout->offsets[i],state->arguments);
+            } else if (xr_xir_type_is_owned(module->types, function->parameters[i])) {
                 if (xr_xir_owned_slot_copy(run.frame, layout->offsets[i], view->arena, function->parameters[i], view->arguments[i].payload) != XR_XIR_VALUE_OK)
                     return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};
             } else xr_xir_scalar_store(run.frame, layout->offsets[i], view->arguments[i].payload);
@@ -807,7 +854,12 @@ static XrXirAction vm_resume(XrXirCallView *view) {
             (inbox.type != XR_XIR_UNIT || inbox.reserved || inbox.payload) :
             !xr_xir_value_argument(&inbox, view->arena, state->expected))
             return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {0, 0, 0}, {0}, 0};
-        if (xr_xir_type_is_owned(module->types, state->expected)) {
+        if (xr_xir_compile_type_arena_borrowed(view->arena,state->expected)) {
+            state->arguments[0]=(XrXirValue){0};
+            XrXirValueStatus status=xr_xir_call_view_inbox_take(view,(XrXirType)state->expected,state->arguments);
+            if (status!=XR_XIR_VALUE_OK) return xr_xir_call_view_operation_fault(status,(XrXirFaultDetail){0});
+            xr_xir_owned_slot_move(run.frame,state->destination,state->arguments);
+        } else if (xr_xir_type_is_owned(module->types, state->expected)) {
             if (xr_xir_owned_slot_copy(run.frame, state->destination, view->arena, state->expected, inbox.payload) != XR_XIR_VALUE_OK)
                 return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, XR_XIR_CALL_LIMIT}, {0}, 0};
         } else if (state->destination != UINT32_MAX)

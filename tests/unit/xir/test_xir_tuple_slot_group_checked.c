@@ -18,7 +18,7 @@
 #include "xir_checked_scalar64_golden.h"
 
 _Static_assert(XR_XIR_SLOT_GROUP_INIT==145 && XR_XIR_TUPLE_NEW==143 && XR_XIR_RETURN==33,"independent opcode roles");
-_Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==73,"current single reader identity");
+_Static_assert(XR_XIR_CHECKED_SCHEMA==30 && XR_XIR_CHECKED_CONTRACT==73,"current single reader identity");
 static void group_digest(uint8_t *bytes,size_t length) {
     XrSHA256Context sha;xr_sha256_init(&sha);xr_sha256_update(&sha,bytes,32);
     xr_sha256_update(&sha,bytes+64,length-64);xr_sha256_final(&sha,bytes+32);

@@ -92,7 +92,7 @@ int main(void) {
     LibraryCompileOwner compiler={0};
     CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
     const XrXirCompileContext *context=&compiler.context;
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==24 && XR_XIR_CALL_ABI_VERSION==29 &&
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==27 && XR_XIR_CALL_ABI_VERSION==29 &&
         XR_XIR_PROGRAM_ABI_VERSION==31,"sum values require current consumers");
     const XrXirProgramSpec *spec=&nullable_checked_program;XrXirProgramSpec old=*spec;
     old.target.abi_version=16;XrXirProgram *program=(XrXirProgram *)(uintptr_t)1;

@@ -1,0 +1,28 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xir_sdk_map_key_path_consumer.c - Actual admitted archives execute owned container programs
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
+#include "xir/xxir_compile_context.h"
+#include "p09_map_key_path_input.h"
+#include "p09_map_key_path_program.h"
+extern const XrXirProgramSpec *const p09_map_key_path_programs[8];
+extern const uint32_t p09_map_key_path_ids[8];
+int main(void) {
+    for(unsigned row=0;row<8;++row) {
+        const XrCompileResourceLimits limits={67108864,8388608,128000000};
+        XrXirCompileContext context={0};context.limits=xr_xir_compile_default_limits();
+        CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+        XrXirProgram *program=NULL;
+        CHECK(xr_xir_compile_program_seal(&context,p09_map_key_path_programs[row],&program)==XR_XIR_OK);
+        xr_compile_resources_release(context.resources);key_source_run(program,p09_map_key_path_ids[row],map_key_sources[row].expected);
+    }
+    puts("map-key-path-sdk-ok");return 0;
+}

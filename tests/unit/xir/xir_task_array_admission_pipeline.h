@@ -187,7 +187,7 @@ static TaskArrayCompile task_array_build(size_t failure, XrCompileResourceLimits
     if (emit) {
         FILE *file = fopen(emit, "wb"); CHECK(file);
         CHECK(fwrite(source.text, 1, source.length, file) == source.length && fclose(file) == 0);
-        printf("Array concat C bytes=%zu cap1048576\n", source.length);
+        printf("Array concat C bytes=%zu cap1048676\n", source.length);
     } else { run.module = xr_xir_compile_artifact_module(run.lowered); run.stage = 7; run.status = task_array_seal(&run, mode); }
     task_array_profile_stage(&run, "seal-or-file");
 done:

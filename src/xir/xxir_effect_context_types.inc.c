@@ -104,7 +104,11 @@ static XrXirStatus effect_terms_import(EffectTerms *pool,
             for (uint32_t a=0;a<node.nominal.argument_count && status==XR_XIR_OK;++a)
                 status=effect_terms_import_child(pool,cache,i,node.nominal.arguments[a],&arguments[a]);
             node.nominal.arguments=arguments;
-        } else status=effect_terms_import_child(pool,cache,i,node.element,&node.element);
+        } else {
+            status=effect_terms_import_child(pool,cache,i,node.element,&node.element);
+            if (status==XR_XIR_OK && node.kind==XR_XIR_TYPE_MAP)
+                status=effect_terms_import_child(pool,cache,i,node.result,&node.result);
+        }
         if (status!=XR_XIR_OK) return status;
         cache[i]=effect_term_intern(pool,node);
         if (pool->status!=XR_XIR_OK) return pool->status;
