@@ -1,0 +1,27 @@
+class Box {
+    value: i64
+
+    init(value: i64) {
+        this.value = value
+    }
+
+    get() -> i64 {
+        return this.value
+    }
+
+    set(value: i64) {
+        this.value = value
+    }
+}
+
+fn idBox(box: Box) -> Box {
+    var alias = box
+    return alias
+}
+
+var box = Box(7)
+var alias = idBox(box)
+alias.set(9)
+
+print(box.get())
+print(alias.get())

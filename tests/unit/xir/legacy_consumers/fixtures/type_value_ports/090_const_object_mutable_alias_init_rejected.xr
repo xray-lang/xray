@@ -1,0 +1,13 @@
+class Box {
+    value: i64
+
+    init(v: i64) {
+        this.value = v
+    }
+}
+
+var b = Box(1)
+const frozen = b
+b.value = 9
+print(frozen.value)
+print(b.value)

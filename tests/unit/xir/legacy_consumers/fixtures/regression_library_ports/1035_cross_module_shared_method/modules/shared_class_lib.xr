@@ -1,0 +1,25 @@
+// shared_class_lib.xr - helper module for 1035_cross_module_shared_method test
+
+export type CounterStats = {
+    count: i64,
+    label: string,
+}
+
+export class Counter {
+    count: Atomic<i64>
+
+    init() {
+        this.count = Atomic<i64>(0)
+    }
+
+    increment() {
+        this.count.fetchAdd(1)
+    }
+
+    stats() -> CounterStats {
+        return {
+            count: this.count.load(),
+            label: "counter",
+        }
+    }
+}

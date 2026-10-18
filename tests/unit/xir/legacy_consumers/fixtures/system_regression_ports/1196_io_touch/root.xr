@@ -1,0 +1,56 @@
+// touch updates a path's timestamps and creates the file when there is
+// nothing to update. The order matters: a directory accepts the timestamp
+// update but cannot be created as a file, so attempting creation first would
+// report failure for a path touch handles.
+
+import io
+import path
+
+fn scratch(base: Path, name: string) -> Path {
+    return path.join(base, path.from(name))
+}
+
+@test
+fn test_creates_a_missing_file_empty() {
+    var base = io.tempDir()!
+    defer { io.removeAll(base) }
+    var target = scratch(base, "touch_new")
+    assertEqual(io.exists(target), false)
+    assert(io.touch(target))
+    assert(io.isFile(target))
+    assertEqual(io.fileSize(target), 0)
+    io.remove(target)
+}
+
+@test
+fn test_does_not_truncate_an_existing_file() {
+    var base = io.tempDir()!
+    defer { io.removeAll(base) }
+    var target = scratch(base, "touch_existing")
+    assert(io.writeFile(target, "hello"))
+    assert(io.touch(target))
+    assertEqual(io.fileSize(target), 5)
+    assertEqual(io.readFile(target) ?? "", "hello")
+    io.remove(target)
+}
+
+@test
+fn test_succeeds_on_a_directory() {
+    var base = io.tempDir()!
+    defer { io.removeAll(base) }
+    var dir = scratch(base, "touch_dir")
+    assert(io.mkdirp(dir))
+    // The timestamp update accepts a directory; creation would not.
+    assert(io.touch(dir))
+    assert(io.isDir(dir))
+    io.removeAll(dir)
+}
+
+@test
+fn test_fails_when_the_parent_is_missing() {
+    var base = io.tempDir()!
+    defer { io.removeAll(base) }
+    var orphan = path.join(scratch(base, "touch_absent_parent"), path.from("child"))
+    assertEqual(io.touch(orphan), false)
+    assertEqual(io.exists(orphan), false)
+}

@@ -1,0 +1,300 @@
+// 1180_base64_basic.xr - Base64 module Slice<byte>/Array<byte> API tests
+
+import base64
+import {
+    Base64Alphabet,
+    Base64DecodeOptions,
+    Base64EncodeOptions,
+    Base64Error,
+    Base64PaddingPolicy
+} from base64
+
+fn encodeText(data: string, options: Base64EncodeOptions = Base64EncodeOptions()) -> string {
+    var view: Slice<u8> = data.bytes()
+    return base64.encode(view, options)
+}
+
+fn decodeText(data: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> string {
+    var decoded = base64.decode(data, options)
+    return string.fromUtf8(decoded[:])
+}
+
+fn decodeFails(data: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> bool {
+    try {
+        var decoded = base64.decode(data, options)
+        return len(decoded) < 0
+    } catch (e: Base64Error) {
+        return true
+    }
+}
+
+fn urlEncodeOptions() -> Base64EncodeOptions {
+    var options = Base64EncodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = false
+    return options
+}
+
+fn urlDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = Base64PaddingPolicy.Forbidden
+    return options
+}
+
+fn optionalDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.padding = Base64PaddingPolicy.Optional
+    return options
+}
+
+fn forbiddenDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.padding = Base64PaddingPolicy.Forbidden
+    return options
+}
+
+fn standardForbiddenDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.alphabet = Base64Alphabet.Standard
+    options.padding = Base64PaddingPolicy.Forbidden
+    return options
+}
+
+// ===== encode / decode =====
+
+@test
+fn test_encode_basic() {
+    var result = encodeText("Hello, World!")
+    assertEqual(result, "SGVsbG8sIFdvcmxkIQ==")
+}
+
+@test
+fn test_decode_basic() {
+    var result = decodeText("SGVsbG8sIFdvcmxkIQ==")
+    assertEqual(result, "Hello, World!")
+}
+
+@test
+fn test_roundtrip() {
+    var original = "xray language test 123!@#"
+    var encoded = encodeText(original)
+    var decoded = decodeText(encoded)
+    assertEqual(decoded, original)
+}
+
+@test
+fn test_encode_empty() {
+    var result = encodeText("")
+    assertEqual(result, "")
+}
+
+@test
+fn test_decode_empty() {
+    var result = decodeText("")
+    assertEqual(result, "")
+}
+
+@test
+fn test_encode_single_char() {
+    var result = encodeText("A")
+    assertEqual(result, "QQ==")
+}
+
+@test
+fn test_encode_two_chars() {
+    var result = encodeText("AB")
+    assertEqual(result, "QUI=")
+}
+
+@test
+fn test_encode_three_chars() {
+    var result = encodeText("ABC")
+    assertEqual(result, "QUJD")
+}
+
+@test
+fn test_encode_chinese() {
+    var original = "你好世界"
+    var encoded = encodeText(original)
+    var decoded = decodeText(encoded)
+    assertEqual(decoded, original)
+}
+
+// ===== URL-safe encode / decode =====
+
+@test
+fn test_encode_url_basic() {
+    var raw = Array<u8>(2)
+    raw[0] = 251
+    raw[1] = 255
+    assertEqual(base64.encode(raw[:]), "+/8=")
+
+    var encoded = base64.encode(raw[:], urlEncodeOptions())
+    assertEqual(encoded, "-_8")
+    assertEqual(encoded.contains("+"), false)
+    assertEqual(encoded.contains("/"), false)
+    assertEqual(encoded.contains("="), false)
+}
+
+@test
+fn test_decode_url_roundtrip() {
+    var original = "test data with special chars: +/="
+    var encoded = encodeText(original, urlEncodeOptions())
+    var decoded = decodeText(encoded, urlDecodeOptions())
+    assertEqual(decoded, original)
+}
+
+@test
+fn test_url_alphabet_is_explicit() {
+    assertEqual(base64.isValid("SGVsbG8_", standardForbiddenDecodeOptions()), false)
+    assertEqual(base64.isValid("SGVsbG8_", urlDecodeOptions()), true)
+}
+
+// ===== isValid =====
+
+@test
+fn test_is_valid_true() {
+    assertEqual(base64.isValid("SGVsbG8="), true)
+    assertEqual(base64.isValid("QUJD"), true)
+    assertEqual(base64.isValid("QQ=="), true)
+}
+
+@test
+fn test_is_valid_false() {
+    assertEqual(base64.isValid("not valid base64!!!"), false)
+}
+
+@test
+fn test_is_valid_empty() {
+    assertEqual(base64.isValid(""), true)
+}
+
+// ===== Decode error handling =====
+
+@test
+fn test_decode_invalid_chars() {
+    assert(decodeFails("!!!!"))
+}
+
+@test
+fn test_decode_single_char() {
+    assert(decodeFails("A"))
+}
+
+@test
+fn test_decode_excess_padding() {
+    assert(decodeFails("Q==="))
+}
+
+@test
+fn test_decode_noncanonical_trailing_bits() {
+    assert(decodeFails("QR=="))
+    assertEqual(base64.isValid("QR=="), false)
+}
+
+// ===== padding policy =====
+
+@test
+fn test_required_padding_rejects_missing_padding() {
+    assertEqual(base64.isValid("A"), false)
+    assertEqual(base64.isValid("QQ"), false)
+    assertEqual(base64.isValid("QUI"), false)
+    assert(decodeFails("QQ"))
+    assert(decodeFails("QUI"))
+}
+
+@test
+fn test_optional_padding_accepts_missing_padding() {
+    assertEqual(base64.isValid("QQ", optionalDecodeOptions()), true)
+    assertEqual(base64.isValid("QUI", optionalDecodeOptions()), true)
+    assertEqual(decodeText("QQ", optionalDecodeOptions()), "A")
+    assertEqual(decodeText("QUI", optionalDecodeOptions()), "AB")
+}
+
+@test
+fn test_forbidden_padding_rejects_padding() {
+    assertEqual(base64.isValid("QQ", forbiddenDecodeOptions()), true)
+    assertEqual(base64.isValid("QQ==", forbiddenDecodeOptions()), false)
+}
+
+// ===== raw bytes =====
+
+@test
+fn test_encode_bytes_basic() {
+    var bytes = Array<u8>(3)
+    bytes[0] = 72   // 'H'
+    bytes[1] = 101  // 'e'
+    bytes[2] = 108  // 'l'
+    var encoded = base64.encode(bytes[:])
+    assertEqual(encoded, "SGVs")
+}
+
+@test
+fn test_decode_to_bytes_basic() {
+    var bytes = base64.decode("SGVs", optionalDecodeOptions())
+    assertEqual(len(bytes), 3)
+    assertEqual(bytes[0], 72)
+    assertEqual(bytes[1], 101)
+    assertEqual(bytes[2], 108)
+}
+
+@test
+fn test_byte_array_roundtrip() {
+    var original = Array<u8>(5)
+    original[0] = 0
+    original[1] = 127
+    original[2] = 255
+    original[3] = 1
+    original[4] = 128
+    var encoded = base64.encode(original[:])
+    var decoded = base64.decode(encoded)
+    assertEqual(len(decoded), 5)
+    assertEqual(decoded[0], 0)
+    assertEqual(decoded[1], 127)
+    assertEqual(decoded[2], 255)
+    assertEqual(decoded[3], 1)
+    assertEqual(decoded[4], 128)
+}
+
+@test
+fn test_decode_to_bytes_invalid() {
+    assert(decodeFails("!!!"))
+}
+
+@test
+fn test_encode_bytes_empty() {
+    var bytes = Array<u8>(0)
+    var encoded = base64.encode(bytes[:])
+    assertEqual(encoded, "")
+}
+
+// ===== Edge cases =====
+
+@test
+fn test_long_string() {
+    var original = "a"
+    var long = ""
+    for (var i = 0; i < 1000; i++) {
+        long = long + original
+    }
+    var encoded = encodeText(long)
+    var decoded = decodeText(encoded)
+    assertEqual(decoded, long)
+}
+
+@test
+fn test_binary_like_content() {
+    var original = "\t\n\r special chars"
+    var encoded = encodeText(original)
+    var decoded = decodeText(encoded)
+    assertEqual(decoded, original)
+}
+
+@test
+fn test_no_padding_decode() {
+    var withPad = base64.decode("QQ==")
+    var withoutPad = base64.decode("QQ", optionalDecodeOptions())
+    assertEqual(len(withPad), len(withoutPad))
+    assertEqual(withPad[0], withoutPad[0])
+}

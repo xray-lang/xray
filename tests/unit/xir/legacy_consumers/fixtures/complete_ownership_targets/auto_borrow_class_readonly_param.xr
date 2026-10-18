@@ -1,0 +1,24 @@
+class Box {
+    value: i64
+
+    init(value: i64) {
+        this.value = value
+    }
+
+    get() -> i64 {
+        return this.value
+    }
+
+    set(value: i64) {
+        this.value = value
+    }
+}
+
+fn readBox(box: Box) -> i64 {
+    return box.get()
+}
+
+var box = Box(7)
+print(readBox(box))
+box.set(9)
+print(readBox(box))

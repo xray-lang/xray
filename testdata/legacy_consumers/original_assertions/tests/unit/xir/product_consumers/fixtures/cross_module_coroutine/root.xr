@@ -1,0 +1,3 @@
+import { child } from "./library"
+fn answer() -> i64 { return child(7) }
+export fn consumerAnswer() -> i64 { return answer() }

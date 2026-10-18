@@ -1,0 +1,88 @@
+{
+  "status": "COMPLETE_WHOLE_PARALLEL_NORMAL_DOMAINS_NOT_RUNTIME_QUALIFICATION",
+  "cases": [
+    {
+      "id": "complete_parallel_api_reference",
+      "oracle_id": "complete_parallel_api_reference",
+      "source": "tests/diff/cases/semantics/stdlib/parallel_api_reference.xr",
+      "source_lf_sha256": "7f7798834c8e4c529dd348f860ad4d87def0c13677727f7315bc431df9de2578",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/parallel_api_reference.xr",
+        "lf_sha256": "7f7798834c8e4c529dd348f860ad4d87def0c13677727f7315bc431df9de2578"
+      },
+      "entry": "run",
+      "source_context": "original_absolute",
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "stdout_utf8": "10\n4\n0\n9\n3\n11\n13\n20\n3\n409\ntrue\ntrue\n",
+      "stdout_utf8_options": [
+        "10\n4\n0\n9\n3\n11\n13\n20\n0\n406\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n1\n406\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n1\n407\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n1\n408\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n1\n409\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n1\n410\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n3\n406\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n3\n407\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n3\n408\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n3\n409\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n3\n410\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n3\n411\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n3\n412\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n3\n413\ntrue\ntrue\n",
+        "10\n4\n0\n9\n3\n11\n13\n20\n3\n414\ntrue\ntrue\n"
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "remaining_gates": [
+        "Complete original program,all normal outputs/callbacks andtermination;workers upper bound andcorrelated plan state domain",
+        "Real parallel batch/lane identity/initializer anditem counts,atomic/mapInto/closed errors,physical release/FI/resources/lifetime/safety/providers/mixed;source bootstrap reference isnot full hosted parallel qualification"
+      ]
+    },
+    {
+      "id": "complete_parallel_plan_close_lifecycle",
+      "oracle_id": "complete_parallel_plan_close_lifecycle",
+      "source": "tests/diff/cases/semantics/stdlib/parallel_plan_close_lifecycle.xr",
+      "source_lf_sha256": "48cd46bde2cf2996b36d71f880bdf6807a6ee09ec90de77e9d4561aaf59c424b",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/stdlib/parallel_plan_close_lifecycle.xr",
+        "lf_sha256": "48cd46bde2cf2996b36d71f880bdf6807a6ee09ec90de77e9d4561aaf59c424b"
+      },
+      "entry": "run",
+      "source_context": "original_absolute",
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "stdout_utf8": "7\nclosed\ndone\n",
+      "stdout_utf8_options": [
+        "6\nclosed\ndone\n",
+        "7\nclosed\ndone\n",
+        "8\nclosed\ndone\n",
+        "9\nclosed\ndone\n"
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "remaining_gates": [
+        "Complete original program,all normal outputs/callbacks andtermination;workers upper bound andcorrelated plan state domain",
+        "Real parallel batch/lane identity/initializer anditem counts,atomic/mapInto/closed errors,physical release/FI/resources/lifetime/safety/providers/mixed;source bootstrap reference isnot full hosted parallel qualification"
+      ]
+    }
+  ]
+}

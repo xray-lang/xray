@@ -1,0 +1,114 @@
+// 1402_crypto_random.xr
+// 作者：xingleixu@gmail.com
+// 测试：crypto 库随机数和 UUID 测试
+//
+// 覆盖功能：
+//   - randomBytes 随机字节生成
+//   - uuid UUID v4 生成
+
+import crypto
+
+fn requireLowerHex(value: string) {
+    var bytes = value.bytes()
+    for (var i = 0; i < len(bytes); i++) {
+        var b = bytes[i] as i64
+        assert((b >= 48 && b <= 57) || (b >= 97 && b <= 102))
+    }
+}
+
+
+// ============================================================
+// 第一部分：randomBytes 测试
+// ============================================================
+
+@test
+fn test_random_bytes_length_8() {
+    // 生成 8 字节随机数（hex 编码后 16 字符）
+    var r = crypto.randomBytes(8)
+    assertEqual(len(r), 16)
+}
+
+@test
+fn test_random_bytes_length_16() {
+    // 生成 16 字节随机数（hex 编码后 32 字符）
+    var r = crypto.randomBytes(16)
+    assertEqual(len(r), 32)
+}
+
+@test
+fn test_random_bytes_length_32() {
+    // 生成 32 字节随机数（hex 编码后 64 字符）
+    var r = crypto.randomBytes(32)
+    assertEqual(len(r), 64)
+}
+
+@test
+fn test_random_bytes_uniqueness() {
+    // 验证每次生成的随机数不同
+    var r1 = crypto.randomBytes(16)
+    var r2 = crypto.randomBytes(16)
+    assert(r1 != r2)
+}
+
+@test
+fn test_random_bytes_hex_format() {
+    // 验证输出是有效的十六进制字符串
+    var r = crypto.randomBytes(4)
+    assertEqual(len(r), 8)
+    requireLowerHex(r)
+    // Length alone cannot establish hexadecimal content.
+}
+
+// ============================================================
+// 第二部分：UUID v4 测试
+// ============================================================
+
+@test
+fn test_uuid_length() {
+    // UUID v4 格式：xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    var uuid = crypto.uuid()
+    assertEqual(len(uuid), 36)
+}
+
+@test
+fn test_uuid_format() {
+    // 验证 UUID 包含 4 个破折号
+    var uuid = crypto.uuid()
+    var parts = uuid.split("-")
+    assertEqual(len(parts), 5)
+}
+
+@test
+fn test_uuid_parts_length() {
+    // 验证各段长度：8-4-4-4-12
+    var uuid = crypto.uuid()
+    var parts = uuid.split("-")
+    assertEqual(len(parts[0]), 8)
+    assertEqual(len(parts[1]), 4)
+    assertEqual(len(parts[2]), 4)
+    assertEqual(len(parts[3]), 4)
+    assertEqual(len(parts[4]), 12)
+    for (var i = 0; i < len(parts); i++) { requireLowerHex(parts[i]) }
+    assertEqual(uuid.slice(14, 15), "4")
+    assert("89ab".contains(uuid.slice(19, 20)))
+}
+
+@test
+fn test_uuid_uniqueness() {
+    // 验证每次生成的 UUID 不同
+    var uuid1 = crypto.uuid()
+    var uuid2 = crypto.uuid()
+    assert(uuid1 != uuid2)
+}
+
+@test
+fn test_uuid_multiple_uniqueness() {
+    // 生成多个 UUID 验证唯一性
+    var uuids: Array<string> = []
+    for (i in 0..10) {
+        uuids.push(crypto.uuid())
+    }
+    // 检查前两个不同（概率验证）
+    assert(uuids[0] != uuids[1])
+    assert(uuids[1] != uuids[2])
+}

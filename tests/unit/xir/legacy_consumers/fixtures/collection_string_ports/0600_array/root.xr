@@ -1,0 +1,221 @@
+// 0600_array.xr
+// 作者：xingleixu@gmail.com
+// 测试：数组基础
+// ===== 创建 =====
+@test
+fn test_array_literal() {
+    var arr = [1, 2, 3]
+    assertEqual(len(arr), 3)
+    assertEqual(arr[0], 1)
+    assertEqual(arr[1], 2)
+    assertEqual(arr[2], 3)
+}
+
+@test
+fn test_empty_array() {
+    var arr: Array<i64> = []
+    assertEqual(len(arr), 0)
+    assertEqual(len(arr) == 0, true)
+}
+
+@test
+fn test_single_element() {
+    var arr = [42]
+    assertEqual(len(arr), 1)
+    assertEqual(arr[0], 42)
+}
+
+@test
+fn test_mixed_types() {
+    type MixedValue = i64 | string | f64 | bool
+    var integer: MixedValue = 1
+    var text: MixedValue = "hello"
+    var real: MixedValue = 3.14
+    var flag: MixedValue = true
+    var arr: Array<MixedValue?> = [integer, text, real, flag, null]
+    assertEqual(len(arr), 5)
+    assertEqual(arr[0]! as i64, 1)
+    assertEqual(arr[1]! as string, "hello")
+    assertEqual(arr[2]! as f64, 3.14)
+    assertEqual(arr[3]! as bool, true)
+    assert(arr[4] == null)
+}
+
+@test
+fn test_nested_array() {
+    var matrix = [[1, 2], [3, 4], [5, 6]]
+    assertEqual(len(matrix), 3)
+    assertEqual(matrix[0][0], 1)
+    assertEqual(matrix[1][1], 4)
+    assertEqual(matrix[2][0], 5)
+}
+
+// ===== 访问 =====
+@test
+fn test_index_access() {
+    var arr = [10, 20, 30, 40, 50]
+    assertEqual(arr[0], 10)
+    assertEqual(arr[2], 30)
+    assertEqual(arr[4], 50)
+}
+
+@test
+fn test_out_of_bounds() {
+    var arr = [1, 2, 3]
+    var caught_high = false
+    try {
+        var high_value = arr[100]
+        print(high_value)
+    } catch panic (p) {
+        caught_high = true
+    }
+    assertEqual(caught_high, true)
+
+    var caught_negative = false
+    try {
+        var negative_value = arr[-1]
+        print(negative_value)
+    } catch panic (p) {
+        caught_negative = true
+    }
+    assertEqual(caught_negative, true)
+}
+
+@test
+fn test_dynamic_index() {
+    var arr = [10, 20, 30]
+    var i = 1
+    assertEqual(arr[i], 20)
+    assertEqual(arr[i + 1], 30)
+}
+
+// ===== 修改 =====
+@test
+fn test_index_assignment() {
+    var arr = [1, 2, 3]
+    arr[0] = 10
+    arr[2] = 30
+    assertEqual(arr[0], 10)
+    assertEqual(arr[1], 2)
+    assertEqual(arr[2], 30)
+}
+
+// ===== push/pop =====
+@test
+fn test_push() {
+    var arr: Array<i64> = []
+    arr.push(1)
+    arr.push(2)
+    arr.push(3)
+    assertEqual(len(arr), 3)
+    assertEqual(arr[0], 1)
+    assertEqual(arr[2], 3)
+}
+
+@test
+fn test_pop() {
+    var arr = [1, 2, 3]
+    var last = arr.pop()
+    assertEqual(last, 3)
+    assertEqual(len(arr), 2)
+    last = arr.pop()
+    assertEqual(last, 2)
+    assertEqual(len(arr), 1)
+}
+
+@test
+fn test_pop_empty() {
+    var arr: Array<i64> = []
+    var result = arr.pop()
+    assertEqual(result, null)
+    assertEqual(len(arr), 0)
+}
+
+// ===== shift/unshift =====
+@test
+fn test_shift() {
+    var arr = [1, 2, 3]
+    var first = arr.shift()
+    assertEqual(first, 1)
+    assertEqual(len(arr), 2)
+    assertEqual(arr[0], 2)
+}
+
+@test
+fn test_unshift() {
+    var arr = [2, 3]
+    arr.unshift(1)
+    assertEqual(arr[0], 1)
+    assertEqual(len(arr), 3)
+}
+
+@test
+fn test_shift_empty() {
+    var arr: Array<i64> = []
+    var result = arr.shift()
+    assertEqual(result, null)
+}
+
+// ===== 查找 =====
+@test
+fn test_indexOf() {
+    var arr = ["a", "b", "c", "b"]
+    assertEqual(arr.indexOf("a"), 0)
+    assertEqual(arr.indexOf("b"), 1)
+    assertEqual(arr.indexOf("c"), 2)
+    assertEqual(arr.indexOf("d"), -1)
+}
+
+@test
+fn test_contains() {
+    var arr = [1, 2, 3]
+    assertEqual(arr.contains(2), true)
+    assertEqual(arr.contains(5), false)
+}
+
+// ===== 转换 =====
+@test
+fn test_join() {
+    var arr = ["a", "b", "c"]
+    assertEqual(arr.join(","), "a,b,c")
+    assertEqual(arr.join("-"), "a-b-c")
+    assertEqual(arr.join(""), "abc")
+}
+
+@test
+fn test_reverse() {
+    var arr = [1, 2, 3, 4, 5]
+    arr.reverse()
+    assertEqual(arr[0], 5)
+    assertEqual(arr[4], 1)
+}
+
+@test
+fn test_clear() {
+    var arr = [1, 2, 3]
+    arr.clear()
+    assertEqual(len(arr), 0)
+    assertEqual(len(arr) == 0, true)
+}
+
+// ===== 边界条件 =====
+@test
+fn test_large_array() {
+    var arr: Array<i64> = []
+    for (var i = 0; i < 100; i++) {
+        arr.push(i)
+    }
+    assertEqual(len(arr), 100)
+    assertEqual(arr[0], 0)
+    assertEqual(arr[99], 99)
+}
+
+@test
+fn test_array_of_arrays() {
+    var arr: Array<Array<i64>> = []
+    arr.push([1, 2])
+    arr.push([3, 4])
+    assertEqual(len(arr), 2)
+    assertEqual(arr[0][0], 1)
+    assertEqual(arr[1][1], 4)
+}

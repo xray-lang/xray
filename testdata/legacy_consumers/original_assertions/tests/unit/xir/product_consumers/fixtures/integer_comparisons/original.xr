@@ -1,0 +1,201 @@
+fn op0_i8(a: i8, b: i8) -> bool { return a == b }
+fn op1_i8(a: i8, b: i8) -> bool { return a != b }
+fn op2_i8(a: i8, b: i8) -> bool { return a < b }
+fn op3_i8(a: i8, b: i8) -> bool { return a <= b }
+fn op4_i8(a: i8, b: i8) -> bool { return a > b }
+fn op5_i8(a: i8, b: i8) -> bool { return a >= b }
+fn op0_u8(a: u8, b: u8) -> bool { return a == b }
+fn op1_u8(a: u8, b: u8) -> bool { return a != b }
+fn op2_u8(a: u8, b: u8) -> bool { return a < b }
+fn op3_u8(a: u8, b: u8) -> bool { return a <= b }
+fn op4_u8(a: u8, b: u8) -> bool { return a > b }
+fn op5_u8(a: u8, b: u8) -> bool { return a >= b }
+fn op0_i16(a: i16, b: i16) -> bool { return a == b }
+fn op1_i16(a: i16, b: i16) -> bool { return a != b }
+fn op2_i16(a: i16, b: i16) -> bool { return a < b }
+fn op3_i16(a: i16, b: i16) -> bool { return a <= b }
+fn op4_i16(a: i16, b: i16) -> bool { return a > b }
+fn op5_i16(a: i16, b: i16) -> bool { return a >= b }
+fn op0_u16(a: u16, b: u16) -> bool { return a == b }
+fn op1_u16(a: u16, b: u16) -> bool { return a != b }
+fn op2_u16(a: u16, b: u16) -> bool { return a < b }
+fn op3_u16(a: u16, b: u16) -> bool { return a <= b }
+fn op4_u16(a: u16, b: u16) -> bool { return a > b }
+fn op5_u16(a: u16, b: u16) -> bool { return a >= b }
+fn op0_i32(a: i32, b: i32) -> bool { return a == b }
+fn op1_i32(a: i32, b: i32) -> bool { return a != b }
+fn op2_i32(a: i32, b: i32) -> bool { return a < b }
+fn op3_i32(a: i32, b: i32) -> bool { return a <= b }
+fn op4_i32(a: i32, b: i32) -> bool { return a > b }
+fn op5_i32(a: i32, b: i32) -> bool { return a >= b }
+fn op0_u32(a: u32, b: u32) -> bool { return a == b }
+fn op1_u32(a: u32, b: u32) -> bool { return a != b }
+fn op2_u32(a: u32, b: u32) -> bool { return a < b }
+fn op3_u32(a: u32, b: u32) -> bool { return a <= b }
+fn op4_u32(a: u32, b: u32) -> bool { return a > b }
+fn op5_u32(a: u32, b: u32) -> bool { return a >= b }
+fn op0_i64(a: i64, b: i64) -> bool { return a == b }
+fn op1_i64(a: i64, b: i64) -> bool { return a != b }
+fn op2_i64(a: i64, b: i64) -> bool { return a < b }
+fn op3_i64(a: i64, b: i64) -> bool { return a <= b }
+fn op4_i64(a: i64, b: i64) -> bool { return a > b }
+fn op5_i64(a: i64, b: i64) -> bool { return a >= b }
+fn op0_u64(a: u64, b: u64) -> bool { return a == b }
+fn op1_u64(a: u64, b: u64) -> bool { return a != b }
+fn op2_u64(a: u64, b: u64) -> bool { return a < b }
+fn op3_u64(a: u64, b: u64) -> bool { return a <= b }
+fn op4_u64(a: u64, b: u64) -> bool { return a > b }
+fn op5_u64(a: u64, b: u64) -> bool { return a >= b }
+fn mixed(a: u32, b: u64) -> bool { return a < b }
+fn signedMixed(a: i8, b: i16) -> bool { return a < b }
+fn answer() -> i64 {
+if (op0_i8(-128, 127)) { return 1 }
+if (op0_i8(127, -128)) { return 2 }
+if (!op0_i8(127, 127)) { return 3 }
+if (!op1_i8(-128, 127)) { return 4 }
+if (!op1_i8(127, -128)) { return 5 }
+if (op1_i8(127, 127)) { return 6 }
+if (!op2_i8(-128, 127)) { return 7 }
+if (op2_i8(127, -128)) { return 8 }
+if (op2_i8(127, 127)) { return 9 }
+if (!op3_i8(-128, 127)) { return 10 }
+if (op3_i8(127, -128)) { return 11 }
+if (!op3_i8(127, 127)) { return 12 }
+if (op4_i8(-128, 127)) { return 13 }
+if (!op4_i8(127, -128)) { return 14 }
+if (op4_i8(127, 127)) { return 15 }
+if (op5_i8(-128, 127)) { return 16 }
+if (!op5_i8(127, -128)) { return 17 }
+if (!op5_i8(127, 127)) { return 18 }
+if (op0_u8(0, 255)) { return 19 }
+if (op0_u8(255, 0)) { return 20 }
+if (!op0_u8(255, 255)) { return 21 }
+if (!op1_u8(0, 255)) { return 22 }
+if (!op1_u8(255, 0)) { return 23 }
+if (op1_u8(255, 255)) { return 24 }
+if (!op2_u8(0, 255)) { return 25 }
+if (op2_u8(255, 0)) { return 26 }
+if (op2_u8(255, 255)) { return 27 }
+if (!op3_u8(0, 255)) { return 28 }
+if (op3_u8(255, 0)) { return 29 }
+if (!op3_u8(255, 255)) { return 30 }
+if (op4_u8(0, 255)) { return 31 }
+if (!op4_u8(255, 0)) { return 32 }
+if (op4_u8(255, 255)) { return 33 }
+if (op5_u8(0, 255)) { return 34 }
+if (!op5_u8(255, 0)) { return 35 }
+if (!op5_u8(255, 255)) { return 36 }
+if (op0_i16(-32768, 32767)) { return 37 }
+if (op0_i16(32767, -32768)) { return 38 }
+if (!op0_i16(32767, 32767)) { return 39 }
+if (!op1_i16(-32768, 32767)) { return 40 }
+if (!op1_i16(32767, -32768)) { return 41 }
+if (op1_i16(32767, 32767)) { return 42 }
+if (!op2_i16(-32768, 32767)) { return 43 }
+if (op2_i16(32767, -32768)) { return 44 }
+if (op2_i16(32767, 32767)) { return 45 }
+if (!op3_i16(-32768, 32767)) { return 46 }
+if (op3_i16(32767, -32768)) { return 47 }
+if (!op3_i16(32767, 32767)) { return 48 }
+if (op4_i16(-32768, 32767)) { return 49 }
+if (!op4_i16(32767, -32768)) { return 50 }
+if (op4_i16(32767, 32767)) { return 51 }
+if (op5_i16(-32768, 32767)) { return 52 }
+if (!op5_i16(32767, -32768)) { return 53 }
+if (!op5_i16(32767, 32767)) { return 54 }
+if (op0_u16(0, 65535)) { return 55 }
+if (op0_u16(65535, 0)) { return 56 }
+if (!op0_u16(65535, 65535)) { return 57 }
+if (!op1_u16(0, 65535)) { return 58 }
+if (!op1_u16(65535, 0)) { return 59 }
+if (op1_u16(65535, 65535)) { return 60 }
+if (!op2_u16(0, 65535)) { return 61 }
+if (op2_u16(65535, 0)) { return 62 }
+if (op2_u16(65535, 65535)) { return 63 }
+if (!op3_u16(0, 65535)) { return 64 }
+if (op3_u16(65535, 0)) { return 65 }
+if (!op3_u16(65535, 65535)) { return 66 }
+if (op4_u16(0, 65535)) { return 67 }
+if (!op4_u16(65535, 0)) { return 68 }
+if (op4_u16(65535, 65535)) { return 69 }
+if (op5_u16(0, 65535)) { return 70 }
+if (!op5_u16(65535, 0)) { return 71 }
+if (!op5_u16(65535, 65535)) { return 72 }
+if (op0_i32(-2147483648, 2147483647)) { return 73 }
+if (op0_i32(2147483647, -2147483648)) { return 74 }
+if (!op0_i32(2147483647, 2147483647)) { return 75 }
+if (!op1_i32(-2147483648, 2147483647)) { return 76 }
+if (!op1_i32(2147483647, -2147483648)) { return 77 }
+if (op1_i32(2147483647, 2147483647)) { return 78 }
+if (!op2_i32(-2147483648, 2147483647)) { return 79 }
+if (op2_i32(2147483647, -2147483648)) { return 80 }
+if (op2_i32(2147483647, 2147483647)) { return 81 }
+if (!op3_i32(-2147483648, 2147483647)) { return 82 }
+if (op3_i32(2147483647, -2147483648)) { return 83 }
+if (!op3_i32(2147483647, 2147483647)) { return 84 }
+if (op4_i32(-2147483648, 2147483647)) { return 85 }
+if (!op4_i32(2147483647, -2147483648)) { return 86 }
+if (op4_i32(2147483647, 2147483647)) { return 87 }
+if (op5_i32(-2147483648, 2147483647)) { return 88 }
+if (!op5_i32(2147483647, -2147483648)) { return 89 }
+if (!op5_i32(2147483647, 2147483647)) { return 90 }
+if (op0_u32(0, 4294967295)) { return 91 }
+if (op0_u32(4294967295, 0)) { return 92 }
+if (!op0_u32(4294967295, 4294967295)) { return 93 }
+if (!op1_u32(0, 4294967295)) { return 94 }
+if (!op1_u32(4294967295, 0)) { return 95 }
+if (op1_u32(4294967295, 4294967295)) { return 96 }
+if (!op2_u32(0, 4294967295)) { return 97 }
+if (op2_u32(4294967295, 0)) { return 98 }
+if (op2_u32(4294967295, 4294967295)) { return 99 }
+if (!op3_u32(0, 4294967295)) { return 100 }
+if (op3_u32(4294967295, 0)) { return 101 }
+if (!op3_u32(4294967295, 4294967295)) { return 102 }
+if (op4_u32(0, 4294967295)) { return 103 }
+if (!op4_u32(4294967295, 0)) { return 104 }
+if (op4_u32(4294967295, 4294967295)) { return 105 }
+if (op5_u32(0, 4294967295)) { return 106 }
+if (!op5_u32(4294967295, 0)) { return 107 }
+if (!op5_u32(4294967295, 4294967295)) { return 108 }
+if (op0_i64(-9223372036854775808, 9223372036854775807)) { return 109 }
+if (op0_i64(9223372036854775807, -9223372036854775808)) { return 110 }
+if (!op0_i64(9223372036854775807, 9223372036854775807)) { return 111 }
+if (!op1_i64(-9223372036854775808, 9223372036854775807)) { return 112 }
+if (!op1_i64(9223372036854775807, -9223372036854775808)) { return 113 }
+if (op1_i64(9223372036854775807, 9223372036854775807)) { return 114 }
+if (!op2_i64(-9223372036854775808, 9223372036854775807)) { return 115 }
+if (op2_i64(9223372036854775807, -9223372036854775808)) { return 116 }
+if (op2_i64(9223372036854775807, 9223372036854775807)) { return 117 }
+if (!op3_i64(-9223372036854775808, 9223372036854775807)) { return 118 }
+if (op3_i64(9223372036854775807, -9223372036854775808)) { return 119 }
+if (!op3_i64(9223372036854775807, 9223372036854775807)) { return 120 }
+if (op4_i64(-9223372036854775808, 9223372036854775807)) { return 121 }
+if (!op4_i64(9223372036854775807, -9223372036854775808)) { return 122 }
+if (op4_i64(9223372036854775807, 9223372036854775807)) { return 123 }
+if (op5_i64(-9223372036854775808, 9223372036854775807)) { return 124 }
+if (!op5_i64(9223372036854775807, -9223372036854775808)) { return 125 }
+if (!op5_i64(9223372036854775807, 9223372036854775807)) { return 126 }
+if (op0_u64(0, 18446744073709551615)) { return 127 }
+if (op0_u64(18446744073709551615, 0)) { return 128 }
+if (!op0_u64(18446744073709551615, 18446744073709551615)) { return 129 }
+if (!op1_u64(0, 18446744073709551615)) { return 130 }
+if (!op1_u64(18446744073709551615, 0)) { return 131 }
+if (op1_u64(18446744073709551615, 18446744073709551615)) { return 132 }
+if (!op2_u64(0, 18446744073709551615)) { return 133 }
+if (op2_u64(18446744073709551615, 0)) { return 134 }
+if (op2_u64(18446744073709551615, 18446744073709551615)) { return 135 }
+if (!op3_u64(0, 18446744073709551615)) { return 136 }
+if (op3_u64(18446744073709551615, 0)) { return 137 }
+if (!op3_u64(18446744073709551615, 18446744073709551615)) { return 138 }
+if (op4_u64(0, 18446744073709551615)) { return 139 }
+if (!op4_u64(18446744073709551615, 0)) { return 140 }
+if (op4_u64(18446744073709551615, 18446744073709551615)) { return 141 }
+if (op5_u64(0, 18446744073709551615)) { return 142 }
+if (!op5_u64(18446744073709551615, 0)) { return 143 }
+if (!op5_u64(18446744073709551615, 18446744073709551615)) { return 144 }
+if (!mixed(4294967295, 18446744073709551615)) { return 145 }
+if (!signedMixed(-128, 32767)) { return 146 }
+if (!op2_u64(9223372036854775807, 9223372036854775808)) { return 147 }
+if (op2_u64(9223372036854775808, 9223372036854775807)) { return 148 }
+return 0
+}

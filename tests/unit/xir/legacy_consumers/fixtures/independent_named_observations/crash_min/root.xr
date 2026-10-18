@@ -1,0 +1,17 @@
+// Test: just define and use a class
+
+class Box {
+    value: i64
+    init(v: i64) {
+        this.value = v
+    }
+}
+
+@test
+fn test_crash_min() {
+
+    for (var i = 0; i < 200; i++) {
+        var b = Box(i)
+        print(b.value)
+    }
+}

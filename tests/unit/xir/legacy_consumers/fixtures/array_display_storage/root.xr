@@ -1,0 +1,12 @@
+enum Failure {
+    Bad { ints: Array<i64>, strings: Array<string>, nested: Array<Array<i64>> }
+}
+
+fn fail() {
+    var min: i64 = -9223372036854775807 - 1
+    var max: i64 = 9223372036854775807
+    var nested: Array<Array<i64>> = [[1, 2], []]
+    throw Failure.Bad { ints: [min, max], strings: ["A\0中"], nested: nested }
+}
+
+fail()

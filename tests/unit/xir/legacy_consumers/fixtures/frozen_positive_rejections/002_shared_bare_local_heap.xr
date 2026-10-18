@@ -1,0 +1,10 @@
+var source: Array<i64> = [1, 2]
+const snapshot = source
+print(len(snapshot))
+
+source[0] = 9
+source.push(3)
+print(snapshot[0])
+print(len(snapshot))
+print(source[0])
+print(len(source))

@@ -1,0 +1,133 @@
+fn appendUtf8(output: ref Array<u8>, value: string) {
+    var bytes: Slice<u8> = value.bytes()
+    for (byte in bytes) { output.push(byte) }
+}
+
+// 0720_stringbuilder.xr
+// 作者：xingleixu@gmail.com
+// Test owned UTF-8 accumulation after builder retirement.
+
+// ===== 基本操作 =====
+
+@test
+fn test_basic_append() {
+    var output: Array<u8> = []
+    appendUtf8(ref output, string("Hello"))
+    appendUtf8(ref output, string(" "))
+    appendUtf8(ref output, string("World"))
+    assertEqual(string.fromUtf8(output[:]), "Hello World")
+}
+
+@test
+fn test_chain_append() {
+    var output: Array<u8> = []
+    appendUtf8(ref output, "a")
+    appendUtf8(ref output, "b")
+    appendUtf8(ref output, "c")
+    assertEqual(string.fromUtf8(output[:]), "abc")
+}
+
+// ===== 不同类型 =====
+
+@test
+fn test_append_int() {
+    var output: Array<u8> = []
+    appendUtf8(ref output, string("num: "))
+    appendUtf8(ref output, string(42))
+    assertEqual(string.fromUtf8(output[:]), "num: 42")
+}
+
+@test
+fn test_append_float() {
+    var output: Array<u8> = []
+    appendUtf8(ref output, string("pi: "))
+    appendUtf8(ref output, string(3.14))
+    var result = string.fromUtf8(output[:])
+    assertEqual(result.startsWith("pi: 3.14"), true)
+}
+
+@test
+fn test_mixed_types() {
+    var output: Array<u8> = []
+    appendUtf8(ref output, string("count="))
+    appendUtf8(ref output, string(100))
+    appendUtf8(ref output, string(", ok="))
+    appendUtf8(ref output, string(true))
+    var result = string.fromUtf8(output[:])
+    assertEqual(result.contains("100"), true)
+}
+
+@test
+fn test_append_char() {
+    var output: Array<u8> = []
+    appendUtf8(ref output, string("hex="))
+    appendUtf8(ref output, string("0123456789abcdef".runes().nth(10)))
+    appendUtf8(ref output, string(", unicode="))
+    appendUtf8(ref output, string("你好".runes().nth(1)))
+    assertEqual(string.fromUtf8(output[:]), "hex=a, unicode=好")
+}
+
+// ===== 循环中使用 =====
+
+@test
+fn test_loop_append() {
+    var output: Array<u8> = []
+    for (i in 0..5) {
+        appendUtf8(ref output, string("x"))
+    }
+    assertEqual(string.fromUtf8(output[:]), "xxxxx")
+}
+
+@test
+fn test_loop_numbers() {
+    var output: Array<u8> = []
+    for (i in 1..4) {
+        if (i > 1) {
+            appendUtf8(ref output, string(","))
+        }
+        appendUtf8(ref output, string(i))
+    }
+    assertEqual(string.fromUtf8(output[:]), "1,2,3")
+}
+
+// ===== clear 方法 =====
+
+@test
+fn test_clear() {
+    var output: Array<u8> = []
+    appendUtf8(ref output, string("test"))
+    output.clear()
+    appendUtf8(ref output, string("new"))
+    assertEqual(string.fromUtf8(output[:]), "new")
+}
+
+@test
+fn test_clear_then_reuse() {
+    var output: Array<u8> = []
+    appendUtf8(ref output, string("first"))
+    var firstSnapshot = string.fromUtf8(output[:])
+    assertEqual(firstSnapshot, "first")
+    output.clear()
+    appendUtf8(ref output, string("second"))
+    assertEqual(string.fromUtf8(output[:]), "second")
+    assertEqual(firstSnapshot, "first")
+}
+
+// ===== 空 StringBuilder =====
+
+@test
+fn test_empty() {
+    var output: Array<u8> = []
+    assertEqual(string.fromUtf8(output[:]), "")
+}
+
+// ===== 大量数据 =====
+
+@test
+fn test_large_append() {
+    var output: Array<u8> = []
+    for (i in 0..100) {
+        appendUtf8(ref output, string("a"))
+    }
+    assertEqual(len(string.fromUtf8(output[:])), 100)
+}

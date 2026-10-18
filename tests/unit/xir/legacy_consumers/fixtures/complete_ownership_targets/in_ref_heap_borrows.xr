@@ -1,0 +1,54 @@
+class Box {
+    value: i64
+
+    init(v: i64) {
+        this.value = v
+    }
+
+    get() -> i64 {
+        return this.value
+    }
+
+    set(v: i64) {
+        this.value = v
+    }
+}
+
+fn sum(data: Array<i64>) -> i64 {
+    var total = 0
+    for (item in data) {
+        total = total + item
+    }
+    return total
+}
+
+fn put(table: ref Map<string, i64>, key: string, value: i64) {
+    table.set(key, value)
+}
+
+fn hasKey(table: Map<string, i64>, key: string) -> bool {
+    return table.containsKey(key)
+}
+
+fn setBox(box: ref Box, value: i64) {
+    box.set(value)
+}
+
+fn readBox(box: Box) -> i64 {
+    return box.get()
+}
+
+var values: Array<i64> = [1, 2, 3]
+print(sum(values))
+values.push(4)
+print(sum(values))
+
+var table: Map<string, i64> = #{}
+put(ref table, "x", 7)
+print(hasKey(table, "x"))
+print(table["x"])
+
+var box = Box(3)
+print(readBox(box))
+setBox(ref box, 8)
+print(readBox(box))

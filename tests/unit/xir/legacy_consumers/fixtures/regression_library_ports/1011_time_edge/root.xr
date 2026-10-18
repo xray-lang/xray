@@ -1,0 +1,58 @@
+// 1011_time_edge.xr - Time module edge case tests
+
+import time
+
+// ===== Monotonic clock ordering =====
+
+@test
+fn test_monotonic_ordering() {
+    var t1 = time.monotonic()
+    var t2 = time.monotonic()
+    var t3 = time.monotonic()
+    assert(t3 >= t2)
+    assert(t2 >= t1)
+}
+
+// ===== time.now precision =====
+
+@test
+fn test_now_returns_milliseconds() {
+    var t = time.now()
+    // Should be in milliseconds (13+ digits since 2001)
+    assert(t > 1000000000000)
+}
+
+@test
+fn test_now_advances() {
+    var t1 = time.now()
+    time.sleep(10)
+    var t2 = time.now()
+    assert(t2 > t1)
+}
+
+// ===== time.clock accumulates =====
+
+@test
+fn test_clock_non_negative() {
+    var c = time.clock()
+    assert(c >= 0)
+}
+
+// ===== time.sleep boundary =====
+
+@test
+fn test_sleep_zero() {
+    var start = time.monotonic()
+    time.sleep(0)
+    var end = time.monotonic()
+    assert(end >= start)
+}
+
+@test
+fn test_sleep_small() {
+    var start = time.monotonic()
+    time.sleep(1)
+    var end = time.monotonic()
+    assert(end >= start)
+    assert(end - start >= 1)
+}

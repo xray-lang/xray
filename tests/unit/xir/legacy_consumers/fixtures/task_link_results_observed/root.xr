@@ -1,0 +1,68 @@
+// Test plain await and TaskResult status for failed/cancelled tasks
+
+import time
+
+enum LinkErr { Msg { message: string } }
+
+fn failing() -> i64 {
+    throw LinkErr.Msg { message: "link error" }
+    return 0
+}
+fn slow_work() -> i64 {
+    time.sleep(50)
+    return 1
+}
+fn ok() -> i64 {
+    return 42
+}
+fn test_cancel_result() {
+    var t = go slow_work()
+    t.cancel()
+    var r = t.awaitResult()
+    print(match (r) {
+        TaskResult.Cancelled -> true
+        _ -> false
+    })
+    match (r) {
+        TaskResult.Cancelled -> assert(true, "cancelled task should return TaskResult.Cancelled")
+        _ -> assert(false, "cancelled task should not return a value")
+    }
+}
+fn test_failed_result() {
+    var t = go failing()
+    var r = t.awaitResult()
+    print(match (r) {
+        TaskResult.Failed { error: _ } -> true
+        _ -> false
+    })
+    match (r) {
+        TaskResult.Failed { error: _ } -> assert(true, "failed task should return TaskResult.Failed")
+        _ -> assert(false, "failed task should not return success")
+    }
+}
+fn test_both_ok() {
+    var t1 = go ok()
+    var t2 = go ok()
+    var r1 = await t1
+    var r2 = await t2
+    print(r1)
+    assert(r1 == 42)
+    print(r2)
+    assert(r2 == 42)
+}
+
+@test
+fn test_task_link() {
+
+
+
+    // Test 1: explicit cancellation reports TaskResult.Cancelled
+
+    // Test 2: failure reports TaskResult.Failed
+
+    // Test 3: both succeed
+
+    test_cancel_result()
+    test_failed_result()
+    test_both_ok()
+}

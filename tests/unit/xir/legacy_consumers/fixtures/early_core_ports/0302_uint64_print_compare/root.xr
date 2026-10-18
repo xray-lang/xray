@@ -1,0 +1,18 @@
+@test
+fn test_uint64_unsigned_format_and_compare() {
+    var max: u64 = 9223372036854775807
+    var high: u64 = max + 1
+    var all: u64 = 0 - 1
+    var zero: u64 = 0
+
+    assertEqual(string(high), "9223372036854775808")
+    assertEqual("${high}", "9223372036854775808")
+    assertEqual("u=" + string(high) + ":" + string(all),
+              "u=9223372036854775808:18446744073709551615")
+
+    assertEqual(high > zero, true)
+    assertEqual(zero < high, true)
+    assertEqual(all > high, true)
+    assertEqual(high <= all, true)
+    assertEqual(high < zero, false)
+}

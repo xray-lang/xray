@@ -1,0 +1,169 @@
+// Preserve every original enum/Atomic body and capture each original invocation exactly once.
+// 0914_atomic_basic.xr
+// Atomic<T> basic operations: load, store, add, sub, fetchAdd, fetchSub,
+// swap, compareExchange, toggle, toString, Ordering enum
+
+@test
+fn test_atomic_int_load_store() {
+    const a = Atomic(0)
+    var p19Observed0 = a.load()
+    assertEqual(p19Observed0, 0)
+    print(p19Observed0)
+    a.store(42)
+    var p19Observed1 = a.load()
+    assertEqual(p19Observed1, 42)
+    print(p19Observed1)
+}
+
+@test
+fn test_atomic_int_add_sub() {
+    const a = Atomic(10)
+    a.add(5)
+    var p19Observed2 = a.load()
+    assertEqual(p19Observed2, 15)
+    print(p19Observed2)
+    a.sub(3)
+    var p19Observed3 = a.load()
+    assertEqual(p19Observed3, 12)
+    print(p19Observed3)
+}
+
+@test
+fn test_atomic_int_fetch_add_sub() {
+    const a = Atomic(10)
+    var old1 = a.fetchAdd(5)
+    var p19Observed4 = old1
+    assertEqual(p19Observed4, 10)
+    print(p19Observed4)
+    var p19Observed5 = a.load()
+    assertEqual(p19Observed5, 15)
+    print(p19Observed5)
+    var old2 = a.fetchSub(3)
+    var p19Observed6 = old2
+    assertEqual(p19Observed6, 15)
+    print(p19Observed6)
+    var p19Observed7 = a.load()
+    assertEqual(p19Observed7, 12)
+    print(p19Observed7)
+}
+
+@test
+fn test_atomic_int_swap() {
+    const a = Atomic(1)
+    var old = a.swap(99)
+    var p19Observed8 = old
+    assertEqual(p19Observed8, 1)
+    print(p19Observed8)
+    var p19Observed9 = a.load()
+    assertEqual(p19Observed9, 99)
+    print(p19Observed9)
+}
+
+@test
+fn test_atomic_int_compare_exchange_success() {
+    const a = Atomic(0)
+    var (prev, ok) = a.compareExchange(0, 1)
+    var p19Observed10 = prev
+    assertEqual(p19Observed10, 0)
+    print(p19Observed10)
+    var p19Observed11 = ok
+    assertEqual(p19Observed11, true)
+    print(p19Observed11)
+    var p19Observed12 = a.load()
+    assertEqual(p19Observed12, 1)
+    print(p19Observed12)
+}
+
+@test
+fn test_atomic_int_compare_exchange_failure() {
+    const a = Atomic(5)
+    var (prev, ok) = a.compareExchange(0, 1)
+    var p19Observed13 = ok
+    assertEqual(p19Observed13, false)
+    print(p19Observed13)
+    var p19Observed14 = prev
+    assertEqual(p19Observed14, 5)
+    print(p19Observed14)
+    var p19Observed15 = a.load()
+    assertEqual(p19Observed15, 5)
+    print(p19Observed15)
+}
+
+@test
+fn test_atomic_bool_load_store() {
+    const flag = Atomic(false)
+    var p19Observed16 = flag.load()
+    assertEqual(p19Observed16, false)
+    print(p19Observed16)
+    flag.store(true)
+    var p19Observed17 = flag.load()
+    assertEqual(p19Observed17, true)
+    print(p19Observed17)
+}
+
+@test
+fn test_atomic_bool_toggle() {
+    const flag = Atomic(false)
+    var was = flag.toggle()
+    var p19Observed18 = was
+    assertEqual(p19Observed18, false)
+    print(p19Observed18)
+    var p19Observed19 = flag.load()
+    assertEqual(p19Observed19, true)
+    print(p19Observed19)
+    var was2 = flag.toggle()
+    var p19Observed20 = was2
+    assertEqual(p19Observed20, true)
+    print(p19Observed20)
+    var p19Observed21 = flag.load()
+    assertEqual(p19Observed21, false)
+    print(p19Observed21)
+}
+
+@test
+fn test_atomic_float_load_store() {
+    const rate = Atomic(0.0)
+    var p19Observed22 = rate.load()
+    assertEqual(p19Observed22, 0.0)
+    print(p19Observed22)
+    rate.store(3.14)
+    var p19Observed23 = rate.load()
+    assertEqual(p19Observed23, 3.14)
+    print(p19Observed23)
+}
+
+@test
+fn test_atomic_float_add_sub() {
+    const rate = Atomic(1.0)
+    rate.add(0.5)
+    var p19Observed24 = rate.load()
+    assertEqual(p19Observed24, 1.5)
+    print(p19Observed24)
+    rate.sub(0.25)
+    var p19Observed25 = rate.load()
+    assertEqual(p19Observed25, 1.25)
+    print(p19Observed25)
+}
+
+@test
+fn test_atomic_to_string() {
+    const a = Atomic(42)
+    var s = a.toString()
+    var p19Observed26 = s
+    assertEqual(p19Observed26, "42")
+    print(p19Observed26)
+}
+
+@test
+fn test_atomic_ordering_enum() {
+    const a = Atomic(0)
+    a.store(1, Ordering.Relaxed)
+    var v = a.load(Ordering.Relaxed)
+    var p19Observed27 = v
+    assertEqual(p19Observed27, 1)
+    print(p19Observed27)
+    a.store(2, Ordering.SeqCst)
+    var p19Observed28 = a.load(Ordering.SeqCst)
+    assertEqual(p19Observed28, 2)
+    print(p19Observed28)
+}

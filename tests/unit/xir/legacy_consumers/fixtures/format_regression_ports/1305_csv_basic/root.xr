@@ -1,0 +1,153 @@
+// Typed CSV module contract.
+
+import csv
+import {
+    CsvDelimiter,
+    CsvDocument,
+    CsvError,
+    CsvErrorKind,
+    CsvHeader,
+    defaultParseOptions
+} from csv
+
+@test
+fn test_parse_basic() {
+    var doc = csv.parse("name,age,city\nAlice,30,Beijing\nBob,25,Shanghai")
+    assertEqual(len(doc.headers), 0)
+    assertEqual(len(doc.rows), 3)
+    assertEqual(doc.rows[1][0], "Alice")
+    assertEqual(doc.rows[1][1], "30")
+}
+
+@test
+fn test_header_modes() {
+    var first = defaultParseOptions()
+    first.header = CsvHeader.FirstRow
+    var doc = csv.parse("name,age\nAlice,30\nBob,25", first)
+    assertEqual(doc.headers[0], "name")
+    assertEqual(len(doc.rows), 2)
+
+    var names: Array<string> = ["user", "score"]
+    var explicit = defaultParseOptions()
+    explicit.header = CsvHeader.Explicit { names: names }
+    var explicitDoc = csv.parse("Alice,30\nBob,25", explicit)
+    assertEqual(explicitDoc.headers[0], "user")
+    assertEqual(explicitDoc.rows[1][1], "25")
+}
+
+@test
+fn test_parse_quoted_and_escaped() {
+    var doc = csv.parse("name,desc\n\"John\",\"Hello, World\"\n\"Test\",\"He said \"\"Hello\"\"\"")
+    assertEqual(doc.rows[1][1], "Hello, World")
+    assertEqual(doc.rows[2][1], "He said \"Hello\"")
+}
+
+@test
+fn test_parse_report_and_strict_error() {
+    var report = csv.parseReport("a,b\n1,2\n3")
+    assertEqual(len(report.document.rows), 3)
+    assertEqual(len(report.diagnostics), 1)
+    assert(report.diagnostics[0].kind == CsvErrorKind.FieldCountMismatch)
+    assertEqual(report.diagnostics[0].line, 3)
+    assertEqual(report.diagnostics[0].record, 2)
+
+    var rejected = false
+    try {
+        csv.parse("a,b\n1")
+    } catch (e: CsvError) {
+        rejected = match (e) {
+            CsvError.FieldCountMismatch { byteOffset: offset, line, record, column, message } -> record == 1,
+            _ -> false
+        }
+    }
+    assert(rejected)
+}
+
+@test
+fn test_exact_and_auto_delimiters() {
+    var tsvOptions = defaultParseOptions()
+    tsvOptions.delimiter = CsvDelimiter.Exact { delimiter: '\t' }
+    var tsv = csv.parse("a\tb\tc\n1\t2\t3", tsvOptions)
+    assertEqual(tsv.rows[0][1], "b")
+
+    var autoOptions = defaultParseOptions()
+    autoOptions.delimiter = CsvDelimiter.Auto
+    var auto = csv.parse("a|b|c\n1|2|3", autoOptions)
+    assertEqual(auto.rows[1][1], "2")
+}
+
+@test
+fn test_parse_options() {
+    var options = defaultParseOptions()
+    options.skipRecords = 2
+    options.maxRecords = 2
+    options.trimFields = true
+    var doc = csv.parse("skip1\nskip2\n a , b \n 1 , 2 \n3,4", options)
+    assertEqual(len(doc.rows), 2)
+    assertEqual(doc.rows[0][0], "a")
+    assertEqual(doc.rows[1][1], "2")
+}
+
+@test
+fn test_comment_quoting_empty_fields_and_crlf() {
+    var options = defaultParseOptions()
+    options.commentPrefix = "#"
+    var doc = csv.parse("\"# value\",x,\r\n# comment\r\n1,,3", options)
+    assertEqual(len(doc.rows), 2)
+    assertEqual(doc.rows[0][0], "# value")
+    assertEqual(len(doc.rows[0]), 3)
+    assertEqual(len(doc.rows[1]), 3)
+    assertEqual(doc.rows[1][1], "")
+}
+
+@test
+fn test_stringify_roundtrip() {
+    var doc = CsvDocument()
+    doc.headers.push("name")
+    doc.headers.push("note")
+    doc.rows.push(["Alice", "hello, world"])
+    doc.rows.push(["Bob", "quote \" me"])
+    var output = csv.stringify(doc)
+    assert(output.contains("\"hello, world\""))
+    assert(output.contains("\"quote \"\" me\""))
+
+    var options = defaultParseOptions()
+    options.header = CsvHeader.FirstRow
+    var reparsed = csv.parse(output, options)
+    assertEqual(reparsed.headers[0], "name")
+    assertEqual(reparsed.rows[1][1], "quote \" me")
+}
+
+@test
+fn test_unterminated_quote_preserves_partial_row() {
+    var report = csv.parseReport("a,b\n\"unterminated")
+    assertEqual(len(report.diagnostics), 2)
+    assert(report.diagnostics[0].kind == CsvErrorKind.UnterminatedQuote)
+    assertEqual(len(report.document.rows), 2)
+    assertEqual(report.document.rows[1][0], "unterminated")
+}
+
+@test
+fn test_limits() {
+    var options = defaultParseOptions()
+    options.maxColumns = 1
+    var rejected = false
+    try {
+        csv.parse("a,b", options)
+    } catch (e: CsvError) {
+        rejected = match (e) {
+            CsvError.ColumnLimitExceeded { limit } -> limit == 1,
+            _                                   -> false
+        }
+    }
+    assert(rejected)
+}
+
+@test
+fn test_mixed_linebreak_metadata() {
+    var report = csv.parseReport("a,b\r\n1,2\n3,4\r5,6")
+    assertEqual(len(report.document.rows), 4)
+    assertEqual(report.linebreak, "mixed")
+}
+
+print("All typed CSV tests passed")

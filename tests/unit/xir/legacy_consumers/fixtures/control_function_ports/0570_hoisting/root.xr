@@ -1,0 +1,135 @@
+// 0570_hoisting.xr
+// Test: Function and class declaration hoisting at module level
+// Functions and classes can be called/used before their definition in source order.
+
+// ===== Basic function hoisting =====
+
+@test
+fn test_call_before_definition() {
+    var result = add(10, 20)
+    assertEqual(result, 30)
+}
+
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
+}
+
+// ===== Mutual recursion =====
+
+@test
+fn test_mutual_recursion() {
+    assertEqual(isEven(4), true)
+    assertEqual(isEven(3), false)
+    assertEqual(isOdd(3), true)
+    assertEqual(isOdd(4), false)
+}
+
+fn isEven(n: i64) -> bool {
+    if (n == 0) { return true }
+    return isOdd(n - 1)
+}
+
+fn isOdd(n: i64) -> bool {
+    if (n == 0) { return false }
+    return isEven(n - 1)
+}
+
+// ===== Function references class defined after it =====
+
+fn createDog(name: string) -> Dog {
+    return Dog(name)
+}
+
+class Dog {
+    name: string
+    init(name: string) {
+        this.name = name
+    }
+}
+
+@test
+fn test_fn_before_class() {
+    var d = createDog("Rex")
+    assertEqual(d.name, "Rex")
+}
+
+// ===== Class method calls function defined after it =====
+
+class Formatter {
+    format(s: string) -> string {
+        return addBrackets(s)
+    }
+}
+
+fn addBrackets(s: string) -> string {
+    return "[" + s + "]"
+}
+
+@test
+fn test_class_method_uses_later_fn() {
+    var f = Formatter()
+    assertEqual(f.format("hello"), "[hello]")
+}
+
+// ===== Definition before call still works =====
+
+fn multiply(x: i64, y: i64) -> i64 {
+    return x * y
+}
+
+@test
+fn test_definition_before_call() {
+    assertEqual(multiply(3, 4), 12)
+}
+
+// ===== Function uses variable defined before it (upvalue) =====
+
+var factor = 10
+
+fn scaled(x: i64) -> i64 {
+    return x * factor
+}
+
+@test
+fn test_fn_captures_variable() {
+    assertEqual(scaled(5), 50)
+}
+
+// ===== Block-level hoisting =====
+
+@test
+fn test_block_call_before_definition() {
+    var r = greetBlock("world")
+    assertEqual(r, "hello world")
+
+    fn greetBlock(name: string) -> string {
+        return "hello " + name
+    }
+}
+
+@test
+fn test_block_closure_capture_with_hoisting() {
+    var x = 10
+    var result = getDoubled()
+    assertEqual(result, 20)
+
+    fn getDoubled() -> i64 {
+        return x * 2
+    }
+}
+
+@test
+fn test_block_mutual_recursion() {
+    assertEqual(blockEven(4), true)
+    assertEqual(blockEven(3), false)
+
+    fn blockEven(n: i64) -> bool {
+        if (n == 0) { return true }
+        return blockOdd(n - 1)
+    }
+
+    fn blockOdd(n: i64) -> bool {
+        if (n == 0) { return false }
+        return blockEven(n - 1)
+    }
+}

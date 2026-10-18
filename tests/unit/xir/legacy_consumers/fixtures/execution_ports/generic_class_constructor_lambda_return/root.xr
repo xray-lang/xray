@@ -1,0 +1,28 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+class Box<T> {
+    values: Array<T>
+
+    init(initializer: fn(i64) -> T) {
+        var states: Array<T> = []
+        for (lane in 0..3) {
+            states.push(initializer(lane))
+        }
+        this.values = states
+    }
+
+    get(i: i64) -> T {
+        return this.values[i]
+    }
+}
+
+var seen: Array<i64> = []
+var box = Box<i64>((lane) -> {
+    seen.push(lane)
+    return 100 + lane
+})
+
+print(len(seen))
+print(seen[0])
+print(seen[2])
+print(box.get(0))
+print(box.get(2))

@@ -1,0 +1,55 @@
+fn main() {
+    var xs = [1, 2, 3]
+    try {
+        xs.reserve(-4)
+        print("unreachable reserve")
+    } catch panic (p) {
+        print(p.code)
+    }
+    print(len(xs))
+    xs.resize(5, 9)
+    print(len(xs))
+    print(xs[3])
+    print(xs[4])
+    try {
+        xs.resize(-2, 7)
+        print("unreachable resize")
+    } catch panic (p) {
+        print(p.code)
+    }
+    print(len(xs))
+    var ints = Array<i64>(2, 4)
+    ints.reserve(8)
+    print(len(ints))
+    print(ints.capacity >= 8)
+    ints.resize(4, 11)
+    print(ints[0])
+    print(ints[2])
+    print(ints[3])
+    // Slices are borrowed views: grow methods (reserve/resize/push) are
+    // rejected at compile time (see tests/compile_errors/type/span_owner_method),
+    // so only read semantics are exercised here.
+    var source = [10, 20, 30, 40, 50]
+    var view: Slice<i64> = source[1:4]
+    print(len(view))
+    print(view[0])
+    print(view[2])
+    print(len(source))
+    var bytes = Array<u8>(3, 5)
+    try {
+        bytes.resize(-9, 0)
+        print("unreachable byte-resize")
+    } catch panic (p) {
+        print(p.code)
+    }
+    print(len(bytes))
+    var before = ints
+    var oldCapacity = ints.capacity
+    var returned = ints.reserve(oldCapacity + 4)
+    returned[0] = 77
+    print(ints[0])
+    print(before.capacity == oldCapacity)
+    print(returned.capacity >= oldCapacity + 4)
+}
+
+main()

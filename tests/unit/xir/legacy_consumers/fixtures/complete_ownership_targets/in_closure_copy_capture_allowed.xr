@@ -1,0 +1,12 @@
+fn make(data: Array<i64>) -> fn() -> i64 {
+    var snapshot = data
+    return fn() -> i64 {
+        return len(snapshot)
+    }
+}
+
+var values: Array<i64> = [1, 2, 3, 4]
+var f = make(values)
+values.push(5)
+print(f())
+print(len(values))

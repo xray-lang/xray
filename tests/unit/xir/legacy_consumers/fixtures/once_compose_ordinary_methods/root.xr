@@ -1,0 +1,26 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
+// The guarded identity invokes its callback exactly once across three calls.
+
+class Once {
+    _sem: Semaphore
+    _done: bool
+    init() {
+        this._sem = Semaphore(1)
+        this._done = false
+    }
+    call(body: fn()) {
+        this._sem.acquire()
+        defer { this._sem.release() }
+        if (!this._done) {
+            body()
+            this._done = true
+        }
+    }
+}
+
+const counter = Atomic<i64>(0)
+var once = Once()
+once.call(() -> { counter.fetchAdd(1) })
+once.call(() -> { counter.fetchAdd(1) })
+once.call(() -> { counter.fetchAdd(1) })
+print(counter.load())   // 1 — body ran exactly once

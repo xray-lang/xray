@@ -1,0 +1,29 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// anchor: computed-accessor-inheritance
+// A finalized subclass carries inherited getter/setter summaries. VM field
+// dispatch must enter the frozen accessor table only for such classes, while
+// AOT resolves the same source-level accessors directly.
+
+class Counter {
+    _value: i64
+
+    init(initial: i64) {
+        this._value = initial
+    }
+
+    value: i64 {
+        fn() { return this._value }
+        fn(next: i64) { this._value = next }
+    }
+}
+
+class StepCounter extends Counter {
+    init(initial: i64) {
+        super(initial)
+    }
+}
+
+var counter = StepCounter(7)
+print(counter.value)
+counter.value = 42
+print(counter.value)

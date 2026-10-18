@@ -1,0 +1,184 @@
+// Retain every original numeric body and observe exact scalar values beyond positive-only predicates.
+// 0330_bitwise.xr
+// 作者：xingleixu@gmail.com
+// 测试：位运算符
+
+// ===== AND (&) =====
+
+@test
+fn test_and_basic() {
+    assertEqual(0b1100 & 0b1010, 0b1000)
+    assertEqual(0xFF & 0x0F, 0x0F)
+    assertEqual(12 & 10, 8)
+    print(0b1100 & 0b1010)
+    print(0xFF & 0x0F)
+    print(12 & 10)
+}
+
+@test
+fn test_and_zero() {
+    assertEqual(0xFF & 0, 0)
+    assertEqual(0 & 0xFF, 0)
+    print(0xFF & 0)
+    print(0 & 0xFF)
+}
+
+@test
+fn test_and_all_ones() {
+    assertEqual(0xFF & 0xFF, 0xFF)
+    print(0xFF & 0xFF)
+}
+
+// ===== OR (|) =====
+
+@test
+fn test_or_basic() {
+    assertEqual(0b1100 | 0b1010, 0b1110)
+    assertEqual(0xF0 | 0x0F, 0xFF)
+    assertEqual(12 | 10, 14)
+    print(0b1100 | 0b1010)
+    print(0xF0 | 0x0F)
+    print(12 | 10)
+}
+
+@test
+fn test_or_zero() {
+    assertEqual(0xFF | 0, 0xFF)
+    assertEqual(0 | 0xFF, 0xFF)
+    print(0xFF | 0)
+    print(0 | 0xFF)
+}
+
+@test
+fn test_or_same() {
+    assertEqual(0xFF | 0xFF, 0xFF)
+    print(0xFF | 0xFF)
+}
+
+// ===== XOR (^) =====
+
+@test
+fn test_xor_basic() {
+    assertEqual(0b1100 ^ 0b1010, 0b0110)
+    assertEqual(0xFF ^ 0x0F, 0xF0)
+    assertEqual(12 ^ 10, 6)
+    print(0b1100 ^ 0b1010)
+    print(0xFF ^ 0x0F)
+    print(12 ^ 10)
+}
+
+@test
+fn test_xor_zero() {
+    assertEqual(0xFF ^ 0, 0xFF)
+    assertEqual(0 ^ 0xFF, 0xFF)
+    print(0xFF ^ 0)
+    print(0 ^ 0xFF)
+}
+
+@test
+fn test_xor_same() {
+    assertEqual(0xFF ^ 0xFF, 0)  // 自身异或为 0
+    print(0xFF ^ 0xFF)
+}
+
+@test
+fn test_xor_swap() {
+    var a = 5
+    var b = 3
+    a = a ^ b
+    b = a ^ b
+    a = a ^ b
+    assertEqual(a, 3)
+    assertEqual(b, 5)
+    print(a)
+    print(b)
+}
+
+// ===== NOT (~) =====
+
+@test
+fn test_not_basic() {
+    assertEqual(~0, -1)
+    assertEqual(~(-1), 0)
+    print(~0)
+    print(~(-1))
+}
+
+@test
+fn test_not_byte() {
+    // ~0xFF 在 64 位上是很大的负数
+    var x = ~0xFF
+    assertEqual(x < 0, true)
+    print(x)
+    print(x < 0)
+}
+
+// ===== 移位运算 =====
+
+@test
+fn test_shl_basic() {
+    var x = 1
+    var shift = 3
+    var result = x << shift
+    assertEqual(result, 8)
+    print(result)
+}
+
+@test
+fn test_shr_basic() {
+    var x = 16
+    var shift = 2
+    var result = x >> shift
+    assertEqual(result, 4)
+    print(result)
+}
+
+// ===== 实际应用 =====
+
+@test
+fn test_check_bit() {
+    var flags = 0b1010
+    assertEqual((flags & 0b0010) != 0, true)   // 第 1 位设置
+    assertEqual((flags & 0b0001) != 0, false)  // 第 0 位未设置
+    print((flags & 0b0010) != 0)
+    print((flags & 0b0001) != 0)
+}
+
+@test
+fn test_set_bit() {
+    var flags = 0b0000
+    flags = flags | 0b0100  // 设置第 2 位
+    assertEqual(flags, 0b0100)
+    print(flags)
+}
+
+@test
+fn test_clear_bit() {
+    var flags = 0b1111
+    flags = flags & ~0b0100  // 清除第 2 位
+    assertEqual(flags, 0b1011)
+    print(flags)
+}
+
+@test
+fn test_toggle_bit() {
+    var flags = 0b1010
+    flags = flags ^ 0b0010  // 切换第 1 位
+    assertEqual(flags, 0b1000)
+    print(flags)
+    flags = flags ^ 0b0010  // 再次切换
+    assertEqual(flags, 0b1010)
+    print(flags)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_shift_large() {
+    var x = 1
+    var shift = 20
+    var result = x << shift
+    assertEqual(result > 0, true)
+    print(result)
+}
+

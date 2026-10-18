@@ -1,0 +1,30 @@
+// Preserve all original callable/nullable/Array/unary bodies; capture each actual call and fault projection once.
+@test
+fn test_bnot_owner_signed_64_bit_edges() {
+    var p19CallableValue0 = ~0
+    assertEqual(p19CallableValue0, -1)
+    print(p19CallableValue0)
+    var p19CallableValue1 = ~1
+    assertEqual(p19CallableValue1, -2)
+    print(p19CallableValue1)
+    var p19CallableValue2 = ~(-1)
+    assertEqual(p19CallableValue2, 0)
+    print(p19CallableValue2)
+    var p19CallableValue3 = ~9223372036854775807
+    assertEqual(p19CallableValue3, -9223372036854775807 - 1)
+    print(p19CallableValue3)
+    var p19CallableValue4 = ~(-9223372036854775807 - 1)
+    assertEqual(p19CallableValue4, 9223372036854775807)
+    print(p19CallableValue4)
+}
+
+@test
+fn test_bnot_owner_is_involutive() {
+    var values = [0, 1, -1, 42, -42, 9223372036854775807, -9223372036854775807 - 1]
+    print(len(values))
+    for (value in values) {
+        var p19BnotValue = ~~value
+        assertEqual(p19BnotValue, value)
+        print(p19BnotValue)
+    }
+}

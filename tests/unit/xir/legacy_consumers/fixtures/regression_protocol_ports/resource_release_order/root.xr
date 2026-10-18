@@ -1,0 +1,29 @@
+// anchor: defer-resource-release-lifo
+// spec §4.9 / §16.8: `defer { ... }` is the deterministic cross-backend cleanup
+// mechanism. Acquiring several resources and releasing them in cleanup blocks
+// must produce a
+// byte-identical LIFO release order on VM and AOT, independent of when the
+// objects themselves are reclaimed.
+class Resource {
+    name: string
+    init(name: string) {
+        this.name = name
+        print("open " + this.name)
+    }
+    close() {
+        print("close " + this.name)
+    }
+}
+
+fn use_resources() {
+    var a = Resource("A")
+    defer { a.close() }
+    var b = Resource("B")
+    defer { b.close() }
+    var c = Resource("C")
+    defer { c.close() }
+    print("work")
+}
+
+use_resources()
+print("done")

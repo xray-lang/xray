@@ -1,0 +1,40 @@
+// anchor: slice-window-shared-core
+fn main() {
+    var values = Array<i64>(6, 0)
+    var i = 0
+    while (i < 6) {
+        values[i] = i * 10
+        i = i + 1
+    }
+    var all: MutSlice<i64> = values[:]
+
+    var middle: MutSlice<i64> = all[1:4]
+    print(len(middle))
+    print(middle[0])
+    print(middle[2])
+
+    // A window is a view: writing through it reaches the source.
+    middle[1] = 99
+    print(middle[1])
+
+    // A window of a window keeps the same rule.
+    var inner: MutSlice<i64> = middle[1:3]
+    print(len(inner))
+    print(inner[0])
+    print(inner[1])
+
+    // An empty window is admissible anywhere inside the source, including
+    // exactly at its end.
+    var empty: Slice<i64> = all[6:6]
+    print(len(empty))
+    var emptyMiddle: Slice<i64> = all[2:2]
+    print(len(emptyMiddle))
+
+    // The whole source is a window of itself.
+    var whole: Slice<i64> = all[0:6]
+    print(len(whole))
+    print(whole[5])
+    assert(values[2] == 99)
+}
+
+main()

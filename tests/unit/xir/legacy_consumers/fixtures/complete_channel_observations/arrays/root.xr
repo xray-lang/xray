@@ -1,0 +1,141 @@
+fn sent(r: SendResult) -> bool {
+    return match (r) {
+        SendResult.Sent -> true
+        _ -> false
+    }
+}
+
+fn recv_array(ch: Channel<Array<i64>>) -> Array<i64> {
+    return match (ch.recv()) {
+        Recv.Value { value: v } -> v
+        _ -> []
+    }
+}
+
+fn forward_array(ch: Channel<Array<i64>>, data: Array<i64>) {
+    ch.send(data)
+}
+
+@test
+fn test_channel_send_value_preserves_source() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = [1, 2]
+    ch.send(xs)
+    xs.push(3)
+
+    var got = recv_array(ch)
+    got.push(99)
+
+    const p19Observed4 = len(xs)
+    assertEqual(p19Observed4, 3)
+    print(p19Observed4)
+    const p19Observed5 = len(got)
+    assertEqual(p19Observed5, 3)
+    print(p19Observed5)
+    const p19Observed6 = got[0]
+    assertEqual(p19Observed6, 1)
+    print(p19Observed6)
+    const p19Observed7 = got[1]
+    assertEqual(p19Observed7, 2)
+    print(p19Observed7)
+    const p19Observed8 = got[2]
+    assertEqual(p19Observed8, 99)
+    print(p19Observed8)
+    ch.close()
+}
+
+@test
+fn test_channel_try_send_value_preserves_source() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = [4, 5]
+    assert(sent(ch.trySend(xs)))
+    xs.push(6)
+
+    var got = recv_array(ch)
+    const p19Observed9 = len(xs)
+    assertEqual(p19Observed9, 3)
+    print(p19Observed9)
+    const p19Observed10 = len(got)
+    assertEqual(p19Observed10, 2)
+    print(p19Observed10)
+    const p19Observed11 = got[0]
+    assertEqual(p19Observed11, 4)
+    print(p19Observed11)
+    const p19Observed12 = got[1]
+    assertEqual(p19Observed12, 5)
+    print(p19Observed12)
+    ch.close()
+}
+
+@test
+fn test_channel_send_timeout_value_preserves_source() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = [7, 8]
+    assert(sent(ch.sendTimeout(xs, 0)))
+    xs.push(9)
+
+    var got = recv_array(ch)
+    const p19Observed13 = len(xs)
+    assertEqual(p19Observed13, 3)
+    print(p19Observed13)
+    const p19Observed14 = len(got)
+    assertEqual(p19Observed14, 2)
+    print(p19Observed14)
+    const p19Observed15 = got[0]
+    assertEqual(p19Observed15, 7)
+    print(p19Observed15)
+    const p19Observed16 = got[1]
+    assertEqual(p19Observed16, 8)
+    print(p19Observed16)
+    ch.close()
+}
+
+@test
+fn test_channel_send_value_preserves_source_after_send() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = Array<i64>(2, 0)
+    xs[0] = 10
+    xs[1] = 11
+    ch.send(xs)
+    xs.push(12)
+    const p19Observed17 = len(xs)
+    assertEqual(p19Observed17, 3)
+    print(p19Observed17)
+
+    var got = recv_array(ch)
+    const p19Observed18 = len(got)
+    assertEqual(p19Observed18, 2)
+    print(p19Observed18)
+    const p19Observed19 = got[0]
+    assertEqual(p19Observed19, 10)
+    print(p19Observed19)
+    const p19Observed20 = got[1]
+    assertEqual(p19Observed20, 11)
+    print(p19Observed20)
+    ch.close()
+}
+
+@test
+fn test_channel_send_helper_value_preserves_source() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = Array<i64>(2, 0)
+    xs[0] = 12
+    xs[1] = 13
+    forward_array(ch, xs)
+    xs.push(14)
+    const p19Observed21 = len(xs)
+    assertEqual(p19Observed21, 3)
+    print(p19Observed21)
+
+    var got = recv_array(ch)
+    const p19Observed22 = len(got)
+    assertEqual(p19Observed22, 2)
+    print(p19Observed22)
+    const p19Observed23 = got[0]
+    assertEqual(p19Observed23, 12)
+    print(p19Observed23)
+    const p19Observed24 = got[1]
+    assertEqual(p19Observed24, 13)
+    print(p19Observed24)
+    ch.close()
+}

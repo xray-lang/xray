@@ -1,0 +1,38 @@
+{
+  "status": "COMPLETE_WHOLE_AWAIT_TIMEOUT_NORMAL_DOMAIN_NOT_TIMER_QUALIFICATION",
+  "cases": [
+    {
+      "id": "complete_await_timeout_1117",
+      "oracle_id": "complete_await_timeout_1117",
+      "source": "tests/regression/11_coroutine/1117_await_timeout.xr",
+      "source_lf_sha256": "33374094c1db7c1bd382ab3e466805ee2d143e28a31148a80e56e11838ac6890",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1117_await_timeout.xr",
+        "lf_sha256": "33374094c1db7c1bd382ab3e466805ee2d143e28a31148a80e56e11838ac6890"
+      },
+      "entry": "run",
+      "source_context": "original_absolute",
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "stdout_utf8": "test1: fast task with timeout\n  result: 42\ntest2: immediate completion\n  result: 42\ntest3: already done task\n  result: 42\ntest4: timeout returns TaskResult.Timeout\n  timeout: true\n",
+      "stdout_utf8_options": [
+        "test1: fast task with timeout\n  result: -1\ntest2: immediate completion\n  result: -1\ntest3: already done task\n  result: 42\ntest4: timeout returns TaskResult.Timeout\n  timeout: false\n",
+        "test1: fast task with timeout\n  result: -1\ntest2: immediate completion\n  result: -1\ntest3: already done task\n  result: 42\ntest4: timeout returns TaskResult.Timeout\n  timeout: true\n",
+        "test1: fast task with timeout\n  result: -1\ntest2: immediate completion\n  result: 42\ntest3: already done task\n  result: 42\ntest4: timeout returns TaskResult.Timeout\n  timeout: false\n",
+        "test1: fast task with timeout\n  result: -1\ntest2: immediate completion\n  result: 42\ntest3: already done task\n  result: 42\ntest4: timeout returns TaskResult.Timeout\n  timeout: true\n",
+        "test1: fast task with timeout\n  result: 42\ntest2: immediate completion\n  result: -1\ntest3: already done task\n  result: 42\ntest4: timeout returns TaskResult.Timeout\n  timeout: false\n",
+        "test1: fast task with timeout\n  result: 42\ntest2: immediate completion\n  result: -1\ntest3: already done task\n  result: 42\ntest4: timeout returns TaskResult.Timeout\n  timeout: true\n",
+        "test1: fast task with timeout\n  result: 42\ntest2: immediate completion\n  result: 42\ntest3: already done task\n  result: 42\ntest4: timeout returns TaskResult.Timeout\n  timeout: false\n",
+        "test1: fast task with timeout\n  result: 42\ntest2: immediate completion\n  result: 42\ntest3: already done task\n  result: 42\ntest4: timeout returns TaskResult.Timeout\n  timeout: true\n"
+      ],
+      "owners": [
+        "P09",
+        "P10",
+        "P06",
+        "P13",
+        "P14"
+      ]
+    }
+  ]
+}

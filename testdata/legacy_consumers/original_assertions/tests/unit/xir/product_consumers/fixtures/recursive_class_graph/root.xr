@@ -1,0 +1,7 @@
+class Node {
+  next: Node?
+  init(next: Node?) { this.next = next }
+}
+fn answer(node: Node) -> i64 {
+  return 42
+}

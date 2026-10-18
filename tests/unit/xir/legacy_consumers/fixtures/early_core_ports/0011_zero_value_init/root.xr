@@ -1,0 +1,77 @@
+// Typed variables without initializer get zero values (default-initializable types only)
+
+@test
+fn test_int_zero_value() {
+    var a: i64
+    assertEqual(a, 0)
+}
+
+@test
+fn test_float_zero_value() {
+    var b: f64
+    assertEqual(b, 0.0)
+}
+
+@test
+fn test_bool_zero_value() {
+    var c: bool
+    assertEqual(c, false)
+}
+
+@test
+fn test_nullable_defaults_to_null() {
+    var e: i64?
+    assertEqual(e, null)
+}
+
+@test
+fn test_string_requires_initializer() {
+    // string is not default-initializable; must use explicit initializer
+    var d: string = ""
+    assertEqual(d, "")
+}
+
+struct DefaultPoint {
+    x: i64
+    y: i64
+}
+
+struct DefaultBox {
+    p: DefaultPoint
+    ok: bool
+}
+
+@test
+fn test_struct_zero_value_init() {
+    var p: DefaultPoint
+    assertEqual(p.x, 0)
+    assertEqual(p.y, 0)
+
+    p.x = 7
+    assertEqual(p.x, 7)
+
+    var box: DefaultBox
+    assertEqual(box.p.x, 0)
+    assertEqual(box.p.y, 0)
+    assertEqual(box.ok, false)
+}
+
+class BranchInitializedName {
+    name: string
+
+    init(flag: bool) {
+        if (flag) {
+            this.name = "yes"
+        } else {
+            this.name = "no"
+        }
+    }
+}
+
+@test
+fn test_class_field_initialized_in_both_branches() {
+    var yes = BranchInitializedName(true)
+    var no = BranchInitializedName(false)
+    assertEqual(yes.name, "yes")
+    assertEqual(no.name, "no")
+}

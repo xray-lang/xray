@@ -1,0 +1,296 @@
+// Observe the original scalar exactly once and retain every original test body.
+// 0520_closure.xr
+// 作者：xingleixu@gmail.com
+// 测试：闭包
+
+// ===== 基础闭包 =====
+
+@test
+fn test_closure_basic() {
+    fn makeCounter() -> fn() -> i64 {
+        var count = 0
+        fn increment() -> i64 {
+            count++
+            return count
+        }
+        return increment
+    }
+    
+    var counter = makeCounter()
+    var p19Observed0 = counter()
+    assertEqual(p19Observed0, 1)
+    print(p19Observed0)
+    var p19Observed1 = counter()
+    assertEqual(p19Observed1, 2)
+    print(p19Observed1)
+    var p19Observed2 = counter()
+    assertEqual(p19Observed2, 3)
+    print(p19Observed2)
+}
+
+@test
+fn test_closure_multiple_instances() {
+    fn makeCounter() -> fn() -> i64 {
+        var count = 0
+        fn increment() -> i64 {
+            count++
+            return count
+        }
+        return increment
+    }
+    
+    var c1 = makeCounter()
+    var c2 = makeCounter()
+    
+    var p19Observed3 = c1()
+    assertEqual(p19Observed3, 1)
+    print(p19Observed3)
+    var p19Observed4 = c1()
+    assertEqual(p19Observed4, 2)
+    print(p19Observed4)
+    var p19Observed5 = c2()
+    assertEqual(p19Observed5, 1)
+    print(p19Observed5)
+    var p19Observed6 = c1()
+    assertEqual(p19Observed6, 3)
+    print(p19Observed6)
+    var p19Observed7 = c2()
+    assertEqual(p19Observed7, 2)
+    print(p19Observed7)
+}
+
+// ===== 参数捕获 =====
+
+@test
+fn test_capture_param() {
+    fn makeAdder(x: i64) -> fn(i64) -> i64 {
+        fn add(y: i64) -> i64 {
+            return x + y
+        }
+        return add
+    }
+    
+    var add5 = makeAdder(5)
+    var add10 = makeAdder(10)
+    
+    var p19Observed8 = add5(3)
+    assertEqual(p19Observed8, 8)
+    print(p19Observed8)
+    var p19Observed9 = add10(3)
+    assertEqual(p19Observed9, 13)
+    print(p19Observed9)
+    var p19Observed10 = add5(add10(1))
+    assertEqual(p19Observed10, 16)
+    print(p19Observed10)
+}
+
+@test
+fn test_capture_multiple_params() {
+    fn makeRange(min: i64, max: i64) -> fn(i64) -> bool {
+        fn isInRange(x: i64) -> bool {
+            return x >= min && x <= max
+        }
+        return isInRange
+    }
+    
+    var inRange = makeRange(5, 10)
+    var p19Observed11 = inRange(3)
+    assertEqual(p19Observed11, false)
+    print(p19Observed11)
+    var p19Observed12 = inRange(5)
+    assertEqual(p19Observed12, true)
+    print(p19Observed12)
+    var p19Observed13 = inRange(7)
+    assertEqual(p19Observed13, true)
+    print(p19Observed13)
+    var p19Observed14 = inRange(10)
+    assertEqual(p19Observed14, true)
+    print(p19Observed14)
+    var p19Observed15 = inRange(12)
+    assertEqual(p19Observed15, false)
+    print(p19Observed15)
+}
+
+// ===== 修改外层变量 =====
+
+@test
+fn test_modify_outer() {
+    var x = 10
+    
+    fn modify() {
+        x = 20
+    }
+    
+    var p19Observed16 = x
+    assertEqual(p19Observed16, 10)
+    print(p19Observed16)
+    modify()
+    var p19Observed17 = x
+    assertEqual(p19Observed17, 20)
+    print(p19Observed17)
+}
+
+@test
+fn test_accumulator() {
+    fn makeAccumulator() -> fn(i64) -> i64 {
+        var total = 0
+        fn add(n: i64) -> i64 {
+            total += n
+            return total
+        }
+        return add
+    }
+    
+    var acc = makeAccumulator()
+    var p19Observed18 = acc(5)
+    assertEqual(p19Observed18, 5)
+    print(p19Observed18)
+    var p19Observed19 = acc(10)
+    assertEqual(p19Observed19, 15)
+    print(p19Observed19)
+    var p19Observed20 = acc(3)
+    assertEqual(p19Observed20, 18)
+    print(p19Observed20)
+}
+
+// ===== 嵌套闭包 =====
+
+@test
+fn test_nested_closure() {
+    fn outer(x: i64) -> fn(i64) -> fn(i64) -> i64 {
+        fn middle(y: i64) -> fn(i64) -> i64 {
+            fn inner(z: i64) -> i64 {
+                return x + y + z
+            }
+            return inner
+        }
+        return middle
+    }
+    
+    var f = outer(1)(2)
+    var p19Observed21 = f(3)
+    assertEqual(p19Observed21, 6)
+    print(p19Observed21)
+}
+
+@test
+fn test_deeply_nested() {
+    fn level1(a: i64) -> fn(i64) -> fn(i64) -> fn(i64) -> i64 {
+        fn level2(b: i64) -> fn(i64) -> fn(i64) -> i64 {
+            fn level3(c: i64) -> fn(i64) -> i64 {
+                fn level4(d: i64) -> i64 {
+                    return a + b + c + d
+                }
+                return level4
+            }
+            return level3
+        }
+        return level2
+    }
+    
+    var result = level1(1)(2)(3)(4)
+    var p19Observed22 = result
+    assertEqual(p19Observed22, 10)
+    print(p19Observed22)
+}
+
+// ===== 闭包工厂 =====
+
+@test
+fn test_multiplier_factory() {
+    fn createMultiplier(factor: i64) -> fn(i64) -> i64 {
+        fn multiply(x: i64) -> i64 {
+            return x * factor
+        }
+        return multiply
+    }
+    
+    var double = createMultiplier(2)
+    var triple = createMultiplier(3)
+    
+    var p19Observed23 = double(5)
+    assertEqual(p19Observed23, 10)
+    print(p19Observed23)
+    var p19Observed24 = triple(5)
+    assertEqual(p19Observed24, 15)
+    print(p19Observed24)
+}
+
+@test
+fn test_greeting_factory() {
+    fn createGreeter(greeting: string) -> fn(string) -> string {
+        fn greet(name: string) -> string {
+            return greeting + ", " + name + "!"
+        }
+        return greet
+    }
+    
+    var hello = createGreeter("Hello")
+    var hi = createGreeter("Hi")
+    
+    var p19Observed25 = hello("Alice")
+    assertEqual(p19Observed25, "Hello, Alice!")
+    print(p19Observed25)
+    var p19Observed26 = hi("Bob")
+    assertEqual(p19Observed26, "Hi, Bob!")
+    print(p19Observed26)
+}
+
+// ===== 闭包与循环 =====
+
+@test
+fn test_closure_captures_value() {
+    var funcs: Array<fn() -> i64> = []
+    for (var i = 0; i < 3; i++) {
+        var val = i  // 每次循环创建新变量
+        fn capture() -> i64 {
+            return val
+        }
+        funcs.push(capture)
+    }
+    
+    var p19Observed27 = funcs[0]()
+    assertEqual(p19Observed27, 0)
+    print(p19Observed27)
+    var p19Observed28 = funcs[1]()
+    assertEqual(p19Observed28, 1)
+    print(p19Observed28)
+    var p19Observed29 = funcs[2]()
+    assertEqual(p19Observed29, 2)
+    print(p19Observed29)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_closure_no_capture() {
+    fn outer() -> fn() -> i64 {
+        fn inner() -> i64 {
+            return 42
+        }
+        return inner
+    }
+    
+    var f = outer()
+    var p19Observed30 = f()
+    assertEqual(p19Observed30, 42)
+    print(p19Observed30)
+}
+
+@test
+fn test_closure_capture_const() {
+    const VALUE = 100
+    
+    fn getClosure() -> fn() -> i64 {
+        fn inner() -> i64 {
+            return VALUE
+        }
+        return inner
+    }
+    
+    var f = getClosure()
+    var p19Observed31 = f()
+    assertEqual(p19Observed31, 100)
+    print(p19Observed31)
+}
+

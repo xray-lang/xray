@@ -1,0 +1,2 @@
+struct Box<T> { value: T }
+print(Box<i64>{value: 41}.value + 1)

@@ -1,0 +1,14 @@
+// anchor: slice-array-negative-both
+fn main() {
+    var arr = [1, 2, 3, 4]
+    var middle: Slice<i64> = arr[-3:-1]
+    print(copy(middle))
+    var explicitCopyView: Slice<i64> = arr[-3:-1]
+    print(copy(explicitCopyView))
+    var clampedStart: Slice<i64> = arr[-999:-1]
+    print(copy(clampedStart))
+    var reversed: Slice<i64> = arr[-1:-999]
+    print(copy(reversed))
+}
+
+main()

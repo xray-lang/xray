@@ -1,0 +1,17 @@
+// anchor: known-empty-call-result-null
+// Reported divergence. A call to a body that returns nothing still produces a
+// value the caller may bind. It is Unit (), distinct from null. Inlining the
+// empty body must leave the binding with a definition rather than none.
+fn empty() { }
+
+fn run() {
+    fn local_empty() { }
+    var result = empty()
+    assert(typeName(result) == "()")
+    print(result)
+    var nested = local_empty()
+    assert(typeName(nested) == "()")
+    print(nested)
+}
+
+run()

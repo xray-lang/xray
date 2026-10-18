@@ -1,0 +1,34 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
+// Ordinary class methods update one guarded identity and preserve callback results.
+
+class Mutex<T> {
+    _sem: Semaphore
+    value: T
+
+    init(v: T) {
+        this._sem = Semaphore(1)
+        this.value = v
+    }
+
+    lock<U>(body: fn(T) -> U) -> U {
+        this._sem.acquire()
+        defer { this._sem.release() }
+        return body(this.value)
+    }
+
+    replace(body: fn(T) -> T) -> T {
+        this._sem.acquire()
+        defer { this._sem.release() }
+        this.value = body(this.value)
+        return this.value
+    }
+}
+
+var m = Mutex<i64>(10)
+print(m.lock((v) -> v * 2))       // 20 (reads guarded value)
+print(m.replace((v) -> v + 5))    // 15 (mutates guarded value under lock)
+print(m.lock((v) -> v))           // 15 (sees the mutation)
+
+var ms = Mutex<string>("a")
+print(ms.replace((s) -> s + "b")) // ab
+print(ms.lock((s) -> s + "!"))    // ab!

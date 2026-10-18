@@ -1,0 +1,71 @@
+// Preserve every original enum/Atomic body and capture each original invocation exactly once.
+// Cross-module error propagation via value-return channel.
+// Errors thrown in an imported module propagate correctly to the caller.
+
+import "./modules/error_source" as src
+
+@test fn catch_error_from_imported_module() {
+    var result = 0
+    try {
+        result = src.safe_div(10, 0)
+    } catch (e) {
+        result = -1
+    }
+    var p19Observed0 = result
+    assertEqual(p19Observed0, -1)
+    print(p19Observed0)
+}
+
+@test fn success_from_imported_module() {
+    var result = 0
+    try {
+        result = src.safe_div(10, 2)
+    } catch (e) {
+        result = -1
+    }
+    var p19Observed1 = result
+    assertEqual(p19Observed1, 5)
+    print(p19Observed1)
+}
+
+@test fn catch_cross_module_with_match() {
+    var msg = ""
+    try {
+        msg = src.validate("")
+    } catch (e) {
+        msg = "validation error"
+    }
+    var p19Observed2 = msg
+    assertEqual(p19Observed2, "validation error")
+    print(p19Observed2)
+}
+
+@test fn auto_propagation_cross_module() {
+    fn wrapper() -> i64 {
+        var x = src.safe_div(100, 0)
+        return x + 1
+    }
+    var result = 0
+    try {
+        result = wrapper()
+    } catch (e) {
+        result = -99
+    }
+    var p19Observed3 = result
+    assertEqual(p19Observed3, -99)
+    print(p19Observed3)
+}
+
+@test fn multiple_cross_module_calls() {
+    var sum = 0
+    try {
+        var a = src.safe_div(10, 2)
+        var b = src.safe_div(20, 4)
+        sum = a + b
+    } catch (e) {
+        sum = -1
+    }
+    var p19Observed4 = sum
+    assertEqual(p19Observed4, 10)
+    print(p19Observed4)
+}

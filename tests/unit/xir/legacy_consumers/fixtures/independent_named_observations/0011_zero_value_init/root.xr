@@ -1,0 +1,103 @@
+// Typed variables without initializer get zero values (default-initializable types only)
+
+@test
+fn test_int_zero_value() {
+    var a: i64
+    var p19SupportedValue1 = a
+    assertEqual(p19SupportedValue1, 0)
+    print(p19SupportedValue1)
+}
+
+@test
+fn test_float_zero_value() {
+    var b: f64
+    var p19SupportedValue2 = b
+    assertEqual(p19SupportedValue2, 0.0)
+    print(p19SupportedValue2)
+}
+
+@test
+fn test_bool_zero_value() {
+    var c: bool
+    var p19SupportedValue3 = c
+    assertEqual(p19SupportedValue3, false)
+    print(p19SupportedValue3)
+}
+
+@test
+fn test_nullable_defaults_to_null() {
+    var e: i64?
+    var p19SupportedValue4 = e
+    assertEqual(p19SupportedValue4, null)
+    print(p19SupportedValue4 == null)
+}
+
+@test
+fn test_string_requires_initializer() {
+    // string is not default-initializable; must use explicit initializer
+    var d: string = ""
+    var p19SupportedValue5 = d
+    assertEqual(p19SupportedValue5, "")
+    print(p19SupportedValue5)
+}
+
+struct DefaultPoint {
+    x: i64
+    y: i64
+}
+
+struct DefaultBox {
+    p: DefaultPoint
+    ok: bool
+}
+
+@test
+fn test_struct_zero_value_init() {
+    var p: DefaultPoint
+    var p19SupportedValue6 = p.x
+    assertEqual(p19SupportedValue6, 0)
+    print(p19SupportedValue6)
+    var p19SupportedValue7 = p.y
+    assertEqual(p19SupportedValue7, 0)
+    print(p19SupportedValue7)
+
+    p.x = 7
+    var p19SupportedValue8 = p.x
+    assertEqual(p19SupportedValue8, 7)
+    print(p19SupportedValue8)
+
+    var box: DefaultBox
+    var p19SupportedValue9 = box.p.x
+    assertEqual(p19SupportedValue9, 0)
+    print(p19SupportedValue9)
+    var p19SupportedValue10 = box.p.y
+    assertEqual(p19SupportedValue10, 0)
+    print(p19SupportedValue10)
+    var p19SupportedValue11 = box.ok
+    assertEqual(p19SupportedValue11, false)
+    print(p19SupportedValue11)
+}
+
+class BranchInitializedName {
+    name: string
+
+    init(flag: bool) {
+        if (flag) {
+            this.name = "yes"
+        } else {
+            this.name = "no"
+        }
+    }
+}
+
+@test
+fn test_class_field_initialized_in_both_branches() {
+    var yes = BranchInitializedName(true)
+    var no = BranchInitializedName(false)
+    var p19SupportedValue12 = yes.name
+    assertEqual(p19SupportedValue12, "yes")
+    print(p19SupportedValue12)
+    var p19SupportedValue13 = no.name
+    assertEqual(p19SupportedValue13, "no")
+    print(p19SupportedValue13)
+}

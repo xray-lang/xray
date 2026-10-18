@@ -4681,3 +4681,5 @@ add_subdirectory(xir/p11_materialization)
 add_subdirectory(xir/p11_recursive_data)
 add_subdirectory(xir/p11_import)
 add_subdirectory(xir/p11_ctfe_instance)
+# Register independent legacy controls without replacing product-owned tests.
+add_subdirectory(xir/legacy_consumers)

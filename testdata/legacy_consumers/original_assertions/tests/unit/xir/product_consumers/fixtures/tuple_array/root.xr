@@ -1,0 +1,9 @@
+fn answer() -> i64 {
+ var rows: Array<(string, string)> = []
+ var builder = StringBuilder()
+ builder.append("abcdefghijklmnopqrstu")
+ rows.push((builder.toString(), builder.toString()))
+ builder.clear()
+ return len(rows[0].0) + len(rows[0].1)
+}
+export fn consumerAnswer() -> i64 { return answer() }

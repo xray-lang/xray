@@ -1,0 +1,27 @@
+class Counter {
+    value: i64
+
+    init(v: i64) {
+        this.value = v
+    }
+
+    bump() {
+        this.value = this.value + 1
+    }
+
+    current() -> i64 {
+        return this.value
+    }
+}
+
+@test
+fn test_receiver_mutation_does_not_need_ref_marker() {
+    var counter = Counter(1)
+    counter.bump()
+    assertEqual(counter.current(), 2)
+
+    var values: Array<i64> = [1, 2]
+    values.push(3)
+    assertEqual(len(values), 3)
+    assertEqual(values[2], 3)
+}

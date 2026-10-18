@@ -1,0 +1,208 @@
+// 0800_class_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：类基础
+
+// ===== 简单类 =====
+
+class Point {
+    x: i64
+    y: i64
+
+    init(x: i64, y: i64) {
+        this.x = x
+        this.y = y
+    }
+
+    toString() -> string {
+        return "(${this.x}, ${this.y})"
+    }
+}
+
+@test
+fn test_class_instantiation() {
+    var p = Point(3, 4)
+    var p19SupportedValue1 = p.x
+    assertEqual(p19SupportedValue1, 3)
+    print(p19SupportedValue1)
+    var p19SupportedValue2 = p.y
+    assertEqual(p19SupportedValue2, 4)
+    print(p19SupportedValue2)
+}
+
+@test
+fn test_class_method() {
+    var p = Point(5, 10)
+    var p19SupportedValue3 = p.toString()
+    assertEqual(p19SupportedValue3, "(5, 10)")
+    print(p19SupportedValue3)
+}
+
+// ===== 方法调用 =====
+
+class Counter {
+    count: i64
+
+    init() {
+        this.count = 0
+    }
+
+    increment() {
+        this.count = this.count + 1
+    }
+
+    decrement() {
+        this.count = this.count - 1
+    }
+
+    getValue() -> i64 {
+        return this.count
+    }
+}
+
+@test
+fn test_method_modifies_state() {
+    var c = Counter()
+    var p19SupportedValue4 = c.getValue()
+    assertEqual(p19SupportedValue4, 0)
+    print(p19SupportedValue4)
+
+    c.increment()
+    c.increment()
+    var p19SupportedValue5 = c.getValue()
+    assertEqual(p19SupportedValue5, 2)
+    print(p19SupportedValue5)
+
+    c.decrement()
+    var p19SupportedValue6 = c.getValue()
+    assertEqual(p19SupportedValue6, 1)
+    print(p19SupportedValue6)
+}
+
+// ===== 多个实例 =====
+
+@test
+fn test_multiple_instances() {
+    var c1 = Counter()
+    var c2 = Counter()
+
+    c1.increment()
+    c1.increment()
+    c2.increment()
+
+    var p19SupportedValue7 = c1.getValue()
+    assertEqual(p19SupportedValue7, 2)
+    print(p19SupportedValue7)
+    var p19SupportedValue8 = c2.getValue()
+    assertEqual(p19SupportedValue8, 1)
+    print(p19SupportedValue8)
+}
+
+// ===== 方法返回 this =====
+
+class Builder {
+    value: string
+
+    init() {
+        this.value = ""
+    }
+
+    append(s: string) -> Builder {
+        this.value += s
+        return this
+    }
+
+    build() -> string {
+        return this.value
+    }
+}
+
+@test
+fn test_method_chaining() {
+    var b = Builder()
+    var result = b.append("hello").append(" ").append("world").build()
+    var p19SupportedValue9 = result
+    assertEqual(p19SupportedValue9, "hello world")
+    print(p19SupportedValue9)
+}
+
+// ===== 默认值 =====
+
+class Config {
+    name: string
+    enabled: bool
+
+    init() {
+        this.name = "default"
+        this.enabled = true
+    }
+}
+
+@test
+fn test_default_values() {
+    var cfg = Config()
+    var p19SupportedValue10 = cfg.name
+    assertEqual(p19SupportedValue10, "default")
+    print(p19SupportedValue10)
+    var p19SupportedValue11 = cfg.enabled
+    assertEqual(p19SupportedValue11, true)
+    print(p19SupportedValue11)
+}
+
+// ===== 字段访问 =====
+
+class Person {
+    name: string
+    age: i64
+
+    init(name: string, age: i64) {
+        this.name = name
+        this.age = age
+    }
+}
+
+@test
+fn test_field_read() {
+    var p = Person("Alice", 30)
+    var p19SupportedValue12 = p.name
+    assertEqual(p19SupportedValue12, "Alice")
+    print(p19SupportedValue12)
+    var p19SupportedValue13 = p.age
+    assertEqual(p19SupportedValue13, 30)
+    print(p19SupportedValue13)
+}
+
+@test
+fn test_field_write() {
+    var p = Person("Alice", 30)
+    p.name = "Bob"
+    p.age = 25
+    var p19SupportedValue14 = p.name
+    assertEqual(p19SupportedValue14, "Bob")
+    print(p19SupportedValue14)
+    var p19SupportedValue15 = p.age
+    assertEqual(p19SupportedValue15, 25)
+    print(p19SupportedValue15)
+}
+
+// ===== 多参数方法 =====
+
+class Calculator {
+    add(a: i64, b: i64) -> i64 {
+        return a + b
+    }
+
+    multiply(a: i64, b: i64, c: i64) -> i64 {
+        return a * b * c
+    }
+}
+
+@test
+fn test_multi_param_methods() {
+    var calc = Calculator()
+    var p19SupportedValue16 = calc.add(3, 5)
+    assertEqual(p19SupportedValue16, 8)
+    print(p19SupportedValue16)
+    var p19SupportedValue17 = calc.multiply(2, 3, 4)
+    assertEqual(p19SupportedValue17, 24)
+    print(p19SupportedValue17)
+}

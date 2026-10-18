@@ -1,0 +1,185 @@
+struct Point {
+    x: i64
+    y: i64
+}
+
+const LIMIT = comptime (8 * 4)
+
+comptime {
+    const LOCAL_BASE = comptime (LIMIT / 4)
+    const LOCAL_SUM = LOCAL_BASE + 6
+    compile_assert(1 + 1 == 2, "math")
+    compile_assert(LIMIT == 32)
+    compile_assert(LOCAL_BASE == 8)
+    compile_assert(LOCAL_SUM == 14, "local const chain")
+    compile_assert(true)
+}
+
+comptime {
+    var counter = comptime 1
+    counter = counter + 1
+    counter = counter * 10
+    compile_assert(counter == 20, "local var state")
+    counter += 2
+    compile_assert(counter == 22, "local var compound assignment")
+
+    var pair = comptime Point{x: 1, y: 2}
+    pair = comptime Point{x: pair.y, y: pair.x + counter}
+    compile_assert(pair.x == 2)
+    compile_assert(pair.y == 23)
+
+    if (counter == 22) {
+        counter = counter + 2
+    } else {
+        compile_error("unselected comptime branch")
+    }
+    compile_assert(counter == 24, "comptime if selected branch")
+
+    if (false) {
+        compile_error("false comptime branch")
+    } else {
+        const branched = counter + 1
+        compile_assert(branched == 25)
+    }
+
+    var ops = comptime 5
+    ops += 3
+    ops -= 2
+    ops *= 7
+    ops /= 6
+    ops %= 4
+    ops <<= 3
+    ops >>= 2
+    ops &= 5
+    ops |= 2
+    ops ^= 3
+    compile_assert(ops == 5, "compound assignment ops")
+}
+
+comptime {
+    var i = comptime 0
+    var sum = comptime 0
+    while (i < 5) {
+        sum += i
+        i += 1
+    }
+    compile_assert(sum == 10, "comptime while sum")
+    compile_assert(i == 5, "comptime while condition refresh")
+
+    var countdown = comptime 3
+    while (countdown > 0) {
+        countdown -= 1
+    }
+    compile_assert(countdown == 0, "comptime while countdown")
+
+    var control = comptime 0
+    var kept = comptime 0
+    while (true) {
+        control += 1
+        if (control == 2) {
+            continue
+        }
+        if (control == 5) {
+            break
+        }
+        kept += control
+    }
+    compile_assert(control == 5, "comptime while break")
+    compile_assert(kept == 8, "comptime while continue")
+
+    var forSum = comptime 0
+    for (var j = 0; j < 6; j += 1) {
+        if (j == 2) {
+            continue
+        }
+        if (j == 5) {
+            break
+        }
+        forSum += j
+    }
+    compile_assert(forSum == 8, "comptime for control flow")
+
+    var labeledBreakWhile = comptime 0
+    outer_break: while (true) {
+        labeledBreakWhile += 1
+        while (true) {
+            break outer_break
+        }
+        compile_error("unreachable after labeled break")
+    }
+    compile_assert(labeledBreakWhile == 1, "comptime labeled break exits outer while")
+
+    var labeledBreakFor = comptime 0
+    break_for: for (var k = 0; k < 4; k += 1) {
+        labeledBreakFor += 1
+        while (true) {
+            break break_for
+        }
+        compile_error("unreachable after labeled for break")
+    }
+    compile_assert(labeledBreakFor == 1, "comptime labeled break exits outer for")
+
+    var continueWhile = comptime 0
+    continue_outer: while (continueWhile < 3) {
+        continueWhile += 1
+        while (true) {
+            continue continue_outer
+        }
+        compile_error("unreachable after labeled while continue")
+    }
+    compile_assert(continueWhile == 3, "comptime labeled continue targets outer while")
+
+    var continueForVisits = comptime 0
+    var continueForLanded = comptime 0
+    continue_for: for (var m = 0; m < 4; m += 1) {
+        continueForVisits += 1
+        while (true) {
+            if (m < 2) {
+                continue continue_for
+            }
+            break
+        }
+        continueForLanded += m
+    }
+    compile_assert(continueForVisits == 4, "comptime labeled continue visits outer for")
+    compile_assert(continueForLanded == 5, "comptime labeled continue runs for increment")
+}
+
+comptime {
+    const table: [i64; 5] = comptime [2, 4, 6, 8, 10]
+
+    var sum = comptime 0
+    for (value in table) {
+        sum += value
+    }
+    compile_assert(sum == 30, "comptime for-in value sum")
+
+    var weighted = comptime 0
+    for (index, value in table) {
+        if (index == 1) {
+            continue
+        }
+        if (index == 4) {
+            break
+        }
+        weighted += index * value
+    }
+    compile_assert(weighted == 36, "comptime for-in index/value control")
+
+    var labeledForIn = comptime 0
+    stop_values: for (value in table) {
+        labeledForIn += value
+        for (var guard = 0; guard < 2; guard += 1) {
+            if (value == 6) {
+                break stop_values
+            }
+        }
+    }
+    compile_assert(labeledForIn == 12, "comptime for-in labeled break")
+}
+
+@test
+fn test_comptime_block_erased() {
+    var x = 3
+    assertEqual(x, 3)
+}

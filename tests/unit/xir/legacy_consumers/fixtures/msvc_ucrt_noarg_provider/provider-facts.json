@@ -1,0 +1,30 @@
+{
+  "profile": "msvc-x64-ucrt-source-10.0.22621.0",
+  "target": "windows-x86_64",
+  "state_bits": 32,
+  "multiplier": 214013,
+  "increment": 2531011,
+  "output_shift": 16,
+  "output_mask": 32767,
+  "seed_function": "void __cdecl srand(unsigned int)",
+  "next_function": "int __cdecl rand(void)",
+  "state_storage": "__acrt_ptd._rand_state unsigned int;thread-local CRT data",
+  "reviewed_installed_authorities": [
+    {
+      "file": "ucrt/stdlib/rand.cpp",
+      "raw_sha256": "7a9fb4d6928b8f105e87d79a54899194a3100dc4cd46c23ef77370675c3f3543",
+      "facts": "srand assigns seed;rand multiplies214013/adds2531011 then shifts16 and masks RAND_MAX"
+    },
+    {
+      "file": "ucrt/stdlib.h",
+      "raw_sha256": "1576fdb40eb225dff53489db2fd52e41c7bb24f1e621e4a95c2c7f4a7216949c",
+      "facts": "RAND_MAX is0x7fff"
+    },
+    {
+      "file": "ucrt/inc/corecrt_internal.h",
+      "raw_sha256": "badeb8bfcdf53d00c8e7ef21b97a8391bbef0c88c432858316c0b9cce7a123a0",
+      "facts": "_rand_state has unsigned int storage"
+    }
+  ],
+  "scope": "Independent installed-provider source facts,not an ISO C universal sequence or Xray provider binding. Full noarg/void/unused extern Xray descriptor/native manifest andallprovider qualification remain OPEN."
+}

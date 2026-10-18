@@ -1,0 +1,52 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// anchor: method-as-value
+// Task 264 D5, and the one defect in that task where the two backends
+// disagree: the type layer hands out `() -> int` for `c.get`, but GETPROP
+// returns the method closure with no receiver bound. The VM catches the arity
+// (the proto counts the implicit receiver) and panics; the AOT read falls
+// through to xrt_getprop, which returns null for a user class instance, so the
+// call dereferences null instead.
+//
+// This case assumes the binding-closure fix: lowering synthesises a thunk that
+// captures the receiver. If the decision instead lands on rejecting method
+// references at compile time, this case moves to tests/compile_errors/oop/.
+class Counter {
+    n: i64 = 7
+    get() -> i64 { return this.n }
+    bump(d: i64) -> i64 { this.n = this.n + d
+                          return this.n }
+}
+
+fn main() {
+    var c = Counter()
+    print(c.get())          // 7 -- ordinary call
+
+    var f: fn() -> i64 = c.get
+    print(f())              // 7 -- receiver stays bound
+
+    var g = c.bump
+    print(g(5))             // 12 -- and mutations land on the same instance
+    print(c.get())          // 12
+}
+
+main()
+
+fn escapedGet() -> fn() -> i64 {
+    var local = Counter()
+    local.n = 20
+    return local.get
+}
+var escaped = escapedGet()
+print(escaped())
+
+var probe = Counter()
+probe.n = 12
+var receiverCalls = 0
+fn receiver() -> Counter {
+    receiverCalls += 1
+    return probe
+}
+var retained = receiver().get
+print(receiverCalls)
+print(retained())
+print(receiverCalls)

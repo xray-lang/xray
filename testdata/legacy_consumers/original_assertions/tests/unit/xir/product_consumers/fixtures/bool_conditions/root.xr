@@ -1,0 +1,18 @@
+fn amount(present: bool) -> i64? { if (present) { return 0 }; return null }
+fn answer() -> i64 {
+ var absent = amount(false)
+ var zero = amount(true)
+ var score: i64 = 0
+ if (zero != null) { score += 1 }
+ if (absent == null) { score += 2 }
+ if (absent != null && absent > 0) { return -1 }
+ var selected = zero != null ? zero : 99
+ if (zero == null || zero != 0) { return -2 }
+ for (var index = 0; index < 2; index++) { score += 4 }
+ while (score < 13) { score += 1 }
+ for (var index = 0; ; index++) { break }
+ var extra = match (score) { value if (value == 13) -> 29
+ _ -> 0 }
+ return score + selected + extra
+}
+export fn consumerAnswer() -> i64 { return answer() }

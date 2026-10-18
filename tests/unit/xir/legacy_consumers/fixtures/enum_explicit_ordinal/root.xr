@@ -1,0 +1,10 @@
+// anchor: enum-ordinal-conversion
+
+enum Ordinal { Idle, Ready }
+
+print(Ordinal.Ready.ordinal as u8)
+var ready: Ordinal = Ordinal.Ready
+print(ready.ordinal as i64)
+enum BoxedOrdinal { Payload { value: i64 }, Ready }
+var boxed_ready: BoxedOrdinal = BoxedOrdinal.Ready
+print(boxed_ready.ordinal as i64)

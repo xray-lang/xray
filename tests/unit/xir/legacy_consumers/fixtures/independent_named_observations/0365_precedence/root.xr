@@ -1,0 +1,197 @@
+// Retain every original body and observe scalar results, including nested lexical scopes.
+// 0360_precedence.xr
+// 作者：xingleixu@gmail.com
+// 测试：运算符优先级
+
+// ===== 算术优先级 =====
+
+@test
+fn test_mul_before_add() {
+    var p19Observed0 = 2 + 3 * 4
+    assertEqual(p19Observed0, 14)
+    print(p19Observed0)
+    var p19Observed1 = 10 - 2 * 3
+    assertEqual(p19Observed1, 4)
+    print(p19Observed1)
+}
+
+@test
+fn test_div_before_sub() {
+    var p19Observed2 = 10 - 6 / 2
+    assertEqual(p19Observed2, 7)
+    print(p19Observed2)
+    var p19Observed3 = 20 + 8 / 4
+    assertEqual(p19Observed3, 22)
+    print(p19Observed3)
+}
+
+@test
+fn test_parentheses_override() {
+    var p19Observed4 = (2 + 3) * 4
+    assertEqual(p19Observed4, 20)
+    print(p19Observed4)
+    var p19Observed5 = 2 * (3 + 4)
+    assertEqual(p19Observed5, 14)
+    print(p19Observed5)
+}
+
+// ===== 比较与逻辑优先级 =====
+
+@test
+fn test_comparison_before_and() {
+    var p19Observed6 = 1 < 2 && 3 < 4
+    assertEqual(p19Observed6, true)
+    print(p19Observed6)
+    var p19Observed7 = 1 > 2 && 3 < 4
+    assertEqual(p19Observed7, false)
+    print(p19Observed7)
+}
+
+@test
+fn test_and_before_or() {
+    var p19Observed8 = true || false && false
+    assertEqual(p19Observed8, true)
+    print(p19Observed8)
+    var p19Observed9 = false || true && true
+    assertEqual(p19Observed9, true)
+    print(p19Observed9)
+    var p19Observed10 = false || false && true
+    assertEqual(p19Observed10, false)
+    print(p19Observed10)
+}
+
+// ===== 算术与比较混合 =====
+
+@test
+fn test_arithmetic_then_compare() {
+    var p19Observed11 = 2 + 3 < 10
+    assertEqual(p19Observed11, true)
+    print(p19Observed11)
+    var p19Observed12 = 2 * 5 == 10
+    assertEqual(p19Observed12, true)
+    print(p19Observed12)
+    var p19Observed13 = 10 - 3 >= 7
+    assertEqual(p19Observed13, true)
+    print(p19Observed13)
+}
+
+// ===== 位运算优先级 =====
+
+@test
+fn test_shift_before_comparison() {
+    var x = 1
+    var shift = 3
+    var result = x << shift
+    var p19Observed14 = result < 16
+    assertEqual(p19Observed14, true)
+    print(p19Observed14)
+}
+
+@test
+fn test_bitwise_and_before_or() {
+    // a | b & c == a | (b & c)
+    var p19Observed15 = 0b1100 | 0b1010 & 0b0110
+    assertEqual(p19Observed15, 0b1110)
+    print(p19Observed15)
+}
+
+// ===== 一元运算符 =====
+
+@test
+fn test_unary_minus() {
+    var p19Observed16 = -5 + 10
+    assertEqual(p19Observed16, 5)
+    print(p19Observed16)
+    var p19Observed17 = 10 + -5
+    assertEqual(p19Observed17, 5)
+    print(p19Observed17)
+    var p19Observed18 = -(-5)
+    assertEqual(p19Observed18, 5)
+    print(p19Observed18)
+}
+
+@test
+fn test_logical_not() {
+    var p19Observed19 = !true
+    assertEqual(p19Observed19, false)
+    print(p19Observed19)
+    var p19Observed20 = !false
+    assertEqual(p19Observed20, true)
+    print(p19Observed20)
+    var p19Observed21 = !!true
+    assertEqual(p19Observed21, true)
+    print(p19Observed21)
+}
+
+// ===== 复杂表达式 =====
+
+@test
+fn test_complex_expression() {
+    var a = 2
+    var b = 3
+    var c = 4
+    // a + b * c - a = 2 + 12 - 2 = 12
+    var p19Observed22 = a + b * c - a
+    assertEqual(p19Observed22, 12)
+    print(p19Observed22)
+}
+
+@test
+fn test_nested_parentheses() {
+    var p19Observed23 = ((1 + 2) * 3) + 4
+    assertEqual(p19Observed23, 13)
+    print(p19Observed23)
+    var p19Observed24 = (1 + (2 * (3 + 4)))
+    assertEqual(p19Observed24, 15)
+    print(p19Observed24)
+}
+
+// ===== 三元运算符优先级 =====
+
+@test
+fn test_ternary_with_arithmetic() {
+    var x = 5
+    var result = x > 3 ? x * 2 : x + 1
+    var p19Observed25 = result
+    assertEqual(p19Observed25, 10)
+    print(p19Observed25)
+}
+
+@test
+fn test_ternary_false_branch() {
+    var x = 1
+    var result = x > 3 ? x * 2 : x + 1
+    var p19Observed26 = result
+    assertEqual(p19Observed26, 2)
+    print(p19Observed26)
+}
+
+@test
+fn test_nested_ternary() {
+    var x = 5
+    var result = x < 0 ? "negative" : x == 0 ? "zero" : "positive"
+    var p19Observed27 = result
+    assertEqual(p19Observed27, "positive")
+    print(p19Observed27)
+}
+
+@test
+fn test_ternary_zero() {
+    var x = 0
+    var result = x < 0 ? "negative" : x == 0 ? "zero" : "positive"
+    var p19Observed28 = result
+    assertEqual(p19Observed28, "zero")
+    print(p19Observed28)
+}
+
+// ===== 赋值优先级（最低）=====
+
+@test
+fn test_assignment_lowest() {
+    var x = 0
+    x = 2 + 3  // 赋值的是 5，不是 (x = 2) + 3
+    var p19Observed29 = x
+    assertEqual(p19Observed29, 5)
+    print(p19Observed29)
+}
+

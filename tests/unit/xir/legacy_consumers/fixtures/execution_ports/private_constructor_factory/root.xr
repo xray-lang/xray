@@ -1,0 +1,19 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+class Token {
+    private value: i64
+
+    private init(v: i64) {
+        this.value = v
+    }
+
+    static make(v: i64) -> Token {
+        return Token(v)
+    }
+
+    get() -> i64 {
+        return this.value
+    }
+}
+
+var a = Token.make(7)
+print(a.get())

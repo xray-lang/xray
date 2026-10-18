@@ -1,0 +1,106 @@
+// Preserve all original tuple/generic/function-value bodies and module initialization; observe actual scalar components once.
+/*
+ * Tuple return type safety tests
+ * Functions that need to surface multiple results return a tuple and
+ * callers destructure with tuple patterns.
+ */
+
+// Test 1: Basic tuple return
+fn divide(a: i64, b: i64) -> (i64, bool) {
+    if (b == 0) {
+        return (0, false)
+    }
+    return (a / b, true)
+}
+
+@test
+fn test_tuple_return_basic() {
+    var (result, ok) = divide(10, 2)
+    var p19TupleValue0 = result
+    assertEqual(p19TupleValue0, 5)
+    print(p19TupleValue0)
+    var p19TupleValue1 = ok
+    assertEqual(p19TupleValue1, true)
+    print(p19TupleValue1)
+
+    var (result2, ok2) = divide(10, 0)
+    var p19TupleValue2 = result2
+    assertEqual(p19TupleValue2, 0)
+    print(p19TupleValue2)
+    var p19TupleValue3 = ok2
+    assertEqual(p19TupleValue3, false)
+    print(p19TupleValue3)
+}
+
+// Test 2: Triple return values
+fn minmax(a: i64, b: i64, c: i64) -> (i64, i64, i64) {
+    var min_val = a
+    var max_val = a
+    var sum = a + b + c
+
+    if (b < min_val) { min_val = b }
+    if (c < min_val) { min_val = c }
+    if (b > max_val) { max_val = b }
+    if (c > max_val) { max_val = c }
+
+    return (min_val, max_val, sum)
+}
+
+@test
+fn test_triple_return() {
+    var (min_v, max_v, sum) = minmax(3, 1, 5)
+    var p19TupleValue4 = min_v
+    assertEqual(p19TupleValue4, 1)
+    print(p19TupleValue4)
+    var p19TupleValue5 = max_v
+    assertEqual(p19TupleValue5, 5)
+    print(p19TupleValue5)
+    var p19TupleValue6 = sum
+    assertEqual(p19TupleValue6, 9)
+    print(p19TupleValue6)
+}
+
+// Test 3: Field access on a returned tuple without full destructure
+fn quadruple() -> (i64, i64, i64, i64) {
+    return (1, 2, 3, 4)
+}
+
+@test
+fn test_partial_capture() {
+    // Tuple field access lets callers pick only the elements they need
+    var q = quadruple()
+    var p19TupleValue7 = q.0
+    assertEqual(p19TupleValue7, 1)
+    print(p19TupleValue7)
+    var p19TupleValue8 = q.1
+    assertEqual(p19TupleValue8, 2)
+    print(p19TupleValue8)
+}
+
+// Test 4: Tuple return in a conditional
+fn safeDivide(a: i64, b: i64) -> (f64, bool) {
+    if (b == 0) {
+        return (0.0, false)
+    }
+    return ((a as f64) / (b as f64), true)
+}
+
+@test
+fn test_conditional_tuple_return() {
+    var (r1, ok1) = safeDivide(10, 4)
+    var p19TupleValue9 = ok1
+    assertEqual(p19TupleValue9, true)
+    print(p19TupleValue9)
+    assert(r1 > 2.4 && r1 < 2.6)
+    print(r1)
+
+    var (r2, ok2) = safeDivide(5, 0)
+    var p19TupleValue11 = ok2
+    assertEqual(p19TupleValue11, false)
+    print(p19TupleValue11)
+    var p19TupleValue12 = r2
+    assertEqual(p19TupleValue12, 0.0)
+    print(p19TupleValue12)
+}
+
+print("all tuple return tests passed")

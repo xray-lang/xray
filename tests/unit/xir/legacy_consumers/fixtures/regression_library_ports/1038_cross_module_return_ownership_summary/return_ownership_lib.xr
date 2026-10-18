@@ -1,0 +1,22 @@
+import mem
+
+export struct OwnedValue {
+    value: i64
+}
+
+export fn makeOwnedArray(value: i64) -> Array<i64> {
+    return [value]
+}
+
+export fn makeOwnedBuffer(size: i64) -> Buffer {
+    var buffer = mem.allocZeroed(size)
+    return buffer
+}
+
+export fn makeOwnedValue(value: i64) -> OwnedValue {
+    return OwnedValue{value: value}
+}
+
+export fn copyImportedArray(value: Array<i64>) -> Array<i64> {
+    return value
+}

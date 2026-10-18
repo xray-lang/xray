@@ -1,0 +1,277 @@
+// 0770_string_pool_concurrent_property.xr
+// 作者：xingleixu@gmail.com
+//
+// Property 7: 并发安全性
+// Validates: Requirements 1.1, 5.1
+//
+// 属性：对于任意数量的 Worker 并发执行字符串操作，
+//       不应发生崩溃或数据损坏
+//
+// 测试策略：
+// - 多个协程并发执行字符串驻留操作
+// - 验证每个协程的字符串内容正确
+// - 测试全局池只读访问和本地池私有访问
+// - 测试长字符串（不驻留）和短字符串（驻留）两种路径
+
+// ===== Property 7: 并发安全性 =====
+
+@test
+fn test_property_concurrent_intern_safety() {
+    // **Feature: string-pool-thread-safety, Property 7: 并发安全性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：对于任意 N 个协程并发执行字符串驻留，不应发生崩溃或数据损坏
+
+    fn intern_task(id: i64) -> bool {
+        // 创建多个字符串，触发驻留
+        var s1 = "intern_" + string(id) + "_a"
+        var s2 = "intern_" + string(id) + "_b"
+        var s3 = "intern_" + string(id) + "_c"
+
+        // 验证字符串内容正确
+        var expected1 = "intern_" + string(id) + "_a"
+        var expected2 = "intern_" + string(id) + "_b"
+        var expected3 = "intern_" + string(id) + "_c"
+
+        return s1 == expected1 && s2 == expected2 && s3 == expected3
+    }
+
+    var n = 50
+    var tasks: Array<Task<bool>> = []
+    for (var i = 0; i < n; i++) {
+        tasks.push(go intern_task(i))
+    }
+
+    var results = await all tasks
+
+    // 验证所有协程的结果都正确
+    for (var i = 0; i < n; i++) {
+        assertEqual(results[i], true)
+    }
+}
+
+@test
+fn test_property_concurrent_global_pool_readonly() {
+    // **Feature: string-pool-thread-safety, Property 7: 并发安全性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：对于任意 N 个协程并发访问全局池中的字面量，应该返回相同的字符串
+
+    fn global_access_task(id: i64) -> bool {
+        // 访问全局池中的字面量
+        var s = "shared_literal_value"
+        // 验证与编译期字面量相等
+        return s == "shared_literal_value"
+    }
+
+    var n = 50
+    var tasks: Array<Task<bool>> = []
+    for (var i = 0; i < n; i++) {
+        tasks.push(go global_access_task(i))
+    }
+
+    var results = await all tasks
+
+    // 验证所有协程都能正确访问全局池
+    for (var i = 0; i < n; i++) {
+        assertEqual(results[i], true)
+    }
+}
+
+@test
+fn test_property_concurrent_local_pool_isolation() {
+    // **Feature: string-pool-thread-safety, Property 7: 并发安全性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：对于任意 N 个协程，每个协程的本地池应该独立，互不影响
+
+    fn local_pool_task(id: i64) -> bool {
+        // 创建本地字符串（运行期驻留到本地池）
+        var local1 = "local_" + string(id) + "_first"
+        var local2 = "local_" + string(id) + "_second"
+
+        // 验证本地字符串内容正确
+        var expected1 = "local_" + string(id) + "_first"
+        var expected2 = "local_" + string(id) + "_second"
+
+        return local1 == expected1 && local2 == expected2
+    }
+
+    var n = 50
+    var tasks: Array<Task<bool>> = []
+    for (var i = 0; i < n; i++) {
+        tasks.push(go local_pool_task(i))
+    }
+
+    var results = await all tasks
+
+    // 验证所有协程的本地池独立且正确
+    for (var i = 0; i < n; i++) {
+        assertEqual(results[i], true)
+    }
+}
+
+@test
+fn test_property_concurrent_long_string_no_intern() {
+    // **Feature: string-pool-thread-safety, Property 7: 并发安全性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：对于任意 N 个协程并发创建长字符串（>64字节），不应驻留，不应崩溃
+
+    fn long_string_task(id: i64) -> bool {
+        // 创建超过64字节的长字符串（不驻留）
+        var long = "this_is_a_very_long_string_that_exceeds_64_bytes_" + string(id) + "_end_of_string_data"
+
+        // 验证长度超过64
+        var len_ok = len(long) > 64
+
+        // 验证内容正确
+        var expected = "this_is_a_very_long_string_that_exceeds_64_bytes_" + string(id) + "_end_of_string_data"
+        var content_ok = long == expected
+
+        return len_ok && content_ok
+    }
+
+    var n = 50
+    var tasks: Array<Task<bool>> = []
+    for (var i = 0; i < n; i++) {
+        tasks.push(go long_string_task(i))
+    }
+
+    var results = await all tasks
+
+    // 验证所有协程的长字符串都正确
+    for (var i = 0; i < n; i++) {
+        assertEqual(results[i], true)
+    }
+}
+
+@test
+fn test_property_concurrent_mixed_operations() {
+    // **Feature: string-pool-thread-safety, Property 7: 并发安全性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：对于任意 N 个协程混合执行各种字符串操作，不应发生崩溃或数据损坏
+
+    fn mixed_task(id: i64) -> bool {
+        // 混合操作：驻留、拼接、比较
+        var s1 = "prefix_" + string(id)
+        var s2 = "_suffix"
+        var combined = s1 + s2
+
+        // 创建相同内容的字符串进行比较
+        var expected = "prefix_" + string(id) + "_suffix"
+        var compare_ok = combined == expected
+
+        // 长度验证
+        var len_ok = len(combined) == len(expected)
+
+        return compare_ok && len_ok
+    }
+
+    var n = 50
+    var tasks: Array<Task<bool>> = []
+    for (var i = 0; i < n; i++) {
+        tasks.push(go mixed_task(i))
+    }
+
+    var results = await all tasks
+
+    // 验证所有协程的混合操作都正确
+    for (var i = 0; i < n; i++) {
+        assertEqual(results[i], true)
+    }
+}
+
+@test
+fn test_property_concurrent_string_compare() {
+    // **Feature: string-pool-thread-safety, Property 7: 并发安全性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：对于任意 N 个协程并发执行字符串比较，结果应该正确
+
+    fn compare_task(id: i64) -> bool {
+        // 创建相同内容的字符串
+        var a = "compare_" + string(id)
+        var b = "compare_" + string(id)
+
+        // 创建不同内容的字符串
+        var c = "compare_" + string(id + 1)
+
+        // 验证比较结果
+        var eq_ok = a == b
+        var neq_ok = a != c
+
+        return eq_ok && neq_ok
+    }
+
+    var n = 50
+    var tasks: Array<Task<bool>> = []
+    for (var i = 0; i < n; i++) {
+        tasks.push(go compare_task(i))
+    }
+
+    var results = await all tasks
+
+    // 验证所有协程的比较结果都正确
+    for (var i = 0; i < n; i++) {
+        assertEqual(results[i], true)
+    }
+}
+
+@test
+fn test_property_concurrent_intern_consistency() {
+    // **Feature: string-pool-thread-safety, Property 7: 并发安全性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：对于任意 N 个协程多次创建相同内容的字符串，驻留字符串应该相等
+
+    fn consistency_task(id: i64) -> bool {
+        // 多次创建相同内容的字符串
+        var s1 = "consistent_value"
+        var s2 = "consistent_value"
+        var s3 = "consistent_value"
+
+        // 驻留字符串应该相等
+        return s1 == s2 && s2 == s3
+    }
+
+    var n = 50
+    var tasks: Array<Task<bool>> = []
+    for (var i = 0; i < n; i++) {
+        tasks.push(go consistency_task(i))
+    }
+
+    var results = await all tasks
+
+    // 验证所有协程的驻留一致性
+    for (var i = 0; i < n; i++) {
+        assertEqual(results[i], true)
+    }
+}
+
+@test
+fn test_property_concurrent_stress_200() {
+    // **Feature: string-pool-thread-safety, Property 7: 并发安全性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：对于 200 个协程并发执行字符串操作，不应发生崩溃
+
+    fn stress_task(id: i64) -> bool {
+        // 创建多个字符串
+        var s1 = "stress_" + string(id) + "_first"
+        var s2 = "stress_" + string(id) + "_second"
+
+        // 拼接
+        var combined = s1 + "_" + s2
+
+        // 验证
+        var expected = "stress_" + string(id) + "_first_stress_" + string(id) + "_second"
+        return combined == expected
+    }
+
+    var n = 200
+    var tasks: Array<Task<bool>> = []
+    for (var i = 0; i < n; i++) {
+        tasks.push(go stress_task(i))
+    }
+
+    var results = await all tasks
+
+    // 验证所有协程都正确完成
+    for (var i = 0; i < n; i++) {
+        assertEqual(results[i], true)
+    }
+}

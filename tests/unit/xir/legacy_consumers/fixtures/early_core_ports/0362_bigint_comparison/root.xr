@@ -1,0 +1,71 @@
+// 0362_bigint_comparison.xr
+// BigInt comparison operators test
+
+@test
+fn test_bigint_equality() {
+    var a = 1000000000000n
+    var c = 1000000000000n
+    assertEqual(a == c, true)
+    assertEqual(a != c, false)
+}
+
+@test
+fn test_bigint_inequality() {
+    var a = 1000000000000n
+    var b = 2000000000000n
+    assertEqual(a != b, true)
+    assertEqual(a == b, false)
+}
+
+@test
+fn test_bigint_less_than() {
+    var a = 1000000000000n
+    var b = 2000000000000n
+    assertEqual(a < b, true)
+    assertEqual(b < a, false)
+}
+
+@test
+fn test_bigint_greater_than() {
+    var a = 1000000000000n
+    var b = 2000000000000n
+    assertEqual(b > a, true)
+    assertEqual(a > b, false)
+}
+
+@test
+fn test_bigint_less_equal() {
+    var a = 100n
+    var b = 100n
+    var c = 200n
+    assertEqual(a <= b, true)
+    assertEqual(a <= c, true)
+    assertEqual(c <= a, false)
+}
+
+@test
+fn test_bigint_greater_equal() {
+    var a = 100n
+    var b = 100n
+    var c = 50n
+    assertEqual(a >= b, true)
+    assertEqual(a >= c, true)
+    assertEqual(c >= a, false)
+}
+
+@test
+fn test_mixed_bigint_int_comparison() {
+    var big = 100n
+    var small = 50.toBigInt()
+    assertEqual(big > small, true)
+    assertEqual(small < big, true)
+    assertEqual(big == 100n, true)
+    assertEqual(100n == big, true)
+    assertEqual(big != 99n, true)
+}
+
+@test
+fn test_bigint_type_annotation() {
+    var x: BigInt = 123n
+    assertEqual(x.toString(), "123")
+}

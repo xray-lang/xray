@@ -1,0 +1,146 @@
+// Preserve the complete original struct body and expose each scalar field/method result at its original assertion boundary.
+// Test: struct basic functionality
+// Expected: struct declaration, instantiation, field access, methods
+
+// === Basic struct with fields ===
+
+struct Point {
+    x: f64
+    y: f64
+}
+struct Vec2 {
+    x: f64
+    y: f64
+
+    magnitude_sq() -> f64 {
+        return this.x * this.x + this.y * this.y
+    }
+
+    add(other: Vec2) -> Vec2 {
+        var result = Vec2()
+        result.x = this.x + other.x
+        result.y = this.y + other.y
+        return result
+    }
+}
+struct Color {
+    r: i64
+    g: i64
+    b: i64
+    a: i64
+}
+struct Rect {
+    x: f64
+    y: f64
+    width: f64
+    height: f64
+
+    area() -> f64 {
+        return this.width * this.height
+    }
+}
+struct MathHelper {
+    static pi() -> f64 {
+        return 3.14159
+    }
+}
+
+@test
+fn test_struct_basic() {
+
+    var p = Point()
+    p.x = 3.0
+    p.y = 4.0
+    var p19StructValue0 = p.x
+    assert(p19StructValue0 == 3.0)
+    print(p19StructValue0)
+    var p19StructValue1 = p.y
+    assert(p19StructValue1 == 4.0)
+    print(p19StructValue1)
+
+    // === Struct with method ===
+
+    var a = Vec2()
+    a.x = 3.0
+    a.y = 4.0
+    var p19StructValue2 = a.magnitude_sq()
+    assert(p19StructValue2 == 25.0)
+    print(p19StructValue2)
+
+    var b = Vec2()
+    b.x = 1.0
+    b.y = 2.0
+
+    var c = a.add(b)
+    var p19StructValue3 = c.x
+    assert(p19StructValue3 == 4.0)
+    print(p19StructValue3)
+    var p19StructValue4 = c.y
+    assert(p19StructValue4 == 6.0)
+    print(p19StructValue4)
+
+    // === Struct with int fields ===
+
+    var red = Color()
+    red.r = 255
+    red.g = 0
+    red.b = 0
+    red.a = 255
+    var p19StructValue5 = red.r
+    assert(p19StructValue5 == 255)
+    print(p19StructValue5)
+    var p19StructValue6 = red.g
+    assert(p19StructValue6 == 0)
+    print(p19StructValue6)
+    var p19StructValue7 = red.a
+    assert(p19StructValue7 == 255)
+    print(p19StructValue7)
+
+    // === Struct with mixed field types ===
+
+    var r = Rect()
+    r.x = 10.0
+    r.y = 20.0
+    r.width = 100.0
+    r.height = 50.0
+    var p19StructValue8 = r.area()
+    assert(p19StructValue8 == 5000.0)
+    print(p19StructValue8)
+
+    // === Struct with static method ===
+
+    var p19StructValue9 = MathHelper.pi()
+    assert(p19StructValue9 > 3.14)
+    print(p19StructValue9)
+    var p19StructValue10 = MathHelper.pi()
+    assert(p19StructValue10 < 3.15)
+    print(p19StructValue10)
+
+    // === Struct typeof ===
+    var p2 = Point()
+    var p19StructValue11 = typeName(p2)
+    assert(p19StructValue11 == "Point")
+    print(p19StructValue11)
+
+    // === Multiple struct instances ===
+    var points: Array<Point> = []
+    for (var i = 0; i < 5; i++) {
+        var pt = Point()
+        pt.x = (i as f64)
+        pt.y = (i * 2 as f64)
+        points.push(pt)
+    }
+    var p19StructValue12 = len(points)
+    assert(p19StructValue12 == 5)
+    print(p19StructValue12)
+    var p19StructValue13 = points[0].x
+    assert(p19StructValue13 == 0.0)
+    print(p19StructValue13)
+    var p19StructValue14 = points[4].x
+    assert(p19StructValue14 == 4.0)
+    print(p19StructValue14)
+    var p19StructValue15 = points[4].y
+    assert(p19StructValue15 == 8.0)
+    print(p19StructValue15)
+}
+

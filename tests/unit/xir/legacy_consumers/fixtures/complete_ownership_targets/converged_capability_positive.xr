@@ -1,0 +1,31 @@
+// anchor: ownership-converged-capability-positive
+fn build() -> Array<i64> {
+    var result = [1, 2, 3]
+    return result
+}
+
+fn run() {
+    var source = build()
+    var alias = source
+    print(len(alias))
+
+    var sealSource = [4, 5]
+    const sealed = sealSource
+    print(sealed[0] + sealed[1])
+
+    const ch: Channel<i64> = Channel(1)
+    ch.send(7)
+    match (ch.recv()) {
+        Recv.Value { value: value } -> print(value)
+        _ -> assert(false)
+    }
+    ch.close()
+
+    const captured = [8, 9]
+    var task = go fn() {
+        return len(captured)
+    }()
+    print(await task)
+}
+
+run()
