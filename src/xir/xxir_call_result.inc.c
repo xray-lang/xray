@@ -80,8 +80,12 @@ XR_FUNCDEF XrXirCallStatus xr_xir_call_take_inbox(XrXirCallView *view,XrXirType 
     if (!output || !boundary_value(*output,XR_XIR_UNIT) || (view && output==&view->inbox.value)) return XR_XIR_CALL_BAD_ARGUMENT;
     CallFrame *frame=NULL;XrXirCallStatus status=call_inbox_frame(view,expected,&frame);
     if (status!=XR_XIR_CALL_READY) return status;
-    if (output==&frame->inbox.value || xr_xir_compile_type_arena_borrowed(view->arena,expected))
-        return XR_XIR_CALL_BAD_ARGUMENT;
+    if (output==&frame->inbox.value) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (xr_xir_compile_type_arena_borrowed(view->arena,expected)) {
+        XrXirValueStatus taken=xr_xir_call_view_inbox_take(view,expected,output);
+        return taken==XR_XIR_VALUE_OK ? XR_XIR_CALL_READY : taken==XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM :
+            taken==XR_XIR_VALUE_LIMIT || taken==XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_ARGUMENT;
+    }
     *output=frame->inbox.value;frame->inbox=call_result(XR_XIR_CALL_READY);view->inbox=call_result(XR_XIR_CALL_READY);
     return XR_XIR_CALL_READY;
 }

@@ -539,7 +539,8 @@ XR_FUNC XrXirCallStatus xr_xir_call_return_move(XrXirCallView *view,
     if (status!=XR_XIR_CALL_READY) return status;
     if (!call_cell_work(call,sizeof(*action)+2*sizeof(*source))) return XR_XIR_CALL_LIMIT;
     call->admitting=true;
-    status=call_view_result_admit(call,source,frame->entry->result);
+    XrXirType result_type=(frame->entry->flags & XR_XIR_ENTRY_GENERATOR) ? XR_XIR_UNIT : frame->entry->result;
+    status=call_view_result_admit(call,source,result_type);
     call->admitting=false;
     if (status!=XR_XIR_CALL_READY) return status;
     XR_CHECK(frame->pending.status==XR_XIR_CALL_READY && !frame->pending.value.type &&
@@ -647,7 +648,9 @@ static XrXirCallStatus push_frame_owned(XrXirCall *call, uint32_t id,
     frame->loans = (CallCellLoan *)((unsigned char *)frame + (size_t)loans_offset);
     frame->view_return=borrowed_result ? (CallViewReturn *)((unsigned char *)frame+(size_t)returns_offset) : NULL;
     uint32_t captures = binding ? binding->capture_count : 0;
+    bool admitting=call->admitting;
     status=call_view_return_capture(call,frame,arguments,captures);
+    call->admitting=admitting;
     if (status!=XR_XIR_CALL_READY) {
         frame_view_arguments_release(call,frame);frame_release(call,frame);return status;
     }
@@ -659,6 +662,7 @@ static XrXirCallStatus push_frame_owned(XrXirCall *call, uint32_t id,
             (call->active_view ? xr_xir_instance_weaken_function(call->active_view,entry->parameters[i],value,&frame->arguments[i]) :
              XR_XIR_CALL_BAD_ARGUMENT) :
             call_view_argument_copy(call,frame,value,entry->parameters[i],&frame->arguments[i]);
+        call->admitting=admitting;
         if (status!=XR_XIR_CALL_READY) {
             frame_view_arguments_release(call,frame);
             frame_release(call, frame);
@@ -740,9 +744,9 @@ static void pop_frame(XrXirCall *call, XrXirCallStatus reason) {
         call_view_return_adopt(call,frame);
     frame_view_release(call,frame);
     frame_cell_release(frame);
+    if (frame->view_return) xr_xir_view_origin_unpin(&frame->view_return->origin);
     if (!frame->observer_announced) call_observer_event(call, frame, XR_XIR_CALL_FRAME_ENTER, XR_XIR_CALL_READY);
     call_observer_event(call, frame, XR_XIR_CALL_FRAME_LEAVE, reason);
-    if (frame->view_return) xr_xir_view_origin_unpin(&frame->view_return->origin);
     call->top = frame->parent;
     for (uint32_t i = 0; i < frame->entry->parameter_count; ++i)
         xr_xir_value_drop(&frame->arguments[i]);
