@@ -58,6 +58,8 @@ typedef struct ErrorFlow {
     size_t storage_capacity;
     size_t stride;
     uint32_t values, cell_count, active_count;
+    /* Numeric storage position belongs to this function interpretation only. */
+    EffectBodyRecordCursor block_cursor;
     ErrorInvocationContexts *invocations;
     uint32_t invocation,summary_count;
     bool changed, summary_changed, restart;
@@ -744,27 +746,33 @@ static XrXirStatus error_block_transfer(ErrorFlow *flow,uint32_t b,
     const EffectBodyFunction *function=NULL;
     XrXirStatus status=error_owned_function(flow,&function);
     if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(flow->remaining,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
-    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
+    if (!xir_compile_work(flow->remaining,sizeof(EffectBodyRecordCursor *)+1)) return XR_XIR_BUDGET;
+    EffectBodyRecordCursor *cursor=&flow->block_cursor;
+    if (cursor->last!=UINT32_MAX && block->first<cursor->last) {
+        if (!xir_compile_work(flow->remaining,sizeof(*cursor))) return XR_XIR_BUDGET;
+        *cursor=(EffectBodyRecordCursor){0,0,UINT32_MAX};
+    }
     if (!xir_compile_work(flow->remaining,sizeof(uint32_t))) return XR_XIR_BUDGET;
     uint32_t end=block->first+block->count;
     if (!block->count || block->first>=function->instruction_count ||
         block->count>function->instruction_count-block->first) return XR_XIR_BAD_STRUCTURE;
-    while (cursor.first<end) {
+    uint32_t first=block->first;
+    while (first<end) {
         if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
         const EffectBodyRun *ref;
-        status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
+        status=effect_body_record_cursor_ref(&flow->body.read,function,first,cursor,&ref);
         if (status!=XR_XIR_OK) return status;
         if (!xir_compile_work(flow->remaining,2+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
         if (!xir_compile_work(flow->remaining,1+sizeof(row->constant)+sizeof(row->decoded)))
             return XR_XIR_BUDGET;
         row->constant=ref->mask==0;row->decoded=false;
-        uint32_t first=ref->first<block->first?block->first:ref->first;
         uint32_t limit=ref->first+ref->count<end?ref->first+ref->count:end;
         for (uint32_t i=first;i<limit;++i) {
             status=error_block_row(flow,b,i,zero_copy,ref,row);
             if (status!=XR_XIR_OK || flow->restart) return status;
         }
+        if (!xir_compile_work(flow->remaining,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+        first=limit;cursor->last=limit-1;
     }
     return XR_XIR_OK;
 }
@@ -833,6 +841,10 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
     XrXirStatus head_status=effect_body_request_head(&flow->body,f,&flow->head);
     if (head_status!=XR_XIR_OK) return head_status;
     flow->function=&flow->head;
+    if (error_owned_reader(flow)) {
+        if (!xir_compile_work(flow->remaining,sizeof(flow->block_cursor))) return XR_XIR_BUDGET;
+        flow->block_cursor=(EffectBodyRecordCursor){0,0,UINT32_MAX};
+    }
     if (!xir_compile_work(flow->remaining,sizeof(flow->cell_types)+sizeof(flow->cell_material)+
         sizeof(flow->cell_function)+sizeof(flow->cell_type_count))) return XR_XIR_BUDGET;
     flow->cell_types=NULL;flow->cell_material=NULL;flow->cell_function=flow->cell_type_count=0;

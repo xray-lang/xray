@@ -741,7 +741,9 @@ static void pc_empty_limits(void) {
 #include "xir_error_unit_cell_controls.h"
 #include "xir_error_invocation_controls.h"
 #include "xir_error_return_coverage_controls.h"
+#include "xir_error_block_cursor_cases.h"
 static void pc_semantics(void) {
+    pc_error_block_cursor_controls();
     for (unsigned mode=0;mode<EI_CASES;++mode) {
         XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
         CHECK(ei_whole(&c,mode)==XR_XIR_OK);pc_release(&c,baseline);
@@ -796,6 +798,7 @@ int main(int argc,char **argv) {
         CHECK(!live && !live_bytes);puts("typed-error CFG pending selected feedback PASS");return 0;
     }
 
+    pc_error_block_cursor_controls();
     pc_invocation_controls();
     pc_return_coverage_controls();
     pc_unit_cell_controls();
