@@ -237,9 +237,9 @@ static void copy_owned_sources(ReceiverRun *run, char **argv) {
     CHECK(same_path(expected, run->root));
     CHECK(strlen(argv[3]) < sizeof(run->stdlib)); strcpy(run->stdlib, argv[3]);
     const char *leaves[2] = {"root.xr", "library.xr"};
-    const size_t lengths[2] = {163, 185};
+    const size_t lengths[2] = {163, 178};
     const char *digests[2] = {"3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
-        "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"};
+        "cde4fc2274c19e4eb8cb2b21cf5364e861e53d385790c6a24da97c107dfa40b5"};
     for (unsigned leaf = 0; leaf < 2; ++leaf) {
         size = snprintf(run->paths[leaf], sizeof(run->paths[leaf]), "%s/%s", run->root, leaves[leaf]);
         CHECK(size > 0 && (size_t)size < sizeof(run->paths[leaf]));
