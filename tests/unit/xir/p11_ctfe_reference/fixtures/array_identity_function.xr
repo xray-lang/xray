@@ -1,0 +1,3 @@
+fn plus(x:i64)->i64{return x+2}
+fn answer()->i64{const xs:Array<fn(i64)->i64>=[plus];return xs[0](40)}
+export fn run()->i64{return comptime answer()}

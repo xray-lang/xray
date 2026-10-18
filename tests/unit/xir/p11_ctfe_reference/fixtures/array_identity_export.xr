@@ -1,0 +1,3 @@
+class Box{value:i64;constructor(value:i64){this.value=value}}
+fn answer()->Array<Box>{return [Box(42)]}
+export fn run()->Array<Box>{return comptime answer()}

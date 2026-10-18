@@ -12,6 +12,7 @@
  */
 #include "xxir_value.h"
 #include "xxir_value_internal.h"
+#include "xxir_compile_domain.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_class_origin_internal.h"
 #include "xxir_type_arena.h"
@@ -48,6 +49,7 @@ struct XrXirDomain {
     struct XrXirDomain *closed_previous, *closed_next;
     bool closed, close_started, close_pending, close_processing, graph_invalid;
     XrXirClassObservation *observation;
+    XrCompileResources *compile_resources;
 };
 typedef struct XirAtomic {
     XirObject object;
@@ -123,6 +125,8 @@ static void domain_unlock(XrXirDomain *domain) {
     atomic_store_explicit(&domain->locked, false, memory_order_release);
 }
 static bool value_object_kind_known(uint32_t kind);
+static XrXirValueStatus struct_observe_operation(const XrXirValue *value,uint32_t field,
+    XrXirValueAdmission *admission,XrXirValue *output,bool receiving);
 #include "xxir_value_graph_control.inc.c"
 static bool unit_value(const XrXirValue *value) {
     return value && !value->type && !value->reserved && !value->payload;
@@ -309,6 +313,18 @@ XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, const XrXirTypeArena
         return arena && object_pointer(value)->arena == arena;
     return type != XR_XIR_UNIT;
 }
+XR_FUNC XrXirValueStatus xr_xir_compile_value_arena_borrow(XrCompileResources *resources,
+    const XrXirValue *value, const XrXirTypeArena **output) {
+    if (!resources || !output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (xr_compile_resources_work(resources,64)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_VALUE_LIMIT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status=XR_XIR_VALUE_BAD_ARGUMENT;
+    if (value && value->type>=XR_XIR_CONSTRUCTED_TYPE_BASE && value_header_valid(value)) {
+        const XrXirTypeArena *arena=object_pointer(value)->arena;
+        if (arena) { *output=arena;status=XR_XIR_VALUE_OK; }
+    }
+    xr_xir_value_graph_end();return status;
+}
 XR_FUNC XrXirValueStatus xr_xir_domain_new(uint64_t limit, XrXirDomain **output) {
     if (!output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (limit < sizeof(XrXirDomain)) return XR_XIR_VALUE_LIMIT;
@@ -324,6 +340,67 @@ XR_FUNC XrXirValueStatus xr_xir_domain_new(uint64_t limit, XrXirDomain **output)
     *output = domain;
     return XR_XIR_VALUE_OK;
 }
+static XrXirValueStatus domain_compile_status(XrCompileResourceStatus status) {
+    return status == XR_COMPILE_RESOURCE_OK ? XR_XIR_VALUE_OK :
+        status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_VALUE_OOM :
+        status == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;
+}
+XR_FUNC XrXirValueStatus xr_xir_compile_value_domain_borrow(XrCompileResources *resources,
+    const XrXirValue *value, const XrXirTypeArena *arena, XrXirDomain **output) {
+    if (!resources || !value || !arena || !output || *output ||
+        value->type<XR_XIR_CONSTRUCTED_TYPE_BASE || value->type>=XR_XIR_CONSTRUCTED_TYPE_LIMIT)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status=domain_compile_status(xr_compile_resources_work(resources,64));
+    if (status!=XR_XIR_VALUE_OK) return status;
+    if (!xr_xir_value_argument(value,arena,(XrXirType)value->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirObject *object=object_pointer(value);
+    if (object->kind!=XR_XIR_TYPE_ARRAY && object->kind!=XR_XIR_TYPE_NOMINAL &&
+        object->kind!=XR_XIR_TYPE_NULLABLE && object->kind!=XR_XIR_TYPE_TUPLE) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!object->domain || object->domain->compile_resources!=resources) return XR_XIR_VALUE_BAD_ARGUMENT;
+    *output=object->domain;return XR_XIR_VALUE_OK;
+}
+XR_FUNC XrXirValueStatus xr_xir_compile_domain_new(XrCompileResources *resources,
+    uint64_t limit, XrXirDomain **output) {
+    if (!resources || !output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (limit < sizeof(XrXirDomain)) return XR_XIR_VALUE_LIMIT;
+    XrXirDomain *domain = NULL;
+    XrXirValueStatus status = domain_compile_status(
+        xr_compile_resources_calloc(resources, 1, sizeof(*domain), (void **)&domain));
+    if (status != XR_XIR_VALUE_OK) return status;
+    memcpy(domain->identity, domain_identity, sizeof(domain_identity));
+    atomic_init(&domain->references, 1);
+    atomic_init(&domain->locked, false);
+    domain->limit = limit;
+    domain->compile_resources = resources;
+    domain->stats = (XrXirDomainStats){sizeof(*domain), sizeof(*domain), 1, 0, 0};
+    *output = domain;
+    return XR_XIR_VALUE_OK;
+}
+static void *domain_memory_allocate(XrXirDomain *domain, size_t bytes, bool zero,
+    XrXirValueStatus *status) {
+    if (!domain->compile_resources) {
+        void *memory = zero ? xr_calloc(1, bytes) : xr_malloc(bytes);
+        if (!memory) *status = XR_XIR_VALUE_OOM;
+        return memory;
+    }
+    void *memory = NULL;
+    *status = domain_compile_status(zero ?
+        xr_compile_resources_calloc(domain->compile_resources, 1, bytes, &memory) :
+        xr_compile_resources_alloc(domain->compile_resources, bytes, &memory));
+    return memory;
+}
+static void domain_memory_free(XrXirDomain *domain, void *memory) {
+    if (domain->compile_resources) xr_compile_resources_free(memory);
+    else xr_free(memory);
+}
+static XrXirValueStatus domain_memory_resize(XrXirDomain *domain, void **memory, size_t bytes) {
+    if (domain->compile_resources)
+        return domain_compile_status(xr_compile_resources_resize(domain->compile_resources, memory, bytes));
+    void *replacement = xr_realloc(*memory, bytes);
+    if (!replacement) return XR_XIR_VALUE_OOM;
+    *memory = replacement;
+    return XR_XIR_VALUE_OK;
+}
 XR_FUNC bool xr_xir_domain_retain(XrXirDomain *domain) {
     return xr_xir_domain_current(domain) && xr_xir_reference_retain(&domain->references);
 }
@@ -337,7 +414,7 @@ static void graph_domain_dispose(XrXirDomain *domain) {
                  domain->budget.metadata_allocations == domain->budget.metadata_frees &&
                  domain->budget.call_allocations == domain->budget.call_frees,
                  "domain still owns execution metadata");
-        xr_free(domain);
+        domain_memory_free(domain, domain);
 }
 XR_FUNC void xr_xir_domain_drop(XrXirDomain *domain) {
     if (!domain) return;
@@ -418,12 +495,12 @@ static void *domain_execution_allocate(XrXirDomain *domain, uint64_t bytes, bool
     }
     budget->requested_call_bytes += bytes;
     ++budget->work;
-    void *memory = xr_calloc(1, (size_t)bytes);
+    void *memory = domain_memory_allocate(domain, (size_t)bytes, true, status);
     if (memory) {
         *category_live += bytes;
         if (*category_live > *peak) *peak = *category_live;
         ++*allocations;
-    } else *status = XR_XIR_VALUE_OOM;
+    }
     domain_unlock(domain);
     return memory;
 }
@@ -435,7 +512,7 @@ static void domain_execution_deallocate(XrXirDomain *domain, void *memory, uint6
     uint64_t *frees = metadata ? &budget->metadata_frees : &budget->call_frees;
     uint64_t allocations = metadata ? budget->metadata_allocations : budget->call_allocations;
     XR_CHECK(*category_live >= bytes && allocations > *frees, "execution metadata release requires its original charge");
-    xr_free(memory);
+    domain_memory_free(domain, memory);
     *category_live -= bytes;
     ++*frees;
     domain_unlock(domain);
@@ -456,6 +533,8 @@ XR_FUNC bool xr_xir_domain_work(XrXirDomain *domain, uint64_t work) {
     if (!xr_xir_domain_current(domain)) return false;
     domain_lock(domain);
     bool allowed = !domain->budget.bound || work <= domain->budget.work_limit - domain->budget.work;
+    if (allowed && domain->compile_resources)
+        allowed = xr_compile_resources_work(domain->compile_resources, work) == XR_COMPILE_RESOURCE_OK;
     if (allowed && domain->budget.bound) domain->budget.work += work;
     domain_unlock(domain);
     return allowed;
@@ -482,13 +561,13 @@ XR_FUNC void *xr_xir_domain_allocate(XrXirDomain *domain, size_t bytes, XrXirVal
         return NULL;
     }
     if (domain->budget.bound) { domain->budget.requested_bytes += bytes; ++domain->budget.work; }
-    void *memory = xr_malloc(bytes);
+    void *memory = domain_memory_allocate(domain, bytes, false, status);
     if (memory) {
         domain->stats.live_bytes += bytes;
         if (domain->stats.live_bytes > domain->stats.peak_bytes)
             domain->stats.peak_bytes = domain->stats.live_bytes;
         ++domain->stats.allocations;
-    } else *status = XR_XIR_VALUE_OOM;
+    }
     domain_unlock(domain);
     return memory;
 }
@@ -496,7 +575,7 @@ XR_FUNC void xr_xir_domain_deallocate(XrXirDomain *domain, void *memory, size_t 
     domain_lock(domain);
     XR_CHECK(memory && domain->stats.live_bytes >= bytes &&
              domain->stats.allocations > domain->stats.frees, "invalid string storage release");
-    xr_free(memory);
+    domain_memory_free(domain, memory);
     domain->stats.live_bytes -= bytes;
     ++domain->stats.frees;
     domain_unlock(domain);
@@ -512,10 +591,11 @@ static XrXirValueStatus string_resize(XirString *string, size_t capacity) {
         return XR_XIR_VALUE_LIMIT;
     }
     if (domain->budget.bound) { domain->budget.requested_bytes += capacity; ++domain->budget.work; }
-    char *replacement = xr_realloc(string->bytes, capacity);
-    if (!replacement) {
+    void *replacement = string->bytes;
+    XrXirValueStatus status = domain_memory_resize(domain, &replacement, capacity);
+    if (status != XR_XIR_VALUE_OK) {
         domain_unlock(domain);
-        return XR_XIR_VALUE_OOM;
+        return status;
     }
     string->bytes = replacement;
     string->capacity = capacity;
@@ -588,7 +668,7 @@ static bool empty_enum_object(const XirObject *object) {
         !((const XirNominalValue *) object)->count &&
         xr_xir_type_is_enum(xr_xir_compile_type_arena_types(object->arena), object->type);
 }
-static XrXirValueStatus xr_xir_value_copy_graph_operation(const XrXirValue *source, XrXirValue *output) {
+static XrXirValueStatus value_copy_on_domain(const XrXirValue *source,XrXirDomain *work_owner,XrXirValue *output) {
     if (!unit_value(output) || !source ||
         !xr_xir_value_valid(source))
         return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -596,7 +676,8 @@ static XrXirValueStatus xr_xir_value_copy_graph_operation(const XrXirValue *sour
         XirObject *object = object_pointer(source);
         /* Empty enum storage belongs to its arena, with no value domain.
          * Execution owners charge their copy/admission work before retaining. */
-        if (!empty_enum_object(object) && !xr_xir_domain_work(object->domain, 1)) return XR_XIR_VALUE_LIMIT;
+        if ((work_owner || !empty_enum_object(object)) &&
+            !xr_xir_domain_work(work_owner?work_owner:object->domain,1)) return XR_XIR_VALUE_LIMIT;
         if (!(empty_enum_object(object) ? xr_xir_compile_type_arena_retain(object->arena) :
             graph_object_retain(object))) return XR_XIR_VALUE_REFCOUNT_LIMIT;
     }
@@ -605,7 +686,7 @@ static XrXirValueStatus xr_xir_value_copy_graph_operation(const XrXirValue *sour
 }
 XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output) {
     xr_xir_value_graph_begin();
-    XrXirValueStatus graph_outcome = xr_xir_value_copy_graph_operation(source, output);
+    XrXirValueStatus graph_outcome = value_copy_on_domain(source,NULL,output);
     xr_xir_value_graph_end();
     return graph_outcome;
 }
@@ -1532,6 +1613,65 @@ XR_FUNC XrXirValueStatus xr_xir_array_get(const XrXirValue *value, int64_t index
     xr_xir_value_graph_end();
     return graph_outcome;
 }
+static XrXirValueStatus array_observe_operation(const XrXirValue *value, int64_t index,
+    XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault,bool receiving) {
+    if (fault) *fault=(XrXirFaultDetail){0};
+    if (!value || !fault || !unit_value(output) || !admission || !admission->domain || !admission->arena)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (admission->work<64 || !xr_xir_domain_work(admission->domain,64)) return XR_XIR_VALUE_LIMIT;
+    admission->work-=64;
+    if (!xr_xir_value_argument(value,admission->arena,(XrXirType)value->type) ||
+        !xr_xir_type_is_array(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirArray *array=(XirArray *)object_pointer(value);
+    if (!receiving && array->object.domain!=admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (index<0 || (uint64_t)index>=array->length) {
+        *fault=(XrXirFaultDetail){430,0,index,(int64_t)array->length};return XR_XIR_VALUE_BOUNDS;
+    }
+    if (!admission->work) return XR_XIR_VALUE_LIMIT;
+    --admission->work;
+    StorageSpan span={array->element,array_slot(array,(size_t)index)};
+    return receiving?storage_unpack_operation(span,admission,output,true):storage_unpack(span,admission,output);
+}
+XR_FUNC XrXirValueStatus xr_xir_array_observe(const XrXirValue *array, int64_t index,
+    XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status=array_observe_operation(array,index,admission,output,fault,false);
+    xr_xir_value_graph_end();return status;
+}
+XR_FUNC XrXirValueStatus xr_xir_compile_value_observe(XrCompileResources *resources,
+    const XrXirValue *value,uint64_t index,XrXirValueAdmission *admission,XrXirValue *output) {
+    if (!resources || !value || !admission || !xr_xir_domain_current(admission->domain) ||
+        admission->domain->compile_resources!=resources || index>INT64_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type);
+    XrXirValueStatus status=XR_XIR_VALUE_BAD_ARGUMENT;
+    if (node && node->kind==XR_XIR_TYPE_ARRAY) {
+        XrXirFaultDetail fault={0};
+        status=array_observe_operation(value,(int64_t)index,admission,output,&fault,true);
+    } else if (node && xr_xir_type_is_struct(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type) && index<=UINT32_MAX)
+        status=struct_observe_operation(value,(uint32_t)index,admission,output,true);
+    else if (node) {
+        if (admission->work<64 || !xr_xir_domain_work(admission->domain,64)) status=XR_XIR_VALUE_LIMIT;
+        else {
+            admission->work-=64;
+            if (xr_xir_value_argument(value,admission->arena,(XrXirType)value->type)) {
+                const XrXirValue *child=NULL;
+                if (node->kind==XR_XIR_TYPE_TUPLE) {
+                    const XirTuple *tuple=(const XirTuple *)object_pointer(value);
+                    if (index<tuple->count) child=&tuple->fields[index];
+                } else if (node->kind==XR_XIR_TYPE_NULLABLE ||
+                    xr_xir_type_is_enum(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type)) {
+                    const XirNominalValue *record=(const XirNominalValue *)object_pointer(value);
+                    if (index<record->count) child=&record->fields[index];
+                }
+                if (child) status=value_copy_on_domain(child,admission->domain,output);
+            }
+        }
+    }
+    xr_xir_value_graph_end();return status;
+}
 
 static XrXirValueStatus array_grow(XirArray *array, size_t capacity) {
     XrXirDomain *domain = array->object.domain;
@@ -1552,8 +1692,9 @@ static XrXirValueStatus array_grow(XirArray *array, size_t capacity) {
         domain_unlock(domain); return XR_XIR_VALUE_LIMIT;
     }
     if (domain->budget.bound) { domain->budget.requested_bytes += bytes; ++domain->budget.work; }
-    unsigned char *replacement = xr_realloc(array->data, bytes);
-    if (!replacement) { domain_unlock(domain); return XR_XIR_VALUE_OOM; }
+    void *replacement = array->data;
+    status = domain_memory_resize(domain, &replacement, bytes);
+    if (status != XR_XIR_VALUE_OK) { domain_unlock(domain); return status; }
     array->data = replacement; array->capacity = capacity;
     domain->stats.live_bytes += extra;
     if (domain->stats.live_bytes > domain->stats.peak_bytes) domain->stats.peak_bytes = domain->stats.live_bytes;

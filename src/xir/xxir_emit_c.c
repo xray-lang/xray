@@ -15,6 +15,7 @@
 
 #include "xxir_emit_c.h"
 #include "xxir_checked.h"
+#include "xxir_internal.h"
 #include "xxir_program.h"
 #include "xxir_program_packet_internal.h"
 #include "xxir_atomic.h"
@@ -336,7 +337,7 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_leaf_c(const XrXirArtifact *artifact, co
     if (!output || output->text || output->length)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
-    if (!module || module->stage != XR_XIR_LOWERED)
+    if (!module || module->stage != XR_XIR_LOWERED || xir_artifact_is_evaluation(artifact))
         return XR_XIR_BAD_STAGE;
     CBuffer buffer = {.limit = byte_limit, .status = XR_XIR_OK,
         .types = module->types, .context = xr_xir_compile_artifact_context(artifact)};
@@ -1631,7 +1632,7 @@ XR_FUNC XrXirStatus xr_xir_compile_emit_c(const XrXirArtifact *artifact, const c
                         size_t byte_limit, XrXirCSource *output) {
     if (!output || output->text || output->length) return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
-    if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
+    if (!module || module->stage != XR_XIR_LOWERED || xir_artifact_is_evaluation(artifact)) return XR_XIR_BAD_STAGE;
     CBuffer buffer = {.limit = byte_limit, .status = XR_XIR_OK,
         .types = module->types, .context = xr_xir_compile_artifact_context(artifact)};
     if (!symbol_prefix_valid(&buffer, symbol_prefix))

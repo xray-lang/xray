@@ -1,0 +1,2 @@
+class Box{value:i64;constructor(value:i64){this.value=value}}
+export fn run()->Box{return comptime Box(42)}

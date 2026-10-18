@@ -1,0 +1,2 @@
+fn fail(message:string){assert(false,message)}
+export fn run()->string{var text="ab";try{defer{text=text+"c"};fail(text)}catch panic(p){return p.message};return ""}

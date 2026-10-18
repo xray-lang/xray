@@ -1,0 +1,2 @@
+fn make()->Array<i8> { var xs:Array<i8>=[1,2]; return xs.reserve(6) }
+export fn run()->Array<i8> { return comptime make() }

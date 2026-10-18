@@ -1,0 +1,4 @@
+class Box{value:i64;constructor(value:i64){this.value=value}}
+enum Item{Value{b:Box},Empty}
+fn answer()->i64{const xs=[Item.Value{b:Box(40)},Item.Empty];const b=match(xs[0]){Item.Value{b}->b,Item.Empty->Box(0)};return b.value+2}
+export fn run()->i64{return comptime answer()}

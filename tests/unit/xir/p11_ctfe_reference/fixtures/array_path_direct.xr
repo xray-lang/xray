@@ -1,0 +1,1 @@
+export fn run()->Array<i8> { var xs:Array<Array<i8>>=[[1,2]]; xs[0][0]=7; return xs[0] }

@@ -112,7 +112,7 @@ static XrXirStatus effect_invocation_instance_function(const XrXirCompileContext
 static inline XrXirStatus effect_invocation_instance_bounds(const XrXirCompileContext *work,
     const XrXirModule *module,EffectInvocationDeclaredBounds **output) {
     if (!xir_compile_context_valid(work) || !module || !module->functions || !module->function_count ||
-        !output || *output || !module->provenance || module->provenance->kind!=XR_XIR_EVIDENCE_INSTANCE)
+        !output || *output || !module->provenance || !xir_effect_kind_is_closed(module->provenance->kind))
         return XR_XIR_BAD_STRUCTURE;
     const XrXirProvenance *provenance=module->provenance;
     if (!provenance->source || provenance->source->context.resources!=work->resources)

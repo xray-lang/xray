@@ -179,7 +179,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_generation_prepare(XrXirSourceGenerati
     XrXirSourceRequest request={session,NULL,&authority,&owner->config.context,owner->config.stdlib_path,
         owner->config.lockfile,XR_XIR_PROGRAM,owner->config.libraries};
     SourceInput input={.supplied=true,.text={NULL,record->source,text->length},.capture=&record->capture};
-    status=source_check_input(&request,input,&record->result,&location,NULL);
+    status=source_check_input(&request,input,&record->result,&location,NULL,NULL,NULL);
     if (status!=XR_XIR_OK) goto done;
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(record->result.snapshot);
     if (!record->capture.ast || !view || !view->complete || record->capture.module>=view->module_count) {

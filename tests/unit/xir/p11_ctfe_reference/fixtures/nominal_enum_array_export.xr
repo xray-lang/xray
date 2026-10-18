@@ -1,0 +1,3 @@
+enum Choice { Empty, Some { items:Array<(i8,string)> } }
+fn make()->Choice { return Choice.Some{items:[(7,"ab")]} }
+export fn run()->Choice { return comptime make() }

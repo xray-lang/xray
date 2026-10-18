@@ -1,0 +1,3 @@
+enum Choice { Empty, Some { value:i8 } }
+fn answer()->i64 { const x=Choice.Empty; return match(x) { Choice.Empty -> 42, Choice.Some{value} -> value as i64 } }
+export fn run()->i64 { return comptime answer() }

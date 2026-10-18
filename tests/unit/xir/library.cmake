@@ -11,7 +11,7 @@ target_compile_definitions(test_xir_library_source PRIVATE
     XR_SOURCE_STDLIB="${CMAKE_SOURCE_DIR}/stdlib")
 add_custom_command(OUTPUT ${XIR_LIBRARY_CHECKED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_library_source> ${XIR_LIBRARY_CHECKED}
+    COMMAND $<TARGET_FILE:test_xir_library_source> --emit-only ${XIR_LIBRARY_CHECKED}
     DEPENDS test_xir_library_source
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_library_goldens.h
         ${CMAKE_CURRENT_SOURCE_DIR}/xir/xir_defaults_golden_bytes.h

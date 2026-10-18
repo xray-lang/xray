@@ -1,0 +1,3 @@
+fn flag(x:bool)->bool { var y=x; y=!y; return y }
+fn divide(n:i64)->i64 { var y=n; return 1/y }
+export fn run()->i64 { return 42 }

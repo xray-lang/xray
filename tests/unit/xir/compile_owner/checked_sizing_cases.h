@@ -75,7 +75,7 @@ static const uint8_t sizing_empty_golden[220] = {
 #include "checked_sizing65_golden.h"
 #include "checked_sizing71_golden.h"
 #include "checked_sizing72_golden.h"
-#include "checked_sizing73_golden.h"
+#include "checked_sizing75_golden.h"
 static void sizing_historical_rejections(void) {
     const uint8_t *const vectors[] = {sizing_golden,sizing_embedded_golden,sizing_empty_golden,sizing64_golden,sizing64_embedded_golden,sizing64_empty_golden,sizing65_golden,sizing65_embedded_golden,sizing65_empty_golden,sizing71_golden,sizing71_embedded_golden,sizing71_empty_golden,sizing72_golden,sizing72_embedded_golden,sizing72_empty_golden};
     const size_t lengths[] = {sizeof(sizing_golden),sizeof(sizing_embedded_golden),sizeof(sizing_empty_golden),sizeof(sizing64_golden),sizeof(sizing64_embedded_golden),sizeof(sizing64_empty_golden),sizeof(sizing65_golden),sizeof(sizing65_embedded_golden),sizeof(sizing65_empty_golden),sizeof(sizing71_golden),sizeof(sizing71_embedded_golden),sizeof(sizing71_empty_golden),sizeof(sizing72_golden),sizeof(sizing72_embedded_golden),sizeof(sizing72_empty_golden)};
@@ -191,10 +191,10 @@ static XrXirStatus sizing_packet(XrCompileResources *owner, unsigned variant) {
     if (status==XR_XIR_OK) status=checked_encode(&artifact,&packet,NULL);
     if (status != XR_XIR_OK) CHECK(packet.bytes == &sentinel && packet.length == 17 && sentinel == 0x5a);
     else {
-        CHECK(packet.bytes != &sentinel && packet.length == (variant == 2 ? 224 : 228));
-        if (!variant) CHECK(!memcmp(packet.bytes,sizing73_golden,sizeof(sizing73_golden)));
-        else if (variant == 1) CHECK(!memcmp(packet.bytes,sizing73_embedded_golden,sizeof(sizing73_embedded_golden)));
-        else CHECK(!memcmp(packet.bytes,sizing73_empty_golden,sizeof(sizing73_empty_golden)));
+        CHECK(packet.bytes != &sentinel && packet.length == (variant == 2 ? 236 : 240));
+        if (!variant) CHECK(!memcmp(packet.bytes,sizing75_golden,sizeof(sizing75_golden)));
+        else if (variant == 1) CHECK(!memcmp(packet.bytes,sizing75_embedded_golden,sizeof(sizing75_embedded_golden)));
+        else CHECK(!memcmp(packet.bytes,sizing75_empty_golden,sizeof(sizing75_empty_golden)));
         xr_xir_compile_checked_packet_free(&packet);
     }
     xr_xir_compile_construction_free(artifact.construction);
@@ -207,23 +207,23 @@ static bool sizing_oracle_charge(uint64_t limit, uint64_t charge, uint64_t *spen
 static uint64_t sizing_prefix_work(uint64_t limit, uint64_t size) {
     /* Header fields, body fields, calloc and digest are atomic real operations. */
     static const uint64_t header[] = {8,4,4,4,4,8};
-    static const uint64_t body[] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,4,4};
+    static const uint64_t body[] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,4,4,4,4,4};
     uint64_t spent = 1;
     if (!sizing_oracle_charge(limit,1+sizeof(XrXirConstruction),&spent)) return spent;
-    for (unsigned i = 0; i < 39; ++i) if (!sizing_oracle_charge(limit,1,&spent)) return spent;
+    for (unsigned i = 0; i < 42; ++i) if (!sizing_oracle_charge(limit,1,&spent)) return spent;
     if (!sizing_oracle_charge(limit,size+1,&spent)) return spent;
     for (size_t i = 0; i < sizeof(header)/sizeof(header[0]); ++i)
         if (!sizing_oracle_charge(limit,header[i],&spent)) return spent;
     for (size_t i = 0; i < sizeof(body)/sizeof(body[0]); ++i)
-        if (!sizing_oracle_charge(limit,i == 4 ? size-224 : body[i],&spent)) return spent;
+        if (!sizing_oracle_charge(limit,i == 4 ? size-236 : body[i],&spent)) return spent;
     (void)sizing_oracle_charge(limit,size-32,&spent);
     return spent;
 }
 static void sizing_packet_boundaries(unsigned variant) {
-    /* Mandatory empty facts calloc, thirty-eight integer fields plus blob advance.
-     * Wire body is 160+name bytes. Facts stay live through packet allocation. */
-    const uint64_t size = variant == 2 ? 224 : 228;
-    const uint64_t work = 1 + (1+sizeof(XrXirConstruction)) + 39 + (size+1) + (size-32) + (size-32);
+    /* Mandatory empty facts calloc, forty-one integer fields plus blob advance.
+     * Wire body is 172+name bytes. Facts stay live through packet allocation. */
+    const uint64_t size = variant == 2 ? 236 : 240;
+    const uint64_t work = 1 + (1+sizeof(XrXirConstruction)) + 42 + (size+1) + (size-32) + (size-32);
     const uint64_t storage = sizeof(XrCompileResources) + 2*sizeof(CompileAllocation) + sizeof(XrXirConstruction) + size;
     for (uint64_t cut = 1; cut <= work; ++cut) {
         reset(SIZE_MAX); XrCompileResources *owner = NULL;
@@ -249,7 +249,9 @@ static void sizing_packet_boundaries(unsigned variant) {
         else {
             CHECK(status == XR_COMPILE_RESOURCE_OK);
             CHECK(sizing_packet(owner,variant) == XR_XIR_OUT_OF_MEMORY && attempts == failure+1);
-            CHECK(stats(owner).work == (failure==1 ? 2 : 42+sizeof(XrXirConstruction))); xr_compile_resources_release(owner);
+            /* Owner bootstrap, successful construction, 42 sizing fields and
+             * the failed packet allocation attempt retain their exact debit. */
+            CHECK(stats(owner).work == (failure==1 ? 2 : 45+sizeof(XrXirConstruction))); xr_compile_resources_release(owner);
         }
         CHECK(!live && !live_count);
     }
@@ -261,8 +263,8 @@ static void sizing_public_golden(void) {
     XrXirArtifact *checked = NULL, *decoded = NULL; XrXirCheckedPacket packet = {0};
     CHECK(xir_fixture_check(&context, &module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL) == XR_XIR_OK);
-    CHECK(packet.length == sizeof(sizing73_golden) && !memcmp(packet.bytes,sizing73_golden,sizeof(sizing73_golden)));
-    CHECK(xr_xir_compile_checked_read(&context,sizing73_golden,sizeof(sizing73_golden),&decoded,NULL) == XR_XIR_OK);
+    CHECK(packet.length == sizeof(sizing75_golden) && !memcmp(packet.bytes,sizing75_golden,sizeof(sizing75_golden)));
+    CHECK(xr_xir_compile_checked_read(&context,sizing75_golden,sizeof(sizing75_golden),&decoded,NULL) == XR_XIR_OK);
     CHECK(decoded->module.functions[0].instructions[0].immediate == 42);
     xr_xir_compile_artifact_free(checked); xr_xir_compile_artifact_free(decoded);
     xr_xir_compile_checked_packet_free(&packet); CHECK(live_count == 1);

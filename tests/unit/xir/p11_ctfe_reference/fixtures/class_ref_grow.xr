@@ -1,0 +1,4 @@
+class Box{items:Array<i64>;constructor(items:Array<i64>){this.items=items}}
+fn grow(xs:ref Array<i64>){xs.push(1);xs.push(2)}
+fn answer()->i64{const b=Box([39]);grow(ref b.items);return b.items[0]+len(b.items)}
+export fn run()->i64{return comptime answer()}

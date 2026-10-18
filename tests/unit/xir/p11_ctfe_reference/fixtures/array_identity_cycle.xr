@@ -1,0 +1,3 @@
+class Node{next:Array<Node>;constructor(next:Array<Node>){this.next=next}}
+fn answer()->i64{const b=Node([]);b.next.push(b);return 42}
+export fn run()->i64{return comptime answer()}

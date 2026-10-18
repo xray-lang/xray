@@ -71,6 +71,29 @@ XR_FUNC XrXirValueStatus xr_xir_struct_get(const XrXirValue *value, uint32_t fie
     xr_xir_value_graph_end();
     return graph_outcome;
 }
+static XrXirValueStatus struct_observe_operation(const XrXirValue *value, uint32_t field,
+    XrXirValueAdmission *admission, XrXirValue *output,bool receiving) {
+    if (!value || !unit_value(output) || !admission || !admission->arena || !admission->domain)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (admission->work<64 || !xr_xir_domain_work(admission->domain,64)) return XR_XIR_VALUE_LIMIT;
+    admission->work-=64;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);
+    if (!xr_xir_value_argument(value,admission->arena,(XrXirType)value->type) ||
+        !xr_xir_type_is_struct(types,(XrXirType)value->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    const XirNominalValue *record=(const XirNominalValue *)object_pointer(value);
+    if ((!receiving && record->object.domain!=admission->domain) || field>=record->count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!admission->work) return XR_XIR_VALUE_LIMIT;
+    --admission->work;
+    return receiving?value_copy_on_domain(&record->fields[field],admission->domain,output):
+        xr_xir_value_copy(&record->fields[field],output);
+}
+XR_FUNC XrXirValueStatus xr_xir_struct_observe(const XrXirValue *value, uint32_t field,
+    XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status=struct_observe_operation(value,field,admission,output,false);
+    xr_xir_value_graph_end();return status;
+}
 static XrXirValueStatus xr_xir_struct_set_graph_operation(const XrXirValuePlace *place, uint32_t field,
     const XrXirValue *value, XrXirValueAdmission *admission) {
     if (!place || !place->payload || !admission) return XR_XIR_VALUE_BAD_ARGUMENT;

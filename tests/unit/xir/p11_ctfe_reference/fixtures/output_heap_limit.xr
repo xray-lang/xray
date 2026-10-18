@@ -1,0 +1,2 @@
+fn grow()->string{var t="a";var i=0;while(i<24){t=t+t;i=i+1};return t}
+export fn run()->string{return comptime grow()}

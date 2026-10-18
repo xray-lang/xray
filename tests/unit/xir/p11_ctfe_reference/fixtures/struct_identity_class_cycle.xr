@@ -1,0 +1,4 @@
+class Box{next:Wrap?;constructor(){this.next=null}}
+struct Wrap{item:Box}
+fn answer()->i64{const b=Box();b.next=Wrap{item:b};return 42}
+export fn run()->i64{return comptime answer()}

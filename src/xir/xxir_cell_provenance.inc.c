@@ -420,11 +420,12 @@ static bool cell_proof_role_row(CellProofBuild *build,uint32_t f,uint32_t i,cons
             if (!xr_xir_callable_parameter_storage_valid(module->types, parameter))
                 return cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
             if (parameter->mode != XR_PARAM_REF) continue;
-            if (op->args[1] || cell_proof_tracking(proof,target,p) != 1)
+            uint32_t formal=op->args[1]+p;
+            if (cell_proof_tracking(proof,target,formal) != 1)
                 return cell_proof_error(build,f,i,XR_XIR_BAD_TYPE);
-            /* A real unbound reference authorizes only the scoped call
-             * protocol. No owner origin follows from its signature. */
-            build->uses[callee->begin+p] |= 2u;
+            /* The suffix after authentic captures uses the scoped call
+             * protocol. Its signature grants no capture or owner origin. */
+            build->uses[callee->begin+formal] |= 2u;
         }
     }
     return true;

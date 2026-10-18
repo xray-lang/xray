@@ -17,6 +17,7 @@
 #include "xir_defaults65_golden_bytes.h"
 #include "xir_defaults71_golden_bytes.h"
 #include "xir_defaults72_golden_bytes.h"
+#include "xir_defaults75_golden_bytes.h"
 #include "xir_library_prior_packet_rejection.h"
 #include "xir_defaults_invoke_golden.h"
 static void defaults_wire_goldens(void) {
@@ -46,16 +47,20 @@ static void defaults_wire_goldens(void) {
         {defaults64_golden_10,sizeof(defaults64_golden_10),false},
         {defaults65_golden_7,sizeof(defaults65_golden_7),false},
         {defaults71_golden_7,sizeof(defaults71_golden_7),false},
-        {defaults72_golden_7,sizeof(defaults72_golden_7),true},
+        {defaults72_golden_7,sizeof(defaults72_golden_7),false},
+        {defaults75_golden_7,sizeof(defaults75_golden_7),true},
         {defaults65_golden_8,sizeof(defaults65_golden_8),false},
         {defaults71_golden_8,sizeof(defaults71_golden_8),false},
-        {defaults72_golden_8,sizeof(defaults72_golden_8),true},
+        {defaults72_golden_8,sizeof(defaults72_golden_8),false},
+        {defaults75_golden_8,sizeof(defaults75_golden_8),true},
         {defaults65_golden_9,sizeof(defaults65_golden_9),false},
         {defaults71_golden_9,sizeof(defaults71_golden_9),false},
-        {defaults72_golden_9,sizeof(defaults72_golden_9),true},
+        {defaults72_golden_9,sizeof(defaults72_golden_9),false},
+        {defaults75_golden_9,sizeof(defaults75_golden_9),true},
         {defaults65_golden_10,sizeof(defaults65_golden_10),false},
         {defaults71_golden_10,sizeof(defaults71_golden_10),false},
-        {defaults72_golden_10,sizeof(defaults72_golden_10),true}
+        {defaults72_golden_10,sizeof(defaults72_golden_10),false},
+        {defaults75_golden_10,sizeof(defaults75_golden_10),true}
     };
     size_t live = runtime_live, physical = runtime_bytes;
     for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); ++i) {
@@ -75,7 +80,7 @@ static void defaults_wire_goldens(void) {
 static void defaults_wire_ownership(void) {
     size_t live = runtime_live, physical = runtime_bytes;
     XrXirArtifact *producer = NULL, *copy = NULL;
-    CHECK(xr_xir_compile_checked_read(library_context,defaults72_golden_7,sizeof(defaults72_golden_7),&producer,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(library_context,defaults75_golden_7,sizeof(defaults75_golden_7),&producer,NULL) == XR_XIR_OK);
     const XrXirModule *original = xr_xir_compile_artifact_module(producer);
     CHECK(original->defaults && original->defaults->count == 1);
     CHECK(original->defaults->records[0].function == 0 && original->defaults->records[0].owner == 2);
@@ -86,14 +91,14 @@ static void defaults_wire_ownership(void) {
     CHECK(xr_xir_compile_artifact_verify(copy,NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(copy,&packet,NULL) == XR_XIR_OK);
-    CHECK(packet.length == sizeof(defaults72_golden_7) && !memcmp(packet.bytes,defaults72_golden_7,packet.length));
+    CHECK(packet.length == sizeof(defaults75_golden_7) && !memcmp(packet.bytes,defaults75_golden_7,packet.length));
     xr_xir_compile_artifact_free(copy); xr_xir_compile_checked_packet_free(&packet);
     CHECK(runtime_live == live && runtime_bytes == physical);
 }
 static void defaults_clone_failures(void) {
     size_t live = runtime_live, physical = runtime_bytes;
     XrXirArtifact *producer = NULL, *copy = NULL;
-    CHECK(xr_xir_compile_checked_read(library_context,defaults72_golden_7,sizeof(defaults72_golden_7),&producer,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(library_context,defaults75_golden_7,sizeof(defaults75_golden_7),&producer,NULL) == XR_XIR_OK);
     const XrXirModule *original = xr_xir_compile_artifact_module(producer);
     LibraryPacketFixture fixture={NULL,0,producer};library_compile_operation_cases("defaults owned clone",library_packet_operation,&fixture);
     XrXirModule bad = *original;
@@ -106,18 +111,18 @@ static void defaults_clone_failures(void) {
 static void defaults_wire_failure_prefix(void) {
     size_t live = runtime_live, physical = runtime_bytes;
     XrXirArtifact *artifact = NULL;
-    LibraryPacketFixture fixture={defaults72_golden_7,sizeof(defaults72_golden_7),NULL};
+    LibraryPacketFixture fixture={defaults75_golden_7,sizeof(defaults75_golden_7),NULL};
     library_compile_operation_cases("defaults packet reader/writer",library_packet_operation,&fixture);
-    uint8_t bad[sizeof(defaults72_golden_7)];
-    memcpy(bad,defaults72_golden_7,sizeof(bad));
-    /* The independent fixture's count is at 546, before its 16-byte record. */
-    memset(bad+546,255,4);
+    uint8_t bad[sizeof(defaults75_golden_7)];
+    memcpy(bad,defaults75_golden_7,sizeof(bad));
+    /* The independent fixture's count is at 558, before its 16-byte record. */
+    memset(bad+558,255,4);
     XrSHA256Context digest; xr_sha256_init(&digest); xr_sha256_update(&digest,bad,32);
     xr_sha256_update(&digest,bad+64,sizeof(bad)-64); xr_sha256_final(&digest,bad+32);
     CHECK(xr_xir_compile_checked_read(library_context,bad,sizeof(bad),&artifact,NULL) == XR_XIR_BAD_STRUCTURE && !artifact);
     CHECK(runtime_live == live && runtime_bytes == physical);
     for (size_t length = 518; length < sizeof(bad); ++length) {
-        memcpy(bad,defaults72_golden_7,sizeof(bad));
+        memcpy(bad,defaults75_golden_7,sizeof(bad));
         uint64_t payload = length - 64;
         for (unsigned j = 0; j < 8; ++j) bad[24+j] = (uint8_t)(payload >> (j*8));
         xr_sha256_init(&digest); xr_sha256_update(&digest,bad,32);
@@ -126,7 +131,7 @@ static void defaults_wire_failure_prefix(void) {
         CHECK(runtime_live == live && runtime_bytes == physical);
     }
     /* Zero nominal declarations still require the exact dense wire count. */
-    memcpy(bad,defaults72_golden_7,sizeof(bad));bad[542]=1;
+    memcpy(bad,defaults75_golden_7,sizeof(bad));bad[542]=1;
     xr_sha256_init(&digest);xr_sha256_update(&digest,bad,32);
     xr_sha256_update(&digest,bad+64,sizeof(bad)-64);xr_sha256_final(&digest,bad+32);
     size_t compiler_blocks=source_live,compiler_bytes=source_bytes;
@@ -136,8 +141,8 @@ static void defaults_wire_failure_prefix(void) {
     CHECK(artifact==(XrXirArtifact *)(uintptr_t)1&&source_live==compiler_blocks&&source_bytes==compiler_bytes);
     artifact=NULL;
     for (unsigned field = 0; field < 4; ++field) {
-        memcpy(bad,defaults72_golden_7,sizeof(bad));
-        memset(bad+550+field*4,255,4);
+        memcpy(bad,defaults75_golden_7,sizeof(bad));
+        memset(bad+562+field*4,255,4);
         xr_sha256_init(&digest); xr_sha256_update(&digest,bad,32);
         xr_sha256_update(&digest,bad+64,sizeof(bad)-64); xr_sha256_final(&digest,bad+32);
         XrXirStatus status=xr_xir_compile_checked_read(library_context,bad,sizeof(bad),&artifact,NULL);

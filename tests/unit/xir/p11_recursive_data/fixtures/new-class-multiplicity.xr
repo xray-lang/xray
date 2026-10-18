@@ -1,0 +1,7 @@
+class Leaf{items:Array<(i64,i64)>;constructor(items:Array<(i64,i64)>){this.items=items}}
+class Box{items:Array<Leaf>;constructor(items:Array<Leaf>){this.items=items}}
+struct Wrap{left:Box;right:Box;number:i64}
+fn inner(number:ref i64,box:Box){const leaf=Leaf([]);box.items.push(leaf);leaf.items.push((20,22));number+=1}
+fn outer(number:ref i64,box:Box){inner(ref number,box);number+=1}
+fn eval()->i64{const box=Box([]);var wrap=Wrap{left:box,right:box,number:40};const before=wrap;outer(ref wrap.number,box);return wrap.number+len(wrap.left.items[0].items)+len(wrap.right.items[0].items)+before.number-42}
+export fn answer()->i64{return comptime eval()}

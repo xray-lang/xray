@@ -1,0 +1,2 @@
+fn value()->i64 { defer { while(true) {} }; return 42 }
+export fn run()->i64 { return comptime value() }

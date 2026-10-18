@@ -1,0 +1,5 @@
+enum E{Bad}
+enum Wrapped{Cause{cause:Error}}
+fn make()->Error{return Wrapped.Cause{cause:E.Bad}}
+fn answer()->i64{try{throw make()}catch(e:Wrapped){const cause=match(e){Wrapped.Cause{cause}->cause};try{throw cause}catch(inner:E){return 42}}}
+export fn run()->i64{return comptime answer()}

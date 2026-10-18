@@ -18,6 +18,9 @@ struct XrXirConstruction {
     XrXirConstructionRow *rows;
     uint32_t *kinds;
     uint32_t count;
+    XrXirMaterializationBinding *materializations;
+    uint32_t materialization_count;
+    XrXirComptimeTable comptime;
 };
 /* An owner is mandatory, including when no nominal declarations exist.
  * A live foreign input owner may be borrowed. Checks and copies charge the
@@ -31,4 +34,35 @@ XR_FUNC XrXirStatus xir_construction_empty(const XrXirCompileContext *context,
     const XrXirTypes *types, XrXirConstruction **output);
 XR_FUNC XrXirStatus xir_construction_verify(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction);
+XR_FUNC XrXirStatus xir_materialization_verify(const XrXirCompileContext *context,
+    const XrXirModule *module, const XrXirConstruction *construction);
+/* Only closed private data recipes need to name substituted opaque types.
+ * This classification grants no construction, field or execution authority;
+ * the same current verification still checks every instruction and binding.
+ * Complete current construction verification must precede this classification. */
+XR_FUNC XrXirStatus xir_literal_type_names(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,uint32_t function,bool *output);
+XR_FUNC const XrXirMaterializationBinding *xir_materialization_binding(
+    const XrXirConstruction *construction, uint32_t caller, uint32_t instruction);
+XR_FUNC XrXirStatus xir_construction_lower(const XrXirCompileContext *context,
+    const XrXirTypes *types, const XrXirConstruction *source, XrXirConstruction **output);
+typedef struct XirComptimeSelection {
+    const XrXirModule *source;
+    const XrXirTypes *actual_types;
+    uint32_t caller,instruction;
+    const XrXirType *arguments;
+    uint32_t argument_count;
+} XirComptimeSelection;
+/* Current verified key storage and prepaid vector reads are prerequisites.
+ * This order compares metadata only and grants no substitution authority. */
+XR_FUNC int xir_comptime_key_order(const XrXirComptimeBinding *a,const XrXirComptimeBinding *b);
+XR_FUNC const XrXirComptimeSite *xir_comptime_site(const XrXirConstruction *construction,
+    uint32_t caller,uint32_t instruction);
+/* Full current module/construction checking precedes selection. No site means
+ * no transformation; a site without its actual closed key fails compilation. */
+XR_FUNC XrXirStatus xir_comptime_select(const XrXirCompileContext *context,
+    const XrXirConstruction *construction,const XirComptimeSelection *input,
+    const XrXirComptimeBinding **output);
+XR_FUNC XrXirStatus xir_comptime_verify(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction);
 #endif // XXIR_CONSTRUCTION_INTERNAL_H

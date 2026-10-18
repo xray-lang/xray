@@ -132,8 +132,7 @@ static XrXirStatus effect_invocation_context_reference_result(EffectOrdinaryCont
     XrXirTypeMatchScratch *scratch=effect_terms_type_scratch(terms);
     for (uint32_t p=0;p<current->parameter_count && status==XR_XIR_OK;++p) {
         if (!xir_compile_work(terms->remaining,2)) { status=XR_XIR_BUDGET;break; }
-        if (!xr_xir_callable_parameter_storage_valid(&terms->types,&current->parameters[p]) ||
-            (current->parameters[p].mode==XR_PARAM_REF && op->args[1])) {
+        if (!xr_xir_callable_parameter_storage_valid(&terms->types,&current->parameters[p])) {
             status=XR_XIR_BAD_TYPE;break;
         }
         status=xr_xir_compile_type_substitution_matches_between_scratch(terms->remaining,

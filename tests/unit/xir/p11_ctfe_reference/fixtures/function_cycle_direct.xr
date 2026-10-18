@@ -1,0 +1,1 @@
+export fn run()->i64{var f:fn()->i64=fn()->i64{return 0};const g=fn()->i64{return f()};f=g;return 7}

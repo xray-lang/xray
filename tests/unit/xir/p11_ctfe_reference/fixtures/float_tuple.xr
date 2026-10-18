@@ -1,0 +1,1 @@
+export fn run()->(f32,f32) { return comptime (3.5,1.75) }

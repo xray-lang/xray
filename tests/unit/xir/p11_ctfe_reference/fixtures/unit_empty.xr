@@ -1,0 +1,1 @@
+export fn run()->i64 { comptime {}; return 42 }

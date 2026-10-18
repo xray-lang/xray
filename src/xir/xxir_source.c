@@ -12,6 +12,9 @@
 #include "xxir_source.h"
 #include "xxir_source_corpus.h"
 #include "xxir_ctfe.h"
+#include "xxir_source_instance_internal.h"
+#include "xxir_source_comptime_instances_internal.h"
+#include "xxir_literal_internal.h"
 #include "../base/xsha256.h"
 #include "xxir_internal.h"
 #include "xxir_operand_roles.h"
@@ -198,6 +201,12 @@ typedef struct SourceRootQuery {
 } SourceRootQuery;
 typedef struct SourceLibraryUnit SourceLibraryUnit;
 typedef struct SourceComptimeSite SourceComptimeSite;
+typedef struct SourceInstanceBatch {
+    const XirCtfeInstanceView *views;
+    uint32_t *providers;
+    uint32_t count;
+} SourceInstanceBatch;
+typedef struct SourceMaterialization SourceMaterialization;
 typedef struct SourceContext {
     XrModuleGraph *graph;
     XrXirLinkageKind linkage_kind;
@@ -246,8 +255,13 @@ typedef struct SourceContext {
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;
     SourceComptimeSite *comptime_sites;
+    const SourceInstanceBatch *instance_constants;
+    const XrXirModule *literal_definition;
     const SourceComptimeSite *comptime_input;
+    const XrXirTypes *comptime_input_types;
     uint32_t comptime_capacity,comptime_count,comptime_matched;
+    SourceMaterialization *materializations,*materialization_tail;
+    uint32_t materialization_begin,materialization_count;
     SourceExpressionPlan *active_expression;
     /* This exact argument plan owns the pre-loss role, never its children. */
     SourceExpressionPlan *effect_argument;
@@ -2663,36 +2677,7 @@ static bool source_capture_parameters(SourceContext *ctx, AstNode *node, const S
     }
     return true;
 }
-static bool closure_parameters(SourceContext *ctx, AstNode *node, const SourceCaptureScan *scan,
-    XrXirCallableParameter *parameters, const XrXirTypeNode *context) {
-    if (!source_capture_parameters(ctx, node, scan)) return false;
-    SourceFunction *body = &ctx->bodies[ctx->function];
-    FunctionDeclNode *decl = &node->as.function_expr;
-    for (int i = 0; i < decl->param_count; ++i) {
-        XrParamNode *param = decl->params[i];
-        XrXirType type;
-        if (!source_work(ctx, node)) return false;
-        if (param->passing_mode != XR_PARAM_READ || param->default_value || param->pattern || param->is_rest ||
-            (!param->type && !context))
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter requires an annotation or complete callable context");
-        if (param->type) {
-            if (!source_type(ctx, param->type, &type)) return false;
-        } else type = context->parameters[i].type;
-        if (type == XR_XIR_UNIT)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure parameter cannot be unit");
-        SourceName *symbol = add_name(ctx, &ctx->locals, param->name, node);
-        if (!symbol) return false;
-        symbol->kind = SOURCE_LOCAL; symbol->index = scan->count + (uint32_t) i; symbol->type = type;
-        XrXirSourceRange range = {ctx->module, param->line, param->column, param->line, 0};
-        if (param->column > 0 && source_text_size(ctx, param->name) <= (size_t) (INT_MAX - param->column))
-            range.end_column = param->column + (int) source_text_size(ctx, param->name);
-        if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_PARAMETER, body->declaration, range)) return false;
-        source_query_binding_type(ctx, symbol);
-        body->parameters[symbol->index] = type;
-        parameters[i] = (XrXirCallableParameter) {type, XR_PARAM_READ};
-    }
-    return true;
-}
+#include "xxir_source_closure_parameters.inc.c"
 #include "xxir_source_cleanup.inc.c"
 /* Inside its own body a nested declaration is the closure value rebuilt from the
  * body's captures, so recursion needs no extra capture and no cell. */
@@ -2738,7 +2723,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure arity differs from its callable context");
         for (uint32_t p = 0; p < context->parameter_count; ++p) {
             if (!source_work(ctx, node)) return false;
-            if (context->parameters[p].mode != XR_PARAM_READ)
+            if (context->parameters[p].mode != XR_PARAM_READ && context->parameters[p].mode != XR_PARAM_REF)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "closure context requires an unsupported parameter mode");
         }
     }
@@ -2806,7 +2791,9 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
         ok = !decl->param_count || query_parameters;
         for (int i = 0; ok && i < decl->param_count; ++i) {
             ok = source_work(ctx, node);
-            query_parameters[i] = source_query_type(ctx, parameters[i].type);
+            XrXirType shown = parameters[i].type;
+            if (parameters[i].mode == XR_PARAM_REF) shown = xr_xir_cell_element(&ctx->types, shown);
+            query_parameters[i] = source_query_type(ctx, shown);
         }
         XrXirSourceDeclaration *query_declaration = (XrXirSourceDeclaration *) &ctx->query.declarations[body->declaration - 1];
         query_declaration->type = source_query_type(ctx, ctx->functions[index].result);
@@ -2839,6 +2826,8 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
 #include "xxir_source_array_recipes.inc.c"
 #include "xxir_source_core_panics.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
+#include "xxir_source_materialization_finish.inc.c"
+#include "xxir_source_instance_writer.inc.c"
 static bool build_bodies(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count;
     for (int t = 0; t < ctx->graph->topo_count; ++t) {
@@ -2964,7 +2953,13 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
         source_fail(ctx, NULL, status, failure);
     }
 }
+#include "xxir_source_comptime_table.inc.c"
 #include "xxir_core_source.inc.c"
 #include "xxir_source_comptime_pipeline.inc.c"
+#include "xxir_source_instance_pipeline.inc.c"
+#include "xxir_source_comptime_instances.inc.c"
+#include "xxir_literal_pipeline.inc.c"
+#include "xxir_comptime_resolve.inc.c"
+#include "xxir_source_program_comptime.inc.c"
 #include "xxir_source_input.inc.c"
 #include "xxir_source_generation.inc.c"

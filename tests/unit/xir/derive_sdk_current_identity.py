@@ -4,7 +4,7 @@ import argparse,hashlib,json,struct,sys,tempfile
 root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root/'scripts'))
 from derive_xir_sdk_abi import prepare
 
-def current_preimage(rows, semantic=73, value_abi=24, call_abi=29, wire=28, program_abi=31):
+def current_preimage(rows, semantic=75, value_abi=24, call_abi=29, wire=30, program_abi=31):
     word=lambda value:struct.pack('<I',value)
     def text(value):
         data=value.encode('utf-8');return word(len(data))+data
@@ -67,12 +67,22 @@ def main():
     for name,data in (('current_sdk_kat_preimage',value23_image),('current_sdk_kat_file_digest',value23_file),('current_sdk_kat_digest',value23_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',value23_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired Value23 SDK KAT changed'
+    prior73_image,prior73_file,prior73_digest=current_preimage(retired_rows,73,24,29,28,30)
+    prior73_text=Path(__file__).with_name('sdk_previous73_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',prior73_image),('current_sdk_kat_file_digest',prior73_file),('current_sdk_kat_digest',prior73_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',prior73_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete prior73 SDK KAT changed'
+    prior74_image,prior74_file,prior74_digest=current_preimage(retired_rows,74,24,29,29,30)
+    prior74_text=Path(__file__).with_name('sdk_previous74_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',prior74_image),('current_sdk_kat_file_digest',prior74_file),('current_sdk_kat_digest',prior74_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',prior74_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete prior74 SDK KAT changed'
     image,file_digest,digest=current_preimage(rows)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows,73,24,29,28,30)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(28,73,24,29,31)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(30,75,24,29,31)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
     retired_image,retired_file,retired_digest=current_preimage(retired_rows,73,24,29,28,30)
     retired_text=Path(__file__).with_name('sdk_previous_program30_identity_golden.h').read_text()

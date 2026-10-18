@@ -1,0 +1,2 @@
+fn join(a:string,b:string)->string { return a+b }
+export fn run()->string { return comptime join("ab","cd") }
