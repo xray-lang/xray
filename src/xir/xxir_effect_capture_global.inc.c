@@ -414,6 +414,7 @@ static XrXirStatus effect_capture_clauses(EffectCaptureRead *read) {
     }
     return read->fixed_only?XR_XIR_OK:effect_capture_edges(read);
 }
+#include "xxir_effect_capture_scalar.inc.c"
 static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const EffectInvocationFinal *final) {
     if(!final) return XR_XIR_BAD_STRUCTURE;
     EffectCaptureRead read={.work=work,.final=final,.fallback=true,.fixed_only=true,.class_results=true};
@@ -421,6 +422,9 @@ static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const Ef
     EffectBodyCurrentRead current={0};status=effect_body_current_open(work,final->material,&current);
     if(status!=XR_XIR_OK) return status;
     read.body.current=&current;
+    bool scalar=false;status=effect_capture_scalar_domain(&read,&scalar);
+    if(status!=XR_XIR_OK) return status;
+    if(scalar) return final->capture.count?XR_XIR_BAD_STRUCTURE:effect_capture_inputs_match(&read);
     /* Fixedness is independent of origins, so negative fixed queries consume
      * its complete local closure and positive support before origin clauses. */
     EffectCaptureNode node={0};
@@ -457,6 +461,10 @@ static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectIn
     /* The fresh actual-input negative proof admits only an empty relation.
      * No callback occurs before returning these empty construction bytes. */
     if(status==XR_XIR_OK && !read.active) return XR_XIR_OK;
+    bool scalar=false;
+    if(status==XR_XIR_OK) status=effect_capture_scalar_domain(&read,&scalar);
+    if(status!=XR_XIR_OK) return status;
+    if(scalar) return effect_capture_inputs_match(&read);
     if(status==XR_XIR_OK) {
         read.builder=&final->capture;
         for(uint32_t domain=0;domain<4 && status==XR_XIR_OK;++domain) {
