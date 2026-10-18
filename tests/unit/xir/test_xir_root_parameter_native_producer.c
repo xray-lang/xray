@@ -13,6 +13,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_effects.h"
+#include "xir/xxir_types.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_output.h"
