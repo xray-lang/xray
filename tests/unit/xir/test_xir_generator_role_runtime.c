@@ -19,11 +19,13 @@
 XR_DATA const XrXirProgramSpec generator_role_program;
 XR_DATA const uint32_t generator_role_ids[2];
 int main(int argc,char **argv) {
-    CHECK(argc==2);bool native=!strcmp(argv[1],"native"),vm_only=!strcmp(argv[1],"vm");
+    bool ordinary=argc==3 && !strcmp(argv[2],"--ordinary");
+    if(!ordinary) CHECK(argc==2);
+    bool native=!strcmp(argv[1],"native"),vm_only=!strcmp(argv[1],"vm");
     bool root_native=!strcmp(argv[1],"native-vm");CHECK(native || vm_only || root_native || !strcmp(argv[1],"vm-native"));
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);const XrXirProgramSpec *original=&generator_role_program;
     CHECK(original->entry_count<=64);XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_checked_read(&owner.context,original->proof.bytes,original->proof.length,&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&owner.context,original->packet.bytes,original->packet.length,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_lower(closed,&original->target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirVmBinding *bindings=NULL;XrXirCallEntry *vm=NULL;
@@ -35,9 +37,16 @@ int main(int argc,char **argv) {
     }
     XrXirProgramSpec spec=*original;spec.entries=entries;XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(&owner.context,&spec,&program)==XR_XIR_OK);
-    role_cases(program,generator_role_ids);
+    if(ordinary) {
+        for(uint32_t worker=0;worker<2;++worker)
+            role_execute(program,generator_role_ids[worker],worker!=0,false);
+    } else role_cases(program,generator_role_ids);
     CHECK(native?role_steps[1] && !role_steps[0]:vm_only?role_steps[0] && !role_steps[1]:role_steps[0] && role_steps[1]);
     xr_xir_compile_program_drop(program);xr_compile_resources_free(vm);xr_compile_resources_free(bindings);
     xr_xir_compile_artifact_free(lowered);source_fixture_owner_free(&owner);CHECK(!runtime_live && !runtime_bytes);
-    printf("CONSUMER_ROLE %s: genuine VM%u/native%u callbacks, actual role overrides stale object tag, physical0 PASS\n",argv[1],role_steps[0],role_steps[1]);return 0;
+    if(ordinary)
+        printf("CONSUMER_ROLE %s ordinary: genuine VM%u/native%u callbacks, physical0 PASS\n",argv[1],role_steps[0],role_steps[1]);
+    else
+        printf("CONSUMER_ROLE %s: genuine VM%u/native%u callbacks, actual role overrides stale object tag, physical0 PASS\n",argv[1],role_steps[0],role_steps[1]);
+    return 0;
 }
