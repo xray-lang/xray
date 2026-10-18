@@ -1,0 +1,10 @@
+export fn magnitude(value:f64)->f64 { return value.abs() }
+export fn integral(value:f64)->i64 { return value.toI64() }
+export fn floorValue(value:f64)->i64 { return value.floor() }
+export fn ceilValue(value:f64)->i64 { return value.ceil() }
+export fn roundValue(value:f64)->i64 { return value.round() }
+export fn notNumber(value:f64)->bool { return value.isNaN() }
+export fn floatingText(value:f64)->string { return value.toString() }
+export fn booleanText(value:bool)->string { return value.toString() }
+export fn runeText(value:rune)->string { return value.toString() }
+export fn codepoint(value:rune)->u32 { return value.toUInt32() }

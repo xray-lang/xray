@@ -19,10 +19,12 @@ struct string {
     lastIndexOf(search: string) -> i64
     slice(start: i64, end?: i64) -> string
     sliceBytes(start: i64, end: i64) -> string
+    // @native-operation STRING_TO_STRING allocation=no_heap failures=retain ownership=owned
     toString() -> string
     split(separator: string) -> Array<string>
     replace(search: string, replacement: string) -> string
     replaceAll(search: string, replacement: string) -> string
+    // @native-operation STRING_REPEAT allocation=may_heap failures=allocation,retain,limit ownership=owned
     repeat(count: i64) -> string
     // @native-operation STRING_STARTS_WITH allocation=no_heap failures=none ownership=owned
     startsWith(search: string) -> bool

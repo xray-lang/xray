@@ -32,11 +32,14 @@ static uint64_t expected_admission(const XrNativeTypeDeclaration *declaration) {
     return units;
 }
 static void complete_declarations(void) {
-    for (uint32_t id=1;id<=2;++id) {
-        const XrNativeTypeDeclaration *declaration=xr_native_declaration_by_id(id);
+    const struct { uint32_t id;const char *name;uint32_t members; } expected[]={
+        {1,"Array",32},{2,"string",19},{6,"i64",29},{7,"f64",12},{8,"bool",1},{9,"rune",6}
+    };
+    for (unsigned index=0;index<sizeof(expected)/sizeof(*expected);++index) {
+        const XrNativeTypeDeclaration *declaration=xr_native_declaration_by_id(expected[index].id);
         CHECK(declaration && xr_native_declaration_validate(declaration));
-        CHECK(!strcmp(declaration->name,id==1?"Array":"string"));
-        CHECK(declaration->member_count==(id==1?32u:19u));
+        CHECK(!strcmp(declaration->name,expected[index].name));
+        CHECK(declaration->member_count==expected[index].members);
         uint64_t needed=expected_admission(declaration);
         for (uint64_t limit=0;limit<=needed;++limit) {
             Work ledger={limit,0,0};XrNativeDeclarationWork work={&ledger,charge};
@@ -65,10 +68,12 @@ static void lookup_boundaries(void) {
             (limit==12?XR_NATIVE_DECLARATION_OK:XR_NATIVE_DECLARATION_WORK_LIMIT));
         CHECK(limit==12 ? out==xr_native_declaration_by_id(1) : !out);
     }
-    Work ledger={4,0,0};XrNativeDeclarationWork work={&ledger,charge};
+    /* Each governed name differs from '?' at its first byte. All nine names
+     * must be inspected before absence can be established. */
+    Work ledger={18,0,0};XrNativeDeclarationWork work={&ledger,charge};
     const XrNativeTypeDeclaration *out=NULL;
     CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_NOT_FOUND);
-    CHECK(!out && ledger.used==4 && ledger.calls==2);
+    CHECK(!out && ledger.used==18 && ledger.calls==9);
     ledger=(Work){0,0,0};
     CHECK(xr_native_declaration_find(&work,(const char *)(uintptr_t)1,&out)==XR_NATIVE_DECLARATION_WORK_LIMIT);
     CHECK(!out && !ledger.used && ledger.calls==1);

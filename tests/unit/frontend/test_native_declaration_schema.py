@@ -27,9 +27,35 @@ class NativeDeclarations(unittest.TestCase):
         self.assertEqual(header[:3], (1, 'Array', 'T'))
         self.assertEqual(len(members), 32)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
-                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} | set(schema.array_recipe_contracts('T')))
+                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(schema.array_recipe_contracts('T')))
         self.assertEqual(next(m for m in members if m.name == 'map').operation, 'ARRAY_MAP')
         self.assertNotIn('xr_native_def_array', embed.render(ROOT / 'stdlib/types'))
+
+    def test_integer_definition_and_recipe_rejections(self):
+        source = (ROOT / 'stdlib/types/i64.xr').read_text(encoding='utf-8')
+        header, members = schema.parse_source(source, self.prelude)
+        self.assertEqual(header[:3], (6, 'i64', ''))
+        executable = [m for m in members if m.operation != 'NONE']
+        self.assertEqual(len(executable), 25)
+        self.assertEqual(next(m for m in members if m.name == 'sqrt').operation, 'INTEGER_SQRT')
+        self.assertEqual(next(m for m in members if m.name == 'toBigInt').operation, 'NONE')
+        for changed in [source.replace('wrappingAdd(other: i64)', 'wrappingAdd(other: f64)'),
+                        source.replace('abs() -> i64', 'abs() -> f64'),
+                        source.replace('INTEGER_CHECKED_ADD allocation=may_heap', 'INTEGER_CHECKED_ADD allocation=no_heap'),
+                        source.replace('INTEGER_ABS allocation=no_heap failures=none', 'INTEGER_ABS allocation=no_heap failures=limit'),
+                        source.replace('popcount() -> i64', 'popcount() -> u64'),
+                        source.replace('leadingZeros() -> i64', 'leadingZeros(n: i64) -> i64'),
+                        source.replace('trailingZeros() -> i64', 'ref trailingZeros() -> i64'),
+                        source.replace('INTEGER_BYTESWAP allocation=no_heap', 'INTEGER_BYTESWAP allocation=may_heap'),
+                        source.replace('rotateLeft(n: i64)', 'rotateLeft(n: u64)'),
+                        source.replace('rotateRight(n: i64)', 'rotateRight(n?: i64)'),
+                        source.replace('sqrt() -> f64', 'sqrt() -> i64'),
+                        source.replace('sqrt() -> f64', 'sqrt(n: i64) -> f64'),
+                        source.replace('sqrt() -> f64', 'ref sqrt() -> f64'),
+                        source.replace('INTEGER_SQRT allocation=no_heap', 'INTEGER_SQRT allocation=may_heap'),
+                        source.replace('// @native-type id=6', '// @native-type id=7')]:
+            with self.assertRaises(ValueError):
+                schema.parse_source(changed, self.prelude)
 
     def test_array_recipes_have_exact_symbolic_shapes(self):
         _, members = schema.parse_source(self.source, self.prelude)
@@ -74,8 +100,7 @@ class NativeDeclarations(unittest.TestCase):
         clear = next(member for member in members if member.name == 'clear')
         self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
         self.assertEqual({m.name for m in members if m.operation == 'NONE'},
-                         {'withCapacity', 'capacity', 'ptr', 'mutPtr',
-                          'reserve', 'concat', 'sort', 'fill', 'toString',
+                         {'ptr', 'mutPtr', 'sort', 'toString',
                           'iterator', 'entriesIterator'})
 
     def test_array_recipe_shape_permission_and_result_rejections(self):
@@ -172,11 +197,11 @@ class NativeDeclarations(unittest.TestCase):
         for member in members:
             self.assertTrue(rows[member.line - 1][member.column - 1:].startswith(member.name))
         admitted = [m for m in members if m.operation != 'NONE']
-        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf'})
+        self.assertEqual({m.name for m in admitted}, {'contains', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf', 'toString', 'repeat'})
         for member in admitted:
-            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'BOOL')
-            self.assertEqual(member.allocation, 'no_heap')
-            self.assertEqual(member.failures, 'bounds,limit' if member.name == 'indexOf' else 'limit' if member.name == 'lastIndexOf' else 'none')
+            self.assertEqual(schema.simple_term(member.result, ''), 'I64' if member.name in {'indexOf', 'lastIndexOf'} else 'STRING' if member.name in {'toString','repeat'} else 'BOOL')
+            self.assertEqual(member.allocation, 'may_heap' if member.name=='repeat' else 'no_heap')
+            self.assertEqual(member.failures, {'indexOf':'bounds,limit','lastIndexOf':'limit','toString':'retain','repeat':'allocation,retain,limit'}.get(member.name,'none'))
         self.assertNotIn('xr_native_def_string[]', embed.render(ROOT / 'stdlib/types'))
         for before, after in [('struct string', 'class string'), ('id=2', 'id=1'),
                               ('struct string {', 'struct string<T> {'),
@@ -189,7 +214,10 @@ class NativeDeclarations(unittest.TestCase):
                               ('start?: i64', 'start: i64'), ('start?: i64', 'start?: string'),
                               ('indexOf(search: string', 'indexOf(search?: string'),
                               ('lastIndexOf(search: string', 'lastIndexOf(search?: string'),
-                              ('failures=bounds,limit', 'failures=none')]:
+                              ('failures=bounds,limit', 'failures=none'),
+                              ('repeat(count: i64)', 'repeat(count: u64)'),
+                              ('toString() -> string', 'ref toString() -> string'),
+                              ('STRING_REPEAT allocation=may_heap', 'STRING_REPEAT allocation=no_heap')]:
             with self.subTest(before=before), self.assertRaises(ValueError):
                 schema.parse_source(source.replace(before, after), self.prelude)
 
@@ -253,7 +281,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
-            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/prelude/builtin_symbols.def']:
+            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/types/coroutine.xr', 'stdlib/types/i64.xr', 'stdlib/types/f64.xr', 'stdlib/types/bool.xr', 'stdlib/types/rune.xr', 'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())
@@ -293,6 +321,29 @@ class NativeDeclarations(unittest.TestCase):
                     self.assertEqual(target.stat().st_mtime_ns, expected[relative][1], relative)
                 else:
                     self.assertNotEqual(target.stat().st_mtime_ns, expected[relative][1], relative)
+
+    def test_scalar_complete_contracts_and_fail_closed_mutations(self):
+        for stem, identity, total, admitted in [('f64',7,12,7),('bool',8,1,1),('rune',9,6,2)]:
+            source = (ROOT / 'stdlib/types' / (stem+'.xr')).read_text(encoding='utf-8')
+            header, members = schema.parse_source(source, self.prelude)
+            self.assertEqual((identity,stem,''),header[:3])
+            self.assertEqual(total,len(members))
+            self.assertEqual(admitted,len([m for m in members if m.operation!='NONE']))
+            self.assertNotIn('xr_native_def_'+stem,embed.render(ROOT / 'stdlib/types'))
+        bad = [
+            ('f64','abs() -> f64','abs() -> i64'),
+            ('f64','FLOAT_TO_I64 allocation=no_heap failures=numeric_range','FLOAT_TO_I64 allocation=no_heap failures=none'),
+            ('f64','FLOAT_FLOOR allocation=no_heap','FLOAT_FLOOR allocation=may_heap'),
+            ('f64','FLOAT_IS_NAN','UNKNOWN_OPERATION'),
+            ('bool','toString() -> string','toString() -> bool'),
+            ('rune','toUInt32() -> u32','toUInt32() -> i64'),
+            ('rune','toString() -> string','ref toString() -> string'),
+        ]
+        for stem, before, after in bad:
+            source=(ROOT / 'stdlib/types' / (stem+'.xr')).read_text(encoding='utf-8')
+            self.assertIn(before,source)
+            with self.subTest(stem=stem,before=before), self.assertRaises(ValueError):
+                schema.parse_source(source.replace(before,after),self.prelude)
 
 
 if __name__ == '__main__':
