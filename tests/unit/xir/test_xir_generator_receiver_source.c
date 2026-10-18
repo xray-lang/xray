@@ -81,8 +81,8 @@ int main(int argc,char **argv) {
         &(XrXirSourceText){NULL,receiver_source,sizeof(receiver_source)-1},&source,&diagnostic,NULL);
     if(status!=XR_XIR_OK) {
         XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(owner.context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
-        fprintf(stderr,"Boundary Source status%u line%d work%llu allocated%llu peak%llu live%llu: %s\n",status,diagnostic.line,
-            (unsigned long long)stats.work,(unsigned long long)stats.allocated_bytes,
+        fprintf(stderr,"Boundary Source status%u line%d work%llu allocations%llu allocated%llu peak%llu live%llu: %s\n",status,diagnostic.line,
+            (unsigned long long)stats.work,(unsigned long long)stats.allocation_count,(unsigned long long)stats.allocated_bytes,
             (unsigned long long)stats.peak_bytes,(unsigned long long)stats.live_bytes,diagnostic.message);
     }
     CHECK(status==XR_XIR_OK && source.checked);xr_compile_session_free(session);
