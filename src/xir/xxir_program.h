@@ -16,7 +16,7 @@
 #include "xxir_call.h"
 #include "xxir_class_observation.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 31u
+#define XR_XIR_PROGRAM_ABI_VERSION 33u
 typedef struct XrXirProgram XrXirProgram;
 typedef struct XrXirProgramInput XrXirProgramInput;
 typedef struct XrXirInstance XrXirInstance;
@@ -72,6 +72,8 @@ XR_FUNC void xr_xir_compile_program_drop(XrXirProgram *program);
 XR_FUNC XrXirCallStatus xr_xir_instance_config_init(XrXirInstanceConfig *config, size_t size);
 XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
     XrXirType type, const XrXirValue *input, XrXirValue *output);
+/* Output must be empty before configuration or Program access. Refusal preserves
+ * it; a retired config prefix is checked before reading any Program payload. */
 XR_FUNC XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirInstanceConfig *config,
                                           XrXirInstance **output);
 XR_FUNC XrXirInstanceState xr_xir_instance_state(const XrXirInstance *instance);
@@ -126,6 +128,11 @@ XR_FUNC XrXirCallStatus xr_xir_instance_cell_read_at(XrXirCallView *view,uint32_
     const XrXirValue *cell,XrXirValue *output,XrXirFaultDetail *fault);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_write_at(XrXirCallView *view,uint32_t instruction,
     const XrXirValue *cell,const XrXirValue *value,XrXirFaultDetail *fault);
+/* Owned/module String Cells only; projected Class storage is not admitted. */
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_string_append(XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValue *suffix);
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_string_append_scalar(XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValue *scalar);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_read(XrXirCallView *view, const XrXirValue *cell, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_cell_write(XrXirCallView *view, const XrXirValue *cell, const XrXirValue *value);
 XR_FUNC XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view, uint32_t slot, XrXirValue *output);

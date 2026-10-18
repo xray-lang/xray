@@ -198,9 +198,10 @@ XR_FUNC XrXirRunStatus xir_scalar_core_step(XirScalarCoreRun *run,uint32_t *curs
         *cursor = next; return core_value_status(status);
     }
     case XR_XIR_RETURN:
-        action->kind=XIR_SCALAR_RETURN;action->value=(XrXirValue){(uint32_t)run->function->result,0,0};
-        if (run->function->result!=XR_XIR_UNIT)
-            action->value.payload=xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]);
+          action->kind=XIR_SCALAR_RETURN;action->value=(XrXirValue){0};
+          if (run->function->result!=XR_XIR_UNIT && !xr_xir_value_from_payload(run->arena,
+              run->function->result,xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]),&action->value))
+              return XR_XIR_RUN_BAD_ARTIFACT;
         return XR_XIR_RUN_OK;
     default:return XR_XIR_RUN_BAD_ARTIFACT;
     }

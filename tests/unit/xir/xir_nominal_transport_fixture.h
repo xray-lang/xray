@@ -44,7 +44,7 @@ static XrXirArtifact *nominal_transport_fixture(const XrXirCompileContext *conte
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,entry,2,NULL,0},
         {"carry",5,parameters,2,pair,blocks,4,body,11,operands,5},
         {"leaf",4,parameters,1,pair,&two,1,leaf,2,NULL,0}};
-    XrXirSourceModule source = {"alpha",5,NULL,0,0};
+    XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,1,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0},{0,0,0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};

@@ -2477,6 +2477,7 @@ endif()
 # Source -> Checked -> Lowered pipeline. The Source adapter, path policy and
 # graph authority live in xray_source_compile and are linked, not recompiled here.
 set(XRAY_CLI_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli)
+include("${XRAY_CLI_ROOT}/toolchain_config.cmake")
 set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcli.c
     ${XRAY_CLI_ROOT}/xcli_dispatch.c
@@ -2486,9 +2487,11 @@ set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcli_diag.c
     ${XRAY_CLI_ROOT}/xcli_output.c
     ${XRAY_CLI_ROOT}/xcli_installation.c
+    ${XRAY_CLI_ROOT}/xcmd_repl.c
     ${XRAY_CLI_ROOT}/xcmd_run.c
     ${XRAY_CLI_ROOT}/xcmd_build.c
     ${XRAY_CLI_ROOT}/xcmd_deps.c
+    ${XRAY_CLI_ROOT}/xcmd_toolchain.c
     ${XRAY_CLI_ROOT}/xcmd_check.c
     ${XRAY_CLI_ROOT}/xcmd_fmt.c
     ${XRAY_CLI_ROOT}/xcmd_test.c
@@ -2625,6 +2628,10 @@ else()
 endif()
 
 add_executable(xray ${XRAY_CLI_SOURCES})
+target_link_libraries(xray PRIVATE xray_cli_toolchain_config)
+if(TARGET xray_cli_toolchain_update)
+    target_link_libraries(xray PRIVATE xray_cli_toolchain_update)
+endif()
 
 # The compiler's recursive IR/AOT passes can exceed the PE/COFF default 1 MiB
 # stack on larger programs. Match the usual Unix main-thread allowance so
@@ -2643,6 +2650,9 @@ if(WIN32)
 endif()
 
 target_include_directories(xray PRIVATE ${XRAY_CLI_INCLUDES})
+if(READLINE_LIB)
+    target_link_libraries(xray PRIVATE ${READLINE_LIB})
+endif()
 
 if(WIN32 AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.21")
     add_custom_command(TARGET xray POST_BUILD
@@ -4520,6 +4530,12 @@ if(BUILD_TESTS)
         LABELS "cli;module;identity;package"
         TIMEOUT 60
     )
+
+    add_test(NAME source_repl_cli
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_source_repl_tests.py
+            --binary $<TARGET_FILE:xray> --stdlib ${CMAKE_CURRENT_SOURCE_DIR}/stdlib
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    set_tests_properties(source_repl_cli PROPERTIES TIMEOUT 120 LABELS "cli;source;repl;ownership")
 
     add_test(
         NAME canonical_source_run_cli

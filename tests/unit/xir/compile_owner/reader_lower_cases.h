@@ -196,7 +196,7 @@ static XrXirStatus reader_lower_library(const XrXirCompileContext *context, XrXi
     const XrXirInstruction init = {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     const XrXirBlock block = {0,1,0,0};
     XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&block,1,&init,1,NULL,0},function};
-    const XrXirSourceModule source = {"reader/library",14,NULL,0,0};
+    const XrXirSourceModule source = {"reader/library",14,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[] = {{0},{.exported=1}};
     const XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
     const XrXirModule library = {XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
@@ -364,6 +364,30 @@ static void reader_lower_take_canonical(unsigned kind) {
 /* Task<U8> is a valid definition but its executable await result is outside
  * the current receiving Task ABI. Only final Lowered verification rejects it. */
 static XrXirStatus reader_lower_take_unsupported(const XrXirCompileContext *context, XrXirArtifact **output) {
+    /* U8 is Sendable and executable as a Task result. Direct worker parameter
+     * capability remains a separate obligation of the Lowered consumer. */
+    const XrXirTypeNode node={.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_I64};
+    const XrXirTypes types={&node,1,NULL,NULL};const XrXirType parameter=XR_XIR_U8;
+    const XrXirInstruction init={.op=XR_XIR_RETURN};
+    const XrXirBlock init_block={0,1,0,0},root_block={0,4,0,0},worker_block={0,2,0,0};
+    const XrXirInstruction root[]={
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_U8,.immediate=7},
+        {.op=XR_XIR_GO,.type=(XrXirType)256,.args={0,1},.immediate=2},
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42},{.op=XR_XIR_RETURN,.args={2}}};
+    const XrXirInstruction worker[]={
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=42},{.op=XR_XIR_RETURN,.args={1}}};
+    const uint32_t operand=0;
+    const XrXirFunction functions[]={
+        {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
+        {"main",4,NULL,0,XR_XIR_I64,&root_block,1,root,4,&operand,1},
+        {"worker",6,&parameter,1,XR_XIR_I64,&worker_block,1,worker,2,NULL,0}};
+    const XrXirSourceModule source={"owner",5,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
+    const XrXirFunctionIdentity identities[]={{0},{.exported=1},{0}};
+    const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
+    const XrXirModule built={XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
+    return xir_fixture_check(context,&built,output,NULL);
+}
+static XrXirStatus reader_lower_take_byte(const XrXirCompileContext *context, XrXirArtifact **output) {
     const XrXirTypeNode node={.kind=XR_XIR_TYPE_TASK,.element=XR_XIR_U8};
     const XrXirTypes types={&node,1,NULL,NULL}; const XrXirType parameter=(XrXirType)256;
     const XrXirInstruction body[]={
@@ -376,6 +400,16 @@ static XrXirStatus reader_lower_take_unsupported(const XrXirCompileContext *cont
     return xir_fixture_check(context,&built,output,NULL);
 }
 static void reader_lower_take_rejections(void) {
+    reset(SIZE_MAX);XrCompileResources *byte_owner=NULL;
+    CHECK(xr_compile_resources_new(&reader_lower_caps,&byte_owner)==XR_COMPILE_RESOURCE_OK);
+    XrXirCompileContext byte_context={byte_owner,xr_xir_compile_default_limits()};
+    XrXirArtifact *byte_checked=NULL,*byte_lowered=NULL;
+    CHECK(reader_lower_take_byte(&byte_context,&byte_checked)==XR_XIR_OK);
+    CHECK(xr_xir_compile_lower_take(&byte_checked,&target,&byte_lowered,NULL)==XR_XIR_OK && !byte_checked && byte_lowered);
+    CHECK(xr_xir_compile_artifact_module(byte_lowered)->functions[0].result==XR_XIR_U8 &&
+        xr_xir_compile_artifact_verify(byte_lowered,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(byte_lowered);xr_compile_resources_release(byte_owner);
+    CHECK(!live && !live_count);
     for (unsigned refusal=0;refusal<10;++refusal) {
         reset(SIZE_MAX); XrCompileResources *owner=NULL;
         CHECK(xr_compile_resources_new(&reader_lower_caps,&owner)==XR_COMPILE_RESOURCE_OK);
@@ -384,6 +418,7 @@ static void reader_lower_take_rejections(void) {
         XrXirStatus prepared=refusal==3?reader_lower_library(&context,&closed):
             refusal==4?generic_built(&context,&closed):refusal==9?reader_lower_take_unsupported(&context,&closed):
             reader_lower_take_closed(&context,0,&closed);
+        if (prepared!=XR_XIR_OK) fprintf(stderr,"take preparation refusal=%u status=%u\n",refusal,prepared);
         CHECK(prepared==XR_XIR_OK && closed);
         XrXirTarget invalid={0}; const XrXirTarget *receiving=refusal==0?&invalid:refusal==1?NULL:&target;
         XrXirStatus expected=refusal<2?XR_XIR_BAD_LAYOUT:refusal<5?XR_XIR_BAD_STAGE:

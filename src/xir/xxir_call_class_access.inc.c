@@ -29,7 +29,7 @@ XR_FUNC void xr_xir_call_class_access_commit(const XrXirCallView *view,XrXirCall
     XR_CHECK(access && access->value && view_cell_authority(view,&authority) &&
         authority.activation==access->authority.activation && authority.frame==access->authority.frame &&
         authority.epoch==access->authority.epoch,"immediate Class access retains its exact live frame");
-    const XrXirTypes *types=xr_xir_compile_type_arena_types(xr_xir_call_admission(view)->arena);
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(xr_xir_value_arena(access->value));
     if (xr_xir_type_is_cell(types,(XrXirType)access->value->type))
         xr_xir_cell_loan_commit(access->value,&access->loan,&authority);
     else xr_xir_class_loan_commit(access->value,&access->loan,&authority);

@@ -152,8 +152,9 @@ static void overlay_catalog_collision(const char *root) {
     const char source[] = "export fn value()->i64 { return 41 }\n"; XrXirSourceResult result = {0};
     CHECK(xr_xir_compile_source_check_text(&request, &(XrXirSourceText){"lib.xr", source, sizeof(source)-1}, &result, NULL, NULL) == XR_XIR_OK);
     XrXirCheckedPacket packet = {0}; CHECK(xr_xir_compile_checked_write(result.checked, &packet, NULL) == XR_XIR_OK);
-    XrXirLibraryModuleInput module = {authority, "lib.xr"};
-    XrXirLibraryInput library = {.modules = &module, .module_count = 1};
+    CHECK(xr_xir_compile_artifact_module(result.checked)->declarations->module_count == 1);
+    XrXirLibraryModuleInput binding = {authority,"lib.xr"};
+    XrXirLibraryInput library = {0}; library.modules = &binding; library.module_count = 1;
     library.packet = packet.bytes; library.length = packet.length; xr_sha256(packet.bytes, packet.length, library.sha256);
     XrXirLibraryCatalog *catalog = NULL;
     CHECK(xr_xir_compile_library_catalog_new_v2(&context, &library, 1, &catalog) == XR_XIR_OK);

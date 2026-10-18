@@ -148,11 +148,18 @@ static XrXirStatus source_product_compare(const XrXirCompileContext *context,
     }
     return XR_XIR_OK;
 }
+typedef enum SourceProductInputKind { SOURCE_PRODUCT_FILE, SOURCE_PRODUCT_TEXT, SOURCE_PRODUCT_AST } SourceProductInputKind;
+typedef struct SourceProductInput {
+    SourceProductInputKind kind;
+    const XrXirSourceText *text;
+    const XrXirSourceAst *ast;
+} SourceProductInput;
 static XrXirStatus source_product_build(const XrXirSourceProductRequest *request,
-    const XrXirSourceText *text, bool has_text, XrXirSourceProduct **output,
+    SourceProductInput input, XrXirSourceProduct **output,
     XrXirSourceProductDiagnostic *diagnostic) {
     if (!source_diagnostic_empty(diagnostic)) return XR_XIR_BAD_STRUCTURE;
-    if (!request || (has_text && !text) || !output || *output ||
+    if (!request || (input.kind == SOURCE_PRODUCT_TEXT && !input.text) ||
+        (input.kind == SOURCE_PRODUCT_AST && !input.ast) || !output || *output ||
         !xir_compile_context_valid(request->source.context) ||
         request->source.linkage_kind!=XR_XIR_PROGRAM ||
         request->target.architecture!=XR_XIR_ARCH_X86_64 ||
@@ -162,8 +169,11 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
     if (diagnostic) memset(diagnostic,0,sizeof(*diagnostic));
     XrXirSourceResult source={0};XrXirArtifact *closed=NULL,*lowered=NULL;
     XrXirCheckedPacket source_packet={0},closed_packet={0};
-    XrXirStatus status = has_text ?
-        xr_xir_compile_source_check_text(&request->source, text, &source,
+    XrXirStatus status = input.kind == SOURCE_PRODUCT_AST ?
+        xr_xir_compile_source_check_ast(&request->source, input.ast, &source,
+            diagnostic ? &diagnostic->source : NULL, diagnostic ? &diagnostic->source_path : NULL) :
+        input.kind == SOURCE_PRODUCT_TEXT ?
+        xr_xir_compile_source_check_text(&request->source, input.text, &source,
             diagnostic ? &diagnostic->source : NULL, diagnostic ? &diagnostic->source_path : NULL) :
         xr_xir_compile_source_check(&request->source, &source,
             diagnostic ? &diagnostic->source : NULL, diagnostic ? &diagnostic->source_path : NULL);
@@ -225,11 +235,15 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProductRequest *request,
     XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic) {
-    return source_product_build(request, NULL, false, output, diagnostic);
+    return source_product_build(request, (SourceProductInput){0}, output, diagnostic);
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build_text(const XrXirSourceProductRequest *request,
     const XrXirSourceText *text, XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic) {
-    return source_product_build(request, text, true, output, diagnostic);
+    return source_product_build(request, (SourceProductInput){SOURCE_PRODUCT_TEXT,text,NULL}, output, diagnostic);
+}
+XR_FUNC XrXirStatus xr_xir_compile_source_product_build_ast(const XrXirSourceProductRequest *request,
+    const XrXirSourceAst *ast, XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic) {
+    return source_product_build(request, (SourceProductInput){SOURCE_PRODUCT_AST,NULL,ast}, output, diagnostic);
 }
 XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product) {
     if (!product) return;
@@ -247,7 +261,9 @@ XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
     const XrXirArtifact *lowered, XrXirSourceDiagnostic *diagnostic) {
     XrXirStatus status = XR_XIR_BAD_STRUCTURE;
     uint32_t module = 0;
-    bool state_rejected = false;
+    bool state_rejected = false,birth_rejected=false;
+    uint32_t *order=NULL,active_count=0;
+    uint8_t *active=NULL;
     const XrXirCompileContext *context=xr_xir_compile_artifact_context(lowered);
     const XrXirModule *body=xr_xir_compile_artifact_module(lowered);
     if (!xir_compile_context_valid(context)) goto done;
@@ -259,6 +275,13 @@ XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
         declarations->root_module >= declarations->module_count ||
         (declarations->slot_count && !declarations->slots)) goto done;
     status = XR_XIR_OK;
+    for (module=0;module<declarations->module_count;++module) {
+        if (!xir_compile_work(context,1)) {status=XR_XIR_BUDGET;break;}
+        if (declarations->modules[module].storage==XR_XIR_MODULE_BIRTH_STORAGE) {
+            birth_rejected=true;status=XR_XIR_BAD_STRUCTURE;break;
+        }
+    }
+    if (status!=XR_XIR_OK) goto done;
     for (uint32_t s = 0; s < declarations->slot_count; ++s) {
         if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
         const XrXirSlot *slot = &declarations->slots[s];
@@ -266,17 +289,28 @@ XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
         if (module >= declarations->module_count || slot->mutable > 1) {
             status = XR_XIR_BAD_STRUCTURE; break;
         }
-        /* Public execution admits mutable state only in its authentic root module. */
+        /* Inactive declarations remain unreachable through the same Program
+         * closure. Active foreign mutable storage still needs its birth owner. */
         if (slot->mutable && module != declarations->root_module) {
-            state_rejected = true; status = XR_XIR_BAD_STRUCTURE; break;
+            if(!active) {
+                order=xir_compile_calloc(context,declarations->module_count,sizeof(*order),&status);
+                active=xir_compile_calloc(context,declarations->module_count,1,&status);
+                if(status==XR_XIR_OK)status=xr_xir_compile_declarations_active(context,declarations,order,active,&active_count);
+                if(status!=XR_XIR_OK)break;
+            }
+            if(active[module]){state_rejected = true; status = XR_XIR_BAD_STRUCTURE; break;}
         }
     }
 done:
+    xr_compile_resources_free(active);xr_compile_resources_free(order);
     if (diagnostic) {
         *diagnostic = (XrXirSourceDiagnostic){.status = status, .module = module};
         if (state_rejected) {
             static const char message[] = "library mutable or exported state is not admitted";
             memcpy(diagnostic->message, message, sizeof(message));
+        } else if (birth_rejected) {
+            static const char message[]="historical module requires published birth storage";
+            memcpy(diagnostic->message,message,sizeof(message));
         }
     }
     return status;

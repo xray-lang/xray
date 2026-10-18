@@ -152,6 +152,27 @@ TEST(value_format_names_are_spans_and_style_only_colors_labels) {
     ASSERT_TRUE(!memcmp(capture.bytes, panic, sizeof(panic) - 1));
 }
 
+TEST(value_format_array_uses_original_count_and_depth_limits) {
+    FormatFixture elements[40];
+    memset(elements,0,sizeof(elements));
+    for(unsigned i=0;i<40;++i)elements[i].view=(XrValueFormatView){.kind=XR_VALUE_FORMAT_SIGNED,.signed_value=i};
+    FormatFixture array={.view={.kind=XR_VALUE_FORMAT_ARRAY,.unsigned_value=40,.children=40},.children=elements};
+    FormatCapture capture={.capacity=sizeof(capture.bytes)};
+    XrValueFormatReader reader={NULL,read_fixture,child_fixture};
+    XrValueFormatSink sink={&capture,capture_bytes};
+    ASSERT_TRUE(xr_value_format_value(reader,(XrValueFormatNode){&array,0},sink,0));
+    ASSERT_STR_EQ(capture.bytes,"[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, "
+        "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, ...(8 more)]");
+    capture.size=0;
+    ASSERT_TRUE(xr_value_format_value(reader,(XrValueFormatNode){&array,0},sink,4));
+    ASSERT_STR_EQ(capture.bytes,"...");
+    capture.size=0;array.view.unsigned_value=0;array.view.children=0;array.children=NULL;
+    ASSERT_TRUE(xr_value_format_value(reader,(XrValueFormatNode){&array,0},sink,0));
+    ASSERT_STR_EQ(capture.bytes,"[]");
+    capture.size=0;capture.capacity=2;
+    ASSERT_FALSE(xr_value_format_value(reader,(XrValueFormatNode){&array,0},sink,0));
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Value Format Core");
@@ -161,5 +182,6 @@ RUN_TEST(value_format_core_writes_more_suffix);
 RUN_TEST(value_format_preserves_typed_error_payload);
 RUN_TEST(value_format_streams_long_and_embedded_zero_strings);
 RUN_TEST(value_format_names_are_spans_and_style_only_colors_labels);
+RUN_TEST(value_format_array_uses_original_count_and_depth_limits);
 
 TEST_MAIN_END()

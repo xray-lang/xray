@@ -1,7 +1,28 @@
 add_executable(test_xir_p10_reference "${CMAKE_CURRENT_LIST_DIR}/test_language_reference.c")
+add_executable(test_xir_p10_lexical_scope "${CMAKE_CURRENT_LIST_DIR}/test_lexical_scope.c")
+add_executable(test_xir_p10_type_receiving "${CMAKE_CURRENT_LIST_DIR}/test_type_receiving.c")
+target_link_libraries(test_xir_p10_type_receiving PRIVATE xray_xir_scalar)
+set_target_properties(test_xir_p10_type_receiving PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_p10_type_receiving PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_p10_type_receiving PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_p10_type_receiving COMMAND test_xir_p10_type_receiving)
+set_tests_properties(test_xir_p10_type_receiving PROPERTIES LABELS "unit;xir;p10;ownership;type-identity" TIMEOUT 60)
+target_link_libraries(test_xir_p10_lexical_scope PRIVATE xray_xir_admission)
+set_target_properties(test_xir_p10_lexical_scope PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_p10_lexical_scope PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_p10_lexical_scope PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_p10_lexical_scope COMMAND test_xir_p10_lexical_scope)
+set_tests_properties(test_xir_p10_lexical_scope PROPERTIES TIMEOUT 60 LABELS "unit;xir;p10;ownership;lexical-scope")
 target_link_libraries(test_xir_p10_reference PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
 add_executable(test_xir_p10_source_generations "${CMAKE_CURRENT_LIST_DIR}/test_source_generations.c")
 target_link_libraries(test_xir_p10_source_generations PRIVATE xray_xir_source xray_xir_vm)
+target_compile_definitions(test_xir_p10_source_generations PRIVATE XR_GENERATION_STDLIB="${CMAKE_CURRENT_LIST_DIR}/fixtures/generation_stdlib")
 set_target_properties(test_xir_p10_source_generations PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_xir_p10_source_generations PRIVATE /W4 /WX /utf-8)
@@ -10,9 +31,94 @@ else()
 endif()
 add_test(NAME test_xir_p10_source_generations COMMAND test_xir_p10_source_generations)
 set_tests_properties(test_xir_p10_source_generations PROPERTIES TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source")
+foreach(fact IN ITEMS function generic type stateful cell cell-write array array-const active-birth)
+    string(REPLACE "-" "_" suffix "${fact}")
+    if(fact STREQUAL "active-birth")
+        set(suffix "${fact}")
+    endif()
+    add_test(NAME test_xir_p10_source_history_${suffix}
+        COMMAND test_xir_p10_source_generations --history-${fact})
+    set_tests_properties(test_xir_p10_source_history_${suffix} PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept")
+endforeach()
 
+foreach(kind IN ITEMS definitions definitions-comptime definitions-import definitions-cell)
+    string(REPLACE "-" "_" suffix "${kind}")
+    add_test(NAME test_xir_p10_source_${suffix} COMMAND test_xir_p10_source_generations --${kind})
+    set_tests_properties(test_xir_p10_source_${suffix} PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;semantic-binding")
+endforeach()
 add_executable(test_xir_p10_source_generation_resources "${CMAKE_CURRENT_LIST_DIR}/test_source_generation_resources.c")
-target_link_libraries(test_xir_p10_source_generation_resources PRIVATE xray_xir_source)
+add_executable(source_history_native_producer "${CMAKE_CURRENT_LIST_DIR}/source_history_native_producer.c")
+target_link_libraries(source_history_native_producer PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+set_target_properties(source_history_native_producer PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+set(history_native_dir "${CMAKE_CURRENT_BINARY_DIR}/source_history_native")
+set(history_native_header "${history_native_dir}/source_history_native_generated.h")
+set(history_native_sources)
+foreach(history_mode IN ITEMS read write array array_const function_call function_value)
+    foreach(history_generation RANGE 1 4)
+        list(APPEND history_native_sources "${history_native_dir}/source_history_${history_mode}_${history_generation}.c")
+    endforeach()
+endforeach()
+add_custom_command(OUTPUT ${history_native_sources} "${history_native_header}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${history_native_dir}"
+    COMMAND $<TARGET_FILE:source_history_native_producer> "${history_native_dir}"
+    DEPENDS source_history_native_producer "${CMAKE_CURRENT_LIST_DIR}/source_history_cell_fixture.h"
+        "${CMAKE_CURRENT_LIST_DIR}/source_history_function_fixture.h"
+    VERBATIM)
+add_library(source_history_native_entries STATIC ${history_native_sources} "${history_native_header}")
+target_link_libraries(source_history_native_entries PRIVATE xray_xir_scalar)
+set_target_properties(source_history_native_entries PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+foreach(history_target IN ITEMS source_history_native_producer source_history_native_entries)
+    if(MSVC)
+        target_compile_options(${history_target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${history_target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+endforeach()
+foreach(history_backend IN ITEMS native vm_native native_vm)
+    set(history_target test_xir_p10_source_history_${history_backend})
+    add_executable(${history_target} "${CMAKE_CURRENT_LIST_DIR}/test_source_generations.c" "${history_native_header}")
+    target_include_directories(${history_target} PRIVATE "${history_native_dir}")
+    target_link_libraries(${history_target} PRIVATE xray_xir_source xray_xir_vm source_history_native_entries)
+    target_compile_definitions(${history_target} PRIVATE XR_SOURCE_HISTORY_NATIVE=1
+        XR_GENERATION_STDLIB="${CMAKE_CURRENT_LIST_DIR}/fixtures/generation_stdlib")
+    if(history_backend STREQUAL "native")
+        target_compile_definitions(${history_target} PRIVATE XR_SOURCE_HISTORY_OLD_VM=0 XR_SOURCE_HISTORY_NEW_VM=0)
+    elseif(history_backend STREQUAL "vm_native")
+        target_compile_definitions(${history_target} PRIVATE XR_SOURCE_HISTORY_OLD_VM=1 XR_SOURCE_HISTORY_NEW_VM=0)
+    else()
+        target_compile_definitions(${history_target} PRIVATE XR_SOURCE_HISTORY_OLD_VM=0 XR_SOURCE_HISTORY_NEW_VM=1)
+    endif()
+    set_target_properties(${history_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${history_target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${history_target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+    foreach(history_kind IN ITEMS cell cell-write array array-const function-call function-value)
+        string(REPLACE "-" "_" history_suffix "${history_kind}")
+        add_test(NAME test_xir_p10_source_history_${history_suffix}_${history_backend}
+            COMMAND ${history_target} --history-${history_kind})
+        set_tests_properties(test_xir_p10_source_history_${history_suffix}_${history_backend} PROPERTIES
+            TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept;native")
+    endforeach()
+endforeach()
+add_executable(test_xir_p10_source_birth_storage_resources "${CMAKE_CURRENT_LIST_DIR}/test_source_birth_storage_resources.c")
+target_link_libraries(test_xir_p10_source_birth_storage_resources PRIVATE xray_xir_source xray_xir_vm)
+set_target_properties(test_xir_p10_source_birth_storage_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_p10_source_birth_storage_resources PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_p10_source_birth_storage_resources PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_p10_source_birth_storage_resources COMMAND test_xir_p10_source_birth_storage_resources)
+set_tests_properties(test_xir_p10_source_birth_storage_resources PROPERTIES
+    TIMEOUT 300 COST 100 RUN_SERIAL TRUE LABELS "unit;xir;p10;generation;ownership;budget;allocation")
+add_test(NAME test_xir_p10_source_birth_storage_baseline COMMAND test_xir_p10_source_birth_storage_resources --baseline)
+set_tests_properties(test_xir_p10_source_birth_storage_baseline PROPERTIES
+    TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;resource-control")
+target_link_libraries(test_xir_p10_source_generation_resources PRIVATE xray_xir_source xray_xir_vm)
 set_target_properties(test_xir_p10_source_generation_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
     target_compile_options(test_xir_p10_source_generation_resources PRIVATE /W4 /WX /utf-8)
@@ -21,6 +127,40 @@ else()
 endif()
 add_test(NAME test_xir_p10_source_generation_resources COMMAND test_xir_p10_source_generation_resources)
 set_tests_properties(test_xir_p10_source_generation_resources PROPERTIES TIMEOUT 300 COST 80 RUN_SERIAL TRUE LABELS "unit;xir;p10;generation;ownership;budget;allocation")
+add_test(NAME test_xir_p10_source_generation_comptime_resources
+    COMMAND test_xir_p10_source_generation_resources --comptime)
+set_tests_properties(test_xir_p10_source_generation_comptime_resources PROPERTIES
+    TIMEOUT 300 COST 100 RUN_SERIAL TRUE LABELS "unit;xir;p10;generation;ctfe;ownership;budget;allocation")
+add_test(NAME test_xir_p10_source_generation_program_resources
+    COMMAND test_xir_p10_source_generation_resources --program)
+set_tests_properties(test_xir_p10_source_generation_program_resources PROPERTIES
+    TIMEOUT 300 COST 100 RUN_SERIAL TRUE LABELS "unit;xir;p10;generation;ownership;budget;allocation")
+add_test(NAME test_xir_p10_source_generation_program_baseline
+    COMMAND test_xir_p10_source_generation_resources --program --baseline)
+set_tests_properties(test_xir_p10_source_generation_program_baseline PROPERTIES
+    TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;resource-control")
+add_test(NAME test_xir_p10_source_generation_program_cell_resources
+    COMMAND test_xir_p10_source_generation_resources --program-cell)
+set_tests_properties(test_xir_p10_source_generation_program_cell_resources PROPERTIES
+    TIMEOUT 300 COST 100 RUN_SERIAL TRUE LABELS "unit;xir;p10;generation;ownership;budget;allocation")
+add_test(NAME test_xir_p10_source_generation_program_cell_baseline
+    COMMAND test_xir_p10_source_generation_resources --program-cell --baseline)
+set_tests_properties(test_xir_p10_source_generation_program_cell_baseline PROPERTIES
+    TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;resource-control")
+add_test(NAME test_xir_p10_source_generation_semantic_baseline
+    COMMAND test_xir_p10_source_generation_resources --baseline)
+add_test(NAME test_xir_p10_source_generation_comptime_baseline
+    COMMAND test_xir_p10_source_generation_resources --comptime --baseline)
+set_tests_properties(test_xir_p10_source_generation_semantic_baseline test_xir_p10_source_generation_comptime_baseline
+    PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;generation;ownership;resource-control")
+add_test(NAME test_xir_p10_source_generation_history_resources
+    COMMAND test_xir_p10_source_generation_resources --history)
+set_tests_properties(test_xir_p10_source_generation_history_resources PROPERTIES
+    TIMEOUT 300 COST 100 RUN_SERIAL TRUE LABELS "unit;xir;p10;generation;ownership;budget;allocation;history-accept")
+add_test(NAME test_xir_p10_source_generation_history_baseline
+    COMMAND test_xir_p10_source_generation_resources --history --baseline)
+set_tests_properties(test_xir_p10_source_generation_history_baseline PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;p10;generation;ownership;resource-control;history-accept")
 add_executable(test_xir_p10_initializer_surface "${CMAKE_CURRENT_LIST_DIR}/test_initializer_surface.c")
 add_executable(test_xir_p10_type_surface "${CMAKE_CURRENT_LIST_DIR}/test_type_surface.c")
 target_link_libraries(test_xir_p10_type_surface PRIVATE xray_xir_source xray_frontend_format)
@@ -379,3 +519,22 @@ add_custom_target(xir_p10_native_references DEPENDS ${reference_native_targets})
 
 xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
 xray_prepend_windows_asan_runtime_to_directory_tests()
+
+foreach(storage_kind IN ITEMS array array-const)
+    string(REPLACE "-" "_" storage_suffix "${storage_kind}")
+    add_test(NAME test_xir_p10_source_generation_program_${storage_suffix}_resources
+        COMMAND test_xir_p10_source_generation_resources --program-${storage_kind})
+    set_tests_properties(test_xir_p10_source_generation_program_${storage_suffix}_resources PROPERTIES
+        TIMEOUT 300 COST 100 RUN_SERIAL TRUE LABELS "unit;xir;p10;source;resources;generation;ownership")
+    add_test(NAME test_xir_p10_source_generation_program_${storage_suffix}_baseline
+        COMMAND test_xir_p10_source_generation_resources --program-${storage_kind} --baseline)
+    set_tests_properties(test_xir_p10_source_generation_program_${storage_suffix}_baseline PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;source;resources;generation;ownership;baseline")
+endforeach()
+
+foreach(function_mode IN ITEMS call value)
+    add_test(NAME test_xir_p10_source_history_function_${function_mode}
+        COMMAND test_xir_p10_source_generations --history-function-${function_mode})
+    set_tests_properties(test_xir_p10_source_history_function_${function_mode} PROPERTIES
+        TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept;function")
+endforeach()

@@ -33,7 +33,7 @@ static bool source_interface_declare(SourceContext *ctx, AstNode *node) {
     if (count && !constraints) return false;
     symbol->kind = SOURCE_INTERFACE; symbol->module = ctx->module; symbol->index = ctx->interfaces.count++;
     ctx->interface_sources[symbol->index] = symbol;
-    const char *module = ctx->graph->specs[ctx->module].canonical;
+    const char *module = ctx->modules[ctx->module].name;
     XrXirInterfaceDeclaration *record = (XrXirInterfaceDeclaration *)&ctx->interfaces.declarations[symbol->index];
     *record = (XrXirInterfaceDeclaration){{module,(uint32_t)source_text_size(ctx, module)},
         {declaration->name,(uint32_t)source_text_size(ctx, declaration->name)},node->is_exported,constraints,count,NULL,0,NULL,0};

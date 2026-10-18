@@ -94,7 +94,7 @@ static XrXirArtifact *program_fixture_checked(const XrXirCompileContext *context
     };
     const uint32_t imports[] = {1, 2};
     const XrXirSourceModule modules[] = {
-        {"root", 4, imports, 2, 0}, {"beta", 4, NULL, 0, 1}, {"alpha", 5, NULL, 0, 2}
+        {"root", 4, imports, 2, 0, 0,XR_XIR_MODULE_FRESH_STORAGE}, {"beta", 4, NULL, 0, 1, 0,XR_XIR_MODULE_FRESH_STORAGE}, {"alpha", 5, NULL, 0, 2, 0,XR_XIR_MODULE_FRESH_STORAGE}
     };
     const XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {2, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {1, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
     const XrXirSlot slots[] = {{2, atomic, 0}, {1, atomic, 0},

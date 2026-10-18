@@ -67,6 +67,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_projection_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_invocation_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_operation_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/local_toolchain_owner.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/toolchain_config.cmake)
 add_subdirectory(cli/pe_version_owner)
 if(WIN32)
     set(ADMISSION_SDK "${CMAKE_BINARY_DIR}/xir-runtime-sdk")
@@ -83,6 +84,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cli/public_source_program.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/api/source_product_text.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/api/source_compiler.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/api/source_public.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cli/entry_oracles.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/api/source_submission.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/base/windows_path_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/cgen_bytes_owner.cmake)
@@ -638,6 +640,7 @@ else()
 endif()
 add_test(NAME test_xir_source_text COMMAND test_xir_source_text)
 set_tests_properties(test_xir_source_text PROPERTIES LABELS "unit;xir;ownership;metadata" TIMEOUT 60)
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/source_ast.cmake")
 
 target_link_libraries(test_xir_source_generics PRIVATE xray_xir_source xray_frontend_format)
 target_link_libraries(test_xir_source_admission PRIVATE xray_xir_source)
@@ -3670,10 +3673,30 @@ set_tests_properties(test_stdlib_generators_content_stable PROPERTIES
 # api/ — Public API defense tests
 # ============================================================================
 
-add_xray_unit_test(test_api_defense api/test_api_defense.c)
-add_xray_unit_test(test_dostring_module_defaults api/test_dostring_module_defaults.c)
+add_executable(test_api_defense api/test_api_defense.c)
+target_link_libraries(test_api_defense PRIVATE xray_source_api)
+target_include_directories(test_api_defense PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(test_api_defense PRIVATE XR_API_DEFENSE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_API_DEFENSE_FILE="${PROJECT_SOURCE_DIR}/tests/unit/api/source_repl_hosted/program.xr")
+set_target_properties(test_api_defense PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_api_defense PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_api_defense PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_api_defense COMMAND test_api_defense)
+set_tests_properties(test_api_defense PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;repl;original")
+foreach(source_entry IN ITEMS test_dostring_module_defaults test_dostring_program_image)
+    add_executable(${source_entry} api/${source_entry}.c)
+    target_link_libraries(${source_entry} PRIVATE xray_source_api)
+    target_include_directories(${source_entry} PRIVATE ${XRAY_COMMON_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(${source_entry} PRIVATE XR_PUBLIC_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+    set_target_properties(${source_entry} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    add_test(NAME ${source_entry} COMMAND $<TARGET_FILE:${source_entry}>)
+endforeach()
+target_compile_definitions(test_dostring_program_image PRIVATE
+    XR_PROGRAM_IMAGE_TEMP_ROOT="${CMAKE_CURRENT_BINARY_DIR}")
 set_tests_properties(test_dostring_module_defaults PROPERTIES LABELS "api;modules;defaults")
-add_xray_unit_test(test_dostring_program_image api/test_dostring_program_image.c)
 set_tests_properties(test_dostring_program_image PROPERTIES LABELS "api;modules;generics")
 add_test(
     NAME test_api_inventory_param_modes
@@ -3775,20 +3798,20 @@ set_tests_properties(test_crypto_native_error_abi PROPERTIES
     TIMEOUT 120
 )
 
-# test_repl needs the isolate-profile factory (xr_isolate_profile_*)
-# in addition to xray_core, so build it like test_cli_spec with an
-# explicit source list.
-add_executable(test_repl
-    api/test_repl.c
-    ${CMAKE_SOURCE_DIR}/src/api/xisolate_profile.c
-)
-target_include_directories(test_repl PRIVATE
-    ${XRAY_COMMON_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/src/api
-)
-target_link_libraries(test_repl PRIVATE xray_core)
+# All original REPL names execute through the actual Source and runtime owners.
+add_executable(test_repl api/test_repl.c)
+target_link_libraries(test_repl PRIVATE xray_source_api)
+target_include_directories(test_repl PRIVATE "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(test_repl PRIVATE XR_ORIGINAL_REPL_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_ORIGINAL_REPL_HOSTED="${PROJECT_SOURCE_DIR}/tests/unit/api/source_repl_hosted")
+set_target_properties(test_repl PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_repl PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_repl PRIVATE -Wall -Wextra -Werror)
+endif()
 add_test(NAME test_repl COMMAND test_repl)
+set_tests_properties(test_repl PROPERTIES TIMEOUT 120 LABELS "unit;api;source;repl;original")
 
 # ============================================================================
 # lsp/ — Language Server Protocol (conditional)
@@ -4300,31 +4323,57 @@ add_xray_bootstrap_unit_test(test_callable52_physical_lifecycle
     ${CMAKE_SOURCE_DIR}/src/vm/audit/xr_typed_lifecycle_audit.c)
 
 
-# Substitute only the actual REPL coordinator allocator for this failure gate.
-add_library(xr_repl_publication_allocation_probe OBJECT ${CMAKE_SOURCE_DIR}/src/api/xrepl.c)
-target_include_directories(xr_repl_publication_allocation_probe PRIVATE ${XRAY_COMMON_INCLUDES})
-target_compile_definitions(xr_repl_publication_allocation_probe PRIVATE
-    $<TARGET_PROPERTY:xray_core_objs,COMPILE_DEFINITIONS>)
+add_executable(test_source_compile_transaction api/test_source_compile_transaction.c)
+target_link_libraries(test_source_compile_transaction PRIVATE xray_source_api)
+target_include_directories(test_source_compile_transaction PRIVATE
+    "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(test_source_compile_transaction PRIVATE
+    XR_TRANSACTION_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_source_compile_transaction PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 if(MSVC)
-    # xrepl.c reaches runtime objects that end in C11 flexible array members,
-    # which cl.exe still reports as the C4200 zero-sized-array extension.
-    target_compile_options(xr_repl_publication_allocation_probe PRIVATE
-        /W4 /WX /wd4200 "/FI${CMAKE_CURRENT_SOURCE_DIR}/api/xr_repl_allocation_probe.h")
+    target_compile_options(test_source_compile_transaction PRIVATE /W4 /WX /utf-8)
 else()
-    target_compile_options(xr_repl_publication_allocation_probe PRIVATE
-        -Wall -Wextra -Werror -include "${CMAKE_CURRENT_SOURCE_DIR}/api/xr_repl_allocation_probe.h")
+    target_compile_options(test_source_compile_transaction PRIVATE -Wall -Wextra -Werror)
 endif()
-add_executable(test_repl_publication_allocations
-    api/test_repl_publication_allocations.c
-    $<TARGET_OBJECTS:xr_repl_publication_allocation_probe>
-    "$<FILTER:$<TARGET_OBJECTS:xray_core_objs>,EXCLUDE,/xrepl[.]c[.](o|obj)$>")
+add_test(NAME test_source_compile_transaction COMMAND test_source_compile_transaction)
+set_tests_properties(test_source_compile_transaction PROPERTIES
+    LABELS "unit;api;source;ownership;ast;original;transaction" TIMEOUT 120)
+
+add_executable(test_source_repl_generation api/test_source_repl_generation.c)
+target_link_libraries(test_source_repl_generation PRIVATE xray_source_api)
+target_include_directories(test_source_repl_generation PRIVATE
+    "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(test_source_repl_generation PRIVATE
+    XR_GENERATION_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_source_repl_generation PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_source_repl_generation PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_source_repl_generation PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_source_repl_generation COMMAND test_source_repl_generation)
+set_tests_properties(test_source_repl_generation PROPERTIES
+    LABELS "unit;api;source;ownership;repl;original;generation" TIMEOUT 120)
+
+# Exercise the original publication obligation against actual Source owners.
+add_executable(test_repl_publication_allocations api/test_repl_publication_allocations.c)
+target_link_libraries(test_repl_publication_allocations PRIVATE xray_source_api)
 target_include_directories(test_repl_publication_allocations PRIVATE
-    ${XRAY_COMMON_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_definitions(test_repl_publication_allocations PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
-target_link_libraries(test_repl_publication_allocations PRIVATE xray_stdlib_bootstrap_core)
+    "${PROJECT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(test_repl_publication_allocations PRIVATE
+    XR_PUBLICATION_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_repl_publication_allocations PROPERTIES
+    C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_repl_publication_allocations PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_repl_publication_allocations PRIVATE -Wall -Wextra -Werror)
+endif()
 add_test(NAME test_repl_publication_allocations COMMAND test_repl_publication_allocations)
 set_tests_properties(test_repl_publication_allocations PROPERTIES
-    LABELS "unit;source;ownership;repl" RUN_SERIAL TRUE TIMEOUT 120)
+    LABELS "unit;api;source;ownership;repl;original;compiler-faults" RUN_SERIAL TRUE TIMEOUT 120)
 
 add_xray_bootstrap_unit_test(test_callable_variadic_declaration
     plan/test_callable_variadic_declaration.c plan/test_callable52_attacker_encoder.c)
@@ -4420,12 +4469,18 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/range_check.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_fill.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/array_concat.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_late_cancel_cross.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_array_error.cmake")
 include(xir/task_array_admission.cmake)
 
 add_executable(test_xir_array_capacity_core xir/test_xir_array_capacity_core.c)
 target_include_directories(test_xir_array_capacity_core PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(test_xir_array_capacity_core PRIVATE xray_xir_scalar)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_reserve_cow.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_compile_domain.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_return_copy.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_probe.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_append_performance.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_mutation.cmake")
 add_executable(test_xir_array_capacity_checked xir/test_xir_array_capacity_checked.c)
 target_link_libraries(test_xir_array_capacity_checked PRIVATE xray_xir)
 foreach(capacity_core_target test_xir_array_capacity_core test_xir_array_capacity_checked)
@@ -4479,6 +4534,10 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/error_edge_snapshot.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_call_permissions.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/child_callable_native.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/child_callable_mixed.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/mixed_task_faults.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/call_observation.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_scalar_results.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/task_constructed_results.cmake")
 include(xir/error_dependency_worklist.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/xir/error_cfg_pending.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/root_parameters.cmake)
@@ -4579,7 +4638,9 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/error_cfg_scheduling.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_correspondence.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_input_storage.cmake)
 add_subdirectory(xir/p10_reference)
+add_subdirectory(xir/p11_ctfe_reference)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/instance_bindings.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake)
+include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_owned_receive_probe.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/error_equation_current.cmake)
-
-add_subdirectory(xir/p11_ctfe_reference)

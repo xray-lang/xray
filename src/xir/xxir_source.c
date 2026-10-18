@@ -13,6 +13,7 @@
 #include "xxir_ctfe.h"
 #include "../base/xsha256.h"
 #include "xxir_internal.h"
+#include "xxir_program_internal.h"
 #include "xxir_operand_roles.h"
 #include "xxir_library_catalog.h"
 #include "xxir_constraint_proof.h"
@@ -66,6 +67,8 @@ typedef struct SourceName {
     uint32_t declaration;
     bool inferred;
     bool checked_library;
+    uint32_t reader;
+    bool hidden;
 } SourceName;
 /* SOURCE_UNIT_LOCAL is an initialized logical declaration with no runtime
  * payload. Its index is never an executable value or a capture ordinal.
@@ -196,72 +199,16 @@ typedef struct SourceRootQuery {
     bool expression, cell;
 } SourceRootQuery;
 typedef struct SourceLibraryUnit SourceLibraryUnit;
+typedef struct SourceSemanticEnvironment SourceSemanticEnvironment;
 typedef struct SourceComptimeSite SourceComptimeSite;
-typedef struct SourceContext {
-    XrModuleGraph *graph;
-    XrXirLinkageKind linkage_kind;
-    XrXirCompileContext compile;
-    uint32_t remaining_blocks, remaining_instructions;
-    XrXirSourceDiagnostic diagnostic;
-    SourceMemory *memory;
-    XrXirConstruction *construction;
-    SourceLibraryUnit *library_units;
-    SourceRootQuery *root_queries;
-    SourceRootFlow *root_flow;
-    XrXirProvenance *effect_evidence;
-    SourceManifest *manifests;
-    XrXirFunction *functions;
-    SourceFunction *bodies;
-    XrXirSourceModule *modules;
-    XrXirFunctionIdentity *identities;
-    XrXirGeneric *generics;
-    XrXirTypes types;
-    XrXirNominalTable nominals;
-    SourceTypeScope type_scope;
-    XrXirInterfaceTable interfaces;
-    XrXirImplementationTable implementations;
-    XrXirDefaultTable defaults;
-    uint32_t default_capacity;
-    bool implementations_ready, declarations_building;
-    SourceName **interface_sources, **interface_members;
-    uint32_t **interface_member_declarations;
-    uint32_t **nominal_members, **nominal_variants;
-    uint32_t **nominal_defaults;
-    SourceName **nominal_sources, **nominal_methods;
-    bool *nominal_defaultable;
-    uint32_t *nominal_constructors;
-    uint32_t type_capacity;
-    XrXirSlot *slots;
-    XrXirLiteral *literals;
-    SourceName **names, *locals, *scope;
-    SourceFact *facts;
-    SourceEpoch *epochs;
-    uint64_t next_epoch;
-    uint32_t flow_alternatives;
-    uint32_t function_count, slot_count, literal_count, literal_capacity;
-    uint32_t module_count, entry_function;
-    bool core_factory;
-    SourceName *assertion, *assert_panics, *assert_equal;
-    uint32_t first_closure, next_closure, closure_limit, function_capacity;
-    uint32_t function, module, depth;
-    SourceComptimeSite *comptime_sites;
-    const SourceComptimeSite *comptime_input;
-    uint32_t comptime_capacity,comptime_count,comptime_matched;
-    SourceExpressionPlan *active_expression;
-    /* This exact argument plan owns the pre-loss role, never its children. */
-    SourceExpressionPlan *effect_argument;
-    SourceLoop *loop;
-    bool returned, has_generics, query_ready;
-    XrXirSourceView query;
-    XrXirSourceSyntaxView syntax;
-    uint32_t syntax_declaration_capacity, syntax_reference_capacity, syntax_marker_capacity;
-    uint32_t declaration_capacity, reference_capacity, expression_capacity;
-    uint32_t prelude_module; /* One-based actual graph index, zero when unused. */
-    uint32_t atomic_module, atomic_declaration, atomic_members[10];
-    uint32_t task_module, task_declaration;
-    uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
-    uint32_t string_module, string_declaration, string_members[5];
-} SourceContext;
+#include "xxir_source_context.inc.c"
+static bool source_semantic_capture(SourceContext *ctx,SourceSemanticEnvironment **output);
+static const XrXirModule *source_history_module(SourceContext *ctx,const SourceHistoryUnit *unit);
+static SourceName *source_history_name(SourceContext *ctx,const char *name);
+typedef enum SourceBindingAccessor { SOURCE_ACCESS_READ, SOURCE_ACCESS_WRITE, SOURCE_ACCESS_PUSH } SourceBindingAccessor;
+static bool source_history_binding_read(SourceContext *ctx,const SourceName *symbol,SourceValue *value);
+static bool source_history_binding_push(SourceContext *ctx,const SourceName *symbol,SourceValue input,SourceValue *value);
+static bool source_history_binding_write(SourceContext *ctx,const SourceName *symbol,SourceValue value);
 
 static XrXirModule source_module_view(SourceContext *ctx, XrXirDeclarations *declarations) {
     *declarations = (XrXirDeclarations){ctx->modules,ctx->module_count,ctx->identities,
@@ -520,7 +467,8 @@ static bool source_query_reference(SourceContext *ctx, AstNode *node, SourceName
     if (!records) return false;
     ctx->query.references = records;
     XrXirSourceReference *record = &records[ctx->query.reference_count - 1];
-    *record = (XrXirSourceReference) {source_query_range(ctx, node, NULL), binding->declaration, target->declaration, access};
+    const char *spelling = node && node->type == AST_VARIABLE ? node->as.variable.name : NULL;
+    *record = (XrXirSourceReference) {source_query_range(ctx, node, spelling), binding->declaration, target->declaration, access};
     return source_query_syntax_reference(ctx, source_query_token_range(ctx, node));
 }
 static bool source_query_expression(SourceContext *ctx, AstNode *node, XrXirType type) {
@@ -890,7 +838,8 @@ static bool source_recipe_group(SourceContext *ctx, XrXirInstruction op, const S
 static bool statement(SourceContext *ctx, AstNode *node, bool top);
 static SourceName *visible_name(SourceContext *ctx, const char *name) {
     SourceName *symbol = find_name(ctx, ctx->locals, name);
-    return symbol ? symbol : find_name(ctx, ctx->names[ctx->module], name);
+    if (!symbol) symbol=find_name(ctx,ctx->names[ctx->module],name);
+    return symbol ? symbol : source_history_name(ctx,name);
 }
 /* Import visibility is a declaration fact shared by source and owned libraries. */
 static bool source_declaration_exported(const SourceContext *ctx, const SourceName *name) {
@@ -1801,7 +1750,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     *symbol = (SourceName) {ctx->locals, decl->name, NULL, node,
         logical_type == XR_XIR_UNIT && decl->is_const ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
         logical_type == XR_XIR_UNIT && decl->is_const ? UINT32_MAX : initial.id,
-        ctx->module, logical_type, !decl->is_const, false, 0, false, false};
+        ctx->module, logical_type, !decl->is_const, false, 0, false, false,0,false};
     symbol->inferred = !decl->type_annotation;
     ctx->locals = symbol;
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, ctx->bodies[ctx->function].declaration,
@@ -1809,6 +1758,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     source_query_binding_type(ctx, symbol);
     return source_facts_assign(ctx, symbol, initial_some);
 }
+#include "xxir_source_repl.inc.c"
 /* A nested function is a closure value bound immutably from its declaration on. */
 static bool source_nested_function(SourceContext *ctx, AstNode *node) {
     FunctionDeclNode *decl = &node->as.function_decl;
@@ -1824,7 +1774,7 @@ static bool source_nested_function(SourceContext *ctx, AstNode *node) {
     if (!symbol) {
         symbol = source_alloc(ctx, 1, sizeof(*symbol));
         if (!symbol) return false;
-        *symbol = (SourceName) {ctx->locals, decl->name, NULL, node, SOURCE_PENDING, UINT32_MAX, ctx->module, XR_XIR_UNIT, false, false, 0, false, false};
+        *symbol = (SourceName) {ctx->locals, decl->name, NULL, node, SOURCE_PENDING, UINT32_MAX, ctx->module, XR_XIR_UNIT, false, false, 0, false, false,0,false};
         ctx->locals = symbol;
     }
     symbol->kind = SOURCE_LOCAL; symbol->index = value.id; symbol->type = value.type;
@@ -1848,7 +1798,7 @@ static bool source_block_functions(SourceContext *ctx, AstNode *block) {
         SourceName *symbol = source_alloc(ctx, 1, sizeof(*symbol));
         if (!symbol) return false;
         *symbol = (SourceName) {ctx->locals, node->as.function_decl.name, NULL, node, SOURCE_PENDING, UINT32_MAX,
-            ctx->module, XR_XIR_UNIT, false, false, 0, false, false};
+            ctx->module, XR_XIR_UNIT, false, false, 0, false, false,0,false};
         ctx->locals = symbol;
     }
     return true;
@@ -2034,14 +1984,18 @@ static bool statement(SourceContext *ctx, AstNode *node, bool top) {
     }
     case AST_INC: case AST_DEC: return source_increment(ctx, node);
     case AST_BREAK_STMT: case AST_CONTINUE_STMT: return source_loop_exit(ctx, node);
-    case AST_FUNCTION_DECL: return top || source_nested_function(ctx, node);
+    case AST_FUNCTION_DECL: return top ? source_repl_function_binding(ctx,node) : source_nested_function(ctx,node);
     case AST_TYPE_ALIAS: return true;
     case AST_IMPORT_STMT: case AST_STRUCT_DECL: case AST_CLASS_DECL: case AST_ENUM_DECL: case AST_INTERFACE_DECL:
         return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");
     case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
     case AST_DESTRUCTURE_DECL: return source_destructure_binding(ctx,node,top);
     case AST_EXPR_STMT: {
+        if(top && node==ctx->repl_tail)return source_repl_result(ctx,node);
         SourceValue value; AstNode *expr=node->as.expr_stmt;
+        bool appended = false;
+        if (!source_string_append_statement(ctx, expr, &appended)) return false;
+        if (appended) return true;
         if (expr->type!=AST_MATCH_EXPR) return expression(ctx,expr,&value);
         SourceExpressionPlan *plan=source_plan_collect(ctx,expr,(SourceExpectedType){false,XR_XIR_UNIT, false, false});
         if (!plan) return false;
@@ -2248,16 +2202,18 @@ static bool declare_import(SourceContext *ctx, AstNode *node) {
 }
 #include "xxir_source_function_inventory.inc.c"
 #include "xxir_source_library.inc.c"
+#include "xxir_source_history_receive.inc.c"
 #include "xxir_source_declaration_storage.inc.c"
 
 static bool collect_declarations(SourceContext *ctx) {
     uint32_t count = (uint32_t) ctx->graph->spec_count, functions = count + (ctx->linkage_kind == XR_XIR_PROGRAM), slots = 0, nominals = 0, interfaces = 0;
+    uint32_t readers = ctx->repl_tail ? 1u : 0u, function_values=0;
     SourceClosureCount closures = {ctx,0,0,0,0,0};
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         AstNode *ast = ctx->graph->specs[m].ast;
-        if (ctx->graph->specs[m].representation == XR_MODULE_CHECKED_LIBRARY) {
-            const XrXirModule *library=source_library_module(ctx,m);
+        if (source_owned_checked(&ctx->graph->specs[m])) {
+            const XrXirModule *library=source_owned_module_view(ctx,m);
             if(!library)return false;
             uint32_t imported = 0;
             if(!source_library_inventory(ctx,m,library,&imported,&slots))return false;
@@ -2273,7 +2229,13 @@ static bool collect_declarations(SourceContext *ctx) {
         for (int i = 0; i < ast->as.program.count; ++i) {
             AstNode *node = ast->as.program.statements[i];
             if (!source_work(ctx, node)) return false;
-            if (node->type == AST_FUNCTION_DECL) ++functions;
+            if (node->type == AST_FUNCTION_DECL) {
+                ++functions;
+                if(ctx->interactive && ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index && !node->as.function_decl.type_param_count) {
+                    if(readers==UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"function reader inventory exhausted");
+                    ++readers;++function_values;
+                }
+            }
             if (node->type == AST_INTERFACE_DECL) ++interfaces;
             if (node->type == AST_STRUCT_DECL || node->type == AST_CLASS_DECL || node->type == AST_ENUM_DECL) ++nominals;
             if (node->type == AST_STRUCT_DECL || node->type == AST_CLASS_DECL || node->type == AST_ENUM_DECL) {
@@ -2298,6 +2260,11 @@ static bool collect_declarations(SourceContext *ctx) {
             if (node->type == AST_VAR_DECL || node->type == AST_CONST_DECL) {
                 if (slots==UINT32_MAX) return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
                 ++slots;
+                if (ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index) {
+                    uint32_t added=node->type==AST_VAR_DECL ? 3u : 1u;
+                    if (readers>UINT32_MAX-added) return source_fail(ctx,node,XR_XIR_BUDGET,"binding accessor inventory exhausted");
+                    readers+=added;
+                }
             }
             if(node->type==AST_DESTRUCTURE_DECL) {
                 uint32_t fields=0;if(!source_destructure_pattern(ctx,node,&fields))return false;
@@ -2306,6 +2273,11 @@ static bool collect_declarations(SourceContext *ctx) {
                     if(node->as.destructure_decl.pattern->as.array.elements[f]->type==PATTERN_SKIP)continue;
                     if(slots==UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
                     ++slots;
+                    if (ctx->binding_readers && m==(uint32_t)ctx->graph->entry_index) {
+                        uint32_t added=node->as.destructure_decl.is_const ? 1u : 3u;
+                        if (readers>UINT32_MAX-added) return source_fail(ctx,node,XR_XIR_BUDGET,"binding accessor inventory exhausted");
+                        readers+=added;
+                    }
                 }
             }
         }
@@ -2326,13 +2298,16 @@ static bool collect_declarations(SourceContext *ctx) {
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"member helper capacity exhausted");
     capacity += closures.members;
     if (!ctx->core_factory && capacity <= UINT32_MAX - 7) capacity += 7;
+    if (readers>UINT32_MAX-capacity) return source_fail(ctx,NULL,XR_XIR_BUDGET,"binding reader capacity exhausted");
+    capacity+=readers;
     if (capacity > ctx->compile.limits.functions) capacity = ctx->compile.limits.functions;
     ctx->function_capacity = capacity;
-    if (!source_declaration_storage(ctx,nominals,interfaces)) return false;
+    ctx->function_value_capacity=function_values;
+    if (!source_declaration_storage(ctx,nominals,interfaces) || !source_declaration_modules(ctx)) return false;
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         AstNode *ast = ctx->graph->specs[m].ast;
-        if(ctx->graph->specs[m].representation==XR_MODULE_CHECKED_LIBRARY) {
+        if(source_owned_checked(&ctx->graph->specs[m])) {
             if (source_library_first(ctx,m) && !source_library_reserve(ctx,m)) return false;
             if (ctx->diagnostic.status != XR_XIR_OK) return false;
             continue;
@@ -2346,20 +2321,21 @@ static bool collect_declarations(SourceContext *ctx) {
             if (node->type == AST_IMPORT_STMT && !declare_import(ctx, node)) return false;
         }
     }
-    if (!source_library_metadata(ctx)) return false;
+    if (!source_library_metadata(ctx) || !source_history_bindings(ctx,true)) return false;
     if (!source_nominal_constraints(ctx) || !source_interface_constraints(ctx) ||
         !source_interface_signatures(ctx) || !source_struct_fields(ctx) || !source_enum_fields(ctx) ||
         !source_class_field_capabilities(ctx)) return false;
     if (!source_struct_defaultability(ctx)) return false;
-    if (!source_declaration_modules(ctx)) return false;
+    if (!source_history_dependencies(ctx)) return false;
     uint32_t function = count, slot = 0;
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         XrModuleSpec *spec = &ctx->graph->specs[m];
-        if(spec->representation==XR_MODULE_CHECKED_LIBRARY){
+        if(source_owned_checked(spec)){
             bool first = source_library_first(ctx,m);
             if(ctx->diagnostic.status!=XR_XIR_OK)return false;
-            if(first && !source_library_install(ctx,m,&function,&slot))return false;
+            if (first && !(spec->representation==XR_MODULE_CHECKED_HISTORY ?
+                source_history_install(ctx,m,&function,&slot) : source_library_install(ctx,m,&function,&slot))) return false;
             continue;
         }
         for (int i = 0; i < spec->ast->as.program.count; ++i) {
@@ -2720,7 +2696,7 @@ static bool source_closure_self(SourceContext *ctx, AstNode *node, const SourceC
     if (!source_type_arguments(ctx, node, types, count, &op) || !source_recipe_group(ctx, op, captures, scan->count, &self))
         return false;
     *symbol = (SourceName) {ctx->locals, node->as.function_decl.name, NULL, node, SOURCE_LOCAL, self.id,
-        ctx->module, type, false, false, body->declaration, false, false};
+        ctx->module, type, false, false, body->declaration, false, false,0,false};
     ctx->locals = symbol;
     return true;
 }
@@ -2849,7 +2825,7 @@ static bool build_bodies(SourceContext *ctx) {
         ctx->module = (uint32_t) ctx->graph->topo_order[t]; ctx->function = ctx->module;
         ctx->locals = ctx->scope = NULL; ctx->returned = false; ctx->facts = NULL;ctx->epochs=NULL; ctx->flow_alternatives = 0;
         AstNode *ast = ctx->graph->specs[ctx->module].ast;
-        if(ctx->graph->specs[ctx->module].representation==XR_MODULE_CHECKED_LIBRARY)continue;
+        if(source_owned_checked(&ctx->graph->specs[ctx->module]))continue;
         for (int i = 0; i < ast->as.program.count; ++i) if (!statement(ctx, ast->as.program.statements[i], true)) return false;
         if (!finish_body(ctx)) return false;
     }
@@ -2907,12 +2883,15 @@ static bool build_bodies(SourceContext *ctx) {
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"closure declaration was not checked");
     if (ctx->linkage_kind == XR_XIR_LIBRARY) return true;
     ctx->function = ctx->entry_function; ctx->module = (uint32_t) ctx->graph->entry_index;
+    ctx->locals=ctx->scope=NULL;ctx->loop=NULL;ctx->facts=NULL;ctx->epochs=NULL;
+    ctx->flow_alternatives=0;ctx->returned=false;
     ctx->bodies[ctx->function].module = ctx->module;
     ctx->identities[ctx->function].module = ctx->module;
     ctx->functions[ctx->function] = (XrXirFunction) {"$entry", 6, NULL, 0, XR_XIR_I64,
         NULL, 0, NULL, 0, NULL, 0};
-    if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0, 0}, {0, 0}, 0, {0}}, NULL) ||
-        !source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}}, NULL)) return false;
+    SourceValue value={0};
+    if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},&value))return false;
+    if(!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_RETURN,XR_XIR_UNIT,{value.id,0},{0},0,{0}},NULL))return false;
     ctx->returned = true;
     return finish_body(ctx);
 }
@@ -2935,6 +2914,7 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
         if (output) xr_xir_compile_source_result_free(output);
         return;
     }
+    if (!source_array_query_types(ctx)) { xr_xir_compile_source_result_free(output); return; }
     ctx->query.complete = ctx->diagnostic.status == XR_XIR_OK;
     ctx->query.implementations = ctx->implementations_ready && ctx->implementations.count ? &ctx->implementations : NULL;
     ctx->query.diagnostic = ctx->diagnostic;
@@ -2949,6 +2929,9 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
         failure = "source dependency snapshot publication failed";
         status = source_dependencies_publish(ctx, output->snapshot);
     }
+    if (status==XR_XIR_OK && ctx->semantic_output && !source_semantic_capture(ctx,ctx->semantic_output)) {
+        xr_xir_compile_source_result_free(output);return;
+    }
     if (status != XR_XIR_OK) {
         xr_xir_compile_source_result_free(output); memset(&ctx->diagnostic, 0, sizeof(ctx->diagnostic));
         source_fail(ctx, NULL, status, failure);
@@ -2956,5 +2939,7 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
 }
 #include "xxir_core_source.inc.c"
 #include "xxir_source_comptime_pipeline.inc.c"
+#include "xxir_source_semantic.inc.c"
+#include "xxir_source_history_input.inc.c"
 #include "xxir_source_input.inc.c"
 #include "xxir_source_generation.inc.c"

@@ -181,9 +181,9 @@ static void fixture_spec(Fixture *f, uint32_t mode) {
     f->witness.mode = mode;
     for (uint32_t i = 0; i < 3; ++i) f->env[i] = (Environment) {&f->witness, i};
     f->dependencies[0] = 1; f->dependencies[1] = 2;
-    f->modules[0] = (XrXirSourceModule) {"root", 4, f->dependencies, 2, 0};
-    f->modules[1] = (XrXirSourceModule) {"beta", 4, NULL, 0, 1};
-    f->modules[2] = (XrXirSourceModule) {"alpha", 5, NULL, 0, 2};
+    f->modules[0] = (XrXirSourceModule) {"root", 4, f->dependencies, 2, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
+    f->modules[1] = (XrXirSourceModule) {"beta", 4, NULL, 0, 1, 0,XR_XIR_MODULE_FRESH_STORAGE};
+    f->modules[2] = (XrXirSourceModule) {"alpha", 5, NULL, 0, 2, 0,XR_XIR_MODULE_FRESH_STORAGE};
     uint32_t owners[] = {0, 1, 2, 0, 2, 1, 0, 0, 0, 2};
     for (uint32_t i = 0; i < 10; ++i) {
         f->identities[i] = (XrXirFunctionIdentity) {owners[i], i >= 4, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0};

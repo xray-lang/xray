@@ -8,6 +8,14 @@
  */
 static bool source_declaration_storage(SourceContext *ctx,uint32_t nominals,uint32_t interfaces) {
     uint32_t count=ctx->module_count,capacity=ctx->function_capacity,slots=ctx->slot_count;
+    if(ctx->repl_tail) {
+        if(slots==UINT32_MAX)return source_fail(ctx,ctx->repl_tail,XR_XIR_BUDGET,"implicit result slot capacity exhausted");
+        ++slots;
+    }
+    if(ctx->function_value_capacity>UINT32_MAX-slots)
+        return source_fail(ctx,NULL,XR_XIR_BUDGET,"function value slot capacity exhausted");
+    slots+=ctx->function_value_capacity;
+    ctx->slot_capacity=slots;
     ctx->functions = source_alloc(ctx, capacity, sizeof(*ctx->functions));
     ctx->bodies = source_alloc(ctx, capacity, sizeof(*ctx->bodies));
     ctx->identities = source_alloc(ctx, capacity, sizeof(*ctx->identities));
@@ -33,6 +41,7 @@ static bool source_declaration_storage(SourceContext *ctx,uint32_t nominals,uint
     return true;
 }
 
+#include "xxir_source_module_identity.inc.c"
 static bool source_declaration_modules(SourceContext *ctx) {
     uint32_t count=ctx->module_count;
     for (uint32_t m = 0; m < count; ++m) {
@@ -40,7 +49,11 @@ static bool source_declaration_modules(SourceContext *ctx) {
         uint32_t *deps = source_alloc(ctx, (size_t) spec->dep_count, sizeof(*deps));
         if (!deps) return false;
         for (int i = 0; i < spec->dep_count; ++i) deps[i] = (uint32_t) spec->dep_indices[i];
-        ctx->modules[m] = (XrXirSourceModule) {spec->canonical, (uint32_t) source_text_size(ctx, spec->canonical), deps, (uint32_t) spec->dep_count, m};
+        const char *name=source_declaration_module_name(ctx,spec);
+        if(!name)return false;
+        size_t length=source_text_size(ctx,name);
+        if(length>UINT32_MAX)return source_fail(ctx,NULL,XR_XIR_BUDGET,"module declaration name size exhausted");
+        ctx->modules[m] = (XrXirSourceModule) {name, (uint32_t)length, deps, (uint32_t) spec->dep_count, m, 0,XR_XIR_MODULE_FRESH_STORAGE};
         ctx->bodies[m].module = m;
         ctx->functions[m] = (XrXirFunction) {"$init", 5, NULL, 0, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};
         ctx->identities[m].module = m;

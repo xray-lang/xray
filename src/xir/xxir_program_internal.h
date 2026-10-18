@@ -56,6 +56,7 @@ struct XrXirProgram {
     const XrXirDeclarations *declarations;
     uint32_t *order;
     uint32_t initialization_count;
+    bool requires_birth_storage;
     uint8_t *active_modules;
     uint32_t *module_slots;
     XrXirCodeLease code;
@@ -92,6 +93,11 @@ XR_FUNC bool xr_xir_instance_initialization_publication_missing(
 /* Inspect sealed facts and the advertised bound during the actual callback view. */
 XR_FUNC XrXirCallStatus xr_xir_instance_call_entry_admit(XrXirCallView *view, uint32_t entry,
     const XrXirValue *function, const XrXirValue *arguments, uint32_t count);
+/* A successful permission check still names the exact function binding when
+ * selecting borrowed metadata. No host table or numeric entry grants a route. */
+struct XrXirCallMetadata;
+XR_FUNC XrXirCallStatus xr_xir_instance_call_target(XrXirCallView *view,
+    const XrXirValue *function, uint32_t entry, struct XrXirCallMetadata *output);
 /* Revalidate the same selection while every actual Class loan is reserved. */
 XR_FUNC XrXirCallStatus xr_xir_instance_call_entry_recheck(XrXirCallView *view, uint32_t entry,
     const XrXirValue *function, const XrXirValue *arguments, uint32_t count,

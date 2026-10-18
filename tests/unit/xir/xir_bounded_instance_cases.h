@@ -29,9 +29,12 @@ static void bounded_reentry_trace(void *context,XrXirLifecycleEvent event,uint32
     CHECK(xr_xir_instance_cancel_current(w->instance)==XR_XIR_CALL_BUSY);
     CHECK(xr_xir_instance_poll_bounded(w->instance,1).outcome.status==XR_XIR_CALL_BUSY);
     CHECK(xr_xir_instance_stop(w->instance)==XR_XIR_CALL_BUSY);
+    CHECK(xr_xir_instance_close_activation(w->instance)==XR_XIR_CALL_BUSY);
     ++w->observations;
 }
-static void bounded_instances(XrXirProgram *program,uint32_t normal,uint32_t current,uint32_t spin,uint32_t reader) {
+#include "xir_activation_cases.h"
+static void bounded_instances(XrXirProgram *program,uint32_t normal,uint32_t current,uint32_t spin,uint32_t reader,uint32_t children) {
+    activation_cases(program,normal,current,reader,children);
     size_t live=runtime_live,bytes=runtime_bytes;
     HostTrace trace={0}; XrXirInstanceConfig config=host_config(&trace); XrXirInstance *instance=NULL;
     CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);

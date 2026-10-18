@@ -66,6 +66,7 @@ typedef enum XrValueFormatKind {
     XR_VALUE_FORMAT_BYTES,
     XR_VALUE_FORMAT_ENUM,
     XR_VALUE_FORMAT_LITERAL,
+    XR_VALUE_FORMAT_ARRAY,
 } XrValueFormatKind;
 
 typedef struct XrValueFormatView {
@@ -159,6 +160,29 @@ XR_VALUE_FORMAT_FUNCTION int xr_value_format_value(XrValueFormatReader reader, X
         }
         case XR_VALUE_FORMAT_LITERAL:
             return xr_value_format_write(sink, view.name, view.name_size);
+        case XR_VALUE_FORMAT_ARRAY: {
+            if (xr_value_format_depth_exceeded(depth))
+                return xr_value_format_text(sink, "...");
+            if (view.unsigned_value > INT64_MAX || !xr_value_format_text(sink, "["))
+                return 0;
+            int64_t shown = xr_value_format_limit_count((int64_t)view.unsigned_value);
+            if (shown && !reader.child)
+                return 0;
+            for (uint32_t index = 0; index < (uint32_t)shown; ++index) {
+                XrValueFormatNode child = {0};
+                if ((index && !xr_value_format_text(sink, ", ")) ||
+                    !reader.child(reader.context, node, index, &child) ||
+                    !xr_value_format_value(reader, child, sink, depth + 1))
+                    return 0;
+            }
+            if (view.unsigned_value > (uint64_t)shown) {
+                length = xr_value_format_more_suffix(number, sizeof(number), (int64_t)view.unsigned_value, shown);
+                if (length <= 0 || (size_t)length >= sizeof(number) ||
+                    !xr_value_format_write(sink, number, (size_t)length))
+                    return 0;
+            }
+            return xr_value_format_text(sink, "]");
+        }
         case XR_VALUE_FORMAT_ENUM:
             if (xr_value_format_depth_exceeded(depth))
                 return xr_value_format_text(sink, "...");

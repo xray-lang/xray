@@ -13,11 +13,17 @@
 #define XXIR_SOURCE_QUERY_H
 #include "xxir.h"
 #include "../base/xstable_id.h"
+typedef enum XrXirSourceDiagnosticOrigin {
+    XR_XIR_SOURCE_DIAGNOSTIC_DEFAULT, XR_XIR_SOURCE_DIAGNOSTIC_PARSE,
+    XR_XIR_SOURCE_DIAGNOSTIC_INPUT
+} XrXirSourceDiagnosticOrigin;
 typedef struct XrXirSourceDiagnostic {
     XrXirStatus status;
     uint32_t module;
     int line, column;
     char message[192];
+    /* Actual diagnostic producer, never inferred from message text or line. */
+    XrXirSourceDiagnosticOrigin origin;
 } XrXirSourceDiagnostic;
 typedef struct XrXirSourceRange {
     uint32_t module;

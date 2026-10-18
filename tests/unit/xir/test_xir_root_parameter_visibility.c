@@ -45,8 +45,8 @@ typedef struct VisibilityFixture {
  * and a finite higher-order actual parameter binding. */
 static void visibility_fixture(VisibilityFixture *f, const XrXirCompileContext *c, unsigned mode) {
     memset(f,0,sizeof(*f));CHECK(mode<4);f->dependency=1;
-    f->modules[0]=(XrXirSourceModule){"root",4,&f->dependency,1,2};
-    f->modules[1]=(XrXirSourceModule){"alpha",5,NULL,0,3};
+    f->modules[0]=(XrXirSourceModule){"root",4,&f->dependency,1,2, 0,XR_XIR_MODULE_FRESH_STORAGE};
+    f->modules[1]=(XrXirSourceModule){"alpha",5,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->identities[1]=(XrXirFunctionIdentity){.module=1,.exported=1};
     f->identities[3].module=1;
     f->declarations=(XrXirDeclarations){.modules=f->modules,.module_count=2,

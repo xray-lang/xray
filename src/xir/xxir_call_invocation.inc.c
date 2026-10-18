@@ -41,7 +41,7 @@ XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
     CallFrame *frame=view->activation->top;
     if (!frame->effect_pending || frame->pending_invocation.owner ||
         frame->effect_instruction!=selection->instruction ||
-        selection->caller!=(uint32_t)(frame->entry-view->activation->config.entries))
+        selection->caller!=(uint32_t)(frame->entry-frame->metadata->entries))
         return XR_XIR_CALL_BAD_STATE;
     if (!call_invocation_work(view,sizeof(*selection)+4)) return XR_XIR_CALL_LIMIT;
     frame->pending_invocation=*selection;return XR_XIR_CALL_READY;

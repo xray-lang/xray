@@ -13,11 +13,12 @@
 #include "xir/xxir_nominal.h"
 #include "base/xsha256.h"
 #include "root_construction72_goldens.h"
+#include "root_construction75_previous_goldens.h"
 _Static_assert(XR_XIR_CONST_INT == 2 && XR_XIR_ADD_INT == 25 && XR_XIR_CALL == 28 &&
     XR_XIR_RETURN == 33 && XR_XIR_STRUCT_NEW == 82 && XR_XIR_STRUCT_GET == 83,
     "Independent construction vector opcode identities changed");
 
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 28u && XR_XIR_CHECKED_CONTRACT == 73u &&
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 30u && XR_XIR_CHECKED_CONTRACT == 76u &&
     XR_XIR_CALLABLE_ROOT_REQUIRED == 4u, "Independent construction wire facts changed");
 
 static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
@@ -46,7 +47,7 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
         {"make",4,NULL,0,(XrXirType)256,&blocks[2],1,make,4,operands,2},
         {"a",1,NULL,0,XR_XIR_I64,&blocks[3],1,a,2,NULL,0},
         {"b",1,NULL,0,XR_XIR_I64,&blocks[3],1,b,2,NULL,0}};
-    XrXirSourceModule construction_source_module = {"alpha",5,NULL,0,0};
+    XrXirSourceModule construction_source_module = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0},
         {0,1,0,0,0,0,XR_XIR_NON_MEMBER,0,0},
@@ -154,6 +155,19 @@ static void root_construction72_attacks(void) {
     CHECK(xr_xir_compile_checked_read(&context,root_construction71_previous,
         sizeof(root_construction71_previous),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(decoded == (XrXirArtifact *)(uintptr_t)1 && attempts == before);
+    decoded = NULL;
+    CHECK(xr_xir_compile_checked_read(&context,root_construction74_previous,
+        sizeof(root_construction74_previous),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
+    CHECK(!decoded);
+    const uint8_t *previous[]={root_construction75_checked_previous,root_construction75_instance_previous};
+    const size_t lengths[]={sizeof(root_construction75_checked_previous),sizeof(root_construction75_instance_previous)};
+    for (unsigned i=0;i<2;++i) for (unsigned occupied=0;occupied<2;++occupied) {
+        XrXirArtifact *sentinel=occupied ? (XrXirArtifact *)(uintptr_t)1 : NULL;
+        decoded=sentinel;
+        CHECK(xr_xir_compile_checked_read(&context,previous[i],lengths[i],&decoded,NULL)==XR_XIR_BAD_STRUCTURE);
+        CHECK(decoded==sentinel && attempts==before && live_count==1);
+    }
+    decoded=NULL;
     /* A valid digest cannot hide a wrong dense denominator or helper identity. */
     static const unsigned offsets[] = {0,4,8,16};
     static const uint32_t values[] = {0,1,1,4};

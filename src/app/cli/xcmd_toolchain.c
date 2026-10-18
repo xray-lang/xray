@@ -1,428 +1,122 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcmd_toolchain.c - 'xray toolchain' provider/configuration diagnostics
+ * xcmd_toolchain.c - Owned toolchain preferences at the public CLI boundary
  */
-
 #include "xcli_spec.h"
 #include "xcli_diag.h"
+#include "xcli_toolchain_config.h"
+#include "xcli_toolchain_update.h"
 #include "../../base/xchecks.h"
-#include "../toolchain/xtc_config.h"
-#include "../toolchain/xtc_discovery.h"
-#include "../toolchain/xtc_json.h"
-#include "../toolchain/xtc_probe.h"
-#include "../toolchain/xtc_probe_cache.h"
-
-#include "xray_version.h"
-#include "xray_build_identity.h"
-
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-static bool xcmd_toolchain_json(const XrCliInvocation *inv) {
-    return (inv->ctx && inv->ctx->json_output) || xr_cli_opt_bool(&inv->options, "json");
+static bool toolchain_json(const XrCliInvocation *inv) {
+    return (inv->ctx && inv->ctx->json_output) || xr_cli_opt_bool(&inv->options,"json");
 }
-
-#define xcmd_json_string xtc_json_write_string
-
-static bool xcmd_toolchain_target(const XrCliInvocation *inv, const char **requested,
-                                  XrToolchainTarget *target) {
-    char err[256];
-    *requested = xr_cli_opt_string(&inv->options, "target", "native");
-    if (!xtc_target_parse(*requested, target, err, sizeof(err))) {
-        xr_cli_error("toolchain", "%s", err);
-        return false;
+static void toolchain_string(const char *text) {
+    if(!text){fputs("null",stdout);return;}
+    putchar('"');
+    for(const unsigned char *p=(const unsigned char *)text;*p;++p) {
+        if(*p=='"' || *p=='\\'){putchar('\\');putchar(*p);}
+        else if(*p<32)printf("\\u%04x",(unsigned)*p);
+        else putchar(*p);
     }
-    return true;
+    putchar('"');
 }
-
-static bool xcmd_toolchain_load_config(char *path, size_t path_size, XrToolchainConfig *config,
-                                       char *err, size_t err_size) {
-    bool exists = false;
-    if (!xtc_config_path(path, path_size, err, err_size))
-        return false;
-    return xtc_config_load(path, config, &exists, err, err_size);
+static int toolchain_output_status(void) {
+    if(fflush(stdout)==0 && !ferror(stdout))return XR_CLI_EXIT_OK;
+    xr_cli_error("toolchain","preference output failed");return XR_CLI_EXIT_FAIL;
 }
-
-static bool xcmd_toolchain_request(const XrCliInvocation *inv, const char **requested,
-                                   XrToolchainProbeOptions *options, char *err, size_t err_size) {
-    memset(options, 0, sizeof(*options));
-    *requested = xr_cli_opt_string(&inv->options, "target", "native");
-    if (!xtc_target_parse(*requested, &options->request.target, err, err_size))
-        return false;
-
-    const char *provider = xr_cli_opt_string(&inv->options, "provider", NULL);
-    const char *cc = xr_cli_opt_string(&inv->options, "cc", NULL);
-    const char *zig = xr_cli_opt_string(&inv->options, "zig", NULL);
-    char config_path[1200];
-    XrToolchainConfig config;
-    if (!xcmd_toolchain_load_config(config_path, sizeof(config_path), &config, err, err_size))
-        return false;
-    const XrToolchainPreference *preference = xtc_config_find(&config, *requested);
-    if (!provider) {
-        if (preference) {
-            options->request.selector = preference->selector;
-        } else {
-            options->request.selector = XR_TOOLCHAIN_SELECTOR_AUTO;
-        }
-    } else if (!xtc_selector_parse(provider, &options->request.selector, err, err_size)) {
-        return false;
-    }
-
-    const char *resolved_cc = cc;
-    const char *resolved_zig = zig;
-    xtc_config_apply_provider_paths(preference, options->request.selector, cc, getenv("CC"), zig,
-                                    getenv("XRAY_ZIG"), &resolved_cc, &resolved_zig);
-    if (resolved_cc != cc) {
-        snprintf(options->cc_storage, sizeof(options->cc_storage), "%s", resolved_cc);
-        cc = options->cc_storage;
-    }
-    if (resolved_zig != zig) {
-        snprintf(options->zig_storage, sizeof(options->zig_storage), "%s", resolved_zig);
-        zig = options->zig_storage;
-    }
-
-    if (cc && options->request.selector == XR_TOOLCHAIN_SELECTOR_ZIG) {
-        snprintf(err, err_size, "--cc cannot be used with provider 'zig'");
-        return false;
-    }
-    if (zig && options->request.selector != XR_TOOLCHAIN_SELECTOR_AUTO &&
-        options->request.selector != XR_TOOLCHAIN_SELECTOR_ZIG) {
-        snprintf(err, err_size, "--zig cannot be used with provider '%s'",
-                 xtc_selector_name(options->request.selector));
-        return false;
-    }
-    options->request.cc = cc ? cc : getenv("CC");
-    options->request.zig = zig;
-    options->request.program_hint = inv->ctx ? inv->ctx->program : NULL;
-    const char *profile = xr_cli_opt_string(
-        &inv->options, "profile",
-        xtc_target_is_hosted(&options->request.target) ? "hosted" : "freestanding");
-    if (!xtc_profile_parse(profile, &options->profile, err, err_size))
-        return false;
-    options->no_run = xr_cli_opt_bool(&inv->options, "no-run");
-    options->refresh = xr_cli_opt_bool(&inv->options, "refresh");
-    options->keep_probe = xr_cli_opt_bool(&inv->options, "keep-probe");
-    options->required_codegen_capabilities = XR_TOOLCHAIN_CODEGEN_ALL;
-    return true;
+static int toolchain_config_error(XrCliToolchainConfigStatus status) {
+    const char *reason=status==XR_CLI_TOOLCHAIN_CONFIG_INVALID ? "invalid preference configuration" :
+        status==XR_CLI_TOOLCHAIN_CONFIG_BUDGET ? "preference resource budget exhausted" :
+        status==XR_CLI_TOOLCHAIN_CONFIG_OUT_OF_MEMORY ? "preference allocation failed" :
+        status==XR_CLI_TOOLCHAIN_CONFIG_UNRESOLVED ? "preference path is unresolved" : "preference I/O failed";
+    xr_cli_error("toolchain","%s",reason);return XR_CLI_EXIT_FAIL;
 }
-
-static void xcmd_toolchain_print_probe_human(const XrToolchainProbeOptions *options,
-                                             const XrToolchainProbeResult *result, bool ready) {
-    printf("AOT toolchain: %s\n", ready ? "READY" : "UNAVAILABLE");
-    printf("  Target:     %s\n", options->request.target.name);
-    printf("  Provider:   %s (%s)\n", xtc_provider_name(result->selection.provider),
-           xtc_ownership_name(result->selection.ownership));
-    printf("  Compiler:   %s\n", result->selection.program ? result->selection.program : "missing");
-    if (result->selection.version[0])
-        printf("  Version:    %s\n", result->selection.version);
-    printf("  Readiness:  %s\n", xtc_readiness_name(result->selection.readiness));
-    printf("  C compile:  %s\n", xtc_capability_state_name(result->c_compile));
-    printf("  SDK compile:%s\n", xtc_capability_state_name(result->sdk_compile));
-    printf("  Runtime link: %s\n", xtc_capability_state_name(result->runtime_link));
-    printf("  Native run: %s\n", xtc_capability_state_name(result->native_run));
-    printf("  LTO:        %s\n", xtc_capability_state_name(result->lto));
-    printf("  Force inline: %s\n", xtc_capability_state_name(result->force_inline));
-    printf("  Preserve call: %s\n", xtc_capability_state_name(result->preserve_call));
-    printf("  Value opaque: %s\n", xtc_capability_state_name(result->value_opaque));
-    printf("  Compiler fence: %s\n", xtc_capability_state_name(result->compiler_fence));
-    for (size_t i = 0; i < result->diagnostic_count; i++)
-        printf("  [%s] %s: %s\n", xtc_reason_code_name(result->diagnostics[i].code),
-               result->diagnostics[i].stage, result->diagnostics[i].message);
+static bool toolchain_target(const char *text) {
+    XrToolchainTarget target;char error[256];
+    if(!text)return true;
+    if(!*text){xr_cli_error("toolchain","preference target is empty");return false;}
+    if(xtc_target_parse(text,&target,error,sizeof(error)))return true;
+    xr_cli_error("toolchain","%s",error);return false;
 }
-
-static int xcmd_toolchain_probe_or_doctor(const XrCliInvocation *inv) {
-    XrToolchainProbeOptions options;
-    XrToolchainProbeResult result;
-    const char *requested = NULL;
-    char err[512] = {0};
-    if (!xcmd_toolchain_request(inv, &requested, &options, err, sizeof(err))) {
-        xr_cli_error("toolchain", "%s", err);
-        return XR_CLI_EXIT_USAGE;
+static int toolchain_read(const XrCliInvocation *inv,XrCompileState *state,bool path_only) {
+    const char *target=xr_cli_opt_string(&inv->options,"target",NULL);
+    if(path_only) {
+        char *path=NULL;XrCliToolchainConfigStatus status=xr_cli_toolchain_config_path(state,NULL,&path);
+        if(status!=XR_CLI_TOOLCHAIN_CONFIG_OK)return toolchain_config_error(status);
+        if(toolchain_json(inv)){fputs("{\"schema\":1,\"path\":",stdout);toolchain_string(path);puts("}");}
+        else puts(path);
+        xr_compile_resources_free(path);return toolchain_output_status();
     }
-    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
-    XrCompileResources *process_resources = NULL;
-    XrCompileResourceStatus allocation = xr_compile_resources_new(&process_limits, &process_resources);
-    if (allocation != XR_COMPILE_RESOURCE_OK) {
-        xr_cli_error("toolchain", "%s", allocation == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? "process out of memory" : "process budget exhausted");
-        return XR_CLI_EXIT_UNAVAILABLE;
+    if(!toolchain_target(target))return XR_CLI_EXIT_USAGE;
+    XrCliToolchainConfig *owner=NULL;
+    XrCliToolchainConfigStatus status=xr_cli_toolchain_config_open(state,NULL,&owner);
+    if(status!=XR_CLI_TOOLCHAIN_CONFIG_OK)return toolchain_config_error(status);
+    const XrCliToolchainConfigView *view=xr_cli_toolchain_config_view(owner);bool json=toolchain_json(inv),first=true;
+    if(json) {
+        fputs("{\"schema\":1,\"configPath\":",stdout);toolchain_string(view->path);
+        printf(",\"exists\":%s,\"policy\":{\"allowFallback\":%s,\"preferExternalNative\":%s,\"autoProbe\":%s},\"preferences\":[",
+            view->exists ? "true" : "false",view->allow_fallback ? "true" : "false",
+            view->prefer_external_native ? "true" : "false",view->auto_probe ? "true" : "false");
+    } else printf("Toolchain preferences: %s\n",view->path);
+    for(size_t i=0;i<view->count;++i) {
+        const XrCliToolchainPreference *row=&view->preferences[i];
+        if(target && strcmp(target,row->target))continue;
+        if(json) {
+            if(!first)putchar(',');
+            fputs("{\"target\":",stdout);toolchain_string(row->target);
+            fputs(",\"provider\":",stdout);toolchain_string(xtc_selector_name(row->selector));
+            fputs(",\"compiler\":",stdout);toolchain_string(row->compiler);
+            fputs(",\"zig\":",stdout);toolchain_string(row->zig);putchar('}');
+        } else printf("  %s -> %s%s%s%s%s\n",row->target,xtc_selector_name(row->selector),
+            row->compiler ? " compiler=" : "",row->compiler ? row->compiler : "",
+            row->zig ? " zig=" : "",row->zig ? row->zig : "");
+        first=false;
     }
-    XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
-    options.request.process = &process_context;
-    memset(&result, 0, sizeof(result));
-    bool ready = xtc_probe(&options, &result, err, sizeof(err));
-    xr_compile_resources_release(process_resources);
-    if (xcmd_toolchain_json(inv))
-        (void) xtc_probe_json_write(stdout, requested, &options, &result, ready,
-                                    XRAY_VERSION_STRING, XRAY_BUILD_COMMIT);
-    else
-        xcmd_toolchain_print_probe_human(&options, &result, ready);
-    return ready ? XR_CLI_EXIT_OK : XR_CLI_EXIT_UNAVAILABLE;
+    if(json)puts("]}");
+    xr_cli_toolchain_config_free(owner);return toolchain_output_status();
 }
-
-static int xcmd_toolchain_list(const XrCliInvocation *inv) {
-    const char *requested;
-    XrToolchainTarget target;
-    if (!xcmd_toolchain_target(inv, &requested, &target))
-        return XR_CLI_EXIT_USAGE;
-    char config_path[1200];
-    char err[512];
-    XrToolchainConfig config;
-    if (!xcmd_toolchain_load_config(config_path, sizeof(config_path), &config, err, sizeof(err))) {
-        xr_cli_error("toolchain", "%s", err);
-        return XR_CLI_EXIT_FAIL;
-    }
-    const XrToolchainPreference *preference = xtc_config_find(&config, requested);
-    XrToolchainProbeCacheEntry cache_entries[XTC_PROBE_CACHE_MAX_ENTRIES];
-    size_t cache_count = 0;
-    if (!xtc_probe_cache_list(target.name, cache_entries, XTC_PROBE_CACHE_MAX_ENTRIES, &cache_count,
-                              err, sizeof(err))) {
-        xr_cli_error("toolchain", "%s", err);
-        return XR_CLI_EXIT_FAIL;
-    }
-    static const XrToolchainProviderId providers[] = {
-        XR_TOOLCHAIN_PROVIDER_APPLE_CLANG, XR_TOOLCHAIN_PROVIDER_LLVM_CLANG,
-        XR_TOOLCHAIN_PROVIDER_GCC, XR_TOOLCHAIN_PROVIDER_MSVC, XR_TOOLCHAIN_PROVIDER_ZIG};
-    if (xcmd_toolchain_json(inv)) {
-        printf("{\"schema\":1,\"target\":");
-        xcmd_json_string(stdout, requested);
-        printf(",\"normalizedTarget\":");
-        xcmd_json_string(stdout, target.name);
-        printf(",\"configPath\":");
-        xcmd_json_string(stdout, config_path);
-        printf(",\"preference\":");
-        if (preference)
-            xcmd_json_string(stdout, xtc_selector_name(preference->selector));
-        else
-            fputs("null", stdout);
-        printf(",\"providers\":[");
-        for (size_t i = 0; i < sizeof(providers) / sizeof(providers[0]); i++) {
-            if (i)
-                putchar(',');
-            printf("{\"id\":");
-            xcmd_json_string(stdout, xtc_provider_name(providers[i]));
-            printf(",\"ownership\":\"external-or-managed\"}");
-        }
-        printf("],\"cache\":[");
-        for (size_t i = 0; i < cache_count; i++) {
-            if (i)
-                putchar(',');
-            printf("{\"key\":");
-            xcmd_json_string(stdout, cache_entries[i].key);
-            printf(",\"provider\":");
-            xcmd_json_string(stdout, cache_entries[i].provider);
-            printf(",\"fingerprint\":");
-            xcmd_json_string(stdout, cache_entries[i].fingerprint);
-            printf(",\"runtimeArtifact\":");
-            xcmd_json_string(stdout, cache_entries[i].runtime_artifact);
-            printf(",\"ready\":%s}", cache_entries[i].ready ? "true" : "false");
-        }
-        printf("]}\n");
-    } else {
-        printf("AOT providers for %s (%s):\n", requested, target.name);
-        for (size_t i = 0; i < sizeof(providers) / sizeof(providers[0]); i++)
-            printf("  %s\n", xtc_provider_name(providers[i]));
-        printf("Preference: %s\n", preference ? xtc_selector_name(preference->selector) : "auto");
-        printf("Config: %s\n", config_path);
-        if (cache_count == 0) {
-            printf("Probe cache: none\n");
-        } else {
-            printf("Probe cache:\n");
-            for (size_t i = 0; i < cache_count; i++)
-                printf("  %s provider=%s ready=%s\n", cache_entries[i].key,
-                       cache_entries[i].provider, cache_entries[i].ready ? "yes" : "no");
-        }
-    }
-    return XR_CLI_EXIT_OK;
-}
-
-static int xcmd_toolchain_detect(const XrCliInvocation *inv) {
-    XrToolchainProbeOptions options;
-    const char *requested = NULL;
-    char err[512];
-    if (!xcmd_toolchain_request(inv, &requested, &options, err, sizeof(err))) {
-        xr_cli_error("toolchain", "%s", err);
-        return XR_CLI_EXIT_USAGE;
-    }
-    XrCompileResourceLimits process_limits = {67108864, 16777216, 1073741824};
-    XrCompileResources *process_resources = NULL;
-    XrCompileResourceStatus allocation = xr_compile_resources_new(&process_limits, &process_resources);
-    if (allocation != XR_COMPILE_RESOURCE_OK) {
-        xr_cli_error("toolchain", "%s", allocation == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? "process out of memory" : "process budget exhausted");
-        return XR_CLI_EXIT_UNAVAILABLE;
-    }
-    XrToolchainProcessContext process_context = {process_resources, XTC_PROCESS_OK};
-    options.request.process = &process_context;
-    XrToolchainCandidates candidates;
-    if (!xtc_discover_candidates(&options.request, &candidates, err, sizeof(err))) {
-        xr_compile_resources_release(process_resources);
-        xr_cli_error("toolchain", "%s", err);
-        return XR_CLI_EXIT_UNAVAILABLE;
-    }
-    for (size_t i = 0; i < candidates.count; i++) {
-        char version_err[256];
-        (void) xtc_candidate_read_version(&process_context, &candidates.items[i], version_err, sizeof(version_err));
-        if (process_context.status != XTC_PROCESS_OK) break;
-    }
-    xr_compile_resources_release(process_resources);
-    if (process_context.status != XTC_PROCESS_OK) {
-        xr_cli_error("toolchain", "%s", xtc_process_status_name(process_context.status));
-        return XR_CLI_EXIT_UNAVAILABLE;
-    }
-    if (xcmd_toolchain_json(inv)) {
-        printf("{\"schema\":1,\"target\":");
-        xcmd_json_string(stdout, requested);
-        printf(",\"normalizedTarget\":");
-        xcmd_json_string(stdout, options.request.target.name);
-        printf(",\"candidates\":[");
-        for (size_t i = 0; i < candidates.count; i++) {
-            if (i)
-                putchar(',');
-            printf("{\"provider\":");
-            xcmd_json_string(stdout, xtc_provider_name(candidates.items[i].provider));
-            printf(",\"ownership\":");
-            xcmd_json_string(stdout, xtc_ownership_name(candidates.items[i].ownership));
-            printf(",\"compiler\":");
-            xcmd_json_string(stdout, candidates.items[i].executable);
-            printf(",\"version\":");
-            xcmd_json_string(stdout, candidates.items[i].version);
-            printf(",\"runnable\":%s}", candidates.items[i].runnable ? "true" : "false");
-        }
-        printf("]}\n");
-    } else {
-        printf("Detected candidates for %s:\n", options.request.target.name);
-        for (size_t i = 0; i < candidates.count; i++)
-            printf("  %-12s %-8s %s%s%s\n", xtc_provider_name(candidates.items[i].provider),
-                   candidates.items[i].runnable ? "runnable" : "missing",
-                   candidates.items[i].executable, candidates.items[i].version[0] ? " - " : "",
-                   candidates.items[i].version);
-    }
-    return XR_CLI_EXIT_OK;
-}
-
-static int xcmd_toolchain_use(const XrCliInvocation *inv) {
-    if (inv->positional_count != 2) {
-        xr_cli_error("toolchain", "usage: xray toolchain use --target TARGET PROVIDER");
-        return XR_CLI_EXIT_USAGE;
-    }
-    const char *target_text = xr_cli_opt_string(&inv->options, "target", NULL);
-    if (!target_text) {
-        xr_cli_error("toolchain", "--target is required for 'use'");
-        return XR_CLI_EXIT_USAGE;
-    }
-    XrToolchainSelector selector;
-    char err[512];
-    XrToolchainTarget target;
-    if (!xtc_target_parse(target_text, &target, err, sizeof(err)) ||
-        !xtc_selector_parse(inv->positionals[1], &selector, err, sizeof(err))) {
-        xr_cli_error("toolchain", "%s", err);
-        return XR_CLI_EXIT_USAGE;
-    }
-    const char *cc = xr_cli_opt_string(&inv->options, "cc", NULL);
-    const char *zig = xr_cli_opt_string(&inv->options, "zig", NULL);
-    if ((cc && selector == XR_TOOLCHAIN_SELECTOR_ZIG) ||
-        (zig && selector != XR_TOOLCHAIN_SELECTOR_ZIG)) {
-        xr_cli_error("toolchain", "provider/path option mismatch");
-        return XR_CLI_EXIT_USAGE;
-    }
-    char path[1200];
-    if (!xtc_config_path(path, sizeof(path), err, sizeof(err)) ||
-        !xtc_config_use(path, target_text, selector, cc, zig, err, sizeof(err))) {
-        xr_cli_error("toolchain", "%s", err);
-        return XR_CLI_EXIT_FAIL;
-    }
-    if (xcmd_toolchain_json(inv)) {
-        printf("{\"schema\":1,\"updated\":true,\"target\":");
-        xcmd_json_string(stdout, target_text);
-        printf(",\"provider\":");
-        xcmd_json_string(stdout, xtc_selector_name(selector));
-        printf(",\"configPath\":");
-        xcmd_json_string(stdout, path);
-        printf("}\n");
-    } else {
-        printf("Toolchain preference updated: %s -> %s\n", target_text,
-               xtc_selector_name(selector));
-    }
-    return XR_CLI_EXIT_OK;
-}
-
-static int xcmd_toolchain_reset(const XrCliInvocation *inv) {
-    if (inv->positional_count != 1) {
-        xr_cli_error("toolchain", "usage: xray toolchain reset [--target TARGET]");
-        return XR_CLI_EXIT_USAGE;
-    }
-    const char *target = xr_cli_opt_string(&inv->options, "target", NULL);
-    XrToolchainTarget parsed;
-    char err[512];
-    if (target && !xtc_target_parse(target, &parsed, err, sizeof(err))) {
-        xr_cli_error("toolchain", "%s", err);
-        return XR_CLI_EXIT_USAGE;
-    }
-    char path[1200];
-    const char *normalized_target = target ? parsed.name : NULL;
-    if (!xtc_config_path(path, sizeof(path), err, sizeof(err)) ||
-        !xtc_config_reset(path, target, err, sizeof(err)) ||
-        !xtc_probe_cache_reset(normalized_target, err, sizeof(err))) {
-        xr_cli_error("toolchain", "%s", err);
-        return XR_CLI_EXIT_FAIL;
-    }
-    if (xcmd_toolchain_json(inv)) {
-        printf("{\"schema\":1,\"reset\":true,\"target\":");
-        if (target)
-            xcmd_json_string(stdout, target);
-        else
-            fputs("null", stdout);
-        printf("}\n");
-    } else {
-        printf("Toolchain preference reset: %s\n", target ? target : "all");
-    }
-    return XR_CLI_EXIT_OK;
-}
-
-static int xcmd_toolchain_config_path(const XrCliInvocation *inv) {
-    if (inv->positional_count != 1) {
-        xr_cli_error("toolchain", "usage: xray toolchain config-path");
-        return XR_CLI_EXIT_USAGE;
-    }
-    char path[1200];
-    char err[256];
-    if (!xtc_config_path(path, sizeof(path), err, sizeof(err))) {
-        xr_cli_error("toolchain", "%s", err);
-        return XR_CLI_EXIT_FAIL;
-    }
-    if (xcmd_toolchain_json(inv)) {
-        printf("{\"schema\":1,\"path\":");
-        xcmd_json_string(stdout, path);
-        printf("}\n");
-    } else {
-        printf("%s\n", path);
-    }
-    return XR_CLI_EXIT_OK;
-}
-
+#ifdef XR_OS_WINDOWS
+#include "xcmd_toolchain_update.inc.c"
+#endif
 XR_FUNC int cmd_toolchain(const XrCliInvocation *inv) {
-    XR_DCHECK(inv != NULL, "inv is NULL");
-    if (inv->positional_count < 1) {
-        xr_cli_error("toolchain", "missing subcommand");
+    if(!inv || !inv->positional_count)return XR_CLI_EXIT_USAGE;
+    const char *action=inv->positionals[0];bool use=!strcmp(action,"use"),reset=!strcmp(action,"reset");
+    bool list=!strcmp(action,"list"),path_only=!strcmp(action,"config-path");
+    if((!use && !reset && !list && !path_only) || inv->positional_count!=(use ? 2 : 1) ||
+        (!use && (xr_cli_opt_present(&inv->options,"cc") || xr_cli_opt_present(&inv->options,"zig"))) ||
+        (path_only && xr_cli_opt_present(&inv->options,"target")) ||
+        (use && !xr_cli_opt_present(&inv->options,"target"))) {
+        xr_cli_error("toolchain","expected list [--target TARGET], config-path, use --target TARGET PROVIDER, or reset [--target TARGET]");
         return XR_CLI_EXIT_USAGE;
     }
-    const char *subcommand = inv->positionals[0];
-    if (strcmp(subcommand, "list") == 0)
-        return inv->positional_count == 1 ? xcmd_toolchain_list(inv) : XR_CLI_EXIT_USAGE;
-    if (strcmp(subcommand, "detect") == 0)
-        return inv->positional_count == 1 ? xcmd_toolchain_detect(inv) : XR_CLI_EXIT_USAGE;
-    if (strcmp(subcommand, "probe") == 0 || strcmp(subcommand, "doctor") == 0)
-        return inv->positional_count == 1 ? xcmd_toolchain_probe_or_doctor(inv) : XR_CLI_EXIT_USAGE;
-    if (strcmp(subcommand, "use") == 0)
-        return xcmd_toolchain_use(inv);
-    if (strcmp(subcommand, "reset") == 0)
-        return xcmd_toolchain_reset(inv);
-    if (strcmp(subcommand, "config-path") == 0)
-        return xcmd_toolchain_config_path(inv);
-    xr_cli_error("toolchain", "unknown subcommand '%s'", subcommand);
-    return XR_CLI_EXIT_USAGE;
+    XrCompileResourceLimits limits={UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
+    XrCompileResources *resources=NULL;
+    XrCompileResourceStatus opened=xr_compile_resources_new(&limits,&resources);
+    if(opened!=XR_COMPILE_RESOURCE_OK) {
+        xr_cli_error("toolchain","preference resource owner creation failed");return XR_CLI_EXIT_UNAVAILABLE;
+    }
+    XrCompileState *state=NULL;opened=xr_compile_state_new(resources,&state);
+    if(opened!=XR_COMPILE_RESOURCE_OK) {
+        xr_compile_resources_release(resources);
+        xr_cli_error("toolchain","preference state creation failed");return XR_CLI_EXIT_UNAVAILABLE;
+    }
+    int result;
+    if(list || path_only)result=toolchain_read(inv,state,path_only);
+    else {
+#ifdef XR_OS_WINDOWS
+        result=toolchain_update(inv,state,reset);
+#else
+        xr_cli_error("toolchain","persistent preference updates are unavailable on this host");
+        result=XR_CLI_EXIT_UNAVAILABLE;
+#endif
+    }
+    xr_compile_state_release(state);xr_compile_resources_release(resources);return result;
 }

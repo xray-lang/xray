@@ -21,10 +21,12 @@ static XrXirCallStatus instance_class_view(XrXirCallView *view,XrXirInstance **o
     return XR_XIR_CALL_READY;
 }
 static const XrXirValue *instance_class_root(const XrXirInstance *instance,const XrXirValue *value) {
-    if (!value) return NULL;
-    const XrXirValue *root=xr_xir_type_is_cell(instance->program->types,(XrXirType)value->type)?
+    if (!instance || !value) return NULL;
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(xr_xir_value_arena(value));
+    const XrXirValue *root=xr_xir_type_is_cell(types,(XrXirType)value->type)?
         xr_xir_cell_canonical_root(value):value;
-    return root && xr_xir_type_is_class(instance->program->types,(XrXirType)root->type)?root:NULL;
+    return root && xr_xir_type_is_class(xr_xir_compile_type_arena_types(xr_xir_value_arena(root)),
+        (XrXirType)root->type)?root:NULL;
 }
 static XrXirCallStatus instance_class_access_begin(XrXirCallView *view,uint32_t instruction,
     XirEffectClassAccessKind kind,const XrXirValue *value,XrXirCallClassAccess *access) {
@@ -33,9 +35,10 @@ static XrXirCallStatus instance_class_access_begin(XrXirCallView *view,uint32_t 
     const XrXirValue *root=instance_class_root(instance,value);
     if (!root) return XR_XIR_CALL_BAD_STATE;
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
-    XrXirCallStatus status=admit_instance_value(admission,value,(XrXirType)value->type);
+    XrXirType input_type=XR_XIR_UNIT,root_type=XR_XIR_UNIT;
+    XrXirCallStatus status=instance_received_value(admission,value,&input_type);
     if (status!=XR_XIR_CALL_READY) return status;
-    status=admit_instance_value(admission,root,(XrXirType)root->type);
+    status=instance_received_value(admission,root,&root_type);
     if (status!=XR_XIR_CALL_READY) return status;
     status=value_call_status(xr_xir_call_class_access_prepare(view,value,access));
     if (status!=XR_XIR_CALL_READY) return status;
@@ -52,7 +55,7 @@ static XrXirCallStatus instance_class_access_begin(XrXirCallView *view,uint32_t 
         InstanceInvocationRead actual={admission,NULL,view,NULL};
         XirEffectClassAccessRequest request={.caller=caller,.instruction=instruction,
             .node=current?current->node:UINT32_MAX,.contextual=current!=NULL,.pure=pure,
-            .kind=kind,.input_type=(XrXirType)value->type,.root_type=(XrXirType)root->type,
+            .kind=kind,.input_type=input_type,.root_type=root_type,
             .read={.owner=&actual,.work=instance_invocation_work}};
         XrXirStatus checked=xir_effects_class_access(instance->program->permissions->effects,&request);
         status=checked==XR_XIR_OK?XR_XIR_CALL_READY:checked==XR_XIR_BUDGET?
@@ -103,9 +106,11 @@ XR_FUNC XrXirCallStatus xr_xir_instance_cell_project_at(XrXirCallView *view,uint
         return xr_xir_instance_cell_project(view,type,receiver,path,output);
     if ((receiver->kind!=XR_XIR_ROOT_OBJECT && receiver->kind!=XR_XIR_ROOT_CELL) ||
         receiver->local_payload || receiver->slot ||
-        (receiver->kind==XR_XIR_ROOT_OBJECT && receiver->value.type!=(uint32_t)receiver->type) ||
+        (receiver->kind==XR_XIR_ROOT_OBJECT && !xr_xir_value_argument(&receiver->value,instance->program->arena,receiver->type)) ||
         (receiver->kind==XR_XIR_ROOT_CELL &&
-            xr_xir_cell_element(instance->program->types,(XrXirType)receiver->value.type)!=receiver->type))
+            !xir_type_arena_same_type(xr_xir_value_arena(&receiver->value),
+                xr_xir_cell_element(xr_xir_compile_type_arena_types(xr_xir_value_arena(&receiver->value)),
+                    (XrXirType)receiver->value.type),instance->program->arena,receiver->type)))
         return XR_XIR_CALL_BAD_STATE;
     XrXirCallClassAccess access={0};
     XrXirCallStatus status=instance_class_access_begin(view,instruction,XIR_EFFECT_ACCESS_PROJECT,

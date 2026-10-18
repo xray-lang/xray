@@ -15,7 +15,7 @@ import tempfile
 
 
 ORIGINAL_COMMANDS = ("run", "test", "check", "fmt", "build", "info", "doctor", "self", "help")
-WITHHELD_COMMANDS = ("pkg", "repl", "compile", "verify", "explain", "language")
+WITHHELD_COMMANDS = ("pkg", "compile", "verify", "explain", "language")
 
 
 def main():
@@ -36,7 +36,10 @@ def main():
         usage = invoke(["--help"], 0).stdout.replace(b"\r\n", b"\n")
         commands = usage.split(b"Commands:\n", 1)[1].split(b"Global Options:", 1)[0]
         actual = re.findall(rb"^  ([a-z][a-z-]*)\s", commands.replace(b"\r\n", b"\n"), re.M)
-        assert actual == [name.encode() for name in (*ORIGINAL_COMMANDS[:5], "deps", *ORIGINAL_COMMANDS[5:])], actual
+        assert actual == [name.encode() for name in (ORIGINAL_COMMANDS[0], "repl", *ORIGINAL_COMMANDS[1:5], "deps", "toolchain", *ORIGINAL_COMMANDS[5:])], actual
+        repl_help=invoke(["repl","--help"],0).stdout
+        assert b"--module-id" in repl_help, repl_help
+        invoke(["repl"],2,b"--module-id")
         help_text = invoke(["deps", "--help"], 0).stdout
         assert help_text == invoke(["deps", "-h"], 0).stdout
         assert help_text == invoke(["help", "deps"], 0).stdout

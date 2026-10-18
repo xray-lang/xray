@@ -56,7 +56,7 @@ static void description_budget(const XrXirTypes *types) {
 static void description_authority(XrXirCompileContext *context, XrXirTypes *types,
     EnumMetadataFixture *fixture) {
     uint32_t dependency = 0;
-    XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0},{"beta",4,&dependency,1,1}};
+    XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"beta",4,&dependency,1,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity callers[] = {{.module=0},{.module=1}};
     XrXirDeclarations declarations = {modules,2,callers,NULL,0,NULL,0,1,1,NULL};
     XrXirModule module = {.function_count=2,.declarations=&declarations,.types=types};

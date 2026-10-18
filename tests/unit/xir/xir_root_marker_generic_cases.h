@@ -64,7 +64,7 @@ static void mr_generic_fixture(MarkerGenericFixture *f,bool projected) {
     f->instruction=(XrXirInstruction){.op=XR_XIR_RETURN};f->block=(XrXirBlock){.count=1};
     f->function=(XrXirFunction){.name="init",.name_length=4,.instructions=&f->instruction,
         .instruction_count=1,.blocks=&f->block,.block_count=1};
-    f->source=(XrXirSourceModule){"marker",6,NULL,0,0};
+    f->source=(XrXirSourceModule){.name="marker",.name_length=6};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=&f->identity,
         .implementations=projected?NULL:&f->implementations,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=&f->function,.function_count=1,

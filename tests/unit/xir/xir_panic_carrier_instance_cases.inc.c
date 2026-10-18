@@ -58,7 +58,7 @@ static void program_fixture(PanicProgramFixture *f) {
         {"init", 4, NULL, 0, XR_XIR_UNIT, blocks, 1, init, 1, NULL, 0},
         {"main", 4, NULL, 0, XR_XIR_I64, blocks + 1, 1, main_ops, 2, NULL, 0}
     };
-    const XrXirSourceModule source = {"carrier-test", 12, NULL, 0, 0};
+    const XrXirSourceModule source = {"carrier-test", 12, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[2] = {{0}, {0}};
     const XrXirLiteral literal = {expected_bytes, sizeof(expected_bytes)};
     const XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, &literal, 1, 0, 1, NULL};

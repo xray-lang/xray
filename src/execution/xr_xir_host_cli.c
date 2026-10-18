@@ -45,7 +45,8 @@ XR_FUNC XrXirHostReportStatus xr_xir_host_report_result(const XrXirCallResult *r
             if (!xr_xir_error_borrow(value, &concrete)) return XR_XIR_HOST_REPORT_BAD_ARGUMENT;
             value = &concrete;
         }
-        written = xr_value_format_uncaught(xr_xir_value_format_reader(),
+        XrXirFormatContext format={0};
+        written = xr_value_format_uncaught(xr_xir_value_format_reader(&format),
             (XrValueFormatNode){value, 0}, checked, 0, color);
     } else if (xr_xir_call_panic_status(result->status)) {
         char scratch[XR_XIR_PANIC_MESSAGE_CAPACITY];
@@ -130,14 +131,13 @@ XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program, uint32_t entry
         return 4;
     }
     XrXirInstanceConfig config;
-    if (xr_xir_instance_config_init(&config, sizeof(config)) != XR_XIR_CALL_READY) {
+    if (xr_xir_host_config_init(&config, sizeof(config)) != XR_XIR_CALL_READY) {
         xr_xir_compile_program_drop(owned_program);
         return host_failure("XR_RUN_6002: cannot initialize execution configuration\n", 4);
     }
     /* An ordinary process runs until it finishes or the user stops it; the embedding
      * default poll cap protects hosts that schedule many programs and does not apply. */
     config.poll_limit = UINT64_MAX;
-    xr_xir_host_time_provider(&config.time);
     XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, host_output_bytes, NULL, config.value_limit};
     config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};
     XrXirCallResult result = {0};

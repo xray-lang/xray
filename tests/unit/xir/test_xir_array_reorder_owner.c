@@ -297,7 +297,11 @@ static void owner_return_faults(XrXirProgram *program,const uint32_t *functions,
         CHECK(runtime_attempts>failure && status==XR_XIR_CALL_OOM && failed_tick==line.allocation_ticks[failure]);
         runtime_fail_at=SIZE_MAX;
         XrXirValue untouched={0};
-        CHECK(xr_xir_instance_take_result(instance,&untouched)==XR_XIR_CALL_BAD_STATE && !untouched.type && !untouched.payload);
+        /* A failed start leaves the preceding result consumed. Once the new
+         * root enters execution, extraction preserves its terminal OOM. */
+        XrXirCallStatus expected_extraction=failed_tick ? XR_XIR_CALL_OOM : XR_XIR_CALL_BAD_STATE;
+        XrXirCallStatus extraction=xr_xir_instance_take_result(instance,&untouched);
+        CHECK(extraction==expected_extraction && !untouched.type && !untouched.reserved && !untouched.payload);
         bool postcommit=failed_tick>line.commit;
         CHECK(owner_committed(instance,functions,unshift)==postcommit);
         if (postcommit) ++after; else ++before;

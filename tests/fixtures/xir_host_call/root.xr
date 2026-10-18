@@ -34,3 +34,14 @@ export fn spin()->i64 {
     return counter
 }
 export fn reader()->fn()->i64 { return fn()->i64 { return state } }
+fn runningChild()->i64 {
+    defer { print(73) }
+    while (true) { Coro.yield() }
+    return 7
+}
+export fn children()->i64 {
+    defer { print(74) }
+    const task = go runningChild()
+    while (true) { Coro.yield() }
+    return await task
+}

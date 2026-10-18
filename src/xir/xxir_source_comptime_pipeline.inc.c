@@ -95,6 +95,10 @@ static void source_comptime_receive(SourceContext *ctx,XrXirSourceResult *output
     if (!source_comptime_evaluate(ctx,output->checked)) { xr_xir_compile_source_result_free(output);return; }
     if (!source_work_units(ctx,NULL,sizeof(SourceContext))) { xr_xir_compile_source_result_free(output);return; }
     SourceContext received={0};received.compile=ctx->compile;received.graph=ctx->graph;received.linkage_kind=ctx->linkage_kind;
+    received.semantic_output=ctx->semantic_output;
+    received.binding_readers=ctx->binding_readers;
+    received.interactive=ctx->interactive;received.type_query=ctx->type_query;received.repl_tail=ctx->repl_tail;
+    received.history_input=ctx->history_input;received.self_unit=ctx->self_unit;
     received.manifests=ctx->manifests;received.prelude_module=ctx->prelude_module;received.core_factory=ctx->core_factory;
     received.remaining_blocks=ctx->remaining_blocks;received.remaining_instructions=ctx->remaining_instructions;
     received.comptime_input=ctx->comptime_sites;

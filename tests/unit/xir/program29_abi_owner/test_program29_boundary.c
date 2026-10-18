@@ -13,6 +13,7 @@
 #include "../xir_sdk_resource_test.h"
 extern const XrXirProgramSpec current29_program;
 extern const XrXirProgramSpec old28_program;
+extern void old28_checked_packet(const uint8_t **bytes,size_t *length,const uint8_t **identity);
 extern const void *old28_guarded(unsigned declarations);
 extern const void *old28_guard_page(void);
 extern unsigned old28_callback_count(void);
@@ -27,7 +28,7 @@ static void unchanged(XrCompileResources *resources,XrCompileResourceStats befor
     CHECK(runtime_attempts==attempts && !old28_callback_count() && !old28_release_count() && !old28_lease_count());
 }
 int main(void) {
-    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==29 && XR_XIR_VALUE_ABI_VERSION==21 && XR_XIR_CALL_ABI_VERSION==26,"current identity");
+    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==33 && XR_XIR_VALUE_ABI_VERSION==24 && XR_XIR_CALL_ABI_VERSION==29,"current identity");
     _Static_assert(sizeof(XrXirNominalDeclaration)==128 && sizeof(XrXirNominalIdentity)==112,"actual new record strides");
     XrXirCompileContext context={sdk_ledger(&limits),xr_xir_compile_default_limits()};
     size_t base_live=runtime_live,base_bytes=runtime_bytes;
@@ -43,7 +44,7 @@ int main(void) {
         CHECK(xr_xir_compile_program_seal(&context,spec,&occupied)==XR_XIR_BAD_STRUCTURE && occupied==(XrXirProgram *)(uintptr_t)1);
         unchanged(context.resources,before,attempts);old28_guard_clear();
     }
-    CHECK(current29_program.abi_version==29 && current29_program.target.abi_version==21);
+    CHECK(current29_program.abi_version==33 && current29_program.target.abi_version==24);
     CHECK(current29_program.types && current29_program.types->nominals->count==2);
     const XrXirNominalIdentity *identities=current29_program.types->nominals->identities;
     CHECK(identities && !current29_program.types->nominals->declarations);
@@ -53,20 +54,21 @@ int main(void) {
         CHECK(!identities[i].native.native_id);
         for (uint32_t n=0;n<32;++n) CHECK(!identities[i].native.source_fingerprint[n]);
     }
-    CHECK(old28_program.proof.length>64 && old28_program.proof.bytes[8]==24 && old28_program.proof.bytes[12]==63);
-    uint8_t old_hash[32];xr_sha256(old28_program.proof.bytes,old28_program.proof.length,old_hash);
-    CHECK(!memcmp(old_hash,old28_program.proof.identity,32));
-    XrXirProgramSpec stale_proof=current29_program;stale_proof.proof=old28_program.proof;
+    XrXirProgramPacket old_packet={0};old28_checked_packet(&old_packet.bytes,&old_packet.length,&old_packet.identity);
+    CHECK(old_packet.length>64 && old_packet.bytes[8]==24 && old_packet.bytes[12]==63);
+    uint8_t old_hash[32];xr_sha256(old_packet.bytes,old_packet.length,old_hash);
+    CHECK(!memcmp(old_hash,old_packet.identity,32));
+    XrXirProgramSpec stale_packet=current29_program;stale_packet.packet=old_packet;
     XrCompileResourceStats before=sdk_stats(context.resources);size_t attempts=runtime_attempts;
     XrXirProgram *program=NULL;
-    CHECK(xr_xir_compile_program_seal(&context,&stale_proof,&program)==XR_XIR_BAD_STRUCTURE && !program);
+    CHECK(xr_xir_compile_program_seal(&context,&stale_packet,&program)==XR_XIR_BAD_STRUCTURE && !program);
     XrCompileResourceStats after=sdk_stats(context.resources);
     CHECK(after.work>before.work && after.allocation_count>=before.allocation_count && after.live_bytes==before.live_bytes);
     CHECK(runtime_attempts>=attempts && runtime_live==base_live && runtime_bytes==base_bytes);
     printf("Current metadata shape + old proof refusal: actual temporary allocations=%zu, charged work=%llu\n",
         runtime_attempts-attempts,(unsigned long long)(after.work-before.work));
     XrXirArtifact *old_checked=NULL;
-    CHECK(xr_xir_compile_checked_read(&context,old28_program.proof.bytes,old28_program.proof.length,
+    CHECK(xr_xir_compile_checked_read(&context,old_packet.bytes,old_packet.length,
         &old_checked,NULL)==XR_XIR_BAD_STRUCTURE && !old_checked);
     CHECK(!old28_callback_count() && !old28_release_count() && !old28_lease_count());
     XrXirNominalIdentity *producer_ids=xr_malloc(sizeof(XrXirNominalIdentity[2]));CHECK(producer_ids);
@@ -96,6 +98,6 @@ int main(void) {
     xr_xir_call_result_drop(&result);xr_xir_compile_program_drop(program);
     CHECK(runtime_live==base_live && runtime_bytes==base_bytes);
     xr_compile_resources_release(context.resources);CHECK(!runtime_live && !runtime_bytes);
-    puts("Program28 two actual old strides before guard-page/pointee/callback/lease/work/allocation; current29 old24/63 proof BAD_STRUCTURE; current two-record independent42 physical0 PASS");
+    puts("Program28 two actual old strides before guard-page/pointee/callback/lease/work/allocation; current33 old24/63 packet BAD_STRUCTURE; current two-record independent42 physical0 PASS");
     return 0;
 }

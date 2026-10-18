@@ -185,6 +185,8 @@ static void cn_build(CnFixture *f) {
     CHECK(child_callable_native_program.packet.identity);
     CHECK(child_callable_native_program.declarations->entry_function == CN_ENTRY);
     CHECK(child_callable_native_program.types && child_callable_native_program.types->count == 6);
+    CHECK(child_callable_native_program.types->nodes[5].kind == XR_XIR_TYPE_CELL &&
+        child_callable_native_program.types->nodes[5].element == XR_XIR_I64);
     const uint32_t advertised[4] = {2u, 4u, 8u, 12u};
     for (unsigned i = 0; i < 4; ++i) {
         const XrXirTypeNode *node = &child_callable_native_program.types->nodes[i + 1];
@@ -240,9 +242,15 @@ static XrXirInstanceResult cn_returned(CnWitness *w) {
     for (unsigned polls = 0; polls < 32768; ++polls) {
         XrXirInstanceResult result = xr_xir_instance_poll_bounded(w->instance, 1);
         if (result.outcome.status == XR_XIR_CALL_READY) continue;
-        if (result.outcome.status != XR_XIR_CALL_RETURNED) fprintf(stderr,
-            "native child root status=%u state=%u epoch=%llu\n", result.outcome.status,
-            xr_xir_instance_state(w->instance), (unsigned long long)result.epoch);
+        if (result.outcome.status != XR_XIR_CALL_RETURNED) {
+            XrXirDomainBudgetStats fees = xr_xir_domain_budget_stats(w->domain);
+            fprintf(stderr, "native child root status=%u state=%u epoch=%llu work=%llu/%llu value=%llu/%llu call=%llu/%llu\n",
+                result.outcome.status, xr_xir_instance_state(w->instance), (unsigned long long)result.epoch,
+                (unsigned long long)fees.work, (unsigned long long)fees.work_limit,
+                (unsigned long long)fees.requested_bytes, (unsigned long long)fees.requested_limit,
+                (unsigned long long)fees.requested_call_bytes, (unsigned long long)fees.requested_call_limit);
+            for(unsigned f=0;f<CN_FUNCTIONS;++f)fprintf(stderr,"native child entry=%u resumes=%u releases=%u\n",f,w->calls[f],w->releases[f]);
+        }
         CHECK(result.outcome.status == XR_XIR_CALL_RETURNED);
         return result;
     }

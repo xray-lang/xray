@@ -22,10 +22,10 @@ static void storage_prepared_end(StoragePrepared *prepared) {
     storage_pack_end(&prepared->pack);
 }
 static XrXirValueStatus storage_prepared_begin(StoragePrepared *prepared,
-    const XrXirValue *value, uint32_t stride, XrXirValueAdmission *admission) {
+    XrXirType type,const XrXirValue *value,uint32_t stride,XrXirValueAdmission *admission) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *prepared = (StoragePrepared){0}; prepared->stride = stride;
-    XrXirValueStatus status = storage_pack_begin(admission, (XrXirType)value->type, &prepared->pack);
+    XrXirValueStatus status = storage_pack_begin(admission,type,&prepared->pack);
     if (status != XR_XIR_VALUE_OK) return status;
     if (stride <= sizeof(prepared->compact)) prepared->bytes = (unsigned char *)&prepared->compact;
     else {

@@ -113,7 +113,7 @@ static XrXirArtifact *path_program_fixture(const XrXirCompileContext *context, u
         {"main",4,NULL,0,XR_XIR_I64,&blocks[3],1,main,2,NULL,0},
         {"bounds",6,&index_type,1,XR_XIR_I64,&blocks[2],1,bounds,8,NULL,0},
         {"badWrite",8,&index_type,1,XR_XIR_I64,&blocks[2],1,bad_write,8,NULL,0}};
-    XrXirSourceModule source = {"alpha",5,NULL,0,0};
+    XrXirSourceModule source = {"alpha",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[] = {{0},{.exported = 1},{0},{.exported = 1},{0},
         {.exported = 1},{.exported = 1}};
     XrXirSlot slots[] = {{0,cell,1},{0,root,0}};

@@ -5,178 +5,233 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_repl_publication_allocations.c - Atomic typed metadata publication
+ * test_repl_publication_allocations.c - Actual Source coordinator allocation cuts
+ *
+ * KEY CONCEPT:
+ *   Substitute only allocations requested by the real public coordinator and
+ *   paired submission. Each cut fails the actual ledger allocator; parser and
+ *   compiler internals keep their separate complete allocation obligations.
  */
 #include "../test_framework.h"
-#include "xray.h"
-#include "xray_vm.h"
-#include "../../../src/runtime/xisolate_api.h"
-#include "../../../src/api/xrepl.h"
-#include "../../../src/api/xisolate_profile.h"
-#include "../../../src/toolchain/xcompiler_session.h"
-#include "../../../src/module/xmodule_identity.h"
-#include "../../../src/base/xmalloc.h"
+#include "base/xcompile_state.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include "../../../src/base/xchecks.h"
+#define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
+#include "xir/xir_runtime_allocations.h"
+#include "base/xcompile_resources.c"
+#include "xir/xxir_vm.c"
+#include "xir/xxir_task_budget.c"
+#include "xir/xxir_task.c"
+#include "execution/xr_xir_host_execution.c"
 
-typedef struct ReplProbeAllocation {
-    void *pointer;
-    size_t bytes;
-} ReplProbeAllocation;
-
-static ReplProbeAllocation allocations[128];
-static size_t allocation_count;
-static size_t live_bytes;
-static size_t attempts;
-static size_t failure_at;
-static bool armed;
-
-static size_t find_allocation(void *pointer) {
-    for (size_t i = 0; i < allocation_count; ++i)
-        if (allocations[i].pointer == pointer)
-            return i;
-    return SIZE_MAX;
+static size_t coordinator_attempts, coordinator_fail_at;
+static bool coordinator_armed;
+static void publication_cut(void) {
+    if (coordinator_armed && ++coordinator_attempts == coordinator_fail_at)
+        runtime_fail_at = runtime_attempts;
 }
-
-static bool refuse_allocation(void) {
-    return armed && ++attempts == failure_at;
+static XrCompileResourceStatus publication_calloc(XrCompileState *state,
+    size_t count, size_t size, void **output) {
+    publication_cut();
+    XrCompileResourceStatus status = xr_compile_state_calloc(state,count,size,output);
+    runtime_fail_at = SIZE_MAX;
+    return status;
 }
-
-static void record_allocation(void *pointer, size_t bytes) {
-    if (!pointer)
-        return;
-    XR_CHECK(allocation_count < 128, "REPL allocation probe capacity exhausted");
-    allocations[allocation_count++] = (ReplProbeAllocation) {pointer, bytes};
-    live_bytes += bytes;
+static XrCompileResourceStatus publication_strdup(XrCompileState *state,
+    const char *text, char **output) {
+    publication_cut();
+    XrCompileResourceStatus status = xr_compile_state_strdup(state,text,output);
+    runtime_fail_at = SIZE_MAX;
+    return status;
 }
-
-XR_FUNC void *xr_repl_probe_malloc(size_t size) {
-    if (refuse_allocation())
-        return NULL;
-    void *pointer = xr_malloc(size);
-    if (armed)
-        record_allocation(pointer, size);
-    return pointer;
+static XrCompileResourceStatus publication_strndup(XrCompileState *state,
+    const char *text, size_t length, char **output) {
+    publication_cut();
+    XrCompileResourceStatus status = xr_compile_state_strndup(state,text,length,output);
+    runtime_fail_at = SIZE_MAX;
+    return status;
 }
+#define xr_compile_state_calloc publication_calloc
+#define xr_compile_state_strdup publication_strdup
+#define xr_compile_state_strndup publication_strndup
+#include "api/xsource_api.c"
+#include "api/xsource_submission.c"
+#undef xr_compile_state_calloc
+#undef xr_compile_state_strdup
+#undef xr_compile_state_strndup
 
-XR_FUNC void *xr_repl_probe_calloc(size_t count, size_t size) {
-    if (refuse_allocation())
-        return NULL;
-    void *pointer = xr_calloc(count, size);
-    if (armed)
-        record_allocation(pointer, count * size);
-    return pointer;
+typedef struct PublicationFixture {
+    XrSourceRepl *owner;
+    XrSourceResult *result;
+    XrSourceDiagnostic *diagnostic;
+    XrSourceValue *last, *function;
+    XrXirValue call_result;
+} PublicationFixture;
+static PublicationFixture publication;
+static void publication_close(void) {
+    coordinator_armed = false;
+    runtime_fail_at = SIZE_MAX;
+    xr_xir_value_drop(&publication.call_result);
+    XrSourceEvent cleanup = {0};
+    XrSourceStatus status = xray_source_repl_drop(&publication.owner,&cleanup);
+    XrSourceScalar held = {0};
+    XrSourceStatus scalar_status = publication.last ?
+        xray_source_value_scalar(publication.last,&held) : XR_SOURCE_OK;
+    int64_t result = 15;
+    XrSourceStatus result_status = publication.result ?
+        xray_source_result_i64(publication.result,&result) : XR_SOURCE_OK;
+    bool had_last = publication.last != NULL;
+    xray_source_result_free(publication.result);
+    xray_source_diagnostic_free(publication.diagnostic);
+    xray_source_value_free(publication.last);
+    xray_source_value_free(publication.function);
+    memset(&publication,0,sizeof(publication));
+    ASSERT_EQ_INT(scalar_status,XR_SOURCE_OK);
+    if (had_last) ASSERT_EQ_INT(held.value.signed_value,11);
+    ASSERT_EQ_INT(result_status,XR_SOURCE_OK);
+    ASSERT_EQ_INT(result,15);
+    ASSERT_EQ_INT(status,XR_SOURCE_OK);
+    ASSERT_EQ_INT(cleanup.state,XR_SOURCE_RUN_READY);
+    ASSERT_EQ_INT(runtime_live,0);
+    ASSERT_EQ_INT(runtime_bytes,0);
 }
-
-XR_FUNC void *xr_repl_probe_realloc(void *pointer, size_t size) {
-    if (refuse_allocation())
-        return NULL;
-    size_t index = pointer ? find_allocation(pointer) : SIZE_MAX;
-    void *next = xr_realloc(pointer, size);
-    if (next && index != SIZE_MAX) {
-        live_bytes -= allocations[index].bytes;
-        allocations[index] = (ReplProbeAllocation) {next, size};
-        live_bytes += size;
+static XrSourceWriteStatus publication_output(void *context,
+    XrSourceOutputStream stream, const char *bytes, size_t length) {
+    (void)context;
+    CHECK(stream == XR_SOURCE_STDOUT && (bytes || !length));
+    return XR_SOURCE_WRITE_OK;
+}
+static XrSourceStatus publication_submit(const char *source) {
+    const XrSourceText input = {NULL,"repl-publication-allocations",source,strlen(source)};
+    XrSourceStatus status = xray_source_repl_begin(publication.owner,&input,&publication.diagnostic);
+    XrSourceEvent event = {0};
+    unsigned polls = 0;
+    while (status == XR_SOURCE_OK) {
+        if (++polls > 100000) return XR_SOURCE_BAD_STATE;
+        status = xray_source_repl_poll(publication.owner,16,&event);
+        if (status != XR_SOURCE_OK || event.state != XR_SOURCE_RUN_READY) break;
     }
-    /* Shared compiler buffers are released by their own coordinator. Only
-     * publication arrays allocated here contribute to this live-byte proof. */
-    return next;
+    if (status != XR_SOURCE_OK) return status;
+    if (event.state != XR_SOURCE_RUN_RETURNED) return XR_SOURCE_EXECUTION_FAILED;
+    return xray_source_repl_take(publication.owner,&publication.result);
 }
-
-XR_FUNC void xr_repl_probe_free(void *pointer) {
-    size_t index = pointer ? find_allocation(pointer) : SIZE_MAX;
-    if (index != SIZE_MAX) {
-        live_bytes -= allocations[index].bytes;
-        allocations[index] = allocations[--allocation_count];
-    }
-    xr_free(pointer);
+static void publication_old_function(void) {
+    XrXirInstance *runtime = publication.owner->submission->runtime;
+    ASSERT_EQ_INT(xr_xir_instance_start_function(runtime,&publication.function->value,NULL,0),XR_XIR_CALL_READY);
+    XrXirInstanceResult event = {0};
+    unsigned polls = 0;
+    do {
+        ASSERT_LT(++polls,100000);
+        event = xr_xir_instance_poll_bounded(runtime,16);
+    } while (event.outcome.status == XR_XIR_CALL_READY);
+    ASSERT_EQ_INT(event.outcome.status,XR_XIR_CALL_RETURNED);
+    ASSERT_EQ_INT(xr_xir_instance_take_result(runtime,&publication.call_result),XR_XIR_CALL_RETURNED);
+    ASSERT_EQ_INT(publication.call_result.type,XR_XIR_I64);
+    ASSERT_EQ_INT(publication.call_result.payload,5);
+    xr_xir_value_drop(&publication.call_result);
 }
-
-static const XrModuleIdentityAuthority authority = {
-    .kind = XR_MODULE_IDENTITY_MEMORY,
-    .namespace_id = "repl-publication-allocations",
-};
-
 static void exercise_publication(size_t fail, size_t *allocation_attempts) {
-    XrVMRuntime *vm = xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
-    ASSERT_NOT_NULL(vm);
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(vm);
-    XrReplEvalResult first =
-        xr_repl_eval(session, vm, "fn value() -> i64 { return 5 }\n11 + 0\n", &authority);
-    ASSERT_EQ(first.status, XR_REPL_EVAL_OK);
-    ASSERT_NOT_NULL(first.proto);
-    XrReplSymbolTable *table = xr_repl_symbols_of(vm);
-    XrReplSymbolTable before = *table;
-    XrReplSymbol symbols[32];
-    XrReplSymbol results[32];
-    ASSERT_LE(table->count, 32);
-    ASSERT_LE(table->result_count, 32);
-    memcpy(symbols, table->symbols, (size_t) table->count * sizeof(*symbols));
-    memcpy(results, table->results, (size_t) table->result_count * sizeof(*results));
-    attempts = 0;
-    failure_at = fail;
-    armed = true;
-    XrReplEvalResult next = xr_repl_eval(
-        session, vm, "fn value() -> string { return \"later\" }\nvar added = 9\n7 + 8\n",
-        &authority);
-    armed = false;
-    size_t count = attempts;
+    XrSourceCompilerOptions compiler;
+    XrSourceCallOptions runtime;
+    ASSERT_EQ_INT(xray_source_compiler_options_init(&compiler,sizeof(compiler)),XR_SOURCE_OK);
+    ASSERT_EQ_INT(xray_source_call_options_init(&runtime,sizeof(runtime)),XR_SOURCE_OK);
+    compiler.stdlib_path = XR_PUBLICATION_STDLIB;
+    runtime.write = publication_output;
+    ASSERT_EQ_INT(xray_source_repl_new(&compiler,"repl-publication-allocations",
+        &runtime,&publication.owner),XR_SOURCE_OK);
+    ASSERT_EQ_INT(publication_submit("fn value() -> i64 { return 5 }\n11 + 0\n"),XR_SOURCE_OK);
+    xray_source_result_free(publication.result);
+    publication.result = NULL;
+    XrSourceRepl *owner = publication.owner;
+    const XrSourceReplBindingInfo *before = NULL;
+    size_t count = 0;
+    ASSERT_EQ_INT(xray_source_repl_bindings(owner,&before,&count),XR_SOURCE_OK);
+    ASSERT_LE(count,16);
+    XrSourceReplBindingInfo names[16];
+    memcpy(names,before,count*sizeof(*names));
+    SubmissionBirth *birth = owner->submission->published_births;
+    ASSERT_NOT_NULL(birth);
+    ASSERT_NULL(birth->previous);
+    ASSERT_EQ_INT(birth->source,1);
+    ASSERT_EQ_INT(xray_source_repl_read(owner,"it",&publication.last),XR_SOURCE_OK);
+    ASSERT_EQ_INT(xray_source_repl_read(owner,"value",&publication.function),XR_SOURCE_OK);
+    ASSERT_NOT_NULL(publication.function);
+    coordinator_attempts = 0;
+    coordinator_fail_at = fail;
+    coordinator_armed = true;
+    XrSourceStatus status = publication_submit(
+        "fn value() -> string { return \"later\" }\nvar added = 9\n7 + 8\n");
+    coordinator_armed = false;
+    *allocation_attempts = coordinator_attempts;
     if (fail) {
-        ASSERT_EQ(next.status, XR_REPL_EVAL_COMPILE_ERROR);
-        ASSERT_NULL(next.proto);
-        ASSERT_EQ_INT(live_bytes, 0);
-        ASSERT_EQ_INT(allocation_count, 0);
-        ASSERT_EQ_INT(table->count, before.count);
-        ASSERT_EQ_INT(table->result_count, before.result_count);
-        ASSERT_TRUE(table->symbols == before.symbols);
-        ASSERT_TRUE(table->results == before.results);
-        ASSERT_TRUE(table->latest_result_name == before.latest_result_name);
-        ASSERT_EQ_INT(memcmp(table->symbols, symbols, (size_t) before.count * sizeof(*symbols)), 0);
-        ASSERT_EQ_INT(
-            memcmp(table->results, results, (size_t) before.result_count * sizeof(*results)), 0);
-        XrCompilerSessionReplGenerationSnapshot ledger =
-            xr_compiler_session_repl_generation_snapshot(session);
-        ASSERT_EQ_INT(ledger.published_count, 1);
-        ASSERT_EQ_INT(ledger.abandoned_count, 1);
-        int64_t last = 0;
-        ASSERT_TRUE(xr_repl_peek_int(vm, "it", &last));
-        ASSERT_EQ_INT(last, 11);
-        XrReplEvalResult recovery =
-            xr_repl_eval(session, vm, "var recovered = value()\n", &authority);
-        ASSERT_EQ(recovery.status, XR_REPL_EVAL_OK);
-        ASSERT_NOT_NULL(recovery.proto);
-        int64_t value = 0;
-        ASSERT_TRUE(xr_repl_peek_int(vm, "recovered", &value));
-        ASSERT_EQ_INT(value, 5);
-        xr_free_code(vm, recovery.proto);
+        ASSERT_EQ_INT(status,XR_SOURCE_OUT_OF_MEMORY);
+        ASSERT_EQ_INT(coordinator_attempts,fail);
+        ASSERT_NULL(publication.result);
+        const XrSourceReplBindingInfo *after = NULL;
+        size_t after_count = 0;
+        ASSERT_EQ_INT(xray_source_repl_bindings(owner,&after,&after_count),XR_SOURCE_OK);
+        ASSERT_TRUE(after == before);
+        ASSERT_EQ_INT(after_count,count);
+        ASSERT_EQ_INT(memcmp(after,names,count*sizeof(*names)),0);
+        ASSERT_NULL(owner->prepared_names);
+        ASSERT_EQ_INT(owner->prepared_count,0);
+        ASSERT_TRUE(owner->submission->published_births == birth);
+        ASSERT_NULL(owner->submission->pending_birth);
+        ASSERT_EQ_INT(owner->submission->source_serial,0);
+        ASSERT_EQ_INT(owner->submission->runtime_serial,0);
+        XrCompileState *state = xr_source_compiler_state(owner->compiler);
+        ASSERT_EQ_INT(xr_compile_state_status(state),XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+        XrCompileResources *resources = xr_source_compiler_resources(owner->compiler);
+        XrCompileResourceStats spent = {0}, retry = {0};
+        ASSERT_EQ_INT(xr_compile_resources_stats(resources,&spent),XR_COMPILE_RESOURCE_OK);
+        size_t physical_attempts = runtime_attempts;
+        const XrSourceText recovered = {NULL,"repl-publication-allocations",
+            "var recovered = value()\n",strlen("var recovered = value()\n")};
+        ASSERT_EQ_INT(xray_source_repl_begin(owner,&recovered,NULL),
+            owner->stopped ? XR_SOURCE_BAD_STATE : XR_SOURCE_OUT_OF_MEMORY);
+        ASSERT_EQ_INT(xr_compile_resources_stats(resources,&retry),XR_COMPILE_RESOURCE_OK);
+        ASSERT_EQ_INT(memcmp(&spent,&retry,sizeof(spent)),0);
+        ASSERT_EQ_INT(runtime_attempts,physical_attempts);
     } else {
-        ASSERT_EQ(next.status, XR_REPL_EVAL_OK);
-        ASSERT_NOT_NULL(next.proto);
-        int64_t last = 0;
-        ASSERT_TRUE(xr_repl_peek_int(vm, "it", &last));
-        ASSERT_EQ_INT(last, 15);
+        ASSERT_EQ_INT(status,XR_SOURCE_OK);
+        ASSERT_NOT_NULL(publication.result);
+        ASSERT_TRUE(owner->submission->published_births != birth);
+        ASSERT_TRUE(owner->submission->published_births->previous == birth);
+        XrSourceValue *last = NULL;
+        ASSERT_EQ_INT(xray_source_repl_read(owner,"it",&last),XR_SOURCE_OK);
+        XrSourceScalar scalar = {0};
+        ASSERT_EQ_INT(xray_source_value_scalar(last,&scalar),XR_SOURCE_OK);
+        xray_source_value_free(last);
+        ASSERT_EQ_INT(scalar.value.signed_value,15);
     }
-    if (next.proto)
-        xr_free_code(vm, next.proto);
-    xr_free_code(vm, first.proto);
-    xray_vm_delete(vm);
-    ASSERT_EQ_INT(live_bytes, 0);
-    ASSERT_EQ_INT(allocation_count, 0);
-    *allocation_attempts = count;
+    publication_old_function();
+    XrSourceScalar scalar = {0};
+    ASSERT_EQ_INT(xray_source_value_scalar(publication.last,&scalar),XR_SOURCE_OK);
+    ASSERT_EQ_INT(scalar.value.signed_value,11);
 }
-
 TEST(repl_actual_coordinator_allocations_do_not_publish_partial_metadata) {
     size_t successful_allocations = 0;
-    exercise_publication(0, &successful_allocations);
-    ASSERT_GT(successful_allocations, 0);
+    exercise_publication(0,&successful_allocations);
+    publication_close();
+    ASSERT_GT(successful_allocations,0);
     for (size_t i = 1; i <= successful_allocations; ++i) {
-        size_t actual_attempts = 0;
-        exercise_publication(i, &actual_attempts);
+        unsigned failed = (unsigned)xr_tests_failed;
+        size_t actual = 0;
+        exercise_publication(i,&actual);
+        publication_close();
+        ASSERT_EQ_INT(xr_tests_failed,failed);
+        ASSERT_EQ_INT(actual,i);
     }
-    printf("actual REPL coordinator allocations: %zu; publication buffers reclaimed\n",
-           successful_allocations);
+    printf("actual Source coordinator allocations: %zu; swept=%zu; original values11/15/5; "
+        "sticky retry unchanged; physical=0/0\n",successful_allocations,successful_allocations);
 }
-
+#undef RUN_TEST
+#define RUN_TEST(name) do { \
+    unsigned failed = (unsigned)xr_tests_failed; ++xr_tests_run; \
+    printf("  %-55s ",#name); fflush(stdout); test_##name(); publication_close(); \
+    if ((unsigned)xr_tests_failed == failed) { ++xr_tests_passed; puts("PASS"); } \
+} while (0)
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("REPL publication allocation safety");
 RUN_TEST(repl_actual_coordinator_allocations_do_not_publish_partial_metadata);

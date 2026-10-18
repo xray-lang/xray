@@ -62,12 +62,14 @@ static int string_distance(const char *s1, const char *s2) {
 
 /* ========== Handler Forward Declarations ========== */
 
+XR_FUNC int cmd_repl(const XrCliInvocation *inv);
 XR_FUNC int cmd_run(const XrCliInvocation *inv);
 XR_FUNC int cmd_test(const XrCliInvocation *inv);
 XR_FUNC int cmd_check(const XrCliInvocation *inv);
 XR_FUNC int cmd_fmt(const XrCliInvocation *inv);
 XR_FUNC int cmd_build(const XrCliInvocation *inv);
 XR_FUNC int cmd_deps(const XrCliInvocation *inv);
+XR_FUNC int cmd_toolchain(const XrCliInvocation *inv);
 /* Defined below in this file */
 XR_FUNC int cmd_info(const XrCliInvocation *inv);
 XR_FUNC int cmd_self(const XrCliInvocation *inv);
@@ -77,12 +79,14 @@ XR_FUNC int cmd_help(const XrCliInvocation *inv);
 /* Register all command handlers into the spec table.
  * Must be called once before xr_cli_main(). */
 void xr_cli_register_all_handlers(void) {
+    xr_cli_register_handler("repl", cmd_repl);
     xr_cli_register_handler("run", cmd_run);
     xr_cli_register_handler("test", cmd_test);
     xr_cli_register_handler("check", cmd_check);
     xr_cli_register_handler("fmt", cmd_fmt);
     xr_cli_register_handler("build", cmd_build);
     xr_cli_register_handler("deps", cmd_deps);
+    xr_cli_register_handler("toolchain", cmd_toolchain);
     xr_cli_register_handler("info", cmd_info);
     xr_cli_register_handler("self", cmd_self);
     xr_cli_register_handler("doctor", cmd_doctor);

@@ -93,6 +93,18 @@ XR_FUNC XrXirDomainStats xr_xir_domain_stats(XrXirDomain *domain);
 /* Self-validation does not grant permission to execute an escaped function. */
 XR_FUNC bool xr_xir_value_valid(const XrXirValue *value);
 XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, const XrXirTypeArena *arena, XrXirType type);
+/* Recover the actual carrier type from trusted compact storage, then apply
+ * ordinary expected-type admission. Canonical Error storage keeps its erased
+ * view over the unchanged concrete enum. Failure preserves output. */
+XR_FUNC bool xr_xir_value_from_payload(const XrXirTypeArena *arena,XrXirType expected,
+    int64_t payload,XrXirValue *output);
+/* Borrowing expression for verified frame operands. Invalid storage yields
+ * Unit, which ordinary typed operation admission rejects. */
+static inline XrXirValue xr_xir_value_load(const XrXirTypeArena *arena,XrXirType expected,int64_t payload) {
+    XrXirValue value={0};
+    (void)xr_xir_value_from_payload(arena,expected,payload,&value);
+    return value;
+}
 XR_FUNC const XrXirTypeArena *xr_xir_value_arena(const XrXirValue *value);
 /* Copy/new outputs must be canonical unit handles. Native pointers are trusted. */
 XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output);
@@ -124,7 +136,10 @@ typedef struct XrXirFunctionBinding {
     const XrXirValue *captures;
     uint32_t capture_count;
 } XrXirFunctionBinding;
-/* The caller validates a live execution gate; pointer equality is not authority. */
+/* The caller validates a live execution gate; pointer equality is not authority.
+ * During this callback the admission arena names the actual function owner,
+ * and work points to that same admission's work field. Context and Domain are
+ * unchanged; the receiving arena is restored before callback return escapes. */
 typedef XrXirValueStatus (*XrXirFunctionAdmission)(void *context,
     const XrXirFunctionBinding *binding, XrXirType type, uint64_t *work);
 typedef struct XrXirValueAdmission {
