@@ -123,7 +123,9 @@ static void vm_pull(const XrXirArtifact *lowered,uint32_t function,XrXirTypeAren
         CHECK(value.type==(uint32_t)(unit ? XR_XIR_UNIT : XR_XIR_I64) && value.payload==(unit ? 0 : i ? 22 : 11));
         xr_xir_value_drop(&value);
     }
-    CHECK(xr_xir_call_poll_bounded(call,1000).status==XR_XIR_CALL_RETURNED);
+    XrXirCallResult complete=xr_xir_call_poll_bounded(call,1000);
+    CHECK(complete.status==XR_XIR_CALL_RETURNED && !complete.wake &&
+        complete.value.type==XR_XIR_UNIT && !complete.value.reserved && !complete.value.payload);
     CHECK(xr_xir_call_free(call)==XR_XIR_CALL_READY);
     CHECK(!accounting.live_bytes && !accounting.depth && accounting.allocations==accounting.frees);
 }
@@ -274,7 +276,9 @@ int main(int argc,char **argv) {
     if(argc==2) {FILE *file=fopen(argv[1],"wb");CHECK(file);CHECK(fwrite(c.text,1,c.length,file)==c.length);CHECK(!fclose(file));}
     xr_xir_compile_c_source_free(&c);xr_xir_compile_type_arena_drop(arena);xr_xir_domain_drop(domain);
     uint32_t program_entry=m->declarations->entry_function;XrXirProgram *program=NULL;
-    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && program && !lowered);
+    XrXirStatus received=xr_xir_compile_vm_program_take(&lowered,&program);
+    if(received!=XR_XIR_OK) fprintf(stderr,"Generator Program receiving status%u\n",received);
+    CHECK(received==XR_XIR_OK && program && !lowered);
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_start(instance,numbers,NULL,0)==XR_XIR_CALL_BAD_ARGUMENT &&

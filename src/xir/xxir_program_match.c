@@ -214,10 +214,11 @@ XR_FUNC XrXirStatus xr_xir_compile_program_descriptor_match(const XrXirCompileCo
         MATCH(entry->abi_version,XR_XIR_CALL_ABI_VERSION);
         if (!entry->resume) return XR_XIR_BAD_STRUCTURE;
         MATCH(entry->cleanup_owner,declarations->functions[f].cleanup_owner);
-        uint32_t flags=0;
+        uint32_t flags=(declarations->functions[f].promises & XR_XIR_FUNCTION_GENERATOR) ?
+            XR_XIR_ENTRY_GENERATOR : 0;
         if (cleanup) for (uint32_t child=0;child<spec->entry_count;++child) {
             if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-            if (declarations->functions[child].cleanup_owner==f+1) flags=XR_XIR_ENTRY_EXIT;
+            if (declarations->functions[child].cleanup_owner==f+1) flags|=XR_XIR_ENTRY_EXIT;
         }
         MATCH(entry->flags,flags);
         TRY(xir_effects_program_signature_match(context,permissions->effects,f,
