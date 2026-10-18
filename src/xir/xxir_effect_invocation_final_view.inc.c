@@ -85,10 +85,17 @@ static XrXirStatus effect_invocation_final_head(EffectInvocationFlow *flow,
     if(status==XR_XIR_OK) status=effect_role_range(owner->work,final->nodes[flow->node].input,
         (uint64_t)node.head.parameter_count*node.basis.row_words,sizeof(uint64_t));
     if(status!=XR_XIR_OK) return status;
-    if(!xir_compile_work(owner->work,sizeof(*request)+sizeof(node.head)+sizeof(node.basis)+
+    EffectBodyFunctionHead head={0};
+    status=effect_body_request_head(request,final->nodes[flow->node].body,&head);
+    if(status!=XR_XIR_OK) return status;
+    if(!xir_compile_work(owner->work,6)) return XR_XIR_BUDGET;
+    if(head.parameters!=node.head.parameters || head.parameter_count!=node.head.parameter_count ||
+        head.instruction_count!=node.head.instruction_count || head.operands!=node.head.operands ||
+        head.operand_count!=node.head.operand_count || head.result!=node.head.result) return XR_XIR_BAD_STRUCTURE;
+    if(!xir_compile_work(owner->work,sizeof(*request)+sizeof(head)+sizeof(node.basis)+
         sizeof(flow->function)+sizeof(flow->physical)+sizeof(flow->values)))
         return XR_XIR_BUDGET;
-    flow->body=*request;flow->head=node.head;flow->function=&flow->head;
+    flow->body=*request;flow->head=head;flow->function=&flow->head;
     flow->basis=node.basis;flow->values=node.values;flow->physical=physical;return XR_XIR_OK;
 }
 

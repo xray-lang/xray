@@ -13,8 +13,8 @@
 static XrXirStatus effect_role_range(const XrXirCompileContext *work,const void *pointer,uint64_t count,size_t size);
 typedef struct EffectInvocationSeedRead {
     const XrXirCompileContext *work;
-    EffectBodyRequest body;
-    EffectBodyFunctionHead head;
+    const XrXirTypes *types;
+    EffectBodyFunctionSignature head;
     EffectInvocationBasis basis;
     uint32_t sites;
 } EffectInvocationSeedRead;
@@ -28,8 +28,11 @@ static XrXirStatus effect_invocation_seed_open(const XrXirCompileContext *work,
     status=effect_role_range(work,final->root_spaces,body->domain.function_count,sizeof(*final->root_spaces));
     if(status!=XR_XIR_OK) return status;
     uint32_t root=final->root_spaces[function];if(root>=body->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyFunctionHead head={0};EffectBodyFunctionDimensions space={0};
-    status=effect_body_request_head(body,function,&head);
+    /* Seeds consume current parameter types and their namespace dimensions.
+     * Keep only those projections; no copied body adapter or unused block,
+     * name, instruction and operand vectors enter the seed lifetime. */
+    EffectBodyFunctionSignature head={0};EffectBodyFunctionDimensions space={0};
+    status=effect_body_request_signature(body,function,&head);
     if(status==XR_XIR_OK) {
         /* Only the namespace's actual formal count enters the basis. The
          * current compile read has no callback between these projections. */
@@ -53,7 +56,7 @@ static XrXirStatus effect_invocation_seed_open(const XrXirCompileContext *work,
     EffectInvocationBasis basis={0};status=effect_invocation_basis_parameters_read(work,final,space.parameter_count,&basis);
     if(status!=XR_XIR_OK) return status;
     if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
-    *output=(EffectInvocationSeedRead){work,*body,head,basis,final->site_count};return XR_XIR_OK;
+    *output=(EffectInvocationSeedRead){work,types,head,basis,final->site_count};return XR_XIR_OK;
 }
 static XrXirStatus effect_invocation_seed_bits(const EffectInvocationSeedRead *read,
     uint32_t parameter,uint32_t kind,EffectInvocationSeedBits *output) {
@@ -61,7 +64,7 @@ static XrXirStatus effect_invocation_seed_bits(const EffectInvocationSeedRead *r
         return XR_XIR_BAD_STRUCTURE;
     if(!xir_compile_work(read->work,5)) return XR_XIR_BUDGET;
     output->origin_count=0;output->cell_count=0;
-    const XrXirTypes *types=read->body.domain.types;
+    const XrXirTypes *types=read->types;
     const XrXirTypeNode *node=xr_xir_type_node(types,read->head.parameters[parameter]);
     if(!node) return XR_XIR_OK;
     bool object=false;

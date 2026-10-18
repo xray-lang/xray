@@ -344,13 +344,30 @@ static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
  * external callback; a possible growth discards both views before emitting and
  * frames the actual Input and Final again afterwards. The caller receives no
  * retained stack address, on either success or failure. */
+static XrXirStatus effect_capture_complete_empty(const EffectCaptureRead *read,bool *empty) {
+    *empty=false;
+    if(read->final->site_count) return XR_XIR_OK;
+    if(read->final->binding_count) return XR_XIR_BAD_STRUCTURE;
+    /* The current framed site inventory is empty. Admission requires a real
+     * finite origin bit, so neither a value nor any capture column can be
+     * Complete. Check every stored claim instead of walking empty columns. */
+    for(uint32_t p=0;p<read->final->capture.count;++p) {
+        if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+        const EffectCaptureFact *fact=&read->final->capture.facts[p];
+        if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit>=EFFECT_CAPTURE_COMPLETE)
+            return XR_XIR_BAD_STRUCTURE;
+    }
+    *empty=true;return XR_XIR_OK;
+}
 static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
+    bool empty=false;XrXirStatus status=effect_capture_complete_empty(read,&empty);
+    if(status!=XR_XIR_OK || empty) return status;
     const EffectBodyCurrentRead *saved_current=read->body.current;
     const EffectCaptureNode *saved_node=read->node_view;
     if(read->builder && (saved_current || saved_node)) return XR_XIR_BAD_STRUCTURE;
     EffectBodyCurrentRead current={0};EffectCaptureNode borrowed={0};
     read->node_view=NULL;
-    XrXirStatus status=effect_capture_complete_walk(read,&current,&borrowed,NULL,NULL);
+    status=effect_capture_complete_walk(read,&current,&borrowed,NULL,NULL);
     read->body.current=saved_current;read->node_view=saved_node;
     return status;
 }
@@ -361,8 +378,10 @@ static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
 static XrXirStatus effect_capture_complete_construct(EffectCaptureRead *read) {
     if(!read->builder || read->complete_scope || read->body.current || read->node_view || read->node_views || read->actuals)
         return XR_XIR_BAD_STRUCTURE;
+    bool empty=false;XrXirStatus status=effect_capture_complete_empty(read,&empty);
+    if(status!=XR_XIR_OK || empty) return status;
     EffectBodyCurrentRead current={0};EffectCaptureNode borrowed={0},views[32];EffectCaptureActualRead actuals;
-    read->complete_scope=true;XrXirStatus status=XR_XIR_OK;
+    read->complete_scope=true;
     do {
         read->changed=false;
         status=effect_capture_complete_walk(read,&current,&borrowed,views,&actuals);
