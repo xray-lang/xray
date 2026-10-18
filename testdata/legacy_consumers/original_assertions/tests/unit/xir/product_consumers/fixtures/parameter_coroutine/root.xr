@@ -1,0 +1,13 @@
+fn apply(value: i64, body: fn(i64) -> i64) -> i64 {
+  return body(value)
+}
+fn answer() -> i64 {
+  const factor = 2
+  const body = fn(value: i64) -> i64 {
+    Coro.yield()
+    return value * factor
+  }
+  const first = apply(20, body)
+  return first + body(1)
+}
+export fn consumerAnswer() -> i64 { return answer() }

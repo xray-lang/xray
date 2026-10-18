@@ -1,0 +1,197 @@
+// 0500_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：函数基础
+
+// ===== 简单函数 =====
+
+@test
+fn test_simple_function() {
+    fn greet() -> string {
+        return "hello"
+    }
+    assertEqual(greet(), "hello")
+}
+
+@test
+fn test_function_no_return() {
+    var result = 0
+    fn setResult() {
+        result = 42
+    }
+    setResult()
+    assertEqual(result, 42)
+}
+
+// ===== 参数 =====
+
+@test
+fn test_single_param() {
+    fn double(x: i64) -> i64 {
+        return x * 2
+    }
+    assertEqual(double(5), 10)
+}
+
+@test
+fn test_multiple_params() {
+    fn add(a: i64, b: i64) -> i64 {
+        return a + b
+    }
+    assertEqual(add(3, 5), 8)
+}
+
+@test
+fn test_many_params() {
+    fn sum(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 {
+        return a + b + c + d + e
+    }
+    assertEqual(sum(1, 2, 3, 4, 5), 15)
+}
+
+// ===== 返回值 =====
+
+@test
+fn test_return_int() {
+    fn getInt() -> i64 { return 42 }
+    assertEqual(getInt(), 42)
+}
+
+@test
+fn test_return_float() {
+    fn getFloat() -> f64 { return 3.14 }
+    assertEqual(getFloat(), 3.14)
+}
+
+@test
+fn test_return_string() {
+    fn getString() -> string { return "hello" }
+    assertEqual(getString(), "hello")
+}
+
+@test
+fn test_return_bool() {
+    fn getBool() -> bool { return true }
+    assertEqual(getBool(), true)
+}
+
+@test
+fn test_return_null() {
+    fn getNull() -> i64? { return null }
+    assertEqual(getNull(), null)
+}
+
+@test
+fn test_return_array() {
+    fn getArray() -> Array<i64> { return [1, 2, 3] }
+    var arr = getArray()
+    assertEqual(len(arr), 3)
+}
+
+// ===== 提前返回 =====
+
+@test
+fn test_early_return() {
+    fn check(x: i64) -> string {
+        if (x > 10) {
+            return "big"
+        }
+        return "small"
+    }
+    assertEqual(check(15), "big")
+    assertEqual(check(5), "small")
+}
+
+@test
+fn test_multiple_returns() {
+    fn classify(x: i64) -> string {
+        if (x < 0) { return "negative" }
+        if (x == 0) { return "zero" }
+        return "positive"
+    }
+    assertEqual(classify(-5), "negative")
+    assertEqual(classify(0), "zero")
+    assertEqual(classify(5), "positive")
+}
+
+// ===== 局部变量 =====
+
+@test
+fn test_local_variables() {
+    fn compute(x: i64) -> i64 {
+        var a = x * 2
+        var b = a + 10
+        return b
+    }
+    assertEqual(compute(5), 20)
+}
+
+@test
+fn test_shadow_outer() {
+    var x = 100
+    fn inner() -> i64 {
+        var x = 10
+        return x
+    }
+    assertEqual(inner(), 10)
+    assertEqual(x, 100)  // 外层不变
+}
+
+// ===== 函数调用表达式 =====
+
+@test
+fn test_call_in_expression() {
+    fn double(x: i64) -> i64 { return x * 2 }
+
+    var result = double(5) + double(3)
+    assertEqual(result, 16)
+}
+
+@test
+fn test_nested_call() {
+    fn double(x: i64) -> i64 { return x * 2 }
+
+    var result = double(double(3))
+    assertEqual(result, 12)
+}
+
+@test
+fn test_call_as_argument() {
+    fn add(a: i64, b: i64) -> i64 { return a + b }
+    fn double(x: i64) -> i64 { return x * 2 }
+
+    var result = add(double(2), double(3))
+    assertEqual(result, 10)  // 4 + 6
+}
+
+// ===== 函数作为条件 =====
+
+@test
+fn test_function_as_condition() {
+    fn isPositive(x: i64) -> bool { return x > 0 }
+
+    var result = ""
+    if (isPositive(5)) {
+        result = "yes"
+    } else {
+        result = "no"
+    }
+    assertEqual(result, "yes")
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_empty_function() {
+    fn empty() { }
+    var result = empty()
+    var unit: () = result
+    assertEqual(unit, ())
+}
+
+@test
+fn test_return_only() {
+    fn returnOnly() { return }
+    var result = returnOnly()
+    var unit: () = result
+    assertEqual(unit, ())
+}

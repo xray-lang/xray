@@ -1,0 +1,45 @@
+fn takes_bool(x: bool) {
+    print("fn=" + x.toString())
+}
+
+var dyn: JSON.Object = JSON.parseObject(
+    "{\"goodBool\":true,\"badBool\":1,\"goodInt\":7,\"badInt\":3.5}"
+)
+var m: Map<bool, i64> = #{}
+m.set(JSON.require<bool>(dyn, ["goodBool"]), JSON.require<i64>(dyn, ["goodInt"]))
+print("map=" + m.get(true)!.toString())
+
+try {
+    print(m.containsKey(JSON.require<bool>(dyn, ["badBool"])).toString())
+    print("bad-map-key")
+} catch(e) {
+    print("caught-map-key")
+}
+
+try {
+    m.set(JSON.require<bool>(dyn, ["goodBool"]), JSON.require<i64>(dyn, ["badInt"]))
+    print("bad-map-value")
+} catch(e) {
+    print("caught-map-value")
+}
+
+try {
+    takes_bool(JSON.require<bool>(dyn, ["badBool"]))
+    print("bad-fn")
+} catch(e) {
+    print("caught-fn")
+}
+
+try {
+    var x: i64 = JSON.require<i64>(dyn, ["badInt"])
+    print("bad-var=" + x.toString())
+} catch(e) {
+    print("caught-var")
+}
+
+try {
+    print(JSON.require<i64>(dyn, ["badInt"]).toString())
+    print("bad-return")
+} catch(e) {
+    print("caught-return")
+}

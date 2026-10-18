@@ -1,0 +1,72 @@
+// Test: default parameter values
+// Expected output:
+// Hello, World
+// Hello, Alice
+// 111
+// 103
+// 6
+// 0 0
+// 5 0
+// 5 10
+// John Unknown
+// John Doe
+
+// Basic default parameter
+
+fn greet(name: string = "World") {
+    print("Hello, " + name)
+}
+fn add(a: i64, b: i64 = 10, c: i64 = 100) -> i64 {
+    return a + b + c
+}
+type Point = { x: i64, y: i64 }
+fn createPoint(x: i64 = 0, y: i64 = 0) -> Point {
+    return { x: x, y: y }
+}
+fn formatName(first: string, last: string = "Unknown") -> string {
+    return first + " " + last
+}
+
+@test
+fn test_default_params() {
+
+    greet()
+    greet("Alice")
+
+    // Multiple parameters with defaults
+
+    var defaultSum = add(1)
+    print(defaultSum)           // 1 + 10 + 100 = 111
+    var secondSum = add(1, 2)
+    print(secondSum)        // 1 + 2 + 100 = 103
+    var fullSum = add(1, 2, 3)
+    print(fullSum)     // 1 + 2 + 3 = 6
+
+    // Default with all optional params
+
+    var p1 = createPoint()
+    var p2 = createPoint(5)
+    var p3 = createPoint(5, 10)
+    print(p1.x, p1.y)       // 0 0
+    print(p2.x, p2.y)       // 5 0
+    print(p3.x, p3.y)       // 5 10
+
+    // Required param followed by optional
+
+    var defaultName = formatName("John")
+    print(defaultName)           // John Unknown
+    var fullName = formatName("John", "Doe")
+    print(fullName)    // John Doe
+    assertEqual(defaultSum, 111)
+    assertEqual(secondSum, 103)
+    assertEqual(fullSum, 6)
+    assertEqual(p1.x, 0)
+    assertEqual(p1.y, 0)
+    assertEqual(p2.x, 5)
+    assertEqual(p2.y, 0)
+    assertEqual(p3.x, 5)
+    assertEqual(p3.y, 10)
+    assertEqual(defaultName, "John Unknown")
+    assertEqual(fullName, "John Doe")
+
+}

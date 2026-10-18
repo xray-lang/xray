@@ -1,0 +1,14 @@
+interface Named { label() -> string }
+
+enum Color implements Named {
+    Red, Green
+
+    label() -> string { return "color" }
+}
+
+fn show<T: Named>(value: T) -> string {
+    return value.label()
+}
+
+print(show<Color>(Color.Red))
+print(show<Color>(Color.Green))

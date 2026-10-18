@@ -1,0 +1,363 @@
+// 1206_generic_functions.xr
+// Comprehensive generic function tests
+// ===== Basic Generic Functions =====
+@test
+fn test_identity_int() {
+    fn identity<T>(x: T) -> T {
+        return x
+    }
+    var n = identity(42)
+    assertEqual(n, 42)
+    assertEqual(n + 1, 43)
+}
+
+@test
+fn test_identity_string() {
+    fn identity<T>(x: T) -> T {
+        return x
+    }
+    var s = identity("hello")
+    assertEqual(s, "hello")
+    assertEqual(len(s), 5)
+}
+
+@test
+fn test_identity_float() {
+    fn identity<T>(x: T) -> T {
+        return x
+    }
+    var f = identity(3.14)
+    assert(f > 3 && f < 4)
+}
+
+@test
+fn test_identity_bool() {
+    fn identity<T>(x: T) -> T {
+        return x
+    }
+    assertEqual(identity(true), true)
+    assertEqual(identity(false), false)
+}
+
+@test
+fn test_identity_array() {
+    fn identity<T>(x: T) -> T {
+        return x
+    }
+    var arr = identity([1, 2, 3])
+    assertEqual(len(arr), 3)
+    assertEqual(arr[0], 1)
+}
+
+// ===== Multiple Type Parameters =====
+@test
+fn test_pair_creation() {
+    fn makePair<T, U>(a: T, b: U) -> (T, U) {
+        return (a, b)
+    }
+    var (x, y) = makePair(1, "one")
+    assertEqual(x, 1)
+    assertEqual(y, "one")
+}
+
+@test
+fn test_swap_types() {
+    fn swap<T, U>(a: T, b: U) -> (U, T) {
+        return (b, a)
+    }
+    var (x, y) = swap("hello", 42)
+    assertEqual(x, 42)
+    assertEqual(y, "hello")
+}
+
+@test
+fn test_triple_params() {
+    fn triple<A, B, C>(a: A, b: B, c: C) -> (A, B, C) {
+        return (a, b, c)
+    }
+    var (x, y, z) = triple(1, "two", true)
+    assertEqual(x, 1)
+    assertEqual(y, "two")
+    assertEqual(z, true)
+}
+
+// ===== Generic Functions with Array Parameters =====
+@test
+fn test_array_first() {
+    fn first<T>(arr: Array<T>) -> T? {
+        if (len(arr) > 0) {
+            return arr[0]
+        }
+        return null
+    }
+    assertEqual(first([1, 2, 3]), 1)
+    assertEqual(first(["a", "b"]), "a")
+    assertEqual(first(Array<i64>()), null)
+}
+
+@test
+fn test_array_last() {
+    fn last<T>(arr: Array<T>) -> T? {
+        if (len(arr) > 0) {
+            return arr[len(arr) - 1]
+        }
+        return null
+    }
+    assertEqual(last([1, 2, 3]), 3)
+    assertEqual(last(["x", "y", "z"]), "z")
+    assertEqual(last(Array<i64>()), null)
+}
+
+@test
+fn test_array_swap_elements() {
+    fn swapElements<T>(arr: ref Array<T>, i: i64, j: i64) {
+        var temp = arr[i]
+        arr[i] = arr[j]
+        arr[j] = temp
+    }
+    var nums = [1, 2, 3]
+    swapElements(ref nums, 0, 2)
+    assertEqual(nums[0], 3)
+    assertEqual(nums[2], 1)
+    var strs = ["a", "b", "c"]
+    swapElements(ref strs, 0, 1)
+    assertEqual(strs[0], "b")
+    assertEqual(strs[1], "a")
+}
+
+@test
+fn test_array_contains() {
+    fn contains<T: Equal>(arr: Array<T>, target: T) -> bool {
+        for (item in arr) {
+            if (item == target) {
+                return true
+            }
+        }
+        return false
+    }
+    assert(contains([1, 2, 3], 2))
+    assert(!contains([1, 2, 3], 5))
+    assert(contains(["a", "b", "c"], "b"))
+    assert(!contains(["a", "b", "c"], "z"))
+}
+
+@test
+fn test_array_find_index() {
+    fn findIndex<T: Equal>(arr: Array<T>, target: T) -> i64 {
+        for (var i = 0; i < len(arr); i++) {
+            if (arr[i] == target) {
+                return i
+            }
+        }
+        return -1
+    }
+    assertEqual(findIndex([10, 20, 30], 20), 1)
+    assertEqual(findIndex([10, 20, 30], 50), -1)
+    assertEqual(findIndex(["x", "y", "z"], "z"), 2)
+}
+
+// ===== Generic Functions with Return Types =====
+@test
+fn test_wrap_in_array() {
+    fn wrap<T>(x: T) -> Array<T> {
+        return [x]
+    }
+    var intArr = wrap(42)
+    assertEqual(len(intArr), 1)
+    assertEqual(intArr[0], 42)
+    var strArr = wrap("hello")
+    assertEqual(len(strArr), 1)
+    assertEqual(strArr[0], "hello")
+}
+
+@test
+fn test_repeat_value() {
+    fn repeat<T>(x: T, n: i64) -> Array<T> {
+        var result = Array<T>()
+        for (var i = 0; i < n; i++) {
+            result.push(x)
+        }
+        return result
+    }
+    var nums = repeat(1, 3)
+    assertEqual(len(nums), 3)
+    assertEqual(nums[0], 1)
+    assertEqual(nums[2], 1)
+    var strs = repeat("x", 2)
+    assertEqual(len(strs), 2)
+    assertEqual(strs[0], "x")
+}
+
+// ===== Generic Higher-Order Functions =====
+@test
+fn test_generic_apply() {
+    fn apply<T, R>(x: T, f: fn(T) -> R) -> R {
+        return f(x)
+    }
+    var doubled = apply(5, fn(n) {
+        return n * 2
+    })
+    assertEqual(doubled, 10)
+    var length = apply("hello", fn(s) {
+        return len(s)
+    })
+    assertEqual(length, 5)
+}
+
+@test
+fn test_generic_transform() {
+    fn transform<T>(arr: Array<T>, f: fn(T) -> T) -> Array<T> {
+        var result = Array<T>()
+        for (item in arr) {
+            result.push(f(item))
+        }
+        return result
+    }
+    var doubled = transform([1, 2, 3], fn(x) {
+        return x * 2
+    })
+    assertEqual(doubled[0], 2)
+    assertEqual(doubled[1], 4)
+    assertEqual(doubled[2], 6)
+}
+
+// ===== Generic with Optional Return =====
+@test
+fn test_safe_get() {
+    fn safeGet<T>(arr: Array<T>, index: i64) -> T? {
+        if (index >= 0 && index < len(arr)) {
+            return arr[index]
+        }
+        return null
+    }
+    assertEqual(safeGet([1, 2, 3], 1), 2)
+    assertEqual(safeGet([1, 2, 3], 10), null)
+    assertEqual(safeGet([1, 2, 3], -1), null)
+}
+
+@test
+fn test_find_element() {
+    fn find<T>(arr: Array<T>, predicate: fn(T) -> bool) -> T? {
+        for (item in arr) {
+            if (predicate(item)) {
+                return item
+            }
+        }
+        return null
+    }
+    var result: i64? = find([1, 2, 3, 4, 5], fn(x) {
+        return x > 3
+    })
+    assertEqual(result, 4)
+    var notFound: i64? = find([1, 2, 3], fn(x) {
+        return x > 10
+    })
+    assertEqual(notFound, null)
+}
+
+// ===== Nested Generic Calls =====
+@test
+fn test_nested_generic_calls() {
+    fn identity<T>(x: T) -> T {
+        return x
+    }
+    fn wrap<T>(x: T) -> Array<T> {
+        return [x]
+    }
+    // Nested calls: wrap(identity(value))
+    var arr = wrap(identity(42))
+    assertEqual(len(arr), 1)
+    assertEqual(arr[0], 42)
+}
+
+@test
+fn test_chained_generic_operations() {
+    fn first<T>(arr: Array<T>) -> T? {
+        if (len(arr) > 0) {
+            return arr[0]
+        }
+        return null
+    }
+    fn wrap<T>(x: T) -> Array<T> {
+        return [x]
+    }
+    // Chain: first(wrap(value))
+    var result = first(wrap("test"))
+    assertEqual(result, "test")
+}
+
+// ===== Generic Functions with Complex Types =====
+@test
+fn test_generic_with_map() {
+    fn getOrDefault<K: Hashable, V>(m: Map<K, V>, key: K, defaultVal: V) -> V {
+        if (m.containsKey(key)) {
+            return m.get(key)!
+        }
+        return defaultVal
+    }
+    var m = #{"a": 1, "b": 2}
+    assertEqual(getOrDefault(m, "a", 0), 1)
+    assertEqual(getOrDefault(m, "z", -1), -1)
+}
+
+@test
+fn test_generic_merge_arrays() {
+    fn merge<T>(a: Array<T>, b: Array<T>) -> Array<T> {
+        var result = Array<T>()
+        for (item in a) {
+            result.push(item)
+        }
+        for (item in b) {
+            result.push(item)
+        }
+        return result
+    }
+    var merged = merge([1, 2], [3, 4])
+    assertEqual(len(merged), 4)
+    assertEqual(merged[0], 1)
+    assertEqual(merged[3], 4)
+}
+
+// ===== Type Inference Edge Cases =====
+@test
+fn test_infer_from_return_usage() {
+    fn identity<T>(x: T) -> T {
+        return x
+    }
+    // Type inferred from arithmetic operation
+    var n = identity(10) + 5
+    assertEqual(n, 15)
+    // Type inferred from string operation
+    var s = identity("hello") + " world"
+    assertEqual(s, "hello world")
+}
+
+@test
+fn test_infer_from_array_literal() {
+    fn first<T>(arr: Array<T>) -> T? {
+        if (len(arr) > 0) {
+            return arr[0]
+        }
+        return null
+    }
+    // Direct array literal as argument
+    assertEqual(first([100, 200, 300]), 100)
+    assertEqual(first(["one", "two"]), "one")
+}
+
+// ===== Generic Functions with Default Values =====
+@test
+fn test_generic_with_default() {
+    fn valueOrDefault<T>(val: T?, defaultVal: T) -> T {
+        if (val != null) {
+            return val
+        }
+        return defaultVal
+    }
+    assertEqual(valueOrDefault(null, 42), 42)
+    assertEqual(valueOrDefault(10, 42), 10)
+    assertEqual(valueOrDefault(null, "default"), "default")
+    assertEqual(valueOrDefault("actual", "default"), "actual")
+}
+
+print("All generic function tests passed!")

@@ -1,0 +1,25 @@
+// Preserve every original clock read, sleep duration and loop bound; observe actual contract predicates at the original point.
+// 1035_import_scope_reject.xr
+// Test: import/export only allowed at module top level.
+// Nested import inside functions must be rejected at parse time.
+// This test verifies top-level import works correctly.
+
+import time
+
+@test
+fn test_top_level_import_works() {
+    var now = time.now()
+    var p19ClockPredicate0 = now > 0
+    assert(p19ClockPredicate0)
+    print(p19ClockPredicate0)
+}
+
+@test
+fn test_import_accessible_in_nested_fn() {
+    fn inner() -> i64 {
+        return time.now()
+    }
+    var p19ClockPredicate1 = inner() > 0
+    assert(p19ClockPredicate1)
+    print(p19ClockPredicate1)
+}

@@ -1,0 +1,32 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+class Counter {
+    value: i64
+
+    init(initial: i64) {
+        this.value = initial
+    }
+
+    bump(n: i64) -> i64 {
+        this.value = this.value + n
+        return this.value
+    }
+
+    get() -> i64 {
+        return this.value
+    }
+}
+
+fn make(n: i64) -> Counter {
+    return Counter(n)
+}
+
+fn touch(c: ref Counter) -> i64 {
+    c.value = c.value + 1
+    return c.get()
+}
+
+var c = make(2)
+print(c.bump(5))
+print(c.value)
+print(touch(ref c))
+print(c.get())

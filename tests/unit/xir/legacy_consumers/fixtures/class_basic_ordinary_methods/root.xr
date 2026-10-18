@@ -1,0 +1,174 @@
+// 0800_class_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：类基础
+
+// ===== 简单类 =====
+
+class Point {
+    x: i64
+    y: i64
+
+    init(x: i64, y: i64) {
+        this.x = x
+        this.y = y
+    }
+
+    toString() -> string {
+        return "(${this.x}, ${this.y})"
+    }
+}
+
+@test
+fn test_class_instantiation() {
+    var p = Point(3, 4)
+    assertEqual(p.x, 3)
+    assertEqual(p.y, 4)
+}
+
+@test
+fn test_class_method() {
+    var p = Point(5, 10)
+    assertEqual(p.toString(), "(5, 10)")
+}
+
+// ===== 方法调用 =====
+
+class Counter {
+    count: i64
+
+    init() {
+        this.count = 0
+    }
+
+    increment() {
+        this.count = this.count + 1
+    }
+
+    decrement() {
+        this.count = this.count - 1
+    }
+
+    getValue() -> i64 {
+        return this.count
+    }
+}
+
+@test
+fn test_method_modifies_state() {
+    var c = Counter()
+    assertEqual(c.getValue(), 0)
+
+    c.increment()
+    c.increment()
+    assertEqual(c.getValue(), 2)
+
+    c.decrement()
+    assertEqual(c.getValue(), 1)
+}
+
+// ===== 多个实例 =====
+
+@test
+fn test_multiple_instances() {
+    var c1 = Counter()
+    var c2 = Counter()
+
+    c1.increment()
+    c1.increment()
+    c2.increment()
+
+    assertEqual(c1.getValue(), 2)
+    assertEqual(c2.getValue(), 1)
+}
+
+// ===== 方法返回 this =====
+
+class Builder {
+    value: string
+
+    init() {
+        this.value = ""
+    }
+
+    append(s: string) -> Builder {
+        this.value += s
+        return this
+    }
+
+    build() -> string {
+        return this.value
+    }
+}
+
+@test
+fn test_method_chaining() {
+    var b = Builder()
+    var result = b.append("hello").append(" ").append("world").build()
+    assertEqual(result, "hello world")
+}
+
+// ===== 默认值 =====
+
+class Config {
+    name: string
+    enabled: bool
+
+    init() {
+        this.name = "default"
+        this.enabled = true
+    }
+}
+
+@test
+fn test_default_values() {
+    var cfg = Config()
+    assertEqual(cfg.name, "default")
+    assertEqual(cfg.enabled, true)
+}
+
+// ===== 字段访问 =====
+
+class Person {
+    name: string
+    age: i64
+
+    init(name: string, age: i64) {
+        this.name = name
+        this.age = age
+    }
+}
+
+@test
+fn test_field_read() {
+    var p = Person("Alice", 30)
+    assertEqual(p.name, "Alice")
+    assertEqual(p.age, 30)
+}
+
+@test
+fn test_field_write() {
+    var p = Person("Alice", 30)
+    p.name = "Bob"
+    p.age = 25
+    assertEqual(p.name, "Bob")
+    assertEqual(p.age, 25)
+}
+
+// ===== 多参数方法 =====
+
+class Calculator {
+    add(a: i64, b: i64) -> i64 {
+        return a + b
+    }
+
+    multiply(a: i64, b: i64, c: i64) -> i64 {
+        return a * b * c
+    }
+}
+
+@test
+fn test_multi_param_methods() {
+    var calc = Calculator()
+    assertEqual(calc.add(3, 5), 8)
+    assertEqual(calc.multiply(2, 3, 4), 24)
+}

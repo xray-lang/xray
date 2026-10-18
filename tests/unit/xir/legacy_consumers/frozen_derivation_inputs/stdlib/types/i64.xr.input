@@ -1,0 +1,64 @@
+// Built-in i64 type — implementation in src/runtime/value/xi64_methods.c
+enum NumberParseError {
+    InvalidSyntax,
+    OutOfRange
+}
+// @native-type id=8
+class i64 {
+    // @lowered
+    static parse(text: string) -> i64
+    // @lowered
+    static tryParse(text: string) -> i64?
+    // @native-operation INTEGER_ABS allocation=no_heap failures=none ownership=owned
+    abs() -> i64
+    // @native-operation INTEGER_TO_STRING allocation=may_heap failures=allocation,retain,limit ownership=owned
+    toString() -> string
+    toBigInt() -> BigInt
+    // @native-operation INTEGER_TO_F64 allocation=no_heap failures=none ownership=owned
+    toF64() -> f64
+    // @native-operation INTEGER_TO_HEX allocation=may_heap failures=allocation,retain,limit ownership=owned
+    toHex() -> string
+    // @native-operation INTEGER_MAX allocation=no_heap failures=none ownership=owned
+    max(other: i64) -> i64
+    // @native-operation INTEGER_MIN allocation=no_heap failures=none ownership=owned
+    min(other: i64) -> i64
+    // @native-operation INTEGER_SQRT allocation=no_heap failures=none ownership=owned
+    sqrt() -> f64
+    pow(exp: f64) -> f64
+    // @native-operation INTEGER_CHECKED_ADD allocation=may_heap failures=allocation,retain,limit ownership=owned
+    checkedAdd(other: i64) -> i64?
+    // @native-operation INTEGER_CHECKED_SUB allocation=may_heap failures=allocation,retain,limit ownership=owned
+    checkedSub(other: i64) -> i64?
+    // @native-operation INTEGER_CHECKED_MUL allocation=may_heap failures=allocation,retain,limit ownership=owned
+    checkedMul(other: i64) -> i64?
+    // @native-operation INTEGER_SATURATING_ADD allocation=no_heap failures=none ownership=owned
+    saturatingAdd(other: i64) -> i64
+    // @native-operation INTEGER_SATURATING_SUB allocation=no_heap failures=none ownership=owned
+    saturatingSub(other: i64) -> i64
+    // @native-operation INTEGER_SATURATING_MUL allocation=no_heap failures=none ownership=owned
+    saturatingMul(other: i64) -> i64
+    // @native-operation INTEGER_WRAPPING_ADD allocation=no_heap failures=none ownership=owned
+    wrappingAdd(other: i64) -> i64
+    // @native-operation INTEGER_WRAPPING_SUB allocation=no_heap failures=none ownership=owned
+    wrappingSub(other: i64) -> i64
+    // @native-operation INTEGER_WRAPPING_MUL allocation=no_heap failures=none ownership=owned
+    wrappingMul(other: i64) -> i64
+    // @native-operation INTEGER_ADD_OVERFLOWS allocation=no_heap failures=none ownership=owned
+    addOverflows(other: i64) -> bool
+    // @native-operation INTEGER_SUB_OVERFLOWS allocation=no_heap failures=none ownership=owned
+    subOverflows(other: i64) -> bool
+    // @native-operation INTEGER_MUL_OVERFLOWS allocation=no_heap failures=none ownership=owned
+    mulOverflows(other: i64) -> bool
+    // @native-operation INTEGER_POPCOUNT allocation=no_heap failures=none ownership=owned
+    popcount() -> i64
+    // @native-operation INTEGER_LEADING_ZEROS allocation=no_heap failures=none ownership=owned
+    leadingZeros() -> i64
+    // @native-operation INTEGER_TRAILING_ZEROS allocation=no_heap failures=none ownership=owned
+    trailingZeros() -> i64
+    // @native-operation INTEGER_BYTESWAP allocation=no_heap failures=none ownership=owned
+    byteswap() -> i64
+    // @native-operation INTEGER_ROTATE_LEFT allocation=no_heap failures=none ownership=owned
+    rotateLeft(n: i64) -> i64
+    // @native-operation INTEGER_ROTATE_RIGHT allocation=no_heap failures=none ownership=owned
+    rotateRight(n: i64) -> i64
+}

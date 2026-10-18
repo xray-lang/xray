@@ -1,0 +1,60 @@
+const maps = Channel<Map<i64, i64>>(256)
+const done = Channel<i64>(8)
+
+const PRODUCERS = 4
+const SENDS_PER_PRODUCER = 5000
+
+fn producer(id: i64) -> i64 {
+    var m: Map<i64, i64> = #{}
+    m.set(id, id + 1)
+    m.set(id + 1000, id + 2)
+
+    for (var i = 0; i < SENDS_PER_PRODUCER; i++) {
+        maps.send(m)
+    }
+
+    done.send(SENDS_PER_PRODUCER)
+    return SENDS_PER_PRODUCER
+}
+
+fn recv_map_size() -> i64 {
+    return match (maps.recv()) {
+        Recv.Value { value: m } -> len(m)
+        _ -> -1
+    }
+}
+
+fn recv_done_count() -> i64 {
+    return match (done.recv()) {
+        Recv.Value { value: v } -> v
+        _ -> -1
+    }
+}
+
+@test
+fn test_channel_map_value_copy_stress() {
+    for (var p = 0; p < PRODUCERS; p++) {
+        go producer(p)
+    }
+
+    var total = PRODUCERS * SENDS_PER_PRODUCER
+    var sum = 0
+    for (var i = 0; i < total; i++) {
+        sum = sum + recv_map_size()
+    }
+
+    var completed = 0
+    for (var p = 0; p < PRODUCERS; p++) {
+        completed = completed + recv_done_count()
+    }
+
+    const p19Observed2 = sum
+    assertEqual(p19Observed2, total * 2)
+    print(p19Observed2)
+    const p19Observed3 = completed
+    assertEqual(p19Observed3, total)
+    print(p19Observed3)
+
+    maps.close()
+    done.close()
+}

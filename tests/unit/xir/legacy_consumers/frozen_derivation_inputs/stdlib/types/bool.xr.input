@@ -1,0 +1,6 @@
+// Built-in bool type — implementation in src/runtime/value/xbool_methods.c
+// @native-type id=10
+class bool {
+    // @native-operation BOOL_TO_STRING allocation=may_heap failures=allocation,retain,limit ownership=owned
+    toString() -> string
+}

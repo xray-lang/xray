@@ -1,0 +1,95 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// AOT direct-call Base64 helpers must match VM tagged dispatch.
+import base64
+import {
+    Base64Alphabet,
+    Base64DecodeOptions,
+    Base64EncodeOptions,
+    Base64Error,
+    Base64PaddingPolicy
+} from base64
+
+fn encodeText(data: string, options: Base64EncodeOptions = Base64EncodeOptions()) -> string {
+    var view: Slice<u8> = data.bytes()
+    return base64.encode(view, options)
+}
+
+fn decodeText(data: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> string {
+    var decoded = base64.decode(data, options)
+    return string.fromUtf8(decoded[:])
+}
+
+fn decodeFails(data: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> bool {
+    try {
+        var decoded = base64.decode(data, options)
+        return len(decoded) < 0
+    } catch (e: Base64Error) {
+        return true
+    }
+}
+
+fn urlEncodeOptions() -> Base64EncodeOptions {
+    var options = Base64EncodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = false
+    return options
+}
+
+fn urlDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.alphabet = Base64Alphabet.UrlSafe
+    options.padding = Base64PaddingPolicy.Forbidden
+    return options
+}
+
+fn optionalDecodeOptions() -> Base64DecodeOptions {
+    var options = Base64DecodeOptions()
+    options.padding = Base64PaddingPolicy.Optional
+    return options
+}
+
+print(encodeText("Hello, World!"))
+print(decodeText("SGVsbG8sIFdvcmxkIQ=="))
+print(encodeText(""))
+print(decodeText(""))
+print(encodeText("A"))
+print(encodeText("AB"))
+print(encodeText("ABC"))
+print(encodeText("test data with special chars: +/=", urlEncodeOptions()))
+print(decodeText(encodeText("test data with special chars: +/=", urlEncodeOptions()),
+                 urlDecodeOptions()))
+print(decodeFails("A"))
+print(decodeFails("Q==="))
+
+var bytes = Array<u8>(5)
+bytes[0] = 0
+bytes[1] = 127
+bytes[2] = 255
+bytes[3] = 1
+bytes[4] = 128
+var encodedBytes = base64.encode(bytes[:])
+print(encodedBytes)
+var decodedBytes = base64.decode(encodedBytes)
+print(len(decodedBytes))
+print(decodedBytes[0])
+print(decodedBytes[1])
+print(decodedBytes[2])
+print(decodedBytes[3])
+print(decodedBytes[4])
+var emptyBytes = Array<u8>(0)
+print(base64.encode(emptyBytes[:]))
+print(decodeFails("!!!"))
+
+print(base64.isValid("SGVsbG8="))
+print(base64.isValid("QUJD"))
+print(base64.isValid("QQ=="))
+print(base64.isValid(""))
+print(base64.isValid("QQ"))
+print(base64.isValid("QUI"))
+print(base64.isValid("QQ", optionalDecodeOptions()))
+print(base64.isValid("QUI", optionalDecodeOptions()))
+print(base64.isValid("not valid base64!!!"))
+print(base64.isValid("A"))
+print(base64.isValid("Q==="))
+print(base64.isValid("SGVsbG8_"))
+print(base64.isValid("SGVsbG8_", urlDecodeOptions()))

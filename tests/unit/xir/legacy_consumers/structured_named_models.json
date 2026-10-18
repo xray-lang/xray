@@ -1,0 +1,2780 @@
+{
+  "schema": 1,
+  "inputs": [
+    {
+      "path": "tests/regression/08_oop/0895_struct_basic.xr",
+      "lf_sha256": "a4a642eceac1abb741b6d530d68e43eab40f8224f82eaa648ca2a8dacb2b1b68"
+    },
+    {
+      "path": "tests/regression/08_oop/0896_struct_literal.xr",
+      "lf_sha256": "25e408738db57ef123c72fd45e9ffaf2133ffc69749e73644e3015f320801159"
+    },
+    {
+      "path": "tests/regression/08_oop/0897_struct_value_semantics.xr",
+      "lf_sha256": "55bdd66352d67fc354fdece4f86586fe7b1ac6fc4604347d85aae118600a3b1c"
+    },
+    {
+      "path": "tests/regression/08_oop/0898_struct_comprehensive.xr",
+      "lf_sha256": "96f50af5e0bd2b11914cc70dabf9025b3cd8c59d58b9eac59173946bf1da72a0"
+    },
+    {
+      "path": "tests/regression/08_oop/0901_struct_nested.xr",
+      "lf_sha256": "7fbeca9bf1efdd65100887a8db22782d428ebc4ad4107610c57d22b65ef2623b"
+    },
+    {
+      "path": "tests/regression/08_oop/0902_struct_static_getter.xr",
+      "lf_sha256": "a67c8519383bf39a28119ab054f1d78bdfa0d19e1fbd61af1c69b305367976de"
+    },
+    {
+      "path": "spec/source/sections/003-2-type-system.md",
+      "lf_sha256": "b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677"
+    },
+    {
+      "path": "spec/source/sections/006-5-declarations.md",
+      "lf_sha256": "17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d"
+    },
+    {
+      "path": "tests/regression/08_oop/0907_struct_multi_interface.xr",
+      "lf_sha256": "fc613741a757c264132aba8148454a3cb0f7fa3d45f8d5f08df0bd1e152238ef"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1235_generic_value_struct_annotation.xr",
+      "lf_sha256": "1664d6506ba1628c7d60e5f43bbe3d154c384078e60da0d6efe42ceb3e12ebf0"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1221_generic_class_basic.xr",
+      "lf_sha256": "7e7019d25b6df1be427168fd6f3ccc274c75a5ab87127a64fe20f86c507a3fe2"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1227_mono_class_e2e.xr",
+      "lf_sha256": "8c17ba25011a2bc2e480e346b842387c0ffc45534e9357da6593ba8d4eded2dc"
+    },
+    {
+      "path": "tests/regression/08_oop/0850_interface.xr",
+      "lf_sha256": "7d973cefb80b885ef8021f3b976b34e4dbcf6cc3c4f65ce41bebd69e58784098"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1210_multi_return.xr",
+      "lf_sha256": "45c28b7fbf1538f582fc2d13e3a03206d1adb83d5efdf3ce79a86207712e40d1"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1220_generics.xr",
+      "lf_sha256": "cff7f87c6a8943d314ceb6c127aa2b0276ffd29b925155da298ec86d2c7d9ebb"
+    },
+    {
+      "path": "tests/regression/13_types/1320_tuple_basic.xr",
+      "lf_sha256": "1f0f1ebd8cc9a1ac4365874f12242cb3156d07d677524d5b44be21ee7125366b"
+    },
+    {
+      "path": "tests/regression/13_types/0401_generic_instance_breadth.xr",
+      "lf_sha256": "fa1ab7f6c8ec90a1839875d368dae928bcc792ac887a6919b2c33f5811dfedae"
+    },
+    {
+      "path": "tests/regression/09_advanced/0960_error_set_not_in_type.xr",
+      "lf_sha256": "398446e4ef6e0ee61d1bd8394d73cf666560c0933325be91006b1caef18d003f"
+    },
+    {
+      "path": "tests/regression/08_oop/0915_ref_exclusivity_legal_boundaries.xr",
+      "lf_sha256": "0392681ab01448f08b7f80f33f8bdf624f002ba6bbe5cdf0dfc42d435a49c8aa"
+    },
+    {
+      "path": "tests/regression/13_types/1408_ref_identifier_call_argument_not_marker.xr",
+      "lf_sha256": "072294ec14f2a42b8199d8a60a551de040c1c596c1369add2933cf790222f353"
+    },
+    {
+      "path": "tests/regression/13_types/1421_out_identifier_call_argument_not_marker.xr",
+      "lf_sha256": "7f344c1c947974a48db3202e92283c0bdcf2296741f2bddaa14ca5b1a316766d"
+    },
+    {
+      "path": "tests/regression/13_types/1432_param_mode_in_in_alias_allowed.xr",
+      "lf_sha256": "2ba3b3b01dcc859c59b2e07d742d4c525656942eacd982e4cf842d0c058e52c6"
+    },
+    {
+      "path": "tests/regression/13_types/1433_param_mode_move_source_action.xr",
+      "lf_sha256": "04bfd3cbed2cff51e3d30a093b3713028c1be7af0578df7de53507e73f23a87e"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/copyable_array_parameter_is_read_value/root.xr",
+      "lf_sha256": "07b08129494f6a775fb02a64d7c2ed921fc8f4c0cdcc853caa3933a7438d2165"
+    },
+    {
+      "path": "tests/regression/13_types/1435_param_mode_place_kind_authorization.xr",
+      "lf_sha256": "241a1881869848cd90b5773274464db088bc70401a113044ccb99a887119e585"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1102_go_await.xr",
+      "lf_sha256": "698f7bd99153a34b7276a3868e1bfd2d7b3467c7992b78b533db234aec166833"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1103_defer.xr",
+      "lf_sha256": "fab6decda9de845a4647ffeeb003067a96435a86b6b33adb69b534ff3f20f7cc"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1105_defer_args.xr",
+      "lf_sha256": "e99b48c3d05b6b619bdd3923c2defab6d03771395f0e50e64f427e5fbc4351a5"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1121_defer_block.xr",
+      "lf_sha256": "e741cca3363be3b5583fe4584621233621d1ccc75b5bed683406a23109b645e5"
+    },
+    {
+      "path": "tests/regression/14_typed_array/1400_byte_array_basic.xr",
+      "lf_sha256": "1c12efc309f1d390ce60972a292ee6d58a2d6c8f7871a821f399768006c1ed8d"
+    },
+    {
+      "path": "tests/regression/15_project/1500_project_mode_detect.xr",
+      "lf_sha256": "9367536e8acdbcc2cf05b4c6dc6e0af296fea6039fc73af557ab9b8e85a19987"
+    },
+    {
+      "path": "tests/regression/10_stdlib/modules/generic_box_lib.xr",
+      "lf_sha256": "dd7ae82e4c0ee77593c3df2f7d71020a73e3b16f1367edee632c24def8d289c2"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1039_cross_module_generic_annotation.xr",
+      "lf_sha256": "e19ba4d961ac609c5a741b36e42ade50402a797213dd69f62cdc0230b0545902"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1040_selective_import_generic_return.xr",
+      "lf_sha256": "64353528c19f8639de443d721917da3ff4b833e82387b6ac4073abf1d3313209"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1041_imported_instance_field_substitution.xr",
+      "lf_sha256": "0ae4fc9d2f468dda55cdbd092d1a8b8ec656e42361ec5e138a4da07cdcd3f432"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1060_simd_intrinsic_same_name.xr",
+      "lf_sha256": "09d6b6da979d2a5a7e395af7d7cca4cee689c9ffaa0be407a67352fa58882a9f"
+    },
+    {
+      "path": "tests/regression/12_type_checking/1230_function_type_annotation.xr",
+      "lf_sha256": "394a7b93d46b45a39fa46d52a66e76662e15d960646c622cac025539885b7ba4"
+    },
+    {
+      "path": "tests/regression/06_collections/0650_array_index_set_strict.xr",
+      "lf_sha256": "f3fe7cefdf15dc9611b9c6420383259821dd745f3701073b3347ba463b55f0b6"
+    },
+    {
+      "path": "tests/regression/14_typed_array/1410_shared_provenance_rebind_reset.xr",
+      "lf_sha256": "b8ca267969c600de165eb427aaa2206a85da6249dfdbaa3f34657bb39032c476"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/final_named_ports/1410_shared_provenance_rebind_reset/root.xr",
+      "lf_sha256": "08c8567aaaa728e5ca01c8159b19bbe6cafaab166dac6be466041613e0f12afb"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/control_function_ports/0413_null_unwrap/root.xr",
+      "lf_sha256": "a86cbcbe65846063f55173c9bd2e658bdc6006fa9a6bf103bd3fd2b66e3ec0d0"
+    },
+    {
+      "path": "tests/regression/04_control_flow/0413_null_unwrap.xr",
+      "lf_sha256": "feb1fef07d2aff1381edadf53fccaa01e2d6c87d940069897b67de43bab7de2e"
+    },
+    {
+      "path": "tests/regression/03_operators/0396_bnot_owner_edges.xr",
+      "lf_sha256": "18e60f411957d88afcb86dcfb2c36b0e6d14cf26f608ae143cf05558a3c25d72"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/regression_library_ports/1010_time/root.xr",
+      "lf_sha256": "44e12f13ac616adf864877092324af178cfe79ea3879e584453e4426066f2efb"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1010_time.xr",
+      "lf_sha256": "5e7595b349ae0012ff44fe34f2e70b0c45d0fd61412404610c1120c63aea2bae"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/regression_library_ports/1011_time_edge/root.xr",
+      "lf_sha256": "4b7cc123f9d9363bde0fd125540ef6d3fd94edb5cff688c674ef32f4ab7635bd"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1011_time_edge.xr",
+      "lf_sha256": "27c9942ead3addc25014142d5b7170304193d89b788e0282533bfcb14175f518"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1030_module_import.xr",
+      "lf_sha256": "04d48f43195d7f37c00a76eca91f8a1d123d8489e412f31f57c2b2aa53c7988e"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1035_import_scope_reject.xr",
+      "lf_sha256": "e1f5e52dec733318655fda3c88f4ff65eb159002ebbee79ab677e3af020757d3"
+    },
+    {
+      "path": "tests/regression/10_stdlib/1199_time_units.xr",
+      "lf_sha256": "0af26bbeed35dfa62badc36bf9d30c522249f8ab7823f6fd3eac1a03f27da5b8"
+    },
+    {
+      "path": "tests/regression/03_operators/0302_uint64_print_compare.xr",
+      "lf_sha256": "3d1bff78dbe7f17563604f03c3b90c8be901f2fddf10760074861384fd13185e"
+    },
+    {
+      "path": "tests/regression/03_operators/0302_int64_native.xr",
+      "lf_sha256": "a54da6faf72669401acc8cff0251d69c173e53c673bc3f77a43a227709650bf7"
+    },
+    {
+      "path": "tests/regression/02_variables/0011_zero_value_init.xr",
+      "lf_sha256": "3d3595cf5fa501aac4eb2236368735e865b513e43b47fafd25ed3a9928e9b21e"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/early_core_ports/0011_zero_value_init/root.xr",
+      "lf_sha256": "3d3595cf5fa501aac4eb2236368735e865b513e43b47fafd25ed3a9928e9b21e"
+    },
+    {
+      "path": "tests/regression/08_mem/0805_closure_capture_cell_reassign.xr",
+      "lf_sha256": "9ccbbf9f87a84821563f75892a4451b0e88723a7bfdb11354b143faf8fa79062"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/class_capture_cell_reassign/root.xr",
+      "lf_sha256": "9ccbbf9f87a84821563f75892a4451b0e88723a7bfdb11354b143faf8fa79062"
+    },
+    {
+      "path": "tests/regression/08_oop/0800_class_basic.xr",
+      "lf_sha256": "1f7af715200cba335489fae7b1632f80a0e04947d82c208ac2dbe471f65b17d7"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/class_basic_ordinary_methods/root.xr",
+      "lf_sha256": "521c9a3bd89cbfe5ca19924a91599b6317540dba16d67c35aedb62a8753a2350"
+    },
+    {
+      "path": "tests/regression/13_types/1434_param_mode_receiver_mutation_boundary.xr",
+      "lf_sha256": "dff72e2abe0d1907936c9ca6832b134148d75554d1a27832f0bd2c33b34915ee"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/ordinary_class_mutation_and_array_place/root.xr",
+      "lf_sha256": "d8325d16e4aa2f19ccea2d8dea88363cf4a432ed88c76ef750b802e2985c40d3"
+    },
+    {
+      "path": "tests/regression/13_types/1437_generic_method_param_contract.xr",
+      "lf_sha256": "22aa29e59bb58109c09b096ddb5a96c30f2e326446389788996cf80518ae93f3"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/method_owned_equal_constraint/root.xr",
+      "lf_sha256": "207dc79c05fbce3b028018ec9b8d3bd0c77249f7ca73a7f115d0ff6d6194a6cf"
+    },
+    {
+      "path": "tests/regression/10_stdlib/crash_min.xr",
+      "lf_sha256": "98127f7c0c9720725bb2d811d63bec8a9b682e745dc62cb9be53243dae3bc90e"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/network_regression_ports/crash_min/root.xr",
+      "lf_sha256": "2a8f72ba4f7ecd6174c96078bc3085366d126973e6f4a4d03792b29c4516ad3b"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/class_identity/root.xr",
+      "lf_sha256": "d2b1753ee55e9a656c0ad766279d09d5b2d717d246a711804fa1e8f418f93aa6"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/legacy_responsibilities.json",
+      "lf_sha256": "d2537f362f04b6b017759ca039a4b51ca83a2d67fe0ce3488da6bc335896a943"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/tuple_array/root.xr",
+      "lf_sha256": "c5b270510a924c1df8bd40c32c928bb8fdf92ada0293fab4582ec848a366853b"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/static_methods/root.xr",
+      "lf_sha256": "f7192f6c9d1a6a6403fe142383c9302520840abaa2ccdaf3e6556959796c5fcd"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/tuple_repeated/root.xr",
+      "lf_sha256": "65e40cc5680d1142362190583756c4a7a6163587702ea954a3439d3b5a668f26"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/byte_comparison/root.xr",
+      "lf_sha256": "19355cd9955a110342a4984124535756090f5722ad73615b8884d3929640c66d"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/bool_conditions/root.xr",
+      "lf_sha256": "bdc9cb53993fc822e72661dc04beb3c0d274294328e157f8b3d6e6b91755a265"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/struct_string/root.xr",
+      "lf_sha256": "0010dd4a64c28880f52bb252d20c0ccbc6bda7fc6d98d203a9b9e273e4277a3a"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/array_places/root.xr",
+      "lf_sha256": "9f0f1e7373d56953b7b81727c9e418c5ff10b21bca8713edf389f75c18456666"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/narrow_array/root.xr",
+      "lf_sha256": "49ff3b08987fff6bbd1d988497e27fa064642ec1889509fd76d0832728cd3908"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/array_runtime_length/root.xr",
+      "lf_sha256": "09e03a8908825d0c6e6766047c396f57f6068577cf79e479bcd2122a716e8bb8"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/string_slice/root.xr",
+      "lf_sha256": "a5359a83e3b1dcce7612addaba5ec0f95ac52ccdc67daccff146284be4b92b66"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/integer_width/root.xr",
+      "lf_sha256": "95096bcb6b01a457fa0d84c104b025df582e089cf88cf83ef26aca9542c39883"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/integer_division/root.xr",
+      "lf_sha256": "6266d1efbae095eb9988e9a18d5ea51251d9a1ed70b9bb6247df63101328ae73"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/integer_comparisons/root.xr",
+      "lf_sha256": "19e398b2ef4af2e9d874d3e4f60141de6275cc203144042417879452d3f67dac"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/integer_arithmetic/root.xr",
+      "lf_sha256": "024d75e808e3daa92e304bbac83d785dd109743597310b1cb95102bec025d004"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/integer_conversions/root.xr",
+      "lf_sha256": "7f9bf4a5d20b3cb7cee5b096ebad9e20181084cb041fc96372d54d1cba9c7f36"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/single_module/root.xr",
+      "lf_sha256": "b6399ad088d49af5540f8a64ee0d7df9501b157aef89833a0e84a918e3f74f77"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/two_modules/root.xr",
+      "lf_sha256": "9d73c0d71becfcd55a188efc84f573fcdb91eb954b67c84a433f0e5f92db7db0"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/two_modules/library.xr",
+      "lf_sha256": "a5de40cec575e4452a43492662ff8c5db9174feb8ed3384f724d914cedb21c94"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/module_receiver_suspend/root.xr",
+      "lf_sha256": "3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/module_receiver_suspend/library.xr",
+      "lf_sha256": "cde4fc2274c19e4eb8cb2b21cf5364e861e53d385790c6a24da97c107dfa40b5"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/cross_module_coroutine/root.xr",
+      "lf_sha256": "f09043352aa77c9b481644aac8ea14e41524e5df803bbbf7168a089ca1c6f105"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/cross_module_coroutine/library.xr",
+      "lf_sha256": "58c3b56414f36dfcba1092ac787cf6966874b5a2523c1f79ba3c8e1a6eb667bf"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/cross_module_static_coroutine/root.xr",
+      "lf_sha256": "9580be783d4c99e2d278ad3fc079e80a127ea3f87d866b8f82ffc4652a680af2"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/cross_module_static_coroutine/library.xr",
+      "lf_sha256": "4375fae674a2d0dd0e042a3e09830030ebbb1a13775377117fc928267428ed45"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/callables/root.xr",
+      "lf_sha256": "4d5b4ca98d30707d5a2d8a6951c94f7c366a34aa19b45e8302df42647b0c8649"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generics/root.xr",
+      "lf_sha256": "3b53d9178c3566fa90912e18bcfd75f0546a98e4e5b274437a050e6ce854c8ec"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_constraint_methods/root.xr",
+      "lf_sha256": "04dd4f7c82e0b7fd1a610363a1ac66cd57f60248a63282c3c7b00341b5ad341a"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_constraint_methods/library.xr",
+      "lf_sha256": "b68c3c77338bd5a57e6ea5a02a809e4ab6eaacc5f803d08af2a829196d1356d0"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_constraint_methods/facade.xr",
+      "lf_sha256": "67ad0a7da1187df90c7783097ca073e4b7aa43804c0761c03b4f24b8f1fc20cd"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_value_struct/root.xr",
+      "lf_sha256": "7294a9ded3d1e555713afc934da5e919f908736ef7205c9669665e6e7d3aeb79"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_value_struct/library.xr",
+      "lf_sha256": "96036b42ffd1073661ae462cc7ccd57d88bccb788ed6b2ac29128978a01b9a75"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_value_struct/facade.xr",
+      "lf_sha256": "cd05da74d8ed285d4d55be89e745ea05a36ec50f26a3422655eaaea81e92d2be"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/root.xr",
+      "lf_sha256": "08bbbee65c146f40089099f251d64bba52698722bd334ff6240931e15dd05f15"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/library.xr",
+      "lf_sha256": "b177bec09620dc2175dcd95563605e393b27b1b05293de98c657c165cd57fbda"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_scalar_class/facade.xr",
+      "lf_sha256": "5be13e7587410f933d1ae45ac337fc4743ec2d57142f2fb5091a8cd3c5930e04"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/constructor_folding/root.xr",
+      "lf_sha256": "afa111d3a9a93f062e7ae7631c75ae8939952405ca18704817d14288aa751155"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/root.xr",
+      "lf_sha256": "d5dc5a9a3d96b478130665d79d94dc91e1431e483fefcb46c74bee4cdd30dbdd"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/library.xr",
+      "lf_sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/generic_nested_class/facade.xr",
+      "lf_sha256": "3b9226278693213a6f0560e472e8362bbdc82cb1883debf263814c93a062b3cb"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/class_alias_escape/root.xr",
+      "lf_sha256": "0c463c52705c99194b69cad4baa8c036d164076b90932121d0a6cb263ec7ae67"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/class_field_self_assignment/root.xr",
+      "lf_sha256": "4ff90639e31f0f4e4bcc3f7b8bfeff2030ab8b43e9ffbf772f4c9f9d8362c163"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/class_alias_borrow/root.xr",
+      "lf_sha256": "5acbb595983c012d4efaada681d9c2b5216e89d660c49e19b5c54af38afb05ff"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/class_alias_transfer/root.xr",
+      "lf_sha256": "0fde0e6281382ab3918c59af86623480cfa8503c2f559498545eb2945a23b1af"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/parameter_coroutine/root.xr",
+      "lf_sha256": "521442df28da3d3838de58028fa3b479ec533ef843371775585c85c27c18c91d"
+    },
+    {
+      "path": "tests/unit/xir/product_consumers/fixtures/multi_safepoint/root.xr",
+      "lf_sha256": "896bf5280b1e4e132fac8be41d2851052f3b2f3713ed274e4b60c3575befc6df"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/source_projection_targets/tuple_array_complete.xr",
+      "lf_sha256": "d4c9480eeb5ac03d96edac5671e505ffaff6b3a106d100d9306dbb6349a991dc"
+    }
+  ],
+  "cases": [
+    {
+      "id": "struct_original_0895_struct_basic_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_basic"
+        ],
+        "per_test_observations": {
+          "test_struct_basic": {
+            "values": [
+              3.0,
+              4.0,
+              25.0,
+              4.0,
+              6.0,
+              255,
+              0,
+              255,
+              5000.0,
+              3.14159,
+              3.14159,
+              "Point",
+              5,
+              0.0,
+              4.0,
+              8.0
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "struct_original_0896_struct_literal_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_literal"
+        ],
+        "per_test_observations": {
+          "test_struct_literal": {
+            "values": [
+              3.0,
+              4.0,
+              11.0,
+              20.0,
+              25.0,
+              1.0,
+              4.0,
+              25.0,
+              5.0,
+              6.0,
+              5000.0,
+              0.0,
+              100.0,
+              255,
+              0,
+              "Point",
+              "Vec2",
+              "Rect"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "struct_original_0897_struct_value_semantics_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_value_semantics"
+        ],
+        "per_test_observations": {
+          "test_struct_value_semantics": {
+            "values": [
+              1.0,
+              2.0,
+              99.0,
+              2.0,
+              10.0,
+              999.0,
+              5.0,
+              6.0,
+              42.0,
+              1.0,
+              2.0,
+              3.0,
+              255,
+              0,
+              0,
+              255,
+              128,
+              0,
+              25.0,
+              16.0,
+              "Point",
+              "Point",
+              "Vec2",
+              "Vec2"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "struct_original_0898_struct_comprehensive_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_comprehensive"
+        ],
+        "per_test_observations": {
+          "test_struct_comprehensive": {
+            "values": [
+              100.0,
+              200.0,
+              1.0,
+              4.0,
+              0.0,
+              5000.0,
+              5000.0,
+              10000.0,
+              255,
+              0,
+              255,
+              0,
+              0.0,
+              0.0,
+              0.0,
+              42.0,
+              10.0,
+              20.0,
+              "Point",
+              "Rect",
+              "Color"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "struct_original_0901_struct_nested_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_nested"
+        ],
+        "per_test_observations": {
+          "test_struct_nested": {
+            "values": [
+              0.0,
+              0.0,
+              100.0,
+              50.0,
+              5000.0,
+              0.0,
+              100.0,
+              10.0,
+              200.0,
+              5000.0,
+              10000.0
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "struct_original_0902_struct_static_getter_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_static_getter"
+        ],
+        "per_test_observations": {
+          "test_struct_static_getter": {
+            "values": [
+              255,
+              0,
+              0,
+              0,
+              255,
+              0,
+              0,
+              0,
+              255,
+              "rgb(255,0,0)",
+              "rgb(0,255,0)",
+              255,
+              128
+            ]
+          }
+        }
+      },
+      "model_scope": "Original immutable literal field/method expectations, explicit copy independence and local mathematical pi constant; no output-derived oracle or private representation assumption."
+    },
+    {
+      "id": "structured_original_0907_struct_multi_interface_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_struct_multi_interface"
+        ],
+        "per_test_observations": {
+          "test_struct_multi_interface": {
+            "values": [
+              "Math: 95",
+              "English: 88",
+              95,
+              88,
+              95,
+              95,
+              50
+            ]
+          }
+        }
+      },
+      "model_scope": "Source-derived original literal constructor/field/method/copy results; direct implementation calls do not prove erased interface dispatch or complete generic definition checking."
+    },
+    {
+      "id": "structured_original_1235_generic_value_struct_annotation_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_var_annotation",
+          "test_param_annotation",
+          "test_return_annotation",
+          "test_struct_field_annotation"
+        ],
+        "per_test_observations": {
+          "test_var_annotation": {
+            "values": [
+              41,
+              7,
+              "hi"
+            ]
+          },
+          "test_param_annotation": {
+            "values": [
+              99,
+              5
+            ]
+          },
+          "test_return_annotation": {
+            "values": [
+              41
+            ]
+          },
+          "test_struct_field_annotation": {
+            "values": [
+              41,
+              41,
+              100
+            ]
+          }
+        }
+      },
+      "model_scope": "Source-derived original literal constructor/field/method/copy results; direct implementation calls do not prove erased interface dispatch or complete generic definition checking."
+    },
+    {
+      "id": "structured_original_1221_generic_class_basic_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_generic_class_basic"
+        ],
+        "per_test_observations": {
+          "test_generic_class_basic": {
+            "values": [
+              42,
+              42,
+              "hello",
+              "hello",
+              true,
+              "age",
+              30,
+              1,
+              "one",
+              100,
+              1,
+              2,
+              3,
+              "x",
+              99
+            ]
+          }
+        }
+      },
+      "model_scope": "Source-derived original literal constructor/field/method/copy results; direct implementation calls do not prove erased interface dispatch or complete generic definition checking."
+    },
+    {
+      "id": "structured_original_1227_mono_class_e2e_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_mono_class_e2e"
+        ],
+        "per_test_observations": {
+          "test_mono_class_e2e": {
+            "values": [
+              42,
+              42,
+              3.14,
+              3.14,
+              "hello",
+              "hello",
+              true,
+              "age",
+              30,
+              1,
+              2.5,
+              6,
+              100,
+              10,
+              20,
+              30
+            ]
+          }
+        }
+      },
+      "model_scope": "Source-derived original literal constructor/field/method/copy results; direct implementation calls do not prove erased interface dispatch or complete generic definition checking."
+    },
+    {
+      "id": "structured_original_0850_interface_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_interface_implementation",
+          "test_multi_method_interface",
+          "test_multiple_implementations",
+          "test_interface_with_extra_methods"
+        ],
+        "per_test_observations": {
+          "test_interface_implementation": {
+            "values": [
+              5.0
+            ]
+          },
+          "test_multi_method_interface": {
+            "values": [
+              12.0,
+              14.0
+            ]
+          },
+          "test_multiple_implementations": {
+            "values": [
+              6.0,
+              16.0
+            ]
+          },
+          "test_interface_with_extra_methods": {
+            "values": [
+              "Hello, Alice"
+            ]
+          }
+        }
+      },
+      "model_scope": "Source-derived original literal constructor/field/method/copy results; direct implementation calls do not prove erased interface dispatch or complete generic definition checking."
+    },
+    {
+      "id": "structured_original_1210_multi_return_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_tuple_return_basic",
+          "test_triple_return",
+          "test_partial_capture",
+          "test_conditional_tuple_return"
+        ],
+        "per_test_observations": {
+          "test_tuple_return_basic": {
+            "values": [
+              5,
+              true,
+              0,
+              false
+            ]
+          },
+          "test_triple_return": {
+            "values": [
+              1,
+              5,
+              9
+            ]
+          },
+          "test_partial_capture": {
+            "values": [
+              1,
+              2
+            ]
+          },
+          "test_conditional_tuple_return": {
+            "values": [
+              true,
+              2.5,
+              false,
+              0.0
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "all tuple return tests passed\n"
+      },
+      "model_scope": "Original tuple scalar components, complete40 distinct generic source calls and matching higher-order signatures; module initialization remains and is independently observed, not double-counted as another named body."
+    },
+    {
+      "id": "structured_original_1220_generics_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_generics"
+        ],
+        "per_test_observations": {
+          "test_generics": {
+            "values": [
+              42,
+              "hello",
+              "age",
+              30,
+              100,
+              1,
+              2
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": ""
+      },
+      "model_scope": "Original tuple scalar components, complete40 distinct generic source calls and matching higher-order signatures; module initialization remains and is independently observed, not double-counted as another named body."
+    },
+    {
+      "id": "structured_original_1320_tuple_basic_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_tuple_literal_and_field",
+          "test_tuple_heterogeneous",
+          "test_tuple_destructure",
+          "test_tuple_function_return_field_access",
+          "test_tuple_function_return_destructure",
+          "test_tuple_nested_field_access",
+          "test_tuple_unary"
+        ],
+        "per_test_observations": {
+          "test_tuple_literal_and_field": {
+            "values": [
+              1,
+              2,
+              3
+            ]
+          },
+          "test_tuple_heterogeneous": {
+            "values": [
+              10,
+              "hi",
+              true
+            ]
+          },
+          "test_tuple_destructure": {
+            "values": [
+              42,
+              "hello"
+            ]
+          },
+          "test_tuple_function_return_field_access": {
+            "values": [
+              7,
+              "ok"
+            ]
+          },
+          "test_tuple_function_return_destructure": {
+            "values": [
+              7,
+              "ok"
+            ]
+          },
+          "test_tuple_nested_field_access": {
+            "values": [
+              1,
+              2,
+              3,
+              4
+            ]
+          },
+          "test_tuple_unary": {
+            "values": [
+              99
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": ""
+      },
+      "model_scope": "Original tuple scalar components, complete40 distinct generic source calls and matching higher-order signatures; module initialization remains and is independently observed, not double-counted as another named body."
+    },
+    {
+      "id": "structured_original_0401_generic_instance_breadth_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_many_reference_instantiations"
+        ],
+        "per_test_observations": {
+          "test_many_reference_instantiations": {
+            "values": [
+              40
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": ""
+      },
+      "model_scope": "Original tuple scalar components, complete40 distinct generic source calls and matching higher-order signatures; module initialization remains and is independently observed, not double-counted as another named body."
+    },
+    {
+      "id": "structured_original_0960_error_set_not_in_type_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_error_set_not_in_function_type"
+        ],
+        "per_test_observations": {
+          "test_error_set_not_in_function_type": {
+            "values": [
+              2,
+              11,
+              12,
+              6
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "2\n11\n12\n6\n"
+      },
+      "model_scope": "Original tuple scalar components, complete40 distinct generic source calls and matching higher-order signatures; module initialization remains and is independently observed, not double-counted as another named body."
+    },
+    {
+      "id": "structured_original_0915_ref_exclusivity_legal_boundaries_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_nested_read_before_call_is_legal",
+          "test_ref_to_receiver_subplace_is_legal"
+        ],
+        "per_test_observations": {
+          "test_nested_read_before_call_is_legal": {
+            "values": [
+              3,
+              2
+            ]
+          },
+          "test_ref_to_receiver_subplace_is_legal": {
+            "values": [
+              1
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "structured_original_1408_ref_identifier_call_argument_not_marker_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_ref_identifier_call_argument_not_marker"
+        ],
+        "per_test_observations": {
+          "test_ref_identifier_call_argument_not_marker": {
+            "values": [
+              42
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "structured_original_1421_out_identifier_call_argument_not_marker_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_out_identifier_call_argument_not_marker"
+        ],
+        "per_test_observations": {
+          "test_out_identifier_call_argument_not_marker": {
+            "values": [
+              42,
+              43
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "structured_original_1432_param_mode_in_in_alias_allowed_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_in_in_same_root_alias_allowed"
+        ],
+        "per_test_observations": {
+          "test_in_in_same_root_alias_allowed": {
+            "values": [
+              42
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "structured_original_1433_param_mode_move_source_action_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_read_formal_preserves_values_and_accepts_fresh_owners"
+        ],
+        "per_test_observations": {
+          "test_read_formal_preserves_values_and_accepts_fresh_owners": {
+            "values": [
+              2,
+              2,
+              3,
+              3,
+              4
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "structured_original_1435_param_mode_place_kind_authorization_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_writable_places_accept_ref"
+        ],
+        "per_test_observations": {
+          "test_writable_places_accept_ref": {
+            "values": [
+              2,
+              7,
+              7,
+              0
+            ]
+          }
+        }
+      },
+      "model_scope": "Original legal place/read/ref boundaries and true ref/out identifiers; scalar outcomes do not qualify all illegal overlap paths or full borrow/resource safety."
+    },
+    {
+      "id": "natural_original_1102_go_await_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "30\n30\n60\ndone\n30\n30\n60\ndone\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_go_await"
+        ],
+        "per_test_observations": {
+          "test_go_await": {
+            "values": [
+              30,
+              30,
+              60,
+              "done"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "30\n30\n60\ndone\n"
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "natural_original_1103_defer_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "start\nwork done\ncleanup 3\ncleanup 2\ncleanup 1\nend\nstart\nwork done\ncleanup 3\ncleanup 2\ncleanup 1\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_defer"
+        ],
+        "per_test_observations": {
+          "test_defer": {
+            "values": [
+              "start",
+              "work done",
+              "cleanup 3",
+              "cleanup 2",
+              "cleanup 1"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "start\nwork done\ncleanup 3\ncleanup 2\ncleanup 1\nend\n"
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "natural_original_1105_defer_args_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "start\nwork done\nresult\n42\ncleanup 2\ncleanup 1\nend\nstart\nwork done\nresult\n42\ncleanup 2\ncleanup 1\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_defer_args"
+        ],
+        "per_test_observations": {
+          "test_defer_args": {
+            "values": [
+              "start",
+              "work done",
+              "result",
+              42,
+              "cleanup 2",
+              "cleanup 1"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "start\nwork done\nresult\n42\ncleanup 2\ncleanup 1\nend\n"
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "natural_original_1121_defer_block_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "=== defer 块语法测试 ===\n开始\n结束\ndefer 块\n=== 多个 defer 块 ===\n执行中\n结束\ndefer 2\ndefer 1\n=== defer 混合测试 ===\n执行\ndefer 块 A\ncleanup 函数\n开始\n结束\ndefer 块\n执行中\n结束\ndefer 2\ndefer 1\n执行\ndefer 块 A\ncleanup 函数\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_simple",
+          "test_multi",
+          "test_mixed"
+        ],
+        "per_test_observations": {
+          "test_simple": {
+            "values": [
+              "开始",
+              "结束",
+              "defer 块"
+            ]
+          },
+          "test_multi": {
+            "values": [
+              "执行中",
+              "结束",
+              "defer 2",
+              "defer 1"
+            ]
+          },
+          "test_mixed": {
+            "values": [
+              "执行",
+              "defer 块 A",
+              "cleanup 函数"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": "=== defer 块语法测试 ===\n开始\n结束\ndefer 块\n=== 多个 defer 块 ===\n执行中\n结束\ndefer 2\ndefer 1\n=== defer 混合测试 ===\n执行\ndefer 块 A\ncleanup 函数\n"
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "natural_original_1400_byte_array_basic_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "0\n5\n0\n255\n255\n255\n5\n65\n66\n67\n3\n88\n89\n90\nArray<byte> basic tests passed!\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_byte_array_basic"
+        ],
+        "per_test_observations": {
+          "test_byte_array_basic": {
+            "values": [
+              0,
+              5,
+              0,
+              255,
+              255,
+              255,
+              5,
+              65,
+              66,
+              67,
+              3,
+              88,
+              89,
+              90,
+              "Array<byte> basic tests passed!"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": ""
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "natural_original_1500_project_mode_detect_named",
+      "expected": {
+        "exit_code": 0,
+        "stdout_utf8": "Project mode test\nHello from project!\n",
+        "stderr_utf8": "",
+        "required_test_names": [
+          "test_project_mode_detect"
+        ],
+        "per_test_observations": {
+          "test_project_mode_detect": {
+            "values": [
+              "Project mode test",
+              "Hello from project!"
+            ]
+          }
+        },
+        "module_initialization_stdout_utf8": ""
+      },
+      "model": "Independent source arithmetic and LIFO normal trace; complete natural output and original initialization, no output-derived golden."
+    },
+    {
+      "id": "structured_original_1039_cross_module_generic_annotation_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "annotation_names_a_foreign_instantiation",
+          "generic_method_of_a_foreign_instantiation"
+        ],
+        "per_test_observations": {
+          "annotation_names_a_foreign_instantiation": {
+            "values": [
+              3,
+              4,
+              5,
+              8
+            ]
+          },
+          "generic_method_of_a_foreign_instantiation": {
+            "values": [
+              12,
+              "v6"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original declared-module generic field/call/return and user U32x4 method semantics; value5 must be addition2+3, not a guessed builtin XOR1."
+    },
+    {
+      "id": "structured_original_1040_selective_import_generic_return_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "selective_import_of_an_export_returning_an_instantiation",
+          "result_flows_into_a_generic_method_of_the_instantiation"
+        ],
+        "per_test_observations": {
+          "selective_import_of_an_export_returning_an_instantiation": {
+            "values": [
+              6,
+              6
+            ]
+          },
+          "result_flows_into_a_generic_method_of_the_instantiation": {
+            "values": [
+              8
+            ]
+          }
+        }
+      },
+      "model_scope": "Original declared-module generic field/call/return and user U32x4 method semantics; value5 must be addition2+3, not a guessed builtin XOR1."
+    },
+    {
+      "id": "structured_original_1041_imported_instance_field_substitution_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "field_of_an_instance_whose_class_is_not_imported",
+          "field_read_flows_into_an_inferred_binding",
+          "two_type_parameters_substitute_positionally"
+        ],
+        "per_test_observations": {
+          "field_of_an_instance_whose_class_is_not_imported": {
+            "values": [
+              6,
+              6
+            ]
+          },
+          "field_read_flows_into_an_inferred_binding": {
+            "values": [
+              7,
+              8
+            ]
+          },
+          "two_type_parameters_substitute_positionally": {
+            "values": [
+              3,
+              "three"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original declared-module generic field/call/return and user U32x4 method semantics; value5 must be addition2+3, not a guessed builtin XOR1."
+    },
+    {
+      "id": "structured_original_1060_simd_intrinsic_same_name_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_user_simd_names_are_not_intrinsics"
+        ],
+        "per_test_observations": {
+          "test_user_simd_names_are_not_intrinsics": {
+            "values": [
+              5
+            ]
+          }
+        }
+      },
+      "model_scope": "Original declared-module generic field/call/return and user U32x4 method semantics; value5 must be addition2+3, not a guessed builtin XOR1."
+    },
+    {
+      "id": "structured_original_1230_function_type_annotation_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_fn_type_basic",
+          "test_fn_type_void",
+          "test_fn_type_no_params",
+          "test_fn_type_multi_params",
+          "test_fn_type_string_return",
+          "test_fn_type_higher_order",
+          "test_fn_type_nested",
+          "test_fn_type_variable",
+          "test_fn_type_optional",
+          "test_tuple_type_unchanged"
+        ],
+        "per_test_observations": {
+          "test_fn_type_basic": {
+            "values": [
+              10
+            ]
+          },
+          "test_fn_type_void": {
+            "values": [
+              6
+            ]
+          },
+          "test_fn_type_no_params": {
+            "values": [
+              42
+            ]
+          },
+          "test_fn_type_multi_params": {
+            "values": [
+              7,
+              12
+            ]
+          },
+          "test_fn_type_string_return": {
+            "values": [
+              "value: 42"
+            ]
+          },
+          "test_fn_type_higher_order": {
+            "values": [
+              15,
+              5
+            ]
+          },
+          "test_fn_type_nested": {
+            "values": [
+              12,
+              21
+            ]
+          },
+          "test_fn_type_variable": {
+            "values": [
+              15
+            ]
+          },
+          "test_fn_type_optional": {
+            "values": [
+              6
+            ]
+          },
+          "test_tuple_type_unchanged": {
+            "values": [
+              3,
+              true,
+              0,
+              false
+            ]
+          }
+        }
+      },
+      "model_scope": "Original callable/guard/strict Array/rebind/unary scalar and authentic panic code projections. Code413/430 come from original source contracts, not a private ordinal."
+    },
+    {
+      "id": "structured_original_0650_array_index_set_strict_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_index_set_strict"
+        ],
+        "per_test_observations": {
+          "test_index_set_strict": {
+            "values": [
+              10,
+              30,
+              3,
+              430,
+              3,
+              430,
+              3,
+              430,
+              30
+            ]
+          }
+        }
+      },
+      "model_scope": "Original callable/guard/strict Array/rebind/unary scalar and authentic panic code projections. Code413/430 come from original source contracts, not a private ordinal."
+    },
+    {
+      "id": "structured_original_1410_shared_provenance_rebind_reset_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_shared_provenance_rebind_reset"
+        ],
+        "per_test_observations": {
+          "test_shared_provenance_rebind_reset": {
+            "values": [
+              0,
+              7,
+              0
+            ]
+          }
+        }
+      },
+      "model_scope": "Original callable/guard/strict Array/rebind/unary scalar and authentic panic code projections. Code413/430 come from original source contracts, not a private ordinal."
+    },
+    {
+      "id": "structured_original_0413_null_unwrap_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_null_unwrap_throws_413",
+          "test_non_null_unwrap_succeeds"
+        ],
+        "per_test_observations": {
+          "test_null_unwrap_throws_413": {
+            "values": [
+              413,
+              true,
+              true
+            ]
+          },
+          "test_non_null_unwrap_succeeds": {
+            "values": [
+              42
+            ]
+          }
+        }
+      },
+      "model_scope": "Original callable/guard/strict Array/rebind/unary scalar and authentic panic code projections. Code413/430 come from original source contracts, not a private ordinal."
+    },
+    {
+      "id": "structured_original_0396_bnot_owner_edges_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_bnot_owner_signed_64_bit_edges",
+          "test_bnot_owner_is_involutive"
+        ],
+        "per_test_observations": {
+          "test_bnot_owner_signed_64_bit_edges": {
+            "values": [
+              -1,
+              -2,
+              0,
+              -9223372036854775808,
+              9223372036854775807
+            ]
+          },
+          "test_bnot_owner_is_involutive": {
+            "values": [
+              [
+                0,
+                1,
+                -1,
+                42,
+                -42,
+                9223372036854775807,
+                -9223372036854775808
+              ]
+            ]
+          }
+        }
+      },
+      "model_scope": "Original callable/guard/strict Array/rebind/unary scalar and authentic panic code projections. Code413/430 come from original source contracts, not a private ordinal."
+    },
+    {
+      "id": "clock_original_1010_time_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_time_now",
+          "test_time_clock",
+          "test_time_monotonic",
+          "test_time_sleep"
+        ],
+        "per_test_observations": {
+          "test_time_now": {
+            "values": [
+              true,
+              true
+            ]
+          },
+          "test_time_clock": {
+            "values": [
+              true
+            ]
+          },
+          "test_time_monotonic": {
+            "values": [
+              true
+            ]
+          },
+          "test_time_sleep": {
+            "values": [
+              true,
+              true
+            ]
+          }
+        }
+      },
+      "model_scope": "Original positive epoch, monotonic, exact sleep-duration and unit/offset predicates. Each current clock is read once in original order; actual full200000 sum is independent math. No sampled timestamp or provider/platform substitution."
+    },
+    {
+      "id": "clock_original_1011_time_edge_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_monotonic_ordering",
+          "test_now_returns_milliseconds",
+          "test_now_advances",
+          "test_clock_non_negative",
+          "test_sleep_zero",
+          "test_sleep_small"
+        ],
+        "per_test_observations": {
+          "test_monotonic_ordering": {
+            "values": [
+              true,
+              true
+            ]
+          },
+          "test_now_returns_milliseconds": {
+            "values": [
+              true
+            ]
+          },
+          "test_now_advances": {
+            "values": [
+              true
+            ]
+          },
+          "test_clock_non_negative": {
+            "values": [
+              true
+            ]
+          },
+          "test_sleep_zero": {
+            "values": [
+              true
+            ]
+          },
+          "test_sleep_small": {
+            "values": [
+              true,
+              true
+            ]
+          }
+        }
+      },
+      "model_scope": "Original positive epoch, monotonic, exact sleep-duration and unit/offset predicates. Each current clock is read once in original order; actual full200000 sum is independent math. No sampled timestamp or provider/platform substitution."
+    },
+    {
+      "id": "clock_original_1030_module_import_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_time_now",
+          "test_time_clock",
+          "test_time_milliseconds",
+          "test_time_monotonic",
+          "test_module_method_call"
+        ],
+        "per_test_observations": {
+          "test_time_now": {
+            "values": [
+              true
+            ]
+          },
+          "test_time_clock": {
+            "values": [
+              true
+            ]
+          },
+          "test_time_milliseconds": {
+            "values": [
+              true
+            ]
+          },
+          "test_time_monotonic": {
+            "values": [
+              true
+            ]
+          },
+          "test_module_method_call": {
+            "values": [
+              true
+            ]
+          }
+        }
+      },
+      "model_scope": "Original positive epoch, monotonic, exact sleep-duration and unit/offset predicates. Each current clock is read once in original order; actual full200000 sum is independent math. No sampled timestamp or provider/platform substitution."
+    },
+    {
+      "id": "clock_original_1035_import_scope_reject_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_top_level_import_works",
+          "test_import_accessible_in_nested_fn"
+        ],
+        "per_test_observations": {
+          "test_top_level_import_works": {
+            "values": [
+              true
+            ]
+          },
+          "test_import_accessible_in_nested_fn": {
+            "values": [
+              true
+            ]
+          }
+        }
+      },
+      "model_scope": "Original positive epoch, monotonic, exact sleep-duration and unit/offset predicates. Each current clock is read once in original order; actual full200000 sum is independent math. No sampled timestamp or provider/platform substitution."
+    },
+    {
+      "id": "clock_original_1199_time_units_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_wall_clock_is_in_milliseconds",
+          "test_monotonic_micros_and_nanos_share_one_clock",
+          "test_monotonic_never_goes_backwards",
+          "test_cpu_clock_is_nonnegative_and_advances_monotonically",
+          "test_local_offset_is_local_offset_at_now",
+          "test_offset_is_in_minutes_and_within_the_utc_range"
+        ],
+        "per_test_observations": {
+          "test_wall_clock_is_in_milliseconds": {
+            "values": [
+              true,
+              true
+            ]
+          },
+          "test_monotonic_micros_and_nanos_share_one_clock": {
+            "values": [
+              true,
+              true
+            ]
+          },
+          "test_monotonic_never_goes_backwards": {
+            "values": [
+              true
+            ]
+          },
+          "test_cpu_clock_is_nonnegative_and_advances_monotonically": {
+            "values": [
+              true,
+              19999900000,
+              true,
+              true
+            ]
+          },
+          "test_local_offset_is_local_offset_at_now": {
+            "values": [
+              true
+            ]
+          },
+          "test_offset_is_in_minutes_and_within_the_utc_range": {
+            "values": [
+              true
+            ]
+          }
+        }
+      },
+      "model_scope": "Original positive epoch, monotonic, exact sleep-duration and unit/offset predicates. Each current clock is read once in original order; actual full200000 sum is independent math. No sampled timestamp or provider/platform substitution."
+    },
+    {
+      "id": "structured_original_0302_uint64_print_compare_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_uint64_unsigned_format_and_compare"
+        ],
+        "per_test_observations": {
+          "test_uint64_unsigned_format_and_compare": {
+            "values": [
+              "9223372036854775808",
+              "9223372036854775808",
+              "u=9223372036854775808:18446744073709551615",
+              true,
+              true,
+              true,
+              true,
+              false
+            ]
+          }
+        }
+      },
+      "model_scope": "Unsigned high-bit/all-ones full decimal and order computed from arbitrary-precision integers; original multiline assertion remains."
+    },
+    {
+      "id": "structured_original_0302_int64_native_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_int64_add",
+          "test_int64_sub",
+          "test_int64_mul",
+          "test_int64_div",
+          "test_int64_mod",
+          "test_int64_neg",
+          "test_int64_beyond_48bit_add",
+          "test_int64_large_multiply_verify",
+          "test_int64_negative_large",
+          "test_int64_large_literal_equality",
+          "test_int64_comparison_expr",
+          "test_int64_comparison_expr_lt",
+          "test_int64_comparison_eq_expr",
+          "test_int64_div_by_zero",
+          "test_int64_mod_by_zero",
+          "test_int64_bitwise",
+          "test_int64_shift_large",
+          "test_int64_shift_62",
+          "test_int64_compound_add_large",
+          "test_int64_compound_mul_large",
+          "test_typeof_int64",
+          "test_typeof_float64"
+        ],
+        "per_test_observations": {
+          "test_int64_add": {
+            "values": [
+              300
+            ]
+          },
+          "test_int64_sub": {
+            "values": [
+              -100
+            ]
+          },
+          "test_int64_mul": {
+            "values": [
+              1000000000000
+            ]
+          },
+          "test_int64_div": {
+            "values": [
+              33
+            ]
+          },
+          "test_int64_mod": {
+            "values": [
+              1
+            ]
+          },
+          "test_int64_neg": {
+            "values": [
+              -42
+            ]
+          },
+          "test_int64_beyond_48bit_add": {
+            "values": [
+              140737488355328,
+              140737488355327
+            ]
+          },
+          "test_int64_large_multiply_verify": {
+            "values": [
+              1000000000000000000,
+              1000000000
+            ]
+          },
+          "test_int64_negative_large": {
+            "values": [
+              -140737488355329,
+              -140737488355328
+            ]
+          },
+          "test_int64_large_literal_equality": {
+            "values": [
+              140737488355328
+            ]
+          },
+          "test_int64_comparison_expr": {
+            "values": [
+              true
+            ]
+          },
+          "test_int64_comparison_expr_lt": {
+            "values": [
+              true
+            ]
+          },
+          "test_int64_comparison_eq_expr": {
+            "values": [
+              true
+            ]
+          },
+          "test_int64_div_by_zero": {
+            "values": [
+              "PANIC",
+              true
+            ]
+          },
+          "test_int64_mod_by_zero": {
+            "values": [
+              "PANIC",
+              true
+            ]
+          },
+          "test_int64_bitwise": {
+            "values": [
+              3840,
+              65520,
+              61680
+            ]
+          },
+          "test_int64_shift_large": {
+            "values": [
+              140737488355328,
+              1
+            ]
+          },
+          "test_int64_shift_62": {
+            "values": [
+              4611686018427387904,
+              1
+            ]
+          },
+          "test_int64_compound_add_large": {
+            "values": [
+              140737488356327,
+              140737488355327
+            ]
+          },
+          "test_int64_compound_mul_large": {
+            "values": [
+              1000000000000000000,
+              1000000000
+            ]
+          },
+          "test_typeof_int64": {
+            "values": [
+              "i64"
+            ]
+          },
+          "test_typeof_float64": {
+            "values": [
+              "f64"
+            ]
+          }
+        }
+      },
+      "model_scope": "Original frozen mathematical wide-i64 values and real integer zero-divisor panic classification. Original assertPanics is preserved; an explicitly additional pure probe reads actual PanicInfo message predicates without guessing an ordinal."
+    },
+    {
+      "id": "structured_supported_0011_zero_value_init_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_int_zero_value",
+          "test_float_zero_value",
+          "test_bool_zero_value",
+          "test_nullable_defaults_to_null",
+          "test_string_requires_initializer",
+          "test_struct_zero_value_init",
+          "test_class_field_initialized_in_both_branches"
+        ],
+        "per_test_observations": {
+          "test_int_zero_value": {
+            "values": [
+              0
+            ]
+          },
+          "test_float_zero_value": {
+            "values": [
+              0.0
+            ]
+          },
+          "test_bool_zero_value": {
+            "values": [
+              false
+            ]
+          },
+          "test_nullable_defaults_to_null": {
+            "values": [
+              null
+            ]
+          },
+          "test_string_requires_initializer": {
+            "values": [
+              ""
+            ]
+          },
+          "test_struct_zero_value_init": {
+            "values": [
+              0,
+              0,
+              7,
+              0,
+              0,
+              false
+            ]
+          },
+          "test_class_field_initialized_in_both_branches": {
+            "values": [
+              "yes",
+              "no"
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
+    },
+    {
+      "id": "structured_supported_0805_closure_capture_cell_reassign_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_hoisted_closure_capture_survives_instance_def",
+          "test_multiple_instance_captures_stay_distinct",
+          "test_reassign_after_capture_visible_in_closure",
+          "test_closure_write_visible_to_enclosing_frame",
+          "test_repeated_closure_writes_through_cell",
+          "test_captured_instance_retained_by_container",
+          "test_cell_created_at_capture_register",
+          "test_int_capture_roundtrip"
+        ],
+        "per_test_observations": {
+          "test_hoisted_closure_capture_survives_instance_def": {
+            "values": [
+              0
+            ]
+          },
+          "test_multiple_instance_captures_stay_distinct": {
+            "values": [
+              1,
+              2
+            ]
+          },
+          "test_reassign_after_capture_visible_in_closure": {
+            "values": [
+              3,
+              4,
+              4
+            ]
+          },
+          "test_closure_write_visible_to_enclosing_frame": {
+            "values": [
+              1,
+              2
+            ]
+          },
+          "test_repeated_closure_writes_through_cell": {
+            "values": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              5
+            ]
+          },
+          "test_captured_instance_retained_by_container": {
+            "values": [
+              1,
+              11,
+              11
+            ]
+          },
+          "test_cell_created_at_capture_register": {
+            "values": [
+              2,
+              3
+            ]
+          },
+          "test_int_capture_roundtrip": {
+            "values": [
+              7
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
+    },
+    {
+      "id": "structured_supported_0800_class_basic_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_class_instantiation",
+          "test_class_method",
+          "test_method_modifies_state",
+          "test_multiple_instances",
+          "test_method_chaining",
+          "test_default_values",
+          "test_field_read",
+          "test_field_write",
+          "test_multi_param_methods"
+        ],
+        "per_test_observations": {
+          "test_class_instantiation": {
+            "values": [
+              3,
+              4
+            ]
+          },
+          "test_class_method": {
+            "values": [
+              "(5, 10)"
+            ]
+          },
+          "test_method_modifies_state": {
+            "values": [
+              0,
+              2,
+              1
+            ]
+          },
+          "test_multiple_instances": {
+            "values": [
+              2,
+              1
+            ]
+          },
+          "test_method_chaining": {
+            "values": [
+              "hello world"
+            ]
+          },
+          "test_default_values": {
+            "values": [
+              "default",
+              true
+            ]
+          },
+          "test_field_read": {
+            "values": [
+              "Alice",
+              30
+            ]
+          },
+          "test_field_write": {
+            "values": [
+              "Bob",
+              25
+            ]
+          },
+          "test_multi_param_methods": {
+            "values": [
+              8,
+              24
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
+    },
+    {
+      "id": "structured_supported_1434_param_mode_receiver_mutation_boundary_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_receiver_mutation_does_not_need_ref_marker"
+        ],
+        "per_test_observations": {
+          "test_receiver_mutation_does_not_need_ref_marker": {
+            "values": [
+              2,
+              3,
+              3,
+              [
+                1,
+                2,
+                3
+              ]
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
+    },
+    {
+      "id": "structured_supported_1437_generic_method_param_contract_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_generic_method_keeps_ref_contract"
+        ],
+        "per_test_observations": {
+          "test_generic_method_keeps_ref_contract": {
+            "values": [
+              7,
+              7
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
+    },
+    {
+      "id": "structured_supported_crash_min_observed",
+      "expected": {
+        "exit_code": 0,
+        "required_test_names": [
+          "test_crash_min"
+        ],
+        "per_test_observations": {
+          "test_crash_min": {
+            "values": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              25,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              33,
+              34,
+              35,
+              36,
+              37,
+              38,
+              39,
+              40,
+              41,
+              42,
+              43,
+              44,
+              45,
+              46,
+              47,
+              48,
+              49,
+              50,
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              57,
+              58,
+              59,
+              60,
+              61,
+              62,
+              63,
+              64,
+              65,
+              66,
+              67,
+              68,
+              69,
+              70,
+              71,
+              72,
+              73,
+              74,
+              75,
+              76,
+              77,
+              78,
+              79,
+              80,
+              81,
+              82,
+              83,
+              84,
+              85,
+              86,
+              87,
+              88,
+              89,
+              90,
+              91,
+              92,
+              93,
+              94,
+              95,
+              96,
+              97,
+              98,
+              99,
+              100,
+              101,
+              102,
+              103,
+              104,
+              105,
+              106,
+              107,
+              108,
+              109,
+              110,
+              111,
+              112,
+              113,
+              114,
+              115,
+              116,
+              117,
+              118,
+              119,
+              120,
+              121,
+              122,
+              123,
+              124,
+              125,
+              126,
+              127,
+              128,
+              129,
+              130,
+              131,
+              132,
+              133,
+              134,
+              135,
+              136,
+              137,
+              138,
+              139,
+              140,
+              141,
+              142,
+              143,
+              144,
+              145,
+              146,
+              147,
+              148,
+              149,
+              150,
+              151,
+              152,
+              153,
+              154,
+              155,
+              156,
+              157,
+              158,
+              159,
+              160,
+              161,
+              162,
+              163,
+              164,
+              165,
+              166,
+              167,
+              168,
+              169,
+              170,
+              171,
+              172,
+              173,
+              174,
+              175,
+              176,
+              177,
+              178,
+              179,
+              180,
+              181,
+              182,
+              183,
+              184,
+              185,
+              186,
+              187,
+              188,
+              189,
+              190,
+              191,
+              192,
+              193,
+              194,
+              195,
+              196,
+              197,
+              198,
+              199
+            ]
+          }
+        }
+      },
+      "model_scope": "Independent frozen source literals, initializer zero rules and complete original loop sequences; no captured Xray outputs."
+    },
+    {
+      "id": "source_projection_scalar_array_append_preserves_class_identity",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_tuple_array_elements",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Two independently saved21-byte ordinary string values remain in the tuple/Array after accumulator reset;21+21=42 derives the complete semantic return. Original native harness structural/resource/FI/producer-lifetime/physical/mixed/provider responsibilities remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_static_method_declarations",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_repeated_tuple_elements",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_byte_comparison",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_explicit_bool_conditions_execute",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_value_struct_string_copy_preserves_original",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_array_index_reads_and_replaces_elements",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_narrow_array_elements_precede_allocation",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_array_runtime_length",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_string_slice_scalar_range",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_integer_bitwise_exact_width",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_integer_division_and_remainder_preserve_value_rules",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 0,
+        "stdout_utf8": "0\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_integer_comparisons_preserve_signedness_and_order",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 0,
+        "stdout_utf8": "0\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_integer_wrapping_arithmetic_uses_shared_primitives",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 0,
+        "stdout_utf8": "0\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_exact_integer_constants_and_conversions",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 255,
+        "stdout_utf8": "255\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_single_module_is_deterministic_and_detached",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_two_module_graph_is_deterministic",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_cross_module_instance_method_preserves_receiver_across_suspend",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_cross_module_coroutine_call_has_one_program_and_private_executors",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 7,
+        "stdout_utf8": "7\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_cross_module_static_method_coroutine_has_one_program_and_private_executors",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 7,
+        "stdout_utf8": "7\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_function_parameter_callable_has_one_program_and_private_executors",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 48,
+        "stdout_utf8": "48\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_generic_specializations_are_exact_program_functions",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_generic_constraint_methods_have_exact_concrete_targets",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_generic_value_struct_specializations_are_exact_nominal_aggregates",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_generic_scalar_class_specializations_are_exact_class_references",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_folds_constructor_literal_and_reordered_stores",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 1006,
+        "stdout_utf8": "1006\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_generic_nested_class_types_are_exact",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_class_alias_escape_projects_one_share",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_class_field_self_assignment_shares_before_exchange",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_class_alias_borrows_coalesce_without_share",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_class_alias_final_transfer_coalesces_to_move",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_function_parameter_suspending_callable_has_one_program",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    },
+    {
+      "id": "source_projection_scalar_runs_each_dense_coroutine_state_across_private_executors",
+      "expected": {
+        "exit_code": 0,
+        "return_i64": 42,
+        "stdout_utf8": "42\n",
+        "stderr_utf8": ""
+      },
+      "model": "Original source-backed consumer projection fixed scalar consequence from preserved native/independent assertions; no captured Xray output. Original structural/FI/resource/owner/cancel/physical duties remain OPEN."
+    }
+  ],
+  "independence": "Expected constants come from the original frozen assertions and mathematical method bodies, never current Xray output.",
+  "reviewed_input_epochs": [
+    {
+      "fixed_input": "d5965cf74aefb2125c5b5d43377effcef7f80279",
+      "prior_product_head": "dc6c4b1df2f227d16b4f7ffc18b00e3914375152",
+      "inputs": [
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "prior_lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "prior_lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7"
+        },
+        {
+          "path": "tests/regression/12_type_checking/1221_generic_class_basic.xr",
+          "prior_lf_sha256": "4858cacc68a4999c9ffc7fb8c0ac1d0e7d91918d3f3200bd8370a78826f818ff"
+        },
+        {
+          "path": "tests/regression/12_type_checking/1227_mono_class_e2e.xr",
+          "prior_lf_sha256": "31dbf8139f48415297d9ce7e7abced1ccfac3c1b43c29c12f11a2ca469fdedf1"
+        },
+        {
+          "path": "tests/regression/08_oop/0850_interface.xr",
+          "prior_lf_sha256": "d75c4e320edd5f86edeab16beef2602b690b11b17b3e1b6d78bac6742690131d"
+        },
+        {
+          "path": "tests/regression/12_type_checking/1220_generics.xr",
+          "prior_lf_sha256": "47b46576b44975e8c38182829587c763687b8aceb46a8e6d7fc91f3813547c4d"
+        },
+        {
+          "path": "tests/regression/13_types/0401_generic_instance_breadth.xr",
+          "prior_lf_sha256": "4fe6fd9447e113805516b8a484d26d58b0af3045339cef02bb338f1a54110cef"
+        },
+        {
+          "path": "tests/regression/08_oop/0915_ref_exclusivity_legal_boundaries.xr",
+          "prior_lf_sha256": "12f715d25b67c900baba0669440d783c96d0e9e42ca150086e93bf13c11704f0"
+        },
+        {
+          "path": "tests/regression/10_stdlib/modules/generic_box_lib.xr",
+          "prior_lf_sha256": "3dcea9718fe82a5ff5564117eba7aed71c2a86eb008a8b8deef6124b684b99a1"
+        }
+      ],
+      "semantic_review": "See P19 fixed-input handoff; expected values unchanged."
+    }
+  ]
+}

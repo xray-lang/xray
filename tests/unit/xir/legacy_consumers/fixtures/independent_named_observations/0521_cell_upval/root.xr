@@ -1,0 +1,231 @@
+// Preserve every stateful closure invocation once, every original loop bound, and all original named bodies.
+// 0521_cell_upval.xr
+// Cell-mode mutable capture + flat upvalue regression tests.
+// Exercises: OP_CELL_NEW, OP_CELL_GET, OP_CELL_SET, OP_UPVAL_GET
+// JIT paths: XIR_ALLOC inline bump-pointer, LOAD_FIELD, STORE_FIELD
+
+// ===== Mutable capture via cell (counter pattern) =====
+
+@test
+fn test_cell_counter_basic() {
+    fn make() -> fn() -> i64 {
+        var n = 0
+        fn inc() -> i64 {
+            n++
+            return n
+        }
+        return inc
+    }
+    var f = make()
+    var p19CellValue0 = f()
+    assertEqual(p19CellValue0, 1)
+    print(p19CellValue0)
+    var p19CellValue1 = f()
+    assertEqual(p19CellValue1, 2)
+    print(p19CellValue1)
+    var p19CellValue2 = f()
+    assertEqual(p19CellValue2, 3)
+    print(p19CellValue2)
+}
+
+// ===== Two independent cells in one function =====
+
+@test
+fn test_two_cells() {
+    fn make() -> fn(bool) -> i64 {
+        var a = 0
+        var b = 100
+        fn step(use_a: bool) -> i64 {
+            if (use_a) {
+                a++
+                return a
+            } else {
+                b--
+                return b
+            }
+        }
+        return step
+    }
+    var f = make()
+    var p19CellValue3 = f(true)
+    assertEqual(p19CellValue3, 1)
+    print(p19CellValue3)
+    var p19CellValue4 = f(false)
+    assertEqual(p19CellValue4, 99)
+    print(p19CellValue4)
+    var p19CellValue5 = f(true)
+    assertEqual(p19CellValue5, 2)
+    print(p19CellValue5)
+    var p19CellValue6 = f(false)
+    assertEqual(p19CellValue6, 98)
+    print(p19CellValue6)
+}
+
+// ===== Transitive capture (UPVAL_SRC_UPVAL) =====
+
+@test
+fn test_transitive_capture() {
+    fn outer() -> fn() -> i64 {
+        var x = 10
+        fn middle() -> fn() -> i64 {
+            fn inner() -> i64 {
+                x += 5
+                return x
+            }
+            return inner
+        }
+        return middle()
+    }
+    var f = outer()
+    var p19CellValue7 = f()
+    assertEqual(p19CellValue7, 15)
+    print(p19CellValue7)
+    var p19CellValue8 = f()
+    assertEqual(p19CellValue8, 20)
+    print(p19CellValue8)
+}
+
+// ===== Const capture (no cell needed) =====
+
+@test
+fn test_const_capture() {
+    fn make(base: i64) -> fn(i64) -> i64 {
+        const FACTOR = 3
+        fn calc(x: i64) -> i64 {
+            return base + x * FACTOR
+        }
+        return calc
+    }
+    var f = make(100)
+    var p19CellValue9 = f(1)
+    assertEqual(p19CellValue9, 103)
+    print(p19CellValue9)
+    var p19CellValue10 = f(10)
+    assertEqual(p19CellValue10, 130)
+    print(p19CellValue10)
+}
+
+// ===== Cell in loop — multiple closures sharing same cell =====
+
+@test
+fn test_cell_shared_by_closures() {
+    var count = 0
+    fn inc() { count++ }
+    fn dec() { count-- }
+    fn get() -> i64 { return count }
+
+    inc()
+    inc()
+    inc()
+    var p19CellValue11 = get()
+    assertEqual(p19CellValue11, 3)
+    print(p19CellValue11)
+    dec()
+    var p19CellValue12 = get()
+    assertEqual(p19CellValue12, 2)
+    print(p19CellValue12)
+}
+
+// ===== Hot loop with cell get/set (JIT inline path) =====
+
+@test
+fn test_cell_hot_loop() {
+    fn make() -> fn(i64) -> i64 {
+        var total = 0
+        fn add(n: i64) -> i64 {
+            total += n
+            return total
+        }
+        return add
+    }
+    var acc = make()
+    var sum = 0
+    var p19Iterations = 0
+    for (var i = 1; i <= 100; i++) {
+        sum = acc(i)
+        p19Iterations++
+    }
+    print(p19Iterations)
+    var p19CellValue14 = sum
+    assertEqual(p19CellValue14, 5050)
+    print(p19CellValue14)
+}
+
+// ===== Cell with different value types =====
+
+@test
+fn test_cell_string_value() {
+    fn make() -> fn(string) -> string {
+        var result = ""
+        fn append(s: string) -> string {
+            result = result + s
+            return result
+        }
+        return append
+    }
+    var f = make()
+    var p19CellValue15 = f("a")
+    assertEqual(p19CellValue15, "a")
+    print(p19CellValue15)
+    var p19CellValue16 = f("b")
+    assertEqual(p19CellValue16, "ab")
+    print(p19CellValue16)
+    var p19CellValue17 = f("c")
+    assertEqual(p19CellValue17, "abc")
+    print(p19CellValue17)
+}
+
+@test
+fn test_cell_float_value() {
+    fn make() -> fn(f64) -> f64 {
+        var total = 0.0
+        fn add(x: f64) -> f64 {
+            total += x
+            return total
+        }
+        return add
+    }
+    var f = make()
+    var p19CellValue18 = f(1.5)
+    assertEqual(p19CellValue18, 1.5)
+    print(p19CellValue18)
+    var p19CellValue19 = f(2.5)
+    assertEqual(p19CellValue19, 4.0)
+    print(p19CellValue19)
+}
+
+// ===== Multiple independent closure instances =====
+
+@test
+fn test_many_instances() {
+    fn make() -> fn() -> i64 {
+        var n = 0
+        fn inc() -> i64 {
+            n++
+            return n
+        }
+        return inc
+    }
+    var counters: Array<fn() -> i64> = []
+    for (var i = 0; i < 10; i++) {
+        counters.push(make())
+    }
+    print(len(counters))
+    // Each counter is independent
+    for (var i = 0; i < 10; i++) {
+        var p19CellLoopValue = counters[i]()
+        assertEqual(p19CellLoopValue, 1)
+        print(p19CellLoopValue)
+    }
+    // Call first counter more times
+    var p19CellValue21 = counters[0]()
+    assertEqual(p19CellValue21, 2)
+    print(p19CellValue21)
+    var p19CellValue22 = counters[0]()
+    assertEqual(p19CellValue22, 3)
+    print(p19CellValue22)
+    // Others still at 1
+    var p19CellValue23 = counters[5]()
+    assertEqual(p19CellValue23, 2)
+    print(p19CellValue23)
+}

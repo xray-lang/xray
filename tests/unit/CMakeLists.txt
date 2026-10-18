@@ -4666,3 +4666,6 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_completion_resolve/CMakeLists.txt")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_completion_resolve_errors/CMakeLists.txt")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_enum_payload/CMakeLists.txt")
+
+# Register independent legacy controls without replacing product-owned tests.
+add_subdirectory(xir/legacy_consumers)

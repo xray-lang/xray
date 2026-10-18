@@ -1,0 +1,33 @@
+{
+  "status": "WHOLE_FRAME_DROP_EXPECTATIONS_NOT_PHYSICAL_RELEASE_QUALIFICATION",
+  "cases": [
+    {
+      "id": "complete_suspended_frame_release",
+      "oracle_id": "complete_suspended_frame_release",
+      "source": "tests/diff/cases/semantics/coro/suspended_frame_release.xr",
+      "source_lf_sha256": "ee330504e157f30db15eb9db896fcc90f0885b0410fa4d206e9be26a170fa9fd",
+      "preserved_original_identity": {
+        "source": "tests/diff/cases/semantics/coro/suspended_frame_release.xr",
+        "lf_sha256": "ee330504e157f30db15eb9db896fcc90f0885b0410fa4d206e9be26a170fa9fd"
+      },
+      "entry": "run",
+      "source_context": "original_absolute",
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "stdout_utf8": "26000\n8\n50\ntrue\n",
+      "stdout_utf8_options": [
+        "26000\n8\n50\ntrue\n"
+      ],
+      "owners": [
+        "P08",
+        "P09",
+        "P10",
+        "P06",
+        "P13",
+        "P14",
+        "P17"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,142 @@
+// Keep complete original methods and observe every frozen array element through public len/index operations.
+// 0531_bare_lambda.xr
+// Bare lambda syntax: `x -> expr` without parentheses in call arguments.
+// The analyzer infers parameter types from callee signature or container
+// element type.
+
+// ===== Single-param bare lambda in map/filter =====
+
+@test
+fn test_bare_lambda_map() {
+    var arr = [1, 2, 3, 4, 5]
+    var doubled = arr.map(x -> x * 2)
+    assertEqual(doubled[0], 2)
+    assertEqual(doubled[4], 10)
+    print(len(doubled))
+    for (var p19Index = 0; p19Index < len(doubled); p19Index++) {
+        print(doubled[p19Index])
+    }
+}
+
+@test
+fn test_bare_lambda_filter() {
+    var arr = [1, 2, 3, 4, 5, 6]
+    var evens = arr.filter(x -> x % 2 == 0)
+    assertEqual(len(evens), 3)
+    assertEqual(evens[0], 2)
+    assertEqual(evens[2], 6)
+    print(len(evens))
+    for (var p19Index = 0; p19Index < len(evens); p19Index++) {
+        print(evens[p19Index])
+    }
+    print(len(evens))
+    print(evens[0])
+    print(evens[2])
+}
+
+@test
+fn test_bare_lambda_find() {
+    var arr = [10, 20, 30, 40]
+    var found = arr.find(x -> x > 25)
+    assertEqual(found, 30)
+    print(found!)
+}
+
+@test
+fn test_bare_lambda_every_some() {
+    var arr = [2, 4, 6, 8]
+    assertEqual(arr.every(x -> x % 2 == 0), true)
+    assertEqual(arr.some(x -> x > 7), true)
+    assertEqual(arr.some(x -> x > 10), false)
+    print(arr.every(x -> x % 2 == 0))
+    print(arr.some(x -> x > 7))
+    print(arr.some(x -> x > 10))
+}
+
+// ===== Chained bare lambdas =====
+
+@test
+fn test_bare_lambda_chain() {
+    var arr = [1, 2, 3, 4, 5]
+    var result = arr.filter(x -> x > 2).map(x -> x * 10)
+    assertEqual(result[0], 30)
+    assertEqual(result[1], 40)
+    assertEqual(result[2], 50)
+    print(len(result))
+    for (var p19Index = 0; p19Index < len(result); p19Index++) {
+        print(result[p19Index])
+    }
+}
+
+// ===== Bare lambda with block body =====
+
+@test
+fn test_bare_lambda_block_body() {
+    var arr = [1, 2, 3]
+    var result = arr.map(x -> {
+        var doubled = x * 2
+        return doubled + 1
+    })
+    assertEqual(result[0], 3)
+    assertEqual(result[1], 5)
+    assertEqual(result[2], 7)
+    print(len(result))
+    for (var p19Index = 0; p19Index < len(result); p19Index++) {
+        print(result[p19Index])
+    }
+}
+
+// ===== Bare lambda with closure capture =====
+
+@test
+fn test_bare_lambda_closure() {
+    var factor = 3
+    var arr = [1, 2, 3]
+    var scaled = arr.map(x -> x * factor)
+    assertEqual(scaled[0], 3)
+    assertEqual(scaled[1], 6)
+    assertEqual(scaled[2], 9)
+    print(len(scaled))
+    for (var p19Index = 0; p19Index < len(scaled); p19Index++) {
+        print(scaled[p19Index])
+    }
+}
+
+// ===== Bare lambda as function argument (non-method) =====
+
+@test
+fn test_bare_lambda_fn_arg() {
+    fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
+        return f(x)
+    }
+    var result = apply(x -> x * 5, 4)
+    assertEqual(result, 20)
+    print(result)
+}
+
+// ===== forEach with bare lambda =====
+
+@test
+fn test_bare_lambda_foreach() {
+    var arr = [10, 20, 30]
+    var sum = 0
+    arr.forEach(x -> {
+        sum += x
+    })
+    assertEqual(sum, 60)
+    print(sum)
+}
+
+// ===== String array with bare lambda =====
+
+@test
+fn test_bare_lambda_string_map() {
+    var words = ["hello", "world"]
+    var lengths = words.map(w -> len(w))
+    assertEqual(lengths[0], 5)
+    assertEqual(lengths[1], 5)
+    print(len(lengths))
+    for (var p19Index = 0; p19Index < len(lengths); p19Index++) {
+        print(lengths[p19Index])
+    }
+}

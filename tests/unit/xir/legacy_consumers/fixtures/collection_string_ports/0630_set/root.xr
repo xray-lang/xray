@@ -1,0 +1,149 @@
+// 0630_set.xr
+// 作者：xingleixu@gmail.com
+// 测试：Set 集合
+// ===== 创建 =====
+@test
+fn test_set_literal() {
+    var s = #[1, 2, 3]
+    assertEqual(len(s), 3)
+}
+
+@test
+fn test_empty_set() {
+    var s: Set<i64> = #[]
+    assertEqual(len(s), 0)
+}
+
+@test
+fn test_single_element() {
+    var s = #[42]
+    assertEqual(len(s), 1)
+}
+
+@test
+fn test_set_dedup() {
+    var s = #[1, 2, 2, 3, 3, 3]
+    assertEqual(len(s), 3)
+}
+
+// ===== 添加 =====
+@test
+fn test_add_new() {
+    var s: Set<i64> = #[]
+    s.add(1)
+    s.add(2)
+    s.add(3)
+    assertEqual(len(s), 3)
+}
+
+@test
+fn test_add_duplicate() {
+    var s = #[1, 2]
+    s.add(2)
+    // 重复
+    assertEqual(len(s), 2)
+}
+
+// ===== 检查 =====
+@test
+fn test_has() {
+    var s = #[1, 2, 3]
+    assertEqual(s.contains(2), true)
+    assertEqual(s.contains(5), false)
+}
+
+@test
+fn test_has_empty() {
+    var s: Set<i64> = #[]
+    assertEqual(s.contains(1), false)
+}
+
+// ===== 删除 =====
+@test
+fn test_delete() {
+    var s = #[1, 2, 3]
+    s.delete(2)
+    assertEqual(len(s), 2)
+    assertEqual(s.contains(2), false)
+    assertEqual(s.contains(1), true)
+    assertEqual(s.contains(3), true)
+}
+
+@test
+fn test_delete_missing() {
+    var s = #[1, 2]
+    s.delete(5)
+    // 不存在
+    assertEqual(len(s), 2)
+}
+
+// ===== 遍历 =====
+@test
+fn test_iterate() {
+    var s = #[1, 2, 3]
+    var sum = 0
+    for (x in s) {
+        sum += x
+    }
+    assertEqual(sum, 6)
+}
+
+@test
+fn test_iterate_empty() {
+    var s: Set<i64> = #[]
+    var count = 0
+    for (x in s) {
+        count++
+    }
+    assertEqual(count, 0)
+}
+
+// ===== 清空 =====
+@test
+fn test_clear() {
+    var s = #[1, 2, 3]
+    s.clear()
+    assertEqual(len(s), 0)
+}
+
+// ===== 字符串元素 =====
+@test
+fn test_string_elements() {
+    var s = #["apple", "banana", "cherry"]
+    assertEqual(len(s), 3)
+    assertEqual(s.contains("apple"), true)
+    assertEqual(s.contains("grape"), false)
+}
+
+// ===== 转换为数组 =====
+@test
+fn test_to_array() {
+    var s = #[1, 2, 3]
+    var arr = s.toArray()
+    assertEqual(len(arr), 3)
+}
+
+// ===== 边界条件 =====
+@test
+fn test_many_elements() {
+    var s: Set<i64> = #[]
+    for (var i = 0; i < 100; i++) {
+        s.add(i)
+    }
+    assertEqual(len(s), 100)
+    assertEqual(s.contains(50), true)
+    for (i in 0..100) { assert(s.contains(i)) }
+}
+
+@test
+fn test_add_and_delete() {
+    var s: Set<i64> = #[]
+    s.add(1)
+    s.add(2)
+    s.delete(1)
+    s.add(3)
+    assertEqual(len(s), 2)
+    assertEqual(s.contains(1), false)
+    assertEqual(s.contains(2), true)
+    assertEqual(s.contains(3), true)
+}

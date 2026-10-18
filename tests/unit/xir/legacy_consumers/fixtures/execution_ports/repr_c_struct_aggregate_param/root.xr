@@ -1,0 +1,48 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+struct Inner {
+    x: i32
+}
+
+struct Outer {
+    inner: Inner
+    y: i32
+}
+
+struct Buf {
+    data: [u8; 4]
+    bias: i32
+}
+
+fn sum_outer(p: Outer) -> i32 {
+    return p.inner.x + p.y
+}
+
+fn grow_outer(p: Outer) -> Outer {
+    return Outer{inner: Inner{x: p.inner.x + 1}, y: p.y + 2}
+}
+
+fn sum_buf(p: Buf) -> i32 {
+    return (p.data[0] as i32) + (p.data[1] as i32) + p.bias
+}
+
+fn pick_buf(p: Buf, i: i64) -> i32 {
+    return (p.data[i] as i32) + p.bias
+}
+
+fn patch_buf(p: Buf) -> i32 {
+    var local = p
+    local.data[1] = 9
+    return (local.data[0] as i32) + (local.data[1] as i32) + local.bias
+}
+
+var outer = Outer{inner: Inner{x: 35}, y: 7}
+var grown = grow_outer(outer)
+var buf = Buf{data: [10, 20, 30, 40], bias: 7}
+
+print(sum_outer(outer))
+print(sum_outer(grown))
+print(sum_buf(buf))
+print(pick_buf(buf, 2))
+print(patch_buf(buf))
+
+print(buf.data[1])

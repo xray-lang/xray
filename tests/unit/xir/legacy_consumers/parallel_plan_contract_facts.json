@@ -1,0 +1,20 @@
+{
+  "source_document": "tasks/193-parallel-stdlib-intrinsic-convergence-cn.md",
+  "source_docs_commit": "2d8e8ebee811d0cbb09328fc520fbafb1a3922b3",
+  "source_git_blob_sha256": "e8d0a176d664ae53e0f4472564a75a3e6fa14cd179c7fffbfe561bd9c382e59f",
+  "sections_utf8": {
+    "### 2.1 structured completion": "### 2.1 structured completion\n\n所有基础 API 在函数返回前完成当前 range 的全部工作：\n\n```xray\nparallel.forEach(range, body)\n// 返回后 body 不再运行，body closure 不再被 runtime 持有\n```\n\n因此 callback 是 scoped/noescape，而不是普通 `go` task body。\n",
+    "### 2.2 不保证固定并行度，但禁止后端永久顺序降级": "### 2.2 不保证固定并行度，但禁止后端永久顺序降级\n\n语义只保证：\n\n1. 正常完成时，每个输入索引恰好处理一次；\n2. `map` 结果与输入索引同序；\n3. `reduce` 按 reducer contract 汇总；\n4. API 返回后没有遗留 child job；\n5. hosted backend 必须具备真实多 worker 执行能力，并按统一成本模型选择有效 lane 数。\n\n以下不属于语言保证：\n\n1. 一定创建线程；\n2. 一定使用请求的全部 worker；\n3. item 执行顺序；\n4. worker id 稳定；\n5. job 固定绑定某个 OS thread。\n\n`Options.workers` 是最大并行度请求，不是身份数量承诺。runtime 可以按 item count、平台上限和资源情况下调。\n如果 hosted backend 没有实际提交 parallel batch，sequential fallback 必须使用实际有效 lane\n数（通常为 1），不能继续按用户请求的最大值拆分逻辑 lane；否则 `Plan<S>` 的 state 会错误地\n暴露“请求的 worker 数”而不是“本次真实执行 lane 数”。\n\n以下场景允许有效 lane 数为 1：\n\n1. `workers == 1`；\n2. range 为空或 item 数小于 parallel threshold；\n3. deterministic/test profile 显式固定单 worker；\n4. hosted runtime 实际只配置一个 worker。\n\n不允许 VM 因“只是 semantic oracle”而对所有 `workers > 1` 调用固定顺序执行。该做法既损失性能，也会隐藏真实多 worker 下的 contention、同步、nested dispatch 和错误传播问题。\n",
+    "### 2.6 map contract": "### 2.6 map contract\n\n`parallel.map`：\n\n1. 输入必须是整数 `Range`；\n2. 每个 index 产生恰好一个结果；\n3. 输出 `len == range item count`；\n4. 输出顺序与 range 遍历顺序一致；\n5. 空 range 返回空数组；\n6. AOT 可使用 typed direct lane；\n7. object result 必须执行正确 retain/release/cleanup；不能为了 direct write 泄漏引用。\n\n`parallel.mapInto`：\n\n1. 重用 caller-owned growable `Array<T>`；\n2. 调用开始时把逻辑长度重置为 range item count；\n3. 语义是 overwrite，不是 append；\n4. 输出数组不能与 callback 可写捕获形成 alias；\n5. 返回同一数组，便于组合；\n6. 不提供 tuple/multi-lane grammar；多字段结果使用 struct/tuple element，后端可做 SROA/SoA 优化。\n",
+    "### 2.7 reduce contract": "### 2.7 reduce contract\n\n`parallel.reduce`：\n\n1. `body(index) -> A`；\n2. `combine(A, A) -> A`；\n3. 空 range 返回 `initial`；\n4. combine 必须无副作用、不可挂起、不可 throw；\n5. 调用者负责保证 combine 满足结合律；\n6. 非结合运算的结果允许随 worker count 改变；\n7. 浮点运算不承诺与顺序 fold bitwise 一致；\n8. 固定 range、固定有效 worker count 下，最终 partial 按 lane index 顺序 combine，便于复现。\n\n公开泛型签名不能承诺任意 `A`，却让 AOT 对合法 `A` 临时拒绝。终局实现分两层：\n\n1. 所有满足公开类型/effect contract 的 `A` 都必须有正确的 descriptor-driven generic partial/release/combine path；\n2. native `int`、float 和 fixed-layout aggregate 可在 verifier 证明后走 unboxed specialization；\n3. specialization 未命中时使用已验证的 generic path，不允许回到 Task/await 控制面；\n4. 只有类型本身不满足公开 contract 时才编译诊断，不能以“当前 AOT 尚未实现”为理由制造 VM/AOT 表面差异。\n",
+    "### 4.2 lifecycle": "### 4.2 lifecycle\n\n1. `init(lane)` 每个实际 plan lane 调用一次；\n2. state 由 plan 独占，不能逃逸到普通 shared storage；\n3. 同一 state 同时最多由一个 lane callback 使用；\n4. state 跨多次 plan dispatch 复用；\n5. `close()` 等待活动 dispatch 完成后释放全部 state；\n6. `close()` 幂等；close 后 dispatch 是错误；\n7. `defer { plan.close() }` 是资源清理路径；不重新引入 `final`；\n8. 同一个 plan 禁止并发发起两个 dispatch；如需并发调用，创建多个 plan，使 state owner 和容量边界保持显式；\n9. `init` 的 lane 参数只用于构造，不承诺与 OS thread 恒定绑定。\n"
+  },
+  "workers_is_maximum_request_not_identity_count": true,
+  "structured_completion": true,
+  "map_keeps_input_order": true,
+  "mapInto_overwrites_not_appends": true,
+  "plan_state_persists": true,
+  "close_is_idempotent": true,
+  "current_ownership_type_rules": "Current spec003 andconcurrency ownership rules supersede old shared/unique spellings;selected states are scalar i64 andAtomic handles retain synchronization identity.",
+  "scope": "Only chosen whole-program normal outputs andoutside-active close. Do not equate request3 with3actual lanes,source modulo reference withscheduler contract,initSum with runtime initializer identities,or logicalclear withphysical release."
+}

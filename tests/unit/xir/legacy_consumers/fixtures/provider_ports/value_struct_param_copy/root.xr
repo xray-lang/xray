@@ -1,0 +1,12 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+struct Pair { a: i64; b: i64 }
+
+fn bump(p: Pair) -> i64 {
+    var local = p
+    local.a = local.a + 10
+    return local.a + local.b
+}
+
+var p = Pair{a: 1, b: 2}
+print(bump(p))
+print(p.a)

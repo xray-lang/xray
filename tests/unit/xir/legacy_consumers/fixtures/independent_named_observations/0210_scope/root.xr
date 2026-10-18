@@ -1,0 +1,207 @@
+// Retain every original body and observe scalar results, including nested lexical scopes.
+// 0210_scope.xr
+// 作者：xingleixu@gmail.com
+// 测试：变量作用域
+// ===== 块作用域 =====
+@test
+fn test_block_scope_basic() {
+    var x = 1
+{
+        var y = 2
+        var p19Observed0 = x
+        assertEqual(p19Observed0, 1)
+        print(p19Observed0)
+        // 外层可见
+        var p19Observed1 = y
+        assertEqual(p19Observed1, 2)
+        print(p19Observed1)
+    }
+    var p19Observed2 = x
+    assertEqual(p19Observed2, 1)
+    print(p19Observed2)
+}
+
+@test
+fn test_nested_blocks() {
+    var a = 1
+{
+        var b = 2
+{
+            var c = 3
+            var p19Observed3 = a + b + c
+            assertEqual(p19Observed3, 6)
+            print(p19Observed3)
+        }
+        var p19Observed4 = a + b
+        assertEqual(p19Observed4, 3)
+        print(p19Observed4)
+    }
+    var p19Observed5 = a
+    assertEqual(p19Observed5, 1)
+    print(p19Observed5)
+}
+
+// ===== 变量遮蔽 =====
+@test
+fn test_shadow_same_scope_different_block() {
+    var x = 10
+{
+        var x = 20
+        // 遮蔽外层 x
+        var p19Observed6 = x
+        assertEqual(p19Observed6, 20)
+        print(p19Observed6)
+{
+            var x = 30
+            // 再次遮蔽
+            var p19Observed7 = x
+            assertEqual(p19Observed7, 30)
+            print(p19Observed7)
+        }
+        var p19Observed8 = x
+        assertEqual(p19Observed8, 20)
+        print(p19Observed8)
+    }
+    print(x)
+    var p19Observed10 = typeName(x)
+    assertEqual(p19Observed10, "i64")
+    print(p19Observed10)
+    var p19Observed11 = string(x)
+    assertEqual(p19Observed11, "10")
+    print(p19Observed11)
+}
+
+@test
+fn test_shadow_with_different_type() {
+    var x = 10
+    // int
+{
+        var x = "hello"
+        // string（遮蔽）
+        var p19Observed12 = x
+        assertEqual(p19Observed12, "hello")
+        print(p19Observed12)
+    }
+    print(x)
+    var p19Observed14 = typeName(x)
+    assertEqual(p19Observed14, "i64")
+    print(p19Observed14)
+    var p19Observed15 = string(x)
+    assertEqual(p19Observed15, "10")
+    print(p19Observed15)
+}
+
+// ===== 函数作用域 =====
+@test
+fn test_function_scope() {
+    var x = 100
+    fn inner() -> i64 {
+        var x = 200
+        return x
+    }
+    var p19Observed16 = inner()
+    assertEqual(p19Observed16, 200)
+    print(p19Observed16)
+    var p19Observed17 = x
+    assertEqual(p19Observed17, 100)
+    print(p19Observed17)
+}
+
+@test
+fn test_closure_captures_outer() {
+    var x = 10
+    fn inner() -> i64 {
+        return x
+    }
+    var p19Observed18 = inner()
+    assertEqual(p19Observed18, 10)
+    print(p19Observed18)
+}
+
+@test
+fn test_closure_modifies_outer() {
+    var x = 10
+    fn modify() {
+        x = 20
+    }
+    modify()
+    var p19Observed19 = x
+    assertEqual(p19Observed19, 20)
+    print(p19Observed19)
+}
+
+// ===== 循环作用域 =====
+@test
+fn test_for_loop_scope() {
+    var sum = 0
+    for (var i = 0; i < 3; i++) {
+        sum += i
+    }
+    var p19Observed20 = sum
+    assertEqual(p19Observed20, 3)
+    print(p19Observed20)
+}
+
+@test
+fn test_while_loop_scope() {
+    var i = 0
+    var sum = 0
+    while (i < 3) {
+        var temp = i * 2
+        sum += temp
+        i++
+    }
+    var p19Observed21 = sum
+    assertEqual(p19Observed21, 6)
+    print(p19Observed21)
+}
+
+// ===== if 作用域 =====
+@test
+fn test_if_scope() {
+    var result = 0
+    if (true) {
+        var x = 10
+        result = x
+    }
+    var p19Observed22 = result
+    assertEqual(p19Observed22, 10)
+    print(p19Observed22)
+}
+
+@test
+fn test_if_else_scope() {
+    var result = 0
+    var condition = false
+    if (condition) {
+        var x = 10
+        result = x
+    } else {
+        var y = 20
+        result = y
+    }
+    var p19Observed23 = result
+    assertEqual(p19Observed23, 20)
+    print(p19Observed23)
+}
+
+// ===== 边界条件 =====
+@test
+fn test_deeply_nested() {
+    var a = 1
+{
+        var b = 2
+{
+            var c = 3
+{
+                var d = 4
+{
+                    var e = 5
+                    var p19Observed24 = a + b + c + d + e
+                    assertEqual(p19Observed24, 15)
+                    print(p19Observed24)
+                }
+            }
+        }
+    }
+}

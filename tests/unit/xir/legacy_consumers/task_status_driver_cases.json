@@ -1,0 +1,35 @@
+{
+  "status": "COMPLETE_ORIGINAL_FINITE_TWO_TASK_START_OBSERVATIONS_NOT_RUNTIME_QUALIFICATION",
+  "cases": [
+    {
+      "id": "complete_task_status_1116",
+      "oracle_id": "complete_task_status_1116",
+      "source": "tests/regression/11_coroutine/1116_task_status.xr",
+      "source_lf_sha256": "29f8a8ef5d78886e03b9f950f4bde200e2c990d233768ab4d56e2ec9dd6eb653",
+      "entry": "run",
+      "source_context": "original_absolute",
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "stdout_utf8": "before send:\n  done: false\n  status: TaskStatus.Pending\nafter await:\n  done: true\n  result: 21\nafter cancel:\n  done: true\n  status: TaskStatus.Cancelled\n  cancelled result: true\ncompleted:\n  done: true\n  status: TaskStatus.Success\n  result: 42\n",
+      "stdout_utf8_options": [
+        "before send:\n  done: false\n  status: TaskStatus.Pending\nafter await:\n  done: true\n  result: 21\nafter cancel:\n  done: true\n  status: TaskStatus.Cancelled\n  cancelled result: true\ncompleted:\n  done: true\n  status: TaskStatus.Success\n  result: 42\n",
+        "before send:\n  done: false\n  status: TaskStatus.Running\nafter await:\n  done: true\n  result: 21\nafter cancel:\n  done: true\n  status: TaskStatus.Cancelled\n  cancelled result: true\ncompleted:\n  done: true\n  status: TaskStatus.Success\n  result: 42\n"
+      ],
+      "owners": [
+        "P02",
+        "P06",
+        "P08",
+        "P09",
+        "P10",
+        "P13",
+        "P14",
+        "P17"
+      ],
+      "remaining_gates": [
+        "Complete original input,all14 observations andnormal termination through actualVM/C/native",
+        "Original CLI named hook,real Task/Channel/cancel state andallFI/resources/lifetime/safety/provider/mixed;finite startup observations are not measured scheduler timing"
+      ]
+    }
+  ]
+}

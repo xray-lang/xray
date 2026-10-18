@@ -1,0 +1,165 @@
+// Preserve all original callable/nullable/Array/unary bodies; capture each actual call and fault projection once.
+// 1230_function_type_annotation.xr
+// Test: Function type annotation syntax fn(T): R
+
+// ===== Basic function type parameter =====
+
+@test
+fn test_fn_type_basic() {
+    fn apply(x: i64, f: fn(i64) -> i64) -> i64 {
+        return f(x)
+    }
+    
+    var result = apply(5, (n) -> n * 2)
+    var p19CallableValue0 = result
+    assertEqual(p19CallableValue0, 10)
+    print(p19CallableValue0)
+}
+
+// ===== Function type with void return =====
+
+@test
+fn test_fn_type_void() {
+    var count = 0
+    
+    fn forEach(arr: Array<i64>, f: fn(i64)) {
+        for (item in arr) {
+            f(item)
+        }
+    }
+    
+    forEach([1, 2, 3], (x) -> {
+        count = count + x
+    })
+    var p19CallableValue1 = count
+    assertEqual(p19CallableValue1, 6)
+    print(p19CallableValue1)
+}
+
+// ===== Function type with no parameters =====
+
+@test
+fn test_fn_type_no_params() {
+    fn callIt(f: fn() -> i64) -> i64 {
+        return f()
+    }
+    
+    var result = callIt(() -> 42)
+    var p19CallableValue2 = result
+    assertEqual(p19CallableValue2, 42)
+    print(p19CallableValue2)
+}
+
+// ===== Function type with multiple parameters =====
+
+@test
+fn test_fn_type_multi_params() {
+    fn combine(a: i64, b: i64, f: fn(i64, i64) -> i64) -> i64 {
+        return f(a, b)
+    }
+    
+    var p19CallableValue3 = combine(3, 4, (a, b) -> a + b)
+    assertEqual(p19CallableValue3, 7)
+    print(p19CallableValue3)
+    var p19CallableValue4 = combine(3, 4, (a, b) -> a * b)
+    assertEqual(p19CallableValue4, 12)
+    print(p19CallableValue4)
+}
+
+// ===== Function type with string return =====
+
+@test
+fn test_fn_type_string_return() {
+    fn transform(x: i64, f: fn(i64) -> string) -> string {
+        return f(x)
+    }
+    
+    var result = transform(42, (n) -> "value: " + string(n))
+    var p19CallableValue5 = result
+    assertEqual(p19CallableValue5, "value: 42")
+    print(p19CallableValue5)
+}
+
+// ===== Higher-order: function returning function =====
+
+@test
+fn test_fn_type_higher_order() {
+    fn makeAdder(n: i64) -> fn(i64) -> i64 {
+        return (x) -> x + n
+    }
+    
+    var add5 = makeAdder(5)
+    var p19CallableValue6 = add5(10)
+    assertEqual(p19CallableValue6, 15)
+    print(p19CallableValue6)
+    var p19CallableValue7 = add5(0)
+    assertEqual(p19CallableValue7, 5)
+    print(p19CallableValue7)
+}
+
+// ===== Nested function types: fn(fn(int): int): int =====
+
+@test
+fn test_fn_type_nested() {
+    fn applyTwice(x: i64, f: fn(i64) -> i64) -> i64 {
+        return f(f(x))
+    }
+    
+    var p19CallableValue8 = applyTwice(3, (n) -> n * 2)
+    assertEqual(p19CallableValue8, 12)
+    print(p19CallableValue8)
+    var p19CallableValue9 = applyTwice(1, (n) -> n + 10)
+    assertEqual(p19CallableValue9, 21)
+    print(p19CallableValue9)
+}
+
+// ===== Function type in variable declaration =====
+
+@test
+fn test_fn_type_variable() {
+    var f: fn(i64) -> i64 = (x) -> x * 3
+    var p19CallableValue10 = f(5)
+    assertEqual(p19CallableValue10, 15)
+    print(p19CallableValue10)
+}
+
+// ===== Optional function type =====
+
+@test
+fn test_fn_type_optional() {
+    fn maybeApply(x: i64, f: fn(i64) -> i64) -> i64 {
+        return f(x)
+    }
+    
+    var p19CallableValue11 = maybeApply(5, (n) -> n + 1)
+    assertEqual(p19CallableValue11, 6)
+    print(p19CallableValue11)
+}
+
+// ===== Tuple type still works: (int, bool) =====
+
+@test
+fn test_tuple_type_unchanged() {
+    fn divide(a: i64, b: i64) -> (i64, bool) {
+        if (b == 0) {
+            return (0, false)
+        }
+        return (a / b, true)
+    }
+    
+    var (result, ok) = divide(10, 3)
+    var p19CallableValue12 = result
+    assertEqual(p19CallableValue12, 3)
+    print(p19CallableValue12)
+    var p19CallableValue13 = ok
+    assertEqual(p19CallableValue13, true)
+    print(p19CallableValue13)
+    
+    var (result2, ok2) = divide(10, 0)
+    var p19CallableValue14 = result2
+    assertEqual(p19CallableValue14, 0)
+    print(p19CallableValue14)
+    var p19CallableValue15 = ok2
+    assertEqual(p19CallableValue15, false)
+    print(p19CallableValue15)
+}

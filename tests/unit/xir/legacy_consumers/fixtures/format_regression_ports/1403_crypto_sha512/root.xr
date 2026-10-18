@@ -1,0 +1,68 @@
+// 1403_crypto_sha512.xr
+// Test: crypto SHA-512 hash and HMAC-SHA512
+//
+// Coverage:
+//   - SHA-512 hash
+//   - HMAC-SHA512
+
+import crypto
+
+// ============================================================
+// SHA-512 hash tests
+// ============================================================
+
+@test
+fn test_sha512_empty_string() {
+    var hash = crypto.sha512("")
+    assertEqual(hash, "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e")
+}
+
+@test
+fn test_sha512_hello() {
+    var hash = crypto.sha512("hello")
+    assertEqual(hash, "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043")
+}
+
+@test
+fn test_sha512_hello_world() {
+    var hash = crypto.sha512("Hello World")
+    assertEqual(hash, "2c74fd17edafd80e8447b0d46741ee243b7eb74dd2149a0ab1b9246fb30382f27e853d8585719e0e67cbda0daa8f51671064615d645ae27acb15bfb1447f459b")
+}
+
+@test
+fn test_sha512_length() {
+    // SHA-512 always returns 128 hex characters
+    assertEqual(len(crypto.sha512("test")), 128)
+}
+
+@test
+fn test_sha512_long_string() {
+    var hash = crypto.sha512("The quick brown fox jumps over the lazy dog")
+    assertEqual(hash, "07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6")
+}
+
+// ============================================================
+// HMAC-SHA512 tests
+// ============================================================
+
+@test
+fn test_hmac_sha512_basic() {
+    var hmac = crypto.hmac("sha512", "key", "message")!
+    assertEqual(hmac, "e477384d7ca229dd1426e64b63ebf2d36ebd6d7e669a6735424e72ea6c01d3f8b56eb39c36d8232f5427999b8d1a3f9cd1128fc69f4d75b434216810fa367e98")
+    // HMAC-SHA512 length is 128 hex chars
+    assertEqual(len(hmac), 128)
+}
+
+@test
+fn test_hmac_sha512_empty_message() {
+    var hmac = crypto.hmac("sha512", "key", "")!
+    assertEqual(hmac, "84fa5aa0279bbc473267d05a53ea03310a987cecc4c1535ff29b6d76b8f1444a728df3aadb89d4a9a6709e1998f373566e8f824a8ca93b1821f0b69bc2a2f65e")
+    assertEqual(len(hmac), 128)
+}
+
+@test
+fn test_hmac_sha512_known_vector() {
+    // RFC 4231 test case 2
+    var hmac = crypto.hmac("sha512", "Jefe", "what do ya want for nothing?")!
+    assertEqual(hmac, "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737")
+}

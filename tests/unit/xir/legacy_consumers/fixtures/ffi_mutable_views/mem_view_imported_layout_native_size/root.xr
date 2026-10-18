@@ -1,0 +1,28 @@
+// anchor: task-208-imported-native-size-layout
+import mem
+import { ImportedNativeSize } from "./_native_size_layout_lib"
+
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+}
+
+fn main() {
+    var raw = unsafe { malloc(mem.sizeOf<ImportedNativeSize>() as usize) }
+    unsafe {
+        mem.withSliceMut<ImportedNativeSize>(raw, 1, ref raw,
+            fn(values: ref MutSlice<ImportedNativeSize>) {
+                values[0].length = 37
+                values[0].delta = -37
+                print(values[0].length)
+                print(values[0].delta)
+                values[0].length = 91
+                values[0].delta = -91
+                print(values[0].length)
+                print(values[0].delta)
+            })
+        free(raw)
+    }
+}
+
+main()

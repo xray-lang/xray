@@ -1,0 +1,57 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// AOT direct-call compress helpers must match VM stdlib dispatch.
+//
+// The module takes Slice<u8> and answers Array<u8>: a string source is
+// borrowed with .bytes(), a compressed result is re-borrowed with [:], and
+// textOf turns a decoded payload back into the string it started from.
+import compress
+
+fn textOf(data: Array<u8>) -> string {
+    return string.fromUtf8(data[:])
+}
+
+fn compressionInvalidData(body: fn()) -> bool {
+    try {
+        body()
+        return false
+    } catch (e: CompressionError) {
+        return match (e) {
+            CompressionError.InvalidData -> true
+        }
+    }
+}
+
+var data = "Hello, World! This is a test string for compression."
+
+var gz = compress.gzip(data.bytes())
+print(compress.isGzip(gz[:]))
+print(textOf(compress.gunzip(gz[:])) == data)
+var gz0 = compress.gzip(data.bytes(), 0)
+print(textOf(compress.gunzip(gz0[:])) == data)
+var gz_hi = compress.gzip(data.bytes(), 42)
+print(textOf(compress.gunzip(gz_hi[:])) == data)
+
+var deflated = compress.deflate(data.bytes())
+print(textOf(compress.inflate(deflated[:])) == data)
+var deflated9 = compress.deflate(data.bytes(), 9)
+print(textOf(compress.inflate(deflated9[:])) == data)
+var deflated_neg = compress.deflate(data.bytes(), -7)
+print(textOf(compress.inflate(deflated_neg[:])) == data)
+
+var zlibbed = compress.zlibCompress(data.bytes())
+print(compress.isZlib(zlibbed[:]))
+print(textOf(compress.zlibDecompress(zlibbed[:])) == data)
+var zlib0 = compress.zlibCompress(data.bytes(), 0)
+print(textOf(compress.zlibDecompress(zlib0[:])) == data)
+var zlib_hi = compress.zlibCompress(data.bytes(), 42)
+print(textOf(compress.zlibDecompress(zlib_hi[:])) == data)
+
+var notGzip = "not gzip"
+var notDeflate = "not deflate"
+var notZlib = "not zlib"
+
+print(compress.isGzip(notGzip.bytes()))
+print(compress.isZlib(notZlib.bytes()))
+print(compressionInvalidData(fn() { compress.gunzip(notGzip.bytes()) }))
+print(compressionInvalidData(fn() { compress.inflate(notDeflate.bytes()) }))
+print(compressionInvalidData(fn() { compress.zlibDecompress(notZlib.bytes()) }))

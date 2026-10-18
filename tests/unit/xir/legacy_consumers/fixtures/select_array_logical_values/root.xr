@@ -1,0 +1,39 @@
+// Select sends preserve owned logical Array values. Mutating a local source
+// cannot change queued payloads. Each backend must satisfy independent results.
+
+fn main() {
+    const ch: Channel<Array<i64>> = Channel(4)
+    const sch: Channel<i64> = Channel(2)
+
+    var a = [1, 2, 3]
+    select {
+        a to ch -> { print("first sent") }
+        _ -> { print("first full") }
+    }
+    a[0] = 99  // mutate original; the boundary copy must stay unaffected
+
+    var b = [4, 5, 6]
+    select {
+        b to ch -> { print("second sent") }
+        _ -> { print("second full") }
+    }
+
+    select {
+        7 to sch -> { print("scalar sent") }
+        _ -> { print("scalar full") }
+    }
+
+    var r1 = match (ch.tryRecv()) { Recv.Value { value: v } -> v[0]  _ -> -1 }
+    var r2 = match (ch.tryRecv()) { Recv.Value { value: v } -> v[0]  _ -> -1 }
+    var r3 = match (sch.tryRecv()) { Recv.Value { value: v } -> v  _ -> -1 }
+
+    ch.close()
+    sch.close()
+
+    print(r1)     // 1  (copy taken before a[0] = 99)
+    print(r2)     // 4  (second logical value)
+    print(r3)     // 7  (scalar)
+    print(a[0])   // 99 (original mutated, proving copy independence)
+}
+
+main()

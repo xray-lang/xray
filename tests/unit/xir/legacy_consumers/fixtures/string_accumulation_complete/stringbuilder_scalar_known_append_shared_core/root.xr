@@ -1,0 +1,14 @@
+// anchor: stringbuilder_scalar_known_append
+var sb = ""
+sb += string("[")
+sb += string(true)
+sb += string("|")
+sb += string(false)
+sb += string("|")
+sb += string('中')
+sb += string("|")
+sb += string('A')
+sb += string("|")
+sb += "null"
+sb += string("]")
+print(sb)

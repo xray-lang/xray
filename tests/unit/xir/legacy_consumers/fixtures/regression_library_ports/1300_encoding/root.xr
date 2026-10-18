@@ -1,0 +1,224 @@
+// 1300_encoding.xr - Encoding module tests
+
+import encoding
+import { HexError, Utf16DecodeOptions, Utf16EncodeOptions, Utf16Error } from encoding
+
+fn hexEncodeText(data: string) -> string {
+    var view: Slice<u8> = data.bytes()
+    return encoding.hexEncode(view)
+}
+
+fn hexDecodeText(hex: string) -> string {
+    var bytes = encoding.hexDecode(hex)
+    return string.fromUtf8(bytes[:])
+}
+
+fn hexDecodeFails(hex: string) -> bool {
+    try {
+        var bytes = encoding.hexDecode(hex)
+        return len(bytes) < 0
+    } catch (e: HexError) {
+        return true
+    }
+}
+
+fn utf8ValidText(data: string) -> bool {
+    var view: Slice<u8> = data.bytes()
+    return encoding.utf8Valid(view)
+}
+
+fn utf16EncodeOptions(order: Endian) -> Utf16EncodeOptions {
+    var options = Utf16EncodeOptions()
+    options.order = order
+    return options
+}
+
+fn utf16Options(order: Endian, consumeBom: bool = true) -> Utf16DecodeOptions {
+    var options = Utf16DecodeOptions()
+    options.order = order
+    options.consumeBom = consumeBom
+    return options
+}
+
+fn utf16DecodeFails(data: Slice<u8>) -> bool {
+    try {
+        var decoded = encoding.utf16Decode(data)
+        return len(decoded) < 0
+    } catch (e: Utf16Error) {
+        return true
+    }
+}
+
+// ===== Hex encode =====
+
+@test
+fn test_hex_encode() {
+    assertEqual(hexEncodeText("Hello"), "48656c6c6f")
+}
+
+@test
+fn test_hex_encode_empty() {
+    assertEqual(hexEncodeText(""), "")
+}
+
+@test
+fn test_hex_encode_special() {
+    // Tab = 0x09, newline = 0x0a
+    assertEqual(hexEncodeText("\t"), "09")
+    assertEqual(hexEncodeText("\n"), "0a")
+}
+
+// ===== Hex decode (returns Array<byte>) =====
+
+@test
+fn test_hex_decode_bytes() {
+    var bytes = encoding.hexDecode("48656c6c6f")
+    assertEqual(len(bytes), 5)
+    assertEqual(bytes[0], 0x48)  // 'H'
+    assertEqual(bytes[4], 0x6f)  // 'o'
+}
+
+@test
+fn test_hex_decode_text_composition() {
+    assertEqual(hexDecodeText("48656c6c6f"), "Hello")
+}
+
+@test
+fn test_hex_decode_invalid() {
+    assertEqual(hexDecodeFails("gg"), true)
+    assertEqual(hexDecodeFails("abc"), true)  // odd length
+}
+
+@test
+fn test_hex_decode_empty() {
+    var bytes = encoding.hexDecode("")
+    assertEqual(len(bytes), 0)
+}
+
+@test
+fn test_hex_decode_uppercase() {
+    assertEqual(hexDecodeText("48656C6C6F"), "Hello")
+}
+
+// ===== Hex valid =====
+
+@test
+fn test_hex_valid() {
+    assertEqual(encoding.hexValid("48656c6c6f"), true)
+    assertEqual(encoding.hexValid("ABCDEF"), true)
+    assertEqual(encoding.hexValid("gg"), false)
+    assertEqual(encoding.hexValid("abc"), false)  // odd length
+    assertEqual(encoding.hexValid(""), true)
+}
+
+// ===== UTF-8 =====
+
+@test
+fn test_utf8_valid() {
+    assertEqual(utf8ValidText("Hello"), true)
+    assertEqual(utf8ValidText("你好"), true)
+    assertEqual(utf8ValidText(""), true)
+}
+
+@test
+fn test_utf8_invalid_bytes() {
+    var cont = Array<u8>(1)
+    cont[0] = 0x80
+    assertEqual(encoding.utf8Valid(cont[:]), false)
+
+    var overlong = Array<u8>(2)
+    overlong[0] = 0xC0
+    overlong[1] = 0x80
+    assertEqual(encoding.utf8Valid(overlong[:]), false)
+
+    var truncated = Array<u8>(2)
+    truncated[0] = 0xE2
+    truncated[1] = 0x82
+    assertEqual(encoding.utf8Valid(truncated[:]), false)
+
+    var surrogate = Array<u8>(3)
+    surrogate[0] = 0xED
+    surrogate[1] = 0xA0
+    surrogate[2] = 0x80
+    assertEqual(encoding.utf8Valid(surrogate[:]), false)
+}
+
+// ===== UTF-16 =====
+
+@test
+fn test_utf16_encode_decode_le() {
+    var units = encoding.utf16Encode("AB")
+    assertEqual(len(units), 4)
+    // LE: 'A' = 0x0041 -> [0x41, 0x00]
+    assertEqual(units[0], 0x41)
+    assertEqual(units[1], 0x00)
+    var decoded = encoding.utf16Decode(units[:])
+    assertEqual(decoded, "AB")
+}
+
+@test
+fn test_utf16_encode_decode_be() {
+    var units = encoding.utf16Encode("AB", utf16EncodeOptions(Endian.BE))
+    assertEqual(len(units), 4)
+    // BE: 'A' = 0x0041 -> [0x00, 0x41]
+    assertEqual(units[0], 0x00)
+    assertEqual(units[1], 0x41)
+    var decoded = encoding.utf16Decode(units[:], utf16Options(Endian.BE))
+    assertEqual(decoded, "AB")
+}
+
+@test
+fn test_utf16_cjk() {
+    var units = encoding.utf16Encode("你好")
+    assertEqual(len(units), 4)  // 2 BMP chars x 2 bytes
+    var decoded = encoding.utf16Decode(units[:])
+    assertEqual(decoded, "你好")
+}
+
+@test
+fn test_utf16_empty() {
+    var units = encoding.utf16Encode("")
+    assertEqual(len(units), 0)
+    var decoded = encoding.utf16Decode(units[:])
+    assertEqual(decoded, "")
+}
+
+@test
+fn test_utf16_odd_length_invalid() {
+    var bytes = Array<u8>(1)
+    assertEqual(utf16DecodeFails(bytes[:]), true)
+}
+
+@test
+fn test_utf16_surrogate_errors() {
+    var low = Array<u8>(2)
+    low[0] = 0x00
+    low[1] = 0xDC
+    assertEqual(utf16DecodeFails(low[:]), true)
+
+    var missing = Array<u8>(2)
+    missing[0] = 0x00
+    missing[1] = 0xD8
+    assertEqual(utf16DecodeFails(missing[:]), true)
+
+    var invalid = Array<u8>(4)
+    invalid[0] = 0x00
+    invalid[1] = 0xD8
+    invalid[2] = 0x41
+    invalid[3] = 0x00
+    assertEqual(utf16DecodeFails(invalid[:]), true)
+}
+
+@test
+fn test_utf16_bom_options() {
+    var bom = Array<u8>(4)
+    bom[0] = 0xFE
+    bom[1] = 0xFF
+    bom[2] = 0
+    bom[3] = 65
+    assertEqual(encoding.utf16Decode(bom[:]), "A")
+    var kept = encoding.utf16Decode(bom[:], utf16Options(Endian.BE, false))
+    assertEqual(len(kept), 2)
+    assertEqual(kept.runes().nth(0), '\u{FEFF}')
+    assertEqual(kept.runes().nth(1), 'A')
+}

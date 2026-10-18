@@ -1,0 +1,26 @@
+// anchor: task-208-extern-layout-bytecode-roundtrip
+import mem
+import { BytecodeHeader } from "./_extern_layout_bytecode_lib"
+
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+}
+
+fn main() {
+    var raw = unsafe { malloc(mem.sizeOf<BytecodeHeader>() as usize) }
+    unsafe {
+        mem.withSliceMut<BytecodeHeader>(raw, 1, ref raw,
+            fn(headers: ref MutSlice<BytecodeHeader>) {
+                headers[0].tag = 7
+                headers[0].length = 37
+                headers[0].delta = -37
+                print(headers[0].tag)
+                print(headers[0].length)
+                print(headers[0].delta)
+            })
+        free(raw)
+    }
+}
+
+main()

@@ -1,0 +1,448 @@
+{
+  "schema": 1,
+  "sources": {
+    "ffi/c_export_scalar": "tests/diff/cases/semantics/ffi/c_export_scalar.xr",
+    "cleanup/defer_block_scope_exits": "tests/diff/cases/semantics/cleanup/defer_block_scope_exits.xr",
+    "cleanup/defer_builtin_method_mix": "tests/diff/cases/semantics/cleanup/defer_builtin_method_mix.xr",
+    "cleanup/defer_coroutine": "tests/diff/cases/semantics/cleanup/defer_coroutine.xr",
+    "cleanup/defer_panic_unwind": "tests/diff/cases/semantics/cleanup/defer_panic_unwind.xr",
+    "float_fmt/f32_rounding": "tests/diff/cases/semantics/float_fmt/f32_rounding.xr",
+    "float_fmt/finite": "tests/diff/cases/semantics/float_fmt/finite.xr",
+    "float_fmt/fma_contraction": "tests/diff/cases/semantics/float_fmt/fma_contraction.xr",
+    "float_fmt/neg_zero_const_pool": "tests/diff/cases/semantics/float_fmt/neg_zero_const_pool.xr",
+    "float_fmt/special_values": "tests/diff/cases/semantics/float_fmt/special_values.xr",
+    "int_wrap/uint64_print_compare": "tests/diff/cases/semantics/int_wrap/uint64_print_compare.xr",
+    "modules/xmod_coro": "tests/diff/cases/semantics/modules/xmod_coro.xr",
+    "modules/xmod_private_const_defaults": "tests/diff/cases/semantics/modules/xmod_private_const_defaults.xr",
+    "modules/xmod_static": "tests/diff/cases/semantics/modules/xmod_static.xr",
+    "modules/xmod_static_defaults": "tests/diff/cases/semantics/modules/xmod_static_defaults.xr",
+    "ownership/auto_borrow_value_struct_return_downgrade": "tests/diff/cases/semantics/ownership/auto_borrow_value_struct_return_downgrade.xr",
+    "ownership/closure_mutable_scalar_direct_call": "tests/diff/cases/semantics/ownership/closure_mutable_scalar_direct_call.xr",
+    "ownership/in_mutator_scalar_from_borrow": "tests/diff/cases/semantics/ownership/in_mutator_scalar_from_borrow.xr",
+    "ownership/in_return_scalar_from_borrow": "tests/diff/cases/semantics/ownership/in_return_scalar_from_borrow.xr",
+    "ownership/in_store_scalar_from_borrow": "tests/diff/cases/semantics/ownership/in_store_scalar_from_borrow.xr",
+    "ownership/loop_ref_array_pop_backedge": "tests/diff/cases/semantics/ownership/loop_ref_array_pop_backedge.xr",
+    "ownership/shared_binding_boundaries": "tests/diff/cases/semantics/ownership/shared_binding_boundaries.xr",
+    "ownership/stack_closure_cell_capture": "tests/diff/cases/semantics/ownership/stack_closure_cell_capture.xr",
+    "ownership/value_struct_alias_copy_param": "tests/diff/cases/semantics/ownership/value_struct_alias_copy_param.xr",
+    "condition/bool_nullable_explicit": "tests/diff/cases/semantics/condition/bool_nullable_explicit.xr",
+    "exception/assertion_same_t_parity": "tests/diff/cases/semantics/exception/assertion_same_t_parity.xr",
+    "exception/catch_panic": "tests/diff/cases/semantics/exception/catch_panic.xr",
+    "exception/defer_stack_growth": "tests/diff/cases/semantics/exception/defer_stack_growth.xr",
+    "exception/pattern_catch": "tests/diff/cases/semantics/exception/pattern_catch.xr",
+    "collections/array_unshift_shared_core": "tests/diff/cases/semantics/collections/array_unshift_shared_core.xr",
+    "collections/byte_array_bool_short_circuit_liveness_shared_core": "tests/diff/cases/semantics/collections/byte_array_bool_short_circuit_liveness_shared_core.xr",
+    "value_struct_generic_annotation": "tests/diff/cases/semantics/value_struct_generic_annotation.xr",
+    "oop/enum_static_methods": "tests/diff/cases/semantics/oop/enum_static_methods.xr",
+    "oop/typename_class_instance": "tests/diff/cases/semantics/oop/typename_class_instance.xr",
+    "stdlib/time_query_system_direct": "tests/diff/cases/semantics/stdlib/time_query_system_direct.xr",
+    "side_effects/arg_order": "tests/diff/cases/semantics/side_effects/arg_order.xr",
+    "side_effects/short_circuit": "tests/diff/cases/semantics/side_effects/short_circuit.xr",
+    "coro/cycle_leak_bounded_by_coroutine_heap": "tests/diff/cases/semantics/coro/cycle_leak_bounded_by_coroutine_heap.xr",
+    "regression/0398_null_test_owner_edges": "tests/regression/03_operators/0398_null_test_owner_edges.xr",
+    "match/adt_enum_nonpayload_variant": "tests/diff/cases/match/adt_enum_nonpayload_variant.xr",
+    "observed/assertion_same_t_parity": "tests/unit/xir/legacy_consumers/fixtures/independent_run_observations/assertion_same_t_parity/root.xr",
+    "exception/match_non_exhaustive_panic_shape": "tests/diff/cases/semantics/exception/match_non_exhaustive_panic_shape.xr",
+    "cleanup/defer_loop_scope": "tests/diff/cases/semantics/cleanup/defer_loop_scope.xr",
+    "helper/animals": "tests/diff/cases/semantics/modules/_animals.xr",
+    "helper/borrowed_arg_lib": "tests/diff/cases/semantics/modules/_borrowed_arg_lib.xr",
+    "helper/corolib": "tests/diff/cases/semantics/modules/_corolib.xr",
+    "helper/genbox": "tests/diff/cases/semantics/modules/_genbox.xr",
+    "helper/nested_class_field_lib": "tests/diff/cases/semantics/modules/_nested_class_field_lib.xr",
+    "helper/opts_a": "tests/diff/cases/semantics/modules/_opts_a.xr",
+    "helper/opts_b": "tests/diff/cases/semantics/modules/_opts_b.xr",
+    "helper/private_const_default": "tests/diff/cases/semantics/modules/_private_const_default.xr",
+    "helper/same_name_method_a": "tests/diff/cases/semantics/modules/_same_name_method_a.xr",
+    "helper/same_name_method_b": "tests/diff/cases/semantics/modules/_same_name_method_b.xr",
+    "helper/shapes": "tests/diff/cases/semantics/modules/_shapes.xr",
+    "helper/static_defaults": "tests/diff/cases/semantics/modules/_static_defaults.xr",
+    "helper/value_struct_return_release_lib": "tests/diff/cases/semantics/modules/_value_struct_return_release_lib.xr",
+    "helper/array_fill_ref_lib": "tests/diff/cases/semantics/collections/_array_fill_ref_lib.xr",
+    "object/object_static_index_get_set": "tests/diff/cases/semantics/object/object_static_index_get_set.xr",
+    "ownership/shared_copy_to_shared": "tests/diff/cases/semantics/ownership/shared_copy_to_shared.xr",
+    "int_wrap/fixed_array_uint64_lane": "tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr",
+    "slice/string_byte_slice_receiver_nll": "tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr",
+    "observed/array_logical_const_copy": "tests/unit/xir/legacy_consumers/fixtures/array_logical_const_copy/root.xr",
+    "collections/span_active_borrow_scope_shared_core": "tests/diff/cases/semantics/collections/span_active_borrow_scope_shared_core.xr",
+    "slice/string_byte_slice_view": "tests/diff/cases/semantics/slice/string_byte_slice_view.xr",
+    "functions/higher_order_closures": "tests/diff/cases/semantics/functions/higher_order_closures.xr",
+    "functions/vararg_functions": "tests/diff/cases/semantics/functions/vararg_functions.xr",
+    "condition/match_is_arms_no_separator": "tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr",
+    "generic_type_alias": "tests/diff/cases/semantics/generic_type_alias.xr",
+    "oop/override_checked_valid": "tests/diff/cases/semantics/oop/override_checked_valid.xr"
+  },
+  "inputs": [
+    {
+      "path": "tests/diff/cases/semantics/ffi/c_export_scalar.xr",
+      "lf_sha256": "5386dcd8c5ecc5cdfd6211b935631761aa4e5d5801a68852e33390586d63dac3"
+    },
+    {
+      "path": "tests/diff/cases/semantics/cleanup/defer_block_scope_exits.xr",
+      "lf_sha256": "89affc8a83f28dbd3e43f5806fcf5be2ab3c8f454170a1ee74d68eee2991bf4a"
+    },
+    {
+      "path": "tests/diff/cases/semantics/cleanup/defer_builtin_method_mix.xr",
+      "lf_sha256": "4d87a4787a1bae61349640f415471778e5a5524b55fd15bf4693c112e206c507"
+    },
+    {
+      "path": "tests/diff/cases/semantics/cleanup/defer_coroutine.xr",
+      "lf_sha256": "16fed0f8c2d4622263bdeea3a30d65bd9aa69400cd2a4c8356e83f9b2e4c47ef"
+    },
+    {
+      "path": "tests/diff/cases/semantics/cleanup/defer_panic_unwind.xr",
+      "lf_sha256": "8db007087d02cb360037a459cc6d6bea846b37274530e02d835d558e5c0e6f9a"
+    },
+    {
+      "path": "tests/diff/cases/semantics/float_fmt/f32_rounding.xr",
+      "lf_sha256": "963dc649c889c70dfdc41f9c845207fdea356009ba4d0bbe207819fe29de313f"
+    },
+    {
+      "path": "tests/diff/cases/semantics/float_fmt/finite.xr",
+      "lf_sha256": "837dffdecb1f52accccd4f46d78446164920a51fb010f0e6603cb963f7f85f71"
+    },
+    {
+      "path": "tests/diff/cases/semantics/float_fmt/fma_contraction.xr",
+      "lf_sha256": "ad2d457c2a7dbd136f152f92638609affd2b0f25be03ff59f33af79954440ec0"
+    },
+    {
+      "path": "tests/diff/cases/semantics/float_fmt/neg_zero_const_pool.xr",
+      "lf_sha256": "23cefd3e4e12fd3b42e84471d6e51f8d75e59480a54121568ec5e2fc94479c76"
+    },
+    {
+      "path": "tests/diff/cases/semantics/float_fmt/special_values.xr",
+      "lf_sha256": "56323d90bb66ab80d4ab2e811a13733845443db0869c8f2742619c80c2a7370f"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/uint64_print_compare.xr",
+      "lf_sha256": "8de3ed71211654d4980d2f46a4960a14a1229bacc35c897d040dd5a3539751a6"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/xmod_coro.xr",
+      "lf_sha256": "42563439f1b530c7219086050c920bca695bdc992b987ee945c9aa30662d6cbf"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/xmod_private_const_defaults.xr",
+      "lf_sha256": "e968d554ec6b648a089eb79817567b0abc8450445b719da909a819a692fd5405"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/xmod_static.xr",
+      "lf_sha256": "0ef8393c89c91c368efc622daefe4670d8bf2f3665ad79d0d0a956e71e4d81af"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/xmod_static_defaults.xr",
+      "lf_sha256": "b9cca2cf6dad50f39d6695b96a2a751ba56d506625d1bcabf05b16ebe369526b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/auto_borrow_value_struct_return_downgrade.xr",
+      "lf_sha256": "5b4718c006cb85e474df11563ad84d5f2268729ed8f6a4995a7cc19012bd413c"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/closure_mutable_scalar_direct_call.xr",
+      "lf_sha256": "540549e1a0d3862fa2fa1d41aa664c41b247858708cf604df4a53249137ba02f"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_mutator_scalar_from_borrow.xr",
+      "lf_sha256": "52ebd0c46d1c7d0601bd69763e632fc33ae85524f01184587bfdc3d1f9acf3c0"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_return_scalar_from_borrow.xr",
+      "lf_sha256": "327956aa9e29d250a11b5725df7e8db56977cb76e4af1b3498e88eaea3387b0a"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_store_scalar_from_borrow.xr",
+      "lf_sha256": "3a1580924b504e69654316eeed7a8bcf5db5730b9d91726bcabfbc1fb8c35657"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/loop_ref_array_pop_backedge.xr",
+      "lf_sha256": "10b8d76260315925f3078f0da770c42fd399f08125c47cb87709424bb00da376"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/shared_binding_boundaries.xr",
+      "lf_sha256": "0a4cff162782cd92f784c9a2c1e05f9d6a0390fe5a9c6886a9bbc0fe66e1ec21"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/stack_closure_cell_capture.xr",
+      "lf_sha256": "91d7014caaeddbd3e937cb1d2afc0664edfb938116e4dc7f62f9351ac24b4445"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/value_struct_alias_copy_param.xr",
+      "lf_sha256": "036ca3efccfa536a3beeeb73906f2f942d562d643176ca6a8f9609125a78e395"
+    },
+    {
+      "path": "tests/diff/cases/semantics/condition/bool_nullable_explicit.xr",
+      "lf_sha256": "558f8578080b6164318a6c0800e56a095e5767a6d6a9c21c228c91f6273c0094"
+    },
+    {
+      "path": "tests/diff/cases/semantics/exception/assertion_same_t_parity.xr",
+      "lf_sha256": "7dde3aa7bbade2bd1e65936d7428f5b9616dcf387b61b17734128cd58659c087"
+    },
+    {
+      "path": "tests/diff/cases/semantics/exception/catch_panic.xr",
+      "lf_sha256": "1fb72e6d69ab7db8498fa6e51408c5361a248236dcb7d1358ae944ec6fe92272"
+    },
+    {
+      "path": "tests/diff/cases/semantics/exception/defer_stack_growth.xr",
+      "lf_sha256": "97ccbe8b3c81dbfa0e280da38eb1e695f6a9007670162c10eaa97059dc416bb6"
+    },
+    {
+      "path": "tests/diff/cases/semantics/exception/pattern_catch.xr",
+      "lf_sha256": "738365289d6c2507bf5a53ae2c8fde2b7456c9824ec84eb9521b6648772e7a38"
+    },
+    {
+      "path": "tests/diff/cases/semantics/collections/array_unshift_shared_core.xr",
+      "lf_sha256": "86e6b0a9e289731a025585e4e4da94de155aa662130dfe3f0969cae0a722781d"
+    },
+    {
+      "path": "tests/diff/cases/semantics/collections/byte_array_bool_short_circuit_liveness_shared_core.xr",
+      "lf_sha256": "385ef4a4058d3479af0e78159c309d198f041fc568c62e60421a1391bcc169e6"
+    },
+    {
+      "path": "tests/diff/cases/semantics/value_struct_generic_annotation.xr",
+      "lf_sha256": "96aac80d18c0525e67f1955a07a4563da520c1247ea56fd970c262ea34b7be0b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/oop/enum_static_methods.xr",
+      "lf_sha256": "0c726f36103f08bfe0bbaeb50c935ec4e6de9cb35190bd02753385448cd306ba"
+    },
+    {
+      "path": "tests/diff/cases/semantics/oop/typename_class_instance.xr",
+      "lf_sha256": "7c303bd7350e86a2545111172fcda6b1410cbda9fd2e0cb3ea4afac378b4ad5e"
+    },
+    {
+      "path": "tests/diff/cases/semantics/stdlib/time_query_system_direct.xr",
+      "lf_sha256": "d8f410f68560a391fc9e4189cd2c7fc045ac4fa825df15d7bfa975d74ff1287c"
+    },
+    {
+      "path": "tests/diff/cases/semantics/side_effects/arg_order.xr",
+      "lf_sha256": "ee1c3adcc102599a370522d473a4f63eb70b86a4fc500cf957cd745e8ec93855"
+    },
+    {
+      "path": "tests/diff/cases/semantics/side_effects/short_circuit.xr",
+      "lf_sha256": "d0e784c06269efdbc6f2027b14dbf00a146b51f4cba601d80b97ab89ff9ad276"
+    },
+    {
+      "path": "tests/diff/cases/semantics/coro/cycle_leak_bounded_by_coroutine_heap.xr",
+      "lf_sha256": "0bac8c4696f3034ee5394bcf0d4a72adfaa102ab8d58c1d6a425fd7c6e49e75f"
+    },
+    {
+      "path": "tests/regression/03_operators/0398_null_test_owner_edges.xr",
+      "lf_sha256": "9af34727f47004b6718764417d5541db27d2d0a2271c65e76a2dd84f1f58e89a"
+    },
+    {
+      "path": "tests/diff/cases/match/adt_enum_nonpayload_variant.xr",
+      "lf_sha256": "dc2b37c4520d5104037ff9374e6db712ab09993ce36a103f24de45b4da5bdfab"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_corolib.xr",
+      "lf_sha256": "b659e49fd89c86f4573eecae2d58a4160aa4293c61c18cd8bb6fa323b05ed90b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_private_const_default.xr",
+      "lf_sha256": "b16a75ab4ef1988e4e4fecf4b5d631942cef80279224f7b976c58aca1205eadc"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_shapes.xr",
+      "lf_sha256": "bb6f89feaa9b0f3c1556e2a98dcc0ae38d346d2b156eb8081e265b7557c1279d"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_static_defaults.xr",
+      "lf_sha256": "5c5dd3ce4b7391747365687f7d368b53671968e3e0a747a07645f71d8e3c1fc7"
+    },
+    {
+      "path": "spec/source/sections/003-2-type-system.md",
+      "lf_sha256": "b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677"
+    },
+    {
+      "path": "spec/source/sections/004-3-expressions.md",
+      "lf_sha256": "1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c"
+    },
+    {
+      "path": "spec/source/sections/006-5-declarations.md",
+      "lf_sha256": "17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d"
+    },
+    {
+      "path": "spec/source/sections/009-8-error-handling.md",
+      "lf_sha256": "3679ded015ad0222df39070b598fe26c8099247f9e410305a3f1527b9e63161b"
+    },
+    {
+      "path": "spec/source/sections/011-10-concurrency-and-coroutines.md",
+      "lf_sha256": "27c232a9575d0d40e800ea5730e5d2b96e8f2e62e646731a3d9de2e0eea35aea"
+    },
+    {
+      "path": "spec/source/sections/018-17-compilation-pipeline.md",
+      "lf_sha256": "91e9ef4bc0ce560d6621a1dbf8bd6a3f23c58e073e97469b10b7dece5866e440"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1149_module_call_stack_grow.xr",
+      "lf_sha256": "b1deea660566ad74c64c29594657e775d282ccb77d48cc66812653d84e58533f"
+    },
+    {
+      "path": "tests/regression/11_coroutine/1151_inject_queue_spill.xr",
+      "lf_sha256": "ae419ce6243abfe696843fbba0c8b1ac600a59417c442b266e65222b93709182"
+    },
+    {
+      "path": "tests/regression/11_coroutine/modules/big_stack.xr",
+      "lf_sha256": "defeaa1c1f02cdca57347ac809a6bf430a492c769f3105553b13dfb2721046c2"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/independent_run_observations/assertion_same_t_parity/root.xr",
+      "lf_sha256": "02f589f6454b9a486e8c3a78c1e2429b3c67b7eb43dddeb87f9b284850f4b99d"
+    },
+    {
+      "path": "tests/diff/cases/semantics/exception/match_non_exhaustive_panic_shape.xr",
+      "lf_sha256": "0e93d68b25438ba3b6cb1857900c916ed46de2821b583a3acbc2c7b8f50fd4ed"
+    },
+    {
+      "path": "src/xir/xxir_panic_value.inc.c",
+      "lf_sha256": "dcfe14a864c000c8bd4efa809c5b55204868e40e46156fe384a88133c3b9db02"
+    },
+    {
+      "path": "spec/source/sections/019-18-error-codes.md",
+      "lf_sha256": "2c4416085d5d38f37fb0e434d863cba1ff5d5758d44efb29402fa5158282d9ad"
+    },
+    {
+      "path": "tests/diff/cases/semantics/cleanup/defer_loop_scope.xr",
+      "lf_sha256": "fb9ada7ff862a7e87457fad3543e05d79ca999238e7e3a01ca3f6e1488b36af3"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_animals.xr",
+      "lf_sha256": "74fcfe2315b57f4c32c163f72741fcf9206900aea49c7bad1320bcd4d6e24c96"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_borrowed_arg_lib.xr",
+      "lf_sha256": "45ac2aa9664bf5d894a40e8d24e98bf0c8a0df5dd4b271d4b9b9f24952767cbf"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_genbox.xr",
+      "lf_sha256": "a920b9d261d1187ce75f4bf9ea719086906a9475bb28c9d1d316f08178d937fa"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_nested_class_field_lib.xr",
+      "lf_sha256": "e7945dde250091942b288e58e4ec0f1ba36abcf2fd16bc66bb4107028fa0662b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_opts_a.xr",
+      "lf_sha256": "156a51d75d0c717ae02c55f74c610a5dcee05bb4348ab79b2d5d2613f5132fcc"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_opts_b.xr",
+      "lf_sha256": "f3a1e8b9f1c31627ecd08a2173e47d5cb2d82ee4963b94f8b2dc338b30f11230"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_same_name_method_a.xr",
+      "lf_sha256": "0d3f0f38b2c6d04b89312c462496b3933fce6a7fe72a0a0a55040730f272572c"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_same_name_method_b.xr",
+      "lf_sha256": "3cb02b75792715e9a7f6b25d26010f6309db1ab624d84c78335ed42f1a4a52ec"
+    },
+    {
+      "path": "tests/diff/cases/semantics/modules/_value_struct_return_release_lib.xr",
+      "lf_sha256": "dd38cc00938ea85c8506ba7e546dbd307d2753d18347928ef8bb873392ef055b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/collections/_array_fill_ref_lib.xr",
+      "lf_sha256": "dba3bf1ee43bedfa5478ef7fac827ca7e52be0c3d840b2985d58d3ef197f1de0"
+    },
+    {
+      "path": "tests/diff/cases/semantics/object/object_static_index_get_set.xr",
+      "lf_sha256": "c4e841d7053fee6347ac24569f3ccb4db4a125cf7f4a0b9fdbe2ea7a78b55bb3"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/shared_copy_to_shared.xr",
+      "lf_sha256": "236c6b6d2e1622e95f79ed340a3693007b95be45570a1d9a1562a39786c1aa5e"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr",
+      "lf_sha256": "cbea930f40257ef088bec96d58b7565f5fdfee9c89dc16cd625e6e16c28b7886"
+    },
+    {
+      "path": "tests/diff/cases/semantics/slice/string_byte_slice_receiver_nll.xr",
+      "lf_sha256": "3dff41d162190ec42b23f2adde719faadad5b2b180f0a39262ed05af554d4446"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/array_logical_const_copy/root.xr",
+      "lf_sha256": "372fb6ee06b4e4ecc74200b3ddf755d0efc563055041e85352aa92a74ef96dd6"
+    },
+    {
+      "path": "tests/diff/cases/semantics/collections/span_active_borrow_scope_shared_core.xr",
+      "lf_sha256": "0d4d32f1ad5d7668969f6730f0f073de5a80fec26f71333b04152e8ae4e3ddd2"
+    },
+    {
+      "path": "tests/diff/cases/semantics/slice/string_byte_slice_view.xr",
+      "lf_sha256": "305af8ac6a4c351040ae69ad981561a80864ac04a76081748175407518f215d8"
+    },
+    {
+      "path": "tests/diff/cases/semantics/functions/higher_order_closures.xr",
+      "lf_sha256": "ed88a13484b40e2773ebde5f830cb3f1009b61a9351b4bbe6928b8e5f917c9f3"
+    },
+    {
+      "path": "tests/diff/cases/semantics/functions/vararg_functions.xr",
+      "lf_sha256": "ed5f9c8e56ece46677b2072ade29e281bb63f904bec72d2125128660096209d4"
+    },
+    {
+      "path": "tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr",
+      "lf_sha256": "c0bcf3d2d3441a324f4f553465e07adfcb9cabbff6cc9abb28e8069165d13e06"
+    },
+    {
+      "path": "src/xir/xxir_float_format.inc.c",
+      "lf_sha256": "84b274ea969dbd5a62a7b8b780d87cad905c20dff46c3f752662c1aab87ef457"
+    },
+    {
+      "path": "tests/diff/cases/semantics/generic_type_alias.xr",
+      "lf_sha256": "f6d7e3ce00a163a821f938bdfc997a1b37d9a856f040c4eb9b1d36456d585d0b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/oop/override_checked_valid.xr",
+      "lf_sha256": "de5bbf5c4db212d008a1cfef5b2b6e258c02c808ac6fcdd39b05aa5b7b8225b3"
+    }
+  ],
+  "scope": "Whole original run-entry byte observations only. Original helper definitions, named test entries, complete FI/resources/physical/provider qualification remain separate.",
+  "precision_rule": "Float operations round at the common operand precision; f32 multiplication is rounded before addition. The original f32_rounding comment about narrowing only on store is historical.",
+  "independence": "No captured Xray output is read to calculate these expectations.",
+  "reviewed_input_epochs": [
+    {
+      "fixed_input": "d5965cf74aefb2125c5b5d43377effcef7f80279",
+      "prior_product_head": "dc6c4b1df2f227d16b4f7ffc18b00e3914375152",
+      "inputs": [
+        {
+          "path": "tests/diff/cases/semantics/cleanup/defer_builtin_method_mix.xr",
+          "prior_lf_sha256": "013abd1a8f0609bf6850c4292f39a7a517dcba0fe912a56288c429291d25dbe7"
+        },
+        {
+          "path": "tests/diff/cases/semantics/ownership/in_store_scalar_from_borrow.xr",
+          "prior_lf_sha256": "0cb2dfdaa6e319ee326b11fea905f310405ebf56fc5d58c2c9616a06ae3bd0ed"
+        },
+        {
+          "path": "tests/diff/cases/semantics/oop/typename_class_instance.xr",
+          "prior_lf_sha256": "5e76d61ef12eadbd13638a57a517769249c22ff4261d8250a402383cc1dd3173"
+        },
+        {
+          "path": "tests/diff/cases/semantics/coro/cycle_leak_bounded_by_coroutine_heap.xr",
+          "prior_lf_sha256": "d60d9e3007b4f99a607d8d7fde03872d7ffe9d5fbd8059360f4b7d455d7beb6c"
+        },
+        {
+          "path": "tests/diff/cases/semantics/modules/_shapes.xr",
+          "prior_lf_sha256": "558ccd12a574c2f167250660a1e1dbb4138b3469a881bd5e9aa4d9f67c688803"
+        },
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "prior_lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+        },
+        {
+          "path": "spec/source/sections/006-5-declarations.md",
+          "prior_lf_sha256": "56fa3d36bc0c5ee38b7c52dafbe26d7b8b0a45a6909c14a8626a9bba515cc4a7"
+        },
+        {
+          "path": "spec/source/sections/009-8-error-handling.md",
+          "prior_lf_sha256": "569cafb786430df363674f97f6073e908d76b4a3484f3fb26239b0895342507e"
+        },
+        {
+          "path": "spec/source/sections/018-17-compilation-pipeline.md",
+          "prior_lf_sha256": "e7e24ccd33afa46f68a9daa9368e5d947194c1044a447527dcda173b0ab28b23"
+        }
+      ],
+      "semantic_review": "See P19 fixed-input handoff; expected values unchanged."
+    }
+  ]
+}

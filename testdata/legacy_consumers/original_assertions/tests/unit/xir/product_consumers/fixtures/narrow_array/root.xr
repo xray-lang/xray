@@ -1,0 +1,12 @@
+const bytes: Array<u8> = [0, 255, 42]
+var visits: i64 = 0
+fn next() -> u8 { visits = visits + 1; return visits as u8 }
+fn answer() -> i64 {
+  var ordered: Array<u8> = [next(), next(), next()]
+  const signed: Array<i8> = [-128, 127]
+  assert(ordered[0] == 1 && ordered[1] == 2 && ordered[2] == 3)
+  assert(visits == 3 && bytes[0] == 0 && bytes[1] == 255)
+  assert(signed[0] == -128 && signed[1] == 127)
+  return bytes[2] as i64
+}
+export fn consumerAnswer() -> i64 { return answer() }

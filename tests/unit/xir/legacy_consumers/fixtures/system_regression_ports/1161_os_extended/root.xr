@@ -1,0 +1,178 @@
+// 1161_os_extended.xr - OS module extended tests (user info, sysinfo, exec)
+
+import os
+import io
+import path
+import time
+
+// ===== User Information =====
+
+@test
+fn test_username() {
+    var name = os.username()
+    assert(name != null)
+    assert(len(name!) > 0)
+}
+
+@test
+fn test_homedir() {
+    var home = os.homedir()
+    assert(home != null)
+    assert(len(home!) > 0)
+}
+
+@test
+fn test_homedir_skips_empty_home_env() {
+    var oldHome = os.getenv("HOME")
+    os.setenv("HOME", "")
+
+    var home = os.homedir()
+    assert(home != null)
+    assert(len(home!) > 0)
+
+    if (oldHome != null) {
+        os.setenv("HOME", oldHome ?? "")
+    } else {
+        os.unsetenv("HOME")
+    }
+}
+
+@test
+fn test_uid() {
+    var id = os.uid()
+    assert(id >= 0)
+}
+
+@test
+fn test_gid() {
+    var id = os.gid()
+    assert(id >= 0)
+}
+
+// ===== System Information =====
+
+@test
+fn test_cpuCount() {
+    var n = os.cpuCount()
+    assert(n >= 1)
+}
+
+@test
+fn test_totalMemory() {
+    var mem = os.totalMemory()
+    // At least 64MB
+    assert(mem > 64 * 1024 * 1024)
+}
+
+@test
+fn test_freeMemory() {
+    var mem = os.freeMemory()
+    assert(mem > 0)
+}
+
+@test
+fn test_uptime() {
+    var up = os.uptime()
+    // System must have been running for at least 1 second
+    assert(up > 1.0)
+}
+
+@test
+fn test_loadavg() {
+    var avg = os.loadavg()
+    assertEqual(len(avg), 3)
+    // Load averages should be non-negative
+    assert(avg[0] >= 0.0)
+    assert(avg[1] >= 0.0)
+    assert(avg[2] >= 0.0)
+}
+
+// ===== Process & Signal =====
+
+@test
+fn test_ppid() {
+    var ppid = os.ppid()
+    assert(ppid > 0)
+}
+
+@test
+fn test_clock() {
+    var t = time.clock()
+    assert(t >= 0)
+}
+
+// ===== Process Execution =====
+
+@test
+fn test_exec_echo() {
+    var result = os.exec("echo hello")
+    assert(result != null)
+    var expected = os.platform() == "windows" ? "hello\r\n" : "hello\n"
+    assertEqual(result!.stdout.toString(), expected)
+    assertEqual(result!.exitCode, 0)
+    assertEqual(result!.stdoutTruncated, false)
+    assertEqual(result!.stderrTruncated, false)
+}
+
+@test
+fn test_exec_stderr() {
+    var result = os.exec("echo error_msg >&2")
+    assert(result != null)
+    var expected = os.platform() == "windows" ? "error_msg\r\n" : "error_msg\n"
+    assertEqual(result!.stderr.toString(), expected)
+    assertEqual(result!.exitCode, 0)
+}
+
+@test
+fn test_exec_exit_code() {
+    var result = os.exec("exit 42")
+    assert(result != null)
+    assertEqual(result!.exitCode, 42)
+}
+
+@test
+fn test_exec_command_output() {
+    if (os.platform() == "windows") {
+        // Windows echo adds \r\n; printf not available
+        var result = os.exec("echo abc")
+        assert(result != null)
+        assert(len(result!.stdout) > 0)
+    } else {
+        var result = os.exec("printf 'abc'")
+        assert(result != null)
+        assertEqual(result!.stdout.toString(), "abc")
+    }
+}
+
+@test
+fn test_exec_byte_capture_limits() {
+    var command = os.platform() == "windows" ? "<nul set /p =123456789" : "printf 123456789"
+    var result = os.exec(command, 4, 0)
+    assert(result != null)
+    assertEqual(result!.stdout.toString(), "1234")
+    assertEqual(result!.stdoutTruncated, true)
+    assertEqual(len(result!.stderr), 0)
+    assertEqual(result!.stderrTruncated, false)
+}
+
+// ===== Edge Cases =====
+
+@test
+fn test_setenv_return_value() {
+    var ok = os.setenv("XRAY_TEST_RET", "val")
+    assertEqual(ok, true)
+    os.unsetenv("XRAY_TEST_RET")
+}
+
+@test
+fn test_unsetenv_return_value() {
+    os.setenv("XRAY_TEST_UNSET", "val")
+    var ok = os.unsetenv("XRAY_TEST_UNSET")
+    assertEqual(ok, true)
+}
+
+@test
+fn test_chdir_invalid_path() {
+    var ok = io.chdir(path.from("/nonexistent_xray_test_path_12345"))
+    assertEqual(ok, false)
+}

@@ -1,0 +1,58 @@
+// Retain every original body and observe scalar results, including nested lexical scopes.
+// An unsigned integer has two ways to become text: the conversion the language
+// applies for `print` and `string(x)`, and the `toString()` method. Both must
+// answer with the same digits.
+//
+// The method used to dispatch on the receiver's name into the signed integer
+// implementation, where the runtime value is a bare tagged word carrying no
+// sign, so every value with the high bit set produced its negative twin while
+// the conversion path was correct. Values below 2^63 agreed, which is why the
+// disagreement was easy to miss.
+
+@test
+fn test_unsigned_to_string_matches_conversion() {
+    var big: u64 = 18446744073709551615
+    var p19Observed0 = big.toString()
+    assertEqual(p19Observed0, "18446744073709551615")
+    print(p19Observed0)
+    var p19Observed1 = big.toString()
+    assertEqual(p19Observed1, string(big))
+    print(p19Observed1)
+    var p19Observed2 = "x=" + big.toString()
+    assertEqual(p19Observed2, "x=18446744073709551615")
+    print(p19Observed2)
+}
+
+@test
+fn test_unsigned_to_string_at_high_bit_boundary() {
+    // 2^63 exactly: the smallest value whose high bit is set.
+    var half: u64 = 9223372036854775808
+    var p19Observed3 = half.toString()
+    assertEqual(p19Observed3, "9223372036854775808")
+    print(p19Observed3)
+
+    // One below it, where both paths always agreed.
+    var below: u64 = 9223372036854775807
+    var p19Observed4 = below.toString()
+    assertEqual(p19Observed4, "9223372036854775807")
+    print(p19Observed4)
+}
+
+@test
+fn test_signed_and_float_to_string_unchanged() {
+    // A fix for the unsigned answer must not pay for it here.
+    var negative: i64 = -1
+    var p19Observed5 = negative.toString()
+    assertEqual(p19Observed5, "-1")
+    print(p19Observed5)
+
+    var small: u64 = 42
+    var p19Observed6 = small.toString()
+    assertEqual(p19Observed6, "42")
+    print(p19Observed6)
+
+    var scalar: f64 = 1.5
+    var p19Observed7 = scalar.toString()
+    assertEqual(p19Observed7, "1.5")
+    print(p19Observed7)
+}

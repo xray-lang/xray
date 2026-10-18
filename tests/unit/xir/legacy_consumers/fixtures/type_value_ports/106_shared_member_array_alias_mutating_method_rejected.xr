@@ -1,0 +1,9 @@
+class Box {
+    items: Array<i64> = Array<i64>(1, 0)
+}
+
+const box = Box()
+var items = box.items
+items.push(1)
+print(len(box.items))
+print(len(items))

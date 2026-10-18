@@ -1,0 +1,8 @@
+fn read_and_bump(snapshot: i64, target: ref i64) {
+    target = snapshot + 1
+}
+
+var value = 1
+read_and_bump(value, ref value)
+
+print(value)

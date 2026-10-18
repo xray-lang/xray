@@ -1,0 +1,100 @@
+// 1434_net_byte_array_loopback.xr
+// TCP Array<byte> path: net.readInto / net.writeBytes
+
+import net
+import { NetConn, NetError, NetListener } from net
+
+fn tryListen(backlog: i64) -> NetListener? {
+    try {
+        return net.listen(0, backlog)
+    } catch (e: NetError) {
+        return null
+    }
+}
+
+fn serveBytesEcho(c: NetConn) {
+    defer { net.close(c) }
+    var buf = Array<u8>(16)
+    var n = net.readInto(c, ref buf)
+    if (n > 0) {
+        net.writeBytes(c, buf)
+    }
+    net.close(c)
+}
+
+fn acceptBytesEcho(lst: NetListener) {
+    var conn = net.accept(lst)!
+    net.close(lst)
+    go serveBytesEcho(conn)
+}
+
+fn serveBytesMaxLen(c: NetConn) {
+    defer { net.close(c) }
+    var buf = Array<u8>(16)
+    var n = net.readInto(c, ref buf, 3)
+    if (n > 0) {
+        net.writeBytes(c, buf)
+    }
+    net.close(c)
+}
+
+fn acceptBytesMaxLen(lst: NetListener) {
+    var conn = net.accept(lst)!
+    net.close(lst)
+    go serveBytesMaxLen(conn)
+}
+
+@test
+fn test_byte_array_echo_roundtrip() {
+    var maybeLst = tryListen(8)
+    assert(maybeLst != null)
+    var lst = maybeLst!
+    defer { net.close(lst) }
+    var port = net.port(lst)
+    assert(port > 0)
+
+    go acceptBytesEcho(lst)
+
+    var c = net.dial("127.0.0.1", port)
+    defer { net.close(c) }
+    var payload = Array<u8>([65, 0, 255, 66])
+    assertEqual(net.writeBytes(c, payload), 4)
+
+    var resp = Array<u8>(16)
+    var n = net.readInto(c, ref resp)
+    assertEqual(n, 4)
+    assertEqual(len(resp), n)
+    assertEqual(resp[0], 65)
+    assertEqual(resp[1], 0)
+    assertEqual(resp[2], 255)
+    assertEqual(resp[3], 66)
+
+    net.close(c)
+}
+
+@test
+fn test_read_into_maxlen_controls_length() {
+    var maybeLst = tryListen(8)
+    assert(maybeLst != null)
+    var lst = maybeLst!
+    defer { net.close(lst) }
+    var port = net.port(lst)
+    assert(port > 0)
+
+    go acceptBytesMaxLen(lst)
+
+    var c = net.dial("127.0.0.1", port)
+    defer { net.close(c) }
+    var payload = Array<u8>([80, 81, 82, 83, 84])
+    assertEqual(net.writeBytes(c, payload), 5)
+
+    var resp = Array<u8>(16)
+    var n = net.readInto(c, ref resp)
+    assertEqual(n, 3)
+    assertEqual(len(resp), n)
+    assertEqual(resp[0], 80)
+    assertEqual(resp[1], 81)
+    assertEqual(resp[2], 82)
+
+    net.close(c)
+}

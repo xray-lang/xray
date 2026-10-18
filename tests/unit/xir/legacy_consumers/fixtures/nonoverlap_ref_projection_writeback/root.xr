@@ -1,0 +1,34 @@
+class Pair {
+    left: i64
+    right: i64
+
+    init() {
+        this.left = 0
+        this.right = 0
+    }
+}
+
+fn fill_pair(left: ref i64, right: ref i64) {
+    left = 3
+    right = 7
+}
+
+fn read_and_fill(snapshot: i64, target: ref i64) {
+    target = snapshot + 5
+}
+
+@test
+fn test_member_nonoverlap_compile_surface() {
+    var pair = Pair()
+    fill_pair(ref pair.left, ref pair.right)
+    assertEqual(pair.left, 3)
+    assertEqual(pair.right, 7)
+}
+
+@test
+fn test_index_nonoverlap_compile_surface() {
+    var values = [2, 0]
+    read_and_fill(values[0], ref values[1])
+    assertEqual(values[0], 2)
+    assertEqual(values[1], 7)
+}

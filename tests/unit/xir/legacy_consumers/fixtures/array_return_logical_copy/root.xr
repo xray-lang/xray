@@ -1,0 +1,28 @@
+fn build_reversed() -> Array<i64> {
+    var a = [1, 2, 3]
+    return a.reverse()
+}
+
+var from_dead = build_reversed()
+print(len(from_dead))
+print(from_dead[0])
+print(from_dead[2])
+var a = [1, 2, 3]
+var result = a.reverse()
+a.push(4)
+print(len(a))
+print(len(result))
+print(result[0])
+print(result[2])
+result[0] = 9
+print(a[0])
+print(result[0])
+var total = 0
+var i = 0
+while (i < 20) {
+    var receiver = [1, 2, 3]
+    var returned = receiver.reverse()
+    total += returned[0]
+    i += 1
+}
+print(total)

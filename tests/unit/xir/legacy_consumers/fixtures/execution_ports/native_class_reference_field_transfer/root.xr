@@ -1,0 +1,45 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+import runtime
+import time
+
+class Packet {
+    payload: Array<u8>
+
+    init(payload: Array<u8>) {
+        this.payload = payload
+    }
+
+    replace(first: Array<u8>, second: Array<u8>) {
+        this.payload = first
+        this.payload = second
+        this.payload = this.payload
+    }
+}
+
+fn packetSize(payload: Array<u8>) -> i64 {
+    var packet = Packet(payload)
+    return len(packet.payload)
+}
+
+fn churn(payload: Array<u8>, rounds: i64) -> i64 {
+    time.sleep(1)
+    var total = 0
+    for (var i = 0; i < rounds; i++) {
+        total = total + packetSize(payload)
+    }
+    return total
+}
+
+var payload = Array<u8>(4096, 7)
+var beforeBytes = runtime.liveBytes()
+var beforeObjects = runtime.liveObjects()
+var total = churn(payload, 2000)
+time.sleep(1)
+
+var packet = Packet([1])
+packet.replace([2, 3], [4, 5, 6])
+
+print(total)
+print(len(packet.payload))
+print(runtime.liveBytes() - beforeBytes < 262144)
+print(runtime.liveObjects() - beforeObjects < 128)

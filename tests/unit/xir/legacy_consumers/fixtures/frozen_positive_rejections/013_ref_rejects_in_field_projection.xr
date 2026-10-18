@@ -1,0 +1,21 @@
+class Holder {
+    items: Array<i64>
+
+    init() {
+        this.items = []
+    }
+}
+
+fn mutate(data: ref Array<i64>) {
+    data.push(1)
+}
+
+fn view(holder: Holder) {
+    mutate(ref holder.items)
+}
+
+var holder = Holder()
+view(holder)
+
+print(len(holder.items))
+print(holder.items[0])

@@ -1,0 +1,16 @@
+class Box {
+    value: i64
+
+    init(value: i64) {
+        this.value = value
+    }
+}
+
+fn buildBox() -> i64 {
+    Coro.yield()
+    return 41
+}
+
+var task = go buildBox()
+var box = await task
+print(box + 1)

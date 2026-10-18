@@ -1,0 +1,89 @@
+// A plain `scope` is a wait barrier: child failures do not cancel siblings,
+// and callers observe outcomes through explicit task handles.
+
+import time
+
+enum SvErr { Msg { message: string } }
+
+fn ok_report(ch: Channel<i64>, value: i64) -> i64 {
+    ch.send(value)
+    return value
+}
+
+fn fail_report(ch: Channel<i64>, value: i64) -> i64 {
+    ch.send(value)
+    throw SvErr.Msg { message: "error_" + string(value) }
+    return 0
+}
+
+fn slow() -> i64 {
+    time.sleep(1000)
+    return 7
+}
+
+fn recv_sum(ch: Channel<i64>, count: i64) -> i64 {
+    var sum = 0
+    for (var i = 0; i < count; i++) {
+        match (ch.recv()) {
+            Recv.Value { value: v } -> { sum = sum + v }
+            _ -> {}
+        }
+    }
+    return sum
+}
+
+fn test_scope_waits_for_success_and_failure() {
+    const ch = Channel<i64>(3)
+    scope {
+        go ok_report(ch, 1)
+        go fail_report(ch, 10)
+        go ok_report(ch, 100)
+    }
+    var p19PlainScopeSum = recv_sum(ch, 3)
+    assertEqual(p19PlainScopeSum, 111)
+    print(p19PlainScopeSum)
+    ch.close()
+}
+
+fn test_explicit_task_handle_observes_failure() {
+    const ch = Channel<i64>(1)
+    scope {
+        var task = go fail_report(ch, 5)
+        var result = task.awaitResult()
+        match (result) {
+            TaskResult.Failed { error: _ } -> {}
+            _ -> { assert(false, "failed task should be observed through TaskResult") }
+        }
+        print(match (result) {
+            TaskResult.Failed { error: _ } -> true
+            _ -> false
+        })
+    }
+    var p19PlainScopeFive = recv_sum(ch, 1)
+    assertEqual(p19PlainScopeFive, 5)
+    print(p19PlainScopeFive)
+    ch.close()
+}
+
+fn test_cancelled_child_is_local_to_scope() {
+    scope {
+        var task = go slow()
+        task.cancel()
+        var result = task.awaitResult()
+        match (result) {
+            TaskResult.Cancelled -> {}
+            _ -> { assert(false, "cancelled task should report TaskResult.Cancelled") }
+        }
+        print(match (result) {
+            TaskResult.Cancelled -> true
+            _ -> false
+        })
+    }
+}
+
+@test
+fn test_scope_child_errors() {
+    test_scope_waits_for_success_and_failure()
+    test_explicit_task_handle_observes_failure()
+    test_cancelled_child_is_local_to_scope()
+}

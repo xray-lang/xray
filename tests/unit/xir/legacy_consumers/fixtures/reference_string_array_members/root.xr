@@ -1,0 +1,13 @@
+// anchor: array-member-reference-element-refused
+// Preserve all string Array mutations and observations under one XIR execution.
+fn main() {
+    var names = ["a", "b", "c"]
+    names.fill("z")
+    print(names[0])
+    names.push("w")
+    print(names[3])
+    print(names.indexOf("z"))
+    print(names.contains("w"))
+}
+
+main()

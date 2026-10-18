@@ -1,0 +1,106 @@
+// 1401_crypto_hmac.xr
+// 作者：xingleixu@gmail.com
+// 测试：crypto 库 HMAC 函数测试
+//
+// 覆盖功能：
+//   - HMAC-MD5
+//   - HMAC-SHA1
+//   - HMAC-SHA256
+
+import crypto
+
+// ============================================================
+// 第一部分：HMAC-SHA256 测试
+// ============================================================
+
+@test
+fn test_hmac_sha256_basic() {
+    // 基本 HMAC-SHA256 测试
+    var hmac = crypto.hmac("sha256", "key", "message")!
+    assertEqual(hmac, "6e9ef29b75fffc5b7abae527d58fdadb2fe42e7219011976917343065f58ed4a")
+}
+
+@test
+fn test_hmac_sha256_empty_message() {
+    // 空消息的 HMAC-SHA256
+    var hmac = crypto.hmac("sha256", "key", "")!
+    assertEqual(hmac, "5d5d139563c95b5967b9bd9a8c9b233a9dedb45072794cd232dc1b74832607d0")
+}
+
+@test
+fn test_hmac_sha256_complex_key() {
+    // 复杂密钥的 HMAC-SHA256
+    var hmac = crypto.hmac("sha256", "secret-key-123", "Hello World")!
+    assertEqual(hmac, "89fac429360de35a309dce612ef0e31baf76e254b7127527081c126fef48dd9f")
+}
+
+@test
+fn test_hmac_sha256_rfc4231_jefe_vector() {
+    var hmac = crypto.hmac("sha256", "Jefe", "what do ya want for nothing?")!
+    assertEqual(hmac, "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+}
+
+@test
+fn test_hmac_sha256_long_data() {
+    // 长数据的 HMAC-SHA256
+    var hmac = crypto.hmac("sha256", "secret", "The quick brown fox jumps over the lazy dog")!
+    assertEqual(hmac, "54cd5b827c0ec938fa072a29b177469c843317b095591dc846767aa338bac600")
+    assertEqual(len(hmac), 64)
+}
+
+// ============================================================
+// 第二部分：HMAC-SHA1 测试
+// ============================================================
+
+@test
+fn test_hmac_sha1_basic() {
+    // 基本 HMAC-SHA1 测试
+    var hmac = crypto.hmac("sha1", "key", "message")!
+    assertEqual(hmac, "2088df74d5f2146b48146caf4965377e9d0be3a4")
+}
+
+@test
+fn test_hmac_sha1_empty_message() {
+    // 空消息的 HMAC-SHA1
+    var hmac = crypto.hmac("sha1", "key", "")!
+    assertEqual(hmac, "f42bb0eeb018ebbd4597ae7213711ec60760843f")
+}
+
+@test
+fn test_hmac_sha1_length() {
+    // HMAC-SHA1 长度验证
+    var hmac = crypto.hmac("sha1", "secret", "data")!
+    assertEqual(hmac, "9818e3306ba5ac267b5f2679fe4abd37e6cd7b54")
+    assertEqual(len(hmac), 40)
+}
+
+// ============================================================
+// 第三部分：HMAC-MD5 测试
+// ============================================================
+
+@test
+fn test_hmac_md5_basic() {
+    // 基本 HMAC-MD5 测试
+    var hmac = crypto.hmac("md5", "key", "message")!
+    assertEqual(hmac, "4e4748e62b463521f6775fbf921234b5")
+}
+
+@test
+fn test_hmac_md5_empty_message() {
+    // 空消息的 HMAC-MD5
+    var hmac = crypto.hmac("md5", "key", "")!
+    assertEqual(hmac, "63530468a04e386459855da0063b6596")
+}
+
+@test
+fn test_hmac_md5_length() {
+    // HMAC-MD5 长度验证
+    var hmac = crypto.hmac("md5", "secret", "data")!
+    assertEqual(hmac, "df08aef118f36b32e29d2f47cda649b6")
+    assertEqual(len(hmac), 32)
+}
+
+@test
+fn test_hmac_unsupported_algorithm_returns_null() {
+    assertEqual(crypto.hmac("sha224", "key", "message"), null)
+}

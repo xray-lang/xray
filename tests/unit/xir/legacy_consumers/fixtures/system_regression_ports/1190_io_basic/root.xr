@@ -1,0 +1,183 @@
+// 1190_io_basic.xr - IO module basic tests
+
+import io
+import path
+
+// ===== Temp file + read/write =====
+
+@test
+fn test_temp_file() {
+    var tmp = io.tempFile()!
+    defer { io.remove(tmp) }
+    assert(io.exists(tmp))
+    io.remove(tmp)
+}
+
+@test
+fn test_write_read_file() {
+    var tmp = io.tempFile()!
+    defer { io.remove(tmp) }
+    io.writeFile(tmp, "hello\nworld\ntest")
+    var content = io.readFile(tmp)
+    assertEqual(content, "hello\nworld\ntest")
+    io.remove(tmp)
+}
+
+@test
+fn test_read_lines() {
+    var tmp = io.tempFile()!
+    defer { io.remove(tmp) }
+    io.writeFile(tmp, "line1\nline2\nline3")
+    var lines = io.readLines(tmp)
+    assertEqual(lines[0], "line1")
+    assertEqual(lines[1], "line2")
+    assertEqual(lines[2], "line3")
+    io.remove(tmp)
+}
+
+@test
+fn test_append_file() {
+    var tmp = io.tempFile()!
+    defer { io.remove(tmp) }
+    io.writeFile(tmp, "hello")
+    io.appendFile(tmp, " world")
+    var content = io.readFile(tmp)
+    assertEqual(content, "hello world")
+    io.remove(tmp)
+}
+
+// ===== File info =====
+
+@test
+fn test_file_stat() {
+    var tmp = io.tempFile()!
+    defer { io.remove(tmp) }
+    io.writeFile(tmp, "test content")
+    var st = io.stat(tmp)
+    assert(st != null)
+    assertEqual(st!.size, 12)
+    assertEqual(st!.isFile, true)
+    io.remove(tmp)
+}
+
+@test
+fn test_is_file() {
+    var tmp = io.tempFile()!
+    defer { io.remove(tmp) }
+    io.writeFile(tmp, "x")
+    assertEqual(io.isFile(tmp), true)
+    assertEqual(io.isDir(tmp), false)
+    io.remove(tmp)
+}
+
+@test
+fn test_file_size() {
+    var tmp = io.tempFile()!
+    defer { io.remove(tmp) }
+    io.writeFile(tmp, "12345")
+    assertEqual(io.fileSize(tmp), 5)
+    io.remove(tmp)
+}
+
+// ===== Directory operations =====
+
+@test
+fn test_mkdir_and_isdir() {
+    var tmpDir = io.tempDir()!
+    defer { io.removeAll(tmpDir) }
+    assertEqual(io.isDir(tmpDir), true)
+    io.removeAll(tmpDir)
+}
+
+@test
+fn test_mkdirp() {
+    var tmpDir = io.tempDir()!
+    defer { io.removeAll(tmpDir) }
+    var nested = path.join(tmpDir, path.from("a/b/c"))
+    io.mkdirp(nested)
+    assertEqual(io.isDir(nested), true)
+    io.removeAll(tmpDir)
+}
+
+@test
+fn test_read_dir() {
+    var tmpDir = io.tempDir()!
+    defer { io.removeAll(tmpDir) }
+    io.writeFile(path.join(tmpDir, path.from("file1.txt")), "f1")
+    io.writeFile(path.join(tmpDir, path.from("file2.txt")), "f2")
+    var entries = io.readDir(tmpDir)!
+    assert(len(entries) >= 2)
+    assertEqual(entries[0].toString(), "file1.txt")
+    assertEqual(entries[1].toString(), "file2.txt")
+    io.removeAll(tmpDir)
+}
+
+// ===== Copy and rename =====
+
+@test
+fn test_copy_file() {
+    var src = io.tempFile()!
+    defer { io.remove(src) }
+    io.writeFile(src, "copy test")
+    var dst = path.from(src.toString() + ".copy")
+    defer { io.remove(dst) }
+    io.copyFile(src, dst)
+    assertEqual(io.exists(dst), true)
+    assertEqual(io.readFile(dst), "copy test")
+    io.remove(src)
+    io.remove(dst)
+}
+
+@test
+fn test_rename() {
+    var src = io.tempFile()!
+    defer { io.remove(src) }
+    io.writeFile(src, "rename test")
+    var dst = path.from(src.toString() + ".renamed")
+    defer { io.remove(dst) }
+    io.rename(src, dst)
+    assertEqual(io.exists(src), false)
+    assertEqual(io.exists(dst), true)
+    assertEqual(io.readFile(dst), "rename test")
+    io.remove(dst)
+}
+
+// ===== Touch and chmod =====
+
+@test
+fn test_touch() {
+    var tmp = io.tempFile()!
+    defer { io.remove(tmp) }
+    io.remove(tmp)
+    io.touch(tmp)
+    assertEqual(io.exists(tmp), true)
+    assertEqual(io.fileSize(tmp), 0)
+    io.remove(tmp)
+}
+
+// ===== cwd / realpath =====
+
+@test
+fn test_cwd() {
+    var cwd = io.cwd()
+    assert(len(cwd.toString()) > 0)
+}
+
+@test
+fn test_realpath() {
+    var cwd = io.cwd()
+    var resolved = io.realpath(path.from("."))!
+    assertEqual(resolved.toString(), cwd.toString())
+}
+
+// ===== removeAll =====
+
+@test
+fn test_remove_all() {
+    var tmpDir = io.tempDir()!
+    defer { io.removeAll(tmpDir) }
+    io.mkdirp(path.join(tmpDir, path.from("sub/dir")))
+    io.writeFile(path.join(tmpDir, path.from("sub/file.txt")), "data")
+    io.removeAll(tmpDir)
+    assertEqual(io.exists(tmpDir), false)
+}

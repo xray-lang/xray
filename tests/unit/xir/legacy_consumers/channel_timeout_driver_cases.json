@@ -1,0 +1,37 @@
+{
+  "status": "WHOLE_CHANNEL_TIMEOUT_FIFO_NORMAL_DOMAIN_NOT_CLOCK_QUALIFICATION",
+  "cases": [
+    {
+      "id": "complete_channel_timeout_1123",
+      "oracle_id": "complete_channel_timeout_1123",
+      "source": "tests/regression/11_coroutine/1123_channel_timeout.xr",
+      "source_lf_sha256": "1c2037b29d6d6bd9edc7c9a9267b1d9a9a93da6622ca8069a41583408d2fe42e",
+      "preserved_original_identity": {
+        "source": "tests/regression/11_coroutine/1123_channel_timeout.xr",
+        "lf_sha256": "1c2037b29d6d6bd9edc7c9a9267b1d9a9a93da6622ca8069a41583408d2fe42e"
+      },
+      "entry": "run",
+      "source_context": "original_absolute",
+      "arguments": [],
+      "stdin_hex": "",
+      "companions": [],
+      "stdout_utf8": "test1: recvTimeout with data\n  result: 42 ok: true\ntest2: recvTimeout timeout\n  timeout\ntest3: sendTimeout with space\n  success: true\n  value: 100\ntest4: sendTimeout timeout\n  success: false\ntest5: producer-consumer with timeout\n  consumed: 1\n  consumed: 2\n  consumed: 3\n  total consumed: 3\n",
+      "stdout_utf8_options": [
+        "test1: recvTimeout with data\n  result: 42 ok: true\ntest2: recvTimeout timeout\n  timeout\ntest3: sendTimeout with space\n  success: true\n  value: 100\ntest4: sendTimeout timeout\n  success: false\ntest5: producer-consumer with timeout\n  consumed: 1\n  consumed: 2\n  consumed: 3\n  total consumed: 3\n",
+        "test1: recvTimeout with data\n  result: 42 ok: true\ntest2: recvTimeout timeout\n  timeout\ntest3: sendTimeout with space\n  success: true\n  value: 100\ntest4: sendTimeout timeout\n  success: false\ntest5: producer-consumer with timeout\n  consumed: 1\n  consumed: 2\n  producer timeout at 3\n  total consumed: 2\n",
+        "test1: recvTimeout with data\n  result: 42 ok: true\ntest2: recvTimeout timeout\n  timeout\ntest3: sendTimeout with space\n  success: true\n  value: 100\ntest4: sendTimeout timeout\n  success: false\ntest5: producer-consumer with timeout\n  consumed: 1\n  consumed: 2\n  total consumed: 2\n",
+        "test1: recvTimeout with data\n  result: 42 ok: true\ntest2: recvTimeout timeout\n  timeout\ntest3: sendTimeout with space\n  success: true\n  value: 100\ntest4: sendTimeout timeout\n  success: false\ntest5: producer-consumer with timeout\n  consumed: 1\n  producer timeout at 3\n  consumed: 2\n  total consumed: 2\n",
+        "test1: recvTimeout with data\n  result: 42 ok: true\ntest2: recvTimeout timeout\n  timeout\ntest3: sendTimeout with space\n  success: true\n  value: 100\ntest4: sendTimeout timeout\n  success: false\ntest5: producer-consumer with timeout\n  consumed: 1\n  total consumed: 1\n",
+        "test1: recvTimeout with data\n  result: 42 ok: true\ntest2: recvTimeout timeout\n  timeout\ntest3: sendTimeout with space\n  success: true\n  value: 100\ntest4: sendTimeout timeout\n  success: false\ntest5: producer-consumer with timeout\n  producer timeout at 3\n  consumed: 1\n  consumed: 2\n  total consumed: 2\n",
+        "test1: recvTimeout with data\n  result: 42 ok: true\ntest2: recvTimeout timeout\n  timeout\ntest3: sendTimeout with space\n  success: true\n  value: 100\ntest4: sendTimeout timeout\n  success: false\ntest5: producer-consumer with timeout\n  producer timeout at 3\n  total consumed: 0\n"
+      ],
+      "owners": [
+        "P09",
+        "P10",
+        "P06",
+        "P13",
+        "P14"
+      ]
+    }
+  ]
+}

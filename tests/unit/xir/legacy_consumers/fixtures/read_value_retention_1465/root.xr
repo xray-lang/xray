@@ -1,0 +1,15 @@
+var closures: Array<fn() -> i64> = []
+
+fn stash(data: Array<i64>) {
+    closures.push(fn() -> i64 {
+        return len(data)
+    })
+}
+
+var values: Array<i64> = [1, 2, 3, 4]
+stash(values)
+print(closures[0]())
+
+values.push(9)
+print(closures[0]())
+print(len(values))

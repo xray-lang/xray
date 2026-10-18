@@ -1,0 +1,2 @@
+# Keep frozen expectations and evidence byte-stable across checkouts.
+* -text

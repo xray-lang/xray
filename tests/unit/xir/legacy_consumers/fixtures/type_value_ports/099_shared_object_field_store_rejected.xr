@@ -1,0 +1,11 @@
+class Box {
+    value: i64
+
+    init(v: i64) {
+        this.value = v
+    }
+}
+
+const b = Box(1)
+b.value = 2
+print(b.value)

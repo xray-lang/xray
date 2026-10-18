@@ -1,0 +1,15 @@
+class Box {
+    value: i64
+
+    init(value: i64) {
+        this.value = value
+    }
+}
+
+fn buildBox() -> Box {
+    Coro.yield()
+    return Box(41)
+}
+
+var box = buildBox()
+print(box.value + 1)

@@ -1,0 +1,11 @@
+var sb = ""
+sb += string("bool=")
+sb += string(true)
+sb += string("; null=")
+sb += "null"
+sb += string("; range=")
+sb += string((1..4).toString())
+var xs = [1, 2, 3]
+sb += string("; array=")
+sb += string(xs.toString())
+print(sb)

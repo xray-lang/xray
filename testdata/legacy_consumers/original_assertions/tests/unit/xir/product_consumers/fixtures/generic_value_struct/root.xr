@@ -1,0 +1,27 @@
+import "./library" as direct
+import "./facade" as facade
+struct Box<R> {
+  value: R
+  readAs<U>(_marker: U) -> R { return this.value }
+}
+fn directValue<T>(value: T) -> T {
+  var box = direct.Box<T>{value: value}
+  return box.value
+}
+fn facadeValue<T>(value: T) -> T {
+  var box = facade.OriginBox<T>{value: value}
+  return box.forwardAs<bool>(false)
+}
+fn answer() -> i64 {
+  var left = direct.Box<i64>{value: 38}
+  var same = facade.OriginBox<i64>{value: 1}
+  var other = facade.Box<i64>{value: 1}
+  var nestedOrigin = facadeValue<bool>(true)
+  var nestedDirect = directValue<bool>(true)
+  left.value = left.value + same.value + other.value
+  if (nestedOrigin && nestedDirect) {
+    return left.readAs(false) + same.readAs(false) + other.readAs(false)
+  }
+  return 0
+}
+export fn consumerAnswer() -> i64 { return answer() }

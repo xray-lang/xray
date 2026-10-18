@@ -1,0 +1,9 @@
+var min: i64 = -9223372036854775807 - 1
+var sb = ""
+sb += "min="
+sb += "${min}"
+sb += "; abs="
+sb += "${min.abs()}"
+sb += "; next="
+sb += "${-42}"
+print(sb)

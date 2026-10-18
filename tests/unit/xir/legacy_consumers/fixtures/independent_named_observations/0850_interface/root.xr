@@ -1,0 +1,126 @@
+// Preserve all original generic/interface declarations and complete bodies; observe each original scalar result once.
+// 0850_interface.xr
+// 作者：xingleixu@gmail.com
+// 测试：接口定义和实现
+
+// ===== 基本接口 =====
+
+interface Drawable {
+    draw()
+}
+
+class Circle implements Drawable {
+    radius: f64
+
+    init(radius: f64) {
+        this.radius = radius
+    }
+
+    draw() {        // 实现接口方法
+    }
+
+    getRadius() -> f64 {        return this.radius
+    }
+}
+
+@test
+fn test_interface_implementation() {
+    var circle = Circle(5.0)
+    var p19GenericValue0 = circle.getRadius()
+    assertEqual(p19GenericValue0, 5.0)
+    print(p19GenericValue0)
+}
+
+// ===== 多方法接口 =====
+
+interface Shape {
+    area() -> f64
+    perimeter() -> f64
+}
+
+class Rectangle implements Shape {
+    width: f64
+    height: f64
+
+    init(w: f64, h: f64) {
+        this.width = w
+        this.height = h
+    }
+
+    area() -> f64 {        return this.width * this.height
+    }
+
+    perimeter() -> f64 {        return 2 * (this.width + this.height)
+    }
+}
+
+@test
+fn test_multi_method_interface() {
+    var rect = Rectangle(3.0, 4.0)
+    var p19GenericValue1 = rect.area()
+    assertEqual(p19GenericValue1, 12.0)
+    print(p19GenericValue1)
+    var p19GenericValue2 = rect.perimeter()
+    assertEqual(p19GenericValue2, 14.0)
+    print(p19GenericValue2)
+}
+
+// ===== 多个类实现同一接口 =====
+
+class Square implements Shape {
+    side: f64
+
+    init(s: f64) {
+        this.side = s
+    }
+
+    area() -> f64 {        return this.side * this.side
+    }
+
+    perimeter() -> f64 {        return 4 * this.side
+    }
+}
+
+@test
+fn test_multiple_implementations() {
+    var rect = Rectangle(2.0, 3.0)
+    var square = Square(4.0)
+
+    var p19GenericValue3 = rect.area()
+    assertEqual(p19GenericValue3, 6.0)
+    print(p19GenericValue3)
+    var p19GenericValue4 = square.area()
+    assertEqual(p19GenericValue4, 16.0)
+    print(p19GenericValue4)
+}
+
+// ===== 接口与普通方法混合 =====
+
+interface Printable {
+    toString() -> string
+}
+
+class Person implements Printable {
+    name: string
+    age: i64
+
+    init(name: string, age: i64) {
+        this.name = name
+        this.age = age
+    }
+
+    toString() -> string {        return this.name + " (" + this.age.toString() + ")"
+    }
+
+    greet() -> string {        return "Hello, " + this.name
+    }
+}
+
+@test
+fn test_interface_with_extra_methods() {
+    var p = Person("Alice", 30)
+    var p19GenericValue5 = p.greet()
+    assertEqual(p19GenericValue5, "Hello, Alice")
+    print(p19GenericValue5)
+}
+

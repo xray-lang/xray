@@ -1,0 +1,1142 @@
+{
+  "schema": 1,
+  "entries": [
+    {
+      "id": "complete_original_frozen_positive_002_shared_bare_local_heap",
+      "family": "reclassified",
+      "model_key": "002_shared_bare_local_heap",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/002_shared_bare_local_heap.xr",
+      "source_lf_sha256": "d47151617338114b0c731b892b5696ebf7280fb15be1655df8da5b1810f9b97d",
+      "original_source": "tests/compile_errors/ownership/002_shared_bare_local_heap.xr",
+      "original_lf_sha256": "0f7bc1c672bb1628fcbd74bb1f5d8241f173ec1965004b5977e9bf8a8af4c615",
+      "observation_suffix": "\nsource[0] = 9\nsource.push(3)\nprint(snapshot[0])\nprint(len(snapshot))\nprint(source[0])\nprint(len(source))\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_012_ref_rejects_duplicate_in_arg",
+      "family": "reclassified",
+      "model_key": "012_ref_rejects_duplicate_in_arg",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/012_ref_rejects_duplicate_in_arg.xr",
+      "source_lf_sha256": "51988af2f17814650adbfba875bd93bdfff403be9f42d8f77dea5e392d834670",
+      "original_source": "tests/compile_errors/ownership/012_ref_rejects_duplicate_in_arg.xr",
+      "original_lf_sha256": "53b9b0f3ca821f198b54ef8bd198cb7d0abbe06b4f251a4b8737b49a4c94c882",
+      "observation_suffix": "\nprint(len(values))\nprint(values[1])\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_013_ref_rejects_in_field_projection",
+      "family": "reclassified",
+      "model_key": "013_ref_rejects_in_field_projection",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/013_ref_rejects_in_field_projection.xr",
+      "source_lf_sha256": "49fc315794249563c926571491119e88d348b20d8060abe3a11b7c037f19e64f",
+      "original_source": "tests/compile_errors/ownership/013_ref_rejects_in_field_projection.xr",
+      "original_lf_sha256": "97c3090bef7d129ce9f3b16a3a0d83cd3ac467cabd7bd8fcfb70368c4936b30a",
+      "observation_suffix": "\nprint(len(holder.items))\nprint(holder.items[0])\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_036_ref_return_escape",
+      "family": "reclassified",
+      "model_key": "036_ref_return_escape",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/036_ref_return_escape.xr",
+      "source_lf_sha256": "d67f642178ee91b3f47f81d9548069c2cc52a82da459a8ae8a5dbd84209ef3a9",
+      "original_source": "tests/compile_errors/ownership/036_ref_return_escape.xr",
+      "original_lf_sha256": "e402e0746cf08f87ff8529847839fa66177064703642b92be37b66551ecef0cb",
+      "observation_suffix": "\nvalues[0] = 9\nvalues.push(3)\nprint(leaked[0])\nprint(len(leaked))\nprint(values[0])\nprint(len(values))\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_037_ref_field_store_escape",
+      "family": "reclassified",
+      "model_key": "037_ref_field_store_escape",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/037_ref_field_store_escape.xr",
+      "source_lf_sha256": "aaf5fff393c37e460291a8df34c094cac01f6d319e40d6721937de52ce675c60",
+      "original_source": "tests/compile_errors/ownership/037_ref_field_store_escape.xr",
+      "original_lf_sha256": "ba35a66584543d1873376c6659f263df7c07e129aa3460af926e34c45207e162",
+      "observation_suffix": "\nvalues[0] = 9\nvalues.push(3)\nprint(holder.items[0])\nprint(len(holder.items))\nprint(values[0])\nprint(len(values))\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_038_ref_array_push_escape",
+      "family": "reclassified",
+      "model_key": "038_ref_array_push_escape",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/038_ref_array_push_escape.xr",
+      "source_lf_sha256": "0c540b4836512977b2c97d8b5f28ce8d274eb01aee18ecb939ed155aeb847262",
+      "original_source": "tests/compile_errors/ownership/038_ref_array_push_escape.xr",
+      "original_lf_sha256": "6222e7660492a9a9893a019f74ca4a4cfd834bb7648be06ddca18fa94feef7b1",
+      "observation_suffix": "\nvalues[0] = 9\nvalues.push(3)\nprint(len(out))\nprint(len(out[0]))\nprint(out[0][0])\nprint(values[0])\nprint(len(values))\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_149_in_rejects_ref_alias_arg",
+      "family": "reclassified",
+      "model_key": "149_in_rejects_ref_alias_arg",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/149_in_rejects_ref_alias_arg.xr",
+      "source_lf_sha256": "c8617da4d7c252f9308cbdcd5fa464dcb00017f93e1f770b43709b70b3957674",
+      "original_source": "tests/compile_errors/ownership/149_in_rejects_ref_alias_arg.xr",
+      "original_lf_sha256": "f33780fcf0123eaf43ec25efa54d561e69f65a975465e2f195812f1cb90767d6",
+      "observation_suffix": "\nprint(value)\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_181_defer_cleanup_blocks_return",
+      "family": "reclassified",
+      "model_key": "181_defer_cleanup_blocks_return",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/181_defer_cleanup_blocks_return.xr",
+      "source_lf_sha256": "e5e60f8d78e8b6860866c6f4734d696e2f4d22f3103a6c034c530e26810a1736",
+      "original_source": "tests/compile_errors/ownership/181_defer_cleanup_blocks_return.xr",
+      "original_lf_sha256": "e5e60f8d78e8b6860866c6f4734d696e2f4d22f3103a6c034c530e26810a1736",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_188_ref_rejects_alias_root_arg",
+      "family": "reclassified",
+      "model_key": "188_ref_rejects_alias_root_arg",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/188_ref_rejects_alias_root_arg.xr",
+      "source_lf_sha256": "b2c00d7c0d039eeb34186864d68340970bb6f38465242b41d50a72e4b7d34e0f",
+      "original_source": "tests/compile_errors/ownership/188_ref_rejects_alias_root_arg.xr",
+      "original_lf_sha256": "b65a8f7a6df8fb8acb064e96ad31c57463d0311ea18a9c4a8c12557dc1a50778",
+      "observation_suffix": "\nprint(a.tag)\nprint(b.tag)\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_189_ref_rejects_receiver_overlap",
+      "family": "reclassified",
+      "model_key": "189_ref_rejects_receiver_overlap",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/189_ref_rejects_receiver_overlap.xr",
+      "source_lf_sha256": "8cdca0f823dff142313ca300921124d28b99abff689d450153648dc22d334fe1",
+      "original_source": "tests/compile_errors/ownership/189_ref_rejects_receiver_overlap.xr",
+      "original_lf_sha256": "cbb917da325022dfb6a84aa4a90ae1d2f835e585f00ee374c3fd8c72a3a25fa7",
+      "observation_suffix": "\nprint(bx.n)\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_closure_capture_blocks_rebind",
+      "family": "reclassified",
+      "model_key": "closure_capture_blocks_rebind",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/closure_capture_blocks_rebind.xr",
+      "source_lf_sha256": "073f7f9ef9ba342d98d547c45f165f20ae67c6cfb1f080a19ec55ee247f70369",
+      "original_source": "tests/compile_errors/ownership/closure_capture_blocks_rebind.xr",
+      "original_lf_sha256": "d32c847395c02645b952d1e3033564fc74480e0ae2a9a3b5dd9c737decbb3530",
+      "observation_suffix": "\nmain()\nprint(\"rebound\")\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_array_get_unchecked_requires_unsafe",
+      "family": "reclassified",
+      "model_key": "array_get_unchecked_requires_unsafe",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/array_get_unchecked_requires_unsafe.xr",
+      "source_lf_sha256": "b7fc1d679c73e5ecace3ba324c07da2df5d986bc20c50d71f6ca230eaacb875e",
+      "original_source": "tests/compile_errors/type/array_get_unchecked_requires_unsafe.xr",
+      "original_lf_sha256": "fad13e361797db68ccba053f73e1356814d2b6fc3592e77343af7d46ba4feef1",
+      "observation_suffix": "\nprint(len(values))\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_frozen_positive_array_set_unchecked_requires_unsafe",
+      "family": "reclassified",
+      "model_key": "array_set_unchecked_requires_unsafe",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/array_set_unchecked_requires_unsafe.xr",
+      "source_lf_sha256": "cacb7bbd5180fff09b82726cea712d9cb366203424ca83d443ace879e1f987ec",
+      "original_source": "tests/compile_errors/type/array_set_unchecked_requires_unsafe.xr",
+      "original_lf_sha256": "5832680b31f56f128ea2e1e437d529386c55138a9a2aaabea5ad813a7ec56c1f",
+      "observation_suffix": "\nprint(values[0])\nprint(values[1])\nprint(len(values))\n",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_array_array_char_compact",
+      "family": "arrays",
+      "model_key": "array_char_compact",
+      "source": "tests/diff/cases/semantics/collections/array_char_compact.xr",
+      "source_lf_sha256": "ce48317e4e2e3080015dd25c839c99dd1c0573531e761ea9ce4e397f2eab2dc4",
+      "original_source": "tests/diff/cases/semantics/collections/array_char_compact.xr",
+      "original_lf_sha256": "ce48317e4e2e3080015dd25c839c99dd1c0573531e761ea9ce4e397f2eab2dc4",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_array_array_hof_shared_core",
+      "family": "arrays",
+      "model_key": "array_hof_shared_core",
+      "source": "tests/diff/cases/semantics/collections/array_hof_shared_core.xr",
+      "source_lf_sha256": "4d117dffa7f7cd1582f886b627e8351cf87d0cf1b31c82341896b73e549c6a64",
+      "original_source": "tests/diff/cases/semantics/collections/array_hof_shared_core.xr",
+      "original_lf_sha256": "4d117dffa7f7cd1582f886b627e8351cf87d0cf1b31c82341896b73e549c6a64",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_array_array_reverse_shared_core",
+      "family": "arrays",
+      "model_key": "array_reverse_shared_core",
+      "source": "tests/diff/cases/semantics/collections/array_reverse_shared_core.xr",
+      "source_lf_sha256": "d0ddf325dcd6a400affb6e9e54a1f8f19205d70114d5daba5b7357159799b732",
+      "original_source": "tests/diff/cases/semantics/collections/array_reverse_shared_core.xr",
+      "original_lf_sha256": "d0ddf325dcd6a400affb6e9e54a1f8f19205d70114d5daba5b7357159799b732",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_array_array_shift_shared_core",
+      "family": "arrays",
+      "model_key": "array_shift_shared_core",
+      "source": "tests/diff/cases/semantics/collections/array_shift_shared_core.xr",
+      "source_lf_sha256": "4869abfdf75f1dfdc06073e72166c8757eec7c28ef0bbee1b210e5ae195a1b09",
+      "original_source": "tests/diff/cases/semantics/collections/array_shift_shared_core.xr",
+      "original_lf_sha256": "4869abfdf75f1dfdc06073e72166c8757eec7c28ef0bbee1b210e5ae195a1b09",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_numeric_wrapping_fixed_width",
+      "family": "numeric",
+      "model_key": "wrapping_fixed_width",
+      "source": "tests/diff/cases/semantics/int/wrapping_fixed_width.xr",
+      "source_lf_sha256": "b14af38853396187d9645eacbaf15b6f0cf44e689a1003da9075f84350bb6a21",
+      "original_source": "tests/diff/cases/semantics/int/wrapping_fixed_width.xr",
+      "original_lf_sha256": "b14af38853396187d9645eacbaf15b6f0cf44e689a1003da9075f84350bb6a21",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_numeric_exact_integer_bit_intrinsics",
+      "family": "numeric",
+      "model_key": "exact_integer_bit_intrinsics",
+      "source": "tests/diff/cases/semantics/int_wrap/exact_integer_bit_intrinsics.xr",
+      "source_lf_sha256": "8f81b6abc9298e19c11e426c454abab286a28c7bc6eaae81cffc79c6df156703",
+      "original_source": "tests/diff/cases/semantics/int_wrap/exact_integer_bit_intrinsics.xr",
+      "original_lf_sha256": "8f81b6abc9298e19c11e426c454abab286a28c7bc6eaae81cffc79c6df156703",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_numeric_int_bits_methods",
+      "family": "numeric",
+      "model_key": "int_bits_methods",
+      "source": "tests/diff/cases/semantics/int_wrap/int_bits_methods.xr",
+      "source_lf_sha256": "6e72ca3f692d158d5f5a41180b4a33e340325fbd17a4b0b472999ce13f423071",
+      "original_source": "tests/diff/cases/semantics/int_wrap/int_bits_methods.xr",
+      "original_lf_sha256": "6e72ca3f692d158d5f5a41180b4a33e340325fbd17a4b0b472999ce13f423071",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_numeric_int_overflow_predicates",
+      "family": "numeric",
+      "model_key": "int_overflow_predicates",
+      "source": "tests/diff/cases/semantics/int_wrap/int_overflow_predicates.xr",
+      "source_lf_sha256": "c92ba2dea2e0f37ad9182375befa3d0b98ce3a7d55510e2214d3e773899ebf5a",
+      "original_source": "tests/diff/cases/semantics/int_wrap/int_overflow_predicates.xr",
+      "original_lf_sha256": "c92ba2dea2e0f37ad9182375befa3d0b98ce3a7d55510e2214d3e773899ebf5a",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_numeric_int_safe_methods",
+      "family": "numeric",
+      "model_key": "int_safe_methods",
+      "source": "tests/diff/cases/semantics/int_wrap/int_safe_methods.xr",
+      "source_lf_sha256": "c632da1beee910de7ebfc3266a2e5f10ad8a89fe0d022ddedcb8c122e221a81b",
+      "original_source": "tests/diff/cases/semantics/int_wrap/int_safe_methods.xr",
+      "original_lf_sha256": "c632da1beee910de7ebfc3266a2e5f10ad8a89fe0d022ddedcb8c122e221a81b",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_numeric_numeric_method_shared_core",
+      "family": "numeric",
+      "model_key": "numeric_method_shared_core",
+      "source": "tests/diff/cases/semantics/int_wrap/numeric_method_shared_core.xr",
+      "source_lf_sha256": "1e6b2c05f2ac494981e7404935e708d08302005182ce82047866132a60bd29bc",
+      "original_source": "tests/diff/cases/semantics/int_wrap/numeric_method_shared_core.xr",
+      "original_lf_sha256": "1e6b2c05f2ac494981e7404935e708d08302005182ce82047866132a60bd29bc",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_target_numeric_stringbuilder_numeric_shared_core",
+      "family": "numeric",
+      "model_key": "stringbuilder_numeric_shared_core",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_numeric_text_targets/stringbuilder_numeric_shared_core.xr",
+      "source_lf_sha256": "4668474392945691c33a52fc63ae2f75cd98ab7a5d8ad3157d39d322f2bb4308",
+      "original_source": "tests/diff/cases/semantics/int_wrap/stringbuilder_numeric_shared_core.xr",
+      "original_lf_sha256": "e9fe9a4bf1bcd46f2872bf61359766b87f8d4481dca7901fe4e9612383699f48",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_numeric_uint64_divmod_unsigned",
+      "family": "numeric",
+      "model_key": "uint64_divmod_unsigned",
+      "source": "tests/diff/cases/semantics/int_wrap/uint64_divmod_unsigned.xr",
+      "source_lf_sha256": "c89cd251179f471aab87492fd317cc0cd0fef17e24162b7d1ceb89bc6968b289",
+      "original_source": "tests/diff/cases/semantics/int_wrap/uint64_divmod_unsigned.xr",
+      "original_lf_sha256": "c89cd251179f471aab87492fd317cc0cd0fef17e24162b7d1ceb89bc6968b289",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_target_text_range_string_indexof_start_shared_core",
+      "family": "text_range",
+      "model_key": "string_indexof_start_shared_core",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_numeric_text_targets/string_indexof_start_shared_core.xr",
+      "source_lf_sha256": "bcf7b6916c0ba6064d9c5702fe5f327858e5cae4e6a9d18cd1d154ab14d20609",
+      "original_source": "tests/diff/cases/semantics/string/string_indexof_start_shared_core.xr",
+      "original_lf_sha256": "692aa5713ca25f02ca038a1ec47d373fd0ca14c080adf9f2143fcb28c232e8a4",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_text_range_arrays",
+      "family": "text_range",
+      "model_key": "arrays",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_numeric_text_targets/arrays.xr",
+      "source_lf_sha256": "2abb319bf00fab5345f7b47bc7f22221a09d861b47113b92367a34e7aa82f8ea",
+      "original_source": "tests/diff/cases/basic/arrays.xr",
+      "original_lf_sha256": "86af62e9fce6e07361704d1bf8aa40709e69b34de74ba3092724d49c488a9529",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_auto_borrow_class_alias_return_downgrade",
+      "family": "ownership",
+      "model_key": "auto_borrow_class_alias_return_downgrade",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/auto_borrow_class_alias_return_downgrade.xr",
+      "source_lf_sha256": "38828de6e28a782ea637d6386ff8a144bf713e3a2f5ee6a123a112f3427a26db",
+      "original_source": "tests/diff/cases/semantics/ownership/auto_borrow_class_alias_return_downgrade.xr",
+      "original_lf_sha256": "7a9e9f61341108c0dd9c6f2ea4038a6c650c91da8607a58f9c91c15b2a90e239",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_auto_borrow_class_readonly_param",
+      "family": "ownership",
+      "model_key": "auto_borrow_class_readonly_param",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/auto_borrow_class_readonly_param.xr",
+      "source_lf_sha256": "11a93babfc68f9911575160137996e996093ec13536cca3052a7b3116adb1231",
+      "original_source": "tests/diff/cases/semantics/ownership/auto_borrow_class_readonly_param.xr",
+      "original_lf_sha256": "0e39fde480e426286fa2fd956155b645a905b1ef2f4d643743f05c195a23d2e3",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_ownership_auto_borrow_heap_readonly_param",
+      "family": "ownership",
+      "model_key": "auto_borrow_heap_readonly_param",
+      "source": "tests/diff/cases/semantics/ownership/auto_borrow_heap_readonly_param.xr",
+      "source_lf_sha256": "7f79dc6c7a83aec154a93e54ef15935faaaa137844fa5e69e068c961072e0a83",
+      "original_source": "tests/diff/cases/semantics/ownership/auto_borrow_heap_readonly_param.xr",
+      "original_lf_sha256": "7f79dc6c7a83aec154a93e54ef15935faaaa137844fa5e69e068c961072e0a83",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_target_ownership_converged_capability_positive",
+      "family": "ownership",
+      "model_key": "converged_capability_positive",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/converged_capability_positive.xr",
+      "source_lf_sha256": "3d99e41e3eecafa3d5122b4e5811d03c6de8eb4377656ed8dfd6f9688e723178",
+      "original_source": "tests/diff/cases/semantics/ownership/converged_capability_positive.xr",
+      "original_lf_sha256": "bb78f5d19e7c73278b708f21732d709c0cc504a49edd5403ca09bec64258a8a3",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_copy_deep_independent",
+      "family": "ownership",
+      "model_key": "copy_deep_independent",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/copy_deep_independent.xr",
+      "source_lf_sha256": "ca28292c941e8ded2b67050aecc0a51d45f87d0eb005a0eefb1a53927498488a",
+      "original_source": "tests/diff/cases/semantics/ownership/copy_deep_independent.xr",
+      "original_lf_sha256": "593bca5fe5bf3b919430467dc2908cf7d8ccbb0dba8fbcf9eb28231550a4733d",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_copy_preserves_type",
+      "family": "ownership",
+      "model_key": "copy_preserves_type",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/copy_preserves_type.xr",
+      "source_lf_sha256": "cbf7177251e025e000511e9daf90fae7738698b12dd08b8af412c03e036c01e7",
+      "original_source": "tests/diff/cases/semantics/ownership/copy_preserves_type.xr",
+      "original_lf_sha256": "e70bb3439c561f2090c8d64f01e8eb9556fdc2f24e09893d54e391ab5fedb24b",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_in_alias_reassigned_copy_escape_allowed",
+      "family": "ownership",
+      "model_key": "in_alias_reassigned_copy_escape_allowed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_alias_reassigned_copy_escape_allowed.xr",
+      "source_lf_sha256": "7aa16d9e937aef7391be35a4d83d4e6c89e0459c8d5cab01d484d5aa0677ac09",
+      "original_source": "tests/diff/cases/semantics/ownership/in_alias_reassigned_copy_escape_allowed.xr",
+      "original_lf_sha256": "4d1f0d7870eccf5106fee0bb960ba39cbf3d319051689cedbb3a9d5a78eb4b31",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_in_closure_copy_capture_allowed",
+      "family": "ownership",
+      "model_key": "in_closure_copy_capture_allowed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_closure_copy_capture_allowed.xr",
+      "source_lf_sha256": "073d6f20dba9fa169559de68c1d246cf2c0dab0e5afc9d1b01c442ae0c15d07b",
+      "original_source": "tests/diff/cases/semantics/ownership/in_closure_copy_capture_allowed.xr",
+      "original_lf_sha256": "3daa2ce82d90a7f9115d5c4f5e395bda59c40b0cdc894d1e27bef65a80d3cd2b",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_in_forward_function_param_copy_escape_allowed",
+      "family": "ownership",
+      "model_key": "in_forward_function_param_copy_escape_allowed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_forward_function_param_copy_escape_allowed.xr",
+      "source_lf_sha256": "4141eb37e9ffb6a7d6d8498cf9feac7314def276dd80932abfc0382e1a328668",
+      "original_source": "tests/diff/cases/semantics/ownership/in_forward_function_param_copy_escape_allowed.xr",
+      "original_lf_sha256": "6a4d472aa9c954643e8ca20f6f2e748504c5e42afa3825a27241acdf30072e57",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_in_function_param_copy_escape_allowed",
+      "family": "ownership",
+      "model_key": "in_function_param_copy_escape_allowed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_function_param_copy_escape_allowed.xr",
+      "source_lf_sha256": "0f0133a1787c41bdc6fc27cc53f604b9171ea47d49e7d9674b4828843ce26993",
+      "original_source": "tests/diff/cases/semantics/ownership/in_function_param_copy_escape_allowed.xr",
+      "original_lf_sha256": "24da9bcf2d62c9e84e467b72269076febaf4b03ee75c53cec85792e18886a203",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_in_function_param_method_copy_escape_allowed",
+      "family": "ownership",
+      "model_key": "in_function_param_method_copy_escape_allowed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_function_param_method_copy_escape_allowed.xr",
+      "source_lf_sha256": "956dca1cc7c1e62d35e7954f4a52f5bf372273312476918eb71312d3713864c6",
+      "original_source": "tests/diff/cases/semantics/ownership/in_function_param_method_copy_escape_allowed.xr",
+      "original_lf_sha256": "273fe7e6497909ecf54e7e39cde53f8b213a8d7d9500f03ccef970465e594500",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_in_go_copy_argument_allowed",
+      "family": "ownership",
+      "model_key": "in_go_copy_argument_allowed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_go_copy_argument_allowed.xr",
+      "source_lf_sha256": "fc2be73a9e9547b24de09b210e521d643e38705866e583d2816e914276507c94",
+      "original_source": "tests/diff/cases/semantics/ownership/in_go_copy_argument_allowed.xr",
+      "original_lf_sha256": "ccbe5f48bc106eb0ad72cd066cf2a8312f613a8112dbfdac37acf1d526f77c3f",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_in_method_wrapper_param_copy_escape_allowed",
+      "family": "ownership",
+      "model_key": "in_method_wrapper_param_copy_escape_allowed",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_method_wrapper_param_copy_escape_allowed.xr",
+      "source_lf_sha256": "a6603bb2d48bd12d09b8aaf4ba7bbb5680398a8ea83d999a0bea2064e96a9f22",
+      "original_source": "tests/diff/cases/semantics/ownership/in_method_wrapper_param_copy_escape_allowed.xr",
+      "original_lf_sha256": "10c43ae079c9a5b09fda006afa44377e285788cf579df0f0415ccfc3eb8eb1f9",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_in_readonly_user_method_names",
+      "family": "ownership",
+      "model_key": "in_readonly_user_method_names",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_readonly_user_method_names.xr",
+      "source_lf_sha256": "0f403f6921be66b30522503982d863cfa84422f9731b5aa6df1a2609b8be522f",
+      "original_source": "tests/diff/cases/semantics/ownership/in_readonly_user_method_names.xr",
+      "original_lf_sha256": "a0aa6b6a924c202dfedf7d9a2c4c4e3f4c0abbcaf9a41c9b03b7fc748ead6825",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_in_ref_heap_borrows",
+      "family": "ownership",
+      "model_key": "in_ref_heap_borrows",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_ref_heap_borrows.xr",
+      "source_lf_sha256": "bbcd1dd74a5f618cc5dc27c1e3cd5c9d5230c01ab2bd81d4c5a478ea62379f0e",
+      "original_source": "tests/diff/cases/semantics/ownership/in_ref_heap_borrows.xr",
+      "original_lf_sha256": "15f2ffeda356d6b73e9d0a282e2e220e0c56ea1301104f93a669dcf257f220d1",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_move_into_go",
+      "family": "ownership",
+      "model_key": "move_into_go",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/move_into_go.xr",
+      "source_lf_sha256": "4f8173d119f8dbe6a6f94e00d1df1925f6de2da156ed56f72a7a8ca06652d250",
+      "original_source": "tests/diff/cases/semantics/ownership/move_into_go.xr",
+      "original_lf_sha256": "a089c6cd8145f6c5c415e5156ce1b83018e5027e5457dcc54a4865272f94ec93",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_move_local_heap",
+      "family": "ownership",
+      "model_key": "move_local_heap",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/move_local_heap.xr",
+      "source_lf_sha256": "431dd888082fb90e31c6423c56f9d5dead0de208cf4fbf78fd04fb20bf61d42c",
+      "original_source": "tests/diff/cases/semantics/ownership/move_local_heap.xr",
+      "original_lf_sha256": "38a2869ad499c083a14b57993bbdb524e12f557fd568db40edbd4d9fb3516608",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_move_local_in_fn",
+      "family": "ownership",
+      "model_key": "move_local_in_fn",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/move_local_in_fn.xr",
+      "source_lf_sha256": "43e8fb21d7127f0d0ebc8a80d3ea3842bc6f932c86c0f7f2a98f20d11395385f",
+      "original_source": "tests/diff/cases/semantics/ownership/move_local_in_fn.xr",
+      "original_lf_sha256": "da1e72bd809febb231e951db59fe694d92db8381ca84552766556f61c98f095c",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_shared_class_copy_go",
+      "family": "ownership",
+      "model_key": "shared_class_copy_go",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/shared_class_copy_go.xr",
+      "source_lf_sha256": "56b90519cfd681ec6e0fce8ce9d363e16188a3be30265d5676ff0ffc9d9e299c",
+      "original_source": "tests/diff/cases/semantics/ownership/shared_class_copy_go.xr",
+      "original_lf_sha256": "6c9ff02626c2f32d27d7a8edd6dd0a0ff1cf2c3e0ec23190b11e1d01f383904e",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_target_ownership_shared_freeze_go",
+      "family": "ownership",
+      "model_key": "shared_freeze_go",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/shared_freeze_go.xr",
+      "source_lf_sha256": "ed73bc827a348387924fbcaf667b0014d6cabe7f7fd94ddb46604dc4631f1282",
+      "original_source": "tests/diff/cases/semantics/ownership/shared_freeze_go.xr",
+      "original_lf_sha256": "8f510c0bfd77d6960a8f6ae3e26e8f6978ede44b33488a09a07e9dced2209eae",
+      "observation_suffix": "",
+      "original_run_corpus": false
+    },
+    {
+      "id": "complete_original_text_range_range_precedence",
+      "family": "text_range",
+      "model_key": "range_precedence",
+      "source": "tests/diff/cases/basic/range_precedence.xr",
+      "source_lf_sha256": "52fe37c7796d9832b83c6d57ffae8bdaa92851c652d30f1b9ee80e255d8d2808",
+      "original_source": "tests/diff/cases/basic/range_precedence.xr",
+      "original_lf_sha256": "52fe37c7796d9832b83c6d57ffae8bdaa92851c652d30f1b9ee80e255d8d2808",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_text_range_ranges",
+      "family": "text_range",
+      "model_key": "ranges",
+      "source": "tests/diff/cases/basic/ranges.xr",
+      "source_lf_sha256": "1a9c70b3946fb2f765d0251350665aa59714716a78600e9b04ac2b59c25daeb4",
+      "original_source": "tests/diff/cases/basic/ranges.xr",
+      "original_lf_sha256": "1a9c70b3946fb2f765d0251350665aa59714716a78600e9b04ac2b59c25daeb4",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_text_range_multiconcat",
+      "family": "text_range",
+      "model_key": "multiconcat",
+      "source": "tests/unit/xir/legacy_consumers/fixtures/multiconcat_typed_null/root.xr",
+      "source_lf_sha256": "f8360e532803291985029168c023d29ced78672a1afe257294eafbc686fc8e4d",
+      "original_source": "tests/diff/cases/semantics/string/multiconcat.xr",
+      "original_lf_sha256": "69125f0905f74611fbb76a765427bf705a56d7d8bf3b48f71ef6a1884e1120f5",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_text_range_strings",
+      "family": "text_range",
+      "model_key": "strings",
+      "source": "tests/diff/cases/basic/strings.xr",
+      "source_lf_sha256": "bcb12d73fa39682854db1df69327cf014ec38d8f840ff510d7b9f710f437625d",
+      "original_source": "tests/diff/cases/basic/strings.xr",
+      "original_lf_sha256": "bcb12d73fa39682854db1df69327cf014ec38d8f840ff510d7b9f710f437625d",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    },
+    {
+      "id": "complete_original_text_range_interpolation_display_shapes",
+      "family": "text_range",
+      "model_key": "interpolation_display_shapes",
+      "source": "tests/diff/cases/semantics/string/interpolation_display_shapes.xr",
+      "source_lf_sha256": "9c629eb555e10a76b6ac6ee7ecb0968f8daee7d3146fbbe2a2d49c30381b0019",
+      "original_source": "tests/diff/cases/semantics/string/interpolation_display_shapes.xr",
+      "original_lf_sha256": "9c629eb555e10a76b6ac6ee7ecb0968f8daee7d3146fbbe2a2d49c30381b0019",
+      "observation_suffix": "",
+      "original_run_corpus": true
+    }
+  ],
+  "inputs": [
+    {
+      "path": "spec/source/sections/002-1-lexical-structure.md",
+      "lf_sha256": "52a68bf1cfb62e40e3500377fc3f2b66029050f50dd971352e7f60e90d2ab6a1"
+    },
+    {
+      "path": "spec/source/sections/003-2-type-system.md",
+      "lf_sha256": "b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677"
+    },
+    {
+      "path": "spec/source/sections/004-3-expressions.md",
+      "lf_sha256": "1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c"
+    },
+    {
+      "path": "spec/source/sections/005-4-statements.md",
+      "lf_sha256": "c5849dfeea58b583f6d7685727fde751995b598e734118fce4436d8f2d066915"
+    },
+    {
+      "path": "spec/source/sections/006-5-declarations.md",
+      "lf_sha256": "17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d"
+    },
+    {
+      "path": "spec/source/sections/009-8-error-handling.md",
+      "lf_sha256": "3679ded015ad0222df39070b598fe26c8099247f9e410305a3f1527b9e63161b"
+    },
+    {
+      "path": "spec/source/sections/014-13-built-in-functions.md",
+      "lf_sha256": "2a4af98d2d429babb3cdcd875279f0d798efcabb852afd2c366e69a12ca50380"
+    },
+    {
+      "path": "spec/source/sections/015-14-built-in-type-methods.md",
+      "lf_sha256": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e"
+    },
+    {
+      "path": "src/base/xconstants.h",
+      "lf_sha256": "75525a7d54779d43e6eea0a26cea4e89110539e3d4527ac1b378f153d77a0463"
+    },
+    {
+      "path": "src/shared/xr_numeric_core.h",
+      "lf_sha256": "0504990547f8673ccb4aad1bf2b806431f22680a427742004283f62f5d3d5786"
+    },
+    {
+      "path": "src/shared/xr_range_core.h",
+      "lf_sha256": "8c0d9ec40d4b40f4c78566a2bcecb25c217a921725edc1dda2929590ddec951e"
+    },
+    {
+      "path": "src/shared/xr_string_core.h",
+      "lf_sha256": "1dcdc29bf2c758b45d8189c100ecc3ca400ae2861b52dfdb81397220f9156f16"
+    },
+    {
+      "path": "src/shared/xr_string_parse_core.h",
+      "lf_sha256": "e96e12444c85ef8d64e2b6ab0baa8b8e761c7f3636049f9f10420fe6184ad5a1"
+    },
+    {
+      "path": "src/xir/xxir_source_enum_text.inc.c",
+      "lf_sha256": "322fb243ad34e5c53d1440de55f7e7d34e89330abbe651720e35c86453718f68"
+    },
+    {
+      "path": "stdlib/codegen/codegen.xr",
+      "lf_sha256": "e75bc8908916882cd913fd99def8935ef14fc33af3941270dc94f3ca5ba9be87"
+    },
+    {
+      "path": "stdlib/text/text.xr",
+      "lf_sha256": "55d2aaa9e524bc1924f6b426b763f9d45e52f926f204ded84c7e8a64289b9aef"
+    },
+    {
+      "path": "stdlib/types/array.xr",
+      "lf_sha256": "ac31595b3801ee1df3c3f3ab6f1903c5f66ef084f0fa016dc19d24a2fa653223"
+    },
+    {
+      "path": "stdlib/types/channel.xr",
+      "lf_sha256": "ff2be02bcc28be44f7927b746d316eec7fef4e815f2693207ef07176bbbf1284"
+    },
+    {
+      "path": "stdlib/types/f64.xr",
+      "lf_sha256": "16f8b34079a8ef926027abf5a73c12e2e5601e692c027db00aca622a850cf16c"
+    },
+    {
+      "path": "stdlib/types/map.xr",
+      "lf_sha256": "49c5f1ddd6d0addab7608d918bbb627e655219ca66d10154cab7b05773488f31"
+    },
+    {
+      "path": "stdlib/types/panic_info.xr",
+      "lf_sha256": "ae274d24d1e292dd84fe902fdec2ae93ad23596aef523613d2863bd08a946fb4"
+    },
+    {
+      "path": "stdlib/types/rune.xr",
+      "lf_sha256": "aa54acae8e03100f799aa9869b547e9aecaeb3bea02de4b39890c5f7e4c1e510"
+    },
+    {
+      "path": "stdlib/types/string.xr",
+      "lf_sha256": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7"
+    },
+    {
+      "path": "tests/compile_errors/generics/007_codegen_intrinsic_type_argument.xr",
+      "lf_sha256": "18a2c29ebec50f8849d2098b56b06fda7ec0a21b4591c1978aebc30c580391c6"
+    },
+    {
+      "path": "tests/compile_errors/generics/007_codegen_intrinsic_type_argument.xr.expected",
+      "lf_sha256": "99700889e11fc6346d52db9ae957cc5585256b1c9722844d44aa7ceb81679c19"
+    },
+    {
+      "path": "tests/compile_errors/ownership/002_shared_bare_local_heap.xr",
+      "lf_sha256": "0f7bc1c672bb1628fcbd74bb1f5d8241f173ec1965004b5977e9bf8a8af4c615"
+    },
+    {
+      "path": "tests/compile_errors/ownership/002_shared_bare_local_heap.xr.expected",
+      "lf_sha256": "817f46b639479a0dde151c752b1c2280b97e0f08f2e3b4b5e480689361922747"
+    },
+    {
+      "path": "tests/compile_errors/ownership/012_ref_rejects_duplicate_in_arg.xr",
+      "lf_sha256": "53b9b0f3ca821f198b54ef8bd198cb7d0abbe06b4f251a4b8737b49a4c94c882"
+    },
+    {
+      "path": "tests/compile_errors/ownership/012_ref_rejects_duplicate_in_arg.xr.expected",
+      "lf_sha256": "f4452805b92451f29512884caa3e284591ea9816e5c0084e2d21bd95bb8daa9b"
+    },
+    {
+      "path": "tests/compile_errors/ownership/013_ref_rejects_in_field_projection.xr",
+      "lf_sha256": "97c3090bef7d129ce9f3b16a3a0d83cd3ac467cabd7bd8fcfb70368c4936b30a"
+    },
+    {
+      "path": "tests/compile_errors/ownership/013_ref_rejects_in_field_projection.xr.expected",
+      "lf_sha256": "35ec8a719c4bf552898e3eb2c6cc13d45bcafeb6c9cf718aeeb1ab85790b5402"
+    },
+    {
+      "path": "tests/compile_errors/ownership/036_ref_return_escape.xr",
+      "lf_sha256": "e402e0746cf08f87ff8529847839fa66177064703642b92be37b66551ecef0cb"
+    },
+    {
+      "path": "tests/compile_errors/ownership/036_ref_return_escape.xr.expected",
+      "lf_sha256": "ab09c14c800e09067e8d05f4d312b28f78ab32030d9f9b7d387544b7457b9185"
+    },
+    {
+      "path": "tests/compile_errors/ownership/037_ref_field_store_escape.xr",
+      "lf_sha256": "ba35a66584543d1873376c6659f263df7c07e129aa3460af926e34c45207e162"
+    },
+    {
+      "path": "tests/compile_errors/ownership/037_ref_field_store_escape.xr.expected",
+      "lf_sha256": "c521665ec13f70524d3aed1a8054736aff764588e301addf1879094dd4202518"
+    },
+    {
+      "path": "tests/compile_errors/ownership/038_ref_array_push_escape.xr",
+      "lf_sha256": "6222e7660492a9a9893a019f74ca4a4cfd834bb7648be06ddca18fa94feef7b1"
+    },
+    {
+      "path": "tests/compile_errors/ownership/038_ref_array_push_escape.xr.expected",
+      "lf_sha256": "c854a60ed9a00cbc4bd078a6fc98e2bd17092f98a49f3f547d8da87d0dd95779"
+    },
+    {
+      "path": "tests/compile_errors/ownership/149_in_rejects_ref_alias_arg.xr",
+      "lf_sha256": "f33780fcf0123eaf43ec25efa54d561e69f65a975465e2f195812f1cb90767d6"
+    },
+    {
+      "path": "tests/compile_errors/ownership/149_in_rejects_ref_alias_arg.xr.expected",
+      "lf_sha256": "3a62627dfcb0cd9aa95a91b34053adad66798921c1f637356701910f2cbafa58"
+    },
+    {
+      "path": "tests/compile_errors/ownership/181_defer_cleanup_blocks_return.xr",
+      "lf_sha256": "e5e60f8d78e8b6860866c6f4734d696e2f4d22f3103a6c034c530e26810a1736"
+    },
+    {
+      "path": "tests/compile_errors/ownership/181_defer_cleanup_blocks_return.xr.expected",
+      "lf_sha256": "67da2df64c8f39b812aa36de8f8668741373deac797544dddb2e5f939c26a626"
+    },
+    {
+      "path": "tests/compile_errors/ownership/188_ref_rejects_alias_root_arg.xr",
+      "lf_sha256": "b65a8f7a6df8fb8acb064e96ad31c57463d0311ea18a9c4a8c12557dc1a50778"
+    },
+    {
+      "path": "tests/compile_errors/ownership/188_ref_rejects_alias_root_arg.xr.expected",
+      "lf_sha256": "2ed40bd1fcb98fd745dc04014c310fbbf4053f952c5738f46b65f7d5e8f1a554"
+    },
+    {
+      "path": "tests/compile_errors/ownership/189_ref_rejects_receiver_overlap.xr",
+      "lf_sha256": "cbb917da325022dfb6a84aa4a90ae1d2f835e585f00ee374c3fd8c72a3a25fa7"
+    },
+    {
+      "path": "tests/compile_errors/ownership/189_ref_rejects_receiver_overlap.xr.expected",
+      "lf_sha256": "7b557bf79343d6d4d5c0af98746300d85aae1451e12507d41b0a979e9e667150"
+    },
+    {
+      "path": "tests/compile_errors/ownership/closure_capture_blocks_rebind.xr",
+      "lf_sha256": "d32c847395c02645b952d1e3033564fc74480e0ae2a9a3b5dd9c737decbb3530"
+    },
+    {
+      "path": "tests/compile_errors/ownership/closure_capture_blocks_rebind.xr.expected",
+      "lf_sha256": "d3d38abf9f898171a689ae5eb6fa81285ddc849a1974250bbe18b4364864f983"
+    },
+    {
+      "path": "tests/compile_errors/type/array_get_unchecked_requires_unsafe.xr",
+      "lf_sha256": "fad13e361797db68ccba053f73e1356814d2b6fc3592e77343af7d46ba4feef1"
+    },
+    {
+      "path": "tests/compile_errors/type/array_get_unchecked_requires_unsafe.xr.expected",
+      "lf_sha256": "bdec6246bfa05c23801cb19233a95a789cee2dfae3c1f61cf4bb01e02e002340"
+    },
+    {
+      "path": "tests/compile_errors/type/array_set_unchecked_requires_unsafe.xr",
+      "lf_sha256": "5832680b31f56f128ea2e1e437d529386c55138a9a2aaabea5ad813a7ec56c1f"
+    },
+    {
+      "path": "tests/compile_errors/type/array_set_unchecked_requires_unsafe.xr.expected",
+      "lf_sha256": "6939200e570a34a38dc00b1a17e8e767cd493d3ce15a7c88e92748a18d72d1f3"
+    },
+    {
+      "path": "tests/compile_errors/type/builtin_name_class_redeclared.xr",
+      "lf_sha256": "c65a29089fec870f50298b14c7ea35fd8b73f23ab6b1ecd8cdcfd0782ef4170e"
+    },
+    {
+      "path": "tests/compile_errors/type/builtin_name_class_redeclared.xr.expected",
+      "lf_sha256": "00343db361cc5cbbf5675496e4efa49667d7aa481fae72e3dd7b9a85c2f40bf4"
+    },
+    {
+      "path": "tests/compile_errors/type/builtin_name_enum_redeclared.xr",
+      "lf_sha256": "524dcc077428ef4122ada4146d5b128161e17e06320af0cc2a7238a1f74e5b58"
+    },
+    {
+      "path": "tests/compile_errors/type/builtin_name_enum_redeclared.xr.expected",
+      "lf_sha256": "fa5ccfb22e632c685a8972e7e40768db88630fc66fc2a23109914ee9649877c1"
+    },
+    {
+      "path": "tests/compile_errors/type/builtin_name_interface_redeclared.xr",
+      "lf_sha256": "5e06ff466562dbedbb191862e8ab53ade58165c0742e7641c704801741752137"
+    },
+    {
+      "path": "tests/compile_errors/type/builtin_name_interface_redeclared.xr.expected",
+      "lf_sha256": "3d7749d185dc340d6ed71085883a9d4ba3976c2b05603bb21905dc70738ee7b4"
+    },
+    {
+      "path": "tests/compile_errors/type/slice_return_function_type_multi_source_rejected.xr",
+      "lf_sha256": "6b7effc49e1469658af07554a187995133c2de17583c54d9900019c25167815a"
+    },
+    {
+      "path": "tests/compile_errors/type/slice_return_function_type_multi_source_rejected.xr.expected",
+      "lf_sha256": "c776a86c243959a04ab9674405fb8267d2e11bf33d753cd9d639902ec5c8c01b"
+    },
+    {
+      "path": "tests/diff/cases/basic/arrays.xr",
+      "lf_sha256": "86af62e9fce6e07361704d1bf8aa40709e69b34de74ba3092724d49c488a9529"
+    },
+    {
+      "path": "tests/diff/cases/basic/range_precedence.xr",
+      "lf_sha256": "52fe37c7796d9832b83c6d57ffae8bdaa92851c652d30f1b9ee80e255d8d2808"
+    },
+    {
+      "path": "tests/diff/cases/basic/ranges.xr",
+      "lf_sha256": "1a9c70b3946fb2f765d0251350665aa59714716a78600e9b04ac2b59c25daeb4"
+    },
+    {
+      "path": "tests/diff/cases/basic/strings.xr",
+      "lf_sha256": "bcb12d73fa39682854db1df69327cf014ec38d8f840ff510d7b9f710f437625d"
+    },
+    {
+      "path": "tests/diff/cases/semantics/collections/array_char_compact.xr",
+      "lf_sha256": "ce48317e4e2e3080015dd25c839c99dd1c0573531e761ea9ce4e397f2eab2dc4"
+    },
+    {
+      "path": "tests/diff/cases/semantics/collections/array_hof_shared_core.xr",
+      "lf_sha256": "4d117dffa7f7cd1582f886b627e8351cf87d0cf1b31c82341896b73e549c6a64"
+    },
+    {
+      "path": "tests/diff/cases/semantics/collections/array_reverse_shared_core.xr",
+      "lf_sha256": "d0ddf325dcd6a400affb6e9e54a1f8f19205d70114d5daba5b7357159799b732"
+    },
+    {
+      "path": "tests/diff/cases/semantics/collections/array_shift_shared_core.xr",
+      "lf_sha256": "4869abfdf75f1dfdc06073e72166c8757eec7c28ef0bbee1b210e5ae195a1b09"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int/wrapping_fixed_width.xr",
+      "lf_sha256": "b14af38853396187d9645eacbaf15b6f0cf44e689a1003da9075f84350bb6a21"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/exact_integer_bit_intrinsics.xr",
+      "lf_sha256": "8f81b6abc9298e19c11e426c454abab286a28c7bc6eaae81cffc79c6df156703"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/generic_int_format_shared_core.xr",
+      "lf_sha256": "ed37526163e9069a3973a2dd81152437fe286570829b76cf3caf5711591c2e62"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/int_bits_methods.xr",
+      "lf_sha256": "6e72ca3f692d158d5f5a41180b4a33e340325fbd17a4b0b472999ce13f423071"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/int_overflow_predicates.xr",
+      "lf_sha256": "c92ba2dea2e0f37ad9182375befa3d0b98ce3a7d55510e2214d3e773899ebf5a"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/int_safe_methods.xr",
+      "lf_sha256": "c632da1beee910de7ebfc3266a2e5f10ad8a89fe0d022ddedcb8c122e221a81b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/numeric_method_shared_core.xr",
+      "lf_sha256": "1e6b2c05f2ac494981e7404935e708d08302005182ce82047866132a60bd29bc"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/stringbuilder_numeric_shared_core.xr",
+      "lf_sha256": "e9fe9a4bf1bcd46f2872bf61359766b87f8d4481dca7901fe4e9612383699f48"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/uint64_divmod_unsigned.xr",
+      "lf_sha256": "c89cd251179f471aab87492fd317cc0cd0fef17e24162b7d1ceb89bc6968b289"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/auto_borrow_class_alias_return_downgrade.xr",
+      "lf_sha256": "7a9e9f61341108c0dd9c6f2ea4038a6c650c91da8607a58f9c91c15b2a90e239"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/auto_borrow_class_readonly_param.xr",
+      "lf_sha256": "0e39fde480e426286fa2fd956155b645a905b1ef2f4d643743f05c195a23d2e3"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/auto_borrow_heap_readonly_param.xr",
+      "lf_sha256": "7f79dc6c7a83aec154a93e54ef15935faaaa137844fa5e69e068c961072e0a83"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/converged_capability_positive.xr",
+      "lf_sha256": "bb78f5d19e7c73278b708f21732d709c0cc504a49edd5403ca09bec64258a8a3"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/copy_deep_independent.xr",
+      "lf_sha256": "593bca5fe5bf3b919430467dc2908cf7d8ccbb0dba8fbcf9eb28231550a4733d"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/copy_preserves_type.xr",
+      "lf_sha256": "e70bb3439c561f2090c8d64f01e8eb9556fdc2f24e09893d54e391ab5fedb24b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_alias_reassigned_copy_escape_allowed.xr",
+      "lf_sha256": "4d1f0d7870eccf5106fee0bb960ba39cbf3d319051689cedbb3a9d5a78eb4b31"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_closure_copy_capture_allowed.xr",
+      "lf_sha256": "3daa2ce82d90a7f9115d5c4f5e395bda59c40b0cdc894d1e27bef65a80d3cd2b"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_forward_function_param_copy_escape_allowed.xr",
+      "lf_sha256": "6a4d472aa9c954643e8ca20f6f2e748504c5e42afa3825a27241acdf30072e57"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_function_param_copy_escape_allowed.xr",
+      "lf_sha256": "24da9bcf2d62c9e84e467b72269076febaf4b03ee75c53cec85792e18886a203"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_function_param_method_copy_escape_allowed.xr",
+      "lf_sha256": "273fe7e6497909ecf54e7e39cde53f8b213a8d7d9500f03ccef970465e594500"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_go_copy_argument_allowed.xr",
+      "lf_sha256": "ccbe5f48bc106eb0ad72cd066cf2a8312f613a8112dbfdac37acf1d526f77c3f"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_method_wrapper_param_copy_escape_allowed.xr",
+      "lf_sha256": "10c43ae079c9a5b09fda006afa44377e285788cf579df0f0415ccfc3eb8eb1f9"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_readonly_user_method_names.xr",
+      "lf_sha256": "a0aa6b6a924c202dfedf7d9a2c4c4e3f4c0abbcaf9a41c9b03b7fc748ead6825"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/in_ref_heap_borrows.xr",
+      "lf_sha256": "15f2ffeda356d6b73e9d0a282e2e220e0c56ea1301104f93a669dcf257f220d1"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/move_into_go.xr",
+      "lf_sha256": "a089c6cd8145f6c5c415e5156ce1b83018e5027e5457dcc54a4865272f94ec93"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/move_local_heap.xr",
+      "lf_sha256": "38a2869ad499c083a14b57993bbdb524e12f557fd568db40edbd4d9fb3516608"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/move_local_in_fn.xr",
+      "lf_sha256": "da1e72bd809febb231e951db59fe694d92db8381ca84552766556f61c98f095c"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/shared_class_copy_go.xr",
+      "lf_sha256": "6c9ff02626c2f32d27d7a8edd6dd0a0ff1cf2c3e0ec23190b11e1d01f383904e"
+    },
+    {
+      "path": "tests/diff/cases/semantics/ownership/shared_freeze_go.xr",
+      "lf_sha256": "8f510c0bfd77d6960a8f6ae3e26e8f6978ede44b33488a09a07e9dced2209eae"
+    },
+    {
+      "path": "tests/diff/cases/semantics/string/interpolation_display_shapes.xr",
+      "lf_sha256": "9c629eb555e10a76b6ac6ee7ecb0968f8daee7d3146fbbe2a2d49c30381b0019"
+    },
+    {
+      "path": "tests/diff/cases/semantics/string/multiconcat.xr",
+      "lf_sha256": "69125f0905f74611fbb76a765427bf705a56d7d8bf3b48f71ef6a1884e1120f5"
+    },
+    {
+      "path": "tests/diff/cases/semantics/string/string_indexof_start_shared_core.xr",
+      "lf_sha256": "692aa5713ca25f02ca038a1ec47d373fd0ca14c080adf9f2143fcb28c232e8a4"
+    },
+    {
+      "path": "tests/diff/cases/semantics/string/string_surface_declared_methods.xr",
+      "lf_sha256": "4d478001a610f741e316ea0cd40ac239858094615e649cbb974b90b78ee53526"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/complete_numeric_model.py",
+      "lf_sha256": "25cbd5981ce4371670942bb94f8139d4be239e08cddfb7e62fcb6bd102ee27e2"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/complete_ownership_model.py",
+      "lf_sha256": "0502f946d07989b2065d79d78ac2e71fba8f1fe2c4d5c1588aec0f0e8d4ad688"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/complete_text_range_model.py",
+      "lf_sha256": "5cde240d314ae18f31badba73141d943a618d01434dc3855e03a90cde8343f1e"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_numeric_text_targets/arrays.xr",
+      "lf_sha256": "2abb319bf00fab5345f7b47bc7f22221a09d861b47113b92367a34e7aa82f8ea"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_numeric_text_targets/string_indexof_start_shared_core.xr",
+      "lf_sha256": "bcf7b6916c0ba6064d9c5702fe5f327858e5cae4e6a9d18cd1d154ab14d20609"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_numeric_text_targets/stringbuilder_numeric_shared_core.xr",
+      "lf_sha256": "4668474392945691c33a52fc63ae2f75cd98ab7a5d8ad3157d39d322f2bb4308"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/auto_borrow_class_alias_return_downgrade.xr",
+      "lf_sha256": "38828de6e28a782ea637d6386ff8a144bf713e3a2f5ee6a123a112f3427a26db"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/auto_borrow_class_readonly_param.xr",
+      "lf_sha256": "11a93babfc68f9911575160137996e996093ec13536cca3052a7b3116adb1231"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/converged_capability_positive.xr",
+      "lf_sha256": "3d99e41e3eecafa3d5122b4e5811d03c6de8eb4377656ed8dfd6f9688e723178"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/copy_deep_independent.xr",
+      "lf_sha256": "ca28292c941e8ded2b67050aecc0a51d45f87d0eb005a0eefb1a53927498488a"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/copy_preserves_type.xr",
+      "lf_sha256": "cbf7177251e025e000511e9daf90fae7738698b12dd08b8af412c03e036c01e7"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_alias_reassigned_copy_escape_allowed.xr",
+      "lf_sha256": "7aa16d9e937aef7391be35a4d83d4e6c89e0459c8d5cab01d484d5aa0677ac09"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_closure_copy_capture_allowed.xr",
+      "lf_sha256": "073d6f20dba9fa169559de68c1d246cf2c0dab0e5afc9d1b01c442ae0c15d07b"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_forward_function_param_copy_escape_allowed.xr",
+      "lf_sha256": "4141eb37e9ffb6a7d6d8498cf9feac7314def276dd80932abfc0382e1a328668"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_function_param_copy_escape_allowed.xr",
+      "lf_sha256": "0f0133a1787c41bdc6fc27cc53f604b9171ea47d49e7d9674b4828843ce26993"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_function_param_method_copy_escape_allowed.xr",
+      "lf_sha256": "956dca1cc7c1e62d35e7954f4a52f5bf372273312476918eb71312d3713864c6"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_go_copy_argument_allowed.xr",
+      "lf_sha256": "fc2be73a9e9547b24de09b210e521d643e38705866e583d2816e914276507c94"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_method_wrapper_param_copy_escape_allowed.xr",
+      "lf_sha256": "a6603bb2d48bd12d09b8aaf4ba7bbb5680398a8ea83d999a0bea2064e96a9f22"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_readonly_user_method_names.xr",
+      "lf_sha256": "0f403f6921be66b30522503982d863cfa84422f9731b5aa6df1a2609b8be522f"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/in_ref_heap_borrows.xr",
+      "lf_sha256": "bbcd1dd74a5f618cc5dc27c1e3cd5c9d5230c01ab2bd81d4c5a478ea62379f0e"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/move_into_go.xr",
+      "lf_sha256": "4f8173d119f8dbe6a6f94e00d1df1925f6de2da156ed56f72a7a8ca06652d250"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/move_local_heap.xr",
+      "lf_sha256": "431dd888082fb90e31c6423c56f9d5dead0de208cf4fbf78fd04fb20bf61d42c"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/move_local_in_fn.xr",
+      "lf_sha256": "43e8fb21d7127f0d0ebc8a80d3ea3842bc6f932c86c0f7f2a98f20d11395385f"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/shared_class_copy_go.xr",
+      "lf_sha256": "56b90519cfd681ec6e0fce8ce9d363e16188a3be30265d5676ff0ffc9d9e299c"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/complete_ownership_targets/shared_freeze_go.xr",
+      "lf_sha256": "ed73bc827a348387924fbcaf667b0014d6cabe7f7fd94ddb46604dc4631f1282"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/002_shared_bare_local_heap.xr",
+      "lf_sha256": "d47151617338114b0c731b892b5696ebf7280fb15be1655df8da5b1810f9b97d"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/012_ref_rejects_duplicate_in_arg.xr",
+      "lf_sha256": "51988af2f17814650adbfba875bd93bdfff403be9f42d8f77dea5e392d834670"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/013_ref_rejects_in_field_projection.xr",
+      "lf_sha256": "49fc315794249563c926571491119e88d348b20d8060abe3a11b7c037f19e64f"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/036_ref_return_escape.xr",
+      "lf_sha256": "d67f642178ee91b3f47f81d9548069c2cc52a82da459a8ae8a5dbd84209ef3a9"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/037_ref_field_store_escape.xr",
+      "lf_sha256": "aaf5fff393c37e460291a8df34c094cac01f6d319e40d6721937de52ce675c60"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/038_ref_array_push_escape.xr",
+      "lf_sha256": "0c540b4836512977b2c97d8b5f28ce8d274eb01aee18ecb939ed155aeb847262"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/149_in_rejects_ref_alias_arg.xr",
+      "lf_sha256": "c8617da4d7c252f9308cbdcd5fa464dcb00017f93e1f770b43709b70b3957674"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/181_defer_cleanup_blocks_return.xr",
+      "lf_sha256": "e5e60f8d78e8b6860866c6f4734d696e2f4d22f3103a6c034c530e26810a1736"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/188_ref_rejects_alias_root_arg.xr",
+      "lf_sha256": "b2c00d7c0d039eeb34186864d68340970bb6f38465242b41d50a72e4b7d34e0f"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/189_ref_rejects_receiver_overlap.xr",
+      "lf_sha256": "8cdca0f823dff142313ca300921124d28b99abff689d450153648dc22d334fe1"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/array_get_unchecked_requires_unsafe.xr",
+      "lf_sha256": "b7fc1d679c73e5ecace3ba324c07da2df5d986bc20c50d71f6ca230eaacb875e"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/array_set_unchecked_requires_unsafe.xr",
+      "lf_sha256": "cacb7bbd5180fff09b82726cea712d9cb366203424ca83d443ace879e1f987ec"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/frozen_positive_rejections/closure_capture_blocks_rebind.xr",
+      "lf_sha256": "073f7f9ef9ba342d98d547c45f165f20ae67c6cfb1f080a19ec55ee247f70369"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/fixtures/multiconcat_typed_null/root.xr",
+      "lf_sha256": "f8360e532803291985029168c023d29ced78672a1afe257294eafbc686fc8e4d"
+    },
+    {
+      "path": "tests/unit/xir/legacy_consumers/independent_observation_format.py",
+      "lf_sha256": "09843df7bf351411b39877696ae17e489ee982062827d3a6ab8e8cad7ab1f68b"
+    }
+  ],
+  "qualification": "NOT_RUN",
+  "scope": "Explicit complete originals and observed original-prefix fixtures; no capability or global coverage claim.",
+  "target_abi": "Numeric family uses Windows x86_64 pointer width64; isize/usize retained and required_target enforced against actual binary version."
+}

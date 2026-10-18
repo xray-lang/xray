@@ -1,0 +1,30 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// A local initialized from a class field is a value copy. Taking `ref` to the
+// local must not borrow or mutate the original receiver field.
+fn increment(value: ref i64) {
+    value = value + 1
+}
+
+class DigestState {
+    value: i64
+
+    init(value: i64) {
+        this.value = value
+    }
+
+    digestCopy() -> i64 {
+        var local = this.value
+        increment(ref local)
+        return local
+    }
+
+    incrementField() {
+        increment(ref this.value)
+    }
+}
+
+var state = DigestState(41)
+print(state.digestCopy())
+print(state.value)
+state.incrementField()
+print(state.value)

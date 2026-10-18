@@ -1,0 +1,85 @@
+// Preserve the complete original struct body and expose each scalar field/method result at its original assertion boundary.
+// Test: struct static methods and getter/setter
+// Expected: static factory methods work, computed properties work
+
+struct Color {
+    r: i64
+    g: i64
+    b: i64
+
+    // Computed property
+    hex() -> string {
+        return "rgb(${this.r},${this.g},${this.b})"
+    }
+
+    // Static factory methods
+    static red() -> Color {
+        return Color{r: 255, g: 0, b: 0}
+    }
+
+    static green() -> Color {
+        return Color{r: 0, g: 255, b: 0}
+    }
+
+    static blue() -> Color {
+        return Color{r: 0, g: 0, b: 255}
+    }
+}
+
+@test
+fn test_struct_static_getter() {
+
+    // === Static factory methods ===
+    var r = Color.red()
+    var g = Color.green()
+    var b = Color.blue()
+
+    var p19StructValue0 = r.r
+    assert(p19StructValue0 == 255)
+    print(p19StructValue0)
+    var p19StructValue1 = r.g
+    assert(p19StructValue1 == 0)
+    print(p19StructValue1)
+    var p19StructValue2 = r.b
+    assert(p19StructValue2 == 0)
+    print(p19StructValue2)
+
+    var p19StructValue3 = g.r
+    assert(p19StructValue3 == 0)
+    print(p19StructValue3)
+    var p19StructValue4 = g.g
+    assert(p19StructValue4 == 255)
+    print(p19StructValue4)
+    var p19StructValue5 = g.b
+    assert(p19StructValue5 == 0)
+    print(p19StructValue5)
+
+    var p19StructValue6 = b.r
+    assert(p19StructValue6 == 0)
+    print(p19StructValue6)
+    var p19StructValue7 = b.g
+    assert(p19StructValue7 == 0)
+    print(p19StructValue7)
+    var p19StructValue8 = b.b
+    assert(p19StructValue8 == 255)
+    print(p19StructValue8)
+
+    // === Computed property ===
+    var p19StructValue9 = r.hex()
+    assert(p19StructValue9 == "rgb(255,0,0)")
+    print(p19StructValue9)
+    var p19StructValue10 = g.hex()
+    assert(p19StructValue10 == "rgb(0,255,0)")
+    print(p19StructValue10)
+
+    // === Static result is independent copy ===
+    var r2 = Color.red()
+    r2.r = 128
+    var p19StructValue11 = r.r
+    assert(p19StructValue11 == 255)
+    print(p19StructValue11)
+    var p19StructValue12 = r2.r
+    assert(p19StructValue12 == 128)
+    print(p19StructValue12)
+}
+

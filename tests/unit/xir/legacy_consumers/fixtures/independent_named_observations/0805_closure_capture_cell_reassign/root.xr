@@ -1,0 +1,173 @@
+// Regression: a mutable capture's cell lives in the variable's pinned cell
+// register, but the emitter routed OP_CELL_SET through the *defining value's*
+// own register. A fresh-dst op (CALL, ...) deliberately allocates a new
+// register rather than coalescing onto var_reg, so `var h = Child(0)` after a
+// hoisted closure captured h stored into a register that held no cell.
+// OP_CELL_SET silently no-ops when R[A] is null, so the assignment was dropped
+// and every later read — inside the closure and out — observed null. Where the
+// stale register happened to hold a non-cell pointer instead, the store went
+// through a bogus XrCell* and corrupted the heap (SIGSEGV / SIGABRT).
+//
+// Only captures whose definition lands in a different register from the cell
+// showed it, which is why an int capture assigned from a literal stayed green.
+
+class Parent {
+    children: Array<Child>
+    tag: i64
+    init(tag) { this.children = []; this.tag = tag }
+}
+
+class Child {
+    tag: i64
+    init(tag) { this.tag = tag }
+}
+
+// The reported repro: a hoisted closure captures an instance-typed local that
+// is defined by a call *after* the capture. Crashed the process before the fix.
+@test
+fn test_hoisted_closure_capture_survives_instance_def() {
+    var h = Child(0)
+    fn attach() {
+        var t = Parent(42)
+        t.children.push(h)
+    }
+    attach()
+    var p19SupportedValue1 = h.tag
+    assertEqual(p19SupportedValue1, 0)
+    print(p19SupportedValue1)
+}
+
+// Two captured instances: each must reach its own cell, not one shared or
+// stale register.
+@test
+fn test_multiple_instance_captures_stay_distinct() {
+    var a = Child(1)
+    var b = Child(2)
+    fn pack() {
+        var t = Parent(0)
+        t.children.push(a)
+        t.children.push(b)
+    }
+    pack()
+    var p19SupportedValue2 = a.tag
+    assertEqual(p19SupportedValue2, 1)
+    print(p19SupportedValue2)
+    var p19SupportedValue3 = b.tag
+    assertEqual(p19SupportedValue3, 2)
+    print(p19SupportedValue3)
+}
+
+// Reassigning the captured variable from a call after the closure exists must
+// be visible through the closure, repeatedly.
+@test
+fn test_reassign_after_capture_visible_in_closure() {
+    var h = Child(0)
+    fn read() -> i64 {
+        return h.tag
+    }
+    h = Child(3)
+    var p19SupportedValue4 = read()
+    assertEqual(p19SupportedValue4, 3)
+    print(p19SupportedValue4)
+    h = Child(4)
+    var p19SupportedValue5 = read()
+    assertEqual(p19SupportedValue5, 4)
+    print(p19SupportedValue5)
+    var p19SupportedValue6 = h.tag
+    assertEqual(p19SupportedValue6, 4)
+    print(p19SupportedValue6)
+}
+
+// The mirror direction: a write performed inside the closure must be visible
+// to the enclosing frame.
+@test
+fn test_closure_write_visible_to_enclosing_frame() {
+    var h = Child(1)
+    fn swap() {
+        h = Child(2)
+    }
+    var p19SupportedValue7 = h.tag
+    assertEqual(p19SupportedValue7, 1)
+    print(p19SupportedValue7)
+    swap()
+    var p19SupportedValue8 = h.tag
+    assertEqual(p19SupportedValue8, 2)
+    print(p19SupportedValue8)
+}
+
+// Repeated writes through the cell across a loop must not lose or alias the
+// captured instance.
+@test
+fn test_repeated_closure_writes_through_cell() {
+    var h = Child(0)
+    fn step(n: i64) {
+        h = Child(n)
+    }
+    var i = 1
+    while (i <= 5) {
+        step(i)
+        var p19SupportedValue9 = h.tag
+        assertEqual(p19SupportedValue9, i)
+        print(p19SupportedValue9)
+        i += 1
+    }
+    var p19SupportedValue10 = h.tag
+    assertEqual(p19SupportedValue10, 5)
+    print(p19SupportedValue10)
+}
+
+// The captured instance stays alive and correct once the closure has stored it
+// into a container that outlives the call.
+@test
+fn test_captured_instance_retained_by_container() {
+    var h = Child(11)
+    var p = Parent(1)
+    fn attach() {
+        p.children.push(h)
+    }
+    attach()
+    var p19SupportedValue11 = len(p.children)
+    assertEqual(p19SupportedValue11, 1)
+    print(p19SupportedValue11)
+    var p19SupportedValue12 = p.children[0].tag
+    assertEqual(p19SupportedValue12, 11)
+    print(p19SupportedValue12)
+    var p19SupportedValue13 = h.tag
+    assertEqual(p19SupportedValue13, 11)
+    print(p19SupportedValue13)
+}
+
+// Mirror direction, through the cell-creation path rather than the store path:
+// the capture's reaching definition is the *second* assignment, so the cell was
+// created at the first definition's register while the closure captured the
+// second's. The closure then dereferenced a register holding a raw instance as
+// if it were an XrCell.
+@test
+fn test_cell_created_at_capture_register() {
+    var h = Child(1)
+    h = Child(2)
+    fn f() {
+        h = Child(3)
+    }
+    var p19SupportedValue14 = h.tag
+    assertEqual(p19SupportedValue14, 2)
+    print(p19SupportedValue14)
+    f()
+    var p19SupportedValue15 = h.tag
+    assertEqual(p19SupportedValue15, 3)
+    print(p19SupportedValue15)
+}
+
+// Non-RC captures shared the same emitter path; keep them covered so a future
+// change cannot fix the instance case by special-casing RC types.
+@test
+fn test_int_capture_roundtrip() {
+    var n = 0
+    fn setn() {
+        n = 7
+    }
+    setn()
+    var p19SupportedValue16 = n
+    assertEqual(p19SupportedValue16, 7)
+    print(p19SupportedValue16)
+}

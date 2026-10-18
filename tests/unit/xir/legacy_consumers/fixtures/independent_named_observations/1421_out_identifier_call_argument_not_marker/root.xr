@@ -1,0 +1,15 @@
+// Retain all original calls and place kinds; capture actual scalar results once after their original argument evaluation.
+fn plus_one(x: i64) -> i64 {
+    return x + 1
+}
+
+@test
+fn test_out_identifier_call_argument_not_marker() {
+    var out = 41
+    var p19PlaceValue0 = plus_one(out)
+    assertEqual(p19PlaceValue0, 42)
+    print(p19PlaceValue0)
+    var p19PlaceValue1 = plus_one(out + 1)
+    assertEqual(p19PlaceValue1, 43)
+    print(p19PlaceValue1)
+}

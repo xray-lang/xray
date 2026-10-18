@@ -1,0 +1,20 @@
+// Cross-module value aggregate used by exported_struct_methods.xr. The inline
+// fixed buffer and mutating instance method ensure AOT derives method ownership
+// from nominal capability, without routing the struct through class plans.
+export struct ByteState {
+    data: [u8; 4]
+    total: i64
+
+    static make(seed: i64) -> ByteState {
+        return ByteState{data: [0; 4], total: seed}
+    }
+
+    ref update(value: u8) {
+        this.data[0] = value
+        this.total = this.total + (value as i64)
+    }
+
+    digest() -> i64 {
+        return this.total + (this.data[0] as i64)
+    }
+}

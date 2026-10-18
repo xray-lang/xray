@@ -1,0 +1,64 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// Native class methods must be able to materialize the receiver `this` as a
+// value: return this, read this from a cleanup block, pass this as an argument, and
+// method-chain through a `return this` result. Covers both heap-local receivers
+// and module-level shared-native receivers (which must not use the raw static
+// storage once a method leaks `this`).
+
+class Box {
+    n: i64
+
+    init(n: i64) {
+        this.n = n
+    }
+
+    self() -> Box {
+        return this
+    }
+
+    bump() -> i64 {
+        defer { this.n = this.n + 100 }
+        return this.n
+    }
+}
+
+class Chain {
+    v: i64
+
+    init(v: i64) {
+        this.v = v
+    }
+
+    inc() -> Chain {
+        this.v = this.v + 1
+        return this
+    }
+
+    get() -> i64 {
+        return this.v
+    }
+}
+
+fn readBox(b: Box) -> i64 {
+    return b.n
+}
+
+// Module-level receiver exercises the shared-native storage path.
+var moduleBox = Box(1)
+print(moduleBox.self().n)
+print(moduleBox.bump())
+print(moduleBox.bump())
+print(readBox(moduleBox.self()))
+
+fn run() -> i64 {
+    var b = Box(5)
+    var aliased = b.self()
+    aliased.n = aliased.n + 10
+    var first = b.bump()
+    var viaArg = readBox(b.self())
+    var c = Chain(0)
+    var chained = c.inc().inc().inc().get()
+    return b.n + first + viaArg + chained
+}
+
+print(run())

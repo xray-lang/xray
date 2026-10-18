@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "inputs": [
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/add_overflow.xr",
+      "lf_sha256": "ed20b85dcc45d5295ec01ed8f2f2939a8bb80579316d0f9760bc56df78fcec5c"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/int_as_truncation.xr",
+      "lf_sha256": "3c9f5a384eb028823560132c5fd934f19ad61fb181e7165dcec629f3a631b64d"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/narrow_arith_wrap.xr",
+      "lf_sha256": "37e67685dccae436b0c4860c56f49702079945f29c14ead78e57455fbfc364f0"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/uint64_large_literals.xr",
+      "lf_sha256": "ef86b0eff3f3fb81242cacc7b3235883affb5bfa297094ef84d354a8b96761c5"
+    },
+    {
+      "path": "tests/diff/cases/semantics/int_wrap/uint64_shift_logical.xr",
+      "lf_sha256": "0a744bf8e524a8c40a0a4f31c627d9dace08657ba276a1b050e1a78fc017391e"
+    },
+    {
+      "path": "spec/source/sections/003-2-type-system.md",
+      "lf_sha256": "b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677"
+    },
+    {
+      "path": "spec/source/sections/004-3-expressions.md",
+      "lf_sha256": "1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c"
+    }
+  ],
+  "semantic_basis": "Same-sign mixed integer operands use the wider operand type; operations wrap there before any return widening. Explicit casts truncate modulo the target width. Unsigned right shifts zero extend.",
+  "original_comments": "The two historical mix comments in narrow_arith_wrap describe the earlier widening rule. Preserve original source, apply the current frozen arithmetic definition, and report this transition explicitly.",
+  "reviewed_input_epochs": [
+    {
+      "fixed_input": "d5965cf74aefb2125c5b5d43377effcef7f80279",
+      "prior_product_head": "dc6c4b1df2f227d16b4f7ffc18b00e3914375152",
+      "inputs": [
+        {
+          "path": "spec/source/sections/003-2-type-system.md",
+          "prior_lf_sha256": "f4e970b0cc728c19f65a4d1b2a13cd0e572431dcac3f6f20cd06d23046ebea8a"
+        }
+      ],
+      "semantic_review": "See P19 fixed-input handoff; expected values unchanged."
+    }
+  ]
+}

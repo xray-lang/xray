@@ -1,0 +1,35 @@
+// anchor: task-208-local-native-size-layout
+// Native-size fields are pointer-width C ABI scalars, not enum-range outliers.
+import mem
+
+struct NativeSizeHeader {
+    length: usize
+    delta: isize
+}
+
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+}
+
+fn main() {
+    var raw = unsafe { malloc(mem.sizeOf<NativeSizeHeader>() as usize) }
+
+    unsafe {
+        mem.store<u64>(raw, mem.offsetOf<NativeSizeHeader>("length"), 37, Endian.Native)
+        mem.store<i64>(raw, mem.offsetOf<NativeSizeHeader>("delta"), -37, Endian.Native)
+    }
+    var headers = unsafe { mem.slice<NativeSizeHeader>(raw, 1, raw) }
+    print(headers[0].length)
+    print(headers[0].delta)
+
+    unsafe {
+        mem.store<u64>(raw, mem.offsetOf<NativeSizeHeader>("length"), 91, Endian.Native)
+        mem.store<i64>(raw, mem.offsetOf<NativeSizeHeader>("delta"), -91, Endian.Native)
+        print(mem.load<u64>(raw, mem.offsetOf<NativeSizeHeader>("length"), Endian.Native))
+        print(mem.load<i64>(raw, mem.offsetOf<NativeSizeHeader>("delta"), Endian.Native))
+        free(raw)
+    }
+}
+
+main()

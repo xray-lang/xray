@@ -1,0 +1,4 @@
+var values = Array<i64>(2, 0)
+print(values.get(0))
+
+print(len(values))

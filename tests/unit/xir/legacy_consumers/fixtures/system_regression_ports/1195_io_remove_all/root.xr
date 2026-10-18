@@ -1,0 +1,91 @@
+// removeAll descends into real directories only. A symlink is removed as the
+// link it is and never followed, so nothing outside the tree is touched. The
+// walk stops at 64 levels, and a tree deeper than that is refused whole rather
+// than partially deleted.
+
+import io
+import path
+import { Path } from path
+
+fn tree(parent: Path, name: string) -> Path {
+    var root = path.join(parent, path.from(name))
+    assert(io.mkdirp(path.join(root, path.from("a/b/c"))))
+    assert(io.writeFile(path.join(root, path.from("top")), "t"))
+    assert(io.writeFile(path.join(root, path.from("a/f1")), "1"))
+    assert(io.writeFile(path.join(root, path.from("a/b/f2")), "2"))
+    return root
+}
+
+fn cleanupDeep(parent: Path, root: Path) {
+    var levels: Array<Path> = [root]
+    var current = root.toString()
+    for (var i = 0; i < 70; i++) {
+        current = current + "/d"
+        levels.push(Path(current))
+    }
+    for (var i = 70; i >= 0; i--) { io.removeAll(levels[i]) }
+    io.removeAll(parent)
+}
+
+@test
+fn test_removes_a_whole_tree() {
+    var parent = io.tempDir()!
+    defer { io.removeAll(parent) }
+    var root = tree(parent, "rmall_tree")
+    assert(io.removeAll(root))
+    assertEqual(io.exists(root), false)
+}
+
+@test
+fn test_removes_a_single_file() {
+    var targetParent = io.tempDir()!
+    defer { io.removeAll(targetParent) }
+    var target = path.join(targetParent, path.from("rmall_single"))
+    assert(io.writeFile(target, "x"))
+    assert(io.removeAll(target))
+    assertEqual(io.exists(target), false)
+}
+
+@test
+fn test_missing_path_is_reported_as_failure() {
+    var missingParent = io.tempDir()!
+    defer { io.removeAll(missingParent) }
+    var missing = path.join(missingParent, path.from("rmall_absent"))
+    assertEqual(io.removeAll(missing), false)
+}
+
+@test
+fn test_a_symlink_is_removed_without_following_it() {
+    var outsideParent = io.tempDir()!
+    defer { io.removeAll(outsideParent) }
+    var outside = path.join(outsideParent, path.from("rmall_outside"))
+    assert(io.mkdirp(outside))
+    var keep = path.join(outside, path.from("keep"))
+    assert(io.writeFile(keep, "keep me"))
+
+    var parent = io.tempDir()!
+    defer { io.removeAll(parent) }
+    var root = tree(parent, "rmall_link")
+    assert(io.symlink(outside, path.join(root, path.from("link"))))
+
+    assert(io.removeAll(root))
+    assertEqual(io.exists(root), false)
+    // The link is gone with the tree; what it pointed at is untouched.
+    assert(io.exists(keep))
+    io.removeAll(outside)
+}
+
+@test
+fn test_a_tree_deeper_than_the_ceiling_is_refused_whole() {
+    var parent = io.tempDir()!
+    defer { io.removeAll(parent) }
+    var root = path.join(parent, path.from("rmall_deep"))
+    defer { cleanupDeep(parent, root) }
+    var deep = root.toString()
+    for (var i = 0; i < 70; i++) { deep = deep + "/d" }
+    assert(io.mkdirp(Path(deep)))
+
+    // Refused, and nothing below it was removed on the way down.
+    assertEqual(io.removeAll(root), false)
+    assert(io.isDir(Path(deep)))
+}

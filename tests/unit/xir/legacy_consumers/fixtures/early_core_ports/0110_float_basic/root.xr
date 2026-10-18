@@ -1,0 +1,69 @@
+// 0110_float_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：浮点数字面量基础
+// ===== 正常路径 =====
+@test
+fn test_simple_floats() {
+    assertEqual(1.0, 1.0)
+    assertEqual(3.14, 3.14)
+    assertEqual(2.5, 2.5)
+}
+
+@test
+fn test_zero_float() {
+    assertEqual(0.0, 0.0)
+    var x: f64 = 0.0
+    assertEqual(x, 0.0)
+}
+
+@test
+fn test_negative_floats() {
+    assertEqual(-1.5, -1.5)
+    assertEqual(-3.14, -3.14)
+    assertEqual(-0.001, -0.001)
+}
+
+// ===== 科学计数法 =====
+@test
+fn test_scientific_notation() {
+    assertEqual(1e3, 1000.0)
+    assertEqual(1.5e2, 150.0)
+    assertEqual(2.5e-1, 0.25)
+    assertEqual(1e+06, 1e+06)
+}
+
+@test
+fn test_scientific_negative_exponent() {
+    assertEqual(1e-3, 0.001)
+    assertEqual(5e-2, 0.05)
+}
+
+// ===== Decimal values =====
+@test
+fn test_float_decimal_values() {
+    assertEqual(1000.5, 1000.5)
+    assertEqual(3.14159, 3.14159)
+}
+
+// ===== 边界条件 =====
+@test
+fn test_small_decimals() {
+    assertEqual(0.1 > 0, true)
+    assertEqual(0.01 > 0, true)
+    assertEqual(0.001 > 0, true)
+}
+
+@test
+fn test_leading_zero() {
+    assertEqual(0.5, 0.5)
+    assertEqual(0.123, 0.123)
+}
+
+// ===== 精度测试 =====
+@test
+fn test_float_comparison() {
+    // IEEE 754 精度问题：0.1 + 0.2 != 0.3
+    var sum = 0.1 + 0.2
+    assertEqual(sum > 0.29, true)
+    assertEqual(sum < 0.31, true)
+}

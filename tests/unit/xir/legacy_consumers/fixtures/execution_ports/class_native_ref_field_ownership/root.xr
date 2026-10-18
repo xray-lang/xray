@@ -1,0 +1,50 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+class Bag {
+    values: Array<i64>
+
+    init(values: Array<i64>) {
+        this.values = values
+    }
+
+    sum() -> i64 {
+        var i = 0
+        var total = 0
+        while (i < len(this.values)) {
+            total = total + this.values[i]
+            i = i + 1
+        }
+        return total
+    }
+
+    replace(next: Array<i64>) -> i64 {
+        this.values = next
+        return this.sum()
+    }
+}
+
+fn make(values: Array<i64>) -> Bag {
+    return Bag(values)
+}
+
+fn swap(b: ref Bag, next: Array<i64>) -> i64 {
+    b.values = next
+    return b.sum()
+}
+
+var first = [1, 2, 3]
+var second = [10, 20]
+var bag = make(first)
+
+print(bag.sum())
+print(bag.replace(second))
+print(swap(ref bag, first))
+print(bag.sum())
+
+first[0] = 99
+print(first[0])
+print(bag.values[0])
+var extracted = bag.values
+extracted[1] = 88
+print(extracted[1])
+print(bag.values[1])
+print(first[1])

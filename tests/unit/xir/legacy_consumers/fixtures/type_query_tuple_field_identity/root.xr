@@ -1,0 +1,251 @@
+// 1205_typeof_operator.xr
+// Test typeof operator and runtime type checking
+
+import regex
+
+// ===== Primitive Types =====
+
+@test
+fn test_typeof_int() {
+    var x = 42
+    assertEqual(typeName(x), "i64")
+}
+
+@test
+fn test_typeof_float() {
+    var x = 3.14
+    assertEqual(typeName(x), "f64")
+}
+
+@test
+fn test_typeof_string() {
+    var x = "hello"
+    assertEqual(typeName(x), "string")
+}
+
+@test
+fn test_typeof_bool() {
+    assertEqual(typeName(true), "bool")
+    assertEqual(typeName(false), "bool")
+}
+
+@test
+fn test_typeof_null() {
+    var x = null
+    assertEqual(typeName(x), "null")
+}
+
+// ===== Container Types =====
+
+@test
+fn test_typeof_array() {
+    var arr = [1, 2, 3]
+    assertEqual(typeName(arr), "Array")
+}
+
+@test
+fn test_typeof_map() {
+    var m = #{"a": 1}
+    assertEqual(typeName(m), "Map")
+}
+
+@test
+fn test_typeof_set() {
+    var s = #[1, 2, 3]
+    assertEqual(typeName(s), "Set")
+}
+
+// ===== Function Types =====
+
+@test
+fn test_typeof_function() {
+    fn add(a: i64, b: i64) -> i64 { return a + b }
+    assertEqual(typeName(add), "function")
+}
+
+@test
+fn test_typeof_arrow() {
+    var f = (x: i64) -> x * 2
+    assertEqual(typeName(f), "function")
+}
+
+@test
+fn test_typeof_closure() {
+    var x = 10
+    var f = () -> x
+    assertEqual(typeName(f), "function")
+}
+
+// ===== Class Types =====
+
+class Person {
+    name: string
+    init(name: string) {
+        this.name = name
+    }
+}
+
+class Student extends Person {
+    grade: i64
+    init(name: string, grade: i64) {
+        super(name)
+        this.grade = grade
+    }
+}
+
+@test
+fn test_typeof_class_instance() {
+    var p = Person("Alice")
+    assertEqual(typeName(p), "Person")
+}
+
+@test
+fn test_typeof_subclass_instance() {
+    var s = Student("Bob", 10)
+    assertEqual(typeName(s), "Student")
+}
+
+// ===== Type Checking in Conditionals =====
+
+@test
+fn test_typeof_conditional() {
+    fn describe<T>(x: T) -> string {
+        if (typeName(x) == "i64") {
+            return "an integer"
+        } else if (typeName(x) == "string") {
+            return "a string"
+        } else {
+            return "something else"
+        }
+    }
+
+    assertEqual(describe(42), "an integer")
+    assertEqual(describe("hello"), "a string")
+    assertEqual(describe([1,2,3]), "something else")
+}
+
+@test
+fn test_typeof_switch() {
+    fn typeLabel<T>(x: T) -> string {
+        return match (typeName(x)) {
+            "i64" -> "integer",
+            "f64" -> "decimal",
+            "string" -> "text",
+            "bool" -> "boolean",
+            "Array" -> "list",
+            _ -> "unknown"
+        }
+    }
+
+    assertEqual(typeLabel(42), "integer")
+    assertEqual(typeLabel(3.14), "decimal")
+    assertEqual(typeLabel("hi"), "text")
+    assertEqual(typeLabel(true), "boolean")
+    assertEqual(typeLabel([1,2]), "list")
+}
+
+// ===== Dynamic Type Operations =====
+
+@test
+fn test_typeof_after_assignment() {
+    var x = 42
+    assertEqual(typeName(x), "i64")
+
+    // Variable can't change type in xray, but we can test with any
+    var y: i64 = 42
+    assertEqual(typeName(y), "i64")
+}
+
+@test
+fn test_typeof_expression_result() {
+    assertEqual(typeName(1 + 2), "i64")
+    assertEqual(typeName(1.0 + 2.0), "f64")
+    assertEqual(typeName("a" + "b"), "string")
+    assertEqual(typeName(1 < 2), "bool")
+}
+
+// ===== Special Cases =====
+
+@test
+fn test_typeof_empty_array() {
+    var arr: Array<i64> = []
+    assertEqual(typeName(arr), "Array")
+}
+
+@test
+fn test_typeof_empty_map() {
+    var m: Map<string, i64> = #{}
+    assertEqual(typeName(m), "Map")
+}
+
+@test
+fn test_typeof_empty_set() {
+    var s: Set<i64> = #[]
+    assertEqual(typeName(s), "Set")
+}
+
+@test
+fn test_typeof_bytes() {
+    var b = Array<u8>(10)
+    assertEqual(typeName(b), "Array")
+}
+
+@test
+fn test_typeof_regex() {
+    var r = /\d+/
+    assertEqual(typeName(r), "Regex")
+}
+
+// ===== Structural Object Type =====
+
+@test
+fn test_typeof_json_object() {
+    var obj = { name: "Alice", age: 30 }
+    assertEqual(typeName(obj), "object")
+}
+
+@test
+fn test_typeof_nested_json() {
+    var obj = {
+        user: {
+            name: "Bob",
+            scores: [90, 85, 95]
+        }
+    }
+    assertEqual(typeName(obj), "object")
+    assertEqual(typeName(obj.user.scores), "Array")
+}
+
+// ===== Tuple Types =====
+
+@test
+fn test_typeof_tuple2() {
+    fn pair() -> (i64, string) { return (42, "hello") }
+    var t = pair()
+    assertEqual(typeName(t), "Tuple2")
+}
+
+@test
+fn test_typeof_tuple3() {
+    fn triple() -> (i64, f64, string) { return (1, 2.0, "x") }
+    var t = triple()
+    assertEqual(typeName(t), "Tuple3")
+}
+
+@test
+fn test_is_tuple() {
+    fn pair() -> (i64, string) { return (10, "hi") }
+    var t = pair()
+    assert(t is (i64, string))
+    assert(!(t is (f64, bool)))  // Ordered field types differ, so the intersection is empty.
+}
+
+// ===== Enum Types =====
+
+enum Color { Red, Green, Blue }
+
+@test
+fn test_typeof_enum() {
+    var c = Color.Red
+    assertEqual(typeName(c), "Color")
+}

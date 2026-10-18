@@ -1,0 +1,5 @@
+export struct Box<R> {
+  value: R
+  readAs<U>(_marker: U) -> R { return this.value }
+  forwardAs<U>(marker: U) -> R { return this.readAs<U>(marker) }
+}

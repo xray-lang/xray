@@ -1,0 +1,71 @@
+/* Array<byte> basic tests: Array<byte> is Array<byte> */
+
+@test
+fn test_byte_array_basic() {
+
+    // ========== Create Array<byte> ==========
+
+    // Empty Array<byte>
+    var b1 = Array<u8>()
+    print(len(b1))  // 0
+
+    // Specified length (initialized to 0)
+    var b2 = Array<u8>(5)
+    print(len(b2))  // 5
+    print(b2[0])      // 0
+
+    // Specified length and fill value
+    var b3 = Array<u8>(3, 255)
+    print(b3[0])  // 255
+    print(b3[1])  // 255
+    print(b3[2])  // 255
+
+    // From array
+    var b4 = Array<u8>([72, 101, 108, 108, 111])
+    print(len(b4))  // 5
+
+    // ========== Index get/set ==========
+
+    var b5 = Array<u8>(3)
+    b5[0] = 65   // 'A'
+    b5[1] = 66   // 'B'
+    b5[2] = 67   // 'C'
+    print(b5[0])  // 65
+    print(b5[1])  // 66
+    print(b5[2])  // 67
+
+    // ========== push ==========
+
+    var b6 = Array<u8>()
+    b6.push(88)  // 'X'
+    b6.push(89)  // 'Y'
+    b6.push(90)  // 'Z'
+    print(len(b6))  // 3
+    print(b6[0])      // 88
+    print(b6[1])      // 89
+    print(b6[2])      // 90
+
+    assertEqual(len(b1), 0)
+    assertEqual(b2, [0, 0, 0, 0, 0])
+    assertEqual(b3, [255, 255, 255])
+    assertEqual(b4, [72, 101, 108, 108, 111])
+    assertEqual(b5, [65, 66, 67])
+    assertEqual(b6, [88, 89, 90])
+    print("Array<byte> basic tests passed!")
+
+    // expect: 0
+    // expect: 5
+    // expect: 0
+    // expect: 255
+    // expect: 255
+    // expect: 255
+    // expect: 5
+    // expect: 65
+    // expect: 66
+    // expect: 67
+    // expect: 3
+    // expect: 88
+    // expect: 89
+    // expect: 90
+    // expect: Array<byte> basic tests passed!
+}

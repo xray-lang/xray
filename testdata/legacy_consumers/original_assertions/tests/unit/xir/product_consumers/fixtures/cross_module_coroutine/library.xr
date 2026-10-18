@@ -1,0 +1,5 @@
+export fn child(value: i64) -> i64 {
+  Coro.yield()
+  Coro.yield()
+  return value
+}

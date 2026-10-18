@@ -1,0 +1,50 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// anchor: operator-overload-inherited
+// An operator method is inherited like any other method, so a subclass instance
+// with no operator of its own still resolves `+` to the base declaration. The
+// resolution runs on the static type of the operand, which is the subclass.
+
+class Base {
+    x: i64
+
+    init(x: i64) {
+        this.x = x
+    }
+
+    operator+(other: Base) -> Base {
+        return Base(this.x + other.x)
+    }
+
+    operator*(k: i64) -> Base {
+        return Base(this.x * k)
+    }
+}
+
+class Derived extends Base {
+    tag: i64
+
+    init(x: i64, tag: i64) {
+        super(x)
+        this.tag = tag
+    }
+}
+
+fn main() {
+    var d1 = Derived(3, 1)
+    var d2 = Derived(4, 2)
+
+    // Inherited operator+, invoked on the subclass static type.
+    var sum = d1 + d2
+    print(sum.x)
+
+    // Inherited operator*, mixed operand types (instance and int).
+    var scaled = d1 * 5
+    print(scaled.x)
+
+    // Base-typed binding holding a subclass instance.
+    var b: Base = d2
+    var mixed = b + d1
+    print(mixed.x)
+}
+
+main()

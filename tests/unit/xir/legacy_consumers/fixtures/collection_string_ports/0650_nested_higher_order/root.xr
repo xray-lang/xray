@@ -1,0 +1,516 @@
+// 0650_nested_higher_order.xr
+// Author: xingleixu@gmail.com
+// Test: Complex nested higher-order functions for type inference
+// ===== Deep Chained Operations (3+ levels) =====
+@test
+fn test_triple_chain_map() {
+    var arr = [1, 2, 3, 4, 5]
+    var result = arr.map(fn(x) {
+        return x * 2
+    }).map(fn(x) {
+        return x + 1
+    }).map(fn(x) {
+        return x * x
+    })
+    // [9, 25, 49, 81, 121]
+    assertEqual(len(result), 5)
+    assertEqual(result[0], 9)
+    assertEqual(result[4], 121)
+}
+
+@test
+fn test_quad_chain_mixed() {
+    var arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    var result = arr.filter(fn(x) {
+        return x % 2 == 0
+    }).map(fn(x) {
+        return x * 3
+    }).filter(fn(x) {
+        return x > 10
+    }).map(fn(x) {
+        return x / 6
+    })
+    // [2, 3, 4, 5]
+    assertEqual(len(result), 4)
+    assertEqual(result[0], 2)
+    assertEqual(result[3], 5)
+}
+
+@test
+fn test_five_level_chain() {
+    var arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    var result = arr.map(fn(x) {
+        return x * 2
+    }).filter(fn(x) {
+        return x % 4 == 0
+    }).map(fn(x) {
+        return x / 4
+    }).filter(fn(x) {
+        return x > 2
+    }).reduce(fn(a, b) {
+        return a + b
+    }, 0)
+    // 12
+    assertEqual(result, 12)
+}
+
+// ===== Nested Array Operations =====
+@test
+fn test_map_over_nested_array() {
+    var matrix = [[1, 2], [3, 4], [5, 6]]
+    var doubled = matrix.map(fn(row) {
+        return row.map(fn(x) {
+            return x * 2
+        })
+    })
+    assertEqual(len(doubled), 3)
+    assertEqual(doubled[0][0], 2)
+    assertEqual(doubled[0][1], 4)
+    assertEqual(doubled[2][1], 12)
+}
+
+@test
+fn test_filter_then_map_nested() {
+    var data = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    var result = data.filter(fn(row) {
+        return row[0] > 2
+    }).map(fn(row) {
+        return row.filter(fn(x) {
+            return x % 2 == 0
+        })
+    })
+    // [[4,6], [8]]
+    assertEqual(len(result), 2)
+    assertEqual(len(result[0]), 2)
+    assertEqual(result[0][0], 4)
+    assertEqual(result[1][0], 8)
+}
+
+@test
+fn test_triple_nested_map() {
+    var cube = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    var result = cube.map(fn(plane) {
+        return plane.map(fn(row) {
+            return row.map(fn(x) {
+                return x * 10
+            })
+        })
+    })
+    assertEqual(result[0][0][0], 10)
+    assertEqual(result[0][1][1], 40)
+    assertEqual(result[1][1][1], 80)
+}
+
+@test
+fn test_nested_reduce() {
+    var matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    var rowSums = matrix.map(fn(row) {
+        return row.reduce(fn(a, b) {
+            return a + b
+        }, 0)
+    })
+    assertEqual(len(rowSums), 3)
+    assertEqual(rowSums[0], 6)
+    assertEqual(rowSums[1], 15)
+    assertEqual(rowSums[2], 24)
+    var total = rowSums.reduce(fn(a, b) {
+        return a + b
+    }, 0)
+    assertEqual(total, 45)
+}
+
+@test
+fn test_flatten_with_reduce() {
+    var nested = [[1, 2], [3, 4, 5], [6]]
+    var seed: Array<i64> = []
+    var flat = nested.reduce(fn(acc, arr) {
+        return acc.concat(arr)
+    }, seed)
+    assertEqual(len(flat), 6)
+    assertEqual(flat[0], 1)
+    assertEqual(flat[5], 6)
+}
+
+// ===== Complex Type Transformations =====
+@test
+fn test_map_to_objects_then_filter() {
+    var nums = [1, 2, 3, 4, 5]
+    var objects = nums.map(fn(n) {
+        return ({ "value": n, "doubled": n * 2 })
+    })
+    var filtered = objects.filter(fn(obj) {
+        return obj.doubled > 4
+    })
+    assertEqual(len(filtered), 3)
+    assertEqual(filtered[0].value, 3)
+    assertEqual(filtered[0].doubled, 6)
+}
+
+@test
+fn test_chain_with_type_change() {
+    var words = ["apple", "banana", "cherry", "date"]
+    var result = words.map(fn(w) {
+        return len(w)
+    }).filter(fn(len) {
+        return len > 4
+    }).map(fn(len) {
+        return len.toString()
+    })
+    // ["5", "6", "6"]
+    assertEqual(len(result), 3)
+    assertEqual(result[0], "5")
+    assertEqual(result[1], "6")
+}
+
+@test
+fn test_reduce_to_map() {
+    var pairs = [("a", 1), ("b", 2), ("c", 3)]
+    var seed: Map<string, i64> = #{}
+    var obj = pairs.reduce(fn(acc, pair) {
+        var next = acc
+        next.set(pair.0, pair.1)
+        return next
+    }, seed)
+    assertEqual(obj.get("a"), 1)
+    assertEqual(obj.get("b"), 2)
+    assertEqual(obj.get("c"), 3)
+    assertEqual(len(seed), 0)
+}
+
+// ===== Higher-Order Functions with Closures =====
+@test
+fn test_map_with_closure_capture() {
+    var multiplier = 10
+    var arr = [1, 2, 3, 4, 5]
+    var result = arr.map(fn(x) {
+        return x * multiplier
+    })
+    assertEqual(result[0], 10)
+    assertEqual(result[4], 50)
+}
+
+@test
+fn test_nested_closure_capture() {
+    var base = 100
+    var matrix = [[1, 2], [3, 4]]
+    var result = matrix.map(fn(row) {
+        var offset = 10
+        return row.map(fn(x) {
+            return base + offset + x
+        })
+    })
+    assertEqual(result[0][0], 111)
+    assertEqual(result[1][1], 114)
+}
+
+@test
+fn test_filter_with_external_predicate() {
+    var threshold = 5
+    var arr = [1, 3, 5, 7, 9]
+    fn isAboveThreshold(x: i64) -> bool {
+        return x > threshold
+    }
+    var result = arr.filter(isAboveThreshold)
+    assertEqual(len(result), 2)
+    assertEqual(result[0], 7)
+}
+
+// ===== Combining Multiple Array Operations =====
+@test
+fn test_parallel_operations_then_combine() {
+    var arr = [1, 2, 3, 4, 5]
+    var doubled = arr.map(fn(x) {
+        return x * 2
+    })
+    var tripled = arr.map(fn(x) {
+        return x * 3
+    })
+    var combined: Array<i64> = []
+    for (var i = 0; i < len(arr); i++) {
+        combined.push(doubled[i] + tripled[i])
+    }
+    assertEqual(combined[0], 5)
+    // 2 + 3
+    assertEqual(combined[4], 25)
+}
+
+@test
+fn test_zip_with_reduce() {
+    var a = [1, 2, 3]
+    var b = [4, 5, 6]
+    var indices = [0, 1, 2]
+    var dotProduct = indices.reduce(fn(sum, i) {
+        return sum + a[i] * b[i]
+    }, 0)
+    assertEqual(dotProduct, 32)
+}
+
+// ===== every/some with Complex Predicates =====
+@test
+fn test_every_with_nested_check() {
+    var matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    var allPositive = matrix.every(fn(row) {
+        return row.every(fn(x) {
+            return x > 0
+        })
+    })
+    assertEqual(allPositive, true)
+    var allEven = matrix.every(fn(row) {
+        return row.every(fn(x) {
+            return x % 2 == 0
+        })
+    })
+    assertEqual(allEven, false)
+}
+
+@test
+fn test_some_with_nested_check() {
+    var matrix = [[1, 3, 5], [2, 4, 6], [7, 9, 11]]
+    var hasEvenRow = matrix.some(fn(row) {
+        return row.every(fn(x) {
+            return x % 2 == 0
+        })
+    })
+    assertEqual(hasEvenRow, true)
+}
+
+@test
+fn test_find_with_complex_predicate() {
+    var data = [{ "name": "Alice", "scores": [85, 90, 95] }, { "name": "Bob", "scores": [70, 75, 80] }, { "name": "Carol", "scores": [90, 92, 94] }]
+    var highAchiever = data.find(fn(person) {
+        return person.scores.every(fn(s) {
+            return s >= 90
+        })
+    })
+    assertEqual(highAchiever!.name, "Carol")
+}
+
+// ===== Function Composition with Higher-Order Functions =====
+@test
+fn test_compose_transformations() {
+    fn double(arr: Array<i64>) -> Array<i64> {
+        return arr.map(fn(x: i64) -> i64 {
+            return x * 2
+        })
+    }
+    fn addOne(arr: Array<i64>) -> Array<i64> {
+        return arr.map(fn(x: i64) -> i64 {
+            return x + 1
+        })
+    }
+    fn square(arr: Array<i64>) -> Array<i64> {
+        return arr.map(fn(x: i64) -> i64 {
+            return x * x
+        })
+    }
+    var arr = [1, 2, 3]
+    var result = square(addOne(double(arr)))
+    // double: [2, 4, 6]
+    // addOne: [3, 5, 7]
+    // square: [9, 25, 49]
+    assertEqual(result[0], 9)
+    assertEqual(result[1], 25)
+    assertEqual(result[2], 49)
+}
+
+@test
+fn test_pipeline_of_operations() {
+    var operations = [fn(arr: Array<i64>) {
+        return arr.filter(fn(x) {
+            return x > 2
+        })
+    }, fn(arr: Array<i64>) {
+        return arr.map(fn(x) {
+            return x * 10
+        })
+    }, fn(arr: Array<i64>) {
+        return arr.filter(fn(x) {
+            return x < 50
+        })
+    }]
+    var data = [1, 2, 3, 4, 5]
+    var result = data
+    for (op in operations) {
+        result = op(result)
+    }
+    assertEqual(len(result), 2)
+    assertEqual(result[0], 30)
+    assertEqual(result[1], 40)
+}
+
+// ===== Edge Cases with Empty and Single Element =====
+@test
+fn test_chain_with_empty_intermediate() {
+    var arr = [1, 2, 3, 4, 5]
+    var result = arr.filter(fn(x) {
+        return x > 100
+    }).map(fn(x) {
+        return x * 2
+    }).reduce(fn(a, b) {
+        return a + b
+    }, 0)
+    assertEqual(result, 0)
+}
+
+@test
+fn test_chain_with_single_element() {
+    var arr = [42]
+    var result = arr.map(fn(x) {
+        return x * 2
+    }).filter(fn(x) {
+        return x > 50
+    }).map(fn(x) {
+        return x.toString()
+    })
+    assertEqual(len(result), 1)
+    assertEqual(result[0], "84")
+}
+
+// ===== forEach with Side Effects =====
+@test
+fn test_nested_foreach() {
+    var matrix = [[1, 2], [3, 4], [5, 6]]
+    var sum = 0
+    matrix.forEach(fn(row) {
+        row.forEach(fn(x) {
+            sum += x
+        })
+    })
+    assertEqual(sum, 21)
+}
+
+@test
+fn test_foreach_with_index_simulation() {
+    var arr = ["a", "b", "c"]
+    var indexed: Array<{ index: i64, value: string }> = []
+    var idx = 0
+    arr.forEach(fn(item) {
+        indexed.push({ "index": idx, "value": item })
+        idx++
+    })
+    assertEqual(indexed[0].index, 0)
+    assertEqual(indexed[0].value, "a")
+    assertEqual(indexed[2].index, 2)
+}
+
+// ===== Complex Data Transformations =====
+@test
+fn test_group_by_simulation() {
+    var items = [{ "category": "fruit", "name": "apple" }, { "category": "vegetable", "name": "carrot" }, { "category": "fruit", "name": "banana" }, { "category": "vegetable", "name": "broccoli" }]
+    var fruits = items.filter(fn(item) {
+        return item.category == "fruit"
+    })
+    var vegetables = items.filter(fn(item) {
+        return item.category == "vegetable"
+    })
+    assertEqual(len(fruits), 2)
+    assertEqual(len(vegetables), 2)
+    assertEqual(fruits[0].name, "apple")
+}
+
+@test
+fn test_unique_via_reduce() {
+    var arr = [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]
+    var seen: Set<i64> = #[]
+    var unique = arr.filter(fn(x) {
+        if (seen.contains(x)) {
+            return false
+        }
+        seen.add(x)
+        return true
+    })
+    assertEqual(len(unique), 4)
+    assertEqual(unique[0], 1)
+    assertEqual(unique[3], 4)
+}
+
+@test
+fn test_count_by_reduce() {
+    var words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
+    var seed: Map<string, i64> = #{}
+    var counts = words.reduce(fn(acc, word) {
+        var next = acc
+        next.set(word, (next.get(word) ?? 0) + 1)
+        return next
+    }, seed)
+    assertEqual(counts.get("apple"), 3)
+    assertEqual(counts.get("banana"), 2)
+    assertEqual(counts.get("cherry"), 1)
+    assertEqual(len(seed), 0)
+}
+
+// ===== Return Type Inference Through Chains =====
+@test
+fn test_mixed_return_types() {
+    var arr = [1, 2, 3]
+    // int -> string -> int (length)
+    var lengths = arr.map(fn(x) {
+        return "x".repeat(x)
+    }).map(fn(s) {
+        return len(s)
+    })
+    // [1, 2, 3]
+    assertEqual(lengths[0], 1)
+    assertEqual(lengths[2], 3)
+}
+
+@test
+fn test_boolean_chain() {
+    var arr = [1, 2, 3, 4, 5]
+    var bools = arr.map(fn(x) {
+        return x % 2 == 0
+    }).filter(fn(b) {
+        return b
+    })
+    // [true, true]
+    assertEqual(len(bools), 2)
+    assertEqual(bools[0], true)
+}
+
+// ===== Deeply Nested with Multiple Types =====
+@test
+fn test_complex_data_pipeline() {
+    var users = [{ "name": "Alice", "purchases": [100, 200, 300] }, { "name": "Bob", "purchases": [50, 150] }, { "name": "Carol", "purchases": [500, 600, 700, 800] }]
+    // Calculate total per user, filter high spenders, get names
+    var highSpenders = users.map(fn(user) {
+        var total = user.purchases.reduce(fn(a, b) {
+            return a + b
+        }, 0)
+        return { "name": user.name, "total": total }
+    }).filter(fn(user) {
+        return user.total > 500
+    }).map(fn(user) {
+        return user.name
+    })
+    assertEqual(len(highSpenders), 2)
+    assertEqual(highSpenders[0], "Alice")
+    assertEqual(highSpenders[1], "Carol")
+}
+
+@test
+fn test_matrix_operations() {
+    var matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    // Get column sums
+    var colSums = [0, 1, 2].map(fn(col) {
+        return matrix.reduce(fn(sum, row) {
+            return sum + row[col]
+        }, 0)
+    })
+    assertEqual(colSums[0], 12)
+    // 1+4+7
+    assertEqual(colSums[1], 15)
+    // 2+5+8
+    assertEqual(colSums[2], 18)
+}
+
+@test
+fn test_findIndex_chain() {
+    var data = [[1, 2], [3, 4], [5, 6], [7, 8]]
+    // Find first row where sum > 10
+    var idx = data.findIndex(fn(row) {
+        return row.reduce(fn(a, b) {
+            return a + b
+        }, 0) > 10
+    })
+    assertEqual(idx, 2)
+}

@@ -1,0 +1,19 @@
+// @native-type id=6
+struct Map<K: Hashable, V> {
+    get(key: K) -> V?
+    ref set(key: K, value: V)
+    containsKey(key: K) -> bool
+    containsValue(value: V) -> bool
+    ref delete(key: K) -> bool
+    ref clear()
+    keys() -> Array<K>
+    values() -> Array<V>
+    entries() -> Array<(K, V)>
+    forEach(fn: fn(key: K, value: V)) -> ()
+    // Iteration protocol — iterator() yields each key K (used by
+    // single-variable `for (k in m)`); entriesIterator() yields each
+    // (key, value) tuple (used by `for (k, v in m)`).
+    iterator() -> Iterator<K>
+    entriesIterator() -> Iterator<(K, V)>
+    toString() -> string
+}

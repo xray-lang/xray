@@ -1,0 +1,11 @@
+// anchor: force-unwrap-error-shape
+// An absent Optional force unwrap is a panic; preserve both message/code observations.
+
+var value: i64? = null
+
+try {
+    print(value!)
+} catch panic (e) {
+    print(e.message)
+    print(e.code)
+}

@@ -1,0 +1,13 @@
+fn leak(data: Array<i64>) -> Array<i64> {
+    var alias = data
+    return alias
+}
+
+var values: Array<i64> = [1, 2]
+var leaked = leak(values)
+print(len(leaked))
+
+values[0] = 9
+print(leaked[0])
+leaked[1] = 7
+print(values[1])

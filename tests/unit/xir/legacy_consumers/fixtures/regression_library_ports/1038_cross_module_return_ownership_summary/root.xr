@@ -1,0 +1,54 @@
+import runtime
+import {
+    makeOwnedArray,
+    makeOwnedBuffer,
+    makeOwnedValue,
+    copyImportedArray,
+} from "./return_ownership_lib"
+
+@test
+fn test_imported_owned_return_is_reclaimed() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 10000; i++) {
+        var values = makeOwnedArray(i)
+        assertEqual(values[0], i)
+    }
+    assert(runtime.liveObjects() - before < 100)
+}
+
+@test
+fn test_imported_local_buffer_return_is_reclaimed() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 10000; i++) {
+        var buffer = makeOwnedBuffer(64)
+        assertEqual(len(buffer.asBytes()), 64)
+    }
+    assert(runtime.liveObjects() - before < 100)
+}
+
+@test
+fn test_imported_value_struct_return_is_reclaimed() {
+    var beforeBytes = runtime.liveBytes()
+    var beforeObjects = runtime.liveObjects()
+    for (var i = 0; i < 10000; i++) {
+        var value = makeOwnedValue(i)
+        assertEqual(value.value, i)
+    }
+    assert(runtime.liveBytes() - beforeBytes < 4096)
+    assert(runtime.liveObjects() - beforeObjects < 100)
+}
+
+@test
+fn test_imported_value_return_has_independent_binding() {
+    var before = runtime.liveObjects()
+    for (var i = 0; i < 5000; i++) {
+        var owner = [i]
+        var alias = copyImportedArray(owner)
+        assertEqual(alias[0], owner[0])
+        owner[0] = i + 1
+        assertEqual(alias[0], i)
+        alias[0] = i + 2
+        assertEqual(owner[0], i + 1)
+    }
+    assert(runtime.liveObjects() - before < 100)
+}
