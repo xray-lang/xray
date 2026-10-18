@@ -20,3 +20,6 @@ export fn crossed(f:fn()->i64)->i64 {
     print(42)
     return first + f()
 }
+export fn escaped(text:string)->fn()->string {
+    return fn()->string { return text }
+}
