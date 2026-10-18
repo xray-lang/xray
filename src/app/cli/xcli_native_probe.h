@@ -45,8 +45,9 @@ typedef struct XrCliNativeProbeReport {
  * native admission and exact native output. Only unavailable discovery and
  * completed startup or observed compile child failures can advance automatic selection.
  * Explicit paths/providers, resource failures and integrity failures cannot.
- * Windows MSVC and clang-cl share the admitted MSVC ABI SDK. Zig requires its
- * own target/runtime implementation and remains an explicit unsupported case. */
+ * The current invocation owner admits Windows MSVC. Other providers
+ * require their own recipe and remain explicit unsupported cases; configuration
+ * fallback permission cannot grant an unavailable provider implementation. */
 XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_new(XrCompileResources *resources,
     XrCliNativeProbe **output);
 /* Resolve the same selector/path precedence for probe and build. The result

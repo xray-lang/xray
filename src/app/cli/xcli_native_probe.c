@@ -145,8 +145,7 @@ static bool probe_observe(XrCliNativeProbe *owner) {
     if (!probe_work(owner,sizeof(owner->report.version)*2+3*32+2*sizeof(uint64_t)) ||
         !probe_hex(owner,sdk->identity,owner->report.runtime) ||
         !probe_hex(owner,native->id.bytes,owner->report.fingerprint)) return false;
-    uint32_t expected=local->msvc.driver==XR_XIR_WINDOWS_CLANG_CL ?
-        XR_TOOLCHAIN_BINDING_PROVIDER_CLANG : XR_TOOLCHAIN_BINDING_PROVIDER_MSVC;
+    uint32_t expected=XR_TOOLCHAIN_BINDING_PROVIDER_MSVC;
     if (native->input.toolchain.provider!=expected)
         return probe_fail(owner,XR_CLI_NATIVE_PROBE_INTEGRITY,"ABI_MISMATCH","provider-binding",0,0);
     memcpy(owner->report.version,provider->compiler.version.file_text,sizeof(owner->report.version));
@@ -156,19 +155,18 @@ static bool probe_observe(XrCliNativeProbe *owner) {
     owner->report.native_run=probe_execute(owner) ? "ok" : "failed";
     owner->report.ready=!strcmp(owner->report.native_run,"ok");return owner->report.ready;
 }
-static bool probe_attempt(XrCliNativeProbe *owner,const XrCliNativeProbeRequest *request,XrXirWindowsDriver driver) {
-    XtcXirLocalToolchainRequest locate={request->compiler,NULL,NULL,30000,4*1024*1024,1024*1024,driver};
+static bool probe_attempt(XrCliNativeProbe *owner,const XrCliNativeProbeRequest *request) {
+    XtcXirLocalToolchainRequest locate={request->compiler,NULL,NULL,30000,4*1024*1024,1024*1024};
     XtcXirLocalDiagnostic diagnostic={0};XtcXirLocalStatus found=xtc_xir_local_toolchain_open(owner->resources,&locate,&owner->local,&diagnostic);
     if (found!=XTC_XIR_LOCAL_OK) {
-        owner->retryable=(found==XTC_XIR_LOCAL_UNRESOLVED && diagnostic.stage!=XTC_XIR_LOCAL_SDK) ||
-            (found==XTC_XIR_LOCAL_CHILD_FAILED && diagnostic.stage==XTC_XIR_LOCAL_STARTUP);
+        owner->retryable=found==XTC_XIR_LOCAL_UNRESOLVED && diagnostic.stage!=XTC_XIR_LOCAL_SDK;
         XrCliNativeProbeStatus mapped=found==XTC_XIR_LOCAL_BUDGET ? XR_CLI_NATIVE_PROBE_BUDGET :
             found==XTC_XIR_LOCAL_OUT_OF_MEMORY ? XR_CLI_NATIVE_PROBE_OUT_OF_MEMORY :
             owner->retryable ? XR_CLI_NATIVE_PROBE_UNAVAILABLE : XR_CLI_NATIVE_PROBE_INTEGRITY;
         return probe_fail(owner,mapped,diagnostic.stage==XTC_XIR_LOCAL_SDK ? "SDK_UNAVAILABLE" :
-            diagnostic.stage==XTC_XIR_LOCAL_STARTUP ? "PROVIDER_STARTUP_FAILED" : "TOOLCHAIN_NOT_FOUND",
+            "TOOLCHAIN_NOT_FOUND",
             diagnostic.stage==XTC_XIR_LOCAL_SDK ? "runtime-sdk" :
-            diagnostic.stage==XTC_XIR_LOCAL_STARTUP ? "provider-startup" : "discovery",(unsigned)found,diagnostic.code);
+            "discovery",(unsigned)found,diagnostic.code);
     }
     if (!probe_source(owner)) return false;
     const XtcXirLocalToolchainView *local=xtc_xir_local_toolchain_view(owner->local);
@@ -236,23 +234,13 @@ XR_FUNC XrCliNativeProbeStatus xr_cli_native_probe_run(XrCliNativeProbe *owner,c
     if (!owner || !request || owner->ran) return XR_CLI_NATIVE_PROBE_INVALID;
     owner->ran=true;uint64_t started=GetTickCount64();
     if (request->selector!=XR_TOOLCHAIN_SELECTOR_AUTO && request->selector!=XR_TOOLCHAIN_SELECTOR_HOST &&
-        request->selector!=XR_TOOLCHAIN_SELECTOR_MSVC && request->selector!=XR_TOOLCHAIN_SELECTOR_CLANG) {
+        request->selector!=XR_TOOLCHAIN_SELECTOR_MSVC) {
         probe_fail(owner,XR_CLI_NATIVE_PROBE_UNSUPPORTED,"TARGET_UNSUPPORTED","provider",0,0);goto done;
     }
-    XrXirWindowsDriver driver=request->selector==XR_TOOLCHAIN_SELECTOR_CLANG ? XR_XIR_WINDOWS_CLANG_CL : XR_XIR_WINDOWS_MSVC;
-    bool ready=probe_attempt(owner,request,driver);
+    (void)probe_attempt(owner,request);
     XrCliNativeProbeStatus closed=probe_operation_close(owner);
     if (closed!=XR_CLI_NATIVE_PROBE_OK) { owner->status=closed;goto done; }
-    if (!ready && owner->retryable && request->selector==XR_TOOLCHAIN_SELECTOR_AUTO &&
-        !request->compiler && request->allow_fallback) {
-        if (!probe_work(owner,sizeof(owner->report)*2)) goto done;
-        owner->report.previous=owner->report.failure;
-        xtc_xir_local_toolchain_free(owner->local);owner->local=NULL;probe_report_reset(owner);
-        ready=probe_attempt(owner,request,XR_XIR_WINDOWS_CLANG_CL);
-        closed=probe_operation_close(owner);
-        if (closed!=XR_CLI_NATIVE_PROBE_OK) owner->status=closed;
-        else owner->report.fallback_used=ready;
-    }
+
 done:
     if (!owner->operation) probe_source_free(owner);
     owner->report.duration_ms=GetTickCount64()-started;return owner->status;
