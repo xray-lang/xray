@@ -240,9 +240,10 @@ static XrXirValueStatus cell_path_operation(const XrXirValue *value,
     const CellPathOperation *operation) {
     const XrXirValuePath *suffix = operation->suffix;
     XirCell *cell = cell_owner(value);
+    /* A received Cell retains its birth arena. Domain and loan authority stay
+     * exact; authenticate the received type view before checking its owner. */
     if (!cell || !suffix || !(operation->output ? cell_access(cell,authority) :
-            cell_write_access(cell,authority)) ||
-        !admission_owner(admission, cell->object.arena, cell->object.domain))
+            cell_write_access(cell,authority)) || !admission || admission->domain!=cell->object.domain)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValueAdmission local={0};
     XrXirValueStatus status=storage_admission_begin(value,admission,&local);

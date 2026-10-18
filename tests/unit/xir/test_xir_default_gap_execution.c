@@ -169,39 +169,58 @@ finish:
     xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(special);xr_xir_compile_artifact_free(lowered);return status;
 #endif
 }
+static uint8_t *default_gap_inputs(const char *packet_path,const char *c_path) {
+    uint8_t *bytes=NULL;
+#if DEFAULT_MODE==0
+    default_packet_path=packet_path;(void)c_path;
+#elif DEFAULT_MODE==1
+    FILE *file=fopen(packet_path,"rb");CHECK(file && !fseek(file,0,SEEK_END));
+    long length=ftell(file);CHECK(length>=64 && length<=262144 && !fseek(file,0,SEEK_SET));
+    bytes=malloc((size_t)length);CHECK(bytes && fread(bytes,1,(size_t)length,file)==(size_t)length && !fclose(file));
+    default_packet_bytes=bytes;default_packet_length=(size_t)length;default_c_path=c_path;
+#else
+    (void)c_path;memcpy(default_ids,default_gaps_export_indices,sizeof(default_ids));
+    if(packet_path){FILE *file=fopen(packet_path,"wb");CHECK(file &&
+        fwrite(DEFAULT_SPEC.packet.bytes,1,DEFAULT_SPEC.packet.length,file)==DEFAULT_SPEC.packet.length && !fclose(file));}
+#endif
+    return bytes;
+}
 #include "xir_default_gap_runtime.h"
+#include "xir_default_gap_partitions.h"
 int main(int argc,char **argv) {
+#if DEFAULT_MODE==2
+    if(argc==2 && !strcmp(argv[1],"--serial-compiler-control")){
+        (void)default_gap_inputs(NULL,NULL);gap_seal_faults(default_build);return 0;
+    }
+#endif
+    if(argc>1 && !strncmp(argv[1],"--compiler-",11))return default_gap_compiler_command(argc,argv);
     /* Explicit artifact production and the separate owned lifetime control
      * leave the original registered fault sweeps intact. */
-    bool generate_only=false,owned_recovery=false;
+    bool generate_only=false,owned_recovery=false,normal_only=false;
 #if DEFAULT_MODE==3
     bool binding_attack=false;
 #endif
 #if DEFAULT_MODE<=1
     if(argc==4){
-        CHECK(!strcmp(argv[1],"--generate-only"));generate_only=true;++argv;
+        CHECK(!strcmp(argv[1],"--generate-only") || !strcmp(argv[1],"--normal-only"));
+        generate_only=!strcmp(argv[1],"--generate-only");normal_only=!generate_only;++argv;
     }else CHECK(argc==3 && strcmp(argv[1],"--generate-only"));
 #elif DEFAULT_MODE==3
     if(argc==2){
-        if(!strcmp(argv[1],"--owned-recovery"))owned_recovery=default_owned_recovery=true;
+        if(!strcmp(argv[1],"--normal-only"))normal_only=true;
+        else if(!strcmp(argv[1],"--owned-recovery"))owned_recovery=default_owned_recovery=true;
         else{CHECK(!strcmp(argv[1],"--owned-binding-artifact") || !strcmp(argv[1],"--owned-binding-function"));
             binding_attack=true;default_binding_attack=!strcmp(argv[1],"--owned-binding-artifact")?1u:2u;}
-        generate_only=true;
+        generate_only=!normal_only;
     }else CHECK(argc==1);
 #else
-    CHECK(argc==1);(void)argv;
+    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--normal-only")));normal_only=argc==2;
 #endif
-    XrXirCompileContext context=default_context(default_limits());XrCompileResourceStats baseline=default_stats(&context);uint8_t *bytes=NULL;
+    XrXirCompileContext context=default_context(default_limits());XrCompileResourceStats baseline=default_stats(&context);
 #if DEFAULT_MODE<=1
-#if DEFAULT_MODE==0
-    default_packet_path=argv[1];
+    uint8_t *bytes=default_gap_inputs(argv[1],argv[2]);
 #else
-    FILE *file=fopen(argv[1],"rb");CHECK(file && !fseek(file,0,SEEK_END));long length=ftell(file);CHECK(length>=64 && length<=262144 && !fseek(file,0,SEEK_SET));
-    bytes=malloc((size_t)length);CHECK(bytes && fread(bytes,1,(size_t)length,file)==(size_t)length && !fclose(file));
-    default_packet_bytes=bytes;default_packet_length=(size_t)length;default_c_path=argv[2];
-#endif
-#else
-    memcpy(default_ids,default_gaps_export_indices,sizeof(default_ids));
+    uint8_t *bytes=default_gap_inputs(NULL,NULL);
 #endif
     XrXirProgram *program=NULL;XrXirStatus built=default_build(&context,0,&program);
 #if DEFAULT_MODE==3
@@ -225,7 +244,7 @@ int main(int argc,char **argv) {
         xr_xir_compile_program_drop(program);gap_retained(held);default_owner_free(&context,baseline);}
     CHECK(default_mixed_releases==releases+(DEFAULT_MODE==3 ? 1u : 0u));
     default_packet_path=default_c_path=NULL;
-    if(!generate_only)gap_seal_faults(default_build);free(bytes);
+    if(!generate_only && !normal_only)gap_seal_faults(default_build);free(bytes);
     printf("default gap mode=%u %s outputs retained physicalzero\n",DEFAULT_MODE,
-        owned_recovery?"owned recovery and lifetime":generate_only?"artifact producer normal":"all original");return 0;
+        owned_recovery?"owned recovery and lifetime":generate_only?"artifact producer normal":normal_only?"normal runtime and lifetime":"all original");return 0;
 }
