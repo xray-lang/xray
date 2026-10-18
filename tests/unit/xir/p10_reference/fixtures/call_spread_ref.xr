@@ -1,0 +1,2 @@
+fn add(first: i64, total: ref i64, last: i64) -> i64 { total = total + first + last; return total }
+export fn referenceAnswer() -> i64 { var n = 1; return add(...(20,), ref n, 21) }

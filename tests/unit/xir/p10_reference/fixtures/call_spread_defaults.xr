@@ -1,0 +1,5 @@
+fn calc(a: i64, b: i64 = 2, c: i64 = 3) -> i64 { return a * 100 + b * 10 + c }
+export fn referenceAnswer() -> i64 {
+    const left = (1, 4)
+    return calc(...left) + calc(2, ...()) + calc(...(3, 4, 5))
+}

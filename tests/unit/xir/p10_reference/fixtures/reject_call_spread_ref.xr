@@ -1,0 +1,2 @@
+fn take(value: ref i64) -> i64 { return value }
+export fn referenceAnswer() -> i64 { return take(...(42,)) }

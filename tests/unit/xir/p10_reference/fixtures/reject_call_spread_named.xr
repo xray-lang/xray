@@ -1,0 +1,2 @@
+fn sum(a: i64, b: i64) -> i64 { return a + b }
+export fn referenceAnswer() -> i64 { return sum(a: 20, ...(22,)) }
