@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 project(InstalledNativeSdkOwner C)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/consumer-provider.txt" "${CMAKE_C_COMPILER_ID}\n")
 if(NOT WIN32 OR NOT CMAKE_GENERATOR STREQUAL "Ninja")
     message(FATAL_ERROR "This installed SDK consumer requires Windows and Ninja")
 endif()

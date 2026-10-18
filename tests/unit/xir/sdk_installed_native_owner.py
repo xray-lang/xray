@@ -76,6 +76,8 @@ def main():
                                "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
                                "-DCMAKE_C_COMPILER=" + args.compiler,
                                "-DXIR_SDK_BUNDLE_DIR=" + str(sdk)])
+    detected = (customer_build / "consumer-provider.txt").read_text(encoding="utf-8").strip()
+    assert detected == {"msvc": "MSVC", "clang": "Clang"}[args.provider]
     run("build-customer", [args.cmake, "--build", customer_build, "--parallel", "2"])
     rows = json.loads((customer_build / "compile_commands.json").read_text(encoding="utf-8"))
     assert len(rows) == 2
@@ -101,7 +103,8 @@ def main():
     move_owned(moved, unavailable)
     assert not sdk.exists() and not original.exists()
     assert run("run-without-sdk", [executable], customer_build).replace(b"\r\n", b"\n") == EXPECTED
-    summary = dict(provider=args.provider, manifest_files=len(manifest["files"]),
+    summary = dict(provider=args.provider, detected_compiler=detected,
+                   manifest_files=len(manifest["files"]),
                    original_install_prefix_absent=True, relocated_sdk_hidden_before_second_run=True,
                    customer_compile_uses_only_customer_and_installed_sdk=True,
                    actual_emitted_packet_and_ledger_lifetime_checks=True,
