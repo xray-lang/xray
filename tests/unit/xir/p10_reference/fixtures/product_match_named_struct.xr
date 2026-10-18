@@ -1,0 +1,4 @@
+fn finish(value:i64)->i64 { return value }
+struct Box { n:i64; flag:bool }
+fn read(value:Box)->i64 { return match(value) { {flag:true,n}->n, _->0 } }
+export fn referenceAnswer()->i64 { return finish(read(Box{flag:true,n:42})) }

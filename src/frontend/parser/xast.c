@@ -1870,6 +1870,7 @@ AstNode *xr_ast_pattern_object(XrCompilerSession *session, char **field_names, A
     node->as.pattern_object.field_names = field_names;
     node->as.pattern_object.patterns = patterns;
     node->as.pattern_object.count = count;
+    node->as.pattern_object.field_name_spans = NULL;
     return node;
 }
 
@@ -1884,6 +1885,7 @@ AstNode *xr_ast_pattern_array(XrCompilerSession *session, AstNode **patterns, in
     node->as.pattern_array.has_rest = has_rest;
     node->as.pattern_array.rest_name = rest_name;
     node->as.pattern_array.rest_symbol_id = 0;
+    node->as.pattern_array.rest_binding = NULL;
     return node;
 }
 

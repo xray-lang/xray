@@ -1,0 +1,2 @@
+fn finish(value:i64)->i64{return value}
+export fn referenceAnswer()->i64{const original=[100,1,2];const answer=match(original){[_,..rest]->{var copy=rest;copy[0]=40;copy[1]=1;copy[0]+copy[1]+original[1]},_->0};return finish(answer)}

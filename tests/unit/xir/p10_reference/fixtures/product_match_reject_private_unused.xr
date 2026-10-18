@@ -1,0 +1,5 @@
+struct Secret { private n:i64=1 }
+fn bad(value:Secret)->i64 {
+ return match(value) { {n:_}->42 }
+}
+export fn referenceAnswer()->i64 { return 42 }

@@ -1,0 +1,2 @@
+fn finish(value:i64)->i64 { return value }
+export fn referenceAnswer()->i64 { const value=match(()) { ()->42 }; return finish(value) }

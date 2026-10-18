@@ -412,6 +412,7 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
             emit_array(w, n->as.pattern_object.patterns, n->as.pattern_object.count);
             return true;
         case AST_PATTERN_ARRAY:
+            emit(w, n->as.pattern_array.rest_binding);
             emit_array(w, n->as.pattern_array.patterns, n->as.pattern_array.count);
             return true;
         case AST_PATTERN_ADT:

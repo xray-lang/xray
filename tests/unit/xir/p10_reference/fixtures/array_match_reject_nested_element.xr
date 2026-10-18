@@ -1,0 +1,2 @@
+fn bad(items:Array<(i64,i64)>)->i64{return match(items){[(a,b)]->a+b,_->0}}
+export fn referenceAnswer()->i64{return 42}

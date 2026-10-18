@@ -76,7 +76,14 @@ static void source_generic_requirement_run(XrXirSourceRequest *request, const ch
     if (owner) CHECK(declaration(view,"map",owner->id)->generic_constraints[1].markers==XR_XIR_CONSTRAINT_SENDABLE);
     xr_xir_compile_source_result_free(&result);
     XrXirArtifact *checked=NULL,*specialized=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length, &checked, NULL)==XR_XIR_OK);
+    XrXirDiagnostic packet_diagnostic = {0};
+    status = xr_xir_compile_checked_read(&packet_context, packet.bytes, packet.length,
+        &checked, &packet_diagnostic);
+    if (status != XR_XIR_OK) fprintf(stderr,
+        "generic requirement packet: status=%u function=%u block=%u instruction=%u reason=%u\n",
+        (unsigned)status, packet_diagnostic.function, packet_diagnostic.block,
+        packet_diagnostic.instruction, (unsigned)packet_diagnostic.reason);
+    CHECK(status==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(checked, &specialized, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);

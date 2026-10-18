@@ -379,3 +379,4 @@ add_custom_target(xir_p10_native_references DEPENDS ${reference_native_targets})
 
 xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
 xray_prepend_windows_asan_runtime_to_directory_tests()
+include("${CMAKE_CURRENT_LIST_DIR}/reception_patterns.cmake")

@@ -1,0 +1,4 @@
+var guards:i64=0
+fn gate()->bool{guards+=1;return false}
+fn finish(value:i64)->i64{return value}
+export fn referenceAnswer()->i64{const answer=match([42]){[a,..rest],[a,..rest] if(gate())->a+len(rest),_->41};return finish(answer+guards)}
