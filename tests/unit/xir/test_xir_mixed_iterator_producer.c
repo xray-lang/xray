@@ -27,8 +27,14 @@ int main(int argc, char **argv) {
         &context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
     XrXirSourceResult source = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &source, &diagnostic, NULL);
-    if (status != XR_XIR_OK) fprintf(stderr, "Iterator lifetime Source status=%u at=%d:%d message=%s\n",
-        status, diagnostic.line, diagnostic.column, diagnostic.message);
+    if (status != XR_XIR_OK) {
+        XrCompileResourceStats stats = {0};
+        CHECK(xr_compile_resources_stats(context.resources, &stats) == XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr, "Iterator lifetime Source status=%u at=%d:%d work=%llu allocations=%llu allocated=%llu peak=%llu live=%llu message=%s\n",
+            status, diagnostic.line, diagnostic.column, (unsigned long long)stats.work,
+            (unsigned long long)stats.allocation_count, (unsigned long long)stats.allocated_bytes,
+            (unsigned long long)stats.peak_bytes, (unsigned long long)stats.live_bytes, diagnostic.message);
+    }
     CHECK(status == XR_XIR_OK);
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(source.snapshot);
     CHECK(view && view->complete && view->modules && view->module_count>=3);
