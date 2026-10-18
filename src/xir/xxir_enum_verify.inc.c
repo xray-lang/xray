@@ -26,7 +26,7 @@ static XrXirStatus enum_uses(const Graph *graph, const XrXirFunction *function,
     if (!tag && (construct ? op->args[1] != variant->field_count : op->args[1] >= variant->field_count))
         return XR_XIR_BAD_STRUCTURE;
     uint32_t first = tag || construct ? 0 : variant->field_begin + op->args[1];
-    status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, instance->declaration, first, construct ? XR_XIR_NOMINAL_CONSTRUCT : tag ? XR_XIR_NOMINAL_TYPE : XR_XIR_NOMINAL_READ);
+    status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, type, first, construct ? XR_XIR_NOMINAL_CONSTRUCT : tag ? XR_XIR_NOMINAL_TYPE : XR_XIR_NOMINAL_READ);
     if (status != XR_XIR_OK) return status;
     if (!construct) {
         status = local_operand(types, function, op, op->args[0], 0);

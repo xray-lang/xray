@@ -63,11 +63,11 @@ static void description_authority(XrXirCompileContext *context, XrXirTypes *type
     XrXirModule module = {.function_count=2,.declarations=&declarations,.types=types};
     XrXirTypeDescription view = {0}; fixture->declaration.exported = 0;
     CHECK(xr_xir_compile_type_description(context,types,(XrXirType)256,&view) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(context,&module,1,view.declaration,0,XR_XIR_NOMINAL_TYPE) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(context,&module,1,(XrXirType)256,0,XR_XIR_NOMINAL_TYPE) == XR_XIR_BAD_TYPE);
     fixture->declaration.exported = 1;
-    CHECK(xr_xir_compile_nominal_access(context,&module,1,view.declaration,0,XR_XIR_NOMINAL_TYPE) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(context,&module,1,(XrXirType)256,0,XR_XIR_NOMINAL_TYPE) == XR_XIR_OK);
     modules[1].dependencies = NULL; modules[1].dependency_count = 0;
-    CHECK(xr_xir_compile_nominal_access(context,&module,1,view.declaration,0,XR_XIR_NOMINAL_TYPE) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(context,&module,1,(XrXirType)256,0,XR_XIR_NOMINAL_TYPE) == XR_XIR_BAD_TYPE);
 }
 int main(void) {
     EnumMetadataFixture fixture; enum_metadata_fixture(&fixture);

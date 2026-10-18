@@ -20,3 +20,6 @@ endif()
 add_test(NAME test_xir_type_description COMMAND test_xir_type_description)
 set_tests_properties(test_xir_type_description PROPERTIES TIMEOUT 30 LABELS "unit;xir;metadata;ownership;description")
 include("${CMAKE_CURRENT_LIST_DIR}/generated_built.cmake")
+add_test(NAME test_xir_nominal_authority COMMAND test_xir_checked --nominal-authority)
+set_tests_properties(test_xir_nominal_authority PROPERTIES TIMEOUT 30
+    LABELS "unit;xir;metadata;ownership;authority")

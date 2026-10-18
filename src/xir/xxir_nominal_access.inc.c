@@ -10,18 +10,22 @@ static bool nominal_access_work(const XrXirCompileContext *work, uint64_t amount
     if (!work ||!xir_compile_work(work, amount)) return false;
      return true;
 }
-XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, uint32_t declaration, uint32_t field, XrXirNominalAccess access) {
+XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type, uint32_t field, XrXirNominalAccess access) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *work = &compile_state;
     if (!nominal_access_work(work, 1)) return XR_XIR_BUDGET;
     if (!module || !module->declarations || !module->types || !module->types->nominals ||
-        function >= module->function_count || declaration >= module->types->nominals->count ||
+        function >= module->function_count ||
         access < XR_XIR_NOMINAL_CONSTRUCT || access > XR_XIR_NOMINAL_TYPE ||
         ((access == XR_XIR_NOMINAL_CONSTRUCT || access == XR_XIR_NOMINAL_TYPE) && field)) return XR_XIR_BAD_STRUCTURE;
     const XrXirDeclarations *scope = module->declarations;
     const XrXirFunctionIdentity *caller = &scope->functions[function];
     const XrXirNominalTable *table = module->types->nominals;
+    const XrXirTypeNode *node = xr_xir_type_node(module->types,type);
+    if (!node || node->kind != XR_XIR_TYPE_NOMINAL) return XR_XIR_BAD_TYPE;
+    uint32_t declaration=node->nominal.declaration;
+    if (declaration>=table->count) return XR_XIR_BAD_TYPE;
     XrXirNominalIdentity identity;
     if (table->declarations) {
         const XrXirNominalDeclaration *d = &table->declarations[declaration];
@@ -86,7 +90,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
         if (status!=XR_XIR_OK || !found) break;
         const XrXirTypeNode *node = &types->nodes[i];
         if (node->kind == XR_XIR_TYPE_NOMINAL) {
-            status = xr_xir_compile_nominal_access(remaining, module, function, node->nominal.declaration, 0, XR_XIR_NOMINAL_TYPE);
+            status = xr_xir_compile_nominal_access(remaining, module, function, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i), 0, XR_XIR_NOMINAL_TYPE);
             for (uint32_t a = 0; a < node->nominal.argument_count && status == XR_XIR_OK; ++a)
                 status = type_access_edge(types, node->nominal.arguments[a], i, pending, remaining);
         } else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {

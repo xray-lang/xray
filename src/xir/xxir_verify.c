@@ -703,7 +703,7 @@ static XrXirStatus place_write_authority(const XrXirFunction *function,
             const XrXirTypeNode *node = xr_xir_type_node(context->module->types, type);
             if (!node || (!xr_xir_type_is_struct(context->module->types, type) && !xr_xir_type_is_class(context->module->types, type)) ||
                 op->immediate < 0 || (uint64_t)op->immediate > UINT32_MAX) return XR_XIR_BAD_TYPE;
-            XrXirStatus status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, node->nominal.declaration, (uint32_t)op->immediate, XR_XIR_NOMINAL_WRITE);
+            XrXirStatus status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, type, (uint32_t)op->immediate, XR_XIR_NOMINAL_WRITE);
             if (status != XR_XIR_OK) return status;
         } else if (place == XR_XIR_PLACE_SLOT) {
             const XrXirDeclarations *d = context->module->declarations;
@@ -786,7 +786,7 @@ static XrXirStatus struct_uses(const Graph *graph, const XrXirFunction *function
     uint32_t fields = description.field_count;
     if (construct ? op->args[1] != fields : op->immediate < 0 || (uint64_t) op->immediate >= fields)
         return XR_XIR_BAD_STRUCTURE;
-    status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, instance->declaration, construct ? 0 : (uint32_t) op->immediate, construct ? XR_XIR_NOMINAL_CONSTRUCT : write ? XR_XIR_NOMINAL_WRITE : XR_XIR_NOMINAL_READ);
+    status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, type, construct ? 0 : (uint32_t) op->immediate, construct ? XR_XIR_NOMINAL_CONSTRUCT : write ? XR_XIR_NOMINAL_WRITE : XR_XIR_NOMINAL_READ);
     if (status != XR_XIR_OK) return status;
     if (write) {
         status = role_operand(function, graph, context, instruction, 0, type);
@@ -825,7 +825,7 @@ static XrXirStatus class_uses(const Graph *graph, const XrXirFunction *function,
     uint32_t fields = description.field_count;
     if (construct ? op->args[1] != fields : op->immediate < 0 || (uint64_t) op->immediate >= fields)
         return XR_XIR_BAD_STRUCTURE;
-    status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, instance->declaration, construct ? 0 : (uint32_t) op->immediate, construct ? XR_XIR_NOMINAL_CONSTRUCT : write ? XR_XIR_NOMINAL_WRITE : XR_XIR_NOMINAL_READ);
+    status = xr_xir_compile_nominal_access(&context->remaining, context->module, context->location.function, type, construct ? 0 : (uint32_t) op->immediate, construct ? XR_XIR_NOMINAL_CONSTRUCT : write ? XR_XIR_NOMINAL_WRITE : XR_XIR_NOMINAL_READ);
     if (status != XR_XIR_OK) return status;
     if (!construct) {
         status = local_operand(types, function, op, op->args[0], 0);
