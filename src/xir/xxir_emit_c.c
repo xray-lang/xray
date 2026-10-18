@@ -1042,10 +1042,11 @@ static bool emit_resume_exit(CBuffer *buffer,const XrXirModule *module,
     const XrXirFunction *function,const XrXirFunctionLayout *layout,uint32_t index) {
     const XrXirInstruction *op=&function->instructions[index];
     if (op->op!=XR_XIR_THROW && op->op!=XR_XIR_RETURN) return false;
-        uint32_t type = op->op == XR_XIR_THROW ? (uint32_t) xr_xir_operand_type(function, op->args[0]) : (uint32_t) function->result;
+        uint32_t type = op->op == XR_XIR_THROW ? (uint32_t) xr_xir_operand_type(function, op->args[0])
+            : (uint32_t) xr_xir_function_completion(module,(uint32_t)(function-module->functions));
         uint32_t view_flags=0;
         if (op->op==XR_XIR_RETURN) {
-            buffer->status=xr_xir_compile_view_type_flags(buffer->context,module->types,function->result,&view_flags);
+            buffer->status=xr_xir_compile_view_type_flags(buffer->context,module->types,(XrXirType)type,&view_flags);
             if (buffer->status!=XR_XIR_OK) return true;
         }
         if (view_flags) {emit_view_return(buffer,function,op,layout);return true;}

@@ -71,6 +71,14 @@ static void ctfe_calls_boundaries(CtfeFixture *fixture) {
         uint64_t middle=low+(high-low)/2;request.evaluation.limits.frame_bytes=middle;
         XrXirValue value={0};XrCompileResourceStats before=ctfe_stats(fixture);
         XrXirCtfeStatus status=xr_xir_compile_ctfe_calls(&request,&value);
+        if (status!=XR_XIR_CTFE_OK && status!=XR_XIR_CTFE_FRAME_LIMIT) {
+            XrCompileResourceStats after=ctfe_stats(fixture);
+            fprintf(stderr,"CTFE calls frame boundary bytes=%llu status=%u work_before=%llu work=%llu/%llu allocated=%llu/%llu live=%llu/%llu\n",
+                (unsigned long long)middle,(unsigned)status,
+                (unsigned long long)before.work,(unsigned long long)after.work,(unsigned long long)ctfe_owner_limits.work,
+                (unsigned long long)after.allocated_bytes,(unsigned long long)ctfe_owner_limits.allocated_bytes,
+                (unsigned long long)after.live_bytes,(unsigned long long)ctfe_owner_limits.live_bytes);
+        }
         CHECK(status==XR_XIR_CTFE_OK || status==XR_XIR_CTFE_FRAME_LIMIT);
         CHECK(ctfe_stats(fixture).live_bytes==before.live_bytes);
         if (status==XR_XIR_CTFE_OK) { CHECK(value.type==XR_XIR_I64 && value.payload==42);high=middle; }

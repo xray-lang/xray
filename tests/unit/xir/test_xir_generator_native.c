@@ -32,6 +32,11 @@ static void pull(XrXirCall *call,bool unit,int64_t expected,bool wait) {
     CHECK(value.type==(uint32_t)(unit ? XR_XIR_UNIT : XR_XIR_I64) && value.payload==expected);
     xr_xir_value_drop(&value);
 }
+static void check_completion(XrXirCall *call) {
+    XrXirCallResult result=xr_xir_call_poll_bounded(call,1000);
+    CHECK(result.status==XR_XIR_CALL_RETURNED && !result.wake &&
+        result.value.type==XR_XIR_UNIT && !result.value.reserved && !result.value.payload);
+}
 static void program_receiving(const XrXirCompileContext *context) {
     XrXirCallEntry entries[6];XrXirFunctionIdentity identities[6];
     CHECK(generator_source_program.entry_count==6);
@@ -82,10 +87,12 @@ int main(void) {
     pull(left,false,11,false);pull(right,false,11,false);
     CHECK(xr_xir_call_free(left)==XR_XIR_CALL_READY);pull(right,false,22,true);
     CHECK(xr_xir_call_poll_bounded(right,1000).status==XR_XIR_CALL_RETURNED);
+    check_completion(right);
     CHECK(xr_xir_call_free(right)==XR_XIR_CALL_READY);left=NULL;config.accounting=&accounts[0];
     CHECK(xr_xir_call_generator_new(&config,2,NULL,0,&left)==XR_XIR_CALL_READY);
     pull(left,true,0,false);pull(left,true,0,false);
     CHECK(xr_xir_call_poll_bounded(left,1000).status==XR_XIR_CALL_RETURNED);
+    check_completion(left);
     CHECK(xr_xir_call_free(left)==XR_XIR_CALL_READY);
     for(unsigned i=0;i<2;++i) CHECK(!accounts[i].live_bytes && accounts[i].allocations==accounts[i].frees && !accounts[i].depth);
     program_receiving(&owner.context);
