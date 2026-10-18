@@ -430,6 +430,13 @@ static XrXirRunStatus vm_await_step(ScalarRun *run, VmState *state, const XrXirI
         state->arguments[0]=vm_value_operand(run,op->args[1]);
     }
     uint32_t at = (uint32_t)(op - run->function->instructions);
+    if(op->op!=XR_XIR_TASK_AWAIT && op->op!=XR_XIR_ITERATOR_CLOSE) {
+        XrXirCallStatus status=xr_xir_instance_iterator_at(run->view,at);
+        if(status!=XR_XIR_CALL_READY) {
+            *action=(XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{XR_XIR_I64,0,status},{0},0};
+            return XR_XIR_RUN_OK;
+        }
+    }
     state->invoke = at + 1;
     state->panic = run->function->blocks[vm_block(run->function, at)].panic;
     state->waiting = true;

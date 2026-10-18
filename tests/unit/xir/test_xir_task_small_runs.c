@@ -106,6 +106,7 @@ static void small_runs_case(uint32_t runs) {
 }
 
 int main(void) {
+    invocation_cause_order_cases();sequence_borrow_cases();
     for (uint32_t runs=1;runs<=5;++runs) small_runs_case(runs);
     for (uint32_t mode=0;mode<2;++mode) {
         primitive_root_case(mode,false);primitive_root_case(mode,true);

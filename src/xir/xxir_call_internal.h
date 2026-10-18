@@ -47,8 +47,12 @@ XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,uint32_t *
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,uint32_t instruction);
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
     const XirEffectInvocationSelection *selection);
-XR_FUNC XrXirCallStatus xr_xir_call_generator_bind_context(XrXirCall *call,
-    const XirEffectInvocationSelection *selection);
+/* This view borrows the existing root frame only during a synchronous read. */
+typedef struct XirGeneratorCaptureView {
+    const XrXirValue *values;uint32_t count,entry;
+} XirGeneratorCaptureView;
+XR_FUNC XrXirCallStatus xr_xir_call_generator_captures(const XrXirCall *call,
+    XrXirValueAdmission *admission,XirGeneratorCaptureView *output);
 typedef struct XrXirCallClassAccess {
     const XrXirValue *value;
     XrXirCellAuthority authority;
@@ -111,6 +115,17 @@ XR_FUNC XrXirCallStatus xr_xir_call_complete_task_wait(XrXirCall *call, const Xr
 XR_FUNC XrXirCallStatus xr_xir_call_fail_task_wait(XrXirCall *call, const XrXirTaskWaitToken *token,
     XrXirCallStatus reason);
 /* Iterator waits reuse the exact binding/wake/request token representation. */
+/* Borrowed facts belong to one exact pending wait, never an execution grant. */
+struct XrXirInstance;
+typedef struct XirIteratorWaitContext {
+    struct XrXirInstance *instance;XrXirValueAdmission *admission;
+    const XrXirValue *iterator;const XirEffectInvocationSelection *invocation;
+    uint32_t caller,instruction;
+} XirIteratorWaitContext;
+XR_FUNC XrXirCallStatus xr_xir_call_iterator_context(XrXirCall *call,
+    const XrXirTaskWaitToken *token,XirIteratorWaitContext *output);
+/* Rechecks the real demand before binding the parked producer root context. */
+XR_FUNC XrXirCallStatus xr_xir_call_iterator_prepare(XrXirCall *call,const XrXirTaskWaitToken *token);
 XR_FUNC bool xr_xir_call_iterator_wait_token(const XrXirCall *call,XrXirTaskWaitToken *output);
 XR_FUNC XrXirCallStatus xr_xir_call_link_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token);
 XR_FUNC XrXirCallStatus xr_xir_call_complete_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token);

@@ -40,6 +40,48 @@ static bool task_executor_owner_current(const XrXirTaskExecutor *executor) {
         (!executor->config.admission.domain || xr_xir_domain_current(executor->config.admission.domain)) &&
         (!executor->budget || xr_xir_domain_current(executor->budget->work_domain)));
 }
+/* The Call binding and the executor's actual owned activation must agree.
+ * This walks existing owner lists; it creates no execution or membership cache. */
+static bool task_pending_member_work(XrXirValueAdmission *admission,uint64_t work) {
+    if(work>admission->work || !xr_xir_domain_work(admission->domain,work)) return false;
+    admission->work-=work;return true;
+}
+XR_FUNC XrXirCallStatus xr_xir_task_executor_pending_member(const XrXirTaskExecutor *executor,
+    XrXirCall *call,const XrXirTaskWaitToken *token,XrXirValueAdmission *admission) {
+    if(!task_executor_owner_current(executor) || !executor || !call || !token || !admission)
+        return XR_XIR_CALL_BAD_ARGUMENT;
+    if(task_executor_observing(executor)) return XR_XIR_CALL_BUSY;
+    if(token->binding.owner!=executor || token->binding.generation!=executor->generation ||
+        !xr_xir_call_executor_member(call,&token->binding) || admission->domain!=executor->config.domain ||
+        !executor->config.program || admission->arena!=executor->config.program->arena) return XR_XIR_CALL_BAD_STATE;
+    if(!task_pending_member_work(admission,6)) return XR_XIR_CALL_LIMIT;
+    if(token->binding.activation==&executor->root)
+        return executor->root.call==call && executor->root.ticket==token->binding.ticket &&
+            !executor->root.queued && !executor->root.ready_next?XR_XIR_CALL_READY:XR_XIR_CALL_BAD_STATE;
+    uint64_t walked=0;
+    for(const XirTask *task=executor->active;task;task=task->active_next) {
+        if(++walked>executor->next_identity) return XR_XIR_CALL_BAD_STATE;
+        if(!task_pending_member_work(admission,6)) return XR_XIR_CALL_LIMIT;
+        const XirTaskActivation *activation=&task->activation;
+        if(token->binding.activation!=activation) continue;
+        return task->executor==executor && task->call==call && activation->call==call &&
+            task->generation==executor->generation && task->identity==token->binding.ticket &&
+            activation->ticket==token->binding.ticket && !activation->queued && !activation->ready_next?
+            XR_XIR_CALL_READY:XR_XIR_CALL_BAD_STATE;
+    }
+    for(const XirGenerator *generator=executor->generators;generator;generator=generator->active_next) {
+        if(++walked>executor->next_identity) return XR_XIR_CALL_BAD_STATE;
+        if(!task_pending_member_work(admission,6)) return XR_XIR_CALL_LIMIT;
+        const XirTaskActivation *activation=&generator->activation;
+        if(token->binding.activation!=activation) continue;
+        return generator->executor==executor && generator->call==call && activation->call==call &&
+            generator->generation==executor->generation && generator->identity==token->binding.ticket &&
+            activation->ticket==token->binding.ticket && !activation->queued && !activation->ready_next?
+            XR_XIR_CALL_READY:XR_XIR_CALL_BAD_STATE;
+    }
+    return XR_XIR_CALL_BAD_STATE;
+}
+
 static _Atomic(uint64_t) task_executor_generation;
 #include "xxir_task_outcome.inc.c"
 static XrXirCallStatus task_core_value_status(XrXirValueStatus status) {

@@ -271,7 +271,7 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
                     status=XR_XIR_BAD_STRUCTURE;break;
                 }
                 permissions->generators[generator_at++]=(XrXirProgramGeneratorSite){
-                    (uint32_t)op->immediate,op->args[1],i,op->type};
+                    (uint32_t)op->immediate,op->args[1],i,real.site,op->type};
                 ++permissions->entries[f].generator_count;
             }
             if (op->op != XR_XIR_FUNCTION_REF) continue;

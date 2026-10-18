@@ -25,12 +25,15 @@ typedef struct XirGenerator {
     struct XirGenerator *active_next, *active_previous;
     XirTaskActivation activation;
     uint64_t generation, identity;
+    uint32_t producer;
     _Atomic(XirGeneratorState) state;
     _Atomic(bool) orphaned;
+    /* The current consumer supplies execution role; cold creation grants none. */
     bool child;
 } XirGenerator;
 XR_FUNC bool xr_xir_generator_storage_valid(const XirGenerator *generator);
+typedef struct XirGeneratorSiteOrigin {uint32_t instruction,producer;} XirGeneratorSiteOrigin;
 /* Construction is private to an authenticated executing Instance view. */
 XR_FUNC XrXirCallStatus xr_xir_task_executor_generator(XrXirTaskExecutor *executor,
-    XrXirCallView *view, XrXirType type, const XrXirCallRequest *request, XrXirValue *output, uint32_t instruction);
+    XrXirCallView *view, XrXirType type, const XrXirCallRequest *request, XrXirValue *output, const XirGeneratorSiteOrigin *origin);
 #endif

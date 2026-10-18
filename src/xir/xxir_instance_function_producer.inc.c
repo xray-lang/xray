@@ -50,13 +50,12 @@ XR_FUNC XrXirCallStatus xr_xir_instance_function_at(XrXirCallView *view,uint32_t
     return instance_function_create(view,&request,output);
 }
 
-XR_FUNC XrXirCallStatus xr_xir_instance_function_producer(XrXirCallView *view,
-    const XrXirValue *function,XirEffectProducerView *output) {
-    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
-    XrXirInstance *instance=view_instance(view);
-    if (!instance) return XR_XIR_CALL_BAD_STATE;
+static XrXirCallStatus instance_function_producer_value(XrXirInstance *instance,
+    XrXirValueAdmission *admission,const XrXirValue *function,XirEffectProducerView *output) {
+    if(!instance || !instance_owner_current(instance) || !admission ||
+        admission->function!=admit_function_binding || admission->context!=instance ||
+        admission->arena!=instance->program->arena) return XR_XIR_CALL_BAD_STATE;
     if (!function || !output) return XR_XIR_CALL_BAD_ARGUMENT;
-    XrXirValueAdmission *admission=xr_xir_call_admission(view);
     if (!admission || admission->domain!=instance->domain || admission->work<10 ||
         !xr_xir_domain_work(instance->domain,10)) return XR_XIR_CALL_LIMIT;
     admission->work-=10;
@@ -71,13 +70,27 @@ XR_FUNC XrXirCallStatus xr_xir_instance_function_producer(XrXirCallView *view,
     XrXirCallStatus status=instance_producer_site(instance,admission,producer->function,producer->instruction,&site);
     if (status!=XR_XIR_CALL_READY) return status;
     if (producer->site!=site->site || binding->entry!=site->entry ||
-        binding->capture_count!=site->captures || function->type!=(uint32_t)site->type)
+        binding->capture_count!=site->captures)
         return XR_XIR_CALL_BAD_ARGUMENT;
     status=admit_instance_value(admission,function,(XrXirType)function->type);
     if (status!=XR_XIR_CALL_READY) return status;
+    if (function->type!=(uint32_t)site->type) {
+        InstanceInvocationRead read={admission,NULL,NULL,NULL,instance};
+        XrXirStatus match=xr_xir_callable_weakening_admit(instance->program->types,
+            site->type,(XrXirType)function->type,&read,instance_invocation_work);
+        if (match!=XR_XIR_OK) return match==XR_XIR_BUDGET?XR_XIR_CALL_LIMIT:XR_XIR_CALL_BAD_ARGUMENT;
+    }
     uint64_t work=sizeof(*output);
     if (work>admission->work || !xr_xir_domain_work(instance->domain,work)) return XR_XIR_CALL_LIMIT;
     admission->work-=work;
     *output=(XirEffectProducerView){site->site,producer->function,producer->instruction,
         site->entry,site->captures,site->type};return XR_XIR_CALL_READY;
+}
+
+XR_FUNC XrXirCallStatus xr_xir_instance_function_producer(XrXirCallView *view,
+    const XrXirValue *function,XirEffectProducerView *output) {
+    if(!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance=view_instance(view);
+    if(!instance) return XR_XIR_CALL_BAD_STATE;
+    return instance_function_producer_value(instance,xr_xir_call_admission(view),function,output);
 }

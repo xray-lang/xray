@@ -551,6 +551,9 @@ static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
     XrXirType receiver=xr_xir_operand_type(function,op->args[0]);
     XrXirType expected=op->op==XR_XIR_TASK_AWAIT ? xr_xir_task_element(buffer->types,receiver) :
         op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_UNIT : xr_xir_iterator_element(buffer->types,receiver);
+    if(op->op!=XR_XIR_TASK_AWAIT && op->op!=XR_XIR_ITERATOR_CLOSE)
+        append(buffer," { XrXirCallStatus status = xr_xir_instance_iterator_at(view, %uu);\n"
+            " if (status != XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0}; }\n",index);
     uint32_t normal = function->blocks[op->targets[0]].first;
     uint32_t error = function->blocks[op->targets[1]].first;
     bool discard = function->instructions[normal].op == XR_XIR_INVOKE_DISCARD;

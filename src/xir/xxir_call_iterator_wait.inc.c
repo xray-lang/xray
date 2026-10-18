@@ -27,6 +27,65 @@ static bool iterator_wait_matches(const XrXirCall *call,const XrXirTaskWaitToken
         call->wait.subject==wait->subject && call->wait.generation==wait->generation &&
         call->wait.ticket==wait->ticket && call->waiting_task.type;
 }
+/* This borrows the parked caller frame under its exact waiter identity. The
+ * instruction is only a staged fact; Effects must still authenticate its opcode,
+ * complete current input and physical captures before every producer advance. */
+XR_FUNC XrXirCallStatus xr_xir_call_iterator_context(XrXirCall *call,
+    const XrXirTaskWaitToken *token,XirIteratorWaitContext *output) {
+    if(!call_owner_current(call) || !call || !token || !output) return XR_XIR_CALL_BAD_ARGUMENT;
+    if(call->driving || call_observing(call)) return XR_XIR_CALL_BUSY;
+    if(!iterator_wait_matches(call,token) || !call->wait_linked) return XR_XIR_CALL_BAD_STATE;
+    const CallFrame *frame=call->top;
+    if(frame->effect_instruction==UINT32_MAX) return XR_XIR_CALL_UNSUPPORTED;
+    XrXirValueAdmission *admission=&call->config.admission;uint64_t work=sizeof(*output)+8;
+    if(work>admission->work || !xr_xir_domain_work(admission->domain,work)) return XR_XIR_CALL_LIMIT;
+    admission->work-=work;
+    *output=(XirIteratorWaitContext){call->config.instance,admission,&call->waiting_task,
+        frame->invocation.owner?&frame->invocation:NULL,
+        (uint32_t)(frame->entry-call->config.entries),frame->effect_instruction};
+    return XR_XIR_CALL_READY;
+}
+/* The consumer is still parked while the existing producer root receives its
+ * current execution edge. No caller-supplied selection or creation receipt is
+ * accepted, and every fallible check precedes publication to the root frame. */
+XR_FUNC XrXirCallStatus xr_xir_call_iterator_prepare(XrXirCall *call,const XrXirTaskWaitToken *token) {
+    XirEffectInvocationSelection selected={0};
+    XrXirCallStatus status=xr_xir_instance_iterator_select(call,token,&selected);
+    if(status!=XR_XIR_CALL_READY) return status;
+    if(!iterator_wait_matches(call,token) || !call->wait_linked ||
+        token->request.kind==XR_XIR_WAIT_ITERATOR_CLOSE) return XR_XIR_CALL_BAD_STATE;
+    XirGenerator *generator=(XirGenerator *)(uintptr_t)call->waiting_task.payload;
+    XrXirCall *producer=generator->call;
+    if(generator!=(const XirGenerator *)token->request.subject || generator->consumer!=call ||
+        generator->executor!=token->binding.owner || generator->generation!=token->binding.generation ||
+        generator->generation!=token->request.generation || generator->identity!=token->request.ticket ||
+        atomic_load_explicit(&generator->state,memory_order_acquire)!=XIR_GENERATOR_PARKED ||
+        generator->activation.call!=producer || generator->activation.ticket!=generator->identity ||
+        generator->activation.queued || generator->activation.ready_next || !producer ||
+        !call_owner_current(producer) || producer==call) return XR_XIR_CALL_BAD_STATE;
+    if(producer->driving || call_observing(producer)) return XR_XIR_CALL_BUSY;
+    const XrXirExecutorBinding binding={token->binding.owner,&generator->activation,
+        generator->generation,generator->identity};
+    CallFrame *frame=producer->top;
+    if(!xr_xir_call_executor_member(producer,&binding) || producer->budget!=call->budget ||
+        producer->config.instance!=call->config.instance ||
+        producer->config.admission.domain!=call->config.admission.domain ||
+        producer->config.admission.arena!=call->config.admission.arena ||
+        producer->config.entry_count!=call->config.entry_count ||
+        producer->result.status!=XR_XIR_CALL_READY || producer->cancel_requested || !frame ||
+        frame->parent || frame->exiting || !generator_signature(&producer->config,frame->entry) ||
+        selected.target!=(uint32_t)(frame->entry-producer->config.entries) ||
+        selected.target!=generator->activation.entry || selected.producer!=generator->producer ||
+        !selected.owner || selected.caller==UINT32_MAX || selected.instruction==UINT32_MAX ||
+        selected.parent==UINT32_MAX || selected.node==UINT32_MAX || selected.edge==UINT32_MAX)
+        return XR_XIR_CALL_BAD_STATE;
+    XrXirValueAdmission *admission=&call->config.admission;uint64_t work=sizeof(selected)+12;
+    if(work>admission->work || !xr_xir_domain_work(admission->domain,work)) return XR_XIR_CALL_LIMIT;
+    admission->work-=work;
+    if(!iterator_wait_matches(call,token) || !call->wait_linked || generator->consumer!=call ||
+        producer->top!=frame || producer->result.status!=XR_XIR_CALL_READY) return XR_XIR_CALL_BAD_STATE;
+    frame->invocation=selected;return XR_XIR_CALL_READY;
+}
 XR_FUNC XrXirCallStatus xr_xir_call_link_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token) {
     if(!call_owner_current(call) || !call || !token) return XR_XIR_CALL_BAD_ARGUMENT;
     if(call->driving || call_observing(call)) return XR_XIR_CALL_BUSY;

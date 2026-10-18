@@ -18,6 +18,8 @@
 #include "xir_conditional_retry_cases.h"
 #define XR_XIR_EFFECT_CONTEXT_TESTS 1
 #include "xir/xxir_effects.c"
+#include "xir_invocation_cause_order_cases.h"
+#include "xir_sequence_borrow_cases.h"
 #include "xir_root_conditional_raw_fixture.h"
 #include "xir_construction_fixture.h"
 #include "xir_invocation_core_cases.h"
@@ -1755,6 +1757,7 @@ static void conditional_ordinary_environment_keys(void) {
 
 #include "xir_reference_root_operation_cases.h"
 int main(int argc, char **argv) {
+    invocation_cause_order_cases();sequence_borrow_cases();
     if (argc==2 && !strcmp(argv[1],"--class-physical-replay")) {
         conditional_class_physical_tests();CHECK(!rp_live && !rp_live_bytes);return 0;
     }

@@ -108,28 +108,28 @@ static void invocation_returned_environment_rejections(EffectInvocationWorkspace
     uint32_t at=(uint32_t)(returned-node->producers);
     EffectInvocationProducer original=node->producers[at];
     node->producers[at].atom=known-2;
-    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_BAD_STRUCTURE);node->producers[at]=original;
+    CHECK(effect_invocation_producers_verify_read(&owner->read,&owner->read.body)==XR_XIR_BAD_STRUCTURE);node->producers[at]=original;
     node->producers[at].atom=known-1;
-    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_BAD_STRUCTURE);node->producers[at]=original;
+    CHECK(effect_invocation_producers_verify_read(&owner->read,&owner->read.body)==XR_XIR_BAD_STRUCTURE);node->producers[at]=original;
     node->producers[at].atom=UINT32_MAX;
-    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_BAD_STRUCTURE);node->producers[at]=original;
+    CHECK(effect_invocation_producers_verify_read(&owner->read,&owner->read.body)==XR_XIR_BAD_STRUCTURE);node->producers[at]=original;
     uint32_t last=node->producer_count-1;EffectInvocationProducer tail=node->producers[last];
     node->producers[at]=tail;--node->producer_count;
-    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_producers_verify_read(&owner->read,&owner->read.body)==XR_XIR_BAD_STRUCTURE);
     ++node->producer_count;node->producers[last]=tail;node->producers[at]=original;
     const EffectInvocationProducer *identity=effect_invocation_producer_find(node,values,0);
     CHECK(identity);uint32_t identity_at=(uint32_t)(identity-node->producers);
     EffectInvocationProducer identity_copy=node->producers[identity_at];
     node->producers[identity_at]=original;
-    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_producers_verify_read(&owner->read,&owner->read.body)==XR_XIR_BAD_STRUCTURE);
     node->producers[identity_at]=identity_copy;
     node->producers[at].next_value=values;node->producers[at].distance=2;
-    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_BAD_STRUCTURE);node->producers[at]=original;
-    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_OK);
+    CHECK(effect_invocation_producers_verify_read(&owner->read,&owner->read.body)==XR_XIR_BAD_STRUCTURE);node->producers[at]=original;
+    CHECK(effect_invocation_producers_verify_read(&owner->read,&owner->read.body)==XR_XIR_OK);
 }
 
 static void invocation_returned_rejection_status(EffectInvocationWorkspace *owner,uint32_t mode,const char *mutation) {
-    XrXirStatus status=effect_invocation_producers_verify(owner);
+    XrXirStatus status=effect_invocation_producers_verify_read(&owner->read,&owner->read.body);
     if (status!=XR_XIR_BAD_STRUCTURE) {
         XrCompileResourceStats stats=rp_stats(owner->read.work);
         fprintf(stderr,"INVOCATION_RETURNED_REJECT mode=%u mutation=%s status=%u nodes=%u work=%llu allocated=%llu live=%llu\n",
@@ -151,9 +151,9 @@ static void invocation_returned_rejections(EffectInvocationWorkspace *owner,uint
         EffectInvocationProducer forged[2]={{0,0,index,2,edge,0,1,0},
             {2,0,index,0,UINT32_MAX,1,2,0}};
         node->producers=forged;node->producer_count=node->producer_capacity=2;
-        CHECK(effect_invocation_producers_verify(owner)==XR_XIR_BAD_STRUCTURE);
+        CHECK(effect_invocation_producers_verify_read(&owner->read,&owner->read.body)==XR_XIR_BAD_STRUCTURE);
         node->producers=NULL;node->producer_count=node->producer_capacity=0;
-        CHECK(effect_invocation_producers_verify(owner)==XR_XIR_OK);return;
+        CHECK(effect_invocation_producers_verify_read(&owner->read,&owner->read.body)==XR_XIR_OK);return;
     }
     uint32_t values=owner->final.material->functions[1].instruction_count;
     const EffectInvocationProducer *returned=effect_invocation_producer_find(node,values,0);
@@ -166,7 +166,7 @@ static void invocation_returned_rejections(EffectInvocationWorkspace *owner,uint
     invocation_returned_rejection_status(owner,mode,"next-value");*fact=original;
     fact->site=UINT32_MAX;
     invocation_returned_rejection_status(owner,mode,"site");*fact=original;
-    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_OK);
+    CHECK(effect_invocation_producers_verify_read(&owner->read,&owner->read.body)==XR_XIR_OK);
     if (mode>=6) invocation_returned_environment_rejections(owner,index,values);
 }
 

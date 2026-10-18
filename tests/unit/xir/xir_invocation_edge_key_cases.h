@@ -41,6 +41,42 @@ static void invocation_edge_key_literals(void) {
     xr_compile_resources_free(owner.edge_index);rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
+/* Equal body coordinates deliberately share one chain. Every complete input
+ * remains distinct, and malformed scratch cannot publish a numeric answer. */
+static void invocation_node_key_literals(void) {
+    RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+    uint64_t baseline=rp_stats(&context).live_bytes;
+    uint64_t inputs[6][2]={{1,3},{2,3},{1,4},{1,8},{1,3},{1,3}};
+    EffectInvocationNode nodes[6]={0};EffectInvocationState states[6]={0};
+    for (uint32_t n=0;n<6;++n) nodes[n]=(EffectInvocationNode){.root=n==4?2:1,
+        .body=n==5?3:2,.parameter_count=1,.input=inputs[n]};
+    EffectInvocationWorkspace owner={.read={.work=&context,.final=&owner.final,
+        .body={.domain={.function_count=4}}},.states=states,
+        .final={.nodes=nodes,.count=6,.capacity=6}};
+    CHECK(effect_invocation_node_index_reserve(&owner)==XR_XIR_OK && owner.node_index_capacity==4);
+    for (uint32_t n=0;n<6;++n) {
+        EffectInvocationNodeLookup key={nodes[n].root,nodes[n].body,1,inputs[n],2};
+        uint32_t actual=UINT32_MAX;
+        CHECK(effect_invocation_node_find(&owner,&key,&actual)==XR_XIR_OK && actual==n);
+    }
+    uint64_t missing[2]={1,9};EffectInvocationNodeLookup key={1,2,1,missing,2};
+    uint32_t actual=42;
+    CHECK(effect_invocation_node_find(&owner,&key,&actual)==XR_XIR_OK && actual==UINT32_MAX);
+    uint32_t saved=owner.node_index[2];owner.node_index[2]=UINT32_MAX;actual=42;
+    CHECK(effect_invocation_node_find(&owner,&key,&actual)==XR_XIR_BAD_STRUCTURE && actual==42);
+    owner.node_index[2]=saved;owner.node_index_capacity=3;
+    CHECK(effect_invocation_node_find(&owner,&key,&actual)==XR_XIR_BAD_STRUCTURE && actual==42);
+    owner.node_index_capacity=4;key.parameters=2;
+    CHECK(effect_invocation_node_find(&owner,&key,&actual)==XR_XIR_BAD_STRUCTURE && actual==42);
+    key.parameters=1;uint32_t held=states[saved-1].lookup_next;states[saved-1].lookup_next=saved;
+    CHECK(effect_invocation_node_find(&owner,&key,&actual)==XR_XIR_BAD_STRUCTURE && actual==42);
+    states[saved-1].lookup_next=held;nodes[saved-1].body=3;
+    CHECK(effect_invocation_node_find(&owner,&key,&actual)==XR_XIR_BAD_STRUCTURE && actual==42);
+    nodes[saved-1].body=2;actual=42;
+    CHECK(effect_invocation_node_find(&owner,&key,&actual)==XR_XIR_OK && actual==UINT32_MAX);
+    xr_compile_resources_free(owner.node_index);rp_owner_free(&context,baseline);rp_balanced(physical);
+}
+
 /* The branch selects two genuine FnRef producers of the same target. Their
  * PHI reaches one indirect instruction, so producer identity cannot be lost. */
 typedef struct InvocationEdgePhiFixture {
@@ -186,12 +222,24 @@ static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
     effect_terms_free(&terms);effect_source_outcomes_free(&replay);xr_xir_compile_effects_free(effects);return status;
 }
 
+static void invocation_edge_poison_allocation(void *memory) {
+    for(size_t at=0;at<rp_live;++at) {
+        if(rp_blocks[at].pointer!=memory) continue;
+        memset(memory,0xA7,rp_blocks[at].bytes);return;
+    }
+    CHECK(false);
+}
+
 static void invocation_edge_literals(void) {
-    invocation_edge_key_literals();
+    invocation_edge_key_literals();invocation_node_key_literals();
     for (uint32_t mode=0;mode<4;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         context.limits.instructions=CI_MAX_OPS;uint64_t baseline=rp_stats(&context).live_bytes;
         CHECK(invocation_edge_operation(&context,mode,true)==XR_XIR_OK);
+        CHECK(!rp_allocation_observer);
+        rp_allocation_observer=invocation_edge_poison_allocation;
+        CHECK(invocation_edge_operation(&context,mode,true)==XR_XIR_OK);
+        rp_allocation_observer=NULL;
         rp_owner_free(&context,baseline);rp_balanced(physical);
     }
 }

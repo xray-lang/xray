@@ -11,9 +11,9 @@
 
 static uint32_t cell_head_delegate_calls;
 static XrXirStatus cell_head_delegate(const EffectBodyRequest *request,uint32_t f,
-    EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions) {
+    EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions,EffectBodyFunctionSignature *signature) {
     ++cell_head_delegate_calls;
-    return effect_body_owned_head(request,f,output,dimensions);
+    return effect_body_owned_head(request,f,output,dimensions,signature);
 }
 static void cell_head_equal(const XrXirCellProofBodyHead *a,const EffectBodyFunction *b) {
     CHECK(a->parameters==b->parameters && a->parameter_count==b->parameter_count &&

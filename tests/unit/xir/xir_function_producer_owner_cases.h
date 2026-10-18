@@ -76,6 +76,25 @@ static void producer_runtime_frame_release(XrXirCallView *view,XrXirCallStatus s
     (void)status;xr_xir_value_drop(&((ProducerRuntimeFrame *)view->state)->owned);
 }
 static void producer_runtime_code_release(void *owner) { ++((ProducerRuntimeWitness *)owner)->releases; }
+static XrXirCallStatus producer_runtime_carrier(XrXirCallView *view,XrXirType type,
+    const XrXirValue *input,unsigned mode,XrXirValue *output) {
+    const XrXirFunctionBinding *binding=xr_xir_function_binding(input);
+    CHECK(binding && (mode==1 || mode==2 || mode==8));
+    XrXirCallStatus status=mode==1?
+        xr_xir_instance_function(view,type,binding->entry,binding->captures,binding->capture_count,output):
+        xr_xir_instance_weaken_function(view,type,input,output);
+    if (status!=XR_XIR_CALL_READY) return status;
+    XirFunctionProducer *retained=(XirFunctionProducer *)xr_xir_function_producer(output);
+    if (mode==1) CHECK(!retained);
+    else {
+        const XirFunctionProducer *origin=xr_xir_function_producer(input);
+        CHECK(origin && retained && retained->owner==origin->owner && retained->function==origin->function &&
+            retained->instruction==origin->instruction && retained->site==origin->site);
+        /* Keep the missing-origin attack after legal weakening preserves it. */
+        if (mode==2) { retained->owner=NULL;CHECK(!xr_xir_function_producer(output)); }
+    }
+    return XR_XIR_CALL_READY;
+}
 static XrXirCallStatus producer_runtime_negative(XrXirCallView *view,const XrXirValue *actual) {
     const XrXirFunctionBinding *binding=xr_xir_function_binding(actual);
     CHECK(binding);XirEffectProducerView real={0};
@@ -103,8 +122,10 @@ static XrXirCallStatus producer_runtime_negative(XrXirCallView *view,const XrXir
             !memcmp(&real,&untouched,sizeof(real)));
         status=xr_xir_instance_weaken_function(view,(XrXirType)actual->type,actual,&weakened);
         if (status==XR_XIR_CALL_READY) {
-            CHECK(!xr_xir_function_producer(&weakened));
-            CHECK(xr_xir_instance_function_producer(view,&weakened,&untouched)==XR_XIR_CALL_BAD_ARGUMENT &&
+            const XirFunctionProducer *retained=xr_xir_function_producer(&weakened);
+            CHECK(retained && retained->owner==saved.owner && retained->function==saved.function &&
+                retained->instruction==saved.instruction && retained->site==saved.site);
+            CHECK(xr_xir_instance_function_producer(view,&weakened,&untouched)==XR_XIR_CALL_READY &&
                 !memcmp(&real,&untouched,sizeof(real)));
         }
     }

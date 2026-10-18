@@ -809,6 +809,12 @@ static XrXirStatus class_uses(const Graph *graph, const XrXirFunction *function,
 #include "xxir_tuple_verify.inc.c"
 #include "xxir_atomic_verify.inc.c"
 
+/* Binding admission checks the exact actual; cold transport adds no execution. */
+static bool callable_binding_operation(XrXirOp op) {
+    return op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_GENERATOR_NEW ||
+        op==XR_XIR_FUNCTION_REF || op==XR_XIR_CLEANUP_REGISTER;
+}
+
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
@@ -989,8 +995,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 if (operand >= (uint64_t) function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;
                 operand_type = xr_xir_operand_type(function, operand);
                 XrXirStatus match = xr_xir_compile_call_type_matches(&context->remaining, context->module, context->location.function, op, context->module->functions[op->immediate].parameters[a], operand_type);
-                if (match == XR_XIR_BAD_TYPE && (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE ||
-                    op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CLEANUP_REGISTER))
+                if (match == XR_XIR_BAD_TYPE && callable_binding_operation(op->op))
                     match = xir_effect_call_binding_candidate(&context->remaining,context->module,
                         context->location.function,i,a);
                 if (match != XR_XIR_OK) return match;

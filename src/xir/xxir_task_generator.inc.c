@@ -53,9 +53,9 @@ static XrXirValueStatus generator_core_prepare(XrXirTaskExecutor *executor,XrXir
     xr_xir_value_object_publish(&generator->object);*output=generator;return XR_XIR_VALUE_OK;
 }
 static XrXirCallStatus generator_core_new(XrXirTaskExecutor *executor,XrXirCallView *view,
-    XrXirType type,const XrXirCallRequest *request,XrXirValue *output,uint32_t instruction) {
+    XrXirType type,const XrXirCallRequest *request,XrXirValue *output,const XirGeneratorSiteOrigin *origin) {
     bool child=false;
-    if(!executor || !view || !request || !task_core_empty_value(output)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if(!executor || !view || !request || !origin || origin->producer==UINT32_MAX || !task_core_empty_value(output)) return XR_XIR_CALL_BAD_ARGUMENT;
     if(task_executor_observing(executor) || !xr_xir_task_executor_view_member(executor,view,&child)) return XR_XIR_CALL_BUSY;
     if(executor->stopping || executor->budget->exhausted || executor->next_identity==UINT64_MAX) return XR_XIR_CALL_BAD_STATE;
     const XrXirProgram *program=executor->config.program;
@@ -67,6 +67,7 @@ static XrXirCallStatus generator_core_new(XrXirTaskExecutor *executor,XrXirCallV
     if(!permissions || permissions->function_count!=program->entry_count) return XR_XIR_CALL_BAD_ARGUMENT;
     XirGenerator *generator=NULL;XrXirValueStatus prepared=generator_core_prepare(executor,type,&generator);
     if(prepared!=XR_XIR_VALUE_OK) return task_core_value_status(prepared);
+    generator->producer=origin->producer;
     XrXirCallConfig config;XR_CHECK(xr_xir_call_config_init(&config,sizeof(config))==XR_XIR_CALL_READY,
         "generator configuration uses the canonical Call ABI");
     config.entries=executor->config.entries ? executor->config.entries : program->entries;
@@ -78,13 +79,7 @@ static XrXirCallStatus generator_core_new(XrXirTaskExecutor *executor,XrXirCallV
     if(!config.admission.arena) config.admission=(XrXirValueAdmission){program->arena,executor->config.domain,NULL,NULL,
         executor->config.poll_limit,executor->config.call_limit};
     XrXirCallStatus status=xr_xir_call_generator_new_budgeted(&config,request,executor->budget,&generator->call);
-    /* Cold creation does not execute the producer. An ineligible worker body
-     * remains parked until an actual demand is rejected before scheduling. */
-    if(status==XR_XIR_CALL_READY && child && permissions->entries[request->entry].worker==XR_XIR_OK) {
-        XirEffectInvocationSelection context={0};
-        status=xr_xir_instance_generator_context(view,instruction,request,&context);
-        if(status==XR_XIR_CALL_READY) status=xr_xir_call_generator_bind_context(generator->call,&context);
-    }
+    /* Cold creation owns captures but grants no producer execution context. */
     if(status==XR_XIR_CALL_READY) status=xr_xir_call_execution_status(view);
     if(status==XR_XIR_CALL_READY && (executor->stopping || executor->budget->exhausted))
         status=executor->budget->exhausted ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_CANCELLED;
@@ -98,7 +93,7 @@ static XrXirCallStatus generator_core_new(XrXirTaskExecutor *executor,XrXirCallV
     const XrXirExecutorBinding binding={executor,&generator->activation,executor->generation,generator->identity};
     XR_CHECK(xr_xir_call_bind_executor(generator->call,&binding)==XR_XIR_CALL_READY,
         "a generator activation receives one exact executor identity before publication");
-    generator->executor=executor;generator->child=child;
+    generator->executor=executor;
     generator->active_next=executor->generators;
     if(executor->generators) executor->generators->active_previous=generator;
     executor->generators=generator;
@@ -107,10 +102,10 @@ static XrXirCallStatus generator_core_new(XrXirTaskExecutor *executor,XrXirCallV
     *output=generator_core_value(generator);return XR_XIR_CALL_READY;
 }
 XR_FUNC XrXirCallStatus xr_xir_task_executor_generator(XrXirTaskExecutor *executor,
-    XrXirCallView *view,XrXirType type,const XrXirCallRequest *request,XrXirValue *output,uint32_t instruction) {
+    XrXirCallView *view,XrXirType type,const XrXirCallRequest *request,XrXirValue *output,const XirGeneratorSiteOrigin *origin) {
     if(!task_executor_owner_current(executor)) return XR_XIR_CALL_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
-    XrXirCallStatus status=generator_core_new(executor,view,type,request,output,instruction);
+    XrXirCallStatus status=generator_core_new(executor,view,type,request,output,origin);
     xr_xir_value_graph_end();return status;
 }
 static void generator_core_complete_consumer(XrXirTaskExecutor *executor,XirGenerator *generator);
@@ -126,7 +121,8 @@ static void generator_core_finish(XrXirTaskExecutor *executor,XirGenerator *gene
     if(executor->shutdown_status==XR_XIR_CALL_READY && status!=XR_XIR_CALL_RETURNED && status!=XR_XIR_CALL_CANCELLED &&
         (executor->stopping || (status!=XR_XIR_CALL_THROWN && !xr_xir_call_panic_status(status))))
         executor->shutdown_status=status;
-    generator->call=NULL;generator->activation.call=NULL;generator->activation.entry=UINT32_MAX;
+    /* The numeric entry remains creation identity, never scheduling authority. */
+    generator->call=NULL;generator->activation.call=NULL;
     if(executor->external==&generator->activation) {executor->external=NULL;executor->external_call_wake=0;}
     if(generator->active_previous) generator->active_previous->active_next=generator->active_next;
     else {XR_CHECK(executor->generators==generator,"generator retirement keeps its original registry membership");

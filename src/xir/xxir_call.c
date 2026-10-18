@@ -20,6 +20,7 @@
 #include "xxir_value_internal.h"
 #include "xxir_task_internal.h"
 #include "xxir_generator_internal.h"
+#include "xxir_instance_generator_internal.h"
 #include "xxir_type_arena.h"
 #include "xxir_types.h"
 #include "xxir_panic.h"
@@ -1016,6 +1017,7 @@ XrXirCallResult xr_xir_call_poll_bounded(XrXirCall *call, uint64_t quantum) {
         call->top->entered = true;
         call->active_view = &view;
         call->top->effect_pending=false;
+        call->top->effect_instruction=UINT32_MAX;
         call->top->pending_invocation=(XirEffectInvocationSelection){0};
         call_observer_event(call, call->top, XR_XIR_CALL_DISPATCH_BEGIN, XR_XIR_CALL_READY);
         XrXirAction action = call->top->entry->resume(&view);

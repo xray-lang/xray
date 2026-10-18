@@ -120,7 +120,8 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
 
 /* Replay the original complete finite descriptor. Any opaque, symbolic or
  * unrooted alternative is still an unknown error even with a NONE ROOT mask.
- * Every concrete site must have exactly one real edge for this full input. */
+ * Every discovered complete input has one real edge. An original pending
+ * Iterator input keeps Unknown Error until its genuine origin is discovered. */
 static XrXirStatus error_invocation_indirect_check(EffectInvocationFlow *replay,
     const ErrorInvocationContexts *contexts,const EffectInvocationCoverage *coverage,
     uint32_t instruction,const XrXirInstruction *op,bool *unknown) {
@@ -148,7 +149,16 @@ static XrXirStatus error_invocation_indirect_check(EffectInvocationFlow *replay,
             if (e>=contexts->link_count) return XR_XIR_BAD_STRUCTURE;
             if (contexts->links[e].producer==s) ++matched;
         }
-        if (matched!=1) return XR_XIR_BAD_STRUCTURE;
+        if(matched!=1) {
+            if(matched) return XR_XIR_BAD_STRUCTURE;
+            bool pending=false;
+            XrXirStatus status=effect_invocation_iterator_pending(replay,op,&pending);
+            if(status!=XR_XIR_OK) return status;
+            if(!pending) return XR_XIR_BAD_STRUCTURE;
+            /* The same original discovery rule withheld this call's edge.
+             * Missing Iterator input keeps an unknown Error, never NONE. */
+            unresolved=true;
+        }
     }
     *unknown=unresolved || !present;return XR_XIR_OK;
 }
@@ -181,8 +191,9 @@ static XrXirStatus error_invocation_input_match(EffectInvocationFlow *replay,
     }
     const uint64_t *closure=NULL;
     if (edge.producer!=UINT32_MAX) {
-        if (op->immediate<0 || (uint64_t)op->immediate>=replay->values) return XR_XIR_BAD_STRUCTURE;
-        closure=effect_invocation_row(replay,(uint32_t)op->immediate);
+        uint64_t value=effect_invocation_iterator_operation(op->op)?op->args[0]:(uint64_t)op->immediate;
+        if (value>=replay->values) return XR_XIR_BAD_STRUCTURE;
+        closure=effect_invocation_row(replay,(uint32_t)value);
         if (!closure) return XR_XIR_BAD_STRUCTURE;
     }
     uint64_t *input=NULL;replay->instruction=edge.instruction;
@@ -386,6 +397,8 @@ static XrXirStatus error_invocation_has_indirect(ErrorFlow *flow,bool *output) {
     *output=found;return XR_XIR_OK;
 }
 
+#include "xxir_effect_error_context_replay.inc.c"
+
 static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocationContexts **output) {
     if (!flow || !flow->effects || !output || *output) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationCertificate *certificate=flow->effects->invocations;
@@ -422,26 +435,7 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
             if (e>=owner.final->edge_count || ++walked>owner.final->edge_count) { status=XR_XIR_BAD_STRUCTURE;break; }
             status=error_invocation_link(flow,contexts,certificate,&replay,e);
         }
-        EffectBodyRecordCursor cursor;
-        if (status==XR_XIR_OK) status=effect_body_request_sequence_begin(&replay.body,&cursor);
-        for (uint32_t i=0;status==XR_XIR_OK && i<replay.function->instruction_count;++i) {
-            if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }
-            XrXirInstruction op_storage;const XrXirInstruction *instruction=NULL;
-            status=effect_body_request_sequence_instruction(&replay.body,
-                owner.final->nodes[n].body,i,&cursor,&op_storage,&instruction);
-            if (status!=XR_XIR_OK) break;
-            XrXirOp op=instruction->op;
-            ErrorInvocationCall *call=&contexts->calls[contexts->nodes[n].calls+i];
-            if (call->frontier && (!call->handled || (op!=XR_XIR_CALL_INDIRECT &&
-                op!=XR_XIR_INVOKE_INDIRECT && contexts->links[call->head].next!=UINT32_MAX))) {
-                status=XR_XIR_BAD_STRUCTURE;break;
-            }
-            if (op!=XR_XIR_CALL_INDIRECT && op!=XR_XIR_INVOKE_INDIRECT) continue;
-            status=error_invocation_indirect_check(&replay,contexts,&coverage,i,instruction,&call->unknown);
-            call->handled=true;
-        }
-        if (status==XR_XIR_OK) status=effect_body_request_sequence_finish(&replay.body,
-            owner.final->nodes[n].body,&cursor);
+        if (status==XR_XIR_OK) status=error_invocation_context_replay(&replay,contexts,&coverage);
         xr_compile_resources_free(coverage.memory);
         xr_compile_resources_free(replay.memory);
     }

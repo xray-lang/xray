@@ -133,6 +133,14 @@ int main(int argc,char **argv) {
     if(argc==2) {FILE *file=fopen(argv[1],"wb");CHECK(file);CHECK(fwrite(c.text,1,c.length,file)==c.length);
         CHECK(fprintf(file,"\nconst uint32_t generator_iterable_ids[10]={%u,%u,%u,%u,%u,%u,%u,%u,%u,%u};\n",ids[0],ids[1],ids[2],ids[3],ids[4],ids[5],ids[6],ids[7],ids[8],ids[9])>0);CHECK(!fclose(file));}
     xr_xir_compile_c_source_free(&c);XrXirProgram *program=NULL;
-    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && program && !lowered);
+    XrCompileResourceStats before_take={0};CHECK(xr_compile_resources_stats(owner.context.resources,&before_take)==XR_COMPILE_RESOURCE_OK);
+    status=xr_xir_compile_vm_program_take(&lowered,&program);
+    if(status!=XR_XIR_OK) {
+        XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(owner.context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"Iterable Program take status%u before_work%llu work%llu allocated%llu live%llu\n",status,
+            (unsigned long long)before_take.work,(unsigned long long)stats.work,
+            (unsigned long long)stats.allocated_bytes,(unsigned long long)stats.live_bytes);
+    }
+    CHECK(status==XR_XIR_OK && program && !lowered);
     generator_iterable_cases(program,ids);xr_xir_compile_program_drop(program);source_fixture_owner_free(&owner);return 0;
 }

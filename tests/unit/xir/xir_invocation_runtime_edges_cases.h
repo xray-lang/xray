@@ -49,7 +49,7 @@ static XrXirStatus conditional_invocation_runtime_edge(const XrXirCompileContext
     InvocationRuntimeProbe read={context,mode};
     XirEffectInvocationRequest request={.caller=4,.instruction=call_instruction,.target=2,
         .producer=producer.site,.node=UINT32_MAX,.count=1,
-        .read={.owner=&read,.work=invocation_runtime_work,.cell=invocation_runtime_cell,.function=NULL}};
+        .read={.owner=&read,.work=invocation_runtime_work,.cell=invocation_runtime_cell,.value=NULL}};
     XirEffectInvocationSelection selection={0};
     if (status==XR_XIR_OK) {
         XrXirStatus selected=xir_effects_execution_edge(effects,&request,&selection);

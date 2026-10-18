@@ -98,14 +98,24 @@ static XrXirStatus receiver_proof_class(void *owner,uint32_t parameter,uint32_t 
     CHECK(parameter==0 && output);*output=((ReceiverProofRead *)owner)->publication;return XR_XIR_OK;
 }
 static XrXirStatus receiver_proof_replay(const XrXirCompileContext *context,XrXirEffects *effects) {
-    EffectInvocationCertificate *certificate=effects->invocations;EffectInvocationRead replay={0};
-    XrXirStatus status=effect_invocation_read_open(context,effects,certificate->declared,certificate->final,&replay);
-    if(status!=XR_XIR_OK) return status;
-    replay.work=context;replay.effects=effects;replay.declared=certificate->declared;
-    EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
-    status=effect_invocation_producers_verify_read(&replay,&body);
-    if(status==XR_XIR_OK) status=effect_invocation_class_verify_read(&replay,&body);
-    effect_invocation_read_close(&replay);return status;
+    XrXirStatus expected=XR_XIR_OK;
+    for(unsigned shared=0;shared<2;++shared) {
+        EffectInvocationCertificate *certificate=effects->invocations;EffectInvocationRead replay={0};
+        XrXirStatus status=effect_invocation_read_open(context,effects,certificate->declared,certificate->final,&replay);
+        if(status==XR_XIR_OK) {
+            EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
+            status=shared?effect_invocation_owned_proofs_read(&replay,&body):
+                effect_invocation_producers_verify_read(&replay,&body);
+            if(status==XR_XIR_OK && !shared) status=effect_invocation_class_verify_read(&replay,&body);
+        }
+        effect_invocation_read_close(&replay);
+        if(!shared) expected=status;
+        else if(status!=expected) {
+            fprintf(stderr,"Class receiving shared%u status%u independent%u\n",shared,status,expected);
+            CHECK(status==expected);
+        }
+    }
+    return expected;
 }
 static void receiver_proof_case(bool unknown,bool returned,bool stored) {
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);ReceiverProofFixture fixture;

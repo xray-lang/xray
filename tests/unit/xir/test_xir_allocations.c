@@ -715,7 +715,20 @@ static void allocation_phase_matrix(void) {
         invocation_function_cell_owner_axes(scalar!=0);CHECK(!live);
     }
     CHECK(allocation_phase_cases==67);
-    printf("FI map total: cases=%zu original_ordinals=%zu compiler=%zu runtime=%zu bridge=%zu axes=88\n",
+    printf("FI map total: cases=%zu original_ordinals=%zu compiler=%zu runtime=%zu bridge=%zu axes=176\n",
+        allocation_phase_cases,allocation_phase_ordinals,allocation_phase_compiler_ordinals,
+        allocation_phase_runtime_ordinals,allocation_phase_bridge_ordinals);
+}
+static void allocation_weakened_phase_matrix(void) {
+    invocation_runtime_allocation_phase_case(8);
+    invocation_direct_allocation_phase_case(8);
+    for(unsigned scalar=0;scalar<2;++scalar) {
+        invocation_capture_allocation_phase_case(8,scalar!=0);
+        invocation_return_capture_allocation_phase_case(8,scalar!=0);
+        invocation_function_cell_allocation_phase_case(8,scalar!=0);
+    }
+    CHECK(allocation_phase_cases==75);
+    printf("FI weakened additions: cases=8 complete_cases=%zu original_ordinals=%zu compiler=%zu runtime=%zu bridge=%zu\n",
         allocation_phase_cases,allocation_phase_ordinals,allocation_phase_compiler_ordinals,
         allocation_phase_runtime_ordinals,allocation_phase_bridge_ordinals);
 }
@@ -731,6 +744,6 @@ int main(int argc,char **argv) {
         else {fprintf(stderr,"unknown allocation test selection: %s\n",argv[1]);return 2;}
     }
     if(argc==1)allocation_remaining_resources();
-    allocation_phase_matrix();
+    allocation_phase_matrix();allocation_weakened_phase_matrix();
     CHECK(!live && !class_live_bytes);return 0;
 }

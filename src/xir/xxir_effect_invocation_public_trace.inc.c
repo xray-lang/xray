@@ -61,19 +61,21 @@ typedef struct EffectInvocationPublicTraceOutput {
     uint32_t count;
 } EffectInvocationPublicTraceOutput;
 
-static XrXirStatus effect_invocation_public_walk(const XrXirCompileContext *work,
+static XrXirStatus effect_invocation_public_walk_selection(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const EffectInvocationTraceRequest *request,
-    uint32_t *length,const EffectInvocationPublicTraceOutput *output) {
+    uint32_t *length,const EffectInvocationPublicTraceOutput *output,const EffectInvocationTraceSelection *chosen) {
     if (!length || (output && !!output->steps!=!!output->count)) return XR_XIR_BAD_STRUCTURE;
     uint32_t count=0;EffectInvocationTraceSelection selection={UINT32_MAX,{0}};
-    XrXirStatus status=effect_invocation_trace_walk_selected(work,certificate,request,&count,&selection);
+    XrXirStatus status=effect_invocation_trace_walk_selected(work,certificate,request,&count,&selection,chosen);
     if (status!=XR_XIR_OK) return status;
     bool symbolic=false;
     if (!xir_compile_work(work,sizeof(EffectInvocationProjectedCause))) return XR_XIR_BUDGET;
     const EffectInvocationProjectedCause projected={selection.atom,&selection.witness};
     XrXirRootEffectWitness terminal={0};
-    status=effect_invocation_public_transform(work,certificate,request->function,&projected,
-        output?&terminal:NULL,&symbolic);
+    /* The trace already checked the complete public projection. A length
+     * request uses only the selected atom's symbolic form from that same read. */
+    if(output)status=effect_invocation_public_transform(work,certificate,request->function,&projected,&terminal,&symbolic);
+    else symbolic=selection.atom!=UINT32_MAX && selection.atom>=2;
     if (status!=XR_XIR_OK) return status;
     const EffectInvocationFinal *equations=certificate->final;
     uint32_t limit=equations->count;
@@ -125,6 +127,12 @@ static XrXirStatus effect_invocation_public_walk(const XrXirCompileContext *work
 
 /* Every public domain is proved before publication. Function and environment
  * identities are separate: several keys may execute one recursive body. */
+static XrXirStatus effect_invocation_public_walk(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,const EffectInvocationTraceRequest *request,
+    uint32_t *length,const EffectInvocationPublicTraceOutput *output) {
+    return effect_invocation_public_walk_selection(work,certificate,request,length,output,NULL);
+}
+
 static XrXirStatus effect_invocation_public_gate(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate) {
     if (!xir_compile_context_valid(work) || !certificate || !effect_body_material_shape(certificate->body) ||
@@ -133,9 +141,14 @@ static XrXirStatus effect_invocation_public_gate(const XrXirCompileContext *work
         certificate->final->count>certificate->final->capacity) return XR_XIR_BAD_STRUCTURE;
     uint32_t functions=effect_body_count(certificate->body);
     for (uint32_t f=0;f<functions;++f) {
+        uint32_t atoms[4];XrXirStatus status=effect_invocation_projection_domains(work,certificate,f,0,4,atoms);
+        if(status!=XR_XIR_OK) return status;
         for (uint32_t domain=0;domain<4;++domain) {
+            if(!xir_compile_work(work,sizeof(uint32_t))) return XR_XIR_BUDGET;
+            EffectInvocationTraceSelection selected={atoms[domain],{0}};
+            status=effect_invocation_selected_witness(work,certificate,f,atoms[domain],&selected.witness);
             uint32_t length=0;EffectInvocationTraceRequest request={.function=f,.domain=domain};
-            XrXirStatus status=effect_invocation_public_walk(work,certificate,&request,&length,NULL);
+            if(status==XR_XIR_OK)status=effect_invocation_public_walk_selection(work,certificate,&request,&length,NULL,&selected);
             if (status!=XR_XIR_OK) return status;
         }
     }

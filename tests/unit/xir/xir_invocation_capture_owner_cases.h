@@ -106,12 +106,10 @@ static XrXirCallStatus capture_runtime_probe(XrXirCallView *view,CaptureRuntimeW
     const XrXirFunctionBinding *binding=xr_xir_function_binding(function);
     CHECK(binding && binding->capture_count==1);
     XrXirCallStatus status=XR_XIR_CALL_READY;
-    if (w->mode==1)
-        status=xr_xir_instance_function(view,w->callback,binding->entry,binding->captures,1,&frame->extra);
-    else if (w->mode==2)
-        status=xr_xir_instance_weaken_function(view,w->callback,function,&frame->extra);
+    if (w->mode==1 || w->mode==2 || w->mode==8)
+        status=producer_runtime_carrier(view,w->callback,function,w->mode,&frame->extra);
     if (status!=XR_XIR_CALL_READY) return status;
-    if (w->mode==1 || w->mode==2) { CHECK(!xr_xir_function_producer(&frame->extra));function=&frame->extra; }
+    if (w->mode==1 || w->mode==2 || w->mode==8) function=&frame->extra;
     if (w->mode==4) {
         status=capture_runtime_replace_capture(w,function);
         if (status!=XR_XIR_CALL_READY) return status;
@@ -307,28 +305,30 @@ static bool invocation_capture_owner_run(unsigned mode,bool scalar,const XrXirIn
     CHECK(witness.releases==1);return complete;
 }
 static void invocation_capture_owner_axes(bool scalar) {
-    CaptureRuntimeWitness witness={0};witness.scalar=scalar;XrXirProgram *program=NULL;
-    CHECK(capture_runtime_seal(&witness,&program)==XR_XIR_OK && program);
-    XrCompileResourceStats prefix=native_fixture_stats(&program->context);
-    XrXirDomainBudgetStats cost={0};
-    CHECK(xr_xir_compile_program_retain(program));
-    CHECK(invocation_capture_execute(program,&witness,NULL,&cost));
-    const uint64_t exact[5]={cost.requested_bytes,cost.requested_call_bytes,cost.work,cost.metadata_peak,cost.call_peak};
-    for(unsigned axis=0;axis<5;++axis)for(unsigned minus=0;minus<2;++minus) {
-        CHECK(exact[axis]);XrXirInstanceConfig limits;
-        CHECK(xr_xir_instance_config_init(&limits,sizeof(limits))==XR_XIR_CALL_READY);
-        if(!axis)limits.requested_value_limit=exact[axis]-minus;
-        else if(axis==1)limits.requested_call_limit=exact[axis]-minus;
-        else if(axis==2)limits.work_limit=exact[axis]-minus;
-        else if(axis==3)limits.metadata_limit=exact[axis]-minus;
-        else limits.call_limit=exact[axis]-minus;
+    for(unsigned mode=0;mode<=8;mode+=8) {
+        CaptureRuntimeWitness witness={0};witness.mode=mode;witness.scalar=scalar;XrXirProgram *program=NULL;
+        CHECK(capture_runtime_seal(&witness,&program)==XR_XIR_OK && program);
+        XrCompileResourceStats prefix=native_fixture_stats(&program->context);
+        XrXirDomainBudgetStats cost={0};
         CHECK(xr_xir_compile_program_retain(program));
-        CHECK(invocation_capture_execute(program,&witness,&limits,NULL)==!minus);
-        CHECK(atomic_load(&program->references)==1 && !witness.releases);
+        CHECK(invocation_capture_execute(program,&witness,NULL,&cost));
+        const uint64_t exact[5]={cost.requested_bytes,cost.requested_call_bytes,cost.work,cost.metadata_peak,cost.call_peak};
+        for(unsigned axis=0;axis<5;++axis)for(unsigned minus=0;minus<2;++minus) {
+            CHECK(exact[axis]);XrXirInstanceConfig limits;
+            CHECK(xr_xir_instance_config_init(&limits,sizeof(limits))==XR_XIR_CALL_READY);
+            if(!axis)limits.requested_value_limit=exact[axis]-minus;
+            else if(axis==1)limits.requested_call_limit=exact[axis]-minus;
+            else if(axis==2)limits.work_limit=exact[axis]-minus;
+            else if(axis==3)limits.metadata_limit=exact[axis]-minus;
+            else limits.call_limit=exact[axis]-minus;
+            CHECK(xr_xir_compile_program_retain(program));
+            CHECK(invocation_capture_execute(program,&witness,&limits,NULL)==!minus);
+            CHECK(atomic_load(&program->references)==1 && !witness.releases);
+        }
+        XrCompileResourceStats retired=native_fixture_stats(&program->context);
+        CHECK(retired.work==prefix.work && retired.allocated_bytes==prefix.allocated_bytes &&
+            retired.live_bytes==prefix.live_bytes);
+        xr_xir_compile_program_drop(program);CHECK(witness.releases==1);
     }
-    XrCompileResourceStats retired=native_fixture_stats(&program->context);
-    CHECK(retired.work==prefix.work && retired.allocated_bytes==prefix.allocated_bytes &&
-        retired.live_bytes==prefix.live_bytes);
-    xr_xir_compile_program_drop(program);CHECK(witness.releases==1);
 }
 #endif // XIR_INVOCATION_CAPTURE_OWNER_CASES_H

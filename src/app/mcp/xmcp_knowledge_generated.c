@@ -8329,7 +8329,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "- Higher-order effects are inferred as expressions over callback effects; dynamic targets remain fail-closed when a strong external contract is requested\n"
             "- Closure capture rules are described in the scoping and concurrency sections\n"
             "\n"
-            "These language facilities do not admit Array.map/filter/reduce in the new-XIR subset. Array function elements retain the existing live execution-gate requirements; their presence does not qualify higher-order member methods (spec \xc2\xa7""17.26).\n"
+            "These language facilities do not admit Array.map/filter/reduce in the new-XIR subset. Array function elements retain the existing live execution-gate requirements; their presence does not qualify higher-order member methods (spec \xc2\xa7""17.26). Verified creation origins retained by authenticated Instance weakening identify actual captures; they do not strengthen the destination callable advertisement or erase fixed UNKNOWN/ROOT bounds. Public construction cannot invent an origin, and worker execution still requires the same sealed current-input proof (spec \xc2\xa7""17).\n"
             "",
     },
     {

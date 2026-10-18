@@ -398,7 +398,8 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_invocation_local_inputs(work,owner->final.material,&local_inputs);
     if (status==XR_XIR_OK && local_inputs) {
         if (!owner->read.consumers || !owner->states || owner->pending || owner->front || owner->back ||
-            owner->read.producer_enabled || owner->read.class_enabled || owner->edge_index || owner->edge_index_capacity)
+            owner->read.producer_enabled || owner->read.class_enabled || owner->edge_index || owner->edge_index_capacity ||
+            owner->node_index || owner->node_index_capacity)
             status=XR_XIR_BAD_STRUCTURE;
         for (uint32_t f=0;status==XR_XIR_OK && f<owner->final.count;++f) {
             if (!xir_compile_work(work,3)) status=XR_XIR_BUDGET;
@@ -408,9 +409,7 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         if (status==XR_XIR_OK) status=effect_invocation_local_equations_match(work,&owner->final,local_inputs);
         if (status==XR_XIR_OK) status=effect_invocation_local_result_match(work,&owner->final,local_inputs,result);
     } else if (status==XR_XIR_OK) {
-        status=effect_invocation_producers_verify(owner);
-        if (status==XR_XIR_OK) status=effect_invocation_coverage_verify(owner);
-        if (status==XR_XIR_OK) status=effect_invocation_class_verify(owner);
+        status=effect_invocation_owned_proofs_read(&owner->read,&owner->read.body);
         if (status==XR_XIR_OK) status=effect_invocation_closed(owner);
         if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner->read);
         if (status==XR_XIR_OK) status=effect_invocation_result_match(owner,result);

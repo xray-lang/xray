@@ -9,18 +9,14 @@
  * The caller's sealed SSA relation retains every residual. A physical local
  * object cannot select an older smaller environment or erase uncertainty.
  */
-static XrXirStatus effect_runtime_callable_operand(const EffectInvocationCertificate *certificate,
-    const XirEffectInvocationRequest *request,uint32_t parameter,uint32_t *output) {
-    if(!output || parameter<request->captures || parameter>=request->count)
-        return XR_XIR_BAD_TYPE;
-    const EffectBodyFunction *caller=&certificate->body->functions[request->caller];
-    EffectBodyRead read=effect_body_runtime_read(&request->read);XrXirInstruction op;
-    XrXirStatus status=effect_body_instruction_get(&read,caller,request->instruction,&op);
-    if(status!=XR_XIR_OK) return status;
-    uint32_t suffix=parameter-request->captures;
-    if(op.args[0]>caller->operand_count || suffix>=op.args[1] ||
-        suffix>=caller->operand_count-op.args[0] || !caller->operands) return XR_XIR_BAD_STRUCTURE;
-    *output=caller->operands[op.args[0]+suffix];return XR_XIR_OK;
+/* The receiver is the real SSA value at this original frontier. Creation
+ * arguments are not the receiver of a later ordinary Iterator demand. */
+static XrXirStatus effect_runtime_closure_value(const XrXirInstruction *op,uint32_t *output) {
+    if(!op || !output) return XR_XIR_BAD_STRUCTURE;
+    if(effect_invocation_iterator_operation(op->op)) {*output=op->args[0];return XR_XIR_OK;}
+    if((op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT) ||
+        op->immediate<0 || (uint64_t)op->immediate>=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+    *output=(uint32_t)op->immediate;return XR_XIR_OK;
 }
 static XrXirStatus effect_runtime_capture_class_mask(const EffectInvocationCertificate *certificate,
     const XirEffectInvocationRequest *request,uint32_t value,uint32_t producer,
@@ -51,6 +47,7 @@ static XrXirStatus effect_runtime_capture_class_mask(const EffectInvocationCerti
         const EffectInvocationProducer *fact=&node->producers[p];
         if(fact->value!=value || fact->site!=producer) continue;
         if(!fact->atom) {identity=true;continue;}
+        if((uint64_t)fact->atom-1>=(uint64_t)owner->binding_count*bits) continue;
         uint64_t column=((uint64_t)fact->atom-1)/bits,bit=((uint64_t)fact->atom-1)%bits;
         if(column!=binding) continue;
         if(bit<basis.parameters) return XR_XIR_BAD_STRUCTURE;

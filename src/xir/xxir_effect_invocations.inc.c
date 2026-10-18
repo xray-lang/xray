@@ -19,13 +19,16 @@ typedef struct EffectInvocationCause {
     XrXirRootEffectWitness witness;
     uint32_t next,edge,distance;
 } EffectInvocationCause;
+_Static_assert(offsetof(EffectInvocationCause,edge)==offsetof(EffectInvocationCause,next)+sizeof(uint32_t) &&
+    offsetof(EffectInvocationCause,distance)==offsetof(EffectInvocationCause,edge)+sizeof(uint32_t),
+    "Invocation sentinel fields remain contiguous");
 /* Two cause rows lead the shared payload; every following word row keeps
  * its natural alignment without padding or another allocation owner. */
 _Static_assert((2*sizeof(EffectInvocationCause))%_Alignof(uint64_t)==0,
     "Invocation cause rows preserve word alignment");
-/* One fact identifies a genuine site or one bit of its real Cell/Class capture
- * relation at an SSA or return vertex. Descending authentic causes cannot
- * manufacture either identity or an environment in an unrooted SCC. */
+/* One fact identifies a genuine site, a capture column, or a current SSA bit
+ * with site MAX. Data-only bits have no cause or rank. Descending authentic
+ * causes alone can support identity or coverage in this same finite owner. */
 typedef struct EffectInvocationProducer {
     uint32_t value,site,next_node,next_value,edge,instruction;
     uint64_t distance;
@@ -58,7 +61,10 @@ typedef struct EffectInvocationNode {
 
 /* Construction history belongs only to the solver's finite scratch owner.
  * It cannot qualify any receiving Final fact or survive publication. */
-typedef struct EffectInvocationState { bool queued,expanded; } EffectInvocationState;
+typedef struct EffectInvocationState {
+    uint32_t lookup_next;
+    bool queued,expanded,precision_pending;
+} EffectInvocationState;
 _Static_assert(_Alignof(EffectInvocationState)<=_Alignof(uint32_t),
     "Invocation state follows aligned reverse-index storage");
 
@@ -161,8 +167,8 @@ typedef struct EffectInvocationWorkspace {
     XrXirEffects *effects;
     EffectGraph *graph;
     EffectFinalFunctions *prepared_result;
-    uint32_t *edge_index;
-    size_t edge_index_capacity;
+    uint32_t *edge_index,*node_index;
+    size_t edge_index_capacity,node_index_capacity;
     EffectInvocationState *states;
     uint32_t maximum;
     uint32_t front,back,pending;
@@ -174,9 +180,12 @@ static XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effe
 static inline XrXirStatus effect_invocation_producer_column(const EffectInvocationWorkspace *owner,
     const EffectInvocationBasis *basis,uint32_t site,uint32_t atom,uint32_t *word,uint32_t *bit);
 
-static XrXirStatus effect_invocation_coverage_verify(EffectInvocationWorkspace *owner);
+static XrXirStatus effect_invocation_owned_proofs_read(const EffectInvocationRead *owner,
+    const EffectBodyRequest *request);
 static XrXirStatus effect_invocation_coverage_solve(EffectInvocationWorkspace *owner);
-static XrXirStatus effect_invocation_class_verify(EffectInvocationWorkspace *owner);
+static XrXirStatus effect_invocation_iterator_residual(EffectInvocationWorkspace *owner);
+static XrXirStatus effect_invocation_iterators_read(const EffectInvocationRead *owner,
+    const EffectBodyRequest *request,EffectInvocationWorkspace *builder);
 
 typedef struct EffectInvocationColumn { uint32_t word,bit; } EffectInvocationColumn;
 static XrXirStatus effect_invocation_producer_column_read(const EffectInvocationRead *owner,
@@ -184,6 +193,19 @@ static XrXirStatus effect_invocation_producer_column_read(const EffectInvocation
     uint32_t index,uint32_t atom,EffectInvocationColumn *output);
 static XrXirStatus effect_invocation_class_verify_read(const EffectInvocationRead *owner,
     const EffectBodyRequest *request);
+/* The physical row is scratch for this single completed edge read. Only its
+ * operation pointer is published on success; no fact or authority is retained. */
+typedef struct EffectInvocationEdgeOperation {
+    XrXirInstruction storage;
+    const XrXirInstruction *operation;
+} EffectInvocationEdgeOperation;
+typedef struct EffectInvocationEdgeRead {
+    uint32_t caller,index;
+    XrXirOp *opcode;
+} EffectInvocationEdgeRead;
+static XrXirStatus effect_invocation_edge_read_selected(const XrXirCompileContext *work,
+    const EffectInvocationFinal *equations,const EffectBodyRequest *body,
+    const XrXirTypes *types,const EffectInvocationEdgeRead *selection,EffectInvocationEdgeOperation *decoded);
 static XrXirStatus effect_invocation_edge_shape_read(const XrXirCompileContext *work,
     const EffectInvocationFinal *equations,const EffectBodyRequest *body,
     const XrXirTypes *types,uint32_t caller,uint32_t edge_index);
@@ -208,7 +230,7 @@ static XrXirStatus effect_invocation_operation(const EffectInvocationRead *owner
     uint32_t instruction,XrXirInstruction *storage,const XrXirInstruction **output) {
     if (!owner || !owner->work || !effect_body_material_shape(owner->final->material)) return XR_XIR_BAD_STRUCTURE;
     EffectBodyRequest request=effect_invocation_body(owner);
-    return effect_body_request_instruction(&request,function,instruction,storage,output);
+    return effect_body_request_operation(&request,function,instruction,storage,output);
 }
 
 static XrXirStatus effect_invocation_shape(const EffectInvocationRead *owner,uint32_t function,
@@ -227,6 +249,7 @@ static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
 #include "xxir_effect_invocation_nodes.inc.c"
 #include "xxir_effect_invocation_causes.inc.c"
 #include "xxir_effect_invocation_flow.inc.c"
+static XrXirStatus effect_invocation_iterators_projected_read(EffectInvocationFlow *flow,void *scratch);
 #include "xxir_effect_invocation_class_flow.inc.c"
 #include "xxir_effect_invocation_deferred.inc.c"
 #include "xxir_effect_invocation_calls.inc.c"
@@ -237,6 +260,7 @@ static bool effect_invocation_witness_equal(const XrXirRootEffectWitness *a,
 #include "xxir_effect_invocation_seal.inc.c"
 #include "xxir_effect_invocation_query.inc.c"
 #include "xxir_effect_invocation_coverage.inc.c"
+#include "xxir_effect_invocation_iterator_verify.inc.c"
 #include "xxir_effect_invocation_class_verify.inc.c"
 #include "xxir_effect_invocation_projection.inc.c"
 #include "xxir_effect_invocation_trace.inc.c"

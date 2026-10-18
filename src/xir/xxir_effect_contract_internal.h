@@ -214,16 +214,23 @@ XR_FUNC XrXirStatus xir_effects_producer(const XrXirCompileContext *context,
 
 /* Runtime matching reads only existing completed equations. The callback
  * consumes the live runtime ledger, never the retired compile context. */
+/* A request-local value is a borrowed physical handle, not a permission.
+ * Child reads authenticate the same real parent before exposing its capture.
+ * Iterator publication is zero only after authenticated Frame retirement;
+ * active Iterator and all Function origins retain UINT32_MAX. */
+typedef struct XirEffectRuntimeValue {
+    uint32_t type,reserved,producer,publication;
+    int64_t payload;
+} XirEffectRuntimeValue;
 typedef struct XirEffectRuntimeRead {
     void *owner;
     bool (*work)(void *owner,uint64_t units);
     uint32_t (*cell)(void *owner,uint32_t parameter);
     XrXirStatus (*class_value)(void *owner,uint32_t parameter,uint32_t *module_storage);
-    XrXirStatus (*function)(void *owner,uint32_t parameter,uint32_t *producer);
-    XrXirStatus (*capture_cell)(void *owner,uint32_t parameter,uint32_t capture,
-        uint32_t producer,uint32_t *origin);
-    XrXirStatus (*capture_class_value)(void *owner,uint32_t parameter,uint32_t capture,
-        uint32_t producer,uint32_t *module_storage);
+    XrXirStatus (*value)(void *owner,uint32_t parameter,const XirEffectRuntimeValue *parent,
+        uint32_t capture,XirEffectRuntimeValue *output);
+    void *(*allocate)(void *owner,size_t bytes,XrXirStatus *status);
+    void (*deallocate)(void *owner,void *memory,size_t bytes);
 } XirEffectRuntimeRead;
 typedef enum XirEffectClassAccessKind {
     XIR_EFFECT_ACCESS_CELL_READ,XIR_EFFECT_ACCESS_CELL_WRITE,XIR_EFFECT_ACCESS_PROJECT,
@@ -240,6 +247,11 @@ typedef struct XirEffectClassAccessRequest {
 /* The genuine Instance keeps its Class reservation across this exact query. */
 XR_FUNC XrXirStatus xir_effects_class_access(const struct XrXirEffects *effects,
     const XirEffectClassAccessRequest *request);
+
+/* Original operation facts from the same sealed body, without a verdict. */
+typedef struct XirEffectIteratorInstruction {uint32_t opcode;XrXirType receiver;} XirEffectIteratorInstruction;
+XR_FUNC XrXirStatus xir_effects_iterator_instruction(const struct XrXirEffects *effects,
+    uint32_t caller,uint32_t instruction,const XirEffectRuntimeRead *read,XirEffectIteratorInstruction *output);
 
 typedef struct XirEffectInvocationRequest {
     uint32_t caller,instruction,target,producer,node,count,captures;

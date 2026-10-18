@@ -118,21 +118,21 @@ static void accept_iterator_wait(XrXirCall *call,XrXirAction action) {
     call->wait=(XrXirWaitRequest){action.callee,0,nth ? (uint64_t)action.arguments[0].payload : 0,generator,generator->generation,generator->identity};
 }
 
-/* A prepared producer receives its actual latent edge before executor binding.
- * No selection is inferred from the callee's nominal worker eligibility. */
-XR_FUNC XrXirCallStatus xr_xir_call_generator_bind_context(XrXirCall *call,
-    const XirEffectInvocationSelection *selection) {
-    if (!call || !call_owner_current(call) || !selection || !selection->owner)
-        return XR_XIR_CALL_BAD_ARGUMENT;
-    if (call->driving || call_observing(call)) return XR_XIR_CALL_BUSY;
-    CallFrame *frame=call->top;
-    if (!frame || frame->parent || frame->invocation.owner || call->executor_owner ||
-        call->result.status!=XR_XIR_CALL_READY || !generator_signature(&call->config,frame->entry) ||
-        selection->target!=(uint32_t)(frame->entry-call->config.entries) ||
-        selection->producer!=UINT32_MAX || selection->caller==UINT32_MAX ||
-        selection->instruction==UINT32_MAX || selection->parent==UINT32_MAX ||
-        selection->node==UINT32_MAX || selection->edge==UINT32_MAX)
-        return XR_XIR_CALL_BAD_STATE;
-    if (!xr_xir_domain_work(call->config.admission.domain,sizeof(*selection)+8)) return XR_XIR_CALL_LIMIT;
-    frame->invocation=*selection;return XR_XIR_CALL_READY;
+/* Original arguments already belong to the root frame until it is retired.
+ * A read adds neither capture ownership nor a code lease to the Iterator. */
+XR_FUNC XrXirCallStatus xr_xir_call_generator_captures(const XrXirCall *call,
+    XrXirValueAdmission *admission,XirGeneratorCaptureView *output) {
+    if (!call || !admission || !output || !call_owner_current(call) ||
+        admission->domain!=call->config.admission.domain || admission->arena!=call->config.admission.arena || !call->top) return XR_XIR_CALL_BAD_ARGUMENT;
+    const CallFrame *frame=call->top;uint32_t depth=0;
+    for (;;) {
+        if (depth++>=call->config.depth_limit) return XR_XIR_CALL_BAD_STATE;
+        if (admission->work<2 || !xr_xir_domain_work(admission->domain,2)) return XR_XIR_CALL_LIMIT;
+        admission->work-=2;if (!frame->parent) break;frame=frame->parent;
+    }
+    if (!generator_signature(&call->config,frame->entry) ||
+        (frame->entry->parameter_count && !frame->arguments)) return XR_XIR_CALL_BAD_STATE;
+    *output=(XirGeneratorCaptureView){frame->arguments,frame->entry->parameter_count,
+        (uint32_t)(frame->entry-call->config.entries)};
+    return XR_XIR_CALL_READY;
 }

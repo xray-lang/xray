@@ -83,6 +83,45 @@ static XrXirStatus effect_invocation_captured_leaf(EffectInvocationFlow *flow,ui
     return XR_XIR_OK;
 }
 
+/* A prefix projection reads the complete flat relation of this actual value.
+ * Nested environments stay in the same finite columns as their producer. */
+static XrXirStatus effect_invocation_capture_argument(EffectInvocationFlow *flow,
+    const EffectInvocationActual *actual,const EffectBodyFunctionHead *callee,
+    uint32_t p,uint64_t *row) {
+    const EffectInvocationRead *owner=flow->read;
+    const EffectInvocationSite *site=&owner->final->sites[actual->producer];
+    const uint64_t *closure=actual->closure;XrXirType expected=callee->parameters[p];
+    const uint64_t *captured=closure+flow->basis.origin_words+
+        (size_t)(site->binding+p)*(flow->basis.origin_words+flow->basis.cell_words);
+    XrXirStatus status=XR_XIR_OK;
+    if (xr_xir_type_is_cell(flow->body.domain.types,expected) ||
+        xr_xir_type_is_class(flow->body.domain.types,expected)) {
+        if (!xir_compile_work(owner->work,(uint64_t)flow->basis.cell_words*sizeof(*row))) return XR_XIR_BUDGET;
+        memcpy(row+flow->basis.fn_words,captured+flow->basis.origin_words,
+            (size_t)flow->basis.cell_words*sizeof(*row));
+    } else if (effect_physical_origin(flow->body.domain.types,expected)) {
+        if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row))) return XR_XIR_BUDGET;
+        memcpy(row,captured,(size_t)flow->basis.origin_words*sizeof(*row));
+        memcpy(row+flow->basis.origin_words,closure+flow->basis.origin_words,
+            (size_t)(flow->basis.fn_words-flow->basis.origin_words)*sizeof(*row));
+        status=effect_invocation_captured_leaf(flow,row);
+        if (status==XR_XIR_OK) status=effect_invocation_bound_row(flow,actual->target,p,callee,row);
+    }
+    if (status==XR_XIR_OK && xr_xir_type_is_class(flow->body.domain.types,expected)) {
+        uint32_t known=flow->basis.parameters+2;
+        if (!(row[flow->basis.fn_words+known/64]&(UINT64_C(1)<<(known%64)))) status=XR_XIR_UNRESOLVED;
+    }
+    if (status==XR_XIR_OK && effect_physical_iterator(flow->body.domain.types,expected)) {
+        bool present=false;
+        for (uint32_t w=0;w<flow->basis.origin_words;++w) {
+            if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+            present|=row[w]!=0;
+        }
+        if (!present) status=XR_XIR_UNRESOLVED;
+    }
+    return status;
+}
+
 static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
     const XrXirInstruction *op,const EffectInvocationActual *request,
     const EffectBodyFunctionHead *callee,uint64_t **output) {
@@ -92,21 +131,23 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
     if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
     uint32_t target=request->target,producer=request->producer;
     const uint64_t *closure=request->closure;
-    bool indirect=producer!=UINT32_MAX;uint32_t captures=0,binding=0;
+    bool indirect=producer!=UINT32_MAX,iterator=effect_invocation_iterator_operation(op->op);uint32_t captures=0;
     if (indirect) {
         if (producer>=owner->final->site_count || !closure) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationSite *site=&owner->final->sites[producer];
         if (site->target!=target || site->binding>owner->final->binding_count ||
             site->captures>owner->final->binding_count-site->binding ||
             !(closure[producer/64]&(UINT64_C(1)<<(producer%64)))) return XR_XIR_BAD_STRUCTURE;
-        captures=site->captures;binding=site->binding;
+        captures=site->captures;
     } else if (closure) return XR_XIR_BAD_STRUCTURE;
-    if (captures>callee->parameter_count || op->args[1]!=callee->parameter_count-captures ||
+    if (iterator && (!indirect || captures!=callee->parameter_count || op->args[0]>=flow->values))
+        return XR_XIR_BAD_STRUCTURE;
+    if (!iterator && (captures>callee->parameter_count || op->args[1]!=callee->parameter_count-captures ||
         op->args[0]>flow->function->operand_count ||
         op->args[1]>flow->function->operand_count-op->args[0] ||
-        (op->args[1] && !flow->function->operands)) return XR_XIR_BAD_STRUCTURE;
+        (op->args[1] && !flow->function->operands))) return XR_XIR_BAD_STRUCTURE;
     const XrXirTypeNode *signature=NULL;
-    if (indirect) {
+    if (indirect && !iterator) {
         if (op->immediate<0 || (uint64_t)op->immediate>=flow->values) return XR_XIR_BAD_VALUE;
         XrXirType actual_type=0;
         XrXirStatus type_status=effect_invocation_flow_type(flow,(uint32_t)op->immediate,&actual_type);
@@ -126,31 +167,7 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
         uint64_t *row=input+(size_t)p*flow->basis.row_words;
         XrXirType expected=callee->parameters[p];
         if (p<captures) {
-            const uint64_t *captured=closure+flow->basis.origin_words+
-                (size_t)(binding+p)*(flow->basis.origin_words+flow->basis.cell_words);
-            if (xr_xir_type_is_cell(flow->body.domain.types,expected) ||
-                xr_xir_type_is_class(flow->body.domain.types,expected)) {
-                if (!xir_compile_work(owner->work,(uint64_t)flow->basis.cell_words*sizeof(*row))) {
-                    status=XR_XIR_BUDGET;break;
-                }
-                memcpy(row+flow->basis.fn_words,captured+flow->basis.origin_words,
-                    (size_t)flow->basis.cell_words*sizeof(*row));
-            } else if (xr_xir_callable_signature(flow->body.domain.types,expected)) {
-                if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row))) {
-                    status=XR_XIR_BUDGET;break;
-                }
-                memcpy(row,captured,(size_t)flow->basis.origin_words*sizeof(*row));
-                memcpy(row+flow->basis.origin_words,closure+flow->basis.origin_words,
-                    (size_t)(flow->basis.fn_words-flow->basis.origin_words)*sizeof(*row));
-                status=effect_invocation_captured_leaf(flow,row);
-                if(status==XR_XIR_OK) status=effect_invocation_bound_row(flow,target,p,callee,row);
-            }
-            if (xr_xir_type_is_class(flow->body.domain.types,expected)) {
-                uint32_t known=flow->basis.parameters+2;
-                if(!(row[flow->basis.fn_words+known/64]&(UINT64_C(1)<<(known%64))))
-                    status=XR_XIR_UNRESOLVED;
-            }
-            continue;
+            status=effect_invocation_capture_argument(flow,request,callee,p,row);continue;
         }
         uint32_t suffix=p-captures,actual=flow->function->operands[op->args[0]+suffix];
         if (actual>=flow->values) { status=XR_XIR_BAD_VALUE;break; }
@@ -174,7 +191,7 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
             status=effect_invocation_cell(flow,actual,row+flow->basis.fn_words,NULL);
         } else if (xr_xir_type_is_class(flow->body.domain.types,expected)) {
             status=effect_invocation_class_word(flow,actual,row+flow->basis.fn_words);
-        } else if (xr_xir_callable_signature(flow->body.domain.types,expected)) {
+        } else if (effect_physical_origin(flow->body.domain.types,expected)) {
             if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row))) {
                 status=XR_XIR_BUDGET;break;
             }
@@ -182,6 +199,15 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
             if (!actual_row) { status=XR_XIR_BAD_STRUCTURE;break; }
             memcpy(row,actual_row,
                 (size_t)flow->basis.fn_words*sizeof(*row));
+            if(effect_physical_iterator(flow->body.domain.types,expected)) {
+                bool present=false;
+                for (uint32_t w=0;w<flow->basis.origin_words;++w) {
+                    if (!xir_compile_work(owner->work,1)) {status=XR_XIR_BUDGET;break;}
+                    present|=row[w]!=0;
+                }
+                if (status==XR_XIR_OK && !present) status=XR_XIR_UNRESOLVED;
+                continue;
+            }
             const XrXirEffectParameter *parameter=&effect_contracts_read(owner->effects)[target].parameters[p];
             bool ref=false;
             const XrXirTypeNode *bound=xr_xir_callable_signature(flow->body.domain.types,expected);
@@ -362,10 +388,10 @@ static XrXirStatus effect_invocation_indirect(EffectInvocationFlow *flow,
     if (opaque_present) {
         any=true;status=effect_invocation_mask(flow,mask,changed);
     }
-    EffectBodyFunctionHead root_head={0};
-    status=effect_invocation_flow_head(flow,owner->final->nodes[flow->node].root,&root_head);
+    EffectBodyFunctionSignature root_head={0};
+    status=effect_body_request_signature(&flow->body,owner->final->nodes[flow->node].root,&root_head);
     if (status!=XR_XIR_OK) return status;
-    const EffectBodyFunctionHead *root=&root_head;
+    const EffectBodyFunctionSignature *root=&root_head;
     for (uint32_t p=0;p<flow->basis.parameters && status==XR_XIR_OK;++p) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
         uint32_t bit=owner->final->site_count+p;
@@ -446,7 +472,7 @@ static XrXirStatus effect_invocation_latent_input(EffectInvocationFlow *flow,
             if (actual>=flow->values) { status=XR_XIR_BAD_VALUE;break; }
             if (xr_xir_type_is_cell(flow->body.domain.types,target->parameters[p]))
                 status=effect_invocation_cell(flow,actual,row+flow->basis.fn_words,NULL);
-            else if (xr_xir_callable_signature(flow->body.domain.types,target->parameters[p])) {
+            else if (effect_physical_origin(flow->body.domain.types,target->parameters[p])) {
                 if (!xir_compile_work(owner->work,(uint64_t)flow->basis.fn_words*sizeof(*row))) {
                     status=XR_XIR_BUDGET;break;
                 }
@@ -536,6 +562,8 @@ static XrXirStatus effect_invocation_transport(EffectInvocationFlow *flow,
     return status;
 }
 
+#include "xxir_effect_invocation_iterators.inc.c"
+
 /* The caller owns this complete decoded stack row for only this request.
  * It was read from the same BodyRequest at this actual ordinal; it is never
  * retained by an equation, descriptor or another queue visit. */
@@ -572,8 +600,8 @@ static XrXirStatus effect_invocation_instruction_decoded(EffectInvocationFlow *f
             identity[0],identity[1],&binding);
         if (status!=XR_XIR_OK) return status;
         if (!binding || binding->function>=flow->body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
-        EffectBodyFunctionHead head={0};
-        status=effect_invocation_flow_head(flow,binding->function,&head);
+        EffectBodyFunctionSignature head={0};
+        status=effect_body_request_signature(&flow->body,binding->function,&head);
         if (status!=XR_XIR_OK) return status;
         if (head.parameter_count) return XR_XIR_BAD_STRUCTURE;
         if (xr_xir_type_span(flow->body.domain.types,head.result))
@@ -605,6 +633,8 @@ static XrXirStatus effect_invocation_instruction_decoded(EffectInvocationFlow *f
         if (!closed) return XR_XIR_OK;
         return effect_invocation_transport(flow,instruction,target,op,&head);
     }
+    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH:
+        return effect_invocation_iterator(flow,instruction,op,changed);
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
         return effect_invocation_indirect(flow,instruction,op,changed);
     case XR_XIR_FUNCTION_REF:

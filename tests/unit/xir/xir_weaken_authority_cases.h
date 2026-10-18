@@ -86,6 +86,7 @@ static void weaken_authority_cases(void) {
     CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_take_result(instance, &weak) == XR_XIR_CALL_RETURNED);
     CHECK(strong.type == 257 && weak.type == 256 && strong.payload != weak.payload);
+    CHECK(!xr_xir_function_producer(&strong) && !xr_xir_function_producer(&weak));
     const XrXirFunctionBinding *a = xr_xir_function_binding(&strong), *b = xr_xir_function_binding(&weak);
     CHECK(a && b && a->owner == b->owner && a->entry == b->entry && a->capture_count == 1 && b->capture_count == 1);
     CHECK(a->captures[0].payload == b->captures[0].payload);

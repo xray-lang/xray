@@ -25,9 +25,18 @@ static void source_synthetic_promise_case(const XrXirSourceRequest *request) {
 static void source_qualified_vm(XrXirArtifact *checked, const char *output) {
     const XrXirCompileContext context=*xr_xir_compile_artifact_context(checked);
     const XrXirModule *input = xr_xir_compile_artifact_module(checked);
-    uint32_t weakenings = 0, root_only = 0;
+    uint32_t weakenings = 0, root_only = 0, identities = 0, captured_exact = 0, qualified = 0;
     for (uint32_t f = 0; f < input->function_count; ++f) {
         const XrXirFunction *function = &input->functions[f];
+        const char *callbacks[] = {"dynamic", "weaken", "literalDefault", "namedDefault", "effectDefault"};
+        for (uint32_t c = 0; c < 5; ++c) {
+            if (function->name_length != strlen(callbacks[c]) ||
+                memcmp(function->name, callbacks[c], function->name_length)) continue;
+            CHECK(function->parameter_count == 1);
+            const XrXirTypeNode *parameter = xr_xir_callable_signature(input->types, function->parameters[0]);
+            CHECK(parameter && parameter->flags == (XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND));
+            ++qualified;
+        }
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *instruction = &function->instructions[i];
             if (instruction->op != XR_XIR_FUNCTION_WEAKEN) continue;
@@ -38,6 +47,16 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output) {
             const XrXirTypeNode *from = xr_xir_callable_signature(input->types, type);
             const XrXirTypeNode *to = xr_xir_callable_signature(input->types, instruction->type);
             CHECK(from && to);
+            /* Fixed callbacks retain their explicit normalization even when
+             * reference refinement makes the source and target exact. */
+            if (type == instruction->type) {
+                CHECK(from == to); ++identities;
+                if (function->name_length == 11 && !memcmp(function->name, "capturedUse", 11)) {
+                    CHECK(from->flags == (XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND));
+                    CHECK(!from->parameter_count && from->result == XR_XIR_I64); ++captured_exact;
+                }
+                continue;
+            }
             if ((from->flags & XR_XIR_CALLABLE_NO_SUSPEND) && !(to->flags & XR_XIR_CALLABLE_NO_SUSPEND))
                 ++weakenings;
             else {
@@ -48,7 +67,9 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output) {
             }
         }
     }
-    CHECK(weakenings == 1 && root_only > 0);
+    /* Every fixed callback in this fixture declares no_suspend, so its
+     * normalization preserves that promise while it may forget ROOT. */
+    CHECK(qualified == 5 && weakenings == 0 && root_only > 0 && identities > 0 && captured_exact == 2);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked); checked = NULL;
@@ -58,7 +79,13 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output) {
     CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
+    XrXirStatus lower_status=xr_xir_compile_lower(closed,&target,&lowered,NULL);
+    if(lower_status!=XR_XIR_OK) {
+        XrCompileResourceStats stats={0};
+        CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"Effects lower status%u work%llu\n",lower_status,(unsigned long long)stats.work);
+    }
+    CHECK(lower_status==XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
     uint32_t entry = UINT32_MAX, captured = UINT32_MAX;
@@ -68,7 +95,13 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output) {
     }
     CHECK(entry != UINT32_MAX && captured != UINT32_MAX);
     XrXirCSource source = {0};
-    CHECK(xr_xir_compile_emit_c(lowered, "effect_source", 4194304, &source) == XR_XIR_OK);
+    XrXirStatus emit_status=xr_xir_compile_emit_c(lowered,"effect_source",4194304,&source);
+    if(emit_status!=XR_XIR_OK) {
+        XrCompileResourceStats stats={0};
+        CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"Effects C emission status%u work%llu\n",emit_status,(unsigned long long)stats.work);
+    }
+    CHECK(emit_status==XR_XIR_OK);
     CHECK(!strstr(source.text, "({") && !strstr(source.text, "xr_xir_vm"));
     if (output) {
         FILE *file = fopen(output, "wb"); CHECK(file);

@@ -24,7 +24,7 @@ typedef struct XrXirProgramFunctionRef {
     XrXirType type;
 } XrXirProgramFunctionRef;
 typedef struct XrXirProgramGeneratorSite {
-    uint32_t entry, arguments, instruction;
+    uint32_t entry, arguments, instruction, site;
     XrXirType type;
 } XrXirProgramGeneratorSite;
 

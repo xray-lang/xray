@@ -44,7 +44,7 @@ static XrXirStatus effect_cell_replay_rows_create(const XrXirCompileContext *wor
         EffectBodyRecordCursor cursor;status=effect_body_request_sequence_begin(body,&cursor);
         for (uint32_t i=0;i<head.instruction_count && status==XR_XIR_OK;++i) {
             XrXirInstruction storage;const XrXirInstruction *op=NULL;
-            status=effect_body_request_sequence_instruction(body,f,i,&cursor,&storage,&op);
+            status=effect_body_request_sequence_operation(body,f,i,&cursor,&storage,&op);
             if (status!=XR_XIR_OK) break;
             if (!op) {status=XR_XIR_BAD_STRUCTURE;break;}
             if (!xir_compile_work(work,sizeof(*rows))) {status=XR_XIR_BUDGET;break;}

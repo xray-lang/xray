@@ -129,7 +129,8 @@ static XrXirStatus effect_contract_vector(const XrXirCompileContext *context,
 static bool effect_contract_context_op(XrXirOp op) {
     return op == XR_XIR_CALL || op == XR_XIR_INVOKE || op == XR_XIR_CALL_DEFAULT ||
         op == XR_XIR_INVOKE_DEFAULT || op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_CALL_REQUIREMENT ||
-        op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT;
+        op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT ||
+        op == XR_XIR_ITERATOR_HAS_NEXT || op == XR_XIR_ITERATOR_NEXT || op == XR_XIR_ITERATOR_NTH;
 }
 
 static XrXirStatus effect_contract_formula(const XrXirCompileContext *context,
@@ -483,11 +484,12 @@ static XrXirStatus effect_contract_instance_candidate(const XrXirCompileContext 
     XrXirOp before=original->instructions[instruction].op;
     if (before==XR_XIR_CLEANUP_REGISTER)
         return effect_contract_cleanup_candidate(context,module,caller,instruction,parameter);
-    uint32_t family=before==XR_XIR_CALL || before==XR_XIR_INVOKE ? XR_XIR_EFFECT_BINDING_DIRECT :
+    uint32_t family=before==XR_XIR_CALL || before==XR_XIR_INVOKE || before==XR_XIR_GENERATOR_NEW ? XR_XIR_EFFECT_BINDING_DIRECT :
         before==XR_XIR_FUNCTION_REF ? XR_XIR_EFFECT_BINDING_CAPTURE :
         before==XR_XIR_CALL_DEFAULT || before==XR_XIR_INVOKE_DEFAULT ? XR_XIR_EFFECT_BINDING_DEFAULT :
         before==XR_XIR_CALL_REQUIREMENT ? XR_XIR_EFFECT_BINDING_REQUIREMENT : 0;
-    if (!family || (op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_FUNCTION_REF))
+    if (!family || (op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE &&
+        op->op!=XR_XIR_GENERATOR_NEW && op->op!=XR_XIR_FUNCTION_REF))
         return XR_XIR_BAD_TYPE;
     uint32_t target=(uint32_t)op->immediate;
     if (parameter>=module->functions[target].parameter_count) return XR_XIR_BAD_STRUCTURE;
@@ -557,7 +559,8 @@ XR_FUNC XrXirStatus xir_effect_call_binding_candidate(const XrXirCompileContext 
     if (!function->instructions || (function->parameter_count && !function->parameters))
         return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *op = &function->instructions[instruction];
-    uint32_t family = op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE ? XR_XIR_EFFECT_BINDING_DIRECT :
+    uint32_t family = op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE ||
+        op->op == XR_XIR_GENERATOR_NEW ? XR_XIR_EFFECT_BINDING_DIRECT :
         op->op == XR_XIR_FUNCTION_REF ? XR_XIR_EFFECT_BINDING_CAPTURE :
         op->op == XR_XIR_CALL_REQUIREMENT ? XR_XIR_EFFECT_BINDING_REQUIREMENT : 0;
     if (!family) return XR_XIR_BAD_TYPE;

@@ -13,12 +13,19 @@ static XrXirCallStatus generator_core_advance_permission(XrXirTaskExecutor *exec
     if(token->request.kind==XR_XIR_WAIT_ITERATOR_CLOSE) return XR_XIR_CALL_READY;
     XirTaskActivation *consumer=token->binding.activation;
     XirGenerator *parent=generator_core_activation(executor,consumer);
-    bool child=generator->child || consumer->task || (parent && parent->child);
-    if(!child) return XR_XIR_CALL_READY;
+    bool child=consumer->task || (parent && parent->child);
+    if(!child) {generator->child=false;return XR_XIR_CALL_READY;}
+    XirEffectInvocationSelection selection={0};
+    XrXirCallStatus selected=xr_xir_instance_iterator_select(consumer->call,token,&selection);
+    if(selected!=XR_XIR_CALL_READY) return selected;
+    if(selection.target!=generator->activation.entry || selection.producer!=generator->producer)
+        return XR_XIR_CALL_BAD_STATE;
     const XrXirProgramPermissions *permissions=executor->config.program->permissions;
     uint32_t entry=generator->activation.entry;
     if(!permissions || entry>=permissions->function_count || permissions->entries[entry].worker!=XR_XIR_OK)
         return XR_XIR_CALL_BAD_ARGUMENT;
+    selected=xr_xir_call_iterator_prepare(consumer->call,token);
+    if(selected!=XR_XIR_CALL_READY) return selected;
     generator->child=true;return XR_XIR_CALL_READY;
 }
 static void generator_core_complete_consumer(XrXirTaskExecutor *executor,XirGenerator *generator) {

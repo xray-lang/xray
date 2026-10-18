@@ -21,17 +21,35 @@ typedef struct EffectInvocationCoverage {
 
 /* The input builder is shared with production invocation admission. Old
  * smaller environments remain valid edges, but cannot execute this full key. */
-static XrXirStatus effect_invocation_coverage_input(EffectInvocationFlow *flow,
-    uint32_t e,bool *matched) {
+typedef struct EffectInvocationClosureView {uint32_t value;const uint64_t *row;} EffectInvocationClosureView;
+
+static XrXirStatus effect_invocation_coverage_input_read(EffectInvocationFlow *flow,
+    uint32_t e,const EffectInvocationClosureView *supplied,bool *matched) {
     const EffectInvocationRead *owner=flow->read;*matched=false;
-    XrXirStatus status=effect_invocation_edge_shape_read(owner->work,owner->final,&flow->body,
-        flow->body.domain.types,flow->node,e);
-    if (status!=XR_XIR_OK) return status;
-    EffectInvocationEdge edge=owner->final->edges[e];
-    const EffectInvocationNode *target=&owner->final->nodes[edge.target];
+    XrXirStatus status;EffectInvocationEdgeOperation decoded;
     XrXirInstruction body_op_1;const XrXirInstruction *op=NULL;
-    XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,edge.instruction,&body_op_1,&op);
-    if (body_read_1!=XR_XIR_OK) return body_read_1;
+    /* The exact immutable adapter supplies its row inside this edge read.
+     * Delegated providers keep their independent current-value callback. */
+    if (effect_body_request_owned_matches(owner->work,&flow->body,owner->final->material)) {
+        if (!xir_compile_work(owner->work,sizeof(EffectInvocationEdgeRead)+2*sizeof(decoded.operation)))
+            return XR_XIR_BUDGET;
+        decoded.operation=NULL;const EffectInvocationEdgeRead selection={flow->node,e,NULL};
+        status=effect_invocation_edge_read_selected(owner->work,owner->final,&flow->body,
+            flow->body.domain.types,&selection,&decoded);
+        if (status!=XR_XIR_OK) return status;
+        op=decoded.operation;
+    } else {
+        status=effect_invocation_edge_shape_read(owner->work,owner->final,&flow->body,
+            flow->body.domain.types,flow->node,e);
+        if (status!=XR_XIR_OK) return status;
+        if (e>=owner->final->edge_count) return XR_XIR_BAD_STRUCTURE;
+        status=effect_invocation_flow_instruction(flow,owner->final->edges[e].instruction,&body_op_1,&op);
+        if (status!=XR_XIR_OK) return status;
+    }
+    if (!op || e>=owner->final->edge_count) return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationEdge edge=owner->final->edges[e];
+    if (edge.target>=owner->final->count) return XR_XIR_BAD_STRUCTURE;
+    const EffectInvocationNode *target=&owner->final->nodes[edge.target];
     EffectBodyFunctionHead target_head={0};
     status=effect_invocation_flow_head(flow,target->body,&target_head);
     if (status!=XR_XIR_OK) return status;
@@ -42,14 +60,21 @@ static XrXirStatus effect_invocation_coverage_input(EffectInvocationFlow *flow,
     }
     const uint64_t *closure=NULL;
     if (edge.producer!=UINT32_MAX && op->op!=XR_XIR_FUNCTION_REF) {
-        if (op->immediate<0 || (uint64_t)op->immediate>=flow->values) return XR_XIR_BAD_STRUCTURE;
-        closure=effect_invocation_row(flow,(uint32_t)op->immediate);
+        uint64_t value=effect_invocation_iterator_operation(op->op)?op->args[0]:(uint64_t)op->immediate;
+        if (value>=flow->values) return XR_XIR_BAD_STRUCTURE;
+        if (supplied && (!effect_invocation_iterator_operation(op->op) || supplied->value!=value))
+            return XR_XIR_BAD_STRUCTURE;
+        closure=supplied?supplied->row:effect_invocation_row(flow,(uint32_t)value);
         if (!closure) return XR_XIR_BAD_STRUCTURE;
     }
     uint64_t *input=NULL;flow->instruction=edge.instruction;
     if (op->op==XR_XIR_FUNCTION_REF)
         status=effect_invocation_latent_input(flow,edge.instruction,edge.producer,op,&input);
-    else status=effect_invocation_arguments(flow,op,target->body,edge.producer,closure,&input);
+    else {
+        if (!xir_compile_work(owner->work,sizeof(EffectInvocationActual))) return XR_XIR_BUDGET;
+        EffectInvocationActual actual={target->body,edge.producer,closure};
+        status=effect_invocation_arguments_read(flow,op,&actual,&target_head,&input);
+    }
     uint64_t words=(uint64_t)target->parameter_count*flow->basis.row_words;
     if (status==XR_XIR_OK && words>SIZE_MAX/sizeof(*input)) status=XR_XIR_BUDGET;
     if (status==XR_XIR_OK && words && (!input || !target->input)) status=XR_XIR_BAD_STRUCTURE;
@@ -61,9 +86,40 @@ static XrXirStatus effect_invocation_coverage_input(EffectInvocationFlow *flow,
     xr_compile_resources_free(input);if (status==XR_XIR_OK) *matched=same;return status;
 }
 
+static XrXirStatus effect_invocation_coverage_input(EffectInvocationFlow *flow,
+    uint32_t e,bool *matched) {
+    return effect_invocation_coverage_input_read(flow,e,NULL,matched);
+}
+
+/* The canonical physical inventory already includes every actual write.
+ * Read full write operands only after its real opcode is identified; a
+ * delegated provider retains the complete sequential correspondence below. */
+static XrXirStatus effect_invocation_coverage_owned_writes(EffectInvocationCoverage *coverage) {
+    EffectInvocationFlow *flow=coverage->flow;const EffectInvocationRead *owner=flow->read;
+    for (uint32_t r=0;r<flow->physical->count;++r) {
+        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+        const EffectPhysicalRecord record=flow->physical->records[r];
+        if (!(record.mask&EFFECT_PHYSICAL_TRANSFER)) continue;
+        if (record.value<flow->function->parameter_count || record.value>=flow->values) return XR_XIR_BAD_STRUCTURE;
+        uint32_t i=record.value-flow->function->parameter_count;EffectBodyInstructionShape shape={0};
+        XrXirStatus status=effect_body_request_shape(&flow->body,owner->final->nodes[flow->node].body,i,&shape);
+        if (status!=XR_XIR_OK) return status;
+        if (shape.op!=XR_XIR_LOCAL_WRITE && shape.op!=XR_XIR_SCALAR_LOCAL_WRITE &&
+            shape.op!=XR_XIR_OWNED_LOCAL_WRITE) continue;
+        XrXirInstruction storage;const XrXirInstruction *op=NULL;
+        status=effect_invocation_flow_instruction(flow,i,&storage,&op);
+        if (status!=XR_XIR_OK) return status;
+        if (op->op!=shape.op || op->args[0]>=flow->values || op->args[1]>=flow->values) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+        coverage->next[i]=coverage->writes[op->args[0]];coverage->writes[op->args[0]]=i;
+    }
+    return XR_XIR_OK;
+}
+
 static XrXirStatus effect_invocation_coverage_storage(EffectInvocationFlow *flow,
     EffectInvocationCoverage *coverage) {
-    if (!coverage || coverage->memory || !flow || !flow->read || !flow->rows)
+    if (!coverage || coverage->memory || !flow || !flow->read || !flow->function || !flow->physical ||
+        flow->row_count!=flow->physical->origins || (flow->row_count && !flow->rows))
         return XR_XIR_BAD_STRUCTURE;
     uint64_t rank_bytes=(uint64_t)flow->values*sizeof(uint64_t);
     uint64_t indices=(uint64_t)flow->values+flow->function->instruction_count+flow->read->final->site_count;
@@ -78,13 +134,15 @@ static XrXirStatus effect_invocation_coverage_storage(EffectInvocationFlow *flow
     coverage->matches=coverage->next+flow->function->instruction_count;
     if (!xir_compile_work(flow->read->work,flow->values)) return XR_XIR_BUDGET;
     for (uint32_t v=0;v<flow->values;++v) coverage->writes[v]=UINT32_MAX;
+    if (effect_body_request_owned_matches(flow->read->work,&flow->body,flow->read->final->material))
+        return effect_invocation_coverage_owned_writes(coverage);
     EffectBodyRecordCursor cursor;
     status=effect_body_request_sequence_begin(&flow->body,&cursor);
     if (status!=XR_XIR_OK) return status;
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
         XrXirInstruction body_op_2;const XrXirInstruction *op=NULL;
-        XrXirStatus body_read_2=effect_body_request_sequence_instruction(&flow->body,
+        XrXirStatus body_read_2=effect_body_request_sequence_operation(&flow->body,
             flow->read->final->nodes[flow->node].body,i,&cursor,&body_op_2,&op);
         if (body_read_2!=XR_XIR_OK) return body_read_2;
         if (op->op!=XR_XIR_LOCAL_WRITE && op->op!=XR_XIR_SCALAR_LOCAL_WRITE &&
@@ -98,12 +156,10 @@ static XrXirStatus effect_invocation_coverage_storage(EffectInvocationFlow *flow
 
 /* Every bit of the existing target superset needs its genuine producer cause.
  * Presence alone never establishes coverage: the source clauses below do. */
-static XrXirStatus effect_invocation_coverage_sites(EffectInvocationCoverage *coverage,
-    uint32_t value,bool parameter,bool *complete) {
-    EffectInvocationFlow *flow=coverage->flow;const EffectInvocationRead *owner=flow->read;
-    if (value>=flow->values) return XR_XIR_BAD_STRUCTURE;
-    const uint64_t *row=effect_invocation_row(flow,value);
-    if (!row) return XR_XIR_BAD_STRUCTURE;
+static XrXirStatus effect_invocation_coverage_sites_row(EffectInvocationFlow *flow,
+    uint32_t value,const uint64_t *row,bool parameter,bool *complete) {
+    const EffectInvocationRead *owner=flow->read;
+    if (value>=flow->values || !row || !complete) return XR_XIR_BAD_STRUCTURE;
     bool present=false;
     for (uint32_t s=0;s<owner->final->site_count;++s) {
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
@@ -126,6 +182,12 @@ static XrXirStatus effect_invocation_coverage_sites(EffectInvocationCoverage *co
         }
     }
     *complete=present;return XR_XIR_OK;
+}
+
+static XrXirStatus effect_invocation_coverage_sites(EffectInvocationCoverage *coverage,
+    uint32_t value,bool parameter,bool *complete) {
+    EffectInvocationFlow *flow=coverage->flow;
+    return effect_invocation_coverage_sites_row(flow,value,effect_invocation_row(flow,value),parameter,complete);
 }
 
 static XrXirStatus effect_invocation_coverage_source(EffectInvocationCoverage *coverage,
@@ -195,6 +257,33 @@ static XrXirStatus effect_invocation_coverage_call(EffectInvocationCoverage *cov
     return XR_XIR_OK;
 }
 
+/* Identity completeness is independent of an unchanged ROOT advertisement.
+ * A direct nonescaping callable Cell has exactly its initializer and every
+ * physical write as sources; an alias or escape cannot enter this proof. */
+static XrXirStatus effect_invocation_coverage_callable_cell(EffectInvocationCoverage *coverage,
+    const XrXirInstruction *read,uint64_t *maximum,bool *complete) {
+    EffectInvocationFlow *flow=coverage->flow;uint32_t cell=UINT32_MAX;
+    XrXirStatus status=effect_invocation_callable_cell(flow,read,&cell);
+    if (status!=XR_XIR_OK) return status;
+    if (cell==UINT32_MAX) {*complete=false;return XR_XIR_OK;}
+    EffectBodyRecordCursor cursor;status=effect_body_request_sequence_begin(&flow->body,&cursor);
+    bool present=false;
+    for (uint32_t i=0;status==XR_XIR_OK && i<flow->function->instruction_count;++i) {
+        if (!xir_compile_work(flow->read->work,2)) return XR_XIR_BUDGET;
+        XrXirInstruction storage;const XrXirInstruction *op=NULL;
+        status=effect_body_request_sequence_operation(&flow->body,flow->read->final->nodes[flow->node].body,
+            i,&cursor,&storage,&op);
+        uint32_t source=UINT32_MAX;
+        if (status==XR_XIR_OK) status=effect_invocation_callable_cell_source(flow,cell,i,op,&source);
+        if (status==XR_XIR_OK && source!=UINT32_MAX) {
+            present=true;status=effect_invocation_coverage_source(coverage,source,maximum,complete);
+        }
+    }
+    if (status==XR_XIR_OK) status=effect_body_request_sequence_finish(&flow->body,
+        flow->read->final->nodes[flow->node].body,&cursor);
+    if (!present) *complete=false;return status;
+}
+
 static XrXirStatus effect_invocation_coverage_value(EffectInvocationCoverage *coverage,
     uint32_t v,uint64_t *output) {
     EffectInvocationFlow *flow=coverage->flow;*output=0;
@@ -202,9 +291,7 @@ static XrXirStatus effect_invocation_coverage_value(EffectInvocationCoverage *co
     XrXirType actual_type=0;
     XrXirStatus read_status=effect_invocation_flow_type(flow,v,&actual_type);
     if (read_status!=XR_XIR_OK) return read_status;
-    if (!xr_xir_callable_signature(flow->body.domain.types,actual_type)) return XR_XIR_OK;
-    bool fixed=false;read_status=effect_invocation_flag_get(flow,v,false,&fixed);
-    if (read_status!=XR_XIR_OK || fixed) return read_status;
+    if (!effect_physical_origin(flow->body.domain.types,actual_type)) return XR_XIR_OK;
     bool complete=false;XrXirStatus status=effect_invocation_coverage_sites(coverage,v,
         v<flow->function->parameter_count,&complete);
     if (status!=XR_XIR_OK || !complete) return status;
@@ -219,7 +306,7 @@ static XrXirStatus effect_invocation_coverage_value(EffectInvocationCoverage *co
         XrXirStatus body_read_5=effect_invocation_flow_instruction(flow,i,&body_op_5,&op);
         if (body_read_5!=XR_XIR_OK) return body_read_5;
         switch (op->op) {
-        case XR_XIR_FUNCTION_REF: {
+        case XR_XIR_FUNCTION_REF: case XR_XIR_GENERATOR_NEW: {
             uint32_t site=UINT32_MAX;bool supported=false;
             status=effect_invocation_site(flow,i,&site);
             if (status==XR_XIR_OK) status=effect_invocation_producer_site_supported_read(flow->read,&flow->body,site,&supported);
@@ -227,6 +314,8 @@ static XrXirStatus effect_invocation_coverage_value(EffectInvocationCoverage *co
             if (status==XR_XIR_OK) status=effect_invocation_flag_get(flow,v,true,&certified);
             complete=certified && supported;break;
         }
+        case XR_XIR_CELL_READ:
+            status=effect_invocation_coverage_callable_cell(coverage,op,&maximum,&complete);break;
         case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
         case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
         case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:
@@ -266,8 +355,12 @@ static XrXirStatus effect_invocation_coverage_values(EffectInvocationFlow *flow,
     bool changed=true;
     while (status==XR_XIR_OK && changed) {
         changed=false;
-        for (uint32_t v=0;v<flow->values;++v) {
+        for (uint32_t r=0;r<flow->physical->count;++r) {
             if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
+            const EffectPhysicalRecord record=flow->physical->records[r];
+            if (!(record.mask&(EFFECT_PHYSICAL_CALLABLE|EFFECT_PHYSICAL_ITERATOR))) continue;
+            uint32_t v=record.value;
+            if (v>=flow->values) return XR_XIR_BAD_STRUCTURE;
             if (coverage->ranks[v]) continue;
             uint64_t rank=0;status=effect_invocation_coverage_value(coverage,v,&rank);
             if (status!=XR_XIR_OK) break;
@@ -275,6 +368,24 @@ static XrXirStatus effect_invocation_coverage_values(EffectInvocationFlow *flow,
         }
     }
     return status;
+}
+
+/* No allocation or row mutation occurs while this immutable formal input is
+ * borrowed for membership. Every genuine producer cause is checked by the
+ * same complete site reader; writable or delegated bodies use full SSA. */
+static XrXirStatus effect_invocation_coverage_parameter_sites(const EffectInvocationRead *owner,
+    const EffectBodyRequest *request,uint32_t n,uint32_t p,bool *complete) {
+    EffectInvocationFlow flow={.read=owner,.node=n,.instruction=UINT32_MAX};
+    bool immutable=false;XrXirStatus status=XR_XIR_OK;
+    if (effect_body_request_owned_matches(owner->work,request,owner->final->material)) {
+        status=effect_invocation_formal_prepare(&flow,request);
+        if (status==XR_XIR_OK) status=effect_invocation_formal_immutable(&flow,p,&immutable);
+    }
+    if (status==XR_XIR_OK && !immutable) status=effect_invocation_origins_read(&flow,request);
+    const EffectInvocationNode *node=&owner->final->nodes[n];
+    const uint64_t *row=immutable?node->input+(size_t)p*flow.basis.row_words:effect_invocation_row(&flow,p);
+    if (status==XR_XIR_OK) status=effect_invocation_coverage_sites_row(&flow,p,row,true,complete);
+    xr_compile_resources_free(flow.memory);return status;
 }
 
 #include "xxir_effect_invocation_parameter_coverage.inc.c"
@@ -295,7 +406,7 @@ static XrXirStatus effect_invocation_coverage_return_read(const EffectInvocation
     for (uint32_t i=0;status==XR_XIR_OK && i<flow.function->instruction_count;++i) {
         if (!xir_compile_work(owner->work,1)) { status=XR_XIR_BUDGET;break; }
         XrXirInstruction body_op_6;const XrXirInstruction *op=NULL;
-        status=effect_body_request_sequence_instruction(&flow.body,
+        status=effect_body_request_sequence_operation(&flow.body,
             owner->final->nodes[n].body,i,&cursor,&body_op_6,&op);
         if (status!=XR_XIR_OK) break;
         if (op->op!=XR_XIR_RETURN) continue;
@@ -400,8 +511,5 @@ static XrXirStatus effect_invocation_coverage_verify_read(const EffectInvocation
     }
     return XR_XIR_OK;
 }
-static XrXirStatus effect_invocation_coverage_verify(EffectInvocationWorkspace *owner) {
-    if (!owner || owner->pending || !effect_body_material_shape(owner->final.material)) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyRequest request=effect_body_owned_request(owner->read.work,owner->final.material);
-    return effect_invocation_coverage_verify_read(&owner->read,&request);
-}
+
+#include "xxir_effect_invocation_coverage_check.inc.c"

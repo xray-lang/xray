@@ -15,7 +15,14 @@ typedef struct InstanceInvocationRead {
     const XrXirValue *arguments;
     XrXirCallView *view;
     const XrXirFunctionBinding *binding;
+    XrXirInstance *instance;
 } InstanceInvocationRead;
+/* A parked read has an authenticated Instance owner, never a fabricated view. */
+static XrXirInstance *instance_invocation_owner(const InstanceInvocationRead *read) {
+    if(!read) return NULL;
+    if(read->view) return view_instance(read->view);
+    return read->instance && instance_owner_current(read->instance)?read->instance:NULL;
+}
 static bool instance_invocation_work(void *owner,uint64_t units) {
     InstanceInvocationRead *read=owner;
     if (!read || !read->admission || units>read->admission->work ||
@@ -36,7 +43,7 @@ static uint32_t instance_invocation_cell(void *owner,uint32_t parameter) {
  * the sticky bit is read. A local bit alone is never a Class origin proof. */
 static XrXirStatus instance_invocation_class(void *owner,uint32_t parameter,uint32_t *output) {
     InstanceInvocationRead *read=owner;
-    const XrXirInstance *instance=read?view_instance(read->view):NULL;
+    const XrXirInstance *instance=instance_invocation_owner(read);
     if (!instance || !output || !read->admission) return XR_XIR_BAD_STRUCTURE;
     const XrXirValue *value=instance_invocation_parameter(read,parameter);
     if (!value || !xr_xir_type_is_class(instance->program->types,(XrXirType)value->type)) return XR_XIR_BAD_TYPE;
@@ -48,16 +55,15 @@ static XrXirStatus instance_invocation_class(void *owner,uint32_t parameter,uint
 }
 /* The full Program producer and binding are rechecked before exposing any
  * capture column. Physical Cell types alone cannot grant owned authority. */
-static XrXirStatus instance_invocation_function_view(InstanceInvocationRead *read,uint32_t parameter,
+static XrXirStatus instance_invocation_function_value(InstanceInvocationRead *read,const XrXirValue *value,
     XirEffectProducerView *output,const XrXirFunctionBinding **captures) {
     XirEffectProducerView producer={0};
-    const XrXirValue *value=instance_invocation_parameter(read,parameter);
-    XrXirCallStatus status=xr_xir_instance_function_producer(read->view,value,&producer);
+    XrXirCallStatus status=instance_function_producer_value(instance_invocation_owner(read),read->admission,value,&producer);
     if (status==XR_XIR_CALL_LIMIT) return XR_XIR_BUDGET;
     if (status==XR_XIR_CALL_OOM) return XR_XIR_OUT_OF_MEMORY;
     if (status!=XR_XIR_CALL_READY) return XR_XIR_BAD_TYPE;
     const XrXirFunctionBinding *binding=xr_xir_function_binding(value);
-    const XrXirInstance *instance=view_instance(read->view);
+    const XrXirInstance *instance=instance_invocation_owner(read);
     if (!binding || !instance || producer.target>=instance->program->entry_count ||
         binding->entry!=producer.target || binding->capture_count!=producer.capture_count)
         return XR_XIR_BAD_TYPE;
@@ -73,48 +79,146 @@ static XrXirStatus instance_invocation_function_view(InstanceInvocationRead *rea
                 xr_xir_cell_module_storage(actual)) return XR_XIR_BAD_TYPE;
         } else if (xr_xir_callable_signature(instance->program->types,expected)) {
             XirEffectProducerView captured={0};
-            XrXirCallStatus admitted=xr_xir_instance_function_producer(read->view,actual,&captured);
+            XrXirCallStatus admitted=instance_function_producer_value(instance_invocation_owner(read),read->admission,actual,&captured);
             if(admitted!=XR_XIR_CALL_READY) return admitted==XR_XIR_CALL_LIMIT?XR_XIR_BUDGET:
                 admitted==XR_XIR_CALL_OOM?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_TYPE;
         }
     }
     *output=producer;*captures=binding;return XR_XIR_OK;
 }
-static XrXirStatus instance_invocation_function(void *owner,uint32_t parameter,uint32_t *output) {
-    InstanceInvocationRead *read=owner;XirEffectProducerView producer={0};
-    const XrXirFunctionBinding *binding=NULL;
-    XrXirStatus status=instance_invocation_function_view(read,parameter,&producer,&binding);
-    if (status==XR_XIR_OK) *output=producer.site;
-    return status;
+/* A creation identity belongs to an admitted object in this exact Program
+ * arena and Domain. It selects a genuine site, never an execution permission. */
+static XrXirStatus instance_invocation_generator_value(InstanceInvocationRead *read,
+    const XrXirValue *value,XirEffectProducerView *output) {
+    const XrXirInstance *instance=instance_invocation_owner(read);
+    if (!instance || !read->admission || !output) return XR_XIR_BAD_STRUCTURE;
+    if (!value || (!xr_xir_type_node(instance->program->types,(XrXirType)value->type) ||
+        xr_xir_type_node(instance->program->types,(XrXirType)value->type)->kind!=XR_XIR_TYPE_ITERATOR)) return XR_XIR_BAD_TYPE;
+    XrXirCallStatus status=admit_instance_value(read->admission,value,(XrXirType)value->type);
+    if (status!=XR_XIR_CALL_READY) return status==XR_XIR_CALL_LIMIT?XR_XIR_BUDGET:
+        status==XR_XIR_CALL_OOM?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_TYPE;
+    const XirGenerator *generator=(const XirGenerator *)(uintptr_t)value->payload;
+    const XrXirProgram *program=instance->program;
+    if (!xr_xir_generator_storage_valid(generator) || !generator->generation || !generator->identity ||
+        generator->object.arena!=program->arena ||
+        generator->object.domain!=instance->domain || generator->activation.entry>=program->entry_count) return XR_XIR_BAD_TYPE;
+    bool terminal=atomic_load_explicit(&generator->state,memory_order_acquire)==XIR_GENERATOR_TERMINAL;
+    if(!generator->call && (!terminal || generator->executor || generator->activation.call ||
+        generator->activation.queued || generator->activation.ready_next)) return XR_XIR_BAD_TYPE;
+    const XrXirProgramPermissions *permissions=program->permissions;bool found=false;
+    XirEffectProducerView actual={0};
+    if (!permissions || permissions->function_count!=program->entry_count ||
+        (permissions->generator_count && !permissions->generators)) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t f=0;f<permissions->function_count;++f) {
+        if (!instance_invocation_work(read,3)) return XR_XIR_BUDGET;
+        const XrXirProgramPermission *owner=&permissions->entries[f];
+        if (owner->generator_begin>permissions->generator_count ||
+            owner->generator_count>permissions->generator_count-owner->generator_begin) return XR_XIR_BAD_STRUCTURE;
+        for (uint32_t i=0;i<owner->generator_count;++i) {
+            if (!instance_invocation_work(read,4)) return XR_XIR_BUDGET;
+            const XrXirProgramGeneratorSite *site=&permissions->generators[owner->generator_begin+i];
+            if (site->site!=generator->producer) continue;
+            if (found || site->entry!=generator->activation.entry || site->type!=(XrXirType)value->type ||
+                site->arguments!=program->entries[site->entry].parameter_count) return XR_XIR_BAD_TYPE;
+            actual=(XirEffectProducerView){site->site,f,site->instruction,site->entry,site->arguments,site->type};found=true;
+        }
+    }
+    if (!found) return XR_XIR_BAD_TYPE;
+    if (generator->call) {
+        XirGeneratorCaptureView captures={0};
+        XrXirCallStatus checked=xr_xir_call_generator_captures(generator->call,read->admission,&captures);
+        if (checked!=XR_XIR_CALL_READY) return checked==XR_XIR_CALL_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_TYPE;
+        if (captures.entry!=actual.target || captures.count!=actual.capture_count) return XR_XIR_BAD_TYPE;
+    }
+    *output=actual;return XR_XIR_OK;
 }
-static XrXirStatus instance_invocation_capture_cell(void *owner,uint32_t parameter,uint32_t capture,
-    uint32_t site,uint32_t *output) {
-    InstanceInvocationRead *read=owner;XirEffectProducerView producer={0};
+/* The complete root arguments or immutable binding own these borrowed values
+ * throughout this synchronous read. No capture or code lease is prolonged. */
+static XrXirStatus instance_invocation_capture_values(InstanceInvocationRead *read,const XrXirValue *value,
+    XirEffectProducerView *producer,const XrXirValue **values,uint32_t *count) {
+    const XrXirInstance *instance=instance_invocation_owner(read);
+    if(!instance || !value || !producer || !values || !count) return XR_XIR_BAD_STRUCTURE;
+    const XrXirTypeNode *type=xr_xir_type_node(instance->program->types,(XrXirType)value->type);
+    if(type && type->kind==XR_XIR_TYPE_ITERATOR) {
+        XrXirStatus status=instance_invocation_generator_value(read,value,producer);
+        if(status!=XR_XIR_OK) return status;
+        const XirGenerator *generator=(const XirGenerator *)(uintptr_t)value->payload;
+        XirGeneratorCaptureView captures={0};
+        XrXirCallStatus checked=xr_xir_call_generator_captures(generator->call,read->admission,&captures);
+        if(checked!=XR_XIR_CALL_READY) return checked==XR_XIR_CALL_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_TYPE;
+        if(captures.entry!=producer->target || captures.count!=producer->capture_count) return XR_XIR_BAD_TYPE;
+        *values=captures.values;*count=captures.count;return XR_XIR_OK;
+    }
     const XrXirFunctionBinding *binding=NULL;
-    XrXirStatus status=instance_invocation_function_view(read,parameter,&producer,&binding);
-    if (status!=XR_XIR_OK) return status;
-    const XrXirInstance *instance=view_instance(read->view);
-    if (site!=producer.site || capture>=binding->capture_count ||
-        !xr_xir_type_is_cell(instance->program->types,(XrXirType)binding->captures[capture].type))
-        return XR_XIR_BAD_TYPE;
-    if (!instance_invocation_work(read,3)) return XR_XIR_BUDGET;
-    /* The reader above proved real owned storage. Intrinsic access UNKNOWN is
-     * independently retained by the sealed equation's closed-node check. */
-    *output=0;return XR_XIR_OK;
+    XrXirStatus status=instance_invocation_function_value(read,value,producer,&binding);
+    if(status==XR_XIR_OK) {*values=binding->captures;*count=binding->capture_count;}return status;
 }
-static XrXirStatus instance_invocation_capture_class(void *owner,uint32_t parameter,uint32_t capture,
-    uint32_t site,uint32_t *output) {
-    InstanceInvocationRead *read=owner;XirEffectProducerView producer={0};
-    const XrXirFunctionBinding *binding=NULL;
-    XrXirStatus status=instance_invocation_function_view(read,parameter,&producer,&binding);
+static XrXirStatus instance_invocation_value(void *owner,uint32_t parameter,
+    const XirEffectRuntimeValue *parent,uint32_t capture,XirEffectRuntimeValue *output) {
+    InstanceInvocationRead *read=owner;const XrXirInstance *instance=instance_invocation_owner(read);
+    if(!instance || !read->admission || !output) return XR_XIR_BAD_STRUCTURE;
+    const XrXirValue *actual=NULL;XirEffectProducerView enclosing={0};
+    if(parent) {
+        XrXirValue handle={parent->type,parent->reserved,parent->payload};
+        const XrXirValue *values=NULL;uint32_t count=0;
+        XrXirStatus status=instance_invocation_capture_values(read,&handle,&enclosing,&values,&count);
+        if(status!=XR_XIR_OK) return status;
+        if(enclosing.site!=parent->producer || capture>=count || !values ||
+            enclosing.target>=instance->program->entry_count ||
+            capture>=instance->program->entries[enclosing.target].parameter_count) return XR_XIR_BAD_TYPE;
+        actual=&values[capture];
+        XrXirType expected=instance->program->entries[enclosing.target].parameters[capture];
+        if(actual->type!=(uint32_t)expected) return XR_XIR_BAD_TYPE;
+        if(xr_xir_type_is_cell(instance->program->types,expected) &&
+            (instance_cell_role((void *)instance->program,enclosing.target,capture)!=XR_XIR_CELL_ROLE_OWNED_CAPTURE ||
+             !xr_xir_cell_in_domain(actual,instance->domain) || !xr_xir_cell_unborrowed(actual) ||
+             xr_xir_cell_module_storage(actual))) return XR_XIR_BAD_TYPE;
+    } else {
+        if(capture!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+        actual=instance_invocation_parameter(read,parameter);
+    }
+    if(!actual) return XR_XIR_BAD_TYPE;
+    XrXirCallStatus admitted=admit_instance_value(read->admission,actual,(XrXirType)actual->type);
+    if(admitted!=XR_XIR_CALL_READY) return admitted==XR_XIR_CALL_LIMIT?XR_XIR_BUDGET:
+        admitted==XR_XIR_CALL_OOM?XR_XIR_OUT_OF_MEMORY:XR_XIR_BAD_TYPE;
+    if(!instance_invocation_work(read,sizeof(*output)+6)) return XR_XIR_BUDGET;
+    XirEffectRuntimeValue value={actual->type,actual->reserved,UINT32_MAX,UINT32_MAX,actual->payload};
+    XirEffectProducerView producer={0};XrXirStatus status=XR_XIR_OK;
+    const XrXirTypeNode *type=xr_xir_type_node(instance->program->types,(XrXirType)actual->type);
+    if(type && type->kind==XR_XIR_TYPE_ITERATOR) {
+        status=instance_invocation_generator_value(read,actual,&producer);
+        if(status==XR_XIR_OK && atomic_load_explicit(
+            &((const XirGenerator *)(uintptr_t)actual->payload)->state,memory_order_acquire)==XIR_GENERATOR_TERMINAL)
+            value.publication=0;
+    }
+    else if(xr_xir_callable_signature(instance->program->types,(XrXirType)actual->type)) {
+        const XrXirFunctionBinding *binding=NULL;status=instance_invocation_function_value(read,actual,&producer,&binding);
+    } else if(xr_xir_type_is_class(instance->program->types,(XrXirType)actual->type))
+        value.publication=xr_xir_class_module_storage(actual)?1u:0u;
+    else if(xr_xir_type_is_cell(instance->program->types,(XrXirType)actual->type)) {
+        if(!xr_xir_cell_in_domain(actual,instance->domain)) return XR_XIR_BAD_TYPE;
+        value.publication=xr_xir_cell_module_storage(actual)?1u:0u;
+    }
     if(status!=XR_XIR_OK) return status;
-    const XrXirInstance *instance=view_instance(read->view);
-    if(!output || site!=producer.site || capture>=binding->capture_count ||
-        !xr_xir_type_is_class(instance->program->types,(XrXirType)binding->captures[capture].type))
-        return XR_XIR_BAD_TYPE;
-    if(!instance_invocation_work(read,3)) return XR_XIR_BUDGET;
-    *output=xr_xir_class_module_storage(&binding->captures[capture])?1u:0u;return XR_XIR_OK;
+    if(type && (type->kind==XR_XIR_TYPE_ITERATOR || type->kind==XR_XIR_TYPE_CALLABLE)) value.producer=producer.site;
+    *output=value;return XR_XIR_OK;
 }
+static void *instance_invocation_allocate(void *owner,size_t bytes,XrXirStatus *status) {
+    InstanceInvocationRead *read=owner;
+    if(!read || !read->admission || !status) return NULL;
+    *status=XR_XIR_BUDGET;
+    if(bytes>read->admission->scratch_bytes || !instance_invocation_work(read,3)) return NULL;
+    XrXirValueStatus allocated=XR_XIR_VALUE_OK;
+    void *memory=xr_xir_domain_allocate(read->admission->domain,bytes,&allocated);
+    if(!memory) {*status=allocated==XR_XIR_VALUE_OOM?XR_XIR_OUT_OF_MEMORY:
+        allocated==XR_XIR_VALUE_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_TYPE;return NULL;}
+    read->admission->scratch_bytes-=bytes;*status=XR_XIR_OK;return memory;
+}
+static void instance_invocation_deallocate(void *owner,void *memory,size_t bytes) {
+    InstanceInvocationRead *read=owner;
+    xr_xir_domain_deallocate(read->admission->domain,memory,bytes);read->admission->scratch_bytes+=bytes;
+}
+
 static XrXirCallStatus instance_invocation_select(XrXirCallView *view,uint32_t instruction,
     const XrXirValue *function,const XrXirValue *arguments,uint32_t count,
     XirEffectInvocationSelection *output) {
@@ -133,7 +237,7 @@ static XrXirCallStatus instance_invocation_select(XrXirCallView *view,uint32_t i
         target->parameter_count-producer.capture_count!=count || signature->result!=target->result ||
         (signature->flags&XR_XIR_CALLABLE_ROOT_REQUIRED)) return XR_XIR_CALL_BAD_STATE;
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
-    InstanceInvocationRead actual={admission,arguments,view,binding};
+    InstanceInvocationRead actual={admission,arguments,view,binding,NULL};
     if (!instance_invocation_work(&actual,12+(uint64_t)target->parameter_count*3)) return XR_XIR_CALL_LIMIT;
     for (uint32_t p=0;p<target->parameter_count;++p) {
         bool captured=p<producer.capture_count;
@@ -169,8 +273,8 @@ static XrXirCallStatus instance_invocation_select(XrXirCallView *view,uint32_t i
         .node=current?current->node:UINT32_MAX,.count=target->parameter_count,
         .captures=producer.capture_count,.contextual=current!=NULL,
         .read={.owner=&actual,.work=instance_invocation_work,.cell=instance_invocation_cell,.class_value=instance_invocation_class,
-            .function=instance_invocation_function,.capture_cell=instance_invocation_capture_cell,
-            .capture_class_value=instance_invocation_capture_class}};
+            .value=instance_invocation_value,.allocate=instance_invocation_allocate,
+            .deallocate=instance_invocation_deallocate}};
     XrXirStatus selected=xir_effects_execution_edge(program->permissions->effects,&request,output);
     return selected==XR_XIR_OK?XR_XIR_CALL_READY:selected==XR_XIR_BUDGET?
         XR_XIR_CALL_LIMIT:selected==XR_XIR_OUT_OF_MEMORY?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE;
@@ -184,7 +288,7 @@ static XrXirCallStatus instance_invocation_direct(XrXirCallView *view,uint32_t i
     if (target>=program->entry_count || count!=program->entries[target].parameter_count)
         return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirValueAdmission *admission=xr_xir_call_admission(view);
-    InstanceInvocationRead actual={admission,arguments,view,NULL};
+    InstanceInvocationRead actual={admission,arguments,view,NULL,NULL};
     if (!instance_invocation_work(&actual,12+(uint64_t)count*3)) return XR_XIR_CALL_LIMIT;
     for (uint32_t p=0;p<count;++p) {
         XrXirType expected=program->entries[target].parameters[p];
@@ -201,8 +305,8 @@ static XrXirCallStatus instance_invocation_direct(XrXirCallView *view,uint32_t i
         .instruction=instruction,.target=target,.producer=UINT32_MAX,
         .node=current?current->node:UINT32_MAX,.count=count,.contextual=current!=NULL,
         .read={.owner=&actual,.work=instance_invocation_work,.cell=instance_invocation_cell,.class_value=instance_invocation_class,
-            .function=instance_invocation_function,.capture_cell=instance_invocation_capture_cell,
-            .capture_class_value=instance_invocation_capture_class}};
+            .value=instance_invocation_value,.allocate=instance_invocation_allocate,
+            .deallocate=instance_invocation_deallocate}};
     XrXirStatus selected=xir_effects_execution_edge(program->permissions->effects,&request,output);
     return selected==XR_XIR_OK?XR_XIR_CALL_READY:selected==XR_XIR_BUDGET?
         XR_XIR_CALL_LIMIT:selected==XR_XIR_OUT_OF_MEMORY?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE;

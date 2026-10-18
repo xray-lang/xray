@@ -90,7 +90,7 @@ static XrXirStatus error_type_at(const ErrorFlow *flow,uint32_t value,XrXirType 
 static XrXirStatus error_operation(const ErrorFlow *flow,uint32_t function,uint32_t instruction,
     XrXirInstruction *storage,const XrXirInstruction **output) {
     if (!flow) return XR_XIR_BAD_STRUCTURE;
-    return effect_body_request_instruction(&flow->body,function,instruction,storage,output);
+    return effect_body_request_operation(&flow->body,function,instruction,storage,output);
 }
 static XrXirStatus error_shape(const ErrorFlow *flow,uint32_t function,uint32_t instruction,
     EffectBodyInstructionShape *output) {
@@ -1111,7 +1111,7 @@ static XrXirStatus error_graph_prepare(EffectGraph *graph, XrXirCompileContext *
                 return XR_XIR_BAD_STRUCTURE;
             uint32_t i=record.value-function->parameter_count;
             XrXirInstruction storage;const XrXirInstruction *op=NULL;
-            status=effect_body_request_instruction(&body,f,i,&storage,&op);
+            status=effect_body_request_operation(&body,f,i,&storage,&op);
             if (status!=XR_XIR_OK) return status;
             if (op->op != XR_XIR_GO) return XR_XIR_BAD_STRUCTURE;
             uint32_t callee = (uint32_t)op->immediate;

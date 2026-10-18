@@ -305,6 +305,23 @@ static XrXirStatus effect_body_delta_group(const EffectBodyRead *read,uint32_t m
 
 /* The same bounded reader serves compile and runtime ledger callbacks. A
  * local run reference cannot outlive this request or acquire body permission. */
+/* Every selected delta belongs to the current canonical record. Callers pay
+ * the same header read before supplying the reference; this helper publishes
+ * no pointer, decoded row, semantic fact or permission. */
+static XrXirStatus effect_body_run_shape(const EffectBodyRead *read,
+    const EffectBodyRun *run,uint32_t first,uint32_t limit) {
+    if (!read || !run || first>=limit || run->first!=first || !run->count ||
+        run->count>limit-first || run->mask&~EFFECT_BODY_MASK || (run->count==1 && run->mask))
+        return XR_XIR_BAD_STRUCTURE;
+    if (run->mask) {
+        if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
+        XrXirStatus status=effect_body_delta_group(read,run->mask&31,run->delta,NULL);
+        if (status==XR_XIR_OK) status=effect_body_delta_group(read,run->mask>>5,run->delta+5,NULL);
+        if (status!=XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
+
 static XrXirStatus effect_body_run_ref(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t index,uint32_t first,const EffectBodyRun **output) {
     if (!read || !output || !function || !function->runs ||
@@ -312,16 +329,8 @@ static XrXirStatus effect_body_run_ref(const EffectBodyRead *read,
         index>=function->run_count || first>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
     const EffectBodyRun *run=&function->runs[index];
-    if (run->first!=first || !run->count || run->count>function->instruction_count-first ||
-        run->mask&~EFFECT_BODY_MASK || (run->count==1 && run->mask)) return XR_XIR_BAD_STRUCTURE;
-    /* A selected physical delta must be nonzero. The array is full length,
-     * so there is no packed-column directory or rank to reconstruct. */
-    if (run->mask) {
-        if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
-        XrXirStatus status=effect_body_delta_group(read,run->mask&31,run->delta,NULL);
-        if (status==XR_XIR_OK) status=effect_body_delta_group(read,run->mask>>5,run->delta+5,NULL);
-        if (status!=XR_XIR_OK) return status;
-    }
+    XrXirStatus status=effect_body_run_shape(read,run,first,function->instruction_count);
+    if (status!=XR_XIR_OK) return status;
     if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
     *output=run;return XR_XIR_OK;
 }
@@ -331,33 +340,40 @@ static XrXirStatus effect_body_run_ref(const EffectBodyRead *read,
  * first/final/neighbor record. No reference survives the immediate decode. */
 static XrXirStatus effect_body_small_record_ref(const EffectBodyRead *read,
     const EffectBodyFunction *function,uint32_t instruction,const EffectBodyRun **output) {
-    if (!function || !output || !function->run_count || function->run_count>3 ||
+    if (!read || !function || !output || !function->runs || !function->run_count || function->run_count>3 ||
+        function->run_count>function->run_capacity || function->run_count>function->instruction_count ||
         instruction>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
-    if (!effect_body_read_work(read,5)) return XR_XIR_BUDGET;
-    const EffectBodyRun *first;
-    XrXirStatus status=effect_body_run_ref(read,function,0,0,&first);
+    if (!effect_body_read_work(read,5+sizeof(const EffectBodyRun *)+sizeof(uint32_t))) return XR_XIR_BUDGET;
+    const EffectBodyRun *runs=function->runs;uint32_t count=function->run_count;
+    if (!runs || !count || count>3 || count>function->run_capacity ||
+        count>function->instruction_count || instruction>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
+    XrXirStatus status=effect_body_run_shape(read,&runs[0],0,function->instruction_count);
     if (status!=XR_XIR_OK) return status;
-    if (function->run_count==1) {
-        if (first->count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
-        if (!effect_body_read_work(read,3+sizeof(*output))) return XR_XIR_BUDGET;
-        *output=first;return XR_XIR_OK;
+    if (count==1) {
+        if (runs[0].count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(read,6+sizeof(*output))) return XR_XIR_BUDGET;
+        if (function->runs!=runs || function->run_count!=count || count>function->run_capacity ||
+            runs[0].count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        *output=runs;return XR_XIR_OK;
     }
-    const EffectBodyRun *last;
-    uint32_t end=function->run_count-1;
-    if (!effect_body_read_work(read,sizeof(end)+2)) return XR_XIR_BUDGET;
-    status=effect_body_run_ref(read,function,end,function->runs[end].first,&last);
-    if (status!=XR_XIR_OK) return status;
-    if (last->first+last->count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyRun *middle=first;
-    if (function->run_count==3) {
-        status=effect_body_run_ref(read,function,1,first->count,&middle);
+    if (!effect_body_read_work(read,sizeof(uint32_t)+2)) return XR_XIR_BUDGET;
+    uint32_t end=count-1;
+    if (count==3) {
+        if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
+        status=effect_body_run_shape(read,&runs[1],runs[0].count,function->instruction_count);
         if (status!=XR_XIR_OK) return status;
     }
-    if (!effect_body_read_work(read,7+2*sizeof(middle)+sizeof(*output))) return XR_XIR_BUDGET;
-    if (middle->first+middle->count!=last->first) return XR_XIR_BAD_STRUCTURE;
-    const EffectBodyRun *ref=instruction<first->count?first:instruction<last->first?middle:last;
-    if (instruction<ref->first || instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
-    *output=ref;return XR_XIR_OK;
+    if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
+    status=effect_body_run_shape(read,&runs[end],runs[end-1].first+runs[end-1].count,function->instruction_count);
+    if (status!=XR_XIR_OK) return status;
+    if (!effect_body_read_work(read,10+sizeof(uint32_t)+sizeof(*output))) return XR_XIR_BUDGET;
+    if (function->runs!=runs || function->run_count!=count || count>function->run_capacity ||
+        runs[end].first+runs[end].count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t selected=instruction<runs[0].count?0:instruction<runs[end].first?end-1:end;
+    if (instruction<runs[selected].first || instruction-runs[selected].first>=runs[selected].count)
+        return XR_XIR_BAD_STRUCTURE;
+    *output=&runs[selected];return XR_XIR_OK;
 }
 
 /* Random projection uses the actual ordinal directory. Its complete owner
@@ -370,64 +386,75 @@ static XrXirStatus effect_body_record_ref(const EffectBodyRead *read,
         function->run_count>function->run_capacity ||
         function->run_count>function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     if (function->run_count<=3) return effect_body_small_record_ref(read,function,instruction,output);
-    if (!effect_body_read_work(read,4*sizeof(uint32_t)+2)) return XR_XIR_BUDGET;
-    uint32_t low=1,high=function->run_count-1,first=0,last=high;
-    const EffectBodyRun *head,*tail;
-    XrXirStatus status=effect_body_run_ref(read,function,0,0,&head);
+    if (!effect_body_read_work(read,4*sizeof(uint32_t)+2+sizeof(const EffectBodyRun *)+sizeof(uint32_t)))
+        return XR_XIR_BUDGET;
+    const EffectBodyRun *runs=function->runs;uint32_t count=function->run_count;
+    if (!runs || count<=3 || count>function->run_capacity || count>function->instruction_count ||
+        instruction>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t low=1,high=count-1,first=0,last=high;
+    if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
+    XrXirStatus status=effect_body_run_shape(read,&runs[0],0,function->instruction_count);
     if (status!=XR_XIR_OK) return status;
-    status=effect_body_run_ref(read,function,last,function->runs[last].first,&tail);
+    if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
+    status=effect_body_run_shape(read,&runs[last],runs[last].first,function->instruction_count);
     if (status!=XR_XIR_OK) return status;
-    if (tail->first+tail->count!=function->instruction_count || tail->first<=head->count)
+    if (runs[last].first+runs[last].count!=function->instruction_count || runs[last].first<=runs[0].count)
         return XR_XIR_BAD_STRUCTURE;
-    /* These current endpoints already supply the selected record. Their
-     * actual neighboring boundary still needs its own complete shape check. */
-    if (instruction<head->count) {
-        const EffectBodyRun *next;
-        status=effect_body_run_ref(read,function,1,head->count,&next);
+    if (instruction<runs[0].count) {
+        if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
+        status=effect_body_run_shape(read,&runs[1],runs[0].count,function->instruction_count);
         if (status!=XR_XIR_OK) return status;
-        if (!effect_body_read_work(read,3+sizeof(*output))) return XR_XIR_BUDGET;
-        *output=head;return XR_XIR_OK;
+        if (!effect_body_read_work(read,9+sizeof(*output))) return XR_XIR_BUDGET;
+        if (function->runs!=runs || function->run_count!=count || count>function->run_capacity ||
+            runs[last].first+runs[last].count!=function->instruction_count)
+            return XR_XIR_BAD_STRUCTURE;
+        *output=runs;return XR_XIR_OK;
     }
-    if (instruction>=tail->first) {
-        const EffectBodyRun *previous;
-        status=effect_body_run_ref(read,function,last-1,function->runs[last-1].first,&previous);
+    if (instruction>=runs[last].first) {
+        if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
+        status=effect_body_run_shape(read,&runs[last-1],runs[last-1].first,function->instruction_count);
         if (status!=XR_XIR_OK) return status;
-        if (!effect_body_read_work(read,5+sizeof(*output))) return XR_XIR_BUDGET;
-        if (previous->first+previous->count!=tail->first ||
-            tail->first+tail->count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
-        *output=tail;return XR_XIR_OK;
+        if (!effect_body_read_work(read,8+sizeof(*output))) return XR_XIR_BUDGET;
+        if (function->runs!=runs || function->run_count!=count || count>function->run_capacity ||
+            runs[last-1].first+runs[last-1].count!=runs[last].first ||
+            runs[last].first+runs[last].count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        *output=&runs[last];return XR_XIR_OK;
     }
     while (low<high) {
         if (!effect_body_read_work(read,3+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
         uint32_t middle=low+(high-low)/2;
-        if (function->runs[middle].first<=instruction) low=middle+1;
+        if (runs[middle].first<=instruction) low=middle+1;
         else high=middle;
     }
     if (low<=1) return XR_XIR_BAD_STRUCTURE;
     if (!effect_body_read_work(read,1+sizeof(uint32_t))) return XR_XIR_BUDGET;
     uint32_t index=low-1;
-    if (index==1) first=head->count;
+    if (index==1) first=runs[0].count;
     else {
-        const EffectBodyRun *previous;
-        status=effect_body_run_ref(read,function,index-1,function->runs[index-1].first,&previous);
+        if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
+        status=effect_body_run_shape(read,&runs[index-1],runs[index-1].first,function->instruction_count);
         if (status!=XR_XIR_OK) return status;
-        first=previous->first+previous->count;
+        first=runs[index-1].first+runs[index-1].count;
     }
     if (!effect_body_read_work(read,2+sizeof(first))) return XR_XIR_BUDGET;
-    const EffectBodyRun *ref;
-    status=effect_body_run_ref(read,function,index,first,&ref);
+    if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
+    status=effect_body_run_shape(read,&runs[index],first,function->instruction_count);
     if (status!=XR_XIR_OK) return status;
     if (!effect_body_read_work(read,3)) return XR_XIR_BUDGET;
-    if (instruction<ref->first || instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
+    if (instruction<runs[index].first || instruction-runs[index].first>=runs[index].count)
+        return XR_XIR_BAD_STRUCTURE;
     if (index+1==last) {
-        if (ref->first+ref->count!=tail->first) return XR_XIR_BAD_STRUCTURE;
+        if (runs[index].first+runs[index].count!=runs[last].first) return XR_XIR_BAD_STRUCTURE;
     } else {
-        const EffectBodyRun *next;
-        status=effect_body_run_ref(read,function,index+1,ref->first+ref->count,&next);
+        if (!effect_body_read_work(read,7)) return XR_XIR_BUDGET;
+        status=effect_body_run_shape(read,&runs[index+1],runs[index].first+runs[index].count,function->instruction_count);
         if (status!=XR_XIR_OK) return status;
     }
-    if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
-    *output=ref;return XR_XIR_OK;
+    if (!effect_body_read_work(read,6+sizeof(*output))) return XR_XIR_BUDGET;
+    if (function->runs!=runs || function->run_count!=count || count>function->run_capacity ||
+            runs[last].first+runs[last].count!=function->instruction_count)
+        return XR_XIR_BAD_STRUCTURE;
+    *output=&runs[index];return XR_XIR_OK;
 }
 
 /* Only the current sequential scan owns this physical position. Every read

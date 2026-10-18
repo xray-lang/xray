@@ -28,7 +28,7 @@ static XrXirStatus effect_invocation_callable_cell(EffectInvocationFlow *flow,
     for(uint32_t i=0;i<flow->function->instruction_count;++i) {
         if(!xir_compile_work(flow->read->work,4)) return XR_XIR_BUDGET;
         XrXirInstruction decoded;const XrXirInstruction *op=NULL;
-        status=effect_body_request_sequence_instruction(&flow->body,
+        status=effect_body_request_sequence_operation(&flow->body,
             flow->read->final->nodes[flow->node].body,i,&cursor,&decoded,&op);
         if(status!=XR_XIR_OK) return status;
         if(op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
@@ -77,7 +77,7 @@ static XrXirStatus effect_invocation_callable_cell_origins(EffectInvocationFlow 
     for(uint32_t i=0;i<flow->function->instruction_count;++i) {
         if(!xir_compile_work(flow->read->work,3)) return XR_XIR_BUDGET;
         XrXirInstruction decoded;const XrXirInstruction *op=NULL;
-        status=effect_body_request_sequence_instruction(&flow->body,
+        status=effect_body_request_sequence_operation(&flow->body,
             flow->read->final->nodes[flow->node].body,i,&cursor,&decoded,&op);
         uint32_t source=UINT32_MAX;
         if(status==XR_XIR_OK) status=effect_invocation_callable_cell_source(flow,cell,i,op,&source);

@@ -514,8 +514,8 @@ static void generation_sequence_producers(void) {
             returned==owner->final.nodes[n].return_coverage);
         xr_compile_resources_free(flow.memory);
     }
-    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_OK &&
-        effect_invocation_coverage_verify(owner)==XR_XIR_OK);
+    CHECK(effect_invocation_producers_verify_read(&owner->read,&owner->read.body)==XR_XIR_OK &&
+        effect_invocation_coverage_verify_read(&owner->read,&owner->read.body)==XR_XIR_OK);
     effect_invocation_free(owner);effect_invocation_bounds_free(bounds);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);
     xr_xir_compile_artifact_free(checked);rp_owner_free(&context,baseline);rp_balanced(held);

@@ -37,42 +37,74 @@ XR_FUNC XrXirCallStatus xr_xir_instance_generator_at(XrXirCallView *view,uint32_
     if(!selected || selected->entry>=instance->program->entry_count || selected->arguments!=count)
         return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallRequest request={selected->entry,arguments,count,instance_cell_role,instance->program};
-    return xr_xir_task_executor_generator(instance->executor,view,selected->type,&request,output,instruction);
+    const XirGeneratorSiteOrigin origin={instruction,selected->site};
+    return xr_xir_task_executor_generator(instance->executor,view,selected->type,&request,output,&origin);
 }
 
-XR_FUNC XrXirCallStatus xr_xir_instance_generator_context(XrXirCallView *view,uint32_t instruction,
-    const XrXirCallRequest *request,XirEffectInvocationSelection *output) {
-    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
-    XrXirInstance *instance=view_instance(view);
-    if (!instance || !request || !output || (request->count && !request->arguments)) return XR_XIR_CALL_BAD_ARGUMENT;
+/* A genuine executing view may name one frontier. The parked wait reader and
+ * complete Effects query remain responsible for authenticating the action. */
+XR_FUNC XrXirCallStatus xr_xir_instance_iterator_at(XrXirCallView *view,uint32_t instruction) {
+    if(!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if(!view_instance(view)) return XR_XIR_CALL_BAD_STATE;
+    return xr_xir_call_invocation_stage(view,instruction);
+}
+
+/* The exact linked waiter owns these borrowed inputs throughout this read.
+ * No executing view, creation receipt or nominal body result is substituted. */
+XR_FUNC XrXirCallStatus xr_xir_instance_iterator_select(XrXirCall *call,
+    const XrXirTaskWaitToken *token,XirEffectInvocationSelection *output) {
+    if(!output) return XR_XIR_CALL_BAD_ARGUMENT;
+    XirIteratorWaitContext wait={0};XrXirCallStatus checked=xr_xir_call_iterator_context(call,token,&wait);
+    if(checked!=XR_XIR_CALL_READY) return checked;
+    XrXirInstance *instance=wait.instance;XrXirValueAdmission *admission=wait.admission;
+    if(!admission || admission->function!=admit_function_binding || !instance ||
+        admission->context!=instance) return XR_XIR_CALL_BAD_STATE;
+    if(!instance_owner_current(instance) ||
+        admission->domain!=instance->domain || admission->arena!=instance->program->arena ||
+        !instance->driving || instance_observing(instance) || instance->stopping ||
+        token->binding.owner!=instance->executor) return XR_XIR_CALL_BAD_STATE;
+    checked=xr_xir_task_executor_pending_member(instance->executor,call,token,admission);
+    if(checked!=XR_XIR_CALL_READY) return checked;
     const XrXirProgram *program=instance->program;
-    if (request->entry>=program->entry_count || !program->permissions ||
-        request->cell_role!=instance_cell_role || request->cell_context!=program ||
-        !(program->entries[request->entry].flags&XR_XIR_ENTRY_GENERATOR) ||
-        request->count!=program->entries[request->entry].parameter_count) return XR_XIR_CALL_BAD_ARGUMENT;
-    XrXirValueAdmission *admission=xr_xir_call_admission(view);
-    InstanceInvocationRead actual={admission,request->arguments,view,NULL};
-    if (!instance_invocation_work(&actual,12+(uint64_t)request->count*4)) return XR_XIR_CALL_LIMIT;
-    for (uint32_t p=0;p<request->count;++p) {
-        XrXirType type=program->entries[request->entry].parameters[p];
-        const XrXirValue *value=&request->arguments[p];
-        XrXirCallStatus status=admit_instance_value(admission,value,type);
-        if (status!=XR_XIR_CALL_READY) return status;
-        if (xr_xir_type_is_cell(program->types,type) &&
-            (instance_cell_role((void *)program,request->entry,p)!=XR_XIR_CELL_ROLE_OWNED_CAPTURE ||
-             !xr_xir_cell_in_domain(value,instance->domain) || !xr_xir_cell_unborrowed(value) ||
-             xr_xir_cell_module_storage(value))) return XR_XIR_CALL_BAD_ARGUMENT;
-    }
-    uint32_t caller=xr_xir_call_current_entry(view->activation);
-    const XirEffectInvocationSelection *current=xr_xir_call_invocation(view);
-    if (current && (current->owner!=program->permissions->effects || current->target!=caller))
-        return XR_XIR_CALL_BAD_STATE;
-    XirEffectInvocationRequest selected={.caller=caller,.instruction=instruction,.target=request->entry,
-        .producer=UINT32_MAX,.node=current?current->node:UINT32_MAX,.count=request->count,
-        .contextual=current!=NULL,.read={.owner=&actual,.work=instance_invocation_work,.cell=instance_invocation_cell,
-            .class_value=instance_invocation_class,.function=instance_invocation_function,.capture_cell=instance_invocation_capture_cell,
-            .capture_class_value=instance_invocation_capture_class}};
-    XrXirStatus status=xir_effects_execution_edge(program->permissions->effects,&selected,output);
-    return status==XR_XIR_OK?XR_XIR_CALL_READY:status==XR_XIR_BUDGET?XR_XIR_CALL_LIMIT:
+    if(!program->permissions || !program->permissions->effects || wait.caller>=program->entry_count ||
+        !wait.iterator || (wait.invocation && (wait.invocation->owner!=program->permissions->effects ||
+        wait.invocation->target!=wait.caller))) return XR_XIR_CALL_BAD_STATE;
+    InstanceInvocationRead actual={admission,NULL,NULL,NULL,instance};
+    XirEffectRuntimeRead read={.owner=&actual,.work=instance_invocation_work,.cell=instance_invocation_cell,
+        .class_value=instance_invocation_class,.value=instance_invocation_value,.allocate=instance_invocation_allocate,
+        .deallocate=instance_invocation_deallocate};
+    XirEffectIteratorInstruction instruction={0};
+    XrXirStatus status=xir_effects_iterator_instruction(program->permissions->effects,wait.caller,wait.instruction,&read,&instruction);
+    uint32_t opcode=token->request.kind==XR_XIR_WAIT_ITERATOR_NEXT?XR_XIR_ITERATOR_NEXT:
+        token->request.kind==XR_XIR_WAIT_ITERATOR_HAS_NEXT?XR_XIR_ITERATOR_HAS_NEXT:
+        token->request.kind==XR_XIR_WAIT_ITERATOR_NTH?XR_XIR_ITERATOR_NTH:UINT32_MAX;
+    if(status==XR_XIR_OK && (instruction.opcode!=opcode || instruction.receiver!=(XrXirType)wait.iterator->type))
+        status=XR_XIR_BAD_TYPE;
+    XirEffectProducerView producer={0};const XrXirValue *values=NULL;uint32_t count=0;
+    if(status==XR_XIR_OK) status=instance_invocation_capture_values(&actual,wait.iterator,&producer,&values,&count);
+    if(status!=XR_XIR_OK) return status==XR_XIR_BUDGET?XR_XIR_CALL_LIMIT:
         status==XR_XIR_OUT_OF_MEMORY?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE;
+    actual.arguments=values;
+    for(uint32_t p=0;p<count;++p) {
+        XrXirType type=program->entries[producer.target].parameters[p];
+        checked=admit_instance_value(admission,&values[p],type);if(checked!=XR_XIR_CALL_READY) return checked;
+        if(xr_xir_type_is_cell(program->types,type) &&
+            (instance_cell_role((void *)program,producer.target,p)!=XR_XIR_CELL_ROLE_OWNED_CAPTURE ||
+             !xr_xir_cell_in_domain(&values[p],instance->domain) || !xr_xir_cell_unborrowed(&values[p]) ||
+             xr_xir_cell_module_storage(&values[p]))) return XR_XIR_CALL_BAD_ARGUMENT;
+    }
+    XirEffectInvocationRequest request={.caller=wait.caller,.instruction=wait.instruction,.target=producer.target,
+        .producer=producer.site,.node=wait.invocation?wait.invocation->node:UINT32_MAX,.count=count,.captures=count,
+        .contextual=wait.invocation!=NULL,.read=read};XirEffectInvocationSelection selected={0};
+    status=xir_effects_execution_edge(program->permissions->effects,&request,&selected);
+    if(status!=XR_XIR_OK) return status==XR_XIR_BUDGET?XR_XIR_CALL_LIMIT:
+        status==XR_XIR_OUT_OF_MEMORY?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE;
+    XirIteratorWaitContext current={0};checked=xr_xir_call_iterator_context(call,token,&current);
+    if(checked!=XR_XIR_CALL_READY) return checked;
+    if(current.instance!=wait.instance || current.admission!=admission || current.iterator!=wait.iterator ||
+        current.invocation!=wait.invocation || current.caller!=wait.caller || current.instruction!=wait.instruction)
+        return XR_XIR_CALL_BAD_STATE;
+    checked=xr_xir_task_executor_pending_member(instance->executor,call,token,admission);
+    if(checked!=XR_XIR_CALL_READY) return checked;
+    *output=selected;return XR_XIR_CALL_READY;
 }

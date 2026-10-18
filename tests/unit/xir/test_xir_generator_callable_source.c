@@ -98,7 +98,16 @@ int main(int argc,char **argv) {
     CHECK(xr_xir_compile_program_seal(&owner.context,&spec,&foreign)==XR_XIR_OK);
     callable_admission_cases(adapter,foreign,ids,module->types);xr_xir_compile_program_drop(foreign);xr_xir_compile_program_drop(adapter);
     xr_compile_resources_free(entries);xr_compile_resources_free(bindings);
-    CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && program && !lowered);
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(owner.context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    XrXirStatus status=xr_xir_compile_vm_program_take(&lowered,&program);
+    if(status!=XR_XIR_OK) {
+        CHECK(xr_compile_resources_stats(owner.context.resources,&after)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"Callable Program take status%u before_work%llu work%llu allocated%llu live%llu\n",status,
+            (unsigned long long)before.work,(unsigned long long)after.work,
+            (unsigned long long)after.allocated_bytes,(unsigned long long)after.live_bytes);
+    }
+    CHECK(status==XR_XIR_OK && program && !lowered);
     generator_callable_cases(program,ids);xr_xir_compile_program_drop(program);
     source_fixture_owner_free(&owner);return 0;
 }

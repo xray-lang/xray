@@ -18,12 +18,16 @@ static bool invocation_direct_work(void *owner,uint64_t work) {
 static uint32_t invocation_direct_cell(void *owner,uint32_t parameter) {
     (void)owner;CHECK(parameter<=1);return 0;
 }
-static XrXirStatus invocation_direct_function(void *owner,uint32_t parameter,uint32_t *output) {
-    InvocationDirectRead *read=owner;CHECK(parameter==0);
-    if (read->unknown) return XR_XIR_BAD_TYPE;
+static XrXirStatus invocation_direct_value(void *owner,uint32_t parameter,
+    const XirEffectRuntimeValue *parent,uint32_t capture,XirEffectRuntimeValue *output) {
+    InvocationDirectRead *read=owner;CHECK(parameter==0 && !parent && capture==UINT32_MAX);
+    if(read->unknown) return XR_XIR_BAD_TYPE;
     XirEffectProducerView producer={0};
     XrXirStatus status=xir_effects_producer(read->context,read->effects,0,read->instruction,&producer);
-    if (status==XR_XIR_OK) { CHECK(!producer.capture_count);*output=producer.site; }
+    if(status==XR_XIR_OK) {
+        CHECK(!producer.capture_count);
+        *output=(XirEffectRuntimeValue){producer.type,0,producer.site,UINT32_MAX,1};
+    }
     return status;
 }
 static XrXirStatus conditional_invocation_runtime_direct(const XrXirCompileContext *context,
@@ -52,7 +56,7 @@ static XrXirStatus conditional_invocation_runtime_direct(const XrXirCompileConte
     InvocationDirectRead read={context,effects,2,false};
     XirEffectInvocationRequest direct={.caller=0,.instruction=3,.target=1,.producer=UINT32_MAX,
         .node=UINT32_MAX,.count=2,
-        .read={.owner=&read,.work=invocation_direct_work,.cell=invocation_direct_cell,.function=invocation_direct_function}};
+        .read={.owner=&read,.work=invocation_direct_work,.cell=invocation_direct_cell,.value=invocation_direct_value}};
     XirEffectInvocationSelection selected={0},child={0};XirEffectProducerView producer={0};
     if (status==XR_XIR_OK) {
         XrXirStatus chosen=xir_effects_execution_edge(effects,&direct,&selected);
@@ -65,7 +69,7 @@ static XrXirStatus conditional_invocation_runtime_direct(const XrXirCompileConte
     if (status==XR_XIR_OK) status=xir_effects_producer(context,effects,0,2,&producer);
     XirEffectInvocationRequest indirect={.caller=1,.instruction=mode?1:0,.target=2,
         .producer=producer.site,.node=selected.node,.count=1,.contextual=true,
-        .read={.owner=&read,.work=invocation_direct_work,.cell=invocation_direct_cell,.function=invocation_direct_function}};
+        .read={.owner=&read,.work=invocation_direct_work,.cell=invocation_direct_cell,.value=invocation_direct_value}};
     if (status==XR_XIR_OK && mode!=2) status=xir_effects_execution_edge(effects,&indirect,&child);
     if (status==XR_XIR_OK && oracle && mode!=2) {
         CHECK(!effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved &&

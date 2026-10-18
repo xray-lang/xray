@@ -59,7 +59,7 @@ static XrXirStatus effect_invocation_deferred_frontiers(EffectInvocationFlow *fl
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
         XrXirInstruction body_op_2;const XrXirInstruction *op=NULL;
-        XrXirStatus body_read_2=effect_body_request_sequence_instruction(&flow->body,
+        XrXirStatus body_read_2=effect_body_request_sequence_operation(&flow->body,
             flow->read->final->nodes[flow->node].body,i,&cursor,&body_op_2,&op);
         if (body_read_2!=XR_XIR_OK) return body_read_2;
         if (!(local_contexts[i/64]&(UINT64_C(1)<<(i%64))) ||

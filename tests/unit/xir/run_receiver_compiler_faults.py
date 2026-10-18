@@ -10,6 +10,9 @@ owned.SCHEMA='receiver-compiler-faults.v2'
 WORKERS=8
 TIMEOUT=600
 CAPS=(67108864,8388608,128000000)
+FIXTURE_PATH="tests/unit/xir/test_xir_generator_receiver_compiler.c"
+FIXTURE_SYMBOL="receiver_compile_source"
+FIXTURE_INPUTS=["tests/unit/xir/xir_generator_compiler_fault_cases.h"]
 
 def snapshot(source,deadline):
     command=['git','-C',str(source),'rev-parse','--show-toplevel']
@@ -26,8 +29,8 @@ def snapshot(source,deadline):
     return files
 
 def fixture_identity(source):
-    text=(source/'tests/unit/xir/test_xir_generator_receiver_compiler.c').read_text(encoding='utf-8')
-    match=re.search(r'static const char receiver_compile_source\[\]\s*=\s*((?:"(?:[^"\\]|\\.)*"\s*)+);',text,re.S)
+    text=(source/FIXTURE_PATH).read_text(encoding='utf-8')
+    match=re.search(rf'static const char {re.escape(FIXTURE_SYMBOL)}\[\]\s*=\s*((?:"(?:[^"\\]|\\.)*"\s*)+);',text,re.S)
     owned.checked(match,'Missing actual compiled receiver Source literal')
     data=''.join(ast.literal_eval(s)for s in re.findall(r'"(?:[^"\\]|\\.)*"',match[1])).encode('ascii')
     return len(data),hashlib.sha256(data).hexdigest()
@@ -113,7 +116,7 @@ def main():
         names=['tests/unit/xir/test_xir_generator_receiver_compiler.c','tests/unit/xir/run_receiver_compiler_faults.py',
                'tests/unit/xir/run_generic_callable_compiler_faults.py','tests/unit/xir/generator_driver.cmake',
                'tests/unit/xir/xir_library_compile_owner.h','tests/unit/xir/xir_source_program_compile_owner.h',
-               'tests/lib/xraytest/windows_owned_job.py','tests/lib/xraytest/proc.py']
+               'tests/lib/xraytest/windows_owned_job.py','tests/lib/xraytest/proc.py',*FIXTURE_INPUTS]
         owned.checked(all(name in inputs for name in names),'Actual driver, registry or finite owner input is missing')
         length,digest=fixture_identity(source);binary=owned.sha(executable,deadline);nonce=uuid.uuid4().hex
         identity={'nonce':nonce,'input_sha256':owned.mapping_sha(inputs),'binary_sha256':binary,

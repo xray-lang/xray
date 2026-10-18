@@ -60,7 +60,7 @@ static uint32_t invocation_parameter_actual(EffectInvocationWorkspace *owner) {
 /* A mismatch records the actual first status without adding another proof. */
 static void invocation_parameter_expect_rejection(EffectInvocationWorkspace *owner,
     uint32_t mode,const char *mutation) {
-    XrXirStatus actual=effect_invocation_coverage_verify(owner);
+    XrXirStatus actual=effect_invocation_coverage_verify_read(&owner->read,&owner->read.body);
     if (actual!=XR_XIR_BAD_STRUCTURE) {
         XrCompileResourceStats stats=rp_stats(owner->read.work);
         fprintf(stderr,"PARAMETER_REJECTION mode=%u mutation=%s actual=%u expected=%u producer=%u nodes=%u pending=%u allocated=%llu live=%llu peak=%llu work=%llu\n",
@@ -90,7 +90,7 @@ static void invocation_parameter_disabled_rejections(EffectInvocationWorkspace *
     owner->final.roots[5]=owner->final.count;
     invocation_parameter_expect_rejection(owner,mode,"disabled-root");
     owner->final.roots[5]=formal;
-    CHECK(effect_invocation_coverage_verify(owner)==XR_XIR_OK);
+    CHECK(effect_invocation_coverage_verify_read(&owner->read,&owner->read.body)==XR_XIR_OK);
 }
 
 /* Each altered private fact is restored before the actual seal. These
@@ -103,7 +103,7 @@ static void invocation_parameter_rejections(EffectInvocationWorkspace *owner,uin
     uint64_t original=node->parameter_coverage[0];
     if (mode<2) CHECK(n!=formal);
     CHECK((original!=0)==(mode<2));
-    CHECK(effect_invocation_coverage_verify(owner)==XR_XIR_OK);
+    CHECK(effect_invocation_coverage_verify_read(&owner->read,&owner->read.body)==XR_XIR_OK);
     owner->final.nodes[formal].parameter_coverage[0]=1;
     invocation_parameter_expect_rejection(owner,mode,"formal-rank");
     owner->final.nodes[formal].parameter_coverage[0]=0;
@@ -135,7 +135,7 @@ static void invocation_parameter_rejections(EffectInvocationWorkspace *owner,uin
         invocation_parameter_expect_rejection(owner,mode,"removed-return");
         owner->final.nodes[factory].return_coverage=returned;
     }
-    CHECK(effect_invocation_coverage_verify(owner)==XR_XIR_OK);
+    CHECK(effect_invocation_coverage_verify_read(&owner->read,&owner->read.body)==XR_XIR_OK);
 }
 
 static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
