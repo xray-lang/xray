@@ -52,7 +52,7 @@ export class YamlMapping {
         this.values = []
     }
 
-    ref set(key: string, value: YamlValue) {
+    set(key: string, value: YamlValue) {
         for (var i = 0; i < len(this.keys); i++) {
             if (this.keys[i] == key) {
                 this.values[i] = value
@@ -654,17 +654,17 @@ class YamlFlowParser {
         return this.src.slice(this.pos, (this.pos) + 1)
     }
 
-    ref advance() -> string {
+    advance() -> string {
         var c = this.peek()
         if (len(c) > 0) { this.pos = this.pos + 1 }
         return c
     }
 
-    ref skipWs() {
+    skipWs() {
         while (!this.atEnd() && _isWs(this.peek())) { this.advance() }
     }
 
-    ref parseQuoted() -> string {
+    parseQuoted() -> string {
         var quote = this.advance()
         var out = StringBuilder()
         var escape = false
@@ -704,7 +704,7 @@ class YamlFlowParser {
         return out.toString()
     }
 
-    ref parseKey() -> string {
+    parseKey() -> string {
         this.skipWs()
         if (this.peek() == "\"" || this.peek() == "'") { return this.parseQuoted() }
         var start = this.pos
@@ -712,7 +712,7 @@ class YamlFlowParser {
         return textutil.trim(this.src.slice(start, this.pos))
     }
 
-    ref parsePlain() -> YamlValue {
+    parsePlain() -> YamlValue {
         var start = this.pos
         while (!this.atEnd() && this.peek() != "," && this.peek() != "]" && this.peek() != "}") {
             this.advance()
@@ -726,7 +726,7 @@ class YamlFlowParser {
         return _parsePlainScalar(slice)
     }
 
-    ref parseValue() -> YamlValue {
+    parseValue() -> YamlValue {
         this.skipWs()
         if (this.atEnd()) { return YamlValue.Null }
         var c = this.peek()
@@ -736,7 +736,7 @@ class YamlFlowParser {
         return this.parsePlain()
     }
 
-    ref parseSequence() -> YamlValue {
+    parseSequence() -> YamlValue {
         var arr: Array<YamlValue> = []
         this.advance()
         this.skipWs()
@@ -761,7 +761,7 @@ class YamlFlowParser {
         return YamlValue.Sequence { items: arr }
     }
 
-    ref parseMapping() -> YamlValue {
+    parseMapping() -> YamlValue {
         var mapping = YamlMapping()
         this.advance()
         this.skipWs()
@@ -818,11 +818,11 @@ class YamlParser {
         return _lineClean(this.lines[this.index])
     }
 
-    ref addError(kind: YamlErrorKind, message: string) {
+    addError(kind: YamlErrorKind, message: string) {
         this.errors.push(YamlDiagnostic(kind, this.index + 1, 1, message))
     }
 
-    ref skipIgnorable() {
+    skipIgnorable() {
         while (!this.atEnd()) {
             var t = textutil.trim(this.cleanLine())
             if (t == "" || t == "---") {
@@ -833,7 +833,7 @@ class YamlParser {
         }
     }
 
-    ref nextIndent() -> i64 {
+    nextIndent() -> i64 {
         var p = this.index
         while (p < len(this.lines)) {
             var clean = _lineClean(this.lines[p])
@@ -844,7 +844,7 @@ class YamlParser {
         return -1
     }
 
-    ref parseValueText(text: string) -> YamlValue {
+    parseValueText(text: string) -> YamlValue {
         var raw = textutil.trim(_stripInlineComment(text))
         if (len(raw) == 0) { return YamlValue.Null }
         if (_isTag(raw)) {
@@ -876,7 +876,7 @@ class YamlParser {
         return _parsePlainScalar(raw)
     }
 
-    ref parseBlockScalar(header: string, parentIndent: i64) -> string {
+    parseBlockScalar(header: string, parentIndent: i64) -> string {
         var style = header.slice(0, (0) + 1)
         var chomp = ""
         if (len(header) > 1) {
@@ -923,7 +923,7 @@ class YamlParser {
         return out.toString()
     }
 
-    ref parseMappingLineInto(mapping: ref YamlMapping, content: string, indent: i64) {
+    parseMappingLineInto(mapping: ref YamlMapping, content: string, indent: i64) {
         var colon = _findTopColon(content)
         if (colon < 0) {
             this.addError(YamlErrorKind.InvalidMapping, "expected ':' in mapping entry")
@@ -953,7 +953,7 @@ class YamlParser {
         }
     }
 
-    ref parseMapping(indent: i64, depth: i64) -> YamlValue {
+    parseMapping(indent: i64, depth: i64) -> YamlValue {
         var mapping = YamlMapping()
         while (!this.atEnd()) {
             this.skipIgnorable()
@@ -971,7 +971,7 @@ class YamlParser {
         return YamlValue.Mapping { mapping: mapping }
     }
 
-    ref parseSequenceInlineMapping(afterDash: string, indent: i64, depth: i64) -> YamlValue {
+    parseSequenceInlineMapping(afterDash: string, indent: i64, depth: i64) -> YamlValue {
         var mapping = YamlMapping()
         var colon = _findTopColon(afterDash)
         if (colon < 0) {
@@ -1016,7 +1016,7 @@ class YamlParser {
         return YamlValue.Mapping { mapping: mapping }
     }
 
-    ref parseSequence(indent: i64, depth: i64) -> YamlValue {
+    parseSequence(indent: i64, depth: i64) -> YamlValue {
         var arr: Array<YamlValue> = []
         while (!this.atEnd()) {
             this.skipIgnorable()
@@ -1055,7 +1055,7 @@ class YamlParser {
         return YamlValue.Sequence { items: arr }
     }
 
-    ref parseBlock(indent: i64, depth: i64) -> YamlValue {
+    parseBlock(indent: i64, depth: i64) -> YamlValue {
         if (depth > YAML_MAX_DEPTH) {
             this.addError(YamlErrorKind.MaxDepthExceeded, "maximum nesting depth exceeded")
             return YamlValue.Null
@@ -1071,7 +1071,7 @@ class YamlParser {
         return this.parseMapping(lineIndent, depth)
     }
 
-    ref parseDocument() {
+    parseDocument() {
         this.root = this.parseBlock(0, 0)
     }
 }

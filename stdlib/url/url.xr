@@ -22,12 +22,12 @@ export class QueryParams {
         this.values = []
     }
 
-    ref add(name: string, value: string) {
+    add(name: string, value: string) {
         this.names.push(name)
         this.values.push(value)
     }
 
-    ref set(name: string, value: string) {
+    set(name: string, value: string) {
         var nextNames: Array<string> = []
         var nextValues: Array<string> = []
         var replaced = false

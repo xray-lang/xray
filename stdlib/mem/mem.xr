@@ -59,7 +59,7 @@ export final class Buffer implements Lengthable {
     // ref buffer, callback). No mutable Slice may escape this owner.
     borrowPtr() -> MutPtr<u8> { return __bufferBorrowPtr(this._storage) }
 
-    ref resize(n: i64) -> bool {
+    resize(n: i64) -> bool {
         return __bufferResize(this._storage, _allocationSize(n))
     }
 }

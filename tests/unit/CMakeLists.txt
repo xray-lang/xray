@@ -4637,3 +4637,6 @@ else()
 endif()
 add_test(NAME test_xir_semantic84_receiving COMMAND test_xir_semantic84_receiving)
 set_tests_properties(test_xir_semantic84_receiving PROPERTIES TIMEOUT 30 LABELS "unit;xir;wire;ownership;independent")
+
+# Ordinary source classes retain the language receiver contract.
+include(${CMAKE_CURRENT_SOURCE_DIR}/stdlib/class_receivers.cmake)

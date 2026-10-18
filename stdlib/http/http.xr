@@ -279,7 +279,7 @@ export class CookieJar {
 
     count: i64 { fn() { return len(this.cookies) } }
 
-    ref add(cookie: Cookie, nowSeconds: i64 = 0) {
+    add(cookie: Cookie, nowSeconds: i64 = 0) {
         var now = _cookieNow(nowSeconds)
         var next: Array<Cookie> = []
         var replaced = false
@@ -302,7 +302,7 @@ export class CookieJar {
         this.cookies = next
     }
 
-    ref addFromResponse(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: i64 = 0) {
+    addFromResponse(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: i64 = 0) {
         var now = _cookieNow(nowSeconds)
         for (var i = 0; i < len(setCookieHeaders); i++) {
             var cookie = parseSetCookie(setCookieHeaders[i], requestDomain, requestPath, now)
@@ -325,7 +325,7 @@ export class CookieJar {
         return out.toString()
     }
 
-    ref cleanup(nowSeconds: i64 = 0) {
+    cleanup(nowSeconds: i64 = 0) {
         var now = _cookieNow(nowSeconds)
         var next: Array<Cookie> = []
         for (var i = 0; i < len(this.cookies); i++) {
@@ -335,7 +335,7 @@ export class CookieJar {
         this.cookies = next
     }
 
-    ref clearDomain(domain: string) {
+    clearDomain(domain: string) {
         var domainKey = text.lower(domain)
         var next: Array<Cookie> = []
         for (var i = 0; i < len(this.cookies); i++) {
@@ -345,7 +345,7 @@ export class CookieJar {
         this.cookies = next
     }
 
-    ref clear() {
+    clear() {
         this.cookies = []
     }
 }
@@ -625,7 +625,7 @@ export class Router<T> {
         this.values = []
     }
 
-    ref add(method: string, path: string, value: T) -> bool {
+    add(method: string, path: string, value: T) -> bool {
         var m = _routeMethodKey(method)
         if (len(m) == 0 || !_routePatternValid(path)) { return false }
         for (var i = 0; i < len(this.methods); i++) {
@@ -721,16 +721,16 @@ class _ServerRouter {
         this.routes = []
     }
 
-    ref add<T: JSON.Encodable>(method: string, path: string, value: T) -> bool {
+    add<T: JSON.Encodable>(method: string, path: string, value: T) -> bool {
         return this.addRouteJson(method, path, JSON.value(value), _serverDefaultHandler, false)
     }
 
-    ref addHandler(method: string, path: string, handler: fn(HttpRequest) -> HttpResponse) -> bool {
+    addHandler(method: string, path: string, handler: fn(HttpRequest) -> HttpResponse) -> bool {
         var value: JSON.Value = JSON.value({})
         return this.addRouteJson(method, path, value, handler, true)
     }
 
-    ref addRouteJson(
+    addRouteJson(
         method: string,
         path: string,
         value: JSON.Value,
@@ -1081,11 +1081,11 @@ export class Server {
         this.router = _ServerRouter()
     }
 
-    ref route<T: JSON.Encodable>(method: string, path: string, value: T) -> bool {
+    route<T: JSON.Encodable>(method: string, path: string, value: T) -> bool {
         return this.router.add(method, path, value)
     }
 
-    ref routeHandler(
+    routeHandler(
         method: string,
         path: string,
         handler: fn(HttpRequest) -> HttpResponse
@@ -1128,7 +1128,7 @@ export class FormData {
         this.maxFileSize = _normalizeLimit(maxFileSize)
     }
 
-    ref append(name: string, value: string) -> bool {
+    append(name: string, value: string) -> bool {
         var size = len(value.bytes())
         if (_limitExceeded(this.maxTotalSize, this.totalSize, size)) {
             return false
@@ -1138,7 +1138,7 @@ export class FormData {
         return true
     }
 
-    ref appendFile(name: string, path: Path) -> bool {
+    appendFile(name: string, path: Path) -> bool {
         var data = io.readFile(path)
         if (data == null) { return false }
 
@@ -1300,14 +1300,14 @@ export class Headers {
         this.values = []
     }
 
-    ref add(name: string, value: string) {
+    add(name: string, value: string) {
         if (!_headerNameValid(name)) { throw HttpError.InvalidHeaderName { name: name } }
         if (!_headerValueValid(value)) { throw HttpError.InvalidHeaderValue { value: value } }
         this.names.push(name)
         this.values.push(value)
     }
 
-    ref set(name: string, value: string) {
+    set(name: string, value: string) {
         if (!_headerNameValid(name)) { throw HttpError.InvalidHeaderName { name: name } }
         if (!_headerValueValid(value)) { throw HttpError.InvalidHeaderValue { value: value } }
         var nextNames: Array<string> = []
