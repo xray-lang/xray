@@ -14,7 +14,6 @@
 #include "xmodule.h"
 #include "xmodule_diagnostic.h"
 #include "xray_vm.h"
-#include "../stdlib/xstdlib_vm_fastpath.h"
 #include "xmodule_graph.h"
 #include "xmodule_resolver.h"
 #include "xproject.h"
@@ -1098,12 +1097,6 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
         } else {
             xr_log_warning("module", "failed to execute extension '%s'", path);
         }
-        return false;
-    }
-
-    if (!xr_stdlib_vm_fastpath_install(isolate, module, module_name)) {
-        xr_log_warning("module", "failed to install generated stdlib-native entries for '%s'",
-                       module_name);
         return false;
     }
 

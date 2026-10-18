@@ -22,7 +22,6 @@ class BoundaryManifest:
     root: Path
     raw: dict[str, Any]
     modules: tuple[dict[str, Any], ...]
-    vm_fastpaths: tuple[dict[str, Any], ...]
 
     @property
     def by_name(self) -> dict[str, dict[str, Any]]:
@@ -61,7 +60,6 @@ def load_manifest(root: Path) -> BoundaryManifest:
         root=root,
         raw=raw,
         modules=tuple(raw.get("module", ())),
-        vm_fastpaths=tuple(raw.get("vm_fastpath", ())),
     )
 
 

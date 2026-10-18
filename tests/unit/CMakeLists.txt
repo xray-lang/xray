@@ -179,7 +179,7 @@ endif()
 # Compiler-owner tests need source/module/compiler state but not the finalized
 # stage-2 embedded stdlib. Keeping them on the bootstrap aggregate prevents an
 # edit to the compiler or Program producer from rebuilding every stdlib
-# bytecode and VM fastpath before the focused test can start.
+# bytecode before the focused test can start.
 macro(add_xray_bootstrap_executable name source)
     if(TARGET xray_core_objs AND TARGET xray_stdlib_bootstrap_core)
         add_executable(${name} ${source} ${ARGN})
@@ -967,7 +967,7 @@ add_xray_bootstrap_executable(test_xr_program_source_build
     plan/target_profile_test_fixture.c)
 # This test owns source -> XrProgram fixtures and independent VM/native oracles.
 # Linking the final xray_core archive made its edit/build
-# loop wait for the unrelated stage-2 stdlib bytecode and VM-fastpath
+# loop wait for the unrelated stage-2 stdlib bytecode
 # generators. Use the same stage-1 aggregate as xray_stdlib_bcgen: all common
 # objects plus the bootstrap embedded stdlib table. Full product and
 # embedded-stdlib tests continue to link the final archive and retain their
@@ -3656,23 +3656,11 @@ set_tests_properties(test_native_declaration_schema PROPERTIES LABELS "stdlib;me
 add_test(NAME test_regression_corpus_ratchet
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/unit/frontend/test_regression_corpus_ratchet.py)
 set_tests_properties(test_regression_corpus_ratchet PROPERTIES LABELS "unit;frontend;regression" TIMEOUT 30)
-if(XRAY_STDLIB_VM_FASTPATHS)
-    add_xray_unit_test(test_stdlib_vm_fastpath_abi stdlib/test_stdlib_vm_fastpath_abi.c)
-    set_tests_properties(test_stdlib_vm_fastpath_abi PROPERTIES
-        LABELS "stdlib;performance;abi;task-256"
-        RUN_SERIAL TRUE
-        TIMEOUT 120
-    )
-    add_test(
-        NAME test_generate_vm_fastpaths
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/test_generate_vm_fastpaths.py
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    )
-    set_tests_properties(test_generate_vm_fastpaths PROPERTIES
-        LABELS "stdlib;metadata;tooling;task-256"
-    )
-endif()
+# The shared value ABI remains independent of stdlib implementation choices.
+add_executable(test_hosted_value_abi stdlib/test_hosted_value_abi.c)
+target_include_directories(test_hosted_value_abi PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME test_hosted_value_abi COMMAND test_hosted_value_abi)
+set_tests_properties(test_hosted_value_abi PROPERTIES LABELS "unit;abi")
 add_test(
     NAME test_stdlib_generators_content_stable
     COMMAND ${XRAY_PYTHON}

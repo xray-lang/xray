@@ -3,7 +3,6 @@
 schema = 3
 
 [governance]
-vm_fastpath_option = "XRAY_STDLIB_VM_FASTPATHS"
 export_authority = "boundary_manifest_semantic_source"
 l4_algorithm_review_task = "task-256"
 l4_algorithm_reviewed = [
@@ -14,7 +13,6 @@ error_model = "enum_value_channel"
 failure_as_data = "domain_adt"
 forbidden_prelude_symbols = ["Result"]
 regex_reassessment_triggers = [
-  "generated_stdlib_vm_fastpaths_fully_landed",
   "freestanding_runtime_requires_regex_without_native_library",
 ]
 
@@ -26,59 +24,6 @@ entry_abi = "XrValue(XrHostedFragmentContext*,XrValue*,uint32_t;signal)"
 error_channel = "vm_pending_error"
 ownership = "borrow_args_owned_result"
 unsupported_policy = "fail_closed"
-
-# `log` owns mutable module state shared by its variadic source implementation.
-# A hosted fragment has a separate generated-C module image, so exporting only
-# the fixed-arity control functions would split one logical logger into two
-# state stores. Keep the complete stateful surface on the canonical VM module
-# until hosted fragments can bind directly to VM-owned module slots.
-[[hosted_fragment_deferred]]
-symbol = "log.enableAsync"
-reason = "stateful-module-slot-identity"
-
-[[hosted_fragment_deferred]]
-symbol = "log.enableSource"
-reason = "stateful-module-slot-identity"
-
-[[hosted_fragment_deferred]]
-symbol = "log.flush"
-reason = "stateful-module-slot-identity"
-
-[[hosted_fragment_deferred]]
-symbol = "log.isEnabled"
-reason = "stateful-module-slot-identity"
-
-[[hosted_fragment_deferred]]
-symbol = "log.setFormat"
-reason = "stateful-module-slot-identity"
-
-[[hosted_fragment_deferred]]
-symbol = "log.setLevel"
-reason = "stateful-module-slot-identity"
-
-[[hosted_fragment_deferred]]
-symbol = "cluster.join"
-reason = "canonical-source-method-dependency"
-
-# The cluster runtime generation, source state, and peer directory are mutable
-# module slots. A hosted fragment would read and write its own generated-C
-# image of them while `join` updates the VM module, so every entry that touches
-# that state stays on the canonical VM module with `join`.
-[[hosted_fragment_deferred]]
-symbol = "cluster.discover"
-reason = "stateful-module-slot-identity"
-
-[[hosted_fragment_deferred]]
-symbol = "cluster.nodes"
-reason = "stateful-module-slot-identity"
-
-[[hosted_fragment_deferred]]
-symbol = "cluster.self"
-reason = "stateful-module-slot-identity"
-
-[[hosted_fragment_deferred]]
-symbol = "cluster.stop"
-reason = "stateful-module-slot-identity"
 
 [dynamic_audit]
 # These modules still expose fixed-shape dynamic APIs and must be migrated
@@ -473,42 +418,3 @@ public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
 perf_suite = "stdlib/xml"
-
-# Generated VM-native entries use the canonical hosted object ABI above. New
-# entries fail closed unless the generator supports their exact ABI batch and
-# they provide source, old-C oracle, direct ABI gate, workload benchmark, diff
-# coverage, and the global switch. ABI microbenchmarks deliberately do not use
-# the process-level VM/AOT benchmark runner: that runner mostly measures process
-# startup, while the ABI gate compares generated and legacy-C adapters directly.
-
-[[vm_fastpath]]
-symbol = "http.isRedirectStatus"
-module = "http"
-member = "isRedirectStatus"
-reference = "stdlib/http/http.xr::isRedirectStatus"
-native = "xr_generated_http_is_redirect_status"
-abi = "i64->bool"
-batch = "scalar"
-reason = "Pure scalar protocol predicate; first generated-native ABI batch"
-abi_gate = "test_stdlib_vm_fastpath_abi"
-workload_benchmark = "http.head.contract"
-diff_case = "tests/diff/cases/semantics/stdlib/http_redirect_status_direct.xr"
-oracle = "src/shared/xr_http_url.c::is_redirect_status"
-review_date = "2026-08-02"
-disable_build_option = "XRAY_STDLIB_VM_FASTPATHS"
-
-[[vm_fastpath]]
-symbol = "ws.isValidCloseCode"
-module = "ws"
-member = "isValidCloseCode"
-reference = "stdlib/ws/ws.xr::isValidCloseCode"
-native = "xr_generated_ws_is_valid_close_code"
-abi = "i64->bool"
-batch = "scalar"
-reason = "Pure scalar protocol predicate; first generated-native ABI batch"
-abi_gate = "test_stdlib_vm_fastpath_abi"
-workload_benchmark = "ws.protocol.contract"
-diff_case = "tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.xr"
-oracle = "tests/unit/stdlib/test_stdlib_vm_fastpath_abi.c::legacy_ws_valid_close_code"
-review_date = "2026-08-02"
-disable_build_option = "XRAY_STDLIB_VM_FASTPATHS"

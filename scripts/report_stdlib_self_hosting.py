@@ -24,7 +24,7 @@ from typing import Any
 from check_stdlib_boundary import (
     check_dynamic,
     check_error_model_policy,
-    check_fastpaths,
+    check_hosted_abi,
     check_manifest,
     check_semantic_owners,
 )
@@ -113,7 +113,7 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
         check_manifest(root)
         + check_semantic_owners(root)
         + check_error_model_policy(root)
-        + check_fastpaths(root)
+        + check_hosted_abi(root)
     )
     dynamic_errors, dynamic_report = check_dynamic(root)
     errors.extend(dynamic_errors)
@@ -247,7 +247,6 @@ def build_report(root: Path) -> tuple[list[str], dict[str, Any]]:
         "dynamic_surface": {
             **dynamic_report,
         },
-        "vm_fastpaths": list(manifest.vm_fastpaths),
         "correctness_contracts": contracts,
         "performance_governance": {
             "schema": perf.get("schema"),
@@ -281,7 +280,6 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"- Policy agreement: {report['status']['policy_agreement']}",
             f"- Native boundary modules: {len(report['remaining_native_boundaries'])}",
             f"- Dynamic migration debts: {report['dynamic_surface']['migration_debt_count']}",
-            f"- Approved VM fastpaths: {len(report['vm_fastpaths'])}",
             f"- Migration contracts: {len(report['correctness_contracts'])}",
             f"- Governed performance suites: {report['performance_governance']['governed_suite_count']}",
             f"- Active performance benchmarks: {len(report['performance_governance']['active_benchmarks'])}",

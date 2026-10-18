@@ -23,7 +23,7 @@ from check_stdlib_boundary import (  # noqa: E402
     check_builtin_distribution,
     check_dynamic,
     check_error_model_policy,
-    check_fastpaths,
+    check_hosted_abi,
     check_manifest,
     check_semantic_owners,
 )
@@ -65,9 +65,9 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         self.assertNotIn("prelude", loadable_modules(ROOT))
 
         cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
-        runner = (ROOT / "src/app/mcp/xmcp_tools_run.c").read_text(encoding="utf-8")
+        runner = (ROOT / "src/app/mcp/xmcp_run_source.c").read_text(encoding="utf-8")
         self.assertNotIn("XRAY_STDLIB_SOURCELESS_MODULES prelude", cmake)
-        run_allowlist = runner.split("RUN_ALLOWED_MODULES[] = {", 1)[1].split("};", 1)[0]
+        run_allowlist = runner.split("allowed_modules[] = {", 1)[1].split("};", 1)[0]
         self.assertNotIn('"prelude"', run_allowlist)
 
         registry = (ROOT / "stdlib/prelude/builtin_symbols.def").read_text(
@@ -87,6 +87,27 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
             self.assertNotIn(name, native_entry_binder_modules(ROOT))
             self.assertEqual([], module.get("public_native", []))
         self.assertEqual([], check_builtin_distribution(ROOT))
+
+    def test_distribution_checks_imports_in_non_utf8_fixtures(self) -> None:
+        selected = ROOT / "stdlib/regex/regex.xr"
+        read_bytes = Path.read_bytes
+        cases = (
+            (b"\xff\nfn main() {}\n", None),
+            (b'\xff\nimport "xray/crypto"\n', 'import "xray/crypto'),
+            (b'\xff\nimport { Client } from "xray/http2"\n',
+             'import { Client } from "xray/http2'),
+        )
+        for content, forbidden in cases:
+            with self.subTest(content=content):
+                with mock.patch.object(Path, "read_bytes", autospec=True,
+                    side_effect=lambda path: content if path == selected else read_bytes(path)):
+                    errors = check_builtin_distribution(ROOT)
+                if forbidden is None:
+                    self.assertEqual([], errors)
+                else:
+                    self.assertEqual([
+                        f"{selected.relative_to(ROOT)}: removed package import remains: {forbidden}"
+                    ], errors)
 
     def test_module_native_entries_are_bound_by_a_generated_binder(self) -> None:
         manifest = load_manifest(ROOT)
@@ -142,7 +163,6 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
             root=ROOT,
             raw=raw,
             modules=tuple(raw["module"]),
-            vm_fastpaths=tuple(raw.get("vm_fastpath", ())),
         )
         with mock.patch("check_stdlib_boundary.load_manifest", return_value=mutated):
             errors = check_manifest(ROOT)
@@ -191,9 +211,9 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "requires canonical source module"):
                 stdlibgen.validate_provider_source_owners(root, [foreign])
 
-    def test_semantic_native_and_fastpath_contracts_are_source_derived(self) -> None:
+    def test_semantic_native_and_hosted_abi_are_source_derived(self) -> None:
         self.assertEqual([], check_semantic_owners(ROOT))
-        self.assertEqual([], check_fastpaths(ROOT))
+        self.assertEqual([], check_hosted_abi(ROOT))
 
     def test_regex_object_and_literal_policy_are_source_owned(self) -> None:
         source = (ROOT / "stdlib/regex/regex.xr").read_text(encoding="utf-8")
@@ -201,7 +221,7 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
         definitions = (ROOT / "stdlib/defs/core.def").read_text(encoding="utf-8")
         canonicalizer = (ROOT / "src/frontend/canonical/xcanon.c").read_text(encoding="utf-8")
         self.assertIn("export final class Regex {", source)
-        self.assertIn("constructor(pattern: string, flags: string", source)
+        self.assertIn("init(pattern: string, flags: string", source)
         self.assertIn("fn rxParseFlags(", source)
         self.assertIn("this.prog = Array<i64>()", source)
         self.assertIn('xr_ast_new_expr(ctx->session, "regex", "Regex"', canonicalizer)

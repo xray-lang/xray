@@ -541,6 +541,23 @@ static XrXirStatus effect_invocation_return_origins(EffectInvocationFlow *flow,
     } else if (op->op!=XR_XIR_CALL && op->op!=XR_XIR_CALL_DEFAULT && op->op!=XR_XIR_CALL_INDIRECT)
         return XR_XIR_OK;
     if (!effect_physical_origin(flow->body.domain.types,op->type)) return XR_XIR_OK;
+    /* An opaque callee is a real alternative, not a temporarily empty target
+     * set. Its Iterator result retains Unknown without exposing a target. */
+    if(effect_physical_iterator(flow->body.domain.types,op->type)) {
+        XrXirInstruction storage;const XrXirInstruction *callee_op=op;
+        XrXirStatus status=effect_invocation_flow_instruction(flow,frontier,&storage,&callee_op);
+        if(status!=XR_XIR_OK) return status;
+        if(callee_op->op==XR_XIR_CALL_INDIRECT || callee_op->op==XR_XIR_INVOKE_INDIRECT) {
+            if(callee_op->immediate<0 || (uint64_t)callee_op->immediate>=flow->values) return XR_XIR_BAD_STRUCTURE;
+            uint64_t *callee=effect_invocation_row(flow,(uint32_t)callee_op->immediate);
+            uint32_t opaque=owner->final->site_count+flow->basis.parameters;
+            if(!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+            if(callee && (callee[opaque/64]&(UINT64_C(1)<<(opaque%64)))) {
+                status=effect_invocation_opaque(flow,destination,false);
+                if(status!=XR_XIR_OK) return status;
+            }
+        }
+    }
     for (uint32_t e=owner->final->nodes[flow->node].edge_head;e!=UINT32_MAX;e=owner->final->edges[e].next) {
         if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
         if (e>=owner->final->edge_count || owner->final->edges[e].caller!=flow->node ||

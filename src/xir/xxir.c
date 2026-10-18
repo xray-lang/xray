@@ -12,6 +12,7 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_source_replay_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
@@ -548,6 +549,16 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
 }
 XrXirStatus xr_xir_compile_artifact_verify(const XrXirArtifact *artifact, XrXirDiagnostic *diagnostic) {
     return artifact_verify_owned_effects(artifact,NULL,NULL,diagnostic);
+}
+
+/* Raw implementation sources already need full inference. Keep its owner
+ * only within specialization so later current reads can replay its evidence. */
+XR_FUNC XrXirStatus xir_artifact_verify_raw_source_effects(const XrXirArtifact *artifact,
+    XrXirEffects **output,XrXirDiagnostic *diagnostic) {
+    if(!artifact || !output || *output || artifact->module.stage!=XR_XIR_CHECKED ||
+        artifact->module.provenance || !artifact->module.declarations || !artifact->module.declarations->implementations)
+        return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+    return artifact_verify_owned_effects(artifact,output,NULL,diagnostic);
 }
 
 /* An explicit owning collector still returns a new complete derivation.

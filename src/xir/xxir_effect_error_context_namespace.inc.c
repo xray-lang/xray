@@ -6,8 +6,27 @@ static XrXirStatus effect_final_error_unknown(const XrXirCompileContext *work,
     const EffectBodyMaterial *material,const EffectInvocationFinal *final,uint32_t node,uint32_t value,
     bool present,bool *unknown);
 
-/* Error rows keep the declaration prefix, then every remaining real invocation
- * node in node order. This mapping stores no second callable environment. */
+/* A factory's returned carrier has a separate Error equation from its escaping
+ * errors. The solver and receiving proof use this same current node census. */
+static XrXirStatus error_finite_returned_node(const XrXirCompileContext *work,
+    const EffectBodyMaterial *material,const EffectInvocationFinal *final,uint32_t node,bool *output) {
+    if(!output || node>=final->count || final->nodes[node].body>=effect_body_count(material))
+        return XR_XIR_BAD_STRUCTURE;
+    *output=false;
+    uint32_t function=final->nodes[node].body;
+    const XrXirDeclarations *declarations=material->domain.declarations;
+    if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
+    if(declarations && declarations->functions &&
+        (declarations->functions[function].promises&XR_XIR_FUNCTION_GENERATOR)) return XR_XIR_OK;
+    EffectBodyRequest body=effect_body_owned_request(work,material);
+    EffectBodyFunctionHead head={0};XrXirStatus status=effect_body_request_head(&body,function,&head);
+    if(status!=XR_XIR_OK) return status;
+    const XrXirTypeNode *type=xr_xir_type_node(material->domain.types,head.result);
+    *output=type && (type->kind==XR_XIR_TYPE_TASK || type->kind==XR_XIR_TYPE_ITERATOR);
+    return XR_XIR_OK;
+}
+/* Declaration roots lead, followed by other invocation nodes, then returned
+ * carrier rows in node order. Row purpose is part of identity, not a new call. */
 static XrXirStatus error_finite_context_count(const XrXirCompileContext *work,
     const EffectErrorFinite *proof,uint32_t *output,bool *contextual) {
     const EffectInvocationFinal *final=proof->invocations;
@@ -40,9 +59,17 @@ static XrXirStatus error_finite_context_count(const XrXirCompileContext *work,
                 uint32_t opcode=XR_XIR_INVALID;
                 status=effect_body_run_word(&body,ref,ref->first+i,0,&opcode);
                 if(status!=XR_XIR_OK) return status;
-                if(opcode==XR_XIR_CALL_INDIRECT || opcode==XR_XIR_INVOKE_INDIRECT ||
-                    effect_invocation_iterator_operation((XrXirOp)opcode)) {
-                    *output=final->count;*contextual=true;return XR_XIR_OK;
+                if(opcode==XR_XIR_CALL_INDIRECT || opcode==XR_XIR_INVOKE_INDIRECT) {
+                    *output=final->count;*contextual=true;
+                    for(uint32_t n=0;n<final->count;++n) {
+                        bool returned=false;status=error_finite_returned_node(work,proof->material,final,n,&returned);
+                        if(status!=XR_XIR_OK) return status;
+                        if(returned) {
+                            if(*output==UINT32_MAX) return XR_XIR_BUDGET;
+                            ++*output;
+                        }
+                    }
+                    return XR_XIR_OK;
                 }
             }
         }
@@ -59,6 +86,17 @@ static XrXirStatus error_finite_context_node(const XrXirCompileContext *work,
         if(node>=final->count || final->nodes[node].body!=context) return XR_XIR_BAD_STRUCTURE;
         *output=node;return XR_XIR_OK;
     }
+    uint32_t normal=proof->contextual?final->count:proof->functions;
+    if(context>=normal) {
+        uint32_t at=normal;
+        for(uint32_t n=0;n<final->count;++n) {
+            bool returned=false;
+            XrXirStatus status=error_finite_returned_node(work,proof->material,final,n,&returned);
+            if(status!=XR_XIR_OK) return status;
+            if(returned && at++==context) { *output=n;return XR_XIR_OK; }
+        }
+        return XR_XIR_BAD_STRUCTURE;
+    }
     uint32_t at=proof->functions;
     for(uint32_t n=0;n<final->count;++n) {
         bool root=false;
@@ -72,15 +110,18 @@ static XrXirStatus error_finite_context_node(const XrXirCompileContext *work,
     return XR_XIR_BAD_STRUCTURE;
 }
 static XrXirStatus error_finite_node_context(const XrXirCompileContext *work,
-    const EffectErrorFinite *proof,uint32_t node,uint32_t *output) {
+    const EffectErrorFinite *proof,uint32_t node,bool returned,uint32_t *output) {
     if(node>=proof->invocations->count) return XR_XIR_BAD_STRUCTURE;
     if(!proof->contextual) {
+        if(returned) return XR_XIR_BAD_STRUCTURE;
         *output=proof->invocations->nodes[node].body;
         return *output<proof->functions?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     }
     for(uint32_t c=0;c<proof->contexts;++c) {
         if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-        if(proof->rows[c].node==node) { *output=c;return XR_XIR_OK; }
+        if(proof->rows[c].returned==(uint32_t)returned && proof->rows[c].node==node) {
+            *output=c;return XR_XIR_OK;
+        }
     }
     return XR_XIR_BAD_STRUCTURE;
 }

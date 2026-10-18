@@ -323,14 +323,9 @@ def _run_main(argv: list[str]) -> int:
     if build_targets:
         log(f"build targets={' '.join(build_targets)}")
 
-    # The unified target-machine line has one supported bootstrap shape: the
-    # optional generated stdlib VM fastpaths are disabled. Their generator is
-    # itself a native AOT consumer, so enabling it makes the sanitizer build
-    # depend on target families that this lane is meant to validate. Load the
-    # stdlib from source as well: the focused compiler lane must not depend on
-    # completing the separate self-hosted-bytecode bootstrap before ASan can
-    # execute the compiler under test. Pin both options instead of inheriting a
-    # cache/default and accidentally measuring a different compiler.
+    # Load the stdlib from source: compiler checks must not depend on completing
+    # the separate embedded-bytecode bootstrap. Pin the option so cache reuse
+    # cannot silently change the compiler being measured.
     c_compiler = "clang-cl" if platform.IS_WINDOWS else "clang"
     cxx_compiler = "clang-cl" if platform.IS_WINDOWS else "clang++"
     resolved_c_compiler = Path(sanitizer.resolve_compiler_command(c_compiler)).as_posix()
@@ -341,7 +336,6 @@ def _run_main(argv: list[str]) -> int:
             "ENABLE_ASAN=ON",
             "ENABLE_UBSAN=ON",
             "XR_STDLIB_FROM_FILE=ON",
-            "XRAY_STDLIB_VM_FASTPATHS=OFF",
         ),
         # clang-cl's ASan runtime interposes the release UCRT allocator.  A
         # Debug-profile build that links ucrtbased.dll instead reports false
@@ -356,7 +350,6 @@ def _run_main(argv: list[str]) -> int:
             "ENABLE_ASAN=ON",
             "ENABLE_UBSAN=ON",
             "XR_STDLIB_FROM_FILE=ON",
-            "XRAY_STDLIB_VM_FASTPATHS=OFF",
             "CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL",
             f"CMAKE_C_COMPILER={resolved_c_compiler}",
             f"CMAKE_CXX_COMPILER={resolved_cxx_compiler}",

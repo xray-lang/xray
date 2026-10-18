@@ -15,7 +15,7 @@ static XrXirStatus effect_role_range(const XrXirCompileContext *work,
 static XrXirStatus effect_role_material_frame(const XrXirCompileContext *work,
     const EffectBodyMaterial *material);
 typedef struct EffectErrorFiniteFact { uint64_t coordinate;uint32_t rank; } EffectErrorFiniteFact;
-typedef struct EffectErrorFiniteRow { uint64_t first,end;uint32_t blocks,values,node; } EffectErrorFiniteRow;
+typedef struct EffectErrorFiniteRow { uint64_t first,end;uint32_t blocks,values,node,returned; } EffectErrorFiniteRow;
 typedef struct EffectErrorMarkers EffectErrorMarkers;
 static void error_markers_free(EffectErrorMarkers *markers);
 typedef struct EffectErrorBindings EffectErrorBindings;
@@ -104,7 +104,7 @@ static XrXirStatus error_finite_equation(const EffectErrorFiniteRead *read,
     *output=(EffectErrorEquationRead){.body=effect_body_owned_request(read->work,read->proof->material),
         .work=read->work,.atoms=read->proof->atoms,.context=function,.function=body,
         .atom_count=read->proof->atom_count,.words=read->proof->words,.owner=read,
-        .entry=error_finite_entry,.call=error_finite_call};
+        .entry=error_finite_entry,.call=error_finite_call,.result=error_finite_result};
     if(read->current) output->body.current=&read->current->input;
     return effect_body_request_head(&output->body,output->function,&output->head);
 }
@@ -161,6 +161,7 @@ static XrXirStatus error_finite_predecessors(const EffectErrorEquationRead *equa
 static XrXirStatus error_finite_summary(const EffectErrorEquationRead *equation,
     uint32_t word,uint64_t *output) {
     const EffectErrorFiniteRead *read=equation->owner;uint64_t result=0;
+    bool returned=read->proof->rows[equation->context].returned!=0;
     for(uint32_t b=0;b<equation->head.block_count;++b) {
         bool reachable=false;XrXirStatus status=error_finite_reachable(read,equation->context,b,&reachable);
         if(status!=XR_XIR_OK) return status;
@@ -169,7 +170,10 @@ static XrXirStatus error_finite_summary(const EffectErrorEquationRead *equation,
         for(uint32_t i=block->first;i-block->first<block->count;++i) {
             XrXirInstruction op;uint64_t contribution=0;status=error_equation_operation(equation,i,&op);
             if(status!=XR_XIR_OK) return status;
-            if(op.op==XR_XIR_THROW) status=error_equation_value(equation,b,i,op.args[0],word,&contribution);
+            if(returned) {
+                if(op.op==XR_XIR_RETURN)
+                    status=error_equation_value(equation,b,i,op.args[0],word,&contribution);
+            } else if(op.op==XR_XIR_THROW) status=error_equation_value(equation,b,i,op.args[0],word,&contribution);
             else if(op.op==XR_XIR_CALL || op.op==XR_XIR_CALL_DEFAULT || op.op==XR_XIR_CALL_INDIRECT ||
                 op.op==XR_XIR_CALL_REQUIREMENT) status=equation->call(equation,i,word,&contribution);
             if(status!=XR_XIR_OK) return status;
@@ -294,7 +298,9 @@ static XrXirStatus error_finite_geometry(const XrXirCompileContext *work,const E
         uint32_t node=UINT32_MAX;status=error_finite_context_node(work,proof,f,&node);
         if(status!=XR_XIR_OK) return status;
         const EffectErrorFiniteRow *row=&proof->rows[f];
-        if(row->node!=node || proof->invocations->nodes[node].body>=proof->functions) return XR_XIR_BAD_STRUCTURE;
+        uint32_t returned=proof->contextual && f>=proof->invocations->count;
+        if(row->node!=node || row->returned!=returned ||
+            proof->invocations->nodes[node].body>=proof->functions) return XR_XIR_BAD_STRUCTURE;
         const EffectBodyFunction *head=&proof->material->functions[proof->invocations->nodes[node].body];
         status=effect_role_range(work,head->blocks,head->block_count,sizeof(*head->blocks));
         if(status==XR_XIR_OK) status=effect_role_range(work,head->parameters,head->parameter_count,sizeof(*head->parameters));

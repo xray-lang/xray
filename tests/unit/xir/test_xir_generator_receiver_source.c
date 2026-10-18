@@ -68,14 +68,23 @@ static const char receiver_source[]=
     "export fn object_parameter()->i64{return await go object_parameter_worker()}\n"
     "fn main(){}\n";
 int main(int argc,char **argv) {
-    CHECK(argc==1 || argc==2);bool cell=argc==2 && !strcmp(argv[1],"--cell");receiver_opaque_return_cases();SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
+    CHECK(argc==1 || argc==2);
+    receiver_opaque_return_cases();
+    if(argc==2 && !strcmp(argv[1],"--opaque-bounds")) return 0;
+    if(argc==2 && !strcmp(argv[1],"--origin-controls")) {receiver_origin_cases();return 0;}
+    bool cell=argc==2 && !strcmp(argv[1],"--cell");SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"generator-receiver-captures",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,
         &(XrXirSourceText){NULL,receiver_source,sizeof(receiver_source)-1},&source,&diagnostic,NULL);
-    if(status!=XR_XIR_OK) fprintf(stderr,"Boundary Source status%u line%d: %s\n",status,diagnostic.line,diagnostic.message);
+    if(status!=XR_XIR_OK) {
+        XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(owner.context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"Boundary Source status%u line%d work%llu allocations%llu allocated%llu peak%llu live%llu: %s\n",status,diagnostic.line,
+            (unsigned long long)stats.work,(unsigned long long)stats.allocation_count,(unsigned long long)stats.allocated_bytes,
+            (unsigned long long)stats.peak_bytes,(unsigned long long)stats.live_bytes,diagnostic.message);
+    }
     CHECK(status==XR_XIR_OK && source.checked);xr_compile_session_free(session);
     XrXirCheckedPacket packet={0};XrXirArtifact *decoded=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);

@@ -155,6 +155,20 @@ static XrXirStatus effect_capture_initial_bit(EffectCaptureRead *read,const Effe
     if(!(input[word]&(UINT64_C(1)<<bit))) return XR_XIR_OK;
     return effect_capture_emit(read,(EffectCaptureFact){target->node,target->values+1+parameter,word,bit,rank});
 }
+/* The known-descriptor bit proves that the actual captured Class column is
+ * present. Its root and Unknown bits remain independent payload facts. */
+static XrXirStatus effect_capture_class_prefix(const EffectCaptureRead *read,
+    const EffectCaptureNode *target,const EffectCaptureActual *actual,bool *output) {
+    *output=false;
+    if(!actual->captured || actual->kind!=EFFECT_CAPTURE_CLASS) return XR_XIR_OK;
+    uint32_t known=target->basis.parameters+2;
+    if(actual->first>UINT32_MAX-known/64) return XR_XIR_BAD_STRUCTURE;
+    const EffectCaptureFact *fact=NULL;
+    XrXirStatus status=effect_capture_find(read,
+        (EffectCaptureFact){actual->node,actual->value,actual->first+known/64,known%64,0},&fact);
+    if(status==XR_XIR_OK) *output=fact!=NULL;
+    return status;
+}
 static XrXirStatus effect_capture_argument(EffectCaptureRead *read,uint32_t selected,uint32_t parameter) {
     const EffectInvocationEdge *edge=&read->final->edges[selected];EffectCaptureActual actual={0};
     XrXirStatus status=effect_capture_actual(read,selected,parameter,&actual);if(status!=XR_XIR_OK) return status;
@@ -164,7 +178,11 @@ static XrXirStatus effect_capture_argument(EffectCaptureRead *read,uint32_t sele
     const EffectCaptureNode *target=NULL;
     status=effect_capture_node_borrow(read,edge->target,&target_storage,&target);if(status!=XR_XIR_OK) return status;
     uint32_t destination=target->values+1+parameter;
-    if(actual.unbound || (actual.captured && actual.kind==EFFECT_CAPTURE_CLASS)) {
+    bool projected=false;status=effect_capture_class_prefix(read,target,&actual,&projected);
+    if(status!=XR_XIR_OK) return status;
+    if(actual.captured && actual.kind==EFFECT_CAPTURE_CLASS && !projected)
+        return read->builder?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    if(actual.unbound) {
         if(actual.kind==EFFECT_CAPTURE_CELL || actual.kind==EFFECT_CAPTURE_CLASS) {
             uint32_t unknown=target->basis.parameters+1;
             for(uint32_t bit=unknown;bit<=unknown+1;++bit) {
@@ -207,7 +225,10 @@ static XrXirStatus effect_capture_argument_word(const EffectCaptureRead *read,co
     const EffectCaptureActual *actual,uint32_t word,uint64_t *output) {
     uint64_t bits=0;
     if(actual->kind==EFFECT_CAPTURE_SCALAR) { *output=0;return XR_XIR_OK; }
-    if(actual->unbound || (actual->captured && actual->kind==EFFECT_CAPTURE_CLASS)) {
+    bool projected=false;XrXirStatus prefix_status=effect_capture_class_prefix(read,target,actual,&projected);
+    if(prefix_status!=XR_XIR_OK) return prefix_status;
+    if(actual->captured && actual->kind==EFFECT_CAPTURE_CLASS && !projected) return XR_XIR_UNRESOLVED;
+    if(actual->unbound) {
         if(actual->kind==EFFECT_CAPTURE_CELL || actual->kind==EFFECT_CAPTURE_CLASS) {
             for(uint32_t flag=1;flag<3;++flag) {
                 uint32_t bit=target->basis.parameters+flag;
@@ -257,6 +278,7 @@ static XrXirStatus effect_capture_edge_complete(const EffectCaptureRead *read,ui
         for(uint32_t w=0;w<target->basis.row_words;++w) {
             if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
             uint64_t expected=0;status=effect_capture_argument_word(read,target,&actual,w,&expected);
+            if(status==XR_XIR_UNRESOLVED) return XR_XIR_OK;
             if(status!=XR_XIR_OK) return status;
             if(expected!=read->final->nodes[edge->target].input[(uint64_t)p*target->basis.row_words+w]) return XR_XIR_OK;
         }
@@ -290,9 +312,9 @@ static XrXirStatus effect_capture_results(EffectCaptureRead *read,uint32_t selec
         if(status!=XR_XIR_OK) return status;
         if(kind!=EFFECT_CAPTURE_CALLABLE && kind!=EFFECT_CAPTURE_CLASS) continue;
         if(kind!=provided) return XR_XIR_BAD_TYPE;
-        /* An opaque return boundary retains its advertisement. Identities in
-         * the callee's value proof cannot cross that boundary as call targets. */
-        if(kind==EFFECT_CAPTURE_CALLABLE) {
+        /* Iterator returns carry actual producer origins. An opaque Callable
+         * return retains its advertisement without exposing hidden targets. */
+        if(kind==EFFECT_CAPTURE_CALLABLE && !effect_physical_iterator(read->body.domain.types,target->head.result)) {
             const XrXirTypeNode *signature=xr_xir_callable_signature(read->body.domain.types,target->head.result);
             bool returned=signature && !signature->parameter_span &&
                 (signature->flags&XR_XIR_CALLABLE_ROOT_MASK)==XR_XIR_CALLABLE_ROOT_NONE;
@@ -302,6 +324,22 @@ static XrXirStatus effect_capture_results(EffectCaptureRead *read,uint32_t selec
                 if(signature->parameters[p].mode!=XR_PARAM_READ) returned=false;
             }
             if(!returned) continue;
+        }
+        if(kind==EFFECT_CAPTURE_CALLABLE && effect_physical_iterator(read->body.domain.types,target->head.result)) {
+            EffectCaptureFact key={edge->target,target->values,0,0,0};uint32_t at=0;
+            status=effect_capture_lower(read,&key,&at);if(status!=XR_XIR_OK) return status;
+            uint64_t distance=UINT64_MAX;
+            for(;at<read->final->capture.count;++at) {
+                if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+                const EffectCaptureFact *fact=&read->final->capture.facts[at];
+                if(fact->node!=edge->target || fact->value!=target->values || fact->word>=target->basis.origin_words) break;
+                if(fact->rank<distance) distance=fact->rank;
+            }
+            if(distance!=UINT64_MAX) {
+                if(rank>distance) distance=rank;
+                status=effect_capture_emit(read,(EffectCaptureFact){edge->caller,caller->head.parameter_count+i,
+                    EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_RAW,distance+1});if(status!=XR_XIR_OK) return status;
+            }
         }
         if(kind==EFFECT_CAPTURE_CLASS) {
             if(edge->producer!=UINT32_MAX) continue;

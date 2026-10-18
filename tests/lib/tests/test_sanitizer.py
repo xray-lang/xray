@@ -623,17 +623,12 @@ class ReuseGuardTest(unittest.TestCase):
 
 
 class BuildSpecTest(unittest.TestCase):
-    def test_lanes_pin_supported_stdlib_bootstrap_shape(self):
-        # Sanitizer evidence must use the same bootstrap contract as every
-        # target-machine build. Inheriting the ON default would run a native AOT
-        # generator before the compiler under test has proved the required
-        # target families and can hang before sanitizer tests start.
+    def test_asan_pins_source_stdlib_bootstrap(self):
+        # Compiler checks must not silently inherit a bytecode bootstrap from
+        # a previously configured build directory.
         root = Path(__file__).resolve().parents[3]
-        for name in ("run_asan_focused.py", "run_lsan_strict.py", "run_tsan_focused.py"):
-            text = (root / "scripts" / name).read_text(encoding="utf-8")
-            self.assertIn(
-                'XRAY_STDLIB_VM_FASTPATHS=OFF', text,
-                f"{name} does not pin the supported stdlib bootstrap shape")
+        text = (root / "scripts" / "run_asan_focused.py").read_text(encoding="utf-8")
+        self.assertIn("XR_STDLIB_FROM_FILE=ON", text)
 
     def test_asan_pins_supported_windows_crt_identity(self):
         root = Path(__file__).resolve().parents[3]

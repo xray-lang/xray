@@ -2,7 +2,7 @@
  * xray_value_abi.h - canonical hosted XrValue binary layout
  *
  * This header is the single definition consumed by the VM, hosted AOT, the
- * public runtime API, and generated stdlib-native entries.  Tag namespaces may
+ * public runtime API, and hosted native fragments.  Tag namespaces may
  * add backend-private values, but they may not redefine this carrier layout.
  */
 

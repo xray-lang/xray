@@ -223,6 +223,10 @@ static XrXirStatus effect_source_relations(const XrXirCompileContext *work,
 
 static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
+    if(!source->provenance) {
+        if(!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        return effect_contexts_read(effects)?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
+    }
     if (!source->declarations || !source->declarations->functions)
         return effect_contexts_read(effects)?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     /* Context construction uses this same canonical empty type domain.
@@ -328,11 +332,10 @@ static XrXirStatus effect_source_terminal_roles(const XrXirCompileContext *work,
     return XR_XIR_OK;
 }
 
-XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *work,
+static XrXirStatus effect_source_terminal_current(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
     if (!xir_effects_context_matches(work,effects,source?source->function_count:0) ||
-        !effect_final_outcomes(effects) || !source || source->stage!=XR_XIR_CHECKED || !source->provenance ||
-        source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE || !effects->invocations ||
+        !effect_final_outcomes(effects) || !source || source->stage!=XR_XIR_CHECKED || !effects->invocations ||
         effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_source_relations(work,effects->invocations,effects);
     if (status==XR_XIR_OK) status=effect_source_contexts(work,source,effects);
@@ -342,4 +345,15 @@ XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=error_finite_outcomes_match(work,effects->invocations->body,effect_final_outcomes(effects));
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,effects->invocations->body);
     return status;
+}
+
+XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *work,
+    const XrXirModule *source,const XrXirEffects *effects) {
+    if(!source || !source->provenance || source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
+    return effect_source_terminal_current(work,source,effects);
+}
+XR_FUNC XrXirStatus xir_effects_raw_source_terminal(const XrXirCompileContext *work,
+    const XrXirModule *source,const XrXirEffects *effects) {
+    if(!source || source->provenance) return XR_XIR_BAD_STRUCTURE;
+    return effect_source_terminal_current(work,source,effects);
 }

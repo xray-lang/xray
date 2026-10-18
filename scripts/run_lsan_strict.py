@@ -62,7 +62,6 @@ def main(argv: list[str]) -> int:
         sanitizer_flags=(
             "ENABLE_ASAN=ON",
             "ENABLE_UBSAN=ON",
-            "XRAY_STDLIB_VM_FASTPATHS=OFF",
         ),
     )
 
