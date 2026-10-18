@@ -13,6 +13,7 @@
  */
 #include "xxir_effects.h"
 #include "xxir_compile_memory.h"
+#include "xxir_read_scratch.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_internal.h"
 #include "xxir_types.h"
@@ -174,8 +175,8 @@ typedef struct EffectRootSeedRecord {
     XrXirType callable_type;
 } EffectRootSeedRecord;
 
-static XrXirStatus effect_root_seed_record(const EffectRootSeedRecord *request,
-    XrXirEffects *effects,const XrXirCompileContext *work);
+static XrXirStatus effect_invocation_primitive_frame(const XrXirCompileContext *work,
+    const EffectBodyMaterial *material);
 typedef struct EffectBodyAdvertisementBuilder EffectBodyAdvertisementBuilder;
 static XrXirStatus effect_body_advertisements_begin(const XrXirCompileContext *work,
     const XrXirModule *source,EffectRefinementBounds *refinement,EffectBodyAdvertisementBuilder **output);

@@ -122,7 +122,7 @@ static XrXirStatus effect_body_advertisements_span(EffectBodyAdvertisementBuilde
 
 static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,XrXirRootEffects *facts,
     XrXirRootEffectWitness *required,XrXirRootEffectWitness *unresolved,
-    const XrXirCompileContext *work);
+    const XrXirCompileContext *work,XirReadScratch *memory);
 
 typedef struct EffectBodyWriter {
     const XrXirCompileContext *work;

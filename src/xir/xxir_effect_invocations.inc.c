@@ -232,9 +232,6 @@ static const EffectInvocationClassDiscovery *effect_invocation_class_discovery(
 static XrXirStatus effect_final_class_mask(const XrXirCompileContext *work,
     const EffectInvocationFinal *final,uint32_t node,uint32_t value,uint32_t *output);
 
-static XrXirStatus effect_root_seed(const XrXirModule *module,XrXirEffects *effects,
-    uint32_t function,uint32_t instruction,const XrXirCompileContext *work);
-
 static inline XrXirStatus effect_invocation_producer_column(const EffectInvocationWorkspace *owner,
     const EffectInvocationBasis *basis,uint32_t site,uint32_t atom,uint32_t *word,uint32_t *bit);
 
