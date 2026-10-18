@@ -105,8 +105,8 @@ static void ed_graph_isolation(void){
      * the actual Final and moves only its incoming IDs into this local graph. */
     EffectControlCheck input={0};
     EffectGraph graph={.material=e->invocations->body,.physical=e->invocations->body->physical};
-    CHECK(effect_final_control_prepare(&c,e,&input)==XR_XIR_OK);
-    CHECK(effect_control_dependencies_move(&c,&input,&graph)==XR_XIR_OK);
+    CHECK(effect_legacy_control_prepare(&c,e,&input)==XR_XIR_OK);
+    CHECK(effect_legacy_error_dependencies_move(&c,&input,&graph)==XR_XIR_OK);
     for(uint32_t link=graph.heads[3];link!=UINT32_MAX;link=graph.edges[link].next)CHECK(graph.edges[link].caller!=2);
     CHECK(!graph.error_heads && !graph.error_edges && !effect_roots_read(e)->root[2].requires_root && !effect_roots_read(e)->root[2].unresolved);
     CHECK(error_graph_prepare(&graph,&c)==XR_XIR_OK);
