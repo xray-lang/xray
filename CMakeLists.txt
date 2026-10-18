@@ -1556,8 +1556,13 @@ set(XRAY_STDLIB_BYTECODE_DIR
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib-bytecode")
 set(XRAY_STDLIB_EMBED_GENERATOR
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py")
-file(GLOB XRAY_STDLIB_EMBED_GENERATOR_MODULES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/*.py")
+# Match the embedded generator's metadata imports. Native fastpath generation
+# is a separate consumer and must not enter this source-only dependency graph.
+set(XRAY_STDLIB_EMBED_GENERATOR_MODULES
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/provider_declarations.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/provider_types.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/provider_codegen.py")
 add_custom_command(
     OUTPUT
         ${XRAY_STDLIB_EMBEDDED_SOURCE_INC}
