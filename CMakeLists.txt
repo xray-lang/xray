@@ -188,7 +188,7 @@ else()
 endif()
 
 # Python is a BUILD dependency, not only a test one: the Xi opcode tables, the
-# embedded stdlib bytecode and the VM fastpaths are all generated while the
+# embedded stdlib metadata and bytecode are generated while the
 # project builds. The floor is asserted here, at configure time, so an
 # unsupported interpreter is named with its version -- rather than surfacing
 # later as a ModuleNotFoundError from inside a generator, which reads like a
@@ -254,7 +254,7 @@ else()
         message(FATAL_ERROR
             "Xray requires Python ${XRAY_PYTHON_MIN_VERSION} or newer to build.\n"
             "Python runs the build-time generators for the Xi opcode tables, the "
-            "embedded stdlib and the VM fastpaths.\n"
+            "embedded stdlib metadata.\n"
             "${_xray_python_detail}"
             "Install a newer Python, or point CMake at one:\n"
             "  cmake -DXRAY_PYTHON=/path/to/python3 ...")
@@ -823,7 +823,6 @@ option(XR_ENABLE_CYCLE_DETECTOR "Build the development-mode reference-cycle dete
 option(ENABLE_TLS "Enable HTTPS/TLS support (requires OpenSSL)" ON)
 option(XR_USE_MIMALLOC "Use mimalloc high-performance allocator" OFF)
 option(XR_STDLIB_FROM_FILE "Load stdlib from file instead of embedded bytecode (for debugging)" OFF)
-option(XRAY_STDLIB_VM_FASTPATHS "Enable verified VM-only stdlib fastpaths" ON)
 
 # Modular build options
 option(XR_BUILD_LSP "Build LSP language server" ON)
@@ -1556,8 +1555,7 @@ set(XRAY_STDLIB_BYTECODE_DIR
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib-bytecode")
 set(XRAY_STDLIB_EMBED_GENERATOR
     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_stdlib_embedded.py")
-# Match the embedded generator's metadata imports. Native fastpath generation
-# is a separate consumer and must not enter this source-only dependency graph.
+# Match the embedded generator's metadata imports without unrelated tools.
 set(XRAY_STDLIB_EMBED_GENERATOR_MODULES
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/provider_declarations.py"
@@ -2347,87 +2345,6 @@ if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
     target_link_options(xray_stdlib_bcgen PRIVATE "LINKER:/STACK:8388608")
 endif()
 
-# The stage-1 compiler links the same module factory registry as the final runtime but
-# must not depend on its own generated native output.  Its explicit no-op
-# implementation breaks that bootstrap cycle; final libraries receive either
-# the generated implementation or the same stub when the feature is disabled.
-target_sources(xray_stdlib_bootstrap_core PRIVATE
-    src/stdlib/xstdlib_vm_fastpath_stub.c
-)
-
-set(XRAY_STDLIB_VM_FASTPATH_GEN_DIR
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_vm_fastpaths)
-set(XRAY_STDLIB_VM_FASTPATH_HARNESS
-    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/main.xr)
-set(XRAY_STDLIB_VM_FASTPATH_MANIFEST
-    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/xray.toml)
-set(XRAY_STDLIB_VM_FASTPATH_REGISTRY
-    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/xstdlib_vm_fastpaths_generated.inc.c)
-set(XRAY_STDLIB_VM_FASTPATH_C
-    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/xstdlib_vm_fastpaths_generated.c)
-set(XRAY_STDLIB_VM_FASTPATH_HEADER
-    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/xstdlib_vm_fastpaths_generated.h)
-set(XRAY_STDLIB_VM_FASTPATH_PROVENANCE
-    ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}/xstdlib_vm_fastpaths_manifest.json)
-
-if(XRAY_STDLIB_VM_FASTPATHS)
-    add_custom_command(
-        OUTPUT
-            ${XRAY_STDLIB_VM_FASTPATH_HARNESS}
-            ${XRAY_STDLIB_VM_FASTPATH_MANIFEST}
-            ${XRAY_STDLIB_VM_FASTPATH_REGISTRY}
-            ${XRAY_STDLIB_VM_FASTPATH_C}
-            ${XRAY_STDLIB_VM_FASTPATH_HEADER}
-            ${XRAY_STDLIB_VM_FASTPATH_PROVENANCE}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}
-        COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/generate_vm_fastpaths.py
-            --root ${CMAKE_CURRENT_SOURCE_DIR}
-            --harness-dir ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}
-            --registry-output ${XRAY_STDLIB_VM_FASTPATH_REGISTRY}
-            --manifest-output ${XRAY_STDLIB_VM_FASTPATH_PROVENANCE}
-            --target ${XRAY_HOST_TARGET_ABI}
-            --compiler $<TARGET_FILE:xray_stdlib_bcgen>
-        COMMAND ${CMAKE_COMMAND} -E chdir ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}
-            $<TARGET_FILE:xray_stdlib_bcgen> native-fastpaths
-            main.xr
-            --output ${XRAY_STDLIB_VM_FASTPATH_C}
-            --header ${XRAY_STDLIB_VM_FASTPATH_HEADER}
-        DEPENDS
-            xray_stdlib_bcgen
-            ${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/generate_vm_fastpaths.py
-            ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/stdlib_boundary.toml
-            ${XRAY_STDLIB_SCRIPT_SOURCES}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Generating hosted VM stdlib native fastpaths"
-        VERBATIM
-    )
-    add_custom_target(gen-stdlib-vm-fastpaths
-        DEPENDS
-            ${XRAY_STDLIB_VM_FASTPATH_C}
-            ${XRAY_STDLIB_VM_FASTPATH_HEADER}
-            ${XRAY_STDLIB_VM_FASTPATH_REGISTRY}
-            ${XRAY_STDLIB_VM_FASTPATH_PROVENANCE}
-    )
-    set_source_files_properties(${XRAY_STDLIB_VM_FASTPATH_C} PROPERTIES GENERATED TRUE)
-    set_source_files_properties(src/stdlib/xstdlib_vm_fastpath_amalgam.c PROPERTIES
-        OBJECT_DEPENDS "${XRAY_STDLIB_VM_FASTPATH_C};${XRAY_STDLIB_VM_FASTPATH_REGISTRY}"
-    )
-    target_sources(xray_core PRIVATE
-        src/stdlib/xstdlib_vm_fastpath.c
-        src/stdlib/xstdlib_vm_fastpath_amalgam.c
-    )
-    target_include_directories(xray_core PRIVATE
-        ${XRAY_STDLIB_VM_FASTPATH_GEN_DIR}
-    )
-    target_compile_definitions(xray_core PRIVATE
-        XRAY_STDLIB_VM_FASTPATHS=1
-    )
-    add_dependencies(xray_core gen-stdlib-vm-fastpaths)
-else()
-    target_sources(xray_core PRIVATE src/stdlib/xstdlib_vm_fastpath_stub.c)
-endif()
-
 set(XRAY_STDLIB_BYTECODE_OUTPUTS)
 foreach(XRAY_STDLIB_SOURCE IN LISTS XRAY_STDLIB_SCRIPT_SOURCES)
     get_filename_component(XRAY_STDLIB_MODULE_DIR "${XRAY_STDLIB_SOURCE}" DIRECTORY)
@@ -3132,7 +3049,7 @@ if(BUILD_TESTS)
     # green; builtin-schema is red, which is the point -- it has been red with
     # no lane reporting it. See tests/known_failures.txt for its entry.
     foreach(_xray_stdlib_boundary_check IN ITEMS
-            manifest semantic error-model fastpath dynamic
+            manifest semantic error-model hosted-abi dynamic
             l2-thinning builtin-schema l4-quality)
         add_test(
             NAME stdlib_boundary_${_xray_stdlib_boundary_check}

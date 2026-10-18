@@ -46,7 +46,7 @@ def compile_cases(cases, extra_sources=None, case_timeouts=None, *,
             try:
                 (folder / "main.xr").write_text(source, encoding="utf-8")
                 generated = folder / (name + ".c")
-                run([str(compiler), "native-fastpaths", "main.xr", "--output", str(generated),
+                run([str(compiler), "hosted-fragment", "main.xr", "--output", str(generated),
                      "--header", str(folder / (name + ".h"))], folder,
                     timeout=(case_timeouts or {}).get(name, 60))
                 if reject_statement_expressions and re.search(

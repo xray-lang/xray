@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import re
 import sys
@@ -20,18 +19,9 @@ from stdlib_manifest import (
     loadable_modules,
     load_manifest,
     load_stdlibgen,
-    load_toml,
     native_entry_binder_modules,
     source_modules,
 )
-
-# The hosted-fragment ABI surface, as the generator emits it. Kept here rather
-# than inline so a new batch or ownership mode is one edit and shows up in a
-# grep, instead of a set literal buried in a loop.
-HOSTED_ABI_BATCHES = {"scalar", "string_rc", "mutable_rc", "object_rc"}
-HOSTED_ABI_OWNERSHIP = {"owned", "immediate", "owned-or-null", "immediate-or-null"}
-# Results the VM passes by value; anything else is a heap handle.
-HOSTED_ABI_SCALAR_RESULTS = {"()", "bool", "i64", "f64"}
 
 
 def check_manifest(root: Path) -> list[str]:
@@ -432,7 +422,6 @@ def check_l2_thinning(root: Path) -> list[str]:
     governance = manifest.raw.get("governance", {})
     triggers = set(governance.get("regex_reassessment_triggers", ()))
     expected_triggers = {
-        "generated_stdlib_vm_fastpaths_fully_landed",
         "freestanding_runtime_requires_regex_without_native_library",
     }
     if triggers != expected_triggers:
@@ -544,7 +533,7 @@ def check_error_model_policy(root: Path) -> list[str]:
     return errors
 
 
-def check_fastpaths(root: Path) -> list[str]:
+def check_hosted_abi(root: Path) -> list[str]:
     manifest = load_manifest(root)
     errors: list[str] = []
     object_abi = manifest.raw.get("object_abi", {})
@@ -594,137 +583,6 @@ def check_fastpaths(root: Path) -> list[str]:
             errors.append(f"{relative}: must consume canonical xray_value_abi.h")
         if "typedef struct XrValue" in text:
             errors.append(f"{relative}: duplicates the canonical hosted XrValue layout")
-    generator = root / "tools/stdlibgen/generate_vm_fastpaths.py"
-    if not generator.is_file():
-        errors.append("stdlib generated-native source generator is missing")
-        generated_entries: list[dict[str, object]] = []
-    else:
-        try:
-            spec = importlib.util.spec_from_file_location("xray_vm_fragment_generator", generator)
-            if not spec or not spec.loader:
-                raise RuntimeError("cannot create generator module spec")
-            generator_module = importlib.util.module_from_spec(spec)
-            sys.modules[spec.name] = generator_module
-            spec.loader.exec_module(generator_module)
-            # load_entries returns five values; unpacking fewer raised inside the
-            # fail-closed handler below, which reported the drift as "cannot derive
-            # source-backed VM fragment entries" and then, with an empty entry list,
-            # as a bogus benchmark-baseline mismatch. Keep every field named so the
-            # next signature change is a syntax-visible edit rather than a runtime one.
-            (_version, generated_entries, _deferred, _unsupported,
-             _fingerprint) = generator_module.load_entries(root)
-            if len(generated_entries) < 48:
-                errors.append("source-derived hosted fragment batches must contain at least 48 exports")
-            # These assert the shape of the ABI, not the generator's type
-            # classification. Re-deriving "which results are heap values" here
-            # is what went stale: the gate only knew string and Array<u8>,
-            # so every class-instance and enum result read as a violation once
-            # object_rc arrived. Owning the invariants, and only the
-            # invariants, keeps the gate honest without a second copy of the
-            # type rules that has to be updated in lockstep.
-            for generated in generated_entries:
-                symbol = str(generated.get("symbol", ""))
-                if generated.get("batch") not in HOSTED_ABI_BATCHES:
-                    errors.append(f"generated fragment {symbol}: unsupported hosted ABI batch")
-                if generated.get("effect") != "compiler-verified":
-                    errors.append(f"generated fragment {symbol}: missing compiler effect provenance")
-
-                result = str(generated.get("result", ""))
-                ownership = str(generated.get("ownership", ""))
-                if ownership not in HOSTED_ABI_OWNERSHIP:
-                    errors.append(f"generated fragment {symbol}: unknown result ownership")
-                    continue
-                # A nullable result must say so, and a non-nullable one must not:
-                # the suffix is what tells the VM whether null is a legal value.
-                if result.endswith("?") != ownership.endswith("-or-null"):
-                    errors.append(
-                        f"generated fragment {symbol}: ownership nullability "
-                        "disagrees with result type")
-                base = ownership.split("-or-null")[0]
-                bare = result[:-1] if result.endswith("?") else result
-                # The original ABI rule, still the one that matters: a result
-                # the callee allocates must be handed over as owned, or the VM
-                # leaks it or double-frees it.
-                if (bare == "string" or bare.startswith("Array<")) and base != "owned":
-                    errors.append(
-                        f"generated fragment {symbol}: heap result must be owned")
-                if bare in HOSTED_ABI_SCALAR_RESULTS and base != "immediate":
-                    errors.append(
-                        f"generated fragment {symbol}: scalar result must be immediate")
-            harness, _project = generator_module.render_harness(generated_entries, _fingerprint)
-            if "import http" not in harness or "return http.isRedirectStatus(" not in harness:
-                errors.append("generated fragment harness must call authoritative imported .xr exports")
-            if re.search(r"export\s+fn\s+isRedirectStatus\s*\(", harness):
-                errors.append("generated fragment harness must not copy authoritative function bodies")
-        except Exception as exc:  # fail closed: generator/import inventory is part of the contract
-            generated_entries = []
-            errors.append(f"cannot derive source-backed VM fragment entries: {exc}")
-    option_name = str(manifest.raw.get("governance", {}).get("vm_fastpath_option", ""))
-    cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
-    if not option_name or not re.search(rf"option\(\s*{re.escape(option_name)}\b", cmake):
-        errors.append("governance.vm_fastpath_option must name a real CMake option")
-    required = {
-        "symbol", "module", "member", "reference", "native", "abi", "batch", "reason",
-        "abi_gate", "workload_benchmark", "diff_case", "oracle", "review_date",
-        "disable_build_option"
-    }
-    benchmark_data = load_toml(root / "tests/benchmarks/stdlib/manifest.toml")
-    benchmark_ids = {entry.get("id") for entry in benchmark_data.get("benchmark", ())}
-    unit_cmake = (root / "tests/unit/CMakeLists.txt").read_text(encoding="utf-8")
-    aot_text = "\n".join(
-        path.read_text(encoding="utf-8", errors="strict")
-        for path in (root / "src/aot").rglob("*")
-        if path.is_file() and path.suffix in {".c", ".h"}
-    )
-    seen: set[str] = set()
-    for entry in manifest.vm_fastpaths:
-        symbol = str(entry.get("symbol", ""))
-        if symbol in seen:
-            errors.append(f"duplicate vm_fastpath symbol: {symbol}")
-        seen.add(symbol)
-        missing = sorted(required - set(entry))
-        if missing:
-            errors.append(f"vm_fastpath {symbol or '<unnamed>'}: missing {', '.join(missing)}")
-        module = str(entry.get("module", ""))
-        member = str(entry.get("member", ""))
-        if symbol != f"{module}.{member}":
-            errors.append(f"vm_fastpath {symbol}: symbol must equal module.member")
-        if entry.get("abi") != "i64->bool" or entry.get("batch") != "scalar":
-            errors.append(f"vm_fastpath {symbol}: first generated batch only admits i64->bool scalar ABI")
-        reference_raw = str(entry.get("reference", ""))
-        reference_path, separator, reference_member = reference_raw.partition("::")
-        if reference_path and not (root / reference_path).is_file():
-            errors.append(f"vm_fastpath {symbol}: reference source does not exist: {reference_path}")
-        elif reference_path:
-            reference_text = (root / reference_path).read_text(encoding="utf-8")
-            if not separator or reference_member != member or not re.search(
-                rf"\bexport\s+fn\s+{re.escape(member)}\s*\(", reference_text
-            ):
-                errors.append(f"vm_fastpath {symbol}: reference must name its exported .xr function")
-        oracle_path = str(entry.get("oracle", "")).split("::", 1)[0]
-        if not oracle_path or not (root / oracle_path).is_file():
-            errors.append(f"vm_fastpath {symbol}: migration C oracle does not exist: {oracle_path}")
-        if entry.get("disable_build_option") != option_name:
-            errors.append(f"vm_fastpath {symbol}: must use global disable option {option_name}")
-        abi_gate = str(entry.get("abi_gate", ""))
-        if not abi_gate or not re.search(rf"\b{re.escape(abi_gate)}\b", unit_cmake):
-            errors.append(f"vm_fastpath {symbol}: abi_gate is absent from unit CMake targets")
-        if entry.get("workload_benchmark") not in benchmark_ids:
-            errors.append(
-                f"vm_fastpath {symbol}: workload_benchmark id is absent from stdlib perf manifest"
-            )
-        diff_case = root / str(entry.get("diff_case", ""))
-        if not diff_case.is_file():
-            errors.append(f"vm_fastpath {symbol}: diff_case does not exist: {entry.get('diff_case')}")
-        native = str(entry.get("native", ""))
-        if native and re.search(rf"\b{re.escape(native)}\b", aot_text):
-            errors.append(f"vm_fastpath {symbol}: AOT sources reference VM-only symbol {native}")
-    generated_symbols = {str(entry.get("symbol", "")) for entry in generated_entries}
-    if not seen.issubset(generated_symbols):
-        errors.append(
-            "VM fragment benchmark baselines are not a subset of the source-derived scalar batch: "
-            + ", ".join(sorted(seen - generated_symbols))
-        )
     return errors
 
 
@@ -801,7 +659,7 @@ def check_dynamic(root: Path, require_clean: bool = False) -> tuple[list[str], d
 
 
 CHECKS = {
-    "manifest", "semantic", "l2-thinning", "builtin-schema", "l4-quality", "error-model", "fastpath",
+    "manifest", "semantic", "l2-thinning", "builtin-schema", "l4-quality", "error-model", "hosted-abi",
     "dynamic", "all"
 }
 
@@ -829,8 +687,8 @@ def main() -> int:
         errors.extend(check_l4_quality(root))
     if args.check in {"error-model", "all"}:
         errors.extend(check_error_model_policy(root))
-    if args.check in {"fastpath", "all"}:
-        errors.extend(check_fastpaths(root))
+    if args.check in {"hosted-abi", "all"}:
+        errors.extend(check_hosted_abi(root))
     if args.check in {"dynamic", "all"}:
         dynamic_errors, report = check_dynamic(root, args.require_clean_dynamic)
         errors.extend(dynamic_errors)

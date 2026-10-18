@@ -11,7 +11,8 @@
  *   The final runtime embeds stdlib bytecode, but producing those build-private
  *   files needs a compiler. This tiny build-only tool links against a bootstrap
  *   core that has embedded source plus an empty bytecode table, avoiding a
- *   final-runtime self-dependency cycle.
+ *   final-runtime self-dependency cycle. The hosted-fragment command also
+ *   supplies generic source-to-C fixtures without installing VM exports.
  */
 
 #include "../../api/xisolate_profile.h"
@@ -36,7 +37,7 @@ static int usage(void) {
                     "  xray_stdlib_bcgen compile <input.xr> --output <bytecode-output> "
                     "--format bytecode [--stdlib-module <canonical-name>] "
                     "[--strip-debug] [--strip-source]\n"
-                    "  xray_stdlib_bcgen native-fastpaths <input.xr> --output <output.c> "
+                    "  xray_stdlib_bcgen hosted-fragment <input.xr> --output <output.c> "
                     "--header <output.h>\n");
     return 2;
 }
@@ -51,7 +52,7 @@ static bool write_bytes(const char *path, const char *bytes, size_t size) {
     return ok;
 }
 
-static int generate_native_fastpaths(int argc, char **argv) {
+static int generate_hosted_fragment(int argc, char **argv) {
     if (argc < 5)
         return usage();
     const char *input = argv[2];
@@ -66,7 +67,7 @@ static int generate_native_fastpaths(int argc, char **argv) {
             header = argv[++i];
             continue;
         }
-        fprintf(stderr, "xray_stdlib_bcgen: unknown native-fastpaths argument '%s'\n", argv[i]);
+        fprintf(stderr, "xray_stdlib_bcgen: unknown hosted-fragment argument '%s'\n", argv[i]);
         return 2;
     }
     if (!output || !header)
@@ -81,7 +82,7 @@ static int generate_native_fastpaths(int argc, char **argv) {
     XrTargetProfile *target_profile = NULL;
     XrProject *project = xr_project_load(NULL, ".");
     if (!project || !project->initialized || !project->native_plan) {
-        fprintf(stderr, "xray_stdlib_bcgen: invalid generated fastpath manifest%s%s\n",
+        fprintf(stderr, "xray_stdlib_bcgen: invalid hosted fragment manifest%s%s\n",
                 project && project->native_plan && project->native_plan->error ? ": " : "",
                 project && project->native_plan && project->native_plan->error
                     ? project->native_plan->error
@@ -112,7 +113,7 @@ static int generate_native_fastpaths(int argc, char **argv) {
     if (!xr_project_module_identity_authority(project, &entry_authority, &entry_authority_namespace,
                                               &entry_authority_root, authority_err,
                                               sizeof(authority_err))) {
-        fprintf(stderr, "Error: invalid generated fastpath module identity authority: %s\n",
+        fprintf(stderr, "Error: invalid hosted fragment module identity authority: %s\n",
                 authority_err);
         xr_target_profile_free(target_profile);
         xaot_target_free(&target);
@@ -152,8 +153,8 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
 
-    if (argc >= 2 && strcmp(argv[1], "native-fastpaths") == 0)
-        return generate_native_fastpaths(argc, argv);
+    if (argc >= 2 && strcmp(argv[1], "hosted-fragment") == 0)
+        return generate_hosted_fragment(argc, argv);
     if (argc < 3 || strcmp(argv[1], "compile") != 0)
         return usage();
 

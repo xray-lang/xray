@@ -304,7 +304,6 @@ src/shared/xr_truthy_core.h
 src/shared/xr_type_identity_core.h
 src/shared/xr_type_names_core.h
 src/shared/xr_win_utf.h
-src/stdlib/xstdlib_vm_fastpath.h
 src/toolchain/xcompiler_session.c
 src/toolchain/xcompiler_session.h
 src/vm/audit/xr_typed_lifecycle_audit.c

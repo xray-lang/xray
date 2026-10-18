@@ -242,7 +242,6 @@ class ProductionBuildPreflightTest(unittest.TestCase):
             "generator": {"CMAKE_GENERATOR": "Visual Studio 17 2022"},
             "build type": {"CMAKE_BUILD_TYPE": "Debug"},
             "source stdlib": {"XR_STDLIB_FROM_FILE": "ON"},
-            "missing fastpaths": {"XRAY_STDLIB_VM_FASTPATHS": "OFF"},
             "ASan": {"ENABLE_ASAN": "ON"},
             "UBSan": {"ENABLE_UBSAN": "ON"},
             "TSan": {"ENABLE_TSAN": "ON"},
