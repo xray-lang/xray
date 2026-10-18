@@ -456,6 +456,7 @@ static bool source_array_entries_call(SourceContext *ctx, AstNode *node,
         {store.id}, {0}, 0, {0}}, value);
 }
 
+#include "xxir_source_array_concat_arguments.inc.c"
 /* Capture every input before constructing output so later argument effects cannot replace a snapshot. */
 static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
     const SourceValue *evaluated, SourceValue *value, SourceNativeCallShape *shape) {
@@ -471,16 +472,10 @@ static bool source_array_concat_call(SourceContext *ctx, AstNode *node,
     else if (!expression(ctx, call->callee->as.member_access.object, &receiver)) return false;
     if (!xr_xir_type_is_array(&ctx->types, receiver.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat receiver is not an Array");
-    const uint32_t count = (uint32_t)call->arg_count + 1;
-    SourceValue *arrays = source_alloc(ctx, count, sizeof(*arrays));
-    if (!arrays) return false;
-    arrays[0] = receiver;
-    for (uint32_t i = 1; i < count; ++i) {
-        if (!source_plan_expression(ctx, call->arguments[i - 1],
-                (SourceExpectedType){true, receiver.type, false, false}, &arrays[i])) return false;
-        if (arrays[i].type != receiver.type)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat argument type differs from its receiver");
-    }
+    SourceConcatArguments arguments = {0};
+    if (!source_concat_arguments(ctx, node, receiver, &arguments)) return false;
+    const uint32_t count = arguments.count;
+    const SourceValue *arrays = arguments.values;
     if(!source_native_call_shape(ctx,shape,receiver.type,&receiver.type,1))return false;
     XrXirType element = xr_xir_array_element(&ctx->types, receiver.type), cell_type;
     SourceValue seed, store, candidate, zero;

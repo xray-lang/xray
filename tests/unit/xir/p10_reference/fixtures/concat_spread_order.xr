@@ -1,0 +1,14 @@
+var trace = 0
+var original = [1]
+var part = [20]
+fn receiver() -> Array<i64> { trace = trace * 10 + 1; return original }
+fn spread() -> (Array<i64>, Array<i64>) {
+    trace = trace * 10 + 2
+    original[0] = 99
+    return (part, [21])
+}
+fn last() -> Array<i64> { trace = trace * 10 + 3; part[0] = 88; return [] }
+export fn referenceAnswer() -> i64 {
+    const values = receiver().concat(...spread(), last())
+    return trace * 1000 + values[0] * 100 + values[1] * 2 + values[2]
+}

@@ -1,0 +1,7 @@
+fn append<T>(first: Array<T>, parts: (Array<T>, Array<T>)) -> Array<T> {
+    return first.concat(...parts)
+}
+export fn referenceAnswer() -> i64 {
+    const values = append<i8>([1], ([20], [21]))
+    return (values[0] as i64) + (values[1] as i64) + (values[2] as i64)
+}

@@ -1,0 +1,6 @@
+var count = 0
+fn empty() { count += 1 }
+export fn referenceAnswer() -> i64 {
+    const values = [41].concat(...empty(), ...())
+    return values[0] + count
+}

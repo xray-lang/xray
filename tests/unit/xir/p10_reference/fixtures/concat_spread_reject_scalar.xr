@@ -1,0 +1,4 @@
+export fn referenceAnswer() -> i64 {
+    const values = [1].concat(...7)
+    return len(values)
+}
