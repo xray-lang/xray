@@ -110,7 +110,7 @@ XR_FUNC XrXirStatus xmcp_run_source_product(const XmcpSourceRequest *request,
     XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic) {
     if (!request || !request->text || !request->module_id || !request->context ||
         !request->context->resources || !output || *output ||
-        (diagnostic && (diagnostic->snapshot || diagnostic->source_path || diagnostic->status)))
+        (diagnostic && (diagnostic->snapshot || !xr_xir_compile_source_failure_empty(&diagnostic->failure) || diagnostic->status)))
         return XR_XIR_BAD_STRUCTURE;
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, request->module_id, NULL};
     if (!xr_module_identity_authority_valid(&authority)) return XR_XIR_BAD_STRUCTURE;
@@ -137,7 +137,7 @@ XR_FUNC XrXirStatus xmcp_run_source_product(const XmcpSourceRequest *request,
             built == XR_SOURCE_COMPILE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
             detail.source.status ? detail.source.status : XR_XIR_BAD_STRUCTURE;
     }
-    if (diagnostic && (detail.source.snapshot || detail.source.source_path || detail.source.status)) {
+    if (diagnostic && (detail.source.snapshot || !xr_xir_compile_source_failure_empty(&detail.source.failure) || detail.source.status)) {
         *diagnostic = detail.source; memset(&detail.source, 0, sizeof(detail.source));
     }
     if (status == XR_XIR_OK) status = dependencies_admit(request, product, diagnostic);

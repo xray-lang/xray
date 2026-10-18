@@ -20,12 +20,13 @@
 #include "xir_channel_types74_golden.h"
 #include "xir_channel_types76_golden.h"
 #include "xir_task_unit73_golden.h"
+#include "shared_current_checked.h"
 static void channel_wire(void) {
     const XrXirCompileContext *context=effects_source_owner(UINT64_C(67108864),UINT64_C(128000000));
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==28 && XR_XIR_CHECKED_CONTRACT==76 && XR_XIR_VALUE_ABI_VERSION==29,
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==90 && XR_XIR_VALUE_ABI_VERSION==30,
         "Channel descriptors require the current semantic and runtime generation");
-    const uint8_t *expected[]={channel_types76_golden,channel_unit76_golden};
-    const size_t lengths[]={sizeof(channel_types76_golden),sizeof(channel_unit76_golden)};
+    const uint8_t *expected[]={shared_channel_int,shared_channel_unit};
+    const size_t lengths[]={sizeof(shared_channel_int),sizeof(shared_channel_unit)};
     for (unsigned variant=0;variant<2;++variant) {
         XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_CHANNEL,.element=variant ? XR_XIR_UNIT : XR_XIR_I64},
             {.kind=XR_XIR_TYPE_CHANNEL,.element=XR_XIR_STRING}};
@@ -46,9 +47,9 @@ static void channel_wire(void) {
         xr_xir_compile_artifact_free(read); xr_xir_compile_artifact_free(checked); xr_xir_compile_checked_packet_free(&packet);
     }
     size_t before=effects_compile_attempts; XrXirArtifact *out=NULL;
-    const uint8_t *retired[]={channel_types74_golden,channel_unit74_golden};
-    const size_t retired_lengths[]={sizeof(channel_types74_golden),sizeof(channel_unit74_golden)};
-    for (unsigned i=0;i<2;++i) {
+    const uint8_t *retired[]={channel_types74_golden,channel_unit74_golden,channel_types76_golden,channel_unit76_golden};
+    const size_t retired_lengths[]={sizeof(channel_types74_golden),sizeof(channel_unit74_golden),sizeof(channel_types76_golden),sizeof(channel_unit76_golden)};
+    for (unsigned i=0;i<4;++i) {
         CHECK(xr_xir_compile_checked_read(context,retired[i],retired_lengths[i],&out,NULL)==XR_XIR_BAD_STRUCTURE && !out);
         out=(XrXirArtifact *)(uintptr_t)1;
         CHECK(xr_xir_compile_checked_read(context,retired[i],retired_lengths[i],&out,NULL)==XR_XIR_BAD_STRUCTURE &&
@@ -66,7 +67,7 @@ static void channel_source_case_channels(const char *text, XrXirStatus expected,
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"channel-types",NULL};
     XrXirSourceRequest request={session,NULL,&authority,context,XR_CHANNEL_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceText input={NULL,text,strlen(text)}; XrXirSourceResult result={0};
-    XrXirSourceDiagnostic diagnostic={0}; char *failure=NULL;
+    XrXirSourceDiagnostic diagnostic={0}; XrXirSourceFailure failure={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&result,&diagnostic,&failure);
     xr_compile_session_free(session);
     bool valid=expected==XR_XIR_OK;
@@ -90,7 +91,7 @@ static void channel_source_case_channels(const char *text, XrXirStatus expected,
         xr_xir_compile_checked_packet_free(&packet); CHECK(xr_xir_compile_artifact_verify(read,NULL)==XR_XIR_OK);
         xr_xir_compile_artifact_free(read);
     }
-    xr_xir_compile_source_result_free(&result); xr_compile_resources_free(failure);
+    xr_xir_compile_source_result_free(&result); xr_xir_compile_source_failure_free(&failure);
 }
 static void channel_source_case(const char *text,XrXirStatus expected) {
     channel_source_case_channels(text,expected,1);

@@ -57,3 +57,4 @@ tests/unit/xir/product_consumers/fixtures/** text eol=lf
 tests/unit/xir/product_consumers/*_cases.cmake text eol=lf
 tests/unit/xir/product_consumers/source_product_*_constructors.c text eol=lf
 tests/unit/xir/product_consumers/legacy_responsibilities.json text eol=lf
+tests/unit/xir/shared_current_checked.h text eol=lf

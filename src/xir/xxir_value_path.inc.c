@@ -145,7 +145,7 @@ static XrXirValueStatus path_storage_step(ValuePathSlot *slot,
             if (status != XR_XIR_VALUE_OK) return status;
             value = path_handle(*slot); map = (XirHash *)object_pointer(&value);
         }
-        *slot = (ValuePathSlot){map->value_type, (unsigned char *)hash_span(map, probe.entry, true).bytes, true};
+        *slot = (ValuePathSlot){map->value_type, (unsigned char *)hash_span(map, probe.entry, true).bytes, true, map->object.arena};
         return XR_XIR_VALUE_OK;
     }
     if (step->kind != XR_XIR_PATH_INDEX || !xr_xir_type_is_array(types, slot->type))

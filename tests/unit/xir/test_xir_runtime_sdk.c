@@ -239,6 +239,20 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #undef current_sdk_kat_preimage
 #undef current_sdk_kat_file_digest
 #undef current_sdk_kat_digest
+#define current_sdk_kat_preimage previous_value25_sdk_kat_preimage
+#define current_sdk_kat_file_digest previous_value25_sdk_kat_file_digest
+#define current_sdk_kat_digest previous_value25_sdk_kat_digest
+#include "sdk_previous_value25_identity_golden.h"
+#undef current_sdk_kat_preimage
+#undef current_sdk_kat_file_digest
+#undef current_sdk_kat_digest
+#define current_sdk_kat_preimage previous_value26_sdk_kat_preimage
+#define current_sdk_kat_file_digest previous_value26_sdk_kat_file_digest
+#define current_sdk_kat_digest previous_value26_sdk_kat_digest
+#include "sdk_previous_value26_identity_golden.h"
+#undef current_sdk_kat_preimage
+#undef current_sdk_kat_file_digest
+#undef current_sdk_kat_digest
 #include "sdk_current_identity_golden.h"
 #define current_sdk_kat_preimage previous_program34_sdk_kat_preimage
 #define current_sdk_kat_file_digest previous_program34_sdk_kat_file_digest

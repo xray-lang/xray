@@ -1896,6 +1896,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     *symbol = (SourceName){.next=ctx->locals,.name=decl->name,.imported=NULL,.node=node,.kind=logical_type == XR_XIR_UNIT && decl->is_const ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
             .index=logical_type == XR_XIR_UNIT && decl->is_const ? UINT32_MAX : initial.id,.module=ctx->module,.type=logical_type,.mutable=!decl->is_const,
             .construction=false,.declaration=0,.inferred=false,.checked_library=false};
+    if (!symbol->name) return false;
     symbol->inferred = !decl->type_annotation;
     ctx->locals = symbol;
     if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, ctx->bodies[ctx->function].declaration,
@@ -1923,6 +1924,7 @@ static bool source_nested_function(SourceContext *ctx, AstNode *node) {
         *symbol = (SourceName){.next=ctx->locals,.name=decl->name,.imported=NULL,.node=node,.kind=SOURCE_PENDING,
             .index=UINT32_MAX,.module=ctx->module,.type=XR_XIR_UNIT,.mutable=false,
             .construction=false,.declaration=0,.inferred=false,.checked_library=false};
+        if (!symbol->name) return false;
         ctx->locals = symbol;
     }
     symbol->kind = SOURCE_LOCAL; symbol->index = value.id; symbol->type = value.type;
