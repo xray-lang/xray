@@ -4696,7 +4696,6 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_correspondence.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_input_storage.cmake)
 add_subdirectory(xir/p10_reference)
 add_subdirectory(xir/p11_ctfe_reference)
-include(${CMAKE_CURRENT_SOURCE_DIR}/xir/instance_bindings.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_owned_receive_probe.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/error_equation_current.cmake)
@@ -4765,8 +4764,6 @@ add_subdirectory(xir/legacy_consumers)
 # Ordinary source classes retain the language receiver contract.
 include(${CMAKE_CURRENT_SOURCE_DIR}/stdlib/class_receivers.cmake)
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/xir/stdlib_families.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_string_place.cmake)
 
 include(${CMAKE_CURRENT_LIST_DIR}/xir/error_contract_source.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/source_handler_facts.cmake)
