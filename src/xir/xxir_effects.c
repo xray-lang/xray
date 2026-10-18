@@ -16,6 +16,7 @@
 #include "xxir_read_scratch.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_internal.h"
+#include "xxir_source_replay_internal.h"
 #include "xxir_types.h"
 #include "xxir_interface.h"
 #include "xxir_constraint_proof.h"

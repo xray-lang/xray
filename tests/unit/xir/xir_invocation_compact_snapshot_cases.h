@@ -705,11 +705,13 @@ static void conditional_compact_instance_span(void) {
     CHECK(effect_body_material_create(&context,source,&generic_material)==XR_XIR_OK && generic_material);
     CHECK(effect_body_source_match(&context,generic_material,source)==XR_XIR_OK);
     effect_body_material_free(generic_material);
+    uint64_t before_specialization=rp_stats(&context).live_bytes;
     XrXirDiagnostic specialized_diagnostic={0};
     XrXirStatus specialized=xr_xir_compile_specialize(checked,&instance,&specialized_diagnostic);
     if(specialized!=XR_XIR_OK) fprintf(stderr,"compact instance specialization status%u reason%u f%u i%u work%llu\n",
         specialized,specialized_diagnostic.reason,specialized_diagnostic.function,specialized_diagnostic.instruction,
         (unsigned long long)rp_stats(&context).work);
+    if(specialized!=XR_XIR_OK) CHECK(!instance && rp_stats(&context).live_bytes==before_specialization);
     CHECK(specialized==XR_XIR_OK && instance);
     const XrXirModule *module=xr_xir_compile_artifact_module(instance);
     CHECK(module->provenance && module->provenance->kind==XR_XIR_EVIDENCE_INSTANCE && module->provenance->source);

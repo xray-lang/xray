@@ -891,13 +891,14 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_verify(const XrXirCompileContext *
     bool templated=source->module.provenance &&
         source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
     XrXirEffects *effects=NULL;
-    XrXirStatus status=source_effects ?
+    XrXirStatus status=source_effects && !source->module.provenance ?
+        xir_compile_verify_raw_source_effects(context,&source->module,source->construction,source_effects,diagnostic) : source_effects ?
         xr_xir_compile_verify_source_effects_v2(context,&source->module,source->construction,source_effects,diagnostic) :
         templated ? xr_xir_compile_verify_owned_effects_v2(context,&source->module,source->construction,&effects,diagnostic) :
         xr_xir_compile_verify_v2(context,&source->module,source->construction,diagnostic);
     if (status==XR_XIR_OK)
         status=provenance_functions_match_owned(context,&source->module,destination,instance,
-            source_effects ? source_effects : effects,diagnostic);
+            templated ? (source_effects ? source_effects : effects) : NULL,diagnostic);
     xr_xir_compile_effects_free(effects);
     return status;
 }
