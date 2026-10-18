@@ -79,7 +79,7 @@ static void concat_goldens(ConcatCompile *run) {
     for(int64_t i=0;i<2;++i){XrXirValue item={0};XrXirFaultDetail fault={0};
         CHECK(xr_xir_array_get(&value,i,&admission,&item,&fault)==XR_XIR_VALUE_OK);
         static const int64_t one[]={1,2},two[]={3};concat_array(&item,i?two:one,i?1:2);xr_xir_value_drop(&item);}
-    xr_xir_domain_drop(domain);xr_xir_value_drop(&value);
+    xr_xir_domain_drop(domain);domain=NULL;xr_xir_value_drop(&value);
     value=concat_run(first,concat_find(run->module,"nullable"));
     CHECK(xr_xir_domain_new(1048576,&domain)==XR_XIR_VALUE_OK);
     admission=(XrXirValueAdmission){xr_xir_value_arena(&value),domain,NULL,NULL,100000,1048576};
@@ -114,7 +114,8 @@ int main(int argc,char **argv) {
     unsigned mode=argc>1?(unsigned)strtoul(argv[1],NULL,10):0;const char *emit=argc==3?argv[2]:NULL;
     ConcatCompile run=concat_build(SIZE_MAX,concat_limits(),mode,emit);
     if(run.status!=XR_XIR_OK)fprintf(stderr,"concat build status%u stage%u sites%zu\n",run.status,run.stage,run.sites);
-    CHECK(run.status==XR_XIR_OK);if(!emit){concat_goldens(&run);concat_escape(&run);}
+    CHECK(run.status==XR_XIR_OK);
+    if(!emit){concat_goldens(&run);concat_escape(&run);}
     printf("concat baseline mode%u sites%zu allocated%llu peak%llu work%llu\n",mode,run.sites,
         (unsigned long long)run.stats.allocated_bytes,(unsigned long long)run.stats.peak_bytes,(unsigned long long)run.stats.work);
     concat_release(&run);instance_compile_report();return 0;
