@@ -584,6 +584,8 @@ Source 的 &&/|| 在该局部存储上保留短路语义，经原 Checked→特�
 本节不准入普通 var 生成的拥有型 Cell、owned/path 操作、聚合/字符串导出、未知函数值或 native/Instance 执行；它们需要各自实际类型、生命周期与费用接口及独立资格，不从栈内标量存储外推。
 
 
+### 17.40 Source 失败诊断与编辑器发布
+
 Source失败诊断的原始line/column始终为一基字节位置，原诊断结构及SourceContext/Final布局不为编辑器坐标改变。可选失败输出使用独立拥有型XrXirSourceFailure：空输出在真实已定位失败时接收规范模块路径，parser来源和可用的零基UTF-16标量；该参数原子切换为此类型，没有旧路径输出签名别名。路径转移及清理不补做分配或work，显式free释放接收拥有权。
 
 模块图在实际parser callback期间复制首个真实消息、模块及原始位置，并在当次文本仍有效时按原ledger投影UTF-16。CRLF是一个编辑器换行，独立CR遵守既有编译器字节列与编辑器行规则；非法边界不夹取、半UTF8/半CRLF不作为位置。Source corpus随后纳入模块的parse错误同样保留真实来源，资源失败不得改报为语言错误或部分成功。
@@ -1341,6 +1343,8 @@ Source &&/|| preserve short-circuit semantics through this storage, the ordinary
 
 This section does not admit owned Cells produced by ordinary var, owned/path operations, aggregate/string exports, unknown function values or native/Instance execution. Each requires authentic type, lifetime and charging interfaces plus independent qualification; stack scalar storage does not establish those capabilities.
 
+
+### 17.40 Source failure diagnostics and editor publication
 
 Source failure diagnostics retain one-based byte line/column coordinates. Editor positions do not change the original diagnostic or SourceContext/Final layout. The optional failure output uses an independently owned XrXirSourceFailure: an empty receiver obtains the canonical module path for an actual located failure, parser provenance and available zero-based UTF-16 scalars. The parameter cuts over atomically to this type without a legacy path-output signature alias. Path transfer and cleanup allocate no memory or work; explicit free releases receiving ownership.
 

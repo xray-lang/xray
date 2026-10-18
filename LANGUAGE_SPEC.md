@@ -7838,6 +7838,8 @@ Source &&/|| preserve short-circuit semantics through this storage, the ordinary
 This section does not admit owned Cells produced by ordinary var, owned/path operations, aggregate/string exports, unknown function values or native/Instance execution. Each requires authentic type, lifetime and charging interfaces plus independent qualification; stack scalar storage does not establish those capabilities.
 
 
+### 17.40 Source failure diagnostics and editor publication
+
 Source failure diagnostics retain one-based byte line/column coordinates. Editor positions do not change the original diagnostic or SourceContext/Final layout. The optional failure output uses an independently owned XrXirSourceFailure: an empty receiver obtains the canonical module path for an actual located failure, parser provenance and available zero-based UTF-16 scalars. The parameter cuts over atomically to this type without a legacy path-output signature alias. Path transfer and cleanup allocate no memory or work; explicit free releases receiving ownership.
 
 The module graph copies the first actual parser callback message, module and original location, and projects UTF-16 while that exact text is alive on the original ledger. CRLF is one editor newline; standalone CR follows the existing compiler-byte and editor-row rules. Invalid boundaries are not clamped, and half-UTF8 or half-CRLF boundaries are not positions. Parse failures in later corpus inclusions retain their actual producer too. Resource failure never becomes a language error or partial success.
