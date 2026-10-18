@@ -421,6 +421,7 @@ static void sdk_actual_faults(const XrXirRuntimeSdkRequest *original) {
 }
 #include "xir_sdk_shared_resources.inc.c"
 int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--known-bytes")) { sdk_known_bytes(); return 0; }
     if ((argc!=3 && argc!=4) || (argc==4 && strcmp(argv[3],"status") && strcmp(argv[3],"--shared-resources"))) {
         fputs("usage: sdk-test ROOT MANIFEST [status|--shared-resources]\n",stderr);return 2;
     }
