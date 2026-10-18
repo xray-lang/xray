@@ -72,7 +72,11 @@ static void cell_runtime_failure(CellRuntimeRun *run, unsigned pass, XrXirCallSt
     } else if (instance->call && (failed_phase == CELL_RT_POLL || failed_phase == CELL_RT_CONTROL)) {
         CHECK(xr_xir_instance_poll_bounded(instance, 1).outcome.status == status);
         XrXirCallStatus completed = xr_xir_task_executor_completion_status(instance->executor);
-        XrXirCallStatus expected = completed == XR_XIR_CALL_READY ? XR_XIR_CALL_BAD_STATE : completed;
+        /* A root LIMIT has no transferable value. A group failure over a
+         * successful root still reports its exact completion status. */
+        XrXirCallStatus expected = completed == XR_XIR_CALL_READY ||
+            (completed == XR_XIR_CALL_LIMIT && xr_xir_call_state(instance->call) == XR_XIR_CALL_LIMIT) ?
+            XR_XIR_CALL_BAD_STATE : completed;
         CHECK(xr_xir_instance_take_result(instance, &output) == expected);
     }
     CHECK(!output.type && !output.reserved && !output.payload);
