@@ -14,9 +14,26 @@ XR_FUNC XrXirStatus xir_stdlib_library_catalog_new(const XrXirCompileContext *co
     const char *physical_root, XrXirLibraryCatalog **output) {
     if (!xir_compile_context_valid(context) || !physical_root || !output || *output)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirLibraryInput input = {xir_stdlib_output_checked,xir_stdlib_output_checked_length,{0}, (XrXirLibraryModuleInput[]){{{XR_MODULE_IDENTITY_STDLIB,"io",physical_root},"io/output.xr"}},1};
-    if (!xir_compile_work(context,sizeof(input.sha256))) return XR_XIR_BUDGET;
-    memcpy(input.sha256,xir_stdlib_output_checked_sha256,sizeof(input.sha256));
-    // The ordinary reader verifies the complete body and canonical owner.
-    return xr_xir_compile_library_catalog_new_v2(context,&input,1,output);
+    size_t count = xir_stdlib_checked_component_count;
+    if (!count || count > SIZE_MAX / sizeof(XrXirLibraryInput) ||
+        count > SIZE_MAX / sizeof(XrXirLibraryModuleInput)) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status = XR_XIR_OK;
+    XrXirLibraryInput *inputs = xir_compile_calloc(context,count,sizeof(*inputs),&status);
+    if (!inputs) return status;
+    XrXirLibraryModuleInput *modules = xir_compile_calloc(context,count,sizeof(*modules),&status);
+    if (!modules) { xr_compile_resources_free(inputs); return status; }
+    for (size_t i = 0; i < count; ++i) {
+        const XirStdlibCheckedComponent *component = &xir_stdlib_checked_components[i];
+        if (!xir_compile_work(context,1+sizeof(inputs[i].sha256))) { status = XR_XIR_BUDGET; break; }
+        modules[i] = (XrXirLibraryModuleInput){{XR_MODULE_IDENTITY_STDLIB,
+            component->namespace_id,physical_root},component->logical_path};
+        inputs[i] = (XrXirLibraryInput){component->bytes,component->length,{0},&modules[i],1};
+        memcpy(inputs[i].sha256,component->sha256,sizeof(inputs[i].sha256));
+    }
+    // Each body and its canonical module are independently verified on the same ledger.
+    if (status == XR_XIR_OK)
+        status = xr_xir_compile_library_catalog_new_v2(context,inputs,count,output);
+    xr_compile_resources_free(modules);
+    xr_compile_resources_free(inputs);
+    return status;
 }

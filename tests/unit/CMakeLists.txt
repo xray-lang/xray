@@ -4669,3 +4669,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_enum_payload/CMakeLists.txt")
 
 # Ordinary source classes retain the language receiver contract.
 include(${CMAKE_CURRENT_SOURCE_DIR}/stdlib/class_receivers.cmake)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/stdlib_families.cmake)

@@ -33,7 +33,7 @@ def main():
     environment.pop('XRAY_STDLIB_PATH', None)
     environment['PATH'] = os.pathsep.join(part for part in environment['PATH'].split(os.pathsep)
                                         if not (Path(part)/'clang_rt.asan_dynamic-x86_64.dll').is_file())
-    checked_relative = Path('lib/xray/stdlib-xir/io/output')
+    checked_relative = Path('lib/xray/stdlib-xir')
     sdk_relative = Path('lib/xray/xir-runtime-sdk')
     expected = build/'src/xir/generated/stdlib-checked/stdlib-manifest.json'
     sdk_expected = build/'xir-runtime-sdk/sdk_manifest.json'
@@ -103,21 +103,28 @@ def main():
         program = output/'program'
         shutil.copytree(root/'tests/fixtures/xir_cli_product', program)
         source = program/'main.xr'
+        source.write_text(source.read_text(encoding='utf-8') +
+            '\nimport time as Clock\nconst initial=Clock.nanos()\nClock.sleep(1)\n'
+            'print(Clock.nanos()-initial>=1000000)\n', encoding='utf-8')
         relocated = output/'relocated'
         shutil.copytree(prefixes['full'], relocated)
-        expected_stdout, expected_stderr = b'A\0B41 42 42 true true 1.5\n', b'E\0R'
+        expected_stdout, expected_stderr = b'A\0B41 42 42 true true 1.5\ntrue\n', b'E\0R'
         for name, prefix in (('core', prefixes['core']), ('relocated', relocated)):
             binary = prefix/'bin/xray.exe'
             version, errors = run(name+'-version', [binary, '--version', '--json'])
             assert not errors and json.loads(version)['product'] == 'xray-lang'
             publication = (prefix/checked_relative/'stdlib-manifest.json').read_bytes()
             output_source = prefix/'lib/xray/stdlib/io/output.xr'
+            time_source = prefix/'lib/xray/stdlib/time/time.xr'
             original = output_source.read_bytes()
+            original_time = time_source.read_bytes()
             for scenario in ('source-absent', 'source-poisoned'):
                 if scenario == 'source-absent':
                     output_source.unlink()
+                    time_source.unlink()
                 else:
                     output_source.write_bytes(b'invalid Xray; Checked input must own this declaration\n')
+                    time_source.write_bytes(b'invalid time source; Checked input must own the clock closure\n')
                 out, err = run(name+'-'+scenario+'-vm', [binary, 'run', source])
                 assert (out, err) == (expected_stdout, expected_stderr)
                 generated = output/(name+'-'+scenario+'.c')
@@ -134,6 +141,7 @@ def main():
                     assert (out, err) == (expected_stdout, expected_stderr)
                 assert (prefix/checked_relative/'stdlib-manifest.json').read_bytes() == publication
             output_source.write_bytes(original)
+            time_source.write_bytes(original_time)
             sentinel = output/(name+'-preserved.exe')
             sentinel.write_bytes(b'existing executable publication')
             invalid_env = dict(environment, XRAY_STDLIB_PATH=str(output/'missing-stdlib'))
@@ -160,23 +168,28 @@ def main():
                 path.write_bytes(original)
                 publication.write_bytes(expected.read_bytes())
 
-        for name in ('io-output.chk',):
+        for name in (row['path'] for row in json.loads(expected.read_bytes())['components']):
             path = checked/name
-            rejected('missing-'+name, path)
+            rejected('missing-'+name.replace('/', '-'), path)
             data = bytearray(path.read_bytes())
             data[0] ^= 1
-            rejected('corrupt-'+name, path, data)
+            rejected('corrupt-'+name.replace('/', '-'), path, data)
         trusted = output/'invalid-trusted-record.json'
         cases = ('old-schema', 'unknown-schema', 'unknown-field', 'role', 'escape',
-                 'module-identity', 'digest', 'length')
+                 'module-identity', 'noncanonical-identity', 'empty', 'duplicate-identity',
+                 'duplicate-path', 'digest', 'length')
         for case in cases:
             record = json.loads(expected.read_bytes())
-            if case == 'old-schema': record['schema'] = 2
+            if case == 'old-schema': record['schema'] = 1
             elif case == 'unknown-schema': record['schema'] = 3
             elif case == 'unknown-field': record['unknown'] = 1
             elif case == 'role': record['components'][0]['role'] = 'source'
             elif case == 'escape': record['components'][0]['path'] = '../io-output.chk'
-            elif case == 'module-identity': record['module_identity'] = 'untrusted'
+            elif case == 'module-identity': record['components'][0]['module_identity'] = 'untrusted'
+            elif case == 'noncanonical-identity': record['components'][0]['module_identity'] = 'stdlib-module-v1:module=2:io:path=13:io//output.xr'
+            elif case == 'empty': record['components'] = []
+            elif case == 'duplicate-identity': record['components'].append(dict(record['components'][0]))
+            elif case == 'duplicate-path': record['components'][1]['path'] = record['components'][0]['path']
             elif case == 'digest': record['components'][0]['sha256'] = '0'*64
             elif case == 'length': record['components'][0]['length'] += 1
             trusted.write_text(json.dumps(record), encoding='utf-8')
