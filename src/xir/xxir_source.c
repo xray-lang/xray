@@ -1862,6 +1862,7 @@ static bool source_binding(SourceContext *ctx, AstNode *node, bool top) {
     }
     if (!decl->is_const && decl->type_annotation && initial.type != XR_XIR_UNIT)
         ctx->bodies[ctx->function].recipes[initial.id - ctx->functions[ctx->function].parameter_count].root.kind = 1;
+    /* owned: The graph outlives this temporary binding; snapshot publication copies its name. */
     *symbol = (SourceName){.next=ctx->locals,.name=decl->name,.imported=NULL,.node=node,.kind=logical_type == XR_XIR_UNIT && decl->is_const ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
             .index=logical_type == XR_XIR_UNIT && decl->is_const ? UINT32_MAX : initial.id,.module=ctx->module,.type=logical_type,.mutable=!decl->is_const,
             .construction=false,.declaration=0,.inferred=false,.checked_library=false};
@@ -1888,6 +1889,7 @@ static bool source_nested_function(SourceContext *ctx, AstNode *node) {
     if (!symbol) {
         symbol = source_alloc(ctx, 1, sizeof(*symbol));
         if (!symbol) return false;
+        /* owned: The graph outlives this temporary binding; snapshot publication copies its name. */
         *symbol = (SourceName){.next=ctx->locals,.name=decl->name,.imported=NULL,.node=node,.kind=SOURCE_PENDING,
             .index=UINT32_MAX,.module=ctx->module,.type=XR_XIR_UNIT,.mutable=false,
             .construction=false,.declaration=0,.inferred=false,.checked_library=false};
