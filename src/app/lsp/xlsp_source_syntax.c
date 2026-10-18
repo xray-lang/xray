@@ -105,6 +105,7 @@ done:
     xlsp_source_syntax_free(s);return status;
 }
 const AstNode *xlsp_source_syntax_ast(const XlspSyntaxSnapshot *s){return s?s->ast:NULL;}
+XrCompileState *xlsp_source_syntax_state(const XlspSyntaxSnapshot *s){return s?s->state:NULL;}
 const XlspSyntaxDiagnostic *xlsp_source_syntax_diagnostics(const XlspSyntaxSnapshot *s){return s?s->diagnostics:NULL;}
 XrParseStatus xlsp_source_syntax_status(const XlspSyntaxSnapshot *s){return s?s->status:XR_PARSE_BAD_ARGUMENT;}
 static XrXirStatus syntax_work(const XlspSyntaxSnapshot *s,size_t amount) {

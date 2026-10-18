@@ -16,6 +16,10 @@ typedef struct XlspSyntaxDiagnostic {
 XR_FUNC XrParseStatus xlsp_source_syntax_build(XrCompilerSession *,const XlspSourceDocument *,XlspSyntaxSnapshot **);
 XR_FUNC void xlsp_source_syntax_free(XlspSyntaxSnapshot *);
 XR_FUNC const AstNode *xlsp_source_syntax_ast(const XlspSyntaxSnapshot *);
+/* Borrow the original retained first-failure state for parser-owned syntax
+ * formatting. The snapshot must stay live; callers never release or reset it. */
+XR_FUNC XrCompileState *xlsp_source_syntax_state(const XlspSyntaxSnapshot *);
+
 XR_FUNC const XlspSyntaxDiagnostic *xlsp_source_syntax_diagnostics(const XlspSyntaxSnapshot *);
 XR_FUNC XrParseStatus xlsp_source_syntax_status(const XlspSyntaxSnapshot *);
 XR_FUNC XrXirStatus xlsp_source_syntax_folding_json(const XlspSyntaxSnapshot *,XrJsonValue **);

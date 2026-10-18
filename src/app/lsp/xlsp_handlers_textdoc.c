@@ -23,6 +23,7 @@
 #include "xlsp_semantic_tokens.h"
 #include "xlsp_inlay_hints.h"
 #include "xlsp_utils.h"
+#include "xlsp_index_json.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <string.h>
@@ -85,6 +86,12 @@ XrJsonValue *xlsp_handle_td_completion(XrLspServer *server, XrJsonValue *params)
     lsp_log("handle_completion: uri=%s, line=%d, char=%d", uri, pos.line, pos.character);
 
     XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    if(!items||server->source_failure.stage) {
+        xjson_free(items);
+        if(!server->source_failure.stage){server->source_failure.stage=24;server->source_failure.status=XR_XIR_OUT_OF_MEMORY;}
+        return NULL;
+    }
+
 
     int item_count = items ? xjson_array_len(items) : 0;
     int max_items = server->config.completion_max_items;
@@ -95,10 +102,15 @@ XrJsonValue *xlsp_handle_td_completion(XrLspServer *server, XrJsonValue *params)
     }
     lsp_log("handle_completion: returning %d items%s", item_count, truncated ? " (truncated)" : "");
 
-    XrJsonValue *result = xjson_new_object();
-    xjson_object_set(result, "isIncomplete", xjson_new_bool(truncated));
-    xjson_object_set(result, "items", items);
-
+    XrJsonValue *result=xjson_new_object();
+    if(!result||!index_json_member(result,"isIncomplete",xjson_new_bool(truncated))) {
+        xjson_free(result);xjson_free(items);
+        server->source_failure.stage=24;server->source_failure.status=XR_XIR_OUT_OF_MEMORY;return NULL;
+    }
+    XrJsonValue *child=items;items=NULL;
+    if(!index_json_member(result,"items",child)) {
+        xjson_free(result);server->source_failure.stage=24;server->source_failure.status=XR_XIR_OUT_OF_MEMORY;return NULL;
+    }
     return result;
 }
 

@@ -4643,3 +4643,4 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/xir/lsp_document_owner/CMakeLists.txt")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_completion_resolve/CMakeLists.txt")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_completion_resolve_errors/CMakeLists.txt")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_enum_payload/CMakeLists.txt")
