@@ -202,7 +202,17 @@ static void public_repl_samples(void) {
 static void public_repl_budgets(void) {
     const XrCompileResourceLimits generous={UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
     PublicReplOwners owners={0};XrCompileResourceStats required={0};runtime_fail_at=SIZE_MAX;
-    CHECK(public_repl_drive(&generous,&owners)==XR_SOURCE_OK);
+    XrSourceStatus baseline=public_repl_drive(&generous,&owners);
+    if(baseline!=XR_SOURCE_OK) {
+        XrCompileResourceStats observed={0};
+        bool measured=owners.owner && xr_compile_resources_stats(
+            xr_source_compiler_resources(owners.owner->compiler),&observed)==XR_COMPILE_RESOURCE_OK;
+        fprintf(stderr,"public REPL original baseline status=%u resources=%u allocated=%llu peak=%llu work=%llu limit=%llu\n",
+            (unsigned)baseline,(unsigned)measured,(unsigned long long)observed.allocated_bytes,
+            (unsigned long long)observed.peak_bytes,(unsigned long long)observed.work,
+            (unsigned long long)generous.work);
+    }
+    CHECK(baseline==XR_SOURCE_OK);
     CHECK(xr_compile_resources_stats(owners.independent->resources,&required)==XR_COMPILE_RESOURCE_OK);public_repl_close(&owners);
     for(unsigned axis=0;axis<3;++axis)for(int delta=-1;delta<=1;++delta) {
         XrCompileResourceLimits limits={required.allocated_bytes,required.peak_bytes,required.work};

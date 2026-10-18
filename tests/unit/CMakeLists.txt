@@ -3694,6 +3694,8 @@ foreach(source_entry IN ITEMS test_dostring_module_defaults test_dostring_progra
     set_target_properties(${source_entry} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     add_test(NAME ${source_entry} COMMAND $<TARGET_FILE:${source_entry}>)
 endforeach()
+target_compile_definitions(test_dostring_program_image PRIVATE
+    XR_PROGRAM_IMAGE_TEMP_ROOT="${CMAKE_CURRENT_BINARY_DIR}")
 set_tests_properties(test_dostring_module_defaults PROPERTIES LABELS "api;modules;defaults")
 set_tests_properties(test_dostring_program_image PROPERTIES LABELS "api;modules;generics")
 add_test(

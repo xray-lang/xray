@@ -80,7 +80,7 @@ static bool write_program_file(const char *path, const char *source) {
 }
 
 TEST(dofile_fills_defaults_that_call_exports_of_their_module) {
-    char template[] = "/tmp/xray_dofile_defaults_XXXXXX";
+    char template[] = XR_PROGRAM_IMAGE_TEMP_ROOT "/xray_dofile_defaults_XXXXXX";
     char *directory = xr_test_mkdtemp(template);
     ASSERT(directory != NULL);
     char resolved_directory[4096];
