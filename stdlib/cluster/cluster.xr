@@ -1856,7 +1856,7 @@ export final class PhiDetector {
         this.lastHeartbeatMs = 0
     }
 
-    ref record(nowMs: i64) {
+    record(nowMs: i64) {
         if (this.lastHeartbeatMs > 0) {
             var interval = (nowMs - this.lastHeartbeatMs) as f64
             if (interval < 0.0) { interval = 0.0 }
