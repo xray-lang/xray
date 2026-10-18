@@ -66,13 +66,13 @@ static bool source_catch_placeholders(SourceContext *ctx, const SourceMatchArm *
     return true;
 }
 static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceMatchArm *arm,
-    SourceValue error, SourceMatchFailure **failures) {
+    SourceValue error, SourceMatchFailure **failures, uint32_t *accepted) {
     SourceName *locals = ctx->locals, *scope = ctx->scope;
     if (clause->var_name) {
         SourceName *binding = source_alloc(ctx,1,sizeof(*binding));
         if (!binding) return false;
         *binding = (SourceName){locals,clause->var_name,NULL,clause->body,SOURCE_LOCAL,
-            error.id,ctx->module,error.type,false,false,0, false, false};
+            error.id,ctx->module,error.type,false,false,0, false, false,0,0};
         ctx->locals = binding;
         XrXirSourceRange range = {ctx->module,clause->var_line,clause->var_column,
             clause->var_line,clause->var_column+(uint32_t)source_text_size(ctx, clause->var_name)};
@@ -83,6 +83,7 @@ static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceM
             source_match_alternatives(ctx,arm,error,true,failures);
         if (!bound) return false;
     }
+    if (accepted) *accepted=ctx->bodies[ctx->function].count;
     bool ok = scoped_statement(ctx,clause->body);
     ctx->locals = locals; ctx->scope = scope; return ok;
 }
@@ -114,7 +115,7 @@ static bool source_dead_catch(SourceContext *ctx, XrCatchClause *clause, SourceM
         body->initialization_parent=region;
     }
     body->error_context = NULL;
-    bool ok = begin_block(ctx) && source_catch_body(ctx,clause,arm,(SourceValue){UINT32_MAX,type},NULL);
+    bool ok = begin_block(ctx) && source_catch_body(ctx,clause,arm,(SourceValue){UINT32_MAX,type},NULL,NULL);
     if (ok && region) ok=source_catch_snapshot(ctx,region);
     i = 0;
     for (SourceLoop *loop = ctx->loop; loop; loop = loop->parent) *loop = loops[i++];
@@ -132,8 +133,31 @@ static bool source_catch_join(SourceContext *ctx, uint32_t *joins, uint32_t *cou
     joins[(*count)++] = ctx->bodies[ctx->function].count;
     return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_JUMP,XR_XIR_UNIT,{0},{0},0,{0}},NULL);
 }
-static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, const XrXirType *types,
-    SourceMatchArm *patterns, SourceValue error, uint32_t checkpoint, uint32_t *joins, uint32_t *count) {
+static bool source_catch_accept(SourceContext *ctx,XrCatchClause *clause,uint32_t instruction) {
+    SourceFunction *body=&ctx->bodies[ctx->function];
+    if (instruction>=body->count) return source_fail(ctx,clause->body,XR_XIR_BAD_STRUCTURE,"catch acceptance lacks an instruction");
+    if (!source_work_units(ctx,clause->body,sizeof(XrXirSourceDebugPoint))) return false;
+    XrXirSourceDebugPoint *point=&body->recipes[instruction].debug;
+    if (!point->statement) {
+        if (clause->body->node_id==UINT32_MAX) return source_fail(ctx,clause->body,XR_XIR_BUDGET,"catch source identity exhausted");
+        point->range=(XrXirSourceRange){ctx->module,clause->var_line,clause->var_column,0,0};
+        point->statement=clause->body->node_id+1;
+    }
+    point->flags|=XR_XIR_SOURCE_DEBUG_HANDLER_ACCEPT;return true;
+}
+typedef struct SourceCatchDispatch {
+    TryCatchNode *attempt;
+    const XrXirType *types;
+    SourceMatchArm *patterns;
+    SourceValue error;
+    uint32_t checkpoint, *joins, *count;
+    SourceHandlerRecipe *route;
+} SourceCatchDispatch;
+static bool source_catch_dispatch(SourceContext *ctx,const SourceCatchDispatch *dispatch) {
+    TryCatchNode *attempt=dispatch->attempt;const XrXirType *types=dispatch->types;
+    SourceMatchArm *patterns=dispatch->patterns;SourceValue error=dispatch->error;
+    uint32_t checkpoint=dispatch->checkpoint,*joins=dispatch->joins,*count=dispatch->count;
+    SourceHandlerRecipe *route=dispatch->route;
     SourceFunction *body = &ctx->bodies[ctx->function];
     bool consumed = false;
     for (int i = 0; i < attempt->catch_count; ++i) {
@@ -146,7 +170,7 @@ static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, con
         }
         SourceValue bound = error;
         SourceMatchFailure *failures = NULL;
-        uint32_t branch = UINT32_MAX;
+        uint32_t branch = UINT32_MAX, first=body->count;
         if (types[i] != XR_XIR_ERROR) {
             SourceValue test;
             if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ERROR_IS,XR_XIR_BOOL,{error.id},{0},types[i],{0}},&test)) return false;
@@ -156,7 +180,11 @@ static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, con
             if (!begin_block(ctx) ||
                 !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ERROR_NARROW,types[i],{error.id},{0},0,{0}},&bound)) return false;
         } else consumed = true;
-        if (!source_catch_body(ctx,clause,&patterns[i],bound,&failures) || !source_catch_join(ctx,joins,count)) return false;
+        uint32_t accepted=0;
+        if (!source_catch_body(ctx,clause,&patterns[i],bound,&failures,&accepted) ||
+            !source_catch_join(ctx,joins,count) || !source_catch_accept(ctx,clause,accepted)) return false;
+        route->selectors[route->selector_count++]=(XrXirSourceDebugSelector){first,accepted,
+            branch==UINT32_MAX ? UINT32_MAX : body->count};
         if (branch != UINT32_MAX) {
             uint32_t next = body->block_count;
             body->recipes[branch].instruction.targets[1] = next;
@@ -168,8 +196,11 @@ static bool source_catch_dispatch(SourceContext *ctx, TryCatchNode *attempt, con
         }
     }
     if (!consumed) {
+        route->propagation=body->count;
+        route->parent=body->error_context ? body->error_context->route : NULL;
         if (body->error_context) {
             if (!source_error_edge(ctx,error)) return false;
+            route->propagation_edge=body->error_context->edges;
         } else if (!source_recipe_record(ctx,(XrXirInstruction){XR_XIR_THROW,XR_XIR_UNIT,{error.id},{0},0,{0}},NULL)) return false;
     }
     return true;
@@ -183,7 +214,7 @@ static bool source_panic_handler(SourceContext *ctx, XrCatchClause *clause, uint
     SourceValue caught = {0, XR_XIR_UNIT};
     if (!begin_block(ctx) || !source_recipe_record(ctx,(XrXirInstruction){XR_XIR_PANIC_CATCH,
             clause->var_name ? XR_XIR_PANIC_INFO : XR_XIR_UNIT,{0},{0},0,{0}},&caught) ||
-        !source_catch_body(ctx,clause,NULL,caught,NULL) || !source_catch_join(ctx,joins,count)) return false;
+        !source_catch_body(ctx,clause,NULL,caught,NULL,NULL) || !source_catch_join(ctx,joins,count)) return false;
     for (uint32_t b = first; b < end; ++b) {
         if (!source_work(ctx,clause->body)) return false;
         if (!body->blocks[b].block.panic) body->blocks[b].block.panic = handler;
@@ -240,7 +271,10 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
     }
     SourceErrorContext handler = {0}, *outer = body->error_context;
     handler.frontier = body->frontier;
-    if (ordinary) body->error_context = &handler;
+    if (ordinary) {
+        handler.route=source_alloc(ctx,1,sizeof(*handler.route));if (!handler.route) return false;
+        handler.route->propagation=UINT32_MAX;body->error_context=&handler;
+    }
     bool ok = scoped_statement(ctx,attempt->try_body);
     body->error_context = outer;
     if (!ok) return false;
@@ -260,11 +294,17 @@ static bool source_try(SourceContext *ctx, AstNode *node) {
         for (SourceErrorEdge *edge = handler.edges; edge; edge = edge->next) {
             if (!source_work(ctx,node)) return false;
             body->recipes[edge->jump].instruction.targets[0] = target;
-            --at; inputs[at*2] = (SourceValue){edge->block,XR_XIR_UNIT}; inputs[at*2+1] = edge->value;
+            --at;edge->input=at;inputs[at*2] = (SourceValue){edge->block,XR_XIR_UNIT}; inputs[at*2+1] = edge->value;
         }
         SourceValue error;
-        if (!source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,XR_XIR_ERROR,{0},{0},0,{0}},inputs,handler.count*2,&error) ||
-            !source_catch_dispatch(ctx,attempt,types,patterns,error,checkpoint,joins,&count)) return false;
+        if (!source_recipe_group(ctx,(XrXirInstruction){XR_XIR_PHI,XR_XIR_ERROR,{0},{0},0,{0}},inputs,handler.count*2,&error)) return false;
+        SourceHandlerRecipe *route=handler.route;
+        if (body->handler_count==UINT32_MAX) return source_fail(ctx,node,XR_XIR_BUDGET,"source handler identity exhausted");
+        route->selectors=source_alloc(ctx,attempt->catch_count,sizeof(*route->selectors));if (!route->selectors) return false;
+        route->identity=++body->handler_count;route->error=error.id;
+        route->next=body->handler_recipes;body->handler_recipes=route;
+        SourceCatchDispatch dispatch={attempt,types,patterns,error,checkpoint,joins,&count,route};
+        if (!source_catch_dispatch(ctx,&dispatch)) return false;
     } else for (int i = 0; i < attempt->catch_count; ++i)
         if (!attempt->catch_clauses[i]->is_panic &&
             !source_dead_catch(ctx,attempt->catch_clauses[i],&patterns[i],types[i],checkpoint)) return false;

@@ -1,0 +1,66 @@
+enum Problem { Failed { value: string } }
+
+export fn fail() -> i64 {
+    defer { print(91) }
+    var n = 0
+    while(n < 32) { n += 1 }
+    try {
+        defer { print(89) }
+        throw Problem.Failed{value: "child\0α"}
+    } catch(problem: Problem) { throw problem } // NATIVE_ACCEPT fail
+}
+
+fn sibling() -> i64 {
+    defer { print(73) }
+    var n = 0
+    while(n < 256) { n += 1 }
+    print(17)
+    return 17
+}
+
+export fn awaiting() -> i64 {
+    defer { print(95) }
+    const task = go fail()
+    const other = go sibling()
+    try { return await task }
+    catch(problem: Problem) { return await other }
+}
+
+export fn busy() -> i64 {
+    defer { print(95) }
+    const task = go fail()
+    const other = go sibling()
+    var n = 0
+    while(n < 256) { n += 1 }
+    return 8
+}
+
+export fn escaping() -> Task<i64> { return go fail() }
+export fn main() -> i64 { return 0 }
+
+fn relay() -> i64 { return fail() }
+
+export fn catching() -> i64 {
+    try { return relay() }
+    catch(Problem.Failed{value: "wrong"}) { return 1 }
+    catch(Problem.Failed{value: "child\0α"}) { return 71 } // NATIVE_ACCEPT catching
+}
+
+export fn escape_root() -> i64 { return relay() }
+
+export fn indirect() -> i64 {
+    const callback = fail
+    try { return callback() }
+    catch(problem: Problem) { return 87 } // NATIVE_ACCEPT indirect
+}
+
+fn rec(n: i64) -> i64 {
+    if(n == 0) { return fail() }
+    try { return rec(n - 1) }
+    catch(Problem.Failed{value: "wrong"}) { return 1 }
+}
+
+export fn recursive() -> i64 {
+    try { return rec(3) }
+    catch(problem: Problem) { return 83 } // NATIVE_ACCEPT recursive
+}

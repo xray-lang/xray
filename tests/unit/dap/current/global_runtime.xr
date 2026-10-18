@@ -1,0 +1,15 @@
+import "./global_runtime_library" as lib
+const shared:i64=73
+var changing:i64=11
+var values:Array<i64>=[10,20,30]
+const snapshot=values
+const title:string="global\0value"
+var nothing=()
+fn inspect()->i64 {
+    const shared:i64=99
+    const before=changing
+    const result=values[lib.leaf(5)-25]
+    return changing+values[1]+result+shared+before
+}
+print(inspect())
+const late:i64=88

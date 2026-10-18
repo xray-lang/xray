@@ -1,0 +1,4 @@
+enum Failure{Bad}
+fn opaque(error:Error)->i64{throw error}
+fn worker()->i64{const f=opaque;return f(Failure.Bad)}
+fn main()->i64{return await go worker()}

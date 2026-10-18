@@ -1,0 +1,6 @@
+export fn p09Answer()->i64{
+    var text=""
+    var i=0
+    while(i<32768){text+="x";i+=1}
+    return len(text)
+}

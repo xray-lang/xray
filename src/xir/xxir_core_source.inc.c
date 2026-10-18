@@ -71,6 +71,7 @@ static bool source_core_contract(SourceContext *ctx) {
 #include "xxir_source_construct.inc.c"
 
 static void source_core_dispose(SourceContext *ctx) {
+    source_release_retired_arrays(ctx);
     xr_xir_compile_construction_free(ctx->construction);
     ctx->construction=NULL;
     for (SourceManifest *manifest=ctx->manifests;manifest;manifest=manifest->next)

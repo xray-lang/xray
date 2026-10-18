@@ -21,6 +21,8 @@
 #include "xir_generic_method71_golden.h"
 #include "xir_generic_method72_golden.h"
 #include "xir_generic_method75_golden.h"
+#include "xir_generic_method73_golden.h"
+#include "xir_generic_method74_golden.h"
 static void generic_method_packet_cases(void) {
     checked_previous_identity_rejected(generic_method71_golden,sizeof(generic_method71_golden));
     checked_previous_identity_rejected(generic_method71_invalid_flags0,sizeof(generic_method71_invalid_flags0));
@@ -35,6 +37,9 @@ static void generic_method_packet_cases(void) {
     checked_previous_identity_rejected(generic_method72_golden,sizeof(generic_method72_golden));
     checked_previous_identity_rejected(generic_method72_invalid_flags0,sizeof(generic_method72_invalid_flags0));
     checked_previous_identity_rejected(generic_method72_invalid_flags1,sizeof(generic_method72_invalid_flags1));
+    checked_previous_identity_rejected(generic_method73_golden,sizeof(generic_method73_golden));
+    checked_previous_identity_rejected(generic_method73_invalid_flags0,sizeof(generic_method73_invalid_flags0));
+    checked_previous_identity_rejected(generic_method73_invalid_flags1,sizeof(generic_method73_invalid_flags1));
     checked_current_callable_rejected(generic_method75_invalid_flags0,sizeof(generic_method75_invalid_flags0));
     checked_current_callable_rejected(generic_method75_invalid_flags1,sizeof(generic_method75_invalid_flags1));
     GenericMethodOwnedFixture fixture; generic_method_owned_fixture(&fixture);

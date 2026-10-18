@@ -1,0 +1,22 @@
+enum DataChoice { Number { value:i64 }, Text { text:string }, Empty }
+fn choiceScore(value:DataChoice)->i64 {
+    return match(value){DataChoice.Number{value}->value,DataChoice.Text{text}->len(text),DataChoice.Empty->-7}
+}
+fn inspect()->i64 {
+    var pair:(i64,string)=(11,"old")
+    const beforePair:(i64,string)=pair
+    const incomingPair:(i64,string)=(99,"new\0value")
+    var optional:i64?=11
+    const beforeOptional:i64?=optional
+    const incomingOptional:i64?=99
+    const absent:i64?=null
+    var choice:DataChoice=DataChoice.Number{value:11}
+    const beforeChoice:DataChoice=choice
+    const incomingChoice:DataChoice=DataChoice.Number{value:99}
+    const textChoice:DataChoice=DataChoice.Text{text:"new"}
+    const emptyChoice:DataChoice=DataChoice.Empty
+    const replacementText:string="fresh"
+    return pair.0+(optional ?? -1)+choiceScore(choice)+beforePair.0+(beforeOptional ?? -1)+choiceScore(beforeChoice)
+}
+const job=go inspect()
+print(await job)

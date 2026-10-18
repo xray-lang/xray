@@ -14,6 +14,8 @@
 #include "xxir_value_internal.h"
 #include "xxir_compile_domain.h"
 #include "xxir_cell_owner_internal.h"
+#include "xxir_value_path_internal.h"
+#include "xxir_value_observe_internal.h"
 #include "xxir_class_origin_internal.h"
 #include "xxir_type_arena.h"
 #include "xxir_types.h"
@@ -647,6 +649,23 @@ static XrXirValueStatus xr_xir_string_new_graph_operation(XrXirDomain *domain, c
     if (!xr_xir_domain_work(domain, (uint64_t)length + 1)) return XR_XIR_VALUE_LIMIT;
     XrUtf8ScanResult scan = xr_utf8_core_scan_strict((const uint8_t *) bytes, length);
     if (scan.error != XR_UTF8_OK) return XR_XIR_VALUE_BAD_UTF8;
+    /* A bounded search lends no cache-owned reference. Live equal short values
+     * may share their ordinary COW object; real physical charges never refund. */
+    if (length <= 64 && !domain->closed) {
+        unsigned checked = 0;
+        for (XirObject *object = domain->objects; object && checked < 8; object = object->graph_next, ++checked) {
+            if (!xr_xir_domain_work(domain, 1)) return XR_XIR_VALUE_LIMIT;
+            if (object->type != XR_XIR_STRING || object->kind || object->graph_dead ||
+                atomic_load_explicit(&object->references, memory_order_acquire) == UINT32_MAX) continue;
+            XirString *existing = (XirString *)object;
+            if (existing->length != length) continue;
+            if (!xr_xir_domain_work(domain, length)) return XR_XIR_VALUE_LIMIT;
+            if (!length || !memcmp(existing->bytes, bytes, length)) {
+                XrXirValue borrowed = string_value(existing);
+                return xr_xir_value_copy(&borrowed, output);
+            }
+        }
+    }
     XirString *string = NULL;
     XrXirValueStatus status = string_allocate(domain, length, &string);
     if (status != XR_XIR_VALUE_OK) return status;
@@ -888,6 +907,7 @@ XR_FUNC XrXirValueStatus xr_xir_string_append(XrXirValue *destination, const XrX
     xr_xir_value_graph_end();
     return graph_outcome;
 }
+#include "xxir_string_place.inc.c"
 static bool xr_xir_string_view_graph_operation(const XrXirValue *value, const char **bytes, size_t *length) {
     if (!bytes || !length || !xr_xir_value_argument(value, NULL, XR_XIR_STRING)) return false;
     XirString *string = string_pointer(value);
@@ -1839,7 +1859,8 @@ static XrXirValueStatus xr_xir_cell_value_place_graph_operation(const XrXirValue
     if (holder->projection_count || !cell_access(holder, authority)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirType type = (XrXirType) holder->value.type;
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
-    if (!xr_xir_type_is_array(types, type) && !xr_xir_type_is_nominal(types, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (type != XR_XIR_STRING && !xr_xir_type_is_array(types, type) &&
+        !xr_xir_type_is_nominal(types, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *output = (XrXirValuePlace) {type, &holder->value.payload};
     return XR_XIR_VALUE_OK;
 }
@@ -1855,6 +1876,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_value_place(const XrXirValue *cell,
 #include "xxir_cell_owner.inc.c"
 #include "xxir_class_value.inc.c"
 #include "xxir_struct_value.inc.c"
+#include "xxir_value_observe.inc.c"
 #include "xxir_value_path.inc.c"
 #include "xxir_cell_projection.inc.c"
 #include "xxir_class_access.inc.c"

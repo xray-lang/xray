@@ -15,8 +15,12 @@
  */
 
 #include "xxir_vm.h"
-#include "xxir_internal.h"
+#include "xxir_vm_debug_internal.h"
+#include "xxir_call_native_source_internal.h"
+#include "xxir_call_observer_internal.h"
 #include "xxir_program_internal.h"
+#include "xxir_program_packet_internal.h"
+#include "xxir_internal.h"
 #include "xxir_tuple.h"
 #include "xxir_atomic.h"
 #include "xxir_task.h"
@@ -49,6 +53,7 @@ typedef struct ScalarRun {
 #include "xxir_interpreter_state.h"
 #include "xxir_scalar_core.h"
 _Static_assert(sizeof(ScalarRun)==sizeof(XirScalarCoreRun), "scalar descriptor physical size is unchanged");
+#include "xxir_vm_debug_pending.inc.c"
 
 
 
@@ -81,6 +86,14 @@ static XrXirRunStatus instance_step(ScalarRun *run, VmState *state, const XrXirI
             if (status == XR_XIR_CALL_READY) xr_xir_owned_slot_move(run->frame, offset, &value);
         }
         break;
+    }
+    case XR_XIR_CELL_STRING_APPEND: {
+        XrXirValue cell = {(uint32_t)xr_xir_operand_type(run->function, op->args[0]), 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[0]])};
+        XrXirValue suffix = {(uint32_t)xr_xir_operand_type(run->function, op->args[1]), 0,
+            xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]])};
+        status = op->immediate ? xr_xir_instance_cell_string_append_scalar(run->view, &cell, &suffix) :
+            xr_xir_instance_cell_string_append(run->view, &cell, &suffix); break;
     }
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: {
         XrXirType cell = op->op == XR_XIR_CELL_NEW ? op->type : xr_xir_operand_type(run->function, op->args[0]);
@@ -582,7 +595,8 @@ static XrXirRunStatus vm_step_dispatch(ScalarRun *run,VmState *state,const XrXir
     }
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         op->op == XR_XIR_TO_STRING ||
-        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
+        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
+        op->op == XR_XIR_CELL_STRING_APPEND) {
         state->instruction = next;
         return instance_step(run, state, op, run->layout->offsets[result_id], action);
     }
@@ -744,8 +758,9 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
     return XR_XIR_RUN_OK;
 }
 
-static XrXirAction vm_resume(XrXirCallView *view) {
-    const XrXirVmBinding *binding = view->environment;
+static XrXirAction vm_resume_observed(XrXirCallView *view, const XrXirVmBinding *binding,
+    XrXirVmDebug *debug) {
+    if (xr_xir_call_observer_vm(view) != XR_XIR_CALL_READY) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
     if (xir_artifact_is_evaluation(binding->artifact))
         return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{0},{0},0};
     const XrXirModule *module = xr_xir_compile_artifact_module(binding->artifact);
@@ -813,6 +828,22 @@ static XrXirAction vm_resume(XrXirCallView *view) {
         } else if (state->destination != UINT32_MAX)
             xr_xir_scalar_store(run.frame, state->destination, inbox.payload);
         }
+        if (debug && xir_vm_debug_inbox(debug, state, state->destination) != XR_XIR_VALUE_OK)
+            return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,
+                .value={XR_XIR_I64,0,XR_XIR_CALL_LIMIT}};
+    }
+    XirVmDebugPoint point = {binding, layout, state, run.frame, view, state->instruction};
+    if (debug) {
+        bool stopped = false;
+        XrXirValueStatus observed = xir_vm_debug_before(debug, &point, &stopped);
+        if (observed != XR_XIR_VALUE_OK) {
+            xir_vm_debug_faulted(debug,view);
+            return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,
+                {XR_XIR_I64,0,observed == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM :
+                    observed == XR_XIR_VALUE_BAD_ARGUMENT ? XR_XIR_CALL_BAD_ARGUMENT :
+                    observed == XR_XIR_VALUE_UNSUPPORTED ? XR_XIR_CALL_UNSUPPORTED : XR_XIR_CALL_LIMIT},{0},0};
+        }
+        if (stopped) return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE};
     }
     uint32_t at = state->instruction;
     XrXirAction action;
@@ -820,6 +851,12 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     if (status != XR_XIR_RUN_OK)
         action = xr_xir_call_numeric_fault(status, at < function->instruction_count &&
             function->instructions[at].op == XR_XIR_REM_INT);
+    if (debug) {
+        XirVmDebugPendingCall pending={0};
+        if (action.kind==XR_XIR_ACTION_CALL && vm_debug_pending(&point,&action,&pending)!=XR_XIR_VALUE_OK)
+            action=xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
+        xir_vm_debug_after(debug,&point,action.kind,action.kind==XR_XIR_ACTION_CALL ? &pending : NULL);
+    }
     if (action.kind == XR_XIR_ACTION_FAULT && at < function->instruction_count) {
         uint32_t handler = function->blocks[vm_block(function, at)].panic;
         if (handler) return vm_panic_land(&run, state, handler, action);
@@ -827,14 +864,34 @@ static XrXirAction vm_resume(XrXirCallView *view) {
     return action;
 }
 
-static void vm_release(XrXirCallView *view, XrXirCallStatus reason) {
-    (void) reason;
-    const XrXirVmBinding *binding = view->environment;
+static void vm_release_bound(XrXirCallView *view, const XrXirVmBinding *binding) {
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(binding->artifact, binding->function);
     VmState *state = view->state;
     xr_xir_atomic_progress_clear(&state->atomic);
     for (uint32_t i = layout->owned_count; i > 0; --i)
         xr_xir_owned_slot_clear(state + 1, layout->owned_offsets[i - 1]);
+}
+
+static XrXirAction vm_resume(XrXirCallView *view) {
+    return vm_resume_observed(view, view->environment, NULL);
+}
+static void vm_release(XrXirCallView *view, XrXirCallStatus reason) {
+    (void) reason;
+    vm_release_bound(view, view->environment);
+}
+typedef struct DebugVmBinding {
+    XrXirVmBinding base;
+    XrXirVmDebug *debug;
+} DebugVmBinding;
+static XrXirAction debug_vm_resume(XrXirCallView *view) {
+    const DebugVmBinding *binding = view->environment;
+    return vm_resume_observed(view, &binding->base, binding->debug);
+}
+static void debug_vm_release(XrXirCallView *view, XrXirCallStatus reason) {
+    (void) reason;
+    const DebugVmBinding *binding = view->environment;
+    xir_vm_debug_release(binding->debug, view->state);
+    vm_release_bound(view, &binding->base);
 }
 
 static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t function,
@@ -996,6 +1053,193 @@ finish:
     owner->artifact=*artifact;*artifact=NULL;*output=program;
     return XR_XIR_OK;
 }
+typedef struct DebugVmProgramOwner {
+    XrXirArtifact *artifact;
+    DebugVmBinding *bindings;
+    XrXirVmDebug *debug;
+    XrXirCodeLease native;
+    XirCallNativeSourceCode native_code;
+    uint32_t *native_offsets;
+    bool bound;
+} DebugVmProgramOwner;
+static void debug_vm_program_release(void *pointer) {
+    DebugVmProgramOwner *owner = pointer;
+    if (owner->bound) xir_vm_debug_unbind(owner->debug);
+    if (owner->native.release) owner->native.release(owner->native.owner);
+    /* The canonical Program input owns the artifact; this lease owns wiring. */
+    xr_compile_resources_free(owner->bindings);
+    xr_compile_resources_free(owner->native_offsets);
+    xr_xir_vm_debug_drop(owner->debug);
+    xr_compile_resources_free(owner);
+}
+typedef struct DebugProgramAdmission {
+    const XrXirVmDebugNative *native;
+    XrXirCodeLease lease;
+} DebugProgramAdmission;
+/* Current wire identity detects drift only. The canonical Input receiver below
+ * separately repeats complete body, metadata, layout and Final verification. */
+static XrXirStatus debug_native_match(const XrXirArtifact *artifact,const XrXirVmDebugNative *input) {
+    const XrXirProgramSpec *native=input->program;const unsigned char *mask=input->mask;uint32_t count=input->count;
+    const XirCallNativeSourceCode *code=input->source;
+    if (!native || !code || code->version!=XIR_CALL_NATIVE_SOURCE_VERSION || code->count!=count ||
+        !code->entries || !code->offsets) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    const XrXirTarget *target=xr_xir_compile_artifact_target(artifact);
+    if (!mask || count!=module->function_count || native->entry_count!=count || !native->entries ||
+        native->abi_version!=XR_XIR_PROGRAM_ABI_VERSION || native->target.architecture!=target->architecture ||
+        native->target.abi_version!=target->abi_version || (!!native->code.owner!=!!native->code.release)) return XR_XIR_BAD_STRUCTURE;
+    XrXirProgramPacket packet=xir_program_packet_borrow(artifact);
+    if (!packet.bytes || !packet.identity || !packet.length || !native->packet.bytes ||
+        !native->packet.identity || native->packet.length!=packet.length) return XR_XIR_BAD_STRUCTURE;
+    const XrXirCompileContext *context=xr_xir_compile_artifact_context(artifact);
+    if (!xir_compile_work(context,packet.length+32+count)) return XR_XIR_BUDGET;
+    if (memcmp(packet.bytes,native->packet.bytes,packet.length) || memcmp(packet.identity,native->packet.identity,32))
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t natives=0;
+    for (uint32_t i=0;i<count;++i) {
+        if (mask[i]>1) return XR_XIR_BAD_STRUCTURE;natives+=mask[i];
+        if (!mask[i]) continue;
+        const XrXirCallEntry *actual=&native->entries[i],*emitted=&code->entries[i];
+        const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(artifact,i);
+        if (actual->resume!=emitted->resume || actual->release!=emitted->release ||
+            actual->environment!=emitted->environment || actual->state_bytes!=emitted->state_bytes ||
+            code->offsets[i]==UINT32_MAX || code->offsets[i]>actual->state_bytes ||
+            layout->frame_bytes>actual->state_bytes-code->offsets[i]) return XR_XIR_BAD_STRUCTURE;
+    }
+    return natives?XR_XIR_OK:XR_XIR_UNSUPPORTED;
+}
+static XrXirStatus debug_native_admit(const XrXirCompileContext *context,
+    const XrXirProgramInput *owned,const XrXirVmDebugNative *native) {
+    XrXirStatus status=debug_native_match(owned->artifact,native);
+    XrXirProgramPermissions *permissions=NULL;
+    if (status==XR_XIR_OK) status=xir_program_input_prepare(context,native->program,owned,&permissions);
+    xir_program_permissions_free(permissions);return status;
+}
+/* All allocating preparation and temporary retirement precede this comparison.
+ * Neither a copied callback table nor a previous read grants execution rights. */
+static XrXirStatus debug_program_match(const XrXirCompileContext *context,const XrXirArtifact *artifact,
+    const DebugVmProgramOwner *owner,const XrXirProgram *program,const DebugProgramAdmission *request) {
+    if (!program->permissions || !program->permissions->input ||
+        program->permissions->input->artifact!=artifact) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=xr_xir_compile_program_body_match(context,program->permissions,artifact);
+    if (status!=XR_XIR_OK) return status;
+    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+    if (!owner->bindings || program->entry_count!=module->function_count) return XR_XIR_BAD_STRUCTURE;
+    if (request->native) {
+        status=debug_native_match(artifact,request->native);
+        if (status!=XR_XIR_OK) return status;
+        const XrXirProgramSpec *native=request->native->program;
+        if (native->code.owner!=request->lease.owner || native->code.release!=request->lease.release)
+            return XR_XIR_BAD_STRUCTURE;
+        status=xr_xir_compile_program_descriptor_match(context,native,program->permissions);
+        if (status!=XR_XIR_OK) return status;
+    }
+    for (uint32_t f=0;f<program->entry_count;++f) {
+        if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+        const XrXirCallEntry *entry=&program->entries[f];
+        if (request->native && request->native->mask[f]) {
+            const XrXirCallEntry *native=&request->native->program->entries[f];
+            if (!owner->native_offsets || owner->native_offsets[f]!=request->native->source->offsets[f] ||
+                entry->resume!=native->resume || entry->release!=native->release ||
+                entry->environment!=native->environment || entry->state_bytes!=native->state_bytes)
+                return XR_XIR_BAD_STRUCTURE;
+            continue;
+        }
+        const DebugVmBinding *binding=&owner->bindings[f];
+        const XrXirFunctionLayout *layout=xr_xir_compile_artifact_layout(artifact,f);
+        uint64_t bytes=sizeof(VmState)+(uint64_t)layout->frame_bytes+
+            (uint64_t)layout->outgoing_count*sizeof(XrXirValue)+(uint64_t)layout->path_count*sizeof(XrXirValuePathStep);
+        if (bytes>UINT32_MAX || entry->abi_version!=XR_XIR_CALL_ABI_VERSION || entry->state_bytes!=bytes ||
+            entry->resume!=debug_vm_resume || entry->release!=debug_vm_release || entry->environment!=binding ||
+            binding->base.artifact!=artifact || binding->base.function!=f || binding->debug!=owner->debug ||
+            (request->native && owner->native_offsets[f]!=UINT32_MAX)) return XR_XIR_BAD_STRUCTURE;
+    }
+    XrXirProgramSpec descriptor={XR_XIR_PROGRAM_ABI_VERSION,program->permissions->target,
+        program->entries,program->entry_count,program->declarations,{0},program->types,{0}};
+    return xr_xir_compile_program_match(context,&descriptor,program->permissions->layouts,artifact);
+}
+static XrXirStatus debug_program_take(XrXirArtifact **artifact,XrXirVmDebug *debug,
+    const XrXirVmDebugNative *native,XrXirProgram **output) {
+    if (!output || *output || !artifact || !debug || (native && !native->program)) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module=xr_xir_compile_artifact_module(*artifact);
+    if (!module || module->stage!=XR_XIR_LOWERED || xir_artifact_is_evaluation(*artifact)) return XR_XIR_BAD_STAGE;
+    if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext current_context=*xr_xir_compile_artifact_context(*artifact);
+    const XrXirCompileContext *context=&current_context;
+    DebugProgramAdmission request={native,native?native->program->code:(XrXirCodeLease){0}};
+    if (!xir_compile_work(context,sizeof(request))) return XR_XIR_BUDGET;
+    XrXirArtifact *original=*artifact,*moved=original;XrXirProgramInput *input=NULL;
+    XrXirStatus status=xir_program_input_take(context,&moved,&input);
+    if (status!=XR_XIR_OK) return status;
+    if (native) {
+        status=debug_native_admit(context,input,native);
+        if (status!=XR_XIR_OK) { input->artifact=NULL;xir_program_input_free(input);return status; }
+    }
+    uint32_t count=module->function_count;XrXirProgram *program=NULL;
+    DebugVmProgramOwner *owner=xir_compile_calloc(context,1,sizeof(*owner),&status);
+    if (!owner) { input->artifact=NULL;xir_program_input_free(input);return status; }
+    if (!xir_vm_debug_retain(debug)) {
+        input->artifact=NULL;xir_program_input_free(input);xr_compile_resources_free(owner);return XR_XIR_BAD_STRUCTURE;
+    }
+    owner->debug=debug;
+    owner->bindings=xir_compile_calloc(context,count,sizeof(*owner->bindings),&status);
+    XrXirCallEntry *entries=NULL;
+    if (!owner->bindings) goto finish;
+    if (native) {
+        owner->native_offsets=xir_compile_calloc(context,count,sizeof(*owner->native_offsets),&status);
+        if (!owner->native_offsets) goto finish;
+        if (!xir_compile_work(context,(uint64_t)count*sizeof(*owner->native_offsets)+sizeof(owner->native_code))) {
+            status=XR_XIR_BUDGET;goto finish;
+        }
+        for (uint32_t f=0;f<count;++f) owner->native_offsets[f]=native->mask[f]?native->source->offsets[f]:UINT32_MAX;
+        owner->native_code=(XirCallNativeSourceCode){XIR_CALL_NATIVE_SOURCE_VERSION,count,NULL,owner->native_offsets};
+    }
+    entries=xir_compile_calloc(context,count,sizeof(*entries),&status);
+    if (status!=XR_XIR_OK) goto finish;
+    for (uint32_t f=0;f<count;++f) {
+        if (native && native->mask[f]) entries[f]=native->program->entries[f];
+        else {
+            status=bind_verified(original,f,&owner->bindings[f].base,&entries[f]);
+            if (status!=XR_XIR_OK) goto finish;
+            owner->bindings[f].debug=debug;entries[f].environment=&owner->bindings[f];
+            entries[f].resume=debug_vm_resume;entries[f].release=debug_vm_release;
+        }
+        const XrXirType *parameters=entries[f].parameters;entries[f].parameters=NULL;
+        uint64_t bytes=(uint64_t)entries[f].parameter_count*sizeof(*parameters);
+        if (bytes>SIZE_MAX) { status=XR_XIR_BUDGET;goto finish; }
+        entries[f].parameters=xir_compile_copy(context,parameters,(size_t)bytes,&status);
+        if (status!=XR_XIR_OK) goto finish;
+    }
+    if (!xir_vm_debug_bind(debug,original)) { status=XR_XIR_BAD_STRUCTURE;goto finish; }
+    owner->bound=true;
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,*xr_xir_compile_artifact_target(original),
+        entries,count,module->declarations,{owner,debug_vm_program_release},module->types,{0}};
+    status=xir_program_receive(context,&spec,&input,&entries,&program);
+finish:
+    if (entries) for (uint32_t f=0;f<count;++f) xr_compile_resources_free((void *)entries[f].parameters);
+    xr_compile_resources_free(entries);
+    if (status==XR_XIR_OK && (*output || *artifact!=original)) status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK) status=debug_program_match(context,original,owner,program,&request);
+    if (status!=XR_XIR_OK) {
+        if (program) { program->permissions->input->artifact=NULL;xr_xir_compile_program_drop(program); }
+        else { if (input) { input->artifact=NULL;xir_program_input_free(input); }debug_vm_program_release(owner); }
+        return status;
+    }
+    owner->artifact=original;*artifact=NULL;
+    if (native) { owner->native=request.lease;native->program->code=(XrXirCodeLease){0}; }
+    owner->native_code.entries=program->entries;
+    *output=program;xir_vm_debug_program(debug,program,native?&owner->native_code:NULL);return XR_XIR_OK;
+}
+XR_FUNC XrXirStatus xr_xir_compile_vm_debug_program_take(XrXirArtifact **artifact,
+    XrXirVmDebug *debug,XrXirProgram **output) {
+    return debug_program_take(artifact,debug,NULL,output);
+}
+XR_FUNC XrXirStatus xr_xir_compile_vm_debug_mixed_program_take(XrXirArtifact **artifact,
+    const XrXirVmDebugNative *native,XrXirVmDebug *debug,XrXirProgram **output) {
+    if (!native) return XR_XIR_BAD_STRUCTURE;
+    return debug_program_take(artifact,debug,native,output);
+}
+
 XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint32_t function,
                            XrXirRunContext *context, const XrXirValue *arguments,
                            uint32_t argument_count, XrXirValue *result) {

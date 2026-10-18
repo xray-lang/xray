@@ -67,6 +67,8 @@ static void text_facts(const XrXirSourceResult *result, const char *path) {
         const XrXirSourceReference *reference = &view->references[i];
         if (reference->declaration != parameter->id) continue;
         CHECK(reference->target == parameter->id && reference->access == XR_XIR_SOURCE_READ);
+        if (reference->range.line!=1 || reference->range.column!=44 || reference->range.end_column!=49)
+            fprintf(stderr,"entry reference expected 1:44-49, actual %d:%d-%d\n",reference->range.line,reference->range.column,reference->range.end_column);
         CHECK(reference->range.line == 1 && reference->range.column == 44 && reference->range.end_column == 49);
         ++references;
     }
@@ -136,7 +138,8 @@ static void text_null_descriptor(const XrXirSourceRequest *prototype) {
     CHECK(source_fixture_compile_attempts==attempts&&source_fixture_compile_live==live&&source_fixture_compile_bytes==bytes);
     xr_compile_session_free(session);xr_compile_resources_release(context.resources);text_physical_zero();
 }
-int main(void) {
+int main(int argc,char **argv) {
+    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--facts")));
     XrXirSourceResult absent = {0}; XrXirSourceDiagnostic diagnostic = {0};
     CHECK(xr_xir_compile_source_check_text(NULL, NULL, &absent, &diagnostic, NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(diagnostic.status == XR_XIR_BAD_STRUCTURE && !absent.checked && !absent.snapshot); text_physical_zero();
@@ -168,7 +171,8 @@ int main(void) {
     text_facts(&result, path);
     xr_xir_compile_source_result_free(&result); text_physical_zero();
     /* The physical entry no longer exists: supplied bytes still have the same identity. */
-    text_allocations(&request); text_rejections(&request); text_null_descriptor(&request);
+    if (argc==1) text_allocations(&request);
+    text_rejections(&request);text_null_descriptor(&request);
     XrModuleIdentityAuthority memory = {XR_MODULE_IDENTITY_MEMORY, "entry-query", NULL};
     XrXirSourceRequest memory_request = {NULL, NULL, &memory, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     CHECK(text_check(&memory_request, NULL, entry_text, sizeof(entry_text)-1, text_limits(), &result) == XR_XIR_OK);

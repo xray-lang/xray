@@ -1,0 +1,9 @@
+enum DapFailure { Expected }
+fn fail() -> i64 {
+    throw DapFailure.Expected // DAP_STOP: caught_throw
+}
+try {
+    print(fail())
+} catch (error: DapFailure) {
+    print("caught") // DAP_STOP: caught_handler
+}

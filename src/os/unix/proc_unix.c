@@ -219,6 +219,13 @@ XR_FUNC XrOsProcStatus xr_proc_spawn(const char *prog, const char *const argv[],
 }
 
 /* A group owner retains its unreaped leader until descendants are stopped. */
+XR_FUNC XrOsProcStatus xr_proc_release(XrProcId *owner, const XrProcMemory *memory) {
+    if (!owner || *owner<=0 || (XrProcId)(pid_t)*owner!=*owner || !memory ||
+        !memory->alloc || !memory->free || !memory->work) return XR_PROC_INVALID_ARGUMENT;
+    /* Forgetting an unreaped child would leak a zombie. An explicit reaper
+     * provider is required before a POSIX group may relinquish its owner. */
+    return XR_PROC_UNSUPPORTED;
+}
 XR_FUNC int xr_proc_close(XrProcId pid) {
     if (pid <= 0 || (XrProcId)(pid_t)pid != pid) { errno = EINVAL; return -1; }
     int slot = proc_group_slot(pid); bool stopped = true;

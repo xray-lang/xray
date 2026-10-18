@@ -173,6 +173,8 @@ static void source_class_definition_cases(XrXirSourceRequest *request) {
     {"final class Array<T>{init(){}}\nfn typed(x:Array<i64>){}",0,""},
     {"final class Array<T>{init(){}}\nfn wrong(x:Array<i64>)->i64{return x.len()}",3,"unknown struct field"},
     {"class P {x:i64 init(){this.x=1}}\nclass C extends P {init(){}}",XR_XIR_BAD_TYPE,"class execution currently requires a root declaration without inheritance"},
+    {"final class C<T>{x:i64 init(x:i64){this.x=x}}\nfn make()->C<string>{return C<string>(41)}",0,""},
+    {"final class C<T>{x:i64 init(x:i64){this.x=x}}\nconst left=C<string>(41)\nconst right=C<bool>(42)",0,""},
     };
     bool matched = true;
     for (uint32_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
@@ -187,6 +189,15 @@ static void source_class_definition_cases(XrXirSourceRequest *request) {
         if (status == XR_XIR_OK) CHECK(result.snapshot && xr_xir_compile_source_snapshot_view(result.snapshot)->complete);
         else CHECK(!result.snapshot);
         if (status == XR_XIR_OK) source_class_supported_query_facts(&result, i);
+        if (status == XR_XIR_OK && i+1==sizeof(cases)/sizeof(cases[0])) {
+            const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(result.snapshot);
+            const XrXirSourceDeclaration *left=declaration(view,"left",0),*right=declaration(view,"right",0);
+            CHECK(left && right && left->type.known && right->type.known && left->type.type!=right->type.type);
+            const XrXirTypeNode *a=xr_xir_type_node(view->types,left->type.type),*b=xr_xir_type_node(view->types,right->type.type);
+            CHECK(a && b && a->kind==XR_XIR_TYPE_NOMINAL && b->kind==XR_XIR_TYPE_NOMINAL &&
+                a->nominal.declaration==b->nominal.declaration && a->nominal.argument_count==1 && b->nominal.argument_count==1 &&
+                a->nominal.arguments[0]==XR_XIR_STRING && b->nominal.arguments[0]==XR_XIR_BOOL);
+        }
         xr_xir_compile_source_result_free(&result);
     }
     CHECK(matched);
@@ -206,5 +217,11 @@ static void source_class_definition_cases(XrXirSourceRequest *request) {
         CHECK(!strcmp(diagnostic.message,messages[i]));xr_xir_compile_source_result_free(&result);
     }
     CHECK(!remove(library));free(library);
+    source_generic_requirement_run(request,
+        "final class C<T>{x:i64 constructor(x:i64){this.x=x} get()->i64{return this.x}}\n"
+        "fn child()->i64{return C<string>(41).get()}\n"
+        "const job=go child()\nconst initialized=await job\n"
+        "export fn genericMethodNumber()->i64{return initialized}\n"
+        "export fn genericMethodText()->string{return \"mapped\"}\n");
 }
 #endif // XIR_SOURCE_CLASS_CASES_H

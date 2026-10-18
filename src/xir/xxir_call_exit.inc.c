@@ -12,6 +12,8 @@
  */
 static void request_exit(XrXirCall *call, XrXirCallResult *result, bool scope) {
     CallFrame *frame = call->top;
+    if (call->budget && call->budget->native_hold==call) call->budget->native_hold=NULL;
+    frame->native_pending=false;
     if (result->status == XR_XIR_CALL_CANCELLED && call->abort_reason != XR_XIR_CALL_READY) {
         xr_xir_call_result_drop(result);
         *result = call_result(call->abort_reason);
@@ -123,6 +125,16 @@ static void accept_scope_exit(XrXirCall *call, XrXirAction action, bool panic) {
         }
     } else if (action.flags || !boundary_value(action.value, XR_XIR_UNIT)) {
         abort_frames(call, XR_XIR_CALL_BAD_STATE); return;
+    }
+    if (result.status==XR_XIR_CALL_THROWN && call->top->code_kind==XR_XIR_CALL_CODE_NATIVE && !cleanup_active(call)) {
+        bool held=false;XrXirCallStatus observed=call_native_throw_offer(call,&result,true,&held);
+        if (observed!=XR_XIR_CALL_READY) {
+            xr_xir_call_result_drop(&result);
+            if (observed==XR_XIR_CALL_OOM || observed==XR_XIR_CALL_LIMIT) request_execution_failure(call,observed);
+            else abort_frames(call,XR_XIR_CALL_BAD_STATE);
+            return;
+        }
+        if (held) return;
     }
     request_exit(call, &result, true);
 }

@@ -36,6 +36,77 @@ typedef struct XrXirSourceRange {
     uint32_t module;
     int line, column, end_line, end_column;
 } XrXirSourceRange;
+
+/* Source-owned display coordinates use the sealed instruction order. Zero
+ * statement means no source execution site; it never grants frame authority. */
+#define XR_XIR_SOURCE_DEBUG_ENTRY 1u
+/* This site is reached only after an ordinary catch's type and pattern have
+ * accepted the error. It is not a prediction at an earlier throw and excludes
+ * panic handlers. Empty bodies use their existing join instruction. */
+#define XR_XIR_SOURCE_DEBUG_HANDLER_ACCEPT 2u
+#define XR_XIR_SOURCE_DEBUG_UNIT 1u
+#define XR_XIR_SOURCE_DEBUG_CELL 2u
+/* A reserved nested-function name shadows lookup before initialization. It has
+ * no runtime value ordinal and never grants observation or write authority. */
+#define XR_XIR_SOURCE_DEBUG_UNAVAILABLE 4u
+typedef struct XrXirSourceDebugBinding {
+    uint32_t declaration, value, parent, flags;
+} XrXirSourceDebugBinding;
+typedef struct XrXirSourceDebugPoint {
+    XrXirSourceRange range;
+    uint32_t statement, flags, environment;
+} XrXirSourceDebugPoint;
+
+/* A source throw may lower to a local error jump. The operand is observed
+ * before routing or cleanup; synthetic propagation is not a new source throw. */
+typedef struct XrXirSourceDebugThrow { uint32_t instruction, operand; } XrXirSourceDebugThrow;
+
+/* Half-open selector instructions precede accepted. Rejected names the next
+ * selector or the propagation instruction; UINT32_MAX means unconditional
+ * acceptance. Coordinates describe existing code and grant no evaluation. */
+typedef struct XrXirSourceDebugSelector {
+    uint32_t first, accepted, rejected;
+} XrXirSourceDebugSelector;
+
+/* Handler identities are one-based within one function. A nonzero parent is
+ * the later-built outer propagation route. The Error operand is its existing
+ * join value; a consumed route has no propagation instruction or parent.
+ * Propagation input is a zero-based PHI pair, or UINT32_MAX without a parent. */
+typedef struct XrXirSourceDebugHandler {
+    uint32_t error, parent, propagation;
+    const XrXirSourceDebugSelector *selectors;
+    uint32_t selector_count;
+    uint32_t propagation_input;
+} XrXirSourceDebugHandler;
+
+/* The explicit error edge, value and zero-based PHI pair prove which join receives this site;
+ * pending invoke/await routes never infer a handler from nearby code. */
+typedef struct XrXirSourceDebugRoute { uint32_t instruction, handler, edge, error, input; } XrXirSourceDebugRoute;
+
+typedef struct XrXirSourceDebugFunction {
+    uint32_t function, declaration, parameter_count, instruction_count;
+    const XrXirSourceDebugPoint *points;
+    const XrXirSourceDebugBinding *bindings;
+    uint32_t binding_count;
+    const XrXirSourceDebugThrow *throw_sites;
+    uint32_t throw_count;
+    const XrXirSourceDebugHandler *handlers;
+    uint32_t handler_count;
+    const XrXirSourceDebugRoute *routes;
+    uint32_t route_count;
+} XrXirSourceDebugFunction;
+
+/* A producer-selected slot is a display coordinate, never a module grant. */
+typedef struct XrXirSourceDebugGlobal {
+    uint32_t declaration, slot;
+} XrXirSourceDebugGlobal;
+
+typedef struct XrXirSourceDebugView {
+    const XrXirSourceDebugFunction *functions;
+    uint32_t function_count;
+    const XrXirSourceDebugGlobal *globals;
+    uint32_t global_count;
+} XrXirSourceDebugView;
 typedef struct XrXirSourceType {
     XrXirType type;
     uint32_t generic_owner;
@@ -147,6 +218,7 @@ typedef struct XrXirSourceResult {
     XrXirSourceSnapshot *snapshot;
 } XrXirSourceResult;
 XR_FUNC const XrXirSourceView *xr_xir_compile_source_snapshot_view(const XrXirSourceSnapshot *snapshot);
+XR_FUNC const XrXirSourceDebugView *xr_xir_compile_source_snapshot_debug(const XrXirSourceSnapshot *snapshot);
 /* These immutable observations carry no construction or invocation authority. */
 XR_FUNC const XrXirConstruction *xr_xir_compile_source_snapshot_construction(const XrXirSourceSnapshot *snapshot);
 XR_FUNC void xr_xir_compile_source_snapshot_free(XrXirSourceSnapshot *snapshot);

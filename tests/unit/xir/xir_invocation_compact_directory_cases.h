@@ -172,7 +172,7 @@ static void conditional_compact_directory_literals(void) {
         memset(source,0xCE,sizeof(source));raw.instructions=expected;
         conditional_compact_directory_values(&context,&body,expected);
         conditional_compact_directory_damage(&context,&body,&raw);
-        xr_compile_resources_free(body.runs);rp_owner_free(&context,held);rp_balanced(physical);
+        effect_body_runs_release(body.runs);rp_owner_free(&context,held);rp_balanced(physical);
     }
 }
 #endif // XIR_INVOCATION_COMPACT_DIRECTORY_CASES_H

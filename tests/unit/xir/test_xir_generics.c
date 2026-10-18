@@ -29,6 +29,7 @@ static void generic_runtime_retiring(void *pointer);
 #include "xir_generic_fixture.h"
 #include "xir_error_marker75_golden.h"
 #include "xir_error_marker73_golden.h"
+#include "xir_error_marker74_golden.h"
 #include "xir_nominal_generic_fixture.h"
 #include "xir_nominal_expression_fixture.h"
 #include "xir_nominal_checked_fixture.h"

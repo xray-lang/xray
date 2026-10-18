@@ -14,6 +14,9 @@
  */
 
 #include "xcli_dispatch.h"
+#if defined(XR_HAS_DAP) && defined(XR_OS_WINDOWS)
+#include "xcli_dap_worker.h"
+#endif
 #ifdef XR_OS_WINDOWS
 #include "../../base/xwindows_utf8.h"
 #endif
@@ -99,6 +102,9 @@ static int run_cli(int argc, char **argv) {
 #ifdef SIGBUS
     signal(SIGBUS, crash_handler);
 #endif
+#endif
+#if defined(XR_HAS_DAP) && defined(XR_OS_WINDOWS)
+    if (argc>1 && !strcmp(argv[1],"--xray-dap-worker")) return xr_cli_dap_worker_main(argc,argv);
 #endif
     xr_cli_register_all_handlers();
     return xr_cli_main(argc, argv);

@@ -4470,6 +4470,10 @@ throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚�
 - 正常路径不分配对象、不展开栈；在需传播或捕获错误的调用边界只经过可预测的错误标志分支
 - 未捕获的顶层错误打印 `[Uncaught Error] <enum value>`，退出码 = 1
 
+调试器对值返回错误的 caught／uncaught 分类以当前逻辑执行流的同步调用链为边界：选中本流中的 catch 为 caught，错误逃出真实 Instance 根入口或当前 Task 根入口为 uncaught。Task 保存的错误随后经另一执行流 await 再抛出时，在该 await 所在流重新分类；这不把 Task 失败等同于整个程序失败。观察点位于实际 throw 交付、handler 和清理效果执行之前。分类要求完整的 Source 路由事实及经过认证的执行边界；缺失事实或未经认证的 native 边界保持未知，不能据此报告 uncaught。
+
+同源混合调试 Program 必须接收生成器发布的现行观察协议描述符，核对所选 native 回调及帧偏移并拥有复制注册元数据；缺失或旧协议在执行前拒绝。协议同时提供 Source 原点的指令前观察及普通 CALL 准备后的已解析 callee、指令序号和 invoke 位。接收方拥有这些原始事实后，仍须以实际 child ENTER、完整 executor binding、frame、thread 和深度证明调用已获准；不得读取祖先执行状态或借出祖先 CallView。完整认证 Source 路由及原点覆盖下，all、caught 和 uncaught 可沿真实 VM/native 同步链分类；递归使用实际 frame 身份，Task 根边界不跨越到未来 await 的接收者。原点覆盖不完整时拒绝 all，handler 路由不完整时拒绝 caught／uncaught，配置失败均保留旧过滤值。已经准入的 all 遇到缺失 handler 路由时仍报告 UNKNOWN，不猜测未捕获。生成 native 的停点位于原始 Source throw 对应指令执行之前，包括降为局部跳转或词法错误退出的 throw；继续执行时该指令只运行一次，传播返回和内部 dispatcher 不被当作新的 Source throw。拥有型异常快照保留真实 native 帧身份、Source 指令和枚举值，不暴露 native locals 或执行状态，也不保证后续 cleanup 或 handler 一定完成。canonical Source launch 可由受信任 host provider 返回同证明的 native ProgramSpec、现行描述符、选择及 code lease；失败关闭且不回退 VM，接收成功后只有最后真实代码 owner 退休才释放 lease。允许全部选择 native，不要求空闲 VM 条目。restart 重新接收，失败保留旧停点；detach 后的目标由独立 owner 与原 code lease 驱动，adapter 销毁不卸载代码。JSON 栈只投影快照已有的认证 Source 位置，不添加 native locals 或机器地址。native 指令断点、具有 native 初始化器或入口的启动暂停和全 native 的手动暂停请求明确不支持；任意 native 源码单步、动态库 CLI 载入及其完整安全资格仍未授予。
+
 #### 8.1.2 `try` / `catch`
 
 ```xray
@@ -5821,6 +5825,8 @@ xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5
 首个新 XIR go/Task/await 片段合同为 direct go 调用、Task<i64>/Task<string> 与 plain await；单 FIFO 每 dispatch 至多一次 canonical Call transition，等待真实退 C 栈。参数及结果先拥有式准备，失败不入队或发布句柄。worker 及其可达 direct 调用不得读取普通可变模块槽或写/初始化任何模块槽；const 槽仍需 Sendable、既有读取权限及初始化状态。未知间接调用、借用、Cell 捕获及未接通类型明确未准入，不能把此实现边界变成未来完整语言的限制。此合同冻结不代表 Source/VM/native 已实现：正式身份仍 25/65/21/26/29，完整 M:N、Channel、generator、linked/scope、Task<null>/Unit 与公开状态方法仍须分别取得资格。
 
 跨 Task 边界的完整终态必须满足拥有式与 Sendable 规则，不能只检查成功值 T。worker 及可达调用的逃逸值错误由现有效应摘要证明：真实 Error 枚举的全部变体载荷均须 Sendable，不能只看实际 throw 的变体或名义类型标记；泛型错误须在定义处具有 Error 与 Sendable 约束。首片对未知或无真实身份的逃逸错误明确未准入。未逃逸的局部非 Sendable 值及普通同步 throw 不因本边界改变。运行时在发布 Task 终态前按真实封闭类型与字段权限准入 native 的 THROWN 载荷；异常载荷、OOM、LIMIT 和宿主故障保各自准确状态并完成清理，不伪装成 PanicInfo。当前 panic 载体仅包含标量 fault detail 与拥有式字符串；未来扩展须重新证明完整载荷的 Sendable 与生命周期。
+
+当前新 XIR 执行核的 Error 载荷能力包含以既有标量或 string 为叶子的 Array 字段及嵌套 Array。运行时检查封闭枚举的全部变体字段，Array 类型边逐一消耗同一累计 work，并继续按真实 arena、Domain 和值图准入；不因容器形式跳过 Sendable 或所有权证明。类型链循环、未封闭类型、Cell、callable 和 class 不获该能力；其它合法 Sendable 载荷族仍需各自接通执行能力。此扩展不改变普通 root 故障与 Task 值错误的区分。
 
 runtime capability 只从 executable entry、manifest C export 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
 

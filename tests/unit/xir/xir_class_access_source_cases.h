@@ -14,7 +14,8 @@ static void class_access_source_cases(void) {
         {"class_access_worker_array_cow.xr",CELL_SOURCE_PROJECT_VALUE,4240,XR_XIR_CALL_READY,false},
         {"class_access_worker_carrier_unknown.xr",CELL_SOURCE_REJECT,0,XR_XIR_CALL_READY,false},
         {"class_access_same_owner.xr",CELL_SOURCE_PROJECT_REJECT,0,XR_XIR_CALL_BAD_ARGUMENT,false},
-        {"class_access_worker_module_alias.xr",CELL_SOURCE_REJECT,0,XR_XIR_CALL_READY,false}};
+        {"class_access_worker_module_alias.xr",CELL_SOURCE_REJECT,0,XR_XIR_CALL_READY,false},
+        {"class_access_worker_ref_array.xr",CELL_SOURCE_PROJECT_VALUE,42853,XR_XIR_CALL_READY,false}};
     for (unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
         printf("Source Class current access %u: %s\n",i,cases[i].name);
         cell_source_case(&cases[i]);

@@ -1,0 +1,13 @@
+enum NativeError { Bad { message: string } }
+
+fn native_leaf() -> i64 {
+    defer { print(91) }
+    throw NativeError.Bad{message: "native\0α"}
+}
+
+fn native_caller() -> i64 {
+    try { return native_leaf() }
+    catch(problem: NativeError) { return 73 }
+}
+
+print(native_caller())

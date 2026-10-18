@@ -1,0 +1,14 @@
+import "./global_slots_library" as lib
+const shared:i64=73
+var changing:i64=11
+const nothing=()
+var empty=()
+const text:string="global\0value"
+fn identity<T>(value:T)->T { return value }
+fn inspect()->i64 {
+    const shared:i64=99
+    const flag=identity(true)
+    const size=len(text)
+    return identity(shared)+changing+lib.imported()
+}
+inspect()

@@ -23,11 +23,13 @@ static uint32_t effect_body_source_word(const XrXirInstruction *op,uint32_t word
     }
 }
 
+#include "xxir_effect_snapshot_record_owner.inc.c"
+
 /* Unused capacity is never read or traversed. A failed growth retains the
  * previous allocation so the unique material destructor can release it. */
 static XrXirStatus effect_body_runs_reserve(const XrXirCompileContext *work,
     EffectBodyFunction *function) {
-    if (!function || function->run_count>function->run_capacity ||
+    if (!function || function->borrowed_runs || function->run_count>function->run_capacity ||
         function->run_count>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     if (function->run_count<function->run_capacity) return XR_XIR_OK;
     uint32_t capacity=function->run_capacity?function->run_capacity:4;
@@ -36,30 +38,36 @@ static XrXirStatus effect_body_runs_reserve(const XrXirCompileContext *work,
         capacity=capacity>UINT32_MAX/2?function->instruction_count:capacity*2;
     }
     if (capacity>function->instruction_count) capacity=function->instruction_count;
-    if ((uint64_t)capacity>SIZE_MAX/sizeof(*function->runs)) return XR_XIR_BUDGET;
+    if ((uint64_t)capacity>(SIZE_MAX-sizeof(EffectBodyRunStorage))/sizeof(*function->runs))
+        return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
-    EffectBodyRun *storage=xir_compile_alloc(work,(size_t)capacity*sizeof(*storage),&status);
-    if (!storage) return status;
-    if (!xir_compile_work(work,3)) { xr_compile_resources_free(storage);return XR_XIR_BUDGET; }
+    EffectBodyRunStorage *owner=xir_compile_alloc(work,
+        sizeof(*owner)+(size_t)capacity*sizeof(EffectBodyRun),&status);
+    if (!owner) return status;
+    if (!xir_compile_work(work,3+sizeof(*owner)+3*sizeof(uint32_t))) {
+        xr_compile_resources_free(owner);return XR_XIR_BUDGET;
+    }
+    *owner=(EffectBodyRunStorage){work->resources,1,capacity};
+    EffectBodyRun *storage=(EffectBodyRun *)(owner+1);
     /* Only initialized base fields and mask-selected deltas move. No unused
      * slot, inactive delta or capacity tail is copied or observed. */
     for (uint32_t r=0;r<function->run_count;++r) {
         const EffectBodyRun *source=&function->runs[r];EffectBodyRun *target=&storage[r];
         if (!xir_compile_work(work,3*sizeof(uint32_t)+sizeof(source->base))) {
-            xr_compile_resources_free(storage);return XR_XIR_BUDGET;
+            xr_compile_resources_free(owner);return XR_XIR_BUDGET;
         }
         target->first=source->first;target->count=source->count;target->mask=source->mask;
         target->base=source->base;
         for (uint32_t w=0;w<EFFECT_BODY_WORDS;++w) {
-            if (!xir_compile_work(work,1)) { xr_compile_resources_free(storage);return XR_XIR_BUDGET; }
+            if (!xir_compile_work(work,1)) { xr_compile_resources_free(owner);return XR_XIR_BUDGET; }
             if (!(source->mask&(UINT32_C(1)<<w))) continue;
             if (!xir_compile_work(work,sizeof(uint32_t))) {
-                xr_compile_resources_free(storage);return XR_XIR_BUDGET;
+                xr_compile_resources_free(owner);return XR_XIR_BUDGET;
             }
             target->delta[w]=source->delta[w];
         }
     }
-    xr_compile_resources_free(function->runs);function->runs=storage;
+    effect_body_runs_release(function->runs);function->runs=storage;
     function->run_capacity=capacity;return XR_XIR_OK;
 }
 
@@ -120,16 +128,13 @@ typedef struct EffectBodyWriteSink {
 /* Semantic intake follows the complete physical comparison and append.
  * A constant-column mask chooses only the private range reader. That reader
  * independently checks the real fields; all other rows retain scalar intake. */
-static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
-    const XrXirFunction *source,EffectBodyFunction *target,const EffectBodyRun *run,
-    const EffectBodyWriteSink *sink) {
-    if (!source || !target || !target->runs || !run || run!=&target->runs[target->run_count] ||
-        target->run_count>=target->run_capacity || !run->count ||
-        run->first>=target->instruction_count || run->count>target->instruction_count-run->first)
+static XrXirStatus effect_body_run_intake(const XrXirCompileContext *work,
+    const XrXirFunction *source,const EffectBodyRun *run,const EffectBodyWriteSink *sink) {
+    if (!source || !run || !run->count || run->first>=source->instruction_count ||
+        run->count>source->instruction_count-run->first)
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,1+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    if (!xir_compile_work(work,6)) return XR_XIR_BUDGET;
     uint32_t first=run->first,count=run->count,mask=run->mask;
-    ++target->run_count;
     if (!sink) return XR_XIR_OK;
     if (!sink->owner || !sink->row || !sink->span) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
@@ -140,6 +145,18 @@ static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
         if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
+}
+
+static XrXirStatus effect_body_run_submit(const XrXirCompileContext *work,
+    const XrXirFunction *source,EffectBodyFunction *target,const EffectBodyRun *run,
+    const EffectBodyWriteSink *sink) {
+    if (!source || !target || !target->runs || !run || run!=&target->runs[target->run_count] ||
+        target->run_count>=target->run_capacity || !run->count ||
+        run->first>=target->instruction_count || run->count>target->instruction_count-run->first)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(work,1+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+    ++target->run_count;
+    return effect_body_run_intake(work,source,run,sink);
 }
 
 /* A zero or single varying column selects only an encoding comparison.
@@ -165,7 +182,7 @@ static XrXirStatus effect_body_single_column(const EffectBodyRead *read,uint32_t
 static XrXirStatus effect_body_records_write(const XrXirCompileContext *work,
     const XrXirFunction *source,EffectBodyFunction *target,const EffectBodyWriteSink *sink) {
     if (!source || !target || source->instruction_count!=target->instruction_count ||
-        target->run_count || (source->instruction_count && !source->instructions))
+        target->run_count || target->borrowed_runs || (source->instruction_count && !source->instructions))
         return XR_XIR_BAD_STRUCTURE;
     if (!source->instruction_count) return XR_XIR_OK;
     if (!xir_compile_work(work,sizeof(uint32_t)+sizeof(EffectBodyRun *))) return XR_XIR_BUDGET;
@@ -521,6 +538,25 @@ static XrXirStatus effect_body_instruction_ref_value(const EffectBodyRead *read,
     *output=base_copy?ref->base:
         effect_body_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,instruction-ref->first);
     return XR_XIR_OK;
+}
+
+/* The first or constant canonical row is complete immutable storage. Borrowing
+ * it avoids a decoder copy; no row, domain or semantic permission is cached.
+ * Other varying rows keep the full decoder and caller-owned scratch lifetime. */
+static XrXirStatus effect_body_instruction_ref_borrow(const EffectBodyRead *read,
+    const EffectBodyRun *ref,uint32_t instruction,XrXirInstruction *storage,const XrXirInstruction **output) {
+    if (!read || !storage || !output || !ref || (ref->mask&~EFFECT_BODY_MASK) ||
+        (ref->count==1 && ref->mask) || instruction<ref->first || instruction-ref->first>=ref->count)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!ref->mask || instruction==ref->first) {
+        if (!effect_body_read_work(read,6+sizeof(*output))) return XR_XIR_BUDGET;
+        if (ref->base.op<=XR_XIR_INVALID || ref->base.op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        *output=&ref->base;return XR_XIR_OK;
+    }
+    XrXirStatus status=effect_body_instruction_ref_value(read,ref,instruction,storage);
+    if (status!=XR_XIR_OK) return status;
+    if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=storage;return XR_XIR_OK;
 }
 
 static inline XrXirStatus effect_body_instruction_words_publish(const EffectBodyRead *read,

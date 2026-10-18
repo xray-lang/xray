@@ -1,0 +1,9 @@
+const shared:i64=19
+const label:string="library\0value"
+export fn leaf(value:i64)->i64 {
+    const local=value+1
+    return shared+local
+}
+export fn borrow(value:ref i64)->i64 {
+    return value
+}

@@ -175,7 +175,7 @@ static bool source_destructure_binding(SourceContext *ctx,AstNode *node,bool top
         bool unit=field->type==XR_XIR_UNIT && node->as.destructure_decl.is_const;
         *field->symbol=(SourceName){NULL,field->pattern->as.identifier.name,NULL,node,
             unit ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,unit ? UINT32_MAX : field->value.id,
-            ctx->module,field->type,!node->as.destructure_decl.is_const,false,0,true,false};
+            ctx->module,field->type,!node->as.destructure_decl.is_const,false,0,true,false,0,0};
     }
     if (top) {
         if (!plan.count) return true;

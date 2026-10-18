@@ -34,7 +34,7 @@
 #include "xir_class_access_runtime_cases.h"
 
 static void access_native_rejections(void) {
-    for (unsigned i=0;i<5;++i) if (access_source_cases[i].rejected) {
+    for (unsigned i=0;i<ACCESS_SOURCE_CASE_COUNT;++i) if (access_source_cases[i].rejected) {
         const AccessGeneratedFixture *generated=&access_generated_fixtures[i];
         CHECK(!generated->program && !generated->native && !generated->count);
         CHECK(generated->entries.run==UINT32_MAX && generated->entries.counter==UINT32_MAX &&

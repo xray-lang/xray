@@ -127,6 +127,7 @@ static void source_comptime_values_free(SourceContext *ctx) {
 }
 static void source_comptime_context_free(SourceContext *ctx) {
     source_comptime_values_free(ctx);
+    source_release_retired_arrays(ctx);
     xr_xir_compile_construction_free(ctx->construction);
     while (ctx->memory) { SourceMemory *next=ctx->memory->next;xr_compile_resources_free(ctx->memory);ctx->memory=next; }
 }

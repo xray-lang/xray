@@ -1,0 +1,9 @@
+fn inspect() {
+    var text="a\0"
+    const original=text
+    text+="Ω"
+    text+="${7}"
+    print(text)
+    print(original)
+}
+inspect()

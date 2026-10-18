@@ -17,9 +17,22 @@ typedef struct XrXirValuePlace {
     XrXirType type;
     void *payload;
 } XrXirValuePlace;
+/* The caller pins a real writable root and authenticates its complete loan.
+ * Failure preserves the root. Derived storage uses the admission Domain. */
+XR_FUNC XrXirValueStatus xr_xir_string_place_append(const XrXirValuePlace *place,
+    const XrXirValue *suffix, XrXirValueAdmission *admission);
+/* A caller-owned UTF-8 span is consumed synchronously, with no suffix object.
+ * Validation and copying debit the same finite work and preserve failed roots. */
+XR_FUNC XrXirValueStatus xr_xir_string_place_append_utf8(const XrXirValuePlace *place,
+    const char *bytes, size_t length, XrXirValueAdmission *admission);
 typedef enum XrXirValuePathKind {
     XR_XIR_PATH_FIELD,
-    XR_XIR_PATH_INDEX
+    XR_XIR_PATH_INDEX,
+    /* Immutable wrapper selectors are observation facts. Value mutation and
+     * Cell projection do not accept them as writable storage paths. */
+    XR_XIR_PATH_TUPLE_FIELD,
+    XR_XIR_PATH_NULLABLE_VALUE,
+    XR_XIR_PATH_ENUM_FIELD
 } XrXirValuePathKind;
 typedef struct XrXirValuePathStep {
     XrXirValuePathKind kind;
