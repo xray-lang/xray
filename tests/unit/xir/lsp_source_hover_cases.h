@@ -59,7 +59,7 @@ static XrXirStatus lsp_hover_typed_once(const char *root,XrCompileResourceLimits
     /* Nine actual nested constructors cross the renderer's initial eight-frame
      * allocation. Long complete signature crosses both text growth boundaries. */
 #define HOVER_SOURCE_TYPE "Array<Array<Array<Array<Array<Array<Array<Array<Array<string>>>>>>>>>"
-#define HOVER_DISPLAY_TYPE "Array<Array<Array<Array<Array<Array<Array<Array<Array<String>>>>>>>>>"
+#define HOVER_DISPLAY_TYPE "Array<Array<Array<Array<Array<Array<Array<Array<Array<string>>>>>>>>>"
     static const char typed[]="fn nested(rows:" HOVER_SOURCE_TYPE ")->" HOVER_SOURCE_TYPE " { return rows }\n"
         "fn generic<T>(x:T)->T { return x }\n"
         "fn apply(action:fn(ref i64)->i64,value:ref i64)->i64 { return action(ref value) }\n";
