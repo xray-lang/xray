@@ -21,10 +21,12 @@ static XrXirStatus effect_invocation_bound_row(EffectInvocationFlow *flow,
             return XR_XIR_BAD_TYPE;
         if (bound->parameters[a].mode==XR_PARAM_REF) ref=true;
     }
-    if (effect_contracts_read(owner->effects)[target].parameters[parameter].kind!=XR_XIR_EFFECT_PARAMETER_FIXED)
-        return XR_XIR_OK;
+    uint32_t kind=UINT32_MAX;
+    XrXirStatus status=effect_invocation_role(owner,target,parameter,&kind);
+    if (status!=XR_XIR_OK) return status;
+    if (kind!=XR_XIR_EFFECT_PARAMETER_FIXED) return XR_XIR_OK;
     uint32_t mask=0;
-    XrXirStatus status=effect_invocation_bounds_mask(owner->work,owner->declared,target,parameter,&mask);
+    status=effect_invocation_bounds_mask(owner->work,owner->declared,target,parameter,&mask);
     if (status!=XR_XIR_OK) return status;
     if (ref) {
         /* Actual provenance may close the conditional UNKNOWN portion of a
@@ -179,7 +181,8 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
             if (!actual_row) { status=XR_XIR_BAD_STRUCTURE;break; }
             memcpy(row,actual_row,
                 (size_t)flow->basis.fn_words*sizeof(*row));
-            const XrXirEffectParameter *parameter=&effect_contracts_read(owner->effects)[target].parameters[p];
+            uint32_t kind=UINT32_MAX;status=effect_invocation_role(owner,target,p,&kind);
+            if (status!=XR_XIR_OK) break;
             bool ref=false;
             const XrXirTypeNode *bound=xr_xir_callable_signature(flow->body.domain.types,expected);
             for (uint32_t a=0;a<bound->parameter_count;++a) {
@@ -189,7 +192,7 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
             if (status!=XR_XIR_OK) break;
             bool fixed=false;status=effect_invocation_flag_get(flow,actual,false,&fixed);
             if (status!=XR_XIR_OK) break;
-            if (fixed || (parameter->kind==XR_XIR_EFFECT_PARAMETER_FIXED && !ref)) {
+            if (fixed || (kind==XR_XIR_EFFECT_PARAMETER_FIXED && !ref)) {
                 uint32_t mask=0;
                 status=effect_invocation_bounds_mask(owner->work,owner->declared,
                     fixed ? owner->final->nodes[flow->node].body : target,
@@ -205,7 +208,7 @@ static XrXirStatus effect_invocation_arguments_read(EffectInvocationFlow *flow,
                     row[(opaque+1)/64]|=UINT64_C(1)<<((opaque+1)%64);
                 if (mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED)
                     row[(opaque+2)/64]|=UINT64_C(1)<<((opaque+2)%64);
-            } else if (parameter->kind==XR_XIR_EFFECT_PARAMETER_FIXED && ref)
+            } else if (kind==XR_XIR_EFFECT_PARAMETER_FIXED && ref)
                 status=effect_invocation_bound_row(flow,target,p,callee,row);
         }
     }
@@ -269,8 +272,10 @@ static XrXirStatus effect_invocation_mask(EffectInvocationFlow *flow,
     for (uint32_t unknown=0;unknown<2;++unknown) {
         uint32_t bit=unknown?XR_XIR_CALLABLE_ROOT_UNRESOLVED:XR_XIR_CALLABLE_ROOT_REQUIRED;
         if (!(mask&bit)) continue;
+        if(flow->instruction==UINT32_MAX && (!flow->owner || !flow->owner->primitives ||
+            body>=flow->owner->primitive_count)) return XR_XIR_BAD_STRUCTURE;
         XrXirRootEffectWitness witness=flow->instruction==UINT32_MAX ?
-            flow->read->final->local_witnesses[(size_t)unknown*flow->body.domain.function_count+body] :
+            flow->owner->primitives[body].witnesses[unknown] :
             (XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_INDIRECT,flow->instruction,UINT32_MAX,UINT32_MAX,0};
         XrXirStatus status=effect_invocation_local(flow->owner,flow->node,unknown,witness);
         if (status!=XR_XIR_OK) return status;
@@ -375,8 +380,9 @@ static XrXirStatus effect_invocation_indirect(EffectInvocationFlow *flow,
             if (status==XR_XIR_OK) status=effect_invocation_defer(flow,instruction,changed);
         } else {
             uint32_t root_index=owner->final->nodes[flow->node].root;
-            const XrXirEffectParameter *parameter=&effect_contracts_read(owner->effects)[root_index].parameters[p];
-            if (parameter->kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE)
+            uint32_t kind=UINT32_MAX;status=effect_invocation_role(owner,root_index,p,&kind);
+            if (status!=XR_XIR_OK) break;
+            if (kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE)
                 status=effect_invocation_mask(flow,XR_XIR_CALLABLE_ROOT_UNRESOLVED,changed);
             else {
                 if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;

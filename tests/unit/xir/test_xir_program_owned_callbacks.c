@@ -81,7 +81,7 @@ static void *correspondence_allocate(size_t bytes) {
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 
 #include "xir_error_fixture.h"
-static XrXirRootEffects saved_final_root,saved_final_facts;
+static XrXirRootEffects saved_final_root;
 static XrXirFunctionEffects saved_final_control;
 static XrXirStatus saved_final_task_errors;
 static uint32_t saved_summary_mask,saved_public_mask;
@@ -92,7 +92,7 @@ static void final_callback(unsigned attack) {
     EffectFinalOutcomes *final=(EffectFinalOutcomes *)effect_final_outcomes(effects);
     EffectFinalFunctions *summary=&effects->invocations->final->summary;
     CHECK(final && attack>=10 && attack<=17);
-    saved_final_root=final->root[function];saved_final_facts=summary->facts[function];
+    saved_final_root=final->root[function];
     saved_final_control=final->functions[function];saved_final_task_errors=final->task_errors[function];
     saved_summary_mask=summary->functions[function].formula.constant_mask;
     saved_public_mask=final->contracts[function].formula.constant_mask;
@@ -101,7 +101,7 @@ static void final_callback(unsigned attack) {
     saved_error_row=final->errors[function];
     if (attack==10) final->root[function].requires_root=!final->root[function].requires_root;
     if (attack==11) {
-        final->root[function].requires_root=true;summary->facts[function].requires_root=true;
+        final->root[function].requires_root=true;
         final->contracts[function].formula.constant_mask|=XR_XIR_CALLABLE_ROOT_REQUIRED;
         summary->functions[function].formula.constant_mask|=XR_XIR_CALLABLE_ROOT_REQUIRED;
     }
@@ -128,7 +128,7 @@ static void final_restore(void) {
     XrXirEffects *effects=probe_artifact->program_final;
     EffectFinalOutcomes *final=(EffectFinalOutcomes *)effect_final_outcomes(effects);
     EffectFinalFunctions *summary=&effects->invocations->final->summary;
-    final->root[function]=saved_final_root;summary->facts[function]=saved_final_facts;
+    final->root[function]=saved_final_root;
     final->functions[function]=saved_final_control;final->task_errors[function]=saved_final_task_errors;
     summary->functions[function].formula.constant_mask=saved_summary_mask;
     final->contracts[function].formula.constant_mask=saved_public_mask;

@@ -38,6 +38,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/base/compile_resources.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/base/compiler_arena.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/base/compiler_producer.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/base/compiler_parser.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/frontend/analyzer_storage.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/incremental/cache_compile_resources.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/module/package_compile_resources.cmake)
 add_subdirectory(base/hashmap_owner)
@@ -319,7 +320,10 @@ if(MSVC)
 else()
     target_compile_options(test_xir_allocations PRIVATE -Wall -Wextra -Werror)
 endif()
-add_test(NAME test_xir_allocations COMMAND test_xir_allocations)
+add_test(NAME test_xir_allocations
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/xir/run_allocation_case_faults.py
+        --executable $<TARGET_FILE:test_xir_allocations>
+        --source-root ${CMAKE_SOURCE_DIR} --build-root ${CMAKE_BINARY_DIR} --mode aggregate)
 set_tests_properties(test_xir_allocations PROPERTIES LABELS "unit;xir;memory;ownership")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/allocation_feedback.cmake)
 
@@ -4001,6 +4005,8 @@ if(XR_BUILD_MCP)
             ${CMAKE_SOURCE_DIR}/tests/mcp/test_protocol_transcript.py
             --xray $<TARGET_FILE:xray>
     )
+    set_tests_properties(test_mcp_knowledge_generation test_mcp_protocol_transcript
+        PROPERTIES ENVIRONMENT "XRAY_STDLIB_PATH=${CMAKE_SOURCE_DIR}/stdlib")
 endif()
 
 # ============================================================================
@@ -4529,6 +4535,7 @@ set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_read.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_proof.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_ordinary_environment.cmake")
 
 include(xir/cell_owner_source.cmake)

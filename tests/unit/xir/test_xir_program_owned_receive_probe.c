@@ -6,14 +6,15 @@
 static void rejected_final(const XrXirCompileContext *context,XrXirArtifact *artifact,
     XrXirEffects *effects) {
     EffectFinalOutcomes *final=(EffectFinalOutcomes *)effect_final_outcomes(effects);
-    CHECK(final && effects->invocations->parameter_kinds[2]);
+    CHECK(final);
+    EffectRoleProof *roles=&effects->invocations->final->role_proof;
+    EffectRoleProof saved_roles=*roles;
     XrXirRootEffects root=final->root[1];
     XrXirFunctionEffects control=final->functions[1];
     XrXirStatus worker=final->go_safe[1],errors=final->task_errors[1];
     uint32_t intrinsic=final->entry_roots[1].intrinsic_mask;
     XrXirEffectParameter *parameter=(XrXirEffectParameter *)final->contracts[2].parameters;
     XrXirEffectParameter saved=*parameter;
-    uint8_t kind=effects->invocations->parameter_kinds[2][0];
     for(unsigned attack=0;attack<6;++attack) {
         if(attack==0)final->root[1].requires_root=true;
         if(attack==1)final->functions[1].suspend=true;
@@ -22,13 +23,13 @@ static void rejected_final(const XrXirCompileContext *context,XrXirArtifact *art
         if(attack==4)final->entry_roots[1].intrinsic_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
         if(attack==5) {
             parameter->kind=XR_XIR_EFFECT_PARAMETER_VARIABLE;
-            effects->invocations->parameter_kinds[2][0]=XR_XIR_EFFECT_PARAMETER_VARIABLE;
+            roles->resources=context->resources;
         }
         XrXirStatus status=xir_effects_program_final_verify(context,&artifact->module,effects);
         fprintf(stderr,"received Final attack%u status%u\n",attack,status);
         final->root[1]=root;final->functions[1]=control;final->go_safe[1]=worker;
         final->task_errors[1]=errors;final->entry_roots[1].intrinsic_mask=intrinsic;
-        *parameter=saved;effects->invocations->parameter_kinds[2][0]=kind;
+        *parameter=saved;*roles=saved_roles;
         CHECK(status==XR_XIR_BAD_STRUCTURE);
         CHECK(xir_effects_program_final_verify(context,&artifact->module,effects)==XR_XIR_OK);
     }
@@ -48,13 +49,13 @@ int main(void) {
         artifact->module.stage,(void *)certificate->terms.remaining,
         (void *)certificate->body->terms.remaining,(void *)effect_contexts_read(effects));
     XrXirStatus outcomes[6];
-    outcomes[0]=effect_source_certificate(&context,certificate,effects);
-    fprintf(stderr,"independent_certificate=%u\n",outcomes[0]);
+    outcomes[0]=effect_source_relations(&context,certificate,effects);
+    fprintf(stderr,"independent_relations=%u\n",outcomes[0]);
     outcomes[1]=xir_effects_program_final_verify(&context,&artifact->module,effects);
     fprintf(stderr,"current_lowered_receiver=%u\n",outcomes[1]);
     outcomes[2]=effect_source_publication_match(&context,&artifact->module,effects);
     fprintf(stderr,"public_projection=%u\n",outcomes[2]);
-    outcomes[3]=effect_source_outcomes(&context,effects);
+    outcomes[3]=effect_program_semantics_current(&context,effects);
     fprintf(stderr,"independent_control_error=%u\n",outcomes[3]);
     outcomes[4]=effect_invocation_current_input_match(&context,&artifact->module,certificate->body);
     fprintf(stderr,"current_input=%u\n",outcomes[4]);

@@ -30,7 +30,7 @@ static XrXirStatus effect_invocation_current_input_match(const XrXirCompileConte
 
 /* This boundary alone accepts current mutable raw input. A changed Source
  * first rebuilds the complete generation. The internal queue retains only
- * the owned reader, physical/control inventories and independently owned bounds. */
+ * the owned reader, physical inventory and independently owned bounds. */
 static XrXirStatus effect_invocation_collect(const XrXirCompileContext *work,
     const XrXirModule *module,XrXirEffects *effects,EffectGraph *graph,
     const EffectInvocationDeclaredBounds *declared,EffectBodyRequest *output) {

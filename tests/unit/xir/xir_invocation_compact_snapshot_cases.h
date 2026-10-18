@@ -253,13 +253,12 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
     EffectInvocationNode *entry=&certificate->final->nodes[certificate->final->roots[1]];
     EffectInvocationCause saved=entry->causes[atom];
     XrXirRootEffectWitness witness=certificate->final->summary.witnesses[at];
-    bool fact=certificate->final->summary.facts[1].unresolved;
     XrXirRootTerm *term=(XrXirRootTerm *)certificate->final->summary.functions[1].formula.terms;
     uint32_t index=term[0].index;
     for (uint32_t damage=0;damage<4;++damage) {
         if (!damage) entry->causes[atom].witness.cause=XR_XIR_ROOT_CAUSE_NONE;
         else if (damage==1) certificate->final->summary.witnesses[at].distance^=1;
-        else if (damage==2) certificate->final->summary.facts[1].unresolved=false;
+        else if (damage==2) certificate->final->summary.witnesses[at].cause=XR_XIR_ROOT_CAUSE_NONE;
         else term[0].index=1;
         length=77;
         CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_BAD_STRUCTURE && length==77);
@@ -270,7 +269,7 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
                 effect_invocation_witness_equal(&selected.witness,&sentinel.witness));
         }
         entry->causes[atom]=saved;certificate->final->summary.witnesses[at]=witness;
-        certificate->final->summary.facts[1].unresolved=fact;term[0].index=index;
+        term[0].index=index;
         length=77;
         CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_OK && length==1);
     }
@@ -639,11 +638,16 @@ static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,
     fixture.init_block.count=fixture.functions[3].instruction_count=3;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:8 status%u XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:10 status%u if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:12 status%u if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);\n",(unsigned)status);
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead body_read={0};
     if (status==XR_XIR_OK) status=effect_cell_body_raw(context,xr_xir_compile_artifact_module(checked),&adapter,&body_read);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:15 status%u if (status==XR_XIR_OK) status=effect_cell_body_raw(context,xr_xir_compile_artifact_module(checked),&adapter,&body_read);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,effects->cells,&body_read,NULL);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:17 status%u if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,effects->cells,&body_read,NULL);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) {
         CHECK(effects->invocations && effect_body_material_shape(effects->invocations->body));
         const XrXirModule *original=xr_xir_compile_artifact_module(checked);
@@ -671,8 +675,11 @@ static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
     adapter=(EffectCellBodyAdapter){0};body_read=(XrXirCellProofBodyRead){0};
     if (status==XR_XIR_OK) status=effect_cell_body_owned(context,effects->invocations->body,&adapter,&body_read);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:45 status%u if (status==XR_XIR_OK) status=effect_cell_body_owned(context,effects->invocations->body,&adapter,&body_read);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,effects->cells,&body_read,NULL);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:47 status%u if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,effects->cells,&body_read,NULL);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) conditional_compact_cell_attacks(context,effects,&adapter,&body_read);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:49 status%u if (status==XR_XIR_OK && oracle) conditional_compact_cell_attacks(context,effects,&adapter,&body_read);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) {
         EffectInvocationCertificate *certificate=effects->invocations;
         CHECK(certificate->final);
@@ -820,7 +827,12 @@ static void conditional_compact_instance_span(void) {
     CHECK(effect_body_material_create(&context,source,&generic_material)==XR_XIR_OK && generic_material);
     CHECK(effect_body_source_match(&context,generic_material,source)==XR_XIR_OK);
     effect_body_material_free(generic_material);
-    CHECK(xr_xir_compile_specialize(checked,&instance,NULL)==XR_XIR_OK && instance);
+    XrXirDiagnostic specialized_diagnostic={0};
+    XrXirStatus specialized=xr_xir_compile_specialize(checked,&instance,&specialized_diagnostic);
+    if(specialized!=XR_XIR_OK) fprintf(stderr,"compact instance specialization status%u reason%u f%u i%u work%llu\n",
+        specialized,specialized_diagnostic.reason,specialized_diagnostic.function,specialized_diagnostic.instruction,
+        (unsigned long long)rp_stats(&context).work);
+    CHECK(specialized==XR_XIR_OK && instance);
     const XrXirModule *module=xr_xir_compile_artifact_module(instance);
     CHECK(module->provenance && module->provenance->kind==XR_XIR_EVIDENCE_INSTANCE && module->provenance->source);
     uint32_t selected=UINT32_MAX;
@@ -849,7 +861,8 @@ static void conditional_compact_instance_span(void) {
 }
 
 static XrXirStatus conditional_compact_case(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
-    return mode<2?conditional_compact_codec(context,mode,oracle):conditional_compact_owned(context,oracle);
+    XrXirStatus status=mode<2?conditional_compact_codec(context,mode,oracle):conditional_compact_owned(context,oracle);
+    fprintf(stderr,"DIAG compact mode%u status%u\n",mode,(unsigned)status);return status;
 }
 #include "xir_invocation_compact_directory_cases.h"
 

@@ -311,17 +311,25 @@ static void initial_ordinary_refresh_controls(void) {
     xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
-/* Every node remains a fresh correspondence obligation. The record retains
- * its own four-domain witness and link; sharing node storage grants nothing. */
+/* Every metadata node and every actual Final domain remains an independent
+ * correspondence obligation. There is no forest permission or witness copy. */
 static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
     EffectContextForest *forest) {
     CHECK(forest->count==2 && forest->nodes[0].parameter_count==1 &&
         forest->invocations && effect_invocation_forest_match(context,forest)==XR_XIR_OK);
-    EffectForestNode node=forest->nodes[0];XrXirRootEffects facts=forest->facts[0];
-    EffectContextCertificate record=forest->certificates[0];
-    XrXirRootEffectWitness witness=forest->witnesses[0];
+    EffectForestNode node=forest->nodes[0];
+    EffectFinalFunctions *summary=&forest->invocations->final->summary;
+    XrXirRootEffects facts;CHECK(effect_invocation_certificate_facts(context,forest->invocations,0,&facts)==XR_XIR_OK);
+    EffectInvocationNode *root_node=&forest->invocations->final->nodes[forest->invocations->final->roots[0]];
+    uint32_t intrinsic=root_node->intrinsic_mask;
+    XrXirRootEffectWitness witness=summary->witnesses[0],unknown=summary->witnesses[forest->count];
+    EffectContextRootValue detached,fresh;
+    CHECK(effect_invocation_forest_values(context,forest,0,&detached)==XR_XIR_OK);
+    detached.facts.unresolved=!detached.facts.unresolved;detached.root.cause=XR_XIR_ROOT_CAUSE_CALL;
+    CHECK(effect_invocation_forest_values(context,forest,0,&fresh)==XR_XIR_OK &&
+        fresh.facts.unresolved==facts.unresolved && effect_invocation_witness_equal(&fresh.root,&witness));
     XrXirType wrong_type=XR_XIR_I64;
-    uint8_t wrong_kind=(uint8_t)(node.parameter_kinds[0]^1u);
+    EffectRoleProof role_proof=forest->invocations->final->role_proof;
     for (uint32_t attack=0;attack<14;++attack) {
         uint64_t live=rp_stats(context).live_bytes;
         switch (attack) {
@@ -330,22 +338,23 @@ static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
             case 2: forest->nodes[0].constant_mask^=1u;break;
             case 3: ++forest->nodes[0].argument_count;break;
             case 4: ++forest->nodes[0].parameter_count;break;
-            case 5: forest->facts[0].unresolved=!facts.unresolved;break;
+            case 5: root_node->intrinsic_mask^=XR_XIR_CALLABLE_ROOT_UNRESOLVED;break;
             case 6: forest->nodes[0].physical_types=&wrong_type;break;
-            case 7: forest->nodes[0].parameter_kinds=&wrong_kind;break;
-            case 8: forest->certificates[0].witness.cause=
-                (XrXirRootEffectCause)((uint32_t)record.witness.cause^1u);break;
-            case 9: forest->certificates[0].next=forest->count;break;
-            case 10: forest->certificates[0].parameter_owner=forest->count;break;
-            case 11: forest->certificates[0].domain^=1u;break;
-            case 12: forest->certificates[0].next_domain^=1u;break;
-            case 13: forest->witnesses[0].cause=
+            case 7: ++forest->invocations->final->role_proof.functions;break;
+            case 8: summary->witnesses[0].cause=
                 (XrXirRootEffectCause)((uint32_t)witness.cause^1u);break;
+            case 9: summary->witnesses[0].callee=forest->count;break;
+            case 10: summary->witnesses[0].slot=forest->count;break;
+            case 11: summary->witnesses[0].instruction^=1u;break;
+            case 12: summary->witnesses[0].distance^=1u;break;
+            case 13: summary->witnesses[forest->count].cause=
+                (XrXirRootEffectCause)((uint32_t)unknown.cause^1u);break;
         }
         CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_BAD_STRUCTURE &&
             rp_stats(context).live_bytes==live);
-        forest->nodes[0]=node;forest->facts[0]=facts;
-        forest->certificates[0]=record;forest->witnesses[0]=witness;
+        forest->nodes[0]=node;root_node->intrinsic_mask=intrinsic;
+        forest->invocations->final->role_proof=role_proof;
+        summary->witnesses[0]=witness;summary->witnesses[forest->count]=unknown;
         CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_OK &&
             rp_stats(context).live_bytes==live);
     }
@@ -378,7 +387,12 @@ static void initial_ordinary_forest_controls(void) {
     memset(&fixture,0xCE,sizeof(fixture));
     initial_ordinary_forest_literals(&context,forest);
     CHECK(ordinary_material_cell_match(&context,forest->invocations->body,true)==XR_XIR_OK);
+    EffectContextRootValue detached;
+    CHECK(effect_invocation_forest_values(&context,forest,0,&detached)==XR_XIR_OK);
+    XrXirRootEffects facts=detached.facts;XrXirRootEffectWitness root=detached.root,unknown=detached.unresolved;
     effect_context_forest_free(forest);rp_owner_free(&context,baseline);rp_balanced(physical);
+    CHECK(detached.facts.requires_root==facts.requires_root && detached.facts.unresolved==facts.unresolved &&
+        effect_invocation_witness_equal(&detached.root,&root) && effect_invocation_witness_equal(&detached.unresolved,&unknown));
 }
 
 static void initial_ordinary_controls(void) {

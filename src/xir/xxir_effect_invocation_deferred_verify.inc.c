@@ -8,8 +8,8 @@
  *
  * KEY CONCEPT:
  *   A delayed invocation owns the real formal and complete physical actuals.
- *   Replaying the common value-origin flow verifies this correspondence before
- *   seal; it neither solves another invocation graph nor publishes permission.
+ *   Constructor discovery proposes the mapping. Sealed correspondence consumes
+ *   the sole finite relation and cannot replay an origin solver or grant access.
  */
 static XrXirStatus effect_invocation_deferred_match(EffectInvocationFlow *flow,
     const EffectInvocationDeferred *record) {
@@ -123,7 +123,7 @@ static XrXirStatus effect_invocation_deferred_needed(const EffectInvocationRead 
  * All records, including missing and duplicate frontiers, are consumed before
  * any certificate ownership transfer. A failure leaves every producer owned. */
 static XrXirStatus effect_invocation_deferred_verify(const EffectInvocationRead *owner) {
-    if (!owner || !effect_body_material_shape(owner->final->material) || !owner->effects || !owner->work ||
+    if (!owner || !effect_body_material_shape(owner->final->material) || !effect_invocation_roles_shape(owner) || !owner->work ||
         owner->final->deferred_count>owner->final->deferred_capacity ||
         (owner->final->deferred_count && !owner->final->deferred_calls)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t d=0;d<owner->final->deferred_count;++d) {
@@ -139,7 +139,7 @@ static XrXirStatus effect_invocation_deferred_verify(const EffectInvocationRead 
         if (status!=XR_XIR_OK) return status;
         if (!needed) continue;
         EffectInvocationFlow flow={.read=owner,.node=n,.instruction=UINT32_MAX};
-        status=effect_invocation_origins(&flow);
+        status=owner->roles.construction?effect_invocation_discovery_origins(&flow):effect_invocation_final_view(&flow);
         if (status==XR_XIR_OK) status=effect_invocation_deferred_frontiers(&flow,&matched);
         xr_compile_resources_free(flow.memory);
         if (status!=XR_XIR_OK) return status;

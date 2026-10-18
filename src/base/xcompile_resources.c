@@ -43,6 +43,7 @@ static void compile_unlock(XrCompileResources *resources) {
 static bool compile_release_locked(XrCompileResources *resources) {
     XR_CHECK(resources->references, "A live compiler ledger must have an owner");
     if (--resources->references) return false;
+    XR_CHECK(!resources->allocations, "The last ledger reference has no live payload registry");
     XR_CHECK(resources->stats.live_bytes == sizeof(*resources), "Outstanding compiler allocations retain their ledger");
     return true;
 }
@@ -133,8 +134,8 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_work(XrCompileResources *re
     return status;
 }
 
-static XrCompileResourceStatus compile_storage(XrCompileResources *resources,
-    const void *memory, size_t bytes, bool owning) {
+static XrCompileResourceStatus compile_allocation_storage(XrCompileResources *resources,
+    const void *memory, size_t bytes) {
     if (!resources || !memory || !bytes) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     uintptr_t address = (uintptr_t)memory;
     XrCompileResourceStatus status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
@@ -144,7 +145,7 @@ static XrCompileResourceStatus compile_storage(XrCompileResources *resources,
         status = compile_work_locked(resources, 1);
         if (status != XR_COMPILE_RESOURCE_OK) break;
         uintptr_t start = (uintptr_t)(allocation + 1);
-        if ((!owning || address == start) && address >= start && address - start <= allocation->info.bytes &&
+        if (address == start && address >= start && address - start <= allocation->info.bytes &&
             bytes <= allocation->info.bytes - (size_t)(address - start)) {
             status = XR_COMPILE_RESOURCE_OK;
             break;
@@ -155,14 +156,9 @@ static XrCompileResourceStatus compile_storage(XrCompileResources *resources,
     return status;
 }
 
-XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
-    const void *memory, size_t bytes) {
-    return compile_storage(resources, memory, bytes, false);
-}
-
 XR_FUNC XrCompileResourceStatus xr_compile_resources_allocation(XrCompileResources *resources,
     const void *memory, size_t bytes) {
-    return compile_storage(resources, memory, bytes, true);
+    return compile_allocation_storage(resources, memory, bytes);
 }
 
 XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileResources *resources,
@@ -186,6 +182,42 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_scan_delimiter(XrCompileRes
         *advanced = position;
         *found = matched;
     }
+    compile_unlock(resources);
+    return status;
+}
+
+/* Only trusted live allocation headers are followed. A proposed payload
+ * address is compared numerically and is never read or used to find a header. */
+XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *resources,
+    const void *memory, size_t bytes) {
+    if (!resources || !memory || !bytes) return XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    uintptr_t address = (uintptr_t)memory;
+    compile_lock(resources);
+    XrCompileResourceStatus status = compile_work_locked(resources, 1);
+    bool contained = false;
+    for (const CompileAllocation *allocation = resources->allocations;
+         allocation && status == XR_COMPILE_RESOURCE_OK; allocation = allocation->info.next) {
+        status = compile_work_locked(resources, 6);
+        if (status != XR_COMPILE_RESOURCE_OK) break;
+        uintptr_t begin = (uintptr_t)(allocation + 1);
+        if (address >= begin && address - begin < allocation->info.bytes &&
+            bytes <= allocation->info.bytes - (address - begin)) {
+            contained = true;
+            /* The live registry follows query locality. Its order depends on
+             * allocation/query identity, never on the allocator's addresses. */
+            if (allocation->info.previous) {
+                status=compile_work_locked(resources,6);
+                if (status!=XR_COMPILE_RESOURCE_OK) break;
+                CompileAllocation *hit=(CompileAllocation *)allocation;
+                hit->info.previous->info.next=hit->info.next;
+                if (hit->info.next) hit->info.next->info.previous=hit->info.previous;
+                hit->info.previous=NULL;hit->info.next=resources->allocations;
+                resources->allocations->info.previous=hit;resources->allocations=hit;
+            }
+            break;
+        }
+    }
+    if (status == XR_COMPILE_RESOURCE_OK && !contained) status = XR_COMPILE_RESOURCE_BAD_ARGUMENT;
     compile_unlock(resources);
     return status;
 }

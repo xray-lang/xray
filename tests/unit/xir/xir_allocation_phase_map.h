@@ -20,6 +20,11 @@ static unsigned allocation_phase_selection=7;
 static size_t allocation_phase_ordinals,allocation_phase_cases;
 static size_t allocation_phase_compiler_ordinals,allocation_phase_runtime_ordinals,allocation_phase_bridge_ordinals;
 
+static void allocation_phase_case_begin(const char *family,unsigned scalar,unsigned mode) {
+    allocation_case_name=family;allocation_case_scalar=scalar;allocation_case_mode=mode;
+    allocation_stage="normal-and-seal";
+}
+
 static AllocationPhaseMap allocation_phase_map(const char *family,unsigned scalar,unsigned mode,
     size_t whole,size_t prefix) {
     CHECK(prefix && prefix<whole && whole<10000);
@@ -27,6 +32,7 @@ static AllocationPhaseMap allocation_phase_map(const char *family,unsigned scala
     return (AllocationPhaseMap){family,scalar,mode,whole,prefix,whole-prefix,0,0};
 }
 static void allocation_phase_compile_begin(AllocationPhaseMap *map,size_t ordinal) {
+    allocation_stage="producer-fault";
     CHECK(!live && !class_live_bytes && ordinal==map->compiler_visited && ordinal<map->prefix);
     allocation_calls=0;fail_at=ordinal;
 }
@@ -47,6 +53,7 @@ static void allocation_phase_restore(XrXirProgram *program,AllocationPhasePhysic
 }
 static void allocation_phase_runtime_begin(AllocationPhaseMap *map,size_t ordinal,
     XrXirProgram *program) {
+    allocation_stage="runtime-fault";
     CHECK(ordinal==map->runtime_visited && ordinal<map->runtime);
     CHECK(map->prefix+ordinal<map->whole && atomic_load(&program->references)==1);
     allocation_calls=0;fail_at=ordinal;

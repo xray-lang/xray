@@ -7,21 +7,19 @@
  * xir_string_vm_program.h - Full VM binding tables retained by an immutable Program
  *
  * KEY CONCEPT:
- *   The code lease owns the artifact and binding environments until final drop.
+ *   The Program owns its Input while the code lease retains binding environments.
  */
 #ifndef XIR_STRING_VM_PROGRAM_H
 #define XIR_STRING_VM_PROGRAM_H
-#include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_program_internal.h"
 #include "xir/xxir_program.h"
 #include "xir/xxir_compile_memory.h"
 typedef struct StringVmCode {
-    XrXirArtifact *artifact;
     XrXirVmBinding *bindings;
 } StringVmCode;
 static void string_vm_code_release(void *pointer) {
     StringVmCode *code=pointer;
     if (!code) return;
-    xr_xir_compile_artifact_free(code->artifact);
     xr_compile_resources_free(code->bindings);
     xr_compile_resources_free(code);
 }
@@ -44,9 +42,16 @@ static XrXirStatus string_vm_program_take(XrXirArtifact **artifact,
         if (native_child) entries[1]=*native_child;
         XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,*xr_xir_compile_artifact_target(*artifact),
             entries,5,module->declarations,{code,string_vm_code_release},module->types,
-            xir_program_packet_borrow(*artifact)};
-        status=xr_xir_compile_program_seal(context,&spec,output);
-        if (status==XR_XIR_OK) { code->artifact=*artifact;*artifact=NULL; }
+            {0}};
+        XrXirArtifact *owned=*artifact;
+        XrXirProgramInput *input=NULL;
+        status=xir_program_input_take(context,&owned,&input);
+        if (status==XR_XIR_OK) status=xir_program_receive(context,&spec,&input,NULL,output);
+        if (status==XR_XIR_OK) *artifact=NULL;
+        else if (input) {
+            input->artifact=NULL;
+            xir_program_input_free(input);
+        }
     }
     xr_compile_resources_free(entries);
     if (status!=XR_XIR_OK) { CHECK(!*output);string_vm_code_release(code); }

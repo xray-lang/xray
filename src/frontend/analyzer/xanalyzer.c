@@ -9,6 +9,7 @@
  */
 
 #include "xanalyzer.h"
+#include "xanalyzer_storage.h"
 #include "xanalyzer_visitor.h"
 #include "../parser/xast_walk.h"
 #include "../../base/xchecks.h"
@@ -615,29 +616,8 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     analyzer->isolate = X;
     analyzer->semantic_revision = 1;
 
-    analyzer->consteval_arena = (XrArena *) xr_malloc(sizeof(XrArena));
-    if (!analyzer->consteval_arena) {
-        xr_free(analyzer);
-        return NULL;
-    }
-    xr_arena_init(analyzer->consteval_arena, 4096);
-
-    analyzer->callable_target_arena = (XrArena *) xr_malloc(sizeof(XrArena));
-    if (!analyzer->callable_target_arena) {
-        xr_arena_destroy(analyzer->consteval_arena);
-        xr_free(analyzer->consteval_arena);
-        xr_free(analyzer);
-        return NULL;
-    }
-    xr_arena_init(analyzer->callable_target_arena, 4096);
-
-    // Initialize type pool (per-analyzer, no global state)
-    analyzer->type_pool = xr_type_pool_new();
-    if (!analyzer->type_pool) {
-        xr_arena_destroy(analyzer->callable_target_arena);
-        xr_free(analyzer->callable_target_arena);
-        xr_arena_destroy(analyzer->consteval_arena);
-        xr_free(analyzer->consteval_arena);
+    if (xa_analyzer_storage_open(xr_compile_session_compile_state(session), analyzer) !=
+        XR_COMPILE_RESOURCE_OK) {
         xr_free(analyzer);
         return NULL;
     }
@@ -821,11 +801,6 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
             xr_type_set_current_pool(fallback, fallback ? &fallback->next_type_id : NULL);
     }
 
-    // Free type pool
-    if (analyzer->type_pool) {
-        xr_type_pool_free(analyzer->type_pool);
-    }
-
     // Free the non-owning path -> XaFileEntry lookup map.
     if (analyzer->files_map) {
         xr_hashmap_free((XrHashMap *) analyzer->files_map);
@@ -842,14 +817,7 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
         diag = next;
     }
 
-    if (analyzer->consteval_arena) {
-        xr_arena_destroy(analyzer->consteval_arena);
-        xr_free(analyzer->consteval_arena);
-    }
-    if (analyzer->callable_target_arena) {
-        xr_arena_destroy(analyzer->callable_target_arena);
-        xr_free(analyzer->callable_target_arena);
-    }
+    xa_analyzer_storage_close(analyzer);
 
     xr_free(analyzer);
 }

@@ -329,9 +329,11 @@ static XrXirStatus effect_invocation_certificate_node_mask(const XrXirCompileCon
         if (atom<2) continue;
         if (atom-2<parameters) {
             uint32_t p=atom-2,original=0;
-            if (!certificate->parameter_kinds || !certificate->parameter_kinds[node->root] ||
-                certificate->parameter_kinds[node->root][p]!=XR_XIR_EFFECT_PARAMETER_VARIABLE)
-                return XR_XIR_BAD_STRUCTURE;
+            uint32_t parameter_kind=UINT32_MAX;
+            XrXirStatus role_status=effect_role_parameter_read(work,certificate->body,
+                &certificate->final->role_proof,node->root,p,&parameter_kind);
+            if (role_status!=XR_XIR_OK) return role_status;
+            if (parameter_kind!=XR_XIR_EFFECT_PARAMETER_VARIABLE) return XR_XIR_BAD_STRUCTURE;
             XrXirStatus status=effect_invocation_bounds_mask(work,certificate->declared,node->root,p,&original);
             if (status!=XR_XIR_OK) return status;
             mask|=original;
@@ -415,11 +417,5 @@ XR_FUNC XrXirStatus xir_effects_class_value(const XrXirCompileContext *context,
     XrXirStatus status=effect_body_operand_type(&read,body,value,&type);
     if (status!=XR_XIR_OK) return status;
     if (!xr_xir_type_is_class(certificate->body->domain.types,type)) return XR_XIR_BAD_STRUCTURE;
-    uint32_t at=0;status=effect_invocation_class_find(context,node,value,&at);
-    if (status!=XR_XIR_OK) return status;
-    EffectInvocationClassFact fact=node->classes[at];
-    if ((fact.mask&~EFFECT_CLASS_VALID) || !(fact.mask&EFFECT_CLASS_KNOWN) ||
-        (fact.mask==EFFECT_CLASS_KNOWN?!fact.rank:fact.rank!=0)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(context,6)) return XR_XIR_BUDGET;
-    *output=fact.mask;return XR_XIR_OK;
+    return effect_final_class_mask(context,owner,selected,value,output);
 }

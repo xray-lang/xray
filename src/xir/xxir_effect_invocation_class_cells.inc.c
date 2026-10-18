@@ -11,8 +11,8 @@
  */
 static XrXirStatus effect_invocation_class_cells_match(const EffectInvocationRead *owner,
     const EffectBodyRequest *body) {
-    if (!owner || !body || !owner->work || !owner->effects || !owner->final->cells ||
-        !xir_effects_context_matches(owner->work,owner->effects,body->domain.function_count))
+    if (!owner || !body || !owner->work || !effect_invocation_roles_shape(owner) || !owner->final->cells ||
+        body->domain.function_count!=effect_body_count(owner->final->material))
         return XR_XIR_BAD_STRUCTURE;
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};
     XrXirStatus status=effect_cell_body_request(owner->work,body,&adapter,&read);
@@ -35,16 +35,7 @@ static XrXirStatus effect_invocation_class_cell_subject(EffectInvocationFlow *fl
     if (!place || place->op!=XR_XIR_OBJECT_PLACE || place->args[0]!=root->value ||
         place->type!=subject || !xr_xir_type_is_class(flow->body.domain.types,subject))
         return XR_XIR_BAD_STRUCTURE;
-    uint32_t selected=0;
-    status=effect_invocation_class_find(owner->work,&owner->final->nodes[flow->node],root->value,&selected);
-    if (status!=XR_XIR_OK) return status;
-    if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
-    const EffectInvocationClassFact *fact=&owner->final->nodes[flow->node].classes[selected];
-    if (!fact->mask) return XR_XIR_UNRESOLVED;
-    if ((fact->mask&~EFFECT_CLASS_VALID) || !(fact->mask&EFFECT_CLASS_KNOWN) ||
-        (fact->mask==EFFECT_CLASS_KNOWN ? !fact->rank : fact->rank!=0))
-        return XR_XIR_BAD_STRUCTURE;
-    *mask=fact->mask;return XR_XIR_OK;
+    return effect_invocation_class_mask(owner,flow->node,root->value,mask);
 }
 
 /* A bottom delays this real terminal on the one equation queue. It is not an
@@ -52,7 +43,7 @@ static XrXirStatus effect_invocation_class_cell_subject(EffectInvocationFlow *fl
 static XrXirStatus effect_invocation_class_cell_view(EffectInvocationFlow *flow,
     uint32_t value,XrXirCellOriginView *output) {
     const EffectInvocationRead *owner=flow->read;
-    if (!output || !owner || !owner->work || !owner->effects || !owner->final->cells ||
+    if (!output || !owner || !owner->work || !effect_invocation_roles_shape(owner) || !owner->final->cells ||
         flow->node>=owner->final->count || value>=flow->values) return XR_XIR_BAD_STRUCTURE;
     XrXirCellClassOriginView view={0};
     XrXirStatus status=xr_xir_compile_cell_class_origin_view(owner->work,owner->final->cells,

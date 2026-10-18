@@ -32,6 +32,15 @@ typedef struct EffectBodyInstructionShape {
     XrXirType type;
 } EffectBodyInstructionShape;
 
+/* This stack view belongs to one uninterrupted compile-time read. It contains
+ * only the actual Input identity, never a semantic result or stored verdict. */
+typedef struct EffectBodyCurrentRead {
+    const XrXirCompileContext *work;
+    const EffectBodyMaterial *material;
+} EffectBodyCurrentRead;
+static XrXirStatus effect_body_current_open(const XrXirCompileContext *work,
+    const EffectBodyMaterial *material,EffectBodyCurrentRead *output);
+
 typedef struct EffectBodyRequest EffectBodyRequest;
 struct EffectBodyRequest {
     XirMetadataDomain domain;
@@ -42,7 +51,10 @@ struct EffectBodyRequest {
         XrXirInstruction *,const XrXirInstruction **,EffectBodyInstructionFields *);
     XrXirStatus (*type)(const EffectBodyRequest *,uint32_t,uint32_t,XrXirType *);
     XrXirStatus (*shape)(const EffectBodyRequest *,uint32_t,uint32_t,EffectBodyInstructionShape *);
+    const EffectBodyCurrentRead *current;
 };
+static XrXirStatus effect_body_current_record(const EffectBodyRequest *request,
+    uint32_t function,uint32_t instruction,const EffectBodyRun **output);
 
 static XrXirStatus effect_body_raw_head(const EffectBodyRequest *request,uint32_t f,
     EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions) {
@@ -123,6 +135,14 @@ static XrXirStatus effect_body_owned_instruction(const EffectBodyRequest *reques
     const EffectBodyMaterial *material=request->owner;
     if (!effect_body_material_shape(material) || !storage || !output || f>=effect_body_count(material))
         return XR_XIR_BAD_STRUCTURE;
+    if(request->current && !fields) {
+        const EffectBodyRun *ref=NULL;
+        XrXirStatus status=effect_body_current_record(request,f,i,&ref);
+        if(status==XR_XIR_OK) status=effect_body_instruction_ref_value(&request->read,ref,i,storage);
+        if(status!=XR_XIR_OK) return status;
+        if(!effect_body_read_work(&request->read,sizeof(*output))) return XR_XIR_BUDGET;
+        *output=storage;return XR_XIR_OK;
+    }
     if (fields) return effect_body_instruction_fields_get(&request->read,&material->functions[f],i,fields);
     XrXirStatus status=effect_body_instruction_get(&request->read,&material->functions[f],i,storage);
     if (status!=XR_XIR_OK) return status;
@@ -134,6 +154,16 @@ static XrXirStatus effect_body_owned_type(const EffectBodyRequest *request,uint3
     const EffectBodyMaterial *material=request->owner;
     if (!effect_body_material_shape(material) || f>=effect_body_count(material))
         return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyFunction *head=&material->functions[f];
+    if(request->current && output && value>=head->parameter_count &&
+        (uint64_t)value<(uint64_t)head->parameter_count+head->instruction_count) {
+        const EffectBodyRun *ref=NULL;uint32_t type=0,instruction=value-head->parameter_count;
+        XrXirStatus status=effect_body_current_record(request,f,instruction,&ref);
+        if(status==XR_XIR_OK) status=effect_body_run_word(&request->read,ref,instruction,1,&type);
+        if(status!=XR_XIR_OK) return status;
+        if(!effect_body_read_work(&request->read,sizeof(*output))) return XR_XIR_BUDGET;
+        *output=(XrXirType)type;return XR_XIR_OK;
+    }
     return effect_body_operand_type(&request->read,&material->functions[f],value,output);
 }
 static XrXirStatus effect_body_owned_shape(const EffectBodyRequest *request,uint32_t f,
@@ -152,14 +182,14 @@ static inline EffectBodyRequest effect_body_raw_request(const XrXirCompileContex
     XirMetadataDomain domain=xir_metadata_domain_from_module(module);
     if (!domain.types) domain.types=&effect_empty_types;
     return (EffectBodyRequest){domain,effect_body_compile_read(work),module,
-        effect_body_raw_head,effect_body_raw_instruction,effect_body_raw_type,effect_body_raw_shape};
+        effect_body_raw_head,effect_body_raw_instruction,effect_body_raw_type,effect_body_raw_shape,NULL};
 }
 static inline EffectBodyRequest effect_body_owned_request(const XrXirCompileContext *work,
     const EffectBodyMaterial *body) {
     if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) ||
         body->resources!=work->resources) return (EffectBodyRequest){0};
     return (EffectBodyRequest){body->domain,effect_body_compile_read(work),body,
-        effect_body_owned_head,effect_body_owned_instruction,effect_body_owned_type,effect_body_owned_shape};
+        effect_body_owned_head,effect_body_owned_instruction,effect_body_owned_type,effect_body_owned_shape,NULL};
 }
 /* This is only the identity of the sole current storage adapter. Every
  * permission and final semantic fact is independently replayed by its consumer. */
@@ -180,7 +210,7 @@ static bool effect_body_request_owned_matches(const XrXirCompileContext *work,
  * Field checks avoid reading structure padding or an uninitialized tail. */
 static bool effect_body_request_empty(const EffectBodyRequest *request) {
     return request && !request->owner && !request->head && !request->instruction &&
-        !request->type && !request->shape && !request->read.owner && !request->read.consume &&
+        !request->type && !request->shape && !request->current && !request->read.owner && !request->read.consume &&
         !request->domain.types && !request->domain.declarations && !request->domain.generics &&
         !request->domain.defaults && !request->domain.function_count;
 }

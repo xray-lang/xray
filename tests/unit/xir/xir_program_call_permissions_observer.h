@@ -86,7 +86,8 @@ static XrXirAction pce_resume(XrXirCallView *view) {
     const XrXirVmBinding *binding = view->environment;
     CHECK(f && binding && binding->function < f->functions);
     uint32_t function = binding->function;
-    CHECK(binding == &f->bindings[function] && binding->artifact == f->lowered);
+    CHECK(binding == &f->bindings[function] && f->program->permissions->input &&
+        binding->artifact == f->program->permissions->input->artifact);
     PceWitness *w = pce_witness(view->instance);
     bool child = false;
     const XrXirValueAdmission *admission = xr_xir_call_admission(view);

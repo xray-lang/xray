@@ -44,6 +44,15 @@ static XrXirStatus effect_program_outcomes_storage(const XrXirCompileContext *wo
     if (outcomes->resources!=work->resources || outcomes->count!=count ||
         outcomes->atom_count>outcomes->atom_capacity || outcomes->contexts)
         return XR_XIR_BAD_STRUCTURE;
+    FINAL_STORAGE(outcomes->error_proof,1,EffectErrorFinite);
+    FINAL_STORAGE(outcomes->control_proof,1,EffectControlProof);
+    XrCompileResourceStatus error_owner=xr_compile_resources_allocation(work->resources,
+        outcomes->error_proof,sizeof(*outcomes->error_proof));
+    XrCompileResourceStatus control_owner=error_owner==XR_COMPILE_RESOURCE_OK?
+        xr_compile_resources_allocation(work->resources,outcomes->control_proof,
+            sizeof(*outcomes->control_proof)):error_owner;
+    if (control_owner!=XR_COMPILE_RESOURCE_OK)
+        return control_owner==XR_COMPILE_RESOURCE_BUDGET?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
     FINAL_STORAGE(outcomes->functions,count,XrXirFunctionEffects);
     FINAL_STORAGE(outcomes->witnesses,count,XrXirEffectWitness);
     FINAL_STORAGE(outcomes->atoms,outcomes->atom_capacity,EffectErrorAtom);
@@ -85,6 +94,12 @@ static XrXirStatus effect_program_final_storage(const XrXirCompileContext *work,
         effects->outcomes_owner || effects->root_input ||
         final->count>final->capacity || final->edge_count>final->edge_capacity ||
         final->deferred_count>final->deferred_capacity) return XR_XIR_BAD_STRUCTURE;
+    const EffectRoleProof *roles=&final->role_proof;
+    if (roles->functions>count) return XR_XIR_BAD_STRUCTURE;
+    FINAL_STORAGE(roles->rows,roles->functions,EffectRoleFunction);
+    FINAL_STORAGE(roles->facts,roles->total,EffectRoleFact);
+    if (final->capture.count>final->capture.capacity) return XR_XIR_BAD_STRUCTURE;
+    FINAL_STORAGE(final->capture.facts,final->capture.capacity,EffectCaptureFact);
     status=effect_program_outcomes_storage(work,final->outcomes,count);
     if (status!=XR_XIR_OK) return status;
     status=effect_program_physical_storage(work,final->physical,count);
@@ -95,23 +110,17 @@ static XrXirStatus effect_program_final_storage(const XrXirCompileContext *work,
     if (status!=XR_XIR_OK) return status;
     FINAL_STORAGE(certificate->origins,count,XrXirOrigin);
     FINAL_STORAGE(certificate->owners,count,uint32_t);
-    FINAL_STORAGE(certificate->parameter_kinds,count,uint8_t *);
     FINAL_STORAGE(final->roots,count,uint32_t);
     FINAL_STORAGE(final->root_spaces,count,uint32_t);
-    FINAL_STORAGE(final->local_roots,count,XrXirRootEffects);
-    FINAL_STORAGE(final->local_witnesses,(size_t)count*2,XrXirRootEffectWitness);
-    FINAL_STORAGE(body->control,count,XrXirFunctionEffects);
     FINAL_STORAGE(effects->formula_terminals,(size_t)count*4,XrXirRootEffectWitness);
     FINAL_STORAGE(effects->constant_witnesses,(size_t)count*2,XrXirRootEffectWitness);
     const EffectFinalFunctions *summary=&final->summary;
     if (summary->resources!=work->resources || summary->count!=count || summary->capacity!=count)
         return XR_XIR_BAD_STRUCTURE;
     FINAL_STORAGE(summary->functions,count,EffectFinalFunction);
-    FINAL_STORAGE(summary->facts,count,XrXirRootEffects);
     FINAL_STORAGE(summary->witnesses,(size_t)count*4,XrXirRootEffectWitness);
     for (uint32_t f=0;f<count;++f) {
         if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
-        FINAL_STORAGE(certificate->parameter_kinds[f],body->functions[f].parameter_count,uint8_t);
         FINAL_STORAGE(certificate->origins[f].arguments,certificate->origins[f].argument_count,XrXirType);
         FINAL_STORAGE(certificate->origins[f].effect_arguments,certificate->origins[f].effect_argument_count,XrXirEffectArgument);
         FINAL_STORAGE(summary->functions[f].storage,summary->functions[f].capacity,XrXirRootTerm);
@@ -124,7 +133,7 @@ static XrXirStatus effect_program_final_storage(const XrXirCompileContext *work,
     for (uint32_t n=0;n<final->count;++n) {
         if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
         const EffectInvocationNode *node=&final->nodes[n];
-        if (node->root>=count || node->body>=count || node->producer_count>node->producer_capacity)
+        if (node->root>=count || node->body>=count)
             return XR_XIR_BAD_STRUCTURE;
         uint32_t parameters=body->functions[node->root].parameter_count;
         uint32_t instructions=body->functions[node->body].instruction_count;
@@ -142,9 +151,6 @@ static XrXirStatus effect_program_final_storage(const XrXirCompileContext *work,
         FINAL_STORAGE(node->input,(size_t)input_words,uint64_t);
         FINAL_STORAGE(node->cells,(size_t)output_words,uint64_t);
         FINAL_STORAGE(node->local_cells,(size_t)output_words,uint64_t);
-        FINAL_STORAGE(node->parameter_coverage,node->parameter_count,uint64_t);
-        FINAL_STORAGE(node->producers,node->producer_capacity,EffectInvocationProducer);
-        FINAL_STORAGE(node->classes,node->class_count,EffectInvocationClassFact);
     }
     for (uint32_t d=0;d<final->deferred_count;++d) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;

@@ -159,7 +159,7 @@ static void pc_outcome_error_rows_literals(void) {
     CHECK(final && final->count==5 && final->error_rows>5 && final->words==1 &&
         final->errors[0]==0 && final->errors[1]==1 && final->errors[2]==0 &&
         final->errors[3]==0 && final->errors[4]==0);
-    XrXirEffects fresh={0};CHECK(effect_source_outcomes_prepare(&context,effects,&fresh)==XR_XIR_OK);
+    XrXirEffects fresh={0};CHECK(effect_legacy_error_oracle_prepare(&context,effects,&fresh)==XR_XIR_OK);
     XrXirCompileContext remaining=context;
     CHECK(effect_errors_seed(&effects->invocations->body->domain,&fresh,&remaining)==XR_XIR_OK);
     EffectTerms terms={.types=*effects->invocations->body->domain.types,.remaining=&remaining};
@@ -168,7 +168,7 @@ static void pc_outcome_error_rows_literals(void) {
     CHECK(error_invocation_contexts_new(&flow,&flow.invocations)==XR_XIR_OK && flow.invocations);
     CHECK(error_invocation_summaries(&flow)==XR_XIR_OK && error_invocation_functions(&flow)==XR_XIR_OK);
     CHECK(fresh.outcomes_work.error_rows==final->error_rows &&
-        effect_source_errors_match(&context,effects,&fresh)==XR_XIR_OK);
+        effect_legacy_error_oracle_match(&context,effects,&fresh)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
     uint32_t poisoned=0;
     for (uint32_t n=0;n<effects->invocations->final->count;++n) {
@@ -181,15 +181,15 @@ static void pc_outcome_error_rows_literals(void) {
         effects->invocations->final->outcomes->errors[row]=1;
         CHECK(final->errors[0]==0 && final->errors[1]==1 && final->errors[2]==0 &&
             final->errors[3]==0 && final->errors[4]==0 &&
-            effect_source_errors_match(&context,effects,&fresh)==XR_XIR_BAD_STRUCTURE);
+            effect_legacy_error_oracle_match(&context,effects,&fresh)==XR_XIR_BAD_STRUCTURE);
         effects->invocations->final->outcomes->errors[row]=0;++poisoned;
-        CHECK(effect_source_errors_match(&context,effects,&fresh)==XR_XIR_OK);
+        CHECK(effect_legacy_error_oracle_match(&context,effects,&fresh)==XR_XIR_OK);
     }
     CHECK(poisoned==5);
     printf("whole Final error rows%u public5 closed rotations%u extra-row poisoning rejected and restored\n",
         final->error_rows,poisoned);
     error_storage_free(&flow);error_invocation_contexts_free(flow.invocations);effect_terms_free(&terms);
-    effect_source_outcomes_free(&fresh);xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+    effect_legacy_error_oracle_free(&fresh);xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
 }
 
 static void pc_outcome_retry(const XrXirCompileContext *context,uint32_t mutation,

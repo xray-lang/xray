@@ -30,7 +30,8 @@ static void pc_final_all_terms_retired(const XrXirEffects *effects) {
     pc_final_terms_retired(&owner->forest->terms,"forest");
     pc_final_terms_retired(&owner->forest->invocations->terms,"forest-certificate");
     pc_final_body_terms_retired(owner->forest->invocations->body,"forest-input");
-    CHECK(effect_ordinary_work_empty(owner->ordinary) && owner->ordinary->resources==effects->resources);
+    CHECK(effect_ordinary_work_empty(owner->ordinary) && effect_ordinary_work_empty(owner->dense) &&
+        owner->ordinary->resources==effects->resources && owner->dense->resources==effects->resources);
 }
 
 static void pc_final_retired_terms_rejections(const XrXirCompileContext *context,
@@ -94,18 +95,18 @@ static XrXirStatus pc_source_terminal_operation(const XrXirCompileContext *conte
     current.functions=functions;functions[2].instructions=rows;
     CHECK(!pc_free_hook);pc_source_terminal_free_count=0;pc_free_hook=pc_source_terminal_count_free;
     size_t before=attempts;
-    CHECK(effect_source_certificate(context,effects->invocations,effects)==XR_XIR_OK);
+    CHECK(effect_source_relations(context,effects->invocations,effects)==XR_XIR_OK);
     CHECK(effect_source_contexts(context,&current,effects)==XR_XIR_OK);
     CHECK(effect_source_publication_match(context,&current,effects)==XR_XIR_OK);
     size_t prefix_allocations=attempts-before,prefix_frees=pc_source_terminal_free_count;pc_free_hook=NULL;
     size_t prefix=mutation==2?prefix_frees:prefix_allocations;
     CHECK(!pc_allocate_hook && !pc_source_terminal_row && mutation<3);
-    pc_source_terminal_skip=prefix;pc_source_terminal_observed=0;pc_source_terminal_calls=0;
+    CHECK(prefix);pc_source_terminal_skip=prefix-1;pc_source_terminal_observed=0;pc_source_terminal_calls=0;
     pc_source_terminal_mutation=mutation;pc_source_terminal_row=&rows[0];
     if (mutation==2) pc_free_hook=pc_source_terminal_trigger;else pc_allocate_hook=pc_source_terminal_trigger;
     XrXirStatus status=xir_effects_source_terminal(context,&current,effects);
     pc_allocate_hook=NULL;pc_free_hook=NULL;pc_source_terminal_row=NULL;
-    CHECK(pc_source_terminal_calls==1 && pc_source_terminal_observed==prefix+1);
+    CHECK(pc_source_terminal_calls==1 && pc_source_terminal_observed==prefix);
     rows[0].type=XR_XIR_I64;
     CHECK(xir_effects_source_terminal(context,&current,effects)==XR_XIR_OK);
     if (oracle) fprintf(stderr,"late Source receiving mutation%u prefix%zu callback%u status%u restored0\n",
@@ -124,7 +125,15 @@ static void pc_source_terminal_literal(uint32_t mutation) {
 
 #include "xir_ordinary_retirement_cases.h"
 
+#include "xir_role_reach_cases.h"
+#include "xir_dense_retirement_cases.h"
+
+#include "xir_role_source_final_cases.h"
+
 static void pc_source_terminal_literals(void) {
+    pc_role_source_final_literals();
+    pc_role_reach_literals();
     pc_ordinary_retirement_literals();
+    pc_dense_retirement_literals();
     for (uint32_t mutation=0;mutation<3;++mutation) pc_source_terminal_literal(mutation);
 }

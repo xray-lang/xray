@@ -140,7 +140,7 @@ static void pce_close_pair(PceFixture *f) {
         w->domain = NULL;
         CHECK(runtime_attempts == attempts);
     }
-    CHECK(!f->code_releases && f->lowered);
+    CHECK(!f->code_releases && !f->lowered);
     xr_xir_compile_program_drop(f->program);
     f->program = NULL;
     CHECK(f->code_releases == 1 && !f->lowered);
