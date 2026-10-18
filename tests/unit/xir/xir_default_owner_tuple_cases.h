@@ -60,6 +60,7 @@ static void default_tuple_case(bool constructor,unsigned mode) {
     XrXirDefaultBinding binding={XR_XIR_DEFAULT_PARAMETER,2,1,3};
     XrXirDefaultTable defaults={&binding,1};
     if(constructor){
+        nominal.flags=XR_XIR_NOMINAL_MODULE_LITERAL;
         functions[2].parameters=&parameters[1];functions[2].parameter_count=1;
         functions[2].result=XR_XIR_CONSTRUCTED_TYPE_BASE;ids[2].method_kind=XR_XIR_CONSTRUCTOR;
         owner_ops[0]=(XrXirInstruction){XR_XIR_STRUCT_NEW,XR_XIR_CONSTRUCTED_TYPE_BASE,{0},{0},0,{0}};

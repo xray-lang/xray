@@ -127,8 +127,9 @@ static inline bool xr_decimal_read(XrDecimalWork *work, const char *text, size_t
  * digits: its denominator divides 2^1075 and its significand has at most 54
  * bits. Keeping 1152 digits therefore loses only a tie-breaking sticky tail.
  * All remaining characters are still scanned and validated. */
-static inline bool xr_decimal_scan(XrDecimalWork *work, const char *text, size_t length, XrDecimalInput *out) {
-    if (!text || !length || length > INT32_MAX || !xr_decimal_work(work, 1)) return false;
+static inline bool xr_decimal_scan(XrDecimalWork *work, const char *text, size_t length,
+    bool separators, XrDecimalInput *out) {
+    if (!text || !length || length > UINT32_MAX || !xr_decimal_work(work, 1)) return false;
     if (!xr_decimal_work(work, sizeof(*out))) return false;
     memset(out, 0, sizeof(*out));
     size_t at = 0; bool point = false, seen = false, nonzero = false;
@@ -140,6 +141,7 @@ static inline bool xr_decimal_scan(XrDecimalWork *work, const char *text, size_t
         if (c == 'e' || c == 'E') break;
         if (c == '.') { if (point) return false; point = true; continue; }
         if (c == '_') {
+            if (!separators) return false;
             char previous, next;
             if (!at || at + 1 == length || !xr_decimal_read(work, text, at - 1, &previous) ||
                 !xr_decimal_digit(previous) || !xr_decimal_read(work, text, at + 1, &next) || !xr_decimal_digit(next)) return false;
@@ -166,6 +168,7 @@ static inline bool xr_decimal_scan(XrDecimalWork *work, const char *text, size_t
         for (; at < length; ++at) {
             if (!xr_decimal_read(work, text, at, &c)) return false;
             if (c == '_') {
+                if (!separators) return false;
                 char previous, next;
                 if (at + 1 == length || !xr_decimal_read(work, text, at - 1, &previous) ||
                     !xr_decimal_digit(previous) || !xr_decimal_read(work, text, at + 1, &next) || !xr_decimal_digit(next)) return false;
@@ -234,17 +237,22 @@ static inline bool xr_decimal_encode(XrDecimalWork *work, XrDecimalInput *input,
 /* Fixed algorithm admission costs one unit; scans charge each byte read,
  * arithmetic loops charge each limb operation, and copies/zeroing charge bytes.
  * Borrowed work is sticky and the caller's output changes only on success. */
-static inline XrDecimalStatus xr_decimal_float_parse_work(XrDecimalWork *work,
-    const char *text, size_t length, uint32_t width, uint64_t *output) {
-    if (!work || !work->charge || !text || !length || length > INT32_MAX || !output ||
+static inline XrDecimalStatus xr_decimal_float_receive(XrDecimalWork *work,
+    const char *text, size_t length, uint32_t width, bool separators, uint64_t *output) {
+    if (!work || !work->charge || !text || !length || length > UINT32_MAX || !output ||
         (width != 32 && width != 64)) return XR_DECIMAL_INVALID;
     if (!xr_decimal_work(work, 1)) return XR_DECIMAL_WORK_LIMIT;
     XrDecimalInput input; uint64_t result = 0;
-    bool valid = xr_decimal_scan(work, text, length, &input) && xr_decimal_encode(work, &input, width, &result);
+    bool valid = xr_decimal_scan(work, text, length, separators, &input) && xr_decimal_encode(work, &input, width, &result);
     if (work->failed) return XR_DECIMAL_WORK_LIMIT;
     if (!valid) return XR_DECIMAL_INVALID;
     if (!xr_decimal_work(work, 1)) return XR_DECIMAL_WORK_LIMIT;
     *output = result; return XR_DECIMAL_OK;
+}
+static inline XrDecimalStatus xr_decimal_float_parse_work(XrDecimalWork *work,
+    const char *text, size_t length, uint32_t width, uint64_t *output) {
+    if (length > INT32_MAX) return XR_DECIMAL_INVALID;
+    return xr_decimal_float_receive(work,text,length,width,true,output);
 }
 /* Exact-length ASCII decimal, optional sign, decimal point, e/E exponent and
  * separators strictly between digits. Pure parsing retains its zero-on-failure
@@ -254,5 +262,24 @@ static inline bool xr_decimal_float_parse(const char *text, size_t length, uint3
     *output = 0;
     XrDecimalWork work = xr_decimal_runtime_work();
     return xr_decimal_float_parse_work(&work, text, length, width, output) == XR_DECIMAL_OK;
+}
+/* Runtime text permits surrounding ASCII whitespace but no literal separators.
+ * Preserve that grammar while using the same metered numeric owner. */
+static inline XrDecimalStatus xr_decimal_float_text_work(XrDecimalWork *work,
+    const char *text,size_t length,uint32_t width,uint64_t *output) {
+    if(!work || !work->charge || !text || !length || length>UINT32_MAX || !output ||
+        (width!=32 && width!=64))return XR_DECIMAL_INVALID;
+    size_t first=0,last=length;char c;
+    while(first<last) {
+        if(!xr_decimal_read(work,text,first,&c))return XR_DECIMAL_WORK_LIMIT;
+        if(c!=' ' && c!='\t' && c!='\n' && c!='\r')break;
+        ++first;
+    }
+    while(first<last) {
+        if(!xr_decimal_read(work,text,last-1,&c))return XR_DECIMAL_WORK_LIMIT;
+        if(c!=' ' && c!='\t' && c!='\n' && c!='\r')break;
+        --last;
+    }
+    return xr_decimal_float_receive(work,text+first,last-first,width,false,output);
 }
 #endif // XR_DECIMAL_FLOAT_H

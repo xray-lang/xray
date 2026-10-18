@@ -1,0 +1,13 @@
+add_executable(test_decimal_rounding "${CMAKE_CURRENT_LIST_DIR}/test_decimal_rounding.c")
+target_include_directories(test_decimal_rounding PRIVATE "${CMAKE_SOURCE_DIR}/src")
+set_target_properties(test_decimal_rounding PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_decimal_rounding PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_decimal_rounding PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_decimal_rounding COMMAND test_decimal_rounding)
+set_tests_properties(test_decimal_rounding PROPERTIES TIMEOUT 60 LABELS "unit;numeric;stdlib;rounding")
+add_test(NAME test_decimal_rounding_vectors COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_LIST_DIR}/generate_decimal_rounding_vectors.py" --check)
+set_tests_properties(test_decimal_rounding_vectors PROPERTIES TIMEOUT 60 LABELS "unit;numeric;stdlib;generated")
