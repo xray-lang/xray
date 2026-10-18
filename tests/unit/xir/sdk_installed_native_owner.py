@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 
 
-EXPECTED = b"Native compiler owner: 42 and owned UTF-8 with embedded NUL\n"
+EXPECTED = b"Native compiler owner: 42, owned UTF-8 with embedded NUL and zero-slot cleanup\n"
 
 
 def main():
