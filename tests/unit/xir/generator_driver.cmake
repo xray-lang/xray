@@ -905,3 +905,5 @@ if(WIN32)
     set_tests_properties(test_xir_generator_cell_weakened_compiler_faults PROPERTIES
         LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 8 COST 600)
 endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/mixed_iterator_lifetime.cmake")
