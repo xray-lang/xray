@@ -42,7 +42,7 @@ static XrXirStatus effect_capture_complete_column(const EffectCaptureRead *read,
         if(status!=XR_XIR_OK) return status;
         uint32_t parameter=binding-site->binding;
         if(parameter>=target.parameter_count) return XR_XIR_BAD_STRUCTURE;
-        *callable=xr_xir_callable_signature(read->body.domain.types,target.parameters[parameter])!=NULL;
+        *callable=effect_physical_origin(read->body.domain.types,target.parameters[parameter]);
         return XR_XIR_OK;
     }
     return XR_XIR_BAD_STRUCTURE;
@@ -141,8 +141,8 @@ static XrXirStatus effect_capture_complete_call(const EffectCaptureRead *read,
         ++count;EffectCaptureNode target={0};status=effect_capture_node(read,edge->target,&target);
         if(status!=XR_XIR_OK) return status;
         const XrXirTypeNode *signature=xr_xir_callable_signature(read->body.domain.types,target.head.result);
-        bool returned=signature && !signature->parameter_span &&
-            (signature->flags&XR_XIR_CALLABLE_ROOT_MASK)==XR_XIR_CALLABLE_ROOT_NONE;
+        bool returned=effect_physical_iterator(read->body.domain.types,target.head.result) || (signature && !signature->parameter_span &&
+            (signature->flags&XR_XIR_CALLABLE_ROOT_MASK)==XR_XIR_CALLABLE_ROOT_NONE);
         for(uint32_t p=0;signature && p<signature->parameter_count;++p) {
             if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
             if(!xr_xir_callable_parameter_storage_valid(read->body.domain.types,&signature->parameters[p])) return XR_XIR_BAD_TYPE;
@@ -207,7 +207,7 @@ static XrXirStatus effect_capture_complete_reference(const EffectCaptureRead *re
         if(op->args[0]>node->head.operand_count || site->captures>node->head.operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;
         for(uint32_t p=0;p<site->captures;++p) {
             if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
-            if(!xr_xir_callable_signature(read->body.domain.types,target.parameters[p])) continue;
+            if(!effect_physical_origin(read->body.domain.types,target.parameters[p])) continue;
             uint32_t source=node->head.operands[op->args[0]+p];
             if(column-1==site->binding+p) {
                 status=effect_capture_complete_source(read,node->node,source,0,result);
@@ -235,7 +235,7 @@ static XrXirStatus effect_capture_complete_value(const EffectCaptureRead *read,
         status=effect_body_request_instruction(&read->body,read->final->nodes[node->node].body,i,&storage,&op);
         if(status!=XR_XIR_OK) return status;
         switch(op->op) {
-        case XR_XIR_FUNCTION_REF:status=effect_capture_complete_reference(read,node,i,column,result);break;
+        case XR_XIR_FUNCTION_REF:case XR_XIR_GENERATOR_NEW:status=effect_capture_complete_reference(read,node,i,column,result);break;
         case XR_XIR_COPY:case XR_XIR_SCALAR_COPY:case XR_XIR_OWNED_RETAIN:
         case XR_XIR_LOCAL_NEW:case XR_XIR_SCALAR_LOCAL_NEW:case XR_XIR_OWNED_LOCAL_NEW:
         case XR_XIR_LOCAL_READ:case XR_XIR_SCALAR_LOCAL_READ:case XR_XIR_OWNED_LOCAL_READ:

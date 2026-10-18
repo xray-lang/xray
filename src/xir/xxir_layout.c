@@ -137,7 +137,7 @@ static XrXirStatus function_layout(const LayoutInputRequest *request,uint32_t in
         XrXirStatus reading=request->input->instruction(budget,request->input->owner,index,i,&storage,&op);
         if (reading!=XR_XIR_OK) return reading;
         if (!op) return XR_XIR_BAD_STRUCTURE;
-        uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM ? 1 :
+        uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op==XR_XIR_ITERATOR_NTH ? 1 :
             xr_xir_op_references_function(op->op) || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_INDIRECT ||
             op->op == XR_XIR_PRINT || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
             op->op == XR_XIR_ENUM_NEW || op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT ? op->args[1] : 0;

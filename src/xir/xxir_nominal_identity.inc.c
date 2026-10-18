@@ -39,6 +39,8 @@ static XrXirStatus nominal_identities_verify(const XrXirNominalTable *table, XrX
         if (status != XR_XIR_OK) return status;
         for (uint32_t f = 0; f < d->field_count; ++f) {
             uint32_t flags = d->fields[f].flags;
+            if ((d->flags & XR_XIR_NOMINAL_SENDABLE) && (flags & XR_XIR_FIELD_MUTABLE))
+                return XR_XIR_BAD_TYPE;
             if (d->kind == XR_XIR_NOMINAL_ENUM && flags) return XR_XIR_BAD_STRUCTURE;
             if ((flags & ~7u) || (flags & 3u) == 3u) return XR_XIR_BAD_STRUCTURE;
             status = nominal_name(d->fields[f].name, &b);

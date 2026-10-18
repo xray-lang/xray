@@ -437,7 +437,8 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_invocation_local_inputs(work,owner->final.material,&local_inputs);
     if (status==XR_XIR_OK && local_inputs) {
         if (!owner->read.consumers || !owner->states || owner->pending || owner->front || owner->back ||
-            owner->read.producer_enabled || owner->read.class_enabled || owner->edge_index || owner->edge_index_capacity)
+            owner->read.producer_enabled || owner->read.class_enabled || owner->edge_index || owner->edge_index_capacity ||
+            owner->node_index || owner->node_index_capacity)
             status=XR_XIR_BAD_STRUCTURE;
         for (uint32_t f=0;status==XR_XIR_OK && f<owner->final.count;++f) {
             if (!xir_compile_work(work,3)) status=XR_XIR_BUDGET;
@@ -475,12 +476,15 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
             certificate->final->summary=*staged;
             result=&certificate->final->summary;*request->result=result;summary_moved=true;
         }
-        if (status==XR_XIR_OK) status=effect_role_proof_build(work,certificate->body,&certificate->final->role_proof);
+        if (status==XR_XIR_OK) status=certificate->final->role_proof.resources ?
+            effect_role_proof_match(work,certificate->body,&certificate->final->role_proof) :
+            effect_role_proof_build(work,certificate->body,&certificate->final->role_proof);
         if (status==XR_XIR_OK) status=effect_role_contracts_match(work,certificate->body,
             &certificate->final->role_proof,effect_contracts_read(owner->effects),owner->effects->count);
         if (status==XR_XIR_OK) effect_invocation_discovery_clear(owner);
         if (status==XR_XIR_OK) {
-            status=effect_capture_build(work,certificate->final,owner);
+            status=certificate->final->capture.facts ? effect_capture_match(work,certificate->final) :
+                effect_capture_build(work,certificate->final,owner);
             effect_invocation_class_discovery_clear(owner);
         }
         if (status==XR_XIR_OK) status=effect_invocation_certificate_project(work,certificate,result,sink);

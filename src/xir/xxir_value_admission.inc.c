@@ -60,7 +60,8 @@ static XrXirValueStatus array_needs_admission(const XirArray *array,
         if (!node) { *needed = type == XR_XIR_ERROR; return XR_XIR_VALUE_OK; }
         if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
             node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
-            node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK) {
+            node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK ||
+            node->kind == XR_XIR_TYPE_ITERATOR) {
             *needed = true; return XR_XIR_VALUE_OK;
         }
         if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -144,7 +145,8 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
             if (owned_carrier_type(type)) {
                 XirObject *object = object_pointer(&current);
                 if (domain_sensitive && (object->kind == XIR_OBJECT_CLASS || object->kind == XIR_OBJECT_CELL ||
-                    object->kind == XIR_OBJECT_FUNCTION || object->kind == XR_XIR_TYPE_TASK))
+                    object->kind == XIR_OBJECT_FUNCTION || object->kind == XR_XIR_TYPE_TASK ||
+                    object->kind == XR_XIR_TYPE_ITERATOR))
                     *domain_sensitive = true;
                 size_t count = 0;
                 if (object->kind == XIR_OBJECT_CLASS) {
@@ -178,6 +180,8 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     status = array_needs_admission((XirArray *) object, admission, &needed);
                     if (status != XR_XIR_VALUE_OK) break;
                     if (needed) count = ((XirArray *) object)->length;
+                } else if(object->kind==XR_XIR_TYPE_ITERATOR) {
+                    if(object->domain!=admission->domain) {status=XR_XIR_VALUE_BAD_ARGUMENT;break;}
                 } else if (object->kind == XR_XIR_TYPE_TASK || object->kind == XR_XIR_TYPE_ATOMIC) {
                     if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 } else if (object->kind) {

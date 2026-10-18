@@ -44,9 +44,9 @@ static XrXirStatus effect_invocation_edge_shape_request(const XrXirCompileContex
         edge.instruction>=request->instructions) return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *op=request->op;const XrXirTypes *types=request->types;
     if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
-    if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_GO)
+    if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW)
         return edge.producer==UINT32_MAX && op->immediate>=0 && (uint64_t)op->immediate==to->body &&
-            edge.latent==(op->op==XR_XIR_GO)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+            edge.latent==(op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
         const uint32_t *identity=xr_xir_default_identity(op);const XrXirDefaultBinding *binding=NULL;
         XrXirStatus status=xir_metadata_default_lookup(work,domain,identity[0],identity[1],&binding);
@@ -60,9 +60,21 @@ static XrXirStatus effect_invocation_edge_shape_request(const XrXirCompileContex
         site.binding>equations->binding_count || site.captures>equations->binding_count-site.binding ||
         site.instruction>=request->producer_instructions) return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *reference=request->reference;
-    if (reference->op!=XR_XIR_FUNCTION_REF || reference->immediate<0 ||
+    bool iterator=effect_invocation_iterator_operation(op->op);
+    if ((reference->op!=(iterator?XR_XIR_GENERATOR_NEW:XR_XIR_FUNCTION_REF)) || reference->immediate<0 ||
         (uint64_t)reference->immediate!=site.target || reference->args[1]!=site.captures)
         return XR_XIR_BAD_STRUCTURE;
+    if (iterator) {
+        if (edge.latent || op->args[0]>=(uint64_t)request->parameters+request->instructions ||
+            site.captures!=request->target_parameters ||
+            !effect_physical_iterator(types,reference->type) ||
+            !effect_physical_iterator(types,request->actual_type)) return XR_XIR_BAD_STRUCTURE;
+        XrXirTypeMatchScratch scratch={work->resources,NULL};
+        XrXirStatus status=xr_xir_compile_type_substitution_matches_between_scratch(work,types,types,
+            NULL,0,reference->type,request->actual_type,&scratch);
+        xr_xir_type_match_scratch_free(&scratch);
+        return status==XR_XIR_BAD_TYPE?XR_XIR_BAD_STRUCTURE:status;
+    }
     if (op->op==XR_XIR_FUNCTION_REF)
         return edge.latent && site.function==from->body && site.instruction==edge.instruction?
             XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
@@ -91,17 +103,12 @@ static XrXirStatus effect_invocation_edge_shape_request(const XrXirCompileContex
     return status==XR_XIR_BAD_TYPE?XR_XIR_BAD_STRUCTURE:status;
 }
 
-typedef struct EffectInvocationEdgeRead {
-    uint32_t caller,index;
-    XrXirOp *opcode;
-} EffectInvocationEdgeRead;
-
 /* The optional opcode belongs only to this completed edge request. Full
  * physical decoding and exact edge/type admission precede its publication. */
 static XrXirStatus effect_invocation_edge_read_selected(const XrXirCompileContext *work,
     const EffectInvocationFinal *equations,const EffectBodyRequest *body,
-    const XrXirTypes *types,const EffectInvocationEdgeRead *selection) {
-    if (!body || !equations || !selection || selection->caller>=equations->count ||
+    const XrXirTypes *types,const EffectInvocationEdgeRead *selection,EffectInvocationEdgeOperation *decoded) {
+    if (!body || !equations || !selection || (decoded && decoded->operation) || selection->caller>=equations->count ||
         selection->index>=equations->edge_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t caller=selection->caller,edge_index=selection->index;
     const EffectInvocationEdge *edge=&equations->edges[edge_index];
@@ -113,8 +120,11 @@ static XrXirStatus effect_invocation_edge_read_selected(const XrXirCompileContex
     XrXirStatus status=effect_body_request_dimensions(body,from->body,&function);
     if (status==XR_XIR_OK) status=effect_body_request_dimensions(body,target,&callee);
     XrXirInstruction op_storage,reference_storage;const XrXirInstruction *op=NULL,*reference=NULL;
-    if (status==XR_XIR_OK)
-        status=effect_body_request_instruction(body,from->body,edge->instruction,&op_storage,&op);
+    if (status==XR_XIR_OK) {
+        status=decoded?
+            effect_body_request_instruction(body,from->body,edge->instruction,&decoded->storage,&op):
+            effect_body_request_operation(body,from->body,edge->instruction,&op_storage,&op);
+    }
     if (status!=XR_XIR_OK) return status;
     EffectInvocationEdgeShape request={.equations=equations,.domain=&body->domain,.types=types,.op=op,
         .caller=caller,.edge_index=edge_index,.parameters=function.parameter_count,
@@ -125,7 +135,7 @@ static XrXirStatus effect_invocation_edge_read_selected(const XrXirCompileContex
         EffectBodyFunctionDimensions producer={0};
         status=effect_body_request_dimensions(body,site->function,&producer);
         if (status==XR_XIR_OK)
-            status=effect_body_request_instruction(body,site->function,site->instruction,&reference_storage,&reference);
+            status=effect_body_request_operation(body,site->function,site->instruction,&reference_storage,&reference);
         if (status!=XR_XIR_OK) return status;
         request.reference=reference;request.producer_instructions=producer.instruction_count;
     }
@@ -135,12 +145,18 @@ static XrXirStatus effect_invocation_edge_read_selected(const XrXirCompileContex
         status=effect_body_request_type(body,from->body,(uint32_t)op->immediate,&request.actual_type);
         if (status!=XR_XIR_OK) return status;
     }
+    if (effect_invocation_iterator_operation(op->op)) {
+        if (op->args[0]>=(uint64_t)function.parameter_count+function.instruction_count) return XR_XIR_BAD_STRUCTURE;
+        status=effect_body_request_type(body,from->body,op->args[0],&request.actual_type);
+        if (status!=XR_XIR_OK) return status;
+    }
     status=effect_invocation_edge_shape_request(work,&request);
     if (status!=XR_XIR_OK) return status;
-    if (selection->opcode) {
-        if (!effect_body_read_work(&body->read,1+sizeof(*selection->opcode))) return XR_XIR_BUDGET;
-        *selection->opcode=op->op;
-    }
+    uint64_t units=(decoded?sizeof(decoded->operation):0)+
+        (selection->opcode?1+sizeof(*selection->opcode):0);
+    if (units && !effect_body_read_work(&body->read,units)) return XR_XIR_BUDGET;
+    if (decoded) decoded->operation=op;
+    if (selection->opcode) *selection->opcode=op->op;
     return XR_XIR_OK;
 }
 
@@ -151,7 +167,7 @@ static XrXirStatus effect_invocation_edge_shape_read(const XrXirCompileContext *
         equations->edges[edge_index].target>=equations->count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,sizeof(EffectInvocationEdgeRead))) return XR_XIR_BUDGET;
     const EffectInvocationEdgeRead request={caller,edge_index,NULL};
-    return effect_invocation_edge_read_selected(work,equations,body,types,&request);
+    return effect_invocation_edge_read_selected(work,equations,body,types,&request,NULL);
 }
 
 static inline XrXirStatus effect_invocation_edge_shape(const XrXirCompileContext *work,
@@ -174,7 +190,7 @@ static XrXirStatus effect_invocation_certificate_edge_selected(const XrXirCompil
     const EffectInvocationEdgeRead request={caller,edge_index,opcode};
     EffectBodyRequest body=effect_body_owned_request(work,certificate->body);
     return effect_invocation_edge_read_selected(work,certificate->final,&body,
-        &certificate->terms.types,&request);
+        &certificate->terms.types,&request,NULL);
 }
 
 static XrXirStatus effect_invocation_certificate_edge(const XrXirCompileContext *work,
@@ -266,7 +282,8 @@ static XrXirStatus effect_invocation_certificate_cause(const XrXirCompileContext
                     effect_invocation_frontier(op)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
             if (atom>1) return XR_XIR_BAD_STRUCTURE;
             if (witness.cause==XR_XIR_ROOT_CAUSE_INDIRECT)
-                return (op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT) &&
+                return (op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT ||
+                    (atom==1 && effect_invocation_iterator_operation(op))) &&
                     witness.slot==UINT32_MAX?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
             if (witness.cause==XR_XIR_ROOT_CAUSE_REQUIREMENT)
                 return op==XR_XIR_CALL_REQUIREMENT && witness.slot==UINT32_MAX?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
@@ -293,7 +310,8 @@ static XrXirStatus effect_invocation_certificate_cause(const XrXirCompileContext
             return XR_XIR_BAD_STRUCTURE;
         if (edge.producer!=UINT32_MAX && (edge.producer>=equations->site_count ||
             equations->sites[edge.producer].target!=target->body ||
-            (op!=XR_XIR_CALL_INDIRECT && op!=XR_XIR_INVOKE_INDIRECT))) return XR_XIR_BAD_STRUCTURE;
+            (op!=XR_XIR_CALL_INDIRECT && op!=XR_XIR_INVOKE_INDIRECT &&
+             !effect_invocation_iterator_operation(op)))) return XR_XIR_BAD_STRUCTURE;
         current=cause->next;
     }
 }
@@ -367,7 +385,7 @@ static inline XrXirStatus effect_invocation_certificate_edge_mask(const XrXirCom
     uint32_t root=equations->nodes[parent].root;
     bool executing=op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER ||
         op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT;
-    bool transport=op->op==XR_XIR_GO,reference=op->op==XR_XIR_FUNCTION_REF;
+    bool transport=op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW,reference=op->op==XR_XIR_FUNCTION_REF;
     if (!executing && !transport && !reference) return XR_XIR_BAD_STRUCTURE;
     uint32_t mask=0;bool found=false;uint64_t walked=0;
     for (uint32_t e=equations->nodes[parent].edge_head;e!=UINT32_MAX;e=equations->edges[e].next) {

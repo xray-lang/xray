@@ -58,9 +58,9 @@ static XrXirStatus effect_final_edge_payload(const XrXirCompileContext *work,
     if(status==XR_XIR_OK) status=effect_body_request_instruction(body,from->body,edge->instruction,&storage,&op);
     if(status!=XR_XIR_OK) return status;
     if(!op || !xir_compile_work(work,8)) return op?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
-    if(op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_GO) {
+    if(op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW) {
         if(op->immediate<0 || (uint64_t)op->immediate!=to->body || edge->producer!=UINT32_MAX ||
-            edge->latent!=(op->op==XR_XIR_GO)) return XR_XIR_BAD_STRUCTURE;
+            edge->latent!=(op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW)) return XR_XIR_BAD_STRUCTURE;
         if(op->op==XR_XIR_CLEANUP_REGISTER) {
             const XrXirDeclarations *declarations=body->domain.declarations;
             status=effect_role_range(work,declarations,1,sizeof(*declarations));if(status!=XR_XIR_OK) return status;
@@ -82,6 +82,13 @@ static XrXirStatus effect_final_edge_payload(const XrXirCompileContext *work,
     if(op->op==XR_XIR_FUNCTION_REF) {
         if(!edge->latent || site->function!=from->body || site->instruction!=edge->instruction) return XR_XIR_BAD_STRUCTURE;
         return effect_final_edge_operands(work,&head,op,site->captures);
+    }
+    if(effect_invocation_iterator_operation(op->op)) {
+        if(edge->latent || site->captures!=target.parameter_count ||
+            op->args[0]>=(uint64_t)head.parameter_count+head.instruction_count) return XR_XIR_BAD_STRUCTURE;
+        XrXirType receiver=0;status=effect_body_request_type(body,from->body,op->args[0],&receiver);
+        if(status!=XR_XIR_OK) return status;
+        return effect_physical_iterator(body->domain.types,receiver)?XR_XIR_OK:XR_XIR_BAD_TYPE;
     }
     if((op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT) || edge->latent ||
         op->immediate<0 || (uint64_t)op->immediate>=(uint64_t)head.parameter_count+head.instruction_count)
@@ -145,7 +152,7 @@ static XrXirStatus effect_final_edge_frontiers(const XrXirCompileContext *work,
             if(status!=XR_XIR_OK) return status;
             if(!found) break;
             if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-            bool direct=op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_GO;
+            bool direct=op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW;
             bool defaults=op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT;
             if(!direct && !defaults) continue;
             uint32_t target=UINT32_MAX;
@@ -169,7 +176,7 @@ static XrXirStatus effect_final_edge_frontiers(const XrXirCompileContext *work,
                 }
             }
             if(closed) {
-                status=effect_final_edge_present(work,final,n,i,target,op->op==XR_XIR_GO);
+                status=effect_final_edge_present(work,final,n,i,target,op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW);
                 if(status!=XR_XIR_OK) return status;
             }
         }

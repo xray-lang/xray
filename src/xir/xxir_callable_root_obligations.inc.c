@@ -11,8 +11,17 @@
  *   Constructing a value adds no body-execution edge to its creator.
  */
 #include "xxir_implementation.h"
-static XrXirStatus declaration_callable_root_verify(const XrXirModule *module,
-    const XrXirEffects *effects, XrXirCompileContext *remaining, XrXirDiagnostic *diagnostic) {
+#include "xxir_effect_reference_internal.h"
+typedef struct DeclarationCallableRootCheck {
+    const XrXirModule *module;
+    const XrXirEffects *effects;
+    XrXirCompileContext *remaining;
+    XrXirDiagnostic *diagnostic;
+} DeclarationCallableRootCheck;
+static XrXirStatus declaration_callable_root_read(void *data,XirEffectContextScope *scope) {
+    DeclarationCallableRootCheck *check=data;const XrXirModule *module=check->module;
+    const XrXirEffects *effects=check->effects;XrXirCompileContext *remaining=check->remaining;
+    XrXirDiagnostic *diagnostic=check->diagnostic;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
@@ -22,7 +31,8 @@ static XrXirStatus declaration_callable_root_verify(const XrXirModule *module,
             const XrXirTypeNode *signature = xr_xir_callable_signature(module->types, op->type);
             uint32_t mask=0;
             if (!signature) return XR_XIR_BAD_STRUCTURE;
-            XrXirStatus status=xir_effects_reference_root(remaining,effects,module,f,i,&mask);
+            XrXirStatus status=scope ? xir_effects_reference_root_scoped(scope,f,i,&mask) :
+                xir_effects_reference_root(remaining,effects,module,f,i,&mask);
             if (status!=XR_XIR_OK) return status;
             if (!xr_xir_callable_root_accepts(!!(mask&XR_XIR_CALLABLE_ROOT_REQUIRED),
                 !!(mask&XR_XIR_CALLABLE_ROOT_UNRESOLVED),signature->flags)) {
@@ -55,4 +65,14 @@ static XrXirStatus declaration_callable_root_verify(const XrXirModule *module,
         }
     }
     return XR_XIR_OK;
+}
+
+/* This one read-only proof retains neither the scope nor an input mutation. */
+static XrXirStatus declaration_callable_root_verify(const XrXirModule *module,
+    const XrXirEffects *effects,XrXirCompileContext *remaining,XrXirDiagnostic *diagnostic) {
+    DeclarationCallableRootCheck check={module,effects,remaining,diagnostic};
+    if (!xir_compile_work(remaining,sizeof(check))) return XR_XIR_BUDGET;
+    return xir_effects_context_available(remaining,effects) ?
+        xir_effects_context_operation(remaining,effects,module,module->types,
+            declaration_callable_root_read,&check) : declaration_callable_root_read(&check,NULL);
 }

@@ -91,7 +91,7 @@ static void type_inference_callable_cases(void) {
     XrXirType p0 = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter formal[2] = {{p0,0},{p0,0}}, actual[2] = {{XR_XIR_I64,0},{XR_XIR_I64,0}};
     XrXirTypeNode nodes[2] = {0};
-    for (uint32_t n = 0; n < 2; ++n) { nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].parameter_count = 2; }
+    for (uint32_t n = 0; n < 2; ++n) { nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[n].parameter_count = 2; }
     nodes[0].parameters = formal; nodes[0].result = p0; nodes[0].parameter_span = 1;
     nodes[1].parameters = actual; nodes[1].result = XR_XIR_I64;
     XrXirTypes types = {nodes,2,NULL,NULL};
@@ -100,7 +100,7 @@ static void type_inference_callable_cases(void) {
     for (uint32_t attack = 0; attack < 4; ++attack) {
         actual[1].type = attack==1 ? XR_XIR_STRING : XR_XIR_I64;
         nodes[1].parameter_count = attack==2 ? 1 : 2;
-        nodes[1].flags = attack==3 ? XR_XIR_CALLABLE_NO_SUSPEND : 0;
+        nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED | (attack==3 ? XR_XIR_CALLABLE_NO_SUSPEND : 0);
         XrXirType output = XR_XIR_BOOL; XrXirCompileContext budget = interface_context_default();
         CHECK(inference_test_run(&request,&budget,&output,1)==(attack ? XR_XIR_BAD_TYPE : XR_XIR_OK));
         CHECK(output==(attack ? XR_XIR_BOOL : XR_XIR_I64) && interface_live == stage_owner_count);
@@ -295,7 +295,7 @@ static void type_inference_callable_mode_admission_case(void) {
     XrXirType p0 = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirCallableParameter formal = {p0,0}, actual = {XR_XIR_I64,0};
     XrXirTypeNode nodes[2] = {0};
-    for (uint32_t n = 0; n < 2; ++n) { nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].parameter_count = 1; }
+    for (uint32_t n = 0; n < 2; ++n) { nodes[n].kind = XR_XIR_TYPE_CALLABLE; nodes[n].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[n].parameter_count = 1; }
     nodes[0].parameters = &formal; nodes[0].result = p0; nodes[0].parameter_span = 1;
     nodes[1].parameters = &actual; nodes[1].result = XR_XIR_I64;
     XrXirTypes types = {nodes,2,NULL,NULL}; XrXirCompileContext budget = interface_context_default();
@@ -306,6 +306,9 @@ static void type_inference_callable_mode_admission_case(void) {
     CHECK(inference_test_run(&batch,&budget,&output,1)==XR_XIR_OK && output==XR_XIR_I64);
     /* Current callable descriptors admit READ (0) only. A different mode fails
      * before inference; bypassing admission would violate this internal API. */
+    nodes[1].flags = 0; budget = interface_context_default();
+    CHECK(xr_xir_compile_types_structure_verify(&budget, &types)==XR_XIR_BAD_TYPE);
+    nodes[1].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     actual.mode = 1; budget = interface_context_default();
     CHECK(xr_xir_compile_types_structure_verify(&budget, &types)==XR_XIR_BAD_TYPE);
     CHECK(interface_live == stage_owner_count);

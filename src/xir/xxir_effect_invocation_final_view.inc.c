@@ -42,7 +42,7 @@ static XrXirStatus effect_invocation_final_layout(const EffectInvocationFlow *fl
     const EffectInvocationNode *root=&final->nodes[final->roots[node->root]];
     if(root->body!=node->root) return XR_XIR_BAD_STRUCTURE;
     uint64_t values=(uint64_t)node->parameter_count+node->instruction_count;
-    uint32_t rows=final->physical->functions[node->body].rows;
+    uint32_t rows=final->physical->functions[node->body].origins;
     if(values>UINT32_MAX || rows>values) return XR_XIR_BAD_STRUCTURE;
     EffectInvocationBasis basis={0};
     status=effect_invocation_basis_parameters_read(owner->work,final,root->parameter_count,&basis);
@@ -79,7 +79,7 @@ static XrXirStatus effect_invocation_final_head(EffectInvocationFlow *flow,
     status=effect_capture_node(&read,flow->node,&node);if(status!=XR_XIR_OK) return status;
     const EffectPhysicalFunction *physical=&final->physical->functions[final->nodes[flow->node].body];
     if(physical->parameters!=node.head.parameter_count || physical->instructions!=node.head.instruction_count ||
-        physical->values!=node.values || physical->rows>node.values || physical->count>physical->capacity)
+        physical->values!=node.values || physical->origins>node.values || physical->count>physical->capacity)
         return XR_XIR_BAD_STRUCTURE;
     status=effect_role_range(owner->work,physical->records,physical->capacity,sizeof(*physical->records));
     if(status==XR_XIR_OK) status=effect_role_range(owner->work,final->nodes[flow->node].input,
@@ -151,7 +151,7 @@ static XrXirStatus effect_invocation_final_view_read(EffectInvocationFlow *flow,
     flow->memory=bytes?xir_compile_alloc(flow->read->work,bytes,&status):NULL;
     if(bytes && !flow->memory) return status;
     status=effect_invocation_final_head(flow,request);if(status!=XR_XIR_OK) return status;
-    if(flow->values!=values || flow->physical->rows!=rows || flow->head.parameter_count!=layout.parameters ||
+    if(flow->values!=values || flow->physical->origins!=rows || flow->head.parameter_count!=layout.parameters ||
         flow->head.instruction_count!=layout.instructions || flow->basis.parameters!=basis.parameters ||
         flow->basis.fn_words!=basis.fn_words || flow->basis.origin_words!=basis.origin_words ||
         flow->basis.cell_words!=basis.cell_words || flow->basis.row_words!=basis.row_words ||
@@ -169,7 +169,7 @@ static XrXirStatus effect_invocation_final_view_read(EffectInvocationFlow *flow,
     for(uint32_t r=0;r<flow->physical->count;++r) {
         if(!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
         EffectPhysicalRecord record=flow->physical->records[r];
-        if(!(record.mask&EFFECT_PHYSICAL_CALLABLE)) continue;
+        if(!(record.mask&(EFFECT_PHYSICAL_CALLABLE|EFFECT_PHYSICAL_ITERATOR))) continue;
         if(record.value>=values || row>=rows || flow->row_indices[record.value]!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
         if(!xir_compile_work(flow->read->work,sizeof(uint32_t))) return XR_XIR_BUDGET;
         flow->row_indices[record.value]=row++;

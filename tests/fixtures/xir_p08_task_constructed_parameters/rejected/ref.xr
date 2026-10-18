@@ -1,0 +1,2 @@
+fn worker(value:ref i64)->i64 { return value }
+export fn main()->i64 { var value:i64=42; return await go worker(ref value) }

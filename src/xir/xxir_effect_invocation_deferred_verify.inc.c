@@ -53,10 +53,14 @@ static XrXirStatus effect_invocation_deferred_frontiers(EffectInvocationFlow *fl
     const EffectInvocationRead *owner=flow->read;
     const EffectInvocationNode *node=&owner->final->nodes[flow->node];
     const uint64_t *local_contexts=effect_invocation_node_row(node,EFFECT_INVOCATION_CONTEXTS,true);
+    EffectBodyRecordCursor cursor;
+    XrXirStatus sequence=effect_body_request_sequence_begin(&flow->body,&cursor);
+    if (sequence!=XR_XIR_OK) return sequence;
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
         XrXirInstruction body_op_2;const XrXirInstruction *op=NULL;
-        XrXirStatus body_read_2=effect_invocation_flow_instruction(flow,i,&body_op_2,&op);
+        XrXirStatus body_read_2=effect_body_request_sequence_operation(&flow->body,
+            flow->read->final->nodes[flow->node].body,i,&cursor,&body_op_2,&op);
         if (body_read_2!=XR_XIR_OK) return body_read_2;
         if (!(local_contexts[i/64]&(UINT64_C(1)<<(i%64))) ||
             (op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT)) continue;
@@ -89,7 +93,7 @@ static XrXirStatus effect_invocation_deferred_frontiers(EffectInvocationFlow *fl
             ++*matched;
         }
     }
-    return XR_XIR_OK;
+    return effect_body_request_sequence_finish(&flow->body,flow->read->final->nodes[flow->node].body,&cursor);
 }
 
 static XrXirStatus effect_invocation_deferred_needed(const EffectInvocationRead *owner,

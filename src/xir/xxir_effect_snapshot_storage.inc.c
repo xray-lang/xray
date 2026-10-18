@@ -446,7 +446,7 @@ static XrXirStatus effect_body_owned_types_verify(const XrXirCompileContext *wor
 /* A run is only a lossless storage range. This classifier derives each mask
  * from its actual opcode and type, independent of the stored membership. */
 typedef struct EffectBodyPhysicalReplay {
-    uint32_t at,rows,classes;
+    uint32_t at,rows,origins,classes;
 } EffectBodyPhysicalReplay;
 
 static XrXirStatus effect_body_physical_values(const XrXirCompileContext *work,
@@ -456,6 +456,7 @@ static XrXirStatus effect_body_physical_values(const XrXirCompileContext *work,
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
     if (mask&EFFECT_PHYSICAL_CALLABLE) state->rows+=count;
+    if(mask&(EFFECT_PHYSICAL_CALLABLE|EFFECT_PHYSICAL_ITERATOR)) state->origins+=count;
     if (mask&EFFECT_PHYSICAL_CLASS) state->classes+=count;
     if (!mask) {
         if (state->at<physical->count && physical->records[state->at].value<first+count)
@@ -480,6 +481,7 @@ static XrXirStatus effect_body_physical_typed(const XrXirCompileContext *work,
     if (!xir_compile_work(work,5+sizeof(*output))) return XR_XIR_BUDGET;
     uint32_t mask=op==XR_XIR_INVALID?0:effect_physical_opcode(op);
     if (xr_xir_callable_signature(types,type)) mask|=EFFECT_PHYSICAL_CALLABLE;
+    if(effect_physical_iterator(types,type)) mask|=EFFECT_PHYSICAL_ITERATOR;
     if (xr_xir_type_is_class(types,type)) mask|=EFFECT_PHYSICAL_CLASS;
     *output=mask;return XR_XIR_OK;
 }
@@ -527,7 +529,8 @@ static XrXirStatus effect_body_physical_match(const XrXirCompileContext *work,
             return XR_XIR_BUDGET;
         if (physical->parameters!=body->parameter_count || physical->instructions!=body->instruction_count ||
             physical->values!=(uint64_t)body->parameter_count+body->instruction_count ||
-            physical->rows>physical->values || physical->classes>physical->values ||
+            physical->rows>physical->values || physical->origins>physical->values ||
+            physical->rows>physical->origins || physical->classes>physical->values ||
             physical->count>physical->capacity || physical->capacity>physical->values ||
             !!physical->records!=!!physical->capacity || (body->parameter_count && !body->parameters) ||
             body->run_count>body->run_capacity || body->run_capacity>body->instruction_count ||
@@ -552,7 +555,7 @@ static XrXirStatus effect_body_physical_match(const XrXirCompileContext *work,
         }
         if (!xir_compile_work(work,5)) return XR_XIR_BUDGET;
         if (cursor.first!=body->instruction_count || cursor.run!=body->run_count ||
-            state.at!=physical->count || state.rows!=physical->rows || state.classes!=physical->classes)
+            state.at!=physical->count || state.rows!=physical->rows || state.origins!=physical->origins || state.classes!=physical->classes)
             return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;

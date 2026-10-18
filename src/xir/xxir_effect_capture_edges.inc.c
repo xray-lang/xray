@@ -31,7 +31,8 @@ static XrXirStatus effect_capture_edge_active(const EffectCaptureRead *read,uint
     XrXirInstruction storage;const XrXirInstruction *op=NULL;
     status=effect_body_request_instruction(&read->body,read->final->nodes[edge->caller].body,edge->instruction,&storage,&op);
     if(status!=XR_XIR_OK) return status;
-    uint32_t value=op->op==XR_XIR_FUNCTION_REF?node->head.parameter_count+edge->instruction:(uint32_t)op->immediate;
+    uint32_t value=op->op==XR_XIR_FUNCTION_REF?node->head.parameter_count+edge->instruction:
+        effect_invocation_iterator_operation(op->op)?op->args[0]:(uint32_t)op->immediate;
     const EffectCaptureFact *fact=NULL;
     status=effect_capture_find(read,(EffectCaptureFact){edge->caller,value,edge->producer/64,edge->producer%64,0},&fact);
     if(status!=XR_XIR_OK) return status;
@@ -44,6 +45,7 @@ static XrXirStatus effect_capture_argument_bound(const EffectCaptureRead *read,
     const EffectCaptureNode *target=NULL;
     XrXirStatus status=effect_capture_node_borrow(read,edge->target,&target_storage,&target);
     if(status!=XR_XIR_OK) return status;
+    if(effect_physical_iterator(read->body.domain.types,target->head.parameters[parameter])) return XR_XIR_OK;
     const XrXirTypeNode *signature=NULL;
     status=effect_final_edge_signature(read->work,read->body.domain.types,target->head.parameters[parameter],&signature);
     if(status!=XR_XIR_OK) return status;
@@ -85,18 +87,23 @@ static XrXirStatus effect_capture_actual(const EffectCaptureRead *read,uint32_t 
     status=effect_body_request_instruction(&read->body,read->final->nodes[edge->caller].body,edge->instruction,&storage,&op);
     if(status!=XR_XIR_OK) return status;
     EffectInvocationRead owner={.work=read->work,.final=read->final,.body=read->body};
-    status=effect_invocation_producer_actual_read(&owner,&read->body,edge,parameter,&actual.value);
+    EffectInvocationProducerSource source={0};
+    status=effect_invocation_producer_source_read(&owner,&read->body,edge,parameter,&source);
+    actual.value=source.value;
+    if(status==XR_XIR_OK && source.producer!=UINT32_MAX) actual.value=UINT32_MAX;
     if(status!=XR_XIR_OK) return status;
     if(actual.value==UINT32_MAX) {
         if(op->op==XR_XIR_FUNCTION_REF && edge->latent && parameter>=op->args[1]) actual.unbound=true;
-        else if((op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) && !edge->latent &&
+        else if((op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT ||
+            effect_invocation_iterator_operation(op->op)) && !edge->latent &&
             edge->producer<read->final->site_count && parameter<read->final->sites[edge->producer].captures) {
             const EffectInvocationSite *site=&read->final->sites[edge->producer];
             uint64_t binding=caller->basis.origin_words+((uint64_t)site->binding+parameter)*
                 (caller->basis.origin_words+(uint64_t)caller->basis.cell_words);
             if(binding>UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-            actual.value=(uint32_t)op->immediate;actual.captured=true;actual.first=(uint32_t)binding;
-            if(actual.kind==EFFECT_CAPTURE_CELL) actual.first+=caller->basis.origin_words;
+            actual.value=effect_invocation_iterator_operation(op->op)?op->args[0]:(uint32_t)op->immediate;
+            actual.captured=true;actual.first=(uint32_t)binding;
+            if(actual.kind==EFFECT_CAPTURE_CELL || actual.kind==EFFECT_CAPTURE_CLASS) actual.first+=caller->basis.origin_words;
         } else return XR_XIR_UNRESOLVED;
     } else {
         uint32_t provided=0;status=effect_capture_kind(read,caller,actual.value,&provided,NULL);

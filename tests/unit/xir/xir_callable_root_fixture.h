@@ -14,14 +14,15 @@
 static XrXirStatus bound_fixture(const XrXirCompileContext *context, uint32_t advertised,
     uint32_t referenced, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     XrXirInstruction unit={.op=XR_XIR_RETURN};
+    const XrXirType cell_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+5);
     XrXirInstruction init[]={
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7},
-        {.op=XR_XIR_CELL_NEW,.type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+5),.args={0,0}},
+        {.op=XR_XIR_CELL_NEW,.type=cell_type,.args={0,0}},
         {.op=XR_XIR_SLOT_INIT,.args={1,0}},unit};
     XrXirInstruction pure[]={
         {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=3}, {.op=XR_XIR_RETURN,.args={0,0}}};
     XrXirInstruction root[]={
-        {.op=XR_XIR_SLOT_LOAD,.type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+5)},
+        {.op=XR_XIR_SLOT_LOAD,.type=cell_type},
         {.op=XR_XIR_CELL_READ,.type=XR_XIR_I64,.args={0,0}}, {.op=XR_XIR_RETURN,.args={1,0}}};
     XrXirInstruction reference[]={
         {.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+advertised),.immediate=referenced},unit};
@@ -32,8 +33,9 @@ static XrXirStatus bound_fixture(const XrXirCompileContext *context, uint32_t ad
     XrXirInstruction relay[]={
         {.op=XR_XIR_CALL,.type=XR_XIR_I64,.args={0,1},.immediate=9}, {.op=XR_XIR_RETURN,.args={1,0}}};
     XrXirInstruction erased[]={
-        {.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2),.immediate=3},
-        {.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=0}, {.op=XR_XIR_RETURN,.args={1,0}}};
+        {.op=XR_XIR_FUNCTION_REF,.type=XR_XIR_CONSTRUCTED_TYPE_BASE,.immediate=3},
+        {.op=XR_XIR_FUNCTION_WEAKEN,.type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2),.args={0,0}},
+        {.op=XR_XIR_CALL_INDIRECT,.type=XR_XIR_I64,.immediate=1}, {.op=XR_XIR_RETURN,.args={2,0}}};
     XrXirBlock two={.count=2},three={.count=3},four={.count=4};
     XrXirType parameter[]={
         XR_XIR_CONSTRUCTED_TYPE_BASE,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),
@@ -52,7 +54,7 @@ static XrXirStatus bound_fixture(const XrXirCompileContext *context, uint32_t ad
         {"indirectUnknown",15,&parameter[2],1,XR_XIR_I64,&two,1,indirect,2,NULL,0},
         {"indirectMixed",13,&parameter[3],1,XR_XIR_I64,&two,1,indirect,2,NULL,0},
         {"relay",5,&parameter[3],1,XR_XIR_I64,&two,1,relay,2,&operand,1},
-        {"erased",6,NULL,0,XR_XIR_I64,&three,1,erased,3,NULL,0},
+        {"erased",6,NULL,0,XR_XIR_I64,&four,1,erased,4,NULL,0},
         {"promisedUnknown",15,&parameter[4],1,XR_XIR_I64,&two,1,indirect,2,NULL,0}};
     XrXirTypeNode nodes[]={
         {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=2},
@@ -65,7 +67,7 @@ static XrXirStatus bound_fixture(const XrXirCompileContext *context, uint32_t ad
     XrXirFunctionIdentity identities[13]={{0}};
     identities[12].promises=XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirSourceModule source={"root",4,NULL,0,0};
-    XrXirSlot slot={0,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+5),1};
+    XrXirSlot slot={0,cell_type,1};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
     XrXirModule built={XR_XIR_BUILT,functions,13,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};

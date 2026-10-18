@@ -47,7 +47,7 @@ static XrXirStatus conditional_invocation_captured_prefix(const XrXirCompileCont
     InvocationCaptureRead read={context,0};
     XirEffectInvocationRequest request={.caller=0,.instruction=3,.target=2,.producer=producer.site,
         .node=UINT32_MAX,.count=1,.captures=1,
-        .read={.owner=&read,.work=invocation_capture_work,.cell=invocation_capture_cell,.function=NULL}};
+        .read={.owner=&read,.work=invocation_capture_work,.cell=invocation_capture_cell,.value=NULL}};
     XirEffectInvocationSelection selected={0};
     if (status==XR_XIR_OK) status=xir_effects_execution_edge(effects,&request,&selected);
     if (status==XR_XIR_OK && oracle) {

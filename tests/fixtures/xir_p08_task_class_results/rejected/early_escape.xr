@@ -1,0 +1,3 @@
+class C implements Sendable { x:i64; init(x:i64){const task=go worker(this);this.x=x} }
+fn worker(value:C)->i64{return value.x}
+export fn main()->i64{return 7}

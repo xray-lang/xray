@@ -12,8 +12,6 @@
  *   descending relation. An initial key is separate from its computed SSA row.
  *   Closure and positive support consume the sole Input and Final without a solver.
  */
-#define EFFECT_CAPTURE_FLAGS UINT32_MAX
-enum { EFFECT_CAPTURE_FIXED, EFFECT_CAPTURE_RAW, EFFECT_CAPTURE_COMPLETE };
 enum { EFFECT_CAPTURE_SCALAR, EFFECT_CAPTURE_CALLABLE, EFFECT_CAPTURE_CELL, EFFECT_CAPTURE_CLASS };
 
 typedef struct EffectCaptureNode {
@@ -132,12 +130,17 @@ static XrXirStatus effect_capture_kind(const EffectCaptureRead *read,const Effec
     uint32_t value,uint32_t *output,XrXirType *provided) {
     XrXirType type=0;XrXirStatus status=XR_XIR_OK;
     if(value<node->values) status=effect_body_request_type(&read->body,read->final->nodes[node->node].body,value,&type);
-    else if(value==node->values) type=node->head.result;
+    else if(value==node->values) {
+        const XrXirDeclarations *d=read->body.domain.declarations;
+        uint32_t body=read->final->nodes[node->node].body;
+        type=d && d->functions && (d->functions[body].promises&XR_XIR_FUNCTION_GENERATOR)?
+            XR_XIR_UNIT:node->head.result;
+    }
     else if(value-node->values-1<node->head.parameter_count) type=node->head.parameters[value-node->values-1];
     else return XR_XIR_BAD_STRUCTURE;
     if(status!=XR_XIR_OK) return status;
     uint32_t kind=EFFECT_CAPTURE_SCALAR;
-    if(xr_xir_callable_signature(read->body.domain.types,type)) kind=EFFECT_CAPTURE_CALLABLE;
+    if(effect_physical_origin(read->body.domain.types,type)) kind=EFFECT_CAPTURE_CALLABLE;
     else if(xr_xir_type_is_cell(read->body.domain.types,type)) kind=EFFECT_CAPTURE_CELL;
     else if(xr_xir_type_is_class(read->body.domain.types,type)) kind=EFFECT_CAPTURE_CLASS;
     *output=kind;if(provided) *provided=type;return XR_XIR_OK;

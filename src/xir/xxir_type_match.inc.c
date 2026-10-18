@@ -107,7 +107,8 @@ static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
             from->nominal.argument_count != to->nominal.argument_count) return XR_XIR_BAD_TYPE;
     } else if (from->kind != XR_XIR_TYPE_ARRAY && from->kind != XR_XIR_TYPE_CELL &&
                from->kind != XR_XIR_TYPE_CALLABLE && from->kind != XR_XIR_TYPE_NULLABLE && from->kind != XR_XIR_TYPE_TUPLE &&
-               from->kind != XR_XIR_TYPE_ATOMIC && from->kind != XR_XIR_TYPE_TASK)
+               from->kind != XR_XIR_TYPE_ATOMIC && from->kind != XR_XIR_TYPE_TASK &&
+               from->kind != XR_XIR_TYPE_ITERATOR)
         return XR_XIR_BAD_TYPE;
     *frame = (TypeMatchFrame) {from, to, 0}; return XR_XIR_OK;
 }

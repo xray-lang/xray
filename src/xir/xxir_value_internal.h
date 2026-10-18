@@ -22,8 +22,8 @@
 enum { XIR_OBJECT_CLASS = 260u,
        XIR_OBJECT_CELL = 258u,
        XIR_OBJECT_FUNCTION = 259u };
-_Static_assert((uint32_t)XIR_OBJECT_CLASS > (uint32_t)XR_XIR_TYPE_TASK &&
-    (uint32_t)XIR_OBJECT_CELL > (uint32_t)XR_XIR_TYPE_TASK && (uint32_t)XIR_OBJECT_FUNCTION > (uint32_t)XR_XIR_TYPE_TASK &&
+_Static_assert((uint32_t)XIR_OBJECT_CLASS > (uint32_t)XR_XIR_TYPE_ITERATOR &&
+    (uint32_t)XIR_OBJECT_CELL > (uint32_t)XR_XIR_TYPE_ITERATOR && (uint32_t)XIR_OBJECT_FUNCTION > (uint32_t)XR_XIR_TYPE_ITERATOR &&
     XIR_OBJECT_CLASS != 0x100u && XIR_OBJECT_CLASS != 257u && XIR_OBJECT_CELL != 0x100u &&
     XIR_OBJECT_FUNCTION != 0x100u, "storage tags exclude retired generations");
 _Static_assert(XIR_OBJECT_CLASS != XIR_OBJECT_CELL &&
@@ -112,7 +112,8 @@ XR_FUNC bool xr_xir_domain_work(XrXirDomain *domain, uint64_t work);
 XR_FUNC XrXirDomainBudgetStats xr_xir_domain_budget_stats(XrXirDomain *domain);
 /* Only the real Instance producer path supplies this private source identity.
  * The binding gate pins the Program and its immutable certificate. Public
- * construction and weakening do not copy this identity into another object. */
+ * construction has no source identity. Authenticated weakening can retain it
+ * without strengthening the new carrier's advertised bound. */
 typedef struct XirFunctionProducer {
     const void *owner;
     uint32_t function, instruction, site;

@@ -41,16 +41,48 @@ static XrXirStatus effect_invocation_local(EffectInvocationWorkspace *owner,
     *to=(EffectInvocationCause){witness,UINT32_MAX,UINT32_MAX,0};return XR_XIR_OK;
 }
 
+/* Exact-key interning is finished before cause propagation. Reuse that
+ * private allocation for root-ordered node numbers; nothing enters Final. */
+static XrXirStatus effect_invocation_cause_groups(EffectInvocationWorkspace *owner,uint32_t *groups) {
+    if (!owner || !groups || owner->node_index || owner->node_index_capacity ||
+        !owner->final.root_spaces || !owner->states || !owner->final.nodes)
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t functions=owner->read.body.domain.function_count;
+    if (!xir_compile_work(owner->read.work,(uint64_t)functions*sizeof(*groups))) return XR_XIR_BUDGET;
+    memset(groups,0,(size_t)functions*sizeof(*groups));
+    /* Descending insertion retains the original ascending node visit order. */
+    for(uint32_t end=owner->final.count;end;) {
+        uint32_t n=--end;
+        if (!xir_compile_work(owner->read.work,3+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t root=owner->final.nodes[n].root;
+        if (root>=functions || owner->final.root_spaces[root]!=root || owner->states[n].queued ||
+            (groups[root] && groups[root]<=n+1)) return XR_XIR_BAD_STRUCTURE;
+        owner->states[n].lookup_next=groups[root];groups[root]=n+1;
+    }
+    return XR_XIR_OK;
+}
+
 /* These records describe the full equation key, not only a numeric callee.
  * The same root basis indexes every actual edge on this certificate walk. */
 static XrXirStatus effect_invocation_cause_atom(EffectInvocationWorkspace *owner,
-    uint32_t root,uint32_t parameters,uint32_t atom) {
-    if (!owner || !owner->states || !owner->graph) return XR_XIR_BAD_STRUCTURE;
+    uint32_t root,uint32_t parameters,uint32_t atom,const uint32_t *groups) {
+    if (!owner || !owner->states || !owner->graph || root>=owner->read.body.domain.function_count)
+        return XR_XIR_BAD_STRUCTURE;
     uint32_t front=0,back=0,pending=0;
-    for (uint32_t n=0;n<owner->final.count;++n) {
-        if (!xir_compile_work(owner->read.work,4)) return XR_XIR_BUDGET;
+    for(uint32_t entry=groups?groups[root]:1;entry;) {
+        if (!xir_compile_work(owner->read.work,groups?9:4)) return XR_XIR_BUDGET;
+        uint32_t n=entry-1;
+        if(n>=owner->final.count) return XR_XIR_BAD_STRUCTURE;
         EffectInvocationNode *node=&owner->final.nodes[n];
-        if (node->root!=root) continue;
+        if(groups) {
+            uint32_t next=owner->states[n].lookup_next;
+            if(node->root!=root || (next && (next<=entry || next>owner->final.count)))
+                return XR_XIR_BAD_STRUCTURE;
+            entry=next;
+        } else {
+            entry=n+1<owner->final.count?n+2:0;
+            if(node->root!=root) continue;
+        }
         if (atom>=node->cause_count || owner->states[n].queued) return XR_XIR_BAD_STRUCTURE;
         EffectInvocationCause *cause=&node->causes[atom];
         bool local=effect_invocation_atom(node,parameters,atom,true);
@@ -102,10 +134,20 @@ static XrXirStatus effect_invocation_cause_atom(EffectInvocationWorkspace *owner
             ++pending;owner->states[edge.caller].queued=true;
         }
     }
-    for (uint32_t n=0;n<owner->final.count;++n) {
-        if (!xir_compile_work(owner->read.work,3)) return XR_XIR_BUDGET;
+    for(uint32_t entry=groups?groups[root]:1;entry;) {
+        if (!xir_compile_work(owner->read.work,groups?9:3)) return XR_XIR_BUDGET;
+        uint32_t n=entry-1;
+        if(n>=owner->final.count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationNode *node=&owner->final.nodes[n];
-        if (node->root!=root) continue;
+        if(groups) {
+            uint32_t next=owner->states[n].lookup_next;
+            if(node->root!=root || (next && (next<=entry || next>owner->final.count)))
+                return XR_XIR_BAD_STRUCTURE;
+            entry=next;
+        } else {
+            entry=n+1<owner->final.count?n+2:0;
+            if(node->root!=root) continue;
+        }
         const EffectInvocationCause *cause=&node->causes[atom];
         bool fact=effect_invocation_atom(node,parameters,atom,false);
         if (fact!=(cause->distance!=UINT32_MAX) || owner->states[n].queued ||
@@ -121,19 +163,28 @@ static XrXirStatus effect_invocation_cause_atom(EffectInvocationWorkspace *owner
 }
 
 static XrXirStatus effect_invocation_causes(EffectInvocationWorkspace *owner) {
-    if (!owner || owner->pending || !owner->final.count || !owner->graph || !owner->states)
+    if (!owner || owner->pending || !owner->final.count || !owner->graph || !owner->states ||
+        !owner->final.nodes || owner->final.count>owner->final.capacity || !owner->final.root_spaces ||
+        !owner->node_index || owner->node_index_capacity!=owner->read.body.domain.function_count)
         return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t root=0;root<owner->read.body.domain.function_count;++root) {
-        if (!owner->final.root_spaces || owner->final.root_spaces[root]!=root) continue;
-        EffectBodyFunctionDimensions head={0};XrXirStatus read_status=effect_invocation_dimensions(&owner->read,root,&head);
-        if (read_status!=XR_XIR_OK) return read_status;
+    uint32_t functions=owner->read.body.domain.function_count,roots=0;
+    if(!xir_compile_work(owner->read.work,(uint64_t)functions*2+sizeof(owner->node_index)+
+        sizeof(owner->node_index_capacity))) return XR_XIR_BUDGET;
+    for(uint32_t root=0;root<functions;++root) roots+=owner->final.root_spaces[root]==root;
+    if(!roots) return XR_XIR_BAD_STRUCTURE;
+    uint32_t *indices=owner->node_index;
+    owner->node_index=NULL;owner->node_index_capacity=0;
+    /* A single real root already visits only its own nodes in numeric order. */
+    XrXirStatus status=roots>1?effect_invocation_cause_groups(owner,indices):XR_XIR_OK;
+    for (uint32_t root=0;root<functions && status==XR_XIR_OK;++root) {
+        if (owner->final.root_spaces[root]!=root) continue;
+        EffectBodyFunctionDimensions head={0};status=effect_invocation_dimensions(&owner->read,root,&head);
+        if (status!=XR_XIR_OK) break;
         uint32_t parameters=head.parameter_count;
         uint64_t count=(uint64_t)parameters*2+3;
-        if (count>UINT32_MAX) return XR_XIR_BUDGET;
-        for (uint32_t atom=0;atom<(uint32_t)count;++atom) {
-            XrXirStatus status=effect_invocation_cause_atom(owner,root,parameters,atom);
-            if (status!=XR_XIR_OK) return status;
-        }
+        if (count>UINT32_MAX) {status=XR_XIR_BUDGET;break;}
+        for (uint32_t atom=0;atom<(uint32_t)count && status==XR_XIR_OK;++atom)
+            status=effect_invocation_cause_atom(owner,root,parameters,atom,roots>1?indices:NULL);
     }
-    return XR_XIR_OK;
+    xr_compile_resources_free(indices);return status;
 }

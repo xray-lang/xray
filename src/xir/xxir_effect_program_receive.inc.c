@@ -14,7 +14,7 @@ static XrXirStatus effect_program_layout_head(const XrXirCompileContext *work,
     if (!output) return XR_XIR_BAD_STRUCTURE;
     EffectBodyRequest request=effect_body_owned_request(work,owner);
     EffectBodyFunctionHead head;
-    XrXirStatus status=request.head(&request,function,&head,NULL);
+    XrXirStatus status=effect_body_request_head(&request,function,&head);
     if (status!=XR_XIR_OK) return status;
     if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
     *output=(XirInputFunctionHead){head.name,head.name_length,head.parameters,head.parameter_count,

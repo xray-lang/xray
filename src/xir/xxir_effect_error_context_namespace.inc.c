@@ -40,7 +40,8 @@ static XrXirStatus error_finite_context_count(const XrXirCompileContext *work,
                 uint32_t opcode=XR_XIR_INVALID;
                 status=effect_body_run_word(&body,ref,ref->first+i,0,&opcode);
                 if(status!=XR_XIR_OK) return status;
-                if(opcode==XR_XIR_CALL_INDIRECT || opcode==XR_XIR_INVOKE_INDIRECT) {
+                if(opcode==XR_XIR_CALL_INDIRECT || opcode==XR_XIR_INVOKE_INDIRECT ||
+                    effect_invocation_iterator_operation((XrXirOp)opcode)) {
                     *output=final->count;*contextual=true;return XR_XIR_OK;
                 }
             }

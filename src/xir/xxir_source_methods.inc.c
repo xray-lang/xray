@@ -10,6 +10,8 @@
  *   A READ receiver is one ordinary owned parameter. A struct or enum ref receiver is the
  *   caller's mutable cell, like any ref parameter; class methods never take one.
  */
+static bool source_generator_declaration(SourceContext *ctx,AstNode *node,uint32_t index,
+    XrXirFunctionIdentity *identity,uint32_t captures);
 static SourceName *source_method_find(SourceContext *ctx, XrXirType type, const char *name) {
     const XrXirTypeNode *node = xr_xir_type_node(&ctx->types, type);
     return node && node->kind == XR_XIR_TYPE_NOMINAL ?
@@ -78,7 +80,8 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
         {type->nominal.arguments,type->nominal.argument_count},&receiver,result_context};
     SourceDirectArguments prepared = {0};
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
-    XrXirInstruction op = {XR_XIR_CALL,prepared.result,{0},{0},method->index,{0}};
+    XrXirOp kind=(identity->promises & XR_XIR_FUNCTION_GENERATOR) ? XR_XIR_GENERATOR_NEW : XR_XIR_CALL;
+    XrXirInstruction op = {kind,prepared.result,{0},{0},method->index,{0}};
     uint32_t reference_before=ctx->query.reference_count;
     return source_type_arguments(ctx,node,prepared.substitution.types,prepared.substitution.count,&op) &&
         source_query_target_token_reference(ctx,call->callee,
@@ -289,7 +292,8 @@ static bool source_nominal_methods(SourceContext *ctx, uint32_t *next) {
                 method->is_protected ? XR_XIR_MEMBER_PROTECTED : XR_XIR_MEMBER_PUBLIC;
             ctx->identities[index] = (XrXirFunctionIdentity) {owner->module,
                 access ? 0 : ctx->nominals.declarations[d].exported, d + 1, access, 0, 0, method->is_static ? XR_XIR_STATIC_METHOD : XR_XIR_READ_METHOD, 0, 0};
-            if (!source_query_parameters(ctx, symbol->declaration)) return false;
+            if (!source_generator_declaration(ctx,node,index,&ctx->identities[index],0) ||
+                !source_query_parameters(ctx, symbol->declaration)) return false;
         }
     }
     return true;

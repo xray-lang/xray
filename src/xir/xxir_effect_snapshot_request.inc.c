@@ -27,6 +27,14 @@ typedef struct EffectBodyFunctionDimensions {
     uint32_t parameter_count,instruction_count;
 } EffectBodyFunctionDimensions;
 
+/* A signature projection copies only the fields used by formal and result
+ * consumers. Every request retains the complete head storage preconditions. */
+typedef struct EffectBodyFunctionSignature {
+    const XrXirType *parameters;
+    uint32_t parameter_count;
+    XrXirType result;
+} EffectBodyFunctionSignature;
+
 typedef struct EffectBodyInstructionShape {
     XrXirOp op;
     XrXirType type;
@@ -46,7 +54,7 @@ struct EffectBodyRequest {
     XirMetadataDomain domain;
     EffectBodyRead read;
     const void *owner;
-    XrXirStatus (*head)(const EffectBodyRequest *,uint32_t,EffectBodyFunctionHead *,EffectBodyFunctionDimensions *);
+    XrXirStatus (*head)(const EffectBodyRequest *,uint32_t,EffectBodyFunctionHead *,EffectBodyFunctionDimensions *,EffectBodyFunctionSignature *);
     XrXirStatus (*instruction)(const EffectBodyRequest *,uint32_t,uint32_t,
         XrXirInstruction *,const XrXirInstruction **,EffectBodyInstructionFields *);
     XrXirStatus (*type)(const EffectBodyRequest *,uint32_t,uint32_t,XrXirType *);
@@ -57,12 +65,16 @@ static XrXirStatus effect_body_current_record(const EffectBodyRequest *request,
     uint32_t function,uint32_t instruction,const EffectBodyRun **output);
 
 static XrXirStatus effect_body_raw_head(const EffectBodyRequest *request,uint32_t f,
-    EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions) {
+    EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions,EffectBodyFunctionSignature *signature) {
     const XrXirModule *module=request->owner;
-    if (!module || (!output && !dimensions) || (output && dimensions) ||
+    if (!module || (!!output+!!dimensions+!!signature)!=1 ||
         f>=module->function_count || !module->functions)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *a=&module->functions[f];
+    if (signature) {
+        if (!effect_body_read_work(&request->read,11+sizeof(*signature))) return XR_XIR_BUDGET;
+        *signature=(EffectBodyFunctionSignature){a->parameters,a->parameter_count,a->result};return XR_XIR_OK;
+    }
     if (dimensions) {
         if (!effect_body_read_work(&request->read,11+sizeof(*dimensions))) return XR_XIR_BUDGET;
         *dimensions=(EffectBodyFunctionDimensions){a->parameter_count,a->instruction_count};return XR_XIR_OK;
@@ -110,9 +122,9 @@ static XrXirStatus effect_body_raw_shape(const EffectBodyRequest *request,uint32
     *output=(EffectBodyInstructionShape){opcode,type};return XR_XIR_OK;
 }
 static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint32_t f,
-    EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions) {
+    EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions,EffectBodyFunctionSignature *signature) {
     const EffectBodyMaterial *material=request->owner;
-    if (!effect_body_material_shape(material) || (!output && !dimensions) || (output && dimensions) ||
+    if (!effect_body_material_shape(material) || (!!output+!!dimensions+!!signature)!=1 ||
         f>=effect_body_count(material))
         return XR_XIR_BAD_STRUCTURE;
     const EffectBodyFunction *a=&material->functions[f];
@@ -120,6 +132,10 @@ static XrXirStatus effect_body_owned_head(const EffectBodyRequest *request,uint3
         (a->block_count && !a->blocks) || (a->operand_count && !a->operands) ||
         (a->instruction_count && (!a->runs || !a->run_count)) ||
         a->run_count>a->run_capacity) return XR_XIR_BAD_STRUCTURE;
+    if (signature) {
+        if (!effect_body_read_work(&request->read,11+sizeof(*signature))) return XR_XIR_BUDGET;
+        *signature=(EffectBodyFunctionSignature){a->parameters,a->parameter_count,a->result};return XR_XIR_OK;
+    }
     if (dimensions) {
         if (!effect_body_read_work(&request->read,11+sizeof(*dimensions))) return XR_XIR_BUDGET;
         *dimensions=(EffectBodyFunctionDimensions){a->parameter_count,a->instruction_count};return XR_XIR_OK;
@@ -219,13 +235,20 @@ static inline XrXirStatus effect_body_request_head(const EffectBodyRequest *requ
     uint32_t f,EffectBodyFunctionHead *output) {
     if (!request || !request->owner || !request->head || !request->domain.types ||
         !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    return request->head(request,f,output,NULL);
+    return request->head(request,f,output,NULL,NULL);
 }
+static inline XrXirStatus effect_body_request_signature(const EffectBodyRequest *request,
+    uint32_t f,EffectBodyFunctionSignature *output) {
+    if (!request || !request->owner || !request->head || !request->domain.types ||
+        !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+    return request->head(request,f,NULL,NULL,output);
+}
+
 static inline XrXirStatus effect_body_request_dimensions(const EffectBodyRequest *request,
     uint32_t f,EffectBodyFunctionDimensions *output) {
     if (!request || !request->owner || !request->head || !request->domain.types ||
         !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
-    return request->head(request,f,NULL,output);
+    return request->head(request,f,NULL,output,NULL);
 }
 static inline XrXirStatus effect_body_request_instruction(const EffectBodyRequest *request,
     uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
@@ -252,6 +275,39 @@ static XrXirStatus effect_body_request_sequence_binding(const EffectBodyRequest 
         request->domain.function_count!=material->domain.function_count) return XR_XIR_BAD_STRUCTURE;
     return effect_body_read_work(&request->read,6)?XR_XIR_OK:XR_XIR_BUDGET;
 }
+/* A constant record and the first row of any affine record already own the
+ * complete physical Instruction. Borrow
+ * that immutable row only for this request; no row, permission or selected
+ * cause is cached. Other affine rows still use the unique full value decoder, and
+ * delegated requests keep their original callback and failure sequence. */
+static XrXirStatus effect_body_operation_ref(const EffectBodyRead *read,
+    const EffectBodyRun *ref,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
+    if (ref->mask && i!=ref->first) {
+        XrXirStatus status=effect_body_instruction_ref_value(read,ref,i,storage);
+        if (status!=XR_XIR_OK) return status;
+        if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
+        *output=storage;return XR_XIR_OK;
+    }
+    if (!effect_body_read_work(read,1+sizeof(ref->base.op)+sizeof(*output))) return XR_XIR_BUDGET;
+    if (ref->base.op<=XR_XIR_INVALID || ref->base.op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    *output=&ref->base;return XR_XIR_OK;
+}
+
+static XrXirStatus effect_body_request_operation(const EffectBodyRequest *request,
+    uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
+    if (!request || !request->owner || !request->instruction || !request->domain.types ||
+        !storage || !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_request_sequence_owned(request))
+        return effect_body_request_instruction(request,f,i,storage,output);
+    XrXirStatus status=effect_body_request_sequence_binding(request);
+    if (status!=XR_XIR_OK) return status;
+    const EffectBodyMaterial *material=request->owner;
+    const EffectBodyRun *ref=NULL;
+    status=effect_body_record_ref(&request->read,&material->functions[f],i,&ref);
+    if (status!=XR_XIR_OK) return status;
+    return effect_body_operation_ref(&request->read,ref,i,storage,output);
+}
+
 static XrXirStatus effect_body_request_sequence_begin(const EffectBodyRequest *request,
     EffectBodyRecordCursor *cursor) {
     if (!request || !request->owner || !request->instruction || !request->domain.types || !cursor)
@@ -285,6 +341,27 @@ static XrXirStatus effect_body_request_sequence_instruction(const EffectBodyRequ
     if (status!=XR_XIR_OK) return status;
     if (!effect_body_read_work(&request->read,sizeof(*output))) return XR_XIR_BUDGET;
     *output=storage;return XR_XIR_OK;
+}
+
+/* Local consumers may borrow the complete immutable base row. The copied
+ * sequence reader retains its storage identity for callers that require it. */
+static XrXirStatus effect_body_request_sequence_operation(const EffectBodyRequest *request,
+    uint32_t f,uint32_t i,EffectBodyRecordCursor *cursor,XrXirInstruction *storage,
+    const XrXirInstruction **output) {
+    if (!request || !request->owner || !request->instruction || !request->domain.types ||
+        !storage || !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
+    if (!effect_body_request_sequence_owned(request))
+        return effect_body_request_instruction(request,f,i,storage,output);
+    if (!cursor) return XR_XIR_BAD_STRUCTURE;
+    if (cursor->last==UINT32_MAX?i!=0:i!=cursor->last+1) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_body_request_sequence_binding(request);
+    if (status!=XR_XIR_OK) return status;
+    const EffectBodyMaterial *material=request->owner;
+    if (!effect_body_read_work(&request->read,2)) return XR_XIR_BUDGET;
+    const EffectBodyRun *ref=NULL;
+    status=effect_body_record_cursor_ref(&request->read,&material->functions[f],i,cursor,&ref);
+    if (status!=XR_XIR_OK) return status;
+    return effect_body_operation_ref(&request->read,ref,i,storage,output);
 }
 
 /* Re-read the current final run and exact EOF independently of the cursor.

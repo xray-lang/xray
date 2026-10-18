@@ -26,15 +26,19 @@ static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
     return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || xr_xir_type_is_owned(spec->types, type);
 }
 static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXirProgramSpec *spec) {
-    if (!spec || !spec->entries || !spec->entry_count || !spec->declarations ||
-        (!!spec->code.owner != !!spec->code.release)) return XR_XIR_BAD_STRUCTURE;
+    if (!spec) return XR_XIR_BAD_STRUCTURE;
     if (spec->abi_version != XR_XIR_PROGRAM_ABI_VERSION ||
         spec->target.architecture != XR_XIR_ARCH_X86_64 || spec->target.abi_version != XR_XIR_VALUE_ABI_VERSION)
         return XR_XIR_BAD_LAYOUT;
+    if (!spec->entries || !spec->entry_count || !spec->declarations || !spec->declarations->functions ||
+        (!!spec->code.owner != !!spec->code.release)) return XR_XIR_BAD_STRUCTURE;
     if (spec->entry_count > 65535 || spec->entry_count > context->limits.functions) return XR_XIR_BUDGET;
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
         if (spec->entries[i].abi_version != XR_XIR_CALL_ABI_VERSION) return XR_XIR_BAD_LAYOUT;
+        if ((spec->entries[i].flags & ~(XR_XIR_ENTRY_EXIT | XR_XIR_ENTRY_GENERATOR)) ||
+            (((spec->entries[i].flags & XR_XIR_ENTRY_GENERATOR)!=0)!=
+             ((spec->declarations->functions[i].promises & XR_XIR_FUNCTION_GENERATOR)!=0))) return XR_XIR_BAD_STRUCTURE;
     }
     if (spec->declarations->implementations || (spec->types && spec->types->interfaces)) return XR_XIR_BAD_STAGE;
     XrXirStatus status = xr_xir_compile_types_structure_verify(context, spec->types);
@@ -59,7 +63,11 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
         const XrXirCallEntry *entry = &spec->entries[i];
         if (spec->declarations->functions[i].test_role &&
             (entry->parameter_count || entry->result != XR_XIR_UNIT)) return XR_XIR_BAD_TYPE;
-        if ((entry->flags & ~XR_XIR_ENTRY_EXIT) ||
+        bool generator=(spec->declarations->functions[i].promises & XR_XIR_FUNCTION_GENERATOR)!=0;
+        const XrXirTypeNode *result=xr_xir_type_node(spec->types,entry->result);
+        if (generator && (!result || result->kind!=XR_XIR_TYPE_ITERATOR || result->parameter_span)) return XR_XIR_BAD_TYPE;
+        if ((entry->flags & ~(XR_XIR_ENTRY_EXIT | XR_XIR_ENTRY_GENERATOR)) ||
+            (((entry->flags & XR_XIR_ENTRY_GENERATOR)!=0)!=generator) ||
             entry->cleanup_owner != spec->declarations->functions[i].cleanup_owner ||
             (entry->cleanup_owner && (entry->result != XR_XIR_UNIT ||
              !(spec->entries[entry->cleanup_owner - 1].flags & XR_XIR_ENTRY_EXIT)))) return XR_XIR_BAD_STRUCTURE;

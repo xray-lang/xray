@@ -49,7 +49,7 @@ static XrXirCallStatus instance_class_access_begin(XrXirCallView *view,uint32_t 
         (current->owner!=instance->program->permissions->effects || current->target!=caller))
         status=XR_XIR_CALL_BAD_STATE;
     if (status==XR_XIR_CALL_READY) {
-        InstanceInvocationRead actual={admission,NULL,view,NULL};
+        InstanceInvocationRead actual={admission,NULL,view,NULL,NULL};
         XirEffectClassAccessRequest request={.caller=caller,.instruction=instruction,
             .node=current?current->node:UINT32_MAX,.contextual=current!=NULL,.pure=pure,
             .kind=kind,.input_type=(XrXirType)value->type,.root_type=(XrXirType)root->type,

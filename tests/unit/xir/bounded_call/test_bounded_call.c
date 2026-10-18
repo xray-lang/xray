@@ -124,7 +124,12 @@ static void deep_abort(void) {
             CHECK(w.releases-releases<=1 && a.polls-polls<=1 && (w.releases==releases || a.polls==polls));
             if (w.releases>releases || (m && a.polls==32)) {
                 draining=true;
-                CHECK(xr_xir_call_request_cancel(c)==XR_XIR_CALL_BAD_STATE);
+                /* An intact fault exit accepts cancellation without replacing its first failure. */
+                XrXirCallStatus cancel=expected==XR_XIR_CALL_OOM && r.status==XR_XIR_CALL_READY ?
+                    XR_XIR_CALL_CANCEL_REQUESTED : XR_XIR_CALL_BAD_STATE;
+                XrXirCallAccounting before=a; uint32_t resumes=w.resumes;
+                CHECK(xr_xir_call_request_cancel(c)==cancel);
+                CHECK(!memcmp(&a,&before,sizeof(a)) && w.resumes==resumes);
                 XrXirValue out={0}; CHECK(xr_xir_call_take_result(c,&out)==XR_XIR_CALL_BAD_STATE && !out.payload);
             }
             if (draining) CHECK(w.reason==expected || !w.releases);
@@ -179,7 +184,8 @@ static void scope_and_synchronous_free(void) {
     }
     Witness w={0}; w.mode=3; XrXirCallAccounting a={0}; XrXirCall *c=create(&w,&a,100,31,false);
     CHECK(xr_xir_call_poll_bounded(c,32).status==XR_XIR_CALL_READY && !w.releases);
-    CHECK(xr_xir_call_request_cancel(c)==XR_XIR_CALL_BAD_STATE);
+    CHECK(xr_xir_call_request_cancel(c)==XR_XIR_CALL_CANCEL_REQUESTED);
+    CHECK(!w.releases && w.resumes==32 && a.polls==32);
     CHECK(xr_xir_call_free(c)==XR_XIR_CALL_OOM && w.releases==32 && a.polls==32);
     CHECK(!a.depth && !a.live_bytes && a.allocations==a.frees);
 }

@@ -18,27 +18,25 @@ static bool invocation_function_cell_work(void *owner,uint64_t units) {
 static uint32_t invocation_function_cell_actual(void *owner,uint32_t parameter) {
     InvocationFunctionCellRead *read=owner;CHECK(parameter==0);return read->origin;
 }
-static XrXirStatus invocation_function_cell_site(void *owner,uint32_t parameter,uint32_t *output) {
+static XrXirStatus invocation_function_cell_value(void *owner,uint32_t parameter,
+    const XirEffectRuntimeValue *parent,uint32_t capture,XirEffectRuntimeValue *output) {
     InvocationFunctionCellRead *read=owner;CHECK(parameter==0);
-    if (read->unknown) return XR_XIR_BAD_TYPE;
+    if(read->unknown) return XR_XIR_BAD_TYPE;
     XirEffectProducerView producer={0};
     XrXirStatus status=xir_effects_producer(read->context,read->effects,1,read->instruction,&producer);
-    if (status==XR_XIR_OK) {
-        CHECK(producer.capture_count==1);
-        *output=read->wrong_site?UINT32_MAX:producer.site;
+    if(status!=XR_XIR_OK) return status;
+    CHECK(producer.capture_count==1);
+    if(!parent) {
+        CHECK(capture==UINT32_MAX);
+        *output=(XirEffectRuntimeValue){producer.type,0,read->wrong_site?UINT32_MAX:producer.site,UINT32_MAX,1};
+        return XR_XIR_OK;
     }
-    return status;
+    CHECK(capture==0);
+    if(parent->producer!=producer.site) return XR_XIR_BAD_TYPE;
+    XrXirType type=read->effects->invocations->body->functions[producer.target].parameters[0];
+    bool cell=xr_xir_type_is_cell(&read->effects->invocations->terms.types,type);
+    *output=(XirEffectRuntimeValue){type,0,UINT32_MAX,cell?read->origin:UINT32_MAX,0};return XR_XIR_OK;
 }
-static XrXirStatus invocation_function_cell_capture(void *owner,uint32_t parameter,uint32_t capture,
-    uint32_t site,uint32_t *output) {
-    InvocationFunctionCellRead *read=owner;CHECK(parameter==0 && capture==0);
-    XirEffectProducerView producer={0};
-    XrXirStatus status=xir_effects_producer(read->context,read->effects,1,read->instruction,&producer);
-    if (status!=XR_XIR_OK) return status;
-    if (site!=producer.site) return XR_XIR_BAD_TYPE;
-    *output=read->origin;return XR_XIR_OK;
-}
-
 /* This is a real Checked module, with the factory's returned Function passed
  * as an actual to a distinct body. The Cell prefix keeps its OWNED role. */
 static XrXirStatus conditional_invocation_function_cell_row(const XrXirCompileContext *context,
@@ -60,7 +58,7 @@ static XrXirStatus conditional_invocation_function_cell_row(const XrXirCompileCo
     XirEffectInvocationRequest direct={.caller=0,.instruction=1,.target=3,.producer=UINT32_MAX,
         .node=UINT32_MAX,.count=1,
         .read={.owner=&read,.work=invocation_function_cell_work,.cell=invocation_function_cell_actual,
-            .function=invocation_function_cell_site,.capture_cell=invocation_function_cell_capture}};
+            .value=invocation_function_cell_value}};
     XirEffectInvocationSelection selected={0},child={0};XirEffectProducerView producer={0};
     if (status==XR_XIR_OK) status=xir_effects_execution_edge(effects,&direct,&selected);
     if (status==XR_XIR_OK) status=xir_effects_producer(context,effects,1,read.instruction,&producer);
@@ -85,9 +83,9 @@ static XrXirStatus conditional_invocation_function_cell_row(const XrXirCompileCo
         CHECK(xir_effects_execution_edge(effects,&direct,&masked)==XR_XIR_BAD_TYPE &&
             !memcmp(&masked,&selected,sizeof(masked)));read.wrong_site=false;
         if (!mode) {
-            direct.read.capture_cell=NULL;
+            direct.read.value=NULL;
             CHECK(xir_effects_execution_edge(effects,&direct,&masked)==XR_XIR_BAD_TYPE &&
-                !memcmp(&masked,&selected,sizeof(masked)));direct.read.capture_cell=invocation_function_cell_capture;
+                !memcmp(&masked,&selected,sizeof(masked)));direct.read.value=invocation_function_cell_value;
             for (uint32_t origin=1;origin<3;++origin) {
                 read.origin=origin;
                 CHECK(xir_effects_execution_edge(effects,&direct,&masked)==XR_XIR_BAD_TYPE &&

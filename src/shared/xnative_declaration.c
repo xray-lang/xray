@@ -18,7 +18,8 @@ const XrNativeTypeDeclaration *xr_native_declaration_by_id(uint32_t id) {
         id == xr_native_string.id ? &xr_native_string :
         id == xr_native_atomic.id ? &xr_native_atomic :
         id == xr_native_ordering.id ? &xr_native_ordering :
-        id == xr_native_task.id ? &xr_native_task : NULL;
+        id == xr_native_task.id ? &xr_native_task :
+        id == xr_native_iterator.id ? &xr_native_iterator : NULL;
 }
 typedef struct NativeDeclarationAdmission {
     const XrNativeDeclarationWork *work;
@@ -58,6 +59,7 @@ XR_FUNC XrNativeDeclarationStatus xr_native_declaration_find(
     else if (native_text_equal(&admission, name, xr_native_atomic.name)) found = &xr_native_atomic;
     else if (native_text_equal(&admission, name, xr_native_ordering.name)) found = &xr_native_ordering;
     else if (native_text_equal(&admission, name, xr_native_task.name)) found = &xr_native_task;
+    else if (native_text_equal(&admission, name, xr_native_iterator.name)) found = &xr_native_iterator;
     if (admission.status != XR_NATIVE_DECLARATION_OK) return admission.status;
     if (!found) return XR_NATIVE_DECLARATION_NOT_FOUND;
     *output = found; return XR_NATIVE_DECLARATION_OK;

@@ -265,3 +265,18 @@ static const XrNativeTypeDeclaration xr_native_task = {
     "stdlib/types/coroutine.xr", "xray-native:prelude/Task", {{248, 92, 134, 139, 241, 43, 43, 144, 152, 142, 173, 92, 247, 70, 253, 142, 82, 45, 92, 45, 99, 152, 166, 72, 130, 180, 118, 55, 199, 45, 199, 166}},
     18, 7, xr_native_task_members, 6
 };
+static const XrNativeParameter xr_native_iterator_parameters_2[] = {
+    {"index", "i64", XR_NATIVE_TERM_I64, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_iterator_members[] = {
+    {1, "hasNext", "() -> bool", "bool", 5, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT, XR_NATIVE_ALLOCATION_MAY_HEAP, "", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_BOOL},
+    {2, "next", "() -> T", "T", 7, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_NEXT, XR_NATIVE_ALLOCATION_MAY_HEAP, "IteratorExhausted", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_ELEMENT},
+    {3, "nth", "(index: i64) -> T", "T", 9, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_ITERATOR_NTH, XR_NATIVE_ALLOCATION_MAY_HEAP, "IteratorExhausted", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_iterator_parameters_2, 1, XR_NATIVE_TERM_ELEMENT},
+    {4, "iterator", "() -> Iterator<T>", "Iterator<T>", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
+    {5, "toString", "() -> string", "string", 13, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
+};
+static const XrNativeTypeDeclaration xr_native_iterator = {
+    8, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", "T", 1,
+    "stdlib/types/iterator.xr", "xray-native:prelude/Iterator", {{37, 29, 8, 208, 105, 216, 104, 232, 72, 124, 174, 16, 249, 46, 62, 173, 123, 96, 18, 98, 161, 187, 193, 211, 152, 159, 181, 135, 28, 44, 127, 148}},
+    3, 7, xr_native_iterator_members, 5
+};

@@ -33,6 +33,19 @@ def frames():
         frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,30,75,24,29,31,len(text))+text
         result['xir_native_projection_expectations.h'][prefix+'_policy75_preimage']=frame
         result['xir_native_projection_expectations.h'][prefix+'_policy75']=hashlib.sha256(frame).digest()
+    words=[1,1,27,31,30,2,3,1]+sum(functions,[])
+    assert len(words)==43
+    layout=b'xray:xir-lowered-layout:v1'+struct.pack('<43I',*words)
+    result['xir_source_product_identity.h'].update({'layout_current27_preimage':layout,'product_layout_value27_digest':hashlib.sha256(layout).digest()})
+    words=[1,1,27,34,31,2,3,1]+sum(functions,[])
+    current=b'xray:xir-lowered-layout:v1'+struct.pack('<43I',*words)
+    result['xir_source_product_identity.h'].update({'layout_combined_preimage':current,'product_layout_combined_digest':hashlib.sha256(current).digest()})
+    for prefix in ('linked','original'):
+        text=(prefix+'_source').encode('ascii')
+        for name,versions in (('policy_value27',(28,86,27,31,30)),('policy_combined',(30,89,27,34,31))):
+            frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,*versions,len(text))+text
+            result['xir_native_projection_expectations.h'][prefix+'_'+name+'_preimage']=frame
+            result['xir_native_projection_expectations.h'][prefix+'_'+name]=hashlib.sha256(frame).digest()
     return result
 
 def main():
@@ -54,7 +67,7 @@ def main():
                 assert actual==expected,(filename,name,actual.hex(),expected.hex())
         if args.write:
             path.write_text(source,encoding='utf-8')
-    print('Independent SourceProduct layout/policy preimages: PASS (Value24/Call29/Program31; complete Program30 vectors retained)')
+    print('Independent SourceProduct layout/policy preimages: PASS (current Value27/Call34/Program31; complete historical vectors retained)')
 
 if __name__=='__main__':
     main()

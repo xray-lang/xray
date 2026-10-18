@@ -14,7 +14,7 @@
 /* The input builder is shared with production invocation admission. Old
  * smaller environments remain valid edges, but cannot execute this full key. */
 static XrXirStatus effect_invocation_arguments_match(EffectInvocationFlow *flow,
-    uint32_t e,bool *matched) {
+    uint32_t e,const EffectInvocationClosureView *supplied,bool *matched) {
     const EffectInvocationRead *owner=flow->read;*matched=false;
     XrXirStatus status=effect_invocation_edge_shape_read(owner->work,owner->final,&flow->body,
         flow->body.domain.types,flow->node,e);
@@ -34,8 +34,10 @@ static XrXirStatus effect_invocation_arguments_match(EffectInvocationFlow *flow,
     }
     const uint64_t *closure=NULL;
     if (edge.producer!=UINT32_MAX && op->op!=XR_XIR_FUNCTION_REF) {
-        if (op->immediate<0 || (uint64_t)op->immediate>=flow->values) return XR_XIR_BAD_STRUCTURE;
-        closure=effect_invocation_row(flow,(uint32_t)op->immediate);
+        uint64_t value=effect_invocation_iterator_operation(op->op)?op->args[0]:(uint64_t)op->immediate;
+        if (value>=flow->values || (supplied &&
+            (!effect_invocation_iterator_operation(op->op) || supplied->value!=value))) return XR_XIR_BAD_STRUCTURE;
+        closure=supplied?supplied->row:effect_invocation_row(flow,(uint32_t)value);
         if (!closure) return XR_XIR_BAD_STRUCTURE;
     }
     uint64_t *input=NULL;flow->instruction=edge.instruction;
