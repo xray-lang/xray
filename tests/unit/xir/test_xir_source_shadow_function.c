@@ -66,16 +66,22 @@ static void shadow_goldens(RemoveCompile *run) {
             CHECK(xr_xir_string_view(&value,&text,&length) && length==6 && !memcmp(text,"mapped",6));
         }
         const size_t sites=runtime_attempts;
-        xr_xir_value_drop(&value);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        xr_xir_value_drop(&value);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);instance=NULL;
         for (size_t failure=0;failure<sites;++failure) {
             CHECK(xr_xir_instance_new(run->program,&config,&instance)==XR_XIR_CALL_READY);
             value=remove_run(instance,run->program->declarations->entry_function);xr_xir_value_drop(&value);
             runtime_attempts=0;runtime_fail_at=failure;
             XrXirCallStatus status=xr_xir_instance_start(instance,function,NULL,0);
-            while (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
+            bool driven_oom=false;
+            while (status==XR_XIR_CALL_READY) {
+                status=xr_xir_instance_poll_bounded(instance,UINT64_MAX).outcome.status;
+                driven_oom=status==XR_XIR_CALL_OOM;
+            }
             CHECK(status==XR_XIR_CALL_OOM && runtime_attempts>failure);runtime_fail_at=SIZE_MAX;
-            value=(XrXirValue){0};CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_BAD_STATE && !value.type && !value.payload);
-            CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY && !runtime_live && !runtime_bytes);
+            value=(XrXirValue){0};CHECK(xr_xir_instance_take_result(instance,&value)==(driven_oom?XR_XIR_CALL_OOM:XR_XIR_CALL_BAD_STATE) && !value.type && !value.payload);
+            /* A driven failure remains the executor completion at teardown. */
+            CHECK(xr_xir_instance_free(instance)==(driven_oom?XR_XIR_CALL_OOM:XR_XIR_CALL_READY) && !runtime_live && !runtime_bytes);
+            instance=NULL;
         }
         printf("shadow row%u actual runtimeOOM%zu physical0\n",row,sites);
         CHECK(!runtime_live && !runtime_bytes);
