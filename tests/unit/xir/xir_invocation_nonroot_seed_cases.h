@@ -8,6 +8,7 @@
  */
 #ifndef XIR_INVOCATION_NONROOT_SEED_CASES_H
 #define XIR_INVOCATION_NONROOT_SEED_CASES_H
+#include "xir_invocation_input_seed_range_cases.h"
 static void invocation_nonroot_slot_erasure(const XrXirCompileContext *work,
     EffectInvocationCertificate *certificate) {
     EffectInvocationFinal *final=certificate->final;

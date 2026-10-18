@@ -55,6 +55,8 @@
 #include "xir_cell_owned_run_cases.h"
 #include "xir_invocation_edge_key_cases.h"
 #include "xir_context_constraint_vector_cases.h"
+#include "xir_parameter_schedule_cases.h"
+#include "xir_single_run_reader_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -1594,7 +1596,11 @@ static void conditional_literals(void) {
     CHECK(conditional_scalar(&context,true)==XR_XIR_OK);
     CHECK(conditional_forest(&context,true)==XR_XIR_OK);
     for (uint32_t mode=0;mode<5;++mode) {
+        uint64_t before=rp_stats(&context).work;
         XrXirStatus dense_status=conditional_dense_owner(&context,mode,true);
+        uint64_t after=rp_stats(&context).work;
+        printf("conditional dense mode%u status%u work_before%llu work_after%llu delta%llu owner_limit4000000\n",
+            mode,(uint32_t)dense_status,(unsigned long long)before,(unsigned long long)after,(unsigned long long)(after-before));
         if (dense_status!=XR_XIR_OK) fprintf(stderr,"dense owner mode%u status%u\n",mode,(uint32_t)dense_status);
         CHECK(dense_status==XR_XIR_OK);
     }
@@ -1810,6 +1816,12 @@ int main(int argc, char **argv) {
         rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
     }
     input_seed_run_literals();
+    if (argc==2 && !strcmp(argv[1],"--single-run-reader")) {
+        single_run_reader_controls();return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--parameter-schedule")) {
+        parameter_schedule_controls();return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--read-allocation-bounds")) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
@@ -1821,6 +1833,7 @@ int main(int argc, char **argv) {
         conditional_nonroot_seed_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if (argc==2 && !strcmp(argv[1],"--nonroot-input-seeds-literals")) {
+        invocation_seed_range_literals();
         for (uint32_t mode=0;mode<4;++mode) {
             RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
             uint64_t baseline=rp_stats(&context).live_bytes;

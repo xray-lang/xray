@@ -25,31 +25,99 @@ static XrXirStatus effect_invocation_class_fact_match(const EffectInvocationRead
     return XR_XIR_OK;
 }
 
+/* A current type selects the same Class fact check for either body adapter.
+ * The fact source and descending-rank proof remain independent of traversal. */
+static XrXirStatus effect_invocation_class_member_match(EffectInvocationFlow *flow,
+    uint32_t value,XrXirType type,uint32_t *at,uint64_t limit) {
+    const EffectInvocationRead *owner=flow->read;
+    const EffectInvocationClassDiscovery *rows=effect_invocation_class_discovery(owner,flow->node);
+    if(!rows) return XR_XIR_BAD_STRUCTURE;
+    if (!xr_xir_type_is_class(flow->body.domain.types,type)) {
+        if (*at<rows->count && rows->facts[*at].value<=value) return XR_XIR_BAD_STRUCTURE;
+        return XR_XIR_OK;
+    }
+    if (*at>=rows->count || !rows->facts || rows->facts[*at].value!=value)
+        return XR_XIR_BAD_STRUCTURE;
+    EffectInvocationClassSources sources={0};
+    XrXirStatus status=effect_invocation_class_value(flow,value,&sources);
+    if (status!=XR_XIR_OK) return status;
+    return effect_invocation_class_fact_match(owner,&rows->facts[(*at)++],&sources,limit);
+}
+
+/* Constant current type columns prove a whole non-Class interval. Every
+ * actual Class value still replays its unchanged sources and rank, and a
+ * variable opcode/type column is read at each physical ordinal. */
+static XrXirStatus effect_invocation_class_values_match(EffectInvocationFlow *flow,
+    uint64_t limit) {
+    const EffectInvocationRead *owner=flow->read;
+    const EffectInvocationNode *node=&owner->final->nodes[flow->node];
+    const EffectInvocationClassDiscovery *rows=effect_invocation_class_discovery(owner,flow->node);
+    if(!rows) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->work,30+sizeof(uint32_t))) return XR_XIR_BUDGET;
+    uint32_t at=0;
+    if (rows->count && !rows->facts) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyMaterial *material=owner->final->material;
+    if (!effect_body_request_owned_matches(owner->work,&flow->body,material)) {
+        for (uint32_t v=0;v<flow->values;++v) {
+            if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+            XrXirType type=0;XrXirStatus status=effect_invocation_flow_type(flow,v,&type);
+            if (status==XR_XIR_OK) status=effect_invocation_class_member_match(flow,v,type,&at,limit);
+            if (status!=XR_XIR_OK) return status;
+        }
+        return at==rows->count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+    }
+    if (node->body>=effect_body_count(material)) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyFunction *body=&material->functions[node->body];
+    if (!xir_compile_work(owner->work,7)) return XR_XIR_BUDGET;
+    if (body->parameter_count!=flow->function->parameter_count ||
+        body->instruction_count!=flow->function->instruction_count ||
+        (uint64_t)body->parameter_count+body->instruction_count!=flow->values ||
+        (body->parameter_count && !body->parameters)) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t p=0;p<body->parameter_count;++p) {
+        if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+        XrXirType type=0;XrXirStatus status=effect_invocation_flow_type(flow,p,&type);
+        if (status==XR_XIR_OK) status=effect_invocation_class_member_match(flow,p,type,&at,limit);
+        if (status!=XR_XIR_OK) return status;
+    }
+    if (!xir_compile_work(owner->work,sizeof(EffectBodyRecordCursor)+2*sizeof(uint32_t)))
+        return XR_XIR_BUDGET;
+    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
+    for (uint32_t r=0;r<body->run_count;++r) {
+        const EffectBodyRun *ref;XrXirStatus status=effect_body_range_ref(&flow->body.read,body,&cursor,&ref);
+        if (status!=XR_XIR_OK) return status;
+        uint32_t opcode=0,type=0;
+        status=effect_body_run_word(&flow->body.read,ref,ref->first,0,&opcode);
+        if (status==XR_XIR_OK) status=effect_body_run_word(&flow->body.read,ref,ref->first,1,&type);
+        if (status!=XR_XIR_OK) return status;
+        if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(owner->work,8)) return XR_XIR_BUDGET;
+        if (!(ref->mask&3u) && !xr_xir_type_is_class(flow->body.domain.types,(XrXirType)type)) {
+            uint64_t end=(uint64_t)body->parameter_count+ref->first+ref->count;
+            if (at<rows->count && rows->facts[at].value<end) return XR_XIR_BAD_STRUCTURE;
+            continue;
+        }
+        for (uint32_t i=ref->first;i<ref->first+ref->count;++i) {
+            if (!xir_compile_work(owner->work,4)) return XR_XIR_BUDGET;
+            if (ref->mask&1u) status=effect_body_run_word(&flow->body.read,ref,i,0,&opcode);
+            if (status==XR_XIR_OK && (ref->mask&2u))
+                status=effect_body_run_word(&flow->body.read,ref,i,1,&type);
+            if (status!=XR_XIR_OK) return status;
+            if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+            status=effect_invocation_class_member_match(flow,body->parameter_count+i,(XrXirType)type,&at,limit);
+            if (status!=XR_XIR_OK) return status;
+        }
+    }
+    return cursor.first==body->instruction_count && cursor.run==body->run_count &&
+        at==rows->count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
+
 static XrXirStatus effect_invocation_class_body_match(EffectInvocationFlow *flow,
     uint64_t limit) {
     const EffectInvocationRead *owner=flow->read;
     const EffectInvocationClassDiscovery *rows=effect_invocation_class_discovery(owner,flow->node);
     if(!rows) return XR_XIR_BAD_STRUCTURE;
-    uint32_t at=0;
-    for (uint32_t v=0;v<flow->values;++v) {
-        if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-        XrXirType actual_type=0;
-        XrXirStatus type_status=effect_invocation_flow_type(flow,v,&actual_type);
-        if (type_status!=XR_XIR_OK) return type_status;
-        bool is_class=xr_xir_type_is_class(flow->body.domain.types,actual_type);
-        if (!is_class) {
-            if (at<rows->count && rows->facts[at].value<=v) return XR_XIR_BAD_STRUCTURE;
-            continue;
-        }
-        if (at>=rows->count || !rows->facts || rows->facts[at].value!=v)
-            return XR_XIR_BAD_STRUCTURE;
-        EffectInvocationClassSources sources={0};
-        XrXirStatus status=effect_invocation_class_value(flow,v,&sources);
-        if (status!=XR_XIR_OK) return status;
-        status=effect_invocation_class_fact_match(owner,&rows->facts[at++],&sources,limit);
-        if (status!=XR_XIR_OK) return status;
-    }
-    if (at!=rows->count) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus membership=effect_invocation_class_values_match(flow,limit);
+    if(membership!=XR_XIR_OK) return membership;
     if (!xr_xir_type_is_class(flow->body.domain.types,flow->function->result))
         return rows->return_mask || rows->return_rank?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     EffectInvocationClassSources sources={.complete=true};uint32_t returns=0;

@@ -784,11 +784,23 @@ static XrXirStatus error_block_transfer(ErrorFlow *flow,uint32_t b,
     uint32_t end=block->first+block->count;
     if (!block->count || block->first>=function->instruction_count ||
         block->count>function->instruction_count-block->first) return XR_XIR_BAD_STRUCTURE;
-    while (cursor.first<end) {
-        if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
-        const EffectBodyRun *ref;
+    /* Membership replays every current canonical run before CFG transfer.
+     * A block begins at its real selected run, retaining the common bounded
+     * reader's first, final and adjacent checks without rescanning a prefix. */
+    if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+    const EffectBodyRun *ref;
+    if (block->first && function->run_count>1) {
+        status=effect_body_record_ref(&flow->body.read,function,block->first,&ref);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(flow->remaining,4+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t run=(uint32_t)(ref-function->runs);
+        cursor.first=ref->first+ref->count;cursor.run=run+1;
+    } else {
         status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
+    }
+    for (;;) {
+        if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
         if (!xir_compile_work(flow->remaining,2+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
         if (!xir_compile_work(flow->remaining,1+sizeof(row->constant)+sizeof(row->decoded)))
             return XR_XIR_BUDGET;
@@ -799,6 +811,9 @@ static XrXirStatus error_block_transfer(ErrorFlow *flow,uint32_t b,
             status=error_block_row(flow,b,i,zero_copy,ref,row);
             if (status!=XR_XIR_OK || flow->restart) return status;
         }
+        if (cursor.first>=end) break;
+        status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
+        if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }

@@ -21,6 +21,7 @@ typedef struct EffectInvocationFlow {
     /* Receiving scratch has fixed bits only; certified identity seeds belong
      * exclusively to constructor discovery and cannot be requested sealed. */
     uint64_t *fixed,*certified,*cell_scratch;
+    uint64_t local_flags[2];
     void *memory;
     bool changed,precision;
 } EffectInvocationFlow;
@@ -66,6 +67,19 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
         physical->instructions!=function->instruction_count || physical->rows>values ||
         physical->count>physical->capacity || (physical->count && !physical->records))
         return XR_XIR_BAD_STRUCTURE;
+    /* A complete one-word SSA flag pair has this replay's stack lifetime.
+     * No callable row or index exists in this geometry. The same flag access,
+     * padding checks and complete body replay still consume every real value. */
+    if (!xir_compile_work(flow->read->work,3)) return XR_XIR_BUDGET;
+    if (!physical->rows && values && values<=64 &&
+        (!flow->owner || !flow->basis.cell_words)) {
+        if (!xir_compile_work(flow->read->work,6*sizeof(void *)+2*sizeof(uint32_t)+
+            sizeof(flow->local_flags)+1)) return XR_XIR_BUDGET;
+        flow->physical=physical;flow->values=(uint32_t)values;flow->row_count=0;
+        flow->rows=flow->local_flags;flow->row_indices=NULL;flow->memory=NULL;
+        flow->fixed=flow->local_flags;flow->certified=flow->local_flags+1;
+        memset(flow->local_flags,0,sizeof(flow->local_flags));return XR_XIR_OK;
+    }
     uint64_t words=(uint64_t)physical->rows*flow->basis.fn_words;
     uint64_t indices=physical->rows?values*sizeof(uint32_t):0;
     uint64_t flag_words=(values+63)/64;
@@ -120,8 +134,14 @@ static XrXirStatus effect_invocation_flags_match(EffectInvocationFlow *flow) {
         return XR_XIR_BAD_STRUCTURE;
     if (!flow->values) return !flow->fixed && !flow->certified?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     uint64_t words=((uint64_t)flow->values+63)/64;
-    if (!flow->memory || !flow->fixed || !flow->certified ||
+    if (!flow->fixed || !flow->certified ||
         flow->certified!=flow->fixed+(size_t)words) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(flow->read->work,6)) return XR_XIR_BUDGET;
+    if (!flow->row_count && words==1) {
+        if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
+        if (flow->memory || flow->fixed!=flow->local_flags || flow->rows!=flow->local_flags)
+            return XR_XIR_BAD_STRUCTURE;
+    } else if (!flow->memory) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(flow->read->work,4)) return XR_XIR_BUDGET;
     uint32_t tail=flow->values%64;
     if (!tail) return XR_XIR_OK;

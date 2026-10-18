@@ -99,9 +99,13 @@ static void ed_cost(void){
 static void ed_graph_isolation(void){
     ErrorDependencyFixture f;ed_fixture(&f,ED_GO,false);XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
-    XrXirEffects *e=NULL;CHECK(effect_infer_construct(&c,&f.module,NULL,&e)==XR_XIR_OK);
-    CHECK(!effect_final_outcomes(e) && e->outcomes_work.functions && e->outcomes_work.task_creation);
-    EffectGraph graph={0};CHECK(effect_graph_build(&f.module,e,&graph,&c)==XR_XIR_OK);
+    XrXirEffects *e=NULL;CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&e)==XR_XIR_OK);ed_literals(e,ED_GO);
+    /* Inference has retired construction rows. Fresh receiving scratch reads
+     * the actual Final and moves only its incoming IDs into this local graph. */
+    EffectControlCheck input={0};
+    EffectGraph graph={.material=e->invocations->body,.physical=e->invocations->body->physical};
+    CHECK(effect_final_control_prepare(&c,e,&input)==XR_XIR_OK);
+    CHECK(effect_control_dependencies_move(&c,&input,&graph)==XR_XIR_OK);
     for(uint32_t link=graph.heads[3];link!=UINT32_MAX;link=graph.edges[link].next)CHECK(graph.edges[link].caller!=2);
     CHECK(!graph.error_heads && !graph.error_edges && !effect_roots_read(e)->root[2].requires_root && !effect_roots_read(e)->root[2].unresolved);
     CHECK(error_graph_prepare(&graph,&c)==XR_XIR_OK);
@@ -109,9 +113,7 @@ static void ed_graph_isolation(void){
     CHECK(graph.error_edges[0].caller==2 && graph.error_edges[0].instruction==0 && graph.error_edges[0].next==UINT32_MAX);
     for(uint32_t link=graph.heads[3];link!=UINT32_MAX;link=graph.edges[link].next)CHECK(graph.edges[link].caller!=2);
     CHECK(!effect_roots_read(e)->root[2].requires_root && !effect_roots_read(e)->root[2].unresolved);
-    effect_graph_free(&graph);xr_xir_compile_effects_free(e);e=NULL;
-    CHECK(ed_stats(&c).live_bytes==baseline);
-    CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&e)==XR_XIR_OK);ed_literals(e,ED_GO);
+    effect_graph_free(&graph);effect_control_check_free(&input);
     xr_xir_compile_effects_free(e);ed_release(&c,baseline);
 }
 static void ed_negative(void){
