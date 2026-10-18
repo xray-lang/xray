@@ -87,7 +87,18 @@ def main():
             assert code != 0 and len(unresolved) == 1 and re.search(r'\b' + re.escape(symbol) + r'\b', unresolved[0]), (symbol, unresolved, text)
             outcomes[symbol] = 'exact retired symbol unresolved; no other missing symbol'
     manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
-    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [28, 76, 29, 33, 35]
+    identity_headers = [('xxir_checked.h', 'XR_XIR_CHECKED_SCHEMA'),
+                        ('xxir_checked.h', 'XR_XIR_CHECKED_CONTRACT'),
+                        ('xxir_value.h', 'XR_XIR_VALUE_ABI_VERSION'),
+                        ('xxir_call.h', 'XR_XIR_CALL_ABI_VERSION'),
+                        ('xxir_program.h', 'XR_XIR_PROGRAM_ABI_VERSION')]
+    identity = []
+    for header, macro in identity_headers:
+        values = re.findall(r'^#define ' + macro + r'\s+(\d+)u?\s*$',
+                            (root/'src/xir'/header).read_text(encoding='utf-8'), re.M)
+        assert len(values) == 1, macro
+        identity.append(int(values[0]))
+    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == identity
     sys.path.insert(0,str(root/'scripts'))
     from derive_xir_sdk_abi import prepare
     with tempfile.TemporaryDirectory(prefix='sdk-owner-independent-abi-') as temporary:
@@ -102,6 +113,11 @@ def main():
         code, text = execute([args.owner, sdk_root, path, 'status'], output / (name + '.log'))
         assert code == 0 and int(text.split()[0]) == expected, (name, code, text)
     status('current-sdk-positive', manifest, 0)
+    for name, prefix in [('parent-wire30-sem76-program33', (30, 76, 24, 29, 33)),
+                         ('legacy259-wire28-sem75-program32', (28, 75, 24, 29, 32))]:
+        changed = json.loads(json.dumps(manifest))
+        changed.update(zip(('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi'), prefix))
+        status(name, changed, 1)
     old_manifest = json.loads((old / 'sdk/sdk_manifest.json').read_text())
     status('old-sdk-identity', old_manifest, 1, old / 'sdk')
     for name,value in [('semantic',64),('value_abi',17),('call_abi',21),('program_abi',26),

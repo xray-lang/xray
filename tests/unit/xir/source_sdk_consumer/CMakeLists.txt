@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 3.25)
+project(InstalledSourceConsumer C)
+find_package(XraySource CONFIG REQUIRED)
+add_executable(source_consumer "${CONSUMER_SOURCE}")
+target_link_libraries(source_consumer PRIVATE Xray::Source)
+set_target_properties(source_consumer PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF
+    MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
+if(MSVC)
+    target_compile_options(source_consumer PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(source_consumer PRIVATE -Wall -Wextra -Werror -pedantic-errors)
+endif()

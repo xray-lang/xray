@@ -141,6 +141,9 @@ static const XrCliOptionSpec dap_options[] = {
 #endif
 static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
 static const XrCliOptionSpec toolchain_options[] = {
+    {"provider", 0, XR_CLI_VALUE_STRING, false, false, "PROVIDER", "Probe provider selector"},
+    {"profile", 0, XR_CLI_VALUE_STRING, false, false, "PROFILE", "Probe target profile"},
+    {"refresh", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Run a fresh readiness probe"},
     {"target", 0, XR_CLI_VALUE_STRING, false, false, "TARGET", "Preference target or native"},
     {"cc", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Compiler path to store for use"},
     {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Zig path to store for use"},
@@ -198,8 +201,8 @@ static XrCliCommandSpec cli_commands[] = {
 
     /* Utility commands */
     {"deps", "Analyze source dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
-    {"toolchain", "List, use or reset toolchain preferences",
-     "list [--target TARGET]; config-path; use --target TARGET PROVIDER [--cc PATH | --zig PATH]; reset [--target TARGET]",
+    {"toolchain", "Probe and manage native toolchains",
+     "probe [--target TARGET] [--provider PROVIDER]; list [--target TARGET]; config-path; use --target TARGET PROVIDER [--cc PATH | --zig PATH]; reset [--target TARGET]",
      toolchain_options, 1, 2, false,
      false, NULL, NULL, 0},
     {"info", "Environment and installation info", NULL, info_options, 0, 0, false, false, NULL,

@@ -83,21 +83,26 @@ static int toolchain_read(const XrCliInvocation *inv,XrCompileState *state,bool 
     if(json)puts("]}");
     xr_cli_toolchain_config_free(owner);return toolchain_output_status();
 }
-#ifdef XR_OS_WINDOWS
+#if XR_OS_WINDOWS
 #include "xcmd_toolchain_update.inc.c"
 #endif
+#include "xcmd_toolchain_probe.inc.c"
 XR_FUNC int cmd_toolchain(const XrCliInvocation *inv) {
-    if(!inv || !inv->positional_count)return XR_CLI_EXIT_USAGE;
+    if(!inv || !inv->positionals || inv->positional_count<1 || !inv->positionals[0] ||
+        (inv->options.count && (!inv->options.spec || !inv->options.present)))return XR_CLI_EXIT_USAGE;
     const char *action=inv->positionals[0];bool use=!strcmp(action,"use"),reset=!strcmp(action,"reset");
-    bool list=!strcmp(action,"list"),path_only=!strcmp(action,"config-path");
-    if((!use && !reset && !list && !path_only) || inv->positional_count!=(use ? 2 : 1) ||
+    bool list=!strcmp(action,"list"),path_only=!strcmp(action,"config-path"),probe=!strcmp(action,"probe");
+    if(inv->passthrough_argc || (!probe && (xr_cli_opt_present(&inv->options,"provider") ||
+        xr_cli_opt_present(&inv->options,"profile") || xr_cli_opt_present(&inv->options,"refresh"))))return XR_CLI_EXIT_USAGE;
+    if(!probe && ((!use && !reset && !list && !path_only) || inv->positional_count!=(use ? 2 : 1) ||
         (!use && (xr_cli_opt_present(&inv->options,"cc") || xr_cli_opt_present(&inv->options,"zig"))) ||
         (path_only && xr_cli_opt_present(&inv->options,"target")) ||
-        (use && !xr_cli_opt_present(&inv->options,"target"))) {
+        (use && !xr_cli_opt_present(&inv->options,"target")))) {
         xr_cli_error("toolchain","expected list [--target TARGET], config-path, use --target TARGET PROVIDER, or reset [--target TARGET]");
         return XR_CLI_EXIT_USAGE;
     }
-    XrCompileResourceLimits limits={UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
+    XrCompileResourceLimits limits=probe ? xr_source_compile_default_resource_limits() :
+        (XrCompileResourceLimits){UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
     XrCompileResources *resources=NULL;
     XrCompileResourceStatus opened=xr_compile_resources_new(&limits,&resources);
     if(opened!=XR_COMPILE_RESOURCE_OK) {
@@ -109,9 +114,10 @@ XR_FUNC int cmd_toolchain(const XrCliInvocation *inv) {
         xr_cli_error("toolchain","preference state creation failed");return XR_CLI_EXIT_UNAVAILABLE;
     }
     int result;
-    if(list || path_only)result=toolchain_read(inv,state,path_only);
+    if(probe)result=toolchain_probe(state,inv);
+    else if(list || path_only)result=toolchain_read(inv,state,path_only);
     else {
-#ifdef XR_OS_WINDOWS
+#if XR_OS_WINDOWS
         result=toolchain_update(inv,state,reset);
 #else
         xr_cli_error("toolchain","persistent preference updates are unavailable on this host");
