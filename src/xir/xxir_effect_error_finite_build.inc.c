@@ -142,7 +142,8 @@ static XrXirStatus error_finite_construct(const XrXirCompileContext *work,const 
             rows>(UINT64_MAX-at-summary-head->block_count)/summary) { status=XR_XIR_BUDGET;break; }
         uint64_t size=head->block_count+rows*summary+summary;
         if(!xir_compile_work(work,sizeof(*proof->rows))) { status=XR_XIR_BUDGET;break; }
-        proof->rows[f]=(EffectErrorFiniteRow){at,at+size,head->block_count,(uint32_t)values,node};at+=size;
+        uint32_t returned=proof->contextual && f>=proof->invocations->count;
+        proof->rows[f]=(EffectErrorFiniteRow){at,at+size,head->block_count,(uint32_t)values,node,returned};at+=size;
     }
     if(status==XR_XIR_OK) status=error_finite_types_frame(work,proof);
     if(status==XR_XIR_OK) status=error_bindings_build(work,proof);

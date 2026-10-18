@@ -35,7 +35,10 @@ static void receiver_opaque_return_cases(void) {
         XrXirSourceRequest request={session,NULL,&authority,&owner.context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check_text(&request,&(XrXirSourceText){NULL,text,(size_t)length},&result,&diagnostic,NULL);
-        if(status!=XR_XIR_BAD_TYPE || !strstr(diagnostic.message,"GO target lacks proof for worker execution")) fprintf(stderr,"Receiver negative status%u message%s\n",status,diagnostic.message);
+        if(status!=XR_XIR_BAD_TYPE || !strstr(diagnostic.message,"GO target lacks proof for worker execution"))
+            fprintf(stderr,"Receiver negative case%u receiver=%s status%u diagnostic%u location=%u:%d:%d checked=%u snapshot=%u message=%s\n",
+                mode,receiver[mode],(unsigned)status,(unsigned)diagnostic.status,diagnostic.module,
+                diagnostic.line,diagnostic.column,(unsigned)(result.checked!=NULL),(unsigned)(result.snapshot!=NULL),diagnostic.message);
     CHECK(status==XR_XIR_BAD_TYPE && !result.checked && !result.snapshot &&
             strstr(diagnostic.message,"GO target lacks proof for worker execution"));
         xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);source_fixture_owner_free(&owner);
