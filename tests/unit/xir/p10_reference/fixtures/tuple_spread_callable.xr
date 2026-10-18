@@ -1,0 +1,13 @@
+var counter: i64 = 0
+fn next() -> i64 {
+    counter = counter + 1
+    return counter
+}
+fn identity(value: i64) -> i64 { return value }
+export fn referenceAnswer() -> i64 {
+    counter = 0
+    const original = (next, 7)
+    const copied = (...original,)
+    const callback = copied.0
+    return callback() * 10 + identity(copied.1)
+}

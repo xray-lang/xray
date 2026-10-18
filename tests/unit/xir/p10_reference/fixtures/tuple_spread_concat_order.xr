@@ -1,0 +1,13 @@
+var trace = 0
+var saved = [10]
+fn receiver() -> Array<i64> { trace = trace * 10 + 1; return [1] }
+fn first() -> Array<i64> { trace = trace * 10 + 2; return saved }
+fn tail() -> (Array<i64>, Array<i64>) {
+    trace = trace * 10 + 3
+    saved[0] = 99
+    return ([11], [20])
+}
+export fn referenceAnswer() -> i64 {
+    const result = receiver().concat(...(first(), ...tail(), ...()))
+    return trace * 100 + result[0] + result[1] + result[2] + result[3]
+}
