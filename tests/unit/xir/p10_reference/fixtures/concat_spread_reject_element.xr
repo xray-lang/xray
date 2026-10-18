@@ -1,0 +1,5 @@
+export fn referenceAnswer() -> i64 {
+    const parts = (["two"],)
+    const values = [1].concat(...parts)
+    return len(values)
+}
