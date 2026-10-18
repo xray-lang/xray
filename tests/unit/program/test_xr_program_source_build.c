@@ -48,7 +48,8 @@ typedef struct SourceBuildFixture {
     char facade_path[XR_TEST_PATH_MAX];
     XrVMRuntime *isolate;
     XrCompilerSession *session;
-    XrCompilerSession *original_session;
+    XrCompileResources *resources;
+    XrTargetProfile *runtime_profile;
     XrModuleResolver *resolver;
     XrModuleIdentityAuthority authority;
     char *entry_identity;
@@ -873,13 +874,13 @@ static XrFingerprint semantic_fingerprint(const char *text) {
 static void source_build_fixture_free(SourceBuildFixture *fixture) {
     if (!fixture)
         return;
-    if (fixture->isolate && fixture->session && fixture->original_session)
-        (void) xr_compiler_session_attach_isolate(fixture->isolate, fixture->original_session);
-    xr_compiler_session_delete(fixture->session);
+    xr_compile_module_resolver_free(fixture->resolver);
+    xr_compile_resources_free(fixture->entry_identity);
+    xr_compile_resources_free(fixture->entry_logical_path);
+    xr_compile_session_free(fixture->session);
+    xr_target_profile_free(fixture->runtime_profile);
     xray_vm_delete(fixture->isolate);
-    xr_module_resolver_free(fixture->resolver);
-    xr_free(fixture->entry_identity);
-    xr_free(fixture->entry_logical_path);
+    xr_compile_resources_release(fixture->resources);
     if (fixture->facade_path[0])
         xr_test_unlink(fixture->facade_path);
     if (fixture->dependency_path[0])
@@ -925,28 +926,29 @@ static bool source_build_fixture_init(SourceBuildFixture *fixture, const char *e
     fixture->isolate = xray_vm_new_full(&vm_config);
     if (!fixture->isolate)
         goto fail;
-    fixture->original_session = xr_compiler_session_current_for_isolate(fixture->isolate);
-    XrCompilerSessionConfig session_config = {0};
-    fixture->session = xr_compiler_session_new(&session_config);
-    if (!fixture->session || xr_compiler_session_attach_isolate(
-                                 fixture->isolate, fixture->session) != fixture->original_session)
+    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    if (xr_compile_resources_new(&limits, &fixture->resources) != XR_COMPILE_RESOURCE_OK ||
+        xr_compile_session_new(fixture->resources, &fixture->session) != XR_COMPILER_SESSION_OK ||
+        !xr_runtime_target_profile_build_native_hosted(&fixture->runtime_profile, NULL, 0))
         goto fail;
     XrModuleResolverConfig resolver_config = {0};
-    fixture->resolver = xr_module_resolver_new(&resolver_config);
-    if (!fixture->resolver)
+    if (xr_compile_module_resolver_new(fixture->resources, &resolver_config, &fixture->resolver) != XR_MODULE_OK)
         goto fail;
 
     fixture->authority.kind = XR_MODULE_IDENTITY_SCRIPT;
     fixture->authority.physical_root = fixture->directory;
-    if (!(xr_module_identity_from_source(&fixture->authority, fixture->entry_path,
+    if (!(xr_compile_module_identity_from_source(fixture->resources, &fixture->authority, fixture->entry_path,
                                         &fixture->entry_identity, &fixture->entry_logical_path) == XR_MODULE_OK))
         goto fail;
     XrFingerprint source_fingerprint;
-    xr_module_source_fingerprint(entry_source, &source_fingerprint);
+    if (xr_compile_module_source_fingerprint(fixture->resources, entry_source, &source_fingerprint) != XR_COMPILE_RESOURCE_OK)
+        goto fail;
     fixture->input = (XrProgramSourceBuildInput) {
         .schema_version = XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION,
         .budget = xr_program_source_build_default_budget(),
         .session = fixture->session,
+        .runtime = fixture->isolate,
+        .target_profile = fixture->runtime_profile,
         .resolver = fixture->resolver,
         .entry_source_path = fixture->entry_path,
         .entry_authority = &fixture->authority,
@@ -1121,13 +1123,17 @@ TEST(source_owner_manifest_exports_retain_exact_detached_roots) {
         "[[export.c]]\nxray = \"answer\"\nsymbol = \"answer\"\nabi = \"native\"\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, library));
-    XrTomlValue *toml = xtoml_parse(manifest, sizeof(manifest) - 1u);
+    const XrOsIoPolicy policy = xr_compile_io_policy(fixture.resources);
+    const XrTomlParseLimits parsing = {sizeof(manifest) - 1u, 128u};
+    XrTomlValue *toml = NULL;
+    ASSERT_EQ_INT(xtoml_parse_owned(&policy, manifest, sizeof(manifest) - 1u, &parsing, &toml), XR_TOML_PARSE_OK);
     ASSERT_NOT_NULL(toml);
-    XrNativePackagePlan *plan = xr_native_package_plan_parse(toml, fixture.directory);
-    xtoml_free(toml);
+    XrNativePackagePlan *plan = NULL;
+    ASSERT_EQ_INT(xr_native_package_plan_parse_owned(&policy, toml, fixture.directory, &plan, NULL), XR_MANIFEST_OK);
+    xtoml_owned_free(toml);
     ASSERT_NOT_NULL(plan);
     ASSERT_TRUE(plan->valid);
-    xr_compiler_session_set_native_package_plan(fixture.session, plan);
+    fixture.input.native_package_plan = plan;
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
@@ -1155,7 +1161,7 @@ TEST(source_owner_manifest_exports_retain_exact_detached_roots) {
         ASSERT_EQ_UINT(combined.export_function_ids[index], product.export_function_ids[index]);
     xr_program_source_product_free(&combined);
     source_build_fixture_free(&fixture);
-    xr_native_package_plan_free(plan);
+    xr_native_package_plan_free_owned(plan);
     ASSERT_EQ_INT(strcmp(product.exports[0].xray_name, "read"), 0);
     ASSERT_EQ_INT(strcmp(product.exports[0].symbol, "read_counter"), 0);
     ASSERT_TRUE(product.exports[0].header);
@@ -1211,10 +1217,14 @@ TEST(source_owner_rejects_invalid_manifest_roots_without_partial_product) {
     for (uint32_t invalid = 0u; invalid < 6u; ++invalid) {
         SourceBuildFixture fixture;
         ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
-        XrTomlValue *toml = xtoml_parse(manifest, sizeof(manifest) - 1u);
+        const XrOsIoPolicy policy = xr_compile_io_policy(fixture.resources);
+        const XrTomlParseLimits parsing = {sizeof(manifest) - 1u, 128u};
+        XrTomlValue *toml = NULL;
+        ASSERT_EQ_INT(xtoml_parse_owned(&policy, manifest, sizeof(manifest) - 1u, &parsing, &toml), XR_TOML_PARSE_OK);
         ASSERT_NOT_NULL(toml);
-        XrNativePackagePlan *plan = xr_native_package_plan_parse(toml, fixture.directory);
-        xtoml_free(toml);
+        XrNativePackagePlan *plan = NULL;
+        ASSERT_EQ_INT(xr_native_package_plan_parse_owned(&policy, toml, fixture.directory, &plan, NULL), XR_MANIFEST_OK);
+        xtoml_owned_free(toml);
         ASSERT_NOT_NULL(plan);
         ASSERT_TRUE(plan->valid);
         char *original_name = plan->exports[0].xray_name;
@@ -1235,7 +1245,7 @@ TEST(source_owner_rejects_invalid_manifest_roots_without_partial_product) {
                 expected = XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT;
                 break;
         }
-        xr_compiler_session_set_native_package_plan(fixture.session, plan);
+        fixture.input.native_package_plan = plan;
         XrProgramSourceProduct product = {0};
         XrProgramSourceDiagnostic diagnostic;
         ASSERT_EQ_INT(xr_program_source_build(&fixture.input, &product, &diagnostic), expected);
@@ -1249,7 +1259,7 @@ TEST(source_owner_rejects_invalid_manifest_roots_without_partial_product) {
         plan->exports[0].symbol = original_symbol;
         plan->export_count = 1u;
         source_build_fixture_free(&fixture);
-        xr_native_package_plan_free(plan);
+        xr_native_package_plan_free_owned(plan);
     }
 }
 
@@ -1343,13 +1353,14 @@ TEST(source_owner_retained_roots_share_one_detached_program_and_instance) {
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     char *library_identity = NULL;
     char *library_path = NULL;
-    ASSERT_TRUE((xr_module_identity_from_source(&fixture.authority, fixture.dependency_path,
+    ASSERT_TRUE((xr_compile_module_identity_from_source(fixture.resources, &fixture.authority, fixture.dependency_path,
                                                &library_identity, &library_path) == XR_MODULE_OK));
     XrProgramSourceEntryIdentity roots[2] = {fixture.input.entry, fixture.input.entry};
     roots[0].function_name = "testCase";
     roots[1].module_identity = library_identity;
     roots[1].function_name = "read";
-    xr_module_source_fingerprint(library, &roots[1].source_content_fingerprint);
+    ASSERT_TRUE(xr_compile_module_source_fingerprint(fixture.resources, library,
+        &roots[1].source_content_fingerprint) == XR_COMPILE_RESOURCE_OK);
     fixture.input.retained_entries = roots;
     fixture.input.retained_entry_count = 2u;
     XrProgramSourceProduct first = {0}, reversed = {0};
@@ -1369,8 +1380,8 @@ TEST(source_owner_retained_roots_share_one_detached_program_and_instance) {
     ASSERT_EQ_UINT(first.retained_function_ids[0], reversed.retained_function_ids[1]);
     ASSERT_EQ_UINT(first.retained_function_ids[1], reversed.retained_function_ids[0]);
     source_build_fixture_free(&fixture);
-    xr_free(library_identity);
-    xr_free(library_path);
+    xr_compile_resources_free(library_identity);
+    xr_compile_resources_free(library_path);
     memset(roots, 0, sizeof(roots));
     {
         XrVmCodeOptions options = xr_vm_code_default_options();
@@ -1450,7 +1461,7 @@ TEST(source_owner_rejects_invalid_retained_root_identity_without_partial_product
                 expected = XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT;
                 break;
             case 8:
-                ASSERT_TRUE((xr_module_identity_from_logical(&fixture.authority, "absent.xr",
+                ASSERT_TRUE((xr_compile_module_identity_from_logical(fixture.resources, &fixture.authority, "absent.xr",
                                                             &wrong_identity) == XR_MODULE_OK));
                 roots[0].module_identity = wrong_identity;
                 break;
@@ -1466,7 +1477,7 @@ TEST(source_owner_rejects_invalid_retained_root_identity_without_partial_product
         ASSERT_NULL(product.artifact.bytes);
         ASSERT_NULL(product.retained_function_ids);
         ASSERT_EQ_UINT(product.retained_function_count, 0u);
-        xr_free(wrong_identity);
+        xr_compile_resources_free(wrong_identity);
         source_build_fixture_free(&fixture);
     }
 }
@@ -1541,7 +1552,10 @@ TEST(source_owner_single_module_is_deterministic_and_detached) {
         "fn choose(flag: bool) -> i64 { if (flag) { return answer() }; return 0 }\n";
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
-    XaAnalyzer *analyzer = xa_analyzer_new(fixture.session);
+    const XaAnalyzerInput analysis = {.session = fixture.session, .runtime = fixture.isolate,
+        .target = &xr_target_profile_machine_facts(fixture.input.target_profile)->data_layout,
+        .module_identity = fixture.entry_identity};
+    XaAnalyzer *analyzer = xa_analyzer_new(&analysis);
     ASSERT_NOT_NULL(analyzer);
     XrType *resource = xa_builtin_parse_type_string_for_module(analyzer, "net", "__NetConnStorage?");
     ASSERT_NOT_NULL(resource);
@@ -1727,7 +1741,8 @@ static void assert_cross_module_coroutine_program(const char *entry_source,
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -1924,7 +1939,8 @@ TEST(source_owner_cross_module_instance_method_preserves_receiver_across_suspend
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -2030,7 +2046,8 @@ TEST(source_owner_function_parameter_callable_has_one_program_and_private_execut
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct product = {0};
@@ -2125,7 +2142,8 @@ TEST(source_owner_generic_specializations_are_exact_program_functions) {
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -2338,7 +2356,8 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -2877,7 +2896,8 @@ TEST(source_owner_value_struct_string_copy_preserves_original) {
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -2938,7 +2958,8 @@ TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggrega
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -3284,7 +3305,8 @@ TEST(source_owner_generic_scalar_class_specializations_are_exact_class_reference
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -3726,7 +3748,8 @@ TEST(source_owner_exact_integer_constants_and_conversions) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -3800,7 +3823,8 @@ TEST(source_owner_integer_wrapping_arithmetic_uses_shared_primitives) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -3879,7 +3903,8 @@ TEST(source_owner_integer_comparisons_preserve_signedness_and_order) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -3944,7 +3969,8 @@ TEST(source_owner_integer_division_and_remainder_preserve_value_rules) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -3971,7 +3997,8 @@ TEST(source_owner_array_index_reads_and_replaces_elements) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -4007,7 +4034,8 @@ TEST(source_owner_narrow_array_elements_precede_allocation) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -4046,7 +4074,8 @@ TEST(source_owner_integer_bitwise_exact_width) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -4078,7 +4107,8 @@ TEST(source_owner_array_append_preserves_class_identity) {
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -4103,7 +4133,8 @@ TEST(source_owner_static_method_declarations) {
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -4133,7 +4164,8 @@ TEST(source_owner_tuple_array_elements) {
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -4163,7 +4195,8 @@ TEST(source_owner_repeated_tuple_elements) {
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -4204,7 +4237,8 @@ TEST(source_owner_byte_comparison) {
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0}; XrProgramSourceDiagnostic diagnostic;
     assert_source_build_ok(&fixture.input, &product, &diagnostic);
@@ -4244,7 +4278,8 @@ TEST(source_owner_string_builder_snapshot) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -4276,7 +4311,8 @@ TEST(source_owner_array_error_invoke) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -4305,7 +4341,8 @@ TEST(source_owner_string_slice_scalar_range) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -4338,7 +4375,8 @@ TEST(source_owner_array_runtime_length) {
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -4827,7 +4865,8 @@ TEST(source_owner_function_parameter_suspending_callable_has_one_program) {
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct product = {0};
@@ -5192,7 +5231,8 @@ static void assert_module_report(bool extended, XrSourceFixtureId fixture_id) {
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -5348,7 +5388,8 @@ static void assert_module_initializer_failure(bool panic, XrSourceFixtureId fixt
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -5519,7 +5560,8 @@ TEST(source_owner_text_program_is_exact_across_private_executors) {
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -5679,7 +5721,8 @@ TEST(source_owner_clock_provider_is_exact_across_private_executors) {
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -5888,7 +5931,8 @@ TEST(source_owner_provider_refusal_runs_nested_explicit_trap_cleanup) {
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -6049,7 +6093,8 @@ TEST(source_owner_child_coroutine_provider_failure_composes_static_cleanup) {
     char profile_error[256] = {0};
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -6163,7 +6208,8 @@ TEST(source_owner_child_coroutine_provider_failure_composes_static_cleanup) {
         "  return 43\n"
         "}\n";
     ASSERT_TRUE(source_build_fixture_init(&fixture, segmented_cleanup, NULL));
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     assert_source_build_ok(&fixture.input, &product, &diagnostic);
     ASSERT_NOT_NULL(product.program);
@@ -6206,7 +6252,8 @@ TEST(source_owner_shared_branching_cleanup_projects_private_cancel_graph) {
     char profile_error[256] = {0};
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -6301,7 +6348,8 @@ TEST(source_owner_nested_cleanup_projects_reason_chain) {
     char profile_error[256] = {0};
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
@@ -6401,7 +6449,8 @@ TEST(source_owner_pipe_provider_and_fieldwise_constructor_are_canonical) {
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -6647,7 +6696,8 @@ TEST(source_owner_pipe_failed_close_consumes_endpoints_once) {
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -6775,7 +6825,8 @@ TEST(source_owner_pipe_uncaught_error_runs_cleanup) {
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -7298,7 +7349,8 @@ TEST(source_owner_lowers_defer_panic_cleanup_across_private_executors) {
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct product = {0};
@@ -7381,7 +7433,8 @@ TEST(source_owner_recovers_and_reconstructs_place_backed_defer_for_resume_and_ca
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -7582,7 +7635,8 @@ TEST(source_owner_runs_each_dense_coroutine_state_across_private_executors) {
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -7759,7 +7813,8 @@ TEST(source_owner_keeps_related_ref_parameter_places_stable_across_child_suspens
     char profile_error[256] = {0};
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct first = {0};
@@ -8334,7 +8389,8 @@ TEST(source_owner_keeps_read_existential_root_across_child_suspension) {
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct first = {0};
     XrProgramSourceProduct second = {0};
@@ -8390,7 +8446,8 @@ TEST(source_owner_cross_module_coroutine_transfers_affine_resource_result) {
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct product = {0};
@@ -8535,7 +8592,8 @@ TEST(source_owner_time_sleep_has_typed_suspension_request) {
     char profile_error[256] = {0};
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
 
     XrProgramSourceProduct product = {0};
@@ -8669,7 +8727,7 @@ TEST(source_owner_rejects_non_authoritative_entry_identity) {
     SourceBuildFixture fixture;
     ASSERT_TRUE(source_build_fixture_init(&fixture, source, NULL));
     char *wrong_identity = NULL;
-    ASSERT_TRUE((xr_module_identity_from_logical(&fixture.authority, "other.xr", &wrong_identity) == XR_MODULE_OK));
+    ASSERT_TRUE((xr_compile_module_identity_from_logical(fixture.resources, &fixture.authority, "other.xr", &wrong_identity) == XR_MODULE_OK));
     XrProgramSourceBuildInput input = fixture.input;
     input.entry.module_identity = wrong_identity;
     XrProgramSourceProduct product = {0};
@@ -8699,7 +8757,7 @@ TEST(source_owner_rejects_non_authoritative_entry_identity) {
     ASSERT_NULL(product.artifact.bytes);
     ASSERT_NULL(product.program);
 
-    xr_free(wrong_identity);
+    xr_compile_resources_free(wrong_identity);
     source_build_fixture_free(&fixture);
 }
 
@@ -8732,6 +8790,13 @@ TEST(source_owner_rejects_invalid_or_expanded_budget_request) {
     XrProgramSourceDiagnostic diagnostic;
     XrProgramSourceBuildInput input = fixture.input;
 
+    input.runtime = NULL;
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic), XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT);
+    input = fixture.input;
+    input.target_profile = NULL;
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic), XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT);
+    input = fixture.input;
+
     input.budget.max_modules = defaults.max_modules + 1u;
     ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic),
                   XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT);
@@ -8754,6 +8819,28 @@ TEST(source_owner_rejects_invalid_or_expanded_budget_request) {
     ASSERT_NULL(product.artifact.bytes);
     ASSERT_NULL(product.program);
     source_build_fixture_free(&fixture);
+
+    /* A separate operation owns this state; it is never reset for a retry. */
+    SourceBuildFixture exhausted;
+    ASSERT_TRUE(source_build_fixture_init(&exhausted, source, NULL));
+    XrCompileState *state = xr_compile_session_compile_state(exhausted.session);
+    ASSERT_EQ_INT(xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET), XR_COMPILE_RESOURCE_BUDGET);
+    input = exhausted.input;
+    input.runtime = (XrVMRuntime *) (uintptr_t) 1;
+    input.target_profile = (const XrTargetProfile *) (uintptr_t) 1;
+    input.resolver = (XrModuleResolver *) (uintptr_t) 1;
+    input.entry_authority = (const XrModuleIdentityAuthority *) (uintptr_t) 1;
+    input.entry.module_identity = (const char *) (uintptr_t) 1;
+    XrCompileResourceStats before = {0}, after = {0};
+    ASSERT_EQ_INT(xr_compile_resources_stats(exhausted.resources, &before), XR_COMPILE_RESOURCE_OK);
+    ASSERT_EQ_INT(xr_program_source_build(&input, &product, &diagnostic), XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT);
+    ASSERT_EQ_UINT(diagnostic.underlying_status, XR_COMPILE_RESOURCE_BUDGET);
+    ASSERT_NULL(product.program);
+    ASSERT_NULL(product.artifact.bytes);
+    ASSERT_EQ_INT(xr_compile_resources_stats(exhausted.resources, &after), XR_COMPILE_RESOURCE_OK);
+    ASSERT_TRUE(before.work == after.work && before.allocation_count == after.allocation_count);
+    ASSERT_EQ_INT(xr_compile_state_status(state), XR_COMPILE_RESOURCE_BUDGET);
+    source_build_fixture_free(&exhausted);
 }
 
 TEST(source_owner_reports_exact_monomorphization_depth_budget) {
@@ -8899,7 +8986,8 @@ TEST(source_owner_channel_module_storage_has_exact_types) {
     XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
     assert_source_build_ok(&fixture.input, &product, &diagnostic);
@@ -8930,7 +9018,8 @@ TEST(source_owner_imported_enum_catch_preserves_declaration_identity) {
     XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
     assert_source_build_ok(&fixture.input, &product, &diagnostic);
@@ -8958,7 +9047,8 @@ TEST(source_owner_prelude_enum_catch_preserves_declaration_identity) {
     XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
     assert_source_build_ok(&fixture.input, &product, &diagnostic);
@@ -8986,7 +9076,8 @@ TEST(source_owner_channel_handles_execute) {
     XrTargetProfile *profile = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;
     assert_source_build_ok(&fixture.input, &product, &diagnostic);

@@ -57,14 +57,17 @@ XR_FUNC bool xa_type_is_default_initializable(XaInferContext *ctx, XrType *type)
 // because no caller outside src/frontend/analyzer/
 // needs them.
 XR_FUNC void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node);
-XR_FUNC void xa_bind_declared_view_origins(XaInferContext *ctx, AstNode *node, XaSymbolLinks *links,
+XR_FUNC XrCompileResourceStatus xa_bind_declared_view_origins(XaInferContext *ctx, AstNode *node, XaSymbolLinks *links,
                                            const char **param_names, bool has_receiver);
 XR_FUNC void xa_validate_declared_view_origin_returns(XaInferContext *ctx, XaSymbolLinks *links,
                                                       AstNode *body, XrClassInfo *receiver_info);
 XR_FUNC void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **stmts,
                                                        int count);
-XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, int line);
+/* A valid input slot transfers its detached creator, or borrows an existing
+ * same-scope binding. Success returns a borrowed scope-owned symbol. Failure
+ * clears the slot and releases only a detached creator; no ID may be published. */
+XR_FUNC bool xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol **symbol, int line);
 XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNode *param,
                                                  int fallback_line);
 XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, AstNode *node);

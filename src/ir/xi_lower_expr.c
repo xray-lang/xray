@@ -288,9 +288,32 @@ static bool xi_lower_call_constructs_instance(XiLower *l, const CallExprNode *ca
            xi_lower_builtin_class_global_index(callee->name) >= 0;
 }
 
+static bool xi_lower_accept_export_query(XiLower *l, XrModuleStatus status) {
+    XrCompileState *state = xr_compile_session_compile_state(l->analyzer->compiler_session);
+    if (status == XR_MODULE_OK && xr_compile_state_status(state) == XR_COMPILE_RESOURCE_OK)
+        return true;
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY || status == XR_MODULE_INVALID)
+        (void) xr_compile_state_fail(state, status == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+            status == XR_MODULE_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    l->had_error = true;
+    return false;
+}
+
+static bool xi_lower_export_graph_matches(XiLower *l, const XrModuleGraph *graph) {
+    XrCompileState *state = xr_compile_session_compile_state(l->analyzer->compiler_session);
+    if (!xi_lower_accept_export_query(l, XR_MODULE_OK))
+        return false;
+    if (!graph->compiler_session || graph->resources != xr_compile_state_resources(state) ||
+        xr_compile_session_compile_state(graph->compiler_session) != state)
+        return xi_lower_accept_export_query(l, XR_MODULE_INVALID);
+    return true;
+}
+
 static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
                                          const char *member_name, struct XrType *type, int line) {
-    if (!l || !module_name)
+    if (!l || !l->analyzer || !l->analyzer->compiler_session || !module_name)
+        return NULL;
+    if (!xi_lower_accept_export_query(l, XR_MODULE_OK))
         return NULL;
 
     XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiImportRef));
@@ -322,7 +345,17 @@ static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
     /* Resolved exports carry a canonical module identity, not the source's
      * relative or package spelling. Preserve that resolver join explicitly. */
     if (member_name && l->analyzer && l->analyzer->graph) {
-        int target = xr_module_graph_find((XrModuleGraph *) l->analyzer->graph, module_name);
+        const XrModuleGraph *graph = l->analyzer->graph;
+        if (!xi_lower_export_graph_matches(l, graph))
+            return NULL;
+        const XrOsIoPolicy policy = xr_compile_io_policy(graph->resources);
+        if (!xr_hashmap_owned_uses_policy(graph->id_index, &policy)) {
+            (void) xi_lower_accept_export_query(l, XR_MODULE_INVALID);
+            return NULL;
+        }
+        int target = -1;
+        if (!xi_lower_accept_export_query(l, xr_compile_module_graph_find(graph, module_name, &target)))
+            return NULL;
         if (target >= 0) {
             ref->has_exact_target = true;
             ref->exact_target_spec_index = target;
@@ -361,6 +394,8 @@ static const char *xi_lower_export_module_for_symbol(XiLower *l, XaSymbol *targe
                                                      const char *export_name) {
     if (!l || !l->analyzer || !target || !export_name)
         return NULL;
+    if (!xi_lower_accept_export_query(l, XR_MODULE_OK))
+        return NULL;
 
     XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, target);
     if (links && links->module_name)
@@ -369,15 +404,31 @@ static const char *xi_lower_export_module_for_symbol(XiLower *l, XaSymbol *targe
     XrModuleGraph *graph = (XrModuleGraph *) l->analyzer->graph;
     if (!graph)
         return NULL;
+    if (!xi_lower_export_graph_matches(l, graph))
+        return NULL;
+    XrCompileState *state = xr_compile_session_compile_state(l->analyzer->compiler_session);
+    const XrOsIoPolicy policy = xr_compile_io_policy(graph->resources);
 
     for (int i = 0; i < graph->spec_count; i++) {
+        if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) {
+            l->had_error = true;
+            return NULL;
+        }
         XrModuleSpec *spec = &graph->specs[i];
-        XaSymbol *candidate = spec->export_symbols
-                                  ? (XaSymbol *) xr_hashmap_get(spec->export_symbols, export_name)
-                                  : NULL;
+        if (!spec->export_symbols)
+            continue;
+        if (!xr_hashmap_owned_uses_policy(spec->export_symbols, &policy)) {
+            (void) xi_lower_accept_export_query(l, XR_MODULE_INVALID);
+            return NULL;
+        }
+        void *value = NULL;
+        if (!xi_lower_accept_export_query(l, xr_module_status_from_io(
+            xr_hashmap_owned_get(spec->export_symbols, export_name, &value))))
+            return NULL;
+        XaSymbol *candidate = value;
         if (!candidate)
             continue;
-        if (candidate == target || (candidate->id != 0 && candidate->id == target->id))
+        if (candidate == target)
             return spec->canonical;
     }
     return NULL;
@@ -4978,7 +5029,7 @@ static bool lower_go_call_args(XiLower *l, CallExprNode *call, XiLowerGoArgList 
                  * inconsistency, not a value to erase. */
                 struct XrType *et = xr_type_tuple_get(src->type, j);
                 if (!et)
-                    return NULL;
+                    return false;
                 XiValue *get = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et, 1);
                 if (!get)
                     return false;
@@ -5319,7 +5370,7 @@ static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowe
                  * inconsistency, not a value to erase. */
                 struct XrType *et = xr_type_tuple_get(src->type, j);
                 if (!et)
-                    return NULL;
+                    return false;
                 XiValue *get = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et, 1);
                 if (!get)
                     return false;

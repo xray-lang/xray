@@ -665,6 +665,14 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
         // sharing model). The pass is pure diagnostic, no AST mutation.
         xa_escape_analyze((AstNode *) ast, server->workspace_analyzer);
 
+        int dirty_count = 0;
+        const char **dirty_files = NULL;
+        if (xa_analyzer_get_dirty_files(server->workspace_analyzer, &dirty_files, &dirty_count) !=
+            XR_COMPILE_RESOURCE_OK) {
+            doc->dirty = true;
+            return;
+        }
+
         // Drain analyzer diagnostics into this file's diagnostic array.
         // The analyzer's list is cleared at the next update_incremental,
         // so we must capture them now.
@@ -691,9 +699,7 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
         }
 
         // Check for cross-file dependencies that need re-analysis
-        int dirty_count = 0;
-        const char **dirty_files =
-            xa_analyzer_get_dirty_files(server->workspace_analyzer, &dirty_count);
+
         if (dirty_files && dirty_count > 0) {
             lsp_log("parse_document: %d dirty files", dirty_count);
             // Mark affected documents as needing re-analysis
@@ -703,7 +709,7 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
                     affected->dirty = true;
                 }
             }
-            xr_free(dirty_files);
+            xr_compile_state_free((void *)dirty_files);
         }
     }
 

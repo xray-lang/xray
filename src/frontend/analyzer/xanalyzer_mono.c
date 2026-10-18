@@ -463,7 +463,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
 
 static uint32_t clone_node_id(const AstNode *node, XrAstCloneCtx *clone_ctx) {
     if (clone_ctx && clone_ctx->session)
-        return xr_compiler_session_next_ast_node_id(clone_ctx->session);
+        return xr_compile_session_next_ast_node_id(clone_ctx->session);
     return node ? node->node_id : 0;
 }
 
@@ -633,6 +633,11 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
     }
     n->type = node->type;
     n->node_id = clone_node_id(node, clone_ctx);
+    if (clone_ctx && clone_ctx->session && !n->node_id) {
+        clone_ctx->type_substitution_failed = true;
+        xr_free(n);
+        return NULL;
+    }
     n->line = node->line;
     n->column = node->column;
     n->end_line = node->end_line;
@@ -1403,6 +1408,8 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
 }
 
 AstNode *xr_ast_clone_session(AstNode *node, XrCompilerSession *session) {
+    if (!session || xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
     XrAstCloneCtx clone_ctx = {.session = session, .preserve_symbol_ids = true};
     return xr_ast_clone_ctx(node, NULL, 0, &clone_ctx);
 }
@@ -2673,7 +2680,18 @@ static bool mono_find_private_target(XaAnalyzer *analyzer,
         AstNode *root = graph->specs[spec_index].ast;
         if (!root || root->type != AST_PROGRAM)
             continue;
-        if (!xr_module_spec_owns_top_level_decl(&graph->specs[spec_index], identity->generic_decl))
+        bool owns_declaration = false;
+        XrModuleStatus ownership = xr_compile_module_graph_owns_top_level_decl(
+            graph, &graph->specs[spec_index], identity->generic_decl, &owns_declaration);
+        if (ownership != XR_MODULE_OK) {
+            XrCompileResourceStatus failure = ownership == XR_MODULE_OUT_OF_MEMORY
+                ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : ownership == XR_MODULE_BUDGET
+                ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+            (void) xr_compile_state_fail(
+                xr_compile_session_compile_state(analyzer->compiler_session), failure);
+            return false;
+        }
+        if (!owns_declaration)
             continue;
         for (int i = 0; i < root->as.program.count; ++i) {
             AstNode *candidate = root->as.program.statements[i];
@@ -2740,7 +2758,9 @@ static AstNode *mono_private_type_path(AstNode *root, XaAnalyzer *analyzer, cons
         return NULL;
     memset(path, 0, sizeof(*path));
     path->type = AST_VARIABLE;
-    path->node_id = xr_compiler_session_next_ast_node_id(analyzer->compiler_session);
+    path->node_id = xr_compile_session_next_ast_node_id(analyzer->compiler_session);
+    if (!path->node_id)
+        return NULL;
     path->line = source->line;
     path->column = source->column;
     path->end_line = source->end_line;
@@ -3453,12 +3473,12 @@ static bool mono_append_method_clone(XrArena *arena, AstNode *owner_node, AstNod
 // roots. The collector grows while specialized clones are scanned, and the
 // exact identity dedup plus depth/instance budgets provide the fixpoint bound.
 static void inject_mono_decls(XaMonoRootState *roots, int root_count, XaGenericRegistry *registry,
-                              XaMonoCollector *collector, XrVMRuntime *isolate) {
+                              XaMonoCollector *collector) {
     if (!roots || root_count <= 0 || !registry || !collector || collector->count == 0)
         return;
 
     XrAstCloneCtx clone_ctx = {
-        .session = xr_compiler_session_current_for_isolate(isolate),
+        .session = collector->analyzer ? collector->analyzer->compiler_session : NULL,
         .analyzer = collector->analyzer,
     };
 
@@ -3803,7 +3823,7 @@ static bool xa_mono_graph_pass_internal(AstNode **roots, int root_count, XrVMRun
         goto cleanup;
 
     // Phase 3: materialize the dynamic collector closure in exact owner roots.
-    inject_mono_decls(states, root_count, &registry, &collector, isolate);
+    inject_mono_decls(states, root_count, &registry, &collector);
     if (collector.rewrite_failed)
         goto cleanup;
     for (int i = 0; i < collector.count; ++i) {

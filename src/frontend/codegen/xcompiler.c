@@ -55,37 +55,52 @@ static uint32_t compiler_graph_module_id(const XrModuleGraph *graph, const AstNo
 }
 
 static bool compiler_standalone_graph_view(const XrCompilerContext *ctx, AstNode *ast,
-                                           const XrCompileUnitIdentity *identity,
                                            XrModuleGraph *view_out, XrModuleSpec *spec_out,
                                            int *topo_index_out) {
-    if (!ctx || !ast || !identity || !identity->module_identity || !view_out || !spec_out ||
-        !topo_index_out || !xr_module_identity_valid(identity->module_identity, NULL))
+    if (!ctx || !ctx->analyzer || !ast || !view_out || !spec_out || !topo_index_out)
+        return false;
+    const char *identity = ctx->analyzer->standalone_module_identity;
+    XrModuleIdentityKind kind;
+    if (!xr_module_identity_valid(identity, &kind))
         return false;
 
     memset(spec_out, 0, sizeof(*spec_out));
-    spec_out->canonical = (char *) identity->module_identity;
+    spec_out->canonical = (char *) identity;
     spec_out->source_path = (char *) ctx->source_file;
     spec_out->ast = ast;
-    switch (identity->kind) {
-        case XR_COMPILE_UNIT_STDLIB:
+    switch (kind) {
+        case XR_MODULE_IDENTITY_STDLIB:
             spec_out->kind = XR_MOD_STDLIB;
             spec_out->authority.kind = XR_MODULE_IDENTITY_STDLIB;
-            spec_out->authority.namespace_id = identity->stdlib_module_name;
+            spec_out->authority.namespace_id = ctx->analyzer->standalone_stdlib_module_name;
             break;
-        case XR_COMPILE_UNIT_MEMORY:
+        case XR_MODULE_IDENTITY_MEMORY:
             spec_out->kind = XR_MOD_MEMORY;
             spec_out->authority.kind = XR_MODULE_IDENTITY_MEMORY;
             break;
-        case XR_COMPILE_UNIT_USER:
+        case XR_MODULE_IDENTITY_PROJECT:
+        case XR_MODULE_IDENTITY_SCRIPT:
+        case XR_MODULE_IDENTITY_PACKAGE:
         default:
             spec_out->kind = XR_MOD_FILE;
             break;
     }
-    if (ctx->source_content)
-        xr_module_source_fingerprint(ctx->source_content, &spec_out->source_content_fingerprint);
+    spec_out->authority.kind = kind;
+    spec_out->status = XR_MODSPEC_RESOLVED;
+    if (ctx->source_content) {
+        XrCompileResourceStatus status = xr_compile_module_source_fingerprint(
+            xr_compile_session_resources(ctx->compiler_session), ctx->source_content,
+            &spec_out->source_content_fingerprint);
+        if (status != XR_COMPILE_RESOURCE_OK) {
+            (void) xr_compile_state_fail(xr_compile_session_compile_state(ctx->compiler_session), status);
+            return false;
+        }
+    }
 
     memset(view_out, 0, sizeof(*view_out));
     *topo_index_out = 0;
+    view_out->resources = xr_compile_session_resources(ctx->compiler_session);
+    view_out->compiler_session = ctx->compiler_session;
     view_out->specs = spec_out;
     view_out->spec_count = 1;
     view_out->spec_capacity = 1;
@@ -241,13 +256,14 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
         memset(&global_evidence, 0, sizeof(global_evidence));
         /* REPL mode: top-level bindings go through XrGlobalDict
          * (name-keyed) instead of the slot-indexed shared array. */
-        pipe_cfg.repl_mode = ctx->repl_mode;
+        pipe_cfg.repl_symbols = ctx->repl_symbols;
+        pipe_cfg.target_profile = ctx->target_profile;
+        pipe_cfg.import_mode = ctx->runtime_imports ? XI_EMIT_IMPORT_RUNTIME_LOCATOR : XI_EMIT_IMPORT_PROGRAM;
         pipe_cfg.source_file = ctx->source_file;
         pipe_cfg.module_graph = ctx->module_graph;
         pipe_cfg.graph_modules = ctx->graph_modules;
         pipe_cfg.graph_module_count = ctx->graph_module_count;
-        XrCompileUnitIdentity compile_identity =
-            xr_compiler_session_compile_unit_identity(ctx->compiler_session);
+        const char *module_identity = ctx->analyzer->standalone_module_identity;
         XrModuleGraph standalone_graph;
         XrModuleSpec standalone_spec;
         int standalone_topo_index = 0;
@@ -257,13 +273,15 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
          * a canonical one-module view from its own identity, AST, and source
          * bytes instead. */
         const XrModuleGraph *evidence_graph = ctx->module_graph;
-        if (!evidence_graph &&
-            compiler_standalone_graph_view(ctx, ast, &compile_identity, &standalone_graph,
-                                           &standalone_spec, &standalone_topo_index))
+        if (!evidence_graph) {
+            if (!compiler_standalone_graph_view(ctx, ast, &standalone_graph,
+                                                &standalone_spec, &standalone_topo_index))
+                return NULL;
             evidence_graph = &standalone_graph;
+        }
         if (evidence_graph) {
             uint32_t module_id =
-                compiler_graph_module_id(evidence_graph, ast, compile_identity.module_identity);
+                compiler_graph_module_id(evidence_graph, ast, module_identity);
             if (module_id == XG_NO_ID ||
                 !xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
                     &global_evidence, evidence_graph, XG_BUILD_DEV, 0, NULL, 0, ctx->analyzer)) {
@@ -278,7 +296,7 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
             int spec_index = evidence_graph->topo_order[module_id - 1];
             pipe_cfg.module_identity = evidence_graph->specs[spec_index].canonical;
         } else {
-            pipe_cfg.module_identity = compile_identity.module_identity;
+            pipe_cfg.module_identity = module_identity;
         }
         XiPipelineResult pipe_res =
             xi_pipeline_compile_program(ast, ctx->analyzer, ctx->X, &pipe_cfg);

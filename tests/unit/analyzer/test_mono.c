@@ -804,6 +804,40 @@ TEST(mono_mangle_structural_object_identity_is_complete) {
     free(readonly_user_name);
 }
 
+TEST(ast_clone_uses_original_parser_identity_and_sticky_failure) {
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {UINT64_C(1) << 20, UINT64_C(1) << 20,
+                                     UINT64_C(1) << 20};
+    ASSERT_EQ(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrCompilerSession *session = NULL;
+    ASSERT_EQ(xr_compile_session_new(resources, &session), XR_COMPILER_SESSION_OK);
+    AstNode original = {0};
+    original.type = AST_LITERAL_INT;
+    original.node_id = 700;
+    original.as.literal.int_bits = 42;
+    uint32_t first = xr_compile_session_next_ast_node_id(session);
+    AstNode *copy = xr_ast_clone_session(&original, session);
+    ASSERT_NOT_NULL(copy);
+    ASSERT_EQ(copy->node_id, first + 1);
+    ASSERT_EQ(copy->as.literal.int_bits, 42);
+    ASSERT_EQ(original.node_id, 700);
+    xr_free(copy);
+
+    XrCompileState *state = xr_compile_session_compile_state(session);
+    ASSERT_EQ(xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET),
+              XR_COMPILE_RESOURCE_BUDGET);
+    XrCompileResourceStats before = {0}, after = {0};
+    ASSERT_EQ(xr_compile_resources_stats(resources, &before), XR_COMPILE_RESOURCE_OK);
+    ASSERT_NULL(xr_ast_clone_session(&original, session));
+    ASSERT_EQ(xr_compile_resources_stats(resources, &after), XR_COMPILE_RESOURCE_OK);
+    ASSERT_EQ(after.allocated_bytes, before.allocated_bytes);
+    ASSERT_EQ(after.work, before.work);
+    ASSERT_EQ(xr_compile_session_resource_status(session), XR_COMPILE_RESOURCE_BUDGET);
+    ASSERT_EQ(original.node_id, 700);
+    xr_compile_session_free(session);
+    xr_compile_resources_release(resources);
+}
+
 TEST(ast_clone_decimal_spelling) {
     char spelling[] = "1.000000059604644775390625000000000000000000000000000000001";
     AstNode node = {.type = AST_LITERAL_FLOAT, .line = 1};
@@ -850,6 +884,7 @@ int main(void) {
     RUN_TEST_SUITE("AST Clone");
     RUN_TEST(ast_clone_null);
     RUN_TEST(ast_clone_literal_int);
+    RUN_TEST(ast_clone_uses_original_parser_identity_and_sticky_failure);
     RUN_TEST(ast_clone_decimal_spelling);
     RUN_TEST(ast_clone_literal_string);
     RUN_TEST(ast_owned_string_length);

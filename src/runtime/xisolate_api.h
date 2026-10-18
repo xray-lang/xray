@@ -130,30 +130,35 @@ struct XiModule;
 struct XrModuleGraph;
 struct XaAnalyzer;
 struct XrModuleIdentityAuthority;
+struct XrCompilerInput;
+struct XrCompileGraphInput;
+/* Borrowed facts remain live and are caller-serialized through publication.
+ * The graph and analyzer must belong to the exact input parser state. */
+typedef struct XrCompileGraphInput {
+    const struct XrCompilerInput *compiler;
+    struct XaAnalyzer *analyzer;
+    struct XrModuleGraph *graph;
+    struct XiModule **modules;
+    int module_count;
+} XrCompileGraphInput;
+
 typedef struct XrCompiledModuleGraph {
     struct XiModule **modules;
     struct XrProto **units;
     int count;
 } XrCompiledModuleGraph;
-XR_FUNC XrProto *xr_compile_ast_with_source(struct XrCompilerSession *session, struct AstNode *ast,
-                                            const char *source_file,
-                                            const struct XrModuleIdentityAuthority *authority);
-XR_FUNC XrProto *xr_compile_ast_in_graph(struct XrCompilerSession *session,
-                                         struct XaAnalyzer *shared_analyzer, struct AstNode *ast,
-                                         const char *source_file, const struct XrModuleGraph *graph,
-                                         struct XiModule **graph_modules, int graph_module_count,
-                                         struct XiModule **out_module,
-                                         const struct XrModuleIdentityAuthority *authority);
+XR_FUNC XrProto *xr_compile_ast_with_source(const struct XrCompilerInput *input, struct AstNode *ast,
+    const char *source_file, const struct XrModuleIdentityAuthority *authority);
+XR_FUNC XrProto *xr_compile_ast_in_graph(const struct XrCompileGraphInput *input,
+    int spec_index, struct XiModule **out_module);
 /* Compile every dependency of a module graph whose modules, the entry
  * included, were all analyzed by `shared_analyzer`. Generics are specialized
  * graph-wide first: an instantiation in one module materializes its clone in
  * the module that declares the generic, so every module is re-analyzed and its
  * export table republished before the first dependency is lowered. Analyzer
  * errors are printed under their module's source path. */
-XR_FUNC bool xr_compile_module_graph_dependencies(struct XrCompilerSession *session,
-                                                  struct XaAnalyzer *shared_analyzer,
-                                                  struct XrModuleGraph *graph,
-                                                  XrCompiledModuleGraph *out);
+XR_FUNC bool xr_compile_module_graph_dependencies(const XrCompileGraphInput *input,
+    XrCompiledModuleGraph *output);
 XR_FUNC void xr_compiled_module_graph_dispose(XrCompiledModuleGraph *compilation);
 
 /* The modules a compiled graph supplies to the program that runs it, in the
@@ -176,11 +181,10 @@ XR_FUNC bool xr_program_image_build(XrVMRuntime *X, const struct XrModuleGraph *
                                     XrProgramImage *out);
 XR_FUNC void xr_program_image_install(XrProgramImage *image, struct XrModuleRegistry *registry);
 XR_FUNC void xr_program_image_dispose(XrProgramImage *image);
-XR_FUNC XrProto *xr_compile_source_with_path(struct XrCompilerSession *session, const char *source,
-                                             const char *source_file,
-                                             const struct XrModuleIdentityAuthority *authority);
+XR_FUNC XrProto *xr_compile_source_with_path(const struct XrCompilerInput *input, const char *source,
+    const char *source_file, const struct XrModuleIdentityAuthority *authority);
 struct XrModuleSourceCompilation;
-XR_FUNC bool xr_compile_module_source(struct XrCompilerSession *session, const char *source,
+XR_FUNC bool xr_compile_module_source(struct XrVMRuntime *runtime, struct XrCompilerSession *session, const char *source,
     const char *source_file, const struct XrModuleIdentityAuthority *authority,
     struct XrModuleSourceCompilation *out);
 XR_FUNC int xr_isolate_dostring(XrVMRuntime *isolate, const char *source,

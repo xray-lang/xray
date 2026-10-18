@@ -34,6 +34,8 @@
 #include "../module/xproto_codec.h"
 #include "../os/os_thread.h"
 #include "../runtime/value/xchunk.h"
+#include "../runtime/value/xtype_internal.h"
+#include "../base/xio_policy.h"
 #include "../toolchain/xcompiler_session.h"
 
 /* ========== Compilation API ========== */
@@ -55,179 +57,161 @@ static void ensure_compiler_proto_hooks(void) {
     xr_once_call(&compiler_proto_hooks_once, init_compiler_proto_hooks);
 }
 
-static void restore_session_type_pool(XrCompilerSession *session) {
-    if (xr_compiler_session_analyzer_pool(session))
-        xr_compiler_session_install_analyzer_pool(session);
+typedef struct XrCompileUnitRequest {
+    const XrCompilerInput *compiler;
+    const XrCompileGraphInput *graph;
+    const char *source_file;
+    const char *source_content;
+    const XrModuleIdentityAuthority *authority;
+    const char *canonical;
+} XrCompileUnitRequest;
+
+static XrCompileState *compile_state(const XrCompilerInput *input) {
+    return input ? xr_compile_session_compile_state(input->analysis.session) : NULL;
 }
 
-static bool compile_session_available(XrCompilerSession *session, const char *who) {
-    if (!session) {
-        xr_log_warning("vm", "%s: compiler session is required", who);
+static bool compile_input_ready(const XrCompilerInput *input) {
+    if (xr_compile_state_status(compile_state(input)) != XR_COMPILE_RESOURCE_OK)
         return false;
-    }
-    if (!xr_compiler_session_vm_host(session)) {
-        xr_log_warning("vm", "%s: compiler session has no VM host", who);
-        return false;
-    }
-    return true;
+    return input->analysis.runtime && input->analysis.target && input->policy.target_profile;
 }
 
-static bool build_compile_unit_identity(const XrModuleIdentityAuthority *authority,
-                                        const char *source_file, char **owned_identity,
-                                        XrCompileUnitIdentity *identity) {
-    *owned_identity = NULL;
-    *identity = (XrCompileUnitIdentity) {0};
-    XrModuleIdentityKind kind = authority ? authority->kind : 0;
-    bool valid = false;
-    if (kind == XR_MODULE_IDENTITY_MEMORY) {
-        valid = (xr_module_identity_from_logical(authority, NULL, owned_identity) == XR_MODULE_OK);
-    } else if (kind == XR_MODULE_IDENTITY_STDLIB) {
-        char logical_path[512];
-        int logical_length = authority && authority->namespace_id
-                                 ? snprintf(logical_path, sizeof(logical_path), "%s/%s.xr",
-                                            authority->namespace_id, authority->namespace_id)
-                                 : -1;
-        valid = logical_length > 0 && (size_t) logical_length < sizeof(logical_path) &&
-                (xr_module_identity_from_logical(authority, logical_path, owned_identity) == XR_MODULE_OK);
+static bool identity_failure(XrCompileState *state, XrModuleStatus status) {
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY)
+        (void) xr_compile_state_fail(state, status == XR_MODULE_BUDGET
+            ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    return false;
+}
+
+static bool build_compile_unit_identity(const XrCompilerInput *input,
+    const XrModuleIdentityAuthority *authority, const char *source_file, char **output) {
+    XrCompileState *state = compile_state(input);
+    if (!compile_input_ready(input) || !output || *output || !authority)
+        return false;
+    XrCompileResources *resources = xr_compile_state_resources(state);
+    XrModuleStatus status;
+    if (authority->kind == XR_MODULE_IDENTITY_MEMORY)
+        status = xr_compile_module_identity_from_logical(resources, authority, NULL, output);
+    else if (authority->kind == XR_MODULE_IDENTITY_STDLIB) {
+        size_t length = 0;
+        if (xr_compile_state_string_length(state, authority->namespace_id, &length) != XR_COMPILE_RESOURCE_OK ||
+            length > 253)
+            return false;
+        char logical[512];
+        if (xr_compile_state_copy(state, logical, authority->namespace_id, length) != XR_COMPILE_RESOURCE_OK ||
+            xr_compile_state_copy(state, logical + length, "/", 1) != XR_COMPILE_RESOURCE_OK ||
+            xr_compile_state_copy(state, logical + length + 1, authority->namespace_id, length) != XR_COMPILE_RESOURCE_OK ||
+            xr_compile_state_copy(state, logical + length * 2 + 1, ".xr", 4) != XR_COMPILE_RESOURCE_OK)
+            return false;
+        status = xr_compile_module_identity_from_logical(resources, authority, logical, output);
     } else {
-        char *absolute_source = source_file ? xr_realpath(source_file, NULL) : NULL;
-        char *logical_path = NULL;
-        valid = absolute_source && (xr_module_identity_from_source(
-                                       authority, absolute_source, owned_identity, &logical_path) == XR_MODULE_OK);
-        xr_free(logical_path);
-        xr_free(absolute_source);
+        XrOsIoPolicy policy = xr_compile_io_policy(resources);
+        char *absolute = NULL;
+        XrOsIoStatus io = xr_realpath_owned(&policy, source_file, &absolute);
+        if (io != XR_OS_IO_OK)
+            return identity_failure(state, xr_module_status_from_io(io));
+        char *logical = NULL;
+        status = xr_compile_module_identity_from_source(resources, authority, absolute, output, &logical);
+        xr_compile_resources_free(logical);
+        xr_compile_resources_free(absolute);
     }
-    if (!valid)
-        return false;
-    identity->kind = kind == XR_MODULE_IDENTITY_STDLIB
-                         ? XR_COMPILE_UNIT_STDLIB
-                         : (kind == XR_MODULE_IDENTITY_MEMORY ? XR_COMPILE_UNIT_MEMORY
-                                                              : XR_COMPILE_UNIT_USER);
-    identity->module_identity = *owned_identity;
-    identity->stdlib_module_name =
-        kind == XR_MODULE_IDENTITY_STDLIB ? authority->namespace_id : NULL;
-    return true;
+    return status == XR_MODULE_OK || identity_failure(state, status);
 }
 
-// Compile AST to bytecode (internal)
-//
-// The compiler's for-in desugaring creates AST nodes via xr_ast_* helpers.
-// Re-enter the program arena through the active compiler session so these
-// synthetic nodes share the AST lifetime without mutating VM isolate state.
-static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
-                                     const char *source_file,
-                                     const XrModuleIdentityAuthority *authority,
-                                     const XrModuleGraph *graph,
-                                     XiModule **graph_modules, int graph_module_count,
-                                     XiModule **out_module, XaAnalyzer *shared_analyzer) {
-    if (out_module)
-        *out_module = NULL;
-    if (!compile_session_available(session, "compile_ast_internal"))
+static XrProto *compile_ast_internal(const XrCompileUnitRequest *request, AstNode *ast,
+                                     XiModule **out_module) {
+    const XrCompilerInput *input = request ? request->compiler : NULL;
+    XrCompileState *state = compile_state(input);
+    if (!compile_input_ready(input))
+        return NULL;
+    if (!ast || (out_module && *out_module))
         return NULL;
     char *owned_identity = NULL;
-    XrCompileUnitIdentity identity = {0};
-    if (!ast || !build_compile_unit_identity(authority, source_file, &owned_identity, &identity)) {
-        xr_log_warning("vm", "compile_ast_internal: explicit module authority is invalid");
+    const char *canonical = request->canonical;
+    if (!canonical) {
+        if (!build_compile_unit_identity(input, request->authority, request->source_file, &owned_identity))
+            return NULL;
+        canonical = owned_identity;
+    }
+    if (!xr_module_identity_valid(canonical, NULL)) {
+        xr_compile_resources_free(owned_identity);
         return NULL;
     }
-    XrCompilerSessionOperationScope operation_scope;
-    if (!xr_compiler_session_operation_begin(session, &operation_scope)) {
-        xr_log_warning("vm", "compile_ast_internal: compiler session is busy");
-        xr_free(owned_identity);
-        return NULL;
-    }
-    XrCompileUnitIdentity current = xr_compiler_session_compile_unit_identity(session);
-    bool installed_identity = current.module_identity == NULL;
-    if ((installed_identity && !xr_compiler_session_set_compile_unit_identity(session, &identity)) ||
-        (!installed_identity && strcmp(current.module_identity, identity.module_identity) != 0)) {
-        (void) xr_compiler_session_operation_fail(
-            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
-        xr_free(owned_identity);
-        return NULL;
-    }
+    XrCompilerInput local = *input;
+    local.analysis.module_identity = canonical;
     ensure_compiler_proto_hooks();
-
-    XrCompilerSessionScope ast_scope;
-    bool has_ast_scope =
-        ast->type == AST_PROGRAM && ast->as.program.arena &&
-        xr_compiler_session_push_arena(session, ast->as.program.arena, source_file, &ast_scope);
-
-    XrCompilerContext *ctx = shared_analyzer
-                                 ? xr_compiler_context_new_with_analyzer(session, shared_analyzer)
-                                 : xr_compiler_context_new(session);
-    if (ctx == NULL) {
-        xr_log_warning("vm", "failed to create compiler context");
-        if (has_ast_scope)
-            xr_compiler_session_pop_arena(&ast_scope);
-        if (installed_identity)
-            xr_compiler_session_set_compile_unit_identity(session, NULL);
-        (void) xr_compiler_session_operation_fail(
-            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
-        xr_free(owned_identity);
+    XrCompilerSessionScope scope = {0};
+    if (ast->type != AST_PROGRAM || !ast->as.program.arena ||
+        xr_compile_session_push_arena(local.analysis.session, ast->as.program.arena, &scope) != XR_COMPILE_RESOURCE_OK) {
+        xr_compile_resources_free(owned_identity);
         return NULL;
     }
-    xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
-
-    ctx->source_file = source_file;
-    ctx->module_graph = graph;
-    ctx->graph_modules = graph_modules;
-    ctx->graph_module_count = graph_module_count;
-
-    XrProto *proto = xr_compile(ctx, ast);
-    if (proto && !xr_entry_plan_derive(proto)) {
-        xr_instruction_unit_free(proto);
-        proto = NULL;
-    }
-    if (proto && out_module) {
-        XiFunc *ir = (XiFunc *) proto->xi_func;
-        *out_module = ir ? ir->module : NULL;
-        if (!*out_module) {
+    XrTypePool *previous_pool = xr_type_get_current_pool();
+    XrCompilerContext *context = request->graph && request->graph->analyzer
+        ? xr_compiler_context_new_with_analyzer(request->graph->analyzer, &local.policy)
+        : xr_compiler_context_new(&local);
+    XrProto *proto = NULL;
+    XiModule *module = NULL;
+    if (context) {
+        context->source_file = request->source_file;
+        context->source_content = request->source_content;
+        if (request->graph) {
+            context->module_graph = request->graph->graph;
+            context->graph_modules = request->graph->modules;
+            context->graph_module_count = request->graph->module_count;
+        }
+        xa_analyzer_set_graph(context->analyzer, request->graph ? request->graph->graph : NULL);
+        proto = xr_compile(context, ast);
+        if (proto && !xr_entry_plan_derive(proto)) {
             xr_instruction_unit_free(proto);
             proto = NULL;
         }
+        if (proto && out_module) {
+            XiFunc *function = (XiFunc *) proto->xi_func;
+            module = function ? function->module : NULL;
+            if (!module) {
+                xr_instruction_unit_free(proto);
+                proto = NULL;
+            }
+        }
+        xr_compiler_context_free(context);
     }
-
-    xr_compiler_context_free(ctx);
-
-    // Restore type pool: compiler context freed its analyzer-owned pool, so
-    // TLS must fall back to the session-owned long-lived analyzer pool.
-    restore_session_type_pool(session);
-
-    if (has_ast_scope)
-        xr_compiler_session_pop_arena(&ast_scope);
-
-    if (installed_identity)
-        xr_compiler_session_set_compile_unit_identity(session, NULL);
-
-    bool operation_ok = proto ? xr_compiler_session_operation_succeed(&operation_scope)
-                              : xr_compiler_session_operation_fail(
-                                    &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
-    if (!operation_ok && proto) {
+    xr_type_set_current_pool(previous_pool, NULL);
+    (void) xr_compile_session_pop_arena(&scope);
+    xr_compile_resources_free(owned_identity);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK && proto) {
         xr_instruction_unit_free(proto);
         proto = NULL;
     }
-
-    xr_free(owned_identity);
-
+    if (proto && out_module)
+        *out_module = module;
+    else if (out_module)
+        *out_module = NULL;
     return proto;
 }
 
-XrProto *xr_compile_ast_with_source(XrCompilerSession *session, AstNode *ast,
-                                    const char *source_file,
-                                    const XrModuleIdentityAuthority *authority) {
-    return compile_ast_internal(session, ast, source_file, authority, NULL, NULL, 0, NULL, NULL);
+XrProto *xr_compile_ast_with_source(const XrCompilerInput *input, AstNode *ast,
+    const char *source_file, const XrModuleIdentityAuthority *authority) {
+    XrCompileUnitRequest request = {.compiler = input, .source_file = source_file, .authority = authority};
+    return compile_ast_internal(&request, ast, NULL);
 }
 
-XrProto *xr_compile_ast_in_graph(XrCompilerSession *session, XaAnalyzer *shared_analyzer,
-                                 AstNode *ast, const char *source_file, const XrModuleGraph *graph,
-                                 XiModule **graph_modules, int graph_module_count,
-                                 XiModule **out_module,
-                                 const XrModuleIdentityAuthority *authority) {
-    if (!shared_analyzer || !graph || !graph_modules || graph_module_count <= 0 || !out_module ||
-        !authority)
+XrProto *xr_compile_ast_in_graph(const XrCompileGraphInput *input, int spec_index, XiModule **out_module) {
+    if (!input || !compile_input_ready(input->compiler))
         return NULL;
-    return compile_ast_internal(session, ast, source_file, authority, graph, graph_modules,
-                                graph_module_count, out_module, shared_analyzer);
+    XrCompileState *state = compile_state(input->compiler);
+    if (!input->graph || !input->modules || !out_module || *out_module ||
+        input->module_count != input->graph->topo_count || spec_index < 0 || spec_index >= input->graph->spec_count ||
+        (input->analyzer && input->analyzer->compiler_session != input->compiler->analysis.session) ||
+        (!input->analyzer && (input->graph->topo_count != 1 || spec_index != input->graph->entry_index)) ||
+        input->graph->compiler_session != input->compiler->analysis.session ||
+        input->graph->resources != xr_compile_state_resources(state))
+        return NULL;
+    const XrModuleSpec *spec = &input->graph->specs[spec_index];
+    XrCompileUnitRequest request = {.compiler = input->compiler, .graph = input,
+        .source_file = spec->source_path ? spec->source_path : spec->canonical,
+        .authority = &spec->authority, .canonical = spec->canonical};
+    return compile_ast_internal(&request, spec->ast, out_module);
 }
 
 void xr_compiled_module_graph_dispose(XrCompiledModuleGraph *compilation) {
@@ -236,100 +220,99 @@ void xr_compiled_module_graph_dispose(XrCompiledModuleGraph *compilation) {
     for (int i = 0; i < compilation->count; i++)
         if (compilation->units && compilation->units[i])
             xr_instruction_unit_free(compilation->units[i]);
-    xr_free(compilation->units);
-    xr_free(compilation->modules);
+    xr_compile_state_free(compilation->units);
+    xr_compile_state_free(compilation->modules);
     memset(compilation, 0, sizeof(*compilation));
 }
 
-/* Specialize the generics of an analyzed module graph: run the graph-wide
- * monomorphization pass over every module, then analyze every module again so
- * the clones it materialized in their declaring modules are typed and
- * published in those modules' export tables. */
-static bool specialize_module_graph(XrCompilerSession *session, XaAnalyzer *shared_analyzer,
-                                    XrModuleGraph *graph) {
-    AstNode **roots = (AstNode **) xr_calloc((size_t) graph->topo_count, sizeof(*roots));
-    if (!roots)
+static bool specialize_module_graph(const XrCompileGraphInput *input) {
+    XrModuleGraph *graph = input->graph;
+    XaAnalyzer *analyzer = input->analyzer;
+    XrCompileState *state = compile_state(input->compiler);
+    AstNode **roots = NULL;
+    if (xr_compile_state_calloc(state, (size_t) graph->topo_count, sizeof(*roots), (void **) &roots) != XR_COMPILE_RESOURCE_OK)
         return false;
-    int root_count = 0;
-    for (int ti = 0; ti < graph->topo_count; ti++) {
-        const XrModuleSpec *spec = &graph->specs[graph->topo_order[ti]];
-        if (spec->ast)
-            roots[root_count++] = spec->ast;
-    }
-    XaMonoBudget mono_budget = xa_mono_default_budget();
-    XaMonoUsage mono_usage = {0};
-    bool mono_ok = xa_mono_graph_pass(roots, root_count, xr_compiler_session_vm_host(session),
-                                      &mono_budget, &mono_usage, shared_analyzer);
-    xr_free(roots);
-    const XrModuleSpec *entry =
-        graph->entry_index >= 0 && graph->entry_index < graph->spec_count
-            ? &graph->specs[graph->entry_index]
-            : NULL;
-    int errors = xa_analyzer_print_errors(shared_analyzer, entry ? entry->source_path : NULL);
-    xa_analyzer_clear_diagnostics(shared_analyzer);
-    if (!mono_ok || errors > 0)
-        return false;
-
-    for (int ti = 0; ti < graph->topo_count; ti++) {
-        XrModuleSpec *spec = &graph->specs[graph->topo_order[ti]];
-        if (!spec->ast || !spec->source_path)
-            continue;
-        xa_analyzer_analyze(shared_analyzer, spec->source_path, (XrAstNode *) spec->ast);
-        errors = xa_analyzer_print_errors(shared_analyzer, spec->source_path);
-        if (errors == 0) {
-            XrHashMap *exports = NULL;
-            if (!xa_analyzer_collect_export_symbols_checked(shared_analyzer,
-                                                            (XrAstNode *) spec->ast, &exports)) {
-                errors = xa_analyzer_print_errors(shared_analyzer, spec->source_path);
-                if (errors == 0)
-                    errors = 1;
-            } else {
-                if (spec->export_symbols)
-                    xr_hashmap_free(spec->export_symbols);
-                spec->export_symbols = exports;
-            }
+    int count = 0;
+    for (int i = 0; i < graph->topo_count; i++) {
+        int index = graph->topo_order[i];
+        if (index < 0 || index >= graph->spec_count) {
+            xr_compile_state_free(roots);
+            return false;
         }
-        xa_analyzer_clear_diagnostics(shared_analyzer);
-        if (errors > 0)
+        if (graph->specs[index].ast)
+            roots[count++] = graph->specs[index].ast;
+    }
+    XaMonoBudget budget = xa_mono_default_budget();
+    XaMonoUsage usage = {0};
+    bool specialized = xa_mono_graph_pass(roots, count, input->compiler->analysis.runtime, &budget, &usage, analyzer);
+    xr_compile_state_free(roots);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+        return false;
+    int errors = xa_analyzer_print_errors(analyzer, NULL);
+    xa_analyzer_clear_diagnostics(analyzer);
+    if (!specialized || errors)
+        return false;
+    for (int i = 0; i < graph->topo_count; i++) {
+        XrModuleSpec *spec = &graph->specs[graph->topo_order[i]];
+        if (!spec->ast)
+            continue;
+        const char *file = spec->source_path ? spec->source_path : spec->canonical;
+        xa_analyzer_analyze(analyzer, file, spec->ast);
+        if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+            return false;
+        errors = xa_analyzer_print_errors(analyzer, file);
+        XrHashMap *exports = NULL;
+        if (!errors && !xa_analyzer_collect_export_symbols_checked(analyzer, spec->ast, &exports))
+            errors = 1;
+        if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+            return false;
+        if (!errors && spec->export_symbols != exports) {
+            xr_hashmap_owned_free(spec->export_symbols);
+            spec->export_symbols = exports;
+        }
+        xa_analyzer_clear_diagnostics(analyzer);
+        if (errors)
             return false;
     }
     return true;
 }
 
-bool xr_compile_module_graph_dependencies(XrCompilerSession *session,
-                                          XaAnalyzer *shared_analyzer, XrModuleGraph *graph,
-                                          XrCompiledModuleGraph *out) {
-    if (!out)
+bool xr_compile_module_graph_dependencies(const XrCompileGraphInput *input, XrCompiledModuleGraph *output) {
+    if (!input || !compile_input_ready(input->compiler))
         return false;
-    memset(out, 0, sizeof(*out));
-    if (!session || !shared_analyzer || !graph || graph->topo_count <= 0 ||
-        !graph->topo_order)
+    XrCompileState *state = compile_state(input->compiler);
+    if (!output || output->modules || output->units || output->count || !input->analyzer || !input->graph ||
+        input->graph->compiler_session != input->compiler->analysis.session ||
+        input->analyzer->compiler_session != input->compiler->analysis.session ||
+        input->graph->resources != xr_compile_state_resources(state) ||
+        input->graph->topo_count <= 0 || !input->graph->topo_order)
         return false;
-    if (!specialize_module_graph(session, shared_analyzer, graph))
+    xa_analyzer_set_graph(input->analyzer, input->graph);
+    if (!specialize_module_graph(input))
         return false;
-    out->count = graph->topo_count;
-    out->modules = (XiModule **) xr_calloc((size_t) out->count, sizeof(*out->modules));
-    out->units = (XrProto **) xr_calloc((size_t) out->count, sizeof(*out->units));
-    if (!out->modules || !out->units)
+    XrCompiledModuleGraph staged = {0};
+    staged.count = input->graph->topo_count;
+    if (xr_compile_state_calloc(state, (size_t) staged.count, sizeof(*staged.modules), (void **) &staged.modules) != XR_COMPILE_RESOURCE_OK ||
+        xr_compile_state_calloc(state, (size_t) staged.count, sizeof(*staged.units), (void **) &staged.units) != XR_COMPILE_RESOURCE_OK)
         goto failure;
-
-    for (int ti = 0; ti < graph->topo_count; ti++) {
-        int index = graph->topo_order[ti];
-        if (index < 0 || index >= graph->spec_count)
-            goto failure;
-        XrModuleSpec *spec = &graph->specs[index];
-        if (index == graph->entry_index || !spec->ast || !spec->source_path)
+    XrCompileGraphInput current = *input;
+    current.modules = staged.modules;
+    current.module_count = staged.count;
+    for (int i = 0; i < staged.count; i++) {
+        int index = input->graph->topo_order[i];
+        const XrModuleSpec *spec = &input->graph->specs[index];
+        if (index == input->graph->entry_index || !spec->ast)
             continue;
-        out->units[ti] = xr_compile_ast_in_graph(
-            session, shared_analyzer, spec->ast, spec->source_path, graph, out->modules,
-            out->count, &out->modules[ti], &spec->authority);
-        if (!out->units[ti])
+        staged.units[i] = xr_compile_ast_in_graph(&current, index, &staged.modules[i]);
+        if (!staged.units[i])
             goto failure;
     }
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+        goto failure;
+    *output = staged;
     return true;
-
 failure:
-    xr_compiled_module_graph_dispose(out);
+    xr_compiled_module_graph_dispose(&staged);
     return false;
 }
 
@@ -405,91 +388,16 @@ void xr_program_image_dispose(XrProgramImage *image) {
     memset(image, 0, sizeof(*image));
 }
 
-XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,
-                                     const char *source_file,
-                                     const XrModuleIdentityAuthority *authority) {
-    if (!compile_session_available(session, "compile_source_with_path"))
+XrProto *xr_compile_source_with_path(const XrCompilerInput *input, const char *source,
+    const char *source_file, const XrModuleIdentityAuthority *authority) {
+    if (!compile_input_ready(input) || !source)
         return NULL;
-    char *owned_identity = NULL;
-    XrCompileUnitIdentity identity = {0};
-    if (!source || !build_compile_unit_identity(authority, source_file, &owned_identity,
-                                                &identity)) {
-        xr_log_warning("vm", "compile_source_with_path: explicit module authority is invalid");
+    AstNode *ast = NULL;
+    if (xr_compile_parse(input->analysis.session, source, &ast) != XR_PARSE_OK)
         return NULL;
-    }
-    XrCompilerSessionOperationScope operation_scope;
-    if (!xr_compiler_session_operation_begin(session, &operation_scope)) {
-        xr_log_warning("vm", "compile_source_with_path: compiler session is busy");
-        xr_free(owned_identity);
-        return NULL;
-    }
-    XrCompileUnitIdentity current = xr_compiler_session_compile_unit_identity(session);
-    bool installed_identity = current.module_identity == NULL;
-    if ((installed_identity && !xr_compiler_session_set_compile_unit_identity(session, &identity)) ||
-        (!installed_identity && strcmp(current.module_identity, identity.module_identity) != 0)) {
-        (void) xr_compiler_session_operation_fail(
-            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
-        xr_free(owned_identity);
-        return NULL;
-    }
-    ensure_compiler_proto_hooks();
-    // Create compiler context FIRST to ensure type pool is valid during parsing
-    XrCompilerContext *ctx = xr_compiler_context_new(session);
-    if (!ctx) {
-        xr_log_warning("vm", "failed to create compiler context");
-        if (installed_identity)
-            xr_compiler_session_set_compile_unit_identity(session, NULL);
-        (void) xr_compiler_session_operation_fail(
-            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
-        xr_free(owned_identity);
-        return NULL;
-    }
-    xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
-
-    ctx->source_file = source_file;
-    ctx->source_content = source;
-
-    // Now parse with valid type pool
-    AstNode *ast = xr_parse_with_source(session, source, source_file);
-    if (!ast) {
-        xr_compiler_context_free(ctx);
-        if (installed_identity)
-            xr_compiler_session_set_compile_unit_identity(session, NULL);
-        (void) xr_compiler_session_operation_fail(
-            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
-        xr_free(owned_identity);
-        return NULL;
-    }
-
-    // Compile
-    XrProto *proto = xr_compile(ctx, ast);
-    if (proto && !xr_entry_plan_derive(proto)) {
-        xr_instruction_unit_free(proto);
-        proto = NULL;
-    }
-
-    xr_compiler_context_free(ctx);
-
-    // Restore type pool: compiler context freed its analyzer-owned pool, so
-    // TLS falls back to the session-owned long-lived analyzer pool for
-    // post-compile allocations.
-    restore_session_type_pool(session);
-
-    // Free AST (not needed after compilation)
+    XrCompileUnitRequest request = {.compiler = input, .source_file = source_file,
+        .source_content = source, .authority = authority};
+    XrProto *proto = compile_ast_internal(&request, ast, NULL);
     xr_program_destroy(ast);
-
-    if (installed_identity)
-        xr_compiler_session_set_compile_unit_identity(session, NULL);
-
-    bool operation_ok = proto ? xr_compiler_session_operation_succeed(&operation_scope)
-                              : xr_compiler_session_operation_fail(
-                                    &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
-    if (!operation_ok && proto) {
-        xr_instruction_unit_free(proto);
-        proto = NULL;
-    }
-
-    xr_free(owned_identity);
-
     return proto;
 }

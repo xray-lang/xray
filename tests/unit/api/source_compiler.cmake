@@ -1,5 +1,5 @@
 add_executable(test_api_source_compiler "${CMAKE_CURRENT_LIST_DIR}/source_compiler/test_source_compiler.c")
-target_link_libraries(test_api_source_compiler PRIVATE xray_source_compile)
+target_link_libraries(test_api_source_compiler PRIVATE xray_source_compile xray_xir_runtime_host)
 target_include_directories(test_api_source_compiler PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/unit")
 target_compile_definitions(test_api_source_compiler PRIVATE
     XR_COMPILER_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"

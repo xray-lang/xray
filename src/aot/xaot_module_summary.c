@@ -15,6 +15,7 @@
 #include "../base/xsha256.h"
 #include "../incremental/xr_cache_artifact_verify.h"
 #include "../incremental/xr_module_summary_build.h"
+#include "../incremental/xr_module_task_graph.h"
 #include "../ir/xi_module.h"
 #include "../module/xmodule_graph.h"
 #include "../plan/format/xr_xsm_schema.h"

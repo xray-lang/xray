@@ -40,6 +40,8 @@
 #include "module/xmodule_graph.h"
 #include "module/xmodule_resolver.h"
 #include "toolchain/xcompiler_session.h"
+#include "toolchain/xcompiler_arena_backing.h"
+#include "base/xio_policy.h"
 #include "../test_win_compat.h"
 
 #include <stdint.h>
@@ -52,44 +54,61 @@ static XrVMRuntime *g_isolate = NULL;
 static XrCompilerSession *g_session = NULL;
 static XaAnalyzer *g_analyzer = NULL;
 
+static XrCompileResources *g_resources = NULL;
+static const char fixture_module_identity[] = "memory-module-v1:id=19:analyzer-fixture-v1";
+
+static XaAnalyzer *fixture_analyzer(void) {
+    const XaAnalyzerInput input = {
+        .session = g_session,
+        .runtime = g_isolate,
+        .target = xr_target_data_layout_host(),
+        .module_identity = fixture_module_identity,
+    };
+    return xa_analyzer_new(&input);
+}
+
+static AstNode *fixture_parse(XrCompilerSession *session, const char *source) {
+    AstNode *program = NULL;
+    return xr_compile_parse(session, source, &program) == XR_PARSE_OK ? program : NULL;
+}
+
+static void fixture_arena_open(XrArena *arena) {
+    XrArenaBacking backing = {0};
+    XrArenaStatus status = xr_compiler_arena_state_backing(
+        xr_compile_session_compile_state(g_session), &backing);
+    assert(status == XR_ARENA_OK);
+    status = xr_arena_open(arena, 4096, &backing);
+    assert(status == XR_ARENA_OK);
+}
+
 static void setup_pool(void) {
     if (!g_isolate) {
         XrVMConfig p = {0};
         g_isolate = xray_vm_new_full(&p);
-        g_session = xr_compiler_session_current_for_isolate(g_isolate);
-        assert(g_session != NULL);
-        /* The analyzer names an enum's nominal owner after the compilation
-         * unit identity of the session it runs in, and enum metadata
-         * fail-closes when that owner is absent: every user-declared enum
-         * loses its variant layout and E.Member types as <error>. A bare
-         * session installs no identity, so these tests have to name one. */
-        const XrCompileUnitIdentity identity = {
-            .kind = XR_COMPILE_UNIT_MEMORY,
-            .module_identity = "memory-module-v1:id=19:analyzer-fixture-v1",
-        };
-        bool identity_set = xr_compiler_session_set_compile_unit_identity(g_session, &identity);
-        assert(identity_set);
-        (void) identity_set;
+        assert(g_isolate != NULL);
+        /* These semantic fixtures retain one cumulative parser ledger. The
+         * resource suites supply their own bounded exact/minus/plus inputs. */
+        const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+        XrCompileResourceStatus resources = xr_compile_resources_new(&limits, &g_resources);
+        assert(resources == XR_COMPILE_RESOURCE_OK);
+        XrCompilerSessionStatus session = xr_compile_session_new(g_resources, &g_session);
+        assert(session == XR_COMPILER_SESSION_OK);
     }
-    if (!g_analyzer) {
-        g_analyzer = xa_analyzer_new(g_session);
-    }
-    // Ensure thread-local pool and symbol ID counter are set (even if g_analyzer
-    // already exists, a test may have overwritten them with its own pool)
+    if (!g_analyzer)
+        g_analyzer = fixture_analyzer();
+    assert(g_analyzer != NULL);
     xr_type_set_current_pool(g_analyzer->type_pool, &g_analyzer->type_pool->next_type_id);
-    xa_symbol_set_id_counter(&g_analyzer->next_symbol_id);
 }
 
 static void teardown_pool(void) {
-    if (g_analyzer) {
-        xa_analyzer_free(g_analyzer);
-        g_analyzer = NULL;
-    }
-    if (g_isolate) {
-        xray_vm_delete(g_isolate);
-        g_isolate = NULL;
-        g_session = NULL;
-    }
+    xa_analyzer_free(g_analyzer);
+    g_analyzer = NULL;
+    xr_compile_session_free(g_session);
+    g_session = NULL;
+    xr_compile_resources_release(g_resources);
+    g_resources = NULL;
+    xray_vm_delete(g_isolate);
+    g_isolate = NULL;
 }
 
 #define TEST(name) static void test_##name(void)
@@ -499,7 +518,7 @@ TEST(type_narrowing) {
 // ============================================================================
 
 TEST(symbol_create) {
-    XaSymbol *sym = xa_symbol_new("myVar", XA_SYM_VARIABLE);
+    XaSymbol *sym = xa_symbol_new(g_analyzer->symbol_registry, "myVar", XA_SYM_VARIABLE);
 
     ASSERT(sym != NULL);
     ASSERT(strcmp(sym->name, "myVar") == 0);
@@ -510,23 +529,23 @@ TEST(symbol_create) {
 }
 
 TEST(scope_basic) {
-    XaScope *global = xa_scope_new(XA_SCOPE_GLOBAL, NULL);
+    XaScope *global = xa_scope_new(g_analyzer->symbol_registry, XA_SCOPE_GLOBAL, NULL);
     ASSERT(global != NULL);
     ASSERT(global->kind == XA_SCOPE_GLOBAL);
     ASSERT(global->parent == NULL);
 
-    XaScope *func = xa_scope_new(XA_SCOPE_FUNCTION, global);
+    XaScope *func = xa_scope_new(g_analyzer->symbol_registry, XA_SCOPE_FUNCTION, global);
     ASSERT(func->parent == global);
 
     xa_scope_free(global);  // Also frees func
 }
 
 TEST(scope_lookup) {
-    XaScope *global = xa_scope_new(XA_SCOPE_GLOBAL, NULL);
-    XaScope *func = xa_scope_new(XA_SCOPE_FUNCTION, global);
+    XaScope *global = xa_scope_new(g_analyzer->symbol_registry, XA_SCOPE_GLOBAL, NULL);
+    XaScope *func = xa_scope_new(g_analyzer->symbol_registry, XA_SCOPE_FUNCTION, global);
 
-    XaSymbol *x = xa_symbol_new("x", XA_SYM_VARIABLE);
-    XaSymbol *y = xa_symbol_new("y", XA_SYM_VARIABLE);
+    XaSymbol *x = xa_symbol_new(g_analyzer->symbol_registry, "x", XA_SYM_VARIABLE);
+    XaSymbol *y = xa_symbol_new(g_analyzer->symbol_registry, "y", XA_SYM_VARIABLE);
 
     xa_scope_add_symbol(global, x);
     xa_scope_add_symbol(func, y);
@@ -544,9 +563,9 @@ TEST(scope_lookup) {
 }
 
 TEST(scope_owns_replaced_symbols_until_teardown) {
-    XaScope *scope = xa_scope_new(XA_SCOPE_GLOBAL, NULL);
-    XaSymbol *first = xa_symbol_new("value", XA_SYM_VARIABLE);
-    XaSymbol *replacement = xa_symbol_new("value", XA_SYM_VARIABLE);
+    XaScope *scope = xa_scope_new(g_analyzer->symbol_registry, XA_SCOPE_GLOBAL, NULL);
+    XaSymbol *first = xa_symbol_new(g_analyzer->symbol_registry, "value", XA_SYM_VARIABLE);
+    XaSymbol *replacement = xa_symbol_new(g_analyzer->symbol_registry, "value", XA_SYM_VARIABLE);
 
     xa_scope_add_symbol(scope, first);
     xa_scope_add_symbol(scope, replacement);
@@ -569,7 +588,7 @@ TEST(scope_owns_replaced_symbols_until_teardown) {
 // ============================================================================
 
 TEST(analyzer_create) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     ASSERT(a->global_scope != NULL);
     ASSERT(a->current_scope == a->global_scope);
@@ -581,7 +600,7 @@ TEST(analyzer_create) {
 }
 
 TEST(analyzer_diagnostics) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
 
     XrLocation loc = {.file = "test.xr", .line = 10, .column = 5};
     xa_analyzer_add_diagnostic(a, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNDEFINED_VAR, "Test error",
@@ -603,11 +622,34 @@ TEST(analyzer_diagnostics) {
     setup_pool();  // Restore global pool after test
 }
 
+TEST(type_ref_uses_explicit_analyzer_after_nested_free) {
+    XaAnalyzer *parent = fixture_analyzer();
+    ASSERT(parent != NULL);
+    XrArena arena = {0};
+    fixture_arena_open(&arena);
+    XrCompilerSessionScope scope = {0};
+    ASSERT(xr_compile_session_push_arena(g_session, &arena, &scope) == XR_COMPILE_RESOURCE_OK);
+    XrTypeRef *arguments[] = {xr_tref_i64(g_session)};
+    XrTypeRef *reference = xr_tref_generic(g_session, "Array", arguments, 1);
+    ASSERT(arguments[0] != NULL && reference != NULL);
+    XaAnalyzer *temporary = fixture_analyzer();
+    ASSERT(temporary != NULL);
+    xa_analyzer_free(temporary);
+    XrType *resolved = xr_tref_resolve_in_analyzer(parent, reference);
+    ASSERT(resolved != NULL && XR_TYPE_IS_ARRAY(resolved));
+    ASSERT(resolved->container.element_type != NULL);
+    ASSERT(XR_TYPE_IS_INT(resolved->container.element_type));
+    ASSERT(xr_compile_session_pop_arena(&scope) == XR_COMPILE_RESOURCE_OK);
+    xa_analyzer_free(parent);
+    xr_arena_destroy(&arena);
+    setup_pool();
+}
+
 TEST(analyzer_type_telemetry_splits_unknown_and_error) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *missing_program = xr_parse(g_session, "missing.field(otherMissing);");
+    AstNode *missing_program = fixture_parse(g_session, "missing.field(otherMissing);");
     ASSERT(missing_program != NULL);
     xa_analyzer_analyze(a, "telemetry_error_chain.xr", missing_program);
     int missing_diag_count = 0;
@@ -621,20 +663,20 @@ TEST(analyzer_type_telemetry_splits_unknown_and_error) {
     ASSERT(a->recovery_poison_type_count >= 1);
     xa_analyzer_free(a);
 
-    a = xa_analyzer_new(g_session);
+    a = fixture_analyzer();
     ASSERT(a != NULL);
-    XrArena arena;
-    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
-    XrCompilerSessionScope scope;
+    XrArena arena = {0};
+    fixture_arena_open(&arena);
+    XrCompilerSessionScope scope = {0};
     ASSERT(
-        xr_compiler_session_push_arena(g_session, &arena, "telemetry_error_recovery.xr", &scope));
+        xr_compile_session_push_arena(g_session, &arena, &scope) == XR_COMPILE_RESOURCE_OK);
     AstNode *error_expr = xr_ast_as_expr(g_session, xr_ast_literal_int(g_session, 1, 1),
                                          xr_tref_error(g_session), false, 1);
     ASSERT(error_expr != NULL);
     XrType *error_type = xa_analyzer_infer_expr_type(a, error_expr);
     ASSERT(error_type != NULL);
     ASSERT(XR_TYPE_IS_ERROR(error_type));
-    xr_compiler_session_pop_arena(&scope);
+    ASSERT(xr_compile_session_pop_arena(&scope) == XR_COMPILE_RESOURCE_OK);
     xr_arena_destroy(&arena);
     ASSERT(a->unresolved_inference_count == 0);
     ASSERT(a->recovery_poison_type_count >= 1);
@@ -644,7 +686,7 @@ TEST(analyzer_type_telemetry_splits_unknown_and_error) {
 }
 
 TEST(analyzer_scope_management) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     XaScope *global = a->current_scope;
 
     xa_analyzer_enter_scope(a, XA_SCOPE_FUNCTION, NULL);
@@ -825,15 +867,15 @@ TEST(type_class_instance) {
     ASSERT(strcmp(cls->instance.class_name, "MyClass") == 0);
 
     // Instance type requires class info
-    XrClassInfo *info = xa_class_info_new("TestClass");
+    XrClassInfo *info = xa_class_info_new(xr_compile_session_compile_state(g_session), "TestClass");
     XrType *inst = xr_type_new_instance(g_isolate, info);
     ASSERT(XR_TYPE_IS_INSTANCE(inst));
     xa_class_info_free(info);
 }
 
 TEST(type_class_instance_equality_uses_exact_nominal_owner) {
-    XrClassInfo *left_info = xa_class_info_new("Box");
-    XrClassInfo *right_info = xa_class_info_new("Box");
+    XrClassInfo *left_info = xa_class_info_new(xr_compile_session_compile_state(g_session), "Box");
+    XrClassInfo *right_info = xa_class_info_new(xr_compile_session_compile_state(g_session), "Box");
     ASSERT(left_info != NULL && right_info != NULL);
     XrType *arg = xr_type_new_int_width(NULL, XR_NATIVE_I64);
     XrType *left_args[] = {arg};
@@ -983,9 +1025,9 @@ TEST(type_function_borrow_origin_identity_is_normalized) {
         {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 1},
     };
     XrViewOrigin singleton = {.kind = XR_VIEW_ORIGIN_PARAM, .param_ordinal = 0};
-    ASSERT(xr_type_function_set_view_origins(g_isolate, left, unsorted, 3, false));
-    ASSERT(xr_type_function_set_view_origins(g_isolate, same, canonical, 2, true));
-    ASSERT(xr_type_function_set_view_origins(g_isolate, different, &singleton, 1, false));
+    ASSERT(xr_type_function_set_view_origins(g_isolate, left, unsorted, 3, false) == XR_VIEW_ORIGIN_BIND_OK);
+    ASSERT(xr_type_function_set_view_origins(g_isolate, same, canonical, 2, true) == XR_VIEW_ORIGIN_BIND_OK);
+    ASSERT(xr_type_function_set_view_origins(g_isolate, different, &singleton, 1, false) == XR_VIEW_ORIGIN_BIND_OK);
 
     ASSERT(left->function.view_origin_count == 2);
     ASSERT(left->function.view_origin_set[0].param_ordinal == 0);
@@ -1043,7 +1085,7 @@ TEST(type_function_borrow_origin_rejects_every_hidden_slice_shape) {
 // ============================================================================
 
 TEST(infer_context_create) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     XaInferContext *ctx = xa_infer_context_new(a);
 
     ASSERT(ctx != NULL);
@@ -1058,7 +1100,7 @@ TEST(infer_context_create) {
 }
 
 TEST(infer_return_type_collection) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     XaInferContext *ctx = xa_infer_context_new(a);
 
     // Add multiple return types
@@ -1081,7 +1123,7 @@ TEST(infer_return_type_collection) {
 }
 
 TEST(infer_single_return_type) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     XaInferContext *ctx = xa_infer_context_new(a);
 
     xa_infer_add_return_type(ctx, xr_type_new_int(NULL));
@@ -1095,7 +1137,7 @@ TEST(infer_single_return_type) {
 }
 
 TEST(infer_no_return_type) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     XaInferContext *ctx = xa_infer_context_new(a);
 
     // No return types added -> unit (0-arity tuple)
@@ -1150,7 +1192,7 @@ TEST(compile_type_function) {
 
 TEST(compile_type_ref_function_modes) {
     AstNode *program =
-        xr_parse(g_session, "type Handler = fn(i64, ref string, move Array<bool>) -> i64");
+        fixture_parse(g_session, "type Handler = fn(i64, ref string, move Array<bool>) -> i64");
     ASSERT(program != NULL);
     ASSERT(program->type == AST_PROGRAM);
     ASSERT(program->as.program.count == 1);
@@ -1191,10 +1233,10 @@ static bool analyzer_class_is_cycle_candidate(XaAnalyzer *analyzer, const char *
 }
 
 static XaAnalyzer *analyzer_run_source(const char *file, const char *source) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     if (!a)
         return NULL;
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     if (!program) {
         xa_analyzer_free(a);
         return NULL;
@@ -1363,12 +1405,12 @@ TEST(analyzer_receiver_mode_is_declaration_owned_and_operation_checked) {
 }
 
 TEST(analyzer_ordinary_bool_control_has_no_branch_hint_builtins) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     ASSERT(xa_analyzer_lookup(a, "likely") == NULL);
     ASSERT(xa_analyzer_lookup(a, "unlikely") == NULL);
 
-    AstNode *program = xr_parse(g_session, "fn likely(value: bool) -> bool { return value }\n"
+    AstNode *program = fixture_parse(g_session, "fn likely(value: bool) -> bool { return value }\n"
                                            "fn unlikely(value: bool) -> bool { return value }\n"
                                            "fn choose(flag: bool) -> bool {\n"
                                            "    if (likely(flag)) { return unlikely(true) }\n"
@@ -1440,7 +1482,9 @@ TEST(json_value_and_codec_capability_matrix) {
     ASSERT(result.reason == XA_JSON_CAPABILITY_NON_STRING_MAP_KEY);
 
     const char *enum_members[] = {"Text", "Binary"};
-    XrEnumLayout *enum_layout = xr_enum_layout_new("test.capability", "WireKind", enum_members, 2);
+    XrOsIoPolicy enum_policy_1 = xr_os_io_system_policy();
+    XrEnumLayout *enum_layout = NULL;
+    ASSERT(xr_enum_layout_new(&enum_policy_1, "test.capability", "WireKind", enum_members, 2, &enum_layout) == XR_OS_IO_OK);
     ASSERT(enum_layout != NULL);
     XrType *enum_type = xr_type_new_generic_enum(g_isolate, "WireKind", enum_layout, NULL, 0);
     XrType *good_map = xr_type_new_map(g_isolate, xr_type_new_string(g_isolate), enum_type);
@@ -1493,7 +1537,7 @@ TEST(json_value_and_codec_capability_matrix) {
 }
 
 TEST(analyzer_typed_json_calls_complete_all_analysis_passes) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source =
         "type User = { name: string, age: i64 }\n"
@@ -1503,7 +1547,7 @@ TEST(analyzer_typed_json_calls_complete_all_analysis_passes) {
         "    var parsed = JSON.parse<User>(\"{\\\"name\\\":\\\"Grace\\\",\\\"age\\\":38}\")\n"
         "    print(decoded == null, parsed.name)\n"
         "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "typed_json_all_passes.xr", program);
 
@@ -1517,13 +1561,13 @@ TEST(analyzer_typed_json_calls_complete_all_analysis_passes) {
 }
 
 TEST(analyzer_json_path_result_context_writes_codec_type_evidence) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "var root = JSON.parseObject(\"{\\\"count\\\":7}\")\n"
                          "fn takesInt(value: i64) -> i64 { return value }\n"
                          "var count = takesInt(JSON.require(root, [\"count\"]))\n"
                          "var maybe: i64? = JSON.get(root, [\"missing\"])\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "json_path_contextual_result.xr", program);
     ASSERT(a->diagnostic_count == 0);
@@ -1580,7 +1624,7 @@ static int analyzer_diag_message_count(XaAnalyzer *analyzer, const char *message
 }
 
 TEST(analyzer_structural_object_dot_and_static_index_diagnostics_match) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "type User = { const name: string, age: i64 }\n"
                          "fn probe(key: string) {\n"
@@ -1594,7 +1638,7 @@ TEST(analyzer_structural_object_dot_and_static_index_diagnostics_match) {
                          "    print(user[key])\n"
                          "    user[key] = 1\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "object_field_diagnostics.xr", program);
 
@@ -1613,7 +1657,7 @@ TEST(analyzer_structural_object_dot_and_static_index_diagnostics_match) {
 }
 
 TEST(analyzer_structural_width_is_generic_constraint_and_literal_stays_exact) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "fn probe<T: { name: string }>(value: ref T) {\n"
                          "    value.name = \"Grace\"\n"
@@ -1621,7 +1665,7 @@ TEST(analyzer_structural_width_is_generic_constraint_and_literal_stays_exact) {
                          "}\n"
                          "var concrete = { name: \"Ada\", age: 37 }\n"
                          "probe(ref concrete)\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "object_width_constraint.xr", program);
 
@@ -1731,7 +1775,7 @@ static const XaMemoryRootEffect *memory_effect_root(const XaMemoryEffectSummary 
 }
 
 TEST(analyzer_inferred_unique_alias_nll_guards_move) {
-    XaAnalyzer *bad = xa_analyzer_new(g_session);
+    XaAnalyzer *bad = fixture_analyzer();
     ASSERT(bad != NULL);
     const char *bad_source = "fn consume(xs: move Array<i64>) -> i64 { return len(xs) }\n"
                              "fn bad() {\n"
@@ -1741,7 +1785,7 @@ TEST(analyzer_inferred_unique_alias_nll_guards_move) {
                              "  print(len(alias))\n"
                              "  print(out)\n"
                              "}\n";
-    AstNode *bad_program = xr_parse(g_session, bad_source);
+    AstNode *bad_program = fixture_parse(g_session, bad_source);
     ASSERT(bad_program != NULL);
     xa_analyzer_analyze(bad, "alias_live_move.xr", bad_program);
     XaSymbol *bad_data = xa_analyzer_lookup_deep(bad, "data");
@@ -1753,7 +1797,7 @@ TEST(analyzer_inferred_unique_alias_nll_guards_move) {
     xr_program_destroy(bad_program);
     xa_analyzer_free(bad);
 
-    XaAnalyzer *ok = xa_analyzer_new(g_session);
+    XaAnalyzer *ok = fixture_analyzer();
     ASSERT(ok != NULL);
     const char *ok_source = "fn consume(xs: move Array<i64>) -> i64 { return len(xs) }\n"
                             "fn ok() {\n"
@@ -1763,7 +1807,7 @@ TEST(analyzer_inferred_unique_alias_nll_guards_move) {
                             "  var out = consume(move data)\n"
                             "  print(out)\n"
                             "}\n";
-    AstNode *ok_program = xr_parse(g_session, ok_source);
+    AstNode *ok_program = fixture_parse(g_session, ok_source);
     ASSERT(ok_program != NULL);
     xa_analyzer_analyze(ok, "alias_dead_move.xr", ok_program);
     ASSERT(!analyzer_diag_contains(ok, "OWN-E-LIVE-ALIAS"));
@@ -1774,7 +1818,7 @@ TEST(analyzer_inferred_unique_alias_nll_guards_move) {
 }
 
 TEST(analyzer_parameter_effect_is_canonical_product) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source =
         "fn summarize(input: Array<i64>, target: ref Array<i64>, job: move Array<i64>) "
@@ -1783,7 +1827,7 @@ TEST(analyzer_parameter_effect_is_canonical_product) {
         "  var alias = input\n"
         "  return alias\n"
         "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "param_effect_product.xr", program);
     ASSERT(!analyzer_diag_contains(a, "error"));
@@ -1817,7 +1861,7 @@ TEST(analyzer_parameter_effect_is_canonical_product) {
 }
 
 TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "fn grow(data: ref Array<i64>) { data.push(1) }\n"
                          "fn growViaCall(data: ref Array<i64>) { grow(data) }\n"
@@ -1826,7 +1870,7 @@ TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
                          "fn dynamic(cb: fn(ref Array<i64>), data: ref Array<i64>) { cb(data) }\n"
                          "fn readOnly(data: ref Array<i64>) -> i64 { return data.length }\n"
                          "fn sliceLen(data: Slice<u8>) -> i64 { return len(data) }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "memory_effect_summary.xr", program);
     ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
@@ -1861,7 +1905,7 @@ TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
 }
 
 TEST(analyzer_receiver_permission_is_independent_from_observed_memory_effect) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "class Counter {\n"
                          "  value: i64\n"
@@ -1872,7 +1916,7 @@ TEST(analyzer_receiver_permission_is_independent_from_observed_memory_effect) {
                          "  ref writeViaCall() { this.writeDirect() }\n"
                          "}\n"
                          "fn permissionOnly(counter: ref Counter) { counter.noOp() }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "receiver_memory_effect.xr", program);
     ASSERT(a->diagnostic_count == 0);
@@ -1899,7 +1943,7 @@ TEST(analyzer_receiver_permission_is_independent_from_observed_memory_effect) {
 }
 
 TEST(analyzer_mem_scalar_access_is_stable_for_pointer_owner_borrows) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "import mem\n"
                          "fn loadU64(p: Ptr<u8>) -> u64 {\n"
@@ -1916,7 +1960,7 @@ TEST(analyzer_mem_scalar_access_is_stable_for_pointer_owner_borrows) {
                          "  var read: Ptr<u8> = p\n"
                          "  return loadU64(read)\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "mem_scalar_pointer_borrow.xr", program);
     ASSERT(!analyzer_diag_contains(a, "incomplete view-invalidation effects"));
@@ -1944,11 +1988,11 @@ TEST(analyzer_mem_scalar_access_is_stable_for_pointer_owner_borrows) {
 }
 
 TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
-    XaAnalyzer *source = xa_analyzer_new(g_session);
-    XaAnalyzer *target = xa_analyzer_new(g_session);
+    XaAnalyzer *source = fixture_analyzer();
+    XaAnalyzer *target = fixture_analyzer();
     ASSERT(source != NULL && target != NULL);
-    XaSymbol *source_symbol = xa_symbol_new("foreignRead", XA_SYM_FUNCTION);
-    XaSymbol *target_symbol = xa_symbol_new("foreignRead", XA_SYM_IMPORT);
+    XaSymbol *source_symbol = xa_symbol_new(source->symbol_registry, "foreignRead", XA_SYM_FUNCTION);
+    XaSymbol *target_symbol = xa_symbol_new(target->symbol_registry, "foreignRead", XA_SYM_IMPORT);
     ASSERT(source_symbol != NULL && target_symbol != NULL);
     XaSymbolLinks *source_links = xa_analyzer_get_links(source, source_symbol);
     XaSymbolLinks *target_links = xa_analyzer_get_links(target, target_symbol);
@@ -2014,7 +2058,7 @@ TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
 }
 
 TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "import mem\n"
                          "fn forwardLocal() -> Buffer { return makeLocal() }\n"
@@ -2027,7 +2071,7 @@ TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference) {
                          "  return LocalValue{value: value}\n"
                          "}\n"
                          "fn scalarValue() -> i64 { return 7 }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "local_fresh_return_ownership.xr", program);
     ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
@@ -2056,9 +2100,9 @@ TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference) {
 }
 
 TEST(symbol_export_view_rekeys_foreign_symbol_identity) {
-    XaAnalyzer *source = xa_analyzer_new(g_session);
+    XaAnalyzer *source = fixture_analyzer();
     ASSERT(source != NULL);
-    XaSymbol *source_enum = xa_symbol_new("Signal", XA_SYM_ENUM);
+    XaSymbol *source_enum = xa_symbol_new(source->symbol_registry, "Signal", XA_SYM_ENUM);
     ASSERT(source_enum != NULL);
     source_enum->is_const = true;
     source_enum->is_exported = true;
@@ -2069,14 +2113,18 @@ TEST(symbol_export_view_rekeys_foreign_symbol_identity) {
     source_links->is_definitely_assigned = true;
     source_links->file_path = "signal_module.xr";
 
-    XaAnalyzer *target = xa_analyzer_new(g_session);
+    XaAnalyzer *target = fixture_analyzer();
     ASSERT(target != NULL);
-    while (target->next_symbol_id < source_enum->id) {
-        XaSymbol *padding = xa_symbol_new("padding", XA_SYM_VARIABLE);
-        ASSERT(padding != NULL);
-        xa_scope_add_symbol(target->global_scope, padding);
-    }
-    XaSymbol *collision = xa_symbol_new("unrelated", XA_SYM_VARIABLE);
+    XaSymbol *collision = NULL;
+    do {
+        XaSymbol *candidate = xa_symbol_new(target->symbol_registry, "unrelated", XA_SYM_VARIABLE);
+        ASSERT(candidate != NULL);
+        ASSERT(candidate->id <= source_enum->id);
+        if (candidate->id == source_enum->id)
+            collision = candidate;
+        else
+            xa_symbol_free(candidate);
+    } while (!collision);
     ASSERT(collision != NULL);
     xa_scope_add_symbol(target->global_scope, collision);
     ASSERT(collision->id == source_enum->id);
@@ -2100,7 +2148,7 @@ TEST(symbol_export_view_rekeys_foreign_symbol_identity) {
 }
 
 TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "fn keepResult(dst: ref Slice<u32>) -> i64 {\n"
                          "  var filled: Slice<u32> = dst.fill(7)\n"
@@ -2110,7 +2158,7 @@ TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result) {
                          "  dst.fill(0)\n"
                          "  return len(dst)\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "slice_mutator_memory_effect.xr", program);
     ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
@@ -2135,13 +2183,13 @@ TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result) {
 }
 
 TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "fn worker() -> i64 { return 1 }\n"
                          "fn suspends() { var task = go worker(); await task }\n"
                          "fn transitive() { suspends() }\n"
                          "fn dynamic(cb: fn()) { cb() }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "canonical_suspend_effect.xr", program);
     ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
@@ -2163,9 +2211,9 @@ TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint) {
 }
 
 TEST(analyzer_effect_passes_replace_only_their_owned_dimensions) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
-    AstNode *program = xr_parse(g_session, "fn scalar() -> i64 { return 1 }\n");
+    AstNode *program = fixture_parse(g_session, "fn scalar() -> i64 { return 1 }\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_dimension_reanalysis.xr", program);
     ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
@@ -2214,7 +2262,7 @@ TEST(analyzer_effect_passes_replace_only_their_owned_dimensions) {
  * every generator, and every function that merely drives one, fail `no_suspend`
  * and be treated as a cancellation point. */
 TEST(analyzer_generator_suspend_is_separate_from_scheduler_suspend) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "fn counter(n: i64) -> Iterator<i64> {\n"
                          "    for (var i = 0; i < n; i++) { yield i }\n"
@@ -2228,7 +2276,7 @@ TEST(analyzer_generator_suspend_is_separate_from_scheduler_suspend) {
                          "    var task = go drive()\n"
                          "    yield await task\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "generator_suspend_effect.xr", program);
     ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
@@ -2279,7 +2327,7 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     ASSERT(xa_allocation_summary_fingerprint(&fingerprint_a) !=
            xa_allocation_summary_fingerprint(&fingerprint_b));
 
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "import mem\n"
                          "fn scalar(x: i64) -> i64 { return x + 1 }\n"
@@ -2328,7 +2376,7 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
                          "  read() -> i64 { return this.value }\n"
                          "  bad() { var copy = [this.value] }\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "allocation_effect_contracts.xr", program);
 
@@ -2464,7 +2512,7 @@ static void check_throw_effect_consistency(XaAnalyzer *a, const char *name, int 
 }
 
 TEST(analyzer_throw_effect_bit_matches_effect_summary) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "enum IoErr { Boom }\n"
@@ -2473,7 +2521,7 @@ TEST(analyzer_throw_effect_bit_matches_effect_summary) {
                          "fn propagates() { throwsDirect() }\n"
                          "fn guarded() { try { throwsDirect() } catch (e: IoErr) {} }\n"
                          "fn viaDynamic(f: fn()) { f() }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "throw_effect_bit.xr", program);
 
@@ -2493,7 +2541,7 @@ TEST(analyzer_throw_effect_bit_matches_effect_summary) {
 }
 
 TEST(analyzer_enum_methods_publish_effect_summaries) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "enum MethodError { Failed }\n"
@@ -2502,7 +2550,7 @@ TEST(analyzer_enum_methods_publish_effect_summaries) {
                          "  read() -> i64 { return 1 }\n"
                          "  fail() -> i64 { throw MethodError.Failed }\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "enum_method_effects.xr", program);
     ASSERT(a->diagnostic_count == 0);
@@ -2551,7 +2599,7 @@ TEST(analyzer_enum_methods_publish_effect_summaries) {
 }
 
 TEST(analyzer_inferred_effects_accept_function_values) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "fn increment(value: i64) -> i64 { return value + 1 }\n"
                          "fn applyPure(callback: fn(i64) -> i64, value: i64) -> i64 {\n"
@@ -2563,7 +2611,7 @@ TEST(analyzer_inferred_effects_accept_function_values) {
                          "  }\n"
                          "  return applyPure(increment, local(2))\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "no_throw_constraints.xr", program);
     int diagnostic_count = 0;
@@ -2575,9 +2623,9 @@ TEST(analyzer_inferred_effects_accept_function_values) {
 }
 
 TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
-    AstNode *program = xr_parse(g_session, "import codegen\n"
+    AstNode *program = fixture_parse(g_session, "import codegen\n"
                                            "fn guarded(value: u64, pointer: Ptr<u8>) -> u64 {\n"
                                            "  var hidden = codegen.opaque(value)\n"
                                            "  var samePointer = codegen.opaque(pointer)\n"
@@ -2599,9 +2647,9 @@ TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed) {
     xa_analyzer_free(a);
     setup_pool();
 
-    a = xa_analyzer_new(g_session);
+    a = fixture_analyzer();
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "import codegen\n"
+    program = fixture_parse(g_session, "import codegen\n"
                                   "var text = codegen.opaque(\"x\")\n"
                                   "var floating = codegen.opaque(1.25)\n"
                                   "var truth = codegen.opaque(true)\n"
@@ -2618,12 +2666,12 @@ TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed) {
 }
 
 TEST(analyzer_call_context_accepts_u64_only_literals) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "fn take(value: u64) -> u64 { return value }\n"
                          "fn check(got: u64, want: u64) { print(got == want) }\n"
                          "check(take(11400714785074694791), 15845353736191888555)\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "contextual_u64_call.xr", program);
     int diagnostic_count = 0;
@@ -2634,7 +2682,7 @@ TEST(analyzer_call_context_accepts_u64_only_literals) {
 }
 
 TEST(analyzer_effect_inference_handles_redundant_try_catch) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "fn guarded(value: i64) -> i64 {\n"
                          "  try {\n"
@@ -2643,7 +2691,7 @@ TEST(analyzer_effect_inference_handles_redundant_try_catch) {
                          "    return value\n"
                          "  }\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "no_throw_redundant_try.xr", program);
     int diagnostic_count = 0;
@@ -2655,12 +2703,12 @@ TEST(analyzer_effect_inference_handles_redundant_try_catch) {
 }
 
 TEST(analyzer_deprecated_message_reaches_use_diagnostic) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "@deprecated(\"use modern\")\n"
                          "fn legacy(value: i64) -> i64 { return value }\n"
                          "fn caller() -> i64 { return legacy(1) }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "deprecated_message.xr", program);
     XaSymbol *legacy = analyzer_function_symbol(a, "legacy");
@@ -2674,7 +2722,7 @@ TEST(analyzer_deprecated_message_reaches_use_diagnostic) {
 }
 
 TEST(analyzer_stored_function_value_defaults_may_throw) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "enum StoredEffectErr { Boom }\n"
                          "fn pure(value: i64) -> i64 { return value + 1 }\n"
@@ -2685,7 +2733,7 @@ TEST(analyzer_stored_function_value_defaults_may_throw) {
                          "var callback = pure\n"
                          "callback = checked\n"
                          "print(callback(1))\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "stored_function_effect.xr", program);
     int diagnostic_count = 0;
@@ -2726,7 +2774,7 @@ static int count_private_default_diagnostics(XaAnalyzer *a, const char *file) {
 }
 
 TEST(analyzer_exported_callable_defaults_name_only_reachable_declarations) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "type Opts = { indent: i64 }\n"
                          "const PRIVATE_OPTS: Opts = { indent: 2 }\n"
@@ -2749,7 +2797,7 @@ TEST(analyzer_exported_callable_defaults_name_only_reachable_declarations) {
                          "    constructor(n: i64 = PRIVATE_OPTS.indent) { this.n = n }\n"
                          "}\n"
                          "print(privateCallable(), viaPrivateConst(), Widget().n)\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "exported_defaults.xr", program);
     ASSERT(count_private_default_diagnostics(a, "exported_defaults.xr") == 3);
@@ -2763,12 +2811,12 @@ TEST(analyzer_exported_callable_defaults_name_only_reachable_declarations) {
  * declaring module: a bare `OsMutex()` names nothing, and says which import
  * would. A runtime-provided prelude type such as Atomic stays constructible. */
 TEST(analyzer_module_declared_prelude_types_are_not_bare_constructors) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "var m = OsMutex()\n"
                          "var p = Path(\"/tmp\")\n"
                          "var counter = Atomic<i64>(0)\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "prelude_declarations.xr", program);
     int diagnostic_count = 0;
@@ -2793,7 +2841,7 @@ TEST(analyzer_module_declared_prelude_types_are_not_bare_constructors) {
  * the class such a call allocates -- so the call is refused where it is
  * written, with the fix, instead of failing deep in the pipeline. */
 TEST(analyzer_class_value_held_in_a_variable_is_not_callable) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "class Widget {\n"
                          "    n: i64\n"
@@ -2802,7 +2850,7 @@ TEST(analyzer_class_value_held_in_a_variable_is_not_callable) {
                          "var W = Widget\n"
                          "var direct = Widget(1)\n"
                          "var indirect = W(2)\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "class_value_call.xr", program);
     int diagnostic_count = 0;
@@ -2823,7 +2871,7 @@ TEST(analyzer_class_value_held_in_a_variable_is_not_callable) {
 }
 
 TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source =
         "enum HofEffectErr { Boom }\n"
@@ -2837,7 +2885,7 @@ TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
         "fn viaPureOne(value: i64) -> i64 { return apply<i64>(plusOne, value) }\n"
         "fn viaPureTwo(value: i64) -> i64 { return apply<i64>(plusTwo, value) }\n"
         "fn viaChecked(value: i64) -> i64 { return apply<i64>(checked, value) }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
 
     xa_analyzer_analyze(a, "hof_effect_specialization.xr", program);
@@ -2865,7 +2913,7 @@ TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
 }
 
 TEST(analyzer_error_effect_records_direct_throw_variant) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "enum DirectErr { First, Second, Payload { code: i64 }, Third }\n"
@@ -2878,7 +2926,7 @@ TEST(analyzer_error_effect_records_direct_throw_variant) {
                          "  throw DirectErr.Payload { code: payloadCode() }\n"
                          "}\n"
                          "fn throwsVariable(e: DirectErr) { throw e }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_direct_throw_variant.xr", program);
 
@@ -2926,12 +2974,12 @@ TEST(analyzer_error_effect_records_direct_throw_variant) {
 }
 
 TEST(analyzer_enum_record_construction_publishes_slot_plan) {
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT(analyzer != NULL);
 
     const char *source = "enum PairPayload { Pair { left: i64, right: string } }\n"
                          "var pair = PairPayload.Pair { right: \"value\", left: 7 }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(analyzer, "enum_record_plan.xr", program);
 
@@ -2962,14 +3010,14 @@ TEST(analyzer_enum_record_construction_publishes_slot_plan) {
 }
 
 TEST(analyzer_generic_enum_construction_preserves_concrete_nested_payload) {
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT(analyzer != NULL);
 
     const char *source = "enum Nested<T> { Value { pair: (T, bool) }, Empty }\n"
                          "fn makeNested() -> Nested<i64> {\n"
                          "  return Nested.Value { pair: (7, true) }\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(analyzer, "generic_enum_nested_payload.xr", program);
 
@@ -3012,14 +3060,14 @@ TEST(analyzer_generic_enum_construction_preserves_concrete_nested_payload) {
 }
 
 TEST(analyzer_enum_constructor_stays_non_nullable_in_nullable_context) {
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT(analyzer != NULL);
 
     const char *source = "enum OptionalPayload { Value { item: i64 } }\n"
                          "fn makeOptional() -> OptionalPayload? {\n"
                          "  return OptionalPayload.Value { item: 7 }\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(analyzer, "enum_constructor_nullable_context.xr", program);
 
@@ -3054,9 +3102,9 @@ TEST(analyzer_enum_record_construction_rejects_noncanonical_forms) {
     };
 
     for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
-        XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+        XaAnalyzer *analyzer = fixture_analyzer();
         ASSERT(analyzer != NULL);
-        AstNode *program = xr_parse(g_session, sources[i]);
+        AstNode *program = fixture_parse(g_session, sources[i]);
         ASSERT(program != NULL);
         xa_analyzer_analyze(analyzer, "enum_record_reject.xr", program);
         int diagnostic_count = 0;
@@ -3068,7 +3116,7 @@ TEST(analyzer_enum_record_construction_rejects_noncanonical_forms) {
 }
 
 TEST(analyzer_enum_record_pattern_publishes_slot_plan) {
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT(analyzer != NULL);
 
     const char *source = "enum PairPayload { Pair { left: i64, right: string } }\n"
@@ -3077,7 +3125,7 @@ TEST(analyzer_enum_record_pattern_publishes_slot_plan) {
                          "    PairPayload.Pair { right: _, left } -> left\n"
                          "  }\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(analyzer, "enum_record_pattern_plan.xr", program);
 
@@ -3128,9 +3176,9 @@ TEST(analyzer_enum_record_pattern_rejects_noncanonical_forms) {
     };
 
     for (size_t i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
-        XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+        XaAnalyzer *analyzer = fixture_analyzer();
         ASSERT(analyzer != NULL);
-        AstNode *program = xr_parse(g_session, sources[i]);
+        AstNode *program = fixture_parse(g_session, sources[i]);
         ASSERT(program != NULL);
         xa_analyzer_analyze(analyzer, "enum_record_pattern_reject.xr", program);
         int diagnostic_count = 0;
@@ -3142,7 +3190,7 @@ TEST(analyzer_enum_record_pattern_rejects_noncanonical_forms) {
 }
 
 TEST(analyzer_error_effect_propagates_const_function_value_aliases) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "enum AliasErr { Boom }\n"
@@ -3161,7 +3209,7 @@ TEST(analyzer_error_effect_propagates_const_function_value_aliases) {
                          "  const f = noThrowAlias\n"
                          "  f()\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_const_function_alias.xr", program);
 
@@ -3182,7 +3230,7 @@ TEST(analyzer_error_effect_propagates_const_function_value_aliases) {
 }
 
 TEST(analyzer_error_effect_propagates_stable_var_function_values) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source =
@@ -3347,7 +3395,7 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "  const f = failDynamic\n"
         "  f()\n"
         "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_dynamic_function_value.xr", program);
 
@@ -3536,7 +3584,7 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
 }
 
 TEST(analyzer_callable_target_set_has_no_small_fixed_limit) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const uint32_t target_count = 40;
     const size_t source_capacity = 32768;
@@ -3561,7 +3609,7 @@ TEST(analyzer_callable_target_set_has_no_small_fixed_limit) {
     written = snprintf(source + used, source_capacity - used, "  selected()\n}\n");
     ASSERT(written > 0 && (size_t) written < source_capacity - used);
 
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "callable_target_set_unbounded.xr", program);
     ASSERT(a->diagnostic_count == 0);
@@ -3595,7 +3643,7 @@ TEST(analyzer_callable_target_set_has_no_small_fixed_limit) {
 }
 
 TEST(analyzer_callable_target_set_flows_through_builtin_copy) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "fn first() { }\n"
                          "fn second() { }\n"
@@ -3610,7 +3658,7 @@ TEST(analyzer_callable_target_set_flows_through_builtin_copy) {
                          "  var copied = copy(f)\n"
                          "  copied()\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "callable_target_set_builtin_copy.xr", program);
     ASSERT(a->diagnostic_count == 0);
@@ -3656,7 +3704,7 @@ TEST(analyzer_callable_target_set_flows_through_builtin_copy) {
 }
 
 TEST(analyzer_callable_target_set_flows_into_ordinary_function_parameter) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source =
         "fn named(value: i64) -> i64 { return value * 2 }\n"
@@ -3667,7 +3715,7 @@ TEST(analyzer_callable_target_set_flows_into_ordinary_function_parameter) {
         "  apply(21, named)\n"
         "  apply(5, fn(value: i64) -> i64 { return value + 1 })\n"
         "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "callable_target_set_ordinary_parameter.xr", program);
     ASSERT(a->diagnostic_count == 0);
@@ -3706,7 +3754,7 @@ TEST(analyzer_callable_target_set_flows_into_ordinary_function_parameter) {
 }
 
 TEST(analyzer_callable_target_set_does_not_guess_user_copy_by_name) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "fn original() { }\n"
                          "fn replacement() { }\n"
@@ -3716,7 +3764,7 @@ TEST(analyzer_callable_target_set_does_not_guess_user_copy_by_name) {
                          "  var copied = copy(f)\n"
                          "  copied()\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "callable_target_set_user_copy.xr", program);
     ASSERT(a->diagnostic_count == 0);
@@ -3759,7 +3807,7 @@ TEST(analyzer_callable_target_set_does_not_guess_user_copy_by_name) {
 }
 
 TEST(analyzer_callable_signature_identity_includes_typed_throw_effect) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source =
         "enum CallableIdentityError { Boom }\n"
@@ -3771,7 +3819,7 @@ TEST(analyzer_callable_signature_identity_includes_typed_throw_effect) {
         "  var throwing = fallible\n"
         "  try { throwing(2) } catch (error: CallableIdentityError) { }\n"
         "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "callable_signature_throw_identity.xr", program);
     ASSERT(a->diagnostic_count == 0);
@@ -3809,7 +3857,7 @@ TEST(analyzer_callable_signature_identity_includes_typed_throw_effect) {
 }
 
 TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source =
@@ -3831,7 +3879,7 @@ TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
         "fn viaGenericString() {\n"
         "  runGeneric<string>(\"x\", failGenericString)\n"
         "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
 
     xa_analyzer_analyze(a, "effect_generic_specialization.xr", program);
@@ -3887,7 +3935,7 @@ TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
 }
 
 TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "enum LambdaErr { Boom }\n"
@@ -3936,7 +3984,7 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
                          "  if (flag) { f = fn() { throw LambdaErr.Boom } }\n"
                          "  f()\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_immediate_function_expr.xr", program);
 
@@ -4134,7 +4182,7 @@ TEST(cycle_candidate_marks_recursive_tree_types) {
 }
 
 TEST(analyzer_error_effect_preserves_calls_under_type_expressions) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "enum WrappedError { Failed }\n"
                          "fn fail() -> i64 { throw WrappedError.Failed }\n"
@@ -4142,7 +4190,7 @@ TEST(analyzer_error_effect_preserves_calls_under_type_expressions) {
                          "fn viaCast() -> u8 { return fail() as u8 }\n"
                          "fn viaTest() -> bool { return fail() is i64 }\n"
                          "fn viaSafe() -> u8 { return safe() as u8 }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_type_expressions.xr", program);
     const char *names[] = {"viaCast", "viaTest", "viaSafe"};
@@ -4165,7 +4213,7 @@ TEST(analyzer_error_effect_preserves_calls_under_type_expressions) {
 }
 
 TEST(analyzer_error_effect_handles_recursive_function_expr_cycles) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "enum RecursiveLambdaErr { Boom }\n"
@@ -4183,7 +4231,7 @@ TEST(analyzer_error_effect_handles_recursive_function_expr_cycles) {
                          "  }\n"
                          "  loop(2)\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_recursive_function_expr.xr", program);
 
@@ -4203,7 +4251,7 @@ TEST(analyzer_error_effect_handles_recursive_function_expr_cycles) {
 }
 
 TEST(analyzer_error_effect_propagates_direct_method_calls) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "enum MethodErr { Boom }\n"
@@ -4272,7 +4320,7 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
                          "fn viaInterfaceMethod(r: EffectRunner) {\n"
                          "  r.failEffect()\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_direct_method_calls.xr", program);
 
@@ -4336,7 +4384,7 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
 }
 
 TEST(analyzer_error_effect_propagates_module_export_calls) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *lib_source = "export enum ImportedErr { Selective, Namespace }\n"
@@ -4411,11 +4459,11 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(write_text_file(callback_path, callback_source));
     ASSERT(write_text_file(entry_path, entry_source));
 
-    AstNode *lib_program = xr_parse(g_session, lib_source);
-    AstNode *reexport_program = xr_parse(g_session, reexport_source);
-    AstNode *star_program = xr_parse(g_session, star_source);
-    AstNode *callback_program = xr_parse(g_session, callback_source);
-    AstNode *entry_program = xr_parse(g_session, entry_source);
+    AstNode *lib_program = fixture_parse(g_session, lib_source);
+    AstNode *reexport_program = fixture_parse(g_session, reexport_source);
+    AstNode *star_program = fixture_parse(g_session, star_source);
+    AstNode *callback_program = fixture_parse(g_session, callback_source);
+    AstNode *entry_program = fixture_parse(g_session, entry_source);
     ASSERT(lib_program != NULL);
     ASSERT(reexport_program != NULL);
     ASSERT(star_program != NULL);
@@ -4433,37 +4481,38 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
         .kind = XR_MODULE_IDENTITY_SCRIPT,
         .physical_root = canonical_root,
     };
-    XrModuleResolver *resolver = xr_module_resolver_new(&cfg);
+    XrModuleResolver *resolver = NULL;
+    ASSERT(xr_compile_module_resolver_new(g_resources, &cfg, &resolver) == XR_MODULE_OK);
     ASSERT(resolver != NULL);
-    XrModuleId lib_id;
-    XrModuleId reexport_id;
-    XrModuleId star_id;
-    XrModuleId callback_id;
+    XrModuleId lib_id = {0};
+    XrModuleId reexport_id = {0};
+    XrModuleId star_id = {0};
+    XrModuleId callback_id = {0};
     char *resolve_err = NULL;
     char *entry_realpath = xr_test_realpath_alloc(entry_path);
     ASSERT(entry_realpath != NULL);
-    XrModuleStatus resolved = xr_module_resolver_resolve(resolver, "./effect_export_module",
+    XrModuleStatus resolved = xr_compile_module_resolver_resolve(resolver, "./effect_export_module",
         entry_realpath, &authority, &lib_id, &resolve_err);
     if (resolved != XR_MODULE_OK)
         fprintf(stderr, "effect module resolution: status=%d root=%s entry=%s: %s\n",
                 resolved, canonical_root, entry_realpath, resolve_err ? resolve_err : "");
     ASSERT(resolved == XR_MODULE_OK);
-    xr_free(resolve_err);
+    xr_compile_resources_free(resolve_err);
     resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_reexport_module", entry_realpath, &authority,
+    ASSERT(xr_compile_module_resolver_resolve(resolver, "./effect_reexport_module", entry_realpath, &authority,
                                       &reexport_id, &resolve_err) == 0);
-    xr_free(resolve_err);
+    xr_compile_resources_free(resolve_err);
     resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", entry_realpath, &authority,
+    ASSERT(xr_compile_module_resolver_resolve(resolver, "./effect_star_module", entry_realpath, &authority,
                                       &star_id, &resolve_err) == 0);
-    xr_free(resolve_err);
+    xr_compile_resources_free(resolve_err);
     resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_callback_module", entry_realpath, &authority,
+    ASSERT(xr_compile_module_resolver_resolve(resolver, "./effect_callback_module", entry_realpath, &authority,
                                       &callback_id, &resolve_err) == 0);
-    xr_free(resolve_err);
+    xr_compile_resources_free(resolve_err);
     char *entry_canonical = NULL;
     char *entry_logical = NULL;
-    ASSERT((xr_module_identity_from_source(&authority, entry_realpath, &entry_canonical,
+    ASSERT((xr_compile_module_identity_from_source(g_resources, &authority, entry_realpath, &entry_canonical,
                                           &entry_logical) == XR_MODULE_OK));
 
     XrModuleSpec specs[5] = {{.canonical = lib_id.canonical,
@@ -4502,14 +4551,20 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 4}};
     int topo_order[5] = {0, 1, 2, 3, 4};
-    XrHashMap *id_index = xr_hashmap_new();
+    XrHashMap *id_index = NULL;
+    XrOsIoPolicy graph_policy = xr_compile_io_policy(g_resources);
+    ASSERT(xr_hashmap_owned_new(&graph_policy, &id_index) == XR_OS_IO_OK);
     ASSERT(id_index != NULL);
-    ASSERT(xr_hashmap_set(id_index, specs[0].canonical, (void *) (intptr_t) 1));
-    ASSERT(xr_hashmap_set(id_index, specs[1].canonical, (void *) (intptr_t) 2));
-    ASSERT(xr_hashmap_set(id_index, specs[2].canonical, (void *) (intptr_t) 3));
-    ASSERT(xr_hashmap_set(id_index, specs[3].canonical, (void *) (intptr_t) 4));
-    ASSERT(xr_hashmap_set(id_index, specs[4].canonical, (void *) (intptr_t) 5));
-    XrModuleGraph graph = {.specs = specs,
+    ASSERT(xr_hashmap_owned_set(id_index, specs[0].canonical, (void *) (intptr_t) 1) == XR_OS_IO_OK);
+    ASSERT(xr_hashmap_owned_set(id_index, specs[1].canonical, (void *) (intptr_t) 2) == XR_OS_IO_OK);
+    ASSERT(xr_hashmap_owned_set(id_index, specs[2].canonical, (void *) (intptr_t) 3) == XR_OS_IO_OK);
+    ASSERT(xr_hashmap_owned_set(id_index, specs[3].canonical, (void *) (intptr_t) 4) == XR_OS_IO_OK);
+    ASSERT(xr_hashmap_owned_set(id_index, specs[4].canonical, (void *) (intptr_t) 5) == XR_OS_IO_OK);
+    /* This fixture owns its parsed ASTs and borrowed spec array explicitly.
+     * Its real lookup storage shares the parser's original ledger. */
+    XrModuleGraph graph = {.resources = g_resources,
+                           .compiler_session = g_session,
+                           .specs = specs,
                            .spec_count = 5,
                            .id_index = id_index,
                            .topo_order = topo_order,
@@ -4768,22 +4823,22 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(xa_bitset_test(&namespace_callback_hof_set->variants, 0));
     ASSERT(!xa_bitset_test(&namespace_callback_hof_set->variants, 1));
 
-    xr_hashmap_free(lib_exports);
+    xr_hashmap_owned_free(lib_exports);
     specs[0].export_symbols = NULL;
-    xr_hashmap_free(reexport_exports);
+    xr_hashmap_owned_free(reexport_exports);
     specs[1].export_symbols = NULL;
-    xr_hashmap_free(star_exports);
+    xr_hashmap_owned_free(star_exports);
     specs[2].export_symbols = NULL;
-    xr_hashmap_free(callback_exports);
+    xr_hashmap_owned_free(callback_exports);
     specs[3].export_symbols = NULL;
-    xr_hashmap_free(id_index);
-    xr_module_resolver_free(resolver);
-    xr_module_id_cleanup(&lib_id);
-    xr_module_id_cleanup(&reexport_id);
-    xr_module_id_cleanup(&star_id);
-    xr_module_id_cleanup(&callback_id);
-    xr_free(entry_canonical);
-    xr_free(entry_logical);
+    xr_hashmap_owned_free(id_index);
+    xr_compile_module_resolver_free(resolver);
+    xr_compile_module_id_cleanup(&lib_id);
+    xr_compile_module_id_cleanup(&reexport_id);
+    xr_compile_module_id_cleanup(&star_id);
+    xr_compile_module_id_cleanup(&callback_id);
+    xr_compile_resources_free(entry_canonical);
+    xr_compile_resources_free(entry_logical);
     free(entry_realpath);
     free(canonical_root);
     xr_test_unlink(lib_path);
@@ -4815,7 +4870,7 @@ TEST(analyzer_xrd_signatures_fail_closed_without_typed_contracts) {
     ASSERT(xr_test_setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
     xa_xrd_cleanup();
 
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "enum NativeErr { Boom, Other }\n"
                          "import native_effects\n"
@@ -4829,7 +4884,7 @@ TEST(analyzer_xrd_signatures_fail_closed_without_typed_contracts) {
                          "fn allocNativeOk() { noThrowNative() }\n"
                          "fn allocNativeBad() { native_effects.makeBox() }\n"
                          "fn allocNativeUnknown() { missingNative() }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_xrd_native_contracts.xr", program);
 
@@ -4902,12 +4957,12 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     ASSERT(xr_test_setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
     xa_xrd_cleanup();
 
-    XaAnalyzer *ok = xa_analyzer_new(g_session);
+    XaAnalyzer *ok = fixture_analyzer();
     ASSERT(ok != NULL);
     const char *ok_source = "enum NativeByteErr { BadInput }\n"
                             "import { decode } from native_byte_effects\n"
                             "fn viaNative(input: Slice<u8>) { decode(input) }\n";
-    AstNode *ok_program = xr_parse(g_session, ok_source);
+    AstNode *ok_program = fixture_parse(g_session, ok_source);
     ASSERT(ok_program != NULL);
     xa_analyzer_analyze(ok, "effect_xrd_native_byte_contracts.xr", ok_program);
     ASSERT(!analyzer_diag_contains(ok, "error"));
@@ -4917,14 +4972,14 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     ASSERT((ok_effect->error_unknown_reasons & XA_UNKNOWN_NATIVE_CONTRACT_MISSING) != 0);
     xa_analyzer_free(ok);
 
-    XaAnalyzer *legacy = xa_analyzer_new(g_session);
+    XaAnalyzer *legacy = fixture_analyzer();
     ASSERT(legacy != NULL);
     const char *legacy_source = "enum NativeByteErr { BadInput }\n"
                                 "import { decodeOld, viewOld } from "
                                 "native_legacy_byte_effects\n"
                                 "fn viaOld(input: ByteSlice) { decodeOld(input) }\n"
                                 "fn viaView(input: ByteView) { viewOld(input) }\n";
-    AstNode *legacy_program = xr_parse(g_session, legacy_source);
+    AstNode *legacy_program = fixture_parse(g_session, legacy_source);
     ASSERT(legacy_program != NULL);
     xa_analyzer_analyze(legacy, "effect_xrd_native_legacy_byte_contracts.xr", legacy_program);
     ASSERT(analyzer_diag_contains(legacy, "invalid XRD descriptor"));
@@ -4933,22 +4988,22 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     ASSERT(analyzer_diag_contains(legacy, "undefined type 'ByteView'"));
     xa_analyzer_free(legacy);
 
-    XaAnalyzer *span_only = xa_analyzer_new(g_session);
+    XaAnalyzer *span_only = fixture_analyzer();
     ASSERT(span_only != NULL);
     const char *span_only_source = "import { spanOnly } from native_legacy_bytespan_only\n"
                                    "fn viaSlice(input: Slice<u8>) { spanOnly(input) }\n";
-    AstNode *span_only_program = xr_parse(g_session, span_only_source);
+    AstNode *span_only_program = fixture_parse(g_session, span_only_source);
     ASSERT(span_only_program != NULL);
     xa_analyzer_analyze(span_only, "effect_xrd_legacy_bytespan_only.xr", span_only_program);
     ASSERT(analyzer_diag_contains(span_only, "invalid XRD descriptor"));
     ASSERT(analyzer_diag_contains(span_only, "removed byte alias 'ByteSlice'"));
     xa_analyzer_free(span_only);
 
-    XaAnalyzer *view_only = xa_analyzer_new(g_session);
+    XaAnalyzer *view_only = fixture_analyzer();
     ASSERT(view_only != NULL);
     const char *view_only_source = "import { viewOnly } from native_legacy_byteview_only\n"
                                    "fn viaViewOnly(input: Slice<u8>) { viewOnly(input) }\n";
-    AstNode *view_only_program = xr_parse(g_session, view_only_source);
+    AstNode *view_only_program = fixture_parse(g_session, view_only_source);
     ASSERT(view_only_program != NULL);
     xa_analyzer_analyze(view_only, "effect_xrd_legacy_byteview_only.xr", view_only_program);
     ASSERT(analyzer_diag_contains(view_only, "invalid XRD descriptor"));
@@ -4985,11 +5040,11 @@ TEST(analyzer_xrd_handle_fields_reject_legacy_byte_aliases) {
     ASSERT(xr_test_setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
     xa_xrd_cleanup();
 
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "import { makeBox } from native_handle_bytes\n"
                          "fn payload() { makeBox().payload }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_xrd_handle_legacy_byte_field.xr", program);
     ASSERT(analyzer_diag_contains(a, "invalid XRD descriptor"));
@@ -5023,11 +5078,11 @@ TEST(analyzer_xrd_namespace_reports_invalid_descriptor) {
     ASSERT(xr_test_setenv("XRAY_TYPEPATH", tmpdir, 1) == 0);
     xa_xrd_cleanup();
 
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "import native_handle_namespace_bytes\n"
                          "fn payload() { native_handle_namespace_bytes.makeBox().payload }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_xrd_namespace_invalid_descriptor.xr", program);
     ASSERT(analyzer_diag_contains(a, "invalid XRD descriptor"));
@@ -5098,7 +5153,7 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     ASSERT(strcmp(from_utf8_contract->errors[0], "Utf8Error.InvalidUtf8") == 0);
     ASSERT(strcmp(slice_bytes_contract->errors[0], "StringSliceError.InvalidByteRange") == 0);
 
-    XaAnalyzer *current = xa_analyzer_new(g_session);
+    XaAnalyzer *current = fixture_analyzer();
     ASSERT(current != NULL);
     XaSymbol *utf8_error = xa_analyzer_lookup_deep(current, "Utf8Error");
     XaSymbol *slice_error = xa_analyzer_lookup_deep(current, "StringSliceError");
@@ -5122,7 +5177,7 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
                                  "fn currentInstance(s: string) { s.sliceBytes(0, 1) }\n"
                                  "fn currentLossy(bytes: Slice<u8>) { "
                                  "string.fromUtf8Lossy(bytes) }\n";
-    AstNode *current_program = xr_parse(g_session, current_source);
+    AstNode *current_program = fixture_parse(g_session, current_source);
     ASSERT(current_program != NULL);
     xa_analyzer_analyze(current, "effect_builtin_type_member_current_contracts.xr",
                         current_program);
@@ -5151,7 +5206,7 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     ASSERT(xa_effect_summary_is_nothrow(current_lossy));
     xa_analyzer_free(current);
 
-    XaAnalyzer *hostile = xa_analyzer_new(g_session);
+    XaAnalyzer *hostile = fixture_analyzer();
     ASSERT(hostile != NULL);
     XaSymbol *hostile_utf8_error = xa_analyzer_lookup_deep(hostile, "Utf8Error");
     ASSERT(hostile_utf8_error != NULL && hostile_utf8_error->links.type != NULL);
@@ -5160,7 +5215,7 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     hostile_utf8_error->links.type->enum_type.nominal_ref = NULL;
     const char *hostile_source =
         "fn malformedPreludeIdentity(bytes: Slice<u8>) { string.fromUtf8(bytes) }\n";
-    AstNode *hostile_program = xr_parse(g_session, hostile_source);
+    AstNode *hostile_program = fixture_parse(g_session, hostile_source);
     ASSERT(hostile_program != NULL);
     xa_analyzer_analyze(hostile, "effect_builtin_type_member_malformed_identity.xr",
                         hostile_program);
@@ -5174,11 +5229,11 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     hostile_utf8_error->links.type->enum_type.nominal_ref = saved_utf8_nominal;
     xa_analyzer_free(hostile);
 
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     const char *source = "fn viaStatic(bytes: Slice<u8>) { string.fromUtf8(bytes) }\n"
                          "fn viaInstance(s: string) { s.sliceBytes(0, 1) }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_builtin_type_member_contracts.xr", program);
     ASSERT(!analyzer_diag_contains(a, "error"));
@@ -5205,7 +5260,7 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
 }
 
 TEST(analyzer_error_effect_subtracts_typed_catches) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source =
@@ -5459,7 +5514,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "fn wrongTypedAliasRethrow() { "
         "  try { fail() } catch (e: OtherErr) { const alias = e; throw alias } "
         "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_catch_subtraction.xr", program);
 
@@ -5777,14 +5832,14 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
 }
 
 TEST(analyzer_error_effect_marks_invalid_program_partial_facts) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "enum PartialErr { Boom, Other }\n"
                          "fn invalidPartial() { throw PartialErr.Boom; missingPartial() }\n"
                          "fn invalidEmpty() { missingEmpty() }\n"
                          "fn callsInvalid() { invalidEmpty() }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_invalid_partial.xr", program);
 
@@ -5813,7 +5868,7 @@ TEST(analyzer_error_effect_marks_invalid_program_partial_facts) {
 }
 
 TEST(analyzer_error_effect_tracks_map_catch_aliases) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source =
@@ -6319,7 +6374,7 @@ TEST(analyzer_error_effect_tracks_map_catch_aliases) {
         "    for (entry in entries) { const value: MapErr = entry[1]; throw value }\n"
         "  }\n"
         "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_map_catch_alias.xr", program);
 
@@ -6912,9 +6967,9 @@ TEST(analyzer_length_identity_respects_lexical_shadow) {
         "len() -> i64 { return arrayLength(this.values) } }\n",
     };
     for (unsigned i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i) {
-        XaAnalyzer *a = xa_analyzer_new(g_session);
+        XaAnalyzer *a = fixture_analyzer();
         ASSERT(a != NULL);
-        AstNode *program = xr_parse(g_session, sources[i]);
+        AstNode *program = fixture_parse(g_session, sources[i]);
         ASSERT(program != NULL);
         xa_analyzer_analyze(a, "length_identity.xr", program);
         ASSERT(a->diagnostic_count == 0);
@@ -6933,9 +6988,9 @@ TEST(analyzer_array_index_methods_require_checked_value_operations) {
         "fn bad(a: Array<i64>?) { unsafe { a?.set(0, 8) } }\n",
     };
     for (unsigned i = 0; i < sizeof(sources) / sizeof(sources[0]); ++i) {
-        XaAnalyzer *a = xa_analyzer_new(g_session);
+        XaAnalyzer *a = fixture_analyzer();
         ASSERT(a != NULL);
-        AstNode *program = xr_parse(g_session, sources[i]);
+        AstNode *program = fixture_parse(g_session, sources[i]);
         ASSERT(program != NULL);
         xa_analyzer_analyze(a, "array_index_authority.xr", program);
         ASSERT(analyzer_diag_contains(a, "require the checked XIR value-operation pipeline"));
@@ -6945,7 +7000,7 @@ TEST(analyzer_array_index_methods_require_checked_value_operations) {
 }
 
 TEST(analyzer_error_effect_len_shadow_does_not_preserve_map_provenance) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "enum MapErr { Boom, Other }\n"
@@ -6961,7 +7016,7 @@ TEST(analyzer_error_effect_len_shadow_does_not_preserve_map_provenance) {
                          "    throw box[\"caught\"]\n"
                          "  }\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_map_len_shadow_invalidates.xr", program);
 
@@ -6976,7 +7031,7 @@ TEST(analyzer_error_effect_len_shadow_does_not_preserve_map_provenance) {
 }
 
 TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "enum SetErr { Boom, Other }\n"
@@ -7125,7 +7180,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
                          "  const box: Set<SetErr> = #[SetErr.Boom, SetErr.Other]\n"
                          "  for (item in box) { throw item }\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_set_iterator_catch_alias.xr", program);
 
@@ -7294,7 +7349,7 @@ TEST(analyzer_error_effect_tracks_set_iterator_catch_aliases) {
 }
 
 TEST(analyzer_error_effect_converges_recursive_components) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "enum RecursiveErr { Boom, Other }\n"
@@ -7307,7 +7362,7 @@ TEST(analyzer_error_effect_converges_recursive_components) {
                          "fn cycleC() { cycleA(); throw RecursiveErr.Boom }\n"
                          "fn caughtCycleA() { try { caughtCycleB() } catch (e: RecursiveErr) { } }\n"
                          "fn caughtCycleB() { caughtCycleA(); throw RecursiveErr.Boom }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "effect_recursive_fixpoint.xr", program);
 
@@ -7354,10 +7409,10 @@ TEST(analyzer_error_effect_converges_recursive_components) {
 }
 
 TEST(analyzer_empty_array_uses_unsolved_infer_var) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var xs = []\nvar ys: Array<i64> = []\n");
+    AstNode *program = fixture_parse(g_session, "var xs = []\nvar ys: Array<i64> = []\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "empty_array_infer_var.xr", program);
 
@@ -7370,10 +7425,10 @@ TEST(analyzer_empty_array_uses_unsolved_infer_var) {
 }
 
 TEST(analyzer_empty_set_uses_unsolved_infer_var) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var xs = #[]\nvar ys: Set<i64> = #[]\n");
+    AstNode *program = fixture_parse(g_session, "var xs = #[]\nvar ys: Set<i64> = #[]\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "empty_set_infer_var.xr", program);
 
@@ -7386,10 +7441,10 @@ TEST(analyzer_empty_set_uses_unsolved_infer_var) {
 }
 
 TEST(analyzer_empty_map_uses_unsolved_infer_var) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var xs = #{}\nvar ys: Map<string, i64> = #{}\n");
+    AstNode *program = fixture_parse(g_session, "var xs = #{}\nvar ys: Map<string, i64> = #{}\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "empty_map_infer_var.xr", program);
 
@@ -7402,12 +7457,12 @@ TEST(analyzer_empty_map_uses_unsolved_infer_var) {
 }
 
 TEST(analyzer_struct_literal_unknown_fields_offer_lambda_return_hint) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "struct Point { x: i64; y: i64 }\n"
                          "var f: fn(i64) -> Point = value -> Point{result: value}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "lambda_struct_literal_hint.xr", program);
 
@@ -7421,10 +7476,10 @@ TEST(analyzer_struct_literal_unknown_fields_offer_lambda_return_hint) {
 }
 
 TEST(analyzer_unconstrained_expression_lambda_reports_e0365_with_all_routes) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var f = value -> value\n");
+    AstNode *program = fixture_parse(g_session, "var f = value -> value\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "lambda_inference_routes.xr", program);
 
@@ -7448,7 +7503,7 @@ TEST(analyzer_unconstrained_expression_lambda_reports_e0365_with_all_routes) {
 }
 
 TEST(analyzer_ref_arrow_hint_is_advisory_and_fail_closed) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
     const char *source = "fn mutate(value: ref i64) { value *= 2 }\n"
@@ -7464,7 +7519,7 @@ TEST(analyzer_ref_arrow_hint_is_advisory_and_fail_closed) {
                          "var uncertain = (x: ref i64, callback: fn(ref i64)) -> {\n"
                          "    callback(ref x)\n"
                          "}\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "lambda_ref_hint.xr", program);
 
@@ -7489,12 +7544,12 @@ TEST(analyzer_ref_arrow_hint_is_advisory_and_fail_closed) {
 }
 
 TEST(analyzer_rejects_builtin_generic_arity) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
-    XrArena arena;
-    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
-    XrCompilerSessionScope scope;
-    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "builtin_generic_arity.xr", &scope));
+    XrArena arena = {0};
+    fixture_arena_open(&arena);
+    XrCompilerSessionScope scope = {0};
+    ASSERT(xr_compile_session_push_arena(g_session, &arena, &scope) == XR_COMPILE_RESOURCE_OK);
 
     XrType *bare_array = xr_tref_resolve_in_analyzer(a, xr_tref_named(g_session, "Array"));
     ASSERT(bare_array != NULL);
@@ -7530,20 +7585,19 @@ TEST(analyzer_rejects_builtin_generic_arity) {
     ASSERT(analyzer_diag_contains(a, "generic type 'Task' expects 1 type argument, got 0"));
     ASSERT(analyzer_diag_contains(a, "generic type 'Iterable' expects 1 type argument, got 0"));
 
-    xr_compiler_session_pop_arena(&scope);
+    ASSERT(xr_compile_session_pop_arena(&scope) == XR_COMPILE_RESOURCE_OK);
     xr_arena_destroy(&arena);
     xa_analyzer_free(a);
     setup_pool();
 }
 
 TEST(analyzer_rejects_generator_yield_value_mismatch) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
-    XrArena arena;
-    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
-    XrCompilerSessionScope scope;
-    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "generator_yield_value_mismatch.xr",
-                                          &scope));
+    XrArena arena = {0};
+    fixture_arena_open(&arena);
+    XrCompilerSessionScope scope = {0};
+    ASSERT(xr_compile_session_push_arena(g_session, &arena, &scope) == XR_COMPILE_RESOURCE_OK);
 
     XrTypeRef *iter_args[] = {xr_tref_i64(g_session)};
     XrType *iter_type =
@@ -7561,7 +7615,7 @@ TEST(analyzer_rejects_generator_yield_value_mismatch) {
     ASSERT(!xa_typecheck_assignable(iter_elem, xr_type_new_string(NULL)));
 
     const char *source = "fn bad() -> Iterator<i64> { yield \"x\" }";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
 
     xa_analyzer_analyze(a, "generator_yield_value_mismatch.xr", program);
@@ -7569,20 +7623,19 @@ TEST(analyzer_rejects_generator_yield_value_mismatch) {
     ASSERT(analyzer_diag_contains(
         a, "yielded value of type 'string' is not assignable to generator element type 'i64'"));
 
-    xr_compiler_session_pop_arena(&scope);
+    ASSERT(xr_compile_session_pop_arena(&scope) == XR_COMPILE_RESOURCE_OK);
     xr_arena_destroy(&arena);
     xa_analyzer_free(a);
     setup_pool();
 }
 
 TEST(analyzer_rejects_error_type_container_success_types) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
-    XrArena arena;
-    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
-    XrCompilerSessionScope scope;
-    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "container_error_type_success.xr",
-                                          &scope));
+    XrArena arena = {0};
+    fixture_arena_open(&arena);
+    XrCompilerSessionScope scope = {0};
+    ASSERT(xr_compile_session_push_arena(g_session, &arena, &scope) == XR_COMPILE_RESOURCE_OK);
 
     XrTypeRef *err = xr_tref_error(g_session);
     XrTypeRef *array_args[] = {err};
@@ -7605,19 +7658,19 @@ TEST(analyzer_rejects_error_type_container_success_types) {
     ASSERT(analyzer_diag_contains(a, "container value type 'Map'"));
     ASSERT(analyzer_diag_contains(a, "container element type 'fixed array'"));
 
-    xr_compiler_session_pop_arena(&scope);
+    ASSERT(xr_compile_session_pop_arena(&scope) == XR_COMPILE_RESOURCE_OK);
     xr_arena_destroy(&arena);
     xa_analyzer_free(a);
     setup_pool();
 }
 
 TEST(analyzer_type_ref_failures_use_error_recovery) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
-    XrArena arena;
-    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
-    XrCompilerSessionScope scope;
-    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "type_ref_error_recovery.xr", &scope));
+    XrArena arena = {0};
+    fixture_arena_open(&arena);
+    XrCompilerSessionScope scope = {0};
+    ASSERT(xr_compile_session_push_arena(g_session, &arena, &scope) == XR_COMPILE_RESOURCE_OK);
 
     XrType *missing =
         xr_tref_resolve_in_analyzer(a, xr_tref_named(g_session, "DefinitelyMissingType"));
@@ -7644,17 +7697,17 @@ TEST(analyzer_type_ref_failures_use_error_recovery) {
     ASSERT(analyzer_diag_contains(a, "undefined type 'DefinitelyMissingGeneric'"));
     ASSERT(analyzer_diag_contains(a, "fixed array length must be greater than zero"));
 
-    xr_compiler_session_pop_arena(&scope);
+    ASSERT(xr_compile_session_pop_arena(&scope) == XR_COMPILE_RESOURCE_OK);
     xr_arena_destroy(&arena);
     xa_analyzer_free(a);
     setup_pool();
 }
 
 TEST(analyzer_cast_error_recovery_and_union_overlap) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var value = 1 as MissingCastType\n");
+    AstNode *program = fixture_parse(g_session, "var value = 1 as MissingCastType\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "cast_error_recovery.xr", program);
 
@@ -7667,9 +7720,9 @@ TEST(analyzer_cast_error_recovery_and_union_overlap) {
     xa_analyzer_free(a);
     setup_pool();
 
-    a = xa_analyzer_new(g_session);
+    a = fixture_analyzer();
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "var value: string | bool = \"text\"\n"
+    program = fixture_parse(g_session, "var value: string | bool = \"text\"\n"
                                   "var result = value as i64\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "cast_disjoint_union.xr", program);
@@ -7683,9 +7736,9 @@ TEST(analyzer_cast_error_recovery_and_union_overlap) {
     xa_analyzer_free(a);
     setup_pool();
 
-    a = xa_analyzer_new(g_session);
+    a = fixture_analyzer();
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "var value: i64 | string = 1\n"
+    program = fixture_parse(g_session, "var value: i64 | string = 1\n"
                                   "var result = value as string\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "cast_overlapping_union.xr", program);
@@ -7701,10 +7754,10 @@ TEST(analyzer_cast_error_recovery_and_union_overlap) {
 TEST(analyzer_enum_identity_is_nominal) {
     // Two distinct enums are separate nominal types. Neither an `as` cast nor an
     // assignment may bridge unrelated enums; only same-name enums are equal.
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "enum Color { Red, Green, Blue }\n"
+    AstNode *program = fixture_parse(g_session, "enum Color { Red, Green, Blue }\n"
                                            "enum Suit { Hearts, Spades }\n"
                                            "var value = Color.Red as Suit\n");
     ASSERT(program != NULL);
@@ -7714,9 +7767,9 @@ TEST(analyzer_enum_identity_is_nominal) {
     xa_analyzer_free(a);
     setup_pool();
 
-    a = xa_analyzer_new(g_session);
+    a = fixture_analyzer();
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "enum Color { Red, Green, Blue }\n"
+    program = fixture_parse(g_session, "enum Color { Red, Green, Blue }\n"
                                   "enum Suit { Hearts, Spades }\n"
                                   "var value: Suit = Color.Red\n");
     ASSERT(program != NULL);
@@ -7727,9 +7780,9 @@ TEST(analyzer_enum_identity_is_nominal) {
     setup_pool();
 
     // Same enum stays assignable, and enum -> int conversion remains valid.
-    a = xa_analyzer_new(g_session);
+    a = fixture_analyzer();
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "enum Color { Red, Green, Blue }\n"
+    program = fixture_parse(g_session, "enum Color { Red, Green, Blue }\n"
                                   "var c: Color = Color.Green\n"
                                   "var same: Color = c\n"
                                   "var n = c as i64\n");
@@ -7753,9 +7806,9 @@ TEST(analyzer_enum_identity_is_nominal) {
     xa_analyzer_free(a);
     setup_pool();
 
-    a = xa_analyzer_new(g_session);
+    a = fixture_analyzer();
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "enum Color { Red, Green }\n"
+    program = fixture_parse(g_session, "enum Color { Red, Green }\n"
                                   "var c: Color = Color.Green\n"
                                   "var result = c as i64?\n");
     ASSERT(program != NULL);
@@ -7771,9 +7824,9 @@ TEST(analyzer_enum_identity_is_nominal) {
     xa_analyzer_free(a);
     setup_pool();
 
-    a = xa_analyzer_new(g_session);
+    a = fixture_analyzer();
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "enum Color { Red, Green }\n"
+    program = fixture_parse(g_session, "enum Color { Red, Green }\n"
                                   "var value: Color? = null\n"
                                   "var result = value as i64\n");
     ASSERT(program != NULL);
@@ -7791,9 +7844,9 @@ TEST(analyzer_enum_identity_is_nominal) {
     xa_analyzer_free(a);
     setup_pool();
 
-    a = xa_analyzer_new(g_session);
+    a = fixture_analyzer();
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "enum Color { Red, Green }\n"
+    program = fixture_parse(g_session, "enum Color { Red, Green }\n"
                                   "var value: Color? = null\n"
                                   "var result = value as i64?\n");
     ASSERT(program != NULL);
@@ -7814,10 +7867,10 @@ TEST(analyzer_enum_identity_is_nominal) {
 }
 
 TEST(analyzer_assignment_error_recovery_suppresses_cascade) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var value: MissingAssignmentType = 1\n");
+    AstNode *program = fixture_parse(g_session, "var value: MissingAssignmentType = 1\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "assignment_error_recovery.xr", program);
 
@@ -7832,10 +7885,10 @@ TEST(analyzer_assignment_error_recovery_suppresses_cascade) {
 }
 
 TEST(analyzer_member_error_recovery_suppresses_call_cascade) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "\"hello\".missing();\n");
+    AstNode *program = fixture_parse(g_session, "\"hello\".missing();\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "member_error_recovery.xr", program);
 
@@ -7849,10 +7902,10 @@ TEST(analyzer_member_error_recovery_suppresses_call_cascade) {
 }
 
 TEST(analyzer_operator_and_index_failures_use_error_recovery) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var op = \"text\" - 1\n"
+    AstNode *program = fixture_parse(g_session, "var op = \"text\" - 1\n"
                                            "op.missing()\n"
                                            "var indexed = \"text\"[0]\n"
                                            "indexed.missing()\n");
@@ -7871,10 +7924,10 @@ TEST(analyzer_operator_and_index_failures_use_error_recovery) {
 }
 
 TEST(analyzer_nullable_numeric_equality_uses_nonnull_literal_context) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "fn value() -> i64? { return 7 }\n"
+    AstNode *program = fixture_parse(g_session, "fn value() -> i64? { return 7 }\n"
                                            "var a = value() == 7\n"
                                            "var b = -7 == value()\n"
                                            "var c = value() != null\n");
@@ -7890,10 +7943,10 @@ TEST(analyzer_nullable_numeric_equality_uses_nonnull_literal_context) {
 }
 
 TEST(analyzer_non_callable_failure_uses_error_recovery) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var called = (1)()\ncalled.missing()\n");
+    AstNode *program = fixture_parse(g_session, "var called = (1)()\ncalled.missing()\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "non_callable_error_recovery.xr", program);
 
@@ -7907,10 +7960,10 @@ TEST(analyzer_non_callable_failure_uses_error_recovery) {
 }
 
 TEST(analyzer_container_recovery_rejects_poisoned_success_types) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var xs = [missingElement]\n"
+    AstNode *program = fixture_parse(g_session, "var xs = [missingElement]\n"
                                            "xs.missing()\n"
                                            "var raw = Array()\n"
                                            "raw.missing()\n");
@@ -7928,9 +7981,9 @@ TEST(analyzer_container_recovery_rejects_poisoned_success_types) {
     xa_analyzer_free(a);
     setup_pool();
 
-    a = xa_analyzer_new(g_session);
+    a = fixture_analyzer();
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "var typed = Array<i64>()\n"
+    program = fixture_parse(g_session, "var typed = Array<i64>()\n"
                                   "var value: i64 = typed[0]\n"
                                   "var contextualArray: Array<i64> = Array()\n"
                                   "var contextualMap: Map<string, i64> = Map()\n"
@@ -7950,10 +8003,10 @@ TEST(analyzer_container_recovery_rejects_poisoned_success_types) {
  * types, not silently-accepted ones — a deleted surface that still parses is
  * worse than one that never existed. */
 TEST(analyzer_weak_containers_are_unknown_types) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var wm = WeakMap<string, i64>()\n"
+    AstNode *program = fixture_parse(g_session, "var wm = WeakMap<string, i64>()\n"
                                            "var ws = WeakSet<string>()\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "weak_containers_removed.xr", program);
@@ -7966,20 +8019,20 @@ TEST(analyzer_weak_containers_are_unknown_types) {
 }
 
 TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
 
-    XaSymbol *box = xa_symbol_new("Box", XA_SYM_CLASS);
+    XaSymbol *box = xa_symbol_new(a->symbol_registry, "Box", XA_SYM_CLASS);
     ASSERT(box != NULL);
     box->links.type = xr_type_new_class(a->isolate, "Box");
-    box->links.class_info = xa_class_info_new("Box");
+    box->links.class_info = xa_class_info_new(xr_compile_session_compile_state(g_session), "Box");
     box->links.owns_class_info = true;
     xa_scope_add_symbol(a->global_scope, box);
 
-    XrArena arena;
-    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
-    XrCompilerSessionScope scope;
-    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "box_error_type_arg.xr", &scope));
+    XrArena arena = {0};
+    fixture_arena_open(&arena);
+    XrCompilerSessionScope scope = {0};
+    ASSERT(xr_compile_session_push_arena(g_session, &arena, &scope) == XR_COMPILE_RESOURCE_OK);
     XrTypeRef *err = xr_tref_error(g_session);
     XrTypeRef *box_args[] = {err};
     XrType *box_type =
@@ -7987,13 +8040,13 @@ TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
     ASSERT(box_type != NULL);
     ASSERT(XR_TYPE_IS_ERROR(box_type));
     ASSERT(analyzer_diag_contains(a, "generic type argument 'Box'"));
-    xr_compiler_session_pop_arena(&scope);
+    ASSERT(xr_compile_session_pop_arena(&scope) == XR_COMPILE_RESOURCE_OK);
     xr_arena_destroy(&arena);
 
     xa_analyzer_free(a);
     setup_pool();
 
-    AstNode *program = xr_parse(g_session, "fn id<T: Iterable<i64>>(x: T) -> T { return x }\n");
+    AstNode *program = fixture_parse(g_session, "fn id<T: Iterable<i64>>(x: T) -> T { return x }\n");
     ASSERT(program != NULL);
     ASSERT(program->type == AST_PROGRAM);
     ASSERT(program->as.program.count == 1);
@@ -8004,17 +8057,16 @@ TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
     XrGenericParam *param = fn->as.function_decl.type_params[0];
     ASSERT(param != NULL);
     ASSERT(param->constraint_count == 1);
-    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
-    ASSERT(xr_compiler_session_push_arena(g_session, &arena, "constraint_error_type_success.xr",
-                                          &scope));
+    fixture_arena_open(&arena);
+    ASSERT(xr_compile_session_push_arena(g_session, &arena, &scope) == XR_COMPILE_RESOURCE_OK);
     param->constraints[0] = xr_tref_error(g_session);
 
-    a = xa_analyzer_new(g_session);
+    a = fixture_analyzer();
     ASSERT(a != NULL);
     xa_analyzer_analyze(a, "generic_constraint_error_type.xr", program);
     ASSERT(analyzer_diag_contains(a, "generic constraint 'T'"));
 
-    xr_compiler_session_pop_arena(&scope);
+    ASSERT(xr_compile_session_pop_arena(&scope) == XR_COMPILE_RESOURCE_OK);
     xr_arena_destroy(&arena);
     xa_analyzer_free(a);
     setup_pool();
@@ -8023,11 +8075,11 @@ TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
 TEST(export_symbols_invalidate_table_on_nested_error_type) {
     const char *source = "export fn bad() -> i64 { return 1 }\n"
                          "export fn good() -> i64 { return 1 }\n";
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     ASSERT(program->type == AST_PROGRAM);
 
-    XaAnalyzer *a = xa_analyzer_new(g_session);
+    XaAnalyzer *a = fixture_analyzer();
     ASSERT(a != NULL);
     XrModuleSpec spec = {.canonical = "export_error_type_test.xr",
                          .source_path = "export_error_type_test.xr",
@@ -8141,8 +8193,8 @@ TEST(scope_null_handling) {
 }
 
 TEST(symbol_links_lifecycle) {
-    XaAnalyzer *a = xa_analyzer_new(g_session);
-    XaSymbol *sym = xa_symbol_new("test", XA_SYM_VARIABLE);
+    XaAnalyzer *a = fixture_analyzer();
+    XaSymbol *sym = xa_symbol_new(a->symbol_registry, "test", XA_SYM_VARIABLE);
     xa_scope_add_symbol(a->global_scope, sym);
 
     // Get links (should create if not exists)
@@ -8187,18 +8239,18 @@ TEST(union_type_dedup) {
 }
 
 TEST(class_info_members) {
-    XrClassInfo *info = xa_class_info_new("TestClass");
+    XrClassInfo *info = xa_class_info_new(xr_compile_session_compile_state(g_session), "TestClass");
     ASSERT(info != NULL);
     ASSERT(strcmp(info->name, "TestClass") == 0);
 
     // Add field
-    XaSymbol *field = xa_symbol_new("value", XA_SYM_FIELD);
-    xa_class_info_add_field(info, field);
+    XaSymbol *field = xa_symbol_new(g_analyzer->symbol_registry, "value", XA_SYM_FIELD);
+    ASSERT(xa_class_info_add_field(xr_compile_session_compile_state(g_session), info, field) == XR_COMPILE_RESOURCE_OK);
     ASSERT(info->field_count == 1);
 
     // Add method
-    XaSymbol *method = xa_symbol_new("getValue", XA_SYM_METHOD);
-    xa_class_info_add_method(info, method);
+    XaSymbol *method = xa_symbol_new(g_analyzer->symbol_registry, "getValue", XA_SYM_METHOD);
+    ASSERT(xa_class_info_add_method(xr_compile_session_compile_state(g_session), info, method) == XR_COMPILE_RESOURCE_OK);
     ASSERT(info->method_count == 1);
 
     // Lookup
@@ -8287,6 +8339,7 @@ int main(int argc, char **argv) {
 
     printf("\nAnalyzer tests:\n");
     RUN_TEST(analyzer_create);
+    RUN_TEST(type_ref_uses_explicit_analyzer_after_nested_free);
     RUN_TEST(analyzer_diagnostics);
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);

@@ -149,8 +149,8 @@ static XrXirStatus source_product_compare(const XrXirCompileContext *context,
     return XR_XIR_OK;
 }
 static XrXirStatus source_product_build(const XrXirSourceProductRequest *request,
-    const XrXirSourceText *text, bool has_text, XrXirSourceProduct **output,
-    XrXirSourceProductDiagnostic *diagnostic) {
+    const XrXirSourceText *text, bool has_text, const XrXirSourceAst *syntax,
+    XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic) {
     if (!source_diagnostic_empty(diagnostic)) return XR_XIR_BAD_STRUCTURE;
     if (!request || (has_text && !text) || !output || *output ||
         !xir_compile_context_valid(request->source.context) ||
@@ -162,7 +162,9 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
     if (diagnostic) memset(diagnostic,0,sizeof(*diagnostic));
     XrXirSourceResult source={0};XrXirArtifact *closed=NULL,*lowered=NULL;
     XrXirCheckedPacket source_packet={0},closed_packet={0};
-    XrXirStatus status = has_text ?
+    XrXirStatus status = syntax ?
+        xr_xir_compile_source_check_ast(&request->source, syntax, &source,
+            diagnostic ? &diagnostic->source : NULL, diagnostic ? &diagnostic->source_path : NULL) : has_text ?
         xr_xir_compile_source_check_text(&request->source, text, &source,
             diagnostic ? &diagnostic->source : NULL, diagnostic ? &diagnostic->source_path : NULL) :
         xr_xir_compile_source_check(&request->source, &source,
@@ -225,11 +227,19 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProductRequest *request,
     XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic) {
-    return source_product_build(request, NULL, false, output, diagnostic);
+    return source_product_build(request, NULL, false, NULL, output, diagnostic);
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build_text(const XrXirSourceProductRequest *request,
     const XrXirSourceText *text, XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic) {
-    return source_product_build(request, text, true, output, diagnostic);
+    return source_product_build(request, text, true, NULL, output, diagnostic);
+}
+XR_FUNC XrXirStatus xr_xir_compile_source_product_build_ast(const XrXirSourceProductRequest *request,
+    const XrXirSourceAst *syntax, XrXirSourceProduct **output,
+    XrXirSourceProductDiagnostic *diagnostic) {
+    if (!source_diagnostic_empty(diagnostic)) return XR_XIR_BAD_STRUCTURE;
+    if (!syntax || !syntax->program)
+        return source_product_reject(diagnostic, XR_XIR_SOURCE_PRODUCT_INPUT, XR_XIR_BAD_STRUCTURE);
+    return source_product_build(request, NULL, false, syntax, output, diagnostic);
 }
 XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product) {
     if (!product) return;

@@ -102,6 +102,8 @@ typedef struct {
     XrProto *proto;
     struct XrVMRuntime *isolate; /* for string interning; may be NULL */
     const XrTargetDataLayout *target_data_layout;
+    XrTargetDataLayout target_storage;
+    XiEmitInput input;
     XiEmitStatus status;
 
     /* Register allocation: value_id -> register number */

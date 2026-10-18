@@ -798,10 +798,14 @@ static void collect_open_dispatch_targets_from_scope(OpenDispatchTargetCollector
 
     int count = 0;
     XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
+    if (xa_scope_resource_status(scope) != XR_COMPILE_RESOURCE_OK) {
+        collector->exact = false;
+        return;
+    }
     for (int i = 0; i < count && collector->exact; i++)
         collect_open_dispatch_candidate(collector, symbols[i]);
     if (symbols)
-        xr_free(symbols);
+        xr_compile_state_free(symbols);
 
     for (int i = 0; i < scope->child_count && collector->exact; i++)
         collect_open_dispatch_targets_from_scope(collector,

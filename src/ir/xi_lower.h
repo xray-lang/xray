@@ -41,6 +41,7 @@ struct XaTypedProgram;
 struct XgGlobalEvidence;
 struct XrType;
 struct XrVMRuntime;
+struct XrReplSymbolTable;
 
 /* ========== Variable Tracking for Braun SSA ========== */
 
@@ -302,9 +303,11 @@ XR_FUNC XiFunc *xi_lower_func(const struct XaTypedProgram *program, struct XrVMR
  * Lower a top-level program (sequence of statements) into a
  * synthetic "main" function. Used for script-mode execution.
  * The AST must be canonicalized (xr_canon_program) before lowering.
+ * A non-NULL genuine REPL table selects incremental lowering and is borrowed
+ * through this synchronous call. Ordinary compilation passes NULL.
  */
 XR_FUNC XiFunc *xi_lower_program(const struct XaTypedProgram *program, struct XrVMRuntime *isolate,
-                                 bool repl_mode,
+                                 const struct XrReplSymbolTable *repl_symbols,
                                  const struct XiProgramSemanticInput *program_semantics);
 
 #endif  // XI_LOWER_H

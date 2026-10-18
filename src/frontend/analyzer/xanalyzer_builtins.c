@@ -8,6 +8,7 @@
  * xanalyzer_builtins.c - Built-in type member definitions
  */
 
+#include "xanalyzer_enum_storage.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "xanalyzer_builtins.h"
 #include "xanalyzer.h"
@@ -57,8 +58,8 @@ static XrType *builtin_prelude_enum_type(XrVMRuntime *X, XaAnalyzer *analyzer, c
 static XrType *parse_type_str(XrVMRuntime *X, XaAnalyzer *analyzer, const char *module_name,
                               const char *s, size_t len);
 
-static XrType *parse_metadata_type(XrVMRuntime *X, const char *text) {
-    return text ? parse_type_str(X, NULL, NULL, text, strlen(text)) : xr_type_new_error(X);
+static XrType *parse_metadata_type(XrVMRuntime *X, XaAnalyzer *analyzer, const char *text) {
+    return text ? parse_type_str(X, analyzer, NULL, text, strlen(text)) : xr_type_new_error(X);
 }
 
 // Builtin type table populated at startup from .xr declarations.
@@ -154,31 +155,18 @@ static bool xa_builtin_member_available_for_type(XrType *type, const char *membe
     return true;
 }
 
-// Create fake symbols for built-in members
-XaSymbol **xa_builtin_get_members(XrType *type, int *count) {
-    XR_DCHECK(count != NULL, "builtin_get_members: NULL count");
-    *count = 0;
-
-    const XaBuiltinType *bt = xa_builtin_get_type_info(type);
-    if (!bt)
-        return NULL;
-
-    XaSymbol **symbols = xr_malloc(sizeof(XaSymbol *) * bt->member_count);
-    if (!symbols)
-        return NULL;
-
-    for (int i = 0; i < bt->member_count; i++) {
-        const XaBuiltinMember *m = &bt->members[i];
-        if (!xa_builtin_member_available_for_type(type, m->name))
-            continue;
-        XaSymbolKind kind = m->is_method ? XA_SYM_METHOD : XA_SYM_FIELD;
-        XaSymbol *sym = xa_symbol_new(m->name, kind);
-        sym->is_builtin = true;
-        symbols[*count] = sym;
-        (*count)++;
-    }
-
-    return symbols;
+XR_FUNC XrCompileResourceStatus xa_builtin_get_members(
+    XaSymbolRegistry *registry, XrType *type, XaMemberList *output) {
+    XrCompileState *state = xa_symbol_registry_state(registry);
+    XrCompileResourceStatus status = xr_compile_state_status(state);
+    if (status != XR_COMPILE_RESOURCE_OK)
+        return status;
+    if (!output || output->items || output->count || output->owns_symbols)
+        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    status = xr_compile_state_work(state, 1);
+    if (status != XR_COMPILE_RESOURCE_OK)
+        return status;
+    return xa_member_list_builtins(registry, xa_builtin_get_type_info(type), output);
 }
 
 static const XaBuiltinMember *xa_builtin_find_instance_member(XrType *type,
@@ -1090,8 +1078,9 @@ const XaBuiltinClass *xa_builtin_find_source_provider_bridge(const char *module_
                : NULL;
 }
 
-XrType *xa_builtin_object_shape_decl_type(XrVMRuntime *X,
+XR_FUNC XrType *xa_builtin_object_shape_decl_type(XrVMRuntime *X, XaAnalyzer *analyzer,
                                           const XaBuiltinObjectShape *object_shape) {
+    if (analyzer && xr_compile_state_status(xa_symbol_registry_state(analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK) return xr_type_new_error(X);
     if (!object_shape || object_shape->field_count < 0 ||
         (object_shape->field_count > 0 && !object_shape->fields))
         return xr_type_new_error(X);
@@ -1105,7 +1094,10 @@ XrType *xa_builtin_object_shape_decl_type(XrVMRuntime *X,
     }
     for (int i = 0; i < count; i++) {
         names[i] = object_shape->fields[i].name;
-        types[i] = parse_metadata_type(X, object_shape->fields[i].type_str);
+        types[i] = parse_metadata_type(X, analyzer, object_shape->fields[i].type_str);
+        if (analyzer && xr_compile_state_status(xa_symbol_registry_state(analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK) {
+            xr_free(names); xr_free(types); return xr_type_new_error(X);
+        }
     }
     XrType *type = xr_type_new_struct_object_with_fields(X, names, types, count);
     xr_free(names);
@@ -1126,55 +1118,60 @@ static const char *xa_builtin_enum_nominal_owner(const XaBuiltinEnum *enum_decl)
     return NULL;
 }
 
-XrType *xa_builtin_enum_decl_type(XrVMRuntime *X, const XaBuiltinEnum *enum_decl,
-                                  XaEnumInfo **out_info) {
-    if (out_info)
-        *out_info = NULL;
-    if (!enum_decl || !enum_decl->name || enum_decl->variant_count <= 0 || !enum_decl->variants)
-        return xr_type_new_error(X);
+static bool builtin_enum_io(XaAnalyzer *analyzer, XrOsIoStatus status) {
+    if (analyzer && status != XR_OS_IO_OK && status != XR_OS_IO_BAD_ARGUMENT)
+        (void)xa_enum_capture_status(xa_symbol_registry_state(analyzer->symbol_registry), status);
+    return status == XR_OS_IO_OK;
+}
 
-    const char *nominal_owner = xa_builtin_enum_nominal_owner(enum_decl);
-    if (!nominal_owner)
+XR_FUNC XrType *xa_builtin_enum_decl_type(XrVMRuntime *X, XaAnalyzer *analyzer,
+    const XaBuiltinEnum *decl, XaEnumInfo **output) {
+    XrCompileState *state = analyzer ? xa_symbol_registry_state(analyzer->symbol_registry) : NULL;
+    if (analyzer && xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return xr_type_new_error(X);
+    if ((!analyzer && output) || (output && *output) || (analyzer && X != analyzer->isolate)) {
+        if (analyzer) (void)xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
         return xr_type_new_error(X);
-    XaEnumInfo *info =
-        xa_enum_info_new(nominal_owner, enum_decl->name, (uint32_t) enum_decl->variant_count);
-    if (!info)
-        return xr_type_new_error(X);
-    for (int i = 0; i < enum_decl->variant_count; i++) {
-        const XaBuiltinEnumVariant *src = &enum_decl->variants[i];
-        XaEnumVariantInfo *dst = &info->variants[i];
-        dst->name = src->name;
-        dst->payload_count = (uint16_t) src->payload_count;
-        if (src->payload_count > 0) {
-            dst->payload_types = xr_calloc((size_t) src->payload_count, sizeof(XrType *));
-            if (!dst->payload_types) {
-                xa_enum_info_free(info);
-                return xr_type_new_error(X);
+    }
+    if (!decl || !decl->name || decl->variant_count <= 0 || !decl->variants) return xr_type_new_error(X);
+    const char *nominal_owner = xa_builtin_enum_nominal_owner(decl);
+    if (!nominal_owner) return xr_type_new_error(X);
+    XrOsIoPolicy policy = analyzer ? xr_compile_io_policy(xr_compile_state_resources(state)) : xr_os_io_system_policy();
+    XaEnumInfo *info = NULL;
+    if (!builtin_enum_io(analyzer, xa_enum_info_new(&policy, nominal_owner, decl->name,
+            (uint32_t)decl->variant_count, &info))) return xr_type_new_error(X);
+    for (int i = 0; i < decl->variant_count; ++i) {
+        const XaBuiltinEnumVariant *src = &decl->variants[i]; XaEnumVariantInfo *dst = &info->variants[i];
+        if (src->payload_count < 0 || src->payload_count > UINT16_MAX ||
+            !builtin_enum_io(analyzer, xa_enum_variant_set_name(dst, src->name))) goto failed;
+        dst->payload_count = (uint16_t)src->payload_count;
+        if (src->payload_count) {
+            void *memory = NULL;
+            XrOsIoStatus status = policy.alloc(policy.context, (size_t)src->payload_count * sizeof(XrType *), &memory);
+            if (!builtin_enum_io(analyzer, status)) goto failed;
+            XrType **types = memory;
+            bool ok = true;
+            for (int j = 0; j < src->payload_count; ++j) {
+                status = policy.work(policy.context, 1);
+                if (!builtin_enum_io(analyzer, status)) { ok = false; break; }
+                types[j] = parse_metadata_type(X, analyzer, src->payload_type_strs[j]);
+                if (analyzer && xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) { ok = false; break; }
             }
-            for (int p = 0; p < src->payload_count; p++) {
-                dst->payload_types[p] = parse_metadata_type(X, src->payload_type_strs[p]);
-            }
+            if (ok) ok = builtin_enum_io(analyzer, xa_enum_variant_set_payload_types(dst, types, dst->payload_count));
+            policy.free(policy.context, types);
+            if (!ok) goto failed;
         }
     }
-    if (!xa_enum_info_finalize_layout(info)) {
-        xa_enum_info_free(info);
-        return xr_type_new_error(X);
-    }
-    if (info->layout && enum_decl->layout_id != 0)
-        info->layout->layout_id = enum_decl->layout_id;
-    XrType *type = xr_type_new_enum(X, enum_decl->name);
-    if (!type) {
-        xa_enum_info_free(info);
-        return xr_type_new_error(X);
-    }
-    if (out_info) {
-        type->enum_type.layout = info->layout;
-        type->enum_type.layout_id = info->layout ? info->layout->layout_id : 0;
-        *out_info = info;
-    } else {
-        xa_enum_info_free(info);
-    }
+    if (!builtin_enum_io(analyzer, xa_enum_info_finalize_layout(info))) goto failed;
+    if (info->layout && decl->layout_id) info->layout->layout_id = decl->layout_id;
+    XrType *type = xr_type_new_enum(X, decl->name);
+    if (!type || (analyzer && xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)) goto failed;
+    if (output) {
+        type->enum_type.layout = info->layout; type->enum_type.layout_id = info->layout ? info->layout->layout_id : 0;
+        *output = info;
+    } else xa_enum_info_free(info);
     return type;
+failed:
+    xa_enum_info_free(info); return xr_type_new_error(X);
 }
 
 const XaBuiltinHandle *xa_builtin_find_handle_by_name(const char *handle_name) {
@@ -1763,12 +1760,12 @@ static XrType *parse_type_str(XrVMRuntime *X, XaAnalyzer *analyzer, const char *
                 const XaBuiltinObjectShape *object_shape =
                     xa_builtin_find_object_shape_by_name(name_buf);
                 if (object_shape)
-                    type = xa_builtin_object_shape_decl_type(X, object_shape);
+                    type = xa_builtin_object_shape_decl_type(X, analyzer, object_shape);
             }
             if (!type) {
                 const XaBuiltinEnum *enum_decl = xa_builtin_find_enum_by_name(name_buf);
                 if (enum_decl)
-                    type = xa_builtin_enum_decl_type(X, enum_decl, NULL);
+                    type = xa_builtin_enum_decl_type(X, analyzer, enum_decl, NULL);
             }
             xr_free(name_buf);
         }

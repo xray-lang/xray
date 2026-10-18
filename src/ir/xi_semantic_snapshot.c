@@ -308,7 +308,6 @@ static XrClassInfo *snapshot_class_info(XiSemanticSnapshot *snapshot, const XrCl
     copy->static_field_count = 0;
     copy->static_methods = NULL;
     copy->static_method_count = 0;
-    copy->members_map = NULL;
     copy->vtable = NULL;
     copy->vtable_size = 0;
     copy->constructor_params = NULL;

@@ -28,6 +28,7 @@
 #include "../../runtime/xisolate_api.h"
 #include "../../shared/xr_numeric_conversion_core.h"
 #include "../../base/xchecks.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../../base/xarena.h"
 #include "../../base/xhash.h"
 #include "../../module/xprelude_runtime.h"
@@ -1469,6 +1470,19 @@ XR_FUNC XrType *xr_tref_resolve(XrVMRuntime *X, const XrTypeRef *tref) {
  * return the canonical XrType (carrying the inheritance chain for classes,
  * enum identity for enum values, or the interface singleton for interfaces).
  * Returns NULL when no matching symbol is registered. */
+static XaSymbol *xa_resolve_export_lookup(XaAnalyzer *analyzer, XrHashMap *exports,
+                                           const char *name) {
+    XrCompileState *state = xa_symbol_registry_state(analyzer ? analyzer->symbol_registry : NULL);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK || !exports) return NULL;
+    void *value = NULL;
+    XrOsIoStatus queried = xr_hashmap_owned_get(exports, name, &value);
+    XrCompileResourceStatus status = queried == XR_OS_IO_OK ? XR_COMPILE_RESOURCE_OK :
+        queried == XR_OS_IO_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+        queried == XR_OS_IO_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    if (xr_compile_state_fail(state, status) != XR_COMPILE_RESOURCE_OK) return NULL;
+    return value;
+}
+
 static XaSymbol *resolve_type_symbol(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name)
         return NULL;
@@ -1485,9 +1499,14 @@ static XaSymbol *resolve_type_symbol(XaAnalyzer *analyzer, const char *name) {
         if (links && links->module_name && links->import_member_name) {
             XrHashMap *exports = resolve_graph_export_symbols(analyzer, links->module_name);
             XaSymbol *export_sym =
-                exports ? (XaSymbol *) xr_hashmap_get(exports, links->import_member_name) : NULL;
+                xa_resolve_export_lookup(analyzer, exports, links->import_member_name);
+            if (xr_compile_state_status(xa_symbol_registry_state(analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+                return NULL;
             if (export_sym) {
                 xa_symbol_links_copy_export_metadata(analyzer, links, &export_sym->links);
+                if (xr_compile_state_status(links->resource_state) != XR_COMPILE_RESOURCE_OK) {
+                    return NULL;
+                }
                 type = links->type;
                 if (export_sym->kind == XA_SYM_CLASS || export_sym->kind == XA_SYM_ENUM ||
                     export_sym->kind == XA_SYM_TYPE_ALIAS)
@@ -1882,11 +1901,15 @@ const char *xa_prelude_declaration_module(const char *name) {
  * graph, in which case nothing in this compilation carries the declaration
  * either and the declaration-less prelude form stays self-consistent. */
 static XrType *resolve_prelude_declaration_in_analyzer(XaAnalyzer *analyzer, const char *name) {
+    if (xr_compile_state_status(xa_symbol_registry_state(analyzer ? analyzer->symbol_registry : NULL)) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
     const char *module_name = xa_prelude_declaration_module(name);
     if (!module_name)
         return NULL;
     XrHashMap *exports = resolve_graph_export_symbols(analyzer, module_name);
-    XaSymbol *export_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, name) : NULL;
+    XaSymbol *export_sym = xa_resolve_export_lookup(analyzer, exports, name);
+    if (xr_compile_state_status(xa_symbol_registry_state(analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
     if (!export_sym || export_sym->kind != XA_SYM_CLASS)
         return NULL;
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, export_sym);
@@ -2186,6 +2209,16 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         return xr_type_new_error(NULL);
     if (!analyzer)
         return resolve_impl(NULL, tref);
+    XrCompileState *state = xr_compile_session_compile_state(analyzer->compiler_session);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+        return xr_type_new_error(NULL);
+    if (!analyzer->type_pool || analyzer->type_pool->state != state) {
+        (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return xr_type_new_error(NULL);
+    }
+    /* A nested analyzer may have released the previously selected pool. This
+     * operation names its live owner explicitly and must allocate there. */
+    xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
     XrType *bound = xa_analyzer_get_type_ref_type(analyzer, tref);
     if (bound)
         return bound;

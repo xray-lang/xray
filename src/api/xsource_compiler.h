@@ -45,4 +45,10 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_build_file(XrSourceCompiler *, 
  * Returned products and diagnostics outlive the compiler and all source bytes. */
 XR_FUNC XrSourceCompileStatus xr_source_compiler_build_text(XrSourceCompiler *, const XrSourceCompilerText *,
     XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic);
+/* The actual tree must belong to this compiler's exact parser state. Its
+ * syntax is checked without reparsing the entry; input text supplies owned
+ * diagnostic provenance. The tree is borrowed exclusively during this call.
+ * Imports, admission and cumulative failure use the ordinary source pipeline. */
+XR_FUNC XrSourceCompileStatus xr_source_compiler_build_ast(XrSourceCompiler *, const XrSourceCompilerText *,
+    struct AstNode *program, XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic);
 #endif // XSOURCE_COMPILER_H

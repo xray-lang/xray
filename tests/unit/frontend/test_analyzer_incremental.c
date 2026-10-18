@@ -178,7 +178,8 @@ TEST(get_dirty_files_returns_marked_files) {
     xa_analyzer_invalidate_range(a, "c.xr", 1, 10);
 
     int n = 0;
-    const char **dirty = xa_analyzer_get_dirty_files(a, &n);
+    const char **dirty = NULL;
+    ASSERT(xa_analyzer_get_dirty_files(a, &dirty, &n) == XR_COMPILE_RESOURCE_OK);
     ASSERT_NOT_NULL(dirty);
     ASSERT_EQ_INT(n, 3);
 
@@ -192,9 +193,8 @@ TEST(get_dirty_files_returns_marked_files) {
     }
     ASSERT_EQ_INT(hits, 3);
 
-    // The list buffer is owned by the caller (per existing tests it
-    // is xr_malloc'd by xa_analyzer_get_dirty_files).
-    xr_free((void *) dirty);
+    // The original-state list buffer belongs to this caller.
+    xr_compile_state_free((void *) dirty);
 
     xa_analyzer_free(a);
 }
@@ -270,11 +270,12 @@ TEST(api_is_null_safe) {
     xa_analyzer_refresh_file(a, NULL, NULL, 0);
 
     int n = -1;
-    const char **dirty = xa_analyzer_get_dirty_files(a, &n);
+    const char **dirty = NULL;
+    ASSERT(xa_analyzer_get_dirty_files(a, &dirty, &n) == XR_COMPILE_RESOURCE_OK);
     // Empty analyzer -> 0 dirty files, valid pointer or NULL is OK.
     ASSERT_EQ_INT(n, 0);
     if (dirty)
-        xr_free((void *) dirty);
+        xr_compile_state_free((void *) dirty);
 
     xa_analyzer_free(a);
 }

@@ -112,7 +112,7 @@ static XaSymbol *xa_find_live_strong_alias_in_scope(XaInferContext *ctx, XaScope
         return NULL;
     int count = 0;
     XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
-    if (!symbols && xa_scope_count_symbols(scope) != 0) {
+    if (xa_scope_resource_status(scope) != XR_COMPILE_RESOURCE_OK) {
         if (analysis_failed)
             *analysis_failed = true;
         return NULL;
@@ -123,11 +123,11 @@ static XaSymbol *xa_find_live_strong_alias_in_scope(XaInferContext *ctx, XaScope
             alias->links.binding_use != XA_BINDING_LIVE)
             continue;
         if (xa_symbol_used_after_current_statement(ctx, alias)) {
-            xr_free(symbols);
+            xr_compile_state_free(symbols);
             return alias;
         }
     }
-    xr_free(symbols);
+    xr_compile_state_free(symbols);
     for (int i = 0; i < scope->child_count; i++) {
         XaSymbol *alias = xa_find_live_strong_alias_in_scope(ctx, scope->children[i], move_sym,
                                                              root, analysis_failed);
@@ -153,13 +153,13 @@ static bool xa_mark_root_alias_state_in_scope(XaScope *scope, XaRootId root,
         return true;
     int count = 0;
     XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
-    if (!symbols && xa_scope_count_symbols(scope) != 0)
+    if (xa_scope_resource_status(scope) != XR_COMPILE_RESOURCE_OK)
         return false;
     for (int i = 0; i < count; i++) {
         if (symbols[i] && symbols[i]->links.root_id == root)
             symbols[i]->links.root_alias = state;
     }
-    xr_free(symbols);
+    xr_compile_state_free(symbols);
     for (int i = 0; i < scope->child_count; i++) {
         if (!xa_mark_root_alias_state_in_scope(scope->children[i], root, state))
             return false;

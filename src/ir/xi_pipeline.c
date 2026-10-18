@@ -47,6 +47,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/value/xchunk.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../frontend/analyzer/xanalyzer_storage.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -795,8 +796,13 @@ static bool xi_pipeline_verify_barrier(XiPipelineResult *res, XiPipelineStage st
 }
 
 static bool xi_pipeline_analyzer_gate(struct XaAnalyzer *analyzer, XiPipelineResult *res) {
-    if (!analyzer)
-        return true;
+    if (!analyzer || !analyzer->compiler_session ||
+        xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK) {
+        xi_pipeline_set_error(res, XI_PIPE_ERR_ANALYZE, XI_PIPE_STAGE_ANALYZE,
+            XI_VERIFY_EXECUTABLE_TYPE, NULL, NULL, NULL,
+            "a healthy explicit semantic analyzer is required");
+        return false;
+    }
     int count = 0;
     for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(analyzer, &count); diag;
          diag = diag->next) {
@@ -806,6 +812,24 @@ static bool xi_pipeline_analyzer_gate(struct XaAnalyzer *analyzer, XiPipelineRes
                               XI_VERIFY_EXECUTABLE_TYPE, NULL, NULL, NULL,
                               diag->message ? diag->message : "semantic analysis failed");
         res->error.source_line = diag->location.line > 0 ? (uint32_t) diag->location.line : 0;
+        return false;
+    }
+    return true;
+}
+
+static bool xi_pipeline_target_gate(struct XaAnalyzer *analyzer, struct XrVMRuntime *runtime,
+                                    const XiPipelineConfig *cfg, XiPipelineResult *res) {
+    const XrTargetDataLayout *layout = xa_analyzer_target_data_layout(analyzer);
+    const XrTargetMachineFacts *machine = cfg->target_profile
+        ? xr_target_profile_machine_facts(cfg->target_profile) : NULL;
+    if (!runtime || runtime != analyzer->isolate || !xr_target_data_layout_validate(layout) ||
+        (cfg->target_profile && (!xr_target_profile_verify(cfg->target_profile, NULL, 0) ||
+            !machine || memcmp(&machine->data_layout, layout, sizeof(*layout)) != 0))) {
+        (void) xr_compile_state_fail(xr_compile_session_compile_state(analyzer->compiler_session),
+            XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        xi_pipeline_set_error(res, XI_PIPE_ERR_ANALYZE, XI_PIPE_STAGE_ANALYZE,
+            XI_VERIFY_EXECUTABLE_TYPE, NULL, NULL, NULL,
+            "runtime and target facts must match the explicit semantic analyzer");
         return false;
     }
     return true;
@@ -936,7 +960,7 @@ static XiFunc *xi_pipeline_release_stage_handle(void *program, XiStage stage) {
 }
 
 static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
-                                     const XiPipelineConfig *cfg) {
+                                     const XiPipelineConfig *cfg, const XiEmitInput *emit_input) {
     XiPipelineResult res;
     XiPipelineCoroResolverCtx coro_resolver_ctx = {.cfg = cfg, .root = ir};
     XiCoroResolver coro_resolver;
@@ -1062,8 +1086,15 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
      * SemanticPlan even when a diagnostic/prototype pipeline skips physical
      * retain/release insertion. */
     if (cfg->module_graph && cfg->graph_modules && cfg->graph_module_count > 0) {
-        xi_resolve_imports(ir, cfg->module_graph, cfg->source_file, cfg->graph_modules,
-                           cfg->graph_module_count);
+        XrModuleStatus imports = xi_resolve_imports(ir, cfg->module_graph, cfg->source_file,
+            cfg->graph_modules, cfg->graph_module_count);
+        if (imports != XR_MODULE_OK) {
+            char detail[128];
+            snprintf(detail, sizeof(detail), "import resolution failed (module status %d)", (int) imports);
+            xi_pipeline_set_error(&res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
+                XI_VERIFY_STRUCTURE, ir, NULL, NULL, detail);
+            goto fail;
+        }
     }
     if (!xi_imported_constructor_normalize(ir, X, cfg)) {
         xi_pipeline_set_error(&res, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
@@ -1181,12 +1212,9 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
      * rewrite, or metadata loss cannot be hidden by the earlier lowering-time
      * verification. */
     if (ir->module && (ir->module->program_semantic_closure || ir->module->scalar_call_decision)) {
-        XrCompilerSession *program_session = xr_compiler_session_current_for_isolate(X);
         const XrTargetProfile *program_profile =
-            (ir->module->scalar_call_decision || ir->module->i64_overflow_decisions) &&
-                    program_session
-                ? xr_compiler_session_target_profile(program_session)
-                : NULL;
+            ir->module->scalar_call_decision || ir->module->i64_overflow_decisions
+                ? ir->module->scalar_target_profile : NULL;
         if (!xi_program_semantic_verify_partition(ir->module, program_profile, transition_error,
                                                   sizeof(transition_error))) {
             xi_pipeline_set_error(
@@ -1292,7 +1320,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     /* Bytecode emission (skipped in AOT/CHECK mode) */
     if (cfg->run_emit) {
         struct XrProto *proto = NULL;
-        XiEmitStatus emit_st = xi_emit(ir, X, &proto);
+        XiEmitStatus emit_st = xi_emit(ir, X, emit_input, &proto);
         if (emit_st != XI_EMIT_OK) {
             xi_pipeline_set_error(&res, XI_PIPE_ERR_EMIT, XI_PIPE_STAGE_EMIT, XI_VERIFY_EMISSION,
                                   ir, NULL, NULL, xi_emit_status_str(emit_st));
@@ -1379,7 +1407,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
                                                   struct XrVMRuntime *isolate,
                                                   const XiPipelineConfig *cfg) {
     XR_DCHECK(func_node != NULL, "xi_pipeline_compile_func: NULL func_node");
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    XrCompilerSession *session = analyzer ? analyzer->compiler_session : NULL;
 
     XiPipelineConfig default_cfg;
     if (!cfg) {
@@ -1392,14 +1420,27 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
     XaAnalyzerFileScope file_scope = {0};
     if (!xi_pipeline_push_source_file(analyzer, cfg, &file_scope, &gate))
         return gate;
-    if (!xi_pipeline_analyzer_gate(analyzer, &gate)) {
+    if (!xi_pipeline_analyzer_gate(analyzer, &gate) ||
+        !xi_pipeline_target_gate(analyzer, isolate, cfg, &gate)) {
         xa_analyzer_pop_file_scope(analyzer, &file_scope);
         return gate;
     }
 
-    /* Canonicalize AST before lowering */
+    /* Function-only callers select the real owning arena before entry. */
+    if (cfg->run_canonicalize && !xr_compile_session_current_arena(session)) {
+        xa_analyzer_pop_file_scope(analyzer, &file_scope);
+        xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_ANALYZE,
+            XI_VERIFY_STRUCTURE, NULL, NULL, NULL, "function canonicalization requires its owning AST arena");
+        return gate;
+    }
     if (cfg->run_canonicalize)
         xr_canon_func(func_node, analyzer, session);
+    if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) {
+        xa_analyzer_pop_file_scope(analyzer, &file_scope);
+        xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_ANALYZE,
+            XI_VERIFY_STRUCTURE, NULL, NULL, NULL, "compiler resource failure during canonicalization");
+        return gate;
+    }
 
     XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, func_node, NULL, 0);
     if (!typed.program) {
@@ -1430,7 +1471,14 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
         }
     }
 
-    return run_pipeline(ir, isolate, cfg);
+    const XiEmitInput emit_input = {
+        .state = xr_compile_session_compile_state(session),
+        .target = xa_analyzer_target_data_layout(analyzer),
+        .graph = cfg->module_graph,
+        .module_identity = cfg->module_identity,
+        .import_mode = cfg->import_mode,
+    };
+    return run_pipeline(ir, isolate, cfg, &emit_input);
 }
 
 XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_node,
@@ -1450,24 +1498,32 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     XaAnalyzerFileScope file_scope = {0};
     if (!xi_pipeline_push_source_file(analyzer, cfg, &file_scope, &gate))
         return gate;
-    if (!xi_pipeline_analyzer_gate(analyzer, &gate)) {
+    if (!xi_pipeline_analyzer_gate(analyzer, &gate) ||
+        !xi_pipeline_target_gate(analyzer, isolate, cfg, &gate)) {
         xa_analyzer_pop_file_scope(analyzer, &file_scope);
         return gate;
     }
 
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
-    XrCompilerSessionScope canon_scope;
-    bool has_canon_scope = cfg->run_canonicalize && program_node->type == AST_PROGRAM &&
-                           program_node->as.program.arena &&
-                           xr_compiler_session_push_arena(session, program_node->as.program.arena,
-                                                          cfg->source_file, &canon_scope);
-
-    /* Canonicalize AST before lowering */
-    if (cfg->run_canonicalize)
+    XrCompilerSession *session = analyzer ? analyzer->compiler_session : NULL;
+    XrCompilerSessionScope canon_scope = {0};
+    if (cfg->run_canonicalize) {
+        if (program_node->type != AST_PROGRAM || !program_node->as.program.arena ||
+            xa_analyzer_ast_scope_open(analyzer, program_node, &canon_scope) != XR_COMPILE_RESOURCE_OK) {
+            xa_analyzer_pop_file_scope(analyzer, &file_scope);
+            xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_ANALYZE,
+                XI_VERIFY_STRUCTURE, NULL, NULL, NULL, "program canonicalization requires its original AST arena");
+            return gate;
+        }
         xr_canon_program(program_node, analyzer, session);
-
-    if (has_canon_scope)
-        xr_compiler_session_pop_arena(&canon_scope);
+        if (canon_scope.active)
+            (void) xr_compile_session_pop_arena(&canon_scope);
+        if (xr_compile_session_resource_status(session) != XR_COMPILE_RESOURCE_OK) {
+            xa_analyzer_pop_file_scope(analyzer, &file_scope);
+            xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_ANALYZE,
+                XI_VERIFY_STRUCTURE, NULL, NULL, NULL, "compiler resource failure during canonicalization");
+            return gate;
+        }
+    }
 
     XaTypedProgramPublishResult typed = xa_typed_program_publish(
         analyzer, program_node, cfg->global_evidence, cfg->global_evidence_module_id);
@@ -1514,7 +1570,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
             return gate;
         }
     } else if (xa_typed_program_scalar_authority(typed.program)) {
-        target_profile = session ? xr_compiler_session_target_profile(session) : NULL;
+        target_profile = cfg->target_profile;
         if (!target_profile ||
             !xr_target_profile_verify(target_profile, scalar_error, sizeof(scalar_error)) ||
             !xa_typed_program_build_scalar_closure(typed.program, &program_closure, scalar_error,
@@ -1531,7 +1587,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
                                   XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
                                   scalar_error[0] ? scalar_error
                                                   : "bounded scalar compilation requires an exact "
-                                                    "compiler-session target profile");
+                                                    "explicit target profile");
             return gate;
         }
     } else {
@@ -1548,7 +1604,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
             }
             if (xr_program_semantic_closure_family(program_closure) ==
                 XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE) {
-                target_profile = session ? xr_compiler_session_target_profile(session) : NULL;
+                target_profile = cfg->target_profile;
                 if (!target_profile ||
                     !xr_target_profile_verify(target_profile, scalar_error, sizeof(scalar_error)) ||
                     !xr_i64_overflow_decision_build(
@@ -1586,7 +1642,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     if (program_closure)
         program_input_ptr = &program_input;
 
-    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_mode, program_input_ptr);
+    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_symbols, program_input_ptr);
     if (ir)
         xi_set_source_file_recursive(ir, cfg->source_file);
     if (ir && ir->module) {
@@ -1622,15 +1678,23 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     if (gate.status != XI_PIPE_OK)
         return gate;
 
-    return run_pipeline(ir, isolate, cfg);
+    const XiEmitInput emit_input = {
+        .state = xr_compile_session_compile_state(session),
+        .target = xa_analyzer_target_data_layout(analyzer),
+        .graph = cfg->module_graph,
+        .module_identity = cfg->module_identity,
+        .import_mode = cfg->import_mode,
+    };
+    return run_pipeline(ir, isolate, cfg, &emit_input);
 }
 
-XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrVMRuntime *isolate) {
+XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrVMRuntime *isolate,
+                                            const XiEmitInput *input) {
     XR_DCHECK(ir != NULL, "xi_pipeline_emit_ir: NULL ir");
     XR_DCHECK(isolate != NULL, "xi_pipeline_emit_ir: NULL isolate");
 
     struct XrProto *proto = NULL;
-    XiEmitStatus emit_st = xi_emit(ir, isolate, &proto);
+    XiEmitStatus emit_st = xi_emit(ir, isolate, input, &proto);
     if (emit_st != XI_EMIT_OK) {
         fprintf(stderr, "[xi_pipeline] emit_ir failed: %s\n", xi_emit_status_str(emit_st));
         return NULL;

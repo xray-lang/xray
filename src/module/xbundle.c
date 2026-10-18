@@ -25,6 +25,10 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../ir/xi_module.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../frontend/codegen/xcompiler_context.h"
+#include "../runtime/xisolate_internal.h"
+#include "../runtime/value/xtype_internal.h"
+#include "../plan/target/xr_target_profile.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -65,26 +69,32 @@ static bool bundle_add_entry(XrBundle *bundle, const char *path, const uint8_t *
 static XrModuleGraph *bundle_build_graph(XrCompilerSession *session, XrModuleResolver *resolver,
                                          const char *entry_path,
                                          const XrModuleIdentityAuthority *authority) {
-    XrModuleGraph *graph = xr_module_graph_new(session, resolver);
+    XrCompileState *state = xr_compile_session_compile_state(session);
+    XrModuleGraph *graph = NULL;
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
+    XrModuleStatus status = xr_compile_module_graph_new(xr_compile_state_resources(state), session, resolver, &graph);
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY)
+        xr_compile_state_fail(state, status == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
     if (!graph) {
         xr_log_warning("bundle", "failed to create module graph");
         return NULL;
     }
 
     char *err = NULL;
-    if (xr_module_graph_build(graph, entry_path, authority, &err) != 0) {
+    if (xr_compile_module_graph_build(graph, entry_path, authority, &err) != XR_MODULE_OK) {
         xr_log_warning("bundle", "module graph build failed: %s", err ? err : "?");
-        xr_free(err);
-        xr_module_graph_free(graph);
+        xr_compile_resources_free(err);
+        xr_compile_module_graph_free(graph);
         return NULL;
     }
-    xr_free(err);
+    xr_compile_resources_free(err);
 
-    if (xr_module_graph_topological_sort(graph) != 0 || graph->has_cycle) {
+    if (xr_compile_module_graph_topological_sort(graph) != XR_MODULE_OK || graph->has_cycle) {
         xr_log_warning("bundle", "%s",
                        graph->cycle_desc ? graph->cycle_desc
                                          : "E0504: circular dependency detected");
-        xr_module_graph_free(graph);
+        xr_compile_module_graph_free(graph);
         return NULL;
     }
 
@@ -96,8 +106,10 @@ static XrModuleGraph *bundle_build_graph(XrCompilerSession *session, XrModuleRes
  * any module is lowered: specialization is graph-wide, and a clone requested
  * by the entry is materialized in the dependency that declares the generic,
  * which is compiled first. */
-static XaAnalyzer *bundle_analyze_graph(XrCompilerSession *session, XrModuleGraph *graph) {
-    XaAnalyzer *analyzer = xa_analyzer_new(session);
+static XaAnalyzer *bundle_analyze_graph(const XrCompilerInput *input, XrModuleGraph *graph) {
+    XaAnalyzerInput analysis = input->analysis;
+    analysis.module_identity = graph->specs[graph->entry_index].canonical;
+    XaAnalyzer *analyzer = xa_analyzer_new(&analysis);
     if (!analyzer)
         return NULL;
 
@@ -109,6 +121,8 @@ static XaAnalyzer *bundle_analyze_graph(XrCompilerSession *session, XrModuleGrap
             continue;
 
         xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
+        if (xr_compile_session_resource_status(input->analysis.session) != XR_COMPILE_RESOURCE_OK)
+            goto fail;
         int errors = xa_analyzer_print_errors(analyzer, spec->source_path);
         if (errors == 0) {
             XrHashMap *exports = NULL;
@@ -118,11 +132,14 @@ static XaAnalyzer *bundle_analyze_graph(XrCompilerSession *session, XrModuleGrap
                 if (errors == 0)
                     errors = 1;
             } else {
-                spec->export_symbols = exports;
+                if (exports != spec->export_symbols) {
+                    xr_hashmap_owned_free(spec->export_symbols);
+                    spec->export_symbols = exports;
+                }
             }
         }
         xa_analyzer_clear_diagnostics(analyzer);
-        if (errors > 0)
+        if (errors > 0 || xr_compile_session_resource_status(input->analysis.session) != XR_COMPILE_RESOURCE_OK)
             goto fail;
     }
     return analyzer;
@@ -133,11 +150,12 @@ fail:
     return NULL;
 }
 
-static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaAnalyzer *analyzer,
+static bool bundle_compile_graph(XrVMRuntime *X, const XrCompilerInput *input, XaAnalyzer *analyzer,
                                  XrModuleGraph *graph, XrBundleFlags flags, XrBundle *bundle) {
-    XrCompiledModuleGraph compilation;
+    XrCompiledModuleGraph compilation = {0};
+    XrCompileGraphInput compile_graph = {.compiler = input, .analyzer = analyzer, .graph = graph};
     XrProgramImage image = {0};
-    if (!xr_compile_module_graph_dependencies(session, analyzer, graph, &compilation)) {
+    if (!xr_compile_module_graph_dependencies(&compile_graph, &compilation)) {
         xr_log_warning("bundle", "dependency compilation failed: %s",
                        bundle->entry_path ? bundle->entry_path : "?");
         return false;
@@ -169,9 +187,9 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
                                spec->canonical ? spec->canonical : "?");
                 goto cleanup;
             }
-            entry_proto = xr_compile_ast_in_graph(session, analyzer, spec->ast, spec->source_path,
-                                                  graph, compilation.modules, compilation.count,
-                                                  &compilation.modules[ti], &spec->authority);
+            compile_graph.modules = compilation.modules;
+            compile_graph.module_count = compilation.count;
+            entry_proto = xr_compile_ast_in_graph(&compile_graph, index, &compilation.modules[ti]);
             if (!entry_proto) {
                 xr_log_warning("bundle", "compilation failed: %s", spec->source_path);
                 goto cleanup;
@@ -220,69 +238,45 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file,
         authority->kind == XR_MODULE_IDENTITY_MEMORY)
         return NULL;
 
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
-    if (!session) {
-        xr_log_warning("bundle", "compiler session is required");
+    XrCompilerSession *session = X->compiler_session;
+    XrCompileState *state = xr_compile_session_compile_state(session);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
         return NULL;
-    }
-    XrCompilerSessionOperationScope operation_scope;
-    if (!xr_compiler_session_operation_begin(session, &operation_scope)) {
-        xr_log_warning("bundle", "compiler session is busy");
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(X->native_target_profile);
+    if (!machine)
         return NULL;
-    }
-
+    XrCompilerInput input = {
+        .analysis = {session, X, &machine->data_layout, NULL},
+        .policy = {X->native_target_profile, false, NULL}
+    };
+    XrCompileResources *resources = xr_compile_state_resources(state);
+    XrTypePool *previous_pool = xr_type_get_current_pool();
     XrBundle *bundle = xr_calloc(1, sizeof(XrBundle));
     if (!bundle) {
-        (void) xr_compiler_session_operation_fail(
-            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
         return NULL;
     }
     bundle->entry_index = -1;
-
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
-    XrModuleResolverConfig rcfg = {
-        .stdlib_path = registry ? registry->stdlib_path : NULL,
-        .lockfile = NULL,
-    };
-    XrModuleResolver *resolver = xr_module_resolver_new(&rcfg);
-    XrModuleGraph *graph =
-        resolver ? bundle_build_graph(session, resolver, entry_file, authority) : NULL;
-    XaAnalyzer *graph_analyzer = graph ? bundle_analyze_graph(session, graph) : NULL;
-    XrModuleGraph *previous_graph = xr_compiler_session_module_graph(session);
-    if (!resolver || !graph || !graph_analyzer) {
-        if (graph_analyzer) {
-            xa_analyzer_set_graph(graph_analyzer, NULL);
-            xa_analyzer_free(graph_analyzer);
-        }
-        xr_module_graph_free(graph);
-        xr_module_resolver_free(resolver);
-        xr_bundle_free(bundle);
-        (void) xr_compiler_session_operation_fail(
-            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
-        return NULL;
+    XrModuleResolverConfig config = {.stdlib_path = registry ? registry->stdlib_path : NULL};
+    XrModuleResolver *resolver = NULL;
+    XrModuleStatus status = xr_compile_module_resolver_new(resources, &config, &resolver);
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY)
+        xr_compile_state_fail(state, status == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    XrModuleGraph *graph = status == XR_MODULE_OK ? bundle_build_graph(session, resolver, entry_file, authority) : NULL;
+    XaAnalyzer *analyzer = graph ? bundle_analyze_graph(&input, graph) : NULL;
+    bool complete = false;
+    if (analyzer) {
+        XrModuleSpec *entry = &graph->specs[graph->entry_index];
+        bundle->entry_path = xr_strdup(entry->source_path ? entry->source_path : entry->canonical);
+        complete = bundle->entry_path && bundle_compile_graph(X, &input, analyzer, graph, flags, bundle);
+        xa_analyzer_set_graph(analyzer, NULL);
+        xa_analyzer_free(analyzer);
     }
-    xr_compiler_session_set_module_graph(session, graph);
-
-    XrModuleSpec *entry_spec = &graph->specs[graph->entry_index];
-    const char *entry_path =
-        entry_spec->source_path ? entry_spec->source_path : entry_spec->canonical;
-    bundle->entry_path = xr_strdup(entry_path);
-    bool complete = bundle->entry_path &&
-                    bundle_compile_graph(X, session, graph_analyzer, graph, flags, bundle);
-    xr_compiler_session_set_module_graph(session, previous_graph);
-    xa_analyzer_set_graph(graph_analyzer, NULL);
-    xa_analyzer_free(graph_analyzer);
-    xr_module_graph_free(graph);
-    xr_module_resolver_free(resolver);
-    if (!complete) {
-        xr_log_warning("bundle", "bundle compilation failed: %s", entry_file);
-        xr_bundle_free(bundle);
-        (void) xr_compiler_session_operation_fail(
-            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
-        return NULL;
-    }
-
-    if (!xr_compiler_session_operation_succeed(&operation_scope)) {
+    xr_compile_module_graph_free(graph);
+    xr_compile_module_resolver_free(resolver);
+    xr_type_set_current_pool(previous_pool, NULL);
+    if (!complete || xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) {
         xr_bundle_free(bundle);
         return NULL;
     }

@@ -4852,8 +4852,10 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
         {.name = "Idle", .ordinal = 0, .payload_count = 0},
         {.name = "Ready", .ordinal = 1, .payload_count = 0},
     };
-    XrEnumLayout *compact_layout = xr_enum_layout_new("test.cgen.enum", "CgenOrdinalCompact",
-                                                      compact_names, XR_COUNTOF(compact_names));
+    XrOsIoPolicy enum_policy_1 = xr_os_io_system_policy();
+    XrEnumLayout *compact_layout = NULL;
+    TEST_REQUIRE(xr_enum_layout_new(&enum_policy_1, "test.cgen.enum", "CgenOrdinalCompact",
+                                                      compact_names, XR_COUNTOF(compact_names), &compact_layout) == XR_OS_IO_OK, "enum layout policy constructor");
     TEST_REQUIRE(compact_layout && compact_layout->is_zero_payload, "compact enum layout created");
     XiEnumData compact_data = {.name = "CgenOrdinalCompact",
                                .member_count = XR_COUNTOF(compact_members),
@@ -4906,15 +4908,17 @@ TEST(cgen_enum_ordinal_conversion_uses_frozen_scalar_and_boxed_representations) 
          .payload_types = boxed_payload_types},
         {.name = "Ready", .ordinal = 1, .payload_count = 0},
     };
-    XrEnumLayout *boxed_layout = xr_enum_layout_new("test.cgen.enum", "CgenOrdinalBoxed",
-                                                    boxed_names, XR_COUNTOF(boxed_names));
+    XrOsIoPolicy enum_policy_2 = xr_os_io_system_policy();
+    XrEnumLayout *boxed_layout = NULL;
+    TEST_REQUIRE(xr_enum_layout_new(&enum_policy_2, "test.cgen.enum", "CgenOrdinalBoxed",
+                                                    boxed_names, XR_COUNTOF(boxed_names), &boxed_layout) == XR_OS_IO_OK, "enum layout policy constructor");
     const int boxed_payload_counts[] = {1, 0};
     TEST_REQUIRE(boxed_layout &&
-                     xr_enum_layout_set_payload_counts(boxed_layout, boxed_payload_counts,
-                                                       XR_COUNTOF(boxed_payload_counts)),
+                     (xr_enum_layout_set_payload_counts(boxed_layout, boxed_payload_counts,
+                                                       XR_COUNTOF(boxed_payload_counts)) == XR_OS_IO_OK),
                  "boxed enum payload layout populated");
-    TEST_REQUIRE(xr_enum_layout_set_variant_payload_metadata(boxed_layout, 0, boxed_payload_names,
-                                                             boxed_payload_type_ids, 1),
+    TEST_REQUIRE((xr_enum_layout_set_variant_payload_metadata(boxed_layout, 0, boxed_payload_names,
+                                                             boxed_payload_type_ids, 1) == XR_OS_IO_OK),
                  "boxed enum payload metadata populated");
     XrType boxed_type = {.kind = XR_KIND_ENUM,
                          .id = boxed_layout->layout_id,

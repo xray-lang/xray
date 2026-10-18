@@ -30,6 +30,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../module/xmodule_graph.h"
 #include "../frontend/analyzer/xa_effect_db.h"
 #include "../shared/xr_native_type_core.h"
 #include "../shared/xr_codegen_opaque_core.h"
@@ -771,10 +772,39 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
 
 /* ========== Public API ========== */
 
-XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrProto **out_proto) {
+XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate,
+                              const XiEmitInput *input, struct XrProto **out_proto) {
     XR_DCHECK(f != NULL, "xi_emit: NULL func");
     XR_DCHECK(out_proto != NULL, "xi_emit: NULL out_proto");
     *out_proto = NULL;
+    if (!input || !input->state)
+        return XI_EMIT_ERR_INTERNAL;
+    if (xr_compile_state_work(input->state, 1) != XR_COMPILE_RESOURCE_OK)
+        return XI_EMIT_ERR_RESOURCE;
+    if (!xr_target_data_layout_validate(input->target) ||
+        (input->import_mode != XI_EMIT_IMPORT_PROGRAM &&
+         input->import_mode != XI_EMIT_IMPORT_RUNTIME_LOCATOR) ||
+        (input->graph && (!input->graph->compiler_session ||
+            input->graph->resources != xr_compile_state_resources(input->state) ||
+            xr_compile_session_compile_state(input->graph->compiler_session) != input->state))) {
+        (void) xr_compile_state_fail(input->state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return XI_EMIT_ERR_RESOURCE;
+    }
+    bool stdlib_module = false;
+    if (input->module_identity) {
+        XrModuleIdentityKind module_kind;
+        size_t length = 0;
+        if (xr_compile_state_string_length(input->state, input->module_identity, &length) != XR_COMPILE_RESOURCE_OK)
+            return XI_EMIT_ERR_RESOURCE;
+        if (!xr_module_identity_valid(input->module_identity, &module_kind)) {
+            (void) xr_compile_state_fail(input->state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+            return XI_EMIT_ERR_RESOURCE;
+        }
+        stdlib_module = module_kind == XR_MODULE_IDENTITY_STDLIB;
+    } else if (input->graph) {
+        (void) xr_compile_state_fail(input->state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return XI_EMIT_ERR_RESOURCE;
+    }
 
     /* Run prerequisite analyses */
     uint32_t rpo_count = xi_compute_rpo(f);
@@ -839,18 +869,12 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     memset(&ctx, 0, sizeof(ctx));
     ctx.func = f;
     ctx.isolate = isolate;
-    XrCompilerSession *compiler_session = xr_compiler_session_current_for_isolate(isolate);
-    ctx.target_data_layout = compiler_session
-                                 ? xr_compiler_session_target_data_layout(compiler_session)
-                                 : xr_target_data_layout_host();
-    ctx.bind_module_positions =
-        !compiler_session ||
-        (xr_compiler_session_vm_import_binding(compiler_session) == XR_VM_IMPORT_PROGRAM_TABLE &&
-         xr_compiler_session_compile_unit_identity(compiler_session).kind != XR_COMPILE_UNIT_STDLIB);
-    if (!ctx.target_data_layout) {
-        xr_free(rpo_order);
-        return XI_EMIT_ERR_INTERNAL;
-    }
+    ctx.target_storage = *input->target;
+    ctx.target_data_layout = &ctx.target_storage;
+    ctx.input = *input;
+    ctx.input.target = &ctx.target_storage;
+    ctx.bind_module_positions = input->import_mode == XI_EMIT_IMPORT_PROGRAM &&
+        !stdlib_module;
     ctx.proto = xr_instruction_unit_new();
     if (!ctx.proto) {
         xr_free(rpo_order);
@@ -1002,6 +1026,8 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     ctx.proto->may_task_spawn = (f->semantic_effects & XA_SEM_EFFECT_TASK_SPAWN) != 0;
 
 cleanup:;
+    if (xr_compile_state_status(input->state) != XR_COMPILE_RESOURCE_OK)
+        ctx.status = XI_EMIT_ERR_RESOURCE;
     XiEmitStatus result = ctx.status;
     if (result == XI_EMIT_OK) {
         *out_proto = ctx.proto;
@@ -1103,6 +1129,8 @@ XR_FUNC const char *xi_emit_status_str(XiEmitStatus s) {
             return "constant pool overflow";
         case XI_EMIT_ERR_UNSUPPORTED_OP:
             return "unsupported Xi IR operation";
+        case XI_EMIT_ERR_RESOURCE:
+            return "compiler resource failure";
         case XI_EMIT_ERR_INTERNAL:
             return "internal emitter error";
     }

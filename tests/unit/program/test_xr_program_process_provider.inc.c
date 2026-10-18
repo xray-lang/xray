@@ -137,7 +137,8 @@ static void assert_process_provider_source(XrSourceFixtureId fixture_id) {
     ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, profile_error,
                                                               sizeof(profile_error)));
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;

@@ -55,6 +55,19 @@ typedef struct XrXirSourceText {
 XR_FUNC XrXirStatus xr_xir_compile_source_check_text(const XrXirSourceRequest *request,
     const XrXirSourceText *text,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path);
+typedef struct XrXirSourceAst {
+    XrXirSourceText source;
+    struct AstNode *program;
+} XrXirSourceAst;
+/* Check the actual caller AST, without reparsing the entry or taking ownership.
+ * Its arena must belong to request->session's exact state. Tree, bytes and
+ * authority are borrowed exclusively for this call; results and diagnostics
+ * own all published data. Source text supplies diagnostic provenance, not an
+ * alternative syntax input. Imports use the ordinary graph and checker. */
+XR_FUNC XrXirStatus xr_xir_compile_source_check_ast(const XrXirSourceRequest *request,
+    const XrXirSourceAst *input, XrXirSourceResult *output,
+    XrXirSourceDiagnostic *diagnostic, char **failure_path);
+
 /* Synchronously check a rooted entry with an immutable set of unsaved sources.
  * Entries are deep copied to the request ledger before discovery. The entry
  * may itself be absent on disk. Relative imports select each .xr or /index.xr

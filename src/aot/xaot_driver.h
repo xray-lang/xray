@@ -173,7 +173,7 @@ typedef enum XaotBuildProfile {
 typedef struct XaotBuildOptions {
     const XaotTarget *target;
     XrTargetProfile *target_profile; /* borrowed; exact authority is required */
-    const struct XrNativePackagePlan *native_package_plan; /* borrowed for this build */
+    struct XrNativePackagePlan *native_package_plan; /* borrowed; layout preparation may mutate it */
     XrModuleIdentityAuthority entry_module_authority; /* borrowed strings; exact typed authority */
     struct XrLockfile *lockfile; /* borrowed exact package authority */
     const XaotTargetCapabilityProvider *capability_provider;

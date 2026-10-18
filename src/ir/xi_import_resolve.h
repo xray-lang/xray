@@ -20,19 +20,21 @@
 
 #include "xi.h"
 #include "xi_module.h"
+#include "../module/xmodule_identity.h"
 
 struct XrModuleGraph;
 
 /* Resolve a relative import specifier against the importer's directory.
- * Returns the canonical path from the graph, or NULL if not found.
- * The returned string is owned by the graph (do not free). */
-XR_FUNC const char *xi_resolve_import_canonical(const struct XrModuleGraph *graph,
-                                                const char *importer_path, const char *specifier);
+ * OK publishes a borrowed graph canonical key, or NULL when absent. Failure
+ * preserves output and retains the original parser state's resource cause. */
+XR_FUNC XrModuleStatus xi_resolve_import_canonical(const struct XrModuleGraph *graph,
+    const char *importer_path, const char *specifier, const char **output);
 
 /* Recursively walk an XiFunc and all children, resolving XI_IMPORT_REF
  * values using the module graph.  modules[t] is the XiModule for topo
- * position t; nmodules = graph->topo_count. */
-XR_FUNC void xi_resolve_imports(XiFunc *f, const struct XrModuleGraph *graph,
-                                const char *importer_path, XiModule **modules, int nmodules);
+ * position t; nmodules <= graph->topo_count. Callers must stop compilation on
+ * failure; this pass does not roll back earlier metadata rows in the IR. */
+XR_FUNC XrModuleStatus xi_resolve_imports(XiFunc *f, const struct XrModuleGraph *graph,
+    const char *importer_path, XiModule **modules, int nmodules);
 
 #endif  // XI_IMPORT_RESOLVE_H

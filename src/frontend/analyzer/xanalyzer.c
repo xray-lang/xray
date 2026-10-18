@@ -8,8 +8,14 @@
  * xanalyzer.c - Static type analyzer implementation
  */
 
+#include "xanalyzer_enum_storage.h"
 #include "xanalyzer.h"
+#include "xanalyzer_link_metadata.h"
+#include "xanalyzer_signature.h"
 #include "xanalyzer_storage.h"
+#include "xanalyzer_export_query.h"
+#include "xanalyzer_exports.h"
+#include "xanalyzer_file_storage.h"
 #include "xanalyzer_visitor.h"
 #include "../parser/xast_walk.h"
 #include "../../base/xchecks.h"
@@ -33,7 +39,6 @@
 #include "../../toolchain/xcompiler_session.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xast_types.h"
-#include "../../base/xintmap.h"
 #include "../../base/xhashmap.h"
 #include "../../base/xhash.h"
 #include "../../base/xmalloc.h"
@@ -42,6 +47,7 @@
 #include "../../stdlib/xstdlib_metadata.h"
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
 
 typedef struct XaForeignSymbolView {
     const XaSymbol *source;
@@ -52,7 +58,7 @@ typedef struct XaForeignSymbolView {
 } XaForeignSymbolView;
 
 const XrTargetDataLayout *xa_analyzer_target_data_layout(const XaAnalyzer *analyzer) {
-    return analyzer ? xr_compiler_session_target_data_layout(analyzer->compiler_session) : NULL;
+    return analyzer ? &analyzer->target_data_layout : NULL;
 }
 
 // Register a builtin function symbol in analyzer scope
@@ -60,10 +66,14 @@ static void register_builtin_func(XaAnalyzer *analyzer, const char *name, XrType
     XR_DCHECK(analyzer != NULL, "register_builtin_func: NULL analyzer");
     XR_DCHECK(name != NULL, "register_builtin_func: NULL name");
     XR_DCHECK(type != NULL, "register_builtin_func: NULL type");
-    XaSymbol *sym = xa_symbol_new(name, XA_SYM_FUNCTION);
+    XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, name, XA_SYM_FUNCTION);
+    if (!sym) return;
     sym->location.line = 0;
     sym->is_builtin = true;
-    xa_scope_add_symbol(analyzer->global_scope, sym);
+    if (xa_scope_add_symbol(analyzer->global_scope, sym) != XR_COMPILE_RESOURCE_OK) {
+        xa_symbol_free(sym);
+        return;
+    }
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (links) {
         links->type = type;
@@ -79,7 +89,9 @@ static void register_core_builtin_func(XaAnalyzer *analyzer, XrCoreBuiltinId id,
     const XrCoreIntrinsicDesc *desc = xr_core_intrinsic_by_id(id);
     XR_DCHECK(desc != NULL, "register_core_builtin_func: invalid builtin id");
     register_builtin_func(analyzer, desc->source_name, type);
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) return;
     XaSymbol *sym = xa_scope_lookup(analyzer->global_scope, desc->source_name);
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) return;
     XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
     XR_DCHECK(sym && sym->is_builtin && links,
               "register_core_builtin_func: builtin binding missing");
@@ -91,10 +103,14 @@ static void register_core_builtin_func(XaAnalyzer *analyzer, XrCoreBuiltinId id,
 static void register_builtin_module(XaAnalyzer *analyzer, const char *name) {
     XR_DCHECK(analyzer != NULL, "register_builtin_module: NULL analyzer");
     XR_DCHECK(name != NULL, "register_builtin_module: NULL name");
-    XaSymbol *sym = xa_symbol_new(name, XA_SYM_MODULE);
+    XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, name, XA_SYM_MODULE);
+    if (!sym) return;
     sym->location.line = 0;
     sym->is_builtin = true;
-    xa_scope_add_symbol(analyzer->global_scope, sym);
+    if (xa_scope_add_symbol(analyzer->global_scope, sym) != XR_COMPILE_RESOURCE_OK) {
+        xa_symbol_free(sym);
+        return;
+    }
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (links) {
         links->type = xr_type_new_unknown(NULL);
@@ -106,7 +122,9 @@ static void register_builtin_module(XaAnalyzer *analyzer, const char *name) {
 
 static void register_target_query_namespace(XaAnalyzer *analyzer) {
     register_builtin_module(analyzer, "target");
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) return;
     XaSymbol *symbol = xa_scope_lookup(analyzer->global_scope, "target");
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) return;
     XaSymbolLinks *links = symbol ? xa_analyzer_get_links(analyzer, symbol) : NULL;
     XR_DCHECK(symbol && symbol->is_builtin && links,
               "register_target_query_namespace: builtin binding missing");
@@ -119,11 +137,15 @@ static void register_builtin_var(XaAnalyzer *analyzer, const char *name, XrType 
                                  bool is_const) {
     XR_DCHECK(analyzer != NULL, "register_builtin_var: NULL analyzer");
     XR_DCHECK(name != NULL, "register_builtin_var: NULL name");
-    XaSymbol *sym = xa_symbol_new(name, XA_SYM_VARIABLE);
+    XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, name, XA_SYM_VARIABLE);
+    if (!sym) return;
     sym->location.line = 0;
     sym->is_builtin = true;
     sym->is_const = is_const;
-    xa_scope_add_symbol(analyzer->global_scope, sym);
+    if (xa_scope_add_symbol(analyzer->global_scope, sym) != XR_COMPILE_RESOURCE_OK) {
+        xa_symbol_free(sym);
+        return;
+    }
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (links) {
         links->type = type;
@@ -140,13 +162,16 @@ static void register_exact_scalar_namespaces(XaAnalyzer *analyzer) {
     const XrExactScalarDesc *rows = xr_exact_scalar_rows(&count);
     for (size_t i = 0; i < count; i++) {
         const XrExactScalarDesc *row = &rows[i];
-        XaSymbol *sym = xa_symbol_new(row->source_name, XA_SYM_CLASS);
+        XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, row->source_name, XA_SYM_CLASS);
         if (!sym)
-            continue;
+            return;
         sym->location.line = 0;
         sym->is_builtin = true;
         sym->is_const = true;
-        xa_scope_add_symbol(analyzer->global_scope, sym);
+        if (xa_scope_add_symbol(analyzer->global_scope, sym) != XR_COMPILE_RESOURCE_OK) {
+            xa_symbol_free(sym);
+            return;
+        }
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         if (!links)
             continue;
@@ -169,15 +194,18 @@ static void register_builtin_module_types_in_prelude(XaAnalyzer *analyzer,
         if (!object_shape->name ||
             xa_scope_lookup_local(analyzer->global_scope, object_shape->name))
             continue;
-        XaSymbol *sym = xa_symbol_new(object_shape->name, XA_SYM_TYPE_ALIAS);
+        XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, object_shape->name, XA_SYM_TYPE_ALIAS);
         if (!sym)
-            continue;
+            return;
         sym->location.line = 0;
         sym->is_builtin = true;
         sym->is_const = true;
         sym->is_exported = true;
-        sym->alias_type = xa_builtin_object_shape_decl_type(analyzer->isolate, object_shape);
-        xa_scope_add_symbol(analyzer->global_scope, sym);
+        sym->alias_type = xa_builtin_object_shape_decl_type(analyzer->isolate, analyzer, object_shape);
+        if (xa_scope_add_symbol(analyzer->global_scope, sym) != XR_COMPILE_RESOURCE_OK) {
+            xa_symbol_free(sym);
+            return;
+        }
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         if (links) {
             links->type = sym->alias_type;
@@ -192,18 +220,21 @@ static void register_builtin_module_types_in_prelude(XaAnalyzer *analyzer,
         const XaBuiltinEnum *enum_decl = &module->enums[i];
         if (!enum_decl->name || xa_scope_lookup_local(analyzer->global_scope, enum_decl->name))
             continue;
-        XaSymbol *sym = xa_symbol_new(enum_decl->name, XA_SYM_ENUM);
+        XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, enum_decl->name, XA_SYM_ENUM);
         if (!sym)
-            continue;
+            return;
         sym->location.line = 0;
         sym->is_builtin = true;
         sym->is_const = true;
         sym->is_exported = true;
-        xa_scope_add_symbol(analyzer->global_scope, sym);
+        if (xa_scope_add_symbol(analyzer->global_scope, sym) != XR_COMPILE_RESOURCE_OK) {
+            xa_symbol_free(sym);
+            return;
+        }
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         if (links) {
             links->type =
-                xa_builtin_enum_decl_type(analyzer->isolate, enum_decl, &links->enum_info);
+                xa_builtin_enum_decl_type(analyzer->isolate, analyzer, enum_decl, &links->enum_info);
             links->declared_type = links->type;
             links->is_definitely_assigned = true;
             links->module_name = module_name;
@@ -227,19 +258,28 @@ static void register_inheritable_builtin_class(XaAnalyzer *analyzer, const char 
     if (!builtin || !builtin->members || builtin->member_count <= 0)
         return;
 
-    XaSymbol *class_sym = xa_symbol_new(name, XA_SYM_CLASS);
+    XaSymbol *class_sym = xa_symbol_new(analyzer->symbol_registry, name, XA_SYM_CLASS);
     if (!class_sym)
         return;
     class_sym->location.line = 0;
     class_sym->is_builtin = true;
     class_sym->is_const = true;
-    xa_scope_add_symbol(analyzer->global_scope, class_sym);
+    if (xa_scope_add_symbol(analyzer->global_scope, class_sym) != XR_COMPILE_RESOURCE_OK) {
+        xa_symbol_free(class_sym);
+        return;
+    }
 
     XaSymbolLinks *class_links = xa_analyzer_get_links(analyzer, class_sym);
-    XrClassInfo *info = xa_class_info_new(name);
-    XaScope *class_scope = xa_scope_new(XA_SCOPE_CLASS, analyzer->global_scope);
-    if (!class_links || !info || !class_scope)
+    if (!class_links) return;
+    XrClassInfo *info = xa_class_info_new(xr_compile_session_compile_state(analyzer->compiler_session), name);
+    if (!info) return;
+    XaScope *class_scope = xa_scope_new(analyzer->symbol_registry, XA_SCOPE_CLASS, analyzer->global_scope);
+    if (!class_scope) {
+        xa_class_info_free(info);
+        (void) xr_compile_state_fail(xr_compile_session_compile_state(analyzer->compiler_session),
+            XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
         return;
+    }
 
     class_scope->class_symbol = class_sym;
     info->scope = class_scope;
@@ -257,19 +297,22 @@ static void register_inheritable_builtin_class(XaAnalyzer *analyzer, const char 
             continue;
 
         XaSymbol *member_sym =
-            xa_symbol_new(member->name, member->is_method ? XA_SYM_METHOD : XA_SYM_PROPERTY);
+            xa_symbol_new(analyzer->symbol_registry, member->name, member->is_method ? XA_SYM_METHOD : XA_SYM_PROPERTY);
         if (!member_sym)
-            continue;
+            return;
         member_sym->location.line = 0;
         member_sym->is_builtin = true;
-        xa_scope_add_symbol(class_scope, member_sym);
+        if (xa_scope_add_symbol(class_scope, member_sym) != XR_COMPILE_RESOURCE_OK) {
+            xa_symbol_free(member_sym);
+            return;
+        }
 
         XaSymbolLinks *member_links = xa_analyzer_get_links(analyzer, member_sym);
         if (!member_links)
             continue;
         if (member->is_method) {
             member_links->type = xa_builtin_parse_full_signature(analyzer, member->signature);
-            xa_class_info_add_method(info, member_sym);
+            if (xa_class_info_add_method(xr_compile_session_compile_state(analyzer->compiler_session), info, member_sym) != XR_COMPILE_RESOURCE_OK) return;
             if (strcmp(member->name, "constructor") == 0 && member_links->type &&
                 XR_TYPE_IS_FUNCTION(member_links->type)) {
                 info->has_constructor = true;
@@ -289,7 +332,7 @@ static void register_inheritable_builtin_class(XaAnalyzer *analyzer, const char 
             while (type_text && *type_text == ' ')
                 type_text++;
             member_links->type = xa_builtin_parse_type_string(analyzer, type_text);
-            xa_class_info_add_field(info, member_sym);
+            if (xa_class_info_add_field(xr_compile_session_compile_state(analyzer->compiler_session), info, member_sym) != XR_COMPILE_RESOURCE_OK) return;
         }
         if (!member_links->type)
             member_links->type = xr_type_new_unknown(analyzer->isolate);
@@ -407,20 +450,23 @@ static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
                                        const int *payload_counts, const char **payload_names,
                                        XrType ***payload_types, bool is_adt) {
     XR_DCHECK(analyzer != NULL, "register_prelude_enum: NULL analyzer");
-    XaSymbol *sym = xa_symbol_new(name, XA_SYM_ENUM);
+    XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, name, XA_SYM_ENUM);
     if (!sym)
         return;
     sym->location.line = 0;
     sym->is_builtin = true;
     sym->is_const = true;
-    xa_scope_add_symbol(analyzer->global_scope, sym);
+    if (xa_scope_add_symbol(analyzer->global_scope, sym) != XR_COMPILE_RESOURCE_OK) {
+        xa_symbol_free(sym);
+        return;
+    }
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (!links)
         return;
     links->type = xr_type_new_enum(analyzer->isolate, name);
     if (!links->type)
         return;
-    XrClassInfo *nominal = xa_class_info_new(name);
+    XrClassInfo *nominal = xa_class_info_new(xr_compile_session_compile_state(analyzer->compiler_session), name);
     if (!nominal)
         return;
     nominal->declaration_symbol = sym;
@@ -431,40 +477,39 @@ static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
     links->declared_type = links->type;
     links->is_definitely_assigned = true;
     if (type_param_count > 0 && type_param_names) {
-        xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL, type_param_count);
+        if (xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL, type_param_count) != XR_COMPILE_RESOURCE_OK) {
+            return;
+        }
     }
 
     if (member_count > 0) {
-        XaEnumInfo *info = xa_enum_info_new("prelude", name, (uint32_t) member_count);
-        if (info) {
-            for (int i = 0; i < member_count; i++) {
-                info->variants[i].name = member_names[i];
-                info->variants[i].payload_count =
-                    (uint16_t) (is_adt && payload_counts ? payload_counts[i] : 0);
-                int pc = info->variants[i].payload_count;
-                if (pc > 0 && payload_types && payload_types[i]) {
-                    const char *names[] = {payload_names ? payload_names[i] : NULL};
-                    if (!xa_enum_variant_set_payload_names(&info->variants[i], names, 1)) {
-                        xa_enum_info_free(info);
-                        return;
-                    }
-                    info->variants[i].payload_types =
-                        (XrType **) xr_calloc((size_t) pc, sizeof(XrType *));
-                    if (info->variants[i].payload_types) {
-                        for (int p = 0; p < pc; p++)
-                            info->variants[i].payload_types[p] = payload_types[i][p];
-                    }
-                }
+        XrCompileState *state = xa_symbol_registry_state(analyzer->symbol_registry);
+        if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return;
+        XrOsIoPolicy policy = xr_compile_io_policy(xr_compile_state_resources(state));
+        XaEnumInfo *info = NULL;
+        if (xa_enum_capture_status(state, xa_enum_info_new(&policy, "prelude", name,
+                (uint32_t)member_count, &info)) != XR_COMPILE_RESOURCE_OK) return;
+        for (int i = 0; i < member_count; ++i) {
+            XaEnumVariantInfo *variant = &info->variants[i];
+            if (xa_enum_capture_status(state, xa_enum_variant_set_name(variant, member_names[i])) != XR_COMPILE_RESOURCE_OK) goto enum_failed;
+            int count = is_adt && payload_counts ? payload_counts[i] : 0;
+            if (count < 0 || count > UINT16_MAX) {
+                (void)xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT); goto enum_failed;
             }
-            if (xa_enum_info_finalize_layout(info)) {
-                links->enum_info = info;
-                links->type->enum_type.layout = info->layout;
-                links->type->enum_type.layout_id = info->layout ? info->layout->layout_id : 0;
-                links->declared_type = links->type;
-            } else {
-                xa_enum_info_free(info);
+            variant->payload_count = (uint16_t)count;
+            if (count > 0 && payload_types && payload_types[i]) {
+                const char *names[] = {payload_names ? payload_names[i] : NULL};
+                if (xa_enum_capture_status(state, xa_enum_variant_set_payload_names(variant, names, 1)) != XR_COMPILE_RESOURCE_OK) goto enum_failed;
+                if (xa_enum_capture_status(state, xa_enum_variant_set_payload_types(variant, payload_types[i], (uint16_t)count)) != XR_COMPILE_RESOURCE_OK) goto enum_failed;
             }
         }
+        if (xa_enum_capture_status(state, xa_enum_info_finalize_layout(info)) != XR_COMPILE_RESOURCE_OK) goto enum_failed;
+        links->enum_info = info; links->type->enum_type.layout = info->layout;
+        links->type->enum_type.layout_id = info->layout ? info->layout->layout_id : 0;
+        links->declared_type = links->type;
+        return;
+enum_failed:
+        xa_enum_info_free(info);
     }
 }
 
@@ -596,46 +641,74 @@ static void xa_register_target_query_enums(XaAnalyzer *analyzer) {
     }
 }
 
-// Create analyzer
-XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
-    XR_DCHECK(session != NULL, "xa_analyzer_new: NULL compiler session");
-    if (!session)
+static XrCompileResourceStatus analyzer_copy_identity(XaAnalyzer *analyzer,
+                                                        const char *identity) {
+    XrCompileState *state = xr_compile_session_compile_state(analyzer->compiler_session);
+    if (!identity)
+        return xr_compile_state_status(state);
+    size_t length = 0;
+    XrCompileResourceStatus status = xr_compile_state_string_length(state, identity, &length);
+    if (status != XR_COMPILE_RESOURCE_OK)
+        return status;
+    XrModuleIdentityKind kind;
+    if (!xr_module_identity_valid(identity, &kind))
+        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    status = xr_compile_state_strndup(state, identity, length, &analyzer->standalone_module_identity);
+    if (status != XR_COMPILE_RESOURCE_OK || kind != XR_MODULE_IDENTITY_STDLIB)
+        return status;
+    const char *namespace_id = NULL;
+    size_t namespace_length = 0;
+    if (!xr_module_identity_stdlib_namespace(identity, &namespace_id, &namespace_length))
+        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    status = xr_compile_state_strndup(state, namespace_id, namespace_length,
+                                    &analyzer->standalone_stdlib_module_name);
+    if (status == XR_COMPILE_RESOURCE_OK)
+        analyzer->standalone_module_is_stdlib = true;
+    return status;
+}
+
+XR_FUNC XaAnalyzer *xa_analyzer_new(const XaAnalyzerInput *input) {
+    if (!input || !input->session)
         return NULL;
-
-    // Ensure process-level type singletons are initialized (idempotent)
-    xr_type_global_init();
-
-    XrVMRuntime *X = xr_compiler_session_vm_host(session);
-
-    XaAnalyzer *analyzer = xr_calloc(1, sizeof(XaAnalyzer));
-    if (!analyzer)
+    XrCompilerSession *session = input->session;
+    XrCompileState *state = xr_compile_session_compile_state(session);
+    if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK)
         return NULL;
-
-    // Store owning compiler session and borrowed VM host (explicit, no TLS)
+    if (!input->runtime || !xr_target_data_layout_validate(input->target)) {
+        (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
+    }
+    void *memory = NULL;
+    if (xr_compile_state_calloc(state, 1, sizeof(XaAnalyzer), &memory) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
+    XaAnalyzer *analyzer = memory;
     analyzer->compiler_session = session;
-    analyzer->isolate = X;
+    analyzer->isolate = input->runtime;
+    analyzer->target_data_layout = *input->target;
     analyzer->semantic_revision = 1;
+    if (analyzer_copy_identity(analyzer, input->module_identity) != XR_COMPILE_RESOURCE_OK) {
+        xr_compile_state_free(analyzer->standalone_module_identity);
+        xr_compile_state_free(analyzer->standalone_stdlib_module_name);
+        xr_compile_state_free(analyzer);
+        return NULL;
+    }
+    xr_type_global_init();
+    XrVMRuntime *X = input->runtime;
 
     if (xa_analyzer_storage_open(xr_compile_session_compile_state(session), analyzer) !=
         XR_COMPILE_RESOURCE_OK) {
-        xr_free(analyzer);
+        xr_compile_state_free(analyzer->standalone_module_identity);
+        xr_compile_state_free(analyzer->standalone_stdlib_module_name);
+        xr_compile_state_free(analyzer);
         return NULL;
     }
 
     // Install the analyzer-owned pool for type allocation in this compiler pass.
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
-    xa_symbol_set_id_counter(&analyzer->next_symbol_id);
-
-    // Initialize symbol ID counter (starts at 1)
-    analyzer->next_symbol_id = 1;
-
-    // Symbol registry for O(1) ID lookup (must be set before any scope_add_symbol)
-    analyzer->symbols_by_id = xr_intmap_new();
-    xa_symbol_set_registry(analyzer->symbols_by_id);
-
-    analyzer->global_scope = xa_scope_new(XA_SCOPE_GLOBAL, NULL);
-    analyzer->current_scope = analyzer->global_scope;
-    analyzer->files_map = xr_hashmap_new();
+    if (xa_analyzer_files_open(analyzer) != XR_COMPILE_RESOURCE_OK) {
+        xa_analyzer_free(analyzer);
+        return NULL;
+    }
 
     // Register built-in interfaces (Iterable, Comparable, etc.)
     xa_register_builtin_interfaces(X, analyzer->global_scope);
@@ -647,6 +720,10 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     // visible in every compilation unit.
     xa_register_prelude_enums(analyzer);
     xa_register_target_query_enums(analyzer);
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) {
+        xa_analyzer_free(analyzer);
+        return NULL;
+    }
 
     // Default options. Strict null checks are ON by default: a possibly-null
     // value must be narrowed before member/index/call access (best-practice
@@ -683,7 +760,8 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     // Canonical allocation-effect summaries.
     analyzer->allocation_db = xa_allocation_db_new();
 
-    if (!analyzer->enum_record_plan_table || !analyzer->effect_db || !analyzer->memory_effect_db ||
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK ||
+        !analyzer->enum_record_plan_table || !analyzer->effect_db || !analyzer->memory_effect_db ||
         !analyzer->allocation_db) {
         xa_analyzer_free(analyzer);
         return NULL;
@@ -697,6 +775,8 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
     if (!analyzer)
         return;
 
+    xa_analyzer_files_close(analyzer);
+
     /* Release enum layouts retired by re-analysis (kept alive so cached
      * XrType copies stayed valid across the second analysis pass). */
     for (size_t i = 0; i < analyzer->retired_enum_layout_count; i++)
@@ -709,7 +789,7 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
     XaForeignSymbolView *foreign_view = (XaForeignSymbolView *) analyzer->foreign_symbol_views;
     while (foreign_view) {
         XaForeignSymbolView *next = foreign_view->next;
-        xr_free(foreign_view);
+        xr_compile_state_free(foreign_view);
         foreign_view = next;
     }
     analyzer->foreign_symbol_views = NULL;
@@ -717,28 +797,8 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
     analyzer->foreign_symbol_scope = NULL;
 
     xa_scope_free(analyzer->global_scope);
-
-    /* File scopes are children of global_scope and were reclaimed above.
-     * XaFileEntry itself, including its duplicated path, is owned by the
-     * analyzer's intrusive file list rather than by files_map. */
-    XaFileEntry *file_entry = analyzer->files;
-    while (file_entry) {
-        XaFileEntry *next = file_entry->next;
-        xr_free(file_entry->path);
-        file_entry->path = NULL;
-        file_entry->file_scope = NULL;
-        xr_free(file_entry);
-        file_entry = next;
-    }
-    analyzer->files = NULL;
-    analyzer->file_count = 0;
-
-    // Free symbol registry (values are XaSymbol* owned by scopes, don't free them)
-    if (analyzer->symbols_by_id) {
-        xr_intmap_free((XrIntMap *) analyzer->symbols_by_id);
-    }
-    xa_symbol_set_registry(NULL);
-    xa_symbol_set_id_counter(NULL);
+    analyzer->global_scope = NULL;
+    analyzer->current_scope = NULL;
 
     // Free incremental analysis context
     if (analyzer->incremental) {
@@ -789,37 +849,18 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
         analyzer->allocation_db = NULL;
     }
 
-    // Detach active pool owners before freeing the analyzer-owned pool.
-    // Temporary analyzers may share a compiler session with a longer-lived
-    // analyzer; leaving TLS pointing here turns the next type allocation into
-    // a use-after-free.
-    if (analyzer->type_pool) {
-        XrTypePool *fallback = xr_compiler_session_analyzer_pool(analyzer->compiler_session);
-        if (fallback == analyzer->type_pool)
-            fallback = NULL;
-        if (xr_type_get_current_pool() == analyzer->type_pool)
-            xr_type_set_current_pool(fallback, fallback ? &fallback->next_type_id : NULL);
-    }
+    /* A parser session owns no fallback analyzer. Subsequent semantic work
+     * selects its actual analyzer pool instead of restoring an unowned one. */
+    if (analyzer->type_pool && xr_type_get_current_pool() == analyzer->type_pool)
+        xr_type_set_current_pool(NULL, NULL);
 
-    // Free the non-owning path -> XaFileEntry lookup map.
-    if (analyzer->files_map) {
-        xr_hashmap_free((XrHashMap *) analyzer->files_map);
-    }
+    xa_analyzer_clear_diagnostics(analyzer);
 
-    // Free diagnostics
-    XaDiagnostic *diag = analyzer->diagnostics;
-    while (diag) {
-        XaDiagnostic *next = diag->next;
-        if (diag->message)
-            xr_free((void *) diag->message);
-        // Note: diag->code is an int (error code), not a pointer - no free needed
-        xr_free(diag);
-        diag = next;
-    }
-
+    xr_compile_state_free(analyzer->standalone_module_identity);
+    xr_compile_state_free(analyzer->standalone_stdlib_module_name);
     xa_analyzer_storage_close(analyzer);
 
-    xr_free(analyzer);
+    xr_compile_state_free(analyzer);
 }
 
 size_t xa_analyzer_type_pool_bytes(const XaAnalyzer *analyzer) {
@@ -848,18 +889,6 @@ bool xa_analyzer_is_freestanding(const XaAnalyzer *analyzer) {
     return analyzer && analyzer->build_profile == XA_ANALYZER_BUILD_PROFILE_FREESTANDING;
 }
 
-static void xa_analyzer_sync_type_ref_ast_epoch(XaAnalyzer *analyzer) {
-    if (!analyzer || !analyzer->node_table)
-        return;
-    uint64_t ast_epoch = xr_compiler_session_ast_identity_epoch(analyzer->compiler_session);
-    if (analyzer->type_ref_batch_ast_epoch == ast_epoch)
-        return;
-    xa_node_table_clear_type_ref_types((XaNodeTable *) analyzer->node_table);
-    xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
-    analyzer->type_ref_batch_ast_epoch = ast_epoch;
-    analyzer->type_ref_batch_root_id = 0u;
-}
-
 void xa_analyzer_set_graph(XaAnalyzer *analyzer, struct XrModuleGraph *graph) {
     if (!analyzer)
         return;
@@ -867,278 +896,8 @@ void xa_analyzer_set_graph(XaAnalyzer *analyzer, struct XrModuleGraph *graph) {
         xa_node_table_clear_type_ref_types((XaNodeTable *) analyzer->node_table);
         xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
         analyzer->type_ref_batch_root_id = 0u;
-        analyzer->type_ref_batch_ast_epoch =
-            xr_compiler_session_ast_identity_epoch(analyzer->compiler_session);
     }
     analyzer->graph = graph;
-}
-
-/* Extract the declared name from an exported declaration AST node. */
-static const char *get_export_decl_name(AstNode *decl) {
-    if (!decl)
-        return NULL;
-    switch (decl->type) {
-        case AST_FUNCTION_DECL:
-            return decl->as.function_decl.name;
-        case AST_CLASS_DECL:
-        case AST_STRUCT_DECL:
-        case AST_UNION_DECL:
-            return decl->as.class_decl.name;
-        case AST_CONST_DECL:
-        case AST_VAR_DECL:
-            return decl->as.var_decl.name;
-        case AST_ENUM_DECL:
-            return decl->as.enum_decl.name;
-        case AST_INTERFACE_DECL:
-            return decl->as.interface_decl.name;
-        case AST_TYPE_ALIAS:
-            return decl->as.type_alias.name;
-        default:
-            return NULL;
-    }
-}
-
-static bool xa_symbol_exportable(const XaSymbol *sym) {
-    /* Classes may be exported as namespace values for construction/static
-     * method lookup even when they do not carry an ordinary expression type
-     * in links.type (notably stdlib script overlays on native modules). */
-    if (!sym)
-        return false;
-    if (xr_type_contains_error(sym->links.type) ||
-        xr_type_contains_error(sym->links.declared_type) ||
-        xr_type_contains_error((const XrType *) sym->alias_type))
-        return false;
-    return sym->links.type || (sym->kind == XA_SYM_CLASS && sym->links.class_info);
-}
-
-static bool xa_symbol_export_metadata_poisoned(const XaSymbol *sym) {
-    return sym && (xr_type_contains_error(sym->links.type) ||
-                   xr_type_contains_error(sym->links.declared_type) ||
-                   xr_type_contains_error((const XrType *) sym->alias_type));
-}
-
-static bool xa_export_map_set_symbol(XrHashMap **exports, const char *name, XaSymbol *sym) {
-    if (!name || !xa_symbol_exportable(sym))
-        return false;
-    if (!*exports)
-        *exports = xr_hashmap_new();
-    if (!*exports)
-        return false;
-    return xr_hashmap_set(*exports, name, sym);
-}
-
-static XrModuleSpec *xa_graph_spec_for_ast(XaAnalyzer *analyzer, XrAstNode *ast) {
-    XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
-    if (!graph || !ast)
-        return NULL;
-    for (int i = 0; i < graph->spec_count; i++) {
-        if (graph->specs[i].ast == (struct AstNode *) ast)
-            return &graph->specs[i];
-    }
-    return NULL;
-}
-
-static XrModuleSpec *xa_graph_spec_for_identity(XaAnalyzer *analyzer, const char *module_identity) {
-    XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
-    if (!graph || !module_identity || !xr_module_identity_valid(module_identity, NULL))
-        return NULL;
-    XrModuleSpec *match = NULL;
-    for (int i = 0; i < graph->spec_count; i++) {
-        if (!graph->specs[i].canonical || strcmp(graph->specs[i].canonical, module_identity) != 0)
-            continue;
-        if (match)
-            return NULL;
-        match = &graph->specs[i];
-    }
-    return match;
-}
-
-static void xa_report_poisoned_export_metadata(XaAnalyzer *analyzer, const AstNode *node,
-                                               const char *name) {
-    char msg[256];
-    snprintf(msg, sizeof(msg),
-             "Export '%s' contains compiler recovery ErrorType metadata; module export table is "
-             "invalid",
-             name ? name : "<unknown>");
-    XrLocation loc = {.file = analyzer ? analyzer->current_file : NULL,
-                      .line = node ? node->line : 0,
-                      .column = node ? node->column : 0};
-    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
-                               &loc);
-}
-
-static bool xa_export_map_try_set_symbol(XaAnalyzer *analyzer, XrHashMap **exports,
-                                         const char *name, XaSymbol *sym, const AstNode *loc_node) {
-    if (xa_symbol_export_metadata_poisoned(sym)) {
-        xa_report_poisoned_export_metadata(analyzer, loc_node, name);
-        return false;
-    }
-    (void) xa_export_map_set_symbol(exports, name, sym);
-    return true;
-}
-
-static XrHashMap *xa_graph_reexport_source_exports(XaAnalyzer *analyzer, XrAstNode *ast,
-                                                   const char *from_path, bool *out_invalid) {
-    if (out_invalid)
-        *out_invalid = false;
-    XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
-    if (!graph || !graph->resolver || !from_path)
-        return NULL;
-
-    const XrModuleSpec *owner = xa_graph_spec_for_ast(analyzer, ast);
-    if (!owner)
-        owner = xa_graph_spec_for_identity(analyzer, analyzer->current_module_identity);
-    if (!owner || !owner->source_path || !xr_module_identity_authority_valid(&owner->authority))
-        return NULL;
-    XrModuleId mid;
-    char *err = NULL;
-    int rc = xr_module_resolver_resolve(graph->resolver, from_path, owner->source_path,
-                                        &owner->authority, &mid, &err);
-    xr_free(err);
-    if (rc != 0)
-        return NULL;
-
-    int idx = xr_module_graph_find(graph, mid.canonical);
-    xr_module_id_cleanup(&mid);
-    if (idx < 0)
-        return NULL;
-    if (graph->specs[idx].export_symbols_invalid) {
-        if (out_invalid)
-            *out_invalid = true;
-        return NULL;
-    }
-    return graph->specs[idx].export_symbols;
-}
-
-typedef struct XaReexportAllCtx {
-    XaAnalyzer *analyzer;
-    XrHashMap **exports;
-    const AstNode *loc_node;
-    bool invalid;
-} XaReexportAllCtx;
-
-static void xa_reexport_all_symbol_cb(const char *key, void *value, void *userdata) {
-    XaReexportAllCtx *ctx = (XaReexportAllCtx *) userdata;
-    if (!ctx || !ctx->exports)
-        return;
-    if (!xa_export_map_try_set_symbol(ctx->analyzer, ctx->exports, key, (XaSymbol *) value,
-                                      ctx->loc_node))
-        ctx->invalid = true;
-}
-
-typedef struct XaNativeExportCtx {
-    XaAnalyzer *analyzer;
-    XrHashMap **exports;
-    bool invalid;
-} XaNativeExportCtx;
-
-static void xa_collect_native_export_cb(const char *key, void *value, void *userdata) {
-    XaNativeExportCtx *ctx = (XaNativeExportCtx *) userdata;
-    XaSymbol *sym = (XaSymbol *) value;
-    if (!ctx || !ctx->exports || !sym || !sym->is_builtin || !sym->is_exported)
-        return;
-    if (!xa_export_map_try_set_symbol(ctx->analyzer, ctx->exports, key, sym, NULL))
-        ctx->invalid = true;
-}
-
-bool xa_analyzer_collect_export_symbols_checked(XaAnalyzer *analyzer, XrAstNode *ast,
-                                                XrHashMap **out_exports) {
-    if (out_exports)
-        *out_exports = NULL;
-    if (!analyzer || !ast || ast->type != AST_PROGRAM || !out_exports)
-        return false;
-
-    ProgramNode *prog = &ast->as.program;
-    XrHashMap *exports = NULL;
-    XrModuleSpec *owner = xa_graph_spec_for_ast(analyzer, ast);
-    if (owner)
-        owner->export_symbols_invalid = false;
-
-    /* Hybrid native/script modules publish runtime-backed declarations through
-     * analyzer-owned native symbols, not synthetic source declarations. */
-    XaNativeExportCtx native_ctx = {.analyzer = analyzer, .exports = &exports, .invalid = false};
-    XaScope *export_scope =
-        analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
-    if (export_scope && export_scope->symbols)
-        xr_hashmap_foreach((XrHashMap *) export_scope->symbols, xa_collect_native_export_cb,
-                           &native_ctx);
-    if (native_ctx.invalid)
-        goto invalid;
-
-    for (int i = 0; i < prog->count; i++) {
-        AstNode *stmt = prog->statements[i];
-        if (!stmt)
-            continue;
-
-        /* Direct visibility belongs to the declaration itself. */
-        if (stmt->is_exported) {
-            const char *name = get_export_decl_name(stmt);
-            if (name) {
-                XaSymbol *sym = xa_scope_lookup(export_scope, name);
-                if (!xa_export_map_try_set_symbol(analyzer, &exports, name, sym, stmt))
-                    goto invalid;
-            }
-        }
-
-        if (stmt->type != AST_EXPORT_STMT)
-            continue;
-
-        ExportStmtNode *exp = &stmt->as.export_stmt;
-
-        /* Re-exports remain statements because they do not declare a local name. */
-        if (exp->from_path) {
-            bool source_invalid = false;
-            XrHashMap *source_exports =
-                xa_graph_reexport_source_exports(analyzer, ast, exp->from_path, &source_invalid);
-            if (!source_exports) {
-                if (source_invalid) {
-                    xa_report_poisoned_export_metadata(analyzer, stmt, exp->from_path);
-                    goto invalid;
-                }
-                continue;
-            }
-            if (exp->is_reexport_all) {
-                XaReexportAllCtx ctx = {
-                    .analyzer = analyzer, .exports = &exports, .loc_node = stmt, .invalid = false};
-                xr_hashmap_foreach(source_exports, xa_reexport_all_symbol_cb, &ctx);
-                if (ctx.invalid)
-                    goto invalid;
-                continue;
-            }
-            for (int j = 0; j < exp->reexport_count; j++) {
-                ReexportMember *member = &exp->reexport_members[j];
-                if (!member->name)
-                    continue;
-                XaSymbol *sym = (XaSymbol *) xr_hashmap_get(source_exports, member->name);
-                const char *export_name = member->alias ? member->alias : member->name;
-                if (!xa_export_map_try_set_symbol(analyzer, &exports, export_name, sym, stmt))
-                    goto invalid;
-            }
-        }
-    }
-
-    *out_exports = exports;
-    return true;
-
-invalid:
-    if (exports)
-        xr_hashmap_free(exports);
-    if (owner) {
-        owner->export_symbols_invalid = true;
-        if (owner->export_symbols) {
-            xr_hashmap_free(owner->export_symbols);
-            owner->export_symbols = NULL;
-        }
-    }
-    *out_exports = NULL;
-    return false;
-}
-
-XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *ast) {
-    XrHashMap *exports = NULL;
-    if (!xa_analyzer_collect_export_symbols_checked(analyzer, ast, &exports))
-        return NULL;
-    return exports;
 }
 
 // Symbol lookup
@@ -1196,15 +955,15 @@ XaSymbol *xa_analyzer_lookup_deep(XaAnalyzer *analyzer, const char *name) {
     return best;
 }
 
-XaSymbol *xa_analyzer_symbol_by_id(XaAnalyzer *analyzer, uint32_t symbol_id) {
-    if (!analyzer || !analyzer->symbols_by_id || symbol_id == 0)
-        return NULL;
-    return (XaSymbol *) xr_intmap_get((XrIntMap *) analyzer->symbols_by_id, symbol_id);
-}
 
 XaSymbol *xa_analyzer_import_export_symbol(XaAnalyzer *analyzer, const XaSymbol *source) {
-    if (!analyzer || !source)
+    if (!analyzer) return NULL;
+    XrCompileState *state = xa_symbol_registry_state(analyzer->symbol_registry);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return NULL;
+    if (!source) {
+        (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
         return NULL;
+    }
 
     const XaAnalyzer *source_owner = source->links.summary_owner;
     if (source_owner == analyzer)
@@ -1213,6 +972,7 @@ XaSymbol *xa_analyzer_import_export_symbol(XaAnalyzer *analyzer, const XaSymbol 
     const uint64_t source_revision = source_owner ? source_owner->semantic_revision : 0;
     for (XaForeignSymbolView *entry = (XaForeignSymbolView *) analyzer->foreign_symbol_views; entry;
          entry = entry->next) {
+        if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) return NULL;
         if (entry->source == source && entry->source_owner == source_owner &&
             entry->source_revision == source_revision)
             return entry->view;
@@ -1220,21 +980,15 @@ XaSymbol *xa_analyzer_import_export_symbol(XaAnalyzer *analyzer, const XaSymbol 
 
     if (!analyzer->foreign_symbol_scope) {
         /* Keep declaration-context views outside the lexical scope tree.
-         * Their fresh ids are resolved through symbols_by_id only; exposing
+         * Their fresh ids are resolved through the explicit registry only; exposing
          * their source names to deep lookup would make an unimported foreign
          * declaration appear visible to LSP and recovery paths. */
-        analyzer->foreign_symbol_scope = xa_scope_new(XA_SCOPE_GLOBAL, NULL);
+        analyzer->foreign_symbol_scope = xa_scope_new(analyzer->symbol_registry, XA_SCOPE_GLOBAL, NULL);
         if (!analyzer->foreign_symbol_scope)
             return NULL;
     }
 
-    /* Symbol construction and registration use analyzer-selected TLS only as
-     * a routing mechanism.  Select the destination explicitly so a retained
-     * graph analyzer cannot receive this view by accident. */
-    xa_symbol_set_id_counter(&analyzer->next_symbol_id);
-    xa_symbol_set_registry(analyzer->symbols_by_id);
-
-    XaSymbol *view = xa_symbol_new(source->name, source->kind);
+    XaSymbol *view = xa_symbol_new(analyzer->symbol_registry, source->name, source->kind);
     if (!view)
         return NULL;
     view->location = source->location;
@@ -1254,18 +1008,29 @@ XaSymbol *xa_analyzer_import_export_symbol(XaAnalyzer *analyzer, const XaSymbol 
     view->passing_mode = source->passing_mode;
     view->type_alias_node = source->type_alias_node;
     view->alias_type = source->alias_type;
-    xa_scope_add_symbol(analyzer->foreign_symbol_scope, view);
     xa_symbol_links_copy_export_metadata(analyzer, &view->links, &source->links);
-
-    XaForeignSymbolView *entry = (XaForeignSymbolView *) xr_calloc(1, sizeof(*entry));
-    if (entry) {
-        entry->source = source;
-        entry->source_owner = source_owner;
-        entry->source_revision = source_revision;
-        entry->view = view;
-        entry->next = (XaForeignSymbolView *) analyzer->foreign_symbol_views;
-        analyzer->foreign_symbol_views = entry;
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) {
+        xa_symbol_free(view);
+        return NULL;
     }
+    void *memory = NULL;
+    XrCompileResourceStatus status = xr_compile_state_calloc(state, 1,
+        sizeof(XaForeignSymbolView), &memory);
+    if (status == XR_COMPILE_RESOURCE_OK) status = xr_compile_state_work(state, 5);
+    if (status == XR_COMPILE_RESOURCE_OK)
+        status = xa_scope_add_symbol(analyzer->foreign_symbol_scope, view);
+    if (status != XR_COMPILE_RESOURCE_OK) {
+        xr_compile_state_free(memory);
+        xa_symbol_free(view);
+        return NULL;
+    }
+    XaForeignSymbolView *entry = memory;
+    entry->source = source;
+    entry->source_owner = source_owner;
+    entry->source_revision = source_revision;
+    entry->view = view;
+    entry->next = (XaForeignSymbolView *) analyzer->foreign_symbol_views;
+    analyzer->foreign_symbol_views = entry;
     return view;
 }
 
@@ -1288,7 +1053,7 @@ XrType *xa_analyzer_get_type(XaAnalyzer *analyzer, XaSymbol *symbol) {
         return NULL;
 
     // Ensure type pool is set for this thread
-    xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
+    xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
 
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, symbol);
     if (!links)
@@ -1322,46 +1087,21 @@ XrClassInfo *xa_analyzer_get_class(XaAnalyzer *analyzer, const char *name) {
     return links ? links->class_info : NULL;
 }
 
-// Get members of a type (for LSP completions)
-XaSymbol **xa_analyzer_get_members(XaAnalyzer *analyzer, XrType *type, int *count) {
-    *count = 0;
-    if (!type)
-        return NULL;
-    (void) analyzer;  // May be NULL for builtin lookups
-
-    // For class instances, return class members (including inherited)
-    if (XR_TYPE_IS_INSTANCE(type) && type->instance.class_ref) {
-        XrClassInfo *info = type->instance.class_ref;
-
-        // Count total members including inherited (walk inheritance chain)
-        int total = 0;
-        for (XrClassInfo *c = info; c != NULL; c = c->base) {
-            total += c->field_count + c->method_count;
-        }
-        if (total == 0)
-            return NULL;
-
-        XaSymbol **members = xr_malloc(sizeof(XaSymbol *) * total);
-        if (!members)
-            return NULL;
-        int idx = 0;
-
-        // Collect members from current class and all base classes
-        for (XrClassInfo *c = info; c != NULL; c = c->base) {
-            for (int i = 0; i < c->field_count; i++) {
-                members[idx++] = c->fields[i];
-            }
-            for (int i = 0; i < c->method_count; i++) {
-                members[idx++] = c->methods[i];
-            }
-        }
-
-        *count = idx;
-        return members;
-    }
-
-    // Handle builtin types (Array, Map, String, etc.)
-    return xa_builtin_get_members(type, count);
+XR_FUNC XrCompileResourceStatus xa_analyzer_get_members(
+    XaAnalyzer *analyzer, XrType *type, XaMemberList *output) {
+    XaSymbolRegistry *registry = analyzer ? analyzer->symbol_registry : NULL;
+    XrCompileState *state = xa_symbol_registry_state(registry);
+    XrCompileResourceStatus status = xr_compile_state_status(state);
+    if (status != XR_COMPILE_RESOURCE_OK)
+        return status;
+    if (!output || output->items || output->count || output->owns_symbols)
+        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    status = xr_compile_state_work(state, 1);
+    if (status != XR_COMPILE_RESOURCE_OK || !type)
+        return status;
+    if (XR_TYPE_IS_INSTANCE(type) && type->instance.class_ref)
+        return xa_member_list_class(registry, type->instance.class_ref, output);
+    return xa_builtin_get_members(registry, type, output);
 }
 
 // Get symbols in scope (includes parent scopes)
@@ -1384,6 +1124,10 @@ XaSymbol **xa_analyzer_get_scope_symbols(XaAnalyzer *analyzer, XaScope *scope, i
     for (XaScope *p = s; p; p = p->parent) {
         int sc = 0;
         XaSymbol **syms = xa_scope_get_all_symbols(p, &sc);
+        if (xa_scope_resource_status(p) != XR_COMPILE_RESOURCE_OK) {
+            xr_free(result);
+            return NULL;
+        }
         if (syms) {
             // Grow if needed
             if (idx + sc > capacity) {
@@ -1392,7 +1136,7 @@ XaSymbol **xa_analyzer_get_scope_symbols(XaAnalyzer *analyzer, XaScope *scope, i
                 XaSymbol **tmp = xr_realloc(result, sizeof(XaSymbol *) * capacity);
                 if (!tmp) {
                     xr_free(result);
-                    xr_free(syms);
+                    xr_compile_state_free(syms);
                     return NULL;
                 }
                 result = tmp;
@@ -1400,7 +1144,7 @@ XaSymbol **xa_analyzer_get_scope_symbols(XaAnalyzer *analyzer, XaScope *scope, i
             for (int i = 0; i < sc; i++) {
                 result[idx++] = syms[i];
             }
-            xr_free(syms);
+            xr_compile_state_free(syms);
         }
     }
 
@@ -1414,134 +1158,9 @@ XaSymbol **xa_analyzer_get_scope_symbols(XaAnalyzer *analyzer, XaScope *scope, i
 }
 
 // Diagnostics
-XaDiagnostic *xa_analyzer_get_diagnostics(XaAnalyzer *analyzer, int *count) {
-    if (!analyzer) {
-        *count = 0;
-        return NULL;
-    }
-    *count = analyzer->diagnostic_count;
-    return analyzer->diagnostics;
-}
-
-int xa_analyzer_print_errors(XaAnalyzer *analyzer, const char *fallback_path) {
-    int errors = 0;
-    if (!analyzer)
-        return 0;
-    for (XaDiagnostic *diagnostic = analyzer->diagnostics; diagnostic;
-         diagnostic = diagnostic->next) {
-        if (diagnostic->severity != XR_DIAG_SEV_ERROR)
-            continue;
-        errors++;
-        const char *file = diagnostic->location.file ? diagnostic->location.file
-                           : fallback_path           ? fallback_path
-                                                     : "<module>";
-        fprintf(stderr, "%s:%u:%u: error: %s\n", file, diagnostic->location.line,
-                diagnostic->location.column, diagnostic->message ? diagnostic->message : "");
-    }
-    return errors;
-}
-
-void xa_analyzer_clear_diagnostics(XaAnalyzer *analyzer) {
-    if (!analyzer)
-        return;
-
-    XaDiagnostic *diag = analyzer->diagnostics;
-    while (diag) {
-        XaDiagnostic *next = diag->next;
-        if (diag->message)
-            xr_free((void *) diag->message);
-        xr_free(diag);
-        diag = next;
-    }
-    analyzer->diagnostics = NULL;
-    analyzer->diagnostics_tail = NULL;
-    analyzer->diagnostic_count = 0;
-}
-
-void xa_analyzer_add_diagnostic(XaAnalyzer *analyzer, XrDiagSeverity severity, int code,
-                                const char *message, XrLocation *loc) {
-    if (!analyzer)
-        return;
-
-    /* Independent check sites can reach the same conclusion about the same
-     * source line (e.g. a declared key type and the literal that fills it).
-     * A record equal in code, line, file and message adds no information for
-     * the user, so it is dropped; the column is ignored on purpose because
-     * the duplicates typically anchor to different spans of one construct. */
-    for (XaDiagnostic *d = analyzer->diagnostics; d; d = d->next) {
-        if (d->severity != severity || d->code != code)
-            continue;
-        if (loc && d->location.line != loc->line)
-            continue;
-        if (!loc && (d->location.line != 0 || d->location.column != 0))
-            continue;
-        const char *have_file = d->location.file;
-        const char *want_file = loc ? loc->file : NULL;
-        if ((have_file == NULL) != (want_file == NULL))
-            continue;
-        if (have_file && want_file && strcmp(have_file, want_file) != 0)
-            continue;
-        if ((d->message == NULL) != (message == NULL))
-            continue;
-        if (d->message && message && strcmp(d->message, message) != 0)
-            continue;
-        return;
-    }
-
-    XaDiagnostic *diag = xr_calloc(1, sizeof(XaDiagnostic));
-    if (!diag)
-        return;
-
-    diag->severity = severity;
-    diag->code = code;
-    diag->message = message ? xr_strdup(message) : NULL;
-    if (loc) {
-        diag->location = *loc;
-    }
-
-    // Append to tail: preserves source-order (first error reported = first in list)
-    diag->next = NULL;
-    if (analyzer->diagnostics_tail) {
-        analyzer->diagnostics_tail->next = diag;
-    } else {
-        analyzer->diagnostics = diag;
-    }
-    analyzer->diagnostics_tail = diag;
-    analyzer->diagnostic_count++;
-}
-
 // Scope management
 // Reuses existing child scope if ast_node matches (Pass 2 reuses Pass 1 scope)
-void xa_analyzer_enter_scope(XaAnalyzer *analyzer, XaScopeKind kind, void *ast_node) {
-    if (!analyzer)
-        return;
 
-    if (ast_node) {
-        for (int i = 0; i < analyzer->current_scope->child_count; i++) {
-            XaScope *child = analyzer->current_scope->children[i];
-            if (child->ast_node == ast_node) {
-                // Reusing Pass 1 scope: verify kind consistency
-                XR_DCHECK(child->kind == kind, "enter_scope: scope kind mismatch on reuse");
-                analyzer->current_scope = child;
-                return;
-            }
-        }
-    }
-
-    XaScope *scope = xa_scope_new(kind, analyzer->current_scope);
-    scope->ast_node = ast_node;
-    analyzer->current_scope = scope;
-}
-
-void xa_analyzer_exit_scope(XaAnalyzer *analyzer) {
-    if (!analyzer)
-        return;
-    XR_DCHECK(analyzer->current_scope->parent != NULL,
-              "exit_scope: already at root scope (unbalanced enter/exit)");
-    if (!analyzer->current_scope->parent)
-        return;
-    analyzer->current_scope = analyzer->current_scope->parent;
-}
 
 // Type checking
 static bool typecheck_source_precise_for_target(XrType *target, XrType *source) {
@@ -1676,160 +1295,70 @@ bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type, XrType **ar
 }
 
 // Full AST analysis
-// Find or create file entry
-static XaFileEntry *find_or_create_file(XaAnalyzer *analyzer, const char *file, XaScope *parent) {
-    if (!analyzer || !file)
-        return NULL;
-
-    // O(1) hash lookup
-    XrHashMap *fmap = (XrHashMap *) analyzer->files_map;
-    if (fmap) {
-        XaFileEntry *found = (XaFileEntry *) xr_hashmap_get(fmap, file);
-        if (found)
-            return found;
-    }
-
-    // Create new entry
-    XaFileEntry *entry = xr_calloc(1, sizeof(XaFileEntry));
-    if (!entry)
-        return NULL;
-
-    entry->path = xr_strdup(file);
-    if (!entry->path) {
-        xr_free(entry);
-        return NULL;
-    }
-
-    /* Register the entry before attaching its scope to global_scope.  This
-     * ordering keeps allocation failure atomic: a failed map insertion has
-     * no parent-owned child scope to detach. */
-    if (fmap && !xr_hashmap_set(fmap, entry->path, entry)) {
-        xr_free(entry->path);
-        xr_free(entry);
-        return NULL;
-    }
-
-    entry->file_scope = xa_scope_new(XA_SCOPE_GLOBAL, parent);
-    if (!entry->file_scope) {
-        if (fmap)
-            xr_hashmap_delete(fmap, entry->path);
-        xr_free(entry->path);
-        xr_free(entry);
-        return NULL;
-    }
-
-    entry->dirty = true;
-    entry->next = analyzer->files;
-    analyzer->files = entry;
-    analyzer->file_count++;
-
-    return entry;
-}
-
-XR_FUNC bool xa_analyzer_prepare_input_scope(XaAnalyzer *analyzer, const char *file,
-                                             XaScope *parent) {
-    if (!analyzer || !file || !parent)
-        return false;
-    XaScope *root = parent;
-    while (root->parent)
-        root = root->parent;
-    if (root != analyzer->global_scope)
-        return false;
-    XaFileEntry *entry = find_or_create_file(analyzer, file, parent);
-    return entry && entry->file_scope && entry->file_scope->parent == parent;
-}
-
-bool xa_analyzer_push_file_scope(XaAnalyzer *analyzer, const char *file,
-                                 XaAnalyzerFileScope *scope) {
-    if (!analyzer || !file || !scope)
-        return false;
-
-    memset(scope, 0, sizeof(*scope));
-    XrHashMap *fmap = (XrHashMap *) analyzer->files_map;
-    XaFileEntry *entry = fmap ? (XaFileEntry *) xr_hashmap_get(fmap, file) : NULL;
-    if (!entry || !entry->file_scope)
-        return false;
-
-    scope->previous_scope = analyzer->current_scope;
-    scope->previous_file = analyzer->current_file;
-    scope->active = true;
-    analyzer->current_scope = entry->file_scope;
-    analyzer->current_file = entry->path;
-    return true;
-}
-
-void xa_analyzer_pop_file_scope(XaAnalyzer *analyzer, XaAnalyzerFileScope *scope) {
-    if (!analyzer || !scope || !scope->active)
-        return;
-    analyzer->current_scope = scope->previous_scope;
-    analyzer->current_file = scope->previous_file;
-    memset(scope, 0, sizeof(*scope));
-}
-
-// Clear all base pointers that reference a specific class_info (before freeing it)
-static void clear_base_references(XaScope *scope, XrClassInfo *target, XaAnalyzer *analyzer) {
-    if (!scope || !target)
-        return;
-
-    int count = 0;
-    XaSymbol **syms = xa_scope_get_all_symbols(scope, &count);
-    if (syms) {
-        for (int i = 0; i < count; i++) {
-            if (syms[i]->kind != XA_SYM_CLASS)
-                continue;
-            XaSymbolLinks *links = xa_analyzer_get_links(analyzer, syms[i]);
-            if (links && links->class_info && links->class_info->base == target) {
-                links->class_info->base = NULL;
-            }
-        }
-        xr_free(syms);
-    }
-
-    for (int i = 0; i < scope->child_count; i++) {
-        clear_base_references(scope->children[i], target, analyzer);
-    }
-}
-
-// Remove symbols owned by a specific file from scope
 static void remove_file_symbols(XaScope *scope, const char *file, XaAnalyzer *analyzer) {
-    if (!scope || !file)
-        return;
-
-    // Get all symbols and check ownership
-    int count = 0;
-    XaSymbol **syms = xa_scope_get_all_symbols(scope, &count);
-    if (syms) {
-        for (int i = 0; i < count; i++) {
-            XaSymbol *sym = syms[i];
-            XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
-            if (links && links->file_path && strcmp(links->file_path, file) == 0) {
-                // Clear class_info - first clear all base references to prevent dangling pointers
-                if (links->class_info) {
-                    xa_effect_db_detach_error_types_for_nominal(analyzer->effect_db,
-                                                                links->class_info);
-                    clear_base_references(analyzer->global_scope, links->class_info, analyzer);
-                    if (links->owns_class_info)
-                        xa_class_info_free(links->class_info);
-                    links->class_info = NULL;
-                    links->owns_class_info = false;
-                }
-
-                // Actually remove symbol from scope
-                if (sym->name) {
-                    xa_scope_remove_symbol(scope, sym->name);
-                }
-
-                // Free the symbol (xa_symbol_free also releases inline links content)
-                xa_symbol_free(sym);
+    if (!scope || !file) return;
+    XrCompileState *state = xa_symbol_registry_state(scope->registry);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return;
+    XaSymbol *symbol = scope->owned_symbols;
+    while (symbol) {
+        if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) return;
+        XaSymbol *next = symbol->scope_owned_next;
+        XaSymbolLinks *links = &symbol->links;
+        bool matches = false;
+        if (links->file_path && !xa_export_identity_equal(analyzer, links->file_path, file, &matches))
+            return;
+        if (matches) {
+            if (links->class_info && links->owns_class_info) {
+                if (xa_scope_clear_class_base_references(analyzer->global_scope,
+                        links->class_info) != XR_COMPILE_RESOURCE_OK) return;
             }
+            if (xa_scope_remove_owned_symbol(scope, symbol) != XR_COMPILE_RESOURCE_OK) return;
+            if (links->class_info) {
+                if (links->owns_class_info) {
+                    xa_effect_db_detach_error_types_for_nominal(analyzer->effect_db, links->class_info);
+                    xa_class_info_free(links->class_info);
+                }
+                links->class_info = NULL;
+                links->owns_class_info = false;
+            }
+            xa_symbol_free(symbol);
         }
-        xr_free(syms);
+        symbol = next;
     }
-
-    // Process child scopes
-    for (int i = 0; i < scope->child_count; i++) {
+    for (int i = 0; i < scope->child_count; ++i) {
         remove_file_symbols(scope->children[i], file, analyzer);
+        if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return;
     }
+}
+
+typedef struct XaFileOwnedIds {
+    XaAnalyzer *analyzer;
+    const char *file;
+    uint32_t *ids;
+    int count;
+    int capacity;
+} XaFileOwnedIds;
+
+static bool collect_file_owned_ids(XaScope *scope, XaFileOwnedIds *collect) {
+    if (!scope) return true;
+    XrCompileState *state = xa_symbol_registry_state(scope->registry);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return false;
+    for (XaSymbol *symbol = scope->owned_symbols; symbol; symbol = symbol->scope_owned_next) {
+        if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) return false;
+        bool matches = false;
+        if (symbol->links.file_path && !xa_export_identity_equal(collect->analyzer,
+                symbol->links.file_path, collect->file, &matches)) return false;
+        if (!matches) continue;
+        if (collect->count == INT_MAX || (collect->ids && collect->count >= collect->capacity)) {
+            (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+            return false;
+        }
+        if (collect->ids) collect->ids[collect->count] = symbol->id;
+        ++collect->count;
+    }
+    for (int i = 0; i < scope->child_count; ++i)
+        if (!collect_file_owned_ids(scope->children[i], collect)) return false;
+    return true;
 }
 
 static bool xa_path_char_matches(char a, char b) {
@@ -1957,14 +1486,17 @@ static void xa_register_native_class_symbol(XaAnalyzer *analyzer, XaScope *scope
     if (xa_scope_lookup_local(scope, name))
         return;
 
-    XaSymbol *sym = xa_symbol_new(name, XA_SYM_CLASS);
+    XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, name, XA_SYM_CLASS);
     if (!sym)
         return;
     sym->location.line = 0;
     sym->is_builtin = true;
     sym->is_const = true;
     sym->is_exported = is_exported;
-    xa_scope_add_symbol(scope, sym);
+    if (xa_scope_add_symbol(scope, sym) != XR_COMPILE_RESOURCE_OK) {
+        xa_symbol_free(sym);
+        return;
+    }
 
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (links) {
@@ -1982,7 +1514,9 @@ static void xa_register_native_class_symbol(XaAnalyzer *analyzer, XaScope *scope
         links->file_path = file;
         if (strcmp(name, "Thread") == 0) {
             const char *type_param_names[] = {"T"};
-            xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL, 1);
+            if (xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL, 1) != XR_COMPILE_RESOURCE_OK) {
+                return;
+            }
         }
     }
 }
@@ -2013,7 +1547,7 @@ static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const c
                                             !xa_stdlib_native_type_is_internal(handle->name));
     }
 
-    /* Native classes declared in stdlib/defs/*.def. An internal class is still
+    /* Native classes declared by standard library tables. An internal class is still
      * registered -- the module's own body is exactly where it has to be
      * nameable -- it just stays off the exported surface. The .def visibility
      * key answers that, not the name: unlike a handle or an object shape, a
@@ -2030,15 +1564,18 @@ static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const c
         const XaBuiltinObjectShape *object_shape = &module->object_shapes[i];
         if (!object_shape->name || xa_scope_lookup_local(scope, object_shape->name))
             continue;
-        XaSymbol *sym = xa_symbol_new(object_shape->name, XA_SYM_TYPE_ALIAS);
+        XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, object_shape->name, XA_SYM_TYPE_ALIAS);
         if (!sym)
-            continue;
+            return;
         sym->location.line = 0;
         sym->is_builtin = true;
         sym->is_const = true;
         sym->is_exported = !xa_stdlib_native_type_is_internal(object_shape->name);
-        sym->alias_type = xa_builtin_object_shape_decl_type(analyzer->isolate, object_shape);
-        xa_scope_add_symbol(scope, sym);
+        sym->alias_type = xa_builtin_object_shape_decl_type(analyzer->isolate, analyzer, object_shape);
+        if (xa_scope_add_symbol(scope, sym) != XR_COMPILE_RESOURCE_OK) {
+            xa_symbol_free(sym);
+            return;
+        }
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         if (links) {
             links->type = sym->alias_type;
@@ -2057,18 +1594,21 @@ static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const c
         const XaBuiltinEnum *enum_decl = &module->enums[i];
         if (!enum_decl->name || xa_scope_lookup_local(scope, enum_decl->name))
             continue;
-        XaSymbol *sym = xa_symbol_new(enum_decl->name, XA_SYM_ENUM);
+        XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, enum_decl->name, XA_SYM_ENUM);
         if (!sym)
-            continue;
+            return;
         sym->location.line = 0;
         sym->is_builtin = true;
         sym->is_const = true;
         sym->is_exported = !xa_stdlib_native_type_is_internal(enum_decl->name);
-        xa_scope_add_symbol(scope, sym);
+        if (xa_scope_add_symbol(scope, sym) != XR_COMPILE_RESOURCE_OK) {
+            xa_symbol_free(sym);
+            return;
+        }
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         if (links) {
             links->type =
-                xa_builtin_enum_decl_type(analyzer->isolate, enum_decl, &links->enum_info);
+                xa_builtin_enum_decl_type(analyzer->isolate, analyzer, enum_decl, &links->enum_info);
             links->declared_type = links->type;
             links->is_definitely_assigned = true;
             links->file_path = file;
@@ -2078,10 +1618,11 @@ static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const c
     }
 }
 
-static void xa_register_native_return_ownership(XrVMRuntime *X, XaSymbolLinks *links,
+static XrCompileResourceStatus xa_register_native_return_ownership(XrVMRuntime *X, XaSymbolLinks *links,
                                                 XaBuiltinReturnOwnership ownership) {
-    if (!links)
-        return;
+    XrCompileState *state = links ? links->resource_state : NULL;
+    XrCompileResourceStatus status = xr_compile_state_status(state);
+    if (status != XR_COMPILE_RESOURCE_OK) return status;
     links->return_ownership = (XaReturnOwnershipSummary) {
         .kind = XA_RETURN_OWNERSHIP_UNKNOWN,
         .param_index = -1,
@@ -2127,20 +1668,21 @@ static void xa_register_native_return_ownership(XrVMRuntime *X, XaSymbolLinks *l
             origin.param_ordinal = (int16_t) param_index;
             has_origin = true;
         }
-        if (has_origin && xr_type_function_set_view_origins(X, type, &origin, 1, false)) {
-            links->return_view.origins = (XrViewOrigin *) xr_malloc(sizeof(XrViewOrigin));
-            if (links->return_view.origins) {
-                links->return_view.origins[0] = origin;
-                links->return_view.origin_count = 1;
-                links->return_view.was_elided = false;
-                links->return_view.checked = true;
-                links->return_view.valid = true;
-            }
+        if (has_origin) {
+            status = xa_type_set_view_contract(state, X, type, &origin, 1, false);
+            if (status != XR_COMPILE_RESOURCE_OK) return status;
+            XaViewReturnContract contract = {.origins = type->function.view_origin_set,
+                .origin_count = type->function.view_origin_count,
+                .was_elided = type->function.view_origin_was_elided, .checked = true, .valid = true};
+            status = xa_symbol_links_set_view_contract(links, &contract);
+            if (status != XR_COMPILE_RESOURCE_OK) return status;
         }
     }
+
     /* Bodyless primitive contracts come exclusively from generated metadata;
      * there is no AST body for the generic prepass to inspect. */
     links->return_ownership_scanned = true;
+    return XR_COMPILE_RESOURCE_OK;
 }
 
 static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, const char *file,
@@ -2158,13 +1700,16 @@ static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, con
         if (!member->is_internal || !member->name || xa_scope_lookup_local(scope, member->name))
             continue;
 
-        XaSymbol *sym = xa_symbol_new(member->name, XA_SYM_FUNCTION);
+        XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, member->name, XA_SYM_FUNCTION);
         if (!sym)
-            continue;
+            return;
         sym->location.line = 0;
         sym->is_builtin = true;
         sym->is_const = true;
-        xa_scope_add_symbol(scope, sym);
+        if (xa_scope_add_symbol(scope, sym) != XR_COMPILE_RESOURCE_OK) {
+            xa_symbol_free(sym);
+            return;
+        }
 
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         if (!links)
@@ -2178,7 +1723,8 @@ static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, con
         links->file_path = file;
         links->module_name = mod->name;
         links->import_member_name = member->name;
-        xa_register_native_return_ownership(analyzer->isolate, links, member->return_ownership);
+        if (xa_register_native_return_ownership(analyzer->isolate, links, member->return_ownership) != XR_COMPILE_RESOURCE_OK)
+            return;
     }
 }
 
@@ -2187,40 +1733,40 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     if (!analyzer || !ast)
         return;
 
-    xa_analyzer_sync_type_ref_ast_epoch(analyzer);
-    bool retained_repl_input =
-        analyzer == xr_compiler_session_repl_analyzer(analyzer->compiler_session) &&
-        xr_compiler_session_repl_retains_program(analyzer->compiler_session, ast);
-    if (!analyzer->graph && !retained_repl_input &&
+    /* Inferred syntax belongs to the borrowed program arena. Select it before
+     * changing semantic tables, and keep cleanup valid after any first failure. */
+    XrCompilerSessionScope ast_scope = {0};
+    if (xa_analyzer_ast_scope_open(analyzer, ast, &ast_scope) != XR_COMPILE_RESOURCE_OK)
+        return;
+
+    /* Node IDs are monotonic within this exact parser state. Distinct
+     * graphless roots still begin a fresh semantic batch; no REPL owner or
+     * reset epoch is inferred from the parser session. */
+    if (!analyzer->graph &&
         analyzer->type_ref_batch_root_id != ast->node_id) {
         xa_node_table_clear_type_ref_types((XaNodeTable *) analyzer->node_table);
         xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
     }
     analyzer->type_ref_batch_root_id = analyzer->graph ? 0u : ast->node_id;
-    if (!xa_conditional_admission(analyzer, file, ast)) return;
+    if (!xa_conditional_admission(analyzer, file, ast)) {
+        if (ast_scope.active)
+            (void) xr_compile_session_pop_arena(&ast_scope);
+        return;
+    }
 
     xa_enum_record_plan_table_begin_analysis(
         (XaEnumRecordPlanTable *) analyzer->enum_record_plan_table);
 
-    /* Analyzer inference may materialize syntax-level type references (for
-     * example inferred generic call arguments).  Those nodes are AST state,
-     * so allocate them from the program's arena and keep their lifetime tied
-     * to xr_program_destroy(). */
-    XrCompilerSessionScope ast_scope;
-    bool has_ast_scope = ast->type == AST_PROGRAM && ast->as.program.arena &&
-                         xr_compiler_session_push_arena(analyzer->compiler_session,
-                                                        ast->as.program.arena, file, &ast_scope);
-
-    /* Install the complete analyzer-owned allocation and identity context.
-     * Compiler sessions can retain more than one analyzer on the same thread;
-     * selecting only the type pool and id counter lets a later analysis write
-     * symbols into whichever registry another analyzer installed last. */
-    xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
-    xa_symbol_set_id_counter(&analyzer->next_symbol_id);
-    xa_symbol_set_registry(analyzer->symbols_by_id);
+    /* Type helpers still select the analyzer-owned pool. Symbol construction
+     * receives its explicit registry and cannot route into another analyzer. */
+    xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
 
     // Track file
-    XaFileEntry *entry = find_or_create_file(analyzer, file, analyzer->global_scope);
+    XaFileEntry *entry = NULL;
+    if (xa_analyzer_file_get_or_create(analyzer, file, analyzer->global_scope, &entry) != XR_COMPILE_RESOURCE_OK) {
+        if (ast_scope.active) (void) xr_compile_session_pop_arena(&ast_scope);
+        return;
+    }
     if (entry) {
         entry->dirty = false;
     }
@@ -2228,32 +1774,44 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     XaScope *file_scope = entry && entry->file_scope ? entry->file_scope : analyzer->global_scope;
 
     XrModuleSpec *module_spec = xa_graph_spec_for_ast(analyzer, ast);
-    XrCompileUnitIdentity compile_identity =
-        xr_compiler_session_compile_unit_identity(analyzer->compiler_session);
-    if (!module_spec)
-        module_spec = xa_graph_spec_for_identity(analyzer, compile_identity.module_identity);
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) {
+        if (ast_scope.active) (void) xr_compile_session_pop_arena(&ast_scope);
+        return;
+    }
+    if (!module_spec && analyzer->standalone_module_identity)
+        module_spec = xa_graph_spec_for_identity(analyzer, analyzer->standalone_module_identity);
+    if (!module_spec && !analyzer->standalone_module_identity) {
+        (void) xr_compile_state_fail(xr_compile_session_compile_state(analyzer->compiler_session),
+                                     XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        if (ast_scope.active) (void) xr_compile_session_pop_arena(&ast_scope);
+        return;
+    }
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) {
+        if (ast_scope.active) (void) xr_compile_session_pop_arena(&ast_scope);
+        return;
+    }
     analyzer->current_module_is_stdlib = module_spec
                                              ? module_spec->kind == XR_MOD_STDLIB
-                                             : compile_identity.kind == XR_COMPILE_UNIT_STDLIB;
+                                             : analyzer->standalone_module_is_stdlib;
     analyzer->current_module_identity =
-        module_spec ? module_spec->canonical : compile_identity.module_identity;
+        module_spec ? module_spec->canonical : analyzer->standalone_module_identity;
     analyzer->current_stdlib_module_name = module_spec && module_spec->kind == XR_MOD_STDLIB
                                                ? module_spec->authority.namespace_id
-                                               : compile_identity.stdlib_module_name;
+                                               : analyzer->standalone_stdlib_module_name;
 
     // Set current file/scope for symbol ownership tracking. The root global
     // scope is reserved for builtins/prelude; source modules live in their
     // own top-level scopes so private names cannot collide across modules.
-    analyzer->current_file = file;
+    analyzer->current_file = entry ? entry->path : NULL;
     analyzer->current_scope = file_scope;
-    xa_register_stdlib_native_module_types(analyzer, file, file_scope);
-    xa_register_stdlib_native_module_functions(analyzer, file, file_scope);
+    xa_register_stdlib_native_module_types(analyzer, analyzer->current_file, file_scope);
+    xa_register_stdlib_native_module_functions(analyzer, analyzer->current_file, file_scope);
 
     // Use the visitor-based analysis
     xa_analyze_ast(analyzer, ast);
 
-    if (has_ast_scope)
-        xr_compiler_session_pop_arena(&ast_scope);
+    if (ast_scope.active)
+        (void) xr_compile_session_pop_arena(&ast_scope);
 
     analyzer->semantic_revision++;
     if (analyzer->semantic_revision == 0)
@@ -2276,12 +1834,12 @@ void xa_analyzer_update(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) 
     if (!analyzer || !ast)
         return;
 
-    // Set current type pool and symbol ID counter
-    xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
-    xa_symbol_set_id_counter(&analyzer->next_symbol_id);
+    // Select the current analyzer-owned type pool
+    xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
 
     // Find file entry
-    XaFileEntry *entry = find_or_create_file(analyzer, file, analyzer->global_scope);
+    XaFileEntry *entry = NULL;
+    if (xa_analyzer_file_get_or_create(analyzer, file, analyzer->global_scope, &entry) != XR_COMPILE_RESOURCE_OK) return;
 
     // Check if content changed using hash (incremental optimization)
     XaIncrementalCtx *incr = (XaIncrementalCtx *) analyzer->incremental;
@@ -2311,6 +1869,7 @@ void xa_analyzer_update(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) 
     if (entry)
         entry->dirty = true;
     xa_analyzer_analyze(analyzer, file, ast);
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) return;
 
     // Mark as clean after analysis
     if (entry)
@@ -2322,12 +1881,12 @@ void xa_analyzer_refresh_file(XaAnalyzer *analyzer, const char *file, XrAstNode 
     if (!analyzer || !ast)
         return;
 
-    // Set current type pool and symbol ID counter
-    xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
-    xa_symbol_set_id_counter(&analyzer->next_symbol_id);
+    // Select the current analyzer-owned type pool
+    xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
 
     // Find file entry
-    XaFileEntry *entry = find_or_create_file(analyzer, file, analyzer->global_scope);
+    XaFileEntry *entry = NULL;
+    if (xa_analyzer_file_get_or_create(analyzer, file, analyzer->global_scope, &entry) != XR_COMPILE_RESOURCE_OK) return;
 
     // Check if content changed using provided hash (true incremental check)
     if (entry && entry->content_hash == content_hash && !entry->dirty) {
@@ -2345,6 +1904,7 @@ void xa_analyzer_refresh_file(XaAnalyzer *analyzer, const char *file, XrAstNode 
     // Collect symbols that will be removed (for dependency propagation)
     int old_sym_count = 0;
     XaSymbol **old_symbols = xa_scope_get_all_symbols(analyzer->global_scope, &old_sym_count);
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) return;
 
     // Build change set from symbols in this file
     XaChangeSet changes = {0};
@@ -2369,9 +1929,9 @@ void xa_analyzer_refresh_file(XaAnalyzer *analyzer, const char *file, XrAstNode 
 
             xr_free(changes.modified_symbols);
         }
-        xr_free(old_symbols);
+        xr_compile_state_free(old_symbols);
     } else if (old_symbols) {
-        xr_free(old_symbols);
+        xr_compile_state_free(old_symbols);
     }
 
     // Clear diagnostics for this file
@@ -2389,6 +1949,7 @@ void xa_analyzer_refresh_file(XaAnalyzer *analyzer, const char *file, XrAstNode 
 
     // Re-analyze this file
     xa_analyzer_analyze(analyzer, file, ast);
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) return;
 
     // Mark other files as dirty based on affected symbols
     if (incr && incr->dirty_count > 0) {
@@ -2397,6 +1958,7 @@ void xa_analyzer_refresh_file(XaAnalyzer *analyzer, const char *file, XrAstNode 
             if (sym && sym->location.file && strcmp(sym->location.file, file) != 0) {
                 // Symbol is in another file - mark that file as dirty
                 xa_analyzer_mark_file_dirty(analyzer, sym->location.file);
+                if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) return;
             }
         }
     }
@@ -2404,74 +1966,6 @@ void xa_analyzer_refresh_file(XaAnalyzer *analyzer, const char *file, XrAstNode 
     // Mark current file as clean
     if (entry)
         entry->dirty = false;
-}
-
-void xa_analyzer_mark_file_dirty(XaAnalyzer *analyzer, const char *file) {
-    if (!analyzer || !file)
-        return;
-
-    XrHashMap *fmap = (XrHashMap *) analyzer->files_map;
-    XaFileEntry *entry = fmap ? (XaFileEntry *) xr_hashmap_get(fmap, file) : NULL;
-    if (entry) {
-        entry->dirty = true;
-    }
-}
-
-const char **xa_analyzer_get_dirty_files(XaAnalyzer *analyzer, int *count) {
-    *count = 0;
-    if (!analyzer)
-        return NULL;
-
-    // Count dirty files
-    int dirty_count = 0;
-    XaFileEntry *entry = analyzer->files;
-    while (entry) {
-        if (entry->dirty)
-            dirty_count++;
-        entry = entry->next;
-    }
-
-    if (dirty_count == 0)
-        return NULL;
-
-    // Allocate and fill array
-    const char **result = xr_malloc(sizeof(const char *) * dirty_count);
-    if (!result)
-        return NULL;
-
-    int idx = 0;
-    entry = analyzer->files;
-    while (entry && idx < dirty_count) {
-        if (entry->dirty) {
-            result[idx++] = entry->path;
-        }
-        entry = entry->next;
-    }
-
-    *count = idx;
-    return result;
-}
-
-void xa_analyzer_invalidate_range(XaAnalyzer *analyzer, const char *file, uint32_t start_line,
-                                  uint32_t end_line) {
-    // Today this degrades to whole-file dirty marking. The
-    // (start_line, end_line) range is currently unused but is part of
-    // the API contract so a future block-level incremental implementation
-    // can use it without breaking call sites.
-    //
-    // Calling invalidate_range() on an untracked file MUST register it.
-    // There was no public file-registration entry before, so an LSP
-    // client that issued an edit before any save+analyze would silently
-    // lose the dirty signal. find_or_create_file() initialises
-    // entry->dirty = true so the next refresh_file() call rebuilds it.
-    (void) start_line;
-    (void) end_line;
-    if (!analyzer || !file)
-        return;
-    XaFileEntry *entry = find_or_create_file(analyzer, file, analyzer->global_scope);
-    if (entry) {
-        entry->dirty = true;
-    }
 }
 
 // AST -> inferred type side table convenience wrappers.
@@ -2492,7 +1986,6 @@ struct XrType *xa_analyzer_get_node_type(XaAnalyzer *analyzer, const struct AstN
 
 bool xa_analyzer_bind_type_ref_type(XaAnalyzer *analyzer, const struct XrTypeRef *type_ref,
                                     struct XrType *type) {
-    xa_analyzer_sync_type_ref_ast_epoch(analyzer);
     return analyzer && analyzer->node_table && type_ref && type &&
            xa_node_table_set_type_ref_type((XaNodeTable *) analyzer->node_table, type_ref, type);
 }
@@ -2501,13 +1994,11 @@ struct XrType *xa_analyzer_get_type_ref_type(XaAnalyzer *analyzer,
                                              const struct XrTypeRef *type_ref) {
     if (!analyzer || !analyzer->node_table || !type_ref)
         return NULL;
-    xa_analyzer_sync_type_ref_ast_epoch(analyzer);
     return xa_node_table_get_type_ref_type((const XaNodeTable *) analyzer->node_table, type_ref);
 }
 
 bool xa_analyzer_set_generic_specialization(XaAnalyzer *analyzer, const struct AstNode *node,
                                             const XaGenericSpecializationFact *fact) {
-    xa_analyzer_sync_type_ref_ast_epoch(analyzer);
     return analyzer && analyzer->node_table && node && fact &&
            xa_node_table_set_generic_specialization((XaNodeTable *) analyzer->node_table, node,
                                                     fact);
@@ -2515,7 +2006,6 @@ bool xa_analyzer_set_generic_specialization(XaAnalyzer *analyzer, const struct A
 
 bool xa_analyzer_get_generic_specialization(XaAnalyzer *analyzer, const struct AstNode *node,
                                             XaGenericSpecializationFact *out_fact) {
-    xa_analyzer_sync_type_ref_ast_epoch(analyzer);
     return analyzer && analyzer->node_table && node &&
            xa_node_table_get_generic_specialization((const XaNodeTable *) analyzer->node_table,
                                                     node, out_fact);
@@ -2778,11 +2268,12 @@ struct XrType *xa_analyzer_resolve_adt_payload_type(XaAnalyzer *analyzer,
 void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {
     if (!analyzer || !file)
         return;
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) return;
 
     // This is the unified file-removal entry. It must keep the
     // analyzer's three "size-of-everything" counters self-consistent:
     //
-    //   files_map.size  ==  file_count       (one entry per tracked file)
+    //   file index size == file_count       (one entry per tracked file)
     //   dep_graph edges only reference live symbol IDs
     //   symbol_table holds no symbols owned by `file` after return
     //
@@ -2794,56 +2285,41 @@ void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {
     int edges_before = (incr && incr->deps) ? incr->deps->edge_count : 0;
     int file_count_before = analyzer->file_count;
 
-    // Step 1: collect symbol IDs owned by `file`. We need them BEFORE
-    // remove_file_symbols() destroys the symbols.
-    int total_count = 0;
-    XaSymbol **all_syms = xa_scope_get_all_symbols(analyzer->global_scope, &total_count);
-    uint32_t *file_ids = NULL;
-    int file_id_count = 0;
-    if (all_syms && total_count > 0) {
-        file_ids = xr_malloc(sizeof(uint32_t) * total_count);
-        if (file_ids) {
-            for (int i = 0; i < total_count; i++) {
-                XaSymbol *sym = all_syms[i];
-                XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
-                if (links && links->file_path && strcmp(links->file_path, file) == 0) {
-                    file_ids[file_id_count++] = sym->id;
-                }
-            }
+    /* Collect all owned IDs before mutating the dependency graph. File scopes
+     * are children of the builtin root and may retain hidden old declarations. */
+    XaFileOwnedIds collect = {.analyzer = analyzer, .file = file};
+    if (!collect_file_owned_ids(analyzer->global_scope, &collect)) return;
+    if (collect.count > 0) {
+        XrCompileState *state = xa_symbol_registry_state(analyzer->symbol_registry);
+        int capacity = collect.count;
+        if ((size_t)capacity > SIZE_MAX / sizeof(uint32_t)) {
+            (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+            return;
         }
-        xr_free(all_syms);
+        void *memory = NULL;
+        if (xr_compile_state_alloc(state, (size_t)capacity * sizeof(uint32_t), &memory) !=
+            XR_COMPILE_RESOURCE_OK) return;
+        collect.ids = memory;
+        collect.capacity = capacity;
+        collect.count = 0;
+        if (!collect_file_owned_ids(analyzer->global_scope, &collect)) {
+            xr_compile_state_free(memory);
+            return;
+        }
+        if (incr) xa_dep_remove_symbols(incr, collect.ids, collect.count);
+        xr_compile_state_free(collect.ids);
     }
-
-    // Step 2: drop dependency-graph edges that touch any of those symbols.
-    if (incr && file_ids && file_id_count > 0) {
-        xa_dep_remove_symbols(incr, file_ids, file_id_count);
-    }
-    xr_free(file_ids);
 
     // Step 3: invalidate exact type references before their declaration
     // metadata is freed, then remove symbols owned by this file.
     xa_node_table_clear_type_ref_types((XaNodeTable *) analyzer->node_table);
     xa_node_table_clear_generic_specializations((XaNodeTable *) analyzer->node_table);
     remove_file_symbols(analyzer->global_scope, file, analyzer);
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) return;
 
-    // Step 4: remove file from hash map and linked list.
-    XrHashMap *fmap = (XrHashMap *) analyzer->files_map;
-    bool was_tracked = (fmap && xr_hashmap_get(fmap, file) != NULL);
-    if (fmap)
-        xr_hashmap_delete(fmap, file);
-
-    XaFileEntry **pp = &analyzer->files;
-    while (*pp) {
-        if ((*pp)->path && strcmp((*pp)->path, file) == 0) {
-            XaFileEntry *to_free = *pp;
-            *pp = to_free->next;
-            xr_free(to_free->path);
-            xr_free(to_free);
-            analyzer->file_count--;
-            break;
-        }
-        pp = &(*pp)->next;
-    }
+    // Remove the owned record after semantic retirement succeeds.
+    bool was_tracked = false;
+    if (xa_analyzer_file_remove_record(analyzer, file, &was_tracked) != XR_COMPILE_RESOURCE_OK) return;
 
     // Step 5: clear diagnostics for any subsequent re-analysis.
     xa_analyzer_clear_diagnostics(analyzer);
@@ -2853,6 +2329,8 @@ void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {
     // during a removal.
     XR_DCHECK(analyzer->file_count == (was_tracked ? file_count_before - 1 : file_count_before),
               "xa_analyzer_remove_file: file_count drift");
+    XR_DCHECK(xa_analyzer_file_index_size(analyzer) == (uint32_t)analyzer->file_count,
+              "xa_analyzer_remove_file: index/list count drift");
     XR_DCHECK(!incr || !incr->deps || incr->deps->edge_count <= edges_before,
               "xa_analyzer_remove_file: dep edge_count grew during removal");
     (void) was_tracked;
@@ -2868,6 +2346,7 @@ static XaSymbol *find_symbol_at_position_in_file(XaScope *scope, const char *fil
 
     int count = 0;
     XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
+    if (xa_scope_resource_status(scope) != XR_COMPILE_RESOURCE_OK) return NULL;
 
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];
@@ -2883,16 +2362,17 @@ static XaSymbol *find_symbol_at_position_in_file(XaScope *scope, const char *fil
         if (sym->location.line == line) {
             uint32_t sym_end = sym->location.column + (sym->name ? strlen(sym->name) : 0);
             if (column >= sym->location.column && column <= sym_end) {
-                xr_free(symbols);
+                xr_compile_state_free(symbols);
                 return sym;
             }
         }
     }
-    xr_free(symbols);
+    xr_compile_state_free(symbols);
 
     // Search child scopes
     for (int i = 0; i < scope->child_count; i++) {
         XaSymbol *found = find_symbol_at_position_in_file(scope->children[i], file, line, column);
+        if (xa_scope_resource_status(scope) != XR_COMPILE_RESOURCE_OK) return NULL;
         if (found)
             return found;
     }
@@ -2922,7 +2402,7 @@ XrType *xa_analyzer_infer_expr_type(XaAnalyzer *analyzer, XrAstNode *expr) {
         return NULL;
 
     // Ensure type pool is set for this thread
-    xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
+    xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
 
     // Create temporary inference context
     XaInferContext *ctx = xa_infer_context_new(analyzer);
@@ -2952,8 +2432,12 @@ void xa_analyzer_define_var(XaAnalyzer *analyzer, const char *name, XrType *type
     if (!analyzer || !name)
         return;
 
-    XaSymbol *sym = xa_symbol_new(name, XA_SYM_VARIABLE);
-    xa_scope_add_symbol(analyzer->current_scope, sym);
+    XaSymbol *sym = xa_symbol_new(analyzer->symbol_registry, name, XA_SYM_VARIABLE);
+    if (!sym) return;
+    if (xa_scope_add_symbol(analyzer->current_scope, sym) != XR_COMPILE_RESOURCE_OK) {
+        xa_symbol_free(sym);
+        return;
+    }
 
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (links) {

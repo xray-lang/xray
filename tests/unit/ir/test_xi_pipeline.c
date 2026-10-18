@@ -3428,8 +3428,9 @@ static bool xi_move_module_fixture_build(XiMoveModuleFixture *fixture, XrCompile
     fixture->library_index = fixture->consumer_index == 0u ? 1u : 0u;
     for (uint32_t topo = 0u; topo < 2u; ++topo) {
         int spec_index = fixture->graph->topo_order[topo];
-        xi_resolve_imports(fixture->pipelines[topo].ir, fixture->graph,
-                           fixture->graph->specs[spec_index].source_path, fixture->modules, 2);
+        if (xi_resolve_imports(fixture->pipelines[topo].ir, fixture->graph,
+                           fixture->graph->specs[spec_index].source_path, fixture->modules, 2) != XR_MODULE_OK)
+            goto fail;
     }
     return true;
 

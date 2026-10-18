@@ -217,7 +217,9 @@ static XrType stub_net_storage = {
 static XrEnumLayout *make_unit_enum_type(XrType *out, uint32_t id, const char *owner,
                                          const char *name) {
     static const char *members[] = {"First", "Second"};
-    XrEnumLayout *layout = xr_enum_layout_new(owner, name, members, 2);
+    XrOsIoPolicy enum_policy_1 = xr_os_io_system_policy();
+    XrEnumLayout *layout = NULL;
+    REQUIRE(xr_enum_layout_new(&enum_policy_1, owner, name, members, 2, &layout) == XR_OS_IO_OK);
     REQUIRE(out != NULL && layout != NULL && layout->is_zero_payload && layout->layout_id != 0);
     *out = (XrType) {
         .kind = XR_KIND_ENUM,
@@ -3038,7 +3040,9 @@ static void test_builtin_unit_enum_declaration_identity(void) {
             ordered[0] = members[1];
             ordered[1] = members[0];
         }
-        XrEnumLayout *layout = xr_enum_layout_new(owner, "SendResult", ordered, 4);
+        XrOsIoPolicy enum_policy_2 = xr_os_io_system_policy();
+        XrEnumLayout *layout = NULL;
+        REQUIRE(xr_enum_layout_new(&enum_policy_2, owner, "SendResult", ordered, 4, &layout) == XR_OS_IO_OK);
         REQUIRE(layout != NULL);
         XrType type = {
             .kind = XR_KIND_ENUM, .id = 18, .frozen = true,
@@ -5535,7 +5539,9 @@ static XrSemanticPlan *build_channel_method_semantic(const char *selector,
 
 static void test_channel_method_transfer_operand_freeze(void) {
     const char *members[] = {"Sent", "Full", "Timeout", "Closed"};
-    XrEnumLayout *layout = xr_enum_layout_new("prelude", "SendResult", members, 4);
+    XrOsIoPolicy enum_policy_3 = xr_os_io_system_policy();
+    XrEnumLayout *layout = NULL;
+    REQUIRE(xr_enum_layout_new(&enum_policy_3, "prelude", "SendResult", members, 4, &layout) == XR_OS_IO_OK);
     REQUIRE(layout != NULL);
     XrType result_type = {
         .kind = XR_KIND_ENUM, .id = 18, .frozen = true,

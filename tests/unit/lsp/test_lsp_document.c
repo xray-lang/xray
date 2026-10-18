@@ -117,7 +117,7 @@ static bool analyzer_file_enum_has_layout(XrLspServer *server, const char *uri,
     if (!server || !server->workspace_analyzer || !uri || !enum_name)
         return false;
 
-    XaAnalyzerFileScope file_scope;
+    XaAnalyzerFileScope file_scope = {0};
     if (!xa_analyzer_push_file_scope(server->workspace_analyzer, uri, &file_scope))
         return false;
     XaSymbol *symbol = xa_analyzer_lookup(server->workspace_analyzer, enum_name);

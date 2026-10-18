@@ -23,6 +23,28 @@
 #include <unistd.h>
 #endif
 
+static XrCompileResources *fixture_key_resources;
+static XrCompileState *fixture_key_state;
+static bool fixture_key_initialization_attempted;
+
+static void release_package_fixture_compile_state(void) {
+    xr_compile_state_release(fixture_key_state);
+    xr_compile_resources_release(fixture_key_resources);
+}
+
+static XrCompileState *package_fixture_compile_state(void) {
+    if (!fixture_key_initialization_attempted) {
+        fixture_key_initialization_attempted = true;
+        if (atexit(release_package_fixture_compile_state) != 0)
+            return NULL;
+        const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+        if (xr_compile_resources_new(&limits, &fixture_key_resources) != XR_COMPILE_RESOURCE_OK ||
+            xr_compile_state_new(fixture_key_resources, &fixture_key_state) != XR_COMPILE_RESOURCE_OK)
+            return NULL;
+    }
+    return fixture_key_state;
+}
+
 static int passed;
 static int failed;
 
@@ -406,7 +428,7 @@ static char *make_package_payload_for_source(const char *home_dir, const char *c
     char *payload = NULL;
     if (!package_module_spec_fixture_init(&fixture, home_dir, coordinate, source_path))
         return NULL;
-    if (!xg_standalone_build_key_from_module_spec(&key, &fixture.spec, XG_BUILD_NATIVE_RELEASE,
+    if (!xg_standalone_build_key_from_module_spec(&key, package_fixture_compile_state(), &fixture.spec, XG_BUILD_NATIVE_RELEASE,
                                                   0) ||
         !xg_module_summary_from_module_spec(&module, 1, &fixture.spec))
         goto done;
@@ -444,7 +466,7 @@ static char *make_package_payload_for_ordered_sources(const char *home_dir,
             goto done;
         ordered_specs[i] = &fixtures[i].spec;
     }
-    if (!xg_build_key_from_ordered_module_specs(&key, ordered_specs, count, XG_BUILD_NATIVE_RELEASE,
+    if (!xg_build_key_from_ordered_module_specs(&key, package_fixture_compile_state(), ordered_specs, count, XG_BUILD_NATIVE_RELEASE,
                                                 0))
         goto done;
     xg_global_evidence_init(&package, key);

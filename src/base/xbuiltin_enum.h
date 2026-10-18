@@ -16,6 +16,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* The reserved declaration owner uses the canonical module identity grammar. */
+#define XR_BUILTIN_ENUM_MODULE_IDENTITY \
+    "module-id-v1:kind=6:stdlib:namespace=7:prelude:path=13:builtin-enums"
+
 #define XR_BUILTIN_ENUM_MAX_MEMBERS 8
 
 typedef struct XrBuiltinEnumMember {

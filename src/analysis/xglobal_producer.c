@@ -14,6 +14,7 @@
 #include "../base/xbuiltin_enum.h"
 #include "../base/xarena.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../toolchain/xcompiler_arena_backing.h"
 #include "../base/xmalloc.h"
 #include "../os/os_fs.h"
 #include "../os/os_proc.h"
@@ -118,6 +119,7 @@ typedef struct XgLocalName XgLocalName;
 
 typedef struct XgProducer {
     XgGlobalEvidence *evidence;
+    XrCompileState *state; /* Borrowed from the exact graph parser owner. */
     const XrModuleGraph *module_graph;
     XgClassNameRow *classes;
     uint32_t nclasses;
@@ -1525,7 +1527,20 @@ static const XrModuleSpec *producer_graph_spec_for_module_id(const XgProducer *p
     return match;
 }
 
-static XgModuleId producer_module_id_for_coordinate(const XgProducer *p,
+static bool producer_owns_decl(XgProducer *producer, const XrModuleSpec *spec,
+                               const AstNode *decl) {
+    bool owns = false;
+    XrModuleStatus status = xr_compile_module_graph_owns_top_level_decl(
+        producer->module_graph, spec, decl, &owns);
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY) {
+        (void) xr_compile_state_fail(producer->state, status == XR_MODULE_BUDGET
+            ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+        producer->failed = true;
+    }
+    return status == XR_MODULE_OK && owns;
+}
+
+static XgModuleId producer_module_id_for_coordinate(XgProducer *p,
                                                     XgModuleId importer_module_id,
                                                     const char *coordinate) {
     if (!p || !p->evidence || !coordinate || !coordinate[0])
@@ -1536,36 +1551,48 @@ static XgModuleId producer_module_id_for_coordinate(const XgProducer *p,
 
     /* Source import coordinates are resolved through the graph's typed
      * authority. Never reinterpret a bare coordinate as a durable identity. */
-    const char *resolved_identity = NULL;
     const XrModuleSpec *importer = producer_graph_spec_for_module_id(p, importer_module_id);
     if (p->module_graph && p->module_graph->resolver && importer && importer->source_path &&
         xr_module_identity_authority_valid(&importer->authority)) {
         XrModuleId resolved = {0};
         char *error = NULL;
-        if (xr_module_resolver_resolve(p->module_graph->resolver, coordinate, importer->source_path,
-                                       &importer->authority, &resolved, &error) == 0) {
+        XrModuleStatus status = xr_compile_module_resolver_resolve(
+            p->module_graph->resolver, coordinate, importer->source_path,
+            &importer->authority, &resolved, &error);
+        if (status == XR_MODULE_OK) {
             direct = producer_module_id_for_identity(p, resolved.canonical);
-            xr_module_id_cleanup(&resolved);
+            xr_compile_module_id_cleanup(&resolved);
         }
-        xr_free(error);
+        xr_compile_resources_free(error);
+        if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY) {
+            (void) xr_compile_state_fail(p->state, status == XR_MODULE_BUDGET
+                ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+            p->failed = true;
+            return XG_NO_ID;
+        }
+        if (status != XR_MODULE_OK && status != XR_MODULE_NOT_FOUND) {
+            p->failed = true;
+            return XG_NO_ID;
+        }
         if (direct != XG_NO_ID)
             return direct;
     }
-    if (p->module_graph) {
-        for (int i = 0; i < p->module_graph->spec_count; i++) {
-            const XrModuleSpec *spec = &p->module_graph->specs[i];
-            if (!spec->canonical || !xr_module_identity_authority_valid(&spec->authority) ||
-                !spec->authority.namespace_id ||
-                strcmp(spec->authority.namespace_id, coordinate) != 0)
-                continue;
-            if (resolved_identity && strcmp(resolved_identity, spec->canonical) != 0)
-                return XG_NO_ID;
-            resolved_identity = spec->canonical;
-        }
-    }
-    if (!resolved_identity)
+    if (!p->module_graph || !importer || !importer->source_path)
         return XG_NO_ID;
-    return producer_module_id_for_identity(p, resolved_identity);
+    int index = -1;
+    XrModuleStatus status = xr_compile_module_graph_find_named_dependency(
+        p->module_graph, importer->source_path, coordinate, &index);
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY)
+        (void) xr_compile_state_fail(p->state, status == XR_MODULE_BUDGET
+            ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    if (status != XR_MODULE_OK) {
+        if (status != XR_MODULE_NOT_FOUND)
+            p->failed = true;
+        return XG_NO_ID;
+    }
+    if (index < 0 || index >= p->module_graph->spec_count)
+        return XG_NO_ID;
+    return producer_module_id_for_identity(p, p->module_graph->specs[index].canonical);
 }
 
 static bool producer_reserve_module_imports(XgProducer *p, uint32_t needed) {
@@ -2429,7 +2456,7 @@ static bool tref_contains_object(const XrTypeRef *t) {
     return false;
 }
 
-static uint64_t stable_tref_key(const XrTypeRef *t) {
+static uint64_t stable_tref_key(XgProducer *producer, const XrTypeRef *t) {
     char canonical[512];
     int length;
     if (!t)
@@ -2438,7 +2465,9 @@ static uint64_t stable_tref_key(const XrTypeRef *t) {
         uint64_t key = hash_tref(XR_FNV64_OFFSET_BASIS, t);
         return key ? key : 1;
     }
-    length = xr_tref_to_string_buf(t, canonical, (int) sizeof(canonical));
+    length = xr_compile_tref_to_string_buf(producer->state, t, canonical, (int) sizeof(canonical));
+    if (length < 0)
+        producer->failed = true;
     if (length <= 0)
         return 0;
     uint64_t key = xr_hash_bytes64(canonical, (size_t) length);
@@ -4897,17 +4926,22 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
     if (inferred) {
         XrType carrier = *inferred;
         carrier.is_const = false;
-        XrArena scratch;
-        XrCompilerSessionScope scope;
-        xr_arena_init(&scratch, 4096);
-        if (!xr_compiler_session_push_arena(analyzer->compiler_session, &scratch, NULL, &scope)) {
+        XrArena scratch = {0};
+        XrArenaBacking backing;
+        XrCompilerSessionScope scope = {0};
+        if (xr_compiler_arena_state_backing(bc->producer->state, &backing) != XR_ARENA_OK ||
+            xr_arena_open(&scratch, 4096, &backing) != XR_ARENA_OK ||
+            xr_compile_session_push_arena(analyzer->compiler_session, &scratch, &scope) !=
+                XR_COMPILE_RESOURCE_OK) {
             xr_arena_destroy(&scratch);
             bc->producer->failed = true;
             return 0;
         }
         XrTypeRef *type_ref = xa_synthesize_type_ref(analyzer->compiler_session, &carrier);
         uint32_t key = type_ref ? hash_tref32(type_ref) : 0;
-        xr_compiler_session_pop_arena(&scope);
+        (void) xr_compile_session_pop_arena(&scope);
+        if (xr_compile_state_status(bc->producer->state) != XR_COMPILE_RESOURCE_OK)
+            bc->producer->failed = true;
         xr_arena_destroy(&scratch);
         return key;
     }
@@ -6786,7 +6820,7 @@ static void body_add_object_fields_for_type_alias(XgProducer *producer, XgGlobal
         field.field_ordinal = (uint16_t) (i < UINT16_MAX ? i : UINT16_MAX);
         field.name_id = inputs[i].name_id;
         field.type_key = inputs[i].type ? hash_tref32(inputs[i].type) : 0;
-        field.stable_type_key = stable_tref_key(inputs[i].type);
+        field.stable_type_key = stable_tref_key(producer, inputs[i].type);
         field.stable_name_key = inputs[i].stable_name_key;
         field.flags = inputs[i].flags;
         (void) xg_global_evidence_add_object_field(evidence, &field);
@@ -6794,7 +6828,7 @@ static void body_add_object_fields_for_type_alias(XgProducer *producer, XgGlobal
     xr_free(inputs);
 }
 
-static void body_add_object_fields_for_type_ref(XgGlobalEvidence *evidence,
+static void body_add_object_fields_for_type_ref(XgProducer *producer, XgGlobalEvidence *evidence,
                                                 XgObjectShapeId shape_id, const XrTypeRef *type) {
     if (!evidence || shape_id == XG_NO_ID || !type || type->kind != XR_TREF_OBJECT ||
         (type->nchildren > 0 && (!type->field_names || !type->children)))
@@ -6812,7 +6846,7 @@ static void body_add_object_fields_for_type_ref(XgGlobalEvidence *evidence,
         field.field_ordinal = i;
         field.name_id = hash_name32(name);
         field.type_key = field_type ? hash_tref32(field_type) : 0;
-        field.stable_type_key = stable_tref_key(field_type);
+        field.stable_type_key = stable_tref_key(producer, field_type);
         field.stable_name_key = xg_object_stable_name_key(name);
         field.flags = XG_OBJECT_FIELD_STATIC_KEY | XG_OBJECT_FIELD_REQUIRED;
         if (type->field_readonly && type->field_readonly[source_index])
@@ -7129,11 +7163,11 @@ static XgObjectShapeId body_add_object_shape_for_type_ref(XgBodyCollect *bc, con
     row.flags =
         XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_JSON_ENCODABLE;
     row.shape_hash = shape_hash ? shape_hash : 1;
-    row.stable_type_key = stable_tref_key(type);
+    row.stable_type_key = stable_tref_key(bc->producer, type);
     row.stable_shape_key = row.shape_hash;
     if (!xg_global_evidence_add_object_shape(bc->evidence, &row))
         return XG_NO_ID;
-    body_add_object_fields_for_type_ref(bc->evidence, row.object_shape_id, type);
+    body_add_object_fields_for_type_ref(bc->producer, bc->evidence, row.object_shape_id, type);
     if (!body_finalize_object_shape_identity(bc->evidence, row.object_shape_id))
         return XG_NO_ID;
     return row.object_shape_id;
@@ -12871,14 +12905,14 @@ static bool add_import_contract(XgProducer *p, XgModuleId module_id, const AstNo
                     : decl->type == AST_STRUCT_DECL ? decl->as.struct_decl.name
                                                     : NULL;
                 if (!target_name || strcmp(target_name, member->name) != 0 ||
-                    !xr_module_spec_owns_top_level_decl(target, decl))
+                    !producer_owns_decl(p, target, decl))
                     return false;
             }
             if (member->private_generic_decl) {
                 XaGenericSpecializationFact fact = {0};
                 if (!member->private_target_decl ||
                     member->private_target_decl == member->private_generic_decl ||
-                    !xr_module_spec_owns_top_level_decl(target, member->private_generic_decl) ||
+                    !producer_owns_decl(p, target, member->private_generic_decl) ||
                     !xa_analyzer_get_generic_specialization(p->analyzer,
                                                             member->private_target_decl, &fact) ||
                     !xa_generic_specialization_fact_valid(&fact) ||
@@ -13030,32 +13064,44 @@ static uint64_t module_source_hash(const XrModuleSpec *spec);
  * downstream as a decl that no longer exists — "module storage provenance is
  * missing" — rather than as a stale cache.
  *
- * The image's size and mtime change on every rebuild and cost one stat, taken
- * once per process. A compiler we cannot locate or stat falls back to the
- * version hash alone: degrading to today's behavior beats refusing to build.
+ * The image's size and mtime change on every rebuild. Every submitted stat
+ * uses the requesting compile state's ledger. Missing paths keep the existing
+ * version-only identity; resource and I/O failure never publish a key.
  */
-XR_FUNC uint64_t xg_compiler_image_hash_for_path(const char *path) {
-    uint64_t hash = XG_COMPILER_SEMVER_HASH;
+XR_FUNC XrOsIoStatus xg_compiler_image_hash_for_path(XrCompileState *state,
+    const char *path, uint64_t *output) {
+    XrCompileResourceStatus prior = xr_compile_state_status(state);
+    if (prior != XR_COMPILE_RESOURCE_OK)
+        return prior == XR_COMPILE_RESOURCE_BUDGET ? XR_OS_IO_BUDGET
+             : prior == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_OS_IO_OUT_OF_MEMORY
+             : XR_OS_IO_BAD_ARGUMENT;
+    if (!path || !output)
+        return XR_OS_IO_BAD_ARGUMENT;
+    XrOsIoPolicy policy = xr_compile_io_policy(xr_compile_state_resources(state));
     XrFsStat st;
-    if (!path || xr_fs_stat(path, &st) != 0 || st.kind != XR_FS_FILE)
-        return hash;
-    hash = fold_u64(hash, st.size);
-    hash = fold_u64(hash, (uint64_t) st.mtime_ns);
-    return hash;
+    XrOsIoStatus status = xr_os_io_stat(&policy, path, &st);
+    if (status == XR_OS_IO_BUDGET || status == XR_OS_IO_OUT_OF_MEMORY)
+        (void) xr_compile_state_fail(state, status == XR_OS_IO_BUDGET
+            ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    if (status != XR_OS_IO_OK && status != XR_OS_IO_NOT_FOUND)
+        return status;
+    uint64_t hash = XG_COMPILER_SEMVER_HASH;
+    if (status == XR_OS_IO_OK && st.kind == XR_FS_FILE) {
+        hash = fold_u64(hash, st.size);
+        hash = fold_u64(hash, (uint64_t) st.mtime_ns);
+    }
+    *output = hash;
+    return XR_OS_IO_OK;
 }
 
-static uint64_t compiler_image_hash(void) {
-    static uint64_t cached;
-    static bool computed;
+static uint64_t compiler_image_hash(XrCompileState *state) {
     char exe[4096];
-    if (computed)
-        return cached;
-    computed = true;
-    cached = XG_COMPILER_SEMVER_HASH;
+    uint64_t result = 0;
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+        return 0;
     if (xr_proc_self_exe_path(exe, sizeof(exe)) != 0)
-        return cached;
-    cached = xg_compiler_image_hash_for_path(exe);
-    return cached;
+        return XG_COMPILER_SEMVER_HASH;
+    return xg_compiler_image_hash_for_path(state, exe, &result) == XR_OS_IO_OK ? result : 0;
 }
 
 static uint64_t fold_graph_module_source(uint64_t h, uint64_t module_id, const XrModuleSpec *spec) {
@@ -13129,24 +13175,25 @@ static bool module_identity_is_imported(const XgModuleSummary *imported_modules,
     return false;
 }
 
-XR_FUNC bool xg_standalone_build_key_from_module_spec(XgBuildKey *out_key, const XrModuleSpec *spec,
+XR_FUNC bool xg_standalone_build_key_from_module_spec(XgBuildKey *out_key, XrCompileState *state, const XrModuleSpec *spec,
                                                       uint32_t profile,
                                                       uint64_t imported_summary_hash) {
     const XrModuleSpec *specs[1];
     if (!spec)
         return false;
     specs[0] = spec;
-    return xg_build_key_from_ordered_module_specs(out_key, specs, 1, profile,
+    return xg_build_key_from_ordered_module_specs(out_key, state, specs, 1, profile,
                                                   imported_summary_hash);
 }
 
-XR_FUNC bool xg_build_key_from_ordered_module_specs(XgBuildKey *out_key,
+XR_FUNC bool xg_build_key_from_ordered_module_specs(XgBuildKey *out_key, XrCompileState *state,
                                                     const XrModuleSpec *const *specs,
                                                     uint32_t spec_count, uint32_t profile,
                                                     uint64_t imported_summary_hash) {
     XgBuildKey key;
     uint64_t source_hash = XR_FNV64_OFFSET_BASIS;
-    if (!out_key || !specs || spec_count == 0)
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK ||
+        !out_key || !specs || spec_count == 0)
         return false;
     for (uint32_t i = 0; i < spec_count; i++) {
         if (!specs[i])
@@ -13155,7 +13202,9 @@ XR_FUNC bool xg_build_key_from_ordered_module_specs(XgBuildKey *out_key,
     }
     memset(&key, 0, sizeof(key));
     key.source_hash = source_hash;
-    key.compiler_semver_hash = compiler_image_hash();
+    key.compiler_semver_hash = compiler_image_hash(state);
+    if (!key.compiler_semver_hash)
+        return false;
     key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
     key.imported_summary_hash = imported_summary_hash;
     key.module_id = 1;
@@ -13167,11 +13216,15 @@ XR_FUNC bool xg_build_key_from_ordered_module_specs(XgBuildKey *out_key,
 XR_FUNC bool xg_build_key_from_module_graph(XgBuildKey *out_key, const XrModuleGraph *graph,
                                             uint32_t profile, uint64_t imported_summary_hash) {
     XgBuildKey key;
-    if (!out_key || !graph)
+    XrCompileState *state = graph ? xr_compile_session_compile_state(graph->compiler_session) : NULL;
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK || !out_key || !graph ||
+        graph->resources != xr_compile_state_resources(state))
         return false;
     memset(&key, 0, sizeof(key));
     key.source_hash = source_hash_for_graph(graph);
-    key.compiler_semver_hash = compiler_image_hash();
+    key.compiler_semver_hash = compiler_image_hash(state);
+    if (!key.compiler_semver_hash)
+        return false;
     key.profile_hash = fold_u64(XR_FNV64_OFFSET_BASIS, profile);
     key.imported_summary_hash = imported_summary_hash;
     key.module_id = (XgModuleId) (graph->entry_index >= 0 ? graph->entry_index + 1 : 0);
@@ -13197,18 +13250,8 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules(
         NULL);
 }
 
-static bool prelude_enum_module_identity(char **identity_out) {
-    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_STDLIB, "prelude", NULL};
-    return (xr_module_identity_from_logical(&authority, "builtin-enums", identity_out) == XR_MODULE_OK);
-}
-
 XR_FUNC uint64_t xg_prelude_enum_module_canonical_hash(void) {
-    char *identity = NULL;
-    if (!prelude_enum_module_identity(&identity))
-        return 0;
-    uint64_t hash = hash_text64(identity);
-    xr_free(identity);
-    return hash;
+    return hash_text64(XR_BUILTIN_ENUM_MODULE_IDENTITY);
 }
 
 /* Registry declarations have one owner regardless of the importing source graph.
@@ -13216,9 +13259,7 @@ XR_FUNC uint64_t xg_prelude_enum_module_canonical_hash(void) {
 static bool producer_publish_prelude_enums(XgProducer *producer) {
     if (!producer->analyzer)
         return true;
-    char *identity = NULL;
-    if (!prelude_enum_module_identity(&identity))
-        return false;
+    const char *identity = XR_BUILTIN_ENUM_MODULE_IDENTITY;
     static const char declaration_text[] =
 #define XR_BUILTIN_ENUM(name, arity, slot, variants) #name ":" #arity ":" #variants ";"
 #include "../../stdlib/prelude/builtin_symbols.def"
@@ -13229,7 +13270,6 @@ static bool producer_publish_prelude_enums(XgProducer *producer) {
     module.canonical_hash = hash_text64(identity);
     module.source_hash = hash_text64(declaration_text);
     module.kind = XR_MOD_STDLIB;
-    xr_free(identity);
     if (!module.canonical_hash || !xg_global_evidence_add_module(producer->evidence, &module))
         return false;
     size_t count = 0u;
@@ -13282,6 +13322,7 @@ static bool xg_global_evidence_build_from_module_graph_impl(
     memset(&producer, 0, sizeof(producer));
     producer.evidence = evidence;
     producer.module_graph = graph;
+    producer.state = xr_compile_session_compile_state(graph->compiler_session);
     producer.next_func_id = 1;
     producer.analyzer = analyzer;
 

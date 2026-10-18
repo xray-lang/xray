@@ -13,7 +13,10 @@
  *
  */
 
+#include "xanalyzer_enum_storage.h"
 #include "xanalyzer_visitor_internal.h"
+#include "xanalyzer_link_metadata.h"
+#include "xanalyzer_signature.h"
 #include "xanalyzer_export_query.h"
 #include "xa_intrinsic_registry.h"
 #include "xa_node_table.h"
@@ -65,15 +68,6 @@ static bool xa_module_owns_declaration(XaAnalyzer *analyzer, const XrModuleSpec 
         (XrModuleGraph *) analyzer->graph, spec, declaration, &owned)) && owned;
 }
 
-static void xa_publish_deprecated_attrs(XaSymbolLinks *links, XrAttribute **attrs, int count) {
-    for (int i = 0; links && attrs && i < count; i++) {
-        if (attrs[i] && attrs[i]->kind == ATTR_DEPRECATED) {
-            xa_symbol_links_set_deprecated(links, true, attrs[i]->str_arg);
-            return;
-        }
-    }
-    xa_symbol_links_set_deprecated(links, false, NULL);
-}
 
 static const char *object_shape_type_label_local(XrType *type) {
     if (XR_TYPE_HAS_OBJECT_SHAPE(type) && type->object.type_name)
@@ -3010,69 +3004,13 @@ XR_FUNC bool xa_body_has_return_expr(AstNode *node) {
     }
 }
 
-XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, int line) {
-    if (!ctx || !ctx->analyzer || !symbol)
-        return;
-    XaScope *scope = ctx->analyzer->current_scope;
-    if (!scope)
-        return;
-    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
-    if (links && !links->file_path)
-        links->file_path = ctx->file_path;
-
-    /* `target` is a compiler-owned namespace, not a shadowable prelude value.
-     * Every source binding kind reaches this common definition boundary, so
-     * locals, parameters, captures, patterns and declarations all fail closed
-     * without teaching the lexer a target-specific rule. */
-    if (!symbol->is_builtin && symbol->name &&
-        strcmp(symbol->name, "target") == 0) {
-        char msg[192];
-        snprintf(msg, sizeof(msg),
-                 "Symbol 'target' redeclares the compiler-owned target namespace");
-        XrLocation loc = {.file = ctx->file_path,
-                          .line = line > 0 ? line : (int) symbol->location.line,
-                          .column = (int) symbol->location.column};
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                   XR_ERR_CMP_REDEFINED_VAR, msg, &loc);
-        return;
-    }
-
-    XaSymbol *existing = symbol->name ? xa_scope_lookup_local(scope, symbol->name) : NULL;
-    if (existing) {
-        bool same_source_symbol = existing->kind == symbol->kind &&
-                                  existing->location.line == symbol->location.line &&
-                                  existing->location.column == symbol->location.column;
-        if (!same_source_symbol) {
-            char msg[256];
-            /* Result / Ordering are canonical builtin prelude enums bound to a
-             * single type identity; they are reserved and cannot be
-             * redeclared (the lowerer always resolves them to their builtin
-             * slot, so allowing a redefinition would silently mis-resolve). */
-            if (existing->is_builtin && existing->kind == XA_SYM_ENUM)
-                snprintf(msg, sizeof(msg),
-                         "'%s' is a builtin prelude enum and cannot be redeclared", symbol->name);
-            else
-                snprintf(msg, sizeof(msg), "Symbol '%s' is redefined in the same scope",
-                         symbol->name);
-            XrLocation loc = {.file = ctx->file_path,
-                              .line = line > 0 ? line : (int) symbol->location.line,
-                              .column = (int) symbol->location.column};
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_CMP_REDEFINED_VAR,
-                                       msg, &loc);
-            /* A duplicate function or method must stay out of the scope: two
-             * bodies under one name make the error-set fixpoint oscillate
-             * between them and never converge. Analysis proceeds on the first
-             * definition alone; the diagnostic above already rejects the
-             * program. */
-            if (symbol->kind == XA_SYM_FUNCTION || symbol->kind == XA_SYM_METHOD)
-                return;
-        }
-    }
-    xa_scope_add_symbol(scope, symbol);
-}
-
 XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNode *param,
                                                  int fallback_line) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return NULL;
+
     if (!ctx || !ctx->analyzer || !ctx->analyzer->current_scope || !param || !param->name)
         return NULL;
 
@@ -3087,12 +3025,17 @@ XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNod
     }
 
     if (!symbol) {
-        symbol = xa_symbol_new(param->name, XA_SYM_PARAMETER);
+        symbol = xa_symbol_new(ctx->analyzer->symbol_registry, param->name, XA_SYM_PARAMETER);
+        if (!symbol) {
+            return NULL;
+        }
         if (!symbol)
             return NULL;
         symbol->location.line = param->line > 0 ? param->line : fallback_line;
         symbol->location.column = param->column;
-        xa_visit_add_symbol_checked(ctx, symbol, 0);
+        if (!xa_visit_add_symbol_checked(ctx, &symbol, 0)) {
+            return NULL;
+        }
         param->symbol_id = symbol->id;
     }
 
@@ -3130,6 +3073,11 @@ XR_FUNC XaSymbol *xa_visit_bind_parameter_symbol(XaInferContext *ctx, XrParamNod
  * ========================================================================== */
 
 static void xa_visit_precollect_const_decl(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     if (!ctx || !ctx->analyzer || !node || node->type != AST_CONST_DECL)
         return;
     VarDeclNode *var = &node->as.var_decl;
@@ -3138,13 +3086,18 @@ static void xa_visit_precollect_const_decl(XaInferContext *ctx, AstNode *node) {
     if (xa_scope_lookup_local(ctx->analyzer->current_scope, var->name))
         return;
 
-    XaSymbol *sym = xa_symbol_new(var->name, XA_SYM_VARIABLE);
+    XaSymbol *sym = xa_symbol_new(ctx->analyzer->symbol_registry, var->name, XA_SYM_VARIABLE);
+    if (!sym) {
+        return;
+    }
     sym->location.line = node->line;
     sym->is_const = true;
     sym->is_exported = node->is_exported;
     sym->is_readonly_binding = true;
     sym->is_rebindable = false;
-    xa_visit_add_symbol_checked(ctx, sym, (int) node->line);
+    if (!xa_visit_add_symbol_checked(ctx, &sym, (int) node->line)) {
+        return;
+    }
     if (sym->scope != ctx->analyzer->current_scope)
         return;
     var->symbol_id = sym->id;
@@ -3159,6 +3112,11 @@ static void xa_visit_precollect_const_decl(XaInferContext *ctx, AstNode *node) {
 }
 
 static XaSymbol *xa_visit_predeclare_type_alias(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return NULL;
+
     if (!ctx || !ctx->analyzer || !node || node->type != AST_TYPE_ALIAS)
         return NULL;
     TypeAliasNode *ta = &node->as.type_alias;
@@ -3179,7 +3137,10 @@ static XaSymbol *xa_visit_predeclare_type_alias(XaInferContext *ctx, AstNode *no
         return existing;
     }
 
-    XaSymbol *sym = xa_symbol_new(ta->name, XA_SYM_TYPE_ALIAS);
+    XaSymbol *sym = xa_symbol_new(ctx->analyzer->symbol_registry, ta->name, XA_SYM_TYPE_ALIAS);
+    if (!sym) {
+        return NULL;
+    }
     if (!sym)
         return NULL;
     sym->location.line = node->line;
@@ -3187,22 +3148,18 @@ static XaSymbol *xa_visit_predeclare_type_alias(XaInferContext *ctx, AstNode *no
     sym->is_const = true;
     sym->is_exported = node->is_exported;
     sym->type_alias_node = node;
-    xa_visit_add_symbol_checked(ctx, sym, 0);
+    if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+        return NULL;
+    }
     ta->symbol_id = sym->id;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     if (links) {
         links->file_path = ctx->file_path;
         if (ta->type_param_count > 0 && ta->type_params) {
-            const char **type_param_names =
-                (const char **) xr_calloc((size_t) ta->type_param_count, sizeof(const char *));
-            if (type_param_names) {
-                for (int i = 0; i < ta->type_param_count; i++)
-                    type_param_names[i] = ta->type_params[i] ? ta->type_params[i]->name : NULL;
-                xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL,
-                                                ta->type_param_count);
-                xr_free(type_param_names);
-            }
+            if (xa_symbol_links_set_generic_declarations(links, ta->type_params,
+                    ta->type_param_count) != XR_COMPILE_RESOURCE_OK)
+                return NULL;
         }
     }
     return sym;
@@ -3211,6 +3168,11 @@ static XaSymbol *xa_visit_predeclare_type_alias(XaInferContext *ctx, AstNode *no
 static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node);
 
 static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     if (!ctx || !ctx->analyzer || !node)
         return;
     bool is_struct_decl = node->type == AST_STRUCT_DECL;
@@ -3224,13 +3186,18 @@ static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
     if (!cls->name || cls->symbol_id != 0)
         return;
 
-    XaSymbol *sym = xa_symbol_new(cls->name, XA_SYM_CLASS);
+    XaSymbol *sym = xa_symbol_new(ctx->analyzer->symbol_registry, cls->name, XA_SYM_CLASS);
+    if (!sym) {
+        return;
+    }
     sym->location.line = node->line;
     sym->is_exported = node->is_exported;
-    xa_visit_add_symbol_checked(ctx, sym, 0);
+    if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+        return;
+    }
     cls->symbol_id = sym->id;
 
-    XrClassInfo *info = xa_class_info_new(cls->name);
+    XrClassInfo *info = xa_class_info_new(xa_symbol_registry_state(ctx->analyzer->symbol_registry), cls->name);
     if (!info)
         return;
     info->declaration_symbol = sym;
@@ -3257,6 +3224,11 @@ static void xa_visit_predeclare_class_decl(XaInferContext *ctx, AstNode *node) {
 }
 
 static void xa_visit_predeclare_enum_decl(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     if (!ctx || !ctx->analyzer || !node || node->type != AST_ENUM_DECL)
         return;
     EnumDeclNode *edecl = &node->as.enum_decl;
@@ -3265,17 +3237,23 @@ static void xa_visit_predeclare_enum_decl(XaInferContext *ctx, AstNode *node) {
     if (xa_reject_builtin_name_redeclaration(ctx, node, "enum", edecl->name))
         return;
 
-    XaSymbol *sym = xa_symbol_new(edecl->name, XA_SYM_ENUM);
+    XaSymbol *sym = xa_symbol_new(ctx->analyzer->symbol_registry, edecl->name, XA_SYM_ENUM);
+    if (!sym) {
+        return;
+    }
     sym->location.line = node->line;
     sym->is_const = true;
     sym->is_exported = node->is_exported;
-    xa_visit_add_symbol_checked(ctx, sym, 0);
+    if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+        return;
+    }
     edecl->symbol_id = sym->id;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
     links->declared_type = links->type;
-    links->class_info = xa_class_info_new(edecl->name);
+    links->class_info = xa_class_info_new(xa_symbol_registry_state(ctx->analyzer->symbol_registry), edecl->name);
+    if (!links->class_info) return;
     links->owns_class_info = true;
     if (links->class_info) {
         links->class_info->declaration_symbol = sym;
@@ -3293,22 +3271,21 @@ static void xa_visit_predeclare_enum_decl(XaInferContext *ctx, AstNode *node) {
     if (links->type)
         links->type->enum_type.nominal_ref = links->class_info;
     if (edecl->type_param_count > 0 && edecl->type_params) {
-        const char **type_param_names =
-            xr_malloc(sizeof(const char *) * (size_t) edecl->type_param_count);
-        if (type_param_names) {
-            for (int i = 0; i < edecl->type_param_count; i++)
-                type_param_names[i] = edecl->type_params[i] ? edecl->type_params[i]->name : NULL;
-            xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL,
-                                            edecl->type_param_count);
-            xr_free(type_param_names);
+            if (xa_symbol_links_set_generic_declarations(links, edecl->type_params,
+                    edecl->type_param_count) != XR_COMPILE_RESOURCE_OK)
+                return;
         }
-    }
 }
 
 // xa_visit_collect_function_decl_only / xa_visit_collect_function_body
 // Cross-TU: also called from xa_visit_collect_function_body() in
 // xanalyzer_visitor_decl.c for nested function bodies.
 void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **stmts, int count) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     // Phase -0.5: imports must be visible before signature and field type
     // resolution. Strict type lookup cannot depend on the old unknown class-name
     // fallback for imported declaration types.
@@ -3401,7 +3378,8 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
              * with the same name (variable shadowing).  Matches Pass 2's
              * xa_visit_block_stmt which enters BLOCK_SCOPE. */
             if (stmt->type == AST_BLOCK) {
-                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, stmt);
+                if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, stmt) != XR_COMPILE_RESOURCE_OK)
+                    return;
                 xa_visit_collect(ctx, stmt);
                 xa_analyzer_exit_scope(ctx->analyzer);
             } else {
@@ -3621,6 +3599,11 @@ static XaSymbol *xa_import_symbol_to_reuse(XaInferContext *ctx, uint32_t symbol_
 
 XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node, ImportMember *member,
                                            XrHashMap *graph_exports) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return NULL;
+
     if (!ctx || !node || node->type != AST_IMPORT_STMT || !member)
         return NULL;
     ImportStmtNode *import = &node->as.import_stmt;
@@ -3662,7 +3645,10 @@ XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node, I
     if (sym)
         sym->kind = imported_kind;
     else
-        sym = xa_symbol_new(local_name, imported_kind);
+        sym = xa_symbol_new(ctx->analyzer->symbol_registry, local_name, imported_kind);
+        if (!sym) {
+            return NULL;
+        }
     if (sym) {
         sym->is_imported = true;
         sym->is_const = true;
@@ -3677,7 +3663,9 @@ XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node, I
             sym->alias_type = export_sym->alias_type;
         }
         sym->location.line = node->line;
-        xa_visit_add_symbol_checked(ctx, sym, 0);
+        if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+            return NULL;
+        }
         member->symbol_id = sym->id;
 
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -3688,6 +3676,9 @@ XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node, I
             // Priority 1: resolve from graph exports (user modules)
             if (export_sym) {
                 xa_symbol_links_copy_export_metadata(ctx->analyzer, links, &export_sym->links);
+                if (xr_compile_state_status(links->resource_state) != XR_COMPILE_RESOURCE_OK) {
+                    return NULL;
+                }
                 member_type = links->type;
             }
 
@@ -3709,11 +3700,11 @@ XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node, I
 
             if (!member_type && builtin_object_shape) {
                 member_type =
-                    xa_builtin_object_shape_decl_type(ctx->analyzer->isolate, builtin_object_shape);
+                    xa_builtin_object_shape_decl_type(ctx->analyzer->isolate, ctx->analyzer, builtin_object_shape);
                 sym->alias_type = member_type;
             }
             if (!member_type && builtin_enum) {
-                member_type = xa_builtin_enum_decl_type(ctx->analyzer->isolate, builtin_enum,
+                member_type = xa_builtin_enum_decl_type(ctx->analyzer->isolate, ctx->analyzer, builtin_enum,
                                                         &links->enum_info);
             }
 
@@ -3740,6 +3731,11 @@ XR_FUNC XaSymbol *xa_declare_import_member(XaInferContext *ctx, AstNode *node, I
 
 // Helper: collect import statement (register module variable in symbol table)
 static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     if (!ctx || !node)
         return;
 
@@ -3761,10 +3757,15 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
 
         XaSymbol *sym = xa_import_symbol_to_reuse(ctx, import->symbol_id, var_name);
         if (!sym)
-            sym = xa_symbol_new(var_name, XA_SYM_MODULE);
+            sym = xa_symbol_new(ctx->analyzer->symbol_registry, var_name, XA_SYM_MODULE);
+            if (!sym) {
+                return;
+            }
         if (sym) {
             sym->location.line = node->line;
-            xa_visit_add_symbol_checked(ctx, sym, 0);
+            if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+                return;
+            }
             import->symbol_id = sym->id;
 
             XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -3795,11 +3796,19 @@ static XrType *enum_method_this_type(XaInferContext *ctx, const char *enum_name,
 
 static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym, XrClassInfo *info,
                                          AstNode *method) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     if (!ctx || !enum_sym || !info || !method || method->type != AST_METHOD_DECL)
         return;
 
     MethodDeclNode *md = &method->as.method_decl;
-    XaSymbol *method_sym = xa_symbol_new(md->name, XA_SYM_METHOD);
+    XaSymbol *method_sym = xa_symbol_new(ctx->analyzer->symbol_registry, md->name, XA_SYM_METHOD);
+    if (!method_sym) {
+        return;
+    }
     method_sym->location.line = method->line;
     method_sym->is_static = md->is_static;
     method_sym->is_private = md->is_private;
@@ -3812,7 +3821,9 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
             "an ownership root",
             &loc);
     }
-    xa_visit_add_symbol_checked(ctx, method_sym, 0);
+    if (!xa_visit_add_symbol_checked(ctx, &method_sym, 0)) {
+        return;
+    }
 
     XrType **param_types = NULL;
     const char **param_names = NULL;
@@ -3856,13 +3867,17 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
     }
 
     XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
-    xa_publish_deprecated_attrs(method_links, md->attributes, md->attr_count);
+    if (xa_symbol_links_set_deprecated_attrs(method_links, md->attributes, md->attr_count) != XR_COMPILE_RESOURCE_OK)
+        goto enum_method_cleanup;
     method_links->type = method_type;
     method_links->file_path = ctx->file_path;
     method_links->function_decl_node = method;
-    xa_symbol_links_set_function_sig(method_links, param_types, param_names, md->param_count,
-                                     ret_type);
-    xa_bind_declared_view_origins(ctx, method, method_links, param_names, !md->is_static);
+    if (xa_symbol_links_set_function_sig(method_links, param_types, param_names, md->param_count,
+                                     ret_type) != XR_COMPILE_RESOURCE_OK) {
+        goto enum_method_cleanup;
+    }
+    if (xa_bind_declared_view_origins(ctx, method, method_links, param_names, !md->is_static) != XR_COMPILE_RESOURCE_OK)
+        goto enum_method_cleanup;
     if (md->param_count > 0) {
         AstNode **defs = (AstNode **) xr_calloc(md->param_count, sizeof(AstNode *));
         if (defs) {
@@ -3870,22 +3885,37 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
                 defs[i] = md->params && md->params[i] ? md->params[i]->default_value : NULL;
             xa_bind_param_default_exprs(ctx, defs, param_types, md->param_count,
                                         enum_sym && enum_sym->is_exported);
-            xa_symbol_links_set_param_defaults(method_links, defs, md->param_count);
+            if (xa_symbol_links_set_param_defaults(method_links, defs, md->param_count) != XR_COMPILE_RESOURCE_OK) {
+                xr_free(defs);
+                goto enum_method_cleanup;
+            }
             xr_free(defs);
         }
     }
 
-    xa_class_info_add_method(info, method_sym);
+    if (xa_class_info_add_method(xa_symbol_registry_state(ctx->analyzer->symbol_registry), info, method_sym) != XR_COMPILE_RESOURCE_OK) {
+        xr_free(param_types);
+        xr_free(param_names);
+        return;
+    }
 
     if (md->body) {
-        xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method);
+        if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method) != XR_COMPILE_RESOURCE_OK)
+            goto enum_method_cleanup;
         ctx->analyzer->current_scope->function_symbol = method_sym;
 
         if (!md->is_static) {
-            XaSymbol *this_sym = xa_symbol_new("this", XA_SYM_PARAMETER);
+            XaSymbol *this_sym = xa_symbol_new(ctx->analyzer->symbol_registry, "this", XA_SYM_PARAMETER);
+            if (!this_sym) {
+                xa_analyzer_exit_scope(ctx->analyzer);
+                        goto enum_method_cleanup;
+            }
             this_sym->location.line = method->line;
             this_sym->passing_mode = md->receiver_mode;
-            xa_visit_add_symbol_checked(ctx, this_sym, 0);
+            if (!xa_visit_add_symbol_checked(ctx, &this_sym, 0)) {
+                xa_analyzer_exit_scope(ctx->analyzer);
+                        goto enum_method_cleanup;
+            }
             XaSymbolLinks *this_links = xa_analyzer_get_links(ctx->analyzer, this_sym);
             if (this_links) {
                 this_links->type = enum_method_this_type(ctx, enum_sym->name, info);
@@ -3919,13 +3949,163 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
         xa_analyzer_exit_scope(ctx->analyzer);
     }
 
+enum_method_cleanup:
     xr_free(param_types);
     xr_free(param_names);
 }
 
+static bool collect_enum_io(XaInferContext *ctx, XrOsIoStatus status) {
+    if (status != XR_OS_IO_OK && status != XR_OS_IO_BAD_ARGUMENT)
+        (void) xa_enum_capture_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry),
+                                      status);
+    return status == XR_OS_IO_OK;
+}
+
+static XaEnumInfo *collect_enum_metadata(XaInferContext *ctx, EnumDeclNode *edecl,
+                                         XaSymbolLinks *links) {
+    XrCompileState *state = xa_symbol_registry_state(ctx->analyzer->symbol_registry);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
+    XrOsIoPolicy policy = xr_compile_io_policy(xr_compile_state_resources(state));
+    XaEnumInfo *enum_meta = NULL;
+    char *nominal_owner = xa_analyzer_nominal_owner_for_file(ctx->analyzer, ctx->file_path);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) {
+        xr_free(nominal_owner);
+        return NULL;
+    }
+    XrOsIoStatus opened = xa_enum_info_new(&policy, nominal_owner, edecl->name,
+                                           (uint32_t) edecl->member_count, &enum_meta);
+    xr_free(nominal_owner);
+    if (!collect_enum_io(ctx, opened))
+        return NULL;
+    uint32_t enum_index = 0;
+    for (int m = 0; m < edecl->member_count; m++) {
+        AstNode *mem = edecl->members[m];
+        if (!mem || mem->type != AST_ENUM_MEMBER || !mem->as.enum_member.name)
+            continue;
+        if (!enum_meta || enum_index >= enum_meta->variant_count)
+            continue;
+        if (strcmp(mem->as.enum_member.name, "variants") == 0) {
+            XrLocation loc = {.file = ctx->file_path, .line = mem->line, .column = mem->column};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "enum '%s' cannot declare a variant named 'variants'; "
+                     "'.variants' is the reserved static variant metadata view",
+                     edecl->name ? edecl->name : "<enum>");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+        }
+        XaEnumVariantInfo *variant = &enum_meta->variants[enum_index];
+        if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+            goto failed;
+        if (xa_enum_capture_status(state,
+                                   xa_enum_variant_set_name(variant, mem->as.enum_member.name)) !=
+            XR_COMPILE_RESOURCE_OK)
+            goto failed;
+        int pc = mem->as.enum_member.payload_count;
+        if (pc < 0 || pc > UINT16_MAX) {
+            (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+            goto failed;
+        }
+        variant->payload_count = (uint16_t) pc;
+        if (!collect_enum_io(ctx,
+                             xa_enum_variant_set_payload_names(
+                                 variant, (const char *const *) mem->as.enum_member.payload_names,
+                                 (uint16_t) pc))) {
+            if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+                goto failed;
+            XrLocation loc = {.file = ctx->file_path, .line = mem->line, .column = mem->column};
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                "enum payload fields must have unique non-empty names", &loc);
+        }
+        if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+            goto failed;
+        if (!collect_enum_io(ctx, xa_enum_variant_set_payload_locations(
+                                      variant, ctx->file_path,
+                                      mem->as.enum_member.payload_name_spans, (uint16_t) pc))) {
+            if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+                goto failed;
+            XrLocation loc = {.file = ctx->file_path, .line = mem->line, .column = mem->column};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                       "enum payload fields require exact source locations", &loc);
+        }
+        if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+            goto failed;
+        if (pc > 0 && mem->as.enum_member.payload_types) {
+            void *memory = NULL;
+            if (xr_compile_state_calloc(state, (size_t) pc, sizeof(XrType *), &memory) !=
+                XR_COMPILE_RESOURCE_OK)
+                goto failed;
+            XrType **ptypes = memory;
+            for (int p = 0; p < pc; p++) {
+                XrTypeRef *tref = mem->as.enum_member.payload_types[p];
+                XrType *ptype = tref ? xr_tref_resolve_in_analyzer(ctx->analyzer, tref)
+                                     : xr_type_new_unknown(NULL);
+                if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) {
+                    xr_compile_state_free(ptypes);
+                    goto failed;
+                }
+                if (ptype && edecl->type_param_count > 0 && edecl->type_params &&
+                    links->type_param_names) {
+                    ptype = resolve_class_to_type_param(ctx->analyzer->isolate, ptype,
+                                                        links->type_param_names,
+                                                        links->type_param_count);
+                }
+                if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) {
+                    xr_compile_state_free(ptypes);
+                    goto failed;
+                }
+                if (ptype && xa_enum_payload_contains_by_value(ptype, edecl->name)) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = mem->line, .column = mem->column};
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                             "enum '%s' variant '%s' cannot contain '%s' by "
+                             "value — this creates infinite size. Use a class "
+                             "node (classes are references) or a container slot "
+                             "such as Array<%s> for recursive data",
+                             edecl->name ? edecl->name : "?",
+                             mem->as.enum_member.name ? mem->as.enum_member.name : "?",
+                             edecl->name ? edecl->name : "?", edecl->name ? edecl->name : "?");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                }
+                if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) {
+                    xr_compile_state_free(ptypes);
+                    goto failed;
+                }
+                if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) {
+                    xr_compile_state_free(ptypes);
+                    goto failed;
+                }
+                ptypes[p] = ptype;
+            }
+            XrOsIoStatus copied = xa_enum_variant_set_payload_types(variant, ptypes, (uint16_t) pc);
+            xr_compile_state_free(ptypes);
+            if (!collect_enum_io(ctx, copied))
+                goto failed;
+        }
+        enum_index++;
+    }
+    if (enum_index == enum_meta->variant_count &&
+        collect_enum_io(ctx, xa_enum_info_finalize_layout(enum_meta)))
+        return enum_meta;
+failed:
+    xa_enum_info_free(enum_meta);
+    return NULL;
+}
+
 void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node)
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
         return;
+    XaScope *entry_scope = ctx->analyzer->current_scope;
+
+    if (!ctx || !node)
+        goto collect_done;
 
     switch (node->type) {
         case AST_PROGRAM:
@@ -3959,20 +4139,27 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 if (!sym)
                     sym = xa_scope_lookup_local(ctx->analyzer->current_scope, edecl->name);
                 if (!sym) {
-                    sym = xa_symbol_new(edecl->name, XA_SYM_ENUM);
+                    sym = xa_symbol_new(ctx->analyzer->symbol_registry, edecl->name, XA_SYM_ENUM);
+                    if (!sym) {
+                        goto collect_done;
+                    }
                     sym->location.line = node->line;
                     sym->is_const = true;
-                    xa_visit_add_symbol_checked(ctx, sym, 0);
+                    if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+                        goto collect_done;
+                    }
                     edecl->symbol_id = sym->id;
                 }
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-                xa_publish_deprecated_attrs(links, edecl->attributes, edecl->attr_count);
+                if (xa_symbol_links_set_deprecated_attrs(links, edecl->attributes, edecl->attr_count) != XR_COMPILE_RESOURCE_OK)
+                    goto collect_done;
                 if (!links->type)
                     links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
                 links->declared_type = links->type;
                 bool created_enum_info = links->class_info == NULL;
                 XrClassInfo *enum_info =
-                    links->class_info ? links->class_info : xa_class_info_new(edecl->name);
+                    links->class_info ? links->class_info : xa_class_info_new(xa_symbol_registry_state(ctx->analyzer->symbol_registry), edecl->name);
+                if (!enum_info) goto collect_done;
                 links->class_info = enum_info;
                 if (created_enum_info)
                     links->owns_class_info = true;
@@ -3987,18 +4174,10 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 if (links->declared_type && links->declared_type->kind == XR_KIND_ENUM)
                     links->declared_type->enum_type.nominal_ref = enum_info;
                 if (edecl->type_param_count > 0 && edecl->type_params) {
-                    const char **type_param_names =
-                        xr_malloc(sizeof(const char *) * (size_t) edecl->type_param_count);
-                    if (type_param_names) {
-                        for (int i = 0; i < edecl->type_param_count; i++) {
-                            type_param_names[i] =
-                                edecl->type_params[i] ? edecl->type_params[i]->name : NULL;
-                        }
-                        xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL,
-                                                        edecl->type_param_count);
-                        xr_free(type_param_names);
-                    }
-                }
+            if (xa_symbol_links_set_generic_declarations(links, edecl->type_params,
+                    edecl->type_param_count) != XR_COMPILE_RESOURCE_OK)
+                goto collect_done;
+        }
                 XaScope *enum_payload_scope = ctx->analyzer->current_scope;
                 XaSymbol *saved_enum_class_symbol =
                     enum_payload_scope ? enum_payload_scope->class_symbol : NULL;
@@ -4023,115 +4202,30 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                     links->enum_info = NULL;
                 }
 
-                // Store enum member names and payload metadata for exhaustiveness checking.
                 if (edecl->member_count > 0) {
-                    char *nominal_owner =
-                        xa_analyzer_nominal_owner_for_file(ctx->analyzer, ctx->file_path);
-                    XaEnumInfo *enum_meta = xa_enum_info_new(nominal_owner, edecl->name,
-                                                             (uint32_t) edecl->member_count);
-                    xr_free(nominal_owner);
-                    uint32_t enum_index = 0;
-                    for (int m = 0; m < edecl->member_count; m++) {
-                        AstNode *mem = edecl->members[m];
-                        if (!mem || mem->type != AST_ENUM_MEMBER || !mem->as.enum_member.name)
-                            continue;
-                        if (!enum_meta || enum_index >= enum_meta->variant_count)
-                            continue;
-                        if (strcmp(mem->as.enum_member.name, "variants") == 0) {
-                            XrLocation loc = {
-                                .file = ctx->file_path, .line = mem->line, .column = mem->column};
-                            char msg[256];
-                            snprintf(msg, sizeof(msg),
-                                     "enum '%s' cannot declare a variant named 'variants'; "
-                                     "'.variants' is the reserved static variant metadata view",
-                                     edecl->name ? edecl->name : "<enum>");
-                            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-                        }
-                        XaEnumVariantInfo *variant = &enum_meta->variants[enum_index];
-                        variant->name = mem->as.enum_member.name;
-                        int pc = mem->as.enum_member.payload_count;
-                        variant->payload_count = (uint16_t) pc;
-                        if (!xa_enum_variant_set_payload_names(
-                                variant, (const char *const *) mem->as.enum_member.payload_names,
-                                (uint16_t) pc)) {
-                            XrLocation loc = {
-                                .file = ctx->file_path, .line = mem->line, .column = mem->column};
-                            xa_analyzer_add_diagnostic(
-                                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                "enum payload fields must have unique non-empty names", &loc);
-                        }
-                        if (!xa_enum_variant_set_payload_locations(
-                                variant, ctx->file_path, mem->as.enum_member.payload_name_spans,
-                                (uint16_t) pc)) {
-                            XrLocation loc = {
-                                .file = ctx->file_path, .line = mem->line, .column = mem->column};
-                            xa_analyzer_add_diagnostic(
-                                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                "enum payload fields require exact source locations", &loc);
-                        }
-                        if (pc > 0 && mem->as.enum_member.payload_types) {
-                            XrType **ptypes = xr_calloc((size_t) pc, sizeof(XrType *));
-                            for (int p = 0; p < pc; p++) {
-                                XrTypeRef *tref = mem->as.enum_member.payload_types[p];
-                                XrType *ptype =
-                                    tref ? xr_tref_resolve_in_analyzer(ctx->analyzer, tref)
-                                         : xr_type_new_unknown(NULL);
-                                if (ptype && edecl->type_param_count > 0 && edecl->type_params &&
-                                    links->type_param_names) {
-                                    ptype = resolve_class_to_type_param(
-                                        ctx->analyzer->isolate, ptype, links->type_param_names,
-                                        links->type_param_count);
-                                }
-                                if (ptype &&
-                                    xa_enum_payload_contains_by_value(ptype, edecl->name)) {
-                                    XrLocation loc = {.file = ctx->file_path,
-                                                      .line = mem->line,
-                                                      .column = mem->column};
-                                    char msg[256];
-                                    snprintf(msg, sizeof(msg),
-                                             "enum '%s' variant '%s' cannot contain '%s' by "
-                                             "value — this creates infinite size. Use a class "
-                                             "node (classes are references) or a container slot "
-                                             "such as Array<%s> for recursive data",
-                                             edecl->name ? edecl->name : "?",
-                                             mem->as.enum_member.name ? mem->as.enum_member.name
-                                                                      : "?",
-                                             edecl->name ? edecl->name : "?",
-                                             edecl->name ? edecl->name : "?");
-                                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
-                                                               &loc);
-                                }
-                                ptypes[p] = ptype;
-                            }
-                            variant->payload_types = ptypes;
-                        }
-                        enum_index++;
-                    }
-                    bool enum_layout_ready = enum_meta && enum_index == enum_meta->variant_count &&
-                                             xa_enum_info_finalize_layout(enum_meta);
-                    if (enum_layout_ready) {
+                    XaEnumInfo *enum_meta = collect_enum_metadata(ctx, edecl, links);
+                    if (enum_meta) {
                         links->enum_info = enum_meta;
                         if (links->type && links->type->kind == XR_KIND_ENUM) {
                             links->type->enum_type.layout = enum_meta->layout;
-                            links->type->enum_type.layout_id =
-                                enum_meta->layout ? enum_meta->layout->layout_id : 0;
+                            links->type->enum_type.layout_id = enum_meta->layout->layout_id;
                         }
                         if (links->declared_type && links->declared_type->kind == XR_KIND_ENUM) {
                             links->declared_type->enum_type.layout = enum_meta->layout;
-                            links->declared_type->enum_type.layout_id =
-                                enum_meta->layout ? enum_meta->layout->layout_id : 0;
+                            links->declared_type->enum_type.layout_id = enum_meta->layout->layout_id;
                         }
-                    } else if (enum_meta) {
-                        xa_enum_info_free(enum_meta);
+                    }
+                    if (xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK) {
+                        if (enum_payload_scope) enum_payload_scope->class_symbol = saved_enum_class_symbol;
+                        goto collect_done;
                     }
                 }
                 if (enum_payload_scope)
                     enum_payload_scope->class_symbol = saved_enum_class_symbol;
 
                 if (enum_info && edecl->method_count > 0) {
-                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
+                    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node) != XR_COMPILE_RESOURCE_OK)
+                        goto collect_done;
                     ctx->analyzer->current_scope->class_symbol = sym;
                     for (int m = 0; m < edecl->method_count; m++) {
                         xa_visit_collect_enum_method(ctx, sym, enum_info, edecl->methods[m]);
@@ -4160,13 +4254,18 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             if (ta->name) {
                 XaSymbol *sym = xa_scope_lookup_local(ctx->analyzer->current_scope, ta->name);
                 if (!sym || sym->kind != XA_SYM_TYPE_ALIAS) {
-                    sym = xa_symbol_new(ta->name, XA_SYM_TYPE_ALIAS);
+                    sym = xa_symbol_new(ctx->analyzer->symbol_registry, ta->name, XA_SYM_TYPE_ALIAS);
+                    if (!sym) {
+                        goto collect_done;
+                    }
                     if (!sym)
                         break;
                     sym->location.line = node->line;
                     sym->location.column = node->column;
                     sym->is_const = true;
-                    xa_visit_add_symbol_checked(ctx, sym, 0);
+                    if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+                        goto collect_done;
+                    }
                 }
                 ta->symbol_id = sym->id;
                 sym->type_alias_node = node;
@@ -4196,22 +4295,33 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
         case AST_FOR_IN_STMT: {
             // Register for-in iteration variable in a block scope
             ForInStmtNode *fi = &node->as.for_in_stmt;
-            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+            if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node) != XR_COMPILE_RESOURCE_OK)
+                goto collect_done;
             if (fi->item_name) {
-                XaSymbol *sym = xa_symbol_new(fi->item_name, XA_SYM_VARIABLE);
+                XaSymbol *sym = xa_symbol_new(ctx->analyzer->symbol_registry, fi->item_name, XA_SYM_VARIABLE);
+                if (!sym) {
+                    goto collect_done;
+                }
                 sym->location.line = node->line;
                 sym->is_const = true;  // for-in loop variable is immutable
-                xa_visit_add_symbol_checked(ctx, sym, 0);
+                if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+                    goto collect_done;
+                }
                 fi->item_symbol_id = sym->id;
                 XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (item_links)
                     item_links->is_definitely_assigned = true;
             }
             if (fi->is_keyvalue && fi->value_name) {
-                XaSymbol *vsym = xa_symbol_new(fi->value_name, XA_SYM_VARIABLE);
+                XaSymbol *vsym = xa_symbol_new(ctx->analyzer->symbol_registry, fi->value_name, XA_SYM_VARIABLE);
+                if (!vsym) {
+                    goto collect_done;
+                }
                 vsym->location.line = node->line;
                 vsym->is_const = true;  // for-in loop variable is immutable
-                xa_visit_add_symbol_checked(ctx, vsym, 0);
+                if (!xa_visit_add_symbol_checked(ctx, &vsym, 0)) {
+                    goto collect_done;
+                }
                 fi->value_symbol_id = vsym->id;
                 XaSymbolLinks *val_links = xa_analyzer_get_links(ctx->analyzer, vsym);
                 if (val_links)
@@ -4223,7 +4333,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             if (fi->body) {
                 bool is_block = fi->body->type == AST_BLOCK;
                 if (is_block)
-                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, fi->body);
+                    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, fi->body) != XR_COMPILE_RESOURCE_OK)
+                        goto collect_done;
                 xa_visit_collect(ctx, fi->body);
                 if (is_block)
                     xa_analyzer_exit_scope(ctx->analyzer);
@@ -4244,7 +4355,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
         // Recurse into control flow statements to collect nested declarations
         case AST_FOR_STMT: {
             ForStmtNode *fs = &node->as.for_stmt;
-            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+            if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node) != XR_COMPILE_RESOURCE_OK)
+                goto collect_done;
             if (fs->initializer)
                 xa_visit_collect(ctx, fs->initializer);
             /* The body is its own block scope in Pass 2 (via
@@ -4253,7 +4365,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             if (fs->body) {
                 bool is_block = fs->body->type == AST_BLOCK;
                 if (is_block)
-                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, fs->body);
+                    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, fs->body) != XR_COMPILE_RESOURCE_OK)
+                        goto collect_done;
                 xa_visit_collect(ctx, fs->body);
                 if (is_block)
                     xa_analyzer_exit_scope(ctx->analyzer);
@@ -4269,8 +4382,9 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             if (node->as.while_stmt.body) {
                 bool is_block = node->as.while_stmt.body->type == AST_BLOCK;
                 if (is_block)
-                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK,
-                                            node->as.while_stmt.body);
+                    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK,
+                                            node->as.while_stmt.body) != XR_COMPILE_RESOURCE_OK)
+                        goto collect_done;
                 xa_visit_collect(ctx, node->as.while_stmt.body);
                 if (is_block)
                     xa_analyzer_exit_scope(ctx->analyzer);
@@ -4284,8 +4398,9 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             if (node->as.if_stmt.then_branch) {
                 bool is_block = node->as.if_stmt.then_branch->type == AST_BLOCK;
                 if (is_block)
-                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK,
-                                            node->as.if_stmt.then_branch);
+                    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK,
+                                            node->as.if_stmt.then_branch) != XR_COMPILE_RESOURCE_OK)
+                        goto collect_done;
                 xa_visit_collect(ctx, node->as.if_stmt.then_branch);
                 if (is_block)
                     xa_analyzer_exit_scope(ctx->analyzer);
@@ -4293,8 +4408,9 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             if (node->as.if_stmt.else_branch) {
                 bool is_block = node->as.if_stmt.else_branch->type == AST_BLOCK;
                 if (is_block)
-                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK,
-                                            node->as.if_stmt.else_branch);
+                    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK,
+                                            node->as.if_stmt.else_branch) != XR_COMPILE_RESOURCE_OK)
+                        goto collect_done;
                 xa_visit_collect(ctx, node->as.if_stmt.else_branch);
                 if (is_block)
                     xa_analyzer_exit_scope(ctx->analyzer);
@@ -4305,7 +4421,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             if (tc->try_body) {
                 bool is_block = tc->try_body->type == AST_BLOCK;
                 if (is_block)
-                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, tc->try_body);
+                    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, tc->try_body) != XR_COMPILE_RESOURCE_OK)
+                        goto collect_done;
                 xa_visit_collect(ctx, tc->try_body);
                 if (is_block)
                     xa_analyzer_exit_scope(ctx->analyzer);
@@ -4314,12 +4431,18 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XrCatchClause *cc = tc->catch_clauses[ci];
                 if (!cc || !cc->body)
                     continue;
-                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, cc->body);
+                if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, cc->body) != XR_COMPILE_RESOURCE_OK)
+                    goto collect_done;
                 if (cc->var_name) {
-                    XaSymbol *err_sym = xa_symbol_new(cc->var_name, XA_SYM_VARIABLE);
+                    XaSymbol *err_sym = xa_symbol_new(ctx->analyzer->symbol_registry, cc->var_name, XA_SYM_VARIABLE);
+                    if (!err_sym) {
+                        goto collect_done;
+                    }
                     err_sym->location.line = cc->var_line;
                     err_sym->location.column = cc->var_column;
-                    xa_visit_add_symbol_checked(ctx, err_sym, 0);
+                    if (!xa_visit_add_symbol_checked(ctx, &err_sym, 0)) {
+                        goto collect_done;
+                    }
                     cc->symbol_id = err_sym->id;
                     XaSymbolLinks *err_links = xa_analyzer_get_links(ctx->analyzer, err_sym);
                     if (err_links) {
@@ -4351,10 +4474,16 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             /* Recv cases introduce a variable: `msg from ch -> ...`
              * Enter a block scope for the case body so `msg` is visible. */
             if (sc->var_name && !sc->is_send && !sc->is_default) {
-                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
-                XaSymbol *sym = xa_symbol_new(sc->var_name, XA_SYM_VARIABLE);
+                if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node) != XR_COMPILE_RESOURCE_OK)
+                    goto collect_done;
+                XaSymbol *sym = xa_symbol_new(ctx->analyzer->symbol_registry, sc->var_name, XA_SYM_VARIABLE);
+                if (!sym) {
+                    goto collect_done;
+                }
                 sym->location.line = node->line;
-                xa_visit_add_symbol_checked(ctx, sym, 0);
+                if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+                    goto collect_done;
+                }
                 sc->var_symbol_id = sym->id;
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links)
@@ -4378,7 +4507,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             if (node->as.scope_block.body) {
                 AstNode *body = node->as.scope_block.body;
                 if (body->type == AST_BLOCK) {
-                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, body);
+                    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, body) != XR_COMPILE_RESOURCE_OK)
+                        goto collect_done;
                     xa_visit_collect(ctx, body);
                     xa_analyzer_exit_scope(ctx->analyzer);
                 } else {
@@ -4405,10 +4535,15 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                         XrDestructurePattern *elem = pat->as.array.elements[i];
                         if (elem && elem->type == PATTERN_IDENTIFIER && elem->as.identifier.name) {
                             XaSymbol *sym =
-                                xa_symbol_new(elem->as.identifier.name, XA_SYM_VARIABLE);
+                                xa_symbol_new(ctx->analyzer->symbol_registry, elem->as.identifier.name, XA_SYM_VARIABLE);
+                                if (!sym) {
+                                    goto collect_done;
+                                }
                             sym->is_const = dd->is_const;
                             sym->location.line = node->line;
-                            xa_visit_add_symbol_checked(ctx, sym, 0);
+                            if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+                                goto collect_done;
+                            }
                             elem->as.identifier.symbol_id = sym->id;
                         }
                     }
@@ -4416,10 +4551,15 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                     for (int i = 0; i < pat->as.object.field_count; i++) {
                         XrDestructurePattern *vp = pat->as.object.patterns[i];
                         if (vp && vp->type == PATTERN_IDENTIFIER && vp->as.identifier.name) {
-                            XaSymbol *sym = xa_symbol_new(vp->as.identifier.name, XA_SYM_VARIABLE);
+                            XaSymbol *sym = xa_symbol_new(ctx->analyzer->symbol_registry, vp->as.identifier.name, XA_SYM_VARIABLE);
+                            if (!sym) {
+                                goto collect_done;
+                            }
                             sym->is_const = dd->is_const;
                             sym->location.line = node->line;
-                            xa_visit_add_symbol_checked(ctx, sym, 0);
+                            if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+                                goto collect_done;
+                            }
                             vp->as.identifier.symbol_id = sym->id;
                         }
                     }
@@ -4430,6 +4570,9 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
         default:
             break;
     }
+
+collect_done:
+    ctx->analyzer->current_scope = entry_scope;
 }
 
 void xa_visit_collect_program(XaInferContext *ctx, AstNode *node) {
@@ -4632,6 +4775,12 @@ static const char *xa_comptime_block_supported_message(void) {
            "local var compound assignments, compile-time if/while statements, "
            "C-style for loops, fixed-array for-in loops, break/continue inside comptime loops, "
            "compile_assert(...) and compile_error(...)";
+}
+
+static bool xa_comptime_block_resource_failed(const XaInferContext *ctx) {
+    return xr_compile_state_status(xa_symbol_registry_state(
+               ctx && ctx->analyzer ? ctx->analyzer->symbol_registry : NULL)) !=
+           XR_COMPILE_RESOURCE_OK;
 }
 
 typedef enum XaComptimeBlockFlowKind {
@@ -4934,17 +5083,23 @@ static void xa_visit_comptime_compile_error(XaInferContext *ctx, AstNode *stmt,
 static XaComptimeBlockFlow xa_visit_comptime_block_nested_block(XaInferContext *ctx,
                                                                 AstNode *block_node,
                                                                 XaComptimeBlockReturn *ret) {
+    if (xa_comptime_block_resource_failed(ctx))
+        return xa_comptime_block_flow_normal();
+
     if (!ctx || !block_node)
         return xa_comptime_block_flow_normal();
     if (block_node->type != AST_BLOCK) {
         return xa_visit_comptime_block_statement(ctx, block_node, ret);
     }
 
-    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, block_node);
+    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, block_node) != XR_COMPILE_RESOURCE_OK)
+        return xa_comptime_block_flow_normal();
     BlockNode *block = &block_node->as.block;
     XaComptimeBlockFlow flow = xa_comptime_block_flow_normal();
     for (int i = 0; i < block->count; i++) {
         flow = xa_visit_comptime_block_statement(ctx, block->statements[i], ret);
+        if (xa_comptime_block_resource_failed(ctx))
+            break;
         if (flow.kind != XA_COMPTIME_FLOW_NORMAL)
             break;
     }
@@ -5003,6 +5158,8 @@ static XaComptimeBlockFlow xa_visit_comptime_block_while_stmt(XaInferContext *ct
             flow = xa_visit_comptime_block_nested_block(ctx, while_stmt->body, ret);
         if (ctx->analyzer && ctx->analyzer->diagnostic_count > body_diag_count)
             goto done;
+        if (xa_comptime_block_resource_failed(ctx))
+            goto done;
         if (flow.kind == XA_COMPTIME_FLOW_BREAK) {
             if (xa_comptime_block_flow_targets_loop(&flow, while_stmt->label))
                 goto done;
@@ -5030,10 +5187,14 @@ done:
 static XaComptimeBlockFlow xa_visit_comptime_block_for_stmt(XaInferContext *ctx, AstNode *stmt,
                                                             ForStmtNode *for_stmt,
                                                             XaComptimeBlockReturn *ret) {
+    if (xa_comptime_block_resource_failed(ctx))
+        return xa_comptime_block_flow_normal();
+
     if (!ctx || !stmt || !for_stmt)
         return xa_comptime_block_flow_normal();
 
-    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, stmt);
+    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, stmt) != XR_COMPILE_RESOURCE_OK)
+        return xa_comptime_block_flow_normal();
     XaComptimeBlockFlow result = xa_comptime_block_flow_normal();
     XaLoopScope loop_scope;
     bool loop_scope_pushed = false;
@@ -5041,6 +5202,8 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_stmt(XaInferContext *ctx,
     if (for_stmt->initializer) {
         int init_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
         result = xa_visit_comptime_block_statement(ctx, for_stmt->initializer, ret);
+        if (xa_comptime_block_resource_failed(ctx))
+            goto done;
         if (ctx->analyzer && ctx->analyzer->diagnostic_count > init_diag_count)
             goto done;
         if (result.kind != XA_COMPTIME_FLOW_NORMAL) {
@@ -5072,6 +5235,8 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_stmt(XaInferContext *ctx,
         XaComptimeBlockFlow flow = xa_comptime_block_flow_normal();
         if (for_stmt->body)
             flow = xa_visit_comptime_block_nested_block(ctx, for_stmt->body, ret);
+        if (xa_comptime_block_resource_failed(ctx))
+            goto done;
         if (ctx->analyzer && ctx->analyzer->diagnostic_count > body_diag_count)
             goto done;
         if (flow.kind == XA_COMPTIME_FLOW_BREAK) {
@@ -5094,6 +5259,8 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_stmt(XaInferContext *ctx,
             int inc_diag_count = ctx->analyzer ? ctx->analyzer->diagnostic_count : 0;
             XaComptimeBlockFlow inc_flow =
                 xa_visit_comptime_block_statement(ctx, for_stmt->increment, ret);
+            if (xa_comptime_block_resource_failed(ctx))
+                goto done;
             if (ctx->analyzer && ctx->analyzer->diagnostic_count > inc_diag_count)
                 goto done;
             if (inc_flow.kind != XA_COMPTIME_FLOW_NORMAL) {
@@ -5140,6 +5307,11 @@ static XrType *xa_type_from_ct_value(XaInferContext *ctx, const XrCtValue *value
 static XaSymbol *xa_ensure_comptime_for_in_symbol(XaInferContext *ctx, AstNode *stmt,
                                                   const char *name, uint32_t *symbol_id,
                                                   XrType *type) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return NULL;
+
     if (!ctx || !ctx->analyzer || !name)
         return NULL;
 
@@ -5149,12 +5321,17 @@ static XaSymbol *xa_ensure_comptime_for_in_symbol(XaInferContext *ctx, AstNode *
     if (!sym)
         sym = xa_scope_lookup_local(ctx->analyzer->current_scope, name);
     if (!sym) {
-        sym = xa_symbol_new(name, XA_SYM_VARIABLE);
+        sym = xa_symbol_new(ctx->analyzer->symbol_registry, name, XA_SYM_VARIABLE);
+        if (!sym) {
+            return NULL;
+        }
         sym->location.line = stmt ? stmt->line : 0;
         sym->is_const = true;
         sym->is_readonly_binding = true;
         sym->is_rebindable = false;
-        xa_visit_add_symbol_checked(ctx, sym, 0);
+        if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+            return NULL;
+        }
     }
     if (symbol_id && *symbol_id == 0)
         *symbol_id = sym->id;
@@ -5188,6 +5365,9 @@ static void xa_set_comptime_for_in_symbol_value(XaInferContext *ctx, XaSymbol *s
 static XaComptimeBlockFlow xa_visit_comptime_block_for_in_stmt(XaInferContext *ctx, AstNode *stmt,
                                                                ForInStmtNode *fi,
                                                                XaComptimeBlockReturn *ret) {
+    if (xa_comptime_block_resource_failed(ctx))
+        return xa_comptime_block_flow_normal();
+
     if (!ctx || !ctx->analyzer || !stmt || !fi)
         return xa_comptime_block_flow_normal();
 
@@ -5239,7 +5419,8 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_in_stmt(XaInferContext *c
     if (!element_type)
         element_type = xr_type_new_unknown(ctx->analyzer->isolate);
 
-    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, stmt);
+    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, stmt) != XR_COMPILE_RESOURCE_OK)
+        return xa_comptime_block_flow_normal();
     XaComptimeBlockFlow result = xa_comptime_block_flow_normal();
     XaLoopScope loop_scope;
     xa_loop_scope_push(ctx, &loop_scope, fi->label, stmt);
@@ -5277,6 +5458,8 @@ static XaComptimeBlockFlow xa_visit_comptime_block_for_in_stmt(XaInferContext *c
         if (fi->body)
             flow = xa_visit_comptime_block_nested_block(ctx, fi->body, ret);
         if (ctx->analyzer->diagnostic_count > body_diag_count)
+            goto done;
+        if (xa_comptime_block_resource_failed(ctx))
             goto done;
         if (flow.kind == XA_COMPTIME_FLOW_BREAK) {
             if (xa_comptime_block_flow_targets_loop(&flow, fi->label))
@@ -5368,6 +5551,9 @@ static XaComptimeBlockFlow xa_visit_comptime_block_return_stmt(XaInferContext *c
 
 static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx, AstNode *stmt,
                                                              XaComptimeBlockReturn *ret) {
+    if (xa_comptime_block_resource_failed(ctx))
+        return xa_comptime_block_flow_normal();
+
     if (!ctx || !stmt)
         return xa_comptime_block_flow_normal();
 
@@ -5436,10 +5622,14 @@ static XaComptimeBlockFlow xa_visit_comptime_block_statement(XaInferContext *ctx
 }
 
 XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node) {
+    if (xa_comptime_block_resource_failed(ctx))
+        return NULL;
+
     if (!ctx || !ctx->analyzer || !node || !xa_is_comptime_block_expr(node))
         return xr_type_new_unknown(NULL);
 
-    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
     int saved_comptime_depth = ctx->comptime_block_depth;
     XaLoopScope *saved_loop_scope = ctx->loop_scope;
     int saved_loop_depth = ctx->loop_depth;
@@ -5453,6 +5643,8 @@ XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node) {
     for (int i = 0; i < block->count; i++) {
         AstNode *stmt = block->statements[i];
         XaComptimeBlockFlow flow = xa_visit_comptime_block_statement(ctx, stmt ? stmt : node, &ret);
+        if (xa_comptime_block_resource_failed(ctx))
+            break;
         if (flow.kind == XA_COMPTIME_FLOW_BREAK || flow.kind == XA_COMPTIME_FLOW_CONTINUE) {
             xa_report_unhandled_comptime_loop_control(ctx, &flow, stmt ? stmt : node);
             break;
@@ -5466,6 +5658,8 @@ XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node) {
     ctx->loop_depth = saved_loop_depth;
     xa_analyzer_exit_scope(ctx->analyzer);
 
+    if (xa_comptime_block_resource_failed(ctx))
+        return NULL;
     if (ret.has_value) {
         xa_analyzer_set_node_ct_value(ctx->analyzer, node, &ret.value);
         return ret.type ? ret.type : xr_type_new_unknown(NULL);
@@ -5479,10 +5673,14 @@ XrType *xa_visit_comptime_block_expr(XaInferContext *ctx, AstNode *node) {
 }
 
 static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
+    if (xa_comptime_block_resource_failed(ctx))
+        return;
+
     if (!ctx || !ctx->analyzer || !node || !xa_is_comptime_block_expr(node))
         return;
 
-    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node) != XR_COMPILE_RESOURCE_OK)
+        return;
     int saved_comptime_depth = ctx->comptime_block_depth;
     XaLoopScope *saved_loop_scope = ctx->loop_scope;
     int saved_loop_depth = ctx->loop_depth;
@@ -5494,6 +5692,8 @@ static void xa_visit_comptime_block_stmt(XaInferContext *ctx, AstNode *node) {
     for (int i = 0; i < block->count; i++) {
         AstNode *stmt = block->statements[i];
         XaComptimeBlockFlow flow = xa_visit_comptime_block_statement(ctx, stmt ? stmt : node, NULL);
+        if (xa_comptime_block_resource_failed(ctx))
+            break;
         if (flow.kind == XA_COMPTIME_FLOW_BREAK || flow.kind == XA_COMPTIME_FLOW_CONTINUE) {
             xa_report_unhandled_comptime_loop_control(ctx, &flow, stmt ? stmt : node);
             break;
@@ -6271,6 +6471,11 @@ void xa_check_receiver_write_authorization(XaInferContext *ctx, AstNode *operati
 }
 
 void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     if (!ctx || !node)
         return;
 
@@ -6737,6 +6942,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_FUNCTION_DECL: {
             // Already collected in pass 1, infer body
             FunctionDeclNode *fn_decl = &node->as.function_decl;
+            if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node) != XR_COMPILE_RESOURCE_OK)
+                break;
 
             // Save/restore return type state for nested functions
             XrType **saved_return_types = ctx->return_types;
@@ -6756,7 +6963,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
 
             /* Flow-graph isolation lives in xa_visit_function_body_unified so
              * every function-like body gets it. */
-            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node);
+
 
             // Call-site inference feedback: update unannotated parameter types
             // with types inferred from call-sites during Pass 2.
@@ -6927,7 +7134,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             ClassDeclNode *cls = (node->type == AST_CLASS_DECL)    ? &node->as.class_decl
                                  : (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl
                                                                    : &node->as.union_decl;
-            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
+            if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node) != XR_COMPILE_RESOURCE_OK)
+                break;
             // Establish class context so member-visibility and const-field
             // checks know which class body they are inside.
             XrClassInfo *saved_class_info = ctx->current_class_info;
@@ -6952,7 +7160,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             for (int i = 0; i < cls->method_count; i++) {
                 if (cls->methods[i] && cls->methods[i]->as.method_decl.body) {
-                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, cls->methods[i]);
+                    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, cls->methods[i]) != XR_COMPILE_RESOURCE_OK)
+                        break;
                     // Save/restore expected_return_type so the enclosing
                     // function's type doesn't leak into method bodies.
                     XrType *saved_ret = ctx->expected_return_type;
@@ -6992,12 +7201,21 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 XrCatchClause *cc = tc->catch_clauses[ci];
                 if (!cc || !cc->body)
                     continue;
-                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, cc->body);
+                if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, cc->body) !=
+                    XR_COMPILE_RESOURCE_OK)
+                    break;
                 if (cc->var_name) {
-                    XaSymbol *err_sym = xa_symbol_new(cc->var_name, XA_SYM_VARIABLE);
+                    XaSymbol *err_sym = xa_symbol_new(ctx->analyzer->symbol_registry, cc->var_name, XA_SYM_VARIABLE);
+                    if (!err_sym) {
+                        xa_analyzer_exit_scope(ctx->analyzer);
+                                            break;
+                    }
                     err_sym->location.line = cc->var_line;
                     err_sym->location.column = cc->var_column;
-                    xa_visit_add_symbol_checked(ctx, err_sym, (int) cc->var_line);
+                    if (!xa_visit_add_symbol_checked(ctx, &err_sym, (int) cc->var_line)) {
+                        xa_analyzer_exit_scope(ctx->analyzer);
+                                            break;
+                    }
                     if (err_sym->scope == ctx->analyzer->current_scope) {
                         XaSymbolLinks *err_links = xa_analyzer_get_links(ctx->analyzer, err_sym);
                         if (err_links) {
@@ -7054,7 +7272,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             ForInStmtNode *fi = &node->as.for_in_stmt;
 
             // Enter the scope created in pass 1
-            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+            if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node) != XR_COMPILE_RESOURCE_OK)
+                break;
 
             // Infer collection type
             XrType *coll_type = NULL;
@@ -7848,7 +8067,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             /* Recv cases have a block scope from pass 1 for the variable. */
             if (sc->var_name && !sc->is_send && !sc->is_default) {
-                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+                if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node) != XR_COMPILE_RESOURCE_OK)
+                    break;
                 XaSymbol *binding =
                     sc->var_symbol_id
                         ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, sc->var_symbol_id)
@@ -7924,7 +8144,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 ed->name ? xa_scope_lookup(ctx->analyzer->current_scope, ed->name) : NULL;
             XrClassInfo *saved_class_info = ctx->current_class_info;
             const char *saved_class_name = ctx->current_class_name;
-            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
+            if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node) != XR_COMPILE_RESOURCE_OK)
+                break;
             if (enum_sym && enum_sym->kind == XA_SYM_ENUM) {
                 ctx->analyzer->current_scope->class_symbol = enum_sym;
                 ctx->current_class_info = enum_sym->links.class_info;
@@ -7935,7 +8156,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 if (!method || method->type != AST_METHOD_DECL || !method->as.method_decl.body)
                     continue;
                 MethodDeclNode *md = &method->as.method_decl;
-                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method);
+                if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method) != XR_COMPILE_RESOURCE_OK)
+                    break;
                 XaSymbol *method_sym =
                     xa_scope_lookup_local(ctx->analyzer->current_scope->parent, md->name);
                 ctx->analyzer->current_scope->function_symbol = method_sym;
@@ -8516,6 +8738,8 @@ XR_FUNC void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
 
     // Pass 1: Collect all symbols
     xa_visit_collect(ctx, ast);
+    if (xr_compile_state_status(xa_symbol_registry_state(analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        goto analysis_done;
 
     // Pass 1.5: Link class inheritance chains
     xa_link_class_inheritance(analyzer);
@@ -8523,12 +8747,16 @@ XR_FUNC void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     // Pass 1.5b: Recompute parameter escape summaries after classes and wrappers are linked.
     while (xa_propagate_param_escape_summaries_for_ast(ctx, ast)) {
     }
+    if (xr_compile_state_status(xa_symbol_registry_state(analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        goto analysis_done;
 
     // Pass 1.6: Detect classes that form reference cycles (cycle collector)
     xa_mark_cycle_candidates(analyzer);
 
     // Pass 2: Infer types
     xa_visit_infer(ctx, ast);
+    if (xr_compile_state_status(xa_symbol_registry_state(analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        goto analysis_done;
 
     // Pass 2b: seal source return ownership from fully typed local bindings.
     // Collection-time summaries are provisional because initializer ownership
@@ -8559,5 +8787,6 @@ XR_FUNC void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
 
     xa_validate_freestanding_payload_error_catches(analyzer, ast);
 
+analysis_done:
     xa_infer_context_free(ctx);
 }

@@ -14,6 +14,8 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xanalyzer_link_metadata.h"
+#include "xanalyzer_diagnostics.h"
 #include "xanalyzer_export_query.h"
 #include "xaddressability.h"
 #include "xanalyzer_xrd.h"
@@ -592,6 +594,9 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
 
 static XrType *xa_builtin_receiver_method_type_from_spec(XaInferContext *ctx, XrType *receiver,
                                                          const XaBuiltinReceiverMethodSpec *spec) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
     if (!ctx || !ctx->analyzer || !spec)
         return NULL;
     XrVMRuntime *X = ctx->analyzer->isolate;
@@ -614,7 +619,8 @@ static XrType *xa_builtin_receiver_method_type_from_spec(XaInferContext *ctx, Xr
     if (fn && fn->function.return_type && XR_TYPE_IS_SLICE(fn->function.return_type)) {
         fn->function.return_type = xr_type_make_const(X, fn->function.return_type);
         XrViewOrigin origin = {.kind = XR_VIEW_ORIGIN_RECEIVER, .param_ordinal = -1};
-        (void) xr_type_function_set_view_origins(X, fn, &origin, 1, false);
+        if (xa_type_set_view_contract(xa_symbol_registry_state(ctx->analyzer->symbol_registry),
+                X, fn, &origin, 1, false) != XR_COMPILE_RESOURCE_OK) return NULL;
     }
     return fn;
 }
@@ -650,6 +656,9 @@ static bool xa_has_view_target_context(XaInferContext *ctx) {
 
 static XrType *xa_string_view_method_type(XaInferContext *ctx, XrType *receiver, const char *name,
                                           AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
     if (!receiver || !XR_TYPE_IS_STRING(receiver) || !name)
         return NULL;
     if (strcmp(name, "bytes") != 0)
@@ -663,7 +672,8 @@ static XrType *xa_string_view_method_type(XaInferContext *ctx, XrType *receiver,
         xr_type_new_function(X, NULL, 0, xr_type_make_const(X, xr_type_new_u8_slice(X)), false);
     if (fn) {
         XrViewOrigin origin = {.kind = XR_VIEW_ORIGIN_RECEIVER, .param_ordinal = -1};
-        (void) xr_type_function_set_view_origins(X, fn, &origin, 1, false);
+        if (xa_type_set_view_contract(xa_symbol_registry_state(ctx->analyzer->symbol_registry),
+                X, fn, &origin, 1, false) != XR_COMPILE_RESOURCE_OK) return NULL;
     }
     return fn;
 }
@@ -1271,6 +1281,9 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
              links->type->function.throw_effect != export_type->function.throw_effect);
         if (refresh_missing || refresh_function) {
             xa_symbol_links_copy_export_metadata(ctx->analyzer, links, &export_sym->links);
+            if (xr_compile_state_status(links->resource_state) != XR_COMPILE_RESOURCE_OK) {
+                return NULL;
+            }
             links->module_name = module_name;
             links->import_member_name = member_name;
         }
@@ -1278,7 +1291,8 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     xa_report_deprecated_use(ctx, node, sym, links);
     if (links) {
         uint32_t end_col = node->column + (name ? strlen(name) : 0);
-        xa_symbol_add_ref(links, node->line, node->column, end_col, false);
+        if (xa_symbol_add_ref(links, node->line, node->column, end_col, false) != XR_COMPILE_RESOURCE_OK)
+            return NULL;
     }
 
     // Definite assignment check: warn if variable used before initialization.
@@ -2755,6 +2769,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *string_view_method = xa_string_view_method_type(ctx, obj_type, ma->name, node);
+    if (xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
     if (string_view_method)
         return string_view_method;
 
@@ -2927,8 +2943,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     fn_type->function.return_type =
                         xr_type_make_const(ctx->analyzer->isolate, fn_type->function.return_type);
                     XrViewOrigin origin = {.kind = XR_VIEW_ORIGIN_RECEIVER, .param_ordinal = -1};
-                    (void) xr_type_function_set_view_origins(ctx->analyzer->isolate, fn_type,
-                                                             &origin, 1, false);
+                    if (xa_type_set_view_contract(xa_symbol_registry_state(ctx->analyzer->symbol_registry),
+                            ctx->analyzer->isolate, fn_type, &origin, 1, false) != XR_COMPILE_RESOURCE_OK) return NULL;
                 }
                 return fn_type;
             }
@@ -2940,8 +2956,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             if (fn && XR_TYPE_IS_SLICE(return_type)) {
                 fn->function.return_type = xr_type_make_const(ctx->analyzer->isolate, return_type);
                 XrViewOrigin origin = {.kind = XR_VIEW_ORIGIN_RECEIVER, .param_ordinal = -1};
-                (void) xr_type_function_set_view_origins(ctx->analyzer->isolate, fn, &origin, 1,
-                                                         false);
+                if (xa_type_set_view_contract(xa_symbol_registry_state(ctx->analyzer->symbol_registry),
+                        ctx->analyzer->isolate, fn, &origin, 1, false) != XR_COMPILE_RESOURCE_OK) return NULL;
             }
             return fn;
         }
@@ -5470,6 +5486,11 @@ XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return NULL;
+
     if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_function(NULL, NULL, 0, xr_type_new_unknown(NULL), false);
 
@@ -5598,6 +5619,13 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     bool need_return_infer = !fn->return_type && (XR_TYPE_IS_UNKNOWN(return_type) ||
                                                   return_type->kind == XR_KIND_TYPE_PARAM);
     if (fn->body) {
+        if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node) != XR_COMPILE_RESOURCE_OK) {
+            xr_free(param_types);
+            xr_free(param_modes);
+            if (type_param_names && type_param_names != type_param_buf)
+                xr_free((void *) type_param_names);
+            return NULL;
+        }
         // Closure bodies execute lazily, so the definite-assignment check
         // produces false positives for variables captured from enclosing
         // scopes that are textually assigned after the closure literal.
@@ -5632,8 +5660,8 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         XaScope *saved_parallel_callback_scope = ctx->parallel_callback_scope;
         const char *saved_parallel_callback_name = ctx->parallel_callback_name;
 
-        // Enter function scope
-        xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node);
+        // The admitted scope also bounds the parallel callback capture checks.
+
 
         if (saved_pending_parallel_callback_name) {
             ctx->pending_parallel_callback_name = NULL;
@@ -5741,9 +5769,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
                 XaDiagnostic *next = d->next;
                 if (d->code == XR_ERR_ANALYZE_USED_BEFORE_ASSIGN && d->message &&
                     strncmp(d->message, "Variable '", strlen("Variable '")) == 0) {
-                    if (d->message)
-                        xr_free((void *) d->message);
-                    xr_free(d);
+                    xa_diagnostic_dispose(d);
                     *link = next;
                 } else {
                     new_tail = d;

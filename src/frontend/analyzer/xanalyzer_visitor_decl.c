@@ -42,6 +42,11 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xanalyzer_link_metadata.h"
+#include "xanalyzer_effect_storage.h"
+#include "xanalyzer_signature.h"
+#include "xanalyzer_native_input.h"
+#include "xanalyzer_vtable.h"
 #include "xanalyzer_builtin_interfaces.h"
 #include "xa_intrinsic_registry.h"
 #include "xtype_ref_resolve.h"
@@ -54,15 +59,6 @@
 #include "../../module/xnative_package.h"
 #include "../../toolchain/xcompiler_session.h"
 
-static void xa_publish_deprecated_attrs(XaSymbolLinks *links, XrAttribute **attrs, int count) {
-    for (int i = 0; links && attrs && i < count; i++) {
-        if (attrs[i] && attrs[i]->kind == ATTR_DEPRECATED) {
-            xa_symbol_links_set_deprecated(links, true, attrs[i]->str_arg);
-            return;
-        }
-    }
-    xa_symbol_links_set_deprecated(links, false, NULL);
-}
 
 static XrType *xa_normalize_structural_constraint(XaInferContext *ctx, XrType *constraint) {
     if (!ctx || !ctx->analyzer || !constraint || !XR_TYPE_IS_STRUCT_OBJECT(constraint))
@@ -82,72 +78,86 @@ static XrType *xa_normalize_structural_constraint(XaInferContext *ctx, XrType *c
 // constraint resolved to a runtime XrType, on the declaration's symbol links.
 // Shared by functions, classes and methods so a method's own constraints are
 // tracked exactly like a top-level function's.
-static void xa_store_type_params_with_constraints(XaInferContext *ctx, XaSymbolLinks *links,
-                                                  XrGenericParam **type_params, int count,
-                                                  AstNode *node) {
-    if (!links || !type_params || count <= 0)
-        return;
-
-    const char **names = xr_malloc(sizeof(const char *) * count);
-    XrType ***constraint_lists = xr_malloc(sizeof(XrType **) * count);
-    int *constraint_counts = xr_malloc(sizeof(int) * count);
-
-    if (names && constraint_lists && constraint_counts) {
-        for (int i = 0; i < count; i++) {
-            XrGenericParam *gp = type_params[i];
-            names[i] = gp ? gp->name : NULL;
-
-            int cn = gp ? gp->constraint_count : 0;
-            if (cn > 0 && gp->constraints) {
-                XrType **resolved = xr_malloc(sizeof(XrType *) * cn);
-                for (int j = 0; j < cn; j++) {
-                    // Use analyzer-aware resolver so class-bounded constraints
-                    // (e.g. <T: Animal>) keep their inheritance chain.
-                    resolved[j] =
-                        gp->constraints[j]
-                            ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
-                            : NULL;
-                    if (gp->constraints[j] && gp->constraints[j]->kind == XR_TREF_OBJECT &&
-                        !gp->constraints[j]->name && gp->constraints[j]->field_readonly) {
-                        for (uint8_t k = 0; k < gp->constraints[j]->nchildren; k++) {
-                            if (!gp->constraints[j]->field_readonly[k])
-                                continue;
-                            XrLocation loc = {.file = ctx->file_path,
-                                              .line = gp->constraints[j]->line,
-                                              .column = gp->constraints[j]->column};
-                            xa_analyzer_add_diagnostic(
-                                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                "structural generic constraints cannot declare const fields; "
-                                "field writability is inferred from the generic body",
-                                &loc);
-                            break;
-                        }
-                    }
-                    resolved[j] = xa_normalize_structural_constraint(ctx, resolved[j]);
-                    xa_reject_error_type_success_type(ctx->analyzer, resolved[j],
-                                                      "generic constraint", gp->name, node->line,
-                                                      node->column);
+static XrCompileResourceStatus xa_store_type_params_with_constraints(XaInferContext *ctx,
+    XaSymbolLinks *links, XrGenericParam **type_params, int count, AstNode *node) {
+    XrCompileState *state = xa_symbol_registry_state(ctx && ctx->analyzer ? ctx->analyzer->symbol_registry : NULL);
+    XrCompileResourceStatus status = xr_compile_state_status(state);
+    if (status != XR_COMPILE_RESOURCE_OK) return status;
+    if (!links || links->resource_state != state || count < 0 || (count && (!type_params || !node)))
+        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    if (!count) return XR_COMPILE_RESOURCE_OK;
+    void *memory = NULL;
+    status = xr_compile_state_calloc(state, (size_t) count, sizeof(const char *), &memory);
+    const char **names = memory;
+    memory = NULL;
+    if (status == XR_COMPILE_RESOURCE_OK)
+        status = xr_compile_state_calloc(state, (size_t) count, sizeof(XrType **), &memory);
+    XrType ***constraint_lists = memory;
+    memory = NULL;
+    if (status == XR_COMPILE_RESOURCE_OK)
+        status = xr_compile_state_calloc(state, (size_t) count, sizeof(int), &memory);
+    int *constraint_counts = memory;
+    for (int i = 0; i < count && status == XR_COMPILE_RESOURCE_OK; ++i) {
+        status = xr_compile_state_work(state, 1);
+        if (status != XR_COMPILE_RESOURCE_OK) break;
+        XrGenericParam *gp = type_params[i];
+        names[i] = gp ? gp->name : NULL;
+        int cn = gp ? gp->constraint_count : 0;
+        if (cn < 0 || (cn && !gp->constraints)) {
+            status = xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT); break;
+        }
+        if (!cn) continue;
+        memory = NULL;
+        status = xr_compile_state_calloc(state, (size_t) cn, sizeof(XrType *), &memory);
+        if (status != XR_COMPILE_RESOURCE_OK) break;
+        XrType **resolved = memory;
+        constraint_lists[i] = resolved;
+        constraint_counts[i] = cn;
+        for (int j = 0; j < cn; ++j) {
+            if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) break;
+            // Use analyzer-aware resolver so class-bounded constraints
+            // (e.g. <T: Animal>) keep their inheritance chain.
+            resolved[j] =
+                gp->constraints[j]
+                    ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
+                    : NULL;
+            if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) break;
+            if (gp->constraints[j] && gp->constraints[j]->kind == XR_TREF_OBJECT &&
+                !gp->constraints[j]->name && gp->constraints[j]->field_readonly) {
+                for (uint8_t k = 0; k < gp->constraints[j]->nchildren; k++) {
+                    if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) break;
+                    if (!gp->constraints[j]->field_readonly[k])
+                        continue;
+                    XrLocation loc = {.file = ctx->file_path,
+                                      .line = gp->constraints[j]->line,
+                                      .column = gp->constraints[j]->column};
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                        "structural generic constraints cannot declare const fields; "
+                        "field writability is inferred from the generic body",
+                        &loc);
+                    break;
                 }
-                constraint_lists[i] = resolved;
-                constraint_counts[i] = cn;
-            } else {
-                constraint_lists[i] = NULL;
-                constraint_counts[i] = 0;
             }
-        }
+            if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) break;
+            resolved[j] = xa_normalize_structural_constraint(ctx, resolved[j]);
+            if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) break;
+            xa_reject_error_type_success_type(ctx->analyzer, resolved[j],
+                                              "generic constraint", gp->name, node->line,
+                                              node->column);
 
-        xa_symbol_links_set_type_params(links, names, constraint_lists, constraint_counts, count);
-
-        // set_type_params deep-copies constraint arrays — release temporaries.
-        for (int i = 0; i < count; i++) {
-            if (constraint_lists[i])
-                xr_free(constraint_lists[i]);
+            if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) break;
         }
+        status = xr_compile_state_status(state);
     }
-
-    xr_free(names);
-    xr_free(constraint_lists);
-    xr_free(constraint_counts);
+    if (status == XR_COMPILE_RESOURCE_OK)
+        status = xa_symbol_links_set_type_params(links, names, constraint_lists, constraint_counts, count);
+    if (constraint_lists) {
+        for (int i = 0; i < count; ++i) xr_compile_state_free(constraint_lists[i]);
+    }
+    xr_compile_state_free(names); xr_compile_state_free(constraint_lists);
+    xr_compile_state_free(constraint_counts);
+    return status;
 }
 
 static int xa_fixed_array_elem_native_lane(XrType *elem) {
@@ -363,8 +373,9 @@ static void xa_check_weak_storage_domain(XaInferContext *ctx, const XrType *type
              "a type with a weak field cannot live in %s storage: nothing there would clear the "
              "slot when its target dies",
              domain_label);
+    XrLocation location = loc ? *loc : (XrLocation){0};
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WEAK_FIELD, msg,
-                               loc);
+                               loc ? &location : NULL);
 }
 
 static bool xa_struct_field_bitwise_reinterpretable(const XrAggregateFieldLayout *field) {
@@ -1545,11 +1556,15 @@ static bool xa_summary_return_type_escapes_borrowed_value(XrType *return_type) {
            xa_type_needs_borrow_escape_guard(return_type);
 }
 
-void xa_bind_declared_view_origins(XaInferContext *ctx, AstNode *node, XaSymbolLinks *links,
+XR_FUNC XrCompileResourceStatus xa_bind_declared_view_origins(XaInferContext *ctx, AstNode *node, XaSymbolLinks *links,
                                    const char **param_names, bool has_receiver) {
-    if (!ctx || !ctx->analyzer || !node || !links || !links->type ||
-        !XR_TYPE_IS_FUNCTION(links->type))
-        return;
+    XrCompileState *state = xa_symbol_registry_state(ctx && ctx->analyzer ? ctx->analyzer->symbol_registry : NULL);
+    XrCompileResourceStatus resource_status = xr_compile_state_status(state);
+    if (resource_status != XR_COMPILE_RESOURCE_OK) return resource_status;
+    if (links && links->resource_state != state)
+        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    if (!node || !links || !links->type || !XR_TYPE_IS_FUNCTION(links->type))
+        return XR_COMPILE_RESOURCE_OK;
     XrBorrowOriginSyntaxState syntax = XR_BORROW_ORIGIN_OMITTED;
     const AstBorrowOriginRef *origins = NULL;
     int origin_count = 0;
@@ -1576,28 +1591,25 @@ void xa_bind_declared_view_origins(XaInferContext *ctx, AstNode *node, XaSymbolL
         kind = "interface method";
         name = decl->name ? decl->name : "?";
     } else {
-        return;
+        return XR_COMPILE_RESOURCE_OK;
     }
 
     XrViewOriginBindStatus status =
         xr_type_function_bind_view_origins(ctx->analyzer->isolate, links->type, param_names, syntax,
                                            origins, origin_count, has_receiver);
-    links->return_view.checked = true;
-    links->return_view.valid = status == XR_VIEW_ORIGIN_BIND_OK;
+    resource_status = xr_compile_state_status(state);
+    if (resource_status != XR_COMPILE_RESOURCE_OK) return resource_status;
+    if (status == XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY)
+        return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    XaViewReturnContract contract = {.checked = true, .valid = status == XR_VIEW_ORIGIN_BIND_OK};
     if (status == XR_VIEW_ORIGIN_BIND_OK) {
-        int count = links->type->function.view_origin_count;
-        if (count > 0) {
-            links->return_view.origins =
-                (XrViewOrigin *) xr_malloc(sizeof(XrViewOrigin) * (size_t) count);
-            if (!links->return_view.origins)
-                return;
-            memcpy(links->return_view.origins, links->type->function.view_origin_set,
-                   sizeof(XrViewOrigin) * (size_t) count);
-        }
-        links->return_view.origin_count = count;
-        links->return_view.was_elided = links->type->function.view_origin_was_elided;
-        return;
+        contract.origins = links->type->function.view_origin_set;
+        contract.origin_count = links->type->function.view_origin_count;
+        contract.was_elided = links->type->function.view_origin_was_elided;
     }
+    resource_status = xa_symbol_links_set_view_contract(links, &contract);
+    if (resource_status != XR_COMPILE_RESOURCE_OK || status == XR_VIEW_ORIGIN_BIND_OK)
+        return resource_status;
 
     const char *code = "OWN-E-VIEW-ORIGIN-INVALID";
     const char *reason = "has an invalid borrowed-result origin set";
@@ -1615,14 +1627,13 @@ void xa_bind_declared_view_origins(XaInferContext *ctx, AstNode *node, XaSymbolL
         reason = "names an origin that is not an eligible READ input";
     } else if (status == XR_VIEW_ORIGIN_BIND_NOT_VIEW) {
         reason = "declares 'from' for a return type that is not a borrowed Slice";
-    } else if (status == XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY) {
-        reason = "could not allocate its borrowed-result origin set";
     }
     char message[384];
     snprintf(message, sizeof(message), "%s: %s '%s' %s", code, kind, name, reason);
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_BORROW_SOURCE,
                                message, &loc);
+    return xr_compile_state_status(state);
 }
 
 static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
@@ -1825,13 +1836,22 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
                                                      XrType **param_types, const char **param_names,
                                                      int param_count, XrType *return_type,
                                                      AstNode *body, XrClassInfo *receiver_info) {
-    if (!links || param_count < 0 || !body)
+    XrCompileState *state = xa_symbol_registry_state(ctx && ctx->analyzer ? ctx->analyzer->symbol_registry : NULL);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return false;
+    if (!links || links->resource_state != state || param_count < 0) {
+        (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
         return false;
-    XaParamEffectSummary *effects =
-        param_count > 0 ? xr_calloc((size_t) param_count, sizeof(XaParamEffectSummary)) : NULL;
-    if (param_count > 0 && !effects)
-        return false;
+    }
+    if (!body) return false;
+    void *memory = NULL;
+    if (param_count && xr_compile_state_calloc(state, (size_t) param_count,
+            sizeof(XaParamEffectSummary), &memory) != XR_COMPILE_RESOURCE_OK) return false;
+    XaParamEffectSummary *effects = memory;
     for (int i = 0; i < param_count; i++) {
+        if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) {
+            xr_compile_state_free(effects);
+            return false;
+        }
         XrParamMode mode = xr_type_function_param_mode(links->type, i);
         effects[i].formal_mode = mode;
         effects[i].capability = mode == XR_PARAM_MOVE  ? XA_CAPABILITY_UNIQUE_OWNER
@@ -1857,17 +1877,20 @@ static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymb
                                           ? links->type->function.view_origin_count
                                           : 0};
     xa_summary_walk(&summary, body);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) {
+        xr_compile_state_free(effects);
+        return false;
+    }
 
     bool changed =
         links->param_effect_count != param_count ||
         (param_count > 0 && (!links->param_effects ||
                              memcmp(links->param_effects, effects,
                                     (size_t) param_count * sizeof(XaParamEffectSummary)) != 0));
-    if (links->param_effects)
-        xr_free(links->param_effects);
-    links->param_effects = effects;
-    links->param_effect_count = param_count;
-    return changed;
+    XrCompileResourceStatus status =
+        xa_symbol_links_set_param_effect_summaries(links, effects, param_count);
+    xr_compile_state_free(effects);
+    return status == XR_COMPILE_RESOURCE_OK && changed;
 }
 
 void xa_validate_declared_view_origin_returns(XaInferContext *ctx, XaSymbolLinks *links,
@@ -1899,8 +1922,9 @@ void xa_validate_declared_view_origin_returns(XaInferContext *ctx, XaSymbolLinks
 bool xa_function_expr_param_mutates(XaInferContext *ctx, XrType *function_type,
                                     XrParamNode **params, int param_count, AstNode *body,
                                     int param_slot, bool *out_complete) {
-    if (out_complete)
-        *out_complete = false;
+    if (out_complete) *out_complete = false;
+    XrCompileState *state = xa_symbol_registry_state(ctx && ctx->analyzer ? ctx->analyzer->symbol_registry : NULL);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return false;
     if (!ctx || !function_type || !XR_TYPE_IS_FUNCTION(function_type) || !body || !params ||
         param_count <= 0 || function_type->function.param_count != param_count ||
         !function_type->function.params || param_slot < 0 || param_slot >= param_count)
@@ -1924,16 +1948,17 @@ bool xa_function_expr_param_mutates(XaInferContext *ctx, XrType *function_type,
         types[i] = function_type->function.params[i].type;
     }
 
-    XaSymbolLinks temporary = {.type = function_type};
+    XaSymbolLinks temporary = {.resource_state = state, .type = function_type};
     xa_symbol_links_set_param_escape_summary(ctx, &temporary, types, names, param_count,
                                              function_type->function.return_type, body, NULL);
-    const XaParamEffectSummary *effect = xa_symbol_param_effect(&temporary, param_slot);
+    const XaParamEffectSummary *effect = xr_compile_state_status(state) == XR_COMPILE_RESOURCE_OK
+        ? xa_symbol_param_effect(&temporary, param_slot) : NULL;
     bool mutates = xa_param_effect_mutates(effect);
     if (out_complete)
         *out_complete = effect && effect->complete;
 
     if (temporary.param_effects)
-        xr_free(temporary.param_effects);
+        xr_compile_state_free(temporary.param_effects);
     if (names != stack_names)
         xr_free((void *) names);
     if (types != stack_types)
@@ -1982,6 +2007,11 @@ static bool xa_propagate_function_param_escape_summary(XaInferContext *ctx, AstN
 }
 
 static bool xa_propagate_class_param_escape_summaries(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return false;
+
     if (!ctx || !node || (node->type != AST_CLASS_DECL && node->type != AST_STRUCT_DECL))
         return false;
     ClassDeclNode *cls =
@@ -2001,7 +2031,8 @@ static bool xa_propagate_class_param_escape_summaries(XaInferContext *ctx, AstNo
         return false;
 
     bool changed = false;
-    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
+    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node) != XR_COMPILE_RESOURCE_OK)
+        return false;
     for (int i = 0; i < cls->method_count; i++) {
         AstNode *method = cls->methods ? cls->methods[i] : NULL;
         if (!method || method->type != AST_METHOD_DECL)
@@ -2017,13 +2048,15 @@ static bool xa_propagate_class_param_escape_summaries(XaInferContext *ctx, AstNo
                 method_links->param_count, method_links->return_type, md->body, info)) {
             changed = true;
         }
+        if (xr_compile_state_status(method_links->resource_state) != XR_COMPILE_RESOURCE_OK) break;
     }
     xa_analyzer_exit_scope(ctx->analyzer);
-    return changed;
+    return changed && xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) == XR_COMPILE_RESOURCE_OK;
 }
 
 XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !ctx->analyzer || !node)
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK || !node)
         return false;
 
     bool changed = false;
@@ -2033,6 +2066,7 @@ XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, As
                 if (xa_propagate_param_escape_summaries_for_ast(ctx,
                                                                 node->as.program.statements[i]))
                     changed = true;
+                if (xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK) return false;
             }
             return changed;
         case AST_EXPORT_STMT:
@@ -2248,6 +2282,11 @@ static bool xa_field_is_pending_generic_value_struct(XaInferContext *ctx, const 
 // Cross-TU: called from xa_visit_collect_statements_with_hoisting() in
 // xanalyzer_visitor.c during the hoisting pass.
 void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     if (!node)
         return;
 
@@ -2282,24 +2321,26 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         }
     }
     if (!sym || sym->kind != XA_SYM_FUNCTION)
-        sym = xa_symbol_new(fn->name, XA_SYM_FUNCTION);
+        sym = xa_symbol_new(ctx->analyzer->symbol_registry, fn->name, XA_SYM_FUNCTION);
+        if (!sym) {
+            return;
+        }
     sym->location.line = node->line;
     sym->is_const = true;
     sym->is_exported = node->is_exported;
+    if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+        return;
+    }
+    fn->symbol_id = sym->id;
     XaScope *signature_scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
     XaSymbol *saved_signature_function = signature_scope ? signature_scope->function_symbol : NULL;
     if (fn->type_param_count > 0 && fn->type_params) {
-        const char **type_param_names = xr_malloc(sizeof(const char *) * fn->type_param_count);
-        if (type_param_names) {
-            for (int i = 0; i < fn->type_param_count; i++)
-                type_param_names[i] = fn->type_params[i] ? fn->type_params[i]->name : NULL;
-            xa_symbol_links_set_type_params(&sym->links, type_param_names, NULL, NULL,
-                                            fn->type_param_count);
-            xr_free(type_param_names);
+            if (xa_symbol_links_set_generic_declarations(&sym->links, fn->type_params,
+                    fn->type_param_count) != XR_COMPILE_RESOURCE_OK)
+                return;
+            if (signature_scope)
+                signature_scope->function_symbol = sym;
         }
-        if (signature_scope)
-            signature_scope->function_symbol = sym;
-    }
 
     // Build function type and collect param names
     XrType **param_types = NULL;
@@ -2397,8 +2438,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     }
 
     // Add to scope
-    xa_visit_add_symbol_checked(ctx, sym, 0);
-    fn->symbol_id = sym->id;
+
 
     // Create symbol links with type and param names
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -2413,7 +2453,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
             : XR_STORAGE_EXEC_LOCAL;
     links->file_path = ctx->file_path;
     links->function_decl_node = node;
-    xa_publish_deprecated_attrs(links, fn->attributes, fn->attr_count);
+    if (xa_symbol_links_set_deprecated_attrs(links, fn->attributes, fn->attr_count) != XR_COMPILE_RESOURCE_OK) goto function_signature_cleanup;
     xa_bind_registry_intrinsic(ctx, node, sym, NULL, fn->name, false, fn->param_count);
 
     // FFI: mark extern-block functions so call sites can require `unsafe { }`.
@@ -2421,25 +2461,32 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     if (links->is_extern)
         xa_validate_extern_function_abi(ctx, node, fn, param_types, return_type);
     if (links->is_extern) {
-        const XrNativePackagePlan *native_plan = xr_compiler_session_native_package_plan(
-            ctx->analyzer ? ctx->analyzer->compiler_session : NULL);
-        if (native_plan) {
-            char native_error[512];
+        XrManifestDiagnostic native_error = {0};
+        XrManifestStatus native_status = xa_analyzer_validate_native_arity(ctx->analyzer,
+            fn->name, (uint32_t) fn->param_count, &native_error);
+        if (native_status == XR_MANIFEST_INVALID) {
             XrLocation native_loc = {.file = ctx->file_path,
                                      .line = node ? node->line : 0,
                                      .column = node ? node->column : 0};
-            if (!xr_native_package_validate_symbol_arity(native_plan, fn->name,
-                                                         (uint32_t) fn->param_count, native_error,
-                                                         sizeof(native_error)))
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_ARG_TYPE, native_error, &native_loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                XR_ERR_ANALYZE_ARG_TYPE, native_error.message[0] ? native_error.message :
+                    "Extern declaration violates native symbol contract", &native_loc);
+        } else if (native_status != XR_MANIFEST_OK) {
+            xr_free(param_types);
+            xr_free(param_names);
+            return;
         }
     }
     // Store parameter names for LSP inlay hints
-    xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);
-    xa_bind_declared_view_origins(ctx, node, links, param_names, false);
+    if (xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type) != XR_COMPILE_RESOURCE_OK) {
+        goto function_signature_cleanup;
+    }
+    if (xa_bind_declared_view_origins(ctx, node, links, param_names, false) != XR_COMPILE_RESOURCE_OK)
+        goto function_signature_cleanup;
     xa_symbol_links_set_param_escape_summary(ctx, links, param_types, param_names, fn->param_count,
                                              return_type, fn->body, NULL);
+    if (xr_compile_state_status(links->resource_state) != XR_COMPILE_RESOURCE_OK)
+        goto function_signature_cleanup;
 
     // Record per-parameter default expressions for caller-side default filling.
     if (fn->param_count > 0) {
@@ -2448,13 +2495,16 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
             for (int i = 0; i < fn->param_count; i++)
                 defs[i] = fn->params[i] ? fn->params[i]->default_value : NULL;
             xa_bind_param_default_exprs(ctx, defs, param_types, fn->param_count, node->is_exported);
-            xa_symbol_links_set_param_defaults(links, defs, fn->param_count);
+            if (xa_symbol_links_set_param_defaults(links, defs, fn->param_count) != XR_COMPILE_RESOURCE_OK) {
+                xr_free(defs);
+                goto function_signature_cleanup;
+            }
             xr_free(defs);
         }
     }
 
     // Store generic type parameters and intersection-style constraint lists.
-    xa_store_type_params_with_constraints(ctx, links, fn->type_params, fn->type_param_count, node);
+    if (xa_store_type_params_with_constraints(ctx, links, fn->type_params, fn->type_param_count, node) != XR_COMPILE_RESOURCE_OK) goto function_signature_cleanup;
 
     XrLocation sig_loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
     for (int i = 0; i < fn->param_count; i++) {
@@ -2467,6 +2517,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     }
     xa_validate_hashable_key_type(ctx, return_type, links, "function return type", &sig_loc);
 
+function_signature_cleanup:
     if (param_types)
         xr_free(param_types);
     if (param_names)
@@ -2611,6 +2662,11 @@ static XrType *xa_infer_return_object_type(XrVMRuntime *X, FunctionDeclNode *fn)
 // Cross-TU: called from xa_visit_collect_statements_with_hoisting() in
 // xanalyzer_visitor.c after Phase 1 has hoisted all symbols.
 void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     if (!node)
         return;
 
@@ -2621,7 +2677,8 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
     XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
 
     // Enter function scope and collect body
-    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node);
+    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node) != XR_COMPILE_RESOURCE_OK)
+        return;
     ctx->analyzer->current_scope->function_symbol = sym;
 
     // Add parameters to scope
@@ -2657,6 +2714,8 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
         xa_symbol_links_set_param_escape_summary(ctx, links, links->param_types, links->param_names,
                                                  links->param_count, links->return_type, fn->body,
                                                  NULL);
+        if (xr_compile_state_status(links->resource_state) != XR_COMPILE_RESOURCE_OK)
+            goto function_body_done;
         xa_validate_declared_view_origin_returns(ctx, links, fn->body, NULL);
     }
 
@@ -2682,6 +2741,7 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
     if (links)
         xa_ensure_function_return_ownership_prepass(ctx, links);
 
+function_body_done:
     xa_analyzer_exit_scope(ctx->analyzer);
 }
 
@@ -3000,30 +3060,41 @@ static void validate_class_field_default_initialization(XaInferContext *ctx, Ast
 // does for real classes — that is what lets the conformance check at the end
 // of class collection enforce method-name parity.
 void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
-    if (!node || node->type != AST_INTERFACE_DECL)
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
         return;
+    XaScope *entry_scope = ctx->analyzer->current_scope;
+
+    if (!node || node->type != AST_INTERFACE_DECL)
+        goto interface_done;
 
     InterfaceDeclNode *iface = &node->as.interface_decl;
     if (xa_reject_builtin_name_redeclaration(ctx, node, "interface", iface->name))
-        return;
+        goto interface_done;
 
     XaSymbol *sym = iface->symbol_id
                         ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, iface->symbol_id)
                         : NULL;
     if (!sym) {
-        sym = xa_symbol_new(iface->name, XA_SYM_CLASS);
+        sym = xa_symbol_new(ctx->analyzer->symbol_registry, iface->name, XA_SYM_CLASS);
+        if (!sym) {
+            goto interface_done;
+        }
         if (!sym)
-            return;
+            goto interface_done;
         sym->location.line = node->line;
         sym->is_exported = node->is_exported;
-        xa_visit_add_symbol_checked(ctx, sym, 0);
+        if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+            goto interface_done;
+        }
         iface->symbol_id = sym->id;
     }
     sym->is_exported = node->is_exported;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     if (!links)
-        return;
+        goto interface_done;
     /* Source ownership analyzes the same graph again after monomorphization and
      * canonicalization. Interface identity is nominal, so recreating its
      * XrClassInfo on that second pass leaves already-collected implementors
@@ -3031,11 +3102,11 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
      * fail. Like class collection above, an already materialized declaration is
      * complete and must be reused verbatim. */
     if (links->interface_decl_node == node && links->class_info)
-        return;
+        goto interface_done;
 
-    XrClassInfo *info = xa_class_info_new(iface->name);
+    XrClassInfo *info = xa_class_info_new(xa_symbol_registry_state(ctx->analyzer->symbol_registry), iface->name);
     if (!info)
-        return;
+        goto interface_done;
     links->class_info = info;
     links->owns_class_info = true;
     links->interface_decl_node = node;
@@ -3045,7 +3116,7 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
     if (!xa_analyzer_publish_nominal_identity(ctx->analyzer, node, info)) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE,
                                    "nominal declaration identity is unavailable", &info->location);
-        return;
+        goto interface_done;
     }
     // Represent the interface as a parameterized XR_KIND_INTERFACE: built-in
     // singletons stay as plain interface types; user `interface Foo<T>` keeps
@@ -3063,17 +3134,15 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
     info->base_name = NULL;
 
     if (iface->type_param_count > 0 && iface->type_params) {
-        const char **type_param_names =
-            xr_malloc(sizeof(const char *) * (size_t) iface->type_param_count);
-        if (type_param_names) {
-            for (int i = 0; i < iface->type_param_count; i++) {
-                type_param_names[i] = iface->type_params[i] ? iface->type_params[i]->name : NULL;
-            }
-            xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL,
-                                            iface->type_param_count);
-            xr_free(type_param_names);
+            if (xa_symbol_links_set_generic_declarations(links, iface->type_params,
+                    iface->type_param_count) != XR_COMPILE_RESOURCE_OK)
+                goto interface_done;
         }
-    }
+
+    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node) != XR_COMPILE_RESOURCE_OK)
+        goto interface_done;
+    info->scope = ctx->analyzer->current_scope;
+    info->scope->class_symbol = sym;
 
     // Materialise method and property signatures as XaSymbols. Names matter
     // for conformance; types are best-effort (resolved from XrTypeRef) so the
@@ -3085,12 +3154,17 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         InterfaceMethodNode *im = &m->as.interface_method;
         if (!im->name)
             continue;
-        XaSymbol *msym = xa_symbol_new(im->name, XA_SYM_METHOD);
+        XaSymbol *msym = xa_symbol_new(ctx->analyzer->symbol_registry, im->name, XA_SYM_METHOD);
+        if (!msym) {
+            goto interface_done;
+        }
         msym->location.line = m->line;
         msym->receiver_mode = im->receiver_mode;
+        if (!xa_visit_add_symbol_checked(ctx, &msym, (int) m->line))
+            goto interface_done;
         XaSymbolLinks *mlinks = xa_analyzer_get_links(ctx->analyzer, msym);
         mlinks->function_decl_node = m;
-        xa_publish_deprecated_attrs(mlinks, im->attributes, im->attr_count);
+        if (xa_symbol_links_set_deprecated_attrs(mlinks, im->attributes, im->attr_count) != XR_COMPILE_RESOURCE_OK) goto interface_done;
         // An interface method may carry its own generic params and constraints.
         // They are stored, and the method published as the signature scope's
         // active generic owner, before the signature is resolved — that is what
@@ -3100,16 +3174,21 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         XaSymbol *saved_signature_function =
             signature_scope ? signature_scope->function_symbol : NULL;
         if (im->type_param_count > 0 && im->type_params) {
-            xa_store_type_params_with_constraints(ctx, mlinks, im->type_params,
-                                                  im->type_param_count, m);
+            if (xa_store_type_params_with_constraints(ctx, mlinks, im->type_params,
+                                                  im->type_param_count, m) != XR_COMPILE_RESOURCE_OK) goto interface_done;
             if (signature_scope)
                 signature_scope->function_symbol = msym;
         }
         XrType **param_types = NULL;
         if (im->param_count > 0) {
             param_types = xr_malloc(sizeof(XrType *) * im->param_count);
-            if (!param_types)
-                continue;
+            if (!param_types) {
+                if (signature_scope)
+                    signature_scope->function_symbol = saved_signature_function;
+                (void) xr_compile_state_fail(xa_symbol_registry_state(ctx->analyzer->symbol_registry),
+                                             XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+                goto interface_done;
+            }
             for (int j = 0; j < im->param_count; j++) {
                 XrParamNode *param = im->params ? im->params[j] : NULL;
                 param_types[j] =
@@ -3155,19 +3234,33 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         if (im->param_count > 0) {
             origin_param_names =
                 (const char **) xr_malloc(sizeof(const char *) * (size_t) im->param_count);
+            if (!origin_param_names) {
+                xr_free(param_types);
+                (void) xr_compile_state_fail(xa_symbol_registry_state(ctx->analyzer->symbol_registry),
+                                             XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+                goto interface_done;
+            }
             if (origin_param_names) {
                 for (int j = 0; j < im->param_count; j++)
                     origin_param_names[j] =
                         im->params && im->params[j] ? im->params[j]->name : NULL;
             }
         }
-        xa_symbol_links_set_function_sig(mlinks, param_types, origin_param_names, im->param_count,
-                                         ret_type);
-        xa_bind_declared_view_origins(ctx, m, mlinks, origin_param_names, true);
+        if (xa_symbol_links_set_function_sig(mlinks, param_types, origin_param_names, im->param_count,
+                                         ret_type) != XR_COMPILE_RESOURCE_OK) {
+            xr_free(origin_param_names);
+            xr_free(param_types);
+            goto interface_done;
+        }
+        if (xa_bind_declared_view_origins(ctx, m, mlinks, origin_param_names, true) != XR_COMPILE_RESOURCE_OK) {
+            xr_free(origin_param_names);
+            xr_free(param_types);
+            goto interface_done;
+        }
         xr_free(origin_param_names);
         if (param_types)
             xr_free(param_types);
-        xa_class_info_add_method(info, msym);
+        if (xa_class_info_add_method(xa_symbol_registry_state(ctx->analyzer->symbol_registry), info, msym) != XR_COMPILE_RESOURCE_OK) goto interface_done;
     }
 
     for (int i = 0; i < iface->property_count; i++) {
@@ -3177,13 +3270,21 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         InterfacePropertyNode *ip = &p->as.interface_property;
         if (!ip->name)
             continue;
-        XaSymbol *psym = xa_symbol_new(ip->name, XA_SYM_PROPERTY);
+        XaSymbol *psym = xa_symbol_new(ctx->analyzer->symbol_registry, ip->name, XA_SYM_PROPERTY);
+        if (!psym) {
+            goto interface_done;
+        }
         psym->location.line = p->line;
+        if (!xa_visit_add_symbol_checked(ctx, &psym, (int) p->line))
+            goto interface_done;
         XaSymbolLinks *plinks = xa_analyzer_get_links(ctx->analyzer, psym);
         plinks->type = ip->prop_type ? xr_tref_resolve_in_analyzer(ctx->analyzer, ip->prop_type)
                                      : xr_type_new_unknown(NULL);
-        xa_class_info_add_field(info, psym);
+        if (xa_class_info_add_field(xa_symbol_registry_state(ctx->analyzer->symbol_registry), info, psym) != XR_COMPILE_RESOURCE_OK) goto interface_done;
     }
+
+interface_done:
+    ctx->analyzer->current_scope = entry_scope;
 }
 
 static bool xa_interface_signature_has_recovery_type(const XrType *type) {
@@ -3659,8 +3760,14 @@ bool xa_reject_builtin_name_redeclaration(XaInferContext *ctx, AstNode *node,
 }
 
 void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
-    if (!node)
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
         return;
+    XaScope *entry_scope = ctx->analyzer->current_scope;
+
+    if (!node)
+        goto class_done;
 
     bool is_struct_decl = node->type == AST_STRUCT_DECL;
     bool is_union_decl = node->type == AST_UNION_DECL;
@@ -3672,17 +3779,22 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
                                                         : &node->as.union_decl;
 
     if (xa_reject_builtin_name_redeclaration(ctx, node, decl_label, cls->name))
-        return;
+        goto class_done;
 
     XaSymbol *sym =
         cls->symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, cls->symbol_id) : NULL;
     if (!sym && cls->name)
         sym = xa_scope_lookup_local(ctx->analyzer->current_scope, cls->name);
     if (!sym) {
-        sym = xa_symbol_new(cls->name, XA_SYM_CLASS);
+        sym = xa_symbol_new(ctx->analyzer->symbol_registry, cls->name, XA_SYM_CLASS);
+        if (!sym) {
+            goto class_done;
+        }
         sym->location.line = node->line;
         sym->is_exported = node->is_exported;
-        xa_visit_add_symbol_checked(ctx, sym, 0);
+        if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+            goto class_done;
+        }
         cls->symbol_id = sym->id;
     }
     sym->is_exported = node->is_exported;
@@ -3700,7 +3812,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         links->module_name = stdlib_module;
         links->file_path = ctx->file_path;
     }
-    xa_publish_deprecated_attrs(links, cls->attributes, cls->attr_count);
+    if (xa_symbol_links_set_deprecated_attrs(links, cls->attributes, cls->attr_count) != XR_COMPILE_RESOURCE_OK) goto class_done;
     XrClassInfo *info = links ? links->class_info : NULL;
     const char *capability_name = cls->generic_origin_name ? cls->generic_origin_name : cls->name;
     /* The hoisting collector and direct declaration visitor can both reach the
@@ -3735,10 +3847,11 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
             cls->mono_types_rewritten = false;
             xa_visit_collect_class(ctx, node);
         }
-        return;
+        goto class_done;
     }
     if (!info) {
-        info = xa_class_info_new(cls->name);
+        info = xa_class_info_new(xa_symbol_registry_state(ctx->analyzer->symbol_registry), cls->name);
+        if (!info) goto class_done;
         info->explicit_final = cls->explicit_final;
         info->derive_flags = xa_class_decl_derive_flags(cls->attributes, cls->attr_count);
         info->capability_flags = xa_declared_type_capability_flags(ctx->file_path, capability_name);
@@ -3763,7 +3876,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     if (!xa_analyzer_publish_nominal_identity(ctx->analyzer, node, info)) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE,
                                    "nominal declaration identity is unavailable", &info->location);
-        return;
+        goto class_done;
     }
     if (!links->type) {
         links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);
@@ -3811,11 +3924,12 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
 skip_interfaces:
 
     // Store generic type parameters and intersection-style constraint lists.
-    xa_store_type_params_with_constraints(ctx, links, cls->type_params, cls->type_param_count,
-                                          node);
+    if (xa_store_type_params_with_constraints(ctx, links, cls->type_params, cls->type_param_count,
+                                          node) != XR_COMPILE_RESOURCE_OK) goto class_done;
 
     // Enter class scope
-    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
+    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node) != XR_COMPILE_RESOURCE_OK)
+        goto class_done;
     ctx->analyzer->current_scope->class_symbol = sym;
     info->scope = ctx->analyzer->current_scope;
 
@@ -3824,7 +3938,10 @@ skip_interfaces:
         AstNode *field = cls->fields[i];
         if (field && field->type == AST_FIELD_DECL) {
             FieldDeclNode *fd = &field->as.field_decl;
-            XaSymbol *field_sym = xa_symbol_new(fd->name, XA_SYM_PROPERTY);
+            XaSymbol *field_sym = xa_symbol_new(ctx->analyzer->symbol_registry, fd->name, XA_SYM_PROPERTY);
+            if (!field_sym) {
+                goto class_done;
+            }
             field_sym->location.line = field->line;
             field_sym->is_static = fd->is_static;
             field_sym->is_private = fd->is_private;
@@ -3832,7 +3949,9 @@ skip_interfaces:
             field_sym->is_const = fd->is_const;
             field_sym->is_weak = fd->is_weak;
             field_sym->has_declared_default = (fd->initializer != NULL);
-            xa_visit_add_symbol_checked(ctx, field_sym, 0);
+            if (!xa_visit_add_symbol_checked(ctx, &field_sym, 0)) {
+                goto class_done;
+            }
 
             XaSymbolLinks *field_links = xa_analyzer_get_links(ctx->analyzer, field_sym);
 
@@ -3899,7 +4018,10 @@ skip_interfaces:
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_BORROW_ESCAPE, msg, &loc);
             }
-            xa_class_info_add_field(info, field_sym);
+            if (xa_class_info_add_field(xa_symbol_registry_state(ctx->analyzer->symbol_registry), info, field_sym) != XR_COMPILE_RESOURCE_OK) {
+                xa_analyzer_exit_scope(ctx->analyzer);
+                goto class_done;
+            }
         }
     }
 
@@ -3989,11 +4111,10 @@ skip_interfaces:
      * naming a type that IS declared but has no fixed layout is a real error.
      * Without this signal the two are indistinguishable. */
     if (is_aggregate_decl && cls->name) {
-        XrNativePackagePlan *layout_subject_plan =
-            (XrNativePackagePlan *) xr_compiler_session_native_package_plan(
-                ctx->analyzer ? ctx->analyzer->compiler_session : NULL);
-        if (layout_subject_plan)
-            xr_native_package_note_layout_subject(layout_subject_plan, cls->name);
+        if (xa_analyzer_note_native_layout_subject(ctx->analyzer, cls->name) != XR_MANIFEST_OK) {
+            xa_analyzer_exit_scope(ctx->analyzer);
+            goto class_done;
+        }
     }
     if (is_aggregate_decl && info->field_count > 0 && struct_type_param_count == 0 &&
         struct_field_types_valid) {
@@ -4214,12 +4335,14 @@ skip_interfaces:
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 xr_aggregate_layout_free_owned(layout);
             } else {
+                bool matched = false;
+                if (xa_analyzer_resolve_native_layout(ctx->analyzer, cls->name, layout,
+                        &matched) != XR_MANIFEST_OK) {
+                    xr_aggregate_layout_free_owned(layout);
+                    xa_analyzer_exit_scope(ctx->analyzer);
+                    goto class_done;
+                }
                 info->struct_layout = layout;
-                XrNativePackagePlan *native_plan =
-                    (XrNativePackagePlan *) xr_compiler_session_native_package_plan(
-                        ctx->analyzer ? ctx->analyzer->compiler_session : NULL);
-                if (native_plan)
-                    (void) xr_native_package_resolve_layout(native_plan, cls->name, layout);
             }
         } else {
             xr_aggregate_layout_free_owned(layout);
@@ -4254,7 +4377,10 @@ skip_layout:
                                            XR_ERR_CMP_REDEFINED_VAR, msg, &loc);
                 continue;
             }
-            XaSymbol *method_sym = xa_symbol_new(md->name, XA_SYM_METHOD);
+            XaSymbol *method_sym = xa_symbol_new(ctx->analyzer->symbol_registry, md->name, XA_SYM_METHOD);
+            if (!method_sym) {
+                goto class_done;
+            }
             method_sym->location.line = method->line;
             method_sym->location.column = method->column;
             method_sym->is_override = md->is_override;
@@ -4271,9 +4397,11 @@ skip_layout:
                     "values without an ownership root",
                     &loc);
             }
-            xa_visit_add_symbol_checked(ctx, method_sym, 0);
+            if (!xa_visit_add_symbol_checked(ctx, &method_sym, 0)) {
+                goto class_done;
+            }
             XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
-            xa_publish_deprecated_attrs(method_links, md->attributes, md->attr_count);
+            if (xa_symbol_links_set_deprecated_attrs(method_links, md->attributes, md->attr_count) != XR_COMPILE_RESOURCE_OK) goto class_done;
             XaScope *signature_scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
             XaSymbol *saved_signature_function =
                 signature_scope ? signature_scope->function_symbol : NULL;
@@ -4282,8 +4410,8 @@ skip_layout:
             // checks, the Hashable key check) see them while the signature and
             // the body are still being processed.
             if (md->type_param_count > 0 && md->type_params) {
-                xa_store_type_params_with_constraints(ctx, method_links, md->type_params,
-                                                      md->type_param_count, method);
+                if (xa_store_type_params_with_constraints(ctx, method_links, md->type_params,
+                                                      md->type_param_count, method) != XR_COMPILE_RESOURCE_OK) goto class_done;
                 if (signature_scope)
                     signature_scope->function_symbol = method_sym;
             }
@@ -4401,12 +4529,17 @@ skip_layout:
             method_links->nominal_decl_node = node;
 
             // Store parameter info for LSP
-            xa_symbol_links_set_function_sig(method_links, param_types, param_names,
-                                             md->param_count, ret_type);
-            xa_bind_declared_view_origins(ctx, method, method_links, param_names,
-                                          !md->is_static && !md->is_constructor);
+            if (xa_symbol_links_set_function_sig(method_links, param_types, param_names,
+                                             md->param_count, ret_type) != XR_COMPILE_RESOURCE_OK) {
+                goto class_method_signature_cleanup;
+            }
+            if (xa_bind_declared_view_origins(ctx, method, method_links, param_names,
+                                          !md->is_static && !md->is_constructor) != XR_COMPILE_RESOURCE_OK)
+                goto class_method_signature_cleanup;
             xa_symbol_links_set_param_escape_summary(ctx, method_links, param_types, param_names,
                                                      md->param_count, ret_type, md->body, info);
+            if (xr_compile_state_status(method_links->resource_state) != XR_COMPILE_RESOURCE_OK)
+                goto class_method_signature_cleanup;
             // Record method/constructor default expressions for caller-side default filling.
             if (md->param_count > 0) {
                 AstNode **defs = (AstNode **) xr_calloc(md->param_count, sizeof(AstNode *));
@@ -4415,7 +4548,10 @@ skip_layout:
                         defs[j] = md->params && md->params[j] ? md->params[j]->default_value : NULL;
                     xa_bind_param_default_exprs(ctx, defs, param_types, md->param_count,
                                                 node->is_exported);
-                    xa_symbol_links_set_param_defaults(method_links, defs, md->param_count);
+                    if (xa_symbol_links_set_param_defaults(method_links, defs, md->param_count) != XR_COMPILE_RESOURCE_OK) {
+                        xr_free(defs);
+                        goto class_method_signature_cleanup;
+                    }
                     xr_free(defs);
                 }
             }
@@ -4437,7 +4573,12 @@ skip_layout:
             xa_bind_registry_intrinsic(ctx, method, method_sym, intrinsic_owner_name, md->name,
                                        md->is_static, md->param_count);
 
-            xa_class_info_add_method(info, method_sym);
+            if (xa_class_info_add_method(xa_symbol_registry_state(ctx->analyzer->symbol_registry), info, method_sym) != XR_COMPILE_RESOURCE_OK) {
+                xr_free(param_types);
+                xr_free(param_names);
+                xa_analyzer_exit_scope(ctx->analyzer);
+                goto class_done;
+            }
 
             // Record constructor info in class_info and validate super() rules
             if (md->is_constructor) {
@@ -4453,10 +4594,13 @@ skip_layout:
                 validate_constructor_super_call(ctx, cls, md, method);
             }
 
+class_method_signature_cleanup:
             if (param_types)
                 xr_free(param_types);
             if (param_names)
                 xr_free(param_names);
+            if (xr_compile_state_status(links->resource_state) != XR_COMPILE_RESOURCE_OK)
+                goto class_done;
         }
     }
 
@@ -4482,7 +4626,8 @@ skip_layout:
         if (!md->body)
             continue;
 
-        xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method);
+        if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method) != XR_COMPILE_RESOURCE_OK)
+            goto class_done;
 
         // Look up method symbol to get resolved param types
         XaSymbol *msym = xa_scope_lookup_local(ctx->analyzer->current_scope->parent, md->name);
@@ -4490,11 +4635,16 @@ skip_layout:
         XaSymbolLinks *mlinks = msym ? xa_analyzer_get_links(ctx->analyzer, msym) : NULL;
 
         if (!md->is_static) {
-            XaSymbol *this_sym = xa_symbol_new("this", XA_SYM_PARAMETER);
+            XaSymbol *this_sym = xa_symbol_new(ctx->analyzer->symbol_registry, "this", XA_SYM_PARAMETER);
+            if (!this_sym) {
+                goto class_done;
+            }
             if (this_sym) {
                 this_sym->location.line = method->line;
                 this_sym->passing_mode = md->is_constructor ? XR_PARAM_REF : md->receiver_mode;
-                xa_visit_add_symbol_checked(ctx, this_sym, 0);
+                if (!xa_visit_add_symbol_checked(ctx, &this_sym, 0)) {
+                    goto class_done;
+                }
                 XaSymbolLinks *this_links = xa_analyzer_get_links(ctx->analyzer, this_sym);
                 if (this_links) {
                     XrType *this_type =
@@ -4540,6 +4690,8 @@ skip_layout:
             xa_symbol_links_set_param_escape_summary(ctx, mlinks, mlinks->param_types,
                                                      mlinks->param_names, mlinks->param_count,
                                                      mlinks->return_type, md->body, info);
+            if (xr_compile_state_status(mlinks->resource_state) != XR_COMPILE_RESOURCE_OK)
+                goto class_done;
             xa_validate_declared_view_origin_returns(ctx, mlinks, md->body, info);
         }
 
@@ -4581,6 +4733,8 @@ skip_layout:
                     method_links->param_count, method_links->return_type, md->body, info)) {
                 changed = true;
             }
+            if (xr_compile_state_status(method_links->resource_state) != XR_COMPILE_RESOURCE_OK)
+                goto class_done;
         }
         if (!changed)
             break;
@@ -4593,9 +4747,17 @@ skip_layout:
     // class. Built-in interfaces (Iterable, Comparable, ...) are validated
     // separately when used as generic constraints.
     xa_check_interface_conformance(ctx, node, info);
+
+class_done:
+    ctx->analyzer->current_scope = entry_scope;
 }
 
 void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     XR_DCHECK(ctx != NULL, "visit_collect_var_decl: NULL ctx");
     if (!node)
         return;
@@ -4607,14 +4769,19 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
     XaSymbol *sym =
         var->symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, var->symbol_id) : NULL;
     if (!sym) {
-        sym = xa_symbol_new(var->name, XA_SYM_VARIABLE);
+        sym = xa_symbol_new(ctx->analyzer->symbol_registry, var->name, XA_SYM_VARIABLE);
+        if (!sym) {
+            return;
+        }
         sym->location.line = node->line;
         sym->is_const = is_const;
         sym->is_exported = node->is_exported;
         sym->is_readonly_binding = is_const;
         sym->is_rebindable = !is_const;
 
-        xa_visit_add_symbol_checked(ctx, sym, 0);
+        if (!xa_visit_add_symbol_checked(ctx, &sym, 0)) {
+            return;
+        }
 
         /* Write back unique symbol ID so Xi lowering can use it as Braun SSA key
          * instead of name-based lookup (eliminates scope ambiguity). */
@@ -4669,7 +4836,8 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
             go_call && go_call->type == AST_CALL_EXPR ? go_call->as.call_expr.callee : NULL;
         if (go_fn && go_fn->type == AST_FUNCTION_EXPR) {
             FunctionDeclNode *fn = &go_fn->as.function_expr;
-            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, go_fn);
+            if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, go_fn) != XR_COMPILE_RESOURCE_OK)
+                return;
             if (fn->body)
                 xa_visit_collect(ctx, fn->body);
             xa_analyzer_exit_scope(ctx->analyzer);
@@ -4771,13 +4939,14 @@ static int xa_class_symbol_count_recursive(XaScope *scope) {
     int total = 0;
     int count = 0;
     XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
+    if (xa_scope_resource_status(scope) != XR_COMPILE_RESOURCE_OK) return 0;
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];
         if (sym && sym->kind == XA_SYM_CLASS)
             total++;
     }
     if (symbols)
-        xr_free(symbols);
+        xr_compile_state_free(symbols);
 
     for (int i = 0; i < scope->child_count; i++)
         total += xa_class_symbol_count_recursive(scope->children ? scope->children[i] : NULL);
@@ -4792,13 +4961,14 @@ static int xa_collect_class_symbols_recursive(XaScope *scope, XaSymbol **out, in
     int written = 0;
     int count = 0;
     XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
+    if (xa_scope_resource_status(scope) != XR_COMPILE_RESOURCE_OK) return 0;
     for (int i = 0; i < count && written < max; i++) {
         XaSymbol *sym = symbols[i];
         if (sym && sym->kind == XA_SYM_CLASS)
             out[written++] = sym;
     }
     if (symbols)
-        xr_free(symbols);
+        xr_compile_state_free(symbols);
 
     for (int i = 0; i < scope->child_count && written < max; i++) {
         written += xa_collect_class_symbols_recursive(scope->children ? scope->children[i] : NULL,
@@ -4983,85 +5153,75 @@ static int32_t xa_method_runtime_symbol(XaAnalyzer *analyzer, const char *name) 
     return id == SYMBOL_INVALID ? 0 : (int32_t) id;
 }
 
-// Build virtual method table for a class (inherits base vtable + own methods)
-static void build_class_vtable(XaAnalyzer *analyzer, XrClassInfo *info) {
-    if (!info || info->vtable)
-        return;  // already built
-
-    // First build base vtable if needed
-    if (info->base) {
-        build_class_vtable(analyzer, info->base);
-    }
-
-    // Determine vtable size: base methods + new methods
-    int base_size = info->base ? info->base->vtable_size : 0;
-    int max_size = base_size + info->method_count;
-    if (max_size == 0)
-        return;
-
-    XaMethodSlot *vtable = xr_calloc(max_size, sizeof(XaMethodSlot));
-    int vt_count = 0;
-
-    // Copy base vtable entries (inherit)
-    if (info->base && info->base->vtable) {
-        for (int i = 0; i < info->base->vtable_size; i++) {
-            vtable[i] = info->base->vtable[i];
-            vtable[i].is_final = true;  // assume final until proven otherwise
-            vt_count++;
+/* Runtime identities are collected before the owned table builder can publish
+ * any class or change ancestor flags. A failed provider is never a missing
+ * method; the provider's legacy API has no typed allocation-failure reason. */
+static bool build_class_vtable(XaAnalyzer *analyzer, XrClassInfo *info) {
+    XrCompileState *state = xr_compile_session_compile_state(analyzer ? analyzer->compiler_session : NULL);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return false;
+    if (!info) { (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);return false; }
+    if (info->vtable) return true;
+    XrClassInfo *cursor = info, *slow = info, *fast = info;
+    size_t count = 0, methods = 0;
+    while (cursor && !cursor->vtable) {
+        if (xr_compile_state_work(state, 4) != XR_COMPILE_RESOURCE_OK) return false;
+        if (count == SIZE_MAX) {
+            (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);return false;
+        }
+        if (cursor->method_count < 0 || (cursor->method_count && !cursor->methods)) {
+            (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);return false;
+        }
+        if ((size_t) cursor->method_count > SIZE_MAX - methods) {
+            (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);return false;
+        }
+        methods += (size_t) cursor->method_count;++count;cursor = cursor->base;
+        slow = slow ? slow->base : NULL;
+        fast = fast && fast->base ? fast->base->base : NULL;
+        if (slow && slow == fast) {
+            (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);return false;
         }
     }
-
-    // Process own methods: override existing or add new
-    for (int m = 0; m < info->method_count; m++) {
-        XaSymbol *method = info->methods[m];
-        if (!method || !method->name)
-            continue;
-        int32_t method_symbol = xa_method_runtime_symbol(analyzer, method->name);
-        if (method_symbol <= 0)
-            continue;
-
-        // Check if this overrides a base method
-        bool found = false;
-        for (int v = 0; v < vt_count; v++) {
-            if (vtable[v].symbol_id == method_symbol) {
-                // Override: mark base method as overridden
-                if (info->base && info->base->vtable) {
-                    for (int bv = 0; bv < info->base->vtable_size; bv++) {
-                        if (info->base->vtable[bv].symbol_id == method_symbol) {
-                            info->base->vtable[bv].is_overridden = true;
-                            info->base->vtable[bv].is_final = false;
-                            break;
-                        }
-                    }
-                }
-                // Update slot to point to overriding method
-                vtable[v].symbol = method;
-                vtable[v].is_overridden = false;
-                vtable[v].is_final = true;
-                found = true;
-                break;
+    void *memory = NULL;XaVTableClassInput *inputs = NULL;int32_t *ids = NULL;
+    XrCompileResourceStatus status = xr_compile_state_calloc(state, count, sizeof(XaVTableClassInput), &memory);
+    if (status != XR_COMPILE_RESOURCE_OK) return false;
+    inputs = memory;
+    if (methods) {
+        memory = NULL;status = xr_compile_state_calloc(state, methods, sizeof(int32_t), &memory);
+        if (status != XR_COMPILE_RESOURCE_OK) goto done;
+        ids = memory;
+    }
+    cursor = info;
+    for (size_t i = count; i > 0; --i) {
+        XaVTableClassInput input = {cursor, NULL};
+        status = xr_compile_state_copy(state, &inputs[i - 1], &input, sizeof(input));
+        if (status != XR_COMPILE_RESOURCE_OK) goto done;
+        cursor = cursor->base;
+    }
+    size_t offset = 0;
+    for (size_t i = 0; i < count; ++i) {
+        XrClassInfo *current = inputs[i].info;
+        inputs[i].method_ids = current->method_count ? ids + offset : NULL;
+        for (int j = 0; j < current->method_count; ++j) {
+            status = xr_compile_state_work(state, 1);
+            if (status != XR_COMPILE_RESOURCE_OK) goto done;
+            XaSymbol *method = current->methods[j];
+            if (!method || !method->name) continue;
+            size_t length = 0;
+            status = xr_compile_state_string_length(state, method->name, &length);
+            if (status != XR_COMPILE_RESOURCE_OK) goto done;
+            int32_t id = xa_method_runtime_symbol(analyzer, method->name);
+            if (id <= 0) {
+                status = xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);goto done;
             }
+            status = xr_compile_state_copy(state, &ids[offset + (size_t) j], &id, sizeof(id));
+            if (status != XR_COMPILE_RESOURCE_OK) goto done;
         }
-
-        if (!found) {
-            // New method, add to vtable
-            vtable[vt_count].name = method->name;
-            vtable[vt_count].symbol_id = method_symbol;
-            vtable[vt_count].symbol = method;
-            vtable[vt_count].is_overridden = false;
-            vtable[vt_count].is_final = true;
-            vtable[vt_count].vtable_index = vt_count;
-            vt_count++;
-        }
+        offset += (size_t) current->method_count;
     }
-
-    // Assign vtable indices
-    for (int i = 0; i < vt_count; i++) {
-        vtable[i].vtable_index = i;
-    }
-
-    info->vtable = vtable;
-    info->vtable_size = vt_count;
+    status = xa_class_vtable_build_owned(state, inputs, count);
+done:
+    xr_compile_state_free(ids);xr_compile_state_free(inputs);
+    return status == XR_COMPILE_RESOURCE_OK;
 }
 
 void xa_link_class_inheritance(XaAnalyzer *analyzer) {
@@ -5148,7 +5308,10 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
         if (!links || !links->class_info || !links->owns_class_info)
             continue;
 
-        build_class_vtable(analyzer, links->class_info);
+        if (!build_class_vtable(analyzer, links->class_info)) {
+            xr_free(symbols);
+            return;
+        }
     }
 
     // Pass 4: Mark methods as non-final if class has subclass

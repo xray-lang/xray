@@ -155,7 +155,7 @@ static size_t run_allocation_case(unsigned scenario, size_t failure) {
     XrNativePackagePlan *plan = xr_native_package_plan_parse(toml, fixture.directory);
     xtoml_free(toml);
     REQUIRE(plan && plan->valid);
-    xr_compiler_session_set_native_package_plan(fixture.session, plan);
+    fixture.input.native_package_plan = plan;
     fixture.input.discover_tests = 1u;
     fixture.input.discover_exports = 1u;
     XrProgramSourceProduct product = {0};

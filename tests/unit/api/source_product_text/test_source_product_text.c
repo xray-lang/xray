@@ -15,6 +15,8 @@
 #include "xir/xxir_output.h"
 #include "toolchain/xcompiler_session.h"
 #include "execution/xr_xir_host_execution.h"
+#include "frontend/parser/xparse.h"
+#include "frontend/parser/xast.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -162,6 +164,17 @@ static void rooted_text_authority(void) {
     CHECK(xr_xir_compile_source_product_public_admit(product, NULL) == XR_XIR_OK);
     const XrXirSourceProductFacts *facts = xr_xir_compile_source_product_facts(product);
     CHECK(facts && facts->module_count == 2);
+    AstNode *rooted_ast = NULL;
+    CHECK(xr_compile_parse_with_source(w.session, text.text, w.request.source.entry_path,
+        &rooted_ast) == XR_PARSE_OK);
+    XrXirSourceAst rooted_syntax = {text, rooted_ast};
+    XrXirSourceProduct *ast_product = NULL;
+    CHECK(xr_xir_compile_source_product_build_ast(&w.request, &rooted_syntax,
+        &ast_product, NULL) == XR_XIR_OK);
+    CHECK(xr_xir_compile_source_product_facts(ast_product)->module_count == 2);
+    xr_program_destroy(rooted_ast);
+    CHECK(xr_xir_compile_source_product_verify(ast_product, 1048576, NULL) == XR_XIR_OK);
+    xr_xir_compile_source_product_free(ast_product);
     const XrXirSourceView *view = xr_xir_compile_source_product_view(product);
     bool found = false;
     for (uint32_t i = 0; i < view->module_count; ++i)
@@ -205,8 +218,99 @@ static void complete_compiler_failures(void) {
     }
     printf("text-product full compiler allocation faults=%zu; original ledger and physical zero\n",count);
 }
+static XrXirStatus ast_compile_trial(XrCompileResourceLimits limits,
+    XrCompileResourceStats *measured) {
+    TextWorld w = {0}; AstNode *ast = NULL;
+    XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
+    XrCompileResourceStatus allocation = xr_compile_resources_new(&limits, &w.resources);
+    XrXirStatus status = allocation == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
+        allocation == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    if (status == XR_XIR_OK) {
+        XrCompilerSessionStatus opened = xr_compile_session_new(w.resources, &w.session);
+        status = opened == XR_COMPILER_SESSION_OK ? XR_XIR_OK :
+            opened == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    }
+    const char source[] = "const n:i64 = 42\n";
+    if (status == XR_XIR_OK) {
+        w.context = (XrXirCompileContext){w.resources, xr_xir_compile_default_limits()};
+        w.authority = (XrModuleIdentityAuthority){XR_MODULE_IDENTITY_MEMORY,"caller-ast",NULL};
+        w.request = (XrXirSourceProductRequest){{w.session,NULL,&w.authority,&w.context,
+            NULL,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        XrParseStatus parsed = xr_compile_parse(w.session, source, &ast);
+        status = parsed == XR_PARSE_OK ? XR_XIR_OK : parsed == XR_PARSE_BUDGET ?
+            XR_XIR_BUDGET : parsed == XR_PARSE_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY : XR_XIR_BAD_STRUCTURE;
+    }
+    if (status == XR_XIR_OK) {
+        XrXirSourceAst syntax = {{NULL,source,sizeof(source)-1},ast};
+        status = xr_xir_compile_source_product_build_ast(&w.request,&syntax,&product,&diagnostic);
+    }
+    if (measured && w.resources)
+        CHECK(xr_compile_resources_stats(w.resources,measured)==XR_COMPILE_RESOURCE_OK);
+    runtime_fail_at = SIZE_MAX;
+    xr_program_destroy(ast); world_close(&w);
+    xr_xir_compile_source_product_free(product);
+    xr_xir_compile_source_product_diagnostic_free(&diagnostic);
+    CHECK(!runtime_live && !runtime_bytes);
+    return status;
+}
+static void ast_complete_faults_and_limits(void) {
+    XrCompileResourceLimits limits = {UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
+    XrCompileResourceStats normal = {0}; runtime_attempts=0; runtime_fail_at=SIZE_MAX;
+    CHECK(ast_compile_trial(limits,&normal)==XR_XIR_OK);
+    size_t sites=runtime_attempts; CHECK(sites && sites<20000);
+    for (size_t i=0;i<sites;++i) {
+        runtime_attempts=0; runtime_fail_at=i;
+        CHECK(ast_compile_trial(limits,NULL)==XR_XIR_OUT_OF_MEMORY);
+        CHECK(runtime_attempts>i);
+    }
+    for (unsigned axis=0;axis<3;++axis) for (int delta=-1;delta<=1;++delta) {
+        limits=(XrCompileResourceLimits){normal.allocated_bytes,normal.peak_bytes,normal.work};
+        uint64_t *bound=axis==0?&limits.allocated_bytes:axis==1?&limits.live_bytes:&limits.work;
+        CHECK(*bound>1); *bound=(uint64_t)((int64_t)*bound+delta);
+        runtime_fail_at=SIZE_MAX;
+        CHECK(ast_compile_trial(limits,NULL)==(delta<0?XR_XIR_BUDGET:XR_XIR_OK));
+    }
+    printf("caller-AST complete compiler faults=%zu; three original axes exact/minus/plus and physical zero\n",sites);
+}
+static void ast_owned_execution_and_guards(void) {
+    TextWorld w; world_open(&w,UINT64_C(128000000));
+    const char source[]="const n:i64 = 41\nprint(n)\n";
+    AstNode *ast=NULL; CHECK(xr_compile_parse(w.session,source,&ast)==XR_PARSE_OK);
+    CHECK(ast->type==AST_PROGRAM && ast->as.program.count==2);
+    AstNode *literal=ast->as.program.statements[0]->as.var_decl.initializer;
+    CHECK(literal && literal->type==AST_LITERAL_INT); literal->as.literal.int_bits=42;
+    XrXirSourceAst syntax={{NULL,source,sizeof(source)-1},ast};
+    XrXirSourceProduct *product=NULL;
+    XrCompilerSession *foreign=NULL;
+    CHECK(xr_compile_session_new(w.resources,&foreign)==XR_COMPILER_SESSION_OK);
+    XrXirSourceProductRequest bad=w.request; bad.source.session=foreign;
+    CHECK(xr_xir_compile_source_product_build_ast(&bad,&syntax,&product,NULL)==XR_XIR_BAD_STRUCTURE && !product);
+    xr_compile_session_free(foreign);
+    XrXirSourceProduct *occupied=(XrXirSourceProduct *)(uintptr_t)17;
+    CHECK(xr_xir_compile_source_product_build_ast(&w.request,&syntax,&occupied,NULL)==XR_XIR_BAD_STRUCTURE && occupied==(XrXirSourceProduct *)(uintptr_t)17);
+    CHECK(xr_xir_compile_source_product_build_ast(&w.request,&syntax,&product,NULL)==XR_XIR_OK);
+    CHECK(literal->as.literal.int_bits==42 && ast->as.program.count==2);
+    CHECK(xr_xir_compile_source_product_public_admit(product,NULL)==XR_XIR_OK);
+    uint32_t entry=xr_xir_compile_source_product_facts(product)->entry;
+    xr_program_destroy(ast); world_close(&w);
+    CHECK(xr_xir_compile_source_product_view(product)->complete);
+    CHECK(xr_xir_compile_source_product_verify(product,1048576,NULL)==XR_XIR_OK);
+    XrXirProgram *program=NULL;
+    CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
+    xr_xir_compile_source_product_free(product);
+    Bytes output={{0},0};
+    XrXirOutputSink sink={XR_XIR_CALL_ABI_VERSION,0,write_bytes,&output,sizeof(output.data)};
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+    config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,&sink};
+    XrXirHostExecutionRequest run={program,&config,entry,NULL,0};XrXirCallResult result={0};
+    CHECK(xr_xir_host_execute(&run,&result)==XR_XIR_CALL_RETURNED);
+    CHECK(output.length==3 && !memcmp(output.data,"42\n",3));
+    puts("caller-AST actual edited tree42, exact parser state, rooted imports and producer-death execution PASS");
+    xr_xir_compile_program_drop(program);xr_xir_call_result_drop(&result);
+    CHECK(!runtime_live && !runtime_bytes);
+}
 int main(int argc, char **argv) {
-    if (argc == 2 && !strcmp(argv[1], "--compiler-faults")) complete_compiler_failures();
-    else { CHECK(argc == 1); text_owned_execution(); rejects_and_diagnostics(); exact_resources_and_retry(); rooted_text_authority(); }
+    if (argc == 2 && !strcmp(argv[1], "--compiler-faults")) { complete_compiler_failures(); ast_complete_faults_and_limits(); }
+    else { CHECK(argc == 1); text_owned_execution(); rejects_and_diagnostics(); exact_resources_and_retry(); rooted_text_authority(); ast_owned_execution_and_guards(); }
     puts("owned explicit source product PASS"); return 0;
 }

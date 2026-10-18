@@ -37,14 +37,24 @@
 #include "../../../src/plan/target/xr_target_verify.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <string.h>
+#include "../../../src/runtime/abi/xr_runtime_target_profile.h"
+#include "../../../src/base/xio_policy.h"
 
 static XrVMRuntime *g_iso = NULL;
 static XrCompilerSession *g_session = NULL;
+static XrCompileResources *g_resources = NULL;
+static XrTargetProfile *g_native_profile = NULL;
+static char *g_fixture_identity = NULL;
+typedef struct FixtureAst {
+    AstNode *program;
+    struct FixtureAst *next;
+} FixtureAst;
+static FixtureAst *g_fixture_asts = NULL;
 static XrType stub_int_type = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 
 static void init_memory_module_spec(XrModuleSpec *spec) {
     memset(spec, 0, sizeof(*spec));
-    spec->canonical = "memory-module-v1:id=18:xglobal-fixture-v1";
+    spec->canonical = "module-id-v1:kind=6:memory:namespace=18:xglobal-fixture-v1:path=0:";
     spec->kind = XR_MOD_MEMORY;
     spec->authority.kind = XR_MODULE_IDENTITY_MEMORY;
     spec->authority.namespace_id = "xglobal-fixture-v1";
@@ -107,27 +117,88 @@ static uint32_t evidence_object_shape_count_by_domain(const XgGlobalEvidence *ev
 }
 
 static void setup_parser_session(void) {
-    if (g_iso)
+    if (g_session)
         return;
     XrVMConfig vm_cfg = {0};
     g_iso = xray_vm_new_full(&vm_cfg);
-    g_session = xr_compiler_session_current_for_isolate(g_iso);
-    ASSERT_NOT_NULL(g_session);
+    ASSERT_NOT_NULL(g_iso);
+    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &g_resources), XR_COMPILE_RESOURCE_OK);
+    ASSERT_EQ_INT(xr_compile_session_new(g_resources, &g_session), XR_COMPILER_SESSION_OK);
+    char error[256] = {0};
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&g_native_profile, error, sizeof(error)));
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "xglobal-fixture", NULL};
+    ASSERT_EQ_INT(xr_compile_module_identity_from_logical(g_resources, &authority, NULL,
+        &g_fixture_identity), XR_MODULE_OK);
+}
+
+static AstNode *fixture_parse_owned(XrCompilerSession *session, const char *source) {
+    AstNode *program = NULL;
+    if (xr_compile_parse(session, source, &program) != XR_PARSE_OK)
+        return NULL;
+    FixtureAst *entry = NULL;
+    if (xr_compile_state_calloc(xr_compile_session_compile_state(session), 1, sizeof(*entry),
+            (void **) &entry) != XR_COMPILE_RESOURCE_OK) {
+        xr_program_destroy(program);
+        return NULL;
+    }
+    entry->program = program;
+    entry->next = g_fixture_asts;
+    g_fixture_asts = entry;
+    return program;
+}
+
+static void fixture_destroy_program(AstNode *program) {
+    if (!program)
+        return;
+    for (FixtureAst *entry = g_fixture_asts; entry; entry = entry->next) {
+        if (entry->program == program) {
+            entry->program = NULL;
+            break;
+        }
+    }
+    xr_program_destroy(program);
+}
+
+static XaAnalyzer *fixture_analyzer(void) {
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(g_native_profile);
+    if (!machine)
+        return NULL;
+    XaAnalyzerInput input = {g_session, g_iso, &machine->data_layout, g_fixture_identity};
+    return xa_analyzer_new(&input);
+}
+
+static void fixture_bind_graph(XrModuleGraph *graph) {
+    setup_parser_session();
+    graph->resources = g_resources;
+    graph->compiler_session = g_session;
 }
 
 static void teardown_parser_session(void) {
-    if (g_iso) {
-        xray_vm_delete(g_iso);
-        g_iso = NULL;
-        g_session = NULL;
+    while (g_fixture_asts) {
+        FixtureAst *entry = g_fixture_asts;
+        g_fixture_asts = entry->next;
+        xr_program_destroy(entry->program);
+        xr_compile_state_free(entry);
     }
+    xr_compile_resources_free(g_fixture_identity);
+    g_fixture_identity = NULL;
+    xr_target_profile_free(g_native_profile);
+    g_native_profile = NULL;
+    xr_compile_session_free(g_session);
+    g_session = NULL;
+    xr_compile_resources_release(g_resources);
+    g_resources = NULL;
+    if (g_iso)
+        xray_vm_delete(g_iso);
+    g_iso = NULL;
 }
 
 static bool build_global_evidence_from_source(const char *source, XgGlobalEvidence *out) {
     if (!source || !out)
         return false;
     memset(out, 0, sizeof(*out));
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     if (!ast)
         return false;
 
@@ -137,6 +208,7 @@ static bool build_global_evidence_from_source(const char *source, XgGlobalEviden
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -167,7 +239,7 @@ static bool build_analyzed_global_evidence_from_source(const char *source, XgGlo
     *out_analyzer = NULL;
     if (out_ast)
         *out_ast = NULL;
-    ast = xr_parse(g_session, source);
+    ast = fixture_parse_owned(g_session, source);
     if (!ast)
         return false;
 
@@ -175,13 +247,14 @@ static bool build_analyzed_global_evidence_from_source(const char *source, XgGlo
     spec.ast = ast;
     spec.source_path = "xglobal-core-identity.xr";
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
 
-    analyzer = xa_analyzer_new(g_session);
+    analyzer = fixture_analyzer();
     if (!analyzer)
         return false;
     xa_analyzer_set_graph(analyzer, &graph);
@@ -200,7 +273,7 @@ static bool build_analyzed_global_evidence_from_source(const char *source, XgGlo
         xa_analyzer_free(analyzer);
         xg_global_evidence_free(out);
         memset(out, 0, sizeof(*out));
-        xr_program_destroy(ast);
+        fixture_destroy_program(ast);
     } else {
         *out_analyzer = analyzer;
         if (out_ast)
@@ -247,7 +320,7 @@ TEST(global_evidence_publishes_exact_target_pointer_bits_query) {
 
     xg_global_evidence_free(&evidence);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -271,7 +344,7 @@ TEST(global_evidence_closes_target_query_contract_over_interface_witnesses) {
 
     xg_global_evidence_free(&evidence);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -324,7 +397,7 @@ TEST(global_evidence_rejects_missing_target_query_fact_and_rejects_shadow) {
     XgGlobalEvidence analyzerless = {0};
     ASSERT_FALSE(build_global_evidence_from_source(source, &analyzerless));
     xg_global_evidence_free(&analyzerless);
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -332,12 +405,13 @@ TEST(global_evidence_rejects_missing_target_query_fact_and_rejects_shadow) {
     spec.source_path = "target-query-missing.xr";
     int topo_order[1] = {0};
     XrModuleGraph graph = {0};
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -352,7 +426,7 @@ TEST(global_evidence_rejects_missing_target_query_fact_and_rejects_shadow) {
     xg_global_evidence_free(&rejected);
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
 
     XgGlobalEvidence shadow = {0};
     XaAnalyzer *shadow_analyzer = NULL;
@@ -375,7 +449,7 @@ static XaAnalyzer *build_analyzed_global_evidence_from_graph(XrModuleGraph *grap
     bool has_errors = false;
     if (!graph || !out)
         return NULL;
-    analyzer = xa_analyzer_new(g_session);
+    analyzer = fixture_analyzer();
     if (!analyzer)
         return NULL;
     xa_analyzer_set_graph(analyzer, graph);
@@ -800,7 +874,7 @@ TEST(global_evidence_closes_exact_cooperative_yield_source_xglobal_xi_contract) 
     cfg.run_arc = false;
     cfg.run_emit = false;
     cfg.source_file = "xglobal-core-identity.xr";
-    cfg.module_identity = "memory-module-v1:id=18:xglobal-fixture-v1";
+    cfg.module_identity = "module-id-v1:kind=6:memory:namespace=18:xglobal-fixture-v1:path=0:";
     cfg.global_evidence = &evidence;
     cfg.global_evidence_module_id = 1;
     XiPipelineResult result = xi_pipeline_compile_program(ast, analyzer, g_iso, &cfg);
@@ -842,7 +916,7 @@ TEST(global_evidence_closes_exact_cooperative_yield_source_xglobal_xi_contract) 
 
     xg_global_evidence_free(&evidence);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -885,7 +959,7 @@ TEST(global_evidence_owns_top_level_cooperative_yield_on_module_initializer) {
 
     xg_global_evidence_free(&evidence);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -899,7 +973,7 @@ TEST(global_evidence_rejects_missing_cooperative_yield_fact_and_ignores_shadow) 
     ASSERT_FALSE(build_global_evidence_from_source(source, &analyzerless));
     xg_global_evidence_free(&analyzerless);
 
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -907,12 +981,13 @@ TEST(global_evidence_rejects_missing_cooperative_yield_fact_and_ignores_shadow) 
     spec.source_path = "cooperative-yield-missing.xr";
     int topo_order[1] = {0};
     XrModuleGraph graph = {0};
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -929,13 +1004,13 @@ TEST(global_evidence_rejects_missing_cooperative_yield_fact_and_ignores_shadow) 
     xg_global_evidence_free(&rejected);
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
 
     const char *shadow_source = "fn run(Coro: i64) -> i64 {\n"
                                 "    Coro.yield()\n"
                                 "    return 1\n"
                                 "}\n";
-    AstNode *shadow_ast = xr_parse(g_session, shadow_source);
+    AstNode *shadow_ast = fixture_parse_owned(g_session, shadow_source);
     ASSERT_NOT_NULL(shadow_ast);
     XrModuleSpec shadow_spec;
     init_memory_module_spec(&shadow_spec);
@@ -947,7 +1022,7 @@ TEST(global_evidence_rejects_missing_cooperative_yield_fact_and_ignores_shadow) 
     shadow_graph.topo_order = topo_order;
     shadow_graph.topo_count = 1;
     shadow_graph.entry_index = 0;
-    XaAnalyzer *shadow_analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *shadow_analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(shadow_analyzer);
     xa_analyzer_set_graph(shadow_analyzer, &shadow_graph);
     xa_analyzer_analyze(shadow_analyzer, shadow_spec.source_path, shadow_ast);
@@ -962,7 +1037,7 @@ TEST(global_evidence_rejects_missing_cooperative_yield_fact_and_ignores_shadow) 
     xg_global_evidence_free(&shadow);
     xa_analyzer_set_graph(shadow_analyzer, NULL);
     xa_analyzer_free(shadow_analyzer);
-    xr_program_destroy(shadow_ast);
+    fixture_destroy_program(shadow_ast);
     teardown_parser_session();
 }
 
@@ -7360,7 +7435,7 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
                          "class Solo {\n"
                          "    ping() -> i64 { return 1 }\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -7369,6 +7444,7 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -7423,7 +7499,7 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
 
 TEST(global_evidence_producer_distinguishes_collocated_imports) {
     setup_parser_session();
-    AstNode *ast = xr_parse(g_session,
+    AstNode *ast = fixture_parse_owned(g_session,
                             "import alpha\n"
                             "import { One, Two } from beta\n"
                             "import gamma\n");
@@ -7441,6 +7517,7 @@ TEST(global_evidence_producer_distinguishes_collocated_imports) {
     int topo = 0;
     XrModuleGraph graph = {.specs = &spec, .spec_count = 1, .topo_order = &topo,
                            .topo_count = 1, .entry_index = 0};
+    fixture_bind_graph(&graph);
     XgGlobalEvidence evidence = {0}, repeated = {0};
     ASSERT_TRUE(xg_global_evidence_build_from_module_graph(
         &evidence, &graph, XG_BUILD_NATIVE_RELEASE, 0));
@@ -7478,11 +7555,12 @@ TEST(global_evidence_build_key_uses_explicit_imported_summary_hash) {
     memset(specs, 0, sizeof(specs));
     init_memory_module_spec(&specs[0]);
     init_memory_module_spec(&specs[1]);
-    specs[0].canonical = "memory-module-v1:id=16:xglobal-entry-v1";
+    specs[0].canonical = "module-id-v1:kind=6:memory:namespace=16:xglobal-entry-v1:path=0:";
     specs[0].dep_indices = entry_deps;
     specs[0].dep_count = 1;
-    specs[1].canonical = "memory-module-v1:id=14:xglobal-dep-v1";
+    specs[1].canonical = "module-id-v1:kind=6:memory:namespace=14:xglobal-dep-v1:path=0:";
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = specs;
     graph.spec_count = 2;
     graph.topo_order = topo_order;
@@ -7513,8 +7591,8 @@ TEST(global_evidence_build_skips_imported_package_module_rows) {
     setup_parser_session();
     const char *package_source = "fn package_value() -> i64 { return 1 }\n";
     const char *entry_source = "fn local_value() -> i64 { return 2 }\n";
-    AstNode *package_ast = xr_parse(g_session, package_source);
-    AstNode *entry_ast = xr_parse(g_session, entry_source);
+    AstNode *package_ast = fixture_parse_owned(g_session, package_source);
+    AstNode *entry_ast = fixture_parse_owned(g_session, entry_source);
     ASSERT_NOT_NULL(package_ast);
     ASSERT_NOT_NULL(entry_ast);
 
@@ -7531,10 +7609,11 @@ TEST(global_evidence_build_skips_imported_package_module_rows) {
         "module-id-v1:kind=7:package:namespace=15:codex/pkg@1.0.0:path=11:pkg/main.xr";
     specs[0].kind = XR_MOD_PACKAGE;
     specs[0].ast = package_ast;
-    specs[1].canonical = "memory-module-v1:id=16:xglobal-entry-v1";
+    specs[1].canonical = "module-id-v1:kind=6:memory:namespace=16:xglobal-entry-v1:path=0:";
     specs[1].kind = XR_MOD_FILE;
     specs[1].ast = entry_ast;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = specs;
     graph.spec_count = 2;
     graph.topo_order = topo_order;
@@ -7560,11 +7639,11 @@ TEST(global_evidence_build_skips_imported_package_module_rows) {
 
 TEST(global_evidence_requires_selected_module_to_own_both_private_import_decls) {
     setup_parser_session();
-    AstNode *library = xr_parse(g_session, "fn origin<T>(value: T) -> T { return value }\n"
+    AstNode *library = fixture_parse_owned(g_session, "fn origin<T>(value: T) -> T { return value }\n"
                                           "export fn specialized(value: i64) -> i64 { return value }\n");
-    AstNode *decoy = xr_parse(g_session, "fn origin<T>(value: T) -> T { return value }\n"
+    AstNode *decoy = fixture_parse_owned(g_session, "fn origin<T>(value: T) -> T { return value }\n"
                                         "export fn specialized(value: i64) -> i64 { return value }\n");
-    AstNode *entry = xr_parse(g_session, "import { specialized as hidden } from library\n");
+    AstNode *entry = fixture_parse_owned(g_session, "import { specialized as hidden } from library\n");
     ASSERT_NOT_NULL(library);
     ASSERT_NOT_NULL(decoy);
     ASSERT_NOT_NULL(entry);
@@ -7590,13 +7669,13 @@ TEST(global_evidence_requires_selected_module_to_own_both_private_import_decls) 
     memset(specs, 0, sizeof(specs));
     for (uint32_t index = 0u; index < 3u; ++index)
         init_memory_module_spec(&specs[index]);
-    specs[0].canonical = "memory-module-v1:id=25:private-import-library-v1";
+    specs[0].canonical = "module-id-v1:kind=6:memory:namespace=25:private-import-library-v1:path=0:";
     specs[0].source_path = "private-import-library.xr";
     specs[0].ast = library;
-    specs[1].canonical = "memory-module-v1:id=23:private-import-decoy-v1";
+    specs[1].canonical = "module-id-v1:kind=6:memory:namespace=23:private-import-decoy-v1:path=0:";
     specs[1].source_path = "private-import-decoy.xr";
     specs[1].ast = decoy;
-    specs[2].canonical = "memory-module-v1:id=23:private-import-entry-v1";
+    specs[2].canonical = "module-id-v1:kind=6:memory:namespace=23:private-import-entry-v1:path=0:";
     specs[2].source_path = "private-import-entry.xr";
     specs[2].ast = entry;
     specs[2].dep_indices = entry_deps;
@@ -7608,8 +7687,9 @@ TEST(global_evidence_requires_selected_module_to_own_both_private_import_decls) 
         .topo_count = 3,
         .entry_index = 2,
     };
+    fixture_bind_graph(&graph);
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, specs[0].source_path, library);
@@ -7645,9 +7725,9 @@ TEST(global_evidence_requires_selected_module_to_own_both_private_import_decls) 
 
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(entry);
-    xr_program_destroy(decoy);
-    xr_program_destroy(library);
+    fixture_destroy_program(entry);
+    fixture_destroy_program(decoy);
+    fixture_destroy_program(library);
     teardown_parser_session();
 }
 
@@ -7655,7 +7735,7 @@ TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
     setup_parser_session();
     const char *source = "fn callee(x: i64) -> i64 { return x + 1 }\n"
                          "fn caller() -> i64 { return callee(41) }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -7664,6 +7744,7 @@ TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -7698,7 +7779,7 @@ TEST(global_evidence_producer_uses_stable_source_identity) {
     setup_parser_session();
     const char *source = "fn callee(x: i64) -> i64 { return x + 1 }\n"
                          "fn caller() -> i64 { return callee(1) + callee(2) }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ_UINT(ast->as.program.count, 2);
     const AstNode *callee_node = ast->as.program.statements[0];
@@ -7712,6 +7793,7 @@ TEST(global_evidence_producer_uses_stable_source_identity) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -7774,7 +7856,7 @@ TEST(global_evidence_producer_disambiguates_same_location_callsites) {
     const char *source = "fn caller(a: u32, b: u64, c: i16) -> i64 {\n"
                          "    return i64(a) + i64(b) + i64(c)\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -7783,6 +7865,7 @@ TEST(global_evidence_producer_disambiguates_same_location_callsites) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -7822,8 +7905,8 @@ TEST(global_evidence_source_identity_survives_body_only_change) {
                            "fn main() -> i64 { return id(7) }\n";
     const char *source_b = "fn id(x: i64) -> i64 { return x + 1 }\n"
                            "fn main() -> i64 { return id(7) }\n";
-    AstNode *ast_a = xr_parse(g_session, source_a);
-    AstNode *ast_b = xr_parse(g_session, source_b);
+    AstNode *ast_a = fixture_parse_owned(g_session, source_a);
+    AstNode *ast_b = fixture_parse_owned(g_session, source_b);
     ASSERT_NOT_NULL(ast_a);
     ASSERT_NOT_NULL(ast_b);
 
@@ -7836,6 +7919,7 @@ TEST(global_evidence_source_identity_survives_body_only_change) {
     int topo_order[1] = {0};
     XrModuleGraph graph_a;
     memset(&graph_a, 0, sizeof(graph_a));
+    fixture_bind_graph(&graph_a);
     graph_a.specs = &spec_a;
     graph_a.spec_count = 1;
     graph_a.topo_order = topo_order;
@@ -7843,6 +7927,7 @@ TEST(global_evidence_source_identity_survives_body_only_change) {
     graph_a.entry_index = 0;
     XrModuleGraph graph_b;
     memset(&graph_b, 0, sizeof(graph_b));
+    fixture_bind_graph(&graph_b);
     graph_b.specs = &spec_b;
     graph_b.spec_count = 1;
     graph_b.topo_order = topo_order;
@@ -7878,7 +7963,7 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     setup_parser_session();
     const char *source = "fn id<T>(x: T) -> T { return x }\n"
                          "fn wrapper() -> i64 { return id<i64>(41) }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -7887,13 +7972,14 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -7984,7 +8070,7 @@ TEST(global_evidence_generic_effect_identity_is_orthogonal_to_type_tuple) {
         "fn useMayThrowGenericEffect() -> i64 {\n"
         "  return applyGenericEffect<i64>(2, failGenericEffect)\n"
         "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -7998,7 +8084,8 @@ TEST(global_evidence_generic_effect_identity_is_orthogonal_to_type_tuple) {
         .topo_count = 1,
         .entry_index = 0,
     };
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    fixture_bind_graph(&graph);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -8035,7 +8122,7 @@ TEST(global_evidence_generic_effect_identity_is_orthogonal_to_type_tuple) {
     xg_global_evidence_free(&evidence);
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -8047,7 +8134,7 @@ TEST(global_evidence_final_generic_identity_fails_closed_without_semantic_bindin
                          "    var marker = Marker{value: 7}\n"
                          "    return consume<Marker>(marker)\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -8057,13 +8144,14 @@ TEST(global_evidence_final_generic_identity_fails_closed_without_semantic_bindin
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -8087,7 +8175,7 @@ TEST(global_evidence_final_generic_identity_fails_closed_without_semantic_bindin
 
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -8135,7 +8223,7 @@ TEST(global_evidence_post_mono_records_concrete_nested_generic_root) {
                          "fn nested<U>() -> i64 { return 1 }\n"
                          "fn outer<T>() -> i64 { return nested<Array<T>>() }\n"
                          "fn answer() -> i64 { return outer<Marker>() }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -8149,7 +8237,8 @@ TEST(global_evidence_post_mono_records_concrete_nested_generic_root) {
         .topo_count = 1,
         .entry_index = 0,
     };
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    fixture_bind_graph(&graph);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -8192,7 +8281,7 @@ TEST(global_evidence_post_mono_records_concrete_nested_generic_root) {
     xg_global_evidence_free(&evidence);
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -8213,7 +8302,7 @@ TEST(global_evidence_post_mono_records_concrete_generic_method_root) {
         "  var counter = Counter{value: 41}\n"
         "  return reader.read(counter)\n"
         "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -8227,7 +8316,8 @@ TEST(global_evidence_post_mono_records_concrete_generic_method_root) {
         .topo_count = 1,
         .entry_index = 0,
     };
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    fixture_bind_graph(&graph);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -8310,7 +8400,7 @@ TEST(global_evidence_post_mono_records_concrete_generic_method_root) {
     xg_global_evidence_free(&evidence);
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -8328,7 +8418,7 @@ TEST(global_evidence_post_mono_anchors_generic_value_method_to_concrete_receiver
         "  if (flag.forwardAs<i64>(0)) { return number.readAs(false) + 1 }\n"
         "  return 0\n"
         "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -8342,7 +8432,8 @@ TEST(global_evidence_post_mono_anchors_generic_value_method_to_concrete_receiver
         .topo_count = 1,
         .entry_index = 0,
     };
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    fixture_bind_graph(&graph);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -8517,7 +8608,7 @@ TEST(global_evidence_post_mono_anchors_generic_value_method_to_concrete_receiver
     xg_global_evidence_free(&evidence);
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -8532,7 +8623,7 @@ TEST(global_evidence_post_mono_preserves_inherited_generic_method_receiver) {
         "  var child = GenericChild()\n"
         "  return child.apply(42)\n"
         "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -8546,7 +8637,8 @@ TEST(global_evidence_post_mono_preserves_inherited_generic_method_receiver) {
         .topo_count = 1,
         .entry_index = 0,
     };
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    fixture_bind_graph(&graph);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -8581,7 +8673,7 @@ TEST(global_evidence_post_mono_preserves_inherited_generic_method_receiver) {
     xg_global_evidence_free(&evidence);
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -8589,7 +8681,7 @@ static bool build_monomorphized_type_keys(const char *source, const char *canoni
                                           const char *namespace_id, const char *source_path,
                                           uint64_t *out_type_key, uint64_t *out_type_arg_key,
                                           uint64_t *out_origin_nominal_key) {
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     if (!ast)
         return false;
     XrModuleSpec spec;
@@ -8606,9 +8698,10 @@ static bool build_monomorphized_type_keys(const char *source, const char *canoni
         .topo_count = 1,
         .entry_index = 0,
     };
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    fixture_bind_graph(&graph);
+    XaAnalyzer *analyzer = fixture_analyzer();
     if (!analyzer) {
-        xr_program_destroy(ast);
+        fixture_destroy_program(ast);
         return false;
     }
     xa_analyzer_set_graph(analyzer, &graph);
@@ -8639,7 +8732,7 @@ static bool build_monomorphized_type_keys(const char *source, const char *canoni
     xg_global_evidence_free(&evidence);
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     return ok && specialized_count == 1u && *out_type_key != 0u && *out_type_arg_key != 0u &&
            *out_origin_nominal_key != 0u;
 }
@@ -8655,11 +8748,11 @@ TEST(global_evidence_monomorphized_class_keys_use_exact_nominal_arguments) {
     uint64_t right_arg_key = 0u;
     uint64_t left_origin_nominal_key = 0u;
     uint64_t right_origin_nominal_key = 0u;
-    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=18:generic-class-left",
+    ASSERT_TRUE(build_monomorphized_type_keys(source, "module-id-v1:kind=6:memory:namespace=18:generic-class-left:path=0:",
                                                "generic-class-left", "generic-class-left.xr",
                                                &left_type_key, &left_arg_key,
                                                &left_origin_nominal_key));
-    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=19:generic-class-right",
+    ASSERT_TRUE(build_monomorphized_type_keys(source, "module-id-v1:kind=6:memory:namespace=19:generic-class-right:path=0:",
                                                "generic-class-right", "generic-class-right.xr",
                                                &right_type_key, &right_arg_key,
                                                &right_origin_nominal_key));
@@ -8683,11 +8776,11 @@ TEST(global_evidence_monomorphized_struct_keys_use_exact_nominal_arguments) {
     uint64_t right_arg_key = 0u;
     uint64_t left_origin_nominal_key = 0u;
     uint64_t right_origin_nominal_key = 0u;
-    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=19:generic-struct-left",
+    ASSERT_TRUE(build_monomorphized_type_keys(source, "module-id-v1:kind=6:memory:namespace=19:generic-struct-left:path=0:",
                                                "generic-struct-left", "generic-struct-left.xr",
                                                &left_type_key, &left_arg_key,
                                                &left_origin_nominal_key));
-    ASSERT_TRUE(build_monomorphized_type_keys(source, "memory-module-v1:id=20:generic-struct-right",
+    ASSERT_TRUE(build_monomorphized_type_keys(source, "module-id-v1:kind=6:memory:namespace=20:generic-struct-right:path=0:",
                                                "generic-struct-right", "generic-struct-right.xr",
                                                &right_type_key, &right_arg_key,
                                                &right_origin_nominal_key));
@@ -8708,10 +8801,10 @@ TEST(global_evidence_monomorphized_keys_separate_same_name_same_tuple_sources) {
     uint64_t right_arg_key = 0u;
     uint64_t right_origin_nominal_key = 0u;
     ASSERT_TRUE(build_monomorphized_type_keys(
-        source, "memory-module-v1:id=15:same-tuple-left", "same-tuple-left",
+        source, "module-id-v1:kind=6:memory:namespace=15:same-tuple-left:path=0:", "same-tuple-left",
         "same-tuple-left.xr", &left_type_key, &left_arg_key, &left_origin_nominal_key));
     ASSERT_TRUE(build_monomorphized_type_keys(
-        source, "memory-module-v1:id=16:same-tuple-right", "same-tuple-right",
+        source, "module-id-v1:kind=6:memory:namespace=16:same-tuple-right:path=0:", "same-tuple-right",
         "same-tuple-right.xr", &right_type_key, &right_arg_key, &right_origin_nominal_key));
     ASSERT_EQ_UINT(left_arg_key, right_arg_key);
     ASSERT_TRUE(left_origin_nominal_key != right_origin_nominal_key);
@@ -9211,7 +9304,7 @@ TEST(xaot_verifier_rejects_stale_enum_scalar_plan) {
 TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     setup_parser_session();
     const char *source = "fn caller() -> i64 { return unknown(41) }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -9220,6 +9313,7 @@ TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -9244,7 +9338,7 @@ TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
 TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity) {
     setup_parser_session();
     const char *source = "enum SameName { One, Two }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ_UINT(ast->type, AST_PROGRAM);
     ASSERT_EQ_UINT(ast->as.program.count, 1);
@@ -9259,13 +9353,14 @@ TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -9287,7 +9382,7 @@ TEST(global_evidence_producer_rejects_enum_without_exact_symbol_identity) {
 
 TEST(global_evidence_uses_the_supplied_analyzer_symbol_registry) {
     setup_parser_session();
-    AstNode *exact_ast = xr_parse(g_session, "enum ExactIdentity { One, Two }\n");
+    AstNode *exact_ast = fixture_parse_owned(g_session, "enum ExactIdentity { One, Two }\n");
     ASSERT_NOT_NULL(exact_ast);
 
     XrModuleSpec spec;
@@ -9297,13 +9392,14 @@ TEST(global_evidence_uses_the_supplied_analyzer_symbol_registry) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
 
-    XaAnalyzer *exact_analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *exact_analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(exact_analyzer);
     xa_analyzer_set_graph(exact_analyzer, &graph);
     xa_analyzer_analyze(exact_analyzer, spec.source_path, exact_ast);
@@ -9317,9 +9413,9 @@ TEST(global_evidence_uses_the_supplied_analyzer_symbol_registry) {
     /* Installing and using another analyzer on the same thread must not
      * redirect evidence
      * lookup away from the analyzer passed to the producer. */
-    XaAnalyzer *other_analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *other_analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(other_analyzer);
-    AstNode *other_ast = xr_parse(g_session, "var wrongIdentity = 1\n");
+    AstNode *other_ast = fixture_parse_owned(g_session, "var wrongIdentity = 1\n");
     ASSERT_NOT_NULL(other_ast);
     xa_analyzer_analyze(other_analyzer, "other-analyzer-registry.xr", other_ast);
     ASSERT_EQ_UINT(other_analyzer->diagnostic_count, 0);
@@ -9370,11 +9466,11 @@ TEST(global_evidence_uses_the_supplied_analyzer_symbol_registry) {
         ASSERT_EQ_UINT(symbol->links.class_info->xg_decl_id, decl->decl_id);
     }
     xg_global_evidence_free(&evidence);
-    xr_program_destroy(other_ast);
+    fixture_destroy_program(other_ast);
     xa_analyzer_free(other_analyzer);
     xa_analyzer_set_graph(exact_analyzer, NULL);
     xa_analyzer_free(exact_analyzer);
-    xr_program_destroy(exact_ast);
+    fixture_destroy_program(exact_ast);
     teardown_parser_session();
 }
 
@@ -9387,7 +9483,7 @@ TEST(global_evidence_rebinds_evidence_local_nominal_ids_by_stable_key) {
                          "    ping() -> i64 { return 1 }\n"
                          "}\n"
                          "enum Tone { Light, Dark }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -9397,13 +9493,14 @@ TEST(global_evidence_rebinds_evidence_local_nominal_ids_by_stable_key) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -9520,7 +9617,7 @@ TEST(global_evidence_rebinds_evidence_local_nominal_ids_by_stable_key) {
 
     xa_analyzer_set_graph(analyzer, NULL);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -9641,7 +9738,7 @@ TEST(global_evidence_producer_keeps_shadowing_print_and_dump_as_closures) {
 TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites) {
     setup_parser_session();
     const char *source = "fn caller(x: u32) -> i64 { return x as i64 }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -9650,6 +9747,7 @@ TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -9677,7 +9775,7 @@ TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundar
     setup_parser_session();
     const char *source = "export fn fileFlushRaw(handle: i64) -> bool { "
                          "return __fileFlush(handle) }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -9691,13 +9789,14 @@ TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundar
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, spec.source_path, ast);
@@ -9731,7 +9830,7 @@ TEST(global_evidence_composes_recursive_direct_call_effects) {
                          "    if (n < 2) { return n }\n"
                          "    return fib(n - 1)\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -9740,6 +9839,7 @@ TEST(global_evidence_composes_recursive_direct_call_effects) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -9934,7 +10034,7 @@ TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls
     setup_parser_session();
     const char *source = "extern \"C\" { fn cos(x: f64) -> f64 }\n"
                          "fn useCos() -> f64 { return cos(0.0) }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -9943,6 +10043,7 @@ TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10005,7 +10106,7 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
                          "fn callBase(b: Animal) -> string {\n"
                          "    return b.speak(\"base\")\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10014,6 +10115,7 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10123,8 +10225,8 @@ TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_met
                                "    var server = http.Server()\n"
                                "    return server.route(\"/ok\")\n"
                                "}\n";
-    AstNode *http_ast = xr_parse(g_session, http_source);
-    AstNode *entry_ast = xr_parse(g_session, entry_source);
+    AstNode *http_ast = fixture_parse_owned(g_session, http_source);
+    AstNode *entry_ast = fixture_parse_owned(g_session, entry_source);
     ASSERT_NOT_NULL(http_ast);
     ASSERT_NOT_NULL(entry_ast);
 
@@ -10141,13 +10243,14 @@ TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_met
     specs[0].authority.kind = XR_MODULE_IDENTITY_STDLIB;
     specs[0].authority.namespace_id = "http";
     specs[0].ast = http_ast;
-    specs[1].canonical = "memory-module-v1:id=16:xglobal-entry-v1";
+    specs[1].canonical = "module-id-v1:kind=6:memory:namespace=16:xglobal-entry-v1:path=0:";
     specs[1].source_path = "entry.xr";
     specs[1].kind = XR_MOD_FILE;
     specs[1].ast = entry_ast;
     specs[1].dep_indices = entry_deps;
     specs[1].dep_count = 1;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = specs;
     graph.spec_count = 2;
     graph.topo_order = topo_order;
@@ -10188,20 +10291,20 @@ TEST(global_evidence_seeds_xi_ids_during_lowering) {
                          "    push(v: i64) -> i64 { return v }\n"
                          "}\n"
                          "fn use(s: Sink) -> i64 { return s.push(1) }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_analyze(analyzer, "test.xr", ast);
 
-    XrCompilerSessionScope canon_scope;
+    XrCompilerSessionScope canon_scope = {0};
     bool has_canon_scope =
         ast->type == AST_PROGRAM && ast->as.program.arena &&
-        xr_compiler_session_push_arena(g_session, ast->as.program.arena, "test.xr", &canon_scope);
+        xr_compile_session_push_arena(g_session, ast->as.program.arena, &canon_scope) == XR_COMPILE_RESOURCE_OK;
     xr_canon_program(ast, analyzer, g_session);
     if (has_canon_scope)
-        xr_compiler_session_pop_arena(&canon_scope);
+        (void) xr_compile_session_pop_arena(&canon_scope);
 
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -10210,6 +10313,7 @@ TEST(global_evidence_seeds_xi_ids_during_lowering) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10274,7 +10378,7 @@ TEST(global_evidence_seeds_xi_ids_during_lowering) {
     xi_pipeline_result_free(&res);
     xg_global_evidence_free(&ev);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -10297,7 +10401,7 @@ TEST(global_evidence_producer_resolves_super_constructor_callsite) {
                          "    var r = Rect(2, 3)\n"
                          "    return r.w\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10306,6 +10410,7 @@ TEST(global_evidence_producer_resolves_super_constructor_callsite) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10385,7 +10490,7 @@ TEST(global_evidence_producer_resolves_module_init_constructor_callsite) {
                          "    constructor() { this.value = 1 }\n"
                          "}\n"
                          "var router = Router()\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10394,6 +10499,7 @@ TEST(global_evidence_producer_resolves_module_init_constructor_callsite) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10455,7 +10561,7 @@ TEST(global_evidence_producer_names_go_lambda_body_anonymous) {
                          "go fn() {\n"
                          "    ready = true\n"
                          "}()\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10464,6 +10570,7 @@ TEST(global_evidence_producer_names_go_lambda_body_anonymous) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10500,7 +10607,7 @@ TEST(global_evidence_producer_fills_callsite_argument_type_keys) {
                          "    s.pushInt(z)\n"
                          "    return 0\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10509,6 +10616,7 @@ TEST(global_evidence_producer_fills_callsite_argument_type_keys) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10571,7 +10679,7 @@ TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) 
     const char *source = "fn clampScore(x: i64) -> i64 {\n"
                          "    return math.min(x, 10)\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10580,6 +10688,7 @@ TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) 
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10631,7 +10740,7 @@ TEST(global_evidence_producer_marks_body_escape_bits) {
                          "fn makeIdentity() -> fn(i64) -> i64 {\n"
                          "    return fn(v: i64) -> i64 { return v }\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10640,6 +10749,7 @@ TEST(global_evidence_producer_marks_body_escape_bits) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10679,7 +10789,7 @@ TEST(global_evidence_producer_marks_read_mem_effect) {
                          "fn readIndex(items: Array<i64>) -> i64 {\n"
                          "    return items[0]\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10688,6 +10798,7 @@ TEST(global_evidence_producer_marks_read_mem_effect) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10741,7 +10852,7 @@ TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_
                          "    return fn() -> i64 { count += 1; return count }\n"
                          "}\n";
 
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -10749,12 +10860,13 @@ TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, "<effect-fixture>", ast);
@@ -10807,7 +10919,7 @@ TEST(global_evidence_producer_marks_call_effect) {
                          "fn callAdd(x: i64, y: i64) -> i64 {\n"
                          "    return add(x, y)\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10816,6 +10928,7 @@ TEST(global_evidence_producer_marks_call_effect) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10847,7 +10960,7 @@ TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
     const char *source = "fn read(h: Atomic<i64>) -> i64 {\n"
                          "    return h.load()\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10856,6 +10969,7 @@ TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10882,7 +10996,7 @@ TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
 TEST(global_evidence_producer_marks_native_methods_bodyless) {
     setup_parser_session();
     const char *source = "fn read(h: Atomic<i64>) -> i64 { return h.load() }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10891,6 +11005,7 @@ TEST(global_evidence_producer_marks_native_methods_bodyless) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -10950,7 +11065,7 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
                          "    var shape: Shape = circle\n"
                          "    return shape.area()\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -10959,6 +11074,7 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -11355,7 +11471,7 @@ TEST(global_evidence_producer_records_interface_object_storage_uses) {
                          "    var f = fn() -> Drawable { return local }\n"
                          "    return local\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -11364,6 +11480,7 @@ TEST(global_evidence_producer_records_interface_object_storage_uses) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -11536,7 +11653,7 @@ TEST(global_evidence_producer_derives_verified_class_field_layouts) {
                          "class Later {\n"
                          "    self: Later?\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -11545,6 +11662,7 @@ TEST(global_evidence_producer_derives_verified_class_field_layouts) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -11842,7 +11960,7 @@ TEST(global_evidence_producer_rejects_error_class_field_type) {
     const char *source = "class Bad {\n"
                          "    value: i64\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ_UINT(ast->type, AST_PROGRAM);
     ASSERT_EQ_UINT(ast->as.program.count, 1);
@@ -11853,11 +11971,11 @@ TEST(global_evidence_producer_rejects_error_class_field_type) {
     AstNode *field_node = class_node->as.class_decl.fields[0];
     ASSERT_NOT_NULL(field_node);
     ASSERT_EQ_UINT(field_node->type, AST_FIELD_DECL);
-    XrCompilerSessionScope tref_scope;
-    ASSERT_TRUE(
-        xr_compiler_session_push_arena(g_session, ast->as.program.arena, "test.xr", &tref_scope));
+    XrCompilerSessionScope tref_scope = {0};
+    ASSERT_EQ_INT(xr_compile_session_push_arena(g_session, ast->as.program.arena, &tref_scope),
+        XR_COMPILE_RESOURCE_OK);
     field_node->as.field_decl.field_type = xr_tref_error(g_session);
-    xr_compiler_session_pop_arena(&tref_scope);
+    ASSERT_EQ_INT(xr_compile_session_pop_arena(&tref_scope), XR_COMPILE_RESOURCE_OK);
 
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -11865,6 +11983,7 @@ TEST(global_evidence_producer_rejects_error_class_field_type) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -11988,7 +12107,7 @@ TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
                          "fn describe(shape: Drawable) -> f64 {\n"
                          "    return shape.area()\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -11997,6 +12116,7 @@ TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -12079,7 +12199,7 @@ TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods) {
                          "class RightShape implements Right {\n"
                          "    draw() -> i64 { return 2 }\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -12088,6 +12208,7 @@ TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -12146,7 +12267,7 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
                          "fn describe(shape: Shape) -> f64 {\n"
                          "    return shape.area()\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -12155,6 +12276,7 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -12297,7 +12419,7 @@ TEST(global_evidence_producer_marks_metadata_reachability) {
                          "fn userTypeName(x: i64) -> string {\n"
                          "    return typeName(x)\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -12306,6 +12428,7 @@ TEST(global_evidence_producer_marks_metadata_reachability) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -12356,7 +12479,7 @@ TEST(global_evidence_producer_records_derive_rows) {
                          "    id: i64\n"
                          "    name: string\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -12365,6 +12488,7 @@ TEST(global_evidence_producer_records_derive_rows) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -12552,7 +12676,7 @@ TEST(global_evidence_producer_records_derived_eq_hash_plan) {
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -12628,7 +12752,7 @@ TEST(global_evidence_producer_records_derived_clone_plan) {
                          "class Payload {\n"
                          "    id: i64\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -12637,6 +12761,7 @@ TEST(global_evidence_producer_records_derived_clone_plan) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -12736,7 +12861,7 @@ TEST(global_evidence_producer_classifies_derived_clone_fields) {
                          "class CloneChild extends CloneBase {\n"
                          "    child: i64\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -12745,6 +12870,7 @@ TEST(global_evidence_producer_classifies_derived_clone_fields) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -13406,7 +13532,7 @@ TEST(global_evidence_producer_records_user_hashable_direct_call_plan) {
         "    return 0\n"
         "}\n"
         "userHashEqPlan()\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -13415,6 +13541,7 @@ TEST(global_evidence_producer_records_user_hashable_direct_call_plan) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -13733,7 +13860,7 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
                          "    var bytes = s.copyBytes()\n"
                          "    return n\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -13742,6 +13869,7 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -13854,7 +13982,7 @@ TEST(global_evidence_producer_marks_aliased_counted_loop_capacity_checked) {
                          "    for (i in 0..n) { xs.push(i) }\n"
                          "    return len(alias)\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -13863,6 +13991,7 @@ TEST(global_evidence_producer_marks_aliased_counted_loop_capacity_checked) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -13919,7 +14048,7 @@ TEST(global_evidence_producer_proves_stringbuilder_literal_append_count) {
                          "    sb.clear()\n"
                          "    return sb.toString()\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -13928,6 +14057,7 @@ TEST(global_evidence_producer_proves_stringbuilder_literal_append_count) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -13999,7 +14129,7 @@ TEST(global_evidence_producer_canonicalizes_byte_u8_sequence_type_keys) {
         "    var e = us[0]\n"
         "    return a + c + d + e\n"
         "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -14008,6 +14138,7 @@ TEST(global_evidence_producer_canonicalizes_byte_u8_sequence_type_keys) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -14108,7 +14239,7 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -14121,7 +14252,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_closure_capture) {
                          "    }\n"
                          "    return read()\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -14130,6 +14261,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_closure_capture) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -14188,7 +14320,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_return_receivers) 
                          "fn readReturnedObjectIndirect() -> i64 {\n"
                          "    return makeUserIndirect().age\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -14197,6 +14329,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_return_receivers) 
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -14255,7 +14388,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_typed_param) {
                          "fn readParamObject(user: User) -> i64 {\n"
                          "    return user.age\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -14264,6 +14397,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_typed_param) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -14352,7 +14486,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_field_and_containe
 
     xg_global_evidence_free(&ev);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -14362,7 +14496,7 @@ TEST(global_evidence_producer_records_object_shape_access) {
                          "    var p = { x: 1, y: 2 }\n"
                          "    return p.x\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -14371,6 +14505,7 @@ TEST(global_evidence_producer_records_object_shape_access) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -14422,7 +14557,7 @@ TEST(global_evidence_producer_records_map_literal_and_key_access) {
                          "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
                          "    return scores[\"ada\"]\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -14431,6 +14566,7 @@ TEST(global_evidence_producer_records_map_literal_and_key_access) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -14656,7 +14792,7 @@ TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
                          "    }\n"
                          "    return 0\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -14665,6 +14801,7 @@ TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -14780,7 +14917,7 @@ TEST(global_evidence_producer_records_dense_enum_map_set_lookup) {
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -14795,7 +14932,7 @@ TEST(global_evidence_producer_records_bool_direct_map_shape) {
                          "    }\n"
                          "    return 0\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -14804,6 +14941,7 @@ TEST(global_evidence_producer_records_bool_direct_map_shape) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -14853,7 +14991,7 @@ TEST(global_evidence_producer_rejects_bool_direct_for_ref_value_map) {
     const char *source = "fn labels() {\n"
                          "    var names: Map<bool, string> = #{true: \"yes\", false: \"no\"}\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -14862,6 +15000,7 @@ TEST(global_evidence_producer_rejects_bool_direct_for_ref_value_map) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -14928,7 +15067,7 @@ TEST(global_evidence_producer_propagates_map_shape_through_local_alias) {
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -14939,7 +15078,7 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
                          "    var seen: Set<u8> = #[]\n"
                          "    return 0\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -14948,6 +15087,7 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15022,7 +15162,7 @@ TEST(global_evidence_producer_records_map_set_method_key_access) {
                          "    scores.clear()\n"
                          "    return 0\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -15031,6 +15171,7 @@ TEST(global_evidence_producer_records_map_set_method_key_access) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15119,7 +15260,7 @@ TEST(global_evidence_producer_propagates_map_set_shape_through_closure_capture) 
                          "    }\n"
                          "    return read()\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
     init_memory_module_spec(&spec);
@@ -15128,6 +15269,7 @@ TEST(global_evidence_producer_propagates_map_set_shape_through_closure_capture) 
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15198,7 +15340,7 @@ TEST(global_evidence_producer_marks_static_data_reachability) {
                          "    const value = comptime 7\n"
                          "    return value\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15207,6 +15349,7 @@ TEST(global_evidence_producer_marks_static_data_reachability) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15244,7 +15387,7 @@ TEST(global_evidence_publishes_allocation_contracts) {
     const char *source = "export fn scalar(x: i64) -> i64 { return x + 1 }\n"
                          "fn allocates() { var values = [1, 2, 3] }\n"
                          "fn unknown(cb: fn()) { cb() }\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15253,13 +15396,14 @@ TEST(global_evidence_publishes_allocation_contracts) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
     graph.topo_count = 1;
     graph.entry_index = 0;
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT_NOT_NULL(analyzer);
     xa_analyzer_set_graph(analyzer, &graph);
     xa_analyzer_analyze(analyzer, "allocation_evidence.xr", ast);
@@ -15292,7 +15436,7 @@ TEST(global_evidence_producer_marks_static_data_runtime_init) {
                          "    const table = comptime #{\"a\": 1}\n"
                          "    return 1\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15301,6 +15445,7 @@ TEST(global_evidence_producer_marks_static_data_runtime_init) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15357,7 +15502,7 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
         "        yield i\n"
         "    }\n"
         "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15366,6 +15511,7 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15405,7 +15551,7 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
 TEST(global_evidence_producer_marks_coro_module_runtime_capability) {
     setup_parser_session();
     const char *source = "var stats = Coro.stats()\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15414,6 +15560,7 @@ TEST(global_evidence_producer_marks_coro_module_runtime_capability) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15461,7 +15608,7 @@ TEST(global_evidence_producer_marks_typed_coro_local_and_pool_submit) {
                          "    local.set(1)\n"
                          "    return local.get() ?? -1\n"
                          "})\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15470,6 +15617,7 @@ TEST(global_evidence_producer_marks_typed_coro_local_and_pool_submit) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15562,7 +15710,7 @@ TEST(global_evidence_producer_marks_internal_yield_module_suspendable) {
     setup_parser_session();
     const char *source = "import test_yield\n"
                          "test_yield.simple()\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15571,6 +15719,7 @@ TEST(global_evidence_producer_marks_internal_yield_module_suspendable) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15597,7 +15746,7 @@ TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
                          "    })\n"
                          "    t.detach()\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15606,6 +15755,7 @@ TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15642,7 +15792,7 @@ TEST(global_evidence_producer_marks_stdlib_link_dependencies) {
                          "os.sep()\n"
                          "join(directSep, \"x\")\n"
                          "join(\"c\", \"d\")\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15651,6 +15801,7 @@ TEST(global_evidence_producer_marks_stdlib_link_dependencies) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15682,7 +15833,7 @@ TEST(global_evidence_producer_keeps_vm_control_calls_out_of_stdlib_links) {
     const char *source = "import runtime\n"
                          "runtime.disableCycleCollection()\n"
                          "runtime.enableCycleCollection()\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15691,6 +15842,7 @@ TEST(global_evidence_producer_keeps_vm_control_calls_out_of_stdlib_links) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15715,7 +15867,7 @@ TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities
                          "    var fake = Fake()\n"
                          "    return fake.Semaphore()\n"
                          "}\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15724,6 +15876,7 @@ TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15795,7 +15948,7 @@ TEST(global_evidence_composes_source_class_receiver_effects) {
 
     xg_global_evidence_free(&ev);
     xa_analyzer_free(analyzer);
-    xr_program_destroy(ast);
+    fixture_destroy_program(ast);
     teardown_parser_session();
 }
 
@@ -15805,7 +15958,7 @@ TEST(global_evidence_producer_marks_module_init_body) {
                          "const ch = Channel<i64>(1)\n"
                          "var task = go inc(41)\n"
                          "await task\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
@@ -15814,6 +15967,7 @@ TEST(global_evidence_producer_marks_module_init_body) {
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -15985,7 +16139,7 @@ static void assert_entry_plan_from_prepared_callable(const XgGlobalEvidence *evi
     ASSERT_TRUE(xi_coro_lower(init, NULL));
     init->stage = handler->stage = XI_STAGE_OPTIMIZED;
     XiModule module = {
-        .identity = "memory-module-v1:id=27:entry-callable-authority-v1",
+        .identity = "module-id-v1:kind=6:memory:namespace=27:entry-callable-authority-v1:path=0:",
         .path = "entry_open_callable.xr", .name = "entry_open_callable", .init = init,
     };
     init->module = &module;
@@ -16440,7 +16594,7 @@ TEST(global_evidence_producer_records_storage_provenance) {
     const char *source = "const frozen = 1\n"
                          "var module_state = 2\n"
                          "const shared_state = 3\n";
-    AstNode *ast = xr_parse(g_session, source);
+    AstNode *ast = fixture_parse_owned(g_session, source);
     XrModuleSpec spec;
     XrModuleGraph graph;
     int topo_order[1] = {0};
@@ -16450,9 +16604,10 @@ TEST(global_evidence_producer_records_storage_provenance) {
     const XgDeclSummary *shared_state = NULL;
     ASSERT_NOT_NULL(ast);
     init_memory_module_spec(&spec);
-    spec.canonical = "memory-module-v1:id=18:xglobal-storage-v1";
+    spec.canonical = "module-id-v1:kind=6:memory:namespace=18:xglobal-storage-v1:path=0:";
     spec.ast = ast;
     memset(&graph, 0, sizeof(graph));
+    fixture_bind_graph(&graph);
     graph.specs = &spec;
     graph.spec_count = 1;
     graph.topo_order = topo_order;
@@ -16614,6 +16769,36 @@ TEST(address_plan_rejects_owner_pointer_field_escape) {
     ASSERT_FALSE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
+}
+
+TEST(global_evidence_compiler_identity_preserves_original_resource_failure) {
+    XrCompileResources *resources = NULL;
+    XrCompileState *state = NULL;
+    const XrCompileResourceLimits limits = {65536, 65536, 65536};
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    ASSERT_EQ_INT(xr_compile_state_new(resources, &state), XR_COMPILE_RESOURCE_OK);
+    ASSERT_EQ_INT(xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET), XR_COMPILE_RESOURCE_BUDGET);
+    XrCompileResourceStats before = {0}, after = {0};
+    ASSERT_EQ_INT(xr_compile_resources_stats(resources, &before), XR_COMPILE_RESOURCE_OK);
+    uint64_t identity = UINT64_C(0x12345678);
+    ASSERT_EQ_INT(xg_compiler_image_hash_for_path(state, (const char *) (uintptr_t) 1, &identity), XR_OS_IO_BUDGET);
+    ASSERT_EQ_UINT(identity, UINT64_C(0x12345678));
+    ASSERT_EQ_INT(xr_compile_resources_stats(resources, &after), XR_COMPILE_RESOURCE_OK);
+    ASSERT_EQ_UINT(before.allocation_count, after.allocation_count);
+    ASSERT_EQ_UINT(before.work, after.work);
+    xr_compile_state_release(state);
+    xr_compile_resources_release(resources);
+}
+
+TEST(global_evidence_builtin_identity_matches_owned_identity_grammar) {
+    setup_parser_session();
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_STDLIB, "prelude", NULL};
+    char *identity = NULL;
+    ASSERT_EQ_INT(xr_compile_module_identity_from_logical(g_resources, &authority,
+        "builtin-enums", &identity), XR_MODULE_OK);
+    ASSERT_TRUE(strcmp(identity, XR_BUILTIN_ENUM_MODULE_IDENTITY) == 0);
+    xr_compile_resources_free(identity);
+    teardown_parser_session();
 }
 
 TEST_MAIN_BEGIN()
@@ -16792,4 +16977,7 @@ RUN_TEST(storage_and_capture_plans_close_owner_actions);
 RUN_TEST(global_evidence_producer_records_storage_provenance);
 RUN_TEST(address_plan_rejects_owner_pointer_escape);
 RUN_TEST(address_plan_rejects_owner_pointer_field_escape);
+RUN_TEST(global_evidence_compiler_identity_preserves_original_resource_failure);
+RUN_TEST(global_evidence_builtin_identity_matches_owned_identity_grammar);
+teardown_parser_session();
 TEST_MAIN_END()

@@ -9,10 +9,10 @@
  */
 
 static bool builtin_enum_source_has_errors(const char *source) {
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     if (!analyzer)
         return true;
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     if (!program) {
         xa_analyzer_free(analyzer);
         return true;

@@ -10,6 +10,14 @@
 XR_FUNC XiFunc *xi_func_new(const char *name, struct XrType *return_type);
 XR_FUNC void xi_func_free(XiFunc *f);
 XR_FUNC void *xi_func_arena_alloc(XiFunc *f, uint32_t size);
+struct XrCompileState;
+/* Copy caller-selected typed image policy into the receiving function arena.
+ * Sources are borrowed only through this call. Failure preserves all three
+ * previous fields; staged arena storage dies with the function. This does not
+ * assign a compile ledger to the rest of the existing Xi arena allocator. */
+XR_FUNC bool xi_func_set_native_image_plans(XiFunc *f, struct XrCompileState *state,
+    const struct XrCExportPlan *export_plan, const struct XrLinkSymbolPlan *link_plan,
+    const struct XrFreestandingEntryPlan *entry_plan);
 XR_FUNC bool xi_func_arena_contains(const XiFunc *f, const void *pointer, uint32_t size);
 XR_FUNC bool xi_value_set_view_evidence(XiFunc *f, XiValue *value,
                                         const XiViewSourceEvidence *sources, uint16_t source_count,

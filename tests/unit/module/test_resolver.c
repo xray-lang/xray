@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 #include "module/xresolver.h"
 #include "base/xmalloc.h"
+#include "base/xcompile_resources.h"
 
 /* ========== Dependency Graph Tests ========== */
 
@@ -215,8 +216,10 @@ TEST(resolve_with_lockfile) {
     xr_depgraph_add_root(graph, "xray/redis", "^1.0.0");
 
     // Create lockfile with pinned version
-    XrLockfile *lockfile = xr_lockfile_new();
-    xr_lockfile_add_package(lockfile, "xray/redis", "1.1.0", "", "");
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    XrLockfile *lockfile = NULL;
+    ASSERT_EQ_INT(xr_lockfile_new_owned(&policy, &lockfile), XR_OS_IO_OK);
+    ASSERT_EQ_INT(xr_lockfile_add_package_owned(lockfile, "xray/redis", "1.1.0", "", ""), XR_OS_IO_OK);
 
     XrResolveResult *result = xr_resolve_dependencies(graph, mock_get_info, lockfile, NULL);
     ASSERT_NOT_NULL(result);
@@ -225,7 +228,7 @@ TEST(resolve_with_lockfile) {
     ASSERT_STR_EQ(result->versions[0], "1.1.0");  // Pinned by lockfile
 
     xr_resolve_result_free(result);
-    xr_lockfile_free(lockfile);
+    xr_lockfile_free_owned(lockfile);
     xr_depgraph_free(graph);
 }
 
@@ -239,6 +242,42 @@ TEST(resolve_result_free_null) {
 TEST(package_info_free_null) {
     // Should not crash
     xr_package_info_free(NULL);
+}
+
+static XrPackageInfo *count_registry_queries(const char *name, void *context) {
+    (*(int *) context)++;
+    return mock_get_info(name, NULL);
+}
+
+TEST(resolve_lockfile_budget_does_not_query_registry) {
+    XrCompileResourceLimits limits = {1048576, 1048576, 1048576};
+    XrCompileResources *resources = NULL;
+    ASSERT_EQ_INT(xr_compile_resources_new(&limits, &resources), XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats initial = {0}, used = {0};
+    ASSERT_EQ_INT(xr_compile_resources_stats(resources, &initial), XR_COMPILE_RESOURCE_OK);
+    XrOsIoPolicy policy = xr_compile_io_policy(resources);
+    XrLockfile *lockfile = NULL;
+    ASSERT_EQ_INT(xr_lockfile_new_owned(&policy, &lockfile), XR_OS_IO_OK);
+    ASSERT_EQ_INT(xr_lockfile_add_package_owned(lockfile, "xray/redis", "1.1.0", "", ""), XR_OS_IO_OK);
+    XrDepGraph *graph = xr_depgraph_new();
+    ASSERT_NOT_NULL(graph);
+    ASSERT_TRUE(xr_depgraph_add_root(graph, "xray/redis", "^1.0.0"));
+    ASSERT_EQ_INT(xr_compile_resources_stats(resources, &used), XR_COMPILE_RESOURCE_OK);
+    ASSERT_TRUE(used.work <= limits.work);
+    ASSERT_EQ_INT(xr_compile_resources_work(resources, limits.work - used.work), XR_COMPILE_RESOURCE_OK);
+    int queries = 0;
+    XrResolveResult *result = xr_resolve_dependencies(graph, count_registry_queries, lockfile, &queries);
+    ASSERT_NOT_NULL(result);
+    ASSERT_FALSE(result->success);
+    ASSERT_EQ_INT(queries, 0);
+    ASSERT_EQ_INT(lockfile->package_count, 1);
+    ASSERT_STR_EQ(lockfile->packages[0].version, "1.1.0");
+    xr_resolve_result_free(result);
+    xr_depgraph_free(graph);
+    xr_lockfile_free_owned(lockfile);
+    ASSERT_EQ_INT(xr_compile_resources_stats(resources, &used), XR_COMPILE_RESOURCE_OK);
+    ASSERT_EQ_INT(used.live_bytes, initial.live_bytes);
+    xr_compile_resources_release(resources);
 }
 
 /* ========== Main ========== */
@@ -267,5 +306,6 @@ RUN_TEST(resolve_no_matching_version);
 RUN_TEST(resolve_with_lockfile);
 RUN_TEST(resolve_result_free_null);
 RUN_TEST(package_info_free_null);
+RUN_TEST(resolve_lockfile_budget_does_not_query_registry);
 
 TEST_MAIN_END()

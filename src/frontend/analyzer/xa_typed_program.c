@@ -86,7 +86,7 @@ static OwnershipPublicationStatus verify_scope_ownership(const XaScope *scope,
         return OWNERSHIP_PUBLICATION_OK;
     int symbol_count = 0;
     XaSymbol **symbols = xa_scope_get_all_symbols((XaScope *) scope, &symbol_count);
-    if (!symbols && xa_scope_count_symbols((XaScope *) scope) != 0)
+    if (xa_scope_resource_status(scope) != XR_COMPILE_RESOURCE_OK)
         return OWNERSHIP_PUBLICATION_RESOURCE_FAILURE;
 
     const uint32_t required_candidate = XA_OWNERSHIP_EV_BINDING_LIVE | XA_OWNERSHIP_EV_ROOT_UNIQUE |
@@ -113,11 +113,11 @@ static OwnershipPublicationStatus verify_scope_ownership(const XaScope *scope,
         if (!valid) {
             if (source_line)
                 *source_line = links->final_move.consume_line;
-            xr_free(symbols);
+            xr_compile_state_free(symbols);
             return OWNERSHIP_PUBLICATION_INVALID;
         }
     }
-    xr_free(symbols);
+    xr_compile_state_free(symbols);
 
     for (int i = 0; i < scope->child_count; i++) {
         OwnershipPublicationStatus status = verify_scope_ownership(scope->children[i], source_line);

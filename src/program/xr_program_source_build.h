@@ -23,7 +23,7 @@ struct XrCompilerSession;
 struct XrModuleIdentityAuthority;
 struct XrModuleResolver;
 
-#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(8)
+#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(9)
 #define XR_PROGRAM_SOURCE_BUILD_DEFAULT_MAX_MODULES UINT32_C(1024)
 #define XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE 512u
 #define XR_PROGRAM_SOURCE_DIAGNOSTIC_PATH_SIZE 4096u
@@ -69,10 +69,18 @@ typedef struct XrProgramSourceEntryIdentity {
     XrFingerprint source_content_fingerprint;
 } XrProgramSourceEntryIdentity;
 
+struct XrVMRuntime;
+struct XrTargetProfile;
+
+/* The caller keeps all borrowed inputs live and excludes other producers on
+ * this parser session through final publication. It owns runtime/target policy;
+ * the parser session supplies only its original state and source resources. */
 typedef struct XrProgramSourceBuildInput {
     uint32_t schema_version;
     XrProgramSourceBuildBudget budget;
     struct XrCompilerSession *session;
+    struct XrVMRuntime *runtime;
+    const struct XrTargetProfile *target_profile;
     struct XrModuleResolver *resolver;
     const char *entry_source_path;
     const struct XrModuleIdentityAuthority *entry_authority;
@@ -89,6 +97,9 @@ typedef struct XrProgramSourceBuildInput {
     uint8_t discover_exports;
     uint8_t reserved8[5];
     XrFingerprint semantic_profile_fingerprint;
+    /* Borrowed owned-manifest input on session's ledger. The caller keeps it
+     * live through this build, including native layout preparation. */
+    struct XrNativePackagePlan *native_package_plan;
 } XrProgramSourceBuildInput;
 
 typedef enum XrProgramSourceBuildStage {
