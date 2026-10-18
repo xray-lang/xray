@@ -160,7 +160,7 @@ static void cc_private(void) {
     CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.errors[1]==4);
     CHECK(pc_stats(&c).work-before<UINT64_C(25000));
     CHECK(flow.values==546 && flow.active_count==1 && flow.active[0]==513);
-    CHECK(flow.stride==1 && e.outcomes_work.words==1 && flow.storage_capacity==4692);
+    CHECK(flow.stride==1 && e.outcomes_work.words==1 && flow.storage_capacity==pc_cfg_storage_extent(4692,EE_BLOCKS));
     CHECK(flow.slots[0]==UINT32_MAX && flow.slots[513]==0 && flow.zero[0]==0);
     for (uint32_t v=0;v<513;++v) CHECK(!error_value(&flow,flow.work,v) && error_read(&flow,flow.work,v)[0]==0);
     memset(flow.work,0xa5,sizeof(uint64_t));uint64_t poison=flow.work[0];
@@ -201,7 +201,7 @@ static void cc_cfg_continuation(void) {
         CHECK(attempts==allocations+1 && flow.zero[0]==0);
         if (!effectful) {
             CHECK(flow.values==546 && flow.active_count==1 && flow.active[0]==513 && flow.stride==1);
-            CHECK(flow.storage_capacity==(owned ? 4761u : 4692u));
+            CHECK(flow.storage_capacity==pc_cfg_storage_extent(owned ? 4761u : 4692u,EE_BLOCKS));
             if (owned) {
                 const uint8_t *bits=flow.reachable+flow.function->block_count;
                 for (uint32_t i=0;i<69;++i) CHECK(bits[i]==(i<64 ? 255u : 0u));

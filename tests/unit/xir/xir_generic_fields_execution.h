@@ -20,31 +20,42 @@ static GenericFieldEntries generic_fields_entries(const XrXirModule *module){
  }
  CHECK(e.answer!=UINT32_MAX&&e.text!=UINT32_MAX);return e;
 }
-static XrXirCallStatus generic_fields_run(XrXirInstance *instance,GenericFieldEntries e,XrXirValue *held){
+static XrXirCallStatus generic_fields_run(XrXirInstance *instance,GenericFieldEntries e,
+ XrXirValue *held,bool *driven_oom){
+ CHECK(driven_oom);*driven_oom=false;
  XrXirCallStatus s=xr_xir_instance_start(instance,e.answer,NULL,0);
- if(s==XR_XIR_CALL_READY)s=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+ if(s==XR_XIR_CALL_READY){
+  s=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;*driven_oom=s==XR_XIR_CALL_OOM;
+ }
  if(s!=XR_XIR_CALL_RETURNED)return s;
  XrXirValue number={0};CHECK(xr_xir_instance_take_result(instance,&number)==XR_XIR_CALL_RETURNED);
  CHECK(number.type==XR_XIR_I64&&number.payload==41);xr_xir_value_drop(&number);
  s=xr_xir_instance_start(instance,e.text,NULL,0);
- if(s==XR_XIR_CALL_READY)s=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+ if(s==XR_XIR_CALL_READY){
+  s=xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;*driven_oom=s==XR_XIR_CALL_OOM;
+ }
  if(s==XR_XIR_CALL_RETURNED)CHECK(xr_xir_instance_take_result(instance,held)==XR_XIR_CALL_RETURNED);
  return s;
 }
 static void generic_fields_pair(XrXirProgram *program,GenericFieldEntries e,XrXirValue held[2]){
  XrXirInstance *instances[2]={NULL,NULL};XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
  for(unsigned i=0;i<2;++i)CHECK(xr_xir_instance_new(program,&config,&instances[i])==XR_XIR_CALL_READY);
- for(unsigned i=0;i<2;++i)CHECK(generic_fields_run(instances[i],e,&held[i])==XR_XIR_CALL_RETURNED);
+ for(unsigned i=0;i<2;++i){
+  bool driven_oom=false;
+  CHECK(generic_fields_run(instances[i],e,&held[i],&driven_oom)==XR_XIR_CALL_RETURNED&&!driven_oom);
+ }
  for(unsigned i=0;i<2;++i)CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
 }
 static void generic_fields_faults(XrXirProgram *program,GenericFieldEntries e){
  size_t live=runtime_live,bytes=runtime_bytes,points=0;
  for(size_t pass=0;pass<=points;++pass){runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
   XrXirInstance *instance=NULL;XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirValue held={0};
+  bool driven_oom=false;
   XrXirCallStatus s=xr_xir_instance_new(program,&config,&instance);
-  if(s==XR_XIR_CALL_READY)s=generic_fields_run(instance,e,&held);
+  if(s==XR_XIR_CALL_READY)s=generic_fields_run(instance,e,&held,&driven_oom);
   if(!pass){CHECK(s==XR_XIR_CALL_RETURNED);points=runtime_attempts;CHECK(points);}else CHECK(s==XR_XIR_CALL_OOM);
-  if(instance)CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_value_drop(&held);
+  /* A polled OOM remains the executor's exact completion through destruction. */
+  if(instance)CHECK(xr_xir_instance_free(instance)==(driven_oom?XR_XIR_CALL_OOM:XR_XIR_CALL_READY));xr_xir_value_drop(&held);
   CHECK(runtime_live==live&&runtime_bytes==bytes);
  }
  runtime_fail_at=SIZE_MAX;printf("generic fields %zu runtime OOM points, physical baseline restored\n",points);

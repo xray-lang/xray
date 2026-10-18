@@ -20,7 +20,7 @@ typedef struct EffectInvocationFlow {
     uint64_t *rows;
     /* Receiving scratch has fixed bits only; certified identity seeds belong
      * exclusively to constructor discovery and cannot be requested sealed. */
-    uint64_t *fixed,*certified;
+    uint64_t *fixed,*certified,*cell_scratch;
     void *memory;
     bool changed,precision;
 } EffectInvocationFlow;
@@ -74,7 +74,11 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     if (!xir_compile_work(flow->read->work,6+sizeof(flag_words))) return XR_XIR_BUDGET;
     uint64_t flag_offset=(words*sizeof(*flow->rows)+indices+7)&~UINT64_C(7);
     if (flag_words>(SIZE_MAX-flag_offset)/(2*sizeof(uint64_t))) return XR_XIR_BUDGET;
-    size_t bytes=(size_t)(flag_offset+2*flag_words*sizeof(uint64_t));
+    if (!xir_compile_work(flow->read->work,3)) return XR_XIR_BUDGET;
+    uint64_t scratch_offset=flag_offset+2*flag_words*sizeof(uint64_t);
+    uint64_t scratch_words=flow->owner?flow->basis.cell_words:0;
+    if (scratch_words>(SIZE_MAX-scratch_offset)/sizeof(uint64_t)) return XR_XIR_BUDGET;
+    size_t bytes=(size_t)(scratch_offset+scratch_words*sizeof(uint64_t));
     XrXirStatus status=XR_XIR_OK;flow->physical=physical;
     flow->memory=bytes?xir_compile_alloc(flow->read->work,bytes,&status):NULL;
     if (bytes && !flow->memory) return status;
@@ -84,6 +88,9 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     flow->row_indices=physical->rows?(uint32_t *)(flow->rows+(size_t)words):NULL;
     flow->fixed=flag_words?(uint64_t *)((uint8_t *)flow->memory+(size_t)flag_offset):NULL;
     flow->certified=flag_words?flow->fixed+(size_t)flag_words:NULL;
+    /* This solver replay owns one temporary Cell projection. Its contents
+     * are cleared and charged for every instruction before genuine proof reads. */
+    flow->cell_scratch=scratch_words?(uint64_t *)((uint8_t *)flow->memory+(size_t)scratch_offset):NULL;
     if (words) memset(flow->rows,0,(size_t)words*sizeof(*flow->rows));
     if (flag_words) memset(flow->fixed,0,(size_t)flag_words*2*sizeof(uint64_t));
     if (physical->rows) {

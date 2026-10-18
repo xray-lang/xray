@@ -4572,11 +4572,12 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/cfg_storage.cmake")
 
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/instance_domain_fuel.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/error_cfg_scheduling.cmake")
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_correspondence.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_input_storage.cmake)
 add_subdirectory(xir/p10_reference)
-include("${CMAKE_CURRENT_LIST_DIR}/xir/specialize_key_controls.cmake")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/program_owned_receive_probe.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/error_equation_current.cmake)
 

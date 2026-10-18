@@ -60,6 +60,14 @@ static XrXirCompileContext pc_owner(XrCompileResourceLimits caps) {
 static XrCompileResourceStats pc_stats(const XrXirCompileContext *c) {
     XrCompileResourceStats s={0};CHECK(xr_compile_resources_stats(c->resources,&s)==XR_COMPILE_RESOURCE_OK);return s;
 }
+/* The historical row extent remains exact; the queue has separate real bytes. */
+static size_t pc_cfg_storage_extent(size_t row_bytes,uint32_t blocks) {
+    if(blocks==1)return row_bytes;
+    CHECK(row_bytes<=SIZE_MAX-3);
+    size_t aligned=(row_bytes+3)&~(size_t)3;
+    CHECK((uint64_t)blocks*sizeof(uint32_t)<=SIZE_MAX-aligned);
+    return aligned+(size_t)blocks*sizeof(uint32_t);
+}
 static void pc_release(XrXirCompileContext *c, uint64_t baseline) {
     CHECK(pc_stats(c).live_bytes==baseline);xr_compile_resources_release(c->resources);
     *c=(XrXirCompileContext){0};CHECK(!live && !live_bytes);
@@ -724,7 +732,7 @@ static void pc_empty_nonempty_summary(void) {
     ErrorFlow flow={0};flow.body=effect_body_owned_request(&c,graph.material);
     flow.effects=&replay;flow.remaining=&c;flow.terms=&terms;
     CHECK(error_functions(&replay,&graph,&flow)==XR_XIR_OK);
-    CHECK(replay.outcomes_work.errors[1]==4 && flow.storage_capacity==4684 &&
+    CHECK(replay.outcomes_work.errors[1]==4 && flow.storage_capacity==pc_cfg_storage_extent(4684,EE_BLOCKS) &&
         effect_final_outcomes(e)->errors[1]==0);
     error_storage_free(&flow);effect_terms_free(&terms);effect_graph_free(&graph);effect_control_check_free(&input);
     effect_legacy_error_oracle_free(&replay);
