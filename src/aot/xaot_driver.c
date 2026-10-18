@@ -59,6 +59,7 @@
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/analyzer/xa_program_semantic_closure.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xanalyzer_native_input.h"
 #include "../frontend/analyzer/xanalyzer_mono.h"
 #include "../toolchain/xcompiler_session.h"
 #include "../incremental/xr_cache_artifact_verify.h"
@@ -801,7 +802,8 @@ static bool xaot_payload_matches_package_graph(const char *payload, const XrModu
             !xg_module_summary_identity_matches(&package.modules[i], &expected_module))
             goto done;
     }
-    if (!xg_build_key_from_ordered_module_specs(&expected_key, ordered_specs, package.nmodules,
+    if (!xg_build_key_from_ordered_module_specs(&expected_key,
+            xr_compile_session_compile_state(graph->compiler_session), ordered_specs, package.nmodules,
                                                 profile, 0))
         goto done;
     expected_request = xg_evidence_cache_request_key_from_build_key(
@@ -2183,7 +2185,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         return 1;
     }
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
-    xr_compiler_session_set_native_package_plan(session, options->native_package_plan);
     if (!xr_compiler_session_set_target_profile(session, options->target_profile)) {
         fprintf(stderr, "Error: failed to install exact TargetProfile in compiler session\n");
         xray_vm_delete(X);
@@ -2336,6 +2337,10 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     if (!shared_analyzer) {
         fprintf(stderr, "Error: failed to create shared analyzer\n");
         goto fail_free_graph;
+    }
+    if (xa_analyzer_bind_native_plan(shared_analyzer, options->native_package_plan) != XR_COMPILE_RESOURCE_OK) {
+        fprintf(stderr, "Error: cannot bind native compilation input\n");
+        goto fail_free_analyzer;
     }
     xa_analyzer_set_build_profile(shared_analyzer, profile == XAOT_BUILD_PROFILE_FREESTANDING
                                                        ? XA_ANALYZER_BUILD_PROFILE_FREESTANDING
@@ -2615,7 +2620,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
 
     /* --- Resolve XI_IMPORT_REF using graph (before graph is freed) --- */
     for (int ti = 0; ti < nmodules; ti++) {
-        xi_resolve_imports(ir_funcs[ti], graph, paths[ti], modules, nmodules);
+        XrModuleStatus imports = xi_resolve_imports(ir_funcs[ti], graph, paths[ti], modules, nmodules);
+        if (imports != XR_MODULE_OK) {
+            fprintf(stderr, "Error: import resolution failed (module status %d)\n", (int) imports);
+            goto fail_free_ir;
+        }
     }
     if (!xaot_bundle_init(&aot_bundle, modules, (uint32_t) nmodules, (uint32_t) entry_index)) {
         fprintf(stderr, "Error: failed to initialize AOT bundle plan\n");
@@ -2671,9 +2680,16 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         }
     }
     xaot_trace_phase("module-summaries", -1);
-    if (!xaot_publish_module_summaries(session, graph, modules, nmodules, source_program_closure,
-                                       options, evidence_cache_verbose,
-                                       &result->module_summary_cache))
+    XaotModuleSummaryInput summary_input = {
+        .cache_store = xr_compiler_session_cache_store(session),
+        .graph = graph,
+        .modules = modules,
+        .module_count = nmodules,
+        .program_closure = source_program_closure,
+        .options = options,
+        .verbose = evidence_cache_verbose,
+    };
+    if (!xaot_publish_module_summaries(&summary_input, &result->module_summary_cache))
         goto fail_free_ir;
     xr_program_semantic_closure_free(source_program_closure);
     source_program_closure = NULL;

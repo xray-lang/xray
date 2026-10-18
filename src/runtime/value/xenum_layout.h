@@ -14,9 +14,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "../../base/xdefs.h"
+#include "../../base/xio_policy.h"
 
 typedef struct XrEnumVariantLayout {
-    const char *name; /* Interned/stable; not owned by the layout. */
+    const char *name; /* Owned immutable text. */
     int symbol;
     uint32_t tag;
     uint16_t payload_count;
@@ -30,7 +31,7 @@ typedef struct XrEnumVariantLayout {
 typedef struct XrEnumLayout {
     uint32_t layout_id;
     const char *nominal_owner; /* Canonical module/prelude owner; owned. */
-    const char *name;          /* Interned/stable; not owned by the layout. */
+    const char *name;          /* Owned immutable text. */
     uint32_t variant_count;
     uint8_t tag_size;
     uint16_t align;
@@ -45,19 +46,27 @@ typedef struct XrEnumLayout {
 XR_FUNC bool xr_enum_payload_names_are_exact(const char *const *payload_names,
                                              uint16_t payload_count);
 XR_FUNC bool xr_enum_variant_payload_metadata_is_exact(const XrEnumVariantLayout *variant);
-XR_FUNC XrEnumLayout *xr_enum_layout_new(const char *nominal_owner, const char *name,
-                                         const char *const *variant_names, uint32_t variant_count);
+/* Read-only views may belong to an arena. Mutations and disposal require a live
+ * constructor result and never adopt other storage.
+ * The explicit policy owns all constructor descriptor/name storage. Compiler callers pass
+ * their original ledger policy; other owners make their policy choice explicit.
+ * Output must be empty. Failed preparation preserves every published field. */
+XR_FUNC XrOsIoStatus xr_enum_layout_new(const XrOsIoPolicy *policy, const char *nominal_owner,
+                                        const char *name, const char *const *variant_names,
+                                        uint32_t variant_count, XrEnumLayout **output);
 XR_FUNC uint32_t xr_enum_layout_nominal_id(const XrEnumLayout *layout);
-XR_FUNC bool xr_enum_layout_set_payload_counts(XrEnumLayout *layout, const int *payload_counts,
-                                               uint32_t count);
-XR_FUNC bool xr_enum_layout_set_variant_payload_metadata(XrEnumLayout *layout, uint32_t tag,
-                                                         const char *const *payload_names,
-                                                         const uint8_t *payload_type_ids,
-                                                         uint16_t payload_count);
-XR_FUNC void xr_enum_layout_set_variant_symbol(XrEnumLayout *layout, uint32_t tag, int symbol);
+XR_FUNC XrOsIoStatus xr_enum_layout_set_payload_counts(XrEnumLayout *layout,
+                                                       const int *payload_counts, uint32_t count);
+XR_FUNC XrOsIoStatus xr_enum_layout_set_variant_payload_metadata(XrEnumLayout *layout, uint32_t tag,
+                                                                 const char *const *payload_names,
+                                                                 const uint8_t *payload_type_ids,
+                                                                 uint16_t payload_count);
+XR_FUNC XrOsIoStatus xr_enum_layout_set_variant_symbol(XrEnumLayout *layout, uint32_t tag,
+                                                       int symbol);
 XR_FUNC const XrEnumVariantLayout *xr_enum_layout_variant(const XrEnumLayout *layout, uint32_t tag);
 XR_FUNC int xr_enum_layout_payload_count(const XrEnumLayout *layout, uint32_t tag);
 XR_FUNC uint16_t xr_enum_layout_max_payload(const XrEnumLayout *layout);
+/* Disposal of a live constructor result never requires fresh admission. */
 XR_FUNC void xr_enum_layout_free(XrEnumLayout *layout);
 
 #endif  // XENUM_LAYOUT_H

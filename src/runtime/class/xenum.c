@@ -100,7 +100,9 @@ static XrEnumLayout *xr_enum_layout_from_members(const char *nominal_owner, cons
     for (int i = 0; i < count; i++)
         names[i] = members[i].name;
 
-    XrEnumLayout *layout = xr_enum_layout_new(nominal_owner, name, names, (uint32_t) count);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    XrEnumLayout *layout = NULL;
+    (void)xr_enum_layout_new(&policy, nominal_owner, name, names, (uint32_t)count, &layout);
     xr_free(names);
     return layout;
 }
@@ -244,7 +246,7 @@ bool xr_enum_type_set_adt_payloads(XrEnumType *enum_type, const int *payload_cou
     if (!enum_type || !payload_counts || count <= 0 || (uint32_t) count != enum_type->member_count)
         return false;
 
-    if (!xr_enum_layout_set_payload_counts(enum_type->layout, payload_counts, (uint32_t) count))
+    if (xr_enum_layout_set_payload_counts(enum_type->layout, payload_counts, (uint32_t)count) != XR_OS_IO_OK)
         return false;
 
     for (uint32_t i = 0; i < enum_type->member_count; i++) {
@@ -298,7 +300,7 @@ void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate) {
     for (uint32_t i = 0; i < enum_type->member_count; i++) {
         SymbolId sid = xr_symbol_register_in_table(sym_table, enum_type->members[i].name);
         enum_type->members[i].symbol = sid;
-        xr_enum_layout_set_variant_symbol(enum_type->layout, i, sid);
+        if (xr_enum_layout_set_variant_symbol(enum_type->layout, i, sid) != XR_OS_IO_OK) return;
         if (sid > max_symbol)
             max_symbol = sid;
     }

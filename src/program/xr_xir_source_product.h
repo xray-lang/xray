@@ -73,6 +73,12 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProduct
  * Failure preserves output and owns any published diagnostic path/snapshot. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build_text(const XrXirSourceProductRequest *request,
     const XrXirSourceText *text, XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic);
+/* The caller AST enters the same Checked/specialization/Lowered pipeline.
+ * It is borrowed only synchronously under source_check_ast's contract. No
+ * XrProto adapter or alternate execution representation is produced. */
+XR_FUNC XrXirStatus xr_xir_compile_source_product_build_ast(const XrXirSourceProductRequest *request,
+    const XrXirSourceAst *syntax, XrXirSourceProduct **output,
+    XrXirSourceProductDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product);
 XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDiagnostic *diagnostic);
 /* Public execution admission reads the owner's authentic Program root and all

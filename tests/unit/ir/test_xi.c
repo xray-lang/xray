@@ -10,6 +10,8 @@
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/module/xnative_package.h"
+#include "../../../src/toolchain/xcompiler_session.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,6 +43,11 @@ static void reset_import_ref(XiImportRef *ref) {
  * alias. */
 static void test_typed_named_import_resolution(void) {
     printf("--- test_typed_named_import_resolution ---\n");
+    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResources *resources = NULL;
+    XrCompilerSession *session = NULL;
+    assert(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    assert(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
     static char importer_path[] = "C:/checkout/stdlib/http/http.xr";
     int dependencies[] = {1};
     int topo_order[] = {1, 0};
@@ -63,6 +70,8 @@ static void test_typed_named_import_resolution(void) {
         },
     };
     XrModuleGraph graph = {
+        .resources = resources,
+        .compiler_session = session,
         .specs = specs,
         .spec_count = 2,
         .topo_order = topo_order,
@@ -82,15 +91,46 @@ static void test_typed_named_import_resolution(void) {
     xi_block_set_return(entry, NULL);
     XiModule *modules[] = {dependency_module, NULL};
 
-    xi_resolve_imports(caller, &graph, importer_path, modules, 2);
+    assert(xi_resolve_imports(caller, &graph, importer_path, modules, 2) == XR_MODULE_OK);
     assert(ref.resolution_attempted && ref.resolved_mod_index == 0 &&
            ref.resolved_module == dependency_module);
+
+    /* The star collector must preserve lexical order independently of map
+     * iteration and retain copied names in the receiving function arena. */
+    static const char *const names[] = {"zebra", "alfa", "omega", "beta", "gamma"};
+    static const char *const expected[] = {"alfa", "beta", "gamma", "omega", "zebra"};
+    static const int expected_slots[] = {1, 3, 4, 2, 0};
+    const XrOsIoPolicy policy = xr_compile_io_policy(resources);
+    assert(xr_hashmap_owned_new(&policy, &specs[1].export_symbols) == XR_OS_IO_OK);
+    dependency_module->exports = xr_calloc(5, sizeof(*dependency_module->exports));
+    assert(dependency_module->exports != NULL);
+    dependency_module->nexports = 5;
+    for (int i = 0; i < 5; i++) {
+        dependency_module->exports[i] = (XiModuleExport) {.name = names[i], .shared_slot = (uint16_t) i};
+        assert(xr_hashmap_owned_set(specs[1].export_symbols, names[i], NULL) == XR_OS_IO_OK);
+    }
+    caller->module = xi_module_new(importer_path, "http", caller);
+    caller->reexports = xi_func_arena_alloc(caller, sizeof(*caller->reexports));
+    assert(caller->module && caller->reexports);
+    caller->reexport_count = 1;
+    caller->reexports[0].from_path = "net";
+    assert(xi_resolve_imports(caller, &graph, importer_path, modules, 2) == XR_MODULE_OK);
+    assert(caller->reexports[0].resolution_complete && caller->reexports[0].resolved_member_count == 5);
+    for (int i = 0; i < 5; i++) {
+        const XiResolvedReexport *member = &caller->reexports[0].resolved_members[i];
+        assert(strcmp(member->export_name, expected[i]) == 0);
+        assert(member->mod_index == 0 && member->export_slot == expected_slots[i]);
+        assert(xi_func_arena_contains(caller, member->export_name, (uint32_t) strlen(expected[i]) + 1u));
+    }
+    xr_hashmap_owned_free(specs[1].export_symbols);
+    specs[1].export_symbols = NULL;
+    caller->reexport_count = 0;
 
     /* A bare canonical alias cannot substitute for typed authority. */
     reset_import_ref(&ref);
     specs[1].canonical = "net";
     specs[1].authority.namespace_id = "net";
-    xi_resolve_imports(caller, &graph, importer_path, modules, 2);
+    assert(xi_resolve_imports(caller, &graph, importer_path, modules, 2) == XR_MODULE_INVALID);
     assert(ref.resolution_attempted && ref.resolved_mod_index == -1 &&
            ref.resolved_module == NULL);
 
@@ -99,7 +139,78 @@ static void test_typed_named_import_resolution(void) {
     dependency_module->init = NULL;
     xi_func_free(dependency_root);
     xi_module_free(dependency_module);
+    xr_compile_session_free(session);
+    xr_compile_resources_release(resources);
     printf("  PASS\n\n");
+}
+
+static void test_native_image_policy_owns_records_and_names(void) {
+    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResources *resources = NULL;
+    XrCompileState *state = NULL;
+    assert(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    assert(xr_compile_state_new(resources, &state) == XR_COMPILE_RESOURCE_OK);
+    XiFunc *f = xi_func_new("native-owner", &stub_null);
+    assert(f != NULL);
+    char name[] = "foreign_action", symbol[] = "host_action", abi[] = "C";
+    char visibility[] = "public", section[] = ".vectors", stub[] = "bx lr";
+    XrCExportPlan export_plan = {.xray_name = name, .symbol = symbol, .visibility = visibility, .abi = abi, .header = true};
+    XrLinkSymbolPlan link_plan = {.xray_name = name, .section = section, .used = true, .weak = true};
+    XrFreestandingEntryPlan entry_plan = {.xray_name = name, .symbol = symbol, .kind = XR_FREESTANDING_ENTRY_START,
+        .abi = abi, .section = section, .stub = stub};
+    assert(xi_func_set_native_image_plans(f, state, &export_plan, &link_plan, &entry_plan));
+    assert(f->export_plan != &export_plan && f->link_plan != &link_plan && f->entry_plan != &entry_plan);
+    assert(xi_func_arena_contains(f, f->export_plan, sizeof(*f->export_plan)));
+    assert(xi_func_arena_contains(f, f->export_plan->symbol, sizeof(symbol)));
+    name[0] = symbol[0] = abi[0] = visibility[0] = section[0] = stub[0] = '?';
+    const XrCExportPlan *saved_export = f->export_plan;
+    const XrLinkSymbolPlan *saved_link = f->link_plan;
+    const XrFreestandingEntryPlan *saved_entry = f->entry_plan;
+    assert(xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET) == XR_COMPILE_RESOURCE_BUDGET);
+    XrCompileResourceStats before = {0}, after = {0};
+    assert(xr_compile_resources_stats(resources, &before) == XR_COMPILE_RESOURCE_OK);
+    assert(!xi_func_set_native_image_plans(f, state, (const XrCExportPlan *) (uintptr_t) 1,
+        (const XrLinkSymbolPlan *) (uintptr_t) 1, (const XrFreestandingEntryPlan *) (uintptr_t) 1));
+    assert(f->export_plan == saved_export && f->link_plan == saved_link && f->entry_plan == saved_entry);
+    assert(xr_compile_resources_stats(resources, &after) == XR_COMPILE_RESOURCE_OK);
+    assert(before.work == after.work && before.allocation_count == after.allocation_count);
+    xr_compile_state_release(state);
+    xr_compile_resources_release(resources);
+    assert(strcmp(f->export_plan->xray_name, "foreign_action") == 0);
+    assert(strcmp(f->export_plan->symbol, "host_action") == 0 && strcmp(f->export_plan->abi, "C") == 0);
+    assert(strcmp(f->export_plan->visibility, "public") == 0 && f->export_plan->header);
+    assert(strcmp(f->link_plan->section, ".vectors") == 0 && f->link_plan->used && f->link_plan->weak);
+    assert(strcmp(f->entry_plan->symbol, "host_action") == 0 && strcmp(f->entry_plan->stub, "bx lr") == 0);
+    assert(strcmp(f->entry_plan->section, ".vectors") == 0 && f->entry_plan->kind == XR_FREESTANDING_ENTRY_START);
+    xi_func_free(f);
+}
+
+static void test_import_failure_precedes_poisoned_metadata(void) {
+    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResources *resources = NULL;
+    XrCompilerSession *session = NULL;
+    assert(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    assert(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
+    XiFunc *f = xi_func_new("failed-import", &stub_null);
+    assert(f != NULL);
+    XrModuleGraph graph = {.resources = resources, .compiler_session = session,
+        .specs = (XrModuleSpec *) (uintptr_t) 1, .spec_count = 1,
+        .topo_order = (int *) (uintptr_t) 1, .topo_count = 1};
+    XrCompileState *state = xr_compile_session_compile_state(session);
+    assert(xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET) == XR_COMPILE_RESOURCE_BUDGET);
+    XrCompileResourceStats before = {0}, after = {0};
+    assert(xr_compile_resources_stats(resources, &before) == XR_COMPILE_RESOURCE_OK);
+    assert(xi_resolve_imports(f, &graph, (const char *) (uintptr_t) 1,
+        (XiModule **) (uintptr_t) 1, 1) == XR_MODULE_BUDGET);
+    const char *canonical = "unchanged";
+    assert(xi_resolve_import_canonical(&graph, (const char *) (uintptr_t) 1,
+        (const char *) (uintptr_t) 1, &canonical) == XR_MODULE_BUDGET);
+    assert(strcmp(canonical, "unchanged") == 0);
+    assert(xr_compile_resources_stats(resources, &after) == XR_COMPILE_RESOURCE_OK);
+    assert(before.work == after.work && before.allocation_count == after.allocation_count);
+    xi_func_free(f);
+    xr_compile_session_free(session);
+    xr_compile_resources_release(resources);
 }
 
 /* Test 1: fn add(a: int, b: int) -> int { return a + b } */
@@ -269,6 +380,8 @@ int main(void) {
     test_phi_node();
     test_constants();
     test_typed_named_import_resolution();
+    test_native_image_policy_owns_records_and_names();
+    test_import_failure_precedes_poisoned_metadata();
 
     printf("=== All Xi IR tests passed ===\n");
     return 0;

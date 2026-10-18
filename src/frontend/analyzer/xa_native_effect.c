@@ -10,17 +10,23 @@
 
 #include "xa_native_effect.h"
 #include "xanalyzer.h"
+#include "xanalyzer_native_input.h"
 #include "xanalyzer_symbol.h"
 #include "../parser/xast_nodes.h"
 #include "../../module/xnative_package.h"
 #include "../../toolchain/xcompiler_session.h"
 #include <string.h>
 
-static bool native_text_equals(const char *text, const char *expected) {
-    return text && expected && strcmp(text, expected) == 0;
+static bool native_text_equals(XaAnalyzer *analyzer, const char *text, const char *expected) {
+    if (!text || !expected)
+        return false;
+    if (xr_compile_state_work(xr_compile_session_compile_state(analyzer->compiler_session),
+            strlen(expected) + 1) != XR_COMPILE_RESOURCE_OK)
+        return false;
+    return strcmp(text, expected) == 0;
 }
 
-bool xa_native_effect_is_bodyless_extern(const XaSymbol *symbol) {
+XR_FUNC bool xa_native_effect_is_bodyless_extern(const XaSymbol *symbol) {
     if (!symbol || !symbol->links.is_extern)
         return false;
     AstNode *decl = symbol->links.function_decl_node;
@@ -33,16 +39,17 @@ bool xa_native_effect_is_bodyless_extern(const XaSymbol *symbol) {
     return true;
 }
 
-XaNativeEffectAxioms xa_native_effect_axioms(XaAnalyzer *analyzer, const XaSymbol *symbol) {
+XR_FUNC XaNativeEffectAxioms xa_native_effect_axioms(XaAnalyzer *analyzer, const XaSymbol *symbol) {
     XaNativeEffectAxioms axioms;
     memset(&axioms, 0, sizeof(axioms));
     if (!symbol || !symbol->name)
         return axioms;
-    const XrNativePackagePlan *plan =
-        xr_compiler_session_native_package_plan(analyzer ? analyzer->compiler_session : NULL);
+    const XrNativePackagePlan *plan = xa_analyzer_native_plan(analyzer);
     if (!plan || !plan->valid)
         return axioms;
-    const XrNativeSymbol *native = xr_native_package_find_symbol(plan, symbol->name);
+    const XrNativeSymbol *native = NULL;
+    if (xa_analyzer_find_native_symbol(analyzer, symbol->name, &native) != XR_MANIFEST_OK)
+        return axioms;
     if (!native || !native->contract.complete)
         return axioms;
 
@@ -51,23 +58,25 @@ XaNativeEffectAxioms xa_native_effect_axioms(XaAnalyzer *analyzer, const XaSymbo
     /* Crossing the C boundary is itself an observable effect regardless of what
      * the callee does behind it. */
     axioms.effects = XA_SEM_EFFECT_FOREIGN;
-    if (native_text_equals(contract->allocation, "may")) {
+    if (native_text_equals(analyzer, contract->allocation, "may")) {
         axioms.allocates = true;
         axioms.effects |= XA_SEM_EFFECT_ALLOC;
     }
     /* A native symbol cannot be a generator, so its declared suspension is
      * always the scheduler-visible kind. */
-    if (native_text_equals(contract->suspend, "may")) {
+    if (native_text_equals(analyzer, contract->suspend, "may")) {
         axioms.suspends = true;
         axioms.effects |= XA_SEM_EFFECT_SCHED_SUSPEND;
     }
-    if (native_text_equals(contract->blocking, "may"))
+    if (native_text_equals(analyzer, contract->blocking, "may"))
         axioms.effects |= XA_SEM_EFFECT_MAY_BLOCK;
-    if (native_text_equals(contract->panic, "abort"))
+    if (native_text_equals(analyzer, contract->panic, "abort"))
         axioms.effects |= XA_SEM_EFFECT_ABORT;
-    if (contract->io && !native_text_equals(contract->io, "none"))
+    if (contract->io && !native_text_equals(analyzer, contract->io, "none"))
         axioms.effects |= XA_SEM_EFFECT_IO;
-    if (contract->sync && !native_text_equals(contract->sync, "none"))
+    if (contract->sync && !native_text_equals(analyzer, contract->sync, "none"))
         axioms.effects |= XA_SEM_EFFECT_SYNC;
+    if (xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK)
+        return (XaNativeEffectAxioms){0};
     return axioms;
 }

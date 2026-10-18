@@ -19,6 +19,7 @@ typedef struct SourceInput {
     SourceInputCapture *capture;
     const size_t *included;
     size_t included_count;
+    AstNode *program;
 } SourceInput;
 static bool source_graph_fail(SourceContext *ctx,XrModuleStatus status,const char *message) {
     const XrModuleParseDiagnostic *parse=ctx->graph?&ctx->graph->parse_diagnostic:NULL;
@@ -106,8 +107,14 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
             }
         }
         if (!source_copy_bytes(&ctx, NULL, terminated, text, length)) goto done;
-        module_status = xr_compile_module_graph_build_logical_source(ctx.graph,
-            request->authority, logical_path, request->entry_path, terminated, &error);
+        if (input.program) {
+            XrModuleSourceAstInput syntax = {request->authority, logical_path,
+                request->entry_path, terminated, input.program};
+            module_status = xr_compile_module_graph_build_ast(ctx.graph, &syntax, &error);
+        } else {
+            module_status = xr_compile_module_graph_build_logical_source(ctx.graph,
+                request->authority, logical_path, request->entry_path, terminated, &error);
+        }
         source_release_private(terminated);
     } else if (resolver->overlay) {
         char *canonical = NULL, *logical = NULL; const XrModuleOverlayEntry *entry = NULL;
@@ -181,6 +188,17 @@ XrXirStatus xr_xir_compile_source_check_text(const XrXirSourceRequest *request,
     const XrXirSourceText *text,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
     SourceInput input = {.supplied=true, .text=text ? *text : (XrXirSourceText){0}};
+    return source_check_input(request, input, output, diagnostic, failure);
+}
+
+XrXirStatus xr_xir_compile_source_check_ast(const XrXirSourceRequest *request,
+    const XrXirSourceAst *syntax, XrXirSourceResult *output,
+    XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
+    if (!syntax || !syntax->program) {
+        if (diagnostic) *diagnostic = (XrXirSourceDiagnostic){.status=XR_XIR_BAD_STRUCTURE};
+        return XR_XIR_BAD_STRUCTURE;
+    }
+    SourceInput input = {.supplied=true, .text=syntax->source, .program=syntax->program};
     return source_check_input(request, input, output, diagnostic, failure);
 }
 

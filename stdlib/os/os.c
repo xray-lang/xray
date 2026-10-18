@@ -180,7 +180,8 @@ static XrValue os_getcwd(XrVMRuntime *X, XrValue *args, int argc) {
     (void) argc;
 
     char buf[XR_PATH_MAX];
-    if (xr_fs_getcwd(buf, sizeof(buf)) == NULL) {
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    if (xr_os_io_getcwd(&policy, buf, sizeof(buf)) != XR_OS_IO_OK) {
         return xr_null();
     }
     return xrs_string_value_c(X, buf);

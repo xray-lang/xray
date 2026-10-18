@@ -22,6 +22,12 @@ _Static_assert(sizeof(HashMapOwner) % _Alignof(XrHashMap) == 0, "Map owner prese
 static const XrOsIoPolicy *map_policy(const XrHashMap *map) {
     return &((const HashMapOwner *)map-1)->policy;
 }
+XR_FUNC bool xr_hashmap_owned_uses_policy(const XrHashMap *map, const XrOsIoPolicy *policy) {
+    if (!map || !policy) return false;
+    const XrOsIoPolicy *owned = map_policy(map);
+    return owned->context == policy->context && owned->alloc == policy->alloc &&
+        owned->free == policy->free && owned->work == policy->work;
+}
 static bool empty(const XrHashMapEntry *entry) {
     return !entry->key && entry->value != XR_HASHMAP_TOMBSTONE;
 }
@@ -142,6 +148,18 @@ XR_FUNC XrOsIoStatus xr_hashmap_owned_get(const XrHashMap *map, const char *key,
     if (io.status == XR_OS_IO_OK) *output = entry ? entry->value : NULL;
     return io.status;
 }
+XR_FUNC XrOsIoStatus xr_hashmap_owned_get_pair(const XrHashMap *map, const char *key,
+    const char **stored_key, void **value) {
+    if (!map || !key || !stored_key || !value) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {map_policy(map),XR_OS_IO_OK}; uint32_t hash, index;
+    if (!hash_string(&io,key,&hash)) return io.status;
+    XrHashMapEntry *entry = find_entry(&io,map,key,hash,&index);
+    if (io.status == XR_OS_IO_OK) {
+        *stored_key = entry ? entry->key : NULL;
+        *value = entry ? entry->value : NULL;
+    }
+    return io.status;
+}
 XR_FUNC XrOsIoStatus xr_hashmap_owned_has(const XrHashMap *map, const char *key, bool *output) {
     if (!map || !key || !output) return XR_OS_IO_BAD_ARGUMENT;
     XrIoContext io = {map_policy(map),XR_OS_IO_OK}; uint32_t hash, index;
@@ -174,6 +192,16 @@ XR_FUNC XrOsIoStatus xr_hashmap_owned_foreach(const XrHashMap *map, XrHashMapIte
     for (uint32_t i = 0; i < map->capacity; ++i) {
         if (!io_work(&io,1)) return io.status;
         if (map->entries[i].key) func(map->entries[i].key,map->entries[i].value,userdata);
+    }
+    return XR_OS_IO_OK;
+}
+XR_FUNC XrOsIoStatus xr_hashmap_owned_visit(const XrHashMap *map, XrHashMapVisitFunc func, void *userdata) {
+    if (!map || !func) return XR_OS_IO_BAD_ARGUMENT;
+    XrIoContext io = {map_policy(map),XR_OS_IO_OK};
+    for (uint32_t i = 0; i < map->capacity; ++i) {
+        if (!io_work(&io,1)) return io.status;
+        if (map->entries[i].key && !func(map->entries[i].key,map->entries[i].value,userdata))
+            return XR_OS_IO_OK;
     }
     return XR_OS_IO_OK;
 }

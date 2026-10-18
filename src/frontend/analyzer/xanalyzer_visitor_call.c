@@ -20,6 +20,10 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xanalyzer_link_metadata.h"
+#include "xanalyzer_diagnostics.h"
+#include "xanalyzer_export_query.h"
+#include "xanalyzer_native_input.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xa_parallel_call_plan.h"
 #include "xa_resolved_call.h"
@@ -371,7 +375,9 @@ static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, X
     const char *module_name = links->module_name;
     const char *member_name = links->import_member_name;
     XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name);
-    XaSymbol *export_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
+    XaSymbol *export_sym = NULL;
+    if (!xa_find_export_symbol(ctx->analyzer, exports, member_name, &export_sym))
+        return NULL;
     if (!export_sym && xa_specifier_is_named_module(module_name)) {
         char key[192];
         int key_len = snprintf(key, sizeof(key), "%s.%s", module_name, member_name);
@@ -385,6 +391,9 @@ static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, X
         return links;
 
     xa_symbol_links_copy_export_metadata(ctx->analyzer, links, &export_sym->links);
+    if (xr_compile_state_status(links->resource_state) != XR_COMPILE_RESOURCE_OK) {
+        return NULL;
+    }
     links->module_name = module_name;
     links->import_member_name = member_name;
     return links;
@@ -1771,7 +1780,9 @@ static XaSymbol *xa_thread_spawn_import_target_symbol(XaInferContext *ctx, XaSym
     if (!exports)
         return sym;
     const char *member_name = links->import_member_name ? links->import_member_name : sym->name;
-    XaSymbol *target = member_name ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
+    XaSymbol *target = NULL;
+    if (!xa_find_export_symbol(ctx->analyzer, exports, member_name, &target))
+        return NULL;
     return target ? target : sym;
 }
 
@@ -1794,7 +1805,9 @@ static XaSymbol *xa_thread_spawn_module_member_symbol(XaInferContext *ctx, AstNo
     if (!exports)
         return NULL;
 
-    XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+    XaSymbol *member_sym = NULL;
+    if (!xa_find_export_symbol(ctx->analyzer, exports, ma->name, &member_sym))
+        return NULL;
     return member_sym;
 }
 
@@ -3385,11 +3398,12 @@ static const XrNativeSymbol *xa_ffi_output_native_call(XaInferContext *ctx, AstN
     } else if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         callee_name = call->callee->as.member_access.name;
     }
-    const XrNativePackagePlan *plan = xr_compiler_session_native_package_plan(
-        ctx && ctx->analyzer ? ctx->analyzer->compiler_session : NULL);
+    const XrNativePackagePlan *plan = xa_analyzer_native_plan(ctx ? ctx->analyzer : NULL);
     if (!plan || !plan->valid || plan->audit_mode != XR_NATIVE_AUDIT_SHIPPING)
         return NULL;
-    const XrNativeSymbol *symbol = xr_native_package_find_symbol(plan, callee_name);
+    const XrNativeSymbol *symbol = NULL;
+    if (xa_analyzer_find_native_symbol(ctx->analyzer, callee_name, &symbol) != XR_MANIFEST_OK)
+        return NULL;
     if (!symbol || !symbol->contract.complete)
         return NULL;
     for (int i = 0; i < call->arg_count; i++) {
@@ -5081,7 +5095,9 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, CallExp
         return instance;
     }
 
-    XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+    XaSymbol *member_sym = NULL;
+    if (!xa_find_export_symbol(ctx->analyzer, exports, ma->name, &member_sym))
+        return NULL;
     if (!member_sym || member_sym->kind != XA_SYM_CLASS)
         return NULL;
 
@@ -5138,7 +5154,9 @@ static XaSymbolLinks *xa_module_member_fn_links(XaInferContext *ctx, AstNode *ca
     XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
     if (!exports)
         return NULL;
-    XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+    XaSymbol *member_sym = NULL;
+    if (!xa_find_export_symbol(ctx->analyzer, exports, ma->name, &member_sym))
+        return NULL;
     if (!member_sym || member_sym->kind != XA_SYM_FUNCTION)
         return NULL;
     XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
@@ -5163,7 +5181,9 @@ static XaSymbol *xa_module_member_class_symbol(XaInferContext *ctx, AstNode *nod
     XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
     if (!exports)
         return NULL;
-    XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
+    XaSymbol *member_sym = NULL;
+    if (!xa_find_export_symbol(ctx->analyzer, exports, ma->name, &member_sym))
+        return NULL;
     return member_sym && member_sym->kind == XA_SYM_CLASS ? member_sym : NULL;
 }
 
@@ -5229,29 +5249,6 @@ static XaSymbolLinks *xa_class_constructor_links(XaInferContext *ctx, XaSymbol *
     return ctor_links;
 }
 
-static bool xa_default_arg_path_matches(const char *a, const char *b) {
-    if (!a || !b)
-        return false;
-    if (strcmp(a, b) == 0)
-        return true;
-
-    size_t alen = strlen(a);
-    size_t blen = strlen(b);
-    if (alen > blen && a[alen - blen - 1] == '/' && strcmp(a + alen - blen, b) == 0)
-        return true;
-    if (blen > alen && b[blen - alen - 1] == '/' && strcmp(b + blen - alen, a) == 0)
-        return true;
-
-    char *areal = xr_realpath(a, NULL);
-    char *breal = xr_realpath(b, NULL);
-    bool same = areal && breal && strcmp(areal, breal) == 0;
-    if (areal)
-        xr_free(areal);
-    if (breal)
-        xr_free(breal);
-    return same;
-}
-
 static bool xa_default_arg_stdlib_module_from_path(const char *path, char *out, size_t out_cap) {
     if (!path || !out || out_cap == 0)
         return false;
@@ -5297,6 +5294,8 @@ static XrHashMap *xa_default_arg_decl_exports(XaInferContext *ctx, XaSymbolLinks
         XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, links->module_name);
         if (exports)
             return exports;
+        if (xr_compile_session_resource_status(ctx->analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK)
+            return NULL;
     }
 
     if (!links->file_path)
@@ -5306,9 +5305,13 @@ static XrHashMap *xa_default_arg_decl_exports(XaInferContext *ctx, XaSymbolLinks
         XrModuleSpec *spec = &graph->specs[i];
         if (!spec->export_symbols)
             continue;
-        if ((spec->source_path &&
-             xa_default_arg_path_matches(spec->source_path, links->file_path)) ||
-            (spec->canonical && xa_default_arg_path_matches(spec->canonical, links->file_path))) {
+        bool source_matches = false, identity_matches = false;
+        if (!xa_export_source_path_equal(ctx->analyzer, spec->source_path, links->file_path,
+                                         &source_matches) ||
+            (!source_matches && !xa_export_identity_equal(ctx->analyzer, spec->canonical,
+                links->file_path, &identity_matches)))
+            return NULL;
+        if (source_matches || identity_matches) {
             if (decl_module_canonical)
                 *decl_module_canonical = spec->canonical;
             return spec->export_symbols;
@@ -5339,7 +5342,9 @@ static bool xa_default_arg_symbol_is_from_decl_file(XaAnalyzer *analyzer, XaSymb
     if (!sym || !decl_file || !name || !sym->name || strcmp(sym->name, name) != 0)
         return false;
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
-    return links && links->file_path && xa_default_arg_path_matches(links->file_path, decl_file);
+    bool same = false;
+    return links && links->file_path &&
+        xa_export_source_path_equal(analyzer, links->file_path, decl_file, &same) && same;
 }
 
 static XaSymbol *xa_default_arg_find_decl_file_symbol(XaAnalyzer *analyzer, XaScope *scope,
@@ -5350,12 +5355,16 @@ static XaSymbol *xa_default_arg_find_decl_file_symbol(XaAnalyzer *analyzer, XaSc
     XaSymbol *local = xa_scope_lookup_local(scope, name);
     if (xa_default_arg_symbol_is_from_decl_file(analyzer, local, decl_file, name))
         return local;
+    if (xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
 
     for (int i = 0; i < scope->child_count; i++) {
         XaSymbol *found =
             xa_default_arg_find_decl_file_symbol(analyzer, scope->children[i], decl_file, name);
         if (found)
             return found;
+        if (xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK)
+            return NULL;
     }
     return NULL;
 }
@@ -5382,7 +5391,9 @@ static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, co
     if (!bind || !bind->ctx || !bind->ctx->analyzer || !name)
         return NULL;
     XaAnalyzer *analyzer = bind->ctx->analyzer;
-    XaSymbol *sym = bind->exports ? (XaSymbol *) xr_hashmap_get(bind->exports, name) : NULL;
+    XaSymbol *sym = NULL;
+    if (!xa_find_export_symbol(analyzer, bind->exports, name, &sym))
+        return NULL;
     if (sym)
         return sym;
     return xa_default_arg_find_decl_file_symbol(analyzer, analyzer->global_scope, bind->decl_file,
@@ -5498,8 +5509,9 @@ static ImportMember *xa_default_arg_private_import(XaDefaultArgBindCtx *bind, co
     member->private_target_spec_index = spec_index;
     member->private_target_decl = decl;
 
-    XaAnalyzerFileScope file_scope;
+    XaAnalyzerFileScope file_scope = {0};
     bool pushed = xa_analyzer_push_file_scope(analyzer, ctx->file_path, &file_scope);
+    if (xa_scope_resource_status(analyzer->global_scope) != XR_COMPILE_RESOURCE_OK) return NULL;
     XaSymbol *sym = xa_declare_import_member(ctx, import_node, member, NULL);
     if (pushed)
         xa_analyzer_pop_file_scope(analyzer, &file_scope);
@@ -5617,6 +5629,8 @@ static void xa_bind_default_arg_variable(AstNode *node, void *user_data) {
         return;
     XaAnalyzer *analyzer = bind->ctx->analyzer;
     XaSymbol *sym = xa_default_arg_lookup_decl_symbol(bind, node->as.variable.name);
+    if (xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK)
+        return;
     if (sym) {
         /* The lookup returns a symbol from the declaring module (its export
          * table or declaration file). When the default argument is expanded
@@ -5626,8 +5640,10 @@ static void xa_bind_default_arg_variable(AstNode *node, void *user_data) {
          * compiler-private import of it, and a private scalar constant is
          * carried across as its value. */
         const char *caller_file = bind->ctx->file_path;
-        bool cross_module = !(caller_file && bind->decl_file &&
-                              xa_default_arg_path_matches(caller_file, bind->decl_file));
+        bool same_file = false;
+        if (!xa_export_source_path_equal(analyzer, caller_file, bind->decl_file, &same_file))
+            return;
+        bool cross_module = !same_file;
         if (!cross_module) {
             node->as.variable.symbol_id = sym->id;
             XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
@@ -5698,7 +5714,7 @@ static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *cal
         return false;
 
     XrCompilerSession *sess =
-        ctx->analyzer ? xr_compiler_session_current_for_isolate(ctx->analyzer->isolate) : NULL;
+        ctx->analyzer ? ctx->analyzer->compiler_session : NULL;
     AstNode **new_args = (AstNode **) xr_calloc((size_t) param_count, sizeof(AstNode *));
     if (!new_args)
         return false;
@@ -5770,6 +5786,9 @@ static void xa_append_default_arg_expansion_notes(XaInferContext *ctx, XaDiagnos
                                                   XaSymbolLinks *fn_links, int param_index,
                                                   const char *call_file) {
     XR_DCHECK(ctx && ctx->analyzer && call_node && call, "expansion notes: call context required");
+    XrCompileState *state = xa_symbol_registry_state(ctx && ctx->analyzer ? ctx->analyzer->symbol_registry : NULL);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+        return;
     const char *callee_name = NULL;
     if (call->callee && call->callee->type == AST_VARIABLE)
         callee_name = call->callee->as.variable.name;
@@ -5799,14 +5818,9 @@ static void xa_append_default_arg_expansion_notes(XaInferContext *ctx, XaDiagnos
 
     XaDiagnostic *first = tail ? tail->next : ctx->analyzer->diagnostics;
     for (XaDiagnostic *diag = first; diag; diag = diag->next) {
-        const char *old_message = diag->message ? diag->message : "";
-        size_t need = strlen(old_message) + strlen(suffix) + 1;
-        char *decorated = (char *) xr_malloc(need);
-        if (!decorated)
+        if (xa_analyzer_append_diagnostic_suffix(ctx->analyzer, diag, suffix) !=
+            XR_COMPILE_RESOURCE_OK)
             return;
-        snprintf(decorated, need, "%s%s", old_message, suffix);
-        xr_free((void *) diag->message);
-        diag->message = decorated;
     }
 }
 
@@ -6674,6 +6688,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             fn_sym = xa_lookup_visible_symbol(ctx, fn_name);
         if (fn_sym) {
             fn_links = xa_refresh_imported_symbol_metadata(ctx, fn_sym);
+            if (xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+                XR_COMPILE_RESOURCE_OK)
+                return NULL;
             if (fn_sym->kind == XA_SYM_CLASS)
                 class_ctor_links = xa_class_constructor_links(ctx, fn_sym);
             if (fn_sym->is_imported && fn_links && fn_links->module_name &&
@@ -8106,15 +8123,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     ctx->callback_accumulator_type = saved_acc_type;
     ctx->callback_array_type = saved_arr_type;
 
-    // Call-site parameter type propagation: for unannotated parameters,
-    // record the inferred argument type so codegen can use it for optimization.
+    XrType *final_type = NULL;
+    if (xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        goto call_cleanup;
+    // Call-site parameter type propagation for unannotated parameters.
     if (fn_links && arg_count > 0) {
-        // Ensure inferred_param_types array is allocated
-        if (!fn_links->inferred_param_types && fn_links->param_count > 0) {
-            fn_links->inferred_param_types = xr_calloc(fn_links->param_count, sizeof(XrType *));
-            if (fn_links->inferred_param_types)
-                fn_links->inferred_param_count = fn_links->param_count;
-        }
+        if (xa_symbol_links_ensure_inferred_params(fn_links) != XR_COMPILE_RESOURCE_OK)
+            goto call_cleanup;
         for (int i = 0; i < arg_count && i < fn_links->inferred_param_count; i++) {
             // Only propagate for unannotated params (declared_type is NULL or unknown)
             XrType *declared = (fn_links->param_types && i < fn_links->param_count)
@@ -8143,6 +8158,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    if (xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        goto call_cleanup;
     xa_check_freestanding_math_call(ctx, node, call, fn_links, effective_arg_types, arg_count);
 
     XrType *return_type = callee_type->function.return_type;
@@ -8376,12 +8393,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                    &loc);
     }
 
-    XrType *final_type = return_type ? return_type : xr_type_new_unknown(NULL);
+    final_type = return_type ? return_type : xr_type_new_unknown(NULL);
     if (optional_function_call && final_type && !XR_TYPE_IS_UNKNOWN(final_type))
         final_type = xr_type_make_nullable(ctx->analyzer->isolate,
                                            xr_type_copy(ctx->analyzer->isolate, final_type));
     if (!resolved_intrinsic)
         (void) xa_record_resolved_source_function_call(ctx, node, call->callee, fn_sym);
+call_cleanup:
     xr_free(effective_arg_types);
     xr_free(effective_arg_symbol_ids);
     xr_free(effective_arg_root_ids);

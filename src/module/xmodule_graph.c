@@ -14,6 +14,7 @@
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xparse.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../toolchain/xcompiler_arena_backing.h"
 #include "../os/os_file_read.h"
 #define GRAPH_INITIAL_CAP 16
 #define GRAPH_MAX_MODULES 1024
@@ -32,7 +33,11 @@ static void spec_cleanup(XrModuleSpec *spec) {
 }
 XR_FUNC void xr_compile_module_graph_free(XrModuleGraph *graph) {
     if (!graph) return;
-    for (int i = 0; i < graph->spec_count; ++i) spec_cleanup(&graph->specs[i]);
+    for (int i = 0; i < graph->spec_count; ++i) {
+        if (graph->specs[i].ast == graph->borrowed_entry_ast)
+            graph->specs[i].ast = NULL;
+        spec_cleanup(&graph->specs[i]);
+    }
     xr_compile_resources_free(graph->specs); xr_hashmap_owned_free(graph->id_index);
     xr_compile_resources_free(graph->topo_order); xr_compile_resources_free(graph->cycle_desc);
     xr_compile_resources_free(graph->unresolved_error); xr_compile_resources_free(graph);
@@ -318,8 +323,9 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
                 if (!bytes.data[i]) { module_status(work,XR_MODULE_INVALID); break; }
             text = bytes.data;
         }
-        AstNode *ast = NULL;
-        if (work->status == XR_MODULE_OK) {
+        bool borrowed = index == graph->entry_index && graph->borrowed_entry_ast;
+        AstNode *ast = borrowed ? graph->borrowed_entry_ast : NULL;
+        if (work->status == XR_MODULE_OK && !borrowed) {
             GraphParseCapture capture={work,graph,(uint32_t)index,text};
             const XrParseDiagnostics diagnostics={graph_parse_diagnostic,&capture,20};
             module_status(work,parse_status(xr_compile_parse_with_diagnostics(
@@ -328,7 +334,7 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
         if (work->status == XR_MODULE_OK) module_status(work,module_resource_status(
             xr_compile_module_source_fingerprint(graph->resources,text,&spec->source_content_fingerprint)));
         xr_compile_resources_free(bytes.data);
-        if (work->status != XR_MODULE_OK) { if (ast) xr_program_destroy(ast); break; }
+        if (work->status != XR_MODULE_OK) { if (ast && !borrowed) xr_program_destroy(ast); break; }
         spec->ast = ast; spec->status = XR_MODSPEC_PARSED;
         graph_imports(work,graph,index,ast);
     }
@@ -400,6 +406,19 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_build_logical_source(XrModuleGrap
     const XrModuleIdentityAuthority *authority, const char *logical, const char *path, const char *source, char **error) {
     if (!graph || !graph->resources || graph->spec_count) return XR_MODULE_INVALID;
     return graph_include_logical_source(graph,authority,logical,path,source,error);
+}
+XR_FUNC XrModuleStatus xr_compile_module_graph_build_ast(XrModuleGraph *graph,
+    const XrModuleSourceAstInput *input, char **error) {
+    if (!graph || !graph->resources || graph->spec_count || !input || !input->source ||
+        !input->program || input->program->type != AST_PROGRAM ||
+        !xr_compiler_arena_matches_state(input->program->as.program.arena,
+            xr_compile_session_compile_state(graph->compiler_session)))
+        return XR_MODULE_INVALID;
+    XrCompileResourceStatus state = xr_compile_session_resource_status(graph->compiler_session);
+    if (state != XR_COMPILE_RESOURCE_OK) return module_resource_status(state);
+    graph->borrowed_entry_ast = input->program;
+    return graph_include_logical_source(graph, input->authority, input->logical_path,
+        input->source_path, input->source, error);
 }
 XR_FUNC XrModuleStatus xr_compile_module_graph_include_logical_source(XrModuleGraph *graph,
     const XrModuleIdentityAuthority *authority, const char *logical, const char *path, const char *source, char **error) {

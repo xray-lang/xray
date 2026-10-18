@@ -44,6 +44,10 @@ static XrType stub_enum = {
 
 static int tests_passed = 0;
 static int tests_failed = 0;
+static XrCompileResources *emit_resources;
+static XrCompileState *emit_state;
+static XiEmitInput emit_input;
+
 
 #define TEST(name)                                                                                 \
     static void test_##name(void);                                                                 \
@@ -118,7 +122,7 @@ TEST(emit_return_const_int) {
     xi_block_set_return(entry, c);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && "emit should succeed");
     assert(proto != NULL);
 
@@ -145,7 +149,7 @@ TEST(emit_return_void) {
     xi_block_set_return(entry, NULL);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK);
     assert(proto != NULL);
 
@@ -172,7 +176,7 @@ TEST(emit_target_layout_queries_use_canonical_target_layout) {
     xi_block_set_return(entry, sum);
 
     XrProto *proto = NULL;
-    XiEmitStatus status = xi_emit(f, NULL, &proto);
+    XiEmitStatus status = xi_emit(f, NULL, &emit_input, &proto);
     assert(status == XI_EMIT_OK && proto != NULL);
     int loads = 0;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
@@ -193,7 +197,7 @@ TEST(emit_unreachable_is_terminator) {
     f->entry->kind = XI_BLOCK_UNREACHABLE;
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK);
     assert(proto != NULL);
     assert(PROTO_CODE_COUNT(proto) == 1);
@@ -213,7 +217,7 @@ TEST(emit_const_bool) {
     xi_block_set_return(entry, t);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
@@ -233,7 +237,7 @@ TEST(emit_const_null) {
     xi_block_set_return(entry, n);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
@@ -256,7 +260,7 @@ TEST(emit_add) {
     xi_block_set_return(entry, add);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
     assert(proto->numparams == 2);
 
@@ -292,7 +296,7 @@ TEST(emit_sub_mul_div) {
     xi_block_set_return(entry, mul);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* Verify all opcodes are present */
@@ -322,7 +326,7 @@ TEST(emit_unary_neg) {
     xi_block_set_return(entry, neg);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -351,7 +355,7 @@ TEST(emit_cmp_eq) {
     xi_block_set_return(entry, eq);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -378,7 +382,7 @@ TEST(emit_cmp_gt) {
     xi_block_set_return(entry, gt);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -408,7 +412,7 @@ TEST(emit_uint64_cmp_uses_unsigned_opcode) {
     xi_block_set_return(entry, gt);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -451,7 +455,7 @@ TEST(emit_if_then_else_fuses_single_use_compare) {
     xi_block_set_return(else_b, c2);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* A comparison consumed only by this branch is emitted directly in branch
@@ -481,7 +485,7 @@ TEST(emit_if_then_else_fuses_single_use_compare) {
 
     cond->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
     proto = NULL;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     cond->conversion.kind = XR_CONVERSION_NONE;
     xi_func_free(f);
 }
@@ -516,7 +520,7 @@ TEST(emit_reused_cmp_control_materializes_bool) {
     xi_block_set_return(else_b, two);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_cmp = false;
@@ -551,7 +555,7 @@ TEST(emit_jump_fallthrough) {
     xi_block_set_return(b1, c);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* Should have: LOADI 99, RETURN1 — no JMP since b1 is the next block */
@@ -579,7 +583,7 @@ TEST(emit_copy_becomes_move) {
     xi_block_set_return(entry, cp);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* Should have MOVE + RETURN1 */
@@ -603,7 +607,7 @@ TEST(emit_codegen_compiler_fence_projects_to_void_without_runtime_effect) {
     xi_block_set_return(entry, NULL);
 
     XrProto *proto = NULL;
-    XiEmitStatus status = xi_emit(f, NULL, &proto);
+    XiEmitStatus status = xi_emit(f, NULL, &emit_input, &proto);
     assert(status == XI_EMIT_OK);
     assert(proto != NULL);
     assert(PROTO_CODE_COUNT(proto) == 2);
@@ -630,7 +634,7 @@ TEST(emit_numeric_conversion_packs_typed_witness) {
     xi_block_set_return(entry, convert);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -732,7 +736,7 @@ TEST(emit_enum_ordinal_conversion_uses_a_distinct_typed_mode) {
     xi_block_set_return(entry, convert);
 
     XrProto *proto = NULL;
-    XiEmitStatus status = xi_emit(f, NULL, &proto);
+    XiEmitStatus status = xi_emit(f, NULL, &emit_input, &proto);
     assert(status == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -754,14 +758,14 @@ TEST(emit_enum_ordinal_conversion_uses_a_distinct_typed_mode) {
 
     convert->xa_intrinsic_id = XA_INTRINSIC_I64_PARSE;
     proto = NULL;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     convert->xa_intrinsic_id = XA_INTRINSIC_NONE;
 
     XrType *saved_source_type = source->type;
     source->type = &stub_int;
     convert->xa_intrinsic_id = XA_INTRINSIC_I64_PARSE;
     proto = NULL;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     convert->xa_intrinsic_id = XA_INTRINSIC_NONE;
     source->type = saved_source_type;
 
@@ -776,7 +780,7 @@ TEST(emit_enum_ordinal_conversion_uses_a_distinct_typed_mode) {
     convert->args = two_operands;
     convert->nargs = 2;
     proto = NULL;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     convert->nargs = 1;
     convert->args = one_operand;
 
@@ -784,7 +788,7 @@ TEST(emit_enum_ordinal_conversion_uses_a_distinct_typed_mode) {
     convert->conversion.kind = XR_CONVERSION_DYNAMIC_CHECKED;
     convert->aux_int = (8 << 1);
     proto = NULL;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     convert->op = XI_CONVERT;
     convert->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
     convert->aux_int = 0;
@@ -795,7 +799,7 @@ TEST(emit_enum_ordinal_conversion_uses_a_distinct_typed_mode) {
     convert->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
     convert->aux_int = (8 << 1);
     proto = NULL;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     convert->aux_int = 0;
     convert->op = XI_CONVERT;
     source->type = saved_mixed_source_type;
@@ -803,15 +807,15 @@ TEST(emit_enum_ordinal_conversion_uses_a_distinct_typed_mode) {
     convert->op = XI_NEG;
     convert->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
     proto = NULL;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     convert->op = XI_CONVERT;
 
     source->type->is_nullable = true;
     proto = NULL;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     source->type->is_nullable = false;
     source->type->scalar_rep = XR_NATIVE_I64;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     source->type->scalar_rep = XR_SCALAR_REP_NONE;
 
     /* The target type and witness must both carry a supported integer
@@ -821,21 +825,21 @@ TEST(emit_enum_ordinal_conversion_uses_a_distinct_typed_mode) {
     stub_uint64.scalar_rep = XR_SCALAR_REP_NONE;
     convert->conversion.target_scalar_rep = XR_SCALAR_REP_NONE;
     proto = NULL;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     convert->conversion.target_scalar_rep = saved_witness_target_rep;
     stub_uint64.scalar_rep = saved_target_rep;
 
     convert->conversion.is_implicit = true;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     convert->conversion.is_implicit = false;
     convert->conversion.kind = XR_CONVERSION_NONE;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     convert->conversion.kind = XR_CONVERSION_ENUM_ORDINAL;
     convert->conversion.is_compile_time = true;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     convert->conversion.is_compile_time = false;
     stub_uint64.is_nullable = true;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     stub_uint64.is_nullable = false;
     xi_func_free(f);
 }
@@ -857,7 +861,7 @@ TEST(emit_fused_compare_rejects_enum_ordinal_witness) {
     xi_block_set_return(else_block, xi_const_int(f, else_block, 0, &stub_int));
 
     XrProto *proto = NULL;
-    assert(xi_emit(f, NULL, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
+    assert(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL && proto == NULL);
     xi_func_free(f);
 }
 
@@ -1009,7 +1013,7 @@ TEST(emit_scalar_parse_intrinsics_use_exact_vm_modes) {
     }
 
     XrProto *proto = NULL;
-    XiEmitStatus status = xi_emit(f, NULL, &proto);
+    XiEmitStatus status = xi_emit(f, NULL, &emit_input, &proto);
     assert(status == XI_EMIT_OK && proto != NULL);
     int required_i64 = 0, optional_i64 = 0, required_f64 = 0, optional_f64 = 0;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
@@ -1043,7 +1047,7 @@ TEST(emit_const_float_small) {
     xi_block_set_return(entry, cf);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
@@ -1062,7 +1066,7 @@ TEST(emit_const_float_large) {
     xi_block_set_return(entry, cf);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
@@ -1084,7 +1088,7 @@ TEST(emit_const_int_large) {
     xi_block_set_return(entry, c);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
@@ -1106,7 +1110,7 @@ TEST(emit_const_int_beyond_sbx) {
     xi_block_set_return(entry, c);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
@@ -1135,7 +1139,7 @@ TEST(emit_after_optimization) {
     xi_opt_run(f);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* After optimization, should have minimal instructions */
@@ -1174,7 +1178,7 @@ TEST(emit_reg_recycling) {
     xi_block_set_return(entry, t3);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* After recycling, dead temps' regs are reused.
@@ -1202,7 +1206,7 @@ TEST(emit_reg_pressure) {
     xi_block_set_return(entry, prev);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* p1 is live throughout (used in every ADD), so we need:
@@ -1223,7 +1227,7 @@ TEST(emit_param_register_above_255) {
     xi_block_set_return(entry, last);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
     assert(proto->numparams == 301);
     assert(proto->maxstacksize >= 301);
@@ -1249,7 +1253,7 @@ TEST(emit_coalesces_var_id_above_255) {
     xi_block_set_return(entry, copy);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
     assert(proto->maxstacksize == 1 && "same high var_id should reuse the param register");
 
@@ -1278,7 +1282,7 @@ TEST(emit_select_preserves_param_slot_alias) {
     xi_block_set_return(entry, select);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     int test_pc = -1;
@@ -1335,7 +1339,7 @@ TEST(emit_aggregate_update_preserves_replaced_owner_before_address_use) {
     xi_block_set_return(entry, NULL);
 
     XrProto *proto = NULL;
-    TEST_REQUIRE(xi_emit(f, isolate, &proto) == XI_EMIT_OK && proto != NULL);
+    TEST_REQUIRE(xi_emit(f, isolate, &emit_input, &proto) == XI_EMIT_OK && proto != NULL);
     int copy_pc = -1;
     int old_drop_pc = -1;
     int new_drop_pc = -1;
@@ -1388,7 +1392,7 @@ TEST(emit_addressed_owner_release_follows_place_replacement) {
     xi_block_set_return(entry, NULL);
 
     XrProto *proto = NULL;
-    TEST_REQUIRE(xi_emit(f, NULL, &proto) == XI_EMIT_OK && proto != NULL);
+    TEST_REQUIRE(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_OK && proto != NULL);
     int reload_pc = -1;
     int drop_pc = -1;
     for (int pc = 0; pc < PROTO_CODE_COUNT(proto); pc++) {
@@ -1433,7 +1437,7 @@ TEST(emit_symbol_index_above_255) {
     xi_block_set_return(entry, call);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, iso, &proto);
+    XiEmitStatus s = xi_emit(f, iso, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
     assert(PROTO_SYMBOL_COUNT(proto) == 302);
 
@@ -1468,7 +1472,7 @@ TEST(emit_addi_rhs_const) {
     xi_block_set_return(entry, add);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_addi = false;
@@ -1497,7 +1501,7 @@ TEST(emit_addi_lhs_const) {
     xi_block_set_return(entry, add);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_addi = false;
@@ -1526,7 +1530,7 @@ TEST(emit_subi_muli) {
     xi_block_set_return(entry, mul);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_subi = false, found_muli = false;
@@ -1559,7 +1563,7 @@ TEST(emit_addi_negative) {
     xi_block_set_return(entry, add);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_addi = false;
@@ -1586,7 +1590,7 @@ TEST(emit_addk_large_const) {
     xi_block_set_return(entry, add);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_addk = false;
@@ -1618,7 +1622,7 @@ TEST(emit_str_concat) {
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     TEST_REQUIRE(s == XI_EMIT_OK && proto != NULL);
 
     int concat_count = 0;
@@ -1649,7 +1653,7 @@ TEST(emit_str_concat_uint64_formats_before_range_concat) {
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     TEST_REQUIRE(s == XI_EMIT_OK && proto != NULL);
 
     bool found_tostring_u64 = false;
@@ -1701,7 +1705,7 @@ TEST(emit_closure_new) {
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* Raw direct-emitter tests do not publish unverified IR to the AOT proto. */
@@ -1743,7 +1747,7 @@ TEST(attach_ir_uses_emitted_child_identity_and_retains_templates) {
     }
     xi_block_set_return(parent->entry, xi_const_int(parent, parent->entry, 42, &stub_int));
     XrProto *proto = NULL;
-    TEST_REQUIRE(xi_emit(parent, NULL, &proto) == XI_EMIT_OK && proto != NULL);
+    TEST_REQUIRE(xi_emit(parent, NULL, &emit_input, &proto) == XI_EMIT_OK && proto != NULL);
     TEST_REQUIRE(PROTO_PROTO_COUNT(proto) == 2);
     XrProto *first = PROTO_PROTO(proto, 0);
     XrProto *second = PROTO_PROTO(proto, 1);
@@ -1787,7 +1791,7 @@ TEST(emit_set_new) {
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -1819,7 +1823,7 @@ TEST(emit_is_check) {
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -1847,7 +1851,7 @@ TEST(emit_identity_as_establishes_owned_result) {
     xi_block_set_return(entry, cast);
 
     XrProto *proto = NULL;
-    XiEmitStatus status = xi_emit(f, NULL, &proto);
+    XiEmitStatus status = xi_emit(f, NULL, &emit_input, &proto);
     assert(status == XI_EMIT_OK && proto != NULL);
 
     bool found_dup = false;
@@ -1874,7 +1878,7 @@ TEST(emit_cancelled_builtin) {
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -1901,7 +1905,7 @@ TEST(emit_local_addr_pins_source_slot) {
     xi_block_set_return(entry, load);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &emit_input, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_pinning_move = false;
@@ -1932,18 +1936,13 @@ TEST(emit_local_addr_pins_source_slot) {
 TEST(emit_import_ref_binds_by_name_for_stdlib_units) {
     XrVMRuntime *isolate = new_test_isolate();
     TEST_REQUIRE(isolate != NULL);
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
-    TEST_REQUIRE(session != NULL);
-    static const XrCompileUnitIdentity identities[2] = {
-        {.kind = XR_COMPILE_UNIT_MEMORY,
-         .module_identity = "memory-module-v1:id=25:import-binding-program-v1"},
-        {.kind = XR_COMPILE_UNIT_STDLIB,
-         .module_identity = "stdlib-module-v1:module=4:yaml:path=12:yaml/yaml.xr",
-         .stdlib_module_name = "yaml"},
+    static const char *const identities[2] = {
+        "memory-module-v1:id=25:import-binding-program-v1",
+        "stdlib-module-v1:module=4:yaml:path=12:yaml/yaml.xr",
     };
     for (int unit = 0; unit < 2; unit++) {
-        bool library = identities[unit].kind == XR_COMPILE_UNIT_STDLIB;
-        TEST_REQUIRE(xr_compiler_session_set_compile_unit_identity(session, &identities[unit]));
+        bool library = unit == 1;
+        emit_input.module_identity = identities[unit];
         XiFunc *f = make_func("import_binding", &stub_int);
         XiBlock *entry = f->entry;
         XiImportRef *ref =
@@ -1963,7 +1962,7 @@ TEST(emit_import_ref_binds_by_name_for_stdlib_units) {
         xi_block_set_return(entry, module);
 
         XrProto *proto = NULL;
-        TEST_REQUIRE(xi_emit(f, isolate, &proto) == XI_EMIT_OK && proto != NULL);
+        TEST_REQUIRE(xi_emit(f, isolate, &emit_input, &proto) == XI_EMIT_OK && proto != NULL);
         bool by_position = false;
         bool by_name = false;
         for (int pc = 0; pc < PROTO_CODE_COUNT(proto); pc++) {
@@ -1980,7 +1979,7 @@ TEST(emit_import_ref_binds_by_name_for_stdlib_units) {
         TEST_REQUIRE(by_name == library);
         xr_instruction_unit_free(proto);
         xi_func_free(f);
-        TEST_REQUIRE(xr_compiler_session_set_compile_unit_identity(session, NULL));
+        emit_input.module_identity = NULL;
     }
     xray_vm_delete(isolate);
 }
@@ -1993,16 +1992,12 @@ TEST(emit_import_ref_binds_by_name_for_stdlib_units) {
 TEST(emit_selective_import_reads_stdlib_members_by_name) {
     XrVMRuntime *isolate = new_test_isolate();
     TEST_REQUIRE(isolate != NULL);
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
-    TEST_REQUIRE(session != NULL);
-    static const XrCompileUnitIdentity program = {
-        .kind = XR_COMPILE_UNIT_MEMORY,
-        .module_identity = "memory-module-v1:id=27:selective-import-program-v1"};
+    static const char program[] = "memory-module-v1:id=27:selective-import-program-v1";
     static const char *const target_identities[2] = {
         "module-id-v1:kind=7:project:namespace=8:acme-app:path=17:src/net/client.xr",
         "stdlib-module-v1:module=3:sys:path=10:sys/sys.xr",
     };
-    TEST_REQUIRE(xr_compiler_session_set_compile_unit_identity(session, &program));
+    emit_input.module_identity = program;
     for (int target = 0; target < 2; target++) {
         bool stdlib_target = target == 1;
         XiFunc *f = make_func("selective_import", &stub_int);
@@ -2030,7 +2025,7 @@ TEST(emit_selective_import_reads_stdlib_members_by_name) {
         xi_block_set_return(entry, member);
 
         XrProto *proto = NULL;
-        TEST_REQUIRE(xi_emit(f, isolate, &proto) == XI_EMIT_OK && proto != NULL);
+        TEST_REQUIRE(xi_emit(f, isolate, &emit_input, &proto) == XI_EMIT_OK && proto != NULL);
         bool by_slot = false;
         bool by_name = false;
         for (int pc = 0; pc < PROTO_CODE_COUNT(proto); pc++) {
@@ -2047,7 +2042,7 @@ TEST(emit_selective_import_reads_stdlib_members_by_name) {
         xi_func_free(target_root);
         xi_func_free(f);
     }
-    TEST_REQUIRE(xr_compiler_session_set_compile_unit_identity(session, NULL));
+    emit_input.module_identity = NULL;
     xray_vm_delete(isolate);
 }
 
@@ -2071,7 +2066,7 @@ TEST(emit_assertion_action_scratch_has_explicit_ownership) {
     xi_block_set_return(entry, NULL);
 
     XrProto *proto = NULL;
-    XiEmitStatus status = xi_emit(f, isolate, &proto);
+    XiEmitStatus status = xi_emit(f, isolate, &emit_input, &proto);
     TEST_REQUIRE(status == XI_EMIT_OK && proto != NULL);
 
     int call_pc = -1;
@@ -2145,6 +2140,71 @@ TEST(emit_assertion_action_scratch_has_explicit_ownership) {
 
 /* ========== Error Handling ========== */
 
+TEST(emit_preserves_original_resource_failure_before_reading_inputs) {
+    XiFunc *f = make_func("failed-state", &stub_void);
+    TEST_REQUIRE(f != NULL);
+    xi_block_set_return(f->entry, NULL);
+    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResources *resources = NULL;
+    XrCompileState *state = NULL;
+    TEST_REQUIRE(xr_compile_resources_new(&limits, &resources) == XR_COMPILE_RESOURCE_OK);
+    TEST_REQUIRE(xr_compile_state_new(resources, &state) == XR_COMPILE_RESOURCE_OK);
+    TEST_REQUIRE(xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET) == XR_COMPILE_RESOURCE_BUDGET);
+    XrCompileResourceStats before = {0}, after = {0};
+    TEST_REQUIRE(xr_compile_resources_stats(resources, &before) == XR_COMPILE_RESOURCE_OK);
+    const XiEmitInput input = {.state = state,
+        .target = (const XrTargetDataLayout *) (uintptr_t) 1,
+        .graph = (const struct XrModuleGraph *) (uintptr_t) 1,
+        .module_identity = (const char *) (uintptr_t) 1};
+    XrProto *proto = (XrProto *) (uintptr_t) 1;
+    TEST_REQUIRE(xi_emit(f, NULL, &input, &proto) == XI_EMIT_ERR_RESOURCE);
+    TEST_REQUIRE(proto == NULL);
+    TEST_REQUIRE(xr_compile_state_status(state) == XR_COMPILE_RESOURCE_BUDGET);
+    TEST_REQUIRE(xr_compile_resources_stats(resources, &after) == XR_COMPILE_RESOURCE_OK);
+    TEST_REQUIRE(after.work == before.work && after.allocation_count == before.allocation_count);
+    xr_compile_state_release(state);
+    xr_compile_resources_release(resources);
+    xi_func_free(f);
+}
+
+TEST(emit_import_requires_actual_runtime) {
+    XiFunc *f = make_func("import-runtime", &stub_int);
+    TEST_REQUIRE(f != NULL);
+    XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(f, (uint32_t) sizeof(*ref));
+    TEST_REQUIRE(ref != NULL);
+    *ref = (XiImportRef) {.module_path = "io", .resolved_mod_index = -1,
+        .resolved_shared_slot = -1, .resolved_export_slot = -1, .exact_target_spec_index = -1};
+    XiValue *module = xi_value_new(f, f->entry, XI_IMPORT_REF, &stub_int, 0);
+    TEST_REQUIRE(module != NULL);
+    module->aux = ref;
+    xi_block_set_return(f->entry, module);
+    XrProto *proto = NULL;
+    TEST_REQUIRE(xi_emit(f, NULL, &emit_input, &proto) == XI_EMIT_ERR_INTERNAL);
+    TEST_REQUIRE(proto == NULL);
+    TEST_REQUIRE(xr_compile_state_status(emit_state) == XR_COMPILE_RESOURCE_OK);
+    xi_func_free(f);
+}
+
+TEST(emit_explicit_ilp32_layout_is_independent_of_host) {
+    XrTargetDataLayout target;
+    TEST_REQUIRE(xr_target_data_layout_init_ilp32(&target));
+    XiEmitInput input = emit_input;
+    input.target = &target;
+    XiFunc *f = make_func("ilp32-size", &stub_int);
+    TEST_REQUIRE(f != NULL);
+    XiValue *size = xi_value_new(f, f->entry, XI_TARGET_SIZEOF, &stub_int, 0);
+    TEST_REQUIRE(size != NULL);
+    size->aux_int = XR_NATIVE_USIZE;
+    xi_block_set_return(f->entry, size);
+    XrProto *proto = NULL;
+    TEST_REQUIRE(xi_emit(f, NULL, &input, &proto) == XI_EMIT_OK && proto != NULL);
+    TEST_REQUIRE(PROTO_CODE_COUNT(proto) == 2);
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, 0)) == OP_LOADI);
+    TEST_REQUIRE(GETARG_sBx(PROTO_CODE(proto, 0)) == 4);
+    xr_instruction_unit_free(proto);
+    xi_func_free(f);
+}
+
 TEST(emit_status_str) {
     assert(strcmp(xi_emit_status_str(XI_EMIT_OK), "OK") == 0);
     assert(strcmp(xi_emit_status_str(XI_EMIT_ERR_TOO_MANY_REGS),
@@ -2156,6 +2216,14 @@ TEST(emit_status_str) {
 /* ========== Main ========== */
 
 int main(void) {
+    /* One cumulative ledger governs the standalone IR suite. No emit or
+     * recursive child receives a new allowance. These are normal fixtures;
+     * dedicated resource cases supply their own exact bounded inputs. */
+    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    TEST_REQUIRE(xr_compile_resources_new(&limits, &emit_resources) == XR_COMPILE_RESOURCE_OK);
+    TEST_REQUIRE(xr_compile_state_new(emit_resources, &emit_state) == XR_COMPILE_RESOURCE_OK);
+    emit_input = (XiEmitInput) {.state = emit_state, .target = xr_target_data_layout_host(),
+        .import_mode = XI_EMIT_IMPORT_PROGRAM};
     printf("=== Xi Emit Unit Tests ===\n\n");
 
     (void) stub_null;
@@ -2240,8 +2308,13 @@ int main(void) {
     run_emit_assertion_action_scratch_has_explicit_ownership();
 
     /* Error handling */
+    run_emit_preserves_original_resource_failure_before_reading_inputs();
+    run_emit_import_requires_actual_runtime();
+    run_emit_explicit_ilp32_layout_is_independent_of_host();
     run_emit_status_str();
 
     printf("\n=== %d/%d Xi Emit tests passed ===\n", tests_passed, tests_passed + tests_failed);
+    xr_compile_state_release(emit_state);
+    xr_compile_resources_release(emit_resources);
     return tests_failed > 0 ? 1 : 0;
 }

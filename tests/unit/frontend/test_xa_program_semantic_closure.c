@@ -703,8 +703,9 @@ static bool scalar_graph_plan_fixture_build(ScalarGraphPlanFixture *fixture,
         goto fail;
     for (uint32_t topo = 0; topo < 2; topo++) {
         int spec_index = source->graph->topo_order[topo];
-        xi_resolve_imports(fixture->pipelines[topo].ir, source->graph,
-                           source->graph->specs[spec_index].source_path, fixture->modules, 2);
+        if (xi_resolve_imports(fixture->pipelines[topo].ir, source->graph,
+                           source->graph->specs[spec_index].source_path, fixture->modules, 2) != XR_MODULE_OK)
+            goto fail;
     }
     if ((!scalar_graph_import_join_is_exact(fixture)) ||
         !xi_program_semantic_verify_module_set(fixture->modules, 2, fixture->entry_index, NULL,

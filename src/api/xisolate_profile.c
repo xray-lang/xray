@@ -19,7 +19,7 @@
 #include "../base/xchecks.h"
 #include "../plan/target/xr_target_profile.h"
 #include "../runtime/abi/xr_runtime_target_profile.h"
-#include "../toolchain/xcompiler_session.h"
+#include "../runtime/xisolate_internal.h"
 #include <stdio.h>
 
 /* ========== Profile Configuration ========== */
@@ -35,25 +35,14 @@ void xr_isolate_profile_params(XrIsolateProfile profile, XrVMConfig *out) {
 
 /* ========== Create ========== */
 
-static bool install_native_hosted_profile(XrCompilerSession *session) {
-    XrTargetProfile *profile = NULL;
+static bool verify_native_hosted_profile(const XrVMRuntime *runtime) {
     char error[256] = {0};
-    if (!session || !xr_runtime_target_profile_build_native_hosted(
-                        &profile, error, sizeof(error))) {
-        fprintf(stderr, "xray: %s\n",
-                error[0] ? error : "native hosted TargetProfile is unavailable");
+    if (!runtime || !runtime->native_target_profile ||
+        !xr_target_profile_verify(runtime->native_target_profile, error, sizeof(error))) {
+        fprintf(stderr, "xray: %s\n", error[0] ? error : "native hosted TargetProfile is unavailable");
         return false;
     }
-    bool installed = xr_compiler_session_set_target_profile(session, profile);
-    const XrTargetProfile *session_profile =
-        xr_compiler_session_target_profile(session);
-    installed = installed && session_profile &&
-                xr_target_profile_require_exact(profile, session_profile,
-                                                error, sizeof(error));
-    xr_target_profile_free(profile);
-    if (!installed)
-        fprintf(stderr, "xray: exact native hosted TargetProfile installation failed\n");
-    return installed;
+    return true;
 }
 
 XrVMRuntime *xr_isolate_profile_create(const XrVMConfig *params) {
@@ -62,8 +51,7 @@ XrVMRuntime *xr_isolate_profile_create(const XrVMConfig *params) {
     XrVMRuntime *iso = xray_vm_new_full(params);
     if (!iso) {
         fprintf(stderr, "xray: failed to create isolate\n");
-    } else if (!install_native_hosted_profile(
-                   xr_compiler_session_current_for_isolate(iso))) {
+    } else if (!verify_native_hosted_profile(iso)) {
         xray_vm_delete(iso);
         iso = NULL;
     }

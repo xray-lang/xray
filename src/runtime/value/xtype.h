@@ -997,7 +997,9 @@ XR_FUNC XrType *xr_type_numeric_common_type(XrType *left, XrType *right);
 /* Exact function signature compatibility with covariant throw effect:
  * NO_THROW implements/overrides MAY_THROW, never the reverse. */
 XR_FUNC bool xr_type_function_signature_assignable(XrType *target, XrType *source);
-XR_FUNC bool xr_type_function_set_view_origins(XrVMRuntime *X, XrType *type,
+/* Resource aborts preserve the selected pool's original CompileState cause.
+ * Resource-aware callers must inspect that cause before interpreting the bind status. */
+XR_FUNC XrViewOriginBindStatus xr_type_function_set_view_origins(XrVMRuntime *X, XrType *type,
                                                const XrViewOrigin *origins, int count,
                                                bool was_elided);
 XR_FUNC bool xr_type_function_view_origins_equal(const XrType *a, const XrType *b);

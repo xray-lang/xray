@@ -110,7 +110,9 @@ int main(int argc, char **argv) {
     XrModuleSpec spec = {0};
     XgBuildKey key;
     XgModuleSummary module;
-    XgGlobalEvidence package;
+    XgGlobalEvidence package = {0};
+    XrCompileResources *resources = NULL;
+    XrCompileState *state = NULL;
     char *payload = NULL;
     int rc = 1;
 
@@ -129,16 +131,21 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK ||
+        xr_compile_state_new(resources, &state) != XR_COMPILE_RESOURCE_OK)
+        goto done;
     spec.canonical = (char *) canonical;
     spec.source_path = real_source;
     spec.kind = XR_MOD_PACKAGE;
 
-    if (!xg_standalone_build_key_from_module_spec(&key, &spec, XG_BUILD_NATIVE_RELEASE, 0) ||
+    if (!xg_standalone_build_key_from_module_spec(&key, state, &spec, XG_BUILD_NATIVE_RELEASE, 0) ||
         !xg_module_summary_from_module_spec(&module, 1, &spec)) {
         fprintf(stderr, "package_payload_fixture: failed to derive package evidence identity\n");
-        return 1;
+        goto done;
     }
-    key.compiler_semver_hash = xg_compiler_image_hash_for_path(compiler_path);
+    if (xg_compiler_image_hash_for_path(state, compiler_path, &key.compiler_semver_hash) != XR_OS_IO_OK)
+        goto done;
 
     memset(&package, 0, sizeof(package));
     xg_global_evidence_init(&package, key);
@@ -161,5 +168,7 @@ int main(int argc, char **argv) {
 done:
     xr_free(payload);
     xg_global_evidence_free(&package);
+    xr_compile_state_release(state);
+    xr_compile_resources_release(resources);
     return rc;
 }

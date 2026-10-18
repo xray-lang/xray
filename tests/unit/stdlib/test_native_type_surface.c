@@ -200,7 +200,7 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_TRUE(strcmp(object_shape->fields[0].name, "members") == 0);
     ASSERT_TRUE(strcmp(object_shape->fields[1].name, "reason") == 0);
 
-    XrType *object_shape_type = xa_builtin_object_shape_decl_type(iso, object_shape);
+    XrType *object_shape_type = xa_builtin_object_shape_decl_type(iso, analyzer, object_shape);
     ASSERT_NOT_NULL(object_shape_type);
     ASSERT_EQ_INT(object_shape_type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_EQ_INT(object_shape_type->object.field_count, 2);

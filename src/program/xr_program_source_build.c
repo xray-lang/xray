@@ -20,7 +20,10 @@
 #include "../analysis/xglobal_producer.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../base/xhashmap.h"
+#include "../plan/target/xr_target_profile.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xanalyzer_native_input.h"
 #include "../frontend/analyzer/xanalyzer_mono.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/parser/xast_nodes.h"
@@ -101,6 +104,22 @@ static XrProgramSourceBuildStatus reject(XrProgramSourceDiagnostic *diagnostic,
     return status;
 }
 
+static XrProgramSourceBuildStatus reject_resource(const XrProgramSourceBuildInput *input,
+    XrProgramSourceDiagnostic *diagnostic, XrProgramSourceBuildStage stage, uint32_t module) {
+    XrCompileResourceStatus resource = xr_compile_session_resource_status(input->session);
+    return reject(diagnostic, resource == XR_COMPILE_RESOURCE_BUDGET ? XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT :
+        resource == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY :
+        XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT, stage, module, 0u, (uint32_t) resource,
+        "source build rejected the original compiler resource state");
+}
+
+static void record_module_resource(const XrProgramSourceBuildInput *input, XrModuleStatus status) {
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY)
+        (void) xr_compile_state_fail(xr_compile_session_compile_state(input->session),
+            status == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+            XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+}
+
 static void set_source_location(XrProgramSourceDiagnostic *diagnostic, const XrLocation *location) {
     if (!diagnostic || !location)
         return;
@@ -159,7 +178,7 @@ static void build_context_free(XrProgramSourceBuildContext *context) {
         xa_analyzer_set_graph(context->analyzer, NULL);
         xa_analyzer_free(context->analyzer);
     }
-    xr_module_graph_free(context->graph);
+    xr_compile_module_graph_free(context->graph);
     memset(context, 0, sizeof(*context));
 }
 
@@ -180,24 +199,38 @@ static XrProgramSourceBuildStatus allocate_module_storage(XrProgramSourceBuildCo
 static XrProgramSourceBuildStatus build_module_graph(XrProgramSourceBuildContext *context,
                                                      XrProgramSourceDiagnostic *diagnostic) {
     const XrProgramSourceBuildInput *input = context->input;
-    context->graph = xr_module_graph_new(input->session, input->resolver);
+    XrModuleStatus created = xr_compile_module_graph_new(xr_compile_session_resources(input->session),
+        input->session, input->resolver, &context->graph);
+    if (created != XR_MODULE_OK) {
+        record_module_resource(input, created);
+        return reject_resource(input, diagnostic, XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH, UINT32_MAX);
+    }
     if (!context->graph)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
                       XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH, UINT32_MAX, 0u, 0u,
                       "module graph allocation failed");
     char *graph_error = NULL;
-    int graph_status = xr_module_graph_build(context->graph, input->entry_source_path,
+    XrModuleStatus graph_status = xr_compile_module_graph_build(context->graph, input->entry_source_path,
                                              input->entry_authority, &graph_error);
-    if (graph_status != 0) {
+    if (graph_status != XR_MODULE_OK) {
+        record_module_resource(input, graph_status);
+        if (xr_compile_session_resource_status(input->session) != XR_COMPILE_RESOURCE_OK) {
+            xr_compile_resources_free(graph_error);
+            return reject_resource(input, diagnostic, XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH, UINT32_MAX);
+        }
         XrProgramSourceBuildStatus status =
             reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_GRAPH_REJECTED,
                    XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH, UINT32_MAX, 0u, (uint32_t) graph_status,
                    "%s", graph_error ? graph_error : "module graph build failed");
-        xr_free(graph_error);
+        xr_compile_resources_free(graph_error);
         return status;
     }
-    xr_free(graph_error);
-    if (xr_module_graph_topological_sort(context->graph) != 0 || context->graph->has_cycle ||
+    xr_compile_resources_free(graph_error);
+    graph_status = xr_compile_module_graph_topological_sort(context->graph);
+    record_module_resource(input, graph_status);
+    if (xr_compile_session_resource_status(input->session) != XR_COMPILE_RESOURCE_OK)
+        return reject_resource(input, diagnostic, XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH, UINT32_MAX);
+    if (graph_status != XR_MODULE_OK || context->graph->has_cycle ||
         !context->graph->topo_order || context->graph->topo_count <= 0 ||
         context->graph->entry_index < 0 ||
         context->graph->entry_index >= context->graph->spec_count)
@@ -299,8 +332,7 @@ static XrProgramSourceBuildStatus discover_export_entries(XrProgramSourceBuildCo
                                                          XrProgramSourceDiagnostic *diagnostic) {
     if (!context->input->discover_exports)
         return XR_PROGRAM_SOURCE_BUILD_OK;
-    const XrNativePackagePlan *plan =
-        xr_compiler_session_native_package_plan(context->input->session);
+    const XrNativePackagePlan *plan = context->input->native_package_plan;
     if (!plan)
         return XR_PROGRAM_SOURCE_BUILD_OK;
     uint32_t module = context->entry_topological_index;
@@ -505,6 +537,8 @@ static XrProgramSourceBuildStatus analyze_modules(XrProgramSourceBuildContext *c
         int spec_index = context->graph->topo_order[topo];
         XrModuleSpec *spec = &context->graph->specs[spec_index];
         xa_analyzer_analyze(context->analyzer, spec->source_path, spec->ast);
+        if (xr_compile_session_resource_status(context->input->session) != XR_COMPILE_RESOURCE_OK)
+            return reject_resource(context->input, diagnostic, XR_PROGRAM_SOURCE_STAGE_ANALYSIS, topo);
         int diagnostic_count = 0;
         XaDiagnostic *analysis = xa_analyzer_get_diagnostics(context->analyzer, &diagnostic_count);
         for (; analysis; analysis = analysis->next) {
@@ -520,16 +554,18 @@ static XrProgramSourceBuildStatus analyze_modules(XrProgramSourceBuildContext *c
             xa_analyzer_clear_diagnostics(context->analyzer);
             return status;
         }
-        if (spec->export_symbols)
-            xr_hashmap_free(spec->export_symbols);
-        spec->export_symbols = NULL;
-        if (!xa_analyzer_collect_export_symbols_checked(context->analyzer, spec->ast,
-                                                        &spec->export_symbols)) {
+        XrHashMap *exports = NULL;
+        if (!xa_analyzer_collect_export_symbols_checked(context->analyzer, spec->ast, &exports)) {
+            if (xr_compile_session_resource_status(context->input->session) != XR_COMPILE_RESOURCE_OK)
+                return reject_resource(context->input, diagnostic, XR_PROGRAM_SOURCE_STAGE_ANALYSIS, topo);
             xa_analyzer_clear_diagnostics(context->analyzer);
             return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_ANALYSIS_REJECTED,
                           XR_PROGRAM_SOURCE_STAGE_ANALYSIS, topo, 0u, 0u,
                           "module export analysis is incomplete");
         }
+        if (spec->export_symbols != exports)
+            xr_hashmap_owned_free(spec->export_symbols);
+        spec->export_symbols = exports;
         spec->status = XR_MODSPEC_ANALYZED;
         xa_analyzer_clear_diagnostics(context->analyzer);
     }
@@ -538,11 +574,24 @@ static XrProgramSourceBuildStatus analyze_modules(XrProgramSourceBuildContext *c
 
 static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildContext *context,
                                                          XrProgramSourceDiagnostic *diagnostic) {
-    context->analyzer = xa_analyzer_new(context->input->session);
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(context->input->target_profile);
+    const XaAnalyzerInput analysis = {.session = context->input->session, .runtime = context->input->runtime,
+        .target = &machine->data_layout, .module_identity = context->input->entry.module_identity};
+    context->analyzer = xa_analyzer_new(&analysis);
+    if (!context->analyzer && xr_compile_session_resource_status(context->input->session) != XR_COMPILE_RESOURCE_OK)
+        return reject_resource(context->input, diagnostic, XR_PROGRAM_SOURCE_STAGE_ANALYSIS, UINT32_MAX);
     if (!context->analyzer)
         return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
                       XR_PROGRAM_SOURCE_STAGE_ANALYSIS, UINT32_MAX, 0u, 0u,
                       "analyzer allocation failed");
+    XrCompileResourceStatus native_status = xa_analyzer_bind_native_plan(
+        context->analyzer, context->input->native_package_plan);
+    if (native_status != XR_COMPILE_RESOURCE_OK)
+        return reject(diagnostic, native_status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY
+                ? XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY : native_status == XR_COMPILE_RESOURCE_BUDGET
+                ? XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT : XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT,
+            XR_PROGRAM_SOURCE_STAGE_ANALYSIS, UINT32_MAX, 0u, (uint32_t) native_status,
+            "native input does not belong to this compiler operation");
     xa_analyzer_set_build_profile(context->analyzer, context->input->source_profile ==
                                                              XR_PROGRAM_SOURCE_PROFILE_FREESTANDING
                                                          ? XA_ANALYZER_BUILD_PROFILE_FREESTANDING
@@ -551,7 +600,7 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
     XrProgramSourceBuildStatus status = analyze_modules(context, diagnostic);
     if (status != XR_PROGRAM_SOURCE_BUILD_OK)
         return status;
-    XrVMRuntime *isolate = xr_compiler_session_vm_host(context->input->session);
+    XrVMRuntime *isolate = context->input->runtime;
     XaMonoBudget mono_budget = {
         .max_depth = context->input->budget.max_monomorphization_depth,
         .max_instances = context->input->budget.max_monomorphization_instances,
@@ -559,6 +608,8 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
     XaMonoUsage mono_usage = {0};
     if (!xa_mono_graph_pass(context->ast_roots, (int) context->module_count, isolate, &mono_budget,
                             &mono_usage, context->analyzer)) {
+        if (xr_compile_session_resource_status(context->input->session) != XR_COMPILE_RESOURCE_OK)
+            return reject_resource(context->input, diagnostic, XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION, UINT32_MAX);
         int diagnostic_count = 0;
         XaDiagnostic *analysis = xa_analyzer_get_diagnostics(context->analyzer, &diagnostic_count);
         for (; analysis; analysis = analysis->next) {
@@ -605,15 +656,18 @@ static XrProgramSourceBuildStatus prepare_semantic_graph(XrProgramSourceBuildCon
         int spec_index = context->graph->topo_order[topo];
         XrModuleSpec *spec = &context->graph->specs[spec_index];
         XrCompilerSessionScope scope = {0};
-        if (!spec->ast || spec->ast->type != AST_PROGRAM || !spec->ast->as.program.arena ||
-            !xr_compiler_session_push_arena(context->input->session, spec->ast->as.program.arena,
-                                            spec->source_path, &scope))
+        if (!spec->ast || spec->ast->type != AST_PROGRAM || !spec->ast->as.program.arena)
             return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_CANONICALIZATION_REJECTED,
                           XR_PROGRAM_SOURCE_STAGE_CANONICALIZATION, topo, 0u, 0u,
                           "module canonicalization arena is unavailable");
+        if (xr_compile_session_push_arena(context->input->session, spec->ast->as.program.arena,
+                &scope) != XR_COMPILE_RESOURCE_OK)
+            return reject_resource(context->input, diagnostic, XR_PROGRAM_SOURCE_STAGE_CANONICALIZATION, topo);
         XrCanonStatus canonical =
             xr_canon_program(spec->ast, context->analyzer, context->input->session);
-        xr_compiler_session_pop_arena(&scope);
+        (void) xr_compile_session_pop_arena(&scope);
+        if (xr_compile_session_resource_status(context->input->session) != XR_COMPILE_RESOURCE_OK)
+            return reject_resource(context->input, diagnostic, XR_PROGRAM_SOURCE_STAGE_CANONICALIZATION, topo);
         if (canonical != XR_CANON_OK)
             return reject(diagnostic, XR_PROGRAM_SOURCE_BUILD_CANONICALIZATION_REJECTED,
                           XR_PROGRAM_SOURCE_STAGE_CANONICALIZATION, topo, 0u, (uint32_t) canonical,
@@ -635,11 +689,12 @@ static XrProgramSourceBuildStatus compile_xi_modules(XrProgramSourceBuildContext
                                                      XrProgramSourceDiagnostic *diagnostic) {
     XiPipelineConfig config = xi_pipeline_program_input_config();
     config.run_canonicalize = false;
+    config.target_profile = context->input->target_profile;
     config.module_graph = context->graph;
     config.graph_modules = context->modules;
     config.graph_module_count = (int) context->module_count;
     config.global_evidence = &context->evidence;
-    XrVMRuntime *isolate = xr_compiler_session_vm_host(context->input->session);
+    XrVMRuntime *isolate = context->input->runtime;
     for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
         int spec_index = context->graph->topo_order[topo];
         XrModuleSpec *spec = &context->graph->specs[spec_index];
@@ -660,9 +715,13 @@ static XrProgramSourceBuildStatus compile_xi_modules(XrProgramSourceBuildContext
     }
     for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
         int spec_index = context->graph->topo_order[topo];
-        xi_resolve_imports(context->pipelines[topo].ir, context->graph,
-                           context->graph->specs[spec_index].source_path, context->modules,
-                           (int) context->module_count);
+        XrModuleStatus imports = xi_resolve_imports(context->pipelines[topo].ir, context->graph,
+            context->graph->specs[spec_index].source_path, context->modules, (int) context->module_count);
+        if (imports != XR_MODULE_OK)
+            return reject(diagnostic, imports == XR_MODULE_BUDGET ? XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT :
+                imports == XR_MODULE_OUT_OF_MEMORY ? XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY :
+                XR_PROGRAM_SOURCE_BUILD_PIPELINE_REJECTED, XR_PROGRAM_SOURCE_STAGE_XI_PIPELINE,
+                topo, 0u, (uint32_t) imports, "import resolution failed (module status %d)", (int) imports);
     }
     for (uint32_t topo = 0u; topo < context->module_count; ++topo) {
         char error[256] = {0};
@@ -771,8 +830,7 @@ static XrProgramSourceBuildStatus write_product(XrProgramSourceBuildContext *con
         test->kind = selection->test_kind;
         test->timeout_seconds = selection->timeout_seconds;
     }
-    const XrNativePackagePlan *native_plan =
-        xr_compiler_session_native_package_plan(context->input->session);
+    const XrNativePackagePlan *native_plan = context->input->native_package_plan;
     product->exports = context->export_count
         ? xr_calloc(context->export_count, sizeof(*product->exports)) : NULL;
     product->export_function_ids = context->export_count
@@ -838,8 +896,19 @@ static bool input_valid(const XrProgramSourceBuildInput *input) {
         !source_profile_valid(input->source_profile) ||
         !fingerprint_present(input->semantic_profile_fingerprint) ||
         !xr_module_identity_authority_valid(input->entry_authority) ||
-        !xr_compiler_session_vm_host(input->session))
+        !input->runtime || !input->target_profile ||
+        !xr_target_profile_verify(input->target_profile, NULL, 0))
         return false;
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(input->target_profile);
+    if (!machine || !xr_target_data_layout_validate(&machine->data_layout) ||
+        input->resolver->resources != xr_compile_session_resources(input->session))
+        return false;
+    if (input->native_package_plan) {
+        XrOsIoPolicy policy = xr_compile_io_policy(xr_compile_session_resources(input->session));
+        if (!input->native_package_plan->valid ||
+            !xr_native_package_plan_uses_policy(input->native_package_plan, &policy))
+            return false;
+    }
     for (uint32_t index = 0u; index < input->retained_entry_count; ++index)
         if (!entry_identity_valid(&input->retained_entries[index], false))
             return false;
@@ -855,16 +924,13 @@ XrProgramSourceBuildStatus xr_program_source_build(const XrProgramSourceBuildInp
     if (product_out)
         memset(product_out, 0, sizeof(*product_out));
     clear_diagnostic(diagnostic_out);
+    if (input && input->session &&
+        xr_compile_session_resource_status(input->session) != XR_COMPILE_RESOURCE_OK)
+        return reject_resource(input, diagnostic_out, XR_PROGRAM_SOURCE_STAGE_REQUEST, UINT32_MAX);
     if (!product_out || !input_valid(input))
         return reject(diagnostic_out, XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT,
                       XR_PROGRAM_SOURCE_STAGE_REQUEST, UINT32_MAX, 0u, 0u,
                       "source build request is incomplete");
-
-    XrCompilerSessionOperationScope operation = {0};
-    if (!xr_compiler_session_operation_begin(input->session, &operation))
-        return reject(diagnostic_out, XR_PROGRAM_SOURCE_BUILD_SESSION_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_REQUEST, UINT32_MAX, 0u, 0u,
-                      "compiler session is unavailable");
 
     XrProgramSourceBuildContext context = {.input = input};
     context.entry_topological_index = UINT32_MAX;
@@ -888,16 +954,11 @@ XrProgramSourceBuildStatus xr_program_source_build(const XrProgramSourceBuildInp
 
     if (status != XR_PROGRAM_SOURCE_BUILD_OK) {
         xr_program_source_product_free(&product);
-        if (operation.active)
-            (void) xr_compiler_session_operation_fail(&operation,
-                                                      XR_COMPILER_SESSION_OPERATION_FATAL);
         return status;
     }
-    if (!xr_compiler_session_operation_succeed(&operation)) {
+    if (xr_compile_session_resource_status(input->session) != XR_COMPILE_RESOURCE_OK) {
         xr_program_source_product_free(&product);
-        return reject(diagnostic_out, XR_PROGRAM_SOURCE_BUILD_SESSION_REJECTED,
-                      XR_PROGRAM_SOURCE_STAGE_SESSION_COMMIT, UINT32_MAX, 0u, 0u,
-                      "compiler session rejected the completed source build");
+        return reject_resource(input, diagnostic_out, XR_PROGRAM_SOURCE_STAGE_SESSION_COMMIT, UINT32_MAX);
     }
     *product_out = product;
     clear_diagnostic(diagnostic_out);

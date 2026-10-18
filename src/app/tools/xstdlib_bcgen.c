@@ -22,6 +22,9 @@
 #include "../../module/xproject.h"
 #include "../../runtime/xr_process_shutdown.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../../frontend/codegen/xcompiler_context.h"
+#include "../../runtime/xisolate_internal.h"
+#include "../../plan/target/xr_target_profile.h"
 #include "../toolchain/xtc_target_profile.h"
 #include "xray_vm.h"
 #include <stdio.h>
@@ -203,16 +206,33 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    XrCompilerSession *session = X->compiler_session;
+    XrCompileState *state = xr_compile_session_compile_state(session);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) {
+        xray_vm_delete(X);
+        return 1;
+    }
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(X->native_target_profile);
+    if (!machine) {
+        xray_vm_delete(X);
+        return 1;
+    }
+    XrCompilerInput compiler = {
+        .analysis = {session, X, &machine->data_layout, NULL},
+        .policy = {X->native_target_profile, false, NULL}
+    };
     XrModuleIdentityAuthority authority = {0};
     char *authority_root = NULL;
-    bool have_authority = stdlib_module || (xr_module_identity_script_authority_from_source(
-                                               input, &authority, &authority_root) == XR_MODULE_OK);
+    XrModuleStatus status = stdlib_module ? XR_MODULE_OK :
+        xr_compile_module_identity_script_authority_from_source(xr_compile_state_resources(state),
+            input, &authority, &authority_root);
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY)
+        xr_compile_state_fail(state, status == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
     bool ok =
-        have_authority &&
-        (stdlib_module ? xr_compile_stdlib_to_file(session, stdlib_module, input, output, flags)
-                       : xr_compile_to_file(session, input, output, flags, &authority));
-    xr_free(authority_root);
+        status == XR_MODULE_OK &&
+        (stdlib_module ? xr_compile_stdlib_to_file(&compiler, stdlib_module, input, output, flags)
+                       : xr_compile_to_file(&compiler, input, output, flags, &authority));
+    xr_compile_resources_free(authority_root);
     xray_vm_delete(X);
     return ok ? 0 : 1;
 }

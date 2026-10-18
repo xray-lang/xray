@@ -23,6 +23,8 @@
 #define INITIAL_CAPACITY 16
 #define DEFAULT_CONSTRAINT "^1.0.0"
 
+static void node_free(XrDepNode *node);
+
 /*
  * Parse "name@version" dependency spec.
  * Sets *out_name to the name part (within the dup'd buffer) and
@@ -55,15 +57,20 @@ static XrDepNode *node_new(const char *name, const char *constraint_str) {
     node->name = xr_strdup(name);
     node->constraint_str = xr_strdup(constraint_str);
 
-    if (constraint_str) {
-        xr_constraint_parse(constraint_str, &node->constraint);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    if (!node->name || (constraint_str && !node->constraint_str) ||
+        (constraint_str && xr_constraint_parse_owned(&policy, constraint_str, &node->constraint) != XR_OS_IO_OK)) {
+        node_free(node);
+        return NULL;
     }
 
     node->dep_capacity = 8;
     node->dependencies = (XrDepNode **) xr_malloc(node->dep_capacity * sizeof(XrDepNode *));
-    if (node->dependencies) {
-        memset(node->dependencies, 0, node->dep_capacity * sizeof(XrDepNode *));
+    if (!node->dependencies) {
+        node_free(node);
+        return NULL;
     }
+    memset(node->dependencies, 0, node->dep_capacity * sizeof(XrDepNode *));
 
     return node;
 }
@@ -77,8 +84,8 @@ static void node_free(XrDepNode *node) {
 
     xr_free(node->name);
     xr_free(node->constraint_str);
-    xr_constraint_free(&node->constraint);
-    xr_semver_free(&node->resolved_version);
+    xr_constraint_free_owned(&node->constraint);
+    xr_semver_free_owned(&node->resolved_version);
     xr_free(node->dependencies);
     xr_free(node);
 }
@@ -150,10 +157,12 @@ XrDepGraph *xr_depgraph_new(void) {
 
     graph->root_capacity = INITIAL_CAPACITY;
     graph->roots = (XrDepNode **) xr_malloc(graph->root_capacity * sizeof(XrDepNode *));
-    graph->index = xr_hashmap_new();
+    /* Package installation owns this graph independently of compiler state. */
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    XrOsIoStatus status = xr_hashmap_owned_new(&policy, &graph->index);
 
-    if (!graph->nodes || !graph->roots || !graph->index) {
-        xr_hashmap_free(graph->index);
+    if (!graph->nodes || !graph->roots || status != XR_OS_IO_OK) {
+        xr_hashmap_owned_free(graph->index);
         xr_free(graph->nodes);
         xr_free(graph->roots);
         xr_free(graph);
@@ -170,11 +179,12 @@ void xr_depgraph_free(XrDepGraph *graph) {
     if (!graph)
         return;
 
+    /* The map borrows node names, which remain live through its destruction. */
+    xr_hashmap_owned_free(graph->index);
     for (int i = 0; i < graph->node_count; i++) {
         node_free(graph->nodes[i]);
     }
 
-    xr_hashmap_free(graph->index);
     xr_free(graph->nodes);
     xr_free(graph->roots);
     xr_free(graph);
@@ -209,7 +219,7 @@ static XrDepNode *graph_get_or_create_node(XrDepGraph *graph, const char *name,
     }
 
     graph->nodes[graph->node_count++] = node;
-    if (!xr_hashmap_set(graph->index, node->name, node)) {
+    if (xr_hashmap_owned_set(graph->index, node->name, node) != XR_OS_IO_OK) {
         // Unindexed nodes would be re-created on the next lookup; keep the
         // graph and index consistent by rolling back.
         graph->node_count--;
@@ -248,7 +258,10 @@ bool xr_depgraph_add_root(XrDepGraph *graph, const char *name, const char *const
 XrDepNode *xr_depgraph_find(XrDepGraph *graph, const char *name) {
     if (!graph || !name)
         return NULL;
-    return (XrDepNode *) xr_hashmap_get(graph->index, name);
+    void *value = NULL;
+    if (xr_hashmap_owned_get(graph->index, name, &value) != XR_OS_IO_OK)
+        return NULL;
+    return value;
 }
 
 /* ========== Cycle Detection ========== */
@@ -398,33 +411,44 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node, XrPackageInfoFn get
                          const XrLockfile *lockfile, void *user_data, char **error) {
     if (node->resolved)
         return true;
+    XrOsIoPolicy policy = xr_os_io_system_policy();
 
     // 1. Check if version is pinned in lockfile
     if (lockfile) {
-        const XrLockedPackage *locked = xr_lockfile_find(lockfile, node->name);
+        const XrLockedPackage *locked = NULL;
+        XrOsIoStatus status = xr_lockfile_find_owned(&lockfile->policy, lockfile, node->name, &locked);
+        if (status != XR_OS_IO_OK && status != XR_OS_IO_NOT_FOUND)
+            return false;
         if (locked && locked->version) {
-            xr_semver_parse(locked->version, &node->resolved_version);
+            xr_semver_free_owned(&node->resolved_version);
+            if (xr_semver_parse_owned(&policy, locked->version, &node->resolved_version) != XR_OS_IO_OK)
+                return false;
             node->resolved = true;
 
             // Add locked dependencies
             for (int i = 0; i < locked->dep_count; i++) {
                 const char *dep_name, *dep_ver;
                 char *buf = parse_dep_spec(locked->dependencies[i], &dep_name, &dep_ver);
-                if (!buf)
-                    continue;
-
-                XrDepNode *dep = graph_get_or_create_node(graph, dep_name, dep_ver);
-                if (dep) {
-                    dep->depth = node->depth + 1;
-                    node_add_dep(node, dep);
+                if (!buf) {
+                    node->resolved = false;
+                    return false;
                 }
+                XrDepNode *dep = graph_get_or_create_node(graph, dep_name, dep_ver);
+                bool added = dep && node_add_dep(node, dep);
+                if (added)
+                    dep->depth = node->depth + 1;
                 xr_free(buf);
+                if (!added) {
+                    node->resolved = false;
+                    return false;
+                }
             }
 
             // Recursively resolve dependencies
             for (int i = 0; i < node->dep_count; i++) {
                 if (!resolve_node(graph, node->dependencies[i], get_info, lockfile, user_data,
                                   error)) {
+                    node->resolved = false;
                     return false;
                 }
             }
@@ -455,22 +479,27 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node, XrPackageInfoFn get
     XrSemVer best_ver = {0};
 
     for (int i = 0; i < info->version_count; i++) {
-        XrSemVer ver;
-        if (!xr_semver_parse(info->versions[i], &ver)) {
+        XrSemVer ver = {0};
+        XrOsIoStatus status = xr_semver_parse_owned(&policy, info->versions[i], &ver);
+        if (status == XR_OS_IO_BAD_ARGUMENT)
             continue;
+        if (status != XR_OS_IO_OK)
+            goto version_failure;
+        bool matches = false;
+        status = xr_constraint_matches_owned(&policy, &ver, &node->constraint, &matches);
+        int comparison = 0;
+        if (status == XR_OS_IO_OK && matches && best_idx >= 0)
+            status = xr_semver_compare_owned(&policy, &ver, &best_ver, &comparison);
+        if (status != XR_OS_IO_OK) {
+            xr_semver_free_owned(&ver);
+            goto version_failure;
         }
-
-        if (xr_constraint_matches(&ver, &node->constraint)) {
-            if (best_idx < 0 || xr_semver_compare(&ver, &best_ver) > 0) {
-                xr_semver_free(&best_ver);
-                best_ver = ver;
-                best_idx = i;
-            } else {
-                xr_semver_free(&ver);
-            }
-        } else {
-            xr_semver_free(&ver);
-        }
+        if (matches && (best_idx < 0 || comparison > 0)) {
+            xr_semver_free_owned(&best_ver);
+            best_ver = ver;
+            best_idx = i;
+        } else
+            xr_semver_free_owned(&ver);
     }
 
     if (best_idx < 0) {
@@ -484,6 +513,7 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node, XrPackageInfoFn get
         return false;
     }
 
+    xr_semver_free_owned(&node->resolved_version);
     node->resolved_version = best_ver;
     node->resolved = true;
 
@@ -491,15 +521,16 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node, XrPackageInfoFn get
     for (int i = 0; i < info->dep_count; i++) {
         const char *dep_name, *dep_ver;
         char *buf = parse_dep_spec(info->deps[i], &dep_name, &dep_ver);
-        if (!buf)
-            continue;
-
-        XrDepNode *dep = graph_get_or_create_node(graph, dep_name, dep_ver);
-        if (dep) {
+        XrDepNode *dep = buf ? graph_get_or_create_node(graph, dep_name, dep_ver) : NULL;
+        bool added = dep && node_add_dep(node, dep);
+        if (added)
             dep->depth = node->depth + 1;
-            node_add_dep(node, dep);
-        }
         xr_free(buf);
+        if (!added) {
+            node->resolved = false;
+            xr_package_info_free(info);
+            return false;
+        }
     }
 
     xr_package_info_free(info);
@@ -507,11 +538,16 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node, XrPackageInfoFn get
     // 5. Recursively resolve dependencies
     for (int i = 0; i < node->dep_count; i++) {
         if (!resolve_node(graph, node->dependencies[i], get_info, lockfile, user_data, error)) {
+            node->resolved = false;
             return false;
         }
     }
 
     return true;
+version_failure:
+    xr_semver_free_owned(&best_ver);
+    xr_package_info_free(info);
+    return false;
 }
 
 XrResolveResult *xr_resolve_dependencies(XrDepGraph *graph, XrPackageInfoFn get_info,
@@ -527,7 +563,7 @@ XrResolveResult *xr_resolve_dependencies(XrDepGraph *graph, XrPackageInfoFn get_
     for (int i = 0; i < graph->root_count; i++) {
         if (!resolve_node(graph, graph->roots[i], get_info, lockfile, user_data, &error)) {
             result->success = false;
-            result->error = error;
+            result->error = error ? error : xr_strdup("Dependency metadata operation failed");
             return result;
         }
     }
@@ -543,8 +579,13 @@ XrResolveResult *xr_resolve_dependencies(XrDepGraph *graph, XrPackageInfoFn get_
     }
 
     // 4. Generate result
-    result->packages = (char **) xr_malloc(count * sizeof(char *));
-    result->versions = (char **) xr_malloc(count * sizeof(char *));
+    result->packages = (char **) xr_calloc((size_t) count, sizeof(char *));
+    result->versions = (char **) xr_calloc((size_t) count, sizeof(char *));
+    if (count > 0 && (!result->packages || !result->versions)) {
+        xr_free(order);
+        xr_resolve_result_free(result);
+        return NULL;
+    }
     result->count = count;
     if (result->packages)
         memset(result->packages, 0, count * sizeof(char *));
@@ -555,8 +596,19 @@ XrResolveResult *xr_resolve_dependencies(XrDepGraph *graph, XrPackageInfoFn get_
         result->packages[i] = xr_strdup(order[i]->name);
 
         char ver_buf[64];
-        xr_semver_to_string(&order[i]->resolved_version, ver_buf, sizeof(ver_buf));
+        XrOsIoPolicy policy = xr_os_io_system_policy();
+        size_t written = 0;
+        if (xr_semver_to_string_owned(&policy, &order[i]->resolved_version, ver_buf, sizeof(ver_buf), &written) != XR_OS_IO_OK) {
+            xr_free(order);
+            xr_resolve_result_free(result);
+            return NULL;
+        }
         result->versions[i] = xr_strdup(ver_buf);
+        if (!result->packages[i] || !result->versions[i]) {
+            xr_free(order);
+            xr_resolve_result_free(result);
+            return NULL;
+        }
     }
 
     xr_free(order);
@@ -601,7 +653,10 @@ static void print_node(const XrDepNode *node, int indent) {
 
     char ver_buf[64] = "unresolved";
     if (node->resolved) {
-        xr_semver_to_string(&node->resolved_version, ver_buf, sizeof(ver_buf));
+        XrOsIoPolicy policy = xr_os_io_system_policy();
+        size_t written = 0;
+        if (xr_semver_to_string_owned(&policy, &node->resolved_version, ver_buf, sizeof(ver_buf), &written) != XR_OS_IO_OK)
+            memcpy(ver_buf, "unprintable", sizeof("unprintable"));
     }
 
     printf("%s@%s (%s)\n", node->name, ver_buf, node->constraint_str ? node->constraint_str : "*");

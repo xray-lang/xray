@@ -613,15 +613,25 @@ XR_FUNC bool xa_resolve_enum_pattern_plans(XaInferContext *ctx, AstNode *pattern
 // declared element types when the scrutinee is a known tuple type.
 XR_FUNC void xa_register_pattern_bindings(XaInferContext *ctx, AstNode *pattern,
                                           XrType *slot_type) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     if (!ctx || !pattern)
         return;
 
     if (pattern->type == AST_PATTERN_LITERAL) {
         AstNode *pval = pattern->as.pattern_literal.value;
         if (pval && pval->type == AST_VARIABLE) {
-            XaSymbol *bind_sym = xa_symbol_new(pval->as.variable.name, XA_SYM_VARIABLE);
+            XaSymbol *bind_sym = xa_symbol_new(ctx->analyzer->symbol_registry, pval->as.variable.name, XA_SYM_VARIABLE);
+            if (!bind_sym) {
+                return;
+            }
             bind_sym->location.line = pval->line;
-            xa_visit_add_symbol_checked(ctx, bind_sym, 0);
+            if (!xa_visit_add_symbol_checked(ctx, &bind_sym, 0)) {
+                return;
+            }
             XaSymbolLinks *bind_links = xa_analyzer_get_links(ctx->analyzer, bind_sym);
             if (bind_links) {
                 bind_links->type = slot_type ? slot_type : xr_type_new_unknown(NULL);
@@ -706,9 +716,14 @@ XR_FUNC void xa_register_pattern_bindings(XaInferContext *ctx, AstNode *pattern,
                 xa_register_pattern_bindings(ctx, ap->patterns[i], elem_type);
         }
         if (ap->rest_name) {
-            XaSymbol *rest_sym = xa_symbol_new(ap->rest_name, XA_SYM_VARIABLE);
+            XaSymbol *rest_sym = xa_symbol_new(ctx->analyzer->symbol_registry, ap->rest_name, XA_SYM_VARIABLE);
+            if (!rest_sym) {
+                return;
+            }
             rest_sym->location.line = pattern->line;
-            xa_visit_add_symbol_checked(ctx, rest_sym, 0);
+            if (!xa_visit_add_symbol_checked(ctx, &rest_sym, 0)) {
+                return;
+            }
             ap->rest_symbol_id = rest_sym->id;
             XaSymbolLinks *rest_links = xa_analyzer_get_links(ctx->analyzer, rest_sym);
             if (rest_links) {
@@ -723,9 +738,14 @@ XR_FUNC void xa_register_pattern_bindings(XaInferContext *ctx, AstNode *pattern,
     if (pattern->type == AST_PATTERN_TYPE) {
         PatternTypeNode *tp = &pattern->as.pattern_type;
         if (tp->binding_name) {
-            XaSymbol *bind_sym = xa_symbol_new(tp->binding_name, XA_SYM_VARIABLE);
+            XaSymbol *bind_sym = xa_symbol_new(ctx->analyzer->symbol_registry, tp->binding_name, XA_SYM_VARIABLE);
+            if (!bind_sym) {
+                return;
+            }
             bind_sym->location.line = pattern->line;
-            xa_visit_add_symbol_checked(ctx, bind_sym, 0);
+            if (!xa_visit_add_symbol_checked(ctx, &bind_sym, 0)) {
+                return;
+            }
             XaSymbolLinks *bind_links = xa_analyzer_get_links(ctx->analyzer, bind_sym);
             if (bind_links) {
                 bind_links->type = xr_tref_resolve_in_analyzer(ctx->analyzer, tp->type);
@@ -737,6 +757,11 @@ XR_FUNC void xa_register_pattern_bindings(XaInferContext *ctx, AstNode *pattern,
 }
 
 XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return NULL;
+
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
 
@@ -778,7 +803,8 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
 
         bool has_binding = xa_pattern_has_binding(arm_node->pattern);
         if (has_binding) {
-            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, arm);
+            if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, arm) != XR_COMPILE_RESOURCE_OK)
+                return NULL;
             xa_register_pattern_bindings(ctx, arm_node->pattern, subject_type);
         }
 

@@ -170,8 +170,8 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_build_file(XrSourceCompiler *co
         compiler->libraries, compiler->manifest_limits, compiler->target, compiler->session};
     return xr_source_compile_build(&request, output, diagnostic);
 }
-XR_FUNC XrSourceCompileStatus xr_source_compiler_build_text(XrSourceCompiler *compiler, const XrSourceCompilerText *input,
-    XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic) {
+static XrSourceCompileStatus compiler_build_input(XrSourceCompiler *compiler, const XrSourceCompilerText *input,
+    struct AstNode *program, XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic) {
     if (!compiler_diagnostic_empty(diagnostic)) return XR_SOURCE_COMPILE_BAD_ARGUMENT;
     XrSourceCompileDiagnostic detail = {0};
     if (!compiler || !input || !input->text || !output || *output ||
@@ -202,7 +202,12 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_build_text(XrSourceCompiler *co
         detail.stage = XR_SOURCE_COMPILE_PRODUCT;
         XrXirSourceProductRequest request = {{compiler->session, entry, identity, &compiler->context,
             compiler->stdlib_path, lockfile, XR_XIR_PROGRAM, compiler->libraries}, compiler->target};
-        status = compiler_xir(xr_xir_compile_source_product_build_text(&request, &text, &product, &detail.source));
+        if (program) {
+            XrXirSourceAst syntax = {text, program};
+            status = compiler_xir(xr_xir_compile_source_product_build_ast(&request, &syntax, &product, &detail.source));
+        } else {
+            status = compiler_xir(xr_xir_compile_source_product_build_text(&request, &text, &product, &detail.source));
+        }
         if (status == XR_SOURCE_COMPILE_OK) {
             XrXirStatus admitted = xr_xir_compile_source_product_public_admit(product, &detail.source.source);
             status = compiler_xir(admitted);
@@ -216,4 +221,13 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_build_text(XrSourceCompiler *co
     status = compiler_capture(compiler, status);
     if (status == XR_SOURCE_COMPILE_OK) *output = product;
     return compiler_publish(diagnostic, &detail, status);
+}
+XR_FUNC XrSourceCompileStatus xr_source_compiler_build_text(XrSourceCompiler *compiler, const XrSourceCompilerText *input,
+    XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic) {
+    return compiler_build_input(compiler, input, NULL, output, diagnostic);
+}
+XR_FUNC XrSourceCompileStatus xr_source_compiler_build_ast(XrSourceCompiler *compiler, const XrSourceCompilerText *input,
+    struct AstNode *program, XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic) {
+    if (!program) return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    return compiler_build_input(compiler, input, program, output, diagnostic);
 }

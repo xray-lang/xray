@@ -35,7 +35,6 @@
 // Forward declarations (analyzer-owned; only ever used as pointers here)
 typedef struct XaSymbol XaSymbol;
 typedef struct XaScope XaScope;
-struct XrHashMap;
 struct XrAggregateLayout;
 
 // Virtual method slot for static (compile-time) devirtualization.
@@ -96,9 +95,6 @@ struct XrClassInfo {
     int static_field_count;
     XaSymbol **static_methods;
     int static_method_count;
-
-    // O(1) member lookup (name -> XaSymbol*, own members only; inherited via base chain)
-    struct XrHashMap *members_map;
 
     // Constructor info (set during class collection)
     bool has_constructor;             // true if class explicitly defines a constructor

@@ -18,6 +18,7 @@
 #include "../../base/xtoml.h"
 #include "../../frontend/analyzer/xa_effect_db.h"
 #include "../../frontend/analyzer/xanalyzer.h"
+#include "../../frontend/analyzer/xanalyzer_native_input.h"
 #include "../../frontend/analyzer/xanalyzer_mono.h"
 #include "../../module/xmodule.h"
 #include "../../module/xmodule_graph.h"
@@ -293,7 +294,6 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
     }
     xr_module_system_init_with_script(state->isolate, state->entry);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(state->isolate);
-    xr_compiler_session_set_native_package_plan(session, state->project->native_plan);
     XrModuleRegistry *registry = xr_isolate_get_module_registry(state->isolate);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
     state->graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
@@ -309,6 +309,10 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
     state->analyzer = xa_analyzer_new(session);
     if (!state->analyzer) {
         xr_cli_error("verify", "cannot create the analyzer");
+        return false;
+    }
+    if (xa_analyzer_bind_native_plan(state->analyzer, state->project->native_plan) != XR_COMPILE_RESOURCE_OK) {
+        xr_cli_error("verify", "cannot bind native compilation input");
         return false;
     }
     xa_analyzer_set_graph(state->analyzer, state->graph);

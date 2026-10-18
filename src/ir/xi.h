@@ -2226,7 +2226,8 @@ typedef struct XiFunc {
     bool extern_symbol_qualified;
 
     /* Link-image policy is selected by typed manifest plans, never by source
-     * attributes or copied generic booleans. Plans are compiler-session owned. */
+     * attributes or copied generic booleans. Records and strings are copied
+     * into this function's arena before publication. */
     const struct XrCExportPlan *export_plan;
     const struct XrLinkSymbolPlan *link_plan;
     const struct XrFreestandingEntryPlan *entry_plan;

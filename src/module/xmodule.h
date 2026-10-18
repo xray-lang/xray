@@ -181,7 +181,7 @@ typedef struct XrModuleSourceCompilation {
     bool (*dispose_context)(void *context, bool succeeded);
 } XrModuleSourceCompilation;
 
-typedef bool (*XrModuleCompileSourceHook)(XrCompilerSession *session, const char *source,
+typedef bool (*XrModuleCompileSourceHook)(struct XrVMRuntime *runtime, XrCompilerSession *session, const char *source,
                                           const char *source_file,
                                           const struct XrModuleIdentityAuthority *authority,
                                           XrModuleSourceCompilation *out);
@@ -211,6 +211,8 @@ typedef struct XrModuleRegistry {
     // passes it back into toolchain-owned hook functions.
     XrCompilerSession *compiler_session;
     XrModuleCompileSourceHook fn_compile_src;
+    /* Borrowed through the caller's graph execution scope. */
+    const struct XrModuleGraph *source_graph;
 } XrModuleRegistry;
 
 /* ========== Module System API ========== */

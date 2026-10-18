@@ -17,6 +17,7 @@
 
 #include "../../runtime/value/xtype.h"
 #include "xanalyzer_symbol.h"
+#include "xanalyzer_member_list.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../base/xdefs.h"
 
@@ -180,8 +181,10 @@ XR_FUNC const XaBuiltinType *xa_builtin_get_by_name(const char *name);
 XR_FUNC XrType *xa_builtin_static_member_type(struct XaAnalyzer *analyzer, const char *type_name,
                                               const char *member_name);
 
-// Create fake symbols for built-in members (for LSP)
-XR_FUNC XaSymbol **xa_builtin_get_members(XrType *type, int *count);
+/* Own temporary completion symbols on the explicit registry; the caller
+ * disposes the entire list after its final member consumer. */
+XR_FUNC XrCompileResourceStatus xa_builtin_get_members(
+    XaSymbolRegistry *registry, XrType *type, XaMemberList *output);
 
 // Get member signature for hover
 XR_FUNC const char *xa_builtin_get_member_signature(XrType *type, const char *member_name);
@@ -302,10 +305,11 @@ XR_FUNC const XaBuiltinEnum *xa_builtin_get_enum_type(const char *module_name,
                                                       const char *enum_name);
 XR_FUNC const XaBuiltinEnum *xa_builtin_find_enum_by_name(const char *enum_name);
 
-// Materialize analyzer types and enum metadata from native declarations.
-XR_FUNC XrType *xa_builtin_object_shape_decl_type(XrVMRuntime *X,
+/* Semantic producers supply their actual analyzer. NULL analyzer is only for
+ * ephemeral metadata display and must not publish enum metadata through out_info. */
+XR_FUNC XrType *xa_builtin_object_shape_decl_type(XrVMRuntime *X, struct XaAnalyzer *analyzer,
                                                   const XaBuiltinObjectShape *object_shape);
-XR_FUNC XrType *xa_builtin_enum_decl_type(XrVMRuntime *X, const XaBuiltinEnum *enum_decl,
+XR_FUNC XrType *xa_builtin_enum_decl_type(XrVMRuntime *X, struct XaAnalyzer *analyzer, const XaBuiltinEnum *enum_decl,
                                           XaEnumInfo **out_info);
 
 // Find a handle type by name across all loaded modules (builtin + .xrd)

@@ -1259,7 +1259,7 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     XrProto *child_proto = NULL;
-    XiEmitStatus child_st = xi_emit(child_func, ctx->isolate, &child_proto);
+    XiEmitStatus child_st = xi_emit(child_func, ctx->isolate, &ctx->input, &child_proto);
     if (child_st != XI_EMIT_OK || !child_proto) {
         emit_error(ctx, child_st != XI_EMIT_OK ? child_st : XI_EMIT_ERR_INTERNAL);
         return;
@@ -1448,6 +1448,10 @@ XR_FUNC void xi_emit_class_create(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
  * fills only resolved_mod_index. */
 static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
     XR_DCHECK(ctx != NULL && ref != NULL, "try_emit_time_resolve: NULL arg");
+    if (xr_compile_state_status(ctx->input.state) != XR_COMPILE_RESOURCE_OK) {
+        emit_error(ctx, XI_EMIT_ERR_RESOURCE);
+        return false;
+    }
     if (!ctx->isolate)
         return false;
 
@@ -1460,22 +1464,37 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
     if (!abs_path)
         return false;
 
-    /* Normalize to realpath for cache matching */
-    char *real = xr_realpath(abs_path, NULL);
-    if (real) {
+    /* Normalize on the caller's ledger; resource errors must not become a
+     * cache miss followed by more compiler work. */
+    const XrOsIoPolicy policy = xr_compile_io_policy(xr_compile_state_resources(ctx->input.state));
+    char *real = NULL;
+    XrOsIoStatus normalized = xr_realpath_owned(&policy, abs_path, &real);
+    if (normalized != XR_OS_IO_OK && normalized != XR_OS_IO_NOT_FOUND) {
         xr_free(abs_path);
-        abs_path = real;
+        if (normalized == XR_OS_IO_BUDGET || normalized == XR_OS_IO_OUT_OF_MEMORY ||
+            normalized == XR_OS_IO_BAD_ARGUMENT) {
+            (void) xr_compile_state_fail(ctx->input.state, normalized == XR_OS_IO_BUDGET
+                ? XR_COMPILE_RESOURCE_BUDGET : normalized == XR_OS_IO_OUT_OF_MEMORY
+                ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+            emit_error(ctx, XI_EMIT_ERR_RESOURCE);
+        } else {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        }
+        return false;
     }
+    const char *lookup_path = real ? real : abs_path;
 
     /* Find this module in module_table by matching path */
     int target_topo = -1;
     for (int ti = 0; ti < mreg->module_table_count; ti++) {
         XrModule *m = mreg->module_table[ti];
-        if (m && m->path && strcmp(m->path, abs_path) == 0) {
+        if (m && m->path && strcmp(m->path, lookup_path) == 0) {
             target_topo = ti;
             break;
         }
     }
+    if (real)
+        policy.free(policy.context, real);
     xr_free(abs_path);
     if (target_topo < 0 || (uint64_t) target_topo > MAXARG_B)
         return false;
@@ -1517,13 +1536,27 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
 /* The original facade owns the imported spelling even when export resolution
  * reaches a different underlying module. Graph locators are copied into proto
  * constants; no graph pointer or transient topological index survives here. */
+static bool xi_emit_accept_module(EmitCtx *ctx, XrModuleStatus status) {
+    if (status == XR_MODULE_OK)
+        return true;
+    XrCompileResourceStatus failure = status == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET :
+        status == XR_MODULE_OUT_OF_MEMORY ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT;
+    (void) xr_compile_state_fail(ctx->input.state, failure);
+    emit_error(ctx, XI_EMIT_ERR_RESOURCE);
+    return false;
+}
+
 XR_FUNC const char *xi_emit_runtime_import_path(EmitCtx *ctx, const char *specifier,
                                                 int exact_spec_index) {
-    if (!ctx || !specifier) return NULL;
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(ctx->isolate);
-    const XrModuleGraph *graph = xr_compiler_session_module_graph(session);
+    if (!ctx || !specifier)
+        return NULL;
+    if (xr_compile_state_status(ctx->input.state) != XR_COMPILE_RESOURCE_OK) {
+        emit_error(ctx, XI_EMIT_ERR_RESOURCE);
+        return NULL;
+    }
+    const XrModuleGraph *graph = ctx->input.graph;
     if (!graph) {
-        if (xr_compiler_session_vm_import_binding(session) == XR_VM_IMPORT_RUNTIME_MODULE) {
+        if (ctx->input.import_mode == XI_EMIT_IMPORT_RUNTIME_LOCATOR) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return NULL;
         }
@@ -1531,23 +1564,48 @@ XR_FUNC const char *xi_emit_runtime_import_path(EmitCtx *ctx, const char *specif
     }
     int target = exact_spec_index;
     if (target < 0) {
-        XrCompileUnitIdentity unit = xr_compiler_session_compile_unit_identity(session);
-        int owner = unit.module_identity ? xr_module_graph_find(graph, unit.module_identity) : -1;
-        const char *importer = owner >= 0 ? graph->specs[owner].canonical :
-            (ctx->func->module ? ctx->func->module->path : NULL);
+        int owner = -1;
+        if (!xi_emit_accept_module(ctx, xr_compile_module_graph_find(graph,
+                ctx->input.module_identity, &owner)))
+            return NULL;
+        if (owner < 0 || owner >= graph->spec_count) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return NULL;
+        }
+        const XrModuleSpec *source = &graph->specs[owner];
         if (specifier[0] == '.') {
-            const char *source_path = owner >= 0 ? graph->specs[owner].source_path : importer;
-            const char *canonical = xi_resolve_import_canonical(graph, source_path, specifier);
-            target = canonical ? xr_module_graph_find(graph, canonical) : -1;
+            XrModuleId resolved = {0};
+            XrModuleStatus status = xr_compile_module_resolver_resolve(graph->resolver,
+                specifier, source->source_path, &source->authority, &resolved, NULL);
+            if (xi_emit_accept_module(ctx, status))
+                (void) xi_emit_accept_module(ctx, xr_compile_module_graph_find(graph,
+                    resolved.canonical, &target));
+            xr_compile_module_id_cleanup(&resolved);
+            if (ctx->status != XI_EMIT_OK)
+                return NULL;
         } else {
-            if (owner >= 0 && unit.kind == XR_COMPILE_UNIT_STDLIB &&
-                graph->specs[owner].kind == XR_MOD_STDLIB &&
-                graph->specs[owner].authority.kind == XR_MODULE_IDENTITY_STDLIB &&
-                graph->specs[owner].authority.namespace_id &&
-                strcmp(graph->specs[owner].authority.namespace_id, specifier) == 0)
+            bool self = false;
+            if (source->kind == XR_MOD_STDLIB &&
+                source->authority.kind == XR_MODULE_IDENTITY_STDLIB &&
+                source->authority.namespace_id) {
+                size_t left = 0, right = 0;
+                XrCompileResourceStatus status = xr_compile_state_string_length(ctx->input.state,
+                    source->authority.namespace_id, &left);
+                if (status == XR_COMPILE_RESOURCE_OK)
+                    status = xr_compile_state_string_length(ctx->input.state, specifier, &right);
+                if (status == XR_COMPILE_RESOURCE_OK && left == right)
+                    status = xr_compile_state_work(ctx->input.state, left);
+                if (status != XR_COMPILE_RESOURCE_OK) {
+                    emit_error(ctx, XI_EMIT_ERR_RESOURCE);
+                    return NULL;
+                }
+                self = left == right && !memcmp(source->authority.namespace_id, specifier, left);
+            }
+            if (self)
                 target = owner;
-            else
-                target = xr_module_graph_find_named_dependency(graph, importer, specifier);
+            else if (!xi_emit_accept_module(ctx, xr_compile_module_graph_find_named_dependency(
+                graph, source->source_path, specifier, &target)))
+                return NULL;
         }
     }
     if (target < 0 || target >= graph->spec_count) {
@@ -1555,18 +1613,19 @@ XR_FUNC const char *xi_emit_runtime_import_path(EmitCtx *ctx, const char *specif
         return NULL;
     }
     const char *path = xr_module_spec_import_name(&graph->specs[target]);
-    if (!path) emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+    if (!path)
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
     return path;
 }
 
 /* Module import emission.
  * Selective imports → OP_LOAD_MODULE_SLOT (single indexed load).
  * Whole-module imports → OP_LOAD_MODULE (module object by topo index).
- * Unresolved imports → LOADNULL (should not happen with graph). */
+ * Unresolved names require the actual runtime and an exact import locator. */
 XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiImportRef *ref = (XiImportRef *) v->aux;
     if (!ref || !ref->module_path || !ctx->isolate) {
-        emit_inst(ctx, CREATE_ABx(OP_LOADNULL, dst, 0));
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
 
@@ -1578,6 +1637,8 @@ XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         bool graph_slot = ref->resolved_mod_index >= 0;
         if (!graph_slot)
             try_emit_time_resolve(ctx, ref);
+        if (ctx->status != XI_EMIT_OK)
+            return;
         bool slot_positional =
             !graph_slot || !ref->resolved_module ||
             xi_module_exports_are_positional(ref->resolved_module);
@@ -1739,7 +1800,7 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
     XR_DCHECK(child_func_idx < ctx->func->nchildren, "child index out of bounds");
     XiFunc *child = ctx->func->children[child_func_idx];
     XrProto *child_proto = NULL;
-    XiEmitStatus cst = xi_emit(child, ctx->isolate, &child_proto);
+    XiEmitStatus cst = xi_emit(child, ctx->isolate, &ctx->input, &child_proto);
     if (cst != XI_EMIT_OK || !child_proto)
         return -1;
     child_proto->xi_parent_child = (uint32_t) child_func_idx + 1u;

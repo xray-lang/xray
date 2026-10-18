@@ -269,7 +269,9 @@ static XrType stub_const_u8_slice = {
 
 XrSemanticPlan *test_build_unit_enum_semantic(XrEnumLayout **out_layout) {
     static const char *members[] = {"Standard", "UrlSafe"};
-    XrEnumLayout *layout = xr_enum_layout_new("stdlib/base64", "Base64Alphabet", members, 2);
+    XrOsIoPolicy enum_policy_1 = xr_os_io_system_policy();
+    XrEnumLayout *layout = NULL;
+    REQUIRE(xr_enum_layout_new(&enum_policy_1, "stdlib/base64", "Base64Alphabet", members, 2, &layout) == XR_OS_IO_OK);
     REQUIRE(layout != NULL && layout->is_zero_payload && layout->layout_id != 0);
     XrType enum_type = {
         .kind = XR_KIND_ENUM,

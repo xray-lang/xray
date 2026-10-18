@@ -36,6 +36,7 @@
 #include "../../base/xhashmap.h"
 #include "../../base/xlocation.h"
 #include "../../base/xstorage.h"
+#include "../../base/xcompile_state.h"
 
 typedef struct XrNameSpan XrNameSpan;
 
@@ -142,11 +143,13 @@ typedef struct XaViewReturnContract {
 // Forward declarations (XrLocation/XrClassInfo/XaMethodSlot live in base/runtime layers)
 typedef struct XaSymbol XaSymbol;
 typedef struct XaScope XaScope;
+typedef struct XaSymbolRegistry XaSymbolRegistry;
 typedef struct XaSymbolLinks XaSymbolLinks;
 typedef struct XaEnumInfo XaEnumInfo;
 struct AstNode;
 
 typedef struct XaEnumVariantInfo {
+    XaEnumInfo *owner;
     const char *name;
     int symbol;
     uint32_t tag;
@@ -177,6 +180,7 @@ typedef struct XaRefLocation {
 // Symbol links - type information stored inline inside XaSymbol.
 // Access via sym->links (no intmap lookup required).
 struct XaSymbolLinks {
+    XrCompileState *resource_state; /* factory-bound, borrowed from the owning registry */
     struct XaAnalyzer *summary_owner; /* owns effect/memory/allocation ids */
     XrType *type;                     // Computed type (NULL = not computed)
     XrType *declared_type;            // Explicitly declared type (from annotation)
@@ -357,6 +361,7 @@ struct XaSymbol {
     // Parent references
     XaScope *scope;              // Owning scope
     XaSymbol *scope_owned_next;  // Intrusive link for scope-owned lifetime
+    XaSymbol *scope_owned_previous;
     XaSymbol *parent;            // Parent symbol (for methods/fields)
 
     // For type aliases: declaration-backed TypeRef plus optional resolved cache.
@@ -393,6 +398,8 @@ typedef enum XaScopeKind {
 
 // Scope structure
 struct XaScope {
+    XaSymbolRegistry *registry;
+    void *alias_owners;
     XaScopeKind kind;
     XaScope *parent;     // Parent scope
     XaScope **children;  // Child scopes
@@ -432,29 +439,65 @@ struct XaScope {
 // XrClassInfo and XaMethodSlot are defined in runtime/class/xclass_info.h
 // (included above). Their APIs remain in this header.
 
-// API: Set symbol ID counter (called by XaAnalyzer before analysis)
-// This eliminates global state - each analyzer has its own counter
-XR_FUNC void xa_symbol_set_id_counter(uint32_t *counter);
-
-// API: Set symbol registry for O(1) ID lookup (called by XaAnalyzer)
-XR_FUNC void xa_symbol_set_registry(void *intmap);
-
-// API: Symbol creation
-XR_FUNC XaSymbol *xa_symbol_new(const char *name, XaSymbolKind kind);
+/* Registry and scopes retain the original compiler state. A symbol reserves a
+ * stable ID at birth; only successful scope insertion publishes its ID slot.
+ * Aliases retain their targets and own their names. Producer operations on a
+ * registry are caller-serialized. Destroying scopes or detached symbols can
+ * release the final registry reference after the creating Session is dead. */
+XR_FUNC XrCompileResourceStatus xa_symbol_registry_new(XrCompileState *, XrTypePool *, XaSymbolRegistry **);
+XR_FUNC XrTypePool *xa_symbol_registry_type_pool(XaSymbolRegistry *);
+XR_FUNC XrCompileResourceStatus xa_symbol_registry_retain(XaSymbolRegistry *);
+XR_FUNC void xa_symbol_registry_release(XaSymbolRegistry *);
+XR_FUNC XrCompileState *xa_symbol_registry_state(XaSymbolRegistry *);
+XR_FUNC uint64_t xa_symbol_registry_next_id(const XaSymbolRegistry *);
+XR_FUNC XaSymbol *xa_symbol_registry_lookup(XaSymbolRegistry *, uint32_t);
+XR_FUNC XaSymbol *xa_symbol_new(XaSymbolRegistry *, const char *name, XaSymbolKind kind);
+/* Free the detached creator reference. A scope-owned or already released
+ * creator is rejected without breaking scope ownership or alias references. */
 XR_FUNC void xa_symbol_free(XaSymbol *symbol);
+/* Internal content disposal is shared with semantic-link replacement. */
+XR_FUNC void xa_symbol_links_dispose_contents(XaSymbolLinks *links);
 
 // API: Scope creation
-XR_FUNC XaScope *xa_scope_new(XaScopeKind kind, XaScope *parent);
+XR_FUNC XaScope *xa_scope_new(XaSymbolRegistry *registry, XaScopeKind kind, XaScope *parent);
+/* The owned index must use the registry's exact ledger policy; foreign policy
+ * identity is rejected before allocation or mutation. It borrows key/value. Its last
+ * insertion and the parent edge commit together after scope preparation.
+ * The caller excludes all observation/mutation until its operation returns. */
+struct XrHashMap;
+XR_FUNC XaScope *xa_scope_new_indexed(XaSymbolRegistry *registry, XaScopeKind kind,
+    XaScope *parent, struct XrHashMap *index, const char *key, void *value);
+/* Immutable origin text lives in the registry's existing pinned pool until
+ * the last registry reference dies, including retained symbols and aliases.
+ * Output must be empty; failed preparation preserves it and consumed fees. */
+XR_FUNC XrCompileResourceStatus xa_symbol_registry_copy_origin(XaSymbolRegistry *registry,
+    const char *text, const char **output);
 XR_FUNC void xa_scope_free(XaScope *scope);
+XR_FUNC XrCompileResourceStatus xa_scope_resource_status(const XaScope *scope);
 
 // API: Scope operations
-XR_FUNC void xa_scope_add_symbol(XaScope *scope, XaSymbol *symbol);
+XR_FUNC XrCompileResourceStatus xa_scope_add_symbol(XaScope *scope, XaSymbol *symbol);
 XR_FUNC bool xa_scope_remove_symbol(XaScope *scope, const char *name);  // Returns true if removed
+/* Detach this exact owned declaration, including a hidden replaced binding.
+ * Another current same-name binding and its independent key remain intact.
+ * Success transfers the detached creator back to the caller; failure preserves
+ * the name map, ID slot and both ownership links. */
+XR_FUNC XrCompileResourceStatus xa_scope_remove_owned_symbol(XaScope *scope, XaSymbol *symbol);
+/* Visit all owned declarations, including hidden ones, before retiring a class.
+ * The target must remain alive on failure; already cleared references stay NULL.
+ * Shared views observe their actual local owner. A remaining foreign-owned
+ * base reference or a direct borrowed target view rejects retirement without
+ * mutating that descriptor.
+ * Traversal scratch belongs to the original state and is released on every path. */
+XR_FUNC XrCompileResourceStatus xa_scope_clear_class_base_references(
+    XaScope *root, const XrClassInfo *target);
 XR_FUNC bool xa_scope_set_alias(XaScope *scope, const char *alias, XaSymbol *symbol);
 XR_FUNC bool xa_scope_remove_alias(XaScope *scope, const char *alias);
 XR_FUNC XaSymbol *xa_scope_lookup(XaScope *scope, const char *name);
 XR_FUNC XaSymbol *xa_scope_lookup_local(XaScope *scope, const char *name);
 XR_FUNC XaSymbol *xa_scope_lookup_by_id(XaScope *scope, uint32_t id);
+/* Returned arrays use xr_compile_state_free; symbols remain borrowed.
+ * Failure preserves count and records the registry state without fallback. */
 XR_FUNC XaSymbol **xa_scope_get_all_symbols(XaScope *scope, int *count);
 // Count symbols directly in this scope (non-recursive) without materialising
 // the array. Use this when only the count is needed (e.g. progress logging).
@@ -466,15 +509,24 @@ XR_FUNC XaScope *xa_scope_find_definition(XaScope *scope, const char *name);
 XR_FUNC XaScope *xa_scope_find_by_node(XaScope *root, void *ast_node);
 
 // API: Reference tracking
-XR_FUNC void xa_symbol_add_ref(XaSymbolLinks *links, uint32_t line, uint32_t col, uint32_t end_col,
+XR_FUNC XrCompileResourceStatus xa_symbol_add_ref(XaSymbolLinks *links, uint32_t line, uint32_t col, uint32_t end_col,
                                bool is_write);
 XR_FUNC XaRefLocation *xa_symbol_get_refs(XaSymbolLinks *links, int *count);
 
 // API: Class info
-XR_FUNC XrClassInfo *xa_class_info_new(const char *name);
+/* Identity and member arrays retain this exact compiler state. Names are
+ * copied; member symbols remain borrowed. Only factory results may be mutated
+ * or freed here. Failed appends preserve every published pointer and count,
+ * record the original sticky failure and perform no later member writes.
+ * Cleanup and further admitted appends remain valid after Session death.
+ * Appends require a requesting state on the same ledger. Its prior failure
+ * wins without touching the owner; failures also reach the requesting state. */
+XR_FUNC XrClassInfo *xa_class_info_new(XrCompileState *state, const char *name);
 XR_FUNC void xa_class_info_free(XrClassInfo *info);
-XR_FUNC void xa_class_info_add_field(XrClassInfo *info, XaSymbol *field);
-XR_FUNC void xa_class_info_add_method(XrClassInfo *info, XaSymbol *method);
+XR_FUNC XrCompileResourceStatus xa_class_info_add_field(XrCompileState *request,
+    XrClassInfo *info, XaSymbol *field);
+XR_FUNC XrCompileResourceStatus xa_class_info_add_method(XrCompileState *request,
+    XrClassInfo *info, XaSymbol *method);
 XR_FUNC XaSymbol *xa_class_info_lookup_member(XrClassInfo *info, const char *name);
 XR_FUNC XaSymbol *xa_class_info_lookup_instance_member(XrClassInfo *info, const char *name);
 XR_FUNC XaSymbol *xa_class_info_lookup_static_member(XrClassInfo *info, const char *name);
@@ -487,42 +539,32 @@ XR_FUNC XaSymbol *xa_class_info_lookup_instance_member_owner(XrClassInfo *info, 
                                                              XrClassInfo **owner_out);
 
 // API: Enum metadata
-XR_FUNC XaEnumInfo *xa_enum_info_new(const char *nominal_owner, const char *name,
-                                     uint32_t variant_count);
-XR_FUNC bool xa_enum_variant_set_payload_names(XaEnumVariantInfo *variant,
-                                               const char *const *payload_names,
-                                               uint16_t payload_count);
-XR_FUNC bool xa_enum_variant_set_payload_locations(XaEnumVariantInfo *variant, const char *file,
-                                                   const XrNameSpan *payload_name_spans,
-                                                   uint16_t payload_count);
-XR_FUNC bool xa_enum_info_finalize_layout(XaEnumInfo *info);
-XR_FUNC XaEnumInfo *xa_enum_info_clone(const XaEnumInfo *src);
 XR_FUNC void xa_enum_info_free(XaEnumInfo *info);
 XR_FUNC int xa_enum_info_find_variant(const XaEnumInfo *info, const char *name);
 XR_FUNC XaSymbol *xa_class_info_lookup_static_member_owner(XrClassInfo *info, const char *name,
                                                            XrClassInfo **owner_out);
 
 // API: Function signature helpers (integrated into XaSymbolLinks)
-XR_FUNC void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types,
+XR_FUNC XrCompileResourceStatus xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types,
                                               const char **param_names, int param_count,
                                               XrType *return_type);
 // Record per-parameter default-value expressions (AstNode*, or NULL when the
 // parameter is required) for caller-side default argument completion. The array
 // is copied; passing all-NULL clears any stored defaults.
-XR_FUNC void xa_symbol_links_set_param_defaults(XaSymbolLinks *links, struct AstNode **defaults,
+XR_FUNC XrCompileResourceStatus xa_symbol_links_set_param_defaults(XaSymbolLinks *links, struct AstNode **defaults,
                                                 int count);
 XR_FUNC XrType *xa_symbol_links_get_return_type(XaSymbolLinks *links);
 XR_FUNC XrType **xa_symbol_links_get_param_types(XaSymbolLinks *links, int *count);
 XR_FUNC const char **xa_symbol_links_get_param_names(XaSymbolLinks *links, int *count);
 XR_FUNC bool xa_symbol_is_function(XaSymbol *symbol);
-XR_FUNC void xa_symbol_links_copy_param_effect_summaries(XaSymbolLinks *dst,
+XR_FUNC XrCompileResourceStatus xa_symbol_links_copy_param_effect_summaries(XaSymbolLinks *dst,
                                                          const XaSymbolLinks *src);
 XR_FUNC void xa_symbol_links_clear_return_function_effect_summary(XaSymbolLinks *links);
-XR_FUNC void xa_symbol_links_set_return_function_effect_summary(XaSymbolLinks *dst,
+XR_FUNC XrCompileResourceStatus xa_symbol_links_set_return_function_effect_summary(XaSymbolLinks *dst,
                                                                 const XaSymbolLinks *src);
-XR_FUNC void xa_symbol_links_copy_return_function_effect_summary(XaSymbolLinks *dst,
+XR_FUNC XrCompileResourceStatus xa_symbol_links_copy_return_function_effect_summary(XaSymbolLinks *dst,
                                                                  const XaSymbolLinks *src);
-XR_FUNC void
+XR_FUNC XrCompileResourceStatus
 xa_symbol_links_copy_return_function_effect_to_param_summaries(XaSymbolLinks *dst,
                                                                const XaSymbolLinks *src);
 
@@ -531,7 +573,7 @@ xa_symbol_links_copy_return_function_effect_to_param_summaries(XaSymbolLinks *ds
 // Each generic parameter (e.g. T, U) carries an intersection-style constraint
 // list: a type satisfies the parameter only if it satisfies every constraint
 // in the list.  An empty list means the parameter is unconstrained.
-XR_FUNC void xa_symbol_links_set_type_params(XaSymbolLinks *links, const char **names,
+XR_FUNC XrCompileResourceStatus xa_symbol_links_set_type_params(XaSymbolLinks *links, const char **names,
                                              XrType ***constraint_lists,
                                              const int *constraint_counts, int count);
 XR_FUNC int xa_symbol_links_get_type_param_count(XaSymbolLinks *links);
@@ -545,7 +587,7 @@ XR_FUNC void xa_symbol_links_copy_export_metadata(struct XaAnalyzer *dst_analyze
  * the current analyzer's database. */
 XR_FUNC const XaMemoryEffectSummary *
 xa_symbol_links_memory_effect_summary(const XaSymbolLinks *links);
-XR_FUNC void xa_symbol_links_set_deprecated(XaSymbolLinks *links, bool present,
+XR_FUNC XrCompileResourceStatus xa_symbol_links_set_deprecated(XaSymbolLinks *links, bool present,
                                             const char *message);
 
 // Type alias helpers

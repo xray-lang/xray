@@ -203,7 +203,8 @@ static void assert_output_initializer_failure(bool panic, XrSourceFixtureId fixt
     XrTargetProfile *profile =
         xr_test_target_profile_build_with_output(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     ASSERT_NOT_NULL(profile);
-    ASSERT_TRUE(xr_compiler_session_set_target_profile(fixture.session, profile));
+    ASSERT_TRUE(xr_target_profile_verify(profile, NULL, 0));
+    fixture.input.target_profile = profile;
     fixture.input.semantic_profile_fingerprint = xr_target_profile_target_semantics_id(profile);
     XrProgramSourceProduct product = {0};
     XrProgramSourceDiagnostic diagnostic;

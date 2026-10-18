@@ -1133,8 +1133,8 @@ TEST(bytecode_roundtrips_enum_type_constants) {
     ASSERT_TRUE(xr_enum_type_set_adt_payloads(enum_type, payload_counts, 2));
     const char *payload_names[] = {"reason"};
     uint8_t payload_type_ids[] = {XR_TID_STRING};
-    ASSERT_TRUE(xr_enum_layout_set_variant_payload_metadata(enum_type->layout, 1, payload_names,
-                                                            payload_type_ids, 1));
+    ASSERT_TRUE((xr_enum_layout_set_variant_payload_metadata(enum_type->layout, 1, payload_names,
+                                                            payload_type_ids, 1) == XR_OS_IO_OK));
     enum_type->derive_flags = XR_DERIVE_INSPECT | XR_DERIVE_EQ;
 
     int kidx = xr_valuearray_add(&proto->constants, XR_FROM_PTR(enum_type));
@@ -1188,15 +1188,17 @@ TEST(bytecode_roundtrips_enum_type_constants) {
 
 TEST(enum_payload_metadata_rejects_ambiguous_names_atomically) {
     const char *variants[] = {"Data"};
-    XrEnumLayout *layout = xr_enum_layout_new("test.metadata", "Packet", variants, 1);
+    XrOsIoPolicy enum_policy_1 = xr_os_io_system_policy();
+    XrEnumLayout *layout = NULL;
+    ASSERT_TRUE(xr_enum_layout_new(&enum_policy_1, "test.metadata", "Packet", variants, 1, &layout) == XR_OS_IO_OK);
     ASSERT_NOT_NULL(layout);
     int payload_counts[] = {2};
-    ASSERT_TRUE(xr_enum_layout_set_payload_counts(layout, payload_counts, 1));
+    ASSERT_TRUE((xr_enum_layout_set_payload_counts(layout, payload_counts, 1) == XR_OS_IO_OK));
 
     const char *valid_names[] = {"code", "message"};
     uint8_t valid_types[] = {XR_TID_I64, XR_TID_STRING};
     ASSERT_TRUE(
-        xr_enum_layout_set_variant_payload_metadata(layout, 0, valid_names, valid_types, 2));
+        (xr_enum_layout_set_variant_payload_metadata(layout, 0, valid_names, valid_types, 2) == XR_OS_IO_OK));
     const XrEnumVariantLayout *variant = xr_enum_layout_variant(layout, 0);
     ASSERT_TRUE(xr_enum_variant_payload_metadata_is_exact(variant));
 
@@ -1204,12 +1206,12 @@ TEST(enum_payload_metadata_rejects_ambiguous_names_atomically) {
     const char *duplicate_names[] = {"code", "code"};
     uint8_t invalid_types[] = {XR_TID_I64, XR_TID_COUNT};
     ASSERT_FALSE(
-        xr_enum_layout_set_variant_payload_metadata(layout, 0, empty_names, valid_types, 2));
+        (xr_enum_layout_set_variant_payload_metadata(layout, 0, empty_names, valid_types, 2) == XR_OS_IO_OK));
     ASSERT_FALSE(
-        xr_enum_layout_set_variant_payload_metadata(layout, 0, duplicate_names, valid_types, 2));
-    ASSERT_FALSE(xr_enum_layout_set_variant_payload_metadata(layout, 0, valid_names, NULL, 2));
+        (xr_enum_layout_set_variant_payload_metadata(layout, 0, duplicate_names, valid_types, 2) == XR_OS_IO_OK));
+    ASSERT_FALSE((xr_enum_layout_set_variant_payload_metadata(layout, 0, valid_names, NULL, 2) == XR_OS_IO_OK));
     ASSERT_FALSE(
-        xr_enum_layout_set_variant_payload_metadata(layout, 0, valid_names, invalid_types, 2));
+        (xr_enum_layout_set_variant_payload_metadata(layout, 0, valid_names, invalid_types, 2) == XR_OS_IO_OK));
 
     variant = xr_enum_layout_variant(layout, 0);
     ASSERT_TRUE(xr_enum_variant_payload_metadata_is_exact(variant));

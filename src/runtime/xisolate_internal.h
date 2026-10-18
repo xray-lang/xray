@@ -104,7 +104,10 @@ struct XrVMRuntime {
     XrGlobalsTable *globals;  // Dynamic global variables table
 
     // Type system
-    struct XrCompilerSession *compiler_session;  // Active toolchain session bridge.
+    struct XrCompilerSession *compiler_session;  // Neutral parser resource owner.
+    struct XrTypePool *native_type_pool;        // Native declaration metadata.
+    struct XrTargetProfile *native_target_profile;
+    struct XrSourceCache *diagnostic_sources;
 
     // Configuration
     XrVMConfig params;  // Creation parameters
@@ -231,19 +234,15 @@ struct XiModule;
 struct XrModuleGraph;
 struct XaAnalyzer;
 struct XrModuleIdentityAuthority;
+struct XrCompilerInput;
+struct XrCompileGraphInput;
 
-XR_FUNC XrProto *xr_compile_ast_with_source(XrCompilerSession *session, AstNode *ast,
-                                            const char *source_file,
-                                            const struct XrModuleIdentityAuthority *authority);
-XR_FUNC XrProto *xr_compile_ast_in_graph(XrCompilerSession *session,
-                                         struct XaAnalyzer *shared_analyzer, AstNode *ast,
-                                         const char *source_file, const struct XrModuleGraph *graph,
-                                         struct XiModule **graph_modules, int graph_module_count,
-                                         struct XiModule **out_module,
-                                         const struct XrModuleIdentityAuthority *authority);
-XR_FUNC XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,
-                                             const char *source_file,
-                                             const struct XrModuleIdentityAuthority *authority);
+XR_FUNC XrProto *xr_compile_ast_with_source(const struct XrCompilerInput *input, struct AstNode *ast,
+    const char *source_file, const struct XrModuleIdentityAuthority *authority);
+XR_FUNC XrProto *xr_compile_ast_in_graph(const struct XrCompileGraphInput *input,
+    int spec_index, struct XiModule **out_module);
+XR_FUNC XrProto *xr_compile_source_with_path(const struct XrCompilerInput *input, const char *source,
+    const char *source_file, const struct XrModuleIdentityAuthority *authority);
 
 // xr_execute and xr_free_code are declared in xisolate_api.h.
 

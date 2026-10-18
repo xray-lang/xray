@@ -25,6 +25,7 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xa_node_table.h"
 #include "../frontend/analyzer/xanalyzer_builtins.h"
+#include "../frontend/analyzer/xanalyzer_native_input.h"
 #include "../frontend/analyzer/xa_typed_program.h"
 #include "../frontend/analyzer/xconsteval.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
@@ -44,6 +45,88 @@
 
 /* Forward declarations */
 static void finalize_capture_metadata(XiFunc *f);
+
+static bool xi_lower_native_result(XiLower *l, XrManifestStatus status) {
+    XrCompileState *state = xr_compile_session_compile_state(l->analyzer->compiler_session);
+    if (status == XR_MANIFEST_OK && xr_compile_state_status(state) == XR_COMPILE_RESOURCE_OK)
+        return true;
+    if (status != XR_MANIFEST_OK)
+        (void) xr_compile_state_fail(state, status == XR_MANIFEST_BUDGET || status == XR_MANIFEST_LIMIT
+            ? XR_COMPILE_RESOURCE_BUDGET : status == XR_MANIFEST_OUT_OF_MEMORY
+            ? XR_COMPILE_RESOURCE_OUT_OF_MEMORY : XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    l->had_error = true;
+    return false;
+}
+
+static char *xi_lower_copy_native_text(XiLower *l, const char *source) {
+    XrCompileState *state = xr_compile_session_compile_state(l->analyzer->compiler_session);
+    if (!xi_lower_native_result(l, XR_MANIFEST_OK) || !source)
+        return NULL;
+    size_t length = 0;
+    if (xr_compile_state_string_length(state, source, &length) != XR_COMPILE_RESOURCE_OK) {
+        l->had_error = true;
+        return NULL;
+    }
+    if (length >= UINT32_MAX) {
+        (void) xi_lower_native_result(l, XR_MANIFEST_LIMIT);
+        return NULL;
+    }
+    if (xr_compile_state_work(state, length + 1u) != XR_COMPILE_RESOURCE_OK) {
+        l->had_error = true;
+        return NULL;
+    }
+    char *copy = xi_func_arena_alloc(l->func, (uint32_t) length + 1u);
+    if (!copy) {
+        (void) xi_lower_native_result(l, XR_MANIFEST_OUT_OF_MEMORY);
+        return NULL;
+    }
+    if (xr_compile_state_copy(state, copy, source, length + 1u) != XR_COMPILE_RESOURCE_OK) {
+        l->had_error = true;
+        return NULL;
+    }
+    return copy;
+}
+
+static bool xi_lower_bind_native_function(XiLower *l, const char *name) {
+    if (!xi_lower_native_result(l, XR_MANIFEST_OK))
+        return false;
+    const XrNativePackagePlan *plan = xa_analyzer_native_plan(l->analyzer);
+    if (plan && !plan->valid)
+        return xi_lower_native_result(l, XR_MANIFEST_INVALID);
+    const XrCExportPlan *export_plan = NULL;
+    const XrLinkSymbolPlan *link_plan = NULL;
+    const XrFreestandingEntryPlan *entry_plan = NULL;
+    if (plan && name && name[0] && (!xi_lower_native_result(l, xr_native_package_find_export_owned(plan, name, &export_plan)) ||
+        !xi_lower_native_result(l, xr_native_package_find_link_symbol_owned(plan, name, &link_plan)) ||
+        !xi_lower_native_result(l, xr_native_package_find_entry_owned(plan, name, &entry_plan))))
+        return false;
+    if (!xi_func_set_native_image_plans(l->func,
+            xr_compile_session_compile_state(l->analyzer->compiler_session), export_plan, link_plan, entry_plan)) {
+        l->had_error = true;
+        return false;
+    }
+    if (!l->func->is_extern)
+        return true;
+    const XrNativeSymbol *symbol = NULL;
+    if (!xi_lower_native_result(l, xa_analyzer_find_native_symbol(l->analyzer, name, &symbol)))
+        return false;
+    if (symbol) {
+        const char *library = xr_native_symbol_library(symbol);
+        char *owned_name = xi_lower_copy_native_text(l, symbol->native_name);
+        if (!owned_name) {
+            if (!l->had_error)
+                (void) xi_lower_native_result(l, XR_MANIFEST_INVALID);
+            return false;
+        }
+        char *owned_library = library ? xi_lower_copy_native_text(l, library) : NULL;
+        if (library && !owned_library)
+            return false;
+        l->func->extern_symbol = owned_name;
+        l->func->extern_dylib = owned_library;
+        l->func->extern_symbol_qualified = true;
+    }
+    return true;
+}
 
 static void xi_lower_capture_publish_semantics(XiLower *owner, uint32_t symbol_id,
                                                XiCapture *capture) {
@@ -1773,6 +1856,10 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
                                    struct XrVMRuntime *isolate, XiLower *parent_ctx,
                                    const XaTypedProgram *typed_program) {
     XR_DCHECK(func_node != NULL, "lower_func_impl: func_node is NULL");
+    if (!analyzer || !analyzer->compiler_session ||
+        xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK ||
+        !xr_target_data_layout_validate(xa_analyzer_target_data_layout(analyzer)))
+        return NULL;
     FunctionDeclNode *fdecl = &func_node->as.function_decl;
 
     XiLower l;
@@ -1882,23 +1969,13 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
                                    func_node->line > 0 ? (uint32_t) func_node->line : 0);
 
     /* FFI/linkage identity comes only from typed package plans. */
-    const XrNativePackagePlan *native_plan =
-        xr_compiler_session_native_package_plan(analyzer->compiler_session);
     l.func->is_extern = fdecl->is_extern;
-    l.func->export_plan = xr_native_package_find_export(native_plan, fdecl->name);
-    l.func->link_plan = xr_native_package_find_link_symbol(native_plan, fdecl->name);
-    l.func->entry_plan = xr_native_package_find_entry(native_plan, fdecl->name);
     if (l.func->is_extern && !l.func->extern_symbol)
         l.func->extern_symbol = l.func->name;
-    if (l.func->is_extern) {
-        const XrNativeSymbol *native_symbol =
-            xr_native_package_find_symbol(native_plan, fdecl->name);
-        if (native_symbol) {
-            /* Xi owns every string crossing the analyzer/lowering boundary. */
-            l.func->extern_symbol = arena_strdup(l.func, native_symbol->native_name);
-            l.func->extern_dylib = arena_strdup(l.func, xr_native_symbol_library(native_symbol));
-            l.func->extern_symbol_qualified = true;
-        }
+    if (!xi_lower_bind_native_function(&l, fdecl->name)) {
+        xi_func_free(l.func);
+        xi_lower_cleanup(&l);
+        return NULL;
     }
 
     /* Entry block (no predecessors — seal immediately) */
@@ -2058,10 +2135,14 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
 
     XiFunc *result = NULL;
+    if (xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK)
+        l.had_error = true;
     if (!l.had_error && xi_lower_capture_source_vars(&l)) {
         result = l.func;
         xi_lower_assert_var_ids(&l, result);
     }
+    if (!result)
+        xi_func_free(l.func);
     xi_lower_cleanup(&l);
     return result;
 }
@@ -2070,10 +2151,14 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
 
 XR_FUNC XiFunc *xi_lower_func(const XaTypedProgram *program, struct XrVMRuntime *isolate) {
     XR_CHECK(program != NULL, "xi_lower_func: typed program is NULL");
+    XaAnalyzer *analyzer = xa_typed_program_semantics(program);
+    if (!analyzer || !analyzer->compiler_session ||
+        xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK ||
+        !xr_target_data_layout_validate(xa_analyzer_target_data_layout(analyzer)))
+        return NULL;
     XR_CHECK(xa_typed_program_is_verified(program), "xi_lower_func: typed program is unverified");
     XR_CHECK(xa_typed_program_is_current(program), "xi_lower_func: typed program is stale");
     AstNode *func_node = (AstNode *) xa_typed_program_syntax(program);
-    XaAnalyzer *analyzer = xa_typed_program_semantics(program);
     XR_CHECK(func_node != NULL, "xi_lower_func: typed syntax is NULL");
     XR_CHECK(analyzer != NULL, "xi_lower_func: semantic database is NULL");
     XR_CHECK(func_node->type == AST_FUNCTION_DECL || func_node->type == AST_FUNCTION_EXPR,
@@ -2386,13 +2471,22 @@ static bool shared_default_initializer_from_type(struct XrType *type, XiConstLit
 static void prescan_apply_link_symbol_plan(XiLower *l, const char *name, XiConstLiteral *literal) {
     if (!l || !l->analyzer || !name || !literal || literal->kind == XI_CONST_LITERAL_NONE)
         return;
-    const XrNativePackagePlan *native_plan =
-        xr_compiler_session_native_package_plan(l->analyzer->compiler_session);
-    const XrLinkSymbolPlan *link_plan = xr_native_package_find_link_symbol(native_plan, name);
+    if (!xi_lower_native_result(l, XR_MANIFEST_OK))
+        return;
+    const XrNativePackagePlan *native_plan = xa_analyzer_native_plan(l->analyzer);
+    if (!native_plan)
+        return;
+    const XrLinkSymbolPlan *link_plan = NULL;
+    if (!xi_lower_native_result(l, xr_native_package_find_link_symbol_owned(native_plan, name, &link_plan)))
+        return;
     if (!link_plan)
         return;
-    if (link_plan->section)
-        literal->data_section = arena_strdup(l->func, link_plan->section);
+    if (link_plan->section) {
+        const char *section = xi_lower_copy_native_text(l, link_plan->section);
+        if (!section)
+            return;
+        literal->data_section = section;
+    }
     literal->data_used = link_plan->used;
     literal->data_weak = link_plan->weak;
 }
@@ -2808,6 +2902,10 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
             prescan_apply_link_symbol_plan(l, name,
                                            &slot_meta.slots[next_shared].shared_initializer);
         }
+        if (l->had_error) {
+            prescan_slot_meta_free(&slot_meta);
+            return;
+        }
         next_shared++;
 
         if (s && s->type == AST_ENUM_DECL)
@@ -3000,13 +3098,19 @@ static bool xi_lower_seed_repl_slot(XiLower *l, const XrReplSymbol *symbol, int 
 }
 
 XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRuntime *isolate,
-                                 bool repl_mode, const XiProgramSemanticInput *program_semantics) {
+                                 const XrReplSymbolTable *repl_symbols,
+                                 const XiProgramSemanticInput *program_semantics) {
+    bool repl_mode = repl_symbols != NULL;
     XR_CHECK(program != NULL, "xi_lower_program: typed program is NULL");
+    XaAnalyzer *analyzer = xa_typed_program_semantics(program);
+    if (!analyzer || !analyzer->compiler_session ||
+        xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK ||
+        !xr_target_data_layout_validate(xa_analyzer_target_data_layout(analyzer)))
+        return NULL;
     XR_CHECK(xa_typed_program_is_verified(program),
              "xi_lower_program: typed program is unverified");
     XR_CHECK(xa_typed_program_is_current(program), "xi_lower_program: typed program is stale");
     AstNode *program_node = (AstNode *) xa_typed_program_syntax(program);
-    XaAnalyzer *analyzer = xa_typed_program_semantics(program);
     const struct XgGlobalEvidence *global_evidence = xa_typed_program_global_evidence(program);
     uint32_t module_id = xa_typed_program_module_id(program);
     XR_CHECK(program_node != NULL, "xi_lower_program: typed syntax is NULL");
@@ -3048,11 +3152,10 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
      * current input's references resolve by name.  Each seeded name
      * gets a sentinel shared_map entry (>= 0) so the lowerer knows
      * it is a top-level variable and emits OP_GETGLOBAL/OP_SETGLOBAL.
-     * A session-owned repl_symbols table exists only in REPL mode, so
-     * this is a no-op for ordinary script compilation. */
+     * Only the caller's explicit table supplies history; the parser session
+     * does not own runtime or incremental compilation state. */
     uint16_t next_shared_start = 0;
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
-    XrReplSymbolTable *repl_syms = xr_compiler_session_repl_symbols(session);
+    const XrReplSymbolTable *repl_syms = repl_symbols;
     if (repl_syms) {
         for (int i = 0; i < repl_syms->count; i++) {
             XrReplSymbol *s = &repl_syms->symbols[i];
@@ -3146,6 +3249,8 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
     }
 
     XiFunc *result = NULL;
+    if (xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK)
+        l.had_error = true;
     if (!l.had_error && xi_lower_capture_source_vars(&l)) {
         result = l.func;
         xi_lower_assert_var_ids(&l, result);

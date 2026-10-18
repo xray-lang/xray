@@ -71,6 +71,7 @@ static bool mkdir_recursive(const char *path) {
     if (!tmp)
         return false;
 
+    XrOsIoPolicy policy = xr_os_io_system_policy();
     size_t len = strlen(tmp);
 
     // Remove trailing slash
@@ -82,7 +83,7 @@ static bool mkdir_recursive(const char *path) {
     for (char *p = tmp + 1; *p; p++) {
         if (*p == '/') {
             *p = '\0';
-            if (xr_fs_mkdir(tmp, 0755) != 0) {
+            if (xr_os_io_mkdir(&policy, tmp, 0755) != XR_OS_IO_OK) {
                 xr_free(tmp);
                 return false;
             }
@@ -91,7 +92,7 @@ static bool mkdir_recursive(const char *path) {
     }
 
     // Create final directory
-    if (xr_fs_mkdir(tmp, 0755) != 0) {
+    if (xr_os_io_mkdir(&policy, tmp, 0755) != XR_OS_IO_OK) {
         xr_free(tmp);
         return false;
     }
@@ -725,7 +726,9 @@ bool xr_pkg_client_download(const char *owner, const char *name, const char *ver
         return false;
 
     // Ensure destination directory exists
-    xr_fs_mkdir(dest_dir, 0755);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    if (xr_os_io_mkdir(&policy, dest_dir, 0755) != XR_OS_IO_OK)
+        return false;
 
     char url[512];
     snprintf(url, sizeof(url), "%s/api/packages/%s/%s/%s/download", tls_config.registry_url, owner,
@@ -779,7 +782,8 @@ bool xr_pkg_client_install(const char *owner, const char *name, const char *vers
     // match (reject tampering / MITM / cache poisoning), otherwise record the
     // computed value for trust-on-first-use.
     char computed_checksum[80];
-    if (!xr_lockfile_checksum_file(tarball, computed_checksum)) {
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    if (xr_lockfile_checksum_file_owned(&policy, tarball, computed_checksum, sizeof(computed_checksum)) != XR_OS_IO_OK) {
         fprintf(stderr, "Failed to compute checksum: %s\n", tarball);
         remove(tarball);
         return false;
@@ -1021,7 +1025,9 @@ bool xr_pkg_client_save_token(const char *token) {
 
     char config_dir[512];
     snprintf(config_dir, sizeof(config_dir), "%s/.xray", home);
-    xr_fs_mkdir(config_dir, 0755);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    if (xr_os_io_mkdir(&policy, config_dir, 0755) != XR_OS_IO_OK)
+        return false;
 
     char config_path[512];
     snprintf(config_path, sizeof(config_path), "%s/.xray/credentials", home);
