@@ -5,6 +5,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_effects.h"
 
+static void source_enum_ref_permission_rejections(XrXirSourceRequest *request);
 static void source_enum_witness_run(XrXirSourceRequest *request, const char *source) {
     write_source(request->entry_path,source);
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};

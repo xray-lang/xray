@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
+#include "xir_effect_execution_owner.h"
 #include "shared_current_checked.h"
 
 static XrXirCompileContext context_new(void) {
@@ -24,6 +25,8 @@ static XrXirCompileContext context_new(void) {
 }
 static void current(const uint8_t *bytes,size_t length) {
     XrXirCompileContext context=context_new();
+    XrCompileResourceStats baseline={0};
+    CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     XrXirArtifact *artifact=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_checked_read(&context,bytes,length,&artifact,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"current reception status=%d function=%u instruction=%u\n",
@@ -34,8 +37,9 @@ static void current(const uint8_t *bytes,size_t length) {
     CHECK(packet.length==length && !memcmp(packet.bytes,bytes,length));
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(artifact);
     XrCompileResourceStats stats={0};
-    CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK && !stats.live_bytes);
+    CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK && stats.live_bytes==baseline.live_bytes);
     xr_compile_resources_release(context.resources);
+    CHECK(!effects_compile_live && !effects_compile_bytes);
 }
 static uint32_t read_word(FILE *file) {
     uint8_t bytes[4];CHECK(fread(bytes,1,4,file)==4);
@@ -52,6 +56,7 @@ static void reject(const uint8_t *bytes,size_t length) {
         CHECK(before.allocation_count==after.allocation_count && before.allocated_bytes==after.allocated_bytes);
         CHECK(before.live_bytes==after.live_bytes && after.work-before.work==(occupied?0u:32u));
         xr_compile_resources_release(context.resources);
+        CHECK(!effects_compile_live && !effects_compile_bytes);
     }
 }
 static void all_parents(void) {

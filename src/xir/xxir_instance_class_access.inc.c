@@ -87,7 +87,7 @@ static XrXirCallStatus instance_class_scope_access(XrXirCallView *view,
     if (status==XR_XIR_CALL_READY && current &&
         (current->owner!=instance->program->permissions->effects || current->target!=caller)) status=XR_XIR_CALL_BAD_STATE;
     if (status==XR_XIR_CALL_READY) {
-        InstanceInvocationRead actual={admission,NULL,view,NULL};
+        InstanceInvocationRead actual={.admission=admission,.view=view,.instance=instance};
         XirEffectClassScopeRequest request={.caller=caller,.node=current?current->node:UINT32_MAX,
             .contextual=current!=NULL,.pure=pure,.root_type=(XrXirType)root->type,
             .read={.owner=&actual,.work=instance_invocation_work}};
