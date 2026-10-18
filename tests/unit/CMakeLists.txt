@@ -4831,3 +4831,20 @@ include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_values.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_owner_state.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/xir/p09_view_may_owned.cmake)
 include(xir/union86.cmake)
+
+add_executable(test_xir_shared_interfaces xir/test_xir_shared_interfaces.c)
+target_link_libraries(test_xir_shared_interfaces PRIVATE xray_xir_scalar)
+target_include_directories(test_xir_shared_interfaces PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_compile_definitions(test_xir_shared_interfaces PRIVATE
+    SHARED_PACKET_FILE="${PROJECT_SOURCE_DIR}/tests/unit/xir/shared_parent_packets.bin")
+set_target_properties(test_xir_shared_interfaces PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_shared_interfaces PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_shared_interfaces PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_shared_interfaces COMMAND test_xir_shared_interfaces)
+add_test(NAME test_xir_shared_interfaces_vectors COMMAND ${XRAY_PYTHON}
+    ${CMAKE_CURRENT_LIST_DIR}/xir/derive_shared_interfaces_vectors.py)
+set_tests_properties(test_xir_shared_interfaces test_xir_shared_interfaces_vectors PROPERTIES
+    TIMEOUT 120 LABELS "unit;xir;checked;independent;ownership")

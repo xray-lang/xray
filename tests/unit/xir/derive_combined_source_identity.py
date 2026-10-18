@@ -18,6 +18,7 @@ def arrays():
         (24,29,31,'program31','layout_program31_preimage'),
         (29,33,34,'value29','layout_current29_preimage'),
         (29,33,35,'program35','layout_program35_preimage'),
+        (30,35,36,'program36','layout_program36_preimage'),
     ]:
         words = [1,1,value,call,program,2,3,1] + sum(functions, [])
         assert len(words) == 43
@@ -31,6 +32,7 @@ def arrays():
             (28,73,24,29,30,'_program30'), (28,73,24,29,31,'_value24'),
             (30,75,24,29,31,'75'), (28,76,29,33,34,'_value29'),
             (28,76,29,33,35,'_program35'), (30,77,29,33,35,'77'),
+            (32,90,30,35,36,'90'),
         ]:
             data = b'xray:xir-c11-codegen-policy:v1' + struct.pack('<7I',1,wire,semantic,value,call,program,len(text)) + text
             policies[prefix + '_policy' + suffix + '_preimage'] = data
@@ -61,7 +63,7 @@ def main():
                 assert actual == expected, (filename, name)
         if args.write:
             path.write_text(source,encoding='utf-8',newline='\n')
-    print('Independent combined30/77 policy and complete parent layout/policy frames PASS')
+    print('Independent combined32/90 policy and complete parent layout/policy frames PASS')
 
 
 if __name__ == '__main__':
