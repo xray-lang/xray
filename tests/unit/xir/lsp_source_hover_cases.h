@@ -1,3 +1,4 @@
+#include "lsp_source_hover_closed_cases.h"
 static void lsp_hover_field_cases(const char *root) {
     static const char source[]=
         "enum Result {\n"
@@ -135,4 +136,5 @@ static void lsp_hover_cases(const char *root) {
 
     lsp_hover_typed_matrix(root);
     lsp_hover_field_cases(root);
+    lsp_hover_closed_cases(root);
 }

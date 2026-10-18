@@ -77,6 +77,13 @@ typedef struct XlspSourceHover {char *text;size_t length;} XlspSourceHover;
 XR_FUNC XrXirStatus xlsp_source_hover(const XlspSourceSnapshot *,const char *,size_t,
     XrLspPosition,XlspSourceHover *);
 XR_FUNC void xlsp_source_hover_free(XlspSourceHover *);
+/* Compare the selected canonical declarations on the same resource ledger.
+ * Owned module identity/content, captured versions and Source coordinates authenticate
+ * equality without requiring definition text for LSP position conversion.
+ * Missing facts fail closed; errors preserve the supplied boolean. */
+XR_FUNC XrXirStatus xlsp_source_same_symbol(const XlspSourceSnapshot *,const XlspSourceSnapshot *,
+    const char *,size_t,XrLspPosition,bool *);
+
 /* Token numbers use the unchanged semanticTokens legend; ranges are exact
  * UTF16 units. Opaque owner pins its ledger after every Source producer dies.
  * Missing admitted display facts reject the complete response, never silently

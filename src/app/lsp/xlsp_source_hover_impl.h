@@ -52,6 +52,7 @@ static const XrXirTypeNode *hover_node(const XrXirSourceView *v,XrXirType type) 
         raw-XR_XIR_CONSTRUCTED_TYPE_BASE<v->types->count?v->types->nodes+raw-XR_XIR_CONSTRUCTED_TYPE_BASE:NULL;
 }
 static void hover_mode(LspHoverBuilder *b,uint32_t mode) {
+    if(b->status!=XR_XIR_OK)return;
     if(mode==XR_PARAM_REF)hover_text(b,"ref ");
     else if(mode==XR_PARAM_MOVE)hover_text(b,"move ");
     else if(mode!=XR_PARAM_READ)b->status=XR_XIR_BAD_TYPE;
@@ -151,6 +152,7 @@ static void hover_type_named(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSo
     xr_compile_resources_free(stack);
 }
 static void hover_type(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceType source) {
+    if(b->status!=XR_XIR_OK)return;
     const XrXirSourceSyntaxView *syntax=xr_xir_compile_source_snapshot_syntax(b->snapshot->query);
     if(source.generic_owner) {
         if(!syntax||source.generic_owner>syntax->declaration_count){b->status=XR_XIR_UNRESOLVED;return;}
@@ -184,6 +186,7 @@ static void hover_qualified_name(LspHoverBuilder *b,const XrXirSourceView *v,con
     hover_text(b,d->name);
 }
 static void hover_declaration(LspHoverBuilder *b,const XrXirSourceView *v,const XrXirSourceDeclaration *d) {
+    if(b->status!=XR_XIR_OK)return;
     /* Governed native signature is already an owned Source fact. */
     if(d->signature&&*d->signature){hover_text(b,d->signature);return;}
     if(d->generic_parameter_count||d->generic_parent_count){b->status=XR_XIR_UNSUPPORTED;return;}
@@ -193,6 +196,7 @@ static void hover_declaration(LspHoverBuilder *b,const XrXirSourceView *v,const 
     if(fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED){b->status=XR_XIR_UNSUPPORTED;return;}
     if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD&&d->kind!=XR_XIR_SOURCE_FUNCTION){b->status=XR_XIR_UNSUPPORTED;return;}
     if(d->exported)hover_text(b,"export ");
+    if(b->status!=XR_XIR_OK)return;
     if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD) {
         if(fact->flags&XR_XIR_SOURCE_SYNTAX_STATIC)hover_text(b,"static ");
         for(uint32_t i=0;i<syntax->marker_count&&b->status==XR_XIR_OK;++i) {
