@@ -189,6 +189,26 @@ static void sdk_semantic75_prefix(XrCompileResources *resources,const XrXirSdkMa
     XrCompileResourceStats after=sdk_stats(resources);
     CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);
 }
+static void sdk_combined_previous_prefix(XrCompileResources *resources,XrXirSdkManifest *manifest,const uint32_t *prefix) {
+    XrJsonCursor json;
+    const uint32_t predecessors[][5]={{28,73,24,29,30},{29,74,24,29,30},{30,75,24,29,31},{28,76,29,33,35}};
+    const uint8_t *old_images[]={previous73_sdk_kat_preimage,previous74_sdk_kat_preimage,previousctfe75_sdk_kat_preimage,previouschannel76_sdk_kat_preimage};
+    const size_t old_sizes[]={sizeof(previous73_sdk_kat_preimage),sizeof(previous74_sdk_kat_preimage),sizeof(previousctfe75_sdk_kat_preimage),sizeof(previouschannel76_sdk_kat_preimage)};
+    const uint8_t *old_digests[]={previous73_sdk_kat_digest,previous74_sdk_kat_digest,previousctfe75_sdk_kat_digest,previouschannel76_sdk_kat_digest};
+    for(unsigned prior=0;prior<4;++prior) {
+        uint8_t old_hash[32];xr_sha256(old_images[prior],old_sizes[prior],old_hash);
+        CHECK(!memcmp(old_hash,old_digests[prior],32));
+        memcpy(manifest->prefix,prefix,sizeof(manifest->prefix));
+        memcpy(manifest->prefix+1,predecessors[prior],sizeof(predecessors[prior]));
+        memcpy(manifest->digest,old_digests[prior],32);
+        XrXirSdkManifest saved=*manifest;size_t attempts=runtime_attempts;
+        json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
+        CHECK(!sdk_json_prefix(&json,&manifest) && json.status==XR_JSON_CURSOR_INVALID);
+        CHECK(!memcmp(manifest,&saved,sizeof(manifest)) && runtime_attempts==attempts);
+    }
+    memcpy(manifest->prefix,prefix,sizeof(manifest->prefix));
+}
+
 static void sdk_known_bytes(void) {
     _Static_assert(XR_XIR_CHECKED_SCHEMA==30 && XR_XIR_CHECKED_CONTRACT==77 &&
         XR_XIR_VALUE_ABI_VERSION==29 && XR_XIR_CALL_ABI_VERSION==33 && XR_XIR_PROGRAM_ABI_VERSION==35,
@@ -302,22 +322,7 @@ static void sdk_known_bytes(void) {
     uint8_t hash34[32];xr_sha256(previous_program34_sdk_kat_preimage,sizeof(previous_program34_sdk_kat_preimage),hash34);
     CHECK(sizeof(previous_program34_sdk_kat_preimage)==3194 && !memcmp(hash34,previous_program34_sdk_kat_digest,32));
     memcpy(manifest.prefix,prefix,sizeof(prefix));
-    const uint32_t predecessors[][5]={{28,73,24,29,30},{29,74,24,29,30},{30,75,24,29,31},{28,76,29,33,35}};
-    const uint8_t *old_images[]={previous73_sdk_kat_preimage,previous74_sdk_kat_preimage,previousctfe75_sdk_kat_preimage,previouschannel76_sdk_kat_preimage};
-    const size_t old_sizes[]={sizeof(previous73_sdk_kat_preimage),sizeof(previous74_sdk_kat_preimage),sizeof(previousctfe75_sdk_kat_preimage),sizeof(previouschannel76_sdk_kat_preimage)};
-    const uint8_t *old_digests[]={previous73_sdk_kat_digest,previous74_sdk_kat_digest,previousctfe75_sdk_kat_digest,previouschannel76_sdk_kat_digest};
-    for(unsigned prior=0;prior<4;++prior) {
-        uint8_t old_hash[32];xr_sha256(old_images[prior],old_sizes[prior],old_hash);
-        CHECK(!memcmp(old_hash,old_digests[prior],32));
-        memcpy(manifest.prefix,prefix,sizeof(prefix));
-        memcpy(manifest.prefix+1,predecessors[prior],sizeof(predecessors[prior]));
-        memcpy(manifest.digest,old_digests[prior],32);
-        XrXirSdkManifest saved=manifest;size_t attempts=runtime_attempts;
-        json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
-        CHECK(!sdk_json_prefix(&json,&manifest) && json.status==XR_JSON_CURSOR_INVALID);
-        CHECK(!memcmp(&manifest,&saved,sizeof(manifest)) && runtime_attempts==attempts);
-    }
-    memcpy(manifest.prefix,prefix,sizeof(prefix));
+    sdk_combined_previous_prefix(resources,&manifest,prefix);
     const uint32_t crossed[][2]={{1,25},{1,26},{1,27},{2,70},{2,71},{2,72},{2,73},{2,74},
         {3,22},{3,23},{3,24},{3,25},{3,26},{3,27},{3,28},{4,28},{4,29},{4,30},{4,31},{4,32},{5,29},{5,30},{5,31},{5,32},{5,33},{5,34}};
     for (uint32_t prior=0;prior<sizeof(crossed)/sizeof(crossed[0]);++prior) {
