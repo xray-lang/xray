@@ -108,6 +108,8 @@ static inline XrXirValue xr_xir_value_load(const XrXirTypeArena *arena,XrXirType
 XR_FUNC const XrXirTypeArena *xr_xir_value_arena(const XrXirValue *value);
 /* Copy/new outputs must be canonical unit handles. Native pointers are trusted. */
 XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output);
+/* A prepaid handle transfer consumes the source and never relocates its body. */
+XR_FUNC XrXirValueStatus xr_xir_value_move(XrXirValue *source, XrXirValue *output);
 XR_FUNC void xr_xir_value_drop(XrXirValue *value);
 XR_FUNC XrXirValueStatus xr_xir_string_new(XrXirDomain *domain, const char *bytes,
                                          size_t length, XrXirValue *output);

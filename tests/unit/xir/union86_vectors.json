@@ -1,0 +1,978 @@
+[
+  {
+    "source": "compile_owner/checked_sizing75_golden.h",
+    "symbol": "sizing75_golden",
+    "old_bytes": 240,
+    "bytes": 240,
+    "insertions": [],
+    "sha256": "4bc227b19a879e78d40ed8ce46f1992d9cd5ab6cf48415762cf572cb7523ff03"
+  },
+  {
+    "source": "compile_owner/checked_sizing75_golden.h",
+    "symbol": "sizing75_embedded_golden",
+    "old_bytes": 240,
+    "bytes": 240,
+    "insertions": [],
+    "sha256": "26b435176206a96cae3faa497ed227b066e332008530c313cef08ae81e36fc7e"
+  },
+  {
+    "source": "compile_owner/checked_sizing75_golden.h",
+    "symbol": "sizing75_empty_golden",
+    "old_bytes": 236,
+    "bytes": 236,
+    "insertions": [],
+    "sha256": "da1564f931e2d8641b66ce4a49edb489ad8f4b4717f40f4259fe520817e5f9a1"
+  },
+  {
+    "source": "comptime_binding75_golden.h",
+    "symbol": "comptime_binding75_golden",
+    "old_bytes": 1199,
+    "bytes": 1199,
+    "insertions": [],
+    "sha256": "eef3b75489bd3cf03a2749f23da3531977908c0c5516882e1c10f78bbeb552db"
+  },
+  {
+    "source": "materialization75_golden.h",
+    "symbol": "materialization75_golden",
+    "old_bytes": 1228,
+    "bytes": 1228,
+    "insertions": [],
+    "sha256": "0242c20fa738e98e2dbad3665056844aaef915bb4a9ae0ac90576ecbf6b0dfe8"
+  },
+  {
+    "source": "root_construction75_goldens.h",
+    "symbol": "root_construction75_checked",
+    "old_bytes": 1363,
+    "bytes": 1363,
+    "insertions": [],
+    "sha256": "b6fd7829c80bc36032448a61ef19a4cc87b48b95ee71faa92a03481307cb3dd6"
+  },
+  {
+    "source": "root_construction75_goldens.h",
+    "symbol": "root_construction75_instance",
+    "old_bytes": 2634,
+    "bytes": 2634,
+    "insertions": [],
+    "sha256": "3d6ad0248532d1a463370f8d85a122d8786c3cdf75c98f310f8e521c2dda8bef"
+  },
+  {
+    "source": "xir_assert_panics75_golden.h",
+    "symbol": "assert_panics75_golden",
+    "old_bytes": 2199,
+    "bytes": 2199,
+    "insertions": [],
+    "sha256": "92e520d0c5f321d8b1a29bc1d6485b6f74069e02f740ae0da5653390a63bb43c"
+  },
+  {
+    "source": "xir_checked_range75_golden.h",
+    "symbol": "checked_range75_golden",
+    "old_bytes": 265,
+    "bytes": 265,
+    "insertions": [],
+    "sha256": "cd65384b068b82569eb79e2a1885abf9782ae0d37a9e281f925202de9ccae7b4"
+  },
+  {
+    "source": "xir_checked_scalar75_golden.h",
+    "symbol": "checked_scalar75_golden",
+    "old_bytes": 237,
+    "bytes": 237,
+    "insertions": [],
+    "sha256": "8d0e1c4b1b3f59f0db33d647a46d1fbf38ab3c0ba20947a594ed8b05781fa326"
+  },
+  {
+    "source": "xir_defaults75_golden_bytes.h",
+    "symbol": "defaults75_golden_7",
+    "old_bytes": 582,
+    "bytes": 582,
+    "insertions": [],
+    "sha256": "d6a4beef7eca176f3ff69edff4ba6ef55408ed0879227d6e0b5f7dcb4cedc6a1"
+  },
+  {
+    "source": "xir_defaults75_golden_bytes.h",
+    "symbol": "defaults75_golden_8",
+    "old_bytes": 237,
+    "bytes": 237,
+    "insertions": [],
+    "sha256": "8d0e1c4b1b3f59f0db33d647a46d1fbf38ab3c0ba20947a594ed8b05781fa326"
+  },
+  {
+    "source": "xir_defaults75_golden_bytes.h",
+    "symbol": "defaults75_golden_9",
+    "old_bytes": 632,
+    "bytes": 632,
+    "insertions": [],
+    "sha256": "fb17e887f1bf587fefc9cc37e16a1999dc0ec24707683ebba1dc959afb94b78e"
+  },
+  {
+    "source": "xir_defaults75_golden_bytes.h",
+    "symbol": "defaults75_golden_10",
+    "old_bytes": 437,
+    "bytes": 437,
+    "insertions": [],
+    "sha256": "fe98b01cc9a1ac3a1c3af49776c9055323c53df02256ba377795a9de195fdce4"
+  },
+  {
+    "source": "xir_defaults75_golden_bytes.h",
+    "symbol": "defaults75_invoke_golden",
+    "old_bytes": 937,
+    "bytes": 937,
+    "insertions": [],
+    "sha256": "9425963c1c9c23f174552d1ea87019e2330b156be2e842ba4676c5abc5c9988e"
+  },
+  {
+    "source": "xir_error_marker75_golden.h",
+    "symbol": "error_marker75_golden",
+    "old_bytes": 221,
+    "bytes": 221,
+    "insertions": [],
+    "sha256": "c57fb85e0f4e63c4fa23e107df78a8b0c7752bf1955708ebaa9b0ef931e3a35c"
+  },
+  {
+    "source": "xir_generic_method75_golden.h",
+    "symbol": "generic_method75_golden",
+    "old_bytes": 632,
+    "bytes": 632,
+    "insertions": [],
+    "sha256": "fb17e887f1bf587fefc9cc37e16a1999dc0ec24707683ebba1dc959afb94b78e"
+  },
+  {
+    "source": "xir_generic_method75_golden.h",
+    "symbol": "generic_method75_invalid_flags0",
+    "old_bytes": 632,
+    "bytes": 632,
+    "insertions": [],
+    "sha256": "f46a7c3da83a48b76f1d33a008864eeaff0abeeb6e384c8e2af711aa834b4244"
+  },
+  {
+    "source": "xir_generic_method75_golden.h",
+    "symbol": "generic_method75_invalid_flags1",
+    "old_bytes": 632,
+    "bytes": 632,
+    "insertions": [],
+    "sha256": "25aea3425b07038d79226a8b55a42f9d3ae6eeb40eedd0957905a27771beb575"
+  },
+  {
+    "source": "xir_hash85_golden.h",
+    "symbol": "hash85_golden",
+    "old_bytes": 232,
+    "bytes": 244,
+    "insertions": [
+      160
+    ],
+    "sha256": "f1b80820b3495a0256b9b6cf6e7c7d4327ed27a14393073d5523ba087b562c06"
+  },
+  {
+    "source": "xir_hash_members85_golden.h",
+    "symbol": "hash_members85_golden",
+    "old_bytes": 480,
+    "bytes": 492,
+    "insertions": [
+      408
+    ],
+    "sha256": "ad23eda5c116176828b84ff819ba77f9ad328da0b629d4c9b38bb3ab184d59ad"
+  },
+  {
+    "source": "xir_hash_position85_golden.h",
+    "symbol": "hash_position85_map_key",
+    "old_bytes": 256,
+    "bytes": 268,
+    "insertions": [
+      184
+    ],
+    "sha256": "2b4593698d7502f537a82465486ba3a2a2be53453fdacccc285f5804d67a17bc"
+  },
+  {
+    "source": "xir_hash_position85_golden.h",
+    "symbol": "hash_position85_map_value",
+    "old_bytes": 256,
+    "bytes": 268,
+    "insertions": [
+      184
+    ],
+    "sha256": "e5012b410182d4236a0bb01154dd844cb8c2f8b74af7e5523a1468a103024957"
+  },
+  {
+    "source": "xir_hash_position85_golden.h",
+    "symbol": "hash_position85_set_key",
+    "old_bytes": 252,
+    "bytes": 264,
+    "insertions": [
+      180
+    ],
+    "sha256": "b868f54aaf4961dcd19477f7aee92f4c7b4df93655ed3e909e3faa1fcadd1b19"
+  },
+  {
+    "source": "xir_hash_position85_golden.h",
+    "symbol": "hash_position85_bad_key_receiver",
+    "old_bytes": 252,
+    "bytes": 264,
+    "insertions": [
+      180
+    ],
+    "sha256": "ba8692dec5e348b38331844c4a983e05b7fc6ccb6469d4b2a765a22a50d15ffc"
+  },
+  {
+    "source": "xir_hash_position85_golden.h",
+    "symbol": "hash_position85_bad_value_receiver",
+    "old_bytes": 252,
+    "bytes": 264,
+    "insertions": [
+      180
+    ],
+    "sha256": "90a16cb7f4d5781959b6ec535c3c22b7c0645958f59bd259e3451a65ae8ab471"
+  },
+  {
+    "source": "xir_hash_position85_golden.h",
+    "symbol": "hash_position85_bad_key_result",
+    "old_bytes": 256,
+    "bytes": 268,
+    "insertions": [
+      184
+    ],
+    "sha256": "e4e9aa15c74e47c21c1b5a41072756bd634b43faa05dd67804ea206bd1d18cc8"
+  },
+  {
+    "source": "xir_hash_position85_golden.h",
+    "symbol": "hash_position85_bad_value_result",
+    "old_bytes": 256,
+    "bytes": 268,
+    "insertions": [
+      184
+    ],
+    "sha256": "cbe107d6b99378672e111a1fbad8645906091fd0044a9a703485253ce6696d56"
+  },
+  {
+    "source": "xir_hash_position85_golden.h",
+    "symbol": "hash_position85_bad_index",
+    "old_bytes": 256,
+    "bytes": 268,
+    "insertions": [
+      184
+    ],
+    "sha256": "fcd7c5460487ebf291a24db63ca31ed1da4eac284a2fc65b35573ec0bef14569"
+  },
+  {
+    "source": "xir_hash_position85_golden.h",
+    "symbol": "hash_position85_bad_key_proof",
+    "old_bytes": 268,
+    "bytes": 280,
+    "insertions": [
+      196
+    ],
+    "sha256": "1c4358c7a0b9d71202d641c16836888e613d9ad8f63c9590dba487106703fe98"
+  },
+  {
+    "source": "xir_hash_projection85_golden.h",
+    "symbol": "hash_projection85_keys",
+    "old_bytes": 263,
+    "bytes": 275,
+    "insertions": [
+      191
+    ],
+    "sha256": "4ff0a0e325d3903e775a3038bdd83499bbf1f2289d37ac0bd9f9307536672bad"
+  },
+  {
+    "source": "xir_hash_projection85_golden.h",
+    "symbol": "hash_projection85_values",
+    "old_bytes": 263,
+    "bytes": 275,
+    "insertions": [
+      191
+    ],
+    "sha256": "d363901b3b3dd59840b27aba2f71c6a650c5ded3abce18b00edb0040dd8dfa82"
+  },
+  {
+    "source": "xir_hash_projection85_golden.h",
+    "symbol": "hash_projection85_entries",
+    "old_bytes": 283,
+    "bytes": 295,
+    "insertions": [
+      211
+    ],
+    "sha256": "e44f3296a4a3f42124b3b81062ffc163dc1991f0f8bcf114ebda4e6f3264b567"
+  },
+  {
+    "source": "xir_hash_projection85_golden.h",
+    "symbol": "hash_projection85_set_values",
+    "old_bytes": 259,
+    "bytes": 271,
+    "insertions": [
+      187
+    ],
+    "sha256": "931dfa9e3428aa47ad8ae32674beaedaea7a246ae25ee150232eaef750dce4cd"
+  },
+  {
+    "source": "xir_hash_projection85_golden.h",
+    "symbol": "hash_projection85_bad_keys",
+    "old_bytes": 263,
+    "bytes": 275,
+    "insertions": [
+      191
+    ],
+    "sha256": "3e959cb75b0608f7f81d1376d76f77a9814adf8aeeea7e00322f3d8e9ef61d42"
+  },
+  {
+    "source": "xir_hash_projection85_golden.h",
+    "symbol": "hash_projection85_bad_values",
+    "old_bytes": 263,
+    "bytes": 275,
+    "insertions": [
+      191
+    ],
+    "sha256": "3ba5c57d3292639293cd5893509cff301cb87f0ac6b36b8785c257deb3f2adf0"
+  },
+  {
+    "source": "xir_hash_projection85_golden.h",
+    "symbol": "hash_projection85_bad_set_keys",
+    "old_bytes": 259,
+    "bytes": 271,
+    "insertions": [
+      187
+    ],
+    "sha256": "2bddc0228ba8ba0313dbf72ea58588aa9f8930a47d44df50afda47e8f483ea32"
+  },
+  {
+    "source": "xir_hash_projection85_golden.h",
+    "symbol": "hash_projection85_bad_entries",
+    "old_bytes": 263,
+    "bytes": 275,
+    "insertions": [
+      191
+    ],
+    "sha256": "90ccf63e4c9e9b892145a01e2546f29d1ff30432321f53a5c7888b6860e3cf56"
+  },
+  {
+    "source": "xir_hash_projection85_golden.h",
+    "symbol": "hash_projection85_bad_entry_fields",
+    "old_bytes": 283,
+    "bytes": 295,
+    "insertions": [
+      211
+    ],
+    "sha256": "e32074beb1372931193662b2eab93486b42db1d95fd33c4068d32ebccfa0a7ae"
+  },
+  {
+    "source": "xir_library_string75_goldens.h",
+    "symbol": "library_string75_alpha",
+    "old_bytes": 731,
+    "bytes": 731,
+    "insertions": [],
+    "sha256": "32eaa4657a0e73ba9d6f62eb2067592b85bcdfda319d0ea8830bbb29827dbfb5"
+  },
+  {
+    "source": "xir_library_string75_goldens.h",
+    "symbol": "library_string75_beta",
+    "old_bytes": 729,
+    "bytes": 729,
+    "insertions": [],
+    "sha256": "9f14d3b7f0259c31594b14ae6f39b3a79165dc3601d1b954ef244171cd871fc7"
+  },
+  {
+    "source": "xir_library_string75_goldens.h",
+    "symbol": "library_string75_nul",
+    "old_bytes": 725,
+    "bytes": 725,
+    "insertions": [],
+    "sha256": "9973c86c47c3971c0156115e42d2a57eb312c0fed720047a6b0c00497a640a09"
+  },
+  {
+    "source": "xir_library_string75_goldens.h",
+    "symbol": "library_string75_empty",
+    "old_bytes": 721,
+    "bytes": 721,
+    "insertions": [],
+    "sha256": "0f8382466a0cecb8263041b391a3758bd18db63af2e87b1dfd64c0e701f70efe"
+  },
+  {
+    "source": "xir_library_string75_goldens.h",
+    "symbol": "library_string75_long",
+    "old_bytes": 1426,
+    "bytes": 1426,
+    "insertions": [],
+    "sha256": "3005c5366123355fe711f89c514c2aecd75b293a63df9bf5dc5f6914cd4079ba"
+  },
+  {
+    "source": "xir_library_string75_goldens.h",
+    "symbol": "library_string75_equal",
+    "old_bytes": 728,
+    "bytes": 728,
+    "insertions": [],
+    "sha256": "5cad5c1804e11d9f7054752cdf58923bcf0654d36a2d5bb1776aae042e3a5b39"
+  },
+  {
+    "source": "xir_library_string75_goldens.h",
+    "symbol": "library_string75_unused",
+    "old_bytes": 734,
+    "bytes": 734,
+    "insertions": [],
+    "sha256": "b987c5d0503d6fc9550efbc6601f668b032121bba4c6a67beeea4fabcec3c884"
+  },
+  {
+    "source": "xir_map_index85_golden.h",
+    "symbol": "map_index85_golden",
+    "old_bytes": 457,
+    "bytes": 469,
+    "insertions": [
+      385
+    ],
+    "sha256": "3825bb566bb5687c076c69f4ec4f8a354df6599a25bf75dc30caeff9cca1c5c7"
+  },
+  {
+    "source": "xir_map_index85_golden.h",
+    "symbol": "map_index85_bad_result",
+    "old_bytes": 457,
+    "bytes": 469,
+    "insertions": [
+      385
+    ],
+    "sha256": "96c41d47df2286404be5651cecd704e466a1280e096f8f14549fe8bcc8e2e03b"
+  },
+  {
+    "source": "xir_map_index85_golden.h",
+    "symbol": "map_index85_bad_key",
+    "old_bytes": 457,
+    "bytes": 469,
+    "insertions": [
+      385
+    ],
+    "sha256": "45f3e9419cbd2a97c1999d416c401dda4184fa4ffef10af7ba96274f35693c7f"
+  },
+  {
+    "source": "xir_map_key_path85_golden.h",
+    "symbol": "map_key_path85_path_i64",
+    "old_bytes": 435,
+    "bytes": 447,
+    "insertions": [
+      363
+    ],
+    "sha256": "e0b5cb71a4b7b59f318daa09cf8b61640e55527dec7f814e48091863c4121c43"
+  },
+  {
+    "source": "xir_map_key_path85_golden.h",
+    "symbol": "map_key_path85_path_string",
+    "old_bytes": 435,
+    "bytes": 447,
+    "insertions": [
+      363
+    ],
+    "sha256": "0c7fa6e720305f9a4e4905c3839a7fbaef322a2fb2e00a9f704bd28638c4b21f"
+  },
+  {
+    "source": "xir_map_key_path85_golden.h",
+    "symbol": "map_key_path85_bad_map_key",
+    "old_bytes": 435,
+    "bytes": 447,
+    "insertions": [
+      363
+    ],
+    "sha256": "882ac731a96d49f21039d7d7bc38088f10ac8bbab286af661d4144d4d7ff9a58"
+  },
+  {
+    "source": "xir_map_key_path85_golden.h",
+    "symbol": "map_key_path85_bad_map_result",
+    "old_bytes": 435,
+    "bytes": 447,
+    "insertions": [
+      363
+    ],
+    "sha256": "37e40c83e6a0e178cf6d8a5de12fe32782540b67b70057e889ac34192b7d4f03"
+  },
+  {
+    "source": "xir_map_key_path85_golden.h",
+    "symbol": "map_key_path85_bad_array_key",
+    "old_bytes": 435,
+    "bytes": 447,
+    "insertions": [
+      363
+    ],
+    "sha256": "6b903f8bef7a2f8b17120e67cac628fa974de6e07da75e42b7d5ddd74efcdb30"
+  },
+  {
+    "source": "xir_map_key_path85_golden.h",
+    "symbol": "map_key_path85_bad_set_parent",
+    "old_bytes": 431,
+    "bytes": 443,
+    "insertions": [
+      359
+    ],
+    "sha256": "534e915a4ad21855344c7777ee19a9a37e5d00604a31c6327d9ec8728faf8a49"
+  },
+  {
+    "source": "xir_map_key_path85_golden.h",
+    "symbol": "map_key_path85_bad_value_parent",
+    "old_bytes": 435,
+    "bytes": 447,
+    "insertions": [
+      363
+    ],
+    "sha256": "d011c93d5d5619dea18e3c9a6dd63cdda368978293a46cdc7ae18592ce77bf3f"
+  },
+  {
+    "source": "xir_map_key_path85_golden.h",
+    "symbol": "map_key_path85_map_go",
+    "old_bytes": 755,
+    "bytes": 767,
+    "insertions": [
+      683
+    ],
+    "sha256": "7a3decd77413b85b61bbbe6ed2020f71f3b35d6507555a72fdab073a8fca087a"
+  },
+  {
+    "source": "xir_map_key_path85_golden.h",
+    "symbol": "map_key_path85_set_go",
+    "old_bytes": 751,
+    "bytes": 763,
+    "insertions": [
+      679
+    ],
+    "sha256": "0e1f41cedbe5ae81c5847ef972e248038b932ea364cd9bac5ca45d0009739291"
+  },
+  {
+    "source": "xir_map_key_path85_golden.h",
+    "symbol": "map_key_path85_bad_map_go_callable_value",
+    "old_bytes": 775,
+    "bytes": 787,
+    "insertions": [
+      703
+    ],
+    "sha256": "c33fb3b8e67501da70a3f7fee80a039cddf0279186215996168aa1cc12da62aa"
+  },
+  {
+    "source": "xir_map_membership85_golden.h",
+    "symbol": "map_membership85_valid",
+    "old_bytes": 258,
+    "bytes": 270,
+    "insertions": [
+      186
+    ],
+    "sha256": "16771dda1f7aa409a8a31afc54ad759d89dc76144c057bcbd0ce442aaad430e7"
+  },
+  {
+    "source": "xir_map_membership85_golden.h",
+    "symbol": "map_membership85_bad_receiver",
+    "old_bytes": 254,
+    "bytes": 266,
+    "insertions": [
+      182
+    ],
+    "sha256": "b3f2c6e6ba6b88edeb03c8915df3dfbbef51f2aee3601b6f35e6dbd4c115bfab"
+  },
+  {
+    "source": "xir_map_membership85_golden.h",
+    "symbol": "map_membership85_bad_value_width",
+    "old_bytes": 258,
+    "bytes": 270,
+    "insertions": [
+      186
+    ],
+    "sha256": "e96acfb60c800972bd0f1cce1a010247c8e7044cdd59f37e22e94dd915a6ff79"
+  },
+  {
+    "source": "xir_map_membership85_golden.h",
+    "symbol": "map_membership85_bad_result",
+    "old_bytes": 258,
+    "bytes": 270,
+    "insertions": [
+      186
+    ],
+    "sha256": "059a4dfa86258ce37ff67f26277a5d4f913b129b03d3f0b923762edc50d00030"
+  },
+  {
+    "source": "xir_map_membership85_golden.h",
+    "symbol": "map_membership85_bad_equal",
+    "old_bytes": 270,
+    "bytes": 282,
+    "insertions": [
+      198
+    ],
+    "sha256": "9a7f162c124da36436cf6dc1cc1aa12f7274adaf02dbea3440050e91f141d51c"
+  },
+  {
+    "source": "xir_map_membership85_golden.h",
+    "symbol": "map_membership85_bad_key_proof",
+    "old_bytes": 270,
+    "bytes": 282,
+    "insertions": [
+      198
+    ],
+    "sha256": "50f6d1475af6a92760a016c59b562bbd8fc4f83de0294339435ee5fc2718afa3"
+  },
+  {
+    "source": "xir_nested_nullable85_golden.h",
+    "symbol": "nested_nullable85_golden",
+    "old_bytes": 1693,
+    "bytes": 1705,
+    "insertions": [
+      1621
+    ],
+    "sha256": "b820c09781aa2139b2a072a23639796d48871c6a987f5be7a8819ff6fdcd3376"
+  },
+  {
+    "source": "xir_nullable85_golden.h",
+    "symbol": "nullable_none85_golden",
+    "old_bytes": 237,
+    "bytes": 249,
+    "insertions": [
+      165
+    ],
+    "sha256": "af39266f4fd319a20431e7f6802f41b2613cd7b1614b64e986bdb7a7c9751118"
+  },
+  {
+    "source": "xir_nullable85_golden.h",
+    "symbol": "nullable_some85_golden",
+    "old_bytes": 277,
+    "bytes": 289,
+    "insertions": [
+      205
+    ],
+    "sha256": "a557d0e9305c1fbb3d7ce4f72948277c92d05d68d89ecafeca24076c876ff12b"
+  },
+  {
+    "source": "xir_rune75_golden.h",
+    "symbol": "rune75_golden",
+    "old_bytes": 280,
+    "bytes": 280,
+    "insertions": [],
+    "sha256": "d6934b396fdebe8d9117a74ddef926ccffa26676af77c9717971d4c88b09a14d"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_union",
+    "old_bytes": 251,
+    "bytes": 263,
+    "insertions": [
+      179
+    ],
+    "sha256": "2fdb7967bcf6bbeddd5cd5eb9685c9ead1b1f37fd23fdecb77341bc4d23ab85f"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_intersection",
+    "old_bytes": 251,
+    "bytes": 263,
+    "insertions": [
+      179
+    ],
+    "sha256": "8af92d7e4604055d85dded586af41a44ea56d73c3a3545fab8026183a1391915"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_difference",
+    "old_bytes": 251,
+    "bytes": 263,
+    "insertions": [
+      179
+    ],
+    "sha256": "ab742efd964cc2db0da8de0134623b5bd00f6e6de4fb8f41001af305626f3b44"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_symmetric_difference",
+    "old_bytes": 251,
+    "bytes": 263,
+    "insertions": [
+      179
+    ],
+    "sha256": "ef95860ba1bbb38bfdfa020e9fd4a15734d4af5c81712e2fedf2f1ba393b4100"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_is_subset",
+    "old_bytes": 251,
+    "bytes": 263,
+    "insertions": [
+      179
+    ],
+    "sha256": "ef89f342f7153ead809dcdb162ffec90d9b4f1fc67bdd9aed357826ea989c176"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_is_superset",
+    "old_bytes": 251,
+    "bytes": 263,
+    "insertions": [
+      179
+    ],
+    "sha256": "32151c97b0282ad82e8032614e1afe84b22b43bb3ef0dc0049d2c8010d8c15d6"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_bad_receiver",
+    "old_bytes": 255,
+    "bytes": 267,
+    "insertions": [
+      183
+    ],
+    "sha256": "b4758ee1d0abe1e68f7bfb61e8c7a1608044448420ec4bf9fe89d532181234a1"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_bad_other_kind",
+    "old_bytes": 267,
+    "bytes": 279,
+    "insertions": [
+      195
+    ],
+    "sha256": "5e32ec1b6c0672b7a6530245667e825e12718561d39c5a9e6fe7799fbcd17c3d"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_bad_other_element",
+    "old_bytes": 263,
+    "bytes": 275,
+    "insertions": [
+      191
+    ],
+    "sha256": "1c87a8165d6ad3aa84e9a99a8559befd1169d1aef62502aab79a5feef36f2e84"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_bad_set_result",
+    "old_bytes": 251,
+    "bytes": 263,
+    "insertions": [
+      179
+    ],
+    "sha256": "6ad24c911f28666feb232160dd21ef9bd4a29f739e9f83fa2735ea76692986ca"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_bad_relation_result",
+    "old_bytes": 251,
+    "bytes": 263,
+    "insertions": [
+      179
+    ],
+    "sha256": "e50d3c8017a4cc59666e171742cbad4a3b351297aae0e393852ba4e6debe1ad3"
+  },
+  {
+    "source": "xir_set_algebra85_golden.h",
+    "symbol": "set_algebra85_bad_hashable",
+    "old_bytes": 263,
+    "bytes": 275,
+    "insertions": [
+      191
+    ],
+    "sha256": "b4019d304c48f0ed208cd6b1c14388ed98b4f3fe5adcc6d2bb877fb7d2a7129b"
+  },
+  {
+    "source": "xir_task_go85_golden_part1.h",
+    "symbol": "task_go85_golden",
+    "old_bytes": 1625,
+    "bytes": 1637,
+    "insertions": [
+      1553
+    ],
+    "sha256": "e067e7b268d0e957aa661a7d86b217581a57741d8720a150ae6a7f0000687167"
+  },
+  {
+    "source": "xir_task_go85_golden_part1.h",
+    "symbol": "task_go85_scalar_go",
+    "old_bytes": 1625,
+    "bytes": 1637,
+    "insertions": [
+      1553
+    ],
+    "sha256": "239291c0570f1f6f093b02dbeaf0b9987d298d448a36bbc6d64f5c646d5cd5f8"
+  },
+  {
+    "source": "xir_task_go85_golden_part1.h",
+    "symbol": "task_go85_initializer_target",
+    "old_bytes": 1625,
+    "bytes": 1637,
+    "insertions": [
+      1553
+    ],
+    "sha256": "176ec151846cc6e0af65c8f05d28af7230fb09f0e7bceb366d6c10c9d8ce7f32"
+  },
+  {
+    "source": "xir_task_go85_golden_part1.h",
+    "symbol": "task_go85_await_place",
+    "old_bytes": 1625,
+    "bytes": 1637,
+    "insertions": [
+      1553
+    ],
+    "sha256": "5e2ed7c1766a5a9aed09eaf4ed99812b82a74d50c2c4ac64c485479a919ebf20"
+  },
+  {
+    "source": "xir_task_go85_golden_part1.h",
+    "symbol": "task_go85_go_target",
+    "old_bytes": 1625,
+    "bytes": 1637,
+    "insertions": [
+      1553
+    ],
+    "sha256": "af3d8841bf45b6d6be7fbec2f2d6c0fefe3a8c6786ef53f8f94002b176164193"
+  },
+  {
+    "source": "xir_task_go85_golden_part2.h",
+    "symbol": "task_go85_await_binding",
+    "old_bytes": 1625,
+    "bytes": 1637,
+    "insertions": [
+      1553
+    ],
+    "sha256": "87b7366da0f67b25a341f6b688a4e841e17ab42df08516e1ab649b54fd77616c"
+  },
+  {
+    "source": "xir_task_go85_golden_part2.h",
+    "symbol": "task_go85_mutable_worker",
+    "old_bytes": 1637,
+    "bytes": 1649,
+    "insertions": [
+      1565
+    ],
+    "sha256": "6eef394c21623827a4f2fbc94cf75808b2fd6d0a2a4444ac2eb94d1f8f8dbaf3"
+  },
+  {
+    "source": "xir_task_go85_golden_part2.h",
+    "symbol": "task_go85_cleanup_helper",
+    "old_bytes": 1625,
+    "bytes": 1637,
+    "insertions": [
+      1553
+    ],
+    "sha256": "c1a3b42e4eafaa4a666c6bfbb8cb77bae4113f5018c6dad96d0d78d7ee6bb1b7"
+  },
+  {
+    "source": "xir_task_map_kind85_golden.h",
+    "symbol": "task_map_kind85_golden",
+    "old_bytes": 229,
+    "bytes": 241,
+    "insertions": [
+      157
+    ],
+    "sha256": "823bb0f9f34eb4d8b46701a4e8e5a00160e66ad072d3195a5c24506632b2574b"
+  },
+  {
+    "source": "xir_task_types85_golden.h",
+    "symbol": "task_types85_golden",
+    "old_bytes": 225,
+    "bytes": 237,
+    "insertions": [
+      153
+    ],
+    "sha256": "707882cacfe2f9baa902638cf8b115e38695f2f7e95a4a3a76a7e5886d9d7e26"
+  },
+  {
+    "source": "xir_task_unit85_golden.h",
+    "symbol": "task_unit85_golden",
+    "old_bytes": 225,
+    "bytes": 237,
+    "insertions": [
+      153
+    ],
+    "sha256": "226041a074f2191889ea28f41fbc3e971c7d32793e01b9469c4d6eb3d9035c6d"
+  },
+  {
+    "source": "xir_view_ops85_golden.h",
+    "symbol": "view_ops85_empty_cleanup",
+    "old_bytes": 319,
+    "bytes": 331,
+    "insertions": [
+      247
+    ],
+    "sha256": "f1010e0ef6add6c5d2cd1850f089df9abb61e9484d51f90ce041b8aa983e26ab"
+  },
+  {
+    "source": "xir_view_ops85_golden.h",
+    "symbol": "view_ops85_scalar_176",
+    "old_bytes": 331,
+    "bytes": 343,
+    "insertions": [
+      259
+    ],
+    "sha256": "baf436d4a1452f1ddfd97182b08b410a6387746618339595ec47b9aaa543fcd2"
+  },
+  {
+    "source": "xir_view_ops85_golden.h",
+    "symbol": "view_ops85_scalar_177",
+    "old_bytes": 331,
+    "bytes": 343,
+    "insertions": [
+      259
+    ],
+    "sha256": "edeb8ff91dd2a026afe4a0869e7077fe62c6f82304e1c784c443802224b8feb9"
+  },
+  {
+    "source": "xir_view_ops85_golden.h",
+    "symbol": "view_ops85_scalar_178",
+    "old_bytes": 319,
+    "bytes": 331,
+    "insertions": [
+      247
+    ],
+    "sha256": "bcb3a9155d60915a7e24577f895cf3cf838eabcde35ee7c34f71259dab053d73"
+  },
+  {
+    "source": "xir_view_ops85_golden.h",
+    "symbol": "view_ops85_scalar_179",
+    "old_bytes": 319,
+    "bytes": 331,
+    "insertions": [
+      247
+    ],
+    "sha256": "16942175fafa143c3d4f5f8dee1b75a94493fa1ae2755cbf3e753b72e3aecd2f"
+  },
+  {
+    "source": "xir_view_ops85_golden.h",
+    "symbol": "view_ops85_scalar_180",
+    "old_bytes": 331,
+    "bytes": 343,
+    "insertions": [
+      259
+    ],
+    "sha256": "0a931715a5dcb8f44141c88f624f36dd6f9392bc81ebc9eb837d57c27b5ed354"
+  },
+  {
+    "source": "xir_view_ops85_golden.h",
+    "symbol": "view_ops85_scalar_181",
+    "old_bytes": 319,
+    "bytes": 331,
+    "insertions": [
+      247
+    ],
+    "sha256": "604e4006bd69012c84bd4918a9745b36fdd03524c1bddd70917ceda22e8d8e3e"
+  },
+  {
+    "source": "xir_view_ops85_golden.h",
+    "symbol": "view_ops85_scalar_182",
+    "old_bytes": 319,
+    "bytes": 331,
+    "insertions": [
+      247
+    ],
+    "sha256": "200c8627d281e24a44d83b3e848077c119dffa67a9eb82e13db2b05e415fa13d"
+  },
+  {
+    "source": "xir_view_ops85_golden.h",
+    "symbol": "view_ops85_scalar_183",
+    "old_bytes": 323,
+    "bytes": 335,
+    "insertions": [
+      251
+    ],
+    "sha256": "6f7a7cc74c780fcad65374dd70da680efa86e35532f4ca4daba22500bd5f228a"
+  },
+  {
+    "source": "xir_view_ops85_golden.h",
+    "symbol": "view_ops85_invalid_new_flag",
+    "old_bytes": 331,
+    "bytes": 343,
+    "insertions": [
+      259
+    ],
+    "sha256": "276333e62657e5da0275b8bfd87421a892043faa3970a65a98c5b4d86b0e6a98"
+  },
+  {
+    "source": "xir_view_types85_golden.h",
+    "symbol": "view_types85_golden",
+    "old_bytes": 301,
+    "bytes": 313,
+    "insertions": [
+      229
+    ],
+    "sha256": "278f8bb46d65009b35a5d7d3956bfa4c447dd7a9665cdfccf195d8232b655f7b"
+  }
+]

@@ -26,6 +26,7 @@ static size_t xr_xir_panic_message_format_graph_operation(XrXirFaultDetail detai
     case XR_XIR_PANIC_MATCH: written = snprintf(buffer, capacity, "non-exhaustive match"); break;
     case XR_XIR_PANIC_ITERATOR_EXHAUSTED: written = snprintf(buffer, capacity, "iterator is exhausted"); break;
     case XR_XIR_PANIC_NULL_UNWRAP: written = snprintf(buffer, capacity, "cannot unwrap a null value"); break;
+    case XR_XIR_PANIC_KEY_NOT_FOUND: written = snprintf(buffer, capacity, "map key not found"); break;
     default: return 0;
     }
     return written > 0 && (size_t) written < capacity ? (size_t) written : 0;

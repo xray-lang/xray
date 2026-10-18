@@ -467,8 +467,9 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
     if (status==XR_XIR_OK) status=effect_invocation_copy_origins(certificate,owner,request->dense);
     if (status==XR_XIR_OK) status=effect_body_owned_types_verify(work,certificate->body);
     if (status==XR_XIR_OK) {
-        certificate->final=xir_compile_alloc(work,sizeof(*certificate->final),&status);
-        if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(*certificate->final))) status=XR_XIR_BUDGET;
+        /* Budget failure may enter cleanup before copied ownership is installed.
+         * Publish only initialized spans while charging their actual clearing. */
+        certificate->final=xir_compile_calloc(work,1,sizeof(*certificate->final),&status);
         if (status==XR_XIR_OK) *certificate->final=owner->final;
         if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(certificate->final->summary)+2*sizeof(void *)))
             status=XR_XIR_BUDGET;

@@ -38,8 +38,8 @@ def main():
         add('escaped-same',escaped.encode(),0)
         for name in list(original)[:17]:
             value=modified();value[name]+=1;add('prefix-'+name,value,6 if name in ('sanitizers','allocator') else 1)
-        for name,old in (('schema',1),('semantic',57),('value_abi',16),('call_abi',20),('program_abi',25)):
-            value=modified();value[name]=old;add('old-'+name,value)
+        for name,old in (('schema',1),('semantic',57),('semantic',84),('value_abi',16),('call_abi',20),('program_abi',25)):
+            value=modified();value[name]=old;add('old-'+name+('-84' if name=='semantic' and old==84 else ''),value)
         for i,row in enumerate(original['abi_measurements']):
             value=modified();value['abi_measurements'][i]['value']=row['value']+1;add('abi-'+str(row['id']),value)
         for name in original:

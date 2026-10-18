@@ -450,8 +450,12 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
                 XrXirType field = (XrXirType)checked_u32(c,(uint32_t)fields[p].type);
                 if (c->reading) fields[p] = (XrXirCallableParameter){field,0};
             }
-        } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_CELL ||
-                   s.kind == XR_XIR_TYPE_NULLABLE || s.kind == XR_XIR_TYPE_ATOMIC || s.kind == XR_XIR_TYPE_TASK || (s.kind == XR_XIR_TYPE_ITERATOR || s.kind == XR_XIR_TYPE_CHANNEL)) {
+        } else if (s.kind == XR_XIR_TYPE_MAP) {
+            s.element = (XrXirType)checked_u32(c, (uint32_t)s.element);
+            s.result = (XrXirType)checked_u32(c, (uint32_t)s.result);
+        } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_SET || s.kind == XR_XIR_TYPE_CELL ||
+                   s.kind == XR_XIR_TYPE_NULLABLE || s.kind == XR_XIR_TYPE_ATOMIC || s.kind == XR_XIR_TYPE_TASK ||
+                   s.kind == XR_XIR_TYPE_SLICE || (s.kind == XR_XIR_TYPE_MUT_SLICE || s.kind == XR_XIR_TYPE_ITERATOR || s.kind == XR_XIR_TYPE_CHANNEL)) {
             s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
         } else if (s.kind == XR_XIR_TYPE_NOMINAL) {
             s.nominal.declaration = checked_u32(c, s.nominal.declaration);

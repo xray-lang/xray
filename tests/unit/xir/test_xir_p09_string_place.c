@@ -47,6 +47,28 @@ static XrXirValueStatus string_place_apply(StringPlaceFixture *f, bool utf8) {
     return utf8 ? xr_xir_string_place_append_utf8(&f->place, "bcdefghijklmnopqrstuvwxyz", 25, &f->admission) :
         xr_xir_string_place_append(&f->place, &f->suffix, &f->admission);
 }
+static void string_place_missing_admission(bool utf8) {
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        StringPlaceFixture f; string_place_open(&f, mode, NULL);
+        size_t before = calls; int64_t root = f.root.payload;
+        uint64_t work = f.admission.work;
+        XrXirDomain retired = {0};
+        for (unsigned invalid = 0; invalid < 3; ++invalid) {
+            XrXirValueAdmission *admission = invalid ? &f.admission : NULL;
+            f.admission.domain = invalid == 1 ? NULL : invalid == 2 ? &retired : f.receiver;
+            XrXirValueStatus status = utf8 ?
+                xr_xir_string_place_append_utf8(&f.place, "b", 1, admission) :
+                xr_xir_string_place_append(&f.place, &f.suffix, admission);
+            CHECK(status == XR_XIR_VALUE_BAD_ARGUMENT);
+            CHECK(f.root.payload == root && calls == before && f.admission.work == work);
+            string_place_expect(&f.root, "a", 1);
+            if (mode == 1) string_place_expect(&f.alias, "a", 1);
+        }
+        f.admission.domain = f.receiver;
+        string_place_close(&f); CHECK(!live);
+    }
+    printf("String place utf8=%u missing admission/Domain and retired identity preserve roots/work with no allocation PASS\n", utf8);
+}
 static void string_place_utf8_normal(void) {
     for (unsigned mode = 0; mode < 3; ++mode) {
         StringPlaceFixture f; string_place_open(&f, mode, NULL);
@@ -216,6 +238,12 @@ static void string_place_compile_faults(bool utf8) {
     puts("String place same compile ledger allocated/live/work exact/minus1 PASS");
 }
 int main(int argc, char **argv) {
+    if (argc == 2 && (!strcmp(argv[1], "--invalid-admission-string") ||
+        !strcmp(argv[1], "--invalid-admission-utf8"))) {
+        string_place_missing_admission(!strcmp(argv[1], "--invalid-admission-utf8"));
+        CHECK(!live && !value_compile_live && !value_compile_bytes); return 0;
+    }
+    string_place_missing_admission(false); string_place_missing_admission(true);
     string_place_normal(); string_place_utf8_normal();
     string_place_local_work(false); string_place_local_work(true); string_place_cell_authority();
     if (argc != 2 || strcmp(argv[1], "--normal")) {

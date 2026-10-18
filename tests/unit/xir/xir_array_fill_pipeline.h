@@ -185,7 +185,7 @@ static FillCompile fill_build(size_t failure, XrCompileResourceLimits limits, un
     if (emit) {
         FILE *file = fopen(emit, "wb"); CHECK(file);
         CHECK(fwrite(source.text, 1, source.length, file) == source.length && fclose(file) == 0);
-        printf("Array fill C bytes=%zu cap1048576\n", source.length);
+        printf("Array fill C bytes=%zu cap1048676\n", source.length);
     } else { run.module = xr_xir_compile_artifact_module(run.lowered); run.stage = 7; run.status = fill_seal(&run, mode); }
     fill_profile_stage(&run, "seal-or-file");
 done:

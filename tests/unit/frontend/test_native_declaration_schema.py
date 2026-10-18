@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import gen_native_declarations as schema
 import embed_native_types as embed
+import gen_api_inventory as inventory
 
 
 class NativeDeclarations(unittest.TestCase):
@@ -24,7 +25,7 @@ class NativeDeclarations(unittest.TestCase):
         for name, text in first.items():
             self.assertEqual((ROOT / name).read_text(encoding='utf-8'), text)
         header, members = schema.parse_source(self.source, self.prelude)
-        self.assertEqual(header[:3], (1, 'Array', 'T'))
+        self.assertEqual(header[:3], (1, 'Array', ('T',)))
         self.assertEqual(len(members), 32)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
                          {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY',
@@ -35,7 +36,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_integer_definition_and_recipe_rejections(self):
         source = (ROOT / 'stdlib/types/i64.xr').read_text(encoding='utf-8')
         header, members = schema.parse_source(source, self.prelude)
-        self.assertEqual(header[:3], (12, 'i64', ''))
+        self.assertEqual(header[:3], (12, 'i64', ()))
         executable = [m for m in members if m.operation != 'NONE']
         self.assertEqual(len(executable), 25)
         self.assertEqual(next(m for m in members if m.name == 'sqrt').operation, 'INTEGER_SQRT')
@@ -191,7 +192,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_string_value_identity_and_full_member_spans(self):
         source = (ROOT / 'stdlib/types/string.xr').read_text(encoding='utf-8')
         header, members = schema.parse_source(source, self.prelude)
-        self.assertEqual(header[:3], (2, 'string', ''))
+        self.assertEqual(header[:3], (2, 'string', ()))
         self.assertEqual(len(members), 19)
         rows = source.splitlines()
         self.assertEqual(rows[header[3] - 1][header[4] - 1:], 'string {')
@@ -283,7 +284,8 @@ class NativeDeclarations(unittest.TestCase):
         rows = schema.render_iterator_identity(ROOT)
         self.assertEqual(rows, schema.render_iterator_identity(ROOT))
         projected = '\n'.join(rows)
-        self.assertIn('9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", "T", 1', projected)
+        self.assertIn('9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", xr_native_iterator_type_parameters, 1', projected)
+        self.assertIn('xr_native_iterator_type_parameters[] = {"T"};', projected)
         self.assertEqual(projected.count('XR_NATIVE_OPERATION_NONE'), 2)
         self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT'), 1)
         self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_NEXT'), 1)
@@ -313,7 +315,7 @@ class NativeDeclarations(unittest.TestCase):
             for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr',
                              'stdlib/types/coroutine.xr', 'stdlib/types/channel.xr', 'stdlib/types/iterator.xr',
                              'stdlib/types/i64.xr', 'stdlib/types/f64.xr', 'stdlib/types/bool.xr',
-                             'stdlib/types/rune.xr', 'stdlib/prelude/builtin_symbols.def']:
+                             'stdlib/types/rune.xr', 'stdlib/types/map.xr', 'stdlib/types/set.xr', 'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())
@@ -358,7 +360,7 @@ class NativeDeclarations(unittest.TestCase):
         for stem, identity, total, admitted in [('f64',13,12,7),('bool',14,1,1),('rune',15,6,2)]:
             source = (ROOT / 'stdlib/types' / (stem+'.xr')).read_text(encoding='utf-8')
             header, members = schema.parse_source(source, self.prelude)
-            self.assertEqual((identity,stem,''),header[:3])
+            self.assertEqual((identity,stem,()),header[:3])
             self.assertEqual(total,len(members))
             self.assertEqual(admitted,len([m for m in members if m.operation!='NONE']))
             self.assertNotIn('xr_native_def_'+stem,embed.render(ROOT / 'stdlib/types'))
@@ -388,7 +390,8 @@ class NativeDeclarations(unittest.TestCase):
             source_path = root / 'stdlib/types/channel.xr'
             source = source_path.read_text(encoding='utf-8')
             original = '\n'.join(schema.render_channel_identity(root))
-            self.assertIn('6, XR_NATIVE_DECLARATION_IDENTITY, "Channel", "T", 1,', original)
+            self.assertIn('6, XR_NATIVE_DECLARATION_IDENTITY, "Channel", xr_native_channel_type_parameters, 1,', original)
+            self.assertIn('xr_native_channel_type_parameters[] = {"T"};', original)
             self.assertEqual(original.count('XR_NATIVE_OPERATION_NONE'), 0)
             for operation in ['CHANNEL_CAPACITY', 'CHANNEL_IS_CLOSED', 'CHANNEL_CLOSE', 'CHANNEL_TRY_SEND',
                               'CHANNEL_TRY_RECV', 'CHANNEL_SEND', 'CHANNEL_RECV', 'CHANNEL_RECV_OR',

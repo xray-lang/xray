@@ -12,8 +12,8 @@
 #include "xxir_task_internal.h"
 #include "xxir_generator_internal.h"
 #include "xxir_instance_generator_internal.h"
-#include "xxir_task_result_internal.h"
 #include "xxir_call_time_internal.h"
+#include "xxir_task_shapes.h"
 #include "xxir_error.h"
 #include "xxir_call_observer_internal.h"
 #include "xxir_effects.h"
@@ -103,7 +103,7 @@ XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task) {
         const XrXirTypes *types = xr_xir_compile_type_arena_types(task->object.arena);
         const XrXirTypeNode *node = xr_xir_type_node(types, task->object.type);
         if (!node || node->kind != XR_XIR_TYPE_TASK || node->parameter_span ||
-            !xr_xir_task_result_supported(types, node->element)) return false;
+            !xr_xir_task_result_shape(types, node->element)) return false;
         XirTaskState state = atomic_load_explicit(&task->state, memory_order_acquire);
         if (state == XIR_TASK_PREPARING)
             return !task->generation && !task->identity && !task->executor && !task->call && xr_xir_call_result_empty(&task->outcome);
@@ -314,7 +314,7 @@ static XrXirCallStatus task_core_spawn_inner(XrXirTaskExecutor *executor, XrXirC
     const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(executor->config.task_arena), type);
     if (!node || node->kind != XR_XIR_TYPE_TASK) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirType result = node->element;
-    if (!xr_xir_task_result_supported(program->types, result) ||
+    if (!xr_xir_task_result_shape(program->types, result) ||
         request->entry >= program->entry_count ||
         program->entries[request->entry].result != result || program->entries[request->entry].cleanup_owner)
         return XR_XIR_CALL_BAD_ARGUMENT;
@@ -497,7 +497,7 @@ static void task_core_reject_closed_wait(XrXirTaskExecutor *executor) {
 #include "xxir_task_channel.inc.c"
 static void task_core_dispatch_result(XrXirTaskExecutor *executor,XirTaskActivation *activation,XrXirCallResult result) {
     XirTask *task=activation->task;
-    XirGenerator *generator=activation->generator;
+    XirGenerator *generator=generator_core_activation(executor,activation);
     if (result.status==XR_XIR_CALL_READY) task_core_enqueue(executor,activation);
     else if (result.status==XR_XIR_CALL_SUSPENDED) {
         XrXirWaitRequest wait={0};

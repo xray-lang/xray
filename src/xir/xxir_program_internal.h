@@ -32,7 +32,6 @@ typedef struct XrXirProgramGeneratorSite {
 typedef struct XrXirProgramPermission {
     uint32_t reference_begin, reference_count;
     uint32_t generator_begin, generator_count;
-    uint32_t root_parameter_begin, root_parameter_count, intrinsic_root;
     bool requires_root, unresolved;
     XrXirStatus worker;
 } XrXirProgramPermission;
@@ -41,10 +40,7 @@ typedef struct XrXirProgramPermissions {
     XrXirProgramPermission *entries;
     XrXirProgramFunctionRef *references;
     XrXirProgramGeneratorSite *generators;
-    uint32_t *parameter_offsets;
-    uint32_t *root_parameters;
-    uint8_t *cell_roles;
-    uint32_t root_parameter_count, reference_count, generator_count;
+    uint32_t reference_count, generator_count;
     struct XrXirEffects *effects;
     XrXirProgramInput *input;
     XrXirFunctionLayout *layouts;

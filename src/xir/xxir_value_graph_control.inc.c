@@ -11,6 +11,7 @@
 static atomic_flag value_graph_lock = ATOMIC_FLAG_INIT;
 static uint64_t value_graph_operations;
 static bool value_graph_draining;
+static bool value_graph_pending;
 static XrXirDomain *value_graph_closed;
 static void graph_drain(void);
 static void graph_domain_dispose(XrXirDomain *domain);
@@ -29,7 +30,10 @@ static void graph_object_initialize(XirObject *object) {
 }
 static void graph_dirty(XrXirDomain *domain) {
     XR_CHECK(!domain || xr_xir_domain_current(domain), "graph dirtiness retains its current owner");
-    if (domain && domain->closed) domain->close_pending = true;
+    if (domain && domain->closed) {
+        domain->close_pending = true;
+        value_graph_pending = true;
+    }
 }
 static void graph_object_unlink(XirObject *object) {
     XR_CHECK(object && value_object_kind_known(object->kind) &&
@@ -61,7 +65,7 @@ XR_FUNC void xr_xir_value_graph_end(void) {
     graph_lock();
     XR_CHECK(value_graph_operations, "value graph operation count underflow");
     --value_graph_operations;
-    bool drain = !value_graph_operations && !value_graph_draining;
+    bool drain = value_graph_pending && !value_graph_operations && !value_graph_draining;
     if (drain) value_graph_draining = true;
     graph_unlock();
     if (drain) graph_drain();
@@ -114,8 +118,9 @@ XR_FUNC void xr_xir_domain_close(XrXirDomain *domain) {
         if (value_graph_closed) value_graph_closed->closed_previous = domain;
         value_graph_closed = domain;
         domain->close_pending = true;
+        value_graph_pending = true;
     }
-    bool drain = !value_graph_operations && !value_graph_draining;
+    bool drain = value_graph_pending && !value_graph_operations && !value_graph_draining;
     if (drain) value_graph_draining = true;
     graph_unlock();
     if (drain) graph_drain();

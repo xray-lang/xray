@@ -218,12 +218,8 @@ static bool source_array_get(SourceContext *ctx, AstNode *node, AstNode *receive
         {array.id, at.id}, {0}, 0, {0}}, value) && source_array_member_reference(ctx, node, member) &&
         source_array_call_signature(ctx,node,&(SourceNativeCallShape){array.type,&at.type,1},value->type);
 }
-static bool source_array_set(SourceContext *ctx, AstNode *node, AstNode *receiver, AstNode *index,
-    AstNode *rhs, const XrNativeMemberDeclaration *member, bool assignment, SourceValue *value) {
-    SourceValue args[3];
-    if (!source_array_receiver(ctx, receiver, NULL, true, &args[0]) ||
-        !source_plan_expression(ctx, index, (SourceExpectedType){XR_XIR_I64 != XR_XIR_UNIT,XR_XIR_I64, false, false}, &args[1]) ||
-        !source_plan_expression(ctx, rhs, (SourceExpectedType){xr_xir_array_element(&ctx->types, args[0].type) != XR_XIR_UNIT,xr_xir_array_element(&ctx->types, args[0].type), false, false}, &args[2])) return false;
+static bool source_array_set_values(SourceContext *ctx, AstNode *node, SourceValue *args,
+    const XrNativeMemberDeclaration *member, bool assignment, SourceValue *value) {
     if (!member) member = source_array_member(ctx, node, "set");
     if (!member || member->operation != XR_NATIVE_OPERATION_ARRAY_SET) return false;
     if (!source_recipe_group(ctx, (XrXirInstruction) {XR_XIR_ARRAY_SET, XR_XIR_UNIT, {0}, {0}, 0, {0}}, args, 3, value) ||
@@ -232,6 +228,15 @@ static bool source_array_set(SourceContext *ctx, AstNode *node, AstNode *receive
             (XrXirType[]){args[1].type,args[2].type},2},XR_XIR_UNIT)) return false;
     if (assignment) *value = args[2];
     return true;
+}
+static bool source_array_set(SourceContext *ctx, AstNode *node, AstNode *receiver, AstNode *index,
+    AstNode *rhs, const XrNativeMemberDeclaration *member, bool assignment, SourceValue *value) {
+    SourceValue args[3];
+    if (!source_array_receiver(ctx, receiver, NULL, true, &args[0]) ||
+        !source_plan_expression(ctx, index, (SourceExpectedType){true, XR_XIR_I64, false, false}, &args[1]) ||
+        !source_plan_expression(ctx, rhs, (SourceExpectedType){true,
+            xr_xir_array_element(&ctx->types, args[0].type), false, false}, &args[2])) return false;
+    return source_array_set_values(ctx, node, args, member, assignment, value);
 }
 static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceValue *evaluated, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
@@ -299,7 +304,10 @@ static bool source_length(SourceContext *ctx, AstNode *node,
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "len requires one ordinary value operand");
     SourceValue array;
     if (!source_array_receiver(ctx, call->arguments[0], NULL, false, &array)) return false;
-    if (array.type != XR_XIR_STRING && !xr_xir_type_is_array(&ctx->types, array.type))
+    uint32_t view_kind=0;XrXirType view_element=XR_XIR_UNIT;
+    bool view=source_view_shape(ctx,array.type,&view_kind,&view_element);
+    if (array.type != XR_XIR_STRING && !xr_xir_type_is_array(&ctx->types, array.type) &&
+        !xr_xir_type_is_map(&ctx->types, array.type) && !xr_xir_type_is_set(&ctx->types, array.type) && !view)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "len receiver family is not admitted");
     if (!ctx->length_declaration) {
         XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
@@ -320,7 +328,7 @@ static bool source_length(SourceContext *ctx, AstNode *node,
         record->type = (XrXirSourceType) {XR_XIR_I64, 0, true};
         record->parameters = parameter; record->parameter_count = 1;
     }
-    return source_recipe_record(ctx, (XrXirInstruction) {array.type == XR_XIR_STRING ? XR_XIR_STRING_LEN : XR_XIR_ARRAY_LEN, XR_XIR_I64, {array.id, 0}, {0}, 0, {0}}, value) &&
+    return source_recipe_record(ctx, (XrXirInstruction) {view ? XR_XIR_VIEW_LEN : array.type == XR_XIR_STRING ? XR_XIR_STRING_LEN : xr_xir_type_is_array(&ctx->types, array.type) ? XR_XIR_ARRAY_LEN : XR_XIR_HASH_LEN, XR_XIR_I64, {array.id, 0}, {0}, 0, {0}}, value) &&
         source_query_target_token_reference(ctx,call->callee,
             ctx->length_declaration, XR_XIR_SOURCE_CALL);
 }

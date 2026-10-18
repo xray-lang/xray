@@ -159,8 +159,8 @@ static size_t range_pipeline(size_t failure, bool execute) {
 static void range_old_packet(void) {
     XrXirCompileContext context = range_context();
     const size_t before = instance_compile_attempts;
-    const uint8_t *packets[] = {checked_range67_rejected, checked_range68_rejected, checked_range69_golden, checked_range70_golden, checked_range72_golden, checked_range73_golden};
-    const size_t lengths[] = {sizeof(checked_range67_rejected), sizeof(checked_range68_rejected), sizeof(checked_range69_golden), sizeof(checked_range70_golden), sizeof(checked_range72_golden), sizeof(checked_range73_golden)};
+    const uint8_t *packets[] = {checked_range67_rejected, checked_range68_rejected, checked_range69_golden, checked_range70_golden, checked_range72_golden, checked_range73_golden, checked_range74_golden};
+    const size_t lengths[] = {sizeof(checked_range67_rejected), sizeof(checked_range68_rejected), sizeof(checked_range69_golden), sizeof(checked_range70_golden), sizeof(checked_range72_golden), sizeof(checked_range73_golden), sizeof(checked_range74_golden)};
     CHECK(sizeof(checked_range68_rejected) == sizeof(checked_range68_golden) &&
         !memcmp(checked_range68_rejected, checked_range68_golden, sizeof(checked_range68_golden)));
     for (size_t i = 0; i < sizeof(packets) / sizeof(packets[0]); ++i) {

@@ -19,6 +19,7 @@ add_library(compile_owner_core STATIC
     "${XR_ROOT}/src/xir/xxir_specialize.c"
     "${XR_ROOT}/src/xir/xxir_declarations.c"
     "${XR_ROOT}/src/xir/xxir_types.c"
+    "${XR_ROOT}/src/xir/xxir_view_affine.c"
     "${XR_ROOT}/src/xir/xxir_constraints.c"
     "${XR_ROOT}/src/xir/xxir_constraint_proof.c"
     "${XR_ROOT}/src/xir/xxir_interface.c"
@@ -53,6 +54,11 @@ add_test(NAME test_root_construction72_vectors
     COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/derive_combined_wire.py"
         --source-root "${XR_ROOT}" --output-root "${XR_ROOT}")
 set_tests_properties(test_root_construction72_vectors PROPERTIES
+    LABELS "unit;xir;compiler;wire;independent;retired" TIMEOUT 120)
+add_test(NAME test_root_construction75_vectors
+    COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/derive_root_comptime75_vectors.py"
+        --source-root "${XR_ROOT}" --output-root "${XR_ROOT}")
+set_tests_properties(test_root_construction75_vectors PROPERTIES
     LABELS "unit;xir;compiler;wire;independent" TIMEOUT 120)
 include("${CMAKE_CURRENT_LIST_DIR}/../compile_runtime_owner.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../../aot/cgen_compile_resources.cmake")

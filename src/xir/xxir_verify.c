@@ -16,11 +16,16 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_map.h"
+#include "xxir_task_shapes.h"
 #include "xxir_compile_memory.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
-#include "xxir_task_result_internal.h"
+#include "xxir_view_types_internal.h"
+#include "xxir_view_access_internal.h"
+#include "xxir_view_prepare_internal.h"
+#include "xxir_task_shapes.h"
 #include "xxir_operand_roles.h"
 #include "xxir_initialization.h"
 #include "xxir_constraint_proof.h"
@@ -90,6 +95,7 @@ static bool scalar(XrXirType type) {
 
 static uint32_t operand_count_metadata(const XrXirTypes *types,const XrXirDeclarations *declarations,
     XrXirType result,XrXirType cell,bool generator,const XrXirInstruction *op) {
+    if (xr_xir_op_uses_owner_slots(op->op)) return 0;
     if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
         return declarations ? xr_xir_slot_payload_operands(declarations->slots,
             declarations->slot_count,op) : 1u;
@@ -249,7 +255,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         if (op->args[1] < required || op->args[1] > maximum) return XR_XIR_BAD_STRUCTURE;
     }
     if (op->op == XR_XIR_PHI && (!op->args[1] || op->args[1] % 2)) return XR_XIR_BAD_STRUCTURE;
-    if ((op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_RANGE_CHECK) && op->args[1] != 3) return XR_XIR_BAD_STRUCTURE;
+    if ((op->op == XR_XIR_MAP_SET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_RANGE_CHECK) && op->args[1] != 3) return XR_XIR_BAD_STRUCTURE;
     uint32_t caller_id = (uint32_t) (function - module->functions);
     if (op->op == XR_XIR_CALL_DEFAULT || op->op == XR_XIR_INVOKE_DEFAULT) {
         XrXirStatus status = xr_xir_compile_default_call_verify(remaining, module, caller_id, op);
@@ -290,7 +296,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
         (rule->result == RULE_ARRAY && (!xr_xir_type_is_array(module->types, op->type) ||
             !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_ROOT && ((!xr_xir_type_is_array(module->types, op->type) &&
-            !xr_xir_type_is_nominal(module->types, op->type)) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
+            !xr_xir_type_is_nominal(module->types, op->type) && !xr_xir_type_is_map(module->types, op->type) &&
+            !xr_xir_type_is_set(module->types, op->type)) || !xr_xir_type_in_context(module, caller_id, op->type))) ||
         (rule->result == RULE_NOMINAL && !xr_xir_type_is_nominal(module->types, op->type)) ||
         (rule->result == RULE_VALUE && !((op->op == XR_XIR_SLOT_LOAD || op->op == XR_XIR_TUPLE_FIELD || op->op == XR_XIR_CELL_READ || op->op == XR_XIR_ENUM_GET || op->op==XR_XIR_CHANNEL_RECV_OR) && op->type == XR_XIR_UNIT) &&
             !xr_xir_type_in_context(module, caller_id, op->type)) ||
@@ -322,6 +329,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     } else if (op->op == XR_XIR_CLOCK_NANOS) {
         if (op->immediate < XR_XIR_CLOCK_REALTIME || op->immediate > XR_XIR_CLOCK_MONOTONIC)
             return XR_XIR_BAD_STRUCTURE;
+    } else if (op->op == XR_XIR_VIEW_NEW || op->op==XR_XIR_VIEW_REBORROW) {
+        if (op->immediate!=0 && op->immediate!=1) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op == XR_XIR_CELL_STRING_APPEND) {
         if (op->immediate != 0 && op->immediate != 1) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
@@ -758,6 +767,9 @@ static XrXirStatus role_operand(const XrXirFunction *function, const Graph *grap
     return value_use(function, graph, instruction, id, expected);
 }
 
+#include "xxir_hash_verify.inc.c"
+#include "xxir_view_verify.inc.c"
+
 static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
                              VerifyContext *context, uint32_t instruction) {
     const XrXirInstruction *op = &function->instructions[instruction];
@@ -773,7 +785,8 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
         array = xr_xir_operand_type(function, receiver);
         if (!xr_xir_type_is_array(types, array)) return XR_XIR_BAD_TYPE;
     }
-    if (op->op == XR_XIR_CELL_PLACE && xr_xir_type_is_nominal(types, array))
+    if (op->op == XR_XIR_CELL_PLACE && (xr_xir_type_is_nominal(types, array) ||
+        xr_xir_type_is_map(types, array) || xr_xir_type_is_set(types, array)))
         return role_operand(function, graph, context, instruction, 0, cell);
     XrXirType element = xr_xir_array_element(types, array);
     XrXirStatus status = xir_effect_evidence_is_closed(context->module) || context->literal_type_names ?
@@ -896,6 +909,184 @@ static bool callable_binding_operation(XrXirOp op) {
         op==XR_XIR_FUNCTION_REF || op==XR_XIR_CLEANUP_REGISTER;
 }
 
+static XrXirStatus graph_specialized_uses(const Graph *graph,const XrXirFunction *function,
+    VerifyContext *context,uint32_t i,bool *handled) {
+    if (xr_xir_op_is_channel(function->instructions[i].op)) {
+        *handled=true;return channel_uses(graph,function,context,i);
+    }
+    const XrXirInstruction *op=&function->instructions[i];*handled=true;
+    if(op->op==XR_XIR_SLOT_GROUP_INIT) {
+        uint64_t packed=(uint64_t)op->immediate;
+        uint32_t first=(uint32_t)(packed>>32),count=(uint32_t)packed,payload=0;
+        if(!xir_compile_work(&context->remaining,count))return XR_XIR_BUDGET;
+        for(uint32_t field=0;field<count;++field) {
+            XrXirType type=context->module->declarations->slots[first+field].type;
+            if(type==XR_XIR_UNIT)continue;
+            XrXirStatus status=type_use_context(context,context->location.function,type);
+            if(status==XR_XIR_OK)status=role_operand(function,graph,context,i,payload++,type);
+            if(status!=XR_XIR_OK)return status;
+        }
+        if(payload!=op->args[1])return XR_XIR_BAD_STRUCTURE;
+        return XR_XIR_OK;
+    }
+    if (xr_xir_op_is_atomic(op->op)) {
+        XrXirStatus status = atomic_uses(graph, function, context, i);
+        if (status != XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    if (op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_TUPLE_FIELD) {
+        XrXirStatus status=tuple_uses(graph,function,context,i);
+        if (status!=XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    if ((op->op >= XR_XIR_FIELD_PLACE && op->op <= XR_XIR_PLACE_WRITE) || op->op == XR_XIR_CELL_PROJECT) {
+        XrXirStatus status = path_uses(graph, function, context, i);
+        if (status != XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    if (op->op == XR_XIR_OBJECT_PLACE) {
+        XrXirType object = xr_xir_operand_type(function, op->args[0]);
+        if (!xr_xir_type_is_class(context->module->types, object) || op->type != object) return XR_XIR_BAD_TYPE;
+        XrXirStatus status = role_operand(function, graph, context, i, 0, object);
+        if (status != XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    if (op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
+        XrXirStatus status = error_filter_uses(graph, function, context, i);
+        if (status != XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    if (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) {
+        XrXirStatus status = enum_uses(graph, function, context, i);
+        if (status != XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    if (op->op >= XR_XIR_CLASS_NEW && op->op <= XR_XIR_CLASS_SET) {
+        XrXirStatus status = class_uses(graph, function, context, i);
+        if (status != XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    if (op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) {
+        XrXirStatus status = struct_uses(graph, function, context, i);
+        if (status != XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    if (op->op >= XR_XIR_VIEW_NEW && op->op <= XR_XIR_VIEW_CLEANUP) {
+        XrXirStatus status=view_uses(graph,function,context,i);
+        if (status!=XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    if (op->op >= XR_XIR_MAP_NEW && op->op <= XR_XIR_MAP_VALUE_AT) {
+        XrXirStatus status = hash_uses(graph, function, context, i);
+        if (status != XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    if ((op->op >= XR_XIR_CELL_PLACE && op->op <= XR_XIR_ARRAY_LEN) || op->op == XR_XIR_ARRAY_REPEAT ||
+        (op->op >= XR_XIR_ARRAY_CAPACITY && op->op <= XR_XIR_ARRAY_RESERVE)) {
+        XrXirStatus status = array_uses(graph, function, context, i);
+        if (status != XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    if (op->op == XR_XIR_PHI) {
+        XrXirStatus status = phi_uses(graph, function, context, i);
+        if (status != XR_XIR_OK) return status;
+        return XR_XIR_OK;
+    }
+    *handled=false;return XR_XIR_OK;
+}
+
+static XrXirStatus graph_expected_type(const XrXirFunction *function,VerifyContext *context,
+    uint32_t i,XrXirType *output) {
+    const XrXirInstruction *op=&function->instructions[i];
+    XrXirType expected = op->type;
+    if (op->op == XR_XIR_TASK_AWAIT || op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT || op->op==XR_XIR_ITERATOR_NTH || op->op==XR_XIR_ITERATOR_CLOSE) {
+        expected = xr_xir_operand_type(function, op->args[0]);
+        const XrXirTypeNode *task = xr_xir_type_node(context->module->types, expected);
+        if (!task || task->kind != (uint32_t)(op->op==XR_XIR_TASK_AWAIT ? XR_XIR_TYPE_TASK : XR_XIR_TYPE_ITERATOR))
+            return XR_XIR_BAD_TYPE;
+        XrXirType result = task->element;
+        if (op->op==XR_XIR_TASK_AWAIT && context->module->stage == XR_XIR_LOWERED && !xr_xir_task_result_shape(context->module->types, result))
+            return XR_XIR_UNSUPPORTED;
+    }
+    if (op->op == XR_XIR_NULLABLE_SOME)
+        expected = xr_xir_nullable_element(context->module->types, op->type);
+    if (op->op == XR_XIR_EQUAL) {
+        expected = xr_xir_operand_type(function,op->args[0]);
+        XrXirStatus status = xr_xir_compile_type_constraints(&context->remaining, context->module, context->location.function, expected, (XrXirConstraint){.markers = XR_XIR_CONSTRAINT_EQUAL});
+        if (status != XR_XIR_OK) return status;
+    }
+    if (op->op == XR_XIR_FUNCTION_WEAKEN) {
+        expected = xr_xir_operand_type(function, op->args[0]);
+        XrXirStatus status = xr_xir_compile_callable_weakening(&context->remaining, context->module->types, expected, op->type);
+        if (status != XR_XIR_OK) return status;
+    }
+    if (op->op==XR_XIR_GENERATOR_YIELD)
+        expected=xr_xir_iterator_element(context->module->types,function->result);
+    else if (op->op == XR_XIR_RETURN)
+        expected = xr_xir_function_completion(context->module,context->location.function);
+    else if (op->op == XR_XIR_BRANCH)
+        expected = XR_XIR_BOOL;
+    else if (op->op == XR_XIR_EQ_INT || op->op == XR_XIR_LT_INT ||
+             (op->op >= XR_XIR_NE_INT && op->op <= XR_XIR_GE_INT)) {
+        expected = xr_xir_operand_type(function, op->args[0]);
+        if (!xr_xir_type_is_integer(expected)) return XR_XIR_BAD_TYPE;
+    }
+    if (op->op == XR_XIR_CONVERT_NUMBER || (op->op >= XR_XIR_EQ_FLOAT && op->op <= XR_XIR_GE_FLOAT)) {
+        expected = xr_xir_operand_type(function, op->args[0]);
+        if (op->op == XR_XIR_CONVERT_NUMBER ? !xr_xir_type_is_number(expected) : !xr_xir_float_bits(expected))
+            return XR_XIR_BAD_TYPE;
+    }
+    if (op->op == XR_XIR_THROW || op->op == XR_XIR_CLEANUP_ERROR || op->op == XR_XIR_ERROR_ERASE) {
+        if (op->op == XR_XIR_ERROR_ERASE && op->type != XR_XIR_ERROR) return XR_XIR_BAD_TYPE;
+        expected = xr_xir_operand_type(function, op->args[0]);
+        XrXirStatus status = xr_xir_compile_type_constraints(&context->remaining, context->module, context->location.function, expected, (XrXirConstraint){.markers = XR_XIR_CONSTRAINT_ERROR});
+        if (status != XR_XIR_OK) return status;
+    }
+    if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
+        expected = context->module->declarations->slots[op->immediate].type;
+    if (op->op == XR_XIR_TIMER_AFTER_MS || op->op == XR_XIR_RANGE_CHECK) expected = XR_XIR_I64;
+    if (op->op == XR_XIR_NULLABLE_IS_SOME || op->op == XR_XIR_NULLABLE_UNWRAP) {
+        expected = xr_xir_operand_type(function, op->args[0]);
+        if (!xr_xir_type_is_nullable(context->module->types, expected) ||
+            (op->op == XR_XIR_NULLABLE_UNWRAP && xr_xir_nullable_element(context->module->types, expected) != op->type))
+            return XR_XIR_BAD_TYPE;
+    }
+    if (op->op == XR_XIR_RUNE_TO_INTEGER) {
+        if (op->type != XR_XIR_I64 && op->type != XR_XIR_U32) return XR_XIR_BAD_TYPE;
+        expected = XR_XIR_RUNE;
+    }
+    if (op->op == XR_XIR_INTEGER_TO_RUNE) expected = XR_XIR_I64;
+    if (op->op == XR_XIR_TO_STRING) {
+        expected = xr_xir_operand_type(function, op->args[0]);
+        if (expected != XR_XIR_BOOL && expected != XR_XIR_RUNE && !xr_xir_type_is_number(expected)) return XR_XIR_BAD_TYPE;
+    }
+    if (op->op == XR_XIR_CELL_NEW) expected = xr_xir_cell_element(context->module->types, op->type);
+    if (op->op == XR_XIR_CELL_READ) {
+        expected = xr_xir_operand_type(function, op->args[0]);
+        if (!xr_xir_type_is_cell(context->module->types, expected) ||
+            xr_xir_cell_element(context->module->types, expected) != op->type) return XR_XIR_BAD_TYPE;
+    }
+    if (op->op == XR_XIR_CELL_WRITE) {
+        expected = xr_xir_operand_type(function, op->args[0]);
+        if (!xr_xir_type_is_cell(context->module->types, expected)) return XR_XIR_BAD_TYPE;
+    }
+    if (op->op == XR_XIR_CELL_STRING_APPEND) {
+        expected = xr_xir_operand_type(function, op->args[0]);
+        if (!xr_xir_type_is_cell(context->module->types, expected) ||
+            xr_xir_cell_element(context->module->types, expected) != XR_XIR_STRING)
+            return XR_XIR_BAD_TYPE;
+    }
+    if (op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_STRING_LEN ||
+        op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
+        (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
+        op->op == XR_XIR_STRING_CONTAINS || op->op == XR_XIR_STRING_STARTS_WITH ||
+        op->op == XR_XIR_STRING_ENDS_WITH || op->op == XR_XIR_STRING_INDEX_OF ||
+        op->op == XR_XIR_STRING_LAST_INDEX_OF) expected = XR_XIR_STRING;
+
+    if (op->op == XR_XIR_PANIC_CODE || op->op == XR_XIR_PANIC_MESSAGE) expected = XR_XIR_PANIC_INFO;
+    *output=expected;return XR_XIR_OK;
+}
+
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
@@ -904,164 +1095,13 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
         if (!xir_compile_work(&context->remaining, 1))
             return XR_XIR_BUDGET;
         const XrXirInstruction *op = &function->instructions[i];
-        if(op->op==XR_XIR_SLOT_GROUP_INIT) {
-            uint64_t packed=(uint64_t)op->immediate;
-            uint32_t first=(uint32_t)(packed>>32),count=(uint32_t)packed,payload=0;
-            if(!xir_compile_work(&context->remaining,count))return XR_XIR_BUDGET;
-            for(uint32_t field=0;field<count;++field) {
-                XrXirType type=context->module->declarations->slots[first+field].type;
-                if(type==XR_XIR_UNIT)continue;
-                XrXirStatus status=type_use_context(context,context->location.function,type);
-                if(status==XR_XIR_OK)status=role_operand(function,graph,context,i,payload++,type);
-                if(status!=XR_XIR_OK)return status;
-            }
-            if(payload!=op->args[1])return XR_XIR_BAD_STRUCTURE;
-            continue;
-        }
-        if (xr_xir_op_is_channel(op->op)) {
-            XrXirStatus status=channel_uses(graph,function,context,i);
-            if (status!=XR_XIR_OK) return status;
-            continue;
-        }
-        if (xr_xir_op_is_atomic(op->op)) {
-            XrXirStatus status = atomic_uses(graph, function, context, i);
-            if (status != XR_XIR_OK) return status;
-            continue;
-        }
-        if (op->op == XR_XIR_TUPLE_NEW || op->op == XR_XIR_TUPLE_FIELD) {
-            XrXirStatus status=tuple_uses(graph,function,context,i);
-            if (status!=XR_XIR_OK) return status;
-            continue;
-        }
-        if ((op->op >= XR_XIR_FIELD_PLACE && op->op <= XR_XIR_PLACE_WRITE) || op->op == XR_XIR_CELL_PROJECT) {
-            XrXirStatus status = path_uses(graph, function, context, i);
-            if (status != XR_XIR_OK) return status;
-            continue;
-        }
-        if (op->op == XR_XIR_OBJECT_PLACE) {
-            XrXirType object = xr_xir_operand_type(function, op->args[0]);
-            if (!xr_xir_type_is_class(context->module->types, object) || op->type != object) return XR_XIR_BAD_TYPE;
-            XrXirStatus status = role_operand(function, graph, context, i, 0, object);
-            if (status != XR_XIR_OK) return status;
-            continue;
-        }
-        if (op->op == XR_XIR_ERROR_IS || op->op == XR_XIR_ERROR_NARROW) {
-            XrXirStatus status = error_filter_uses(graph, function, context, i);
-            if (status != XR_XIR_OK) return status;
-            continue;
-        }
-        if (op->op >= XR_XIR_ENUM_NEW && op->op <= XR_XIR_ENUM_GET) {
-            XrXirStatus status = enum_uses(graph, function, context, i);
-            if (status != XR_XIR_OK) return status;
-            continue;
-        }
-        if (op->op >= XR_XIR_CLASS_NEW && op->op <= XR_XIR_CLASS_SET) {
-            XrXirStatus status = class_uses(graph, function, context, i);
-            if (status != XR_XIR_OK) return status;
-            continue;
-        }
-        if (op->op >= XR_XIR_STRUCT_NEW && op->op <= XR_XIR_STRUCT_SET) {
-            XrXirStatus status = struct_uses(graph, function, context, i);
-            if (status != XR_XIR_OK) return status;
-            continue;
-        }
-        if ((op->op >= XR_XIR_CELL_PLACE && op->op <= XR_XIR_ARRAY_LEN) || op->op == XR_XIR_ARRAY_REPEAT ||
-            (op->op >= XR_XIR_ARRAY_CAPACITY && op->op <= XR_XIR_ARRAY_RESERVE)) {
-            XrXirStatus status = array_uses(graph, function, context, i);
-            if (status != XR_XIR_OK) return status;
-            continue;
-        }
-        if (op->op == XR_XIR_PHI) {
-            XrXirStatus status = phi_uses(graph, function, context, i);
-            if (status != XR_XIR_OK) return status;
-            continue;
-        }
-        XrXirType expected = op->type;
-        if (op->op == XR_XIR_TASK_AWAIT || op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT || op->op==XR_XIR_ITERATOR_NTH || op->op==XR_XIR_ITERATOR_CLOSE) {
-            expected = xr_xir_operand_type(function, op->args[0]);
-            const XrXirTypeNode *task = xr_xir_type_node(context->module->types, expected);
-            if (!task || task->kind != (uint32_t)(op->op==XR_XIR_TASK_AWAIT ? XR_XIR_TYPE_TASK : XR_XIR_TYPE_ITERATOR))
-                return XR_XIR_BAD_TYPE;
-            XrXirType result = task->element;
-            if (op->op==XR_XIR_TASK_AWAIT && context->module->stage == XR_XIR_LOWERED && !xr_xir_task_result_supported(context->module->types, result))
-                return XR_XIR_UNSUPPORTED;
-        }
-        if (op->op == XR_XIR_NULLABLE_SOME)
-            expected = xr_xir_nullable_element(context->module->types, op->type);
-        if (op->op == XR_XIR_EQUAL) {
-            expected = xr_xir_operand_type(function,op->args[0]);
-            XrXirStatus status = xr_xir_compile_type_constraints(&context->remaining, context->module, context->location.function, expected, (XrXirConstraint){.markers = XR_XIR_CONSTRAINT_EQUAL});
-            if (status != XR_XIR_OK) return status;
-        }
-        if (op->op == XR_XIR_FUNCTION_WEAKEN) {
-            expected = xr_xir_operand_type(function, op->args[0]);
-            XrXirStatus status = xr_xir_compile_callable_weakening(&context->remaining, context->module->types, expected, op->type);
-            if (status != XR_XIR_OK) return status;
-        }
-        if (op->op==XR_XIR_GENERATOR_YIELD)
-            expected=xr_xir_iterator_element(context->module->types,function->result);
-        else if (op->op == XR_XIR_RETURN)
-            expected = xr_xir_function_completion(context->module,context->location.function);
-        else if (op->op == XR_XIR_BRANCH)
-            expected = XR_XIR_BOOL;
-        else if (op->op == XR_XIR_EQ_INT || op->op == XR_XIR_LT_INT ||
-                 (op->op >= XR_XIR_NE_INT && op->op <= XR_XIR_GE_INT)) {
-            expected = xr_xir_operand_type(function, op->args[0]);
-            if (!xr_xir_type_is_integer(expected)) return XR_XIR_BAD_TYPE;
-        }
-        if (op->op == XR_XIR_CONVERT_NUMBER || (op->op >= XR_XIR_EQ_FLOAT && op->op <= XR_XIR_GE_FLOAT)) {
-            expected = xr_xir_operand_type(function, op->args[0]);
-            if (op->op == XR_XIR_CONVERT_NUMBER ? !xr_xir_type_is_number(expected) : !xr_xir_float_bits(expected))
-                return XR_XIR_BAD_TYPE;
-        }
-        if (op->op == XR_XIR_THROW || op->op == XR_XIR_CLEANUP_ERROR || op->op == XR_XIR_ERROR_ERASE) {
-            if (op->op == XR_XIR_ERROR_ERASE && op->type != XR_XIR_ERROR) return XR_XIR_BAD_TYPE;
-            expected = xr_xir_operand_type(function, op->args[0]);
-            XrXirStatus status = xr_xir_compile_type_constraints(&context->remaining, context->module, context->location.function, expected, (XrXirConstraint){.markers = XR_XIR_CONSTRAINT_ERROR});
-            if (status != XR_XIR_OK) return status;
-        }
-        if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
-            expected = context->module->declarations->slots[op->immediate].type;
-        if (op->op == XR_XIR_TIMER_AFTER_MS || op->op == XR_XIR_RANGE_CHECK) expected = XR_XIR_I64;
-        if (op->op == XR_XIR_NULLABLE_IS_SOME || op->op == XR_XIR_NULLABLE_UNWRAP) {
-            expected = xr_xir_operand_type(function, op->args[0]);
-            if (!xr_xir_type_is_nullable(context->module->types, expected) ||
-                (op->op == XR_XIR_NULLABLE_UNWRAP && xr_xir_nullable_element(context->module->types, expected) != op->type))
-                return XR_XIR_BAD_TYPE;
-        }
-        if (op->op == XR_XIR_RUNE_TO_INTEGER) {
-            if (op->type != XR_XIR_I64 && op->type != XR_XIR_U32) return XR_XIR_BAD_TYPE;
-            expected = XR_XIR_RUNE;
-        }
-        if (op->op == XR_XIR_INTEGER_TO_RUNE) expected = XR_XIR_I64;
-        if (op->op == XR_XIR_TO_STRING) {
-            expected = xr_xir_operand_type(function, op->args[0]);
-            if (expected != XR_XIR_BOOL && expected != XR_XIR_RUNE && !xr_xir_type_is_number(expected)) return XR_XIR_BAD_TYPE;
-        }
-        if (op->op == XR_XIR_CELL_NEW) expected = xr_xir_cell_element(context->module->types, op->type);
-        if (op->op == XR_XIR_CELL_READ) {
-            expected = xr_xir_operand_type(function, op->args[0]);
-            if (!xr_xir_type_is_cell(context->module->types, expected) ||
-                xr_xir_cell_element(context->module->types, expected) != op->type) return XR_XIR_BAD_TYPE;
-        }
-        if (op->op == XR_XIR_CELL_WRITE) {
-            expected = xr_xir_operand_type(function, op->args[0]);
-            if (!xr_xir_type_is_cell(context->module->types, expected)) return XR_XIR_BAD_TYPE;
-        }
-        if (op->op == XR_XIR_CELL_STRING_APPEND) {
-            expected = xr_xir_operand_type(function, op->args[0]);
-            if (!xr_xir_type_is_cell(context->module->types, expected) ||
-                xr_xir_cell_element(context->module->types, expected) != XR_XIR_STRING)
-                return XR_XIR_BAD_TYPE;
-        }
-        if (op->op == XR_XIR_WRITE_STREAM || op->op == XR_XIR_STRING_LEN ||
-            op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
-            (op->op >= XR_XIR_LT_STRING && op->op <= XR_XIR_GE_STRING) ||
-            op->op == XR_XIR_STRING_CONTAINS || op->op == XR_XIR_STRING_STARTS_WITH ||
-            op->op == XR_XIR_STRING_ENDS_WITH || op->op == XR_XIR_STRING_INDEX_OF ||
-            op->op == XR_XIR_STRING_LAST_INDEX_OF) expected = XR_XIR_STRING;
-
-        if (op->op == XR_XIR_PANIC_CODE || op->op == XR_XIR_PANIC_MESSAGE) expected = XR_XIR_PANIC_INFO;
+        bool handled=false;
+        XrXirStatus specialized=graph_specialized_uses(graph,function,context,i,&handled);
+        if (specialized!=XR_XIR_OK) return specialized;
+        if (handled) continue;
+        XrXirType expected;
+        XrXirStatus typed=graph_expected_type(function,context,i,&expected);
+        if (typed!=XR_XIR_OK) return typed;
         if (local_write(op->op)) {
             if (op->args[0] < function->parameter_count ||
                 op->args[0] - function->parameter_count >= function->instruction_count) return XR_XIR_BAD_VALUE;
@@ -1241,20 +1281,8 @@ static XrXirStatus verify_metadata_parameter_count(const XrXirModule *module, Xr
     return XR_XIR_OK;
 }
 
-static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_context,
-    const XrXirModule *module, const XrXirConstruction *construction,
-    const XrXirEffects *source_effects,const XrXirEffects *program_effects,
-    XrXirDiagnostic *diagnostic) {
-    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
-    XrXirCompileContext compile_state = *compile_context;
-    XrXirCompileContext *remaining = &compile_state;
-    if (!remaining) {
-        if (diagnostic)
-            *diagnostic = (XrXirDiagnostic) {XR_XIR_BAD_STRUCTURE, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
-        return XR_XIR_BAD_STRUCTURE;
-    }
-    VerifyContext context = {*remaining,
-                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module, {remaining->resources,NULL}, {remaining->resources,NULL,0}, NULL, 0, false};
+static XrXirStatus structure_verify_ordinary(VerifyContext *context,const XrXirConstruction *construction) {
+    const XrXirModule *module=context->module;
     XrXirStatus status = XR_XIR_OK;
     bool signature_constraints_proved = false;
     if (!module || !module->functions || !module->function_count)
@@ -1267,10 +1295,10 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
     else if (module->stage != XR_XIR_BUILT && module->stage != XR_XIR_CHECKED &&
              module->stage != XR_XIR_LOWERED)
         status = XR_XIR_BAD_STAGE;
-    else if (!spend_count(&context.remaining.limits.functions, module->function_count))
+    else if (!spend_count(&context->remaining.limits.functions, module->function_count))
         status = XR_XIR_BUDGET;
     if (status == XR_XIR_OK) {
-        status = xr_xir_compile_types_structure_verify(&context.remaining, module->types);
+        status = xr_xir_compile_types_structure_verify(&context->remaining, module->types);
         if (status == XR_XIR_OK && module->types && module->types->nominals) {
             bool identities = module->types->nominals->identities != NULL;
             if (identities != (module->stage == XR_XIR_LOWERED)) status = XR_XIR_BAD_STAGE;
@@ -1283,23 +1311,23 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
                 if (module->types->nodes[t].parameter_span) status = XR_XIR_BAD_TYPE;
     }
     if (status == XR_XIR_OK) {
-        status = xr_xir_compile_declarations_verify(&context.remaining, module->declarations, module->types, module->function_count, module->linkage_kind);
+        status = xr_xir_compile_declarations_verify(&context->remaining, module->declarations, module->types, module->function_count, module->linkage_kind);
     }
-    if (status == XR_XIR_OK) status = verify_nominal_modules(module, &context.remaining);
-    if (status == XR_XIR_OK) status = xr_xir_compile_generics_structure_verify(&context.remaining, module);
-    if (status == XR_XIR_OK) status = verify_metadata_parameter_count(module, &context.remaining);
-    if (status == XR_XIR_OK) status = verify_signature_structure(module, &context.remaining);
-    if (status == XR_XIR_OK) status = verify_interface_access(module, &context.remaining);
+    if (status == XR_XIR_OK) status = verify_nominal_modules(module, &context->remaining);
+    if (status == XR_XIR_OK) status = xr_xir_compile_generics_structure_verify(&context->remaining, module);
+    if (status == XR_XIR_OK) status = verify_metadata_parameter_count(module, &context->remaining);
+    if (status == XR_XIR_OK) status = verify_signature_structure(module, &context->remaining);
+    if (status == XR_XIR_OK) status = verify_interface_access(module, &context->remaining);
     if (status == XR_XIR_OK && module->stage == XR_XIR_LOWERED && module->declarations &&
         module->declarations->implementations) status = XR_XIR_BAD_STAGE;
-    if (status == XR_XIR_OK) status = xr_xir_compile_implementations_verify(&context.remaining, module);
-    if (status == XR_XIR_OK) status = xr_xir_compile_defaults_verify(&context.remaining, module);
-    if (status == XR_XIR_OK) status = xir_construction_verify(&context.remaining, module, construction);
-    if (status == XR_XIR_OK) status = xr_xir_compile_result_binders_verify(&context.remaining, module);
+    if (status == XR_XIR_OK) status = xr_xir_compile_implementations_verify(&context->remaining, module);
+    if (status == XR_XIR_OK) status = xr_xir_compile_defaults_verify(&context->remaining, module);
+    if (status == XR_XIR_OK) status = xir_construction_verify(&context->remaining, module, construction);
+    if (status == XR_XIR_OK) status = xr_xir_compile_result_binders_verify(&context->remaining, module);
     if (status == XR_XIR_OK) {
-        status = xr_xir_compile_module_constraints_verify(&context.remaining, module);
+        status = xr_xir_compile_module_constraints_verify(&context->remaining, module);
         if (status == XR_XIR_OK && (module->types || module->generics)) {
-            if (!xir_compile_work(&context.remaining, 1)) status = XR_XIR_BUDGET;
+            if (!xir_compile_work(&context->remaining, 1)) status = XR_XIR_BUDGET;
             else signature_constraints_proved = true;
         }
     }
@@ -1318,8 +1346,8 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
     }
     if (status == XR_XIR_OK) {
         for (uint32_t f = 0; f < module->function_count; ++f) {
-            context.location = (XrXirDiagnostic) {XR_XIR_OK, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
-            if (!xir_compile_work(&context.remaining, 1)) {
+            context->location = (XrXirDiagnostic) {XR_XIR_OK, f, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
+            if (!xir_compile_work(&context->remaining, 1)) {
                 status = XR_XIR_BUDGET;
                 break;
             }
@@ -1329,14 +1357,65 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
                 status = XR_XIR_BAD_TYPE;
                 break;
             }
-            status=xir_literal_type_names(&context.remaining,module,construction,f,&context.literal_type_names);
-            if (status==XR_XIR_OK) status = verify_function(&module->functions[f], module->stage, &context, signature_constraints_proved);
+            status=xir_literal_type_names(&context->remaining,module,construction,f,&context->literal_type_names);
+            if (status==XR_XIR_OK) status = verify_function(&module->functions[f], module->stage, context, signature_constraints_proved);
             if (status != XR_XIR_OK)
                 break;
         }
     }
+    return status;
+}
+XR_FUNC XrXirStatus xir_compile_view_prepare_ordinary(const XrXirCompileContext *compile_context,
+    const XrXirModule *module,const XrXirConstruction *construction,XrXirDiagnostic *diagnostic) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    VerifyContext context={*compile_context,
+        {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE},module,
+        {compile_context->resources,NULL},{compile_context->resources,NULL,0},NULL,0,false};
+    XrXirStatus status=structure_verify_ordinary(&context,construction);
+    xr_compile_resources_free(context.graph_storage);
+    xir_type_scratch_free(&context.pending);xr_xir_constraint_scratch_free(&context.scratch);
+    context.location.status=status;if (diagnostic) *diagnostic=context.location;return status;
+}
+XR_FUNC XrXirStatus xir_compile_view_cell_access_verified(const XrXirCompileContext *context,
+    const XrXirModule *module,XrXirDiagnostic *diagnostic) {
+    if (!xir_compile_context_valid(context) || !module) return XR_XIR_BAD_STRUCTURE;
+    struct {
+        XrXirCellProvenance *owner;
+        XrXirCompileContext remaining;
+        XirViewAccessCells cells;
+        uint64_t bytes;
+    } held={0};
+    uint64_t fixed=sizeof(held)+12u*sizeof(uint64_t);
+    if (context->limits.frame_bytes<fixed || !xir_compile_work(context,fixed)) return XR_XIR_BUDGET;
+    XrXirStatus status=xr_xir_compile_cell_provenance_verified(context,module,&held.owner,diagnostic);
+    if (status==XR_XIR_OK && !held.owner) status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK) status=cell_proof_resident_bytes(context,held.owner,&held.bytes);
+    if (status==XR_XIR_OK && held.bytes>context->limits.frame_bytes-fixed) status=XR_XIR_BUDGET;
+    if (status==XR_XIR_OK) {
+        held.remaining=*context;held.remaining.limits.frame_bytes-=fixed+held.bytes;
+        held.cells=(XirViewAccessCells){held.owner,xr_xir_cell_provenance_role};
+        status=xir_compile_view_access_cells_verified(&held.remaining,module,&held.cells,diagnostic);
+    }
+    xr_xir_compile_cell_provenance_free(held.owner);return status;
+}
+static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_context,
+    const XrXirModule *module, const XrXirConstruction *construction,
+    const XrXirEffects *source_effects,const XrXirEffects *program_effects,
+    XrXirDiagnostic *diagnostic) {
+    if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
+    XrXirCompileContext compile_state = *compile_context;
+    XrXirCompileContext *remaining = &compile_state;
+    if (!remaining) {
+        if (diagnostic)
+            *diagnostic = (XrXirDiagnostic) {XR_XIR_BAD_STRUCTURE, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
+        return XR_XIR_BAD_STRUCTURE;
+    }
+    VerifyContext context = {*remaining,
+                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module, {remaining->resources,NULL}, {remaining->resources,NULL,0}, NULL, 0, false};
+    XrXirStatus status=structure_verify_ordinary(&context,construction);
     xr_compile_resources_free(context.graph_storage);
     context.graph_storage = NULL; context.graph_capacity = 0;
+    if (status == XR_XIR_OK) status = xir_compile_view_module_boundary(&context.remaining,module,&context.location);
     if (status == XR_XIR_OK) {
         XrXirCellProvenance *cell_proof = NULL;
         if (program_effects)

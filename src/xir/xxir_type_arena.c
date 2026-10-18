@@ -17,6 +17,7 @@
 #include "xxir_type_arena_internal.h"
 
 typedef struct XirTypeIdentity { const XrXirTypeArena *owner; XrXirType type; } XirTypeIdentity;
+#include "xxir_view_types_internal.h"
 
 struct XrXirTypeArena {
     _Atomic(uint32_t) references;
@@ -27,6 +28,7 @@ struct XrXirTypeArena {
     XrXirTypeArena *received_from;
     const XrXirTypeArena *error_identity;
     XirTypeIdentity *identities;
+    uint8_t *borrowed;
 };
 
 #include "xxir_type_arena_nominal.inc.c"
@@ -110,9 +112,12 @@ XR_FUNC XrXirValueStatus xr_xir_compile_type_arena_new(const XrXirCompileContext
     value_status = arena_status(xr_xir_compile_storage_layouts(context, &arena->types, &target,
         arena->storage, arena->types.count));
     if (value_status != XR_XIR_VALUE_OK) goto failed;
+    value_status=arena_status(xir_compile_view_flags_new(context,&arena->types,&arena->borrowed));
+    if (value_status!=XR_XIR_VALUE_OK) goto failed;
     *output = arena;
     return XR_XIR_VALUE_OK;
 failed:
+    xr_compile_resources_free(arena->borrowed);
     xr_compile_resources_free(arena);
     return value_status;
 }
@@ -123,9 +128,21 @@ XR_FUNC void xr_xir_compile_type_arena_drop(XrXirTypeArena *arena) {
     while (arena && xr_xir_reference_release(&arena->references)) {
         XrXirTypeArena *previous=arena->received_from;
         xr_compile_resources_free(arena->identities);
+        xr_compile_resources_free(arena->borrowed);
         xr_compile_resources_free(arena);
         arena=previous;
     }
+}
+XR_FUNC uint32_t xr_xir_compile_type_arena_borrowed(const XrXirTypeArena *arena,XrXirType type) {
+    return arena && arena->borrowed && xr_xir_type_node(&arena->types,type) ?
+        arena->borrowed[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]&3u : 0;
+}
+XR_FUNC uint32_t xr_xir_compile_type_arena_borrowed_leaves(const XrXirTypeArena *arena,XrXirType type) {
+    return arena && arena->borrowed && xr_xir_type_node(&arena->types,type) ?
+        arena->borrowed[(uint32_t)type-XR_XIR_CONSTRUCTED_TYPE_BASE]>>2 : 0;
+}
+XR_FUNC bool xr_xir_compile_type_arena_has_borrowed(const XrXirTypeArena *arena) {
+    return arena && arena->borrowed;
 }
 XR_FUNC const XrXirTypes *xr_xir_compile_type_arena_types(const XrXirTypeArena *arena) {
     return arena ? &arena->types : NULL;

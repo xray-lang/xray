@@ -78,6 +78,15 @@ if(WIN32)
                 ${CMAKE_CURRENT_SOURCE_DIR}/xir/sdk_native_consumers.py
                 --lease $<TARGET_FILE:test_xir_sdk_lease> --generator $<TARGET_FILE:test_xir_source_product_linked>
                 --original-generator $<TARGET_FILE:test_xir_source_product>
+                --hash-generator $<TARGET_FILE:test_xir_p09_hash_members>
+                --index-generator $<TARGET_FILE:test_xir_p09_map_index>
+                --projection-generator $<TARGET_FILE:test_xir_p09_hash_projection>
+                --algebra-generator $<TARGET_FILE:test_xir_p09_set_algebra>
+                --membership-generator $<TARGET_FILE:test_xir_p09_map_membership>
+                --foreach-generator $<TARGET_FILE:test_xir_p09_hash_foreach>
+                --foreach-matrix-generator $<TARGET_FILE:test_xir_p09_hash_foreach_matrix>
+                --worker-generator $<TARGET_FILE:test_xir_p09_hash_worker>
+                --key-path-generator $<TARGET_FILE:test_xir_p09_map_key_path_source>
                 --bundle ${CMAKE_BINARY_DIR}/xir-runtime-sdk --stdlib ${PROJECT_SOURCE_DIR}/stdlib
                 --compiler ${XIR_SDK_${upper}} --linker ${XIR_SDK_LINKER} --provider ${provider})
             set_tests_properties(test_xir_runtime_sdk_${provider}_native

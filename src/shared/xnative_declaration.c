@@ -26,7 +26,9 @@ const XrNativeTypeDeclaration *xr_native_declaration_by_id(uint32_t id) {
         id == xr_native_i64.id ? &xr_native_i64 :
         id == xr_native_f64.id ? &xr_native_f64 :
         id == xr_native_bool.id ? &xr_native_bool :
-        id == xr_native_rune.id ? &xr_native_rune : NULL;
+        id == xr_native_rune.id ? &xr_native_rune :
+        id == xr_native_map.id ? &xr_native_map :
+        id == xr_native_set.id ? &xr_native_set : NULL;
 }
 typedef struct NativeDeclarationAdmission {
     const XrNativeDeclarationWork *work;
@@ -74,6 +76,8 @@ XR_FUNC XrNativeDeclarationStatus xr_native_declaration_find(
     else if (native_text_equal(&admission, name, xr_native_f64.name)) found = &xr_native_f64;
     else if (native_text_equal(&admission, name, xr_native_bool.name)) found = &xr_native_bool;
     else if (native_text_equal(&admission, name, xr_native_rune.name)) found = &xr_native_rune;
+    else if (native_text_equal(&admission, name, xr_native_map.name)) found = &xr_native_map;
+    else if (native_text_equal(&admission, name, xr_native_set.name)) found = &xr_native_set;
     if (admission.status != XR_NATIVE_DECLARATION_OK) return admission.status;
     if (!found) return XR_NATIVE_DECLARATION_NOT_FOUND;
     *output = found; return XR_NATIVE_DECLARATION_OK;
@@ -99,7 +103,8 @@ static bool native_declaration_validate(NativeDeclarationAdmission *admission,
     const XrNativeTypeDeclaration *declaration) {
     if (!native_work(admission, 1)) return false;
     if (!declaration ||
-        !declaration->name || !declaration->parameter_name || !declaration->source_path ||
+        !declaration->name || !declaration->source_path ||
+        (!!declaration->parameter_count != !!declaration->parameter_names) ||
         !declaration->identity || !declaration->members || !declaration->member_count ||
         declaration->member_count > 64) return false;
     const XrNativeTypeDeclaration *canonical = xr_native_declaration_by_id(declaration->id);
@@ -108,8 +113,11 @@ static bool native_declaration_validate(NativeDeclarationAdmission *admission,
         declaration->line != canonical->line || declaration->column != canonical->column ||
         !native_text_equal(admission, declaration->identity, canonical->identity) ||
         !native_text_equal(admission, declaration->source_path, canonical->source_path) ||
-        !native_text_equal(admission, declaration->name, canonical->name) ||
-        !native_text_equal(admission, declaration->parameter_name, canonical->parameter_name)) return false;
+        !native_text_equal(admission, declaration->name, canonical->name)) return false;
+    for (uint32_t p = 0; p < declaration->parameter_count; ++p) {
+        if (!native_work(admission, 1) || !native_text_equal(admission,
+            declaration->parameter_names[p], canonical->parameter_names[p])) return false;
+    }
     if (!native_fingerprint_equal(admission, &declaration->source_fingerprint, &canonical->source_fingerprint) ||
         declaration->member_count != canonical->member_count)
         return false;

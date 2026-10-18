@@ -18,7 +18,8 @@ typedef struct XrXirValuePlace {
     void *payload;
 } XrXirValuePlace;
 /* The caller pins a real writable root and authenticates its complete loan.
- * Failure preserves the root. Derived storage uses the admission Domain. */
+ * Failure preserves the root. A current admission Domain is required; missing
+ * admission or owner is rejected before charging work or changing storage. */
 XR_FUNC XrXirValueStatus xr_xir_string_place_append(const XrXirValuePlace *place,
     const XrXirValue *suffix, XrXirValueAdmission *admission);
 /* A caller-owned UTF-8 span is consumed synchronously, with no suffix object.
@@ -32,7 +33,8 @@ typedef enum XrXirValuePathKind {
      * Cell projection do not accept them as writable storage paths. */
     XR_XIR_PATH_TUPLE_FIELD,
     XR_XIR_PATH_NULLABLE_VALUE,
-    XR_XIR_PATH_ENUM_FIELD
+    XR_XIR_PATH_ENUM_FIELD,
+    XR_XIR_PATH_KEY
 } XrXirValuePathKind;
 typedef struct XrXirValuePathStep {
     XrXirValuePathKind kind;
@@ -44,7 +46,9 @@ typedef struct XrXirValuePath {
     uint32_t count;
 } XrXirValuePath;
 /* Callers own checked declaration authority. Steps contain values, never
- * persistent interior addresses; access resolves the current root. */
+ * persistent interior addresses; access resolves the current root. A KEY
+ * selector stores the exact Map key payload. Synchronous callers pin those
+ * keys; retained Cell projections acquire and release their own key owners. */
 XR_FUNC XrXirValueStatus xr_xir_value_path_read(const XrXirValuePlace *root,
     const XrXirValuePath *path, XrXirValueAdmission *admission,
     XrXirValue *output, XrXirFaultDetail *fault);

@@ -233,6 +233,7 @@ static XrXirStatus effect_parameter_group(EffectParameterFlow *flow,
 
 static XrXirStatus effect_parameter_opaque(EffectParameterFlow *flow,
     const XrXirInstruction *op, uint32_t use) {
+    if (xr_xir_op_uses_owner_slots(op->op)) return XR_XIR_OK;
     if (xr_xir_op_uses_operand_table(op->op)) return effect_parameter_group(flow, op, use, false);
     uint32_t count = effect_parameter_operands[op->op];
     if (op->op == XR_XIR_RETURN) count = flow->function->result != XR_XIR_UNIT &&
@@ -307,8 +308,13 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_STORE);
     case XR_XIR_NULLABLE_SOME:
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_STORE);
+    case XR_XIR_SET_UNION: case XR_XIR_SET_INTERSECTION: case XR_XIR_SET_DIFFERENCE:
+    case XR_XIR_SET_SYMMETRIC_DIFFERENCE: {
+        XrXirStatus status = effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_COPY);
+        return status == XR_XIR_OK ? effect_parameter_transfer(flow, destination, op->args[1], XR_XIR_EFFECT_USE_COPY) : status;
+    }
     case XR_XIR_CELL_READ: case XR_XIR_NULLABLE_UNWRAP: case XR_XIR_PLACE_READ:
-    case XR_XIR_STRUCT_GET: case XR_XIR_CLASS_GET: case XR_XIR_ENUM_GET: case XR_XIR_TUPLE_FIELD:
+    case XR_XIR_HASH_KEY_AT: case XR_XIR_MAP_VALUE_AT: case XR_XIR_MAP_GET: case XR_XIR_MAP_INDEX: case XR_XIR_HASH_KEYS: case XR_XIR_HASH_VALUES: case XR_XIR_MAP_ENTRIES: case XR_XIR_STRUCT_GET: case XR_XIR_CLASS_GET: case XR_XIR_ENUM_GET: case XR_XIR_TUPLE_FIELD:
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_COPY);
     case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE: {
         XrXirType type;XrXirStatus status=effect_parameter_type(flow,op->args[0],&type);
@@ -318,11 +324,11 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     }
     case XR_XIR_PLACE_WRITE:
         return effect_parameter_transfer(flow, op->args[0], op->args[1], XR_XIR_EFFECT_USE_STORE);
-    case XR_XIR_ARRAY_NEW: case XR_XIR_STRUCT_NEW: case XR_XIR_CLASS_NEW:
+    case XR_XIR_MAP_NEW: case XR_XIR_SET_NEW: case XR_XIR_ARRAY_NEW: case XR_XIR_STRUCT_NEW: case XR_XIR_CLASS_NEW:
     case XR_XIR_ENUM_NEW: case XR_XIR_TUPLE_NEW:
         return effect_parameter_group(flow, op, XR_XIR_EFFECT_USE_STORE, true);
     case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_GROUP_INIT: case XR_XIR_SLOT_STORE:
-    case XR_XIR_ARRAY_SET: case XR_XIR_ARRAY_PUSH: case XR_XIR_STRUCT_SET: case XR_XIR_CLASS_SET:
+    case XR_XIR_MAP_SET: case XR_XIR_SET_ADD: case XR_XIR_ARRAY_SET: case XR_XIR_ARRAY_PUSH: case XR_XIR_STRUCT_SET: case XR_XIR_CLASS_SET:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_STORE);
     default:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_OTHER);
