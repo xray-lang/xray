@@ -16,6 +16,7 @@
 #include "../../../src/app/lsp/xlsp_analysis.h"
 #include "../../../src/app/lsp/xlsp_source_index.h"
 #include "test_lsp_rename_params.h"
+#include "test_lsp_hover_params.h"
 #include "../../../src/base/xjson.h"
 #include "../test_win_compat.h"
 
@@ -66,7 +67,7 @@ TEST(hover_on_keyword) {
 
     // Hover on "var" (line 0, col 0)
     XrLspPosition pos = {0, 0};
-    XrJsonValue *result = xlsp_analyze_hover(server, doc, pos);
+    XrJsonValue *result = hover_test_at(server, doc, pos);
     // "var" is a keyword, hover should return something (keyword doc)
     // May return NULL if no keyword doc available -- either is acceptable
     if (result) {
@@ -86,7 +87,7 @@ TEST(hover_on_variable) {
 
     // Hover on "greeting" in the print call (line 1, col 6)
     XrLspPosition pos = {1, 6};
-    XrJsonValue *result = xlsp_analyze_hover(server, doc, pos);
+    XrJsonValue *result = hover_test_at(server, doc, pos);
     // Should get some hover info for the variable
     // Even if no type info is available, it should not crash
     if (result) {
@@ -106,7 +107,7 @@ TEST(hover_on_empty_space) {
 
     // Hover on empty line (line 1, col 0)
     XrLspPosition pos = {1, 0};
-    XrJsonValue *result = xlsp_analyze_hover(server, doc, pos);
+    XrJsonValue *result = hover_test_at(server, doc, pos);
     // Should return NULL for empty space
     if (result) {
         xjson_free(result);
@@ -122,7 +123,7 @@ TEST(hover_null_safety) {
     XrLspPosition pos = {0, 0};
 
     // NULL doc should not crash
-    XrJsonValue *result = xlsp_analyze_hover(server, NULL, pos);
+    XrJsonValue *result = hover_test_at(server, NULL, pos);
     ASSERT(result == NULL);
 
     xlsp_server_free(server);

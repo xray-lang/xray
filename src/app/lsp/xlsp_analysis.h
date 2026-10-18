@@ -8,7 +8,7 @@
  * xlsp_analysis.h - Code analysis for LSP features
  *
  * KEY CONCEPT:
- *   Provides diagnostics, completion, hover by analyzing xray source code.
+ *   Provides document syntax ownership, diagnostics, completion and outlines.
  */
 
 #ifndef XLSP_ANALYSIS_H
@@ -28,9 +28,6 @@ XR_FUNC void xlsp_analysis_release_module_graph(XrLspServer *server);
 
 // Generate diagnostics for a document
 XR_FUNC XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc);
-
-// Generate hover info at position
-XR_FUNC XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos);
 
 // Generate document symbols (outline)
 XR_FUNC XrJsonValue *xlsp_analyze_document_symbols(XrLspDocument *doc);

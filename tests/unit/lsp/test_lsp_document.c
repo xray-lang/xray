@@ -24,6 +24,7 @@
 #include "../../../src/app/lsp/xlsp_imports.h"
 #include "../../../src/app/lsp/xlsp_navigation.h"
 #include "test_lsp_rename_params.h"
+#include "test_lsp_hover_params.h"
 #include "../../../src/app/lsp/xlsp_semantic_tokens.h"
 #include "../../../src/app/lsp/xlsp_index_pool.h"
 #include "../../../src/app/lsp/xlsp_workspace.h"
@@ -530,7 +531,7 @@ TEST(contextual_u32_literal_preserves_completion_and_hover_type) {
         xlsp_document_open(server, &(XlspSourceDocument){"file:///hover_contextual_u32.xr", hover_content, strlen("file:///hover_contextual_u32.xr"), strlen(hover_content), 1});
     ASSERT(hover_doc != NULL);
     xlsp_parse_document(hover_doc, server);
-    XrJsonValue *hover = xlsp_analyze_hover(server, hover_doc, (XrLspPosition) {2, 15});
+    XrJsonValue *hover = hover_test_at(server, hover_doc, (XrLspPosition) {2, 15});
     ASSERT(hover != NULL);
     const char *hover_text = hover_markdown_value(hover);
     ASSERT(hover_text != NULL);
@@ -652,7 +653,7 @@ TEST(relative_import_from_disk_provides_precise_hover) {
     int hover_line = 0;
     int hover_col = 0;
     ASSERT(content_position_of_nth(entry, "Shade", 2, &hover_line, &hover_col));
-    XrJsonValue *hover = xlsp_analyze_hover(
+    XrJsonValue *hover = hover_test_at(
         server, doc, (XrLspPosition) {(uint32_t) hover_line, (uint32_t) hover_col + 1});
     ASSERT(hover != NULL);
     const char *hover_text = hover_markdown_value(hover);
@@ -705,7 +706,7 @@ TEST(hover_enum_descriptor_keeps_precise_type) {
     xlsp_parse_document(doc, server);
 
     XrLspPosition pos = {2, 20};
-    XrJsonValue *hover = xlsp_analyze_hover(server, doc, pos);
+    XrJsonValue *hover = hover_test_at(server, doc, pos);
     ASSERT(hover != NULL);
     const char *value = hover_markdown_value(hover);
     ASSERT(value != NULL);
@@ -847,7 +848,7 @@ TEST(hover_u8_array_registry_method) {
     xlsp_parse_document(doc, server);
 
     XrLspPosition pos = {1, 8};
-    XrJsonValue *hover = xlsp_analyze_hover(server, doc, pos);
+    XrJsonValue *hover = hover_test_at(server, doc, pos);
     ASSERT(hover != NULL);
     const char *value = hover_markdown_value(hover);
     ASSERT(value != NULL);
@@ -875,7 +876,7 @@ TEST(hover_deprecated_message_roundtrip) {
     int col = 0;
     ASSERT(content_position_of_nth(content, "legacy", 1, &line, &col));
     XrJsonValue *hover =
-        xlsp_analyze_hover(server, doc, (XrLspPosition) {(uint32_t) line, (uint32_t) col});
+        hover_test_at(server, doc, (XrLspPosition) {(uint32_t) line, (uint32_t) col});
     ASSERT(hover != NULL);
     const char *text = hover_markdown_value(hover);
     ASSERT(text != NULL);
@@ -954,7 +955,7 @@ TEST(global_type_query_builtins_use_canonical_names) {
     xjson_free(items);
 
     XrLspPosition type_of_hover_pos = {0, 1};
-    XrJsonValue *type_of_hover = xlsp_analyze_hover(server, doc, type_of_hover_pos);
+    XrJsonValue *type_of_hover = hover_test_at(server, doc, type_of_hover_pos);
     ASSERT(type_of_hover != NULL);
     const char *type_of_hover_text = hover_markdown_value(type_of_hover);
     ASSERT(type_of_hover_text != NULL);
@@ -963,7 +964,7 @@ TEST(global_type_query_builtins_use_canonical_names) {
     xjson_free(type_of_hover);
 
     XrLspPosition type_name_hover_pos = {1, 1};
-    XrJsonValue *type_name_hover = xlsp_analyze_hover(server, doc, type_name_hover_pos);
+    XrJsonValue *type_name_hover = hover_test_at(server, doc, type_name_hover_pos);
     ASSERT(type_name_hover != NULL);
     const char *type_name_hover_text = hover_markdown_value(type_name_hover);
     ASSERT(type_name_hover_text != NULL);
@@ -1091,7 +1092,7 @@ TEST(param_mode_user_function_lsp_display) {
     xjson_free(items);
 
     XrLspPosition hover_pos = {9, 6};
-    XrJsonValue *hover = xlsp_analyze_hover(server, doc, hover_pos);
+    XrJsonValue *hover = hover_test_at(server, doc, hover_pos);
     ASSERT(hover != NULL);
     const char *hover_text = hover_markdown_value(hover);
     ASSERT(hover_text != NULL);
@@ -1294,7 +1295,7 @@ TEST(enum_record_fields_share_one_semantic_identity) {
     ASSERT_EQ(xjson_array_len(references), 3);
     xjson_free(references);
 
-    XrJsonValue *hover = xlsp_analyze_hover(
+    XrJsonValue *hover = hover_test_at(
         server, doc, (XrLspPosition) {(uint32_t) pattern_line, (uint32_t) pattern_col + 1});
     ASSERT(hover != NULL);
     const char *hover_text = hover_markdown_value(hover);

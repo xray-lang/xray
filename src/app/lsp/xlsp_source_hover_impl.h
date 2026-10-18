@@ -159,12 +159,27 @@ static void hover_type(LspHoverBuilder *b,const XrXirSourceView *v,XrXirSourceTy
     } else hover_type_named(b,v,source,NULL,0,0);
 }
 static void hover_qualified_name(LspHoverBuilder *b,const XrXirSourceView *v,const XrXirSourceDeclaration *d) {
-    /* A member's actual immediate owner supplies the qualifier. Do not invent
-     * namespace paths, overload indices or missing generic parameter names. */
-    if(d->parent) {
-        if(d->parent>v->declaration_count){b->status=XR_XIR_BAD_STRUCTURE;return;}
-        const XrXirSourceDeclaration *parent=&v->declarations[d->parent-1];
-        if(parent->kind==XR_XIR_SOURCE_TYPE){hover_text(b,parent->name);hover_text(b,".");}
+    /* Only canonical member ancestry rooted in a type supplies a qualifier.
+     * Rewalk the bounded chain to emit outer names without retaining pointers
+     * in an unaccounted temporary allocation or using recursive stack depth. */
+    uint32_t owner=d->parent,depth=0;
+    while(owner&&b->status==XR_XIR_OK) {
+        b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)return;
+        if(owner>v->declaration_count||depth>=v->declaration_count){b->status=XR_XIR_BAD_STRUCTURE;return;}
+        const XrXirSourceDeclaration *parent=&v->declarations[owner-1];
+        ++depth;
+        if(parent->kind==XR_XIR_SOURCE_TYPE)break;
+        if(parent->kind!=XR_XIR_SOURCE_MEMBER){owner=0;break;}
+        owner=parent->parent;
+    }
+    if(!owner)depth=0;
+    while(depth&&b->status==XR_XIR_OK) {
+        owner=d->parent;
+        for(uint32_t i=1;i<depth;++i) {
+            b->status=lsp_work(b->snapshot,1);if(b->status!=XR_XIR_OK)return;
+            owner=v->declarations[owner-1].parent;
+        }
+        hover_text(b,v->declarations[owner-1].name);hover_text(b,".");--depth;
     }
     hover_text(b,d->name);
 }

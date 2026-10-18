@@ -1,3 +1,43 @@
+static void lsp_hover_field_cases(const char *root) {
+    static const char source[]=
+        "enum Result {\n"
+        "    Ok { value: i64, code: i64 },\n"
+        "    Err { value: string }\n"
+        "}\n"
+        "var made = Result.Ok { code: 7, value: 42 }\n"
+        "var selected = match (made) {\n"
+        "    Result.Ok { value, code: _ } -> value\n"
+        "    Result.Err { value: message } -> 0\n"
+        "}\n";
+    /* Literal positions distinguish the same-named fields and an explicit
+     * local alias. No emitted declaration or range supplies the oracle. */
+    static const struct {unsigned line,column;const char *expected;} cases[]={
+        {1,10,"const Result.Ok.value: i64"},{1,22,"const Result.Ok.code: i64"},
+        {2,11,"const Result.Err.value: string"},{4,24,"const Result.Ok.code: i64"},
+        {4,33,"const Result.Ok.value: i64"},{6,17,"const Result.Ok.value: i64"},
+        {6,37,"const Result.Ok.value: i64"},{7,18,"const Result.Err.value: string"},
+        {7,25,"const message: string"}
+    };
+    XrCompileResourceLimits limits=lsp_limits();XrXirCompileContext context={0};XrCompilerSession *session=NULL;
+    CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+    char uri[XR_TEST_PATH_MAX],input[sizeof(source)];lsp_uri(uri,sizeof(uri),root,"fields.xr");memcpy(input,source,sizeof(source));
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
+    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XlspSourceDocument document={uri,input,strlen(uri),sizeof(input)-1,3};XlspSourceSnapshot *snapshot=NULL;
+    CHECK(xlsp_source_snapshot_build(&request,&document,1,0,&snapshot,NULL,NULL)==XR_XIR_OK);
+    xr_compile_session_free(session);memset(input,'?',sizeof(input));xr_compile_resources_release(context.resources);
+    XlspSourceHover hover={0};XrJsonValue *json=NULL;
+    for(size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
+        CHECK(xlsp_source_hover(snapshot,uri,strlen(uri),(XrLspPosition){cases[i].line,cases[i].column},&hover)==XR_XIR_OK);
+        if(strcmp(hover.text,cases[i].expected))fprintf(stderr,"Field case%zu expected=%s actual=%s\n",i,cases[i].expected,hover.text);
+        CHECK(!strcmp(hover.text,cases[i].expected));xlsp_source_hover_free(&hover);
+    }
+    CHECK(xlsp_source_hover_many_json(context.resources,&snapshot,1,uri,strlen(uri),(XrLspPosition){6,17},&json)==XR_XIR_OK);
+    xlsp_source_snapshot_free(snapshot);memset(uri,'?',sizeof(uri));
+    CHECK(!strcmp(xjson_get_string(xjson_get_object(json,"contents"),"value"),"const Result.Ok.value: i64"));
+    xjson_free(json);CHECK(!lsp_json_live&&!lsp_json_bytes);lsp_zero();
+}
 /* Independent oracle: literal names/types, never refreshed from query output. */
 static void lsp_hover_json_facts(XrJsonValue *output) {
     CHECK(output&&output->type==XR_JSON_OBJECT&&output->as.object.count==1);
@@ -94,4 +134,5 @@ static void lsp_hover_cases(const char *root) {
     xlsp_source_hover_free(&text);lsp_zero();xjson_free(json);CHECK(!lsp_json_live&&!lsp_json_bytes);
 
     lsp_hover_typed_matrix(root);
+    lsp_hover_field_cases(root);
 }
