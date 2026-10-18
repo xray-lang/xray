@@ -767,7 +767,8 @@ XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance) {
 static XrXirCallStatus instance_free_state(XrXirInstance *instance) {
     if (!instance_owner_current(instance)) return XR_XIR_CALL_BAD_ARGUMENT;
     if (!instance) return XR_XIR_CALL_READY;
-    if (instance_busy(instance)) return XR_XIR_CALL_BUSY;
+    /* The caller already excludes mutation of the root. Its driving flag
+     * describes this teardown and must not be mistaken for callback reentry. */
     instance->driving = true;
     instance->stopping = true;
     if (instance->function_gate) instance->function_gate->instance = NULL;
