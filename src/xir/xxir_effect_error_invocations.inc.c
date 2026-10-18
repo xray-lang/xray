@@ -427,8 +427,8 @@ static XrXirStatus effect_errors_analyze(XrXirEffects *effects,
         status = error_graph_prepare(graph, remaining);
         if (status == XR_XIR_OK) status = error_functions(effects, graph, &flow);
     }
-    /* Temporary substituted identities die with terms. Prove their complete
-     * outcomes while the sole error summary and authentic binders are alive. */
+    /* The finite certificate receives substituted identities before their
+     * constructor retires. The original Input remains independently exact. */
     XirMetadataDomain permission=flow.body.domain;permission.types=&terms.types;
     for (uint32_t f = 0; status == XR_XIR_OK && f < effects->count; ++f) {
         const uint64_t *set = effects->outcomes_work.errors + (size_t)f * effects->outcomes_work.words;
@@ -445,6 +445,9 @@ static XrXirStatus effect_errors_analyze(XrXirEffects *effects,
     }
     error_storage_free(&flow);
     error_invocation_contexts_free(flow.invocations);
+    if(status==XR_XIR_OK && terms.types.count>flow.body.domain.types->count)
+        status=error_finite_construct(remaining,effects->invocations,
+        &effects->outcomes_work,&terms,&effects->outcomes_work.error_proof);
     effect_terms_free(&terms);
     if (status != XR_XIR_OK) return status;
     for (uint32_t f = 0; f < effects->count; ++f) {

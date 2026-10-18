@@ -8,3 +8,12 @@ else()
 endif()
 add_test(NAME test_xir_error_dependency_worklist COMMAND test_xir_error_dependency_worklist)
 set_tests_properties(test_xir_error_dependency_worklist PROPERTIES LABELS "unit;xir;metadata;ownership;budget" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_error_generic_restart_ownership COMMAND test_xir_error_dependency_worklist --restart-literals)
+set_tests_properties(test_xir_error_generic_restart_ownership PROPERTIES
+    LABELS "unit;xir;metadata;ownership;generic-effects" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+foreach(restart_gate IN ITEMS limits resources)
+    add_test(NAME test_xir_error_generic_restart_${restart_gate}
+        COMMAND test_xir_error_dependency_worklist --restart-${restart_gate})
+    set_tests_properties(test_xir_error_generic_restart_${restart_gate} PROPERTIES
+        LABELS "unit;xir;metadata;ownership;generic-effects;compiler-fault" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+endforeach()

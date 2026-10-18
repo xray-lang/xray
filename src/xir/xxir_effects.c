@@ -716,6 +716,7 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, c
 #include "xxir_effect_error_finite.inc.c"
 #include "xxir_effect_error_markers.inc.c"
 #include "xxir_effect_error_marker_build.inc.c"
+#include "xxir_effect_error_bindings.inc.c"
 #include "xxir_effect_error_finite_build.inc.c"
 #include "xxir_effect_error_invocations.inc.c"
 

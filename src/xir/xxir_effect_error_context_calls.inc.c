@@ -2,7 +2,7 @@
  * expands through the current caller's actual type and the complete atom
  * inventory; a constructed generic atom needs its own structural type proof. */
 static XrXirStatus error_finite_call_summary(const EffectErrorEquationRead *equation,
-    const XrXirInstruction *op,uint32_t target,uint32_t word,uint64_t *output) {
+    const XrXirInstruction *op,uint32_t instruction,uint32_t target,uint32_t word,uint64_t *output) {
     const EffectErrorFiniteRead *read=equation->owner;const EffectErrorFinite *proof=read->proof;
     if(target>=proof->contexts || word>=proof->words) return XR_XIR_BAD_STRUCTURE;
     uint64_t first=proof->rows[target].end-(uint64_t)proof->words*64;
@@ -30,8 +30,21 @@ static XrXirStatus error_finite_call_summary(const EffectErrorEquationRead *equa
                 if(status!=XR_XIR_OK) return status;
                 result|=expanded;
             } else {
-                if(xr_xir_type_span(equation->body.domain.types,atom->type)) return XR_XIR_UNRESOLVED;
-                if(source==word) result|=UINT64_C(1)<<bit;
+                XrXirType actual=atom->type;
+                if(!xr_xir_type_span(error_finite_types(proof),atom->type)) {
+                    if(source==word) result|=UINT64_C(1)<<bit;
+                    continue;
+                }
+                status=error_finite_substitution(read->work,proof,equation->function,instruction,atom->type,&actual);
+                if(status!=XR_XIR_OK) return status;
+                bool found=false;
+                for(uint32_t a=0;a<proof->atom_count;++a) {
+                    if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+                    if(proof->atoms[a].type!=actual || proof->atoms[a].variant!=atom->variant) continue;
+                    if((a+2)/64==word) result|=UINT64_C(1)<<((a+2)%64);
+                    found=true;
+                }
+                if(!found) return XR_XIR_BAD_STRUCTURE;
             }
         }
     }
@@ -58,7 +71,7 @@ static XrXirStatus error_finite_call(const EffectErrorEquationRead *equation,
         uint32_t target=UINT32_MAX;status=error_finite_node_context(read->work,proof,edge->target,&target);
         if(status!=XR_XIR_OK) return status;
         uint64_t contribution=0;
-        status=error_finite_call_summary(equation,&op,target,word,&contribution);
+        status=error_finite_call_summary(equation,&op,instruction,target,word,&contribution);
         if(status!=XR_XIR_OK) return status;
         result|=contribution;present=true;
     }
@@ -83,7 +96,7 @@ static XrXirStatus error_finite_call(const EffectErrorEquationRead *equation,
             target=(uint32_t)op.immediate;
         } else return XR_XIR_BAD_STRUCTURE;
         if(target>=proof->functions) return XR_XIR_BAD_TYPE;
-        status=error_finite_call_summary(equation,&op,target,word,&result);
+        status=error_finite_call_summary(equation,&op,instruction,target,word,&result);
         if(status!=XR_XIR_OK) return status;
     }
     *output=result;return XR_XIR_OK;

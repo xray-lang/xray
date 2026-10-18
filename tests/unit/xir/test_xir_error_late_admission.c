@@ -50,7 +50,7 @@ static void late_once(uint32_t mode) {
     EffectErrorFinite *candidate=NULL;late_proof=NULL;late_mode=mode;late_calls=0;
     CHECK(!pc_allocate_hook && !pc_free_hook);
     pc_allocate_hook=late_allocate;
-    XrXirStatus status=error_finite_construct(&context,effects->invocations,published,&candidate);
+    XrXirStatus status=error_finite_construct(&context,effects->invocations,published,NULL,&candidate);
     pc_allocate_hook=NULL;
     CHECK(status==XR_XIR_OK && candidate==late_proof && late_calls==1);
     size_t allocations=attempts;uint64_t physical=live_bytes;
