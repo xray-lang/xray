@@ -21,7 +21,7 @@
 #define CHECK(c) do{if(!(c)){fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}}while(0)
 #include "xir_source_fixture_owner.h"
 #include "xir_generator_consumer_cases.h"
-_Static_assert(XR_XIR_ITERATOR_HAS_NEXT==185 && XR_XIR_ITERATOR_NEXT==186,"canonical consumer ordinals");
+_Static_assert(XR_XIR_ITERATOR_HAS_NEXT==186 && XR_XIR_ITERATOR_NEXT==187,"canonical consumer ordinals");
 static const char factory_source[]=
     "fn numbers()->Iterator<i64> {defer {print(301)}\n"
     " yield 11\n"
