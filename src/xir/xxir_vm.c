@@ -15,8 +15,10 @@
  */
 
 #include "xxir_vm.h"
+#include "xxir_vm_debug_internal.h"
+#include "xxir_call_native_source_internal.h"
+#include "xxir_call_observer_internal.h"
 #include "xxir_map.h"
-#include "xxir_internal.h"
 #include "xxir_program_internal.h"
 #include "xxir_program_packet_internal.h"
 #include "xxir_internal.h"
