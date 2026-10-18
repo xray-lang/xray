@@ -32,6 +32,9 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONCAT_STRING:
     case XR_XIR_WRITE_STREAM:
+    case XR_XIR_CLOCK_NANOS:
+    case XR_XIR_UTC_OFFSET_AT:
+    case XR_XIR_TIMER_AFTER_MS:
     case XR_XIR_ENUM_NEW:
     case XR_XIR_ENUM_TAG:
     case XR_XIR_ENUM_GET:

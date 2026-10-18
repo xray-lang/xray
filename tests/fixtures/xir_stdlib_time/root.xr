@@ -1,0 +1,8 @@
+import time as Clock
+
+export fn clockProbe() -> i64 {
+    Clock.sleep(-1)
+    Clock.sleep(0)
+    return Clock.now() + Clock.clock() + Clock.monotonic() + Clock.micros() +
+        Clock.nanos() + Clock.localOffset() + Clock.localOffsetAt(0)
+}

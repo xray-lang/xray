@@ -60,6 +60,9 @@ typedef struct XrXirSourceDeclaration {
     uint32_t generic_parent, generic_parent_count, generic_parameter_count;
     const XrXirConstraint *generic_constraints;
     const uint32_t *type_parameter_kinds;
+    /* Implicit receiver prefix copied from a verified Checked method identity.
+     * Imported definitions retain absent lexical spans and no synthetic this. */
+    uint32_t checked_receiver_count;
 } XrXirSourceDeclaration;
 typedef enum XrXirSourceAccess {
     XR_XIR_SOURCE_READ, XR_XIR_SOURCE_WRITE, XR_XIR_SOURCE_READ_WRITE,

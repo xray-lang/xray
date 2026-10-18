@@ -137,6 +137,17 @@ static XrXirStatus query_call_signature(SourceQueryCopy *copy,const XrXirSourceC
         if(view->declarations[i].parent==callee->id&&
             copy->snapshot->syntax.declarations[i].role==XR_XIR_SOURCE_SYNTAX_RECEIVER)++receivers;
     }
+    if(!query_work(copy,sizeof(callee->checked_receiver_count)))return copy->status;
+    if(callee->checked_receiver_count) {
+        if(!query_work(copy,sizeof(*callee)))return copy->status;
+        if(callee->checked_receiver_count!=1||receivers||callee->kind!=XR_XIR_SOURCE_FUNCTION||
+            copy->snapshot->syntax.declarations[callee->id-1].role!=XR_XIR_SOURCE_SYNTAX_NONE||
+            callee->range.line||callee->range.column||callee->range.end_line||callee->range.end_column||
+            !callee->parent||callee->parent>view->declaration_count||
+            view->declarations[callee->parent-1].kind!=XR_XIR_SOURCE_TYPE)return XR_XIR_BAD_STRUCTURE;
+        if(!signature->owner_type.known)return XR_XIR_BAD_TYPE;
+        receivers=callee->checked_receiver_count;
+    }
     if(receivers!=signature->receiver_count)return XR_XIR_BAD_STRUCTURE;
     if(native&&(!signature->owner_type.known||!xr_xir_type_is_array(view->types,signature->owner_type.type)||
         (!!signature->parameter_flags!=!!signature->parameter_count)))return XR_XIR_BAD_TYPE;

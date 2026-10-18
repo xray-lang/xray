@@ -511,7 +511,7 @@ static bool source_query_declare(SourceContext *ctx, SourceName *symbol,
     symbol->declaration = ctx->query.declaration_count;
     *record = (XrXirSourceDeclaration) {symbol->declaration, parent, 0, kind, symbol->name, range,
         {0}, NULL, 0, symbol->mutable,
-        (kind == XR_XIR_SOURCE_FUNCTION || kind == XR_XIR_SOURCE_TYPE) && !parent && symbol->node && symbol->node->is_exported, 0, NULL, 0, 0, 0, NULL, NULL};
+        (kind == XR_XIR_SOURCE_FUNCTION || kind == XR_XIR_SOURCE_TYPE) && !parent && symbol->node && symbol->node->is_exported, 0, NULL, 0, 0, 0, NULL, NULL, 0};
     if(kind==XR_XIR_SOURCE_BINDING&&symbol->node&&(symbol->node->type==AST_VAR_DECL||symbol->node->type==AST_CONST_DECL)&&
         symbol->node->as.var_decl.initializer&&!symbol->node->as.var_decl.type_annotation)
         ((XrXirSourceDeclarationSyntax *)ctx->syntax.declarations)[symbol->declaration-1].flags|=XR_XIR_SOURCE_SYNTAX_INFERRED_BINDING;

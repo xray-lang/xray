@@ -104,10 +104,59 @@ static size_t signature_attachment(bool failures,bool generic) {
     }
     return sites;
 }
+static void signature_checked_receiver(void) {
+    for(unsigned mode=0;mode<7;++mode) {
+        SignatureFixture f;signature_fixture(&f);
+        XrXirSourceDeclaration declarations[3];memcpy(declarations,f.calls.declarations,sizeof(f.calls.declarations));
+        declarations[0].parent=3;declarations[0].range=(XrXirSourceRange){0};
+        declarations[0].checked_receiver_count=1;
+        declarations[2]=(XrXirSourceDeclaration){.id=3,.kind=XR_XIR_SOURCE_TYPE,.name="Owner",.range={0},
+            .type={XR_XIR_I64,0,true}};
+        XrXirSourceDeclarationSyntax names[3];memcpy(names,f.calls.names,sizeof(f.calls.names));
+        names[0]=(XrXirSourceDeclarationSyntax){0};names[2]=(XrXirSourceDeclarationSyntax){0};
+        XrXirSourceFunctionRange functions[3];memcpy(functions,f.calls.functions,sizeof(f.calls.functions));
+        functions[0]=(XrXirSourceFunctionRange){0};functions[2]=(XrXirSourceFunctionRange){0};
+        f.calls.view.declarations=declarations;f.calls.view.declaration_count=3;
+        f.calls.syntax.declarations=names;f.calls.syntax.declaration_count=3;
+        f.calls.calls.functions=functions;f.calls.calls.declaration_count=3;
+        f.calls.items[0].signature.receiver_count=1;
+        f.calls.items[0].signature.owner_type=(XrXirSourceType){XR_XIR_I64,0,true};
+        switch(mode) {
+        case 1:declarations[0].checked_receiver_count=2;break;
+        case 2:declarations[0].parent=0;break;
+        case 3:declarations[2].kind=XR_XIR_SOURCE_BINDING;break;
+        case 4:f.calls.items[0].signature.receiver_count=0;break;
+        case 5:f.calls.items[0].signature.owner_type=(XrXirSourceType){0};break;
+        case 6:declarations[0].checked_receiver_count=0;break;
+        }
+        XrCompileResources *r=sdk_ledger(&sdk_unlimited);
+        XrXirCompileContext context={r,xr_xir_compile_default_limits()};
+        XrXirSourceSnapshot *s=snapshot(&context,&f.calls);
+        XrCompileResourceStats before=sdk_stats(r);size_t blocks=runtime_live,bytes=runtime_bytes;
+        XrXirStatus status=xr_xir_compile_source_snapshot_calls_copy(s,&f.calls.calls);
+        if(!mode) {
+            CHECK(status==XR_XIR_OK);
+            declarations[0].checked_receiver_count=0;memset(names,0xa5,sizeof(names));
+            signature_dispose(&f);xr_compile_resources_release(r);
+            const XrXirSourceView *owned=xr_xir_compile_source_snapshot_view(s);
+            const XrXirSourceCalls *calls=xr_xir_compile_source_snapshot_calls(s);
+            CHECK(owned&&owned->declarations[0].checked_receiver_count==1&&!owned->declarations[0].range.line);
+            CHECK(calls&&calls->items[0].signature.receiver_count==1&&calls->items[0].signature.parameters[0].type==XR_XIR_I64);
+            const XrXirSourceSyntaxView *syntax=xr_xir_compile_source_snapshot_syntax(s);
+            CHECK(syntax&&syntax->declarations[0].role==XR_XIR_SOURCE_SYNTAX_NONE);
+        } else {
+            CHECK(status==(mode==5?XR_XIR_BAD_TYPE:XR_XIR_BAD_STRUCTURE));
+            CHECK(!xr_xir_compile_source_snapshot_calls(s)&&runtime_live==blocks&&runtime_bytes==bytes&&sdk_stats(r).live_bytes==before.live_bytes);
+            signature_dispose(&f);xr_compile_resources_release(r);
+        }
+        xr_xir_compile_source_snapshot_free(s);CHECK(!runtime_live&&!runtime_bytes);
+    }
+    puts("Checked receiver display owner positive=1 rejection=6 producer_dead=1 lexical_span_absent=1 physical0/0");
+}
 int main(int argc,char **argv) {
     if(argc==2&&!strcmp(argv[1],"--legacy"))return source_calls_original_main();
     CHECK(argc==1||(argc==2&&!strcmp(argv[1],"--resources")));
-    signature_invalid();size_t sites=signature_attachment(argc==2,false),generic=signature_attachment(argc==2,true);
+    signature_checked_receiver();signature_invalid();size_t sites=signature_attachment(argc==2,false),generic=signature_attachment(argc==2,true);
     printf("Source call signature owner invalid=21 sites=%zu generic_sites=%zu full_FI=%u producer_dead=1 physical0/0\n",sites,generic,argc==2?1u:0u);
     return 0;
 }

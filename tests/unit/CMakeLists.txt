@@ -4683,3 +4683,7 @@ add_subdirectory(xir/p11_import)
 add_subdirectory(xir/p11_ctfe_instance)
 # Register independent legacy controls without replacing product-owned tests.
 add_subdirectory(xir/legacy_consumers)
+# Ordinary source classes retain the language receiver contract.
+include(${CMAKE_CURRENT_SOURCE_DIR}/stdlib/class_receivers.cmake)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/stdlib_families.cmake)
