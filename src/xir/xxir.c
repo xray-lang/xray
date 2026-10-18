@@ -437,6 +437,8 @@ XR_FUNC XrXirStatus xr_xir_compile_check_refined_v2(const XrXirCompileContext *c
     *output = copy; return XR_XIR_OK;
 }
 
+#include "xxir_generated.inc.c"
+
 XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget *target,
     XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     if (!checked || !output || *output || !xir_compile_context_valid(&checked->context))

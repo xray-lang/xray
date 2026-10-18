@@ -13,6 +13,7 @@
 #define XXIR_TYPES_H
 #include "xxir.h"
 #include "xxir_nominal.h"
+#include "xxir_type_description.h"
 #include "../shared/xr_param_mode.h"
 /* Closed bounds and control promises are independent; omitted root bits never
  * become a no-effect proof, even for otherwise well-shaped old descriptors. */
