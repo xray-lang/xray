@@ -25,6 +25,8 @@ typedef struct EffectCaptureRead {
     EffectBodyRequest body;
     EffectCaptureProof *builder;
     const EffectCaptureFact *selected;
+    uint32_t selected_count;
+    uint64_t selected_mask;
     const EffectCaptureNode *node_view;
     uint32_t maximum;
     bool fixed_only,fallback,class_results,active,changed,supported;
@@ -51,13 +53,33 @@ static XrXirStatus effect_capture_find(const EffectCaptureRead *read,EffectCaptu
         *output=&read->final->capture.facts[at];
     return XR_XIR_OK;
 }
+/* Clauses may share one uninterrupted read at the same node and value.
+ * Each coordinate still needs its own descending cause; support is the
+ * conjunction of all witnesses, including their individual rank bounds. */
+static XrXirStatus effect_capture_support_emit(EffectCaptureRead *read,const EffectCaptureFact *fact) {
+    if(!read->selected_count || read->selected_count>64) return XR_XIR_BAD_STRUCTURE;
+    if(fact->node!=read->selected->node || fact->value!=read->selected->value) return XR_XIR_OK;
+    uint32_t lo=0,hi=read->selected_count;
+    while(lo<hi) {
+        if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+        uint32_t mid=lo+(hi-lo)/2;const EffectCaptureFact *wanted=&read->selected[mid];
+        if(wanted->word<fact->word || (wanted->word==fact->word && wanted->bit<fact->bit)) lo=mid+1;else hi=mid;
+    }
+    if(lo<read->selected_count) {
+        if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+        const EffectCaptureFact *wanted=&read->selected[lo];
+        if(wanted->word==fact->word && wanted->bit==fact->bit && fact->rank<=wanted->rank) {
+            if(!xir_compile_work(read->work,sizeof(read->selected_mask)+sizeof(read->supported))) return XR_XIR_BUDGET;
+            read->selected_mask|=UINT64_C(1)<<lo;
+            uint64_t all=read->selected_count==64?UINT64_MAX:(UINT64_C(1)<<read->selected_count)-1;
+            read->supported=read->selected_mask==all;
+        }
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus effect_capture_emit(EffectCaptureRead *read,EffectCaptureFact fact) {
     if(read->fixed_only && (fact.word!=EFFECT_CAPTURE_FLAGS || fact.bit!=EFFECT_CAPTURE_FIXED)) return XR_XIR_OK;
-    if(read->selected) {
-        if(!effect_capture_before(&fact,read->selected) && !effect_capture_before(read->selected,&fact) &&
-            fact.rank<=read->selected->rank) read->supported=true;
-        return XR_XIR_OK;
-    }
+    if(read->selected) return effect_capture_support_emit(read,&fact);
     uint32_t at=0;XrXirStatus status=effect_capture_lower(read,&fact,&at);if(status!=XR_XIR_OK) return status;
     const EffectCaptureProof *current=&read->final->capture;
     const EffectCaptureFact *found=at<current->count?&current->facts[at]:NULL;
@@ -167,8 +189,7 @@ typedef struct EffectCaptureTransfer {
 /* Sorted insertions can move both the allocation and the next source record.
  * Only copied scalar coordinates survive an emit or an allocator callback. */
 static XrXirStatus effect_capture_transfer(EffectCaptureRead *read,const EffectCaptureTransfer *edge) {
-    if(read->selected && (read->selected->node!=edge->to || read->selected->value!=edge->destination ||
-        read->selected->word<edge->word || read->selected->word-edge->word>=edge->words)) return XR_XIR_OK;
+    if(read->selected && (read->selected->node!=edge->to || read->selected->value!=edge->destination)) return XR_XIR_OK;
     EffectCaptureNode target_storage={0};
     const EffectCaptureNode *target=NULL;
     XrXirStatus status=effect_capture_node_borrow(read,edge->to,&target_storage,&target);
@@ -177,19 +198,24 @@ static XrXirStatus effect_capture_transfer(EffectCaptureRead *read,const EffectC
     if(edge->initial && (edge->destination<=target->values || initial>=target->head.parameter_count))
         return XR_XIR_BAD_STRUCTURE;
     if(read->selected) {
-        const EffectCaptureFact *selected=read->selected;
-        if(selected->node!=edge->to || selected->value!=edge->destination || selected->word<edge->word ||
-            selected->word-edge->word>=edge->words) return XR_XIR_OK;
-        if(edge->initial) {
-            const uint64_t *input=read->final->nodes[edge->to].input+(uint64_t)initial*target->basis.row_words;
-            if(!(input[selected->word]&(UINT64_C(1)<<selected->bit))) return XR_XIR_OK;
+        for(uint32_t p=0;p<read->selected_count;++p) {
+            if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+            const EffectCaptureFact *selected=&read->selected[p];
+            if(selected->word<edge->word || selected->word-edge->word>=edge->words) continue;
+            if(edge->initial) {
+                const uint64_t *input=read->final->nodes[edge->to].input+(uint64_t)initial*target->basis.row_words;
+                if(!(input[selected->word]&(UINT64_C(1)<<selected->bit))) continue;
+            }
+            const EffectCaptureFact *source=NULL;
+            EffectCaptureFact key={edge->from,edge->value,edge->first+selected->word-edge->word,selected->bit,0};
+            status=effect_capture_find(read,key,&source);if(status!=XR_XIR_OK) return status;
+            if(!source) continue;
+            uint64_t rank=source->rank>edge->rank?source->rank:edge->rank;
+            if(rank==UINT64_MAX) return XR_XIR_BAD_STRUCTURE;
+            status=effect_capture_emit(read,(EffectCaptureFact){edge->to,edge->destination,selected->word,selected->bit,rank+1});
+            if(status!=XR_XIR_OK) return status;
         }
-        const EffectCaptureFact *source=NULL;
-        EffectCaptureFact key={edge->from,edge->value,edge->first+selected->word-edge->word,selected->bit,0};
-        status=effect_capture_find(read,key,&source);if(status!=XR_XIR_OK || !source) return status;
-        uint64_t rank=source->rank>edge->rank?source->rank:edge->rank;
-        if(rank==UINT64_MAX) return XR_XIR_BAD_STRUCTURE;
-        return effect_capture_emit(read,(EffectCaptureFact){edge->to,edge->destination,selected->word,selected->bit,rank+1});
+        return XR_XIR_OK;
     }
     EffectCaptureFact key={edge->from,edge->value,0,0,0};uint32_t at=0;
     status=effect_capture_lower(read,&key,&at);if(status!=XR_XIR_OK) return status;
@@ -323,8 +349,13 @@ static XrXirStatus effect_capture_selected_node(EffectCaptureRead *read,const Ef
         if(status==XR_XIR_OK) status=effect_capture_instruction(read,node,own,op);
         if(status!=XR_XIR_OK || read->supported) return status;
     }
+    bool fixed=false;
+    for(uint32_t p=0;p<read->selected_count;++p) {
+        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+        fixed|=read->selected[p].word==EFFECT_CAPTURE_FLAGS && read->selected[p].bit==EFFECT_CAPTURE_FIXED;
+    }
     uint32_t selection=value==node->values?EFFECT_FINAL_SELECT_RETURN:
-        fact->word==EFFECT_CAPTURE_FLAGS && fact->bit==EFFECT_CAPTURE_FIXED?EFFECT_FINAL_SELECT_BARRIER:EFFECT_FINAL_SELECT_WRITE;
+        fixed?EFFECT_FINAL_SELECT_BARRIER:EFFECT_FINAL_SELECT_WRITE;
     bool returned=false;
     for(uint32_t pass=0;pass<2;++pass) {
         if(pass && (selection==EFFECT_FINAL_SELECT_RETURN || selection==EFFECT_FINAL_SELECT_WRITE)) break;
@@ -431,10 +462,18 @@ static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const Ef
     for(uint32_t domain=0;domain<2;++domain) {
         read.fixed_only=domain==0;read.selected=NULL;read.node_view=NULL;
         status=effect_capture_clauses(&read);if(status!=XR_XIR_OK) return status;
-        for(uint32_t p=0;p<final->capture.count;++p) {
+        for(uint32_t p=0;p<final->capture.count;) {
             const EffectCaptureFact *fact=&final->capture.facts[p];
-            if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit>=EFFECT_CAPTURE_COMPLETE) continue;
-            if(read.fixed_only && (fact->word!=EFFECT_CAPTURE_FLAGS || fact->bit!=EFFECT_CAPTURE_FIXED)) continue;
+            if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit>=EFFECT_CAPTURE_COMPLETE) { ++p;continue; }
+            if(read.fixed_only && (fact->word!=EFFECT_CAPTURE_FLAGS || fact->bit!=EFFECT_CAPTURE_FIXED)) { ++p;continue; }
+            uint32_t end=p+1;
+            while(!read.fixed_only && end<final->capture.count && end-p<64) {
+                if(!xir_compile_work(work,5)) return XR_XIR_BUDGET;
+                const EffectCaptureFact *next=&final->capture.facts[end];
+                if(next->node!=fact->node || next->value!=fact->value ||
+                    (next->word==EFFECT_CAPTURE_FLAGS && next->bit>=EFFECT_CAPTURE_COMPLETE)) break;
+                ++end;
+            }
             /* This head is borrowed only within one uninterrupted, allocation-
              * free receiving request. Construction never retains this view. */
             if(!read.node_view || read.node_view->node!=fact->node) {
@@ -442,9 +481,11 @@ static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const Ef
                 if(status!=XR_XIR_OK) return status;
                 read.node_view=&node;
             }
-            read.selected=fact;read.supported=false;
+            if(!xir_compile_work(work,sizeof(read.selected_count)+sizeof(read.selected_mask)+sizeof(read.supported))) return XR_XIR_BUDGET;
+            read.selected=fact;read.selected_count=end-p;read.selected_mask=0;read.supported=false;
             status=effect_capture_clauses(&read);if(status!=XR_XIR_OK) return status;
             if(!read.supported) return XR_XIR_BAD_STRUCTURE;
+            p=end;
         }
     }
     read.selected=NULL;read.node_view=NULL;
