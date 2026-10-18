@@ -1,0 +1,2 @@
+fn answer()->i64{const x:i64?=null;try{return x!}catch panic(p){return p.code==413 && p.message=="cannot unwrap a null value" ? 42 : 0}}
+export fn run()->i64{return comptime answer()}

@@ -184,7 +184,9 @@ static XrXirStatus library_catalog_generic(const XrXirModule *module, const XrXi
     }
     for (uint32_t a = 0; a < generic->argument_count; ++a) {
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-        if (!library_catalog_type(module,generic,generic->arguments[a])) return XR_XIR_BAD_STAGE;
+        XrXirType type=generic->arguments[a];
+        if (!library_catalog_type(module,generic,type) && !xr_xir_type_is_number(type) && type!=XR_XIR_RUNE)
+            return XR_XIR_BAD_STAGE;
     }
     return XR_XIR_OK;
 }
@@ -193,6 +195,10 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
     const XrXirDeclarations *d=m->declarations;
     uint32_t nominal_count=m->types && m->types->nominals ? m->types->nominals->count : 0;
     if (!construction || xr_xir_compile_construction_count(construction)!=nominal_count) return XR_XIR_BAD_STRUCTURE;
+    /* Common checking has verified metadata. Source import relocates every
+     * selected site, complete ordered key and provider before publication. */
+    const XrXirComptimeTable *comptime=xr_xir_compile_construction_comptime(construction);
+    if (!comptime) return XR_XIR_BAD_STRUCTURE;
     if(m->linkage_kind!=XR_XIR_LIBRARY || m->stage!=XR_XIR_CHECKED) return XR_XIR_BAD_STAGE;
     if(!d || !d->module_count || !d->modules) return XR_XIR_BAD_STAGE;
     /* State remains lexically private. The shared checker has verified each
@@ -223,6 +229,7 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
             (!d->functions[f].nominal_owner && d->functions[f].method_kind!=XR_XIR_NON_MEMBER) ||
             (d->functions[f].nominal_owner && d->functions[f].method_kind!=XR_XIR_CONSTRUCTOR &&
              d->functions[f].method_kind!=XR_XIR_MEMBER_HELPER &&
+             d->functions[f].method_kind!=XR_XIR_MATERIALIZER &&
              d->functions[f].method_kind!=XR_XIR_READ_METHOD &&
              d->functions[f].method_kind!=XR_XIR_STATIC_METHOD))
             return XR_XIR_BAD_STAGE;
@@ -241,7 +248,20 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
                 if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
                 bound |= m->defaults->records[a].function==f;
             }
-            if (!bound) return XR_XIR_BAD_STAGE;
+            for (uint32_t s=0;s<comptime->site_count;++s) {
+                if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+                bound |= comptime->sites[s].helper==f;
+            }
+            for (uint32_t b=0;b<comptime->binding_count;++b) {
+                if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
+                bound |= comptime->bindings[b].provider==f;
+            }
+            /* Closed comptime thunks carry no generic site. They remain
+             * private zero-argument functions with ordinary lexical checking;
+             * import does not authorize their execution or field access. */
+            if (!bound && (fn->parameter_count || (generic && generic->parameter_count) ||
+                d->functions[f].exported || d->functions[f].member_access ||
+                d->functions[f].test_role || d->functions[f].promises)) return XR_XIR_BAD_STAGE;
         }
         for (uint32_t p = 0; p < fn->parameter_count; ++p) {
             if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;

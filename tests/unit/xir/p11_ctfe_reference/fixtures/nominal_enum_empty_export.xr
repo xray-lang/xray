@@ -1,0 +1,3 @@
+enum Choice { Empty, Some { value:i64 } }
+fn make()->Choice { return Choice.Empty }
+export fn run()->Choice { return comptime make() }

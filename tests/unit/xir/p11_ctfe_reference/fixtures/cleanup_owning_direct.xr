@@ -1,0 +1,2 @@
+fn value()->string { var x="a"; defer { x=x+"b" }; return x }
+export fn run()->string { return value() }

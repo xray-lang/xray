@@ -1,0 +1,2 @@
+fn eval()->i64{var items:Array<fn()->i64>=[];const action=fn()->i64{return len(items)};items.push(action);return 42}
+export fn answer()->i64{return comptime eval()}

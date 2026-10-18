@@ -1,0 +1,2 @@
+fn answer()->i64{var xs:Array<i8>=[1,2];const f=fn()->i64{xs.push(3);return len(xs)};f();return f()}
+export fn run()->i64{return comptime answer()}

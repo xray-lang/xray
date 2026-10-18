@@ -1,0 +1,4 @@
+fn inc(x:ref i64) { x=x+1 }
+fn twice(x:ref i64) { inc(ref x); inc(ref x) }
+fn value()->i64 { var xs=[40]; twice(ref xs[0]); return xs[0] }
+export fn run()->i64 { return comptime value() }

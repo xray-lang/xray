@@ -1,0 +1,2 @@
+fn answer()->string{var text="old";const f=fn(value:ref string)->string{value="ab";defer{value="changed"};return value};return f(ref text)}
+export fn run()->string{return comptime answer()}

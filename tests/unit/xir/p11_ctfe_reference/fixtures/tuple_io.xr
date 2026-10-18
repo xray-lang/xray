@@ -1,0 +1,2 @@
+fn make()->(i8,string) { if (false) { print(1) }; return (7,"ab") }
+export fn run()->(i8,string) { return comptime make() }

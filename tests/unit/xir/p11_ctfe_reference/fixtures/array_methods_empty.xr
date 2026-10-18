@@ -1,0 +1,2 @@
+fn answer()->bool { var xs:Array<Array<i8>>=[[]]; const a=xs[0].pop(); const b=xs[0].shift(); xs[0].reverse(); xs[0].clear(); return a==null && b==null && len(xs[0])==0 }
+export fn run()->bool { return comptime answer() }

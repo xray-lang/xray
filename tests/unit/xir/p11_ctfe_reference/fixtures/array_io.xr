@@ -1,0 +1,2 @@
+fn answer()->Array<i8> { if(false){print(1)}; return [7] }
+export fn run()->Array<i8> { return comptime answer() }

@@ -1,0 +1,4 @@
+class Box{text:string;init(text:string){this.text=text}}
+fn change(xs:ref Array<Box>)->string{xs.push(Box("ab"));defer{xs[1]=Box("changed")};return xs[1].text}
+fn answer()->string{var xs=[Box("old")];return change(ref xs)}
+export fn run()->string{return comptime answer()}

@@ -807,7 +807,7 @@ static XrXirStatus proof_interface_declaration(const XrXirModule *module, uint32
 static XrXirStatus proof_static_owner(const XrXirProofContext *context, XrXirCompileContext *budget) {
     XrXirStatus allocation_status = XR_XIR_OK;
     const XrXirModule *module = context->module;
-    if (!module->declarations || xir_effect_evidence_is_instance(module)) return XR_XIR_OK;
+    if (!module->declarations || xir_effect_evidence_is_closed(module)) return XR_XIR_OK;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[context->owner.declaration];
     if (identity->method_kind != XR_XIR_STATIC_METHOD) return XR_XIR_OK;
     if (!module->types->nominals->declarations) return XR_XIR_OK;

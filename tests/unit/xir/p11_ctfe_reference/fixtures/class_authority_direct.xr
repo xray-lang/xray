@@ -1,0 +1,5 @@
+class Box{items:Array<i64>;init(items:Array<i64>){this.items=items}}
+fn accept_box(b:Box)->i64{return 42}
+fn make_box()->Box{return Box([42])}
+fn make_tuple()->(Box,i64){return (Box([40]),2)}
+export fn run()->i64{return 42}

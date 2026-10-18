@@ -1,0 +1,2 @@
+fn value()->i8 { const x:i8?=null; return x! }
+export fn run()->i8 { return comptime value() }

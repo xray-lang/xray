@@ -10,6 +10,14 @@
  *   Input selection precedes the same checked construction and owned publication.
  */
 typedef struct SourceInputCapture { AstNode *ast; uint32_t module; } SourceInputCapture;
+typedef struct SourceInstanceOperation {
+    const XirSourceInstanceRequest *request;
+    uint32_t *providers;
+} SourceInstanceOperation;
+typedef struct SourceComptimeInstancesOperation {
+    const XirSourceComptimeRequest *request;
+    XirSourceComptimeInstances *output;
+} SourceComptimeInstancesOperation;
 typedef struct SourceInput {
     bool supplied;
     XrXirSourceText text;
@@ -20,6 +28,8 @@ typedef struct SourceInput {
     const size_t *included;
     size_t included_count;
     AstNode *program;
+    const SourceInstanceOperation *instances;
+    const SourceComptimeInstancesOperation *comptime_instances;
 } SourceInput;
 static bool source_graph_fail(SourceContext *ctx,XrModuleStatus status,const char *message) {
     const XrModuleParseDiagnostic *parse=ctx->graph?&ctx->graph->parse_diagnostic:NULL;
@@ -52,6 +62,8 @@ static bool source_include_corpus(SourceContext *ctx, SourceInput input, char **
 }
 static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceInput input,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure) {
+    const SourceInstanceOperation *instances=input.instances;
+    const SourceComptimeInstancesOperation *comptime_instances=input.comptime_instances;
     const bool supplied = input.supplied;
     const char *logical_path = input.text.logical_path, *text = input.text.text;
     const size_t length = input.text.length, overlay_count = input.overlay_count;
@@ -145,11 +157,15 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     }
     semantic_started = true;
     source_construct(&ctx, &result);
-    source_comptime_receive(&ctx, &result);
+    if (comptime_instances) source_comptime_instances_prepare(&ctx,result.checked,comptime_instances->request,comptime_instances->output);
+    else {
+        source_comptime_receive(&ctx, &result);
+        if (instances) source_instance_receive(&ctx,&result,instances->request,instances->providers);
+    }
 done:
     /* A comptime receiver has already copied the complete final query from its
      * own construction. The original context publishes only its own result. */
-    if (!result.snapshot) source_query_publish(&ctx, &result);
+    if (!comptime_instances && !result.snapshot) source_query_publish(&ctx, &result);
     const XrModuleParseDiagnostic *parse=ctx.graph?&ctx.graph->parse_diagnostic:NULL;
     if (failure && (semantic_started||(parse&&parse->present)) && ctx.diagnostic.status != XR_XIR_OK &&
         ctx.diagnostic.line > 0 && ctx.graph &&
@@ -174,7 +190,7 @@ done:
     xr_xir_compile_construction_free(ctx.construction);
     while (ctx.memory) { SourceMemory *next = ctx.memory->next; xr_compile_resources_free(ctx.memory); ctx.memory = next; }
     xr_compile_module_graph_free(ctx.graph); xr_compile_module_resolver_free(resolver);
-    if (ctx.diagnostic.status == XR_XIR_OK) *output = result;
+    if (ctx.diagnostic.status == XR_XIR_OK && !comptime_instances) *output = result;
     else xr_xir_compile_source_result_free(&result);
     if (diagnostic) *diagnostic = ctx.diagnostic;
     return ctx.diagnostic.status;
@@ -215,6 +231,46 @@ XR_FUNC XrXirStatus xr_xir_compile_source_check_corpus(const XrXirSourceCorpusRe
         .overlay_count=request->overlay_count, .included=request->included,
         .included_count=request->included_count};
     return source_check_input(request ? request->entry : NULL, input, output, diagnostic, failure);
+}
+
+XR_FUNC void xr_xir_compile_source_instance_constants_free(XirSourceInstanceConstants *result) {
+    if (!result) return;
+    xr_xir_compile_source_result_free(&result->source);
+    xr_compile_resources_free(result->functions);*result=(XirSourceInstanceConstants){0};
+}
+XR_FUNC XrXirStatus xr_xir_compile_source_instance_constants(const XirSourceInstanceRequest *request,
+    XirSourceInstanceConstants *output,XrXirSourceDiagnostic *diagnostic) {
+    if (!request || !request->source || !xir_compile_context_valid(request->source->context) ||
+        !request->selections || !request->count || request->count>request->source->context->limits.functions ||
+        (request->text && (request->overlays || request->overlay_count)) ||
+        !output || output->source.checked || output->source.snapshot || output->functions || output->count ||
+        request->limits.steps>XR_XIR_CTFE_MAX_STEPS || request->limits.frame_bytes>XR_XIR_CTFE_MAX_FRAME_BYTES ||
+        request->limits.output_bytes>XR_XIR_CTFE_MAX_OUTPUT_BYTES || request->call_depth>XR_XIR_CTFE_MAX_CALL_DEPTH) {
+        if (diagnostic) *diagnostic=(XrXirSourceDiagnostic){.status=XR_XIR_BAD_STRUCTURE};
+        return XR_XIR_BAD_STRUCTURE;
+    }
+    XirSourceInstanceConstants result={0};XrXirStatus status=XR_XIR_OK;
+    uint64_t bytes=(uint64_t)request->count*sizeof(*result.functions);
+    if (bytes>SIZE_MAX) {
+        if (diagnostic) *diagnostic=(XrXirSourceDiagnostic){.status=XR_XIR_BUDGET};
+        return XR_XIR_BUDGET;
+    }
+    result.functions=xir_compile_calloc(request->source->context,request->count,sizeof(*result.functions),&status);
+    if (!result.functions) {
+        if (diagnostic) *diagnostic=(XrXirSourceDiagnostic){.status=status};
+        return status;
+    }
+    SourceInstanceOperation operation={request,result.functions};
+    SourceInput input={.supplied=request->text!=NULL,.text=request->text?*request->text:(XrXirSourceText){0},
+        .overlays=request->overlays,.overlay_count=request->overlay_count,.instances=&operation};
+    status=source_check_input(request->source,input,&result.source,diagnostic,NULL);
+    if (status==XR_XIR_OK && !xir_compile_work(request->source->context,sizeof(*output))) status=XR_XIR_BUDGET;
+    if (status!=XR_XIR_OK) {
+        xr_xir_compile_source_instance_constants_free(&result);
+        if (diagnostic) diagnostic->status=status;
+        return status;
+    }
+    result.count=request->count;*output=result;return XR_XIR_OK;
 }
 
 XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *context,
@@ -261,3 +317,4 @@ XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *co
     if (status==XR_XIR_OK) { *output=result; return status; }
     xr_xir_compile_source_result_free(&result); return status;
 }
+#include "xxir_source_comptime_instances_input.inc.c"

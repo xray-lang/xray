@@ -1,0 +1,2 @@
+fn half(x:f32)->f32 { return x/2.0 }
+export fn run()->f32 { return comptime half(3.5) }

@@ -1,0 +1,16 @@
+class Identity{
+    values:Array<i64>;
+    init(){this.values=[40]}
+}
+struct Box{identity:Identity;value:i64}
+fn assign(value:ref i64,identity:Identity){
+    identity.values.push(2);
+    value=identity.values[0]+identity.values[1]
+}
+fn eval()->i64{
+    var box=Box{identity:Identity(),value:0};
+    const alias=box.identity;
+    assign(ref box.value,alias);
+    return box.value
+}
+export fn answer()->i64{const value=comptime eval();return value}

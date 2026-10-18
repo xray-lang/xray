@@ -1,0 +1,2 @@
+fn answer()->bool { const z:f64=0.0; const n=z/z; return n!=n && !(n<n) && !(n>n) && 0.0==-0.0 && 1.0/z>1.0 && -1.0/z<0.0 }
+export fn run()->bool { return comptime answer() }

@@ -1,0 +1,3 @@
+fn put(x:ref(i8,i8)){x=(40,2)}
+fn value()->i64{var xs:Array<(i8,i8)>=[(0,0)];put(ref xs[0]);return (xs[0].0 as i64)+(xs[0].1 as i64)}
+export fn run()->i64{return comptime value()}

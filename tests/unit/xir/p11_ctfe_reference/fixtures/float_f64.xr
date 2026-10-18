@@ -1,0 +1,2 @@
+fn answer()->f64 { return (3.5*2.0-0.5)/2.0 }
+export fn run()->f64 { return comptime answer() }

@@ -1,0 +1,3 @@
+fn inc(x:ref Array<i8>) { x.push(2) }
+fn value()->i64 { var x:Array<i8>=[1]; inc(ref x); return len(x) }
+export fn run()->i64 { return comptime value() }

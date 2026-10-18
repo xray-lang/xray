@@ -1,0 +1,3 @@
+struct Box { private value:i8; static make()->Box{return Box{value:7}}; get()->i8{return this.value} }
+fn answer()->bool { const b=Box.make(); return b.get()==7 }
+export fn run()->bool { return comptime answer() }

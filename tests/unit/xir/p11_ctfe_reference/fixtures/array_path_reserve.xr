@@ -1,0 +1,2 @@
+fn answer()->i64 { var xs:Array<Array<i8>>=[[1,2]]; xs[0].reserve(6); return xs[0].capacity==6 && xs[0][0]==1 && xs[0][1]==2 ? 42 : 0 }
+export fn run()->i64 { return comptime answer() }

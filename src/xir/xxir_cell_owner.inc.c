@@ -102,6 +102,17 @@ XR_FUNC bool xr_xir_cell_is_projection(const XrXirValue *value) {
     XirCell *cell = cell_owner(value);
     return cell && cell->projection_count;
 }
+XR_FUNC XrXirValueStatus xr_xir_cell_projection_steps(const XrXirValue *value,
+    XrXirValueAdmission *admission,uint32_t *output) {
+    if (!output || !admission || !admission->arena || !admission->domain || !admission_domain_current(admission))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (admission->work<64 || !xr_xir_domain_work(admission->domain,64)) return XR_XIR_VALUE_LIMIT;
+    admission->work-=64;
+    const XirCell *cell=cell_owner(value);
+    if (!cell || cell->object.arena!=admission->arena || cell->object.domain!=admission->domain)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    *output=cell->projection_count;return XR_XIR_VALUE_OK;
+}
 XR_FUNC const XrXirValue *xr_xir_cell_canonical_root(const XrXirValue *value) {
     XirCell *cell = cell_owner(value);
     return cell ? (cell->projection_count ? &cell->value : value) : NULL;

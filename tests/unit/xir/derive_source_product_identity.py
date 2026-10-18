@@ -28,6 +28,11 @@ def frames():
             suffix='value24' if program==31 else 'program30'
             result['xir_native_projection_expectations.h'][prefix+'_policy_'+suffix+'_preimage']=frame
             result['xir_native_projection_expectations.h'][prefix+'_policy_'+suffix]=hashlib.sha256(frame).digest()
+    for prefix in ('linked','original'):
+        text=(prefix+'_source').encode('ascii')
+        frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,30,75,24,29,31,len(text))+text
+        result['xir_native_projection_expectations.h'][prefix+'_policy75_preimage']=frame
+        result['xir_native_projection_expectations.h'][prefix+'_policy75']=hashlib.sha256(frame).digest()
     return result
 
 def main():

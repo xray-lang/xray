@@ -1,0 +1,2 @@
+fn pair()->(i64,i64){return (21,21)}
+export fn run()->(i64,i64){return comptime pair()}

@@ -1,0 +1,2 @@
+fn layer<T>(x:T)->T? { return x }
+export fn run()->i8?? { return comptime layer<i8?>(null) }

@@ -1,0 +1,2 @@
+fn side() { print(1) }
+export fn run()->i64 { comptime side(); return 42 }

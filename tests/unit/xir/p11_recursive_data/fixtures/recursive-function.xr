@@ -1,0 +1,5 @@
+fn forty_two()->i64{return 42}
+struct Node{children:Array<Node>;action:fn()->i64}
+fn factory()->Node{return Node{children:[],action:forty_two}}
+fn eval()->i64{const node=factory();const action=node.action;return action()}
+export fn answer()->i64{const value=comptime eval();return value}

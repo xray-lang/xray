@@ -1,0 +1,2 @@
+fn answer()->bool { const a:Array<u64>=[18446744073709551615]; const b:Array<i64>=[-9223372036854775808]; return a.join("")=="18446744073709551615" && b.join("")=="-9223372036854775808" }
+export fn run()->bool { return comptime answer() }

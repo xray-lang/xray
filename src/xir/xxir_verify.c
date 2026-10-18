@@ -57,6 +57,7 @@ typedef struct VerifyContext {
     /* Function graph views borrow this freshly rebuilt verifier-local storage. */
     void *graph_storage;
     size_t graph_capacity;
+    bool literal_type_names;
 } VerifyContext;
 
 typedef struct Graph {
@@ -132,6 +133,90 @@ static XrXirStatus declaration_instruction(const XrXirFunction *function,
 #include "xxir_slot_group_verify.inc.c"
 #include "xxir_task_verify.inc.c"
 
+static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
+    const XrXirInstruction *op,const XrXirModule *module,XrXirCompileContext *remaining) {
+    uint32_t caller_id=(uint32_t)(function-module->functions);
+    if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    bool bound_helper=false,default_authorized=false;
+    XrXirStatus helper_status=xr_xir_compile_default_helper(remaining, module, (uint32_t)op->immediate, &bound_helper);
+    if (helper_status!=XR_XIR_OK) return helper_status;
+    helper_status=default_origin(module,caller_id,(uint32_t)(op-function->instructions),
+        (uint32_t)op->immediate,remaining,&default_authorized);
+    if(helper_status!=XR_XIR_OK) return helper_status;
+    if (bound_helper && ((op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) ||
+        !default_authorized))
+        return XR_XIR_BAD_STRUCTURE;
+    bool registration = op->op == XR_XIR_CLEANUP_REGISTER;
+    if ((registration && !module->declarations) || (module->declarations &&
+        module->declarations->functions[op->immediate].cleanup_owner != (registration ? caller_id + 1 : 0)))
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirFunction *callee = &module->functions[op->immediate];
+    if ((op->op != XR_XIR_FUNCTION_REF && callee->parameter_count != op->args[1]) || (callee->parameter_count && !callee->parameters))
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus generic_status = xr_xir_compile_generic_call(remaining, module, caller_id, op);
+    if (generic_status != XR_XIR_OK) return generic_status;
+    if (registration && module->generics) {
+        const XrXirGeneric *owner = &module->generics[caller_id];
+        if (op->type_arguments[1] != owner->parameter_count) return XR_XIR_BAD_TYPE;
+        for (uint32_t a = 0; a < owner->parameter_count; ++a) {
+            if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
+            if (owner->arguments[op->type_arguments[0] + a] != (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + a))
+                return XR_XIR_BAD_TYPE;
+        }
+    }
+    XrXirType result = op->type;
+    if (op->op == XR_XIR_GO) {
+        generic_status = task_go_shape(module, op, remaining);
+        if (generic_status != XR_XIR_OK) return generic_status;
+        result = xr_xir_task_element(module->types, op->type);
+    }
+    const XrXirTypeNode *signature = NULL;
+    if (op->op == XR_XIR_FUNCTION_REF) {
+        signature = xr_xir_callable_signature(module->types, op->type);
+        if (!module->declarations || !signature || op->args[1] > callee->parameter_count ||
+            signature->parameter_count != callee->parameter_count - op->args[1])
+            return XR_XIR_BAD_TYPE;
+        if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&
+            !(module->declarations->functions[op->immediate].promises & XR_XIR_FUNCTION_NO_SUSPEND))
+            return XR_XIR_BAD_TYPE;
+        result = signature->result;
+    }
+    generic_status = xr_xir_compile_call_type_matches(remaining, module, caller_id, op, callee->result, result);
+    if (generic_status != XR_XIR_OK) return generic_status;
+    if (signature) for (uint32_t p = 0; p < signature->parameter_count; ++p) {
+        if (!xr_xir_callable_parameter_storage_valid(module->types, &signature->parameters[p])) return XR_XIR_BAD_TYPE;
+        generic_status = xr_xir_compile_call_type_matches(remaining, module, caller_id, op, callee->parameters[p + op->args[1]], signature->parameters[p].type);
+        if (generic_status != XR_XIR_OK) return generic_status;
+    }
+    if (module->declarations && !requirement_origin(module,caller_id,(uint32_t)(op - function->instructions)) &&
+        !default_authorized) {
+        const XrXirDeclarations *d = module->declarations;
+        /* The same complete construction pass has already bound every
+         * private literal-helper use to this exact CALL coordinate. It
+         * does not replace ordinary imports, type or member checks. */
+        bool materializer=d->functions[op->immediate].method_kind==XR_XIR_MATERIALIZER;
+        if (materializer && op->op!=XR_XIR_CALL) return XR_XIR_BAD_TYPE;
+        uint32_t caller_module = d->functions[caller_id].module;
+        uint32_t callee_module = d->functions[op->immediate].module;
+        if ((d->functions[op->immediate].member_access &&
+                d->functions[caller_id].nominal_owner != d->functions[op->immediate].nominal_owner) ||
+            (uint32_t) op->immediate == d->modules[callee_module].initializer ||
+            !xr_xir_module_imports(d, caller_module, callee_module))
+            return XR_XIR_BAD_STRUCTURE;
+        if (caller_module != callee_module && !d->functions[op->immediate].exported && !materializer) {
+            bool source_visible = false;
+            XrXirStatus status = instance_call_visibility(module, caller_id,
+                (uint32_t)(op - function->instructions), (uint32_t)op->immediate,
+                remaining, &source_visible);
+            if (status != XR_XIR_OK) return status;
+            if (!source_visible) return XR_XIR_BAD_STRUCTURE;
+        }
+    }
+
+    return XR_XIR_OK;
+}
+
 static XrXirStatus instruction_shape(const XrXirFunction *function,
                                     const XrXirInstruction *op, XrXirStage stage,
                                     const XrXirModule *module, XrXirCompileContext *remaining) {
@@ -173,79 +258,8 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     if ((op->op == XR_XIR_NULLABLE_NONE || op->op == XR_XIR_NULLABLE_SOME) &&
         !xr_xir_type_is_nullable(module->types, op->type)) return XR_XIR_BAD_TYPE;
     if (xr_xir_op_references_function(op->op)) {
-        if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
-            return XR_XIR_BAD_STRUCTURE;
-        bool bound_helper=false,default_authorized=false;
-        XrXirStatus helper_status=xr_xir_compile_default_helper(remaining, module, (uint32_t)op->immediate, &bound_helper);
-        if (helper_status!=XR_XIR_OK) return helper_status;
-        helper_status=default_origin(module,caller_id,(uint32_t)(op-function->instructions),
-            (uint32_t)op->immediate,remaining,&default_authorized);
-        if(helper_status!=XR_XIR_OK) return helper_status;
-        if (bound_helper && ((op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) ||
-            !default_authorized))
-            return XR_XIR_BAD_STRUCTURE;
-        bool registration = op->op == XR_XIR_CLEANUP_REGISTER;
-        if ((registration && !module->declarations) || (module->declarations &&
-            module->declarations->functions[op->immediate].cleanup_owner != (registration ? caller_id + 1 : 0)))
-            return XR_XIR_BAD_STRUCTURE;
-        const XrXirFunction *callee = &module->functions[op->immediate];
-        if ((op->op != XR_XIR_FUNCTION_REF && callee->parameter_count != op->args[1]) || (callee->parameter_count && !callee->parameters))
-            return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus generic_status = xr_xir_compile_generic_call(remaining, module, caller_id, op);
-        if (generic_status != XR_XIR_OK) return generic_status;
-        if (registration && module->generics) {
-            const XrXirGeneric *owner = &module->generics[caller_id];
-            if (op->type_arguments[1] != owner->parameter_count) return XR_XIR_BAD_TYPE;
-            for (uint32_t a = 0; a < owner->parameter_count; ++a) {
-                if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
-                if (owner->arguments[op->type_arguments[0] + a] != (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + a))
-                    return XR_XIR_BAD_TYPE;
-            }
-        }
-        XrXirType result = op->type;
-        if (op->op == XR_XIR_GO) {
-            generic_status = task_go_shape(module, op, remaining);
-            if (generic_status != XR_XIR_OK) return generic_status;
-            result = xr_xir_task_element(module->types, op->type);
-        }
-        const XrXirTypeNode *signature = NULL;
-        if (op->op == XR_XIR_FUNCTION_REF) {
-            signature = xr_xir_callable_signature(module->types, op->type);
-            if (!module->declarations || !signature || op->args[1] > callee->parameter_count ||
-                signature->parameter_count != callee->parameter_count - op->args[1])
-                return XR_XIR_BAD_TYPE;
-            if ((signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) &&
-                !(module->declarations->functions[op->immediate].promises & XR_XIR_FUNCTION_NO_SUSPEND))
-                return XR_XIR_BAD_TYPE;
-            result = signature->result;
-        }
-        generic_status = xr_xir_compile_call_type_matches(remaining, module, caller_id, op, callee->result, result);
-        if (generic_status != XR_XIR_OK) return generic_status;
-        if (signature) for (uint32_t p = 0; p < signature->parameter_count; ++p) {
-            if (!xr_xir_callable_parameter_storage_valid(module->types, &signature->parameters[p]) ||
-                (signature->parameters[p].mode == XR_PARAM_REF && op->args[1])) return XR_XIR_BAD_TYPE;
-            generic_status = xr_xir_compile_call_type_matches(remaining, module, caller_id, op, callee->parameters[p + op->args[1]], signature->parameters[p].type);
-            if (generic_status != XR_XIR_OK) return generic_status;
-        }
-        if (module->declarations && !requirement_origin(module,caller_id,(uint32_t)(op - function->instructions)) &&
-            !default_authorized) {
-            const XrXirDeclarations *d = module->declarations;
-            uint32_t caller_module = d->functions[caller_id].module;
-            uint32_t callee_module = d->functions[op->immediate].module;
-            if ((d->functions[op->immediate].member_access &&
-                    d->functions[caller_id].nominal_owner != d->functions[op->immediate].nominal_owner) ||
-                (uint32_t) op->immediate == d->modules[callee_module].initializer ||
-                !xr_xir_module_imports(d, caller_module, callee_module))
-                return XR_XIR_BAD_STRUCTURE;
-            if (caller_module != callee_module && !d->functions[op->immediate].exported) {
-                bool source_visible = false;
-                XrXirStatus status = instance_call_visibility(module, caller_id,
-                    (uint32_t)(op - function->instructions), (uint32_t)op->immediate,
-                    remaining, &source_visible);
-                if (status != XR_XIR_OK) return status;
-                if (!source_visible) return XR_XIR_BAD_STRUCTURE;
-            }
-        }
+        XrXirStatus status=instruction_direct_call_shape(function,op,module,remaining);
+        if (status!=XR_XIR_OK) return status;
     }
     if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
         if (op->immediate < 0 || (uint64_t) op->immediate >= (uint64_t) function->parameter_count + function->instruction_count)
@@ -321,7 +335,7 @@ static XrXirStatus type_use_context(VerifyContext *context, uint32_t function, X
     XrXirStatus status = xr_xir_compile_type_use_verify_scratch(&context->remaining, &proof, type, &context->scratch);
     /* Naming checks for substituted types are discharged by original-definition
      * verification and complete correspondence before this module can publish. */
-    if (status != XR_XIR_OK || xir_effect_evidence_is_instance(context->module)) return status;
+    if (status != XR_XIR_OK || xir_effect_evidence_is_closed(context->module) || context->literal_type_names) return status;
     return xr_xir_compile_type_access_scratch(&context->remaining, context->module, function, type, &context->pending);
 }
 
@@ -331,7 +345,7 @@ static XrXirStatus signature_type_use_context(VerifyContext *context, uint32_t f
     XrXirType type, bool constraints_proved) {
     if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
     if (!constraints_proved) return type_use_context(context, function, type);
-    if (xir_effect_evidence_is_instance(context->module)) return XR_XIR_OK;
+    if (xir_effect_evidence_is_closed(context->module) || context->literal_type_names) return XR_XIR_OK;
     return xr_xir_compile_type_access_scratch(&context->remaining, context->module,
         function, type, &context->pending);
 }
@@ -750,7 +764,7 @@ static XrXirStatus array_uses(const Graph *graph, const XrXirFunction *function,
     if (op->op == XR_XIR_CELL_PLACE && xr_xir_type_is_nominal(types, array))
         return role_operand(function, graph, context, instruction, 0, cell);
     XrXirType element = xr_xir_array_element(types, array);
-    XrXirStatus status = xir_effect_evidence_is_instance(context->module) ?
+    XrXirStatus status = xir_effect_evidence_is_closed(context->module) || context->literal_type_names ?
         xr_xir_compile_type_constraints(&context->remaining, context->module, context->location.function, element, (XrXirConstraint){0}) :
         xr_xir_compile_type_satisfies(&context->remaining, context->module, context->location.function, element, (XrXirConstraint){0});
     if (status != XR_XIR_OK) return status;
@@ -1195,7 +1209,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
         return XR_XIR_BAD_STRUCTURE;
     }
     VerifyContext context = {*remaining,
-                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module, {remaining->resources,NULL}, {remaining->resources,NULL,0}, NULL, 0};
+                             {XR_XIR_OK, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE}, module, {remaining->resources,NULL}, {remaining->resources,NULL,0}, NULL, 0, false};
     XrXirStatus status = XR_XIR_OK;
     bool signature_constraints_proved = false;
     if (!module || !module->functions || !module->function_count)
@@ -1203,7 +1217,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
     else if (module->linkage_kind != XR_XIR_PROGRAM && module->linkage_kind != XR_XIR_LIBRARY)
         status = XR_XIR_BAD_STRUCTURE;
     else if (module->linkage_kind == XR_XIR_LIBRARY &&
-             (module->stage == XR_XIR_LOWERED || xir_effect_evidence_is_instance(module)))
+             (module->stage == XR_XIR_LOWERED || xir_effect_evidence_is_closed(module)))
         status = XR_XIR_BAD_STAGE;
     else if (module->stage != XR_XIR_BUILT && module->stage != XR_XIR_CHECKED &&
              module->stage != XR_XIR_LOWERED)
@@ -1270,7 +1284,8 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
                 status = XR_XIR_BAD_TYPE;
                 break;
             }
-            status = verify_function(&module->functions[f], module->stage, &context, signature_constraints_proved);
+            status=xir_literal_type_names(&context.remaining,module,construction,f,&context.literal_type_names);
+            if (status==XR_XIR_OK) status = verify_function(&module->functions[f], module->stage, &context, signature_constraints_proved);
             if (status != XR_XIR_OK)
                 break;
         }
@@ -1325,7 +1340,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompi
     const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     if (!source_effects) return xr_xir_compile_verify_v2(context,module,construction,diagnostic);
     if (!xir_compile_context_valid(context) || !module || !module->provenance ||
-        module->provenance->kind!=XR_XIR_EVIDENCE_INSTANCE) return XR_XIR_BAD_STRUCTURE;
+        !xir_effect_kind_is_closed(module->provenance->kind)) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
     if (status==XR_XIR_OK) {
@@ -1402,7 +1417,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_receiving_effects_v2(const XrXirCompil
     const XrXirModule *module,const XrXirConstruction *construction,
     const XrXirEffects *source_effects,XrXirEffects **output,XrXirDiagnostic *diagnostic) {
     if (source_effects && (!module || !module->provenance ||
-        module->provenance->kind!=XR_XIR_EVIDENCE_INSTANCE)) return XR_XIR_BAD_STRUCTURE;
+        !xir_effect_kind_is_closed(module->provenance->kind))) return XR_XIR_BAD_STRUCTURE;
     return verify_collected_effects(context,module,construction,source_effects,output,diagnostic);
 }
 XrXirStatus xr_xir_compile_verify_v2(const XrXirCompileContext *context,

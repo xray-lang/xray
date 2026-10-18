@@ -1,0 +1,2 @@
+fn make()->(i8,string) { var p:(i8,string)=(1,"a"); p=(7,"ab"); return p }
+export fn run()->(i8,string) { return comptime make() }

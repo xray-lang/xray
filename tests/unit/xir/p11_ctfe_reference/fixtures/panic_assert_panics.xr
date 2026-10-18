@@ -1,0 +1,2 @@
+fn answer()->i64{assertPanics(fn()->string{defer{const s="cleanup"};assert(false,"owned");return "unreachable"});return 42}
+export fn run()->i64{return comptime answer()}

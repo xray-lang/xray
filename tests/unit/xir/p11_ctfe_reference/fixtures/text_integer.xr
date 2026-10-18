@@ -1,0 +1,2 @@
+fn answer()->string { const a:Array<i64>=[-42,7]; return a.join(",") }
+export fn run()->string { return comptime answer() }

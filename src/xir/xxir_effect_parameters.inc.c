@@ -63,7 +63,7 @@ static inline XrXirStatus effect_parameters_variable_domain(const XrXirModule *m
     if (!module || !output) return XR_XIR_BAD_STRUCTURE;
     const XrXirProvenance *provenance=module->provenance;
     bool variables=provenance && provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
-    if (provenance && provenance->kind==XR_XIR_EVIDENCE_INSTANCE) {
+    if (provenance && xir_effect_kind_is_closed(provenance->kind)) {
         XrXirStatus status=effect_contract_instance(work,module,provenance);
         if (status!=XR_XIR_OK) return status;
         variables=true;

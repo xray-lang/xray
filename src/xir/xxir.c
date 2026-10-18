@@ -116,6 +116,7 @@ static XrXirArtifact *clone_module_receiving(const XrXirCompileContext *compile_
         return NULL;
     }
     copy->context = *compile_context;
+    copy->evaluation_only=xir_effect_evidence_is_evaluation(source)?1u:0u;
     copy->module = (XrXirModule) {source->stage, functions, source->function_count, NULL, NULL, NULL, NULL, source->linkage_kind, NULL};
     XrXirGeneric *generics = NULL;
     if ((*allocation_status = xr_xir_compile_generics_clone(compile_context, source, &generics)) != XR_XIR_OK) {
@@ -234,7 +235,7 @@ XrXirStatus xr_xir_compile_recheck_provenance_take(const XrXirCompileContext *co
     if (!checked || checked->stage != XR_XIR_CHECKED)
         return transition_error(XR_XIR_BAD_STAGE, diagnostic);
     const XrXirProvenance *candidate = *owned_provenance;
-    if (checked->provenance != candidate || candidate->kind != XR_XIR_EVIDENCE_INSTANCE ||
+    if (checked->provenance != candidate || !xir_effect_kind_is_closed(candidate->kind) ||
         !candidate->source || candidate->source->context.resources != compile_context->resources)
         return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
     XrXirProvenance *receiving_owner = *owned_provenance; *owned_provenance = NULL;
@@ -324,9 +325,10 @@ static XrXirStatus transition_owned(const XrXirModule *input, const XrXirConstru
         XrXirCompileContext projection_budget = limits;
         status = lower_nominal_types(&copy->module, &projection_budget);
         if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return transition_error(status, diagnostic); }
-        xr_xir_compile_construction_free(copy->construction); copy->construction = NULL;
-        status = xir_construction_empty(budget, copy->module.types, &copy->construction);
+        XrXirConstruction *physical=NULL;
+        status = xir_construction_lower(budget,copy->module.types,copy->construction,&physical);
         if (status != XR_XIR_OK) { xr_xir_compile_artifact_free(copy); return transition_error(status, diagnostic); }
+        xr_xir_compile_construction_free(copy->construction);copy->construction=physical;
         copy->target = *target;
         for (uint32_t f = 0; f < copy->module.function_count; ++f) {
             const XrXirFunction *function = &copy->module.functions[f];
@@ -390,7 +392,7 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower(const XrXirCompileContext 
     XrXirStatus status = xr_xir_compile_checked_read(context, bytes, length, &checked, diagnostic);
     if (status == XR_XIR_OK)
         status = transition_shape(&checked->module, XR_XIR_CHECKED, &checked->context, target, diagnostic);
-    const TransitionInputProof proof = {checked_encode, &checked};
+    const TransitionInputProof proof = {checked_encode,&checked};
     if (status == XR_XIR_OK)
         status = transition_owned(&checked->module, checked->construction, &checked->context, output, diagnostic, target, &proof);
     xr_xir_compile_artifact_free(checked);
@@ -441,7 +443,7 @@ XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget
         return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
     XrXirStatus status=transition_shape(&checked->module,XR_XIR_CHECKED,&checked->context,target,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,diagnostic);
-    const TransitionInputProof proof={checked_encode,NULL};
+    const TransitionInputProof proof={checked->evaluation_only?checked_evaluation_encode:checked_encode,NULL};
     return status==XR_XIR_OK?transition_owned(&checked->module,checked->construction,
         &checked->context,output,diagnostic,target,&proof):status;
 }
@@ -465,7 +467,7 @@ XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **owned_input,
         status = xr_xir_compile_layout_verify(checked);
         if (status != XR_XIR_OK) status = transition_error(status, diagnostic);
     }
-    const TransitionInputProof proof = {checked_encode, &checked};
+    const TransitionInputProof proof = {checked->evaluation_only?checked_evaluation_encode:checked_encode,&checked};
     if (status == XR_XIR_OK)
         status = transition_owned(&checked->module, checked->construction, &limits, output, diagnostic, target, &proof);
     xr_xir_compile_artifact_free(checked);
@@ -475,6 +477,9 @@ XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **owned_input,
 static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
     XrXirEffects **output, const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
     if (!artifact || (output && (*output || source_effects))) return XR_XIR_BAD_STRUCTURE;
+    if (artifact->evaluation_only>1 ||
+        !!artifact->evaluation_only!=xir_effect_evidence_is_evaluation(&artifact->module))
+        return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
     XrXirCompileContext compile_state = artifact->context;
     XrXirCompileContext *budget = &compile_state;
     XrXirCompileContext limits = *budget;
@@ -490,6 +495,19 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
         xr_sha256(packet->bytes, packet->length, digest);
         if (memcmp(digest, artifact->checked_identity, sizeof(digest)))
             return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
+        if (artifact->evaluation_only) {
+            if (packet->length<76 || memcmp(packet->bytes,"XRCEV\0\0\0",8))
+                return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+            const XirEvaluationRoot *root=&artifact->module.provenance->evaluation;
+            uint32_t wanted[3]={root->caller,root->instruction,root->callee};
+            if (!xir_compile_work(&limits,12)) return transition_error(XR_XIR_BUDGET,diagnostic);
+            for (uint32_t i=0;i<3;++i) {
+                const uint8_t *p=packet->bytes+64+4*i;
+                uint32_t actual=(uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);
+                if (actual!=wanted[i]) return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
+            }
+        } else if (!memcmp(packet->bytes,"XRCEV\0\0\0",8))
+            return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
     }
     const XrXirProvenance *provenance=artifact->module.provenance;
     if (artifact->module.stage==XR_XIR_CHECKED && provenance && provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
@@ -499,12 +517,21 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
     }
     if (artifact->source_facts && (!output || !provenance || provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE))
         return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
-    if (provenance && provenance->kind==XR_XIR_EVIDENCE_INSTANCE && provenance->source &&
+    if (provenance && xir_effect_kind_is_closed(provenance->kind) && provenance->source &&
         provenance->source->module.provenance &&
         provenance->source->module.provenance->kind==XR_XIR_EVIDENCE_TEMPLATE) {
-        XrXirStatus status=source_facts_match(&limits,provenance->source,diagnostic);
+        const XrXirArtifact *source=provenance->source;
+        const XirSourceFacts *facts=source->source_facts;
+        /* Common provenance verification below checks this same Source body,
+         * effects and permissions on every request. Bind its retained owner,
+         * terminal and layout here without running those full checks twice.
+         * A separately supplied derivation cannot stand in for stored facts. */
+        XrXirStatus status=source_effects && facts && source_effects!=facts->effects?
+            source_facts_match(&limits,source,diagnostic):source_facts_input_match(&limits,source,facts);
+        if (status==XR_XIR_OK) status=xir_effects_source_terminal(&limits,&source->module,facts->effects);
+        if (status==XR_XIR_OK) status=xr_xir_compile_layout_match_verified(source);
         if (status!=XR_XIR_OK) return transition_error(status,diagnostic);
-        if (!source_effects) source_effects=provenance->source->source_facts->effects;
+        if (!source_effects) source_effects=facts->effects;
     }
     XrXirEffects *owned=NULL;
     XrXirStatus status = output ? xr_xir_compile_verify_receiving_effects_v2(&limits,

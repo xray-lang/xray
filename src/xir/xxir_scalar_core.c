@@ -42,6 +42,9 @@ XR_FUNC XrXirRunStatus xir_scalar_core_equal(XrXirType type,int64_t left,int64_t
     if (type==XR_XIR_BOOL) {
         if ((left!=0 && left!=1) || (right!=0 && right!=1)) return XR_XIR_RUN_BAD_ARGUMENT;
         equal=left==right;
+    } else if (type==XR_XIR_RUNE) {
+        if (!xr_xir_rune_payload_valid(left) || !xr_xir_rune_payload_valid(right)) return XR_XIR_RUN_BAD_ARGUMENT;
+        equal=left==right;
     } else {
         if (!xr_xir_type_is_integer(type)) return XR_XIR_RUN_BAD_ARGUMENT;
         int ordering=0;

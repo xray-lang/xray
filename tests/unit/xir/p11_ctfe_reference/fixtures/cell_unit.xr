@@ -1,0 +1,1 @@
+export fn run()->i64 { comptime { var u:()=(); u=() }; return 42 }

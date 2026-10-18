@@ -1,0 +1,2 @@
+fn fail()->string { const a:Array<bool>=[false,false]; return a.join(",") }
+export fn run()->string { return comptime fail() }

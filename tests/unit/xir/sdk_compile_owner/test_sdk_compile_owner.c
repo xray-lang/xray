@@ -37,7 +37,7 @@ typedef XrXirStatus (*CheckPrototype)(const XrXirCompileContext *, const XrXirMo
     const XrXirConstruction *, XrXirArtifact **, XrXirDiagnostic *);
 typedef XrXirStatus (*VerifyPrototype)(const XrXirCompileContext *, const XrXirModule *,
     const XrXirConstruction *, XrXirDiagnostic *);
-_Static_assert(_Generic(&xr_xir_compile_construction_new, ConstructionPrototype:1, default:0),
+_Static_assert(_Generic(&xr_xir_compile_construction_new_v3, ConstructionPrototype:1, default:0),
     "Explicit immutable construction owner");
 _Static_assert(_Generic(&xr_xir_compile_check_v2, CheckPrototype:1, default:0),
     "Mandatory construction check input");

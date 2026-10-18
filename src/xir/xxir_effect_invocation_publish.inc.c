@@ -40,7 +40,7 @@ static XrXirStatus effect_invocation_publication_write(const XrXirCompileContext
  * prefix. INSTANCE originals instead come from the full owned source proof. */
 static inline XrXirStatus effect_invocation_publication_bounds(const XrXirCompileContext *work,
     const XrXirModule *module,const XrXirEffects *effects,EffectInvocationDeclaredBounds **output) {
-    if (module->provenance && module->provenance->kind==XR_XIR_EVIDENCE_INSTANCE)
+    if (module->provenance && xir_effect_kind_is_closed(module->provenance->kind))
         return effect_invocation_instance_bounds(work,module,output);
     EffectRefinementBounds *refinement=effects->refinement;
     XrXirStatus status=refinement?effect_refinement_match(work,module,refinement):XR_XIR_OK;

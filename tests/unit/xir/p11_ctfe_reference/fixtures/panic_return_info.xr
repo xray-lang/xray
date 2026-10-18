@@ -1,0 +1,3 @@
+fn make()->PanicInfo{try{const n=1/0}catch panic(p){return p};return make()}
+fn answer()->i64{return make().code-378}
+export fn run()->i64{return comptime answer()}

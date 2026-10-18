@@ -1,0 +1,4 @@
+class Node{value:i64;next:Node?;init(value:i64,next:Node?){this.value=value;this.next=next}}
+fn inc(x:ref i64){x=x+2}
+fn eval()->i64{const child=Node(0,null);const b=Node(40,child);inc(ref b.value);return b.value}
+export fn answer()->i64{return comptime eval()}

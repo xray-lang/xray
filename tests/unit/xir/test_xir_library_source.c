@@ -227,8 +227,10 @@ static void library_unit_boundary_cases(void) {
   CHECK(!runtime_live&&!runtime_bytes);
  }
 }
+#include "xir_library_emit_fixture.h"
 int main(int argc,char **argv) {
- CHECK(argc==1||argc==2);
+ CHECK(argc>=1&&argc<=3);
+ if(argc==3){CHECK(!strcmp(argv[1],"--emit-only"));library_emit_fixture(argv[2]);return 0;}
  if(argc==2&&!strcmp(argv[1],"--views")){
   LibraryCompileOwner views_owner={0};
   for(unsigned mode=0;mode<5;++mode){

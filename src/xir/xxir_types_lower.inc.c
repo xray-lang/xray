@@ -38,7 +38,7 @@ static XrXirStatus lower_provenance(XrXirModule *module, const uint32_t *map,
     XrXirStatus allocation_status = XR_XIR_OK;
     XrXirProvenance *proof = (XrXirProvenance *)module->provenance;
     if (!proof) return XR_XIR_OK;
-    if (proof->kind != XR_XIR_EVIDENCE_INSTANCE) return XR_XIR_BAD_STAGE;
+    if (!xir_effect_kind_is_closed(proof->kind)) return XR_XIR_BAD_STAGE;
     for (uint32_t f = 0; f < proof->count; ++f) {
         XrXirOrigin *origin = &proof->origins[f];
         if (!lower_type_work(budget, (uint64_t)origin->argument_count + 1)) return XR_XIR_BUDGET;
