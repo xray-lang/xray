@@ -252,17 +252,19 @@ def check_builtin_distribution(root: Path) -> list[str]:
             if marker in text:
                 errors.append(f"{label}: removed official-package marker remains: {marker}")
 
-    package_import = re.compile(
+    # Import spellings are ASCII; negative lexer fixtures can contain arbitrary
+    # bytes. Scan their complete contents without discarding undecodable data.
+    package_import = re.compile((
         r"(?m)^\s*import\s+(?:\{[^}\n]+\}\s+from\s+)?"
         rf"(?:[\"'])?xray/(?:{'|'.join(sorted(expected | source_only))})\b"
-    )
+    ).encode("ascii"))
     for base in ("stdlib", "tests"):
         for path in sorted((root / base).rglob("*.xr")):
-            match = package_import.search(path.read_text(encoding="utf-8"))
+            match = package_import.search(path.read_bytes())
             if match:
                 errors.append(
                     f"{path.relative_to(root)}: removed package import remains: "
-                    f"{match.group(0).strip()}"
+                    f"{match.group(0).strip().decode('utf-8', errors='backslashreplace')}"
                 )
 
     errors.extend(
