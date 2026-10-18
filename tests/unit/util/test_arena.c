@@ -15,8 +15,9 @@
 /* ========== Basic Operations ========== */
 
 TEST(arena_init_destroy) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     ASSERT_NOT_NULL(arena.head);
     ASSERT_TRUE(arena.position != NULL);
@@ -26,8 +27,9 @@ TEST(arena_init_destroy) {
 }
 
 TEST(arena_alloc_single) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     int *p = (int *) xr_arena_alloc(&arena, sizeof(int));
     ASSERT_NOT_NULL(p);
@@ -39,8 +41,9 @@ TEST(arena_alloc_single) {
 }
 
 TEST(arena_alloc_multiple) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     int *a = (int *) xr_arena_alloc(&arena, sizeof(int));
     int *b = (int *) xr_arena_alloc(&arena, sizeof(int));
@@ -67,8 +70,9 @@ TEST(arena_alloc_multiple) {
 }
 
 TEST(arena_alloc_struct) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     typedef struct {
         int x;
@@ -91,8 +95,9 @@ TEST(arena_alloc_struct) {
 }
 
 TEST(arena_alloc_array) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     int *arr = xr_arena_array(&arena, int, 100);
     ASSERT_NOT_NULL(arr);
@@ -111,8 +116,9 @@ TEST(arena_alloc_array) {
 /* ========== String Operations ========== */
 
 TEST(arena_strdup) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     const char *original = "Hello, World!";
     char *copy = xr_arena_strdup(&arena, original);
@@ -125,8 +131,9 @@ TEST(arena_strdup) {
 }
 
 TEST(arena_strndup) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     const char *original = "Hello, World!";
     char *copy = xr_arena_strndup(&arena, original, 5);
@@ -138,8 +145,9 @@ TEST(arena_strndup) {
 }
 
 TEST(arena_strdup_empty) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     char *copy = xr_arena_strdup(&arena, "");
     ASSERT_NOT_NULL(copy);
@@ -151,8 +159,9 @@ TEST(arena_strdup_empty) {
 /* ========== Reset Operations ========== */
 
 TEST(arena_reset) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     // Allocate some memory
     for (int i = 0; i < 10; i++) {
@@ -175,8 +184,9 @@ TEST(arena_reset) {
 }
 
 TEST(arena_reset_reuse) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     // First phase
     char *s1 = xr_arena_strdup(&arena, "first");
@@ -194,8 +204,9 @@ TEST(arena_reset_reuse) {
 /* ========== Growth Tests ========== */
 
 TEST(arena_growth) {
-    XrArena arena;
-    xr_arena_init(&arena, 64);  // Small initial size
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 64, &backing), XR_ARENA_OK);  // Small initial size
 
     // Allocate more than initial capacity
     for (int i = 0; i < 100; i++) {
@@ -211,8 +222,9 @@ TEST(arena_growth) {
 }
 
 TEST(arena_large_allocation) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     // Allocate larger than segment size
     size_t large_size = XR_ARENA_SEGMENT_SIZE * 2;
@@ -228,8 +240,9 @@ TEST(arena_large_allocation) {
 }
 
 TEST(arena_rejects_oversized_allocation) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     size_t before = xr_arena_get_allocated_size(&arena);
     ASSERT_NULL(xr_arena_alloc(&arena, SIZE_MAX));
@@ -241,8 +254,9 @@ TEST(arena_rejects_oversized_allocation) {
 }
 
 TEST(arena_rejects_strndup_wrap) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     char ch = 'x';
     ASSERT_NULL(xr_arena_strndup(&arena, &ch, SIZE_MAX));
@@ -253,8 +267,9 @@ TEST(arena_rejects_strndup_wrap) {
 /* ========== Alignment Tests ========== */
 
 TEST(arena_alignment) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     // Allocate various sizes
     char *c = (char *) xr_arena_alloc(&arena, 1);
@@ -275,8 +290,9 @@ TEST(arena_alignment) {
 /* ========== Allocated Size Tracking ========== */
 
 TEST(arena_get_allocated_size) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     size_t size1 = xr_arena_get_allocated_size(&arena);
 
@@ -294,8 +310,9 @@ TEST(arena_get_allocated_size) {
 /* ========== Stress Tests ========== */
 
 TEST(arena_stress_many_small) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     // Many small allocations
     for (int i = 0; i < 10000; i++) {
@@ -308,8 +325,9 @@ TEST(arena_stress_many_small) {
 }
 
 TEST(arena_stress_mixed_sizes) {
-    XrArena arena;
-    xr_arena_init(&arena, 1024);
+    XrArena arena = {0};
+    const XrArenaBacking backing = xr_arena_system_backing();
+    ASSERT_EQ_INT(xr_arena_open(&arena, 1024, &backing), XR_ARENA_OK);
 
     // Mixed size allocations
     for (int i = 0; i < 1000; i++) {
