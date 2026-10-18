@@ -138,7 +138,7 @@ static void generation_terminal_rejection(void) {
     CHECK(native_fixture_owner_new(&source.compiler)==XR_XIR_OK);
     CHECK(native_metadata_fixture(&source.compiler.context,&source.spec,&source.proof)==XR_XIR_OK);
     source.spec.types=xr_xir_compile_artifact_module(source.proof)->types;
-    source.spec.proof=xr_xir_compile_program_proof(source.proof);
+    source.spec.packet=xir_program_packet_borrow(source.proof);
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(xr_xir_compile_artifact_context(source.proof),&source.spec,&program)==XR_XIR_OK);
     xr_xir_compile_artifact_free(source.proof);native_fixture_owner_free(&source.compiler);

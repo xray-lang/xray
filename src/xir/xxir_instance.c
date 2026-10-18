@@ -13,13 +13,16 @@
 
 
 #include "xxir_program_internal.h"
+#include "xxir_effects.h"
 #include "xxir_instance_value.h"
+#include "xxir_instance_binding.h"
 #include "xxir_instance_function_internal.h"
 #include "xxir_value_internal.h"
 #include "xxir_call_internal.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_class_origin_internal.h"
 #include "xxir_cell_provenance_internal.h"
+#include "xxir_effect_runtime_internal.h"
 #include "xxir_task_internal.h"
 #include "xxir_struct.h"
 #include "xxir_output.h"
@@ -81,7 +84,11 @@ struct XrXirInstance {
     XrXirTaskExecutor *replacement_executor;
     uint64_t generation_id, generation_counter, call_epoch;
     XrXirCallStatus last_outcome;
+    struct XirInstanceBindingTable *symbol_bindings;
+    bool bindings_published;
 };
+static void instance_bindings_free(XrXirInstance *instance);
+static bool instance_bindings_ready(const XrXirInstance *instance);
 static XrXirInstance *instance_root(XrXirInstance *instance) {
     return instance && instance->owner ? instance->owner : instance;
 }
@@ -155,8 +162,9 @@ static bool function_bound_admitted(const XrXirProgram *program, uint32_t entry,
     if (!signature || !permissions || entry >= program->entry_count ||
         permissions->function_count != program->entry_count ||
         permissions->slot_count != program->declarations->slot_count) return false;
-    const XrXirProgramPermission *permission = &permissions->entries[entry];
-    return xr_xir_callable_root_accepts(permission->requires_root, permission->unresolved, signature->flags) &&
+    XrXirEffectFacts facts = xr_xir_effects_read(permissions->effects, entry);
+    return facts.status == XR_XIR_OK &&
+        xr_xir_callable_root_accepts(facts.root.requires_root, facts.root.unresolved, signature->flags) &&
         (!(signature->flags & XR_XIR_CALLABLE_NO_SUSPEND) ||
          (program->declarations->functions[entry].promises & XR_XIR_FUNCTION_NO_SUSPEND));
 }
@@ -334,6 +342,7 @@ static void instance_dispose(XrXirInstance *instance) {
     xr_xir_value_drop(&instance->pending_function);
     XR_CHECK(xr_xir_task_executor_free(instance->executor, NULL) == XR_XIR_CALL_READY,
         "unpublished or already drained instance executor has no incomplete cleanup");
+    instance_bindings_free(instance);
     if (instance->entries) xr_xir_domain_metadata_deallocate(domain, instance->entries,
         ((uint64_t)program->entry_count + 1) * sizeof(*instance->entries));
     if (instance->slots) xr_xir_domain_metadata_deallocate(domain, instance->slots,
@@ -1250,11 +1259,12 @@ XrXirCallStatus xr_xir_instance_resolve_function(XrXirCallView *view, const XrXi
     if (status != XR_XIR_CALL_READY) return status;
     if (view_is_child(instance, view)) {
         const XrXirTypeNode *signature = xr_xir_callable_signature(instance->program->types, (XrXirType)function->type);
-        const XrXirProgramPermission *permission = &instance->program->permissions->entries[candidate];
+        XrXirEffectFacts facts = xr_xir_effects_read(instance->program->permissions->effects, candidate);
         /* A local ordinary call proves both bounds; worker eligibility and
          * address recovery cannot supply a missing execution permission. */
-        if ((signature->flags & XR_XIR_CALLABLE_ROOT_MASK) != XR_XIR_CALLABLE_ROOT_NONE ||
-            permission->requires_root || permission->unresolved) return XR_XIR_CALL_BAD_STATE;
+        if (!signature || facts.status != XR_XIR_OK ||
+            (signature->flags & XR_XIR_CALLABLE_ROOT_MASK) != XR_XIR_CALLABLE_ROOT_NONE ||
+            facts.root.requires_root || facts.root.unresolved) return XR_XIR_CALL_BAD_STATE;
     }
     *entry = candidate;
     return XR_XIR_CALL_READY;
@@ -1474,3 +1484,5 @@ XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAc
     *pc = handler_pc;
     return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}, 0};
 }
+
+#include "xxir_instance_binding.inc.c"

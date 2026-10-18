@@ -21,6 +21,7 @@
 #include "xxir_constraint_proof.h"
 #include "xxir_operand_roles.h"
 #include "xxir_cell_provenance_internal.h"
+#include "xxir_effect_runtime_internal.h"
 #include "../base/xmalloc.h"
 
 #include "xxir_effect_contract.inc.c"
@@ -865,6 +866,7 @@ XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
 
 static XrXirStatus effect_final_inventories_match(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *outcomes);
+#include "xxir_effect_runtime_entries.inc.c"
 #include "xxir_effect_outcomes.inc.c"
 #include "xxir_effect_control_verify.inc.c"
 #include "xxir_effect_role_check.inc.c"

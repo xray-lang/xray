@@ -13,6 +13,7 @@
 #ifndef XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H
 #define XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H
 
+#include "xir_program_final_roots.h"
 enum { PCE_INSTANCES = 2, PCE_MAX_FUNCTIONS = 16 };
 typedef enum PceMode { PCE_NORMAL, PCE_REQUIRED, PCE_UNKNOWN, PCE_MIXED,
     PCE_ADVERTISED_UNKNOWN } PceMode;
@@ -174,10 +175,10 @@ static void pce_check_facts(const PceFixture *f) {
         f->entries[PCE_UNKNOWN_TARGET], f->entries[PCE_MIXED_TARGET]};
     const bool expected[4][2] = {{false,false},{true,false},{false,true},{true,true}};
     for (unsigned i = 0; i < 4; ++i) {
-        CHECK(p->entries[targets[i]].requires_root == expected[i][0]);
-        CHECK(p->entries[targets[i]].unresolved == expected[i][1]);
+        CHECK(test_program_final_roots(f->program,targets[i]).requires_root == expected[i][0]);
+        CHECK(test_program_final_roots(f->program,targets[i]).unresolved == expected[i][1]);
     }
-    CHECK(p->entries[f->initializer].requires_root && !p->entries[f->initializer].unresolved);
+    CHECK(test_program_final_roots(f->program,f->initializer).requires_root && !test_program_final_roots(f->program,f->initializer).unresolved);
     CHECK(p->entries[f->entries[PCE_WORKER]].worker == XR_XIR_OK);
 }
 

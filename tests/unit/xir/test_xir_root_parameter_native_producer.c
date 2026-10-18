@@ -13,6 +13,7 @@
 #include "xir/xxir_checked.h"
 #include "xir/xxir_generic.h"
 #include "xir/xxir_effects.h"
+#include "xir/xxir_types.h"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_emit_c.h"
 #include "xir/xxir_output.h"
@@ -125,7 +126,11 @@ static void h1n_emit(const RootParameterSourceOracle *oracle, unsigned index, co
     CHECK(d->module_count == 1 && d->entry_function < lm->function_count && d->entry_function != run);
     CHECK(!lm->functions[d->entry_function].parameter_count && lm->functions[d->entry_function].result == XR_XIR_I64);
     CHECK(d->slot_count == (oracle->root ? 1u : 0u));
-    if (d->slot_count) CHECK(d->slots[0].module == d->root_module && d->slots[0].mutable && d->slots[0].type == XR_XIR_I64);
+    if (d->slot_count) {
+        const XrXirTypeNode *cell=xr_xir_type_node(lm->types,d->slots[0].type);
+        CHECK(d->slots[0].module == d->root_module && d->slots[0].mutable &&
+            cell && cell->kind == XR_XIR_TYPE_CELL && cell->element == XR_XIR_I64);
+    }
     char symbol[64];
     CHECK(snprintf(symbol, sizeof(symbol), "h1native_%u", index) > 0);
     CHECK(fprintf(header, "XR_DATA const XrXirProgramSpec %s_program;\n", symbol) > 0);

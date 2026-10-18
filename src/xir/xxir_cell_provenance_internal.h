@@ -161,7 +161,4 @@ XR_FUNC XrXirStatus xr_xir_compile_cell_class_origin_view(const XrXirCompileCont
  * then contributes UNKNOWN. Explicit owners cover the complete physical prefix. */
 XR_FUNC XrXirStatus xr_xir_compile_cell_access(const XrXirCompileContext *context,
     const XrXirCellProvenance *proof, const XrXirCellAccessRequest *request, uint32_t *output);
-/* Offsets and byte roles are caller-owned outputs, published only after success. */
-XR_FUNC XrXirStatus xr_xir_compile_cell_roles_verified(const XrXirCompileContext *context,
-    const XrXirModule *module, uint32_t *offsets, uint8_t *roles, XrXirDiagnostic *diagnostic);
 #endif // XXIR_CELL_PROVENANCE_INTERNAL_H

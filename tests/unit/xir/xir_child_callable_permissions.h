@@ -14,6 +14,7 @@
 #ifndef XIR_CHILD_CALLABLE_PERMISSIONS_H
 #define XIR_CHILD_CALLABLE_PERMISSIONS_H
 
+#include "xir_program_final_roots.h"
 enum { XRCP_INIT, XRCP_ENTRY, XRCP_ROOT, XRCP_CHILD, XRCP_PURE, XRCP_RELAY, XRCP_ROOT_LEAF,
     XRCP_UNKNOWN, XRCP_MIXED, XRCP_FACTORY, XRCP_FUNCTIONS, XRCP_INSTANCES = 2 };
 enum { XRCP_TASK = 256, XRCP_NONE, XRCP_REQUIRED, XRCP_UNRESOLVED, XRCP_BOTH, XRCP_CELL };
@@ -238,12 +239,12 @@ static void cp_build(CpFixture *f) {
         CHECK(module->declarations->functions[i].test_role==XR_XIR_TEST_ROLE_NONE&&
             !module->declarations->functions[i].test_timeout_seconds);
     CHECK(xr_xir_compile_program_seal(f->context, &spec, &f->program) == XR_XIR_OK);
-    CHECK(!f->program->permissions->entries[XRCP_PURE].requires_root && !f->program->permissions->entries[XRCP_PURE].unresolved);
-    CHECK(!f->program->permissions->entries[XRCP_RELAY].requires_root && !f->program->permissions->entries[XRCP_RELAY].unresolved);
+    CHECK(!test_program_final_roots(f->program,XRCP_PURE).requires_root && !test_program_final_roots(f->program,XRCP_PURE).unresolved);
+    CHECK(!test_program_final_roots(f->program,XRCP_RELAY).requires_root && !test_program_final_roots(f->program,XRCP_RELAY).unresolved);
     CHECK(f->program->permissions->entries[XRCP_RELAY].worker == XR_XIR_BAD_TYPE);
     CHECK(f->program->permissions->entries[XRCP_CHILD].worker == XR_XIR_OK);
-    CHECK(f->program->permissions->entries[XRCP_ROOT_LEAF].requires_root && !f->program->permissions->entries[XRCP_ROOT_LEAF].unresolved);
-    CHECK(!f->program->permissions->entries[XRCP_UNKNOWN].requires_root && f->program->permissions->entries[XRCP_UNKNOWN].unresolved);
-    CHECK(f->program->permissions->entries[XRCP_MIXED].requires_root && f->program->permissions->entries[XRCP_MIXED].unresolved);
+    CHECK(test_program_final_roots(f->program,XRCP_ROOT_LEAF).requires_root && !test_program_final_roots(f->program,XRCP_ROOT_LEAF).unresolved);
+    CHECK(!test_program_final_roots(f->program,XRCP_UNKNOWN).requires_root && test_program_final_roots(f->program,XRCP_UNKNOWN).unresolved);
+    CHECK(test_program_final_roots(f->program,XRCP_MIXED).requires_root && test_program_final_roots(f->program,XRCP_MIXED).unresolved);
 }
 #endif // XIR_CHILD_CALLABLE_PERMISSIONS_H

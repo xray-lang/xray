@@ -11,6 +11,7 @@
  */
 #ifndef XIR_ROOT_PARAMETER_VISIBILITY_RUNTIME_H
 #define XIR_ROOT_PARAMETER_VISIBILITY_RUNTIME_H
+#include "xir_program_final_roots.h"
 #include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_program_internal.h"
@@ -82,8 +83,8 @@ static void visibility_runtime_shape(const XrXirProgram *program) {
     for (uint32_t f = 1; f < program->entry_count; ++f) CHECK(!p->entries[f].reference_count);
     CHECK(!program->declarations->functions[visibility_runtime_target].exported);
     CHECK(program->declarations->functions[visibility_runtime_target].module == 1);
-    CHECK(!p->entries[visibility_runtime_target].requires_root && !p->entries[visibility_runtime_target].unresolved);
-    CHECK(p->entries[visibility_runtime_init].requires_root);
+    CHECK(!test_program_final_roots(program,visibility_runtime_target).requires_root && !test_program_final_roots(program,visibility_runtime_target).unresolved);
+    CHECK(test_program_final_roots(program,visibility_runtime_init).requires_root);
 }
 
 static void visibility_runtime_drive(XrXirProgram *program) {

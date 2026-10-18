@@ -18,6 +18,7 @@ static XrXirStatus invocation_seed_scalar_reference(const XrXirCompileContext *w
     XrXirRootEffects facts={0};XrXirRootEffectWitness witnesses[2]={{0},{0}};
     if (decls && decls->modules[decls->functions[0].module].initializer==0) facts.requires_root=true;
     EffectBodyRead read=effect_body_compile_read(work);
+    XirReadScratch memory={.resources=work->resources};
     for (uint32_t i=0;i<head->instruction_count;++i) {
         XrXirInstruction op;XrXirStatus status=effect_body_instruction_get(&read,head,i,&op);
         if (status!=XR_XIR_OK) return status;
@@ -27,7 +28,7 @@ static XrXirStatus invocation_seed_scalar_reference(const XrXirCompileContext *w
                 return XR_XIR_BAD_STRUCTURE;
         }
         const EffectRootSeedRecord request={&body->domain,&op,0,i,XR_XIR_UNIT};
-        status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work,NULL);
+        status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work,&memory);
         if (status!=XR_XIR_OK) return status;
         if (op.op==XR_XIR_CALL_REQUIREMENT) {facts.unresolved=false;witnesses[1]=(XrXirRootEffectWitness){0};}
     }

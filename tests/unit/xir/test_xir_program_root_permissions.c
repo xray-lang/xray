@@ -20,6 +20,7 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_callable_root_owner.h"
+#include "xir_program_final_roots.h"
 #include "xir_program_root_fixture.h"
 #include "xir/xxir_instance.c"
 
@@ -107,10 +108,17 @@ static void permission_runtime(void) {
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(&context, &spec, &program) == XR_XIR_OK && program);
     CHECK(program->permissions && program->permissions->function_count == 13 && program->permissions->slot_count == 1);
+    XrCompileResourceStats reads_before=bound_stats(&context);
     for (uint32_t f = 0; f < 13; ++f) {
-        CHECK(program->permissions->entries[f].requires_root == facts[f][0]);
-        CHECK(program->permissions->entries[f].unresolved == facts[f][1]);
+        CHECK(test_program_final_roots(program,f).requires_root == facts[f][0]);
+        CHECK(test_program_final_roots(program,f).unresolved == facts[f][1]);
     }
+    CHECK(xr_xir_effects_read(NULL,0).status==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_effects_read(program->permissions->effects,13).status==XR_XIR_BAD_STRUCTURE);
+    XrCompileResourceStats reads_after=bound_stats(&context);
+    CHECK(reads_before.allocation_count==reads_after.allocation_count &&
+        reads_before.allocated_bytes==reads_after.allocated_bytes && reads_before.live_bytes==reads_after.live_bytes &&
+        reads_before.peak_bytes==reads_after.peak_bytes && reads_before.work==reads_after.work);
     CHECK(program->permissions->entries[0].worker == XR_XIR_BAD_TYPE);
     CHECK(program->permissions->entries[3].worker == XR_XIR_OK);
     /* A pure body with a non-Sendable Fn parameter still fails worker admission. */
@@ -150,6 +158,13 @@ static void permission_runtime(void) {
     probe_mode = 2; permission_drive(a);
     probe_mode = 1; permission_drive(a);
     forged->entry = 3;
+    /* A retained carrier cannot authorize entry without its actual Final. */
+    XrXirEffects *retained_final=program->permissions->effects;
+    XrXirInstanceState saved_state=xr_xir_instance_state(a);
+    program->permissions->effects=NULL;
+    CHECK(xr_xir_instance_start_function(a,&pure,NULL,0)==XR_XIR_CALL_BAD_ARGUMENT);
+    CHECK(xr_xir_instance_state(a)==saved_state);
+    program->permissions->effects=retained_final;
     CHECK(xr_xir_instance_start_function(a, &pure, NULL, 0) == XR_XIR_CALL_READY);
     CHECK(xr_xir_instance_poll_bounded(a, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     XrXirValue result = {0};
