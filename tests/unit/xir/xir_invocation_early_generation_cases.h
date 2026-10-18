@@ -269,14 +269,35 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
     conditional_generation_full_heads=conditional_generation_dimension_heads=conditional_generation_signature_heads=0;
     conditional_generation_dimensions_refused=false;
     XrXirStatus producer_status=effect_invocation_discovery_verify(owner,&read);
-    fprintf(stderr,"generation real producer replay status%u full%u functions%u dimensions%u expected%u\n",
-        (unsigned)producer_status,conditional_generation_full_heads,read.domain.function_count,
-        conditional_generation_dimension_heads,dimensions);
-    /* All three literal fixtures have four declarations and seven real keys.
-     * Genuine site replay reads additional full heads and target dimensions. */
-    CHECK(read.domain.function_count==4 && owner->final.count==7 && dimensions==11);
-    CHECK(producer_status==XR_XIR_OK && conditional_generation_full_heads==47 &&
-        conditional_generation_dimension_heads==15);
+    /* Each literal has four declaration roots and three actual keys: the
+     * latent REF, direct apply and executing callback. The parameterless init
+     * and all actual keys use a foreign root. Only entry and both apply keys
+     * have callable rows; their scalar RETURNs still read a full head.
+     * The three atom-zero facts are REF, COPY and the apply callable formal.
+     * All are checked in the frame, independently, and at their replayed put;
+     * the REF seed additionally checks its site. Every site check reads one
+     * signature and one dimension head. The callable actual is read twice,
+     * once for its cause and once for its transfer. Origin replay reads each
+     * full body and foreign-root dimensions; edge inputs read every target,
+     * and nonlatent results read their target before the scalar early return.
+     * REF authentication, two closure passes and seed capture inspection each
+     * add a signature read, even with zero captures. */
+    enum { declarations=4,actual_keys=3,keys=declarations+actual_keys,
+        foreign_roots=1+actual_keys,callable_nodes=1+2,edges=1+2,executing_edges=2,
+        producer_facts=1+1+1,reference_seeds=1,replayed_puts=producer_facts,
+        actual_source_reads=1+1,reference_closure_passes=2 };
+    uint32_t site_reads=2*producer_facts+reference_seeds+replayed_puts;
+    uint32_t full_reads=keys+callable_nodes+edges+executing_edges+actual_source_reads;
+    uint32_t dimension_reads=keys+2*foreign_roots+site_reads+actual_source_reads;
+    uint32_t signature_reads=site_reads+reference_seeds+reference_closure_passes+reference_seeds;
+    fprintf(stderr,"generation real producer replay status%u full%u dimensions%u signatures%u\n",
+        (unsigned)producer_status,conditional_generation_full_heads,
+        conditional_generation_dimension_heads,conditional_generation_signature_heads);
+    CHECK(read.domain.function_count==declarations && owner->final.count==keys &&
+        dimensions==keys+foreign_roots);
+    CHECK(producer_status==XR_XIR_OK && conditional_generation_full_heads==full_reads &&
+        conditional_generation_dimension_heads==dimension_reads &&
+        conditional_generation_signature_heads==signature_reads);
     size_t attempts=rp_attempts;uint32_t count=owner->final.count;
     conditional_generation_dimensions_refused=true;
     CHECK(effect_invocation_discovery_verify(owner,&read)==XR_XIR_BAD_STRUCTURE &&
