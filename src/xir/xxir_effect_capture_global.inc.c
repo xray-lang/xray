@@ -27,6 +27,7 @@ typedef struct EffectCaptureNode {
 } EffectCaptureNode;
 typedef struct EffectCaptureSchedule EffectCaptureSchedule;
 typedef struct EffectCaptureActualRead EffectCaptureActualRead;
+typedef struct EffectCaptureCompleteTypes EffectCaptureCompleteTypes;
 typedef struct EffectCaptureRead {
     const XrXirCompileContext *work;
     const EffectInvocationFinal *final;
@@ -38,6 +39,7 @@ typedef struct EffectCaptureRead {
     uint64_t selected_mask;
     const EffectCaptureNode *node_view,*node_views,*edge_views;
     EffectCaptureActualRead *actuals;
+    EffectCaptureCompleteTypes *complete_types;
     const uint32_t *fact_nodes;
     uint64_t *support_bits;
     uint32_t support_first,support_count;
