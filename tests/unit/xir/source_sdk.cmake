@@ -60,4 +60,39 @@ if(WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_SANITIZERS AND NOT ENABLE_UBSAN
         --output "${CMAKE_CURRENT_BINARY_DIR}/source-sdk-owned" ${source_sdk_owned_secondary})
     set_tests_properties(source_sdk_owned_installed PROPERTIES
         TIMEOUT 300 RUN_SERIAL TRUE COST 30 LABELS "unit;api;source;sdk;install;ownership;values")
+
+    find_program(SOURCE_SDK_DUMPBIN NAMES dumpbin REQUIRED)
+    find_program(SOURCE_SDK_CLANG_CL NAMES clang-cl HINTS "C:/Program Files/LLVM/bin" REQUIRED)
+    get_filename_component(source_clang_bin "${SOURCE_SDK_CLANG_CL}" DIRECTORY)
+    file(GLOB source_asan_candidates "${source_clang_bin}/../lib/clang/*/lib/windows/clang_rt.asan_dynamic-x86_64.dll")
+    list(SORT source_asan_candidates COMPARE NATURAL ORDER DESCENDING)
+    list(LENGTH source_asan_candidates source_asan_count)
+    if(source_asan_count EQUAL 0)
+        message(FATAL_ERROR "The installed Source ASan client gate requires the actual Clang ASan runtime")
+    endif()
+    list(GET source_asan_candidates 0 source_asan_dll)
+    get_filename_component(source_asan_runtime "${source_asan_dll}" DIRECTORY)
+    add_custom_target(source-sdk-public-consumers DEPENDS source-sdk-bundle xir-runtime-sdk-bundle)
+    foreach(mode IN ITEMS normal asan)
+        set(source_client_args)
+        set(source_client_compiler "${CMAKE_C_COMPILER}")
+        if(mode STREQUAL "asan")
+            set(source_client_compiler "${SOURCE_SDK_CLANG_CL}")
+            list(APPEND source_client_args --asan-runtime "${source_asan_runtime}")
+        endif()
+        add_test(NAME source_sdk_public_${mode}_clients COMMAND ${XRAY_PYTHON} -X utf8 -B
+            "${CMAKE_CURRENT_LIST_DIR}/source_sdk_smoke.py" --build "${CMAKE_BINARY_DIR}"
+            --compiler "${source_client_compiler}" --dumpbin "${SOURCE_SDK_DUMPBIN}"
+            --output "${CMAKE_CURRENT_BINARY_DIR}/source-sdk-public-${mode}" ${source_client_args})
+        set_tests_properties(source_sdk_public_${mode}_clients PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE COST 10
+            LABELS "unit;api;source;sdk;install;ownership;public-client")
+    endforeach()
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        add_test(NAME cli_toolchain_probe_repaired COMMAND ${XRAY_PYTHON} -X utf8 -B
+            "${PROJECT_SOURCE_DIR}/tests/unit/cli/test_cli_toolchain_probe.py"
+            $<TARGET_FILE:xray> "${CMAKE_C_COMPILER}"
+            "${CMAKE_CURRENT_BINARY_DIR}/toolchain-probe-repaired")
+        set_tests_properties(cli_toolchain_probe_repaired PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE COST 10
+            LABELS "unit;cli;source;sdk;native;probe")
+    endif()
 endif()
