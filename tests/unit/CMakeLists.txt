@@ -2094,12 +2094,12 @@ set_tests_properties(test_native_structural_object_carrier_authority PROPERTIES
     LABELS "aot;generated-c;array;ownership;integration" TIMEOUT 240)
 add_test(NAME test_native_class_coalesce_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_class_coalesce.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
+        --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_class_coalesce_authority PROPERTIES
     LABELS "aot;generated-c;class;ownership;integration" TIMEOUT 240)
 add_test(NAME test_native_ref_array_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_ref_array.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
+        --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_ref_array_authority PROPERTIES
     LABELS "aot;generated-c;array;ownership;integration" TIMEOUT 240)
 add_test(NAME test_native_ref_slice_authority

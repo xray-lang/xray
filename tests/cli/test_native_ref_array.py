@@ -1,5 +1,5 @@
 """Verify Array reads after imported ref calls through strict C compilation."""
-from native_source_compile import compile_cases
+from source_product_compile import compile_cases
 
 if __name__ == "__main__":
     helper = "export fn change(dst: ref Array<u8>) { dst[0] = 9 as u8 }"
