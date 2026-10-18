@@ -85,7 +85,7 @@ static void access_compile_axes(const AccessCompileTrial *trial) {
     }
 }
 static void access_compiler_cases(const char *operation) {
-    for (unsigned i=0;i<5;++i) {
+    for (unsigned i=0;i<ACCESS_SOURCE_CASE_COUNT;++i) {
         AccessCompileTrial trial={.fixture=&access_source_cases[i]};
         access_compile_depth=0;trial.single=access_compile_operation(&trial,NULL,false);
         CHECK(trial.single.complete && trial.single.sites && !trial.single.hits);access_compile_census(&trial);

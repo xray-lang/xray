@@ -1,0 +1,20 @@
+enum WrappedChoice { Full { box:WrappedBox }, Empty }
+class WrappedBox {
+    value:i64
+    init() { this.value=11 }
+}
+fn inspect()->i64 {
+    const box:WrappedBox=WrappedBox()
+    const pair:(WrappedBox,i64)=(box,13)
+    const optional:WrappedBox?=box
+    const choice:WrappedChoice=WrappedChoice.Full{box:box}
+    var mutablePair:(WrappedBox,i64)=pair
+    var mutableOptional:WrappedBox?=optional
+    var mutableChoice:WrappedChoice=choice
+    const none:WrappedBox?=null
+    const empty:WrappedChoice=WrappedChoice.Empty
+    const before:i64=box.value
+    const incoming:i64=99
+    return box.value+before+pair.1
+}
+print(inspect())

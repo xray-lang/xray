@@ -234,7 +234,7 @@ static void constraint_proof_shared_type_walk(void) {
     for (uint32_t i = 0; i < DEPTH; ++i) {
         XrXirType child = i ? member_case_type(i-1) : (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
         parameters[i][0] = parameters[i][1] = (XrXirCallableParameter){child,0};
-        nodes[i].kind = XR_XIR_TYPE_CALLABLE; nodes[i].parameter_span = 1;
+        nodes[i].kind = XR_XIR_TYPE_CALLABLE; nodes[i].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[i].parameter_span = 1;
         nodes[i].parameters = parameters[i]; nodes[i].parameter_count = 2; nodes[i].result = child;
     }
     XrXirTypes types = {nodes,DEPTH,NULL,NULL}; XrXirConstraint empty = {0};
@@ -253,7 +253,7 @@ static void constraint_proof_shared_type_walk(void) {
 }
 static void constraint_proof_interface_identity_work(void) {
     enum { COUNT = 16 };
-    XrXirTypeNode signature = {0}; signature.kind = XR_XIR_TYPE_CALLABLE; signature.result = XR_XIR_I64;
+    XrXirTypeNode signature = {0}; signature.kind = XR_XIR_TYPE_CALLABLE; signature.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; signature.result = XR_XIR_I64;
     XrXirInterfaceMethod method = {{"measure",7},member_case_type(0),0,0,NULL};
     XrXirInterfaceDeclaration declaration = {{"m",1},{"Measure",7},1,NULL,0,NULL,0,&method,1};
     XrXirInterfaceTable interfaces = {&declaration,1};

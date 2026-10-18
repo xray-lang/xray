@@ -1,0 +1,7 @@
+import { writeStdout, writeStderr } from "std/io/output"
+import time
+print(writeStdout("前 out\0α"))
+print(writeStderr("前 err\0α"))
+time.sleep(1500)
+print(writeStdout("后 out\0β"))
+print(writeStderr("后 err\0β"))

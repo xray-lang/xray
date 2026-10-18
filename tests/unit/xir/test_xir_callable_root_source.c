@@ -57,6 +57,8 @@ static void root_source_facts(XrXirArtifact *artifact, bool flows) {
         const XrXirRootEffects *actual=(actual_read.status==XR_XIR_OK?&actual_read.root:NULL);
         CHECK(actual && !actual->requires_root && !actual->unresolved);
         CHECK(xr_xir_effects_go_safe(effects,f) == XR_XIR_OK);
+        CHECK(xr_xir_effects_task_errors(effects,f) == XR_XIR_OK);
+        CHECK(!xr_xir_effects_error_unknown(effects,f) && !xr_xir_effects_error_unidentified(effects,f));
     }
     xr_xir_compile_effects_free(effects);
 }
@@ -191,7 +193,8 @@ int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1],"--compiler")) {
         root_source_resource_cases();
     } else if (argc == 1) {
-        const char *accepted[] = {"flows.xr","worker.xr","worker_tuple.xr","worker_array.xr"};
+        const char *accepted[] = {"flows.xr","worker.xr","worker_tuple.xr","worker_array.xr",
+            "worker_uncaught.xr","worker_error_known.xr"};
         for (size_t i = 0; i < sizeof(accepted) / sizeof(*accepted); ++i) {
             LibraryCompileOwner owner = {0}; CHECK(library_compile_owner_new(&owner,&library_compile_limits) == XR_XIR_OK);
             RootSourceOperation fixture = {accepted[i],true};
@@ -201,7 +204,7 @@ int main(int argc, char **argv) {
         root_source_reject("worker_root.xr",XR_XIR_BAD_TYPE,"requires the current instance root execution");
         root_source_reject("worker_fixed.xr",XR_XIR_BAD_TYPE,"lacks proof for worker execution");
         root_source_reject("worker_nullable_fixed.xr",XR_XIR_BAD_TYPE,"lacks proof for worker execution");
-        root_source_reject("worker_uncaught.xr",XR_XIR_BAD_TYPE,NULL);
+        root_source_reject("worker_error_unknown.xr",XR_XIR_BAD_TYPE,NULL);
         root_source_reject("bad_generic.xr",XR_XIR_BAD_TYPE,NULL);
         root_source_reject("bad_visibility.xr",XR_XIR_BAD_STRUCTURE,"requires an exported declaration");
     } else return 2;

@@ -1,0 +1,7 @@
+fn record(value: i64) -> i64 {
+    return value
+}
+print(record(11))
+print(record(22))
+print(record(33))
+print(record(44))

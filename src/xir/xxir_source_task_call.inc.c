@@ -110,7 +110,7 @@ static bool source_task_await(SourceContext *ctx, AstNode *node, SourceExpectedT
     if (!source_recipe_append(ctx, (XrXirInstruction) {XR_XIR_INVOKE_ERROR, XR_XIR_ERROR, {0}, {0}, origin, {0}}, &caught))
         return false;
     if (body->error_context) {
-        if (!source_error_edge(ctx, caught)) return false;
+        if (!source_error_edge(ctx, caught) || !source_handler_site(ctx,origin,caught.id)) return false;
     } else if (!source_recipe_append(ctx, (XrXirInstruction) {XR_XIR_THROW, XR_XIR_UNIT, {caught.id, 0}, {0}, 0, {0}}, NULL))
         return false;
     if (!begin_block(ctx)) return false;

@@ -1,0 +1,11 @@
+struct MemberRecord { number:i64; const flag:bool }
+class MemberLeaf { number:i64; init() {this.number=23} }
+class MemberBox { number:i64; label:string; numbers:Array<i64>; leaf:MemberLeaf; maybe:i64?; private secret:i64; protected seal:i64
+ init() {this.number=11;this.label="s\0x";this.numbers=[11,12];this.leaf=MemberLeaf();this.maybe=null;this.secret=17;this.seal=19}
+ contains(value:string)->bool {this.number=999;print("BAD");return true}
+ static inspect(box:MemberBox,record:MemberRecord)->i64 {return probe(box,record,5)} }
+fn probe(box:MemberBox,record:MemberRecord,_dap_member_0:i64)->i64 {
+ return box.number+record.number+_dap_member_0
+}
+fn run() {const box:MemberBox=MemberBox();const record:MemberRecord=MemberRecord{number:13,flag:true};print(MemberBox.inspect(box,record));print(box.leaf.number+record.number);print((box.leaf).number*2);print(box.label.contains("\0"));print(len(box.label));print(false && box.numbers[99]==0);print(box.maybe ?? 99)}
+run()

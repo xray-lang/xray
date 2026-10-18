@@ -16,6 +16,7 @@
 #include "../xir/xxir_types.h"
 #include "../base/xsha256.h"
 #include "../xir/xxir_compile_memory.h"
+#include "../xir/xxir_internal.h"
 #include <string.h>
 
 struct XrXirSourceProduct {
@@ -25,6 +26,7 @@ struct XrXirSourceProduct {
     XrXirCheckedPacket source_packet, closed_packet;
     XrXirSourceProductFacts facts;
     XrXirSourceTests tests;
+    XrXirSourceDebugView debug;
 };
 static XrXirStatus source_product_tests(XrXirSourceProduct *product, const XrXirModule *module) {
     const XrXirCompileContext *context = &product->context;
@@ -148,6 +150,7 @@ static XrXirStatus source_product_compare(const XrXirCompileContext *context,
     }
     return XR_XIR_OK;
 }
+#include "xr_xir_source_debug.inc.c"
 static XrXirStatus source_product_build(const XrXirSourceProductRequest *request,
     const XrXirSourceText *text, bool has_text, const XrXirSourceAst *syntax,
     XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic) {
@@ -213,6 +216,7 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
         if (status==XR_XIR_OK)
             status=source_product_layout_digest(lowered,&product->facts,product->facts.lowered_layout_digest);
         if (status==XR_XIR_OK) status=source_product_tests(product,module);
+        if (status==XR_XIR_OK) status=source_product_debug(product,source.snapshot,&source_packet,module);
     }
     if (status==XR_XIR_OK) {
         product->lowered=lowered;product->snapshot=source.snapshot;
@@ -220,6 +224,7 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
         *output=product;source.snapshot=NULL;source_packet=(XrXirCheckedPacket){0};closed_packet=(XrXirCheckedPacket){0};
     } else {
         if (product) xr_compile_resources_free((void *)product->tests.entries);
+        if (product) xr_compile_resources_free((void *)product->debug.functions);
         xr_compile_resources_free(product);
         xr_xir_compile_artifact_free(lowered);
         if (diagnostic) {diagnostic->snapshot=source.snapshot;source.snapshot=NULL;}
@@ -247,6 +252,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_build_ast(const XrXirSourcePro
 XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product) {
     if (!product) return;
     xr_compile_resources_free((void *)product->tests.entries);
+    xr_compile_resources_free((void *)product->debug.functions);
     xr_xir_compile_artifact_free(product->lowered);xr_xir_compile_source_snapshot_free(product->snapshot);
     xr_xir_compile_checked_packet_free(&product->source_packet);xr_xir_compile_checked_packet_free(&product->closed_packet);
     xr_compile_resources_free(product);
@@ -390,6 +396,15 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_emit(const XrXirSourceProduct 
         return XR_XIR_BAD_STRUCTURE;
     if (!product->lowered) return XR_XIR_BAD_STAGE;
     return xr_xir_compile_emit_c(product->lowered,prefix,byte_limit,output);
+}
+XR_FUNC XrXirCtfeStatus xr_xir_compile_source_product_scalar(const XrXirSourceProduct *product,uint32_t function,
+    const XrXirValue *arguments,uint32_t count,XrXirCtfeLimits limits,XrXirValue *output) {
+    if (!product || !product->lowered) return XR_XIR_CTFE_BAD_ARGUMENT;
+    if (!xir_compile_work(&product->context,sizeof(XrXirCtfeRequest))) return XR_XIR_CTFE_BUDGET;
+    XrXirCtfeRequest request={.artifact=product->lowered,.function=function,.target=product->facts.target,
+        .arguments=arguments,.argument_count=count,.limits=limits};
+    memcpy(request.checked_identity,product->facts.closed_digest,sizeof(request.checked_identity));
+    return xr_xir_compile_ctfe_leaf(&request,output);
 }
 
 XR_FUNC const XrXirSourceDependencies *xr_xir_compile_source_product_dependencies(

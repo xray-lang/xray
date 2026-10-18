@@ -90,8 +90,7 @@ static void requirement_value_poison(XrXirArtifact *artifact) {
     witness_reject_derived(artifact); application[1]=own;
     CHECK(xr_xir_compile_artifact_verify(artifact, NULL)==XR_XIR_OK);
 }
-static void source_requirement_value_provenance(XrXirSourceRequest *request) {
-    write_source(request->entry_path,
+static const char requirement_value_origin_source[]=
         "interface Evidence<A>{}\n"
         "interface I<A>{map<U:Sendable>(seed:A,value:U)->U;other<V:Sendable>(seed:A,value:V)->V}\n"
         "struct Token implements Evidence<i64>{}\n"
@@ -100,7 +99,32 @@ static void source_requirement_value_provenance(XrXirSourceRequest *request) {
         "fn bind<A,T:I<A>,K:Evidence<A>,U:Sendable>(receiver:T,key:K)->fn(A,U)->U{return receiver.map<U>}\n"
         "fn bindOther<A,T:I<A>,K:Evidence<A>,U:Sendable>(receiver:T,key:K)->fn(A,U)->U{return receiver.other<U>}\n"
         "export fn number()->i64{const f=bind<i64,Adapter<string,i64>,Token,i64>(Adapter<string,i64>{},Token{});return f(0,41)}\n"
-        "export fn otherNumber()->i64{const f=bindOther<i64,Adapter<string,i64>,OtherToken,i64>(Adapter<string,i64>{},OtherToken{});return f(0,41)}\n");
+        "export fn otherNumber()->i64{const f=bindOther<i64,Adapter<string,i64>,OtherToken,i64>(Adapter<string,i64>{},OtherToken{});return f(0,41)}\n";
+static void source_requirement_value_alternates(const XrXirSourceRequest *request) {
+    const char *call=strstr(requirement_value_origin_source,"receiver.map<U>");CHECK(call);
+    const char *alternates[]={"receiver.other<U>","receiver.map<A>"};
+    for (uint32_t mode=0;mode<2;++mode) {
+        char text[4096];int length=snprintf(text,sizeof(text),"%.*s%s%s",
+            (int)(call-requirement_value_origin_source),requirement_value_origin_source,
+            alternates[mode],call+strlen("receiver.map<U>"));
+        CHECK(length>0 && (size_t)length<sizeof(text));write_source(request->entry_path,text);
+        XrXirCompileContext context=stage_context_default();XrCompilerSession *session=NULL;
+        CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
+        XrXirSourceRequest input=*request;input.context=&context;input.session=session;
+        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
+        CHECK(xr_xir_compile_source_check(&input,&result,&diagnostic,NULL)==(mode?XR_XIR_BAD_TYPE:XR_XIR_OK));
+        if (mode) CHECK(!result.checked && !result.snapshot && diagnostic.status==XR_XIR_BAD_TYPE);
+        else {
+            CHECK(result.checked && result.snapshot && xr_xir_compile_artifact_verify(result.checked,NULL)==XR_XIR_OK);
+            XrXirArtifact *closed=NULL;CHECK(xr_xir_compile_specialize(result.checked,&closed,NULL)==XR_XIR_OK);
+            CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+        }
+        xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
+        CHECK(stage_stats(&context).live_bytes==stage_owner_baseline.live_bytes);
+    }
+}
+static void source_requirement_value_provenance(XrXirSourceRequest *request) {
+    write_source(request->entry_path,requirement_value_origin_source);
     XrXirSourceResult result={0}; XrXirSourceDiagnostic diagnostic={0};
     CHECK(xr_xir_compile_source_check(request, &result, &diagnostic, NULL)==XR_XIR_OK && result.checked);
     XrXirArtifact *closed=NULL,*copy=NULL,*lowered=NULL;
@@ -114,5 +138,6 @@ static void source_requirement_value_provenance(XrXirSourceRequest *request) {
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(copy, &target, &lowered, NULL)==XR_XIR_OK); xr_xir_compile_artifact_free(copy);
     requirement_value_poison(lowered); xr_xir_compile_artifact_free(lowered);
+    source_requirement_value_alternates(request);
 }
 #endif // XIR_SOURCE_REQUIREMENT_VALUE_PROVENANCE_H

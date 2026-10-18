@@ -1173,8 +1173,20 @@ bool xr_lbrace_starts_destructure_assignment(Parser *parser) {
     return false;
 }
 
-// Parse statement
+static AstNode *parse_statement_body(Parser *parser);
+/* The statement owns its consumed keyword/token boundary. Return and loop
+ * constructors do not otherwise retain the keyword column. */
 AstNode *xr_parse_statement(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
+    int line=parser->current.line,column=parser->current.column;
+    AstNode *node=parse_statement_body(parser);
+    if (node) {
+        if (!ast_work(parser->compiler_session,sizeof(node->line)+sizeof(node->column))) return NULL;
+        node->line=line;node->column=column;
+    }
+    return node;
+}
+static AstNode *parse_statement_body(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     if (parser->current.type == TK_NAME) {
         Parser checkpoint;

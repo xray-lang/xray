@@ -7,7 +7,7 @@
  *
  * test_dap_breakpoints.c - Unit tests for DAP breakpoint data structures
  *
- * Tests breakpoint/watch data structure operations without full runtime.
+ * Tests breakpoint and debug-state data structure operations without full runtime.
  */
 
 #include <stdio.h>
@@ -50,7 +50,6 @@ static XrDebugState *create_debug_state(void) {
     XrDebugState *state = (XrDebugState *) calloc(1, sizeof(XrDebugState));
     if (state) {
         state->next_bp_id = 1;
-        state->next_watch_id = 1;
         state->next_var_ref_id = 1000;
     }
     return state;
@@ -70,15 +69,6 @@ static void free_debug_state(XrDebugState *state) {
         free(bp->hit_condition);
         free(bp);
         bp = next;
-    }
-
-    // Free watches
-    struct XrWatch *w = state->watches;
-    while (w) {
-        struct XrWatch *next = w->next;
-        free(w->expression);
-        free(w);
-        w = next;
     }
 
     free(state);
@@ -116,30 +106,6 @@ static struct XrBreakpoint *find_breakpoint(XrDebugState *state, const char *pat
         }
     }
     return NULL;
-}
-
-// Helper to add watch
-static int add_watch(XrDebugState *state, const char *expression) {
-    struct XrWatch *w = (struct XrWatch *) calloc(1, sizeof(struct XrWatch));
-    if (!w)
-        return -1;
-
-    w->id = state->next_watch_id++;
-    w->expression = strdup(expression);
-
-    w->next = state->watches;
-    state->watches = w;
-
-    return w->id;
-}
-
-// Helper to count watches
-static int count_watches(XrDebugState *state) {
-    int count = 0;
-    for (struct XrWatch *w = state->watches; w; w = w->next) {
-        count++;
-    }
-    return count;
 }
 
 // ============================================================================
@@ -254,47 +220,6 @@ TEST(breakpoint_not_found) {
 }
 
 // ============================================================================
-// Watch Tests
-// ============================================================================
-
-TEST(watch_add) {
-    XrDebugState *state = create_debug_state();
-    ASSERT(state != NULL);
-
-    int id = add_watch(state, "x + y");
-    ASSERT(id > 0);
-    ASSERT_EQ(count_watches(state), 1);
-
-    free_debug_state(state);
-}
-
-TEST(watch_add_multiple) {
-    XrDebugState *state = create_debug_state();
-    ASSERT(state != NULL);
-
-    int id1 = add_watch(state, "x");
-    int id2 = add_watch(state, "y");
-    int id3 = add_watch(state, "x + y");
-
-    ASSERT(id1 > 0 && id2 > 0 && id3 > 0);
-    ASSERT_EQ(count_watches(state), 3);
-
-    free_debug_state(state);
-}
-
-TEST(watch_expression_stored) {
-    XrDebugState *state = create_debug_state();
-    ASSERT(state != NULL);
-
-    add_watch(state, "myVariable");
-
-    ASSERT(state->watches != NULL);
-    ASSERT_STR_EQ(state->watches->expression, "myVariable");
-
-    free_debug_state(state);
-}
-
-// ============================================================================
 // Debug State Tests
 // ============================================================================
 
@@ -304,9 +229,7 @@ TEST(debug_state_initial) {
 
     ASSERT(state->enabled == false);
     ASSERT(state->breakpoints == NULL);
-    ASSERT(state->watches == NULL);
     ASSERT_EQ(state->next_bp_id, 1);
-    ASSERT_EQ(state->next_watch_id, 1);
 
     free_debug_state(state);
 }
@@ -370,11 +293,6 @@ int main(int argc, char **argv) {
     RUN_TEST(breakpoint_hit_condition);
     RUN_TEST(breakpoint_combined);
     RUN_TEST(breakpoint_not_found);
-
-    printf("\nWatch tests:\n");
-    RUN_TEST(watch_add);
-    RUN_TEST(watch_add_multiple);
-    RUN_TEST(watch_expression_stored);
 
     printf("\nDebug state tests:\n");
     RUN_TEST(debug_state_initial);

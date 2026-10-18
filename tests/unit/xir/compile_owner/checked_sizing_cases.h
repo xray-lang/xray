@@ -76,9 +76,11 @@ static const uint8_t sizing_empty_golden[220] = {
 #include "checked_sizing71_golden.h"
 #include "checked_sizing72_golden.h"
 #include "checked_sizing75_golden.h"
+#include "checked_sizing73_golden.h"
+#include "checked_sizing74_golden.h"
 static void sizing_historical_rejections(void) {
-    const uint8_t *const vectors[] = {sizing_golden,sizing_embedded_golden,sizing_empty_golden,sizing64_golden,sizing64_embedded_golden,sizing64_empty_golden,sizing65_golden,sizing65_embedded_golden,sizing65_empty_golden,sizing71_golden,sizing71_embedded_golden,sizing71_empty_golden,sizing72_golden,sizing72_embedded_golden,sizing72_empty_golden};
-    const size_t lengths[] = {sizeof(sizing_golden),sizeof(sizing_embedded_golden),sizeof(sizing_empty_golden),sizeof(sizing64_golden),sizeof(sizing64_embedded_golden),sizeof(sizing64_empty_golden),sizeof(sizing65_golden),sizeof(sizing65_embedded_golden),sizeof(sizing65_empty_golden),sizeof(sizing71_golden),sizeof(sizing71_embedded_golden),sizeof(sizing71_empty_golden),sizeof(sizing72_golden),sizeof(sizing72_embedded_golden),sizeof(sizing72_empty_golden)};
+    const uint8_t *const vectors[] = {sizing_golden,sizing_embedded_golden,sizing_empty_golden,sizing64_golden,sizing64_embedded_golden,sizing64_empty_golden,sizing65_golden,sizing65_embedded_golden,sizing65_empty_golden,sizing71_golden,sizing71_embedded_golden,sizing71_empty_golden,sizing72_golden,sizing72_embedded_golden,sizing72_empty_golden,sizing73_golden,sizing73_embedded_golden,sizing73_empty_golden};
+    const size_t lengths[] = {sizeof(sizing_golden),sizeof(sizing_embedded_golden),sizeof(sizing_empty_golden),sizeof(sizing64_golden),sizeof(sizing64_embedded_golden),sizeof(sizing64_empty_golden),sizeof(sizing65_golden),sizeof(sizing65_embedded_golden),sizeof(sizing65_empty_golden),sizeof(sizing71_golden),sizeof(sizing71_embedded_golden),sizeof(sizing71_empty_golden),sizeof(sizing72_golden),sizeof(sizing72_embedded_golden),sizeof(sizing72_empty_golden),sizeof(sizing73_golden),sizeof(sizing73_embedded_golden),sizeof(sizing73_empty_golden)};
     for (unsigned i = 0; i < sizeof(vectors)/sizeof(vectors[0]); ++i) for (unsigned occupied = 0; occupied < 2; ++occupied) {
         reset(SIZE_MAX); XrCompileResources *owner = NULL;
         CHECK(xr_compile_resources_new(&sizing_caps,&owner) == XR_COMPILE_RESOURCE_OK);

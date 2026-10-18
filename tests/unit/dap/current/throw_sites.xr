@@ -1,0 +1,33 @@
+enum SiteFailure{Bad}
+var stage:i64=0
+fn local()->i64{
+    try{
+        stage=1
+        throw SiteFailure.Bad // THROW_SITE: local
+    }catch(error:SiteFailure){
+        print(stage)
+        return 7
+    }
+}
+fn nested()->i64{
+    try{
+        try{
+            throw SiteFailure.Bad // THROW_SITE: inner
+        }catch(error:SiteFailure){
+            stage=2
+            throw error // THROW_SITE: rethrow
+        }
+    }catch(error:SiteFailure){
+        print(stage)
+        return 11
+    }
+}
+fn generic<T>(value:T)->T{
+    try{
+        throw SiteFailure.Bad // THROW_SITE: generic
+    }catch(error:SiteFailure){return value}
+}
+print(local())
+print(nested())
+print(generic<i64>(13))
+print(generic<string>("x"))

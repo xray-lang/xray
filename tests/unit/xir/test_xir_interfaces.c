@@ -63,7 +63,7 @@ typedef struct Fixture {
 static void fixture(Fixture *f) {
     memset(f, 0, sizeof(*f)); memcpy(f->name, "Measure", 8); memcpy(f->method, "get", 4);
     f->parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE; f->concrete = XR_XIR_I64;
-    f->signature.kind = XR_XIR_TYPE_CALLABLE; f->signature.result = f->parameter; f->signature.parameter_span = 1;
+    f->signature.kind = XR_XIR_TYPE_CALLABLE; f->signature.flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; f->signature.result = f->parameter; f->signature.parameter_span = 1;
     f->types = (XrXirTypes){&f->signature, 1, NULL, NULL};
     f->member = (XrXirInterfaceMethod){{f->method, 3}, (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE, 0,0,NULL};
     f->parents[0] = (XrXirInterfaceApplication){0, &f->parameter, 1};

@@ -136,6 +136,9 @@ static AstNode *parse_body(Parser *parser, bool expression, bool trivia) {
         AstNode *value = xr_parse_expression(parser);
         if (!xr_parser_healthy(parser)) return NULL;
         if (!value) { parser->had_error = 1; return NULL; }
+        if (!xr_parser_check(parser,TK_EOF)) {
+            xr_parser_error_at_current(parser,"unexpected trailing input after expression");return NULL;
+        }
         xr_ast_program_add(parser->compiler_session, program, value);
         return xr_parser_healthy(parser) ? program : NULL;
     }
@@ -192,7 +195,9 @@ static XrParseStatus parse_owned(XrCompilerSession *session, const char *source,
     XrArena *arena = memory;
     XrArenaBacking backing;
     (void) xr_compiler_arena_state_backing(state, &backing);
-    (void) xr_arena_open(arena, XR_ARENA_SEGMENT_SIZE, &backing);
+    /* Independent small modules retain their first segment for the AST's
+     * lifetime. Subsequent segments still use the common growth policy. */
+    (void) xr_arena_open(arena, 32 * 1024, &backing);
     if (xr_compiler_arena_capture_status(arena, state) != XR_COMPILE_RESOURCE_OK) {
         status = parse_resource_status(state);
         goto failure;

@@ -1,0 +1,6 @@
+import "./global_runtime_library" as lib
+const shared:i64=73
+var changing:i64=11
+fn child()->i64 { return lib.leaf(5) }
+const job=go child()
+print(await job)

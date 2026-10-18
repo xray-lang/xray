@@ -18,6 +18,7 @@
 #include "xxir_internal.h"
 #include "xxir_program.h"
 #include "xxir_program_packet_internal.h"
+#include "xxir_call_native_source_internal.h"
 #include "xxir_atomic.h"
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
@@ -386,7 +387,8 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
                                const XrXirFunction *function, const XrXirInstruction *op,
                                const XrXirFunctionLayout *layout, uint32_t destination) {
     append(buffer, " { XrXirCallStatus status = XR_XIR_CALL_READY; XrXirFaultDetail fault={0};\n");
-    if (op->op != XR_XIR_CELL_WRITE && op->op != XR_XIR_SLOT_GROUP_INIT) EMIT_STATIC(buffer, es_2543e90d643759e3, " XrXirValue value = {0};\n");
+    if (op->op != XR_XIR_CELL_WRITE && op->op != XR_XIR_SLOT_GROUP_INIT &&
+        op->op != XR_XIR_CELL_STRING_APPEND) EMIT_STATIC(buffer, es_2543e90d643759e3, " XrXirValue value = {0};\n");
     switch (op->op) {
     case XR_XIR_CELL_LOCAL_WRITE: {
         uint32_t offset=layout->offsets[op->args[0]];
@@ -401,6 +403,12 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
             " if (status == XR_XIR_CALL_READY) xr_xir_owned_slot_move(state->frame,%uu,&value); }\n",
             (uint32_t)(op-function->instructions),(uint32_t)type,offset);break;
     }
+    case XR_XIR_CELL_STRING_APPEND:
+        append(buffer," XrXirValue cell = "); emit_value(buffer,function,layout,op->args[0]);
+        append(buffer,";\n XrXirValue suffix = "); emit_value(buffer,function,layout,op->args[1]);
+        append(buffer,op->immediate ? ";\n status = xr_xir_instance_cell_string_append_scalar(view,&cell,&suffix);\n" :
+            ";\n status = xr_xir_instance_cell_string_append(view,&cell,&suffix);\n");
+        break;
     case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: {
         XrXirType cell=op->op==XR_XIR_CELL_NEW?op->type:xr_xir_operand_type(function,op->args[0]);
         uint32_t count=xr_xir_cell_payload_operands(module->types,cell,op->op);
@@ -514,6 +522,9 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
             " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
             "{XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};\n",
             (uint32_t)(op-function->instructions),op->args[1]?"state->arguments":"NULL",op->args[1]);
+    append(buffer," XrXirCallStatus observed = xir_call_native_source_call(view,%uu,callee,%s);\n"
+        " if (observed != XR_XIR_CALL_READY) return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,observed}};\n",
+        (uint32_t)(op-function->instructions),(op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT) ? "true" : "false");
     append(buffer, " return (XrXirAction) {XR_XIR_ACTION_CALL, callee, %s, %uu, target, {0}, %s}; }\n",
         op->args[1] ? "state->arguments" : "NULL", op->args[1], protected_call ? "XR_XIR_ACTION_PROTECTED" : "0u");
 }
@@ -873,7 +884,14 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                             uint32_t index) {
     const XrXirInstruction *op = &function->instructions[index];
     uint32_t destination = layout->offsets[function->parameter_count + index];
-    append(buffer, "    case %uu:\n state->pc = %uu;\n", index, index + 1);
+    append(buffer, "    case %uu:\n", index);
+    if (op->op==XR_XIR_JUMP || op->op==XR_XIR_THROW || op->op==XR_XIR_CLEANUP_ERROR) {
+        append(buffer," { bool stopped = false;\n"
+            " XrXirCallStatus observed = xir_call_native_source_before(view,%uu,state->frame,%uu,&stopped);\n"
+            " if (observed != XR_XIR_CALL_READY) return (XrXirAction){.kind=XR_XIR_ACTION_FAULT,.value={XR_XIR_I64,0,observed}};\n"
+            " if (stopped) return (XrXirAction){.kind=XR_XIR_ACTION_CONTINUE}; }\n",index,layout->frame_bytes);
+    }
+    append(buffer," state->pc = %uu;\n",index+1);
     if (op->op == XR_XIR_STRING_INDEX_OF || op->op == XR_XIR_STRING_LAST_INDEX_OF ||
         (op->op >= XR_XIR_STRING_CONTAINS && op->op <= XR_XIR_STRING_ENDS_WITH) ||
         op->op == XR_XIR_STRING_LEN || op->op == XR_XIR_EQ_STRING || op->op == XR_XIR_NE_STRING ||
@@ -911,7 +929,8 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     }
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_SLOT_GROUP_INIT || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
         op->op == XR_XIR_TO_STRING ||
-        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE) {
+        (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
+        op->op == XR_XIR_CELL_STRING_APPEND) {
         emit_instance_step(buffer, module, function, op, layout, destination);
         return;
     }
@@ -1572,6 +1591,12 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
     if (module->types) append(buffer, "&%s_types", prefix); else EMIT_LITERAL(buffer, "NULL");
     append(buffer, ", {%s_checked, sizeof(%s_checked), %s_identity}};\n",
         prefix, prefix, prefix);
+    append(buffer,"static const uint32_t %s_native_source_offsets[] = {\n",prefix);
+    for(uint32_t f=0;f<module->function_count && emit_work(buffer,1);++f)
+        append(buffer,"    (uint32_t)offsetof(%s_state_%u,frame),\n",prefix,f);
+    append(buffer,"};\nXR_DATADEF const XirCallNativeSourceCode %s_native_source = {\n"
+        "    %uu,%uu,%s_entries,%s_native_source_offsets};\n",
+        prefix,XIR_CALL_NATIVE_SOURCE_VERSION,module->function_count,prefix,prefix);
 }
 
 /* Sizing and writing traverse the same immutable Lowered artifact. */
@@ -1579,6 +1604,8 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     const char *symbol_prefix) {
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
     emit_checked_identity(buffer);
+    EMIT_LITERAL(buffer,"#include \"xir/xxir_call_native_source_internal.h\"\n");
+    append(buffer,"_Static_assert(XIR_CALL_NATIVE_SOURCE_VERSION==%uu,\"native source observation version\");\n",XIR_CALL_NATIVE_SOURCE_VERSION);
     EMIT_FORMAT(buffer, et_9ba6727bb474d42c, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
            "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"

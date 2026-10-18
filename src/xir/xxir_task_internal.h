@@ -64,6 +64,9 @@ XR_FUNC bool xr_xir_task_executor_root_idle(const XrXirTaskExecutor *executor);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_completion_status(const XrXirTaskExecutor *executor);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_attach_root(XrXirTaskExecutor *executor, XrXirCall *call, uint64_t epoch);
 XR_FUNC XrXirCallResult xr_xir_task_executor_poll_root(XrXirTaskExecutor *executor, uint64_t quantum);
+/* One authenticated VM callback, with no other activation dispatched. A ready
+ * activation retains its exact FIFO position. Driver failures stay recorded. */
+XR_FUNC XrXirCallStatus xir_task_executor_visit_vm(XrXirTaskExecutor *,const XrXirExecutorBinding *,uint64_t,bool *);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_resume_root(XrXirTaskExecutor *executor, uint64_t epoch, uint64_t wake);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_root_wait(const XrXirTaskExecutor *executor, uint64_t epoch, uint64_t wake,
     XrXirWaitRequest *output);

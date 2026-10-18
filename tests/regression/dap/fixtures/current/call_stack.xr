@@ -1,0 +1,12 @@
+fn inner(value: i64) -> i64 {
+    var doubled: i64 = value * 2
+    const label: string = "inner"
+    doubled = doubled + 1 // DAP_STOP: inner_update
+    return doubled // DAP_STOP: inner_return
+}
+fn outer(value: i64) -> i64 {
+    const input: i64 = value + 1
+    const result: i64 = inner(input) // DAP_STOP: outer_call
+    return result + 3 // DAP_STOP: outer_return
+}
+print(outer(19))

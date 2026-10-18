@@ -15,7 +15,7 @@ static bool source_iteration_binding(SourceContext *ctx, AstNode *node,
     SourceName *symbol = source_alloc(ctx,1,sizeof(*symbol));
     if (!symbol) return false;
     *symbol = (SourceName){ctx->locals,name,NULL,node,SOURCE_LOCAL,value.id,ctx->module,
-        value.type,false,false,0, false, false};
+        value.type,false,false,0, false, false,0,0};
     ctx->locals = symbol;
     if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,
         ctx->bodies[ctx->function].declaration,source_query_range(ctx,node,name))) return false;

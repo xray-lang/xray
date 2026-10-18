@@ -1,0 +1,10 @@
+fn child()->i64 {
+    var value:i64=1
+    return value
+}
+fn parent()->i64 {
+    var suffix:i64=3
+    const result=child()
+    return result+suffix
+}
+print(parent())

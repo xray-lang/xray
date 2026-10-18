@@ -11,7 +11,7 @@
  *   producer is alive. No refined SSA flag reconstructs an advertisement.
  */
 static XrXirStatus effect_invocation_source_declarations(const XrXirCompileContext *work,
-    const XrXirModule *source,uint32_t function,const XrXirType *prebottom,XrXirType **output);
+    const XrXirModule *source,uint32_t function,const EffectRefinementFunction *original,XrXirType **output);
 
 struct EffectBodyAdvertisementBuilder {
     const XrXirCompileContext *work;
@@ -60,7 +60,7 @@ static XrXirStatus effect_body_advertisements_function(EffectBodyAdvertisementBu
     if (builder->refinement) builder->instructions=builder->refinement->functions[function].instructions;
     bool instance=builder->source->provenance && xir_effect_kind_is_closed(builder->source->provenance->kind);
     XrXirStatus status=instance?XR_XIR_OK:effect_invocation_source_declarations(builder->work,
-        builder->source,function,builder->instructions,&builder->source_types);
+        builder->source,function,builder->refinement?&builder->refinement->functions[function]:NULL,&builder->source_types);
     if (status!=XR_XIR_OK) return status;
     if (builder->source_types) builder->instructions=builder->source_types;
     builder->open=values!=0;

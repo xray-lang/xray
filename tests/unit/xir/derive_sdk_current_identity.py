@@ -77,6 +77,16 @@ def main():
     for name,data in (('current_sdk_kat_preimage',prior74_image),('current_sdk_kat_file_digest',prior74_file),('current_sdk_kat_digest',prior74_digest)):
         match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',prior74_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete prior74 SDK KAT changed'
+    retired31,retired31_file,retired31_digest=current_preimage(rows,73,24,29,28,31)
+    retired31_text=Path(__file__).with_name('sdk_previous_program31_sem73_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',retired31),('current_sdk_kat_file_digest',retired31_file),('current_sdk_kat_digest',retired31_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',retired31_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired Program31 semantic73 KAT changed'
+    p16_image,p16_file,p16_digest=current_preimage(rows,74,24,29,28,31)
+    p16_text=Path(__file__).with_name('sdk_previous_p16_program31_sem74_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',p16_image),('current_sdk_kat_file_digest',p16_file),('current_sdk_kat_digest',p16_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',p16_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete debugger Program31 semantic74 KAT changed'
     image,file_digest,digest=current_preimage(rows)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]

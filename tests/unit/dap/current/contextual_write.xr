@@ -1,0 +1,17 @@
+var shared: u16 = 2
+fn inspect() {
+    var small: i8 = 1
+    var count: u8 = 2
+    var decimal: f32 = 1.0
+    var optional: i32? = 4
+    var items: Array<i16> = [1, 2]
+    var pair: (i8, u16) = (3, 4); var nested: i32?? = optional
+    print(small)
+    print(count)
+    print(decimal)
+    print(optional == null)
+    print(len(items))
+    print(pair.0)
+    print(shared)
+}
+inspect()

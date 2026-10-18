@@ -1,0 +1,8 @@
+fn accumulate() -> i64 {
+    var sum: i64 = 0
+    for (var index: i64 = 0; index < 4; index++) {
+        sum = sum + index // DAP_STOP: loop_body
+    }
+    return sum // DAP_STOP: loop_return
+}
+print(accumulate())

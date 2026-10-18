@@ -1,0 +1,6 @@
+enum DapFailure { Expected }
+fn fail() -> i64 {
+    throw DapFailure.Expected // DAP_STOP: uncaught_throw
+}
+print(fail())
+print("unreachable")

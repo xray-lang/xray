@@ -54,7 +54,7 @@ static bool effect_physical_error_empty_opcode(XrXirOp op) {
     case XR_XIR_NE_INT: case XR_XIR_LE_INT: case XR_XIR_GT_INT: case XR_XIR_GE_INT:
     case XR_XIR_AND_INT: case XR_XIR_OR_INT: case XR_XIR_XOR_INT: case XR_XIR_SHL_INT:
     case XR_XIR_SHR_INT: case XR_XIR_PHI: case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_NEW:
-    case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_PROJECT:
+    case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND: case XR_XIR_CELL_PROJECT:
     case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT:
     case XR_XIR_NEG_FLOAT: case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT: case XR_XIR_LT_FLOAT:
     case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT: case XR_XIR_CELL_PLACE:
@@ -104,7 +104,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     default:break;
     }
     switch (op) {
-    case XR_XIR_CELL_NEW: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE:
+    case XR_XIR_CELL_NEW: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND: case XR_XIR_CELL_LOCAL_WRITE:
     case XR_XIR_PLACE_WRITE: case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_GROUP_INIT:
     case XR_XIR_SLOT_STORE: case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_SET:
     case XR_XIR_ARRAY_PUSH: case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_SET:
@@ -128,7 +128,7 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CALL_DEFAULT: case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_REQUIREMENT:
     case XR_XIR_GO: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
-    case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
+    case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND:
     case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:
     case XR_XIR_CELL_PROJECT:
         mask|=EFFECT_PHYSICAL_INVOCATION;break;

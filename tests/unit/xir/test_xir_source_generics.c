@@ -40,6 +40,7 @@ static void write_generic_source(const char *path, const char *text) {
     FILE *file = fopen(path, "wb"); CHECK(file);
     CHECK(fwrite(text, 1, strlen(text), file) == strlen(text) && fclose(file) == 0);
 }
+#include "xir_source_member_authority_cases.h"
 static bool reference_child(AstNode *child, void *user) {
     CHECK(child && child->type == AST_VARIABLE); ++*(unsigned *) user; return true;
 }
@@ -124,9 +125,9 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
             XrXirProvenance *proof = (XrXirProvenance *)closed->module.provenance;
             CHECK(proof && proof->source);
             closed->module.provenance = NULL;
-            CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_TYPE);
+            CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_STRUCTURE);
             XrXirCheckedPacket stripped = {0};
-            CHECK(xr_xir_compile_checked_write(closed, &stripped, NULL) == XR_XIR_BAD_TYPE && !stripped.bytes);
+            CHECK(xr_xir_compile_checked_write(closed, &stripped, NULL) == XR_XIR_BAD_STRUCTURE && !stripped.bytes);
             closed->module.provenance = proof;
             uint32_t instance = UINT32_MAX;
             for (uint32_t f = 0; f < closed->module.function_count; ++f)
@@ -150,6 +151,7 @@ static void nominal_specialization_authority(XrXirSourceRequest *request, const 
             CHECK(opaque != XR_XIR_UNIT);
             XrXirFunction *definition = (XrXirFunction *)&proof->source->module.functions[original];
             XrXirType saved = definition->result; definition->result = opaque;
+            CHECK(xr_xir_compile_artifact_verify(proof->source, NULL) == XR_XIR_BAD_TYPE);
             CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_BAD_TYPE);
             definition->result = saved;
             CHECK(xr_xir_compile_artifact_verify(closed, NULL) == XR_XIR_OK);
@@ -220,7 +222,7 @@ static void member_reference_authority(XrXirSourceRequest *request, const char *
     XrXirSourceResult result = {0};
     CHECK(source_generic_check(request, &result, NULL) == XR_XIR_OK);
     XrXirModule *module = &result.checked->module;
-    unsigned allowed = 0, denied = 0;
+    unsigned same = 0, different = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         for (uint32_t i = 0; i < module->functions[f].instruction_count; ++i) {
             const XrXirInstruction *op = &module->functions[f].instructions[i];
@@ -230,18 +232,24 @@ static void member_reference_authority(XrXirSourceRequest *request, const char *
             id->nominal_owner = 1; id->exported = 0; id->member_access = XR_XIR_MEMBER_PRIVATE;
             id->method_kind = XR_XIR_MEMBER_HELPER;
             bool same_owner = module->declarations->functions[f].nominal_owner == 1;
-            CHECK(xr_xir_compile_artifact_verify(result.checked, NULL) ==
-                (same_owner ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE));
-            if (same_owner) ++allowed; else ++denied;
+            CHECK(memcmp(id,&saved,sizeof(saved)));
+            CHECK(xr_xir_compile_artifact_verify(result.checked,NULL)==XR_XIR_BAD_STRUCTURE);
+            XrXirCheckedPacket denied={0};
+            CHECK(xr_xir_compile_checked_write(result.checked,&denied,NULL)==XR_XIR_BAD_STRUCTURE && !denied.bytes && !denied.length);
+            if (same_owner) ++same; else ++different;
             *id = saved;
+            CHECK(xr_xir_compile_artifact_verify(result.checked,NULL)==XR_XIR_OK);
         }
     }
-    CHECK(allowed == 1 && denied == 1);
+    CHECK(same==1 && different==1);
     xr_xir_compile_source_result_free(&result);
+    source_member_authorized_reference(request);
     write_generic_source(library, "export struct S{private secret()->i64{return 7};protected guarded()->i64{return 8}}\n");
     const char *sources[] = {"import \"./lib\" as lib\nlib.S().secret()\n",
-        "import \"./lib\" as lib\nlib.S().guarded()\n"};
-    for (unsigned i = 0; i < 2; ++i) {
+        "import \"./lib\" as lib\nlib.S().guarded()\n",
+        "import \"./lib\" as lib\nconst callback=lib.S().secret\n",
+        "import \"./lib\" as lib\nconst callback=lib.S().guarded\n"};
+    for (unsigned i = 0; i < sizeof(sources)/sizeof(*sources); ++i) {
         write_generic_source(request->entry_path, sources[i]);
         CHECK(source_generic_check(request, &result, NULL) == XR_XIR_BAD_TYPE && !result.checked);
         xr_xir_compile_source_result_free(&result);

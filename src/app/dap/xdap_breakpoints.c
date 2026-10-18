@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xdap_breakpoints.c - Breakpoint management (line, function, exception, watch)
+ * xdap_breakpoints.c - Breakpoint management (line, function, exception)
  */
 
 #include "xdap_debug.h"
@@ -346,92 +346,6 @@ int xr_debug_check_breakpoint_ex(XrVMRuntime *isolate, const char *path, int lin
 
 bool xr_debug_check_breakpoint(XrVMRuntime *isolate, const char *path, int line) {
     return xr_debug_check_breakpoint_ex(isolate, path, line, NULL) == 1;
-}
-
-// ============================================================================
-// Watch Expression Management
-// ============================================================================
-
-int xr_debug_add_watch(XrVMRuntime *isolate, const char *expression) {
-    XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
-    if (!dbg || !expression)
-        return -1;
-
-    struct XrWatch *watch = (struct XrWatch *) xr_calloc(1, sizeof(struct XrWatch));
-    if (!watch)
-        return -1;
-    watch->id = dbg->next_watch_id++;
-    watch->expression = xr_strdup(expression);
-
-    // Add to list
-    watch->next = dbg->watches;
-    dbg->watches = watch;
-
-    return watch->id;
-}
-
-bool xr_debug_remove_watch(XrVMRuntime *isolate, int id) {
-    XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
-    if (!dbg)
-        return false;
-
-    struct XrWatch **pp = &dbg->watches;
-    while (*pp) {
-        if ((*pp)->id == id) {
-            struct XrWatch *w = *pp;
-            *pp = w->next;
-            xr_free(w->expression);
-            xr_free(w);
-            return true;
-        }
-        pp = &(*pp)->next;
-    }
-    return false;
-}
-
-void xr_debug_clear_watches(XrVMRuntime *isolate) {
-    XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
-    if (!dbg)
-        return;
-
-    struct XrWatch *w = dbg->watches;
-    while (w) {
-        struct XrWatch *next = w->next;
-        xr_free(w->expression);
-        xr_free(w);
-        w = next;
-    }
-    dbg->watches = NULL;
-}
-
-int xr_debug_get_watch_count(XrVMRuntime *isolate) {
-    XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
-    if (!dbg)
-        return 0;
-
-    int count = 0;
-    for (struct XrWatch *w = dbg->watches; w; w = w->next) {
-        count++;
-    }
-    return count;
-}
-
-bool xr_debug_get_watch(XrVMRuntime *isolate, int idx, int *out_id, const char **out_expr) {
-    XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
-    if (!dbg)
-        return false;
-
-    int i = 0;
-    for (struct XrWatch *w = dbg->watches; w; w = w->next, i++) {
-        if (i == idx) {
-            if (out_id)
-                *out_id = w->id;
-            if (out_expr)
-                *out_expr = w->expression;
-            return true;
-        }
-    }
-    return false;
 }
 
 // ============================================================================

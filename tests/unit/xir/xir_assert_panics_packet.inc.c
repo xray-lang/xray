@@ -142,6 +142,7 @@ static void panics_previous_identity_rejected(const uint8_t *bytes,size_t length
 static void panics_packet_gates(void) {
     panics_previous_identity_rejected(assert_panics71_golden,sizeof(assert_panics71_golden),26,71);
     panics_previous_identity_rejected(assert_panics72_golden,sizeof(assert_panics72_golden),27,72);
+    panics_previous_identity_rejected(assert_panics73_golden,sizeof(assert_panics73_golden),28,73);
     _Static_assert(XR_XIR_CHECKED_SCHEMA==30 && XR_XIR_CHECKED_CONTRACT==75,
         "Core packet known bytes require the independently encoded contract");
     panics_core_bound_rejections();

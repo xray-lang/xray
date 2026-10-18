@@ -190,6 +190,11 @@ XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *con
     XirEffectContextOperation operation,void *data);
 XR_FUNC XrXirStatus xir_effects_context_select_scoped(XirEffectContextScope *scope,
     const XirEffectContextInput *input,XirEffectContextView *output);
+/* The Source producer may advance before this call. Complete current matching
+ * and any required rebuild precede one immutable, fully admitted edge read. */
+XR_FUNC XrXirStatus xir_effects_source_reference_root(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects,const XrXirModule *source,
+    uint32_t function,uint32_t instruction,uint32_t *output);
 /* The common verifier calls this with its freshly derived owner and the same
  * verified module. It consumes the real reference edge, never a target hint. */
 XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *context,
@@ -244,6 +249,17 @@ typedef struct XirEffectClassAccessRequest {
 /* The genuine Instance keeps its Class reservation across this exact query. */
 XR_FUNC XrXirStatus xir_effects_class_access(const struct XrXirEffects *effects,
     const XirEffectClassAccessRequest *request);
+
+typedef struct XirEffectClassScopeRequest {
+    uint32_t caller,node;
+    bool contextual,pure;
+    XrXirType root_type;
+    XirEffectRuntimeRead read;
+} XirEffectClassScopeRequest;
+/* Paused control has no language instruction. The genuine Instance supplies
+ * its actual frame selection and retains the Class reservation across replay. */
+XR_FUNC XrXirStatus xir_effects_class_scope(const struct XrXirEffects *effects,
+    const XirEffectClassScopeRequest *request);
 
 typedef struct XirEffectInvocationRequest {
     uint32_t caller,instruction,target,producer,node,count,captures;

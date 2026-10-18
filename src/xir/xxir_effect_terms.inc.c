@@ -35,7 +35,7 @@ typedef struct EffectTerms {
     size_t slice_capacity;
     EffectTermFrame *stack;
     XrXirType *cache;
-    uint32_t stack_capacity;
+    uint32_t stack_capacity,cache_count;
     bool stack_claimed;
     XrXirTypeMatchScratch match;
 } EffectTerms;
@@ -208,30 +208,29 @@ static bool effect_term_ready(EffectTerms *pool, XrXirType type, const XrXirGene
     *result = cache[(uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE];
     return *result != XR_XIR_UNIT;
 }
-/* Capacity survives sequential substitutions; frames and result cache do
- * not. Every active traversal owns its frames until it has completely unwound. */
+/* Active frames occupy the prefix; completed cache indices use its disjoint
+ * tail. Every cache write prepays cleanup, so neither failure nor a later
+ * substitution observes an earlier result. Child-buffer capacity is reusable. */
 static XrXirStatus effect_term_stack(EffectTerms *pool,uint32_t size) {
-    if (pool->stack_claimed) return XR_XIR_BAD_STRUCTURE;
+    if (pool->stack_claimed || pool->cache_count) return XR_XIR_BAD_STRUCTURE;
     uint64_t bytes=(uint64_t)size*(sizeof(EffectTermFrame)+sizeof(XrXirType));
-    if (bytes>SIZE_MAX || !xir_compile_work(pool->remaining,(uint64_t)size*2+1))
+    if (bytes>SIZE_MAX || !xir_compile_work(pool->remaining,2*sizeof(bool)+sizeof(pool->cache_count)+3))
         return XR_XIR_BUDGET;
     if (size>pool->stack_capacity) {
         XrXirStatus status=XR_XIR_OK;
         EffectTermFrame *stack=xir_compile_alloc(pool->remaining,(size_t)bytes,&status);
         if (!stack) return status;
-        size_t frame_bytes=(size_t)size*sizeof(*stack);
+        size_t frame_bytes=(size_t)size*sizeof(*stack),cache_bytes=(size_t)size*sizeof(XrXirType);
         uint64_t copy=(uint64_t)pool->stack_capacity*sizeof(*stack);
-        if (!xir_compile_work(pool->remaining,(uint64_t)frame_bytes+copy)) {
+        if (!xir_compile_work(pool->remaining,(uint64_t)frame_bytes+cache_bytes+copy)) {
             xr_compile_resources_free(stack);return XR_XIR_BUDGET;
         }
-        memset(stack,0,frame_bytes);
+        memset(stack,0,frame_bytes+cache_bytes);
         if (copy) memcpy(stack,pool->stack,(size_t)copy);
         xr_compile_resources_free(pool->stack);
-        pool->stack=stack;pool->cache=(XrXirType *)(stack+size);pool->stack_capacity=size;
+        pool->stack=stack;pool->cache=(XrXirType *)(stack+size);
+        pool->stack_capacity=size;
     }
-    size_t cache_bytes=(size_t)size*sizeof(*pool->cache);
-    if (!xir_compile_work(pool->remaining,cache_bytes)) return XR_XIR_BUDGET;
-    if (cache_bytes) memset(pool->cache,0,cache_bytes);
     pool->stack_claimed=true;return XR_XIR_OK;
 }
 
@@ -265,6 +264,12 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
     *output=XR_XIR_UNIT;
     if (pool->status!=XR_XIR_OK) return pool->status;
     if (!xr_xir_type_span(&pool->types,type)) { *output=type;return XR_XIR_OK; }
+    /* A bare binder is a vector lookup. It has no constructed child that
+     * could need traversal storage; the original reader still checks bounds. */
+    if (!xir_compile_work(pool->remaining,2)) return XR_XIR_BUDGET;
+    if ((uint32_t)type>=XR_XIR_TYPE_PARAMETER_BASE && (uint32_t)type<XR_XIR_TYPE_PARAMETER_LIMIT) {
+        return effect_term_ready(pool,type,arguments,NULL,output)?XR_XIR_OK:pool->status;
+    }
     uint32_t size=pool->types.count;
     XrXirStatus status=effect_term_stack(pool,size);
     if (status!=XR_XIR_OK) return status;
@@ -282,7 +287,17 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
             source.kind==XR_XIR_TYPE_CALLABLE ? source.parameter_count+1 :
             source.kind==XR_XIR_TYPE_TUPLE ? source.parameter_count : 1;
         if (frame->next==components) {
-            cache[frame->index]=effect_term_intern(pool,frame->node);
+            if (pool->cache_count>=size || depth>size-pool->cache_count) {
+                pool->status=XR_XIR_BAD_TYPE;break;
+            }
+            if (!xir_compile_work(pool->remaining,2*sizeof(XrXirType)+2*sizeof(uint32_t)+3)) {
+                pool->status=XR_XIR_BUDGET;break;
+            }
+            XrXirType substituted=effect_term_intern(pool,frame->node);
+            if (pool->status==XR_XIR_OK) {
+                uint32_t index=frame->index;cache[index]=substituted;
+                stack[size-1-pool->cache_count++].index=index;
+            }
             --depth;continue;
         }
         XrXirType child=source.element;
@@ -293,7 +308,7 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         if (!effect_term_ready(pool,child,arguments,cache,&result)) {
             if (pool->status!=XR_XIR_OK) break;
             uint32_t index=(uint32_t)child-XR_XIR_CONSTRUCTED_TYPE_BASE;
-            if (index>=frame->index || depth>=size) { pool->status=XR_XIR_BAD_TYPE;break; }
+            if (index>=frame->index || depth>=size-pool->cache_count) { pool->status=XR_XIR_BAD_TYPE;break; }
             if (effect_term_push(pool,&stack[depth],index)) ++depth;
             continue;
         }
@@ -308,5 +323,7 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
     }
     if (pool->status==XR_XIR_OK && !effect_term_ready(pool,type,arguments,cache,output) && pool->status==XR_XIR_OK)
         pool->status=XR_XIR_BAD_TYPE;
-    pool->stack_claimed=false;return pool->status;
+    /* Every published cache entry prepays its cleanup, including failure. */
+    for (uint32_t n=0;n<pool->cache_count;++n) cache[stack[size-1-n].index]=XR_XIR_UNIT;
+    pool->cache_count=0;pool->stack_claimed=false;return pool->status;
 }

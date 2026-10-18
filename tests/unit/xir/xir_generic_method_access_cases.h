@@ -43,8 +43,8 @@ static void generic_method_access_cases(void) {
         XrXirTypeNode nodes[4] = {0};
         nodes[0].kind = XR_XIR_TYPE_NOMINAL;
         nodes[1].kind = XR_XIR_TYPE_ARRAY; nodes[1].element = (XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
-        nodes[2].kind = XR_XIR_TYPE_CALLABLE; nodes[2].result = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
-        nodes[3].kind = XR_XIR_TYPE_CALLABLE; nodes[3].result = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
+        nodes[2].kind = XR_XIR_TYPE_CALLABLE; nodes[2].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[2].result = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1);
+        nodes[3].kind = XR_XIR_TYPE_CALLABLE; nodes[3].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED; nodes[3].result = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
         nodes[3].parameter_span = 1;
         XrXirType argument = (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2);
         XrXirInterfaceApplication application = {1,&argument,1};
