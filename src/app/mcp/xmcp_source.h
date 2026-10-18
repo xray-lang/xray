@@ -23,7 +23,7 @@ typedef struct XmcpSourceRequest {
 typedef struct XmcpSourceOwner {
     XrXirSourceResult result;
     XrXirSourceDiagnostic diagnostic;
-    char *failure_path;
+    XrXirSourceFailure failure;
 } XmcpSourceOwner;
 
 XR_FUNC XrCompileResourceLimits xmcp_source_default_limits(void);

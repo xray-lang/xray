@@ -20,7 +20,7 @@ XR_FUNC XrCompileResourceLimits xmcp_source_default_limits(void) {
 
 XR_FUNC XrXirStatus xmcp_source_check(const XmcpSourceRequest *request, XmcpSourceOwner *output) {
     if (!request || !output || output->result.checked || output->result.snapshot ||
-        output->failure_path || !request->text || !request->module_id ||
+        !xr_xir_compile_source_failure_empty(&output->failure) || !request->text || !request->module_id ||
         !request->context || !request->context->resources) return XR_XIR_BAD_STRUCTURE;
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, request->module_id, NULL};
     if (!xr_module_identity_authority_valid(&authority)) return XR_XIR_BAD_STRUCTURE;
@@ -33,7 +33,7 @@ XR_FUNC XrXirStatus xmcp_source_check(const XmcpSourceRequest *request, XmcpSour
         XrXirSourceRequest input = {session, NULL, &authority, request->context, NULL, NULL, XR_XIR_PROGRAM, NULL};
         XrXirSourceText text = {NULL, request->text, request->length};
         status = xr_xir_compile_source_check_text(&input, &text, &output->result,
-            &output->diagnostic, &output->failure_path);
+            &output->diagnostic, &output->failure);
     } else output->diagnostic.status = status;
     xr_compile_session_free(session);
     return status;
@@ -42,6 +42,6 @@ XR_FUNC XrXirStatus xmcp_source_check(const XmcpSourceRequest *request, XmcpSour
 XR_FUNC void xmcp_source_free(XmcpSourceOwner *owner) {
     if (!owner) return;
     xr_xir_compile_source_result_free(&owner->result);
-    xr_compile_resources_free(owner->failure_path);
+    xr_xir_compile_source_failure_free(&owner->failure);
     memset(owner, 0, sizeof(*owner));
 }
