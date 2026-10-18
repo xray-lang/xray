@@ -10,6 +10,47 @@
  */
 #ifndef XIR_LEGACY_ERROR_ORACLE_H
 #define XIR_LEGACY_ERROR_ORACLE_H
+/* The allocating raw oracle retains its own Slot rule. Production Input
+ * readers cannot select this raw-domain allocation path. */
+static XrXirStatus oracle_root_seed_record(const EffectRootSeedRecord *request,XrXirEffects *effects,
+    const XrXirCompileContext *work) {
+    if(!request || !request->instruction || !effects || request->function>=effects->count ||
+        !effects->outcomes_work.root || !effects->outcomes_work.root_witnesses ||
+        !effects->outcomes_work.unresolved_witnesses) return XR_XIR_BAD_STRUCTURE;
+    const XrXirInstruction *op=request->instruction;
+    if(op->op==XR_XIR_SLOT_LOAD || op->op==XR_XIR_SLOT_PLACE || op->op==XR_XIR_SLOT_STORE) {
+        const XrXirDeclarations *decls=request->domain?request->domain->declarations:NULL;
+        if(!decls || !decls->slots || op->immediate<0 || (uint64_t)op->immediate>=decls->slot_count)
+            return XR_XIR_BAD_STRUCTURE;
+        const XrXirSlot *slot=&decls->slots[op->immediate];
+        XrXirRootEffectCause cause=XR_XIR_ROOT_CAUSE_MUTABLE_SLOT;
+        if(!slot->mutable) {
+            XirMetadataProofContext proof={request->domain,{XR_XIR_CONTEXT_FUNCTION,request->function,0}};
+            XrXirStatus status=xir_metadata_type_markers_prove(work,&proof,slot->type,XR_XIR_CONSTRAINT_SENDABLE);
+            if(status==XR_XIR_OK) return XR_XIR_OK;
+            if(status!=XR_XIR_BAD_TYPE) return status;
+            cause=XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST;
+        }
+        effects->outcomes_work.root[request->function].requires_root=true;
+        effect_root_terminal(&effects->outcomes_work.root_witnesses[request->function],cause,
+            request->ordinal,(uint32_t)op->immediate);return XR_XIR_OK;
+    }
+    return effect_root_seed_output(request,&effects->outcomes_work.root[request->function],
+        &effects->outcomes_work.root_witnesses[request->function],
+        &effects->outcomes_work.unresolved_witnesses[request->function],work,NULL);
+}
+static inline XrXirStatus oracle_root_seed(const XrXirModule *module,XrXirEffects *effects,
+    uint32_t function,uint32_t instruction,const XrXirCompileContext *work) {
+    if(!module || !module->functions || function>=module->function_count ||
+        instruction>=module->functions[function].instruction_count || !module->functions[function].instructions)
+        return XR_XIR_BAD_STRUCTURE;
+    const XrXirInstruction *op=&module->functions[function].instructions[instruction];
+    XirMetadataDomain domain=xir_metadata_domain_from_module(module);
+    EffectRootSeedRecord request={&domain,op,function,instruction,XR_XIR_UNIT};
+    if(op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT)
+        request.callable_type=xr_xir_operand_type(&module->functions[function],(uint32_t)op->immediate);
+    return oracle_root_seed_record(&request,effects,work);
+}
 typedef struct EffectControlCheck {
     EffectBodyRequest input;
     const EffectFinalOutcomes *final;
