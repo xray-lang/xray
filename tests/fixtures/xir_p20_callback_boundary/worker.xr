@@ -1,0 +1,7 @@
+export fn work()->i64 {
+    Coro.yield()
+    print(17)
+    Coro.yield()
+    print(25)
+    return 42
+}

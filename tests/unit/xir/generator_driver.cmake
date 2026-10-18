@@ -909,3 +909,5 @@ endif()
 include("${CMAKE_CURRENT_LIST_DIR}/mixed_iterator_lifetime.cmake")
 
 include("${CMAKE_CURRENT_LIST_DIR}/mixed_class_lifetime.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/mixed_callback_boundary.cmake")
