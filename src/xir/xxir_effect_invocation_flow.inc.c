@@ -136,8 +136,8 @@ static XrXirStatus effect_invocation_flags_match(EffectInvocationFlow *flow) {
     uint64_t words=((uint64_t)flow->values+63)/64;
     if (!flow->fixed || !flow->certified ||
         flow->certified!=flow->fixed+(size_t)words) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(flow->read->work,6)) return XR_XIR_BUDGET;
-    if (!flow->row_count && words==1) {
+    if (!xir_compile_work(flow->read->work,9)) return XR_XIR_BUDGET;
+    if (!flow->row_count && words==1 && (!flow->owner || !flow->basis.cell_words)) {
         if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
         if (flow->memory || flow->fixed!=flow->local_flags || flow->rows!=flow->local_flags)
             return XR_XIR_BAD_STRUCTURE;
