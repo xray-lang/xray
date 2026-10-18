@@ -224,6 +224,7 @@ typedef struct GraphParseCapture {
     ModuleWork *work;
     XrModuleGraph *graph;
     uint32_t module;
+    const char *text;
 } GraphParseCapture;
 static void graph_source_diagnostic(GraphParseCapture *capture,XrModuleSourceDiagnosticOrigin origin,
     int line,int column,const char *message) {
@@ -242,7 +243,18 @@ static void graph_source_diagnostic(GraphParseCapture *capture,XrModuleSourceDia
 static void graph_parse_diagnostic(void *context,int line,int column,int end_line,int end_column,
     const char *message) {
     (void)end_line;(void)end_column;
+    GraphParseCapture *capture=context;
+    if(capture->graph->source_diagnostic.present)return;
     graph_source_diagnostic(context,XR_MODULE_DIAGNOSTIC_PARSE,line,column,message);
+    XrModuleSourceDiagnostic *diagnostic=&capture->graph->source_diagnostic;
+    if(capture->work->status!=XR_MODULE_OK)return;
+    size_t source_length=module_length(capture->work,capture->text);
+    if(capture->work->status!=XR_MODULE_OK)return;
+    XrModuleSourcePosition position={0};
+    XrModuleStatus projected=xr_compile_module_source_position(capture->work->resources,
+        capture->text,source_length,line,column,&position);
+    if(projected==XR_MODULE_OK){diagnostic->utf16_position=position;diagnostic->has_utf16_position=true;}
+    else if(projected!=XR_MODULE_INVALID)module_status(capture->work,projected);
 }
 static XrModuleStatus read_status(XrFileReadStatus status) {
     switch (status) {
@@ -321,7 +333,7 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
                 if (!bytes.data[i]) {
                     if(line>INT_MAX || i-line_start>=INT_MAX)module_status(work,XR_MODULE_BUDGET);
                     else {
-                        GraphParseCapture capture={work,graph,(uint32_t)index};
+                        GraphParseCapture capture={.work=work,.graph=graph,.module=(uint32_t)index,.text=text};
                         graph_source_diagnostic(&capture,XR_MODULE_DIAGNOSTIC_INPUT,(int)line,(int)(i-line_start)+1,
                             "source text contains an embedded NUL");
                         module_status(work,XR_MODULE_INVALID);
@@ -334,7 +346,7 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
         }
         AstNode *ast = NULL;
         if (work->status == XR_MODULE_OK) {
-            GraphParseCapture capture={work,graph,(uint32_t)index};
+            GraphParseCapture capture={.work=work,.graph=graph,.module=(uint32_t)index,.text=text};
             const XrParseDiagnostics diagnostics={graph_parse_diagnostic,&capture,20};
             module_status(work,parse_status(xr_compile_parse_with_diagnostics(
                 graph->compiler_session,text,spec->source_path,&diagnostics,&ast)));

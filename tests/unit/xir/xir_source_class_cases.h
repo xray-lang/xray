@@ -139,7 +139,7 @@ static void source_class_definition_cases(XrXirSourceRequest *request) {
     {"final class Box<T>{value:T init(v:T){this.value=v}}\nfn unused(b:Box<Slice<u8>>){}",3,"name does not resolve to an admitted nominal type"},
     {"final class Box<T>{value:T init(v:T){this.value=v}}\nfn unused(b:Box<MutSlice<u8>>){}",3,"name does not resolve to an admitted nominal type"},
     {"class C {x:i64 init(){this.x=1}}",0,""},
-    {"class P {x:i64 init(){this.x=1}}\nclass C : P {init(){}}",XR_XIR_BAD_STRUCTURE,"module graph build failed"},
+    {"class P {x:i64 init(){this.x=1}}\nclass C : P {init(){}}",XR_XIR_BAD_STRUCTURE,"use 'extends' instead of ':' for class inheritance, e.g. class Dog extends Animal"},
     {"final class C{x:i64}",0,""},
     {"final class C{x:Array<i64> init(){this.x=[1]}}",0,""},
     {"final class C{x:i64=1 init(){}}",0,""},

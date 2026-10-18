@@ -79,9 +79,11 @@ static bool source_method_call(SourceContext *ctx, AstNode *node, SourceValue re
     SourceDirectArguments prepared = {0};
     if (!source_direct_arguments(ctx,node,&direct,&prepared)) return false;
     XrXirInstruction op = {XR_XIR_CALL,prepared.result,{0},{0},method->index,{0}};
+    uint32_t reference_before=ctx->query.reference_count;
     return source_type_arguments(ctx,node,prepared.substitution.types,prepared.substitution.count,&op) &&
         source_query_target_token_reference(ctx,call->callee,
             method->declaration,XR_XIR_SOURCE_CALL) &&
+        source_direct_call_signature(ctx,node,method->index,&prepared,reference_before) &&
         source_recipe_group(ctx,op,prepared.values,prepared.count,value);
 }
 /* A direct ref receiver uses the same actual owner/path capability as ref

@@ -293,6 +293,9 @@ typedef struct ImportMember {
     int32_t private_target_spec_index;
     struct AstNode *private_generic_decl;
     struct AstNode *private_target_decl;
+    // Exact parser spellings; synthesized members keep these absent.
+    XrNameSpan name_span;
+    XrNameSpan alias_span;
 } ImportMember;
 
 // Import statement node — supports two forms:
@@ -305,6 +308,9 @@ typedef struct ImportStmtNode {
     ImportMember *members;  // Selective import member list
     int member_count;       // 0 means whole module import
     uint32_t symbol_id;     // Analyzer-assigned unique ID (whole-module import)
+    XrNameSpan alias_span;
+    XrNameSpan module_name_span; // Final bare module-name token, absent for quoted paths
+    XrNameSpan specifier_end;    // Position immediately after the raw specifier token
 } ImportStmtNode;
 
 // Re-export member structure: export { a, b as c } from "./file"

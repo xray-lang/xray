@@ -310,7 +310,9 @@ static AstNode *parse_adt_record_pattern(Parser *parser, AstNode *variant, int l
         } else {
             AstNode *binding =
                 xr_ast_variable(parser->compiler_session, field_name, field_token.line);
-            if (!xr_parser_healthy(parser)) return NULL;
+            if (!binding || !xr_parser_healthy(parser)) return NULL;
+            if (!ast_copy(parser->compiler_session, &binding->column, &field_token.column,
+                          sizeof(binding->column))) return NULL;
             do {
                 subpattern =
                 xr_ast_pattern_literal(parser->compiler_session, binding, field_token.line);

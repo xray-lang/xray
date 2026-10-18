@@ -11,6 +11,7 @@
  *   User declarations and serialized facts cannot enter the binding boundary.
  */
 #include "xir_core_declarations_source.inc.c"
+#include "xxir_core_source_identity.h"
 
 static bool source_core_contract(SourceContext *ctx) {
     if (!ctx->core_factory || ctx->graph->spec_count != 1 || ctx->function_count != 7 ||
@@ -175,6 +176,7 @@ static bool source_core_query(SourceContext *ctx, const SourceContext *core, uin
         records[ctx->query.declaration_count-1]=original;
         XrXirSourceDeclarationSyntax fact=core->syntax.declarations[d];
         fact.name.module=module;
+        if(!source_display_names_copy(ctx,&fact))return false;
         if (!source_query_syntax_declaration(ctx,fact.name)) return false;
         XrXirSourceDeclarationSyntax *syntax=(XrXirSourceDeclarationSyntax *)&ctx->syntax.declarations[ctx->syntax.declaration_count-1];
         if (!source_copy_bytes(ctx,NULL,syntax,&fact,sizeof(fact))) return false;
@@ -347,7 +349,7 @@ static bool source_core_load(SourceContext *ctx, AstNode *site) {
     XrCompilerSessionStatus opened=xr_compile_session_new(ctx->compile.resources,&session);
     XrModuleResolverConfig config={0};
     XrModuleResolver *resolver=NULL;
-    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"xray-core-assertions-v1",NULL};
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,XIR_CORE_SOURCE_NAMESPACE,NULL};
     XrXirSourceResult result={0};
     char *error=NULL;
     if (opened!=XR_COMPILER_SESSION_OK) source_fail(&core,NULL,opened==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET :

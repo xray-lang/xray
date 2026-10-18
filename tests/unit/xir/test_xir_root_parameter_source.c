@@ -109,13 +109,13 @@ static XrXirStatus rps_operation(const XrXirCompileContext *context, void *opaqu
         return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ROOT_PARAMETER_SOURCE_FIXTURES};
     XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
+    XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure failure={0};
     XrXirArtifact *read=NULL,*instance=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&failure);
     xr_compile_session_free(session);
     if (status==XR_XIR_OK) {
-        CHECK(result.checked && result.snapshot && !failure);
+        CHECK(result.checked && result.snapshot && !failure.path);
         if (operation->qualify) rps_template(result.checked);
         status=xr_xir_compile_checked_write(result.checked,&packet,NULL);
     }
@@ -129,7 +129,7 @@ static XrXirStatus rps_operation(const XrXirCompileContext *context, void *opaqu
     if (status!=XR_XIR_OK && source_program_compile_fail_at==SIZE_MAX && status!=XR_XIR_BUDGET)
         fprintf(stderr,"%s status%u %d:%d %s\n",oracle->file,status,diagnostic.line,diagnostic.column,diagnostic.message);
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(instance);xr_xir_compile_artifact_free(read);
-    xr_xir_compile_checked_packet_free(&packet);xr_compile_resources_free(failure);
+    xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_source_failure_free(&failure);
     xr_xir_compile_source_result_free(&result);return status;
 }
 int main(int argc, char **argv) {

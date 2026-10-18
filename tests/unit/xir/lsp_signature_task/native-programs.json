@@ -1,0 +1,172 @@
+{
+  "25": {
+    "source": "fn main()->i64 {\n const values=[1,2]\n return values.get(\n  0\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "26": {
+    "source": "fn main(){\n var values=[1,2]\n values.set(\n  0,\n  3\n )\n}\n",
+    "row": 4,
+    "column": 2
+  },
+  "27": {
+    "source": "fn main()->Array<i64> {\n return Array<i64>.withCapacity(\n  2\n )\n}\n",
+    "row": 2,
+    "column": 2
+  },
+  "28": {
+    "source": "fn main(){\n var values=[1]\n const result=values.reserve(\n  4\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "29": {
+    "source": "fn main(){\n var values=[1]\n values.push(\n  2\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "30": {
+    "source": "fn main(){\n const values=[1]\n const result=values.join(\n  \",\"\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "31": {
+    "source": "fn main(){\n const values=[1]\n const result=values.concat(\n  [2],\n  [3],\n  [4]\n )\n}\n",
+    "row": 5,
+    "column": 2
+  },
+  "32": {
+    "source": "fn main(){\n var values=[1]\n values.clear(\n )\n}\n",
+    "row": 3,
+    "column": 1
+  },
+  "33": {
+    "source": "fn main(){\n var values=[1]\n const result=values.reverse(\n )\n}\n",
+    "row": 3,
+    "column": 1
+  },
+  "34": {
+    "source": "fn main(){\n var values=[1]\n values.unshift(\n  2\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "35": {
+    "source": "fn main(){\n var values=[1]\n const result=values.pop(\n )\n}\n",
+    "row": 3,
+    "column": 1
+  },
+  "36": {
+    "source": "fn main(){\n var values=[1]\n const result=values.shift(\n )\n}\n",
+    "row": 3,
+    "column": 1
+  },
+  "37": {
+    "source": "fn main(){\n var values=[1]\n const result=values.resize(\n  3,\n  2\n )\n}\n",
+    "row": 4,
+    "column": 2
+  },
+  "38": {
+    "source": "fn main(){\n var values=[1,2,3]\n const result=values.fill(\n  4,\n  0,\n  2\n )\n}\n",
+    "row": 5,
+    "column": 2
+  },
+  "39": {
+    "source": "fn main(){\n var values=[1]\n const result=values.fill(\n  2\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "40": {
+    "source": "fn main(){\n const values=[1]\n const result=values.entries(\n )\n}\n",
+    "row": 3,
+    "column": 1
+  },
+  "41": {
+    "source": "fn main(){\n const values=[1]\n const result=values.map(\n  fn(item:i64)->string {return \"value\"}\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "42": {
+    "source": "fn main(){\n const values=[1]\n const result=values.reduce(\n  fn(acc:i64,item:i64)->i64 {return acc+item},\n  0\n )\n}\n",
+    "row": 4,
+    "column": 2
+  },
+  "43": {
+    "source": "fn main(){\n const values=[1]\n const result=values.filter(\n  fn(item:i64)->bool {return item>0}\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "44": {
+    "source": "fn main(){\n const values=[1]\n values.forEach(\n  fn(item:i64) {}\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "45": {
+    "source": "fn main(){\n const values=[1]\n const result=values.find(\n  fn(item:i64)->bool {return item>0}\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "46": {
+    "source": "fn main(){\n const values=[1]\n const result=values.findIndex(\n  fn(item:i64)->bool {return item>0}\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "47": {
+    "source": "fn main(){\n const values=[1]\n const result=values.every(\n  fn(item:i64)->bool {return item>0}\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "48": {
+    "source": "fn main(){\n const values=[1]\n const result=values.some(\n  fn(item:i64)->bool {return item>0}\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "49": {
+    "source": "fn main(){\n const values=[1]\n const result=values.indexOf(\n  1\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "50": {
+    "source": "fn main(){\n const values=[1]\n const result=values.contains(\n  1\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "51": {
+    "source": "fn main()->i64 {\n const values=[1,2]\n return values.get(\n  values.get(0)\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "52": {
+    "source": "fn wrapper<Item>(value:Item)->Item {\n const values=[value]\n return values.get(\n  0\n )\n}\nfn main()->i64 {return wrapper(1)}\n",
+    "row": 3,
+    "column": 2
+  },
+  "53": {
+    "source": "fn main(){\n var values:Array<i16>=[1]\n const value:i8=2\n values.push(\n  value\n )\n}\n",
+    "row": 4,
+    "column": 2
+  },
+  "54": {
+    "source": "fn main(){\n const values=[1]\n const result=values.join(\n )\n}\n",
+    "row": 3,
+    "column": 1
+  },
+  "57": {
+    "source": "fn main()->rune {\n const values=['x']\n return values.get(\n  0\n )\n}\n",
+    "row": 3,
+    "column": 2
+  },
+  "58": {
+    "source": "fn main(){\n var values:Array<fn(i64)->i64>=[fn(value:i64)->i64{return value}]\n const result=values.pop(\n )\n}\n",
+    "row": 3,
+    "column": 1
+  },
+  "59": {
+    "source": "export fn compute()->i64 {\n const values=[1,2]\n return values.get(\n  0\n )\n}\nfn main()->i64 {return compute()}\n",
+    "row": 3,
+    "column": 2
+  },
+  "60": {
+    "source": "struct Array<T> {const value:T get(index:i64)->T{return this.value}}\nexport fn compute()->i64 {\n const values=Array<i64>{value:7}\n return values.get(\n  0\n )\n}\nfn main()->i64{return compute()}\n",
+    "row": 4,
+    "column": 2
+  }
+}

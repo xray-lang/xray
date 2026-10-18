@@ -215,34 +215,34 @@ static FailureObservation source_failure(const char *entry,const char *stdlib,
     CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
     XrXirSourceRequest request={session,entry,&authority,&context,stdlib,NULL,XR_XIR_PROGRAM,NULL};
     XrXirSourceResult result={0},empty=result;
-    XrXirSourceDiagnostic diagnostic={0};char *path=NULL;
-    char *sentinel=(char *)(uintptr_t)1;
+    XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure path={0};
+    XrXirSourceFailure sentinel={.path=(char *)(uintptr_t)1};
     XrCompileResourceStats before=sdk_stats(resources);
     size_t before_attempts=runtime_attempts;
     CHECK(xr_xir_compile_source_check(&request,&result,&diagnostic,&sentinel)==XR_XIR_BAD_STRUCTURE);
-    CHECK(sentinel==(char *)(uintptr_t)1 && !memcmp(&result,&empty,sizeof(result)));
+    CHECK(sentinel.path==(char *)(uintptr_t)1 && !memcmp(&result,&empty,sizeof(result)));
     CHECK(runtime_attempts==before_attempts && sdk_stats(resources).work==before.work);
     result.checked=(XrXirArtifact *)(uintptr_t)1;
     XrXirSourceResult saved=result;
     CHECK(xr_xir_compile_source_check(&request,&result,&diagnostic,&path)==XR_XIR_BAD_STRUCTURE);
-    CHECK(!path && !memcmp(&result,&saved,sizeof(result)));
+    CHECK(!path.path && !memcmp(&result,&saved,sizeof(result)));
     result=empty;
     runtime_attempts=0;runtime_fail_at=fail_at;
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,want_path?&path:NULL);
     runtime_fail_at=SIZE_MAX;
-    FailureObservation observation={sdk_stats(resources),runtime_attempts,status,path!=NULL};
+    FailureObservation observation={sdk_stats(resources),runtime_attempts,status,path.path!=NULL};
     CHECK(status!=XR_XIR_OK && !memcmp(&result,&empty,sizeof(result)) && diagnostic.status==status);
     xr_compile_session_free(session);xr_compile_resources_free(root);
     xr_compile_resources_release(resources);
     memset(&context,0xcc,sizeof(context));memset(&request,0xcc,sizeof(request));
     memset(&authority,0xcc,sizeof(authority));
-    if(path) {
+    if(path.path) {
         /* The first path read occurs after every producer and external ledger
          * reference has died. This fixture's independent source is line 1. */
-        CHECK(!strcmp(path,entry) && diagnostic.line>0);
+        CHECK(!strcmp(path.path,entry) && diagnostic.line>0);
         if(status!=XR_XIR_OUT_OF_MEMORY) CHECK(diagnostic.line==1 && diagnostic.column==13);
     }
-    xr_compile_resources_free(path);
+    xr_xir_compile_source_failure_free(&path);
     CHECK(!runtime_live && !runtime_bytes && handles()==baseline);
     return observation;
 }
@@ -311,7 +311,11 @@ static int source_owner_main(int argc,char **argv) {
         CHECK(xr_xir_compile_source_product_build(NULL,&product,&diagnostic.source)==XR_XIR_BAD_STRUCTURE);
         CHECK(!memcmp(&saved,&diagnostic,sizeof(saved)));
     }
-    if(!strcmp(argv[3],"parse-reject") || !strcmp(argv[3],"graph-reject"))
+    if(!strcmp(argv[3],"parse-reject")) {
+        CHECK(diagnostic.source.source_path&&!strcmp(diagnostic.source.source_path,argv[1]));
+        CHECK(!diagnostic.source.snapshot&&diagnostic.source.source.line>0&&diagnostic.source.source.column>0);
+    }
+    if(!strcmp(argv[3],"graph-reject"))
         CHECK(!diagnostic.source.source_path && !diagnostic.source.snapshot && !diagnostic.source.source.line);
     xr_source_compile_diagnostic_free(&diagnostic);xr_source_compile_diagnostic_free(&diagnostic);
     CHECK(!runtime_live && !runtime_bytes && handles()==baseline);

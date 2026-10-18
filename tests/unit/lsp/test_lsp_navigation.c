@@ -14,7 +14,9 @@
 #include <string.h>
 #include "../../../src/app/lsp/xlsp_server.h"
 #include "../../../src/app/lsp/xlsp_analysis.h"
-#include "../../../src/app/lsp/xlsp_rename.h"
+#include "../../../src/app/lsp/xlsp_source_index.h"
+#include "test_lsp_rename_params.h"
+#include "test_lsp_hover_params.h"
 #include "../../../src/base/xjson.h"
 #include "../test_win_compat.h"
 
@@ -65,7 +67,7 @@ TEST(hover_on_keyword) {
 
     // Hover on "var" (line 0, col 0)
     XrLspPosition pos = {0, 0};
-    XrJsonValue *result = xlsp_analyze_hover(server, doc, pos);
+    XrJsonValue *result = hover_test_at(server, doc, pos);
     // "var" is a keyword, hover should return something (keyword doc)
     // May return NULL if no keyword doc available -- either is acceptable
     if (result) {
@@ -85,7 +87,7 @@ TEST(hover_on_variable) {
 
     // Hover on "greeting" in the print call (line 1, col 6)
     XrLspPosition pos = {1, 6};
-    XrJsonValue *result = xlsp_analyze_hover(server, doc, pos);
+    XrJsonValue *result = hover_test_at(server, doc, pos);
     // Should get some hover info for the variable
     // Even if no type info is available, it should not crash
     if (result) {
@@ -105,7 +107,7 @@ TEST(hover_on_empty_space) {
 
     // Hover on empty line (line 1, col 0)
     XrLspPosition pos = {1, 0};
-    XrJsonValue *result = xlsp_analyze_hover(server, doc, pos);
+    XrJsonValue *result = hover_test_at(server, doc, pos);
     // Should return NULL for empty space
     if (result) {
         xjson_free(result);
@@ -121,7 +123,7 @@ TEST(hover_null_safety) {
     XrLspPosition pos = {0, 0};
 
     // NULL doc should not crash
-    XrJsonValue *result = xlsp_analyze_hover(server, NULL, pos);
+    XrJsonValue *result = hover_test_at(server, NULL, pos);
     ASSERT(result == NULL);
 
     xlsp_server_free(server);
@@ -294,20 +296,42 @@ TEST(highlight_null_safety) {
 // ============================================================================
 // Prepare Rename Tests
 // ============================================================================
+static bool prepare_rename_test_uri(char *uri,size_t size) {
+    char root[XR_TEST_PATH_MAX],path[XR_TEST_PATH_MAX];
+    if(!xr_test_realpath_buf(".",root,sizeof(root)))return false;
+    int n=snprintf(path,sizeof(path),"%s/prepare_rename.xr",root);
+    if(n<=0||(size_t)n>=sizeof(path))return false;
+    const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrCompileResources *resources=NULL;char *owned=NULL;bool ok=false;
+    if(xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK)return false;
+    if(xlsp_index_file_uri(resources,path,&owned)==XR_XIR_OK) {
+        size_t length=strlen(owned);if(length<size){memcpy(uri,owned,length+1);ok=true;}
+    }
+    xr_compile_resources_free(owned);xr_compile_resources_release(resources);return ok;
+}
 
 TEST(prepare_rename_valid_symbol) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
     const char *code = "var counter = 0\n";
-    XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
+    char uri[XR_TEST_PATH_MAX];ASSERT(prepare_rename_test_uri(uri,sizeof(uri)));
+    XrLspDocument *doc = open_and_parse(server, uri, code);
     ASSERT(doc != NULL);
 
     // Prepare rename on "counter" (line 0, col 4)
     XrLspPosition pos = {0, 4};
-    XrJsonValue *result = xlsp_analyze_prepare_rename(doc, pos);
+    XrJsonValue *params=rename_test_params(uri,pos,NULL);ASSERT(params != NULL);
+    XrJsonValue *result = xlsp_handle_td_prepare_rename(server,params);xjson_free(params);
     // Should return a range covering "counter"
     ASSERT(result != NULL);
+    const char *placeholder=xjson_get_string(result,"placeholder");ASSERT(placeholder != NULL);
+    ASSERT(strcmp(placeholder,"counter")==0);
+    XrJsonValue *range=xjson_get_object(result,"range");ASSERT(range != NULL);
+    ASSERT_EQ(xjson_get_int(xjson_get_object(range,"start"),"line"),0);
+    ASSERT_EQ(xjson_get_int(xjson_get_object(range,"start"),"character"),4);
+    ASSERT_EQ(xjson_get_int(xjson_get_object(range,"end"),"line"),0);
+    ASSERT_EQ(xjson_get_int(xjson_get_object(range,"end"),"character"),11);
 
     xjson_free(result);
     xlsp_server_free(server);
@@ -318,20 +342,21 @@ TEST(prepare_rename_keyword_rejected) {
     ASSERT(server != NULL);
 
     const char *code = "var x = 42\n";
-    XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
+    char uri[XR_TEST_PATH_MAX];ASSERT(prepare_rename_test_uri(uri,sizeof(uri)));
+    XrLspDocument *doc = open_and_parse(server, uri, code);
     ASSERT(doc != NULL);
 
     // Prepare rename on "var" (line 0, col 0) --should be rejected
     XrLspPosition pos = {0, 0};
-    XrJsonValue *result = xlsp_analyze_prepare_rename(doc, pos);
+    XrJsonValue *params=rename_test_params(uri,pos,NULL);ASSERT(params != NULL);
+    XrJsonValue *result = xlsp_handle_td_prepare_rename(server,params);xjson_free(params);
     ASSERT(result == NULL);
 
     xlsp_server_free(server);
 }
 
 TEST(prepare_rename_null_safety) {
-    XrLspPosition pos = {0, 0};
-    XrJsonValue *result = xlsp_analyze_prepare_rename(NULL, pos);
+    XrJsonValue *result = xlsp_handle_td_prepare_rename(NULL,NULL);
     ASSERT(result == NULL);
 }
 

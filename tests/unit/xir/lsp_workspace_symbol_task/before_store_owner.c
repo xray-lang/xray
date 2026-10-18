@@ -1,0 +1,11 @@
+/* Copyright (c) 2026 Xinglei Xu. MIT License. */
+#include "app/lsp/xlsp_source_index_store.h"
+#define xlsp_source_index_store_new before_xlsp_source_index_store_new
+#define xlsp_source_index_store_free before_xlsp_source_index_store_free
+#define xlsp_source_index_store_count before_xlsp_source_index_store_count
+#define xlsp_source_index_store_replace before_xlsp_source_index_store_replace
+#define xlsp_source_index_store_remove before_xlsp_source_index_store_remove
+#define xlsp_source_index_store_remove_prefix before_xlsp_source_index_store_remove_prefix
+#define xlsp_source_index_store_find before_xlsp_source_index_store_find
+#define xlsp_source_index_store_visit before_xlsp_source_index_store_visit
+#include "before_store.c"

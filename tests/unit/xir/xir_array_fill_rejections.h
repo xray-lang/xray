@@ -22,12 +22,12 @@ static void fill_rejections(void) {
         char name[1024];CHECK(snprintf(name,sizeof(name),"%s/rejected/%s/root.xr",XR_FILL_FIXTURES,cases[n])>0);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_FILL_FIXTURES};
         XrXirSourceRequest request={session,name,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *path=NULL;
+        XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirSourceFailure path={0};
         XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&path);
         printf("fill rejected%u %s status%u line%d:%d reason=%s\n",n,cases[n],status,diagnostic.line,diagnostic.column,diagnostic.message);
         CHECK(status==XR_XIR_BAD_TYPE&&diagnostic.status==status&&!result.checked&&!result.snapshot);
         CHECK(*diagnostic.message);
-        xr_compile_resources_free(path);xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
+        xr_xir_compile_source_failure_free(&path);xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);
         CHECK(fill_stats(&context).live_bytes==baseline);xr_compile_resources_release(context.resources);
         instance_compile_zero();CHECK(!runtime_live&&!runtime_bytes);
     }

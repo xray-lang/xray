@@ -1250,66 +1250,109 @@ bool xr_is_construct_only_type_name(Parser *parser, const char *name) {
     return false;
 }
 
-AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
+static bool xr_parse_argument_token_end(Parser *parser,const Token *token,XrNameSpan *out) {
+    if(!token->start||token->length<=0||token->line<=0||token->column<=0) {
+        xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_BAD_ARGUMENT);return false;
+    }
+    XrNameSpan end={token->line,token->column};
+    for(int i=0;i<token->length;++i) {
+        char byte=xr_parser_read_byte(parser,token->start+i);if(!xr_parser_healthy(parser))return false;
+        if(byte=='\n') {
+            if(end.line==INT_MAX){xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_BUDGET);return false;}
+            ++end.line;end.column=1;
+        } else {
+            if(end.column==INT_MAX){xr_compile_state_fail(parser->state,XR_COMPILE_RESOURCE_BUDGET);return false;}
+            ++end.column;
+        }
+    }
+    *out=end;return true;
+}
+XR_FUNC AstNode *xr_parse_call_with_types(Parser *parser, AstNode *callee,
+                                         XrTypeRef **type_args, int type_count) {
     if (!xr_parser_healthy(parser)) return NULL;
-    XR_DCHECK(parser != NULL, "parse_call_expr: NULL parser");
-    int line = callee && callee->line > 0 ? callee->line : parser->previous.line;
-    int column = callee && callee->column > 0 ? callee->column : parser->previous.column;
+    Token opening = parser->previous;
+    int before_errors = parser->error_count;
+    int line = callee && callee->line > 0 ? callee->line : opening.line;
+    int column = callee && callee->column > 0 ? callee->column : opening.column;
+    AstNode **arguments = NULL;
+    XrCallArgAccess *arg_accesses = NULL;
+    XrNameSpan *boundaries = NULL;
+    XrParseArgumentSyntax *argument_syntax = NULL;
+    int arg_count = 0, arg_capacity = 0, access_count = 0, access_capacity = 0;
+    int boundary_count = 0, boundary_capacity = 0;
+    int syntax_count = 0, syntax_capacity = 0;
+    if (parser->call_syntax_callback) {
+        XrNameSpan boundary = {opening.line, opening.column + opening.length};
+        XR_PARSE_PUSH(parser, boundaries, boundary_count, boundary_capacity, boundary);
+        if (!xr_parser_healthy(parser)) return NULL;
+    }
+    if (!xr_parser_check(parser, TK_RPAREN)) {
+        do {
+            Token first = parser->current;
+            XrCallArgAccess access = XR_CALL_ARG_PLAIN;
+            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
+            if (!xr_parser_healthy(parser)) return NULL;
+            if (parser->call_syntax_callback && arg && parser->error_count == before_errors) {
+                Token last = parser->previous;
+                XrNameSpan end={0};if(!xr_parse_argument_token_end(parser,&last,&end))return NULL;
+                XrParseArgumentSyntax fact = {arg, {first.line, first.column},end};
+                XR_PARSE_PUSH(parser, argument_syntax, syntax_count, syntax_capacity, fact);
+                if (!xr_parser_healthy(parser)) return NULL;
+            }
+            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
+            if (!xr_parser_healthy(parser)) return NULL;
+            XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
+            if (!xr_parser_healthy(parser)) return NULL;
+            if (!xr_parser_match(parser, TK_COMMA)) break;
+            if (parser->call_syntax_callback) {
+                XrNameSpan boundary = {parser->previous.line,
+                                       parser->previous.column + parser->previous.length};
+                XR_PARSE_PUSH(parser, boundaries, boundary_count, boundary_capacity, boundary);
+                if (!xr_parser_healthy(parser)) return NULL;
+            }
+        } while (!xr_parser_check(parser, TK_RPAREN));
+    }
+    xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
+    if (!xr_parser_healthy(parser)) return NULL;
+    Token closing = parser->previous;
+    AstNode *call = NULL;
+    if (callee && callee->type == AST_VARIABLE &&
+        xr_is_construct_only_type_name(parser, callee->as.variable.name)) {
+        call = xr_ast_new_expr(parser->compiler_session, NULL, callee->as.variable.name,
+                               arguments, arg_accesses, arg_count, type_args, type_count, line);
+    } else if (type_count) {
+        call = xr_ast_call_expr_generic(parser->compiler_session, callee, arguments, arg_accesses,
+                                        arg_count, type_args, type_count, line);
+    } else {
+        call = xr_ast_call_expr(parser->compiler_session, callee, arguments, arg_accesses,
+                                arg_count, line);
+    }
+    if (!xr_parser_healthy(parser) || !call) return NULL;
+    call->column = column;
+    call->end_line = closing.line;
+    call->end_column = closing.column + closing.length;
+    if (parser->call_syntax_callback && opening.type == TK_LPAREN && closing.type == TK_RPAREN &&
+        parser->error_count == before_errors) {
+        XrParseCallSyntax syntax = {.node=call,.callee=callee,.opening={opening.line, opening.column},
+            .closing={closing.line, closing.column},.boundaries=boundaries,.boundary_count=(size_t)boundary_count,
+            .arguments=argument_syntax,.argument_count=(size_t)syntax_count};
+        XrCompileResourceStatus status = parser->call_syntax_callback(parser->call_syntax_data, &syntax);
+        if (status != XR_COMPILE_RESOURCE_OK) {
+            (void)xr_compile_state_fail(parser->state, status);
+            return NULL;
+        }
+    }
+    return call;
+}
 
-    /* `a?.b.c()` — the call continues an optional chain, so it becomes the
-     * chain's method-call link and short-circuits with it (spec §3.6), exactly
-     * like the `a?.c()` the programmer could have written. */
+XR_FUNC AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
+    if (!xr_parser_healthy(parser)) return NULL;
+    /* Calls on implicit optional member links short-circuit with the chain. */
     if (callee && callee->type == AST_OPTIONAL_CHAIN && callee->as.optional_chain.implicit_link &&
         callee->as.optional_chain.chain_type == 0 && callee->as.optional_chain.name) {
         callee->as.optional_chain.chain_type = 2;
     }
-
-    AstNode **arguments = NULL;
-    XrCallArgAccess *arg_accesses = NULL;
-    int arg_count = 0;
-    int arg_capacity = 0;
-    int access_count = 0;
-    int access_capacity = 0;
-
-    if (!xr_parser_check(parser, TK_RPAREN)) {
-        do {
-            XrCallArgAccess access = XR_CALL_ARG_PLAIN;
-            AstNode *arg = xr_parse_call_argument_with_access(parser, &access);
-            if (!xr_parser_healthy(parser)) return NULL;
-            do {
-                XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, arg);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            do {
-                XR_PARSE_PUSH(parser, arg_accesses, access_count, access_capacity, access);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
-    }
-
-    do {
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
-        if (!xr_parser_healthy(parser)) return NULL;
-    } while (0);
-    int end_line = parser->previous.line;
-    int end_column = parser->previous.column + parser->previous.length;
-
-    // `Map()` / `Array()` / `Channel(n)` etc. construct built-in heap types.
-    if (callee && callee->type == AST_VARIABLE &&
-        xr_is_construct_only_type_name(parser, callee->as.variable.name)) {
-        return xr_ast_new_expr(parser->compiler_session, NULL, callee->as.variable.name, arguments,
-                               arg_accesses, arg_count, NULL, 0, line);
-    }
-
-    AstNode *call = xr_ast_call_expr(parser->compiler_session, callee, arguments, arg_accesses,
-                                     arg_count, line);
-    if (!xr_parser_healthy(parser)) return NULL;
-    if (call) {
-        call->column = column;
-        call->end_line = end_line;
-        call->end_column = end_column;
-    }
-    return call;
+    return xr_parse_call_with_types(parser, callee, NULL, 0);
 }
 
 /* ========== Array Parsing ========== */
@@ -2117,6 +2160,71 @@ AstNode *xr_parse_return_statement(Parser *parser) {
     return xr_ast_return_stmt(parser->compiler_session, values, 1, line);
 }
 
+static bool parse_alias_parameters(Parser *parser, XrGenericParam ***out, int *out_count) {
+    XrGenericParam **type_params = NULL;
+    int type_param_count = 0;
+    int type_param_capacity = 0;
+
+    if (xr_parser_match(parser, TK_LT)) {
+        do {
+            do {
+                xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+                if (!xr_parser_healthy(parser)) return false;
+            } while (0);
+            Token param_token = parser->previous;
+
+            char *param_name =
+                (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
+            if (!xr_parser_healthy(parser)) return false;
+            do { if (!ast_copy(parser->compiler_session, param_name, param_token.start, (size_t) param_token.length)) return false; } while (0);
+            do { if (!ast_work(parser->compiler_session, 1)) return false; param_name[param_token.length] = '\0'; } while (0);
+
+            for (int i = 0; xr_parser_step(parser) && (i < type_param_count); i++) {
+                if (type_params[i] && type_params[i]->name &&
+                    xr_parser_compare_string(parser, type_params[i]->name, param_name) == 0) {
+                    do {
+                        xr_parser_error(parser, "duplicate type parameter name in type alias");
+                        if (!xr_parser_healthy(parser)) return false;
+                    } while (0);
+                }
+            }
+
+            XrTypeRef **constraints = NULL;
+            int constraint_count = 0;
+            if (xr_parser_match(parser, TK_COLON)) {
+                do {
+                    xr_parser_error(parser, "type alias type parameters do not support constraints");
+                    if (!xr_parser_healthy(parser)) return false;
+                } while (0);
+                do {
+                    constraints = xr_parse_constraint_list(parser, &constraint_count);
+                    if (!xr_parser_healthy(parser)) return false;
+                } while (0);
+            }
+
+            XrGenericParam *gp =
+                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
+            if (!xr_parser_healthy(parser)) return false;
+            gp->name = param_name;
+            gp->constraints = constraints;
+            gp->constraint_count = constraint_count;
+            do {
+                XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
+                if (!xr_parser_healthy(parser)) return false;
+            } while (0);
+        } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
+
+        do {
+            xr_parser_consume(parser, TK_GT, "expected '>' to close type alias parameters");
+            if (!xr_parser_healthy(parser)) return false;
+        } while (0);
+    }
+
+    *out = type_params;
+    *out_count = type_param_count;
+    return true;
+}
+
 /*
  * Parse type alias declaration
  * type Point = { x: float, y: float }
@@ -2128,74 +2236,19 @@ AstNode *xr_parse_return_statement(Parser *parser) {
  */
 AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
-    int line = parser->previous.line;
 
     // Parse alias name
     do {
         xr_parser_consume(parser, TK_NAME, "expected type name after 'type'");
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
-    char *alias_name = ast_strndup(parser->compiler_session, parser->previous.start, parser->previous.length);
+    Token alias_token = parser->previous;
+    char *alias_name = ast_strndup(parser->compiler_session, alias_token.start, alias_token.length);
     if (!xr_parser_healthy(parser)) return NULL;
 
     XrGenericParam **type_params = NULL;
     int type_param_count = 0;
-    int type_param_capacity = 0;
-
-    if (xr_parser_match(parser, TK_LT)) {
-        do {
-            do {
-                xr_parser_consume(parser, TK_NAME, "expected type parameter name");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            Token param_token = parser->previous;
-
-            char *param_name =
-                (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
-            if (!xr_parser_healthy(parser)) return NULL;
-            do { if (!ast_copy(parser->compiler_session, param_name, param_token.start, (size_t) param_token.length)) return NULL; } while (0);
-            do { if (!ast_work(parser->compiler_session, 1)) return NULL; param_name[param_token.length] = '\0'; } while (0);
-
-            for (int i = 0; xr_parser_step(parser) && (i < type_param_count); i++) {
-                if (type_params[i] && type_params[i]->name &&
-                    xr_parser_compare_string(parser, type_params[i]->name, param_name) == 0) {
-                    do {
-                        xr_parser_error(parser, "duplicate type parameter name in type alias");
-                        if (!xr_parser_healthy(parser)) return NULL;
-                    } while (0);
-                }
-            }
-
-            XrTypeRef **constraints = NULL;
-            int constraint_count = 0;
-            if (xr_parser_match(parser, TK_COLON)) {
-                do {
-                    xr_parser_error(parser, "type alias type parameters do not support constraints");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                do {
-                    constraints = xr_parse_constraint_list(parser, &constraint_count);
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-            }
-
-            XrGenericParam *gp =
-                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
-            if (!xr_parser_healthy(parser)) return NULL;
-            gp->name = param_name;
-            gp->constraints = constraints;
-            gp->constraint_count = constraint_count;
-            do {
-                XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
-
-        do {
-            xr_parser_consume(parser, TK_GT, "expected '>' to close type alias parameters");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-    }
+    if (!parse_alias_parameters(parser, &type_params, &type_param_count)) return NULL;
 
     // Expect '='
     do {
@@ -2281,12 +2334,15 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     // Stash the resolved type in TypeAliasNode::resolved_type so that
     // the analyzer can read it without going through any backchannel
     // on AstNode itself.
-    AstNode *node = xr_ast_type_alias(parser->compiler_session, alias_name, NULL, NULL, 0, line);
+    AstNode *node = xr_ast_type_alias(parser->compiler_session, alias_name, NULL, NULL, 0, alias_token.line);
     if (!xr_parser_healthy(parser)) return NULL;
 
     if (!node) {
         return NULL;
     }
+    node->column = alias_token.column;
+    node->end_line = parser->previous.line;
+    node->end_column = parser->previous.column + parser->previous.length;
     node->as.type_alias.type_params = type_params;
     node->as.type_alias.type_param_count = type_param_count;
     node->as.type_alias.resolved_type = type_definition;

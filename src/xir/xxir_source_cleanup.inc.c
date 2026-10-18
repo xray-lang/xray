@@ -41,6 +41,7 @@ static bool source_defer(SourceContext *ctx, AstNode *node) {
     SourceName declaration = {0}; declaration.name = name; declaration.node = node;
     if (!source_query_declare(ctx, &declaration, XR_XIR_SOURCE_FUNCTION, owner->declaration,
         source_query_range(ctx, node, NULL))) return false;
+    if (!source_query_syntax_role(ctx, declaration.declaration, XR_XIR_SOURCE_SYNTAX_NONE, 0)) return false;
     body->declaration = declaration.declaration;
     ctx->functions[index] = (XrXirFunction){name, (uint32_t)source_text_size(ctx, name), body->parameters,
         scan.count, XR_XIR_UNIT, NULL, 0, NULL, 0, NULL, 0};

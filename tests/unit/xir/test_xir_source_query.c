@@ -379,11 +379,11 @@ static void multiline_declaration(const XrXirSourceRequest *request) {
     xr_xir_compile_source_result_free(&result);
 }
 static void failures(XrXirSourceRequest *request) {
-    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure_path = NULL;
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure_path={0};
     write_source(request->entry_path, "const kept=1\nprint(kept)\nprint(missing)\nconst later=2\n");
     CHECK(xr_xir_compile_source_check(request, &result, &diagnostic, &failure_path) == XR_XIR_BAD_VALUE);
     CHECK(!result.checked && !result.snapshot && diagnostic.line == 3 && diagnostic.status == XR_XIR_BAD_VALUE);
-    CHECK(failure_path && strstr(failure_path, "root.xr")); xr_compile_resources_free(failure_path); failure_path = NULL;
+    CHECK(failure_path.path && strstr(failure_path.path, "root.xr")); xr_xir_compile_source_failure_free(&failure_path); failure_path.path = NULL;
     xr_xir_compile_source_result_free(&result); CHECK(!result.checked && !result.snapshot);
     /* The valid counterpart publishes both names; failure grants neither. */
     write_source(request->entry_path, "const kept=1\nprint(kept)\nprint(kept)\nconst later=2\n");
@@ -394,7 +394,7 @@ static void failures(XrXirSourceRequest *request) {
     CHECK(references(view, kept->id, kept->id) == 2); xr_xir_compile_source_result_free(&result);
     write_source(request->entry_path, "import \"./lib\" as lib\nconst kept=1\nlib.hidden(1)\n");
     CHECK(xr_xir_compile_source_check(request, &result, &diagnostic, &failure_path) != XR_XIR_OK);
-    CHECK(!result.checked && !result.snapshot); xr_compile_resources_free(failure_path); failure_path = NULL;
+    CHECK(!result.checked && !result.snapshot); xr_xir_compile_source_failure_free(&failure_path); failure_path.path = NULL;
     xr_xir_compile_source_result_free(&result);
     write_source(request->entry_path, "import \"./lib\" as lib\nconst kept=1\nlib.visible(1)\n");
     CHECK(xr_xir_compile_source_check(request, &result, &diagnostic, NULL) == XR_XIR_OK);
@@ -407,7 +407,7 @@ static void failures(XrXirSourceRequest *request) {
     write_source(request->entry_path, "import { hidden } from \"./lib\"\n");
     CHECK(xr_xir_compile_source_check(request, &result, &diagnostic, &failure_path) != XR_XIR_OK);
     CHECK(!result.checked && !result.snapshot && diagnostic.module == 0);
-    CHECK(!failure_path || strstr(failure_path, "root.xr")); xr_compile_resources_free(failure_path);
+    CHECK(!failure_path.path || strstr(failure_path.path, "root.xr")); xr_xir_compile_source_failure_free(&failure_path);
     xr_xir_compile_source_result_free(&result);
     write_source(request->entry_path, "import { visible } from \"./lib\"\n");
     CHECK(xr_xir_compile_source_check(request, &result, &diagnostic, NULL) == XR_XIR_OK);
@@ -500,7 +500,7 @@ static void native_array_type_rejections(XrXirSourceRequest *request) {
         }
         if (i == 2) {
             CHECK(status == XR_XIR_BAD_STRUCTURE && !result.snapshot);
-            CHECK(!strcmp(diagnostic.message, "module graph build failed"));
+            CHECK(!strcmp(diagnostic.message, "type alias 'Array' does not take type arguments"));
         } else {
             CHECK(status == XR_XIR_BAD_TYPE && !result.snapshot);
         }
@@ -508,7 +508,7 @@ static void native_array_type_rejections(XrXirSourceRequest *request) {
         CHECK(diagnostic.status == status);
         CHECK(!strcmp(diagnostic.message, i == 0 ?
             "Array element must be a copyable storable type in this declaration" : i == 2 ?
-            "module graph build failed" : "type name does not bind the governed Array declaration"));
+            "type alias 'Array' does not take type arguments" : "type name does not bind the governed Array declaration"));
         xr_xir_compile_source_result_free(&result);
     }
 }
@@ -966,7 +966,7 @@ static void query_next_scope(XrXirSourceRequest *request, XrCompilerSession **se
 int main(int argc, char **argv) {
     CHECK(argc == 1 || (argc == 2 && (!strcmp(argv[1], "--interface-name-spans") ||
         !strcmp(argv[1], "--core-syntax") || !strcmp(argv[1], "--requirement-capacity") ||
-        !strcmp(argv[1], "--requirement-provenance") || !strcmp(argv[1], "--enum-ref-next"))));
+        !strcmp(argv[1], "--requirement-provenance") || !strcmp(argv[1], "--enum-ref-next") || !strcmp(argv[1], "--enum-ref-permission"))));
     stage_context = stage_context_default(); generic_storage_cases();
     nominal_query_boundary(&stage_context);
     char directory[XR_TEST_PATH_MAX] = "xir-source-query-XXXXXX", absolute[XR_TEST_PATH_MAX];
@@ -984,6 +984,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[1], "--core-syntax")) source_core_syntax_facts(&request);
         else if (!strcmp(argv[1], "--requirement-capacity")) source_requirement_value_boundaries(&request);
         else if (!strcmp(argv[1], "--requirement-provenance")) source_requirement_value_provenance(&request);
+        else if (!strcmp(argv[1], "--enum-ref-permission")) source_enum_ref_permission_cases(&request);
         else source_interface_name_spans(&request);
         xr_compile_session_free(session);
         CHECK(xr_test_unlink(root) == 0 && xr_test_unlink(library) == 0 && xr_test_rmdir(directory) == 0);

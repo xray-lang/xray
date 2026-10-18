@@ -6,7 +6,8 @@
  *
  * xxir_source_constraints.inc.c - Declaration-scoped interface applications
  */
-static SourceName *source_interface_name(SourceContext *ctx, AstNode *node, const char *name) {
+static SourceName *source_interface_name(SourceContext *ctx, AstNode *node, const char *name,
+    uint32_t *binding) {
     if (!name || !*name) return NULL;
     int count = 0;
     XrGenericParam **parameters = source_type_parameters(ctx, &count);
@@ -26,11 +27,38 @@ static SourceName *source_interface_name(SourceContext *ctx, AstNode *node, cons
         symbol = visible_name(ctx, prefix);
         if (symbol && symbol->kind == SOURCE_MODULE) symbol = imported_declaration(ctx, symbol, dot + 1);
         else symbol = NULL;
+        if (symbol) *binding = symbol->declaration;
     } else {
         symbol = visible_name(ctx, name);
+        if (symbol) *binding = symbol->declaration;
         if (symbol && symbol->kind == SOURCE_IMPORT) symbol = imported_declaration(ctx, symbol, symbol->imported);
     }
     return symbol && symbol->kind == SOURCE_INTERFACE ? symbol : NULL;
+}
+static bool source_interface_reference(SourceContext *ctx, const XrTypeRef *ref,
+    uint32_t binding, uint32_t target) {
+    XrTypeNameSpan span = ref->name_span;
+    if (!span.line && !span.column && !span.length) return true;
+    if (span.line <= 0 || span.column <= 0 || span.length <= 0 || span.length > INT_MAX - span.column ||
+        !binding || !target)
+        return source_fail(ctx, NULL, XR_XIR_BAD_STRUCTURE, "interface reference token is invalid");
+    XrXirSourceRange range = {ctx->module, span.line, span.column, span.line, span.column + span.length};
+    /* Constraints can be checked more than once. One written token keeps one
+     * binding/target observation, independently of semantic replay. */
+    for (uint32_t i = 0; i < ctx->query.reference_count; ++i) {
+        if (!source_work(ctx, NULL)) return false;
+        const XrXirSourceReference *existing = &ctx->query.references[i];
+        if (existing->range.module == range.module && existing->range.line == range.line &&
+            existing->range.column == range.column && existing->range.end_line == range.end_line &&
+            existing->range.end_column == range.end_column && existing->declaration == binding &&
+            existing->target == target && existing->access == XR_XIR_SOURCE_TYPE_USE) return true;
+    }
+    XrXirSourceReference *records = source_query_append(ctx, ctx->query.references,
+        &ctx->query.reference_count, &ctx->reference_capacity, sizeof(*records));
+    if (!records) return false;
+    ctx->query.references = records;
+    records[ctx->query.reference_count - 1] = (XrXirSourceReference) {range, binding, target, XR_XIR_SOURCE_TYPE_USE};
+    return source_query_syntax_reference(ctx, range);
 }
 static bool source_interface_application(SourceContext *ctx, AstNode *node,
     const XrTypeRef *ref, XrXirInterfaceApplication *output) {
@@ -38,9 +66,11 @@ static bool source_interface_application(SourceContext *ctx, AstNode *node,
         !ref->name || (ref->kind == XR_TREF_NAMED && ref->nchildren) ||
         (ref->nchildren && !ref->children))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface application requires an explicit named interface");
-    SourceName *symbol = source_interface_name(ctx, node, ref->name);
+    uint32_t binding = 0;
+    SourceName *symbol = source_interface_name(ctx, node, ref->name, &binding);
     if (!symbol) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "constraint name does not resolve to an interface");
     const XrXirInterfaceDeclaration *declaration = &ctx->interfaces.declarations[symbol->index];
+    uint32_t index = symbol->index, target = symbol->declaration;
     uint32_t count = ref->nchildren;
     if (count != declaration->parameter_count)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface application requires its exact explicit arguments");
@@ -51,8 +81,8 @@ static bool source_interface_application(SourceContext *ctx, AstNode *node,
         if (arguments[a] == XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types, arguments[a]))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "interface argument must be an admitted value type");
     }
-    *output = (XrXirInterfaceApplication){symbol->index, arguments, count};
-    return true;
+    *output = (XrXirInterfaceApplication){index, arguments, count};
+    return source_interface_reference(ctx, ref, binding, target);
 }
 static bool source_constraint_same(SourceContext *ctx, AstNode *node,
     const XrXirInterfaceApplication *a, const XrXirInterfaceApplication *b, bool *same) {

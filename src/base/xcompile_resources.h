@@ -22,8 +22,11 @@ typedef enum XrCompileResourceStatus {
     XR_COMPILE_RESOURCE_OK,
     XR_COMPILE_RESOURCE_BAD_ARGUMENT,
     XR_COMPILE_RESOURCE_BUDGET,
-    XR_COMPILE_RESOURCE_OUT_OF_MEMORY
+    XR_COMPILE_RESOURCE_OUT_OF_MEMORY,
+    XR_COMPILE_RESOURCE_CANCELLED
 } XrCompileResourceStatus;
+
+typedef bool (*XrCompileCancelPoll)(const void *context);
 
 typedef struct XrCompileResourceLimits {
     uint64_t allocated_bytes, live_bytes, work;
@@ -64,6 +67,18 @@ XR_FUNC XrCompileResourceStatus xr_compile_resources_extent(XrCompileResources *
  * This has the same charging and exclusion rules as the extent observation. */
 XR_FUNC XrCompileResourceStatus xr_compile_resources_allocation(XrCompileResources *resources,
     const void *memory, size_t bytes);
+/* Bind one compound operation's borrowed cancellation context. The poll must
+ * not allocate, block, throw, or re-enter this ledger; it runs under its lock.
+ * Keep context alive until the matching end call. Nested or mismatched scopes
+ * fail without replacing the active binding. A true poll latches cancellation.
+ * End polls once more, detaches, and returns CANCELLED when latched. Neither
+ * operation resets counters or limits. Retain/stats/free remain available.
+ * A compound owner must give the end result precedence over nested failures;
+ * nested domain adapters can use their ordinary failure category to unwind. */
+XR_FUNC XrCompileResourceStatus xr_compile_resources_begin_cancel(XrCompileResources *resources,
+    XrCompileCancelPoll poll, const void *context);
+XR_FUNC XrCompileResourceStatus xr_compile_resources_end_cancel(XrCompileResources *resources,
+    XrCompileCancelPoll poll, const void *context);
 
 /* Check one prospective payload allocation and its specified payload work at
  * this instant, without allocating, charging, or reserving resources. Actual

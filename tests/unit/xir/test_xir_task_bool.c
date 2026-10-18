@@ -30,13 +30,13 @@ static XrXirProgram *bool_program(const BoolOracle *oracle, uint32_t *entry) {
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_TASK_BOOL_FIXTURES, oracle->name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_BOOL_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirSourceResult source = {0}; XrXirSourceDiagnostic source_diagnostic = {0}; char *failure = NULL;
+    XrXirSourceResult source = {0}; XrXirSourceDiagnostic source_diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirDiagnostic diagnostic = {0}; XrXirCheckedPacket packet = {0};
     XrXirArtifact *read = NULL, *closed = NULL, *lowered = NULL;
     XrXirStatus status = xr_xir_compile_source_check(&request, &source, &source_diagnostic, &failure);
     xr_compile_session_free(session);
     if (status != XR_XIR_OK) fprintf(stderr, "%s check=%u %s\n", oracle->name, status, source_diagnostic.message);
-    CHECK(status == XR_XIR_OK && source.checked && !failure);
+    CHECK(status == XR_XIR_OK && source.checked && !failure.path);
     CHECK(xr_xir_compile_checked_write(source.checked, &packet, &diagnostic) == XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);
     CHECK(xr_xir_compile_checked_read(context, packet.bytes, packet.length, &read, &diagnostic) == XR_XIR_OK);
@@ -116,11 +116,11 @@ static void bool_reject(const char *name) {
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_TASK_BOOL_FIXTURES, name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_BOOL_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     fprintf(stderr, "Task<bool> reject %s=%u: %s\n", name, status, diagnostic.message);
     CHECK(status == XR_XIR_BAD_TYPE && !result.checked && !result.snapshot);
-    xr_compile_resources_free(failure); xr_xir_compile_source_result_free(&result); xr_compile_session_free(session);
+    xr_xir_compile_source_failure_free(&failure); xr_xir_compile_source_result_free(&result); xr_compile_session_free(session);
 }
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0); bool complete = true;

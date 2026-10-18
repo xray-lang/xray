@@ -402,6 +402,24 @@ GET及索引读返回独立拥有的元素，并保留索引求值前选定的�
 
 源码查询快照独立拥有Array类型节点、成员签名、泛型声明owner、源码位置及内容身份，编译会话释放后仍有效；查询不重新解析、推断或执行。原生声明的查询来源不产生可执行initializer。失败的私有、别名或未准入成员查找不发布成功绑定；资源失败不发布Checked或快照。查询中的core len记录其稳定身份，未知源码来源保持未知。
 
+源码调用观察额外拥有规范实参推导及转换完成后的直接调用显示签名：实际替换的参数向量、真实接收者前缀和结果类型。残留类型参数保留调用方声明owner及真实参数名；有序名称向量独立拥有，不从序号合成。附件校验声明参数数、接收者身份和类型表达式，深复制到接收快照，失败原子回滚且不重置原资源账本。签名查询结合这些观察、声明名称及参数模式，不重复推导。间接或尚未准入的原生调用观察保持未知。这些显示事实不构造可执行调用，也不授予Final或效果权威。
+
+已准入的Array调用还保存实际实例化owner、检查及转换后的显式参数类型、结果和原生声明的optional/variadic标记；不为原生值操作虚构receiver参数。参数名来自受治理的原生声明，附件独立核对原生owner/member身份、名称、源码路径、内容指纹、位置及参数数，不能仅凭显示标签或同名用户类型绑定。查询消费者按真实variadic末参数选择活动参数，跨入口合并还核对声明来源；原生来源不虚构编辑器文档版本或跳转URI。
+
+原生声明的开放Array<T> schema只属于拥有式查询类型池。成功Checked后，查询投影保留全部可执行类型ID前缀，并复用已有规范开放节点或追加独立查询节点；不把声明schema插入可执行类型池。Array recipe中的临时存储保留已检查receiver元素的声明类型界限，不作为新的用户类型推断变量。此边界不授予执行、构造、Final或效果权限。
+
+assert、assertEqual及assertPanics的已检查调用观察保留INTRINSIC声明族，不伪装普通函数。附件接收这些已知签名前，核对治理的稳定ID、名称、参数数、Unit结果及泛型参数数、真实名称位置，以及唯一内建源码的memory模块身份和带域及长度边界的内容指纹。来源检查复用模块身份和指纹算法，资源失败保持附件未发布，不重置接收账本。查询事实不建立内建执行绑定，也不为memory来源虚构文件URI。
+
+源码声明显示事实还独立拥有定义作用域中的真实有序泛型名称，包括方法和闭包的实际外层前缀；缺失名称保持明确不可用，不从类型参数序号合成名称。接收端校验名称向量、参数数与声明族，并深复制全部字符串，附件失败保持原快照和资源账本。只有带初始化器且没有显式类型注解的变量或常量声明可带推导绑定标记。只读类型提示使用该标记、Checked 类型及真实名称位置，按严格 UTF-16 的半开区间筛选，拥有完整未截断标签；它不重新推导，也不建立函数效果证明或宣告公开 inlay handler 的完整资格。
+
+参数提示的语法输入独立拥有最终 AST 中可达的已完成调用及完整实参 token 范围，包含括号、显式访问标记和多行 token；恢复解析中丢弃的调用不发布。数值位置、真实变量选择、URI、版本和规范内容指纹在原账本上拥有，语法会话销毁后仍有效。只读查询核对同一账本和精确文档身份，再从已检查的调用目标、真实声明参数及模式构造完整名称标签；不从显示签名反向解析或重推导。原生参数可来自治理声明而无独立 token 位置，内建 memory 来源不虚构文件路径或编辑器 URI。显示结果拥有目标声明族、原生身份、模块身份、路径、内容指纹及真实名称范围，不能仅凭同名标签跨根合并。没有确定调用目标或真实参数事实时明确不可用；这不授予合法 MOVE 正向、一般 Final、完整效果或公开 inlay 过程资格。
+
+多根参数提示必须比较真实目标来源，包括可用时的声明编辑器 URI、版本与严格 UTF-16 选择范围，以及规范模块身份、内容指纹、路径、声明族、原生身份和实际名称范围；不同根中的局部模块序号不构成身份。只有包含调用文档的根参加比较，任一来源冲突均原子拒绝，空结果仍参加一致性判断。跨账本根在访问其事实前拒绝。拥有型参数请求捕获 range、开放文本和参数名称配置，在线程工作开始前即可销毁所有生产者；配置关闭仍校验 UTF-16 坐标。结果只在原请求身份、版本和取消状态仍有效时发布，不写入语义 token 缓存。准备中的参数请求不替代公开 inlay 对类型和效果事实的完整要求。
+
+类型提示另外拥有不依赖局部类型或声明序号的显示身份。编码观察已检查的 builtin、真实泛型 owner、复合类型节点、callable flags/modes、实参及字段类型，名义类型附规范模块身份、来源指纹、真实声明及编辑器版本；循环图以有限活动路径回边表示，不重推导。多根类型 JSON 在任何提示产生前核对完整请求文档内容和版本，再比较标签、位置和实际类型身份；空区域也不得放过文档版本冲突。准备中的同一绑定提示请求同时捕获类型与参数开关，在原账本内生成独立 JSON，并以有界稳定归并排序按位置和提示种类发布；任一步失败释放两域准备而不发布部分结果。公开 inlay 对完整效果证明的要求保持。
+
+
+
 此子集的Windows源码VM、native、混合条目及Checked重载按独立预期验证两模块字符串程序，输出为`red\nblue\n2\ngreen\nblue\ngreen\n3\n`；实例隔离、结果寿命、初始化越界粘滞与分配失败物理释放另有断言。输出golden不替代OOM、retain、工作预算或全量sanitizer门。完整批次资格仍要求受影响目标重建、回归、合同和sanitizer门；本节不声明这些完整门或macOS已通过。
 
 其余13个Array成员以及尚未接通的capacity、切片、ptr/mutPtr和iterator方法族仍须分别准入；不因已有recipe的冻结而自动完成。完整move、用户结构体族、跨Program结构导入、stdlib Checked/native包发布及旧链最终删除不由本节完成。源码Array for-in沿既有拥有式快照合同，不能视为iterator API资格。唯一现行协议仍由§17.6的实现常量定义，无旧reader或兼容接口；本节合同同步不宣称完整安全或全回归通过。
@@ -565,6 +583,21 @@ Source 的 &&/|| 在该局部存储上保留短路语义，经原 Checked→特�
 
 本节不准入普通 var 生成的拥有型 Cell、owned/path 操作、聚合/字符串导出、未知函数值或 native/Instance 执行；它们需要各自实际类型、生命周期与费用接口及独立资格，不从栈内标量存储外推。
 
+
+### 17.40 Source 失败诊断与编辑器发布
+
+Source失败诊断的原始line/column始终为一基字节位置，原诊断结构及SourceContext/Final布局不为编辑器坐标改变。可选失败输出使用独立拥有型XrXirSourceFailure：空输出在真实已定位失败时接收规范模块路径，parser来源和可用的零基UTF-16标量；该参数原子切换为此类型，没有旧路径输出签名别名。路径转移及清理不补做分配或work，显式free释放接收拥有权。
+
+模块图在实际parser callback期间复制首个真实消息、模块及原始位置，并在当次文本仍有效时按原ledger投影UTF-16。CRLF是一个编辑器换行，独立CR遵守既有编译器字节列与编辑器行规则；非法边界不夹取、半UTF8/半CRLF不作为位置。Source corpus随后纳入模块的parse错误同样保留真实来源，资源失败不得改报为语言错误或部分成功。
+
+LSP仅消费该失败事实：开放文本核对真实模块与投影并保留版本，关闭依赖使用规范路径编码URI及null版本，不重读已变化的磁盘，也不对入口文本转换依赖字节位置。选中编辑器的独立syntax诊断仍优先；未知来源或坐标保持失败，不生成虚构零位置或空成功。这些事实只有显示权威，不授类型、调用、效果或执行权限。
+
+
+LSP文档打开、编辑与诊断使用既定64MiB累计分配、8MiB存活量和128000000 work额度，不借用CLI默认额度。发布校验Source文本快照的服务器修订和开放目标版本；真实关闭依赖保留null版本，不能仅因没有编辑器bucket就丢弃已有解析事实。
+
+成功发布者拥有该URI的完整空诊断清除参数；该JSON独立拥有字符串，在文档Source替换时显式转移，不借用已死亡的源文本或ledger。相同URI被新的发布者接管后，原发布者不得再清除它。编辑后目标URI变化先清除旧接收者再发布新结果，两份JSON和序列化体均在首字节写出前准备；准备失败不花费发送拥有权，已被操作系统接受的字节不可回滚，写失败终止发送。
+
+文档关闭清除自身和指向关闭编辑器的既有发布；清除全部诊断同时覆盖关闭依赖与开放文档。无法定位的新语言错误只撤销已过期的自有发布，不伪造当前文本的空成功。清理拥有权不再补做分配或资源work；显式清除准备与传输失败保持原拥有权或进入终止状态，不制造部分JSON帧。
 ### 17.50 已发布Source定义的历史接收
 
 持续Source拥有者只向下一候选输入提供本拥有者已发布的真实Checked Program和实际注册绑定。历史输入使用独立于Catalog Library的内部模块表示；不重新解析或拼接旧Source，不修改Program的linkage，也不以查询名称构造函数、泛型或名义类型身份。接收复制并重定位完整Checked声明闭包，仍进入唯一Built→Checked→特化复验→Lowered管线。
@@ -1195,6 +1228,24 @@ An escaped Array owns the TypeArena and backing lifetime needed for reading, cop
 
 Source query snapshots independently own Array type nodes, member signatures, generic declaration owners, source positions and content identities, and remain valid after compiler-session release. Queries do not resolve, infer or execute. Native declaration provenance does not create an executable initializer. Failed private, alias or unadmitted-member lookups publish no successful binding; resource failure publishes neither Checked nor a snapshot. A core len query records its stable identity and leaves unknown source provenance unknown.
 
+Source call observations additionally own direct-call display signatures after the canonical argument inference and conversion pass: the actual substituted parameter vector, the real receiver prefix and the result type. A remaining type parameter retains its caller declaration owner and exact parameter name; the ordered name vector is independently owned and is never synthesized from an ordinal. Attachment validates the declaration arity, receiver identity and type expressions, deeply copies the vector into the receiving snapshot and rolls back on failure without resetting its resource ledger. Signature queries use these observations together with declaration names and parameter modes; they do not repeat inference. Unknown indirect or unadmitted native observations remain unknown. These display facts neither construct executable calls nor establish Final or effect authority.
+
+Admitted Array calls also retain the actual instantiated owner, checked and converted explicit parameter types, result and governed optional/variadic parameter flags. Native value operations acquire no invented receiver parameter. Parameter names come from governed native declarations. Attachment independently checks native owner/member identities, names, source path, content fingerprint, ranges and arity; a display label or a same-named user type cannot establish identity. The consumer selects the real final variadic parameter and compares declaration provenance across entry snapshots. Native provenance invents neither an editor document version nor a navigation URI.
+
+An open Array<T> native declaration schema belongs only to the owned query type pool. After successful Checked construction, query projection preserves the complete executable type-ID prefix and either reuses an existing canonical open node or appends a separate query node. Declaration schemas never enter the executable pool. Array recipe temporaries retain the declared type bound of the checked receiver element rather than becoming new user inference variables. This boundary grants no execution, construction, Final or effect authority.
+
+Checked observations for assert, assertEqual and assertPanics retain the INTRINSIC declaration family rather than impersonating ordinary functions. Before accepting their known signatures, attachment checks governed stable IDs, names, arity, Unit result, generic arity, actual name locations, and the unique builtin source memory-module identity and domain- and length-framed content fingerprint. Origin checks reuse the module identity and fingerprint algorithms. Resource failure leaves attachment unpublished without resetting the receiving ledger. Query facts establish no intrinsic execution binding and invent no file URI for memory provenance.
+
+Declaration display facts also independently own the actual ordered generic names in the definition scope, including a method or closure's real enclosing prefix. Missing names remain explicitly unavailable and are never synthesized from parameter ordinals. Attachment validates vector shape, arity and declaration family, deeply copies every string and preserves the original snapshot and resource ledger on failure. Only variable or constant declarations with an initializer and no explicit type annotation carry the inferred-binding flag. Readonly type hints use this flag, Checked types and actual name positions, select a strict UTF-16 half-open range and own complete untruncated labels. They do not repeat inference, establish function-effect proofs or qualify the complete public inlay handler.
+
+Parameter-hint syntax independently owns completed calls reachable from the final AST and complete argument-token ranges, including parentheses, explicit access markers and multiline tokens. Calls discarded during recovery never publish. Numeric positions, actual variable selections, URI, version and canonical content fingerprint are owned on the original ledger and survive syntax-session death. Readonly queries validate that ledger and exact document identity before deriving complete name labels from checked call targets, actual declaration parameters and modes; they neither parse display signatures nor repeat inference. Native parameter names may come from governed declarations without separate token positions, and builtin memory origins acquire no invented file path or editor URI. Results own target declaration family, native identity, module identity, path, content fingerprint and actual name range; equal labels alone never justify merging roots. Indeterminate call targets or parameter facts remain explicitly unavailable. These observations qualify neither positive noncopyable MOVE, general Final, complete effects nor the public inlay process.
+
+Parameter hints across roots compare authentic target provenance, including the declaration editor URI, version and strict UTF-16 selection when available, canonical module identity, content fingerprint, path, declaration family, native identity and actual name range. Root-local module ordinals are not identities. Only roots containing the call document participate; any provenance conflict rejects atomically, and empty results still participate in agreement. Foreign-ledger roots reject before their facts are accessed. Owned parameter requests capture the range, open texts and parameter-name configuration, allowing all producers to die before worker execution. Disabled configuration still validates UTF-16 coordinates. Publication requires the original request identity, revision and cancellation state; it never writes semantic-token caches. Prepared parameter requests do not replace the full public inlay requirements for type and effect facts.
+
+Type hints additionally own a display identity independent of local type and declaration ordinals. Encoding observes checked builtins, authentic generic owners, constructed nodes, callable flags and modes, arguments and field types. Nominal types include canonical module identity, source fingerprint, actual declaration facts and editor versions. Cyclic graphs use finite active-path backreferences without inference. Before producing any hints, multi-root type JSON validates the complete requested text and version, then compares labels, positions and authentic type identities; empty regions do not excuse document-version conflicts. The same prepared binding-hint request captures both type and parameter controls, constructs independent JSON on the original ledger and uses bounded stable merge sorting by position and hint kind. Any failure releases preparation in both allocation domains without publishing partial output. Public inlay still requires complete effect proof.
+
+
+
 The Windows source VM, native, mixed-entry and Checked-reload paths verify the two-module string program against independent expectations: `red\nblue\n2\ngreen\nblue\ngreen\n3\n`. Separate assertions cover instance isolation, result lifetime, sticky initialization bounds and physical release after allocation failure. The output golden does not replace OOM, retain, work-budget or full sanitizer gates. Complete batch qualification still requires fresh affected targets, regression, contract and sanitizer gates; this section does not claim those complete gates or macOS have passed.
 
 The other 13 Array members, and unfinished capacity, slice, ptr/mutPtr and iterator method families, still require individual admission; freezing existing recipes does not complete them automatically. Full move, user-struct families, cross-Program structural import, stdlib Checked/native package publication and final old-chain deletion are outside this subset. Source Array for-in follows its existing owned-snapshot contract and does not qualify iterator APIs. The sole current protocols remain defined by the implementation constants in §17.6, without old readers or compatibility interfaces. This contract update claims neither full safety nor full regression success.
@@ -1365,6 +1416,21 @@ Source &&/|| preserve short-circuit semantics through this storage, the ordinary
 
 This section does not admit owned Cells produced by ordinary var, owned/path operations, aggregate/string exports, unknown function values or native/Instance execution. Each requires authentic type, lifetime and charging interfaces plus independent qualification; stack scalar storage does not establish those capabilities.
 
+
+### 17.40 Source failure diagnostics and editor publication
+
+Source failure diagnostics retain one-based byte line/column coordinates. Editor positions do not change the original diagnostic or SourceContext/Final layout. The optional failure output uses an independently owned XrXirSourceFailure: an empty receiver obtains the canonical module path for an actual located failure, parser provenance and available zero-based UTF-16 scalars. The parameter cuts over atomically to this type without a legacy path-output signature alias. Path transfer and cleanup allocate no memory or work; explicit free releases receiving ownership.
+
+The module graph copies the first actual parser callback message, module and original location, and projects UTF-16 while that exact text is alive on the original ledger. CRLF is one editor newline; standalone CR follows the existing compiler-byte and editor-row rules. Invalid boundaries are not clamped, and half-UTF8 or half-CRLF boundaries are not positions. Parse failures in later corpus inclusions retain their actual producer too. Resource failure never becomes a language error or partial success.
+
+LSP only consumes those failure facts: open text authenticates its actual module and projection and retains its version; a closed dependency uses the canonical path encoded as a URI and a null version. It neither rereads changed disk bytes nor converts dependency bytes against entry text. The selected editor's independent syntax diagnostics keep precedence. Unknown provenance or coordinates fail rather than inventing position zero or empty success. These are display facts, with no type, call, effect or execution authority.
+
+
+LSP document open, edit and diagnostics use the established limits of 64 MiB cumulative allocation, 8 MiB live storage and 128000000 work, without borrowing CLI defaults. Publication checks the server revision of the Source text snapshot and the open target version. An actual closed dependency retains a null version; an absent editor bucket does not discard existing parser facts.
+
+The successful publisher owns complete empty-diagnostic params for that URI. This JSON independently owns its strings and explicitly transfers when the document Source owner is replaced, without borrowing dead source text or ledgers. A later publisher taking the same URI revokes the previous publisher's clearing right. A changed target URI clears the former recipient before publishing the new result. Both JSON envelopes and serialized bodies are ready before the first byte write. Preparation failure does not spend publication ownership. Bytes accepted by the operating system cannot be rolled back; a failed write terminates publication.
+
+Document close clears its own publication and existing publications targeting that editor. Clear-all covers closed dependencies and open documents. A new language error without an authentic position only revokes the obsolete owned publication; it does not invent an empty successful result for current text. Ownership cleanup allocates and charges no further work. Explicit clear preparation and transport failures preserve prior ownership or enter terminal state, without creating partial JSON frames.
 ### 17.50 Receiving published Source definitions
 
 A persistent Source owner supplies a candidate with only that owner's published, actual Checked Program and registered bindings. History uses an internal module representation distinct from Catalog Libraries. Receiving neither reparses nor concatenates prior Source, changes Program linkage, nor constructs function, generic or nominal identities from query names. It copies and relocates the complete Checked declaration closure through the single Built → Checked → specialization recheck → Lowered pipeline.

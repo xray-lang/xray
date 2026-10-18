@@ -63,6 +63,7 @@
 #define LSP_SYMBOL_BOOLEAN 17
 #define LSP_SYMBOL_ARRAY 18
 #define LSP_SYMBOL_ENUM_MEMBER 22
+#define LSP_SYMBOL_STRUCT 23
 
 // ============================================================================
 // LSP Protocol Types

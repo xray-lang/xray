@@ -80,7 +80,7 @@ typedef struct ReceiverRun {
     XrCompilerSession *library_session, *program_session;
     XrXirSourceResult library_source;
     XrXirSourceDiagnostic library_diagnostic;
-    char *library_failure_path;
+    XrXirSourceFailure library_failure_path;
     XrXirCheckedPacket library_packet, expected_source;
     XrXirLibraryModuleInput *bindings;
     XrXirFunctionIdentity *control_identities;
@@ -431,7 +431,7 @@ static void library_inputs_die(ReceiverRun *run) {
     }
     xr_xir_compile_source_result_free(&run->library_source);
     xr_compile_session_free(run->library_session); run->library_session = NULL;
-    free_text(run->library_failure_path); run->library_failure_path = NULL;
+    xr_xir_compile_source_failure_free(&run->library_failure_path); run->library_failure_path.path = NULL;
     poison(&run->library_diagnostic, sizeof(run->library_diagnostic));
 }
 /* Importing a suspension does not authorize a false no-suspend promise.
@@ -464,7 +464,7 @@ static bool library_catalog_build(ReceiverRun *run) {
     if (!completed(run, xr_xir_compile_source_check(&request, &run->library_source,
         &run->library_diagnostic, &run->library_failure_path), "Library-Source-check")) {
         fprintf(stderr, "Library-message=%.192s path=%s\n", run->library_diagnostic.message,
-            run->library_failure_path ? run->library_failure_path : "(none)");
+            run->library_failure_path.path ? run->library_failure_path.path : "(none)");
         return false;
     }
     CHECK(run->library_source.checked && run->library_source.snapshot);

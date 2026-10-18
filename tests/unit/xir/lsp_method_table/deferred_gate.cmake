@@ -1,0 +1,5 @@
+enable_testing()
+function(xray_method_table_gate)
+    include("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/CMakeLists.txt")
+endfunction()
+cmake_language(DEFER CALL xray_method_table_gate)

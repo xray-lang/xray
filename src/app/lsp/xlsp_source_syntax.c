@@ -3,8 +3,26 @@
 #include "../../toolchain/xcompiler_arena_backing.h"
 #include "../../base/xarena.h"
 #include "../../frontend/parser/xast_nodes.h"
+#include "../../frontend/parser/xast_walk.h"
 #include <limits.h>
 #include <string.h>
+typedef struct XlspSyntaxArgumentRecord {
+    uintptr_t address;
+    uint32_t node_id;
+    AstNodeType type;
+    XrNameSpan start,end,variable,variable_end;
+    bool has_variable;
+} XlspSyntaxArgumentRecord;
+typedef struct XlspSyntaxCallRecord {
+    uintptr_t address;
+    uint32_t node_id;
+    AstNodeType type;
+    XrNameSpan start,end,closing,selection,selection_end;
+    XrNameSpan *boundaries;
+    XlspSyntaxArgumentRecord *arguments;
+    size_t boundary_count,argument_count;
+    bool has_callee,live;
+} XlspSyntaxCallRecord;
 struct XlspSyntaxSnapshot {
     XrCompileState *state; /* Retained by the opened embedded arena. */
     XrArena arena;
@@ -14,7 +32,11 @@ struct XlspSyntaxSnapshot {
     AstNode *ast;
     XlspSyntaxDiagnostic *diagnostics,*last;
     XrParseStatus status;
+    XlspSyntaxCallRecord *calls;
+    size_t call_count,call_capacity;
 };
+static XrCompileResourceStatus syntax_call_observe(void *,const XrParseCallSyntax *);
+static XrCompileResourceStatus syntax_calls_finalize(XlspSyntaxSnapshot *);
 static XrParseStatus syntax_status(XrCompileResourceStatus status) {
     return status==XR_COMPILE_RESOURCE_OK?XR_PARSE_OK:
         status==XR_COMPILE_RESOURCE_BUDGET?XR_PARSE_BUDGET:
@@ -22,6 +44,10 @@ static XrParseStatus syntax_status(XrCompileResourceStatus status) {
 }
 void xlsp_source_syntax_free(XlspSyntaxSnapshot *s) {
     if(!s)return;
+    for(size_t i=0;i<s->call_count;++i) {
+        xr_compile_state_free(s->calls[i].boundaries);xr_compile_state_free(s->calls[i].arguments);
+    }
+    xr_compile_state_free(s->calls);
     XlspSyntaxDiagnostic *item=s->diagnostics;
     while(item){XlspSyntaxDiagnostic *next=(XlspSyntaxDiagnostic *)item->next;xr_compile_state_free((char *)item->message);xr_compile_state_free(item);item=next;}
     xr_arena_destroy(&s->arena);xr_compile_state_free(s->uri);xr_compile_state_free(s->text);xr_compile_state_free(s);
@@ -67,13 +93,19 @@ XrParseStatus xlsp_source_syntax_build(XrCompilerSession *session,const XlspSour
     Parser parser={0};status=xr_compile_parser_open(&parser,session,s->text,s->uri,&s->arena);
     if(status!=XR_PARSE_OK)goto done;
     xr_parser_set_error_callback(&parser,syntax_diagnostic,s,100);
+    xr_parser_set_call_syntax_callback(&parser,syntax_call_observe,s);
     status=xr_compile_parse_recoverable(&parser,&s->ast);
     xr_compile_parser_close(&parser);
+    if(status==XR_PARSE_OK||status==XR_PARSE_RECOVERED) {
+        XrCompileResourceStatus finalized=syntax_calls_finalize(s);
+        if(finalized!=XR_COMPILE_RESOURCE_OK)status=syntax_status(finalized);
+    }
     if(status==XR_PARSE_OK||status==XR_PARSE_RECOVERED){s->status=status;*out=s;s=NULL;}
 done:
     xlsp_source_syntax_free(s);return status;
 }
 const AstNode *xlsp_source_syntax_ast(const XlspSyntaxSnapshot *s){return s?s->ast:NULL;}
+XrCompileState *xlsp_source_syntax_state(const XlspSyntaxSnapshot *s){return s?s->state:NULL;}
 const XlspSyntaxDiagnostic *xlsp_source_syntax_diagnostics(const XlspSyntaxSnapshot *s){return s?s->diagnostics:NULL;}
 XrParseStatus xlsp_source_syntax_status(const XlspSyntaxSnapshot *s){return s?s->status:XR_PARSE_BAD_ARGUMENT;}
 static XrXirStatus syntax_work(const XlspSyntaxSnapshot *s,size_t amount) {
@@ -101,6 +133,39 @@ static XrXirStatus syntax_push(const XlspSyntaxSnapshot *s,const AstNode ***stac
         *capacity=next;
     }
     (*stack)[(*count)++]=node;return XR_XIR_OK;
+}
+static XrJsonValue *syntax_position_json(XrLspPosition position) {
+    XrJsonValue *out=xjson_new_object();if(!out)return NULL;
+    if(!syntax_member(out,"line",xjson_new_number(position.line))||
+        !syntax_member(out,"character",xjson_new_number(position.character))){xjson_free(out);return NULL;}
+    return out;
+}
+XR_FUNC XrXirStatus xlsp_source_syntax_diagnostics_json(const XlspSyntaxSnapshot *s,XrJsonValue **out) {
+    if(!s||!out||*out)return XR_XIR_BAD_STRUCTURE;
+    XrJsonValue *array=xjson_new_array();if(!array)return XR_XIR_OUT_OF_MEMORY;
+    XrXirStatus status=XR_XIR_OK;XrCompileResources *resources=xr_compile_state_resources(s->state);
+    for(const XlspSyntaxDiagnostic *d=s->diagnostics;d;d=d->next) {
+        status=syntax_work(s,sizeof(*d));if(status!=XR_XIR_OK)break;
+        XrLspPosition start={0},end={0};
+        status=xlsp_source_position(resources,s->text,s->length,d->line,d->column,&start);
+        if(status==XR_XIR_OK)status=xlsp_source_position(resources,s->text,s->length,d->end_line,d->end_column,&end);
+        if(status!=XR_XIR_OK)break;
+        XrJsonValue *diag=xjson_new_object(),*range=xjson_new_object();
+        if(!diag||!range){xjson_free(diag);xjson_free(range);status=XR_XIR_OUT_OF_MEMORY;break;}
+        if(!syntax_member(range,"start",syntax_position_json(start))||!syntax_member(range,"end",syntax_position_json(end))) {
+            xjson_free(range);xjson_free(diag);status=XR_XIR_OUT_OF_MEMORY;break;
+        }
+        if(!syntax_member(diag,"range",range)||!syntax_member(diag,"severity",xjson_new_number(1))||
+            !syntax_member(diag,"source",xjson_new_string("xray"))||!syntax_member(diag,"message",xjson_new_string(d->message))) {
+            xjson_free(diag);status=XR_XIR_OUT_OF_MEMORY;break;
+        }
+        int count=array->as.array.count;
+        if(count==array->as.array.capacity&&array->as.array.capacity>INT_MAX/2){xjson_free(diag);status=XR_XIR_BUDGET;break;}
+        xjson_array_push(array,diag);
+        if(array->as.array.count!=count+1){xjson_free(diag);status=XR_XIR_OUT_OF_MEMORY;break;}
+    }
+    if(status==XR_XIR_OK){*out=array;array=NULL;}
+    xjson_free(array);return status;
 }
 XrXirStatus xlsp_source_syntax_folding_json(const XlspSyntaxSnapshot *s,XrJsonValue **out) {
     if(!s||!out||*out)return XR_XIR_BAD_STRUCTURE;
@@ -151,3 +216,5 @@ XrXirStatus xlsp_source_syntax_folding_json(const XlspSyntaxSnapshot *s,XrJsonVa
 }
 
 #include "xlsp_source_outline_impl.h"
+#include "xlsp_source_call_syntax.inc.c"
+#include "xlsp_source_argument_syntax.inc.c"

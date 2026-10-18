@@ -107,7 +107,7 @@ static XrXirStatus root_source_operation(const XrXirCompileContext *context, voi
         return created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CALLABLE_ROOT_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirStatus status = xr_xir_compile_source_check(&request,&result,&diagnostic,&failure);
     xr_compile_session_free(session); session = NULL;
     if (status != XR_XIR_OK) {
@@ -116,7 +116,7 @@ static XrXirStatus root_source_operation(const XrXirCompileContext *context, voi
             fprintf(stderr,"%s status%u %d:%d %s\n",file,status,diagnostic.line,diagnostic.column,diagnostic.message);
         goto done;
     }
-    CHECK(result.checked && result.snapshot && !failure);
+    CHECK(result.checked && result.snapshot && !failure.path);
     bool flows = !strcmp(file,"flows.xr");
     /* The producer session is already gone. All queried names and identities
      * belong to the snapshot, and replay uses only freshly decoded Checked. */
@@ -131,7 +131,7 @@ static XrXirStatus root_source_operation(const XrXirCompileContext *context, voi
         xr_xir_compile_artifact_free(decoded); xr_xir_compile_checked_packet_free(&packet);
     }
 done:
-    xr_compile_resources_free(failure); xr_xir_compile_source_result_free(&result);
+    xr_xir_compile_source_failure_free(&failure); xr_xir_compile_source_result_free(&result);
     return status;
 }
 static void root_source_reject(const char *file, XrXirStatus expected, const char *reason) {
@@ -140,12 +140,12 @@ static void root_source_reject(const char *file, XrXirStatus expected, const cha
     char path[1024]; CHECK(snprintf(path,sizeof(path),"%s/%s",XR_CALLABLE_ROOT_SOURCE_FIXTURES,file) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CALLABLE_ROOT_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session,path,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirStatus status = xr_xir_compile_source_check(&request,&result,&diagnostic,&failure);
     if (status != expected) fprintf(stderr,"reject %s status%u %s\n",file,status,diagnostic.message);
     CHECK(status == expected && !result.checked && !result.snapshot);
     if (reason) CHECK(strstr(diagnostic.message,reason));
-    xr_compile_resources_free(failure); xr_xir_compile_source_result_free(&result); xr_compile_session_free(session);
+    xr_xir_compile_source_failure_free(&failure); xr_xir_compile_source_result_free(&result); xr_compile_session_free(session);
     library_compile_owner_drop(&owner);
 }
 static void root_source_resource_cases(void) {

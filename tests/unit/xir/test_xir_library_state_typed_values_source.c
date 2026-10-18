@@ -27,7 +27,7 @@ static void library_state_typed_values_observe_cases(const char *name,LibraryCom
     ++library_state_typed_values_scans;library_compile_operation_cases(name,operation,fixture);
 }
 static XrXirStatus library_state_typed_values_observe_source(const XrXirSourceRequest *request,
-    XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic,char **failure_path) {
+    XrXirSourceResult *output,XrXirSourceDiagnostic *diagnostic,XrXirSourceFailure *failure_path) {
     ++library_state_typed_values_source_calls;
     return xr_xir_compile_source_check(request,output,diagnostic,failure_path);
 }

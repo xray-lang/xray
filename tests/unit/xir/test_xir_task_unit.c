@@ -76,13 +76,13 @@ static XrXirProgram *unit_program(const UnitOracle *oracle, uint32_t *entry) {
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_TASK_UNIT_FIXTURES, oracle->name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_UNIT_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirSourceResult source = {0}; XrXirSourceDiagnostic source_diagnostic = {0}; char *failure = NULL;
+    XrXirSourceResult source = {0}; XrXirSourceDiagnostic source_diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirDiagnostic diagnostic = {0}; XrXirCheckedPacket packet = {0};
     XrXirArtifact *read = NULL, *closed = NULL, *lowered = NULL;
     XrXirStatus status = xr_xir_compile_source_check(&request, &source, &source_diagnostic, &failure);
     xr_compile_session_free(session);
     if (status != XR_XIR_OK) fprintf(stderr, "%s check=%u %s\n", oracle->name, status, source_diagnostic.message);
-    CHECK(status == XR_XIR_OK && source.checked && !failure);
+    CHECK(status == XR_XIR_OK && source.checked && !failure.path);
     unit_shape(xr_xir_compile_artifact_module(source.checked));
     if (!strcmp(oracle->name, "unknown_waiter")) {
         const XrXirModule *checked = xr_xir_compile_artifact_module(source.checked);
@@ -185,12 +185,12 @@ static void unit_reject(const char *name) {
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_TASK_UNIT_FIXTURES, name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_TASK_UNIT_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
-    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceFailure failure={0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     xr_compile_session_free(session);
     if (status == XR_XIR_OK) fprintf(stderr, "unexpected Unit admission: %s\n", name);
     CHECK(status != XR_XIR_OK && !result.checked && !result.snapshot);
-    xr_compile_resources_free(failure); xr_xir_compile_source_result_free(&result);
+    xr_xir_compile_source_failure_free(&failure); xr_xir_compile_source_result_free(&result);
     printf("Task<Unit> reject %s: status=%u, no owned artifact\n", name, status);
 }
 static void unit_fixed_codec(void) {

@@ -15,6 +15,7 @@
 static XrArenaStatus compiler_arena_status(XrCompileResourceStatus status) {
     switch (status) {
         case XR_COMPILE_RESOURCE_OK: return XR_ARENA_OK;
+        case XR_COMPILE_RESOURCE_CANCELLED:
         case XR_COMPILE_RESOURCE_BAD_ARGUMENT: return XR_ARENA_BAD_ARGUMENT;
         case XR_COMPILE_RESOURCE_BUDGET: return XR_ARENA_BUDGET;
         case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_ARENA_OUT_OF_MEMORY;

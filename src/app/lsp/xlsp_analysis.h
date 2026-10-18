@@ -8,7 +8,7 @@
  * xlsp_analysis.h - Code analysis for LSP features
  *
  * KEY CONCEPT:
- *   Provides diagnostics, completion, hover by analyzing xray source code.
+ *   Provides document syntax ownership, diagnostics, completion and outlines.
  */
 
 #ifndef XLSP_ANALYSIS_H
@@ -22,17 +22,6 @@
 typedef struct XrCompilerSession XrCompilerSession;
 typedef struct XrModuleGraph XrModuleGraph;
 
-/* Scoped compiler identity used by every LSP analyzer entry point.  The
- * identity storage is borrowed by the compiler session until pop. */
-typedef struct XlspAnalysisIdentity {
-    XrCompilerSession *session;
-    char *identity;
-} XlspAnalysisIdentity;
-
-XR_FUNC bool xlsp_analysis_identity_push(XlspAnalysisIdentity *scope, XrCompilerSession *session,
-                                         const XrModuleGraph *graph, const char *uri);
-XR_FUNC void xlsp_analysis_identity_pop(XlspAnalysisIdentity *scope);
-
 /* Clear the analyzer's borrowed graph and release the server-owned graph and
  * authority. Safe to call during server teardown or analyzer replacement. */
 XR_FUNC void xlsp_analysis_release_module_graph(XrLspServer *server);
@@ -40,45 +29,20 @@ XR_FUNC void xlsp_analysis_release_module_graph(XrLspServer *server);
 // Generate diagnostics for a document
 XR_FUNC XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc);
 
-// Generate hover info at position
-XR_FUNC XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos);
-
 // Generate document symbols (outline)
 XR_FUNC XrJsonValue *xlsp_analyze_document_symbols(XrLspDocument *doc);
 
 // Navigation (definition, references, highlight) moved to xlsp_navigation.h
 #include "xlsp_navigation.h"
 
-// Internal symbol table (shared between analysis and navigation)
-typedef struct {
-    char *name;
-    int kind;
-    int line;
-    int start_char;
-    int end_line;
-    int end_char;
-} SymbolEntry;
-
-typedef struct {
-    SymbolEntry *entries;
-    int count;
-    int capacity;
-} SymbolTable;
-
-XR_FUNC void xlsp_symbol_table_init(SymbolTable *table);
-XR_FUNC void xlsp_symbol_table_free(SymbolTable *table);
-XR_FUNC void xlsp_extract_symbols(XrLspDocument *doc, SymbolTable *table);
-
 // Parse document and cache AST (call after document open/change)
-// Uses server->workspace_analyzer for cross-file analysis
+// Owns the actual Source syntax snapshot for this document version.
 XR_FUNC void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server);
 
 /* Release the module graph built for the last parsed document, clearing the
  * analyzer's borrowed pointer to it first. Call before tearing the analyzer
  * down: the graph outlives a single parse on purpose, so nothing else frees
  * it at shutdown. */
-
-// Rename (moved to xlsp_rename.h / xlsp_rename.c)
 
 // Format (moved to xlsp_format.h / xlsp_format.c)
 #include "xlsp_format.h"

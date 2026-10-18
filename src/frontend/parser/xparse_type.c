@@ -1139,6 +1139,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     /* Identifier: class / enum / prelude / alias / generic params */
     if (xr_parser_match(parser, TK_NAME)) {
         Token name_token = parser->previous;
+        Token selected_token = name_token;
         char temp_name[256];
         int name_len = name_token.length < 255 ? name_token.length : 255;
         do {
@@ -1163,6 +1164,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 if (!xr_parser_healthy(parser)) return NULL;
             } while (0);
             Token member_token = parser->previous;
+            selected_token = member_token;
             int member_len = member_token.length;
             if (name_len + 1 + member_len >= (int) sizeof(temp_name)) {
                 do {
@@ -1228,7 +1230,11 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                     } while (0);
             } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA));
             consume_gt_in_generic(parser);
-            return expand_generic_or_clone(parser, temp_name, type_args, type_arg_count);
+            XrTypeRef *result = expand_generic_or_clone(parser, temp_name, type_args, type_arg_count);
+            if (!xr_parser_healthy(parser)) return NULL;
+            if (result && result->name && xr_parser_compare_string(parser, result->name, temp_name) == 0)
+                result->name_span = (XrTypeNameSpan) {selected_token.line, selected_token.column, selected_token.length};
+            return xr_parser_healthy(parser) ? result : NULL;
         }
 
         /* Check parser's type scope for aliases and generic params */
@@ -1240,7 +1246,10 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         }
 
         /* Plain named type (class, enum, prelude — resolved in analyzer) */
-        return xr_tref_named(parser->compiler_session, temp_name);
+        XrTypeRef *result = xr_tref_named(parser->compiler_session, temp_name);
+        if (result)
+            result->name_span = (XrTypeNameSpan) {selected_token.line, selected_token.column, selected_token.length};
+        return result;
     }
 
     /* Error recovery */

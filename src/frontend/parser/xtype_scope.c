@@ -18,6 +18,7 @@ struct XrTypeScope {
 static XrTypeScopeStatus type_scope_status(XrCompileResourceStatus status) {
     switch (status) {
         case XR_COMPILE_RESOURCE_OK: return XR_TYPE_SCOPE_OK;
+        case XR_COMPILE_RESOURCE_CANCELLED:
         case XR_COMPILE_RESOURCE_BAD_ARGUMENT: return XR_TYPE_SCOPE_BAD_ARGUMENT;
         case XR_COMPILE_RESOURCE_BUDGET: return XR_TYPE_SCOPE_BUDGET;
         case XR_COMPILE_RESOURCE_OUT_OF_MEMORY: return XR_TYPE_SCOPE_OUT_OF_MEMORY;

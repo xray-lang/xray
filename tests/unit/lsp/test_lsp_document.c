@@ -23,8 +23,10 @@
 #include "../../../src/app/lsp/xlsp_inlay_hints.h"
 #include "../../../src/app/lsp/xlsp_imports.h"
 #include "../../../src/app/lsp/xlsp_navigation.h"
-#include "../../../src/app/lsp/xlsp_rename.h"
+#include "test_lsp_rename_params.h"
+#include "test_lsp_hover_params.h"
 #include "../../../src/app/lsp/xlsp_semantic_tokens.h"
+#include "../../../src/app/lsp/xlsp_index_pool.h"
 #include "../../../src/app/lsp/xlsp_workspace.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/module/xmodule_graph.h"
@@ -196,19 +198,56 @@ TEST(block_import_path_uses_shared_quoted_literal_decoder) {
     xlsp_free_imports(imports);
 }
 
-static bool semantic_token_exists(XlspSemanticTokensResult *tokens, int line, int col,
-                                  const char *text, XlspSemanticTokenType type) {
-    if (!tokens || !text)
-        return false;
-    int len = (int) strlen(text);
-    for (int i = 0; i < tokens->count; i++) {
-        XlspSemanticToken *token = &tokens->tokens[i];
-        if (token->line == line && token->start_char == col && token->length == len &&
-            token->type == type) {
-            return true;
-        }
+static XrJsonValue *semantic_tokens_for_test(XrLspServer *server,XrLspDocument *doc) {
+    XrJsonValue *params=xjson_new_object(),*document=xjson_new_object();
+    if(!params||!document){xjson_free(params);xjson_free(document);return NULL;}
+    xjson_object_set_new(document,"uri",xjson_new_string(doc->uri));
+    xjson_object_set_new(params,"textDocument",document);
+    XrJsonValue *result=xlsp_semantic_handle(server,params,0);xjson_free(params);return result;
+}
+static int semantic_token_count(XrJsonValue *result) {
+    XrJsonValue *data=xjson_get_array(result,"data");
+    return data&&data->as.array.count>=0&&data->as.array.count%5==0?data->as.array.count/5:-1;
+}
+static bool semantic_token_word(XrJsonValue *data,int index,uint32_t *out) {
+    XrJsonValue *value=xjson_array_get(data,index);
+    if(!value||value->type!=XR_JSON_NUMBER||!(value->as.number>=0&&value->as.number<=INT32_MAX)||
+       value->as.number!=(double)(uint32_t)value->as.number)return false;
+    *out=(uint32_t)value->as.number;return true;
+}
+static bool semantic_token_at(XrJsonValue *result,int index,XlspSourceToken *out) {
+    if(index<0||index>=semantic_token_count(result))return false;
+    XrJsonValue *data=xjson_get_array(result,"data");XlspSourceToken token={0};
+    for(int i=0;i<=index;++i) {
+        uint32_t row=0,column=0;
+        if(!semantic_token_word(data,i*5,&row)||!semantic_token_word(data,i*5+1,&column)||
+           !semantic_token_word(data,i*5+2,&token.length)||!semantic_token_word(data,i*5+3,&token.type)||
+           !semantic_token_word(data,i*5+4,&token.modifiers)||row>INT32_MAX-token.line)return false;
+        token.line+=row;if(row)token.column=0;
+        if(column>INT32_MAX-token.column)return false;token.column+=column;
+        if(!token.length||token.length>INT32_MAX-token.column||token.type>=XLSP_TOKEN_COUNT)return false;
+    }
+    *out=token;return true;
+}
+static bool semantic_token_exists(XrJsonValue *tokens,int line,int col,const char *text,XlspSemanticTokenType type) {
+    if(!tokens||!text||line<0||col<0)return false;
+    for(int i=0;i<semantic_token_count(tokens);++i) {
+        XlspSourceToken token={0};if(!semantic_token_at(tokens,i,&token))return false;
+        if(token.line==(uint32_t)line&&token.column==(uint32_t)col&&token.length==strlen(text)&&token.type==(uint32_t)type)return true;
     }
     return false;
+}
+static bool semantic_test_uri(const char *name,char *uri,size_t size) {
+    char root[XR_TEST_PATH_MAX],path[XR_TEST_PATH_MAX];
+    if(!xr_test_realpath_buf(".",root,sizeof(root)))return false;
+    int n=snprintf(path,sizeof(path),"%s/%s",root,name);if(n<=0||(size_t)n>=sizeof(path))return false;
+    XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrCompileResources *resources=NULL;char *owned=NULL;bool ok=false;
+    if(xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK)return false;
+    if(xlsp_index_file_uri(resources,path,&owned)==XR_XIR_OK) {
+        size_t length=strlen(owned);if(length<size){memcpy(uri,owned,length+1);ok=true;}
+    }
+    xr_compile_resources_free(owned);xr_compile_resources_release(resources);return ok;
 }
 
 // ============================================================================
@@ -492,7 +531,7 @@ TEST(contextual_u32_literal_preserves_completion_and_hover_type) {
         xlsp_document_open(server, &(XlspSourceDocument){"file:///hover_contextual_u32.xr", hover_content, strlen("file:///hover_contextual_u32.xr"), strlen(hover_content), 1});
     ASSERT(hover_doc != NULL);
     xlsp_parse_document(hover_doc, server);
-    XrJsonValue *hover = xlsp_analyze_hover(server, hover_doc, (XrLspPosition) {2, 15});
+    XrJsonValue *hover = hover_test_at(server, hover_doc, (XrLspPosition) {2, 15});
     ASSERT(hover != NULL);
     const char *hover_text = hover_markdown_value(hover);
     ASSERT(hover_text != NULL);
@@ -614,7 +653,7 @@ TEST(relative_import_from_disk_provides_precise_hover) {
     int hover_line = 0;
     int hover_col = 0;
     ASSERT(content_position_of_nth(entry, "Shade", 2, &hover_line, &hover_col));
-    XrJsonValue *hover = xlsp_analyze_hover(
+    XrJsonValue *hover = hover_test_at(
         server, doc, (XrLspPosition) {(uint32_t) hover_line, (uint32_t) hover_col + 1});
     ASSERT(hover != NULL);
     const char *hover_text = hover_markdown_value(hover);
@@ -667,7 +706,7 @@ TEST(hover_enum_descriptor_keeps_precise_type) {
     xlsp_parse_document(doc, server);
 
     XrLspPosition pos = {2, 20};
-    XrJsonValue *hover = xlsp_analyze_hover(server, doc, pos);
+    XrJsonValue *hover = hover_test_at(server, doc, pos);
     ASSERT(hover != NULL);
     const char *value = hover_markdown_value(hover);
     ASSERT(value != NULL);
@@ -809,7 +848,7 @@ TEST(hover_u8_array_registry_method) {
     xlsp_parse_document(doc, server);
 
     XrLspPosition pos = {1, 8};
-    XrJsonValue *hover = xlsp_analyze_hover(server, doc, pos);
+    XrJsonValue *hover = hover_test_at(server, doc, pos);
     ASSERT(hover != NULL);
     const char *value = hover_markdown_value(hover);
     ASSERT(value != NULL);
@@ -837,7 +876,7 @@ TEST(hover_deprecated_message_roundtrip) {
     int col = 0;
     ASSERT(content_position_of_nth(content, "legacy", 1, &line, &col));
     XrJsonValue *hover =
-        xlsp_analyze_hover(server, doc, (XrLspPosition) {(uint32_t) line, (uint32_t) col});
+        hover_test_at(server, doc, (XrLspPosition) {(uint32_t) line, (uint32_t) col});
     ASSERT(hover != NULL);
     const char *text = hover_markdown_value(hover);
     ASSERT(text != NULL);
@@ -916,7 +955,7 @@ TEST(global_type_query_builtins_use_canonical_names) {
     xjson_free(items);
 
     XrLspPosition type_of_hover_pos = {0, 1};
-    XrJsonValue *type_of_hover = xlsp_analyze_hover(server, doc, type_of_hover_pos);
+    XrJsonValue *type_of_hover = hover_test_at(server, doc, type_of_hover_pos);
     ASSERT(type_of_hover != NULL);
     const char *type_of_hover_text = hover_markdown_value(type_of_hover);
     ASSERT(type_of_hover_text != NULL);
@@ -925,7 +964,7 @@ TEST(global_type_query_builtins_use_canonical_names) {
     xjson_free(type_of_hover);
 
     XrLspPosition type_name_hover_pos = {1, 1};
-    XrJsonValue *type_name_hover = xlsp_analyze_hover(server, doc, type_name_hover_pos);
+    XrJsonValue *type_name_hover = hover_test_at(server, doc, type_name_hover_pos);
     ASSERT(type_name_hover != NULL);
     const char *type_name_hover_text = hover_markdown_value(type_name_hover);
     ASSERT(type_name_hover_text != NULL);
@@ -1053,7 +1092,7 @@ TEST(param_mode_user_function_lsp_display) {
     xjson_free(items);
 
     XrLspPosition hover_pos = {9, 6};
-    XrJsonValue *hover = xlsp_analyze_hover(server, doc, hover_pos);
+    XrJsonValue *hover = hover_test_at(server, doc, hover_pos);
     ASSERT(hover != NULL);
     const char *hover_text = hover_markdown_value(hover);
     ASSERT(hover_text != NULL);
@@ -1099,11 +1138,12 @@ TEST(param_mode_semantic_tokens_mark_modes_and_call_access) {
                           "    adjust(value, ref slot, move payload)\n"
                           "}\n";
 
-    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///param_mode_tokens.xr", content, strlen("file:///param_mode_tokens.xr"), strlen(content), 1});
+    char uri[XR_TEST_PATH_MAX];ASSERT(semantic_test_uri("param_mode_tokens.xr",uri,sizeof(uri)));
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri,content,strlen(uri),strlen(content),1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
 
-    XlspSemanticTokensResult *tokens = xlsp_analyze_semantic_tokens(doc);
+    XrJsonValue *tokens = semantic_tokens_for_test(server,doc);
     ASSERT(tokens != NULL);
 
     int line = -1;
@@ -1117,7 +1157,7 @@ TEST(param_mode_semantic_tokens_mark_modes_and_call_access) {
     ASSERT(content_position_of_nth(content, "move", 2, &line, &col));
     ASSERT(semantic_token_exists(tokens, line, col, "move", XLSP_TOKEN_MODIFIER));
 
-    xlsp_semantic_tokens_free(tokens);
+    xjson_free(tokens);
     xlsp_server_free(server);
 }
 
@@ -1131,8 +1171,8 @@ TEST(block_quoted_literals_preserve_lsp_positions_and_semantic_boundaries) {
                           "${HOME} // literal { bytes }\n"
                           "\"\"\"\"\n"
                           "var after = 7\n";
-    XrLspDocument *doc =
-        xlsp_document_open(server, &(XlspSourceDocument){"file:///quoted_literal_positions.xr", content, strlen("file:///quoted_literal_positions.xr"), strlen(content), 1});
+    char uri[XR_TEST_PATH_MAX];ASSERT(semantic_test_uri("quoted_literal_positions.xr",uri,sizeof(uri)));
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri,content,strlen(uri),strlen(content),1});
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
     ASSERT(doc->ast != NULL);
@@ -1146,15 +1186,17 @@ TEST(block_quoted_literals_preserve_lsp_positions_and_semantic_boundaries) {
     ASSERT_EQ(roundtrip.line, (uint32_t) after_line);
     ASSERT_EQ(roundtrip.character, (uint32_t) after_col);
 
-    XlspSemanticTokensResult *tokens = xlsp_analyze_semantic_tokens(doc);
+    XrJsonValue *tokens = semantic_tokens_for_test(server,doc);
     ASSERT(tokens != NULL);
     ASSERT(semantic_token_exists(tokens, after_line, after_col, "after", XLSP_TOKEN_VARIABLE));
-    for (int i = 0; i < tokens->count; i++) {
-        ASSERT(tokens->tokens[i].line != 1);
-        ASSERT(tokens->tokens[i].line != 4);
+    ASSERT(semantic_token_count(tokens)>=0);
+    for (int i = 0; i < semantic_token_count(tokens); i++) {
+        XlspSourceToken token={0};ASSERT(semantic_token_at(tokens,i,&token));
+        ASSERT(token.line != 1);
+        ASSERT(token.line != 4);
     }
 
-    xlsp_semantic_tokens_free(tokens);
+    xjson_free(tokens);
     xlsp_server_free(server);
 }
 
@@ -1212,7 +1254,7 @@ TEST(throw_effect_inlay_hints_show_inferred_result) {
 TEST(enum_record_fields_share_one_semantic_identity) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
-    const char *uri = "file:///enum_record_fields.xr";
+    char uri[XR_TEST_PATH_MAX];ASSERT(semantic_test_uri("enum_record_fields.xr",uri,sizeof(uri)));
     const char *content = "enum Result {\n"
                           "    Ok { value: i64, code: i64 },\n"
                           "    Err { value: string }\n"
@@ -1253,7 +1295,7 @@ TEST(enum_record_fields_share_one_semantic_identity) {
     ASSERT_EQ(xjson_array_len(references), 3);
     xjson_free(references);
 
-    XrJsonValue *hover = xlsp_analyze_hover(
+    XrJsonValue *hover = hover_test_at(
         server, doc, (XrLspPosition) {(uint32_t) pattern_line, (uint32_t) pattern_col + 1});
     ASSERT(hover != NULL);
     const char *hover_text = hover_markdown_value(hover);
@@ -1261,37 +1303,49 @@ TEST(enum_record_fields_share_one_semantic_identity) {
     ASSERT(strstr(hover_text, "Result.Ok.value: i64") != NULL);
     xjson_free(hover);
 
-    XrJsonValue *rename = xlsp_analyze_rename(server, doc, construct_pos, "payload");
+    XrJsonValue *rename_params=rename_test_params(uri,construct_pos,"payload");ASSERT(rename_params != NULL);
+    XrJsonValue *rename = xlsp_handle_td_rename(server,rename_params);xjson_free(rename_params);
     ASSERT(rename != NULL);
-    XrJsonValue *changes = xjson_get_object(rename, "changes");
-    XrJsonValue *edits = changes ? xjson_get_array(changes, uri) : NULL;
+    XrJsonValue *changes = xjson_get_array(rename, "documentChanges");
+    ASSERT(changes != NULL);ASSERT_EQ(xjson_array_len(changes),1);
+    XrJsonValue *change=xjson_array_get(changes,0),*text_document=xjson_get_object(change,"textDocument");
+    ASSERT(text_document != NULL);ASSERT_STR_EQ(xjson_get_string(text_document,"uri"),uri);
+    ASSERT_EQ(xjson_get_int(text_document,"version"),1);
+    XrJsonValue *edits = xjson_get_array(change,"edits");
     ASSERT(edits != NULL);
     ASSERT_EQ(xjson_array_len(edits), 3);
+    for(int i=0;i<3;++i) {
+        XrJsonValue *edit=xjson_array_get(edits,i),*start=xjson_get_object(xjson_get_object(edit,"range"),"start");
+        ASSERT(start != NULL);
+        ASSERT_STR_EQ(xjson_get_string(edit,"newText"),xjson_get_int(start,"line")==pattern_line?"payload: value":"payload");
+    }
     xjson_free(rename);
 
-    XlspSemanticTokensResult *tokens = xlsp_analyze_semantic_tokens(doc);
+    XrJsonValue *tokens = semantic_tokens_for_test(server,doc);
     ASSERT(tokens != NULL);
     int property_count = 0;
     bool declaration_is_property = false;
     bool construct_is_property = false;
     bool pattern_is_property = false;
-    for (int i = 0; i < tokens->count; i++) {
-        XlspSemanticToken *token = &tokens->tokens[i];
+    ASSERT(semantic_token_count(tokens)>=0);
+    for (int i = 0; i < semantic_token_count(tokens); i++) {
+        XlspSourceToken decoded={0};ASSERT(semantic_token_at(tokens,i,&decoded));
+        XlspSourceToken *token = &decoded;
         if (token->type != XLSP_TOKEN_PROPERTY || token->length != 5)
             continue;
         property_count++;
-        if (token->line == declaration_line && token->start_char == declaration_col)
+        if (token->line == (uint32_t) declaration_line && token->column == (uint32_t) declaration_col)
             declaration_is_property = true;
-        if (token->line == construct_line && token->start_char == construct_col)
+        if (token->line == (uint32_t) construct_line && token->column == (uint32_t) construct_col)
             construct_is_property = true;
-        if (token->line == pattern_line && token->start_char == pattern_col)
+        if (token->line == (uint32_t) pattern_line && token->column == (uint32_t) pattern_col)
             pattern_is_property = true;
     }
     ASSERT(property_count >= 5);
     ASSERT(declaration_is_property);
     ASSERT(construct_is_property);
     ASSERT(pattern_is_property);
-    xlsp_semantic_tokens_free(tokens);
+    xjson_free(tokens);
     xlsp_server_free(server);
 }
 

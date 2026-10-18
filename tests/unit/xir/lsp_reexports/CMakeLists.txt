@@ -1,0 +1,10 @@
+include("${CMAKE_CURRENT_LIST_DIR}/../lsp_imports/CMakeLists.txt")
+include("${CMAKE_CURRENT_LIST_DIR}/../lsp_links/CMakeLists.txt")
+if(TEST test_lsp_reexport_imports_normal)
+    return()
+endif()
+add_test(NAME test_lsp_reexport_imports_normal COMMAND test_lsp_import_observations --normal)
+set_tests_properties(test_lsp_reexport_imports_normal PROPERTIES TIMEOUT 30 LABELS "unit;lsp;metadata")
+add_test(NAME test_lsp_reexport_links_normal COMMAND "${Python3_EXECUTABLE}" -X utf8
+    "${CMAKE_CURRENT_LIST_DIR}/../lsp_links/test_links.py" "$<TARGET_FILE:test_lsp_source_links>" "${PROJECT_SOURCE_DIR}/stdlib" --normal)
+set_tests_properties(test_lsp_reexport_links_normal PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "unit;lsp;metadata;ownership")

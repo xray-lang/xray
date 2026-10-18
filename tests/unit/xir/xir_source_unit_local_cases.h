@@ -122,7 +122,7 @@ static void source_unit_local_cases(XrXirSourceRequest *request) {
     const XrXirStatus statuses[]={XR_XIR_BAD_STRUCTURE,XR_XIR_BAD_TYPE,XR_XIR_BAD_TYPE,
         XR_XIR_BAD_TYPE,XR_XIR_BAD_VALUE,XR_XIR_BAD_VALUE};
     const char *messages[]={
-        "module graph build failed",
+        "constants must be initialized",
         "assignment requires a mutable binding",
         "expression cannot satisfy its declared type",
         "expression cannot satisfy its declared type",
@@ -136,7 +136,7 @@ static void source_unit_local_cases(XrXirSourceRequest *request) {
         if(status!=statuses[i] || strcmp(diagnostic.message,messages[i]))
             fprintf(stderr,"Unit local rejection %u: %u %s\n",i,status,diagnostic.message);
         CHECK(status==statuses[i] && !result.checked && !result.snapshot);
-        if (!i) CHECK(diagnostic.status == XR_XIR_BAD_STRUCTURE && diagnostic.module == 0 && !diagnostic.line && !diagnostic.column);
+        if (!i) CHECK(diagnostic.status == XR_XIR_BAD_STRUCTURE && diagnostic.module == 0 && diagnostic.line == 1 && diagnostic.column == 20);
         CHECK(!strcmp(diagnostic.message,messages[i]));xr_xir_compile_source_result_free(&result);
     }
 }

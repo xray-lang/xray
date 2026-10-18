@@ -21,6 +21,7 @@
 #include "../base/xstable_id.h"
 #include "xmodule_resolver.h"
 #include "xmodule_fingerprint.h"
+#include "xmodule_position.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -94,6 +95,8 @@ typedef struct XrModuleSourceDiagnostic {
     uint32_t module;
     int line, column;
     char message[192];
+    bool has_utf16_position;
+    XrModuleSourcePosition utf16_position;
 } XrModuleSourceDiagnostic;
 
 typedef struct XrModuleGraph {

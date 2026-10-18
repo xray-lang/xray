@@ -188,6 +188,7 @@ XR_FUNC AstNode *xr_parse_bare_lambda(Parser *parser, AstNode *parameter);
 XR_FUNC AstNode *xr_parse_assignment(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee);
+XR_FUNC AstNode *xr_parse_call_with_types(Parser *, AstNode *, XrTypeRef **, int);
 XR_FUNC AstNode *xr_parse_call_argument(Parser *parser);
 XR_FUNC AstNode *xr_parse_call_argument_with_access(Parser *parser, XrCallArgAccess *out_access);
 XR_FUNC AstNode *xr_parse_try_generic_call_after_lt(Parser *parser, AstNode *callee);

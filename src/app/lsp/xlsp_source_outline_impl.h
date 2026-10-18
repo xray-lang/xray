@@ -85,7 +85,7 @@ XrXirStatus xlsp_source_syntax_outline(const XlspSyntaxSnapshot *s,XlspSourceOut
         case AST_INTERFACE_DECL:name=node->as.interface_decl.name;kind=LSP_SYMBOL_INTERFACE;break;
         case AST_ENUM_DECL:name=node->as.enum_decl.name;kind=LSP_SYMBOL_ENUM;break;
         case AST_ENUM_MEMBER:name=node->as.enum_member.name;kind=LSP_SYMBOL_ENUM_MEMBER;break;
-        case AST_TYPE_ALIAS:status=XR_XIR_UNSUPPORTED;break;
+        case AST_TYPE_ALIAS:name=node->as.type_alias.name;kind=XR_SYMBOL_TYPE_PARAMETER;break;
         default:break;
         }
         if(kind)status=outline_append(s,o,node,name,kind,frame.parent,&index);

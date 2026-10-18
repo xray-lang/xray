@@ -90,9 +90,7 @@ static void source_enum_ref_place_cases(XrXirSourceRequest *request) {
     const char *sources[] = {
         "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{const e=E.V;return e.f()}\n",
         "enum E { V ref f()->i64{return 41} }\nfn bad(e:E)->i64{return e.f()}\n",
-        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{return E.V.f()}\n",
-        "enum E { V ref f()->i64{return 41} }\nvar e=E.V\nfn bad()->i64{return e.f()}\n",
-        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{var es=[E.V];return es[0].f()}\n"
+        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{return E.V.f()}\n"
     };
     const char *reasons[] = {
         "ref requires a mutable stored binding",
@@ -134,6 +132,44 @@ static void source_enum_ref_place_cases(XrXirSourceRequest *request) {
         "enum E { V ref f()->i64{return 41} }\nexport fn enumWitness()->i64{var es=[E.V];return es[0].f()}\n");
     puts("enum actual module/index ref: original three rejects; root literals after producer death; Checked roundtrip/specialize/Lowered/VM two independent instances41");
 }
+static void source_generic_requirement_run(XrXirSourceRequest *request,const char *source);
+static void source_enum_ref_permission_cases(XrXirSourceRequest *request) {
+    const char *sources[] = {
+        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{const e=E.V;return e.f()}\n",
+        "enum E { V ref f()->i64{return 41} }\nfn bad(e:E)->i64{return e.f()}\n",
+        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{return E.V.f()}\n"
+    };
+    const char *reasons[] = {
+        "ref requires a mutable stored binding",
+        "ref requires a mutable stored binding",
+        "expression cannot satisfy its declared type"
+    };
+    unsigned mismatches = 0;
+    for (uint32_t i = 0; i < sizeof(sources)/sizeof(*sources); ++i) {
+        write_source(request->entry_path, sources[i]);
+        XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
+        XrXirStatus status = xr_xir_compile_source_check(request, &result, &diagnostic, NULL);
+        if (status != XR_XIR_BAD_TYPE || strcmp(diagnostic.message, reasons[i]))
+            fprintf(stderr, "enum ref permission %u: %u %s\n", i, status, diagnostic.message);
+        if (status != XR_XIR_BAD_TYPE || result.checked || result.snapshot ||
+            strcmp(diagnostic.message, reasons[i])) ++mismatches;
+        xr_xir_compile_source_result_free(&result);
+    }
+    CHECK(!mismatches);
+    /* Module variables and indexed value elements already use the canonical
+     * writable-place path. Keep the original inputs as real execution cases. */
+    const char *positive[]={
+        "enum E { V ref f()->i64{return 41} }\nvar e=E.V\nfn bad()->i64{return e.f()}\n",
+        "enum E { V ref f()->i64{return 41} }\nfn bad()->i64{var es=[E.V];return es[0].f()}\n"
+    };
+    for(uint32_t i=0;i<2;++i){
+        char program[512];int length=snprintf(program,sizeof(program),"%s%s",positive[i],
+            "export fn genericMethodNumber()->i64{return bad()}\nexport fn genericMethodText()->string{return \"mapped\"}\n");
+        CHECK(length>0&&(size_t)length<sizeof(program));
+        source_generic_requirement_run(request,program);
+    }
+}
+
 static void source_enum_witness_rejections(XrXirSourceRequest *request) {
     const char *rejected[] = {
         "enum E { V name()->i64{return 41} }\n",
@@ -168,7 +204,7 @@ static void source_enum_witness_rejections(XrXirSourceRequest *request) {
         "method conflicts with enum builtin member", "variant conflicts with enum type metadata member",
         "method conflicts with enum builtin member", "enum method conflicts with variant",
         "enum method conflicts with variant", "duplicate or empty declaration name",
-        "module graph build failed", "", "method declaration contract is not admitted",
+        "expected ',' between enum variants", "", "method declaration contract is not admitted",
         "name is not an initialized value", "member receiver is not a nominal value",
         "explicit implementation is missing a method",
         "interface implementation requires a read instance method with matching own parameters",

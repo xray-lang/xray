@@ -115,6 +115,8 @@ typedef struct SourceContext {
     bool returned, has_generics, query_ready;
     XrXirSourceView query;
     XrXirSourceSyntaxView syntax;
+    XrXirSourceCalls calls;
+    uint32_t call_capacity;
     uint32_t syntax_declaration_capacity, syntax_reference_capacity, syntax_marker_capacity;
     uint32_t declaration_capacity, reference_capacity, expression_capacity;
     uint32_t prelude_module; /* One-based actual graph index, zero when unused. */
