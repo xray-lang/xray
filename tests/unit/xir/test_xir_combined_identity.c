@@ -48,7 +48,9 @@ static void reject_parent(const XrXirCompileContext *context, ParentPacket paren
         CHECK(xr_xir_compile_checked_read(context,parent.bytes,parent.length,&output,NULL)==XR_XIR_BAD_STRUCTURE);
         CHECK(output==sentinel);
         CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
-        CHECK(after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes && after.work==before.work);
+        /* The empty-output read charges its exact32 header bytes; an occupied
+         * output rejects before reading. Neither path allocates or refunds. */
+        CHECK(after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes && after.work==before.work+32);
     }
 }
 
@@ -111,6 +113,6 @@ int main(void) {
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(artifact);
     XrCompileResourceStats final={0};CHECK(xr_compile_resources_stats(context.resources,&final)==XR_COMPILE_RESOURCE_OK && !final.live_bytes);
     xr_compile_resources_release(context.resources);
-    puts("Combined30/77 independent Core roundtrip and44 complete parent packets: unchanged outputs and zero-charge early rejection PASS");
+    puts("Combined30/77 independent Core roundtrip and44 complete parent packets: unchanged outputs and exact32-work no-allocation early rejection PASS");
     return 0;
 }
