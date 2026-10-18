@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import gen_native_declarations as schema
 import embed_native_types as embed
+import gen_api_inventory as inventory
 
 
 class NativeDeclarations(unittest.TestCase):
@@ -24,10 +25,11 @@ class NativeDeclarations(unittest.TestCase):
         for name, text in first.items():
             self.assertEqual((ROOT / name).read_text(encoding='utf-8'), text)
         header, members = schema.parse_source(self.source, self.prelude)
-        self.assertEqual(header[:3], (1, 'Array', 'T'))
+        self.assertEqual(header[:3], (1, 'Array', ('T',)))
         self.assertEqual(len(members), 32)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
-                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} | set(schema.array_recipe_contracts('T')))
+                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY',
+                          'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(schema.array_recipe_contracts('T')))
         self.assertEqual(next(m for m in members if m.name == 'map').operation, 'ARRAY_MAP')
         self.assertNotIn('xr_native_def_array', embed.render(ROOT / 'stdlib/types'))
 
@@ -74,9 +76,7 @@ class NativeDeclarations(unittest.TestCase):
         clear = next(member for member in members if member.name == 'clear')
         self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
         self.assertEqual({m.name for m in members if m.operation == 'NONE'},
-                         {'withCapacity', 'capacity', 'ptr', 'mutPtr',
-                          'reserve', 'concat', 'sort', 'fill', 'toString',
-                          'iterator', 'entriesIterator'})
+                         {'ptr', 'mutPtr', 'sort', 'toString', 'iterator', 'entriesIterator'})
 
     def test_array_recipe_shape_permission_and_result_rejections(self):
         with self.assertRaises(ValueError):
@@ -165,7 +165,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_string_value_identity_and_full_member_spans(self):
         source = (ROOT / 'stdlib/types/string.xr').read_text(encoding='utf-8')
         header, members = schema.parse_source(source, self.prelude)
-        self.assertEqual(header[:3], (2, 'string', ''))
+        self.assertEqual(header[:3], (2, 'string', ()))
         self.assertEqual(len(members), 19)
         rows = source.splitlines()
         self.assertEqual(rows[header[3] - 1][header[4] - 1:], 'string {')
@@ -250,10 +250,80 @@ class NativeDeclarations(unittest.TestCase):
             subprocess.run([sys.executable, str(Path(embed.__file__)), str(root), '--check', str(output)],
                            check=True, capture_output=True)
 
+    def test_hash_declarations_preserve_ordered_binders_and_value_identity(self):
+        for stem, identity, name, binders, count in [('map', 6, 'Map', ('K', 'V'), 13),
+                                                     ('set', 7, 'Set', ('T',), 15)]:
+            source = (ROOT / f'stdlib/types/{stem}.xr').read_text(encoding='utf-8')
+            header, members = schema.parse_source(source, self.prelude)
+            self.assertEqual(header[:3], (identity, name, binders))
+            self.assertEqual(len(members), count)
+            self.assertEqual({member.name for member in members if member.operation != 'NONE'},
+                {'get', 'set', 'containsKey', 'containsValue', 'delete', 'clear', 'keys', 'values', 'entries', 'forEach'} if stem == 'map' else
+                {'add', 'contains', 'delete', 'clear', 'values', 'toArray', 'union', 'intersection',
+                 'difference', 'symmetricDifference', 'isSubset', 'isSuperset', 'forEach'})
+            self.assertNotIn(f'xr_native_def_{stem}', embed.render(ROOT / 'stdlib/types'))
+            for before, after in [('struct ', 'class '), (': Hashable', ''),
+                                  (': Hashable', ': Equal'), ('ref clear()', 'clear()'),
+                                  ('toString() -> string', 'toString() -> i64')]:
+                with self.subTest(stem=stem, before=before), self.assertRaises(ValueError):
+                    schema.parse_source(source.replace(before, after), self.prelude)
+        source = (ROOT / 'stdlib/types/map.xr').read_text(encoding='utf-8')
+        _, members = schema.parse_source(source, self.prelude)
+        get = next(member for member in members if member.name == 'get')
+        put = next(member for member in members if member.name == 'set')
+        self.assertEqual(schema.simple_term(get.result, ('K', 'V')), 'NULLABLE_VALUE')
+        self.assertEqual([schema.simple_term(p[1], ('K', 'V')) for p in put.parameters], ['KEY', 'VALUE'])
+        for name, operation, result in [('keys', 'HASH_KEYS', 'ARRAY_KEY'),
+                ('values', 'HASH_VALUES', 'ARRAY_VALUE'), ('entries', 'MAP_ENTRIES', 'ARRAY_KEY_VALUE')]:
+            member = next(member for member in members if member.name == name)
+            self.assertEqual(member.operation, operation)
+            self.assertEqual(schema.simple_term(member.result, ('K', 'V')), result)
+            self.assertEqual(len(member.parameters), 0)
+            self.assertEqual(member.receiver, 'READ')
+        for header in ('Map<V, K: Hashable>', 'Map<K: Hashable, K>', 'Map<K: Hashable>', 'Map<K, V: Hashable>'):
+            with self.subTest(header=header), self.assertRaises(ValueError):
+                schema.parse_source(source.replace('Map<K: Hashable, V>', header), self.prelude)
+        source = (ROOT / 'stdlib/types/set.xr').read_text(encoding='utf-8')
+        _, members = schema.parse_source(source, self.prelude)
+        for name, operation in [('union', 'SET_UNION'), ('intersection', 'SET_INTERSECTION'),
+                ('difference', 'SET_DIFFERENCE'), ('symmetricDifference', 'SET_SYMMETRIC_DIFFERENCE'),
+                ('isSubset', 'SET_IS_SUBSET'), ('isSuperset', 'SET_IS_SUPERSET')]:
+            member = next(member for member in members if member.name == name)
+            self.assertEqual(member.operation, operation)
+            self.assertEqual(member.receiver, 'READ')
+            self.assertEqual([schema.simple_term(p[1], ('T',)) for p in member.parameters], ['SET_ELEMENT'])
+            self.assertEqual(schema.simple_term(member.result, ('T',)), 'BOOL' if name.startswith('is') else 'SET_ELEMENT')
+
+    def test_inventory_preserves_governed_hash_signatures_and_admission(self):
+        for stem, identity, names, signature in [('array', 1, ['T'], 'Array<T>'),
+                ('string', 2, [], 'string'), ('map', 6, ['K', 'V'], 'Map<K: Hashable, V>'),
+                ('set', 7, ['T'], 'Set<T: Hashable>')]:
+            path = ROOT / f'stdlib/types/{stem}.xr'
+            text = path.read_text(encoding='utf-8')
+            rows = inventory.collect_native_declaration(ROOT, path, text, 'stdlib', stem)
+            declaration = rows[0]
+            self.assertEqual(declaration['signature'], signature)
+            self.assertEqual(declaration['generic_parameter_names'], names)
+            self.assertEqual(declaration['generic_parameter_count'], len(names))
+            self.assertEqual(declaration['native_type_id'], identity)
+            self.assertEqual(declaration['declaration_kind'], 'struct')
+            if stem in ('map', 'set'):
+                self.assertEqual({member['name'] for member in rows[1:] if member['xir_admitted']},
+                    {'get', 'set', 'containsKey', 'containsValue', 'delete', 'clear', 'keys', 'values', 'entries', 'forEach'} if stem == 'map' else
+                    {'add', 'contains', 'delete', 'clear', 'values', 'toArray', 'union', 'intersection',
+                     'difference', 'symmetricDifference', 'isSubset', 'isSuperset', 'forEach'})
+            else:
+                self.assertTrue(any(member['xir_admitted'] for member in rows[1:]))
+        with self.assertRaises(ValueError):
+            inventory.collect_native_declaration(ROOT, ROOT / 'stdlib/types/map.xr',
+                (ROOT / 'stdlib/types/set.xr').read_text(encoding='utf-8'), 'stdlib', 'map')
+
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
-            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/prelude/builtin_symbols.def']:
+            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr',
+                             'stdlib/types/coroutine.xr', 'stdlib/types/map.xr', 'stdlib/types/set.xr',
+                             'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())

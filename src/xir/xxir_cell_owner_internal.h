@@ -23,6 +23,7 @@ typedef struct XrXirCellLoan {
     const void *scope;
     struct XrXirCellLoan *previous;
     XrXirCellAuthority authority;
+    struct XrXirCellLoan *child;
 } XrXirCellLoan;
 typedef struct XrXirCellPublication {
     const void *owner;

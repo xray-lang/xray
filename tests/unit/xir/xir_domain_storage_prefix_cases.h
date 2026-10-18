@@ -54,7 +54,7 @@ static void prefix_domain_reject_value(XrXirDomain *old_domain, XrXirValueAdmiss
     prefix_unreadable = NULL;
 }
 static void prefix_domain_literal_case(uint32_t references, bool locked, unsigned char padding,
-    XrXirTypeArena *arena, XrXirValueAdmission *admission, const XrXirValue *text) {
+    unsigned char generation,XrXirTypeArena *arena, XrXirValueAdmission *admission, const XrXirValue *text) {
     SYSTEM_INFO info; GetSystemInfo(&info); size_t page = info.dwPageSize;
     CHECK(page >= 8 && page <= SIZE_MAX/2 && sizeof(atomic_bool) == 1 && sizeof(_Atomic(uint32_t)) == 4);
     unsigned char *memory = VirtualAlloc(NULL,page*2,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE); CHECK(memory);
@@ -64,6 +64,7 @@ static void prefix_domain_literal_case(uint32_t references, bool locked, unsigne
     atomic_init((_Atomic(uint32_t) *)prefix,references);
     atomic_init((atomic_bool *)(prefix+4),locked);
     CHECK(prefix[4] == (locked ? 1u : 0u));
+    if (generation) {prefix[4]=generation;prefix[5]=0;prefix[6]=0;prefix[7]=1;}
     unsigned char before[8]; memcpy(before,prefix,8);
     size_t attempts = prefix_runtime_allocations, live = cell_owner_live, bytes = cell_owner_bytes;
     size_t compiler = value_compile_calls; XrXirDomain *domain = (XrXirDomain *)prefix;
@@ -86,9 +87,11 @@ static void prefix_domain_cases(XrXirTypeArena *arena, XrXirDomain *domain,
     const uint32_t references[] = {1,UINT32_MAX-1,UINT32_MAX};
     for (unsigned r=0;r<3;++r) for (unsigned locked=0;locked<2;++locked)
         for (unsigned padding=0;padding<2;++padding)
-            prefix_domain_literal_case(references[r],locked != 0,padding ? 0xffu : 0u,arena,admission,&text);
+            prefix_domain_literal_case(references[r],locked != 0,padding ? 0xffu : 0u,0,arena,admission,&text);
     for (unsigned locked=0;locked<2;++locked)
-        prefix_domain_literal_case(UINT32_C(0x4d445258),locked != 0,2,arena,admission,&text);
+        prefix_domain_literal_case(UINT32_C(0x4d445258),locked != 0,2,0,arena,admission,&text);
+    for (unsigned char generation=24;generation<=26;++generation)
+        prefix_domain_literal_case(UINT32_C(0x4d445258),false,0,generation,arena,admission,&text);
     xr_xir_value_drop(&text);
 }
 #endif // XIR_DOMAIN_STORAGE_PREFIX_CASES_H

@@ -10,12 +10,16 @@ add_library(xir_compile_owner_runtime STATIC
     "${XIR_OWNER_ROOT}/src/xir/xxir_type_arena.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_value.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_scalar.c"
+    "${XIR_OWNER_ROOT}/src/xir/xxir_scalar_core.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_float.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_output.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_program.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_program_match.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_program_input.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_call.c"
+    "${XIR_OWNER_ROOT}/src/xir/xxir_task.c"
+    "${XIR_OWNER_ROOT}/src/xir/xxir_task_budget.c"
+    "${XIR_OWNER_ROOT}/src/xir/xxir_format.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_instance.c")
 target_link_libraries(xir_compile_owner_runtime PRIVATE compile_owner_core)
 add_executable(test_xir_compile_runtime_owner

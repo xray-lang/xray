@@ -13,7 +13,9 @@ def main():
         raise SystemExit('Core declaration source must be nonempty UTF-8 without NUL')
     rows=[', '.join(f'0x{x:02x}' for x in (data+b'\0')[i:i+20]) for i in range(0,len(data)+1,20)]
     text='/* Generated compiler-owned declaration bytes. */\n'
+    text+='#ifndef XIR_CORE_DECLARATIONS_SOURCE_INC_C\n#define XIR_CORE_DECLARATIONS_SOURCE_INC_C\n'
     text+='static const char xir_core_declaration_source[] = {\n    '+',\n    '.join(rows)+'\n};\n'
+    text+='#endif\n'
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(text,encoding='utf-8',newline='\n')
 

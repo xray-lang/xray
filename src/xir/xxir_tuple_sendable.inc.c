@@ -52,6 +52,7 @@ static XrXirStatus sendable_enum_shape(const XrXirConstraintEnvironment *environ
 static uint32_t sendable_child_count(const XrXirConstraintEnvironment *environment,
     const XrXirTypeNode *node) {
     if (node->kind == XR_XIR_TYPE_TUPLE) return node->parameter_count;
+    if (node->kind == XR_XIR_TYPE_MAP) return 2;
     if (node->kind != XR_XIR_TYPE_NOMINAL) return 1;
     if (node->nominal.field_count) return node->nominal.field_count;
     const XrXirNominalTable *table = environment->types->nominals;
@@ -60,6 +61,7 @@ static uint32_t sendable_child_count(const XrXirConstraintEnvironment *environme
 static XrXirType sendable_child(const XrXirConstraintEnvironment *environment,
     const XrXirTypeNode *node, uint32_t at) {
     if (node->kind == XR_XIR_TYPE_TUPLE) return node->parameters[at].type;
+    if (node->kind == XR_XIR_TYPE_MAP) return at ? node->result : node->element;
     if (node->kind != XR_XIR_TYPE_NOMINAL) return node->element;
     return node->nominal.field_count ? node->nominal.fields[at] :
         environment->types->nominals->declarations[node->nominal.declaration].fields[at].type;
@@ -94,7 +96,8 @@ static XrXirStatus sendable_enter(const XrXirConstraintEnvironment *environment,
         if (status != XR_XIR_OK) return status;
     } else if (node->kind == XR_XIR_TYPE_TUPLE) {
         if (!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
-    } else if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE &&
+    } else if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_MAP &&
+               node->kind != XR_XIR_TYPE_SET && node->kind != XR_XIR_TYPE_NULLABLE &&
                node->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
     walk->state[index] = 1; walk->frames[(walk->depth)++] = (SendableFrame){index, 0};
     return XR_XIR_OK;

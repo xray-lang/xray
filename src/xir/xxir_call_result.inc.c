@@ -67,6 +67,7 @@ XR_FUNCDEF XrXirCallStatus xr_xir_call_discard_inbox(XrXirCallView *view, XrXirT
         owner->value.payload != view->inbox.value.payload ||
         (expected == XR_XIR_UNIT ? !boundary_value(owner->value,expected) :
             !xr_xir_value_argument(&owner->value,view->arena,expected))) return XR_XIR_CALL_BAD_STATE;
+    if (xr_xir_compile_type_arena_borrowed(view->arena,expected)) return call_view_inbox_discard(view);
     xr_xir_call_result_drop(&frame->inbox);
     view->inbox = call_result(XR_XIR_CALL_READY);
     return XR_XIR_CALL_READY;

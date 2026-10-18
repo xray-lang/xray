@@ -14,6 +14,7 @@
 
 #include "xxir_program_internal.h"
 #include "xxir_instance_value.h"
+#include "xxir_instance_hash.h"
 #include "xxir_instance_function_internal.h"
 #include "xxir_value_internal.h"
 #include "xxir_call_internal.h"
@@ -21,6 +22,7 @@
 #include "xxir_class_origin_internal.h"
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_task_internal.h"
+#include "xxir_task_shapes.h"
 #include "xxir_struct.h"
 #include "xxir_output.h"
 #include "xxir_panic.h"
@@ -143,6 +145,11 @@ static XrXirCallStatus value_call_status(XrXirValueStatus status) {
     if (status == XR_XIR_VALUE_UNSUPPORTED) return XR_XIR_CALL_UNSUPPORTED;
     if (status == XR_XIR_VALUE_LIMIT || status == XR_XIR_VALUE_REFCOUNT_LIMIT) return XR_XIR_CALL_LIMIT;
     return XR_XIR_CALL_BAD_STATE;
+}
+static XrXirCallStatus value_path_call_status(XrXirValueStatus status, const XrXirFaultDetail *fault) {
+    if (status == XR_XIR_VALUE_BOUNDS && fault && xr_xir_fault_runtime_valid(*fault))
+        return XR_XIR_CALL_RUNTIME_PANIC;
+    return value_call_status(status);
 }
 static bool instance_cleanup_grant(const XrXirInstance *instance) {
     return instance->driving && !instance->observing && xr_xir_task_executor_cleanup_active(instance->executor);
@@ -1422,8 +1429,7 @@ XR_FUNC XrXirCallStatus xr_xir_task_go(XrXirCallView *view, XrXirType task_type,
     if (!task || task->kind != XR_XIR_TYPE_TASK || task->element != target->result)
         return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirType result = task->element;
-    if (result != XR_XIR_UNIT && result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING)
-        return XR_XIR_CALL_UNSUPPORTED;
+    if (!xr_xir_task_result_shape(program->types, result)) return XR_XIR_CALL_UNSUPPORTED;
     for (uint32_t p = 0; p < count; ++p) {
         if (!xr_xir_task_parameter_supported(program->types, target->parameters[p]))
             return XR_XIR_CALL_UNSUPPORTED;
@@ -1456,6 +1462,32 @@ XrXirCallStatus xr_xir_instance_cell_write(XrXirCallView *view, const XrXirValue
     XrXirCallStatus status = instance_cell_access(view, instance, cell);
     return status == XR_XIR_CALL_READY ? value_call_status(xr_xir_call_cell_write(view, cell, value)) : status;
 }
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_string_append(XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValue *suffix) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || !cell || !suffix) return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus status = instance_cell_access(view, instance, cell);
+    if (status != XR_XIR_CALL_READY) return status;
+    XrXirValuePlace place = {0};
+    XrXirValueStatus admitted = xr_xir_call_cell_place(view, cell, &place);
+    if (admitted != XR_XIR_VALUE_OK) return value_call_status(admitted);
+    return value_call_status(xr_xir_string_place_append(&place, suffix, xr_xir_call_admission(view)));
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_cell_string_append_scalar(XrXirCallView *view,
+    const XrXirValue *cell, const XrXirValue *scalar) {
+    if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirInstance *instance = view_instance(view);
+    if (!instance || !cell || !scalar) return XR_XIR_CALL_BAD_STATE;
+    XrXirCallStatus status = instance_cell_access(view, instance, cell);
+    if (status != XR_XIR_CALL_READY) return status;
+    XrXirValuePlace place = {0};
+    XrXirValueStatus admitted = xr_xir_call_cell_place(view, cell, &place);
+    if (admitted != XR_XIR_VALUE_OK) return value_call_status(admitted);
+    char buffer[XR_XIR_SCALAR_TEXT_BYTES]; const char *bytes = NULL; size_t length = 0;
+    if (!xr_xir_scalar_text(scalar, buffer, &bytes, &length)) return XR_XIR_CALL_BAD_ARGUMENT;
+    return value_call_status(xr_xir_string_place_append_utf8(&place, bytes, length, xr_xir_call_admission(view)));
+}
 XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAction action,
     uint32_t destination, uint32_t handler_pc, uint32_t *pc) {
     if (!instance_view_current(view)) return (XrXirAction){.kind = XR_XIR_ACTION_FAULT, .value = {XR_XIR_I64,0,XR_XIR_CALL_BAD_ARGUMENT}};
@@ -1474,3 +1506,5 @@ XrXirAction xr_xir_instance_panic_land(XrXirCallView *view, void *frame, XrXirAc
     *pc = handler_pc;
     return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0, 0, 0}, {0}, 0};
 }
+
+#include "xxir_instance_hash.inc.c"

@@ -14,7 +14,7 @@
 #define XXIR_VALUE_H
 #include "../base/xdefs.h"
 
-#define XR_XIR_VALUE_ABI_VERSION 24u
+#define XR_XIR_VALUE_ABI_VERSION 27u
 #define XR_XIR_CONSTRUCTED_TYPE_BASE 256u
 #define XR_XIR_CONSTRUCTED_TYPE_LIMIT 65536u
 #define XR_XIR_TYPE_PARAMETER_BASE 65536u
@@ -96,6 +96,8 @@ XR_FUNC bool xr_xir_value_argument(const XrXirValue *value, const XrXirTypeArena
 XR_FUNC const XrXirTypeArena *xr_xir_value_arena(const XrXirValue *value);
 /* Copy/new outputs must be canonical unit handles. Native pointers are trusted. */
 XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output);
+/* A prepaid handle transfer consumes the source and never relocates its body. */
+XR_FUNC XrXirValueStatus xr_xir_value_move(XrXirValue *source, XrXirValue *output);
 XR_FUNC void xr_xir_value_drop(XrXirValue *value);
 XR_FUNC XrXirValueStatus xr_xir_string_new(XrXirDomain *domain, const char *bytes,
                                          size_t length, XrXirValue *output);

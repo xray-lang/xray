@@ -1,0 +1,85 @@
+add_executable(test_xir_p09_hash_members "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_members.c")
+target_link_libraries(test_xir_p09_hash_members PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
+set(HASH_MEMBERS_C "${CMAKE_BINARY_DIR}/generated/xir_p09_hash_members.c")
+add_custom_command(OUTPUT "${HASH_MEMBERS_C}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_p09_hash_members> "${HASH_MEMBERS_C}"
+    DEPENDS test_xir_p09_hash_members VERBATIM)
+add_executable(test_xir_p09_hash_members_native
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_members_native.c" "${HASH_MEMBERS_C}")
+target_link_libraries(test_xir_p09_hash_members_native PRIVATE xray_xir_scalar)
+add_executable(test_xir_p09_hash_members_mixed
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_members_mixed.c" "${HASH_MEMBERS_C}")
+target_link_libraries(test_xir_p09_hash_members_mixed PRIVATE xray_xir_source xray_xir_vm)
+foreach(target test_xir_p09_hash_members test_xir_p09_hash_members_native test_xir_p09_hash_members_mixed)
+    target_compile_definitions(${target} PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /utf-8 /W4 /WX)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME ${target} COMMAND ${target})
+    set_tests_properties(${target} PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;source;ownership;codec;provider")
+endforeach()
+
+add_test(NAME test_xir_p09_hash_members76_vectors COMMAND ${XRAY_PYTHON}
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_hash76_vectors.py"
+    --source "${PROJECT_SOURCE_DIR}" --output "${CMAKE_BINARY_DIR}/p09-hash-members76-vectors")
+set_tests_properties(test_xir_p09_hash_members76_vectors PROPERTIES TIMEOUT 30 LABELS "unit;xir;hash;codec")
+
+add_executable(test_xir_p09_hash_members_resources
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_members_resources.c")
+target_link_libraries(test_xir_p09_hash_members_resources PRIVATE xray_xir_source xray_xir_vm)
+target_compile_definitions(test_xir_p09_hash_members_resources PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_xir_p09_hash_members_resources PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_p09_hash_members_resources PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_p09_hash_members_resources PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_p09_hash_members_resources_normal COMMAND test_xir_p09_hash_members_resources --normal)
+set_tests_properties(test_xir_p09_hash_members_resources_normal PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;resources;target-impact")
+add_test(NAME test_xir_p09_hash_members_resources COMMAND test_xir_p09_hash_members_resources)
+set_tests_properties(test_xir_p09_hash_members_resources PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;hash;resources;allocation;ownership;cancellation")
+
+foreach(mode native mixed)
+    set(target test_xir_p09_hash_members_resources_${mode})
+    add_executable(${target}
+        "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_members_resources_${mode}.c" "${HASH_MEMBERS_C}")
+    target_link_libraries(${target} PRIVATE xray_xir_source xray_xir_vm)
+    target_compile_definitions(${target} PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+    set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /utf-8 /W4 /WX)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME ${target}_normal COMMAND ${target} --normal)
+    set_tests_properties(${target}_normal PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;resources;target-impact;provider")
+    add_test(NAME ${target} COMMAND ${target})
+    set_tests_properties(${target} PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;hash;resources;allocation;ownership;cancellation;provider")
+endforeach()
+
+foreach(target test_xir_p09_hash_members_resources test_xir_p09_hash_members_resources_native test_xir_p09_hash_members_resources_mixed)
+    add_test(NAME ${target}_cancellation COMMAND ${target} --cancel)
+    set_tests_properties(${target}_cancellation PROPERTIES TIMEOUT 120
+        LABELS "unit;xir;hash;resources;cancellation;ownership;target-impact;provider")
+endforeach()
+
+add_executable(test_xir_p09_hash_members_compiler "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_hash_members_compiler.c")
+target_link_libraries(test_xir_p09_hash_members_compiler PRIVATE xray_xir_source xray_xir_cgen xray_xir_vm)
+target_compile_definitions(test_xir_p09_hash_members_compiler PRIVATE XR_P09_HASH_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+set_target_properties(test_xir_p09_hash_members_compiler PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_p09_hash_members_compiler PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_p09_hash_members_compiler PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_p09_hash_members_compiler_normal COMMAND test_xir_p09_hash_members_compiler --normal)
+add_test(NAME test_xir_p09_hash_members_compiler_resources COMMAND test_xir_p09_hash_members_compiler --resources)
+set_tests_properties(test_xir_p09_hash_members_compiler_normal test_xir_p09_hash_members_compiler_resources
+    PROPERTIES TIMEOUT 120 LABELS "unit;xir;hash;compiler;resources;ownership;target-impact")
+add_test(NAME test_xir_p09_hash_members_compiler COMMAND test_xir_p09_hash_members_compiler)
+set_tests_properties(test_xir_p09_hash_members_compiler PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
+    LABELS "unit;xir;hash;compiler;resources;ownership;allocation")

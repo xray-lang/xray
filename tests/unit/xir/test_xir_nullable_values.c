@@ -21,6 +21,7 @@ static const XrXirCompileContext *nullable_context;
 #include "xir_nullable_golden.h"
 #include "xir_nullable65_golden.h"
 #include "xir_nullable72_golden.h"
+#include "xir_nullable85_golden.h"
 
 static void nullable_word(uint8_t *bytes,uint32_t word) {
     for (uint32_t i=0;i<4;++i) bytes[i]=(uint8_t)(word>>(8*i));
@@ -42,8 +43,8 @@ static XrXirStatus nullable_packet_operation(const XrXirCompileContext *context,
 }
 static void nullable_packets(void) {
     for (uint32_t some=0;some<2;++some) {
-        const uint8_t *golden=some ? nullable_some72_golden : nullable_none72_golden;
-        size_t length=some ? sizeof(nullable_some72_golden) : sizeof(nullable_none72_golden);
+        const uint8_t *golden=some ? nullable_some85_golden : nullable_none85_golden;
+        size_t length=some ? sizeof(nullable_some85_golden) : sizeof(nullable_none85_golden);
         XrXirArtifact *checked=NULL;XrXirCheckedPacket packet={0};
         CHECK(xr_xir_compile_checked_read(nullable_context,golden,length,&checked,NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
@@ -70,12 +71,14 @@ static void nullable_packets(void) {
         const uint8_t *historical[]={some?nullable_some_golden:nullable_none_golden,
             some?nullable_some64_golden:nullable_none64_golden,
             some?nullable_some65_golden:nullable_none65_golden,
-            some?nullable_some71_golden:nullable_none71_golden};
+            some?nullable_some71_golden:nullable_none71_golden,
+            some?nullable_some72_golden:nullable_none72_golden};
         const size_t historical_lengths[]={
             some?sizeof(nullable_some_golden):sizeof(nullable_none_golden),
             some?sizeof(nullable_some64_golden):sizeof(nullable_none64_golden),
             some?sizeof(nullable_some65_golden):sizeof(nullable_none65_golden),
-            some?sizeof(nullable_some71_golden):sizeof(nullable_none71_golden)};
+            some?sizeof(nullable_some71_golden):sizeof(nullable_none71_golden),
+            some?sizeof(nullable_some72_golden):sizeof(nullable_none72_golden)};
         for(size_t old=0;old<sizeof(historical)/sizeof(*historical);++old){
             XrCompileResourceStats before=library_compile_stats(nullable_context);
             for(unsigned occupied=0;occupied<2;++occupied){

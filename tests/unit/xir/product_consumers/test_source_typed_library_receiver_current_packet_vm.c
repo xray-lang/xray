@@ -60,11 +60,11 @@ static void record_failure(const char *domain, const char *operation, bool has_s
     if (receiver_cleanup_enabled) { longjmp(receiver_failure, 1); } exit(1); } } while (0)
 /* Public Git reference 9031dbc04d5f66ae2bcb356478a0d9450dc9ad4e pins interface facts.
  * Producer adoption and execution require separately qualified materials. */
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 28u && XR_XIR_CHECKED_CONTRACT == 73u, "Formal Checked identity");
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 28u && XR_XIR_CHECKED_CONTRACT == 85u, "Formal Checked identity");
 #if defined(XR_SOURCE_TYPED_LIBRARY_PACKET_WRITER)
 _Static_assert(XR_XIR_LIBRARY_C_INTERFACE_VERSION == 2u, "Actual owned Catalog interface");
 #endif
-_Static_assert(XR_XIR_VALUE_ABI_VERSION == 24u && XR_XIR_CALL_ABI_VERSION == 29u &&
+_Static_assert(XR_XIR_VALUE_ABI_VERSION == 27u && XR_XIR_CALL_ABI_VERSION == 29u &&
     XR_XIR_PROGRAM_ABI_VERSION == 31u, "Formal public runtime identity");
 
 typedef struct ReceiverRoles {
@@ -226,9 +226,9 @@ static void copy_owned_sources(ReceiverRun *run, char **argv) {
     CHECK(same_path(expected, run->root));
     CHECK(strlen(argv[3]) < sizeof(run->stdlib)); strcpy(run->stdlib, argv[3]);
     const char *leaves[2] = {"root.xr", "library.xr"};
-    const size_t lengths[2] = {163, 185};
+    const size_t lengths[2] = {163, 178};
     const char *digests[2] = {"3bb17ffe354b537a024dbf6e4c371df1c80051d72a3db21f20d48fdbeeb5f8bc",
-        "bb41f3d3d610b67ce6445475deb031967b10a0b069ef00b1c923599b3d6a6c87"};
+        "cde4fc2274c19e4eb8cb2b21cf5364e861e53d385790c6a24da97c107dfa40b5"};
     for (unsigned leaf = 0; leaf < 2; ++leaf) {
         size = snprintf(run->paths[leaf], sizeof(run->paths[leaf]), "%s/%s", run->root, leaves[leaf]);
         CHECK(size > 0 && (size_t)size < sizeof(run->paths[leaf]));

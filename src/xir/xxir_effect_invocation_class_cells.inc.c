@@ -89,7 +89,7 @@ static XrXirStatus effect_invocation_cell_mask(EffectInvocationFlow *flow,
 }
 
 static bool effect_invocation_cell_terminal(XrXirOp op) {
-    return op==XR_XIR_CELL_READ || op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_LOCAL_WRITE ||
+    return op==XR_XIR_CELL_READ || op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_STRING_APPEND || op==XR_XIR_CELL_LOCAL_WRITE ||
         op==XR_XIR_PLACE_READ || op==XR_XIR_PLACE_WRITE || op==XR_XIR_CELL_PROJECT;
 }
 

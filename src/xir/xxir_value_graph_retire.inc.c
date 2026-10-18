@@ -45,10 +45,23 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
     GraphEdgeBudget *budget) {
     if (!graph_edge_work(budget)) return false;
     if (object->type == XR_XIR_STRING || object->kind == XR_XIR_TYPE_ATOMIC) return true;
+    if (object->kind==XR_XIR_TYPE_SLICE || object->kind==XR_XIR_TYPE_MUT_SLICE) {
+        XirView *view=(XirView *)object;
+        return graph_direct_edge(&view->storage.root,visit,context) && graph_direct_edge(&view->parent,visit,context);
+    }
     if (object->type == XR_XIR_PANIC_INFO)
         return graph_direct_edge(&((XirPanicInfo *)object)->panic.message, visit, context);
-    if (object->kind == XIR_OBJECT_CELL)
-        return graph_direct_edge(&((XirCell *)object)->value, visit, context);
+    if (object->kind == XIR_OBJECT_CELL) {
+        XirCell *cell = (XirCell *)object;
+        XrXirValuePathStep *steps = (XrXirValuePathStep *)(cell + 1);
+        for (uint32_t i = 0; i < cell->projection_count; ++i) {
+            if (!graph_edge_work(budget)) return false;
+            if (steps[i].kind != XR_XIR_PATH_KEY) continue;
+            XrXirValue key = path_key_value(&steps[i], object->arena);
+            if (!visit(&key, &steps[i].selector, context)) return false;
+        }
+        return graph_direct_edge(&cell->value, visit, context);
+    }
     if (object->kind == XIR_OBJECT_FUNCTION) {
         const XrXirFunctionBinding *binding = &((XirFunction *)object)->binding;
         for (uint32_t i = 0; i < binding->capture_count; ++i)
@@ -87,6 +100,22 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
             StorageCursor cursor = {0};
             StorageSpan span = {node->nominal.fields[i], body + layout->field_offsets[i]};
             if (storage_cursor_init(object->arena, span, frames, instance->release_capacity, true, &cursor) != XR_XIR_VALUE_OK ||
+                !graph_storage_edges(&cursor, visit, context, budget)) return false;
+        }
+        return true;
+    }
+    if (object->kind == XR_XIR_TYPE_MAP || object->kind == XR_XIR_TYPE_SET) {
+        XirHash *map = (XirHash *)object;
+        if (!hash_storage_valid(map)) return false;
+        unsigned fields = object->kind == XR_XIR_TYPE_MAP ? 2 : 1;
+        for (size_t i = 0; i < map->length; ++i) for (unsigned field = 0; field < fields; ++field) {
+            if (!graph_edge_work(budget)) return false;
+            StorageSpan span = hash_span(map, i, field != 0);
+            if (span.type == XR_XIR_UNIT) continue;
+            StorageCursor cursor = {0};
+            if (storage_cursor_init(object->arena, span,
+                map->release_capacity ? (StorageFrame *)(map + 1) : NULL,
+                map->release_capacity, true, &cursor) != XR_XIR_VALUE_OK ||
                 !graph_storage_edges(&cursor, visit, context, budget)) return false;
         }
         return true;
@@ -216,6 +245,7 @@ static void graph_drain(void) {
             domain = domain->closed_next;
         }
         if (value_graph_operations || !domain) {
+            if (!domain) value_graph_pending = false;
             value_graph_draining = false;
             graph_unlock(); return;
         }

@@ -110,6 +110,10 @@ static XrXirStatus effect_root_callable(const EffectRootSeedRecord *request,XrXi
  * a local result never stands in for complete invocation propagation. */
 static bool effect_root_seed_local(XrXirOp opcode) {
     switch (opcode) {
+    /* Admitted Cell/place and borrowed inputs retain their root authority. */
+    case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN:
+    case XR_XIR_VIEW_GET: case XR_XIR_VIEW_SET: case XR_XIR_VIEW_COPY:
+    case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING:
     case XR_XIR_ATOMIC_NEW: case XR_XIR_ATOMIC_LOAD: case XR_XIR_ATOMIC_STORE:
     case XR_XIR_ATOMIC_ADD: case XR_XIR_ATOMIC_SUB: case XR_XIR_ATOMIC_FETCH_ADD:
@@ -128,12 +132,18 @@ static bool effect_root_seed_local(XrXirOp opcode) {
     case XR_XIR_GT_INT: case XR_XIR_GE_INT: case XR_XIR_AND_INT:
     case XR_XIR_OR_INT: case XR_XIR_XOR_INT: case XR_XIR_SHL_INT:
     case XR_XIR_SHR_INT: case XR_XIR_PHI: case XR_XIR_FUNCTION_REF:
-    case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE:
+    case XR_XIR_CELL_NEW: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND:
     case XR_XIR_CELL_PROJECT:
     case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT: case XR_XIR_NEG_FLOAT:
     case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT: case XR_XIR_LT_FLOAT:
     case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
-    case XR_XIR_CELL_PLACE: case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET:
+    case XR_XIR_CELL_PLACE: case XR_XIR_MAP_NEW: case XR_XIR_SET_NEW: case XR_XIR_MAP_GET: case XR_XIR_MAP_INDEX: case XR_XIR_HASH_KEYS: case XR_XIR_HASH_VALUES: case XR_XIR_MAP_ENTRIES: case XR_XIR_HASH_CONTAINS:
+    case XR_XIR_HASH_KEY_AT: case XR_XIR_MAP_VALUE_AT:
+    case XR_XIR_MAP_CONTAINS_VALUE:
+    case XR_XIR_SET_UNION: case XR_XIR_SET_INTERSECTION: case XR_XIR_SET_DIFFERENCE:
+    case XR_XIR_SET_SYMMETRIC_DIFFERENCE: case XR_XIR_SET_IS_SUBSET: case XR_XIR_SET_IS_SUPERSET:
+    case XR_XIR_HASH_LEN: case XR_XIR_MAP_SET: case XR_XIR_SET_ADD: case XR_XIR_HASH_DELETE: case XR_XIR_HASH_CLEAR:
+    case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET:
     case XR_XIR_ARRAY_SET: case XR_XIR_ARRAY_PUSH: case XR_XIR_ARRAY_LEN:
     case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT:
     case XR_XIR_DIV_FLOAT: case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET:

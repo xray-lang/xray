@@ -34,6 +34,10 @@
 #include "xir_task_unit69_golden.h"
 #include "xir_task_unit70_golden.h"
 #include "xir_task_unit72_golden.h"
+#include "xir_task_types85_golden.h"
+#include "xir_task_go85_golden.h"
+#include "xir_task_unit85_golden.h"
+#include "xir_task_map_kind85_golden.h"
 #include "xir_atomic_types65_golden.h"
 #include "xir/xxir_effect_terms.inc.c"
 #include "task_outcome_sendable_cases.h"
@@ -62,14 +66,14 @@ static XrXirStatus task_types_pipeline(const XrXirCompileContext *c) {
     XrXirStatus status = xir_fixture_check(c, &f.module, &checked, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_checked_write(checked, &packet, NULL);
     if (status == XR_XIR_OK) {
-        if (packet.length != sizeof(task_types72_golden)) fprintf(stderr, "packet length actual%zu expected%zu\n", packet.length, sizeof(task_types72_golden));
-        for (size_t i = 64; i < packet.length && i < sizeof(task_types72_golden); ++i)
-            if (packet.bytes[i] != task_types72_golden[i]) {
-                fprintf(stderr, "packet first body mismatch offset%zu actual%u expected%u\n", i, packet.bytes[i], task_types72_golden[i]); break;
+        if (packet.length != sizeof(task_types85_golden)) fprintf(stderr, "packet length actual%zu expected%zu\n", packet.length, sizeof(task_types85_golden));
+        for (size_t i = 64; i < packet.length && i < sizeof(task_types85_golden); ++i)
+            if (packet.bytes[i] != task_types85_golden[i]) {
+                fprintf(stderr, "packet first body mismatch offset%zu actual%u expected%u\n", i, packet.bytes[i], task_types85_golden[i]); break;
             }
-        CHECK(packet.length == sizeof(task_types72_golden) && !memcmp(packet.bytes, task_types72_golden, packet.length));
+        CHECK(packet.length == sizeof(task_types85_golden) && !memcmp(packet.bytes, task_types85_golden, packet.length));
     }
-    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_types72_golden, sizeof(task_types72_golden), &decoded, NULL);
+    if (status == XR_XIR_OK) status = xr_xir_compile_checked_read(c, task_types85_golden, sizeof(task_types85_golden), &decoded, NULL);
     if (status == XR_XIR_OK) status = xr_xir_compile_types_clone(c, xr_xir_compile_artifact_module(decoded)->types, &clone);
     if (status == XR_XIR_OK) {
         CHECK(clone->nodes != f.nodes && clone->nodes[0].kind == XR_XIR_TYPE_TASK &&
@@ -107,7 +111,7 @@ static void task_types_reject(void) {
         CHECK(xr_xir_compile_checked_read(&c, previous[i], lengths[i], &out, NULL) == XR_XIR_BAD_STRUCTURE &&
             out == (XrXirArtifact *)(uintptr_t)1 && attempts == before);
     }
-    for (uint32_t mutation = 0; mutation < 12; ++mutation) {
+    for (uint32_t mutation = 0; mutation < 13; ++mutation) {
         TaskTypesFixture f; task_types_fixture(&f); XrXirCallableParameter parameter = {XR_XIR_I64, 0};
         switch (mutation) {
         case 0: f.nodes[0].element = XR_XIR_UNIT; break;
@@ -121,18 +125,24 @@ static void task_types_reject(void) {
         case 8: f.nodes[0].nominal.declaration = 1; break;
         case 9: f.nodes[0].nominal.arguments = &parameter.type; f.nodes[0].nominal.argument_count = 1; break;
         case 10: f.nodes[0].nominal.fields = &parameter.type; f.nodes[0].nominal.field_count = 1; break;
-        default: f.nodes[0].kind = 9; break;
+        case 11: f.nodes[0].kind = XR_XIR_TYPE_MAP; break;
+        default: f.nodes[0].kind = UINT32_MAX; break;
         }
         out = NULL;
-        if (!mutation) {
+        if (!mutation || mutation==11) {
             XrXirCheckedPacket packet = {0};
             CHECK(xir_fixture_check(&c, &f.module, &out, NULL) == XR_XIR_OK && out);
             CHECK(xr_xir_compile_checked_write(out, &packet, NULL) == XR_XIR_OK);
-            CHECK(packet.length == sizeof(task_unit72_golden) &&
-                !memcmp(packet.bytes, task_unit72_golden, packet.length));
+            const uint8_t *expected_packet=mutation==11?task_map_kind85_golden:task_unit85_golden;
+            size_t expected_length=mutation==11?sizeof(task_map_kind85_golden):sizeof(task_unit85_golden);
+            CHECK(packet.length==expected_length && !memcmp(packet.bytes,expected_packet,packet.length));
             xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(out);
-        } else CHECK(xir_fixture_check(&c, &f.module, &out, NULL) ==
-            (mutation >= 5 && mutation <= 10 ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_TYPE) && !out);
+        } else {
+            XrXirStatus expected=mutation>=5 && mutation<=10?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_TYPE;
+            XrXirStatus observed=xir_fixture_check(&c,&f.module,&out,NULL);
+            if(observed!=expected)fprintf(stderr,"Task type mutation=%u observed=%u expected=%u\n",mutation,observed,expected);
+            CHECK(observed==expected && !out);
+        }
         CHECK(stats(&c).live_bytes == baseline);
     }
     owner_free(&c, baseline);
@@ -246,9 +256,9 @@ static XrXirStatus task_interface_paths(const XrXirCompileContext *c) {
     }
     xr_xir_compile_types_free(owned); return status;
 }
-static void task_types_faults(void) {
+static void task_types_faults(bool full) {
     size_t sites = 0;
-    for (size_t ordinal = 0; ordinal <= sites; ++ordinal) {
+    for (size_t ordinal = 0; ordinal <= (full ? sites : 0); ++ordinal) {
         attempts = 0; fail_at = ordinal ? ordinal - 1 : SIZE_MAX; injected = false;
         XrCompileResourceLimits limits = caps(); XrXirCompileContext c = {0};
         XrCompileResourceStatus acquired = xr_compile_resources_new(&limits, &c.resources);
@@ -269,11 +279,12 @@ static void task_types_faults(void) {
         CHECK(!live && !live_bytes);
     }
     fail_at = SIZE_MAX;
-    printf("Task Checked70 independent current KAT, old65/66/67/68/69 zeroalloc reject, original Unit0 mutation now positive and other11 rejected, actual compiler OOM ordinals=%zu physical0\n", sites);
+    printf("Task independent current fields and retired zeroalloc rejection; Unit0 and canonical Map kind positive; other11 rejected; actual compiler OOM ordinals=%zu mode=%s physical0\n", sites, full ? "full" : "baseline");
 }
-int main(void) {
+int main(int argc, char **argv) {
+    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--normal")));
     task_types_reject(); task_definition(); task_dag_constraints(); task_error_reject();
     task_error_axes(); task_go_reject(); task_go_slots(); task_go_definition();
     task_go_outcomes(); task_go_caught(); task_go_cleanup(); task_go_visibility();
-    task_go_phi(); task_go_packets(); task_go_previous_packets(); task_go_cleanup_permissions(); task_go_axes(); task_types_faults(); return 0;
+    task_go_phi(); task_go_packets(); task_go_previous_packets(); task_go_cleanup_permissions(); task_go_axes(); task_types_faults(argc==1); return 0;
 }
