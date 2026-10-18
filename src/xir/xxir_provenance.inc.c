@@ -192,7 +192,10 @@ static XrXirStatus provenance_copy_source(const XrXirCompileContext *context,
     XrXirStatus status = provenance_storage_shape(context, source);
     if (status != XR_XIR_OK) return status;
     if (xir_effect_kind_is_closed(source->kind)) {
-        status = source_effects ? xr_xir_compile_verify_source_effects_v2(context,
+        if(source_effects && !source->source->module.provenance)
+            status=xir_compile_verify_raw_source_effects(context,&source->source->module,
+                source->source->construction,source_effects,NULL);
+        else status = source_effects ? xr_xir_compile_verify_source_effects_v2(context,
             &source->source->module,source->source->construction,source_effects,NULL) :
             xr_xir_compile_verify_v2(context,&source->source->module,source->source->construction,NULL);
         if (status != XR_XIR_OK) return status;

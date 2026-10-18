@@ -2,6 +2,7 @@
 #define main selector_original_pending_entry
 #include "test_xir_error_cfg_pending.c"
 #undef main
+#include "xir_root_conditional_raw_fixture.h"
 static void selector_no_callback(void *memory,size_t bytes) { (void)memory;(void)bytes;CHECK(false); }
 static void selector_scalar_domain(void) {
     XrXirTypeNode nodes[2]={{.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64},
@@ -56,7 +57,73 @@ static void selector_scalar_domain(void) {
     pc_allocate_hook=NULL;pc_free_hook=NULL;xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
     puts("primitive capture domain: unused Cell/callable types, live formal and affine type/opcode changes, invalid opcode, false scalar input, dead producer and physical0");
 }
+typedef struct SelectorRawSource {
+    ConditionalRawFixture raw;
+    XrXirInstruction forward[4],entry[2];
+    XrXirFunction functions[5];XrXirGeneric generics[5];
+    XrXirFunctionIdentity identities[5];XrXirBlock blocks[5];
+} SelectorRawSource;
+static void selector_raw_source_fixture(SelectorRawSource *f) {
+    memset(f,0,sizeof(*f));conditional_raw_fixture(&f->raw,2);
+    f->forward[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=1};
+    f->forward[1]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=2};
+    f->forward[2]=f->raw.forward_ops[0];f->forward[3]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={4,0}};
+    f->raw.functions[1].instructions=f->forward;f->raw.functions[1].instruction_count=4;
+    f->entry[0]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7};
+    f->entry[1]=(XrXirInstruction){.op=XR_XIR_RETURN,.args={0,0}};
+    memcpy(f->functions,f->raw.functions,sizeof(f->raw.functions));
+    memcpy(f->generics,f->raw.generics,sizeof(f->raw.generics));
+    memcpy(f->identities,f->raw.identities,sizeof(f->raw.identities));
+    f->functions[4]=(XrXirFunction){.name="entry",.name_length=5,.result=XR_XIR_I64,
+        .instructions=f->entry,.instruction_count=2};
+    for(uint32_t n=0;n<5;++n) {
+        f->blocks[n]=(XrXirBlock){.count=f->functions[n].instruction_count};
+        f->functions[n].blocks=&f->blocks[n];f->functions[n].block_count=1;
+    }
+    f->raw.declarations.functions=f->identities;f->raw.declarations.entry_function=4;
+    f->raw.module.functions=f->functions;f->raw.module.function_count=5;f->raw.module.generics=f->generics;
+}
+static void selector_raw_source_replay(void) {
+    size_t sites=0;uint64_t peak=0,maximum=0;
+    for(size_t pass=0;pass<=sites;++pass) {
+        SelectorRawSource fixture;selector_raw_source_fixture(&fixture);
+        XrCompileResourceLimits caps=pc_caps();caps.work=4000000;
+        XrXirCompileContext context=pc_owner(caps);context.limits.functions=32;
+        context.limits.parameters=16;context.limits.instructions=128;
+        uint64_t baseline=pc_stats(&context).live_bytes;
+        XrXirArtifact *checked=NULL;
+        CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
+        memset(&fixture,0xDC,sizeof(fixture));
+        uint64_t held=pc_stats(&context).live_bytes;XrCompileResources *identity=context.resources;
+        attempts=0;fail_at=pass?pass-1:SIZE_MAX;injected=false;
+        XrXirEffects *effects=NULL;
+        XrXirStatus status=xir_artifact_verify_raw_source_effects(checked,&effects,NULL);
+        if(!pass) { CHECK(status==XR_XIR_OK && effects);sites=attempts; }
+        else {
+            if(status!=XR_XIR_OUT_OF_MEMORY) fprintf(stderr,"raw replay allocation%zu status%u work%llu\n",
+                pass-1,status,(unsigned long long)pc_stats(&context).work);
+            CHECK(status==XR_XIR_OUT_OF_MEMORY && injected && !effects && pc_stats(&context).live_bytes==held);
+            fail_at=SIZE_MAX;
+            CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+        }
+        fail_at=SIZE_MAX;uint64_t retained=pc_stats(&context).live_bytes;
+        const XrXirModule *module=xr_xir_compile_artifact_module(checked);
+        for(uint32_t read=0;read<2;++read) {
+            uint64_t before=pc_stats(&context).work;
+            CHECK(xir_compile_verify_raw_source_effects(&context,module,checked->construction,effects,NULL)==XR_XIR_OK);
+            CHECK(pc_stats(&context).work>before && pc_stats(&context).live_bytes==retained && context.resources==identity);
+        }
+        XrCompileResourceStats stats=pc_stats(&context);
+        if(stats.peak_bytes>peak) peak=stats.peak_bytes;
+        if(stats.work>maximum) maximum=stats.work;
+        xr_xir_compile_effects_free(effects);CHECK(pc_stats(&context).live_bytes==held);
+        xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
+    }
+    printf("raw source replay: original5-function captured generic input, 4M owner, dead producer, twice current proof, FI%zu same-owner retries, maxwork%llu peak%llu physical0\n",
+        sites,(unsigned long long)maximum,(unsigned long long)peak);
+}
 int main(void) {
+    selector_raw_source_replay();
     selector_scalar_domain();
     EdgeFixture fixture;pc_empty_fixture(&fixture,4);
     XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;

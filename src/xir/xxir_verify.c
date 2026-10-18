@@ -16,6 +16,7 @@
  */
 
 #include "xxir_internal.h"
+#include "xxir_source_replay_internal.h"
 #include "xxir_map.h"
 #include "xxir_task_shapes.h"
 #include "xxir_compile_memory.h"
@@ -1454,6 +1455,24 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_source_effects_v2(const XrXirCompileCo
         status=declaration_effects_verify(source,&remaining,&location,effects,NULL);
     }
     location.status=status;if (diagnostic) *diagnostic=location;
+    return status;
+}
+
+/* Reusing an owned derivation never substitutes for a current proof. The
+ * terminal replays all finite relations after any declaration-read callbacks. */
+XR_FUNC XrXirStatus xir_compile_verify_raw_source_effects(const XrXirCompileContext *context,
+    const XrXirModule *source,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    if(!xir_compile_context_valid(context) || !source || source->provenance || !effects) return XR_XIR_BAD_STRUCTURE;
+    XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    XrXirStatus status=structure_verify_source(context,source,construction,NULL,NULL,&location);
+    if(status==XR_XIR_OK) status=xir_effects_source_body_match(context,source,effects);
+    if(status==XR_XIR_OK) {
+        XrXirCompileContext remaining=*context;
+        status=declaration_effects_verify(source,&remaining,&location,effects,NULL);
+    }
+    if(status==XR_XIR_OK) status=xir_effects_raw_source_terminal(context,source,effects);
+    location.status=status;if(diagnostic) *diagnostic=location;
     return status;
 }
 

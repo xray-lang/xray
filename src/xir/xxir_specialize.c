@@ -15,6 +15,7 @@
 #include "xxir_operand_roles.h"
 #include "xxir_types.h"
 #include "xxir_internal.h"
+#include "xxir_source_replay_internal.h"
 #include "xxir_defaults_internal.h"
 #include "xxir_implementation_verify.h"
 #include "xxir_type_match_internal.h"
@@ -47,6 +48,7 @@ typedef struct SpecContext {
     const XrXirArtifact *source_artifact;
     XirSourceFacts *source_facts;
     const XrXirEffects *effects;
+    XrXirEffects *verification_effects;
     XrXirCompileContext remaining;
     XrXirDiagnostic diagnostic;
     SpecMemory *memory;
@@ -582,8 +584,9 @@ static XrXirStatus spec_provenance(SpecContext *c, XrXirProvenance **output) {
     if (!spec_effect_proofs(c,&evidence.bindings,&evidence.binding_count)) {
         xr_compile_resources_free(origins);return c->diagnostic.status;
     }
-    XrXirStatus status = c->effects ? xr_xir_compile_provenance_copy_source_effects(
-        &c->remaining,&evidence,c->effects,output) :
+    const XrXirEffects *source_read=c->effects?c->effects:c->verification_effects;
+    XrXirStatus status = source_read ? xr_xir_compile_provenance_copy_source_effects(
+        &c->remaining,&evidence,source_read,output) :
         xr_xir_compile_provenance_copy(&c->remaining,&evidence,output);
     xr_compile_resources_free(origins);
     return status;
@@ -610,9 +613,10 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     if (!c.source || c.source->stage != XR_XIR_CHECKED || c.source->linkage_kind != XR_XIR_PROGRAM ||
         xir_artifact_is_evaluation(checked)) { c.diagnostic.status = XR_XIR_BAD_STAGE; goto done; }
     bool templated=c.source->provenance && c.source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
-    c.diagnostic.status = templated ?
-        xir_source_facts_acquire(checked,&c.source_facts,&c.diagnostic) :
-        xr_xir_compile_artifact_verify(checked,&c.diagnostic);
+    if(templated) c.diagnostic.status=xir_source_facts_acquire(checked,&c.source_facts,&c.diagnostic);
+    else if(!c.source->provenance && c.source->declarations && c.source->declarations->implementations)
+        c.diagnostic.status=xir_artifact_verify_raw_source_effects(checked,&c.verification_effects,&c.diagnostic);
+    else c.diagnostic.status=xr_xir_compile_artifact_verify(checked,&c.diagnostic);
     if (c.diagnostic.status != XR_XIR_OK) goto done;
     c.effects=xir_source_facts_effects(c.source_facts);
     if (xir_effect_evidence_is_instance(c.source)) {
@@ -679,7 +683,7 @@ static XrXirStatus spec_run(const XrXirArtifact *checked,XrXirArtifact **output,
     if (c.diagnostic.status == XR_XIR_OK) {
         if (!xir_compile_work(&limits,sizeof(XirProvenanceReceiving))) c.diagnostic.status=XR_XIR_BUDGET;
         else {
-            XirProvenanceReceiving receiving={projected,c.effects};
+            XirProvenanceReceiving receiving={projected,c.effects?c.effects:c.verification_effects};
             c.diagnostic.status = xr_xir_compile_recheck_provenance_take(&limits, &specialized,
                 &receiving, &provenance, &built, &c.diagnostic);
         }
@@ -704,6 +708,7 @@ done:
     if (c.diagnostic.status == XR_XIR_OK) { *output = built; built = NULL; }
     xr_xir_compile_artifact_free(built);
     xir_source_facts_release(c.source_facts);
+    xr_xir_compile_effects_free(c.verification_effects);
     while (c.memory) { SpecMemory *next = c.memory->next; xr_compile_resources_free(c.memory); c.memory = next; }
     if (diagnostic) *diagnostic = c.diagnostic;
     return c.diagnostic.status;
