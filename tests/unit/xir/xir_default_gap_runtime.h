@@ -15,6 +15,7 @@ static bool gap_pair(XrXirProgram *program,const uint32_t ids[3],XrXirValue held
     for(uint32_t n=0;n<2;++n){
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);XrXirInstance *instance=NULL;
         XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
+        bool driven_oom=false;
         for(uint32_t e=0;e<3 && status!=XR_XIR_CALL_OOM;++e){
             CHECK(status==XR_XIR_CALL_READY || status==XR_XIR_CALL_RETURNED);
             status=xr_xir_instance_start(instance,ids[e],NULL,0);
@@ -26,7 +27,7 @@ static bool gap_pair(XrXirProgram *program,const uint32_t ids[3],XrXirValue held
                     if(status!=XR_XIR_CALL_READY)break;
                     run=xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                 }
-                if(status==XR_XIR_CALL_READY)status=run.outcome.status;
+                if(status==XR_XIR_CALL_READY){status=run.outcome.status;driven_oom=status==XR_XIR_CALL_OOM;}
                 if(status==XR_XIR_CALL_RETURNED)CHECK(yields==(e==2 ? 1u : 0u));
             }
             if(status==XR_XIR_CALL_RETURNED){
@@ -38,7 +39,9 @@ static bool gap_pair(XrXirProgram *program,const uint32_t ids[3],XrXirValue held
             }
             CHECK(status==XR_XIR_CALL_RETURNED || status==XR_XIR_CALL_OOM);
         }
-        if(instance)CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+        /* Destruction consumes the Instance while preserving a polled OOM.
+         * Keep the original injected fault active through that cleanup. */
+        if(instance)CHECK(xr_xir_instance_free(instance)==(driven_oom?XR_XIR_CALL_OOM:XR_XIR_CALL_READY));
         if(status==XR_XIR_CALL_OOM)return false;
     }
     return true;
