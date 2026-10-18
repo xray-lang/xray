@@ -184,7 +184,8 @@ static bool effect_invocation_producer_before(const EffectInvocationProducer *a,
  * current SSA bit; they have no producer identity, cause, rank or permission. */
 /* Immutable input keys bound the facts that may enter a parameter. A
  * historical less precise key cannot acquire a site merely because a later
- * actual environment contains it; that actual must name another full key. */
+ * actual environment contains it; that actual must name another full key.
+ * Producer deltas must revisit SSA transfers in already expanded equations. */
 static XrXirStatus effect_invocation_producer_put(EffectInvocationFlow *flow,
     const EffectInvocationProducer *fact,bool *changed,bool verify) {
     const EffectInvocationRead *owner=flow->read;
@@ -224,7 +225,7 @@ static XrXirStatus effect_invocation_producer_put(EffectInvocationFlow *flow,
         if (!xir_compile_work(owner->work,sizeof(*fact))) return XR_XIR_BUDGET;
         if (!flow->owner || owner!=&flow->owner->read) return XR_XIR_BAD_STRUCTURE;
         flow->owner->states[flow->node].producers.facts[p]=*fact;
-        *changed=true;return effect_invocation_enqueue(flow->owner,flow->node);
+        *changed=true;return effect_invocation_enqueue_precision(flow->owner,flow->node);
     }
     if (verify) return XR_XIR_BAD_STRUCTURE;
     if (!flow->owner || owner!=&flow->owner->read) return XR_XIR_BAD_STRUCTURE;
@@ -247,7 +248,7 @@ static XrXirStatus effect_invocation_producer_put(EffectInvocationFlow *flow,
     }
     if (!xir_compile_work(owner->work,sizeof(*fact)+1)) return XR_XIR_BUDGET;
     receiving->facts[receiving->count++]=*fact;*changed=true;
-    return effect_invocation_enqueue(flow->owner,flow->node);
+    return effect_invocation_enqueue_precision(flow->owner,flow->node);
 }
 
 static XrXirStatus effect_invocation_producer_alias(EffectInvocationFlow *flow,

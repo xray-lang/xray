@@ -499,8 +499,14 @@ static XrXirStatus effect_invocation_seal(const XrXirCompileContext *work,
         if (summary_moved) { *staged=*result;*request->result=staged; }
         if (certificate) {
             if (certificate->final) {
-                xr_compile_resources_free(certificate->final->capture.facts);
-                effect_role_proof_clear(&certificate->final->role_proof);
+                /* Copied proof pointers remain borrowed until publication.
+                 * Rollback releases only children created by this receiver. */
+                if (certificate->final->capture.facts!=owner->final.capture.facts)
+                    xr_compile_resources_free(certificate->final->capture.facts);
+                EffectRoleProof *proof=&certificate->final->role_proof;
+                if (proof->rows==owner->final.role_proof.rows) proof->rows=NULL;
+                if (proof->facts==owner->final.role_proof.facts) proof->facts=NULL;
+                effect_role_proof_clear(proof);
                 *certificate->final=(EffectInvocationFinal){0};
             }
             certificate->body=NULL;
