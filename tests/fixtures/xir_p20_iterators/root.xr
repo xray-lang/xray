@@ -1,0 +1,6 @@
+import "./worker" as library
+
+export fn make()->Iterator<string> { return library.source() }
+export fn next(it:Iterator<string>)->string { return it.next() }
+export fn has(it:Iterator<string>)->bool { return it.hasNext() }
+export fn nth(it:Iterator<string>,index:i64)->string { return it.nth(index) }
