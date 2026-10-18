@@ -103,11 +103,11 @@ static XrXirStatus produce(const XrXirCompileContext *context, const DetachmentC
     if (status != XR_XIR_OK) {
         CHECK(!*product);
     } else {
-        CHECK(*product && !error.snapshot && !error.source_path);
+        CHECK(*product && !error.snapshot && xr_xir_compile_source_failure_empty(&error.failure));
         CHECK(xr_xir_compile_source_product_view(*product)->complete);
     }
     xr_xir_compile_source_product_diagnostic_free(&error);
-    CHECK(!error.snapshot && !error.source_path && !error.source.message[0]);
+    CHECK(!error.snapshot && xr_xir_compile_source_failure_empty(&error.failure) && !error.source.message[0]);
     return status;
 }
 

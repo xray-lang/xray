@@ -22,8 +22,6 @@ typedef struct XrXirSourceDiagnostic {
     uint32_t module;
     int line, column;
     char message[192];
-    /* Actual diagnostic producer, never inferred from message text or line. */
-    XrXirSourceDiagnosticOrigin origin;
 } XrXirSourceDiagnostic;
 /* Separate failure ownership leaves the diagnostic and semantic owner layouts
  * unchanged. Coordinates project actual parser text before teardown. */

@@ -226,7 +226,7 @@ static XrXirStatus source_generation_prepare(XrXirSourceGenerations *owner,
     if (text && (!text->text || (text->logical_path && *text->logical_path))) return XR_XIR_BAD_STRUCTURE;
     const XrXirSourceReplInput *repl=input->repl;
     bool rooted=repl && repl->authority;
-    if (repl && (repl->ast!=ast || !input->interactive || (repl->failure_path && *repl->failure_path) ||
+    if (repl && (repl->ast!=ast || !input->interactive || !xr_xir_compile_source_failure_empty(repl->failure) ||
         (rooted ? !repl->absolute_path || !*repl->absolute_path || !repl->logical_path || !*repl->logical_path ||
             repl->authority->kind==XR_MODULE_IDENTITY_MEMORY || !repl->authority->physical_root :
             repl->absolute_path || repl->logical_path || repl->lockfile))) return XR_XIR_BAD_STRUCTURE;
@@ -266,10 +266,7 @@ static XrXirStatus source_generation_prepare(XrXirSourceGenerations *owner,
         .capture=&record->capture,.binding_readers=input->readers,.interactive=input->interactive,.type_query=input->type_query,
         .module_scope=input->interactive?record->namespace_id:NULL,
         .history=owner->published ? &owner->published->unit : NULL,.self=&record->unit};
-    XrXirSourceFailure failure={0};
-    status=source_check_input(&request,source,&record->result,&location,repl?&failure:NULL);
-    if(repl && repl->failure_path){*repl->failure_path=failure.path;failure.path=NULL;}
-    xr_xir_compile_source_failure_free(&failure);
+    status=source_check_input(&request,source,&record->result,&location,repl?repl->failure:NULL);
     if (status!=XR_XIR_OK) goto done;
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(record->result.snapshot);
     if (!record->capture.ast || !view || !view->complete || record->capture.module>=view->module_count) {

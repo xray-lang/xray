@@ -54,7 +54,7 @@ static bool build_options_supported(const XrCliInvocation *inv) {
 static void build_source_report(const XrSourceCompileDiagnostic *diagnostic) {
     const XrXirSourceDiagnostic *source = &diagnostic->source.source;
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(diagnostic->source.snapshot);
-    const char *path = diagnostic->source.source_path;
+    const char *path = diagnostic->source.failure.path;
     if (!path && view && view->modules && source->module < view->module_count) path=view->modules[source->module].path;
     if (path && source->line>0) fprintf(stderr,"%s:%d:%d: error: %s\n",path,source->line,source->column,source->message);
     else fprintf(stderr,"XR_BUILD_6003: source build failed (stage=%u status=%s): %s\n",

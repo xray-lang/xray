@@ -108,10 +108,10 @@ static void owned_compiler(void) {
     XrXirSourceProduct *rejected=NULL; XrSourceCompileDiagnostic diagnostic={0};
     CHECK(xr_source_compiler_build_text(compiler,&text,&rejected,&diagnostic)==XR_SOURCE_COMPILE_REJECTED);
     CHECK(!rejected && diagnostic.source.source.line==1 && diagnostic.source.source.column==13);
-    CHECK(diagnostic.source.source_path && strstr(diagnostic.source.source_path,"unsaved-compiler.xr"));
+    CHECK(diagnostic.source.failure.path && strstr(diagnostic.source.failure.path,"unsaved-compiler.xr"));
     memset(source,'!',sizeof(source)); xr_source_compiler_free(compiler);
     CHECK(strstr(diagnostic.source.source.message,"initialized value"));
-    CHECK(strstr(diagnostic.source.source_path,"unsaved-compiler.xr"));
+    CHECK(strstr(diagnostic.source.failure.path,"unsaved-compiler.xr"));
     CHECK(xr_xir_compile_source_product_verify(first,1048576,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_source_product_verify(second,1048576,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_source_product_verify(rooted,1048576,NULL)==XR_XIR_OK);

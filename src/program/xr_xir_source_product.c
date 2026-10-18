@@ -73,7 +73,7 @@ static XrXirStatus source_product_tests(XrXirSourceProduct *product, const XrXir
     return XR_XIR_OK;
 }
 static bool source_diagnostic_empty(const XrXirSourceProductDiagnostic *diagnostic) {
-    return !diagnostic || (!diagnostic->snapshot && !diagnostic->source_path);
+    return !diagnostic || (!diagnostic->snapshot && xr_xir_compile_source_failure_empty(&diagnostic->failure));
 }
 static XrXirStatus source_product_reject(XrXirSourceProductDiagnostic *diagnostic,
                                        XrXirSourceProductStage stage,XrXirStatus status) {
@@ -178,7 +178,7 @@ static XrXirStatus source_product_build(const XrXirSourceProductRequest *request
             diagnostic ? &diagnostic->source : NULL, diagnostic ? &failure : NULL) :
         xr_xir_compile_source_check(&request->source, &source,
             diagnostic ? &diagnostic->source : NULL, diagnostic ? &failure : NULL);
-    if(diagnostic){diagnostic->source_path=failure.path;failure.path=NULL;}
+    if(diagnostic){diagnostic->failure=failure;failure=(XrXirSourceFailure){0};}
     xr_xir_compile_source_failure_free(&failure);
     XrXirSourceProductStage stage=XR_XIR_SOURCE_PRODUCT_CHECK;
     if (status==XR_XIR_OK) {
@@ -258,7 +258,7 @@ XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product) {
 XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDiagnostic *diagnostic) {
     if (!diagnostic) return;
     xr_xir_compile_source_snapshot_free(diagnostic->snapshot);
-    xr_compile_resources_free(diagnostic->source_path);memset(diagnostic,0,sizeof(*diagnostic));
+    xr_xir_compile_source_failure_free(&diagnostic->failure);memset(diagnostic,0,sizeof(*diagnostic));
 }
 XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
     const XrXirArtifact *lowered, XrXirSourceDiagnostic *diagnostic) {

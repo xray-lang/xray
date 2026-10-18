@@ -120,7 +120,7 @@ static XrSourceStatus api_repl_prepare(XrSourceRepl *owner,const XrSourceText *i
         repl.absolute_path=xr_source_authority_source_path(authority);
         repl.logical_path=xr_source_authority_logical_path(authority);
         repl.lockfile=xr_source_authority_lockfile(authority);
-        if(detail)status=api_resource(xr_compile_state_strdup(state,ast->path,&detail->detail.source.source_path));
+        if(detail)status=api_resource(xr_compile_state_strdup(state,ast->path,&detail->detail.source.failure.path));
     }
     XrXirSourceAstOwner syntax={0};
     if(status==XR_SOURCE_OK)status=xr_source_ast_owned_input(ast,&syntax);
@@ -128,17 +128,18 @@ static XrSourceStatus api_repl_prepare(XrSourceRepl *owner,const XrSourceText *i
     if(status==XR_SOURCE_OK && detail)detail->detail.stage=XR_SOURCE_COMPILE_PRODUCT;
     XrXirSourceDiagnostic ignored={0};
     XrXirSourceDiagnostic *source_diagnostic=detail?&detail->detail.source.source:&ignored;
-    char *failure_path=NULL;repl.failure_path=detail?&failure_path:NULL;
+    XrXirSourceFailure failure={0};repl.failure=&failure;
     if(status==XR_SOURCE_OK)status=type_query ? xr_source_submission_prepare_repl_type_ast(owner->submission,&repl,
         source_diagnostic) : xr_source_submission_prepare_repl_ast(owner->submission,&repl,source_diagnostic);
     if((status==XR_SOURCE_BAD_ARGUMENT || status==XR_SOURCE_REJECTED) &&
         source_diagnostic->status==XR_XIR_BAD_STRUCTURE &&
-        (source_diagnostic->origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
-         source_diagnostic->origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT))status=XR_SOURCE_INVALID;
-    if(failure_path) {
-        xr_compile_resources_free(detail->detail.source.source_path);
-        detail->detail.source.source_path=failure_path;
+        (failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
+         failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT))status=XR_SOURCE_INVALID;
+    if(detail && !xr_xir_compile_source_failure_empty(&failure)) {
+        xr_xir_compile_source_failure_free(&detail->detail.source.failure);
+        detail->detail.source.failure=failure;failure=(XrXirSourceFailure){0};
     }
+    xr_xir_compile_source_failure_free(&failure);
     xr_source_authority_close(opened);
     bool prepared=status==XR_SOURCE_OK;
     if(prepared && !type_query)status=api_repl_prepare_names(owner);

@@ -156,7 +156,7 @@ static void rooted_text_authority(void) {
     XrXirSourceProduct *product = NULL;
     XrXirSourceProductDiagnostic diagnostic = {0};
     XrXirStatus built = xr_xir_compile_source_product_build_text(&w.request, &text, &product, &diagnostic);
-    if (built != XR_XIR_OK) fprintf(stderr, "rooted status=%d stage=%u path=%s message=%s\n", built, (unsigned)diagnostic.stage, diagnostic.source_path ? diagnostic.source_path : "", diagnostic.source.message);
+    if (built != XR_XIR_OK) fprintf(stderr, "rooted status=%d stage=%u path=%s message=%s\n", built, (unsigned)diagnostic.stage, diagnostic.failure.path ? diagnostic.failure.path : "", diagnostic.source.message);
     CHECK(built == XR_XIR_OK);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     CHECK(xr_xir_compile_source_product_public_admit(product, NULL) == XR_XIR_OK);

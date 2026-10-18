@@ -226,7 +226,7 @@ XRAY_API XrSourceStatus xray_source_diagnostic_info(const XrSourceDiagnostic *di
     const XrSourceCompileDiagnostic *detail=&diagnostic->detail;
     const XrXirSourceDiagnostic *source=&detail->source.source;
     *output=(XrSourceDiagnosticInfo){api_compile(detail->status),(uint32_t)detail->stage,source->line,source->column,
-        detail->source.source_path,source->message[0]?source->message:
+        detail->source.failure.path,source->message[0]?source->message:
             detail->authority.message[0]?detail->authority.message:xr_source_compile_status_name(detail->status)};return XR_SOURCE_OK;
 }
 XRAY_API void xray_source_diagnostic_free(XrSourceDiagnostic *diagnostic) {

@@ -42,12 +42,12 @@ typedef struct XrSourceEntryInput {
     const char *text; /* TEXT only: length bytes, no terminator required. */
     size_t length;
 } XrSourceEntryInput;
-/* Diagnostic receivers borrow only during open. failure_path must be empty;
+/* Diagnostic receivers borrow only during open. failure must be empty;
  * an actual input rejection transfers the canonical owned entry path. */
 typedef struct XrSourceAuthorityDiagnostics {
     XrManifestDiagnostic *manifest;
     XrXirSourceDiagnostic *source;
-    char **failure_path;
+    XrXirSourceFailure *failure;
 } XrSourceAuthorityDiagnostics;
 /* Same authority discovery as the file entry. TEXT and AST may be absent on disk;
  * its nearest existing parent is canonicalized and missing path components

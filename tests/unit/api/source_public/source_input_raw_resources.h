@@ -13,7 +13,7 @@ typedef struct RawInputOwners {
     XrSourceAuthority *authority;
     XrXirSourceResult result;
     XrXirSourceDiagnostic diagnostic;
-    char *path;
+    XrXirSourceFailure failure;
 } RawInputOwners;
 static XrSourceStatus raw_input_prepare(RawInputOwners *owner,const XrCompileResourceLimits *limits) {
     XrSourceCompilerOptions options;CHECK(xray_source_compiler_options_init(&options,sizeof(options))==XR_SOURCE_OK);
@@ -35,19 +35,19 @@ static XrXirStatus raw_input_reject(RawInputOwners *owner,bool rooted) {
         xr_source_authority_context(owner->authority),XR_PUBLIC_STDLIB,xr_source_authority_lockfile(owner->authority),
         XR_XIR_PROGRAM,xr_source_authority_catalog(owner->authority)};
     const XrXirSourceText text={rooted?xr_source_authority_logical_path(owner->authority):NULL,bad,sizeof(bad)-1};
-    XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,&owner->result,&owner->diagnostic,&owner->path);
+    XrXirStatus status=xr_xir_compile_source_check_text(&request,&text,&owner->result,&owner->diagnostic,&owner->failure);
     CHECK(!owner->result.checked && !owner->result.snapshot);
     return status;
 }
 static void raw_input_close(RawInputOwners *owner,bool normal,bool rooted) {
     xr_source_authority_close(owner->authority);xray_source_compiler_free(owner->compiler);
     if(normal) {
-        CHECK(owner->diagnostic.status==XR_XIR_BAD_STRUCTURE && owner->diagnostic.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT);
+        CHECK(owner->diagnostic.status==XR_XIR_BAD_STRUCTURE && owner->failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT);
         CHECK(owner->diagnostic.line==2 && owner->diagnostic.column==1 &&
             !strcmp(owner->diagnostic.message,"source text contains an embedded NUL"));
-        CHECK(rooted?owner->path && strstr(owner->path,"坏 库.xr"):owner->path==NULL);
+        CHECK(rooted?owner->failure.path && strstr(owner->failure.path,"坏 库.xr"):owner->failure.path==NULL);
     }
-    xr_xir_compile_source_result_free(&owner->result);xr_compile_resources_free(owner->path);
+    xr_xir_compile_source_result_free(&owner->result);xr_xir_compile_source_failure_free(&owner->failure);
     *owner=(RawInputOwners){0};CHECK(!runtime_live && !runtime_bytes);
 }
 static void raw_input_resources(bool rooted) {
@@ -83,26 +83,26 @@ static void authority_input_receivers(void) {
     const XrXirLibraryCatalog *catalog=xr_source_authority_catalog(owner.authority);
     const XrTomlParseLimits limits={1024*1024,64};
     XrSourceAuthority *output=NULL;XrXirSourceDiagnostic detail={.status=XR_XIR_BAD_STAGE};
-    char occupied[]="occupied";char *path=occupied;
-    XrSourceAuthorityDiagnostics receivers={NULL,&detail,&path};
+    char occupied[]="occupied";XrXirSourceFailure failure={.path=occupied};
+    XrSourceAuthorityDiagnostics receivers={NULL,&detail,&failure};
     XrCompileResourceStats before={0},after={0};
     CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
     size_t attempts=runtime_attempts;
     CHECK(xr_source_authority_open_input(context,&input,catalog,&limits,&output,&receivers)==XR_MANIFEST_BAD_ARGUMENT);
-    CHECK(!output && path==occupied && detail.status==XR_XIR_BAD_STAGE && runtime_attempts==attempts);
+    CHECK(!output && failure.path==occupied && detail.status==XR_XIR_BAD_STAGE && runtime_attempts==attempts);
     CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK && !memcmp(&before,&after,sizeof(before)));
-    XrSourceEntryInput oversized=input;oversized.length=SIZE_MAX;path=NULL;
+    XrSourceEntryInput oversized=input;oversized.length=SIZE_MAX;failure=(XrXirSourceFailure){0};
     CHECK(xr_source_authority_open_input(context,&oversized,catalog,&limits,&output,&receivers)==XR_MANIFEST_BUDGET);
-    CHECK(!output && !path && detail.status==XR_XIR_BAD_STAGE);
+    CHECK(!output && xr_xir_compile_source_failure_empty(&failure) && detail.status==XR_XIR_BAD_STAGE);
     CHECK(xr_source_authority_open_input(context,&input,catalog,&limits,&output,NULL)==XR_MANIFEST_INVALID && !output);
-    path=NULL;receivers.source=NULL;
-    CHECK(xr_source_authority_open_input(context,&input,catalog,&limits,&output,&receivers)==XR_MANIFEST_INVALID && !output && path);
-    xr_compile_resources_free(path);path=NULL;receivers.source=&detail;
-    CHECK(xr_source_authority_open_input(context,&input,catalog,&limits,&output,&receivers)==XR_MANIFEST_INVALID && !output && path);
-    CHECK(detail.status==XR_XIR_BAD_STRUCTURE && detail.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT &&
+    failure=(XrXirSourceFailure){0};receivers.source=NULL;
+    CHECK(xr_source_authority_open_input(context,&input,catalog,&limits,&output,&receivers)==XR_MANIFEST_INVALID && !output && failure.path);
+    xr_xir_compile_source_failure_free(&failure);failure=(XrXirSourceFailure){0};receivers.source=&detail;
+    CHECK(xr_source_authority_open_input(context,&input,catalog,&limits,&output,&receivers)==XR_MANIFEST_INVALID && !output && failure.path);
+    CHECK(detail.status==XR_XIR_BAD_STRUCTURE && failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT &&
         detail.line==2 && detail.column==1 && !strcmp(detail.message,"source text contains an embedded NUL"));
     xr_source_authority_close(owner.authority);owner.authority=NULL;
     xray_source_compiler_free(owner.compiler);owner.compiler=NULL;
-    CHECK(strstr(path,"坏 库.xr"));xr_compile_resources_free(path);raw_input_close(&owner,false,false);
+    CHECK(strstr(failure.path,"坏 库.xr"));xr_xir_compile_source_failure_free(&failure);raw_input_close(&owner,false,false);
     puts("Source authority occupied receiver preserves outputs/ledger; optional diagnostics and owned canonical path PASS");
 }

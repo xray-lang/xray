@@ -66,7 +66,7 @@ static XrSourceCompileStatus compiler_manifest(XrManifestStatus status) {
     }
 }
 static bool compiler_diagnostic_empty(const XrSourceCompileDiagnostic *diagnostic) {
-    return !diagnostic || (!diagnostic->source.snapshot && !diagnostic->source.source_path);
+    return !diagnostic || (!diagnostic->source.snapshot && xr_xir_compile_source_failure_empty(&diagnostic->source.failure));
 }
 static XrSourceCompileStatus compiler_publish(XrSourceCompileDiagnostic *out,
     XrSourceCompileDiagnostic *detail, XrSourceCompileStatus status) {
@@ -175,7 +175,7 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_open_input(XrSourceCompiler *co
     XrSourceCompileDiagnostic detail={0};detail.stage=XR_SOURCE_COMPILE_AUTHORITY;
     XrSourceCompileStatus status=compiler_resource(xr_compile_session_resource_status(compiler->session));
     if(status==XR_SOURCE_COMPILE_OK) {
-        const XrSourceAuthorityDiagnostics receivers={&detail.authority,&detail.source.source,&detail.source.source_path};
+        const XrSourceAuthorityDiagnostics receivers={&detail.authority,&detail.source.source,&detail.source.failure};
         detail.authority_status=xr_source_authority_open_input(&compiler->context,input,compiler->libraries,
             &compiler->manifest_limits,output,&receivers);
         status=compiler_capture(compiler,compiler_manifest(detail.authority_status));
@@ -261,8 +261,8 @@ static XrSourceCompileStatus compiler_build_supplied(XrSourceCompiler *compiler,
             xr_xir_compile_source_product_build_ast(&request, &ast, &product, &detail.source) :
             xr_xir_compile_source_product_build_text(&request, &text, &product, &detail.source));
         if(detail.source.status==XR_XIR_BAD_STRUCTURE &&
-            (detail.source.source.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
-             detail.source.source.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT))status=XR_SOURCE_COMPILE_INVALID;
+            (detail.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
+             detail.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT))status=XR_SOURCE_COMPILE_INVALID;
         if (status == XR_SOURCE_COMPILE_OK) {
             XrXirStatus admitted = xr_xir_compile_source_product_public_admit(product, &detail.source.source);
             status = compiler_xir(admitted);

@@ -106,7 +106,7 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_build(
     const XrSourceCompileRequest *request, XrXirSourceProduct **output,
     XrSourceCompileDiagnostic *diagnostic) {
     /* Never overwrite a caller's still-owned diagnostic storage. */
-    if (diagnostic && (diagnostic->source.snapshot || diagnostic->source.source_path))
+    if (diagnostic && (diagnostic->source.snapshot || !xr_xir_compile_source_failure_empty(&diagnostic->source.failure)))
         return XR_SOURCE_COMPILE_BAD_ARGUMENT;
     XrSourceCompileDiagnostic detail = {0};
     XrSourceCompileStatus status = XR_SOURCE_COMPILE_BAD_ARGUMENT;
@@ -172,8 +172,8 @@ XR_FUNC XrSourceCompileStatus xr_source_compile_build(
             request->target};
         status = source_xir_status(xr_xir_compile_source_product_build(&source, &product, &detail.source));
         if(detail.source.status==XR_XIR_BAD_STRUCTURE &&
-            (detail.source.source.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
-             detail.source.source.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT))status=XR_SOURCE_COMPILE_INVALID;
+            (detail.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE ||
+             detail.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT))status=XR_SOURCE_COMPILE_INVALID;
         if (status == XR_SOURCE_COMPILE_OK) {
             XrXirStatus admitted = xr_xir_compile_source_product_public_admit(product, &detail.source.source);
             status = source_xir_status(admitted);
@@ -208,7 +208,7 @@ XR_FUNC bool xr_source_compile_diagnostic_format(
     if (!diagnostic || !out || !size) return false;
     const XrXirSourceDiagnostic *source = &diagnostic->source.source;
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(diagnostic->source.snapshot);
-    const char *path = diagnostic->source.source_path;
+    const char *path = diagnostic->source.failure.path;
     if (!path && view && view->modules && source->module < view->module_count)
         path = view->modules[source->module].path;
     if (path && path[0] && source->line > 0) {

@@ -44,7 +44,6 @@ static void source_input_nul(SourceContext *ctx,const char *path,size_t line,siz
         if(!owned_path){source_fail(ctx,NULL,status,"source failure path copy failed");return;}
     }
     source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source text contains an embedded NUL");
-    ctx->diagnostic.origin=XR_XIR_SOURCE_DIAGNOSTIC_INPUT;
     ctx->diagnostic.line=(int)line;ctx->diagnostic.column=(int)column;
     if(failure)*failure=(XrXirSourceFailure){.path=owned_path,.origin=XR_XIR_SOURCE_DIAGNOSTIC_INPUT};
 }
@@ -52,7 +51,6 @@ static bool source_graph_fail(SourceContext *ctx,XrModuleStatus status,const cha
     const XrModuleSourceDiagnostic *parse=ctx->graph?&ctx->graph->source_diagnostic:NULL;
     source_module_fail(ctx,NULL,status,parse&&parse->present&&parse->message[0]?parse->message:message);
     if(parse&&parse->present) {
-        ctx->diagnostic.origin=parse->origin==XR_MODULE_DIAGNOSTIC_INPUT?XR_XIR_SOURCE_DIAGNOSTIC_INPUT:XR_XIR_SOURCE_DIAGNOSTIC_PARSE;
         ctx->diagnostic.module=parse->module;ctx->diagnostic.line=parse->line;ctx->diagnostic.column=parse->column;
     }
     return false;
@@ -188,7 +186,7 @@ done:
      * own construction. The original context publishes only its own result. */
     if (!result.snapshot) source_query_publish(&ctx, &result);
     const XrModuleSourceDiagnostic *parse=ctx.graph?&ctx.graph->source_diagnostic:NULL;
-    if (failure && (semantic_started||(parse&&parse->present)||ctx.diagnostic.origin==XR_XIR_SOURCE_DIAGNOSTIC_INPUT) && ctx.diagnostic.status != XR_XIR_OK &&
+    if (failure && (semantic_started||(parse&&parse->present)) && ctx.diagnostic.status != XR_XIR_OK &&
         ctx.diagnostic.line > 0 && ctx.graph &&
         ctx.diagnostic.module < (uint32_t)ctx.graph->spec_count) {
         XrModuleSpec *module = &ctx.graph->specs[ctx.diagnostic.module];

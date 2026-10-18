@@ -546,7 +546,7 @@ static bool program_source_build(ReceiverRun *run) {
     if (!completed(run, xr_xir_compile_source_product_build(&request, &run->product,
         &run->diagnostic), "Program-SourceProduct-Catalog-import")) {
         fprintf(stderr, "Program-stage=%u message=%.192s path=%s\n", (unsigned)run->diagnostic.stage,
-            run->diagnostic.source.message, run->diagnostic.source_path ? run->diagnostic.source_path : "(none)");
+            run->diagnostic.source.message, run->diagnostic.failure.path ? run->diagnostic.failure.path : "(none)");
         return false;
     }
     CHECK(run->product && xr_xir_compile_source_product_context(run->product)->resources == run->context->resources);

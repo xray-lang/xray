@@ -208,12 +208,12 @@ static XrManifestStatus authority_validate_text(XrIoContext *io,const XrSourceEn
             XrXirSourceDiagnostic *detail=diagnostics?diagnostics->source:NULL;
             if(detail) {
                 static const char message[]="source text contains an embedded NUL";
-                detail->status=XR_XIR_BAD_STRUCTURE;detail->origin=XR_XIR_SOURCE_DIAGNOSTIC_INPUT;
+                detail->status=XR_XIR_BAD_STRUCTURE;
                 detail->line=(int)line;detail->column=(int)(i-line_start)+1;
                 if(!io_copy(io,detail->message,message,sizeof(message)))detail->status=XR_XIR_BUDGET;
             }
-            if(diagnostics && diagnostics->failure_path) {
-                *diagnostics->failure_path=authority->entry_path;authority->entry_path=NULL;
+            if(diagnostics && diagnostics->failure) {
+                *diagnostics->failure=(XrXirSourceFailure){.path=authority->entry_path,.origin=XR_XIR_SOURCE_DIAGNOSTIC_INPUT};authority->entry_path=NULL;
             }
             return io->status==XR_OS_IO_OK?XR_MANIFEST_INVALID:authority_status(io->status);
         }
@@ -228,7 +228,7 @@ XR_FUNC XrManifestStatus xr_source_authority_open_input(const XrXirCompileContex
         (input->kind != XR_SOURCE_ENTRY_FILE && input->kind != XR_SOURCE_ENTRY_TEXT && input->kind != XR_SOURCE_ENTRY_AST) ||
         (input->kind != XR_SOURCE_ENTRY_TEXT && (input->text || input->length)) ||
         (input->kind == XR_SOURCE_ENTRY_TEXT && !input->text) ||
-        (diagnostics && diagnostics->failure_path && *diagnostics->failure_path))return XR_MANIFEST_BAD_ARGUMENT;
+        (diagnostics && !xr_xir_compile_source_failure_empty(diagnostics->failure)))return XR_MANIFEST_BAD_ARGUMENT;
     if(libraries&&xr_xir_compile_library_catalog_context(libraries)->resources!=context->resources)return XR_MANIFEST_BAD_ARGUMENT;
     XrOsIoPolicy policy=xr_compile_io_policy(context->resources);XrIoContext io={&policy,XR_OS_IO_OK};
     if(!authority_absolute(&io,input->absolute_path))return io.status==XR_OS_IO_OK?XR_MANIFEST_BAD_ARGUMENT:authority_status(io.status);

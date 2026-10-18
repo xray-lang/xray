@@ -16,7 +16,7 @@ static void api_parse_error(void *context,int line,int column,int end_line,int e
     ApiParseDiagnostic *capture=context;
     if(!capture->output || capture->output->detail.source.source.line)return;
     XrXirSourceDiagnostic *detail=&capture->output->detail.source.source;
-    detail->origin=XR_XIR_SOURCE_DIAGNOSTIC_PARSE;
+    capture->output->detail.source.failure.origin=XR_XIR_SOURCE_DIAGNOSTIC_PARSE;
     size_t size=0;
     if(xr_compile_state_string_length(capture->state,message,&size)!=XR_COMPILE_RESOURCE_OK)return;
     if(size>=sizeof(detail->message))size=sizeof(detail->message)-1;
@@ -40,7 +40,7 @@ static XrSourceStatus api_parse_owned(XrSourceCompiler *compiler,const XrSourceT
     if(status==XR_SOURCE_OK && text->namespace_id)
         status=api_resource(xr_compile_state_strdup(state,text->namespace_id,&ast->namespace_id));
     if(status==XR_SOURCE_OK && diagnostic && ast->path)
-        status=api_resource(xr_compile_state_strdup(state,ast->path,&diagnostic->detail.source.source_path));
+        status=api_resource(xr_compile_state_strdup(state,ast->path,&diagnostic->detail.source.failure.path));
     size_t line=1,line_start=0;
     for(size_t i=0;status==XR_SOURCE_OK && i<text->length;++i) {
         status=api_resource(xr_compile_state_work(state,1));
@@ -50,7 +50,7 @@ static XrSourceStatus api_parse_owned(XrSourceCompiler *compiler,const XrSourceT
             if(diagnostic) {
                 static const char message[]="source text contains an embedded NUL";
                 XrXirSourceDiagnostic *detail=&diagnostic->detail.source.source;
-                detail->origin=XR_XIR_SOURCE_DIAGNOSTIC_INPUT;detail->line=(int)line;detail->column=(int)(i-line_start)+1;
+                diagnostic->detail.source.failure.origin=XR_XIR_SOURCE_DIAGNOSTIC_INPUT;detail->line=(int)line;detail->column=(int)(i-line_start)+1;
                 XrCompileResourceStatus copied=xr_compile_state_copy(state,detail->message,message,sizeof(message));
                 if(copied!=XR_COMPILE_RESOURCE_OK)status=api_resource(copied);
             }

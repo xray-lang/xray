@@ -60,7 +60,7 @@ typedef struct XrXirSourceProductDiagnostic {
     XrXirSourceDiagnostic source;
     XrXirDiagnostic xir;
     XrXirSourceSnapshot *snapshot;
-    char *source_path;
+    XrXirSourceFailure failure;
 } XrXirSourceProductDiagnostic;
 /* Failure preserves output. Diagnostics own their semantic failure path and
  * any complete query snapshot retained after a later projection failure. */

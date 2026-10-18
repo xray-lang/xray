@@ -32,9 +32,9 @@ typedef struct XrXirSourceReplInput {
     const XrModuleIdentityAuthority *authority;
     const char *absolute_path, *logical_path;
     struct XrLockfile *lockfile;
-    /* Optional empty output receives the actual owned parser/semantic failure
-     * path. It borrows only during prepare; free with compile_resources_free. */
-    char **failure_path;
+    /* Optional empty output receives independently owned failure facts.
+     * It borrows only during prepare; release with source_failure_free. */
+    XrXirSourceFailure *failure;
 } XrXirSourceReplInput;
 
 typedef struct XrXirSourceGenerationView {

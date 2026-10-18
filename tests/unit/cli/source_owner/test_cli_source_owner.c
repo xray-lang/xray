@@ -301,7 +301,7 @@ static int source_owner_main(int argc,char **argv) {
     else CHECK(!product);
     if(semantic) {
         CHECK(!diagnostic.source.snapshot);
-        CHECK(diagnostic.source.source_path && !strcmp(diagnostic.source.source_path,argc==5?argv[4]:argv[1]));
+        CHECK(diagnostic.source.failure.path && !strcmp(diagnostic.source.failure.path,argc==5?argv[4]:argv[1]));
         CHECK(diagnostic.source.source.line==1 && diagnostic.source.source.column==13);
         CHECK(!strcmp(diagnostic.source.source.message,"name is not an initialized value"));
         if(argc==5) CHECK(diagnostic.source.source.module!=0);
@@ -312,11 +312,11 @@ static int source_owner_main(int argc,char **argv) {
         CHECK(!memcmp(&saved,&diagnostic,sizeof(saved)));
     }
     if(!strcmp(argv[3],"parse-reject")) {
-        CHECK(diagnostic.source.source_path&&!strcmp(diagnostic.source.source_path,argv[1]));
+        CHECK(diagnostic.source.failure.path&&!strcmp(diagnostic.source.failure.path,argv[1]));
         CHECK(!diagnostic.source.snapshot&&diagnostic.source.source.line>0&&diagnostic.source.source.column>0);
     }
     if(!strcmp(argv[3],"graph-reject"))
-        CHECK(!diagnostic.source.source_path && !diagnostic.source.snapshot && !diagnostic.source.source.line);
+        CHECK(!diagnostic.source.failure.path && !diagnostic.source.snapshot && !diagnostic.source.source.line);
     xr_source_compile_diagnostic_free(&diagnostic);xr_source_compile_diagnostic_free(&diagnostic);
     CHECK(!runtime_live && !runtime_bytes && handles()==baseline);
     if(!strcmp(argv[3],"scan"))fault_scan(argv[1],argv[2]);

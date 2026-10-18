@@ -158,7 +158,7 @@ static void check_semantic(CheckWork *work, const char *path) {
         if (status != XR_SOURCE_COMPILE_OK) {
             const XrXirSourceDiagnostic *source = &diagnostic.source.source;
             const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(diagnostic.source.snapshot);
-            const char *failed_path = diagnostic.source.source_path;
+            const char *failed_path = diagnostic.source.failure.path;
             if (!failed_path && view && view->modules && source->module < view->module_count)
                 failed_path = view->modules[source->module].path;
             if (failed_path && source->line > 0)

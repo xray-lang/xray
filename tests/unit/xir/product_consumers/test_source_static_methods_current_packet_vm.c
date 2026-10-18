@@ -152,16 +152,16 @@ static int write_source_packet(char **argv) {
     } else CHECK(!product && diagnostic.status == status && diagnostic.source.message[0]);
     XrXirSourceProductDiagnostic saved = diagnostic;
     char owned_path[2048] = {0};
-    if (diagnostic.source_path) {
-        CHECK(strlen(diagnostic.source_path) < sizeof(owned_path));
-        strcpy(owned_path, diagnostic.source_path);
+    if (diagnostic.failure.path) {
+        CHECK(strlen(diagnostic.failure.path) < sizeof(owned_path));
+        strcpy(owned_path, diagnostic.failure.path);
     }
     xr_compile_session_free(session); session = NULL;
     xr_xir_compile_source_product_free(product); product = NULL;
     memset(root, 0xa5, sizeof(root)); memset(file, 0xa5, sizeof(file));
     memset(&request, 0xa5, sizeof(request)); memset(&authority, 0xa5, sizeof(authority));
     CHECK(!memcmp(&saved, &diagnostic, sizeof(saved)));
-    if (owned_path[0]) CHECK(!strcmp(owned_path, diagnostic.source_path));
+    if (owned_path[0]) CHECK(!strcmp(owned_path, diagnostic.failure.path));
     if (source_checked) {
         CHECK(xr_xir_compile_artifact_verify(source_checked, NULL) == XR_XIR_OK);
         construction_owner(source_checked, context);
