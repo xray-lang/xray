@@ -226,6 +226,27 @@ static XrXirStatus effect_capture_reference(EffectCaptureRead *read,const Effect
 
 #include "xxir_effect_capture_cells.inc.c"
 
+/* A known Iterator factory has actual returned origins, not a Callable
+ * advertisement. Only an opaque callee supplies an opaque result alternative. */
+static XrXirStatus effect_capture_iterator_call(EffectCaptureRead *read,const EffectCaptureNode *node,
+    uint32_t instruction,const XrXirInstruction *operation) {
+    XrXirInstruction storage;const XrXirInstruction *op=operation;
+    if(op->op==XR_XIR_INVOKE_RESULT) {
+        if(op->immediate<0 || (uint64_t)op->immediate>=node->head.instruction_count) return XR_XIR_BAD_STRUCTURE;
+        XrXirStatus status=effect_body_request_instruction(&read->body,read->final->nodes[node->node].body,
+            (uint32_t)op->immediate,&storage,&op);if(status!=XR_XIR_OK) return status;
+    }
+    if(op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_INVOKE_INDIRECT) return XR_XIR_OK;
+    if(op->immediate<0 || (uint64_t)op->immediate>=node->values) return XR_XIR_BAD_STRUCTURE;
+    uint32_t opaque=read->final->site_count+node->basis.parameters;
+    const EffectCaptureFact *source=NULL;
+    XrXirStatus status=effect_capture_find(read,
+        (EffectCaptureFact){node->node,(uint32_t)op->immediate,opaque/64,opaque%64,0},&source);
+    if(status!=XR_XIR_OK || !source) return status;
+    EffectCaptureFact destination={node->node,node->head.parameter_count+instruction,0,0,source->rank+1};
+    return effect_capture_opaque(read,node,&destination,XR_XIR_CALLABLE_ROOT_UNRESOLVED,true);
+}
+
 static XrXirStatus effect_capture_instruction(EffectCaptureRead *read,const EffectCaptureNode *node,
     uint32_t instruction,const XrXirInstruction *op) {
     uint32_t value=node->head.parameter_count+instruction,kind=0;XrXirStatus status=effect_capture_kind(read,node,value,&kind,NULL);
@@ -257,11 +278,20 @@ static XrXirStatus effect_capture_instruction(EffectCaptureRead *read,const Effe
     } else if(!read->fixed_only && (op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_GENERATOR_NEW)) {
         status=effect_capture_reference(read,node,instruction,op);if(status!=XR_XIR_OK) return status;
     } else if(!read->fixed_only && kind==EFFECT_CAPTURE_CALLABLE) {
-        const XrXirTypeNode *signature=xr_xir_callable_signature(read->body.domain.types,op->type);
-        EffectCaptureFact destination={node->node,value,0,0,0};
-        status=effect_capture_opaque(read,node,&destination,signature?signature->flags:XR_XIR_CALLABLE_ROOT_UNRESOLVED,true);if(status!=XR_XIR_OK) return status;
+        if(effect_physical_iterator(read->body.domain.types,op->type) &&
+            (op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_RESULT))
+            status=effect_capture_iterator_call(read,node,instruction,op);
+        else {
+            const XrXirTypeNode *signature=xr_xir_callable_signature(read->body.domain.types,op->type);
+            EffectCaptureFact destination={node->node,value,0,0,0};
+            status=effect_capture_opaque(read,node,&destination,signature?signature->flags:XR_XIR_CALLABLE_ROOT_UNRESOLVED,true);
+        }
+        if(status!=XR_XIR_OK) return status;
     } else if(!read->fixed_only && kind==EFFECT_CAPTURE_CLASS) {
         status=effect_capture_class_intrinsic(read,node,instruction,op);if(status!=XR_XIR_OK) return status;
+    }
+    if(op->op==XR_XIR_CELL_READ && kind==EFFECT_CAPTURE_CALLABLE) {
+        status=effect_capture_callable_cell(read,node,instruction,op);if(status!=XR_XIR_OK) return status;
     }
     if(!read->fixed_only && op->op==XR_XIR_RETURN) {
         uint32_t returned=0;status=effect_capture_kind(read,node,node->values,&returned,NULL);if(status!=XR_XIR_OK) return status;

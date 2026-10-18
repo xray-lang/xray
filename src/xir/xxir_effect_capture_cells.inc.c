@@ -137,3 +137,72 @@ static XrXirStatus effect_capture_class_proposals(EffectCaptureRead *read,
     }
     return XR_XIR_OK;
 }
+
+/* Only a direct local allocation whose identity never escapes has a complete
+ * physical payload inventory. Aliases and escaped Cells retain their bound. */
+static XrXirStatus effect_capture_callable_cell_local(EffectCaptureRead *read,
+    const EffectCaptureNode *node,const XrXirInstruction *operation,uint32_t *output) {
+    if(!output || !operation || operation->op!=XR_XIR_CELL_READ) return XR_XIR_BAD_STRUCTURE;
+    *output=UINT32_MAX;
+    if(!xr_xir_callable_signature(read->body.domain.types,operation->type)) return XR_XIR_OK;
+    uint32_t cell=operation->args[0],body=read->final->nodes[node->node].body;
+    if(cell<node->head.parameter_count || cell>=node->values) return XR_XIR_OK;
+    XrXirInstruction storage;const XrXirInstruction *allocation=NULL;
+    XrXirStatus status=effect_body_request_instruction(&read->body,body,
+        cell-node->head.parameter_count,&storage,&allocation);
+    if(status!=XR_XIR_OK || allocation->op!=XR_XIR_CELL_NEW) return status;
+    EffectBodyRecordCursor cursor;
+    status=effect_body_request_sequence_begin(&read->body,&cursor);
+    if(status!=XR_XIR_OK) return status;
+    bool escaped=false;
+    for(uint32_t i=0;i<node->head.instruction_count;++i) {
+        if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+        XrXirInstruction decoded;const XrXirInstruction *op=NULL;
+        status=effect_body_request_sequence_operation(&read->body,body,i,&cursor,&decoded,&op);
+        if(status!=XR_XIR_OK) return status;
+        if(op->op<=XR_XIR_INVALID || op->op>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        bool table=xr_xir_op_uses_operand_table(op->op);
+        uint32_t count=table?op->args[1]:effect_parameter_operands[op->op];
+        if(table && (op->args[0]>node->head.operand_count || count>node->head.operand_count-op->args[0] ||
+            (count && !node->head.operands))) return XR_XIR_BAD_STRUCTURE;
+        if(!table && count>XR_COUNTOF(op->args)) return XR_XIR_BAD_STRUCTURE;
+        for(uint32_t a=0;a<count;++a) {
+            if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+            if(op->op==XR_XIR_PHI && !(a&1)) continue;
+            uint32_t value=table?node->head.operands[op->args[0]+a]:op->args[a];
+            if(value!=cell) continue;
+            if(a || (op->op!=XR_XIR_CELL_READ && op->op!=XR_XIR_CELL_WRITE &&
+                op->op!=XR_XIR_CELL_LOCAL_WRITE)) escaped=true;
+        }
+    }
+    status=effect_body_request_sequence_finish(&read->body,body,&cursor);
+    if(status==XR_XIR_OK && !escaped) *output=cell;
+    return status;
+}
+
+static XrXirStatus effect_capture_callable_cell(EffectCaptureRead *read,
+    const EffectCaptureNode *node,uint32_t instruction,const XrXirInstruction *operation) {
+    uint32_t cell=UINT32_MAX;
+    XrXirStatus status=effect_capture_callable_cell_local(read,node,operation,&cell);
+    if(status!=XR_XIR_OK || cell==UINT32_MAX) return status;
+    uint32_t body=read->final->nodes[node->node].body;
+    EffectBodyRecordCursor cursor;
+    status=effect_body_request_sequence_begin(&read->body,&cursor);
+    if(status!=XR_XIR_OK) return status;
+    for(uint32_t i=0;i<node->head.instruction_count;++i) {
+        if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+        XrXirInstruction decoded;const XrXirInstruction *op=NULL;
+        status=effect_body_request_sequence_operation(&read->body,body,i,&cursor,&decoded,&op);
+        if(status!=XR_XIR_OK) return status;
+        uint32_t source=UINT32_MAX;
+        if(op->op==XR_XIR_CELL_NEW && node->head.parameter_count+i==cell) source=op->args[0];
+        else if((op->op==XR_XIR_CELL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE) && op->args[0]==cell)
+            source=op->args[1];
+        if(source!=UINT32_MAX) {
+            if(source>=node->values) return XR_XIR_BAD_STRUCTURE;
+            status=effect_capture_alias(read,node,source,node->head.parameter_count+instruction);
+            if(status!=XR_XIR_OK) return status;
+        }
+    }
+    return effect_body_request_sequence_finish(&read->body,body,&cursor);
+}
