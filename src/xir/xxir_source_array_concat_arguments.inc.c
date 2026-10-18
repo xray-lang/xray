@@ -33,24 +33,11 @@ static bool source_concat_append(SourceContext *ctx, AstNode *node,
 
 static bool source_concat_spread_value(SourceContext *ctx, AstNode *node,
     XrXirType array_type, SourceValue *value) {
-    SourceExpectedType expected = {false, XR_XIR_UNIT, false, false};
     if (!node)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "Array concat spread expression is missing");
-    if (node->type == AST_TUPLE_LITERAL && node->as.tuple_literal.count > 0) {
-        uint32_t count = (uint32_t)node->as.tuple_literal.count;
-        if (count > 65536)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array concat expanded argument limit exceeded");
-        XrXirCallableParameter *fields = source_alloc(ctx, count, sizeof(*fields));
-        if (!fields) return false;
-        for (uint32_t i = 0; i < count; ++i) {
-            if (!source_work(ctx, node)) return false;
-            fields[i] = (XrXirCallableParameter){array_type, 0};
-        }
-        if (!source_intern_type(ctx, (XrXirTypeNode){.kind = XR_XIR_TYPE_TUPLE,
-                .parameters = fields, .parameter_count = count}, &expected.type)) return false;
-        expected.present = true;
-    }
-    return source_plan_expression(ctx, node, expected, value);
+    /* A variadic context fixes each expanded field, not the syntax's item count. */
+    const SourceTuplePrefix context = {NULL, 65536, false, array_type};
+    return source_tuple_spread_value(ctx, node, &context, value);
 }
 
 static bool source_concat_spread(SourceContext *ctx, AstNode *node,

@@ -15,6 +15,7 @@ typedef struct SourceTuplePrefix {
     const XrXirCallableParameter *fields;
     uint32_t count;
     bool inferred;
+    XrXirType repeated_type;
 } SourceTuplePrefix;
 
 typedef struct SourceTupleElements {
@@ -24,7 +25,8 @@ typedef struct SourceTupleElements {
 } SourceTupleElements;
 
 static SourceExpectedType source_tuple_field_context(const SourceTuplePrefix *context, uint32_t index) {
-    return (SourceExpectedType){context != NULL, context ? context->fields[index].type : XR_XIR_UNIT,
+    XrXirType type = !context ? XR_XIR_UNIT : context->fields ? context->fields[index].type : context->repeated_type;
+    return (SourceExpectedType){context != NULL, type,
         false, context && context->inferred};
 }
 
@@ -72,7 +74,8 @@ static bool source_tuple_expand(SourceContext *ctx, AstNode *node, SourceTupleEl
     if (!source) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "Tuple spread source is missing");
     const SourceTuplePrefix *context = elements->context;
     SourceTuplePrefix tail = {context && context->fields ? context->fields + elements->count : NULL,
-        context ? context->count - elements->count : 0, context && context->inferred};
+        context ? context->count - elements->count : 0, context && context->inferred,
+        context ? context->repeated_type : XR_XIR_UNIT};
     SourceValue tuple;
     if (!source_tuple_spread_value(ctx, source, context ? &tail : NULL, &tuple)) return false;
     if (tuple.type == XR_XIR_UNIT) return true;
