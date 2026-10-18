@@ -21,7 +21,7 @@ static const XrNativeMemberDeclaration *source_array_member(SourceContext *ctx,
     }
     return member;
 }
-static XrXirSourceType source_array_schema_type(SourceContext *ctx, XrNativeTypeTerm term, bool display) {
+static XrXirSourceType source_array_schema_type(SourceContext *ctx, XrNativeTypeTerm term) {
     if (term == XR_NATIVE_TERM_ELEMENT)
         return (XrXirSourceType) {(XrXirType) XR_XIR_TYPE_PARAMETER_BASE, ctx->array_declaration, true};
     if (term == XR_NATIVE_TERM_ARRAY_ELEMENT) {
@@ -49,13 +49,13 @@ static bool source_array_member_reference(SourceContext *ctx, AstNode *node,
         if (member->parameter_count && !parameters) return false;
         for (uint32_t p = 0; p < member->parameter_count; ++p) {
             if (!source_work(ctx, node)) return false;
-            parameters[p] = source_array_schema_type(ctx, member->parameters[p].type, false);
+            parameters[p] = source_array_schema_type(ctx, member->parameters[p].type);
         }
         XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
         record->native_identity = member->id;
         record->signature = source_owned_text(ctx, member->signature);
         if (!record->signature) return false;
-        record->type = source_array_schema_type(ctx, member->result, false);
+        record->type = source_array_schema_type(ctx, member->result);
         record->parameters = parameters; record->parameter_count = member->parameter_count;
         record->exported = true; record->mutable = member->receiver == XR_NATIVE_RECEIVER_REF;
         record->generic_parent = ctx->array_declaration; record->generic_parent_count = 1;
