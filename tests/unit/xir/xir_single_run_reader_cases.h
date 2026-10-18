@@ -177,9 +177,14 @@ static XrXirStatus class_scan_membership_case(const XrXirCompileContext *context
     material.terms.types=domain.types;
     material.domain=(XirMetadataDomain){.types=&material.terms.types,.function_count=1};
     EffectInvocationClassFact fact={.value=1+2*count,.mask=EFFECT_CLASS_KNOWN};
-    EffectInvocationNode node={.body=0,.class_count=mode==4?1u:0u,.classes=mode==4?&fact:NULL};
-    EffectInvocationFinal final={.material=&material,.count=1,.capacity=1,.nodes=&node};
-    EffectInvocationRead read={.work=context,.final=&final};
+    EffectInvocationNode node={.body=0};
+    EffectInvocationState state={.classes={.facts=mode==4?&fact:NULL,.count=mode==4?1u:0u}};
+    XrXirEffects construction={0};
+    EffectInvocationWorkspace workspace={.final={.material=&material,.count=1,.capacity=1,.nodes=&node},
+        .states=&state};
+    EffectInvocationRead read={.work=context,.final=&workspace.final,
+        .roles={.construction=&construction},.discovery=&workspace};
+    workspace.read=read;
     EffectBodyFunctionHead head={.parameters=&parameter,.parameter_count=1,.instruction_count=4*count};
     XrXirFunction function={.parameters=&parameter,.parameter_count=1,
         .instructions=instructions,.instruction_count=4*count};
@@ -187,8 +192,10 @@ static XrXirStatus class_scan_membership_case(const XrXirCompileContext *context
     EffectInvocationFlow flow={.read=&read,.function=&head,.values=1+4*count};
     flow.body=raw?effect_body_raw_request(context,&module):effect_body_owned_request(context,&material);
     EffectInvocationNode saved=node;EffectInvocationClassFact saved_fact=fact;
+    EffectInvocationState saved_state=state;
     XrXirStatus status=effect_invocation_class_values_match(&flow,100);
-    CHECK(!memcmp(&node,&saved,sizeof(node)) && !memcmp(&fact,&saved_fact,sizeof(fact)));
+    CHECK(!memcmp(&node,&saved,sizeof(node)) && !memcmp(&fact,&saved_fact,sizeof(fact)) &&
+        !memcmp(&state,&saved_state,sizeof(state)));
     return status;
 }
 

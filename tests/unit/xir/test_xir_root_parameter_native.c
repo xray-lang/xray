@@ -24,6 +24,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"H1 native/mixed %d: %s\n",__LINE__,#c); exit(1); } } while (0)
 #include "xir_instance_compile_observer.h"
 #include "xir_runtime_allocations.h"
+#include "xir_program_final_roots.h"
 #include "xir/xxir_task_budget.c"
 #include "xir/xxir_task.c"
 #include "xir_root_parameter_execution_cases.h"
@@ -157,8 +158,8 @@ static H1ExecFixture h1n_program(const XrXirProgramSpec *native, uint32_t run,
         spec.declarations->root_module,spec.declarations->slot_count};
     CHECK(xr_xir_compile_program_seal(&context,&spec,&fixture.program) == XR_XIR_OK);
     CHECK(fixture.program && fixture.program->permissions);
-    const XrXirProgramPermission *permission = &fixture.program->permissions->entries[run];
-    CHECK(permission->requires_root == oracle->root && permission->unresolved == oracle->unresolved);
+    XrXirRootEffects root = test_program_final_roots(fixture.program,run);
+    CHECK(root.requires_root == oracle->root && root.unresolved == oracle->unresolved);
     xr_compile_resources_release(context.resources);
     return fixture;
 }

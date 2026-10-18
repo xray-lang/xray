@@ -18,26 +18,21 @@
 #include "xxir_types.h"
 #include "xxir_type_arena.h"
 #include <stdatomic.h>
-/* Only a completed proof publishes this owner. Root facts and worker eligibility
- * have different meanings even when both deny a particular worker call. */
+/* Only a completed proof publishes this owner. Semantic root facts remain in
+ * the retained Final; worker eligibility and reference coordinates are distinct. */
 typedef struct XrXirProgramFunctionRef {
     uint32_t entry, captures, instruction, site;
     XrXirType type;
 } XrXirProgramFunctionRef;
 typedef struct XrXirProgramPermission {
     uint32_t reference_begin, reference_count;
-    uint32_t root_parameter_begin, root_parameter_count, intrinsic_root;
-    bool requires_root, unresolved;
     XrXirStatus worker;
 } XrXirProgramPermission;
 typedef struct XrXirProgramPermissions {
     uint32_t function_count, slot_count;
     XrXirProgramPermission *entries;
     XrXirProgramFunctionRef *references;
-    uint32_t *parameter_offsets;
-    uint32_t *root_parameters;
-    uint8_t *cell_roles;
-    uint32_t root_parameter_count, reference_count;
+    uint32_t reference_count;
     struct XrXirEffects *effects;
     XrXirProgramInput *input;
     XrXirFunctionLayout *layouts;

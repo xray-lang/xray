@@ -11,6 +11,7 @@
  */
 #ifndef XIR_CHILD_CALLABLE_NATIVE_ORACLES_H
 #define XIR_CHILD_CALLABLE_NATIVE_ORACLES_H
+#include "xir_program_final_roots.h"
 #include "xir_child_callable_capture_auth.h"
 
 enum { CN_INIT, CN_ENTRY, CN_ROOT, CN_CHILD, CN_PURE, CN_RELAY, CN_ROOT_LEAF,
@@ -212,13 +213,13 @@ static void cn_build(CnFixture *f) {
     CHECK(xr_xir_compile_program_seal(f->context, &spec, &f->program) == XR_XIR_OK);
     const XrXirProgramPermissions *permissions = f->program->permissions;
     CHECK(permissions && permissions->function_count == CN_FUNCTIONS && permissions->layouts);
-    CHECK(!permissions->entries[CN_PURE].requires_root && !permissions->entries[CN_PURE].unresolved);
-    CHECK(!permissions->entries[CN_RELAY].requires_root && !permissions->entries[CN_RELAY].unresolved);
+    CHECK(!test_program_final_roots(f->program,CN_PURE).requires_root && !test_program_final_roots(f->program,CN_PURE).unresolved);
+    CHECK(!test_program_final_roots(f->program,CN_RELAY).requires_root && !test_program_final_roots(f->program,CN_RELAY).unresolved);
     CHECK(permissions->entries[CN_RELAY].worker == XR_XIR_BAD_TYPE);
     CHECK(permissions->entries[CN_CHILD].worker == XR_XIR_OK);
-    CHECK(permissions->entries[CN_ROOT_LEAF].requires_root && !permissions->entries[CN_ROOT_LEAF].unresolved);
-    CHECK(!permissions->entries[CN_UNKNOWN].requires_root && permissions->entries[CN_UNKNOWN].unresolved);
-    CHECK(permissions->entries[CN_MIXED].requires_root && permissions->entries[CN_MIXED].unresolved);
+    CHECK(test_program_final_roots(f->program,CN_ROOT_LEAF).requires_root && !test_program_final_roots(f->program,CN_ROOT_LEAF).unresolved);
+    CHECK(!test_program_final_roots(f->program,CN_UNKNOWN).requires_root && test_program_final_roots(f->program,CN_UNKNOWN).unresolved);
+    CHECK(test_program_final_roots(f->program,CN_MIXED).requires_root && test_program_final_roots(f->program,CN_MIXED).unresolved);
 }
 
 static XrXirOutputStatus cn_bytes(void *context, XrXirOutputStream stream, const char *bytes, size_t length) {
