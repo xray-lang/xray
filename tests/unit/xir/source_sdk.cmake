@@ -93,6 +93,7 @@ if(WIN32 AND NOT ENABLE_ASAN AND NOT ENABLE_SANITIZERS AND NOT ENABLE_UBSAN
             $<TARGET_FILE:xray> "${CMAKE_C_COMPILER}"
             "${CMAKE_CURRENT_BINARY_DIR}/toolchain-probe-repaired")
         set_tests_properties(cli_toolchain_probe_repaired PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE COST 10
-            LABELS "unit;cli;source;sdk;native;probe")
+            LABELS "unit;cli;source;sdk;native;probe"
+            ENVIRONMENT "XRAY_STDLIB_PATH=${PROJECT_SOURCE_DIR}/stdlib")
     endif()
 endif()

@@ -30,6 +30,7 @@ def main():
     out = Path(tempfile.mkdtemp(prefix='SDK 客户-', dir=parent)).resolve()
     env = dict(os.environ, TEMP=str(out), TMP=str(out), PYTHONDONTWRITEBYTECODE='1',
                PYTHONIOENCODING='utf-8')
+    env.pop('XRAY_STDLIB_PATH', None)
     if args.asan_runtime:
         assert (args.asan_runtime/'clang_rt.asan_dynamic-x86_64.dll').is_file()
         env['PATH'] = str(args.asan_runtime) + os.pathsep + env.get('PATH', '')
@@ -114,8 +115,8 @@ endforeach()
     dependencies = run('header-dependencies', ['ninja', '-C', customer_build, '-t', 'deps'])
     assert len(re.findall(rb'#deps ([1-9][0-9]*)', dependencies)) == 2
     assert str(root).replace('\\', '/').lower().encode() not in dependencies.replace(b'\\', b'/').lower()
-    empty = out/'empty-stdlib'
-    empty.mkdir()
+    empty = parent/'empty-stdlib'
+    empty.mkdir(exist_ok=True)
     for language in ['c', 'cpp']:
         exe = customer_build/('source_'+language+'.exe')
         imports = run(language+'-imports', [args.dumpbin, '/dependents', exe])
