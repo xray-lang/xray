@@ -13,6 +13,8 @@ static bool source_native_channel_declaration(SourceContext *ctx) {
     if (ctx->channel_declaration) return true;
     const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_CHANNEL);
     if (!source_native_admit(ctx, native)) return false;
+    if (native->parameter_count!=1 || !native->parameter_names || !native->parameter_names[0])
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"native declaration requires one named type parameter");
     XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
         &ctx->query.module_count, &ctx->query_module_capacity, sizeof(*modules));
     if (!modules) return false;
@@ -29,7 +31,7 @@ static bool source_native_channel_declaration(SourceContext *ctx) {
     XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
     record->native_identity = native->id; record->exported = true;
     record->generic_parameter_count = 1; record->generic_constraints = constraints;
-    SourceName parameter = {0}; parameter.name = source_owned_text(ctx, native->parameter_name);
+    SourceName parameter = {0}; parameter.name = source_owned_text(ctx, native->parameter_names[0]);
     if (!parameter.name || !source_query_declare(ctx, &parameter, XR_XIR_SOURCE_TYPE_PARAMETER,
         ctx->channel_declaration, (XrXirSourceRange) {ctx->channel_module, 0, 0, 0, 0})) return false;
     record = (XrXirSourceDeclaration *) &ctx->query.declarations[parameter.declaration - 1];
