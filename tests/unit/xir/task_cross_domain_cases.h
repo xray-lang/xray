@@ -5,7 +5,7 @@
  *
  * task_cross_domain_cases.h - Local residual ring owns real foreign Tasks
  */
-#include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_program_internal.h"
 #ifndef TASK_CROSS_DOMAIN_CASES_H
 #define TASK_CROSS_DOMAIN_CASES_H
 static void task_cross_fixture_new(TaskFixture *fixture) {
@@ -39,9 +39,7 @@ static void task_cross_fixture_new(TaskFixture *fixture) {
     XrXirStatus proof_status = native_metadata_fixture(&fixture->compiler.context, &spec, &proof);
     if (proof_status != XR_XIR_OK) fprintf(stderr, "metadata proof status=%d\n", (int)proof_status);
     CHECK(proof_status == XR_XIR_OK);
-    spec.packet = xir_program_packet_borrow(proof);
-    CHECK(xr_xir_compile_program_seal(&fixture->compiler.context, &spec, &fixture->program) == XR_XIR_OK);
-    xr_xir_compile_artifact_free(proof);
+    CHECK(task_owned_program_take(&fixture->compiler.context,&spec,&proof,&fixture->program)==XR_XIR_OK && !proof);
     CHECK(fixture->program->arena && xr_xir_compile_type_arena_retain(fixture->program->arena));
     fixture->arena = fixture->program->arena;
     CHECK(fixture->program->types == xr_xir_compile_type_arena_types(fixture->arena));
