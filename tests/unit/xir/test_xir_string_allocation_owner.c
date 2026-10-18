@@ -21,6 +21,10 @@ typedef struct MetadataBlock { void *pointer; size_t bytes; } MetadataBlock;
 static MetadataBlock metadata_blocks[4096];
 static size_t metadata_attempts, metadata_fail_at=SIZE_MAX;
 static uint64_t metadata_live, metadata_bytes, metadata_total, metadata_peak;
+static unsigned string_binding_attack,string_binding_callbacks;
+static void *string_entries_allocation;
+static XrXirVmBinding *string_observed_bindings;
+static XrXirInstruction *string_observed_instruction;
 /* Capture the host allocator before temporarily observing resource metadata. */
 static void *physical_malloc(size_t bytes) { return xr_malloc(bytes); }
 static void physical_free(void *pointer) { xr_free(pointer); }
@@ -37,6 +41,16 @@ static void *metadata_malloc(size_t bytes) {
 }
 static void metadata_free(void *pointer) {
     if (!pointer) return;
+    if (pointer==string_entries_allocation) {
+        string_entries_allocation=NULL;
+        if (string_binding_attack) {
+            ++string_binding_callbacks;
+            if (string_binding_attack==1)
+                string_observed_bindings[0].artifact=(const XrXirArtifact *)(uintptr_t)1;
+            else if (string_binding_attack==2) string_observed_bindings[0].function=1;
+            else string_observed_instruction->immediate^=1;
+        }
+    }
     size_t i=0; while (i<4096 && metadata_blocks[i].pointer!=pointer) ++i;
     CHECK(i<4096 && metadata_live && metadata_bytes>=metadata_blocks[i].bytes);
     metadata_bytes-=metadata_blocks[i].bytes; --metadata_live;
@@ -62,7 +76,21 @@ static void string_instance_retiring(void *pointer);
 #undef XIR_STRING_INSTANCE_IMPLEMENTATION_PRESENT
 #include "xir_source_fixture_owner.h"
 #include "xir_string_fixture.h"
+static XrXirStatus string_observe_bind_table(const XrXirArtifact *artifact,
+    XrXirVmBinding **bindings,XrXirCallEntry **entries) {
+    XrXirStatus status=xr_xir_compile_vm_bind_table(artifact,bindings,entries);
+    if (status==XR_XIR_OK) {
+        string_observed_bindings=*bindings;
+        string_entries_allocation=(CompileAllocation *)*entries-1;
+        const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
+        CHECK(module && module->function_count==5 && module->functions[4].instruction_count==2);
+        string_observed_instruction=(XrXirInstruction *)(uintptr_t)module->functions[4].instructions;
+    }
+    return status;
+}
+#define xr_xir_compile_vm_bind_table string_observe_bind_table
 #include "xir_string_vm_program.h"
+#undef xr_xir_compile_vm_bind_table
 
 static const char left_bytes[]="A\0\xE4\xB8\xAD";
 static const char right_bytes[]="\xF0\x9F\x98\x80!";
@@ -290,7 +318,47 @@ static void metadata_allocation_failures(void) {
     printf("String Error metadata actual allocation OOM: ledger+arena sites=%zu\n",sites);
 }
 #include "xir_string_factory_cases.h"
-int main(void) {
+static void string_binding_recovery(unsigned attack) {
+    for (unsigned variant=0;variant<2;++variant) {
+        reset_metadata();runtime_fail_at=SIZE_MAX;
+        SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
+        XrXirArtifact *artifact=string_fixture(&owner.context,variant),*original=artifact;
+        XrXirProgram *program=NULL;
+        string_binding_attack=attack;string_binding_callbacks=0;
+        XrXirStatus status=string_vm_program_take(&artifact,NULL,&program);
+        string_binding_attack=0;string_observed_bindings=NULL;
+        if (attack==3) string_observed_instruction->immediate^=1;
+        string_observed_instruction=NULL;
+        CHECK(!string_entries_allocation && string_binding_callbacks==(attack?1u:0u));
+        if (attack) {
+            if (status!=XR_XIR_BAD_STRUCTURE || program || artifact!=original) {
+                bool accepted=program!=NULL;
+                xr_xir_compile_program_drop(program);xr_xir_compile_artifact_free(artifact);
+                source_fixture_owner_free(&owner);
+                CHECK(!metadata_live && !metadata_bytes && !runtime_live && !runtime_bytes);
+                fprintf(stderr,"late entries-free attack=%u status=%u accepted=%u callbacks=%u physical zero\n",
+                    attack,status,(unsigned)accepted,string_binding_callbacks);
+                CHECK(status==XR_XIR_BAD_STRUCTURE && !accepted);
+            }
+            CHECK(status==XR_XIR_BAD_STRUCTURE && !program && artifact==original);
+            CHECK(string_vm_program_take(&artifact,NULL,&program)==XR_XIR_OK);
+        } else CHECK(status==XR_XIR_OK);
+        CHECK(program && !artifact);
+        xr_xir_compile_program_drop(program);source_fixture_owner_free(&owner);
+        string_observed_bindings=NULL;
+        CHECK(!metadata_live && !metadata_bytes && !runtime_live && !runtime_bytes);
+    }
+    puts("String actual entries-free binding check, original Artifact recovery and physical zero");
+}
+int main(int argc,char **argv) {
+    if (argc==2) {
+        if (!strcmp(argv[1],"--binding-control")) string_binding_recovery(0);
+        else if (!strcmp(argv[1],"--binding-artifact")) string_binding_recovery(1);
+        else if (!strcmp(argv[1],"--binding-function")) string_binding_recovery(2);
+        else { CHECK(!strcmp(argv[1],"--binding-body"));string_binding_recovery(3); }
+        return 0;
+    }
+    CHECK(argc==1);
     string_factory_failures();runtime_allocation_failures();escaped_result_after_artifact();metadata_allocation_failures();
     CHECK(!metadata_live && !metadata_bytes && !runtime_live && !runtime_bytes);
     puts("Independent string bytes, runtime and metadata OOM, cancellation and escaped Error physical zero");
