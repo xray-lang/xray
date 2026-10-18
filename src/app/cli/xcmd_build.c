@@ -7,8 +7,8 @@
  * xcmd_build.c - One Source product and admitted output publication
  */
 #include "xcli.h"
-#include "xcli_canonical_source.h"
-#include "xcli_source_paths.h"
+#include "../../api/xsource_compile.h"
+#include "../../api/xsource_paths.h"
 #include "../toolchain/xtc_xir_publication.h"
 #include "../toolchain/xtc_xir_local_toolchain.h"
 #include "../toolchain/xtc_xir_native_admission.h"
@@ -23,8 +23,8 @@
 #endif
 #define BUILD_C_LIMIT (UINT64_C(64) << 20)
 
-static int build_source_exit(XrCliCompileSourceStatus status) {
-    return status == XR_CLI_COMPILE_SOURCE_OUT_OF_MEMORY || status == XR_CLI_COMPILE_SOURCE_BAD_ARGUMENT ?
+static int build_source_exit(XrSourceCompileStatus status) {
+    return status == XR_SOURCE_COMPILE_OUT_OF_MEMORY || status == XR_SOURCE_COMPILE_BAD_ARGUMENT ?
         XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL;
 }
 static int build_publication_exit(XtcXirPublicationStatus status) {
@@ -49,14 +49,14 @@ static bool build_options_supported(const XrCliInvocation *inv) {
     }
     return true;
 }
-static void build_source_report(const XrCliCompileSourceDiagnostic *diagnostic) {
+static void build_source_report(const XrSourceCompileDiagnostic *diagnostic) {
     const XrXirSourceDiagnostic *source = &diagnostic->source.source;
     const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(diagnostic->source.snapshot);
     const char *path = diagnostic->source.source_path;
     if (!path && view && view->modules && source->module < view->module_count) path=view->modules[source->module].path;
     if (path && source->line>0) fprintf(stderr,"%s:%d:%d: error: %s\n",path,source->line,source->column,source->message);
     else fprintf(stderr,"XR_BUILD_6003: source build failed (stage=%u status=%s): %s\n",
-        (unsigned)diagnostic->stage,xr_cli_compile_source_status_name(diagnostic->status),source->message);
+        (unsigned)diagnostic->stage,xr_source_compile_status_name(diagnostic->status),source->message);
 }
 static int build_publication_close(XtcXirPublication **owner) {
     bool had_failure=false;
@@ -99,26 +99,26 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
 #else
     bool c_only=xr_cli_opt_bool(&inv->options,"c-only");
     const char *output=xr_cli_opt_string(&inv->options,"output",c_only ? "app.c" : "app.exe");
-    XrCompileResourceLimits limits=xr_cli_compile_default_resource_limits();
+    XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
     XrCompileResources *resources=NULL;
     XrCompileResourceStatus opened=xr_compile_resources_new(&limits,&resources);
     if (opened!=XR_COMPILE_RESOURCE_OK) return opened==XR_COMPILE_RESOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
-    XrCliSourcePaths paths={0}; XrCliSourcePathsDiagnostic path_diagnostic={0};
-    XrCliCompileSourceDiagnostic diagnostic={0}; XrXirSourceProduct *product=NULL;
+    XrSourcePaths paths={0}; XrSourcePathsDiagnostic path_diagnostic={0};
+    XrSourceCompileDiagnostic diagnostic={0}; XrXirSourceProduct *product=NULL;
     XrXirNativeProjection *projection=NULL; XtcXirPublication *publication=NULL;
     XrXirNativeArtifact *artifact=NULL;
     int result=XR_CLI_EXIT_FAIL;
-    XrCliCompileSourceStatus source=xr_cli_compile_source_paths(resources,input,&paths,&path_diagnostic);
-    if (source!=XR_CLI_COMPILE_SOURCE_OK) {
+    XrSourceCompileStatus source=xr_source_paths(resources,input,&paths,&path_diagnostic);
+    if (source!=XR_SOURCE_COMPILE_OK) {
         fprintf(stderr,"XR_BUILD_6003: path lookup failed (stage=%u status=%s io=%u)\n",
-            (unsigned)path_diagnostic.stage,xr_cli_compile_source_status_name(source),(unsigned)path_diagnostic.io_status);
+            (unsigned)path_diagnostic.stage,xr_source_compile_status_name(source),(unsigned)path_diagnostic.io_status);
         result=build_source_exit(source); goto cleanup;
     }
-    XrCliCompileSourceRequest request={&context,paths.entry,paths.stdlib,NULL,
-        xr_cli_compile_default_manifest_limits(),{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-    source=xr_cli_compile_source_build(&request,&product,&diagnostic);
-    if (source!=XR_CLI_COMPILE_SOURCE_OK) { build_source_report(&diagnostic);result=build_source_exit(source);goto cleanup; }
+    XrSourceCompileRequest request={&context,paths.entry,paths.stdlib,NULL,
+        xr_source_compile_default_manifest_limits(),{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}, NULL};
+    source=xr_source_compile_build(&request,&product,&diagnostic);
+    if (source!=XR_SOURCE_COMPILE_OK) { build_source_report(&diagnostic);result=build_source_exit(source);goto cleanup; }
     XrXirNativeProjectionRequest prepare={product,"xray_app",(size_t)BUILD_C_LIMIT};
     XrXirDiagnostic projection_diagnostic={0};
     XrXirStatus projected=xr_compile_native_projection_prepare(&prepare,&projection,&projection_diagnostic);
@@ -145,8 +145,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     xr_compile_native_artifact_free(artifact);artifact=NULL;
     xr_compile_native_projection_owner_free(projection);projection=NULL;
     xr_xir_compile_source_product_free(product);product=NULL;
-    xr_cli_compile_source_diagnostic_free(&diagnostic);
-    xr_cli_compile_source_paths_free(&paths);
+    xr_source_compile_diagnostic_free(&diagnostic);
+    xr_source_paths_free(&paths);
     xr_compile_resources_release(resources);resources=NULL;
     if (status==XTC_XIR_PUBLICATION_OK) status=xtc_xir_publication_commit(publication);
     if (status!=XTC_XIR_PUBLICATION_OK) {
@@ -159,8 +159,8 @@ cleanup:
     xr_compile_native_artifact_free(artifact);
     xr_compile_native_projection_owner_free(projection);
     xr_xir_compile_source_product_free(product);
-    xr_cli_compile_source_diagnostic_free(&diagnostic);
-    xr_cli_compile_source_paths_free(&paths);
+    xr_source_compile_diagnostic_free(&diagnostic);
+    xr_source_paths_free(&paths);
     xr_compile_resources_release(resources);
     bool published=publication && xtc_xir_publication_diagnostic(publication)->published;
     int closed=build_publication_close(&publication);

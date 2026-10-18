@@ -23,7 +23,7 @@ fn map_values<K, V, R>(m: Map<K, V>, f: fn(V): R): Map<K, R> {
 class Box<T> {
     value: T
 
-    constructor(value: T) {
+    init(value: T) {
         this.value = value
     }
 
@@ -44,7 +44,7 @@ class Pair<A, B> {
     first: A
     second: B
 
-    constructor(first: A, second: B) {
+    init(first: A, second: B) {
         this.first = first
         this.second = second
     }
@@ -57,7 +57,7 @@ class Pair<A, B> {
 class Stack<T> {
     private items: Array<T>
 
-    constructor() {
+    init() {
         this.items = []
     }
 

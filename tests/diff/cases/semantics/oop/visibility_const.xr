@@ -5,7 +5,7 @@ class Account {
     private balance: i64
     protected owner: string
     const id: i64
-    constructor(b: i64, o: string, i: i64) {
+    init(b: i64, o: string, i: i64) {
         this.balance = b
         this.owner = o
         this.id = i

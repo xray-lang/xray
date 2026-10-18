@@ -80,14 +80,14 @@ fn test_typeof_closure() {
 
 class Person {
     name: string
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
 }
 
 class Student extends Person {
     grade: i64
-    constructor(name: string, grade: i64) {
+    init(name: string, grade: i64) {
         super(name)
         this.grade = grade
     }

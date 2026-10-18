@@ -52,7 +52,7 @@ assertEqual(selected,"variant")
 var getCount = 0
 final class Box {
     text:string?
-    constructor(text:string?) { this.text = text }
+    init(text:string?) { this.text = text }
     get()->string? { getCount = getCount + 1; return this.text }
     set(text:string?) { this.text = text }
 }

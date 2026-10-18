@@ -97,7 +97,7 @@ op_call_entry:;
             }
 
             // Look for constructor method (user defined class)
-            int ctor_symbol = xr_symbol_lookup_in_table(sym_table, XR_KEYWORD_CONSTRUCTOR);
+            int ctor_symbol = xr_symbol_lookup_in_table(sym_table, XR_INIT_MEMBER_NAME);
             if (ctor_symbol >= 0) {
                 constructor = xr_class_lookup_method(klass, ctor_symbol);
             }

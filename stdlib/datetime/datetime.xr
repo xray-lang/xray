@@ -19,7 +19,7 @@ class DateTimeParts {
     weekday: i64
     yearday: i64
 
-    constructor(
+    init(
         year: i64,
         month: i64,
         day: i64,
@@ -54,7 +54,7 @@ export class DateTime {
     _weekday: i64
     _yearday: i64
 
-    constructor(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true) {
+    init(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true) {
         this._timestamp = timestamp
         this._millisecond = millisecond
         this._tzOffset = tzOffset

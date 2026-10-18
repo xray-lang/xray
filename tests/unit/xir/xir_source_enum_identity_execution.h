@@ -28,9 +28,18 @@ static void source_enum_identity_value_check(const XrXirValue *value, uint32_t i
             CHECK(bytes[i] == (kind == 3 ? 'V' : i < 301 ? 'E' : i == 301 ? '.' : 'V'));
     }
 }
-static XrXirCallStatus source_enum_identity_count(XrXirInstance *instance, uint32_t entry, int64_t expected) {
+static XrXirCallStatus source_enum_identity_poll(XrXirInstance *instance,
+    XrXirCallStatus status, bool *driven_oom) {
+    if (status == XR_XIR_CALL_READY) {
+        status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+        *driven_oom = status == XR_XIR_CALL_OOM;
+    }
+    return status;
+}
+static XrXirCallStatus source_enum_identity_count(XrXirInstance *instance, uint32_t entry,
+    int64_t expected, bool *driven_oom) {
     XrXirCallStatus status = xr_xir_instance_start(instance,entry,NULL,0);
-    if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+    status = source_enum_identity_poll(instance,status,driven_oom);
     if (status == XR_XIR_CALL_RETURNED) {
         XrXirValue value = {0};
         CHECK(xr_xir_instance_take_result(instance,&value) == XR_XIR_CALL_RETURNED);
@@ -40,20 +49,28 @@ static XrXirCallStatus source_enum_identity_count(XrXirInstance *instance, uint3
 }
 static void source_enum_identity_attempt(XrXirProgram *program, SourceEnumIdentityEntries entries, XrXirValue results[4]) {
     XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
-    XrXirInstance *instance = NULL;
+    XrXirInstance *instance = NULL; bool driven_oom = false;
     XrXirCallStatus status = xr_xir_instance_new(program,&config,&instance);
-    if (status == XR_XIR_CALL_READY) status = source_enum_identity_count(instance,entries.count,0);
+    if (status == XR_XIR_CALL_READY) status = source_enum_identity_count(instance,entries.count,0,&driven_oom);
     for (uint32_t e = 0; e < 4 && status == XR_XIR_CALL_RETURNED; ++e) {
         status = xr_xir_instance_start(instance,entries.values[e],NULL,0);
-        if (status == XR_XIR_CALL_READY) status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+        status = source_enum_identity_poll(instance,status,&driven_oom);
         if (status == XR_XIR_CALL_RETURNED) {
             CHECK(xr_xir_instance_take_result(instance,&results[e]) == XR_XIR_CALL_RETURNED);
             source_enum_identity_value_check(&results[e],e);
         }
     }
-    if (status == XR_XIR_CALL_RETURNED) status = source_enum_identity_count(instance,entries.count,1);
+    if (status == XR_XIR_CALL_RETURNED) status = source_enum_identity_count(instance,entries.count,1,&driven_oom);
     CHECK(status == XR_XIR_CALL_RETURNED || (runtime_fail_at != SIZE_MAX && status == XR_XIR_CALL_OOM));
-    CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+    if (driven_oom) CHECK(status == XR_XIR_CALL_OOM && runtime_fail_at != SIZE_MAX);
+    /* A driven failure remains observable while destruction consumes the owner. */
+    XrXirCallStatus expected_release = driven_oom ? XR_XIR_CALL_OOM : XR_XIR_CALL_READY;
+    XrXirCallStatus released = xr_xir_instance_free(instance);
+    if (released != expected_release)
+        fprintf(stderr, "Enum cleanup got=%u want=%u prior=%u fail_at=%zu attempts=%zu\n",
+            (unsigned)released, (unsigned)expected_release, (unsigned)status,
+            runtime_fail_at, runtime_attempts);
+    CHECK(released == expected_release);
 }
 static void source_enum_identity_pair(XrXirProgram *program, SourceEnumIdentityEntries entries, XrXirValue retained[2][4]) {
     for (uint32_t i = 0; i < 2; ++i) source_enum_identity_attempt(program,entries,retained[i]);

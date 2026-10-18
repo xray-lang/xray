@@ -7,13 +7,13 @@
 class TreeNode {
     children: Array<TreeNode>
     tag: i64
-    constructor(tag) { this.children = []; this.tag = tag }
+    init(tag) { this.children = []; this.tag = tag }
 }
 
 class ListNode {
     next: ListNode?
     tag: i64
-    constructor(tag) { this.next = null; this.tag = tag }
+    init(tag) { this.next = null; this.tag = tag }
 }
 
 // 树：类型图有自环，对象图是 DAG

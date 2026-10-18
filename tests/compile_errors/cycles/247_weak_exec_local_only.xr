@@ -3,7 +3,7 @@
 // 释放掉的目标。
 class Node {
     weak peer: Node?
-    constructor() { this.peer = null }
+    init() { this.peer = null }
 }
 
 var shared_node: Node = Node()

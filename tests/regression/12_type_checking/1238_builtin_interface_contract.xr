@@ -8,7 +8,7 @@
 
 class Bag implements Lengthable {
     n: i64
-    constructor(n: i64) { this.n = n }
+    init(n: i64) { this.n = n }
     operator len() -> i64 { return this.n }
 }
 

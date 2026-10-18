@@ -58,7 +58,7 @@ export class ProbeBox {
     label: string
     count: i64
 
-    constructor(label: string, count: i64) {
+    init(label: string, count: i64) {
         this.label = label
         this.count = count
     }
@@ -85,7 +85,7 @@ export fn probeReadBox(box: ProbeBox) -> string {
 export class ProbeCell<T> {
     value: T
 
-    constructor(v: T) {
+    init(v: T) {
         this.value = v
     }
 
@@ -97,7 +97,7 @@ export class ProbeCell<T> {
 export class ProbeBag {
     boxes: Array<ProbeBox>
 
-    constructor(boxes: Array<ProbeBox>) {
+    init(boxes: Array<ProbeBox>) {
         this.boxes = boxes
     }
 

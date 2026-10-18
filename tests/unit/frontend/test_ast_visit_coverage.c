@@ -714,7 +714,7 @@ TEST(try_catch) {
 TEST(class_basic) {
     return assert_all_typed("class Dog {\n"
                             "    name: string\n"
-                            "    constructor(n: string) {\n"
+                            "    init(n: string) {\n"
                             "        this.name = n\n"
                             "    }\n"
                             "    bark() -> string {\n"

@@ -10,7 +10,7 @@
 class Name {
     prefix: string
     local: string
-    constructor(prefix: string, local: string) {
+    init(prefix: string, local: string) {
         this.prefix = prefix
         this.local = local
     }
@@ -19,7 +19,7 @@ class Name {
 class Attr {
     name: Name
     value: string
-    constructor(name: Name, value: string) {
+    init(name: Name, value: string) {
         this.name = name
         this.value = value
     }

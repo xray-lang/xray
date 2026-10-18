@@ -7,7 +7,7 @@
 // (array literal) that forces a synthesized constructor.
 class Base {
     id: i64
-    constructor() { this.id = 42 }
+    init() { this.id = 42 }
 }
 class Child extends Base {
     xs: Array<i64> = [1, 2, 3]

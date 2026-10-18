@@ -15,7 +15,7 @@ endif()
 foreach(mode injected production)
     add_executable(test_source_paths_${mode} test_source_paths.c
         "${XR_ROOT}/src/base/xio_policy.c" "${XR_ROOT}/src/base/xfileio.c"
-        "${XR_ROOT}/src/os/win/fs_win.c" "${XR_ROOT}/src/app/cli/xcli_source_paths.c")
+        "${XR_ROOT}/src/os/win/fs_win.c" "${XR_ROOT}/src/api/xsource_paths.c")
     if(mode STREQUAL "production")
         target_compile_definitions(test_source_paths_${mode} PRIVATE SOURCE_PATHS_PRODUCTION)
         target_sources(test_source_paths_${mode} PRIVATE "${XR_ROOT}/src/os/win/proc_self_win.c")

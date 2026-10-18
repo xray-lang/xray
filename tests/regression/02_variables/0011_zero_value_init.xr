@@ -59,7 +59,7 @@ fn test_struct_zero_value_init() {
 class BranchInitializedName {
     name: string
 
-    constructor(flag: bool) {
+    init(flag: bool) {
         if (flag) {
             this.name = "yes"
         } else {

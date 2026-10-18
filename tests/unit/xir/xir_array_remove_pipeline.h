@@ -99,7 +99,7 @@ static void remove_shadow_query(const XrXirSourceResult *result, const XrXirSour
         const XrXirSourceDeclaration *decl = &view->declarations[d];
         if (decl->parent != owner->id || decl->kind != XR_XIR_SOURCE_FUNCTION) continue;
         CHECK(!decl->native_identity);
-        if (!strcmp(decl->name, "constructor")) { CHECK(!constructor); constructor = decl; }
+        if (!strcmp(decl->name, "init")) { CHECK(!constructor); constructor = decl; }
         if (!strcmp(decl->name, "pop")) { CHECK(!pop); pop = decl; }
         if (!strcmp(decl->name, "shift")) { CHECK(!shift); shift = decl; }
     }

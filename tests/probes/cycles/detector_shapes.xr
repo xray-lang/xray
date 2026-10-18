@@ -10,27 +10,27 @@
 // L0 的 Map 值边（G1）——修复前这类环根本不被标为候选
 class MapNode {
     peers: Map<string, MapNode>
-    constructor() { this.peers = #{} }
+    init() { this.peers = #{} }
 }
 
 // 直接字段环
 class Plain {
     peer: Plain?
     tag: i64
-    constructor(tag) { this.peer = null; this.tag = tag }
+    init(tag) { this.peer = null; this.tag = tag }
 }
 
 // union 成员中的类（G3：修复前只取首个命中成员）
 class UnionNode {
     peer: i64 | string | UnionNode | null
-    constructor() { this.peer = null }
+    init() { this.peer = null }
 }
 
 // 大对象参与：元素缓冲超过 XR_LARGE_OBJECT_THRESHOLD，走 large_set 而非块内
 class BigNode {
     pad: Array<i64>
     peer: BigNode?
-    constructor() { this.pad = Array<i64>(2000, 0); this.peer = null }
+    init() { this.pad = Array<i64>(2000, 0); this.peer = null }
 }
 
 fn map_cycle() { var a = MapNode(); var b = MapNode(); a.peers["n"] = b; b.peers["n"] = a }

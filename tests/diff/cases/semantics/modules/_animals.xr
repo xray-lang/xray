@@ -4,7 +4,7 @@
 export class Animal {
     name: string
     legs: i64
-    constructor(n: string, l: i64) {
+    init(n: string, l: i64) {
         this.name = n
         this.legs = l
     }

@@ -12,7 +12,7 @@
  */
 static void source_dependency_ready_cases(XrXirSourceRequest *request) {
         source_generic_requirement_run(request,
-            "final class Counter{n:i64;label:string;constructor(n:i64){this.n=n;this.label=\"mapped\"} bump(){this.n+=1} get()->i64{return this.n}}\n"
+            "final class Counter{n:i64;label:string;init(n:i64){this.n=n;this.label=\"mapped\"} bump(){this.n+=1} get()->i64{return this.n}}\n"
             "export fn genericMethodNumber()->i64{const c=Counter(40);const alias=c;alias.bump();return c.get()}\n"
             "export fn genericMethodText()->string{const c=Counter(0);return c.label}\n");
         source_generic_requirement_run(request,

@@ -1,6 +1,6 @@
 final class C<T> {
     x: i64
-    constructor(x: i64) { this.x = x }
+    init(x: i64) { this.x = x }
     get() -> i64 { return this.x }
 }
 export fn referenceAnswer() -> i64 { return C<string>(41).get() }

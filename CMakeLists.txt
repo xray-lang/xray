@@ -1372,6 +1372,13 @@ list(REMOVE_ITEM AOT_SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/aot/xrt_gen_iter.c"
     "src/aot/xrt_gen_iter.c")
 file(GLOB API_SRC CONFIGURE_DEPENDS "src/api/*.c")
+# Source compilation has one production owner shared by API and application consumers.
+list(REMOVE_ITEM API_SRC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_api.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_compiler.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_compile.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_paths.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/api/xsource_authority.c")
 file(GLOB NEW_CLI_SRC CONFIGURE_DEPENDS "src/app/cli/*.c")
 file(GLOB APP_TOOLCHAIN_SRC CONFIGURE_DEPENDS "src/app/toolchain/*.c")
 # Native operation components are owned by their explicit production libraries.
@@ -2468,7 +2475,7 @@ endif()
 # Base CLI source files
 # The public executable is composed only from consumers of the single
 # Source -> Checked -> Lowered pipeline. The Source adapter, path policy and
-# graph authority live in xray_cli_source and are linked, not recompiled here.
+# graph authority live in xray_source_compile and are linked, not recompiled here.
 set(XRAY_CLI_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli)
 set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcli.c
@@ -2628,7 +2635,7 @@ endif()
 
 # The executable links only the single-pipeline libraries; none of them reach
 # the retired analyzer/Xi/Program core.
-target_link_libraries(xray PRIVATE xray_cli_source xray_xir_runtime_host xray_frontend_format
+target_link_libraries(xray PRIVATE xray_source_api xray_xir_runtime_host xray_frontend_format
     xray_compile_resources)
 if(WIN32)
     target_link_libraries(xray PRIVATE xray_xir_native_admission xray_xir_local_toolchain
@@ -2673,7 +2680,7 @@ add_subdirectory(src/execution)
 add_subdirectory(src/toolchain)
 include(src/frontend/format/xformatter.cmake)
 target_link_libraries(xray PRIVATE xray_frontend_format)
-include(src/app/cli/xir_compile_source.cmake)
+include(src/api/xsource_compile.cmake)
 include(src/app/toolchain/xir_target.cmake)
 
 if(BUILD_TESTS)

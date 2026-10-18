@@ -5,7 +5,7 @@
 class Animal {
     name: string
 
-    constructor(name) {
+    init(name) {
         this.name = name
     }
 
@@ -19,7 +19,7 @@ class Animal {
 }
 
 class Dog extends Animal {
-    constructor(name) {
+    init(name) {
         super(name)
     }
 
@@ -33,7 +33,7 @@ class Dog extends Animal {
 }
 
 class Cat extends Animal {
-    constructor(name) {
+    init(name) {
         super(name)
     }
 
@@ -47,7 +47,7 @@ class Cat extends Animal {
 }
 
 class Bird extends Animal {
-    constructor(name) {
+    init(name) {
         super(name)
     }
 

@@ -11,7 +11,7 @@ export class Options {
     retries: i64 = BASE_RETRIES
     label: string = DEFAULT_LABEL
 
-    constructor() {
+    init() {
         this.retries = BASE_RETRIES
         this.label = DEFAULT_LABEL
     }

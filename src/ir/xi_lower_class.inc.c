@@ -505,7 +505,7 @@ static XrAggregateLayout *class_clone_value_layout(XiLower *l, const XrAggregate
 
 /* True when a synthesized constructor for `cd` must chain to a parent
  * constructor. A subclass without its own constructor reaches the parent
- * constructor by ordinary "constructor" method dispatch; a subclass that gains
+ * constructor by ordinary "init" method dispatch; a subclass that gains
  * a *synthesized* constructor (from its own complex field initializer) shadows
  * that dispatch, so the synthesized body must call super() itself or the
  * parent's field initialization is silently dropped.
@@ -518,7 +518,7 @@ static bool class_synth_ctor_needs_super(XiLower *l, const ClassDeclNode *cd) {
     if (!l || !cd || (!cd->super_name && !cd->super_module))
         return false;
     XrClassInfo *ci = class_info_for_decl(l, cd);
-    if (ci && ci->base && xa_class_info_lookup_member(ci->base, XR_KEYWORD_CONSTRUCTOR))
+    if (ci && ci->base && xa_class_info_lookup_member(ci->base, XR_INIT_MEMBER_NAME))
         return true;
     if (cd->super_name && !cd->super_module && l->shared_slot_classes) {
         for (int i = 0; i < l->var_cap; i++) {
@@ -541,7 +541,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, XaSymbol 
                                         bool is_inst, ClassDeclNode *cd,
                                         bool owner_is_value_aggregate, struct XrType *receiver_type,
                                         uint32_t source_node_id) {
-    const bool is_ctor = m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
+    const bool is_ctor = m->is_constructor || (m->name && strcmp(m->name, "init") == 0);
     XaSymbolLinks *method_links =
         method_sym && l && l->analyzer ? xa_analyzer_get_links(l->analyzer, method_sym) : NULL;
     XrType *method_sig = method_links ? method_links->type : NULL;
@@ -856,7 +856,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
             stat_n++;
         else {
             inst_n++;
-            if (m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0))
+            if (m->is_constructor || (m->name && strcmp(m->name, "init") == 0))
                 has_ctor = true;
         }
     }
@@ -894,7 +894,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
 
     if (synth_ctor) {
         MethodDeclNode synth = {0};
-        synth.name = "constructor";
+        synth.name = "init";
         synth.is_constructor = true;
 
         XiFunc *mf =
@@ -1204,14 +1204,14 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
                 data->methods[mi].name = arena_strdup(l->func, m->name);
                 data->methods[mi].symbol_id = xi_lower_method_symbol(l, m->name);
                 data->methods[mi].is_constructor =
-                    m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
+                    m->is_constructor || (m->name && strcmp(m->name, "init") == 0);
                 data->methods[mi].is_static = false;
                 data->methods[mi].is_static_constructor = false;
                 mi++;
             }
             if (synth_ctor && mi < total) {
-                data->methods[mi].name = arena_strdup(l->func, "constructor");
-                data->methods[mi].symbol_id = xi_lower_method_symbol(l, "constructor");
+                data->methods[mi].name = arena_strdup(l->func, "init");
+                data->methods[mi].symbol_id = xi_lower_method_symbol(l, "init");
                 data->methods[mi].is_constructor = true;
                 data->methods[mi].is_static = false;
                 data->methods[mi].is_static_constructor = false;
@@ -1226,7 +1226,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
                 data->methods[mi].name = arena_strdup(l->func, m->name);
                 data->methods[mi].symbol_id = xi_lower_method_symbol(l, m->name);
                 data->methods[mi].is_constructor =
-                    m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
+                    m->is_constructor || (m->name && strcmp(m->name, "init") == 0);
                 data->methods[mi].is_static = true;
                 data->methods[mi].is_static_constructor = false;
                 mi++;

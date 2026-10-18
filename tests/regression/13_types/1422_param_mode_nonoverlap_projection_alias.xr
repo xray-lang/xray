@@ -2,7 +2,7 @@ class Pair {
     left: i64
     right: i64
 
-    constructor() {
+    init() {
         this.left = 0
         this.right = 0
     }

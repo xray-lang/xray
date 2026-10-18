@@ -15,11 +15,15 @@
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#c);exit(1);}} while(0)
 #include "xir_source_program_compile_owner.h"
 #include "xir_runtime_allocations.h"
+#define XIR_INSTANCE_IMPLEMENTATION_PRESENT
+#include "xir_instance_retirement_probe.c"
+#undef XIR_INSTANCE_IMPLEMENTATION_PRESENT
 
 typedef enum GroupMode {
     GROUP_NORMAL, GROUP_CANCEL_PREPARED, GROUP_CANCEL_COMMITTED, GROUP_RETAIN_LIMIT,
     GROUP_WORK_EXACT, GROUP_WORK_SHORT, GROUP_SCRATCH_EXACT, GROUP_SCRATCH_SHORT,
-    GROUP_VALUE_EXACT, GROUP_VALUE_SHORT, GROUP_UNIT
+    GROUP_VALUE_EXACT, GROUP_VALUE_SHORT, GROUP_UNIT,
+    GROUP_DOMAIN_EXACT, GROUP_DOMAIN_SHORT, GROUP_UNIT_DOMAIN_EXACT, GROUP_UNIT_DOMAIN_SHORT
 } GroupMode;
 typedef struct GroupWitness {
     XrXirInstance *instance;
@@ -41,7 +45,8 @@ static void group_trace(void *context,XrXirLifecycleEvent event,uint32_t index) 
     CHECK(instance->publication_count==3 && instance->published_counts[0]==3);
     for(uint32_t i=0;i<3;++i)CHECK(instance->published[i] && instance->publication_order[i]==i);
     CHECK(value_unit(instance->slots[1]));
-    if(w->mode==GROUP_UNIT)CHECK(value_unit(instance->slots[0]) && value_unit(instance->slots[2]));
+    if(w->mode==GROUP_UNIT || w->mode==GROUP_UNIT_DOMAIN_EXACT || w->mode==GROUP_UNIT_DOMAIN_SHORT)
+        CHECK(value_unit(instance->slots[0]) && value_unit(instance->slots[2]));
     else {
         XrXirValue field={0};
         CHECK(xr_xir_tuple_get(&instance->slots[0],0,&field)==XR_XIR_VALUE_OK && field.payload==1);
@@ -59,7 +64,7 @@ static XrXirAction group_fault(XrXirCallStatus status) {
 static XrXirAction group_initializer(XrXirCallView *view) {
     GroupWitness *w=(GroupWitness *)view->environment;GroupFrame *frame=view->state;
     XrXirValueAdmission *admission=xr_xir_call_admission(view);CHECK(admission);
-    bool unit=w->mode==GROUP_UNIT;
+    bool unit=w->mode==GROUP_UNIT || w->mode==GROUP_UNIT_DOMAIN_EXACT || w->mode==GROUP_UNIT_DOMAIN_SHORT;
     if(!unit)for(uint32_t i=0;i<2;++i) {
         XrXirValue fields[]={{XR_XIR_I64,0,(int64_t)(i*2+1)},{XR_XIR_I64,0,(int64_t)(i*2+2)}};
         XrXirValueStatus made=xr_xir_tuple_new((XrXirType)256,fields,2,admission,&frame->values[i]);
@@ -67,8 +72,12 @@ static XrXirAction group_initializer(XrXirCallView *view) {
     }
     /* A fresh activation owns each independent operation. Only lower its
      * existing limits; domain allocation history is never reset. */
-    const uint64_t group_work=21+(unit?0:6);
-    const uint64_t group_scratch=3*sizeof(XrXirValue)+(unit?0:sizeof(ValueAdmissionFrame));
+    /* Include complete graph publication: both Tuple roots and all four scalar
+     * leaves, or the three Unit roots. Temporary owners overlap the group table. */
+    const uint64_t group_work=unit?31:56;
+    const uint64_t traversal_scratch=sizeof(ValueAdmissionFrame)>4*sizeof(XrXirValue)?
+        sizeof(ValueAdmissionFrame):4*sizeof(XrXirValue);
+    const uint64_t group_scratch=3*sizeof(XrXirValue)+(unit?0:traversal_scratch);
     uint64_t value_live=xr_xir_domain_stats(admission->domain).live_bytes;
     if(w->mode==GROUP_WORK_EXACT || w->mode==GROUP_WORK_SHORT) {
         CHECK(group_work<=admission->work);admission->work=group_work-(w->mode==GROUP_WORK_SHORT);
@@ -91,7 +100,20 @@ static XrXirAction group_initializer(XrXirCallView *view) {
         CHECK(xr_xir_call_request_cancel(view->activation)==XR_XIR_CALL_CANCEL_REQUESTED);
     w->work_before=admission->work;w->scratch_before=admission->scratch_bytes;
     size_t attempts=runtime_attempts;XrXirDomainStats before=xr_xir_domain_stats(admission->domain);
+    uint64_t domain_work_before=xr_xir_domain_budget_stats(admission->domain).work;
+    const uint64_t domain_work=unit?32:64;
+    uint64_t domain_limit=admission->domain->budget.work_limit;
+    bool domain_control=w->mode>=GROUP_DOMAIN_EXACT;
+    if(domain_control) {
+        CHECK(domain_work<=domain_limit-domain_work_before);
+        bool short_work=w->mode==GROUP_DOMAIN_SHORT || w->mode==GROUP_UNIT_DOMAIN_SHORT;
+        admission->domain->budget.work_limit=domain_work_before+domain_work-short_work;
+    }
     w->prepared=xr_xir_instance_slot_group_init(view,0,3,unit?NULL:frame->values,unit?0:2);
+    if(domain_control) {
+        CHECK(admission->domain->budget.work<=admission->domain->budget.work_limit);
+        admission->domain->budget.work_limit=domain_limit;
+    }
     w->prepare_allocations=runtime_attempts-attempts;
     w->work_after=admission->work;w->scratch_after=admission->scratch_bytes;
     CHECK(w->scratch_before==w->scratch_after);
@@ -107,6 +129,12 @@ static XrXirAction group_initializer(XrXirCallView *view) {
         return group_fault(w->prepared);
     }
     CHECK(w->work_before-w->work_after==group_work);
+    if(runtime_fail_at==SIZE_MAX)
+        printf("SLOT_GROUP_COST unit=%u admission=%llu domain=%llu scratch=%llu allocations=%zu\n",
+            (unsigned)unit,(unsigned long long)group_work,
+            (unsigned long long)(xr_xir_domain_budget_stats(admission->domain).work-domain_work_before),
+            (unsigned long long)group_scratch,w->prepare_allocations);
+    CHECK(xr_xir_domain_budget_stats(admission->domain).work-domain_work_before==domain_work);
     return (XrXirAction){.kind=XR_XIR_ACTION_RETURN};
 }
 static void group_release(XrXirCallView *view,XrXirCallStatus reason) {
@@ -175,7 +203,8 @@ static void group_run(XrXirArtifact *lowered,GroupMode mode,bool vm,size_t fail_
     *attempts=runtime_attempts;runtime_fail_at=SIZE_MAX;
     if(fail_at!=SIZE_MAX)CHECK(status==XR_XIR_CALL_OOM && runtime_attempts>fail_at);
     else if(mode==GROUP_CANCEL_PREPARED || mode==GROUP_CANCEL_COMMITTED)CHECK(status==XR_XIR_CALL_CANCELLED);
-    else if(mode==GROUP_RETAIN_LIMIT || mode==GROUP_WORK_SHORT || mode==GROUP_SCRATCH_SHORT || mode==GROUP_VALUE_SHORT)
+    else if(mode==GROUP_RETAIN_LIMIT || mode==GROUP_WORK_SHORT || mode==GROUP_SCRATCH_SHORT ||
+        mode==GROUP_VALUE_SHORT || mode==GROUP_DOMAIN_SHORT || mode==GROUP_UNIT_DOMAIN_SHORT)
         CHECK(status==XR_XIR_CALL_LIMIT);
     else CHECK(status==XR_XIR_CALL_RETURNED);
     CHECK(witness.published==0 || witness.published==3);
@@ -187,9 +216,14 @@ static void group_run(XrXirArtifact *lowered,GroupMode mode,bool vm,size_t fail_
             CHECK(xr_xir_instance_start(witness.instance,1,NULL,0)==status && before==runtime_attempts);
         }
     }
-    if(mode==GROUP_CANCEL_PREPARED && fail_at==SIZE_MAX)CHECK(witness.prepare_allocations==3 && !witness.published);
+    if(mode==GROUP_CANCEL_PREPARED && fail_at==SIZE_MAX)CHECK(witness.prepare_allocations==2 && !witness.published);
     if(mode==GROUP_CANCEL_COMMITTED && fail_at==SIZE_MAX)CHECK(witness.published==3 && witness.released==3);
-    if(witness.instance)CHECK(xr_xir_instance_free(witness.instance)==XR_XIR_CALL_READY);
+    if(witness.instance) {
+        XrXirCallStatus fault=witness.instance->state==XR_XIR_INSTANCE_FAILED &&
+            (status==XR_XIR_CALL_OOM || status==XR_XIR_CALL_LIMIT)?status:XR_XIR_CALL_READY;
+        XrXirCallStatus retirement=xr_test_instance_retirement(witness.instance,fault);
+        CHECK(xr_xir_instance_free(witness.instance)==retirement);
+    }
     CHECK(runtime_live==live && runtime_bytes==bytes);xr_xir_compile_program_drop(program);
     CHECK(!runtime_live && !runtime_bytes);
 }
@@ -205,6 +239,10 @@ int main(void) {
     }
     for(GroupMode mode=GROUP_CANCEL_PREPARED;mode<=GROUP_VALUE_SHORT;++mode) {
         size_t attempts=0;group_run(normal,mode,false,SIZE_MAX,&attempts);
+    }
+    for(GroupMode mode=GROUP_DOMAIN_EXACT;mode<=GROUP_UNIT_DOMAIN_SHORT;++mode) {
+        size_t attempts=0;
+        group_run(mode>=GROUP_UNIT_DOMAIN_EXACT?unit:normal,mode,false,SIZE_MAX,&attempts);
     }
     xr_xir_compile_artifact_free(normal);xr_xir_compile_artifact_free(unit);source_program_owners_free();
     printf("Slot group: VM and native callbacks, actual OOM=%zu, complete first trace, Unit0payload, retain saturation, prepared/committed cancel, exact/minus-one work/scratch/value, physical0 PASS\n",total);

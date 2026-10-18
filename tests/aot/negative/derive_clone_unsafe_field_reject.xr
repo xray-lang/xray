@@ -1,7 +1,7 @@
 class UnsafeCloneHandle {
     value: i64
 
-    constructor(value: i64) {
+    init(value: i64) {
         this.value = value
     }
 }
@@ -10,7 +10,7 @@ class UnsafeCloneHandle {
 class UnsafeCloneOwner {
     handle: UnsafeCloneHandle
 
-    constructor(handle: UnsafeCloneHandle) {
+    init(handle: UnsafeCloneHandle) {
         this.handle = handle
     }
 }

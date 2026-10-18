@@ -3,7 +3,7 @@ export class Rect {
     w: i64
     h: i64
 
-    constructor(w: i64, h: i64) {
+    init(w: i64, h: i64) {
         this.w = w
         this.h = h
     }

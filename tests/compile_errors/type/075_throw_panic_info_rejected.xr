@@ -2,7 +2,7 @@
 // errors must be enum values.
 class MyError {
     message: string
-    constructor(message: string) {
+    init(message: string) {
         this.message = message
     }
 }

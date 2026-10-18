@@ -5,7 +5,7 @@ class Config {
     host: string
     port: i64
 
-    constructor(h: string, p: i64) {
+    init(h: string, p: i64) {
         this.host = h
         this.port = p
     }
