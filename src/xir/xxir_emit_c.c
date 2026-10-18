@@ -222,7 +222,7 @@ static void emit_edge(CBuffer *buffer, const XrXirFunction *function,
         const XrXirInstruction *phi = &function->instructions[i];
         uint32_t destination = layout->offsets[function->parameter_count + i];
         if (xr_xir_type_is_owned(buffer->types, phi->type))
-            append(buffer, " { XrXirValue value = {%uu, 0, xr_xir_scalar_load(%s, %uu)};\n"
+            append(buffer, " { XrXirValue value = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(%s, %uu));\n"
                 " xr_xir_scalar_store(%s, %uu, 0);\n"
                 " xr_xir_owned_slot_move(%s, %uu, &value); }\n",
                 (uint32_t) phi->type, frame, destination + 8, frame, destination + 8, frame, destination);
@@ -393,7 +393,7 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_CELL_LOCAL_WRITE: {
         uint32_t offset=layout->offsets[op->args[0]];
         XrXirType type=xr_xir_operand_type(function,op->args[0]);
-        append(buffer," XrXirValue cell = {%uu,0,xr_xir_scalar_load(state->frame,%uu)};\n"
+        append(buffer," XrXirValue cell = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame,%uu));\n"
             " XrXirValue incoming = ",(uint32_t)type,offset);
         if (xr_xir_cell_payload_operands(module->types,type,op->op)==2)
             emit_value(buffer,function,layout,op->args[1]);
@@ -427,14 +427,14 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
         break;
     }
     case XR_XIR_FUNCTION_WEAKEN:
-        EMIT_FORMAT(buffer, et_daf5467fbac28c1c, " XrXirValue input = {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+        append(buffer, " XrXirValue input = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
             (uint32_t)xr_xir_operand_type(function, op->args[0]), layout->offsets[op->args[0]]);
         EMIT_FORMAT(buffer, et_ab313a8fcb7dfd19, " status = xr_xir_instance_weaken_function(view, (XrXirType)%u, &input, &value);\n", (uint32_t)op->type);
         break;
     case XR_XIR_FUNCTION_REF:
         for (uint32_t p = 0; p < op->args[1] && emit_work(buffer, 1); ++p) {
             uint32_t id = function->operands[op->args[0] + p];
-            EMIT_FORMAT(buffer, et_7f1bcb7df267d207, "state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+            append(buffer, "state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
                 p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
         }
         append(buffer, "status = xr_xir_instance_function_at(view, %uu, %s, %uu, &value);\n",
@@ -449,14 +449,14 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_SLOT_STORE:
         if (xr_xir_slot_is_unit(module->declarations->slots,module->declarations->slot_count,op))
             EMIT_STATIC(buffer, es_59fdc74f9b91f21a," value = (XrXirValue) {0};\n");
-        else EMIT_FORMAT(buffer, et_5a4704c550508d6f, " value = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+        else append(buffer, " value = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
             (uint32_t) module->declarations->slots[op->immediate].type, layout->offsets[op->args[0]]);
         EMIT_FORMAT(buffer, et_fd94df89587f359a, " status = xr_xir_instance_slot_write(view, %uu, &value, %s);\n",
             (uint32_t) op->immediate, op->op == XR_XIR_SLOT_INIT ? "true" : "false");
         break;
     case XR_XIR_SLOT_GROUP_INIT: {
         for(uint32_t p=0;p<op->args[1] && emit_work(buffer,1);++p)
-            EMIT_FORMAT(buffer, et_aca6525658d4d8e7, " state->arguments[%u] = (XrXirValue) {%uu,0,xr_xir_scalar_load(state->frame,%uu)};\n",
+            append(buffer, " state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame,%uu));\n",
                 p,(uint32_t)xr_xir_operand_type(function,function->operands[op->args[0]+p]),
                 layout->offsets[function->operands[op->args[0]+p]]);
         uint64_t packed=(uint64_t)op->immediate;
@@ -485,7 +485,7 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
     EMIT_FORMAT(buffer, et_79564e185903c374, " { uint32_t callee = %uu; XrXirValue target = {0};\n", (uint32_t) op->immediate);
     if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT) {
         uint32_t id = (uint32_t) op->immediate;
-        EMIT_FORMAT(buffer, et_40228ac8335a0aa3, " target = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+        append(buffer, " target = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
             (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
     }
     if (op->op == XR_XIR_INVOKE || op->op == XR_XIR_INVOKE_INDIRECT) {
@@ -509,7 +509,7 @@ static void emit_resume_call(CBuffer *buffer, const XrXirFunction *function,
         destination, (uint32_t) op->type);
     for (uint32_t p = 0; p < op->args[1] && emit_work(buffer, 1); ++p) {
         uint32_t id = function->operands[op->args[0] + p];
-        EMIT_FORMAT(buffer, et_700bb40b61790c72, " state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+        append(buffer, " state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
             p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
     }
     if (op->op == XR_XIR_CALL_INDIRECT || op->op == XR_XIR_INVOKE_INDIRECT)
@@ -534,7 +534,7 @@ static void emit_resume_go(CBuffer *buffer, const XrXirFunction *function,
     EMIT_STATIC(buffer, es_ff1a07ada386851d, " { XrXirValue output = {0};\n");
     for (uint32_t p = 0; p < op->args[1] && emit_work(buffer, 1); ++p) {
         uint32_t id = function->operands[op->args[0] + p];
-        EMIT_FORMAT(buffer, et_700bb40b61790c72, " state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+        append(buffer, " state->arguments[%u] = xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu));\n",
             p, (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
     }
     EMIT_FORMAT(buffer, et_c8446c9331686535, " XrXirCallStatus status = xr_xir_task_go(view, (XrXirType) %uu, %uu, %s, %uu, &output);\n"
@@ -577,7 +577,7 @@ static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
 
 static void emit_value(CBuffer *buffer, const XrXirFunction *function,
     const XrXirFunctionLayout *layout, uint32_t id) {
-    append(buffer, "(XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)}",
+    append(buffer, "xr_xir_value_load(view->arena,(XrXirType)%uu,xr_xir_scalar_load(state->frame, %uu))",
         (uint32_t) xr_xir_operand_type(function, id), layout->offsets[id]);
 }
 static void emit_value_receiver(CBuffer *buffer, const XrXirFunction *function,
@@ -690,8 +690,9 @@ static void emit_class_step(CBuffer *buffer, const XrXirFunction *function,
         if(op->op == XR_XIR_CLASS_SET) {
             EMIT_LITERAL(buffer," value = ");emit_value(buffer,function,layout,op->args[1]);EMIT_LITERAL(buffer,";\n");
             EMIT_FORMAT(buffer, et_105640b30c89915c," status=xr_xir_class_set(&receiver,%uu,&value,xr_xir_call_admission(view));\n",(uint32_t)op->immediate);
-        } else EMIT_FORMAT(buffer, et_a81a2bf8209a647d," status=xr_xir_value_admit(&receiver,(XrXirType)receiver.type,xr_xir_call_admission(view));\n"
-            " if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,%uu,xr_xir_call_admission(view),&value);\n",(uint32_t)op->immediate);
+        } else append(buffer," status=xr_xir_value_admit(&receiver,(XrXirType)%uu,xr_xir_call_admission(view));\n"
+            " if(status == XR_XIR_VALUE_OK) status=xr_xir_class_get(&receiver,%uu,xr_xir_call_admission(view),&value);\n",
+            (uint32_t)xr_xir_operand_type(function,op->args[0]),(uint32_t)op->immediate);
     }
     EMIT_STATIC(buffer, es_ee88b60d69c79771," if(status != XR_XIR_VALUE_OK) return xr_xir_call_fault(\n"
         " status == XR_XIR_VALUE_OOM \? XR_XIR_RUN_OUT_OF_MEMORY :\n"
@@ -1129,11 +1130,11 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
                 " return (XrXirAction) {XR_XIR_ACTION_THROW, 0, NULL, 0, concrete, {0}, 0}; }\n");
             return;
         }
-        append(buffer, " return (XrXirAction) {%s, 0, NULL, 0, {%uu, 0, ",
-               op->op == XR_XIR_THROW ? "XR_XIR_ACTION_THROW" : "XR_XIR_ACTION_RETURN", type);
-        if (type == XR_XIR_UNIT) EMIT_LITERAL(buffer, "0");
-        else EMIT_U_SHAPE(buffer, et_1cf00b902a57630a, "xr_xir_scalar_load(state->frame, %uu)", "xr_xir_scalar_load(state->frame, ", "u)", layout->offsets[op->args[0]]);
-        EMIT_LITERAL(buffer, "}, {0}, 0};\n");
+        append(buffer, " return (XrXirAction) {%s, 0, NULL, 0, ",
+               op->op == XR_XIR_THROW ? "XR_XIR_ACTION_THROW" : "XR_XIR_ACTION_RETURN");
+        if (type == XR_XIR_UNIT) EMIT_LITERAL(buffer, "{0}");
+        else emit_value(buffer,function,layout,op->args[0]);
+        EMIT_LITERAL(buffer, ", {0}, 0};\n");
         return;
     }
     default:
@@ -1551,7 +1552,7 @@ static void emit_program(CBuffer *buffer, const XrXirArtifact *artifact, const c
         EMIT_U_SHAPE(buffer, et_4c51538f4bdf2e07, ", %uu, ", ", ", "u, ", source->name_length);
         if (source->dependency_count) append(buffer, "%s_dependencies_%u", prefix, m);
         else EMIT_LITERAL(buffer, "NULL");
-        append(buffer, ", %uu, %uu},\n", source->dependency_count, source->initializer);
+        append(buffer, ", %uu, %uu, %uu, %uu},\n", source->dependency_count, source->initializer, source->lexical_scope,source->storage);
     }
     EMIT_FORMAT(buffer, et_69a1907ec586c822, "};\nstatic const XrXirFunctionIdentity %s_identities[] = {\n", prefix);
     for (uint32_t f = 0; f < module->function_count && emit_work(buffer, 1); ++f)

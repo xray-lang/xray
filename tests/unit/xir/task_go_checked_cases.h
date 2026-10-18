@@ -63,7 +63,7 @@ static void task_go_fixture(TaskGoFixture *f) {
         .instructions = f->unknown, .instruction_count = 5};
     f->functions[5] = (XrXirFunction){.name = "init", .name_length = 4, .blocks = &f->init_block,
         .block_count = 1, .instructions = &f->initializer, .instruction_count = 1};
-    f->source = (XrXirSourceModule){"m", 1, NULL, 0, 5};
+    f->source = (XrXirSourceModule){"m", 1, NULL, 0, 5, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations = (XrXirDeclarations){.modules = &f->source, .module_count = 1,
         .functions = f->identities, .root_module = 0, .entry_function = 1};
     f->module = (XrXirModule){.stage = XR_XIR_BUILT, .functions = f->functions, .function_count = 6,
@@ -282,7 +282,7 @@ static void task_go_visibility(void) {
     for (uint32_t mode = 0; mode < 3; ++mode) {
         XrXirCompileContext c = owner_new(caps()); uint64_t baseline = stats(&c).live_bytes;
         TaskGoFixture f; task_go_fixture(&f); uint32_t dependency = 1;
-        XrXirSourceModule modules[2] = {{"m", 1, &dependency, mode ? 1 : 0, 5}, {"n", 1, NULL, 0, 6}};
+        XrXirSourceModule modules[2] = {{"m", 1, &dependency, mode ? 1 : 0, 5, 0,XR_XIR_MODULE_FRESH_STORAGE}, {"n", 1, NULL, 0, 6, 0,XR_XIR_MODULE_FRESH_STORAGE}};
         f.identities[0].module = f.identities[6].module = 1;
         f.identities[0].exported = mode != 1;
         f.functions[6] = (XrXirFunction){.name = "initN", .name_length = 5, .blocks = &f.init_block,

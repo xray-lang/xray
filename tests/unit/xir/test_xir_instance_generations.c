@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "xir/xxir_instance_generation.h"
+#include "xir/xxir_program_packet_internal.h"
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "xir_instance_compile_observer.h"
 #include "xir_runtime_allocations.h"

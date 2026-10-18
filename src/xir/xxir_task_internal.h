@@ -75,6 +75,10 @@ XR_FUNC bool xr_xir_task_executor_view_member(const XrXirTaskExecutor *executor,
 XR_FUNC bool xr_xir_task_executor_cleanup_active(const XrXirTaskExecutor *executor);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_cancel_root(XrXirTaskExecutor *executor);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor);
+/* Stops and drains the whole activation group with no control allocation.
+ * Language cleanup keeps its ordinary budget. The stopped executor remains
+ * owned so its actual terminal root can still be observed. */
+XR_FUNC XrXirCallStatus xr_xir_task_executor_drain(XrXirTaskExecutor *executor);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_free(XrXirTaskExecutor *executor, XrXirCallBudget *accounting);
 XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task);
 #endif // XXIR_TASK_INTERNAL_H

@@ -16,8 +16,8 @@
 #include "../toolchain/xcompiler_session.h"
 #include "../toolchain/xcompiler_arena_backing.h"
 #include "../os/os_file_read.h"
+#include <limits.h>
 #define GRAPH_INITIAL_CAP 16
-#define GRAPH_MAX_MODULES 1024
 #define GRAPH_EMBEDDED_STDLIB_PREFIX "<embedded stdlib>/"
 extern void xr_program_destroy(struct AstNode *ast);
 static XrModuleStatus graph_failure(XrModuleGraph *graph, XrModuleStatus status) {
@@ -28,14 +28,12 @@ static void spec_cleanup(XrModuleSpec *spec) {
     xr_compile_resources_free(spec->canonical); xr_compile_resources_free(spec->logical_path);
     xr_compile_resources_free(spec->source_path); xr_compile_resources_free((char *)spec->authority.namespace_id);
     xr_compile_resources_free((char *)spec->authority.physical_root); xr_compile_resources_free(spec->dep_indices);
-    if (spec->ast) xr_program_destroy(spec->ast);
+    if (spec->ast && !spec->ast_borrowed) xr_program_destroy(spec->ast);
     xr_hashmap_owned_free(spec->export_symbols); *spec = (XrModuleSpec){0};
 }
 XR_FUNC void xr_compile_module_graph_free(XrModuleGraph *graph) {
     if (!graph) return;
     for (int i = 0; i < graph->spec_count; ++i) {
-        if (graph->specs[i].ast == graph->borrowed_entry_ast)
-            graph->specs[i].ast = NULL;
         spec_cleanup(&graph->specs[i]);
     }
     xr_compile_resources_free(graph->specs); xr_hashmap_owned_free(graph->id_index);
@@ -119,7 +117,7 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_find_named_dependency(const XrMod
 }
 static int graph_add_spec(ModuleWork *work, XrModuleGraph *graph, const char *canonical, const char *logical,
     const char *path, XrModuleKind kind, const XrModuleIdentityAuthority *authority) {
-    if (graph->spec_count >= GRAPH_MAX_MODULES) { module_status(work,XR_MODULE_BUDGET); return -1; }
+    if (graph->spec_count >= XR_MODULE_GRAPH_MAX_MODULES) { module_status(work,XR_MODULE_BUDGET); return -1; }
     if (graph->spec_count >= graph->spec_capacity) {
         int capacity = graph->spec_capacity*2; void *memory = graph->specs;
         if (!module_resize(work,&memory,(size_t)capacity*sizeof(*graph->specs))) return -1;
@@ -137,7 +135,7 @@ static int graph_add_spec(ModuleWork *work, XrModuleGraph *graph, const char *ca
 static void spec_add_dep(ModuleWork *work, XrModuleSpec *spec, int index) {
     for (int i = 0; i < spec->dep_count && module_work(work,1); ++i) if (spec->dep_indices[i] == index) return;
     if (spec->dep_count == spec->dep_capacity) {
-        if (spec->dep_capacity >= GRAPH_MAX_MODULES) { module_status(work,XR_MODULE_BUDGET); return; }
+        if (spec->dep_capacity >= XR_MODULE_GRAPH_MAX_MODULES) { module_status(work,XR_MODULE_BUDGET); return; }
         int capacity = spec->dep_capacity ? spec->dep_capacity*2 : 4; void *memory = spec->dep_indices;
         if (!module_resize(work,&memory,(size_t)capacity*sizeof(int))) return;
         spec->dep_indices = memory; spec->dep_capacity = capacity;
@@ -213,6 +211,7 @@ typedef struct GraphSourceRoot {
     XrModuleKind kind;
     const XrModuleIdentityAuthority *authority;
     const char *source;
+    AstNode *ast;
 } GraphSourceRoot;
 static XrModuleStatus parse_status(XrParseStatus status) {
     switch (status) {
@@ -229,13 +228,11 @@ typedef struct GraphParseCapture {
     uint32_t module;
     const char *text;
 } GraphParseCapture;
-static void graph_parse_diagnostic(void *context,int line,int column,int end_line,int end_column,
-    const char *message) {
-    (void)end_line;(void)end_column;
-    GraphParseCapture *capture=context;
-    XrModuleParseDiagnostic *diagnostic=&capture->graph->parse_diagnostic;
+static void graph_source_diagnostic(GraphParseCapture *capture,XrModuleSourceDiagnosticOrigin origin,
+    int line,int column,const char *message) {
+    XrModuleSourceDiagnostic *diagnostic=&capture->graph->source_diagnostic;
     if(diagnostic->present)return;
-    diagnostic->present=true;diagnostic->module=capture->module;
+    diagnostic->present=true;diagnostic->origin=origin;diagnostic->module=capture->module;
     diagnostic->line=line;diagnostic->column=column;
     if(!message){module_status(capture->work,XR_MODULE_INVALID);return;}
     size_t length=0;
@@ -244,6 +241,14 @@ static void graph_parse_diagnostic(void *context,int line,int column,int end_lin
         ++length;
     }
     if(module_copy(capture->work,diagnostic->message,message,length))diagnostic->message[length]=0;
+}
+static void graph_parse_diagnostic(void *context,int line,int column,int end_line,int end_column,
+    const char *message) {
+    (void)end_line;(void)end_column;
+    GraphParseCapture *capture=context;
+    if(capture->graph->source_diagnostic.present)return;
+    graph_source_diagnostic(context,XR_MODULE_DIAGNOSTIC_PARSE,line,column,message);
+    XrModuleSourceDiagnostic *diagnostic=&capture->graph->source_diagnostic;
     if(capture->work->status!=XR_MODULE_OK)return;
     size_t source_length=module_length(capture->work,capture->text);
     if(capture->work->status!=XR_MODULE_OK)return;
@@ -298,6 +303,12 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
             if (spec->status < XR_MODSPEC_RESOLVED) graph_checked_imports(work,graph,index);
             continue;
         }
+        if (index == entry && root->ast) {
+            spec->ast = root->ast; spec->ast_borrowed = true;
+            spec->status = XR_MODSPEC_PARSED;
+            graph_imports(work,graph,index,root->ast);
+            continue;
+        }
         bool supplied = index == entry && root->source;
         const char *text = root->source; XrFileBytes bytes = {0};
         if (graph->resolver->overlay) {
@@ -319,14 +330,25 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
             if (!text) module_status(work,XR_MODULE_INVALID);
         } else if (!supplied) {
             module_status(work,read_status(xr_os_io_read_under_root(&policy,spec->authority.physical_root,spec->logical_path,SIZE_MAX-1,&bytes)));
-            for (size_t i = 0; i < bytes.size && module_work(work,1); ++i)
-                if (!bytes.data[i]) { module_status(work,XR_MODULE_INVALID); break; }
+            size_t line=1,line_start=0;
+            for (size_t i = 0; i < bytes.size && module_work(work,1); ++i) {
+                if (!bytes.data[i]) {
+                    if(line>INT_MAX || i-line_start>=INT_MAX)module_status(work,XR_MODULE_BUDGET);
+                    else {
+                        GraphParseCapture capture={.work=work,.graph=graph,.module=(uint32_t)index,.text=text};
+                        graph_source_diagnostic(&capture,XR_MODULE_DIAGNOSTIC_INPUT,(int)line,(int)(i-line_start)+1,
+                            "source text contains an embedded NUL");
+                        module_status(work,XR_MODULE_INVALID);
+                    }
+                    break;
+                }
+                if(bytes.data[i]=='\n'){++line;line_start=i+1;}
+            }
             text = bytes.data;
         }
-        bool borrowed = index == graph->entry_index && graph->borrowed_entry_ast;
-        AstNode *ast = borrowed ? graph->borrowed_entry_ast : NULL;
-        if (work->status == XR_MODULE_OK && !borrowed) {
-            GraphParseCapture capture={work,graph,(uint32_t)index,text};
+        AstNode *ast = NULL;
+        if (work->status == XR_MODULE_OK) {
+            GraphParseCapture capture={.work=work,.graph=graph,.module=(uint32_t)index,.text=text};
             const XrParseDiagnostics diagnostics={graph_parse_diagnostic,&capture,20};
             module_status(work,parse_status(xr_compile_parse_with_diagnostics(
                 graph->compiler_session,text,spec->source_path,&diagnostics,&ast)));
@@ -334,7 +356,7 @@ static void graph_expand(ModuleWork *work, XrModuleGraph *graph, const GraphSour
         if (work->status == XR_MODULE_OK) module_status(work,module_resource_status(
             xr_compile_module_source_fingerprint(graph->resources,text,&spec->source_content_fingerprint)));
         xr_compile_resources_free(bytes.data);
-        if (work->status != XR_MODULE_OK) { if (ast && !borrowed) xr_program_destroy(ast); break; }
+        if (work->status != XR_MODULE_OK) { if (ast) xr_program_destroy(ast); break; }
         spec->ast = ast; spec->status = XR_MODSPEC_PARSED;
         graph_imports(work,graph,index,ast);
     }
@@ -363,7 +385,7 @@ static XrModuleStatus graph_include_path(XrModuleGraph *graph, const char *path,
     if (work.status == XR_MODULE_OK) module_io(&work,xr_realpath_owned(&policy,path,&absolute));
     if (work.status == XR_MODULE_OK) module_status(&work,xr_compile_module_identity_from_source(graph->resources,authority,absolute,&identity,&logical));
     if (work.status == XR_MODULE_OK) {
-        GraphSourceRoot root = {identity,logical,absolute,authority_kind(authority),authority,NULL}; graph_expand(&work,graph,&root);
+        GraphSourceRoot root = {identity,logical,absolute,authority_kind(authority),authority,NULL,NULL}; graph_expand(&work,graph,&root);
     }
     xr_compile_resources_free(absolute); xr_compile_resources_free(identity); xr_compile_resources_free(logical);
     return graph_result(&work,graph,error);
@@ -383,9 +405,11 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_build_source(XrModuleGraph *graph
     if (!authority || authority->kind != XR_MODULE_IDENTITY_MEMORY) return XR_MODULE_INVALID;
     return xr_compile_module_graph_build_logical_source(graph,authority,NULL,NULL,source,error);
 }
-static XrModuleStatus graph_include_logical_source(XrModuleGraph *graph,
-    const XrModuleIdentityAuthority *authority, const char *logical, const char *path, const char *source, char **error) {
-    if (!source || !authority) return XR_MODULE_INVALID;
+typedef struct GraphLogicalInput { const char *source; AstNode *ast; } GraphLogicalInput;
+static XrModuleStatus graph_include_logical_input(XrModuleGraph *graph,
+    const XrModuleIdentityAuthority *authority, const char *logical, const char *path,
+    GraphLogicalInput input, char **error) {
+    if ((!input.source && !input.ast) || !authority) return XR_MODULE_INVALID;
     ModuleWork work = {graph->resources,graph->resolution_status};
     char *identity = NULL, *physical = NULL, *physical_logical = NULL;
     if (work.status == XR_MODULE_OK) module_status(&work,xr_compile_module_identity_from_logical(graph->resources,authority,logical,&identity));
@@ -397,7 +421,8 @@ static XrModuleStatus graph_include_logical_source(XrModuleGraph *graph,
         } else if (authority->kind != XR_MODULE_IDENTITY_STDLIB) module_status(&work,XR_MODULE_INVALID);
     }
     if (work.status == XR_MODULE_OK) {
-        GraphSourceRoot root = {identity,logical,path,authority_kind(authority),authority,source}; graph_expand(&work,graph,&root);
+        GraphSourceRoot root = {identity,logical,path,authority_kind(authority),authority,input.source,input.ast};
+        graph_expand(&work,graph,&root);
     }
     xr_compile_resources_free(identity); xr_compile_resources_free(physical); xr_compile_resources_free(physical_logical);
     return graph_result(&work,graph,error);
@@ -405,25 +430,28 @@ static XrModuleStatus graph_include_logical_source(XrModuleGraph *graph,
 XR_FUNC XrModuleStatus xr_compile_module_graph_build_logical_source(XrModuleGraph *graph,
     const XrModuleIdentityAuthority *authority, const char *logical, const char *path, const char *source, char **error) {
     if (!graph || !graph->resources || graph->spec_count) return XR_MODULE_INVALID;
-    return graph_include_logical_source(graph,authority,logical,path,source,error);
+    return graph_include_logical_input(graph,authority,logical,path,(GraphLogicalInput){source,NULL},error);
 }
 XR_FUNC XrModuleStatus xr_compile_module_graph_build_ast(XrModuleGraph *graph,
     const XrModuleSourceAstInput *input, char **error) {
-    if (!graph || !graph->resources || graph->spec_count || !input || !input->source ||
-        !input->program || input->program->type != AST_PROGRAM ||
-        !xr_compiler_arena_matches_state(input->program->as.program.arena,
-            xr_compile_session_compile_state(graph->compiler_session)))
-        return XR_MODULE_INVALID;
-    XrCompileResourceStatus state = xr_compile_session_resource_status(graph->compiler_session);
-    if (state != XR_COMPILE_RESOURCE_OK) return module_resource_status(state);
-    graph->borrowed_entry_ast = input->program;
-    return graph_include_logical_source(graph, input->authority, input->logical_path,
-        input->source_path, input->source, error);
+    if (!graph || !graph->resources || graph->spec_count || !input || !input->program ||
+        input->program->type != AST_PROGRAM || !input->program->as.program.owns_arena ||
+        input->program->as.program.count < 0 ||
+        input->program->as.program.capacity < input->program->as.program.count ||
+        (input->program->as.program.count && !input->program->as.program.statements)) return XR_MODULE_INVALID;
+    XrCompileState *state = xr_compiler_arena_compile_state(input->program->as.program.arena);
+    if (!state || xr_compile_state_resources(state) != graph->resources ||
+        (state != xr_compile_session_compile_state(graph->compiler_session) && xr_compile_state_has_sessions(state))) return XR_MODULE_INVALID;
+    XrCompileResourceStatus status = xr_compiler_arena_capture_status(input->program->as.program.arena,state);
+    if (status != XR_COMPILE_RESOURCE_OK) return graph_failure(graph,module_resource_status(status));
+    if (graph->resolver->overlay) return XR_MODULE_INVALID;
+    return graph_include_logical_input(graph,input->authority,input->logical_path,input->source_path,
+        (GraphLogicalInput){input->source,input->program},error);
 }
 XR_FUNC XrModuleStatus xr_compile_module_graph_include_logical_source(XrModuleGraph *graph,
     const XrModuleIdentityAuthority *authority, const char *logical, const char *path, const char *source, char **error) {
     if (!graph || !graph->resources || graph->entry_index < 0) return XR_MODULE_INVALID;
-    return graph_include_logical_source(graph,authority,logical,path,source,error);
+    return graph_include_logical_input(graph,authority,logical,path,(GraphLogicalInput){source,NULL},error);
 }
 XR_FUNC XrModuleStatus xr_compile_module_graph_include_catalog_logical(XrModuleGraph *graph,
     const XrModuleIdentityAuthority *authority, const char *logical, int *output) {

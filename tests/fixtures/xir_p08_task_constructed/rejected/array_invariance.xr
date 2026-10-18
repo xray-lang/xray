@@ -1,0 +1,2 @@
+fn worker()->Array<i64>{return [10,20]}
+export fn main()->i64{const task:Task<Array<f64>> = go worker();return 7}

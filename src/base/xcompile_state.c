@@ -15,6 +15,7 @@
 struct XrCompileState {
     XrCompileResources *resources;
     _Atomic uint64_t references;
+    _Atomic uint64_t sessions;
     _Atomic int failure;
 };
 
@@ -26,6 +27,7 @@ XR_FUNC XrCompileResourceStatus xr_compile_state_new(XrCompileResources *resourc
     XrCompileState *state = memory;
     state->resources = resources;
     atomic_init(&state->references, 1);
+    atomic_init(&state->sessions, 0);
     atomic_init(&state->failure, XR_COMPILE_RESOURCE_OK);
     *output = state;
     return XR_COMPILE_RESOURCE_OK;
@@ -67,6 +69,24 @@ XR_FUNC void xr_compile_state_release(XrCompileState *state) {
 
 XR_FUNC XrCompileResources *xr_compile_state_resources(const XrCompileState *state) {
     return state ? state->resources : NULL;
+}
+XR_FUNC XrCompileResourceStatus xr_compile_state_session_open(XrCompileState *state) {
+    XrCompileResourceStatus status=xr_compile_state_status(state);
+    if (status!=XR_COMPILE_RESOURCE_OK) return status;
+    uint64_t count=atomic_load_explicit(&state->sessions,memory_order_relaxed);
+    for (;;) {
+        if (count==UINT64_MAX) return xr_compile_state_fail(state,XR_COMPILE_RESOURCE_BUDGET);
+        if (atomic_compare_exchange_weak_explicit(&state->sessions,&count,count+1,
+            memory_order_acq_rel,memory_order_relaxed)) return XR_COMPILE_RESOURCE_OK;
+    }
+}
+XR_FUNC void xr_compile_state_session_close(XrCompileState *state) {
+    XR_CHECK(state,"A parser session retains its actual state");
+    uint64_t count=atomic_fetch_sub_explicit(&state->sessions,1,memory_order_acq_rel);
+    XR_CHECK(count,"Only a registered parser session can close");
+}
+XR_FUNC bool xr_compile_state_has_sessions(const XrCompileState *state) {
+    return state && atomic_load_explicit(&state->sessions,memory_order_acquire)!=0;
 }
 
 XR_FUNC XrCompileResourceStatus xr_compile_state_work(XrCompileState *state, uint64_t units) {

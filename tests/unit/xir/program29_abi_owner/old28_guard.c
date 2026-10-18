@@ -9,6 +9,10 @@
 _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==28 && XR_XIR_VALUE_ABI_VERSION==20 && XR_XIR_CALL_ABI_VERSION==25,"authentic prior ABI");
 _Static_assert(sizeof(XrXirNominalDeclaration)==88 && sizeof(XrXirNominalIdentity)==72,"actual prior two strides");
 extern const XrXirProgramSpec old28_program;
+void old28_checked_packet(const uint8_t **bytes,size_t *length,const uint8_t **identity) {
+    CHECK(bytes && length && identity);
+    *bytes=old28_program.proof.bytes;*length=old28_program.proof.length;*identity=old28_program.proof.identity;
+}
 static unsigned callbacks,releases,leases;
 static void *allocation;
 static XrXirProgramSpec spec;

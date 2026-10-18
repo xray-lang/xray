@@ -38,6 +38,9 @@ typedef struct XrCompilerSessionScope {
  * analyzer, REPL, cache or dependency-graph ownership belongs to this session.
  * Completed AST arenas retain their own state and may outlive the session. */
 XR_FUNC XrCompilerSessionStatus xr_compile_session_new(XrCompileResources *resources, XrCompilerSession **output);
+/* A retained AST owner can create a temporary parser context on its exact
+ * state. It shares sticky failures and the sole ledger without copying quota. */
+XR_FUNC XrCompilerSessionStatus xr_compile_session_new_with_state(XrCompileState *state, XrCompilerSession **output);
 XR_FUNC void xr_compile_session_free(XrCompilerSession *session);
 XR_FUNC XrCompileResources *xr_compile_session_resources(const XrCompilerSession *session);
 XR_FUNC XrCompileState *xr_compile_session_compile_state(const XrCompilerSession *session);

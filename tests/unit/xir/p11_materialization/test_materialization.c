@@ -21,7 +21,7 @@
 #include "xir/xxir_ctfe.h"
 #include "xir/xxir_library_catalog.h"
 #include "base/xsha256.h"
-#include "materialization75_golden.h"
+#include "materialization76_golden.h"
 static const XrCompileResourceLimits caps={UINT64_C(67108864),UINT64_C(8388608),UINT64_C(128000000)};
 typedef struct PreparedMaterialization {
     XrXirSourceResult source;
@@ -182,7 +182,15 @@ static void execute(XrXirArtifact **artifact,const char *entry,uint32_t bindings
         if (module->declarations->functions[f].method_kind==XR_XIR_MATERIALIZER) { inner=f;break; }
     CHECK(inner!=UINT32_MAX);compiler_entries(*artifact,inner,run);
     CHECK(xr_xir_compile_construction_materialization_count((*artifact)->construction)==bindings);
-    XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(artifact,&program)==XR_XIR_OK && !*artifact);
+    XrXirProgram *program=NULL;
+    XrXirStatus received=xr_xir_compile_vm_program_take(artifact,&program);
+    if (received!=XR_XIR_OK) {
+        XrCompileResourceStats usage=stats(xr_xir_compile_artifact_context(*artifact));
+        fprintf(stderr,"Materializer Program reception status=%u allocated=%llu peak=%llu work=%llu\n",
+            (unsigned)received,(unsigned long long)usage.allocated_bytes,(unsigned long long)usage.peak_bytes,
+            (unsigned long long)usage.work);
+    }
+    CHECK(received==XR_XIR_OK && !*artifact);
     XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
     config.metadata_limit=1048576;config.value_limit=1048576;config.call_limit=1048576;config.work_limit=1000000;
     XrXirInstance *instances[2]={NULL,NULL};
@@ -285,12 +293,12 @@ static void independent_wire(void) {
     XrXirCompileContext context;context_new(&context);XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
     wire_built(&context);
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_checked_read(&context,materialization75_golden,sizeof(materialization75_golden),&checked,&diagnostic);
+    XrXirStatus status=xr_xir_compile_checked_read(&context,materialization76_golden,sizeof(materialization76_golden),&checked,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"Independent materializer wire status=%u function=%u instruction=%u\n",
         (unsigned)status,diagnostic.function,diagnostic.instruction);
     CHECK(status==XR_XIR_OK && checked);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.length==sizeof(materialization75_golden) && !memcmp(packet.bytes,materialization75_golden,packet.length));
+    CHECK(packet.length==sizeof(materialization76_golden) && !memcmp(packet.bytes,materialization76_golden,packet.length));
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

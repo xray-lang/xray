@@ -1,0 +1,5 @@
+import "./sibling" as sibling
+var state=40
+fn next()->i64{state+=1;return state+sibling.answer()-42}
+const bytes="owned\0中"
+11

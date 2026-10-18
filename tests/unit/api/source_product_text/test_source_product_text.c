@@ -158,7 +158,7 @@ static void rooted_text_authority(void) {
     XrXirSourceProduct *product = NULL;
     XrXirSourceProductDiagnostic diagnostic = {0};
     XrXirStatus built = xr_xir_compile_source_product_build_text(&w.request, &text, &product, &diagnostic);
-    if (built != XR_XIR_OK) fprintf(stderr, "rooted status=%d stage=%u path=%s message=%s\n", built, (unsigned)diagnostic.stage, diagnostic.source_path ? diagnostic.source_path : "", diagnostic.source.message);
+    if (built != XR_XIR_OK) fprintf(stderr, "rooted status=%d stage=%u path=%s message=%s\n", built, (unsigned)diagnostic.stage, diagnostic.failure.path ? diagnostic.failure.path : "", diagnostic.source.message);
     CHECK(built == XR_XIR_OK);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);
     CHECK(xr_xir_compile_source_product_public_admit(product, NULL) == XR_XIR_OK);
@@ -311,6 +311,7 @@ static void ast_owned_execution_and_guards(void) {
 }
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--compiler-faults")) { complete_compiler_failures(); ast_complete_faults_and_limits(); }
+    else if (argc == 2 && !strcmp(argv[1], "--ast-smoke")) { rooted_text_authority(); ast_owned_execution_and_guards(); }
     else { CHECK(argc == 1); text_owned_execution(); rejects_and_diagnostics(); exact_resources_and_retry(); rooted_text_authority(); ast_owned_execution_and_guards(); }
     puts("owned explicit source product PASS"); return 0;
 }

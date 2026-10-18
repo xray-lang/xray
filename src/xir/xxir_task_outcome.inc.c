@@ -65,7 +65,14 @@ static XrXirCallStatus task_core_error_admit(XrXirTaskExecutor *executor, const 
 }
 static XrXirCallStatus task_core_outcome_admit(XrXirTaskExecutor *executor, const XrXirCallResult *outcome) {
     if (outcome->status == XR_XIR_CALL_THROWN) return task_core_error_admit(executor, &outcome->value);
-    /* Canonical Call admission already checked i64/string returns and the
+    if (outcome->status == XR_XIR_CALL_RETURNED && !xr_xir_task_scalar_result_supported((XrXirType)outcome->value.type)) {
+        XrXirValueAdmission admission = {executor->config.program->arena, executor->config.domain, NULL, NULL,
+            executor->config.poll_limit, executor->config.call_limit};
+        XrXirValueStatus status = xr_xir_value_admit(&outcome->value, (XrXirType)outcome->value.type, &admission);
+        return status == XR_XIR_VALUE_OK ? XR_XIR_CALL_READY : status == XR_XIR_VALUE_LIMIT ? XR_XIR_CALL_LIMIT :
+            status == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM : XR_XIR_CALL_BAD_STATE;
+    }
+    /* Canonical Call admission already checked typed scalar/string returns and the
      * exact scalar FaultDetail plus immutable string panic representation. */
     return XR_XIR_CALL_READY;
 }

@@ -14,7 +14,8 @@
 #include "xxir.h"
 #include "../base/xstable_id.h"
 typedef enum XrXirSourceDiagnosticOrigin {
-    XR_XIR_SOURCE_DIAGNOSTIC_DEFAULT, XR_XIR_SOURCE_DIAGNOSTIC_PARSE
+    XR_XIR_SOURCE_DIAGNOSTIC_DEFAULT, XR_XIR_SOURCE_DIAGNOSTIC_PARSE,
+    XR_XIR_SOURCE_DIAGNOSTIC_INPUT
 } XrXirSourceDiagnosticOrigin;
 typedef struct XrXirSourceDiagnostic {
     XrXirStatus status;

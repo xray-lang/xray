@@ -173,9 +173,9 @@ static bool source_destructure_binding(SourceContext *ctx,AstNode *node,bool top
                     {field->type==XR_XIR_UNIT ? 0 : field->value.id,0},{0},0,{0}},&field->value)) return false;
         }
         bool unit=field->type==XR_XIR_UNIT && node->as.destructure_decl.is_const;
-        *field->symbol=(SourceName){NULL,field->pattern->as.identifier.name,NULL,node,
-            unit ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,unit ? UINT32_MAX : field->value.id,
-            ctx->module,field->type,!node->as.destructure_decl.is_const,false,0,true,false,0,0};
+        *field->symbol=(SourceName){.next=NULL,.name=field->pattern->as.identifier.name,.parameters=NULL,.node=node,.kind=unit ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL,
+            .index=unit ? UINT32_MAX : field->value.id,.module=ctx->module,.type=field->type,.mutable=!node->as.destructure_decl.is_const,
+            .construction=false,.declaration=0,.inferred=true,.checked_library=false};
     }
     if (top) {
         if (!plan.count) return true;

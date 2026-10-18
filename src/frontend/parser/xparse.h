@@ -235,10 +235,12 @@ XR_FUNC void xr_parser_stream_restore(Parser *parser, const XrParserStreamState 
 // and keeps the shared state/ledger alive until xr_program_destroy().
 XR_FUNC XrParseStatus xr_compile_parse(XrCompilerSession *session, const char *source, AstNode **output);
 XR_FUNC XrParseStatus xr_compile_parse_repl_unit(XrCompilerSession *session, const char *source, AstNode **output);
+XR_FUNC XrParseStatus xr_compile_parse_repl_with_trivia(XrCompilerSession *session, const char *source,
+    const char *source_file, const XrParseDiagnostics *diagnostics, AstNode **output);
 XR_FUNC XrParseStatus xr_compile_parse_with_source(XrCompilerSession *session, const char *source,
                                            const char *source_file, AstNode **output);
-/* Messages borrow only during the callback. A supplied consumer receives
- * actual parser errors without console output or a summary. */
+/* Same owning parse without trivia. Diagnostic messages borrow only during
+ * the callback; a supplied consumer receives errors without console output. */
 XR_FUNC XrParseStatus xr_compile_parse_with_diagnostics(XrCompilerSession *session, const char *source,
     const char *source_file, const XrParseDiagnostics *diagnostics, AstNode **output);
 XR_FUNC XrParseStatus xr_compile_parse_with_trivia(XrCompilerSession *session, const char *source,

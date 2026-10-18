@@ -20,6 +20,7 @@
 #include "xxir_defaults_internal.h"
 #include "xxir_generic.h"
 #include "xxir_types.h"
+#include "xxir_task_result_internal.h"
 #include "xxir_operand_roles.h"
 #include "xxir_initialization.h"
 #include "xxir_constraint_proof.h"
@@ -204,7 +205,7 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
             (uint32_t) op->immediate == d->modules[callee_module].initializer ||
             !xr_xir_module_imports(d, caller_module, callee_module))
             return XR_XIR_BAD_STRUCTURE;
-        if (caller_module != callee_module && !d->functions[op->immediate].exported && !materializer) {
+        if (!xr_xir_module_same_scope(d,caller_module,callee_module) && !d->functions[op->immediate].exported && !materializer) {
             bool source_visible = false;
             XrXirStatus status = instance_call_visibility(module, caller_id,
                 (uint32_t)(op - function->instructions), (uint32_t)op->immediate,
@@ -960,8 +961,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             const XrXirTypeNode *task = xr_xir_type_node(context->module->types, expected);
             if (!task || task->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
             XrXirType result = task->element;
-            if (context->module->stage == XR_XIR_LOWERED && result != XR_XIR_UNIT &&
-                result != XR_XIR_BOOL && result != XR_XIR_I64 && result != XR_XIR_STRING)
+            if (context->module->stage == XR_XIR_LOWERED && !xr_xir_task_result_supported(context->module->types, result))
                 return XR_XIR_UNSUPPORTED;
         }
         if (op->op == XR_XIR_NULLABLE_SOME)

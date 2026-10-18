@@ -14,8 +14,9 @@ static bool source_iteration_binding(SourceContext *ctx, AstNode *node,
     if (source_text_same(ctx, NULL, name, "_")) return true;
     SourceName *symbol = source_alloc(ctx,1,sizeof(*symbol));
     if (!symbol) return false;
-    *symbol = (SourceName){ctx->locals,name,NULL,node,SOURCE_LOCAL,value.id,ctx->module,
-        value.type,false,false,0, false, false,0,0};
+    *symbol = (SourceName){.next=ctx->locals,.name=name,.parameters=NULL,.node=node,.kind=SOURCE_LOCAL,
+            .index=value.id,.module=ctx->module,.type=value.type,.mutable=false,
+            .construction=false,.declaration=0,.inferred=false,.checked_library=false};
     ctx->locals = symbol;
     if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,
         ctx->bodies[ctx->function].declaration,source_query_range(ctx,node,name))) return false;

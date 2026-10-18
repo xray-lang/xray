@@ -17,6 +17,7 @@
 struct XrCompilerSession;
 struct XrLockfile;
 struct XrXirLibraryCatalog;
+struct AstNode;
 typedef struct XrXirSourceRequest {
     struct XrCompilerSession *session;
     const char *entry_path;
@@ -60,10 +61,13 @@ typedef struct XrXirSourceAst {
     struct AstNode *program;
 } XrXirSourceAst;
 /* Check the actual caller AST, without reparsing the entry or taking ownership.
- * Its arena must belong to request->session's exact state. Tree, bytes and
+ * Its active arena must belong to request->session's exact state. An owning
+ * AST whose producer session has closed may retain its original ledger and
+ * enter another session on that ledger. Tree, optional diagnostic bytes and
  * authority are borrowed exclusively for this call; results and diagnostics
  * own all published data. Source text supplies diagnostic provenance, not an
- * alternative syntax input. Imports use the ordinary graph and checker. */
+ * alternative syntax input. No entry file is read or synthesized, and an AST
+ * has no source-byte fingerprint. Imports use the ordinary graph and checker. */
 XR_FUNC XrXirStatus xr_xir_compile_source_check_ast(const XrXirSourceRequest *request,
     const XrXirSourceAst *input, XrXirSourceResult *output,
     XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure);

@@ -77,7 +77,6 @@ src/api/xvm_exec.c
 src/app/cli/xcli_spec.c
 src/app/cli/xcmd_compile.c
 src/app/cli/xcmd_language.c
-src/app/cli/xcmd_plan.c
 src/app/cli/xcmd_repl.c
 src/app/cli/xcmd_test.c
 src/app/dap/xdap_protocol.c

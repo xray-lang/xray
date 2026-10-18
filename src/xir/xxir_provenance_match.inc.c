@@ -639,7 +639,7 @@ static XrXirStatus provenance_declarations(ProvenanceMatch *c) {
 
     for (uint32_t m = 0; m < a->module_count; ++m) {
         const XrXirSourceModule *from = &a->modules[m], *to = &b->modules[m];
-        if (from->dependency_count != to->dependency_count ||
+        if (from->lexical_scope != to->lexical_scope || from->storage!=to->storage || from->dependency_count != to->dependency_count ||
             (to->dependency_count && !to->dependencies) ||
             !provenance_ordinary(c, from->initializer, to->initializer)) return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status = provenance_bytes(c, from->name, from->name_length, to->name, to->name_length);

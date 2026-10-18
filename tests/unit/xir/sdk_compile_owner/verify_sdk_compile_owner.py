@@ -87,13 +87,13 @@ def main():
             assert code != 0 and len(unresolved) == 1 and re.search(r'\b' + re.escape(symbol) + r'\b', unresolved[0]), (symbol, unresolved, text)
             outcomes[symbol] = 'exact retired symbol unresolved; no other missing symbol'
     manifest = json.loads((bundle / 'sdk_manifest.json').read_text())
-    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [28, 74, 24, 29, 31]
+    assert [manifest[name] for name in ('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi')] == [30, 76, 24, 29, 33]
     sys.path.insert(0,str(root/'scripts'))
     from derive_xir_sdk_abi import prepare
     with tempfile.TemporaryDirectory(prefix='sdk-owner-independent-abi-') as temporary:
         facts=Path(temporary)/'facts';prepare(facts)
         expected=json.loads((facts/'EXPECTED.json').read_text())['rows']
-    assert len(expected)==361 and len({row['id'] for row in expected})==361
+    assert len(expected)==370 and len({row['id'] for row in expected})==370
     assert manifest['abi_measurements']==[dict(id=row['id'],value=row['value']) for row in expected]
     assert [row['path'] for row in manifest['files'] if row['kind'] == 5] == sorted('lib/' + name + '.lib' for name in ARCHIVES)
     def status(name, document, expected, sdk_root=bundle):

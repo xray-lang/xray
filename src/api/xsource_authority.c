@@ -13,6 +13,7 @@
 #include "../base/xio_policy.inc.h"
 #include "../os/os_fs.h"
 #include "../xir/xxir_library_catalog.h"
+#include <limits.h>
 
 struct XrSourceAuthority {
     XrXirCompileContext context;
@@ -22,6 +23,7 @@ struct XrSourceAuthority {
     XrModuleIdentityAuthority script_authority;
     char *script_root;
     char *entry_path;
+    char *logical_path;
     XrModuleOverlay *overlay;
     const XrXirLibraryCatalog *libraries;
 };
@@ -150,7 +152,7 @@ static bool authority_entry_path(XrIoContext *io, const char *path) {
 /* canonical_directory is a real existing directory. Missing suffix components
  * are retained verbatim after the existing path helper canonicalizes that parent.
  * This follows the existing OS path contract; it does not invent symlink equality. */
-static XrOsIoStatus authority_text_entry(XrIoContext *io, const char *entry,
+static XrOsIoStatus authority_virtual_entry(XrIoContext *io, const char *entry,
     char **canonical_entry, char **canonical_directory) {
     if (!authority_entry_path(io,entry))
         return io->status == XR_OS_IO_OK ? XR_OS_IO_BAD_ARGUMENT : io->status;
@@ -192,15 +194,41 @@ XR_FUNC void xr_source_authority_close(XrSourceAuthority *authority) {
     xr_lockfile_free_owned(authority->lockfile);xr_project_free_owned(authority->project);
     xr_compile_module_overlay_free(authority->overlay);
     xr_compile_resources_free(authority->entry_path);
+    xr_compile_resources_free(authority->logical_path);
     xr_compile_resources_free(authority->script_root);xr_compile_resources_free(authority);
+}
+static XrManifestStatus authority_validate_text(XrIoContext *io,const XrSourceEntryInput *input,
+    XrSourceAuthority *authority,const XrSourceAuthorityDiagnostics *diagnostics) {
+    if(input->length==SIZE_MAX)return XR_MANIFEST_BUDGET;
+    size_t line=1,line_start=0;
+    for(size_t i=0;i<input->length;++i) {
+        if(!io_work(io,1))return authority_status(io->status);
+        if(!input->text[i]) {
+            if(line>INT_MAX || i-line_start>=INT_MAX)return XR_MANIFEST_BUDGET;
+            XrXirSourceDiagnostic *detail=diagnostics?diagnostics->source:NULL;
+            if(detail) {
+                static const char message[]="source text contains an embedded NUL";
+                detail->status=XR_XIR_BAD_STRUCTURE;
+                detail->line=(int)line;detail->column=(int)(i-line_start)+1;
+                if(!io_copy(io,detail->message,message,sizeof(message)))detail->status=XR_XIR_BUDGET;
+            }
+            if(diagnostics && diagnostics->failure) {
+                *diagnostics->failure=(XrXirSourceFailure){.path=authority->entry_path,.origin=XR_XIR_SOURCE_DIAGNOSTIC_INPUT};authority->entry_path=NULL;
+            }
+            return io->status==XR_OS_IO_OK?XR_MANIFEST_INVALID:authority_status(io->status);
+        }
+        if(input->text[i]=='\n'){++line;line_start=i+1;}
+    }
+    return XR_MANIFEST_OK;
 }
 XR_FUNC XrManifestStatus xr_source_authority_open_input(const XrXirCompileContext *context,
     const XrSourceEntryInput *input, const XrXirLibraryCatalog *libraries, const XrTomlParseLimits *limits,
-    XrSourceAuthority **output, XrManifestDiagnostic *diagnostic) {
+    XrSourceAuthority **output, const XrSourceAuthorityDiagnostics *diagnostics) {
     if(!context||!context->resources||!input||!input->absolute_path||!limits||!output||*output ||
-        (input->kind != XR_SOURCE_ENTRY_FILE && input->kind != XR_SOURCE_ENTRY_TEXT) ||
-        (input->kind == XR_SOURCE_ENTRY_FILE && (input->text || input->length)) ||
-        (input->kind == XR_SOURCE_ENTRY_TEXT && !input->text)) return XR_MANIFEST_BAD_ARGUMENT;
+        (input->kind != XR_SOURCE_ENTRY_FILE && input->kind != XR_SOURCE_ENTRY_TEXT && input->kind != XR_SOURCE_ENTRY_AST) ||
+        (input->kind != XR_SOURCE_ENTRY_TEXT && (input->text || input->length)) ||
+        (input->kind == XR_SOURCE_ENTRY_TEXT && !input->text) ||
+        (diagnostics && !xr_xir_compile_source_failure_empty(diagnostics->failure)))return XR_MANIFEST_BAD_ARGUMENT;
     if(libraries&&xr_xir_compile_library_catalog_context(libraries)->resources!=context->resources)return XR_MANIFEST_BAD_ARGUMENT;
     XrOsIoPolicy policy=xr_compile_io_policy(context->resources);XrIoContext io={&policy,XR_OS_IO_OK};
     if(!authority_absolute(&io,input->absolute_path))return io.status==XR_OS_IO_OK?XR_MANIFEST_BAD_ARGUMENT:authority_status(io.status);
@@ -210,8 +238,8 @@ XR_FUNC XrManifestStatus xr_source_authority_open_input(const XrXirCompileContex
     authority->context=*context;authority->libraries=libraries;
     char *directory=NULL,*root=NULL,*lockpath=NULL,*identity=NULL,*logical=NULL;
     XrManifestStatus status=XR_MANIFEST_OK;
-    if (input->kind == XR_SOURCE_ENTRY_TEXT) {
-        io_status(&io,authority_text_entry(&io,input->absolute_path,&authority->entry_path,&directory));
+    if (input->kind != XR_SOURCE_ENTRY_FILE) {
+        io_status(&io,authority_virtual_entry(&io,input->absolute_path,&authority->entry_path,&directory));
     } else {
         io_status(&io,xr_file_probe_owned(&policy,input->absolute_path,true));
         if(io.status==XR_OS_IO_OK)io_status(&io,xr_realpath_owned(&policy,input->absolute_path,&authority->entry_path));
@@ -221,8 +249,9 @@ XR_FUNC XrManifestStatus xr_source_authority_open_input(const XrXirCompileContex
     XrOsIoStatus find=xr_source_find_project_root(&policy,directory,&root);
     status=authority_status(find);
     if(find==XR_OS_IO_OK) {
-        status=xr_project_load_owned(&policy,root,limits,&authority->project,diagnostic);
-        if(status==XR_MANIFEST_OK)status=xr_project_authority_build_owned(authority->project,&authority->project_authority,diagnostic);
+        status=xr_project_load_owned(&policy,root,limits,&authority->project,diagnostics?diagnostics->manifest:NULL);
+        if(status==XR_MANIFEST_OK)status=xr_project_authority_build_owned(authority->project,&authority->project_authority,
+            diagnostics?diagnostics->manifest:NULL);
         if(status==XR_MANIFEST_OK) {
             io_status(&io,xr_path_join_owned(&policy,root,"xray.lock",&lockpath));
             if(io.status==XR_OS_IO_OK) {
@@ -245,6 +274,8 @@ XR_FUNC XrManifestStatus xr_source_authority_open_input(const XrXirCompileContex
         status=module==XR_MODULE_OK?XR_MANIFEST_OK:module==XR_MODULE_BUDGET?XR_MANIFEST_BUDGET:
             module==XR_MODULE_OUT_OF_MEMORY?XR_MANIFEST_OUT_OF_MEMORY:XR_MANIFEST_INVALID;
         if(status==XR_MANIFEST_OK && input->kind==XR_SOURCE_ENTRY_TEXT) {
+            status=authority_validate_text(&io,input,authority,diagnostics);
+            if(status!=XR_MANIFEST_OK)goto done;
             XrModuleOverlayInput entry={*entry_authority,logical,authority->entry_path,input->text,input->length};
             module=xr_compile_module_overlay_new(context->resources,&entry,1,&authority->overlay);
             status=module==XR_MODULE_OK?XR_MANIFEST_OK:module==XR_MODULE_BUDGET?XR_MANIFEST_BUDGET:
@@ -252,6 +283,7 @@ XR_FUNC XrManifestStatus xr_source_authority_open_input(const XrXirCompileContex
         }
     }
     if(status==XR_MANIFEST_OK) {
+        if (input->kind != XR_SOURCE_ENTRY_TEXT) { authority->logical_path=logical; logical=NULL; }
         if(io_work(&io,1)){*output=authority;authority=NULL;}
         else status=authority_status(io.status);
     }
@@ -263,10 +295,14 @@ XR_FUNC XrManifestStatus xr_source_authority_open(const XrXirCompileContext *con
     const char *entry, const XrXirLibraryCatalog *libraries, const XrTomlParseLimits *limits,
     XrSourceAuthority **output, XrManifestDiagnostic *diagnostic) {
     XrSourceEntryInput input={XR_SOURCE_ENTRY_FILE,entry,NULL,0};
-    return xr_source_authority_open_input(context,&input,libraries,limits,output,diagnostic);
+    const XrSourceAuthorityDiagnostics diagnostics={diagnostic,NULL,NULL};
+    return xr_source_authority_open_input(context,&input,libraries,limits,output,&diagnostics);
 }
 XR_FUNC const char *xr_source_authority_source_path(const XrSourceAuthority *authority) {
     return authority?authority->entry_path:NULL;
+}
+XR_FUNC const char *xr_source_authority_logical_path(const XrSourceAuthority *authority) {
+    return authority?authority->logical_path:NULL;
 }
 XR_FUNC const XrModuleOverlayInput *xr_source_authority_overlay(const XrSourceAuthority *authority) {
     if(!authority || !authority->overlay)return NULL;

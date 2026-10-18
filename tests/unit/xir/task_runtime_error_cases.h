@@ -46,7 +46,7 @@ static void task_error_fixture_new(TaskErrorFixture *f) {
             task_test_error_release, &f->mode, 0, 0},
         {XR_XIR_CALL_ABI_VERSION, NULL, 0, XR_XIR_I64, 0, task_test_failure, NULL, NULL, 0, 0}};
     XrXirFunctionIdentity identities[3] = {0}; identities[1].exported = identities[2].exported = 1;
-    const XrXirSourceModule source = {"task-errors", 11, NULL, 0, 0};
+    const XrXirSourceModule source = {"task-errors", 11, NULL, 0, 0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirDeclarations declarations = {.modules = &source, .module_count = 1, .functions = identities,
         .root_module = 0, .entry_function = 2};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},

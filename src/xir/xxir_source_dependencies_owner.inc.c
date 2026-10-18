@@ -20,7 +20,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_dependencies_copy(
     for (uint32_t i = 0; i < source->count && query_work(&copy, sizeof(source->entries[i])); ++i) {
         const XrXirSourceDependency *row = &source->entries[i];
         if (row->module >= view->module_count || positions[row->module] ||
-            (unsigned)row->kind > XR_XIR_DEPENDENCY_MEMORY || !row->path ||
+            (unsigned)row->kind > XR_XIR_DEPENDENCY_HISTORY || !row->path ||
             (!!row->imports != !!row->import_count)) { copy.status = XR_XIR_BAD_STRUCTURE; break; }
         positions[row->module] = i + 1;
     }

@@ -12,13 +12,39 @@
  *   Suspension tokens are resumed exactly and are never interpreted as clocks.
  */
 #include "xr_xir_host_execution.h"
+#include "../xir/xxir_instance_activation.h"
 #include "xr_xir_host_time.h"
 #include "../base/xmalloc.h"
 
+XR_FUNC XrXirTarget xr_xir_host_target(void) {
+#if defined(XR_ARCH_X86_64)
+    return (XrXirTarget){XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+#else
+    return (XrXirTarget){0};
+#endif
+}
+XR_FUNC XrXirCallStatus xr_xir_host_config_init(XrXirInstanceConfig *config,size_t size) {
+    if(!config)return XR_XIR_CALL_BAD_ARGUMENT;
+    if(size!=sizeof(*config))return XR_XIR_CALL_BAD_ABI;
+    if(!xr_xir_host_target().architecture)return XR_XIR_CALL_UNSUPPORTED;
+    XrXirInstanceConfig prepared={0};
+    XrXirCallStatus status=xr_xir_instance_config_init(&prepared,sizeof(prepared));
+    if(status==XR_XIR_CALL_READY) {
+        xr_xir_host_time_provider(&prepared.time);*config=prepared;
+    }
+    return status;
+}
+
 struct XrXirHostCall {
     XrXirInstance *instance;
+    XrXirHostInstance *owner;
     XrXirInstanceResult observed;
     bool busy, consumed;
+};
+struct XrXirHostInstance {
+    XrXirInstance *instance;
+    XrXirHostCall call;
+    bool active, busy, detached;
 };
 
 static XrXirInstanceResult host_status(XrXirCallStatus status) {
@@ -36,30 +62,67 @@ static XrXirCallStatus copy_status(XrXirValueStatus status) {
     default: return XR_XIR_CALL_BAD_ARGUMENT;
     }
 }
+XR_FUNC XrXirCallStatus xr_xir_host_instance_new(XrXirProgram *program,
+    const XrXirInstanceConfig *input, XrXirHostInstance **output) {
+    if (!program || !input || !output || *output) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (input->abi_version != XR_XIR_CALL_ABI_VERSION || input->struct_size != sizeof(*input) ||
+        !xr_xir_output_provider_valid(&input->output)) return XR_XIR_CALL_BAD_ABI;
+    if (input->metadata_limit < sizeof(XrXirHostInstance)) return XR_XIR_CALL_LIMIT;
+    XrXirHostInstance *owner = xr_calloc(1, sizeof(*owner));
+    if (!owner) return XR_XIR_CALL_OOM;
+    XrXirInstanceConfig config = *input;
+    config.metadata_limit -= sizeof(*owner);
+    XrXirCallStatus status = xr_xir_instance_new(program, &config, &owner->instance);
+    if (status != XR_XIR_CALL_READY) { xr_free(owner); return status; }
+    *output = owner;
+    return XR_XIR_CALL_READY;
+}
+static XrXirCallStatus host_instance_begin(XrXirHostInstance *owner, uint32_t entry,
+    const XrXirValue *function, const XrXirValue *arguments, uint32_t count, XrXirHostCall **output) {
+    if (!owner || !output || *output || (count && !arguments)) return XR_XIR_CALL_BAD_ARGUMENT;
+    if (owner->busy || owner->active) return XR_XIR_CALL_BUSY;
+    owner->busy = true;
+    XrXirCallStatus status = function ? xr_xir_instance_start_function(owner->instance, function, arguments, count) :
+        xr_xir_instance_start(owner->instance, entry, arguments, count);
+    owner->busy = false;
+    if (status != XR_XIR_CALL_READY) return status;
+    owner->call = (XrXirHostCall){.instance = owner->instance, .owner = owner};
+    owner->active = true;
+    *output = &owner->call;
+    return XR_XIR_CALL_READY;
+}
+XR_FUNC XrXirCallStatus xr_xir_host_instance_begin(XrXirHostInstance *owner, uint32_t entry,
+    const XrXirValue *arguments, uint32_t count, XrXirHostCall **output) {
+    return host_instance_begin(owner, entry, NULL, arguments, count, output);
+}
+XR_FUNC XrXirCallStatus xr_xir_host_instance_begin_function(XrXirHostInstance *owner,
+    const XrXirValue *function, const XrXirValue *arguments, uint32_t count, XrXirHostCall **output) {
+    if (!function) return XR_XIR_CALL_BAD_ARGUMENT;
+    return host_instance_begin(owner, 0, function, arguments, count, output);
+}
+XR_FUNC XrXirCallStatus xr_xir_host_instance_drop(XrXirHostInstance *owner) {
+    if (!owner) return XR_XIR_CALL_READY;
+    if (owner->busy || owner->active) return XR_XIR_CALL_BUSY;
+    owner->busy = true;
+    XrXirCallStatus status = xr_xir_instance_free(owner->instance);
+    if (status == XR_XIR_CALL_BUSY) { owner->busy = false; return status; }
+    xr_free(owner);
+    return status;
+}
 XR_FUNC XrXirCallStatus xr_xir_host_call_begin(const XrXirHostExecutionRequest *request,
     XrXirHostCall **output) {
     if (!request || !request->program || !request->config ||
         (request->argument_count && !request->arguments) || !output || *output)
         return XR_XIR_CALL_BAD_ARGUMENT;
-    if (request->config->abi_version != XR_XIR_CALL_ABI_VERSION ||
-        request->config->struct_size != sizeof(*request->config) ||
-        !xr_xir_output_provider_valid(&request->config->output)) return XR_XIR_CALL_BAD_ABI;
-    if (request->config->metadata_limit < sizeof(XrXirHostCall)) return XR_XIR_CALL_LIMIT;
-    XrXirHostCall *call = xr_calloc(1, sizeof(*call));
-    if (!call) return XR_XIR_CALL_OOM;
-    XrXirInstanceConfig config = *request->config;
-    config.metadata_limit -= sizeof(*call);
-    XrXirInstance *instance = NULL;
-    XrXirCallStatus status = xr_xir_instance_new(request->program, &config, &instance);
+    XrXirHostInstance *owner = NULL;
+    XrXirCallStatus status = xr_xir_host_instance_new(request->program, request->config, &owner);
     if (status == XR_XIR_CALL_READY)
-        status = xr_xir_instance_start(instance, request->entry, request->arguments, request->argument_count);
+        status = xr_xir_host_instance_begin(owner, request->entry, request->arguments, request->argument_count, output);
     if (status != XR_XIR_CALL_READY) {
-        XrXirCallStatus cleanup = xr_xir_instance_free(instance);
-        xr_free(call);
+        XrXirCallStatus cleanup = xr_xir_host_instance_drop(owner);
         return cleanup == XR_XIR_CALL_READY ? status : cleanup;
     }
-    call->instance = instance;
-    *output = call;
+    owner->detached = true;
     return XR_XIR_CALL_READY;
 }
 XR_FUNC XrXirInstanceResult xr_xir_host_call_step_bounded(XrXirHostCall *call, uint64_t quantum) {
@@ -113,17 +176,19 @@ XR_FUNC XrXirCallStatus xr_xir_host_call_drop(XrXirHostCall *call) {
     if (!call) return XR_XIR_CALL_READY;
     if (call->busy) return XR_XIR_CALL_BUSY;
     call->busy = true;
-    XrXirCallStatus status = xr_xir_instance_free(call->instance);
+    XrXirHostInstance *owner = call->owner;
+    owner->busy = true;
+    XrXirCallStatus status = owner->detached ? xr_xir_instance_free(call->instance) :
+        xr_xir_instance_close_activation(call->instance);
+    owner->busy = false;
     if (status == XR_XIR_CALL_BUSY) { call->busy = false; return status; }
-    xr_free(call);
+    owner->active = false;
+    if (owner->detached) xr_free(owner);
+    else owner->call = (XrXirHostCall){0};
     return status;
 }
-XR_FUNC XrXirCallStatus xr_xir_host_execute(const XrXirHostExecutionRequest *request,
-    XrXirCallResult *output) {
-    if (!xr_xir_call_result_empty(output)) return XR_XIR_CALL_BAD_ARGUMENT;
-    XrXirHostCall *call = NULL;
-    XrXirCallStatus status = xr_xir_host_call_begin(request, &call);
-    if (status != XR_XIR_CALL_READY) return status;
+static XrXirCallStatus host_complete(XrXirHostCall *call, XrXirCallResult *output) {
+    XrXirCallStatus status = XR_XIR_CALL_READY;
     XrXirInstanceResult observed = xr_xir_host_call_step_bounded(call, 256);
     while (observed.outcome.status == XR_XIR_CALL_READY ||
         observed.outcome.status == XR_XIR_CALL_SUSPENDED) {
@@ -162,4 +227,18 @@ XR_FUNC XrXirCallStatus xr_xir_host_execute(const XrXirHostExecutionRequest *req
     }
     if (!xr_xir_call_result_empty(&owned)) xr_xir_call_result_move(&owned, output);
     return status;
+}
+XR_FUNC XrXirCallStatus xr_xir_host_execute(const XrXirHostExecutionRequest *request,
+    XrXirCallResult *output) {
+    if (!xr_xir_call_result_empty(output)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirHostCall *call = NULL;
+    XrXirCallStatus status = xr_xir_host_call_begin(request, &call);
+    return status == XR_XIR_CALL_READY ? host_complete(call, output) : status;
+}
+XR_FUNC XrXirCallStatus xr_xir_host_instance_execute(XrXirHostInstance *owner, uint32_t entry,
+    const XrXirValue *arguments, uint32_t count, XrXirCallResult *output) {
+    if (!xr_xir_call_result_empty(output)) return XR_XIR_CALL_BAD_ARGUMENT;
+    XrXirHostCall *call = NULL;
+    XrXirCallStatus status = xr_xir_host_instance_begin(owner, entry, arguments, count, &call);
+    return status == XR_XIR_CALL_READY ? host_complete(call, output) : status;
 }

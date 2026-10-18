@@ -26,6 +26,14 @@ static bool source_manifest_failure(SourceContext *ctx, XrDeclarationStatus stat
 }
 static bool source_manifest_module(SourceContext *ctx, SourceManifest *manifest, const char *logical) {
     if (!source_work(ctx, NULL)) return false;
+    /* A supplied AST is the entry snapshot. Its declarations still receive
+     * every manifest obligation; unrelated disk bytes cannot replace it. */
+    if (ctx->graph->entry_index >= 0) {
+        const XrModuleSpec *entry = &ctx->graph->specs[ctx->graph->entry_index];
+        if (entry->ast_borrowed && source_text_same(ctx,NULL,entry->logical_path,logical) &&
+            source_manifest_same(ctx,&entry->authority,&manifest->authority)) return true;
+        if (ctx->diagnostic.status != XR_XIR_OK) return false;
+    }
     XrOsIoPolicy policy = xr_compile_io_policy(ctx->compile.resources);
     XrFileBytes bytes = {0};
     XrFileReadStatus read = xr_os_io_read_under_root(&policy, manifest->authority.physical_root, logical, SIZE_MAX - 1, &bytes);

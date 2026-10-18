@@ -123,7 +123,7 @@ static void rci_fixture(RootCaptureFixture *f, const RootCaptureCase *probe) {
     }
     f->functions[4]=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,
         .instructions=f->init,.instruction_count=f->init_block.count,.blocks=&f->init_block,.block_count=1};
-    f->source_module=(XrXirSourceModule){"capture",7,NULL,0,4};
+    f->source_module=(XrXirSourceModule){"capture",7,NULL,0,4, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations.modules=&f->source_module;f->declarations.module_count=1;
     f->declarations.functions=f->identities;f->declarations.entry_function=0;
     f->contracts[4].formula.constant_mask=4;

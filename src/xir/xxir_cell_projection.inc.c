@@ -144,7 +144,8 @@ static ValuePathRoute cell_projection_route(const XirCell *cell,
     bool published = identity ?
         (atomic_load_explicit(&((const XirClassObject *)owner)->publication_state, memory_order_acquire) &
             XIR_CLASS_ORIGIN_MODULE) != 0 : owner && ((const XirCell *)owner)->module_storage;
-    return (ValuePathRoute){prefix, *suffix, identity ? owner : NULL, published};
+    const XrXirTypeArena *arena=identity ? owner->arena : ((const XirCell *)owner)->object.arena;
+    return (ValuePathRoute){prefix,*suffix,identity ? owner : NULL,published,arena,cell->object.arena};
 }
 XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare_path(const XrXirValue *value,
     const XrXirCellAuthority *parent, XrXirValueAdmission *admission,
@@ -153,24 +154,28 @@ XR_FUNC XrXirValueStatus xr_xir_cell_loan_prepare_path(const XrXirValue *value,
     if (!fault || !cell_loan_empty(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
     *fault = (XrXirFaultDetail){0};
     XirCell *cell = cell_owner(value);
-    if (!cell || !admission_owner(admission, cell->object.arena, cell->object.domain))
-        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission local={0};
+    XrXirValueStatus status=storage_admission_begin(value,admission,&local);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    if (!cell || !admission_owner(&local,cell->object.arena,cell->object.domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     /* The finite scope comparison is charged before the ordinary authority check. */
     if (cell->projection_count && !cell_projection_work(admission, cell->projection_count))
         return XR_XIR_VALUE_LIMIT;
-    XrXirValueStatus status = xr_xir_cell_loan_prepare(value, parent, output);
+    status = xr_xir_cell_loan_prepare(value, parent, output);
     if (status != XR_XIR_VALUE_OK || !cell->projection_count) return status;
     xr_xir_value_graph_begin();
     XirObject *owner = cell_root_object(cell);
     XrXirValue *root = owner->kind == XIR_OBJECT_CLASS ? &cell->value : &((XirCell *)owner)->value;
-    XrXirValuePlace place = {(XrXirType)root->type, &root->payload};
+    XrXirType root_type=owner->kind==XIR_OBJECT_CLASS ? owner->type :
+        xr_xir_cell_element(xr_xir_compile_type_arena_types(owner->arena),owner->type);
+    XrXirValuePlace place = {root_type,&root->payload};
     XrXirValuePath empty = {0}; ValuePathRoute route = cell_projection_route(cell, &empty);
     ValuePathSlot slot = {0}; uint32_t count = 0;
     status = path_route_begin(&place, &route, admission, &slot, &count, fault);
     for (uint32_t i = 0; status == XR_XIR_VALUE_OK && i < count; ++i)
-        status = path_step(&slot, path_route_step(&route, i), admission, NULL, fault, i ? NULL : route.borrow_owner);
-    if (status == XR_XIR_VALUE_OK && slot.type !=
-            xr_xir_cell_element(xr_xir_compile_type_arena_types(admission->arena), (XrXirType)value->type))
+        status = path_step(&slot,path_route_step(&route,i,admission->arena),admission,NULL,fault,i ? NULL : route.borrow_owner);
+    if (status == XR_XIR_VALUE_OK && !xir_type_arena_same_type(slot.arena,slot.type,
+            cell->object.arena,xr_xir_cell_element(xr_xir_compile_type_arena_types(cell->object.arena),cell->object.type)))
         status = XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_end();
     if (status != XR_XIR_VALUE_OK) xr_xir_cell_loan_abort(output);
@@ -188,19 +193,32 @@ static XrXirValueStatus cell_path_operation(const XrXirValue *value,
     const CellPathOperation *operation) {
     const XrXirValuePath *suffix = operation->suffix;
     XirCell *cell = cell_owner(value);
-    if (!cell || !suffix || !cell_access(cell, authority) ||
-        !admission_owner(admission, cell->object.arena, cell->object.domain))
+    if (!cell || !suffix || !cell_access(cell, authority))
         return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission local={0};
+    XrXirValueStatus status=storage_admission_begin(value,admission,&local);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    if (!admission_owner(&local,cell->object.arena,cell->object.domain)) return XR_XIR_VALUE_BAD_ARGUMENT;
     /* Descriptor selectors add real traversal to every access. */
     if (cell->projection_count && !cell_projection_work(admission, cell->projection_count))
         return XR_XIR_VALUE_LIMIT;
     XirObject *owner = cell_root_object(cell);
     XrXirValue *root = owner->kind == XIR_OBJECT_CLASS ? &cell->value : &((XirCell *)owner)->value;
-    XrXirValuePlace place = {(XrXirType)root->type, &root->payload};
+    XrXirType root_type=owner->kind==XIR_OBJECT_CLASS ? owner->type :
+        xr_xir_cell_element(xr_xir_compile_type_arena_types(owner->arena),owner->type);
+    XrXirValuePlace place = {root_type,&root->payload};
     ValuePathRoute route = cell_projection_route(cell, suffix);
-    return operation->output ? value_path_read_route(&place, &route, admission,
-        operation->output, operation->fault) : path_mutate_route(&place, &route,
-        operation->replacement, admission, operation->fault, operation->append);
+    if (operation->output) return value_path_read_route(&place,&route,admission,operation->output,operation->fault);
+    if (!cell->projection_count && !suffix->count && !operation->append)
+        return xr_xir_cell_write_graph_operation(value,operation->replacement,admission,authority);
+    status=path_mutate_route(&place,&route,operation->replacement,admission,operation->fault,operation->append);
+    if (status==XR_XIR_VALUE_OK && owner->kind==XIR_OBJECT_CELL) {
+        XrXirValue actual={0};
+        XR_CHECK(xr_xir_value_from_payload(owner->arena,root_type,root->payload,&actual),
+            "successful root publication preserves the actual carrier header");
+        *root=actual;
+    }
+    return status;
 }
 XR_FUNC XrXirValueStatus xr_xir_cell_authorized_path_read(const XrXirValue *cell,
     const XrXirCellAuthority *authority, const XrXirValuePath *suffix,

@@ -32,13 +32,14 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
     }
     case AST_INC: case AST_DEC: return source_increment(ctx, node);
     case AST_BREAK_STMT: case AST_CONTINUE_STMT: return source_loop_exit(ctx, node);
-    case AST_FUNCTION_DECL: return top || source_nested_function(ctx, node);
+    case AST_FUNCTION_DECL: return top ? source_repl_function_binding(ctx,node) : source_nested_function(ctx,node);
     case AST_TYPE_ALIAS: return true;
     case AST_IMPORT_STMT: case AST_STRUCT_DECL: case AST_CLASS_DECL: case AST_ENUM_DECL: case AST_INTERFACE_DECL:
         return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");
     case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
     case AST_DESTRUCTURE_DECL: return source_destructure_binding(ctx,node,top);
     case AST_EXPR_STMT: {
+        if(top && node==ctx->repl_tail)return source_repl_result(ctx,node);
         SourceValue value; AstNode *expr=node->as.expr_stmt;
         bool appended = false;
         if (!source_string_append_statement(ctx, expr, &appended)) return false;

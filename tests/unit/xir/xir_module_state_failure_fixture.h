@@ -54,8 +54,8 @@ static XrXirArtifact *state_failure_fixture(const XrXirCompileContext *context,u
         {"main",4,NULL,0,XR_XIR_I64,&blocks[2],1,scenario==2?entry:text_entry,entry_count,scenario==2?NULL:&printed,scenario==2?0u:1u}};
     const uint32_t base=0,diamond[]={1,2};
     const XrXirSourceModule modules[]={
-        {"base",4,NULL,0,0},{"left",4,&base,1,1},
-        {"right",5,&base,1,2},{"root",4,diamond,2,3}};
+        {"base",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"left",4,&base,1,1, 0,XR_XIR_MODULE_FRESH_STORAGE},
+        {"right",5,&base,1,2, 0,XR_XIR_MODULE_FRESH_STORAGE},{"root",4,diamond,2,3, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     const XrXirFunctionIdentity identities[]={
         {.module=0},{.module=1},{.module=2},{.module=3},{.module=3,.exported=true}};
     const XrXirSlot slot={0,scenario==2?XR_XIR_I64:XR_XIR_STRING,false};

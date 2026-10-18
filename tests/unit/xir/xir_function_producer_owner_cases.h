@@ -64,7 +64,7 @@ static void producer_runtime_fixture(ProducerRuntimeFixture *f) {
     f->functions[4].parameters=&f->callback;f->functions[4].parameter_count=1;
     f->functions[5].parameters=&f->callback;f->functions[5].parameter_count=1;
     f->functions[5].operands=&f->forward_capture;f->functions[5].operand_count=1;
-    f->source=(XrXirSourceModule){"producer",8,NULL,0,0};
+    f->source=(XrXirSourceModule){"producer",8,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .entry_function=1};
     f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=6,
