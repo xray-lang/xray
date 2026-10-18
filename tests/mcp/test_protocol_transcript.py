@@ -521,6 +521,49 @@ def test_runner_timed_channel_and_request_deadline(xray: Path) -> None:
         session.close()
 
 
+def test_runner_owned_task_results_and_output(xray: Path) -> None:
+    cases = [
+        ("fn worker()->Array<i64> { Coro.yield(); return [10,20] }\n"
+         "fn main()->i64 { const task=go worker(); var first=await task; first[0]=99; "
+         "const second=await task; return second[0] }\nprint(main())\n", "10\n", None),
+        ('fn worker()->Array<Array<string>> { Coro.yield(); return [["owned"]] }\n'
+         'fn main()->string { const task=go worker(); var first=await task; first[0][0]="changed"; '
+         'const second=await task; return second[0][0] }\nprint(main())\n', "owned\n", None),
+        ('fn worker()->(i64,string) { Coro.yield(); return (42,"owned") }\n'
+         "fn main()->i64 { const task=go worker(); const first=await task; "
+         "const second=await task; return second.0 }\nprint(main())\n", "42\n", None),
+        ("fn leaf()->i64 { Coro.yield(); return 42 }\n"
+         "fn worker()->Task<i64> { Coro.yield(); return go leaf() }\n"
+         "fn main()->i64 { const outer=go worker(); const inner=await outer; "
+         "return await inner }\nprint(main())\n", "42\n", None),
+        ('print("A\\0拥有")\n', "A\0拥有\n", None),
+        ('print("ABCDEFGHIJKLMNOPQRSTUVWXYZ")\n', "ABCDEFGHIJ", 10),
+        ('print("recovered")\n', "recovered\n", None),
+    ]
+    session = McpSession(xray, enable_runner=True)
+    try:
+        initialize(session, 1)
+        mark_initialized(session)
+        for req_id, (code, expected, output_limit) in enumerate(cases, 2):
+            arguments = {"code": code, "moduleId": "mcp-owned-task-results"}
+            if output_limit is not None:
+                arguments["outputLimit"] = output_limit
+            session.send(request("tools/call", req_id, {"name": "xray_run", "arguments": arguments}))
+            response = session.recv()
+            assert response.get("jsonrpc") == "2.0" and response.get("id") == req_id, response
+            assert "error" not in response, response
+            result = response.get("result", {})
+            value = result.get("structuredContent", {})
+            assert result.get("isError") in (False, None) and value.get("ok") is True, response
+            assert value.get("sourceStatus") == 0 and value.get("runtimeStatus") == 1, response
+            assert value.get("exitCode") == 0 and value.get("timedOut") is False, response
+            assert value.get("stdout") == expected, response
+            assert value.get("outputBytes") == len(expected.encode("utf-8")), response
+            assert value.get("truncated") is (output_limit is not None), response
+    finally:
+        session.close()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--xray", required=True, type=Path)
@@ -540,6 +583,7 @@ def main() -> int:
         test_tools_call_invalid_params_and_structured_content,
         test_runner_channel_values_and_pending_cancel,
         test_runner_timed_channel_and_request_deadline,
+        test_runner_owned_task_results_and_output,
     ]
     for test in tests:
         test(args.xray)
