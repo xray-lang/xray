@@ -110,6 +110,7 @@ static XrXirStatus effect_capture_barrier(EffectCaptureRead *read,const EffectCa
     return XR_XIR_OK;
 }
 
+static XrXirStatus effect_capture_cell(EffectCaptureRead *read,const EffectCaptureNode *node,uint32_t value);
 static XrXirStatus effect_capture_parameters(EffectCaptureRead *read,const EffectCaptureNode *node) {
     if(read->fixed_only) return XR_XIR_OK;
     if(read->selected) {
@@ -141,6 +142,12 @@ static XrXirStatus effect_capture_parameters(EffectCaptureRead *read,const Effec
             }
         }
         if(read->selected && read->selected->value>node->values) continue;
+        /* A formal's current Cell proof can establish an owned root without
+         * the dependency carried by its separate symbolic initial row. */
+        if(kind==EFFECT_CAPTURE_CELL) {
+            status=effect_capture_cell(read,node,p);if(status!=XR_XIR_OK) return status;
+            continue;
+        }
         uint32_t first=kind==EFFECT_CAPTURE_CALLABLE?0:node->basis.fn_words;
         uint32_t words=kind==EFFECT_CAPTURE_CALLABLE?node->basis.fn_words:node->basis.cell_words;
         EffectCaptureTransfer edge={.from=node->node,.value=initial,.to=node->node,.destination=p,
