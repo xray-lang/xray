@@ -45,6 +45,7 @@ static void ed_free(void *pointer){
 #pragma pop_macro("xr_free")
 #pragma pop_macro("xr_malloc")
 #include "xir/xxir_effects.c"
+#include "xir_legacy_error_oracle.h"
 #include "xir_error_dependency_fixture.h"
 static XrCompileResourceLimits ed_caps(void){return (XrCompileResourceLimits){16777216,4194304,16000000};}
 static XrXirCompileContext ed_owner(XrCompileResourceLimits limits){
