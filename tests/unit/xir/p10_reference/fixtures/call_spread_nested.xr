@@ -1,0 +1,2 @@
+fn calc(a: i64, pair: (i64, i64), b: i64) -> i64 { return a + pair.0 * 10 + pair.1 + b }
+export fn referenceAnswer() -> i64 { return calc(...(2, ...(((3, 4),))), 6) }

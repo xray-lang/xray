@@ -1,0 +1,9 @@
+var trace: i64 = 0
+fn empty(tag: i64) -> () { trace = trace * 10 + tag; return () }
+fn fixed(a: i64 = 7, b: i64 = 8) -> i64 { return a * 10 + b }
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    const a = fixed(...empty(1))
+    const b = fixed(...(), 2, ...empty(2), ...())
+    return trace * 10000 + a * 100 + b
+}

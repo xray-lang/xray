@@ -1,0 +1,2 @@
+fn calc(a: ref i64, x: i64, b: ref i64) -> i64 { return a + x + b }
+export fn referenceAnswer() -> i64 { var n = 1; return calc(ref n, ...(40,), ref n) }

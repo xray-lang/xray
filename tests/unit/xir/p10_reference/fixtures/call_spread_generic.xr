@@ -1,0 +1,8 @@
+fn choose<T>(left: T, right: T) -> T { return right }
+fn forward<T>(pair: (T, T)) -> T { return choose(...pair) }
+fn take<T>(value: T, unused: Array<i64>) -> T { return value }
+export fn referenceAnswer() -> i64 {
+    const pair = take(...((20, 2), []))
+    const scalar = take(...(1 + 1, []))
+    return forward((18, 20)) + choose<i64>(...(1, 2)) + pair.0 + scalar - 2
+}

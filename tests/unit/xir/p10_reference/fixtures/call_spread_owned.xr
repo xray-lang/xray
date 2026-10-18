@@ -1,0 +1,11 @@
+fn replace(parts: ref (Array<string>, string)) -> i64 { parts = (["other"], "changed"); return 2 }
+fn inspect(values: Array<string>, text: string, marker: i64) -> i64 {
+    if (values[0] != "cedar" || text != "birch" || marker != 2) { return 0 }
+    return 42
+}
+export fn referenceAnswer() -> i64 {
+    var parts = (["cedar"], "birch")
+    const result = inspect(...parts, replace(ref parts))
+    if (parts.0[0] != "other" || parts.1 != "changed") { return 0 }
+    return result
+}
