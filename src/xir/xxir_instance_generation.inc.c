@@ -87,6 +87,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_generation_publish(XrXirInstance *instan
         xr_xir_task_executor_completion_status(candidate->executor) != XR_XIR_CALL_READY ||
         (xr_xir_call_state(candidate->call) != XR_XIR_CALL_RETURNED &&
          xr_xir_call_state(candidate->call) != XR_XIR_CALL_CONSUMED)) return XR_XIR_CALL_BAD_STATE;
+    if (!instance_bindings_ready(candidate)) return XR_XIR_CALL_BAD_STATE;
     instance->driving = true;
     if (candidate->replacement_executor) {
         instance_retire_call(candidate->previous_generation, candidate->replacement_executor);
@@ -95,6 +96,7 @@ XR_FUNC XrXirCallStatus xr_xir_instance_generation_publish(XrXirInstance *instan
     instance->published_generation = candidate;
     instance->active_generation = candidate;
     instance->prepared_generation = NULL;
+    candidate->bindings_published = true;
     instance->driving = false;
     return XR_XIR_CALL_READY;
 }
