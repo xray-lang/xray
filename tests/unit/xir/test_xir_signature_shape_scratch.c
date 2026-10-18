@@ -17,20 +17,20 @@
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL %d %s\n",__LINE__,#c);exit(1); } } while (0)
 typedef struct Physical { void *pointer; size_t bytes; } Physical;
-static Physical physical[64];
+static Physical shape_physical[64];
 static size_t live, live_bytes, attempts, fail_at=SIZE_MAX;
 static bool injected;
 static void *shape_malloc(size_t bytes) {
     if (attempts++==fail_at) { injected=true;return NULL; }
     void *pointer=xr_malloc(bytes);if (!pointer)return NULL;
     CHECK(live<64 && bytes<=SIZE_MAX-live_bytes);
-    physical[live++]=(Physical){pointer,bytes};live_bytes+=bytes;return pointer;
+    shape_physical[live++]=(Physical){pointer,bytes};live_bytes+=bytes;return pointer;
 }
 static void shape_free(void *pointer) {
     if (!pointer)return;
-    size_t i=0;while (i<live && physical[i].pointer!=pointer)++i;
-    CHECK(i<live && live_bytes>=physical[i].bytes);
-    live_bytes-=physical[i].bytes;physical[i]=physical[--live];xr_free(pointer);
+    size_t i=0;while (i<live && shape_physical[i].pointer!=pointer)++i;
+    CHECK(i<live && live_bytes>=shape_physical[i].bytes);
+    live_bytes-=shape_physical[i].bytes;shape_physical[i]=shape_physical[--live];xr_free(pointer);
 }
 #pragma push_macro("xr_malloc")
 #pragma push_macro("xr_free")
