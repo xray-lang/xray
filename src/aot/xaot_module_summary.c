@@ -51,6 +51,7 @@ typedef struct XaotModuleSummaryTaskState {
  * vector, and the report accumulate. */
 typedef struct XaotModuleSummaryBuild {
     XrDependencyGraph *graph;
+    XrCompileState *state;
     XrCacheStore *store;
     XiModule *const *modules;
     int module_count;
@@ -511,7 +512,7 @@ static void finalize_module_summary_task(void *task_state, void *context) {
         (XaotModuleSummaryTaskState *) task_state;
     if (!state)
         return;
-    for (uint32_t index = 0; index < state->artifact_count; index++) {
+    for (uint32_t index = 0; state->artifacts && index < state->artifact_count; index++) {
         xr_cache_blob_release(&state->artifacts[index].blob);
         xr_free(state->artifacts[index].encoded);
         xr_free(state->artifacts[index].dependencies);
@@ -663,19 +664,74 @@ static bool collect_module_nodes(XaotModuleSummaryBuild *build, const XrModuleGr
     return true;
 }
 
-static bool build_summary_graph(XaotModuleSummaryBuild *build, XrCompilerSession *session,
-                                const XrModuleGraph *graph, XiModule *const *modules,
-                                int module_count,
-                                const XrProgramSemanticClosure *program_closure,
-                                const XaotBuildOptions *options) {
-    const XrTargetProfile *profile = xr_compiler_session_target_profile(session);
+/* Preparation writes disjoint rows. Publication begins only after every row
+ * passes preflight, and all partially prepared rows are finalized on failure. */
+static bool run_summary_tasks(XaotModuleSummaryBuild *build, uint32_t worker_limit,
+                              char *error, size_t error_size) {
+    XrModuleTaskGraph *graph = NULL;
+    if (!xr_module_task_graph_build(build->graph, &graph, error, error_size))
+        return false;
+    uint32_t count = xr_module_task_graph_count(graph);
+    XrModuleTaskOutput *outputs = NULL;
+    XaotModuleSummaryTaskState *states = NULL;
+    bool ok = count != 0 &&
+        xr_compile_state_calloc(build->state, count, sizeof(*outputs), (void **)&outputs) ==
+            XR_COMPILE_RESOURCE_OK &&
+        xr_compile_state_calloc(build->state, count, sizeof(*states), (void **)&states) ==
+            XR_COMPILE_RESOURCE_OK;
+    if (!ok && error && error_size)
+        (void)snprintf(error, error_size, "module summary task storage is unavailable");
+    XrModuleTaskStats stats = {0};
+    if (ok) {
+        XrModuleTaskBatch batch = {
+            .dependency_graph = build->graph,
+            .task_graph = graph,
+            .worker_limit = worker_limit,
+            .execute = prepare_module_summary_task,
+            .context = build,
+            .task_states = states,
+            .task_state_size = sizeof(*states),
+            .outputs = outputs,
+            .output_count = count,
+        };
+        ok = xr_module_task_graph_run(&batch, &stats, error, error_size);
+    }
+    for (uint32_t task = 0; ok && task < count; ++task)
+        ok = xr_compile_state_work(build->state, 1) == XR_COMPILE_RESOURCE_OK &&
+            preflight_module_summary_task(graph, task, &outputs[task], &states[task],
+                                           build, error, error_size);
+    for (uint32_t task = 0; ok && task < count; ++task)
+        ok = xr_compile_state_work(build->state, 1) == XR_COMPILE_RESOURCE_OK &&
+            publish_module_summary_task(graph, task, &outputs[task], &states[task],
+                                         build, error, error_size);
+    if (states)
+        for (uint32_t task = 0; task < count; ++task)
+            finalize_module_summary_task(&states[task], build);
+    if (ok) {
+        build->stats->workers = stats.worker_count;
+        build->stats->tasks = count;
+    }
+    xr_compile_state_free(states);
+    xr_compile_state_free(outputs);
+    xr_module_task_graph_free(graph);
+    return ok;
+}
+
+static bool build_summary_graph(XaotModuleSummaryBuild *build,
+                                const XaotModuleSummaryInput *input) {
+    const XrModuleGraph *graph = input->graph;
+    XiModule *const *modules = input->modules;
+    int module_count = input->module_count;
+    const XrProgramSemanticClosure *program_closure = input->program_closure;
+    const XaotBuildOptions *options = input->options;
+    const XrTargetProfile *profile = options->target_profile;
     char error[256];
     if (!profile || !xr_target_profile_verify(profile, error, sizeof(error))) {
         fprintf(stderr, "Error: module summaries require an exact verified TargetProfile\n");
         return false;
     }
 
-    build->store = xr_compiler_session_cache_store(session);
+    build->store = input->cache_store;
     build->modules = modules;
     build->module_count = module_count;
     build->program_closure = program_closure;
@@ -712,16 +768,25 @@ static bool build_summary_graph(XaotModuleSummaryBuild *build, XrCompilerSession
     return ok;
 }
 
-bool xaot_publish_module_summaries(XrCompilerSession *session, const XrModuleGraph *graph,
-                                   XiModule *const *modules, int module_count,
-                                   const XrProgramSemanticClosure *program_closure,
-                                   const XaotBuildOptions *options, bool verbose,
+bool xaot_publish_module_summaries(const XaotModuleSummaryInput *input,
                                    XaotModuleSummaryCacheStats *stats) {
     if (stats)
         memset(stats, 0, sizeof(*stats));
-    if (!session || !graph || !modules || !options || !stats || module_count <= 0 ||
-        graph->topo_count != module_count) {
+    if (!input || !input->graph || !input->graph->compiler_session ||
+        !input->modules || !input->options || !stats || input->module_count <= 0 ||
+        input->graph->topo_count != input->module_count) {
         fprintf(stderr, "Error: module summary publication received an inconsistent module set\n");
+        return false;
+    }
+    const XrModuleGraph *graph = input->graph;
+    int module_count = input->module_count;
+    const XrProgramSemanticClosure *program_closure = input->program_closure;
+    const XaotBuildOptions *options = input->options;
+    XrCompileState *state = xr_compile_session_compile_state(graph->compiler_session);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK ||
+        (input->cache_store && xr_compile_cache_store_resources(input->cache_store) !=
+            xr_compile_state_resources(state))) {
+        fprintf(stderr, "Error: module summary resource authority is unavailable or foreign\n");
         return false;
     }
 
@@ -730,10 +795,10 @@ bool xaot_publish_module_summaries(XrCompilerSession *session, const XrModuleGra
     memset(&build, 0, sizeof(build));
     xr_dependency_graph_init(&summary_graph);
     build.graph = &summary_graph;
+    build.state = state;
     build.stats = stats;
 
-    bool ok = build_summary_graph(&build, session, graph, modules, module_count,
-                                  program_closure, options);
+    bool ok = build_summary_graph(&build, input);
     if (ok && program_closure) {
         stats->program_modules =
             (uint32_t) xr_program_semantic_closure_module_count(program_closure);
@@ -758,26 +823,12 @@ bool xaot_publish_module_summaries(XrCompilerSession *session, const XrModuleGra
         xr_sha256_init(&build.publish_order);
         hash_text(&build.publish_order,
                   "xray-module-summary-publish-order-v1");
-        XrCompilerSessionModuleTaskBatch task_batch = {
-            .dependency_graph = &summary_graph,
-            .worker_limit = options->module_summary_workers,
-            .task_state_size = sizeof(XaotModuleSummaryTaskState),
-            .prepare = prepare_module_summary_task,
-            .preflight = preflight_module_summary_task,
-            .publish = publish_module_summary_task,
-            .finalize = finalize_module_summary_task,
-            .context = &build,
-        };
-        XrCompilerSessionModuleTaskStats task_stats;
-        char error[512];
-        if (!xr_compiler_session_publish_module_tasks(
-                session, &task_batch, &task_stats, error, sizeof(error))) {
+        char error[512] = {0};
+        if (!run_summary_tasks(&build, options->module_summary_workers, error, sizeof(error))) {
             fprintf(stderr, "Error: module summary task publication failed: %s\n",
                     error[0] ? error : "unknown error");
             ok = false;
         } else {
-            stats->workers = task_stats.execution.worker_count;
-            stats->tasks = task_stats.task_count;
             xr_sha256_final(
                 &build.artifact_order,
                 stats->artifact_order_fingerprint.bytes);
@@ -790,7 +841,7 @@ bool xaot_publish_module_summaries(XrCompilerSession *session, const XrModuleGra
     xr_free(build.keys);
     xr_free(build.ids);
 
-    if (ok && verbose) {
+    if (ok && input->verbose) {
         char graph_hex[XR_FINGERPRINT_BYTES * 2 + 1];
         char artifact_hex[XR_FINGERPRINT_BYTES * 2 + 1];
         char publish_hex[XR_FINGERPRINT_BYTES * 2 + 1];

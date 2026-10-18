@@ -2680,9 +2680,16 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         }
     }
     xaot_trace_phase("module-summaries", -1);
-    if (!xaot_publish_module_summaries(session, graph, modules, nmodules, source_program_closure,
-                                       options, evidence_cache_verbose,
-                                       &result->module_summary_cache))
+    XaotModuleSummaryInput summary_input = {
+        .cache_store = xr_compiler_session_cache_store(session),
+        .graph = graph,
+        .modules = modules,
+        .module_count = nmodules,
+        .program_closure = source_program_closure,
+        .options = options,
+        .verbose = evidence_cache_verbose,
+    };
+    if (!xaot_publish_module_summaries(&summary_input, &result->module_summary_cache))
         goto fail_free_ir;
     xr_program_semantic_closure_free(source_program_closure);
     source_program_closure = NULL;
