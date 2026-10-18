@@ -2097,6 +2097,29 @@ static bool xaot_build_module_emission_plans(const XaotBundle *bundle,
     return true;
 }
 
+/* Keep the producer's first resource failure while reporting the verifier's
+ * typed outcome. A C90 policy rejection is semantic, not a ledger failure. */
+static const char *xaot_cgen_verification_failure(XrCompileState *state,
+                                                 XiCgenVerifyStatus status) {
+    switch (status) {
+        case XI_CGEN_VERIFY_BUDGET:
+            (void)xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+            return "budget exhausted";
+        case XI_CGEN_VERIFY_OUT_OF_MEMORY:
+            (void)xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+            return "out of memory";
+        case XI_CGEN_VERIFY_BAD_ARGUMENT:
+            (void)xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+            return "invalid input";
+        case XI_CGEN_VERIFY_MALFORMED:
+            return "malformed C";
+        case XI_CGEN_VERIFY_PASSED:
+            return "passed";
+    }
+    (void)xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+    return "invalid verifier status";
+}
+
 XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                        XaotBuildResult *result) {
     bool emit_plan_dump;
@@ -2928,24 +2951,41 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
          * structurally well-formed before it can be written to disk / handed
          * to the C toolchain. Fail-closed — a malformed TU raises an ICE with
          * a full on-disk dump and never reaches clang. No bypass. */
+        XrCompileState *verification_state =
+            xr_compile_session_compile_state(graph->compiler_session);
+        if (xr_compile_state_status(verification_state) != XR_COMPILE_RESOURCE_OK) {
+            fprintf(stderr, "Error: generated C verification requires a healthy compiler state\n");
+            xr_free(buf);
+            emit_ok = false;
+            break;
+        }
+        XrCompileResources *verification_resources = xr_compile_state_resources(verification_state);
         const char *verify_timing = getenv("XRAY_CGEN_VERIFY_TIMING");
         clock_t verify_started = verify_timing ? clock() : (clock_t) 0;
-        XiCgenVerifyStatus verified =
-            xi_cgen_verify_output_or_ice(buf, bufsz, mod_names[m] ? mod_names[m] : "module");
+        XiCgenVerifyStatus verified = xr_compile_cgen_verify_output_or_ice(
+            verification_resources, buf, bufsz, mod_names[m] ? mod_names[m] : "module");
         if (verified != XI_CGEN_VERIFY_PASSED) {
             fprintf(stderr, "Error: generated C verification failed (%s)\n",
-                    verified == XI_CGEN_VERIFY_OUT_OF_MEMORY ? "out of memory" : "invalid input");
+                    xaot_cgen_verification_failure(verification_state, verified));
             xr_free(buf);
             emit_ok = false;
             break;
         }
         if (options->c_dialect == XI_CGEN_C_DIALECT_C90) {
             XiCgenVerifyResult c90_result;
-            if (!xi_cgen_verify_c90_output(buf, bufsz, &c90_result)) {
-                fprintf(stderr,
-                        "Error: restricted C90 code generation rejected module '%s' at line "
-                        "%d: %s\n",
-                        mod_names[m] ? mod_names[m] : "?", c90_result.line, c90_result.message);
+            XiCgenVerifyStatus c90_status = xr_compile_cgen_verify_c90_output(
+                verification_resources, buf, bufsz, &c90_result);
+            if (c90_status != XI_CGEN_VERIFY_PASSED) {
+                if (c90_status == XI_CGEN_VERIFY_MALFORMED) {
+                    fprintf(stderr,
+                            "Error: restricted C90 code generation rejected module '%s' at line "
+                            "%d: %s\n",
+                            mod_names[m] ? mod_names[m] : "?", c90_result.line, c90_result.message);
+                } else {
+                    fprintf(stderr, "Error: restricted C90 verification failed for module '%s': %s\n",
+                            mod_names[m] ? mod_names[m] : "?",
+                            xaot_cgen_verification_failure(verification_state, c90_status));
+                }
                 xr_free(buf);
                 emit_ok = false;
                 break;
