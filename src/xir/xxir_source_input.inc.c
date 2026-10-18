@@ -148,7 +148,7 @@ XrXirStatus xr_xir_compile_source_check(const XrXirSourceRequest *request,
 XrXirStatus xr_xir_compile_source_check_text(const XrXirSourceRequest *request,
     const XrXirSourceText *text,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, char **failure_path) {
-    SourceInput input = {true, text ? *text : (XrXirSourceText){0}, NULL, 0, false, NULL};
+    SourceInput input = {.supplied=true, .text=text ? *text : (XrXirSourceText){0}};
     return source_check_input(request, input, output, diagnostic, failure_path);
 }
 
@@ -166,7 +166,7 @@ XrXirStatus xr_xir_compile_source_check_ast(const XrXirSourceRequest *request,
 XrXirStatus xr_xir_compile_source_check_overlay(const XrXirSourceRequest *request,
     const XrModuleOverlayInput *overlays, size_t count, XrXirSourceResult *output,
     XrXirSourceDiagnostic *diagnostic, char **failure_path) {
-    SourceInput input = {false, {0}, overlays, count, false, NULL};
+    SourceInput input = {.overlays=overlays, .overlay_count=count};
     return source_check_input(request, input, output, diagnostic, failure_path);
 }
 
@@ -201,7 +201,8 @@ XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *co
         }
         ++length;
     }
-    SourceInput input={true,{XIR_PRELUDE_LOGICAL,xir_prelude_source.text,length},NULL,0,true,NULL};
+    SourceInput input={.supplied=true, .text={XIR_PRELUDE_LOGICAL,xir_prelude_source.text,length},
+        .prelude_factory=true};
     XrXirSourceResult result={0};
     XrXirStatus status=source_check_input(&request,input,&result,diagnostic,NULL);
     if (status==XR_XIR_OK) {
