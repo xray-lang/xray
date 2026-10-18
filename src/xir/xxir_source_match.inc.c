@@ -22,7 +22,9 @@ static bool source_match_prepare(SourceContext *ctx, SourceExpressionPlan *plan)
     if (match->arm_count<=0 || (uint32_t)match->arm_count>UINT32_MAX/2)
         return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"match requires arms and a scrutinee");
     XrXirType type=plan->left->ground_type;
-    if (!xr_xir_type_is_enum(&ctx->types,type) && type!=XR_XIR_BOOL && type!=XR_XIR_RUNE && type!=XR_XIR_STRING && !xr_xir_type_is_number(type))
+    if (source_pattern_product_kind(ctx,type)==XR_XIR_OP_COUNT && !xr_xir_type_is_enum(&ctx->types,type) &&
+        type!=XR_XIR_BOOL && type!=XR_XIR_RUNE && type!=XR_XIR_STRING &&
+        !xr_xir_type_is_number(type) && !xr_xir_type_is_array(&ctx->types,type))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"match scrutinee family is not admitted");
     SourceMatchPlan *prepared=source_recipe_storage(ctx,1,sizeof(*prepared));
     if (!prepared) return false;
@@ -60,7 +62,9 @@ static bool source_match_bind(SourceContext *ctx, SourceName *symbol, SourceValu
     if (!symbol || symbol->type!=value.type) return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"pattern binding type is inconsistent");
     SourceName *binding=source_alloc(ctx,1,sizeof(*binding));
     if (!binding) return false;
-    *binding=*symbol; binding->next=ctx->locals; binding->index=value.id; ctx->locals=binding;
+    *binding=*symbol;binding->next=ctx->locals;
+    binding->kind=value.type==XR_XIR_UNIT ? SOURCE_UNIT_LOCAL : SOURCE_LOCAL;
+    binding->index=value.type==XR_XIR_UNIT ? UINT32_MAX : value.id;ctx->locals=binding;
     return true;
 }
 
@@ -77,6 +81,7 @@ static bool source_match_test(SourceContext *ctx, SourceValue condition, bool tr
     branch.targets[truth?0:1]=body->block_count;
     return source_recipe_record(ctx,branch,NULL) && begin_block(ctx);
 }
+#include "xxir_source_pattern_array.inc.c"
 static bool source_pattern_integer_value(SourceContext *ctx, XrXirType type, uint64_t key, SourceValue *value) {
     uint64_t bias=source_pattern_integer_bias(type), bits=key^bias;
     if (bits&bias) bits|=~source_pattern_integer_max(type);
@@ -111,6 +116,18 @@ static bool source_match_payload(SourceContext *ctx, SourceMatchPattern *pattern
             pattern->type,{0},{0},pattern->literal_payload, {0}},&literal)) return false;
         return !test || (source_binary_apply(ctx,pattern->node,AST_BINARY_EQ,receiver,literal,&condition) &&
             source_match_test(ctx,condition,true,failures));
+    }
+    if (pattern->array) return source_match_array_payload(ctx,pattern,receiver,test,failures);
+    if (pattern->product) {
+        for (uint32_t i=0;i<pattern->count;++i) {
+            if (!source_work(ctx,pattern->node)) return false;
+            SourceMatchPattern *child=pattern->fields[i];
+            if (!child || (child->any && !child->binding)) continue;
+            SourceValue value;
+            if (!source_pattern_product_value(ctx,pattern,i,receiver,&value) ||
+                !source_match_payload(ctx,child,value,test,failures,depth+1)) return false;
+        }
+        return true;
     }
     SourceEnumSelection *selected=&pattern->selection;
     if (test) {
@@ -155,7 +172,7 @@ static bool source_match(SourceContext *ctx, AstNode *node, SourceExpectedType e
     SourceMatchPlan *prepared=plan->match;
     if (!prepared) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"match scrutinee type is not ready");
     uint32_t count=prepared->count;SourceMatchArm *patterns=prepared->arms;bool exhaustive=prepared->exhaustive;
-    SourceValue *inputs=source_alloc(ctx,count*2,sizeof(*inputs)); uint32_t *jumps=source_alloc(ctx,count,sizeof(*jumps));
+    SourceValue *inputs=source_recipe_storage(ctx,count*2,sizeof(*inputs)); uint32_t *jumps=source_recipe_storage(ctx,count,sizeof(*jumps));
     if (!inputs || !jumps) return false;
     SourceFunction *body=&ctx->bodies[ctx->function];
     SourceName *saved=ctx->locals,*scope=ctx->scope; XrXirType result=XR_XIR_UNIT;

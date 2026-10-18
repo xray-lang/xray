@@ -1,0 +1,3 @@
+fn first<T>(items:Array<T>,fallback:T)->T{return match(items){[head,..]->head,_->fallback}}
+fn finish(value:i64)->i64{return value}
+export fn referenceAnswer()->i64{return finish(first([42],0)+first(Array<i64>(),0))}

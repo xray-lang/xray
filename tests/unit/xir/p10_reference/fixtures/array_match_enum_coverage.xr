@@ -1,0 +1,4 @@
+enum Packet{Data{items:Array<i64>},Empty}
+fn read(packet:Packet)->i64{return match(packet){Packet.Data{items:[]}->0,Packet.Data{items:[head,..]}->head,Packet.Empty->0}}
+fn finish(value:i64)->i64{return value}
+export fn referenceAnswer()->i64{return finish(read(Packet.Data{items:[42]}))}

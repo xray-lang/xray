@@ -1,0 +1,3 @@
+fn step(value:i64)->i64 { return value }
+fn finish(value:i64)->i64 { return step(value) }
+export fn referenceAnswer()->i64 { const ((),{n:_,unit:()},())=((),{n:42,unit:()},()); const {}={}; return finish(42) }

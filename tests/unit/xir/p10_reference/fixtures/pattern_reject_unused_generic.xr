@@ -1,0 +1,4 @@
+fn bad<T>(value:T)->i64 {
+ const {n}=value; return n
+}
+export fn referenceAnswer()->i64 { return 42 }

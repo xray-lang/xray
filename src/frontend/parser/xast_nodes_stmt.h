@@ -177,11 +177,12 @@ typedef struct PatternTupleNode {
 // Object match pattern: `{ x, y }` or `{ x: sub }`. field_names[i] is the
 // source field; patterns[i] is the sub-pattern bound to that field value (a
 // bare-name binding for shorthand `{ x }`, or a nested/renamed sub-pattern for
-// `{ x: sub }`). Matches any object/Json carrying those fields.
+// `{ x: sub }`). Uses only statically known fields; it does not grant schema-less access.
 typedef struct PatternObjectNode {
     char **field_names;
     AstNode **patterns;
     int count;
+    XrNameSpan *field_name_spans;
 } PatternObjectNode;
 
 // Array match pattern: `[a, b, ..rest]`. patterns[i] are positional element
@@ -193,6 +194,7 @@ typedef struct PatternArrayNode {
     bool has_rest;
     char *rest_name;
     uint32_t rest_symbol_id;  // analyzer-assigned id for the rest binding (0 if none)
+    AstNode *rest_binding;  // Exact parser-owned declaration token, absent for a discarded tail.
 } PatternArrayNode;
 
 typedef struct PatternAdtNode {

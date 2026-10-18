@@ -1,0 +1,2 @@
+fn finish(value:i64)->i64{return value}
+export fn referenceAnswer()->i64{return finish(match(Array<i64>()){[..tail]->len(tail)+42})}

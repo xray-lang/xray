@@ -2310,13 +2310,11 @@ static bool collect_declarations(SourceContext *ctx) {
                 ++slots;
             }
             if(node->type==AST_DESTRUCTURE_DECL) {
-                uint32_t fields=0;if(!source_destructure_pattern(ctx,node,&fields))return false;
-                for(uint32_t f=0;f<fields;++f) {
-                    if(!source_work(ctx,node))return false;
-                    if(node->as.destructure_decl.pattern->as.array.elements[f]->type==PATTERN_SKIP)continue;
-                    if(slots==UINT32_MAX)return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
-                    ++slots;
-                }
+                SourceDestructurePlan plan={0};
+                if (!source_destructure_pattern(ctx,node,&plan)) return false;
+                if (plan.count>UINT32_MAX-slots)
+                    return source_fail(ctx,node,XR_XIR_BUDGET,"module binding inventory exhausted");
+                slots+=plan.count;
             }
         }
     }
@@ -2383,11 +2381,11 @@ static bool collect_declarations(SourceContext *ctx) {
                 if (!source_query_declare(ctx, symbol, XR_XIR_SOURCE_BINDING, 0, source_query_range(ctx, node, symbol->name))) return false;
                 ctx->slots[slot++] = (XrXirSlot) {m, XR_XIR_UNIT, symbol->mutable};
             } else if(node->type==AST_DESTRUCTURE_DECL) {
-                uint32_t fields=0;if(!source_destructure_pattern(ctx,node,&fields))return false;
-                for(uint32_t f=0;f<fields;++f) {
+                SourceDestructurePlan plan={0};
+                if (!source_destructure_pattern(ctx,node,&plan)) return false;
+                for(uint32_t f=0;f<plan.count;++f) {
                     if(!source_work(ctx,node))return false;
-                    XrDestructurePattern *field=node->as.destructure_decl.pattern->as.array.elements[f];
-                    if(field->type==PATTERN_SKIP)continue;
+                    const XrDestructurePattern *field=plan.fields[f].pattern;
                     if(node->is_exported) return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"exported state is not admitted");
                     SourceName *symbol=add_name(ctx,&ctx->names[m],field->as.identifier.name,node);
                     if(!symbol)return false;
@@ -2541,6 +2539,23 @@ static bool capture_pattern(SourceCaptureScan *scan, AstNode *node, uint32_t dep
         return capture_pattern(scan,node->as.pattern_multi.patterns[0],depth+1);
     }
     if (source_pattern_binding(node)) return capture_bind(scan,node->as.pattern_literal.value->as.variable.name,node);
+    if (node->type==AST_PATTERN_TUPLE || node->type==AST_PATTERN_OBJECT) {
+        bool tuple=node->type==AST_PATTERN_TUPLE;
+        int count=tuple ? node->as.pattern_tuple.count : node->as.pattern_object.count;
+        AstNode **patterns=tuple ? node->as.pattern_tuple.patterns : node->as.pattern_object.patterns;
+        if (count<0 || (count && !patterns))
+            return source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"product capture patterns are missing");
+        for (int i=0;i<count;++i)
+            if (!capture_pattern(scan,patterns[i],depth+1)) return false;
+    }
+    if (node->type==AST_PATTERN_ARRAY) {
+        PatternArrayNode *array=&node->as.pattern_array;
+        if (array->count<0 || (array->count && !array->patterns))
+            return source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"Array capture patterns are missing");
+        for (int i=0;i<array->count;++i)
+            if (!capture_pattern(scan,array->patterns[i],depth+1)) return false;
+        if (array->rest_binding && !capture_bind(scan,array->rest_name,array->rest_binding)) return false;
+    }
     if (node->type==AST_PATTERN_ADT) {
         for (int i=0;i<node->as.pattern_adt.count;++i)
             if (!capture_pattern(scan,node->as.pattern_adt.patterns[i],depth+1)) return false;
@@ -2584,13 +2599,11 @@ static bool capture_children(SourceCaptureScan *scan, AstNode *node) {
     case AST_VAR_DECL: case AST_CONST_DECL:
         return capture_scan(node->as.var_decl.initializer, scan) && capture_bind(scan, node->as.var_decl.name, node);
     case AST_DESTRUCTURE_DECL: {
-        uint32_t count=0;
-        if (!source_destructure_pattern(scan->ctx,node,&count) ||
+        SourceDestructurePlan plan={0};
+        if (!source_destructure_pattern(scan->ctx,node,&plan) ||
             !capture_scan(node->as.destructure_decl.initializer,scan)) return false;
-        for (uint32_t i=0;i<count;++i) {
-            XrDestructurePattern *field=node->as.destructure_decl.pattern->as.array.elements[i];
-            if (field->type==PATTERN_IDENTIFIER && !capture_bind(scan,field->as.identifier.name,node)) return false;
-        }
+        for (uint32_t i=0;i<plan.count;++i)
+            if (!capture_bind(scan,plan.fields[i].pattern->as.identifier.name,node)) return false;
         return true;
     }
     case AST_BLOCK: {
@@ -2824,6 +2837,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     return source_type_arguments(ctx, node, types, count, &op) && source_recipe_group(ctx, op, captures, scan.count, value);
 }
 #include "xxir_source_array_recipes.inc.c"
+#include "xxir_source_pattern_array_tail.inc.c"
 #include "xxir_source_core_panics.inc.c"
 #include "xxir_source_comptime_expression.inc.c"
 #include "xxir_source_materialization_finish.inc.c"

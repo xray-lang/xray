@@ -1,0 +1,3 @@
+fn finish(value:i64)->i64 { return value }
+fn read(value:(bool,bool))->i64 { return match(value) { (true,true)->40, (true,false)->41, (false,_)->42 } }
+export fn referenceAnswer()->i64 { return finish(read((false,true))) }

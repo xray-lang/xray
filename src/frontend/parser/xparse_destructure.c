@@ -8,10 +8,8 @@
  * xparse_destructure.c - Destructuring pattern parsing
  *
  * KEY CONCEPT:
- *   Flat (non-nested) destructuring only:
- *     - Array: var [a, b, c] = expr        (positional)
- *     - Object: var {x, y: local} = expr   (field-name extraction)
- *   No nesting, no rest (...), no Map destructuring.
+ *   Product children retain distinct binding and field-selection spans.
+ *   Nested patterns share the parser recursion and allocation budgets.
  */
 
 #include "xparse_internal.h"
@@ -116,6 +114,24 @@ XrDestructurePattern *xr_parse_array_pattern(Parser *parser) {
 // have positively identified a tuple destructuring head (the dispatch
 // logic in xr_parse_let_stmt / fn-param / for-in handles the
 // disambiguation).
+
+static XrDestructurePattern *parse_destructure_binding(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
+    Token token=parser->current;XrDestructurePattern *pattern=NULL;
+    if (xr_parser_match(parser,TK_UNDERSCORE))
+        pattern=xr_pattern_skip(parser->compiler_session);
+    else if (xr_parser_match(parser,TK_NAME)) {
+        char *name=copy_token_string(parser,&parser->previous);
+        if (!xr_parser_healthy(parser)) return NULL;
+        pattern=xr_pattern_identifier(parser->compiler_session,name,NULL);
+    } else pattern=xr_parse_destructure_pattern(parser);
+    if (!xr_parser_healthy(parser) || !pattern) return NULL;
+    pattern->line=token.line;pattern->column=token.column;
+    pattern->end_line=parser->previous.line;
+    pattern->end_column=parser->previous.column+parser->previous.length;
+    return pattern;
+}
+
 XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_tuple_pattern: NULL parser");
@@ -141,32 +157,9 @@ XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
             elements = _new_elements;
         }
 
-        Token field_token=parser->current;
-        if (xr_parser_match(parser, TK_UNDERSCORE)) {
-            do {
-                elements[count++] = xr_pattern_skip(parser->compiler_session);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } else if (xr_parser_match(parser, TK_NAME)) {
-            char *name = copy_token_string(parser, &parser->previous);
-            if (!xr_parser_healthy(parser)) return NULL;
-            do {
-                elements[count++] = xr_pattern_identifier(parser->compiler_session, name, NULL);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } else {
-            do {
-                xr_parser_error_expected_name(parser,
-                                          "expected identifier or '_' in tuple destructuring");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return NULL;
-        }
-
-        elements[count-1]->line=field_token.line;
-        elements[count-1]->column=field_token.column;
-        elements[count-1]->end_line=field_token.line;
-        elements[count-1]->end_column=field_token.column+field_token.length;
+        elements[count]=parse_destructure_binding(parser);
+        if (!elements[count]) return NULL;
+        ++count;
         // A trailing comma at the end is allowed (and mandatory for
         // the unary form `(x,)`); otherwise comma separates elements.
         if (xr_parser_check(parser, TK_RPAREN))
@@ -192,7 +185,7 @@ XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
     return xr_pattern_tuple(parser->compiler_session, elements, count);
 }
 
-// Parse flat object destructuring: {name, age: local}
+// Parse field selections with binding, discard or nested product children.
 // Field names drive extraction; optional aliases choose the local binding name.
 XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
@@ -235,31 +228,21 @@ XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
             return NULL;
         }
 
+        Token field_token=parser->previous;
         char *field = copy_token_string(parser, &parser->previous);
         if (!xr_parser_healthy(parser)) return NULL;
 
-        XrDestructurePattern *binding = NULL;
-        if (xr_parser_match(parser, TK_COLON)) {
-            all_shorthand = false;
-            if (!xr_parser_match(parser, TK_NAME)) {
-                do {
-                    xr_parser_error_expected_name(parser, "expected local binding name after ':'");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                return NULL;
-            }
-            char *local = copy_token_string(parser, &parser->previous);
-            if (!xr_parser_healthy(parser)) return NULL;
-            do {
-                binding = xr_pattern_identifier(parser->compiler_session, local, NULL);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
+        XrDestructurePattern *binding=NULL;
+        if (xr_parser_match(parser,TK_COLON)) {
+            all_shorthand=false;binding=parse_destructure_binding(parser);
         } else {
-            do {
-                binding = xr_pattern_identifier(parser->compiler_session, field, NULL);
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
+            binding=xr_pattern_identifier(parser->compiler_session,field,NULL);
+            if (!xr_parser_healthy(parser) || !binding) return NULL;
+            binding->line=field_token.line;binding->column=field_token.column;
+            binding->end_line=field_token.line;binding->end_column=field_token.column+field_token.length;
         }
+        if (!xr_parser_healthy(parser) || !binding) return NULL;
+        binding->field_span=(XrNameSpan){field_token.line,field_token.column};
 
         field_names[count] = field;
         patterns[count] = binding;
@@ -284,7 +267,7 @@ XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
 }
 
 // Unified entry point
-XrDestructurePattern *xr_parse_destructure_pattern(Parser *parser) {
+static XrDestructurePattern *parse_destructure_pattern_inner(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_destructure_pattern: NULL parser");
     if (xr_parser_match(parser, TK_LBRACKET)) {
@@ -300,6 +283,18 @@ XrDestructurePattern *xr_parse_destructure_pattern(Parser *parser) {
         } while (0);
         return NULL;
     }
+}
+
+XrDestructurePattern *xr_parse_destructure_pattern(Parser *parser) {
+    if (!xr_parser_healthy(parser)) return NULL;
+    if (++parser->recursion_depth>XR_PARSER_MAX_DEPTH) {
+        --parser->recursion_depth;
+        xr_parser_error(parser,"destructure nesting too deep (max 1000 levels)");
+        return NULL;
+    }
+    XrDestructurePattern *pattern=parse_destructure_pattern_inner(parser);
+    --parser->recursion_depth;
+    return xr_parser_healthy(parser) ? pattern : NULL;
 }
 
 // Parse destructuring declaration: var [a, b] = expr  or  const {x, y} = expr

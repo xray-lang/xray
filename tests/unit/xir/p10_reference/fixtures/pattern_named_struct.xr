@@ -1,0 +1,4 @@
+fn step(value:i64)->i64 { return value }
+fn finish(value:i64)->i64 { return step(value) }
+struct Box { n:i64; extra:bool }
+export fn referenceAnswer()->i64 { const {extra:_,n:value}=Box{n:42,extra:true}; return finish(value) }

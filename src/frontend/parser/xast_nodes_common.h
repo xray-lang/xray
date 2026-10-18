@@ -128,6 +128,8 @@ typedef struct XrDestructurePattern {
             uint32_t symbol_id;
         } identifier;
     } as;
+    /* An object field selection is distinct from the local binding token. */
+    XrNameSpan field_span;
     /* Parser-owned exact binding token span; never grants type permissions. */
     int line, column, end_line, end_column;
 } XrDestructurePattern;
