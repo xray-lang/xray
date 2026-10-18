@@ -1,0 +1,16 @@
+var trace: i64 = 0
+fn empty() -> () {
+    trace = trace * 10 + 1
+    return ()
+}
+fn marker() -> () {
+    trace = trace * 10 + 2
+    return ()
+}
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    const nothing: () = (...empty(),)
+    const result = (marker(), ...empty(), ...(), 7)
+    const one = (...(...(11,),),)
+    return trace * 100 + result.1 * 10 + one.0
+}

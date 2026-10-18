@@ -521,6 +521,7 @@ xray_stage_windows_asan_runtime("${CMAKE_CURRENT_BINARY_DIR}")
 xray_prepend_windows_asan_runtime_to_directory_tests()
 include("${CMAKE_CURRENT_LIST_DIR}/reception_patterns.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/concat_spread.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/tuple_spread.cmake")
 
 foreach(storage_kind IN ITEMS array array-const)
     string(REPLACE "-" "_" storage_suffix "${storage_kind}")

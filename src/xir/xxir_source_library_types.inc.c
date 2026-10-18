@@ -66,7 +66,7 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
     const XrModuleSpec *spec=&ctx->graph->specs[module];
     const XrXirArtifact *artifact=source_owned_artifact(spec);
     const XrXirModule *library=xr_xir_compile_artifact_module(artifact);
-    if (!library->types && spec->representation!=XR_MODULE_CHECKED_HISTORY) return true;
+    /* Primitive-only libraries still need an owner for function and slot maps. */
     SourceLibraryUnit *unit=source_alloc(ctx,1,sizeof(*unit));
     if (!unit) return false;
     unit->library=library;unit->artifact=artifact;unit->history=spec->history;

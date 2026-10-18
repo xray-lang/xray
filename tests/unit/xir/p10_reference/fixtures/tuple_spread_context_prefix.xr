@@ -1,0 +1,7 @@
+fn finish(value: i64) -> i64 { return value }
+export fn referenceAnswer() -> i64 {
+    const result: (i8?, Array<i8>, i8, (), i64) = (...(null, []), ...(...(7, ()),), 35)
+    const unit: () = result.3
+    if (result.0 != null || len(result.1) != 0) { return 0 }
+    return finish((result.2 as i64) + result.4)
+}
