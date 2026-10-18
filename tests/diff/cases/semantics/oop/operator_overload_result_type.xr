@@ -8,7 +8,7 @@
 class Money {
     cents: i64
 
-    constructor(cents: i64) {
+    init(cents: i64) {
         this.cents = cents
     }
 

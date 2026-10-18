@@ -221,25 +221,25 @@ static void conditional_compact_null_body(const XrXirCompileContext *context,XrX
     XirEffectInvocationSelection sentinel={effects,11,12,13,14,15,16,17},selection=sentinel;
     CHECK(xir_effects_execution_edge(effects,&request,&selection)==XR_XIR_BAD_STRUCTURE &&
         !memcmp(&selection,&sentinel,sizeof(selection)));
-    CHECK(effect_invocation_public_gate(context,certificate,effects->count)==XR_XIR_BAD_STRUCTURE);
+    CHECK(effect_invocation_public_gate(context,certificate)==XR_XIR_BAD_STRUCTURE);
     XrXirRootCauseTrace *trace=NULL;
-    CHECK(effect_invocation_public_trace(context,certificate,effects->count,0,&effects->root[0],&trace)==
+    CHECK(effect_invocation_public_trace(context,certificate,0,&effect_roots_read(effects)->root[0],&trace)==
         XR_XIR_BAD_STRUCTURE && !trace);
     certificate->body=owned;
-    CHECK(effect_body_material_shape(owned) && effect_invocation_public_gate(context,certificate,effects->count)==XR_XIR_OK);
+    CHECK(effect_body_material_shape(owned) && effect_invocation_public_gate(context,certificate)==XR_XIR_OK);
 }
 
 /* This genuine Checked producer has already died. Every trace request must
  * still replay the complete selected equation and reject independent damage. */
 static void conditional_compact_public_selection(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate) {
-    CHECK(certificate->result->functions[1].formula.constant_mask==0 &&
-        certificate->result->functions[1].formula.term_count==1 &&
-        certificate->result->functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
-        certificate->result->functions[1].formula.terms[0].index==0);
+    CHECK(certificate->final->summary.functions[1].formula.constant_mask==0 &&
+        certificate->final->summary.functions[1].formula.term_count==1 &&
+        certificate->final->summary.functions[1].formula.terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
+        certificate->final->summary.functions[1].formula.terms[0].index==0);
     for (uint32_t f=0;f<2;++f) for (uint32_t d=0;d<4;++d) {
         EffectInvocationTraceRequest request={.function=f,.domain=d};uint32_t length=77;
-        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_OK &&
+        CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_OK &&
             length==((f==1 && d==1)?1u:0u));
     }
     EffectInvocationTraceRequest request={.function=1,.domain=1};
@@ -249,31 +249,34 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
     CHECK(effect_invocation_trace_walk_selected(context,certificate,&request,&length,&selected)==XR_XIR_OK &&
         length==1 && selected.atom==6 && selected.witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL &&
         selected.witness.instruction==0 && selected.witness.distance==0);
-    uint32_t at=certificate->result->count+1,atom=certificate->projection_atoms[at];
-    XrXirRootEffectWitness witness=certificate->result->witnesses[at];
-    bool fact=certificate->result->facts[1].unresolved;
-    XrXirRootTerm *term=(XrXirRootTerm *)certificate->result->functions[1].formula.terms;
+    uint32_t at=certificate->final->summary.count+1,atom=selected.atom;
+    EffectInvocationNode *entry=&certificate->final->nodes[certificate->final->roots[1]];
+    EffectInvocationCause saved=entry->causes[atom];
+    XrXirRootEffectWitness witness=certificate->final->summary.witnesses[at];
+    XrXirRootTerm *term=(XrXirRootTerm *)certificate->final->summary.functions[1].formula.terms;
     uint32_t index=term[0].index;
     for (uint32_t damage=0;damage<4;++damage) {
-        if (!damage) certificate->projection_atoms[at]=UINT32_MAX;
-        else if (damage==1) certificate->result->witnesses[at].distance^=1;
-        else if (damage==2) certificate->result->facts[1].unresolved=false;
+        if (!damage) entry->causes[atom].witness.cause=XR_XIR_ROOT_CAUSE_NONE;
+        else if (damage==1) certificate->final->summary.witnesses[at].distance^=1;
+        else if (damage==2) certificate->final->summary.witnesses[at].cause=XR_XIR_ROOT_CAUSE_NONE;
         else term[0].index=1;
         length=77;
-        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_BAD_STRUCTURE && length==77);
+        CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_BAD_STRUCTURE && length==77);
         if (damage<3) {
             selected=sentinel;length=77;
             CHECK(effect_invocation_trace_walk_selected(context,certificate,&request,&length,&selected)==
                 XR_XIR_BAD_STRUCTURE && length==77 && selected.atom==sentinel.atom &&
                 effect_invocation_witness_equal(&selected.witness,&sentinel.witness));
         }
-        certificate->projection_atoms[at]=atom;certificate->result->witnesses[at]=witness;
-        certificate->result->facts[1].unresolved=fact;term[0].index=index;
+        entry->causes[atom]=saved;certificate->final->summary.witnesses[at]=witness;
+        term[0].index=index;
         length=77;
-        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_OK && length==1);
+        CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_OK && length==1);
     }
     length=77;
-    CHECK(effect_invocation_public_walk(context,certificate,&request,0,&length)==XR_XIR_BAD_STRUCTURE && length==77);
+    uint32_t key_count=certificate->final->count;certificate->final->count=0;
+    CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_BAD_STRUCTURE && length==77);
+    certificate->final->count=key_count;
 }
 
 /* Genuine owned CONTEXT_CALL terminal; the producer and raw fixture have
@@ -281,10 +284,10 @@ static void conditional_compact_public_selection(const XrXirCompileContext *cont
  * without using the new reader as the expected instruction oracle. */
 static void conditional_compact_cause_opcode(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate) {
-    uint32_t selected=certificate->equations->roots[1],atom=6;
-    CHECK(selected<certificate->equations->count &&
-        certificate->equations->nodes[selected].body==1 &&
-        certificate->equations->nodes[selected].causes[atom].witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL);
+    uint32_t selected=certificate->final->roots[1],atom=6;
+    CHECK(selected<certificate->final->count &&
+        certificate->final->nodes[selected].body==1 &&
+        certificate->final->nodes[selected].causes[atom].witness.cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL);
     EffectBodyFunction *function=&certificate->body->functions[1];
     CHECK(function->runs && function->instruction_count==2 && function->run_count &&
         function->runs[0].first==0 && function->runs[0].base.op==XR_XIR_CALL_INDIRECT);
@@ -303,13 +306,13 @@ static void conditional_compact_cause_opcode(const XrXirCompileContext *context,
         else function->run_count=0;
         CHECK(effect_invocation_certificate_cause(context,certificate,selected,atom)==XR_XIR_BAD_STRUCTURE);
         uint32_t length=77;
-        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_BAD_STRUCTURE && length==77);
+        CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_BAD_STRUCTURE && length==77);
         function->runs[0].first=first;function->runs[0].count=count;function->runs[0].mask=mask;function->runs[0].base.op=(XrXirOp)opcode;
         function->run_count=words;function->run_capacity=capacity;function->run_count=runs;
         CHECK(effect_invocation_certificate_cause(context,certificate,selected,atom)==XR_XIR_OK);
     }
     uint32_t length=77;
-    CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==XR_XIR_OK && length==1);
+    CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==XR_XIR_OK && length==1);
 }
 
 /* Literal domains of the genuine four-function Checked producer. ROOT
@@ -338,7 +341,7 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
         }
     }
     uint32_t selected[4];
-    uint32_t root=certificate->equations->roots[1];EffectInvocationNode *node=&certificate->equations->nodes[root];
+    uint32_t root=certificate->final->roots[1];EffectInvocationNode *node=&certificate->final->nodes[root];
     EffectInvocationCause *cause=&node->causes[6],*local=&effect_invocation_local_causes(node)[6];
     XrXirRootEffectWitness saved=cause->witness,local_saved=local->witness;
     uint32_t stream_first=certificate->body->functions[1].runs[0].first;
@@ -346,17 +349,17 @@ static void conditional_compact_projection_domains(const XrXirCompileContext *co
         if (!damage) cause->witness.slot=0;
         else if (damage==1) local->witness.cause=XR_XIR_ROOT_CAUSE_PARAMETER;
         else if (damage==2) certificate->body->functions[1].runs[0].first=1;
-        else if (damage==3) certificate->equations->roots[1]=certificate->equations->roots[0];
+        else if (damage==3) certificate->final->roots[1]=certificate->final->roots[0];
         CHECK(effect_invocation_projection_domains(context,certificate,1,damage==4?1u:0u,4,selected)==
             XR_XIR_BAD_STRUCTURE);
         /* Private scratch has no failure value. The public request still
          * preserves its output when the same damaged proof is rejected. */
         EffectInvocationTraceRequest request={.function=1,.domain=damage==4?4u:1u};
         uint32_t length=77;
-        CHECK(effect_invocation_public_walk(context,certificate,&request,4,&length)==
+        CHECK(effect_invocation_public_walk(context,certificate,&request,&length,NULL)==
             XR_XIR_BAD_STRUCTURE && length==77);
         cause->witness=saved;local->witness=local_saved;
-        certificate->body->functions[1].runs[0].first=stream_first;certificate->equations->roots[1]=root;
+        certificate->body->functions[1].runs[0].first=stream_first;certificate->final->roots[1]=root;
         CHECK(effect_invocation_projection_domains(context,certificate,1,0,4,selected)==XR_XIR_OK &&
             selected[1]==6 && selected[0]==UINT32_MAX && selected[2]==UINT32_MAX &&
             selected[3]==UINT32_MAX);
@@ -409,7 +412,7 @@ static void conditional_compact_dimension_damage(const XrXirCompileContext *cont
  * identity. Only its already-decoded opcode is reused inside this request. */
 static void conditional_compact_edge_reads(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate) {
-    EffectInvocationOwner *equations=certificate->equations;uint32_t matched=0,chosen=UINT32_MAX;
+    EffectInvocationFinal *equations=certificate->final;uint32_t matched=0,chosen=UINT32_MAX;
     for (uint32_t e=0;e<equations->edge_count;++e) {
         const EffectInvocationEdge *edge=&equations->edges[e];
         uint32_t body=equations->nodes[edge->caller].body;XrXirOp expected=XR_XIR_INVALID;
@@ -635,11 +638,16 @@ static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,
     fixture.init_block.count=fixture.functions[3].instruction_count=3;
     XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:8 status%u XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:10 status%u if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:12 status%u if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);\n",(unsigned)status);
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead body_read={0};
     if (status==XR_XIR_OK) status=effect_cell_body_raw(context,xr_xir_compile_artifact_module(checked),&adapter,&body_read);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:15 status%u if (status==XR_XIR_OK) status=effect_cell_body_raw(context,xr_xir_compile_artifact_module(checked),&adapter,&body_read);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,effects->cells,&body_read,NULL);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:17 status%u if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,effects->cells,&body_read,NULL);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) {
         CHECK(effects->invocations && effect_body_material_shape(effects->invocations->body));
         const XrXirModule *original=xr_xir_compile_artifact_module(checked);
@@ -667,12 +675,14 @@ static XrXirStatus conditional_compact_owned(const XrXirCompileContext *context,
     xr_xir_compile_artifact_free(checked);memset(&fixture,0xCE,sizeof(fixture));
     adapter=(EffectCellBodyAdapter){0};body_read=(XrXirCellProofBodyRead){0};
     if (status==XR_XIR_OK) status=effect_cell_body_owned(context,effects->invocations->body,&adapter,&body_read);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:45 status%u if (status==XR_XIR_OK) status=effect_cell_body_owned(context,effects->invocations->body,&adapter,&body_read);\n",(unsigned)status);
     if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,effects->cells,&body_read,NULL);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:47 status%u if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(context,effects->cells,&body_read,NULL);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) conditional_compact_cell_attacks(context,effects,&adapter,&body_read);
+    fprintf(stderr,"DIAG xir_invocation_compact_snapshot_cases.h:49 status%u if (status==XR_XIR_OK && oracle) conditional_compact_cell_attacks(context,effects,&adapter,&body_read);\n",(unsigned)status);
     if (status==XR_XIR_OK && oracle) {
         EffectInvocationCertificate *certificate=effects->invocations;
-        CHECK(certificate->equations && !certificate->equations->work && !certificate->equations->body.read.owner &&
-            !certificate->equations->effects && !certificate->equations->graph);
+        CHECK(certificate->final);
         EffectBodyRequest request=effect_body_owned_request(context,certificate->body);
         EffectBodyFunctionHead head={0};XrXirInstruction storage;const XrXirInstruction *op=NULL;
         CHECK(effect_body_request_head(&request,0,&head)==XR_XIR_OK && head.parameter_count==0 &&
@@ -817,7 +827,12 @@ static void conditional_compact_instance_span(void) {
     CHECK(effect_body_material_create(&context,source,&generic_material)==XR_XIR_OK && generic_material);
     CHECK(effect_body_source_match(&context,generic_material,source)==XR_XIR_OK);
     effect_body_material_free(generic_material);
-    CHECK(xr_xir_compile_specialize(checked,&instance,NULL)==XR_XIR_OK && instance);
+    XrXirDiagnostic specialized_diagnostic={0};
+    XrXirStatus specialized=xr_xir_compile_specialize(checked,&instance,&specialized_diagnostic);
+    if(specialized!=XR_XIR_OK) fprintf(stderr,"compact instance specialization status%u reason%u f%u i%u work%llu\n",
+        specialized,specialized_diagnostic.reason,specialized_diagnostic.function,specialized_diagnostic.instruction,
+        (unsigned long long)rp_stats(&context).work);
+    CHECK(specialized==XR_XIR_OK && instance);
     const XrXirModule *module=xr_xir_compile_artifact_module(instance);
     CHECK(module->provenance && module->provenance->kind==XR_XIR_EVIDENCE_INSTANCE && module->provenance->source);
     uint32_t selected=UINT32_MAX;
@@ -846,7 +861,8 @@ static void conditional_compact_instance_span(void) {
 }
 
 static XrXirStatus conditional_compact_case(const XrXirCompileContext *context,uint32_t mode,bool oracle) {
-    return mode<2?conditional_compact_codec(context,mode,oracle):conditional_compact_owned(context,oracle);
+    XrXirStatus status=mode<2?conditional_compact_codec(context,mode,oracle):conditional_compact_owned(context,oracle);
+    fprintf(stderr,"DIAG compact mode%u status%u\n",mode,(unsigned)status);return status;
 }
 #include "xir_invocation_compact_directory_cases.h"
 

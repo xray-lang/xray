@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Real checked bodies and bound VM entries survive source and packet destruction.
  */
+#include "xir/xxir_program_internal.h"
 #ifndef XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H
 #define XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H
 
@@ -54,7 +55,7 @@ typedef struct PceWitness {
     bool empty_preserved, occupied_preserved;
     XrXirValue borrowed, taken, advertised;
     unsigned carrier_created, carrier_dropped;
-    XrXirValue slot_before;
+    XrXirValue slot_before, slot_value_before;
     XrXirInstanceState finished_state;
     XrXirCallStatus outcome, take_empty, take_occupied, stop, freed;
 } PceWitness;
@@ -80,10 +81,8 @@ static void pce_release(XrXirCallView *view, XrXirCallStatus reason);
 
 static void pce_code_release(void *opaque) {
     PceFixture *f = opaque;
-    CHECK(f->lowered && !f->code_releases);
+    CHECK(!f->lowered && !f->code_releases);
     ++f->code_releases;
-    xr_xir_compile_artifact_free(f->lowered);
-    f->lowered = NULL;
 }
 
 static uint32_t pce_function(const XrXirModule *m, const char *name) {
@@ -194,7 +193,8 @@ static void pce_build(PceFixture *f, PceMode mode) {
     const XrXirModule *m = xr_xir_compile_artifact_module(f->lowered);
     CHECK(m->function_count <= PCE_MAX_FUNCTIONS && m->declarations->module_count == 1);
     CHECK(m->declarations->slot_count == 1 && m->declarations->slots[0].mutable == 1);
-    CHECK(m->declarations->slots[0].type == XR_XIR_I64);
+    CHECK(xr_xir_type_is_cell(m->types, m->declarations->slots[0].type));
+    CHECK(xr_xir_cell_element(m->types, m->declarations->slots[0].type) == XR_XIR_I64);
     f->functions = m->function_count;
     f->module = m->declarations->root_module;
     f->initializer = m->declarations->modules[f->module].initializer;
@@ -220,8 +220,14 @@ static void pce_build(PceFixture *f, PceMode mode) {
     }
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     const XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, entries, f->functions,
-        m->declarations, {f,pce_code_release}, m->types, xr_xir_compile_program_proof(f->lowered)};
-    CHECK(xr_xir_compile_program_seal(&f->compiler, &spec, &f->program) == XR_XIR_OK);
+        m->declarations, {f,pce_code_release}, m->types, {0}};
+    XrXirArtifact *pending = f->lowered;
+    XrXirProgramInput *input = NULL;
+    XrXirStatus received = xir_program_input_take(&f->compiler, &pending, &input);
+    if (received == XR_XIR_OK) received = xir_program_receive(&f->compiler, &spec, &input, NULL, &f->program);
+    if (received == XR_XIR_OK) f->lowered = NULL;
+    else if (input) { input->artifact = NULL; xir_program_input_free(input); }
+    CHECK(received == XR_XIR_OK && !input && !f->lowered && !f->code_releases);
     pce_check_facts(f);
 }
 #endif // XIR_PROGRAM_CALL_PERMISSIONS_FIXTURE_H

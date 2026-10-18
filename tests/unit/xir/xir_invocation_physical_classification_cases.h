@@ -8,6 +8,7 @@
  */
 #ifndef XIR_INVOCATION_PHYSICAL_CLASSIFICATION_CASES_H
 #define XIR_INVOCATION_PHYSICAL_CLASSIFICATION_CASES_H
+#include "xir_raw_physical_correspondence.h"
 
 /* These are storage ownership and generation assertions, not permission
  * from pointer identity. Complete membership is independently matched. */
@@ -16,22 +17,22 @@ static void conditional_physical_generations(const XrXirCompileContext *context,
     EffectGraph graph={0};
     CHECK(effect_graph_physical_refresh(context,module,&graph,NULL)==XR_XIR_OK && graph.physical_owned);
     EffectPhysicalDomain *initial=graph.physical;
-    CHECK(initial && initial!=certificate->equations->physical &&
-        effect_physical_match(context,initial,module)==XR_XIR_OK);
+    CHECK(initial && initial!=certificate->final->physical &&
+        invocation_raw_physical_match(context,initial,module)==XR_XIR_OK);
     size_t first_attempt=rp_attempts;uint64_t first_live=rp_stats(context).live_bytes;
     rp_fail_at=first_attempt;rp_injected=false;
     CHECK(effect_graph_physical_refresh(context,module,&graph,NULL)==XR_XIR_OUT_OF_MEMORY &&
         rp_injected && graph.physical==initial && graph.physical_owned &&
         rp_stats(context).live_bytes==first_live);
     rp_fail_at=SIZE_MAX;rp_injected=false;
-    CHECK(effect_physical_match(context,initial,module)==XR_XIR_OK);
+    CHECK(invocation_raw_physical_match(context,initial,module)==XR_XIR_OK);
     XrXirInstruction *ops=(XrXirInstruction *)module->functions[1].instructions;
     XrXirOp original=ops[64].op;CHECK(original==XR_XIR_COPY);
     ops[64].op=XR_XIR_FUNCTION_WEAKEN;
-    CHECK(effect_physical_match(context,initial,module)==XR_XIR_BAD_STRUCTURE);
+    CHECK(invocation_raw_physical_match(context,initial,module)==XR_XIR_BAD_STRUCTURE);
     CHECK(effect_graph_physical_refresh(context,module,&graph,NULL)==XR_XIR_OK &&
         graph.physical_owned && graph.physical!=initial &&
-        effect_physical_match(context,graph.physical,module)==XR_XIR_OK);
+        invocation_raw_physical_match(context,graph.physical,module)==XR_XIR_OK);
     bool found=false;
     for (uint32_t r=0;r<graph.physical->functions[1].count;++r) {
         EffectPhysicalRecord record=graph.physical->functions[1].records[r];
@@ -45,9 +46,9 @@ static void conditional_physical_generations(const XrXirCompileContext *context,
     EffectBodyMaterial *taken=NULL;
     CHECK(effect_graph_material_take(context,module,&graph,&taken)==XR_XIR_OK && taken==material && taken->physical==initial &&
         !graph.material && !graph.physical && !graph.physical_owned && rp_attempts==attempts);
-    CHECK(effect_physical_match(context,taken->physical,module)==XR_XIR_OK);
+    CHECK(invocation_raw_physical_match(context,taken->physical,module)==XR_XIR_OK);
     graph.material=taken;graph.physical=taken->physical;graph.physical_owned=false;effect_graph_free(&graph);
-    CHECK(effect_physical_match(context,taken->physical,module)==XR_XIR_OK);
+    CHECK(invocation_raw_physical_match(context,taken->physical,module)==XR_XIR_OK);
     graph.material=taken;graph.physical=taken->physical;graph.physical_owned=false;
     const bool escaping_empty[4]={false,false,true,true};
     for (uint32_t f=0;f<4;++f) {
@@ -59,13 +60,13 @@ static void conditional_physical_generations(const XrXirCompileContext *context,
     }
     effect_graph_free(&graph);
     effect_body_material_free(taken);
-    CHECK(effect_physical_match(context,certificate->equations->physical,module)==XR_XIR_OK);
+    CHECK(invocation_raw_physical_match(context,certificate->final->physical,module)==XR_XIR_OK);
 }
 
 static void conditional_physical_rejections(const XrXirCompileContext *context,
     EffectInvocationCertificate *certificate,XrXirModule *module) {
-    EffectPhysicalDomain *domain=certificate->equations->physical;
-    CHECK(effect_physical_match(context,domain,module)==XR_XIR_OK);
+    EffectPhysicalDomain *domain=certificate->final->physical;
+    CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_OK);
     EffectPhysicalFunction *body=&domain->functions[1];
     const uint32_t values[10]={0,3,4,5,6,7,65,66,96,97};
     const uint32_t masks[10]={1,4,8,8,8,8,27,9,2328,32};
@@ -81,38 +82,38 @@ static void conditional_physical_rejections(const XrXirCompileContext *context,
     for (uint32_t r=0;r<7;++r)
         CHECK(scalar->records[r].value==scalar_values[r] && scalar->records[r].mask==scalar_masks[r]);
     uint32_t count=body->count;body->count=count-1;
-    CHECK(effect_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);body->count=count;
+    CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);body->count=count;
     uint32_t mask=body->records[1].mask;body->records[1].mask=0;
-    CHECK(effect_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);body->records[1].mask=mask;
+    CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);body->records[1].mask=mask;
     uint32_t error_mask=body->records[8].mask;
     body->records[8].mask=error_mask&~EFFECT_PHYSICAL_ERROR_ESCAPE;
-    CHECK(effect_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);
+    CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);
     body->records[8].mask=error_mask&~EFFECT_PHYSICAL_CONTROL;
-    CHECK(effect_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);
+    CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);
     body->records[8].mask=error_mask;
     uint32_t value=body->records[2].value;body->records[2].value=3;
-    CHECK(effect_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);body->records[2].value=value;
+    CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);body->records[2].value=value;
     uint32_t rows=body->rows;body->rows=rows-1;
-    CHECK(effect_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);body->rows=rows;
+    CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);body->rows=rows;
     XrXirInstruction *ops=(XrXirInstruction *)module->functions[1].instructions;
     XrXirOp invalid=ops[63].op;ops[63].op=XR_XIR_INVALID;
-    CHECK(effect_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);ops[63].op=invalid;
+    CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);ops[63].op=invalid;
     XrXirOp opcode=ops[2].op;ops[2].op=XR_XIR_CONST_INT;
-    CHECK(effect_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);ops[2].op=opcode;
+    CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);ops[2].op=opcode;
     XrXirType type=ops[64].type;ops[64].type=XR_XIR_I64;
-    CHECK(effect_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);ops[64].type=type;
+    CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_BAD_STRUCTURE);ops[64].type=type;
     EffectPhysicalDomain *occupied=domain;size_t attempts=rp_attempts;
     CHECK(effect_physical_new(context,module,&occupied)==XR_XIR_BAD_STRUCTURE &&
         occupied==domain && rp_attempts==attempts);
-    CHECK(effect_physical_match(context,domain,module)==XR_XIR_OK);
+    CHECK(invocation_raw_physical_match(context,domain,module)==XR_XIR_OK);
     conditional_physical_generations(context,certificate,module);
-    EffectInvocationOwner replay=*certificate->equations;
-    replay.work=context;replay.physical=NULL;
-    EffectInvocationFlow flow={.owner=&replay,.node=replay.roots[1]};
-    CHECK(effect_invocation_origins(&flow)==XR_XIR_BAD_STRUCTURE && !flow.memory);
+    EffectInvocationFinal damaged=*certificate->final;damaged.physical=NULL;
+    EffectInvocationRead replay={.work=context,.final=&damaged};
+    EffectInvocationFlow flow={.read=&replay,.node=damaged.roots[1]};
+    CHECK(effect_invocation_final_view(&flow)==XR_XIR_BAD_STRUCTURE && !flow.memory);
     RootParameterMark physical=rp_mark();XrXirCompileContext foreign=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&foreign).live_bytes;
-    CHECK(effect_physical_match(&foreign,domain,module)==XR_XIR_BAD_STRUCTURE);
+    CHECK(invocation_raw_physical_match(&foreign,domain,module)==XR_XIR_BAD_STRUCTURE);
     rp_owner_free(&foreign,baseline);rp_balanced(physical);
 }
 
@@ -139,15 +140,15 @@ static XrXirStatus conditional_physical_case(const XrXirCompileContext *context,
     memset(blocks,0xCE,sizeof(blocks));memset(incoming,0xCE,sizeof(incoming));
     if (status==XR_XIR_OK) {
         phase=3;
-        if (!effects->invocations || !effects->invocations->equations ||
-            !effects->invocations->equations->physical) status=XR_XIR_BAD_STRUCTURE;
-        else status=effect_body_physical_match(context,effects->invocations->equations->physical,
+        if (!effects->invocations || !effects->invocations->final ||
+            !effects->invocations->final->physical) status=XR_XIR_BAD_STRUCTURE;
+        else status=effect_body_physical_match(context,effects->invocations->final->physical,
             effects->invocations->body);
     }
     if (status==XR_XIR_OK && oracle) {
-        CHECK(!effects->root[0].requires_root && !effects->root[0].unresolved && effects->root[1].unresolved);
-        CHECK(!effects->invocations->equations->body.read.owner && !effects->invocations->equations->work &&
-            effects->invocations->equations->physical->resources==context->resources);
+        CHECK(!effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved && effect_roots_read(effects)->root[1].unresolved);
+        CHECK((effects->invocations->final->material!=NULL) && (effects->invocations->final->material!=NULL) &&
+            effects->invocations->final->physical->resources==context->resources);
         const XrXirTypeNode *signature=xr_xir_callable_signature(&effects->invocations->terms.types,
             effects->invocations->body->functions[1].parameters[0]);
         CHECK(signature && (signature->flags&XR_XIR_CALLABLE_ROOT_UNRESOLVED));

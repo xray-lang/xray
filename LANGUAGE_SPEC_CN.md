@@ -233,7 +233,6 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `type` | 类型别名 |
 | `new` | 保留字；对象构造统一写 `T(...)`（见 §3.14） |
 | `this` `super` | 自我/父类引用 |
-| `constructor` | 构造器 |
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `const` | 不可变字段/绑定修饰符 |
 | `final` | `final class` 禁止继承 |
@@ -280,6 +279,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 | Token | 出现位置 |
 |--|--|
+| `init` | class/struct 的初始化成员声明；在其它位置仍为普通标识符 |
 | `from` | `select` 的接收分支 (`x from ch`)；也用于命名 import / re-export (`import { x } from "module"`) |
 | `to` | `select` 的发送分支 (`value to ch`) |
 | `default` | 保留，当前未启用 |
@@ -941,7 +941,7 @@ fn first(packet: Packet) -> u8 {
 
 切片使用显式目标视图类型。`array[start:end]` 或 `fixedArray[start:end]` 可形成共享视图；形成 `MutSlice<T>` 还要求 owner 是独占可写 place，并在视图产生前完成必要的 COW 分离。字符串字节视图 `str.bytes()` 是 `Slice<u8>`，不能用于修改字符串。
 
-`len(view)` 读取长度，`view[i]` 读取元素；只有 `MutSlice<T>` 允许 `view[i] = value`，写入对应 owner 的逻辑值。视图不提供成员方法或 `.length`。从 `const` owner 派生的视图只能只读；不得用尚未冻结的 type-position `const T` 重新定义可写视图。
+`len(view)` 读取长度，`view[i]` 读取元素；只有 `MutSlice<T>` 允许 `view[i] = value`，写入对应 owner 的逻辑值。视图不提供成员方法或 `.length`。从 `const` owner 派生的视图只能只读；类型位置不接受 `const T`；只读视图使用 `Slice<T>`，可写视图使用 `MutSlice<T>`。
 
 owner 必须是可证明存活的具名局部 place、参数或 receiver 字段路径，不能借用临时值。嵌套投影保护所属根及必要路径。class 字段借用须保活对象并动态检查独占；只有局部无冲突证明才可省去动态检查。
 
@@ -1465,9 +1465,9 @@ Xray 默认只保留最小类型身份层：
 
 ```xray
 class Address { city: string
-    constructor(city: string) { this.city = city } }
+    init(city: string) { this.city = city } }
 class User { address: Address?
-    constructor(address: Address?) { this.address = address } }
+    init(address: Address?) { this.address = address } }
 
 fn show(u: User) {
     var addr = u.address          // 提取为简单绑定
@@ -1619,7 +1619,7 @@ print(len(a))               // 4
 
 不可复制资源的消费转移持有权和最终析构责任，调用是否消费由声明的参数或 receiver 模式决定。对这类转移，`move x` 是可选的显式标记；源绑定成功消费后不可再用，未被所有路径重新初始化的循环再次消费也必须拒绝。只读与 `ref` 借用不消费持有权。被拒绝的操作不能把有效源状态错误地标为已消费。
 
-可复制类型（包括 Array）不能声明 `move` 参数或 receiver。可复制值是否另行允许独立的 `move x` 表达式、普通值 `copy(array)` 是否保留公开拼写，以及 type-position `const T` 的身份和转换，均不在本已冻结子集内，须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver。通用 type-position `const T` 已删除，不产生类型身份或转换。可复制值是否另行允许独立的 `move x` 表达式、普通值 `copy(array)` 是否保留公开拼写，仍须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
 
 #### 2.14.6 struct 字段的复制与初始化
 
@@ -2830,7 +2830,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-本节冻结绑定与值语义部分的只读权限，不裁决 type-position `const T` 的独立类型身份、转换及全部可用位置；该表面不在本已冻结子集内，须在准入前另行确定，不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
+`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止；不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
 
 这些是语言合同；完整声明族的当前新 XIR 实现资格见 §17，不因本节示例而宣称实现完成。跨执行共享还须满足 §10 的类型与边界合同。
 
@@ -3219,11 +3219,11 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
               ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl | StaticBlock
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // 参数类型可省
+InitDecl ::= 'init' '(' ParamList? ')' Block          // 参数类型可省
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
@@ -3243,7 +3243,7 @@ class Animal {
     name: string                       // 字段
     private _age: i64 = 0              // 私有字段，可有默认值
 
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
 
@@ -3265,7 +3265,7 @@ print(Animal.create("Bob").name)
 
 ```xray
 class Dog extends Animal {
-    constructor(name: string) {
+    init(name: string) {
         super(name)                    // **必须**首语句（仅限派生类）
     }
 
@@ -3309,7 +3309,7 @@ class Dog extends Animal {
 class Point {
     x: f64
     y: f64
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -3319,14 +3319,14 @@ class Point {
 class Vector2 {
     x: f64
     y: f64
-    constructor(x, y) {         // 等价于显式写 (x: f64, y: f64)
+    init(x, y) {         // 等价于显式写 (x: f64, y: f64)
         this.x = x
         this.y = y
     }
 }
 ```
 
-- 关键字 `constructor`（不是 `init` 也不是与类同名）。
+- `init` 是类型成员位置的上下文关键字；旧 `constructor` 声明拼写拒绝，不保留别名。其它位置的 `init` 仍是普通标识符。
 - 一个类**只有一个构造器**（不支持构造器重载）；要多种创建方式用 `static` 工厂方法。
 - 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况必须显式声明类型，不得从调用位点倒推定义的类型或能力。
 - 构造器隐式返回 `this`（编译期注入）。
@@ -3334,7 +3334,7 @@ class Vector2 {
 - 字段读取前必须在每条到达路径上完成初始化；整体 `this` 的返回、方法调用或闭包捕获要求所有字段初始化。正常结束和无值 `return` 都返回完整的 `this`，构造器不能显式返回另一个值。失败不发布部分结构体，已执行的外部副作用不回滚。
 - const 字段的声明默认表达式或构造体赋值构成唯一初始化；存在任一路径已初始化时不能再次赋值，循环回边也参与检查。mutable 字段初始化后可继续更新。
 - 构造器的自然结束与无值 `return` 都先执行退出清理，再从已初始化字段组装并发布完整的 `this`。清理对 mutable 字段的合法更新进入最终构造结果；失败不发布结果。普通函数显式返回表达式先取值、再清理的值快照规则不因此改变。
-- 字段字面量与构造器调用分别遵循字段权限和构造器权限；声明显式构造器本身不取消合法的 struct 字段字面量，也不扩大私有字段的构造权限。
+- 有显式 `init` 的 struct 只允许在其声明模块内使用字段字面量；外部经 `Type(...)` 或具名工厂构造。无显式 `init` 的 struct 保留正常字段字面量规则。展开字面量不能绕过此权限，任何形式均不扩大私有字段权限。
 - 派生类构造器必须首行调 `super(...)`。
 - struct 可以**没有**构造器，但省略构造器仍须为每个字段提供合法的默认初值（§5.1、§5.4）。`Point()` 的数值字段可初始化为零；没有显式初值的非 nullable Array 等字段不能因此被零初始化。
 
@@ -3345,7 +3345,7 @@ class Vec2 {
     x: f64
     y: f64
 
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x; this.y = y
     }
 
@@ -3422,7 +3422,7 @@ interface Iterable<T> {
 class Rect {
     _w: i64
     _h: i64
-    constructor(w: i64, h: i64) { this._w = w; this._h = h }
+    init(w: i64, h: i64) { this._w = w; this._h = h }
 
     // 只读：只有 getter
     area: i64 { fn() { return this._w * this._h } }
@@ -3460,12 +3460,12 @@ fn main() {
 ```xray
 class Animal {
     name: string
-    constructor(name: string) { this.name = name }
+    init(name: string) { this.name = name }
     speak() -> string { return "..." }
 }
 
 class Dog extends Animal {
-    constructor(name: string) { super(name) }
+    init(name: string) { super(name) }
     override speak() -> string { return "woof" }
 }
 
@@ -3484,7 +3484,7 @@ main()
 class Vec2 {
     x: i64
     y: i64
-    constructor(x: i64, y: i64) { this.x = x; this.y = y }
+    init(x: i64, y: i64) { this.x = x; this.y = y }
     operator+(other: Vec2) -> Vec2 {
         return Vec2(this.x + other.x, this.y + other.y)
     }
@@ -3568,7 +3568,7 @@ var c = Config{host: "localhost"}    // OK
 | 泛型 | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | 运算符重载 | ✅ | ✅ |
-| 构造器 | `constructor(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
+| 构造器 | `init(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
 
 **适用场景**：
@@ -3623,7 +3623,7 @@ interface Greeter {
 
 class Circle implements Shape {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
 }
@@ -3631,7 +3631,7 @@ class Circle implements Shape {
 // 实现多个接口
 class Logger implements Shape, Greeter {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
     greet(name: string) { print("hello,", name) }
@@ -3683,7 +3683,7 @@ interface SizedCollection<T> extends HasLength {
 class Buffer implements SizedCollection<i64> {
     length: i64                       // 实现属性签名
     private data: Array<i64>
-    constructor(n: i64) {
+    init(n: i64) {
         this.length = n
         this.data = []
     }
@@ -3702,7 +3702,7 @@ interface Shape {
 
 class Circle implements Shape {
     r: f64
-    constructor(r: f64) { this.r = r }
+    init(r: f64) { this.r = r }
     area() -> f64 { return 3.14159 * this.r * this.r }
 }
 
@@ -3780,7 +3780,7 @@ enum NetEvent {
 // 递归 enum 的 payload 必须经 class 节点间接化
 class ExprNode {
     expr: Expr
-    constructor(expr: Expr) { this.expr = expr }
+    init(expr: Expr) { this.expr = expr }
     get() -> Expr { return this.expr }
 }
 
@@ -3959,7 +3959,7 @@ print(Color.fromInt(2).label())     // "Green"
 - 方法语法与类型体内方法一致：`name(...)`、`ref name(...)`、`move name(...)` 或 `static name(...)`；不写 `fn`
 - 方法体内 `this` 的静态类型是 enum 自身（如 `Option<T>`），需要 `match (this)` 才能取出变体 payload
 - 静态方法没有 `this`；调用形式是 `EnumName.method(args...)`
-- **不**支持 `constructor`（变体语法本身就是构造器）
+- **不**支持 `init`（变体语法本身就是构造器）
 - **不**支持继承（`enum E extends ...` 是非法）；如需共享行为，用接口实现（`enum E implements Iface`）或顶层函数
 - 简单枚举（无 payload）也可定义方法，但方法体内 `this` 是该 enum 的值，可用 `==` 直接比较：
   ```xray
@@ -4693,7 +4693,7 @@ class PanicInfo {
     code: i64                   // 错误码
     data: JSON.Value            // 附加数据；无数据时为 JSON null
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
@@ -4853,7 +4853,7 @@ enum ConnErr { Refused, Timeout }
 // 用一个极简的 "连接" 替身让示例自成一体。
 class Conn {
     alive: bool
-    constructor(alive: bool) { this.alive = alive }
+    init(alive: bool) { this.alive = alive }
     isAlive() -> bool { return this.alive }
     close() { print("closed") }
 }
@@ -5020,7 +5020,7 @@ var b = identity("hello")               // 推断 T=string
 // 泛型类
 class Box<T> {
     value: T
-    constructor(v: T) { this.value = v }
+    init(v: T) { this.value = v }
     get() -> T { return this.value }
 }
 
@@ -5031,7 +5031,7 @@ var b2 = Box<string>("hi")
 class Pair<K, V> {
     key: K
     value: V
-    constructor(k: K, v: V) {
+    init(k: K, v: V) {
         this.key = k; this.value = v
     }
 }
@@ -5098,7 +5098,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 class Token implements Hashable {
     value: i64
 
-    constructor(value: i64) { this.value = value }
+    init(value: i64) { this.value = value }
 
     // 参数写 Token，不写 Self
     operator==(other: Token) -> bool { return this.value == other.value }
@@ -5934,7 +5934,7 @@ ExportSpec ::= Identifier ('as' Identifier)?
 export fn helper() { return }
 export final class MyClass {
     value: i64
-    constructor() { this.value = 1 }
+    init() { this.value = 1 }
 }
 export const VERSION = "1.0"
 
@@ -6595,7 +6595,7 @@ print(len(empty))           // 0
 
 ### 14.16 `PanicInfo`
 
-内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
+内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `init(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
 
 ### 14.17 `Task<T>` 与 enum 值
 
@@ -6929,7 +6929,7 @@ class PanicInfo {
     code: i64                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
     data: JSON.Value            // 运行时故障的结构化附加数据；无数据时为 JSON null
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
@@ -7178,6 +7178,25 @@ fetchAdd遵循原子合同，fetchAdd返回旧值并按二进制补码环绕。�
 恢复必须匹配执行epoch和wake，防止跨调用迟到恢复。首版仅准入单宿主线程独占驱动。
 精确准入、预算与租约责任由 `test_xir_instances` 验证；这不授予源码或缓存格式资格。
 
+内部 VM 接收把真实 Lowered Artifact 及其规范 Input/Final 转交给 Program，
+不借内部 packet 重新解码或重新 Lower。外部 native 描述只携带
+`XrXirProgramPacket` 的 bytes、length、identity，边界解码一次后进入同一拥有型接收核；
+packet 不携带调用者提供的布局权限。接收核独立检查当前语义、body、声明、布局和接线，
+成功才转交 Input、入口表及代码租约，失败保全调用者输入且不发表 Program。
+准备期只借用调用者拥有的入口表和参数块；失败保留同一 Input、表与参数，可在不重置账本下重试，成功无回调提交时才一并清空拥有槽。VM失败清理按实际分配的固定数量遍历，不能采用末次回调改变的模块计数。
+拥有型 Input、Artifact、入口表和非空参数块须分别位于原账本中的存活分配起点，不能将可读的内部区间当成可释放的拥有指针。拥有表及其参数在深读前检查物理范围，发布前再检查当前表、参数、数量及归属；零参数行的拥有指针须为空，多个拥有行不能重复转交同一参数块。失败不分配新的接收对象来修补畸形的物理输入，检查所用 work 仍计入原账本。
+内部载体转交核验原账本拥有、规范 body 与布局对应，使后续绑定可安全读取；载体本身不授语义或执行权限。完整当前 Input/Final 语义核验由统一 receiver 在准备期和末次回调后承担，不能把载体构造时的重复核验或保存的 PASS 当作权限依据。物理 body/布局不对应时不转交；语义事实被篡改的物理载体仍必须在发表 Program 前拒绝并保全输入。
+Program直接使用所转交规范Input拥有的不可变声明；不再深复制另一份声明，失败销毁Program时也不释放调用者仍拥有的Input声明。运行时类型arena仍独立拥有其类型，以支持逃逸值寿命。
+内部 packet 先死亡、外部 packet/spec 随后死亡均不能使成功 Program 借用失效存储。
+旧 Program ABI 及旧 Proof/getter 接口拒绝，不保留适配分支。
+
+末次准备回调后的 Error 检查，若从完整当前 Input 证明所有操作只有空逃逸传递和
+内部直接调用，则其最小解必须全空，包括无种子递归调用环；当前 Error 行及
+throws/task_errors 公开投影须同时匹配。此检查不分配或释放，按真实读取收费，
+拒绝联合伪造行与两个公开字段。即使其他函数有真实Error种子，完整无调用且无deferred cleanup的叶子函数仍须从当前Input独立证明Error行及两个公开投影全空；此局部检查不为其他函数授予权限。含真实错误种子、精确间接调用或一般泛型绑定的
+完整当前 Error V 仍有独立责任；拥有型载体不代表一般 Final 证明、全部构造
+Workspace 退役或完整故障/资源/安全资格已经完成。
+
 ### 17.9 新 XIR 源码准入边界
 
 新 source owner 复用实际 parser 与模块 resolver/graph，直接检查声明和构造 Built，
@@ -7220,6 +7239,12 @@ Lowered 或旧格式读取器。
 
 该子集（含§17.11的标记约束模板）不代表完整成员约束/见证、效应、诊断来源序列化、包链接、native 缓存配对、
 installer 发布或完整无源码标准库分发已经验收。
+
+Program 在所有准备分配及释放回调结束后，将当前描述和拥有副本分别与独立检查的规范类型、声明、签名及物理布局比较；VM 拥有权交接还将实际执行 body 和绑定接线对应到同一输入。最终比较不分配或释放存储。摘要仅检查 packet 漂移，不授语义权限。失败不取得调用者 artifact 或代码租约，不发表 Program；此边界不认证任意 native 回调行为，也不替代一般 Final 独立验证与全部构造 Workspace 退役要求。
+
+准备阶段从独立规范输入复制语义元数据，避免把被准备回调失效的调用者表作为拥有副本的来源。最终比较先拒绝所有非空表缺失的存储，再逐项遍历，包括模块表及函数表。恢复原调用者存储后，可在同一累计账本重试；拒绝不退还工作量或分配费用。
+
+Program 的当前 body 对应检查在读取前，用同一累计账本的实际活分配范围核验规范 body 和 Lowered 投影的头、名称、签名、块、指令、操作数、压缩记录及默认记录；按所读类型检查对齐和完整范围，并拒绝记录计数越过容量。检查不分配，实际扫描仍计费。合法物理范围不证明字段对应、语义、历史分配代际或完整 Final；最后准备回调后的当前字段仍须独立比较，拒绝保全输入与空输出。
 
 ### 17.11 定义处检查与 Checked 泛型特化
 
@@ -7569,6 +7594,18 @@ FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owne
 
 COPY/PHI/local Cell、闭合 capture、Nullable 包装、只读 Tuple/Array 构造和投影同步身份。PHI 和同元素 Array 的外层 callable 输入按唯一弱化规则归一化，根两事实分别求闭合。固定复合的嵌套身份不能协变；无法表达嵌套弱化的共享、元素变更或 Nullable 分支合流保守保留上界或拒绝，有限高阶依赖及容器别名流后继仍未完成。NO_SUSPEND、GO 借用形状、错误和 Sendable 义务独立保留。准备、闭合及查询复制共用原有限资源账本，不增加 wire 字段、schema、semantic 或公开 ABI。这一实现候选仍须鲜编和两配置资源、安全资格；runtime 许可与 VM/native 执行资格未由此取得。
 
+callable 的真实目标与 opaque 广告可同时存在；opaque 仅在实际来源穷尽时可从 Error unknown 中消除。有限证据的来源义务包括全部实参、复制/PHI 输入、局部写入、完整调用 key 对应的全部目标，以及每个真实 RETURN 出口；每项正依赖的 rank 严格下降，未扎根循环和删除全部完备事实均拒绝。声明根形参仍表示外部来源，固定边界或 FUNCTION_WEAKEN 不授予精确身份。接收方从当前拥有式 Input 与同一有限关系检查闭包和正支持，不从旧 coverage rank 恢复权限。返回值与形参的旧持久 coverage 字段、独立 rank 求解及接收重放均已删除；Error 的来源穷尽查询直接消费同一有限关系，最后回调后仍完整验证该关系。捕获 callable 的每一列包含独立的完备性事实，空列也必须证明全部来源，不能把空描述符当成没有隐藏环境；callee 身份不能替代列证明。返回闭包保留实际嵌套列，并以该列自己的声明形参检查类型。未发布构造区从同一有限 Error 事实的当前几何读取 Error 行、throws 与 Task Error 权限候选；最后回调后，独立接收谓词验证完整闭包、正支持及全部投影对应后才发布。已发布 effects 不再取得构造写能力。producer 发现记录只归 Workspace，在有限证据接收前实际释放；Final 不保留旧 producer 表，发布后返回来源与捕获列从同一有限关系读取，读者不能恢复构造能力。Class 发现行及其返回 mask/rank 也仅归 Workspace，在有限关系构造后、封存投影前实际释放；Final 不保留旧 Class 库存。编译与运行时 Class 查询从同一有限关系读取，Cell 终端仍检查真实 ROOT 贡献及对应 witness，不能因删除旧 Class 重放而删除终端验证。primitive ROOT 贡献和终端 witness 共同从当前 owned Input 读取；Input 与 Final 不保存预计算的局部 ROOT seed 行，构造发现期暂存只属于 Workspace，在有限证明构造前清空并释放。封存读者不再重算 callable 来源固定点或返回来源重放；Error 与 deferred 对应检查直接投影同一有限关系到当次 scratch，且不保存或查询 constructor certified 身份位。Class/Cell 终端仅借当前 head、basis 与共同 Cell 证据。scratch 分配前只计算有界尺寸，分配后重新核实际 Input、key、命名空间计数与数组几何；当次视图不代替最后回调后的完整语义验证。完整来源构造仅在同一无回调区间借用当前 Input 与 head；可能增长事实关系前丢弃视图，之后重新验证实际 Input 与 Final 的几何，调用结束不保留栈地址。局部 Control 种子不缓存到 Input。构造与接收共用当前 opcode 与实际 callable 签名的只读原语；构造在完整 canonical run 遍历中写入私有结果行，接收逐条检查真实种子、调用边与有限支撑。Source 与 Input 的完整物理对应仍是必要条件，但两者一致不能替代 Final 的独立效果证据。有限 Error 方程构造与接收在同一无回调区间借用当前 Input 几何，不保存语义结论。事实缓冲区满时先完整退出方程遍历，再使视图失效并增长；分配后重新核对当前范围，释放旧事实前清空构造字段，释放回调后重新核对范围并在后续遍历打开新视图。全部闭包方程和严格下降的有限支撑检查仍适用。完整高阶/泛型族、全部效果验证与旧求解器退役仍未完成。
+
+ROOT primitive 对不可变 constructed slot 的标记查询使用当次只增容量 scratch。类型、泛型约束、接口闭包、投影字段和 Sendable 仍由原完整谓词检查。尝试期间只能认领或逻辑释放已有 buffer，不触发 allocator/release 回调；缺容量时完整退出全部 head/run/descriptor 借用，再增长并重新核当前 Input 及函数 namespace，重试从空证明状态开始。容量不保存 domain 指针或语义判定，失败不写输出且费用不退。真实释放之后仍须核当前几何；这不代替最后释放回调后的完整语义 ROOT RHS、一般 V 或 typed allocation identity 证明，这些责任仍未完成。
+
+### 17.39 有界 CTFE 的标量局部存储与短路
+
+编译期执行以完整复验的 Lowered 为输入；bool/integer 普通函数的整个可达直接调用闭包先准入，再执行。SCALAR_LOCAL_NEW、SCALAR_LOCAL_READ 和 SCALAR_LOCAL_WRITE 使用与 VM 相同的 scalar step 和目标帧偏移；写操作产生 Unit 并继续顺序执行，不是控制流终结。读/写按实际帧访问收费，原 steps、全栈 depth/frame bytes、output bytes 和编译作业累计账本保持；callee 不重置预算，失败不退款并保全规范 Unit 输出。
+
+Source 的 &&/|| 在该局部存储上保留短路语义，经原 Checked→特化复验→Lowered CTFE 求值，再独立重放完整 Source 并检查普通常量 recipe。未执行的纯算术错误分支可以跳过；未执行分支中可达 I/O 仍使整个闭包不准入。根权限或 effect=NONE 不授予确定性。
+
+本节不准入普通 var 生成的拥有型 Cell、owned/path 操作、聚合/字符串导出、未知函数值或 native/Instance 执行；它们需要各自实际类型、生命周期与费用接口及独立资格，不从栈内标量存储外推。
+
 ---
 
 ## 18. 错误码 (Error Codes)
@@ -7803,8 +7840,7 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= ConstType | FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
-ConstType ::= 'const' PrimaryType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
@@ -8038,11 +8074,11 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               ('extends' NamedType)?
               ('implements' NamedType (',' NamedType)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl
+ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block
+InitDecl ::= 'init' '(' ParamList? ')' Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
@@ -8093,7 +8129,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-以下 **64 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 52 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
+以下 **63 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 51 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`init`、`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
 
 | 关键字 | 节 |
 |--|--|
@@ -8105,7 +8141,6 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `class` | §5.3 |
 | `comptime` | §3.2 |
 | `const` | §5.1 |
-| `constructor` | §5.3 |
 | `continue` | §4.6 |
 | `defer` | §4.9 |
 | `else` | §4.2 |

@@ -1,0 +1,2 @@
+import "./init_types" as declared
+export fn referenceAnswer() -> i64 { return declared.Box{value: 41}.value }

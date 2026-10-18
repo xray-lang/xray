@@ -267,11 +267,14 @@ static XrXirStatus effect_body_run_ref(const EffectBodyRead *read,
         run->mask&~EFFECT_BODY_MASK || (run->count==1 && run->mask)) return XR_XIR_BAD_STRUCTURE;
     /* A selected physical delta must be nonzero. The array is full length,
      * so there is no packed-column directory or rank to reconstruct. */
-    for (uint32_t w=0;run->mask && w<EFFECT_BODY_WORDS;++w) {
-        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
-        if (!(run->mask&(UINT32_C(1)<<w))) continue;
-        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
-        if (!run->delta[w]) return XR_XIR_BAD_STRUCTURE;
+    if (run->mask) {
+        if (!effect_body_read_work(read,sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t remaining=run->mask;
+        do {
+            if (!effect_body_read_work(read,3)) return XR_XIR_BUDGET;
+            uint32_t w=(uint32_t)__builtin_ctz(remaining);remaining&=remaining-1;
+            if (!run->delta[w]) return XR_XIR_BAD_STRUCTURE;
+        } while (remaining);
     }
     if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
     *output=run;return XR_XIR_OK;
@@ -292,13 +295,44 @@ static XrXirStatus effect_body_record_ref(const EffectBodyRead *read,
     XrXirStatus status=effect_body_run_ref(read,function,0,0,&boundary);
     if (status!=XR_XIR_OK) return status;
     if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
-    if (function->run_count>1) {
+    /* The sole current run already proves both ends of this request. There
+     * is no directory search or adjacent record to read; full value decoding
+     * still validates every selected delta and publishes all physical words. */
+    if (function->run_count==1) {
+        if (boundary->first+boundary->count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+        if (!effect_body_read_work(read,sizeof(*output))) return XR_XIR_BUDGET;
+        *output=boundary;return XR_XIR_OK;
+    }
+    {
         uint32_t last=function->run_count-1;
         if (!effect_body_read_work(read,sizeof(last)+1)) return XR_XIR_BUDGET;
         status=effect_body_run_ref(read,function,last,function->runs[last].first,&boundary);
         if (status!=XR_XIR_OK) return status;
     }
     if (boundary->first+boundary->count!=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
+    /* With two runs the first and last are also the selected neighbors.
+     * Their current shared boundary locates the row without another search
+     * or a second read of either record. Nothing survives this request. */
+    if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
+    if (function->run_count==2) {
+        if (!effect_body_read_work(read,5+sizeof(*output))) return XR_XIR_BUDGET;
+        if (function->runs[0].count!=boundary->first) return XR_XIR_BAD_STRUCTURE;
+        *output=instruction<boundary->first?&function->runs[0]:boundary;return XR_XIR_OK;
+    }
+    /* Three current runs have only one interior boundary. Read it once,
+     * check both joins, and select from the three validated physical records. */
+    if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
+    if (function->run_count==3) {
+        if (!effect_body_read_work(read,2+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        const EffectBodyRun *middle;
+        status=effect_body_run_ref(read,function,1,function->runs[0].count,&middle);
+        if (status!=XR_XIR_OK) return status;
+        if (!effect_body_read_work(read,5+sizeof(*output))) return XR_XIR_BUDGET;
+        if (middle->first+middle->count!=boundary->first) return XR_XIR_BAD_STRUCTURE;
+        *output=instruction<middle->first?&function->runs[0]:
+            instruction<boundary->first?middle:boundary;
+        return XR_XIR_OK;
+    }
     while (low<high) {
         if (!effect_body_read_work(read,3+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
         uint32_t middle=low+(high-low)/2;
@@ -451,35 +485,41 @@ static XrXirInstruction effect_body_instruction_words_value(const XrXirInstructi
 }
 
 /* Counting and opcode validation finish before the full row is published.
- * The value core writes no temporary ten-word array; its actual cursor,
- * selected reads and complete Instruction output remain charged. */
+ * Only the actual first row may copy the complete stored base. Other rows
+ * retain every column reconstruction; all output bytes remain charged. */
 static XrXirStatus effect_body_instruction_ref_prepare(const EffectBodyRead *read,
-    const EffectBodyRun *ref,uint32_t instruction) {
+    const EffectBodyRun *ref,uint32_t instruction,bool base_copy) {
     if (!read || !ref || (ref->mask&~EFFECT_BODY_MASK) || (ref->count==1 && ref->mask) ||
-        instruction<ref->first || instruction-ref->first>=ref->count) return XR_XIR_BAD_STRUCTURE;
+        instruction<ref->first || instruction-ref->first>=ref->count ||
+        (base_copy && instruction!=ref->first)) return XR_XIR_BAD_STRUCTURE;
     if (!effect_body_read_work(read,1+sizeof(uint32_t)+((ref->mask&UINT32_C(1))?3:0)))
         return XR_XIR_BUDGET;
     uint32_t operation=effect_body_source_word(&ref->base,0)+((ref->mask&UINT32_C(1))?
         ref->delta[0]*(instruction-ref->first):0);
     if (operation<=XR_XIR_INVALID || operation>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-    uint64_t units=EFFECT_BODY_WORDS+sizeof(XrXirInstruction)+2;
-    for (uint32_t w=0;ref->mask && w<EFFECT_BODY_WORDS;++w) {
-        if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
-        if (ref->mask&(UINT32_C(1)<<w)) {
-            if (!effect_body_read_work(read,1)) return XR_XIR_BUDGET;
+    uint64_t units=(base_copy?0:EFFECT_BODY_WORDS)+sizeof(XrXirInstruction)+2;
+    if (ref->mask) {
+        if (!effect_body_read_work(read,sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t remaining=ref->mask;
+        do {
+            if (!effect_body_read_work(read,3)) return XR_XIR_BUDGET;
+            uint32_t w=(uint32_t)__builtin_ctz(remaining);remaining&=remaining-1;
             if (!ref->delta[w]) return XR_XIR_BAD_STRUCTURE;
-            units+=4;
-        }
+            units+=base_copy?0:4;
+        } while (remaining);
     }
-    if (!effect_body_read_work(read,units+EFFECT_BODY_WORDS)) return XR_XIR_BUDGET;
+    if (!effect_body_read_work(read,units+(base_copy?0:EFFECT_BODY_WORDS))) return XR_XIR_BUDGET;
     return XR_XIR_OK;
 }
 static XrXirStatus effect_body_instruction_ref_value(const EffectBodyRead *read,
     const EffectBodyRun *ref,uint32_t instruction,XrXirInstruction *output) {
     if (!output) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_body_instruction_ref_prepare(read,ref,instruction);
+    bool base_copy=ref && instruction==ref->first;
+    XrXirStatus status=effect_body_instruction_ref_prepare(read,ref,instruction,base_copy);
     if (status!=XR_XIR_OK) return status;
-    *output=effect_body_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,instruction-ref->first);
+    if (!effect_body_read_work(read,2)) return XR_XIR_BUDGET;
+    *output=base_copy?ref->base:
+        effect_body_instruction_words_value(&ref->base,NULL,ref->mask,ref->delta,instruction-ref->first);
     return XR_XIR_OK;
 }
 

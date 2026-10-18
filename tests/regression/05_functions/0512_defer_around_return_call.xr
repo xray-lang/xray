@@ -7,7 +7,7 @@
 class Gate {
     held: bool
     handlers: Array<fn(i64) -> string>
-    constructor() {
+    init() {
         this.held = false
         this.handlers = [fn(v: i64) -> string { return "a" }, fn(v: i64) -> string { return "b" }]
     }

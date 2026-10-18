@@ -1853,7 +1853,7 @@ static void test_driver_boxed_adapter_scan_respects_cold_body_authority(void) {
     ASSERT_TRUE(write_file_text(library,
         "export class Payload {\n"
         "    value: i64\n"
-        "    constructor(value: i64) { this.value = value }\n"
+        "    init(value: i64) { this.value = value }\n"
         "}\n"
         "export enum Envelope { Some { payload: Payload }, None }\n"
         "export fn cold(node: Envelope) -> i64 {\n"
@@ -1865,7 +1865,7 @@ static void test_driver_boxed_adapter_scan_respects_cold_body_authority(void) {
     ASSERT_TRUE(write_file_text(entry,
         "import \"./library\"\n"
         "class Counter {\n"
-        "    constructor() {}\n"
+        "    init() {}\n"
         "}\n"
         "export fn probe() -> i64 {\n"
         "    var counter = Counter()\n"
@@ -1935,7 +1935,7 @@ static void test_driver_hosted_export_keeps_callee_abi(void) {
                                          "    return clampLevel(level) + len(bytes)\n"
                                          "}\n"
                                          "export fn byteCount(text: string) -> i64 {\n"
-                                         "    var bytes: const Slice<u8> = text.bytes()\n"
+                                         "    var bytes: Slice<u8> = text.bytes()\n"
                                          "    return len(bytes)\n"
                                          "}\n"
                                          "export fn makeBytes() -> Array<u8> {\n"

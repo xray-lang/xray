@@ -3,7 +3,7 @@ interface EchoLike {
 }
 
 class Echo implements EchoLike {
-    constructor() {
+    init() {
     }
 
     idText(text: string) -> string {

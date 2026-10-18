@@ -1,7 +1,7 @@
 class Shape {
     kind: i64
 
-    constructor(kind: i64) {
+    init(kind: i64) {
         this.kind = kind
     }
 
@@ -14,7 +14,7 @@ class Rect extends Shape {
     w: i64
     h: i64
 
-    constructor(w: i64, h: i64) {
+    init(w: i64, h: i64) {
         super(1)
         this.w = w
         this.h = h

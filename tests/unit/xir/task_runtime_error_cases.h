@@ -1,4 +1,5 @@
 /* Typed native outcomes retain their actual closed enum authority. */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_enum.h"
 typedef struct TaskErrorState { XrXirValue field, error, erased; } TaskErrorState;
 typedef struct TaskErrorFixture { TaskFixture base; uint32_t mode; } TaskErrorFixture;
@@ -53,7 +54,7 @@ static void task_error_fixture_new(TaskErrorFixture *f) {
     XrXirArtifact *proof = NULL;
     CHECK(native_metadata_fixture(&f->base.compiler.context, &spec, &proof) == XR_XIR_OK);
     const XrXirModule *lowered = xr_xir_compile_artifact_module(proof);
-    spec.types = lowered->types; spec.declarations = lowered->declarations; spec.proof = xr_xir_compile_program_proof(proof);
+    spec.types = lowered->types; spec.declarations = lowered->declarations; spec.packet = xir_program_packet_borrow(proof);
     CHECK(xr_xir_compile_program_seal(&f->base.compiler.context, &spec, &f->base.program) == XR_XIR_OK);
     xr_xir_compile_artifact_free(proof);
     const XrXirTypeNode task_node = {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64};

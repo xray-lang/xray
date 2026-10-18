@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   The same owned Checked program supplies independent VM and native expectations.
  */
+#include "xir/xxir_program_internal.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_generic.h"
@@ -65,8 +66,14 @@ int main(void){
     CHECK(owner->entries[entries.values[1]].resume!=fixture_enum_program.entries[entries.values[1]].resume);
     CHECK(owner->entries[entries.values[2]].resume==fixture_enum_program.entries[entries.values[2]].resume);
     CHECK(owner->entries[entries.values[3]].resume!=fixture_enum_program.entries[entries.values[3]].resume);
-    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,module->function_count,module->declarations,{owner,enum_release},module->types,xr_xir_compile_program_proof(owner->artifact)};
-    XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(&context,&spec,&program)==XR_XIR_OK);
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,module->function_count,module->declarations,{owner,enum_release},module->types,{0}};
+    XrXirProgram *program=NULL;
+    XrXirArtifact *pending=owner->artifact;XrXirProgramInput *input=NULL;
+    XrXirStatus received=xir_program_input_take(&context,&pending,&input);
+    if(received==XR_XIR_OK)received=xir_program_receive(&context,&spec,&input,NULL,&program);
+    if(received==XR_XIR_OK)owner->artifact=NULL;
+    else if(input){input->artifact=NULL;xir_program_input_free(input);}
+    CHECK(received==XR_XIR_OK && !input && !owner->artifact);
     XrXirValue retained[2][4]={{{0}}};
     source_enum_identity_pair(program,entries,retained);
     source_enum_identity_runtime_failures(program,entries);

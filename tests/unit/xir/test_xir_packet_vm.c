@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   The consumer links neither parser nor source compiler and needs only a packet.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_generic.h"
@@ -81,7 +82,7 @@ int main(int argc, char **argv) {
     size_t negative_physical_blocks=source_fixture_compile_live,negative_physical_bytes=source_fixture_compile_bytes;
     const XrXirCompileContext negative=*source_fixture_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
     XrXirArtifact *negative_lowered=source_packet_lower(&negative,packet_path);
-    XrXirProgramProof normal_proof=xr_xir_compile_program_proof(lowered),negative_proof=xr_xir_compile_program_proof(negative_lowered);
+    XrXirProgramPacket normal_proof=xir_program_packet_borrow(lowered),negative_proof=xir_program_packet_borrow(negative_lowered);
     CHECK(normal_proof.length==negative_proof.length && !memcmp(normal_proof.bytes,negative_proof.bytes,normal_proof.length));
     XrXirArtifact *negative_sentinel=negative_lowered;XrXirCSource rejected={0};
     CHECK(xr_xir_compile_emit_c(negative_lowered,"fixture_source",524288,&rejected)==XR_XIR_BUDGET);

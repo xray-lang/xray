@@ -137,6 +137,25 @@ fetchAdd遵循原子合同，fetchAdd返回旧值并按二进制补码环绕。�
 恢复必须匹配执行epoch和wake，防止跨调用迟到恢复。首版仅准入单宿主线程独占驱动。
 精确准入、预算与租约责任由 `test_xir_instances` 验证；这不授予源码或缓存格式资格。
 
+内部 VM 接收把真实 Lowered Artifact 及其规范 Input/Final 转交给 Program，
+不借内部 packet 重新解码或重新 Lower。外部 native 描述只携带
+`XrXirProgramPacket` 的 bytes、length、identity，边界解码一次后进入同一拥有型接收核；
+packet 不携带调用者提供的布局权限。接收核独立检查当前语义、body、声明、布局和接线，
+成功才转交 Input、入口表及代码租约，失败保全调用者输入且不发表 Program。
+准备期只借用调用者拥有的入口表和参数块；失败保留同一 Input、表与参数，可在不重置账本下重试，成功无回调提交时才一并清空拥有槽。VM失败清理按实际分配的固定数量遍历，不能采用末次回调改变的模块计数。
+拥有型 Input、Artifact、入口表和非空参数块须分别位于原账本中的存活分配起点，不能将可读的内部区间当成可释放的拥有指针。拥有表及其参数在深读前检查物理范围，发布前再检查当前表、参数、数量及归属；零参数行的拥有指针须为空，多个拥有行不能重复转交同一参数块。失败不分配新的接收对象来修补畸形的物理输入，检查所用 work 仍计入原账本。
+内部载体转交核验原账本拥有、规范 body 与布局对应，使后续绑定可安全读取；载体本身不授语义或执行权限。完整当前 Input/Final 语义核验由统一 receiver 在准备期和末次回调后承担，不能把载体构造时的重复核验或保存的 PASS 当作权限依据。物理 body/布局不对应时不转交；语义事实被篡改的物理载体仍必须在发表 Program 前拒绝并保全输入。
+Program直接使用所转交规范Input拥有的不可变声明；不再深复制另一份声明，失败销毁Program时也不释放调用者仍拥有的Input声明。运行时类型arena仍独立拥有其类型，以支持逃逸值寿命。
+内部 packet 先死亡、外部 packet/spec 随后死亡均不能使成功 Program 借用失效存储。
+旧 Program ABI 及旧 Proof/getter 接口拒绝，不保留适配分支。
+
+末次准备回调后的 Error 检查，若从完整当前 Input 证明所有操作只有空逃逸传递和
+内部直接调用，则其最小解必须全空，包括无种子递归调用环；当前 Error 行及
+throws/task_errors 公开投影须同时匹配。此检查不分配或释放，按真实读取收费，
+拒绝联合伪造行与两个公开字段。即使其他函数有真实Error种子，完整无调用且无deferred cleanup的叶子函数仍须从当前Input独立证明Error行及两个公开投影全空；此局部检查不为其他函数授予权限。含真实错误种子、精确间接调用或一般泛型绑定的
+完整当前 Error V 仍有独立责任；拥有型载体不代表一般 Final 证明、全部构造
+Workspace 退役或完整故障/资源/安全资格已经完成。
+
 ### 17.9 新 XIR 源码准入边界
 
 新 source owner 复用实际 parser 与模块 resolver/graph，直接检查声明和构造 Built，
@@ -179,6 +198,12 @@ Lowered 或旧格式读取器。
 
 该子集（含§17.11的标记约束模板）不代表完整成员约束/见证、效应、诊断来源序列化、包链接、native 缓存配对、
 installer 发布或完整无源码标准库分发已经验收。
+
+Program 在所有准备分配及释放回调结束后，将当前描述和拥有副本分别与独立检查的规范类型、声明、签名及物理布局比较；VM 拥有权交接还将实际执行 body 和绑定接线对应到同一输入。最终比较不分配或释放存储。摘要仅检查 packet 漂移，不授语义权限。失败不取得调用者 artifact 或代码租约，不发表 Program；此边界不认证任意 native 回调行为，也不替代一般 Final 独立验证与全部构造 Workspace 退役要求。
+
+准备阶段从独立规范输入复制语义元数据，避免把被准备回调失效的调用者表作为拥有副本的来源。最终比较先拒绝所有非空表缺失的存储，再逐项遍历，包括模块表及函数表。恢复原调用者存储后，可在同一累计账本重试；拒绝不退还工作量或分配费用。
+
+Program 的当前 body 对应检查在读取前，用同一累计账本的实际活分配范围核验规范 body 和 Lowered 投影的头、名称、签名、块、指令、操作数、压缩记录及默认记录；按所读类型检查对齐和完整范围，并拒绝记录计数越过容量。检查不分配，实际扫描仍计费。合法物理范围不证明字段对应、语义、历史分配代际或完整 Final；最后准备回调后的当前字段仍须独立比较，拒绝保全输入与空输出。
 
 ### 17.11 定义处检查与 Checked 泛型特化
 
@@ -528,6 +553,18 @@ FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owne
 
 COPY/PHI/local Cell、闭合 capture、Nullable 包装、只读 Tuple/Array 构造和投影同步身份。PHI 和同元素 Array 的外层 callable 输入按唯一弱化规则归一化，根两事实分别求闭合。固定复合的嵌套身份不能协变；无法表达嵌套弱化的共享、元素变更或 Nullable 分支合流保守保留上界或拒绝，有限高阶依赖及容器别名流后继仍未完成。NO_SUSPEND、GO 借用形状、错误和 Sendable 义务独立保留。准备、闭合及查询复制共用原有限资源账本，不增加 wire 字段、schema、semantic 或公开 ABI。这一实现候选仍须鲜编和两配置资源、安全资格；runtime 许可与 VM/native 执行资格未由此取得。
 
+callable 的真实目标与 opaque 广告可同时存在；opaque 仅在实际来源穷尽时可从 Error unknown 中消除。有限证据的来源义务包括全部实参、复制/PHI 输入、局部写入、完整调用 key 对应的全部目标，以及每个真实 RETURN 出口；每项正依赖的 rank 严格下降，未扎根循环和删除全部完备事实均拒绝。声明根形参仍表示外部来源，固定边界或 FUNCTION_WEAKEN 不授予精确身份。接收方从当前拥有式 Input 与同一有限关系检查闭包和正支持，不从旧 coverage rank 恢复权限。返回值与形参的旧持久 coverage 字段、独立 rank 求解及接收重放均已删除；Error 的来源穷尽查询直接消费同一有限关系，最后回调后仍完整验证该关系。捕获 callable 的每一列包含独立的完备性事实，空列也必须证明全部来源，不能把空描述符当成没有隐藏环境；callee 身份不能替代列证明。返回闭包保留实际嵌套列，并以该列自己的声明形参检查类型。未发布构造区从同一有限 Error 事实的当前几何读取 Error 行、throws 与 Task Error 权限候选；最后回调后，独立接收谓词验证完整闭包、正支持及全部投影对应后才发布。已发布 effects 不再取得构造写能力。producer 发现记录只归 Workspace，在有限证据接收前实际释放；Final 不保留旧 producer 表，发布后返回来源与捕获列从同一有限关系读取，读者不能恢复构造能力。Class 发现行及其返回 mask/rank 也仅归 Workspace，在有限关系构造后、封存投影前实际释放；Final 不保留旧 Class 库存。编译与运行时 Class 查询从同一有限关系读取，Cell 终端仍检查真实 ROOT 贡献及对应 witness，不能因删除旧 Class 重放而删除终端验证。primitive ROOT 贡献和终端 witness 共同从当前 owned Input 读取；Input 与 Final 不保存预计算的局部 ROOT seed 行，构造发现期暂存只属于 Workspace，在有限证明构造前清空并释放。封存读者不再重算 callable 来源固定点或返回来源重放；Error 与 deferred 对应检查直接投影同一有限关系到当次 scratch，且不保存或查询 constructor certified 身份位。Class/Cell 终端仅借当前 head、basis 与共同 Cell 证据。scratch 分配前只计算有界尺寸，分配后重新核实际 Input、key、命名空间计数与数组几何；当次视图不代替最后回调后的完整语义验证。完整来源构造仅在同一无回调区间借用当前 Input 与 head；可能增长事实关系前丢弃视图，之后重新验证实际 Input 与 Final 的几何，调用结束不保留栈地址。局部 Control 种子不缓存到 Input。构造与接收共用当前 opcode 与实际 callable 签名的只读原语；构造在完整 canonical run 遍历中写入私有结果行，接收逐条检查真实种子、调用边与有限支撑。Source 与 Input 的完整物理对应仍是必要条件，但两者一致不能替代 Final 的独立效果证据。有限 Error 方程构造与接收在同一无回调区间借用当前 Input 几何，不保存语义结论。事实缓冲区满时先完整退出方程遍历，再使视图失效并增长；分配后重新核对当前范围，释放旧事实前清空构造字段，释放回调后重新核对范围并在后续遍历打开新视图。全部闭包方程和严格下降的有限支撑检查仍适用。完整高阶/泛型族、全部效果验证与旧求解器退役仍未完成。
+
+ROOT primitive 对不可变 constructed slot 的标记查询使用当次只增容量 scratch。类型、泛型约束、接口闭包、投影字段和 Sendable 仍由原完整谓词检查。尝试期间只能认领或逻辑释放已有 buffer，不触发 allocator/release 回调；缺容量时完整退出全部 head/run/descriptor 借用，再增长并重新核当前 Input 及函数 namespace，重试从空证明状态开始。容量不保存 domain 指针或语义判定，失败不写输出且费用不退。真实释放之后仍须核当前几何；这不代替最后释放回调后的完整语义 ROOT RHS、一般 V 或 typed allocation identity 证明，这些责任仍未完成。
+
+### 17.39 有界 CTFE 的标量局部存储与短路
+
+编译期执行以完整复验的 Lowered 为输入；bool/integer 普通函数的整个可达直接调用闭包先准入，再执行。SCALAR_LOCAL_NEW、SCALAR_LOCAL_READ 和 SCALAR_LOCAL_WRITE 使用与 VM 相同的 scalar step 和目标帧偏移；写操作产生 Unit 并继续顺序执行，不是控制流终结。读/写按实际帧访问收费，原 steps、全栈 depth/frame bytes、output bytes 和编译作业累计账本保持；callee 不重置预算，失败不退款并保全规范 Unit 输出。
+
+Source 的 &&/|| 在该局部存储上保留短路语义，经原 Checked→特化复验→Lowered CTFE 求值，再独立重放完整 Source 并检查普通常量 recipe。未执行的纯算术错误分支可以跳过；未执行分支中可达 I/O 仍使整个闭包不准入。根权限或 effect=NONE 不授予确定性。
+
+本节不准入普通 var 生成的拥有型 Cell、owned/path 操作、聚合/字符串导出、未知函数值或 native/Instance 执行；它们需要各自实际类型、生命周期与费用接口及独立资格，不从栈内标量存储外推。
+
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -694,6 +731,53 @@ The initial instance interface admits exclusive driving by one host thread only.
 The precise internal interface is verified by `test_xir_instances`; source and
 serialized/cache admission require separate qualification.
 
+Internal VM reception transfers the actual Lowered Artifact and its canonical
+Input/Final into the Program, without decoding an internal packet or lowering
+it again. External native descriptors carry only the bytes, length and identity
+of `XrXirProgramPacket`; one boundary decode enters the same owning receiver.
+Packets carry no caller-supplied layout authority. Reception independently
+checks current semantics, bodies, declarations, layouts and wiring before
+transferring the Input, entry table and code lease. Failure preserves caller
+inputs and publishes no Program. Preparation borrows a caller-owned entry table
+and its parameter blocks. Refusal retains the same Input, table and parameters
+for retry without ledger refill; only the final callback-free commit clears both
+owning slots. VM failure cleanup uses the actual fixed allocation count rather
+than a module count changed by a preparation callback. Owning Input, Artifact,
+entry tables and nonempty parameter blocks must start at live allocations on
+the receiving ledger; a readable interior extent cannot transfer a releasable
+owner. Check table and parameter storage before deep reads and again before
+publication, including current pointers and counts. Empty parameter rows have
+null owning pointers, and rows cannot transfer the same parameter block twice.
+Malformed physical input creates no new receiving objects; its actual checking
+work remains charged to the original ledger. Internal carrier transfer checks
+ledger ownership and canonical body/layout correspondence for bounded binding
+reads, without granting semantic or execution authority. The sole receiver
+independently verifies current Input/Final semantics during preparation and
+after the last callback; neither a duplicate constructor verification nor a
+saved PASS grants permission. Mismatched physical bodies/layouts do not move.
+A physically valid carrier with forged semantic facts must still reject before
+Program publication and retain its inputs. The Program uses the immutable declarations
+owned by its transferred canonical Input without a second deep clone. Failed
+Program disposal leaves caller-owned Input declarations live. The runtime type
+arena keeps its independent ownership for escaping values. Internal packet destruction before reception
+and external packet/spec destruction afterwards cannot invalidate a successful
+Program. Old Program ABIs and the old Proof/getter interface reject without an
+adapter path.
+
+After the last preparation callback, a complete current Input containing only
+empty escaping transfers and internal direct calls has the least empty Error
+solution, including recursive call components without a seed. Current Error
+rows and both public throws/task_errors projections must match that solution.
+This check allocates and releases nothing, charges actual reads, and rejects a
+joint forgery of a row and its two projections. Inputs with real error seeds,
+precise indirect calls or general generic bindings retain the separate complete
+current Error verification obligation. Even when another function has a real Error seed,
+a complete leaf without calls or deferred cleanup independently proves its Error row and
+both public projections empty from current Input; this local check grants no authority to
+other functions. An owning carrier does not qualify the
+general Final proof, retirement of every construction Workspace, or complete
+fault, resource and safety gates.
+
 ### 17.9 New XIR Source Admission Boundary
 
 The source owner reuses the real parser and module resolver/graph, checks source
@@ -755,6 +839,34 @@ rules are verified by `test_xir_checked`.
 This subset (including §17.11 marker templates) does not qualify full member constraints/witnesses,
 effects, diagnostic provenance, package linking, Checked library publication, installer
 publication or complete source-free standard-library distribution.
+
+Program publication compares the current descriptors and their owned copies
+against independently checked canonical types, declarations, signatures and
+physical layouts after all preparation allocator callbacks have finished. VM
+ownership transfer additionally compares the actual executable body and binding
+wiring to that same input. These final comparisons allocate and release no
+storage. A content digest only detects packet drift; it grants no semantic
+permission. Failure leaves the caller's artifact and code lease unconsumed and
+publishes no Program. This boundary does not authenticate arbitrary native
+callback behavior or replace general independent Final verification and
+retirement of every construction Workspace.
+
+Preparation copies semantic metadata from the independent canonical input,
+so a caller metadata table invalidated by a preparation callback is never used
+as the source of an owned copy. The final comparison rejects missing storage
+for every nonempty table before traversing it, including module and function
+tables. Restoring the caller's original storage permits a retry on the same
+cumulative ledger; rejection does not refund work or allocation charges.
+
+Before reading either canonical body or Lowered projection storage, current
+Program body correspondence checks the actual live allocation ranges on the
+same cumulative ledger for headers, names, signatures, blocks, instructions,
+operands, compressed records and default records. Each typed read requires its
+alignment and complete range; record counts cannot exceed capacity. These
+checks allocate nothing and charge actual scans. A valid range proves neither
+field correspondence, semantics, historical allocation generation nor a
+complete Final. Current fields still require independent comparison after the
+last preparation callback; rejection preserves inputs and the empty output.
 
 ### 17.11 Definition Checking and Checked Generic Specialization
 
@@ -1166,5 +1278,17 @@ This flags meaning uses the sole Checked semantic70; schema25 retains its existi
 Prepared ordinary reference refinement records owned INFERRED/FIXED value identities before region recipes are released. Ordinary direct references and closure sites close against authentic targets on the existing effects owner. Explicit callable parameters, annotations, results and conversion contexts remain fixed upper bounds; equal provisional UNKNOWN identities do not erase a boundary. A private COPY preserves it and becomes the sole ordinary FUNCTION_WEAKEN when closed identities differ. Private structure/SSA/constraint/access preparation publishes no Checked. The common complete Checker verifies all effects and permissions on both construction memory and its independent owned copy before publishing only that copy.
 
 COPY/PHI/local Cell, closed captures, Nullable wrappers and readonly Tuple/Array construction and projection synchronize identities. Callable PHI and uniform Array inputs use the sole outer weakening relation; the two root facts close independently. Fixed composite nested identities cannot vary. Unsupported nested weakening, shared mutation, element updates or Nullable branch joins retain a conservative bound or reject; finite higher-order dependencies and container alias flow remain incomplete. NO_SUSPEND, GO borrow shapes, errors and Sendable obligations remain independent. Preparation, closure and query copying share the original finite ledger without wire, schema, semantic or public ABI additions. This implementation candidate still requires fresh builds and both configurations' resource and safety gates; it grants no runtime or VM/native execution qualification.
+
+Authentic callable targets may coexist with an opaque advertisement. Error unknown may discharge that advertisement only when actual sources are exhaustive. Finite evidence obligates every argument, copy/PHI input, local write, target matching the complete call key and actual RETURN exit. Positive dependencies strictly decrease rank; unrooted cycles and deletion of all completeness facts reject. Declaration-root formals retain external sources; fixed boundaries and FUNCTION_WEAKEN grant no precise identity. The receiver checks closure and positive support against current owned Input and the same finite relation, without deriving authority from legacy coverage ranks. Persistent return and parameter coverage fields, their separate rank solver and receiving replay are removed. Error completeness queries consume the same finite relation, whose full validation remains mandatory after the final callback. Every captured callable column has its own completeness fact, including empty columns: an empty descriptor does not prove absence of hidden environments. A complete callee identity cannot substitute for column evidence. Returned closures retain actual nested columns, typed at each column's declaring formal. Construction writes candidate Error rows, throws and Task Error permissions from geometrically framed finite facts. After the last callback, the independent receiver checks complete closure, positive support and every projection before publication. Published effects cannot regain construction write capability. Producer discovery records belong only to Workspace and are physically released before finite evidence is admitted. Final retains no old producer table; sealed returned-source and capture projections read the same finite relation and cannot recover constructor capability. Class discovery rows and their returned masks and ranks also belong only to Workspace and are physically released after finite construction and before sealed projection. Final retains no old Class inventory. Compiler and runtime Class queries read the same finite relation. Cell terminals still check actual ROOT contributions and their witnesses; removing old Class replay does not remove terminal validation. Primitive ROOT contributions and terminal witnesses are read from current owned Input. Input and Final retain no precomputed local ROOT seed rows. Constructor proposals belong only to Workspace and are cleared and released before finite proof construction. Sealed readers do not rerun callable-origin fixed points or returned-origin replay. Error and deferred correspondence project the same finite relation into request-local scratch, without storing or querying constructor-certified identity bits. Class and Cell terminals borrow only current heads, bases and the common Cell evidence. Before scratch allocation, only bounded dimensions are calculated. Afterwards the actual Input, key, namespace counts and array geometry are framed again. A local view never replaces complete semantic validation after the final callback. Completeness construction borrows current Input and heads only within one callback-free interval. A possible fact-relation growth discards those views before emission and reframes actual Input and Final afterwards; no stack address survives the call. Local Control seeds are not cached in Input. Construction and receiving share read-only primitives for current opcodes and actual callable signatures. Construction writes private result rows during the complete canonical run walk; receiving checks real seeds, call edges and finite support. Complete physical correspondence between Source and Input remains necessary, but their agreement cannot replace independent effect evidence in Final. Finite Error construction and receiving borrow current Input geometry only within one callback-free interval, without retaining semantic conclusions. A full fact buffer first unwinds the equation walk, then invalidates its view before growth. Current ranges are reframed after allocation; constructor fields are cleared before old facts are released. Ranges are reframed after that release callback, and a subsequent walk opens a fresh view. Complete closure equations and strictly descending finite support remain mandatory. Complete higher-order and generic families, complete effect verification and retirement of the old solver remain unfinished.
+
+ROOT primitive marker queries for immutable constructed slots use request-local capacity scratch. The original complete predicates still check types, generic constraints, interface closures, projected fields and Sendable. An attempt only claims or logically releases existing buffers and invokes no allocation or release callback. Missing capacity unwinds all head, run and descriptor borrows before growth; current Input and the function namespace are framed again, and the next attempt starts with no proof facts. Capacity retains no domain pointer or semantic verdict. Failure leaves output untouched and never refunds work. Actual release still requires current geometry checks. This does not replace complete semantic ROOT RHS, general V or typed allocation identity evidence after the final release callback; those obligations remain unfinished.
+
+### 17.39 Bounded CTFE scalar local storage and short circuiting
+
+Compiler execution receives completely reverified Lowered input. It admits the entire reachable direct-call closure of bool/integer ordinary functions before execution. SCALAR_LOCAL_NEW, SCALAR_LOCAL_READ and SCALAR_LOCAL_WRITE use the same scalar step and target frame offsets as the VM. A local write produces Unit and falls through; it is not a control-flow terminator. Actual frame accesses consume work. Existing steps, whole-stack depth/frame bytes, output bytes and cumulative compiler ledger limits remain; a callee does not reset them, failures refund no charges and preserve canonical Unit output.
+
+Source &&/|| preserve short-circuit semantics through this storage, the ordinary Checked→specialization reverification→Lowered CTFE pipeline, and an independent complete Source replay that checks ordinary constant recipes. An unexecuted pure arithmetic error may be skipped; reachable I/O in an unexecuted branch still rejects the entire closure. Root authority or effect=NONE grants no determinism.
+
+This section does not admit owned Cells produced by ordinary var, owned/path operations, aggregate/string exports, unknown function values or native/Instance execution. Each requires authentic type, lifetime and charging interfaces plus independent qualification; stack scalar storage does not establish those capabilities.
 
 <!-- /xr-spec:en -->

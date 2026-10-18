@@ -207,7 +207,7 @@ fn test_instance_field_gc() {
         label: string
         children: Array<Node>
 
-        constructor(v: i64, l: string) {
+        init(v: i64, l: string) {
             this.value = v
             this.label = l
             this.children = []

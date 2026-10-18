@@ -80,7 +80,7 @@ let instance = new class {
 class AllModifiers {
     private static _instance = null
 
-    private constructor() {}
+    private init() {}
 
     static getInstance() {
         if (AllModifiers._instance == null) {

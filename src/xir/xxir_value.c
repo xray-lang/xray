@@ -63,6 +63,7 @@ typedef struct XirCell {
     XirObject object;
     XrXirValue value;
     XrXirCellLoan *borrow_top;
+    XrXirCellLoan *prepared_loan;
     const void *module_owner;
     uint32_t module_slot;
     bool initialized, module_storage;
@@ -1190,6 +1191,7 @@ static XrXirValueStatus xr_xir_cell_new_graph_operation(XrXirDomain *domain, XrX
     if (!cell) return status;
     cell->value = (XrXirValue) {0};
     cell->borrow_top = NULL;
+    cell->prepared_loan = NULL;
     cell->module_owner = NULL;
     cell->module_slot = UINT32_MAX;
     cell->initialized = false;
@@ -1473,6 +1475,11 @@ static XrXirValueStatus xr_xir_array_reserve_graph_operation(const XrXirValue *v
     XrXirValueStatus status = xr_xir_value_admit(value, (XrXirType)value->type, admission);
     if (status != XR_XIR_VALUE_OK) return status;
     XirArray *source = (XirArray *)object_pointer(value), *copy = NULL;
+    /* Admission remains complete; allocation affinity only selects physical
+     * sharing. A later write separates the independently owned logical copy. */
+    if (source->object.domain == admission->domain && source->object.arena == admission->arena &&
+        (uint64_t)capacity <= source->capacity)
+        return xr_xir_value_copy(value, output);
     if (source->length > admission->work || !xr_xir_domain_work(admission->domain, source->length))
         return XR_XIR_VALUE_LIMIT;
     admission->work -= source->length;

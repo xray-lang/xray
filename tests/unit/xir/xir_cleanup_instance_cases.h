@@ -8,6 +8,7 @@
  */
 #ifndef XIR_CLEANUP_INSTANCE_CASES_H
 #define XIR_CLEANUP_INSTANCE_CASES_H
+#include "xir/xxir_program_packet_internal.h"
 #include "xir_construction_fixture.h"
 #include "xir/xxir_program.h"
 #include "xir/xxir_instance_value.h"
@@ -140,7 +141,7 @@ static void cleanup_instance_case(bool late_gate, bool malformed) {
     SourceFixtureOwner compiler={0}; cleanup_fixture_owner_new(&compiler);
     XrXirArtifact *proof=NULL;
     CHECK(drain_proof(&compiler.context,&declarations,&types,parameters,late_gate,&proof) == XR_XIR_OK);
-    spec.proof = xr_xir_compile_program_proof(proof);
+    spec.packet = xir_program_packet_borrow(proof);
     XrXirProgram *program = NULL;
     spec.abi_version = 18;
     CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program) == XR_XIR_BAD_LAYOUT && !program);
@@ -200,9 +201,9 @@ static XrXirStatus cleanup_compiler_pipeline(const XrXirCompileContext *context,
     XrXirArtifact *proof=NULL;
     XrXirStatus status=drain_proof(context,&f->declarations,&f->types,f->parameters,f->witness.late_gate,&proof);
     if (status==XR_XIR_OK) {
-        f->spec.proof=xr_xir_compile_program_proof(proof);
+        f->spec.packet=xir_program_packet_borrow(proof);
         status=xr_xir_compile_program_seal(context,&f->spec,output);
-        f->spec.proof=(XrXirProgramProof){0};
+        f->spec.packet=(XrXirProgramPacket){0};
     }
     xr_xir_compile_artifact_free(proof);
     return status;

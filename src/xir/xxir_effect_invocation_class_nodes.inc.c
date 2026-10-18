@@ -8,34 +8,34 @@
  * Complete physical membership is copied into each genuine equation key.
  * These storage facts do not authorize a Class projection or erase UNKNOWN.
  */
-static XrXirStatus effect_invocation_class_storage(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_class_storage(EffectInvocationWorkspace *owner,
     uint32_t body,EffectInvocationClassFact **output,uint32_t *count) {
-    if (!output || *output || !count || *count || body>=owner->body.domain.function_count ||
-        !owner->physical || owner->physical->resources!=owner->work->resources ||
-        owner->physical->count!=owner->body.domain.function_count)
+    if (!output || *output || !count || *count || body>=owner->read.body.domain.function_count ||
+        !owner->final.physical || owner->final.physical->resources!=owner->read.work->resources ||
+        owner->final.physical->count!=owner->read.body.domain.function_count)
         return XR_XIR_BAD_STRUCTURE;
-    EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_invocation_dimensions(owner,body,&head);
+    EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_invocation_dimensions(&owner->read,body,&head);
     if (status!=XR_XIR_OK) return status;
     const EffectBodyFunctionDimensions *function=&head;
-    const EffectPhysicalFunction *physical=&owner->physical->functions[body];
+    const EffectPhysicalFunction *physical=&owner->final.physical->functions[body];
     if (physical->values!=(uint64_t)function->parameter_count+function->instruction_count ||
         physical->classes>physical->values || physical->count>physical->capacity ||
         (physical->count && !physical->records)) return XR_XIR_BAD_STRUCTURE;
     if (!physical->classes) return XR_XIR_OK;
-    EffectInvocationClassFact *facts=xir_compile_calloc(owner->work,
+    EffectInvocationClassFact *facts=xir_compile_calloc(owner->read.work,
         physical->classes,sizeof(*facts),&status);
     if (!facts) return status;
     uint32_t at=0;
     for (uint32_t r=0;r<physical->count && status==XR_XIR_OK;++r) {
-        if (!xir_compile_work(owner->work,1)) { status=XR_XIR_BUDGET;break; }
+        if (!xir_compile_work(owner->read.work,1)) { status=XR_XIR_BUDGET;break; }
         EffectPhysicalRecord record=physical->records[r];
         if (!(record.mask&EFFECT_PHYSICAL_CLASS)) continue;
-        XrXirType type;status=effect_body_request_type(&owner->body,body,record.value,&type);
+        XrXirType type;status=effect_body_request_type(&owner->read.body,body,record.value,&type);
         if (status!=XR_XIR_OK) break;
         if (at>=physical->classes || record.value>=physical->values ||
-            !xr_xir_type_is_class(owner->body.domain.types,type) ||
+            !xr_xir_type_is_class(owner->read.body.domain.types,type) ||
             (at && facts[at-1].value>=record.value)) { status=XR_XIR_BAD_STRUCTURE;break; }
-        if (!xir_compile_work(owner->work,sizeof(*facts))) { status=XR_XIR_BUDGET;break; }
+        if (!xir_compile_work(owner->read.work,sizeof(*facts))) { status=XR_XIR_BUDGET;break; }
         facts[at++]=(EffectInvocationClassFact){.value=record.value};
     }
     if (status==XR_XIR_OK && at!=physical->classes) status=XR_XIR_BAD_STRUCTURE;
@@ -46,58 +46,78 @@ static XrXirStatus effect_invocation_class_storage(EffectInvocationOwner *owner,
 /* A missing Class row is a malformed physical relation, never a None fact.
  * Its lookup belongs to this exact body/input equation and is fully charged. */
 static XrXirStatus effect_invocation_class_find(const XrXirCompileContext *work,
-    const EffectInvocationNode *node,uint32_t value,uint32_t *output) {
-    if (!output || !node || (node->class_count && !node->classes)) return XR_XIR_BAD_STRUCTURE;
-    uint32_t low=0,high=node->class_count;
+    const EffectInvocationClassDiscovery *node,uint32_t value,uint32_t *output) {
+    if (!output || !node || (node->count && !node->facts)) return XR_XIR_BAD_STRUCTURE;
+    uint32_t low=0,high=node->count;
     while (low<high) {
         if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
         uint32_t middle=low+(high-low)/2;
-        if (node->classes[middle].value<value) low=middle+1;
+        if (node->facts[middle].value<value) low=middle+1;
         else high=middle;
     }
     if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-    if (low>=node->class_count || node->classes[low].value!=value) return XR_XIR_BAD_STRUCTURE;
+    if (low>=node->count || node->facts[low].value!=value) return XR_XIR_BAD_STRUCTURE;
     *output=low;return XR_XIR_OK;
+}
+
+/* Constructor bottoms are private. A sealed reader projects only the current
+ * finite relation, never a retained solver row or a fabricated pure rank. */
+static XrXirStatus effect_invocation_class_mask(const EffectInvocationRead *owner,
+    uint32_t node,uint32_t value,uint32_t *output) {
+    if(!owner || !output || *output || node>=owner->final->count) return XR_XIR_BAD_STRUCTURE;
+    if(!owner->discovery) {
+        if(owner->roles.construction) return XR_XIR_BAD_STRUCTURE;
+        return effect_final_class_mask(owner->work,owner->final,node,value,output);
+    }
+    const EffectInvocationClassDiscovery *rows=effect_invocation_class_discovery(owner,node);
+    uint32_t at=0;XrXirStatus status=effect_invocation_class_find(owner->work,rows,value,&at);
+    if(status!=XR_XIR_OK) return status;
+    EffectInvocationClassFact fact=rows->facts[at];
+    if(!fact.mask) return XR_XIR_UNRESOLVED;
+    if((fact.mask&~EFFECT_CLASS_VALID) || !(fact.mask&EFFECT_CLASS_KNOWN) ||
+        (fact.mask==EFFECT_CLASS_KNOWN?!fact.rank:fact.rank!=0)) return XR_XIR_BAD_STRUCTURE;
+    *output=fact.mask;return XR_XIR_OK;
 }
 
 /* The true full graph bounds a descending certificate. Growing the existing
  * owner updates this bound; an unrooted cycle cannot certify itself at rank0. */
-static XrXirStatus effect_invocation_class_rank_limit_count(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_class_rank_limit_count(const EffectInvocationRead *owner,
     uint32_t functions,uint64_t *output) {
-    if (!output || !owner->physical || owner->physical->count!=functions)
+    if (!output || !owner->final->physical || owner->final->physical->count!=functions)
         return XR_XIR_BAD_STRUCTURE;
     uint64_t maximum=0;
-    for (uint32_t n=0;n<owner->count;++n) {
+    for (uint32_t n=0;n<owner->final->count;++n) {
         if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
-        const EffectInvocationNode *node=&owner->nodes[n];
-        if (node->body>=owner->physical->count ||
-            node->class_count!=owner->physical->functions[node->body].classes ||
-            (uint64_t)node->class_count+1>UINT64_MAX-maximum) return XR_XIR_BAD_STRUCTURE;
-        maximum+=(uint64_t)node->class_count+1;
+        const EffectInvocationNode *node=&owner->final->nodes[n];
+        const EffectInvocationClassDiscovery *rows=effect_invocation_class_discovery(owner,n);
+        if (!rows || node->body>=owner->final->physical->count ||
+            rows->count!=owner->final->physical->functions[node->body].classes ||
+            (uint64_t)rows->count+1>UINT64_MAX-maximum) return XR_XIR_BAD_STRUCTURE;
+        maximum+=(uint64_t)rows->count+1;
     }
     *output=maximum;return XR_XIR_OK;
 }
 
-static XrXirStatus effect_invocation_class_rank_limit(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_class_rank_limit(const EffectInvocationRead *owner,
     uint64_t *output) {
-    if (!owner || !effect_body_material_shape(owner->material)) return XR_XIR_BAD_STRUCTURE;
+    if (!owner || !effect_body_material_shape(owner->final->material)) return XR_XIR_BAD_STRUCTURE;
     return effect_invocation_class_rank_limit_count(owner,owner->body.domain.function_count,output);
 }
 
-static XrXirStatus effect_invocation_class_fact_join(EffectInvocationOwner *owner,
+static XrXirStatus effect_invocation_class_fact_join(EffectInvocationWorkspace *owner,
     EffectInvocationClassFact *destination,uint32_t mask,uint64_t rank,
     uint64_t maximum,bool *changed) {
     if (!destination || !changed || (mask&~EFFECT_CLASS_VALID) || rank>maximum ||
         (mask && !(mask&EFFECT_CLASS_KNOWN)) ||
         (mask==EFFECT_CLASS_KNOWN ? !rank : rank!=0)) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(owner->work,5)) return XR_XIR_BUDGET;
+    if (!xir_compile_work(owner->read.work,5)) return XR_XIR_BUDGET;
     uint32_t joined=destination->mask|mask;
     /* A positive rank certifies a complete pure source. Mixed residuals
      * have no such rank; an earlier complete proof can only be shortened. */
     uint64_t distance=joined==EFFECT_CLASS_KNOWN ?
         (!destination->rank || rank<destination->rank ? rank : destination->rank) : 0;
     if (destination->mask!=joined || destination->rank!=distance) {
-        if (!xir_compile_work(owner->work,sizeof(destination->mask)+sizeof(destination->rank)))
+        if (!xir_compile_work(owner->read.work,sizeof(destination->mask)+sizeof(destination->rank)))
             return XR_XIR_BUDGET;
         destination->mask=joined;destination->rank=distance;*changed=true;
     }

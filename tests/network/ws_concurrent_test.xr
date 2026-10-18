@@ -26,7 +26,7 @@ class ConnResult {
     messagesReceived: i64
     errorCount: i64
 
-    constructor(id: i64) {
+    init(id: i64) {
         this.id = id
         this.connected = false
         this.messagesSent = 0

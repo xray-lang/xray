@@ -74,6 +74,19 @@ static XrXirArtifact *panic_source_lower(const char *path) {
 }
 int main(int argc, char **argv) {
     CHECK(argc == 1 || argc == 2);
+    if (argc==2) {
+        XrXirArtifact *first=panic_source_lower(XR_PANIC_FIXTURES "/root.xr");
+        uint32_t functions[PANIC_FUNCTIONS];
+        panic_find(xr_xir_compile_artifact_module(first),functions);
+        panic_emit(first,functions,argv[1]);
+        xr_xir_compile_artifact_free(first);
+        XrXirArtifact *second=panic_source_lower(XR_PANIC_FIXTURES "/initialization.xr");
+        panic_emit(second,NULL,argv[1]);
+        xr_xir_compile_artifact_free(second);
+        effects_source_owners_free();
+        puts("Both real panic program descriptors generated; full runtime FI not run");
+        return 0;
+    }
     XrXirArtifact *lowered = panic_source_lower(XR_PANIC_FIXTURES "/root.xr");
     uint32_t functions[PANIC_FUNCTIONS]; panic_find(xr_xir_compile_artifact_module(lowered), functions);
     panic_emit(lowered, functions, argc == 2 ? argv[1] : NULL);

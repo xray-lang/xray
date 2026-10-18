@@ -999,7 +999,7 @@ TEST(e2e_open_template_keeps_declaration_without_runtime_publication) {
     XrProto *proto = compile_source("fn before() -> i64 { return 40 }\n"
                                    "class Cell<T> {\n"
                                    "  value: T\n"
-                                   "  constructor(value: T) { this.value = value }\n"
+                                   "  init(value: T) { this.value = value }\n"
                                    "}\n"
                                    "fn after() -> i64 { return before() + 2 }\n"
                                    "print(after())\n", NULL);
@@ -2308,11 +2308,11 @@ TEST(e2e_super_calls_preserve_exact_error_channel) {
         const char *source;
         bool may_error;
     } cases[] = {
-        {"class Base { constructor() {} }\n"
-         "class Child extends Base { constructor() { super() } }\n", false},
+        {"class Base { init() {} }\n"
+         "class Child extends Base { init() { super() } }\n", false},
         {"enum Failure { Failed }\n"
-         "class Base { constructor() { throw Failure.Failed } }\n"
-         "class Child extends Base { constructor() { super() } }\n", true},
+         "class Base { init() { throw Failure.Failed } }\n"
+         "class Child extends Base { init() { super() } }\n", true},
         {"class Base { value() -> i64 { return 42 } }\n"
          "class Child extends Base { override value() -> i64 { return super.value() } }\n",
          false},

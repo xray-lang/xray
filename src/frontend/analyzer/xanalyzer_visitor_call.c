@@ -731,7 +731,7 @@ static void xa_check_class_constructor_args(XaInferContext *ctx, AstNode *node, 
                                             int type_arg_count) {
     if (!ctx || !ctx->analyzer || !node || !call || !class_info || call->arg_count <= 0)
         return;
-    XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR);
+    XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_INIT_MEMBER_NAME);
     XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
     XrType *ctor_type = ctor_links ? ctor_links->type : NULL;
     if (!ctor_type || !XR_TYPE_IS_FUNCTION(ctor_type)) {
@@ -1338,7 +1338,7 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
                 }
             }
         } else if (call->arg_count > 0) {
-            XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR);
+            XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_INIT_MEMBER_NAME);
             XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
             XrType *ctor_type = ctor_links ? ctor_links->type : NULL;
             if (ctor_type && XR_TYPE_IS_FUNCTION(ctor_type)) {
@@ -1445,7 +1445,7 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
         snprintf(msg, sizeof(msg),
                  "cannot infer type arguments for generic constructor '%s'; add explicit %s<T> "
                  "type arguments",
-                 class_name ? class_name : "class", class_name ? class_name : "constructor");
+                 class_name ? class_name : "class", class_name ? class_name : "init");
         return xa_infer_var_report_unsolved(ctx, var, msg);
     }
 
@@ -5242,7 +5242,7 @@ static XaSymbolLinks *xa_class_constructor_links(XaInferContext *ctx, XaSymbol *
     XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
     XrClassInfo *class_info = class_links ? class_links->class_info : NULL;
     XaSymbol *ctor =
-        class_info ? xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR) : NULL;
+        class_info ? xa_class_info_lookup_member(class_info, XR_INIT_MEMBER_NAME) : NULL;
     XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
     if (ctor_links && !ctor_links->file_path && class_info)
         ctor_links->file_path = class_info->location.file;

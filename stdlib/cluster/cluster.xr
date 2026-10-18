@@ -251,7 +251,7 @@ final class _PeerEndpoint {
     ready: Channel<i64>
     wake: Channel<i64>
 
-    constructor(runtimeToken: i64, generation: i64,
+    init(runtimeToken: i64, generation: i64,
                 conn: NetConn, ready: Channel<i64>, wake: Channel<i64>) {
         this.runtimeToken = runtimeToken
         this.generation = generation
@@ -265,7 +265,7 @@ final class _PeerEndpoint {
 // failure detector. Every field is protected by _peerTransportLock, and no
 // operation suspends while that lock is held.
 type _PeerTransportState = {
-    endpoint: const _PeerEndpoint,
+    endpoint: _PeerEndpoint,
     committed: bool,
     outbound: Array<Array<u8>>,
     queuedBytes: i64,
@@ -1026,7 +1026,7 @@ type _DiscoveryDatagram = {
 }
 
 fn _bytes(text: string) -> Array<u8> {
-    var view: const Slice<u8> = text.bytes()
+    var view: Slice<u8> = text.bytes()
     var out = Array<u8>(len(view))
     for (var i = 0; i < len(view); i++) { out[i] = view[i] }
     return out
@@ -1381,7 +1381,7 @@ fn _enqueuePeerFrame(peerGeneration: i64, wire: Array<u8>) -> i64 {
     }
     var owned = _copyBytes(wire, 0, len(wire))
     if (owned == null) { return _PEER_QUEUE_INVALID }
-    var wake: const Channel<i64>? = null
+    var wake: Channel<i64>? = null
     var outcome = _PEER_QUEUE_STOPPED
     _lockPeerTransport()
     for (var i = 0; i < len(_peerTransports); i++) {
@@ -1450,9 +1450,9 @@ fn _peerQueueStatus(peerGeneration: i64) -> i64 {
     return _PEER_QUEUE_STOPPED
 }
 
-fn _detachPeerTransport(peerGeneration: i64) -> const _PeerEndpoint? {
+fn _detachPeerTransport(peerGeneration: i64) -> _PeerEndpoint? {
     _lockPeerTransport()
-    var endpoint: const _PeerEndpoint? = null
+    var endpoint: _PeerEndpoint? = null
     var retained: Array<_PeerTransportState> = []
     for (var i = 0; i < len(_peerTransports); i++) {
         var peer = _peerTransports[i]
@@ -1475,7 +1475,7 @@ fn _detachPeerTransport(peerGeneration: i64) -> const _PeerEndpoint? {
 fn _detachPeerTransportIfCurrent(runtimeToken: i64, peerGeneration: i64,
                                  expectedLastReceivedAtMs: i64) -> bool {
     _lockPeerTransport()
-    var endpoint: const _PeerEndpoint? = null
+    var endpoint: _PeerEndpoint? = null
     var retained: Array<_PeerTransportState> = []
     for (var i = 0; i < len(_peerTransports); i++) {
         var peer = _peerTransports[i]
@@ -1497,7 +1497,7 @@ fn _detachPeerTransportIfCurrent(runtimeToken: i64, peerGeneration: i64,
 }
 
 fn _stopPeerTransports(runtimeToken: i64) {
-    var endpoints: Array<const _PeerEndpoint> = []
+    var endpoints: Array<_PeerEndpoint> = []
     var retained: Array<_PeerTransportState> = []
     _lockPeerTransport()
     for (var i = 0; i < len(_peerTransports); i++) {
@@ -1756,7 +1756,7 @@ fn _drivePeer(runtimeToken: i64, peerGeneration: i64,
 // dispatch frames or become observable through public APIs.
 fn _installPeerTransport(conn: move NetConn, runtimeToken: i64,
                          peerGeneration: i64,
-                         connectedAtMs: i64) -> const _PeerEndpoint? {
+                         connectedAtMs: i64) -> _PeerEndpoint? {
     if (_runtimeActiveToken.load() != runtimeToken || peerGeneration <= 0 ||
         !net.setDeadline(conn, 0)) {
         net.close(conn)
@@ -1845,7 +1845,7 @@ export final class PhiDetector {
     sumSquares: f64
     lastHeartbeatMs: i64
 
-    constructor(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS) {
+    init(expectedIntervalMs: i64 = HEARTBEAT_INTERVAL_MS) {
         this.intervals = Array<f64>(PHI_WINDOW_SIZE)
         this.sampleCount = 0
         this.writeIndex = 0
@@ -2081,7 +2081,7 @@ export fn tombstoneIsLive(markedAtMs: i64, nowMs: i64) -> bool {
 export fn discoveryClusterHash(secret: string) -> u64 {
     if (len(secret) == 0) { return 0 }
     var hash: u64 = 14695981039346656037
-    var bytes: const Slice<u8> = secret.bytes()
+    var bytes: Slice<u8> = secret.bytes()
     for (var i = 0; i < len(bytes); i++) {
         hash = (hash ^ (bytes[i] as u64)) * (1099511628211 as u64)
     }

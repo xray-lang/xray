@@ -173,7 +173,7 @@ static void sparse_decode(const CBuffer *buffer,const SparseProofCase *input) {
     CHECK(buffer->text[buffer->length]=='\0');
 }
 static void sparse_emit_closed(CBuffer *buffer,const SparseProofCase *input) {
-    emit_checked_proof_bytes(buffer,input->bytes,input->length,"sparse");
+    emit_checked_packet_bytes(buffer,input->bytes,input->length,"sparse");
     EMIT_LITERAL(buffer,"\n};\n");
 }
 static void sparse_normal(const SparseProofCase *input) {
@@ -307,7 +307,7 @@ static void sparse_invalid_spans(void) {
         CBuffer buffer={.text=&sentinel,.capacity=1,.limit=1,.status=XR_XIR_OK,.context=&context};
         const uint8_t *bytes=which==2 ? sparse_one_zero : NULL;
         size_t length=which==1 ? 1 : 0;
-        emit_checked_proof_bytes(&buffer,bytes,length,"sparse");
+        emit_checked_packet_bytes(&buffer,bytes,length,"sparse");
         CHECK(buffer.status==XR_XIR_BAD_STRUCTURE && !buffer.length);
         CHECK(buffer.text==&sentinel && sentinel=='q');
     }

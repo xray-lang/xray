@@ -1922,7 +1922,7 @@ TEST(source_owner_cross_module_static_method_coroutine_has_one_program_and_priva
 TEST(source_owner_cross_module_instance_method_preserves_receiver_across_suspend) {
     static const char library_source[] = "export final class Worker {\n"
                                          "  value: i64\n"
-                                         "  constructor(value: i64) { this.value = value }\n"
+                                         "  init(value: i64) { this.value = value }\n"
                                          "  child(add: i64) -> i64 {\n"
                                          "    Coro.yield()\n"
                                          "    Coro.yield()\n"
@@ -2305,7 +2305,7 @@ TEST(source_owner_generic_constraint_methods_have_exact_concrete_targets) {
         "}\n"
         "export class GenericReader {\n"
         "  bias: i64\n"
-        "  constructor(bias: i64) { this.bias = bias }\n"
+        "  init(bias: i64) { this.bias = bias }\n"
         "  genericRead<T: ReadCounter>(counter: T) -> i64 {\n"
         "    return this.bias + counter.current()\n"
         "  }\n"
@@ -3269,13 +3269,13 @@ TEST(source_owner_generic_value_struct_specializations_are_exact_nominal_aggrega
 TEST(source_owner_generic_scalar_class_specializations_are_exact_class_references) {
     static const char library_source[] = "export class Box<T> {\n"
                                          "  value: T\n"
-                                         "  constructor(value: T) { this.value = value }\n"
+                                         "  init(value: T) { this.value = value }\n"
                                          "  get() -> T { return this.value }\n"
                                          "}\n";
     static const char facade_source[] = "export { Box as OriginBox } from \"./library\"\n"
                                         "export class Box<T> {\n"
                                         "  value: T\n"
-                                        "  constructor(value: T) { this.value = value }\n"
+                                        "  init(value: T) { this.value = value }\n"
                                         "  get() -> T { return this.value }\n"
                                         "}\n";
     static const char entry_source[] =
@@ -3283,7 +3283,7 @@ TEST(source_owner_generic_scalar_class_specializations_are_exact_class_reference
         "import \"./facade\" as facade\n"
         "class Box<T> {\n"
         "  value: T\n"
-        "  constructor(value: T) { this.value = value }\n"
+        "  init(value: T) { this.value = value }\n"
         "  get() -> T { return this.value }\n"
         "}\n"
         "fn answer() -> i64 {\n"
@@ -3483,18 +3483,18 @@ TEST(source_owner_generic_scalar_class_specializations_are_exact_class_reference
 TEST(source_owner_folds_constructor_literal_and_reordered_stores) {
     static const char source[] = "class Counter {\n"
                                  "  value: i64\n"
-                                 "  constructor() { this.value = 0 }\n"
+                                 "  init() { this.value = 0 }\n"
                                  "}\n"
                                  "class Pair {\n"
                                  "  a: i64\n"
                                  "  b: bool\n"
-                                 "  constructor(x: i64) { this.b = true\n"
+                                 "  init(x: i64) { this.b = true\n"
                                  "    this.a = x }\n"
                                  "}\n"
                                  "class Swap {\n"
                                  "  first: i64\n"
                                  "  second: i64\n"
-                                 "  constructor(x: i64, y: i64) { this.second = x\n"
+                                 "  init(x: i64, y: i64) { this.second = x\n"
                                  "    this.first = y }\n"
                                  "}\n"
                                  "fn answer() -> i64 {\n"
@@ -3574,7 +3574,7 @@ TEST(source_owner_generic_nested_class_types_are_exact) {
     static const char direct_managed_struct_source[] =
         "class Leaf {\n"
         "  value: i64\n"
-        "  constructor(value: i64) { this.value = value }\n"
+        "  init(value: i64) { this.value = value }\n"
         "}\n"
         "struct Bad { value: Leaf }\n"
         "fn answer() -> i64 {\n"
@@ -3585,7 +3585,7 @@ TEST(source_owner_generic_nested_class_types_are_exact) {
     static const char nested_managed_struct_source[] =
         "class Leaf {\n"
         "  value: i64\n"
-        "  constructor(value: i64) { this.value = value }\n"
+        "  init(value: i64) { this.value = value }\n"
         "}\n"
         "struct Bad { value: Leaf? }\n"
         "fn answer() -> i64 {\n"
@@ -3613,30 +3613,30 @@ TEST(source_owner_generic_nested_class_types_are_exact) {
 
     static const char library_source[] = "export class Leaf {\n"
                                          "  value: i64\n"
-                                         "  constructor(value: i64) { this.value = value }\n"
+                                         "  init(value: i64) { this.value = value }\n"
                                          "}\n"
                                          "export class Box<T> {\n"
                                          "  value: T\n"
-                                         "  constructor(value: move T) { this.value = value }\n"
+                                         "  init(value: move T) { this.value = value }\n"
                                          "}\n";
     static const char facade_source[] = "export class Leaf {\n"
                                         "  value: i64\n"
-                                        "  constructor(value: i64) { this.value = value }\n"
+                                        "  init(value: i64) { this.value = value }\n"
                                         "}\n"
                                         "export class Box<T> {\n"
                                         "  value: T\n"
-                                        "  constructor(value: move T) { this.value = value }\n"
+                                        "  init(value: move T) { this.value = value }\n"
                                         "}\n";
     static const char entry_source[] =
         "import { Leaf as DirectLeaf, Box as DirectBox } from \"./library\"\n"
         "import { Leaf as FacadeLeaf, Box as FacadeBox } from \"./facade\"\n"
         "class Leaf {\n"
         "  value: i64\n"
-        "  constructor(value: i64) { this.value = value }\n"
+        "  init(value: i64) { this.value = value }\n"
         "}\n"
         "class Box<T> {\n"
         "  value: T\n"
-        "  constructor(value: move T) { this.value = value }\n"
+        "  init(value: move T) { this.value = value }\n"
         "}\n"
         "fn answer() -> i64 {\n"
         "  var directLeaf = DirectLeaf(19)\n"
@@ -4094,7 +4094,7 @@ TEST(source_owner_array_append_preserves_class_identity) {
     static const char source[] =
         "class Holder {\n"
         " value: i64\n"
-        " constructor(value: i64) { this.value = value }\n"
+        " init(value: i64) { this.value = value }\n"
         "}\n"
         "fn answer() -> i64 {\n"
         " var rows: Array<Holder> = []\n"
@@ -4394,7 +4394,7 @@ TEST(source_owner_array_runtime_length) {
 TEST(source_owner_recursive_class_type_reservation_is_cycle_safe) {
     static const char source[] = "class Node {\n"
                                  "  next: Node?\n"
-                                 "  constructor(next: Node?) { this.next = next }\n"
+                                 "  init(next: Node?) { this.next = next }\n"
                                  "}\n"
                                  "fn answer(node: Node) -> i64 {\n"
                                  "  return 42\n"
@@ -4440,11 +4440,11 @@ TEST(source_owner_recursive_class_type_reservation_is_cycle_safe) {
 TEST(source_owner_mutual_class_type_reservation_is_cycle_safe) {
     static const char source[] = "class Left {\n"
                                  "  right: Right?\n"
-                                 "  constructor(right: Right?) { this.right = right }\n"
+                                 "  init(right: Right?) { this.right = right }\n"
                                  "}\n"
                                  "class Right {\n"
                                  "  left: Left?\n"
-                                 "  constructor(left: Left?) { this.left = left }\n"
+                                 "  init(left: Left?) { this.left = left }\n"
                                  "}\n"
                                  "fn answer(left: Left) -> i64 {\n"
                                  "  return 42\n"
@@ -4498,11 +4498,11 @@ TEST(source_owner_deep_class_chain_has_no_nominal_recursion_limit) {
     for (int32_t index = CLASS_COUNT - 1; index >= 0; --index) {
         int written = index == CLASS_COUNT - 1
                           ? snprintf(source + used, SOURCE_CAPACITY - used,
-                                     "class C%d {\n  value: i64\n  constructor(value: i64) { "
+                                     "class C%d {\n  value: i64\n  init(value: i64) { "
                                      "this.value = value }\n}\n",
                                      index)
                           : snprintf(source + used, SOURCE_CAPACITY - used,
-                                     "class C%d {\n  next: C%d?\n  constructor(next: C%d?) { "
+                                     "class C%d {\n  next: C%d?\n  init(next: C%d?) { "
                                      "this.next = next }\n}\n",
                                      index, index + 1, index + 1);
         ASSERT_TRUE(written > 0 && (size_t) written < SOURCE_CAPACITY - used);
@@ -4541,11 +4541,11 @@ TEST(source_owner_deep_class_chain_has_no_nominal_recursion_limit) {
 TEST(source_owner_class_alias_escape_projects_one_share) {
     static const char source[] = "class Cell {\n"
                                  "  value: i64\n"
-                                 "  constructor(value: i64) { this.value = value }\n"
+                                 "  init(value: i64) { this.value = value }\n"
                                  "}\n"
                                  "class Holder {\n"
                                  "  child: Cell\n"
-                                 "  constructor(child: Cell) { this.child = child }\n"
+                                 "  init(child: Cell) { this.child = child }\n"
                                  "}\n"
                                  "fn answer() -> i64 {\n"
                                  "  var cell = Cell(1)\n"
@@ -4664,11 +4664,11 @@ TEST(source_owner_class_alias_escape_projects_one_share) {
 TEST(source_owner_class_field_self_assignment_shares_before_exchange) {
     static const char source[] = "class Cell {\n"
                                  "  value: i64\n"
-                                 "  constructor(value: i64) { this.value = value }\n"
+                                 "  init(value: i64) { this.value = value }\n"
                                  "}\n"
                                  "class Holder {\n"
                                  "  child: Cell\n"
-                                 "  constructor(child: Cell) { this.child = child }\n"
+                                 "  init(child: Cell) { this.child = child }\n"
                                  "}\n"
                                  "fn answer() -> i64 {\n"
                                  "  var holder = Holder(Cell(42))\n"
@@ -4773,7 +4773,7 @@ TEST(source_owner_class_field_self_assignment_shares_before_exchange) {
 TEST(source_owner_class_alias_borrows_coalesce_without_share) {
     static const char source[] = "class Cell {\n"
                                  "  value: i64\n"
-                                 "  constructor(value: i64) { this.value = value }\n"
+                                 "  init(value: i64) { this.value = value }\n"
                                  "}\n"
                                  "fn answer() -> i64 {\n"
                                  "  var cell = Cell(1)\n"
@@ -4810,11 +4810,11 @@ TEST(source_owner_class_alias_borrows_coalesce_without_share) {
 TEST(source_owner_class_alias_final_transfer_coalesces_to_move) {
     static const char source[] = "class Cell {\n"
                                  "  value: i64\n"
-                                 "  constructor(value: i64) { this.value = value }\n"
+                                 "  init(value: i64) { this.value = value }\n"
                                  "}\n"
                                  "class Holder {\n"
                                  "  child: Cell\n"
-                                 "  constructor(child: Cell) { this.child = child }\n"
+                                 "  init(child: Cell) { this.child = child }\n"
                                  "}\n"
                                  "fn answer() -> i64 {\n"
                                  "  var cell = Cell(42)\n"
@@ -5370,7 +5370,7 @@ static void assert_module_initializer_failure(bool panic, XrSourceFixtureId fixt
     int length =
         snprintf(library, sizeof(library),
                  "enum InitFailure { Rejected { code: i64, message: string } }\n"
-                 "class Cell { value: i64; constructor(value: i64) { this.value = value } }\n"
+                 "class Cell { value: i64; init(value: i64) { this.value = value } }\n"
                  "var state = Cell(1)\n"
                  "fn initialize(ok: bool) -> i64 {\n"
                  "  var local = Cell(2)\n"
@@ -6974,7 +6974,7 @@ static void assert_builtin_panic_cleans_live_owners(uint32_t panic_code,
     int written = snprintf(
         source, sizeof(source),
         "%s%sclass Cell {\nvalue: i64\n"
-        "constructor(value: i64) { this.value = value }\n}\n"
+        "init(value: i64) { this.value = value }\n}\n"
         "fn checked(ok: bool) -> i64 {\n"
         "var first = Cell(20)\nvar second = Cell(22)\n%s%s}\n"
         "fn answer() -> i64 { return checked(false)%s }\n",
@@ -8846,7 +8846,7 @@ TEST(source_owner_rejects_invalid_or_expanded_budget_request) {
 TEST(source_owner_reports_exact_monomorphization_depth_budget) {
     static const char source[] = "class C0<T> {\n"
                                  "  value: T\n"
-                                 "  constructor(value: T) { this.value = value }\n"
+                                 "  init(value: T) { this.value = value }\n"
                                  "  get() -> T {\n"
                                  "    var next = C1<T>(this.value)\n"
                                  "    return next.get()\n"
@@ -8854,7 +8854,7 @@ TEST(source_owner_reports_exact_monomorphization_depth_budget) {
                                  "}\n"
                                  "class C1<T> {\n"
                                  "  value: T\n"
-                                 "  constructor(value: T) { this.value = value }\n"
+                                 "  init(value: T) { this.value = value }\n"
                                  "  get() -> T {\n"
                                  "    var next = C2<T>(this.value)\n"
                                  "    return next.get()\n"
@@ -8862,7 +8862,7 @@ TEST(source_owner_reports_exact_monomorphization_depth_budget) {
                                  "}\n"
                                  "class C2<T> {\n"
                                  "  value: T\n"
-                                 "  constructor(value: T) { this.value = value }\n"
+                                 "  init(value: T) { this.value = value }\n"
                                  "  get() -> T { return this.value }\n"
                                  "}\n"
                                  "fn answer() -> i64 {\n"

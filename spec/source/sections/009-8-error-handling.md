@@ -274,7 +274,7 @@ class PanicInfo {
     code: i64                   // 错误码
     data: JSON.Value            // 附加数据；无数据时为 JSON null
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
@@ -434,7 +434,7 @@ enum ConnErr { Refused, Timeout }
 // 用一个极简的 "连接" 替身让示例自成一体。
 class Conn {
     alive: bool
-    constructor(alive: bool) { this.alive = alive }
+    init(alive: bool) { this.alive = alive }
     isAlive() -> bool { return this.alive }
     close() { print("closed") }
 }
@@ -845,7 +845,7 @@ class PanicInfo {
     code: i64                   // error code
     data: JSON.Value            // additional data; JSON null when absent
 
-    constructor(message: string = "", cause: PanicInfo? = null)
+    init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
@@ -1017,7 +1017,7 @@ enum ConnErr { Refused, Timeout }
 // A tiny stand-in "connection" so the example runs on its own.
 class Conn {
     alive: bool
-    constructor(alive: bool) { this.alive = alive }
+    init(alive: bool) { this.alive = alive }
     isAlive() -> bool { return this.alive }
     close() { print("closed") }
 }

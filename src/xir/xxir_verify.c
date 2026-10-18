@@ -54,7 +54,7 @@ typedef struct VerifyContext {
     const XrXirModule *module;
     XirConstraintScratch scratch;
     XirTypeScratch pending;
-    /* Function graph views borrow this fully cleared verifier-local storage. */
+    /* Function graph views borrow this freshly rebuilt verifier-local storage. */
     void *graph_storage;
     size_t graph_capacity;
 } VerifyContext;
@@ -517,8 +517,58 @@ static XrXirStatus graph_connect(Graph *graph, const XrXirFunction *function,
     return XR_XIR_OK;
 }
 
+/* Reachability has already visited every current block. Reuse its bytes
+ * for DFS colors and the queue for an active stack followed by finished
+ * reverse postorder. The two regions never overlap, and no fact escapes this
+ * function's scratch storage or survives the next graph allocation. */
+static XrXirStatus graph_reverse_postorder(Graph *graph, const XrXirFunction *function,
+                                         VerifyContext *context) {
+    if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+    if (function->block_count <= 2) return XR_XIR_OK;
+    if (!xir_compile_work(&context->remaining, 2 * sizeof(uint32_t) + sizeof(uint8_t)))
+        return XR_XIR_BUDGET;
+    uint32_t top = 1, write = function->block_count;
+    graph->reachable[0] = 2;
+    for (;;) {
+        if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+        if (!top) break;
+        if (!xir_compile_work(&context->remaining, 2 + sizeof(uint32_t) + sizeof(void *)))
+            return XR_XIR_BUDGET;
+        if (top > write) return XR_XIR_BAD_STRUCTURE;
+        uint32_t block = graph->queue[top - 1];
+        if (block >= function->block_count) return XR_XIR_BAD_STRUCTURE;
+        const XrXirInstruction *op = terminator(function, block);
+        uint32_t target = 0;
+        for (uint32_t i = 0; i <= op_rules[op->op].edges; ++i) {
+            if (!xir_compile_work(&context->remaining, 3 + sizeof(uint32_t) + sizeof(uint8_t)))
+                return XR_XIR_BUDGET;
+            target = i < op_rules[op->op].edges ? op->targets[i] : function->blocks[block].panic;
+            if (target >= function->block_count) return XR_XIR_BAD_STRUCTURE;
+            if (target && graph->reachable[target] == 1) break;
+            target = 0;
+        }
+        if (target) {
+            if (!xir_compile_work(&context->remaining, 2 + sizeof(uint32_t) + sizeof(uint8_t)))
+                return XR_XIR_BUDGET;
+            if (top >= write) return XR_XIR_BAD_STRUCTURE;
+            graph->reachable[target] = 2;
+            graph->queue[top++] = target;
+        } else {
+            if (!xir_compile_work(&context->remaining, 3 + sizeof(uint32_t) + sizeof(uint8_t)))
+                return XR_XIR_BUDGET;
+            --top;
+            graph->queue[--write] = block;
+            graph->reachable[block] = 3;
+        }
+    }
+    if (!xir_compile_work(&context->remaining, 2)) return XR_XIR_BUDGET;
+    return !write && !graph->queue[0] ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
+}
+
 static XrXirStatus graph_dominators(Graph *graph, const XrXirFunction *function,
                                   VerifyContext *context) {
+    XrXirStatus status = graph_reverse_postorder(graph, function, context);
+    if (status != XR_XIR_OK) return status;
     graph->dominators[0] = 1;
     for (uint32_t b = 1; b < function->block_count; ++b) {
         if (!xir_compile_work(&context->remaining, graph->words))
@@ -529,7 +579,15 @@ static XrXirStatus graph_dominators(Graph *graph, const XrXirFunction *function,
     bool changed;
     do {
         changed = false;
-        for (uint32_t b = 1; b < function->block_count; ++b) {
+        for (uint32_t position = 1; position < function->block_count; ++position) {
+            if (!xir_compile_work(&context->remaining, 1)) return XR_XIR_BUDGET;
+            uint32_t b = position;
+            if (function->block_count > 2) {
+                if (!xir_compile_work(&context->remaining, 3 + sizeof(uint32_t)))
+                    return XR_XIR_BUDGET;
+                b = graph->queue[position];
+                if (!b || b >= function->block_count) return XR_XIR_BAD_STRUCTURE;
+            }
             if (!xir_compile_work(&context->remaining, (uint64_t) graph->words * 2))
                 return XR_XIR_BUDGET;
             for (uint32_t w = 0; w < graph->words; ++w)
@@ -1126,7 +1184,8 @@ static XrXirStatus verify_metadata_parameter_count(const XrXirModule *module, Xr
 
 static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_context,
     const XrXirModule *module, const XrXirConstruction *construction,
-    const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
+    const XrXirEffects *source_effects,const XrXirEffects *program_effects,
+    XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *remaining = &compile_state;
@@ -1220,7 +1279,9 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
     context.graph_storage = NULL; context.graph_capacity = 0;
     if (status == XR_XIR_OK) {
         XrXirCellProvenance *cell_proof = NULL;
-        status = xr_xir_compile_cell_provenance_verified(&context.remaining, module, &cell_proof, &context.location);
+        if (program_effects)
+            status=xir_effects_program_cells_match(&context.remaining,program_effects,&context.location);
+        else status = xr_xir_compile_cell_provenance_verified(&context.remaining, module, &cell_proof, &context.location);
         xr_xir_compile_cell_provenance_free(cell_proof);
     }
     if (status == XR_XIR_OK && module->provenance)
@@ -1236,7 +1297,7 @@ static XrXirStatus structure_verify_source(const XrXirCompileContext *compile_co
 
 XrXirStatus xr_xir_compile_structure_verify_v2(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirConstruction *construction, XrXirDiagnostic *diagnostic) {
-    return structure_verify_source(context,module,construction,NULL,diagnostic);
+    return structure_verify_source(context,module,construction,NULL,NULL,diagnostic);
 }
 
 /* Every use repeats complete current Source admission before consuming this
@@ -1247,7 +1308,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_source_effects_v2(const XrXirCompileCo
     if (!xir_compile_context_valid(context) || !effects || !source || !source->provenance ||
         source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status=structure_verify_source(context,source,construction,NULL,&location);
+    XrXirStatus status=structure_verify_source(context,source,construction,NULL,NULL,&location);
     if (status==XR_XIR_OK) status=xir_effects_source_body_match(context,source,effects);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
@@ -1266,7 +1327,7 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompi
     if (!xir_compile_context_valid(context) || !module || !module->provenance ||
         module->provenance->kind!=XR_XIR_EVIDENCE_INSTANCE) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,&location);
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
         status=declaration_effects_verify(module,&remaining,&location,NULL,NULL);
@@ -1277,11 +1338,14 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_provenance_effects_v2(const XrXirCompi
 
 /* The same complete checker consumes either freshly inferred facts or the
  * private prepared owner; neither path omits declarations or permissions. */
-XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *context,
-    const XrXirModule *module, const XrXirConstruction *construction, const XrXirEffects *effects, XrXirDiagnostic *diagnostic) {
+static XrXirStatus verify_effects_body(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,const XrXirEffects *program_effects,XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location = {XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
-    XrXirStatus status = xr_xir_compile_structure_verify_v2(context,module,construction,&location);
+    XrXirStatus status = structure_verify_source(context,module,construction,NULL,program_effects,&location);
+    if (status==XR_XIR_OK && program_effects)
+        status=xir_effects_program_body_match(context,module,program_effects);
     if (status == XR_XIR_OK) {
         XrXirCompileContext remaining = *context;
         status = declaration_effects_verify(module,&remaining,&location,effects,NULL);
@@ -1289,6 +1353,17 @@ XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *
     location.status = status;
     if (diagnostic) *diagnostic = location;
     return status;
+}
+XR_FUNC XrXirStatus xr_xir_compile_verify_effects_v2(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    return verify_effects_body(context,module,construction,effects,NULL,diagnostic);
+}
+XR_FUNC XrXirStatus xir_compile_verify_program_effects(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirConstruction *construction,
+    const XrXirEffects *effects,XrXirDiagnostic *diagnostic) {
+    if (!effects) return XR_XIR_BAD_STRUCTURE;
+    return verify_effects_body(context,module,construction,effects,effects,diagnostic);
 }
 /* Structural, source and permission checks finish before the fresh owner
  * becomes observable. Only the Template consumer restricts this collector's
@@ -1299,7 +1374,7 @@ static XrXirStatus verify_collected_effects(const XrXirCompileContext *context,
     if (!xir_compile_context_valid(context) || !output || *output) return XR_XIR_BAD_STRUCTURE;
     XrXirDiagnostic location={XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
     XrXirEffects *owned=NULL;
-    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,&location);
+    XrXirStatus status=structure_verify_source(context,module,construction,source_effects,NULL,&location);
     if (status==XR_XIR_OK) {
         XrXirCompileContext remaining=*context;
         status=declaration_effects_verify(module,&remaining,&location,NULL,&owned);

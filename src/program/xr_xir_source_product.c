@@ -253,15 +253,16 @@ XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDia
     xr_xir_compile_source_snapshot_free(diagnostic->snapshot);
     xr_compile_resources_free(diagnostic->source_path);memset(diagnostic,0,sizeof(*diagnostic));
 }
-XR_FUNC XrXirStatus xr_xir_compile_source_product_public_admit(
-    const XrXirSourceProduct *product, XrXirSourceDiagnostic *diagnostic) {
+XR_FUNC XrXirStatus xr_xir_compile_source_lowered_public_admit(
+    const XrXirArtifact *lowered, XrXirSourceDiagnostic *diagnostic) {
     XrXirStatus status = XR_XIR_BAD_STRUCTURE;
     uint32_t module = 0;
     bool state_rejected = false;
-    if (!product || !xir_compile_context_valid(&product->context)) goto done;
-    if (!product->lowered) { status = XR_XIR_BAD_STAGE; goto done; }
-    if (!xir_compile_work(&product->context, 1)) { status = XR_XIR_BUDGET; goto done; }
-    const XrXirModule *body = xr_xir_compile_artifact_module(product->lowered);
+    const XrXirCompileContext *context=xr_xir_compile_artifact_context(lowered);
+    const XrXirModule *body=xr_xir_compile_artifact_module(lowered);
+    if (!xir_compile_context_valid(context)) goto done;
+    if (!body || body->stage!=XR_XIR_LOWERED) { status = XR_XIR_BAD_STAGE; goto done; }
+    if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; goto done; }
     const XrXirDeclarations *declarations = body ? body->declarations : NULL;
     if (!body || body->linkage_kind != XR_XIR_PROGRAM || !declarations ||
         !declarations->modules || !declarations->module_count ||
@@ -269,7 +270,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_public_admit(
         (declarations->slot_count && !declarations->slots)) goto done;
     status = XR_XIR_OK;
     for (uint32_t s = 0; s < declarations->slot_count; ++s) {
-        if (!xir_compile_work(&product->context, 1)) { status = XR_XIR_BUDGET; break; }
+        if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }
         const XrXirSlot *slot = &declarations->slots[s];
         module = slot->module;
         if (module >= declarations->module_count || slot->mutable > 1) {
@@ -288,6 +289,14 @@ done:
             memcpy(diagnostic->message, message, sizeof(message));
         }
     }
+    return status;
+}
+XR_FUNC XrXirStatus xr_xir_compile_source_product_public_admit(
+    const XrXirSourceProduct *product, XrXirSourceDiagnostic *diagnostic) {
+    if(product && xir_compile_context_valid(&product->context) && product->lowered)
+        return xr_xir_compile_source_lowered_public_admit(product->lowered,diagnostic);
+    XrXirStatus status=product && xir_compile_context_valid(&product->context)?XR_XIR_BAD_STAGE:XR_XIR_BAD_STRUCTURE;
+    if(diagnostic)*diagnostic=(XrXirSourceDiagnostic){.status=status};
     return status;
 }
 XR_FUNC const XrXirSourceProductFacts *xr_xir_compile_source_product_facts(const XrXirSourceProduct *product) {

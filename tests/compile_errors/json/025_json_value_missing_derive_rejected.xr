@@ -1,7 +1,7 @@
 class PlainUser {
     name: string
 
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
 }

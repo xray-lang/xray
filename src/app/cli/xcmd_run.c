@@ -14,6 +14,7 @@
 #include "xcli.h"
 #include "../../api/xsource_compile.h"
 #include "../../api/xsource_paths.h"
+#include "../../api/xsource_api.h"
 #include "../../execution/xr_xir_host_cli.h"
 #include <stdio.h>
 #include <string.h>
@@ -85,6 +86,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         &paths, &path_diagnostic);
     XrXirSourceProduct *product = NULL;
     XrSourceCompileDiagnostic diagnostic = {0};
+    XrSourceProgram *owned = NULL;
     XrXirProgram *program = NULL;
     uint32_t entry = 0;
     int result = XR_CLI_EXIT_FAIL;
@@ -100,21 +102,21 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         if (status != XR_SOURCE_COMPILE_OK) {
             result = report_source_failure(&diagnostic);
         } else {
-            const XrXirSourceProductFacts *facts = xr_xir_compile_source_product_facts(product);
-            if (!facts) {
-                fprintf(stderr, "XR_RUN_6002: source product has no admitted entry\n");
-                result = XR_CLI_EXIT_INTERNAL;
+            XrSourceStatus wrapped = xr_source_program_take_product(&product, &owned);
+            if (wrapped != XR_SOURCE_OK) {
+                fprintf(stderr, "XR_RUN_6002: cannot admit owned API program (status=%u)\n", (unsigned)wrapped);
+                result = wrapped == XR_SOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
             } else {
-                entry = facts->entry;
-                XrXirStatus taken = xr_xir_compile_source_product_vm_take(product, &program);
-                if (taken != XR_XIR_OK) {
+                XrSourceStatus taken = xr_source_program_take_vm(&owned, &program, &entry);
+                if (taken != XR_SOURCE_OK) {
                     fprintf(stderr, "XR_RUN_6002: cannot prepare VM program (status=%u)\n", (unsigned)taken);
-                    result = taken == XR_XIR_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
+                    result = taken == XR_SOURCE_BUDGET ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_INTERNAL;
                 }
             }
         }
     }
     xr_source_paths_free(&paths);
+    xray_source_program_free(owned);
     xr_xir_compile_source_product_free(product);
     xr_source_compile_diagnostic_free(&diagnostic);
     xr_compile_resources_release(resources);

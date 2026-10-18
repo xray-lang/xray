@@ -14,6 +14,7 @@ add_library(xir_compile_owner_runtime STATIC
     "${XIR_OWNER_ROOT}/src/xir/xxir_output.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_program.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_program_match.c"
+    "${XIR_OWNER_ROOT}/src/xir/xxir_program_input.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_call.c"
     "${XIR_OWNER_ROOT}/src/xir/xxir_instance.c")
 target_link_libraries(xir_compile_owner_runtime PRIVATE compile_owner_core)

@@ -69,7 +69,8 @@ static void source_enum_identity_run(XrXirSourceRequest *request, const char *so
     for(uint32_t f=0;f<checked_module->function_count;++f) {
         const XrXirFunction *function=&checked_module->functions[f];
         if(function->name_length==4 && !memcmp(function->name,"text",4)) {
-            const XrXirFunctionEffects *fact=xr_xir_effects_function(effects,f);
+            XrXirEffectFacts fact_read=xr_xir_effects_read(effects,f);
+            const XrXirFunctionEffects *fact=(fact_read.status==XR_XIR_OK?&fact_read.control:NULL);
             CHECK(fact && fact->suspend==XR_XIR_EFFECT_NONE && fact->throws==XR_XIR_EFFECT_NONE);
         }
     }

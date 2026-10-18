@@ -55,8 +55,8 @@ static XrXirStatus conditional_metadata_roots(const XrXirCompileContext *context
     if (module->function_count!=4) return XR_XIR_BAD_STRUCTURE;
     XrXirRootEffects ar[4]={0},br[4]={0};
     XrXirRootEffectWitness aw[4]={0},bw[4]={0},au[4]={0},bu[4]={0};
-    XrXirEffects raw={.count=4,.root=ar,.root_witnesses=aw,.unresolved_witnesses=au};
-    XrXirEffects metadata={.count=4,.root=br,.root_witnesses=bw,.unresolved_witnesses=bu};
+    XrXirEffects raw={.count=4,.outcomes_work={.root=ar,.root_witnesses=aw,.unresolved_witnesses=au}};
+    XrXirEffects metadata={.count=4,.outcomes_work={.root=br,.root_witnesses=bw,.unresolved_witnesses=bu}};
     XirMetadataDomain domain=xir_metadata_domain_from_module(module);
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t f=0;f<4 && status==XR_XIR_OK;++f) {
@@ -66,8 +66,8 @@ static XrXirStatus conditional_metadata_roots(const XrXirCompileContext *context
             EffectRootSeedRecord record={&domain,op,f,i,XR_XIR_UNIT};
             if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT)
                 record.callable_type=xr_xir_operand_type(body,(uint32_t)op->immediate);
-            status=effect_root_seed(module,&raw,f,i,context);
-            if (status==XR_XIR_OK) status=effect_root_seed_record(&record,&metadata,context);
+            status=oracle_root_seed(module,&raw,f,i,context);
+            if (status==XR_XIR_OK) status=oracle_root_seed_record(&record,&metadata,context);
         }
     }
     if (status==XR_XIR_OK && oracle) {
@@ -76,8 +76,8 @@ static XrXirStatus conditional_metadata_roots(const XrXirCompileContext *context
         CHECK(!ar[2].requires_root && !ar[2].unresolved && ar[3].requires_root);
         XrXirInstruction invalid={.op=(XrXirOp)UINT16_MAX};
         EffectRootSeedRecord record={&domain,&invalid,0,0,XR_XIR_UNIT};
-        CHECK(effect_root_seed_record(&record,&metadata,context)==XR_XIR_BAD_STRUCTURE);
-        record.function=4;CHECK(effect_root_seed_record(&record,&metadata,context)==XR_XIR_BAD_STRUCTURE);
+        CHECK(oracle_root_seed_record(&record,&metadata,context)==XR_XIR_BAD_STRUCTURE);
+        record.function=4;CHECK(oracle_root_seed_record(&record,&metadata,context)==XR_XIR_BAD_STRUCTURE);
     }
     return status;
 }

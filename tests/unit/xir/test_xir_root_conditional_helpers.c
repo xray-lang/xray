@@ -18,6 +18,7 @@
 #include "xir_conditional_retry_cases.h"
 #define XR_XIR_EFFECT_CONTEXT_TESTS 1
 #include "xir/xxir_effects.c"
+#include "xir_legacy_error_oracle.h"
 #include "xir_root_conditional_raw_fixture.h"
 #include "xir_construction_fixture.h"
 #include "xir_invocation_core_cases.h"
@@ -41,7 +42,9 @@
 #include "xir_invocation_physical_classification_cases.h"
 #include "xir_invocation_class_rows_cases.h"
 #include "xir_invocation_class_cell_cases.h"
+#include "xir_invocation_class_lifetime_cases.h"
 #include "xir_invocation_compact_snapshot_cases.h"
+#include "xir_invocation_primitive_cases.h"
 #include "xir_invocation_early_generation_cases.h"
 #include "xir_invocation_generation_range_cases.h"
 #include "xir_ordinary_initial_role_cases.h"
@@ -52,6 +55,8 @@
 #include "xir_cell_owned_run_cases.h"
 #include "xir_invocation_edge_key_cases.h"
 #include "xir_context_constraint_vector_cases.h"
+#include "xir_parameter_schedule_cases.h"
+#include "xir_single_run_reader_cases.h"
 
 static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint32_t mode, bool oracle) {
     ConditionalRawFixture f;conditional_raw_fixture(&f,mode);
@@ -63,6 +68,23 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
         if (oracle) CHECK(resolved && resolved->known && resolved->target==1 &&
             resolved->family==1 && resolved->argument_count==1 && resolved->arguments[0]==(XrXirType)256);
         status=effect_ordinary_classify(context,&f.module,resolved,&contexts,&selected);
+    }
+    if (status==XR_XIR_OK && oracle) {
+        contexts->terms.remaining=context;
+        uint32_t repeated=UINT32_MAX;
+        CHECK(effect_ordinary_intern(contexts,&f.module,resolved,resolved->function,&repeated)==XR_XIR_OK &&
+            repeated==selected);
+        uint32_t count=contexts->count;const XrXirType *arguments=contexts->nodes[selected].arguments;
+        XrCompileResourceStats before=rp_stats(context);
+        for (uint32_t repeat=0;repeat<8;++repeat) {
+            repeated=UINT32_MAX;
+            CHECK(effect_ordinary_intern(contexts,&f.module,resolved,resolved->function,&repeated)==XR_XIR_OK &&
+                repeated==selected && contexts->count==count && contexts->nodes[selected].arguments==arguments);
+        }
+        XrCompileResourceStats after=rp_stats(context);
+        CHECK(after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes &&
+            after.allocation_count==before.allocation_count && after.work>before.work);
+        contexts->terms.remaining=NULL;
     }
     if (status==XR_XIR_OK) {
         /* A real caller edge supplies the precise actual while every original
@@ -81,6 +103,14 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
         module.generics=generics;module.declarations=&declarations;
         status=effect_context_owner_build(context,&module,NULL,NULL,&execution);
         if (status==XR_XIR_OK) {
+            if (oracle && context->limits.functions==5) {
+                CHECK(contexts->count==5 && execution->ordinary->count>module.function_count &&
+                    execution->dense->count>module.function_count &&
+                    execution->forest->invocations->final->summary.count==execution->dense->count);
+                fprintf(stderr,"ordinary namespace mode%u declarations%u ordinary%u dense%u final%u function_limit%u\n",
+                    mode,module.function_count,execution->ordinary->count,execution->dense->count,
+                    execution->forest->invocations->final->summary.count,context->limits.functions);
+            }
             uint32_t caller_index=(uint32_t)execution->dense->functions[4].instructions[0].immediate;
             CHECK(caller_index<execution->dense->count);
             uint32_t ordinary=execution->dense->nodes[caller_index].ordinary;
@@ -123,8 +153,8 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
     }
     if (status==XR_XIR_OK && oracle) {
         CHECK(contexts && contexts->count==5 && selected==4);
-        const XrXirFunctionEffectContract *base=&contexts->uses.contracts[1];
-        const XrXirFunctionEffectContract *closed=&contexts->uses.contracts[selected];
+        const XrXirFunctionEffectContract *base=&contexts->uses.outcomes_work.contracts[1];
+        const XrXirFunctionEffectContract *closed=&contexts->uses.outcomes_work.contracts[selected];
         CHECK(base->parameters[1].kind==2 && base->parameters[1].uses==2);
         CHECK(closed->parameters[1].kind==(mode==1 || mode==3 ? 0u : 1u));
         CHECK(closed->parameters[1].uses==(mode==1 || mode==3 ? 8u : 2u));
@@ -136,7 +166,7 @@ static XrXirStatus conditional_classify(const XrXirCompileContext *context, uint
         memset(&f,0,sizeof(f));
         CHECK(!memcmp(contexts->terms.types.nominals->declarations[0].name.bytes,"Runner",6));
         CHECK(contexts->nodes[selected].declaration==1 && contexts->nodes[selected].arguments[0]==(XrXirType)256);
-        CHECK(contexts->uses.contracts[0].parameters[1].kind==(mode==1 || mode==3 ? 0u : 1u));
+        CHECK(contexts->uses.outcomes_work.contracts[0].parameters[1].kind==(mode==1 || mode==3 ? 0u : 1u));
     }
     effect_context_owner_free(execution);effect_ordinary_free(contexts);effect_context_free(resolved);return status;
 }
@@ -204,22 +234,30 @@ static XrXirStatus conditional_forest(const XrXirCompileContext *context, bool o
         CHECK(forest->terms.types.nominals && forest->terms.types.interfaces &&
             !memcmp(forest->terms.types.nominals->declarations[0].name.bytes,"Runner",6) &&
             !memcmp(forest->terms.types.interfaces->declarations[0].name.bytes,"Apply",5));
-        CHECK(forest->certificates[2].next==4 && forest->certificates[2*forest->count+4].next==0);
+        uint32_t selected2[4],selected4[4];EffectContextCauseValue cause2,cause4;
+        CHECK(effect_invocation_projection_domains(context,forest->invocations,2,0,4,selected2)==XR_XIR_OK);
+        CHECK(effect_invocation_projection_domains(context,forest->invocations,4,0,4,selected4)==XR_XIR_OK);
+        EffectInvocationForestProjection request2={&selected2[0],0},request4={&selected4[2],2};
+        CHECK(effect_invocation_forest_record(context,forest,forest->invocations,2,&request2,&cause2)==XR_XIR_OK);
+        CHECK(effect_invocation_forest_record(context,forest,forest->invocations,4,&request4,&cause4)==XR_XIR_OK);
+        CHECK(cause2.next==4 && cause4.next==0);
         CHECK(forest->nodes[4].argument_count==1 && forest->nodes[4].arguments[0]==(XrXirType)256 &&
             forest->nodes[4].parameter_count==2 && forest->nodes[4].physical_types[0]==(XrXirType)256 &&
             forest->nodes[4].physical_types[1]==(XrXirType)257);
         XrXirRootCauseTrace *rejected=NULL;
-        XrXirRootEffectWitness saved=forest->witnesses[2*forest->count+4];
-        forest->witnesses[2*forest->count+4].callee=1;
+        XrXirRootEffectWitness saved=forest->invocations->final->summary.witnesses[2*forest->count+4];
+        forest->invocations->final->summary.witnesses[2*forest->count+4].callee=1;
         CHECK(effect_context_forest_trace(context,forest,2,&rejected)==XR_XIR_BAD_STRUCTURE && !rejected);
-        forest->witnesses[2*forest->count+4]=saved;
-        EffectContextCertificate certificate=forest->certificates[2];
-        forest->certificates[2].next=1;
+        forest->invocations->final->summary.witnesses[2*forest->count+4]=saved;
+        EffectInvocationFinal *final=forest->invocations->final;
+        CHECK(selected2[0]!=UINT32_MAX);
+        EffectInvocationCause *cause=&final->nodes[final->roots[2]].causes[selected2[0]];
+        EffectInvocationCause saved_cause=*cause;cause->next=final->roots[1];
         CHECK(effect_context_forest_trace(context,forest,2,&rejected)==XR_XIR_BAD_STRUCTURE && !rejected);
-        forest->certificates[2]=certificate;
-        forest->witnesses[2*forest->count+4].cause=9;
+        *cause=saved_cause;
+        forest->invocations->final->summary.witnesses[2*forest->count+4].cause=9;
         CHECK(effect_context_forest_trace(context,forest,2,&rejected)==XR_XIR_BAD_STRUCTURE && !rejected);
-        forest->witnesses[2*forest->count+4]=saved;
+        forest->invocations->final->summary.witnesses[2*forest->count+4]=saved;
     }
     effect_context_forest_free(forest);
     if (status==XR_XIR_OK && oracle) {
@@ -283,7 +321,7 @@ static void conditional_domain_rejections(const XrXirCompileContext *context) {
     CHECK(effect_ordinary_classify(context,&fixture.module,resolved,&contexts,&selected)==XR_XIR_OK);
     fixture.types.count=5;
     CHECK(effect_ordinary_roots(context,&fixture.module,contexts)==XR_XIR_BAD_STRUCTURE);
-    CHECK(!contexts->uses.root && !contexts->uses.root_witnesses);
+    CHECK(!contexts->uses.outcomes_work.root && !contexts->uses.outcomes_work.root_witnesses);
     effect_ordinary_free(contexts);effect_context_free(resolved);
 }
 
@@ -305,22 +343,23 @@ static XrXirStatus conditional_dense_owner(const XrXirCompileContext *context,
     EffectContextOwner *owner=NULL;XrXirStatus status=effect_context_owner_build(context,&f.module,NULL,NULL,&owner);
     XrXirRootCauseTrace *trace=NULL;
     if (status==XR_XIR_OK && oracle) {
-        const XrXirRootEffects *facts=&owner->forest->facts[4];
+        EffectContextRootValue value;CHECK(effect_invocation_forest_values(context,owner->forest,4,&value)==XR_XIR_OK);
+        const XrXirRootEffects *facts=&value.facts;
         if (facts->requires_root!=(mode==3 || mode==4) || facts->unresolved!=(mode==1)) {
             fprintf(stderr,"dense owner mode%u root%u unresolved%u\n",mode,facts->requires_root,facts->unresolved);
             for (uint32_t n=0;n<owner->dense->count;++n) {
                 const XrXirFunction *body=&owner->dense->functions[n];
                 fprintf(stderr," context%u decl%u ordinary%u root%u unknown%u",n,owner->dense->nodes[n].declaration,
-                    owner->dense->nodes[n].ordinary,owner->dense->uses.root[n].requires_root,owner->dense->uses.root[n].unresolved);
+                    owner->dense->nodes[n].ordinary,owner->dense->uses.outcomes_work.root[n].requires_root,owner->dense->uses.outcomes_work.root[n].unresolved);
                 for (uint32_t p=0;p<body->parameter_count;++p)
-                    fprintf(stderr," p%u:%u/k%u",p,body->parameters[p],owner->dense->uses.contracts[n].parameters[p].kind);
+                    fprintf(stderr," p%u:%u/k%u",p,body->parameters[p],owner->dense->uses.outcomes_work.contracts[n].parameters[p].kind);
                 for (uint32_t i=0;i<body->instruction_count;++i)
                     fprintf(stderr," i%u:%u/t%u/to%lld",i,body->instructions[i].op,body->instructions[i].type,(long long)body->instructions[i].immediate);
                 fputc('\n',stderr);
             }
         }
         CHECK(facts->requires_root==(mode==3 || mode==4) && facts->unresolved==(mode==1));
-        XrXirEffects effects={.resources=context->resources,.count=5,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=5,.outcomes_work={.contexts=owner}};
         XrXirEffectArgument physical[2]={{0,(XrXirType)256},{1,(XrXirType)259}};
         XrXirOrigin origin={4,NULL,0,physical,2};
         XirEffectContextInput request={&f.module,&f.types,&origin,0,NULL,0};XirEffectContextView selected={0};
@@ -457,7 +496,7 @@ static XrXirStatus conditional_cleanup_owner(const XrXirCompileContext *context,
         .types=&types,.provenance=&template,.linkage_kind=XR_XIR_PROGRAM};
     EffectContextOwner *owner=NULL;XrXirStatus status=effect_context_owner_build(context,&module,NULL,NULL,&owner);
     if (status==XR_XIR_OK && oracle) {
-        XrXirEffects effects={.resources=context->resources,.count=4,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=4,.outcomes_work={.contexts=owner}};
         XrXirEffectArgument physical[2]={{0,(XrXirType)257},{1,(XrXirType)258}};
         XrXirOrigin origin={0,NULL,0,physical,2};
         XirEffectContextInput input={&module,&types,&origin,0,NULL,0};XirEffectContextView first={0},second={0};
@@ -527,15 +566,15 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
     XrXirProvenance template={.kind=XR_XIR_EVIDENCE_TEMPLATE};module.provenance=&template;
     if (status==XR_XIR_OK) status=effect_context_owner_build(context,&module,NULL,NULL,&owner);
     if (status==XR_XIR_OK && oracle) {
-        CHECK(effects->root[0].unresolved && !effects->root[0].requires_root);
-        CHECK(!effects->root[1].unresolved && !effects->root[1].requires_root);
-        CHECK(effects->root[2].requires_root && !effects->root[2].unresolved);
-        CHECK(effects->root[4].unresolved && !effects->root[4].requires_root);
-        CHECK(!effects->root[5].unresolved && !effects->root[5].requires_root);
-        CHECK(effects->contracts[0].parameters[0].kind==XR_XIR_EFFECT_PARAMETER_FIXED);
-        CHECK(effects->contracts[0].formula.term_count==1 &&
-            effects->contracts[0].formula.terms[0].kind==XR_XIR_ROOT_TERM_CELL_PARAMETER &&
-            effects->contracts[0].formula.terms[0].index==0);
+        CHECK(effect_roots_read(effects)->root[0].unresolved && !effect_roots_read(effects)->root[0].requires_root);
+        CHECK(!effect_roots_read(effects)->root[1].unresolved && !effect_roots_read(effects)->root[1].requires_root);
+        CHECK(effect_roots_read(effects)->root[2].requires_root && !effect_roots_read(effects)->root[2].unresolved);
+        CHECK(effect_roots_read(effects)->root[4].unresolved && !effect_roots_read(effects)->root[4].requires_root);
+        CHECK(!effect_roots_read(effects)->root[5].unresolved && !effect_roots_read(effects)->root[5].requires_root);
+        CHECK(effect_roots_read(effects)->contracts[0].parameters[0].kind==XR_XIR_EFFECT_PARAMETER_FIXED);
+        CHECK(effect_roots_read(effects)->contracts[0].formula.term_count==1 &&
+            effect_roots_read(effects)->contracts[0].formula.terms[0].kind==XR_XIR_ROOT_TERM_CELL_PARAMETER &&
+            effect_roots_read(effects)->contracts[0].formula.terms[0].index==0);
         XirEffectEntryRootView entry={0};
         CHECK(xir_effects_entry_root(context,effects,0,&entry)==XR_XIR_OK &&
             !entry.intrinsic_mask && entry.parameter_count==1 && entry.parameters[0]==0);
@@ -549,7 +588,7 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
         CHECK(xir_effects_entry_root(context,effects,6,&entry)==XR_XIR_BAD_STRUCTURE &&
             entry.intrinsic_mask==UINT32_MAX);
         CHECK(owner->dense->count==6);
-        XrXirEffects selected_effects={.resources=context->resources,.count=6,.contexts=owner};
+        XrXirEffects selected_effects={.resources=context->resources,.count=6,.outcomes_work={.contexts=owner}};
         XrXirOrigin local_origin={.function=1},shared_origin={.function=2};
         XirEffectContextInput input={&module,&types,&local_origin,2,NULL,0};
         XirEffectContextView local_view={0},shared_view={0};
@@ -606,8 +645,8 @@ static XrXirStatus conditional_cell_payload(const XrXirCompileContext *context, 
         .declarations=&declarations,.types=&types,.linkage_kind=XR_XIR_PROGRAM};
     XrXirEffects *effects=NULL;XrXirStatus status=xr_xir_compile_effects_infer_verified(context,&module,&effects);
     if (status==XR_XIR_OK && oracle) {
-        CHECK(!effects->root[0].requires_root && !effects->root[0].unresolved);
-        CHECK(effects->root[1].requires_root && !effects->root[1].unresolved);
+        CHECK(!effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved);
+        CHECK(effect_roots_read(effects)->root[1].requires_root && !effect_roots_read(effects)->root[1].unresolved);
         XirEffectEntryRootView entry={0};
         CHECK(xir_effects_entry_root(context,effects,1,&entry)==XR_XIR_OK &&
             entry.intrinsic_mask==XR_XIR_CALLABLE_ROOT_REQUIRED && !entry.parameter_count);
@@ -653,7 +692,7 @@ static void conditional_empty_domains(const XrXirCompileContext *context) {
         .declarations=&declarations,.linkage_kind=XR_XIR_PROGRAM,.provenance=&template};
     EffectContextOwner *owner=NULL;
     CHECK(effect_context_owner_build(context,&module,NULL,NULL,&owner)==XR_XIR_OK);
-    XrXirEffects effects={.resources=context->resources,.count=3,.contexts=owner};
+    XrXirEffects effects={.resources=context->resources,.count=3,.outcomes_work={.contexts=owner}};
     XrXirOrigin origin={.function=1};XirEffectContextInput input={&module,NULL,&origin,0,NULL,0};
     XirEffectContextView selected={0};
     CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_OK && selected.declaration==0);
@@ -664,7 +703,7 @@ static void conditional_empty_domains(const XrXirCompileContext *context) {
 
     ConditionalRawFixture nominal;conditional_raw_fixture(&nominal,0);owner=NULL;
     CHECK(effect_context_owner_build(context,&nominal.module,NULL,NULL,&owner)==XR_XIR_OK);
-    effects=(XrXirEffects){.resources=context->resources,.count=4,.contexts=owner};
+    effects=(XrXirEffects){.resources=context->resources,.count=4,.outcomes_work={.contexts=owner}};
     origin=(XrXirOrigin){.function=2};input=(XirEffectContextInput){&nominal.module,NULL,&origin,UINT32_MAX,NULL,0};
     selected.declaration=UINT32_MAX;
     CHECK(xir_effects_context_select(context,&effects,&input,&selected)==XR_XIR_BAD_TYPE &&
@@ -717,9 +756,9 @@ static XrXirStatus conditional_zero_carrier(const XrXirCompileContext *context,
     XrXirEffects *effects=NULL;
     XrXirStatus status=conditional_zero_checked(context,&module,&effects);
     if (status==XR_XIR_OK && oracle) {
-        CHECK(effects->root[0].unresolved && !effects->root[0].requires_root);
-        CHECK(effects->contracts[0].formula.constant_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED &&
-            !effects->contracts[0].formula.term_count && !effects->contracts[0].formula.terms);
+        CHECK(effect_roots_read(effects)->root[0].unresolved && !effect_roots_read(effects)->root[0].requires_root);
+        CHECK(effect_roots_read(effects)->contracts[0].formula.constant_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED &&
+            !effect_roots_read(effects)->contracts[0].formula.term_count && !effect_roots_read(effects)->contracts[0].formula.terms);
         XirEffectEntryRootView view={0};
         CHECK(xir_effects_entry_root(context,effects,0,&view)==XR_XIR_OK &&
             view.intrinsic_mask==XR_XIR_CALLABLE_ROOT_UNRESOLVED && !view.parameter_count);
@@ -729,8 +768,8 @@ static XrXirStatus conditional_zero_carrier(const XrXirCompileContext *context,
     /* Merely extracting the same payload does not execute its body. */
     ops[2]=(XrXirInstruction){.op=XR_XIR_CONST_INT,.type=XR_XIR_I64};
     status=conditional_zero_checked(context,&module,&effects);
-    if (status==XR_XIR_OK) CHECK(!effects->root[0].unresolved && !effects->root[0].requires_root &&
-        !effects->contracts[0].formula.constant_mask && !effects->contracts[0].formula.term_count);
+    if (status==XR_XIR_OK) CHECK(!effect_roots_read(effects)->root[0].unresolved && !effect_roots_read(effects)->root[0].requires_root &&
+        !effect_roots_read(effects)->contracts[0].formula.constant_mask && !effect_roots_read(effects)->contracts[0].formula.term_count);
     xr_xir_compile_effects_free(effects);effects=NULL;
     if (status!=XR_XIR_OK) return status;
     /* Exhaustive opcode admission precedes every zero-origin decision. */
@@ -779,11 +818,11 @@ static XrXirStatus conditional_zero_module_fn(const XrXirCompileContext *context
         CHECK(effect_body_request_head(&flow.body,0,&flow.head)==XR_XIR_OK);flow.function=&flow.head;
         bool needed=true;
         CHECK(effect_formula_needs_value_flow(&flow,&needed)==XR_XIR_OK && !needed);
-        CHECK(effects->root[0].requires_root && !effects->root[0].unresolved &&
-            effects->contracts[0].formula.constant_mask==XR_XIR_CALLABLE_ROOT_REQUIRED &&
-            !effects->contracts[0].formula.term_count);
-        CHECK(!effects->root[1].requires_root && !effects->root[1].unresolved);
-        CHECK(effects->root[2].requires_root && !effects->root[2].unresolved);
+        CHECK(effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved &&
+            effect_roots_read(effects)->contracts[0].formula.constant_mask==XR_XIR_CALLABLE_ROOT_REQUIRED &&
+            !effect_roots_read(effects)->contracts[0].formula.term_count);
+        CHECK(!effect_roots_read(effects)->root[1].requires_root && !effect_roots_read(effects)->root[1].unresolved);
+        CHECK(effect_roots_read(effects)->root[2].requires_root && !effect_roots_read(effects)->root[2].unresolved);
         XirEffectEntryRootView view={0};
         CHECK(xir_effects_entry_root(context,effects,0,&view)==XR_XIR_OK &&
             view.intrinsic_mask==XR_XIR_CALLABLE_ROOT_REQUIRED && !view.parameter_count);
@@ -826,7 +865,7 @@ static XrXirStatus conditional_zero_arity(const XrXirCompileContext *context,boo
         xr_xir_compile_artifact_construction(checked),NULL);
     if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=3,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=3,.outcomes_work={.contexts=owner}};
         XrXirOrigin origin={.function=0,.arguments=&ordinary[0],.argument_count=1};
         XirEffectContextInput input={owned,owned->types,&origin,UINT32_MAX,NULL,0};
         XirEffectContextView first={0},second={0};
@@ -863,7 +902,8 @@ static XrXirStatus conditional_zero_arity(const XrXirCompileContext *context,boo
         if (status==XR_XIR_OK && oracle) {
             uint32_t count=UINT32_MAX;
             CHECK(!xr_xir_root_cause_trace_steps(trace,false,&count) && !count);
-            CHECK(!owner->forest->facts[1].requires_root && !owner->forest->facts[1].unresolved);
+            EffectContextRootValue value;CHECK(effect_invocation_forest_values(context,owner->forest,1,&value)==XR_XIR_OK);
+            CHECK(!value.facts.requires_root && !value.facts.unresolved);
         }
         xr_xir_compile_root_cause_trace_free(trace);
     }
@@ -909,7 +949,7 @@ static XrXirStatus conditional_zero_arity_cleanup(const XrXirCompileContext *con
         xr_xir_compile_artifact_construction(checked),NULL);
     if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=5,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=5,.outcomes_work={.contexts=owner}};
         XrXirOrigin nested={.function=2,.arguments=&ordinary[0],.argument_count=1};
         XrXirOrigin parents[2]={{.function=1,.arguments=&ordinary[0],.argument_count=1},
             {.function=0,.arguments=&ordinary[0],.argument_count=1}};
@@ -943,7 +983,9 @@ static XrXirStatus conditional_zero_arity_cleanup(const XrXirCompileContext *con
     xr_xir_compile_artifact_free(checked);memset(functions,0,sizeof(functions));memset(generics,0,sizeof(generics));
     if (status==XR_XIR_OK) {
         XrXirRootCauseTrace *trace=NULL;status=effect_context_forest_trace(context,owner->forest,3,&trace);
-        if (status==XR_XIR_OK && oracle) CHECK(!owner->forest->facts[3].requires_root && !owner->forest->facts[3].unresolved);
+        if (status==XR_XIR_OK && oracle) { EffectContextRootValue value;
+            CHECK(effect_invocation_forest_values(context,owner->forest,3,&value)==XR_XIR_OK);
+            CHECK(!value.facts.requires_root && !value.facts.unresolved); }
         xr_xir_compile_root_cause_trace_free(trace);
     }
     effect_context_owner_free(owner);return status;
@@ -1017,14 +1059,15 @@ static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext 
     if (status==XR_XIR_OK) status=effect_context_owner_build(context,owned,NULL,NULL,&owner);
     uint32_t pure_mask=UINT32_MAX,root_mask=UINT32_MAX;
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=7,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=7,.outcomes_work={.contexts=owner}};
         status=xir_effects_reference_root(context,&effects,owned,2,0,&pure_mask);
         if (status==XR_XIR_OK) status=xir_effects_reference_root(context,&effects,owned,2,1,&root_mask);
         uint32_t noncleanup=UINT32_MAX;
         if (status==XR_XIR_OK) status=xir_effects_reference_root(context,&effects,owned,5,1,&noncleanup);
         if (status==XR_XIR_OK && oracle) {
             CHECK(!pure_mask && !noncleanup && root_mask==XR_XIR_CALLABLE_ROOT_REQUIRED);
-            CHECK(!owner->forest->facts[2].requires_root && !owner->forest->facts[2].unresolved);
+            EffectContextRootValue value;CHECK(effect_invocation_forest_values(context,owner->forest,2,&value)==XR_XIR_OK);
+            CHECK(!value.facts.requires_root && !value.facts.unresolved);
             XrXirOrigin origin={.function=2},parents[3]={{.function=1},{.function=0},{.function=5}};
             XirEffectContextInput input={owned,owned->types,&origin,0,parents,2};
             XirEffectContextView selected={.declaration=UINT32_MAX};
@@ -1070,7 +1113,9 @@ static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext 
     xr_xir_compile_artifact_free(checked);memset(functions,0,sizeof(functions));memset(nodes,0,sizeof(nodes));
     if (status==XR_XIR_OK) {
         XrXirRootCauseTrace *trace=NULL;status=effect_context_forest_trace(context,owner->forest,5,&trace);
-        if (status==XR_XIR_OK && oracle) CHECK(!owner->forest->facts[5].requires_root && !owner->forest->facts[5].unresolved);
+        if (status==XR_XIR_OK && oracle) { EffectContextRootValue value;
+            CHECK(effect_invocation_forest_values(context,owner->forest,5,&value)==XR_XIR_OK);
+            CHECK(!value.facts.requires_root && !value.facts.unresolved); }
         xr_xir_compile_root_cause_trace_free(trace);
     }
     effect_context_owner_free(owner);return status;
@@ -1418,7 +1463,7 @@ static XrXirStatus conditional_descriptor_case(const XrXirCompileContext *contex
         status=conditional_descriptor_grow(records,oracle);records->terms.remaining=NULL;
     }
     if (status==XR_XIR_OK) {
-        XrXirEffects effects={.resources=context->resources,.count=4,.contexts=owner};
+        XrXirEffects effects={.resources=context->resources,.count=4,.outcomes_work={.contexts=owner}};
         XrXirOrigin origin={.function=2};
         XirEffectContextInput input={&fixture.module,&fixture.types,&origin,UINT32_MAX,NULL,0};
         XirEffectContextView selected={0};
@@ -1450,7 +1495,7 @@ static void conditional_descriptor_failures(void) {
         if (mode<2) rp_fail_at=attempts+mode;
         XrXirStatus expected=mode<2?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
         if (mode==3) CHECK(!effect_ordinary_descriptor_alloc(storage,2,SIZE_MAX));
-        else CHECK(effect_ordinary_capacity(storage,mode<2?capacity+1:33)==expected);
+        else CHECK(effect_ordinary_capacity(storage,mode<2?capacity+1:effect_body_entry_limit(&context)+1)==expected);
         CHECK(storage->terms.status==expected &&
             storage->nodes==nodes && storage->functions==functions && storage->count==1 && storage->capacity==capacity);
         CHECK(!memcmp(&node,&storage->nodes[0],sizeof(node)) && !memcmp(&function,&storage->functions[0],sizeof(function)));
@@ -1514,14 +1559,14 @@ static void conditional_new_literals(void) {
     for (uint32_t which=25;which<61;++which) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;
-        XrXirStatus status=which<29 ? conditional_invocation_core(&context,which-25,true) :
+        XrXirStatus status=which<29 ? conditional_invocation_core(&context,which-25,true,false) :
             which==29 ? conditional_invocation_rotation(&context,false,true) :
             which<32 ? conditional_invocation_deferred(&context,which-30,true) :
             which<34 ? conditional_invocation_lowered_context(&context,which-32,true) :
             which<36 ? conditional_invocation_publish(&context,which-34,true) :
             which<38 ? conditional_invocation_template_publish(&context,which-36,true) :
             which<41 ? conditional_lowered_snapshot(&context,which-38,true) :
-            which<49 ? conditional_invocation_returned(&context,which-41,true) :
+            which<49 ? conditional_invocation_returned(&context,which-41,true,false) :
             which<51 ? conditional_invocation_producer(&context,which-49,true) :
             which<53 ? conditional_invocation_runtime_edge(&context,which-51,true) :
             which<56 ? conditional_invocation_runtime_direct(&context,which-53,true) :
@@ -1551,7 +1596,11 @@ static void conditional_literals(void) {
     CHECK(conditional_scalar(&context,true)==XR_XIR_OK);
     CHECK(conditional_forest(&context,true)==XR_XIR_OK);
     for (uint32_t mode=0;mode<5;++mode) {
+        uint64_t before=rp_stats(&context).work;
         XrXirStatus dense_status=conditional_dense_owner(&context,mode,true);
+        uint64_t after=rp_stats(&context).work;
+        printf("conditional dense mode%u status%u work_before%llu work_after%llu delta%llu owner_limit4000000\n",
+            mode,(uint32_t)dense_status,(unsigned long long)before,(unsigned long long)after,(unsigned long long)(after-before));
         if (dense_status!=XR_XIR_OK) fprintf(stderr,"dense owner mode%u status%u\n",mode,(uint32_t)dense_status);
         CHECK(dense_status==XR_XIR_OK);
     }
@@ -1576,14 +1625,14 @@ static XrXirStatus conditional_resource_case(const XrXirCompileContext *context,
         which==22 ? conditional_invocation_bounds(context,false) :
         which==23 ? conditional_invocation_refinement(context,false) :
         which==24 ? conditional_invocation_generic_bounds(context,false) :
-        which<29 ? conditional_invocation_core(context,which-25,false) :
+        which<29 ? conditional_invocation_core(context,which-25,false,false) :
         which==29 ? conditional_invocation_rotation(context,false,false) :
         which<32 ? conditional_invocation_deferred(context,which-30,false) :
         which<34 ? conditional_invocation_lowered_context(context,which-32,false) :
         which<36 ? conditional_invocation_publish(context,which-34,false) :
         which<38 ? conditional_invocation_template_publish(context,which-36,false) :
         which<41 ? conditional_lowered_snapshot(context,which-38,false) :
-        which<49 ? conditional_invocation_returned(context,which-41,false) :
+        which<49 ? conditional_invocation_returned(context,which-41,false,false) :
         which<51 ? conditional_invocation_producer(context,which-49,false) :
         which<53 ? conditional_invocation_runtime_edge(context,which-51,false) :
         which<56 ? conditional_invocation_runtime_direct(context,which-53,false) :
@@ -1593,7 +1642,8 @@ static XrXirStatus conditional_resource_case(const XrXirCompileContext *context,
 }
 
 static XrXirStatus conditional_retry_case(const XrXirCompileContext *context,uint32_t which) {
-    if (which>=100) return XR_XIR_BAD_STRUCTURE;
+    if (which>=104) return XR_XIR_BAD_STRUCTURE;
+    if (which>=100) return conditional_invocation_core(context,which-100,false,true);
     if (which>=97) return conditional_generation_case(context,which-97,false);
     if (which>=90) return conditional_class_cell_case(context,which-90,false);
     if (which>=87) return conditional_compact_case(context,which-87,false);
@@ -1657,7 +1707,161 @@ static void conditional_axes(void) {
     }
 }
 
+#include "xir_invocation_final_retirement_cases.h"
+
+static void conditional_nonroot_seed_resources(void) {
+    for (uint32_t which=100;which<104;++which) {
+        size_t sites=0;XrCompileResourceStats single={0};
+        for (size_t pass=0;pass<=sites;++pass) {
+            RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+            XrCompileResourceStats entry=rp_stats(&context);RootParameterMark retained=rp_mark();
+            XrCompileResources *identity=context.resources;
+            rp_attempts=0;rp_injected=false;rp_fail_at=pass?pass-1:SIZE_MAX;
+            XrXirStatus status=conditional_retry_case(&context,which);rp_fail_at=SIZE_MAX;
+            if (!pass) { CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context); }
+            else CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
+            ConditionalRetryTrial retry={.which=which,.ordinal=pass?pass-1:SIZE_MAX,.sites=sites,
+                .resources=identity,.initial=entry,.single=single,.retained=retained,.first=status};
+            if (pass) conditional_retry_operation(&context,&retry);
+            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        }
+        printf("nonroot primitive mode%u complete allocation census %zu\n",which-100,sites);
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        XrCompileResourceStats entry=rp_stats(&context);size_t attempts=rp_attempts;
+        CHECK(conditional_retry_case(&context,which)==XR_XIR_OK);
+        size_t measured=rp_attempts-attempts;XrCompileResourceStats census=rp_stats(&context);
+        rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        for (uint32_t axis=0;axis<3;++axis) for (uint32_t minus=0;minus<2;++minus) {
+            XrCompileResourceLimits caps=rp_caps();
+            if (!axis) caps.allocated_bytes=census.allocated_bytes-minus;
+            else if (axis==1) caps.live_bytes=census.peak_bytes-minus;
+            else caps.work=census.work-minus;
+            physical=rp_mark();context=rp_owner(caps);entry=rp_stats(&context);
+            RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
+            XrXirStatus status=conditional_retry_case(&context,which);
+            CHECK(status==(minus?XR_XIR_BUDGET:XR_XIR_OK));
+            ConditionalRetryTrial retry={.which=which,.ordinal=SIZE_MAX,.sites=measured,
+                .resources=identity,.initial=entry,.single=census,.retained=retained,.first=status};
+            conditional_retry_operation(&context,&retry);
+            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        }
+    }
+}
+
+/* The original four classifiers keep their entire allocation denominator.
+ * Repeated interning controls run separately on genuine resolved inputs. */
+static void conditional_ordinary_environment_keys(void) {
+    for (uint32_t mode=0;mode<4;++mode) {
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        context.limits.functions=5;
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        CHECK(conditional_classify(&context,mode,true)==XR_XIR_OK);
+        rp_owner_free(&context,baseline);rp_balanced(physical);
+        size_t sites=0;XrCompileResourceStats single={0};
+        for (size_t pass=0;pass<=sites;++pass) {
+            physical=rp_mark();context=rp_owner(rp_caps());context.limits.functions=5;
+            XrCompileResourceStats entry=rp_stats(&context);
+            RootParameterMark retained=rp_mark();XrCompileResources *identity=context.resources;
+            rp_attempts=0;rp_injected=false;rp_fail_at=pass?pass-1:SIZE_MAX;
+            XrXirStatus status=conditional_resource_case(&context,mode);rp_fail_at=SIZE_MAX;
+            if (!pass) { CHECK(status==XR_XIR_OK);sites=rp_attempts;single=rp_stats(&context); }
+            else CHECK(rp_injected && status==XR_XIR_OUT_OF_MEMORY);
+            ConditionalRetryTrial retry={.which=mode,.ordinal=pass?pass-1:SIZE_MAX,.sites=sites,
+                .resources=identity,.initial=entry,.single=single,.retained=retained,.first=status};
+            if (pass) conditional_retry_operation(&context,&retry);
+            rp_owner_free(&context,entry.live_bytes);rp_balanced(physical);
+        }
+        printf("ordinary environment mode%u complete allocation census %zu\n",mode,sites);
+    }
+}
+
+#include "xir_input_seed_run_cases.h"
+
 int main(int argc, char **argv) {
+    if(argc==3 && !strcmp(argv[1],"--class-discovery-lifetime")) {
+        uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<4);
+        RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        XrXirStatus status=conditional_class_discovery_lifetime(&context,mode);
+        fprintf(stderr,"Class discovery lifetime mode%u status%u work%llu\n",mode,status,
+            (unsigned long long)rp_stats(&context).work);
+        rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
+    }
+    if(argc==3 && (!strcmp(argv[1],"--class-case") || !strcmp(argv[1],"--class-cell-case"))) {
+        uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<7);
+        RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        XrXirStatus status=!strcmp(argv[1],"--class-case")?conditional_class_rows_case(&context,mode,true):
+            conditional_class_cell_case(&context,mode,true);
+        fprintf(stderr,"%s mode%u status%u work%llu\n",argv[1],mode,status,
+            (unsigned long long)rp_stats(&context).work);
+        rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
+    }
+    if(argc==3 && !strcmp(argv[1],"--returned-case")) {
+        uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<8);
+        RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        XrXirStatus status=conditional_invocation_returned(&context,mode,true,false);
+        fprintf(stderr,"returned case mode%u status%u work%llu\n",mode,status,
+            (unsigned long long)rp_stats(&context).work);
+        rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
+    }
+    if(argc==3 && !strcmp(argv[1],"--parameter-case")) {
+        uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<5);
+        RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        XrXirStatus status=conditional_parameter_case(&context,mode,true);
+        fprintf(stderr,"parameter case mode%u status%u work%llu\n",mode,status,
+            (unsigned long long)rp_stats(&context).work);
+        rp_owner_free(&context,baseline);rp_balanced(held);return status==XR_XIR_OK?0:1;
+    }
+    input_seed_run_literals();
+    if (argc==2 && !strcmp(argv[1],"--single-run-reader")) {
+        single_run_reader_controls();return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--parameter-schedule")) {
+        parameter_schedule_controls();return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--read-allocation-bounds")) {
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        CHECK(conditional_invocation_returned(&context,0,true,true)==XR_XIR_OK);
+        rp_owner_free(&context,baseline);rp_balanced(physical);
+        CHECK(!rp_live && !rp_live_bytes && !rp_allocation_observer);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--nonroot-input-seeds-resources")) {
+        conditional_nonroot_seed_resources();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--nonroot-input-seeds-literals")) {
+        invocation_seed_range_literals();
+        for (uint32_t mode=0;mode<4;++mode) {
+            RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+            uint64_t baseline=rp_stats(&context).live_bytes;
+            CHECK(conditional_invocation_core(&context,mode,true,true)==XR_XIR_OK);
+            rp_owner_free(&context,baseline);rp_balanced(physical);
+        }
+        CHECK(!rp_live && !rp_live_bytes && !rp_release_observer);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--final-retirement-literals")) {
+        invocation_final_retirement_literals();
+        CHECK(!rp_live && !rp_live_bytes && !rp_release_observer);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--ordinary-environment-literals")) {
+        for (uint32_t mode=0;mode<4;++mode) {
+            RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+            context.limits.functions=5;uint64_t baseline=rp_stats(&context).live_bytes;
+            CHECK(conditional_classify(&context,mode,true)==XR_XIR_OK);
+            rp_owner_free(&context,baseline);rp_balanced(physical);
+        }
+        CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--ordinary-environment-keys")) {
+        conditional_ordinary_environment_keys();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--final-retirement")) {
+        invocation_final_retirement_literals();invocation_final_retirement_resources();
+        CHECK(!rp_live && !rp_live_bytes && !rp_release_observer);return 0;
+    }
     if (argc==2 && !strcmp(argv[1],"--invocation-edge-keys")) {
         invocation_edge_literals();invocation_edge_resources();
         CHECK(!rp_live && !rp_live_bytes);return 0;

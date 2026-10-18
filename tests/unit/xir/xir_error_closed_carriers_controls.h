@@ -157,10 +157,10 @@ static void cc_private(void) {
     XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
     XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
     pc_private_begin(&c,&f.edge,&e,&terms,&flow);uint64_t before=pc_stats(&c).work;
-    CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==4);
+    CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.errors[1]==4);
     CHECK(pc_stats(&c).work-before<UINT64_C(25000));
     CHECK(flow.values==546 && flow.active_count==1 && flow.active[0]==513);
-    CHECK(flow.stride==1 && e.words==1 && flow.storage_capacity==4692);
+    CHECK(flow.stride==1 && e.outcomes_work.words==1 && flow.storage_capacity==pc_cfg_storage_extent(4692,EE_BLOCKS));
     CHECK(flow.slots[0]==UINT32_MAX && flow.slots[513]==0 && flow.zero[0]==0);
     for (uint32_t v=0;v<513;++v) CHECK(!error_value(&flow,flow.work,v) && error_read(&flow,flow.work,v)[0]==0);
     memset(flow.work,0xa5,sizeof(uint64_t));uint64_t poison=flow.work[0];
@@ -190,32 +190,32 @@ static void cc_cfg_continuation(void) {
         if (effectful) cc_cfg_transfer_fixture(&f);else cc_fixture(&f,0);
         XrXirCompileContext c=pc_owner(pc_caps());uint64_t baseline=pc_stats(&c).live_bytes;
         XrXirEffects e={0};EffectTerms terms={0};ErrorFlow flow={0};flow.remaining=&c;
-        pc_private_begin(&c,&f.edge,&e,&terms,&flow);e.errors[2]=8;
+        pc_private_begin(&c,&f.edge,&e,&terms,&flow);e.outcomes_work.errors[2]=8;
         EffectBodyMaterial *material=NULL;
         if (owned) {
             CHECK(effect_body_material_create(&c,&f.edge.module,&material)==XR_XIR_OK && material);
             flow.body=effect_body_owned_request(&c,material);
         }
         size_t allocations=attempts;
-        CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==(effectful ? 12u : 4u));
+        CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.errors[1]==(effectful ? 12u : 4u));
         CHECK(attempts==allocations+1 && flow.zero[0]==0);
         if (!effectful) {
             CHECK(flow.values==546 && flow.active_count==1 && flow.active[0]==513 && flow.stride==1);
-            CHECK(flow.storage_capacity==(owned ? 4761u : 4692u));
+            CHECK(flow.storage_capacity==pc_cfg_storage_extent(owned ? 4761u : 4692u,EE_BLOCKS));
             if (owned) {
                 const uint8_t *bits=flow.reachable+flow.function->block_count;
                 for (uint32_t i=0;i<69;++i) CHECK(bits[i]==(i<64 ? 255u : 0u));
-                uint32_t first=material->functions[1].runs[0].first;uint64_t saved=e.errors[1];
+                uint32_t first=material->functions[1].runs[0].first;uint64_t saved=e.outcomes_work.errors[1];
                 allocations=attempts;uint64_t held=pc_stats(&c).live_bytes;
                 material->functions[1].runs[0].first=1;
-                CHECK(error_function(&flow,1)==XR_XIR_BAD_STRUCTURE && e.errors[1]==saved);
+                CHECK(error_function(&flow,1)==XR_XIR_BAD_STRUCTURE && e.outcomes_work.errors[1]==saved);
                 CHECK(attempts==allocations && pc_stats(&c).live_bytes==held);
                 material->functions[1].runs[0].first=first;
                 f.edge.subject[0].op=XR_XIR_INVALID;f.nodes[2].flags=1;
                 CHECK(xir_fixture_verify(&c,&f.edge.module,NULL)==XR_XIR_BAD_STRUCTURE);
                 allocations=attempts;held=pc_stats(&c).live_bytes;
                 memset(flow.storage,0xff,flow.storage_capacity);
-                CHECK(error_function(&flow,1)==XR_XIR_OK && e.errors[1]==4 && flow.zero[0]==0);
+                CHECK(error_function(&flow,1)==XR_XIR_OK && e.outcomes_work.errors[1]==4 && flow.zero[0]==0);
                 CHECK(attempts==allocations && pc_stats(&c).live_bytes==held);
             }
         } else {
@@ -237,11 +237,11 @@ static void cc_cfg_watchdog(void) {
         pc_private_begin(&c,&f.edge,&e,&terms,&flow);
         CHECK(error_function(&flow,1)==XR_XIR_OK);
         uint64_t used=pc_stats(&c).work,left=enough ? 4u : 3u;
-        CHECK(e.words==1 && e.atom_count==2 && used<=caps.work-left);
+        CHECK(e.outcomes_work.words==1 && e.outcomes_work.atom_count==2 && used<=caps.work-left);
         CHECK(xr_compile_resources_work(c.resources,caps.work-used-left)==XR_COMPILE_RESOURCE_OK);
         uint64_t before=pc_stats(&c).work,held_live=pc_stats(&c).live_bytes;size_t allocations=attempts;
         CHECK(error_instruction_begin(&flow,0)==(enough ? XR_XIR_OK : XR_XIR_BUDGET));
-        CHECK(pc_stats(&c).work-before==(enough ? 4u : 0u) && e.errors[1]==4 && flow.zero[0]==0);
+        CHECK(pc_stats(&c).work-before==(enough ? 4u : 0u) && e.outcomes_work.errors[1]==4 && flow.zero[0]==0);
         CHECK(error_instruction_begin(&flow,flow.function->instruction_count)==XR_XIR_BAD_STRUCTURE);
         CHECK(pc_stats(&c).live_bytes==held_live && attempts==allocations);
         pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
@@ -269,10 +269,10 @@ static void cc_cfg_large_faults(void) {
         if (!pass) { CHECK(status==XR_XIR_OK);sites=actual;CHECK(sites==2); }
         else {
             CHECK(injected && actual>=pass && status==XR_XIR_OUT_OF_MEMORY);
-            CHECK(!flow.storage && !e.errors[1] && pc_stats(&c).live_bytes==prepared);
+            CHECK(!flow.storage && !e.outcomes_work.errors[1] && pc_stats(&c).live_bytes==prepared);
             CHECK(error_function(&flow,1)==XR_XIR_OK);
         }
-        CHECK(!e.errors[1] && !flow.active_count && !flow.cell_count && flow.zero[0]==0);
+        CHECK(!e.outcomes_work.errors[1] && !flow.active_count && !flow.cell_count && flow.zero[0]==0);
         for (uint32_t v=0;v<1024;++v) CHECK(flow.roots[v]==0 && flow.slots[v]==UINT32_MAX);
         effect_body_material_free(material);pc_private_free(&flow,&terms,&e);pc_release(&c,baseline);
     }
@@ -315,25 +315,25 @@ static XrXirStatus cc_whole(const XrXirCompileContext *c,unsigned mode) {
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&e);else CHECK(!checked);
     if (status==XR_XIR_OK) {
         uint64_t bits=!mode ? 4u : mode==5 ? 2u : mode==6 || mode==7 ? 1u : 12u;
-        CHECK(e && e->words==1 && e->atom_count==2 && e->errors[1]==bits && e->errors[2]==8);
-        CHECK(e->functions[1].throws==((mode==6 || mode==7) ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_MAY));
-        if (e->root[1].requires_root || e->root[1].unresolved!=(mode==7 || mode>=8)) {
-            const XrXirRootFormula *formula=&e->contracts[1].formula;
+        CHECK(e && effect_final_outcomes(e)->words==1 && effect_final_outcomes(e)->atom_count==2 && effect_final_outcomes(e)->errors[1]==bits && effect_final_outcomes(e)->errors[2]==8);
+        CHECK(effect_final_outcomes(e)->functions[1].throws==((mode==6 || mode==7) ? XR_XIR_EFFECT_UNKNOWN : XR_XIR_EFFECT_MAY));
+        if (effect_roots_read(e)->root[1].requires_root || effect_roots_read(e)->root[1].unresolved!=(mode==7 || mode>=8)) {
+            const XrXirRootFormula *formula=&effect_roots_read(e)->contracts[1].formula;
             fprintf(stderr,"closed CONDITIONAL_EXPECTATION_MISMATCH mode=%u requires=%u unresolved=%u constant=%u terms=%u cell_role=%u cell_origin=%u root_cause=%u unknown_cause=%u\n",
-                mode,(unsigned)e->root[1].requires_root,(unsigned)e->root[1].unresolved,
+                mode,(unsigned)effect_roots_read(e)->root[1].requires_root,(unsigned)effect_roots_read(e)->root[1].unresolved,
                 formula->constant_mask,formula->term_count,
                 (unsigned)xr_xir_cell_provenance_role(e->cells,1,0),
                 xr_xir_cell_provenance_origin(e->cells,1,0),
-                e->root_witnesses[1].cause,e->unresolved_witnesses[1].cause);
+                effect_roots_read(e)->root_witnesses[1].cause,effect_roots_read(e)->unresolved_witnesses[1].cause);
             for (uint32_t t=0;t<formula->term_count;++t)
                 fprintf(stderr,"closed term=%u kind=%u index=%u\n",t,formula->terms[t].kind,formula->terms[t].index);
             fflush(stderr);
         }
-        CHECK(!e->root[1].requires_root && e->root[1].unresolved==(mode==7 || mode>=8));
+        CHECK(!effect_roots_read(e)->root[1].requires_root && effect_roots_read(e)->root[1].unresolved==(mode==7 || mode>=8));
         if (mode>=8) {
             /* An open physical Cell parameter remains conditional regardless
              * of whether authentic incoming local/module callers also exist. */
-            const XrXirRootFormula *formula=&e->contracts[1].formula;
+            const XrXirRootFormula *formula=&effect_roots_read(e)->contracts[1].formula;
             CHECK(!formula->constant_mask && formula->term_count==1 &&
                 formula->terms[0].kind==XR_XIR_ROOT_TERM_CELL_PARAMETER && formula->terms[0].index==0);
             CHECK(xr_xir_cell_provenance_origin(e->cells,1,0)==XR_XIR_CELL_ORIGIN_SCOPED);
@@ -342,12 +342,12 @@ static XrXirStatus cc_whole(const XrXirCompileContext *c,unsigned mode) {
             /* The complete checker and effect analyzer close only the real
              * CALL edge: owned local is NONE; published module requires ROOT. */
             CHECK(xr_xir_cell_provenance_role(e->cells,1,0)==XR_XIR_CELL_PROOF_SCOPED_REF);
-            CHECK(e->root[3].requires_root==(mode==10) && !e->root[3].unresolved);
-            CHECK(e->errors[3]==12 && e->functions[3].throws==XR_XIR_EFFECT_MAY);
+            CHECK(effect_roots_read(e)->root[3].requires_root==(mode==10) && !effect_roots_read(e)->root[3].unresolved);
+            CHECK(effect_final_outcomes(e)->errors[3]==12 && effect_final_outcomes(e)->functions[3].throws==XR_XIR_EFFECT_MAY);
             CHECK(xr_xir_cell_provenance_origin(e->cells,3,operand)==
                 (mode==10 ? XR_XIR_CELL_ORIGIN_MODULE : XR_XIR_CELL_ORIGIN_OWNED));
         }
-        CHECK(e->root[0].requires_root && !e->root[0].unresolved && !e->errors[0]);
+        CHECK(effect_roots_read(e)->root[0].requires_root && !effect_roots_read(e)->root[0].unresolved && !effect_final_outcomes(e)->errors[0]);
     } else {
         CHECK(!e);
         if (status!=XR_XIR_BUDGET && status!=XR_XIR_OUT_OF_MEMORY)

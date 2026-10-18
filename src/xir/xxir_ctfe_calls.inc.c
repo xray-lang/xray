@@ -54,8 +54,8 @@ static XrXirCtfeStatus ctfe_call_body_admit(const XrXirArtifact *artifact,uint32
     for (uint32_t i=0;i<body->instruction_count;++i) {
         if (!xir_compile_work(work,3)) return XR_XIR_CTFE_BUDGET;
         const XrXirInstruction *op=&body->instructions[i];uint64_t ignored=0;
-        bool terminal=op->op==XR_XIR_JUMP || op->op==XR_XIR_BRANCH || op->op==XR_XIR_RETURN;
-        if ((!terminal && !ctfe_scalar_type(op->type)) || (terminal && op->type!=XR_XIR_UNIT))
+        bool unit=ctfe_unit_result(op->op);
+        if ((!unit && !ctfe_scalar_type(op->type)) || (unit && op->type!=XR_XIR_UNIT))
             return XR_XIR_CTFE_NOT_SUPPORTED;
         if (op->op==XR_XIR_CALL) {
             if (!xir_compile_work(work,5)) return XR_XIR_CTFE_BUDGET;

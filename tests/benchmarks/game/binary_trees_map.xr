@@ -3,7 +3,7 @@
 class MapTree {
     children: Map<string, MapTree?>
 
-    constructor(left: MapTree?, right: MapTree?) {
+    init(left: MapTree?, right: MapTree?) {
         this.children = Map()
         this.children.set("left", left)
         this.children.set("right", right)

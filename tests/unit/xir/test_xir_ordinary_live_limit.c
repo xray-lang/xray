@@ -1,4 +1,6 @@
 /* Fixed live storage rejection after all module initializers became READY. */
+#include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_program_input_internal.h"
 #include "xir/xxir_program.h"
 #include "xir/xxir_vm.h"
 #include <inttypes.h>
@@ -95,15 +97,16 @@ static XrXirAction oll_resume(XrXirCallView *view) {
     CHECK(view && view->environment && xr_xir_call_admission(view));
     OllBinding *binding = (OllBinding *)view->environment; OllOwner *owner = binding->owner;
     CHECK(owner && binding == &owner->bindings[binding->function] && !owner->code_releases);
-    unsigned witness = oll_instance(owner, view->instance);
+    XrXirInstance *instance = view->instance;
+    unsigned witness = oll_instance(owner, instance);
     ++owner->steps[witness][binding->native];
     if (binding->function == owner->fixture.run || binding->function == owner->fixture.recovery) {
-        CHECK(view->instance->state == XR_XIR_INSTANCE_READY && view->instance->cursor == OLL_MODULES &&
-            view->instance->current_module == UINT32_MAX);
-        for (uint32_t m = 0; m < OLL_MODULES; ++m) CHECK(view->instance->ready[m] == 1);
+        CHECK(instance->state == XR_XIR_INSTANCE_READY && instance->cursor == OLL_MODULES &&
+            instance->current_module == UINT32_MAX);
+        for (uint32_t m = 0; m < OLL_MODULES; ++m) CHECK(instance->ready[m] == 1);
     }
-    if (view->instance->accounting[view->instance->epoch % 2].depth > owner->deepest[witness])
-        owner->deepest[witness] = view->instance->accounting[view->instance->epoch % 2].depth;
+    if (instance->accounting[instance->epoch % 2].depth > owner->deepest[witness])
+        owner->deepest[witness] = instance->accounting[instance->epoch % 2].depth;
     const void *environment = view->environment;
     XrXirAction action = binding->actual.resume(view);
     CHECK(view->environment == environment && xr_xir_call_admission(view));
@@ -128,7 +131,28 @@ static void oll_code_drop(void *opaque) {
     xr_compile_resources_free(owner->entries); owner->entries = NULL;
     xr_compile_resources_free(owner->bindings); owner->bindings = NULL; ++owner->code_releases;
 }
-static XrXirProgram *oll_build(OllOwner *owner, const char *mode) {
+static XrXirStatus oll_receive(const XrXirCompileContext *context,
+    XrXirProgramSpec *spec, OllOwner *owner, XrXirProgram **output) {
+#ifdef OLL_VM
+    XrXirArtifact *owned = owner->lowered;
+    XrXirProgramInput *input = NULL;
+    XrXirStatus status = xir_program_input_take(context, &owned, &input);
+    if (status == XR_XIR_OK) {
+        spec->packet = (XrXirProgramPacket){0};
+        status = xir_program_receive(context, spec, &input, NULL, output);
+    }
+    if (status == XR_XIR_OK) owner->lowered = NULL;
+    else if (input) {
+        input->artifact = NULL;
+        xir_program_input_free(input);
+    }
+    return status;
+#else
+    (void)owner;
+    return xr_xir_compile_program_seal(context, spec, output);
+#endif
+}
+static XrXirProgram *oll_build(OllOwner *owner, const char *mode, bool reject_first) {
     XrXirCompileContext context; oll_context(&context);
     XrXirProgramSpec spec = ordinary_live_limit_program;
     CHECK(spec.entry_count == OLL_FUNCTIONS && !spec.code.owner && !spec.code.release && spec.declarations->module_count == OLL_MODULES);
@@ -136,14 +160,14 @@ static XrXirProgram *oll_build(OllOwner *owner, const char *mode) {
 #ifdef OLL_VM
     XrXirArtifact *checked = NULL;
     if (!strcmp(mode, "source") || !strcmp(mode, "vm")) checked = oll_source(&context);
-    else CHECK(xr_xir_compile_checked_read(&context, spec.proof.bytes, spec.proof.length, &checked, NULL) == XR_XIR_OK);
+    else CHECK(xr_xir_compile_checked_read(&context, spec.packet.bytes, spec.packet.length, &checked, NULL) == XR_XIR_OK);
     owner->lowered = oll_lower(&context, checked, &spec.target, &owner->fixture);
     CHECK(owner->fixture.entry == ordinary_live_limit_fixture.entry && owner->fixture.run == ordinary_live_limit_fixture.run &&
         owner->fixture.recovery == ordinary_live_limit_fixture.recovery && owner->fixture.root == ordinary_live_limit_fixture.root);
-    XrXirProgramProof proof = xr_xir_compile_program_proof(owner->lowered);
-    CHECK(proof.length == spec.proof.length && !memcmp(proof.bytes, spec.proof.bytes, proof.length) &&
-        !memcmp(proof.identity, spec.proof.identity, 32));
-    spec.proof = proof;
+    XrXirProgramPacket proof = xir_program_packet_borrow(owner->lowered);
+    CHECK(proof.length == spec.packet.length && !memcmp(proof.bytes, spec.packet.bytes, proof.length) &&
+        !memcmp(proof.identity, spec.packet.identity, 32));
+    spec.packet = proof;
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->lowered);
     spec.declarations = module->declarations; spec.types = module->types;
 #else
@@ -169,7 +193,21 @@ static XrXirProgram *oll_build(OllOwner *owner, const char *mode) {
     }
     spec.entries = owner->entries; spec.code = (XrXirCodeLease){owner, oll_code_drop};
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_compile_program_seal(&context, &spec, &program) == XR_XIR_OK && program);
+    if (reject_first) {
+        XrXirArtifact *artifact = owner->lowered;
+        XrXirCallEntry *original_entries = owner->entries;
+        OllBinding *original_bindings = owner->bindings;
+        XrCompileResourceStats before = {0}, after = {0};
+        CHECK(xr_compile_resources_stats(context.resources, &before) == XR_COMPILE_RESOURCE_OK);
+        XrXirProgramSpec invalid = spec; invalid.abi_version = 0;
+        CHECK(oll_receive(&context, &invalid, owner, &program) == XR_XIR_BAD_LAYOUT && !program);
+        CHECK(owner->lowered == artifact && owner->entries == original_entries &&
+            owner->bindings == original_bindings && !owner->code_releases);
+        CHECK(xr_compile_resources_stats(context.resources, &after) == XR_COMPILE_RESOURCE_OK);
+        CHECK(after.live_bytes == before.live_bytes && after.work >= before.work &&
+            after.allocated_bytes >= before.allocated_bytes);
+    }
+    CHECK(oll_receive(&context, &spec, owner, &program) == XR_XIR_OK && program);
     xr_compile_resources_release(context.resources); return program;
 }
 static void oll_value(const XrXirValue *value) {
@@ -187,7 +225,7 @@ static XrXirInstanceResult oll_drive(XrXirInstance *instance, XrXirInstance *pee
 }
 static void oll_case(const char *mode, unsigned victim) {
     instance_compile_zero(); CHECK(!runtime_live && !runtime_bytes);
-    OllOwner owner = {0}; XrXirProgram *program = oll_build(&owner, mode);
+    OllOwner owner = {0}; XrXirProgram *program = oll_build(&owner, mode, false);
     XrXirInstance *instances[2] = {NULL, NULL}; OllObservation observations[2] = {{0}, {0}};
     XrXirValue peer_value = {0}, recovered_value = {0}; unsigned peer = 1u - victim;
     for (unsigned i = 0; i < 2; ++i) {
@@ -280,6 +318,45 @@ static void oll_case(const char *mode, unsigned victim) {
     /* The oracle stays fixed even when a replacement cannot fit the original cap. */
     CHECK(recovered && stopped == XR_XIR_CALL_READY && freed == XR_XIR_CALL_READY);
 }
+/* Recovery remains independent of the live-limit refusal oracle. */
+static void oll_owned_recovery(const char *mode) {
+    instance_compile_zero();CHECK(!runtime_live && !runtime_bytes);
+    OllOwner owner={0};XrXirProgram *program=oll_build(&owner,mode,true);
+    XrXirInstance *instances[2]={NULL,NULL};OllObservation observed[2]={{0},{0}};
+    XrXirValue values[2]={{0},{0}};
+    for(unsigned i=0;i<2;++i) {
+        XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+        config.metadata_limit=config.value_limit=UINT64_C(65536);config.call_limit=oll_call_cap;
+        config.poll_limit=8000;config.depth_limit=96;
+        config.requested_value_limit=config.requested_call_limit=UINT64_C(67108864);config.work_limit=UINT64_C(128000000);
+        config.trace=oll_trace;config.trace_context=&observed[i];
+        config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,oll_output,&observed[i]};
+        CHECK(xr_xir_instance_new(program,&config,&instances[i])==XR_XIR_CALL_READY);
+        owner.instance_ids[i]=(uintptr_t)instances[i];
+    }
+    xr_xir_compile_program_drop(program);CHECK(!owner.code_releases);
+    for(unsigned i=0;i<2;++i) {
+        CHECK(xr_xir_instance_start(instances[i],owner.fixture.recovery,NULL,0)==XR_XIR_CALL_READY);
+        XrXirInstanceResult result=oll_drive(instances[i],instances[1-i],&observed[1-i]);
+        CHECK(result.outcome.status==XR_XIR_CALL_RETURNED && result.epoch==1);oll_value(&result.outcome.value);
+        CHECK(observed[i].begun==oll_module_mask && observed[i].ready==oll_module_mask && !observed[i].groups);
+        CHECK(xr_xir_instance_take_result(instances[i],&values[i])==XR_XIR_CALL_RETURNED);oll_value(&values[i]);
+        CHECK(!owner.code_releases);
+    }
+    for(unsigned i=0;i<2;++i) {
+        CHECK(xr_xir_instance_stop(instances[i])==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
+        CHECK(owner.code_releases==(i==1?1u:0u));
+    }
+    CHECK(!owner.lowered && !owner.entries && !owner.bindings && !runtime_live && !runtime_bytes && !runtime_owned && !runtime_owned_capacity);
+    for(unsigned i=0;i<2;++i){oll_value(&values[i]);xr_xir_value_drop(&values[i]);}
+    instance_compile_zero();
+    printf("OWNED_RECOVERY mode=%s instances=2 Program_dropped_before_poll=1 recovery41=2 "
+        "code_release=1 compiler_physical=0/0 runtime_physical=0/0 cap=10111 "
+        "rejected_owner_preserved=1 independent_recovery_only=1\n",mode);
+}
+
 int main(int argc, char **argv) {
+    if (argc == 3 && !strcmp(argv[1], "--owned-recovery")) { oll_owned_recovery(argv[2]); return 0; }
     CHECK(argc == 2); oll_case(argv[1], 0); oll_case(argv[1], 1); return 0;
 }

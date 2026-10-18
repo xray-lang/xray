@@ -16,24 +16,27 @@ typedef struct EffectInvocationDriverInput {
     const EffectOrdinaryContexts *dense;
 } EffectInvocationDriverInput;
 
-/* Current raw correspondence is checked at an actual intake or after all
- * projection callbacks. It is never a reader or permission flag inside Eq. */
+/* Current raw correspondence is checked at intake and after projection
+ * callbacks. Physical membership alone cannot prove the instruction words,
+ * operands, signatures or metadata retained by the independently owned input. */
 static XrXirStatus effect_invocation_current_input_match(const XrXirCompileContext *work,
     const XrXirModule *module,const EffectBodyMaterial *material) {
-    XrXirStatus status=effect_physical_match(work,material?material->physical:NULL,module);
-    if (status==XR_XIR_OK) status=effect_body_type_domain_match(work,material,module);
+    XrXirStatus status=effect_body_source_types_match(work,material,module);
+    for (uint32_t f=0;status==XR_XIR_OK && f<module->function_count;++f)
+        status=effect_body_function_match(work,&material->functions[f],&module->functions[f]);
+    if (status==XR_XIR_OK) status=effect_body_metadata_match(work,&material->domain,module);
     return status;
 }
 
 /* This boundary alone accepts current mutable raw input. A changed Source
  * first rebuilds the complete generation. The internal queue retains only
- * the owned reader, physical/control inventories and independently owned bounds. */
+ * the owned reader, physical inventory and independently owned bounds. */
 static XrXirStatus effect_invocation_collect(const XrXirCompileContext *work,
     const XrXirModule *module,XrXirEffects *effects,EffectGraph *graph,
     const EffectInvocationDeclaredBounds *declared,EffectBodyRequest *output) {
     if (!xir_compile_context_valid(work) || !module || !module->functions || !graph || !effects ||
         !effect_body_request_empty(output) || !xir_effects_context_matches(work,effects,module->function_count) ||
-        !effects->contracts || !declared || declared->resources!=work->resources ||
+        !effect_contracts_read(effects) || !declared || declared->resources!=work->resources ||
         declared->count!=module->function_count || !declared->functions) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,3+sizeof(bool))) return XR_XIR_BUDGET;
     bool local_bounds=graph->material && declared==graph->material->declared;
@@ -67,7 +70,7 @@ static XrXirStatus effect_invocation_collect(const XrXirCompileContext *work,
  * failed collection status is converted to a structural error or retried. */
 static inline XrXirStatus effect_invocations_receive(const XrXirCompileContext *work,
     const XrXirModule *module,XrXirEffects *effects,EffectGraph *graph,
-    const EffectInvocationDeclaredBounds *declared,EffectInvocationOwner **output) {
+    const EffectInvocationDeclaredBounds *declared,EffectInvocationWorkspace **output) {
     if (!output || *output || !xir_compile_context_valid(work)) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,sizeof(EffectBodyRequest))) return XR_XIR_BUDGET;
     EffectBodyRequest input={0};
@@ -83,11 +86,11 @@ static inline XrXirStatus effect_invocations_receive(const XrXirCompileContext *
  * a completely sealed computation; publication belongs to the common caller. */
 static inline XrXirStatus effect_invocation_derive(const EffectInvocationDriverInput *input,
     EffectInvocationCertificate **output,const EffectInvocationProjectionSink *sink,
-    EffectInvocationResult **receiving) {
+    EffectFinalFunctions **receiving) {
     if (!input || !output || *output || !receiving || *receiving || !xir_compile_context_valid(input->work) || !input->body ||
         !effect_invocation_projection_sink_matches(input->work,sink,input->body->domain.function_count))
         return XR_XIR_BAD_STRUCTURE;
-    EffectInvocationOwner *equations=NULL;
+    EffectInvocationWorkspace *equations=NULL;
     XrXirStatus status=effect_invocations_create(input->work,input->body,input->effects,
         input->graph,input->declared,&equations);
     if (status==XR_XIR_OK) status=effect_invocations_solve(equations);

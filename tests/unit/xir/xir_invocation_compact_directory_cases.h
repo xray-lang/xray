@@ -76,7 +76,90 @@ static void conditional_compact_directory_damage(const XrXirCompileContext *cont
     }
 }
 
+/* The oracle is an independent physical instruction array. Every subset of
+ * the ten varying words is decoded after its source storage has been erased. */
+static void conditional_compact_tiny_rows(XrXirInstruction *rows,uint32_t mask) {
+    for (uint32_t i=0;i<3;++i) {
+        uint32_t low=UINT32_C(0xfffffff0)+((mask&64)?i*17:0);
+        uint32_t high=UINT32_C(0x80000000)+((mask&128)?i*3:0);
+        uint64_t bits=((uint64_t)high<<32)|low;int64_t immediate;
+        memcpy(&immediate,&bits,sizeof(immediate));
+        rows[i]=(XrXirInstruction){.op=(XrXirOp)(XR_XIR_CONST_INT+((mask&1)?i:0)),
+            .type=XR_XIR_I64+((mask&2)?i:0),
+            .args={11+((mask&4)?i*3:0),UINT32_MAX-((mask&8)?i*5:0)},
+            .targets={19+((mask&16)?i*7:0),31+((mask&32)?i*11:0)},
+            .immediate=immediate,.type_arguments={43+((mask&256)?i*13:0),
+                UINT32_MAX-((mask&512)?i*19:0)}};
+    }
+    rows[3]=(XrXirInstruction){.op=XR_XIR_RETURN,.type=XR_XIR_BOOL,
+        .args={997,991},.targets={983,977},.immediate=INT64_MIN,
+        .type_arguments={971,967}};
+}
+
+/* Tiny directories must reject corruption anywhere in the complete local
+ * directory, including the unselected second run. Output remains untouched. */
+static void conditional_compact_tiny_damage(const XrXirCompileContext *context,
+    EffectBodyFunction *body,const XrXirInstruction *expected) {
+    EffectBodyRead read=effect_body_compile_read(context);
+    for (uint32_t r=0;r<body->run_count;++r) {
+        EffectBodyRun *run=&body->runs[r];
+        uint32_t first=run->first,count=run->count,mask=run->mask;
+        for (uint32_t damage=0;damage<5;++damage) {
+            if (!damage) ++run->first;
+            else if (damage==1) run->count=0;
+            else if (damage==2) ++run->count;
+            else if (damage==3) run->mask|=UINT32_C(1024);
+            else if (run->count==1) run->mask=1;
+            else continue;
+            XrXirInstruction sentinel={.op=XR_XIR_RETURN,.immediate=INT64_MIN},out=sentinel;
+            CHECK(effect_body_instruction_get(&read,body,0,&out)==XR_XIR_BAD_STRUCTURE &&
+                conditional_compact_same(&out,&sentinel));
+            run->first=first;run->count=count;run->mask=mask;
+            CHECK(effect_body_instruction_get(&read,body,0,&out)==XR_XIR_OK &&
+                conditional_compact_same(&out,&expected[0]));
+        }
+        for (uint32_t w=0;w<10;++w) if (run->mask&(UINT32_C(1)<<w)) {
+            uint32_t delta=run->delta[w];run->delta[w]=0;
+            XrXirInstruction sentinel={.op=XR_XIR_RETURN,.immediate=INT64_MIN},out=sentinel;
+            CHECK(effect_body_instruction_get(&read,body,0,&out)==XR_XIR_BAD_STRUCTURE &&
+                conditional_compact_same(&out,&sentinel));
+            run->delta[w]=delta;
+        }
+    }
+}
+
+static void conditional_compact_tiny_masks(void) {
+    _Static_assert(XR_XIR_CONST_INT+2<XR_XIR_OP_COUNT,"Physical test opcodes must be representable");
+    for (uint32_t mask=0;mask<1024;++mask) for (uint32_t tail=0;tail<2;++tail) {
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        XrXirInstruction source[4],expected[4];conditional_compact_tiny_rows(source,mask);
+        memcpy(expected,source,sizeof(expected));
+        XrXirFunction raw={.instructions=source,.instruction_count=3+tail};
+        EffectBodyFunction body={.instruction_count=raw.instruction_count};
+        CHECK(effect_body_records_copy(&context,&raw,&body)==XR_XIR_OK &&
+            body.run_count==1+tail && body.runs[0].mask==mask);
+        memset(source,0xCE,sizeof(source));raw.instructions=expected;
+        EffectBodyRead read=effect_body_compile_read(&context);
+        for (uint32_t order=0;order<body.instruction_count;++order) {
+            uint32_t i=body.instruction_count-order-1;XrXirInstruction out;
+            CHECK(effect_body_instruction_get(&read,&body,i,&out)==XR_XIR_OK &&
+                conditional_compact_same(&out,&expected[i]));
+            EffectBodyInstructionFields fields;
+            CHECK(effect_body_instruction_fields_get(&read,&body,i,&fields)==XR_XIR_OK &&
+                fields.op==expected[i].op && fields.type==expected[i].type && fields.source==expected[i].args[0]);
+        }
+        CHECK(effect_body_records_match(&read,&body,&raw)==XR_XIR_OK);
+        conditional_compact_tiny_damage(&context,&body,expected);
+        conditional_compact_read_failures(&context,&body,1,&expected[1]);
+        conditional_compact_fields_failures(&context,&body,1,&expected[1]);
+        xr_compile_resources_free(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
+    }
+    puts("compact tiny directories: all 1024 physical masks, one/two runs, damage and every read refusal passed");
+}
+
 static void conditional_compact_directory_literals(void) {
+    conditional_compact_tiny_masks();
     const uint32_t sizes[3]={5,9,17};
     for (uint32_t mode=0;mode<3;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());

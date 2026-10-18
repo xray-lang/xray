@@ -42,8 +42,8 @@ static XrXirStatus conditional_invocation_runtime_edge(const XrXirCompileContext
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_analyze(checked,&effects);
-    if (status==XR_XIR_OK && oracle) CHECK(effects->root[4].requires_root==(mode!=0) &&
-        !effects->root[4].unresolved && effects->root[2].unresolved);
+    if (status==XR_XIR_OK && oracle) CHECK(effect_roots_read(effects)->root[4].requires_root==(mode!=0) &&
+        !effect_roots_read(effects)->root[4].unresolved && effect_roots_read(effects)->root[2].unresolved);
     XirEffectProducerView producer={0};
     if (status==XR_XIR_OK) status=xir_effects_producer(context,effects,4,producer_instruction,&producer);
     InvocationRuntimeProbe read={context,mode};

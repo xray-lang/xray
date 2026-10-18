@@ -11,6 +11,7 @@
  */
 #ifndef XIR_TASK_ARRAY_ADMISSION_PIPELINE_H
 #define XIR_TASK_ARRAY_ADMISSION_PIPELINE_H
+#include "xir/xxir_program_packet_internal.h"
 #include "base/xsha256.h"
 #ifndef XR_TASK_ARRAY_COMPONENT
 #define XR_TASK_ARRAY_COMPONENT "transaction"
@@ -45,9 +46,9 @@ static XrXirStatus task_array_allocate(const XrXirCompileContext *context, size_
 static XrXirStatus task_array_seal(TaskArrayCompile *run, unsigned mode) {
     if (!mode) return xr_xir_compile_vm_program_take(&run->lowered, &run->program);
 #if defined(XR_TASK_ARRAY_NATIVE)
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
-    CHECK(proof.length == task_array_admission_program.proof.length && !memcmp(proof.identity, task_array_admission_program.proof.identity, 32));
-    CHECK(!memcmp(proof.bytes, task_array_admission_program.proof.bytes, proof.length));
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
+    CHECK(proof.length == task_array_admission_program.packet.length && !memcmp(proof.identity, task_array_admission_program.packet.identity, 32));
+    CHECK(!memcmp(proof.bytes, task_array_admission_program.packet.bytes, proof.length));
     if (mode == 1) return xr_xir_compile_program_seal(&run->context, &task_array_admission_program, &run->program);
     TaskArrayMixed *owner = NULL;
     XrXirStatus status = task_array_allocate(&run->context, 1, sizeof(*owner), (void **)&owner);
@@ -68,7 +69,7 @@ static XrXirStatus task_array_seal(TaskArrayCompile *run, unsigned mode) {
         CHECK(native && vm);
         XrXirProgramSpec spec = task_array_admission_program;
         spec.entries = owner->entries; spec.types = module->types; spec.declarations = module->declarations;
-        spec.proof = xr_xir_compile_program_proof(artifact); spec.code = (XrXirCodeLease){owner, task_array_mixed_free};
+        spec.packet = xir_program_packet_borrow(artifact); spec.code = (XrXirCodeLease){owner, task_array_mixed_free};
         status = xr_xir_compile_program_seal(&run->context, &spec, &run->program);
     }
     if (status != XR_XIR_OK) { CHECK(!run->program); task_array_mixed_free(owner); }
@@ -178,7 +179,7 @@ static TaskArrayCompile task_array_build(size_t failure, XrCompileResourceLimits
     run.prefix_references = run.context.resources->references;
     run.prefix_blocks = instance_compile_live; run.prefix_bytes = instance_compile_bytes;
     if (task_array_compiler_digest) {
-        XrXirProgramProof proof = xr_xir_compile_program_proof(run.lowered);
+        XrXirProgramPacket proof = xir_program_packet_borrow(run.lowered);
         task_array_digest(source.text, source.length, run.c_sha); task_array_digest(proof.bytes, proof.length, run.proof_sha);
     }
     run.c_bytes = source.length;

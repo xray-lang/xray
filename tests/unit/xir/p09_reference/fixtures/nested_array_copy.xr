@@ -1,0 +1,7 @@
+export fn p09Answer() -> i64 {
+    var original: Array<Array<i64>> = [[1, 2], [3, 4]]
+    var changed = original
+    changed[0].push(9)
+    changed[1][0] = 30
+    return len(original[0]) * 1000 + len(changed[0]) * 100 + original[1][0] * 10 + changed[1][0]
+}

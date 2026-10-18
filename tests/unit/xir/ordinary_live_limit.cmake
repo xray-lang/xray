@@ -48,6 +48,10 @@ function(xr_add_ordinary_live_limit_graph suffix fixture modules functions)
         add_test(NAME test_xir_ordinary_live_limit_${suffix}_${_oll_name} COMMAND ${_oll_target} "${_oll_mode}")
         set_tests_properties(test_xir_ordinary_live_limit_${suffix}_${_oll_name} PROPERTIES
             TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;program;instance;source;generated-c;resources;ownership;abi")
+        add_test(NAME test_xir_ordinary_live_limit_${suffix}_${_oll_name}_owned_recovery
+            COMMAND ${_oll_target} --owned-recovery "${_oll_mode}")
+        set_tests_properties(test_xir_ordinary_live_limit_${suffix}_${_oll_name}_owned_recovery PROPERTIES
+            TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;program;instance;source;generated-c;resources;ownership;abi;normal")
     endforeach()
 endfunction()
 # The independent READY graph does not replace the original 25-module graph.

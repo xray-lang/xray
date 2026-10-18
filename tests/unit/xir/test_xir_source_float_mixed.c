@@ -6,6 +6,7 @@
  *
  * test_xir_source_float_mixed.c - Both directions of Float calls across VM/native
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
@@ -59,7 +60,7 @@ static void source_float_mixed(bool root_native) {
     }
     CHECK(native && vm);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
-        owner->entries, module->function_count, module->declarations, {owner, source_float_mixed_free}, module->types, xr_xir_compile_program_proof(owner->artifact)};
+        owner->entries, module->function_count, module->declarations, {owner, source_float_mixed_free}, module->types, xir_program_packet_borrow(owner->artifact)};
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(&compiler.context, &spec, &program) == XR_XIR_OK);
     source_float_program_cases(program, functions); program = NULL;

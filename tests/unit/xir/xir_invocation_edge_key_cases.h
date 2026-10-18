@@ -16,7 +16,7 @@ static void invocation_edge_key_literals(void) {
     uint64_t baseline=rp_stats(&context).live_bytes;
     const EffectInvocationEdgeKey keys[6]={{1,2,3,4,0},{2,2,3,4,0},{1,3,3,4,0},
         {1,2,4,4,0},{1,2,3,5,0},{1,2,3,4,1}};
-    EffectInvocationEdge edges[6];EffectInvocationOwner owner={.work=&context,.edges=edges};
+    EffectInvocationEdge edges[6];EffectInvocationWorkspace owner={.read={.work=&context,.final=&owner.final},.final={.edges=edges}};
     CHECK(effect_invocation_edge_index_reserve(&owner)==XR_XIR_OK && owner.edge_index_capacity==16);
     for (uint32_t e=0;e<6;++e) {
         size_t at=SIZE_MAX;CHECK(effect_invocation_edge_slot(&owner,owner.edge_index,
@@ -24,7 +24,7 @@ static void invocation_edge_key_literals(void) {
         CHECK(xir_compile_work(&context,sizeof(*edges)+sizeof(uint32_t)));
         edges[e]=(EffectInvocationEdge){keys[e].caller,keys[e].target,keys[e].instruction,
             keys[e].producer,UINT32_MAX,UINT32_MAX,keys[e].latent!=0};
-        owner.edge_index[at]=e+1;++owner.edge_count;
+        owner.edge_index[at]=e+1;++owner.final.edge_count;
     }
     for (uint32_t e=0;e<6;++e) {
         size_t at=SIZE_MAX;CHECK(effect_invocation_edge_slot(&owner,owner.edge_index,
@@ -80,8 +80,8 @@ static void invocation_edge_phi_fixture(InvocationEdgePhiFixture *f) {
         .function_count=3,.declarations=&f->declarations,.linkage_kind=XR_XIR_LIBRARY};
 }
 
-static void invocation_edge_published_keys(const EffectInvocationOwner *owner,uint32_t mode) {
-    CHECK(!owner->edge_index && !owner->edge_index_capacity && !owner->work && !owner->body.read.owner);
+static void invocation_edge_published_keys(const EffectInvocationFinal *owner,uint32_t mode) {
+    CHECK(owner->material && owner->material->resources);
     uint32_t calls=0,latent=0,producers=0,target=UINT32_MAX;
     for (uint32_t e=0;e<owner->edge_count;++e) {
         const EffectInvocationEdge *edge=&owner->edges[e];
@@ -120,7 +120,7 @@ static void invocation_edge_published_keys(const EffectInvocationOwner *owner,ui
 static void invocation_edge_dimension_controls(const XrXirCompileContext *context,
     XrXirEffects *effects) {
     const EffectInvocationCertificate *certificate=effects->invocations;
-    EffectInvocationOwner *owner=certificate->equations;uint32_t pure=UINT32_MAX;
+    EffectInvocationFinal *owner=certificate->final;uint32_t pure=UINT32_MAX;
     for (uint32_t n=0;n<owner->count;++n) {
         EffectInvocationNode *node=&owner->nodes[n];
         CHECK(node->instruction_count==certificate->body->functions[node->body].instruction_count);
@@ -151,8 +151,8 @@ static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
     XrXirEffects *effects=NULL;XrXirStatus status=xir_fixture_verify(context,module,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_effects_infer_verified(context,module,&effects);
     if (status==XR_XIR_OK) {
-        invocation_edge_published_keys(effects->invocations->equations,mode);
-        CHECK(effects->words==1 && effects->errors[1]==(mode==2?UINT64_C(0):mode?UINT64_C(4):UINT64_C(12)));
+        invocation_edge_published_keys(effects->invocations->final,mode);
+        CHECK(effect_final_outcomes(effects)->words==1 && effect_final_outcomes(effects)->errors[1]==(mode==2?UINT64_C(0):mode?UINT64_C(4):UINT64_C(12)));
     }
     if (status==XR_XIR_OK && oracle) {
         CHECK(effect_body_source_match(context,effects->invocations->body,module)==XR_XIR_OK);
@@ -165,18 +165,14 @@ static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
     }
     memset(&cells,0xCE,sizeof(cells));memset(&phi,0xCE,sizeof(phi));
     if (status==XR_XIR_OK && oracle) invocation_edge_dimension_controls(context,effects);
-    EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};
+    EffectTerms terms={0};terms.remaining=context;ErrorFlow flow={0};XrXirEffects replay={0};
+    if (status==XR_XIR_OK) status=owned_error_replay_begin(context,effects,&replay);
     if (status==XR_XIR_OK) {
         flow.body=effect_body_owned_request(context,effects->invocations->body);
-        terms.types=*flow.body.domain.types;flow.effects=effects;
+        terms.types=*flow.body.domain.types;flow.effects=&replay;
         flow.remaining=(XrXirCompileContext *)context;flow.terms=&terms;
         flow.summary_count=effects->count;flow.invocation=UINT32_MAX;
         status=error_invocation_contexts_new(&flow,&flow.invocations);
-    }
-    if (status==XR_XIR_OK) {
-        size_t bytes=(size_t)effects->count*effects->words*sizeof(*effects->errors);
-        if (!xir_compile_work(context,bytes)) status=XR_XIR_BUDGET;
-        else memset(effects->errors,0,bytes);
     }
     if (status==XR_XIR_OK && mode==2) {
         CHECK(flow.invocations);status=error_invocation_summaries(&flow);
@@ -184,10 +180,10 @@ static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
     } else if (status==XR_XIR_OK) {
         CHECK(!flow.invocations);status=error_function(&flow,1);
     }
-    if (status==XR_XIR_OK) CHECK(effects->errors[1]==
+    if (status==XR_XIR_OK) CHECK(replay.outcomes_work.errors[1]==
         (mode==2?UINT64_C(0):mode?UINT64_C(4):UINT64_C(12)));
     error_storage_free(&flow);error_invocation_contexts_free(flow.invocations);
-    effect_terms_free(&terms);xr_xir_compile_effects_free(effects);return status;
+    effect_terms_free(&terms);effect_legacy_error_oracle_free(&replay);xr_xir_compile_effects_free(effects);return status;
 }
 
 static void invocation_edge_literals(void) {

@@ -15,6 +15,7 @@
 #include "xxir_interface.h"
 
 typedef struct XrXirInterfaceClosure XrXirInterfaceClosure;
+struct XirReadScratch;
 typedef struct XrXirInterfaceRequirement {
     uint32_t application, origin_interface, member;
     XrXirType signature;
@@ -51,6 +52,10 @@ typedef struct XrXirInterfaceClosureRoots {
  * complete substitution belongs to actual_types, whose pool is borrowed. */
 XR_FUNC XrXirStatus xr_xir_compile_interface_closure_substitute(const XrXirCompileContext *compile_context, const XrXirInterfaceClosureRequest *request, XrXirInterfaceClosure **output);
 XR_FUNC XrXirStatus xr_xir_compile_interface_closure_build(const XrXirCompileContext *compile_context, const XrXirInterfaceClosureRoots *request, XrXirInterfaceClosure **output);
+XR_FUNC XrXirStatus xir_interface_closure_read_build(const XrXirCompileContext *context,
+    const XrXirInterfaceClosureRoots *request,XrXirInterfaceClosure **output,struct XirReadScratch *memory);
+XR_FUNC XrXirStatus xir_interface_closure_read_substitute(const XrXirCompileContext *context,
+    const XrXirInterfaceClosureRequest *request,XrXirInterfaceClosure **output,struct XirReadScratch *memory);
 XR_FUNC const XrXirTypes *xr_xir_interface_closure_types(const XrXirInterfaceClosure *closure);
 XR_FUNC uint32_t xr_xir_interface_closure_application_count(const XrXirInterfaceClosure *closure);
 XR_FUNC const XrXirInterfaceApplication *xr_xir_interface_closure_application(

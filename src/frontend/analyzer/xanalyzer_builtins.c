@@ -1393,10 +1393,9 @@ static XrType *parse_type_str(XrVMRuntime *X, XaAnalyzer *analyzer, const char *
     size_t end = parse_type_trim_right(s, start, len);
     s += start;
     len = end - start;
-    if (len >= 6 && strncmp(s, "const ", 6) == 0) {
-        XrType *inner = parse_type_str(X, analyzer, module_name, s + 6, len - 6);
-        return inner ? xr_type_make_const(X, inner) : xr_type_new_error(X);
-    }
+    if (len >= 5 && strncmp(s, "const", 5) == 0 &&
+        (len == 5 || s[5] == ' ' || s[5] == '\t' || s[5] == '\n' || s[5] == '\r'))
+        return xr_type_new_error(X);
 
     // Top-level union: T1 | T2 | ... . Mirrors the parser's union rule
     // in xr_parse_type_annotation, except we work on the cfunc-signature

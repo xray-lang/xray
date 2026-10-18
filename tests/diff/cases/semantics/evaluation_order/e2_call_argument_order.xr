@@ -9,7 +9,7 @@ fn withDefault(a: i64, b: i64 = 99) -> i64 { return a + b }
 
 class Holder {
     base: i64
-    constructor() { this.base = 10 }
+    init() { this.base = 10 }
     bump(n: i64) -> i64 {
         return this.base + n
     }

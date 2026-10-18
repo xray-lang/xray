@@ -28,7 +28,7 @@ fn run() {
     assert(owner.resize(12))
     assert(len(owner) == 12)
     {
-        var view: const Slice<u8> = owner.asBytes()
+        var view: Slice<u8> = owner.asBytes()
         assert(view[0] == 42)
         assert(view[3] == 99)
     }

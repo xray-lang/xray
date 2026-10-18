@@ -20,7 +20,10 @@
 #include "xir_effect_execution_owner.h"
 #include "xir_runtime_allocations.h"
 #include "xir_initialization_failure_execution.h"
-int main(int argc,char **argv){CHECK(argc==1||argc==2);
+int main(int argc,char **argv){
+ bool generate_only=argc==3;
+ if(generate_only){CHECK(!strcmp(argv[1],"--generate-only"));++argv;--argc;}
+ CHECK(argc==1||argc==2);CHECK(argc==1 || strcmp(argv[1],"--generate-only"));
  const XrXirCompileContext compile=*effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
 FILE *file=fopen(XR_CHECKED_FIXTURE,"rb");
 CHECK(file&&!fseek(file,0,SEEK_END));
@@ -55,10 +58,10 @@ CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
 XrXirValue held[3]={{0}};
 init_pair(program,entry,held);
 init_protocol_failures(program,entry);
-init_runtime_faults(program,entry);
+if(!generate_only)init_runtime_faults(program,entry);
 xr_xir_compile_program_drop(program);
 init_retained(held);
 CHECK(!runtime_live&&!runtime_bytes);effects_source_owners_free();
-puts("source-free VM initialization failure41 reverse-release retained string PASS");
+puts(generate_only ? "source-free VM initialization artifact producer normal; retained string physical zero" : "source-free VM initialization failure41 all original runtime fault sweeps retained string physical zero");
 return 0;
 }

@@ -8,6 +8,7 @@
  */
 #ifndef XIR_INVOCATION_SPARSE_STORAGE_CASES_H
 #define XIR_INVOCATION_SPARSE_STORAGE_CASES_H
+#include "xir_raw_physical_correspondence.h"
 
 /* Every body first passes Built checking and owned verification. Scalar
  * stores, COPY, local operations and PHI keep their full-SSA fixed flags. */
@@ -51,7 +52,7 @@ static XrXirStatus invocation_storage_copy_bounds(const XrXirCompileContext *con
     EffectBodyMaterial *material=NULL;
     EffectInvocationDeclaredBounds *selected=NULL;
     XrXirStatus status=effect_body_material_create(context,module,&material);
-    if (status==XR_XIR_OK) status=effect_physical_match(context,material->physical,module);
+    if (status==XR_XIR_OK) status=invocation_raw_physical_match(context,material->physical,module);
     if (status==XR_XIR_OK) status=effect_invocation_bounds_copy_physical(context,bounds,
         material->physical,&selected);
     if (status==XR_XIR_OK) {
@@ -114,11 +115,11 @@ static void invocation_storage_bitmap_controls(EffectInvocationFlow *flow) {
         flow->certified[last]&=~bit;CHECK(effect_invocation_flags_match(flow)==XR_XIR_OK);
     }
 }
-static XrXirStatus invocation_storage_rows(EffectInvocationOwner *owner,uint32_t node,uint32_t mode,bool oracle) {
-    EffectInvocationFlow flow={.owner=owner,.node=node,.instruction=UINT32_MAX};
-    XrXirStatus status=effect_invocation_origins(&flow);
+static XrXirStatus invocation_storage_rows(EffectInvocationWorkspace *owner,uint32_t node,uint32_t mode,bool oracle) {
+    EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=node,.instruction=UINT32_MAX};
+    XrXirStatus status=effect_invocation_discovery_origins(&flow);
     if (status==XR_XIR_OK && oracle) {
-        uint32_t body=owner->nodes[node].body,expected=0;
+        uint32_t body=owner->final.nodes[node].body,expected=0;
         for (uint32_t v=0;v<flow.values;++v) {
             XrXirType type=XR_XIR_UNIT;CHECK(effect_invocation_flow_type(&flow,v,&type)==XR_XIR_OK);
             bool callable=xr_xir_callable_signature(flow.body.domain.types,type)!=NULL;
@@ -154,7 +155,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
     XrXirEffects effects={0};EffectGraph graph={0};EffectInvocationDeclaredBounds *bounds=NULL;
-    EffectInvocationOwner *owner=NULL;EffectInvocationResult *solution=NULL;
+    EffectInvocationWorkspace *owner=NULL;EffectFinalFunctions *solution=NULL;
     EffectInvocationCertificate *certificate=NULL;
     if (status==XR_XIR_OK) { phase=2;status=invocation_core_storage(context,module,&effects); }
     if (status==XR_XIR_OK) { phase=3;status=effect_graph_build(module,&effects,&graph,(XrXirCompileContext *)context); }
@@ -165,7 +166,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
     if (status==XR_XIR_OK && oracle) invocation_storage_rejections(context,module,bounds);
     if (status==XR_XIR_OK) { phase=6;status=effect_invocations_receive(context,module,&effects,&graph,bounds,&owner); }
     if (status==XR_XIR_OK) { phase=7;status=effect_invocations_solve(owner); }
-    for (uint32_t n=0;status==XR_XIR_OK && n<owner->count;++n)
+    for (uint32_t n=0;status==XR_XIR_OK && n<owner->final.count;++n)
         status=invocation_storage_rows(owner,n,mode,oracle);
     if (status==XR_XIR_OK) { phase=8;status=effect_invocation_stage(owner,&solution); }
     EffectInvocationSealRequest request={&owner,&solution,NULL};
@@ -180,7 +181,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
     memset(blocks,0xCE,sizeof(blocks));memset(incoming,0xCE,sizeof(incoming));
     if (status==XR_XIR_OK) {
         uint32_t mask=UINT32_MAX;
-        phase=10;status=effect_invocation_certificate_node_mask(context,certificate,certificate->equations->roots[0],&mask);
+        phase=10;status=effect_invocation_certificate_node_mask(context,certificate,certificate->final->roots[0],&mask);
         if (status==XR_XIR_OK && oracle) {
             CHECK(!mask && certificate->declared && certificate->declared->functions[1].values==98);
             const EffectInvocationFunctionBounds *body=&certificate->declared->functions[1];
@@ -194,13 +195,106 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
                     saved==XR_XIR_CALLABLE_ROOT_UNRESOLVED);
             }
             CHECK(!certificate->declared->functions[3].count && !certificate->declared->functions[3].bounds);
-            CHECK(!certificate->equations->body.read.owner && !certificate->equations->effects && !certificate->equations->declared);
+            CHECK((certificate->final->material!=NULL));
         }
     }
     effect_invocation_certificate_free(certificate);return status;
 }
 
+/* This literal bitmap/geometry component fixture never admits a language
+ * artifact or publishes its small structural input as a Final certificate. */
+static uint64_t invocation_storage_geometry(const XrXirCompileContext *context,
+    uint32_t values,uint32_t rows,bool check_bits,XrXirStatus expected) {
+    EffectPhysicalRecord record={.value=0,.mask=EFFECT_PHYSICAL_CALLABLE};
+    EffectPhysicalFunction physical={.instructions=values,.values=values,.rows=rows,
+        .count=rows,.capacity=rows,.records=rows?&record:NULL};
+    EffectPhysicalDomain domain={.resources=context->resources,.count=1,.functions=&physical};
+    EffectInvocationNode node={.body=0};
+    EffectInvocationFinal shape={.physical=&domain,.nodes=&node,.count=1};
+    EffectInvocationRead read={.work=context,.final=&shape};
+    EffectBodyFunctionHead head={.instruction_count=values};
+    EffectInvocationFlow flow={.read=&read,.function=&head,.basis={.fn_words=2}};
+    flow.local_flags[0]=UINT64_MAX;flow.local_flags[1]=UINT64_MAX;
+    uint64_t before=rp_stats(context).work,allocated=rp_stats(context).allocated_bytes;
+    size_t attempts=rp_attempts;
+    XrXirStatus status=effect_invocation_flow_storage(&flow);
+    uint64_t used=rp_stats(context).work-before;
+    CHECK(status==expected);
+    if (status==XR_XIR_OK && check_bits) {
+        bool local=!rows && values && values<=64;
+        CHECK(flow.values==values && flow.row_count==rows);
+        CHECK((flow.memory!=NULL)==(values && !local));
+        CHECK((rp_attempts==attempts)==(!values || local));
+        CHECK((rp_stats(context).allocated_bytes==allocated)==(!values || local));
+        if (local) CHECK(flow.rows==flow.local_flags && flow.fixed==flow.local_flags && flow.certified==flow.local_flags+1);
+        CHECK(effect_invocation_flags_match(&flow)==XR_XIR_OK);
+        bool expected_fixed[129]={0},expected_certified[129]={0};
+        for (uint32_t v=0;v<values;++v) {
+            bool first=true,second=true,changed=false;
+            CHECK(effect_invocation_flag_get(&flow,v,false,&first)==XR_XIR_OK && !first);
+            CHECK(effect_invocation_flag_get(&flow,v,true,&second)==XR_XIR_OK && !second);
+            expected_fixed[v]=(v%3)==1;expected_certified[v]=(v%2)==0;
+            if (expected_fixed[v]) CHECK(effect_invocation_flag_put(&flow,v,false,&changed)==XR_XIR_OK && changed);
+            changed=false;
+            if (expected_certified[v]) CHECK(effect_invocation_flag_put(&flow,v,true,&changed)==XR_XIR_OK && changed);
+        }
+        uint64_t packed[2][3]={{0}};
+        for (uint32_t v=0;v<values;++v) {
+            bool actual=false;
+            CHECK(effect_invocation_flag_get(&flow,v,false,&actual)==XR_XIR_OK && actual==expected_fixed[v]);
+            CHECK(effect_invocation_flag_get(&flow,v,true,&actual)==XR_XIR_OK && actual==expected_certified[v]);
+            if (expected_fixed[v]) packed[0][v/64]|=UINT64_C(1)<<(v%64);
+            if (expected_certified[v]) packed[1][v/64]|=UINT64_C(1)<<(v%64);
+        }
+        for (uint32_t word=0;word<(values+63)/64;++word)
+            CHECK(flow.fixed[word]==packed[0][word] && flow.certified[word]==packed[1][word]);
+        if (values) invocation_storage_bitmap_controls(&flow);
+        if (local) {
+            uint64_t other[2]={0};flow.fixed=other;flow.certified=other+1;
+            CHECK(effect_invocation_flags_match(&flow)==XR_XIR_BAD_STRUCTURE);
+            flow.fixed=flow.local_flags;flow.certified=flow.local_flags+1;
+            flow.memory=flow.local_flags;
+            CHECK(effect_invocation_flags_match(&flow)==XR_XIR_BAD_STRUCTURE);
+            flow.memory=NULL;
+        }
+    }
+    xr_compile_resources_free(flow.memory);return used;
+}
+
+static void invocation_storage_geometry_literals(void) {
+    const uint32_t sizes[]={0,1,2,63,64,65,127,128,129};
+    unsigned cases=0,real_budget_cuts=0,actual_oom_retries=0;
+    for (uint32_t row=0;row<2;++row) for (size_t i=0;i<sizeof(sizes)/sizeof(sizes[0]);++i) {
+        uint32_t values=sizes[i];if (row && !values) continue;
+        RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
+        uint64_t baseline=rp_stats(&context).live_bytes;
+        uint64_t work=invocation_storage_geometry(&context,values,row,true,XR_XIR_OK);
+        rp_owner_free(&context,baseline);rp_balanced(physical);++cases;
+        for (unsigned minus=0;minus<2;++minus) {
+            XrCompileResourceLimits limits=rp_caps();limits.work=work+1-minus;
+            physical=rp_mark();context=rp_owner(limits);baseline=rp_stats(&context).live_bytes;
+            invocation_storage_geometry(&context,values,row,false,minus?XR_XIR_BUDGET:XR_XIR_OK);
+            rp_owner_free(&context,baseline);rp_balanced(physical);++real_budget_cuts;
+        }
+        if (values && (row || values>64)) {
+            physical=rp_mark();context=rp_owner(rp_caps());baseline=rp_stats(&context).live_bytes;
+            XrCompileResources *identity=context.resources;
+            rp_fail_at=rp_attempts;rp_injected=false;
+            invocation_storage_geometry(&context,values,row,false,XR_XIR_OUT_OF_MEMORY);
+            CHECK(rp_injected);uint64_t failed_work=rp_stats(&context).work;
+            rp_fail_at=SIZE_MAX;
+            invocation_storage_geometry(&context,values,row,true,XR_XIR_OK);
+            CHECK(context.resources==identity && rp_stats(&context).work>failed_work);
+            rp_owner_free(&context,baseline);rp_balanced(physical);++actual_oom_retries;
+        }
+    }
+    printf("local flag component %u geometry/Boolean cases, %u real exact/minus work cuts, %u actual OOM same-owner retries PASS\n",
+        cases,real_budget_cuts,actual_oom_retries);
+}
+
+
 static void conditional_storage_literals(void) {
+    invocation_storage_geometry_literals();
     for (uint32_t mode=0;mode<3;++mode) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
         uint64_t baseline=rp_stats(&context).live_bytes;

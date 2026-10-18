@@ -36,7 +36,7 @@ interface Shape {
 
 class Circle implements Shape {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14159 * this.radius * this.radius }
     describe() -> string { return "Circle(r=${this.radius})" }
 }
@@ -44,7 +44,7 @@ class Circle implements Shape {
 class Rect implements Shape {
     width: f64
     height: f64
-    constructor(w: f64, h: f64) { this.width = w; this.height = h }
+    init(w: f64, h: f64) { this.width = w; this.height = h }
     area() -> f64 { return this.width * this.height }
     describe() -> string { return "Rect(${this.width}x${this.height})" }
 }

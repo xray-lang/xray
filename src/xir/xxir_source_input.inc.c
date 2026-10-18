@@ -9,12 +9,14 @@
  * KEY CONCEPT:
  *   Input selection precedes the same checked construction and owned publication.
  */
+typedef struct SourceInputCapture { AstNode *ast; uint32_t module; } SourceInputCapture;
 typedef struct SourceInput {
     bool supplied;
     XrXirSourceText text;
     const XrModuleOverlayInput *overlays;
     size_t overlay_count;
     bool prelude_factory;
+    SourceInputCapture *capture;
     AstNode *program;
 } SourceInput;
 static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceInput input,
@@ -122,6 +124,11 @@ done:
         *failure_path = module->source_path;
         module->source_path = NULL;
     }
+    if (ctx.diagnostic.status == XR_XIR_OK && input.capture) {
+        input.capture->module = (uint32_t)ctx.graph->entry_index;
+        input.capture->ast = ctx.graph->specs[ctx.graph->entry_index].ast;
+        ctx.graph->specs[ctx.graph->entry_index].ast = NULL;
+    }
     xr_compile_resources_free(error);
     for (SourceManifest *manifest = ctx.manifests; manifest; manifest = manifest->next)
         xr_compile_declaration_manifest_free(manifest->declarations);
@@ -152,7 +159,7 @@ XrXirStatus xr_xir_compile_source_check_ast(const XrXirSourceRequest *request,
         if (diagnostic) *diagnostic = (XrXirSourceDiagnostic){.status=XR_XIR_BAD_STRUCTURE};
         return XR_XIR_BAD_STRUCTURE;
     }
-    SourceInput input = {true, syntax->source, NULL, 0, false, syntax->program};
+    SourceInput input = {.supplied=true, .text=syntax->source, .program=syntax->program};
     return source_check_input(request, input, output, diagnostic, failure_path);
 }
 

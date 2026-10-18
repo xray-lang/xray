@@ -4,7 +4,7 @@ import argparse,hashlib,json,struct,sys,tempfile
 root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root/'scripts'))
 from derive_xir_sdk_abi import prepare
 
-def current_preimage(rows, semantic=73, value_abi=24, call_abi=29, wire=28, program_abi=30):
+def current_preimage(rows, semantic=73, value_abi=24, call_abi=29, wire=28, program_abi=31):
     word=lambda value:struct.pack('<I',value)
     def text(value):
         data=value.encode('utf-8');return word(len(data))+data
@@ -32,9 +32,13 @@ def main():
     with tempfile.TemporaryDirectory(prefix='xir-current-sdk-kat-') as temporary:
         facts=Path(temporary)/'facts';prepare(facts)
         rows=json.loads((facts/'EXPECTED.json').read_text())['rows']
-    assert len(rows)==362 and len({row['id'] for row in rows})==362
+    assert len(rows)==361 and len({row['id'] for row in rows})==361
+    retired_program=json.loads(Path(__file__).with_name('sdk_historical_program30_abi362.json').read_text())
+    assert (retired_program['wire'],retired_program['semantic'],retired_program['value_abi'],retired_program['call_abi'],retired_program['program_abi'])==(28,73,24,29,30)
+    retired_rows=retired_program['rows'];assert len(retired_rows)==362
+    assert any(row['id']==1505 for row in retired_rows) and all(row['id']!=1505 for row in rows)
     observer_ids={49,50,*range(4500,4509)}
-    old_rows=[row for row in rows if row['id'] not in observer_ids]
+    old_rows=[row for row in retired_rows if row['id'] not in observer_ids]
     assert len(old_rows)==351
     historical=json.loads(Path(__file__).with_name('sdk_historical_abi345.json').read_text(encoding='utf-8'))
     assert (historical['wire'],historical['value_abi'],historical['call_abi'],historical['program_abi'])==(25,21,26,29)
@@ -66,11 +70,16 @@ def main():
     image,file_digest,digest=current_preimage(rows)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
-    old_current_image,_,_=current_preimage(old_rows)
+    old_current_image,_,_=current_preimage(old_rows,73,24,29,28,30)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(28,73,24,29,30)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(28,73,24,29,31)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
-    assert len(image)==3186 and len(previous_image)==len(value23_image)==3098
+    retired_image,retired_file,retired_digest=current_preimage(retired_rows,73,24,29,28,30)
+    retired_text=Path(__file__).with_name('sdk_previous_program30_identity_golden.h').read_text()
+    for name,data in (('current_sdk_kat_preimage',retired_image),('current_sdk_kat_file_digest',retired_file),('current_sdk_kat_digest',retired_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',retired_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired Program30 SDK KAT changed'
+    assert len(image)==3178 and len(retired_image)==3186 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
     output='/* Independent current SDK framing and natural Windows C layout facts. */\n'
     for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest)):

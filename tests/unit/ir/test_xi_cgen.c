@@ -4395,9 +4395,9 @@ TEST(cgen_encoding_inline_and_named_slice_share_type_identity) {
         "    const view: Slice<u8> = bytes[:]\n"
         "    print(string.fromUtf8(view)!, string.fromUtf8(bytes[:])!)\n"
         "}\n"
-        "fn first(view: const Slice<u8>) -> i64 { return view[0] as i64 }\n"
+        "fn first(view: Slice<u8>) -> i64 { return view[0] as i64 }\n"
         "enum ViewFailure { Rejected }\n"
-        "@noinline fn checkedView(view: Slice<u8>, accept: bool) -> const Slice<u8> from view {\n"
+        "@noinline fn checkedView(view: Slice<u8>, accept: bool) -> Slice<u8> from view {\n"
         "    if (!accept) { throw ViewFailure.Rejected }\n"
         "    return view\n"
         "}\n"
@@ -6759,7 +6759,7 @@ TEST(cgen_mem_slice_struct_pointer_owner_load_is_elided) {
                       "struct Holder {\n"
                       "    pointer: Ptr<u8>\n"
                       "    viewLength(size: i64) -> i64 {\n"
-                      "        var bytes: const Slice<u8> = unsafe {\n"
+                      "        var bytes: Slice<u8> = unsafe {\n"
                       "            mem.slice<u8>(this.pointer, size, this.pointer)\n"
                       "        }\n"
                       "        return len(bytes)\n"
@@ -6854,7 +6854,7 @@ TEST(cgen_span_phi_snapshot_is_debug_only) {
         "import mem\n"
         "fn selectedLength(flag: bool, first: Slice<u8>, second: Slice<u8>, "
         "output: MutPtr<u8>) -> i64 {\n"
-        "    var selected: const Slice<u8> = first\n"
+        "    var selected: Slice<u8> = first\n"
         "    if (flag) { selected = second }\n"
         "    unsafe { mem.set(output, 0, 0) }\n"
         "    return len(selected)\n"
@@ -7258,7 +7258,7 @@ TEST(cgen_nullable_unit_enum_compare_execution) {
         "enum ProbeError { Bad, Worse, Timeout }\n"
         "class Holder {\n"
         "    kind: ProbeError\n"
-        "    constructor() { this.kind = ProbeError.Worse }\n"
+        "    init() { this.kind = ProbeError.Worse }\n"
         "}\n"
         "fn query(flag: i64) -> ProbeError? {\n"
         "    if (flag == 1) { return ProbeError.Timeout }\n"
@@ -8424,7 +8424,7 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
 TEST(cgen_source_class_array_push_consumes_generated_emission_recipe) {
     const char *src = "class Item {\n"
                       "    value: i64\n"
-                      "    constructor(value: i64) { this.value = value }\n"
+                      "    init(value: i64) { this.value = value }\n"
                       "}\n"
                       "fn run() -> i64 {\n"
                       "    var items: Array<Item> = []\n"
@@ -10072,7 +10072,7 @@ TEST(cgen_map_class_static_factory_is_not_constructor) {
     const char *src = "class Box {\n"
                       "    kind: string\n"
                       "    value: i64\n"
-                      "    constructor(kind: string) {\n"
+                      "    init(kind: string) {\n"
                       "        this.kind = kind\n"
                       "        this.value = 0\n"
                       "    }\n"
@@ -10179,7 +10179,7 @@ TEST(cgen_class_method_caches_receiver_scalar_fields) {
     const char *src = "class Counter {\n"
                       "    value: i64\n"
                       "    step: i64\n"
-                      "    constructor(init: i64, step: i64) {\n"
+                      "    init(init: i64, step: i64) {\n"
                       "        this.value = init\n"
                       "        this.step = step\n"
                       "    }\n"
@@ -10236,7 +10236,7 @@ TEST(cgen_class_method_caches_receiver_scalar_fields) {
 TEST(cgen_local_class_direct_native_methods_omit_boxed_adapters) {
     const char *src = "class Counter {\n"
                       "    value: i64\n"
-                      "    constructor(init: i64) { this.value = init }\n"
+                      "    init(init: i64) { this.value = init }\n"
                       "    ref bump(n: i64) -> i64 {\n"
                       "        this.value = this.value + n\n"
                       "        return this.value\n"
@@ -10287,7 +10287,7 @@ TEST(cgen_local_class_direct_native_methods_omit_boxed_adapters) {
 TEST(cgen_native_receiver_static_cleanup_borrows_without_closure_arc) {
     const char *src = "class Box {\n"
                       "    n: i64\n"
-                      "    constructor(n: i64) { this.n = n }\n"
+                      "    init(n: i64) { this.n = n }\n"
                       "    ref bump() -> i64 {\n"
                       "        defer { this.n = this.n + 100 }\n"
                       "        return this.n\n"
@@ -10335,7 +10335,7 @@ TEST(cgen_native_receiver_static_cleanup_borrows_without_closure_arc) {
 TEST(cgen_class_constructor_returns_heap_native_instance) {
     const char *src = "class Counter {\n"
                       "    value: i64\n"
-                      "    constructor(init: i64) { this.value = init }\n"
+                      "    init(init: i64) { this.value = init }\n"
                       "    ref bump(n: i64) -> i64 {\n"
                       "        this.value = this.value + n\n"
                       "        return this.value\n"
@@ -10429,7 +10429,7 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
 TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
     const char *src = "class IntBag {\n"
                       "    values: Array<i64>\n"
-                      "    constructor(values: Array<i64>) { this.values = values }\n"
+                      "    init(values: Array<i64>) { this.values = values }\n"
                       "    scan(rounds: i64) -> i64 {\n"
                       "        var r = 0\n"
                       "        var sum = 0\n"
@@ -10497,7 +10497,7 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
 TEST(cgen_native_class_collection_ref_fields_use_arc) {
     const char *src = "class Bag {\n"
                       "    values: Array<i64>\n"
-                      "    constructor(values: Array<i64>) {\n"
+                      "    init(values: Array<i64>) {\n"
                       "        this.values = values\n"
                       "    }\n"
                       "    replace(next: Array<i64>) -> i64 {\n"
@@ -10637,7 +10637,7 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
 TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
     const char *src = "class Bag {\n"
                       "    values: Set<i64>\n"
-                      "    constructor() {\n"
+                      "    init() {\n"
                       "        this.values = #[]\n"
                       "    }\n"
                       "    fill(n: i64) -> i64 {\n"
@@ -10689,7 +10689,7 @@ TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
 TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
     const char *src = "class Bag {\n"
                       "    values: Set<u8>\n"
-                      "    constructor() {\n"
+                      "    init() {\n"
                       "        this.values = #[]\n"
                       "    }\n"
                       "    fill(n: i64) -> i64 {\n"
@@ -10769,7 +10769,7 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
 TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
     const char *src = "class Bag {\n"
                       "    values: Map<i64, i64>\n"
-                      "    constructor() {\n"
+                      "    init() {\n"
                       "        this.values = #{}\n"
                       "    }\n"
                       "    fill(n: i64) -> i64 {\n"
@@ -10859,7 +10859,7 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
 TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
     const char *src =
         "class Bag { values: Map<bool, f32>\n"
-        "constructor() { this.values = #{} } fill() -> i64 { this.values.set(true, 1.5); "
+        "init() { this.values = #{} } fill() -> i64 { this.values.set(true, 1.5); "
         "this.values.set(false, 2.25); return len(this.values) } "
         "scan() -> f64 { var sum = 0.0; if (this.values.containsKey(true)) { sum = sum + "
         "this.values.get(true)! }; if (this.values.containsKey(false)) { sum = sum + "
@@ -10867,7 +10867,7 @@ TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
         "}; return sum } prune() -> i64 { if (this.values.delete(false)) { return "
         "len(this.values) }; return 0 }\n"
         "} class IntBag { values: Map<bool, i64>\n"
-        "constructor() { this.values = #{} } fill() -> i64 { this.values.set(true, 11); "
+        "init() { this.values = #{} } fill() -> i64 { this.values.set(true, 11); "
         "this.values.set(false, 23); return len(this.values) } "
         "scan() -> i64 { var sum = 0; if (this.values.containsKey(true)) { sum = sum + "
         "this.values.get(true)! }; if (this.values.containsKey(false)) { sum = sum + "
@@ -10920,7 +10920,7 @@ TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
 TEST(cgen_class_map_bool_value_guarded_condition_uses_native) {
     const char *src =
         "class Bag { values: Map<i64, bool>\n"
-        "constructor() { this.values = #{} } "
+        "init() { this.values = #{} } "
         "fill(n: i64) -> i64 { var i = 0; while (i < n) { this.values.set(i, i % 3 == 0); "
         "i = i + 1 }; return len(this.values) } "
         "count(n: i64) -> i64 { var i = 0; var total = 0; while (i < n) { "
@@ -10954,7 +10954,7 @@ TEST(cgen_class_map_bool_value_guarded_condition_uses_native) {
 
 TEST(cgen_class_map_bool_value_unguarded_explicit_true_uses_tagged_compare) {
     const char *src = "class Bag { values: Map<i64, bool>\n"
-                      "constructor() { this.values = #{}; this.values.set(1, true) } "
+                      "init() { this.values = #{}; this.values.set(1, true) } "
                       "count() -> i64 { if (this.values.get(1) == true) { return 1 }; return 0 }\n"
                       "} var bag = Bag(); print(bag.count())\n";
 
@@ -10983,7 +10983,7 @@ TEST(cgen_class_map_bool_value_unguarded_explicit_true_uses_tagged_compare) {
 TEST(cgen_inherited_class_uses_native_base_layout) {
     const char *src = "class Shape {\n"
                       "    kind: i64\n"
-                      "    constructor(kind: i64) {\n"
+                      "    init(kind: i64) {\n"
                       "        this.kind = kind\n"
                       "    }\n"
                       "    kind_plus() -> i64 {\n"
@@ -10993,7 +10993,7 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
                       "class Rect extends Shape {\n"
                       "    w: i64\n"
                       "    h: i64\n"
-                      "    constructor(w: i64, h: i64) {\n"
+                      "    init(w: i64, h: i64) {\n"
                       "        super(1)\n"
                       "        this.w = w\n"
                       "        this.h = h\n"
@@ -11721,7 +11721,7 @@ TEST(cgen_span_index_set_checks_readonly_flag) {
 TEST(cgen_same_type_as_lowers_away_without_arc) {
     const char *src = "class Box {\n"
                       "    value: i64\n"
-                      "    constructor(value: i64) { this.value = value }\n"
+                      "    init(value: i64) { this.value = value }\n"
                       "}\n"
                       "fn pass(box: move Box) -> Box { return box }\n"
                       "fn cast(box: move Box) -> Box { return pass(move box) as Box }\n"
@@ -13937,7 +13937,7 @@ TEST(cgen_mixed_callable_targets_use_stable_descriptor_switch) {
 
 TEST(cgen_direct_suspend_method_call_propagates_cps) {
     const char *src = "class Box {\n"
-                      "    constructor() {}\n"
+                      "    init() {}\n"
                       "    bump(n: i64) -> i64 {\n"
                       "        Coro.yield()\n"
                       "        return n + 1\n"
@@ -14447,7 +14447,7 @@ TEST(cgen_returned_class_accepts_field_store) {
         "class Parts {\n"
         "    value: i64\n"
         "    _enabled: bool\n"
-        "    constructor(value: i64) { this.value = value; this._enabled = true }\n"
+        "    init(value: i64) { this.value = value; this._enabled = true }\n"
         "    enabled: bool { fn() { return this._enabled } }\n"
         "}\n"
         "fn create(value: i64) -> Parts { return Parts(value) }\n"
@@ -14528,7 +14528,7 @@ TEST(cgen_nullable_field_retains_optional_string) {
     const char *source =
         "class Holder {\n"
         "    text: string?\n"
-        "    constructor(text: string?) { this.text = text }\n"
+        "    init(text: string?) { this.text = text }\n"
         "    ref clear(text: string?) { this.text = text }\n"
         "}\n"
         "fn read(holder: Holder) -> string? { return holder.text }\n"
@@ -15471,7 +15471,7 @@ TEST(cgen_hosted_coroutine_export_publishes_resumable_continuation) {
 TEST(cgen_hosted_class_boundary_uses_nominal_opaque_proxy) {
     const char *src = "class Box {\n"
                       "    value: i64\n"
-                      "    constructor(value: i64) { this.value = value }\n"
+                      "    init(value: i64) { this.value = value }\n"
                       "}\n"
                       "fn bridge(value: Box) -> Box { return value }\n"
                       "bridge(Box(7))\n";
@@ -15525,7 +15525,7 @@ TEST(cgen_hosted_class_boundary_uses_nominal_opaque_proxy) {
 TEST(cgen_hosted_native_field_store_uses_portable_c_statements) {
     const char *src = "class Box {\n"
                       "    text: string\n"
-                      "    constructor(text: string) { this.text = text }\n"
+                      "    init(text: string) { this.text = text }\n"
                       "}\n"
                       "fn setText(box: Box, text: string) {\n"
                       "    var target = box\n"
@@ -15627,7 +15627,7 @@ TEST(cgen_hosted_non_escaping_string_argument_stays_zero_copy) {
 TEST(cgen_hosted_normal_class_result_call_is_not_a_constructor) {
     const char *src = "class Box {\n"
                       "    value: i64\n"
-                      "    constructor(value: i64) { this.value = value }\n"
+                      "    init(value: i64) { this.value = value }\n"
                       "}\n"
                       "fn makeBox() -> Box { return Box(7) }\n"
                       "fn forward() -> Box { return makeBox() }\n"
@@ -15667,7 +15667,7 @@ TEST(cgen_hosted_normal_class_result_call_is_not_a_constructor) {
 TEST(cgen_coro_native_class_await_uses_tagged_boundary_slot) {
     const char *src = "class Box {\n"
                       "    value: i64\n"
-                      "    constructor(value: i64) { this.value = value }\n"
+                      "    init(value: i64) { this.value = value }\n"
                       "}\n"
                       "fn worker() -> Box {\n"
                       "    Coro.yield()\n"

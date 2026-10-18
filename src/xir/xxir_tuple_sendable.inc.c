@@ -12,7 +12,7 @@
  */
 typedef struct SendableFrame { uint32_t index, next; } SendableFrame;
 static XrXirStatus sendable_enum_shape(const XrXirConstraintEnvironment *environment,
-    const XrXirTypeNode *node, const XrXirCompileContext *work) {
+    const XrXirTypeNode *node, const XrXirCompileContext *work,XirReadScratch *read) {
     const XrXirNominalTable *table = environment->types->nominals;
     if (!table || (!!table->declarations == !!table->identities) ||
         node->nominal.declaration >= table->count) return XR_XIR_BAD_TYPE;
@@ -42,8 +42,8 @@ static XrXirStatus sendable_enum_shape(const XrXirConstraintEnvironment *environ
     if (d && node->nominal.field_count) {
         if (!d->fields) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t f = 0; f < count; ++f) {
-            XrXirStatus status = xr_xir_compile_type_substitution_matches(work, environment->types,
-                node->nominal.arguments, arity, d->fields[f].type, node->nominal.fields[f]);
+            XrXirStatus status = xir_type_match_read(work,&(XirTypeMatchRead){environment->types,environment->types,
+                node->nominal.arguments,arity,d->fields[f].type,node->nominal.fields[f],read});
             if (status != XR_XIR_OK) return status;
         }
     }
@@ -64,8 +64,14 @@ static XrXirType sendable_child(const XrXirConstraintEnvironment *environment,
     return node->nominal.field_count ? node->nominal.fields[at] :
         environment->types->nominals->declarations[node->nominal.declaration].fields[at].type;
 }
+typedef struct SendableWalk {
+    unsigned char *state;
+    SendableFrame *frames;
+    uint32_t depth;
+    XirReadScratch *read;
+} SendableWalk;
 static XrXirStatus sendable_enter(const XrXirConstraintEnvironment *environment,
-    XrXirType type, unsigned char *state, SendableFrame *frames, uint32_t *depth,
+    XrXirType type, SendableWalk *walk,
     const XrXirCompileContext *work) {
     if (!xir_compile_work(work, 1)) return XR_XIR_BUDGET;
     if (type == XR_XIR_UNIT || type == XR_XIR_BOOL || type == XR_XIR_RUNE ||
@@ -79,38 +85,38 @@ static XrXirStatus sendable_enter(const XrXirConstraintEnvironment *environment,
     const XrXirTypeNode *node = xr_xir_type_node(environment->types, type);
     if (!node || node->parameter_span > environment->parameter_count) return XR_XIR_BAD_TYPE;
     uint32_t index = id - XR_XIR_CONSTRUCTED_TYPE_BASE;
-    if (state[index] == 2) return XR_XIR_OK;
-    if (state[index] || *depth >= environment->types->count) return XR_XIR_BAD_TYPE;
+    if (walk->state[index] == 2) return XR_XIR_OK;
+    if (walk->state[index] || walk->depth >= environment->types->count) return XR_XIR_BAD_TYPE;
     if (node->kind == XR_XIR_TYPE_ATOMIC)
         return constraint_atomic(environment, node->element, XR_XIR_CONSTRAINT_ATOMIC_VALUE, work);
     if (node->kind == XR_XIR_TYPE_NOMINAL) {
-        XrXirStatus status = sendable_enum_shape(environment, node, work);
+        XrXirStatus status = sendable_enum_shape(environment, node, work,walk->read);
         if (status != XR_XIR_OK) return status;
     } else if (node->kind == XR_XIR_TYPE_TUPLE) {
         if (!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
     } else if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE &&
                node->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
-    state[index] = 1; frames[(*depth)++] = (SendableFrame){index, 0};
+    walk->state[index] = 1; walk->frames[(walk->depth)++] = (SendableFrame){index, 0};
     return XR_XIR_OK;
 }
 static XrXirStatus constraint_sendable_graph(const XrXirConstraintEnvironment *environment,
-    XrXirType type, const XrXirCompileContext *work) {
+    XrXirType type, const XrXirCompileContext *work,XirReadScratch *read) {
     const XrXirTypes *types = environment->types;
     if (!types || !types->count || !types->nodes) return XR_XIR_BAD_TYPE;
     uint64_t bytes = (uint64_t)types->count * (sizeof(SendableFrame) + 1);
     if (bytes > SIZE_MAX || !xir_compile_work(work, types->count)) return XR_XIR_BUDGET;
     XrXirStatus status = XR_XIR_OK;
-    SendableFrame *frames = xir_compile_calloc(work, 1, (size_t)bytes, &status);
+    SendableFrame *frames = xir_read_scratch_alloc(work,read,(size_t)bytes,true,&status);
     if (!frames) return status;
     unsigned char *state = (unsigned char *)(frames + types->count);
-    uint32_t depth = 0;
-    status = sendable_enter(environment, type, state, frames, &depth, work);
-    while (depth && status == XR_XIR_OK) {
+    SendableWalk walk={state,frames,0,read};
+    status = sendable_enter(environment, type, &walk, work);
+    while (walk.depth && status == XR_XIR_OK) {
         if (!xir_compile_work(work, 1)) { status = XR_XIR_BUDGET; break; }
-        SendableFrame *frame = &frames[depth - 1];
+        SendableFrame *frame = &frames[walk.depth - 1];
         const XrXirTypeNode *node = &types->nodes[frame->index];
         if (frame->next == sendable_child_count(environment, node)) {
-            state[frame->index] = 2; --depth; continue;
+            state[frame->index] = 2; --walk.depth; continue;
         }
         if (node->kind == XR_XIR_TYPE_TUPLE && node->parameters[frame->next].mode) {
             status = XR_XIR_BAD_TYPE; break;
@@ -123,7 +129,7 @@ static XrXirStatus constraint_sendable_graph(const XrXirConstraintEnvironment *e
             (uint32_t)child - XR_XIR_CONSTRUCTED_TYPE_BASE >= frame->index) {
             status = XR_XIR_BAD_TYPE; break;
         }
-        status = sendable_enter(environment, child, state, frames, &depth, work);
+        status = sendable_enter(environment, child, &walk, work);
     }
-    xr_compile_resources_free(frames); return status;
+    xir_read_scratch_release(read,frames); return status;
 }

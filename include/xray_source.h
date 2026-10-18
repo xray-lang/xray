@@ -14,7 +14,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define XRAY_SOURCE_API_VERSION 1u
+#define XRAY_SOURCE_API_VERSION 2u
 typedef struct XrSourceCompiler XrSourceCompiler;
 typedef struct XrSourceProgram XrSourceProgram;
 typedef struct XrSourceDiagnostic XrSourceDiagnostic;
@@ -27,6 +27,7 @@ typedef enum XrSourceStatus {
 } XrSourceStatus;
 typedef struct XrSourceCompilerOptions {
     uint32_t api_version, struct_size;
+    uint32_t wait_size; /* Exact sizeof(XrSourceWait) from this header. */
     uint64_t allocated_bytes, live_bytes, work;
     const char *stdlib_path; /* NULL selects environment/executable/cwd precedence. */
 } XrSourceCompilerOptions;
@@ -68,7 +69,15 @@ typedef struct XrSourceCallOptions {
     void *context; /* Host-owned until call_drop or execute returns. */
 } XrSourceCallOptions;
 typedef enum XrSourceWaitKind { XR_SOURCE_WAIT_YIELD, XR_SOURCE_WAIT_TIMER, XR_SOURCE_WAIT_TASK } XrSourceWaitKind;
-typedef struct XrSourceWait { XrSourceWaitKind kind; uint64_t after_ms; } XrSourceWait;
+typedef struct XrSourceWait {
+    XrSourceWaitKind kind;
+    uint64_t after_ms;
+    /* Borrowed observation, not a Task handle or execution authority. Never
+     * dereference or adopt subject. It expires on the next successful change
+     * to this Call, including a poll, resume, cancellation or drop. */
+    const void *subject;
+    uint64_t generation, ticket;
+} XrSourceWait;
 /* Initialize options before construction. One compiler owns one cumulative
  * ledger; all compiler/Program operations require caller exclusion. Products,
  * diagnostics and execution results survive their producer's destruction.
@@ -85,12 +94,14 @@ XRAY_API void xray_source_diagnostic_free(XrSourceDiagnostic *);
 XRAY_API XrSourceStatus xray_source_call_options_init(XrSourceCallOptions *, size_t);
 /* Begin executes the ordinary admitted root entry. Polls borrow no result
  * payload; take publishes an owned terminal result exactly once. Reentrant
- * state-changing calls return BUSY. Cancellation only queues cleanup; continue
- * bounded polls to the terminal outcome. Program may die after begin succeeds. */
+ * state-changing calls return BUSY. Cancellation only queues cleanup; honor
+ * any valid waits while continuing bounded polls to the terminal outcome.
+ * Program may die after begin succeeds. */
 XRAY_API XrSourceStatus xray_source_call_begin(XrSourceProgram *, const XrSourceCallOptions *, XrSourceCall **);
 XRAY_API XrSourceStatus xray_source_call_poll(XrSourceCall *, uint64_t quantum, XrSourceEvent *);
 XRAY_API XrSourceStatus xray_source_call_resume(XrSourceCall *, uint64_t epoch, uint64_t wake);
-XRAY_API XrSourceStatus xray_source_call_wait_request(const XrSourceCall *, uint64_t epoch, uint64_t wake, XrSourceWait *);
+/* Size must match this header; any refusal preserves every output field. */
+XRAY_API XrSourceStatus xray_source_call_wait_request(const XrSourceCall *, uint64_t epoch, uint64_t wake, XrSourceWait *, size_t);
 XRAY_API XrSourceStatus xray_source_call_cancel(XrSourceCall *);
 XRAY_API XrSourceStatus xray_source_call_take(XrSourceCall *, XrSourceResult **);
 /* Consumes and clears call except on BUSY. Cleanup failure is reported in the

@@ -65,7 +65,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-本节冻结绑定与值语义部分的只读权限，不裁决 type-position `const T` 的独立类型身份、转换及全部可用位置；该表面不在本已冻结子集内，须在准入前另行确定，不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
+`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止；不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
 
 这些是语言合同；完整声明族的当前新 XIR 实现资格见 §17，不因本节示例而宣称实现完成。跨执行共享还须满足 §10 的类型与边界合同。
 
@@ -454,11 +454,11 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
               ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl | StaticBlock
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // 参数类型可省
+InitDecl ::= 'init' '(' ParamList? ')' Block          // 参数类型可省
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
@@ -478,7 +478,7 @@ class Animal {
     name: string                       // 字段
     private _age: i64 = 0              // 私有字段，可有默认值
 
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
 
@@ -500,7 +500,7 @@ print(Animal.create("Bob").name)
 
 ```xray @id=decl-class-inheritance
 class Dog extends Animal {
-    constructor(name: string) {
+    init(name: string) {
         super(name)                    // **必须**首语句（仅限派生类）
     }
 
@@ -544,7 +544,7 @@ class Dog extends Animal {
 class Point {
     x: f64
     y: f64
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -554,14 +554,14 @@ class Point {
 class Vector2 {
     x: f64
     y: f64
-    constructor(x, y) {         // 等价于显式写 (x: f64, y: f64)
+    init(x, y) {         // 等价于显式写 (x: f64, y: f64)
         this.x = x
         this.y = y
     }
 }
 ```
 
-- 关键字 `constructor`（不是 `init` 也不是与类同名）。
+- `init` 是类型成员位置的上下文关键字；旧 `constructor` 声明拼写拒绝，不保留别名。其它位置的 `init` 仍是普通标识符。
 - 一个类**只有一个构造器**（不支持构造器重载）；要多种创建方式用 `static` 工厂方法。
 - 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况必须显式声明类型，不得从调用位点倒推定义的类型或能力。
 - 构造器隐式返回 `this`（编译期注入）。
@@ -569,7 +569,7 @@ class Vector2 {
 - 字段读取前必须在每条到达路径上完成初始化；整体 `this` 的返回、方法调用或闭包捕获要求所有字段初始化。正常结束和无值 `return` 都返回完整的 `this`，构造器不能显式返回另一个值。失败不发布部分结构体，已执行的外部副作用不回滚。
 - const 字段的声明默认表达式或构造体赋值构成唯一初始化；存在任一路径已初始化时不能再次赋值，循环回边也参与检查。mutable 字段初始化后可继续更新。
 - 构造器的自然结束与无值 `return` 都先执行退出清理，再从已初始化字段组装并发布完整的 `this`。清理对 mutable 字段的合法更新进入最终构造结果；失败不发布结果。普通函数显式返回表达式先取值、再清理的值快照规则不因此改变。
-- 字段字面量与构造器调用分别遵循字段权限和构造器权限；声明显式构造器本身不取消合法的 struct 字段字面量，也不扩大私有字段的构造权限。
+- 有显式 `init` 的 struct 只允许在其声明模块内使用字段字面量；外部经 `Type(...)` 或具名工厂构造。无显式 `init` 的 struct 保留正常字段字面量规则。展开字面量不能绕过此权限，任何形式均不扩大私有字段权限。
 - 派生类构造器必须首行调 `super(...)`。
 - struct 可以**没有**构造器，但省略构造器仍须为每个字段提供合法的默认初值（§5.1、§5.4）。`Point()` 的数值字段可初始化为零；没有显式初值的非 nullable Array 等字段不能因此被零初始化。
 
@@ -580,7 +580,7 @@ class Vec2 {
     x: f64
     y: f64
 
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x; this.y = y
     }
 
@@ -657,7 +657,7 @@ interface Iterable<T> {
 class Rect {
     _w: i64
     _h: i64
-    constructor(w: i64, h: i64) { this._w = w; this._h = h }
+    init(w: i64, h: i64) { this._w = w; this._h = h }
 
     // 只读：只有 getter
     area: i64 { fn() { return this._w * this._h } }
@@ -695,12 +695,12 @@ fn main() {
 ```xray
 class Animal {
     name: string
-    constructor(name: string) { this.name = name }
+    init(name: string) { this.name = name }
     speak() -> string { return "..." }
 }
 
 class Dog extends Animal {
-    constructor(name: string) { super(name) }
+    init(name: string) { super(name) }
     override speak() -> string { return "woof" }
 }
 
@@ -719,7 +719,7 @@ main()
 class Vec2 {
     x: i64
     y: i64
-    constructor(x: i64, y: i64) { this.x = x; this.y = y }
+    init(x: i64, y: i64) { this.x = x; this.y = y }
     operator+(other: Vec2) -> Vec2 {
         return Vec2(this.x + other.x, this.y + other.y)
     }
@@ -803,7 +803,7 @@ var c = Config{host: "localhost"}    // OK
 | 泛型 | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | 运算符重载 | ✅ | ✅ |
-| 构造器 | `constructor(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
+| 构造器 | `init(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
 
 **适用场景**：
@@ -858,7 +858,7 @@ interface Greeter {
 
 class Circle implements Shape {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
 }
@@ -866,7 +866,7 @@ class Circle implements Shape {
 // 实现多个接口
 class Logger implements Shape, Greeter {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
     greet(name: string) { print("hello,", name) }
@@ -918,7 +918,7 @@ interface SizedCollection<T> extends HasLength {
 class Buffer implements SizedCollection<i64> {
     length: i64                       // 实现属性签名
     private data: Array<i64>
-    constructor(n: i64) {
+    init(n: i64) {
         this.length = n
         this.data = []
     }
@@ -937,7 +937,7 @@ interface Shape {
 
 class Circle implements Shape {
     r: f64
-    constructor(r: f64) { this.r = r }
+    init(r: f64) { this.r = r }
     area() -> f64 { return 3.14159 * this.r * this.r }
 }
 
@@ -1015,7 +1015,7 @@ enum NetEvent {
 // 递归 enum 的 payload 必须经 class 节点间接化
 class ExprNode {
     expr: Expr
-    constructor(expr: Expr) { this.expr = expr }
+    init(expr: Expr) { this.expr = expr }
     get() -> Expr { return this.expr }
 }
 
@@ -1194,7 +1194,7 @@ print(Color.fromInt(2).label())     // "Green"
 - 方法语法与类型体内方法一致：`name(...)`、`ref name(...)`、`move name(...)` 或 `static name(...)`；不写 `fn`
 - 方法体内 `this` 的静态类型是 enum 自身（如 `Option<T>`），需要 `match (this)` 才能取出变体 payload
 - 静态方法没有 `this`；调用形式是 `EnumName.method(args...)`
-- **不**支持 `constructor`（变体语法本身就是构造器）
+- **不**支持 `init`（变体语法本身就是构造器）
 - **不**支持继承（`enum E extends ...` 是非法）；如需共享行为，用接口实现（`enum E implements Iface`）或顶层函数
 - 简单枚举（无 payload）也可定义方法，但方法体内 `this` 是该 enum 的值，可用 `==` 直接比较：
   ```xray
@@ -1325,7 +1325,7 @@ print(snapshot[0])          // 1
 print(len(snapshot))        // 3
 ```
 
-This section freezes read-only binding and value-component permissions, not the distinct type identity, conversions, or permitted positions of type-position `const T`. That surface is outside this frozen subset and requires a separate decision before admission; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
+`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
 
 These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
 
@@ -1705,11 +1705,11 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               ('extends' Identifier TypeArgs?)?
               ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
               '{' ClassMember* '}'
-ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl | StaticBlock
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
-ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // parameter types may be omitted
+InitDecl ::= 'init' '(' ParamList? ')' Block          // parameter types may be omitted
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
@@ -1729,7 +1729,7 @@ class Animal {
     name: string                       // field
     private _age: i64 = 0              // private field with default value
 
-    constructor(name: string) {
+    init(name: string) {
         this.name = name
     }
 
@@ -1751,7 +1751,7 @@ print(Animal.create("Bob").name)
 
 ```xray @id=decl-class-inheritance
 class Dog extends Animal {
-    constructor(name: string) {
+    init(name: string) {
         super(name)                    // **must** be the first statement (derived classes only)
     }
 
@@ -1795,7 +1795,7 @@ Direct static calls obey the trailing default-argument, left-to-right evaluation
 class Point {
     x: f64
     y: f64
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -1805,14 +1805,14 @@ class Point {
 class Vector2 {
     x: f64
     y: f64
-    constructor(x, y) {         // equivalent to (x: f64, y: f64)
+    init(x, y) {         // equivalent to (x: f64, y: f64)
         this.x = x
         this.y = y
     }
 }
 ```
 
-- The keyword is `constructor` (not `init`, not the class name).
+- `init` is contextual at a type member declaration. The retired `constructor` declaration spelling is rejected without an alias. Elsewhere `init` remains an ordinary identifier.
 - A class has **at most one constructor** (no overloading); multiple creation paths use `static` factory methods.
 - Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise an explicit type is required; call sites do not infer definition types or capabilities.
 - The constructor implicitly returns `this` (compiler-injected).
@@ -1820,7 +1820,7 @@ class Vector2 {
 - A field read requires initialization on every incoming path. Returning the whole `this`, calling a method on it, or capturing it requires every field to be initialized. Normal completion and bare `return` return the complete `this`; constructors cannot explicitly return another value. Failure publishes no partial struct and does not roll back prior external effects.
 - Constructor fallthrough and bare `return` both execute exit cleanup before assembling and publishing the complete `this` from initialized fields. Permitted cleanup updates to mutable fields become part of the constructed result; failure publishes no result. This does not change ordinary explicit return expressions, whose values are evaluated and snapshotted before cleanup.
 - A const field is initialized exactly once by its declaration default or a body assignment. A write is rejected if any incoming path may already have initialized it, including loop backedges. Mutable fields permit subsequent updates.
-- Field literals and constructor calls obey field and constructor permissions respectively. Declaring an explicit constructor neither disables otherwise legal struct field literals nor grants private-field construction permission.
+- A struct declaring explicit `init` admits field literals only in its declaring module; outside callers use `Type(...)` or a named factory. Structs without explicit `init` retain ordinary field-literal rules. Spread cannot bypass this boundary, and neither form grants private-field permission.
 - Derived class constructors must call `super(...)` first.
 - A `struct` may have **no** constructor, but omission still requires a valid default initializer for every field (§5.1, §5.4). Numeric fields of `Point()` may start at zero; this does not permit zero-initializing a non-nullable Array or similar field without an explicit initializer.
 
@@ -1831,7 +1831,7 @@ class Vec2 {
     x: f64
     y: f64
 
-    constructor(x: f64, y: f64) {
+    init(x: f64, y: f64) {
         this.x = x; this.y = y
     }
 
@@ -1908,7 +1908,7 @@ A field name followed by an accessor block declares a **computed property**: it 
 class Rect {
     _w: i64
     _h: i64
-    constructor(w: i64, h: i64) { this._w = w; this._h = h }
+    init(w: i64, h: i64) { this._w = w; this._h = h }
 
     // Read-only: getter alone
     area: i64 { fn() { return this._w * this._h } }
@@ -1946,12 +1946,12 @@ Inheritance with explicit override:
 ```xray
 class Animal {
     name: string
-    constructor(name: string) { this.name = name }
+    init(name: string) { this.name = name }
     speak() -> string { return "..." }
 }
 
 class Dog extends Animal {
-    constructor(name: string) { super(name) }
+    init(name: string) { super(name) }
     override speak() -> string { return "woof" }
 }
 
@@ -1970,7 +1970,7 @@ Operator overloading (call with named values):
 class Vec2 {
     x: i64
     y: i64
-    constructor(x: i64, y: i64) { this.x = x; this.y = y }
+    init(x: i64, y: i64) { this.x = x; this.y = y }
     operator+(other: Vec2) -> Vec2 {
         return Vec2(this.x + other.x, this.y + other.y)
     }
@@ -2054,7 +2054,7 @@ var c = Config{host: "localhost"}    // OK
 | Generics | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | Operator overload | ✅ | ✅ |
-| Constructor | `constructor(...)` | Omission still requires a valid default initializer for every field; a non-nullable Array cannot be zero-initialized |
+| Constructor | `init(...)` | Omission still requires a valid default initializer for every field; a non-nullable Array cannot be zero-initialized |
 | Literal | none | `TypeName{field: value, ...}` |
 
 **When to use**:
@@ -2109,7 +2109,7 @@ interface Greeter {
 
 class Circle implements Shape {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
 }
@@ -2117,7 +2117,7 @@ class Circle implements Shape {
 // Implement multiple interfaces
 class Logger implements Shape, Greeter {
     radius: f64
-    constructor(r: f64) { this.radius = r }
+    init(r: f64) { this.radius = r }
     area() -> f64 { return 3.14 * this.radius * this.radius }
     perimeter() -> f64 { return 6.28 * this.radius }
     greet(name: string) { print("hello,", name) }
@@ -2169,7 +2169,7 @@ interface SizedCollection<T> extends HasLength {
 class Buffer implements SizedCollection<i64> {
     length: i64                       // implements the property signature
     private data: Array<i64>
-    constructor(n: i64) {
+    init(n: i64) {
         this.length = n
         this.data = []
     }
@@ -2188,7 +2188,7 @@ interface Shape {
 
 class Circle implements Shape {
     r: f64
-    constructor(r: f64) { this.r = r }
+    init(r: f64) { this.r = r }
     area() -> f64 { return 3.14159 * this.r * this.r }
 }
 
@@ -2266,7 +2266,7 @@ enum NetEvent {
 // A recursive enum payload must be indirected through a class node
 class ExprNode {
     expr: Expr
-    constructor(expr: Expr) { this.expr = expr }
+    init(expr: Expr) { this.expr = expr }
     get() -> Expr { return this.expr }
 }
 

@@ -59,7 +59,7 @@ static XrXirStatus conditional_invocation_runtime_direct(const XrXirCompileConte
         if (mode==2) {
             if (chosen==XR_XIR_BUDGET) status=chosen;
             else CHECK(chosen==XR_XIR_BAD_TYPE && !selected.owner &&
-                effects->root[0].unresolved && effects->root[1].unresolved);
+                effect_roots_read(effects)->root[0].unresolved && effect_roots_read(effects)->root[1].unresolved);
         } else status=chosen;
     }
     if (status==XR_XIR_OK) status=xir_effects_producer(context,effects,0,2,&producer);
@@ -68,16 +68,18 @@ static XrXirStatus conditional_invocation_runtime_direct(const XrXirCompileConte
         .read={.owner=&read,.work=invocation_direct_work,.cell=invocation_direct_cell,.function=invocation_direct_function}};
     if (status==XR_XIR_OK && mode!=2) status=xir_effects_execution_edge(effects,&indirect,&child);
     if (status==XR_XIR_OK && oracle && mode!=2) {
-        CHECK(!effects->root[0].requires_root && !effects->root[0].unresolved &&
-            effects->root[1].unresolved==(mode==0));
+        CHECK(!effect_roots_read(effects)->root[0].requires_root && !effect_roots_read(effects)->root[0].unresolved &&
+            effect_roots_read(effects)->root[1].unresolved==(mode==0));
         CHECK(selected.owner==effects && selected.target==1 && child.owner==effects && child.caller==1 &&
             child.target==2 && child.parent==selected.node);
         if (mode==1) {
             const EffectInvocationCertificate *certificate=effects->invocations;
-            const EffectInvocationNode *node=&certificate->equations->nodes[selected.node];
-            uint32_t opaque=certificate->equations->site_count+
+            const EffectInvocationNode *node=&certificate->final->nodes[selected.node];
+            uint32_t opaque=certificate->final->site_count+
                 certificate->body->functions[node->root].parameter_count;
-            CHECK(certificate->parameter_kinds[1][0]==XR_XIR_EFFECT_PARAMETER_FIXED &&
+            uint32_t role=UINT32_MAX;
+            CHECK(effect_role_parameter_read(context,certificate->body,&certificate->final->role_proof,1,0,&role)==XR_XIR_OK &&
+                role==XR_XIR_EFFECT_PARAMETER_FIXED &&
                 certificate->declared->functions[1].count &&
             certificate->declared->functions[1].bounds[0].value==0 &&
             !certificate->declared->functions[1].bounds[0].mask &&

@@ -85,8 +85,9 @@ static void root_detached_owner(const XrXirArtifact *artifact) {
     CHECK(f<xr_xir_compile_artifact_module(copy)->function_count);
     xr_xir_compile_artifact_free(copy);xr_compile_resources_release(context.resources);context.resources=NULL;
     root_fact(summary,f,true,true);
-    CHECK(xr_xir_effects_root_witness(summary,f)->distance==1);
-    const XrXirRootEffectWitness *parameter=xr_xir_effects_unresolved_witness(summary,f);
+    CHECK(xr_xir_effects_read(summary,f).root_witness.distance==1);
+    XrXirEffectFacts parameter_read=xr_xir_effects_read(summary,f);
+    const XrXirRootEffectWitness *parameter=(parameter_read.status==XR_XIR_OK && parameter_read.unresolved_witness.cause!=0?&parameter_read.unresolved_witness:NULL);
     CHECK(parameter->distance==0 && parameter->cause==XR_XIR_ROOT_CAUSE_PARAMETER);
     CHECK(parameter->slot==0 && parameter->callee==UINT32_MAX);
     xr_xir_compile_effects_free(summary);effect_mark_check(mark);
@@ -108,12 +109,13 @@ static void root_source_cases(bool resources) {
     const XrXirModule *module=xr_xir_compile_artifact_module(checked);
     uint32_t mixed=root_find(module,"mixedRelay"),scalar=root_find(module,"mutableRead");
     CHECK(mixed<module->function_count&&scalar<module->function_count);
-    XrXirRootEffectWitness known=*xr_xir_effects_root_witness(summary,mixed);
-    XrXirRootEffectWitness unknown=*xr_xir_effects_unresolved_witness(summary,mixed);
+    XrXirRootEffectWitness known=xr_xir_effects_read(summary,mixed).root_witness;
+    XrXirRootEffectWitness unknown=xr_xir_effects_read(summary,mixed).unresolved_witness;
     effect_artifact_free(checked);root_fact(summary,mixed,true,true);root_fact(summary,scalar,true,false);
-    const XrXirRootEffectWitness *owned=xr_xir_effects_root_witness(summary,mixed);
+    XrXirEffectFacts owned_read=xr_xir_effects_read(summary,mixed);
+    const XrXirRootEffectWitness *owned=(owned_read.status==XR_XIR_OK && owned_read.root_witness.cause!=0?&owned_read.root_witness:NULL);
     CHECK(owned->cause==known.cause&&owned->instruction==known.instruction&&owned->callee==known.callee&&owned->distance==known.distance);
-    owned=xr_xir_effects_unresolved_witness(summary,mixed);
+    owned_read=xr_xir_effects_read(summary,mixed);owned=(owned_read.status==XR_XIR_OK && owned_read.unresolved_witness.cause!=0?&owned_read.unresolved_witness:NULL);
     CHECK(owned->cause==unknown.cause&&owned->instruction==unknown.instruction&&owned->callee==unknown.callee&&owned->distance==unknown.distance);
     effect_summary_free(summary);CHECK(effect_balanced());
     puts("root literal source/replay/Checked specialization/Lowered facts; producer-dead owned witnesses PASS");
@@ -125,17 +127,19 @@ static void root_builtin_cases(void) {
         root_fact(effects,0,true,false);root_fact(effects,1,false,false);root_fact(effects,2,true,false);
         root_fact(effects,3,false,false);root_fact(effects,4,false,false);root_fact(effects,5,mode==0,false);
         root_fact(effects,6,false,true);root_fact(effects,7,false,false);root_fact(effects,8,true,false);
-        CHECK(xr_xir_effects_function(effects,6)->suspend==XR_XIR_EFFECT_NONE);
-        const XrXirRootEffectWitness *w=xr_xir_effects_unresolved_witness(effects,6);
+        CHECK(xr_xir_effects_read(effects,6).control.suspend==XR_XIR_EFFECT_NONE);
+        XrXirEffectFacts w_read=xr_xir_effects_read(effects,6);
+        const XrXirRootEffectWitness *w=(w_read.status==XR_XIR_OK && w_read.unresolved_witness.cause!=0?&w_read.unresolved_witness:NULL);
         CHECK(w&&w->cause==XR_XIR_ROOT_CAUSE_INDIRECT&&w->instruction==0&&w->distance==0);
-        if(!mode){w=xr_xir_effects_root_witness(effects,5);CHECK(w->cause==XR_XIR_ROOT_CAUSE_CALL&&w->callee==2&&w->instruction==0&&w->distance==1);}
+        if(!mode){w_read=xr_xir_effects_read(effects,5);w=(w_read.status==XR_XIR_OK && w_read.root_witness.cause!=0?&w_read.root_witness:NULL);CHECK(w->cause==XR_XIR_ROOT_CAUSE_CALL&&w->callee==2&&w->instruction==0&&w->distance==1);}
         root_paths(xr_xir_compile_artifact_module(artifact),effects);effect_summary_free(effects);effect_artifact_free(artifact);
     }
     CHECK(!root_builtin(2));CHECK(!root_builtin(3));
     XrXirArtifact *group=root_replay(root_group());XrXirEffects *effects=NULL;
     CHECK(effect_analyze(group,&effects)==XR_XIR_OK);
     root_fact(effects,0,true,false);root_fact(effects,1,false,false);root_fact(effects,2,true,false);
-    const XrXirRootEffectWitness *w=xr_xir_effects_root_witness(effects,0);
+    XrXirEffectFacts w_read=xr_xir_effects_read(effects,0);
+    const XrXirRootEffectWitness *w=(w_read.status==XR_XIR_OK && w_read.root_witness.cause!=0?&w_read.root_witness:NULL);
     CHECK(w&&w->cause==XR_XIR_ROOT_CAUSE_INITIALIZER&&w->instruction==2&&w->slot==1&&w->distance==0);
     effect_summary_free(effects);effect_artifact_free(group);root_permutation();
     puts("root authentic defaults/noSuspend indirect/reference/group first-slot/edge permutation PASS");
@@ -155,7 +159,8 @@ static void root_var_atomic_case(void) {
         uint32_t read=root_find(module,"read");CHECK(read<module->function_count);
         XrXirEffects *effects=NULL;CHECK(effect_analyze(stages[stage],&effects)==XR_XIR_OK);
         root_fact(effects,read,true,false);
-        const XrXirRootEffectWitness *witness=xr_xir_effects_root_witness(effects,read);
+        XrXirEffectFacts witness_read=xr_xir_effects_read(effects,read);
+        const XrXirRootEffectWitness *witness=(witness_read.status==XR_XIR_OK && witness_read.root_witness.cause!=0?&witness_read.root_witness:NULL);
         CHECK(witness && witness->cause==XR_XIR_ROOT_CAUSE_MUTABLE_SLOT && witness->distance==0);
         CHECK(witness->slot<module->declarations->slot_count);
         const XrXirSlot *slot=&module->declarations->slots[witness->slot];

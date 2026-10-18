@@ -47,23 +47,23 @@ static XrXirStatus initial_ordinary_owner(const XrXirCompileContext *context,
         CHECK(dense->cells==initial->cells && dense->physical==initial->physical);
         forest=owner->forest;owner->forest=NULL;
         XrXirEffects *summary=&owner->dense->uses;
-        const EffectInvocationResult *borrowed=forest->invocations->result;
+        const EffectFinalFunctions *borrowed=(&forest->invocations->final->summary);
         CHECK(!summary->invocations && summary->result_borrow==borrowed &&
             summary->formula_terminals==borrowed->witnesses &&
             summary->constant_witnesses==borrowed->witnesses+(size_t)borrowed->count*2);
         for (uint32_t f=0;f<summary->count;++f) {
-            const XrXirRootFormula *view=&summary->contracts[f].formula;
+            const XrXirRootFormula *view=&effect_roots_read(summary)->contracts[f].formula;
             const XrXirRootFormula *actual=&borrowed->functions[f].formula;
             CHECK(view->terms==actual->terms && view->term_count==actual->term_count &&
                 view->constant_mask==actual->constant_mask);
         }
         effect_parameters_free(summary);
-        CHECK(!summary->result_borrow && !summary->contracts &&
+        CHECK(!summary->result_borrow && !effect_roots_read(summary)->contracts &&
             !summary->formula_terminals && !summary->constant_witnesses);
         effect_context_owner_free(owner);owner=NULL;
         CHECK(ordinary->references==1 && initial->references==references+1);
         status=ordinary_material_cell_match(context,dense,tracked);
-        if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,forest->invocations,source->function_count);
+        if (status==XR_XIR_OK) status=effect_invocation_public_gate(context,forest->invocations);
         if (status==XR_XIR_OK) status=effect_invocation_forest_match(context,forest);
     }
     effect_context_forest_free(forest);effect_context_owner_free(owner);return status;
@@ -242,9 +242,24 @@ static void initial_ordinary_refresh_controls(void) {
     XrXirStatus status=initial_ordinary_effects(&context,original,&effects);
     if (status!=XR_XIR_OK) fprintf(stderr,"INITIAL_REFRESH_EFFECTS status=%u\n",(unsigned)status);
     CHECK(status==XR_XIR_OK && effects);
-    CHECK(effects->contexts && !effects->refinement &&
-        effects->result_borrow==effects->invocations->result &&
-        effects->contexts->dense->uses.result_borrow==effects->contexts->forest->invocations->result);
+    /* A published owner has no constructor refresh capability. Its actual
+     * Final, output records and charged resource state must remain unchanged. */
+    EffectInvocationFinal *published=effects->invocations->final;
+    XrCompileResourceStats before_refresh=rp_stats(&context);
+    RootParameterMark retained=rp_mark();
+    CHECK(xir_effects_context_refresh(&context,original,effects)==XR_XIR_BAD_STRUCTURE);
+    XrCompileResourceStats after_refresh=rp_stats(&context);
+    CHECK(!memcmp(&before_refresh,&after_refresh,sizeof(before_refresh)) &&
+        effects->invocations->final==published && effect_outcomes_empty(&effects->outcomes_work));
+    rp_balanced(retained);xr_xir_compile_effects_free(effects);effects=NULL;
+    /* This actual constructor remains private while Source refines its body.
+     * It is released without publishing facts for a changed Source input. */
+    CHECK(effect_infer_construct(&context,original,NULL,&effects)==XR_XIR_OK && effects &&
+        effects->outcomes_owner && !effects->invocations->final->outcomes);
+
+    CHECK(effect_contexts_read(effects) && !effects->refinement &&
+        effects->result_borrow==(&effects->invocations->final->summary) &&
+        effect_contexts_read(effects)->dense->uses.result_borrow==(&effect_contexts_read(effects)->forest->invocations->final->summary));
     CHECK(effects->invocations && !effects->invocations->body->backbone);
     EffectInvocationCertificate *certificate=effects->invocations,saved_certificate=*certificate;
     EffectBodyMaterial *initial=certificate->body;uint32_t sites[2]={0};
@@ -263,7 +278,7 @@ static void initial_ordinary_refresh_controls(void) {
         initial_ordinary_wide(&context,original->types,narrow[1])};
     for (uint32_t pass=0;pass<2;++pass) for (uint32_t site=0;site<2;++site) {
         EffectBodyMaterial saved=*initial;
-        EffectBodyMaterial *old_ordinary=effects->contexts->ordinary->uses.generation;
+        EffectBodyMaterial *old_ordinary=effect_contexts_read(effects)->ordinary->uses.generation;
         /* Dropping the previous context retires exactly its actual parent
          * edge. The certificate's own edge and every payload remain intact. */
         if (old_ordinary->backbone==initial) { CHECK(saved.references>1);--saved.references; }
@@ -272,11 +287,11 @@ static void initial_ordinary_refresh_controls(void) {
         XrXirStatus expected=restored?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
         CHECK(effect_body_source_match(&context,initial,&current)==expected);
         CHECK(xir_effects_context_refresh(&context,&current,effects)==XR_XIR_OK);
-        CHECK(effects->invocations==certificate && effects->result_borrow==certificate->result &&
-            effects->contexts->dense->uses.result_borrow==effects->contexts->forest->invocations->result &&
+        CHECK(effects->invocations==certificate && effects->result_borrow==(&certificate->final->summary) &&
+            effect_contexts_read(effects)->dense->uses.result_borrow==(&effect_contexts_read(effects)->forest->invocations->final->summary) &&
             !memcmp(certificate,&saved_certificate,sizeof(saved_certificate)) &&
             !memcmp(initial,&saved,sizeof(saved)) && !initial->backbone && !initial->overlay);
-        EffectBodyMaterial *fresh=effects->contexts->ordinary->uses.generation;
+        EffectBodyMaterial *fresh=effect_contexts_read(effects)->ordinary->uses.generation;
         CHECK(fresh && fresh!=initial && !fresh->backbone && !fresh->overlay &&
             fresh->cells!=initial->cells && fresh->functions[selected].block_count==0);
         uint32_t mask=UINT32_MAX;
@@ -296,17 +311,25 @@ static void initial_ordinary_refresh_controls(void) {
     xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);rp_balanced(physical);
 }
 
-/* Every node remains a fresh correspondence obligation. The record retains
- * its own four-domain witness and link; sharing node storage grants nothing. */
+/* Every metadata node and every actual Final domain remains an independent
+ * correspondence obligation. There is no forest permission or witness copy. */
 static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
     EffectContextForest *forest) {
     CHECK(forest->count==2 && forest->nodes[0].parameter_count==1 &&
         forest->invocations && effect_invocation_forest_match(context,forest)==XR_XIR_OK);
-    EffectForestNode node=forest->nodes[0];XrXirRootEffects facts=forest->facts[0];
-    EffectContextCertificate record=forest->certificates[0];
-    XrXirRootEffectWitness witness=forest->witnesses[0];
+    EffectForestNode node=forest->nodes[0];
+    EffectFinalFunctions *summary=&forest->invocations->final->summary;
+    XrXirRootEffects facts;CHECK(effect_invocation_certificate_facts(context,forest->invocations,0,&facts)==XR_XIR_OK);
+    EffectInvocationNode *root_node=&forest->invocations->final->nodes[forest->invocations->final->roots[0]];
+    uint32_t intrinsic=root_node->intrinsic_mask;
+    XrXirRootEffectWitness witness=summary->witnesses[0],unknown=summary->witnesses[forest->count];
+    EffectContextRootValue detached,fresh;
+    CHECK(effect_invocation_forest_values(context,forest,0,&detached)==XR_XIR_OK);
+    detached.facts.unresolved=!detached.facts.unresolved;detached.root.cause=XR_XIR_ROOT_CAUSE_CALL;
+    CHECK(effect_invocation_forest_values(context,forest,0,&fresh)==XR_XIR_OK &&
+        fresh.facts.unresolved==facts.unresolved && effect_invocation_witness_equal(&fresh.root,&witness));
     XrXirType wrong_type=XR_XIR_I64;
-    uint8_t wrong_kind=(uint8_t)(node.parameter_kinds[0]^1u);
+    EffectRoleProof role_proof=forest->invocations->final->role_proof;
     for (uint32_t attack=0;attack<14;++attack) {
         uint64_t live=rp_stats(context).live_bytes;
         switch (attack) {
@@ -315,22 +338,23 @@ static void initial_ordinary_forest_literals(const XrXirCompileContext *context,
             case 2: forest->nodes[0].constant_mask^=1u;break;
             case 3: ++forest->nodes[0].argument_count;break;
             case 4: ++forest->nodes[0].parameter_count;break;
-            case 5: forest->facts[0].unresolved=!facts.unresolved;break;
+            case 5: root_node->intrinsic_mask^=XR_XIR_CALLABLE_ROOT_UNRESOLVED;break;
             case 6: forest->nodes[0].physical_types=&wrong_type;break;
-            case 7: forest->nodes[0].parameter_kinds=&wrong_kind;break;
-            case 8: forest->certificates[0].witness.cause=
-                (XrXirRootEffectCause)((uint32_t)record.witness.cause^1u);break;
-            case 9: forest->certificates[0].next=forest->count;break;
-            case 10: forest->certificates[0].parameter_owner=forest->count;break;
-            case 11: forest->certificates[0].domain^=1u;break;
-            case 12: forest->certificates[0].next_domain^=1u;break;
-            case 13: forest->witnesses[0].cause=
+            case 7: ++forest->invocations->final->role_proof.functions;break;
+            case 8: summary->witnesses[0].cause=
                 (XrXirRootEffectCause)((uint32_t)witness.cause^1u);break;
+            case 9: summary->witnesses[0].callee=forest->count;break;
+            case 10: summary->witnesses[0].slot=forest->count;break;
+            case 11: summary->witnesses[0].instruction^=1u;break;
+            case 12: summary->witnesses[0].distance^=1u;break;
+            case 13: summary->witnesses[forest->count].cause=
+                (XrXirRootEffectCause)((uint32_t)unknown.cause^1u);break;
         }
         CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_BAD_STRUCTURE &&
             rp_stats(context).live_bytes==live);
-        forest->nodes[0]=node;forest->facts[0]=facts;
-        forest->certificates[0]=record;forest->witnesses[0]=witness;
+        forest->nodes[0]=node;root_node->intrinsic_mask=intrinsic;
+        forest->invocations->final->role_proof=role_proof;
+        summary->witnesses[0]=witness;summary->witnesses[forest->count]=unknown;
         CHECK(effect_invocation_forest_match(context,forest)==XR_XIR_OK &&
             rp_stats(context).live_bytes==live);
     }
@@ -363,7 +387,12 @@ static void initial_ordinary_forest_controls(void) {
     memset(&fixture,0xCE,sizeof(fixture));
     initial_ordinary_forest_literals(&context,forest);
     CHECK(ordinary_material_cell_match(&context,forest->invocations->body,true)==XR_XIR_OK);
+    EffectContextRootValue detached;
+    CHECK(effect_invocation_forest_values(&context,forest,0,&detached)==XR_XIR_OK);
+    XrXirRootEffects facts=detached.facts;XrXirRootEffectWitness root=detached.root,unknown=detached.unresolved;
     effect_context_forest_free(forest);rp_owner_free(&context,baseline);rp_balanced(physical);
+    CHECK(detached.facts.requires_root==facts.requires_root && detached.facts.unresolved==facts.unresolved &&
+        effect_invocation_witness_equal(&detached.root,&root) && effect_invocation_witness_equal(&detached.unresolved,&unknown));
 }
 
 static void initial_ordinary_controls(void) {

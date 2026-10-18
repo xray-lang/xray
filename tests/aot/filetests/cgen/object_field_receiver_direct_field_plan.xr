@@ -3,7 +3,7 @@ type User = { name: string, age: i64 }
 class Holder {
     user: User
 
-    constructor(user: User) {
+    init(user: User) {
         this.user = user
     }
 

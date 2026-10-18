@@ -262,7 +262,7 @@ TEST(panic_normalization_preserves_constructive_error_consumer) {
         runtime, "fn part(value:i64)->i64 { return value / 1000 }\n"
                  "class Box {\n"
                  "  value:i64\n"
-                 "  constructor(value:i64) { this.value=part(value) }\n"
+                 "  init(value:i64) { this.value=part(value) }\n"
                  "}\nconst box=Box(1000)\n");
     XiValue *check = NULL;
     for (uint32_t b = 0u; root && b < root->nblocks; ++b)

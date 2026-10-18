@@ -7,6 +7,7 @@
  * test_xir_root_parameter_native_resources.c - Native and mixed resource owners
  */
 #define main h1n_reference_main
+#include "xir/xxir_program_packet_internal.h"
 #include "test_xir_root_parameter_native.c"
 #undef main
 #include "xir/xxir_checked.h"
@@ -69,7 +70,7 @@ static XrXirStatus h1nc_action(H1NativeCompiler *c, unsigned p, const XrCompileR
         else CHECK(!c->context.resources); break;
 #ifdef H1_MIXED
     case H1C_READ:
-        status = xr_xir_compile_checked_read(&c->context,h1nr_native->proof.bytes,h1nr_native->proof.length,&c->checked,NULL);
+        status = xr_xir_compile_checked_read(&c->context,h1nr_native->packet.bytes,h1nr_native->packet.length,&c->checked,NULL);
         if (status != XR_XIR_OK) CHECK(!c->checked); break;
     case H1C_SPECIALIZE:
         status = xr_xir_compile_specialize(c->checked,&c->closed,NULL);
@@ -79,7 +80,7 @@ static XrXirStatus h1nc_action(H1NativeCompiler *c, unsigned p, const XrCompileR
     case H1C_WRITE:
         status = xr_xir_compile_checked_write(c->closed,&c->packet,NULL);
         if (status == XR_XIR_OK) {
-            CHECK(c->packet.length == h1nr_native->proof.length && !memcmp(c->packet.bytes,h1nr_native->proof.bytes,c->packet.length));
+            CHECK(c->packet.length == h1nr_native->packet.length && !memcmp(c->packet.bytes,h1nr_native->packet.bytes,c->packet.length));
             memset(c->packet.bytes,0xa5,c->packet.length); xr_xir_compile_checked_packet_free(&c->packet);
         } else CHECK(!c->packet.bytes && !c->packet.length); break;
     case H1C_LOWER:
@@ -91,9 +92,9 @@ static XrXirStatus h1nc_action(H1NativeCompiler *c, unsigned p, const XrCompileR
         if (status != XR_XIR_OK) break;
         const XrXirModule *module = xr_xir_compile_artifact_module(h1nr_owner.lowered);
         CHECK(module && module->function_count == h1nr_owner.count);
-        c->spec.proof = xr_xir_compile_program_proof(h1nr_owner.lowered);
-        CHECK(c->spec.proof.length == h1nr_native->proof.length && !memcmp(c->spec.proof.bytes,h1nr_native->proof.bytes,c->spec.proof.length));
-        CHECK(!memcmp(c->spec.proof.identity,h1nr_native->proof.identity,32));
+        c->spec.packet = xir_program_packet_borrow(h1nr_owner.lowered);
+        CHECK(c->spec.packet.length == h1nr_native->packet.length && !memcmp(c->spec.packet.bytes,h1nr_native->packet.bytes,c->spec.packet.length));
+        CHECK(!memcmp(c->spec.packet.identity,h1nr_native->packet.identity,32));
         c->spec.declarations = module->declarations; c->spec.types = module->types; break;
     }
 #else

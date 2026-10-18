@@ -9,6 +9,7 @@
  * KEY CONCEPT:
  *   Trusted callbacks try false carrier claims against independently sealed bodies.
  */
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_effects.h"
 #include "xir/xxir_generic.h"
@@ -102,7 +103,7 @@ static void permission_runtime(void) {
     entries[4].resume = permission_probe; entries[4].release = NULL;
     PermissionLease lease = {lowered, 0};
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, entries, 13,
-        module->declarations, {&lease, permission_release}, module->types, xr_xir_compile_program_proof(lowered)};
+        module->declarations, {&lease, permission_release}, module->types, xir_program_packet_borrow(lowered)};
     XrXirProgram *program = NULL;
     CHECK(xr_xir_compile_program_seal(&context, &spec, &program) == XR_XIR_OK && program);
     CHECK(program->permissions && program->permissions->function_count == 13 && program->permissions->slot_count == 1);

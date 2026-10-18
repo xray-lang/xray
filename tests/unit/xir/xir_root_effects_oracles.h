@@ -31,18 +31,20 @@ static uint32_t root_find(const XrXirModule *module,const char *name) {
     fprintf(stderr,"root oracle missing function %s\n",name);return UINT32_MAX;
 }
 static void root_fact(const XrXirEffects *effects,uint32_t f,bool root,bool unresolved) {
-    const XrXirRootEffects *fact=xr_xir_effects_root(effects,f);
+    XrXirEffectFacts fact_read=xr_xir_effects_read(effects,f);
+    const XrXirRootEffects *fact=(fact_read.status==XR_XIR_OK?&fact_read.root:NULL);
     if(!fact||fact->requires_root!=root||fact->unresolved!=unresolved)
         fprintf(stderr,"root f%u expected(%u,%u) actual(%u,%u)\n",f,root,unresolved,
             fact?fact->requires_root:9,fact?fact->unresolved:9);
     CHECK(fact&&fact->requires_root==root&&fact->unresolved==unresolved);
-    CHECK((xr_xir_effects_root_witness(effects,f)!=NULL)==root);
-    CHECK((xr_xir_effects_unresolved_witness(effects,f)!=NULL)==unresolved);
+    CHECK(((xr_xir_effects_read(effects,f).status==XR_XIR_OK && xr_xir_effects_read(effects,f).root_witness.cause!=0))==root);
+    CHECK(((xr_xir_effects_read(effects,f).status==XR_XIR_OK && xr_xir_effects_read(effects,f).unresolved_witness.cause!=0))==unresolved);
 }
 static void root_paths(const XrXirModule *module,const XrXirEffects *effects) {
     for(uint32_t f=0;f<module->function_count;++f)for(unsigned kind=0;kind<2;++kind){
         uint32_t current=f,steps=0;
-        const XrXirRootEffectWitness *w=kind?xr_xir_effects_unresolved_witness(effects,current):xr_xir_effects_root_witness(effects,current);
+        XrXirEffectFacts w_read=xr_xir_effects_read(effects,current);
+        const XrXirRootEffectWitness *w=kind?(w_read.status==XR_XIR_OK && w_read.unresolved_witness.cause!=0?&w_read.unresolved_witness:NULL):(w_read.status==XR_XIR_OK && w_read.root_witness.cause!=0?&w_read.root_witness:NULL);
         if(!w)continue;
         while(w->distance){
             CHECK(++steps<module->function_count&&w->callee<module->function_count);
@@ -52,7 +54,7 @@ static void root_paths(const XrXirModule *module,const XrXirEffects *effects) {
             CHECK(w->cause==XR_XIR_ROOT_CAUSE_CLEANUP?op==XR_XIR_CLEANUP_REGISTER:
                 op==XR_XIR_CALL||op==XR_XIR_INVOKE||op==XR_XIR_CALL_DEFAULT||op==XR_XIR_INVOKE_DEFAULT);
             uint32_t distance=w->distance;current=w->callee;
-            w=kind?xr_xir_effects_unresolved_witness(effects,current):xr_xir_effects_root_witness(effects,current);
+            w_read=xr_xir_effects_read(effects,current);w=kind?(w_read.status==XR_XIR_OK && w_read.unresolved_witness.cause!=0?&w_read.unresolved_witness:NULL):(w_read.status==XR_XIR_OK && w_read.root_witness.cause!=0?&w_read.root_witness:NULL);
             CHECK(w&&w->distance+1==distance);
         }
         CHECK(w->callee==UINT32_MAX);
@@ -104,7 +106,8 @@ static void root_source_facts(const XrXirModule *module,const XrXirEffects *effe
         uint32_t initializer=module->declarations->modules[m].initializer;root_fact(effects,initializer,true,false);
         const XrXirFunction *body=&module->functions[initializer];
         if(body->instruction_count==1&&body->instructions[0].op==XR_XIR_RETURN){
-            const XrXirRootEffectWitness *w=xr_xir_effects_root_witness(effects,initializer);
+            XrXirEffectFacts w_read=xr_xir_effects_read(effects,initializer);
+            const XrXirRootEffectWitness *w=(w_read.status==XR_XIR_OK && w_read.root_witness.cause!=0?&w_read.root_witness:NULL);
             CHECK(w->cause==XR_XIR_ROOT_CAUSE_INITIALIZER&&w->instruction==UINT32_MAX&&w->distance==0);
             empty_initializer=true;
         }
@@ -112,16 +115,32 @@ static void root_source_facts(const XrXirModule *module,const XrXirEffects *effe
     CHECK(empty_initializer);
     uint32_t box=root_find(module,"constBoxRead"),projection=root_find(module,"projection"),cleanup=root_find(module,"cleanupOwner");
     CHECK(box<module->function_count&&projection<module->function_count&&cleanup<module->function_count);
-    CHECK(xr_xir_effects_root_witness(effects,box)->cause==XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST);
-    CHECK(xr_xir_effects_root_witness(effects,projection)->cause==XR_XIR_ROOT_CAUSE_MUTABLE_SLOT);
-    CHECK(xr_xir_effects_root_witness(effects,cleanup)->cause==XR_XIR_ROOT_CAUSE_CLEANUP);
+    CHECK(xr_xir_effects_read(effects,box).root_witness.cause==XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST);
+    CHECK(xr_xir_effects_read(effects,projection).root_witness.cause==XR_XIR_ROOT_CAUSE_MUTABLE_SLOT);
+    CHECK(xr_xir_effects_read(effects,cleanup).root_witness.cause==XR_XIR_ROOT_CAUSE_CLEANUP);
     uint32_t diamond=root_find(module,"diamond"),right=root_find(module,"right");
     CHECK(diamond<module->function_count&&right<module->function_count);
-    const XrXirRootEffectWitness *chosen=xr_xir_effects_root_witness(effects,diamond);
+    XrXirEffectFacts chosen_read=xr_xir_effects_read(effects,diamond);
+    const XrXirRootEffectWitness *chosen=(chosen_read.status==XR_XIR_OK && chosen_read.root_witness.cause!=0?&chosen_read.root_witness:NULL);
     CHECK(chosen->cause==XR_XIR_ROOT_CAUSE_CALL&&chosen->instruction==0&&chosen->callee==right&&chosen->distance==2);
     root_paths(module,effects);
-    CHECK(!xr_xir_effects_root(NULL,0)&&!xr_xir_effects_root(effects,module->function_count));
-    CHECK(!xr_xir_effects_root_witness(NULL,0)&&!xr_xir_effects_unresolved_witness(effects,UINT32_MAX));
+    const char *trace_names[]={"constBoxRead","requirement"};
+    for (uint32_t kind=0;kind<2;++kind) {
+        if (closed && kind) continue;
+        uint32_t function=root_find(module,trace_names[kind]);CHECK(function<module->function_count);
+        XrXirRootCauseTrace *trace=NULL;
+        XrXirStatus status=xr_xir_compile_root_cause_trace_copy(&effect_context,effects,function,&trace);
+        if (status!=XR_XIR_OK) fprintf(stderr,"source owned terminal %s status%u\n",trace_names[kind],status);
+        CHECK(status==XR_XIR_OK && trace);
+        const XrXirRootEffects *facts=xr_xir_root_cause_trace_facts(trace);
+        CHECK(facts && facts->requires_root==!kind && facts->unresolved==(kind!=0));
+        uint32_t count=0;const XrXirRootCauseStep *steps=xr_xir_root_cause_trace_steps(trace,kind!=0,&count);
+        CHECK(count==1 && steps && steps[0].function==function && !steps[0].distance &&
+            steps[0].cause==(kind?XR_XIR_ROOT_CAUSE_CONTEXT_CALL:XR_XIR_ROOT_CAUSE_NON_SENDABLE_CONST));
+        xr_xir_compile_root_cause_trace_free(trace);
+    }
+    CHECK(!(xr_xir_effects_read(NULL,0).status==XR_XIR_OK)&&!(xr_xir_effects_read(effects,module->function_count).status==XR_XIR_OK));
+    CHECK(!(xr_xir_effects_read(NULL,0).status==XR_XIR_OK && xr_xir_effects_read(NULL,0).root_witness.cause!=0)&&!(xr_xir_effects_read(effects,UINT32_MAX).status==XR_XIR_OK && xr_xir_effects_read(effects,UINT32_MAX).unresolved_witness.cause!=0));
 }
 static inline void root_source_oracles(const XrXirArtifact *artifact,bool closed) {
     XrXirEffects *effects=NULL;CHECK(effect_analyze(artifact,&effects)==XR_XIR_OK);
@@ -135,7 +154,7 @@ static void root_permutation(void) {
         {XR_XIR_ROOT_CAUSE_MUTABLE_SLOT,0,UINT32_MAX,0,0}};
     for(unsigned reverse=0;reverse<2;++reverse){
         XrXirRootEffectWitness witnesses[4]={{0}};witnesses[3]=expected[3];
-        XrXirEffects effects={.count=4,.root=facts,.root_witnesses=witnesses};
+        XrXirEffects effects={.count=4,.outcomes_work={.root=facts,.root_witnesses=witnesses}};
         uint32_t heads[]={UINT32_MAX,2,3,reverse?1u:0u},queue[4]={0};
         EffectEdge edges[]={{1,reverse?UINT32_MAX:1u,0,false},{2,reverse?0u:UINT32_MAX,0,false},
             {0,UINT32_MAX,8,false},{0,UINT32_MAX,2,false}};

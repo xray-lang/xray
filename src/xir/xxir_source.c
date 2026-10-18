@@ -2957,3 +2957,4 @@ static void source_query_publish(SourceContext *ctx, XrXirSourceResult *output) 
 #include "xxir_core_source.inc.c"
 #include "xxir_source_comptime_pipeline.inc.c"
 #include "xxir_source_input.inc.c"
+#include "xxir_source_generation.inc.c"

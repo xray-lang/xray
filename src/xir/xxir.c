@@ -65,6 +65,7 @@ void xr_xir_compile_artifact_free(XrXirArtifact *artifact) {
         }
     }
     xir_source_facts_release(artifact->source_facts);
+    xr_xir_compile_effects_free(artifact->program_final);
     xr_xir_compile_construction_free(artifact->construction);
     xr_compile_resources_free(artifact->layouts);
     xr_xir_compile_checked_packet_free(&artifact->checked_packet);
@@ -287,7 +288,6 @@ typedef XrXirStatus (*TransitionPacketWriter)(const XrXirArtifact *,
 typedef struct TransitionInputProof {
     TransitionPacketWriter writer;
     XrXirArtifact **owned_input;
-    XrXirEffects **effects;
 } TransitionInputProof;
 
 /* The private reader transfers its fully verified, unaliased decoded owner.
@@ -354,11 +354,10 @@ static XrXirStatus transition_owned(const XrXirModule *input, const XrXirConstru
     }
     if (status==XR_XIR_OK && copy->module.stage==XR_XIR_CHECKED)
         status=source_facts_prepare(copy,diagnostic);
-    if (proof->effects && !xir_compile_work(budget, sizeof(proof->effects)))
-        status = transition_error(XR_XIR_BUDGET, diagnostic);
     if (status == XR_XIR_OK)
-        status = proof->effects ? artifact_verify_owned_effects(copy, proof->effects, NULL, diagnostic) :
-            xr_xir_compile_artifact_verify(copy, diagnostic);
+        status = copy->module.stage==XR_XIR_LOWERED ?
+            artifact_verify_owned_effects(copy,&copy->program_final,NULL,diagnostic) :
+            xr_xir_compile_artifact_verify(copy,diagnostic);
     if (status != XR_XIR_OK) {
         xr_xir_compile_artifact_free(copy);
         return status;
@@ -377,7 +376,7 @@ static XrXirStatus transition(const XrXirModule *input, const XrXirConstruction 
     if (status != XR_XIR_OK) return status;
     /* Complete admission precedes the private exact clone. Its encoder needs
      * no second admission; complete receiving checks precede publication. */
-    const TransitionInputProof proof = {checked_encode, NULL, NULL};
+    const TransitionInputProof proof = {checked_encode, NULL};
     return transition_owned(input, construction, budget, output, diagnostic, target, &proof);
 }
 
@@ -391,42 +390,13 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower(const XrXirCompileContext 
     XrXirStatus status = xr_xir_compile_checked_read(context, bytes, length, &checked, diagnostic);
     if (status == XR_XIR_OK)
         status = transition_shape(&checked->module, XR_XIR_CHECKED, &checked->context, target, diagnostic);
-    const TransitionInputProof proof = {checked_encode, &checked, NULL};
+    const TransitionInputProof proof = {checked_encode, &checked};
     if (status == XR_XIR_OK)
         status = transition_owned(&checked->module, checked->construction, &checked->context, output, diagnostic, target, &proof);
     xr_xir_compile_artifact_free(checked);
     return status;
 }
 
-/* Both outputs remain private until packet, type, source, effects and every
- * physical layout check finish. Only the decoded owner can reach this path. */
-XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower_effects(const XrXirCompileContext *context,
-    const void *bytes, size_t length, const XrXirTarget *target,
-    XirLoweredEffects *output, XrXirDiagnostic *diagnostic) {
-    if (!xir_compile_context_valid(context) || !output || output->artifact || output->effects)
-        return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
-    if (!xir_compile_work(context, sizeof(XirLoweredEffects)))
-        return transition_error(XR_XIR_BUDGET, diagnostic);
-    XirLoweredEffects result = {0};
-    XrXirArtifact *checked = NULL;
-    XrXirStatus status = xr_xir_compile_checked_read(context, bytes, length, &checked, diagnostic);
-    if (status == XR_XIR_OK)
-        status = transition_shape(&checked->module, XR_XIR_CHECKED, &checked->context, target, diagnostic);
-    const TransitionInputProof proof = {checked_encode, &checked, &result.effects};
-    if (status == XR_XIR_OK)
-        status = transition_owned(&checked->module, checked->construction, &checked->context,
-            &result.artifact, diagnostic, target, &proof);
-    xr_xir_compile_artifact_free(checked);
-    if (status == XR_XIR_OK && !xir_compile_work(context, sizeof(result)))
-        status = transition_error(XR_XIR_BUDGET, diagnostic);
-    if (status != XR_XIR_OK) {
-        xr_xir_compile_effects_free(result.effects);
-        xr_xir_compile_artifact_free(result.artifact);
-        return status;
-    }
-    *output = result;
-    return XR_XIR_OK;
-}
 
 XrXirStatus xr_xir_compile_check_v2(const XrXirCompileContext *compile_context, const XrXirModule *built, const XrXirConstruction *construction, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
@@ -471,7 +441,7 @@ XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget
         return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
     XrXirStatus status=transition_shape(&checked->module,XR_XIR_CHECKED,&checked->context,target,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,diagnostic);
-    const TransitionInputProof proof={checked_encode,NULL,NULL};
+    const TransitionInputProof proof={checked_encode,NULL};
     return status==XR_XIR_OK?transition_owned(&checked->module,checked->construction,
         &checked->context,output,diagnostic,target,&proof):status;
 }
@@ -495,7 +465,7 @@ XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **owned_input,
         status = xr_xir_compile_layout_verify(checked);
         if (status != XR_XIR_OK) status = transition_error(status, diagnostic);
     }
-    const TransitionInputProof proof = {checked_encode, &checked, NULL};
+    const TransitionInputProof proof = {checked_encode, &checked};
     if (status == XR_XIR_OK)
         status = transition_owned(&checked->module, checked->construction, &limits, output, diagnostic, target, &proof);
     xr_xir_compile_artifact_free(checked);

@@ -11,6 +11,7 @@
  */
 #ifndef XIR_ARRAY_ENTRIES_PIPELINE_H
 #define XIR_ARRAY_ENTRIES_PIPELINE_H
+#include "xir/xxir_program_packet_internal.h"
 #include "base/xsha256.h"
 #ifndef XR_ENTRIES_COMPONENT
 #define XR_ENTRIES_COMPONENT "transaction"
@@ -45,9 +46,9 @@ static XrXirStatus entries_allocate(const XrXirCompileContext *context, size_t c
 static XrXirStatus entries_seal(EntriesCompile *run, unsigned mode) {
     if (!mode) return xr_xir_compile_vm_program_take(&run->lowered, &run->program);
 #if defined(XR_ENTRIES_NATIVE)
-    XrXirProgramProof proof = xr_xir_compile_program_proof(run->lowered);
-    CHECK(proof.length == array_entries_program.proof.length && !memcmp(proof.identity, array_entries_program.proof.identity, 32));
-    CHECK(!memcmp(proof.bytes, array_entries_program.proof.bytes, proof.length));
+    XrXirProgramPacket proof = xir_program_packet_borrow(run->lowered);
+    CHECK(proof.length == array_entries_program.packet.length && !memcmp(proof.identity, array_entries_program.packet.identity, 32));
+    CHECK(!memcmp(proof.bytes, array_entries_program.packet.bytes, proof.length));
     if (mode == 1) return xr_xir_compile_program_seal(&run->context, &array_entries_program, &run->program);
     EntriesMixed *owner = NULL;
     XrXirStatus status = entries_allocate(&run->context, 1, sizeof(*owner), (void **)&owner);
@@ -68,7 +69,7 @@ static XrXirStatus entries_seal(EntriesCompile *run, unsigned mode) {
         CHECK(native && vm);
         XrXirProgramSpec spec = array_entries_program;
         spec.entries = owner->entries; spec.types = module->types; spec.declarations = module->declarations;
-        spec.proof = xr_xir_compile_program_proof(artifact); spec.code = (XrXirCodeLease){owner, entries_mixed_free};
+        spec.packet = xir_program_packet_borrow(artifact); spec.code = (XrXirCodeLease){owner, entries_mixed_free};
         status = xr_xir_compile_program_seal(&run->context, &spec, &run->program);
     }
     if (status != XR_XIR_OK) { CHECK(!run->program); entries_mixed_free(owner); }
@@ -179,7 +180,7 @@ static EntriesCompile entries_build(size_t failure, XrCompileResourceLimits limi
     run.prefix_references = run.context.resources->references;
     run.prefix_blocks = instance_compile_live; run.prefix_bytes = instance_compile_bytes;
     if (entries_compiler_digest) {
-        XrXirProgramProof proof = xr_xir_compile_program_proof(run.lowered);
+        XrXirProgramPacket proof = xir_program_packet_borrow(run.lowered);
         entries_digest(source.text, source.length, run.c_sha); entries_digest(proof.bytes, proof.length, run.proof_sha);
     }
     run.c_bytes = source.length;

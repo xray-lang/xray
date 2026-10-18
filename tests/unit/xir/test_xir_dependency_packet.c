@@ -38,7 +38,12 @@ int main(int argc,char **argv){CHECK(argc==1||argc==2);
  printf("ready generated C %zu bytes / %u functions\n",c.length,module->function_count);
  if(argc==2){file=fopen(argv[1],"wb");CHECK(file&&fwrite(c.text,1,c.length,file)==c.length);
  CHECK(fprintf(file,"\nconst uint32_t dependency_ready_functions[3]={%uu,%uu,%uu};\n",entries.answer,entries.retained,entries.values)>0);CHECK(!fclose(file));}
- xr_xir_compile_c_source_free(&c);XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
+ xr_xir_compile_c_source_free(&c);
+ if(argc==2){
+  xr_xir_compile_artifact_free(lowered);effects_source_owners_free();
+  puts("Real dependency C generated; full runtime FI not run");return 0;
+ }
+ XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
  XrXirValue held[2][2]={{{0}}};ready_pair(program,entries,held);ready_runtime_faults(program,entries);
  xr_xir_compile_program_drop(program);ready_retained(held);CHECK(!runtime_live&&!runtime_bytes);effects_source_owners_free();
  puts("source-free VM readiness41 trace12 retained strings/Array PASS");return 0;

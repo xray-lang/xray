@@ -16,7 +16,7 @@ typedef struct SourceComptimeTestReport {
 } SourceComptimeTestReport;
 static XrXirStatus source_comptime_test_whole(const XrXirCompileContext *context) {
     XrXirSourceResult output={0};XrXirSourceDiagnostic diagnostic={0};
-    XrXirStatus status=source_comptime_test_build(context,source_comptime_test_text,&output,&diagnostic);
+    XrXirStatus status=source_comptime_test_build(context,source_comptime_resource_text,&output,&diagnostic);
     if (status==XR_XIR_OK) {
         CHECK(output.checked && output.snapshot);
         const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(output.snapshot);

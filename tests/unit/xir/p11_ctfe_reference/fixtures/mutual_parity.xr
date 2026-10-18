@@ -1,0 +1,3 @@
+fn even(n:i64)->bool { return n==0 ? true : odd(n-1) }
+fn odd(n:i64)->bool { return n==0 ? false : even(n-1) }
+export fn run()->bool { return comptime even(7) }

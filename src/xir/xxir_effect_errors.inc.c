@@ -16,19 +16,22 @@ static bool error_bit(const uint64_t *set, uint32_t bit) {
 }
 static void error_add(uint64_t *set, uint32_t bit) { set[bit / 64] |= (uint64_t)1 << (bit % 64); }
 bool xr_xir_effects_error(const XrXirEffects *effects, uint32_t f, XrXirType type, uint32_t variant) {
-    if (!effects || f >= effects->count) return false;
+    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
+    if (!final || f>=final->count) return false;
     if ((uint32_t)type >= XR_XIR_CONSTRUCTED_TYPE_BASE && (uint32_t)type < XR_XIR_CONSTRUCTED_TYPE_LIMIT &&
-        (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE >= effects->source_type_count) return false;
-    for (uint32_t a = 0; a < effects->atom_count; ++a)
-        if (effects->atoms[a].type == type && effects->atoms[a].variant == variant)
-            return error_bit(effects->errors + (size_t)f * effects->words, a + 2);
+        (uint32_t)type - XR_XIR_CONSTRUCTED_TYPE_BASE >= final->source_type_count) return false;
+    for (uint32_t a = 0; a < final->atom_count; ++a)
+        if (final->atoms[a].type == type && final->atoms[a].variant == variant)
+            return error_bit(final->errors + (size_t)f * final->words, a + 2);
     return false;
 }
 bool xr_xir_effects_error_unknown(const XrXirEffects *effects, uint32_t f) {
-    return effects && f < effects->count && error_bit(effects->errors + (size_t)f * effects->words, 0);
+    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
+    return final && f<final->count && error_bit(final->errors + (size_t)f * final->words, 0);
 }
 bool xr_xir_effects_error_unidentified(const XrXirEffects *effects, uint32_t f) {
-    return effects && f < effects->count && error_bit(effects->errors + (size_t)f * effects->words, 1);
+    const EffectFinalOutcomes *final=effect_final_outcomes(effects);
+    return final && f<final->count && error_bit(final->errors + (size_t)f * final->words, 1);
 }
 typedef struct ErrorInvocationContexts ErrorInvocationContexts;
 static uint32_t error_invocation_summary(const ErrorInvocationContexts *contexts,uint32_t n);
@@ -49,6 +52,8 @@ typedef struct ErrorFlow {
     EffectTerms *terms;
     uint64_t *states, *work, *edge, *snapshot, *escaping;
     uint8_t *reachable;
+    uint32_t *queue,front,back,pending;
+    bool scheduling;
     uint32_t *roots, *cells, *slots, *active;
     ErrorCellType *cell_types;
     const EffectBodyMaterial *cell_material;
@@ -62,6 +67,7 @@ typedef struct ErrorFlow {
     uint32_t invocation,summary_count;
     bool changed, summary_changed, restart;
 } ErrorFlow;
+#include "xxir_effect_error_cfg.inc.c"
 static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocationContexts **output);
 static void error_invocation_contexts_free(ErrorInvocationContexts *contexts);
 static XrXirStatus error_invocation_functions(ErrorFlow *flow);
@@ -87,12 +93,12 @@ static XrXirStatus error_shape(const ErrorFlow *flow,uint32_t function,uint32_t 
 /* Missing scalar rows are read-only zero facts, never writable aliases. */
 static uint64_t *error_value(ErrorFlow *flow, uint64_t *row, uint32_t value) {
     if (value >= flow->values || flow->slots[value] == UINT32_MAX) return NULL;
-    return row + (size_t)flow->slots[value] * flow->effects->words;
+    return row + (size_t)flow->slots[value] * flow->effects->outcomes_work.words;
 }
 static const uint64_t *error_read(const ErrorFlow *flow, const uint64_t *row, uint32_t value) {
     if (value >= flow->values) return NULL;
     return flow->slots[value] == UINT32_MAX ? flow->zero :
-        row + (size_t)flow->slots[value] * flow->effects->words;
+        row + (size_t)flow->slots[value] * flow->effects->outcomes_work.words;
 }
 /* Complete type verification precedes inference. Closed outer containers are
  * not Error atoms, even when an extracted payload has its own error facts. */
@@ -363,8 +369,8 @@ static void error_type(ErrorFlow *flow, XrXirType type, uint64_t *set) {
     if (xr_xir_type_is_cell(flow->body.domain.types, type)) type = xr_xir_cell_element(flow->body.domain.types, type);
     const XrXirTypeNode *node = xr_xir_type_node(flow->body.domain.types, type);
     if (type == XR_XIR_ERROR || (node && node->kind == XR_XIR_TYPE_TASK)) error_add(set, 1);
-    else for (uint32_t a = 0; a < flow->effects->atom_count; ++a)
-        if (flow->effects->atoms[a].type == type) error_add(set, a + 2);
+    else for (uint32_t a = 0; a < flow->effects->outcomes_work.atom_count; ++a)
+        if (flow->effects->outcomes_work.atoms[a].type == type) error_add(set, a + 2);
 }
 static XrXirStatus error_definition(ErrorFlow *flow,uint32_t value,
     XrXirInstruction *storage,const XrXirInstruction **output) {
@@ -394,26 +400,26 @@ static XrXirStatus error_roots(ErrorFlow *flow,const uint8_t *membership,
 static XrXirStatus error_atom(ErrorFlow *flow, EffectErrorAtom atom, uint64_t *set) {
     XrXirStatus allocation_status = XR_XIR_OK;
     XrXirEffects *effects = flow->effects;
-    for (uint32_t a = 0; a < effects->atom_count; ++a) {
+    for (uint32_t a = 0; a < effects->outcomes_work.atom_count; ++a) {
         if (!xir_compile_work(flow->remaining, 1)) return XR_XIR_BUDGET;
-        if (effects->atoms[a].type == atom.type && effects->atoms[a].variant == atom.variant) {
+        if (effects->outcomes_work.atoms[a].type == atom.type && effects->outcomes_work.atoms[a].variant == atom.variant) {
             error_add(set, a + 2); return XR_XIR_OK;
         }
     }
-    if (effects->atom_count == UINT32_MAX - 2u) return XR_XIR_BUDGET;
-    if (effects->atom_count == effects->atom_capacity) {
-        uint64_t capacity = effects->atom_capacity ? (uint64_t)effects->atom_capacity * 2 : 8;
+    if (effects->outcomes_work.atom_count == UINT32_MAX - 2u) return XR_XIR_BUDGET;
+    if (effects->outcomes_work.atom_count == effects->outcomes_work.atom_capacity) {
+        uint64_t capacity = effects->outcomes_work.atom_capacity ? (uint64_t)effects->outcomes_work.atom_capacity * 2 : 8;
         if (capacity > UINT32_MAX - 2u) capacity = UINT32_MAX - 2u;
         uint64_t bytes = capacity * sizeof(EffectErrorAtom);
         if (bytes > SIZE_MAX ||
-            !xir_compile_work(flow->remaining, capacity + effects->atom_count)) return XR_XIR_BUDGET;
+            !xir_compile_work(flow->remaining, capacity + effects->outcomes_work.atom_count)) return XR_XIR_BUDGET;
         EffectErrorAtom *atoms = xir_compile_calloc(flow->remaining, (size_t)capacity, sizeof(*atoms), &allocation_status);
         if (!atoms) return allocation_status;
 
-        if (effects->atom_count) { if (!xir_compile_work(flow->remaining, (size_t)effects->atom_count * sizeof(*atoms))) { xr_compile_resources_free(atoms); return XR_XIR_BUDGET; } memcpy(atoms, effects->atoms, (size_t)effects->atom_count * sizeof(*atoms)); }
-        xr_compile_resources_free(effects->atoms); effects->atoms = atoms; effects->atom_capacity = (uint32_t)capacity;
+        if (effects->outcomes_work.atom_count) { if (!xir_compile_work(flow->remaining, (size_t)effects->outcomes_work.atom_count * sizeof(*atoms))) { xr_compile_resources_free(atoms); return XR_XIR_BUDGET; } memcpy(atoms, effects->outcomes_work.atoms, (size_t)effects->outcomes_work.atom_count * sizeof(*atoms)); }
+        xr_compile_resources_free(effects->outcomes_work.atoms); effects->outcomes_work.atoms = atoms; effects->outcomes_work.atom_capacity = (uint32_t)capacity;
     }
-    effects->atoms[effects->atom_count++] = atom;
+    effects->outcomes_work.atoms[effects->outcomes_work.atom_count++] = atom;
     flow->restart = true;
     return XR_XIR_OK;
 }
@@ -422,9 +428,9 @@ static XrXirStatus error_call_summary(ErrorFlow *flow, const XrXirInstruction *c
     uint32_t caller=flow->function_index;
     if (error_bit(from, 0)) error_add(set, 0);
     if (error_bit(from, 1)) error_add(set, 1);
-    for (uint32_t a = 0; a < flow->effects->atom_count; ++a) if (error_bit(from, a + 2)) {
-        EffectErrorAtom atom = flow->effects->atoms[a];
-        if (!xir_compile_work(flow->remaining, (uint64_t)flow->effects->atom_count + 1)) return XR_XIR_BUDGET;
+    for (uint32_t a = 0; a < flow->effects->outcomes_work.atom_count; ++a) if (error_bit(from, a + 2)) {
+        EffectErrorAtom atom = flow->effects->outcomes_work.atoms[a];
+        if (!xir_compile_work(flow->remaining, (uint64_t)flow->effects->outcomes_work.atom_count + 1)) return XR_XIR_BUDGET;
         if (atom.variant == XR_XIR_ERROR_SYMBOLIC_VARIANT) {
             uint32_t p = (uint32_t)atom.type - XR_XIR_TYPE_PARAMETER_BASE;
             if (p >= call->type_arguments[1]) return XR_XIR_BAD_TYPE;
@@ -459,7 +465,7 @@ static XrXirStatus error_call(ErrorFlow *flow, const XrXirInstruction *call, uin
         if(!binding) return XR_XIR_BAD_STRUCTURE;
         resolved=*call;resolved.immediate=binding->function;call=&resolved;
     }
-    const uint64_t *from = flow->effects->errors + (size_t)call->immediate * flow->effects->words;
+    const uint64_t *from = flow->effects->outcomes_work.errors + (size_t)call->immediate * flow->effects->outcomes_work.words;
     return error_call_summary(flow,call,from,set);
 }
 
@@ -473,7 +479,7 @@ static XrXirStatus error_cells(ErrorFlow *flow, uint32_t target, const uint64_t 
         if (status!=XR_XIR_OK) return status;
     }
     for (uint32_t c = 0; c < flow->cell_count; ++c) {
-        if (!xir_compile_work(flow->remaining, flow->effects->words + (uint64_t)flow->effects->atom_count + 1))
+        if (!xir_compile_work(flow->remaining, flow->effects->outcomes_work.words + (uint64_t)flow->effects->outcomes_work.atom_count + 1))
             return XR_XIR_BUDGET;
         uint32_t v = flow->cells[c];
         if (v >= flow->values) return XR_XIR_BAD_STRUCTURE;
@@ -489,9 +495,9 @@ static XrXirStatus error_cells(ErrorFlow *flow, uint32_t target, const uint64_t 
         if (!xr_xir_type_is_cell(flow->body.domain.types,type)) return XR_XIR_BAD_STRUCTURE;
         uint64_t *set = error_value(flow,flow->work,v);
         if (!set) return XR_XIR_BAD_STRUCTURE;
-        { if (!xir_compile_work(flow->remaining, (size_t)flow->effects->words*sizeof(uint64_t))) { return XR_XIR_BUDGET; } memset(set,0,(size_t)flow->effects->words*sizeof(uint64_t)); }
+        { if (!xir_compile_work(flow->remaining, (size_t)flow->effects->outcomes_work.words*sizeof(uint64_t))) { return XR_XIR_BUDGET; } memset(set,0,(size_t)flow->effects->outcomes_work.words*sizeof(uint64_t)); }
         if (target != UINT32_MAX && flow->roots[v] == flow->roots[target])
-            { if (!xir_compile_work(flow->remaining, (size_t)flow->effects->words*sizeof(uint64_t))) { return XR_XIR_BUDGET; } memcpy(set,value,(size_t)flow->effects->words*sizeof(uint64_t)); }
+            { if (!xir_compile_work(flow->remaining, (size_t)flow->effects->outcomes_work.words*sizeof(uint64_t))) { return XR_XIR_BUDGET; } memcpy(set,value,(size_t)flow->effects->outcomes_work.words*sizeof(uint64_t)); }
         else error_type(flow,type,set);
     }
     return XR_XIR_OK;
@@ -501,15 +507,15 @@ static XrXirStatus error_instruction_begin(ErrorFlow *flow,uint32_t i) {
     if (!flow || !flow->function || i>=flow->function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     flow->instruction=i;
-    return xir_compile_work(flow->remaining,(uint64_t)flow->effects->words+
-        flow->effects->atom_count+1) ? XR_XIR_OK : XR_XIR_BUDGET;
+    return xir_compile_work(flow->remaining,(uint64_t)flow->effects->outcomes_work.words+
+        flow->effects->outcomes_work.atom_count+1) ? XR_XIR_OK : XR_XIR_BUDGET;
 }
 static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i,
     const XrXirInstruction *op) {
     if (!op) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus read=error_instruction_begin(flow,i);
     if (read!=XR_XIR_OK) return read;
-    uint32_t words = flow->effects->words;
+    uint32_t words = flow->effects->outcomes_work.words;
     uint64_t *out = error_value(flow, flow->work, flow->function->parameter_count + i);
     if (op->op == XR_XIR_PHI) return XR_XIR_OK;
     if (out) { if (!xir_compile_work(flow->remaining, (size_t)words * sizeof(*out))) { return XR_XIR_BUDGET; } memset(out, 0, (size_t)words * sizeof(*out)); }
@@ -551,8 +557,8 @@ static XrXirStatus error_instruction(ErrorFlow *flow, uint32_t i,
     }
     else if (op->op == XR_XIR_ENUM_NEW) {
         if (!out) return XR_XIR_BAD_STRUCTURE;
-        for (uint32_t a = 0; a < flow->effects->atom_count; ++a)
-            if (flow->effects->atoms[a].type == op->type && flow->effects->atoms[a].variant == (uint32_t)op->immediate)
+        for (uint32_t a = 0; a < flow->effects->outcomes_work.atom_count; ++a)
+            if (flow->effects->outcomes_work.atoms[a].type == op->type && flow->effects->outcomes_work.atoms[a].variant == (uint32_t)op->immediate)
                 error_add(out, a + 2);
     } else if (op->op == XR_XIR_GO) {
         if (!out) return XR_XIR_BAD_STRUCTURE;
@@ -622,20 +628,20 @@ static XrXirStatus error_filter(ErrorFlow *flow,const XrXirInstruction *branch,b
         uint32_t v = flow->active[slot];
         if (flow->roots[v] != root) continue;
         uint64_t *set = error_value(flow, flow->edge, v);
-        for (uint32_t a = 0; a < flow->effects->atom_count; ++a) {
-            if (flow->effects->atoms[a].variant==XR_XIR_ERROR_SYMBOLIC_VARIANT) continue;
-            bool match = flow->effects->atoms[a].type == type &&
-                (variant < 0 || flow->effects->atoms[a].variant == (uint64_t)variant);
+        for (uint32_t a = 0; a < flow->effects->outcomes_work.atom_count; ++a) {
+            if (flow->effects->outcomes_work.atoms[a].variant==XR_XIR_ERROR_SYMBOLIC_VARIANT) continue;
+            bool match = flow->effects->outcomes_work.atoms[a].type == type &&
+                (variant < 0 || flow->effects->outcomes_work.atoms[a].variant == (uint64_t)variant);
             if (match != yes) set[(a + 2) / 64] &= ~((uint64_t)1 << ((a + 2) % 64));
         }
     }
-    *possible=error_any(error_read(flow,flow->edge,value),flow->effects->words);
+    *possible=error_any(error_read(flow,flow->edge,value),flow->effects->outcomes_work.words);
     return XR_XIR_OK;
 }
 static XrXirStatus error_edge(ErrorFlow *flow, uint32_t from, uint32_t to,
     const XrXirInstruction *branch, bool yes) {
     if (!xir_compile_work(flow->remaining, (uint64_t)flow->stride * 3) ||
-        !xir_compile_work(flow->remaining, (uint64_t)flow->active_count * ((uint64_t)flow->effects->atom_count + 1)))
+        !xir_compile_work(flow->remaining, (uint64_t)flow->active_count * ((uint64_t)flow->effects->outcomes_work.atom_count + 1)))
         return XR_XIR_BUDGET;
     /* Both original charges precede metadata access, including extreme probes. */
     const XrXirBlock *block = &flow->function->blocks[to];
@@ -678,8 +684,8 @@ static XrXirStatus error_edge(ErrorFlow *flow, uint32_t from, uint32_t to,
                 uint32_t value = flow->function->operands[phi->args[0] + p + 1];
                 uint64_t *out = error_value(flow, flow->edge, flow->function->parameter_count + i);
                 if (out) {
-                    if (!xir_compile_work(flow->remaining, (size_t)flow->effects->words * sizeof(*out))) return XR_XIR_BUDGET;
-                    memcpy(out, error_read(flow, flow->snapshot, value), (size_t)flow->effects->words * sizeof(*out));
+                    if (!xir_compile_work(flow->remaining, (size_t)flow->effects->outcomes_work.words * sizeof(*out))) return XR_XIR_BUDGET;
+                    memcpy(out, error_read(flow, flow->snapshot, value), (size_t)flow->effects->outcomes_work.words * sizeof(*out));
                 }
             }
         }
@@ -691,7 +697,10 @@ static XrXirStatus error_edge(ErrorFlow *flow, uint32_t from, uint32_t to,
         changed = true;
     }
     if (changed) {
-        flow->reachable[to] |= ERROR_BLOCK_PENDING;
+        if (flow->scheduling) {
+            XrXirStatus queued=error_cfg_enqueue(flow,to);
+            if (queued!=XR_XIR_OK) return queued;
+        } else flow->reachable[to] |= ERROR_BLOCK_PENDING;
         flow->changed = true;
     }
     return XR_XIR_OK;
@@ -715,6 +724,31 @@ static XrXirStatus error_block_row(ErrorFlow *flow,uint32_t b,uint32_t i,
     }
     if (status!=XR_XIR_OK) return status;
     if (copied_zero) return error_instruction_begin(flow,i);
+    /* A nonterminal primitive literal has no Error transfer and no active
+     * result row. Re-read its actual opcode and type after the panic edge;
+     * unused words remain obligations of complete physical correspondence.
+     * The final row is always decoded for the block's terminal consumer. */
+    if (ref && i+1<block->first+block->count && !(ref->mask&UINT32_C(3))) {
+        if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+        uint32_t opcode=XR_XIR_INVALID;
+        status=effect_body_run_word(&flow->body.read,ref,i,0,&opcode);
+        if (status!=XR_XIR_OK) return status;
+        if (opcode==XR_XIR_CONST_BOOL || opcode==XR_XIR_CONST_INT ||
+            opcode==XR_XIR_CONST_FLOAT || opcode==XR_XIR_CONST_RUNE) {
+            uint32_t type=XR_XIR_UNIT;
+            status=effect_body_run_word(&flow->body.read,ref,i,1,&type);
+            if (status!=XR_XIR_OK) return status;
+            if ((opcode==XR_XIR_CONST_BOOL && type==XR_XIR_BOOL) ||
+                (opcode==XR_XIR_CONST_INT && type==XR_XIR_I64) ||
+                (opcode==XR_XIR_CONST_FLOAT && type==XR_XIR_F64) ||
+                (opcode==XR_XIR_CONST_RUNE && type==XR_XIR_RUNE)) {
+                if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+                if (!flow->slots || flow->slots[flow->function->parameter_count+i]!=UINT32_MAX)
+                    return XR_XIR_BAD_STRUCTURE;
+                return error_instruction_begin(flow,i);
+            }
+        }
+    }
     if (ref) {
         if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
         if (!row->constant || !row->decoded) {
@@ -750,11 +784,23 @@ static XrXirStatus error_block_transfer(ErrorFlow *flow,uint32_t b,
     uint32_t end=block->first+block->count;
     if (!block->count || block->first>=function->instruction_count ||
         block->count>function->instruction_count-block->first) return XR_XIR_BAD_STRUCTURE;
-    while (cursor.first<end) {
-        if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
-        const EffectBodyRun *ref;
+    /* Membership replays every current canonical run before CFG transfer.
+     * A block begins at its real selected run, retaining the common bounded
+     * reader's first, final and adjacent checks without rescanning a prefix. */
+    if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+    const EffectBodyRun *ref;
+    if (block->first && function->run_count>1) {
+        status=effect_body_record_ref(&flow->body.read,function,block->first,&ref);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(flow->remaining,4+3*sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t run=(uint32_t)(ref-function->runs);
+        cursor.first=ref->first+ref->count;cursor.run=run+1;
+    } else {
         status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
+    }
+    for (;;) {
+        if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
         if (!xir_compile_work(flow->remaining,2+2*sizeof(uint32_t))) return XR_XIR_BUDGET;
         if (!xir_compile_work(flow->remaining,1+sizeof(row->constant)+sizeof(row->decoded)))
             return XR_XIR_BUDGET;
@@ -765,6 +811,9 @@ static XrXirStatus error_block_transfer(ErrorFlow *flow,uint32_t b,
             status=error_block_row(flow,b,i,zero_copy,ref,row);
             if (status!=XR_XIR_OK || flow->restart) return status;
         }
+        if (cursor.first>=end) break;
+        status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
+        if (status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
@@ -792,14 +841,14 @@ static XrXirStatus error_block(ErrorFlow *flow, uint32_t b,const uint8_t *zero_c
         end->op == XR_XIR_TASK_AWAIT) {
         XrXirStatus status = error_edge(flow, b, end->targets[0], NULL, true);
         if (status != XR_XIR_OK) return status;
-        { if (!xir_compile_work(flow->remaining, (size_t)flow->effects->words * sizeof(uint64_t))) { return XR_XIR_BUDGET; } memset(flow->snapshot, 0, (size_t)flow->effects->words * sizeof(uint64_t)); }
+        { if (!xir_compile_work(flow->remaining, (size_t)flow->effects->outcomes_work.words * sizeof(uint64_t))) { return XR_XIR_BUDGET; } memset(flow->snapshot, 0, (size_t)flow->effects->outcomes_work.words * sizeof(uint64_t)); }
         if (end->op == XR_XIR_TASK_AWAIT) {
-            if (!xir_compile_work(flow->remaining, (uint64_t)flow->effects->words * sizeof(uint64_t))) return XR_XIR_BUDGET;
+            if (!xir_compile_work(flow->remaining, (uint64_t)flow->effects->outcomes_work.words * sizeof(uint64_t))) return XR_XIR_BUDGET;
             memcpy(flow->snapshot, error_read(flow, flow->work, end->args[0]),
-                (size_t)flow->effects->words * sizeof(uint64_t));
+                (size_t)flow->effects->outcomes_work.words * sizeof(uint64_t));
         } else status=error_call(flow, end, flow->snapshot);
         if (status!=XR_XIR_OK || flow->restart) return status;
-        if (error_any(flow->snapshot, flow->effects->words)) return error_edge(flow, b, end->targets[1], NULL, true);
+        if (error_any(flow->snapshot, flow->effects->outcomes_work.words)) return error_edge(flow, b, end->targets[1], NULL, true);
     }
     return XR_XIR_OK;
 }
@@ -813,6 +862,7 @@ static void error_storage_free(ErrorFlow *flow) {
     flow->cell_function=flow->cell_type_count=0;
     flow->zero = NULL; flow->cell_count = flow->active_count = 0;
     flow->reachable = NULL; flow->escaping = NULL;
+    flow->queue=NULL;flow->front=flow->back=flow->pending=0;flow->scheduling=false;
 }
 static XrXirStatus error_storage_prepare(ErrorFlow *flow, size_t bytes) {
     if (!bytes) return XR_XIR_BAD_STRUCTURE;
@@ -829,6 +879,7 @@ static XrXirStatus error_storage_prepare(ErrorFlow *flow, size_t bytes) {
     return XR_XIR_OK;
 }
 static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
+    flow->scheduling=false;flow->front=flow->back=flow->pending=0;
     flow->function_index=f;
     XrXirStatus head_status=effect_body_request_head(&flow->body,f,&flow->head);
     if (head_status!=XR_XIR_OK) return head_status;
@@ -840,8 +891,10 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
     if (flow->function->parameter_count > UINT32_MAX - flow->function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     flow->values = flow->function->parameter_count + flow->function->instruction_count;
-    uint64_t words = flow->effects->words, rows = (uint64_t)flow->function->block_count + 3;
-    uint64_t minimum_extra = (uint64_t)flow->values * 2 * sizeof(uint32_t) + flow->function->block_count;
+    uint64_t words = flow->effects->outcomes_work.words, rows = (uint64_t)flow->function->block_count + 3;
+    uint64_t minimum_extra = (uint64_t)flow->values * 2 * sizeof(uint32_t) +
+        flow->function->block_count + (flow->function->block_count>1?
+            (uint64_t)flow->function->block_count*sizeof(uint32_t):0);
     /* At least one writable words row and a separate zero vector are required
      * even when no SSA value can carry error facts. Reject resource-impossible
      * metadata before reading it, without charging a fictitious allocation. */
@@ -890,6 +943,14 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
     if (extra > SIZE_MAX - zero_bytes ||
         stride > (SIZE_MAX - zero_bytes - extra) / sizeof(uint64_t) / rows) { status = XR_XIR_BUDGET;goto membership_done; }
     uint64_t bytes = stride * rows * sizeof(uint64_t) + zero_bytes + extra;
+    uint64_t queue_offset=bytes,queue_bytes=flow->function->block_count>1?
+        (uint64_t)flow->function->block_count*sizeof(uint32_t):0;
+    if (queue_bytes) {
+        if (bytes>SIZE_MAX-3) { status=XR_XIR_BUDGET;goto membership_done; }
+        queue_offset=(bytes+3)&~UINT64_C(3);
+        if (queue_bytes>SIZE_MAX-queue_offset) { status=XR_XIR_BUDGET;goto membership_done; }
+        bytes=queue_offset+queue_bytes;
+    }
     if (!xir_compile_work(flow->remaining, stride * rows + words + flow->values + flow->function->block_count))
         { status = XR_XIR_BUDGET;goto membership_done; }
     flow->stride = (size_t)stride;
@@ -907,6 +968,7 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
             flow->cell_types=(ErrorCellType *)(flow->cells+flow->cell_count);
         }
         flow->reachable = (uint8_t *)(flow->cells + flow->cell_count)+(size_t)cell_bytes;
+        flow->queue=queue_bytes?(uint32_t *)(flow->storage+(size_t)queue_offset):NULL;
         /* Charge the temporary byte scan and all map, inverse and Cell writes. */
         if (!xir_compile_work(flow->remaining, (uint64_t)flow->values * 2 + flow->active_count + flow->cell_count))
             { status = XR_XIR_BUDGET;goto membership_done; }
@@ -936,28 +998,18 @@ static XrXirStatus error_function(ErrorFlow *flow, uint32_t f) {
         flow->edge = flow->work + flow->stride; flow->snapshot = flow->edge + flow->stride;
         uint32_t summary=flow->invocations?error_invocation_summary(flow->invocations,flow->invocation):f;
         if (summary>=(flow->invocations?flow->summary_count:flow->effects->count)) { status = XR_XIR_BAD_STRUCTURE;goto membership_done; }
-        flow->escaping = flow->effects->errors + (size_t)summary * flow->effects->words;
+        flow->escaping = flow->effects->outcomes_work.errors + (size_t)summary * flow->effects->outcomes_work.words;
         status = error_roots(flow,membership,sources);
         xr_compile_resources_free(heap_membership);heap_membership = NULL;
-        flow->reachable[0] = ERROR_BLOCK_REACHABLE | ERROR_BLOCK_PENDING;
+        flow->reachable[0] = ERROR_BLOCK_REACHABLE;
         for (uint32_t p = 0; p < flow->function->parameter_count && status == XR_XIR_OK; ++p) {
-            if (!xir_compile_work(flow->remaining, flow->effects->atom_count + 1)) status = XR_XIR_BUDGET;
+            if (!xir_compile_work(flow->remaining, flow->effects->outcomes_work.atom_count + 1)) status = XR_XIR_BUDGET;
             else {
                 uint64_t *set = error_value(flow, flow->states, p);
                 if (set) error_type(flow, flow->function->parameters[p], set);
             }
         }
-        do {
-            flow->changed = false;
-            for (uint32_t b = 0; b < flow->function->block_count && status == XR_XIR_OK && !flow->restart; ++b) {
-                if (!xir_compile_work(flow->remaining, 1)) status = XR_XIR_BUDGET;
-                else if (flow->reachable[b] & ERROR_BLOCK_PENDING) {
-                    /* Clear before transfer so self/back edges can schedule it again. */
-                    flow->reachable[b] &= (uint8_t)~ERROR_BLOCK_PENDING;
-                    status = error_block(flow, b,zero_copy);
-                }
-            }
-        } while (status == XR_XIR_OK && flow->changed && !flow->restart);
+        if (status==XR_XIR_OK) status=error_cfg_solve(flow,zero_copy);
     }
 membership_done:
     xr_compile_resources_free(heap_membership);
@@ -982,13 +1034,14 @@ static XrXirStatus effect_errors_seed(const XirMetadataDomain *module, XrXirEffe
             atoms += error_variant_count(module->types, t);
     }
     if (atoms > UINT32_MAX-2u) return XR_XIR_BUDGET;
-    effects->source_type_count = module->types ? module->types->count : 0;
-    effects->atom_count = (uint32_t)atoms; effects->atom_capacity = (uint32_t)atoms; effects->words = (uint32_t)((atoms + 65) / 64);
-    uint64_t bytes = atoms * sizeof(EffectErrorAtom) + (uint64_t)effects->count * effects->words * sizeof(uint64_t);
+    effects->outcomes_work.source_type_count = module->types ? module->types->count : 0;
+    effects->outcomes_work.error_rows=effects->count;
+    effects->outcomes_work.atom_count = (uint32_t)atoms; effects->outcomes_work.atom_capacity = (uint32_t)atoms; effects->outcomes_work.words = (uint32_t)((atoms + 65) / 64);
+    uint64_t bytes = atoms * sizeof(EffectErrorAtom) + (uint64_t)effects->count * effects->outcomes_work.words * sizeof(uint64_t);
     if ((bytes > SIZE_MAX) || bytes > SIZE_MAX) return XR_XIR_BUDGET;
-    if (atoms) effects->atoms = xir_compile_calloc(remaining, (size_t)atoms, sizeof(EffectErrorAtom), &allocation_status);
-    effects->errors = xir_compile_calloc(remaining, (size_t)effects->count * effects->words, sizeof(uint64_t), &allocation_status);
-    if ((atoms && !effects->atoms) || !effects->errors) return allocation_status;
+    if (atoms) effects->outcomes_work.atoms = xir_compile_calloc(remaining, (size_t)atoms, sizeof(EffectErrorAtom), &allocation_status);
+    effects->outcomes_work.errors = xir_compile_calloc(remaining, (size_t)effects->count * effects->outcomes_work.words, sizeof(uint64_t), &allocation_status);
+    if ((atoms && !effects->outcomes_work.atoms) || !effects->outcomes_work.errors) return allocation_status;
 
     uint32_t at = 0;
     for (uint32_t t = 0; module->types && t < module->types->count; ++t) {
@@ -997,18 +1050,18 @@ static XrXirStatus effect_errors_seed(const XirMetadataDomain *module, XrXirEffe
         if (!xr_xir_type_is_enum(module->types, type)) continue;
         uint32_t count = error_variant_count(module->types, t);
         if (!xir_compile_work(remaining, count)) return XR_XIR_BUDGET;
-        for (uint32_t v = 0; v < count; ++v) effects->atoms[at++] = (EffectErrorAtom){type, v};
+        for (uint32_t v = 0; v < count; ++v) effects->outcomes_work.atoms[at++] = (EffectErrorAtom){type, v};
     }
     if (!xir_compile_work(remaining,parameters)) return XR_XIR_BUDGET;
     for (uint32_t p=0;p<parameters;++p)
-        effects->atoms[at++]=(EffectErrorAtom){(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p),XR_XIR_ERROR_SYMBOLIC_VARIANT};
+        effects->outcomes_work.atoms[at++]=(EffectErrorAtom){(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p),XR_XIR_ERROR_SYMBOLIC_VARIANT};
     return XR_XIR_OK;
 }
 static XrXirStatus error_summary_resize(ErrorFlow *flow) {
     XrXirEffects *effects=flow->effects;XrXirCompileContext *remaining=flow->remaining;
     XrXirStatus allocation_status = XR_XIR_OK;
-    uint32_t words = (uint32_t)(((uint64_t)effects->atom_count + 65) / 64);
-    if (words == effects->words) return XR_XIR_OK;
+    uint32_t words = (uint32_t)(((uint64_t)effects->outcomes_work.atom_count + 65) / 64);
+    if (words == effects->outcomes_work.words) return XR_XIR_OK;
     uint32_t summaries=flow->invocations?flow->summary_count:effects->count;
     uint64_t count = (uint64_t)summaries * words;
     if (count > SIZE_MAX / sizeof(uint64_t) ||(count * sizeof(uint64_t) > SIZE_MAX) ||
@@ -1017,9 +1070,9 @@ static XrXirStatus error_summary_resize(ErrorFlow *flow) {
     if (!errors) return allocation_status;
 
     for (uint32_t f = 0; f < summaries; ++f)
-        { if (!xir_compile_work(remaining, (size_t)effects->words * sizeof(*errors))) { xr_compile_resources_free(errors); return XR_XIR_BUDGET; } memcpy(errors + (size_t)f * words, effects->errors + (size_t)f * effects->words,
-            (size_t)effects->words * sizeof(*errors)); }
-    xr_compile_resources_free(effects->errors); effects->errors = errors; effects->words = words;
+        { if (!xir_compile_work(remaining, (size_t)effects->outcomes_work.words * sizeof(*errors))) { xr_compile_resources_free(errors); return XR_XIR_BUDGET; } memcpy(errors + (size_t)f * words, effects->outcomes_work.errors + (size_t)f * effects->outcomes_work.words,
+            (size_t)effects->outcomes_work.words * sizeof(*errors)); }
+    xr_compile_resources_free(effects->outcomes_work.errors); effects->outcomes_work.errors = errors; effects->outcomes_work.words = words;
     return XR_XIR_OK;
 }
 /* A child task's errors affect GO values and await paths, but cannot grant
@@ -1267,8 +1320,8 @@ static XrXirStatus error_functions(XrXirEffects *effects, EffectGraph *graph, Er
             status = error_empty_escaping_graph(f,graph,flow->remaining,&empty);
             if (status == XR_XIR_OK && empty) {
                 /* Preserve an existing nonempty summary rather than washing it. */
-                if (!xir_compile_work(flow->remaining, effects->words)) status = XR_XIR_BUDGET;
-                else if (error_any(effects->errors + (size_t)f * effects->words, effects->words)) empty = false;
+                if (!xir_compile_work(flow->remaining, effects->outcomes_work.words)) status = XR_XIR_BUDGET;
+                else if (error_any(effects->outcomes_work.errors + (size_t)f * effects->outcomes_work.words, effects->outcomes_work.words)) empty = false;
             }
             if (status == XR_XIR_OK && !empty) status = error_function(flow, f);
             if (status != XR_XIR_OK || flow->restart || !flow->summary_changed) continue;

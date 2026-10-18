@@ -45,6 +45,7 @@ static void ed_free(void *pointer){
 #pragma pop_macro("xr_free")
 #pragma pop_macro("xr_malloc")
 #include "xir/xxir_effects.c"
+#include "xir_legacy_error_oracle.h"
 #include "xir_error_dependency_fixture.h"
 static XrCompileResourceLimits ed_caps(void){return (XrCompileResourceLimits){16777216,4194304,16000000};}
 static XrXirCompileContext ed_owner(XrCompileResourceLimits limits){
@@ -60,20 +61,20 @@ static void ed_release(XrXirCompileContext *c,uint64_t baseline){
     CHECK(!live && !live_bytes);
 }
 static void ed_literals(const XrXirEffects *e,ErrorDependencyMode mode){
-    CHECK(e && e->count==ED_COUNT && e->atom_count==2 && e->words==1);
+    CHECK(e && e->count==ED_COUNT && effect_final_outcomes(e)->atom_count==2 && effect_final_outcomes(e)->words==1);
     for(uint32_t f=0;f<ED_COUNT;++f){
         uint64_t expected=f<2?0:
             f==2 && mode==ED_UNKNOWN?UINT64_C(1):UINT64_C(12);
-        CHECK(e->errors[f]==expected);
+        CHECK(effect_final_outcomes(e)->errors[f]==expected);
         CHECK(xr_xir_effects_error_unknown(e,f)==(expected==1));
         CHECK(!xr_xir_effects_error_unidentified(e,f));
         CHECK(xr_xir_effects_error(e,f,(XrXirType)ED_ENUM,0)==(expected==12));
         CHECK(xr_xir_effects_error(e,f,(XrXirType)ED_ENUM,1)==(expected==12));
-        CHECK(e->functions[f].throws==(expected==1?XR_XIR_EFFECT_UNKNOWN:expected?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
-        CHECK(e->root[f].requires_root==(f==0) && e->root[f].unresolved==(f==2 && mode==ED_UNKNOWN));
-        CHECK(e->functions[f].suspend==(f==2 && mode==ED_GO?XR_XIR_EFFECT_MAY:
+        CHECK(effect_final_outcomes(e)->functions[f].throws==(expected==1?XR_XIR_EFFECT_UNKNOWN:expected?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
+        CHECK(effect_roots_read(e)->root[f].requires_root==(f==0) && effect_roots_read(e)->root[f].unresolved==(f==2 && mode==ED_UNKNOWN));
+        CHECK(effect_final_outcomes(e)->functions[f].suspend==(f==2 && mode==ED_GO?XR_XIR_EFFECT_MAY:
             f==2 && mode==ED_UNKNOWN?XR_XIR_EFFECT_UNKNOWN:XR_XIR_EFFECT_NONE));
-        CHECK(e->task_errors[f]==(expected==1?XR_XIR_BAD_TYPE:XR_XIR_OK));
+        CHECK(effect_final_outcomes(e)->task_errors[f]==(expected==1?XR_XIR_BAD_TYPE:XR_XIR_OK));
     }
 }
 static XrXirStatus ed_whole(const XrXirCompileContext *c,ErrorDependencyMode mode,bool large){
@@ -100,15 +101,21 @@ static void ed_graph_isolation(void){
     ErrorDependencyFixture f;ed_fixture(&f,ED_GO,false);XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
     CHECK(xir_fixture_verify(&c, &f.module, NULL)==XR_XIR_OK);
     XrXirEffects *e=NULL;CHECK(xr_xir_compile_effects_infer_verified(&c,&f.module,&e)==XR_XIR_OK);ed_literals(e,ED_GO);
-    EffectGraph graph={0};CHECK(effect_graph_build(&f.module,e,&graph,&c)==XR_XIR_OK);
+    /* Inference has retired construction rows. Fresh receiving scratch reads
+     * the actual Final and moves only its incoming IDs into this local graph. */
+    EffectControlCheck input={0};
+    EffectGraph graph={.material=e->invocations->body,.physical=e->invocations->body->physical};
+    CHECK(effect_final_control_prepare(&c,e,&input)==XR_XIR_OK);
+    CHECK(effect_control_dependencies_move(&c,&input,&graph)==XR_XIR_OK);
     for(uint32_t link=graph.heads[3];link!=UINT32_MAX;link=graph.edges[link].next)CHECK(graph.edges[link].caller!=2);
-    CHECK(!graph.error_heads && !graph.error_edges && !e->root[2].requires_root && !e->root[2].unresolved);
+    CHECK(!graph.error_heads && !graph.error_edges && !effect_roots_read(e)->root[2].requires_root && !effect_roots_read(e)->root[2].unresolved);
     CHECK(error_graph_prepare(&graph,&c)==XR_XIR_OK);
     CHECK(graph.error_heads && graph.error_edges && graph.error_heads[3]==0);
     CHECK(graph.error_edges[0].caller==2 && graph.error_edges[0].instruction==0 && graph.error_edges[0].next==UINT32_MAX);
     for(uint32_t link=graph.heads[3];link!=UINT32_MAX;link=graph.edges[link].next)CHECK(graph.edges[link].caller!=2);
-    CHECK(!e->root[2].requires_root && !e->root[2].unresolved);
-    effect_graph_free(&graph);xr_xir_compile_effects_free(e);ed_release(&c,baseline);
+    CHECK(!effect_roots_read(e)->root[2].requires_root && !effect_roots_read(e)->root[2].unresolved);
+    effect_graph_free(&graph);effect_control_check_free(&input);
+    xr_xir_compile_effects_free(e);ed_release(&c,baseline);
 }
 static void ed_negative(void){
     ErrorDependencyFixture f;ed_fixture(&f,ED_DIRECT,false);XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
@@ -157,21 +164,21 @@ static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload){
     XrXirDiagnostic d={0};XrXirStatus status=xir_fixture_verify(c, &module, &d);XrXirEffects *e=NULL;
     if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(c,&module,&e);
     if(status==XR_XIR_OK){
-        CHECK(e && e->count==3 && e->atom_count==63 && e->words==2 && e->source_type_count==1);
-        CHECK(e->errors[0]==0 && e->errors[1]==0 && e->errors[2]==0 && e->errors[3]==1);
-        CHECK(e->errors[4]==(UINT64_C(1)<<62) && e->errors[5]==0);
-        CHECK(e->atoms[62].type==(XrXirType)257 && e->atoms[62].variant==60);
+        CHECK(e && e->count==3 && effect_final_outcomes(e)->atom_count==63 && effect_final_outcomes(e)->words==2 && effect_final_outcomes(e)->source_type_count==1);
+        CHECK(effect_final_outcomes(e)->errors[0]==0 && effect_final_outcomes(e)->errors[1]==0 && effect_final_outcomes(e)->errors[2]==0 && effect_final_outcomes(e)->errors[3]==1);
+        CHECK(effect_final_outcomes(e)->errors[4]==(UINT64_C(1)<<62) && effect_final_outcomes(e)->errors[5]==0);
+        CHECK(effect_final_outcomes(e)->atoms[62].type==(XrXirType)257 && effect_final_outcomes(e)->atoms[62].variant==60);
         for(uint32_t f=0;f<3;++f){
-            CHECK(e->functions[f].throws==(f?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
-            CHECK(e->task_errors[f]==(payload && f?XR_XIR_BAD_TYPE:XR_XIR_OK));
-            CHECK(e->root[f].requires_root==(f==0) && e->root[f].unresolved==(f==1));
-            const XrXirRootFormula *formula=&e->contracts[f].formula;
+            CHECK(effect_final_outcomes(e)->functions[f].throws==(f?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
+            CHECK(effect_final_outcomes(e)->task_errors[f]==(payload && f?XR_XIR_BAD_TYPE:XR_XIR_OK));
+            CHECK(effect_roots_read(e)->root[f].requires_root==(f==0) && effect_roots_read(e)->root[f].unresolved==(f==1));
+            const XrXirRootFormula *formula=&effect_roots_read(e)->contracts[f].formula;
             CHECK(formula->constant_mask==(f==0?XR_XIR_CALLABLE_ROOT_REQUIRED:0));
             CHECK(formula->term_count==(f==1?1u:0u));
             if(f==1){
                 CHECK(formula->terms && formula->terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL &&
                     formula->terms[0].index==0);
-                const XrXirRootEffectWitness *w=&e->unresolved_witnesses[f];
+                const XrXirRootEffectWitness *w=&effect_roots_read(e)->unresolved_witnesses[f];
                 CHECK(w->cause==XR_XIR_ROOT_CAUSE_CONTEXT_CALL && !w->instruction &&
                     w->callee==UINT32_MAX && w->slot==UINT32_MAX && !w->distance);
             }
@@ -207,14 +214,14 @@ static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload){
         if(status==XR_XIR_OK)status=xr_xir_compile_effects_infer_verified(c,&module,&e);
     }
     if(status==XR_XIR_OK){
-        CHECK(e && e->count==3 && e->source_type_count==1 && e->atom_count==61 && e->words==1);
-        CHECK(e->errors[0]==0 && e->errors[1]==(UINT64_C(1)<<62) &&
-            e->errors[2]==(UINT64_C(1)<<62));
+        CHECK(e && e->count==3 && effect_final_outcomes(e)->source_type_count==1 && effect_final_outcomes(e)->atom_count==61 && effect_final_outcomes(e)->words==1);
+        CHECK(effect_final_outcomes(e)->errors[0]==0 && effect_final_outcomes(e)->errors[1]==(UINT64_C(1)<<62) &&
+            effect_final_outcomes(e)->errors[2]==(UINT64_C(1)<<62));
         for(uint32_t f=0;f<3;++f){
-            CHECK(e->root[f].requires_root==(f==0) && !e->root[f].unresolved);
-            CHECK(e->contracts[f].formula.constant_mask==(f==0?XR_XIR_CALLABLE_ROOT_REQUIRED:0) &&
-                !e->contracts[f].formula.term_count);
-            CHECK(e->functions[f].throws==(f?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
+            CHECK(effect_roots_read(e)->root[f].requires_root==(f==0) && !effect_roots_read(e)->root[f].unresolved);
+            CHECK(effect_roots_read(e)->contracts[f].formula.constant_mask==(f==0?XR_XIR_CALLABLE_ROOT_REQUIRED:0) &&
+                !effect_roots_read(e)->contracts[f].formula.term_count);
+            CHECK(effect_final_outcomes(e)->functions[f].throws==(f?XR_XIR_EFFECT_MAY:XR_XIR_EFFECT_NONE));
             CHECK(!xr_xir_effects_error_unknown(e,f) && !xr_xir_effects_error_unidentified(e,f));
         }
         CHECK(xr_xir_effects_error(e,1,(XrXirType)256,60) &&

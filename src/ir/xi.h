@@ -935,7 +935,7 @@ typedef struct XiReexportEntry {
 typedef struct XiClassMethod {
     const char *name;           /* method name (arena copy) */
     int32_t symbol_id;          /* runtime symbol-table ID for dispatch matching */
-    bool is_constructor;        /* true for constructor or "constructor" */
+    bool is_constructor;        /* true for constructor or "init" */
     bool is_static;             /* true for static methods */
     bool is_static_constructor; /* true for static constructor */
 } XiClassMethod;
@@ -1063,7 +1063,7 @@ typedef enum {
  * therefore never dropped, which leaked every `var x = ClassName(...)`).
  *
  * The fact must come from lowering, not from the callee's spelling: a
- * `super(...)` call lowers to the same XI_CALL_METHOD with aux "constructor"
+ * `super(...)` call lowers to the same XI_CALL_METHOD with aux "init"
  * but returns the receiver at +0, and it is deliberately NOT marked. */
 #define XI_LOWERING_FLAG_CONSTRUCTOR_CALL (1u << 5)
 /* A fixed structural field access whose closed receiver-shape set does not

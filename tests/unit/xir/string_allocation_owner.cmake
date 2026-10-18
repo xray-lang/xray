@@ -13,3 +13,9 @@ add_test(NAME test_xir_string_allocation_owner
     COMMAND $<TARGET_FILE:test_xir_string_allocation_owner>)
 set_tests_properties(test_xir_string_allocation_owner PROPERTIES
     LABELS "unit;xir;memory;ownership;budget;execution" TIMEOUT 120)
+foreach(binding_case control artifact function body)
+    add_test(NAME test_xir_string_owned_binding_${binding_case}
+        COMMAND $<TARGET_FILE:test_xir_string_allocation_owner> --binding-${binding_case})
+    set_tests_properties(test_xir_string_owned_binding_${binding_case} PROPERTIES
+        LABELS "unit;xir;memory;ownership;budget;execution" TIMEOUT 120)
+endforeach()

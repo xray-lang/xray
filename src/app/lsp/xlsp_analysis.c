@@ -145,8 +145,8 @@ typedef struct {
 
 static const XlspDocEntry keyword_docs[] = {
     {"var", "```xray\nvar <name> = <value>\n```\n\nDeclares a mutable variable."},
-    {"const", "```xray\nconst <name> = <value>\nvar snapshot: const Config = "
-              "load()\n```\n\nDeclares a stable binding or a deep-read-only type capability."},
+    {"const", "```xray\nconst <name> = <value>\nconst snapshot: Config = "
+              "load()\n```\n\nDeclares a binding whose value components are read-only; identity-bearing objects retain their declared permissions."},
     {"fn", "```xray\nfn <name>(<params>) { <body> }\n```\n\nDeclares a function."},
     {"class", "```xray\nclass <name> { <members> }\n```\n\nDeclares a class."},
     {"go", "```xray\ngo <expr>\n```\n\nSpawns a new coroutine."},

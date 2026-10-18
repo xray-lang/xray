@@ -965,7 +965,7 @@ XR_FUNC void xa_check_constructor_visibility(XaInferContext *ctx, AstNode *node,
                                              struct XrClassInfo *owner) {
     if (!ctx || !ctx->analyzer || !node || !owner)
         return;
-    XaSymbol *ctor = xa_class_info_lookup_member(owner, XR_KEYWORD_CONSTRUCTOR);
+    XaSymbol *ctor = xa_class_info_lookup_member(owner, XR_INIT_MEMBER_NAME);
     if (!ctor || ctor->kind != XA_SYM_METHOD)
         return;
     xa_check_member_visibility(ctx, node, ctor, owner);
@@ -4403,7 +4403,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
     // via a runtime null sentinel inside the constructor body.
     if (class_info) {
         xa_check_constructor_visibility(ctx, node, class_info);
-        XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR);
+        XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_INIT_MEMBER_NAME);
         XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
         if (ctor_links && ctor_links->param_defaults && ctor_links->param_count > ne->arg_count) {
             int pc = ctor_links->param_count;
@@ -4532,7 +4532,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         if (class_info && class_links && ne->arg_count > 0) {
             int type_param_count = xa_symbol_links_get_type_param_count(class_links);
             if (type_param_count > 0 && type_param_count == ne->type_arg_count) {
-                XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR);
+                XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_INIT_MEMBER_NAME);
                 if (ctor && ctor->kind == XA_SYM_METHOD) {
                     XaSymbolLinks *ctor_links = xa_analyzer_get_links(ctx->analyzer, ctor);
                     if (ctor_links && ctor_links->type && XR_TYPE_IS_FUNCTION(ctor_links->type)) {
@@ -4593,7 +4593,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         int type_param_count = xa_symbol_links_get_type_param_count(class_links);
         if (type_param_count > 0 && class_info) {
             // Look up constructor
-            XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR);
+            XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_INIT_MEMBER_NAME);
             if (ctor && ctor->kind == XA_SYM_METHOD) {
                 XaSymbolLinks *ctor_links = xa_analyzer_get_links(ctx->analyzer, ctor);
                 if (ctor_links && ctor_links->type && XR_TYPE_IS_FUNCTION(ctor_links->type)) {

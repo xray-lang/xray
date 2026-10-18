@@ -127,7 +127,6 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `type` | 类型别名 |
 | `new` | 保留字；对象构造统一写 `T(...)`（见 §3.14） |
 | `this` `super` | 自我/父类引用 |
-| `constructor` | 构造器 |
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `const` | 不可变字段/绑定修饰符 |
 | `final` | `final class` 禁止继承 |
@@ -174,6 +173,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 | Token | 出现位置 |
 |--|--|
+| `init` | class/struct 的初始化成员声明；在其它位置仍为普通标识符 |
 | `from` | `select` 的接收分支 (`x from ch`)；也用于命名 import / re-export (`import { x } from "module"`) |
 | `to` | `select` 的发送分支 (`value to ch`) |
 | `default` | 保留，当前未启用 |
@@ -610,7 +610,6 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 | `type` | type alias |
 | `new` | reserved; construct objects with `T(...)` (see §3.14) |
 | `this` `super` | self / parent reference |
-| `constructor` | constructor |
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
 | `const` | immutable field/binding modifier |
 | `final` | `final class` cannot be inherited |
@@ -657,6 +656,7 @@ These are not in the lexer keyword table; the parser recognizes them by position
 
 | Token | Where it appears |
 |--|--|
+| `init` | class/struct initializer member declaration; ordinary identifier elsewhere |
 | `from` | `select` receive arm (`x from ch`); also in named import / re-export (`import { x } from "module"`) |
 | `to` | `select` send arm (`value to ch`) |
 | `default` | reserved, currently disabled |

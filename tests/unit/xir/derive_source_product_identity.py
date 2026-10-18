@@ -8,27 +8,26 @@ import struct
 ROOT=Path(__file__).resolve().parent
 
 def frames():
-    # Result/parameter carriers are boxed 16/8. Frame storage is 8/8;
-    # Unit has no frame payload and retains its UINT32_MAX slot sentinel.
+    # The carrier and function layouts are fixed independent facts. Only the
+    # declared Program ABI word changes; all retired bytes remain checked.
     functions=[
         [0,1,2,8,16,8,1,0,0,0,0xffffffff,16,8,0],
         [1,0,1,0,16,8,0,0,0,0xffffffff],
         [2,0,2,8,16,8,0,0,0,0,0xffffffff],
     ]
-    words=[1,1,24,29,30,2,3,1]+sum(functions,[])
-    assert len(words)==43
-    layout=b'xray:xir-lowered-layout:v1'+struct.pack('<43I',*words)
-    result={'xir_source_product_identity.h':{
-        'layout_current24_preimage':layout,
-        'product_layout_value24_digest':hashlib.sha256(layout).digest(),
-    }}
-    policies={}
-    for prefix in ('linked','original'):
-        text=(prefix+'_source').encode('ascii')
-        frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,28,73,24,29,30,len(text))+text
-        policies[prefix+'_policy_value24_preimage']=frame
-        policies[prefix+'_policy_value24']=hashlib.sha256(frame).digest()
-    result['xir_native_projection_expectations.h']=policies
+    result={'xir_source_product_identity.h':{},'xir_native_projection_expectations.h':{}}
+    for program in (30,31):
+        words=[1,1,24,29,program,2,3,1]+sum(functions,[]);assert len(words)==43
+        layout=b'xray:xir-lowered-layout:v1'+struct.pack('<43I',*words)
+        key='layout_current24_preimage' if program==31 else 'layout_program30_preimage'
+        digest='product_layout_value24_digest' if program==31 else 'product_layout_program30_digest'
+        result['xir_source_product_identity.h'].update({key:layout,digest:hashlib.sha256(layout).digest()})
+        for prefix in ('linked','original'):
+            text=(prefix+'_source').encode('ascii')
+            frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,28,73,24,29,program,len(text))+text
+            suffix='value24' if program==31 else 'program30'
+            result['xir_native_projection_expectations.h'][prefix+'_policy_'+suffix+'_preimage']=frame
+            result['xir_native_projection_expectations.h'][prefix+'_policy_'+suffix]=hashlib.sha256(frame).digest()
     return result
 
 def main():
@@ -50,7 +49,7 @@ def main():
                 assert actual==expected,(filename,name,actual.hex(),expected.hex())
         if args.write:
             path.write_text(source,encoding='utf-8')
-    print('Independent SourceProduct layout/policy preimages: PASS (Value24/Call29/Program30)')
+    print('Independent SourceProduct layout/policy preimages: PASS (Value24/Call29/Program31; complete Program30 vectors retained)')
 
 if __name__=='__main__':
     main()

@@ -65,7 +65,7 @@ static void cleanup_constructor_storage(const XrXirModule *module) {
     unsigned ordinary = 0;
     for (uint32_t f = 0; f < module->function_count; ++f) {
         const XrXirFunction *function = &module->functions[f];
-        if (function->name_length != 11 || memcmp(function->name, "constructor", 11)) continue;
+        if (function->name_length != 4 || memcmp(function->name, "init", 4)) continue;
         const XrXirTypeNode *type = xr_xir_type_node(module->types, function->result);
         CHECK(type && type->kind == XR_XIR_TYPE_NOMINAL);
         CHECK(module->types->nominals->identities && !module->types->nominals->declarations);
