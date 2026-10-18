@@ -90,24 +90,6 @@ static XrXirStatus effect_invocation_formal_prepare(EffectInvocationFlow *flow,
     flow->values=(uint32_t)values;return XR_XIR_OK;
 }
 
-/* A formal is immutable only if no real write can change its origin row.
- * This scan supplies storage eligibility, never identity or effect authority. */
-static XrXirStatus effect_invocation_formal_immutable(EffectInvocationFlow *flow,uint32_t p,bool *immutable) {
-    *immutable=false;
-    if (p>=flow->function->parameter_count) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t r=0;r<flow->physical->count;++r) {
-        if (!xir_compile_work(flow->read->work,1)) return XR_XIR_BUDGET;
-        const EffectPhysicalRecord record=flow->physical->records[r];
-        if (!(record.mask&EFFECT_PHYSICAL_TRANSFER) || record.value<flow->function->parameter_count) continue;
-        XrXirInstruction storage;const XrXirInstruction *op=NULL;
-        XrXirStatus status=effect_invocation_flow_instruction(flow,record.value-flow->function->parameter_count,&storage,&op);
-        if (status!=XR_XIR_OK) return status;
-        if ((op->op==XR_XIR_LOCAL_WRITE || op->op==XR_XIR_SCALAR_LOCAL_WRITE ||
-            op->op==XR_XIR_OWNED_LOCAL_WRITE || op->op==XR_XIR_CELL_LOCAL_WRITE) && op->args[0]==p) return XR_XIR_OK;
-    }
-    *immutable=true;return XR_XIR_OK;
-}
-
 static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow,const uint64_t *input) {
     const EffectBodyFunctionHead *function=flow->function;
     const EffectPhysicalDomain *domain=flow->read->final->physical;

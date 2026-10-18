@@ -52,7 +52,8 @@ static void generator_site_fixture(GeneratorSiteFixture *f) {
     f->functions[1].parameters=&f->parameter;f->functions[1].parameter_count=1;
     f->functions[3].operands=f->actuals;f->functions[3].operand_count=2;
     f->identities[1].promises=XR_XIR_FUNCTION_GENERATOR;
-    f->source=(XrXirSourceModule){"root",4,NULL,0,0};
+    f->source=(XrXirSourceModule){.name="root",.name_length=4,.dependencies=NULL,
+        .dependency_count=0,.initializer=0,.lexical_scope=0,.storage=0};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,.entry_function=3};
     f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=4,
         .declarations=&f->declarations,.types=&f->types,.linkage_kind=XR_XIR_PROGRAM};

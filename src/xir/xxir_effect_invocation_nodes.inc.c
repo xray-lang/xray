@@ -77,54 +77,6 @@ static XrXirStatus effect_invocation_sites(EffectInvocationWorkspace *owner) {
     owner->final.sites=sites;owner->final.site_count=at;owner->final.binding_count=binding;return XR_XIR_OK;
 }
 
-/* Receiving replays every genuine physical producer in canonical order. An
- * unused extra site or missing binding cannot enlarge the finite namespace. */
-static XrXirStatus effect_invocation_sites_match(const EffectInvocationRead *owner) {
-    if(!owner || !owner->work || !owner->final || !effect_body_material_shape(owner->final->material) ||
-        (owner->final->site_count && !owner->final->sites)) return XR_XIR_BAD_STRUCTURE;
-    const EffectInvocationFinal *final=owner->final;uint32_t at=0,binding=0;
-    if(!final->physical || final->physical->count!=owner->body.domain.function_count ||
-        (final->physical->count && !final->physical->functions)) return XR_XIR_BAD_STRUCTURE;
-    for(uint32_t f=0;f<final->physical->count;++f) {
-        const EffectPhysicalFunction *physical=&final->physical->functions[f];
-        if(physical->count>physical->capacity || (physical->count && !physical->records))
-            return XR_XIR_BAD_STRUCTURE;
-        for(uint32_t r=0;r<physical->count;++r) {
-            if(!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
-            EffectPhysicalRecord record=physical->records[r];
-            if(!(record.mask&(EFFECT_PHYSICAL_REFERENCE|EFFECT_PHYSICAL_GENERATOR))) continue;
-            if(record.value<physical->parameters || record.value>=physical->values || at>=final->site_count)
-                return XR_XIR_BAD_STRUCTURE;
-            uint32_t instruction=record.value-physical->parameters;
-            XrXirInstruction decoded;const XrXirInstruction *op=NULL;
-            XrXirStatus status=effect_body_request_operation(&owner->body,f,instruction,&decoded,&op);
-            if(status!=XR_XIR_OK) return status;
-            if((op->op!=XR_XIR_FUNCTION_REF && op->op!=XR_XIR_GENERATOR_NEW) || op->immediate<0 ||
-                (uint64_t)op->immediate>=owner->body.domain.function_count ||
-                op->args[1]>UINT32_MAX-binding) return XR_XIR_BAD_STRUCTURE;
-            EffectBodyFunctionSignature target={0};
-            status=effect_body_request_signature(&owner->body,(uint32_t)op->immediate,&target);
-            if(status!=XR_XIR_OK) return status;
-            const XrXirDeclarations *declarations=owner->body.domain.declarations;
-            bool generator=declarations && declarations->functions &&
-                (declarations->functions[op->immediate].promises&XR_XIR_FUNCTION_GENERATOR)!=0;
-            if(generator!=(op->op==XR_XIR_GENERATOR_NEW) || op->args[1]>target.parameter_count)
-                return XR_XIR_BAD_STRUCTURE;
-            if(generator) {
-                const XrXirTypeNode *type=xr_xir_type_node(owner->body.domain.types,op->type);
-                if(!type || type->kind!=XR_XIR_TYPE_ITERATOR || op->type!=target.result ||
-                    op->args[1]!=target.parameter_count) return XR_XIR_BAD_STRUCTURE;
-            }
-            if(!xir_compile_work(owner->work,sizeof(EffectInvocationSite)+5)) return XR_XIR_BUDGET;
-            EffectInvocationSite site=final->sites[at++];
-            if(site.function!=f || site.instruction!=instruction || site.target!=(uint32_t)op->immediate ||
-                site.captures!=op->args[1] || site.binding!=binding) return XR_XIR_BAD_STRUCTURE;
-            binding+=op->args[1];
-        }
-    }
-    return at==final->site_count && binding==final->binding_count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
-}
-
 static XrXirStatus effect_invocation_basis_parameters_read(const XrXirCompileContext *work,
     const EffectInvocationFinal *final,
     uint32_t parameters,EffectInvocationBasis *output) {
