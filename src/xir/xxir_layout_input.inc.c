@@ -85,11 +85,15 @@ static XrXirStatus layout_path_capacity(const LayoutInputRequest *request,
             id=head->operands[id];
         }
         uint32_t depth=0;
+        bool cell_root=false;
         for (;;) {
             LayoutInputSlot slot;
             status=layout_read_slot(request,head,function,id,&slot);
             if (status!=XR_XIR_OK) return status;
-            if (slot.place!=XR_XIR_PLACE_FIELD && slot.place!=XR_XIR_PLACE_INDEX) break;
+            if (slot.place!=XR_XIR_PLACE_FIELD && slot.place!=XR_XIR_PLACE_INDEX) {
+                cell_root=slot.place==XR_XIR_PLACE_CELL;
+                break;
+            }
             if (!xir_compile_work(request->context,1)) return XR_XIR_BUDGET;
             if (depth==head->instruction_count) return XR_XIR_BAD_VALUE;
             ++depth;
@@ -100,7 +104,8 @@ static XrXirStatus layout_path_capacity(const LayoutInputRequest *request,
             if (!parent) return XR_XIR_BAD_STRUCTURE;
             id=parent->args[0];
         }
-        if (depth && (op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_ARRAY_SET || op->op==XR_XIR_STRUCT_SET)) {
+        /* A direct Cell uses the same implicit selector as a nested place. */
+        if ((depth || cell_root) && (op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_ARRAY_SET || op->op==XR_XIR_STRUCT_SET)) {
             if (depth==UINT32_MAX) return XR_XIR_BUDGET;
             ++depth;
         }
