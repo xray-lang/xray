@@ -47,9 +47,9 @@ static void array_checked_cases(void) {
     CHECK(xir_fixture_check(suite_context, &f.module, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL; memset(&f, 0xCC, sizeof(f));
-    /* Independent 30/76 fields: header64 + module12 + functions204/665/128;
+    /* Independent 31/76 fields: header64 + module12 + functions204/665/128;
      * declarations20 + source23 + identities3*36 + slot12 + impl-count4;
-     * generics4 + types(12+12+12+20) + construction4 + defaults4 + provenance4 = 1324. */
+     * generics4 + types(12+12+12+20) + construction4 + materializations4 + sites4 + bindings4 + defaults4 + provenance4 = 1324. */
     const size_t entry = 321, operands = 925, slot = 1224;
     CHECK(packet.length == 1324);
     fprintf(stderr,"array packet actual length=%zu entry=%u array=%u operand=%u\n",packet.length,packet.bytes[entry],packet.bytes[entry+2*40],packet.bytes[operands+8]);
