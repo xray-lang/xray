@@ -26,7 +26,7 @@ XR_DATA const XrXirCallEntry child_callable_native_entries[];
 #include "xir_child_callable_mixed_oracles.h"
 
 int main(int argc, char **argv) {
-    _Static_assert(XR_XIR_CHECKED_CONTRACT == 73u, "current callable semantic contract");
+    _Static_assert(XR_XIR_CHECKED_CONTRACT == 76u, "current callable semantic contract");
     _Static_assert(sizeof(XrXirFunctionIdentity)==36 && offsetof(XrXirFunctionIdentity,test_role)==28,
         "current role-bearing declaration layout");
     CHECK(argc == 2);
