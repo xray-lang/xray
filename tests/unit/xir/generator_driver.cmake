@@ -747,6 +747,8 @@ set_tests_properties(test_xir_generator_role_source PROPERTIES LABELS "unit;xir;
 foreach(mode native vm vm-native native-vm)
     add_test(NAME test_xir_generator_role_${mode} COMMAND test_xir_generator_role_runtime ${mode})
     set_tests_properties(test_xir_generator_role_${mode} PROPERTIES LABELS "unit;xir;generator;ownership;runtime;mixed" TIMEOUT 120 PROCESSORS 1)
+    add_test(NAME test_xir_generator_role_ordinary_${mode} COMMAND test_xir_generator_role_runtime ${mode} --ordinary)
+    set_tests_properties(test_xir_generator_role_ordinary_${mode} PROPERTIES LABELS "unit;xir;generator;ownership;runtime;mixed" TIMEOUT 120 PROCESSORS 1)
 endforeach()
 
 add_executable(test_xir_generator_terminal_source xir/test_xir_generator_terminal_source.c)
@@ -903,3 +905,7 @@ if(WIN32)
     set_tests_properties(test_xir_generator_cell_weakened_compiler_faults PROPERTIES
         LABELS "unit;xir;generator;compiler-fault;ownership" TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 8 COST 600)
 endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/mixed_iterator_lifetime.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/mixed_class_lifetime.cmake")

@@ -23,7 +23,7 @@ from check_stdlib_boundary import (  # noqa: E402
     check_builtin_distribution,
     check_dynamic,
     check_error_model_policy,
-    check_fastpaths,
+    check_hosted_abi,
     check_manifest,
     check_semantic_owners,
 )
@@ -142,7 +142,6 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
             root=ROOT,
             raw=raw,
             modules=tuple(raw["module"]),
-            vm_fastpaths=tuple(raw.get("vm_fastpath", ())),
         )
         with mock.patch("check_stdlib_boundary.load_manifest", return_value=mutated):
             errors = check_manifest(ROOT)
@@ -191,9 +190,9 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "requires canonical source module"):
                 stdlibgen.validate_provider_source_owners(root, [foreign])
 
-    def test_semantic_native_and_fastpath_contracts_are_source_derived(self) -> None:
+    def test_semantic_native_and_hosted_abi_are_source_derived(self) -> None:
         self.assertEqual([], check_semantic_owners(ROOT))
-        self.assertEqual([], check_fastpaths(ROOT))
+        self.assertEqual([], check_hosted_abi(ROOT))
 
     def test_regex_object_and_literal_policy_are_source_owned(self) -> None:
         source = (ROOT / "stdlib/regex/regex.xr").read_text(encoding="utf-8")

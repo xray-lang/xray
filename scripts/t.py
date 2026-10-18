@@ -68,10 +68,9 @@ Environment:
     XR_NO_BUILD=1  skip the incremental build step
     XR_FAST=1      t0/t1/exact preflights: build in build-fast (build-fast-clang on
                    Windows), load stdlib source
-                   from disk, and omit stdlib VM fastpaths. This removes both
-                   self-hosted stdlib generation edges from the edit loop; the
-                   fastpath edge alone costs ~70s after any src/ edit. t2/t3
-                   gate embedded stdlib and fastpaths and reject the flag.
+                   from disk, and omit the embedded-bytecode generation edge
+                   from the edit loop. t2/t3 gate embedded stdlib and reject
+                   the flag.
     XR_SHARDS=N    run only 1/N of the two big corpora (backend diff, AOT
                    filetests). OFF by default and deliberately so: t2 exists
                    precisely to catch a backend divergence, and a tier that
@@ -200,7 +199,6 @@ PRODUCTION_CACHE_VALUES = {
     "CMAKE_GENERATOR": "Ninja",
     "CMAKE_BUILD_TYPE": "Release",
     "XR_STDLIB_FROM_FILE": "OFF",
-    "XRAY_STDLIB_VM_FASTPATHS": "ON",
     "ENABLE_ASAN": "OFF",
     "ENABLE_UBSAN": "OFF",
     "ENABLE_TSAN": "OFF",
@@ -548,7 +546,7 @@ def validate_production_build(build_dir: Path) -> bool:
     for error in errors:
         print(f"    {error}")
     print("    configure a separate Ninja Release tree with embedded stdlib, "
-          "VM fastpaths enabled, and sanitizers disabled")
+          "and sanitizers disabled")
     return False
 
 
@@ -684,10 +682,9 @@ def _run_main(argv: List[str]) -> int:
     build_jobs = platform.env_int("XR_JOBS", default_jobs())
     ctest_jobs = platform.env_int("XR_CTEST_JOBS", default_ctest_jobs(build_jobs))
 
-    # XR_FAST removes both self-hosted stdlib generation edges from the edit
-    # cycle.  Source loading preserves the language/compiler checks while
-    # avoiding an embedded-bytecode rebuild that cannot succeed during parts of
-    # the bootstrap.  Fastpaths are a VM performance layer, not a semantic one.
+    # XR_FAST removes the embedded-bytecode generation edge from the edit
+    # cycle. Source loading preserves the language/compiler checks while
+    # avoiding a bytecode rebuild during compiler bootstrap work.
     # canonical/t2/t3 explicitly gate production configuration edges and reject
     # the flag. Narrow exact profiles identify themselves as partial preflights.
     if platform.env_flag("XR_FAST"):
@@ -700,14 +697,13 @@ def _run_main(argv: List[str]) -> int:
         build_dir = Path(os.environ.get("XR_BUILD_DIR", fast_default))
         fast_cache = (
             "XR_STDLIB_FROM_FILE:BOOL=ON",
-            "XRAY_STDLIB_VM_FASTPATHS:BOOL=OFF",
         )
         if not cache_contains_all(build_dir, fast_cache):
-            print(f"{BLUE}==>{NC} configuring {build_dir} (source stdlib, no VM fastpaths)")
+            print(f"{BLUE}==>{NC} configuring {build_dir} (source stdlib)")
             configure_args = [
                 "cmake", "-S", str(REPO_ROOT), "-B", str(build_dir), "-G", "Ninja",
                 "-DCMAKE_BUILD_TYPE=Release", "-DXR_STDLIB_FROM_FILE=ON",
-                "-DXRAY_STDLIB_VM_FASTPATHS=OFF", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+                "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
             ]
             if platform.IS_WINDOWS:
                 configure_args.extend((
@@ -719,7 +715,7 @@ def _run_main(argv: List[str]) -> int:
             if not configure.ok:
                 sys.stdout.write(configure.combined_text())
                 return 1
-        print(f"{YELLOW}XR_FAST{NC}: using {build_dir} with source stdlib and no VM fastpaths")
+        print(f"{YELLOW}XR_FAST{NC}: using {build_dir} with source stdlib")
 
     shards = platform.env_int("XR_SHARDS", 1)
     shard_index = platform.env_int("XR_SHARD_INDEX", 0)
