@@ -95,7 +95,8 @@ static XrXirStatus generated_receive(const XrXirCompileContext *context,Generate
     XrXirConstruction *construction=NULL;
     uint32_t field=0;XrXirConstructionRow row={0,&field,1};
     bool nominal=f->built.types && f->built.types->nominals;
-    XrXirStatus status=xr_xir_compile_construction_new(context,f->built.types,nominal?&row:NULL,nominal?1:0,&construction);
+    const XrXirConstructionSpec input={.rows=nominal?&row:NULL,.count=nominal?1u:0u};
+    XrXirStatus status=xr_xir_compile_construction_new_v3(context,f->built.types,&input,&construction);
     if(status==XR_XIR_OK) {
         XrXirGeneratedReceive request={&f->built,construction,f->origins,3};
         status=xr_xir_compile_generated_receive(context,&request,owner);
