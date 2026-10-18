@@ -1929,7 +1929,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
 endif()
 add_test(NAME test_native_string_search_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_string_search.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
+        --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_string_search_authority PROPERTIES
     LABELS "aot;generated-c;runtime-method;integration"
     TIMEOUT 240)
