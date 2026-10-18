@@ -150,4 +150,3 @@ XR_FUNC XaRefLocation *xa_symbol_get_refs(XaSymbolLinks *links, int *count) {
         *count = links->ref_count;
     return links->references;
 }
-

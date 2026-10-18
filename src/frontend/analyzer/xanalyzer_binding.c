@@ -108,4 +108,3 @@ XR_FUNC bool xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol **input, 
         links->file_path = ctx->file_path;
     return true;
 }
-

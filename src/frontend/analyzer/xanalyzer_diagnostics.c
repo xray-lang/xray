@@ -216,4 +216,3 @@ XR_FUNC int xa_analyzer_print_errors(XaAnalyzer *analyzer, const char *fallback_
     }
     return errors;
 }
-

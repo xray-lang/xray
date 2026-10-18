@@ -36,4 +36,3 @@ XR_FUNC void xa_symbol_links_dispose_contents(XaSymbolLinks *links) {
     links->references = NULL;
     links->ref_count = 0;
 }
-
