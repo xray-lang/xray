@@ -12,6 +12,7 @@
 #include "xxir_scalar_core.h"
 #include "xxir_float.h"
 #include "xxir_types.h"
+#include "xxir_operand_roles.h"
 static XrXirRunStatus core_value_status(XrXirValueStatus status) {
     if (status == XR_XIR_VALUE_OK) return XR_XIR_RUN_OK;
     if (status == XR_XIR_VALUE_OOM) return XR_XIR_RUN_OUT_OF_MEMORY;
@@ -200,12 +201,17 @@ XR_FUNC XrXirRunStatus xir_scalar_core_step(XirScalarCoreRun *run,uint32_t *curs
             xr_xir_scalar_load(run->frame, run->layout->offsets[op->args[1]]));
         *cursor = next; return core_value_status(status);
     }
-    case XR_XIR_RETURN:
-          action->kind=XIR_SCALAR_RETURN;action->value=(XrXirValue){0};
-          if (run->function->result!=XR_XIR_UNIT && !xr_xir_value_from_payload(run->arena,
-              run->function->result,xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]),&action->value))
-              return XR_XIR_RUN_BAD_ARTIFACT;
+    case XR_XIR_RETURN: {
+        XrXirType completion=xr_xir_function_completion(run->module,
+            (uint32_t)(run->function-run->module->functions));
+        action->kind=XIR_SCALAR_RETURN;action->value=(XrXirValue){0};
+        /* Generator completion has no SSA payload; its declared Iterator is
+         * the factory result, not an owner stored in the RETURN operand. */
+        if (completion!=XR_XIR_UNIT && !xr_xir_value_from_payload(run->arena,
+            completion,xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]]),&action->value))
+            return XR_XIR_RUN_BAD_ARTIFACT;
         return XR_XIR_RUN_OK;
+    }
     default:return XR_XIR_RUN_BAD_ARTIFACT;
     }
     if (op->type!=XR_XIR_UNIT) xr_xir_scalar_store(run->frame,run->layout->offsets[result_id],value);

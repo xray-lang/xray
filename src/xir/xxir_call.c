@@ -465,7 +465,7 @@ static XrXirCallStatus entry_arguments(const XrXirCallEntry *entry, const XrXirV
         bool borrowed=xr_xir_compile_type_arena_borrowed(admission->arena,entry->parameters[i])!=0;
         XrXirCallStatus status = borrowed ? (i<captures ? XR_XIR_CALL_BAD_ARGUMENT :
             call_view_argument_admit(call,value,entry->parameters[i])) : admit_value(value,entry->parameters[i],admission);
-        if (!borrowed && status==XR_XIR_CALL_BAD_ARGUMENT && call->active_view && value &&
+        if (!borrowed && status==XR_XIR_CALL_BAD_ARGUMENT && call && call->active_view && value &&
             value->type!=(uint32_t)entry->parameters[i])
             status=xr_xir_instance_argument_weakening_admit(call->active_view,entry->parameters[i],value);
         if (status != XR_XIR_CALL_READY) return status;
