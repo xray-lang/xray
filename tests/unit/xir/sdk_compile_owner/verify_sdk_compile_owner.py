@@ -113,6 +113,11 @@ def main():
         code, text = execute([args.owner, sdk_root, path, 'status'], output / (name + '.log'))
         assert code == 0 and int(text.split()[0]) == expected, (name, code, text)
     status('current-sdk-positive', manifest, 0)
+    for name, prefix in [('parent-wire30-sem76-program33', (30, 76, 24, 29, 33)),
+                         ('legacy259-wire28-sem75-program32', (28, 75, 24, 29, 32))]:
+        changed = json.loads(json.dumps(manifest))
+        changed.update(zip(('wire', 'semantic', 'value_abi', 'call_abi', 'program_abi'), prefix))
+        status(name, changed, 1)
     old_manifest = json.loads((old / 'sdk/sdk_manifest.json').read_text())
     status('old-sdk-identity', old_manifest, 1, old / 'sdk')
     for name,value in [('semantic',64),('value_abi',17),('call_abi',21),('program_abi',26),

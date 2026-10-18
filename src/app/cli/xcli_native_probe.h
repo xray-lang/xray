@@ -42,9 +42,8 @@ typedef struct XrCliNativeProbeReport {
 /* New only allocates on the required original ledger and preserves output on
  * failure. Run borrows request text for one synchronous capability selection.
  * Every attempt uses a real Source projection, locked compile/link replay,
- * native admission and exact native output. Only unavailable discovery and
- * completed startup or observed compile child failures can advance automatic selection.
- * Explicit paths/providers, resource failures and integrity failures cannot.
+ * native admission and exact native output. Explicit paths/providers,
+ * resource failures and integrity failures never select another provider.
  * The current invocation owner admits Windows MSVC. Other providers
  * require their own recipe and remain explicit unsupported cases; configuration
  * fallback permission cannot grant an unavailable provider implementation. */
