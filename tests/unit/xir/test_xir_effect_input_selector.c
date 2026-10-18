@@ -157,7 +157,58 @@ static void selector_capture_support(void) {
     pc_allocate_hook=NULL;pc_free_hook=NULL;pc_release(&context,baseline);
     puts("capture support: all64 obligations across words, individual ranks, fixed/raw flags, no callbacks and physical0");
 }
+/* A reference followed by k copies has exactly k+1 finite origins and
+ * RAW flags and Complete witnesses, with literal distance ranks 0 through k. These
+ * cases straddle the constructor's bounded ordinal table without changing
+ * the source relation or the independent exhaustive receiving obligation. */
+static void selector_complete_chain(void) {
+    for(uint32_t copies=126;copies<=128;++copies) {
+        XrXirTypeNode callable={.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_UNIT,.flags=XR_XIR_CALLABLE_ROOT_NONE};
+        XrXirTypes types={.nodes=&callable,.count=1};
+        XrXirInstruction done={.op=XR_XIR_RETURN},ops[130]={0};
+        ops[0]=(XrXirInstruction){.op=XR_XIR_FUNCTION_REF,.type=(XrXirType)256,.immediate=1};
+        for(uint32_t i=1;i<=copies;++i) ops[i]=(XrXirInstruction){.op=XR_XIR_COPY,.type=(XrXirType)256,.args={i-1}};
+        ops[copies+1]=done;
+        XrXirBlock blocks[3]={{.count=1},{.count=1},{.count=copies+2}};
+        XrXirFunction functions[3]={{.name="init",.name_length=4,.instructions=&done,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
+            {.name="leaf",.name_length=4,.instructions=&done,.instruction_count=1,.blocks=&blocks[1],.block_count=1},
+            {.name="chain",.name_length=5,.instructions=ops,.instruction_count=copies+2,.blocks=&blocks[2],.block_count=1}};
+        XrXirFunctionIdentity identities[3]={{0}};
+        XrXirSourceModule identity={.name="chain",.name_length=5};
+        XrXirDeclarations declarations={.modules=&identity,.module_count=1,.functions=identities,
+            .root_module=UINT32_MAX,.entry_function=2};
+        XrXirModule module={.stage=XR_XIR_BUILT,.types=&types,.functions=functions,.function_count=3,
+            .declarations=&declarations,.linkage_kind=XR_XIR_LIBRARY};
+        XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+        XrXirEffects *effects=NULL;CHECK(xr_xir_compile_effects_infer_verified(&context,&module,&effects)==XR_XIR_OK && effects);
+        EffectInvocationFinal *final=effects->invocations->final;
+        CHECK(final->site_count==1 && !final->binding_count && final->sites[0].function==2 &&
+            !final->sites[0].instruction && final->sites[0].target==1 && !final->sites[0].captures);
+        CHECK(final->capture.count==3*(copies+1));
+        uint32_t origins=0,raw=0,complete=0,node=final->roots[2];
+        EffectCaptureFact *last=NULL;
+        for(uint32_t f=0;f<final->capture.count;++f) {
+            EffectCaptureFact *fact=&final->capture.facts[f];
+            CHECK(fact->node==node && fact->value<=copies && fact->rank==fact->value);
+            if(!fact->word && !fact->bit) ++origins;
+            else if(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit==EFFECT_CAPTURE_RAW) ++raw;
+            else { CHECK(fact->word==EFFECT_CAPTURE_FLAGS && fact->bit==EFFECT_CAPTURE_COMPLETE);++complete;last=fact; }
+        }
+        CHECK(origins==copies+1 && raw==copies+1 && complete==copies+1 && last);
+        memset(ops,0xDC,sizeof(ops));memset(functions,0xDC,sizeof(functions));
+        size_t allocated=attempts;uint64_t physical=live_bytes;
+        pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+        CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
+        uint64_t rank=last->rank;last->rank=rank+1;
+        CHECK(effect_capture_match(&context,final)==XR_XIR_BAD_STRUCTURE);last->rank=rank;
+        CHECK(effect_capture_match(&context,final)==XR_XIR_OK && attempts==allocated && live_bytes==physical);
+        pc_allocate_hook=NULL;pc_free_hook=NULL;
+        xr_xir_compile_effects_free(effects);pc_release(&context,baseline);
+    }
+    puts("Complete constructor:127/128/129 literal copy-chain witnesses, exact identities/ranks, exhaustive receiving and physical0 PASS");
+}
 int main(void) {
+    selector_complete_chain();
     selector_capture_support();
     selector_raw_source_replay();
     selector_scalar_domain();

@@ -13,7 +13,7 @@
  */
 typedef struct EffectCaptureComplete {
     uint64_t rank;
-    bool complete;
+    bool complete,admitted;
 } EffectCaptureComplete;
 
 static XrXirStatus effect_capture_complete_source(const EffectCaptureRead *read,
@@ -77,7 +77,7 @@ static XrXirStatus effect_capture_complete_admit(const EffectCaptureRead *read,
 static XrXirStatus effect_capture_complete_initial(const EffectCaptureRead *read,
     const EffectCaptureNode *node,uint32_t parameter,uint32_t column,EffectCaptureComplete *result) {
     if(read->final->roots[read->final->nodes[node->node].body]==node->node) {
-        result->complete=false;return XR_XIR_OK;
+        result->complete=false;result->admitted=false;return XR_XIR_OK;
     }
     uint32_t count=0;
     for(uint32_t e=0;e<read->final->edge_count;++e) {
@@ -226,6 +226,7 @@ static XrXirStatus effect_capture_complete_value(const EffectCaptureRead *read,
     *result=(EffectCaptureComplete){.complete=true};bool admitted=false;
     XrXirStatus status=effect_capture_complete_admit(read,node,value,column,&admitted);
     if(status!=XR_XIR_OK || !admitted) { result->complete=false;return status; }
+    result->admitted=true;
     if(value>node->values) return effect_capture_complete_initial(read,node,value-node->values-1,column,result);
     if(value==node->values) return effect_capture_complete_selected(read,node,value,EFFECT_FINAL_SELECT_RETURN,column,result);
     if(value<node->head.parameter_count) {
@@ -250,49 +251,85 @@ static XrXirStatus effect_capture_complete_value(const EffectCaptureRead *read,
             break;
         case XR_XIR_CALL:case XR_XIR_CALL_DEFAULT:case XR_XIR_CALL_INDIRECT:case XR_XIR_INVOKE_RESULT:
             status=effect_capture_complete_call(read,node,i,column,result);break;
-        default:result->complete=false;break;
+        default:result->complete=false;result->admitted=false;break;
         }
     }
     if(status!=XR_XIR_OK || !result->complete) return status;
     return effect_capture_complete_selected(read,node,value,EFFECT_FINAL_SELECT_WRITE,column,result);
 }
 
+typedef struct EffectCaptureCompleteCoordinate {
+    uint32_t node,value,column;
+} EffectCaptureCompleteCoordinate;
+typedef struct EffectCaptureCompleteJobs {
+    EffectCaptureCompleteCoordinate values[128];
+    uint32_t count;
+    bool overflow;
+} EffectCaptureCompleteJobs;
+
+static XrXirStatus effect_capture_complete_open(EffectCaptureRead *read,
+    EffectBodyCurrentRead *current,EffectCaptureNode *views,EffectCaptureActualRead *actuals) {
+    if(!read->builder || read->body.current) return XR_XIR_OK;
+    *current=(EffectBodyCurrentRead){0};
+    XrXirStatus status=effect_body_current_open(read->work,read->final->material,current);
+    if(status!=XR_XIR_OK) return status;
+    read->body.current=current;
+    if(views && actuals) {
+        if(read->final->count<=32) {
+            for(uint32_t at=0;at<read->final->count;++at) {
+                status=effect_capture_node(read,at,&views[at]);if(status!=XR_XIR_OK) return status;
+            }
+            read->node_views=views;read->node_view_count=read->final->count;
+        }
+        status=effect_capture_actuals_read(read,actuals);if(status!=XR_XIR_OK) return status;
+        if(actuals->edges) read->actuals=actuals;
+    }
+    return XR_XIR_OK;
+}
+
+/* Every source loan ends before a growing emit. In-place Complete writes
+ * preserve the current body and origin projections used by the next job. */
+static XrXirStatus effect_capture_complete_put(EffectCaptureRead *read,
+    EffectBodyCurrentRead *current,EffectCaptureNode *borrowed,
+    EffectCaptureCompleteCoordinate coordinate,const EffectCaptureComplete *result) {
+    EffectCaptureFact key={coordinate.node,coordinate.value,EFFECT_CAPTURE_FLAGS,
+        EFFECT_CAPTURE_COMPLETE+coordinate.column,result->rank};
+    const EffectCaptureFact *stored=NULL;XrXirStatus status=effect_capture_find(read,key,&stored);
+    if(status!=XR_XIR_OK) return status;
+    if(!read->builder && stored && (!result->complete || stored->rank!=result->rank)) return XR_XIR_BAD_STRUCTURE;
+    if(!result->complete) return XR_XIR_OK;
+    bool growing=read->builder && read->builder->count==read->builder->capacity && !stored;
+    if(growing) {
+        read->node_view=NULL;read->body.current=NULL;
+        read->node_views=NULL;read->node_view_count=0;read->actuals=NULL;
+        *borrowed=(EffectCaptureNode){0};*current=(EffectBodyCurrentRead){0};
+    }
+    status=effect_capture_emit(read,key);if(status!=XR_XIR_OK) return status;
+    return growing?effect_capture_frame(read):XR_XIR_OK;
+}
+
 static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
     EffectBodyCurrentRead *current,EffectCaptureNode *borrowed,
-    EffectCaptureNode *views,EffectCaptureActualRead *actuals) {
+    EffectCaptureNode *views,EffectCaptureActualRead *actuals,EffectCaptureCompleteJobs *jobs) {
     if(read->final->binding_count>UINT32_MAX-EFFECT_CAPTURE_COMPLETE) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t n=0;n<read->final->count;++n) for(uint32_t value=0;;++value) {
         uint32_t column=0;bool present=false;
         for(;;) {
-            if(read->builder && !read->body.current) {
-                *current=(EffectBodyCurrentRead){0};
-                XrXirStatus status=effect_body_current_open(read->work,read->final->material,current);
-                if(status!=XR_XIR_OK) return status;
-                read->body.current=current;
-                if(views && actuals) {
-                    if(read->final->count<=32) {
-                        for(uint32_t at=0;at<read->final->count;++at) {
-                            status=effect_capture_node(read,at,&views[at]);if(status!=XR_XIR_OK) return status;
-                        }
-                        read->node_views=views;read->node_view_count=read->final->count;
-                    }
-                    status=effect_capture_actuals_read(read,actuals);if(status!=XR_XIR_OK) return status;
-                    if(actuals->edges) read->actuals=actuals;
-                }
-            }
+            XrXirStatus status=effect_capture_complete_open(read,current,views,actuals);
+            if(status!=XR_XIR_OK) return status;
             /* Heads remain borrowed only until an emit can invoke allocation
              * or release. No borrowed field survives that callback boundary. */
-            EffectCaptureComplete result={0};uint64_t end=0;
+            EffectCaptureComplete result={0};
             {
                 if(!read->node_view || read->node_view->node!=n) {
-                    read->node_view=NULL;XrXirStatus status=effect_capture_node(read,n,borrowed);
+                    read->node_view=NULL;status=effect_capture_node(read,n,borrowed);
                     if(status!=XR_XIR_OK) return status;
                     read->node_view=borrowed;
                 }
                 const EffectCaptureNode *node=NULL;
-                XrXirStatus status=effect_capture_node_borrow(read,n,borrowed,&node);
+                status=effect_capture_node_borrow(read,n,borrowed,&node);
                 if(status!=XR_XIR_OK) return status;
-                end=(uint64_t)node->values+1+node->head.parameter_count;
+                uint64_t end=(uint64_t)node->values+1+node->head.parameter_count;
                 if(value>=end) break;
                 present=true;
                 if(!column) {
@@ -315,27 +352,50 @@ static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
                 }
                 status=effect_capture_complete_value(read,node,value,column,&result);if(status!=XR_XIR_OK) return status;
             }
-            EffectCaptureFact key={n,value,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_COMPLETE+column,result.rank};
-            const EffectCaptureFact *stored=NULL;XrXirStatus status=effect_capture_find(read,key,&stored);
-            if(status!=XR_XIR_OK) return status;
-            if(!read->builder && stored && (!result.complete || stored->rank!=result.rank)) return XR_XIR_BAD_STRUCTURE;
-            if(result.complete) {
-                bool growing=read->builder && read->builder->count==read->builder->capacity && !stored;
-                if(growing) {
-                    read->node_view=NULL;read->body.current=NULL;
-                    read->node_views=NULL;read->node_view_count=0;read->actuals=NULL;
-                    *borrowed=(EffectCaptureNode){0};*current=(EffectBodyCurrentRead){0};
+            EffectCaptureCompleteCoordinate coordinate={n,value,column};
+            if(jobs && result.admitted && !jobs->overflow) {
+                if(jobs->count==XR_COUNTOF(jobs->values)) {
+                    if(!xir_compile_work(read->work,sizeof(jobs->overflow))) return XR_XIR_BUDGET;
+                    jobs->overflow=true;
                 }
-                status=effect_capture_emit(read,key);if(status!=XR_XIR_OK) return status;
-                if(growing) {
-                    status=effect_capture_frame(read);if(status!=XR_XIR_OK) return status;
+                else {
+                    if(!xir_compile_work(read->work,sizeof(coordinate)+sizeof(jobs->count))) return XR_XIR_BUDGET;
+                    jobs->values[jobs->count++]=coordinate;
                 }
             }
+            status=effect_capture_complete_put(read,current,borrowed,coordinate,&result);
+            if(status!=XR_XIR_OK) return status;
             if(column==read->final->binding_count) break;
             ++column;
         }
         if(!present) break;
         if(value==UINT32_MAX) return XR_XIR_BUDGET;
+    }
+    return XR_XIR_OK;
+}
+
+/* Admission depends on the fixed origin/type domain, not on Complete facts.
+ * Ordinals collected by the first full sweep select subsequent builder work;
+ * every job recomputes its current rule and rank. Receiving still walks the
+ * entire actual domain, independently of these constructor proposals. */
+static XrXirStatus effect_capture_complete_jobs(EffectCaptureRead *read,
+    EffectBodyCurrentRead *current,EffectCaptureNode *borrowed,
+    EffectCaptureNode *views,EffectCaptureActualRead *actuals,const EffectCaptureCompleteJobs *jobs) {
+    if(!read->builder || !read->complete_scope || !jobs || jobs->overflow) return XR_XIR_BAD_STRUCTURE;
+    for(uint32_t j=0;j<jobs->count;++j) {
+        if(!xir_compile_work(read->work,sizeof(EffectCaptureCompleteCoordinate))) return XR_XIR_BUDGET;
+        EffectCaptureCompleteCoordinate coordinate=jobs->values[j];
+        XrXirStatus status=effect_capture_complete_open(read,current,views,actuals);
+        if(status!=XR_XIR_OK) return status;
+        EffectCaptureComplete result={0};
+        {
+            const EffectCaptureNode *node=NULL;
+            status=effect_capture_node_borrow(read,coordinate.node,borrowed,&node);
+            if(status!=XR_XIR_OK) return status;
+            status=effect_capture_complete_value(read,node,coordinate.value,coordinate.column,&result);
+        }
+        if(status==XR_XIR_OK) status=effect_capture_complete_put(read,current,borrowed,coordinate,&result);
+        if(status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
@@ -367,7 +427,7 @@ static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
     if(read->builder && (saved_current || saved_node)) return XR_XIR_BAD_STRUCTURE;
     EffectBodyCurrentRead current={0};EffectCaptureNode borrowed={0};
     read->node_view=NULL;
-    status=effect_capture_complete_walk(read,&current,&borrowed,NULL,NULL);
+    status=effect_capture_complete_walk(read,&current,&borrowed,NULL,NULL,NULL);
     read->body.current=saved_current;read->node_view=saved_node;
     return status;
 }
@@ -381,11 +441,16 @@ static XrXirStatus effect_capture_complete_construct(EffectCaptureRead *read) {
     bool empty=false;XrXirStatus status=effect_capture_complete_empty(read,&empty);
     if(status!=XR_XIR_OK || empty) return status;
     EffectBodyCurrentRead current={0};EffectCaptureNode borrowed={0},views[32];EffectCaptureActualRead actuals;
-    read->complete_scope=true;
-    do {
+    EffectCaptureCompleteJobs jobs;
+    if(!xir_compile_work(read->work,sizeof(jobs.count)+sizeof(jobs.overflow))) return XR_XIR_BUDGET;
+    jobs.count=0;jobs.overflow=false;
+    read->complete_scope=true;read->changed=false;
+    status=effect_capture_complete_walk(read,&current,&borrowed,views,&actuals,&jobs);
+    while(status==XR_XIR_OK && read->changed) {
         read->changed=false;
-        status=effect_capture_complete_walk(read,&current,&borrowed,views,&actuals);
-    } while(status==XR_XIR_OK && read->changed);
+        status=jobs.overflow?effect_capture_complete_walk(read,&current,&borrowed,views,&actuals,NULL):
+            effect_capture_complete_jobs(read,&current,&borrowed,views,&actuals,&jobs);
+    }
     read->complete_scope=false;read->body.current=NULL;read->node_view=NULL;
     read->node_views=NULL;read->node_view_count=0;read->actuals=NULL;return status;
 }
