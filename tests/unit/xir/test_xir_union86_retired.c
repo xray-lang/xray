@@ -45,7 +45,7 @@ static void reject(const RetiredPacket *row) {
     xr_free(data);
 }
 int main(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==90,"combined receiving identity");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==91,"combined receiving identity");
     for (size_t i=0;i<sizeof(retired_packets)/sizeof(retired_packets[0]);++i) reject(retired_packets+i);
     printf("Complete retired packets=%zu; empty/occupied output, no receiving allocation, bounded header work PASS\n",
         sizeof(retired_packets)/sizeof(retired_packets[0]));return 0;

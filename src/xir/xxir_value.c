@@ -1605,6 +1605,7 @@ XR_FUNC XrXirValueStatus xr_xir_cell_write(const XrXirValue *cell, const XrXirVa
 #include "xxir_storage_prepare.inc.c"
 #include "xxir_array_prepare.inc.c"
 #include "xxir_array_value.inc.c"
+#include "xxir_value_string_owned.inc.c"
 static XrXirValueStatus cell_value_place_storage(const XrXirValue *cell,
     XrXirValueAdmission *admission, XrXirValuePlace *output, const XrXirCellAuthority *authority) {
     if (!output || !cell || !admission || !admission->arena || !admission->domain)

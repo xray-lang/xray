@@ -25,7 +25,7 @@
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
 #include "xir_source_fixture_owner.h"
 #include "xir_generator89_golden.h"
-#include "xir_generator90_golden.h"
+#include "xir_generator91_golden.h"
 #include "xir_generator86_golden.h"
 #include "xir_generator87_golden.h"
 #include "xir_generator88_golden.h"
@@ -222,19 +222,19 @@ static void packet_models(const XrXirCompileContext *context) {
         CHECK(after.allocated_bytes==before.allocated_bytes && after.allocation_count==before.allocation_count && after.live_bytes==before.live_bytes);
     }
     const struct {const uint8_t *bytes;size_t length;XrXirStatus expected;} cases[]={
-        {generator90_i64,sizeof(generator90_i64),XR_XIR_OK},{generator90_unit,sizeof(generator90_unit),XR_XIR_OK},
-        {generator90_no_role,sizeof(generator90_no_role),XR_XIR_BAD_TYPE},
-        {generator90_scalar_result,sizeof(generator90_scalar_result),XR_XIR_BAD_TYPE},
-        {generator90_wrong_value,sizeof(generator90_wrong_value),XR_XIR_BAD_TYPE},
-        {generator90_return_arg,sizeof(generator90_return_arg),XR_XIR_BAD_STRUCTURE},
-        {generator90_no_suspend,sizeof(generator90_no_suspend),XR_XIR_BAD_STRUCTURE},
-        {generator90_ref_parameter,sizeof(generator90_ref_parameter),XR_XIR_BAD_TYPE},
-        {generator90_unit_arg,sizeof(generator90_unit_arg),XR_XIR_BAD_STRUCTURE},
-        {generator90_unknown_role,sizeof(generator90_unknown_role),XR_XIR_BAD_STRUCTURE},
-        {generator90_initializer_role,sizeof(generator90_initializer_role),XR_XIR_BAD_STRUCTURE},
-        {generator90_entry_role,sizeof(generator90_entry_role),XR_XIR_BAD_STRUCTURE},
-        {generator90_map_result,sizeof(generator90_map_result),XR_XIR_BAD_TYPE},
-        {generator90_set_result,sizeof(generator90_set_result),XR_XIR_BAD_TYPE}};
+        {generator91_i64,sizeof(generator91_i64),XR_XIR_OK},{generator91_unit,sizeof(generator91_unit),XR_XIR_OK},
+        {generator91_no_role,sizeof(generator91_no_role),XR_XIR_BAD_TYPE},
+        {generator91_scalar_result,sizeof(generator91_scalar_result),XR_XIR_BAD_TYPE},
+        {generator91_wrong_value,sizeof(generator91_wrong_value),XR_XIR_BAD_TYPE},
+        {generator91_return_arg,sizeof(generator91_return_arg),XR_XIR_BAD_STRUCTURE},
+        {generator91_no_suspend,sizeof(generator91_no_suspend),XR_XIR_BAD_STRUCTURE},
+        {generator91_ref_parameter,sizeof(generator91_ref_parameter),XR_XIR_BAD_TYPE},
+        {generator91_unit_arg,sizeof(generator91_unit_arg),XR_XIR_BAD_STRUCTURE},
+        {generator91_unknown_role,sizeof(generator91_unknown_role),XR_XIR_BAD_STRUCTURE},
+        {generator91_initializer_role,sizeof(generator91_initializer_role),XR_XIR_BAD_STRUCTURE},
+        {generator91_entry_role,sizeof(generator91_entry_role),XR_XIR_BAD_STRUCTURE},
+        {generator91_map_result,sizeof(generator91_map_result),XR_XIR_BAD_TYPE},
+        {generator91_set_result,sizeof(generator91_set_result),XR_XIR_BAD_TYPE}};
     for(unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
         XrXirArtifact *decoded=NULL;XrXirStatus status=xr_xir_compile_checked_read(context,cases[i].bytes,cases[i].length,&decoded,NULL);
         if(status!=cases[i].expected) fprintf(stderr,"Independent packet%u status%u expected%u\n",i,status,cases[i].expected);

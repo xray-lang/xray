@@ -5,5 +5,7 @@ export fn referenceAnswer() -> i64 {
     if ("aaa".replaceAll("aa", "a") != "aa" || "é\0é".replaceAll("é", "🙂") != "🙂\0🙂") { return 0 }
     if ("abc".replaceAll("", "x") != "abc" || "abc".replaceAll("b", "") != "ac") { return 0 }
     if ("".replaceAll("a", "b") != "" || "abc".replaceAll("abcdef", "x") != "abc") { return 0 }
+    if ("éabcdefghiéabcdefghi".replaceAll("éabcdefghi", "aéabcdefghi") != "aéabcdefghiaéabcdefghi") { return 0 }
+    if ("same".replaceAll("same", "same") != "same") { return 0 }
     return 42
 }

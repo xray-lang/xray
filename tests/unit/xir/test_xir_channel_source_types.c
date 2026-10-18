@@ -23,7 +23,7 @@
 #include "shared_current_checked.h"
 static void channel_wire(void) {
     const XrXirCompileContext *context=effects_source_owner(UINT64_C(67108864),UINT64_C(128000000));
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==90 && XR_XIR_VALUE_ABI_VERSION==30,
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==32 && XR_XIR_CHECKED_CONTRACT==91 && XR_XIR_VALUE_ABI_VERSION==30,
         "Channel descriptors require the current semantic and runtime generation");
     const uint8_t *expected[]={shared_channel_int,shared_channel_unit};
     const size_t lengths[]={sizeof(shared_channel_int),sizeof(shared_channel_unit)};

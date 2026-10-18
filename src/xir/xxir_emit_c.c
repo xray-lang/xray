@@ -480,6 +480,18 @@ static void emit_instance_step(CBuffer *buffer, const XrXirModule *module,
             " status = xr_xir_instance_scalar_text(view, &scalar, &value);\n",
             (uint32_t) xr_xir_operand_type(function, op->args[0]), layout->offsets[op->args[0]]);
         break;
+    case XR_XIR_STRING_COPY_BYTES:
+        append(buffer," XrXirValue receiver={XR_XIR_STRING,0,xr_xir_scalar_load(state->frame,%uu)};\n"
+            " status=xr_xir_instance_string_copy_bytes(view,(XrXirType)%uu,&receiver,&value);\n",
+            layout->offsets[op->args[0]],(uint32_t)op->type);break;
+    case XR_XIR_STRING_REPLACE: {
+        const uint32_t *ids=function->operands+op->args[0];
+        append(buffer," XrXirValue receiver={XR_XIR_STRING,0,xr_xir_scalar_load(state->frame,%uu)};\n"
+            " XrXirValue search={XR_XIR_STRING,0,xr_xir_scalar_load(state->frame,%uu)};\n"
+            " XrXirValue replacement={XR_XIR_STRING,0,xr_xir_scalar_load(state->frame,%uu)};\n"
+            " status=xr_xir_instance_string_replace(view,&receiver,&search,&replacement,%s,&value);\n",
+            layout->offsets[ids[0]],layout->offsets[ids[1]],layout->offsets[ids[2]],op->immediate?"true":"false");break;
+    }
     default: emit_reject(buffer, XR_XIR_BAD_STAGE); break;
     }
     EMIT_STATIC(buffer, es_bf88de7cd2177400, " if (status != XR_XIR_CALL_READY) return (XrXirAction) "
@@ -1124,7 +1136,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         return;
     }
     if ((op->op >= XR_XIR_CONST_STRING && op->op <= XR_XIR_SLOT_STORE) || op->op == XR_XIR_SLOT_GROUP_INIT || op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_FUNCTION_WEAKEN ||
-        op->op == XR_XIR_TO_STRING ||
+        op->op == XR_XIR_TO_STRING || op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_STRING_REPLACE ||
         (op->op >= XR_XIR_CELL_NEW && op->op <= XR_XIR_CELL_WRITE) || op->op == XR_XIR_CELL_LOCAL_WRITE ||
         op->op == XR_XIR_CELL_STRING_APPEND) {
         emit_instance_step(buffer, module, function, op, layout, destination);

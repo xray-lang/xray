@@ -1,0 +1,9 @@
+fn computed() -> i64 {
+    const text = "é\0é".replaceAll("é", "🙂")
+    const bytes = text.copyBytes()
+    if (text != "🙂\0🙂" || len(bytes) != 9 || bytes[0] != 240 || bytes[4] != 0 || bytes[8] != 130) { return 0 }
+    if ("a\0a".replace("a", "é") != "é\0a") { return 0 }
+    return 42
+}
+fn consume(value: i64) -> i64 { return value }
+export fn referenceAnswer() -> i64 { const result = comptime computed(); return consume(result) }

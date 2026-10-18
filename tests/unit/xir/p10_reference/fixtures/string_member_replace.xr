@@ -4,5 +4,6 @@ export fn referenceAnswer() -> i64 {
     if (probe("aa") != 2 || "aaaa".replace("aa", "X") != "Xaa") { return 0 }
     if ("é\0é🙂".replace("\0é", "Q") != "éQ🙂") { return 0 }
     if ("abc".replace("", "x") != "abc" || "abc".replace("b", "") != "ac") { return 0 }
+    if ("abcdefghijabcdefghij".replace("abcdefghij", "é") != "éabcdefghij") { return 0 }
     return 42
 }

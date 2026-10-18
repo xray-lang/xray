@@ -3,6 +3,7 @@ from pathlib import Path
 import argparse
 import hashlib
 import json
+import re
 import struct
 
 ROOT=Path(__file__).resolve().parent
@@ -12,7 +13,7 @@ def words(*values):
     return struct.pack('<'+'I'*len(values),*values)
 
 
-def channel_packet(element):
+def channel_packet(element, semantic=91):
     name=b'channelTypes'
     function=words(len(name))+name+words(2,256,257,0,1,0,1,0,0,1)
     instruction=words(33,0,0,0,0,0)+struct.pack('<q',0)+words(0,0)
@@ -20,7 +21,7 @@ def channel_packet(element):
     body=words(0,1,0)+function+instruction+words(0,0,2,0,0,14,0,element,14,0,3)
     # Construction rows, materializations, CTFE sites/bindings, defaults, provenance.
     body+=words(0,0,0,0,0,0)
-    prefix=b'XRCHK\0\0\0'+struct.pack('<4IQ',32,90,2,0,len(body))
+    prefix=b'XRCHK\0\0\0'+struct.pack('<4IQ',32,semantic,2,0,len(body))
     return prefix+hashlib.sha256(prefix+body).digest()+body
 
 
@@ -42,7 +43,10 @@ def main():
         assert hashlib.sha256(data[:32]+data[64:]).digest()==data[32:64]
         container+=words(len(data))+bytes.fromhex(row['sha256'])+data
     header='/* Independent current Channel signature field model. */\n'
+    previous=(ROOT/'shared_previous90_checked.h').read_text()
     for name,element in [('shared_channel_int',2),('shared_channel_unit',0)]:
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==channel_packet(element,90)
         data=channel_packet(element)
         header+='static const uint8_t '+name+'[] = {\n'
         header+=''.join('    '+','.join(f'0x{x:02x}' for x in data[i:i+16])+',\n' for i in range(0,len(data),16))
@@ -53,7 +57,7 @@ def main():
         if args.write:path.write_bytes(data)
         else:assert path.read_bytes()==data,filename
     print(json.dumps({'fixed_parents':5,'complete_unique_parent_packets':1284,'complete_packet_bytes':804442,
-                      'container_sha256':hashlib.sha256(container).hexdigest(),'current':[32,90],
+                      'container_sha256':hashlib.sha256(container).hexdigest(),'current':[32,91],
                       'expected_source':'explicit function, instruction, type and empty metadata fields; no writer output'}))
 
 

@@ -118,12 +118,17 @@ def main():
         for symbol,data in [('current_sdk_kat_preimage',prior_image),('current_sdk_kat_file_digest',prior_file),('current_sdk_kat_digest',prior_digest)]:
             match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_text,re.S)
             assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,('complete predecessor SDK KAT changed',name)
-    image,file_digest,digest=current_preimage(current_rows,90,30,35,32,36)
+    prior_image,prior_file,prior_digest=current_preimage(current_rows,90,30,35,32,36)
+    prior_text=Path(__file__).with_name('sdk_previous90_identity_golden.h').read_text(encoding='utf-8')
+    for symbol,data in [('current_sdk_kat_preimage',prior_image),('current_sdk_kat_file_digest',prior_file),('current_sdk_kat_digest',prior_digest)]:
+        match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete semantic90 SDK KAT changed'
+    image,file_digest,digest=current_preimage(current_rows,91,30,35,32,36)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows,75,25)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(32,90,30,35,36)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(32,91,30,35,36)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
     assert len(image)==3330 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest

@@ -372,6 +372,7 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     case XR_XIR_VIEW_NEW: case XR_XIR_VIEW_REBORROW: case XR_XIR_VIEW_LEN:
     case XR_XIR_VIEW_GET: case XR_XIR_VIEW_SET: case XR_XIR_VIEW_COPY:
     case XR_XIR_VIEW_END: case XR_XIR_VIEW_CLEANUP:
+    case XR_XIR_STRING_COPY_BYTES: case XR_XIR_STRING_REPLACE:
     case XR_XIR_CONST_RUNE: case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING:
