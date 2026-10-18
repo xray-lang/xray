@@ -67,6 +67,7 @@ static void delta_mask_case(uint32_t mask,uint32_t less,bool full) {
 
 static void delta_group_cases(void) {
     single_run_decode_cases();borrowed_instruction_cases();fixed_data_cases();runtime_current_key_cases();runtime_capture_walk_cases();
+    runtime_origin_identity_cases();
     for(uint32_t mask=0;mask<1024;++mask)for(uint32_t less=0;less<2;++less)for(uint32_t full=0;full<2;++full)
         delta_mask_case(mask,less,full!=0);
     puts("All1024 physical masks,all selected zero slots,original scalar equality,complete row/exact-minus1,unchanged failure outputs,no allocations,physical0 PASS");

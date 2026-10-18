@@ -81,6 +81,7 @@ static XrXirStatus capture_walk_value(void *owner,uint32_t p,const XirEffectRunt
     if(last && probe->attack==2)output->producer=UINT32_MAX;
     if(last && probe->attack==3)output->publication=1;
     if(last && probe->attack==4)output->publication=0;
+    if(last && probe->attack==5)output->reserved=1;
     return XR_XIR_OK;
 }
 static void capture_walk_query_cases(const XrXirEffects *effects,const XirEffectInvocationRequest *request,
@@ -116,6 +117,10 @@ static void capture_walk_query_cases(const XrXirEffects *effects,const XirEffect
         CHECK(xir_effects_execution_edge(effects,request,&untouched)==(attack?XR_XIR_BAD_TYPE:XR_XIR_OK) && !probe->live);
         CHECK(probe->reads==258 && (attack?!memcmp(&untouched,selected,sizeof(untouched)):untouched.node==selected->node));
     }
+    *probe=capture_walk_probe(257);probe->attack=5;XirEffectInvocationSelection reserved=*selected;
+    XrXirStatus reserved_status=xir_effects_execution_edge(effects,request,&reserved);
+    fprintf(stderr,"CAPTURE_RESERVED status%u reads%u physical_live%llu\n",reserved_status,probe->reads,(unsigned long long)probe->live);
+    CHECK(reserved_status==XR_XIR_BAD_TYPE && !memcmp(&reserved,selected,sizeof(reserved)) && !probe->live);
     *probe=capture_walk_probe(17);probe->cycle=true;XirEffectInvocationSelection cycle={0};
     CHECK(xir_effects_execution_edge(effects,request,&cycle)==XR_XIR_OK && cycle.node==selected->node && probe->reads==18 && !probe->live);
     printf("CAPTURE_WALK real solver repeated-site relation, distinct257 handles, cycle identity, %u work/18 read refusals, %u OOM/same-owner retries, threeaxes, producer-dead, physical0 PASS\n",calls,allocations);
@@ -142,4 +147,5 @@ static void runtime_capture_walk_cases(void) {
     CHECK(before.work==after.work && before.allocation_count==after.allocation_count && before.live_bytes==after.live_bytes);
     xr_xir_compile_effects_free(effects);rp_owner_free(&context,baseline);rp_balanced(physical);CHECK(!rp_live && !rp_live_bytes);
 }
+#include "xir_runtime_origin_identity_cases.h"
 #endif // XIR_RUNTIME_CAPTURE_WALK_CASES_H

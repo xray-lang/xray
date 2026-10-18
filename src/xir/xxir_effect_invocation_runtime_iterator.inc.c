@@ -26,7 +26,7 @@ static XrXirStatus effect_runtime_origin_shape(const EffectRuntimeOriginRead *re
     const EffectInvocationFinal *owner=certificate->final;
     bool iterator=effect_physical_iterator(&certificate->terms.types,expected);
     bool terminal=iterator && value->publication==0;
-    if(!value->payload || value->producer>=owner->site_count || (!terminal && value->publication!=UINT32_MAX) ||
+    if(value->reserved || !value->payload || value->producer>=owner->site_count || (!terminal && value->publication!=UINT32_MAX) ||
         !effect_physical_origin(&certificate->terms.types,(XrXirType)value->type) ||
         iterator!=effect_physical_iterator(&certificate->terms.types,(XrXirType)value->type)) return XR_XIR_BAD_TYPE;
     const EffectInvocationSite *site=&owner->sites[value->producer];
@@ -36,7 +36,7 @@ static XrXirStatus effect_runtime_origin_shape(const EffectRuntimeOriginRead *re
         (site->captures && !certificate->body->functions[site->target].parameters) ||
         column>read->basis.fn_words || read->basis.origin_words>read->basis.fn_words-column)
         return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_runtime_work(&read->request->read,12+sizeof(*captures));
+    XrXirStatus status=effect_runtime_work(&read->request->read,13+sizeof(*captures));
     if(status!=XR_XIR_OK) return status;
     if(!(read->row[column+value->producer/64]&(UINT64_C(1)<<(value->producer%64)))) return XR_XIR_BAD_TYPE;
     EffectBodyRead body=effect_body_runtime_read(&read->request->read);XrXirInstruction reference;
@@ -54,9 +54,10 @@ static XrXirStatus effect_runtime_origin_storage(const EffectRuntimeOriginRead *
     const EffectInvocationBasis *basis=&read->basis;
     bool cell=xr_xir_type_is_cell(&read->certificate->terms.types,type);
     bool is_class=xr_xir_type_is_class(&read->certificate->terms.types,type);
-    if(value->producer!=UINT32_MAX || (!cell && !is_class?value->publication!=UINT32_MAX:value->publication>1))
+    if(value->reserved || value->producer!=UINT32_MAX || (!cell && !is_class?value->publication!=UINT32_MAX:value->publication>1))
         return XR_XIR_BAD_TYPE;
-    if(!cell && !is_class) return XR_XIR_OK;
+    XrXirStatus checked=effect_runtime_work(&read->request->read,1);
+    if(checked!=XR_XIR_OK || (!cell && !is_class)) return checked;
     uint64_t first=(uint64_t)column+basis->origin_words;
     if(first>basis->fn_words || basis->cell_words>basis->fn_words-first) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t w=0;w<basis->cell_words;++w) {
@@ -122,7 +123,16 @@ static XrXirStatus effect_runtime_origin_walk(const EffectRuntimeOriginRead *rea
         bool ancestor=false;
         for(size_t n=0;n<stack.depth;++n) {
             status=effect_runtime_work(actual,2);if(status!=XR_XIR_OK) break;
-            if(stack.frames[n].value.payload==child.payload) {ancestor=true;break;}
+            if(stack.frames[n].value.payload==child.payload) {
+                status=effect_runtime_work(actual,4);if(status!=XR_XIR_OK) break;
+                const XirEffectRuntimeValue *prior=&stack.frames[n].value;
+                /* One physical object keeps its complete immutable origin. */
+                if(prior->type!=child.type || prior->reserved!=child.reserved ||
+                    prior->producer!=child.producer || prior->publication!=child.publication)
+                    status=XR_XIR_BAD_TYPE;
+                else ancestor=true;
+                break;
+            }
         }
         if(status==XR_XIR_OK && !ancestor) status=effect_runtime_origin_push(&stack,&child,actual);
     }
