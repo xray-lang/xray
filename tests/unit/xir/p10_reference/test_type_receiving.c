@@ -108,6 +108,13 @@ int main(void) {
     XrXirType mapped=XR_XIR_BOOL;
     CHECK(xir_type_arena_local_type(target,source,type(1),&mapped) && mapped==type(2));
     CHECK(!xir_type_arena_local_type(unrelated,source,type(1),&mapped) && mapped==type(2));
+    XrXirValue unrelated_array={0},unchanged={0};
+    XrXirValueAdmission unrelated_admission=admission;unrelated_admission.arena=unrelated;
+    CHECK(xr_xir_array_new(type(1),values,2,&unrelated_admission,&unrelated_array)==XR_XIR_VALUE_OK);
+    CHECK(xr_xir_cell_write(&cell,&unrelated_array,&admission)==XR_XIR_VALUE_BAD_ARGUMENT);
+    CHECK(xr_xir_value_valid(&cell) && xr_xir_cell_read(&cell,&unchanged)==XR_XIR_VALUE_OK);
+    CHECK(unchanged.type==array.type && unchanged.payload==array.payload);
+    xr_xir_value_drop(&unchanged);xr_xir_value_drop(&unrelated_array);
     XrXirValue replacement={0};values[0].payload=51;values[1].payload=52;
     CHECK(xr_xir_array_new(type(1),values,2,&admission,&replacement)==XR_XIR_VALUE_OK);
     XrXirValueStatus write_status=xr_xir_cell_write(&cell,&replacement,&admission);

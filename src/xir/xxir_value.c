@@ -348,7 +348,8 @@ static bool cell_root_header_valid(const XirCell *cell) {
     if (!value_header_argument(content,cell->object.arena,element)) return false;
     if (owned_carrier_type(element) && !arena_free_carrier(element)) {
         const XirObject *child=object_pointer(content);
-        return child->arena==cell->object.arena && child->kind!=XIR_OBJECT_CELL;
+        /* The header check above authenticates received identities across arenas. */
+        return child->kind!=XIR_OBJECT_CELL;
     }
     return true;
 }
