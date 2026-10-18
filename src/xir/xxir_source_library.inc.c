@@ -294,6 +294,8 @@ static bool source_library_function_query(SourceContext *ctx,uint32_t declaratio
     const XrXirFunction *function=&ctx->functions[ctx->function];
     source_library_query_type(ctx,declaration,function->result,declaration);
     XrXirSourceDeclaration *query=(XrXirSourceDeclaration *)&ctx->query.declarations[declaration-1];
+    if (!source_work(ctx,NULL)) return false;
+    query->checked_receiver_count=ctx->identities[ctx->function].method_kind==XR_XIR_READ_METHOD ? 1u : 0u;
     XrXirSourceType *parameters=(XrXirSourceType *)query->parameters;
     for (uint32_t p=0; p<function->parameter_count; ++p) {
         if (!source_work(ctx,NULL)) return false;
