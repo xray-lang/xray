@@ -23,7 +23,7 @@ int main(int argc,char **argv) {
     bool root_native=!strcmp(argv[1],"native-vm");CHECK(native || vm_only || root_native || !strcmp(argv[1],"vm-native"));
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);const XrXirProgramSpec *original=&generator_role_program;
     CHECK(original->entry_count<=64);XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_checked_read(&owner.context,original->proof.bytes,original->proof.length,&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&owner.context,original->packet.bytes,original->packet.length,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_lower(closed,&original->target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirVmBinding *bindings=NULL;XrXirCallEntry *vm=NULL;
