@@ -282,7 +282,8 @@ static int source_owner_main(int argc,char **argv) {
         (unsigned)diagnostic.authority_status,diagnostic.source.source.message,diagnostic.authority.message);
     XrSourceCompileStatus expected=XR_SOURCE_COMPILE_OK;
     bool semantic=!strcmp(argv[3],"reject") || !strcmp(argv[3],"failure-path");
-    if(semantic || !strcmp(argv[3],"parse-reject"))expected=XR_SOURCE_COMPILE_REJECTED;
+    if(semantic)expected=XR_SOURCE_COMPILE_REJECTED;
+    if(!strcmp(argv[3],"parse-reject"))expected=XR_SOURCE_COMPILE_INVALID;
     bool state_rejected=!strcmp(argv[3],"state-reject") || !strcmp(argv[3],"catalog-state-reject");
     if(state_rejected)expected=XR_SOURCE_COMPILE_REJECTED;
     if(!strcmp(argv[3],"graph-reject"))expected=XR_SOURCE_COMPILE_NOT_FOUND;
@@ -312,6 +313,7 @@ static int source_owner_main(int argc,char **argv) {
         CHECK(!memcmp(&saved,&diagnostic,sizeof(saved)));
     }
     if(!strcmp(argv[3],"parse-reject")) {
+        CHECK(diagnostic.source.failure.origin==XR_XIR_SOURCE_DIAGNOSTIC_PARSE);
         CHECK(diagnostic.source.failure.path&&!strcmp(diagnostic.source.failure.path,argv[1]));
         CHECK(!diagnostic.source.snapshot&&diagnostic.source.source.line>0&&diagnostic.source.source.column>0);
     }
