@@ -32,7 +32,6 @@
 #define CHECK(x) do{if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}}while(0)
 #include "xir_effect_execution_owner.h"
 /* Compile the actual Source implementation to retain its private conversion tests. */
-#include "xir/xxir_source_query.c"
 #include "xir/xxir_type_inference.c"
 #include "xir/xxir_source.c"
 static void init_compiler_faults(void){
