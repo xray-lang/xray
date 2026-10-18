@@ -33,6 +33,7 @@
 #include "xir_library_string75_goldens.h"
 #include "xir_rune75_golden.h"
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while(0)
+#include "xir_source_compile_owner.h"
 typedef struct ParentPacket { const uint8_t *bytes; size_t length; } ParentPacket;
 #define PARENT(name) {name,sizeof(name)}
 
@@ -105,14 +106,16 @@ int main(void) {
     XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    XrCompileResourceStats baseline={0};CHECK(xr_compile_resources_stats(context.resources,&baseline)==XR_COMPILE_RESOURCE_OK);
     for(size_t i=0;i<sizeof(parents)/sizeof(parents[0]);++i) reject_parent(&context,parents[i]);
     XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_read(&context,assert_panics_current_golden,sizeof(assert_panics_current_golden),&artifact,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(artifact,&packet,NULL)==XR_XIR_OK);
     CHECK(packet.length==sizeof(assert_panics_current_golden) && !memcmp(packet.bytes,assert_panics_current_golden,packet.length));
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(artifact);
-    XrCompileResourceStats final={0};CHECK(xr_compile_resources_stats(context.resources,&final)==XR_COMPILE_RESOURCE_OK && !final.live_bytes);
+    XrCompileResourceStats final={0};CHECK(xr_compile_resources_stats(context.resources,&final)==XR_COMPILE_RESOURCE_OK && final.live_bytes==baseline.live_bytes);
     xr_compile_resources_release(context.resources);
+    CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
     puts("Combined30/77 independent Core roundtrip and44 complete parent packets: unchanged outputs and exact32-work no-allocation early rejection PASS");
     return 0;
 }
