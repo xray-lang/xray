@@ -1,0 +1,5 @@
+fn finish(value: i64) -> i64 { return value }
+export fn referenceAnswer() -> i64 {
+    const result = (1, ...((2, 3), 36))
+    return finish(result.0 + result.1.0 + result.1.1 + result.2)
+}

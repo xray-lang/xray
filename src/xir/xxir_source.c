@@ -121,6 +121,7 @@ typedef struct SourceExpressionPlan {
     struct SourceExpressionPlan *parent, *left, *right, *condition;
     struct SourceConditionalRecipe *conditional;
     struct SourceMatchPlan *match;
+    struct SourceTuplePrefix *tuple_prefix;
     struct SourceBinaryRecipe *binary;
     AstNode *syntax;
     SourceName *binding;

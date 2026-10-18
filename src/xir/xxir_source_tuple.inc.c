@@ -19,6 +19,7 @@ static bool source_tuple_index(SourceContext *ctx,AstNode *node,const char *name
     }
     *field=index;return true;
 }
+#include "xxir_source_tuple_spread.inc.c"
 static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpectedType expected,SourceValue *value) {
     const TupleLiteralNode *literal=&node->as.tuple_literal;
     if (literal->count<0 || (literal->count && !literal->elements))
@@ -27,6 +28,13 @@ static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpected
         if (expected.present && expected.type!=XR_XIR_UNIT)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"empty Tuple syntax denotes Unit");
         *value=(SourceValue){UINT32_MAX,XR_XIR_UNIT};return true;
+    }
+    if (ctx->active_expression->tuple_prefix)
+        return source_tuple_expanded_literal(ctx,node,expected,value);
+    for (int i=0;i<literal->count;++i) {
+        if (!source_work(ctx,literal->elements[i])) return false;
+        if (literal->elements[i] && literal->elements[i]->type==AST_SPREAD_EXPR)
+            return source_tuple_expanded_literal(ctx,node,expected,value);
     }
     const XrXirTypeNode *context=expected.present ? xr_xir_tuple_signature(&ctx->types,expected.type) : NULL;
     uint32_t count=(uint32_t)literal->count;
@@ -40,8 +48,8 @@ static bool source_tuple_literal(SourceContext *ctx,AstNode *node,SourceExpected
     uint32_t payload_count=0;
     for (uint32_t i=0;i<count;++i) {
         AstNode *child=literal->elements[i];SourceValue element={0};
-        if (!child || child->type==AST_SPREAD_EXPR)
-            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Tuple spread requires its complete expansion contract");
+        if (!child)
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"Tuple literal entry is missing");
         SourceExpectedType hint={expected.present,fields[i].type,false, expected.inferred};
         if (!source_plan_expression(ctx,child,hint,&element)) return false;
         if (expected.present && element.type!=fields[i].type)
