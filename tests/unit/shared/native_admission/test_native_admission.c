@@ -12,8 +12,9 @@
 #include <string.h>
 #define CHECK(test) do { if (!(test)) { fprintf(stderr,"check failed at %d: %s\n",__LINE__,#test); abort(); } } while (0)
 typedef struct Work { uint64_t limit, used, calls; } Work;
-static const char *const native_names[]={"Array","string","Atomic","Ordering","Task","Channel","Recv","SendResult"};
-static const uint32_t native_members[]={32,19,10,5,6,10,4,4};
+static const char *const native_names[]={"Array","string","Atomic","Ordering","Task","Channel","Recv","SendResult","Iterator","i64","f64","bool","rune"};
+static const uint32_t native_ids[]={1,2,3,4,5,6,7,8,9,12,13,14,15};
+static const uint32_t native_members[]={32,19,10,5,6,10,4,4,5,29,12,1,6};
 static bool charge(void *context, uint64_t units) {
     Work *work=context; ++work->calls;
     if (units>work->limit-work->used) return false;
@@ -35,7 +36,7 @@ static uint64_t expected_admission(const XrNativeTypeDeclaration *declaration) {
 }
 static void complete_declarations(void) {
     for (uint32_t id=1;id<=sizeof(native_names)/sizeof(*native_names);++id) {
-        const XrNativeTypeDeclaration *declaration=xr_native_declaration_by_id(id);
+        const XrNativeTypeDeclaration *declaration=xr_native_declaration_by_id(native_ids[id-1]);
         CHECK(declaration && xr_native_declaration_validate(declaration));
         CHECK(!strcmp(declaration->name,native_names[id-1]));
         CHECK(declaration->member_count==native_members[id-1]);
@@ -111,7 +112,7 @@ static void complete_lookup_boundaries(void) {
             Work ledger={limit,0,0}; XrNativeDeclarationWork work={&ledger,charge}; const XrNativeTypeDeclaration *out=NULL;
             CHECK(xr_native_declaration_find(&work,native_names[selected],&out)==
                 (limit==needed ? XR_NATIVE_DECLARATION_OK : XR_NATIVE_DECLARATION_WORK_LIMIT));
-            CHECK(limit==needed ? out==xr_native_declaration_by_id(selected+1) && ledger.used==needed : !out);
+            CHECK(limit==needed ? out==xr_native_declaration_by_id(native_ids[selected]) && ledger.used==needed : !out);
         }
     }
 }
