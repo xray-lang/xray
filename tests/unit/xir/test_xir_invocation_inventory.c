@@ -45,7 +45,8 @@ static uint32_t inventory_source_once(uint32_t cut,unsigned mode) {
     XrXirFunction functions[3]={{.name="init",.name_length=4,.instructions=&ret,.instruction_count=1,.blocks=&blocks[0],.block_count=1},
         {.name="factory",.name_length=7,.result=(XrXirType)256,.instructions=ops,.instruction_count=4,.blocks=&blocks[1],.block_count=1,.operands=operands,.operand_count=2},
         {.name="target",.name_length=6,.parameters=&scalar,.parameter_count=1,.instructions=&ret,.instruction_count=1,.blocks=&blocks[2],.block_count=1}};
-    const XrXirSourceModule source={"inventory",9,NULL,0,0};
+    const XrXirSourceModule source={.name="inventory",.name_length=9,.dependencies=NULL,
+        .dependency_count=0,.initializer=0,.lexical_scope=0,.storage=0};
     const XrXirFunctionIdentity identities[3]={{.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER}};
     const XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     XrXirEffectParameter scalar_effect={0};

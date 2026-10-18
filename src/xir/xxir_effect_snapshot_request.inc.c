@@ -277,8 +277,9 @@ static XrXirStatus effect_body_request_sequence_binding(const EffectBodyRequest 
 }
 /* Only this finite metadata operation may borrow immutable owned storage.
  * The ordinary getter retains its caller-scratch contract. Layout identity
- * and complete domain correspondence select storage, never permission. */
-static XrXirStatus effect_body_request_borrow_instruction(const EffectBodyRequest *request,
+ * and complete domain correspondence select storage, never permission.
+ * Metadata clients may use this optional getter independently of opcode replay. */
+static inline XrXirStatus effect_body_request_borrow_instruction(const EffectBodyRequest *request,
     uint32_t f,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
     if (!request || !request->owner || !storage || !output || !request->domain.types ||
         f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;

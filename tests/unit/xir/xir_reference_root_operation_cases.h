@@ -71,7 +71,8 @@ static void root_operation_case(uint32_t generic,uint32_t repeats,uint32_t less)
         {.name="init",.name_length=4,.blocks=&three,.block_count=1,.instructions=init,.instruction_count=3}};
     XrXirFunctionIdentity identities[8]={[1]={.cleanup_owner=1},[2]={.cleanup_owner=2},
         [3]={.promises=XR_XIR_FUNCTION_NO_SUSPEND},[4]={.promises=XR_XIR_FUNCTION_NO_SUSPEND}};
-    XrXirSourceModule identity={"nested-reference",16,NULL,0,6};
+    XrXirSourceModule identity={.name="nested-reference",.name_length=16,.dependencies=NULL,
+        .dependency_count=0,.initializer=6,.lexical_scope=0,.storage=0};
     XrXirSlot slot={0,(XrXirType)257,1};
     XrXirDeclarations declarations={.modules=&identity,.module_count=1,.functions=identities,
         .entry_function=5,.slots=&slot,.slot_count=1};
