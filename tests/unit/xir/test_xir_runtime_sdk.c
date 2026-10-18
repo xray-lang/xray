@@ -204,7 +204,7 @@ static void sdk_combined_previous_prefix(XrCompileResources *resources,XrXirSdkM
         XrXirSdkManifest saved=*manifest;size_t attempts=runtime_attempts;
         json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
         CHECK(!sdk_json_prefix(&json,manifest) && json.status==XR_JSON_CURSOR_INVALID);
-        CHECK(!memcmp(manifest,&saved,sizeof(manifest)) && runtime_attempts==attempts);
+        CHECK(!memcmp(manifest,&saved,sizeof(*manifest)) && runtime_attempts==attempts);
     }
     memcpy(manifest->prefix,prefix,sizeof(manifest->prefix));
 }
@@ -323,7 +323,7 @@ static void sdk_known_bytes(void) {
     CHECK(sizeof(previous_program34_sdk_kat_preimage)==3194 && !memcmp(hash34,previous_program34_sdk_kat_digest,32));
     memcpy(manifest.prefix,prefix,sizeof(prefix));
     sdk_combined_previous_prefix(resources,&manifest,prefix);
-    const uint32_t crossed[][2]={{1,25},{1,26},{1,27},{2,70},{2,71},{2,72},{2,73},{2,74},
+    const uint32_t crossed[][2]={{1,25},{1,26},{1,27},{1,28},{1,29},{2,70},{2,71},{2,72},{2,73},{2,74},{2,75},{2,76},
         {3,22},{3,23},{3,24},{3,25},{3,26},{3,27},{3,28},{4,28},{4,29},{4,30},{4,31},{4,32},{5,29},{5,30},{5,31},{5,32},{5,33},{5,34}};
     for (uint32_t prior=0;prior<sizeof(crossed)/sizeof(crossed[0]);++prior) {
         uint32_t field=crossed[prior][0];manifest.prefix[field]=crossed[prior][1];
