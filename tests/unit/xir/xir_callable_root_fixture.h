@@ -57,12 +57,13 @@ static XrXirStatus bound_fixture(const XrXirCompileContext *context, uint32_t ad
         {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=4},
         {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=8},
         {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=12},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=9}};
-    XrXirTypes types={nodes,5,NULL,NULL};
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=9},
+        {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64}};
+    XrXirTypes types={nodes,6,NULL,NULL};
     XrXirFunctionIdentity identities[13]={{0}};
     identities[12].promises=XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirSourceModule source={"root",4,NULL,0,0};
-    XrXirSlot slot={0,XR_XIR_I64,1};
+    XrXirSlot slot={0,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+5),1};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
     XrXirModule built={XR_XIR_BUILT,functions,13,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};

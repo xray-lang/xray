@@ -374,8 +374,9 @@ static void forwarding(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(valid, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(valid); valid=NULL;
-    CHECK(packet.length > 68 && packet.bytes[packet.length - 68] == XR_XIR_CONSTRAINT_SENDABLE);
-    packet.bytes[packet.length - 68] = 0; rehash_generic(&packet);
+    /* Empty construction materialization, site and binding counts occupy twelve bytes. */
+    CHECK(packet.length > 80 && packet.bytes[packet.length - 80] == XR_XIR_CONSTRAINT_SENDABLE);
+    packet.bytes[packet.length - 80] = 0; rehash_generic(&packet);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &forged, NULL) == XR_XIR_BAD_TYPE && !forged);
     xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(checked); checked=NULL;
