@@ -2646,7 +2646,7 @@ target_link_libraries(xray PRIVATE xray_source_api xray_xir_runtime_host xray_fr
     xray_compile_resources)
 if(WIN32)
     target_link_libraries(xray PRIVATE xray_xir_native_admission xray_xir_local_toolchain
-        xray_xir_publication xray_toolchain_dependencies)
+        xray_xir_publication xray_toolchain_dependencies xray_cli_native_probe)
 endif()
 
 target_include_directories(xray PRIVATE ${XRAY_CLI_INCLUDES})
@@ -2691,6 +2691,7 @@ add_subdirectory(src/toolchain)
 include(src/frontend/format/xformatter.cmake)
 target_link_libraries(xray PRIVATE xray_frontend_format)
 include(src/api/xsource_compile.cmake)
+include(cmake/XraySourceSdk.cmake)
 include(src/app/toolchain/xir_target.cmake)
 
 if(BUILD_TESTS)
