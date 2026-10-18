@@ -19,4 +19,10 @@ if(WIN32)
             --output ${CMAKE_CURRENT_BINARY_DIR}/task-late-cancel-cross --phase normal)
     set_tests_properties(test_xir_task_late_cancel_cross PROPERTIES
         TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;task;source;runtime;ownership")
+    add_test(NAME test_xir_task_late_cancel_cross_full
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_LIST_DIR}/run_task_late_cancel_cross.py
+            --exe $<TARGET_FILE:test_xir_task_late_cancel_cross>
+            --output ${CMAKE_CURRENT_BINARY_DIR}/task-late-cancel-cross-full --phase full)
+    set_tests_properties(test_xir_task_late_cancel_cross_full PROPERTIES
+        TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1 LABELS "unit;xir;task;source;runtime;ownership;fault-injection")
 endif()

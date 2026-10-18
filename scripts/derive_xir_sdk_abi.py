@@ -24,7 +24,8 @@ STRUCTURES = [
                              ('work','u64'),('scratch_bytes','u64')]),
  (1000, 'XrXirCallConfig', [('abi_version','u32'),('struct_size','u32'),('entries','ptr'),('entry_count','u32'),
                          ('instance','ptr'),('byte_limit','u64'),('poll_limit','u64'),('depth_limit','u32'),
-                         ('accounting','ptr'),('output','XrXirOutputProvider'),('admission','XrXirValueAdmission')]),
+                         ('accounting','ptr'),('output','XrXirOutputProvider'),('admission','XrXirValueAdmission'),
+                         ('time','XrXirTimeProvider')]),
  (1100, 'XrXirOutputSink', [('abi_version','u32'),('reserved','u32'),('write','ptr'),('context','ptr'),('byte_limit','u64')]),
  (2700, 'XrXirTimeProvider', [('abi_version','u32'),('reserved','u32'),('clock','ptr'),('utc_offset','ptr'),('context','ptr')]),
  (2800, 'XrXirWaitRequest', [('kind','u32'),('reserved','u32'),('after_ms','u64'),
@@ -143,6 +144,8 @@ def align(value: int, alignment: int) -> int:
 def prepare(output: Path) -> None:
     output.mkdir(parents=True, exist_ok=False)
     layout = dict(PRIMITIVES)
+    # Three pointer fields after two u32 fields have natural size32/alignment8.
+    layout['XrXirTimeProvider'] = (32,8)
     rows = [{'id':i,'name':name,'value':value,'expression':expression} for i,name,value,expression in SCALARS]
     for base, name, fields in STRUCTURES + PUBLIC_STRUCTURES:
         offsets = []; size = 0; alignment = 1

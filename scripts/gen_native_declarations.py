@@ -545,49 +545,143 @@ def render_task_identity(root):
 
 
 
-def render_prelude_source(root):
-    """One fixed owned enum module; the complete input digest closes its identity."""
+def render_channel_identity(root):
+    """Bind the complete source identity without granting unimplemented recipes."""
+    source = (root / 'stdlib/types/channel.xr').read_text(encoding='utf-8').replace('\r\n', '\n')
+    prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
+    bindings = re.findall(r'^\s*XR_BUILTIN_PRELUDE_TYPE\("Channel",\s*1,\s*XR_TCHANNEL,\s*GENERIC_1\)\s*$', prelude, re.M)
+    registrations = re.findall(r'^\s*XR_BUILTIN_[A-Z_]+\(\s*"Channel"', prelude, re.M)
+    if len(bindings) != 1 or len(registrations) != 1:
+        raise ValueError('Channel registry needs one exact one-parameter binding')
+    if re.search(r'@native-|@lowered', source):
+        raise ValueError('Channel identity grants no native member operation')
+    rows = [(number, raw) for number, raw in enumerate(source.splitlines(), 1)
+            if raw.strip() and not raw.strip().startswith('//')]
+    expected = ['enum Recv<T> {', 'Value { value: T },', 'Empty,', 'Timeout,', 'Closed,', '}',
+                'enum SendResult {', 'Sent,', 'Full,', 'Timeout,', 'Closed,', '}',
+                'class Channel<T> {', 'capacity: i64', 'isClosed: bool',
+                'send(value: T)', 'recv() -> Recv<T>', 'recvOr(default: T) -> T',
+                'trySend(value: T) -> SendResult', 'tryRecv() -> Recv<T>',
+                'sendTimeout(value: T, timeout: i64) -> SendResult',
+                'recvTimeout(timeout: i64) -> Recv<T>', 'close()', '}']
+    if [raw.strip() for _, raw in rows] != expected:
+        raise ValueError('Channel source differs from its complete governed declaration')
+    output, facts = [], []
+    for index, (number, raw) in enumerate(rows[13:-1]):
+        text = raw.strip(); name = IDENT.match(text).group(); signature = text[len(name):]
+        parser = TypeParser(signature); method = parser.peek() == '('
+        parameters = parser.parameters() if method else []; result_text = '()'
+        if not method:
+            parser.take(':'); result_text = signature[1:].strip(); parser.type()
+        elif parser.peek() == '->':
+            parser.take('->'); result_text = signature.split('->', 1)[1].strip(); parser.type()
+        if parser.peek() is not None: raise ValueError('trailing Channel member signature')
+        if parameters:
+            output.append(f'static const XrNativeParameter xr_native_channel_parameters_{index}[] = {{')
+            for pname, _, spelling, optional, variadic in parameters:
+                output.append('    {' + ', '.join([c_string(pname), c_string(spelling),
+                    'XR_NATIVE_TERM_'+{'T':'ELEMENT','i64':'I64'}.get(spelling,'UNADMITTED'), str(optional).lower(), str(variadic).lower()]) + '},')
+            output.append('};')
+        facts.append((index, number, raw, name, signature, method, parameters, result_text))
+    output.append('static const XrNativeMemberDeclaration xr_native_channel_members[] = {')
+    for index, number, raw, name, signature, method, parameters, result_text in facts:
+        params = f'xr_native_channel_parameters_{index}' if parameters else 'NULL'
+        admitted = {'capacity': ('CHANNEL_CAPACITY', 'I64'),
+                    'isClosed': ('CHANNEL_IS_CLOSED', 'BOOL'), 'close': ('CHANNEL_CLOSE', 'UNIT'),
+                    'trySend': ('CHANNEL_TRY_SEND', 'SEND_RESULT'), 'tryRecv': ('CHANNEL_TRY_RECV', 'RECV_ELEMENT'),
+                    'send': ('CHANNEL_SEND', 'UNIT'), 'recv': ('CHANNEL_RECV', 'RECV_ELEMENT'),
+                    'recvOr': ('CHANNEL_RECV_OR', 'ELEMENT'),
+                    'sendTimeout': ('CHANNEL_SEND_TIMEOUT', 'SEND_RESULT'),
+                    'recvTimeout': ('CHANNEL_RECV_TIMEOUT', 'RECV_ELEMENT')}.get(name)
+        output.append('    {' + ', '.join([str(index + 1), c_string(name), c_string(signature),
+            c_string(result_text), str(number), str(len(raw[:raw.index(name)].encode('utf-8')) + 1),
+            'XR_NATIVE_RECEIVER_READ', 'false', str(method).lower(), str(bool(admitted)).lower(), 'true',
+            'XR_NATIVE_OPERATION_'+(admitted[0] if admitted else 'NONE'),
+            ('XR_NATIVE_ALLOCATION_MAY_HEAP' if name in ('trySend','tryRecv','send','recv','recvOr','sendTimeout','recvTimeout') else 'XR_NATIVE_ALLOCATION_NO_HEAP') if admitted else 'XR_NATIVE_ALLOCATION_UNKNOWN',
+            (c_string('allocation,retain,limit,numeric_range,host') if name in ('sendTimeout','recvTimeout') else
+             c_string('allocation,retain,limit') if name in ('trySend','tryRecv','send','recv','recvOr') else c_string('limit')) if admitted else c_string(''),
+            ('XR_NATIVE_RESULT_OWNERSHIP_UNIT' if admitted[1]=='UNIT' else 'XR_NATIVE_RESULT_OWNERSHIP_OWNED')
+                if admitted else 'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN', params, str(len(parameters)),
+            'XR_NATIVE_TERM_'+(admitted[1] if admitted else 'UNADMITTED')]) + '},')
+    number, raw = rows[12]; digest = hashlib.sha256(source.encode('utf-8')).digest()
+    output += ['};', 'static const XrNativeTypeDeclaration xr_native_channel = {',
+        '    6, XR_NATIVE_DECLARATION_IDENTITY, "Channel", "T", 1,',
+        '    "stdlib/types/channel.xr", "xray-native:prelude/Channel", {{' +
+        ', '.join(str(byte) for byte in digest) + '}},',
+        f'    {number}, {len(raw[:raw.index("Channel")].encode("utf-8")) + 1}, xr_native_channel_members, 10', '};']
+    return output
+
+
+def channel_result_rows(root):
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8').replace('\r\n', '\n')
-    expected = [('Ordering', 'ORDERING', ['Relaxed','Acquire','Release','AcquireRelease','SeqCst'], 4),
-                ('CryptoError', 'CRYPTO_ERROR', ['InvalidLength'], 0)]
-    rows=[]
-    for name, kind, variants, native_id in expected:
-        registrations=re.findall(r'XR_BUILTIN_ENUM\(\s*"'+name+r'"',prelude)
-        if len(registrations)!=1: raise ValueError('prelude enum is duplicated: '+name)
-        # The inner variant parentheses require a balanced outer declaration.
-        start=list(re.finditer(r'XR_BUILTIN_ENUM\("'+name+r'",\s*0,\s*'+kind+r',',prelude))
-        if len(start)!=1: raise ValueError('prelude needs one exact enum binding: '+name)
-        tail=prelude[start[0].end():]; depth=1; end=0
+    rows = [('Ordering', 'ORDERING', [('Relaxed','NONE'),('Acquire','NONE'),('Release','NONE'),('AcquireRelease','NONE'),('SeqCst','NONE')], 4, 0),
+            ('CryptoError', 'CRYPTO_ERROR', [('InvalidLength','NONE')], 0, 0),
+            ('Recv', 'RECV', [('Value','TYPE_PARAM_0'),('Empty','NONE'),('Timeout','NONE'),('Closed','NONE')], 7, 1),
+            ('SendResult', 'SEND_RESULT', [('Sent','NONE'),('Full','NONE'),('Timeout','NONE'),('Closed','NONE')], 8, 0)]
+    for name, kind, variants, _, arity in rows:
+        registrations = re.findall(r'^\s*XR_BUILTIN_ENUM\(\s*"'+name+r'"', prelude, re.M)
+        matches = list(re.finditer(r'XR_BUILTIN_ENUM\("'+name+r'",\s*'+str(arity)+r',\s*'+kind+r',', prelude))
+        if len(registrations)!=1 or len(matches)!=1: raise ValueError('prelude needs one exact enum binding: '+name)
+        tail=prelude[matches[0].end():];depth=1;end=0
         for end,ch in enumerate(tail):
-            if ch=='(': depth+=1
+            if ch=='(':depth+=1
             elif ch==')':
                 depth-=1
-                if not depth: break
-        body=tail[:end]
-        fixed=''.join('XR_BUILTIN_ENUM_VARIANT("'+v+'",NONE)' for v in variants)
-        if ''.join(body.split())!=fixed: raise ValueError('prelude enum inventory differs: '+name)
-        rows.append((name,variants,native_id))
-    digest=hashlib.sha256(prelude.encode('utf-8')).digest()
+                if not depth:break
+        fixed=''.join('XR_BUILTIN_ENUM_VARIANT("'+variant+'",'+payload+')' for variant,payload in variants)
+        if ''.join(tail[:end].split())!=fixed: raise ValueError('prelude enum inventory differs: '+name)
+    return prelude, rows
+
+
+def render_channel_result_identities(root):
+    prelude, rows = channel_result_rows(root);digest=hashlib.sha256(prelude.encode('utf-8')).digest();lines=[]
+    for name, _, variants, native_id, arity in rows:
+        if native_id not in (7,8):continue
+        variable='recv' if native_id==7 else 'send_result'
+        line,raw=next((number,raw) for number,raw in enumerate(prelude.splitlines(),1) if 'XR_BUILTIN_ENUM("'+name+'",' in raw)
+        if arity:
+            lines += ['static const XrNativeParameter xr_native_recv_value_parameters[] = {',
+                      '    {"value", "T", XR_NATIVE_TERM_ELEMENT, false, false}', '};']
+        lines.append('static const XrNativeMemberDeclaration xr_native_'+variable+'_members[] = {')
+        for index,(variant,payload) in enumerate(variants):
+            member_line,member_raw=next((number,raw) for number,raw in enumerate(prelude.splitlines(),1)
+                                       if 'XR_BUILTIN_ENUM_VARIANT("'+variant+'", '+payload+')' in raw and number>=line)
+            count=1 if payload=='TYPE_PARAM_0' else 0
+            lines.append('    {'+', '.join([str(index+1),c_string(variant),c_string(variant),c_string(name+('<T>' if arity else '')),
+                str(member_line),str(member_raw.index(variant)+1),'XR_NATIVE_RECEIVER_READ','true','false','false','true',
+                'XR_NATIVE_OPERATION_NONE','XR_NATIVE_ALLOCATION_UNKNOWN','""','XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN',
+                'xr_native_recv_value_parameters' if count else 'NULL',str(count),'XR_NATIVE_TERM_UNADMITTED'])+'},')
+        lines += ['};','static const XrNativeTypeDeclaration xr_native_'+variable+' = {',
+                  '    '+str(native_id)+', XR_NATIVE_DECLARATION_VALUE, '+c_string(name)+', '+c_string('T' if arity else '')+', '+str(arity)+',',
+                  '    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/'+name+'", {{'+', '.join(str(byte) for byte in digest)+'}},',
+                  '    '+str(line)+', '+str(raw.index(name)+1)+', xr_native_'+variable+'_members, '+str(len(variants)), '};']
+    return lines
+
+
+def render_prelude_source(root):
+    """Project complete governed enum definitions through ordinary Source checking."""
+    prelude,rows=channel_result_rows(root);digest=hashlib.sha256(prelude.encode('utf-8')).digest()
     text='// builtin_symbols.def sha256 '+digest.hex()+'\n'
-    for name, variants, _ in rows:
-        text+='export enum '+name+' { '+', '.join(variants)+' }\n'
+    for name, _, variants, _, arity in rows:
+        values=[variant+(' { value: T }' if payload=='TYPE_PARAM_0' else '') for variant,payload in variants]
+        text+='export enum '+name+('<T>' if arity else '')+' { '+', '.join(values)+' }\n'
     lines=['/* Generated by gen_native_declarations.py; do not edit. */']
-    for index, (_, variants, _) in enumerate(rows):
-        lines.append('static const char *const xir_prelude_variants_'+str(index)+'[] = {'+', '.join(c_string(v) for v in variants)+'};')
+    for index, (_, _, variants, _, _) in enumerate(rows):
+        lines.append('static const char *const xir_prelude_variants_'+str(index)+'[] = {'+', '.join(c_string(v) for v,_ in variants)+'};')
     lines.append('static const XirPreludeEnum xir_prelude_enums[] = {')
-    for index,(name,variants,native_id) in enumerate(rows):
-        lines.append('    {'+c_string(name)+', '+str(native_id)+', '+str(len(variants))+', xir_prelude_variants_'+str(index)+'},')
-    lines+=['};','static const XirPreludeSource xir_prelude_source = {',
-        '    '+c_string(text)+',',
-        '    {'+', '.join(str(byte) for byte in digest)+'},',
-        '    xir_prelude_enums, '+str(len(rows)), '};']
+    for index,(name,_,variants,native_id,arity) in enumerate(rows):
+        field_count=sum(payload!='NONE' for _,payload in variants)
+        lines.append('    {'+c_string(name)+', '+str(native_id)+', '+str(len(variants))+', '+str(arity)+', '+str(field_count)+', xir_prelude_variants_'+str(index)+'},')
+    lines += ['};','static const XirPreludeSource xir_prelude_source = {','    '+c_string(text)+',',
+              '    {'+', '.join(str(byte) for byte in digest)+'},','    xir_prelude_enums, '+str(len(rows)), '};']
     return '\n'.join(lines)+'\n'
+
 
 def render(root):
     lines = ['/* Generated by gen_native_declarations.py; do not edit. */']
     array_lines, header, members = render_type(root, "array")
     string_lines, _, _ = render_type(root, "string")
-    lines += array_lines + string_lines + render_atomic_identities(root) + render_task_identity(root)
+    lines += array_lines + string_lines + render_atomic_identities(root) + render_task_identity(root) + render_channel_identity(root) + render_channel_result_identities(root)
     binder = header[2]
     receiver = {}
     for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):

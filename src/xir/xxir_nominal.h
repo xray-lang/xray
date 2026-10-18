@@ -77,6 +77,9 @@ typedef struct XrXirNominalTable {
 XR_FUNC const XrXirNominalNativeRecord *xr_xir_nominal_native_record(const XrXirTypes *types, XrXirType type);
 /* A verified pool record must match the actual governed value declaration. */
 XR_FUNC bool xr_xir_nominal_native_ordering(const XrXirTypes *types, XrXirType type);
+/* Verified owned pools still require the exact instantiated payload projection. */
+XR_FUNC bool xr_xir_nominal_native_recv(const XrXirTypes *types, XrXirType type, XrXirType element);
+XR_FUNC bool xr_xir_nominal_native_send_result(const XrXirTypes *types, XrXirType type);
 /* Metadata helpers grant no executable type or source admission.
  * Outputs publish only after complete successful validation; work is never refunded. */
 XR_FUNC XrXirStatus xr_xir_compile_nominal_structure_verify(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, const XrXirTypes *types);
@@ -84,20 +87,6 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_clone(const XrXirCompileContext *comp
 /* Projection requires a verified declaration table and owns only identities. */
 XR_FUNC XrXirStatus xr_xir_compile_nominal_project(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, XrXirNominalTable **output);
 XR_FUNC void xr_xir_compile_nominal_free(XrXirNominalTable *table);
-/* A synchronous compiler view borrows its canonical pool. The record must
- * already satisfy structural admission; this query grants no field, method,
- * construction or generic authority and does not certify the whole pool.
- * One ledger work unit is consumed per query, with no allocation or refund.
- * Failure preserves output. All references die with the original pool. */
-typedef struct XrXirEnumDescription {
-    XrXirLiteral module, name;
-    const XrXirNominalVariant *variants;
-    uint32_t variant_count, declaration;
-    const XrXirNominalType *instance;
-    const XrXirNominalDeclaration *definition;
-} XrXirEnumDescription;
-XR_FUNC XrXirStatus xr_xir_compile_enum_description(const XrXirCompileContext *context,
-    const XrXirTypes *types, XrXirType type, XrXirEnumDescription *output);
 typedef enum XrXirNominalAccess {
     XR_XIR_NOMINAL_CONSTRUCT, XR_XIR_NOMINAL_READ, XR_XIR_NOMINAL_WRITE, XR_XIR_NOMINAL_TYPE
 } XrXirNominalAccess;

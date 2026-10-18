@@ -95,5 +95,6 @@ int main(void) {
     for (unsigned i = 0; i < 8; ++i) unit_native_execute(i);
     unit_native_invalid(); effects_source_owners_free();
     CHECK(!runtime_live && !runtime_bytes && !effects_compile_live && !effects_compile_bytes);
-    puts("UNIT_NATIVE_COMPLETE graphs=8 instances=16 identity=25/69/22/28/29 physical=0/0"); return 0;
+    printf("UNIT_NATIVE_COMPLETE graphs=8 instances=16 identity=%u/%u/%u/%u/%u physical=0/0\n",
+        XR_XIR_CHECKED_SCHEMA,XR_XIR_CHECKED_CONTRACT,XR_XIR_VALUE_ABI_VERSION,XR_XIR_CALL_ABI_VERSION,XR_XIR_PROGRAM_ABI_VERSION);return 0;
 }

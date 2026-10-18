@@ -39,7 +39,7 @@ def main():
                             '--fixtures', str(root / 'tests/fixtures/xir_cli_product'),
                             '--stdlib', str(stdlib), '--output', str(evidence)], check=True, timeout=100)
             summary = json.loads((evidence / 'summary.json').read_text(encoding='utf-8'))
-            assert summary['commands'] == 16 and summary['status'] == 'PUBLIC_CLI_VM_NATIVE_LITERAL_PASS'
+            assert summary['commands'] == 22 and summary['status'] == 'PUBLIC_CLI_VM_NATIVE_LITERAL_PASS'
             assert summary['stdlib_root'] == str(stdlib)
             assert (hashlib.sha256(poison.read_bytes()).hexdigest() if poison.exists() else None) == before
             receipts.append({'scenario': scenario, 'source_sha256': before, 'summary': summary})
@@ -56,7 +56,7 @@ def main():
         assert process.returncode == 1 and not process.stdout and process.stderr
         assert sentinel.read_bytes() == original and not invalid.exists()
         record = {'status': 'PUBLIC_CLI_CHECKED_STDLIB_NO_SOURCE_FALLBACK_PASS',
-                  'scenarios': receipts, 'commands': 33, 'invalid_explicit_root_exit': process.returncode,
+                  'scenarios': receipts, 'commands': 45, 'invalid_explicit_root_exit': process.returncode,
                   'complete_stdlib_installation': 'OPEN', 'production_release': False}
         (output / 'summary.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
         print('Public CLI Checked stdlib: missing/poisoned output source, independent VM/native literal outputs PASS')

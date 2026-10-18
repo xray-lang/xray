@@ -1,0 +1,21 @@
+import "./factory" as factory
+export fn main() -> i64 {
+    const channel = factory.make<i64>(3)
+    const alias = factory.alias(channel)
+    const empty = Channel<string>()
+    const unit = Channel<()>(1)
+    const contextual: Channel<i64> = Channel(2)
+    print(channel.capacity, channel.isClosed, empty.capacity, unit.capacity, contextual.capacity)
+    alias.close()
+    print(channel.isClosed, alias.isClosed, empty.isClosed)
+    channel.close()
+    return channel.capacity
+}
+export fn negative() -> i64 {
+    const channel = Channel<i64>(-1)
+    return channel.capacity
+}
+export fn oversized() -> i64 {
+    const channel = Channel<i64>(4294967296)
+    return channel.capacity
+}

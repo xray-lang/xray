@@ -262,6 +262,7 @@ typedef struct SourceContext {
     uint32_t prelude_module; /* One-based actual graph index, zero when unused. */
     uint32_t atomic_module, atomic_declaration, atomic_members[10];
     uint32_t task_module, task_declaration;
+    uint32_t channel_module, channel_declaration, channel_members[10];
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
     uint32_t string_module, string_declaration, string_members[5];
 } SourceContext;
@@ -571,6 +572,7 @@ static bool source_query_parameters(SourceContext *ctx, uint32_t declaration) {
 #include "xxir_source_native.inc.c"
 #include "xxir_source_atomic.inc.c"
 #include "xxir_source_task_type.inc.c"
+#include "xxir_source_channel_type.inc.c"
 #include "xxir_source_ordering.inc.c"
 typedef struct SourceSubstitution { const XrXirType *types; uint32_t count; } SourceSubstitution;
 static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
@@ -717,6 +719,8 @@ static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type)
             return source_native_atomic_type(ctx,ref,type);
         if (ref->name && source_text_same(ctx,NULL,ref->name,"Task"))
             return source_native_task_type(ctx,ref,type);
+        if (ref->name && source_text_same(ctx,NULL,ref->name,"Channel"))
+            return source_native_channel_type(ctx,ref,type);
         if (ref->name && source_native_find(ctx,ref->name))
             return source_native_array_type(ctx, ref, type);
         return source_nominal_arguments(ctx, ref->name, ref->children, ref->nchildren, type);
@@ -1124,6 +1128,7 @@ static bool source_string_literal(SourceContext *ctx, AstNode *node, const char 
 #include "xxir_source_type_name.inc.c"
 #include "xxir_source_defaults.inc.c"
 #include "xxir_source_atomic_calls.inc.c"
+#include "xxir_source_channel_calls.inc.c"
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
     SourceName *target,SourceExpectedType result_context,SourceValue *value);
 #include "xxir_source_constructors.inc.c"
@@ -1208,6 +1213,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 return source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){false, XR_XIR_UNIT, false, false}, &input) &&
                     source_type_name(ctx, node, input, value);
             }
+            if (source_text_same(ctx,NULL,name,"Channel"))
+                return source_channel_inferred_construct(ctx,node,result_context,value);
             if (source_text_same(ctx,NULL,name,"Atomic"))
                 return source_atomic_inferred_construct(ctx,node,result_context,value);
             print = source_text_same(ctx, NULL, name, "print"); stream = stream_primitive(ctx, name);
@@ -1262,6 +1269,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
             if (!expression(ctx, member->object, &receiver)) return false;
             if (xr_xir_type_is_array(&ctx->types, receiver.type))
                 return source_array_call(ctx, node, &receiver, value);
+            if (xr_xir_type_is_channel(&ctx->types,receiver.type))
+                return source_channel_member(ctx,node,receiver,true,value);
             if (xr_xir_type_is_atomic(&ctx->types,receiver.type))
                 return source_atomic_call(ctx,node,receiver,value);
             if ((receiver.type == XR_XIR_BOOL || receiver.type == XR_XIR_RUNE || xr_xir_type_is_number(receiver.type)) &&
@@ -1672,11 +1681,14 @@ static bool expression_body(SourceContext *ctx, AstNode *node, SourceExpectedTyp
     case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_STRING: case AST_LITERAL_RUNE:
         return source_literal(ctx, node, value);
     case AST_TEMPLATE_STRING: return source_template(ctx, node, value);
+    case AST_CHANNEL_NEW: return source_channel_context_construct(ctx,node,context,value);
     case AST_NEW_EXPR:
         if (ctx->active_expression->binding)
             return source_constructor_new(ctx, node, context, value);
         if (node->as.new_expr.class_name && source_text_same(ctx,NULL,node->as.new_expr.class_name,"Atomic"))
             return source_atomic_explicit_construct(ctx,node,value);
+        if (node->as.new_expr.class_name && source_text_same(ctx,NULL,node->as.new_expr.class_name,"Channel"))
+            return source_channel_explicit_construct(ctx,node,value);
         return source_array_construct(ctx, node, value);
     case AST_AS_EXPR: return source_number_cast(ctx, node, value);
     case AST_TERNARY: return source_conditional(ctx, node, context, value);

@@ -166,7 +166,7 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
 }
 static bool source_default_value(SourceContext *ctx, AstNode *node, XrXirType type, SourceValue *value);
 /* `Array<T>()` is empty, `Array<T>(n)` and `Array<T>(n, fill)` hold n copies of the fill or of the
- * element default, and `Array<T>([...])` is the literal. Other built-in construction is not admitted. */
+ * element default, and `Array<T>([...])` is the literal. Only governed Array declarations use these recipes. */
 static bool source_array_construct(SourceContext *ctx, AstNode *node, SourceValue *value) {
     NewExprNode *call = &node->as.new_expr;
     if (call->is_type_namespace || call->module_name || !call->class_name ||

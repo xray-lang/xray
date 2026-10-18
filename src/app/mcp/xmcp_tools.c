@@ -19,6 +19,7 @@
  *     3. Add one row to TOOL_TABLE.
  */
 
+#include "xmcp_json.h"
 #include "xmcp_tools.h"
 #include "xmcp_tools_internal.h"
 #include "xmcp_protocol.h"
@@ -73,42 +74,6 @@ static const XmcpToolDef TOOL_TABLE[] = {
 /* --------------------------------------------------------------------------
  * Result helpers (visible to the per-domain handler files)
  * -------------------------------------------------------------------------- */
-
-XR_FUNC XrJsonValue *xmcp_make_error_result(const char *message) {
-    XR_DCHECK(message != NULL, "xmcp_make_error_result: NULL message");
-    XrJsonValue *r = xjson_new_object();
-    XrJsonValue *c = xjson_new_array();
-    XrJsonValue *item = xjson_new_object();
-    XJSON_SET_STRING(item, "type", "text");
-    XJSON_SET_STRING(item, "text", message);
-    xjson_array_push(c, item);
-    xjson_object_set(r, "content", c);
-    XJSON_SET_BOOL(r, "isError", true);
-    return r;
-}
-
-XR_FUNC XrJsonValue *xmcp_make_text_result(const char *text, bool is_error) {
-    XR_DCHECK(text != NULL, "xmcp_make_text_result: NULL text");
-    XrJsonValue *result = xjson_new_object();
-    XrJsonValue *arr = xjson_new_array();
-    XrJsonValue *item = xjson_new_object();
-    XJSON_SET_STRING(item, "type", "text");
-    xjson_object_set(item, "text", xjson_new_string(text));
-    xjson_array_push(arr, item);
-    xjson_object_set(result, "content", arr);
-    if (is_error) {
-        XJSON_SET_BOOL(result, "isError", true);
-    }
-    return result;
-}
-
-XR_FUNC XrJsonValue *xmcp_make_text_structured_result(const char *text, XrJsonValue *structured,
-                                                      bool is_error) {
-    XR_DCHECK(structured != NULL, "xmcp_make_text_structured_result: NULL structured");
-    XrJsonValue *result = xmcp_make_text_result(text, is_error);
-    xjson_object_set(result, "structuredContent", structured);
-    return result;
-}
 
 /* --------------------------------------------------------------------------
  * Validator helpers (file-local; used only by xmcp_validate_tool_arguments)
@@ -177,7 +142,8 @@ static bool xmcp_schema_enum_contains(XrJsonValue *allowed, XrJsonValue *value) 
         return false;
     for (int i = 0; i < xjson_array_len(allowed); i++) {
         XrJsonValue *item = xjson_array_get(allowed, i);
-        if (xjson_is_string(item) && strcmp(item->as.string, value->as.string) == 0)
+        if (xjson_is_string(item) && item->string_len == value->string_len &&
+            !memcmp(item->as.string, value->as.string, value->string_len))
             return true;
     }
     return false;
@@ -202,16 +168,8 @@ static void xmcp_format_string_enum(XrJsonValue *allowed, char *buf, size_t cap)
 
 /* Validate `arguments` against `tool->build_schema()`. Populates `error` with
  * `XMCP_ERR_INVALID_PARAMS` on failure. Returns true when arguments pass. */
-static bool xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJsonValue *arguments,
-                                         XmcpRpcError *error) {
-    XR_DCHECK(tool != NULL, "xmcp_validate_tool_arguments: NULL tool");
-    XR_DCHECK(arguments != NULL, "xmcp_validate_tool_arguments: NULL arguments");
-    XR_DCHECK(error != NULL, "xmcp_validate_tool_arguments: NULL error");
-
-    XrJsonValue *schema = tool->build_schema ? tool->build_schema() : NULL;
-    if (!schema)
-        return true;
-
+static bool xmcp_arguments_match_schema(const XmcpToolDef *tool, XrJsonValue *arguments,
+    XrJsonValue *schema, XmcpRpcError *error) {
     XrJsonValue *required = xjson_get_array(schema, "required");
     for (int i = 0; i < xjson_array_len(required); i++) {
         XrJsonValue *item = xjson_array_get(required, i);
@@ -279,6 +237,20 @@ static bool xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJsonValue *a
     return true;
 }
 
+static bool xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJsonValue *arguments,
+    XmcpRpcError *error) {
+    if (!tool->build_schema) return true;
+    XrJsonValue *schema = tool->build_schema();
+    if (!schema) {
+        error->code = XMCP_ERR_INTERNAL;
+        snprintf(error->message, sizeof(error->message), "tools/call: failed to build complete schema");
+        return false;
+    }
+    bool valid = xmcp_arguments_match_schema(tool, arguments, schema, error);
+    xjson_free(schema);
+    return valid;
+}
+
 /* --------------------------------------------------------------------------
  * tools/list handler (table-driven)
  * -------------------------------------------------------------------------- */
@@ -297,18 +269,18 @@ XR_FUNC const XmcpToolDef *xmcp_tools_table(void) {
 static XrJsonValue *xmcp_tool_to_json(const XmcpToolDef *tool) {
     XR_DCHECK(tool != NULL, "xmcp_tool_to_json: NULL tool");
     XrJsonValue *t = xjson_new_object();
-    XJSON_SET_STRING(t, "name", tool->name);
-    XJSON_SET_STRING(t, "description", tool->description);
-    xjson_object_set(t, "inputSchema", xjson_clone(tool->build_schema()));
+    XMCP_JSON_STRING(t, "name", tool->name);
+    XMCP_JSON_STRING(t, "description", tool->description);
+    xmcp_json_set(t, "inputSchema", tool->build_schema());
     if (tool->build_output_schema)
-        xjson_object_set(t, "outputSchema", xjson_clone(tool->build_output_schema()));
+        xmcp_json_set(t, "outputSchema", tool->build_output_schema());
 
     XrJsonValue *ann = xjson_new_object();
-    XJSON_SET_STRING(ann, "title", tool->title);
-    XJSON_SET_BOOL(ann, "readOnlyHint", tool->read_only);
-    XJSON_SET_BOOL(ann, "destructiveHint", false);
-    XJSON_SET_BOOL(ann, "openWorldHint", tool->open_world);
-    xjson_object_set(t, "annotations", ann);
+    XMCP_JSON_STRING(ann, "title", tool->title);
+    XMCP_JSON_BOOL(ann, "readOnlyHint", tool->read_only);
+    XMCP_JSON_BOOL(ann, "destructiveHint", false);
+    XMCP_JSON_BOOL(ann, "openWorldHint", tool->open_world);
+    xmcp_json_set(t, "annotations", ann);
     return t;
 }
 
@@ -322,11 +294,11 @@ XR_FUNC XrJsonValue *xmcp_handle_tools_list(XmcpServer *server, XrJsonValue *par
 
     for (size_t i = 0; i < server->registry.tool_count; i++) {
         const XmcpToolDef *td = xmcp_registry_tool_at(&server->registry, i);
-        xjson_array_push(tools, xmcp_tool_to_json(td));
+        xmcp_json_push(tools, xmcp_tool_to_json(td));
     }
 
-    xjson_object_set(result, "tools", tools);
-    return result;
+    xmcp_json_set(result, "tools", tools);
+    return xmcp_json_finish(result);
 }
 
 /* --------------------------------------------------------------------------
@@ -344,8 +316,9 @@ XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *par
         return NULL;
     }
 
-    const char *name = xjson_get_string(params, "name");
-    if (!name || name[0] == '\0') {
+    XrJsonValue *name_value = xjson_get(params, "name");
+    const char *name = xjson_is_string(name_value) ? name_value->as.string : NULL;
+    if (!name || !name_value->string_len || memchr(name, 0, name_value->string_len)) {
         error->code = XMCP_ERR_INVALID_PARAMS;
         snprintf(error->message, sizeof(error->message), "tools/call: 'name' is required");
         return NULL;
@@ -372,7 +345,7 @@ XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *par
     if (meta) {
         XrJsonValue *tok = xjson_get(meta, "progressToken");
         if (tok)
-            ctx.progress_token = xjson_clone(tok);
+            ctx.progress_token = xmcp_json_clone(tok);
     }
 
     XrJsonValue *empty_args = NULL;
@@ -382,9 +355,14 @@ XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *par
         arguments = empty_args;
     }
 
+    if (!arguments || xmcp_json_failed()) {
+        xjson_free(empty_args); xjson_free(ctx.progress_token);
+        error->code = XMCP_ERR_INTERNAL;
+        snprintf(error->message, sizeof(error->message), "tools/call: out of memory preparing request");
+        return NULL;
+    }
     if (!xmcp_validate_tool_arguments(tool, arguments, error)) {
-        if (empty_args)
-            xjson_free(empty_args);
+        xjson_free(empty_args); xjson_free(ctx.progress_token);
         return NULL;
     }
 
@@ -399,5 +377,5 @@ XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *par
         xjson_free(ctx.progress_token);
     if (empty_args)
         xjson_free(empty_args);
-    return result;
+    return xmcp_json_finish(result);
 }

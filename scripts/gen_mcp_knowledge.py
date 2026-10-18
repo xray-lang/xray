@@ -149,12 +149,7 @@ def c_escape(s: str) -> str:
 
 
 def to_c_string_block(s: str, indent: str = "        ") -> str:
-    """Emit `s` as a sequence of `"line\\n"` literals, one per source line.
-
-    Adjacent string literals concatenate in C, so the result behaves as a
-    single string but stays diff-friendly: each Markdown line maps to one
-    C source line.
-    """
+    """Keep Markdown literals intact and pack adjacent tokens into bounded rows."""
     if s == "":
         return '""'
     lines = s.split("\n")
@@ -162,7 +157,16 @@ def to_c_string_block(s: str, indent: str = "        ") -> str:
     for i, line in enumerate(lines):
         suffix = "\\n" if i < len(lines) - 1 else ""
         pieces.append(f'"{c_escape(line)}{suffix}"')
-    return ("\n" + indent).join(pieces)
+    rows: list[str] = []
+    current = ""
+    for piece in pieces:
+        if current and len(indent) + len(current) + len(piece) + 1 > 1024:
+            rows.append(current)
+            current = piece
+        else:
+            current += (" " if current else "") + piece
+    rows.append(current)
+    return ("\n" + indent).join(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -323,11 +327,10 @@ def emit_stdlib_symbols_array(module: str, symbols: list[dict[str, str]]) -> lis
         return []
     lines = [f"static const XmcpGeneratedStdlibSymbol _symbols_{module}[] = {{"]
     for s in symbols:
-        lines.append("    {")
-        lines.append(f'        .name = "{c_escape(s["name"])}",')
-        lines.append(f'        .signature = "{c_escape(s["signature"])}",')
-        lines.append(f'        .summary = "{c_escape(s["summary"])}",')
-        lines.append("    },")
+        fields = [f'.name = "{c_escape(s["name"])}",',
+                  f'.signature = "{c_escape(s["signature"])}",',
+                  f'.summary = "{c_escape(s["summary"])}",']
+        lines.append("    {" + " ".join(fields) + "},")
     lines.append("};")
     lines.append("")
     return lines

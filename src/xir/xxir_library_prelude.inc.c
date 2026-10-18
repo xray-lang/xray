@@ -38,8 +38,8 @@ static XrXirStatus library_prelude_module(const XrXirCompileContext *context,
     if (!governed || view->dependency_count || !module->types || !module->types->nominals)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirNominalTable *table=module->types->nominals; uint32_t owned=0;
-    uint32_t seen[2]={0,0};
-    if (xir_prelude_source.enum_count!=2) return XR_XIR_BAD_STRUCTURE;
+    uint32_t seen[sizeof(xir_prelude_enums)/sizeof(*xir_prelude_enums)]={0};
+    if (xir_prelude_source.enum_count!=sizeof(seen)/sizeof(*seen)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=0;i<table->count;++i) {
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
         const XrXirNominalDeclaration *record=&table->declarations[i]; bool owner=false;
@@ -53,9 +53,18 @@ static XrXirStatus library_prelude_module(const XrXirCompileContext *context,
             if (equal) match=e;
         }
         if (match==UINT32_MAX || seen[match]++ || record->kind!=XR_XIR_NOMINAL_ENUM ||
-            record->exported!=1 || record->parameter_count || record->field_count || record->flags)
+            record->exported!=1 || record->flags)
             return XR_XIR_BAD_STRUCTURE;
         const XirPreludeEnum *expected=&xir_prelude_source.enums[match];
+        if (record->parameter_count!=expected->parameter_count || record->field_count!=expected->field_count)
+            return XR_XIR_BAD_STRUCTURE;
+        if (expected->field_count) {
+            bool field_name=false;
+            status=library_prelude_literal(context,record->fields[0].name,"value",&field_name);
+            if (status!=XR_XIR_OK) return status;
+            if (!field_name || record->fields[0].flags || record->fields[0].type!=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE ||
+                record->constraints[0].markers || record->constraints[0].interface_count) return XR_XIR_BAD_STRUCTURE;
+        }
         if (record->native.native_id!=expected->native_id || record->variant_count!=expected->variant_count)
             return XR_XIR_BAD_STRUCTURE;
         if (!xir_compile_work(context,sizeof(record->native.source_fingerprint))) return XR_XIR_BUDGET;
@@ -63,14 +72,18 @@ static XrXirStatus library_prelude_module(const XrXirCompileContext *context,
             uint8_t wanted=expected->native_id ? xir_prelude_source.input_sha256[byte] : 0;
             if (record->native.source_fingerprint[byte]!=wanted) return XR_XIR_BAD_STRUCTURE;
         }
+        uint32_t begin=0;
         for (uint32_t v=0;v<expected->variant_count;++v) {
             const XrXirNominalVariant *variant=&record->variants[v]; bool equal=false;
             status=library_prelude_literal(context,variant->name,expected->variants[v],&equal);
             if (status!=XR_XIR_OK) return status;
-            if (!equal || variant->field_begin || variant->field_count) return XR_XIR_BAD_STRUCTURE;
+            uint32_t count=expected->field_count && !v ? 1u : 0u;
+            if (!equal || variant->field_begin!=begin || variant->field_count!=count) return XR_XIR_BAD_STRUCTURE;
+            begin+=count;
         }
     }
-    if (owned!=xir_prelude_source.enum_count || !seen[0] || !seen[1]) return XR_XIR_BAD_STRUCTURE;
+    if (owned!=xir_prelude_source.enum_count) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t e=0;e<xir_prelude_source.enum_count;++e) if (!seen[e]) return XR_XIR_BAD_STRUCTURE;
     const XrXirImplementationTable *implementations=d->implementations;
     for (uint32_t i=0;implementations && i<implementations->count;++i) {
         bool owner=false;

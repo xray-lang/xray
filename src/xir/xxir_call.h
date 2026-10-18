@@ -16,7 +16,7 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 29u
+#define XR_XIR_CALL_ABI_VERSION 33u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -46,7 +46,9 @@ typedef enum XrXirActionKind {
     /* value is the nonzero I64 millisecond duration the activation waits for. */
     XR_XIR_ACTION_TIMER,
     /* value borrows the true Task handle until the driver retains its wait lease. */
-    XR_XIR_ACTION_AWAIT_TASK
+    XR_XIR_ACTION_AWAIT_TASK,
+    /* An authenticated callback staged its owned Channel frontier watch. */
+    XR_XIR_ACTION_AWAIT_CHANNEL
 } XrXirActionKind;
 /* A PROTECTED call delivers a panic of its callee subtree back to the caller. */
 #define XR_XIR_ACTION_PROTECTED 1u
@@ -144,9 +146,10 @@ typedef struct XrXirOutputProvider {
     XrXirOutputEntry write;
     void *context;
 } XrXirOutputProvider;
-/* Clock reads and UTC offsets are synchronous services of the instance; they
+/* Clock reads and UTC offsets are synchronous services of the activation; they
  * never suspend. An absent provider is all zero and every service then fails
- * as a host error. The provider context stays host-owned. */
+ * as a host error. The provider context stays host-owned until every receiving
+ * Call or Instance retires. Child Calls inherit the exact provider. */
 typedef enum XrXirTimeStatus {
     XR_XIR_TIME_OK, XR_XIR_TIME_RANGE, XR_XIR_TIME_FAILED
 } XrXirTimeStatus;
@@ -167,7 +170,9 @@ static inline bool xr_xir_time_provider_valid(const XrXirTimeProvider *provider)
 }
 /* A suspension asks its host for nothing (YIELD) or for a duration (TIMER). The
  * request is published only for the exact pending wake token. */
-typedef enum XrXirWaitKind { XR_XIR_WAIT_NONE, XR_XIR_WAIT_YIELD, XR_XIR_WAIT_TIMER_MS, XR_XIR_WAIT_TASK } XrXirWaitKind;
+typedef enum XrXirWaitKind {
+    XR_XIR_WAIT_NONE, XR_XIR_WAIT_YIELD, XR_XIR_WAIT_TIMER_MS, XR_XIR_WAIT_TASK, XR_XIR_WAIT_CHANNEL
+} XrXirWaitKind;
 #define XR_XIR_TIMER_MAX_MS UINT64_C(86400000)
 typedef struct XrXirWaitRequest {
     uint32_t kind, reserved;
@@ -186,6 +191,7 @@ typedef struct XrXirCallConfig {
     XrXirCallAccounting *accounting;
     XrXirOutputProvider output;
     XrXirValueAdmission admission;
+    XrXirTimeProvider time;
 } XrXirCallConfig;
 
 /* Failed initialization leaves the complete caller buffer unchanged. */

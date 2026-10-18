@@ -14,6 +14,10 @@
  * the copied body. Calls, references, literals and requirements map separately. */
 static bool library_catalog_local_instruction(XrXirOp op) {
     switch (op) {
+    case XR_XIR_CHANNEL_TRY_SEND: case XR_XIR_CHANNEL_TRY_RECV:
+    case XR_XIR_CHANNEL_SEND: case XR_XIR_CHANNEL_RECV: case XR_XIR_CHANNEL_RECV_OR:
+    case XR_XIR_CHANNEL_SEND_TIMEOUT: case XR_XIR_CHANNEL_RECV_TIMEOUT:
+    case XR_XIR_CHANNEL_NEW: case XR_XIR_CHANNEL_CAPACITY: case XR_XIR_CHANNEL_IS_CLOSED: case XR_XIR_CHANNEL_CLOSE:
     case XR_XIR_ATOMIC_NEW:
     case XR_XIR_ATOMIC_LOAD:
     case XR_XIR_ATOMIC_STORE:
@@ -32,6 +36,9 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONCAT_STRING:
     case XR_XIR_WRITE_STREAM:
+    case XR_XIR_CLOCK_NANOS:
+    case XR_XIR_UTC_OFFSET_AT:
+    case XR_XIR_TIMER_AFTER_MS:
     case XR_XIR_ENUM_NEW:
     case XR_XIR_ENUM_TAG:
     case XR_XIR_ENUM_GET:

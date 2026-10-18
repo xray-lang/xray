@@ -1,0 +1,103 @@
+import "./factory" as factory
+fn sent(result: SendResult) -> i64 {
+    return match (result) {
+        SendResult.Sent -> 1,
+        SendResult.Full -> 2,
+        SendResult.Timeout -> 3,
+        SendResult.Closed -> 4,
+    }
+}
+fn received(result: Recv<i64>) -> i64 {
+    return match (result) {
+        Recv.Value { value: item } -> item,
+        Recv.Empty -> -1,
+        Recv.Timeout -> -2,
+        Recv.Closed -> -3,
+    }
+}
+fn tick(counter: Atomic<i64>) { counter.add(1) }
+export fn newRetryChannel() -> Channel<()> { return Channel<()>(1) }
+export fn retrySend(channel: Channel<()>) -> i64 {
+    const counter = Atomic<i64>(0)
+    const result = channel.trySend(tick(counter))
+    return sent(result) * 100 + counter.load()
+}
+export fn retryRecv(channel: Channel<()>) -> i64 {
+    return match (channel.tryRecv()) {
+        Recv.Value { value: ignored } -> 41,
+        Recv.Empty -> 42,
+        Recv.Timeout -> 43,
+        Recv.Closed -> 44,
+    }
+}
+export fn retryClose(channel: Channel<()>) -> i64 {
+    channel.close()
+    return 7
+}
+export fn newRendezvousChannel() -> Channel<i64> { return Channel<i64>(0) }
+export fn rendezvousRecv(channel: Channel<i64>) -> i64 { return received(channel.tryRecv()) }
+export fn rendezvousSend(channel: Channel<i64>, value: i64) -> i64 { return sent(channel.trySend(value)) }
+fn offerWorker(channel: Channel<i64>) -> i64 { return sent(channel.trySend(123)) }
+fn echoChannel<T: Sendable>(channel: Channel<T>) -> Channel<T> { return channel }
+export fn main() -> i64 {
+    const marker = 99
+    const channel = Channel<i64>(1)
+    print(received(factory.take(channel)), sent(factory.offer(channel, 42)),
+        sent(channel.trySend(77)), received(channel.tryRecv()))
+    channel.close()
+    print(received(channel.tryRecv()), sent(channel.trySend(88)))
+    const arrays = Channel<Array<i64>>(1)
+    var payload = [11, 22]
+    const offered = arrays.trySend(payload)
+    payload[0] = 99
+    const original = match (arrays.tryRecv()) {
+        Recv.Value { value: item } -> item[0],
+        Recv.Empty -> -1,
+        Recv.Timeout -> -2,
+        Recv.Closed -> -3,
+    }
+    print(sent(offered), original, payload[0])
+    const counter = Atomic<i64>(0)
+    const units = Channel<()>(1)
+    const unit_sent = units.trySend(tick(counter))
+    const unit_seen = match (units.tryRecv()) {
+        Recv.Value { value: ignored } -> marker,
+        Recv.Empty -> -1,
+        Recv.Timeout -> -2,
+        Recv.Closed -> -3,
+    }
+    print(sent(unit_sent), unit_seen, counter.load())
+    const inner = Channel<string>(1)
+    const nested = Channel<Channel<string>>(1)
+    const inner_sent = inner.trySend("nested")
+    const nested_sent = nested.trySend(inner)
+    const text = match (nested.tryRecv()) {
+        Recv.Value { value: item } -> match (item.tryRecv()) {
+            Recv.Value { value: bytes } -> bytes,
+            Recv.Empty -> "empty",
+            Recv.Timeout -> "timeout",
+            Recv.Closed -> "closed",
+        },
+        Recv.Empty -> "outer-empty",
+        Recv.Timeout -> "outer-timeout",
+        Recv.Closed -> "outer-closed",
+    }
+    print(sent(inner_sent), sent(nested_sent), text, inner.capacity)
+    const zero = Channel<i64>()
+    print(sent(zero.trySend(7)), received(zero.tryRecv()), zero.capacity)
+    const explicit_unit = Recv<()>.Value { value: tick(counter) }
+    const constructed_seen = match (explicit_unit) {
+        Recv.Value { value: ignored } -> marker,
+        Recv.Empty -> -1,
+        Recv.Timeout -> -2,
+        Recv.Closed -> -3,
+    }
+    print(constructed_seen, counter.load())
+    const task_channel = Channel<i64>(1)
+    const worker = go offerWorker(task_channel)
+    const worker_result = await worker
+    const task_alias = await go echoChannel(task_channel)
+    task_alias.close()
+    print(worker_result, received(task_channel.tryRecv()), task_channel.isClosed)
+    return marker
+}

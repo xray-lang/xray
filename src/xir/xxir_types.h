@@ -13,6 +13,7 @@
 #define XXIR_TYPES_H
 #include "xxir.h"
 #include "xxir_nominal.h"
+#include "xxir_type_description.h"
 #include "../shared/xr_param_mode.h"
 /* Closed bounds and control promises are independent; omitted root bits never
  * become a no-effect proof, even for otherwise well-shaped old descriptors. */
@@ -56,6 +57,9 @@ XR_FUNC XrXirStatus xr_xir_callable_weakening_admit(const XrXirTypes *types,
     XrXirType source, XrXirType target, void *work_owner, bool (*charge)(void *, uint64_t));
 XR_FUNC XrXirStatus xr_xir_compile_callable_weakening(const XrXirCompileContext *compile_context, const XrXirTypes *types, XrXirType source, XrXirType target);
 /* Classification requires a verified pool and grants no operation authority. */
+/* Structural classification grants no construction or execution authority. */
+XR_FUNC bool xr_xir_type_is_channel(const XrXirTypes *types, XrXirType type);
+XR_FUNC XrXirType xr_xir_channel_element(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_atomic(const XrXirTypes *types, XrXirType type);
 XR_FUNC XrXirType xr_xir_task_element(const XrXirTypes *types, XrXirType type);
 /* Executable parameter families still require definition-site Sendable proof. */

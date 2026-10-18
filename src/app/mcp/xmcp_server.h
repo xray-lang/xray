@@ -25,7 +25,6 @@
 
 /* Forward declarations */
 typedef struct XrJsonValue XrJsonValue;
-typedef struct XrVMRuntime XrVMRuntime;
 typedef struct XmcpKnowledge XmcpKnowledge;
 
 typedef enum XmcpLifecycleState {
@@ -39,9 +38,6 @@ typedef struct XmcpServer {
     /* stdio transport */
     XmcpStdioTransport transport;
 
-    /* Analyzer isolate for MCP code analysis tools */
-    XrVMRuntime *isolate;
-
     /* Knowledge base (syntax spec + stdlib index) */
     XmcpKnowledge *knowledge;
 
@@ -54,6 +50,7 @@ typedef struct XmcpServer {
 
     /* Server lifecycle */
     XmcpLifecycleState lifecycle_state;
+    bool failed;
     volatile sig_atomic_t shutdown; /* signal-safe shutdown flag */
 } XmcpServer;
 

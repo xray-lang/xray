@@ -13,6 +13,7 @@
 #define XXIR_INTERPRETER_STATE_H
 #include "xxir_atomic.h"
 #include "xxir_value_place.h"
+#include "xxir_channel_call_internal.h"
 typedef struct VmState {
     uint32_t instruction, destination, invoke, panic;
     uint32_t frontier, exit_target, exit_block, landing;
@@ -21,5 +22,6 @@ typedef struct VmState {
     XrXirValue *arguments;
     XrXirValuePathStep *path_steps;
     XrXirAtomicProgress atomic;
+    XrXirChannelCallState channel;
 } VmState;
 #endif // XXIR_INTERPRETER_STATE_H

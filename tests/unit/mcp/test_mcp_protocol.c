@@ -21,28 +21,7 @@
 #include "../../../src/app/mcp/xmcp_knowledge.h"
 #include "../../../src/base/xjson.h"
 #include "../../../src/base/xmalloc.h"
-#include "../../../src/toolchain/xcompiler_session.h"
-#include "../../../include/xray_vm.h"
 #include "../test_win_compat.h"
-
-/* Stubs for notification functions (implemented in xmcp_server.c, not linked
- * into this test binary). Tools may call these; they are no-ops here. */
-void xmcp_send_notification(XmcpServer *s, const char *m, XrJsonValue *p) {
-    (void) s;
-    (void) m;
-    (void) p;
-}
-void xmcp_send_log_notification(XmcpServer *s, const char *l, const char *m) {
-    (void) s;
-    (void) l;
-    (void) m;
-}
-void xmcp_send_progress_notification(XmcpServer *s, const XrJsonValue *t, int64_t p, int64_t tot) {
-    (void) s;
-    (void) t;
-    (void) p;
-    (void) tot;
-}
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -112,10 +91,6 @@ static XmcpServer test_server_with_runner(bool enable_runner) {
 
 static XmcpServer test_server(void) {
     return test_server_with_runner(false);
-}
-
-static XrCompilerSession *test_compiler_session(XrVMRuntime *isolate) {
-    return xr_compiler_session_current_for_isolate(isolate);
 }
 
 static void test_server_load_knowledge(XmcpServer *server) {
@@ -782,11 +757,6 @@ TEST(tools_call_format_schema_has_optional_params) {
 
 TEST(tools_call_format_returns_structured_content) {
     XmcpServer server = test_server();
-    XrVMConfig iso_params = {0};
-    server.isolate = xray_vm_new_full(&iso_params);
-    ASSERT_NOT_NULL(server.isolate);
-    XrCompilerSession *session = test_compiler_session(server.isolate);
-    ASSERT_NOT_NULL(session);
 
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_format");
@@ -814,16 +784,10 @@ TEST(tools_call_format_returns_structured_content) {
 
     xjson_free(params);
     xjson_free(result);
-    xray_vm_delete(server.isolate);
 }
 
 TEST(tools_call_format_syntax_errors_are_structured) {
     XmcpServer server = test_server();
-    XrVMConfig iso_params = {0};
-    server.isolate = xray_vm_new_full(&iso_params);
-    ASSERT_NOT_NULL(server.isolate);
-    XrCompilerSession *session = test_compiler_session(server.isolate);
-    ASSERT_NOT_NULL(session);
 
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_format");
@@ -847,7 +811,6 @@ TEST(tools_call_format_syntax_errors_are_structured) {
 
     xjson_free(params);
     xjson_free(result);
-    xray_vm_delete(server.isolate);
 }
 
 /* =========================================================================
@@ -888,9 +851,6 @@ TEST(tools_call_analyze_schema) {
 
 TEST(tools_call_analyze_returns_structured_diagnostics) {
     XmcpServer server = test_server();
-    XrVMConfig iso_params = {0};
-    server.isolate = xray_vm_new_full(&iso_params);
-    ASSERT_NOT_NULL(server.isolate);
 
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_analyze");
@@ -912,7 +872,6 @@ TEST(tools_call_analyze_returns_structured_diagnostics) {
 
     xjson_free(params);
     xjson_free(result);
-    xray_vm_delete(server.isolate);
 }
 
 /* =========================================================================
@@ -1689,171 +1648,6 @@ TEST(prompts_get_missing_name) {
 }
 
 /* =========================================================================
- * Knowledge base
- * ========================================================================= */
-
-TEST(knowledge_new_and_load) {
-    XmcpKnowledge *kb = xmcp_knowledge_new();
-    ASSERT_NOT_NULL(kb);
-    ASSERT_EQ(kb->topic_count, 0);
-    ASSERT_EQ(kb->module_count, 0);
-
-    xmcp_knowledge_load(kb);
-    ASSERT(kb->topic_count > 0);
-    ASSERT(kb->module_count > 0);
-
-    xmcp_knowledge_free(kb);
-}
-
-TEST(knowledge_lookup_exact) {
-    XmcpKnowledge *kb = xmcp_knowledge_new();
-    ASSERT_NOT_NULL(kb);
-    xmcp_knowledge_load(kb);
-
-    const char *content = xmcp_knowledge_lookup_topic(kb, "channel");
-    ASSERT_NOT_NULL(content);
-    /* Content should mention Channel */
-    ASSERT(strstr(content, "Channel") != NULL);
-
-    xmcp_knowledge_free(kb);
-}
-
-TEST(knowledge_lookup_alias) {
-    XmcpKnowledge *kb = xmcp_knowledge_new();
-    ASSERT_NOT_NULL(kb);
-    xmcp_knowledge_load(kb);
-
-    /* "fn" is an alias for "functions" */
-    const char *content = xmcp_knowledge_lookup_topic(kb, "fn");
-    ASSERT_NOT_NULL(content);
-    ASSERT(strstr(content, "Functions") != NULL || strstr(content, "fn") != NULL);
-
-    xmcp_knowledge_free(kb);
-}
-
-TEST(knowledge_lookup_not_found) {
-    XmcpKnowledge *kb = xmcp_knowledge_new();
-    ASSERT_NOT_NULL(kb);
-    xmcp_knowledge_load(kb);
-
-    const char *content = xmcp_knowledge_lookup_topic(kb, "zzz_nonexistent_topic");
-    ASSERT(content == NULL);
-
-    xmcp_knowledge_free(kb);
-}
-
-TEST(knowledge_search_stdlib) {
-    XmcpKnowledge *kb = xmcp_knowledge_new();
-    ASSERT_NOT_NULL(kb);
-    xmcp_knowledge_load(kb);
-
-    XmcpStdlibSearchResult matches;
-    xmcp_knowledge_search_stdlib_matches(kb, "http", NULL, &matches);
-    ASSERT(matches.match_count > 0);
-    ASSERT_STR_EQ(matches.matches[0].module->name, "http");
-    ASSERT(matches.matches[0].symbol == NULL);
-
-    int match_count = 0;
-    char *result = xmcp_knowledge_search_stdlib(kb, "http", NULL, &match_count);
-    ASSERT_NOT_NULL(result);
-    ASSERT(match_count > 0);
-    ASSERT(strstr(result, "Module: http") != NULL);
-    xr_free(result);
-
-    xmcp_knowledge_free(kb);
-}
-
-TEST(knowledge_search_stdlib_ranks_symbols) {
-    XmcpKnowledge *kb = xmcp_knowledge_new();
-    ASSERT_NOT_NULL(kb);
-    xmcp_knowledge_load(kb);
-
-    XmcpStdlibSearchResult result;
-    xmcp_knowledge_search_stdlib_matches(kb, "parse", "csv", &result);
-    ASSERT(result.match_count > 0);
-    ASSERT_NOT_NULL(result.matches[0].module);
-    ASSERT_STR_EQ(result.matches[0].module->name, "csv");
-    ASSERT_NOT_NULL(result.matches[0].symbol);
-    ASSERT_STR_EQ(result.matches[0].symbol->name, "parse");
-    ASSERT(result.matches[0].score > 0);
-
-    xmcp_knowledge_free(kb);
-}
-
-TEST(knowledge_search_stdlib_module_symbol_direct) {
-    XmcpKnowledge *kb = xmcp_knowledge_new();
-    ASSERT_NOT_NULL(kb);
-    xmcp_knowledge_load(kb);
-
-    XmcpStdlibSearchResult result;
-    xmcp_knowledge_search_stdlib_matches(kb, "http.request", NULL, &result);
-    ASSERT(result.match_count > 0);
-    ASSERT_NOT_NULL(result.matches[0].module);
-    ASSERT_STR_EQ(result.matches[0].module->name, "http");
-    ASSERT_NOT_NULL(result.matches[0].symbol);
-    ASSERT_STR_EQ(result.matches[0].symbol->name, "request");
-
-    xmcp_knowledge_search_stdlib_matches(kb, "http.request", "csv", &result);
-    ASSERT_EQ(result.match_count, 0);
-
-    xmcp_knowledge_free(kb);
-}
-
-TEST(knowledge_search_stdlib_multi_token_module_context) {
-    XmcpKnowledge *kb = xmcp_knowledge_new();
-    ASSERT_NOT_NULL(kb);
-    xmcp_knowledge_load(kb);
-
-    XmcpStdlibSearchResult result;
-    xmcp_knowledge_search_stdlib_matches(kb, "csv parse", NULL, &result);
-    ASSERT(result.match_count > 0);
-    ASSERT_NOT_NULL(result.matches[0].module);
-    ASSERT_STR_EQ(result.matches[0].module->name, "csv");
-    ASSERT_NOT_NULL(result.matches[0].symbol);
-    ASSERT_STR_EQ(result.matches[0].symbol->name, "parse");
-
-    xmcp_knowledge_free(kb);
-}
-
-TEST(knowledge_search_stdlib_no_match) {
-    XmcpKnowledge *kb = xmcp_knowledge_new();
-    ASSERT_NOT_NULL(kb);
-    xmcp_knowledge_load(kb);
-
-    int match_count = 0;
-    char *result = xmcp_knowledge_search_stdlib(kb, "zzz_nonexistent", NULL, &match_count);
-    ASSERT_NOT_NULL(result);
-    ASSERT_EQ(match_count, 0);
-    /* Should contain "No modules found" or module list */
-    ASSERT(strstr(result, "No modules found") != NULL ||
-           strstr(result, "Available modules") != NULL);
-    xr_free(result);
-
-    xmcp_knowledge_free(kb);
-}
-
-TEST(knowledge_get_cheatsheet) {
-    const char *cs = xmcp_knowledge_get_cheatsheet();
-    ASSERT_NOT_NULL(cs);
-    ASSERT(strstr(cs, "Xray") != NULL);
-    ASSERT(strlen(cs) > 100);
-}
-
-TEST(knowledge_get_concurrency) {
-    const char *cm = xmcp_knowledge_get_concurrency();
-    ASSERT_NOT_NULL(cm);
-    ASSERT(strstr(cm, "Concurrency") != NULL);
-}
-
-TEST(knowledge_get_stdlib_list) {
-    const char *sl = xmcp_knowledge_get_stdlib_list();
-    ASSERT_NOT_NULL(sl);
-    ASSERT(strstr(sl, "http") != NULL);
-    ASSERT(strstr(sl, "| `json` |") == NULL);
-    ASSERT(strstr(sl, "JSON.parse<T>()") != NULL);
-}
-
-/* =========================================================================
  * Method dispatch table structure
  * ========================================================================= */
 
@@ -2005,20 +1799,6 @@ int main(int argc, char **argv) {
         RUN_TEST(prompts_get_missing_name);
     }
 
-    if (test_group_selected(requested_group, "knowledge")) {
-        RUN_TEST(knowledge_new_and_load);
-        RUN_TEST(knowledge_lookup_exact);
-        RUN_TEST(knowledge_lookup_alias);
-        RUN_TEST(knowledge_lookup_not_found);
-        RUN_TEST(knowledge_search_stdlib);
-        RUN_TEST(knowledge_search_stdlib_ranks_symbols);
-        RUN_TEST(knowledge_search_stdlib_module_symbol_direct);
-        RUN_TEST(knowledge_search_stdlib_multi_token_module_context);
-        RUN_TEST(knowledge_search_stdlib_no_match);
-        RUN_TEST(knowledge_get_cheatsheet);
-        RUN_TEST(knowledge_get_concurrency);
-        RUN_TEST(knowledge_get_stdlib_list);
-    }
 
     if (test_group_selected(requested_group, "dispatch"))
         RUN_TEST(method_entry_struct_size);

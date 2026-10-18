@@ -1,0 +1,2 @@
+fn worker() -> i8 { return 127 }
+export fn main() -> i64 { const task: Task<i16> = go worker(); return 7 }

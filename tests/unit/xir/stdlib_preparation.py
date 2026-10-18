@@ -13,3 +13,7 @@ with tempfile.TemporaryDirectory(prefix="xir-library-preparation-") as temporary
     (root/"root.xr").write_text("export fn padding() -> i64 { return 7 }\n" + text +
                              "\nexport fn writeStdout() -> bool { return false }\nexport fn writer() -> fn(string)->bool { return output.writeStdout }\n", encoding="utf-8")
     subprocess.run([str(executable.resolve()), str(root), str(root/"root.xr"), mode], check=True)
+    # Preserve the original fixture, then qualify the complete clock closure.
+    (root/"root.xr").write_text((root/"root.xr").read_text(encoding="utf-8") +
+        (source/"tests/fixtures/xir_stdlib_time/root.xr").read_text(encoding="utf-8"), encoding="utf-8")
+    subprocess.run([str(executable.resolve()), str(root), str(root/"root.xr"), mode], check=True)

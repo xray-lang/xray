@@ -65,13 +65,14 @@ XR_FUNC bool xmcp_jsonrpc_validate_message(XrJsonValue *msg, XmcpJsonRpcMessage 
         return xmcp_jsonrpc_fail(NULL, error_id, error_code, error_message,
                                  "Invalid Request: invalid id");
 
-    const char *jsonrpc = xjson_get_string(msg, "jsonrpc");
-    if (!jsonrpc || strcmp(jsonrpc, "2.0") != 0)
+    XrJsonValue *version = xjson_get(msg, "jsonrpc");
+    if (!xjson_is_string(version) || version->string_len != 3 || memcmp(version->as.string, "2.0", 3))
         return xmcp_jsonrpc_fail(id, error_id, error_code, error_message,
                                  "Invalid Request: invalid jsonrpc version");
 
-    const char *method = xjson_get_string(msg, "method");
-    if (!method)
+    XrJsonValue *method_value = xjson_get(msg, "method");
+    const char *method = xjson_is_string(method_value) ? method_value->as.string : NULL;
+    if (!method || !method_value->string_len || memchr(method, 0, method_value->string_len))
         return xmcp_jsonrpc_fail(id, error_id, error_code, error_message,
                                  "Invalid Request: missing method");
 

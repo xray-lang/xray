@@ -13,6 +13,7 @@
  *   MCP protocol version 2025-03-26.
  */
 
+#include "xmcp_json.h"
 #include "xmcp_protocol.h"
 #include "xmcp_server.h"
 #include "../../base/xjson.h"
@@ -24,29 +25,29 @@ static XrJsonValue *build_capabilities(XmcpServer *server) {
 
     if (xmcp_registry_has_tools(&server->registry)) {
         XrJsonValue *tc = xjson_new_object();
-        XJSON_SET_BOOL(tc, "listChanged", true);
-        xjson_object_set(caps, "tools", tc);
+        XMCP_JSON_BOOL(tc, "listChanged", true);
+        xmcp_json_set(caps, "tools", tc);
     }
 
     if (xmcp_registry_has_resources(&server->registry)) {
         XrJsonValue *rc = xjson_new_object();
-        XJSON_SET_BOOL(rc, "listChanged", false);
-        xjson_object_set(caps, "resources", rc);
+        XMCP_JSON_BOOL(rc, "listChanged", false);
+        xmcp_json_set(caps, "resources", rc);
     }
 
     if (xmcp_registry_has_prompts(&server->registry)) {
         XrJsonValue *pc = xjson_new_object();
-        XJSON_SET_BOOL(pc, "listChanged", true);
-        xjson_object_set(caps, "prompts", pc);
+        XMCP_JSON_BOOL(pc, "listChanged", true);
+        xmcp_json_set(caps, "prompts", pc);
     }
 
     /* Logging is always available */
-    xjson_object_set(caps, "logging", xjson_new_object());
+    xmcp_json_set(caps, "logging", xjson_new_object());
 
     return caps;
 }
 
-XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params, XmcpRpcError *error) {
+XR_FUNC XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params, XmcpRpcError *error) {
     (void) error;
     XR_DCHECK(server != NULL, "xmcp_handle_initialize: NULL server");
 
@@ -64,16 +65,16 @@ XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params, Xmc
     XrJsonValue *result = xjson_new_object();
 
     /* Protocol version */
-    XJSON_SET_STRING(result, "protocolVersion", XMCP_PROTOCOL_VERSION);
+    XMCP_JSON_STRING(result, "protocolVersion", XMCP_PROTOCOL_VERSION);
 
     /* Dynamically inferred capabilities */
-    xjson_object_set(result, "capabilities", build_capabilities(server));
+    xmcp_json_set(result, "capabilities", build_capabilities(server));
 
     /* Server info */
     XrJsonValue *info = xjson_new_object();
-    XJSON_SET_STRING(info, "name", XMCP_SERVER_NAME);
-    XJSON_SET_STRING(info, "version", XMCP_SERVER_VERSION);
-    xjson_object_set(result, "serverInfo", info);
+    XMCP_JSON_STRING(info, "name", XMCP_SERVER_NAME);
+    XMCP_JSON_STRING(info, "version", XMCP_SERVER_VERSION);
+    xmcp_json_set(result, "serverInfo", info);
 
-    return result;
+    return xmcp_json_finish(result);
 }

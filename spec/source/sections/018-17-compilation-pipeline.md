@@ -515,7 +515,7 @@ NUL/深度257、逐实际OOM与exact/minus1、producer销毁/双Instance/physica
 
 PRINT失败保留准确Call状态。WRITE_STREAM在合法已配置provider下将OK映为true、OUTPUT_ERROR映为false；缺provider仍为Call OUTPUT_ERROR，OOM/LIMIT/BAD_ARGUMENT/BAD_ABI不得映为false。取消保持既有优先级。资源失败不成为panic，不能被assertPanics消费为成功。
 
-当前Call ABI为21。Provider/Sink以abi_version与reserved=0开头；有callback先验21，无provider仅准canonical全零。CallConfig/InstanceConfig以abi_version和struct_size开头，在读取其它字段前验21及exact sizeof。Windows x86_64实测Provider24、Sink32、CallConfig136、InstanceConfig88；这些数值不代替其它target的实际ABI验证。唯一xr_xir_call_config_init(config,size)与xr_xir_instance_config_init(config,size)返回CallStatus，成功才写，失败保留全部output bytes；旧按值defaults符号删除，无别名或wrapper。旧Call20 entry必须在执行callback前拒绝；旧embedding defaults对象必须链接拒绝，不能用重编旧对象替代证据。
+当前 Call ABI 只由 §17.6 的实现常量定义。Provider/Sink 先检查该 ABI 与 reserved=0；无 callback 只接受 canonical 全零。CallConfig/InstanceConfig 先检查现行 abi_version 和 exact struct_size，再读取其余字段。唯一 xr_xir_call_config_init(config,size) 与 xr_xir_instance_config_init(config,size) 返回 CallStatus，失败保留全部 output bytes。CallConfig 的 TimeProvider 由宿主借出，context 必须活到全部接收 Call/Instance 退休；Task 子 Call 从真实 parent 或 root 继承同一 provider。实际 SDK 的目标探针核对布局，单个 Windows 布局不能授予其它 target 资格。旧 entry 在 callback 前拒绝，退休 embedding 符号保持链接拒绝；重编旧对象不构成历史二进制证据。
 
 Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移不授Source/Target/SDK权限，不证明完整安全、默认stdlib缓存或最终旧链删除。VM/native独立预期、每个真实分配失败、准确状态、旧对象拒绝、producer寿命及物理释放分别验证。
 
@@ -539,7 +539,7 @@ Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移�
 
 ### 17.37 Checked 标准库出版与普通执行
 
-标准库只提供一份 Checked XIR 语义输入，包含声明、泛型定义、私有实现闭包、模块初始化、效果和所有权事实。当前出版族为 io/output，不代表其余标准库族已获资格。库模板是经过验证的输入，不是可执行 Program 授权。Catalog 在调用方累计资源账本下验证完整 Checked body、规范模块身份和依赖；字节摘要不能代替语义复验。Catalog 深拥有物理根，输入和 Source 生产者销毁后仍有效。缺失或畸形的 advertised 输入拒绝，不回退到 Source。
+标准库只提供一份 Checked XIR 语义输入，包含声明、泛型定义、私有实现闭包、模块初始化、效果和所有权事实。当前出版族为 io/output 与 time，不代表其余标准库族已获资格。库模板是经过验证的输入，不是可执行 Program 授权。Catalog 在调用方累计资源账本下验证完整 Checked body、规范模块身份和依赖；字节摘要不能代替语义复验。Catalog 深拥有物理根，输入和 Source 生产者销毁后仍有效。缺失或畸形的 advertised 输入拒绝，不回退到 Source。
 
 Checked producer 只进行 Source 检查与 Checked 编码，不依赖 CGen、native 编译、object 清单或 runtime SDK；构建 producer 可执行文件本身仍需要支持的宿主 C 工具链。嵌入的不可变 Checked 字节和独立组件 manifest 不包含机器码回调。CLI、LSP、VM、AOT 独立于 native 代码取得同一 Catalog 输入。VM 对可达实例特化、复验、Lower 后按普通不可变 Program seal 接收，不查找或替换标准库函数为 cached native entries，执行期不需要 C 编译器。AOT 将库与用户 XIR 共同交给普通 C backend 编译。
 
@@ -548,6 +548,10 @@ Checked producer 只进行 Source 检查与 Checked 编码，不依赖 CGen、na
 Core 只安装 Checked 组件及精确 module/length/digest manifest。SDK 组件独立验证 target、ABI、Source 和 archive manifest；SDK-only 安装不要求标准库配对。组件及规范相对路径在出版前拒绝畸形输入；验证失败保全已有 manifest。真实 Core/SDK/full 安装、搬移、无源码 VM/AOT、用户新泛型类型及缺失/损坏组件需要独立测试。完整标准库交付与删除当前已支持族的缓存是不同完成责任。
 
 保留独立输出预期：stdout 为 out\0 后接 U+4E2D 的七个字节，stderr 为 err! 四个字节及空输入；保留两 Instance、四种 provider 结果、导入 leaf 与用户 wrapper、同名用户声明、producer death、escaped Function/result 寿命和物理释放。只退役 cache match/lease/object-pair 断言。每个实际 preparation、bind/seal 分配故障，资源三轴 exact/minus1、不补账本的 retry、失败保全 take 和零分配 cleanup 仍由普通路径覆盖。W1–W4、可移植 C11、适用 provider/sanitizer 门及既有 generic/library/output 责任全部保留。
+
+当前出版保存io/output的私有路由函数，以及time的三项私有缩放常量、全部八项公开函数和真实initializer。CLOCK_NANOS、UTC_OFFSET_AT与TIMER_AFTER_MS沿普通已验证操作导入，保留时钟种类、计时器悬挂效果和模块槽重定位；不引入本机回调缓存。bare `import time`先按精确authority及logical path选Catalog，源文件损坏或不存在不改变该闭包。源码私有var禁令与322 P1–P3完整退出要求不变。codegen的优化屏障身份尚未由此发布。
+
+Checked安装清单唯一采用schema2：每个components条目含role、path、module_identity、length、sha256。各条目的身份和相对路径唯一，旧schema1、空清单、非canonical身份、重复条目、缺文件及错误摘要拒绝；清单最后原子发布。多组件构造共享累计资源账本，临时数组与已接收产物在失败时释放，既有输出保全。
 
 ### 17.38 共同根执行流事实与原因查询
 
@@ -1275,7 +1279,7 @@ The sole XrXirOutputStatus is OK=0, OOM=1, LIMIT=2, OUTPUT_ERROR=3, BAD_ARGUMENT
 
 PRINT failure preserves the exact Call status. For a valid configured provider, WRITE_STREAM maps OK to true and OUTPUT_ERROR to false. An absent provider remains Call OUTPUT_ERROR; OOM/LIMIT/BAD_ARGUMENT/BAD_ABI never become false. Existing cancellation priority remains. Resource failure is not panic and cannot satisfy assertPanics.
 
-Current Call ABI is21. Provider/Sink start with abi_version and reserved=0: callbacks require21, while no provider requires canonical all-zero state. CallConfig/InstanceConfig start with abi_version and struct_size, checking21 and exact sizeof before reading other fields. Actual Windows x86_64 sizes are Provider24, Sink32, CallConfig136 and InstanceConfig88; these do not qualify other targets. Sole xr_xir_call_config_init(config,size) and xr_xir_instance_config_init(config,size) return CallStatus, writing only on success and preserving all output bytes on failure. Old by-value defaults symbols are removed without aliases or wrappers. Actual Call20 entries reject before callbacks; old embedding defaults objects must fail to link rather than being rebuilt as purported old evidence.
+The current Call ABI is defined only by the implementation constant listed in §17.6. Provider/Sink first check that ABI and reserved=0; an absent callback requires canonical all-zero state. CallConfig/InstanceConfig check the current abi_version and exact struct_size before reading other fields. The sole xr_xir_call_config_init(config,size) and xr_xir_instance_config_init(config,size) return CallStatus and preserve every output byte on failure. The host lends the CallConfig TimeProvider and keeps its context alive until all receiving Calls/Instances retire; Task child Calls inherit the same provider from their authentic parent or root. Actual SDK target probes check layout; one Windows layout does not qualify another target. Old entries reject before callbacks and retired embedding symbols remain link failures; rebuilding old objects does not recover historical binary evidence.
 
 Checked22/57, Value16 and Program26 retain their own actual contracts. Output migration grants no Source/Target/SDK authority and does not qualify complete safety, default stdlib caching or final legacy deletion. Independently expected VM/native behavior, every actual allocation failure, exact status, old-object rejection, producer lifetimes and physical release need separate verification.
 
@@ -1299,7 +1303,7 @@ Qualification includes a private generic helper, two Libraries both using binder
 
 ### 17.37 Checked standard library publication and ordinary execution
 
-The standard library supplies one Checked XIR semantic input, including declarations, generic definitions, private implementation closure, module initialization, effects and ownership facts. The current published family is io/output; this does not qualify the remaining library families. Library templates are verified input rather than executable Program authority. Catalog admission verifies the complete Checked body, its canonical module identity and dependencies under the caller's cumulative resource ledger. Byte digests never replace semantic verification. Catalog ownership survives input/source destruction and copies physical roots. Missing or malformed advertised input rejects without a source fallback.
+The standard library supplies one Checked XIR semantic input, including declarations, generic definitions, private implementation closure, module initialization, effects and ownership facts. The current published families are io/output and time; this does not qualify the remaining library families. Library templates are verified input rather than executable Program authority. Catalog admission verifies the complete Checked body, its canonical module identity and dependencies under the caller's cumulative resource ledger. Byte digests never replace semantic verification. Catalog ownership survives input/source destruction and copies physical roots. Missing or malformed advertised input rejects without a source fallback.
 
 The Checked producer performs Source checking and Checked encoding without CGen, native compilation, object inventory or a runtime SDK dependency. Building the producer executable still needs the supported host C toolchain. Embedded immutable Checked bytes and their own component manifest contain no machine-code callbacks. CLI, LSP, VM and AOT obtain library input from this same Catalog independently of native code. VM specializes, reverifies and lowers reachable instances before ordinary immutable Program sealing. VM binding does not look up or replace standard library functions with cached native entries and needs no C compiler at execution time. AOT compiles library and user XIR together through the ordinary C backend.
 
@@ -1308,6 +1312,10 @@ Standard library native registries, matching factories, cache leases, paired bui
 Core publication installs only the Checked component and its exact module/length/digest manifest. The SDK component verifies its own target, ABI, source and archive manifest independently; SDK-only installation needs no standard library pair. Components and canonical relative paths reject before publication, and failed verification preserves any previously published manifest. Real Core/SDK/full installs, relocation, source-free VM/AOT, user-created generic types and missing/corrupt components require independent tests. Complete library delivery is separate from removal of the cache for the currently supported family.
 
 Preserve the independent seven stdout bytes out\0 followed by U+4E2D, four stderr bytes err! and empty; two Instances, four provider outcomes, imported leaves and user wrappers, same-spelling user declarations, producer death, escaped Function/result lifetimes and physical release. Retire only cache match/lease/object-pair assertions. Every actual preparation and bind/seal allocation failure, exact/minus1 resource axis, retry without ledger refill, failure-preserving take and zero-allocation cleanup remains covered on the ordinary paths. W1–W4, portable C11, applicable provider/sanitizer gates and all existing generic/library/output obligations remain.
+
+Current publication retains the private io/output routing body and all eight time exports, its three private scaling constants and authentic initializer. CLOCK_NANOS, UTC_OFFSET_AT and TIMER_AFTER_MS import as ordinary verified operations, retaining clock kinds, timer suspension effects and module-slot relocation without cached native callbacks. Bare `import time` selects the Catalog by exact authority and logical path before source; absent or malformed source cannot change this closure. Private library var remains prohibited until the complete Task322 protection gates pass. Codegen optimizer-barrier identities are not published by this change.
+
+The sole Checked install manifest uses schema2: every components row contains role, path, module_identity, length and sha256. Identities and relative paths are unique. Schema1, an empty inventory, noncanonical identities, duplicates, missing files and wrong digests reject; the manifest is atomically published last. Multi-component construction shares the cumulative resource ledger, frees scratch and admitted artifacts on failure and preserves an occupied output.
 
 ### 17.38 Shared root execution facts and owned causes
 

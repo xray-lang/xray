@@ -14,6 +14,15 @@
 XR_DATA const uint8_t xir_stdlib_output_checked[];
 XR_DATA const size_t xir_stdlib_output_checked_length;
 XR_DATA const uint8_t xir_stdlib_output_checked_sha256[32];
+typedef struct XirStdlibCheckedComponent {
+    const uint8_t *bytes;
+    size_t length;
+    const uint8_t *sha256;
+    const char *namespace_id;
+    const char *logical_path;
+} XirStdlibCheckedComponent;
+XR_DATA const XirStdlibCheckedComponent xir_stdlib_checked_components[];
+XR_DATA const size_t xir_stdlib_checked_component_count;
 /* Construction copies the physical root and verifies the entire Checked input
  * under the caller's ledger. Failure leaves the output unchanged. */
 XR_FUNC XrXirStatus xir_stdlib_library_catalog_new(const XrXirCompileContext *context,

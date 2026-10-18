@@ -89,6 +89,9 @@ static inline bool xr_xir_function_has_go_role(const XrXirModule *module, uint32
 static inline bool xr_xir_op_is_atomic(XrXirOp op) {
     return op >= XR_XIR_ATOMIC_NEW && op <= XR_XIR_ATOMIC_TO_STRING;
 }
+static inline bool xr_xir_op_is_channel(XrXirOp op) {
+    return op>=XR_XIR_CHANNEL_NEW && op<=XR_XIR_CHANNEL_RECV_TIMEOUT;
+}
 static inline uint32_t xr_xir_atomic_required_operands(XrXirOp op) {
     if (op == XR_XIR_ATOMIC_COMPARE_EXCHANGE) return 3;
     if (op == XR_XIR_ATOMIC_STORE || (op >= XR_XIR_ATOMIC_ADD && op <= XR_XIR_ATOMIC_SWAP)) return 2;
@@ -98,7 +101,10 @@ static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT ||
         op == XR_XIR_PRINT || op == XR_XIR_PHI || op == XR_XIR_ARRAY_NEW || op == XR_XIR_ARRAY_SET ||
         op == XR_XIR_STRUCT_NEW || op == XR_XIR_ENUM_NEW || op == XR_XIR_CLASS_NEW || op == XR_XIR_STRING_INDEX_OF ||
-        op == XR_XIR_TUPLE_NEW || op == XR_XIR_SLOT_GROUP_INIT || op == XR_XIR_RANGE_CHECK || (xr_xir_op_is_atomic(op) && op != XR_XIR_ATOMIC_NEW);
+        op == XR_XIR_TUPLE_NEW || op == XR_XIR_SLOT_GROUP_INIT || op == XR_XIR_RANGE_CHECK || op==XR_XIR_CHANNEL_TRY_SEND ||
+        op==XR_XIR_CHANNEL_SEND || op==XR_XIR_CHANNEL_RECV_OR ||
+        op==XR_XIR_CHANNEL_SEND_TIMEOUT || op==XR_XIR_CHANNEL_RECV_TIMEOUT ||
+        (xr_xir_op_is_atomic(op) && op != XR_XIR_ATOMIC_NEW);
 }
 static inline bool xr_xir_op_uses_type_arguments(XrXirOp op) {
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_DEFAULT || op == XR_XIR_INVOKE_DEFAULT;

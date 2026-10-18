@@ -802,24 +802,25 @@ XR_FUNC XrJsonValue *xjson_new_object(void) {
     return alloc_value(XR_JSON_OBJECT);
 }
 
-XR_FUNC void xjson_array_push(XrJsonValue *arr, XrJsonValue *value) {
+XR_FUNC bool xjson_array_push(XrJsonValue *arr, XrJsonValue *value) {
     if (!arr || arr->type != XR_JSON_ARRAY || !value || arr->as.array.count < 0 ||
         arr->as.array.capacity < arr->as.array.count || arr->as.array.count == INT_MAX ||
         (arr->as.array.capacity && !arr->as.array.items))
-        return;
+        return false;
 
     if (arr->as.array.count >= arr->as.array.capacity) {
         int old_cap = arr->as.array.capacity;
         int new_cap = old_cap < 8 ? 8 : old_cap > INT_MAX / 2 ? INT_MAX : old_cap * 2;
-        if (sizeof(XrJsonValue *) > SIZE_MAX / (size_t)new_cap) return;
+        if (sizeof(XrJsonValue *) > SIZE_MAX / (size_t)new_cap) return false;
         XrJsonValue **tmp = (XrJsonValue **) xr_realloc(arr->as.array.items,
                                                         (size_t) new_cap * sizeof(XrJsonValue *));
         if (!tmp)
-            return;
+            return false;
         arr->as.array.items = tmp;
         arr->as.array.capacity = new_cap;
     }
     arr->as.array.items[arr->as.array.count++] = value;
+    return true;
 }
 
 XR_FUNC void xjson_array_truncate(XrJsonValue *arr, int max_len) {
@@ -853,24 +854,24 @@ static bool object_append_n(XrJsonValue *obj, const char *key, size_t length, Xr
     return true;
 }
 
-XR_FUNC void xjson_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value) {
+XR_FUNC bool xjson_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value) {
     if (!obj || obj->type != XR_JSON_OBJECT || !key || !value || obj->as.object.count < 0 ||
         obj->as.object.capacity < obj->as.object.count || (obj->as.object.capacity && !obj->as.object.members))
-        return;
+        return false;
     size_t length = strlen(key);
     for (int i = 0; i < obj->as.object.count; ++i) {
         XrJsonMember *member = &obj->as.object.members[i];
-        if (!member->key) return;
+        if (!member->key) return false;
         if (member->key_len == length && !memcmp(member->key, key, length)) {
             if (member->value != value) xjson_free(member->value);
-            member->value = value; return;
+            member->value = value; return true;
         }
     }
-    (void)object_append_n(obj, key, length, value);
+    return object_append_n(obj, key, length, value);
 }
 
-XR_FUNC void xjson_object_set_new(XrJsonValue *obj, const char *key, XrJsonValue *value) {
-    if (key) (void)object_append_n(obj, key, strlen(key), value);
+XR_FUNC bool xjson_object_set_new(XrJsonValue *obj, const char *key, XrJsonValue *value) {
+    return key && object_append_n(obj, key, strlen(key), value);
 }
 
 /* ========== Serialization ========== */

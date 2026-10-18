@@ -188,6 +188,8 @@ const cha = Channel(3)          // 元素类型从首次 send 推断
 | `close()` | `() -> ()` | 关闭 channel；幂等 |
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
+**超时语义**：`ms` 必须是 `0..86_400_000` 范围内的 `i64`；越界在 Channel 操作前产生 `NumericRange`。零毫秒只尝试一次队列操作。正毫秒从首次尝试记录单一单调截止时间，反复等待或重新登记不能延长期限；宿主必须提供有效时钟，读数失败、为零或倒退产生 `HostError`，不冒充超时。发送关闭返回 `SendResult.Closed`，接收关闭且排空返回 `Recv.Closed`。receiver、消息和毫秒表达式按源码顺序各求值一次，Unit 消息也保留求值副作用；等待期间复用原值。peer 完成与 timeout/cancel 的首个原子终态决定结果，已提交交付不可撤回。两方法保守视为可能挂起，零毫秒不改变这一静态效果。
+
 ```xray @id=channel-basic-ops
 const ch = Channel<i64>(10)
 ch.send(42)                             // 阻塞发送
@@ -214,7 +216,7 @@ for (msg in ch) {
 var value = ch.recvOr(-1)
 ```
 
-**send/recv 与 `move`**：发送大对象时用 `ch.send(move payload)` 转移所有权，避免拷贝；接收方独占。
+**载荷所有权**：`Channel<T>` 要求 copyable、storable、Sendable 的 `T`。发送普通值保持逻辑副本，Array 后续修改相互隔离；class 和同步句柄保持其共享身份，不复制对象身份，也不以 `const` 代替 Sendable 证明。
 
 Channel 在类型位置写作 `Channel<T>`，可用于函数参数、字段和返回类型：
 
@@ -515,6 +517,10 @@ xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5
 
 跨 Task 边界的完整终态必须满足拥有式与 Sendable 规则，不能只检查成功值 T。worker 及可达调用的逃逸值错误由现有效应摘要证明：真实 Error 枚举的全部变体载荷均须 Sendable，不能只看实际 throw 的变体或名义类型标记；泛型错误须在定义处具有 Error 与 Sendable 约束。首片对未知或无真实身份的逃逸错误明确未准入。未逃逸的局部非 Sendable 值及普通同步 throw 不因本边界改变。运行时在发布 Task 终态前按真实封闭类型与字段权限准入 native 的 THROWN 载荷；异常载荷、OOM、LIMIT 和宿主故障保各自准确状态并完成清理，不伪装成 PanicInfo。当前 panic 载体仅包含标量 fault detail 与拥有式字符串；未来扩展须重新证明完整载荷的 Sendable 与生命周期。
 
+当前新 XIR 执行核的 Error 载荷能力包含以既有标量或 string 为叶子的 Array 字段及嵌套 Array。运行时检查封闭枚举的全部变体字段，Array 类型边逐一消耗同一累计 work，并继续按真实 arena、Domain 和值图准入；不因容器形式跳过 Sendable 或所有权证明。类型链循环、未封闭类型、Cell、callable 和 class 不获该能力；其它合法 Sendable 载荷族仍需各自接通执行能力。此扩展不改变普通 root 故障与 Task 值错误的区分。
+
+当前可执行 Task 结果族包含 Unit、bool、rune、既有全部整数/浮点类型及 string，以及封闭的 Array、Nullable、Tuple、enum、Atomic 和 Task。这些结果须通过同一 Checked 的完整 Sendable 图证明；执行能力准入不替代 worker 的 root 效果、实参和值准入，私有 spawn 也须匹配真实 worker 认证入口。await 与粘滞终态副本保留准确类型及规范标量位表示；值语义副本的修改不污染后续 await，同步句柄与 Task 在复制时保留身份。非标量成功值在发布前按真实 arena、Domain 和有界值图准入；直接嵌套的终态 Task 验证沿不可变类型池严格下降，以迭代方式避免 C 栈随嵌套深度增长。终态 Task 在 Instance 和执行代码租约释放后仍持有拥有式结果。复制失败保全空输出和粘滞终态，沿同一累计预算收费，不退款。struct/class 结果、完整 Task 参数族及其它逃逸 Error 载荷族须各自接通并取得资格，本能力不隐式开放它们。
+
 runtime capability 只从 executable entry、manifest C export 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
 
 Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。Freestanding target 若可达代码只需要 core，则保持零 coroutine runtime；若需要 task、frame、submit、park/wake、timer、interrupt completion 或 executor pump，target manifest 必须提供版本化 provider ABI 及所需 hooks，缺失能力在生成或链接前硬失败。provider 是 target/build 契约，不引入 `async main`、`static main` 或 freestanding 专用源语言关键字。
@@ -705,6 +711,8 @@ const cha = Channel(3)          // element type inferred from the first send
 | `close()` | `() -> ()` | Close the channel; idempotent |
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
+**Timeout semantics**: `ms` must be an `i64` in `0..86_400_000`; an out-of-range value raises `NumericRange` before the Channel operation. Zero milliseconds performs one queue attempt. A positive duration establishes one monotonic deadline at the first attempt; repeated waits or registration cannot extend it. The host must supply a valid clock; a failed, zero or backward reading raises `HostError` rather than becoming a timeout. A closed send returns `SendResult.Closed`; a closed and drained receive returns `Recv.Closed`. Evaluate the receiver, message and duration once in source order, including Unit message side effects, and retain those values across waits. The first atomic terminal transition arbitrates peer completion against timeout/cancellation; a committed delivery cannot be withdrawn. Both methods conservatively may suspend, including a statically zero duration.
+
 ```xray @id=channel-basic-ops
 const ch = Channel<i64>(10)
 ch.send(42)                             // blocking send
@@ -731,7 +739,7 @@ for (msg in ch) {
 var value = ch.recvOr(-1)
 ```
 
-**send/recv with `move`**: when sending a large object, use `ch.send(move payload)` to transfer ownership and avoid copying; the receiver becomes the sole owner.
+**Payload ownership**: `Channel<T>` requires copyable, storable, Sendable `T`. Sending an ordinary value preserves a logical copy, including independent later Array mutations. Class and synchronization handles retain their shared identity; sending does not clone identity, and `const` never substitutes for Sendable evidence.
 
 In type position, a channel is written as `Channel<T>` and may be used in function parameters, fields, and return types:
 
@@ -1031,6 +1039,10 @@ An ordinary non-root parent does not implicitly join ordinary go children when i
 The first new XIR go/Task/await contract admits direct go calls, Task<i64>/Task<string> and plain await. One FIFO performs at most one canonical Call transition per dispatch; waits leave the C stack. All arguments and result ownership are prepared before queue publication; failure publishes neither queue entry nor handle. A worker and its reachable direct calls cannot read ordinary mutable module slots or write/initialize any module slot. Const slots still require Sendable, existing read permission and initialization state. Unknown indirect calls, loans, Cell captures and unconnected types fail as unimplemented; these implementation boundaries do not restrict the future complete language. This freeze does not claim Source/VM/native implementation: formal identities remain 25/65/21/26/29. Full M:N, Channel, generators, linked/scope, Task<null>/Unit and public status methods require separate qualification.
 
 The complete outcome crossing a Task boundary must satisfy owned and Sendable rules; checking the successful T alone is insufficient. Existing effect summaries prove escaping value errors from the worker and reachable calls: every variant payload of the authentic Error enum must be Sendable, rather than only the thrown variant or a nominal type marker. Generic errors require both Error and Sendable constraints at the definition. The first slice rejects unknown or unauthenticated escaping errors as unimplemented. Local non-Sendable values that do not escape and ordinary synchronous throws are unaffected. Before Task terminal publication, the runtime admits native THROWN payloads using the actual closed type and field authority. Malformed payloads, OOM, LIMIT and host faults retain their accurate statuses through cleanup instead of becoming PanicInfo. The current panic carrier contains only scalar fault detail and owned strings; future extensions must prove Sendable and lifetime for the complete payload again.
+
+The new XIR runtime supports Error enum fields containing Arrays, including nested Arrays, whose leaves are the existing scalar or string families. It checks every variant field of the closed enum, charges each Array type edge to the same cumulative work budget, and still admits the actual arena, Domain and value graph. A container does not bypass Sendable or ownership proof. Cyclic or unclosed type chains, Cell, callable and class payloads are not admitted by this capability; other legal Sendable payload families require their own runtime support. This extension preserves the distinction between ordinary root faults and Task value errors.
+
+The executable Task result families include Unit, bool, rune, all existing integer and floating-point types, string, and closed Array, Nullable, Tuple, enum, Atomic and Task types. Every result must pass the same complete Checked Sendable graph proof; capability admission does not replace the worker's root-effect, argument or value admission, and private spawn must also match an authentic worker-certified entry. Await and sticky terminal copies preserve the exact value type and canonical scalar bits. Mutating a value copy does not alter later awaits; synchronization handles and Tasks retain their identity when copied. Nonscalar successful values undergo bounded graph admission against the actual arena and Domain before publication. Directly nested terminal Tasks validate iteratively with strict descent through the immutable type pool, without C stack growth proportional to nesting depth. A terminal Task keeps its owned result after the Instance and execution code lease are released. Failed copies preserve the empty output and the sticky outcome, consume the same cumulative budget and do not refund work. Struct/class results, complete Task parameter families and other escaping Error payload families require their own implementation and qualification; this capability does not open them implicitly.
 
 Runtime capabilities propagate only from final artifact roots such as the executable entry and manifest-selected C exports. An unreachable helper containing `go`, `await`, or Channel operations does not force the artifact to link a scheduler, timer, netpoll, or hosted runtime.
 

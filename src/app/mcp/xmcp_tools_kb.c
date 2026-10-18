@@ -17,6 +17,7 @@
  *   trio needs them.
  */
 
+#include "xmcp_json.h"
 #include "xmcp_tools_internal.h"
 #include "xmcp_server.h"
 #include "xmcp_knowledge.h"
@@ -32,9 +33,9 @@ static XrJsonValue *make_syntax_result_content(const char *topic, bool found, co
     XR_DCHECK(topic != NULL, "make_syntax_result_content: NULL topic");
     XR_DCHECK(content != NULL, "make_syntax_result_content: NULL content");
     XrJsonValue *structured = xjson_new_object();
-    XJSON_SET_STRING(structured, "topic", topic);
-    XJSON_SET_BOOL(structured, "found", found);
-    XJSON_SET_STRING(structured, "content", content);
+    XMCP_JSON_STRING(structured, "topic", topic);
+    XMCP_JSON_BOOL(structured, "found", found);
+    XMCP_JSON_STRING(structured, "content", content);
     return structured;
 }
 
@@ -42,13 +43,13 @@ static XrJsonValue *make_stdlib_match_json(const XmcpStdlibMatch *match) {
     XR_DCHECK(match != NULL, "make_stdlib_match_json: NULL match");
     XR_DCHECK(match->module != NULL, "make_stdlib_match_json: NULL module");
     XrJsonValue *item = xjson_new_object();
-    XJSON_SET_STRING(item, "module", match->module->name);
-    XJSON_SET_STRING(item, "summary", match->module->summary);
-    XJSON_SET_INT(item, "score", match->score);
+    XMCP_JSON_STRING(item, "module", match->module->name);
+    XMCP_JSON_STRING(item, "summary", match->module->summary);
+    XMCP_JSON_INT(item, "score", match->score);
     if (match->symbol) {
-        XJSON_SET_STRING(item, "symbol", match->symbol->name);
-        XJSON_SET_STRING(item, "signature", match->symbol->signature);
-        XJSON_SET_STRING(item, "symbolSummary", match->symbol->summary);
+        XMCP_JSON_STRING(item, "symbol", match->symbol->name);
+        XMCP_JSON_STRING(item, "signature", match->symbol->signature);
+        XMCP_JSON_STRING(item, "symbolSummary", match->symbol->summary);
     }
     return item;
 }
@@ -60,15 +61,15 @@ static XrJsonValue *make_stdlib_result_content(const char *query, const char *mo
     XR_DCHECK(search != NULL, "make_stdlib_result_content: NULL search");
     XR_DCHECK(content != NULL, "make_stdlib_result_content: NULL content");
     XrJsonValue *structured = xjson_new_object();
-    XJSON_SET_STRING(structured, "query", query);
-    XJSON_SET_STRING(structured, "module", module ? module : "");
-    XJSON_SET_INT(structured, "matchCount", search->match_count);
-    XJSON_SET_BOOL(structured, "found", search->match_count > 0);
-    XJSON_SET_STRING(structured, "content", content);
+    XMCP_JSON_STRING(structured, "query", query);
+    XMCP_JSON_STRING(structured, "module", module ? module : "");
+    XMCP_JSON_INT(structured, "matchCount", search->match_count);
+    XMCP_JSON_BOOL(structured, "found", search->match_count > 0);
+    XMCP_JSON_STRING(structured, "content", content);
     XrJsonValue *matches = xjson_new_array();
     for (int i = 0; i < search->match_count; i++)
-        xjson_array_push(matches, make_stdlib_match_json(&search->matches[i]));
-    xjson_object_set(structured, "matches", matches);
+        xmcp_json_push(matches, make_stdlib_match_json(&search->matches[i]));
+    xmcp_json_set(structured, "matches", matches);
     return structured;
 }
 
@@ -78,10 +79,10 @@ static XrJsonValue *make_definition_result_content(const char *symbol, const cha
     XR_DCHECK(kind != NULL, "make_definition_result_content: NULL kind");
     XR_DCHECK(content != NULL, "make_definition_result_content: NULL content");
     XrJsonValue *structured = xjson_new_object();
-    XJSON_SET_STRING(structured, "symbol", symbol);
-    XJSON_SET_STRING(structured, "kind", kind);
-    XJSON_SET_BOOL(structured, "found", found);
-    XJSON_SET_STRING(structured, "content", content);
+    XMCP_JSON_STRING(structured, "symbol", symbol);
+    XMCP_JSON_STRING(structured, "kind", kind);
+    XMCP_JSON_BOOL(structured, "found", found);
+    XMCP_JSON_STRING(structured, "content", content);
     return structured;
 }
 
@@ -107,6 +108,8 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_syntax_lookup(XmcpServer *server, const Xmcp
     }
 
     char *available = xmcp_knowledge_list_topics(server->knowledge);
+    if (!available)
+        return xmcp_make_error_result("Error: syntax lookup failed");
     char msg[1024];
     snprintf(msg, sizeof(msg),
              "No syntax documentation found for topic \"%s\".\n\n"
@@ -185,6 +188,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_definition(XmcpServer *server, const XmcpCal
     const char *symbol = xjson_get_string(arguments, "symbol");
     if (!symbol || symbol[0] == '\0')
         return xmcp_make_error_result("Error: 'symbol' must not be empty");
+    if (xjson_get(arguments, "code")) return xmcp_tool_source_definition(arguments);
     if (!server->knowledge)
         return xmcp_make_error_result("Error: knowledge base is not available");
 

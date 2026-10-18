@@ -9,8 +9,7 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from build_xir_runtime_sdk import canonical_identity
 
-COMPONENTS = (('checked', 'io-output.chk'),)
-FIELDS = {'schema', 'module_identity', 'components'}
+FIELDS = {'schema', 'components'}
 
 
 def digest(value):
@@ -42,15 +41,23 @@ def file_matches(root, row):
 def verify_components(root, expected, sdk_root, expected_sdk):
     raw = expected.read_bytes()
     record = json.loads(raw)
-    if set(record) != FIELDS or type(record['schema']) is not int or record['schema'] != 1:
+    if set(record) != FIELDS or type(record['schema']) is not int or record['schema'] != 2:
         raise ValueError('unknown publication schema or fields')
-    if record['module_identity'] != 'stdlib-module-v1:module=2:io:path=12:io/output.xr':
-        raise ValueError('wrong stdlib module identity')
-    if [(r.get('role'), r.get('path')) for r in record['components']] != list(COMPONENTS):
-        raise ValueError('unknown component role or path')
-    for row in record['components']:
-        if set(row) != {'role', 'path', 'length', 'sha256'}:
-            raise ValueError('unknown component fields')
+    rows = record['components']
+    if not isinstance(rows, list) or not rows:
+        raise ValueError('empty or invalid component inventory')
+    identities, paths = set(), set()
+    for row in rows:
+        if set(row) != {'role', 'path', 'module_identity', 'length', 'sha256'} or row['role'] != 'checked':
+            raise ValueError('unknown component fields or role')
+        identity = row['module_identity']
+        match = re.fullmatch(r'stdlib-module-v1:module=([1-9][0-9]*):([A-Za-z_][A-Za-z_0-9]*):path=([1-9][0-9]*):([A-Za-z_][A-Za-z_0-9]*(?:/[A-Za-z_][A-Za-z_0-9]*)+\.xr)', identity)
+        if not match or int(match[1]) != len(match[2]) or int(match[3]) != len(match[4]) or not match[4].startswith(match[2]+'/'):
+            raise ValueError('wrong stdlib module identity')
+        if identity in identities or row['path'] in paths:
+            raise ValueError('duplicate component identity or path')
+        identities.add(identity)
+        paths.add(row['path'])
         file_matches(root, row)
     sdk_identity = None
     if sdk_root is not None and (sdk_root.exists() or sdk_root.is_symlink()):

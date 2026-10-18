@@ -17,7 +17,7 @@
 #define XR_CHANNEL_STORAGE_H
 
 #ifndef XR_CHANNEL_BUFFER_H
-#include "xr_channel_buffer.h"
+#include "../../shared/xr_channel_buffer.h"
 #endif
 #ifndef XR_ATOMIC_COMPAT_H
 #include "../../shared/xr_atomic_compat.h"

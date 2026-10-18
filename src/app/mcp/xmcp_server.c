@@ -14,6 +14,7 @@
  *   All diagnostic output goes to stderr (never stdout).
  */
 
+#include "xmcp_json.h"
 #include "xmcp_server.h"
 #include "xmcp_protocol.h"
 #include "xmcp_jsonrpc.h"
@@ -24,8 +25,6 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../base/xjson.h"
-#include "../../api/xisolate_profile.h"
-#include "xray_vm.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -118,91 +117,42 @@ static void mcp_send_response(XmcpServer *s, XrJsonValue *id, XrJsonValue *resul
                               XrJsonValue *error) {
     XR_DCHECK(s != NULL, "mcp_send_response: NULL server");
     XrJsonValue *resp = xjson_new_object();
-    XJSON_SET_STRING(resp, "jsonrpc", "2.0");
+    XMCP_JSON_STRING(resp, "jsonrpc", "2.0");
 
     if (id) {
-        xjson_object_set(resp, "id", xjson_clone(id));
+        xmcp_json_set(resp, "id", xmcp_json_clone(id));
     } else {
-        XJSON_SET_NULL(resp, "id");
+        XMCP_JSON_NULL(resp, "id");
     }
 
     if (error) {
-        xjson_object_set(resp, "error", error);
+        xmcp_json_set(resp, "error", error);
     } else {
-        xjson_object_set(resp, "result", result ? result : xjson_new_object());
+        /* A missing owned result is a handler failure, never an empty success. */
+        xmcp_json_set(resp, "result", result);
     }
 
+    resp = xmcp_json_finish(resp);
+    if (!resp) { s->failed = true; s->shutdown = 1; return; }
     size_t len = 0;
     char *json = xjson_stringify(resp, &len);
     if (json) {
-        xmcp_stdio_write_message(&s->transport, json, len);
+        if (!xmcp_stdio_write_message(&s->transport, json, len)) { s->failed = true; s->shutdown = 1; }
         xr_free(json);
-    }
+    } else { s->failed = true; s->shutdown = 1; }
     xjson_free(resp);
 }
 
 static void mcp_send_error(XmcpServer *s, XrJsonValue *id, int code, const char *message) {
     XrJsonValue *err = xjson_new_object();
-    XJSON_SET_INT(err, "code", code);
-    XJSON_SET_STRING(err, "message", message);
+    XMCP_JSON_INT(err, "code", code);
+    XMCP_JSON_STRING(err, "message", message);
     mcp_send_response(s, id, NULL, err);
 }
 
 /* --------------------------------------------------------------------------
  * Notification sending (public API)
  * -------------------------------------------------------------------------- */
-
-void xmcp_send_notification(XmcpServer *server, const char *method, XrJsonValue *params) {
-    XR_DCHECK(server != NULL, "xmcp_send_notification: NULL server");
-    XR_DCHECK(method != NULL, "xmcp_send_notification: NULL method");
-    if (server->lifecycle_state != XMCP_LIFECYCLE_READY)
-        return;
-
-    XrJsonValue *msg = xjson_new_object();
-    XJSON_SET_STRING(msg, "jsonrpc", "2.0");
-    XJSON_SET_STRING(msg, "method", method);
-    if (params) {
-        xjson_object_set(msg, "params", params);
-    }
-
-    size_t len = 0;
-    char *json = xjson_stringify(msg, &len);
-    if (json) {
-        xmcp_stdio_write_message(&server->transport, json, len);
-        xr_free(json);
-    }
-    xjson_free(msg);
-}
-
-void xmcp_send_log_notification(XmcpServer *server, const char *level, const char *message) {
-    XR_DCHECK(server != NULL, "xmcp_send_log_notification: NULL server");
-    XR_DCHECK(level != NULL, "xmcp_send_log_notification: NULL level");
-    XR_DCHECK(message != NULL, "xmcp_send_log_notification: NULL message");
-    if (server->lifecycle_state != XMCP_LIFECYCLE_READY)
-        return;
-
-    XrJsonValue *params = xjson_new_object();
-    XJSON_SET_STRING(params, "level", level);
-    xjson_object_set(params, "data", xjson_new_string(message));
-    xmcp_send_notification(server, "notifications/message", params);
-}
-
-void xmcp_send_progress_notification(XmcpServer *server, const XrJsonValue *progress_token,
-                                     int64_t progress, int64_t total) {
-    XR_DCHECK(server != NULL, "xmcp_send_progress_notification: NULL server");
-    if (!progress_token)
-        return;
-    if (server->lifecycle_state != XMCP_LIFECYCLE_READY)
-        return;
-
-    XrJsonValue *params = xjson_new_object();
-    xjson_object_set(params, "progressToken", xjson_clone(progress_token));
-    XJSON_SET_INT(params, "progress", progress);
-    if (total > 0) {
-        XJSON_SET_INT(params, "total", total);
-    }
-    xmcp_send_notification(server, "notifications/progress", params);
-}
 
 /* --------------------------------------------------------------------------
  * Method handlers (thin wrappers matching XmcpMethodHandler signature)
@@ -392,7 +342,7 @@ XR_FUNC void xmcp_server_options_default(XmcpServerOptions *options) {
     options->enable_runner = false;
 }
 
-XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
+XR_FUNC XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
     XR_DCHECK(options != NULL, "xmcp_server_new: NULL options");
 
     XmcpServer *s = xr_calloc(1, sizeof(XmcpServer));
@@ -409,20 +359,13 @@ XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
     /* Disable stdout buffering so responses reach the client immediately */
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    /* Create analyzer isolate for MCP code analysis tools */
-    s->isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
-    if (!s->isolate) {
-        mcp_log(s, 0, "failed to create isolate");
-        xmcp_stdio_destroy(&s->transport);
-        xr_free(s);
-        return NULL;
-    }
-
     /* Load knowledge base */
     s->knowledge = xmcp_knowledge_new();
-    if (s->knowledge) {
-        xmcp_knowledge_load(s->knowledge);
+    if (!s->knowledge) {
+        xmcp_server_free(s);
+        return NULL;
     }
+    xmcp_knowledge_load(s->knowledge);
 
     XmcpRegistryOptions registry_options;
     xmcp_registry_options_default(&registry_options);
@@ -432,22 +375,20 @@ XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
     return s;
 }
 
-void xmcp_server_free(XmcpServer *s) {
+XR_FUNC void xmcp_server_free(XmcpServer *s) {
     if (!s)
         return;
     if (g_mcp_server == s)
         g_mcp_server = NULL;
     if (s->knowledge)
         xmcp_knowledge_free(s->knowledge);
-    if (s->isolate)
-        xray_vm_delete(s->isolate);
     if (s->log_file)
         fclose(s->log_file);
     xmcp_stdio_destroy(&s->transport);
     xr_free(s);
 }
 
-int xmcp_server_run(XmcpServer *s) {
+XR_FUNC int xmcp_server_run(XmcpServer *s) {
     XR_DCHECK(s != NULL, "xmcp_server_run: NULL server");
 
     /* Install signal handlers for graceful shutdown */
@@ -470,9 +411,11 @@ int xmcp_server_run(XmcpServer *s) {
         }
         if (status != XMCP_STDIO_READ_OK) {
             mcp_log(s, 0, "stdio read error");
+            s->failed = true;
             break;
         }
 
+        xmcp_json_begin();
         XrJsonValue *msg = xjson_parse(body, body_len);
         xr_free(body);
 
@@ -487,5 +430,5 @@ int xmcp_server_run(XmcpServer *s) {
     }
 
     mcp_log(s, 2, "MCP server stopped");
-    return 0;
+    return s->failed ? 1 : 0;
 }
