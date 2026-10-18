@@ -90,7 +90,12 @@ int main(int argc,char **argv) {
     values_request(adapter,7,scope,0,0);reply=last_response("variables",true);
     XrJsonValue *variables=xjson_get_array(xjson_get_object(reply,"body"),"variables");CHECK(xjson_array_len(variables)==5);
     const char *types[]={"Array<Array<i64>>","string","(i64, string)","i64?","Array<Parcel>"};
-    for (int i=0;i<5;++i) CHECK(!strcmp(xjson_get_string(xjson_array_get(variables,i),"type"),types[i]));
+    for (int i=0;i<5;++i) {
+        const char *actual=xjson_get_string(xjson_array_get(variables,i),"type");
+        if (!actual || strcmp(actual,types[i]))
+            fprintf(stderr,"variable %d type=%s expected=%s\n",i,actual ? actual : "<missing>",types[i]);
+        CHECK(actual && !strcmp(actual,types[i]));
+    }
     uint64_t matrix=(uint64_t)xjson_get_int(xjson_array_get(variables,0),"variablesReference");
     CHECK(matrix && xjson_get_int(xjson_array_get(variables,0),"indexedVariables")==2);
     uint64_t pair=(uint64_t)xjson_get_int(xjson_array_get(variables,2),"variablesReference");

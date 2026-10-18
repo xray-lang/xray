@@ -74,6 +74,9 @@ static size_t class_case(uint32_t kind,size_t fail,uint32_t invalid) {
     }
     size_t sites=runtime_attempts-begin;runtime_fail_at=SIZE_MAX;bool changed=fail==SIZE_MAX && !invalid;
     if (changed) {
+        if (status!=XR_XIR_VALUE_OK || !fresh || result.debug_epoch!=epoch+1)
+            fprintf(stderr,"class write status=%u fresh=%u epoch=%llu expected=%llu\n",
+                (unsigned)status,fresh!=NULL,(unsigned long long)result.debug_epoch,(unsigned long long)(epoch+1));
         CHECK(status==XR_XIR_VALUE_OK && fresh && result.debug_epoch==epoch+1);class_number(&box,fixture.domain,99);
         XrXirVmDebugFrameInfo same=write_frame(fresh);CHECK(same.id==frame.id && same.instruction==frame.instruction && same.thread==frame.thread);
     }
