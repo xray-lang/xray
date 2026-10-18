@@ -913,6 +913,13 @@ if(ENABLE_ASAN)
                 "/INCLUDE:__asan_seh_interceptor"
                 "/WHOLEARCHIVE:${_XRAY_MSVC_ASAN_THUNK}"
             )
+            get_filename_component(_XRAY_ASAN_LINKER_NAME "${CMAKE_LINKER}" NAME)
+            string(TOLOWER "${_XRAY_ASAN_LINKER_NAME}" _XRAY_ASAN_LINKER_NAME)
+            if(_XRAY_ASAN_LINKER_NAME MATCHES "^lld-link(\\.exe)?$")
+                # Tail merging can place a literal inside another ASan global's
+                # redzone. Preserve each instrumented object's storage extent.
+                add_link_options("/OPT:NOLLDTAILMERGE")
+            endif()
         endif()
         # MSVC AddressSanitizer is incompatible with /RTC and incremental
         # linking. CMake's Debug defaults enable both, so remove only those
