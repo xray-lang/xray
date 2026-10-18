@@ -1,0 +1,5 @@
+fn context(a: Array<i64>, n: i8, pair: (i8?, Array<string>)) -> i64 {
+    if (len(a) != 0 || n != 7 || pair.0 != null || len(pair.1) != 0) { return 0 }
+    return 42
+}
+export fn referenceAnswer() -> i64 { return context(...([], 7, (null, []))) }

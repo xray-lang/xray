@@ -1,5 +1,5 @@
 """Compile exact tuple results and nullable payload boundaries."""
-from native_source_compile import compile_cases
+from source_product_compile import compile_cases
 
 if __name__ == "__main__":
     raise SystemExit(compile_cases({

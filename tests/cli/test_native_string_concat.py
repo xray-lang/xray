@@ -1,5 +1,5 @@
 """Compile executable string concatenation recipes as strict portable C."""
-from native_source_compile import compile_cases
+from source_product_compile import compile_cases
 
 
 if __name__ == "__main__":

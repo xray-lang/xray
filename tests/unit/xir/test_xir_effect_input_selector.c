@@ -108,6 +108,18 @@ static void selector_raw_source_replay(void) {
         }
         fail_at=SIZE_MAX;uint64_t retained=pc_stats(&context).live_bytes;
         const XrXirModule *module=xr_xir_compile_artifact_module(checked);
+        if(!pass) {
+            XrCompileResourceStats before=pc_stats(&context);
+            pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+            CHECK(effect_capture_match(&context,effects->invocations->final)==XR_XIR_OK);
+            pc_allocate_hook=NULL;pc_free_hook=NULL;
+            XrCompileResourceStats after=pc_stats(&context);
+            CHECK(after.work>before.work && after.allocated_bytes==before.allocated_bytes &&
+                after.live_bytes==retained && after.allocation_count==before.allocation_count && context.resources==identity);
+            printf("capture current support: original5-function input facts%u work%llu allocated%llu live%llu peak%llu no callbacks\n",
+                effects->invocations->final->capture.count,(unsigned long long)(after.work-before.work),
+                (unsigned long long)after.allocated_bytes,(unsigned long long)after.live_bytes,(unsigned long long)after.peak_bytes);
+        }
         for(uint32_t read=0;read<2;++read) {
             uint64_t before=pc_stats(&context).work;
             CHECK(xir_compile_verify_raw_source_effects(&context,module,checked->construction,effects,NULL)==XR_XIR_OK);
@@ -122,7 +134,31 @@ static void selector_raw_source_replay(void) {
     printf("raw source replay: original5-function captured generic input, 4M owner, dead producer, twice current proof, FI%zu same-owner retries, maxwork%llu peak%llu physical0\n",
         sites,(unsigned long long)maximum,(unsigned long long)peak);
 }
+static void selector_capture_support(void) {
+    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    EffectCaptureFact facts[64];
+    for(uint32_t p=0;p<64;++p) facts[p]=(EffectCaptureFact){2,3,p/32,p%32,p+3};
+    EffectCaptureRead read={.work=&context,.selected=facts,.selected_count=64};
+    size_t allocated=attempts;uint64_t physical=live_bytes;
+    pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+    for(uint32_t p=63;p>0;--p) CHECK(effect_capture_emit(&read,facts[p])==XR_XIR_OK && !read.supported);
+    CHECK(read.selected_mask==UINT64_MAX-1);
+    EffectCaptureFact cause=facts[0];++cause.rank;
+    CHECK(effect_capture_emit(&read,cause)==XR_XIR_OK && !read.supported && read.selected_mask==UINT64_MAX-1);
+    cause=facts[0];++cause.node;
+    CHECK(effect_capture_emit(&read,cause)==XR_XIR_OK && !read.supported && read.selected_mask==UINT64_MAX-1);
+    CHECK(effect_capture_emit(&read,facts[0])==XR_XIR_OK && read.supported && read.selected_mask==UINT64_MAX);
+    EffectCaptureFact flags[2]={{2,3,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_FIXED,3},
+        {2,3,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_RAW,7}};
+    read.selected=flags;read.selected_count=2;read.selected_mask=0;read.supported=false;
+    CHECK(effect_capture_emit(&read,flags[1])==XR_XIR_OK && !read.supported && read.selected_mask==2);
+    CHECK(effect_capture_emit(&read,flags[0])==XR_XIR_OK && read.supported && read.selected_mask==3);
+    CHECK(attempts==allocated && live_bytes==physical);
+    pc_allocate_hook=NULL;pc_free_hook=NULL;pc_release(&context,baseline);
+    puts("capture support: all64 obligations across words, individual ranks, fixed/raw flags, no callbacks and physical0");
+}
 int main(void) {
+    selector_capture_support();
     selector_raw_source_replay();
     selector_scalar_domain();
     EdgeFixture fixture;pc_empty_fixture(&fixture,4);

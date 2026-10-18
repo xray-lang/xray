@@ -1,5 +1,5 @@
 """Compile Atomic compare-exchange result carriers with strict host C checks."""
-from native_source_compile import compile_cases
+from source_product_compile import compile_cases
 
 if __name__ == "__main__":
     cases = {}
@@ -18,7 +18,7 @@ if __name__ == "__main__":
     cases["class_field_retry"] = """
 class Counter {
     private cell: Atomic<i64>
-    constructor() { this.cell = Atomic<i64>(42) }
+    init() { this.cell = Atomic<i64>(42) }
     decrement() -> bool {
         var current = this.cell.load(Ordering.Acquire)
         var (_, ok) = this.cell.compareExchange(current, current - 1, Ordering.AcquireRelease)

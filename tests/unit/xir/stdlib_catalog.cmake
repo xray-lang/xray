@@ -14,3 +14,8 @@ add_test(NAME test_xir_public_cli_checked_stdlib
         --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR})
 set_tests_properties(test_xir_public_cli_checked_stdlib PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1
     LABELS "cli;xir;stdlib;native;execution")
+add_test(NAME test_xir_public_cli_checked_time
+    COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/tests/cli/run_xir_checked_time.py
+        --binary $<TARGET_FILE:xray> --root ${PROJECT_SOURCE_DIR})
+set_tests_properties(test_xir_public_cli_checked_time PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE PROCESSORS 1
+    LABELS "cli;xir;stdlib;native;execution;time")

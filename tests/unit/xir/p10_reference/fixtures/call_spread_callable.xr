@@ -1,0 +1,3 @@
+fn forty() -> i64 { return 40 }
+fn apply(callback: fn() -> i64, extra: i64) -> i64 { return callback() + extra }
+export fn referenceAnswer() -> i64 { return apply(...(forty, 2)) }
