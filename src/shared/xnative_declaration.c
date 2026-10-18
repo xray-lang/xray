@@ -72,12 +72,12 @@ XR_FUNC XrNativeDeclarationStatus xr_native_declaration_find(
     else if (native_text_equal(&admission, name, xr_native_recv.name)) found = &xr_native_recv;
     else if (native_text_equal(&admission, name, xr_native_send_result.name)) found = &xr_native_send_result;
     else if (native_text_equal(&admission, name, xr_native_iterator.name)) found = &xr_native_iterator;
+    else if (native_text_equal(&admission, name, xr_native_map.name)) found = &xr_native_map;
+    else if (native_text_equal(&admission, name, xr_native_set.name)) found = &xr_native_set;
     else if (native_text_equal(&admission, name, xr_native_i64.name)) found = &xr_native_i64;
     else if (native_text_equal(&admission, name, xr_native_f64.name)) found = &xr_native_f64;
     else if (native_text_equal(&admission, name, xr_native_bool.name)) found = &xr_native_bool;
     else if (native_text_equal(&admission, name, xr_native_rune.name)) found = &xr_native_rune;
-    else if (native_text_equal(&admission, name, xr_native_map.name)) found = &xr_native_map;
-    else if (native_text_equal(&admission, name, xr_native_set.name)) found = &xr_native_set;
     if (admission.status != XR_NATIVE_DECLARATION_OK) return admission.status;
     if (!found) return XR_NATIVE_DECLARATION_NOT_FOUND;
     *output = found; return XR_NATIVE_DECLARATION_OK;
