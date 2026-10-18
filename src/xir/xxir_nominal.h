@@ -77,6 +77,9 @@ typedef struct XrXirNominalTable {
 XR_FUNC const XrXirNominalNativeRecord *xr_xir_nominal_native_record(const XrXirTypes *types, XrXirType type);
 /* A verified pool record must match the actual governed value declaration. */
 XR_FUNC bool xr_xir_nominal_native_ordering(const XrXirTypes *types, XrXirType type);
+/* Verified owned pools still require the exact instantiated payload projection. */
+XR_FUNC bool xr_xir_nominal_native_recv(const XrXirTypes *types, XrXirType type, XrXirType element);
+XR_FUNC bool xr_xir_nominal_native_send_result(const XrXirTypes *types, XrXirType type);
 /* Metadata helpers grant no executable type or source admission.
  * Outputs publish only after complete successful validation; work is never refunded. */
 XR_FUNC XrXirStatus xr_xir_compile_nominal_structure_verify(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, const XrXirTypes *types);

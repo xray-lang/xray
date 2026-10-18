@@ -17,7 +17,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_description(const XrXirCompileContext *c
             !xr_xir_type_is_number(type) && type != XR_XIR_STRING &&
             type != XR_XIR_ERROR && type != XR_XIR_PANIC_INFO) return XR_XIR_BAD_TYPE;
     } else {
-        if (node->kind < XR_XIR_TYPE_CALLABLE || node->kind > XR_XIR_TYPE_TASK)
+        if (node->kind < XR_XIR_TYPE_CALLABLE || node->kind > XR_XIR_TYPE_CHANNEL)
             return XR_XIR_BAD_TYPE;
         description.kind = node->kind; description.node = node;
         if (node->kind == XR_XIR_TYPE_TUPLE) {

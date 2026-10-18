@@ -82,7 +82,7 @@ static XrXirValueStatus array_needs_admission(const XirArray *array,
         if (!node) { *needed = type == XR_XIR_ERROR; return XR_XIR_VALUE_OK; }
         if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_NOMINAL ||
             node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE ||
-            node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK) {
+            node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_CHANNEL) {
             *needed = true; return XR_XIR_VALUE_OK;
         }
         if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -113,6 +113,12 @@ static void admission_child(ValueAdmissionFrame *frame, const XrXirTypeArena *ar
         *span = (StorageSpan){array->element, array->data ? array->data + index * array->stride : NULL};
     } else if (*tuple_field) *value=((XirTuple *)frame->boxed.object)->fields[index];
     else *value = ((XirNominalValue *)frame->boxed.object)->fields[index];
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(arena);
+    if (frame->boxed.inline_storage && span->type==XR_XIR_UNIT &&
+        xr_xir_nominal_native_recv(types,frame->packed.type,XR_XIR_UNIT)) {
+        *value=(XrXirValue){0}; *inlined=false; *tuple_field=true;
+    } else if (!frame->boxed.inline_storage && !*inlined && value->type==XR_XIR_UNIT &&
+        xr_xir_nominal_native_recv(types,frame->boxed.object->type,XR_XIR_UNIT)) *tuple_field=true;
 }
 static XrXirValueStatus admission_inline(ValueAdmissionStack *stack,
     StorageSpan span,const XrXirTypeArena *arena,XrXirValueAdmission *admission) {
@@ -203,7 +209,7 @@ static XrXirValueStatus value_admit_summary(const XrXirValue *value, XrXirType t
                     status = array_needs_admission((XirArray *) object, admission, &needed);
                     if (status != XR_XIR_VALUE_OK) break;
                     if (needed) count = ((XirArray *) object)->length;
-                } else if (object->kind == XR_XIR_TYPE_TASK || object->kind == XR_XIR_TYPE_ATOMIC) {
+                } else if (object->kind == XR_XIR_TYPE_TASK || object->kind == XR_XIR_TYPE_ATOMIC || object->kind == XR_XIR_TYPE_CHANNEL) {
                     if (!admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }
                 } else if (object->kind) {
                     if (object->domain != admission->domain) { status = XR_XIR_VALUE_BAD_ARGUMENT; break; }

@@ -30,7 +30,7 @@ static bool source_pattern_bindings(SourceContext *ctx, SourceMatchPattern *patt
             if (symbol) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"duplicate pattern binding");
             symbol=source_alloc(ctx,1,sizeof(*symbol));
             if (!symbol) return false;
-            *symbol=(SourceName){.next=arm->bindings,.name=name,.parameters=NULL,.node=node,.kind=SOURCE_LOCAL,
+            *symbol=(SourceName){.next=arm->bindings,.name=name,.imported=NULL,.node=node,.kind=SOURCE_LOCAL,
             .index=1,.module=ctx->module,.type=pattern->type,.mutable=false,
             .construction=false,.declaration=0,.inferred=false,.checked_library=false};
             arm->bindings=symbol;

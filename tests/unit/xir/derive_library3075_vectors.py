@@ -14,7 +14,10 @@ def main():
     source=args.source_root/'tests/unit/xir';output=args.output_root/'tests/unit/xir'
     old=load(source/'derive_library2772_vectors.py','library_full_fields')
     utility=load(source/'derive_construction72_vectors.py','library_literal_fields')
-    raw=(source/'library2671_models.json').read_bytes();assert hashlib.sha256(raw).hexdigest()==old.MODEL_SHA
+    raw=(source/'library2671_models.json').read_bytes()
+    # The frozen model digest uses Windows newlines; its JSON fields are fixed.
+    framed=raw.replace(b'\r\n',b'\n').replace(b'\n',b'\r\n')
+    assert hashlib.sha256(framed).hexdigest()==old.MODEL_SHA
     groups={};records=[];models=json.loads(raw)
     for name,model in models.items():
         family='library_string' if name.startswith('library_string') else 'defaults'

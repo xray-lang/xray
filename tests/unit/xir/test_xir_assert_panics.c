@@ -95,14 +95,19 @@ static void panics_query_roles(const XrXirSourceResult *result) {
     }
     CHECK(found==1);
 }
+static void panics_default_identity_gate(const XrXirArtifact *checked,XrXirCheckedPacket *packet);
 #include "xir_assert_panics_execution.inc.c"
 #include "xir_assert_panics_packet.inc.c"
+#include "xir_assert_panics_default_identity_cases.h"
 #include "xir_assert_panics_authority.inc.c"
 #include "xir_assert_panics_pipeline_oom.inc.c"
 #include "xir_assert_panics_resource.inc.c"
 int main(int argc,char **argv) {
     assert_compile_begin();
     CHECK(argc==3 || argc==4);char path[2048];CHECK(snprintf(path,sizeof(path),"%s/panics.xr",argv[1])>0);
+    if (argc==4 && !strcmp(argv[3],"--core-only")) {
+        panics_packet_gates();assert_compile_end();return 0;
+    }
     if (argc==4) {
         panics_source_oom(argv[1],path);panics_pipeline_oom(argv[1],path);
         puts("Panics Source/pipeline/runtime actual OOM and exact budget PASS");assert_compile_end();return 0;

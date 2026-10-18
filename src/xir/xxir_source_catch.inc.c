@@ -71,7 +71,7 @@ static bool source_catch_body(SourceContext *ctx, XrCatchClause *clause, SourceM
     if (clause->var_name) {
         SourceName *binding = source_alloc(ctx,1,sizeof(*binding));
         if (!binding) return false;
-        *binding = (SourceName){.next=locals,.name=clause->var_name,.parameters=NULL,.node=clause->body,.kind=SOURCE_LOCAL,
+        *binding = (SourceName){.next=locals,.name=clause->var_name,.imported=NULL,.node=clause->body,.kind=SOURCE_LOCAL,
             .index=error.id,.module=ctx->module,.type=error.type,.mutable=false,
             .construction=false,.declaration=0,.inferred=false,.checked_library=false};
         ctx->locals = binding;

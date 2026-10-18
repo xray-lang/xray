@@ -62,6 +62,8 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_stdlib_search(struct XmcpServer *s, const Xm
 XR_FUNC XrJsonValue *xmcp_tool_xray_definition(struct XmcpServer *s, const XmcpCallContext *ctx,
                                                XrJsonValue *args);
 
+XR_FUNC XrJsonValue *xmcp_tool_source_definition(XrJsonValue *arguments);
+
 /* ---- Schema builders (forward decls used by TOOL_TABLE) ---------------- */
 
 XR_FUNC XrJsonValue *xmcp_schema_analyze(void);

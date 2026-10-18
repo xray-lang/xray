@@ -9,21 +9,21 @@
  *
  * KEY CONCEPT:
  *   Both tools share the parser-error capture pipeline.  analyze adds the
- *   semantic analyzer pass on top; format uses one owned trivia-aware
+ *   owned Source semantic check on top; format uses one owned trivia-aware
  *   parse, formats its AST, and surfaces parser diagnostics in the
  *   structured result.
  */
 
+#include "xmcp_json.h"
 #include "xmcp_tools_internal.h"
 #include "xmcp_protocol.h"
 #include "xmcp_server.h"
+#include "xmcp_source.h"
 #include "../../base/xjson.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
-#include "../../base/xarena.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
-#include "../../frontend/analyzer/xanalyzer.h"
 #include "../../frontend/format/xfmt.h"
 #include "../../toolchain/xcompiler_session.h"
 #include <stdio.h>
@@ -40,35 +40,6 @@ typedef struct {
     int count;
 } ErrorCapture;
 
-static void check_error_callback(void *user_data, int line, int column, int end_line,
-                                 int end_column, const char *message) {
-    ErrorCapture *cap = (ErrorCapture *) user_data;
-    XR_DCHECK(cap != NULL, "check_error_callback: NULL capture");
-    if (cap->count >= XMCP_TOOLS_MAX_CHECK_ERRORS)
-        return;
-    int i = cap->count;
-    cap->lines[i] = line;
-    cap->columns[i] = column;
-    cap->end_lines[i] = end_line;
-    cap->end_columns[i] = end_column;
-    snprintf(cap->messages[i], sizeof(cap->messages[0]), "%s", message);
-    cap->count++;
-}
-
-static const char *diag_severity_name(XrDiagSeverity severity) {
-    switch (severity) {
-        case XR_DIAG_SEV_WARNING:
-            return "warning";
-        case XR_DIAG_SEV_INFO:
-            return "info";
-        case XR_DIAG_SEV_HINT:
-            return "hint";
-        case XR_DIAG_SEV_ERROR:
-        default:
-            return "error";
-    }
-}
-
 static XrJsonValue *make_diagnostic(int line, int column, int end_line, int end_column,
                                     const char *severity, int code, const char *message,
                                     const char *source) {
@@ -77,14 +48,14 @@ static XrJsonValue *make_diagnostic(int line, int column, int end_line, int end_
     XR_DCHECK(source != NULL, "make_diagnostic: NULL source");
 
     XrJsonValue *diag = xjson_new_object();
-    XJSON_SET_INT(diag, "line", line);
-    XJSON_SET_INT(diag, "column", column);
-    XJSON_SET_INT(diag, "endLine", end_line);
-    XJSON_SET_INT(diag, "endColumn", end_column);
-    XJSON_SET_STRING(diag, "severity", severity);
-    XJSON_SET_INT(diag, "code", code);
-    XJSON_SET_STRING(diag, "message", message);
-    XJSON_SET_STRING(diag, "source", source);
+    XMCP_JSON_INT(diag, "line", line);
+    XMCP_JSON_INT(diag, "column", column);
+    XMCP_JSON_INT(diag, "endLine", end_line);
+    XMCP_JSON_INT(diag, "endColumn", end_column);
+    XMCP_JSON_STRING(diag, "severity", severity);
+    XMCP_JSON_INT(diag, "code", code);
+    XMCP_JSON_STRING(diag, "message", message);
+    XMCP_JSON_STRING(diag, "source", source);
     return diag;
 }
 
@@ -97,7 +68,7 @@ static XrJsonValue *make_parser_diagnostics(const ErrorCapture *cap, int *out_co
     XrJsonValue *diagnostics = xjson_new_array();
     int emitted = 0;
     for (int i = 0; i < cap->count && emitted < XMCP_TOOLS_MAX_CHECK_ERRORS; i++, emitted++) {
-        xjson_array_push(diagnostics, make_diagnostic(cap->lines[i], cap->columns[i],
+        xmcp_json_push(diagnostics, make_diagnostic(cap->lines[i], cap->columns[i],
                                                       cap->end_lines[i], cap->end_columns[i],
                                                       "error", 0, cap->messages[i], "parser"));
     }
@@ -110,136 +81,111 @@ static XrJsonValue *make_format_result_content(const char *formatted, bool chang
                                                bool use_tabs, bool ok, bool truncated,
                                                XrJsonValue *diagnostics) {
     XR_DCHECK(formatted != NULL, "make_format_result_content: NULL formatted");
-    XR_DCHECK(diagnostics != NULL, "make_format_result_content: NULL diagnostics");
+    if (!diagnostics) xmcp_json_fail();
     XrJsonValue *structured = xjson_new_object();
-    XJSON_SET_BOOL(structured, "ok", ok);
-    XJSON_SET_STRING(structured, "formattedCode", formatted);
-    XJSON_SET_BOOL(structured, "changed", changed);
-    XJSON_SET_INT(structured, "indentSize", indent_size);
-    XJSON_SET_BOOL(structured, "useTabs", use_tabs);
-    XJSON_SET_INT(structured, "diagnosticCount", xjson_array_len(diagnostics));
-    XJSON_SET_BOOL(structured, "truncated", truncated);
-    xjson_object_set(structured, "diagnostics", diagnostics);
+    XMCP_JSON_BOOL(structured, "ok", ok);
+    XMCP_JSON_STRING(structured, "formattedCode", formatted);
+    XMCP_JSON_BOOL(structured, "changed", changed);
+    XMCP_JSON_INT(structured, "indentSize", indent_size);
+    XMCP_JSON_BOOL(structured, "useTabs", use_tabs);
+    XMCP_JSON_INT(structured, "diagnosticCount", xjson_array_len(diagnostics));
+    XMCP_JSON_BOOL(structured, "truncated", truncated);
+    xmcp_json_set(structured, "diagnostics", diagnostics);
     return structured;
 }
 
 /* ---- Tool: xray_analyze ------------------------------------------------ */
 
-XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallContext *ctx,
-                                            XrJsonValue *arguments) {
-    XR_DCHECK(server != NULL, "xmcp_tool_xray_analyze: NULL server");
-    XR_DCHECK(ctx != NULL, "xmcp_tool_xray_analyze: NULL ctx");
-    XR_DCHECK(arguments != NULL, "xmcp_tool_xray_analyze: NULL arguments");
+static void analysis_error_callback(void *data, int line, int column, int end_line,
+    int end_column, const char *message) {
+    ErrorCapture *capture = data;
+    if (capture->count >= XMCP_TOOLS_MAX_CHECK_ERRORS) return;
+    int i = capture->count++;
+    capture->lines[i] = line; capture->columns[i] = column;
+    capture->end_lines[i] = end_line; capture->end_columns[i] = end_column;
+    snprintf(capture->messages[i], sizeof(capture->messages[i]), "%s", message);
+}
 
-    const char *code = xjson_get_string(arguments, "code");
-    if (!code || code[0] == '\0')
-        return xmcp_make_error_result("Error: 'code' must not be empty");
-    if (!server->isolate)
-        return xmcp_make_error_result("Error: analyzer isolate is not available");
-
-    const char *filename = xjson_get_string(arguments, "filename");
-    if (!filename || filename[0] == '\0')
-        filename = "<mcp-analyze>";
-    const char *mode = xjson_get_string(arguments, "mode");
-    if (!mode || mode[0] == '\0')
-        mode = "full";
-    bool run_analyzer = strcmp(mode, "syntax") != 0;
-
-    XrArena *arena = xr_malloc(sizeof(XrArena));
-    if (!arena)
-        return xmcp_make_error_result("Error: out of memory");
-    xr_arena_init(arena, 0);
-
-    const XrJsonValue *ptok = ctx->progress_token;
-    if (ptok)
-        xmcp_send_progress_notification(server, ptok, 0, 2);
-
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(server->isolate);
-    if (!session) {
-        xr_arena_destroy(arena);
-        xr_free(arena);
-        return xmcp_make_error_result("Error: compiler session is required");
-    }
-
-    XrCompilerSessionScope parse_scope;
-    if (!xr_compiler_session_push_arena(session, arena, filename, &parse_scope)) {
-        xr_arena_destroy(arena);
-        xr_free(arena);
-        return xmcp_make_error_result("Error: failed to enter compiler session");
-    }
-
-    ErrorCapture cap = {.count = 0};
-    Parser parser;
-    xr_parser_init(&parser, session, code, filename, arena);
-    xr_parser_set_error_callback(&parser, check_error_callback, &cap, XMCP_TOOLS_MAX_CHECK_ERRORS);
-    AstNode *ast = xr_parse_recoverable(&parser);
-
-    if (ptok)
-        xmcp_send_progress_notification(server, ptok, 1, 2);
-
-    XaAnalyzer *analyzer = NULL;
-    XaDiagnostic *analyzer_diags = NULL;
-    int analyzer_count = 0;
-    if (ast && cap.count == 0 && run_analyzer) {
-        analyzer = xa_analyzer_new(session);
-        if (!analyzer) {
-            xr_compiler_session_pop_arena(&parse_scope);
-            xr_arena_destroy(arena);
-            xr_free(arena);
-            return xmcp_make_error_result("Error: out of memory");
-        }
-        if (strcmp(mode, "semantic") == 0 || strcmp(mode, "full") == 0)
-            xa_analyzer_set_strict_mode(analyzer, true);
-        xa_analyzer_analyze(analyzer, filename, (XrAstNode *) ast);
-        analyzer_diags = xa_analyzer_get_diagnostics(analyzer, &analyzer_count);
-    }
-
-    XrJsonValue *diagnostics = xjson_new_array();
-    int emitted = 0;
-    bool truncated = false;
-    for (int i = 0; i < cap.count && emitted < XMCP_TOOLS_MAX_CHECK_ERRORS; i++, emitted++) {
-        xjson_array_push(diagnostics, make_diagnostic(cap.lines[i], cap.columns[i],
-                                                      cap.end_lines[i], cap.end_columns[i], "error",
-                                                      0, cap.messages[i], "parser"));
-    }
-    for (XaDiagnostic *d = analyzer_diags; d && emitted < XMCP_TOOLS_MAX_CHECK_ERRORS;
-         d = d->next, emitted++) {
-        xjson_array_push(diagnostics,
-                         make_diagnostic((int) d->location.line, (int) d->location.column,
-                                         (int) d->location.end_line, (int) d->location.end_column,
-                                         diag_severity_name(d->severity), d->code, d->message,
-                                         "analyzer"));
-    }
-    if (cap.count >= XMCP_TOOLS_MAX_CHECK_ERRORS ||
-        analyzer_count > XMCP_TOOLS_MAX_CHECK_ERRORS - cap.count)
-        truncated = true;
-
-    int diagnostic_count = xjson_array_len(diagnostics);
-    char text[256];
-    if (diagnostic_count == 0) {
-        snprintf(text, sizeof(text), "OK: no diagnostics found.");
-    } else {
-        snprintf(text, sizeof(text), "Found %d diagnostic(s).", diagnostic_count);
-    }
-
+static XrJsonValue *analysis_result(const char *mode, bool ok, bool truncated, XrJsonValue *diagnostics) {
+    int count = xjson_array_len(diagnostics);
     XrJsonValue *structured = xjson_new_object();
-    XJSON_SET_BOOL(structured, "ok", diagnostic_count == 0);
-    XJSON_SET_STRING(structured, "mode", mode);
-    XJSON_SET_INT(structured, "diagnosticCount", diagnostic_count);
-    XJSON_SET_BOOL(structured, "truncated", truncated);
-    xjson_object_set(structured, "diagnostics", diagnostics);
+    XMCP_JSON_BOOL(structured, "ok", ok);
+    XMCP_JSON_STRING(structured, "mode", mode);
+    XMCP_JSON_INT(structured, "diagnosticCount", count);
+    XMCP_JSON_BOOL(structured, "truncated", truncated);
+    xmcp_json_set(structured, "diagnostics", diagnostics);
+    char text[128];
+    snprintf(text, sizeof(text), ok ? "OK: no diagnostics found." : "Found %d diagnostic(s).", count);
+    return xmcp_make_text_structured_result(text, structured, !ok);
+}
 
-    XrJsonValue *result = xmcp_make_text_result(text, diagnostic_count > 0);
-    xjson_object_set(result, "structuredContent", xjson_clone(structured));
-    xjson_free(structured);
-    if (ptok)
-        xmcp_send_progress_notification(server, ptok, 2, 2);
+static void analysis_failure(XrJsonValue *items, int line, int column, int status,
+    const char *message, const char *source) {
+    xmcp_json_push(items, make_diagnostic(line, column, line, column, "error", status,
+        message && message[0] ? message : "Source checking failed", source));
+}
 
-    if (analyzer)
-        xa_analyzer_free(analyzer);
-    xr_compiler_session_pop_arena(&parse_scope);
-    xr_arena_destroy(arena);
-    xr_free(arena);
+XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallContext *ctx,
+    XrJsonValue *arguments) {
+    if (!server || !ctx || !arguments) return NULL;
+    XrJsonValue *input = xjson_get(arguments, "code");
+    if (!xjson_is_string(input) || !input->string_len)
+        return xmcp_make_error_result("Error: 'code' must not be empty");
+    const char *mode = xjson_get_string(arguments, "mode");
+    if (!mode || !mode[0]) mode = "full";
+    if (strcmp(mode, "syntax") && strcmp(mode, "semantic") && strcmp(mode, "full"))
+        return xmcp_make_error_result("Error: invalid analysis mode");
+    const char *filename = xjson_get_string(arguments, "filename");
+    if (!filename || !filename[0]) filename = "<mcp-analyze>";
+    if (ctx->progress_token) xmcp_send_progress_notification(server, ctx->progress_token, 0, 2);
+    XrJsonValue *items = xjson_new_array();
+    if (!items) return NULL;
+    bool ok = false, truncated = false;
+    if (!strcmp(mode, "syntax")) {
+        XrCompileResources *resources = NULL;
+        XrCompilerSession *session = NULL;
+        AstNode *ast = NULL;
+        XrCompileResourceLimits limits = xmcp_source_default_limits();
+        XrCompileResourceStatus created = xr_compile_resources_new(&limits, &resources);
+        XrCompilerSessionStatus opened = created == XR_COMPILE_RESOURCE_OK ?
+            xr_compile_session_new(resources, &session) : XR_COMPILER_SESSION_OUT_OF_MEMORY;
+        ErrorCapture capture = {0};
+        XrParseStatus status = created == XR_COMPILE_RESOURCE_BUDGET || opened == XR_COMPILER_SESSION_BUDGET ?
+            XR_PARSE_BUDGET : opened == XR_COMPILER_SESSION_OK ? XR_PARSE_OK : XR_PARSE_OUT_OF_MEMORY;
+        if (status == XR_PARSE_OK && memchr(input->as.string, 0, input->string_len)) {
+            analysis_failure(items, 0, 0, XR_PARSE_SYNTAX, "Source contains a NUL byte", "parser");
+            status = XR_PARSE_SYNTAX;
+        } else if (status == XR_PARSE_OK) {
+            XrParseDiagnostics diagnostics = {analysis_error_callback, &capture, XMCP_TOOLS_MAX_CHECK_ERRORS};
+            status = xr_compile_parse_with_trivia(session, input->as.string, filename, &diagnostics, &ast);
+            int count = 0;
+            xjson_free(items);
+            items = make_parser_diagnostics(&capture, &count, &truncated);
+        }
+        if (status != XR_PARSE_OK && xjson_array_len(items) == 0) {
+            analysis_failure(items, 0, 0, status, "Parser resource or input failure", "parser");
+        }
+        xr_program_destroy(ast);
+        xr_compile_session_free(session);
+        xr_compile_resources_release(resources);
+        ok = status == XR_PARSE_OK;
+    } else {
+        XmcpSourceOwner owner = {0};
+        XrCompileResourceLimits limits = xmcp_source_default_limits();
+        XrXirCompileContext context = {NULL, xr_xir_compile_default_limits()};
+        XrCompileResourceStatus created = xr_compile_resources_new(&limits, &context.resources);
+        XmcpSourceRequest request = {input->as.string, input->string_len, "mcp-analyze", &context};
+        XrXirStatus status = created == XR_COMPILE_RESOURCE_OK ? xmcp_source_check(&request, &owner) :
+            created == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+        const XrXirSourceView *view = xr_xir_compile_source_snapshot_view(owner.result.snapshot);
+        ok = status == XR_XIR_OK && view && view->complete;
+        if (!ok) analysis_failure(items, owner.diagnostic.line, owner.diagnostic.column,
+            (int)status, owner.diagnostic.message, "source");
+        xmcp_source_free(&owner);
+        xr_compile_resources_release(context.resources);
+    }
+    XrJsonValue *result = analysis_result(mode, ok, truncated, items);
+    if (ctx->progress_token) xmcp_send_progress_notification(server, ctx->progress_token, 2, 2);
     return result;
 }
 
@@ -274,9 +220,12 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
     (void) ctx;
     (void) server;
 
-    const char *code = xjson_get_string(arguments, "code");
-    if (!code || code[0] == '\0')
+    XrJsonValue *input = xjson_get(arguments, "code");
+    if (!xjson_is_string(input) || !input->string_len)
         return xmcp_make_error_result("Error: 'code' must not be empty");
+    if (memchr(input->as.string, 0, input->string_len))
+        return xmcp_make_error_result("Error: Source contains a NUL byte");
+    const char *code = input->as.string;
 
     XrFmtConfig config = xfmt_default_config;
     int64_t indent = xjson_get_int_or(arguments, "indentSize", 0);
@@ -325,7 +274,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
     XrJsonValue *structured=make_format_result_content(output.text,changed,config.indent_size,
         config.use_tabs!=0,true,false,xjson_new_array());
     result=xmcp_make_text_result(output.text,false);
-    xjson_object_set(result,"structuredContent",structured);
+    xmcp_json_set(result,"structuredContent",structured);
 cleanup:
     xr_program_destroy(ast); xr_compile_session_free(session);
     xr_compile_resources_release(resources); xr_compile_format_output_free(&output);

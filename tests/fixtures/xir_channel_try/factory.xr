@@ -1,0 +1,6 @@
+export fn offer<T: Sendable>(channel: Channel<T>, value: T) -> SendResult {
+    return channel.trySend(value)
+}
+export fn take<T: Sendable>(channel: Channel<T>) -> Recv<T> {
+    return channel.tryRecv()
+}

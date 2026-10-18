@@ -25,6 +25,7 @@ static inline bool xr_xir_task_result_supported(const XrXirTypes *types, XrXirTy
     if (!node || node->parameter_span) return false;
     return node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_NULLABLE ||
         node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
-        node->kind == XR_XIR_TYPE_TASK || (node->kind == XR_XIR_TYPE_NOMINAL && xr_xir_type_is_enum(types, type));
+        node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_CHANNEL ||
+        (node->kind == XR_XIR_TYPE_NOMINAL && xr_xir_type_is_enum(types, type));
 }
 #endif // XXIR_TASK_RESULT_INTERNAL_H

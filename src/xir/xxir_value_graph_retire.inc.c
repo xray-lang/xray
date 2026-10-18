@@ -66,6 +66,35 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
             if (!graph_edge_work(budget) || !graph_direct_edge(&binding->captures[i], visit, context)) return false;
         return true;
     }
+    if (object->kind == XR_XIR_TYPE_CHANNEL) {
+        /* Live publication stops at the synchronized identity. Retirement is
+         * quiescent and must still account for every actual queued owner. */
+        if (budget) { budget->status = XR_XIR_VALUE_UNSUPPORTED; return false; }
+        XirChannel *channel = (XirChannel *)object;
+        if (!channel_header_valid(channel) || !xr_channel_buffer_valid(&channel->buffer)) return false;
+        for (uint32_t i = 0; i < channel->buffer.count; ++i) {
+            uint32_t slot = xr_channel_buffer_slot(&channel->buffer, i);
+            if (!graph_direct_edge(&channel_slots(channel)[slot], visit, context)) return false;
+        }
+        uint32_t count=0;XrXirChannelSendWait *previous=NULL;
+        for (XrXirChannelSendWait *send=channel->send_head;send;send=send->next) {
+            if (!send->linked || send->previous!=previous || count==channel->send_count ||
+                !graph_direct_edge(&send->message,visit,context)) return false;
+            ++count;previous=send;
+        }
+        if (count!=channel->send_count || previous!=channel->send_tail) return false;
+        count=0;XrXirChannelRecvWait *before=NULL;
+        for (XrXirChannelRecvWait *recv=channel->recv_head;recv;recv=recv->next) {
+            /* Queued receives own no payload. Wrapped receives also retain
+             * unpublished empty storage and an arena-owned Closed descriptor. */
+            if (!recv->linked || recv->previous!=before || count==channel->recv_count || !unit_value(&recv->result) || recv->taken)
+                return false;
+            if (recv->raw ? recv->reservation!=NULL || !unit_value(&recv->closed) :
+                !recv->reservation || recv->reservation->object.graph_registered || !unit_value(&recv->reservation->fields[0])) return false;
+            ++count;before=recv;
+        }
+        return count==channel->recv_count && before==channel->recv_tail;
+    }
     if (object->kind == XR_XIR_TYPE_TASK) {
         XirTask *task = (XirTask *)object;
         if (atomic_load_explicit(&task->state, memory_order_acquire) != XIR_TASK_TERMINAL ||

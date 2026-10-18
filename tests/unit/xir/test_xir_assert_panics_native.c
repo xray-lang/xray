@@ -6,7 +6,7 @@
  *
  * test_xir_assert_panics_native.c - Actual native and mixed typed discard outcomes
  */
-#include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_program_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_source_query.h"
@@ -22,8 +22,9 @@ XR_DATA const uint32_t panics_checked_functions[4],panics_matrix_functions[14];
 static unsigned panics_native_releases;
 typedef struct PanicsNativeOwner {XrXirArtifact *artifact;XrXirCallEntry *entries;XrXirVmBinding *bindings;} PanicsNativeOwner;
 static void panics_native_release(void *pointer) {
-    PanicsNativeOwner *owner=pointer;xr_xir_compile_artifact_free(owner->artifact);
-    xr_free(owner->entries);xr_free(owner->bindings);xr_free(owner);++panics_native_releases;
+    PanicsNativeOwner *owner=pointer;CHECK(!owner->artifact);
+    xr_compile_resources_free(owner->entries);xr_compile_resources_free(owner->bindings);
+    xr_free(owner);++panics_native_releases;
 }
 static void panics_native_cases(XrXirProgram *program,bool matrix) {
     const int64_t expected[]={445,445,445,445,445,0,11,11,420,420,123,3,19,445};
@@ -52,25 +53,27 @@ static void panics_native_mixed(const XrXirProgramSpec *native,bool matrix,bool 
     PanicsNativeOwner *owner=xr_calloc(1,sizeof(*owner));CHECK(owner);
     CHECK(xr_xir_compile_lower(checked,&native->target,&owner->artifact,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     const XrXirModule *module=xr_xir_compile_artifact_module(owner->artifact);CHECK(module->function_count==native->entry_count);
-    owner->entries=xr_calloc(module->function_count,sizeof(*owner->entries));
-    owner->bindings=xr_calloc(module->function_count,sizeof(*owner->bindings));CHECK(owner->entries && owner->bindings);
+    CHECK(xr_xir_compile_vm_bind_table(owner->artifact,&owner->bindings,&owner->entries)==XR_XIR_OK &&
+        owner->entries && owner->bindings);
     unsigned native_count=0,vm_count=0;
     for (uint32_t f=0;f<module->function_count;++f) {
-        CHECK(xr_xir_compile_vm_bind(owner->artifact,f,&owner->bindings[f],&owner->entries[f])==XR_XIR_OK);
         bool root=module->declarations->functions[f].module==module->declarations->root_module;
         if (root==root_native) {owner->entries[f]=native->entries[f];++native_count;} else ++vm_count;
     }
     CHECK(native_count && vm_count);
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,native->target,owner->entries,module->function_count,
-        module->declarations,{owner,panics_native_release},module->types,xir_program_packet_borrow(owner->artifact)};
-    XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(assert_compile_context,&spec,&program)==XR_XIR_OK);
+        module->declarations,{owner,panics_native_release},module->types,{0}};
+    XrXirProgramInput *input=NULL;
+    CHECK(xir_program_input_take(assert_compile_context,&owner->artifact,&input)==XR_XIR_OK && !owner->artifact);
+    XrXirProgram *program=NULL;
+    CHECK(xir_program_receive(assert_compile_context,&spec,&input,NULL,&program)==XR_XIR_OK && !input);
     panics_native_cases(program,matrix);
 }
 int main(void) {
     assert_compile_begin();
     _Static_assert(sizeof(XrXirGeneric)==40 && sizeof(XrXirSourceDeclaration)==120,"internal result-role metadata requires fresh consumers");
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==24 && XR_XIR_CALL_ABI_VERSION==29 &&
-        XR_XIR_PROGRAM_ABI_VERSION==33,"current typed execution ABI");
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==29 && XR_XIR_CALL_ABI_VERSION==33 &&
+        XR_XIR_PROGRAM_ABI_VERSION==35,"current typed execution ABI");
     _Static_assert(sizeof(XrXirValue)==16 && _Alignof(XrXirValue)==8 &&
         offsetof(XrXirValue,type)==0 && offsetof(XrXirValue,reserved)==4 &&
         offsetof(XrXirValue,payload)==8,"XrXirValue complete current carrier layout");
@@ -113,5 +116,5 @@ int main(void) {
         panics_native_mixed(spec,matrix!=0,true);CHECK(!runtime_live && !runtime_bytes);
     }
     CHECK(panics_native_releases==4);
-    puts("18 independent outcomes: native and both VM/native directions PASS; Value22 Call28 Program29; complete carrier layouts verified; physical baseline restored");assert_compile_end();return 0;
+    puts("18 independent outcomes: native and both VM/native directions PASS; Value29 Call33 Program35; complete carrier layouts verified; physical baseline restored");assert_compile_end();return 0;
 }

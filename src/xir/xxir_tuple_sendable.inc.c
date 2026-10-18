@@ -95,7 +95,7 @@ static XrXirStatus sendable_enter(const XrXirConstraintEnvironment *environment,
     } else if (node->kind == XR_XIR_TYPE_TUPLE) {
         if (!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
     } else if (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE &&
-               node->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
+               node->kind != XR_XIR_TYPE_TASK && node->kind != XR_XIR_TYPE_CHANNEL) return XR_XIR_BAD_TYPE;
     walk->state[index] = 1; walk->frames[(walk->depth)++] = (SendableFrame){index, 0};
     return XR_XIR_OK;
 }

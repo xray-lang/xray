@@ -63,7 +63,8 @@ static bool class_publication_edge(const XrXirValue *value, void *payload, void 
     if (!xr_xir_value_valid(value)) { scan->status = XR_XIR_VALUE_BAD_ARGUMENT; return false; }
     if (!owned_carrier_type((XrXirType)value->type)) return true;
     XirObject *object = object_pointer(value);
-    if (empty_enum_object(object) || object->type == XR_XIR_STRING || object->kind == XR_XIR_TYPE_ATOMIC)
+    if (empty_enum_object(object) || object->type == XR_XIR_STRING || object->kind == XR_XIR_TYPE_ATOMIC ||
+        object->kind == XR_XIR_TYPE_CHANNEL)
         return true;
     for (size_t i = 0; i < publication->count; ++i) {
         if (!class_publication_work(admission, 1)) { scan->status = XR_XIR_VALUE_LIMIT; return false; }

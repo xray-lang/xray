@@ -515,7 +515,7 @@ NUL/深度257、逐实际OOM与exact/minus1、producer销毁/双Instance/physica
 
 PRINT失败保留准确Call状态。WRITE_STREAM在合法已配置provider下将OK映为true、OUTPUT_ERROR映为false；缺provider仍为Call OUTPUT_ERROR，OOM/LIMIT/BAD_ARGUMENT/BAD_ABI不得映为false。取消保持既有优先级。资源失败不成为panic，不能被assertPanics消费为成功。
 
-当前Call ABI为21。Provider/Sink以abi_version与reserved=0开头；有callback先验21，无provider仅准canonical全零。CallConfig/InstanceConfig以abi_version和struct_size开头，在读取其它字段前验21及exact sizeof。Windows x86_64实测Provider24、Sink32、CallConfig136、InstanceConfig88；这些数值不代替其它target的实际ABI验证。唯一xr_xir_call_config_init(config,size)与xr_xir_instance_config_init(config,size)返回CallStatus，成功才写，失败保留全部output bytes；旧按值defaults符号删除，无别名或wrapper。旧Call20 entry必须在执行callback前拒绝；旧embedding defaults对象必须链接拒绝，不能用重编旧对象替代证据。
+当前 Call ABI 只由 §17.6 的实现常量定义。Provider/Sink 先检查该 ABI 与 reserved=0；无 callback 只接受 canonical 全零。CallConfig/InstanceConfig 先检查现行 abi_version 和 exact struct_size，再读取其余字段。唯一 xr_xir_call_config_init(config,size) 与 xr_xir_instance_config_init(config,size) 返回 CallStatus，失败保留全部 output bytes。CallConfig 的 TimeProvider 由宿主借出，context 必须活到全部接收 Call/Instance 退休；Task 子 Call 从真实 parent 或 root 继承同一 provider。实际 SDK 的目标探针核对布局，单个 Windows 布局不能授予其它 target 资格。旧 entry 在 callback 前拒绝，退休 embedding 符号保持链接拒绝；重编旧对象不构成历史二进制证据。
 
 Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移不授Source/Target/SDK权限，不证明完整安全、默认stdlib缓存或最终旧链删除。VM/native独立预期、每个真实分配失败、准确状态、旧对象拒绝、producer寿命及物理释放分别验证。
 
@@ -1103,6 +1103,9 @@ NUL 验证具有独立的 SOURCE_INPUT 来源，不伪称 parser 回调。根文
 出生函数的 Source 对应关系通过真实特化映射及新 Lowered body/layout 与 Program 所拥有的 Input/Final 比对建立，不以 wire 摘要相同代替该接收证明。模块 lexical_scope、storage 和既有出生身份继续逐字段核验；函数、成员、ref、Task 的执行权限仍来自真实 Program/Instance/Call。
 
 此接收布局使用 Program ABI33；Value24/Call29 和 Checked30/semantic76 不变。旧 Program32 及更早前缀拒绝，不保留借用 Proof/layout reader 或兼容别名。SDK 的 Packet/ProgramSpec 真实布局由独立声明模型和宿主 C11 核验；完整旧 SDK 向量继续保存为拒例。全部复制、深读、比对、失败与寿命继续使用原累计账本及既有首错状态。
+
+
+共同Checked身份为wire30/semantic77：同时编码CTFE稠密分母、materialization/site/binding完整事实及Channel的十一条操作。Value29/Call33/Program35对应实际载荷、计时与拥有式Input布局，不为组合递增。完整旧30/75与28/76包在任何分配前拒绝，空及占用输出均保全；两侧独立字段构造器、历史字节与旧控制保留，不能以生产writer输出更新golden。名义权限必须从当前canonical pool实例读取，声明序号不能替代泛型实参或pool身份。C11策略和SDK身份使用同一30/77边界。
 
 <!-- /xr-spec:cn -->
 
@@ -1780,7 +1783,7 @@ The sole XrXirOutputStatus is OK=0, OOM=1, LIMIT=2, OUTPUT_ERROR=3, BAD_ARGUMENT
 
 PRINT failure preserves the exact Call status. For a valid configured provider, WRITE_STREAM maps OK to true and OUTPUT_ERROR to false. An absent provider remains Call OUTPUT_ERROR; OOM/LIMIT/BAD_ARGUMENT/BAD_ABI never become false. Existing cancellation priority remains. Resource failure is not panic and cannot satisfy assertPanics.
 
-Current Call ABI is21. Provider/Sink start with abi_version and reserved=0: callbacks require21, while no provider requires canonical all-zero state. CallConfig/InstanceConfig start with abi_version and struct_size, checking21 and exact sizeof before reading other fields. Actual Windows x86_64 sizes are Provider24, Sink32, CallConfig136 and InstanceConfig88; these do not qualify other targets. Sole xr_xir_call_config_init(config,size) and xr_xir_instance_config_init(config,size) return CallStatus, writing only on success and preserving all output bytes on failure. Old by-value defaults symbols are removed without aliases or wrappers. Actual Call20 entries reject before callbacks; old embedding defaults objects must fail to link rather than being rebuilt as purported old evidence.
+The current Call ABI is defined only by the implementation constant listed in §17.6. Provider/Sink first check that ABI and reserved=0; an absent callback requires canonical all-zero state. CallConfig/InstanceConfig check the current abi_version and exact struct_size before reading other fields. The sole xr_xir_call_config_init(config,size) and xr_xir_instance_config_init(config,size) return CallStatus and preserve every output byte on failure. The host lends the CallConfig TimeProvider and keeps its context alive until all receiving Calls/Instances retire; Task child Calls inherit the same provider from their authentic parent or root. Actual SDK target probes check layout; one Windows layout does not qualify another target. Old entries reject before callbacks and retired embedding symbols remain link failures; rebuilding old objects does not recover historical binary evidence.
 
 Checked22/57, Value16 and Program26 retain their own actual contracts. Output migration grants no Source/Target/SDK authority and does not qualify complete safety, default stdlib caching or final legacy deletion. Independently expected VM/native behavior, every actual allocation failure, exact status, old-object rejection, producer lifetimes and physical release need separate verification.
 
@@ -2368,5 +2371,8 @@ Public Source and REPL Program construction use the common owning receiver for t
 A birth function's Source correspondence follows the authentic specialization map and compares the new Lowered body and layouts against Program's owned Input and Final. Equal wire digests do not replace that receiving proof. Module lexical scope, storage and existing birth identities remain part of complete field comparison. Function, member, ref and Task execution permission still comes from the real Program, Instance and Call.
 
 This receiving layout uses Program ABI33; Value24, Call29 and Checked30/semantic76 are unchanged. Program32 and earlier prefixes are rejected without a borrowed Proof/layout reader or compatibility alias. An independent declaration model and host C11 verify the actual Packet and ProgramSpec SDK layout; complete historical SDK vectors remain rejection inputs. Copies, deep reads, comparisons, failures and lifetimes continue to use the original cumulative ledger and first-failure state.
+
+
+The combined Checked identity is wire30/semantic77: CTFE dense denominators and complete materialization/site/binding facts coexist with all eleven Channel operations. Value29/Call33/Program35 describe the actual payload, time and owning Input layouts and do not advance for integration. Complete prior30/75 and28/76 packets are rejected before allocation with empty and occupied outputs preserved. Both independent field models, historical bytes and controls remain; production writer output cannot replace goldens. Nominal authority requires the actual canonical pool instance, never a declaration ordinal in place of generic arguments or pool identity. C11 policy and SDK identities bind the same30/77 boundary.
 
 <!-- /xr-spec:en -->

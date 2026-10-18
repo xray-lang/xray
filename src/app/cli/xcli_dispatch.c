@@ -73,6 +73,9 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv);
 XR_FUNC int cmd_dap(const XrCliInvocation *inv);
 #endif
 XR_FUNC int cmd_toolchain(const XrCliInvocation *inv);
+#ifdef XR_HAS_MCP
+XR_FUNC int cmd_mcp_server(const XrCliInvocation *inv);
+#endif
 /* Defined below in this file */
 XR_FUNC int cmd_info(const XrCliInvocation *inv);
 XR_FUNC int cmd_self(const XrCliInvocation *inv);
@@ -93,6 +96,9 @@ void xr_cli_register_all_handlers(void) {
     xr_cli_register_handler("dap", cmd_dap);
 #endif
     xr_cli_register_handler("toolchain", cmd_toolchain);
+#ifdef XR_HAS_MCP
+    xr_cli_register_handler("mcp-server", cmd_mcp_server);
+#endif
     xr_cli_register_handler("info", cmd_info);
     xr_cli_register_handler("self", cmd_self);
     xr_cli_register_handler("doctor", cmd_doctor);

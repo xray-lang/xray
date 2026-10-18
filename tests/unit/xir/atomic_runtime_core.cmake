@@ -12,7 +12,7 @@ add_executable(test_xir_atomic_runtime_core
  ${PROJECT_SOURCE_DIR}/src/base/xfileio.c
  ${PROJECT_SOURCE_DIR}/src/base/xio_policy.c)
 target_include_directories(test_xir_atomic_runtime_core PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(test_xir_atomic_runtime_core PRIVATE xray_xir_admission)
+target_link_libraries(test_xir_atomic_runtime_core PRIVATE xray_xir_scalar)
 if(MSVC)
  target_compile_options(test_xir_atomic_runtime_core PRIVATE /W4 /WX)
 else()

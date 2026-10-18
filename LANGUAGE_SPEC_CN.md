@@ -5499,6 +5499,8 @@ const cha = Channel(3)          // 元素类型从首次 send 推断
 | `close()` | `() -> ()` | 关闭 channel；幂等 |
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
+**超时语义**：`ms` 必须是 `0..86_400_000` 范围内的 `i64`；越界在 Channel 操作前产生 `NumericRange`。零毫秒只尝试一次队列操作。正毫秒从首次尝试记录单一单调截止时间，反复等待或重新登记不能延长期限；宿主必须提供有效时钟，读数失败、为零或倒退产生 `HostError`，不冒充超时。发送关闭返回 `SendResult.Closed`，接收关闭且排空返回 `Recv.Closed`。receiver、消息和毫秒表达式按源码顺序各求值一次，Unit 消息也保留求值副作用；等待期间复用原值。peer 完成与 timeout/cancel 的首个原子终态决定结果，已提交交付不可撤回。两方法保守视为可能挂起，零毫秒不改变这一静态效果。
+
 ```xray
 const ch = Channel<i64>(10)
 ch.send(42)                             // 阻塞发送
@@ -5525,7 +5527,7 @@ for (msg in ch) {
 var value = ch.recvOr(-1)
 ```
 
-**send/recv 与 `move`**：发送大对象时用 `ch.send(move payload)` 转移所有权，避免拷贝；接收方独占。
+**载荷所有权**：`Channel<T>` 要求 copyable、storable、Sendable 的 `T`。发送普通值保持逻辑副本，Array 后续修改相互隔离；class 和同步句柄保持其共享身份，不复制对象身份，也不以 `const` 代替 Sendable 证明。
 
 Channel 在类型位置写作 `Channel<T>`，可用于函数参数、字段和返回类型：
 
@@ -7565,7 +7567,7 @@ NUL/深度257、逐实际OOM与exact/minus1、producer销毁/双Instance/physica
 
 PRINT失败保留准确Call状态。WRITE_STREAM在合法已配置provider下将OK映为true、OUTPUT_ERROR映为false；缺provider仍为Call OUTPUT_ERROR，OOM/LIMIT/BAD_ARGUMENT/BAD_ABI不得映为false。取消保持既有优先级。资源失败不成为panic，不能被assertPanics消费为成功。
 
-当前Call ABI为21。Provider/Sink以abi_version与reserved=0开头；有callback先验21，无provider仅准canonical全零。CallConfig/InstanceConfig以abi_version和struct_size开头，在读取其它字段前验21及exact sizeof。Windows x86_64实测Provider24、Sink32、CallConfig136、InstanceConfig88；这些数值不代替其它target的实际ABI验证。唯一xr_xir_call_config_init(config,size)与xr_xir_instance_config_init(config,size)返回CallStatus，成功才写，失败保留全部output bytes；旧按值defaults符号删除，无别名或wrapper。旧Call20 entry必须在执行callback前拒绝；旧embedding defaults对象必须链接拒绝，不能用重编旧对象替代证据。
+当前 Call ABI 只由 §17.6 的实现常量定义。Provider/Sink 先检查该 ABI 与 reserved=0；无 callback 只接受 canonical 全零。CallConfig/InstanceConfig 先检查现行 abi_version 和 exact struct_size，再读取其余字段。唯一 xr_xir_call_config_init(config,size) 与 xr_xir_instance_config_init(config,size) 返回 CallStatus，失败保留全部 output bytes。CallConfig 的 TimeProvider 由宿主借出，context 必须活到全部接收 Call/Instance 退休；Task 子 Call 从真实 parent 或 root 继承同一 provider。实际 SDK 的目标探针核对布局，单个 Windows 布局不能授予其它 target 资格。旧 entry 在 callback 前拒绝，退休 embedding 符号保持链接拒绝；重编旧对象不构成历史二进制证据。
 
 Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移不授Source/Target/SDK权限，不证明完整安全、默认stdlib缓存或最终旧链删除。VM/native独立预期、每个真实分配失败、准确状态、旧对象拒绝、producer寿命及物理释放分别验证。
 
@@ -8153,6 +8155,9 @@ NUL 验证具有独立的 SOURCE_INPUT 来源，不伪称 parser 回调。根文
 出生函数的 Source 对应关系通过真实特化映射及新 Lowered body/layout 与 Program 所拥有的 Input/Final 比对建立，不以 wire 摘要相同代替该接收证明。模块 lexical_scope、storage 和既有出生身份继续逐字段核验；函数、成员、ref、Task 的执行权限仍来自真实 Program/Instance/Call。
 
 此接收布局使用 Program ABI33；Value24/Call29 和 Checked30/semantic76 不变。旧 Program32 及更早前缀拒绝，不保留借用 Proof/layout reader 或兼容别名。SDK 的 Packet/ProgramSpec 真实布局由独立声明模型和宿主 C11 核验；完整旧 SDK 向量继续保存为拒例。全部复制、深读、比对、失败与寿命继续使用原累计账本及既有首错状态。
+
+
+共同Checked身份为wire30/semantic77：同时编码CTFE稠密分母、materialization/site/binding完整事实及Channel的十一条操作。Value29/Call33/Program35对应实际载荷、计时与拥有式Input布局，不为组合递增。完整旧30/75与28/76包在任何分配前拒绝，空及占用输出均保全；两侧独立字段构造器、历史字节与旧控制保留，不能以生产writer输出更新golden。名义权限必须从当前canonical pool实例读取，声明序号不能替代泛型实参或pool身份。C11策略和SDK身份使用同一30/77边界。
 
 ---
 

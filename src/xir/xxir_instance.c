@@ -706,7 +706,7 @@ static XrXirCallStatus instance_start(XrXirInstance *instance, uint32_t entry,
      * Alternate this generation's ledgers independently of that sequence. */
     uint32_t accounting_index = 1 - instance->accounting_index;
     config.accounting = &instance->accounting[accounting_index];
-    config.output = instance->config.output; config.admission = *admission;
+    config.output = instance->config.output; config.admission = *admission; config.time = instance->config.time;
     XrXirTaskExecutor *previous_replacement = NULL;
     if (previous != instance && previous->call && !root_instance->prepared_generation) {
         if (!xr_xir_task_executor_root_idle(previous->executor) ||

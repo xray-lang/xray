@@ -14,7 +14,7 @@ static bool source_iteration_binding(SourceContext *ctx, AstNode *node,
     if (source_text_same(ctx, NULL, name, "_")) return true;
     SourceName *symbol = source_alloc(ctx,1,sizeof(*symbol));
     if (!symbol) return false;
-    *symbol = (SourceName){.next=ctx->locals,.name=name,.parameters=NULL,.node=node,.kind=SOURCE_LOCAL,
+    *symbol = (SourceName){.next=ctx->locals,.name=name,.imported=NULL,.node=node,.kind=SOURCE_LOCAL,
             .index=value.id,.module=ctx->module,.type=value.type,.mutable=false,
             .construction=false,.declaration=0,.inferred=false,.checked_library=false};
     ctx->locals = symbol;

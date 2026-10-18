@@ -169,6 +169,14 @@ static const XrCliCommandSpec doctor_subcommands[] = {
      false, NULL, NULL, 0},
     {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
 
+#ifdef XR_HAS_MCP
+static const XrCliOptionSpec mcp_options[] = {
+    {"enable-runner", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Enable bounded source execution"},
+    {"log-level", 0, XR_CLI_VALUE_STRING, false, false, "LEVEL", "Logging: error, warn, info, debug"},
+    {"log-file", 0, XR_CLI_VALUE_STRING, false, false, "FILE", "Append diagnostics to this log file"},
+    XR_CLI_OPT_END};
+#endif
+
 /* ========== Top-level Command Table ========== */
 
 static XrCliCommandSpec cli_commands[] = {
@@ -183,6 +191,10 @@ static XrCliCommandSpec cli_commands[] = {
 #endif
     /* Artifact commands */
     {"build", "Compile to a native binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},
+
+#ifdef XR_HAS_MCP
+    {"mcp-server", "Serve Xray tools over stdio", NULL, mcp_options, 0, 0, false, false, NULL, NULL, 0},
+#endif
 
     /* Utility commands */
     {"deps", "Analyze source dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},

@@ -1,243 +1,238 @@
 /*
  * xray - Lightweight typed scripting with native concurrency
  * https://www.xray-lang.org
- *
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xmcp_tools_run.c - The xray_run sandbox tool (opt-in)
+ * xmcp_tools_run.c - Owned bounded execution for the opt-in MCP runner
  *
  * KEY CONCEPT:
- *   Runs a short Xray snippet inside a fresh isolate with stdout captured
- *   in memory (open_memstream on POSIX, tmpfile on Windows).  Quotas come
- *   from xmcp_tools_internal.h so the schema and the runner stay in sync;
- *   the import allowlist is intentionally narrow because the runner shares
- *   the MCP server's process and cannot give up netd / fs / cluster
- *   modules cleanly on timeout.
+ *   SourceProduct transfers genuine code to an owned Instance. Output never reaches
+ *   process descriptors. Whole-instance stop retires child waits before the
+ *   terminal outcome is copied and every producer owner is released.
  */
-
+#include "xmcp_json.h"
 #include "xmcp_tools_internal.h"
 #include "xmcp_server.h"
-#include "../../base/xjson.h"
+#include "xmcp_run_source.h"
 #include "../../base/xmalloc.h"
-#include "../../base/xchecks.h"
-#include "../../module/xmodule_identity.h"
-#include "../../runtime/xisolate_api.h"
-#include "xray_vm.h"
+#include "../../xir/xxir_program.h"
+#include "../../execution/xr_xir_host_cli.h"
+#include "../../execution/xr_xir_host_time.h"
+#include "../../xir/xxir_output.h"
+#include "../../os/os_time.h"
 #include <stdio.h>
 #include <string.h>
 
-/* Modules user snippets may import. Anything not on this list is rejected at
- * the module loader and surfaces inside the script as a runtime import
- * failure.  Pure data / formatting / regex modules only.  Networking
- * (`net`/`http`/`ws`), local I/O (`io`/`os`/`path`), cluster orchestration,
- * and dlopen-based packages are off the table because the MCP runner runs in
- * the same process as the server and cannot give them up cleanly on timeout.
- *
- * The implicit language core is installed before this allowlist is configured;
- * it is isolate state, not a module users can import. */
-static const char *const RUN_ALLOWED_MODULES[] = {
-    "math", "json", "string", "regex", "encoding", "base64", "url",   "datetime",
-    "time", "log",  "csv",    "toml",  "xml",      "yaml",   "types", "test_yield",
-};
-#define RUN_ALLOWED_MODULES_COUNT (sizeof(RUN_ALLOWED_MODULES) / sizeof(RUN_ALLOWED_MODULES[0]))
-
-/* In-memory stdout capture for xray_run.  Avoids touching /tmp on POSIX
- * (open_memstream backs the FILE* with a libc-allocated buffer) and falls
- * back to tmpfile() on Windows where open_memstream is not available. */
-typedef struct {
-    FILE *file;
-#ifndef XR_OS_WINDOWS
-    char *mem_buf;   /* libc-malloc'd, owned by open_memstream until fclose */
-    size_t mem_size; /* bytes flushed into mem_buf */
-#endif
-} XmcpRunCapture;
-
-static bool xmcp_run_capture_open(XmcpRunCapture *cap) {
-    XR_DCHECK(cap != NULL, "xmcp_run_capture_open: NULL cap");
-#ifdef XR_OS_WINDOWS
-    cap->file = tmpfile();
-    return cap->file != NULL;
-#else
-    cap->mem_buf = NULL;
-    cap->mem_size = 0;
-    cap->file = open_memstream(&cap->mem_buf, &cap->mem_size);
-    return cap->file != NULL;
-#endif
+typedef struct RunBytes { char *bytes; size_t used, limit; bool truncated; } RunBytes;
+typedef struct RunCapture { RunBytes out, error; } RunCapture;
+typedef struct RunExecution {
+    XrXirCallResult owned;
+    XrXirCallStatus status;
+    bool timed_out;
+} RunExecution;
+static bool bytes_open(RunBytes *buffer, size_t limit) {
+    buffer->bytes = xr_malloc(limit + 1);
+    if (!buffer->bytes) return false;
+    buffer->bytes[0] = 0; buffer->limit = limit;
+    return true;
 }
-
-/* Closes the capture and copies up to `limit` bytes into a freshly
- * xr_malloc'd, NUL-terminated buffer.  *out_size receives the byte count
- * before truncation; *out_truncated is set when the actual output exceeded
- * `limit`.  Caller owns the returned buffer. */
-static char *xmcp_run_capture_finish(XmcpRunCapture *cap, int64_t limit, int *out_size,
-                                     bool *out_truncated) {
-    XR_DCHECK(cap != NULL && cap->file != NULL, "xmcp_run_capture_finish: invalid cap");
-    XR_DCHECK(out_size != NULL && out_truncated != NULL,
-              "xmcp_run_capture_finish: NULL out params");
-    fflush(cap->file);
-#ifdef XR_OS_WINDOWS
-    long total = ftell(cap->file);
-    if (total < 0)
-        total = 0;
-    long copy = total > (long) limit ? (long) limit : total;
-    *out_truncated = total > copy;
-    char *buf = xr_malloc((size_t) copy + 1);
-    if (!buf) {
-        fclose(cap->file);
-        return NULL;
-    }
-    if (copy > 0) {
-        fseek(cap->file, 0, SEEK_SET);
-        size_t nread = fread(buf, 1, (size_t) copy, cap->file);
-        copy = (long) nread;
-    }
-    buf[copy] = '\0';
-    *out_size = (int) copy;
-    fclose(cap->file);
-    return buf;
-#else
-    size_t total = cap->mem_size;
-    size_t copy = total > (size_t) limit ? (size_t) limit : total;
-    *out_truncated = total > copy;
-    char *buf = xr_malloc(copy + 1);
-    if (!buf) {
-        fclose(cap->file);
-        free(cap->mem_buf); /* xr:allow-raw-alloc libc open_memstream */
-        return NULL;
-    }
-    if (copy > 0)
-        memcpy(buf, cap->mem_buf, copy);
-    buf[copy] = '\0';
-    *out_size = (int) copy;
-    fclose(cap->file);
-    free(cap->mem_buf); /* xr:allow-raw-alloc libc open_memstream */
-    return buf;
-#endif
+static void bytes_append(RunBytes *buffer, const char *bytes, size_t length) {
+    size_t remaining = buffer->limit - buffer->used;
+    size_t copy = length < remaining ? length : remaining;
+    if (copy) memcpy(buffer->bytes + buffer->used, bytes, copy);
+    buffer->used += copy; buffer->bytes[buffer->used] = 0;
+    if (length > copy) buffer->truncated = true;
 }
-
-/* Build the structured tool result described by xmcp_schema_run_output(). */
-static XrJsonValue *build_run_structured(bool ok, int exit_code, const char *stdout_text,
-                                         int output_bytes, bool timed_out, bool truncated) {
-    XrJsonValue *s = xjson_new_object();
-    XJSON_SET_BOOL(s, "ok", ok);
-    XJSON_SET_INT(s, "exitCode", exit_code);
-    xjson_object_set(s, "stdout", xjson_new_string(stdout_text ? stdout_text : ""));
-    XJSON_SET_BOOL(s, "timedOut", timed_out);
-    XJSON_SET_BOOL(s, "truncated", truncated);
-    XJSON_SET_INT(s, "outputBytes", output_bytes);
-    return s;
+static XrXirOutputStatus capture_write(void *context, XrXirOutputStream stream,
+    const char *bytes, size_t length) {
+    RunCapture *capture = context;
+    RunBytes *buffer = stream == XR_XIR_STDOUT ? &capture->out :
+        stream == XR_XIR_STDERR ? &capture->error : NULL;
+    if (!buffer || (length && !bytes)) return XR_XIR_OUTPUT_BAD_ARGUMENT;
+    bytes_append(buffer, bytes, length);
+    return XR_XIR_OUTPUT_OK;
 }
-
-XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContext *ctx,
-                                        XrJsonValue *arguments) {
-    XR_DCHECK(server != NULL, "xmcp_tool_xray_run: NULL server");
-    XR_DCHECK(ctx != NULL, "xmcp_tool_xray_run: NULL ctx");
-    XR_DCHECK(arguments != NULL, "xmcp_tool_xray_run: NULL arguments");
-    (void) server;
-    (void) ctx;
-
-    const char *code = xjson_get_string(arguments, "code");
-    if (!code || code[0] == '\0') {
-        XrJsonValue *structured = build_run_structured(false, -1, "", 0, false, false);
-        return xmcp_make_text_structured_result("Error: 'code' must not be empty", structured,
-                                                true);
+static int report_write(void *context, const void *bytes, size_t length) {
+    bytes_append(context, bytes, length); return 1;
+}
+static bool execution_stopped(const XmcpServer *server, uint64_t start, uint64_t duration,
+    RunExecution *execution) {
+    uint64_t now = xr_time_monotonic_ns();
+    if (!now || now < start) { execution->status = XR_XIR_CALL_HOST_ERROR; return true; }
+    if (now - start >= duration) { execution->timed_out = true; return true; }
+    if (server->shutdown) { execution->status = XR_XIR_CALL_CANCELLED; return true; }
+    return false;
+}
+static XrXirCallStatus resume_wait(XrXirInstance *instance, XrXirInstanceResult observed,
+    const XmcpServer *server, uint64_t start, uint64_t duration, RunExecution *execution) {
+    XrXirWaitRequest request = {0}; XrXirHostWait wait = {0};
+    XrXirCallStatus status = xr_xir_instance_wait_request(instance, observed.epoch,
+        observed.outcome.wake, &request);
+    if (status != XR_XIR_CALL_READY) return status;
+    if (request.kind == XR_XIR_WAIT_CHANNEL) {
+        /* Channel completion belongs to the authenticated executor. A host
+         * wake cannot resume it; polling only observes a real queue event.
+         * Keep the original whole-request deadline while yielding the CPU. */
+        if (execution_stopped(server, start, duration, execution)) return XR_XIR_CALL_CANCEL_REQUESTED;
+        xr_time_sleep_ns(UINT64_C(1000000));
+        return execution_stopped(server, start, duration, execution) ?
+            XR_XIR_CALL_CANCEL_REQUESTED : XR_XIR_CALL_READY;
     }
-    const char *module_id = xjson_get_string(arguments, "moduleId");
-    XrModuleIdentityAuthority authority = {
-        .kind = XR_MODULE_IDENTITY_MEMORY,
-        .namespace_id = module_id,
-    };
-    if (!xr_module_identity_authority_valid(&authority)) {
-        XrJsonValue *structured = build_run_structured(false, -1, "", 0, false, false);
-        return xmcp_make_text_structured_result(
-            "Error: 'moduleId' must be an explicit valid memory-module identity", structured, true);
+    XrXirHostWaitStatus waiting = xr_xir_host_wait_begin(&wait, &request);
+    while (waiting == XR_XIR_HOST_WAIT_PENDING) {
+        if (execution_stopped(server, start, duration, execution)) return XR_XIR_CALL_CANCEL_REQUESTED;
+        waiting = xr_xir_host_wait_poll(&wait, UINT64_C(1000000));
     }
-
-    /* Resolve quotas. Negative / zero / oversized values fall back to the
-     * default rather than getting silently clamped to a confusing minimum. */
-    int64_t timeout_ms =
-        xjson_get_int_or(arguments, "timeoutMs", XMCP_TOOLS_RUN_TIMEOUT_DEFAULT_MS);
-    if (timeout_ms <= 0)
-        timeout_ms = XMCP_TOOLS_RUN_TIMEOUT_DEFAULT_MS;
-    if (timeout_ms > XMCP_TOOLS_RUN_TIMEOUT_HARD_MAX_MS)
-        timeout_ms = XMCP_TOOLS_RUN_TIMEOUT_HARD_MAX_MS;
-
-    int64_t output_limit =
-        xjson_get_int_or(arguments, "outputLimit", XMCP_TOOLS_RUN_OUTPUT_DEFAULT);
-    if (output_limit <= 0)
-        output_limit = XMCP_TOOLS_RUN_OUTPUT_DEFAULT;
-    if (output_limit > XMCP_TOOLS_RUN_OUTPUT_HARD_MAX)
-        output_limit = XMCP_TOOLS_RUN_OUTPUT_HARD_MAX;
-
-    /* Per-call in-memory stdout capture; written to via
-     * xr_isolate_set_stdout() so we never touch the process-wide fd 1
-     * (which is the MCP transport) or the filesystem. */
-    XmcpRunCapture capture;
-    if (!xmcp_run_capture_open(&capture)) {
-        XrJsonValue *structured = build_run_structured(false, -1, "", 0, false, false);
-        return xmcp_make_text_structured_result("Error: failed to create capture buffer",
-                                                structured, true);
+    return waiting == XR_XIR_HOST_WAIT_DUE ?
+        xr_xir_instance_resume(instance, observed.epoch, observed.outcome.wake) : XR_XIR_CALL_HOST_ERROR;
+}
+static XrXirCallStatus run_copy_status(XrXirValueStatus status) {
+    switch (status) {
+    case XR_XIR_VALUE_OK: return XR_XIR_CALL_READY;
+    case XR_XIR_VALUE_OOM: return XR_XIR_CALL_OOM;
+    case XR_XIR_VALUE_LIMIT:
+    case XR_XIR_VALUE_REFCOUNT_LIMIT: return XR_XIR_CALL_LIMIT;
+    default: return XR_XIR_CALL_BAD_ARGUMENT;
     }
-
-    XrVMConfig params = {0};
-    XrVMRuntime *iso = xray_vm_new_full(&params);
-    if (!iso) {
-        int dummy_size = 0;
-        bool dummy_trunc = false;
-        char *junk = xmcp_run_capture_finish(&capture, 0, &dummy_size, &dummy_trunc);
-        xr_free(junk);
-        XrJsonValue *structured = build_run_structured(false, -1, "", 0, false, false);
-        return xmcp_make_text_structured_result("Error: failed to create isolate", structured,
-                                                true);
+}
+static RunExecution execute_program(XrXirProgram *program, uint32_t entry, RunCapture *capture,
+    const XmcpServer *server, uint64_t start, uint64_t duration) {
+    RunExecution execution = {0};
+    XrXirInstanceConfig config;
+    execution.status = xr_xir_instance_config_init(&config, sizeof(config));
+    if (execution.status != XR_XIR_CALL_READY) return execution;
+    XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, capture_write, capture, (size_t)config.value_limit};
+    config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};
+    xr_xir_host_time_provider(&config.time);
+    XrXirInstance *instance = NULL;
+    execution.status = xr_xir_instance_new(program, &config, &instance);
+    if (execution.status == XR_XIR_CALL_READY)
+        execution.status = xr_xir_instance_start(instance, entry, NULL, 0);
+    if (execution.status != XR_XIR_CALL_READY) {
+        XrXirCallStatus cleanup = xr_xir_instance_free(instance);
+        if (cleanup != XR_XIR_CALL_READY) execution.status = cleanup;
+        return execution;
     }
-
-    /* Sandbox configuration. The allowlist applies only to user imports;
-     * implicit language-core installation already ran in xray_vm_new_full(). */
-    xr_isolate_set_stdout(iso, capture.file);
-    xr_isolate_set_module_allowlist(iso, RUN_ALLOWED_MODULES, RUN_ALLOWED_MODULES_COUNT);
-    xr_isolate_set_deadline_ms(iso, timeout_ms);
-
-    /* No multicore runtime: xr_execute() falls back to the in-place
-     * interpreter, which (since the VM back-edge fallback) keeps refilling
-     * reductions instead of yielding to a non-existent scheduler. The
-     * wall-clock deadline above remains the sole termination guarantee for
-     * tight loops. Skipping the runtime saves the per-call thread spin-up. */
-    int exec_result = xr_isolate_dostring(iso, code, &authority);
-    bool timed_out = xr_isolate_timed_out(iso);
-
-    xray_vm_delete(iso);
-
-    int output_bytes = 0;
-    bool truncated = false;
-    char *output = xmcp_run_capture_finish(&capture, output_limit, &output_bytes, &truncated);
-    if (!output) {
-        XrJsonValue *structured = build_run_structured(false, -1, "", 0, timed_out, truncated);
-        return xmcp_make_text_structured_result("Error: out of memory", structured, true);
+    /* A started owner can publish a real terminal cancellation even when
+     * compilation spent the deadline. Stop before polling any user code. */
+    XrXirInstanceResult observed = {0};
+    bool cancelling = execution_stopped(server, start, duration, &execution);
+    for (;;) {
+        if (cancelling) {
+            /* This request owns the entire instance; retire every child wait. */
+            XrXirCallStatus stopped = xr_xir_instance_stop(instance);
+            observed = xr_xir_instance_poll_bounded(instance, 256);
+            if (stopped != XR_XIR_CALL_READY &&
+                (observed.outcome.status == XR_XIR_CALL_READY ||
+                 observed.outcome.status == XR_XIR_CALL_SUSPENDED)) execution.status = stopped;
+            break;
+        }
+        observed = xr_xir_instance_poll_bounded(instance, 256);
+        if (observed.outcome.status != XR_XIR_CALL_READY && observed.outcome.status != XR_XIR_CALL_SUSPENDED) break;
+        cancelling = execution_stopped(server, start, duration, &execution);
+        if (!cancelling && observed.outcome.status == XR_XIR_CALL_SUSPENDED) {
+            XrXirCallStatus resumed = resume_wait(instance, observed, server, start, duration, &execution);
+            if (resumed != XR_XIR_CALL_READY) {
+                if (resumed != XR_XIR_CALL_CANCEL_REQUESTED) execution.status = resumed;
+                cancelling = true;
+            }
+        }
     }
-
-    bool ok = (exec_result == 0) && !timed_out;
-    XrJsonValue *structured =
-        build_run_structured(ok, exec_result, output, output_bytes, timed_out, truncated);
-
-    /* Compose a text summary so plain-text MCP clients see the outcome. */
-    char summary[1024];
-    if (timed_out) {
-        snprintf(summary, sizeof(summary), "[timed out after %lldms] %s%s%d byte%s captured%s",
-                 (long long) timeout_ms, output_bytes > 0 ? "\n" : "",
-                 output_bytes > 0 ? output : "", output_bytes, output_bytes == 1 ? "" : "s",
-                 truncated ? " (truncated)" : "");
-    } else if (exec_result != 0) {
-        snprintf(summary, sizeof(summary), "[exit code %d] %s%s%s", exec_result,
-                 output_bytes > 0 ? "\n" : "", output_bytes > 0 ? output : "",
-                 truncated ? "\n(truncated)" : "");
-    } else if (output_bytes == 0) {
-        snprintf(summary, sizeof(summary), "(no output)");
-    } else {
-        snprintf(summary, sizeof(summary), "%s%s", output, truncated ? "\n(truncated)" : "");
+    XrXirCallStatus taken = XR_XIR_CALL_BAD_STATE;
+    if (observed.outcome.status != XR_XIR_CALL_READY && observed.outcome.status != XR_XIR_CALL_SUSPENDED) {
+        taken = run_copy_status(xr_xir_call_result_copy(&observed.outcome, &execution.owned));
+        if (taken == XR_XIR_CALL_READY) taken = execution.owned.status;
     }
-
+    if (execution.status == XR_XIR_CALL_READY) execution.status = taken;
+    XrXirCallStatus cleanup = xr_xir_instance_free(instance);
+    if (cleanup != XR_XIR_CALL_READY) {
+        xr_xir_call_result_drop(&execution.owned); execution.status = cleanup;
+    }
+    return execution;
+}
+static XrJsonValue *run_result(bool ok, int exit_code, const RunCapture *capture,
+    const RunExecution *execution, XrXirStatus source_status, const char *summary) {
+    XrJsonValue *structured = xjson_new_object();
+    XMCP_JSON_BOOL(structured, "ok", ok); XMCP_JSON_INT(structured, "exitCode", exit_code);
+    const RunBytes *out = &capture->out, *error = &capture->error;
+    xmcp_json_set(structured, "stdout", xjson_new_string_n(out->bytes ? out->bytes : "", out->used));
+    xmcp_json_set(structured, "stderr", xjson_new_string_n(error->bytes ? error->bytes : "", error->used));
+    XMCP_JSON_BOOL(structured, "timedOut", execution->timed_out);
+    XMCP_JSON_BOOL(structured, "truncated", out->truncated);
+    XMCP_JSON_BOOL(structured, "stderrTruncated", error->truncated);
+    XMCP_JSON_INT(structured, "outputBytes", (int64_t)out->used);
+    XMCP_JSON_INT(structured, "sourceStatus", source_status);
+    XMCP_JSON_INT(structured, "runtimeStatus", execution->status);
     XrJsonValue *result = xmcp_make_text_structured_result(summary, structured, !ok);
-    xr_free(output);
-    return result;
+    if (ok && out->used) {
+        XrJsonValue *item = xjson_array_get(xjson_get_array(result, "content"), 0);
+        xmcp_json_set(item, "text", xjson_new_string_n(out->bytes, out->used));
+    }
+    return xmcp_json_finish(result);
+}
+XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContext *ctx,
+    XrJsonValue *arguments) {
+    if (!server || !ctx || !arguments) return NULL;
+    RunCapture capture = {0}; RunExecution execution = {0};
+    XrXirStatus status = XR_XIR_BAD_STRUCTURE;
+    char summary[384] = "Error: 'code' must not be empty";
+    XrJsonValue *code = xjson_get(arguments, "code"), *identity = xjson_get(arguments, "moduleId");
+    if (!xjson_is_string(code) || !code->string_len) goto publish;
+    snprintf(summary, sizeof(summary), "Error: 'moduleId' must be an explicit valid memory-module identity");
+    if (!xjson_is_string(identity) || memchr(identity->as.string, 0, identity->string_len)) goto publish;
+    XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, identity->as.string, NULL};
+    if (!xr_module_identity_authority_valid(&authority)) goto publish;
+    int64_t timeout = xjson_get_int_or(arguments, "timeoutMs", XMCP_TOOLS_RUN_TIMEOUT_DEFAULT_MS);
+    if (timeout <= 0) timeout = XMCP_TOOLS_RUN_TIMEOUT_DEFAULT_MS;
+    if (timeout > XMCP_TOOLS_RUN_TIMEOUT_HARD_MAX_MS) timeout = XMCP_TOOLS_RUN_TIMEOUT_HARD_MAX_MS;
+    int64_t limit = xjson_get_int_or(arguments, "outputLimit", XMCP_TOOLS_RUN_OUTPUT_DEFAULT);
+    if (limit <= 0) limit = XMCP_TOOLS_RUN_OUTPUT_DEFAULT;
+    if (limit > XMCP_TOOLS_RUN_OUTPUT_HARD_MAX) limit = XMCP_TOOLS_RUN_OUTPUT_HARD_MAX;
+    snprintf(summary, sizeof(summary), "Error: out of memory capturing output");
+    if (!bytes_open(&capture.out, (size_t)limit) || !bytes_open(&capture.error, (size_t)limit)) {
+        status = XR_XIR_OUT_OF_MEMORY; goto publish;
+    }
+    uint64_t start = xr_time_monotonic_ns();
+    if (!start) {
+        execution.status = XR_XIR_CALL_HOST_ERROR;
+        snprintf(summary, sizeof(summary), "Error: monotonic host clock failed"); goto publish;
+    }
+    XrXirCompileContext context = {NULL, xr_xir_compile_default_limits()};
+    XrCompileResourceLimits limits = xmcp_source_default_limits();
+    XrCompileResourceStatus created = xr_compile_resources_new(&limits, &context.resources);
+    status = created == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
+        created == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
+    XmcpSourceRequest request = {code->as.string, code->string_len, identity->as.string, &context};
+    XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
+    XrXirProgram *program = NULL; uint32_t entry = 0;
+    if (status == XR_XIR_OK) status = xmcp_run_source_product(&request, &product, &diagnostic);
+    if (status == XR_XIR_OK) {
+        entry = xr_xir_compile_source_product_facts(product)->entry;
+        status = xr_xir_compile_source_product_vm_take(product, &program);
+    }
+    snprintf(summary, sizeof(summary), "Source failure (%d) at %d:%d: %s", status,
+        diagnostic.source.line, diagnostic.source.column, diagnostic.source.message);
+    xr_xir_compile_source_product_diagnostic_free(&diagnostic);
+    xr_xir_compile_source_product_free(product); xr_compile_resources_release(context.resources);
+    if (status == XR_XIR_OK) execution = execute_program(program, entry, &capture, server, start,
+        (uint64_t)timeout * UINT64_C(1000000));
+    xr_xir_compile_program_drop(program);
+    if (status == XR_XIR_OK) {
+        if (execution.owned.status == XR_XIR_CALL_THROWN || xr_xir_call_panic_status(execution.owned.status)) {
+            XrValueFormatSink sink = {&capture.error, report_write};
+            if (xr_xir_host_report_result(&execution.owned, sink, false) != XR_XIR_HOST_REPORT_OK)
+                execution.status = XR_XIR_CALL_HOST_ERROR;
+        }
+        if (execution.timed_out) snprintf(summary, sizeof(summary), "Execution timed out after %lldms",
+            (long long)timeout);
+        else snprintf(summary, sizeof(summary), "Execution status %d; %zu stdout bytes captured%s",
+            execution.status, capture.out.used, capture.out.truncated ? " (truncated)" : "");
+    }
+    xr_xir_call_result_drop(&execution.owned);
+publish:;
+    bool ok = status == XR_XIR_OK && execution.status == XR_XIR_CALL_RETURNED && !execution.timed_out;
+    XrJsonValue *result = run_result(ok, ok ? 0 : -1, &capture, &execution, status, summary);
+    xr_free(capture.out.bytes); xr_free(capture.error.bytes);
+    return xmcp_json_finish(result);
 }

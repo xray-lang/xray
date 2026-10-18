@@ -16,6 +16,7 @@
  *   - write-test: generate tests for Xray code
  */
 
+#include "xmcp_json.h"
 #include "xmcp_prompts.h"
 #include "xmcp_protocol.h"
 #include "xmcp_server.h"
@@ -145,7 +146,7 @@ static const char WRITE_TEST_SYSTEM[] =
  * prompts/list handler
  * -------------------------------------------------------------------------- */
 
-XrJsonValue *xmcp_handle_prompts_list(XmcpServer *server, XmcpRpcError *error) {
+XR_FUNC XrJsonValue *xmcp_handle_prompts_list(XmcpServer *server, XmcpRpcError *error) {
     XR_DCHECK(server != NULL, "xmcp_handle_prompts_list: NULL server");
     (void) error;
     XrJsonValue *result = xjson_new_object();
@@ -154,26 +155,26 @@ XrJsonValue *xmcp_handle_prompts_list(XmcpServer *server, XmcpRpcError *error) {
     for (size_t i = 0; i < server->registry.prompt_count; i++) {
         const XmcpPromptDef *p = xmcp_registry_prompt_at(&server->registry, i);
         XrJsonValue *prompt = xjson_new_object();
-        XJSON_SET_STRING(prompt, "name", p->name);
-        XJSON_SET_STRING(prompt, "description", p->description);
+        XMCP_JSON_STRING(prompt, "name", p->name);
+        XMCP_JSON_STRING(prompt, "description", p->description);
 
         if (p->arg_count > 0) {
             XrJsonValue *args = xjson_new_array();
             for (int j = 0; j < p->arg_count; j++) {
                 XrJsonValue *arg = xjson_new_object();
-                XJSON_SET_STRING(arg, "name", p->args[j].name);
-                XJSON_SET_STRING(arg, "description", p->args[j].description);
-                XJSON_SET_BOOL(arg, "required", p->args[j].required);
-                xjson_array_push(args, arg);
+                XMCP_JSON_STRING(arg, "name", p->args[j].name);
+                XMCP_JSON_STRING(arg, "description", p->args[j].description);
+                XMCP_JSON_BOOL(arg, "required", p->args[j].required);
+                xmcp_json_push(args, arg);
             }
-            xjson_object_set(prompt, "arguments", args);
+            xmcp_json_set(prompt, "arguments", args);
         }
 
-        xjson_array_push(prompts, prompt);
+        xmcp_json_push(prompts, prompt);
     }
 
-    xjson_object_set(result, "prompts", prompts);
-    return result;
+    xmcp_json_set(result, "prompts", prompts);
+    return xmcp_json_finish(result);
 }
 
 /* --------------------------------------------------------------------------
@@ -193,7 +194,7 @@ static XrJsonValue *build_prompt_messages(const char *system_text, const char *u
     size_t user_len = strlen(user_text);
     size_t total = preamble_len + system_len + 2 /* \n\n */ + user_len + 1;
     char *combined = xr_malloc(total);
-    XR_DCHECK(combined != NULL, "build_prompt_messages: allocation failed");
+    if (!combined) { xmcp_json_fail(); return NULL; }
 
     XrJsonValue *messages = xjson_new_array();
     if (combined) {
@@ -205,21 +206,21 @@ static XrJsonValue *build_prompt_messages(const char *system_text, const char *u
         combined[total - 1] = '\0';
 
         XrJsonValue *msg = xjson_new_object();
-        XJSON_SET_STRING(msg, "role", "user");
+        XMCP_JSON_STRING(msg, "role", "user");
         XrJsonValue *content = xjson_new_object();
-        XJSON_SET_STRING(content, "type", "text");
-        xjson_object_set(content, "text", xjson_new_string(combined));
+        XMCP_JSON_STRING(content, "type", "text");
+        xmcp_json_set(content, "text", xjson_new_string(combined));
         XrJsonValue *arr = xjson_new_array();
-        xjson_array_push(arr, content);
-        xjson_object_set(msg, "content", arr);
-        xjson_array_push(messages, msg);
+        xmcp_json_push(arr, content);
+        xmcp_json_set(msg, "content", arr);
+        xmcp_json_push(messages, msg);
         xr_free(combined);
     }
 
-    return messages;
+    return xmcp_json_finish(messages);
 }
 
-XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params, XmcpRpcError *error) {
+XR_FUNC XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params, XmcpRpcError *error) {
     XR_DCHECK(server != NULL, "xmcp_handle_prompts_get: NULL server");
     XR_DCHECK(error != NULL, "xmcp_handle_prompts_get: NULL error");
 
@@ -288,8 +289,8 @@ XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params, Xm
     /* Build result */
     XrJsonValue *result = xjson_new_object();
 
-    XJSON_SET_STRING(result, "description", prompt->description);
+    XMCP_JSON_STRING(result, "description", prompt->description);
 
-    xjson_object_set(result, "messages", build_prompt_messages(system_text, user_arg));
-    return result;
+    xmcp_json_set(result, "messages", build_prompt_messages(system_text, user_arg));
+    return xmcp_json_finish(result);
 }

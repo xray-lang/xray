@@ -132,6 +132,7 @@ typedef struct SourceContext {
     uint32_t prelude_module; /* One-based actual graph index, zero when unused. */
     uint32_t atomic_module, atomic_declaration, atomic_members[10];
     uint32_t task_module, task_declaration;
+    uint32_t channel_module, channel_declaration, channel_members[10];
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
     uint32_t string_module, string_declaration, string_members[5];
 } SourceContext;
