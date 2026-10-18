@@ -1,4 +1,4 @@
-class Identity{value:i64;constructor(value:i64){this.value=value}}
+class Identity{value:i64;init(value:i64){this.value=value}}
 struct Node{children:Array<Node>;identity:Identity}
 fn factory()->Node{return Node{children:[],identity:Identity(42)}}
 fn eval()->i64{const node=factory();return node.identity.value}

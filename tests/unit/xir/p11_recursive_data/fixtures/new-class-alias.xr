@@ -1,4 +1,4 @@
-class Box{items:Array<(i64,i64)>;constructor(items:Array<(i64,i64)>){this.items=items}}
+class Box{items:Array<(i64,i64)>;init(items:Array<(i64,i64)>){this.items=items}}
 fn grow(items:ref Array<Box>){for(var i=0;i<8;i++){items.push(Box([]))};const first=items[0];first.items.push((20,22))}
 fn eval()->i64{var nested:Array<Array<Box>>=[[]];const before=nested;grow(ref nested[0]);return nested[0][0].items[0].0+nested[0][0].items[0].1+len(before[0])}
 export fn answer()->i64{return comptime eval()}

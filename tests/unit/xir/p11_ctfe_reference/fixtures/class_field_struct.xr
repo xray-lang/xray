@@ -1,4 +1,4 @@
 struct Pair{a:i64;b:i64}
-class Box{pair:Pair;constructor(pair:Pair){this.pair=pair}}
+class Box{pair:Pair;init(pair:Pair){this.pair=pair}}
 fn answer()->i64{const b=Box(Pair{a:40,b:0});b.pair.b=2;return b.pair.a+b.pair.b}
 export fn run()->i64{return comptime answer()}

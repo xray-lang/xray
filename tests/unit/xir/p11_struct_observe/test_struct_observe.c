@@ -55,7 +55,7 @@ static void execute(XrXirArtifact **lowered) {
 static void job_new(ObserveJob *job) {
     *job=(ObserveJob){0};CHECK(xr_compile_resources_new(&caps,&job->context.resources)==XR_COMPILE_RESOURCE_OK);
     job->context.limits=xr_xir_compile_default_limits();
-    static const char text[]="class Box{value:i64;constructor(value:i64){this.value=value}}\n"
+    static const char text[]="class Box{value:i64;init(value:i64){this.value=value}}\n"
         "struct Wrap{item:Box;label:string}\nexport fn run()->i64{const w=Wrap{item:Box(42),label:\"ab\"};return w.item.value}\n";
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(job->context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"struct-observe",NULL};

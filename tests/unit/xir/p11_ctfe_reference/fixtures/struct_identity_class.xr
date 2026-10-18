@@ -1,4 +1,4 @@
-class Box{value:i64;constructor(value:i64){this.value=value}}
+class Box{value:i64;init(value:i64){this.value=value}}
 struct Wrap{item:Box}
 fn answer()->i64{const w=Wrap{item:Box(42)};return w.item.value}
 export fn run()->i64{return comptime answer()}

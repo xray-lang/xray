@@ -1,3 +1,3 @@
-class Box{items:Array<i64>;constructor(items:Array<i64>){this.items=items}}
+class Box{items:Array<i64>;init(items:Array<i64>){this.items=items}}
 fn answer()->i64{const b=Box([40]);b.items[0]=b.items[0]+2;return b.items[0]}
 export fn run()->i64{return comptime answer()}

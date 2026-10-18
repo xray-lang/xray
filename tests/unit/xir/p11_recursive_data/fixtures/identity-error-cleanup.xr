@@ -1,5 +1,5 @@
 enum E{Bad}
-class Box{items:Array<(i64,i64)>;constructor(items:Array<(i64,i64)>){this.items=items}}
+class Box{items:Array<(i64,i64)>;init(items:Array<(i64,i64)>){this.items=items}}
 struct Wrap{item:Box;number:i64}
 fn fail(number:ref i64,box:Box){defer{number+=1};box.items.push((20,22));throw E.Bad}
 fn outer(number:ref i64,box:Box){try{fail(ref number,box)}catch(e:E){number+=1}}

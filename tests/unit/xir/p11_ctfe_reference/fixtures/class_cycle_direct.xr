@@ -1,3 +1,3 @@
-class Node{value:i64;next:Node?;constructor(value:i64,next:Node?){this.value=value;this.next=next}}
+class Node{value:i64;next:Node?;init(value:i64,next:Node?){this.value=value;this.next=next}}
 fn unhandled()->i64{const a=Node(40,null);const b=Node(2,a);a.next=b;return a.value}
 export fn run()->i64{return 42}

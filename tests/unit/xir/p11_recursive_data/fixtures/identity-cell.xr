@@ -1,6 +1,6 @@
 class Identity{
     values:Array<i64>;
-    constructor(){this.values=[40]}
+    init(){this.values=[40]}
 }
 struct Box{identity:Identity;value:i64}
 fn assign(value:ref i64,identity:Identity){

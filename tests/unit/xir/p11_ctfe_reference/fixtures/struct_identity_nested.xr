@@ -1,4 +1,4 @@
-class Box{value:i64;constructor(value:i64){this.value=value}}
+class Box{value:i64;init(value:i64){this.value=value}}
 struct Inner{item:Box}
 struct Outer{inner:Inner}
 fn answer()->i64{const w=Outer{inner:Inner{item:Box(42)}};return w.inner.item.value}

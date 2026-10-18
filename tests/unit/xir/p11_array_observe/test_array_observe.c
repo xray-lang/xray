@@ -39,7 +39,7 @@ static XrXirValueAdmission admission(const ObserveJob *job) {
 static void job_new(ObserveJob *job) {
     *job=(ObserveJob){0};CHECK(xr_compile_resources_new(&limits,&job->context.resources)==XR_COMPILE_RESOURCE_OK);
     job->context.limits=xr_xir_compile_default_limits();
-    static const char text[]="class Box{value:i64;constructor(value:i64){this.value=value}}\nexport fn run()->i64{const xs:Array<Box?>=[Box(40),null];return (xs[0]??Box(0)).value+2}\n";
+    static const char text[]="class Box{value:i64;init(value:i64){this.value=value}}\nexport fn run()->i64{const xs:Array<Box?>=[Box(40),null];return (xs[0]??Box(0)).value+2}\n";
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(job->context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"array-observe",NULL};
     XrXirSourceRequest request={session,NULL,&authority,&job->context,NULL,NULL,XR_XIR_PROGRAM,NULL};

@@ -1,4 +1,4 @@
-class Box{items:Array<Box>;constructor(items:Array<Box>){this.items=items}}
+class Box{items:Array<Box>;init(items:Array<Box>){this.items=items}}
 fn poison(items:ref Array<Box>,box:Box){items.push(box)}
 fn eval()->i64{const box=Box([]);poison(ref box.items,box);return 42}
 export fn answer()->i64{return comptime eval()}

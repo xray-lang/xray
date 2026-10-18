@@ -34,24 +34,24 @@ static const char source_comptime_output_text[]=
     "fn pair_constant()->(i64,i64){return comptime pair()}\n"
     "export fn run()->i64{return comptime {const xs=table_constant();const p=pair_constant();xs[9] as i64+p.0+p.1-34}}\n";
 static const char source_comptime_class_text[]=
-    "class Box{items:Array<i64>;constructor(items:Array<i64>){this.items=items}}\n"
+    "class Box{items:Array<i64>;init(items:Array<i64>){this.items=items}}\n"
     "fn inc(x:ref i64){defer{x=x+2}}\n"
     "fn answer()->i64{const b=Box([40]);inc(ref b.items[0]);return b.items[0]}\n"
     "export fn run()->i64{return comptime answer()}\n";
 static const char source_comptime_dynamic_loan_text[]=
-    "class Box{items:Array<(i64,i64)>;constructor(items:Array<(i64,i64)>){this.items=items}}\n"
+    "class Box{items:Array<(i64,i64)>;init(items:Array<(i64,i64)>){this.items=items}}\n"
     "fn add(xs:ref Array<(i64,i64)>){xs.push((1,1))}\n"
     "fn middle(xs:ref Array<(i64,i64)>){add(ref xs);xs[1]=(20,20);add(ref xs)}\n"
     "fn answer()->i64{const b=Box([(0,0)]);middle(ref b.items);return b.items[1].0+b.items[1].1+b.items[2].0+b.items[2].1}\n"
     "export fn run()->i64{return comptime answer()}\n";
 static const char source_comptime_inactive_loan_text[]=
-    "class Box{items:Array<(i64,i64)>;next:Box?;constructor(items:Array<(i64,i64)>,next:Box?){this.items=items;this.next=next}}\n"
+    "class Box{items:Array<(i64,i64)>;next:Box?;init(items:Array<(i64,i64)>,next:Box?){this.items=items;this.next=next}}\n"
     "fn add(xs:ref Array<(i64,i64)>){xs.push((1,1))}\n"
     "fn middle(xs:ref Array<(i64,i64)>){add(ref xs);xs[1]=(20,20);add(ref xs)}\n"
     "fn answer()->i64{const b=Box([(0,0)],null);middle(ref b.items);return b.items[1].0+b.items[1].1+b.items[2].0+b.items[2].1}\n"
     "export fn run()->i64{return comptime answer()}\n";
 static const char source_comptime_array_identity_text[]=
-    "class Box{value:i64;constructor(value:i64){this.value=value}}\n"
+    "class Box{value:i64;init(value:i64){this.value=value}}\n"
     "fn grow(xs:ref Array<Box>){xs.push(Box(41));xs[0]=Box(1)}\n"
     "fn answer()->i64{var xs=[Box(0)];grow(ref xs);return xs[0].value+xs[1].value}\n"
     "export fn run()->i64{return comptime answer()}\n";
@@ -60,7 +60,7 @@ static const char source_comptime_ref_closure_text[]=
     "const f:fn(ref i64)->i64=fn(value)->i64{value+=n;defer{value+=2};return value};f(ref x);return x}\n"
     "export fn run()->i64{return comptime answer()}\n";
 static const char source_comptime_struct_identity_text[]=
-    "class Box{value:i64;constructor(value:i64){this.value=value}}\n"
+    "class Box{value:i64;init(value:i64){this.value=value}}\n"
     "struct Wrap{item:Box;label:string}\n"
     "fn replace(value:ref Wrap){value=Wrap{item:Box(0),label:\"changed\"}}\n"
     "fn own()->string{var w=Wrap{item:Box(42),label:\"ab\"};defer{replace(ref w)};return w.label}\n"

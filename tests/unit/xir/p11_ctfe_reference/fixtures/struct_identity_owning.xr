@@ -1,4 +1,4 @@
-class Box{value:i64;constructor(value:i64){this.value=value}}
+class Box{value:i64;init(value:i64){this.value=value}}
 struct Wrap{item:Box;label:string}
 fn replace(value:ref Wrap){value=Wrap{item:Box(0),label:"changed"}}
 fn own()->string{var w=Wrap{item:Box(42),label:"ab"};defer{replace(ref w)};return w.label}

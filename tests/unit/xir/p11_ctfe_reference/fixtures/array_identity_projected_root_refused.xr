@@ -1,4 +1,4 @@
-class Box{items:Array<(i64,i64)>;constructor(items:Array<(i64,i64)>){this.items=items}}
+class Box{items:Array<(i64,i64)>;init(items:Array<(i64,i64)>){this.items=items}}
 fn change(xs:ref Array<Box>,b:Box)->i64{b.items.push((20,22));return xs[0].items[1].0+xs[0].items[1].1}
 fn answer()->i64{const b=Box([(0,0)]);var nested=[[b]];return change(ref nested[0],b)}
 export fn run()->i64{return comptime answer()}
