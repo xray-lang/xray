@@ -16,9 +16,9 @@ XR_FUNC XrXirStatus xr_xir_compile_source_comptime_instances(const XirSourceComp
         return XR_XIR_BAD_STRUCTURE;
     }
     XirSourceComptimeInstances result={0};SourceComptimeInstancesOperation operation={request,&result};
-    SourceInput input={.supplied=request->text!=NULL,.text=request->text?*request->text:(XrXirSourceText){0},.overlays=request->overlays,.overlay_count=request->overlay_count};
+    SourceInput input={.supplied=request->text!=NULL,.text=request->text?*request->text:(XrXirSourceText){0},.overlays=request->overlays,.overlay_count=request->overlay_count,.comptime_instances=&operation};
     XrXirSourceResult ignored={0};
-    XrXirStatus status=source_check_input(request->source,input,&ignored,diagnostic,NULL,NULL,&operation);
+    XrXirStatus status=source_check_input(request->source,input,&ignored,diagnostic,NULL);
     if (status==XR_XIR_OK && !xir_compile_work(request->source->context,sizeof(*output))) status=XR_XIR_BUDGET;
     if (status!=XR_XIR_OK) {
         xr_xir_compile_source_comptime_instances_free(&result);
