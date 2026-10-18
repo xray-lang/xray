@@ -1387,7 +1387,9 @@ static XrXirCallStatus instance_slot_copy(XrXirCallView *view,XrXirInstance *ins
 }
 XR_FUNC XrXirCallStatus xr_xir_instance_slot_read(XrXirCallView *view,uint32_t slot,XrXirValue *output) {
     if (!instance_view_current(view)) return XR_XIR_CALL_BAD_ARGUMENT;
-    return instance_slot_copy(view,view_instance(view),xr_xir_call_current_entry(view->activation),slot,output);
+    XrXirInstance *instance=view_instance(view);
+    if (!instance) return XR_XIR_CALL_BAD_STATE;
+    return instance_slot_copy(view,instance,xr_xir_call_current_entry(view->activation),slot,output);
 }
 XR_FUNC XrXirCallStatus xir_instance_observe_slot(XrXirCallView *view,uint64_t frame,uint32_t slot,XrXirValue *output) {
     XrXirInstance *instance=NULL;XrXirCallStatus status=instance_class_view(view,&instance);

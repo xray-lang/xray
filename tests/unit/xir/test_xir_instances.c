@@ -605,7 +605,19 @@ static void function_compiler_faults(void) {
     }
     printf("callable metadata compiler OOM sites=%zu; no lease publication\n", sites);
 }
-int main(void) {
+static void invalid_slot_views(void) {
+    XrXirCallView empty={0};
+    XrXirValue output={XR_XIR_I64,0,73};
+    CHECK(xr_xir_instance_slot_read(NULL,0,&output)==XR_XIR_CALL_BAD_STATE);
+    CHECK(output.type==XR_XIR_I64 && !output.reserved && output.payload==73);
+    CHECK(xr_xir_instance_slot_read(&empty,0,&output)==XR_XIR_CALL_BAD_STATE);
+    CHECK(output.type==XR_XIR_I64 && !output.reserved && output.payload==73);
+    CHECK(xr_xir_instance_slot_read(NULL,UINT32_MAX,NULL)==XR_XIR_CALL_BAD_STATE);
+}
+int main(int argc,char **argv) {
+    invalid_slot_views();
+    if (argc==2 && !strcmp(argv[1],"--invalid-slot-views")) return 0;
+    CHECK(argc==1);
     compiler_pipeline_faults(); function_compiler_faults(); seal_work_boundaries(); occupied_outputs();
     effect_binding_cases();
     weaken_authority_cases();
