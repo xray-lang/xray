@@ -336,8 +336,38 @@ static void generation_range_origin_bindings(const XrXirCompileContext *context,
     EffectInvocationWorkspace *owner=NULL;
     CHECK(effect_invocations_receive(context,source,&trial->effects,&trial->graph,
         material->declared,&owner)==XR_XIR_OK && effect_invocations_solve(owner)==XR_XIR_OK);
-    CHECK(!owner->read.producer_enabled && !owner->pending && owner->final.material==material &&
-        owner->final.physical==material->physical);
+    /* The original local-Cell fixture has one target2 REF at instruction2,
+     * followed by COPY3 and the direct apply CALL4. Zero captures need no
+     * binding columns, but identity still has three descending producer facts:
+     * the reference, its alias and the actual apply callable formal. */
+    CHECK(owner->read.producer_enabled && owner->final.site_count==1 && !owner->final.binding_count &&
+        !owner->pending && owner->final.material==material && owner->final.physical==material->physical);
+    const EffectInvocationSite *site=&owner->final.sites[0];
+    CHECK(site->function==0 && site->instruction==2 && site->target==2 && !site->captures && !site->binding);
+    uint32_t entry=owner->final.roots[0],seeds=0,aliases=0,actuals=0;
+    for(uint32_t n=0;n<owner->final.count;++n) {
+        const EffectInvocationProducerSet *records=effect_invocation_discovery_read(&owner->read,n);
+        CHECK(records);
+        for(uint32_t p=0;p<records->count;++p) {
+            const EffectInvocationProducer *fact=&records->facts[p];
+            CHECK(!fact->site && !fact->atom);
+            if(n==entry && fact->value==2) {
+                CHECK(!fact->distance && fact->instruction==2 && fact->next_node==UINT32_MAX &&
+                    fact->next_value==UINT32_MAX && fact->edge==UINT32_MAX);++seeds;
+            } else if(n==entry && fact->value==3) {
+                CHECK(fact->distance==1 && fact->instruction==3 && fact->next_node==entry &&
+                    fact->next_value==2 && fact->edge==UINT32_MAX);++aliases;
+            } else {
+                CHECK(owner->final.nodes[n].root==0 && owner->final.nodes[n].body==1 &&
+                    !fact->value && fact->distance==2 && fact->instruction==4 &&
+                    fact->next_node==entry && fact->next_value==3 && fact->edge<owner->final.edge_count);
+                const EffectInvocationEdge *edge=&owner->final.edges[fact->edge];
+                CHECK(edge->caller==entry && edge->target==n && edge->instruction==4 &&
+                    edge->producer==UINT32_MAX && !edge->latent);++actuals;
+            }
+        }
+    }
+    CHECK(seeds==1 && aliases==1 && actuals==1);
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
     CHECK(effect_invocation_discovery_origins(&flow)==XR_XIR_OK && !flow.changed);
     uint32_t function=owner->final.nodes[flow.node].body;
