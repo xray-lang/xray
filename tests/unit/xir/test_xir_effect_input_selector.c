@@ -207,7 +207,39 @@ static void selector_complete_chain(void) {
     }
     puts("Complete constructor:127/128/129 literal copy-chain witnesses, exact identities/ranks, exhaustive receiving and physical0 PASS");
 }
+typedef struct SelectorCurrentPoll { bool requested;uint32_t calls; } SelectorCurrentPoll;
+static bool selector_current_poll(const void *context) {
+    SelectorCurrentPoll *poll=(SelectorCurrentPoll *)context;++poll->calls;return poll->requested;
+}
+static void selector_current_handoff(void) {
+    SelectorRawSource fixture;selector_raw_source_fixture(&fixture);
+    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    context.limits.functions=32;context.limits.parameters=16;context.limits.instructions=128;
+    XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
+    CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
+    memset(&fixture,0xDC,sizeof(fixture));
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+    EffectInvocationFinal *final=effects->invocations->final;
+    SelectorCurrentPoll poll={0};
+    CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
+    {
+        EffectBodyCurrentRead current={0};CHECK(effect_body_current_open(&context,final->material,&current)==XR_XIR_OK);
+        size_t allocated=attempts;uint64_t physical=live_bytes;uint32_t calls=poll.calls;
+        pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+        CHECK(effect_capture_current_match(&context,final,&current)==XR_XIR_OK && poll.calls>calls);
+        poll.requested=true;
+        CHECK(effect_capture_current_match(&context,final,&current)==XR_XIR_BAD_STRUCTURE);
+        CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
+        CHECK(attempts==allocated && live_bytes==physical);
+        current=(EffectBodyCurrentRead){0};
+        pc_allocate_hook=NULL;pc_free_hook=NULL;
+    }
+    CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
+    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
+    puts("current handoff: owned parent scope, independent receiving, cancellation polling/latch/recovery, no allocator callbacks and physical0 PASS");
+}
 int main(void) {
+    selector_current_handoff();
     selector_complete_chain();
     selector_capture_support();
     selector_raw_source_replay();

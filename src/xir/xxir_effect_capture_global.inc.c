@@ -350,7 +350,7 @@ static XrXirStatus effect_capture_domain(EffectCaptureRead *read) {
     return XR_XIR_OK;
 }
 
-static XrXirStatus effect_capture_frame(EffectCaptureRead *read) {
+static XrXirStatus effect_capture_frame_current(EffectCaptureRead *read,const EffectBodyCurrentRead *current) {
     XrXirStatus status=effect_role_range(read->work,read->final,1,sizeof(*read->final));
     if(status==XR_XIR_OK) status=effect_role_material_frame(read->work,read->final->material);
     if(status!=XR_XIR_OK) return status;
@@ -368,6 +368,11 @@ static XrXirStatus effect_capture_frame(EffectCaptureRead *read) {
             final->nodes[root].body!=f || final->nodes[root].root!=space) return XR_XIR_BAD_STRUCTURE;
     }
     read->body=effect_body_owned_request(read->work,final->material);
+    if(current) {
+        if(!xir_compile_work(read->work,2+sizeof(read->body.current))) return XR_XIR_BUDGET;
+        if(current->work!=read->work || current->material!=final->material) return XR_XIR_BAD_STRUCTURE;
+        read->body.current=current;
+    }
     status=effect_final_inventory_sites(read->work,final->material,final);if(status!=XR_XIR_OK) return status;
     status=effect_capture_domain(read);if(status!=XR_XIR_OK) return status;
     uint64_t maximum=0;
@@ -415,6 +420,10 @@ static XrXirStatus effect_capture_frame(EffectCaptureRead *read) {
         }
     }
     return XR_XIR_OK;
+}
+
+static XrXirStatus effect_capture_frame(EffectCaptureRead *read) {
+    return effect_capture_frame_current(read,NULL);
 }
 
 #include "xxir_effect_capture_reference.inc.c"
@@ -626,13 +635,17 @@ static XrXirStatus effect_capture_receiving_domain(EffectCaptureRead *read) {
     } while(first<count);
     return XR_XIR_OK;
 }
-static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const EffectInvocationFinal *final) {
+static XrXirStatus effect_capture_current_match(const XrXirCompileContext *work,
+    const EffectInvocationFinal *final,const EffectBodyCurrentRead *current) {
     if(!final) return XR_XIR_BAD_STRUCTURE;
     EffectCaptureRead read={.work=work,.final=final,.fallback=true,.fixed_only=true,.class_results=true};
-    XrXirStatus status=effect_capture_frame(&read);if(status!=XR_XIR_OK || !read.active) return status;
-    EffectBodyCurrentRead current={0};status=effect_body_current_open(work,final->material,&current);
-    if(status!=XR_XIR_OK) return status;
-    read.body.current=&current;
+    XrXirStatus status=effect_capture_frame_current(&read,current);if(status!=XR_XIR_OK || !read.active) return status;
+    EffectBodyCurrentRead fresh={0};
+    if(!current) {
+        status=effect_body_current_open(work,final->material,&fresh);
+        if(status!=XR_XIR_OK) return status;
+        read.body.current=&fresh;
+    }
     bool scalar=false;status=effect_capture_scalar_domain(&read,&scalar);
     if(status!=XR_XIR_OK) return status;
     if(scalar) return final->capture.count?XR_XIR_BAD_STRUCTURE:effect_capture_inputs_match(&read);
@@ -673,6 +686,12 @@ static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const Ef
     status=effect_capture_complete_clauses(&read);if(status!=XR_XIR_OK) return status;
     return effect_capture_inputs_match(&read);
 }
+static XrXirStatus effect_capture_match(const XrXirCompileContext *work,const EffectInvocationFinal *final) {
+    return effect_capture_current_match(work,final,NULL);
+}
+/* Construction and its immediate receiver own the same private Input. The
+ * parent descriptor is discarded before every possible cleanup callback;
+ * no child stack projection or semantic result crosses this boundary. */
 static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectInvocationFinal *final,
     const EffectInvocationWorkspace *discovery) {
     if(!final || !discovery || !discovery->read.work || work->resources!=discovery->read.work->resources ||
@@ -715,11 +734,13 @@ static XrXirStatus effect_capture_build(const XrXirCompileContext *work,EffectIn
     read.schedule=NULL;
     xr_compile_resources_free(schedule);
     if(status==XR_XIR_OK) status=effect_capture_frame(&read);
+    EffectBodyCurrentRead current={0};
     if(status==XR_XIR_OK) {
         read.fixed_only=false;
-        status=effect_capture_complete_construct(&read);
+        status=effect_capture_complete_construct(&read,&current);
     }
-    if(status==XR_XIR_OK) status=effect_capture_match(work,final);
+    if(status==XR_XIR_OK) status=effect_capture_current_match(work,final,current.material?&current:NULL);
+    current=(EffectBodyCurrentRead){0};
     if(status!=XR_XIR_OK) { xr_compile_resources_free(final->capture.facts);final->capture=(EffectCaptureProof){0}; }
     return status;
 }

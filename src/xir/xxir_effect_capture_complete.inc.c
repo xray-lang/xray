@@ -481,12 +481,13 @@ static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
 /* Only Complete flags change during this construction interval. Source
  * descriptors therefore remain current until a growing emit invokes a
  * callback; the walk drops every projection first and rebuilds afterwards. */
-static XrXirStatus effect_capture_complete_construct(EffectCaptureRead *read) {
-    if(!read->builder || read->complete_scope || read->body.current || read->node_view || read->node_views || read->actuals || read->complete_types)
+static XrXirStatus effect_capture_complete_construct(EffectCaptureRead *read,EffectBodyCurrentRead *current) {
+    if(!current || current->work || current->material || !read->builder || read->complete_scope || read->body.current ||
+        read->node_view || read->node_views || read->actuals || read->complete_types)
         return XR_XIR_BAD_STRUCTURE;
     bool empty=false;XrXirStatus status=effect_capture_complete_empty(read,&empty);
     if(status!=XR_XIR_OK || empty) return status;
-    EffectBodyCurrentRead current={0};EffectCaptureNode borrowed={0},views[32];EffectCaptureActualRead actuals;
+    EffectCaptureNode borrowed={0},views[32];EffectCaptureActualRead actuals;
     EffectCaptureCompleteJobs jobs;
     if(!xir_compile_work(read->work,sizeof(jobs.count)+sizeof(jobs.overflow))) return XR_XIR_BUDGET;
     jobs.count=0;jobs.overflow=false;
@@ -496,12 +497,15 @@ static XrXirStatus effect_capture_complete_construct(EffectCaptureRead *read) {
         types.count=0;read->complete_types=&types;
     }
     read->complete_scope=true;read->changed=false;
-    status=effect_capture_complete_walk(read,&current,&borrowed,views,&actuals,&jobs);
+    status=effect_capture_complete_walk(read,current,&borrowed,views,&actuals,&jobs);
     while(status==XR_XIR_OK && read->changed) {
         read->changed=false;
-        status=jobs.overflow?effect_capture_complete_walk(read,&current,&borrowed,views,&actuals,NULL):
-            effect_capture_complete_jobs(read,&current,&borrowed,views,&actuals,&jobs);
+        status=jobs.overflow?effect_capture_complete_walk(read,current,&borrowed,views,&actuals,NULL):
+            effect_capture_complete_jobs(read,current,&borrowed,views,&actuals,&jobs);
     }
+    /* Only the parent's actual current descriptor may outlive this traversal.
+     * A final growth or any failure leaves no loan for receiving or cleanup. */
+    if(status!=XR_XIR_OK || !read->body.current) *current=(EffectBodyCurrentRead){0};
     read->complete_scope=false;read->body.current=NULL;read->node_view=NULL;
     read->node_views=NULL;read->node_view_count=0;read->actuals=NULL;read->complete_types=NULL;return status;
 }
