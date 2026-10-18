@@ -54,8 +54,14 @@ typedef struct XrXirCallRequest {
 /* A pending instruction is not a permission. Instance admission rechecks
  * actual values before the driver transfers a sealed selection to a frame. */
 XR_FUNC const XirEffectInvocationSelection *xr_xir_call_invocation(const XrXirCallView *view);
-XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,uint32_t *instruction);
-XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,uint32_t instruction);
+typedef struct XrXirCallFrontier {
+    uint32_t instruction,target,producer;
+} XrXirCallFrontier;
+/* A staged frontier retains only identity. Actual inputs still require a fresh
+ * Final selection before acceptance and another check after loan preparation. */
+XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,XrXirCallFrontier *frontier);
+XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,
+    const XirEffectInvocationSelection *selection);
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
     const XirEffectInvocationSelection *selection);
 typedef struct XrXirCallClassAccess {

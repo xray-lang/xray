@@ -22,22 +22,31 @@
 #include "xir_cell_owner_source_pipeline.h"
 #include "xir_cell_loan_lifecycle_cases.h"
 
+static const char *const cell_life_fixtures[] = {
+    "lifecycle.xr", "indirect_ref_lifecycle.xr", "project_lifecycle.xr", "class_project_lifecycle.xr"};
+static const char *const cell_life_entry_names[CELL_LIFE_ENTRIES] = {
+    "run", "cellCounter", "caughtThrow", "caughtPanic", "uncaughtThrow", "suspended"};
+
 static void cell_life_zero(void) {
     instance_compile_zero();
     if (runtime_live || runtime_bytes || runtime_owned) runtime_report_residuals(stderr);
     CHECK(!runtime_live && !runtime_bytes && !runtime_owned);
 }
+#if defined(XR_CELL_LIFE_BACKEND)
+#include "xir_cell_lifecycle_native_backend.h"
+#else
 static XrXirProgram *cell_life_program(const XrXirCompileContext *context, const char *fixture, uint32_t *entries) {
     XrXirArtifact *lowered = NULL;
     XrXirProgram *program = NULL;
     CHECK(cell_source_lower(context, fixture, &lowered, false) == XR_XIR_OK && lowered);
     const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
-    const char *names[] = {"run", "cellCounter", "caughtThrow", "caughtPanic", "uncaughtThrow", "suspended"};
     CHECK(module && module->declarations && module->declarations->functions);
-    for (unsigned i = 0; i < CELL_LIFE_ENTRIES; ++i) entries[i] = cell_source_entry(module, names[i], true);
+    for (unsigned i = 0; i < CELL_LIFE_ENTRIES; ++i) entries[i] = cell_source_entry(module, cell_life_entry_names[i], true);
     CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered && program);
     return program;
 }
+static void cell_life_program_release(void) { }
+#endif
 static void cell_life_mode(const char *fixture, unsigned mode) {
     CHECK(mode < CELL_LIFE_MODES);
     cell_life_zero();
@@ -81,6 +90,7 @@ static void cell_life_mode(const char *fixture, unsigned mode) {
     xr_xir_value_drop(&result);
     xr_xir_value_drop(&log.other_result);
     xr_xir_value_drop(&log.other_counter);
+    cell_life_program_release();
     source_fixture_owner_free(&owner);
     cell_life_zero();
     printf("Cell lifecycle mode%u compiler/runtime physical blocks/bytes=0/0\n", mode);
@@ -118,19 +128,24 @@ static void cell_life_existing(const char *name, bool unit) {
     printf("Cell existing %s unchanged expectations and compiler/runtime physical0\n", name);
 }
 #include "xir_cell_lifecycle_resources.h"
+#if defined(XR_CELL_LIFE_PRODUCER)
+#include "xir_cell_lifecycle_native_producer.h"
+#endif
 int main(int argc, char **argv) {
-    const char *fixtures[] = {"lifecycle.xr", "indirect_ref_lifecycle.xr", "project_lifecycle.xr", "class_project_lifecycle.xr"};
+#if defined(XR_CELL_LIFE_PRODUCER)
+    if (argc == 7 && !strcmp(argv[1], "--write-c")) return cell_life_write_c(argv);
+#endif
     if (argc == 2) {
         CHECK(!strcmp(argv[1],"--runtime-normal") || !strcmp(argv[1],"--runtime-fi") ||
             !strcmp(argv[1],"--runtime-axes") || !strcmp(argv[1],"--runtime-prepare"));
-        cell_life_runtime_resources(fixtures, sizeof(fixtures)/sizeof(fixtures[0]), argv[1]);
+        cell_life_runtime_resources(cell_life_fixtures, sizeof(cell_life_fixtures)/sizeof(cell_life_fixtures[0]), argv[1]);
         instance_compile_report();
         puts("Cell lifecycle real runtime resource scenarios complete; exact results and physical0 preserved");
         return 0;
     }
     CHECK(argc == 1);
-    for (unsigned f = 0; f < sizeof(fixtures)/sizeof(fixtures[0]); ++f)
-        for (unsigned mode = 0; mode < CELL_LIFE_MODES; ++mode) cell_life_mode(fixtures[f],mode);
+    for (unsigned f = 0; f < sizeof(cell_life_fixtures)/sizeof(cell_life_fixtures[0]); ++f)
+        for (unsigned mode = 0; mode < CELL_LIFE_MODES; ++mode) cell_life_mode(cell_life_fixtures[f],mode);
     cell_life_existing("duplicate_actual.xr", false);
     cell_life_existing("unit_ref.xr", true);
     instance_compile_report();

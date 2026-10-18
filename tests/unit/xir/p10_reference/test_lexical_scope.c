@@ -37,7 +37,7 @@ int main(void) {
     XrXirDeclarations declarations={modules,2,identities,NULL,0,NULL,0,1,3,NULL};
     XrXirModule built={XR_XIR_BUILT,functions,4,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirConstruction *construction=NULL;
-    CHECK(xr_xir_compile_construction_new(&owner.context,NULL,NULL,0,&construction)==XR_XIR_OK);
+    CHECK(xr_xir_compile_construction_new_v3(&owner.context,NULL,&(XrXirConstructionSpec){NULL,0,NULL,0,NULL},&construction)==XR_XIR_OK);
     XrXirArtifact *checked=NULL,*decoded=NULL;
     CHECK(xr_xir_compile_check_v2(&owner.context,&built,construction,&checked,NULL)==XR_XIR_OK);
     CHECK(identities[2].module==0 && !identities[2].exported && xr_xir_module_same_scope(&declarations,0,1));
