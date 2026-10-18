@@ -125,12 +125,7 @@ static bool source_comptime_thunk(SourceContext *ctx,AstNode *node,SourceExpecte
     if (ok && !open) {
         ctx->generics[f].constraints=NULL;ctx->generics[f].parameter_count=0;ctx->generics[f].parameter_kinds=NULL;
     }
-    if (ok) {
-        XrXirSourceDeclaration *query=&((XrXirSourceDeclaration *)ctx->query.declarations)[declaration.declaration-1];
-        query->type=source_query_type(ctx,ctx->functions[f].result);
-        query->generic_parameter_count=ctx->generics[f].parameter_count;
-        query->generic_constraints=ctx->generics[f].constraints;query->type_parameter_kinds=ctx->generics[f].parameter_kinds;
-    }
+    if (ok) ok=source_query_parameters(ctx,declaration.declaration);
     source_comptime_restore(ctx,&saved);
     if (ok) *output=f;
     return ok;
