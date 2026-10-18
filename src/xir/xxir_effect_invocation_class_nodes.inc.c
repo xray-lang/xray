@@ -8,6 +8,68 @@
  * Complete physical membership is copied into each genuine equation key.
  * These storage facts do not authorize a Class projection or erase UNKNOWN.
  */
+typedef struct EffectInvocationClassReceiver {
+    EffectInvocationWorkspace *owner;
+    const EffectBodyFunction *function;
+    const EffectPhysicalFunction *physical;
+    EffectInvocationClassFact *facts;
+    uint32_t record,at;
+} EffectInvocationClassReceiver;
+
+/* Membership receives a current type before creating a fresh lattice bottom.
+ * Neither physical location nor an earlier node supplies a semantic mask. */
+static XrXirStatus effect_invocation_class_receive_fact(EffectInvocationClassReceiver *input,
+    uint32_t value,XrXirType type) {
+    if (input->at>=input->physical->classes || value>=input->physical->values ||
+        !xr_xir_type_is_class(input->owner->body.domain.types,type) ||
+        (input->at && input->facts[input->at-1].value>=value)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(input->owner->work,sizeof(*input->facts))) return XR_XIR_BUDGET;
+    input->facts[input->at++]=(EffectInvocationClassFact){.value=value};return XR_XIR_OK;
+}
+
+/* The complete current directory is checked by the common visitor before
+ * this synchronous receiver reads selected type words from each real run. */
+static XrXirStatus effect_invocation_class_receive_run(void *owner,const EffectBodyRun *ref) {
+    EffectInvocationClassReceiver *input=owner;EffectInvocationWorkspace *workspace=input->owner;
+    if (!xir_compile_work(workspace->work,5)) return XR_XIR_BUDGET;
+    uint32_t parameters=input->function->parameter_count,end=ref->first+ref->count;
+    while (input->record<input->physical->count) {
+        if (!xir_compile_work(workspace->work,1)) return XR_XIR_BUDGET;
+        EffectPhysicalRecord record=input->physical->records[input->record];
+        if (!(record.mask&EFFECT_PHYSICAL_CLASS)) { ++input->record;continue; }
+        if (record.value<parameters) return XR_XIR_BAD_STRUCTURE;
+        uint32_t instruction=record.value-parameters,type=XR_XIR_UNIT;
+        if (instruction<ref->first) return XR_XIR_BAD_STRUCTURE;
+        if (instruction>=end) return XR_XIR_OK;
+        XrXirStatus status=effect_body_run_word(&workspace->body.read,ref,instruction,1,&type);
+        if (status==XR_XIR_OK) status=effect_invocation_class_receive_fact(input,record.value,(XrXirType)type);
+        if (status!=XR_XIR_OK) return status;
+        ++input->record;
+    }
+    return XR_XIR_OK;
+}
+
+static XrXirStatus effect_invocation_class_receive_owned(EffectInvocationClassReceiver *input) {
+    EffectInvocationWorkspace *owner=input->owner;
+    if (!xir_compile_work(owner->work,sizeof(EffectBodyRunVisitor)+sizeof(input->record))) return XR_XIR_BUDGET;
+    while (input->record<input->physical->count) {
+        if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
+        EffectPhysicalRecord record=input->physical->records[input->record];
+        if (!(record.mask&EFFECT_PHYSICAL_CLASS)) { ++input->record;continue; }
+        if (record.value>=input->function->parameter_count) break;
+        XrXirType type=XR_XIR_UNIT;
+        XrXirStatus status=effect_body_operand_type(&owner->body.read,input->function,record.value,&type);
+        if (status==XR_XIR_OK) status=effect_invocation_class_receive_fact(input,record.value,type);
+        if (status!=XR_XIR_OK) return status;
+        ++input->record;
+    }
+    if (input->record==input->physical->count) return XR_XIR_OK;
+    EffectBodyRunVisitor visitor={input,effect_invocation_class_receive_run};
+    XrXirStatus status=effect_body_runs_visit(&owner->body.read,input->function,&visitor);
+    if (status!=XR_XIR_OK) return status;
+    return input->record==input->physical->count?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+}
+
 static XrXirStatus effect_invocation_class_storage(EffectInvocationWorkspace *owner,
     uint32_t body,EffectInvocationClassFact **output,uint32_t *count) {
     if (!output || *output || !count || *count || body>=owner->body.domain.function_count ||
@@ -22,25 +84,33 @@ static XrXirStatus effect_invocation_class_storage(EffectInvocationWorkspace *ow
         physical->classes>physical->values || physical->count>physical->capacity ||
         (physical->count && !physical->records)) return XR_XIR_BAD_STRUCTURE;
     if (!physical->classes) return XR_XIR_OK;
+    bool native=effect_body_request_sequence_owned(&owner->body);
+    if (native) {
+        status=effect_body_request_sequence_binding(&owner->body);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
+        if (owner->body.owner!=owner->final.material || owner->final.material->physical!=owner->final.physical)
+            return XR_XIR_BAD_STRUCTURE;
+    }
     EffectInvocationClassFact *facts=xir_compile_calloc(owner->work,
         physical->classes,sizeof(*facts),&status);
     if (!facts) return status;
-    uint32_t at=0;
-    for (uint32_t r=0;r<physical->count && status==XR_XIR_OK;++r) {
+    if (!xir_compile_work(owner->work,sizeof(EffectInvocationClassReceiver))) {
+        xr_compile_resources_free(facts);return XR_XIR_BUDGET;
+    }
+    EffectInvocationClassReceiver input={owner,native?&owner->final.material->functions[body]:NULL,physical,facts,0,0};
+    if (native) status=effect_invocation_class_receive_owned(&input);
+    for (uint32_t r=0;!native && r<physical->count && status==XR_XIR_OK;++r) {
         if (!xir_compile_work(owner->work,1)) { status=XR_XIR_BUDGET;break; }
         EffectPhysicalRecord record=physical->records[r];
         if (!(record.mask&EFFECT_PHYSICAL_CLASS)) continue;
         XrXirType type;status=effect_body_request_type(&owner->body,body,record.value,&type);
         if (status!=XR_XIR_OK) break;
-        if (at>=physical->classes || record.value>=physical->values ||
-            !xr_xir_type_is_class(owner->body.domain.types,type) ||
-            (at && facts[at-1].value>=record.value)) { status=XR_XIR_BAD_STRUCTURE;break; }
-        if (!xir_compile_work(owner->work,sizeof(*facts))) { status=XR_XIR_BUDGET;break; }
-        facts[at++]=(EffectInvocationClassFact){.value=record.value};
+        status=effect_invocation_class_receive_fact(&input,record.value,type);
     }
-    if (status==XR_XIR_OK && at!=physical->classes) status=XR_XIR_BAD_STRUCTURE;
+    if (status==XR_XIR_OK && input.at!=physical->classes) status=XR_XIR_BAD_STRUCTURE;
     if (status!=XR_XIR_OK) { xr_compile_resources_free(facts);return status; }
-    *output=facts;*count=at;return XR_XIR_OK;
+    *output=facts;*count=input.at;return XR_XIR_OK;
 }
 
 /* A missing Class row is a malformed physical relation, never a None fact.

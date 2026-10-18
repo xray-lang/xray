@@ -42,11 +42,13 @@
 #include "xir_invocation_cause_empty_cases.h"
 #include "xir_snapshot_literal_census_cases.h"
 #include "xir_snapshot_literal_correspondence_cases.h"
+#include "xir_invocation_class_storage_range_cases.h"
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--queued-child-producers")) {
         invocation_queued_child_returned_controls();CHECK(!rp_live && !rp_live_bytes);return 0;
     }
     if(argc==2 && !strcmp(argv[1],"--codec-literals")) {
+        invocation_class_storage_range_controls();
         snapshot_literal_correspondence_controls();
         snapshot_literal_census_controls();
         invocation_private_context_controls();
