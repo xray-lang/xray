@@ -126,7 +126,8 @@ static XrXirCallStatus frame_cell_prepare(XrXirCall *call, CallFrame *frame,
         if (prepared != XR_XIR_VALUE_OK) return prepared == XR_XIR_VALUE_OOM ? XR_XIR_CALL_OOM :
             prepared == XR_XIR_VALUE_LIMIT || prepared == XR_XIR_VALUE_REFCOUNT_LIMIT ? XR_XIR_CALL_LIMIT :
             prepared == XR_XIR_VALUE_BOUNDS && xr_xir_fault_bounds_valid(*fault) ?
-                XR_XIR_CALL_BOUNDS : XR_XIR_CALL_BAD_ARGUMENT;
+                XR_XIR_CALL_BOUNDS : prepared == XR_XIR_VALUE_BOUNDS && xr_xir_fault_runtime_valid(*fault) ?
+                XR_XIR_CALL_RUNTIME_PANIC : XR_XIR_CALL_BAD_ARGUMENT;
         /* Every successful preparation is now an owned rollback obligation. */
         record->parameter = p; ++frame->loan_count;
     }
@@ -143,5 +144,12 @@ static void frame_cell_abort(CallFrame *frame) {
     while (frame->loan_count) xr_xir_cell_loan_abort(&frame->loans[--frame->loan_count].loan);
 }
 static void frame_cell_release(CallFrame *frame) {
-    while (frame->loan_count) xr_xir_cell_loan_release(&frame->loans[--frame->loan_count].loan);
+    while (frame->loan_count) {
+        CallCellLoan *record=&frame->loans[--frame->loan_count];
+        if (record->adopted) {
+            XR_CHECK(!record->loan.cell && !record->loan.scope && !record->loan.previous && !record->loan.child &&
+                !record->loan.authority.activation && !record->loan.authority.frame && !record->loan.authority.epoch,
+                "adopted inline loans were detached exactly once before frame reclamation");
+        } else xr_xir_cell_loan_release(&record->loan);
+    }
 }

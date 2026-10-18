@@ -142,9 +142,9 @@ static void string_catalog_poison(void) {
     size_t live=runtime_live,bytes=runtime_bytes;
     uint8_t altered[sizeof(library_string76_alpha)];
     const struct {size_t offset;uint32_t value;} attacks[]={
-        {LIBRARY_STRING75_ALPHA_LITERAL_ID_LOW,2}, /* Original count is2: merged count4 cannot legitimize ID2. */
-        {LIBRARY_STRING75_ALPHA_LITERAL_ID_LOW,UINT32_MAX},{LIBRARY_STRING75_ALPHA_LITERAL_ID_HIGH,UINT32_MAX},{LIBRARY_STRING75_ALPHA_LITERAL_COUNT,UINT32_MAX},{629,UINT32_MAX}, /* Original malformed member_access remains an attack. */
-        {LIBRARY_STRING75_ALPHA_LITERAL0_LENGTH,UINT32_MAX}
+        {LIBRARY_STRING86_ALPHA_LITERAL_ID_LOW,2}, /* Original count is2: merged count4 cannot legitimize ID2. */
+        {LIBRARY_STRING86_ALPHA_LITERAL_ID_LOW,UINT32_MAX},{LIBRARY_STRING86_ALPHA_LITERAL_ID_HIGH,UINT32_MAX},{LIBRARY_STRING86_ALPHA_LITERAL_COUNT,UINT32_MAX},{629,UINT32_MAX}, /* Original malformed member_access remains an attack. */
+        {LIBRARY_STRING86_ALPHA_LITERAL0_LENGTH,UINT32_MAX}
     };
     for(size_t i=0;i<sizeof(attacks)/sizeof(attacks[0]);++i) {
         memcpy(altered,library_string76_alpha,sizeof(altered));

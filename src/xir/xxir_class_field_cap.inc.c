@@ -19,6 +19,9 @@ static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, boo
      * retains that handle rather than copying the synchronized cell. */
     if (node->kind==XR_XIR_TYPE_ATOMIC) return XR_XIR_OK;
     if (node->kind==XR_XIR_TYPE_NULLABLE || node->kind==XR_XIR_TYPE_TUPLE) { *leaf=false; return XR_XIR_OK; }
+    /* Hash containers own separately admitted dense storage. A class field
+     * retains only that handle, so recursive identities stop at this edge. */
+    if (node->kind==XR_XIR_TYPE_MAP || node->kind==XR_XIR_TYPE_SET) return XR_XIR_OK;
     /* An Array field is a handle whose backing store is its own admitted array; any element the
      * array family admits (scalars, strings, nominal values, nullable values, arrays) is stored there. */
     if (node->kind==XR_XIR_TYPE_ARRAY) {
@@ -26,7 +29,8 @@ static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, boo
         const XrXirTypeNode *element=xr_xir_type_node(types,node->element);
         return element && !element->parameter_span && (element->kind==XR_XIR_TYPE_NOMINAL ||
             element->kind==XR_XIR_TYPE_NULLABLE || element->kind==XR_XIR_TYPE_ARRAY ||
-            element->kind==XR_XIR_TYPE_TUPLE) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+            element->kind==XR_XIR_TYPE_TUPLE || element->kind==XR_XIR_TYPE_MAP ||
+            element->kind==XR_XIR_TYPE_SET) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
     }
     if (node->kind!=XR_XIR_TYPE_NOMINAL || !types->nominals ||
         (types->nominals->declarations!=NULL)==(types->nominals->identities!=NULL) ||

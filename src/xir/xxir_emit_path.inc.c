@@ -9,14 +9,15 @@
 static void emit_path_component(CBuffer *buffer, const XrXirFunctionLayout *layout,
     uint32_t slot, XrXirType container, bool field, int64_t selector) {
     append(buffer, "        state->path_steps[%u] = (XrXirValuePathStep) {%s, (XrXirType) %uu, ",
-        slot, field ? "XR_XIR_PATH_FIELD" : "XR_XIR_PATH_INDEX", (uint32_t) container);
+        slot, field ? "XR_XIR_PATH_FIELD" : xr_xir_type_is_map(buffer->types, container) ?
+            "XR_XIR_PATH_KEY" : "XR_XIR_PATH_INDEX", (uint32_t) container);
     if (field) emit_constant(buffer, selector);
     else append(buffer, "xr_xir_scalar_load(state->frame, %uu)", layout->offsets[(uint32_t) selector]);
     append(buffer, "};\n");
 }
 static void emit_path_receiver(CBuffer *buffer, const XrXirFunction *function,
     const XrXirFunctionLayout *layout, const XrXirInstruction *op) {
-    const uint32_t *args = op->op == XR_XIR_ARRAY_SET ? &function->operands[op->args[0]] : op->args;
+    const uint32_t *args = (op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_MAP_SET) ? &function->operands[op->args[0]] : op->args;
     uint32_t id = args[0], begin = layout->path_count;
     if (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_STRUCT_SET) {
         if (!begin) { emit_reject(buffer, XR_XIR_BAD_LAYOUT); return; }
@@ -50,7 +51,7 @@ static void emit_path_step(CBuffer *buffer, const XrXirFunction *function,
         op->op == XR_XIR_ARRAY_LEN || op->op == XR_XIR_ARRAY_CAPACITY;
     if (read) append(buffer, "        XrXirValue value = {0};\n");
     else {
-        uint32_t id = op->op == XR_XIR_ARRAY_SET ? function->operands[op->args[0] + 2] : op->args[1];
+        uint32_t id = (op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_MAP_SET) ? function->operands[op->args[0] + 2] : op->args[1];
         append(buffer, "        XrXirValue value = "); emit_value(buffer, function, layout, id);
         append(buffer, ";\n");
     }

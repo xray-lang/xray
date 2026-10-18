@@ -25,7 +25,7 @@
 #if defined(XR_CAPACITY_NATIVE)
 XR_DATA const XrXirProgramSpec array_capacity_program;
 #endif
-#include "xir_instance_compile_observer.h"
+#include "xir_p09_compile_observer.h"
 #include "xir_runtime_allocations.h"
 #include "xir_array_capacity_pipeline.h"
 

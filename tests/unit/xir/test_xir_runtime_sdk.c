@@ -360,6 +360,8 @@ static void sdk_known_bytes(void) {
     xr_sha256(previous66_sdk_kat_preimage,sizeof(previous66_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous66_sdk_kat_digest,32));
     const size_t semantic_offset=sizeof("xray:xir-runtime-sdk:v1")-1+2*sizeof(uint32_t);
+    xr_sha256(previous74_sdk_kat_preimage,sizeof(previous74_sdk_kat_preimage),old_hash);
+    CHECK(!memcmp(old_hash,previous74_sdk_kat_digest,32) && memcmp(old_hash,current_sdk_kat_digest,32));
     _Static_assert(sizeof(previous67_sdk_kat_preimage)==3098,"complete previous67 SDK preimage");
     xr_sha256(previous67_sdk_kat_preimage,sizeof(previous67_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous67_sdk_kat_digest,32));
@@ -379,6 +381,16 @@ static void sdk_known_bytes(void) {
     _Static_assert(sizeof(previous_value23_sdk_kat_preimage)==3098,"complete retired Value23 SDK preimage");
     xr_sha256(previous_value23_sdk_kat_preimage,sizeof(previous_value23_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous_value23_sdk_kat_digest,32));
+    _Static_assert(sizeof(previous_value25_sdk_kat_preimage)==3258,"complete retired Value25 SDK preimage");
+    xr_sha256(previous_value25_sdk_kat_preimage,sizeof(previous_value25_sdk_kat_preimage),old_hash);
+    CHECK(!memcmp(old_hash,previous_value25_sdk_kat_digest,32) && memcmp(old_hash,current_sdk_kat_digest,32));
+    CHECK(previous_value25_sdk_kat_preimage[semantic_offset]==84 &&
+        previous_value25_sdk_kat_preimage[semantic_offset+4]==25);
+    _Static_assert(sizeof(previous_value26_sdk_kat_preimage)==3258,"complete retired Value26 SDK preimage");
+    xr_sha256(previous_value26_sdk_kat_preimage,sizeof(previous_value26_sdk_kat_preimage),old_hash);
+    CHECK(!memcmp(old_hash,previous_value26_sdk_kat_digest,32) && memcmp(old_hash,current_sdk_kat_digest,32));
+    CHECK(previous_value26_sdk_kat_preimage[semantic_offset]==84 &&
+        previous_value26_sdk_kat_preimage[semantic_offset+4]==26);
     const size_t wire_offset=semantic_offset-sizeof(uint32_t);
     CHECK(previous71_sdk_kat_preimage[wire_offset]==26 && previous71_sdk_kat_preimage[semantic_offset]==71);
     CHECK(!memcmp(previous71_sdk_kat_preimage,previous72_sdk_kat_preimage,wire_offset));
@@ -415,6 +427,7 @@ static void sdk_known_bytes(void) {
     XrJsonCursor json=xr_json_cursor_make(NULL,0,resources,sdk_cursor_charge);
     CHECK(sdk_identity(&json,&manifest) && !memcmp(manifest.digest,current_sdk_kat_digest,32));
     uint64_t work=sdk_stats(resources).work;
+    sdk_fixed_parent_prefixes(resources,&manifest);
     const uint64_t encoded_integers=4*(17+3+1+2*(sizeof(sdk_abi_fields)/sizeof(sdk_abi_fields[0]))+1+1+1+1+1)+8;
     const uint64_t scanned_strings=sizeof("x86_64-windows-msvc")+sizeof("xray:xir-runtime-abi-measurements:v1")+
         sizeof("xray:xir-runtime-recipe:windows-x86_64-hosted:v1")+sizeof("lib/test.lib")+sizeof("kernel32");

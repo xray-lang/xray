@@ -15,6 +15,7 @@ typedef struct CBuffer {
     XrXirStatus status;
     const XrXirTypes *types;
     const XrXirCompileContext *context;
+    const uint8_t *borrowed_flags;
     bool measuring, tracking;
     unsigned label_match[2];
     bool label_used[2];

@@ -17,6 +17,7 @@
 #include "xxir_types.h"
 #include "xxir_operand_roles.h"
 #include "xxir_value_place.h"
+#include "xxir_view_types_internal.h"
 #include "../base/xmalloc.h"
 
 static bool layout_equal(XrXirLayout left, XrXirLayout right) {
@@ -41,6 +42,55 @@ static XrXirStatus layout_structure(const XrXirModule *module, const XrXirCompil
     if (status == XR_XIR_OK) status = xr_xir_compile_declarations_verify(context,
         module->declarations, module->types, module->function_count, module->linkage_kind);
     return status == XR_XIR_OK ? layout_function_bounds(module, context) : status;
+}
+
+static XrXirStatus layout_outgoing(const LayoutInputRequest *request,
+    const XirInputFunctionHead *function,uint32_t index,uint32_t *output) {
+    const XrXirCompileContext *budget=request->context;
+    uint32_t outgoing=*output,result_flags=0;
+    XrXirStatus result_status=xr_xir_compile_view_type_flags(budget,request->input->domain.types,function->result,&result_flags);
+    if (result_status!=XR_XIR_OK) return result_status;
+    if (result_flags) outgoing=2;
+    uint32_t phi_count=0;bool borrowed_phi=false;
+    for (uint32_t i = 0; i < function->instruction_count; ++i) {
+        if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
+        XrXirInstruction storage;const XrXirInstruction *op=NULL;
+        XrXirStatus reading=request->input->instruction(budget,request->input->owner,index,i,&storage,&op);
+        if (reading!=XR_XIR_OK) return reading;
+        if (!op) return XR_XIR_BAD_STRUCTURE;
+        uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op==XR_XIR_ITERATOR_NTH ? 1 :
+            xr_xir_op_references_function(op->op) || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_INDIRECT ||
+            op->op == XR_XIR_PRINT || op->op == XR_XIR_MAP_NEW || op->op == XR_XIR_SET_NEW || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
+            op->op == XR_XIR_ENUM_NEW || op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT ? op->args[1] : 0;
+        if (op->op==XR_XIR_TUPLE_NEW) {
+            const XrXirTypeNode *tuple=xr_xir_tuple_signature(request->input->domain.types,op->type);
+            if (!tuple) return XR_XIR_BAD_TYPE;
+            count=tuple->parameter_count;
+        }
+        if (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_NULLABLE_SOME || op->op==XR_XIR_PHI) {
+            uint32_t flags=0;
+            XrXirStatus borrowed=xr_xir_compile_view_type_flags(budget,request->input->domain.types,op->type,&flags);
+            if (borrowed!=XR_XIR_OK) return borrowed;
+            if (op->op==XR_XIR_PHI) {phi_count+=op->type!=XR_XIR_UNIT;borrowed_phi|=flags!=0;}
+            else if (flags) {
+                if (count==UINT32_MAX) return XR_XIR_BUDGET;
+                count=op->op==XR_XIR_TUPLE_NEW?count+1u:2u;
+            }
+        }
+        if (borrowed_phi && phi_count>outgoing) outgoing=phi_count;
+        if (op->op!=XR_XIR_PHI) { phi_count=0;borrowed_phi=false; }
+        else if (i+1u<function->instruction_count) {
+            XrXirInstruction next_storage;const XrXirInstruction *next=NULL;
+            reading=request->input->instruction(budget,request->input->owner,index,i+1u,&next_storage,&next);
+            if (reading!=XR_XIR_OK) return reading;
+            if (!next) return XR_XIR_BAD_STRUCTURE;
+            if (next->op!=XR_XIR_PHI) { phi_count=0;borrowed_phi=false; }
+        }
+        if (op->op==XR_XIR_VIEW_CLEANUP) count=op->args[1];
+        else if (op->op>=XR_XIR_VIEW_NEW && op->op<=XR_XIR_VIEW_END && count<2) count=2;
+        if (count > outgoing) outgoing = count;
+    }
+    *output=outgoing;return XR_XIR_OK;
 }
 
 static XrXirStatus function_layout(const LayoutInputRequest *request,uint32_t index,
@@ -78,7 +128,7 @@ static XrXirStatus function_layout(const LayoutInputRequest *request,uint32_t in
             sizeof(XrXirLayout),_Alignof(XrXirLayout));
         if (status!=XR_XIR_OK) return status;
     }
-    uint32_t bytes = 0, owned = 0;
+    uint32_t bytes = 0, owned = 0, outgoing = 0;
     for (uint32_t slot = 0; slot < slots; ++slot) {
         if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
         LayoutInputSlot field;
@@ -121,6 +171,10 @@ static XrXirStatus function_layout(const LayoutInputRequest *request,uint32_t in
             }
         }
         if (slot < function->parameter_count) {
+            uint32_t flags=0;
+            status=xr_xir_compile_view_type_flags(budget,request->input->domain.types,type,&flags);
+            if (status!=XR_XIR_OK) return status;
+            if (flags) outgoing=2;
             status = xr_xir_compile_layout(budget, request->input->domain.types, type, request->target, XR_XIR_LAYOUT_PARAMETER, &physical);
             if (status != XR_XIR_OK)
                 return status;
@@ -132,23 +186,8 @@ static XrXirStatus function_layout(const LayoutInputRequest *request,uint32_t in
     }
     XrXirLayout result;
     uint32_t outgoing = 0;
-    for (uint32_t i = 0; i < function->instruction_count; ++i) {
-        if (!xir_compile_work(budget, 1)) return XR_XIR_BUDGET;
-        XrXirInstruction storage;const XrXirInstruction *op=NULL;
-        XrXirStatus reading=request->input->instruction(budget,request->input->owner,index,i,&storage,&op);
-        if (reading!=XR_XIR_OK) return reading;
-        if (!op) return XR_XIR_BAD_STRUCTURE;
-        uint32_t count = op->op == XR_XIR_OUTPUT || op->op == XR_XIR_WRITE_STREAM || op->op==XR_XIR_ITERATOR_NTH ? 1 :
-            xr_xir_op_references_function(op->op) || op->op == XR_XIR_INVOKE_INDIRECT || op->op == XR_XIR_CALL_INDIRECT ||
-            op->op == XR_XIR_PRINT || op->op == XR_XIR_ARRAY_NEW || op->op == XR_XIR_STRUCT_NEW ||
-            op->op == XR_XIR_ENUM_NEW || op->op == XR_XIR_CLASS_NEW || op->op == XR_XIR_SLOT_GROUP_INIT ? op->args[1] : 0;
-        if (op->op==XR_XIR_TUPLE_NEW) {
-            const XrXirTypeNode *tuple=xr_xir_tuple_signature(request->input->domain.types,op->type);
-            if (!tuple) return XR_XIR_BAD_TYPE;
-            count=tuple->parameter_count;
-        }
-        if (count > outgoing) outgoing = count;
-    }
+    XrXirStatus outgoing_status=layout_outgoing(request,function,index,&outgoing);
+    if (outgoing_status!=XR_XIR_OK) return outgoing_status;
     uint32_t paths = 0;
     XrXirStatus path_status = layout_path_capacity(request,function,index,&paths);
     if (path_status != XR_XIR_OK) return path_status;

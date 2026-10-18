@@ -84,6 +84,7 @@ static void host_faults(XrXirProgram *program, const uint32_t entries[3], unsign
         XrXirHostExecutionRequest request = {program, &config, entries[mode == 3 ? 1 : mode == 4 ? 2 : 0], NULL, 0};
         runtime_attempts = 0; runtime_fail_at = point ? point - 1 : SIZE_MAX;
         XrXirHostCall *call = NULL; XrXirCallResult owned = {0};
+        bool driven_oom = false;
         XrXirCallStatus status = xr_xir_host_call_begin(&request, &call);
         trace.call = call;
         if (status == XR_XIR_CALL_READY) {
@@ -98,6 +99,17 @@ static void host_faults(XrXirProgram *program, const uint32_t entries[3], unsign
             } else {
                 while (result.outcome.status == XR_XIR_CALL_SUSPENDED) result = host_resume(call, result);
                 status = result.outcome.status;
+            }
+            driven_oom = call && status == XR_XIR_CALL_OOM;
+            if (driven_oom) {
+                XrXirInstance *instance = call->instance;
+                CHECK(xr_xir_task_executor_root_idle(instance->executor));
+                CHECK(xr_xir_task_executor_completion_status(instance->executor) == XR_XIR_CALL_OOM);
+                CHECK(instance->call);
+                const XrXirExecutorBinding binding = {instance->executor, instance->call->executor_activation,
+                    instance->call->executor_generation, instance->call->executor_ticket};
+                XrXirCallStatus failure = XR_XIR_CALL_READY;
+                CHECK(xr_xir_call_driver_failure(instance->call, &binding, &failure) && failure == XR_XIR_CALL_OOM);
             }
             if (call) CHECK(xr_xir_host_call_take(call, &owned) == status);
         }

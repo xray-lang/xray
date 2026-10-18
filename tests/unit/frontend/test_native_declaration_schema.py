@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import gen_native_declarations as schema
 import embed_native_types as embed
+import gen_api_inventory as inventory
 
 
 class NativeDeclarations(unittest.TestCase):
@@ -24,7 +25,7 @@ class NativeDeclarations(unittest.TestCase):
         for name, text in first.items():
             self.assertEqual((ROOT / name).read_text(encoding='utf-8'), text)
         header, members = schema.parse_source(self.source, self.prelude)
-        self.assertEqual(header[:3], (1, 'Array', 'T'))
+        self.assertEqual(header[:3], (1, 'Array', ('T',)))
         self.assertEqual(len(members), 32)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
                          {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY',
@@ -165,7 +166,7 @@ class NativeDeclarations(unittest.TestCase):
     def test_string_value_identity_and_full_member_spans(self):
         source = (ROOT / 'stdlib/types/string.xr').read_text(encoding='utf-8')
         header, members = schema.parse_source(source, self.prelude)
-        self.assertEqual(header[:3], (2, 'string', ''))
+        self.assertEqual(header[:3], (2, 'string', ()))
         self.assertEqual(len(members), 19)
         rows = source.splitlines()
         self.assertEqual(rows[header[3] - 1][header[4] - 1:], 'string {')

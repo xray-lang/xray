@@ -127,7 +127,11 @@ static bool source_root_bottom_type(SourceContext *ctx, XrXirType original,
     XrXirTypeNode bottom = *node;
     if (bottom.kind == XR_XIR_TYPE_CALLABLE) {
         bottom.flags = (bottom.flags & XR_XIR_CALLABLE_NO_SUSPEND) | XR_XIR_CALLABLE_ROOT_NONE;
-    } else if (bottom.kind == XR_XIR_TYPE_CELL || bottom.kind == XR_XIR_TYPE_ARRAY || bottom.kind == XR_XIR_TYPE_NULLABLE) {
+    } else if (bottom.kind == XR_XIR_TYPE_MAP) {
+        if (!source_root_bottom_type(ctx,bottom.element,depth + 1,&bottom.element) ||
+            !source_root_bottom_type(ctx,bottom.result,depth + 1,&bottom.result)) return false;
+    } else if (bottom.kind == XR_XIR_TYPE_CELL || bottom.kind == XR_XIR_TYPE_SET ||
+               bottom.kind == XR_XIR_TYPE_ARRAY || bottom.kind == XR_XIR_TYPE_NULLABLE) {
         if (!source_root_bottom_type(ctx,bottom.element,depth + 1,&bottom.element)) return false;
     } else if (bottom.kind == XR_XIR_TYPE_TUPLE) {
         XrXirCallableParameter *fields = bottom.parameter_count ? source_alloc(ctx,bottom.parameter_count,sizeof(*fields)) : NULL;
@@ -150,7 +154,8 @@ static bool source_root_capture_join(SourceContext *ctx, XrXirType left,
         return source_fail(ctx,NULL,XR_XIR_BUDGET,"capture shape join exhausted");
     if (!a || !b || a->kind != b->kind || a->parameter_count != b->parameter_count ||
         (a->kind != XR_XIR_TYPE_CELL && a->kind != XR_XIR_TYPE_ARRAY &&
-         a->kind != XR_XIR_TYPE_NULLABLE && a->kind != XR_XIR_TYPE_TUPLE))
+         a->kind != XR_XIR_TYPE_NULLABLE && a->kind != XR_XIR_TYPE_TUPLE &&
+         a->kind != XR_XIR_TYPE_MAP && a->kind != XR_XIR_TYPE_SET))
         return source_fail(ctx,NULL,XR_XIR_BAD_TYPE,"capture value shapes cannot change");
     XrXirTypeNode joined = *a, right_shape = *b;
     if (joined.kind == XR_XIR_TYPE_TUPLE) {
@@ -161,6 +166,10 @@ static bool source_root_capture_join(SourceContext *ctx, XrXirType left,
             if (!source_root_capture_join(ctx,fields[p].type,right_shape.parameters[p].type,depth + 1,&fields[p].type)) return false;
         }
         joined.parameters = fields;
-    } else if (!source_root_capture_join(ctx,joined.element,right_shape.element,depth + 1,&joined.element)) return false;
+    } else {
+        if (!source_root_capture_join(ctx,joined.element,right_shape.element,depth + 1,&joined.element)) return false;
+        if (joined.kind == XR_XIR_TYPE_MAP &&
+            !source_root_capture_join(ctx,joined.result,right_shape.result,depth + 1,&joined.result)) return false;
+    }
     return source_intern_type(ctx,joined,output);
 }

@@ -50,13 +50,19 @@ static XrXirValueStatus path_unique(ValuePathSlot *slot,
     ValuePathWrite *write, XrXirValueAdmission *admission) {
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     bool array = xr_xir_type_is_array(types, slot->type);
-    if (!array && slot->inline_storage) return XR_XIR_VALUE_OK;
+    bool map = xr_xir_type_is_map(types, slot->type);
+    if (!array && !map && slot->inline_storage) return XR_XIR_VALUE_OK;
     XrXirValue current = path_handle(*slot);
     XirObject *object = object_pointer(&current);
     if (atomic_load_explicit(&object->references, memory_order_acquire) == 1 &&
         (!write->domain_sensitive || object->domain == admission->domain)) return XR_XIR_VALUE_OK;
     XrXirValue copy = {0}; XrXirValueStatus status;
     if (array) status = path_array_clone(&current, admission, &copy);
+    else if (map) {
+        XirHash *cloned = NULL;
+        status = hash_clone((const XirHash *)object, ((const XirHash *)object)->capacity, NULL, admission, &cloned);
+        if (status == XR_XIR_VALUE_OK) copy = hash_value(cloned);
+    }
     else {
         XirNominalValue *record = (XirNominalValue *)object;
         if (record->count > admission->work) return XR_XIR_VALUE_LIMIT;
@@ -121,6 +127,26 @@ static XrXirValueStatus path_storage_step(ValuePathSlot *slot,
             slot->bytes = (unsigned char *)&record->fields[field].payload;
         }
         slot->type = node->nominal.fields[field]; return XR_XIR_VALUE_OK;
+    }
+    if (step->kind == XR_XIR_PATH_KEY) {
+        if (!xr_xir_type_is_map(types, slot->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+        XrXirValue value = path_handle(*slot);
+        XirHash *map = (XirHash *)object_pointer(&value);
+        XrXirValue key = {(uint32_t)map->key_type, 0, step->selector};
+        HashProbe probe = {0};
+        XrXirValueStatus status = hash_probe(map, &key, admission, &probe);
+        if (status != XR_XIR_VALUE_OK) return status;
+        if (!probe.found) {
+            *fault = (XrXirFaultDetail){431, 0, 0, 0};
+            return XR_XIR_VALUE_BOUNDS;
+        }
+        if (write) {
+            status = path_unique(slot, write, admission);
+            if (status != XR_XIR_VALUE_OK) return status;
+            value = path_handle(*slot); map = (XirHash *)object_pointer(&value);
+        }
+        *slot = (ValuePathSlot){map->value_type, (unsigned char *)hash_span(map, probe.entry, true).bytes, true};
+        return XR_XIR_VALUE_OK;
     }
     if (step->kind != XR_XIR_PATH_INDEX || !xr_xir_type_is_array(types, slot->type))
         return XR_XIR_VALUE_BAD_ARGUMENT;

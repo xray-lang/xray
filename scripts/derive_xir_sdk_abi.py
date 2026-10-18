@@ -103,6 +103,8 @@ PUBLIC_STRUCTURES = [
      ('kind','u32'),('flags','u32'),('initialized_fields','u32'),('status','u32')]),
  (4600,'XrXirSourceModule',[('name','ptr'),('name_length','u32'),('dependencies','ptr'),
      ('dependency_count','u32'),('initializer','u32'),('lexical_scope','u32'),('storage','u32')]),
+ (4700, 'XrXirHashRequest', [('operation','enum'),('result','enum'),('instruction','u32'),
+     ('receiver','ptr'),('path','ptr'),('key','ptr'),('value','ptr')]),
 ]
 
 PUBLIC_SCALARS = [
@@ -140,6 +142,19 @@ OBSERVER_LINKS = '''    XrXirCallStatus (*volatile open_api)(XrXirInstance *, ui
     (void)open_api; (void)retain_api; (void)drop_api; (void)drain_api;
 '''
 
+HASH_PROTOTYPES = '''_Static_assert(_Generic(&xr_xir_instance_hash_new,
+    XrXirCallStatus (*)(XrXirCallView *, XrXirType, const XrXirValue *, uint32_t, XrXirValue *): 1,
+    default: 0), "hash construction prototype");
+_Static_assert(_Generic(&xr_xir_instance_hash_apply,
+    XrXirCallStatus (*)(XrXirCallView *, const XrXirHashRequest *, XrXirValue *, XrXirFaultDetail *): 1,
+    default: 0), "hash mutation prototype");
+static XrXirCallStatus (*volatile hash_new_link)(XrXirCallView *, XrXirType,
+    const XrXirValue *, uint32_t, XrXirValue *) = xr_xir_instance_hash_new;
+static XrXirCallStatus (*volatile hash_apply_link)(XrXirCallView *, const XrXirHashRequest *,
+    XrXirValue *, XrXirFaultDetail *) = xr_xir_instance_hash_apply;
+'''
+HASH_LINKS = 'if (!hash_new_link || !hash_apply_link) return 9;\n'
+
 def align(value: int, alignment: int) -> int:
     return (value + alignment - 1) // alignment * alignment
 
@@ -171,7 +186,7 @@ def prepare(output: Path) -> None:
                         'u32/int/enum align4, bool align1; declaration field sequence copied '
                         'from actual versioned runtime headers. Never from a compiler probe output.'}
     (output/'EXPECTED.json').write_text(json.dumps(document,indent=2)+'\n',encoding='utf-8',newline='\n')
-    source = '#include "xir/xxir_program.h"\n#include "xir/xxir_class_observation.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\n' + OBSERVER_PROTOTYPES + 'int main(void) { const uint32_t endian=1; puts("[");\n' + OBSERVER_LINKS
+    source = '#include "xir/xxir_program.h"\n#include "xir/xxir_instance_hash.h"\n#include "xir/xxir_class_observation.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\n' + OBSERVER_PROTOTYPES + HASH_PROTOTYPES + 'int main(void) { const uint32_t endian=1; puts("[");\n' + OBSERVER_LINKS + HASH_LINKS
     for index, row in enumerate(rows):
         tail = ',' if index+1 < len(rows) else ''
         source += f'printf("  {{\\"id\\":{row["id"]},\\"value\\":%u}}{tail}\\n",(unsigned)({row["expression"]}));\n'

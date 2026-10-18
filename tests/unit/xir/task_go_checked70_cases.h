@@ -3,7 +3,7 @@
 typedef struct TaskGoFixture {
     XrXirTypeNode nodes[3]; XrXirTypes types;
     XrXirType worker_parameter, task_parameter, generic_argument;
-    XrXirInstruction worker[4], root[14], maker[2], helper[2], unknown[5], initializer;
+    XrXirInstruction worker[4], root[14], maker[2], helper[3], unknown[5], initializer;
     XrXirBlock worker_block, worker_blocks[3], root_blocks[6], maker_block, helper_block, unknown_blocks[3], init_block;
     XrXirInstruction cleanup_helper[3], cleanup_initializer[4];
     uint32_t root_operand, maker_operand, helper_operand, worker_operand;
@@ -480,7 +480,10 @@ static void task_go_cleanup_permissions(void) {
         XrXirArtifact *checked = NULL;
         fprintf(stderr, "Task cleanup role spawn=%u mutable=%u\n", spawn, mutable);
         task_go_expected(&c, &f, spawn && mutable ? XR_XIR_BAD_TYPE : XR_XIR_OK, &checked);
-        xr_xir_compile_artifact_free(checked); owner_free(&c, baseline);
+        xr_xir_compile_artifact_free(checked); checked=NULL;
+        f.slot.type=XR_XIR_I64;
+        task_go_expected(&c,&f,XR_XIR_BAD_TYPE,&checked);
+        owner_free(&c, baseline);
     }
     XrXirCompileContext context=owner_new(caps()); uint64_t baseline=stats(&context).live_bytes;
     TaskGoFixture legacy; task_go_cleanup_fixture(&legacy,0,0);

@@ -503,7 +503,7 @@ static void nominal_metadata_cases(void) {
     nominal_fixture(&f); f.constraint.markers = 8;
     b = stage_context_default();
     CHECK(xr_xir_compile_nominal_structure_verify(&b, &f.table, NULL) == XR_XIR_OK);
-    nominal_fixture(&f); f.constraint.markers = 64;
+    nominal_fixture(&f); f.constraint.markers = 128;
     b = stage_context_default();
     CHECK(xr_xir_compile_nominal_structure_verify(&b, &f.table, NULL) == XR_XIR_BAD_TYPE);
     nominal_fixture(&f); f.fields[0].flags = XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED;

@@ -107,7 +107,7 @@ def main():
     image,file_digest,digest=current_preimage(rows,77,29,33,30,35)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
-    old_current_image,_,_=current_preimage(old_rows,73,24,29,28,30)
+    old_current_image,_,_=current_preimage(old_rows,75,25)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
     assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(30,77,29,33,35)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
@@ -121,6 +121,6 @@ def main():
     target=Path(__file__).with_name('sdk_current_identity_golden.h')
     if args.write:target.write_text(output,encoding='utf-8',newline='\n')
     else:assert target.read_text(encoding='utf-8')==output,'current SDK known bytes differ from independent facts'
-    print('Current SDK '+str(len(rows))+' fields / '+str(len(image))+' byte independent preimage PASS: '+digest.hex())
+    print('Current SDK '+str(len(current_rows))+' fields / '+str(len(image))+' byte independent preimage PASS: '+digest.hex())
 
 if __name__=='__main__':main()

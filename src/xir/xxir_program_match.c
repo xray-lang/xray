@@ -17,7 +17,28 @@
 #include "xxir_constraint_proof.h"
 #include "xxir_cell_provenance_internal.h"
 #include "xxir_effect_contract_internal.h"
+#include "xxir_effect_runtime_internal.h"
 #include "../base/xsha256.h"
+
+static XrXirStatus program_cell_roles(const XrXirCompileContext *context,
+    const XrXirEffects *effects,const XrXirModule *module,XrXirProgramPermissions *permissions) {
+    uint32_t at=0;
+    for (uint32_t f=0;f<module->function_count;++f) {
+        if (!xir_compile_work(context,sizeof(uint32_t)+2)) return XR_XIR_BUDGET;
+        permissions->parameter_offsets[f]=at;
+        for (uint32_t p=0;p<module->functions[f].parameter_count;++p) {
+            if (at==UINT32_MAX) return XR_XIR_BUDGET;
+            if (!xir_compile_work(context,sizeof(XrXirCellProofRole)+sizeof(uint8_t)+2))
+                return XR_XIR_BUDGET;
+            XrXirCellProofRole role=XR_XIR_CELL_PROOF_UNKNOWN;
+            XrXirStatus status=xir_effects_runtime_cell_role(effects,f,p,&role);
+            if (status!=XR_XIR_OK) return status;
+            permissions->cell_roles[at++]=(uint8_t)role;
+        }
+    }
+    if (!xir_compile_work(context,sizeof(uint32_t))) return XR_XIR_BUDGET;
+    permissions->parameter_offsets[module->function_count]=at;return XR_XIR_OK;
+}
 
 #define MATCH(a, b) do { \
     if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET; if ((a) != (b)) return XR_XIR_BAD_STRUCTURE; \
@@ -289,8 +310,7 @@ static XrXirStatus program_permissions(const XrXirCompileContext *context,
         permissions->slot_count = module->declarations->slot_count;
     }
     if (status == XR_XIR_OK)
-        status = xr_xir_compile_cell_roles_verified(context, module,
-            permissions->parameter_offsets, permissions->cell_roles, NULL);
+        status = program_cell_roles(context,effects,module,permissions);
     uint32_t reference_at = 0, generator_at = 0, root_parameter_at = 0;
     for (uint32_t f = 0; f < module->function_count && status == XR_XIR_OK; ++f) {
         if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; break; }

@@ -17,6 +17,12 @@ add_test(NAME test_xir_p09_string_place COMMAND test_xir_p09_string_place)
 set_tests_properties(test_xir_p09_string_place PROPERTIES TIMEOUT 120 LABELS "unit;xir;ctfe;ownership;memory;budget")
 add_test(NAME test_xir_p09_string_place_normal COMMAND test_xir_p09_string_place --normal)
 set_tests_properties(test_xir_p09_string_place_normal PROPERTIES TIMEOUT 120 LABELS "unit;xir;string;ownership;execution")
+foreach(mode string utf8)
+    add_test(NAME test_xir_p09_string_place_invalid_admission_${mode}
+        COMMAND test_xir_p09_string_place --invalid-admission-${mode})
+    set_tests_properties(test_xir_p09_string_place_invalid_admission_${mode}
+        PROPERTIES TIMEOUT 120 LABELS "unit;xir;string;ownership;memory;rejection")
+endforeach()
 
 add_executable(test_xir_p09_string_checked "${PROJECT_SOURCE_DIR}/tests/unit/xir/test_xir_p09_string_checked.c")
 target_link_libraries(test_xir_p09_string_checked PRIVATE xray_xir_source)
@@ -29,7 +35,7 @@ endif()
 add_test(NAME test_xir_p09_string_checked COMMAND test_xir_p09_string_checked)
 set_tests_properties(test_xir_p09_string_checked PROPERTIES TIMEOUT 120 LABELS "unit;xir;string;ownership;rejection;abi")
 
-add_test(NAME test_xir_p09_sizing74_vectors COMMAND ${XRAY_PYTHON}
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/compile_owner/derive_checked_sizing74_golden.py"
-    --source-root "${PROJECT_SOURCE_DIR}" --output-root "${PROJECT_SOURCE_DIR}")
-set_tests_properties(test_xir_p09_sizing74_vectors PROPERTIES TIMEOUT 120 LABELS "unit;xir;wire;independent;compiler")
+add_test(NAME test_xir_p09_sizing75_vectors COMMAND ${XRAY_PYTHON}
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_hash75_vectors.py"
+)
+set_tests_properties(test_xir_p09_sizing75_vectors PROPERTIES TIMEOUT 120 LABELS "unit;xir;wire;independent;compiler")

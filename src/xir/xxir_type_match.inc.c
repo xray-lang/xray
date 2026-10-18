@@ -108,7 +108,8 @@ static XrXirStatus type_match_pair(TypeMatchContext *c, XrXirType expected,
     } else if (from->kind != XR_XIR_TYPE_ARRAY && from->kind != XR_XIR_TYPE_CELL &&
                from->kind != XR_XIR_TYPE_CALLABLE && from->kind != XR_XIR_TYPE_NULLABLE && from->kind != XR_XIR_TYPE_TUPLE &&
                from->kind != XR_XIR_TYPE_ATOMIC && from->kind != XR_XIR_TYPE_TASK &&
-               from->kind != XR_XIR_TYPE_ITERATOR && from->kind != XR_XIR_TYPE_CHANNEL)
+               from->kind != XR_XIR_TYPE_MAP && from->kind != XR_XIR_TYPE_SET &&
+               from->kind != XR_XIR_TYPE_SLICE && from->kind != XR_XIR_TYPE_MUT_SLICE && from->kind != XR_XIR_TYPE_ITERATOR && from->kind != XR_XIR_TYPE_CHANNEL)
         return XR_XIR_BAD_TYPE;
     *frame = (TypeMatchFrame) {from, to, 0}; return XR_XIR_OK;
 }
@@ -139,10 +140,12 @@ static XrXirStatus type_match_run(const XrXirCompileContext *compile_context,
         const XrXirTypeNode *from = frame->from, *to = frame->to;
         uint32_t components = from->kind == XR_XIR_TYPE_NOMINAL ? from->nominal.argument_count :
             from->kind == XR_XIR_TYPE_CALLABLE ? from->parameter_count + 1 :
-            from->kind == XR_XIR_TYPE_TUPLE ? from->parameter_count : 1;
+            from->kind == XR_XIR_TYPE_TUPLE ? from->parameter_count : from->kind == XR_XIR_TYPE_MAP ? 2 : 1;
         if (frame->next == components) { --depth; continue; }
         XrXirType left = from->element, right = to->element;
-        if (from->kind == XR_XIR_TYPE_NOMINAL) {
+        if (from->kind == XR_XIR_TYPE_MAP && frame->next) {
+            left = from->result; right = to->result;
+        } else if (from->kind == XR_XIR_TYPE_NOMINAL) {
             left = from->nominal.arguments[frame->next]; right = to->nominal.arguments[frame->next];
         } else if (from->kind == XR_XIR_TYPE_TUPLE) {
             uint32_t p=frame->next;

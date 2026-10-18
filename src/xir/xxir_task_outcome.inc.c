@@ -43,7 +43,7 @@ static XrXirCallStatus task_core_outcome_admit(XrXirTaskExecutor *executor,
     const XirTask *task, const XrXirCallResult *outcome) {
     if (outcome->status==XR_XIR_CALL_THROWN)
         return task_core_error_admit(executor,task->activation.entry,&outcome->value);
-    if (outcome->status==XR_XIR_CALL_RETURNED && !xr_xir_task_scalar_result_supported((XrXirType)outcome->value.type)) {
+    if (outcome->status==XR_XIR_CALL_RETURNED && !xr_xir_task_scalar_shape((XrXirType)outcome->value.type)) {
         XrXirValueAdmission admission={executor->config.program->arena,executor->config.domain,NULL,NULL,
             executor->config.poll_limit,executor->config.call_limit};
         XrXirValueStatus status=xr_xir_value_admit(&outcome->value,(XrXirType)outcome->value.type,&admission);

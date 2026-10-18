@@ -38,8 +38,12 @@ static const uint8_t original_policy_program35[] = {
 
 #include "aot/program/xr_xir_native_projection.h"
 #include "base/xsha256.h"
+#include "xir_view_value27_program31_identity.h"
+#include "xir_union86_identity.h"
+#include "xir_program31_value24_identity.h"
 
 /* Independent complete prior and current policy frames. */
+#include "xir_view_value27_identity.h"
 static const uint8_t linked_policy71_preimage[71]={
     0x78,0x72,0x61,0x79,0x3a,0x78,0x69,0x72,0x2d,0x63,0x31,0x31,
     0x2d,0x63,0x6f,0x64,0x65,0x67,0x65,0x6e,0x2d,0x70,0x6f,0x6c,
@@ -297,11 +301,6 @@ static const uint8_t original_policy73[] = {
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_value29 : original_policy_value29,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_program35 : original_policy_program35,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_value24 : original_policy_value24,32));
-    uint8_t program30_hash[32];
-    xr_sha256(linked ? linked_policy_program30_preimage : original_policy_program30_preimage,
-        linked ? sizeof(linked_policy_program30_preimage) : sizeof(original_policy_program30_preimage),program30_hash);
-    CHECK(!memcmp(program30_hash,linked ? linked_policy_program30 : original_policy_program30,32));
-    CHECK(memcmp(input->codegen_policy_id.bytes,program30_hash,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy73 : original_policy73,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy72 : original_policy72,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy71 : original_policy71,32));

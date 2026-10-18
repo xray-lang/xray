@@ -20,6 +20,7 @@ static void request_exit(XrXirCall *call, XrXirCallResult *result, bool scope) {
         *result = call_result(call->abort_reason);
     }
     xr_xir_call_result_drop(&frame->pending);
+    frame->return_staged = false;
     xr_xir_call_result_move(result, &frame->pending);
     frame->exiting = true;
     frame->exit_done = false;

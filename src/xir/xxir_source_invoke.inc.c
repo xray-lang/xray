@@ -29,6 +29,7 @@ static bool source_error_edge(SourceContext *ctx, SourceValue value) {
         XR_XIR_UNIT,{leaving ? value.id : 0},{0},leaving ? handler->frontier : 0,{0}},NULL);
 }
 static bool source_recipe_record(SourceContext *ctx, XrXirInstruction op, SourceValue *result) {
+    if (!source_call_borrows(ctx,&op)) return false;
     SourceFunction *body = &ctx->bodies[ctx->function];
     if (!body->error_context || (op.op != XR_XIR_CALL && op.op != XR_XIR_CALL_INDIRECT &&
         op.op != XR_XIR_CALL_DEFAULT))

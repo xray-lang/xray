@@ -55,6 +55,9 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
         if (!source_ground_type(ctx,node->as.index_get.array,depth+1,&receiver)) return false;
         if (receiver.present && xr_xir_type_is_array(&ctx->types,receiver.type))
             *output=(SourceExpectedType){true,xr_xir_array_element(&ctx->types,receiver.type), false, false};
+        uint32_t kind=0;XrXirType element=XR_XIR_UNIT;
+        if (receiver.present && source_view_shape(ctx,receiver.type,&kind,&element))
+            *output=(SourceExpectedType){true,element,false,false};
         return true;
     }
     AstNode *member=node;
