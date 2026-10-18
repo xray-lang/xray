@@ -11,7 +11,9 @@
  *   Native insertion sort retains its state while a real Lowered comparator
  *   returns to the host, resumes, throws, or is cancelled.
  */
-#include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_program_internal.h"
+#include "xir/xxir_compile_memory.h"
+#include "xir_mixed_binding_projection.h"
 #include "xir_construction_fixture.h"
 #include "xir/xxir_call.h"
 #include "xir/xxir_vm.h"
@@ -22,6 +24,21 @@
 #endif
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_source_fixture_owner.h"
+static uint32_t call_factory_abi=XR_XIR_PROGRAM_ABI_VERSION;
+static unsigned call_binding_attack,call_binding_callbacks;
+static unsigned call_code_releases;
+static XrXirVmBinding *call_attack_bindings;
+static void call_before_compile_allocation(size_t bytes) {
+    (void)bytes;
+    if(!call_attack_bindings)return;
+    ++call_binding_callbacks;
+    if(call_binding_attack==1)call_attack_bindings[0].artifact=(const XrXirArtifact *)(uintptr_t)1;
+    else call_attack_bindings[0].function=1;
+}
+#define XR_INSTANCE_COMPILE_BEFORE_ALLOCATION(bytes) call_before_compile_allocation(bytes)
+#include "xir_instance_compile_observer.h"
+#undef XR_INSTANCE_COMPILE_BEFORE_ALLOCATION
+
 static void call_runtime_retiring(void *pointer);
 #define XIR_RUNTIME_BEFORE_FREE(pointer) call_runtime_retiring(pointer)
 #include "xir_runtime_allocations.h"
@@ -270,41 +287,60 @@ XR_DATA const XrXirCallEntry fixture_calls12_entries[5];
 XR_DATA const XrXirCallEntry fixture_calls13_entries[5];
 
 typedef struct CallFixtureCode {
-    XrXirArtifact *artifact;
-    XrXirVmBinding bindings[5];
-    XrXirCallEntry entries[5];
+    XrXirVmBinding *bindings;
+    XrXirCallEntry *entries;
 } CallFixtureCode;
-
-static void call_fixture_code_drop(void *owner) {
-    CallFixtureCode *code=owner;
-    xr_xir_compile_artifact_free(code->artifact);
+static void call_fixture_code_drop(void *pointer) {
+    CallFixtureCode *code=pointer;if(!code)return;
+    xr_compile_resources_free(code->bindings);xr_compile_resources_free(code->entries);
     xr_compile_resources_free(code);
 }
-
-static XrXirProgram *call_fixture_program(const XrXirCompileContext *context,
-    XrXirArtifact *artifact,const XrXirCallEntry *native,uint32_t mode,XrXirResumeEntry invalid_result) {
+static void call_fixture_code_release(void *pointer) {
+    ++call_code_releases;call_fixture_code_drop(pointer);
+}
+static XrXirStatus call_fixture_program_take(const XrXirCompileContext *context,
+    XrXirArtifact **artifact,const XrXirCallEntry *native,uint32_t mode,
+    XrXirResumeEntry invalid_result,XrXirProgram **output) {
+    CHECK(artifact && *artifact && output && !*output);
+    XrXirCompileContext current=*context;context=&current;
+    XrXirArtifact *original=*artifact;
+    const XrXirModule *module=xr_xir_compile_artifact_module(original);
+    CHECK(module && module->stage==XR_XIR_LOWERED && module->function_count==5 && module->declarations);
     XrXirStatus status=XR_XIR_OK;
     CallFixtureCode *code=xir_compile_calloc(context,1,sizeof(*code),&status);
-    CHECK(status==XR_XIR_OK && code);
-    code->artifact=artifact;
-    const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
-    CHECK(module && module->stage==XR_XIR_LOWERED && module->function_count==5 && module->declarations);
-    for (uint32_t i=0;i<5;++i)
-        CHECK(xr_xir_compile_vm_bind(artifact,i,&code->bindings[i],&code->entries[i])==XR_XIR_OK);
-    if (native) { uint32_t callee=mode>=12?4u:1u;code->entries[callee]=native[callee]; }
-    /* Keep the actual Bool descriptor: only the returned carrier is malformed. */
-    if (invalid_result) {
+    if(!code)return status;
+    XirMixedProjection projection;
+    XrXirProgramInput *input=NULL;XrXirProgram *program=NULL;
+    status=xr_xir_compile_vm_bind_table(original,&code->bindings,&code->entries);
+    if(status==XR_XIR_OK)status=xir_mixed_projection_prepare(context,original,code->bindings,code->entries,5,&projection);
+    if(status==XR_XIR_OK && native){
+        uint32_t callee=mode>=12?4u:1u;
+        status=xir_mixed_projection_native(context,&projection,callee,&native[callee]);
+        if(status==XR_XIR_OK)code->entries[callee]=native[callee];
+    }
+    if(status==XR_XIR_OK && invalid_result){
         CHECK(code->entries[2].result==XR_XIR_BOOL);
         code->entries[2].resume=invalid_result;
+        status=xir_mixed_projection_native(context,&projection,2,&code->entries[2]);
     }
-    XrXirProgramSpec spec={.abi_version=XR_XIR_PROGRAM_ABI_VERSION,
-        .target=*xr_xir_compile_artifact_target(artifact),.entries=code->entries,.entry_count=5,
-        .declarations=module->declarations,.code={code,call_fixture_code_drop},.types=module->types,
-        .packet=xir_program_packet_borrow(artifact)};
-    CHECK(spec.packet.bytes && spec.packet.length && spec.packet.identity && xr_xir_compile_artifact_layout(artifact, 0));
-    XrXirProgram *program=NULL;
-    CHECK(xr_xir_compile_program_seal(context,&spec,&program)==XR_XIR_OK && program);
-    return program;
+    if(status==XR_XIR_OK){
+        XrXirProgramSpec spec={call_factory_abi,*xr_xir_compile_artifact_target(original),
+            code->entries,5,module->declarations,{0},module->types,{0}};
+        XrXirArtifact *owned=original;
+        call_attack_bindings=call_binding_attack?code->bindings:NULL;
+        status=xir_program_input_take(context,&owned,&input);
+        if(status==XR_XIR_OK)status=xir_program_receive(context,&spec,&input,NULL,&program);
+        call_attack_bindings=NULL;
+    }
+    if(status==XR_XIR_OK && (*output || *artifact!=original))status=XR_XIR_BAD_STRUCTURE;
+    if(status==XR_XIR_OK)status=xir_mixed_projection_match(context,program,&projection);
+    if(status!=XR_XIR_OK){
+        if(program){program->permissions->input->artifact=NULL;xr_xir_compile_program_drop(program);}
+        else if(input){input->artifact=NULL;xir_program_input_free(input);}
+        call_fixture_code_drop(code);return status;
+    }
+    program->code=(XrXirCodeLease){code,call_fixture_code_release};
+    *artifact=NULL;*output=program;return XR_XIR_OK;
 }
 
 static void xir_instruction_calls(const XrXirCompileContext *context) {
@@ -315,8 +351,8 @@ static void xir_instruction_calls(const XrXirCompileContext *context) {
             fixture_calls7_entries,fixture_calls8_entries,fixture_calls9_entries,fixture_calls10_entries,
             fixture_calls11_entries,fixture_calls12_entries,fixture_calls13_entries};
         XrXirArtifact *artifact=call_fixture(context,mode);
-        XrXirProgram *program=call_fixture_program(context,artifact,native?tables[mode]:NULL,mode,NULL);
-        artifact=NULL;
+        XrXirProgram *program=NULL;
+        CHECK(call_fixture_program_take(context,&artifact,native?tables[mode]:NULL,mode,NULL,&program)==XR_XIR_OK && !artifact && program);
         XrXirInstance *instance=call_instance_new(program);
         xr_xir_compile_program_drop(program);program=NULL;
         XrXirValue args[]={{XR_XIR_I64,0,9},{XR_XIR_I64,0,4}};
@@ -407,7 +443,8 @@ static void call_admission(const XrXirCompileContext *context) {
     for (uint32_t native = 0; native < 2; ++native) {
         if (native) entries[1] = fixture_calls0_entries[1];
         XrXirArtifact *invalid=call_fixture(context,0);
-        XrXirProgram *program=call_fixture_program(context,invalid,native?fixture_calls0_entries:NULL,0,wrong_comparator);
+        XrXirProgram *program=NULL;
+        CHECK(call_fixture_program_take(context,&invalid,native?fixture_calls0_entries:NULL,0,wrong_comparator,&program)==XR_XIR_OK && !invalid && program);
         XrXirInstance *instance=call_instance_new(program);
         xr_xir_compile_program_drop(program);
         CHECK(xr_xir_instance_start(instance,0,arguments,2)==XR_XIR_CALL_READY);
@@ -482,7 +519,7 @@ static void fault_boundary(void) {
 
 #include "xir_bounds_call_cases.h"
 
-int main(void) {
+static int call_complete_cases(void) {
     SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     bounds_fault_boundary();
     match_fault_boundary();
@@ -494,4 +531,56 @@ int main(void) {
     source_fixture_owner_free(&compiler);
     puts("Resumable native-to-Lowered-VM comparator and bounded trampoline witnesses passed");
     return 0;
+}
+
+static void call_owned_recovery(void) {
+    for(unsigned mode=0;mode<2;++mode)for(unsigned native=0;native<2;++native)
+    for(unsigned attack=0;attack<3;++attack){
+        SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
+        const XrXirCallEntry *table=mode?fixture_calls1_entries:fixture_calls0_entries;
+        XrXirArtifact *artifact=call_fixture(&owner.context,mode),*original_artifact=artifact;
+        XrXirProgram *program=NULL;
+        unsigned releases=call_code_releases;
+        call_binding_attack=attack;call_binding_callbacks=0;
+        call_factory_abi=attack?XR_XIR_PROGRAM_ABI_VERSION:0;
+        XrXirStatus status=call_fixture_program_take(&owner.context,&artifact,
+            native?table:NULL,mode,NULL,&program);
+        call_factory_abi=XR_XIR_PROGRAM_ABI_VERSION;call_binding_attack=0;
+        CHECK(status==(attack?XR_XIR_BAD_STRUCTURE:XR_XIR_BAD_LAYOUT));
+        CHECK(!program && artifact==original_artifact && (attack?call_binding_callbacks>0:!call_binding_callbacks));
+        CHECK(call_code_releases==releases);
+        CHECK(call_fixture_program_take(&owner.context,&artifact,native?table:NULL,
+            mode,NULL,&program)==XR_XIR_OK && !artifact && program);
+        XrXirInstance *instance=call_instance_new(program);
+        XrCompileResourceStats stats={0};
+        CHECK(xr_compile_resources_stats(owner.context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
+        XrCompileResources *producer=owner.context.resources;
+        memset(&owner,0xa5,sizeof(owner));xr_compile_resources_release(producer);
+        xr_xir_compile_program_drop(program);program=NULL;
+        CHECK(call_code_releases==releases);
+        XrXirValue args[]={{XR_XIR_I64,0,9},{XR_XIR_I64,0,4}};
+        CHECK(xr_xir_instance_start(instance,0,args,2)==XR_XIR_CALL_READY);
+        XrXirInstanceResult run=xr_xir_instance_poll_bounded(instance,UINT64_MAX);
+        CHECK(run.outcome.status==XR_XIR_CALL_SUSPENDED);
+        CHECK(xr_xir_instance_resume(instance,run.epoch,run.outcome.wake)==XR_XIR_CALL_READY);
+        run=xr_xir_instance_poll_bounded(instance,UINT64_MAX);
+        CHECK(run.outcome.status==(mode?XR_XIR_CALL_THROWN:XR_XIR_CALL_RETURNED));
+        XrXirValue escaped={0};
+        CHECK(xr_xir_instance_take_result(instance,&escaped)==run.outcome.status);
+        call_instance_free(instance,XR_XIR_CALL_READY);CHECK(call_code_releases==releases+1);
+        if(mode){
+            CHECK(instance_compile_live && instance_compile_bytes && xr_xir_value_valid(&escaped));
+            XrXirDomain *reader=NULL;CHECK(xr_xir_domain_new(65536,&reader)==XR_XIR_VALUE_OK);
+            CHECK(error_fixture_is_code(&escaped,reader,91));xr_xir_domain_drop(reader);
+        }else CHECK(escaped.type==XR_XIR_I64 && escaped.payload==4);
+        xr_xir_value_drop(&escaped);
+        CHECK(!runtime_live && !runtime_bytes);instance_compile_zero();
+        printf("Calls mode=%u native=%u attack=%u real_callbacks=%u lease=1 compiler_work=%llu physical_zero\n",
+            mode,native,attack,call_binding_callbacks,(unsigned long long)stats.work);
+    }
+    instance_compile_report();puts("Calls current Input failure recovery, producer death, actual callbacks, execution4 and escaped Error91 passed");
+}
+int main(int argc,char **argv) {
+    if(argc==1){int status=call_complete_cases();instance_compile_zero();return status;}
+    CHECK(argc==2 && !strcmp(argv[1],"--owned-recovery"));call_owned_recovery();return 0;
 }
