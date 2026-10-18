@@ -1,5 +1,5 @@
-"""Compile module const publication and mutable/local controls through frozen plans."""
-from native_source_compile import compile_cases
+"""Compile module const publication and mutable/local controls through Source."""
+from source_product_compile import compile_cases
 
 if __name__ == "__main__":
     cases = {

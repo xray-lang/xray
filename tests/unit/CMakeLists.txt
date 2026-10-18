@@ -84,6 +84,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cli/build_source_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/public_source_program.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/api/source_product_text.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/api/source_compiler.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/api/source_generated_c.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/api/source_public.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/entry_oracles.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/api/source_submission.cmake)
@@ -1948,7 +1949,7 @@ add_test(NAME test_semantic_external_field_type_identity
 set_tests_properties(test_semantic_external_field_type_identity PROPERTIES LABELS "semantic;class;ownership")
 add_test(NAME test_native_array_pop_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_array_pop.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
+        --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_array_pop_authority PROPERTIES
     LABELS "aot;generated-c;array;ownership;integration" TIMEOUT 240)
 add_test(NAME test_native_json_codec_authority
@@ -1963,7 +1964,7 @@ set_tests_properties(test_native_coroutine_method_authority PROPERTIES
     LABELS "aot;generated-c;coroutine;integration" TIMEOUT 240)
 add_test(NAME test_native_tuple_boundary_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_tuple_boundary.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
+        --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_tuple_boundary_authority PROPERTIES
     LABELS "aot;generated-c;tuple;ownership;integration" TIMEOUT 240)
 add_test(NAME test_native_tuple_array_authority
@@ -1973,7 +1974,7 @@ set_tests_properties(test_native_tuple_array_authority PROPERTIES
     LABELS "aot;generated-c;array;ownership;integration" TIMEOUT 240)
 add_test(NAME test_native_string_concat_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_string_concat.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
+        --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_string_concat_authority PROPERTIES
     LABELS "aot;generated-c;string;ownership;integration" TIMEOUT 120)
 add_test(NAME test_native_execution_closure_authority
@@ -2123,7 +2124,7 @@ set_tests_properties(test_native_enum_namespace_authority PROPERTIES
     LABELS "aot;generated-c;enum;integration" TIMEOUT 240)
 add_test(NAME test_native_module_const_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_module_const.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
+        --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_module_const_authority PROPERTIES
     LABELS "aot;generated-c;array;ownership;integration" TIMEOUT 240)
 add_test(NAME test_target_array_owned_string_result

@@ -1,5 +1,5 @@
 """Verify nullable Array.pop results through strict generated C compilation."""
-from native_source_compile import compile_cases
+from source_product_compile import compile_cases
 
 
 if __name__ == "__main__":
