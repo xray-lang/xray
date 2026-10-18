@@ -1059,18 +1059,18 @@ static XrJsonValue *complete_instance_members_by_name(XaAnalyzer *analyzer,
 // Instance-member completion via XaAnalyzer type lookup (prefix is a
 // variable; type comes from analyzer inference).
 static XrJsonValue *complete_instance_members_from_analyzer(XaAnalyzer *analyzer, XrType *type) {
-    int member_count = 0;
-    XaSymbol **members = xa_analyzer_get_members(analyzer, type, &member_count);
-    if (!members || member_count == 0) {
-        if (members)
-            xr_free(members);
+    XaMemberList members = {0};
+    if (xa_analyzer_get_members(analyzer, type, &members) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
+    if (!members.count) {
+        xa_member_list_dispose(&members);
         return NULL;
     }
     const char *cls_name = type->instance.class_name ? type->instance.class_name : "class";
     XrJsonValue *items = xjson_new_array();
     char detail_buf[512];
-    for (int i = 0; i < member_count; i++) {
-        XaSymbol *m = members[i];
+    for (int i = 0; i < members.count; i++) {
+        XaSymbol *m = members.items[i];
         if (!m || !m->name || m->is_private)
             continue;
         if (m->kind == XA_SYM_METHOD && strcmp(m->name, XR_INIT_MEMBER_NAME) == 0)
@@ -1102,7 +1102,7 @@ static XrJsonValue *complete_instance_members_from_analyzer(XaAnalyzer *analyzer
             xjson_array_push(items, make_completion_item(m->name, 5, detail_buf));
         }
     }
-    xr_free(members);
+    xa_member_list_dispose(&members);
     if (xjson_array_len(items) > 0)
         return items;
     xjson_free(items);
@@ -1158,6 +1158,9 @@ static XrJsonValue *complete_from_analyzer_type(XaAnalyzer *analyzer, const char
         XrJsonValue *r = complete_instance_members_from_analyzer(analyzer, type);
         if (r)
             return r;
+        if (xr_compile_state_status(xa_symbol_registry_state(analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+            return NULL;
         // Fall through: some instances (built-in classes) still have
         // useful completions in the builtin bucket below.
     }
@@ -1229,6 +1232,9 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
     }
 
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
+    if (analyzer && xr_compile_state_status(xa_symbol_registry_state(analyzer->symbol_registry)) !=
+                        XR_COMPILE_RESOURCE_OK)
+        return NULL;
     char module_name[64];
     const char *prefix = find_module_prefix(doc, pos, module_name, sizeof(module_name));
     lsp_log("xlsp_analyze_completion_with_server: prefix=%s", prefix ? prefix : "(null)");
@@ -1278,7 +1284,13 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
     }
 
     if (analyzer) {
-        if ((r = complete_from_analyzer_type(analyzer, prefix)))
+        r = complete_from_analyzer_type(analyzer, prefix);
+        if (xr_compile_state_status(xa_symbol_registry_state(analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK) {
+            xjson_free(r);
+            return NULL;
+        }
+        if (r)
             return r;
     }
 

@@ -1,0 +1,34 @@
+// Preserve all original callable/nullable/Array/unary bodies; capture each actual call and fault projection once.
+// Null force unwrap (!) throws PanicInfo with code 413
+
+@test
+fn test_null_unwrap_throws_413() {
+    var x: i64? = null
+    var caught = false
+    try {
+        var v = x!
+        assert(false)
+    } catch panic (e: PanicInfo) {
+        caught = true
+        var p19CallableValue0 = e.code
+        assertEqual(p19CallableValue0, 413)
+        print(p19CallableValue0)
+        // The code carries E0413; the message carries what went wrong. The
+        // constructor strips a recognised "E0xxx: " prefix on purpose, so that
+        // reporters can re-prefix from the code field without doubling it.
+        var p19CallableValue1 = e.message.contains("unwrap")
+        assert(p19CallableValue1)
+        print(p19CallableValue1)
+    }
+    var p19CallableValue2 = caught
+    assertEqual(p19CallableValue2, true)
+    print(p19CallableValue2)
+}
+
+@test
+fn test_non_null_unwrap_succeeds() {
+    var y: i64? = 42
+    var p19CallableValue3 = y!
+    assertEqual(p19CallableValue3, 42)
+    print(p19CallableValue3)
+}

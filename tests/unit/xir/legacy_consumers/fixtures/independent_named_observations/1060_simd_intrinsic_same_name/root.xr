@@ -1,0 +1,17 @@
+// Preserve the original declared-module type authority and full imported/user-named bodies; observe each actual scalar call once.
+// User declarations that share canonical SIMD spellings remain ordinary code.
+struct U32x4 {
+    value: u32
+
+    bitXor(other: U32x4) -> u32 {
+        return this.value + other.value
+    }
+}
+
+@test
+fn test_user_simd_names_are_not_intrinsics() {
+    var result = U32x4{value: 2}.bitXor(U32x4{value: 3})
+    var p19ImportedValue0 = result
+    assertEqual(p19ImportedValue0, 5)
+    print(p19ImportedValue0)
+}

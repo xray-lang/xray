@@ -25,6 +25,7 @@
 #include "../../runtime/value/xtype.h"
 #include "../../base/xtarget_data_layout.h"
 #include "xanalyzer_symbol.h"
+#include "xanalyzer_member_list.h"
 #include "xa_parallel_call_plan.h"
 #include "xa_enum_record_plan.h"
 #include "xa_memory_effect_db.h"
@@ -83,7 +84,7 @@ typedef struct XaDiagnostic {
 
 // File entry for multi-file support
 typedef struct XaFileEntry {
-    char *path;             // Owned file path
+    const char *path;       // Immutable origin text in the registry's pinned pool
     XaScope *file_scope;    // File's top-level scope
     uint64_t content_hash;  // Hash for change detection
     bool dirty;             // Needs re-analysis
@@ -93,10 +94,15 @@ typedef struct XaFileEntry {
 // Scoped activation of one analyzed file. Multi-module compiler phases must
 // resolve names from the file that owns the AST, not whichever file happened
 // to be analyzed last by a shared analyzer.
+/* Zero-initialize before push. Live tokens cannot move/copy and their storage
+ * remains alive until LIFO pop or analyzer file cleanup invalidates them.
+ * Valid pop restores context even after a resource failure, without admission. */
 typedef struct XaAnalyzerFileScope {
     XaScope *previous_scope;
     const char *previous_file;
     bool active;
+    XaAnalyzer *owner;
+    struct XaAnalyzerFileScope *parent;
 } XaAnalyzerFileScope;
 
 // Analyzer context
@@ -104,18 +110,29 @@ struct XaAnalyzer {
     // Owning compiler session (explicit, no TLS)
     XrCompilerSession *compiler_session;
 
+    /* Borrowed semantic input; its project owner outlives this analyzer.
+     * Binding happens once before analysis and never belongs to the parser. */
+    struct XrNativePackagePlan *native_plan;
+    bool native_plan_bound;
+
     /* Monotonic semantic publication revision. TypedProgram snapshots bind
      * to this value and become invalid after any completed re-analysis. */
     uint64_t semantic_revision;
 
-    // Borrowed VM host for the current bytecode/runtime type helpers.
+    // Borrowed runtime required by existing native method/type consumers.
     XrVMRuntime *isolate;
+    XrTargetDataLayout target_data_layout;
+    /* Exact canonical fallback for graphless input, copied from its caller.
+     * A module graph always supplies the declaration's authoritative identity. */
+    char *standalone_module_identity;
+    char *standalone_stdlib_module_name;
+    bool standalone_module_is_stdlib;
 
     // Type pool (per-analyzer, no global state)
     XrTypePool *type_pool;
 
-    // Symbol ID counter (per-analyzer, thread-safe)
-    uint32_t next_symbol_id;
+    // Explicit symbol identity and storage owner for this analyzer.
+    XaSymbolRegistry *symbol_registry;
 
     // Global scope
     XaScope *global_scope;
@@ -127,9 +144,6 @@ struct XaAnalyzer {
     // Current file being analyzed
     const char *current_file;
 
-    // Symbol registry (id -> XaSymbol*) for O(1) ID lookup
-    void *symbols_by_id;  // XrIntMap internally
-
     /* Analyzer-owned semantic views of declarations exported by another
      * analyzer.  AST symbol ids are local to one analyzer and must never be
      * copied across that boundary; declaration-context expressions (notably
@@ -139,7 +153,7 @@ struct XaAnalyzer {
 
     // Multi-file support
     XaFileEntry *files;  // Linked list for ordered traversal
-    void *files_map;     // XrHashMap*: path -> XaFileEntry* for O(1) lookup
+    void *files_storage; // Private original-state index and LIFO cursor owner
     int file_count;
 
     // Diagnostics list (tail pointer keeps append O(1) and preserves source order)
@@ -166,10 +180,9 @@ struct XaAnalyzer {
     // with semantic state. Forward-declared as void* to keep the public
     // analyzer header free of frontend-internal types.
     void *node_table;  // XaNodeTable* (forward declared)
-    // A graph-less analyzer retains exact type-reference facts only while it
-    // reanalyzes the same AST root in one compiler-session AST epoch.
+    // Graphless type-reference facts belong to one semantic root. Node IDs
+    // are monotonic for the lifetime of the borrowed parser session.
     uint32_t type_ref_batch_root_id;
-    uint64_t type_ref_batch_ast_epoch;
 
     // Arena-owned compile-time aggregate values cached in symbols/nodes.
     XrArena *consteval_arena;
@@ -236,8 +249,20 @@ struct XaAnalyzer {
     size_t retired_enum_layout_cap;
 };
 
+/* Construction borrows the exact parser session and real runtime for the
+ * analyzer lifetime. Target facts and optional canonical module identity are
+ * copied during construction; graphless analysis requires that identity.
+ * ASTs and foreign nominal descriptors remain caller-owned through their last
+ * semantic consumer. No runtime or target is recovered from parser state. */
+typedef struct XaAnalyzerInput {
+    XrCompilerSession *session;
+    XrVMRuntime *runtime;
+    const XrTargetDataLayout *target;
+    const char *module_identity;
+} XaAnalyzerInput;
+
 // API: Analyzer lifecycle
-XR_FUNC XaAnalyzer *xa_analyzer_new(XrCompilerSession *session);
+XR_FUNC XaAnalyzer *xa_analyzer_new(const XaAnalyzerInput *input);
 XR_FUNC void xa_analyzer_free(XaAnalyzer *analyzer);
 
 // Current retained bytes in the analyzer's type-pool arena.
@@ -388,7 +413,12 @@ XR_FUNC const XaResolvedCall *xa_analyzer_get_resolved_call(XaAnalyzer *analyzer
                                                             const struct AstNode *node);
 
 // API: Cross-file incremental analysis
-XR_FUNC const char **xa_analyzer_get_dirty_files(XaAnalyzer *analyzer, int *count);
+/* Output must be empty. The array is original-state owned; release it with
+ * xr_compile_state_free. Names borrow the registry's pinned storage, so the
+ * caller keeps that owner live until releasing the array. Failures preserve
+ * both outputs and never publish a partial list. */
+XR_FUNC XrCompileResourceStatus xa_analyzer_get_dirty_files(XaAnalyzer *analyzer,
+    const char ***output, int *count);
 XR_FUNC void xa_analyzer_mark_file_dirty(XaAnalyzer *analyzer, const char *file);
 
 // API: Symbol lookup
@@ -436,7 +466,10 @@ static inline XaSymbolLinks *xa_analyzer_get_links(XaAnalyzer *analyzer, XaSymbo
 XR_FUNC XrClassInfo *xa_analyzer_get_class(XaAnalyzer *analyzer, const char *name);
 
 // API: Member completions (for LSP)
-XR_FUNC XaSymbol **xa_analyzer_get_members(XaAnalyzer *analyzer, XrType *type, int *count);
+/* An explicit analyzer supplies the original registry and resource cause.
+ * The empty output follows the owning/borrowed member-list lifetime contract. */
+XR_FUNC XrCompileResourceStatus xa_analyzer_get_members(
+    XaAnalyzer *analyzer, XrType *type, XaMemberList *output);
 XR_FUNC XaSymbol **xa_analyzer_get_scope_symbols(XaAnalyzer *analyzer, XaScope *scope, int *count);
 
 // API: Diagnostics
@@ -471,12 +504,16 @@ XR_FUNC bool xa_analyzer_is_iterable(XaAnalyzer *analyzer, XrType *type, XrType 
 
 // API: Cross-module exports collection
 // After analyzing a file, collect exported semantic symbols into a hashmap.
-// Returns a new hashmap (name -> XaSymbol*) owned by caller (free with xr_hashmap_free).
+// Returns a new hashmap (name -> XaSymbol*) owned by caller (xr_hashmap_owned_free).
 // Symbol pointers are borrowed from analyzer scopes and live until analyzer is freed.
 // Returns NULL if no exports found.
 XR_FUNC struct XrHashMap *xa_analyzer_collect_export_symbols(XaAnalyzer *analyzer, XrAstNode *ast);
 // Checked variant used by module-graph drivers. Returns false when the module's
-// export metadata is poisoned and the whole table must be treated as invalid.
+// export metadata is poisoned or a resource operation fails. The original state
+// distinguishes failure from an empty result. Resource failure preserves output;
+// semantic poison invalidates the graph owner's table. Keys borrow AST/scope
+// names, so both owners remain alive until the map is released. The caller owns
+// any prior output map and retains/releases it independently when replacing it.
 XR_FUNC bool xa_analyzer_collect_export_symbols_checked(XaAnalyzer *analyzer, XrAstNode *ast,
                                                         struct XrHashMap **out_exports);
 
@@ -485,7 +522,9 @@ XR_FUNC void xa_analyzer_add_diagnostic(XaAnalyzer *analyzer, XrDiagSeverity sev
                                         const char *message, XrLocation *loc);
 
 // Internal: Enter/exit scope (ast_node can be NULL)
-XR_FUNC void xa_analyzer_enter_scope(XaAnalyzer *analyzer, XaScopeKind kind, void *ast_node);
+/* Failure preserves the selected scope; callers must not exit an entry that failed. */
+XR_FUNC XrCompileResourceStatus xa_analyzer_enter_scope(
+    XaAnalyzer *analyzer, XaScopeKind kind, void *ast_node);
 XR_FUNC void xa_analyzer_exit_scope(XaAnalyzer *analyzer);
 
 // API: Variable operations (compatible with ct_infer)

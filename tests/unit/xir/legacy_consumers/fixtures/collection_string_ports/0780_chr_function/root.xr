@@ -1,0 +1,62 @@
+fn caughtInvalidScalar(value: i64) -> bool {
+    try { rune(value) } catch panic (p: PanicInfo) { return p.code == 422 }
+    return false
+}
+
+// Convert scalar values to owned strings and reject invalid values.
+
+// @test ASCII characters
+
+@test
+fn test_chr_function() {
+    assertEqual(string.fromRune(rune(65)), "A")
+    assertEqual(string.fromRune(rune(97)), "a")
+    assertEqual(string.fromRune(rune(48)), "0")
+    assertEqual(string.fromRune(rune(32)), " ")
+    assertEqual(string.fromRune(rune(10)), "\n")
+    assertEqual(string.fromRune(rune(9)), "\t")
+
+    // @test printable ASCII range
+    assertEqual(string.fromRune(rune(33)), "!")
+    assertEqual(string.fromRune(rune(64)), "@")
+    assertEqual(string.fromRune(rune(90)), "Z")
+    assertEqual(string.fromRune(rune(122)), "z")
+    assertEqual(string.fromRune(rune(126)), "~")
+
+    // @test Unicode 2-byte characters (U+0080 - U+07FF)
+    assertEqual(string.fromRune(rune(169)), "©")
+    assertEqual(string.fromRune(rune(246)), "ö")
+
+    // @test Unicode 3-byte characters (U+0800 - U+FFFF)
+    assertEqual(string.fromRune(rune(20013)), "中")
+    assertEqual(string.fromRune(rune(19990)), "世")
+    assertEqual(string.fromRune(rune(30028)), "界")
+    assertEqual(string.fromRune(rune(8364)), "€")
+
+    // @test Unicode 4-byte characters (U+10000 - U+10FFFF)
+    assertEqual(string.fromRune(rune(128522)), "😊")
+    assertEqual(string.fromRune(rune(127881)), "🎉")
+
+    // @test boundary values
+    var del = string.fromRune(rune(0x7F))
+    assertEqual(del.runes().nth(0).toUInt32(), 127)
+    var first_2byte = string.fromRune(rune(0x80))
+    assertEqual(first_2byte.runes().nth(0).toUInt32(), 128)
+
+    // Invalid scalar conversion uses the runtime panic channel.
+    assert(caughtInvalidScalar(-1))
+    assert(caughtInvalidScalar(-100))
+    assert(caughtInvalidScalar(0xD800))
+    assert(caughtInvalidScalar(0xDFFF))
+    assert(caughtInvalidScalar(0x110000))
+
+    // Non-integer inputs are now caught at compile time (type system prevents passing
+    // wrong types to chr). Only valid int inputs are tested above.
+
+    // @test chr + ord roundtrip
+    var ch = string.fromRune(rune(65))
+    assertEqual(ch.runes().nth(0).toUInt32(), 65)
+
+    var ch2 = string.fromRune(rune(20013))
+    assertEqual(ch2.runes().nth(0).toUInt32(), 20013)
+}

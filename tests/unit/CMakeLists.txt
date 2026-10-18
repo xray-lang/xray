@@ -68,6 +68,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_invocation_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/native_operation_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/local_toolchain_owner.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cli/toolchain_config.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/sdk_installed_native_owner.cmake)
 add_subdirectory(cli/pe_version_owner)
 if(WIN32)
     set(ADMISSION_SDK "${CMAKE_BINARY_DIR}/xir-runtime-sdk")
@@ -373,6 +374,7 @@ add_custom_command(OUTPUT ${XIR_CALL_GENERATED}
 add_executable(test_xir_call_native xir/test_xir_call_native.c ${XIR_CALL_GENERATED})
 target_link_libraries(test_xir_call_native PRIVATE xray_xir_scalar)
 target_sources(test_xir_calls PRIVATE ${XIR_CALL_GENERATED})
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/calls_owned_receive.cmake")
 set(XIR_SCALAR_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_scalar_fixture.c)
 add_custom_command(OUTPUT ${XIR_SCALAR_GENERATED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
@@ -788,6 +790,8 @@ add_executable(test_xir_cleanup_native xir/test_xir_cleanup_native.c ${XIR_CLEAN
 target_link_libraries(test_xir_cleanup_native PRIVATE xray_xir_scalar)
 add_executable(test_xir_cleanup_mixed xir/test_xir_cleanup_mixed.c ${XIR_CLEANUP_GENERATED})
 target_link_libraries(test_xir_cleanup_mixed PRIVATE xray_xir_vm)
+include(xir/mixed_lifecycle.cmake)
+include(xir/mixed_terminals.cmake)
 if(MSVC)
     foreach(cleanup_host IN ITEMS test_xir_cleanup_source test_xir_cleanup_native test_xir_cleanup_mixed)
         target_compile_options(${cleanup_host} PRIVATE /O2 /Ob2 /Oy-)
@@ -4727,3 +4731,18 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_completion_resolve/CMakeLists.txt")
 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_completion_resolve_errors/CMakeLists.txt")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/lsp_enum_payload/CMakeLists.txt")
+
+add_subdirectory(xir/p11_generic_prefix)
+add_subdirectory(xir/p11_source_receiving)
+add_subdirectory(xir/p11_array_observe)
+add_subdirectory(xir/p11_ref_closure_source)
+add_subdirectory(xir/p11_struct_observe)
+add_subdirectory(xir/p11_materialization)
+add_subdirectory(xir/p11_recursive_data)
+add_subdirectory(xir/p11_import)
+add_subdirectory(xir/p11_ctfe_instance)
+# Register independent legacy controls without replacing product-owned tests.
+add_subdirectory(xir/legacy_consumers)
+
+add_test(NAME test_xir_combined_wire_smoke COMMAND test_xir_checked --wire-smoke)
+set_tests_properties(test_xir_combined_wire_smoke PROPERTIES TIMEOUT 120 LABELS "unit;xir;checked;independent")

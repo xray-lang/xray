@@ -1,0 +1,293 @@
+// Retain every original body and observe scalar results, including nested lexical scopes.
+// 0400_if.xr
+// 作者：xingleixu@gmail.com
+// 测试：if 条件语句
+
+// ===== 基础 if =====
+
+@test
+fn test_if_true() {
+    var result = 0
+    if (true) {
+        result = 1
+    }
+    var p19Observed0 = result
+    assertEqual(p19Observed0, 1)
+    print(p19Observed0)
+}
+
+@test
+fn test_if_false() {
+    var result = 0
+    if (false) {
+        result = 1
+    }
+    var p19Observed1 = result
+    assertEqual(p19Observed1, 0)
+    print(p19Observed1)
+}
+
+@test
+fn test_if_expression() {
+    var x = 10
+    var result = 0
+    if (x > 5) {
+        result = 1
+    }
+    var p19Observed2 = result
+    assertEqual(p19Observed2, 1)
+    print(p19Observed2)
+}
+
+// ===== if-else =====
+
+@test
+fn test_if_else_true() {
+    var result = ""
+    if (true) {
+        result = "yes"
+    } else {
+        result = "no"
+    }
+    var p19Observed3 = result
+    assertEqual(p19Observed3, "yes")
+    print(p19Observed3)
+}
+
+@test
+fn test_if_else_false() {
+    var result = ""
+    if (false) {
+        result = "yes"
+    } else {
+        result = "no"
+    }
+    var p19Observed4 = result
+    assertEqual(p19Observed4, "no")
+    print(p19Observed4)
+}
+
+@test
+fn test_if_else_expression() {
+    var x = 3
+    var result = ""
+    if (x > 5) {
+        result = "big"
+    } else {
+        result = "small"
+    }
+    var p19Observed5 = result
+    assertEqual(p19Observed5, "small")
+    print(p19Observed5)
+}
+
+// ===== if-else if-else =====
+
+@test
+fn test_elseif_first() {
+    var x = 1
+    var result = ""
+    if (x == 1) {
+        result = "one"
+    } else if (x == 2) {
+        result = "two"
+    } else {
+        result = "other"
+    }
+    var p19Observed6 = result
+    assertEqual(p19Observed6, "one")
+    print(p19Observed6)
+}
+
+@test
+fn test_elseif_second() {
+    var x = 2
+    var result = ""
+    if (x == 1) {
+        result = "one"
+    } else if (x == 2) {
+        result = "two"
+    } else {
+        result = "other"
+    }
+    var p19Observed7 = result
+    assertEqual(p19Observed7, "two")
+    print(p19Observed7)
+}
+
+@test
+fn test_elseif_else() {
+    var x = 3
+    var result = ""
+    if (x == 1) {
+        result = "one"
+    } else if (x == 2) {
+        result = "two"
+    } else {
+        result = "other"
+    }
+    var p19Observed8 = result
+    assertEqual(p19Observed8, "other")
+    print(p19Observed8)
+}
+
+@test
+fn test_multiple_elseif() {
+    var score = 75
+    var grade = ""
+    if (score >= 90) {
+        grade = "A"
+    } else if (score >= 80) {
+        grade = "B"
+    } else if (score >= 70) {
+        grade = "C"
+    } else if (score >= 60) {
+        grade = "D"
+    } else {
+        grade = "F"
+    }
+    var p19Observed9 = grade
+    assertEqual(p19Observed9, "C")
+    print(p19Observed9)
+}
+
+// ===== 嵌套 if =====
+
+@test
+fn test_nested_if() {
+    var x = 5
+    var y = 10
+    var result = ""
+    
+    if (x > 0) {
+        if (y > 5) {
+            result = "x>0, y>5"
+        } else {
+            result = "x>0, y<=5"
+        }
+    } else {
+        result = "x<=0"
+    }
+    var p19Observed10 = result
+    assertEqual(p19Observed10, "x>0, y>5")
+    print(p19Observed10)
+}
+
+@test
+fn test_deep_nested() {
+    var a = 1
+    var b = 2
+    var c = 3
+    var result = 0
+    
+    if (a > 0) {
+        if (b > 0) {
+            if (c > 0) {
+                result = a + b + c
+            }
+        }
+    }
+    var p19Observed11 = result
+    assertEqual(p19Observed11, 6)
+    print(p19Observed11)
+}
+
+// ===== 显式条件（非 truthy） =====
+
+@test
+fn test_explicit_bool_condition() {
+    var result = ""
+    if (true) { result = "yes" } else { result = "no" }
+    var p19Observed12 = result
+    assertEqual(p19Observed12, "yes")
+    print(p19Observed12)
+    if (false) { result = "yes" } else { result = "no" }
+    var p19Observed13 = result
+    assertEqual(p19Observed13, "no")
+    print(p19Observed13)
+}
+
+@test
+fn test_nullable_presence_condition() {
+    var s: string? = null
+    var result = ""
+    if (s != null) { result = "present" } else { result = "absent" }
+    var p19Observed14 = result
+    assertEqual(p19Observed14, "absent")
+    print(p19Observed14)
+    var empty: string? = ""
+    if (empty != null) { result = "present" } else { result = "absent" }
+    var p19Observed15 = result
+    assertEqual(p19Observed15, "present")
+    print(p19Observed15)
+}
+
+// ===== 复合条件 =====
+
+@test
+fn test_and_condition() {
+    var x = 5
+    var y = 10
+    var result = false
+    if (x > 0 && y > 0) {
+        result = true
+    }
+    var p19Observed16 = result
+    assertEqual(p19Observed16, true)
+    print(p19Observed16)
+}
+
+@test
+fn test_or_condition() {
+    var x = -5
+    var y = 10
+    var result = false
+    if (x > 0 || y > 0) {
+        result = true
+    }
+    var p19Observed17 = result
+    assertEqual(p19Observed17, true)
+    print(p19Observed17)
+}
+
+@test
+fn test_not_condition() {
+    var flag = false
+    var result = 0
+    if (!flag) {
+        result = 1
+    }
+    var p19Observed18 = result
+    assertEqual(p19Observed18, 1)
+    print(p19Observed18)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_empty_if_body() {
+    var x = 10
+    if (x < 5) {
+        // 空体
+    }
+    var p19Observed19 = x
+    assertEqual(p19Observed19, 10)
+    print(p19Observed19)
+}
+
+@test
+fn test_if_only_once() {
+    var count = 0
+    var x = 10
+    
+    if (x > 5) {
+        count++
+    }
+    if (x > 3) {
+        count++
+    }
+    var p19Observed20 = count
+    assertEqual(p19Observed20, 2)
+    print(p19Observed20)
+}
+

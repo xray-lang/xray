@@ -1,0 +1,10 @@
+fn apply(value: i64, body: fn(i64) -> i64) -> i64 {
+  return body(value)
+}
+fn twice(value: i64) -> i64 { return value * 2 }
+fn answer() -> i64 {
+  const named = apply(21, twice)
+  const closure = apply(5, fn(value: i64) -> i64 { return value + 1 })
+  return named + closure
+}
+export fn consumerAnswer() -> i64 { return answer() }

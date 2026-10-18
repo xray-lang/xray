@@ -128,9 +128,24 @@ static BOOL sdk_test_read(HANDLE file,LPVOID bytes,DWORD length,LPDWORD actual,L
 #undef current_sdk_kat_file_digest
 #undef current_sdk_kat_digest
 #include "sdk_current_identity_golden.h"
+#define current_sdk_kat_preimage previous73_sdk_kat_preimage
+#define current_sdk_kat_file_digest previous73_sdk_kat_file_digest
+#define current_sdk_kat_digest previous73_sdk_kat_digest
+#include "sdk_previous73_identity_golden.h"
+#undef current_sdk_kat_preimage
+#undef current_sdk_kat_file_digest
+#undef current_sdk_kat_digest
+
+#define current_sdk_kat_preimage previous74_sdk_kat_preimage
+#define current_sdk_kat_file_digest previous74_sdk_kat_file_digest
+#define current_sdk_kat_digest previous74_sdk_kat_digest
+#include "sdk_previous74_identity_golden.h"
+#undef current_sdk_kat_preimage
+#undef current_sdk_kat_file_digest
+#undef current_sdk_kat_digest
 
 static void sdk_known_bytes(void) {
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==30 && XR_XIR_CHECKED_CONTRACT==76 &&
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==76 &&
         XR_XIR_VALUE_ABI_VERSION==24 && XR_XIR_CALL_ABI_VERSION==29 && XR_XIR_PROGRAM_ABI_VERSION==33,
         "SDK known bytes require the independently framed public contract");
     uint8_t old_hash[32];xr_sha256(sdk_kat_preimage,sizeof(sdk_kat_preimage),old_hash);
@@ -185,7 +200,7 @@ static void sdk_known_bytes(void) {
     xr_sha256(previous_program32_sdk_kat_preimage,sizeof(previous_program32_sdk_kat_preimage),old_hash);
     CHECK(!memcmp(old_hash,previous_program32_sdk_kat_digest,32));
     CHECK(memcmp(old_hash,current_sdk_kat_digest,32));
-    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,30,76,24,29,33,1,1,1,11,2,0,1,0,3,1,1};
+    XrXirSdkManifest manifest={0};const uint32_t prefix[]={2,31,76,24,29,33,1,1,1,11,2,0,1,0,3,1,1};
     memcpy(manifest.prefix,prefix,sizeof(prefix));
     manifest.target_triple="x86_64-windows-msvc";manifest.abi_recipe="xray:xir-runtime-abi-measurements:v1";
     manifest.closure_recipe="xray:xir-runtime-recipe:windows-x86_64-hosted:v1";

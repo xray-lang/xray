@@ -1,0 +1,16 @@
+fn take(data: Array<i64>) -> i64 {
+    return len(data)
+}
+
+@test
+fn test_read_formal_preserves_values_and_accepts_fresh_owners() {
+    var xs = Array<i64>(2, 1)
+    assertEqual(take(xs), 2)
+    assertEqual(len(xs), 2)
+
+    var ys = Array<i64>(3, 1)
+    assertEqual(take(ys), 3)
+    assertEqual(len(ys), 3)
+
+    assertEqual(take(Array<i64>(4, 1)), 4)
+}

@@ -1,0 +1,8 @@
+var narrow: f32 = 1.5
+var value: f32 | f64 = narrow
+print(value is f32)
+print(value is f64)
+var wide: f64 = 1.5
+value = wide
+print(value is f32)
+print(value is f64)

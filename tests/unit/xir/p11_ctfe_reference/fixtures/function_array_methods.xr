@@ -1,0 +1,2 @@
+fn answer()->i64{const xs:Array<i64>=[1,2,3];const mapped=xs.map(fn(x:i64)->i64{return x*2});const selected=mapped.filter(fn(x:i64)->bool{return x>2});return selected.reduce(fn(a:i64,b:i64)->i64{return a+b},0)}
+export fn run()->i64{return comptime answer()}

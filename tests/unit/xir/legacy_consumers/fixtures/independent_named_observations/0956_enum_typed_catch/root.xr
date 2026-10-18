@@ -1,0 +1,78 @@
+// Preserve every original enum/Atomic body and capture each original invocation exactly once.
+// REGRESSION: typed catch on enum error values (`catch (e: SomeEnum)`).
+// The value-return error channel carries `throw <enum>` values; a typed
+// multi-catch must route each error to the clause whose enum type matches.
+// This exercises the runtime `is <EnumType>` identity check used to select
+// the matching catch branch.
+
+enum NetErr { Timeout, Refused }
+enum DiskErr { Full, ReadOnly }
+
+fn fail(kind: i64) -> i64 {
+    if (kind == 0) { throw NetErr.Timeout }
+    if (kind == 1) { throw DiskErr.Full }
+    return kind
+}
+
+// Route by enum type: NetErr → "net", DiskErr → "disk".
+fn classify(kind: i64) -> string {
+    var tag = "none"
+    try {
+        fail(kind)
+    } catch (e: NetErr) {
+        tag = "net"
+    } catch (e: DiskErr) {
+        tag = "disk"
+    }
+    return tag
+}
+
+@test
+fn test_typed_enum_catch_first() {
+    var p19Observed0 = classify(0)
+    assertEqual(p19Observed0, "net")
+    print(p19Observed0)
+}
+
+@test
+fn test_typed_enum_catch_second() {
+    var p19Observed1 = classify(1)
+    assertEqual(p19Observed1, "disk")
+    print(p19Observed1)
+}
+
+@test
+fn test_typed_enum_no_throw() {
+    var p19Observed2 = classify(2)
+    assertEqual(p19Observed2, "none")
+    print(p19Observed2)
+}
+
+// Typed enum catch followed by a catch-all: a non-matching enum must fall
+// through the typed clause into the catch-all rather than propagating.
+fn classify_with_default(kind: i64) -> string {
+    var tag = "none"
+    try {
+        fail(kind)
+    } catch (e: NetErr) {
+        tag = "net"
+    } catch (e) {
+        tag = "other"
+    }
+    return tag
+}
+
+@test
+fn test_typed_enum_then_catchall_match() {
+    var p19Observed3 = classify_with_default(0)
+    assertEqual(p19Observed3, "net")
+    print(p19Observed3)
+}
+
+@test
+fn test_typed_enum_then_catchall_fallthrough() {
+    // DiskErr.Full does not match `catch (e: NetErr)` → catch-all "other".
+    var p19Observed4 = classify_with_default(1)
+    assertEqual(p19Observed4, "other")
+    print(p19Observed4)
+}

@@ -1,0 +1,2 @@
+fn choose(flag:bool)->(i8,string) { return flag ? (7,"ab") : (1,"x") }
+export fn run()->(i8,string) { return comptime choose(true) }

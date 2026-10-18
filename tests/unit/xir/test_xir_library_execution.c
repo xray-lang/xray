@@ -37,7 +37,7 @@ static bool pair(XrXirProgram *program){
   if(status==XR_XIR_CALL_RETURNED){XrXirValue result={0};CHECK(xr_xir_instance_take_result(instance,&result)==XR_XIR_CALL_RETURNED);
    CHECK(result.type==XR_XIR_I64&&result.payload==41);xr_xir_value_drop(&result);
   }else CHECK(status==XR_XIR_CALL_OOM);
-  if(instance)CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+  if(instance){CHECK(xr_xir_instance_stop(instance)==XR_XIR_CALL_READY);CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);}
   if(status!=XR_XIR_CALL_RETURNED)return false;
  }return true;
 }

@@ -1,0 +1,2 @@
+fn value()->i64 { var x=0; { defer { { defer { x=x+1 }; x=x+10 } } }; return x }
+export fn run()->i64 { return comptime value() }

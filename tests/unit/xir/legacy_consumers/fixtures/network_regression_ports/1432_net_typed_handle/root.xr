@@ -1,0 +1,94 @@
+// 1432_net_typed_handle.xr
+// Source-defined handles backed by private native storage.
+//
+// Covers:
+//   - net.fd / net.port / net.close / net.isClosed
+//   - inferred and explicit NetListener values cross the private leaf boundary
+//
+// net.listen throws NetError on setup failure, so the environment-dependent
+// skip folds the throw back into null here.
+
+import net
+import { NetError, NetListener } from net
+
+fn tryListen(backlog: i64) -> NetListener? {
+    try {
+        return net.listen(0, backlog)
+    } catch (e: NetError) {
+        return null
+    }
+}
+
+@test
+fn test_listener_operations() {
+    // listen on an ephemeral port (0 -> kernel picks)
+    var listener = tryListen(16)
+    assert(listener != null)
+
+    const fd = net.fd(listener!)
+    assert(fd >= 0)
+    assert(net.port(listener!) > 0)
+    assert(!net.isClosed(listener!))
+
+    // net.close is idempotent
+    net.close(listener!)
+    assert(net.isClosed(listener!))
+    assert(net.fd(listener!) == -1)
+
+    // Calling close again is a no-op
+    net.close(listener!)
+    assert(net.isClosed(listener!))
+}
+
+@test
+fn test_module_operations_are_consistent() {
+    var listener = tryListen(1)
+    assert(listener != null)
+
+    assert(net.fd(listener!) >= 0)
+
+    net.close(listener!)
+    assert(net.isClosed(listener!))
+    assert(net.fd(listener!) == -1)
+}
+
+// ============================================================
+// Module operations via type inference
+// ============================================================
+
+@test
+fn test_operations_via_inference() {
+    var listener = tryListen(1)
+    assert(listener != null)
+
+    var l = listener!
+    defer { net.close(l) }
+    assert(net.fd(l) >= 0)
+    assert(net.port(l) > 0)
+
+    net.close(l)
+    assert(net.isClosed(l))
+}
+
+// ============================================================
+// Module operations via explicit typed annotations
+//
+// NetConn / NetListener are exported source classes from net, so explicit
+// NetListener? / NetListener annotations and inference cross the same private
+// provider boundary.
+// ============================================================
+
+@test
+fn test_explicit_typed_listener() {
+    var listener: NetListener? = tryListen(1)
+    assert(listener != null)
+
+    var l: NetListener = listener!
+    defer { net.close(l) }
+    assert(net.fd(l) >= 0)
+    assert(net.port(l) > 0)
+    assert(!net.isClosed(l))
+
+    net.close(l)
+    assert(net.isClosed(l))
+}

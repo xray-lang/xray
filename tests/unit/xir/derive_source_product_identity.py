@@ -24,11 +24,16 @@ def frames():
         result['xir_source_product_identity.h'].update({key:layout,digest:hashlib.sha256(layout).digest()})
         for prefix in ('linked','original'):
             text=(prefix+'_source').encode('ascii')
-            wire,semantic=(30,76) if program==33 else (28,73)
+            wire,semantic=(31,76) if program==33 else (28,73)
             frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,wire,semantic,24,29,program,len(text))+text
             suffix='value24' if program==33 else 'program30'
             result['xir_native_projection_expectations.h'][prefix+'_policy_'+suffix+'_preimage']=frame
             result['xir_native_projection_expectations.h'][prefix+'_policy_'+suffix]=hashlib.sha256(frame).digest()
+    for prefix in ('linked','original'):
+        text=(prefix+'_source').encode('ascii')
+        frame=b'xray:xir-c11-codegen-policy:v1'+struct.pack('<7I',1,30,75,24,29,31,len(text))+text
+        result['xir_native_projection_expectations.h'][prefix+'_policy75_preimage']=frame
+        result['xir_native_projection_expectations.h'][prefix+'_policy75']=hashlib.sha256(frame).digest()
     return result
 
 def main():

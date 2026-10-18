@@ -8,11 +8,9 @@
  * xaot_module_summary.h - Per-module summary publication for a native build
  *
  * KEY CONCEPT:
- *   After every module owns a verified SemanticPlan, the build derives one
- *   module summary per module, publishes the resulting dependency graph into
- *   the compiler session, and round-trips each module's XSM artifact through
- *   the incremental cache. A cache hit is evidence that the module's verified
- *   semantics are unchanged; it never replaces a proof this build already owes.
+ *   A build owns its dependency graph, task rows and cache borrows. Preparation
+ *   may run in parallel; every prepared row is preflighted before canonical
+ *   publication. A cache hit never replaces the semantic proof owed by this build.
  */
 
 #ifndef XAOT_MODULE_SUMMARY_H
@@ -21,18 +19,24 @@
 #include "xaot_driver.h"
 
 struct XiModule;
-struct XrCompilerSession;
+struct XrCacheStore;
 struct XrModuleGraph;
 struct XrProgramSemanticClosure;
 
-/* Modules are indexed by topological position, matching graph->topo_order.
- * Diagnostics are written to stderr and the verbose report to stdout, so the
- * caller keeps a single failure branch. */
-XR_FUNC bool xaot_publish_module_summaries(struct XrCompilerSession *session,
-                                           const struct XrModuleGraph *graph,
-                                           struct XiModule *const *modules, int module_count,
-                                           const struct XrProgramSemanticClosure *program_closure,
-                                           const XaotBuildOptions *options, bool verbose,
-                                           XaotModuleSummaryCacheStats *stats);
+/* All pointers are borrowed through this synchronous operation. Modules follow
+ * graph->topo_order. The graph's actual compiler state owns task-row storage;
+ * a cache store, when supplied, must use that same resource ledger. */
+typedef struct XaotModuleSummaryInput {
+    struct XrCacheStore *cache_store;
+    const struct XrModuleGraph *graph;
+    struct XiModule *const *modules;
+    int module_count;
+    const struct XrProgramSemanticClosure *program_closure;
+    const XaotBuildOptions *options;
+    bool verbose;
+} XaotModuleSummaryInput;
+
+XR_FUNC bool xaot_publish_module_summaries(const XaotModuleSummaryInput *input,
+    XaotModuleSummaryCacheStats *stats);
 
 #endif  // XAOT_MODULE_SUMMARY_H

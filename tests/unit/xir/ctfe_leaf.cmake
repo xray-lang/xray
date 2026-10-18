@@ -16,3 +16,15 @@ set_tests_properties(test_xir_ctfe_calls PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE P
 add_test(NAME test_xir_ctfe_calls_resources COMMAND test_xir_ctfe_leaf --call-resources)
 set_tests_properties(test_xir_ctfe_calls_resources PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE PROCESSORS 1
     LABELS "unit;xir;metadata;ownership;compiler-fault;ctfe;direct-call")
+
+add_test(NAME test_xir_ctfe_leaf_loops COMMAND test_xir_ctfe_leaf --loops)
+set_tests_properties(test_xir_ctfe_leaf_loops PROPERTIES TIMEOUT 60
+    LABELS "unit;xir;ctfe;ownership;loops")
+add_test(NAME test_xir_ctfe_leaf_loops_resources COMMAND test_xir_ctfe_leaf --loop-resources)
+add_test(NAME test_xir_ctfe_phi_resources COMMAND test_xir_ctfe_leaf --phi-resources)
+set_tests_properties(test_xir_ctfe_leaf_loops_resources test_xir_ctfe_phi_resources PROPERTIES
+    TIMEOUT 600 RUN_SERIAL TRUE COST 120 LABELS "unit;xir;ctfe;ownership;compiler-fault;resources;loops")
+
+add_test(NAME test_xir_ctfe_declarationless COMMAND test_xir_ctfe_leaf --declarationless)
+set_tests_properties(test_xir_ctfe_declarationless PROPERTIES TIMEOUT 60
+    LABELS "unit;xir;ctfe;ownership;admission")

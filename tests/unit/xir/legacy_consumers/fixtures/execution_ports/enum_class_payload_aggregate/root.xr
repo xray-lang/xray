@@ -1,0 +1,73 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// anchor: enum-class-payload-aggregate
+//
+// Regression guard: enum variants that carry user-class payloads (and nested
+// Array payloads) must round-trip identically on VM and native AOT. The unified
+// native class representation exposed a cgen defect where the enum aggregate
+// from_base converter referenced the module shared-slot array (class native
+// type id) from a file-scope static inline function without the array being
+// declared, producing "use of undeclared identifier 'xrt_shared'".
+
+class Name {
+    prefix: string
+    local: string
+    init(prefix: string, local: string) {
+        this.prefix = prefix
+        this.local = local
+    }
+}
+
+class Attr {
+    name: Name
+    value: string
+    init(name: Name, value: string) {
+        this.name = name
+        this.value = value
+    }
+}
+
+enum Node {
+    Document { children: Array<Node> },
+    Element { name: Name, attributes: Array<Attr>, children: Array<Node> },
+    Text { content: string }
+}
+
+fn tagOf(node: Node) -> string {
+    return match (node) {
+        Node.Element { name, attributes: attrs, children } -> name.local,
+        Node.Text { content: t } -> "#text",
+        Node.Document { children: kids } -> "#document"
+    }
+}
+
+fn childCount(node: Node) -> i64 {
+    return match (node) {
+        Node.Document { children: kids } -> len(kids),
+        Node.Element { name, attributes: attrs, children: kids } -> len(kids),
+        Node.Text { content: t } -> 0
+    }
+}
+
+fn firstAttrValue(node: Node) -> string {
+    return match (node) {
+        Node.Element { name, attributes: attrs, children: kids } -> (len(attrs) > 0 ? attrs[0].value : ""),
+        _ -> ""
+    }
+}
+
+var emptyAttrs: Array<Attr> = []
+var attrs: Array<Attr> = [Attr(Name("", "id"), "7"), Attr(Name("x", "lang"), "en")]
+var inner: Array<Node> = [Node.Text { content: "hello" }]
+var item = Node.Element { name: Name("", "item"), attributes: attrs, children: inner }
+var roots: Array<Node> = [item]
+var root = Node.Element { name: Name("", "root"), attributes: emptyAttrs, children: roots }
+var doc = Node.Document { children: [root] }
+
+print(tagOf(root))
+print(childCount(root))
+print(firstAttrValue(item))
+print(tagOf(item))
+print(childCount(item))
+print(tagOf(doc))
+print(childCount(doc))
+print(tagOf(inner[0]))

@@ -10,6 +10,8 @@
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_output.h"
+#include "execution/xr_xir_host_execution.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,9 +37,9 @@ static XrSourceCompileStatus build_actual_ast(XrSourceCompiler *compiler, bool r
         AstNode *value=function->as.function_decl.body->as.block.statements[0]->as.return_stmt.values[0];
         CHECK(value->type==AST_LITERAL_INT); value->as.literal.int_bits=42; value->as.literal.raw_value.int_val=42;
     }
-    XrSourceCompilerAst input={rooted ? XR_COMPILER_FIXTURE "/unsaved-ast.xr" : NULL,
-        rooted ? NULL : "owned-actual-ast",ast};
-    XrSourceCompileStatus status=xr_source_compiler_build_ast(compiler,&input,product,diagnostic);
+    XrSourceCompilerText input={rooted ? XR_COMPILER_FIXTURE "/unsaved-ast.xr" : NULL,
+        rooted ? NULL : "owned-actual-ast",NULL,0};
+    XrSourceCompileStatus status=xr_source_compiler_build_ast(compiler,&input,ast,product,diagnostic);
     CHECK(ast->as.program.owns_arena); xr_program_destroy(ast); return status;
 }
 static void owned_ast_compiler(void) {
@@ -47,7 +49,7 @@ static void owned_ast_compiler(void) {
     CHECK(xr_source_compiler_new(&config,&compiler,NULL)==XR_SOURCE_COMPILE_OK);
     XrXirSourceProduct *products[2]={0};
     for(unsigned i=0;i<2;++i) CHECK(build_actual_ast(compiler,i!=0,&products[i],NULL)==XR_SOURCE_COMPILE_OK);
-    CHECK(xr_source_compiler_build_ast(compiler,NULL,&products[0],NULL)==XR_SOURCE_COMPILE_BAD_ARGUMENT);
+    CHECK(xr_source_compiler_build_ast(compiler,NULL,NULL,&products[0],NULL)==XR_SOURCE_COMPILE_BAD_ARGUMENT);
     xr_source_compiler_free(compiler); xr_compile_resources_release(resources);
     for(unsigned i=0;i<2;++i) {
         CHECK(xr_xir_compile_source_product_verify(products[i],1048576,NULL)==XR_XIR_OK);
@@ -74,6 +76,76 @@ static void owned_ast_compiler(void) {
     }
     CHECK(!runtime_live && !runtime_bytes);
     puts("SourceCompiler actual AST42/import43 after compiler and AST death; normal public admission and Program verification PASS");
+}
+static XrSourceCompileStatus compiler_ast_trial(XrSourceCompiler *compiler,
+    const XrSourceCompilerText *input, XrXirSourceProduct **output,
+    XrSourceCompileDiagnostic *diagnostic) {
+    AstNode *ast = NULL;
+    XrParseStatus parsed = xr_compile_parse_with_source(xr_source_compiler_session(compiler),
+        input->text, input->absolute_path, &ast);
+    if (parsed != XR_PARSE_OK) {
+        CHECK(parsed == XR_PARSE_BUDGET || parsed == XR_PARSE_OUT_OF_MEMORY);
+        return parsed == XR_PARSE_BUDGET ? XR_SOURCE_COMPILE_BUDGET : XR_SOURCE_COMPILE_OUT_OF_MEMORY;
+    }
+    XrSourceCompileStatus status = xr_source_compiler_build_ast(compiler, input, ast, output, diagnostic);
+    xr_program_destroy(ast);
+    return status;
+}
+typedef struct CompilerOutput { char data[16]; size_t length; } CompilerOutput;
+static XrXirOutputStatus compiler_write(void *context, XrXirOutputStream stream,
+    const char *bytes, size_t length) {
+    CompilerOutput *out = context;
+    if (stream != XR_XIR_STDOUT || length > sizeof(out->data) - out->length) return XR_XIR_OUTPUT_ERROR;
+    memcpy(out->data + out->length, bytes, length); out->length += length;
+    return XR_XIR_OUTPUT_OK;
+}
+static void caller_ast_compiler(void) {
+    XrCompileResources *resources = NULL;
+    XrCompileResourceLimits limits = {UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrSourceCompilerConfig config = configuration(resources); XrSourceCompiler *compiler = NULL;
+    CHECK(xr_source_compiler_new(&config,&compiler,NULL)==XR_SOURCE_COMPILE_OK);
+    XrCompilerSession *session = xr_source_compiler_session(compiler);
+    char source[] = "const n:i64 = 41\nprint(n)\n";
+    XrSourceCompilerText text = {NULL,"compiler-caller-ast",source,sizeof(source)-1};
+    AstNode *ast = NULL; CHECK(xr_compile_parse(session,source,&ast)==XR_PARSE_OK);
+    CHECK(ast->type==AST_PROGRAM && ast->as.program.count==2);
+    AstNode *literal = ast->as.program.statements[0]->as.var_decl.initializer;
+    CHECK(literal && literal->type==AST_LITERAL_INT); literal->as.literal.int_bits=42;
+    XrXirSourceProduct *product=NULL,*rooted=NULL;
+    CHECK(xr_source_compiler_build_ast(compiler,&text,NULL,&product,NULL)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !product);
+    XrCompilerSession *foreign=NULL;
+    CHECK(xr_compile_session_new(resources,&foreign)==XR_COMPILER_SESSION_OK);
+    AstNode *foreign_ast=NULL; CHECK(xr_compile_parse(foreign,source,&foreign_ast)==XR_PARSE_OK);
+    CHECK(xr_source_compiler_build_ast(compiler,&text,foreign_ast,&product,NULL)==XR_SOURCE_COMPILE_BAD_ARGUMENT && !product);
+    xr_program_destroy(foreign_ast);xr_compile_session_free(foreign);
+    CHECK(xr_source_compiler_build_ast(compiler,&text,ast,&product,NULL)==XR_SOURCE_COMPILE_OK);
+    XrXirSourceProduct *occupied=product;
+    CHECK(xr_source_compiler_build_ast(compiler,&text,ast,&product,NULL)==XR_SOURCE_COMPILE_BAD_ARGUMENT && product==occupied);
+    CHECK(literal->as.literal.int_bits==42 && xr_source_compiler_session(compiler)==session);
+    const char import[]="import \"./sibling\" as sibling\nprint(sibling.answer())\n";
+    XrSourceCompilerText rooted_text={XR_COMPILER_FIXTURE "/unsaved-ast-compiler.xr",NULL,import,sizeof(import)-1};
+    CHECK(compiler_ast_trial(compiler,&rooted_text,&rooted,NULL)==XR_SOURCE_COMPILE_OK);
+    CHECK(xr_xir_compile_source_product_facts(rooted)->module_count==2);
+    uint32_t entry=xr_xir_compile_source_product_facts(product)->entry;
+    xr_program_destroy(ast);memset(source,'!',sizeof(source));
+    xr_compile_resources_release(resources);xr_source_compiler_free(compiler);
+    CHECK(xr_xir_compile_source_product_verify(rooted,1048576,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_source_product_verify(product,1048576,NULL)==XR_XIR_OK);
+    xr_xir_compile_source_product_free(rooted);
+    XrXirProgram *program=NULL;
+    CHECK(xr_xir_compile_source_product_vm_take(product,&program)==XR_XIR_OK);
+    xr_xir_compile_source_product_free(product);
+    CompilerOutput output={{0},0};
+    XrXirOutputSink sink={XR_XIR_CALL_ABI_VERSION,0,compiler_write,&output,sizeof(output.data)};
+    XrXirInstanceConfig run_config;CHECK(xr_xir_instance_config_init(&run_config,sizeof(run_config))==XR_XIR_CALL_READY);
+    run_config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,xr_xir_output_render,&sink};
+    XrXirHostExecutionRequest run={program,&run_config,entry,NULL,0};XrXirCallResult result={0};
+    CHECK(xr_xir_host_execute(&run,&result)==XR_XIR_CALL_RETURNED);
+    CHECK(output.length==3 && !memcmp(output.data,"42\n",3));
+    xr_xir_compile_program_drop(program);xr_xir_call_result_drop(&result);
+    CHECK(!runtime_live && !runtime_bytes);
+    puts("compiler actual edited AST42, exact parser owner, rooted imports and execution after producer death PASS");
 }
 static void owned_compiler(void) {
     XrCompileResources *resources = NULL;
@@ -239,6 +311,7 @@ static void compiler_faults(unsigned first,unsigned end) {
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--compiler-faults"))compiler_faults(0,3);
     else if(argc==2 && !strcmp(argv[1],"--ast-faults")){compiler_faults(3,5);compiler_ast_limits();}
-    else {CHECK(argc==1);owned_compiler();owned_ast_compiler();compiler_limits();}
+    else if(argc==2 && !strcmp(argv[1],"--ast-smoke")){owned_ast_compiler();caller_ast_compiler();}
+    else {CHECK(argc==1);owned_compiler();owned_ast_compiler();caller_ast_compiler();compiler_limits();}
     return 0;
 }

@@ -1,0 +1,3 @@
+fn same(a:Array<i8>?,b:Array<i8>?)->bool { return a==b }
+fn answer()->bool { const a:Array<i8>?=[1,2]; const b:Array<i8>?=[1,2]; const none:Array<i8>?=null; return same(a,b) && !same(a,none) && same(none,none) }
+export fn run()->bool { return comptime answer() }

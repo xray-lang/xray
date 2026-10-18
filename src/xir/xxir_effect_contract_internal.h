@@ -20,7 +20,8 @@
 typedef enum XrXirEvidenceKind {
     XR_XIR_EVIDENCE_ABSENT = 0,
     XR_XIR_EVIDENCE_TEMPLATE = 1,
-    XR_XIR_EVIDENCE_INSTANCE = 2
+    XR_XIR_EVIDENCE_INSTANCE = 2,
+    XR_XIR_EVIDENCE_EVALUATION = 3
 } XrXirEvidenceKind;
 
 typedef enum XrXirEffectParameterKind {
@@ -122,6 +123,10 @@ typedef struct XrXirOrigin {
     uint32_t effect_argument_count;
 } XrXirOrigin;
 
+typedef struct XirEvaluationRoot {
+    uint32_t caller, instruction, callee;
+} XirEvaluationRoot;
+
 typedef struct XrXirProvenance {
     uint32_t kind;
     XrXirArtifact *source;
@@ -131,6 +136,7 @@ typedef struct XrXirProvenance {
     uint32_t contract_count;
     XrXirEffectBindingProof *bindings;
     uint32_t binding_count;
+    XirEvaluationRoot evaluation;
 } XrXirProvenance;
 
 /* Each raw correspondence entry replays the complete order/unique/range
@@ -261,6 +267,15 @@ XR_FUNC XrXirStatus xir_effects_class_value(const XrXirCompileContext *context,
 static inline bool xir_effect_evidence_is_instance(const XrXirModule *module) {
     return module && module->provenance &&
         module->provenance->kind == XR_XIR_EVIDENCE_INSTANCE;
+}
+static inline bool xir_effect_kind_is_closed(uint32_t kind) {
+    return kind==XR_XIR_EVIDENCE_INSTANCE || kind==XR_XIR_EVIDENCE_EVALUATION;
+}
+static inline bool xir_effect_evidence_is_closed(const XrXirModule *module) {
+    return module && module->provenance && xir_effect_kind_is_closed(module->provenance->kind);
+}
+static inline bool xir_effect_evidence_is_evaluation(const XrXirModule *module) {
+    return module && module->provenance && module->provenance->kind==XR_XIR_EVIDENCE_EVALUATION;
 }
 
 #endif // XXIR_EFFECT_CONTRACT_INTERNAL_H

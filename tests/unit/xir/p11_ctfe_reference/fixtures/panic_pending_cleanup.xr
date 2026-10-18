@@ -1,0 +1,2 @@
+fn answer()->i64{var x=40;try{defer{try{const n=1%0}catch panic(p){x=x+(p.code-419)}};return 1/0}catch panic(p){return p.code==420 ? x : 0}}
+export fn run()->i64{return comptime answer()}

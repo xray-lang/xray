@@ -190,8 +190,8 @@ static bool instance_function_parameters(XrXirProgram *program, uint32_t entry,
         const XrXirCallableParameter *parameter = &signature->parameters[p];
         if (!xr_xir_callable_parameter_storage_valid(program->types,parameter) ||
             target->parameters[p+captures] != parameter->type) return false;
-        if (parameter->mode == XR_PARAM_REF && (captures ||
-            instance_cell_role(program,entry,p) != XR_XIR_CELL_ROLE_SCOPED_REF)) return false;
+        if (parameter->mode == XR_PARAM_REF &&
+            instance_cell_role(program,entry,p+captures) != XR_XIR_CELL_ROLE_SCOPED_REF) return false;
     }
     return true;
 }

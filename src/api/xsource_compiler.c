@@ -16,6 +16,8 @@
 #include "../os/os_fs.h"
 #include "../xir/xxir_compile_memory.h"
 #include "../xir/xxir_stdlib_internal.h"
+#include "../frontend/parser/xast.h"
+#include "../toolchain/xcompiler_arena_backing.h"
 
 struct XrSourceCompiler {
     XrXirCompileContext context;
@@ -231,21 +233,25 @@ static XrSourceCompileStatus compiler_build_supplied(XrSourceCompiler *compiler,
         return compiler_publish(diagnostic, &detail, XR_SOURCE_COMPILE_BAD_ARGUMENT);
     XrSourceCompileStatus status = compiler_resource(xr_compile_session_resource_status(compiler->session));
     if (status != XR_SOURCE_COMPILE_OK) return compiler_publish(diagnostic, &detail, status);
+    if (supplied.ast && (supplied.program->type!=AST_PROGRAM ||
+        !supplied.program->as.program.owns_arena ||
+        !xr_compiler_arena_matches_state(supplied.program->as.program.arena,xr_source_compiler_state(compiler))))
+        return compiler_publish(diagnostic,&detail,XR_SOURCE_COMPILE_BAD_ARGUMENT);
     XrSourceAuthority *authority = NULL;
     XrModuleIdentityAuthority memory = {XR_MODULE_IDENTITY_MEMORY, input->namespace_id, NULL};
     const XrModuleIdentityAuthority *identity = &memory;
     XrXirSourceText text = {NULL, input->text, input->length};
-    XrXirSourceAst ast = {supplied.program,NULL};
+    XrXirSourceAst ast = {text,supplied.program};
     const char *entry = NULL; XrLockfile *lockfile = NULL;
     if (input->absolute_path) {
         detail.stage = XR_SOURCE_COMPILE_AUTHORITY;
         XrSourceEntryInput rooted = {supplied.ast ? XR_SOURCE_ENTRY_AST : XR_SOURCE_ENTRY_TEXT,
-            input->absolute_path, input->text, input->length};
+            input->absolute_path, supplied.ast ? NULL : input->text, supplied.ast ? 0 : input->length};
         status = xr_source_compiler_open_input(compiler, &rooted, &authority, &detail);
         if (status == XR_SOURCE_COMPILE_OK) {
             identity = xr_source_authority_entry(authority); entry = xr_source_authority_source_path(authority);
             lockfile = xr_source_authority_lockfile(authority);
-            if (supplied.ast) ast.logical_path = xr_source_authority_logical_path(authority);
+            if (supplied.ast) ast.source.logical_path = xr_source_authority_logical_path(authority);
             else {
                 const XrModuleOverlayInput *overlay = xr_source_authority_overlay(authority);
                 text = (XrXirSourceText){overlay->logical_path, overlay->text, overlay->length};
@@ -282,8 +288,8 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_build_text(XrSourceCompiler *co
     return compiler_build_supplied(compiler,(CompilerSuppliedInput){input ? *input : (XrSourceCompilerText){0},NULL,false},
         output,diagnostic);
 }
-XR_FUNC XrSourceCompileStatus xr_source_compiler_build_ast(XrSourceCompiler *compiler, const XrSourceCompilerAst *input,
-    XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic) {
-    XrSourceCompilerText source = {input ? input->absolute_path : NULL,input ? input->namespace_id : NULL,NULL,0};
-    return compiler_build_supplied(compiler,(CompilerSuppliedInput){source,input ? input->program : NULL,true},output,diagnostic);
+XR_FUNC XrSourceCompileStatus xr_source_compiler_build_ast(XrSourceCompiler *compiler, const XrSourceCompilerText *input,
+    struct AstNode *program, XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic) {
+    if (!program) return XR_SOURCE_COMPILE_BAD_ARGUMENT;
+    return compiler_build_supplied(compiler,(CompilerSuppliedInput){input ? *input : (XrSourceCompilerText){0},program,true},output,diagnostic);
 }

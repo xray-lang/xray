@@ -1,0 +1,80 @@
+// 0100_int_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：整数字面量基础
+// ===== 正常路径 =====
+@test
+fn test_positive_integers() {
+    assertEqual(1, 1)
+    assertEqual(42, 42)
+    assertEqual(100, 100)
+    assertEqual(999999, 999999)
+}
+
+@test
+fn test_zero() {
+    assertEqual(0, 0)
+    var x = 0
+    assertEqual(x, 0)
+}
+
+@test
+fn test_negative_integers() {
+    assertEqual(-1, -1)
+    assertEqual(-42, -42)
+    assertEqual(-999999, -999999)
+}
+
+// ===== 多进制 =====
+@test
+fn test_hexadecimal() {
+    assertEqual(0xFF, 255)
+    assertEqual(0x10, 16)
+    assertEqual(0xABCD, 43981)
+    assertEqual(0x0, 0)
+}
+
+@test
+fn test_binary() {
+    assertEqual(0b1010, 10)
+    assertEqual(0b1111, 15)
+    assertEqual(0b0, 0)
+    assertEqual(0b11111111, 255)
+}
+
+@test
+fn test_octal() {
+    assertEqual(0o777, 511)
+    assertEqual(0o10, 8)
+    assertEqual(0o0, 0)
+}
+
+// ===== 下划线分隔符 =====
+@test
+fn test_underscore_separator() {
+    assertEqual(1_000_000, 1000000)
+    assertEqual(1_2_3, 123)
+    assertEqual(0xFF_FF, 65535)
+    assertEqual(0b1111_0000, 240)
+}
+
+// ===== 边界条件 =====
+@test
+fn test_single_digit() {
+    for (i in 0..10) {
+        assertEqual(i >= 0, true)
+        assertEqual(i < 10, true)
+    }
+}
+
+@test
+fn test_large_numbers() {
+    var billion = 1000000000
+    assertEqual(billion, 1000000000)
+    // Test max 48-bit signed integer (NaN Boxing limit)
+    var max_int = 140737488355327
+    assertEqual(max_int > 0, true)
+    // For larger numbers, use BigInt
+    var large = 9223372036854775807n
+    // INT64_MAX as BigInt
+    assertEqual(large > 0n, true)
+}

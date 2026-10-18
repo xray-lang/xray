@@ -1,0 +1,34 @@
+// Retain all original calls and place kinds; capture actual scalar results once after their original argument evaluation.
+fn bump(value: ref i64) -> i64 {
+    return value + 1
+}
+
+fn fill(value: ref i64) -> i64 {
+    value = 7
+    return value
+}
+
+fn observe(values: ref Array<i64>) -> i64 {
+    return len(values)
+}
+
+@test
+fn test_writable_places_accept_ref() {
+    var value = 1
+    var p19PlaceValue0 = bump(ref value)
+    assertEqual(p19PlaceValue0, 2)
+    print(p19PlaceValue0)
+
+    var slot = 0
+    var p19PlaceValue1 = fill(ref slot)
+    assertEqual(p19PlaceValue1, 7)
+    print(p19PlaceValue1)
+    var p19PlaceValue2 = slot
+    assertEqual(p19PlaceValue2, 7)
+    print(p19PlaceValue2)
+
+    var values = Array<i64>(0)
+    var p19PlaceValue3 = observe(ref values)
+    assertEqual(p19PlaceValue3, 0)
+    print(p19PlaceValue3)
+}

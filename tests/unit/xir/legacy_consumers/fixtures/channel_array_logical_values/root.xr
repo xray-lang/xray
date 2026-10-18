@@ -1,0 +1,99 @@
+fn sent(r: SendResult) -> bool {
+    return match (r) {
+        SendResult.Sent -> true
+        _ -> false
+    }
+}
+
+fn recv_array(ch: Channel<Array<i64>>) -> Array<i64> {
+    return match (ch.recv()) {
+        Recv.Value { value: v } -> v
+        _ -> []
+    }
+}
+
+fn forward_array(ch: Channel<Array<i64>>, data: Array<i64>) {
+    ch.send(data)
+}
+
+@test
+fn test_channel_send_value_preserves_source() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = [1, 2]
+    ch.send(xs)
+    xs.push(3)
+
+    var got = recv_array(ch)
+    got.push(99)
+
+    assertEqual(len(xs), 3)
+    assertEqual(len(got), 3)
+    assertEqual(got[0], 1)
+    assertEqual(got[1], 2)
+    assertEqual(got[2], 99)
+    ch.close()
+}
+
+@test
+fn test_channel_try_send_value_preserves_source() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = [4, 5]
+    assert(sent(ch.trySend(xs)))
+    xs.push(6)
+
+    var got = recv_array(ch)
+    assertEqual(len(xs), 3)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 4)
+    assertEqual(got[1], 5)
+    ch.close()
+}
+
+@test
+fn test_channel_send_timeout_value_preserves_source() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = [7, 8]
+    assert(sent(ch.sendTimeout(xs, 0)))
+    xs.push(9)
+
+    var got = recv_array(ch)
+    assertEqual(len(xs), 3)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 7)
+    assertEqual(got[1], 8)
+    ch.close()
+}
+
+@test
+fn test_channel_send_value_preserves_source_after_send() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = Array<i64>(2, 0)
+    xs[0] = 10
+    xs[1] = 11
+    ch.send(xs)
+    xs.push(12)
+    assertEqual(len(xs), 3)
+
+    var got = recv_array(ch)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 10)
+    assertEqual(got[1], 11)
+    ch.close()
+}
+
+@test
+fn test_channel_send_helper_value_preserves_source() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = Array<i64>(2, 0)
+    xs[0] = 12
+    xs[1] = 13
+    forward_array(ch, xs)
+    xs.push(14)
+    assertEqual(len(xs), 3)
+
+    var got = recv_array(ch)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 12)
+    assertEqual(got[1], 13)
+    ch.close()
+}

@@ -20,6 +20,7 @@
 #include "../base/xdefs.h"
 #include "../base/xtarget_data_layout.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../frontend/analyzer/xanalyzer.h"
 
 #include <string.h>
 
@@ -32,12 +33,7 @@ typedef struct MethodDeclNode MethodDeclNode;
 typedef struct ClassDeclNode ClassDeclNode;
 
 static inline const XrTargetDataLayout *xi_lower_target_data_layout(const XiLower *l) {
-    XrCompilerSession *session = l ? xr_compiler_session_current_for_isolate(l->isolate) : NULL;
-    const XrTargetDataLayout *layout =
-        session ? xr_compiler_session_target_data_layout(session) : NULL;
-    /* Standalone Xi unit tests have no compiler session and model the VM
-     * backend, whose target is explicitly the host ABI. */
-    return layout ? layout : xr_target_data_layout_host();
+    return xa_analyzer_target_data_layout(l ? l->analyzer : NULL);
 }
 
 /* Copy a string into the XiFunc arena so it survives AST destruction. */
@@ -273,12 +269,12 @@ XR_FUNC void xi_lower_cleanup_scope_push(XiLower *l);
 XR_FUNC void xi_lower_cleanup_scope_pop_normal(XiLower *l, int line);
 XR_FUNC void xi_lower_cleanup_run_to_depth(XiLower *l, int target_depth, int line);
 XR_FUNC bool xi_lower_cleanup_has_active_site(XiLower *l);
-XR_FUNC void xi_lower_prepare_cleanup_places(XiLower *l, AstNode *root);
+XR_FUNC void xi_lower_prepare_cleanup_places(XiLower *l, struct AstNode *root);
 XR_FUNC bool xi_lower_cleanup_symbol_needs_place(const XiLower *l, uint32_t symbol_id);
 XR_FUNC bool xi_lower_cleanup_bind_place(XiLower *l, int var_id, XiValue *initial_value, int line);
-XR_FUNC XiValue *xi_lower_parallel_plan_lifecycle_call(XiLower *l, AstNode *node, XiValue *plan,
+XR_FUNC XiValue *xi_lower_parallel_plan_lifecycle_call(XiLower *l, struct AstNode *node, XiValue *plan,
                                                        const char *method);
-XR_FUNC bool xi_lower_cleanup_register_parallel_end(XiLower *l, AstNode *node, XiValue *plan);
+XR_FUNC bool xi_lower_cleanup_register_parallel_end(XiLower *l, struct AstNode *node, XiValue *plan);
 
 /* Emit XI_IS test against the given XrTypeRef on a pre-lowered value. */
 struct XrTypeRef;

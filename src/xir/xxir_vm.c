@@ -751,6 +751,8 @@ static XrXirRunStatus scalar_step(ScalarRun *run, VmState *state, XrXirAction *a
 static XrXirAction vm_resume(XrXirCallView *view) {
     if (xr_xir_call_observer_vm(view) != XR_XIR_CALL_READY) return xr_xir_call_fault(XR_XIR_RUN_BAD_ARTIFACT);
     const XrXirVmBinding *binding = view->environment;
+    if (xir_artifact_is_evaluation(binding->artifact))
+        return (XrXirAction){XR_XIR_ACTION_FAULT,0,NULL,0,{0},{0},0};
     const XrXirModule *module = xr_xir_compile_artifact_module(binding->artifact);
     const XrXirFunction *function = &module->functions[binding->function];
     const XrXirFunctionLayout *layout = xr_xir_compile_artifact_layout(binding->artifact, binding->function);
@@ -842,6 +844,7 @@ static void vm_release(XrXirCallView *view, XrXirCallStatus reason) {
 
 static XrXirStatus bind_verified(const XrXirArtifact *artifact, uint32_t function,
                                  XrXirVmBinding *binding, XrXirCallEntry *entry) {
+    if (xir_artifact_is_evaluation(artifact)) return XR_XIR_BAD_STAGE;
     const XrXirCompileContext *context = xr_xir_compile_artifact_context(artifact);
     if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
@@ -869,7 +872,7 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_bind(const XrXirArtifact *artifact, uint32
     XrXirVmBinding *binding, XrXirCallEntry *entry) {
     if (!binding || !entry) return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
-    if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
+    if (!module || module->stage != XR_XIR_LOWERED || xir_artifact_is_evaluation(artifact)) return XR_XIR_BAD_STAGE;
     if (function >= module->function_count) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = xr_xir_compile_artifact_verify(artifact, NULL);
     return status == XR_XIR_OK ? bind_verified(artifact, function, binding, entry) : status;
@@ -880,7 +883,7 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_bind_table(const XrXirArtifact *artifact,
     if (!bindings || !entries || (void *) bindings == (void *) entries || *bindings || *entries)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
-    if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
+    if (!module || module->stage != XR_XIR_LOWERED || xir_artifact_is_evaluation(artifact)) return XR_XIR_BAD_STAGE;
     const XrXirCompileContext *context = xr_xir_compile_artifact_context(artifact);
     XrXirStatus status = xr_xir_compile_artifact_verify(artifact, NULL);
     if (status != XR_XIR_OK) return status;
@@ -947,7 +950,7 @@ XR_FUNC XrXirStatus xr_xir_compile_vm_program_take(XrXirArtifact **artifact,
     XrXirProgram **output) {
     if (!output || *output || !artifact) return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *module = xr_xir_compile_artifact_module(*artifact);
-    if (!module || module->stage != XR_XIR_LOWERED) return XR_XIR_BAD_STAGE;
+    if (!module || module->stage != XR_XIR_LOWERED || xir_artifact_is_evaluation(*artifact)) return XR_XIR_BAD_STAGE;
     if (!module->declarations) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext current_context=*xr_xir_compile_artifact_context(*artifact);
     const XrXirCompileContext *context=&current_context;
@@ -1007,12 +1010,13 @@ XR_FUNC XrXirRunStatus xr_xir_compile_vm_run(const XrXirArtifact *artifact, uint
     if (!context || (argument_count && !arguments))
         return XR_XIR_RUN_BAD_ARGUMENT;
     const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
-    if (!module || module->stage != XR_XIR_LOWERED || function >= module->function_count)
+    if (!module || module->stage != XR_XIR_LOWERED || function >= module->function_count || xir_artifact_is_evaluation(artifact))
         return XR_XIR_RUN_BAD_ARTIFACT;
     XrXirStatus verified = xr_xir_compile_artifact_verify(artifact, NULL);
     if (verified != XR_XIR_OK)
         return verified == XR_XIR_OUT_OF_MEMORY ? XR_XIR_RUN_OUT_OF_MEMORY : XR_XIR_RUN_BAD_ARTIFACT;
-    if (module->declarations && module->declarations->functions[function].cleanup_owner) return XR_XIR_RUN_BAD_ARTIFACT;
+    if (module->declarations && (module->declarations->functions[function].cleanup_owner ||
+        module->declarations->functions[function].method_kind==XR_XIR_MATERIALIZER)) return XR_XIR_RUN_BAD_ARTIFACT;
     const XrXirFunction *body = &module->functions[function];
     if (xr_xir_type_is_owned(module->types, body->result)) return XR_XIR_RUN_BAD_ARTIFACT;
     for (uint32_t i = 0; i < body->parameter_count; ++i)

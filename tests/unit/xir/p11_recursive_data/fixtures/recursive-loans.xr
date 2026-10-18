@@ -1,0 +1,15 @@
+struct Node{value:i64;children:Array<Node>}
+fn edit(node:ref Node,depth:i64){
+    if(depth>0){edit(ref node.children[0],depth-1)}
+    else{node.children.push(Node{value:41,children:[]});node.value=1}
+}
+fn eval()->i64{
+    var root=Node{value:2,children:[]};
+    for(var i=0;i<12;i++){root=Node{value:0,children:[root]}}
+    const before=root;
+    edit(ref root,12);
+    var current=root;var previous=before;
+    for(var i=0;i<12;i++){current=current.children[0];previous=previous.children[0]}
+    return current.value+current.children[0].value+len(previous.children)+previous.value-2
+}
+export fn answer()->i64{const value=comptime eval();return value}

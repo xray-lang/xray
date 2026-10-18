@@ -250,9 +250,9 @@ static int xi_lower_configure_adt_layout(XiLower *l, XrEnumType *enum_type,
                 members && members[i].payload_types ? members[i].payload_types[p] : NULL;
             type_ids[p] = xr_type_to_tid(payload_type);
         }
-        if (!xr_enum_layout_set_variant_payload_metadata(
+        if (xr_enum_layout_set_variant_payload_metadata(
                 enum_type->layout, (uint32_t) i, (const char *const *) member->payload_names,
-                type_ids, (uint16_t) member->payload_count))
+                type_ids, (uint16_t) member->payload_count) != XR_OS_IO_OK)
             l->had_error = true;
         xr_free(type_ids);
     }

@@ -1,0 +1,288 @@
+// Keep complete original methods and observe every frozen array element through public len/index operations.
+// 0610_array_functional.xr
+// 作者：xingleixu@gmail.com
+// 测试：数组函数式方法
+// ===== map =====
+@test
+fn test_map_basic() {
+    var arr = [1, 2, 3, 4, 5]
+    var doubled = arr.map(fn(x) {
+        return x * 2
+    })
+    assertEqual(len(doubled), 5)
+    assertEqual(doubled[0], 2)
+    assertEqual(doubled[4], 10)
+    print(len(doubled))
+    for (var p19Index = 0; p19Index < len(doubled); p19Index++) {
+        print(doubled[p19Index])
+    }
+    print(len(doubled))
+}
+
+@test
+fn test_map_empty() {
+    var arr: Array<i64> = []
+    var result = arr.map(fn(x) {
+        return x * 2
+    })
+    assertEqual(len(result), 0)
+    print(len(result))
+    for (var p19Index = 0; p19Index < len(result); p19Index++) {
+        print(result[p19Index])
+    }
+}
+
+@test
+fn test_map_to_different_type() {
+    var arr = [1, 2, 3]
+    var strs = arr.map(fn(x) {
+        return x.toString()
+    })
+    assertEqual(strs[0], "1")
+    assertEqual(strs[1], "2")
+    assertEqual(strs[2], "3")
+    print(strs[0])
+    print(strs[1])
+    print(strs[2])
+}
+
+// ===== filter =====
+@test
+fn test_filter_basic() {
+    var arr = [1, 2, 3, 4, 5, 6]
+    var evens = arr.filter(fn(x) {
+        return x % 2 == 0
+    })
+    assertEqual(len(evens), 3)
+    assertEqual(evens[0], 2)
+    assertEqual(evens[1], 4)
+    assertEqual(evens[2], 6)
+    print(len(evens))
+    for (var p19Index = 0; p19Index < len(evens); p19Index++) {
+        print(evens[p19Index])
+    }
+    print(len(evens))
+}
+
+@test
+fn test_filter_none() {
+    var arr = [1, 3, 5, 7]
+    var evens = arr.filter(fn(x) {
+        return x % 2 == 0
+    })
+    assertEqual(len(evens), 0)
+    print(len(evens))
+    for (var p19Index = 0; p19Index < len(evens); p19Index++) {
+        print(evens[p19Index])
+    }
+}
+
+@test
+fn test_filter_all() {
+    var arr = [2, 4, 6, 8]
+    var evens = arr.filter(fn(x) {
+        return x % 2 == 0
+    })
+    assertEqual(len(evens), 4)
+    print(len(evens))
+    for (var p19Index = 0; p19Index < len(evens); p19Index++) {
+        print(evens[p19Index])
+    }
+    print(len(evens))
+}
+
+@test
+fn test_filter_empty() {
+    var arr: Array<i64> = []
+    var result = arr.filter(fn(x) {
+        return true
+    })
+    assertEqual(len(result), 0)
+    print(len(result))
+    for (var p19Index = 0; p19Index < len(result); p19Index++) {
+        print(result[p19Index])
+    }
+}
+
+// ===== reduce =====
+@test
+fn test_reduce_sum() {
+    var arr = [1, 2, 3, 4, 5]
+    var sum = arr.reduce(fn(acc, x) {
+        return acc + x
+    }, 0)
+    assertEqual(sum, 15)
+    print(sum)
+}
+
+@test
+fn test_reduce_product() {
+    var arr = [1, 2, 3, 4]
+    var product = arr.reduce(fn(acc, x) {
+        return acc * x
+    }, 1)
+    assertEqual(product, 24)
+    print(product)
+}
+
+@test
+fn test_reduce_max() {
+    var arr = [3, 1, 4, 1, 5, 9, 2, 6]
+    var max = arr.reduce(fn(a, b) {
+        return a > b ? a : b
+    }, arr[0])
+    assertEqual(max, 9)
+    print(max)
+}
+
+@test
+fn test_reduce_min() {
+    var arr = [3, 1, 4, 1, 5, 9, 2, 6]
+    var min = arr.reduce(fn(a, b) {
+        return a < b ? a : b
+    }, arr[0])
+    assertEqual(min, 1)
+    print(min)
+}
+
+@test
+fn test_reduce_empty() {
+    var arr: Array<i64> = []
+    var sum = arr.reduce(fn(acc, x) {
+        return acc + x
+    }, 0)
+    assertEqual(sum, 0)
+    print(sum)
+}
+
+@test
+fn test_reduce_single() {
+    var arr = [42]
+    var sum = arr.reduce(fn(acc, x) {
+        return acc + x
+    }, 0)
+    assertEqual(sum, 42)
+    print(sum)
+}
+
+// ===== forEach =====
+@test
+fn test_foreach_basic() {
+    var arr = [1, 2, 3]
+    var sum = 0
+    arr.forEach(fn(x) {
+        sum += x
+    })
+    assertEqual(sum, 6)
+    print(sum)
+}
+
+@test
+fn test_foreach_empty() {
+    var arr: Array<i64> = []
+    var count = 0
+    arr.forEach(fn(x) {
+        count++
+    })
+    assertEqual(count, 0)
+    print(count)
+}
+
+// ===== 链式调用 =====
+@test
+fn test_chain_map_filter() {
+    var arr = [1, 2, 3, 4, 5]
+    var result = arr.map(fn(x) {
+        return x * 2
+    }).filter(fn(x) {
+        return x > 5
+    })
+    // [6, 8, 10]
+    assertEqual(len(result), 3)
+    assertEqual(result[0], 6)
+    print(len(result))
+    for (var p19Index = 0; p19Index < len(result); p19Index++) {
+        print(result[p19Index])
+    }
+    print(len(result))
+}
+
+@test
+fn test_chain_filter_map() {
+    var arr = [1, 2, 3, 4, 5, 6]
+    var result = arr.filter(fn(x) {
+        return x % 2 == 0
+    }).map(fn(x) {
+        return x * x
+    })
+    // [4, 16, 36]
+    assertEqual(len(result), 3)
+    assertEqual(result[0], 4)
+    assertEqual(result[2], 36)
+    print(len(result))
+    for (var p19Index = 0; p19Index < len(result); p19Index++) {
+        print(result[p19Index])
+    }
+    print(len(result))
+}
+
+@test
+fn test_chain_map_filter_reduce() {
+    var arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    var result = arr.filter(fn(x) {
+        return x % 2 == 0
+    }).map(fn(x) {
+        return x * 2
+    }).reduce(fn(a, b) {
+        return a + b
+    }, 0)
+    // 60
+    assertEqual(result, 60)
+    print(result)
+}
+
+// ===== 实际应用 =====
+@test
+fn test_sum_of_squares() {
+    var arr = [1, 2, 3, 4]
+    var sumOfSquares = arr.map(fn(x) {
+        return x * x
+    }).reduce(fn(a, b) {
+        return a + b
+    }, 0)
+    assertEqual(sumOfSquares, 30)
+    print(sumOfSquares)
+}
+
+@test
+fn test_count_matches() {
+    var words = ["apple", "banana", "apricot", "cherry"]
+    var startsWithA = words.filter(fn(w) {
+        return w.startsWith("a")
+    })
+    assertEqual(len(startsWithA), 2)
+    print(len(startsWithA))
+    for (var p19Index = 0; p19Index < len(startsWithA); p19Index++) {
+        print(startsWithA[p19Index])
+    }
+    print(len(startsWithA))
+}
+
+@test
+fn test_flatten_single_level() {
+    var nested = [[1, 2], [3, 4], [5, 6]]
+    var flat: Array<i64> = []
+    for (arr in nested) {
+        for (x in arr) {
+            flat.push(x)
+        }
+    }
+    assertEqual(len(flat), 6)
+    assertEqual(flat[0], 1)
+    assertEqual(flat[5], 6)
+    print(len(flat))
+    for (var p19Index = 0; p19Index < len(flat); p19Index++) {
+        print(flat[p19Index])
+    }
+    print(len(flat))
+}

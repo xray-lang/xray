@@ -1,0 +1,130 @@
+/* Owned slice-copy lifetime across source grow (task 152 surface split).
+ *
+ * `Slice<T>`/`Slice<byte>` are scoped fast borrowed views, so they may not stay live
+ * across owner growth. Long-lived non-copying slices belong to `Slice<T>`/
+ * `Slice<byte>`; `copy(slice)` is the explicit owned snapshot path and must survive
+ * source growth independently.
+ *
+ * Covers POD element buffers (Array<byte> / typed Array<int>) and ANY buffers (object
+ * arrays), including the `copy(slice)` target-typed view path.
+ */
+
+@test
+fn test_byte_array_copy_survives_source_grow() {
+    var b = Array<u8>(4)
+    b[0] = 1
+    b[1] = 2
+    b[2] = 3
+    b[3] = 4
+
+    // Spill the backing store to the system heap BEFORE slicing, so the slice
+    // points into a heap buffer (the case that actually freed on a later grow).
+    for (var i = 0; i < 64; i++) {
+        b.push(200)
+    }
+
+    var s: Array<u8> = copy(b[1:4])
+    print(s[0])  // 2
+    print(s[2])  // 4
+
+    // Grow far past capacity -> realloc/fork of the backing store.
+    for (var i = 0; i < 4096; i++) {
+        b.push(7)
+    }
+
+    // The copy must still be valid and observe the snapshot taken at copy time.
+    print(s[0])  // 2
+    print(s[2])  // 4
+
+    s[1] = 99
+    print(s[1])  // 99
+    assertEqual(b[2], 3)
+    assertEqual(len(b), 4164)
+    assertEqual(s, [2, 99, 4])
+
+    print("bytes copy survived grow")
+
+    // expect: 2
+    // expect: 4
+    // expect: 2
+    // expect: 4
+    // expect: 99
+    // expect: bytes copy survived grow
+}
+
+@test
+fn test_typed_int_copy_survives_source_grow() {
+    var a = Array<i64>(4, 0)
+    a[0] = 10
+    a[1] = 20
+    a[2] = 30
+    a[3] = 40
+
+    for (var i = 0; i < 64; i++) {
+        a.push(100 + i)
+    }
+
+    var s: Array<i64> = copy(a[1:4])
+    print(s[0])  // 20
+    print(s[1])  // 30
+    print(s[2])  // 40
+
+    for (var i = 0; i < 4096; i++) {
+        a.push(i)
+    }
+
+    print(s[0])  // 20
+    print(s[1])  // 30
+    print(s[2])  // 40
+
+    s[1] = 999
+    print(s[1])  // 99
+    assertEqual(b[2], 3)
+    assertEqual(len(b), 4164)
+    assertEqual(s, [2, 99, 4])9
+
+    print("typed int copy survived grow")
+
+    // expect: 20
+    // expect: 30
+    // expect: 40
+    // expect: 20
+    // expect: 30
+    // expect: 40
+    // expect: 999
+    // expect: typed int copy survived grow
+}
+
+@test
+fn test_any_object_copy_survives_source_grow() {
+    var a = ["a", "b", "c", "d"]
+
+    for (var i = 0; i < 64; i++) {
+        a.push("x")
+    }
+
+    var s: Array<string> = copy(a[1:4])
+    print(s[0])  // b
+    print(s[1])  // c
+    print(s[2])  // d
+
+    for (var i = 0; i < 4096; i++) {
+        a.push("y")
+    }
+
+    print(s[0])  // b
+    print(s[1])  // c
+    print(s[2])  // d
+
+    assertEqual(len(a), 4164)
+    assertEqual(s, ["b", "c", "d"])
+    print("any object copy survived grow")
+
+    // expect: b
+    // expect: c
+    // expect: d
+    // expect: b
+    // expect: c
+    // expect: d
+    // expect: any object copy survived grow
+}

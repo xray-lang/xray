@@ -1,0 +1,5 @@
+enum Unused { First, Second }
+export interface ReadCounter { current() -> i64 }
+var offset: i64 = 1
+export fn increment(value: i64) -> i64 { return value + offset }
+export fn unused(value: i64) -> i64 { return value + 100 }

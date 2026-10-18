@@ -1,0 +1,240 @@
+// 1204_class_type.xr
+// Test class type inference
+import math
+
+// ===== Basic Class Type =====
+class Point {
+    x: i64
+    y: i64
+
+    init(x: i64, y: i64) {
+        this.x = x
+        this.y = y
+    }
+
+    distance() -> f64 {
+        var sum = this.x * this.x + this.y * this.y
+        return math.sqrt((sum as f64))
+    }
+
+    toString() -> string {
+        return "Point(" + string(this.x) + ", " + string(this.y) + ")"
+    }
+}
+
+@test
+fn test_class_instance_type() {
+    var p = Point(3, 4)
+    assertEqual(typeName(p), "Point")
+}
+
+@test
+fn test_class_field_access() {
+    var p = Point(3, 4)
+    assertEqual(p.x, 3)
+    assertEqual(p.y, 4)
+}
+
+@test
+fn test_class_method_call() {
+    var p = Point(3, 4)
+    var d = p.distance()
+    assertEqual(typeName(d), "f64")
+    assert(d > 4.9 && d < 5.1)
+}
+
+@test
+fn test_class_method_return_type() {
+    var p = Point(0, 0)
+    var s = p.toString()
+    assertEqual(typeName(s), "string")
+    assertEqual(s, "Point(0, 0)")
+}
+
+// ===== Class Inheritance =====
+class Animal {
+    name: string
+
+    init(name: string) {
+        this.name = name
+    }
+
+    speak() -> string {
+        return this.name + " makes a sound"
+    }
+}
+
+class Dog extends Animal {
+    breed: string
+
+    init(name: string, breed: string) {
+        super(name)
+        this.breed = breed
+    }
+
+    override speak() -> string {
+        return this.name + " barks"
+    }
+
+    fetch() -> string {
+        return this.name + " fetches the ball"
+    }
+}
+
+@test
+fn test_inheritance_type() {
+    var d = Dog("Rex", "Labrador")
+    assertEqual(typeName(d), "Dog")
+}
+
+@test
+fn test_inheritance_field() {
+    var d = Dog("Rex", "Labrador")
+    assertEqual(d.name, "Rex")
+    // Inherited field
+    assertEqual(d.breed, "Labrador")
+}
+
+@test
+fn test_inheritance_method() {
+    var d = Dog("Rex", "Labrador")
+    assertEqual(d.speak(), "Rex barks")
+    // Overridden
+    assertEqual(d.fetch(), "Rex fetches the ball")
+}
+
+@test
+fn test_polymorphism() {
+    var animals = [Animal("Generic"), Dog("Rex", "Lab")]
+    assertEqual(animals[0].speak(), "Generic makes a sound")
+    assertEqual(animals[1].speak(), "Rex barks")
+}
+
+@test
+fn test_array_literal_contextual_supertype() {
+    var animals: Array<Animal> = [Animal("Generic"), Dog("Rex", "Lab")]
+    assertEqual(len(animals), 2)
+    assertEqual(animals[0].speak(), "Generic makes a sound")
+    assertEqual(animals[1].speak(), "Rex barks")
+}
+
+// ===== Static Members =====
+class Counter {
+    static count: i64 = 0
+
+    static increment() {
+        Counter.count = Counter.count + 1
+    }
+
+    static getCount() -> i64 {
+        return Counter.count
+    }
+}
+
+@test
+fn test_static_field() {
+    Counter.count = 0
+    // Reset
+    assertEqual(Counter.count, 0)
+    Counter.count = 5
+    assertEqual(Counter.count, 5)
+}
+
+@test
+fn test_static_method() {
+    Counter.count = 0
+    // Reset
+    Counter.increment()
+    Counter.increment()
+    assertEqual(Counter.getCount(), 2)
+}
+
+// ===== Class with Generic-like Patterns =====
+class Box {
+    value: i64
+
+    init(value: i64) {
+        this.value = value
+    }
+
+    get() -> i64 {
+        return this.value
+    }
+
+    set(value: i64) {        this.value = value
+    }
+}
+
+@test
+fn test_box_int() {
+    var b = Box(42)
+    assertEqual(b.get(), 42)
+}
+
+@test
+fn test_box_second_instance() {
+    var b = Box(7)
+    assertEqual(b.get(), 7)
+}
+
+@test
+fn test_box_mutation() {
+    var b = Box(1)
+    b.set(2)
+    assertEqual(b.get(), 2)
+}
+
+// ===== is Operator =====
+@test
+fn test_is_operator_class() {
+    var d = Dog("Rex", "Lab")
+    assert(d is Dog)
+    assert(d is Animal)
+}
+
+@test
+fn test_is_operator_primitives() {
+    var x = 42
+    assert(x is i64)
+    var s = "hello"
+    assert(s is string)
+    var b = true
+    assert(b is bool)
+}
+
+// ===== Multiple Classes =====
+class Rectangle {
+    width: i64
+    height: i64
+
+    init(w: i64, h: i64) {
+        this.width = w
+        this.height = h
+    }
+
+    area() -> i64 {
+        return this.width * this.height
+    }
+}
+
+class Circle {
+    radius: f64
+
+    init(r: f64) {
+        this.radius = r
+    }
+
+    area() -> f64 {
+        return 3.14159 * this.radius * this.radius
+    }
+}
+
+@test
+fn test_different_classes() {
+    var rect = Rectangle(4, 5)
+    var circ = Circle(3)
+    assertEqual(typeName(rect), "Rectangle")
+    assertEqual(typeName(circ), "Circle")
+    assertEqual(rect.area(), 20)
+    assert(circ.area() > 28 && circ.area() < 29)
+}

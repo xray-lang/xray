@@ -1,0 +1,2 @@
+fn rec(n:i64)->i64{const f=rec;return n==0?0:f(n-1)+1}
+export fn run()->i64{return comptime rec(42)}

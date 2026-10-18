@@ -1,0 +1,4 @@
+class Box{value:i64;init(value:i64){this.value=value}}
+struct Wrap{items:Array<Box>}
+fn answer()->i64{const w=Wrap{items:[Box(40),Box(2)]};return w.items[0].value+w.items[1].value}
+export fn run()->i64{return comptime answer()}

@@ -1,0 +1,8 @@
+var narrow: i16 = 3
+var value: i16 | i32 = narrow
+print(value is i16)
+print(value is i32)
+var wide: i32 = 3
+value = wide
+print(value is i16)
+print(value is i32)

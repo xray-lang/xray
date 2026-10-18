@@ -185,7 +185,7 @@ int main(int argc,char **argv) {
     cross_expected_instance=argc>3?(unsigned)strtoul(argv[3],NULL,10):UINT32_MAX;
     CHECK(argc==1||argc==2||oc_guard_enabled||argc==4);
     if(fail_at!=SIZE_MAX)CHECK(prefix>=5&&prefix<=11&&cross_expected_instance<2);
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==30 && XR_XIR_CHECKED_CONTRACT==76, "The cross observer binds the current complete packet");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==76, "The cross observer binds the current complete packet");
     printf("CENSUS_LAYOUT {\"string\":%zu,\"enum_one_field\":%zu,\"admission_frame\":%zu,\"call_result\":%zu}\n",
         sizeof(XirString),sizeof(XirNominalValue)+sizeof(XrXirValue),sizeof(ValueAdmissionFrame),sizeof(XrXirCallResult));
     uint32_t entry=UINT32_MAX;oc_phase=0;

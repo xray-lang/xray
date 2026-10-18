@@ -11,7 +11,7 @@
  *   Digest-valid old semantics reject before artifact allocation. Class field
  *   values use the same owned failure carrier as every other runtime value.
  */
-_Static_assert(XR_XIR_CHECKED_SCHEMA==30 && XR_XIR_CHECKED_CONTRACT==76,
+_Static_assert(XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==76,
     "class Array fields use the current default-binding schema and semantic contract");
 _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==33 && XR_XIR_VALUE_ABI_VERSION==24 &&
     XR_XIR_CALL_ABI_VERSION==29,"class field values use the current carrier ABIs");

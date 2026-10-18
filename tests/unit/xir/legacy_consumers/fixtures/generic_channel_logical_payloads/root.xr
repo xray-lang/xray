@@ -1,0 +1,115 @@
+// Test: Generic Channel types
+// Expected: prints "ok"
+// Basic Channel<T> type annotation
+
+fn sent(r: SendResult) -> bool {
+    return match (r) {
+        SendResult.Sent -> true
+        _ -> false
+    }
+}
+
+fn recv_int(ch: Channel<i64>) -> i64 {
+    return match (ch.recv()) {
+        Recv.Value { value: v } -> v
+        _ -> -1
+    }
+}
+
+fn recv_string(ch: Channel<string>) -> string {
+    return match (ch.recv()) {
+        Recv.Value { value: v } -> v
+        _ -> ""
+    }
+}
+
+fn recv_array(ch: Channel<Array<i64>>) -> Array<i64> {
+    return match (ch.recv()) {
+        Recv.Value { value: v } -> v
+        _ -> []
+    }
+}
+
+fn recv_opt_int(ch: Channel<i64?>) -> i64? {
+    return match (ch.recv()) {
+        Recv.Value { value: v } -> v
+        _ -> null
+    }
+}
+
+@test
+fn test_generic_channel() {
+    const intCh: Channel<i64> = Channel(5)
+    const strCh: Channel<string> = Channel(5)
+    // Send and receive int
+    intCh.send(42)
+    intCh.send(100)
+    var v1 = recv_int(intCh)
+    var v2 = recv_int(intCh)
+    assertEqual(v1, 42)
+    assertEqual(v2, 100)
+    // Send and receive string
+    strCh.send("hello")
+    strCh.send("world")
+    var s1 = recv_string(strCh)
+    var s2 = recv_string(strCh)
+    assertEqual(s1, "hello")
+    assertEqual(s2, "world")
+    // Channel with Array
+    const arrCh: Channel<Array<i64>> = Channel(2)
+    var firstPayload = [1, 2, 3]
+    arrCh.send(firstPayload)
+    firstPayload[0] = 99
+    var secondPayload = [4, 5, 6]
+    arrCh.send(secondPayload)
+    var arr1 = recv_array(arrCh)
+    var arr2 = recv_array(arrCh)
+    assertEqual(arr1[0], 1)
+    assertEqual(arr2[2], 6)
+    assertEqual(firstPayload[0], 99)
+    arr1.push(7)
+    assertEqual(len(firstPayload), 3)
+    // tryRecv with generic channel
+    const tryCh: Channel<i64> = Channel(1)
+    // Empty channel
+    var r1 = tryCh.tryRecv()
+    var ok1 = match (r1) {
+        Recv.Value { value: _ } -> true
+        _ -> false
+    }
+    assert(!ok1)
+    // With value
+    tryCh.send(999)
+    var r2 = tryCh.tryRecv()
+    var ok2 = match (r2) {
+        Recv.Value { value: _ } -> true
+        _ -> false
+    }
+    var val2 = match (r2) {
+        Recv.Value { value: v } -> v
+        _ -> -1
+    }
+    assert(ok2)
+    assertEqual(val2, 999)
+    // trySend with generic channel
+    const smallCh: Channel<string> = Channel(1)
+    var sent1 = smallCh.trySend("first")
+    assert(sent(sent1))
+    // Channel is full
+    var sent2 = smallCh.trySend("second")
+    assert(!sent(sent2))
+    // Receive and try again
+    var recv = recv_string(smallCh)
+    assertEqual(recv, "first")
+    // Optional value in channel
+    const optCh: Channel<i64?> = Channel(3)
+    optCh.send(42)
+    optCh.send(null)
+    optCh.send(100)
+    var o1 = recv_opt_int(optCh)
+    var o2 = recv_opt_int(optCh)
+    var o3 = recv_opt_int(optCh)
+    assertEqual(o1, 42)
+    assertEqual(o2, null)
+    assertEqual(o3, 100)
+}

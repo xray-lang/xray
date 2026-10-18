@@ -230,7 +230,8 @@ static XrValue io_mkdir(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
-    return xr_bool(xr_fs_mkdir(path, 0755) == 0);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    return xr_bool(xr_os_io_mkdir(&policy, path, 0755) == XR_OS_IO_OK);
 }
 
 typedef struct IoDirIter {
@@ -333,7 +334,8 @@ static XrValue io_chdir(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
-    return xr_bool(xr_fs_chdir(path) == 0);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    return xr_bool(xr_os_io_chdir(&policy, path) == XR_OS_IO_OK);
 }
 
 // stat(path) - Get file stat info
@@ -498,7 +500,8 @@ static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
 
     char resolved[XR_PATH_MAX];
-    if (xr_fs_realpath(path, resolved, sizeof(resolved)) == NULL)
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    if (xr_os_io_realpath(&policy, path, resolved, sizeof(resolved)) != XR_OS_IO_OK)
         return xr_null();
     XrIoCorePathView view;
     if (!xr_io_core_path_result_cstr_view(resolved, &view))

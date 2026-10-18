@@ -1,0 +1,139 @@
+// 1438_ws_self_connect.xr
+// 作者：xingleixu@gmail.com
+// 测试：WebSocket 进程内自连接（server + client 在同进程跨协程）。
+//
+// 回归护栏：客户端把 `passed`/`failed` 计数器（声明为函数首个局部 = 变量 #0）
+// 维持在「跨循环 + 内含 `&&` 条件」的活跃区间，并在循环结束后再次读取它们。
+// 这一控制流曾触发 Xi 寄存器分配把临时 phi（`&&` 结果，因构造时漏初始化
+// var_id 而退化为 0）与变量 #0 合并到同一寄存器，污染计数器，使客户端协程
+// 在 `passed = passed + 1` 处静默抛出 "addition requires numeric types"，
+// 表象却是「服务器自连接挂起」。本用例同时为之前仅手动运行、不在自动套件里
+// 的 ws 自连接提供回归覆盖。
+
+import ws
+import { WsConn } from ws
+import time
+import net
+
+// Echo server: bounce every text/binary frame back until the peer closes.
+// Runs until `running` is cleared by the test.
+fn startEchoServer(port: i64, running: Atomic<bool>) {
+    ws.serve(port, fn(conn: WsConn) {
+        while (true) {
+            var msg = conn.recv()
+            if (msg == null) {
+                break
+            }
+            if (msg!.error != null) {
+                break
+            }
+            var data = msg!.data
+            if (data != null) {
+                conn.sendBytes(data!, msg!.binary)
+            }
+        }
+    }, running)
+}
+
+// Reserve an ephemeral port, then release it so the echo server can rebind it.
+fn pickPort() -> i64 {
+    try {
+        var lst = net.listen(0, 1)
+        var p = net.port(lst)
+        net.close(lst)
+        return p
+    } catch (e) {
+        return -1
+    }
+}
+
+@test
+fn test_ws_self_connect() {
+    // `passed` MUST stay the first declared local so it maps to variable #0 —
+    // the exact slot the temporary `&&` phi wrongly coalesced onto.
+    var passed = 0
+    var failed = 0
+
+    const running = Atomic(true)
+    defer { running.store(false) }
+    var port = pickPort()
+    assert(port > 0)
+    var url = "ws://127.0.0.1:" + port.toString()
+
+    go startEchoServer(port, running)
+    time.sleep(300)
+
+    // I1: single echo. The `&&` over a nullable response is the miscompile site.
+    var conn1 = ws.connect(url, null)
+    defer { conn1.close() }
+    if (conn1.error != null) {
+        running.store(false)
+        assert(false)
+    } else {
+        conn1.sendText("hello self")
+        var resp = conn1.recv(5000)
+        if (resp != null && resp!.data != null && string.fromUtf8(resp!.data![:]) == "hello self") {
+            passed = passed + 1
+        } else {
+            failed = failed + 1
+        }
+        conn1.close()
+    }
+
+    // I2: 20-message round trip; inner counter read after the loop.
+    var conn2 = ws.connect(url, null)
+    defer { conn2.close() }
+    if (conn2.error != null) {
+        failed = failed + 1
+    } else {
+        var count = 20
+        var success = 0
+        for (var i = 0; i < count; i = i + 1) {
+            var m = "self-msg-" + i.toString()
+            conn2.sendText(m)
+            var resp = conn2.recv(5000)
+            if (resp != null && resp!.data != null && string.fromUtf8(resp!.data![:]) == m) {
+                success = success + 1
+            }
+        }
+        conn2.close()
+        if (success == count) {
+            passed = passed + 1
+        } else {
+            failed = failed + 1
+        }
+    }
+
+    // I3: three sequential clients, five messages each.
+    var allOk = true
+    for (var c = 0; c < 3; c = c + 1) {
+        var conn = ws.connect(url, null)
+    defer { conn.close() }
+        if (conn.error != null) {
+            allOk = false
+            break
+        }
+        for (var i = 0; i < 5; i = i + 1) {
+            var m = "client" + c.toString() + "-" + i.toString()
+            conn.sendText(m)
+            var resp = conn.recv(5000)
+            if (resp == null || resp!.data == null || string.fromUtf8(resp!.data![:]) != m) {
+                allOk = false
+                break
+            }
+        }
+        conn.close()
+    }
+    if (allOk) {
+        passed = passed + 1
+    } else {
+        failed = failed + 1
+    }
+
+    running.store(false)
+
+    // If the counters were clobbered by the register-coalescing bug, either
+    // these assertions fail or the client already threw mid-loop.
+    assertEqual(failed, 0)
+    assertEqual(passed, 3)
+}

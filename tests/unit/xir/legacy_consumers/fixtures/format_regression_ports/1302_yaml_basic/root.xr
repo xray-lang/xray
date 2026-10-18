@@ -1,0 +1,79 @@
+// 1302_yaml_basic.xr - YAML module tests (typed YamlValue ADT)
+
+import yaml
+import { YamlValue } from yaml
+
+// Typed access helpers (mirror the module-level accessor free functions).
+fn getV(v: YamlValue, k: string) -> YamlValue { return yaml.get(v, k)! }
+fn getInt(v: YamlValue, k: string) -> i64 { return yaml.asInt(yaml.get(v, k)!) ?? -1 }
+fn getStr(v: YamlValue, k: string) -> string { return yaml.asString(yaml.get(v, k)!) ?? "" }
+fn getBool(v: YamlValue, k: string) -> bool { return yaml.asBool(yaml.get(v, k)!) ?? false }
+fn atInt(v: YamlValue, i: i64) -> i64 { return yaml.asInt(yaml.at(v, i)!) ?? -1 }
+
+// ===== Basic key-value =====
+
+@test
+fn test_parse_basic() {
+    var data = "name: Alice\nage: 30\nactive: true"
+    var obj = yaml.parse(data)
+    assertEqual(getStr(obj, "name"), "Alice")
+    assertEqual(getInt(obj, "age"), 30)
+    assertEqual(getBool(obj, "active"), true)
+}
+
+// ===== Nested mapping =====
+
+@test
+fn test_parse_nested() {
+    var data = "server:\n  host: localhost\n  port: 8080"
+    var obj = yaml.parse(data)
+    var server = getV(obj, "server")
+    assertEqual(getStr(server, "host"), "localhost")
+    assertEqual(getInt(server, "port"), 8080)
+}
+
+// ===== Flow sequence =====
+
+@test
+fn test_parse_flow_sequence() {
+    var data = "list: [1, 2, 3]"
+    var obj = yaml.parse(data)
+    var list = getV(obj, "list")
+    assertEqual(atInt(list, 0), 1)
+    assertEqual(atInt(list, 2), 3)
+}
+
+// ===== Flow mapping =====
+
+@test
+fn test_parse_flow_mapping() {
+    var data = "map: {a: 1, b: 2}"
+    var obj = yaml.parse(data)
+    var map = getV(obj, "map")
+    assertEqual(getInt(map, "a"), 1)
+    assertEqual(getInt(map, "b"), 2)
+}
+
+// ===== Quoted strings =====
+
+@test
+fn test_parse_quoted_strings() {
+    var data = "single: 'hello'\ndouble: \"world\""
+    var obj = yaml.parse(data)
+    assertEqual(getStr(obj, "single"), "hello")
+    assertEqual(getStr(obj, "double"), "world")
+}
+
+// ===== Stringify =====
+
+@test
+fn test_stringify() {
+    var config = yaml.newMapping()
+    yaml.mappingSet(ref config, "name", yaml.stringValue("xray"))
+    yaml.mappingSet(ref config, "version", yaml.intValue(1))
+    var result = yaml.stringify(yaml.mappingValue(config))
+    assert(len(result) > 0)
+    var reparsed = yaml.parse(result)
+    assertEqual(getStr(reparsed, "name"), "xray")
+    assertEqual(getInt(reparsed, "version"), 1)
+}

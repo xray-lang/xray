@@ -16,6 +16,7 @@
 #include "xa_selection.h"
 #include "xanalyzer.h"
 #include "xanalyzer_symbol.h"
+#include "xanalyzer_export_query.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xast_walk.h"
 #include "../../base/xsha256.h"
@@ -685,7 +686,8 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_leaf_a
         XrProgramSemanticClosureFailureKind failure =
             xr_program_semantic_closure_failure_kind(closure);
         xr_program_semantic_closure_free(closure);
-        return failure == XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_RESOURCE
+        return failure == XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_RESOURCE ||
+                       xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK
                    ? XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE
                    : XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
     }
@@ -939,7 +941,8 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_leaf_p
         XrProgramSemanticClosureFailureKind failure =
             xr_program_semantic_closure_failure_kind(closure);
         xr_program_semantic_closure_free(closure);
-        return failure == XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_RESOURCE
+        return failure == XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_RESOURCE ||
+                       xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK
                    ? XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE
                    : XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
     }
@@ -1078,21 +1081,46 @@ scalar_graph_symbol_export_declaration(const XaAnalyzer *analyzer, const XaSymbo
     return true;
 }
 
-static bool scalar_graph_import_targets_dependency(const XrModuleGraph *graph,
-                                                   const XrModuleSpec *entry,
-                                                   const XrModuleSpec *dependency,
-                                                   const ImportStmtNode *import) {
-    if (!graph || !graph->resolver || !entry || !dependency || !import || !import->module_name ||
-        !import->is_quoted)
+static XrModuleStatus semantic_import_matches(XaAnalyzer *analyzer,
+    const XrModuleGraph *graph, const XrModuleSpec *source, const char *specifier,
+    const XrModuleSpec *dependency, bool *output) {
+    XrCompileState *state = analyzer ? xr_compile_session_compile_state(analyzer->compiler_session) : NULL;
+    XrCompileResourceStatus resource = xr_compile_state_status(state);
+    if (resource != XR_COMPILE_RESOURCE_OK)
+        return resource == XR_COMPILE_RESOURCE_BUDGET ? XR_MODULE_BUDGET :
+            resource == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_MODULE_OUT_OF_MEMORY : XR_MODULE_INVALID;
+    if (!graph || !graph->resolver || graph->resources != xr_compile_state_resources(state) ||
+        !source || !specifier || !dependency || !output) {
+        (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return XR_MODULE_INVALID;
+    }
+    XrModuleId resolved = {0};
+    XrModuleStatus status = xr_compile_module_resolver_resolve(graph->resolver, specifier,
+        source->source_path, &source->authority, &resolved, NULL);
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY)
+        (void) xr_compile_state_fail(state, status == XR_MODULE_BUDGET ?
+            XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    bool exact = false;
+    if (status == XR_MODULE_OK &&
+        !xa_export_identity_equal(analyzer, resolved.canonical, dependency->canonical, &exact)) {
+        resource = xr_compile_state_status(state);
+        status = resource == XR_COMPILE_RESOURCE_BUDGET ? XR_MODULE_BUDGET :
+            resource == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_MODULE_OUT_OF_MEMORY : XR_MODULE_INVALID;
+    }
+    xr_compile_module_id_cleanup(&resolved);
+    if (status == XR_MODULE_OK)
+        *output = exact;
+    return status;
+}
+
+static bool scalar_graph_import_targets_dependency(XaAnalyzer *analyzer,
+    const XrModuleGraph *graph, const XrModuleSpec *entry,
+    const XrModuleSpec *dependency, const ImportStmtNode *import) {
+    if (!import || !import->is_quoted)
         return false;
-    XrModuleId resolved;
-    int status = xr_module_resolver_resolve(graph->resolver, import->module_name,
-                                            entry->source_path, &entry->authority, &resolved, NULL);
-    bool exact = status == 0 && resolved.canonical && dependency->canonical &&
-                 strcmp(resolved.canonical, dependency->canonical) == 0;
-    if (status == 0)
-        xr_module_id_cleanup(&resolved);
-    return exact;
+    bool exact = false;
+    return semantic_import_matches(analyzer, graph, entry, import->module_name,
+        dependency, &exact) == XR_MODULE_OK && exact;
 }
 
 XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_scalar_module_graph(
@@ -1102,6 +1130,8 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_scalar
         *out = NULL;
     if (!out || !analyzer || !graph)
         return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+    if (xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK)
+        return XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE;
     if (graph->spec_count != 2 || graph->entry_index < 0 || graph->entry_index >= graph->spec_count)
         return XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED;
 
@@ -1142,9 +1172,10 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_scalar
         entry->dep_count != 1 || !entry->dep_indices || entry->dep_indices[0] != dependency_index ||
         dependency->dep_count != 0 || graph->has_cycle || graph->topo_count != 2 ||
         !graph->topo_order ||
-        !scalar_graph_import_targets_dependency(graph, entry, dependency, import)) {
+        !scalar_graph_import_targets_dependency(analyzer, graph, entry, dependency, import)) {
         bridge_fail(error, error_size, "two-module scalar graph has no exact dependency authority");
-        return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+        return xr_compile_session_resource_status(analyzer->compiler_session) == XR_COMPILE_RESOURCE_OK
+            ? XA_PROGRAM_SEMANTIC_CLOSURE_INVALID : XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE;
     }
 
     const XaSymbol *entry_symbol = NULL;
@@ -1157,10 +1188,10 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_scalar
     const ImportMember *member = &import->members[0];
     const XaSymbol *imported_symbol =
         member->symbol_id ? xa_analyzer_symbol_by_id(analyzer, member->symbol_id) : NULL;
-    const XaSymbol *export_table_symbol =
-        dependency->export_symbols && member->name
-            ? (const XaSymbol *) xr_hashmap_get(dependency->export_symbols, member->name)
-            : NULL;
+    XaSymbol *export_table_symbol = NULL;
+    if (!xa_find_export_symbol(analyzer, dependency->export_symbols, member->name,
+                               &export_table_symbol))
+        return XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE;
     if (!member->name || !member->symbol_id || !exported_function->as.function_decl.name ||
         strcmp(member->name, exported_function->as.function_decl.name) != 0 ||
         !scalar_graph_import_symbol_exact(analyzer, imported_symbol) || !export_table_symbol) {
@@ -1390,7 +1421,8 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_scalar
         XrProgramSemanticClosureFailureKind failure =
             xr_program_semantic_closure_failure_kind(closure);
         xr_program_semantic_closure_free(closure);
-        return failure == XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_RESOURCE
+        return failure == XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_RESOURCE ||
+                       xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK
                    ? XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE
                    : XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
     }
@@ -1413,7 +1445,7 @@ static int source_graph_locator_compare(XrProgramSemanticSourceLocator left,
     return 0;
 }
 
-static bool source_graph_edge_locator(const XrModuleGraph *graph, const XrModuleSpec *source,
+static bool source_graph_edge_locator(XaAnalyzer *analyzer, const XrModuleGraph *graph, const XrModuleSpec *source,
                                       const XrModuleSpec *dependency,
                                       XrProgramSemanticSourceLocator *out) {
     if (out)
@@ -1433,13 +1465,10 @@ static bool source_graph_edge_locator(const XrModuleGraph *graph, const XrModule
             specifier = statement->as.export_stmt.from_path;
         if (!specifier)
             continue;
-        XrModuleId resolved = {0};
-        int status = xr_module_resolver_resolve(graph->resolver, specifier, source->source_path,
-                                                &source->authority, &resolved, NULL);
-        bool exact = status == 0 && resolved.canonical &&
-                     strcmp(resolved.canonical, dependency->canonical) == 0;
-        if (status == 0)
-            xr_module_id_cleanup(&resolved);
+        bool exact = false;
+        if (semantic_import_matches(analyzer, graph, source, specifier, dependency,
+                                    &exact) != XR_MODULE_OK)
+            return false;
         if (!exact)
             continue;
         XrProgramSemanticSourceLocator candidate = leaf_locator(statement);
@@ -1537,7 +1566,7 @@ source_graph_collect_authority(XaAnalyzer *analyzer, const XrModuleGraph *graph,
     return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
 }
 
-static bool source_graph_add_rows(XrProgramSemanticClosure *closure, const XrModuleGraph *graph,
+static bool source_graph_add_rows(XaAnalyzer *analyzer, XrProgramSemanticClosure *closure, const XrModuleGraph *graph,
                                   const XaSourceGraphAuthority *authority, char *error,
                                   size_t error_size) {
     bool ok = true;
@@ -1551,7 +1580,7 @@ static bool source_graph_add_rows(XrProgramSemanticClosure *closure, const XrMod
             XrProgramSemanticSourceLocator locator = {0};
             XrStableId binding = {{0}};
             XrFingerprint contract = {{0}};
-            ok = source_graph_edge_locator(graph, source, &graph->specs[dependency_index],
+            ok = source_graph_edge_locator(analyzer, graph, source, &graph->specs[dependency_index],
                                            &locator) &&
                  xr_source_semantic_module_graph_import_binding(
                      &authority->modules[source_index], &authority->modules[dependency_index],
@@ -1581,6 +1610,8 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_source
         *out = NULL;
     if (!out || !analyzer || !graph)
         return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+    if (xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK)
+        return XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE;
     XaSourceGraphAuthority authority = {0};
     XaProgramSemanticClosurePublishStatus collected =
         source_graph_collect_authority(analyzer, graph, &authority, error, error_size);
@@ -1597,7 +1628,7 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_source
               xr_program_semantic_closure_create(&limits, policy, &closure, error, error_size) &&
               xr_program_semantic_closure_set_family(
                   closure, XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_GRAPH, error, error_size);
-    ok = ok && source_graph_add_rows(closure, graph, &authority, error, error_size);
+    ok = ok && source_graph_add_rows(analyzer, closure, graph, &authority, error, error_size);
     source_graph_authority_cleanup(&authority);
     ok = ok && xr_program_semantic_closure_freeze(closure, error, error_size) &&
          xr_program_semantic_closure_verify(closure, error, error_size);
@@ -1605,7 +1636,8 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_source
         XrProgramSemanticClosureFailureKind failure =
             xr_program_semantic_closure_failure_kind(closure);
         xr_program_semantic_closure_free(closure);
-        return failure == XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_RESOURCE
+        return failure == XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_RESOURCE ||
+                       xr_compile_session_resource_status(analyzer->compiler_session) != XR_COMPILE_RESOURCE_OK
                    ? XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE
                    : XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
     }

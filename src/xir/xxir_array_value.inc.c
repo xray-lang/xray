@@ -428,3 +428,65 @@ XR_FUNC XrXirValueStatus xr_xir_array_push(const XrXirValuePlace *place,
     xr_xir_value_graph_end();
     return storage_admission_end(admission,&local,graph_outcome);
 }
+
+static XrXirValueStatus array_observe_operation(const XrXirValue *value, int64_t index,
+    XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault,bool receiving) {
+    if (fault) *fault=(XrXirFaultDetail){0};
+    if (!value || !fault || !unit_value(output) || !admission || !admission->domain || !admission->arena)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (admission->work<64 || !xr_xir_domain_work(admission->domain,64)) return XR_XIR_VALUE_LIMIT;
+    admission->work-=64;
+    if (!xr_xir_value_argument(value,admission->arena,(XrXirType)value->type) ||
+        !xr_xir_type_is_array(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirArray *array=(XirArray *)object_pointer(value);
+    if (!receiving && array->object.domain!=admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (index<0 || (uint64_t)index>=array->length) {
+        *fault=(XrXirFaultDetail){430,0,index,(int64_t)array->length};return XR_XIR_VALUE_BOUNDS;
+    }
+    if (!admission->work) return XR_XIR_VALUE_LIMIT;
+    --admission->work;
+    StorageSpan span={array->element,array_slot(array,(size_t)index)};
+    return receiving?storage_unpack_operation(span,admission,output,true):storage_unpack(span,admission,output);
+}
+
+XR_FUNC XrXirValueStatus xr_xir_array_observe(const XrXirValue *array, int64_t index,
+    XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status=array_observe_operation(array,index,admission,output,fault,false);
+    xr_xir_value_graph_end();return status;
+}
+
+XR_FUNC XrXirValueStatus xr_xir_compile_value_observe(XrCompileResources *resources,
+    const XrXirValue *value,uint64_t index,XrXirValueAdmission *admission,XrXirValue *output) {
+    if (!resources || !value || !admission || !xr_xir_domain_current(admission->domain) ||
+        admission->domain->compile_resources!=resources || index>INT64_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    const XrXirTypeNode *node=xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type);
+    XrXirValueStatus status=XR_XIR_VALUE_BAD_ARGUMENT;
+    if (node && node->kind==XR_XIR_TYPE_ARRAY) {
+        XrXirFaultDetail fault={0};
+        status=array_observe_operation(value,(int64_t)index,admission,output,&fault,true);
+    } else if (node && xr_xir_type_is_struct(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type) && index<=UINT32_MAX)
+        status=struct_observe_operation(value,(uint32_t)index,admission,output,true);
+    else if (node) {
+        if (admission->work<64 || !xr_xir_domain_work(admission->domain,64)) status=XR_XIR_VALUE_LIMIT;
+        else {
+            admission->work-=64;
+            if (xr_xir_value_argument(value,admission->arena,(XrXirType)value->type)) {
+                const XrXirValue *child=NULL;
+                if (node->kind==XR_XIR_TYPE_TUPLE) {
+                    const XirTuple *tuple=(const XirTuple *)object_pointer(value);
+                    if (index<tuple->count) child=&tuple->fields[index];
+                } else if (node->kind==XR_XIR_TYPE_NULLABLE ||
+                    xr_xir_type_is_enum(xr_xir_compile_type_arena_types(admission->arena),(XrXirType)value->type)) {
+                    const XirNominalValue *record=(const XirNominalValue *)object_pointer(value);
+                    if (index<record->count) child=&record->fields[index];
+                }
+                if (child) status=value_copy_on_domain(child,admission->domain,output);
+            }
+        }
+    }
+    xr_xir_value_graph_end();return status;
+}

@@ -1,0 +1,38 @@
+fn greet(name: string) -> string {
+  return "hello, " + name
+}
+fn describe(n: i64, tag: string) -> string {
+  return "${tag}=${n}"
+}
+fn tally(limit: i64) -> string {
+  var i = 0
+  var out = ""
+  while (i < limit) {
+    out = out + "x"
+    i = i + 1
+  }
+  return out
+}
+fn echo(v: string) -> string {
+  if (v == "yes") { return v }
+  return v
+}
+fn pick(flag: bool, a: string, b: string) -> string {
+  if (flag) { return a }
+  return b
+}
+fn answer() -> i64 {
+  const s = greet("world")
+  print(s)
+  const d = describe(42, "answer")
+  print(d, s == "hello, world", 'x')
+  var code = 0
+  if (d < s) { code = 1 }
+  if ("" == "") { code = code + 2 }
+  const t = tally(3)
+  const e = echo(pick(code == 3, "yes", "no"))
+  print("code", code, t, e, echo(pick(false, e, "no")))
+  if (t == "xxx") { code = code + 4 }
+  return code
+}
+export fn consumerAnswer() -> i64 { return answer() }

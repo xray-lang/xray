@@ -143,7 +143,7 @@ static void panics_packet_gates(void) {
     panics_previous_identity_rejected(assert_panics71_golden,sizeof(assert_panics71_golden),26,71);
     panics_previous_identity_rejected(assert_panics72_golden,sizeof(assert_panics72_golden),27,72);
     panics_previous_identity_rejected(assert_panics73_golden,sizeof(assert_panics73_golden),28,73);
-    _Static_assert(XR_XIR_CHECKED_SCHEMA==30 && XR_XIR_CHECKED_CONTRACT==76,
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==31 && XR_XIR_CHECKED_CONTRACT==76,
         "Core packet known bytes require the independently encoded contract");
     panics_core_bound_rejections();
     XrXirArtifact *checked=panics_core_checked();XrXirCheckedPacket packet={0};

@@ -1,0 +1,2519 @@
+---
+id: spec.5_declarations
+order: 006
+---
+
+<!-- xr-spec:cn -->
+---
+
+## 5. 声明 (Declarations)
+
+> 声明语法锚点：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`。本章语言合同由前端统一检查；当前新 XIR 声明族实现资格见 §17，不能由旧 analyzer 行为替代本章规则。
+
+### 5.1 `var` / `const`
+
+```ebnf
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+Binding ::= Pattern (':' Type)? ('=' Expression)?
+Pattern ::= Identifier
+         | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
+         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
+         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
+ObjectBinding ::= Identifier (':' Identifier)?
+```
+
+#### 5.1.1 `var` — 可变绑定
+
+```xray @id=decl-var
+var x = 1                         // 类型推断为 i64
+var name: string = "Alice"        // 显式类型
+var count: i64                    // 仅声明无初值：使用零值
+var maybeName: string?            // OK：默认 null
+var empty: string = ""            // string 必须显式初始化
+```
+
+- 可重新赋值。
+- 必须有初值**或**类型标注；否则编译错误 `E0303`。
+- 无初值只允许 **default-initializable** 类型：数值类型默认 `0` / `0.0`，`bool` 默认 `false`，`()` 默认 unit，`T?` 默认 `null`，struct 仅当所有字段都可默认初始化时允许。
+- 非 nullable 的 `string`、class instance、`Array` / `Map` / `Set`、`Channel`、`Task`、function / closure、interface / union 等必须显式初始化。`var a: Array<T>` 不默认构造空数组。
+
+#### 5.1.2 `const` — 不可变绑定
+
+```xray @id=decl-const
+const PI = 3.14159
+const MAX_LEN: i64 = 1024
+```
+
+- **必须**有初值，不能重新赋值（编译错误 `E0303`）；类型可推断或显式标注。
+- 与 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
+- `const` 固定绑定及其值语义部分：不得经该绑定改写 Array 元素、追加元素或修改值类型字段。普通 `const snapshot = source` 合法并保留逻辑副本，不要求显式 `move` / `copy` 或源数组 backing 唯一。
+- 值语义在 class 和同步身份边界停止。`const xs = [Counter()]` 不冻结 Counter；普通 class 方法仍可修改所引用的对象。经一个可写副本替换数组元素，不影响 `xs` 的元素。
+- `Channel`、`Atomic`、`Mutex` 等受审计同步句柄可用 `const` 固定绑定；其受审计 API 仍可改变同步保护的内部状态。`const` 本身不是 Sendable 或并发安全的证明。
+- 从只读可复制值保存到 `var` 时得到可写的逻辑副本；不能借此取得原 place 的可写借用，或解除 class 对象自身的权限限制。
+
+```xray @id=decl-capability
+const channel = Channel<i64>(16)
+const counter = Atomic(0)
+
+var source = [1, 2, 3]
+const snapshot = source
+source[0] = 9
+var current = snapshot
+current.push(4)
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
+```
+
+`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止；不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
+
+这些是语言合同；完整声明族的当前新 XIR 实现资格见 §17，不因本节示例而宣称实现完成。跨执行共享还须满足 §10 的类型与边界合同。
+
+#### 5.1.3 解构绑定
+
+```xray @id=decl-destructuring
+// 数组解构
+var [a, b, c] = [1, 2, 3]
+var [first, , third] = [10, 20, 30]         // 跳过元素
+
+// 元组解构（多返回值）
+var (q, r) = divmod(17, 5)
+
+// 对象解构（按字段名提取，可重命名本地绑定）
+var { name, age } = { name: "Alice", age: 30 }
+var { name: localName, age } = { name: "Alice", age: 30 }
+```
+
+约束：
+- 解构变量数必须匹配（除 rest 模式外）。
+- 对象解构字段名必须是 `Identifier`；`field: localName` 只改变本地绑定名，不改变被读取的字段名。
+
+当前新 XIR 准入平坦 Tuple 的 `var` / `const` 解构：名字或 `_` 叶、精确有序 arity、Unit 和必须带逗号的 singleton，适用于局部、模块及闭包捕获。RHS 只求值一次，所有 FIELD / Cell / 持有准备先于整组绑定发布；模块通过共同 SLOT_GROUP_INIT 原子发布，首个 trace 可观察全部 slots。`_` 不建立名字；泛型定义按原约束检查，不因解构取得额外权限。嵌套 pattern、rest、数组/对象解构、spread 与 match 仍是独立合法未实现责任，当前入口明确拒绝；平坦子片不代表全部解构已完成。叶上类型注解当前尚未准入。精确准备、失败及发布合同见 §17.35。
+
+### 5.2 `fn` 函数声明
+
+```ebnf
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+ParamList ::= Param (',' Param)*
+Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
+            | '...' Identifier ':' Type
+ParamType ::= ParamMode? Type
+ParamMode ::= 'ref' | 'move'
+ReturnType ::= '->' Type
+            |  '->' '(' Type (',' Type)+ ')'   // 元组返回
+TypeParams ::= '<' Identifier (',' Identifier)* '>'
+AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+```
+
+#### 5.2.1 基本形式
+
+```xray @id=decl-fn-basic
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
+}
+
+fn greet(name: string) -> () {         // 显式 Unit
+    print("Hi ${name}")
+}
+
+fn echo(x: i64) {                       // 省略返回类型 = ()
+    print(x)
+}
+```
+
+**关键**：
+- 参数**必须**带类型标注（与箭头函数一致）。
+- 返回类型省略 = `()`（Unit）；推荐显式标注以增强可读性。
+- 函数体必须是块。
+
+#### 5.2.2 默认参数值
+
+```xray @id=decl-fn-default
+fn connect(host: string, port: i64 = 8080, tls: bool = false) {
+    print(host, port, tls)
+}
+
+connect("localhost")              // port=8080, tls=false
+connect("localhost", 443)         // tls=false
+connect("localhost", 443, true)
+```
+
+- 默认值在**调用点**求值：省略某个尾部参数时，编译器在该调用点补入默认表达式，按实参顺序、每次省略调用各求值一次。
+- 显式传 `null` 就是传入 `null`，**不会**触发默认值（默认值只在参数被省略时使用）。
+- 有默认值的参数必须在尾部连续出现。
+- 默认参数只作用于**具名函数/方法/构造器的直接调用**。通过函数值（函数类型变量）的间接调用不携带默认表达式，必须传入全部实参。
+- 默认表达式在声明方模块、类型参数和成员权限作用域内按参数类型检查，包括未使用的声明；不引用调用方局部变量。本次调用的形参（包括前面的形参）及 `this` 不在默认表达式作用域内。普通泛型只使用定义处约束，不因某个具体实例而获得额外能力。
+- 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的尾部参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
+- 默认表达式可以使用声明方可访问的私有名称；导出调用方不因此获得这些名称的直接访问权限。默认表达式先在声明处检查，再通过同一 Checked 特化与复验管线执行；不能依靠调用方重新绑定名称或运行时 AST 展开绕过权限。构造参数默认值在字段默认初始化及构造器体之前执行，不可观察部分构造的 `this`。
+
+- 普通泛型调用先从显式参数和已有结果期待完成实参推导及完整约束验证，再计算缺省参数；被省略的默认表达式不额外提供调用方类型推导证据。默认表达式自身仍在声明处按泛型参数类型及原约束检查。
+- 默认表达式的计算效应不继承被调用函数或构造器体的效应承诺。期待返回 `no_suspend` callable 只约束该 callable，不自动约束计算它的表达式；构造器体的 `no_suspend` 不自动禁止在调用方先计算的默认值挂起。完整求值仍须符合实际调用方的效应承诺。
+
+#### 5.2.3 多返回值
+
+```xray @id=decl-fn-multi-return
+fn divmod(a: i64, b: i64) -> (i64, i64) {
+    return (a / b, a % b)
+}
+
+var (q, r) = divmod(17, 5)
+var result = divmod(10, 3)        // result 类型 (i64, i64)
+```
+
+**约束**：
+- 返回类型用括号包裹元组：`(i64, bool)`。
+- 单返回值不写括号：`: i64`。
+- `return (a, b)` 必须带括号；裸逗号 `return a, b` 是编译错误（`E0801`）。
+
+#### 5.2.4 参数模式
+
+普通参数默认为 READ；写借用使用 `name: ref T`，不可复制资源的消费交接使用 `name: move T`。参数模式属于声明合同，不由具体 ABI 是传值、指针还是句柄决定。
+
+```xray @id=decl-fn-param-modes
+fn length_sq(v: Vec2) -> f64 {
+    return v.x * v.x + v.y * v.y
+}
+
+fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
+    v.x += dx
+    v.y += dy
+}
+
+fn appended(xs: Array<string>, value: string) -> Array<string> {
+    var result = xs
+    result.push(value)
+    return result
+}
+
+translate(ref point, 1.0, 2.0)
+```
+
+| 参数模式 | 语义 |
+|--|--|
+| 无（READ） | 参数绑定不可重绑，其值语义部分只读；可复制、可保存的值可以保存或返回逻辑副本 |
+| `ref` | 独占可写 place 借用，修改回写调用方；调用点必须写 `ref place` |
+| `move` | 仅用于不可复制类型，转移持有权及最终析构责任；调用是否消费由声明模式决定，`move value` 可选标明该转移 |
+
+READ Array 参数不能直接索引写入、调用 `push` 或重绑参数；保存到本地 `var` 后可以修改副本，原实参不受影响。保存可复制值不等于允许借用逃逸；视图或不可复制资源不能借此成为普通拥有式副本。READ class 参数同样不能重绑，但可调用修改同一对象的方法，不能把 READ 解释为整个可达图不可变。
+
+`ref` 实参必须是类型精确匹配的可写 place，不能是 `const`、只读参数或临时值；`ref` 类型不变。调用先按 §3.0 E2 完成 receiver 与全部实参求值，再建立独占借用，覆盖检查、必要的 COW 分离、修改及回写。不得提前借用 receiver 而拒绝 `a.push(a[0])`。赋值仍遵循 E5 的位置子表达式、索引、右值、存储顺序。
+
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver；不可复制资源的初始化、消费后使用和活动借用仍须检查，详见 §2.14.5。资源声明族和完整 `ref` / 视图调用的当前实现资格见 §17，不能由该语言合同推定已经实现。
+
+普通输出使用返回值、tuple 或 struct；业务错误按 §8 的类型化 `throw` / `catch` 通道处理，不引入全局 `Result<T,E>`。C ABI 输出位置使用 `MutPtr<T>`，不把输出参数模式引入普通 Xray 函数。
+
+#### 5.2.5 rest 参数
+
+```xray @id=decl-fn-rest
+fn sum(...nums: i64) -> i64 {
+    var total = 0
+    for (n in nums) { total += n }
+    return total
+}
+
+sum(1, 2, 3)        // total = 6
+```
+
+- rest 参数在参数列表**最后**。
+- 类型 `...T` 内部实际是 `Array<T>`。
+- 只能有一个 rest 参数。
+
+#### 5.2.6 函数提升
+
+```xray
+main()                       // OK：函数声明被提升
+
+fn main() { ... }
+```
+
+- 顶层 `fn` 声明被提升到当前作用域顶部。
+- `var f = (x: i64) -> x`（赋值给变量的箭头函数）**不**提升。
+
+#### 5.2.7 尾递归优化
+
+Xi 优化器会把可证明的自尾调用改写为循环；VM 也有常量栈空间的 tail-call opcode。不要把这一点理解为所有后端、所有间接/互递归调用的通用常量栈保证：构造调用和无法证明安全的调用仍按普通调用执行。详见 [§17](#17-编译流水线-compilation-pipeline)。
+
+```xray
+fn factorial(n: i64, acc: i64 = 1) -> i64 {
+    if (n <= 1) { return acc }
+    return factorial(n - 1, acc * n)     // 尾调用：自动优化为循环
+}
+```
+
+#### 5.2.8 程序入口
+
+xray **没有隐式 `main` 入口**：脚本/模块从顶层开始顺序执行，遇到 `fn` 声明被提升注册，遇到表达式或语句被立即执行。
+
+```xray
+// hello.xr
+print("loading")          // 顶层语句，立即执行
+fn greet() { print("hi") }
+greet()                   // 必须显式调用
+```
+
+- `fn main()` 没有任何特殊含义；如需手动调用，写 `main()`。
+- 顶层不允许 `return`（编译错误 `E0306`）。
+- 多文件项目的入口由 `xray.toml` 的 `[project]`（或 package manifest 的 `[package]`）中的 `main` 字段指定，例如 `main = "src/main.xr"`；对应文件按上述脚本规则执行。
+
+#### 5.2.9 `extern "C"` C FFI 声明块
+
+`extern "C"` 块只声明共享 C ABI 的外部**函数符号**。外部函数没有 Xray 函数体，调用点必须显式写在 `unsafe { }` 内：
+
+```xray
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+    fn cos(x: f64) -> f64
+}
+
+var p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(cos(0.0))
+    free(p)
+}
+```
+
+库、目标、symbol rename、原生源码/对象、typed flags、hash 与许可证都属于 `xray.toml` 的 NativePackagePlan，不写在普通源码中。`extern "C"` 不允许 `dylib/link` 子句、函数体、data/global，也不允许在块内声明 struct/union/packed/flex。
+
+C ABI 聚合使用普通 Xray struct，并由 manifest 的 `[[native.layout]]` 绑定 C header/type。构建器生成 `sizeof`、`_Alignof` 与 `offsetof` 静态断言；任何不一致都在链接前失败：
+
+```xray
+import mem
+
+struct CHeader {
+    tag: u8
+    count: u32
+}
+
+print(mem.sizeOf<CHeader>())
+print(mem.alignOf<CHeader>())
+print(mem.offsetOf<CHeader>("count"))
+```
+
+规则：
+- ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
+- extern 块内函数只能声明签名，不能带 `{ }` 函数体；普通函数必须带块体。
+- 每个声明必须在 NativePackagePlan 中有唯一 symbol mapping 与完整 typed contract；shipping package 缺合同、hash、目标或来源信息时 fail closed。
+- C 输出指针先写入 raw `Buffer`。成功路径仅可在 `unsafe` 中调用 `mem.assumeInitialized<T>(move buffer)`；编译器要求 exact size/alignment、完整 output validity、success-path dominance 与 header layout evidence。失败/partial write 不能物化为 `T`。
+- 普通 Xray 函数没有 output parameter mode，返回值统一写 `return value`，不写 `return move value`。
+- 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、Slice/layout 查询与 header verifier共用 size/alignment/field-offset 结果。
+- 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`f32` / `f64`、`usize` / `isize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
+- C 回调参数必须写成 `CFn<fn(A, B) -> R>`，不能使用普通 xray 函数类型 `fn(A, B) -> R`。
+- 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
+
+```xray
+extern "C" {
+    fn bsearch(
+        key: Ptr<u8>,
+        base: Ptr<u8>,
+        count: usize,
+        size: usize,
+        cmp: CFn<fn(Ptr<u8>, Ptr<u8>) -> i32>
+    ) -> Ptr<u8>
+}
+
+fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
+    return 0
+}
+
+// zeroCmp 是模块级非捕获函数，可作为 CFn 回调。
+```
+
+#### 5.2.10 Manifest C ABI 导出
+
+模块级 Xray 函数在源码中保持普通 `fn`；是否导出 C ABI、导出符号与可见性都由 `xray.toml` 的 typed export plan 指定：
+
+```xray
+fn add(a: i32, b: i32) -> i32 {
+    return a + b
+}
+
+print(add(19, 23))        // Xray 内部仍是普通函数调用
+```
+
+```toml
+[[export.c]]
+xray = "add"
+symbol = "xr_add_i32"
+visibility = "default"
+header = true
+```
+
+规则：
+- `xray` 必须唯一解析到模块级、有函数体的普通函数；方法、匿名函数、嵌套函数与 extern 声明不能成为导出目标。
+- `symbol` 必须是非空 C identifier；同一 AOT bundle 的 Xray target 与 C symbol 均不得重复。
+- 当前支持的导出边界类型是 `bool`、精确整数、`f32` / `f64`、`usize` / `isize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
+- 当前不直接导出 Xray managed value 或 by-value aggregate；与 C 共享结构体内存时通过 `Ptr<T>` / `MutPtr<T>` 传递地址。
+- `xray build --native --c-header FILE` 为 `header = true` 的 export 生成 C 原型；`--shared` 只接受无需 runtime 初始化的 scalar/raw-pointer 边界。
+- export plan 只选择导出目标，不绕过 ABI verifier，也不改变 VM 语义或普通 Xray 调用。
+
+#### 5.2.11 推导 effect 与 `xray verify` 合同
+
+分配、错误集、挂起、阻塞、panic/abort 与 AOT residue 全部由编译器推导，不由源码注解声明；需要发布或性能门禁时，把要求写入版本化合同：
+
+```toml
+version = 1
+
+[[function]]
+symbol = "math.addOne"
+scope = "semantic"
+requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
+
+[[function]]
+symbol = "codec.hotAdd"
+scope = "backend"
+backend = "aot"
+target = "aarch64-apple-darwin"
+profile = "release"
+requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+
+[function.shape]
+forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
+allow = []
+```
+
+运行 `xray verify --contract perf-contracts.toml`。合同只验证已有语义/effect 与目标产物形状，不授予优化许可，也不能改变运行语义。semantic 合同可与目标无关；backend/shape 合同必须写出具体 backend、target 与 profile。动态调用、native unknown、缺失 symbol 或不完整证明均 fail closed，并报告 witness。
+
+**native unknown 的含义**：无函数体的 `extern "C"` 声明没有可推导的 Xray 语义，唯一可采信的证据是 `xray.toml` 中该 symbol 的 `[native.symbol.contract]`。契约声明 `allocation` / `suspend` 等字段时，这些字段作为公理进入被调用方的 effect 结论；没有完整契约时，相应语义位标记为 unknown，任何覆盖它的合同 fail closed。**空的函数体不是证明。**
+
+**推导覆盖面**（状态：部分实现）：`requires` 目前只有 `no_semantic_alloc`、`no_suspend`、`no_throw`（semantic scope）与 `no_runtime_heap`（backend scope）由真实分析 pass 支撑。`no_block`、`no_thread_block`、`no_panic`、`no_abort` 所对应的语义 effect 位当前没有任何 pass 推导，因此 `xray verify` 拒绝这四项并报告"无推导来源"，而不是空真地通过。相应分析实现后，这四项才会被接受。
+
+#### 包拥有的声明承诺（实现待接通）
+
+项目或包可在其根目录的 `xray.toml` 中声明稳定的函数接口义务。该区与 `xray verify` 要求及 native provider 公理分开：每条 Xray 承诺必须在定义处由同一 Checked 检查器证明，不能从某次特化或被选函数的推导结果反向取得。
+
+```toml
+[declarations]
+version = 1
+
+[[declarations.function]]
+module = "src/worker.xr"
+name = "apply"
+no_suspend = true
+no_suspend_parameters = ["callback"]
+
+[[declarations.function]]
+module = "src/box.xr"
+owner = "Box"
+name = "get"
+no_suspend = true
+```
+
+没有 `declarations` 区表示没有此载体提供的显式承诺；存在时，必须包含整数 `version = 1` 和非空 `function` 记录数组。该区及记录中的未知字段、未知版本或错误类型均拒绝，不默默忽略。每条记录必须有非空 `module` 和 `name`；`owner` 省略表示顶层函数，出现时必须为非空且精确的声明名。`no_suspend` 只接受布尔 `true`；`no_suspend_parameters` 出现时必须为非空、无重复的显式参数名数组。每条记录至少提供函数自身义务或参数义务；同一 module/owner/name 只能有一条记录。
+
+`module` 是所属 authority 根内的、使用 `/` 的 `.xr` 逻辑文件路径，不是 import alias 或 canonical identity。绝对路径、反斜杠、空路径段、`.`、`..`、另一包的 namespace 及物理解析后越出根的路径均拒绝。参数名在定义处绑定，排除 instance receiver；缺失、歧义、非 callable 参数拒绝。当前新 XIR 载体支持顶层函数、精确名义 owner 下的普通 instance/static 方法，以及精确接口 owner 下已准入的普通 read 方法要求。接口选择器绑定要求签名，全部 manifest 签名承诺先于显式实现映射检查完成；实现方法必须在定义处证明对应义务。构造器、清理器和合成辅助函数不能由外部选择器命名。尚未准入的声明族及嵌套/返回 callable 限定不因本子集从语言目标中删除。
+
+每份 manifest 只约束它所属项目或包，消费者不能加强导入包的承诺，不向父目录搜索或继承另一份声明区。选择不给予私有访问、字段或构造权限，也不改变泛型定义处约束。全部显式记录都必须解析到实际定义并检查，包括未调用或未被当前入口 import 的目标；但额外的包级检查不能增加入口运行图中的初始化模块或副作用。Checked 发布身份保留已证明的义务，特化和生成内容复验不可以增删承诺。该公开载体尚未接通产品入口，不能把示例视为现有 CLI 已支持的配置。
+
+#### 完整可运行示例
+
+当匿名函数字面量直接处于已声明的 `no_suspend` callable 期望上下文时，该上下文为这个新函数建立必须验证的承诺。函数体在定义处按当前泛型约束检查，未知或可能挂起的调用均拒绝；特化不得补足缺失证明。捕获的普通 callable 不会因此获得承诺。该规则不添加源码效应注解，不把 `verify` 性能要求当作声明，也不允许将已构造的普通函数值按实现体推导强化；脱离受限上下文的匿名函数仍是普通 callable。
+
+默认参数表达式采用参数声明的相同期望类型，并在定义处检查，即使没有调用省略该参数。返回受限 callable 不意味着默认值计算过程也承诺不挂起；省略参数时，默认值计算的效应仍属于调用方。
+
+闭包捕获与高阶函数：
+
+```xray
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
+    return f(x)
+}
+
+fn main() {
+    var base = 10
+    var addBase = fn(x: i64) -> i64 { return x + base }   // 闭包捕获 base
+    print(addBase(5))            // => 15
+    print(apply(addBase, 7))     // => 17（函数作为参数传入）
+}
+
+main()
+```
+
+多返回值（元组）：
+
+```xray
+fn divmod(a: i64, b: i64) -> (i64, i64) {
+    return (a / b, a % b)
+}
+
+fn main() {
+    var (q, r) = divmod(17, 5)
+    print(q)   // => 3
+    print(r)   // => 2
+}
+
+main()
+```
+
+### 5.3 `class` 声明
+
+class 具有身份，赋值与保存参数只复制引用。class 方法不写 `ref` / `move` receiver；经只读参数或 `const` 绑定调用普通方法仍可修改对象，但不能重绑该参数或绑定。class 字段的 `ref` / 视图访问须保活对象并检查动态独占；局部无冲突证明只可消除检查，不能改变权限合同。
+
+```ebnf
+ClassDecl ::= 'final'? 'class' Identifier TypeParams?
+              ('extends' Identifier TypeArgs?)?
+              ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
+              '{' ClassMember* '}'
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
+FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
+            |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' Block          // 参数类型可省
+Modifier ::= 'private' | 'protected' | 'static' | 'const'
+```
+
+> **关于默认公开可见性和显式覆写**：
+>
+> - 公开是**默认可见性**——所有未带 `private` / `protected` 的字段/方法都是公开的；语言没有 `public` 修饰符。
+> - 可见性受**编译期强制**：从类外访问 `private` / `protected` 成员、或从非子类访问 `protected` 成员，均报 `E0377`。
+> - 实际覆写必须声明 `override`：编译器独立验证父类链中非私有实例方法的名称、签名和 receiver 权限；漏标、无对应目标或合同不匹配均拒绝。
+> - 单纯实现接口方法不写 `override`。不支持 `abstract` / `final method`；同名不同签、字段/方法隐藏、静态方法隐藏均为编译错误。
+>
+> 标准库和回归测试一致采用"省略默认修饰符"风格。
+
+#### 5.3.1 基本类
+
+```xray @id=decl-class-basic
+class Animal {
+    name: string                       // 字段
+    private _age: i64 = 0              // 私有字段，可有默认值
+
+    init(name: string) {
+        this.name = name
+    }
+
+    speak() -> string {
+        return "..."
+    }
+
+    static create(name: string) -> Animal {
+        return Animal(name)
+    }
+}
+
+var a = Animal("Rex")
+print(a.speak())
+print(Animal.create("Bob").name)
+```
+
+#### 5.3.2 继承
+
+```xray @id=decl-class-inheritance
+class Dog extends Animal {
+    init(name: string) {
+        super(name)                    // **必须**首语句（仅限派生类）
+    }
+
+    override speak() -> string {         // 显式覆写父方法
+        return "woof"
+    }
+}
+```
+
+**约束**：
+- 派生类构造器**第一行**必须是 `super(...)`（除非未声明构造器）；否则编译错误。
+- 不能在 `super(...)` 之前访问 `this`。
+- **覆写父类方法必须写 `override`**；该修饰符只用于类实例方法，不用于字段、构造器、静态方法、struct 或 enum。顺序为可选可见性、`override`；class 方法不声明 `ref` / `move` receiver。
+- 同名不同签不是重载，也不是隐藏；必须改名或使用默认参数 / 命名工厂。
+- 父类标 `final class` 则不可继承。
+- `super.method()` 可在重写的方法体内调用被屏蔽的父类方法。
+
+#### 5.3.3 修饰符
+
+| 修饰符 | 适用 | 语义 |
+|--|--|--|
+| （无） | 字段/方法 | 默认 public——公开可见 |
+| `private` | 字段/方法 | 仅声明类内部可访问（含同类其它实例）；子类与外部访问均报 `E0377` |
+| `protected` | 字段/方法 | 声明类及其子类内部可访问；外部访问报 `E0377` |
+| `override` | 类实例方法 | 必须匹配非私有父方法的签名与 receiver 权限；不可降低为 private |
+| `static` | 字段/方法 | 类级别，不属于实例；调用为 `ClassName.method()` |
+| `const` | 字段 | 不可变字段——只能在声明类的构造器中经 `this` 赋值一次，之后重写报 `E0378` |
+| `final` | 类声明前缀 | `final class C` 禁止继承；`final` 不用于字段或方法 |
+
+**修饰符可组合**：`private const secret: string = "key123"`、`protected static counter: i64 = 0`。
+
+静态方法通过声明类型限定访问，例如 `Box<i64>.make(value)` 或 `module.Box<i64>.make(value)`；实例限定的静态访问和类型限定的实例方法调用/取值均非法。局部同名绑定按正常名称解析遮蔽类型。静态方法没有隐式接收者，体内及默认参数中不提供 `this`。类型实参属于声明类型；方法自身的类型实参属于方法，不能互相代替。普通泛型体按定义处约束检查，实例化不得扩大可见性或构造权限。
+
+静态方法的直接调用沿用尾部默认参数、从左到右求值、效应、挂起和失败清理合同；其函数值不捕获接收者，间接调用必须提供完整签名参数。私有静态方法以及静态工厂中的私有构造操作按声明所有者授权；公开工厂不会使调用方获得私有成员的直接访问权。返回值沿用普通函数的值语义和所有权规则。静态字段、静态初始化及继承规则不由静态方法准入隐式开启。
+
+> `const` = 不可变字段/绑定，`final class` = 禁止继承。字段不可变只用 `const`；对字段或方法写 `final` 会报错。
+
+#### 5.3.4 构造器
+
+```xray
+class Point {
+    x: f64
+    y: f64
+    init(x: f64, y: f64) {
+        this.x = x
+        this.y = y
+    }
+}
+
+// 参数类型可省（从同名字段推断）
+class Vector2 {
+    x: f64
+    y: f64
+    init(x, y) {         // 等价于显式写 (x: f64, y: f64)
+        this.x = x
+        this.y = y
+    }
+}
+```
+
+- `init` 是类型成员位置的上下文关键字；旧 `constructor` 声明拼写拒绝，不保留别名。其它位置的 `init` 仍是普通标识符。
+- 一个类**只有一个构造器**（不支持构造器重载）；要多种创建方式用 `static` 工厂方法。
+- 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况必须显式声明类型，不得从调用位点倒推定义的类型或能力。
+- 构造器隐式返回 `this`（编译期注入）。
+- struct 显式构造器按字段声明顺序先执行声明处的默认表达式；无声明默认表达式的字段保持未初始化（包括数值字段），由构造体负责初始化。只有没有显式构造器时才生成合法的默认构造器。
+- 字段读取前必须在每条到达路径上完成初始化；整体 `this` 的返回、方法调用或闭包捕获要求所有字段初始化。正常结束和无值 `return` 都返回完整的 `this`，构造器不能显式返回另一个值。失败不发布部分结构体，已执行的外部副作用不回滚。
+- 构造期间，已初始化的 mutable 字段可作为普通值操作的存储根，继续投影其 struct 字段或 Array 元素；这不要求先发布整个 `this`。每一级投影仍核字段可见性、const 和初始化状态，选择器及实参依序求值一次。私有构造字段的稳定存储不构成完整对象身份，不单独授予 `ref` 逃逸、闭包捕获或整体接收者权限；失败清理仍只释放实际已初始化的字段。
+- const 字段的声明默认表达式或构造体赋值构成唯一初始化；存在任一路径已初始化时不能再次赋值，循环回边也参与检查。mutable 字段初始化后可继续更新。
+- 构造器的自然结束与无值 `return` 都先执行退出清理，再从已初始化字段组装并发布完整的 `this`。清理对 mutable 字段的合法更新进入最终构造结果；失败不发布结果。普通函数显式返回表达式先取值、再清理的值快照规则不因此改变。
+- 有显式 `init` 的 struct 只允许在其声明模块内使用字段字面量；外部经 `Type(...)` 或具名工厂构造。无显式 `init` 的 struct 保留正常字段字面量规则。展开字面量不能绕过此权限，任何形式均不扩大私有字段权限。
+- 派生类构造器必须首行调 `super(...)`。
+- struct 可以**没有**构造器，但省略构造器仍须为每个字段提供合法的默认初值（§5.1、§5.4）。`Point()` 的数值字段可初始化为零；没有显式初值的非 nullable Array 等字段不能因此被零初始化。
+
+#### 5.3.5 运算符重载
+
+```xray
+class Vec2 {
+    x: f64
+    y: f64
+
+    init(x: f64, y: f64) {
+        this.x = x; this.y = y
+    }
+
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+
+    operator==(other: Vec2) -> bool {
+        return this.x == other.x && this.y == other.y
+    }
+
+    operator[](index: i64) -> f64 {
+        if (index == 0) { return this.x }
+        return this.y
+    }
+}
+```
+
+**可重载的运算符**（完整列表，源自 `xparse_oop.c`）：
+
+| 类别 | 运算符 | 参数数 | 备注 |
+|--|--|--|--|
+| 二元算术 | `+` `-` `*` `/` `%` | 1 | `-` 单参数视为一元负号 |
+| 位运算 | `&` `\|` `^` `<<` `>>` | 1 | |
+| 比较 | `==` `!=` `<` `<=` `>` `>=` | 1 | 一般成对实现 `==`/`!=`、`<`/`<=`/`>`/`>=` |
+| 下标 | `[]`（getter）`[]=`（setter） | 1 / 2 | setter 是 `(index, value)` |
+| 一元 | `!` `~` `++` `--` | 0 | |
+| 复合赋值 | `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 1 | |
+
+```xray
+class Counter {
+    n: i64 = 0
+    operator++() -> Counter { this.n = this.n + 1; return this }
+    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
+    operator[](i: i64) -> i64 { return this.n + i }
+    operator[]=(i: i64, v: i64) { this.n = v - i }
+}
+```
+
+**不能**重载：`&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
+
+#### 5.3.6 `Iterator<T>` 与 `Iterable<T>`
+
+`Iterator<T>` 是 prelude 内建接口，是 `for-in` 的拉取协议，也是生成器函数（§3.16）的返回类型：
+
+```xray @id=decl-iterator-protocol
+interface Iterator<T> {
+    hasNext() -> bool       // 是否还有下一个元素；不消费元素
+    next() -> T             // 取下一个元素并前进
+    nth(index: i64) -> T    // 从当前位置起前进 index 个元素并返回
+}
+
+interface Iterable<T> {
+    iterator() -> Iterator<T>
+}
+```
+
+规则：
+
+- 任何实现 `iterator()` 的类型都可用于 `for-in`；内建集合与 `string`（按 `rune`）已实现。
+- `for-in` 只保证按 `hasNext()` / `next()` 拉取，**不保证**调用次数与调用时机之外的任何行为。
+- `next()` 返回 `T` 而非 `T?`：**耗尽不由返回值表示**。协议是两步的——每次 `next()` / `nth()` 之前必须先由 `hasNext()` 返回 `true`。在 `hasNext()` 为 `false` 后调用 `next()` 属于契约违规：运行时以 `E0432` panic 报告，不返回零值，也不返回 `T` 所禁止的 `null`（§18.3）。
+- `Iterator<T>` 是**一次性**的：耗尽后 `hasNext()` 恒为 `false`，不可重置。需要再次遍历时重新调用 `iterator()` 或重新调用生成器函数。
+- 迭代期间修改集合的行为由该集合定义。内建 `Array<T>` 的 for-in 持有拥有式逻辑值快照，修改或重绑源数组不使该快照失效（§14.7）；其它集合与身份 iterator 的失效规则由各自合同定义。
+- `Iterator<T>` **没有** `close()`：提前放弃一个迭代器不执行任何清理（§3.16.3），这也是生成器体内禁止 `defer` 的原因。
+
+生成器函数（体内使用 `yield expr`）由编译器自动实现该接口，无需手写。
+
+#### 5.3.7 计算属性
+
+字段名后跟一个访问器块，即声明一个**计算属性**：它没有存储槽，读写都转成访问器调用。
+
+```xray
+class Rect {
+    _w: i64
+    _h: i64
+    init(w: i64, h: i64) { this._w = w; this._h = h }
+
+    // 只读：只有 getter
+    area: i64 { fn() { return this._w * this._h } }
+
+    // 可读可写：getter + setter
+    width: i64 {
+        fn() { return this._w }
+        fn(v: i64) { this._w = v }
+    }
+}
+
+fn main() {
+    var r = Rect(3, 4)
+    print(r.area)       // => 12
+    r.width = 10
+    print(r.area)       // => 40
+}
+```
+
+规则：
+
+- 访问器块只能含 `fn` 定义。**无参**的是 getter，**一个参数**的是 setter；各自最多一个，参数多于一个是编译错误。
+- getter 的返回类型默认为属性声明的类型，setter 的参数类型同理，二者都可省略。
+- 属性类型即读取表达式的类型。只有 getter 的属性是**只读**的，写它按未声明成员报 `E0380`。
+- `obj.p` 与 `obj.p = v` 是普通调用，**不是**槽读写：访问器可以计算、可以带副作用，其开销就是一次方法调用。
+- 计算属性可满足 interface 要求的属性——interface 不区分它由槽还是访问器提供。
+- 访问器在类的方法表中以 `get:<名>` / `set:<名>` 存在。该名字含 `:`，标识符里不可能出现，因此不会与声明的方法冲突；这是实现细节，不是可书写的语法。
+
+#### 5.3.8 完整可运行示例
+
+以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
+
+继承与显式覆写：
+
+```xray
+class Animal {
+    name: string
+    init(name: string) { this.name = name }
+    speak() -> string { return "..." }
+}
+
+class Dog extends Animal {
+    init(name: string) { super(name) }
+    override speak() -> string { return "woof" }
+}
+
+fn main() {
+    var d = Dog("Rex")
+    print(d.name)      // => Rex
+    print(d.speak())   // => woof
+}
+
+main()
+```
+
+运算符重载（用具名变量调用）：
+
+```xray
+class Vec2 {
+    x: i64
+    y: i64
+    init(x: i64, y: i64) { this.x = x; this.y = y }
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+}
+
+fn main() {
+    var a = Vec2(1, 2)
+    var b = Vec2(3, 4)
+    var sum = a + b
+    print(sum.x)   // => 4
+    print(sum.y)   // => 6
+}
+
+main()
+```
+
+### 5.4 `struct` 声明
+
+可复制 struct 按字段声明类型保留逻辑副本：Array 等拥有式容器字段保持值语义，class 与同步字段只复制身份引用。字段可以是 Array 或 class；不能将 struct 限制为仅含标量和 string，也不能把 struct 复制误写为复制整个 class 对象图。字段仍须满足初始化、存储及可复制性要求（§2.14.6）。
+
+struct / enum 修改自身值语义部分的方法显式使用 `ref` receiver；只读 receiver 可以保存可复制副本，不能直接修改自身。可复制类型不得声明 `move` receiver。完整聚合、receiver 和借用声明族的实现资格见 §17。
+
+```ebnf
+StructDecl ::= 'struct' Identifier TypeParams?
+               ('implements' Identifier (',' Identifier)*)?
+               '{' StructMember* '}'
+```
+
+```xray @id=decl-struct-point
+struct Point {
+    x: f64
+    y: f64
+
+    magnitude_sq() -> f64 {
+        return this.x * this.x + this.y * this.y
+    }
+}
+
+// 两种创建方式
+var p = Point()                  // 默认构造（字段为零值）后逐个赋值
+p.x = 3.0
+p.y = 4.0
+
+var q = Point{x: 3.0, y: 4.0}        // struct 字面量：类型名 + { field: value }
+var pt = Point{x: 1.0, y: 2.0}
+
+// 值语义：赋值与传参都是拷贝
+var b = q                            // b 是 q 的独立拷贝
+b.x = 99.0
+// q.x 仍为 3.0
+```
+
+**聚合字面量的字段规则**（与 sealed structural object 一致）：
+
+- 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
+- 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
+- struct 字段默认表达式在声明模块和声明类型参数作用域内检查，包括未使用的声明；不能捕获构造调用方的局部变量。字面量先按书写顺序求值显式字段，再按字段声明顺序求值被省略字段的默认表达式；显式提供的字段不执行其默认表达式。默认表达式允许普通已准入函数效应，失败不撤销之前的副作用，但不发布部分结构体值。
+- 具名字面量支持字段简写 `Point{x}`（即 `Point{x: x}`）与展开 `Point{...base, x: value}`。所有显式字段和展开源在其书写位置各求值一次；同名字段由后写条目覆盖，但两个显式条目重复指定同一字段仍是错误。展开只能提供目标已声明的字段，各字段沿普通字段赋值的已检查类型转换接收；源字段读取与目标字段构造分别遵守可见性，不能借展开绕过 `init` 的模块边界。展开已提供的字段不再执行声明默认表达式，容器字段保留普通值复制语义。
+- 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
+- **`union` 例外**：union 的成员共享同一块存储，同时只有一个成员是活的，因此 union 字面量必须**恰好**设置一个成员。设置 0 个（活成员未定义）或多个（写入互相覆盖）都是 `E0381`。
+
+```xray
+struct Config {
+    host: string
+    port: i64 = 8080        // 声明默认值：字面量中可省
+    label: string?          // 可空：字面量中可省
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // 编译错误 E0380：没有字段 'ports'
+// Config{port: 1}                   // 编译错误 E0381：缺少字段 'host'
+```
+
+**与 `class` 的差异**：
+
+| 维度 | `class` | `struct` |
+|--|--|--|
+| 内存语义 | 身份引用 | 逻辑值；物理布局不改变复制合同 |
+| 赋值/保存参数 | 复制身份引用 | **按字段复制**（`var b = a` 保留逻辑副本） |
+| 继承 | 支持 `extends` | **不支持**继承 |
+| `implements` | ✅ | ✅ |
+| 泛型 | ✅ | ✅ |
+| `static` / `private` / `protected` / `const` | ✅ | ✅ |
+| 运算符重载 | ✅ | ✅ |
+| 构造器 | `init(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
+| 字面量 | 无 | `TypeName{field: value, ...}` |
+
+**适用场景**：
+- 数学类型（Vec2/Vec3/Quat/Color）
+- 短生命周期值（迭代器状态、临时元组替代）
+- 性能敏感、希望避免堆分配的数据
+
+#### 5.4.1 值语义示例
+
+可复制 `struct` 是值类型，赋值与保存参数按字段保留逻辑副本；普通 READ 参数只读访问该值，允许保存副本，不强制某一种物理 ABI：
+
+```xray
+struct Point {
+    x: i64
+    y: i64
+}
+
+fn main() {
+    var p = Point{x: 3, y: 4}
+    var q = p            // struct 赋值是拷贝
+    q.x = 99
+    print(p.x)           // => 3（不受影响）
+    print(q.x)           // => 99
+}
+
+main()
+```
+
+### 5.5 `interface` 与 `implements`
+
+xray 接口实现是**显式声明的**（与 Go 的隐式实现不同）：类 / struct 必须用 `implements` 列出实现的接口。
+
+```ebnf
+InterfaceDecl ::= 'interface' Identifier TypeParams?
+                  ('extends' NamedType (',' NamedType)*)?
+                  '{' InterfaceMember* '}'
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?       // 方法签名
+                 |  ('const')? Identifier ':' Type                   // 属性签名（可加 const 表示只读）
+```
+
+```xray @id=decl-interface-shape
+interface Shape {
+    area() -> f64
+    perimeter() -> f64
+}
+
+// 接口方法返回类型可省略（默认 ()）
+interface Greeter {
+    greet(name: string)             // 等价于 greet(name: string) -> ()
+    log()                           // 无参无返回
+}
+
+class Circle implements Shape {
+    radius: f64
+    init(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
+}
+
+// 实现多个接口
+class Logger implements Shape, Greeter {
+    radius: f64
+    init(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
+    greet(name: string) { print("hello,", name) }
+    log() { print("logging") }
+}
+
+fn describe(s: Shape) -> string {
+    return "area=${s.area()}, perimeter=${s.perimeter()}"
+}
+```
+
+**约束**：
+
+- 接口可继承其他接口（`extends`）；支持泛型 `interface Container<T>` 与受约束 `interface Stats<T: Numeric>`。
+- 类 / struct 用 `implements I1, I2, ...` 声明实现一个或多个接口（**显式**，不存在隐式实现）。
+- 实现类**必须**提供所有接口成员（方法同名同参同返回；属性同名同类型）。
+- 接口方法声明中的**返回类型可省略**（默认 `()`）。
+- 接口方法默认 `abstract`（无方法体）。
+- 接口可声明**属性签名**（`length: i64`、`const id: i64`）；实现类型可提供同类型的字段或访问器。const 属性要求可读，普通属性要求可读可写；实现的读取/写入权限不能窄于对应接口要求。
+- 实现类可以提供额外的方法（接口仅定义最小集）。
+
+#### 方法要求身份与静态泛型见证
+
+接口身份由 canonical module 与声明名确定，接口应用另含有序类型实参。成员身份属于其原始接口声明；继承展开不创建新的身份。类型参数按所属声明和序号绑定。实现关系由名义类型声明中的显式 `implements` 建立，一个类型与一个接口应用至多声明一次；同名方法本身不证明实现关系。
+
+继承必须无环，包括未使用的声明。同源成员经相同类型替换到达时去重；不同来源的同名成员仅在完整合同完全相同时合并查找，同时保留全部实现义务。合同包括成员种类、receiver、参数数目/模式/类型、结果类型与 callable 承诺；不相同则拒绝歧义，不按继承、约束或导入顺序挑选。重新声明继承成员同样须精确匹配。参数名字不参与签名比较，但 manifest 按各声明自己的参数名字绑定。
+
+实现方法必须是该类型的公开实例方法，精确满足参数、结果及 receiver 合同；静态、私有、受保护、构造和 cleanup 函数不能充当见证。不新增一般协变/逆变转换。实现可提供更强的函数自身 `no_suspend` 保证，但不能加强调用者的参数义务或弱化接口保证。同名合并要求须绑定该类型的同一个方法身份。
+
+泛型约束为标记与接口应用的合取，相同约束重复幂等；派生接口通过明确的类型替换蕴含祖先要求。定义处成员访问必须绑定到约束所提供的要求身份及完整签名；具体实参的额外方法不能补足证明，未使用的非法泛型也拒绝。证明及其缓存必须包含参数环境。抽象方法没有已检查实现体，其效应由公开合同给出，未承诺者按未知 callable 上界处理；实现须在定义处证明这些义务。
+
+接口要求可有自身类型参数，例如 `I<A>.map<U:C<A>>(value:U)->U`。接口外围与方法自身参数按真实owner及ordinal分别绑定，完整空间为 `[interface parent, method own]`；自身名字不遮蔽外围，条件可引用后续自身参数。自身where仅约束自身参数。调用的显式列表只填own，parent来自定义处约束应用；调用方必须证明全部条件。继承同名方法按own数量、完整签名和alpha对齐后的条件双向蕴含比较，重复与冗余祖先幂等，同时保留全部原要求身份。实现向量为 `[nominal parent, method own]`；其条件只能由名义前提与原要求方法前提蕴含，不能用实现自身条件自证，实现体仍按自身声明检查。Checked特化及独立来源复验保留完整nominal+own实参，即使own未出现在物理签名中也不能省略。
+
+受约束接收者的接口方法取值 `receiver.read` 或 `receiver.map<i64>` 先以原要求应用及完整条件检查；接收者只求值一次并保存当时的值。首个执行族支持没有own参数或完整显式own列表，所得callable无默认参数并保留原签名及承诺，不从未来具体实现增加能力。函数值采用普通typed helper与FUNCTION_REF；helper继承真实调用者参数/条件，内部要求调用保留完整parent+own，外层函数引用保留完整caller参数，两层来源各自复验。捕获、复制、挂起、结果所有权和物理释放遵循普通函数值合同；不增加格式、字典或独立执行路径。
+
+Checked 拥有约束、接口应用、要求身份和显式实现映射。单态化只选择已证明的见证，转换为普通调用并复验后进入 Lowered；不得重新按具体类型的成员名猜选实现。普通实例在不可变 Program 封存前完成，无运行时泛型字典或未解见证 fallback。此规则不取消接口值及可覆写 class 方法的动态分派。
+
+当前新 XIR 已接通普通 read receiver 方法、显式 struct/enum 实现与定义处泛型成员调用：Checked 保存原要求身份及实现映射，在 Checked 上选择见证、特化并复验后进入 Lowered。泛型 struct/enum 的实现受其名义声明前提约束，方法额外条件不得补足缺失的类型前提。enum 普通 READ/static 方法复用名义方法机制，载荷先经 match 解构；方法及内建成员碰撞按 §5.6.7 在声明处拒绝。该子集已有 Windows VM/native 独立预期验证，不代表完整声明族或全部安全资格完成。接口方法自身泛型的完整显式列表、内联/where条件及调用值形状推断已取得上述Windows范围验证；晚结果上下文补足和显式方法取值为下一验证族，完整双向和函数值上下文推断仍OPEN。属性、其他 receiver、未接通的 enum name/toString/variants 消费、class/override 和接口值仍须分别实现和验证，未接通的表面明确拒绝；上述语言目标不因此缩减。
+
+```xray
+// 属性签名 + 接口继承
+interface HasLength {
+    length: i64
+}
+interface SizedCollection<T> extends HasLength {
+    first() -> T
+}
+
+class Buffer implements SizedCollection<i64> {
+    length: i64                       // 实现属性签名
+    private data: Array<i64>
+    init(n: i64) {
+        this.length = n
+        this.data = []
+    }
+    first() -> i64 { return this.data[0] }
+}
+```
+
+#### 完整可运行示例
+
+接口 + `implements` + 多态：
+
+```xray
+interface Shape {
+    area() -> f64
+}
+
+class Circle implements Shape {
+    r: f64
+    init(r: f64) { this.r = r }
+    area() -> f64 { return 3.14159 * this.r * this.r }
+}
+
+fn main() {
+    var s: Shape = Circle(2.0)
+    print(s.area())   // => 12.56636
+}
+
+main()
+```
+
+### 5.6 `enum` 声明
+
+xray 的 `enum` 是**安全 tagged aggregate**：每个值包含编译器分配的声明顺序 tag，并且只有当前 tag 对应的 payload 可读。无 payload 的简单 enum 只是 payload size 为 0 的 tagged aggregate；带 payload 的 enum 是同一模型下的安全 sum type。
+
+```ebnf
+EnumDecl       ::= 'enum' Identifier TypeParams?
+                   ('implements' NamedType (',' NamedType)*)?
+                   '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+```
+
+> 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
+
+枚举类型的身份由所属模块、声明及有序类型实参共同确定；局部类型编号或相同 ordinal 不足以识别枚举类型。非 nullable enum 必须显式初始化，不隐式选择第一个变体。声明至少包含一个变体；变体名在声明内唯一，payload 字段名只须在所属变体内唯一。复制和销毁仅作用于活动变体的载荷；值逃逸不延长 Program 或 Instance 的执行权限。
+
+#### 5.6.1 简单枚举（0-payload enum）
+
+```xray @id=decl-enum-simple
+enum Color { Red, Green, Blue }
+
+Color.Red.ordinal     // 0
+Color.Blue.ordinal    // 2
+Color.Red.name        // "Red"
+Color.Red.toString()  // "Color.Red"
+
+enum HttpStatus {
+    OK,
+    NotFound,
+    InternalError
+
+    code() -> i64 {
+        return match (this) {
+            HttpStatus.OK -> 200,
+            HttpStatus.NotFound -> 404,
+            HttpStatus.InternalError -> 500
+        }
+    }
+}
+```
+
+enum variant 使用声明顺序形成稳定的 `ordinal`，不声明额外 backing value。协议数值、字符串符号等外部表示通过 `const`、方法或显式转换函数表达。
+
+#### 5.6.2 Payload enum
+
+payload 变体使用具名记录字段；每个字段必须有非空且唯一的名称：
+
+```xray @id=decl-enum-payload
+enum Option<T> {
+    Some { value: T },
+    None,
+}
+
+enum NetEvent {
+    Connected,
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
+}
+
+// 递归 enum 的 payload 必须经 class 节点间接化
+class ExprNode {
+    expr: Expr
+    init(expr: Expr) { this.expr = expr }
+    get() -> Expr { return this.expr }
+}
+
+enum Expr {
+    Number { value: i64 },
+    Binary { op: string, left: ExprNode, right: ExprNode },
+    Call { name: string, args: Array<Expr> },
+}
+```
+
+直接按值递归的 enum payload 会导致无限大小，必须编译拒绝（`E0352`）。递归数据结构必须显式间接化，有两种手段：
+
+- **class 节点**：class 是引用类型，字段只占一个指针宽度，因此 `Binary(left: ExprNode, ...)` 布局有限。
+- **容器槽**：`Array<Expr>`、`Map<K, Expr>` 等容器把元素存在自己的存储里，payload 只保存容器句柄。
+
+`T?` 不构成间接化——nullable 不改变 payload 的按值布局，`Binary(left: Expr?, ...)` 同样被 `E0352` 拒绝。
+
+#### 5.6.3 构造与解构
+
+构造：
+
+```xray
+var c = Color.Red
+var r1 = Option.Some { value: 42 }
+var e1 = NetEvent.DataReceived { bytes: b }
+var e2 = NetEvent.Error { code: 404, message: "not found" }
+var e3 = NetEvent.Connected                         // unit 变体不写 braces
+```
+
+解构（match）：
+
+```xray @id=decl-enum-match
+match (event) {
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+}
+```
+
+详见 §6.3。
+
+#### 5.6.4 enum 值 API
+
+实例属性（作用在枚举值上）：
+
+```xray @id=decl-enum-properties
+Color.Red.name        // "Red"          变体名 (string)
+Color.Red.ordinal     // 0              声明顺序 tag (i64，从 0)
+Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
+```
+
+enum 值提供 `name`、`ordinal` 与 `toString()`。name只返回活动变体的声明名，toString只返回原enum声明名和活动变体名，不附加泛型实参、不读取或格式化payload、不调用载荷回调。两者按原类型与成员权限检查，不能授予构造权限或隐式Stringable见证；描述查询也不能补足原泛型约束。它们不提供 `value`、`rawValue`、`fromName` 或 `fromOrdinal` 等隐式 backing-value/reflection API。
+
+#### 5.6.5 遍历
+
+仅由无 payload 变体组成的具体 enum 可以直接迭代实际 enum 值；任意具体 enum 都可通过 `.variants` 迭代声明级描述符：
+
+```xray @id=decl-enum-iteration
+for (color in Color) {
+    print(color.name)                     // color: Color；Red、Green、Blue
+}
+
+for (variant in NetEvent.variants) {
+    print(variant.ordinal)                // variant: EnumVariant<NetEvent>
+    print(variant.name)
+    for (field in variant.payloads) {
+        print(field.name)                 // field: EnumPayloadField<NetEvent>
+        print(field.type)                 // i64：具体字段类型的 canonical TypeId
+    }
+}
+```
+
+两种循环语法相似，但产出类型有意不同：
+
+| 表达式 | 适用范围 | 循环变量类型 | 语义 |
+|---|---|---|---|
+| `E` | 仅 unit-only 具体 enum | `E` | 按声明顺序产出实际 enum 值 |
+| `E.variants` | 任意具体 enum | `EnumVariant<E>` | 按声明顺序产出只读变体描述符 |
+| `variant.payloads` | 一个 `EnumVariant<E>` | `EnumPayloadField<E>` | 按声明顺序产出只读 payload 字段描述符 |
+
+若 `E` 含任一 payload 变体，`for (value in E)` 是编译错误，诊断会建议 `E.variants`；编译器不会虚构 payload 值。`for (variant in Color.variants)` 对 unit-only enum 也完全合法，但 `variant` 仍是描述符而不是 `Color` 值。循环本身不打印任何内容；只有循环体显式执行的副作用会产生输出。
+
+descriptor API 是封闭白名单：
+
+| 类型 | 属性 / 操作 |
+|---|---|
+| `EnumVariants<E>` | `length: i64`、检查边界的 `[index] -> EnumVariant<E>`、`for-in` |
+| `EnumVariant<E>` | `ordinal: i64`、`name: string`、`payloadCount: i64`、`isUnit: bool`、`payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: i64`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
+| `EnumPayloadField<E>` | `index: i64`、`name: string`、`type: i64`（canonical TypeId） |
+
+payload 字段的 `name` 始终是源码声明名；空名称、同一变体内重复名称或名称/类型计数不一致的 metadata 必须拒绝。
+
+这些类型不可由用户构造，描述符不可调用，也不提供从名字/ordinal 构造 enum 值的入口。越界索引按普通 checked index 失败。descriptor 不进入 C ABI，FFI 边界会编译拒绝。
+
+该能力是编译器静态类型域，不是 `Iterable` 协议实现。直接循环和不逃逸 descriptor 可在 Lowered 中以 ordinal/index 标量表示，无需分配数组或 iterator。流入 union、泛型存储、容器、闭包或跨协程通道的描述值必须保留具体声明身份及有效的元数据生命周期；描述查询不得绕过泛型约束、可见性或构造权限。只有证明查询结果及生命周期不受影响时，才可消除描述符引用或裁剪未使用的元数据。
+
+unit-only enum 的实际值与带载荷 enum 具有相同的名义身份规则。保存 ordinal 不能替代所属模块、声明及有序类型实参；值跨越调用、存储或挂起边界后，`.name`、`toString()`、相等性和字符串格式化仍须保持完整语义，且逃逸值不得延长执行权限。物理载体由统一 Lowered 管线决定；仅在证明身份可恢复且元数据生命周期安全时，才可将值缩减为 ordinal。规范不要求保留某个旧载体宽度，也不要求每个值独立分配。
+
+泛型时必须知道具体 enum layout，例如 `Option<i64>.variants` 合法；未约束类型参数 `E.variants` 不合法。别名、导入和跨模块编译保留同一声明顺序与具体类型替换。
+
+#### 5.6.6 反查（从值到成员）
+
+默认不支持 `Enum(value)` 或从 backing value 反查 enum。协议解析应写成显式函数：
+
+```xray
+fn statusFromCode(code: i64) -> HttpStatus? {
+    if (code == 200) { return HttpStatus.OK }
+    if (code == 404) { return HttpStatus.NotFound }
+    if (code == 500) { return HttpStatus.InternalError }
+    return null
+}
+```
+
+#### 5.6.7 enum 方法
+
+枚举的类型访问域与值访问域分别解析成员。值访问域的内建 `name`、`ordinal` 属性及 `toString` 方法不能被用户实例方法替换；类型访问域的内建 `variants` 成员不能被变体或用户 static 方法替换。这些标识符不作全局保留：在不违反其他唯一性规则时，允许名为 `name`、`ordinal`、`toString` 的变体或 static 方法，以及名为 `variants` 的实例方法。同一枚举内，所有用户方法名唯一，static 与实例方法不能以同名构成重载；任何用户方法也不能与变体同名。碰撞在声明处拒绝，不因使用方采用属性访问、调用或方法取值而选择不同含义。内建成员名本身不建立接口实现关系，也不自动提供见证。
+
+`enum` 体内可定义实例方法和静态方法，语法与 `class` 内的方法一致（不引入 `impl` 关键字）。实例方法在所有变体上可调用；方法体内通过 `match (this)` 区分变体行为：
+
+```xray
+enum Shape {
+    Circle { radius: f64 },
+    Rect { width: f64, height: f64 },
+    Triangle { a: f64, b: f64, c: f64 }
+
+    area() -> f64 {
+        return match (this) {
+            Shape.Circle { radius } -> 3.14159 * radius * radius,
+            Shape.Rect { width, height } -> width * height,
+            Shape.Triangle { a, b, c } -> {
+                var s = (a + b + c) / 2.0
+                return (s * (s-a) * (s-b) * (s-c)).sqrt()
+            },
+        }
+    }
+
+    isRound() -> bool {
+        return match (this) {
+            Shape.Circle {} -> true,
+            _               -> false,
+        }
+    }
+}
+
+var s = Shape.Circle { radius: 1.0 }
+print(s.area())          // 3.14159
+print(s.isRound())       // true
+```
+
+静态方法使用 `static name(...)`；实例方法默认 READ receiver，修改值语义部分使用 `ref` receiver。`move` receiver 仅适用于不可复制 enum，可复制 enum 不得声明；不可复制声明族的准入见 §17。enum 方法不写 `fn`：
+
+```xray
+enum Color {
+    Red, Green, Blue
+
+    static fromInt(v: i64) -> Color {
+        if (v == 1) { return Color.Red }
+        if (v == 2) { return Color.Green }
+        return Color.Blue
+    }
+
+    label() -> string {
+        return this.name
+    }
+}
+
+print(Color.fromInt(2).label())     // "Green"
+```
+
+> 注意 `Triangle { ... }` 后没有逗号——最后一个变体与方法块之间用空白分隔（trailing comma 允许但不强制）。
+
+**规则**：
+
+- 方法语法与类型体内方法一致：`name(...)`、`ref name(...)`、`move name(...)` 或 `static name(...)`；不写 `fn`
+- 方法体内 `this` 的静态类型是 enum 自身（如 `Option<T>`），需要 `match (this)` 才能取出变体 payload
+- 静态方法没有 `this`；调用形式是 `EnumName.method(args...)`
+- **不**支持 `init`（变体语法本身就是构造器）
+- **不**支持继承（`enum E extends ...` 是非法）；如需共享行为，用接口实现（`enum E implements Iface`）或顶层函数
+- 简单枚举（无 payload）也可定义方法，但方法体内 `this` 是该 enum 的值，可用 `==` 直接比较：
+  ```xray
+  enum Color {
+      Red, Green, Blue
+
+      isWarm() -> bool { return this == Color.Red }
+  }
+  ```
+- 方法**不能**和变体名同名
+
+> 此设计与 Java enum / Swift enum / Kotlin sealed class 一致。Rust 的 `impl` 块在 xray 中**不**引入——xray 的方法定义统一在类型体内。
+
+### 5.7 `type` 别名
+
+```ebnf
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
+```
+
+```xray
+type Outcome = i64 | string                          // union 别名
+type Mapper = fn(i64) -> i64                              // 函数类型别名
+type Point = { x: f64, y: f64 }                  // 结构化对象别名（sealed）
+type Pair<T> = { first: T, second: T }                // 泛型别名
+```
+
+**语义**：
+- 别名是**纯语法**替换，不产生新名义类型。
+- 泛型别名在使用处做类型实参代入；代入发生在编译期，不引入运行时表示或 AOT 分支。
+- 泛型别名形参只允许名字列表；不支持约束。约束应写在使用该别名的泛型声明上。
+- `type Point = {...}` 的对象类型在使用此别名标注时**密封**：未声明的字段访问/赋值是编译错误。
+- `type T = JSON.Value` 等于 `JSON.Value`；`type O = JSON.Object` 等于 `Map<string, JSON.Value>`。
+- 别名可前向引用，但**禁止循环别名**。
+
+详见 [§2.4.7](#247-json) 与 [§2.8](#28-类型别名)。
+
+### 5.8 `import` / `export`
+
+详见 [§11](#11-模块系统-modules)。语法要点：
+
+```xray
+// stdlib / 第三方包：裸标识符，可自动生成别名
+import time
+import http
+import alice/utils as utils
+
+// 文件路径或目录路径：字符串，可显式 `as`，否则从路径尾段推导别名
+import "./modules/mod_a.xr" as a
+import "../utils/string_utils.xr" as utils
+import "models/user" as user
+
+// 命名 import：支持 quoted path 或裸模块名，成员可用 `as` 重命名
+import { readFile, writeFile as write } from io
+import { publicFn } from "./modules/mod_a.xr"
+
+// 导出
+export fn publicFn() -> string { return "hi" }
+export const VERSION = "1.0"
+export { name1, name2 as alias } from "./other"
+export * from "./other"
+```
+
+**xray 不支持** JavaScript 默认导入 `import name from "module"`。使用 `import "module" as name`、`import module` 或 `import { name } from module`。
+
+完整规则、路径解析、可见性细则见 [§11 模块系统](#11-模块系统-modules)。
+<!-- /xr-spec:cn -->
+
+<!-- xr-spec:en -->
+---
+
+## 5. Declarations
+
+> Declaration-syntax anchors: `src/frontend/parser/xparse_decl.c` and `src/frontend/parser/xast_nodes_decl.h`. The frontend checks this chapter's language contracts uniformly. See §17 for current new XIR declaration-family qualification; old analyzer behavior does not replace these rules.
+
+### 5.1 `var` / `const`
+
+```ebnf
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+Binding ::= Pattern (':' Type)? ('=' Expression)?
+Pattern ::= Identifier
+         | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
+         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
+         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
+ObjectBinding ::= Identifier (':' Identifier)?
+```
+
+#### 5.1.1 `var` — mutable binding
+
+```xray @id=decl-var
+var x = 1                         // type inferred as i64
+var name: string = "Alice"        // explicit type
+var count: i64                    // no initializer: zero value used
+var maybeName: string?            // OK: defaults to null
+var empty: string = ""            // string requires an explicit initializer
+```
+
+- Reassignable.
+- Must have an initializer **or** a type annotation; otherwise compile error `E0303`.
+- Omitted initializers are allowed only for **default-initializable** types: numeric types default to `0` / `0.0`, `bool` defaults to `false`, `()` defaults to unit, `T?` defaults to `null`, and structs are allowed only when every field is default-initializable.
+- Non-nullable `string`, class instances, `Array` / `Map` / `Set`, `Channel`, `Task`, function / closure, interface / union, and similar types require an explicit initializer. `var a: Array<T>` does not default-construct an empty array.
+
+#### 5.1.2 `const` — immutable binding
+
+```xray @id=decl-const
+const PI = 3.14159
+const MAX_LEN: i64 = 1024
+```
+
+- An initializer is **required** and reassignment is forbidden (compile error `E0303`). The type may be inferred or annotated.
+- Like `var`, each declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
+- `const` fixes the binding and its value-semantic components: Array elements, appends, and value-type fields cannot be mutated through it. Ordinary `const snapshot = source` is legal and preserves a logical copy; it does not require explicit `move` / `copy` or a unique source backing store.
+- Value semantics stop at class and synchronized identity boundaries. `const xs = [Counter()]` does not freeze Counter; ordinary class methods may still mutate the referenced object. Replacing an array element through a writable copy does not change the elements of `xs`.
+- Audited synchronization handles such as `Channel`, `Atomic`, and `Mutex` may use `const` to fix the binding. Their audited APIs can still change protected internal state. `const` alone proves neither Sendable nor concurrency safety.
+- Saving a copyable read-only value into `var` produces a writable logical copy. It does not acquire a writable borrow of the original place or remove the referenced class object's own permission restrictions.
+
+```xray @id=decl-capability
+const channel = Channel<i64>(16)
+const counter = Atomic(0)
+
+var source = [1, 2, 3]
+const snapshot = source
+source[0] = 9
+var current = snapshot
+current.push(4)
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
+```
+
+`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
+
+These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
+
+#### 5.1.3 Destructuring bindings
+
+```xray @id=decl-destructuring
+// array destructuring
+var [a, b, c] = [1, 2, 3]
+var [first, , third] = [10, 20, 30]         // skip elements
+
+// tuple destructuring (multi-return)
+var (q, r) = divmod(17, 5)
+
+// object destructuring (extract by field name; local binding may be renamed)
+var { name, age } = { name: "Alice", age: 30 }
+var { name: localName, age } = { name: "Alice", age: 30 }
+```
+
+Constraints:
+- The number of destructured bindings must match (except with rest patterns).
+- Object destructuring field names must be `Identifier`s; `field: localName` changes only the local binding name, not the field being read.
+
+The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `_` leaves, exact ordered arity, Unit and comma-marked singletons, for locals, module bindings and closure capture. Evaluate the RHS once and prepare every FIELD, Cell and owned hold before publishing the binding group. Modules use the shared SLOT_GROUP_INIT transaction; its first trace observes every committed slot. `_` creates no name and ordinary generics retain definition-time constraints and permissions. Nested patterns, rest, array/object destructuring, spread and match remain separate legal but unimplemented obligations and reject at the current entry; this flat subset does not complete all destructuring. Leaf type annotations are not yet admitted. See §17.35 for exact preparation, failure and publication rules.
+
+### 5.2 `fn` function declaration
+
+```ebnf
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+ParamList ::= Param (',' Param)*
+Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
+            | '...' Identifier ':' Type
+ParamType ::= ParamMode? Type
+ParamMode ::= 'ref' | 'move'
+ReturnType ::= '->' Type
+            |  '->' '(' Type (',' Type)+ ')'   // tuple return
+TypeParams ::= '<' Identifier (',' Identifier)* '>'
+AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+```
+
+#### 5.2.1 Basic form
+
+```xray @id=decl-fn-basic
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
+}
+
+fn greet(name: string) -> () {         // explicit Unit
+    print("Hi ${name}")
+}
+
+fn echo(x: i64) {                       // omitted return type = ()
+    print(x)
+}
+```
+
+**Key points**:
+- Parameters **must** carry type annotations (consistent with arrow functions).
+- An omitted return type means `()` (Unit); explicit annotation is recommended for readability.
+- The function body must be a block.
+
+#### 5.2.2 Default parameter values
+
+```xray @id=decl-fn-default
+fn connect(host: string, port: i64 = 8080, tls: bool = false) {
+    print(host, port, tls)
+}
+
+connect("localhost")              // port=8080, tls=false
+connect("localhost", 443)         // tls=false
+connect("localhost", 443, true)
+```
+
+- Default values are evaluated at the **call site**: when a trailing argument is omitted, the compiler completes the call with the default expression, evaluating it once per omitting call in argument order.
+- Passing an explicit `null` passes `null`; it does **not** trigger the default (defaults are used only when the argument is omitted).
+- Parameters with default values must appear consecutively at the tail of the parameter list.
+- Default arguments apply only to **direct calls of a named function/method/constructor**. A call through a function value (a function-typed variable) carries no default expressions and must pass every argument.
+- Default expressions are checked against the parameter type in the declaring module, type-parameter and member-authority scope, including unused declarations; they cannot reference caller locals. Parameters of this invocation (including preceding parameters) and `this` are not in default-expression scope. Ordinary generics use only their definition constraints, without gaining capabilities from a concrete instance.
+- Evaluate the receiver or callee first, explicit arguments left to right next, and omitted trailing defaults once each in declaration order last. An explicit argument suppresses its default. Defaults permit ordinary admitted function effects; suspension, failure and owned-result cleanup follow ordinary call rules. Failure preserves earlier side effects and does not enter a callee body that has not started.
+- Defaults may use private names accessible to their declaration; exported callers gain no direct access to those names. Check defaults at their declaration and execute through the same Checked specialization and revalidation pipeline, without caller-side rebinding or runtime AST expansion that bypasses authority. Constructor argument defaults run before field defaults and the constructor body and cannot observe partially constructed `this`.
+
+- Ordinary generic calls complete type-argument inference and all constraint proofs from explicit arguments and existing result context before evaluating omitted defaults. An omitted default contributes no additional caller-side inference evidence; its definition still checks against the formal generic type and original constraints.
+- Default computation does not inherit the body promises of the called function or constructor. Expecting a `no_suspend` callable constrains that returned callable, not automatically the computation producing it. A constructor body's `no_suspend` promise does not automatically forbid suspension in defaults evaluated beforehand by the caller; complete evaluation must still satisfy the actual caller's promises.
+
+#### 5.2.3 Multiple return values
+
+```xray @id=decl-fn-multi-return
+fn divmod(a: i64, b: i64) -> (i64, i64) {
+    return (a / b, a % b)
+}
+
+var (q, r) = divmod(17, 5)
+var result = divmod(10, 3)        // result has type (i64, i64)
+```
+
+**Constraints**:
+- The return type wraps the tuple in parentheses: `(i64, bool)`.
+- A single return value omits the parentheses: `: i64`.
+- `return (a, b)` requires the parentheses; bare comma `return a, b` is a compile error (`E0801`).
+
+#### 5.2.4 Parameter modes
+
+Ordinary parameters default to READ. Writable borrowing uses `name: ref T`; consuming a noncopyable resource uses `name: move T`. A parameter mode is a declaration contract, independent of whether the concrete ABI passes a value, pointer, or handle.
+
+```xray @id=decl-fn-param-modes
+fn length_sq(v: Vec2) -> f64 {
+    return v.x * v.x + v.y * v.y
+}
+
+fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
+    v.x += dx
+    v.y += dy
+}
+
+fn appended(xs: Array<string>, value: string) -> Array<string> {
+    var result = xs
+    result.push(value)
+    return result
+}
+
+translate(ref point, 1.0, 2.0)
+```
+
+| Parameter mode | Semantics |
+|--|--|
+| none (READ) | The parameter binding cannot be rebound and its value-semantic components are read-only; copyable, storable values may be saved or returned as logical copies |
+| `ref` | Exclusive writable place borrow; mutations write back to the caller, and the call site must write `ref place` |
+| `move` | Restricted to noncopyable types; transfers ownership and final destruction responsibility. The declaration mode determines consumption; `move value` optionally marks that transfer |
+
+A READ Array parameter cannot be indexed for writing, passed as a receiver to `push`, or rebound. Saving it into a local `var` permits mutation of the copy without changing the original argument. Saving a copyable value does not permit a borrow to escape; views and noncopyable resources cannot thereby become ordinary owned copies. A READ class parameter also cannot be rebound, but may invoke methods that mutate the same object. READ does not mean that the entire reachable graph is immutable.
+
+A `ref` argument must be an exactly typed writable place, not a `const`, READ parameter, or temporary. `ref` types are invariant. §3.0 E2 evaluates the receiver and every argument before exclusive access begins. That access covers checks, necessary COW detachment, mutation, and writeback. Borrowing the receiver early must not reject `a.push(a[0])`. Assignment still follows E5: location subexpressions, index, right-hand side, then storage.
+
+Copyable types, including Array, cannot declare `move` parameters or receivers. Initialization, use after consumption, and active borrows of noncopyable resources still require checking; see §2.14.5. See §17 for current implementation qualification of resource declarations and complete `ref` / view calls; these language contracts do not imply implementation completion.
+
+Ordinary outputs use return values, tuples, or structs. Business errors follow §8's typed `throw` / `catch` channel; no global `Result<T,E>` is introduced. C ABI output locations use `MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
+
+#### 5.2.5 Rest parameters
+
+```xray @id=decl-fn-rest
+fn sum(...nums: i64) -> i64 {
+    var total = 0
+    for (n in nums) { total += n }
+    return total
+}
+
+sum(1, 2, 3)        // total = 6
+```
+
+- The rest parameter must be **last**.
+- The actual internal type of `...T` is `Array<T>`.
+- Only one rest parameter is allowed.
+
+#### 5.2.6 Function hoisting
+
+```xray
+main()                       // OK: the function declaration is hoisted
+
+fn main() { ... }
+```
+
+- Top-level `fn` declarations are hoisted to the top of the current scope.
+- `var f = (x: i64) -> x` (an arrow function bound to a variable) is **not** hoisted.
+
+#### 5.2.7 Tail-call optimization
+
+The Xi optimizer rewrites proven self-tail calls into loops, and the VM also has constant-stack tail-call opcodes. This is not a blanket constant-stack guarantee for every back end or every indirect/mutually-recursive call: constructors and calls that cannot be proven safe remain ordinary calls. See [§17](#17-compilation-pipeline).
+
+```xray
+fn factorial(n: i64, acc: i64 = 1) -> i64 {
+    if (n <= 1) { return acc }
+    return factorial(n - 1, acc * n)     // tail call: optimized to a loop
+}
+```
+
+#### 5.2.8 Program entry point
+
+xray has **no implicit `main` entry**: scripts/modules execute their top level in declaration order. `fn` declarations are hoisted and registered; expressions and statements run immediately.
+
+```xray
+// hello.xr
+print("loading")          // top-level statement, runs immediately
+fn greet() { print("hi") }
+greet()                   // must be called explicitly
+```
+
+- `fn main()` has no special meaning; call `main()` explicitly if desired.
+- Top-level `return` is forbidden (compile error `E0306`).
+- Multi-file projects specify the entry with the `main` field under `[project]` (or `[package]` for a package manifest), for example `main = "src/main.xr"`; that file follows the script execution rules above.
+
+#### 5.2.9 `extern "C"` C FFI Declaration Blocks
+
+An `extern "C"` block declares external **function symbols** that share the C ABI. External functions have no Xray body, and calls must appear explicitly inside `unsafe { }`:
+
+```xray
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+    fn cos(x: f64) -> f64
+}
+
+var p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(cos(0.0))
+    free(p)
+}
+```
+
+Libraries, targets, symbol renames, native sources/objects, typed flags, hashes, and licenses belong to the NativePackagePlan in `xray.toml`, not ordinary source. An `extern "C"` block does not accept `dylib`/`link` clauses, bodies, data/globals, structs, unions, packed layouts, or flexible members.
+
+C ABI aggregates use ordinary Xray structs bound to a C header/type by `[[native.layout]]`. Before linking, the builder compiles static assertions for `sizeof`, `_Alignof`, and every `offsetof`; any mismatch fails closed:
+
+```xray
+import mem
+
+struct CHeader {
+    tag: u8
+    count: u32
+}
+
+print(mem.sizeOf<CHeader>())
+print(mem.alignOf<CHeader>())
+print(mem.offsetOf<CHeader>("count"))
+```
+
+Rules:
+- The ABI string is mandatory; `"C"` is currently the only supported value.
+- Functions inside an extern block declare signatures only and cannot have `{ }` bodies.
+- Every declaration must have a unique symbol mapping and a complete typed contract in the NativePackagePlan. A shipping package with missing contract, hash, target, or provenance is rejected.
+- C output pointers write raw `Buffer` storage first. A success path may materialize `T` only with `unsafe { mem.assumeInitialized<T>(move buffer) }`, after exact size/alignment, complete output validity, success-path dominance, and header-layout evidence are proven. Partial or failed writes never produce `T`.
+- Ordinary Xray functions have no output parameter mode. Returns always use `return value`, never `return move value`.
+- Each target has one canonical data layout shared by the analyzer, VM, AOT, Slice/layout queries, and header verifier.
+- The aligned VM/AOT boundary types are `bool`, sized integers, `f32` / `f64`, `usize` / `isize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
+- C callbacks use `CFn<fn(A, B) -> R>`, not ordinary Xray function types. A `CFn` value must be a module-level, noncapturing Xray function with an exact signature match.
+
+```xray
+extern "C" {
+    fn bsearch(
+        key: Ptr<u8>,
+        base: Ptr<u8>,
+        count: usize,
+        size: usize,
+        cmp: CFn<fn(Ptr<u8>, Ptr<u8>) -> i32>
+    ) -> Ptr<u8>
+}
+
+fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
+    return 0
+}
+
+// zeroCmp is a module-level noncapturing function and can be used as a CFn callback.
+```
+
+#### 5.2.10 Manifest C ABI Exports
+
+A module-level Xray function remains an ordinary `fn` in source. Its C ABI export name and visibility are selected by the typed export plan in `xray.toml`:
+
+```xray
+fn add(a: i32, b: i32) -> i32 {
+    return a + b
+}
+```
+
+```toml
+[[export.c]]
+xray = "add"
+symbol = "xr_add_i32"
+visibility = "default"
+header = true
+```
+
+The Xray target must resolve uniquely to a module-level function with a body; methods, closures, nested functions, and extern declarations are rejected. Xray targets and C symbols must be unique. The plan selects exports but never bypasses the ABI verifier or changes VM/ordinary-call semantics. `xray build --native --c-header FILE` emits prototypes for entries with `header = true`; current shared exports are restricted to scalar/raw-pointer boundaries that need no runtime initialization.
+
+#### 5.2.11 Inferred Effects and `xray verify` Contracts
+
+Allocation, error sets, suspension, blocking, panic/abort, and AOT residue are always inferred by the compiler. Source functions do not declare them with effect or zero-cost attributes. Publication and performance gates live in a versioned contract:
+
+```toml
+version = 1
+
+[[function]]
+symbol = "math.addOne"
+scope = "semantic"
+requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
+
+[[function]]
+symbol = "codec.hotAdd"
+scope = "backend"
+backend = "aot"
+target = "aarch64-apple-darwin"
+profile = "release"
+requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+
+[function.shape]
+forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
+allow = []
+```
+
+Run `xray verify --contract perf-contracts.toml`. A contract checks existing semantic/effect evidence and target artifact shape; it never grants optimization permission or changes runtime semantics. A semantic contract may be target-independent, while backend/shape contracts require concrete backend, target, and profile values. Dynamic calls, native unknowns, missing symbols, and incomplete proofs fail closed with a witness.
+
+**What a native unknown is**: a bodyless `extern "C"` declaration has no inferable Xray semantics, so the only admissible evidence about it is that symbol's `[native.symbol.contract]` in `xray.toml`. Fields the contract declares (`allocation`, `suspend`, and so on) enter the caller's effect conclusion as axioms; without a complete contract the corresponding semantic bits are marked unknown and any contract covering them fails closed. **An absent body is not a proof.**
+
+**Inference coverage** (status: partially implemented): `requires` values backed by a real analysis pass today are `no_semantic_alloc`, `no_suspend`, `no_throw` (semantic scope) and `no_runtime_heap` (backend scope). The semantic effect bits behind `no_block`, `no_thread_block`, `no_panic`, and `no_abort` are computed by no pass, so `xray verify` rejects those four with a "no inference source" witness instead of granting them vacuously. They become accepted once their analyses land.
+
+#### Package-owned declaration promises (implementation pending)
+
+A project or package may declare stable function interface obligations in its root `xray.toml`. This section is distinct from `xray verify` requirements and native-provider axioms: the same Checked checker must prove every Xray promise at its definition, without obtaining it from a particular specialization or inferred properties of a selected implementation.
+
+```toml
+[declarations]
+version = 1
+
+[[declarations.function]]
+module = "src/worker.xr"
+name = "apply"
+no_suspend = true
+no_suspend_parameters = ["callback"]
+
+[[declarations.function]]
+module = "src/box.xr"
+owner = "Box"
+name = "get"
+no_suspend = true
+```
+
+An absent `declarations` section supplies no explicit promises through this carrier. A present section requires integer `version = 1` and a nonempty `function` record array. Unknown fields in the section or records, unknown versions, and incorrect types reject rather than being ignored. Every record requires nonempty `module` and `name` strings. Omitting `owner` selects a top-level function; a supplied owner must be a nonempty exact declaration name. `no_suspend` accepts only boolean `true`; a supplied `no_suspend_parameters` must be a nonempty array of distinct explicit parameter names. Each record supplies at least a function obligation or a parameter obligation. A module/owner/name selection may occur only once.
+
+`module` is a `/`-separated logical `.xr` file path inside the owning authority root, not an import alias or canonical identity. Absolute paths, backslashes, empty segments, `.` and `..`, another package namespace, and physical paths resolving outside the root reject. Parameter names bind at the definition, excluding an instance receiver; missing, ambiguous, or non-callable parameters reject. The current new-XIR carrier selects top-level functions, ordinary instance/static methods of an exact nominal owner, and admitted ordinary read-method requirements of an exact interface owner. Interface selectors bind requirement signatures. All manifest signature promises are bound before explicit implementation mappings are checked, and implementation methods must prove the corresponding obligations at definition time. Constructors, cleanup functions, and synthetic helpers cannot be named by external selectors. This subset does not remove remaining declaration families or nested/result callable qualifiers from the language objective.
+
+Each manifest constrains only its owning project or package. A consumer cannot strengthen an imported package's promises, and the loader must not search parents or inherit another declaration section. Selection grants no private access, field or construction permission, and changes no generic definition-context constraints. All explicit records must resolve to actual definitions and be checked, including unused targets and modules not imported by the current entry. Additional package checking must not add initialized modules or effects to the entry's execution graph. Published Checked identities retain proved obligations; specialization and generated-content rechecking cannot add or remove promises. This public carrier is not yet connected to product entry points; the examples do not claim existing CLI configuration support.
+
+#### Worked Examples
+
+A function literal directly checked against an explicitly declared `no_suspend` callable context receives that obligation for its new function definition. Its body is checked under the current generic constraints; unknown or potentially suspending calls reject, and specialization cannot supply a missing proof. Captured ordinary callables do not acquire the promise. This rule adds no source effect annotation, does not turn performance `verify` requirements into declarations, and cannot strengthen an already constructed ordinary function value from inferred body effects. Without a restricted context, a function literal remains an ordinary callable.
+
+A default argument expression uses the parameter's declared expected type and is checked at its definition, even if no call omits that argument. Returning a restricted callable does not promise that computing the default cannot suspend; default evaluation effects still belong to the caller when an argument is omitted.
+
+Closure capture and higher-order functions:
+
+```xray
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
+    return f(x)
+}
+
+fn main() {
+    var base = 10
+    var addBase = fn(x: i64) -> i64 { return x + base }   // closure captures base
+    print(addBase(5))            // => 15
+    print(apply(addBase, 7))     // => 17 (function passed as an argument)
+}
+
+main()
+```
+
+Multiple return values (a tuple):
+
+```xray
+fn divmod(a: i64, b: i64) -> (i64, i64) {
+    return (a / b, a % b)
+}
+
+fn main() {
+    var (q, r) = divmod(17, 5)
+    print(q)   // => 3
+    print(r)   // => 2
+}
+
+main()
+```
+
+### 5.3 `class` declaration
+
+Classes have identity; assignment and saving a parameter copy references only. Class methods do not declare `ref` / `move` receivers. Ordinary methods invoked through a READ parameter or `const` binding may still mutate the object, but cannot rebind that parameter or binding. A `ref` / view access to a class field must retain the object and check dynamic exclusivity. A local proof of no conflict may eliminate that check, not change the permission contract.
+
+```ebnf
+ClassDecl ::= 'final'? 'class' Identifier TypeParams?
+              ('extends' Identifier TypeArgs?)?
+              ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
+              '{' ClassMember* '}'
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
+FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
+            |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' Block          // parameter types may be omitted
+Modifier ::= 'private' | 'protected' | 'static' | 'const'
+```
+
+> **About default public visibility and explicit overrides**:
+>
+> - Public is the **default visibility**—every field/method without `private` / `protected` is public; the language has no `public` modifier.
+> - Visibility is **compile-time enforced**: accessing a `private` / `protected` member from outside the class, or a `protected` member from a non-subclass, reports `E0377`.
+> - Every actual override must declare `override`. The compiler independently checks the non-private parent-chain target, signature and receiver contract; a missing marker, absent target or mismatch is an error.
+> - Implementing an interface alone does not require `override`. Same-name different-signature methods and member hiding remain compile errors.
+>
+> The standard library and the regression tests consistently use the "omit the default modifier" style.
+
+#### 5.3.1 Basic class
+
+```xray @id=decl-class-basic
+class Animal {
+    name: string                       // field
+    private _age: i64 = 0              // private field with default value
+
+    init(name: string) {
+        this.name = name
+    }
+
+    speak() -> string {
+        return "..."
+    }
+
+    static create(name: string) -> Animal {
+        return Animal(name)
+    }
+}
+
+var a = Animal("Rex")
+print(a.speak())
+print(Animal.create("Bob").name)
+```
+
+#### 5.3.2 Inheritance
+
+```xray @id=decl-class-inheritance
+class Dog extends Animal {
+    init(name: string) {
+        super(name)                    // **must** be the first statement (derived classes only)
+    }
+
+    override speak() -> string {         // Explicit parent method override
+        return "woof"
+    }
+}
+```
+
+**Constraints**:
+- A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
+- `this` must not be accessed before `super(...)`.
+- **Overriding requires `override`**, only on class instance methods. Fields, constructors, static methods, struct and enum methods cannot declare it. Modifier order is optional visibility followed by `override`; class methods do not declare `ref` / `move` receivers.
+- Same-name different-signature methods are not overloads or hiding; rename the method or use default arguments / named factories.
+- A `final class` cannot be inherited.
+- `super.method()` invokes the shadowed parent method from inside an override.
+
+#### 5.3.3 Modifiers
+
+| Modifier | Applies to | Semantics |
+|--|--|--|
+| (none) | field/method | Default public—externally visible |
+| `private` | field/method | Accessible only inside the declaring class (including other instances of the same class); subclass and external access report `E0377` |
+| `protected` | field/method | Accessible inside the declaring class and its subclasses; external access reports `E0377` |
+| `override` | class instance method | Requires a matching non-private inherited signature and receiver contract; cannot narrow visibility to private |
+| `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
+| `const` | field | Immutable field—assignable once via `this` in the declaring class's constructor; later writes report `E0378` |
+| `final` | class declaration prefix | `final class C` cannot be inherited; `final` is not used on fields or methods |
+
+**Modifiers may combine**: `private const secret: string = "key123"`, `protected static counter: i64 = 0`.
+
+Static methods are qualified by their declaring type, for example `Box<i64>.make(value)` or `module.Box<i64>.make(value)`. Instance-qualified static access and type-qualified instance method calls or values are invalid. Ordinary name resolution lets a local binding shadow a type. Static methods have no implicit receiver and provide no `this` in their body or parameter defaults. Type arguments belong to the declaring type; a method's own type arguments belong to that method and cannot substitute for the former. Ordinary generic bodies are checked against definition constraints; instantiation cannot expand visibility or construction authority.
+
+Direct static calls obey the trailing default-argument, left-to-right evaluation, effect, suspension and failure-cleanup contracts. Their function values capture no receiver and indirect calls require the full signature. Private static methods and private construction inside a static factory require declaration-owner authority; a public factory grants callers no direct access to private members. Results obey ordinary function value and ownership rules. Admitting static methods does not implicitly admit static fields, static initialization or inheritance rules.
+
+> `const` = immutable field/binding, `final class` = cannot be inherited. Immutable fields use `const` only; writing `final` on a field or method is an error.
+
+#### 5.3.4 Constructors
+
+```xray
+class Point {
+    x: f64
+    y: f64
+    init(x: f64, y: f64) {
+        this.x = x
+        this.y = y
+    }
+}
+
+// Parameter types may be omitted (inferred from same-named fields)
+class Vector2 {
+    x: f64
+    y: f64
+    init(x, y) {         // equivalent to (x: f64, y: f64)
+        this.x = x
+        this.y = y
+    }
+}
+```
+
+- `init` is contextual at a type member declaration. The retired `constructor` declaration spelling is rejected without an alias. Elsewhere `init` remains an ordinary identifier.
+- A class has **at most one constructor** (no overloading); multiple creation paths use `static` factory methods.
+- Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise an explicit type is required; call sites do not infer definition types or capabilities.
+- The constructor implicitly returns `this` (compiler-injected).
+- An explicit struct constructor evaluates declaration defaults in field declaration order before its body. Fields without a declaration default remain uninitialized, including numeric fields. A legal default constructor is synthesized only when no explicit constructor is declared.
+- A field read requires initialization on every incoming path. Returning the whole `this`, calling a method on it, or capturing it requires every field to be initialized. Normal completion and bare `return` return the complete `this`; constructors cannot explicitly return another value. Failure publishes no partial struct and does not roll back prior external effects.
+- During construction, an initialized mutable field can root ordinary value operations and further projections through struct fields or Array elements without publishing the whole `this`. Every projection still checks visibility, const and initialization state, and selectors and arguments evaluate once in source order. Stable private construction storage is not a complete object identity and does not independently grant escaping `ref`, capture or whole-receiver authority. Failure cleanup releases only fields that were actually initialized.
+- Constructor fallthrough and bare `return` both execute exit cleanup before assembling and publishing the complete `this` from initialized fields. Permitted cleanup updates to mutable fields become part of the constructed result; failure publishes no result. This does not change ordinary explicit return expressions, whose values are evaluated and snapshotted before cleanup.
+- A const field is initialized exactly once by its declaration default or a body assignment. A write is rejected if any incoming path may already have initialized it, including loop backedges. Mutable fields permit subsequent updates.
+- A struct declaring explicit `init` admits field literals only in its declaring module; outside callers use `Type(...)` or a named factory. Structs without explicit `init` retain ordinary field-literal rules. Spread cannot bypass this boundary, and neither form grants private-field permission.
+- Derived class constructors must call `super(...)` first.
+- A `struct` may have **no** constructor, but omission still requires a valid default initializer for every field (§5.1, §5.4). Numeric fields of `Point()` may start at zero; this does not permit zero-initializing a non-nullable Array or similar field without an explicit initializer.
+
+#### 5.3.5 Operator overloading
+
+```xray
+class Vec2 {
+    x: f64
+    y: f64
+
+    init(x: f64, y: f64) {
+        this.x = x; this.y = y
+    }
+
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+
+    operator==(other: Vec2) -> bool {
+        return this.x == other.x && this.y == other.y
+    }
+
+    operator[](index: i64) -> f64 {
+        if (index == 0) { return this.x }
+        return this.y
+    }
+}
+```
+
+**Overloadable operators** (full list, source: `xparse_oop.c`):
+
+| Category | Operators | Arity | Notes |
+|--|--|--|--|
+| Binary arithmetic | `+` `-` `*` `/` `%` | 1 | A unary `-` with no parameters acts as unary minus |
+| Bitwise | `&` `\|` `^` `<<` `>>` | 1 | |
+| Comparison | `==` `!=` `<` `<=` `>` `>=` | 1 | Typically implement `==`/`!=` and `<`/`<=`/`>`/`>=` as pairs |
+| Indexing | `[]` (getter), `[]=` (setter) | 1 / 2 | The setter is `(index, value)` |
+| Unary | `!` `~` `++` `--` | 0 | |
+| Compound assignment | `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 1 | |
+
+```xray
+class Counter {
+    n: i64 = 0
+    operator++() -> Counter { this.n = this.n + 1; return this }
+    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
+    operator[](i: i64) -> i64 { return this.n + i }
+    operator[]=(i: i64, v: i64) { this.n = v - i }
+}
+```
+
+**Cannot** be overloaded: `&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
+
+#### 5.3.6 `Iterator<T>` and `Iterable<T>`
+
+`Iterator<T>` is a built-in prelude interface. It is the pull protocol behind `for-in` and the return type of a generator function (§3.16):
+
+```xray @id=decl-iterator-protocol
+interface Iterator<T> {
+    hasNext() -> bool       // is another element available; does not consume one
+    next() -> T             // take the next element and advance
+    nth(index: i64) -> T    // advance index elements from the current position and return it
+}
+
+interface Iterable<T> {
+    iterator() -> Iterator<T>
+}
+```
+
+Rules:
+
+- Any type implementing `iterator()` can be used with `for-in`; the built-in collections and `string` (by `rune`) already do.
+- `for-in` guarantees only that it pulls through `hasNext()` / `next()`; nothing beyond the number and ordering of those calls is guaranteed.
+- `next()` returns `T`, not `T?`: **exhaustion is not encoded in the return value**. The protocol is two-step — every `next()` / `nth()` must be preceded by a `hasNext()` that returned `true`. Calling `next()` after `hasNext()` is `false` violates the contract: the runtime reports it as an `E0432` panic rather than returning a zero value or a `null` that `T` forbids (§18.3).
+- `Iterator<T>` is **single-use**: once exhausted, `hasNext()` stays `false` and it cannot be reset. Call `iterator()` again, or call the generator function again, to traverse again.
+- Mutation during iteration follows the collection contract. Built-in `Array<T>` for-in owns a logical value snapshot; mutation or rebinding of the source array does not invalidate that snapshot (§14.7). Other collections and identity iterators define their own invalidation rules.
+- `Iterator<T>` has **no** `close()`: abandoning an iterator early runs no cleanup (§3.16.3), which is why `defer` is rejected inside a generator body.
+
+A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
+
+#### 5.3.7 Computed Properties
+
+A field name followed by an accessor block declares a **computed property**: it has no storage slot, and reads and writes become accessor calls.
+
+```xray
+class Rect {
+    _w: i64
+    _h: i64
+    init(w: i64, h: i64) { this._w = w; this._h = h }
+
+    // Read-only: getter alone
+    area: i64 { fn() { return this._w * this._h } }
+
+    // Readable and writable: getter + setter
+    width: i64 {
+        fn() { return this._w }
+        fn(v: i64) { this._w = v }
+    }
+}
+
+fn main() {
+    var r = Rect(3, 4)
+    print(r.area)       // => 12
+    r.width = 10
+    print(r.area)       // => 40
+}
+```
+
+Rules:
+
+- An accessor block contains only `fn` definitions. The one taking **no parameter** is the getter; the one taking **exactly one** is the setter. At most one of each; more than one parameter is a compile error.
+- The getter's return type defaults to the declared property type, as does the setter's parameter type; both may be omitted.
+- The property type is the type of a read. A property with only a getter is **read-only**; writing it reports `E0380` as an undeclared member.
+- `obj.p` and `obj.p = v` are ordinary calls, **not** slot accesses: an accessor may compute and may have effects, and it costs one method call.
+- A computed property satisfies an interface's property requirement — an interface does not distinguish a slot from an accessor.
+- Accessors live in the class method table as `get:<name>` / `set:<name>`. That name contains `:`, which no identifier can, so it never collides with a declared method; this is an implementation detail, not writable syntax.
+
+#### 5.3.8 Worked Examples
+
+Self-contained programs that run as-is and pass `xray check` (comments show the real output).
+
+Inheritance with explicit override:
+
+```xray
+class Animal {
+    name: string
+    init(name: string) { this.name = name }
+    speak() -> string { return "..." }
+}
+
+class Dog extends Animal {
+    init(name: string) { super(name) }
+    override speak() -> string { return "woof" }
+}
+
+fn main() {
+    var d = Dog("Rex")
+    print(d.name)      // => Rex
+    print(d.speak())   // => woof
+}
+
+main()
+```
+
+Operator overloading (call with named values):
+
+```xray
+class Vec2 {
+    x: i64
+    y: i64
+    init(x: i64, y: i64) { this.x = x; this.y = y }
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+}
+
+fn main() {
+    var a = Vec2(1, 2)
+    var b = Vec2(3, 4)
+    var sum = a + b
+    print(sum.x)   // => 4
+    print(sum.y)   // => 6
+}
+
+main()
+```
+
+### 5.4 `struct` declaration
+
+A copyable struct preserves logical copies according to the declared type of each field. Owned container fields such as Array retain value semantics; class and synchronized fields copy identity references only. Fields may be Arrays or classes. Structs are not restricted to scalars and strings, and copying a struct does not copy an entire class object graph. Fields still satisfy initialization, storage, and copyability requirements (§2.14.6).
+
+A struct / enum method that mutates its own value-semantic components explicitly uses a `ref` receiver. A READ receiver may save a copyable value but cannot mutate itself directly. Copyable types cannot declare `move` receivers. See §17 for implementation qualification of complete aggregate, receiver, and borrow declaration families.
+
+```ebnf
+StructDecl ::= 'struct' Identifier TypeParams?
+               ('implements' Identifier (',' Identifier)*)?
+               '{' StructMember* '}'
+```
+
+```xray @id=decl-struct-point
+struct Point {
+    x: f64
+    y: f64
+
+    magnitude_sq() -> f64 {
+        return this.x * this.x + this.y * this.y
+    }
+}
+
+// Two creation styles
+var p = Point()                  // default-construct (zero-valued fields), then assign
+p.x = 3.0
+p.y = 4.0
+
+var q = Point{x: 3.0, y: 4.0}        // struct literal: TypeName + { field: value }
+var pt = Point{x: 1.0, y: 2.0}
+
+// Value semantics: assignment and parameter passing copy
+var b = q                            // b is an independent copy of q
+b.x = 99.0
+// q.x is still 3.0
+```
+
+**Field rules for aggregate literals** (identical to sealed Records):
+
+- Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
+- Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
+- Struct field defaults are checked in the declaring module and type-parameter scope, including unused declarations; they cannot capture a construction caller's locals. Literals evaluate explicit fields in written order, followed by omitted fields' defaults in declaration order. An explicitly supplied field does not run its default. Defaults permit ordinary admitted function effects; failure preserves earlier side effects but publishes no partial struct value.
+- Named literals support field shorthand `Point{x}` (meaning `Point{x: x}`) and spread `Point{...base, x: value}`. Every explicit field and spread source is evaluated exactly once at its written position. A later entry replaces the same field, but two explicit entries naming the same field are still an error. A spread may supply only fields declared by the target, using the ordinary checked field-assignment conversion for each value. Source-field reads and target-field construction retain their separate visibility checks; spread cannot bypass the module boundary of `init`. Fields supplied by spread do not run declaration defaults, and container fields retain ordinary value-copy semantics.
+- Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
+- **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
+
+```xray
+struct Config {
+    host: string
+    port: i64 = 8080        // declaration default: omittable in a literal
+    label: string?          // nullable: omittable in a literal
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // compile error E0380: no field 'ports'
+// Config{port: 1}                   // compile error E0381: missing field 'host'
+```
+
+**Differences from `class`**:
+
+| Dimension | `class` | `struct` |
+|--|--|--|
+| Memory model | Identity reference | Logical value; physical layout does not change the copy contract |
+| Assign / save parameter | Copy identity reference | **Field-wise copy** (`var b = a` preserves a logical copy) |
+| Inheritance | Supports `extends` | **No** inheritance |
+| `implements` | ✅ | ✅ |
+| Generics | ✅ | ✅ |
+| `static` / `private` / `protected` / `const` | ✅ | ✅ |
+| Operator overload | ✅ | ✅ |
+| Constructor | `init(...)` | Omission still requires a valid default initializer for every field; a non-nullable Array cannot be zero-initialized |
+| Literal | none | `TypeName{field: value, ...}` |
+
+**When to use**:
+- Math types (Vec2/Vec3/Quat/Color)
+- Short-lived values (iterator state, ad-hoc tuples)
+- Performance-sensitive data where heap allocation should be avoided
+
+#### 5.4.1 Value-semantics example
+
+A copyable `struct` is a value type: assignment and saving a parameter preserve logical copies field by field. An ordinary READ parameter accesses the value read-only and may save a copy, without requiring a particular physical ABI.
+
+```xray
+struct Point {
+    x: i64
+    y: i64
+}
+
+fn main() {
+    var p = Point{x: 3, y: 4}
+    var q = p            // struct assignment copies
+    q.x = 99
+    print(p.x)           // => 3 (unchanged)
+    print(q.x)           // => 99
+}
+
+main()
+```
+
+### 5.5 `interface` and `implements`
+
+xray's interface implementation is **explicit** (unlike Go's structural implementation): a class/struct must list interfaces with `implements`.
+
+```ebnf
+InterfaceDecl ::= 'interface' Identifier TypeParams?
+                  ('extends' NamedType (',' NamedType)*)?
+                  '{' InterfaceMember* '}'
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?       // method signature
+                 |  ('const')? Identifier ':' Type                   // property signature (`const` for read-only)
+```
+
+```xray @id=decl-interface-shape
+interface Shape {
+    area() -> f64
+    perimeter() -> f64
+}
+
+// Interface method return types may be omitted (default ())
+interface Greeter {
+    greet(name: string)             // same as greet(name: string) -> ()
+    log()                           // no parameters, no return value
+}
+
+class Circle implements Shape {
+    radius: f64
+    init(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
+}
+
+// Implement multiple interfaces
+class Logger implements Shape, Greeter {
+    radius: f64
+    init(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
+    greet(name: string) { print("hello,", name) }
+    log() { print("logging") }
+}
+
+fn describe(s: Shape) -> string {
+    return "area=${s.area()}, perimeter=${s.perimeter()}"
+}
+```
+
+**Constraints**:
+
+- Interfaces may extend other interfaces (`extends`); generics (`interface Container<T>`) and constraints (`interface Stats<T: Numeric>`) are supported.
+- Classes/structs use `implements I1, I2, ...` to declare implementation of one or more interfaces (**explicit**; structural implementation is not supported).
+- The implementing type **must** provide every interface member (matching name/parameters/return type for methods; matching name/type for properties).
+- **Return types in interface method declarations may be omitted** (default `()`).
+- Interface methods are `abstract` by default (no body).
+- Interfaces may declare **property signatures** (`length: i64`, `const id: i64`); the implementing type may provide a field or accessors of the same type. A const property requires reading; an ordinary property requires reading and writing. Implementation read/write access cannot be narrower than the corresponding interface requirement.
+- Implementing types may add additional methods (the interface defines the minimum surface).
+
+#### Method Requirement Identity and Static Generic Witnesses
+
+An interface is identified by its canonical module and declaration name; an application additionally includes ordered type arguments. A member belongs to its original interface declaration; expanding inheritance creates no new identity. Type parameters bind by owning declaration and ordinal. Explicit `implements` on the nominal declaration establishes conformance, with at most one declaration per type and interface application; a same-named method alone proves no conformance.
+
+Inheritance must be acyclic, including unused declarations. The same originating member under the same substitution is deduplicated; same-named members from different origins merge for lookup only when their complete contracts are identical, retaining every implementation obligation. Contracts include member kind, receiver, parameter count/modes/types, result type and callable promises. A mismatch rejects as ambiguous, without choosing by inheritance, constraint or import order. Redeclaring an inherited member also requires an exact match. Parameter names do not affect signature equality, but each declaration's manifest binds its own parameter names.
+
+A witness must be a public instance method of the implementing type, exactly matching parameter, result and receiver contracts. Static, private, protected, constructor and cleanup functions cannot serve as witnesses. No general covariance/contravariance conversion is introduced. An implementation may strengthen its own function-level `no_suspend` guarantee, but cannot strengthen caller parameter obligations or weaken interface guarantees. Merged same-named requirements must bind the same method identity of that type.
+
+Generic constraints conjoin markers and interface applications, with identical duplicates idempotent. A derived interface entails ancestor requirements through explicit type substitution. Definition-site member access must bind a requirement identity and complete signature provided by the constraints; extra methods of a concrete argument cannot supply missing proof, and unused invalid generics reject too. Proof and cache identity must include the parameter environment. An abstract method has no checked implementation body: its public contract bounds effects, with undeclared effects using the unknown-callable upper bound. Implementations prove these obligations at definition time.
+
+An interface requirement may declare its own type parameters, such as `I<A>.map<U:C<A>>(value:U)->U`. Interface parents and method parameters bind to authentic owners and ordinals in `[interface parent, method own]` order. Own names cannot shadow parents, and conditions may refer to later own parameters. A method where clause constrains only its own parameters. Explicit call arguments fill only the own suffix; the prefix comes from definition-site constraint applications, and the caller proves every condition. Inherited same-named methods compare own arity, complete signatures and alpha-aligned conditions by mutual entailment; duplicate and redundant ancestors are idempotent while all original identities remain. An implementation uses `[nominal parent, method own]`, and its conditions must follow from nominal and original requirement-method premises without using its own conditions to prove itself. Its body still checks against its own declaration. Checked specialization and independent provenance retain the complete nominal-plus-own tuple, even for parameters absent from the physical signature.
+
+Interface method values on constrained receivers, such as `receiver.read` and `receiver.map<i64>`, check the original requirement application and complete conditions before capture. The receiver evaluates once and saves its current value. The first execution family admits zero own parameters or a complete explicit own list; the callable has no defaults and retains the original signature and promises, without borrowing capabilities from a future concrete implementation. An ordinary typed helper and FUNCTION_REF preserve the authentic caller parameters and conditions. The inner requirement call retains parent+own, the outer reference retains the full caller tuple, and both origins are independently reverified. Capture, copy, suspension, result ownership and physical release follow ordinary function-value contracts; no format, dictionary or additional execution path is introduced.
+
+Checked owns constraints, interface applications, requirement identities and explicit implementation maps. Monomorphization selects only proved witnesses, converts them to ordinary calls and rechecks before Lowered; it cannot guess an implementation by looking up the concrete type's member name again. Ordinary instances complete before immutable Program sealing, without runtime generic dictionaries or unresolved-witness fallback. This rule does not remove dynamic dispatch for interface values or overridable class methods.
+
+New XIR now admits ordinary read-receiver methods, explicit struct/enum implementations, and generic member calls checked at definition time. Checked retains original requirement identities and implementation mappings; witness selection and specialization occur on Checked and are reverified before Lowered. Generic struct/enum implementations depend on their nominal declaration premises; additional method conditions cannot supply missing type premises. Ordinary enum READ/static methods reuse nominal method production and require match before payload extraction; method and builtin member collisions reject at declaration time under §5.6.7. This subset has Windows VM/native validation against independent expectations, without claiming complete declaration-family or safety qualification. Complete explicit own arguments and inline conditions of generic interface methods have the Windows scope qualification above. Own where and value-shape inference have Windows scope qualification; late result completion and explicit method values form the next qualification family. Full bidirectional and contextual function-value inference remain OPEN. Properties, other receivers, unimplemented enum name/toString/variants consumers, class/override, and interface values still require separate implementation and verification. Unimplemented surfaces reject explicitly; these language objectives remain unchanged.
+
+```xray
+// property signatures + interface inheritance
+interface HasLength {
+    length: i64
+}
+interface SizedCollection<T> extends HasLength {
+    first() -> T
+}
+
+class Buffer implements SizedCollection<i64> {
+    length: i64                       // implements the property signature
+    private data: Array<i64>
+    init(n: i64) {
+        this.length = n
+        this.data = []
+    }
+    first() -> i64 { return this.data[0] }
+}
+```
+
+#### Worked Examples
+
+Interface + `implements` + polymorphism:
+
+```xray
+interface Shape {
+    area() -> f64
+}
+
+class Circle implements Shape {
+    r: f64
+    init(r: f64) { this.r = r }
+    area() -> f64 { return 3.14159 * this.r * this.r }
+}
+
+fn main() {
+    var s: Shape = Circle(2.0)
+    print(s.area())   // => 12.56636
+}
+
+main()
+```
+
+### 5.6 `enum` declaration
+
+xray's `enum` is a **safe tagged aggregate**: each value contains a compiler-assigned declaration-order tag, and only the payload for the active tag may be read. A payload-free enum is just a tagged aggregate whose variants have payload size 0; payload enums are the same model used as a safe sum type.
+
+```ebnf
+EnumDecl       ::= 'enum' Identifier TypeParams?
+                   ('implements' NamedType (',' NamedType)*)?
+                   '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+```
+
+> Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
+
+An enum type is identified by its declaring module, declaration and ordered type arguments; a local type index or matching ordinal is not sufficient identity. A non-nullable enum requires explicit initialization and never implicitly selects its first variant. A declaration has at least one variant; variant names are unique within the declaration, while payload field names need only be unique within their own variant. Copy and destruction affect only the active payload; escaping values do not extend the execution authority of a Program or Instance.
+
+#### 5.6.1 Simple enums (0-payload enum)
+
+```xray @id=decl-enum-simple
+enum Color { Red, Green, Blue }
+
+Color.Red.ordinal     // 0
+Color.Blue.ordinal    // 2
+Color.Red.name        // "Red"
+Color.Red.toString()  // "Color.Red"
+
+enum HttpStatus {
+    OK,
+    NotFound,
+    InternalError
+
+    code() -> i64 {
+        return match (this) {
+            HttpStatus.OK -> 200,
+            HttpStatus.NotFound -> 404,
+            HttpStatus.InternalError -> 500
+        }
+    }
+}
+```
+
+Enum variants use declaration order for their stable `ordinal` and do not declare a separate backing value. Express protocol numbers, string symbols, and similar external representations with `const`, methods, or explicit conversion functions.
+
+#### 5.6.2 Payload enum
+
+Payload variants use named record fields. Every field has a non-empty name unique within the variant:
+
+```xray @id=decl-enum-payload
+enum Option<T> {
+    Some { value: T },
+    None,
+}
+
+enum NetEvent {
+    Connected,
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
+}
+
+// A recursive enum payload must be indirected through a class node
+class ExprNode {
+    expr: Expr
+    init(expr: Expr) { this.expr = expr }
+    get() -> Expr { return this.expr }
+}
+
+enum Expr {
+    Number { value: i64 },
+    Binary { op: string, left: ExprNode, right: ExprNode },
+    Call { name: string, args: Array<Expr> },
+}
+```
+
+A directly recursive enum payload would have infinite size and is rejected at compile time (`E0352`). Recursive data structures must use explicit indirection, in one of two forms:
+
+- **Class node**: classes are reference types, so the field costs one pointer and `Binary(left: ExprNode, ...)` has a finite layout.
+- **Container slot**: `Array<Expr>`, `Map<K, Expr>`, and other containers keep elements in their own storage, so the payload holds only the container handle.
+
+`T?` is not indirection — nullable does not change the by-value layout of the payload, so `Binary(left: Expr?, ...)` is rejected by `E0352` as well.
+
+#### 5.6.3 Construction and destructuring
+
+Construction:
+
+```xray
+var c = Color.Red
+var r1 = Option.Some { value: 42 }
+var e1 = NetEvent.DataReceived { bytes: b }
+var e2 = NetEvent.Error { code: 404, message: "not found" }
+var e3 = NetEvent.Connected                         // unit variant: no braces
+```
+
+Destructuring (match):
+
+```xray @id=decl-enum-match
+match (event) {
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+}
+```
+
+See §6.3.
+
+#### 5.6.4 Enum value API
+
+Instance properties (act on the enum value):
+
+```xray @id=decl-enum-properties
+Color.Red.name        // "Red"          variant name (string)
+Color.Red.ordinal     // 0              declaration-order tag (i64, zero-based)
+Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
+```
+
+Enum values provide `name`, `ordinal`, and `toString()`. name returns the active variant declaration name; toString returns only the original enum declaration name and active variant name. Neither appends generic arguments, reads or formats payloads, or invokes payload callbacks. Original type and member permissions still apply; these operations grant no construction authority or implicit Stringable witness, and descriptive queries cannot supply missing generic premises. They do not expose implicit backing-value/reflection APIs such as `value`, `rawValue`, `fromName`, or `fromOrdinal`.
+
+#### 5.6.5 Iteration
+
+A concrete enum containing only payload-free variants can be iterated directly as actual enum values. Every concrete enum can expose declaration metadata through `.variants`:
+
+```xray @id=decl-enum-iteration
+for (color in Color) {
+    print(color.name)                     // color: Color; Red, Green, Blue
+}
+
+for (variant in NetEvent.variants) {
+    print(variant.ordinal)                // variant: EnumVariant<NetEvent>
+    print(variant.name)
+    for (field in variant.payloads) {
+        print(field.name)                 // field: EnumPayloadField<NetEvent>
+        print(field.type)                 // i64: canonical TypeId for the concrete field type
+    }
+}
+```
+
+The two loop forms deliberately yield different types:
+
+| Expression | Availability | Loop variable | Meaning |
+|---|---|---|---|
+| `E` | concrete unit-only enum | `E` | actual enum values in declaration order |
+| `E.variants` | any concrete enum | `EnumVariant<E>` | read-only variant descriptors in declaration order |
+| `variant.payloads` | an `EnumVariant<E>` | `EnumPayloadField<E>` | read-only payload-field descriptors in declaration order |
+
+If `E` contains any payload variant, `for (value in E)` is a compile error and the diagnostic recommends `E.variants`; the compiler never invents payload values. `for (variant in Color.variants)` is also valid for a unit-only enum, but `variant` remains a descriptor, not a `Color` value. A loop does not print by itself; only explicit effects in its body produce output.
+
+The descriptor API is a closed whitelist:
+
+| Type | Properties / operations |
+|---|---|
+| `EnumVariants<E>` | `length: i64`, checked `[index] -> EnumVariant<E>`, and `for-in` |
+| `EnumVariant<E>` | `ordinal: i64`, `name: string`, `payloadCount: i64`, `isUnit: bool`, `payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: i64`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
+| `EnumPayloadField<E>` | `index: i64`, `name: string`, `type: i64` (canonical TypeId) |
+
+Every payload-field `name` is its source declaration name. Metadata with an empty name, duplicate names within one variant, or mismatched name/type counts is rejected.
+
+Users cannot construct these types, descriptors are not callable, and they do not provide name/ordinal-to-value construction. Out-of-range access fails like other checked indexing. Descriptors have no C ABI and are rejected at FFI boundaries.
+
+This facility is a compiler-recognized static type domain, not an `Iterable` conformance. Direct loops and non-escaping descriptors may use ordinal/index scalars in Lowered without allocating an array or iterator. Description values crossing a union, generic storage, container, closure or cross-coroutine channel must preserve their concrete declaration identity and valid metadata lifetime. Description queries cannot bypass generic constraints, visibility or construction authority. Descriptor references or unused metadata may be eliminated only when query results and lifetime remain unchanged.
+
+Actual unit-only enum values follow the same nominal identity rules as payload enums. An ordinal cannot replace the declaring module, declaration and ordered type arguments. Across calls, storage and suspension, `.name`, `toString()`, equality and string formatting must retain their complete semantics, without extending execution authority for escaped values. The single Lowered pipeline determines physical carriers; reducing a value to an ordinal requires proof that identity is recoverable and metadata lifetime remains safe. The language requires neither a legacy carrier width nor a separate allocation per value.
+
+Generic code must identify a concrete enum layout. `Option<i64>.variants` is valid; `E.variants` on an unconstrained type parameter is not. Aliases, imports, and separate compilation preserve declaration order and concrete type substitution.
+
+#### 5.6.6 Reverse lookup (value to member)
+
+`Enum(value)` and reverse lookup from backing values are not supported by default. Protocol parsing should be written as an explicit function:
+
+```xray
+fn statusFromCode(code: i64) -> HttpStatus? {
+    if (code == 200) { return HttpStatus.OK }
+    if (code == 404) { return HttpStatus.NotFound }
+    if (code == 500) { return HttpStatus.InternalError }
+    return null
+}
+```
+
+#### 5.6.7 Enum methods
+
+An enum resolves members separately in its type-access and value-access domains. The value-domain builtin properties `name` and `ordinal`, and builtin method `toString`, cannot be replaced by user instance methods. The type-domain builtin member `variants` cannot be replaced by a variant or a user static method. These identifiers are not globally reserved: subject to the other uniqueness rules, variants and static methods named `name`, `ordinal`, or `toString`, and instance methods named `variants`, are allowed. All user method names within one enum are unique; static and instance methods cannot form a same-name overload. No user method may share a name with a variant. Collisions reject at declaration time, rather than choosing a meaning according to whether a use reads a property, calls a method, or takes a method value. A builtin member name establishes neither interface conformance nor an automatic witness.
+
+Instance and static methods may be defined inside `enum` bodies with the same syntax as `class` methods (no `impl` keyword is introduced). Instance methods are callable on every variant; method bodies typically `match (this)` to dispatch on the variant:
+
+```xray
+enum Shape {
+    Circle { radius: f64 },
+    Rect { width: f64, height: f64 },
+    Triangle { a: f64, b: f64, c: f64 }
+
+    area() -> f64 {
+        return match (this) {
+            Shape.Circle { radius } -> 3.14159 * radius * radius,
+            Shape.Rect { width, height } -> width * height,
+            Shape.Triangle { a, b, c } -> {
+                var s = (a + b + c) / 2.0
+                return (s * (s-a) * (s-b) * (s-c)).sqrt()
+            },
+        }
+    }
+
+    isRound() -> bool {
+        return match (this) {
+            Shape.Circle {} -> true,
+            _               -> false,
+        }
+    }
+}
+
+var s = Shape.Circle { radius: 1.0 }
+print(s.area())          // 3.14159
+print(s.isRound())       // true
+```
+
+Static methods use `static name(...)`. Instance methods have a READ receiver by default and use `ref` to mutate value-semantic components. A `move` receiver is restricted to noncopyable enums and is forbidden for copyable enums; see §17 for admission of noncopyable declarations. Enum methods do not write `fn`:
+
+```xray
+enum Color {
+    Red, Green, Blue
+
+    static fromInt(v: i64) -> Color {
+        if (v == 1) { return Color.Red }
+        if (v == 2) { return Color.Green }
+        return Color.Blue
+    }
+
+    label() -> string {
+        return this.name
+    }
+}
+
+print(Color.fromInt(2).label())     // "Green"
+```
+
+> Note that `Triangle { ... }` is not followed by a comma — the last variant is separated from the method block by whitespace (a trailing comma is allowed but not required).
+
+**Rules**:
+
+- Type-body method forms are `name(...)`, `ref name(...)`, `move name(...)`, and `static name(...)`; enum methods do not write `fn`.
+- Inside a method, the static type of `this` is the enum itself (e.g. `Option<T>`); use `match (this)` to extract a variant's payload.
+- Static methods have no `this`; call them as `EnumName.method(args...)`.
+- `constructor` is **not** supported (variant syntax already serves as the constructor).
+- Inheritance is **not** supported (`enum E extends ...` is illegal); for shared behaviour use interface implementation (`enum E implements Iface`) or top-level functions.
+- Simple (payload-free) enums may also define methods; inside such methods `this` is the enum value and can be compared directly with `==`:
+  ```xray
+  enum Color {
+      Red, Green, Blue
+
+      isWarm() -> bool { return this == Color.Red }
+  }
+  ```
+- Methods **may not** share a name with a variant.
+
+> This design matches Java enums, Swift enums, and Kotlin sealed classes. Rust's `impl` blocks are **not** introduced in xray—xray defines methods inside the type body uniformly.
+
+### 5.7 `type` aliases
+
+```ebnf
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
+```
+
+```xray
+type Outcome = i64 | string                          // union alias
+type Mapper = fn(i64) -> i64                           // function-type alias
+type Point = { x: f64, y: f64 }                  // structural object alias (sealed)
+type Pair<T> = { first: T, second: T }                // generic alias
+```
+
+**Semantics**:
+- An alias is **purely a syntactic** substitution; it does not introduce a new nominal type.
+- A generic alias substitutes type arguments at the use site; substitution happens at compile time and introduces no runtime representation or AOT branch.
+- Generic alias parameters are only a name list; constraints are not supported. Put constraints on the generic declaration that uses the alias.
+- A `type Point = {...}` object alias is **sealed** when used as an annotation: accessing or assigning an undeclared field is a compile error.
+- `type T = JSON.Value` equals `JSON.Value`; `type O = JSON.Object` equals `Map<string, JSON.Value>`.
+- Aliases may be referenced before their declaration but **must not be cyclic**.
+
+See [§2.4.7](#247-json) and [§2.8](#28-type-aliases).
+
+### 5.8 `import` / `export`
+
+See [§11](#11-modules). Syntax highlights:
+
+```xray
+// stdlib / third-party packages: bare identifiers; alias auto-derived
+import time
+import http
+import alice/utils as utils
+
+// File path or directory path: string, with explicit `as` or alias derived from the trailing segment
+import "./modules/mod_a.xr" as a
+import "../utils/string_utils.xr" as utils
+import "models/user" as user
+
+// Named import: supports quoted paths or bare module names; members may be renamed with `as`
+import { readFile, writeFile as write } from io
+import { publicFn } from "./modules/mod_a.xr"
+
+// Exports
+export fn publicFn() -> string { return "hi" }
+export const VERSION = "1.0"
+export { name1, name2 as alias } from "./other"
+export * from "./other"
+```
+
+**xray does not support** the JavaScript default-import form `import name from "module"`. Use `import "module" as name`, `import module`, or `import { name } from module`.
+
+For full rules, path resolution, and visibility details see [§11 Modules](#11-modules).
+<!-- /xr-spec:en -->

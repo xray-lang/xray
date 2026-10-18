@@ -1,0 +1,1 @@
+export fn run()->Array<i8> { return comptime Array<i8>.withCapacity(2) }

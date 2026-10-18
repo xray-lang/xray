@@ -27,6 +27,7 @@
 #include "xi.h"
 #include "xi_opt.h"
 #include "xi_module.h"
+#include "xi_emit.h"
 
 struct AstNode;
 struct XaAnalyzer;
@@ -93,6 +94,8 @@ typedef enum {
 
 /* ========== Pipeline Configuration ========== */
 
+struct XrReplSymbolTable;
+
 typedef struct XiPipelineConfig {
     XiPipelineMode mode;         /* selects default pass sequence (can be overridden) */
     bool run_optimize;           /* run optimization passes (default: true) */
@@ -119,12 +122,13 @@ typedef struct XiPipelineConfig {
     uint64_t budget_ns;          /* optimization time budget in nanoseconds (0 = unlimited).
                                   * Both production pipelines leave this at 0: a wall-clock
                                   * cut makes the emitted artifact depend on machine load. */
-    bool repl_mode;              /* REPL incremental compilation: top-level bindings
-                                  * are lowered to XI_GET/SET_GLOBAL (name-keyed dict)
-                                  * instead of XI_GET/SET_SHARED (slot-indexed array).
-                                  * Default: false (script-mode shared array path). */
+    const struct XrReplSymbolTable *repl_symbols; /* Caller-owned actual history, borrowed through compilation. */
     const char *source_file;     /* Source path propagated to emitted XrProto debug info. */
     const char *module_identity; /* Durable identity; never a physical source path. */
+    /* Borrowed immutable target authority for constructing scalar/overflow
+     * decisions. Result modules retain it when those decisions require it. */
+    const struct XrTargetProfile *target_profile;
+    XiEmitImportMode import_mode;
     const char *module_name;     /* Stable C-safe module name installed before plan construction. */
     XiRepPolicy rep_policy;      /* policy for representation boundary insertion */
     XiOptDisableMask disabled_opt_passes;
@@ -187,7 +191,8 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
  * The IR must have been lowered and optimized (via compile_program with
  * run_emit=false, or the AOT pipeline).  Returns XrProto on success, NULL
  * on emission failure.  Attaches the IR to the proto for AOT reuse. */
-XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrVMRuntime *isolate);
+XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrVMRuntime *isolate,
+                                            const XiEmitInput *input);
 
 /* Free pipeline result (frees IR, does NOT free proto). */
 XR_FUNC void xi_pipeline_result_free(XiPipelineResult *res);

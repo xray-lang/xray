@@ -19,6 +19,7 @@
 #include "base/xsha256.h"
 #include "xir/xxir_ctfe.h"
 #include "xir/xxir_vm.h"
+#include "xir/xxir_scalar_core.h"
 
 typedef struct CtfeReferenceCase {
     const char *name;
@@ -30,7 +31,420 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
+    {"struct_identity_array", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_error", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_cow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_alias", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_acyclic_replace", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_function_cycle", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"struct_identity_class_cycle", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
+    {"struct_identity_export", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "closed value family", 3},
+    {"struct_identity_projected_root_refused", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_absent_loan", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_active_loan", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_owning_direct", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"struct_identity_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"struct_identity_class", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_function", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_result", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_unit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_return", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_explicit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_context", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_arrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_readonly", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_cell_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_array", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_projection", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_generic_context", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_panic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_alias", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"ref_closure_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_owning_direct", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"ref_closure_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"array_identity_projected_root_refused", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_owning_direct", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"array_identity_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"array_identity_cow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_repeat", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_function_set_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"array_identity_function_path_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"array_identity_error", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_empty_ref", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_function_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"array_identity_basic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_alias", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_mutate", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_function", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_field", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"array_identity_export", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 3},
+    {"class_inactive_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"class_inactive_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_dynamic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_active_child", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_identity_leaf", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_fields", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_replace", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_error", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_panic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_cow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"class_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_cell", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_chain", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"class_self_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"class_error", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_panic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_grow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ref_dynamic_gap", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_deep_ref_gap", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_return_string", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"class_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_export", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 2},
+    {"class_cycle_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_acyclic_replace", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_field_struct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_empty", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"output_heap_limit", XR_XIR_STRING, 0, XR_XIR_BUDGET, NULL, 2},
+    {"output_fibonacci", XR_XIR_UNIT, 10, XR_XIR_OK, NULL, 0},
+    {"output_fibonacci_direct", XR_XIR_UNIT, 10, XR_XIR_OK, NULL, 0},
+    {"output_pair", XR_XIR_UNIT, 16, XR_XIR_OK, NULL, 0},
+    {"output_pair_direct", XR_XIR_UNIT, 16, XR_XIR_OK, NULL, 0},
+    {"class_authority_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_work_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_ctor", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_write", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_alias", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_method", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_array", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_projection_recheck", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_abort_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_escape_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_work_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_error_channel", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_invoke", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_pending_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_cleanup_local", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_error_cleanup_local", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_array", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_struct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_cell", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_null", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_range", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_assert", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_assert_true", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_assert_panics", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_assert_normal", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_project_bounds", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_path_bounds", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_eval_once", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_return_info", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_cleanup_escape", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "comptime panic escaped defer cleanup", 2},
+    {"panic_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "comptime requires an admitted", 2},
+    {"panic_unhandled_assert", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "comptime assertion failed", 2},
+    {"panic_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"panic_local", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_code", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_cross", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_bounds_message", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"panic_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cycle_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cycle_acyclic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cleanup_invoke", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_caller_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_nested_holder", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_work_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_higher", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_generic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_holder", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cell", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_abort_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_success", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_unit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_discard", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_rethrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_filter", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cleanup_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cleanup_catch", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_snapshot", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_unhandled", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "comptime uncaught error", 3},
+    {"error_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
+    {"error_infinite_cleanup", XR_XIR_I64, 0, XR_XIR_BUDGET, NULL, 3},
+    {"error_recursion", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_owning_direct", XR_XIR_STRING, 0, XR_XIR_OK, NULL, 0},
+    {"error_local", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_call", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_ref", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"error_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_owning_direct", XR_XIR_STRING, 0, XR_XIR_OK, NULL, 0},
+    {"project_reproject", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_suffix", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_reserve", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_evaluate_once", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_bounds", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "comptime index out of bounds", 3},
+    {"project_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"project_field", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_mixed", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_cow", XR_XIR_I64, 82, XR_XIR_OK, NULL, 0},
+    {"project_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_higher", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_index", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"project_grow", XR_XIR_I64, 3, XR_XIR_OK, NULL, 0},
+    {"project_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cleanup_infinite", XR_XIR_I64, 0, XR_XIR_BUDGET, NULL, 2},
+    {"cleanup_generic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cleanup_owning_direct", XR_XIR_STRING, 1, XR_XIR_OK, NULL, 0},
+    {"ref_alias_source", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "ref arguments of one call must not alias", 2},
+    {"cleanup_empty", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cleanup_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cleanup_return_string", XR_XIR_I64, 1, XR_XIR_OK, NULL, 0},
+    {"cleanup_path", XR_XIR_I64, 2, XR_XIR_OK, NULL, 0},
+    {"ref_higher", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_array", XR_XIR_I64, 2, XR_XIR_OK, NULL, 0},
+    {"cleanup_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cleanup_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"cleanup_scope", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cleanup_lifo", XR_XIR_I64, 21, XR_XIR_OK, NULL, 0},
+    {"cleanup_loop", XR_XIR_I64, 31, XR_XIR_OK, NULL, 0},
+    {"cleanup_return", XR_XIR_I64, 40, XR_XIR_OK, NULL, 0},
+    {"cleanup_owned", XR_XIR_I64, 2, XR_XIR_OK, NULL, 0},
+    {"cleanup_nested", XR_XIR_I64, 11, XR_XIR_OK, NULL, 0},
+    {"cleanup_function", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_simple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_cycle_direct", XR_XIR_I64, 0, XR_XIR_OK, NULL, 0},
+    {"function_cell_replace", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_cell_acyclic", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"function_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_array_methods", XR_XIR_I64, 10, XR_XIR_OK, NULL, 0},
+    {"function_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_phi", XR_XIR_I64, 84, XR_XIR_OK, NULL, 0},
+    {"function_recursion", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_capture_array", XR_XIR_I64, 4, XR_XIR_OK, NULL, 0},
+    {"function_capture_string", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_capture_function", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_return_array", XR_XIR_I64, 3, XR_XIR_OK, NULL, 0},
+    {"function_float", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"function_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"function_export", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 1},
+    {"function_ref", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_lambda", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_capture_copy", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"function_capture_cell", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_return", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"function_higher", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"lexical_private_direct", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"lexical_nested", XR_XIR_I64, 8, XR_XIR_OK, NULL, 0},
+    {"lexical_class_instance", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"lexical_class_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 1},
+    {"lexical_oversize", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"lexical_struct_construct", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"lexical_struct_export", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"lexical_private_call", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"lexical_class_static", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"lexical_io", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 1},
+    {"lexical_unauthorized", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, NULL, 2},
+    {"nominal_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 3},
+    {"nominal_private", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_array_export", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_export", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_empty_export", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_export", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_empty_export", XR_XIR_UNIT, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_single_export", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"nominal_nested_export", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_direct", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_direct", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"nominal_field_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_large", XR_XIR_UNIT, 9, XR_XIR_OK, NULL, 0},
+    {"nominal_dynamic_gap", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_class", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_struct", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_method", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_generic", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_struct_cow", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_enum", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
+    {"nominal_enum_empty", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"nominal_nested", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"text_bool_false", XR_XIR_STRING, 5, XR_XIR_OK, NULL, 0},
+    {"text_widths", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"text_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"text_cell", XR_XIR_STRING, 3, XR_XIR_OK, NULL, 0},
+    {"text_holder", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"text_integer", XR_XIR_STRING, 5, XR_XIR_OK, NULL, 0},
+    {"text_unsigned", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"text_bool", XR_XIR_STRING, 4, XR_XIR_OK, NULL, 0},
+    {"text_rune", XR_XIR_STRING, 5, XR_XIR_OK, NULL, 0},
+    {"text_float", XR_XIR_STRING, 8, XR_XIR_OK, NULL, 0},
+    {"text_float_extreme", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"text_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"text_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"text_oversize", XR_XIR_STRING, 11, XR_XIR_OK, NULL, 0},
+    {"array_methods_fill_range", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_fill_invalid", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"array_methods_empty", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_path_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"array_methods_query", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_join", XR_XIR_STRING, 5, XR_XIR_OK, NULL, 0},
+    {"array_methods_reorder", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_extract", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_clear", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_fill", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_resize", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_methods_concat", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_path_string_direct", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"array_path_set", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_path_push", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_path_reserve", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_path_cow", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"array_path_bounds", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime index out of bounds", 2},
+    {"array_path_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"array_path_export", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"array_path_direct", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"equal_array_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"equal_array_int", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_float", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_string", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_nested", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_nullable", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_nullable_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"equal_array_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"array_holder", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_deep_gap", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_repeat", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_reserve", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"array_export", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"array_empty", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"array_nested", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_string", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"array_tuple", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_nullable", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"array_capacity", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"array_cell", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"array_internal", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_bounds", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime index out of bounds", 2},
+    {"array_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"nullable_units", XR_XIR_UNIT, 1, XR_XIR_OK, NULL, 0},
+    {"nullable_phi", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"nullable_tuple_field", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"nullable_string_equal", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nullable_work", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"nullable_some", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"nullable_none", XR_XIR_UNIT, 1, XR_XIR_OK, NULL, 0},
+    {"nullable_nested", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"nullable_some_none", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"nullable_string", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"nullable_tuple", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"nullable_cell", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
+    {"nullable_internal", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"nullable_equal", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nullable_unwrap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime null unwrap", 2},
+    {"nullable_oversize", XR_XIR_UNIT, 9, XR_XIR_OK, NULL, 0},
+    {"nullable_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"nullable_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"float_tuple", XR_XIR_UNIT, 8, XR_XIR_OK, NULL, 0},
+    {"float_f64", XR_XIR_F64, INT64_C(0x400a000000000000), XR_XIR_OK, NULL, 0},
+    {"float_f32", XR_XIR_F32, INT64_C(0x3fe00000), XR_XIR_OK, NULL, 0},
+    {"float_ieee", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"float_convert", XR_XIR_I64, -42, XR_XIR_OK, NULL, 0},
+    {"float_round", XR_XIR_F32, INT64_C(0x4b800000), XR_XIR_OK, NULL, 0},
+    {"float_cell", XR_XIR_F64, INT64_C(0x4022000000000000), XR_XIR_OK, NULL, 0},
+    {"float_zero", XR_XIR_F64, INT64_MIN, XR_XIR_OK, NULL, 0},
+    {"float_range", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"float_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"float_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"tuple_generic", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"tuple_export", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"tuple_nested", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
+    {"tuple_units", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"tuple_cell", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"tuple_phi", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
+    {"tuple_internal", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"tuple_oversize", XR_XIR_UNIT, 9, XR_XIR_OK, NULL, 0},
+    {"tuple_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"string_order", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"string_methods", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"string_search", XR_XIR_I64, 1220, XR_XIR_OK, NULL, 0},
+    {"string_search_empty", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"string_read_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"string_bounds_negative", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"string_bounds_end", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "comptime value range violation", 2},
+    {"string_read_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic closed-value call closure", 2},
+    {"string_export", XR_XIR_STRING, 4, XR_XIR_OK, NULL, 0},
+    {"string_empty", XR_XIR_STRING, 0, XR_XIR_OK, NULL, 0},
+    {"string_nul", XR_XIR_STRING, 3, XR_XIR_OK, NULL, 0},
+    {"string_cell", XR_XIR_STRING, 4, XR_XIR_OK, NULL, 0},
+    {"string_predicate", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"string_overflow", XR_XIR_STRING, 9, XR_XIR_OK, NULL, 0},
+    {"cell_rune", XR_XIR_RUNE, 128512, XR_XIR_OK, NULL, 0},
+    {"cell_loop", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cell_recursion", XR_XIR_I64, 720, XR_XIR_OK, NULL, 0},
+    {"cell_unit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"cell_infinite", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"cell_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic closed-value call closure", 2},
+    {"cell_leaf", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"rune_literal", XR_XIR_RUNE, 65, XR_XIR_OK, NULL, 0},
+    {"rune_nested", XR_XIR_RUNE, 128512, XR_XIR_OK, NULL, 0},
+    {"rune_equal", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"rune_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"rune_surrogate", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, NULL, 1},
+    {"rune_overflow", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, NULL, 1},
     {"factorial", XR_XIR_I64, 720, XR_XIR_OK, NULL, 0},
+    {"unit_empty", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"unit_statements", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"unit_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"unit_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic closed-value call closure", 2},
+    {"unit_infinite", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 2},
+    {"unit_closure", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"unit_recipe", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"unit_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"short_circuit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"logical_truth_table", XR_XIR_I64, 232, XR_XIR_OK, NULL, 0},
     {"logical_skip_division", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
@@ -40,9 +454,9 @@ static const CtfeReferenceCase reference_cases[] = {
     {"frame_state", XR_XIR_I64, 316, XR_XIR_OK, NULL, 0},
     {"unreachable_function_io", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"reachable_short_circuit_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE,
-        "admitted deterministic scalar direct-call closure", 3},
+        "admitted deterministic closed-value call closure", 3},
     {"reachable_branch_io", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE,
-        "admitted deterministic scalar direct-call closure", 3},
+        "admitted deterministic closed-value call closure", 3},
     {"mutual_depth", XR_XIR_UNIT, 0, XR_XIR_BUDGET, NULL, 3},
     {"mutual_depth_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0}
 };
@@ -131,7 +545,7 @@ static void reference_accept(const XrXirCompileContext *context, XrXirSourceResu
         const XrXirInstruction *op = &body->instructions[i];
         CHECK(op->op != XR_XIR_CALL && op->op != XR_XIR_CALL_INDIRECT &&
             op->op != XR_XIR_FUNCTION_REF);
-        if (op->op == (selected->type == XR_XIR_BOOL ? XR_XIR_CONST_BOOL : XR_XIR_CONST_INT) &&
+        if (op->op == (selected->type == XR_XIR_BOOL ? XR_XIR_CONST_BOOL : selected->type == XR_XIR_RUNE ? XR_XIR_CONST_RUNE : xr_xir_float_bits(selected->type) ? XR_XIR_CONST_FLOAT : XR_XIR_CONST_INT) &&
             op->type == selected->type && op->immediate == selected->value) constant = true;
     }
     CHECK(constant);
@@ -208,6 +622,258 @@ static void reference_leaf_locals(const XrXirCompileContext *context, XrXirSourc
     fprintf(stderr, "CTFE actual scalar local NEW/READ/WRITE leaf truth table passed\n");
 }
 
+static void reference_unit_direct(const XrXirCompileContext *context, XrXirSourceResult *source) {
+    uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
+    uint32_t noop=UINT32_MAX,leaf=UINT32_MAX;
+    for (uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *body=&module->functions[f];
+        if (body->name_length==4 && !memcmp(body->name,"noop",4)) { CHECK(noop==UINT32_MAX);noop=f; }
+        if (body->name_length==4 && !memcmp(body->name,"leaf",4)) { CHECK(leaf==UINT32_MAX);leaf=f; }
+    }
+    CHECK(noop!=UINT32_MAX && leaf!=UINT32_MAX);
+    CHECK(module->functions[noop].result==XR_XIR_UNIT && module->functions[noop].instruction_count==1);
+    XrXirCtfeRequest request={.artifact=lowered,.function=noop,
+        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .limits={1,XR_XIR_CTFE_MAX_FRAME_BYTES,0}};
+    memcpy(request.checked_identity,identity,sizeof(identity));
+    XrXirValue output={0};
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    CHECK(!output.type && !output.reserved && !output.payload);
+    request.limits.steps=0;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_STEP_LIMIT);
+    CHECK(!output.type && !output.reserved && !output.payload);
+    request.limits.steps=1;
+    XrXirCtfeCallRequest calls={request,1};
+    CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OK);
+    CHECK(!output.type && !output.reserved && !output.payload);
+    calls.call_depth=0;
+    CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_DEPTH_LIMIT);
+    CHECK(!output.type && !output.reserved && !output.payload);
+    XrXirValue argument={XR_XIR_I64,0,41};calls.evaluation.function=leaf;
+    calls.evaluation.arguments=&argument;calls.evaluation.argument_count=1;
+    calls.evaluation.limits=(XrXirCtfeLimits){XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,8};calls.call_depth=2;
+    CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OK);
+    CHECK(output.type==XR_XIR_I64 && !output.reserved && output.payload==42 && argument.payload==41);
+    XrXirValue occupied={XR_XIR_UNIT,77,99},saved=occupied;
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(context->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&occupied)==XR_XIR_CTFE_BAD_ARGUMENT);
+    CHECK(!memcmp(&occupied,&saved,sizeof(saved)));
+    CHECK(xr_compile_resources_stats(context->resources,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(!memcmp(&before,&after,sizeof(before)));
+    xr_xir_compile_artifact_free(lowered);
+    fprintf(stderr,"CTFE canonical Unit leaf/call output bytes=0; exact1/minus0 and depth1/minus0; child Unit keeps parent argument41/result42; occupied fees unchanged\n");
+}
+
+static uint32_t reference_named(const XrXirModule *module,const char *name) {
+    uint32_t result=UINT32_MAX;size_t length=strlen(name);
+    for (uint32_t f=0;f<module->function_count;++f)
+        if (module->functions[f].name_length==length && !memcmp(module->functions[f].name,name,length)) {
+            CHECK(result==UINT32_MAX);result=f;
+        }
+    CHECK(result!=UINT32_MAX);return result;
+}
+static void reference_rune_direct(const XrXirCompileContext *context,XrXirSourceResult *source) {
+    uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
+    uint32_t point=reference_named(module,"point"),convert=reference_named(module,"convert");
+    uint32_t same=reference_named(module,"same"),literal=reference_named(module,"literal");
+    XrXirValue args[2]={{XR_XIR_RUNE,0,0},{XR_XIR_RUNE,0,0}},output={0};
+    XrXirCtfeRequest request={.artifact=lowered,.function=literal,
+        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,4}};
+    memcpy(request.checked_identity,identity,sizeof(identity));
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    CHECK(output.type==XR_XIR_RUNE && !output.reserved && output.payload==65);output=(XrXirValue){0};
+    request.limits.output_bytes=3;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OUTPUT_LIMIT && !output.type && !output.payload);
+    request.limits.output_bytes=8;request.arguments=args;request.argument_count=1;
+    static const int64_t good[]={0,65,0xd7ff,0xe000,0x1f600,0x10ffff};
+    static const int64_t bad[]={-1,0xd800,0xdfff,0x110000,INT64_MAX};
+    for (size_t i=0;i<sizeof(good)/sizeof(good[0]);++i) for (unsigned c=0;c<2;++c) {
+        request.function=c?convert:point;args[0]=(XrXirValue){c?XR_XIR_I64:XR_XIR_RUNE,0,good[i]};
+        XrXirCtfeCallRequest calls={request,1};
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+        CHECK(output.type==(uint32_t)(c?XR_XIR_RUNE:XR_XIR_I64) && !output.reserved && output.payload==good[i]);output=(XrXirValue){0};
+        CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OK);
+        CHECK(output.type==(uint32_t)(c?XR_XIR_RUNE:XR_XIR_I64) && !output.reserved && output.payload==good[i]);output=(XrXirValue){0};
+    }
+    for (size_t i=0;i<sizeof(bad)/sizeof(bad[0]);++i) for (unsigned c=0;c<2;++c) {
+        request.function=c?convert:point;args[0]=(XrXirValue){c?XR_XIR_I64:XR_XIR_RUNE,0,bad[i]};
+        XrXirCtfeStatus expected=c?XR_XIR_CTFE_NUMERIC_RANGE:XR_XIR_CTFE_BAD_ARGUMENT;
+        XrXirCtfeCallRequest calls={request,1};
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==expected);
+        CHECK(!output.type && !output.reserved && !output.payload);
+        CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==expected);
+        CHECK(!output.type && !output.reserved && !output.payload);
+        bool unchanged=true;
+        CHECK(xir_scalar_core_equal(XR_XIR_RUNE,bad[i],65,&unchanged)==XR_XIR_RUN_BAD_ARGUMENT && unchanged);
+    }
+    request.function=same;request.argument_count=2;args[0]=(XrXirValue){XR_XIR_RUNE,0,65};
+    for (unsigned different=0;different<2;++different) {
+        args[1]=(XrXirValue){XR_XIR_RUNE,0,65+different};bool equal=false;
+        CHECK(xir_scalar_core_equal(XR_XIR_RUNE,65,args[1].payload,&equal)==XR_XIR_RUN_OK && equal==!different);
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+        CHECK(output.type==XR_XIR_BOOL && !output.reserved && output.payload==!different);output=(XrXirValue){0};
+    }
+    request.function=literal;request.arguments=NULL;request.argument_count=0;
+    size_t start=source_fixture_compile_attempts;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);output=(XrXirValue){0};
+    size_t sites=source_fixture_compile_attempts-start;CHECK(sites>0);
+    XrCompileResourceStats baseline=reference_stats(context);
+    for (size_t f=0;f<sites;++f) {
+        source_fixture_compile_injected=false;source_fixture_compile_fail_at=source_fixture_compile_attempts+f;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OUT_OF_MEMORY);
+        CHECK(source_fixture_compile_injected && !output.type && !output.reserved && !output.payload);
+        CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+        source_fixture_compile_fail_at=SIZE_MAX;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+        CHECK(output.type==XR_XIR_RUNE && !output.reserved && output.payload==65);output=(XrXirValue){0};
+    }
+    xr_xir_compile_artifact_free(lowered);
+    fprintf(stderr,"CTFE Rune canonical boundary/conversion/equality leaf and calls; output4/minus3; evaluator FI=%zu same-owner retry; physical0 after last owner\n",sites);
+}
+
+static void reference_cell_leaf(const XrXirCompileContext *context,XrXirSourceResult *source) {
+    uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
+    const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
+    uint32_t flag=reference_named(module,"flag"),divide=reference_named(module,"divide");
+    const XrXirFunction *body=&module->functions[flag];unsigned operations=0;
+    for (uint32_t i=0;i<body->instruction_count;++i) {
+        XrXirOp op=body->instructions[i].op;
+        if (op==XR_XIR_CELL_NEW || op==XR_XIR_CELL_LOCAL_WRITE) operations|=1;
+        if (op==XR_XIR_CELL_READ) operations|=2;
+        if (op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_LOCAL_WRITE) operations|=4;
+    }
+    CHECK(operations==7);
+    XrXirValue argument={XR_XIR_BOOL,0,1},output={0};
+    XrXirCtfeRequest request={.artifact=lowered,.function=flag,
+        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.arguments=&argument,.argument_count=1,
+        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,1}};
+    memcpy(request.checked_identity,identity,sizeof(identity));
+    XrCompileResourceStats baseline=reference_stats(context);
+    size_t start=source_fixture_compile_attempts;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    CHECK(output.type==XR_XIR_BOOL && !output.reserved && !output.payload);output=(XrXirValue){0};
+    size_t sites=source_fixture_compile_attempts-start;CHECK(sites>0);
+    CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+    for (size_t f=0;f<sites;++f) {
+        source_fixture_compile_injected=false;source_fixture_compile_fail_at=source_fixture_compile_attempts+f;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OUT_OF_MEMORY);
+        CHECK(source_fixture_compile_injected && !output.type && !output.reserved && !output.payload);
+        CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+        source_fixture_compile_fail_at=SIZE_MAX;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+        CHECK(output.type==XR_XIR_BOOL && !output.reserved && !output.payload);output=(XrXirValue){0};
+    }
+    request.limits.steps=1;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_STEP_LIMIT);
+    CHECK(!output.type && !output.reserved && !output.payload && reference_stats(context).live_bytes==baseline.live_bytes);
+    request.limits.steps=XR_XIR_CTFE_MAX_STEPS;request.function=divide;request.limits.output_bytes=8;
+    argument=(XrXirValue){XR_XIR_I64,0,0};
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_DIVIDE_BY_ZERO);
+    CHECK(!output.type && !output.reserved && !output.payload && reference_stats(context).live_bytes==baseline.live_bytes);
+    argument.payload=2;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    CHECK(output.type==XR_XIR_I64 && !output.reserved && !output.payload);output=(XrXirValue){0};
+    xr_xir_compile_artifact_free(lowered);
+    fprintf(stderr,"CTFE real Cell leaf NEW/READ/WRITE; evaluator FI=%zu same-owner retry; step/division failure clears owned frame; physical0 after last owner\n",sites);
+}
+
+static void reference_string(const XrXirCompileContext *context,XrXirSourceResult *source,
+    const CtfeReferenceCase *selected) {
+    const char *expected=!strcmp(selected->name,"string_overflow")?"123456789":!strcmp(selected->name,"text_oversize")?"false,false":!strcmp(selected->name,"text_bool_false")?"false":!strcmp(selected->name,"text_cell")?"3.5":!strcmp(selected->name,"text_integer")?"-42,7":!strcmp(selected->name,"text_bool")?"true":
+        !strcmp(selected->name,"text_rune")?"\0\xf0\x9f\x98\x80":!strcmp(selected->name,"text_float")?"3.5,-0.0":
+        !strcmp(selected->name,"array_methods_join")?"a\0b|z":!strcmp(selected->name,"string_nul")?"a\0b":
+        !strcmp(selected->name,"string_empty")?"":(!strcmp(selected->name,"panic_owning") || !strcmp(selected->name,"class_return_string") || !strcmp(selected->name,"class_ref_dynamic_owning"))?"ab":"abcd";
+    size_t length=(size_t)selected->value;
+    const XrXirModule *module=xr_xir_compile_artifact_module(source->checked);
+    const XrXirFunction *body=&module->functions[reference_run_function(module)];bool literal=false;
+    for (uint32_t i=0;i<body->instruction_count;++i) {
+        const XrXirInstruction *op=&body->instructions[i];
+        CHECK(op->op!=XR_XIR_CALL && op->op!=XR_XIR_CALL_INDIRECT && op->op!=XR_XIR_FUNCTION_REF);
+        if (op->op==XR_XIR_CONST_STRING) {
+            CHECK(op->immediate>=0 && (uint64_t)op->immediate<module->declarations->literal_count);
+            const XrXirLiteral *text=&module->declarations->literals[op->immediate];
+            if (text->length==length && (!length || !memcmp(text->bytes,expected,length))) literal=true;
+        }
+    }
+    CHECK(literal);
+    uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(context,source,identity);
+    XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
+        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,(uint64_t)length}};
+    memcpy(request.checked_identity,identity,sizeof(identity));XrXirValue output={0};
+    XrCompileResourceStats baseline=reference_stats(context);
+    size_t start=source_fixture_compile_attempts;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    size_t sites=source_fixture_compile_attempts-start;CHECK(sites>0);
+    const char *bytes=NULL;size_t actual=SIZE_MAX;
+    CHECK(xr_xir_string_view(&output,&bytes,&actual) && actual==length && (!length || !memcmp(bytes,expected,length)));
+    xr_xir_value_drop(&output);CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+    for (size_t f=0;f<sites;++f) {
+        source_fixture_compile_injected=false;source_fixture_compile_fail_at=source_fixture_compile_attempts+f;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OUT_OF_MEMORY);
+        CHECK(source_fixture_compile_injected && !output.type && !output.reserved && !output.payload);
+        CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+        source_fixture_compile_fail_at=SIZE_MAX;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);xr_xir_value_drop(&output);
+        CHECK(reference_stats(context).live_bytes==baseline.live_bytes);
+    }
+    if (length) {
+        request.limits.output_bytes=length-1;
+        CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OUTPUT_LIMIT);
+        CHECK(!output.type && !output.reserved && !output.payload && reference_stats(context).live_bytes==baseline.live_bytes);
+    }
+    request.limits.output_bytes=length;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    xr_xir_compile_artifact_free(lowered);
+    CHECK(xr_xir_string_view(&output,&bytes,&actual) && actual==length && (!length || !memcmp(bytes,expected,length)));
+    xr_xir_value_drop(&output);
+    fprintf(stderr,"CTFE string export logical bytes=%zu exact/minus-one; evaluator FI=%zu same-owner retry; value survives Artifact; physical0 after last owner\n",length,sites);
+}
+
+static void reference_string_late_owner(void) {
+    XrXirCompileContext context={0};
+    CHECK(xr_compile_resources_new(&reference_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
+    context.limits=xr_xir_compile_default_limits();XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
+    CHECK(reference_source(&context,"string_export",&source,&diagnostic)==XR_XIR_OK);
+    uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(&context,&source,identity);
+    XrXirCtfeCallRequest request={.evaluation={.artifact=lowered,
+        .function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
+        .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
+        .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,4}},.call_depth=XR_XIR_CTFE_MAX_CALL_DEPTH};
+    memcpy(request.evaluation.checked_identity,identity,sizeof(identity));XrXirValue value={0};
+    CHECK(xr_xir_compile_ctfe_calls(&request,&value)==XR_XIR_CTFE_OK);
+    xr_xir_compile_artifact_free(lowered);xr_compile_resources_release(context.resources);context.resources=NULL;
+    const char *bytes=NULL;size_t length=0;
+    CHECK(xr_xir_string_view(&value,&bytes,&length) && length==4 && !memcmp(bytes,"abcd",4));
+    size_t calls=source_fixture_compile_attempts;source_fixture_compile_fail_at=calls;
+    xr_xir_value_drop(&value);source_fixture_compile_fail_at=SIZE_MAX;
+    CHECK(source_fixture_compile_attempts==calls && !source_fixture_compile_live && !source_fixture_compile_bytes);
+    fprintf(stderr,"CTFE String remains readable after Source/Artifact/ledger caller death; final drop no allocation physical0\n");
+}
+
+#include "xir_ctfe_string_read_cases.h"
+#include "xir_ctfe_tuple_cases.h"
+#include "xir_ctfe_float_cases.h"
+#include "xir_ctfe_nullable_cases.h"
+#include "xir_ctfe_array_cases.h"
+#include "xir_ctfe_equal_cases.h"
+#include "xir_ctfe_text_cases.h"
+#include "xir_ctfe_nominal_cases.h"
+#include "xir_ctfe_function_cases.h"
+#include "xir_ctfe_cleanup_cases.h"
+#include "xir_ctfe_projection_cases.h"
+#include "xir_ctfe_error_cases.h"
+#include "xir_ctfe_error_abort_cases.h"
+#include "xir_ctfe_panic_cases.h"
+#include "xir_ctfe_panic_abort_cases.h"
+#include "xir_ctfe_class_cases.h"
+#include "xir_ctfe_dynamic_loan_cases.h"
+#include "xir_ctfe_output_cases.h"
+
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     const CtfeReferenceCase *selected = NULL;
@@ -226,7 +892,52 @@ int main(int argc, char **argv) {
         selected->name, (unsigned)status, diagnostic.line, diagnostic.column, diagnostic.message);
     CHECK(status == selected->status);
     if (status == XR_XIR_OK) {
-        if (!strcmp(selected->name, "leaf_locals")) reference_leaf_locals(&context, &source);
+        if (!strncmp(selected->name,"output_",7)) reference_output(&context,&source,selected);
+        else if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
+        else if (!strcmp(selected->name,"class_direct")) reference_class_direct(&context,&source);
+        else if (!strcmp(selected->name,"struct_identity_direct") || !strcmp(selected->name,"ref_closure_direct")) reference_dynamic_direct(&context,&source,false,false);
+        else if (!strcmp(selected->name,"struct_identity_owning_direct") || !strcmp(selected->name,"ref_closure_owning_direct")) reference_dynamic_direct(&context,&source,true,false);
+        else if (!strcmp(selected->name,"struct_identity_owning") || !strcmp(selected->name,"ref_closure_owning")) reference_dynamic_source_string(&context,&source);
+        else if (!strcmp(selected->name,"array_identity_direct")) reference_dynamic_direct(&context,&source,false,false);
+        else if (!strcmp(selected->name,"array_identity_owning_direct")) reference_dynamic_direct(&context,&source,true,false);
+        else if (!strcmp(selected->name,"array_identity_owning")) reference_dynamic_source_string(&context,&source);
+        else if (!strcmp(selected->name,"class_ref_dynamic_direct") || !strcmp(selected->name,"class_inactive_direct")) reference_dynamic_direct(&context,&source,false,true);
+        else if (!strcmp(selected->name,"class_ref_dynamic_owning_direct") || !strcmp(selected->name,"class_inactive_owning_direct")) reference_dynamic_direct(&context,&source,true,true);
+        else if (!strcmp(selected->name,"class_owning_direct")) reference_class_owning(&context,&source);
+        else if (!strcmp(selected->name,"class_ref_dynamic_owning") || !strcmp(selected->name,"class_inactive_owning")) reference_dynamic_source_string(&context,&source);
+        else if (!strcmp(selected->name,"class_cycle_direct")) reference_class_cycle(&context,&source);
+        else if (!strcmp(selected->name,"class_work_direct")) reference_class_work(&context,&source);
+        else if (!strcmp(selected->name,"class_authority_direct")) reference_class_authority(&context,&source);
+        else if (!strcmp(selected->name,"panic_abort_direct")) reference_panic_abort(&context,&source,false);
+        else if (!strcmp(selected->name,"panic_escape_direct")) reference_panic_abort(&context,&source,true);
+        else if (!strcmp(selected->name,"panic_work_direct")) reference_panic_work(&context,&source);
+        else if (!strcmp(selected->name,"panic_owning_direct")) reference_panic_owning(&context,&source);
+        else if (!strcmp(selected->name,"panic_direct")) reference_panic_direct(&context,&source);
+        else if (!strcmp(selected->name,"error_cycle_direct")) reference_function_cycle(&context,&source);
+        else if (!strcmp(selected->name,"error_work_direct")) reference_error_work(&context,&source);
+        else if (!strcmp(selected->name,"error_abort_direct")) reference_error_abort(&context,&source);
+        else if (!strcmp(selected->name,"error_owning_direct")) reference_error_owning(&context,&source);
+        else if (!strcmp(selected->name,"error_direct")) reference_error_direct(&context,&source);
+        else if (!strcmp(selected->name,"project_direct")) reference_projection_direct(&context,&source);
+        else if (!strcmp(selected->name,"project_owning_direct")) reference_projection_owning(&context,&source);
+        else if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_owning(&context,&source);
+        else if (!strcmp(selected->name,"cleanup_direct")) reference_cleanup_direct(&context,&source);
+        else if (!strcmp(selected->name,"function_cycle_direct")) reference_function_cycle(&context,&source);
+        else if (!strcmp(selected->name,"function_direct")) reference_function_direct(&context,&source);
+        else if (!strcmp(selected->name,"text_direct")) reference_text_direct(&context,&source);
+        else if (!strcmp(selected->name,"equal_array_direct")) reference_owned_equal(&context,&source);
+        else if (!strncmp(selected->name,"array_",6) && selected->type==XR_XIR_UNIT) reference_array(&context,&source,selected);
+        else if (!strcmp(selected->name,"nullable_direct")) reference_nullable_direct(&context,&source);
+        else if (!strncmp(selected->name,"nullable_",9) && selected->type==XR_XIR_UNIT) reference_nullable(&context,&source,selected);
+        else if (!strcmp(selected->name,"float_tuple")) reference_tuple(&context,&source,selected);
+        else if (!strncmp(selected->name,"tuple_",6) && selected->type==XR_XIR_UNIT) reference_tuple(&context,&source,selected);
+        else if (selected->type==XR_XIR_STRING) reference_string(&context,&source,selected);
+        else if (!strcmp(selected->name, "float_direct")) reference_float_direct(&context,&source);
+        else if (!strcmp(selected->name, "string_read_direct")) reference_string_read_direct(&context,&source);
+        else if (!strcmp(selected->name, "cell_leaf")) reference_cell_leaf(&context,&source);
+        else if (!strcmp(selected->name, "rune_direct")) reference_rune_direct(&context,&source);
+        else if (!strcmp(selected->name, "unit_direct")) reference_unit_direct(&context,&source);
+        else if (!strcmp(selected->name, "leaf_locals")) reference_leaf_locals(&context, &source);
         else if (!strcmp(selected->name, "mutual_depth_direct")) reference_direct_depth(&context, &source);
         else reference_accept(&context, &source, selected);
     }
@@ -241,10 +952,41 @@ int main(int argc, char **argv) {
     XrCompileResourceStats spent = reference_stats(&context);
     CHECK(spent.live_bytes == before.live_bytes && spent.work >= before.work &&
         spent.allocated_bytes >= before.allocated_bytes);
+    if ((!strcmp(selected->name,"nullable_work") || !strcmp(selected->name,"equal_array_work"))) {
+        CHECK(spent.work>=reference_limits.work-UINT64_C(131072));
+        fprintf(stderr,"CTFE %s String comparison scan paid original ledger: work=%llu/128000000; failure releases every owner\n",
+            !strcmp(selected->name,"nullable_work")?"Nullable":"Array",(unsigned long long)spent.work);
+    }
+    if (!strcmp(selected->name,"array_path_work")) {
+        CHECK(spent.work>=reference_limits.work-UINT64_C(65536));
+        fprintf(stderr,"CTFE private path ancestor copy paid original ledger: work=%llu/128000000; unpayable capacity65536; physical0\n",(unsigned long long)spent.work);
+    }
+    if (!strcmp(selected->name,"nominal_work")) {
+        CHECK(spent.work>=reference_limits.work-UINT64_C(65536));
+        fprintf(stderr,"CTFE nominal field ancestor copy paid original ledger: work=%llu/128000000; unpayable capacity65536; physical0\n",(unsigned long long)spent.work);
+    }
+    if (!strcmp(selected->name,"text_work")) {
+        CHECK(spent.work>=reference_limits.work-UINT64_C(137216));
+        fprintf(stderr,"CTFE finite scalar text paid original ledger: work=%llu/128000000; unpayable format137216; physical0\n",(unsigned long long)spent.work);
+    }
     CHECK(spent.allocated_bytes <= reference_limits.allocated_bytes &&
         spent.peak_bytes <= reference_limits.live_bytes && spent.work <= reference_limits.work);
     xr_compile_resources_release(context.resources);
     CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
+    if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_last_owner();
+    if (!strcmp(selected->name,"project_owning_direct")) reference_projection_last_owner();
+    if (!strcmp(selected->name,"class_owning_direct")) reference_class_last_owner();
+    if (!strcmp(selected->name,"struct_identity_owning_direct") || !strcmp(selected->name,"ref_closure_owning_direct")) reference_dynamic_last_owner(selected->name);
+    if (!strcmp(selected->name,"class_ref_dynamic_owning_direct") || !strcmp(selected->name,"class_inactive_owning_direct") || !strcmp(selected->name,"array_identity_owning_direct")) reference_dynamic_last_owner(selected->name);
+    if (!strcmp(selected->name,"output_fibonacci_direct") || !strcmp(selected->name,"output_pair_direct")) reference_output_last_owner(selected);
+    if (!strcmp(selected->name,"error_owning_direct")) reference_error_last_owner();
+    if (!strcmp(selected->name,"panic_owning_direct")) reference_panic_last_owner();
+    if (!strcmp(selected->name,"string_export")) reference_string_late_owner();
+    if (!strcmp(selected->name,"tuple_export")) reference_tuple_late_owner();
+    if (!strcmp(selected->name,"nullable_tuple")) reference_nullable_late_owner();
+    if (!strcmp(selected->name,"array_string") || !strcmp(selected->name,"array_path_string_direct")) reference_array_late_owner(selected->name);
+    if (!strcmp(selected->name,"text_direct")) reference_text_last_owner();
+    if (!strcmp(selected->name,"nominal_struct_direct") || !strcmp(selected->name,"nominal_enum_direct") || !strcmp(selected->name,"lexical_private_direct")) reference_nominal_last_owner(selected);
     fprintf(stderr, "CTFE reference %s: status=%u expected=%lld allocated=%llu peak=%llu work=%llu physical=0/0\n",
         selected->name, (unsigned)status, (long long)selected->value,
         (unsigned long long)spent.allocated_bytes, (unsigned long long)spent.peak_bytes,

@@ -1,0 +1,68 @@
+// Preserve the complete original struct body and expose each scalar field/method result at its original assertion boundary.
+// Test: nested struct (struct field is another struct instance)
+// Expected: nested struct fields work, copy is deep
+
+struct Point {
+    x: f64
+    y: f64
+}
+struct Rect {
+    origin: Point
+    size: Point
+
+    area() -> f64 {
+        return this.size.x * this.size.y
+    }
+}
+
+@test
+fn test_struct_nested() {
+
+
+    // === Basic nested construction ===
+    var r = Rect{
+        origin: Point{x: 0.0, y: 0.0},
+        size: Point{x: 100.0, y: 50.0}
+    }
+    var p19StructValue0 = r.origin.x
+    assert(p19StructValue0 == 0.0)
+    print(p19StructValue0)
+    var p19StructValue1 = r.origin.y
+    assert(p19StructValue1 == 0.0)
+    print(p19StructValue1)
+    var p19StructValue2 = r.size.x
+    assert(p19StructValue2 == 100.0)
+    print(p19StructValue2)
+    var p19StructValue3 = r.size.y
+    assert(p19StructValue3 == 50.0)
+    print(p19StructValue3)
+    var p19StructValue4 = r.area()
+    assert(p19StructValue4 == 5000.0)
+    print(p19StructValue4)
+
+    // === Copy of nested struct is deep ===
+    var r2 = r
+    r2.origin.x = 10.0
+    r2.size.x = 200.0
+    var p19StructValue5 = r.origin.x
+    assert(p19StructValue5 == 0.0)
+    print(p19StructValue5)
+    var p19StructValue6 = r.size.x
+    assert(p19StructValue6 == 100.0)
+    print(p19StructValue6)
+    var p19StructValue7 = r2.origin.x
+    assert(p19StructValue7 == 10.0)
+    print(p19StructValue7)
+    var p19StructValue8 = r2.size.x
+    assert(p19StructValue8 == 200.0)
+    print(p19StructValue8)
+
+    // === Method on copied nested struct ===
+    var p19StructValue9 = r.area()
+    assert(p19StructValue9 == 5000.0)
+    print(p19StructValue9)
+    var p19StructValue10 = r2.area()
+    assert(p19StructValue10 == 10000.0)
+    print(p19StructValue10)
+}
+

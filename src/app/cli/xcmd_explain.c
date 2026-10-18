@@ -17,6 +17,7 @@
 #include "../../module/xmodule_resolver.h"
 #include "../../api/xisolate_profile.h"
 #include "../../frontend/analyzer/xanalyzer.h"
+#include "../../frontend/analyzer/xanalyzer_native_input.h"
 #include "../../frontend/analyzer/xanalyzer_mono.h"
 #include "../../frontend/analyzer/xa_effect_db.h"
 #include "../../frontend/analyzer/xa_memory_effect_db.h"
@@ -525,7 +526,6 @@ static int explain_effect_view(const char *subject, bool suspend_view) {
     }
     xr_module_system_init_with_script(isolate, entry);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
-    xr_compiler_session_set_native_package_plan(session, project->native_plan);
     XrModuleRegistry *registry = xr_isolate_get_module_registry(isolate);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
     XrModuleGraph *graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
@@ -554,6 +554,15 @@ static int explain_effect_view(const char *subject, bool suspend_view) {
         xr_free(entry);
         xr_project_free(project);
         return XR_CLI_EXIT_INTERNAL;
+    }
+    if (xa_analyzer_bind_native_plan(analyzer, project->native_plan) != XR_COMPILE_RESOURCE_OK) {
+        xa_analyzer_free(analyzer);
+        xr_module_graph_free(graph);
+        xray_vm_delete(isolate);
+        xr_free(entry);
+        xr_project_free(project);
+        xr_cli_error("explain", "cannot bind native compilation input");
+        return XR_CLI_EXIT_FAIL;
     }
     xa_analyzer_set_graph(analyzer, graph);
     int errors = 0;

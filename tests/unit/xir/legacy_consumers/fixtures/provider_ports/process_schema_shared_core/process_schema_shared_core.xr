@@ -1,0 +1,11 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// anchor: process-schema-shared-core
+// Process field names and ordering are shared between VM, AOT runtime bridge,
+// and the freestanding AOT process map adapter.
+print(__file__.endsWith("process_schema_shared_core.xr"))
+print(len(__dir__) > 0)
+print(process.file.endsWith("process_schema_shared_core.xr"))
+print(len(process.dir) > 0)
+print(len(process.args))
+print(process.args[0])
+print(process.args[1])

@@ -1,0 +1,42 @@
+import { forwardImportedArray, recvImportedArray } from "./owned_transfer_lib"
+import "./owned_transfer_lib" as transfer
+
+@test
+fn test_selective_import_copies_value_param_summary() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = Array<i64>(2, 0)
+    xs[0] = 21
+    xs[1] = 22
+
+    forwardImportedArray(ch, xs)
+
+    var got = recvImportedArray(ch)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 21)
+    assertEqual(got[1], 22)
+    got[1] = 801
+    assertEqual(xs[1], 22)
+    xs[0] = 901
+    assertEqual(got[0], 21)
+    ch.close()
+}
+
+@test
+fn test_namespace_import_copies_value_param_summary() {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = Array<i64>(2, 0)
+    xs[0] = 31
+    xs[1] = 32
+
+    transfer.forwardImportedArray(ch, xs)
+
+    var got = transfer.recvImportedArray(ch)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 31)
+    assertEqual(got[1], 32)
+    got[1] = 802
+    assertEqual(xs[1], 32)
+    xs[0] = 902
+    assertEqual(got[0], 31)
+    ch.close()
+}

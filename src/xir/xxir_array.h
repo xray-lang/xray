@@ -32,6 +32,13 @@ XR_FUNC XrXirValueStatus xr_xir_array_reserve(const XrXirValue *array, int64_t c
     XrXirValueAdmission *admission, XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_array_get(const XrXirValue *array, int64_t index,
     XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault);
+/* Observe one element of an already validated Array on its exact arena/Domain.
+ * The caller prepays the selected type's complete shallow validation and inline
+ * snapshot span on that same work owner. This operation charges its fixed header
+ * observation but does not admit unrelated descendants. The owned result grants
+ * no call, member or loan authority; ordinary receiving must still check those. */
+XR_FUNC XrXirValueStatus xr_xir_array_observe(const XrXirValue *array, int64_t index,
+    XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault);
 XR_FUNC XrXirValueStatus xr_xir_array_set(const XrXirValuePlace *place, int64_t index,
     const XrXirValue *element, XrXirValueAdmission *admission, XrXirFaultDetail *fault);
 XR_FUNC XrXirValueStatus xr_xir_array_push(const XrXirValuePlace *place,

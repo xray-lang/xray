@@ -1,0 +1,5 @@
+const xs = Array<i64>()
+var ys = xs
+ys.push(1)
+print(len(xs))
+print(len(ys))

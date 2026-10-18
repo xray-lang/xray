@@ -1,0 +1,3 @@
+class Box{private value:i64;init(value:i64){this.value=value};add(n:i64){this.value=this.value+n};read()->i64{return this.value}}
+fn answer()->i64{const b=Box(40);b.add(2);return b.read()}
+export fn run()->i64{return comptime answer()}

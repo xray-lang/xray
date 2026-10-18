@@ -438,20 +438,24 @@ void xr_module_free(XrModule *module) {
 ** Returns an xr_malloc'd string; caller owns it.
 */
 static char *resolve_stdlib_root(void) {
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    bool exists = false;
     const char *env = getenv("XRAY_STDLIB_PATH");
-    if (env && env[0] && xr_fs_exists(env))
+    if (env && env[0] && xr_os_io_exists(&policy, env, &exists) == XR_OS_IO_OK && exists)
         return xr_strdup(env);
 
     char exe[XR_PATH_MAX];
     if (xr_proc_self_exe_path(exe, sizeof(exe)) == 0) {
-        char *dir = xr_path_dirname(exe);
+        char *dir = NULL;
+        (void) xr_path_dirname_owned(&policy, exe, &dir);
         if (dir) {
             static const char *const suffixes[] = {"../stdlib", "../lib/xray/stdlib"};
             for (size_t i = 0; i < sizeof(suffixes) / sizeof(suffixes[0]); i++) {
                 char cand[XR_PATH_MAX];
                 snprintf(cand, sizeof(cand), "%s/%s", dir, suffixes[i]);
-                if (xr_fs_exists(cand)) {
-                    char *real = xr_realpath(cand, NULL);
+                if (xr_os_io_exists(&policy, cand, &exists) == XR_OS_IO_OK && exists) {
+                    char *real = NULL;
+                    (void) xr_realpath_owned(&policy, cand, &real);
                     xr_free(dir);
                     return real ? real : xr_strdup(cand);
                 }
@@ -472,7 +476,11 @@ static XrModuleRegistry *create_registry(void) {
         return NULL;
 
     memset(registry, 0, sizeof(*registry));
-    registry->loaded_modules = xr_hashmap_new();
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    if (xr_hashmap_owned_new(&policy, &registry->loaded_modules) != XR_OS_IO_OK) {
+        xr_free(registry);
+        return NULL;
+    }
     registry->stdlib_path = resolve_stdlib_root();
 
     return registry;
@@ -493,7 +501,7 @@ static void destroy_registry(XrModuleRegistry *registry) {
                 xr_module_free((XrModule *) entry->value);
             }
         }
-        xr_hashmap_free(registry->loaded_modules);
+        xr_hashmap_owned_free(registry->loaded_modules);
     }
     if (registry->stdlib_path) {
         xr_free(registry->stdlib_path);
@@ -506,12 +514,12 @@ static void destroy_registry(XrModuleRegistry *registry) {
 
     // Free resolver
     if (registry->resolver) {
-        xr_module_resolver_free(registry->resolver);
+        xr_compile_module_resolver_free(registry->resolver);
     }
 
     // Free project config
     if (registry->project) {
-        xr_project_free(registry->project);
+        xr_project_free_owned(registry->project);
     }
 
     xr_free(registry);
@@ -554,9 +562,23 @@ void xr_module_system_init_with_script(XrVMRuntime *isolate, const char *script_
 
     // Try to load project config (for package management)
     if (script_path && !registry->project) {
-        char *dir = xr_path_dirname(script_path);
-        registry->project = xr_project_load(isolate, dir);
-        xr_free(dir);
+        XrCompileState *state = xr_compile_session_compile_state(registry->compiler_session);
+        if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+            return;
+        XrOsIoPolicy policy = xr_compile_io_policy(xr_compile_state_resources(state));
+        char *absolute = NULL, *dir = NULL;
+        XrOsIoStatus status = xr_realpath_owned(&policy, script_path, &absolute);
+        if (status == XR_OS_IO_OK)
+            status = xr_path_dirname_owned(&policy, absolute, &dir);
+        if (status == XR_OS_IO_OK) {
+            const XrTomlParseLimits limits = {SIZE_MAX, 128};
+            XrManifestStatus manifest = xr_project_load_owned(&policy, dir, &limits, &registry->project, NULL);
+            if (manifest == XR_MANIFEST_BUDGET || manifest == XR_MANIFEST_OUT_OF_MEMORY)
+                xr_compile_state_fail(state, manifest == XR_MANIFEST_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+        } else if (status == XR_OS_IO_BUDGET || status == XR_OS_IO_OUT_OF_MEMORY)
+            xr_compile_state_fail(state, status == XR_OS_IO_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+        xr_compile_resources_free(dir);
+        xr_compile_resources_free(absolute);
     }
 }
 
@@ -585,7 +607,12 @@ static XrModuleResolver *ensure_resolver(XrModuleRegistry *registry) {
         .stdlib_path = registry->stdlib_path,
         .lockfile = NULL,
     };
-    registry->resolver = xr_module_resolver_new(&cfg);
+    XrCompileState *state = xr_compile_session_compile_state(registry->compiler_session);
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
+    XrModuleStatus status = xr_compile_module_resolver_new(xr_compile_state_resources(state), &cfg, &registry->resolver);
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY)
+        xr_compile_state_fail(state, status == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
     return registry->resolver;
 }
 
@@ -615,18 +642,21 @@ static const XrModuleSpec *module_spec_for_locator(const XrModuleRegistry *regis
         *claimed_out = false;
     if (!registry || !registry->compiler_session || !locator || !locator[0])
         return NULL;
-    const XrModuleGraph *graph = xr_compiler_session_module_graph(registry->compiler_session);
+    const XrModuleGraph *graph = registry->source_graph;
     if (!graph)
         return NULL;
     const XrModuleSpec *match = NULL;
     bool invalid_match = false;
-    char *locator_realpath = xr_realpath(locator, NULL);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    char *locator_realpath = NULL;
+    (void) xr_realpath_owned(&policy, locator, &locator_realpath);
     for (int i = 0; i < graph->spec_count; i++) {
         const XrModuleSpec *spec = &graph->specs[i];
         bool matches = (spec->canonical && strcmp(spec->canonical, locator) == 0) ||
                        (spec->source_path && strcmp(spec->source_path, locator) == 0);
         if (!matches && locator_realpath && spec->source_path) {
-            char *spec_realpath = xr_realpath(spec->source_path, NULL);
+            char *spec_realpath = NULL;
+            (void) xr_realpath_owned(&policy, spec->source_path, &spec_realpath);
             matches = spec_realpath && strcmp(spec_realpath, locator_realpath) == 0;
             xr_free(spec_realpath);
         }
@@ -672,7 +702,7 @@ static XrNamedImportResult module_spec_for_named_import(const XrModuleRegistry *
     if (!registry || !registry->compiler_session || !importer || !specifier || !specifier[0] ||
         specifier[0] == '.')
         return XR_NAMED_IMPORT_UNHANDLED;
-    const XrModuleGraph *graph = xr_compiler_session_module_graph(registry->compiler_session);
+    const XrModuleGraph *graph = registry->source_graph;
     if (!graph)
         return XR_NAMED_IMPORT_UNHANDLED;
     bool importer_claimed = false;
@@ -681,8 +711,12 @@ static XrNamedImportResult module_spec_for_named_import(const XrModuleRegistry *
         return XR_NAMED_IMPORT_UNHANDLED;
     if (!owner)
         return XR_NAMED_IMPORT_CLAIMED_INVALID;
-    int dependency = xr_module_graph_find_named_dependency(graph, owner->source_path, specifier);
-    if (dependency < 0 || dependency >= graph->spec_count || !graph->specs[dependency].source_path)
+    int dependency = -1;
+    XrModuleStatus status = xr_compile_module_graph_find_named_dependency(graph, owner->source_path, specifier, &dependency);
+    if (status == XR_MODULE_BUDGET || status == XR_MODULE_OUT_OF_MEMORY)
+        xr_compile_state_fail(xr_compile_session_compile_state(registry->compiler_session),
+            status == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+    if (status != XR_MODULE_OK || dependency < 0 || dependency >= graph->spec_count || !graph->specs[dependency].source_path)
         return XR_NAMED_IMPORT_CLAIMED_INVALID;
     if (out_spec)
         *out_spec = &graph->specs[dependency];
@@ -707,7 +741,9 @@ static char *resolve_embedded_relative(const XrModuleRegistry *registry, const c
     if (!registry || !specifier || !importer || specifier[0] != '.')
         return NULL;
 
-    char *base_dir = xr_path_dirname(importer);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    char *base_dir = NULL;
+    (void) xr_path_dirname_owned(&policy, importer, &base_dir);
     if (!base_dir)
         return NULL;
 
@@ -793,16 +829,19 @@ char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
     if (!importer_authority)
         return NULL;
 
-    XrModuleId mid;
+    XrModuleId mid = {0};
     char *err = NULL;
-    int rc =
-        xr_module_resolver_resolve(resolver, module_name, importer, importer_authority, &mid, &err);
+    XrModuleStatus rc =
+        xr_compile_module_resolver_resolve(resolver, module_name, importer, importer_authority, &mid, &err);
+    if (rc == XR_MODULE_BUDGET || rc == XR_MODULE_OUT_OF_MEMORY)
+        xr_compile_state_fail(xr_compile_session_compile_state(registry->compiler_session),
+            rc == XR_MODULE_BUDGET ? XR_COMPILE_RESOURCE_BUDGET : XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
     if (err)
-        xr_free(err);
+        xr_compile_resources_free(err);
 
     if (rc == 0) {
         char *result = mid.source_path ? xr_strdup(mid.source_path) : NULL;
-        xr_module_id_cleanup(&mid);
+        xr_compile_module_id_cleanup(&mid);
         return result;
     }
 
@@ -1010,7 +1049,7 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
             .namespace_id = module_name,
             .physical_root = owned_source ? registry->stdlib_path : NULL,
         };
-        if (!registry->fn_compile_src(registry->compiler_session, source, path, &authority,
+        if (!registry->fn_compile_src(isolate, registry->compiler_session, source, path, &authority,
                                        &compilation)) {
             xr_isolate_set_current_module(isolate, prev_module);
             xr_free(owned_source);
@@ -1090,7 +1129,7 @@ static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_nam
     if (!registry)
         return NULL;
 
-    const XrStdlibModuleDescriptor *descriptor = xr_stdlib_module_descriptor(module_name);
+    const XrStdlibSourceDescriptor *descriptor = xr_stdlib_source_descriptor(module_name);
     if (!descriptor)
         return NULL;
 
@@ -1119,7 +1158,7 @@ static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_nam
         xr_module_free(module);
         return NULL;
     }
-    if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
+    if (xr_hashmap_owned_set(registry->loaded_modules, module_name, module) != XR_OS_IO_OK) {
         xr_log_warning("module", "out of memory caching standard library module '%s'", module_name);
         xr_module_fail(module);
         xr_module_free(module);
@@ -1192,7 +1231,7 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
         const XrModuleIdentityAuthority *authority =
             module_authority_for_source(registry, clean_path);
         if (!registry || !registry->compiler_session || !registry->fn_compile_src ||
-            !authority || !registry->fn_compile_src(registry->compiler_session, source,
+            !authority || !registry->fn_compile_src(isolate, registry->compiler_session, source,
                                                      clean_path, authority, &compilation)) {
             xr_free(source);
             xr_free(clean_path);
@@ -1249,7 +1288,10 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
     }
 
     // 1. Check cache (by module name or absolute path)
-    XrModule *module = (XrModule *) xr_hashmap_get(registry->loaded_modules, module_name);
+    void *cached_module = NULL;
+    if (xr_hashmap_owned_get(registry->loaded_modules, module_name, &cached_module) != XR_OS_IO_OK)
+        return xr_null();
+    XrModule *module = cached_module;
     if (module) {
         XrModuleState state = xr_module_state(module);
         if (state == XR_MODULE_INITIALIZING) {
@@ -1292,14 +1334,21 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
     }
 
     // Normalize path (resolve . and ..), ensure same file uses same cache key
-    char *real_path = xr_realpath(path, NULL);
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    char *real_path = NULL;
+    (void) xr_realpath_owned(&policy, path, &real_path);
     if (real_path) {
         xr_free(path);
         path = real_path;
     }
 
     // 4. Check cache with absolute path (ensures module singleton)
-    module = (XrModule *) xr_hashmap_get(registry->loaded_modules, path);
+    cached_module = NULL;
+    if (xr_hashmap_owned_get(registry->loaded_modules, path, &cached_module) != XR_OS_IO_OK) {
+        xr_free(path);
+        return xr_null();
+    }
+    module = cached_module;
     if (module) {
         xr_free(path);
         XrModuleState state = xr_module_state(module);
@@ -1322,7 +1371,7 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
          * installed before execution so recursion observes INITIALIZING, and
          * retained after execution so later imports observe the terminal
          * PUBLISHED or FAILED state without re-running initialization. */
-        if (!xr_hashmap_set(registry->loaded_modules, module->path, module)) {
+        if (xr_hashmap_owned_set(registry->loaded_modules, module->path, module) != XR_OS_IO_OK) {
             xr_log_warning("module", "out of memory caching module '%s'", module_name);
             xr_module_fail(module);
             xr_free(path);

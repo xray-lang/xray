@@ -1813,26 +1813,25 @@ unsafe {
 
 #### `comptime expr` / `comptime { ... }`
 
-`comptime` 要求表达式或块在分析阶段求值；失败是编译错误，不会退回运行期。常量表达式不限于整数：当前支持标量常量、TypeId、定长数组、tuple、struct 聚合及其成员/索引访问，以及可求值的一元/二元运算。固定数组长度等静态整数位置仍要求最终值是正整数。
+`comptime` 要求一个关闭的表达式或块在编译期间求值。普通Source先构造真实XIR，经完整Built/Checked、特化复验和Lowered后，进入唯一有界CTFE服务；结果再由独立普通Source重放并完整检查。失败是带源位置的编译错误，不退回运行期、AST evaluator或宿主执行。普通函数能否在运行期调用，不由它是否通过CTFE准入决定。
+
+允许的普通函数调用、高阶调用、有限递归与循环使用同一数值/CFG核。完整可达闭包包括实际函数值和cleanup目标；尚未执行的可达body也必须准入，`requires_root=NONE`等效果标志不授予确定性。编译期私有局部状态、临时分配、真实ref与cleanup受相同拥有、借用和资源检查。外部可变模块状态、时钟/熵/环境、文件/网络/进程I/O、调度同步、未知extern及任意native调用不准入。
+
+可导出结果是准入的标量、String、Unit、Tuple、Nullable、Array及关闭的struct/enum数据；有限递归nominal数据遵守§17.68。内部Class/Function/Cell等可以按其专属规则参与计算，但其身份或外部资源句柄不能成为常量结果。私有字段的常量重放使用§17.67的真实声明绑定，不给使用方私有构造权。类型描述与派生服务不由此成为任意CTFE值或字段权限。
 
 ```xray
-const SCALE = comptime 8 * 4
-var buf: [u8; comptime SCALE + 2] = [0; SCALE + 2]
+fn fact(n:i64)->i64 { return n==0 ? 1 : n*fact(n-1) }
+export fn run()->i64 { return comptime fact(6) }
 ```
 
-`comptime { ... }` 已实现受限解释执行。块支持局部 `const`/`var`、局部变量赋值和复合赋值、`if`/`while`、C 风格 `for`、定长数组 `for-in`、循环内带标签或不带标签的 `break`/`continue`、`compile_assert(...)` 与 `compile_error(...)`。块只产生编译期副作用并在运行时被擦除；需要把值带出块时使用 `return <consteval-expression>`。当前函数调用不属于 consteval-safe 表达式，unsupported 语句会在分析期拒绝。
+块内的普通局部声明、赋值、条件与循环仍按普通Source语义检查。最后一个表达式语句产生块值；空块或以普通语句结束的块产生Unit。`return`不能从comptime块跳回外围函数，且不能以它替代尾表达式。块不隐式捕获外围运行期局部变量或参数。泛型源作用域中的comptime不捕获外围运行期值。外围类型参数保留原lexical含义；依赖它们的Program表达式先进入普通泛型检查，经实际特化和唯一Lowered CTFE逐关闭实例执行，再以完整规范键接回私有literal provider（17.78）。自身完全关闭的thunk仍按17.71执行。Library未来泛型实例仍待完整重定位，不能以一个站点单一Value或运行期fallback代替实际结果。
 
 ```xray
-const TABLE_SIZE = comptime 4 * 8
-
-comptime {
-    var sum = comptime 0
-    for (var i = 0; i < 4; i += 1) {
-        sum += i
-    }
-    compile_assert(sum == 6, "comptime loop")
-}
+fn noop() {}
+export fn run()->i64 { return comptime { comptime noop(); 42 } }
 ```
+
+步骤、整个调用栈的深度/frame、临时堆、逻辑输出和类型/字段遍历都向原编译作业收费，返回与失败不重置累计费用。无限循环、深递归或巨大输出会确定性地拒绝并保全空结果，墙钟watchdog另记环境失败。准入、target/profile、完整预算、输出policy2、失败清理及独立重放细则见§17的CTFE执行条款。
 
 ### 3.3 二元表达式
 
@@ -7628,8 +7627,436 @@ Source 的 &&/|| 在该局部存储上保留短路语义，经原 Checked→特�
 
 本节不准入普通 var 生成的拥有型 Cell、owned/path 操作、聚合/字符串导出、未知函数值或 native/Instance 执行；它们需要各自实际类型、生命周期与费用接口及独立资格，不从栈内标量存储外推。
 
+### 17.40 CTFE有界CFG回边与声明身份接收
 
-### 17.40 Source 失败诊断与编辑器发布
+leaf CTFE接受经过完整Lowered复验的标量CFG回边；PHI在共同scalar edge核中按前驱选择并行复制。整个执行共享原steps/watchdog和编译账本：回边不重置或退还费用，非终结循环在有限steps耗尽时拒绝并保全规范Unit输出。实际Phi前驱、target、offset和签名仍由完整复验检查，执行器不按block ordinal推断可终结性。
+
+CTFE要求实际普通函数声明身份。结构合法但没有declarations/functions表的Lowered不能授予执行资格；leaf/direct-call入口分别拒绝为NOT_LEAF/NOT_SUPPORTED，并保留输出和已消费费用。Module initializer、nominal/cleanup owner、实际不支持的操作及可达I/O仍逐项拒绝，root或effect标志不授予确定性。leaf保持无CALL边界，有限调用使用独立全闭包接收入口。
+
+### 17.41 CTFE的规范Unit返回与普通Source重放
+
+没有值参数的普通Unit结果函数可进入CTFE的实际闭包准入；其Unit RETURN保留零type/reserved/payload，目标逻辑输出大小为零。Unit返回没有SSA存储槽，子调用返回不得向该槽写入；调用者的标量参数与已活跃值保持。Unit不作为普通值参数开放，入口仍按实际类型和完整Lowered身份复验。
+
+Source的Unit comptime结果经同一有限CTFE管线接收，再独立重放为普通Unit表达式，保留站点匹配、覆盖和规范结果验证。空块或末尾为普通语句的块产生Unit，拥有型局部状态继续依赖实际值域接点；comptime块不授予从外围函数非局部return的许可。I/O、非终结循环及不可接收的实际操作仍分别按闭包准入或预算规则拒绝，失败输出和原编译账本保持。
+
+### 17.42 有界CTFE的Rune值与普通Source常量
+
+Rune与bool/integer共同进入实际标量参数、返回、局部存储和直接调用闭包准入。CONST_RUNE、INTEGER_TO_RUNE、RUNE_TO_INTEGER使用已有共同执行核；Rune相等比较验证两边完整Unicode标量后比较码点，不把Rune解释为整数类型或宿主字符。合法范围为0..0x10ffff，排除0xd800..0xdfff；非法Rune输入拒绝为BAD_ARGUMENT，整数转Rune越界拒绝为NUMERIC_RANGE，失败保留规范Unit输出。CONVERT_NUMBER仍只准入整数之间转换，不由Rune开放浮点。
+
+导出大小由规范目标layout确定，Rune为4字节，output_bytes=3拒绝；不使用宿主载体sizeof或UTF-8长度决定预算。Source通过实际Checked/特化复验/Lowered计算后，在独立完整重放中写入普通CONST_RUNE recipe，保持完整站点、类型、规范值和覆盖验证。嵌套comptime和普通Rune调用不绕过闭包准入；原steps/depth/frame/output上限、同一累计编译账本、真实物理OOM和最后owner释放责任不变。本族不授予managed聚合、字符串、未知函数值或运行期fallback资格。
+
+### 17.43 原编译账本上的私有Cell执行与Unit尾赋值
+
+CTFE在整个实际调用闭包准入后，允许函数帧内的Cell<Unit/bool/integer/Rune>。普通var的CELL_NEW/READ/WRITE、懒构造CELL_LOCAL_WRITE和LOCAL_UNINIT使用既有真实Value操作；类型元数据独立复制进编译TypeArena，值存储经原XrCompileResources支持的Domain分配。所有分配、复制、遍历与Domain work保持同一累计账本和真实物理FI；局部接收fuel只限制一次标量检查，不复制、重置或返还编译预算。无Cell操作的原标量入口不创建该Domain/arena。
+
+实际owned offsets在正常返回、子帧返回、步数/预算/OOM/算术失败中全部释放。帧建立预付其清理offset扫描费用；清理不依赖剩余执行预算，也不分配。每次Cell访问验证同一私有Domain，参数仍限bool/integer/Rune，导出仍限规范Unit/bool/integer/Rune结果，不接收外部Cell、ref借用、模块状态或任意拥有值。类型、前驱/PHI、target、身份、签名、可达I/O、depth/steps/activation bytes及原输出上限继续全量复验，不从root/effect标志授予纯度，不调用Instance/native/fallback。
+
+Unit块的最后赋值可带普通表达式的内部编号，但helper的Unit RETURN必须使用零编号，不构造Unit SSA槽或传递该编号。Source仍完整独立重放、核对站点与规范值并重新Checker接收；私有Cell执行只导出实际标量/Unit结果。本族不授予Cell/聚合/字符串导出、函数值、清理函数或挂起资格。
+
+### 17.44 CTFE字符串拥有型导出与独立Source接收
+
+String参数、结果及Cell<String>使用实际Value/TypeArena和原compiler Domain。外部字符串参数先按完整UTF-8字节复制为本编译账本上的独立快照；内部调用通过真实owned slot retain/copy/move，正常、子返回和所有失败释放全部slot。常量、拼接、拥有型局部复制、字符数len与相等比较使用既有Value语义，扫描/复制/比较span在执行前付原累计work，Domain分配/resize也接同ledger。不调用Instance/native/AST fallback，不因root或effect授纯度。
+
+String输出大小是实际UTF-8字节数，不是宿主指针、carrier sizeof或字符数；空串在output_bytes=0可导出，超过调用者在17.61政策下选定的逻辑限额拒绝OUTPUT_LIMIT，失败输出保持Unit。发布前取得独立拥有引用，帧/Artifact/Source/ledger调用者死亡不使结果悬空；最后drop不分配、不退累计费用，仅退live。
+
+Source每个原站点及重放站点分别持有真实结果；独立重放把完整字节复制到自己的普通literal/CONST_STRING recipe，再经完整Checker/query发布。内嵌NUL按长度保存，未知/重复/多余/类型错配站点仍拒绝。所有部分结果与第二次构造/费用/发布失败的结果均释放。目标/profile与原steps/depth/frame/output及编译三轴保持，未开放任意聚合/函数值/资源句柄导出。
+
+### 17.45 有界CTFE的String比较和只读搜索
+
+CTFE准入完整Lowered函数闭包中的String字节序比较（<、<=、>、>=）、contains、startsWith、endsWith、indexOf和lastIndexOf，调用既有Value操作确定语义，不引入native、Instance或AST求值路线。indexOf的start与两种索引结果都以Unicode标量计数，String长度也以标量计数；比较使用完整UTF-8字节序，嵌入NUL不截断。空模式、未找到的-1及start等于标量长度保持普通运行期规则；负start或超过标量长度返回NUMERIC_RANGE，Source给出value range violation诊断并保全输出。
+
+可变扫描在调用Value操作前从原累计compiler ledger预付保守上界：字节比较跨度、每个候选字节的模式比较和循环责任、实际搜索算法需要的skip表初始化及模式访问、索引换算的UTF-8扫描均计入。所有加乘检查溢出；无法支付或溢出拒绝BUDGET，不开展无界宿主搜索。空模式与已判定的范围错误无需扫描。该预付不是新额度，不退款、不重置原128M work及64MiB allocated/8MiB live限制。
+
+输入仍先复制到compiler Domain快照，异常、OOM、step或work拒绝释放全部帧拥有槽并保全调用者String。Source继续独立两次构造、普通常量recipe、完整Checker和查询发布；即使搜索条件使I/O分支不执行，实际可达闭包中的I/O仍拒绝。本族不授予任意聚合、函数值、资源或清理路径准入。
+
+### 17.46 编译域内的不可变Tuple与独立常量接收
+
+CTFE接收已经完整复验的类型池与普通函数闭包，迭代准入由Unit、bool、integer、Rune、String及这些类型组成的不可变Tuple。类型ID只在实际owner的描述池中有意义；循环描述、未闭合类型和含函数值/Cell/资源权限的字段拒绝，不从root或effect标志取得确定性。TUPLE_NEW按完整有序字段向量构造真实Value，Unit字段保留位置而无SSA槽；TUPLE_FIELD、内部Tuple参数/子返回、owned局部/并行PHI及私有Cell<Tuple>保持真实拥有引用和同compiler Domain。外部Tuple参数仍需有界跨arena接收接口，当前失败关闭拒绝。
+
+类型描述DFS、摘要与所有实际元数据分配进入原ledger。嵌套接收费用按完整展开的类型形状预付，重复字段位置逐次计数，数据共享不退费；加乘溢出或无力支付拒绝BUDGET。构造参数向量按完整arity占真实activation字节，遍历scratch使用原剩余frame额度并计入resize新旧块同时存活的峰值。steps65536、depth128、frame65536、17.61规定的输出上限及原64MiB allocated/8MiB live/128M work保持，不重置或退款。
+
+Tuple导出大小是按字段顺序递归相加的目标标量存储大小与String实际UTF-8字节，Unit贡献0；不计host指针、拥有头、type ID、carrier sizeof或填充。超原请求上限保全Unit输出。发布先取得独立拥有引用，类型arena、嵌套Tuple和String字段在Source/Artifact/ledger调用者死亡后仍有效；最后drop不分配，仅退live。
+
+Source以实际类型结构跨owner匹配helper及重放结果，而非假定局部type ID相同。独立接收以迭代拥有帧保存字段引用，将每个字段写成普通常量和TUPLE_NEW recipe，并完整Checker/查询发布。NUL完整长度、Unit字段位置、闭合泛型和原站点/owner/expected覆盖保持；字段失败、OOM、预算、构造与发布失败均释放全部临时结果。当前准入不授予任意Array/struct/enum、Tuple相等、函数值或cleanup路径完整资格。
+
+### 17.47 有界CTFE浮点位运算与目标常量
+
+完整Lowered重验与整个直接调用闭包接收后，CTFE允许f32/f64参数、结果、普通局部、私有Cell与不可变Tuple字段。CONST_FLOAT、负号、加减乘除、比较及具体数值转换复用现有仅整数实现的IEEE位运算，不依赖宿主FPU、Instance、native或AST回退。次正规数、最近偶数舍入、规范NaN、无穷和有符号零沿用普通执行语义；浮点除零产生IEEE结果。浮点转整数越界、NaN和无穷返回NUMERIC_RANGE，失败保持Unit输出。
+
+每条浮点操作在进入数值API前向原累计compiler ledger预付1024单位work。此保守固定上界覆盖64位格式的解码/打包、归一化、乘积进位扫描和长除法；这些循环只受固定格式位宽限制。预付不复制、重置或退还配额；未付清则先返回BUDGET。完整类型、身份、CFG、可达I/O及原steps/depth/frame/output/allocated/live/work上限继续生效。
+
+f32和f64逻辑输出分别占四和八个目标字节，Tuple字段继续累加目标存储大小。f32输入必须没有高位且NaN编码规范；f64沿用普通Value接收规则。Source在独立重放中再次校验目标规范浮点payload，记录普通CONST_FLOAT配方并交完整Checker。外部Tuple、任意Array/struct/enum、函数值和cleanup路径资格仍未由此授予。
+
+### 17.48 编译域内Nullable活跃分支与有界常量接收
+
+完整Lowered重验和整个可达直接调用闭包接收后，Nullable可以包装已准入的基本值、String、不可变Tuple及合法嵌套Nullable。类型ID仍只属于实际不可变pool；迭代类型族接收拒绝环、非法element和带Cell/函数/资源权限的字段。NULLABLE_NONE/SOME、IS_SOME和UNWRAP调用真实Value操作，在原compiler Domain构造、观察或取得独立payload引用。内部参数/子返回、owned局部/并行PHI、Tuple字段和私有Cell<Nullable>保持完整拥有寿命。解包None返回独立NULL_UNWRAP状态，Source报告带位置的编译错误，失败保全Unit输出并释放所有帧。
+
+逻辑导出从唯一TypeArena storage layout取得判别字节数，加上Some活跃payload的递归逻辑大小；None没有payload费用，不计算inactive存储、对齐填充、指针或owner头。当前canonical Nullable tag为一字节：None<i64>占一字节、Some<i8>占两字节，Some<i64>需九字节，按17.61规定的调用者逻辑输出上限检查。迭代导出scratch继续计入原frame额度及resize时新旧块峰值；目标标量大小、String UTF-8长度和Unit Tuple字段零字节规则不变。
+
+完整有限类型形状在每次Value接收前预付原ledger，活跃分支不能借None免掉型别准入。Nullable相等仅接既有共同Value相等支持的Nullable链及基本/String叶；规范NaN、有符号零和完整NUL字节沿用同一个语义owner。固定数值work和活跃String扫描跨度在比较前支付原累计ledger，溢出或无力支付先返回BUDGET。没有另建语义解释器、配额、退款或Instance/native回退。
+
+Source独立重放按真实跨owner类型结构匹配，持有真实分支和字段owner，迭代记录普通NULLABLE_NONE/SOME与payload常量/TUPLE_NEW配方，再交完整Checker和查询发布。原站点/owner/expected覆盖以及每个失败前缀释放保持。外部Nullable/其他复合参数仍需有界跨arena完整快照接收；当前明确拒绝。Array/struct/enum、函数值和cleanup完整资格不由本族授予，原所有预算与正式安全门继续生效。
+
+### 17.49 有界编译Array、私有根修改与capacity接收
+
+完整Lowered和整个实际直接调用闭包重验后，CTFE接真实ARRAY_NEW/REPEAT/GET/LEN、CAPACITY/WITH_CAPACITY/RESERVE、SET/PUSH及私有Array Cell的CELL_PLACE/PLACE_READ/WRITE。类型族接收允许基本/String叶、纯Array链、接收跨度静态可界定的Tuple/Nullable元素及合法外层Tuple/Nullable包装。编译域内参数、子返回、Cell、owned局部与PHI仍用原Value/TypeArena/Domain，不运行Instance/native或AST fallback。root/effect不证明确定性。只有真实当前私有Cell根的同步place可修改；module根、外部Cell/ref和未接通的field/index投影继续拒绝。
+
+类型形状只报告费用和可变接收跨度，不是Value/执行授权。所有元数据、向量、复制、扫描、扩容和清理预付都进入原累计ledger。Array浅层长度可在有界header观察后取得；普通接收跨度按长度乘完整静态元素形状的保守上界在调用Value之前支付，检查加乘溢出。Tuple/Nullable包装中的可变Array跨度用迭代拥有访问定位并提前付清，不依靠宿主递归。scratch计入剩余原frame额度，导出stack与Value接收scratch的同时峰值一并计算。未付清先BUDGET；原预算、步数、深度和失败不退款规则不变。
+
+现有array_get会先接收整个Array。若某元素又包含自身需遍历可变Array内容的接收边界，如Array<Array<Tuple<...>>>或Array<Array<i8?>>，调用前无法借现有API有界取得内部长度。该具体族当前fail closed，需Value owner提供在每次访问前付费的浅层子观察/完整接收接口；不改成另一Value表示、不先无预算扫描、不将该接口缺口描述为整个Array目标完成。纯Array<Array<i8>>无需这种深接收，可以执行。任意Array相等、其他Array方法与完整路径仍未由本节授予。
+
+Array逻辑导出递归累加活跃元素的目标标量、String字节、Nullable判别和Tuple字段大小；空数组零字节，不计capacity、指针、owner头或inactive存储。实际capacity仍是普通语言可观察值，独立Source重放以WITH_CAPACITY、私有Cell、逐元素PUSH和CELL_READ配方精确保留它，不能把Array重新建成具有不同capacity的普通字面量。所有临时owner失败前缀均释放；导出类型、元素及账本在Source/Artifact/调用者死亡后仍有效，最后drop无分配且只退live。
+
+真实COW修改保留旧快照。负长度/capacity返回NUMERIC_RANGE，索引越界返回追加的compiler-only BOUNDS状态；Source给带位置的编译错误。失败保全Unit输出及借用值。外部复合快照、有嵌套可变接收的元素、nominal/函数值/cleanup和正式共享/完整安全资格继续按原目标实施，不能从此有限开发资格推断完成。
+
+### 17.50 原账本预付的共同Array/Nullable相等
+
+在完整Lowered、实际类型族及整个可达调用闭包接收后，XR_EQUAL可比较已准入的Array/Nullable链与共同Value相等支持的基本/String叶。只由既有xr_xir_value_equal产生布尔结果；预付遍历不另写数值、String或容器相等规则。共享backing或地址相同不能证明自反性，NaN数组与自身仍不相等，正负零沿共同IEEE规则相等。capacity不参与内容相等，NUL保持完整String长度。Tuple/nominal或带执行/资源权限的比较族仍要求其真实owner支持，不能凭类型名字猜能力。
+
+迭代拥有的成对预付遍历在每次header/型别/child访问前收费。浅层Array长度和Nullable活跃分支限定后续跨度；每次真实Array getter之前付清其完整接收跨度，String完整比较字节和各浮点叶的固定宽度费用在共同比较前支付原累计ledger。上界保守，溢出/无力支付先BUDGET，所有费用不重置、不退款。长度或None分支不需要未访问payload扫描；实际比较仍调用同一Value语义。没有unbounded host walker、Instance/native执行或AST回退。
+
+预付stack使用原剩余frame限额，包括resize新旧块和getter接收scratch同时峰值；共同比较开始前释放该stack和所有临时引用，再独立约束共同Value scratch。任一物理OOM、work/step/frame失败都保全Unit输出、原借用值及累计收费，释放全部临时/帧owner。Nullable旧专用相等分支由此共同路径原子替换；Source仍两次构造、独立普通BOOL常量与完整Checker/query发布。原全部预算、安全门和更深变量接收的具体Value观察接口缺口继续生效，开发资格不等于完整P11。
+
+### 17.51 私有Array索引路径的有界接收与写入
+
+CTFE在完整Lowered及整个可达闭包准入后支持以真实私有Cell为根的INDEX_PLACE链。每个投影只保存类型和已计算索引；执行读写时重新解析当前根，不持有跨操作内部地址。索引链必须回到已准入、当前compiler Domain内的Cell；字段路径遵守17.53，私有Class对象根遵守17.60；模块根、外部Cell及投影Cell权限不会因此获得准入。完整类型族限制不变，尚无有界接收接口的更深变量Array仍明确拒绝。
+
+路径计数与构造、每次类型/头观察、完整getter接收跨度、最终公共路径接收以及可能复制的每个祖先capacity字节，均在实际访问前预付原累计账本。push还预付叶Array可能增长的容量。溢出或无法预付先返回BUDGET。路径步骤本身占用原frame剩余额度；观察和最终Value操作的scratch只可使用扣除路径后的余额。所有临时观察owner在共同写入前释放，避免人为制造共享；唯一Value path read/write/push决定普通语义、COW及发布，不能另造CTFE写入算法。
+
+嵌套set/push、PLACE_READ/WRITE及普通reserve读/构造/写回配方沿这条路径执行。现有普通Array方法配方可继续组合已准入操作，包括contains/indexOf、String join、clear/reverse/unshift/pop/shift/resize/fill/concat/entries；各自仍须通过实际opcode、类型和完整闭包检查。内部函数值回调遵守17.55，数值格式化遵守17.52。Source保留独立普通常量重放；路径结果导出仍按活跃逻辑字节与原output帽。
+
+已有快照保持普通COW语义。任一物理OOM、越界或work/step/frame/output错误保全空输出并释放全部帧与临时owner，累计费用不退款。Source/Artifact及ledger调用者死亡后，最后拥有结果仍保留真实类型/Domain寿命，最终drop无分配。路径开发资格不替代完整P11、公共sanitizer、provider和其他原门。
+
+### 17.52 共同标量文本与原账本的格式化费用
+
+TO_STRING在完整Lowered及整个可达闭包准入后支持bool、整数、Rune和f32/f64。唯一`xr_xir_scalar_text`产生普通十进制整数、true/false、完整Rune UTF-8和最短往返浮点文本；CTFE不使用Instance输出或另一套转换器。浮点仍沿仅整数的共同IEEE格式化，正负零、subnormal、NaN/inf和指数记法不依赖宿主FPU或locale。NUL按长度传递。普通Array数值/bool/Rune join配方由相同TO_STRING接通；该准入不授予I/O、身份或外部状态权限。
+
+每次格式化前先支付有界元数据观察，随后预付原累计账本的算法费用和原frame中的固定工作区。整数/bool/Rune使用256 work、512 frame字节；浮点零及非有限值使用1024 work、512 frame字节。有限非零浮点以正常数的无偏二进制指数、或subnormal最低可能指数的绝对值d，预付131072+(d+2)×2048 work和16384 frame字节，覆盖至多17位/每位9次减法、全部bigint复制和正规化；费用判定只观察位宽/指数，不决定文本语义。共同decimal workspace的sizeof≤1024由编译断言保持，扩大它必须重新证明费用和frame上界。剩余frame不足或无法预付先失败；不得先进入格式化再检查预算。String构造的真实复制、分配和所有权继续计入原Domain/ledger。
+
+逻辑输出仍按完整UTF-8字节数遵守原17.61规定的输出上限；内部较长文本可用于比较，不能把内部长度误当导出权限。独立Source重放普通String/Bool常量并经过完整Checker/query。物理OOM、work/step/frame/output拒绝保全空输出与借用参数，费用不退款，释放全部帧/临时owner。真正格式化得到的最后String在Source/Artifact/ledger调用者死亡后保持有效，最终drop无分配。声明绑定nominal与内部函数值分别遵守17.53/17.55；cleanup、foreign接收及正式完整安全资格仍按原P11责任推进。
+
+### 17.53 声明绑定的结构体、活动枚举与私有字段路径
+
+CTFE在唯一完整Lowered及整个可达闭包准入之后执行已关闭的普通struct/enum。类型族逐字段检查、拒绝循环及未准入native类型；内部Class身份与实际图接收遵守17.60；声明owner的lexical准入见17.54；它不代替函数体、效果或权限检查，也不代表class实例。STRUCT_NEW/GET、ENUM_NEW/TAG/GET使用唯一Value构造、接收和拥有slot；普通方法与泛型特化仍经过既有Source/Checker和闭包准入。枚举仅观察实际活动variant，不执行失活payload。
+
+FIELD_PLACE与INDEX_PLACE可以组合，但根必须是本次compiler Domain内真实私有Cell。STRUCT_SET和普通字段/Array写入、push沿同一Value path实现。每次观察及完整接收前预付原累计ledger费用，可能复制的struct字段向量和Array祖先capacity一并预付。路径、显式遍历栈和同时存在的接收scratch共享剩余frame；观察owner在共同变更前释放，保留正常COW和单次发布。类型形状只用于计费，不是另一种Value表示或权限证明。
+
+拥有结果按活动字段递归计算目标标量与String字节、Array元素、Nullable标签和enum真实storage标签字节；空struct为0，单variant空enum可为0，多variant空分支仍计实际标签。padding、capacity、拥有头和指针不计输出。拥有结果不得先调用不适用的独立nominal storage布局查询再按指针大小放行；唯一TypeArena storage及逻辑遍历决定导出，原17.61规定的输出上限不变。
+
+Source从同一不可变输入图独立重建普通STRUCT_NEW/ENUM_NEW配方；跨池接收核完整声明顺序/identity、字段权限/名称、variant范围、native指纹和关闭字段类型，不能只比较局部type ID。元数据和字节比较在访问前计入原账本，最终完整Checker及query继续决定权限与发布。外部nominal/Class参数仍不准入，内部Class执行遵守17.60；缺少有界观察接口的struct动态child和更深Array接收仍明确拒绝，不能无预算预扫描。外部私有拥有结果的物化权限与Unit字段Source前置尚需完整资格，不据内部方法成功宣称覆盖。
+
+物理OOM及work/step/frame/output拒绝保全空输出和借用输入，全部临时/帧owner释放，费用不退款。真正struct/enum结果在Source、Artifact和ledger调用者死亡后仍有效，最后drop不分配。该范围开发证据不替代函数值/cleanup、foreign接收、P12以及原全部共享/provider/正式安全门，完整P11目标保持开放。
+
+### 17.54 编译期helper的真实lexical声明权限
+
+普通成员内的comptime helper与普通嵌套函数沿相同规则继承真实lexical nominal owner，并使用既有MEMBER_HELPER身份。它不捕获运行期参数/局部状态，不授予调用者其他声明的权限，也不因helper名或结果类型伪造owner。嵌套comptime继续继承实际外层helper的声明上下文；开放类型相关的comptime仍按17.71明确拒绝。
+
+Checked特化及完整Lowered接收之后，helper查找须匹配模块、唯一名称、零参数、关闭结果类型、真实nominal owner及member kind，并拒绝cleanup身份变化，不能假定所有helper都是无owner的顶层函数。观察与比较先付原累计work，任何错配失败保全已有结果和临时owner。
+
+声明owner本身不是class值或效果授权。纯class静态普通函数可在完整闭包准入下计算；内部临时Class与身份操作须满足17.60，Class身份导出及I/O/native/外部状态仍不获准。私有字段构造/调用只在真实声明owner中合法，独立Source重放保留该普通Checker权限。已经得到私有拥有值不授予外部函数私有构造权限；此类结果的完整物化机制仍属原目标，未实现处须拒绝，不能借反射/内存写入或runtime fallback绕过。
+
+### 17.55 内部真实Function值与有界间接调用
+
+CTFE在每次完整Lowered、identity/target/profile复验后，将实际direct CALL和全部FUNCTION_REF目标一并纳入本次可达闭包；尚未执行的回调目标也不能隐藏I/O或其他未准入操作。FUNCTION_REF、FUNCTION_WEAKEN及CALL_INDIRECT使用既有Value Function工厂、不可变capture向量、owned slot和同一有界activation机器。普通函数返回函数、高阶参数、PHI、Tuple/Nullable内部持有，以及已有Array map/filter/reduce普通配方可以组合已准入操作；不调用Instance/native/宿主函数体或AST解释器。
+
+每个实际Function带本次执行私有lease，按原资源owner登记。接收时先在活跃登记表匹配owner，再核原Artifact、真实producer指令/type、原FUNCTION_REF entry/capture及本次可达集合，不能先解引用任意binding.owner。弱化必须通过既有callable weakening规则；新lease独立保存原producer事实，不借悬空父lease。capture由共同Value持有，最后释放仅摘链和释放原资源，不分配。外部Function参数在读取payload或调用其准入回调之前拒绝；Function及任何含Function的结果不能导出或写成Source常量。
+
+按值capture保持共同Value所有权。可变capture只接受本次新推导的真实Cell provenance中OWNED_CAPTURE角色，且必须处于当前compiler Domain、无借用、非投影、非module storage；Function capture仍拒绝scoped/ref和cleanup角色；内部调用参数与静态cleanup另遵守17.56。每次私有Cell/path写入之前，迭代观察输入的真实Function capture与Cell快照，拒绝通向目标Cell的回边，保全旧值；无环共享和替换并不因此禁止。该检查不制造另一种值表示，也不读取私有对象头。内部动态struct按17.66接收；内部Array<Function>按17.64逐实际capture接收。
+
+类型/签名、登记表扫描、capture向量、Cell元素形状、完整getter/复制和最终共同Value接收均先付原累计work；显式观察栈和同时接收scratch占原剩余frame。所有调用共享原steps/depth/frame，仍为steps65536、depth128、frame65536、17.61规定的输出上限及work128M/allocated64MiB/live8MiB。OOM、耗尽、非法闭包或循环写入保全空输出/借用值并释放每个activation、capture和lease，累计费用不退款或重置。内部Function准入不授予外部权限；静态cleanup/ref调用遵守17.56，P12和正式共享/provider/安全资格仍须独立验证。
+
+### 17.56 静态cleanup frontier与真实编译期Cell借用
+
+完整Lowered/identity/target/profile复验后，direct CALL、全部FUNCTION_REF与CLEANUP_REGISTER目标共同构成本次准入闭包；未执行的cleanup目标也不能藏I/O。CLEANUP_REGISTER激活既有不可变注册记录，CLEANUP_LEAVE沿实际frontier的祖先链按LIFO调用真实cleanup函数。只有该child正常返回后才退休注册记录；嵌套cleanup、作用域结束及循环continue/break沿同一规则执行。所有控制流边及并行PHI仍走共同scalar edge核，不另建表达式或Value解释器。
+
+RETURN遇到活跃frontier时，先用共同Value保留实际返回快照，再退出到frontier0；cleanup改变私有Cell不能追溯改变已捕获的返回值。原拥有slot、COW和Value copy/drop决定寿命。最终结果按原目标逻辑大小导出；临时返回快照在失败或frame释放时也必须释放。预算/物理OOM等编译作业中止不发布部分结果，仍须在不分配、不退款的终态路径释放全部frame、快照、lease和loan。
+
+内部Cell参数继续由本次新推导的真实provenance区分：Function capture只接受OWNED_CAPTURE；普通ref调用接受SCOPED_REF；cleanup参数接受LEXICAL_CLEANUP且必须匹配实际cleanup_owner和正在退出的直接父frame。callable的ref模式描述存储，不单独授予借用权限。实际Cell必须属于当前compiler Domain、非module storage；scoped projection另遵守17.57，拥有capture仍不得接projection。外部Cell参数仍在payload接收之前拒绝，cleanup声明也不能作为独立外部CTFE入口调用。
+
+每个真实compiler activation使用私有身份、稳定frame及本次有限epoch构成既有CellAuthority。loan记录在进入前按全部Cell参数数量预留，计入原live frame；现有Cell loan prepare/commit/abort/release拥有唯一借用语义。只有直接活跃父authority可以重借；所有参数完成准备且后续发布费用可支付后才统一commit。任一失败逆序abort已准备前缀；正常或失败pop逆序release，精确恢复父loan。Cell读写及同步Array/字段路径使用既有authorized Value操作，不能凭type ID、持有引用或root标志绕过权限。借用期间不把scoped Cell伪装成拥有capture。
+
+参数类型、元素形状、别名检查、frontier查找/迁移及所有可变接收先付原累计work；loan终态释放费用预付，scratch仍限原剩余frame。所有cleanup和ref调用共享原steps/depth/frame及原128M/64MiB/8MiB、17.61规定的输出上限限额。缺省declarations继续明确拒绝，入口guard不能先解引用缺省表。scoped projection遵守17.57；Error cleanup遵守17.58，panic handler/cleanup遵守17.59；外部有界接收及其他未准入族仍fail closed；内部ref/cleanup不授予P12、共享/provider或正式全安全资格。
+
+### 17.57 有界scoped projection与当前根的真实借用
+
+完整Lowered及整个direct/FUNCTION_REF/cleanup闭包准入后，CELL_PROJECT接既有Value工厂，为当前compiler Domain私有Cell的INDEX_PLACE/FIELD_PLACE链构造真实描述符。描述符拥有已求值selector和规范存储根，不缓存内部地址或叶快照。先完成receiver与全部实参求值，再由真实loan_prepare_path重验当前根、完整路径和父scope；所有准备成功且费用可支付后统一commit。借用期间通过既有authorized path read/write/push访问，空suffix表示当前借用scope本身；再投影扩展现有selector，只有真实父authority可以重借。既有provenance角色、别名拒绝、精确父loan恢复和静态cleanup规则继续适用，不授予外部Cell、module/object根或拥有capture权限。
+
+只在闭包实际含CELL_PROJECT时，预扫描真实可达Cell创建点的Array/struct元素形状，元数据操作之前向原ledger支付最大形状的128倍。首次投影借用准备时，父authority仍可合法读取完整规范根；实际有界接收遍历的已付work与类型形状保存在该loan记录，临时根快照在借用准备之前释放。后继重借只从当前父loan继承费用上界；该数字不授予读取根或扩大scope的权限，真实Value loan仍独立复验。当前可准入动态根是元素接收跨度静态可界定的Array，其长度不能经严格后代loan改变；其他可准入根接收跨度静态可界定。尚无完整有界观察接口的更深变量族继续拒绝，不无预算探测私有头。
+
+每次投影访问预付根接收work乘以4×(根形状+1)，覆盖公共path操作的前缀、suffix及完整接收。修改还先读真实Domain live统计，预付live_bytes×根形状×32，覆盖同一无环路径可能发生的祖先COW与保留；Array叶增长另按真实容量及元素storage付费。所有乘法先检溢出，费用不可支付时在Value访问/修改前BUDGET，累计账本从不退款或重置。观察快照在修改之前释放，保留既有COW副本；可变拥有结果可在Source/Artifact/ledger调用者死亡后继续持有，最后drop不分配。
+
+临时selector、共同接收scratch和所有同时存活activation共享原frame；child分配后，参数接收和loan准备只能使用再扣除child字节的余额。Value的scratch不足可能沿既有LIMIT映射为BUDGET，显式frame检查仍返回FRAME_LIMIT；两者均保全空输出并释放已准备前缀，不能伪装为成功或放宽上限。所有step/depth/output与原128M/64MiB/8MiB及65536 frame不变。该族没有公共Value/Call/Instance/SourceContext或schema/opcode变更。Error cleanup遵守17.58，panic handler/cleanup遵守17.59；普通Source ref lambda遵守17.65；foreign/deep-variable接收、P12及完整共享/provider/安全资格仍为独立剩余责任。
+
+### 17.58 内部Error、显式错误continuation与有界cleanup
+
+每次完整Lowered/identity/target/profile复验后，CTFE把INVOKE与direct CALL、FUNCTION_REF和cleanup目标共同纳入实际可达闭包。INVOKE_INDIRECT仍只调用本次真实Function lease已经验证的目标；未执行的错误分支或cleanup也不能隐藏I/O、挂起或其他未准入操作。ERROR_ERASE/IS/NARROW直接使用共同Value的真实enum视图、精确声明身份与既有权限规则，不制造另一Error包装、Value表示或解释器。Error可在准入族内作内部参数/返回、Cell、owned局部、PHI及Tuple/Nullable/enum持有值；外部Error参数及Error或含Error的拥有常量导出继续拒绝，不能借Error擦除扩大类型/声明或执行权限。
+
+真实可达enum创建点的完整形状，与投影所需的Cell根形状共同决定128倍浅层metadata预付上界。opaque Error先付该原ledger费用，再经公开error_borrow取得实际enum视图；完整有界接收另按实际活动字段、String/Array跨度、Function capture及Cell付费。Tuple getter和Nullable unwrap返回Error时也先付实际opaque元数据上界。内部Error类型只标记变量接收，不为其他拥有族绕过原类型限制；内部Array<Error>按17.64接收；内部动态struct按17.66接收；其他缺有界观察的深变量族继续明确拒绝。私有Cell写入前，Error内的Function/Cell图仍沿既有观察路径检查目标Cell回边；合法无环持有与替换允许，环不能由Error隐藏。
+
+成功INVOKE沿真实正常边进入专属INVOKE_RESULT或INVOKE_DISCARD，Unit正常边不伪造值槽。错误先保留真实concrete enum快照，沿该frame的frontier执行LIFO cleanup；每个注册仍只在cleanup child正常返回后退休。跨普通CALL传播先结束child、逆序释放其loan、恢复真实父authority，再将保留错误交给父frame退出。对应INVOKE接收则沿专属INVOKE_ERROR边保留共同Error视图，原shared scalar edge负责真实predecessor与并行PHI；marker必须绑定实际callsite。当前frame的CLEANUP_ERROR保持已求值错误快照，在离开相应scope后沿原错误continuation继续，不能因为cleanup改变Cell而追溯改变抛出的String/Array值。
+
+cleanup内部可有完整处理的try/catch与调用，但其定义仍须满足真实Source/Checker的不逃逸throw和不挂起规则；不能把NO_THROW或root标志当确定性证明。预算/OOM等编译作业失败从不进入语言catch，仍保全空输出并在不分配、不退款的终态路径释放全部frame、pending error、返回快照、lease与loan。未捕获语言错误在适用cleanup完成后返回compiler-only UNCAUGHT_ERROR，Source在原comptime站点报告编译错误；无限cleanup仍受原step/work/frame/depth上限而不能抢先发布未捕获错误。
+
+所有metadata、接收、retention、continuation与清理迁移费用计原累计128M work/64MiB allocated/8MiB live；steps65536、depth128、frame65536、17.61规定的输出上限不变，错误槽和同时存活child/receiving scratch计原frame。Error不授予外部输入快照、Error常量导出或宿主执行。panic handler/cleanup遵守17.59；普通Source ref lambda遵守17.65；外部私有物化/Unit前置、有界foreign/deep-variable接收、P12及完整共享/provider/正式安全资格仍为独立责任。本族不改变公共Value/Call/Instance/SourceContext布局、schema或opcode。
+
+### 17.59 有界panic handler、真实PanicInfo与cleanup传播
+
+完整准入的Lowered闭包可含panic保护块、PANIC_CATCH/CODE/MESSAGE、ASSERT_CONDITION与MATCH_FAIL；所有handler、cleanup及Function目标仍须每次完整检查，未执行分支不能藏I/O或挂起。除零/余数零、数值范围、null解包、Array/投影路径越界、断言和不完整match沿既有共同numeric/Value语义产生panic。只有语言故障进入panic通道；原ledger耗尽、OOM、step/depth/frame/output上限、非法artifact或权限拒绝绝不成为可捕获panic，assertPanics也不能把这些失败当成功。
+
+每个compiler activation独立拥有pending panic payload，并把该carrier计入原frame；pending返回值、Error和panic使用各自真实拥有状态。bounds原语返回的code/index/length在该次失败时立即保存，不重复求值索引、不重查cleanup变更后的长度。断言保留原已求值String快照与精确字节/长度，包括嵌入NUL；cleanup之后的Cell写入不能追溯更改message。PanicInfo使用共同不可变Value工厂，CODE/MESSAGE使用公开getter与唯一规范消息格式化器，不读取私有对象头，不创建第二种Value或宿主异常对象。固定metadata/work与格式化scratch先付原ledger/frame；内部PanicInfo形状按固定32 work单元计入复合接收上界，不能将其用作外部权限证明。
+
+同frame故障按实际故障指令所在block选择panic handler，先沿frontier执行跨越的LIFO cleanup，再进入专属PANIC_CATCH marker；handler不伪造普通CFG predecessor。跨frame先完成child cleanup、释放真实loan、恢复直接父authority和剩余frame，再根据原真实callsite的保护块传播。INVOKE的Error边不能消费panic，panic handler也不捕获enum Error；普通成功、Error及panic仍是独立continuation。嵌套handler及handler再次panic使用各自当前位置的保护关系，不能错误复用上一次landing。
+
+cleanup可在内部完整捕获panic，包括外层已持有返回/Error/panic时；每帧payload防止内层捕获覆盖外层正在展开的消息。panic逃逸cleanup时，CTFE在无分配终态释放本作业全部拥有值和loan，返回compiler-only CLEANUP_PANIC并在原comptime站点报告编译错误，绝不调用运行期fatal/进程终止接口，也不能交给外层语言handler消费。此编译边界不修改运行期cleanup逃逸panic的既有fatal规则。未捕获普通panic完成适用cleanup后返回相应编译失败；无限cleanup先受原step/work上限，不能提前发布未捕获panic。
+
+真实PanicInfo可在已准入族内作内部参数/返回、Cell、PHI、Tuple、Nullable、Array、struct/enum和Function捕获，仍使用共同拥有/接收规则；它不是Sendable，不能由CTFE外部真实PanicInfo参数或含PanicInfo常量导出获得权限。普通Source独立recipe只接已准入可导出结果，不重放PanicInfo。原128M work/64MiB allocated/8MiB live、steps65536、depth128、frame65536及17.61规定的输出上限保持；失败输出为空，费用不退款/重置，最后拥有值释放不分配。外部私有物化/Unit前置、普通Source ref lambda遵守17.65；有界foreign/deep-variable接收、P12与完整共享/provider/正式安全资格仍独立。本族只追加compiler-only失败状态与私有执行状态，不改公共Value/Call/Instance/SourceContext布局、schema或opcode。
+
+### 17.60 私有临时Class身份与有界实际字段图
+
+在每次完整Lowered/identity/target/profile及整个可达闭包准入后，CLASS_NEW/GET/SET使用现有Class Value工厂与get/set，保持真实Checked声明、构造和字段权限。对象只由本次compiler Domain内可达工厂创建；没有Instance、宿主callback或第二Value表示。内部Class可经普通参数/返回、拥有局部、Cell、PHI、Tuple、Nullable、活动enum/Error和Function capture流动，仍须满足各族限制。外部真实Class输入、Class及包含Class身份的常量导出拒绝；身份句柄不是常量字节。
+
+类型费用将Class句柄的固定header验证计32单元，不递归猜测可能递归的声明图。实际接收在原ledger上的显式拥有栈逐字段访问真实对象；只调用浅层公开class_get，先付根/字段metadata、实际Array接收span与同时存活scratch。它不读取私有对象头，也不先运行完整未付费receiver扫描。每次写入先观察完整当前receiver及输入图，拒绝通向实际目标Class的回边；句柄相同仅用于回边拒绝，真实Domain/arena、存储和借用仍由Value API认证。无环共享、别名可见字段修改和替换保留普通身份语义；不能把抛出的Class身份当不可变字段快照。
+
+OBJECT_PLACE代表完整Class根，FIELD_PLACE才增加字段selector。经已求值selector的字段/Array路径先付接收与可能祖先复制，再使用真实帧authority prepare/commit短整对象loan，通过共同authorized path操作，所有终态allocation-free释放loan。路径不保存内部地址；若路径在首根之外跨另一Class身份，当前入口明确拒绝，须从实际子对象另建合法根。ref投影仍由唯一Cell projection工厂与真实父子loan管理。Class根的初始投影借用要求所有字段为可导出纯数据类型，或按17.63证明实际不可变包装中不存在活动子权限，拒绝窄loan期间不能观察的其他可变身份。scalar/String及受支持纯Array链可借用、重借用和cleanup写回；动态数据leaf的增长、替换和父借用接收上界遵守17.62，含活动子身份的Class根仍明确拒绝。
+
+字段get返回真实拥有值；返回String快照不受随后Class字段替换影响，并在Source/Artifact/ledger调用者死亡后保持有效。普通返回、Error与panic的LIFO cleanup、真实父loan恢复和资源失败语义继续遵守17.56–17.59。完整物理FI包括构造、字段图接收、投影/cleanup、拥有String和回边拒绝的所有已观测分配点，失败后同一原owner重试，保持空输出及live归零。遍历栈/loan/路径与共同scratch计原frame；work耗尽后重试不能重置费用。
+
+原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth和17.61规定的最大逻辑输出；其他限额不变。本族不改Value/Call/Instance/SourceContext ABI、schema或opcode。内部Array<Class>按17.64执行；内部动态struct按17.66接收；缺少有界观察的foreign/deep-variable接收、私有外部Source物化、完整P12后继消费及共享/provider/正式安全资格仍有独立未完成项；私有Class通过不代表完整P11或生产发布。
+
+### 17.61 版本化8MiB逻辑输出政策与原预算保全
+
+compiler-private输出政策版本为2，XR_XIR_CTFE_MAX_OUTPUT_BYTES固定为8388608字节（8MiB）。leaf、有限调用与Source独立重放使用同一上限和唯一既有evaluator；不保留旧硬帽开关、第二入口、分片或截断。调用者仍可请求0、7、8等更小逻辑上限，实际结果超过请求返回OUTPUT_LIMIT。大于8388608的请求在任何求值/账本消费前BAD_ARGUMENT，保持规范空输出；等于硬帽的请求合法，但不保证能在其他原资源限制内生成同样大小的结果。
+
+逻辑大小继续由真实目标活动值决定：整数/Float/Rune/bool按目标存储宽度，String按完整UTF-8字节，Tuple按有序字段总和，Nullable/enum按真实活动标签与payload，Array逐活动元素计数，Unit为零。指针、宿主carrier、对齐padding、容量、对象头和失活字段都不计输出。十项Fibonacci [0,1,1,2,3,5,8,13,21,34] 的Array<i8>为10字节，(21,21)的(i64,i64)为16字节；显式8字节请求仍拒绝两者，10/16精确请求成功而9/15拒绝。Nullable<i64>、(i64,bool)及带单个i64活动payload的双variant enum均为逻辑9字节，不因存储对齐变成16；旧9字节String与11字节布尔join在新政策下按真实完整值接收。
+
+原同一compiler ledger的128000000 work、64MiB累计分配、8MiB live、65536 steps/frame及128 depth不变；更大的逻辑上限不能增加、克隆、重置或退款任何费用。输出遍历、接收、独立Source普通recipe、完整Checker/query和所有失败前缀继续计原owner，临时栈及共同scratch继续计剩余frame。结果可能在达到逻辑硬帽前先耗尽work/heap/frame，保留对应原资源拒绝；不能把这种拒绝改成成功或推定OUTPUT_LIMIT。资源失败不进入语言catch，失败后同owner重试仍受累计消耗约束。
+
+结果保留真实TypeArena、Domain与嵌套拥有字段；完整向量在Source/Artifact/ledger调用者死亡后有效，最后drop无分配并归零live。Source从同一不可变图独立重建完整Array/Tuple/String等普通配方，保留真实容量、类型与字节长度；没有CTFE指针写入Checker。版本2不授予Class/Function/Error/PanicInfo身份导出、foreign跨arena接收、私有构造权限或新副作用。完整闭包、target/profile/Checked摘要与已有准入表继续复验，不修改Value/Call/Instance ABI、schema或opcode。
+
+政策版本2及硬帽属于compiler产物/未来持久CTFE缓存身份，不能只用公开签名或Checked函数摘要。任何持久结果键还必须包含完整私有依赖/准入/编译器与XIR身份、目标profile、授权、全部请求限制和原预算策略；较大预算成功不能变成较小预算的免费命中，失效失败不能由旧政策复用。当前evaluator与Source路径没有持久结果缓存；每次请求均完整验证、执行和计费，内部类型费用缓存只在单次执行内存活。该政策身份不宣称已实现缓存系统。局部Windows验证不等于完整P11、完整provider/sanitizer资格或生产发布。
+
+### 17.62 纯数据Class根上的动态借用接收费用
+
+在17.60的真实Class根、唯一Cell投影和原帧authority上，scoped ref可借用已准入的动态纯数据leaf，包括Array<静态Tuple/Nullable/enum>及含这些Array的Nullable/enum整体替换。整个Class根的每个字段须通过外部纯数据类型族检查或17.63的实际无活动子权限检查；Class/Function/Cell/Error/PanicInfo字段或尚无有界接收的深动态Array/struct不能借此获准。COW数据副本不会在窄loan外修改该根的变量接收span；其他Class身份仍是独立权限边界。
+
+借用记录只保存根类型形状和保守接收费用上界，不保存根Value、内部地址或新的访问证明。初借在实际完整根上计费；重借用继承真实直接父loan的上界与变量标记。在投影CELL_WRITE/路径写入/Array push调用共同Value修改前，先按原ledger接收完整输入，并观察该次输入接收实际支付的work。静态复合Array单元素新增接收至多shape*32，其自身接收已付shape*16；整体替换已付完整新变量子树，外层固定metadata由原根形状覆盖。因此输入接收work的四倍是保守增量；原始标量Array的接收没有随长度增长的逐元素span。乘加溢出拒绝BUDGET。
+
+写入前沿真实activation父链扫描所有live loan，逐帧/记录/owner比较先付费，仅对同一真实canonical owner单调增加接收上界；当前和全部父loan同时更新，子帧退出后再读、写或重借用不能恢复旧上界。随后先付扩大后的根接收费用，再执行唯一authorized Value写入。此数字仅决定后续收费，不授予访问或增加预算。失败写入可保留保守高估；费用与上界均不退款。原COW祖先复制、当前输入接收和共同Domain收费仍独立生效，资源失败不被语言catch。
+
+普通返回、LIFO cleanup、caught Error/panic与reborrow保持17.56–17.59的真实父loan恢复。Class别名可见字段修改；先取得的Array或String数据快照保持COW/拥有语义。拥有结果在Source/Artifact/ledger调用者死亡后保持有效，最终drop无分配。完整FI逐实际物理分配点失败并在同一原有限job owner重试；不同故障场景可独立建job，不把整个故障矩阵累计到同一耗尽账本，也不分片每次求值。
+
+原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及17.61的policy2输出保持。全部新增metadata遍历、真实输入接收与共同scratch仍计原资源。无新Value/Call/Instance/SourceContext布局、schema、opcode或替代evaluator；foreign接收、跨第二Class路径、含活动子身份的Class根、未准入深动态数据与完整共享/provider/正式安全仍保留独立原责任。
+
+### 17.63 无活动子权限的Class字段借用
+
+Class字段的声明类型含身份并不代表当前值存在子身份。初始投影在外部纯数据类型检查明确返回NOT_SUPPORTED时，先以真实Class getter付费读取当前字段，再复用唯一接收图遍历观察Tuple、Nullable和enum的实际活动字段。None或空variant可以证明该分支没有活动子权限；嵌套包装继续逐实际子值检查。静态纯数据子树仍走原完整接收；动态纯数据子树保留原接收与复制费用。活动Class、Cell、Function、Error、PanicInfo及尚无有界接收的struct不能借此获准；Array另按17.64观察实际空分支。OOM、预算与其他失败立即传播，不能当作类型不支持后继续观察。
+
+借用leaf本身必须为可导出的纯数据类型，防止通过该loan把原空分支改成含身份。真实整根loan阻止别名在窄借用期间重绑兄弟字段；实际无子权限证明不创建访问权限、Value哨兵或第二loan协议。重借用、cleanup、动态leaf增长和父上界传播继续使用17.56–17.62的唯一实现。遍历栈与委托接收的同时scratch计入原frame额度，全部分配和访问付同一原有限owner；其他预算不变。
+
+### 17.64 内部动态元素Array的真实接收
+
+唯一CTFE路径可在内部执行Array<Class>、Array<Function>、Array<Error>以及它们在已准入Tuple、Nullable、enum或嵌套Array中的组合。类型shape只预付固定header和inline表示，不能代表变量子图。原显式拥有栈先认证当前Array并观察长度，按全部元素shape预付静态复制/验证跨度，再逐实际动态元素继续原Class字段、Function capture、Cell和Error活动值遍历。每次委托观察前预付receiver和元素完整浅层验证跨度；外层遍历栈与物化scratch同时占用原frame，长度、乘法和栈增长溢出拒绝。内部动态struct另按17.66接收。
+
+共同Value层的xr_xir_array_observe只在已验证Array的精确arena/Domain上同步观察一个元素。调用者必须在同一原work owner预付所选类型的全部浅层验证与inline物化费用；接口先付固定header观察，再通过原storage_unpack取得拥有快照，不扫描无关后代。它不授予调用、成员或loan权限，普通完整接收仍独立检查；xr_xir_array_get保持原完整receiver准入。这是原Value表示上的内部观察接口，不是foreign深接收、替代值表示或可信来源标记。
+
+Array创建/重复填充以及SET/PUSH/整体写入先接收真实输入图再调用共同Value工厂或authorized写入。写入canonical Cell时沿原Cell回边检查拒绝Function或包装值捕获目标；Class根路径沿原目标Class检查拒绝回边。无环共享允许，Array副本保持COW，元素Class保持身份别名，拥有String返回在后续cleanup替换元素后仍是原快照。失败不发布部分结果、保留原值，费用不退款；完整FI须逐实际物理点失败并在同一有限job owner重试。
+
+Class根数据loan的实际无子权限证明也可观察Array包装：空Array或实际无活动身份的子分支可通过，活动Class/Function/Cell/Error/PanicInfo仍拒绝。leaf本身仍必须外部可导出的纯数据类型，真实整根loan防止窄借用期间兄弟重绑；此扩展不允许借用身份leaf或跨第二Class路径。外部含Class/Function/Error/PanicInfo的Array参数与常量导出继续拒绝。
+
+数据Cell根上的严格后代投影仍要求根类型通过外部纯数据准入。Array内部可执行含身份元素，并不能证明窄loan期间子身份不会经其他别名增长；因此此类根的缓存接收上界未闭合，初始loan准备在取得完整根快照之前拒绝。直接canonical Array Cell的整根ref不依赖该后代投影缓存，仍可执行；完整身份根投影的预算和权限是独立未完成项。
+
+原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB逻辑输出保持，类型/实际图/物化和独立Source重放都付原owner。没有公共Value/Call/Instance/SourceContext布局、schema、opcode或另一evaluator变化。固定提交的局部正例与FI不等于完整P11、完整类型组合、provider或正式安全资格。
+
+### 17.65 普通ref闭包与真实捕获前缀
+
+普通函数表达式、箭头闭包和局部嵌套函数可声明ref参数，完整callable上下文也可为省略模式的参数提供ref模式。参数标注和上下文的模式、类型及数量必须一致；READ与REF以外的参数模式、默认值、模式解构和rest仍不因本族开放。调用仍要求真实可变place和显式ref实参，不能用普通值或不可变绑定冒充借用。
+
+闭包体的物理参数行先放真实捕获前缀，再放callable参数后缀。REF后缀的存储为Cell<元素>；共同验证器、Cell来源推导、effects调用边和Instance均按capture_count+p定位同一真实formal。拥有Cell捕获保持OWNED_CAPTURE来源，REF后缀保持SCOPED_REF来源；函数签名不授予捕获、拥有或访问权限。把scoped借用保存到拥有闭包仍拒绝，错配的前缀、后缀或实际捕获仍拒绝。
+
+Source查询显示参数的逻辑元素类型、可变绑定和真实源码范围，callable查询参数同样显示元素类型；只有实际写出的ref token产生REF marker，上下文推导不能伪造token。查询、完整Checked及packet接收独立拥有所需事实，Source文本和parser/session死亡后仍可使用；特化、Lowered和Program/Instance继续共同完整复验，不保留Source借用地址。
+
+CTFE复用同一Lowered执行和既有Function/Cell/loan协议，可执行真实ref闭包的直接、返回后调用、重借用、Array及投影place、cleanup和已准入panic组合。捕获同一可变Cell又传作ref实参仍须通过真实loan排他检查，签名合法不能消除运行权限冲突。拥有返回值保留求值快照及独立Source重放；没有第二evaluator、宿主Instance执行或保存的CTFE指针。
+
+原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB逻辑输出保持，失败保留空输出和原owner累计费用。完整物理FI、原owner重试、exact/minus-one、最后拥有者释放与正式安全资格仍分别提供实测证据。此族不改变公共Value/Call/Instance/SourceContext布局、schema或opcode，也不补授foreign/deep-variable接收、身份根投影、私有Source物化或完整P11资格。
+
+### 17.66 内部动态struct的真实字段接收
+
+唯一CTFE路径可在内部执行含Class、Function、Error及已准入Array、Tuple、Nullable、enum和嵌套struct的值。类型shape只描述固定浅层跨度，动态子图仍逐实际字段、活动分支、Function capture及Cell观察；struct不再误用enum借用视图。所有字段类型、完整nominal身份与构造/访问权限仍由共同Checker复验，字段观察不授予私有构造或读取权限。
+
+共同Value接口xr_xir_struct_observe只观察已验证struct在精确arena/Domain上的一个字段。调用者在同一原work owner预付完整浅层receiver与所选字段的验证跨度，接口再付固定header观察费用，返回真实拥有快照而不接收无关后代。普通struct_get保留完整receiver接收。CTFE接收栈在观察前支付真实类型/字段费用，外层栈与所有同时存活scratch继续计原frame；此接口没有另一种值表示或可信来源标记。
+
+构造、整体替换和已授权写入先接收实际输入图。struct包装不能隐藏通向目标Cell或Class的回边；无环替换仍合法。struct副本保持值语义和COW，内部Class保持身份别名；返回的String快照不受cleanup整体替换原struct影响，最后释放不分配。Class根的真实整根loan也可通过struct字段证明实际无活动子权限，活动身份仍拒绝；借用leaf必须可导出纯数据。含身份的数据Cell严格后代投影仍因独立预算/权限义务未闭合而拒绝，直接canonical Cell的整根ref保持独立准入。
+
+外部含身份struct参数或常量导出、未具备有界观察的foreign/deep-variable接收以及私有值Source重放的合法声明owner/函数库存仍未获准。原128M work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth和policy2/8MiB逻辑输出保持；失败保全空输出、原owner费用及全部已准备前缀。无公共布局、ABI、schema、opcode或替代evaluator变化；完整FI、同owner重试、资源/寿命、共同/provider/正式安全仍需各自真实资格，不能由本族正例替代。
+
+### 17.67 私有固定数据物化与精确调用边
+
+独立 Source 接收允许已经求值的封闭 struct/enum 常量含有私有字段。接收者不能因此取得字段权限。Source 在当前真实 nominal 声明库存下创建私有、零参数的 MATERIALIZER 函数，只重建该固定常量；函数结果和每条指令只含已准入的封闭数据，函数体为单个基本块，只允许字面量、数据构造、局部 Array 容量重建及到其他已绑定物化函数的直接调用。禁止用户计算调用、外部输入、身份值、函数引用、默认参数绑定、实现绑定和物化调用环。
+
+拥有的 construction 目录保存每条边的实际 caller、instruction、function、nominal 坐标，按 caller/instruction 严格排序。完整普通 Checker 复验全部函数库存、每条实际使用、声明归属、数据类型、调用图及普通模块导入；只有匹配精确目录的直接 CALL 可调用未导出的物化函数。MATERIALIZER 角色或结果类型本身不构成权限。直接 CTFE/VM 入口及公开 Instance 调用不允许选择物化函数，普通函数中的已绑定内部调用仍可执行。
+
+Source 先完成普通函数库存，再迭代生成尾部物化函数，避免改变两次普通构造中的函数及 comptime occurrence 身份。生成声明的父级和作用域来自当前真实 Source/Checked nominal 声明；没有 AST 的 Checked 声明也必须有完整的接收库存。常量快照只在同步构造期间拥有，最终产物仅保存普通字面量 recipe。Checked 重读、特化及 Lowered 接收分别拥有并复验目录；库导入按真实 caller/callee/nominal 映射重定位精确边，不复制旧编号作为权限。
+
+封闭泛型 nominal 缺少派生字段缓存时，Source 只用当前声明的字段类型和真实泛型实参，经普通类型替换补齐缓存；求值 ValueArena 不提供 Source 字段或权限。替换可能扩容类型池，接收者必须按稳定 ID 重新获取节点。物化数据类型必须保留完整声明字段分母。目录边数不等同于函数数，坐标按实际模块/函数体复验，不拿已消耗后的剩余函数预算当作输入编号上界。
+
+派生字段可能在接收时引入类型节点，因此后续 comptime occurrence 的期望类型必须在两个同步存活的真实 Source 类型池之间完整匹配，不能跨 owner 比较本地 type ID。期望上下文的标志、实际语法、模块、声明及函数库存仍逐项复验；类型池借用在同步 Source 构造结束前终止，不进入发布的 Artifact 或查询快照。
+
+库内 comptime 由同一不可变源码图独立构造普通 Program，经过完整 Built/Checked/特化/Lowered 路径后使用唯一 CTFE 求值器。库模板不改标为可执行产物。结果按实际语法 occurrence、模块、声明祖先、期望上下文和完整跨池结果类型接收，再由独立 Library Source 构造复验。所有临时 Program、目录、快照和失败前缀使用原 ledger，不重置预算。
+
+物化目录最初增加于 Checked schema29/contract74；当前由17.76原子切到schema30/contract75，construction C接口revision3统一由xr_xir_compile_construction_new_v3接收XrXirConstructionSpec；旧无版本及v2构造符号退休，不保留别名，旧编译对象必须链接失败，不误绑定新签名。旧 wire 同样拒绝。Value/Call/Instance 布局和 opcode 不变，Source 私有构造库存增加物化请求。原 work128M、累计分配64MiB、live8MiB、steps/frame65536、depth128及 policy2/8MiB 逻辑输出保持。完整 FI、同 owner 重试、资源/寿命与共同/provider/正式安全必须分别取得实际证据；此机制不授予 foreign/identity-bearing 输出或完整 P11 资格。
+
+### 17.68 有限递归数据与按原拥有者观察
+
+普通Array、Tuple及Nullable描述符只能引用池内前序构造类型；只有另经完整普通验证的nominal字段可闭合递归图。Array/Nullable的原始前向自环不能伪装成合法递归nominal。
+
+CTFE的关闭数据族可包含经Array等真实有限storage handle形成的递归类型描述，例如Node含Array<Node>；这不授权循环对象图。原账本拥有的迭代DFS在灰色回边逐帧收费，拒绝没有有限存储的inline循环及没有终端准入查询的纯Array闭环。遇到允许的类型回边后仍检查每个其余字段；Class、Function、Cell、Error和PanicInfo不能因回边而成为外部常量字段。类型shape仅描述浅层费用并标记动态子图，不能充当递归深度或完整实际值费用的上界。私有materializer类型接收采用同一有限存储边界；materializer实际调用图仍须无环。
+
+Array含拥有结构、结构含动态Array及有限递归数据均按实际活动值逐节点接收。Source只在同步观察中借用Value的真实Domain：调用者保持Value存活，预付完整浅层header校验，接口先收64 work，再检查精确TypeArena及原compiler ledger。失败保全空输出，成功不增加引用、不授予构造、字段、调用或loan权限，不得drop或保存该借用Domain。Array长度/容量和选定元素、struct选定字段使用原arena/Domain的既有观察操作；每个变量子节点另付原拥有者费用，不建立替代Domain后对整个外部子图作无界getter。独立普通Source重放、完整Checked重读、特化复验和Lowered保持。
+
+真实Cell投影的不可变selector数量只在精确arena/Domain上观察，接口先收64 work，失败保全输出；调用者保持Cell存活并预付完整浅层canonical-root header费用。实际prefix加本次suffix共同计费，每个loan保存其真实descriptor的保守selector跨度。递归类型不能假装静态路径深度上界。变量数据写入之前，完整incoming admission的实收费保守扩展同一canonical owner的所有活跃父loan储备；不同loan可具有不同的真实selector跨度，不因跨度不同拒绝合法重借用，也不共享权限。COW旧快照和父loan恢复保持。
+
+所有操作仍使用原128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB逻辑输出。完整物理故障逐点覆盖实际分配分母；每个trial内失败与retry使用同一原拥有者。先独立测量完整操作需求，再按已消费前缀核剩余额度：足够则要求完整成功且费用一致，不足则要求BUDGET、空输出/live恢复和再次同owner拒绝，不为强求第二次成功复制账本、退款或调高额度。首末点、census和exact/minus-one不是完整FI资格。
+
+本扩展不改变公共Value/Call/Instance/SourceContext布局、schema或opcode；没有新evaluator、宿主执行或持久缓存。外部关闭纯数据参数与foreign跨arena接收按17.70办理；活动身份字段常量导出仍拒绝，内部身份子图的data-Cell后代投影按17.69接收。完整资源、真实provider和正式安全门须绑定其实际输入取得证据，普通样本通过不构成整包或生产资格。
+
+### 17.69 身份别名的有界接收储备与真实frame占用
+
+内部Array/struct与Class根的后代ref可以包含实际Class、Function捕获及私有Cell。初始完整接收沿既有拥有型遍历观察真实可变Class/Cell句柄，按实际出现次数收集身份键。已准入carrier的相等性只标识同一对象，不授予字段、构造、调用或loan权限。登记表仅保留这些真实身份的拥有引用；不保存整个根Value快照、字段地址或隐含根访问。非活动Nullable/enum分支不制造身份，普通声明和所有实际可达函数仍独立准入。
+
+本节的真实别名预算规则取代17.62–17.66对活动后代身份的初始投影拒绝限制；外部纯数据参数按17.70接收；外部身份实参、身份常量导出、模块状态和未知调用的拒绝继续生效。初始root接收费用与每个descriptor的真实selector跨度单独保存。实际路径使共同Value接收再次访问完整根时，先按其实际selector次数付费；类型图边数不能代替路径次数。子loan共享稳定的原始预算拥有记录，各descriptor与live接收费用仍独立检查。
+
+每次Class、Cell或路径写入在共同Value变更之前完整接收incoming值，并收集它实际包含的身份及次数。先按目标canonical Class/Cell身份在所有真实活跃loan中查找已登记的出现次数；按该次数乘以incoming接收实收费的四倍，单调扩大相关接收储备。新的嵌套身份以同样出现次数加入原始登记表。只有该原始拥有记录维护身份表，父子loan不能重复登记同一拥有表。每次查找、扫描、复制、计数和扩容先付原账本work；算术溢出或无法支付立即拒绝，失败可留下保守储备但不退款或执行实际写入。
+
+身份键持有实际lease，防止对象销毁后地址复用把新对象误当已登记别名；这些lease不改变Array的逻辑数据快照。临时incoming身份表只同步借用仍由调用者保持存活的输入，完成即释放。表扩容需要的旧加新存储及同时遍历scratch占同一剩余frame上限。所有活跃表字节与activation累计，正常返回、错误、panic及每个准备失败前缀均按原拥有者释放；最后drop不分配。稳定frame/loan地址与原始登记拥有者一起存活，不跨可增长向量保存元素指针。
+
+写入仍运行原目标Cell/Class回边检查、真实prepare/commit/abort/release协议和完整Value接收；身份登记不替代权限、闭包、所有权或循环检查。新Class插入后的后续别名增长、同一Class在多个字段出现、真实捕获Cell、嵌套重借用、旧COW快照及错误/panic cleanup组合都由相同规则约束。完整步骤/深度/frame/output边界、同owner耗尽、物理故障逐点和最后拥有者寿命需要各自实际证据。
+
+本机制保持128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB输出。公共Value/Call/Instance/SourceContext布局、schema和opcode不变；唯一Lowered evaluator、共同数值核及独立Source重放保持。局部参考通过不授予完整FI、provider、正式安全或P11整包资格。
+
+### 17.70 外部关闭数据实参的独立有界接收
+
+leaf/calls CTFE入口可以接收已经拥有真实Value和不可变TypeArena的关闭纯数据实参：标量、String、Tuple、Nullable、Array及struct/enum。顶层Unit仍不是实参。整个声明类型族必须获准，不能凭当前不活动的分支夹带Class、Function、Cell、Error、PanicInfo、Task、Atomic或其他身份/资源。所有可达函数、target、Checked身份和权限仍完整复验。本节取代前述各节对全部外部复合实参统一拒绝的临时限制，不扩张未获准值族。
+
+接收者先按原compiler ledger支付64 work，只观察源carrier的真实固定header并同步借用它实际保活的TypeArena；这一步不扫描尚未付费的字段。随后完整检查关闭数据类型。不同池的本地type ID或nominal ordinal没有共同含义：接收按真实限定module/name、种类、泛型实参、所有字段的名称/权限标志/关闭类型、enum分支名称与范围、native身份及源码指纹逐项核对。暂存类型对的有界工作表在本次作业原ledger分配、查询和释放；递归类型引用不跳过剩余声明字段，也不把类型相等当构造或执行授权。普通特化匹配器要求共享nominal声明身份，不能把该前提移用于任意foreign池。
+
+每个实际活动数据节点都复制到本次调用的真实compiler Domain和目标TypeArena。String按完整UTF-8字节复制；Array逐元素接收并保留capacity，不能把变量长度向量直接当固定frame字段数组。Nullable/enum仅复制当前活动载荷，同时保留完整类型准入；Tuple包含真实Unit字段。源Value在同步接收期间保持存活，返回metadata和字段借用不进入结果。源对象真实引用计数/寿命检查继续成立，临时保活的work和inline快照分配明确向当前接收者原ledger收费；源ledger即使已经耗尽也不被扣费或重置。最终快照不依赖源Domain、源Artifact或其调用者ledger引用存活。
+
+执行前完成全部实参快照，再进入同一Lowered evaluator。类型复验与展开使用原compiler work/allocated/live额度；实际接收栈、固定bookkeeping、临时字段向量、扩容时新旧共存及Value观察scratch共同受原剩余frame约束。所有分配、扫描、复制、临时retain和实际节点访问先收费，失败保全空结果、原实参与全部可释放前缀，不退累计work/allocated。不同nominal或关闭类型不匹配返回BAD_ARGUMENT，未准入身份返回NOT_SUPPORTED；原预算、frame、step、output、OOM与Value限制的错误映射继续适用，不能通过语言catch或运行期fallback绕过。
+
+这里是对既有拥有式数据的复制，不是从类型描述取得私有成员、构造、调用或loan权限。Source独立重放仍要求17.67的真实声明owner和精确materializer边；泛型源作用域中的闭合thunk按17.71办理。输出逻辑大小只计最终发布结果，输入接收仍支付原完整内存与work。保留128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth及policy2/8MiB输出；不改变Value/Call/Instance/SourceContext布局、schema、opcode或构造接口2，不新增evaluator、native执行或持久结果缓存。完整逐点FI、same-owner重试、所有边界/寿命、provider和正式安全资格仍须绑定实际固定输入取得；正常或首末点通过不能替代它们。
+
+### 17.71 泛型lexical作用域中的关闭comptime thunk
+
+外围函数或方法具有泛型参数，不再单凭这个事实拒绝comptime；外围已经发生普通泛型调用而拥有类型实参表，也不构成拒绝理由。thunk仍是无运行期实参的真实普通函数，经过完整Built检查、普通特化及复验、Lowered和同一个有界CTFE，再由独立Source owner重放完整检查。它只能引用已经关闭的类型和调用目标，例如在泛型函数中计算固定标量、拥有式Tuple/Array或显式关闭的普通泛型调用。
+
+类型名继续沿实际外围lexical上下文解析，包括泛型参数对同名全局类型的遮蔽；不通过清空类型作用域把开放类型误解成另一声明。真实nominal owner和MEMBER_HELPER规则保持。thunk不继承外围运行期参数、局部变量或this；无权从类型描述、helper名称或关闭结果推导额外访问权限。封装后的真实指令类型和完整调用类型实参表逐项付原ledger work检查，含开放类型参数的条目在执行前拒绝；checker及完整可达闭包准入继续复验，不以该前置检查替代。
+
+本节限定上下文无关的关闭thunk。依赖外围类型实参、在不同关闭T下产生Array<T>、T?或不同结果的Program表达式由17.78接回；一个语法站点的单一Value不能代表多个特化结果。普通泛型继续定义处按约束检查，不能在实例化时重解释AST、借宿主执行或保留运行期fallback。Library未来泛型实例及完整资格仍是未闭合责任，不得因这里的上下文无关正例宣称完成。
+
+每次Source构造、关闭性扫描、CTFE及独立接收共同消费同一原compiler ledger；失败不退work/累计分配，输出和可释放前缀保持。原128000000 work、64MiB累计分配、8MiB live、65536 steps/frame、128 depth、policy2/8MiB输出和原错误映射不变。共同Value的scratch LIMIT仍沿既有映射报告CTFE BUDGET；frame直接拒绝可报告FRAME_LIMIT。正常、预算边界和首末故障控制不替代完整逐分配FI、provider、正式安全或整包资格；公共布局、schema、opcode及构造接口2保持。
+
+### 17.72 保留真实泛型定义的关闭实例结果
+
+编译器内部的关闭实例结果所有者接收真实Checked产物、函数序号、显式target及原有限CTFE限制。该函数必须具有普通特化产生的INSTANCE证据、真实原定义与完整非空类型替换，并且没有运行期参数；非泛型函数和需要运行期实参的函数不能借此入口取得实例结果。每次工厂调用都独立写出并接收完整Checked字节，再由同一原compiler ledger执行普通Lowered与唯一CTFE；不接收调用者提供的结果、PASS提示或另一个预算owner，也不缓存结果。
+
+所有者同时保留独立拥有的关闭Checked、Lowered、真实原泛型定义/替换以及拥有式Value；它们可以长于原Source、packet、输入Artifact与ledger调用者的寿命。借用视图发布前完整验证当前拥有的两份产物，并重新写出当前Checked字节，与Lowered实际来源packet逐字对应。相同签名或结果类型、另一合法替换、摘要或先前验证成功都不能代替当前输入对应。观察仅标识真实来源，不授予构造、成员、私有调用、loan或指令改写权限；调用者必须在整个借用期间保活且排除修改。
+
+所有准备、复制、完整复验与观察先付同一原ledger费用，失败保全空输出、不退work或累计分配；最终释放不分配。原work/allocated/live、steps/frame/depth/output上限、错误映射、Value/SourceContext布局、schema、opcode与构造接口保持。本入口只完成关闭实例执行结果的拥有和对应边界；公共Program逐实例Source接回另见17.78，Library未来泛型实例仍待完整实现。完整逐分配故障、原owner重试、精确边界、正式安全与provider资格必须分别绑定实际固定输入，不由小门或此接口的存在推导。
+
+### 17.73 真实关闭实例结果的独立 Source 提供函数
+
+编译器内部的实例常量接收入口从实际文件、文本或overlay完整构造Program Source，再执行普通特化。请求以原定义和本次真实收集实例的一对序号选择目标；完整INSTANCE来源、定义对应、实际非空类型替换和零运行期实参仍由原检查与17.72工厂验证，不能按裸名字、跨池类型ID或调用者提供的Value选择结果。每个请求独立执行唯一CTFE，显式target及原steps/frame/output/depth限制不变。
+
+接收者在另一份SourceContext中对同一仍保活、不可变的真实模块图重新构造普通定义，仅将已执行结果通过原常量配方写成新的无运行期实参函数。原泛型AST只在各次普通Source构造中检查，不按每个关闭实例重解释。新函数的声明祖先、模块和lexical nominal owner来自当前真实原定义；不从结果类型或名字伪造来源。原泛型定义及其要求调用保留，经完整普通Checker、根效果推导、查询发布、packet接收及后续特化重新建立证据；不删除原关闭证据再把私有witness边当普通公开调用。
+
+实际关闭类型实参按自己的已验证类型树复制并驻留到当前Source池，保留原替换深度128和原ledger费用。共享子树使用本次接收拥有的映射；活动inline依赖拒绝。nominal身份必须对应当前真实声明，字段缓存由当前声明和实际替换重新推导；外来字段缓存不授权限。这样可接收仅在特化后出现的构造类型，不要求其本地ID已存在于原Source池。同一接收可为不同实际替换生成不同Array、Nullable、Tuple和nominal结果，String保留完整显式字节长度，Unit不产生虚构值槽。
+
+函数外的私有拥有式结果继续使用17.67的真实声明owner、literal-only materializer与精确调用绑定，不把数据观察升级为一般私有构造权。结果函数保持私有，获得其序号不授予运行期外部入口权限。所有Source、特化、工厂、类型接收、配方和发布共用原有限compiler ledger；失败保全空输出、全部前缀可释放，不退work/累计分配，最终释放不分配。公开SourceContext/Value/Call/Instance布局、schema、opcode、构造接口和预算不变。
+
+该入口建立普通Program Source中真实关闭实例的结果接收与提供函数，不把提供函数自动接回某个comptime语法站点。目前含comptime站点的输入、Library模板后续绑定和无当前Source声明节点的定义仍拒绝；公共Program逐实例comptime由17.78另行接回，不由本手工选择入口获得。这些限制不是完整C0/C1完成定义的缩减。完整物理FI、原owner重试、精确边界、当前完整矩阵、正式安全和provider证据必须分别取得，不能由定向正例推导。
+
+### 17.74 同步批次中的独立有界执行
+
+编译器内部批次只在一次同步调用的完整动态范围内共享同一不可变Lowered的整体验证。每个零运行期实参根仍逐一建立当前完整可达闭包、类型/Cell/指令准入、显式target与Checked身份，并使用原唯一执行核和独立steps/frame/output/depth限制。每根拥有自己的执行状态与值所有权；重复根也重新执行，不共享可变运行状态。所有根、共享准备和结果共用输入的原有限compiler ledger，不续额、不退累计费用。
+
+拥有型实例批次先完整核验所有真实INSTANCE定义与非空替换，将实际Checked独立写入并接收一次、普通Lowered一次，再执行全部选择。全部结果成功后才发布批次拥有者；任一根失败释放已产生值并保全空输出。一次视图借用完整重写当前Checked、验证当前Lowered并逐字对应其实际来源packet，再检查全部定义/结果后原子发布全部视图。不能保留准备令牌、布尔PASS、旧摘要或跨调用验证提示；后续调用必须重新验证当前输入。借用要求拥有者保活且输入不可变。
+
+17.73的Source实例接收使用此批次拥有者，共享独立接收产物，仍为每个真实替换分别执行和写出常量配方，完整普通Checker、权限和泛型witness证据保持。公开ABI、schema、opcode、预算和未完成comptime语法/Library边界不变。实际物理分配减少后须重测完整新分母，保留旧固定输入证据；首末故障点不等于完整FI，原门与时限不缩减。
+
+### 17.75 真实泛型 comptime 调用的内部执行接点
+
+Source对依赖词法类型实参的comptime表达式生成真实普通泛型helper，继承原定义的符号binder、约束、模块及名义owner，并在真实调用上显式记录有序类型实参。完全关闭的helper仍不携带无用binder。符号结果只进入普通Built检查；只有普通特化关闭后的真实类型、完整可达闭包和限额通过后才能进入唯一CTFE，不按实例重解释AST。
+
+内部执行入口自动收集本次Program图中实际形成的泛型comptime调用，无调用者函数序号、外池类型ID、Value或PASS。每项保留当前原定义/原调用指令与关闭caller/callee/指令坐标，经17.74拥有批次独立接收和执行。视图完整复验当前产物及实际来源packet，再逐项核真实调用和全部有序替换，最后原子发布。Checked与Lowered的类型ID各属自己的池；类型关系按完整结构检查，不能直接比较外池ordinal。结果与原定义在AST、session及生产者死亡后仍保活，最终释放不分配。
+
+这些结果是编译器内部的站点执行数据，不发布含未绑定comptime的Source程序。公共Program入口的完整常量接回见17.78；Library未来实例与无当前Source节点的站点没有由本执行入口获得权限。全部收费来自原有限ledger，原steps/frame/output/depth和work/allocated/live不变。完整语法接回、规范站点/结果绑定、独立packet、完整FI与正式安全仍须各自完成，不以此准备接点关闭C0/C1。
+
+### 17.76 泛型编译期调用的规范站点与关闭结果绑定
+
+共同construction拥有真实Source caller/指令/helper站点和按站点、有序关闭类型向量排序的结果绑定。词法helper保留调用者的完整binder、约束、模块及nominal owner；调用上的完整符号实参必须逐项对应。绑定仅引用同词法owner下的私有、无运行期参数、无泛型参数的普通literal provider。共同Checker验证实际调用、全部关闭实参及原约束、完整结构结果类型、provider纯字面量边界和helper完整引用库存；同结构的重复键拒绝。名称、相同签名、裸类型ordinal、旧身份或PASS不构成对应。
+
+普通特化只对真实当前调用及完整关闭替换选择provider，缺键编译失败。INSTANCE对应检查独立重做同一选择，保留原泛型Source、普通requirement/private witness以及其他body/effect验证；不在verifier执行CTFE，不抹除关闭来源。投影INSTANCE和Lowered不携带未解决站点，递归来源仍完整拥有原表。表、每项实参、wire读写、clone、清理及失败前缀均使用接收方原有限ledger；最后释放不分配，不退款或重置预算。
+
+由于共同输入布局与Module编码实际增加站点和绑定计数及其字段，Checked原子切到schema30/contract75；construction C接口revision3只提供xr_xir_compile_construction_new_v3，旧无版本和v2构造符号退休，旧wire拒绝，不保留shim。每个Module在物化目录后编码site_count与各caller/instruction/helper，再编码binding_count与各site/argument_count/arguments/provider；递归来源同样编码。Value24、Call29、Program30、opcode及全部既有预算不变。历史字节保留为拒绝向量，当前固定向量由独立完整字段模型推导。
+
+本节贯通共同规范绑定依赖，无AST typed literal接收核见17.77。公共Program逐实例常量接回见17.78。Library规范站点、完整键与未来实例接回按17.81执行，不得丢弃表而保留运行期helper调用。完整Library资格、全FI与正式安全仍须分别取得，不能将本机制或定向验证视为P11/C0/C1完成。
+
+### 17.77 无AST的拥有式实例字面量接收
+
+内部typed literal接收核只接收17.74的真实拥有式CTFE批次、准确结果数及同一原有限编译context。每次先完整复验当前Checked、Lowered及其实际来源packet，然后借用实际原泛型定义、完整有序关闭替换和拥有值。调用者不能提供Value、外国类型ordinal、AST节点、声明名或PASS。所有语法生产者可以已经销毁；批次在整个同步借用期间保持存活且不可变。
+
+接收方复制可变函数/类型描述头，以真实Checked声明建立库存，复用同一普通常量recipe writer，生成私有、零运行期参数、非泛型provider。关闭实参按完整结构复制并intern到接收池；专化后才出现的新类型无需原本就有本地ID，完整有序向量由返回结果独立拥有。原泛型函数、约束、requirement/private witness、模块/nominal身份和全部原TEMPLATE根效应契约保留；新增literal函数生成普通契约，完整共同Checker重新验证所有body/effect和构造绑定。不会把关闭INSTANCE伪装成无来源Built，也不清空原TEMPLATE来绕过验证。
+
+Array、Nullable、Tuple、struct/enum、标量、String和Unit继续使用原配方语义。私有字段值在其实际声明库存中解析唯一模块及nominal owner，通过17.67同一literal materializer及精确调用绑定接收；不伪造AST/query声明，不由结果类型授予一般私有访问。既有materializer绑定和comptime表完整复制。最终Checked拥有全部函数、类型、字符串、契约及构造信息，批次和生产者死亡后仍可独立packet写读、普通特化、Lowered和唯一CTFE。知道私有provider ordinal仍不授外部运行期入口权限。
+
+整个操作、当前复验、类型接收、配方、契约和最终检查计入原work128000000、累计分配64MiB、live8MiB；不重置、退款或提高steps/frame65536、depth128、policy2/8MiB输出及替换深度128。任一失败不发布部分结果，所有前缀可回收，最后析构不分配。公开布局、schema30/contract75、construction C3和opcode保持。本内部核只负责literal接收；公共Program组合流程见17.78，Library未来实例收集与重定位另见17.81。完整FI、原owner重试、当前全矩阵、正式安全/provider及原C0/C1退出门仍各需真实固定输入证据。
+
+### 17.78 公共Program的完整逐实例comptime接回
+
+文件、文本和overlay的公共Program Source入口接受依赖实际外围类型实参的comptime。源定义始终按真实约束、词法模块/nominal owner及完整TEMPLATE检查；不按实例重解释AST，不隐式捕获外围运行期参数、局部或this。初始Source是未发布的准备输入。自身关闭的表达式仍由唯一Lowered CTFE执行，再在另一真实Source owner中按普通recipe重建；开放helper保留真实符号调用，跨这两个Source库存的预期类型以完整有序binder恒等替换核对，不能把开放类型误当作零实参关闭匹配。
+
+随后普通特化收集当前真正出现的关闭caller/callee及原定义/指令坐标。每项按原独立执行限额进入同一拥有式CTFE批次，完整复验后由17.77接收私有literal provider及必要materializer。当前实参向量属于接收类型池，按完整有序结构去重，站点及键规范排序。没有实际关闭实例时不伪造执行或Value，仍保留所有符号站点。混合关闭/开放、多站点、方法、跨模块私有witness、实例化中新生类型和嵌套comptime遵守同一规则。
+
+最终construction拥有全部站点/当前键/provider绑定，全部原泛型、约束、原函数body、requirement/private witness和TEMPLATE保留。普通共同Checker重新完整验证body/effect/构造和规范对应，成功后才发布Checked及独立query/syntax/dependency快照；query类型池先接收最终新增类型头，已有语义类型ID保持原前缀，显示schema可在其后继续产生。所有函数、类型、契约、向量及字符串独立拥有，生产者和packet字节死亡后仍能独立读写、普通特化、Lowered及运行。
+
+普通特化只在真实站点和完整关闭键下选择provider；缺当前键编译失败，不留下运行期helper替代comptime。嵌套外层literal可消除内层运行期调用，但原Source仍保留完整站点和实际收集键。根局部CTFE失败报告真实批次选择位置，再对应原语法站点；不通过重执行猜失败位置。批次准备前的全局失败不伪造根编号。错误、预算或OOM不发布部分Source，失败/重试使用同一原ledger，所有前缀可清理，最终释放不分配。
+
+原work128000000、累计分配64MiB、live8MiB、steps/frame65536、depth128、policy2/8MiB输出、替换深度128和显式支持target保持。公开布局、schema30/contract75、construction C3及opcode不变。本节实现公共Program接回；Library规范站点搬移和未来键接回另见17.81，完整类型证明与资格须独立闭合。不得丢表后执行helper，也不以本流程或定向门替代完整C0/C1、全FI、原限额、VM/native/mixed、正式安全/provider及生产资格。
+
+### 17.79 拥有式泛型comptime缺键观察
+
+内部待求值接点只接受真实Checked Program Source。普通specializer按实际调用和关闭替换寻找第一个尚无规范绑定的站点；已存在绑定仍选择原provider，全部原泛型、约束、词法owner、requirement/private witness及完整TEMPLATE保留。没有实际缺键时成功返回空owner，不伪造执行或Value。缺键观察仅为编译器元数据，不是关闭INSTANCE、Lowered、Program或可执行资格。
+
+接收方独立拥有完整Source、必要新增关闭类型和完整有序实参；类型ID原前缀保持，新生描述符随完整共同Checker重新检查。每次查询重新完整验证当前Source及其逐字packet对应，再重复真实普通专化发现并核对站点和完整有序类型结构。原生产者、session和packet字节死亡后仍可查询；修改当前body、类型、名称或实参不能凭缓存PASS获得视图。实参必须关闭并满足原helper的完整约束，不按实例解释AST，不清空规范表或TEMPLATE，不把已有绑定重新求值。
+
+所有准备、复制、复验和重试共用原有限compiler ledger；预算或OOM原子失败，最后释放不分配。17.78的缺键普通特化拒绝保持。本观察接点不执行helper；17.80另行提供真实helper求值及Source键接回。Library表重定位由17.81接续，完整P11资格仍须独立取得。原schema30/contract75、construction接口3、Value24/Call29/Program30、opcode和所有预算保持。
+
+### 17.80 编译器专用求值与无AST的Source规范键闭合
+
+内部待求值专化入口从17.79的真实拥有观察构造完整关闭图。它复用普通specializer、完整原Source及TEMPLATE，保留真实Program entry、全部module initializer、原泛型/约束/requirement/private witness及已有绑定。已有键始终选原literal provider；当前缺键仅在编译器专用EVALUATION来源角色中展开真实helper body。共同Checker逐指令证明替换、调用/效果/私有权限与完整实例可达性，并证明固定caller/instruction/callee确属真实站点、关闭有序实参及尚无绑定的实际调用。目的标记仅选择语法，不能代替任何证明。
+
+该角色不进入普通Checked/Library运输、普通再特化、VM绑定/运行/Program或native C发射。它经原完整Lowered流程进入唯一CTFE；原调用、函数值、cleanup、数据和所有执行准入仍生效，只有固定缺键helper可以作为执行根。生产者死亡后的拥有式批次和普通literal writer独立接收真实结果，保留原定义、词法owner、完整约束与全部模板契约，不按实例解释AST、不接收调用方Value或虚假初始化函数。非根选择及当前根、目的、body、来源或packet篡改必须拒绝。
+
+编译器私有packet采用独立XRCEV语法和版本1，普通XRCHK仍严格为schema30/contract75且拒绝EVALUATION。私有头仍为64字节，payload先存little-endian caller/instruction/callee三个u32，再按共同模块遍历存储完整关闭图、EVALUATION来源及完整Source；Source递归的来源至多为普通TEMPLATE，禁止关闭或EVALUATION来源链。长度为完整payload，SHA256覆盖头前32字节与全部payload。独立私有读取完成EOF、所有权、类型、约束、body、可达性及根证明后才发布；Lowered身份绑定整个私有packet，并逐次核对固定根前缀。私有格式不能通过改magic/头、移除前缀或改变来源种类获得普通运输或运行权限。
+
+内部Source接回入口只接受真实Checked Program Source，以原ledger独立接收输入，反复收集实际缺键、构造编译器专用关闭图、按原限额执行唯一CTFE，再由普通无AST literal核接收provider。新键以共同规范顺序插入原construction，有序类型向量完整拥有，原所有站点和已有键/provider意义保持。完整共同Checker复验新增Source后才继续收集；无实际缺键、未实例化或已由外层literal消除的内层调用不制造求值。已有provider可与当前helper body不同，甚至helper当前会陷阱，仍不得清表或重新求值已有键。最终Source仍保留原泛型和TEMPLATE，按普通packet、严格INSTANCE特化、Lowered及VM/AOT管线继续。
+
+任意准备、接收、执行、重定位或预算/OOM失败均不发布部分Source，不退款或重置原账本。真实根局部CTFE失败报告原站点及实际状态，不执行重试猜位置；全局失败不虚构根索引。原work128M、allocated64MiB、live8MiB、steps/frame65536、depth128、policy2/output8MiB以及Value24/Call29/Program30、153opcodes保持；最后释放不分配。此入口实现无AST的Program Source缺键求值与接回，Library表重定位/公开接回另见17.81，本入口不授予全FI、VM/native/mixed或正式安全资格。
+
+### 17.81 Library规范表重定位与公开未来键接回
+
+Library Source保留开放泛型comptime的真实helper、符号调用、原泛型/约束/private witness及TEMPLATE，并将规范站点封入最终construction与独立query快照。Library本身不变为可执行Program。已有关闭表达式仍在原有限ledger上从同一不可变图独立构造真实Program、执行唯一CTFE并接收关闭值；开放预期/结果类型按完整有序binder身份对应，不以零实参关闭匹配误判。未来关闭类型不依赖Library AST、query或原session存活。
+
+普通Checked packet/Catalog接收先完整检查当前产物及全部construction。导入按真实选中module视图映射全部函数，包括仅由规范绑定引用、没有普通CALL入边的provider；映射caller/helper/provider、module/nominal/interface owner、类型头与完整有序类型实参、private witness及精确materializer边。原instruction坐标保持；类型经共同结构intern而非算术偏移。builtin-only且无类型池的Library也拥有规范表接收者。越出实际选择闭包的helper/provider/owner拒绝，不能凭空添加初始化依赖。
+
+导入表和本地开放站点共同按caller/instruction排序，既有绑定以映射后站点和完整有序键重新规范排序；冲突拒绝，不覆盖已有provider。construction独立拥有全部数据，完整普通Checker先证明当前表、类型、约束、body/效果和词法权限后才发布。开放泛型私有member helper须由真实规范站点或结果绑定对应；关闭comptime thunk没有泛型站点，只以私有、零运行参数、非泛型且无额外entry承诺的函数接收，普通词法/调用/效果验证保持，其余准入仍须独立满足。无泛型表的完整Library同样处理，不以空指针代替空泛型库存。只有当前完整construction已证明的规范provider或精确绑定materializer，且满足私有、无运行期参数/泛型/导出或root承诺的关闭纯数据字面配方，才可命名已描述的opaque替换类型；真实EVALUATION根的原站点和有序结果键必须先接入construction，再完整核验provider声明；无站点、错误目的/站点、已有键和只复制结果类型不取得该证明。当前完整body限定为普通literal opcode与精确materializer调用，完整类型约束、CFG、来源/效果及每个字段/构造权限仍须分别通过。不能把该命名规则授给普通调用、字段观察/写入、身份数据或公开入口。关闭实参中的普通数值/Rune类型不因不属于旧直接函数签名子集而被当作未知类型；类型实参不授予字段、方法或执行权限。
+
+公开Program入口以17.80的同一缺键管线接回本地及导入的实际键，不再保留另一套开放调用结果收集路径。已知键保留原provider意义，当前helper body即使不同也不得重算；未实例化或被外层literal消除的内层站点不制造求值。关闭表达式的独立Source接收仍必须完整核验符号库存和最终query类型前缀。新增关闭类型的命名和词法证明必须在结果声明接回时闭合，不能靠公开私有类型、伪造依赖、清TEMPLATE或放宽字段访问绕过。任何失败均不发布部分Program，真实根失败保留原坐标与CTFE状态；没有Library AST时不能伪造语法位置。
+
+所有重定位、排序、完整复验、执行、失败和重试计入原同一ledger；不重置或提高work128M、allocated64MiB、live8MiB、steps/frame65536、depth128、policy2/output8MiB或替换深度128。普通schema30/contract75、construction C3、Value24/Call29/Program30、153opcodes及私有XRCEV revision1保持。最后析构不分配。功能、当前完整类型证明、完整FI、原C0/C1、VM/native/mixed与正式安全/provider须各有固定证据，不能由定向接回推导完整P11资格。
+
+
+### 17.82 Source 失败诊断与编辑器发布
 
 Source失败诊断的原始line/column始终为一基字节位置，原诊断结构及SourceContext/Final布局不为编辑器坐标改变。可选失败输出使用独立拥有型XrXirSourceFailure：空输出在真实已定位失败时接收规范模块路径，parser来源和可用的零基UTF-16标量；该参数原子切换为此类型，没有旧路径输出签名别名。路径转移及清理不补做分配或work，显式free释放接收拥有权。
 

@@ -1,0 +1,3 @@
+enum Box{Some{value:PanicInfo}}
+fn answer()->i64{try{return 1/0}catch panic(p){const b=Box.Some{value:p};return match(b){Box.Some{value}->value.code-378}}}
+export fn run()->i64{return comptime answer()}

@@ -13,6 +13,7 @@
 #include "../../runtime/value/xtype_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../../plan/target/xr_target_profile.h"
 #include "../xdiag_fmt.h"
 #include <string.h>
 #include <stdio.h>
@@ -21,11 +22,26 @@
 /* Shared initializer for both public constructors.  When `analyzer` is
  * NULL a fresh owned analyzer is created; otherwise the provided one is
  * borrowed (ownership stays with the caller). */
-static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *session,
-                                                       XaAnalyzer *analyzer) {
-    XrVMRuntime *X = xr_compiler_session_vm_host(session);
-    if (!session || !X) {
+static XrCompilerContext *xr_compiler_context_new_impl(const XaAnalyzerInput *input,
+    const XrCompilerPolicy *policy, XaAnalyzer *analyzer) {
+    if (!input || !policy || !input->session || !input->runtime || !input->target ||
+        xr_compile_session_resource_status(input->session) != XR_COMPILE_RESOURCE_OK)
         return NULL;
+    XrCompilerSession *session = input->session;
+    XrVMRuntime *X = input->runtime;
+    if (analyzer && (analyzer->compiler_session != session || analyzer->isolate != X))
+        return NULL;
+    if (!xr_target_data_layout_validate(input->target)) {
+        (void) xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+        return NULL;
+    }
+    if (policy->target_profile) {
+        const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(policy->target_profile);
+        if (!xr_target_profile_verify(policy->target_profile, NULL, 0) || !machine ||
+            memcmp(&machine->data_layout, input->target, sizeof(*input->target)) != 0) {
+            (void) xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BAD_ARGUMENT);
+            return NULL;
+        }
     }
 
     XrCompilerContext *ctx = (XrCompilerContext *) xr_malloc(sizeof(XrCompilerContext));
@@ -57,6 +73,15 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *sessio
         ctx->shared_vars[i].moved_column = 0;
     }
 
+    ctx->target_profile = policy->target_profile ? xr_target_profile_retain(policy->target_profile) : NULL;
+    if (policy->target_profile && !ctx->target_profile) {
+        xr_free(ctx->global_vars);
+        xr_free(ctx->shared_vars);
+        xr_free(ctx);
+        (void) xr_compile_state_fail(xr_compile_session_compile_state(session), XR_COMPILE_RESOURCE_BUDGET);
+        return NULL;
+    }
+    ctx->runtime_imports = policy->runtime_imports;
     ctx->compiler_session = session;
     ctx->X = X;
     ctx->current_line = 1;
@@ -67,7 +92,7 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *sessio
     ctx->shared_var_count = 0;
     ctx->had_error = false;
     ctx->panic_mode = false;
-    ctx->repl_mode = false;
+    ctx->repl_symbols = policy->repl_symbols;
     ctx->post_analyze_hook = NULL;
     ctx->post_analyze_user_data = NULL;
     ctx->module_graph = NULL;
@@ -89,20 +114,32 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *sessio
         if (analyzer->type_pool)
             xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
     } else {
-        ctx->analyzer = xa_analyzer_new(ctx->compiler_session);
+        ctx->analyzer = xa_analyzer_new(input);
         ctx->owns_analyzer = true;
     }
 
+    if (!ctx->analyzer) {
+        xr_compiler_context_free(ctx);
+        return NULL;
+    }
     return ctx;
 }
 
-XrCompilerContext *xr_compiler_context_new(XrCompilerSession *session) {
-    return xr_compiler_context_new_impl(session, NULL);
+XR_FUNC XrCompilerContext *xr_compiler_context_new(const XrCompilerInput *input) {
+    return input ? xr_compiler_context_new_impl(&input->analysis, &input->policy, NULL) : NULL;
 }
 
-XrCompilerContext *xr_compiler_context_new_with_analyzer(XrCompilerSession *session,
-                                                         XaAnalyzer *analyzer) {
-    return xr_compiler_context_new_impl(session, analyzer);
+XR_FUNC XrCompilerContext *xr_compiler_context_new_with_analyzer(XaAnalyzer *analyzer,
+                                                               const XrCompilerPolicy *policy) {
+    if (!analyzer || !policy)
+        return NULL;
+    const XaAnalyzerInput input = {
+        .session = analyzer->compiler_session,
+        .runtime = analyzer->isolate,
+        .target = &analyzer->target_data_layout,
+        .module_identity = analyzer->standalone_module_identity,
+    };
+    return xr_compiler_context_new_impl(&input, policy, analyzer);
 }
 
 void xr_compiler_context_free(XrCompilerContext *ctx) {
@@ -122,6 +159,8 @@ void xr_compiler_context_free(XrCompilerContext *ctx) {
     }
     ctx->analyzer = NULL;
 
+    xr_target_profile_free(ctx->target_profile);
+    ctx->target_profile = NULL;
     xr_free(ctx);
 }
 

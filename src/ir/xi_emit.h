@@ -33,9 +33,29 @@
 #define XI_EMIT_H
 
 #include "xi.h"
+#include "../base/xcompile_state.h"
+#include "../base/xtarget_data_layout.h"
 
 struct XrProto;
 struct XrVMRuntime;
+struct XrModuleGraph;
+
+typedef enum XiEmitImportMode {
+    XI_EMIT_IMPORT_PROGRAM = 0,
+    XI_EMIT_IMPORT_RUNTIME_LOCATOR,
+} XiEmitImportMode;
+
+/* All inputs are genuine caller-owned facts, borrowed exclusively through the
+ * complete recursive emit. The graph must use this exact parser state. Target
+ * layout is validated and copied before use. Names retained by a proto are
+ * copied or interned by its actual runtime; this descriptor never escapes. */
+typedef struct XiEmitInput {
+    XrCompileState *state;
+    const XrTargetDataLayout *target;
+    const struct XrModuleGraph *graph;
+    const char *module_identity;
+    XiEmitImportMode import_mode;
+} XiEmitInput;
 
 /* Emit result status */
 typedef enum {
@@ -44,6 +64,7 @@ typedef enum {
     XI_EMIT_ERR_TOO_MANY_CONSTS, /* constant pool overflow */
     XI_EMIT_ERR_UNSUPPORTED_OP,  /* unhandled XiOp */
     XI_EMIT_ERR_INTERNAL,        /* unexpected internal error */
+    XI_EMIT_ERR_RESOURCE,        /* original CompileState retains the exact first cause */
 } XiEmitStatus;
 
 /* Emit Xi IR function to a new XrProto.
@@ -51,7 +72,8 @@ typedef enum {
  * and the status indicates the error kind.
  * Caller owns the returned XrProto (free with xr_instruction_unit_free). */
 /* isolate is needed for string constant interning (may be NULL for no-string funcs) */
-XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrProto **out_proto);
+XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate,
+                              const XiEmitInput *input, struct XrProto **out_proto);
 
 /* Human-readable error string for emit status. */
 XR_FUNC const char *xi_emit_status_str(XiEmitStatus s);

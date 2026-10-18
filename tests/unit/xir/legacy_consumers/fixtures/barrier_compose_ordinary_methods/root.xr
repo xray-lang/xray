@@ -1,0 +1,16 @@
+import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
+// A single arrival releases the one-party barrier.
+
+class Barrier {
+    _latch: CountdownLatch
+    init(parties: i64) {
+        this._latch = CountdownLatch(parties)
+    }
+    wait() -> bool {
+        this._latch.done()
+        return this._latch.wait()
+    }
+}
+
+var b = Barrier(1)
+print(b.wait())   // true — sole party arrives, latch reaches zero

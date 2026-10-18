@@ -28,9 +28,9 @@ TEST(analyzer_override_requires_declaration_and_matching_target) {
         {"class A { value(x: i64 = 1) {} }\nclass B extends A { override value(x: i64 = 2) {} }", 1},
     };
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
-        XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+        XaAnalyzer *analyzer = fixture_analyzer();
         ASSERT(analyzer != NULL);
-        AstNode *program = xr_parse(g_session, cases[i].source);
+        AstNode *program = fixture_parse(g_session, cases[i].source);
         ASSERT(program != NULL);
         xa_analyzer_analyze(analyzer, "override-contract.xr", program);
         int count = 0;

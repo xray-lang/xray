@@ -1,0 +1,2 @@
+fn forever() { while(true) {} }
+export fn run()->i64 { comptime forever(); return 42 }

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "fixed_source_commit": "460622cf45c82ab0bc93be14d2f0ac3fce21bef6",
+  "accepted_product_cli_sha256": "4da822ed581b7b22f56cd6a5cb24037ac7f51fcf1088f5440d628e7a4a11b11e",
+  "accepted_product_manifest_sha256": "d5ddf7eec828b84e8d52b56816efbfded091658eb73cd264c3bc2409f87f54b8",
+  "canonical_fault": {
+    "code": 413,
+    "message": "cannot unwrap a null value"
+  },
+  "source_snapshots": [
+    {
+      "source_path": "src/xir/xxir_fault.h",
+      "snapshot_path": "tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/xxir_fault.h.txt",
+      "git_blob_oid": "065a9aa29e5a918f5f27f06c7625880e4038abc4",
+      "lf_sha256": "ae4c2c8feb94f29730681574218a4f2d44e69a2fe5b237f895111516e3e40c5c"
+    },
+    {
+      "source_path": "src/xir/xxir_panic_value.inc.c",
+      "snapshot_path": "tests/unit/xir/legacy_consumers/fixtures/map_panic_fixed_reference/xxir_panic_value.inc.c.txt",
+      "git_blob_oid": "31eca424d6e347f8b4776af144e9688be2b0d253",
+      "lf_sha256": "24164946e69744c5f79669e7fe035c602b58db5b2c527169a72412a4fa7703fd"
+    },
+    {
+      "source_path": "tests/unit/xir/xir_source_nested_nullable_cases.h",
+      "snapshot_path": "tests/unit/xir/legacy_consumers/fixtures/null_unwrap_fixed_reference/xir_source_nested_nullable_cases.h.txt",
+      "git_blob_oid": "eca92fef4d2d347036ce966eaa1700ee76210d2b",
+      "lf_sha256": "326c49486859719a7df78161ed789a92210ee1a7edcb768db8bf97065ce28408"
+    }
+  ],
+  "normative_basis": [
+    "spec/source/sections/003-2-type-system.md N-13",
+    "spec/source/sections/009-8-error-handling.md panic channel",
+    "spec/source/sections/019-18-error-codes.md E0413"
+  ],
+  "legacy_example_conflict": {
+    "source": "spec/source/sections/004-3-expressions.md 3.7",
+    "old_example": "NullThrowError (E0410)",
+    "state": "OPEN_OWNED_SPEC_RECONCILIATION;current fixture follows explicit N13/E0413 and accepted fixed XIR;no existing spec pin refreshed"
+  },
+  "qualification": "Default message/code and panic-channel reference only;copied producer assertions do not transfer execution,ABI,FI,lifetime,SDK or provider qualification"
+}

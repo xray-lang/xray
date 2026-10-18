@@ -58,7 +58,7 @@ static XrXirStatus effect_body_advertisements_function(EffectBodyAdvertisementBu
     if (!xir_compile_work(builder->work,6)) return XR_XIR_BUDGET;
     builder->bounds->functions[function].values=(uint32_t)values;
     if (builder->refinement) builder->instructions=builder->refinement->functions[function].instructions;
-    bool instance=builder->source->provenance && builder->source->provenance->kind==XR_XIR_EVIDENCE_INSTANCE;
+    bool instance=builder->source->provenance && xir_effect_kind_is_closed(builder->source->provenance->kind);
     XrXirStatus status=instance?XR_XIR_OK:effect_invocation_source_declarations(builder->work,
         builder->source,function,builder->instructions,&builder->source_types);
     if (status!=XR_XIR_OK) return status;
@@ -95,7 +95,7 @@ static XrXirStatus effect_body_advertisements_value(EffectBodyAdvertisementBuild
     if (!xir_compile_work(builder->work,3)) return XR_XIR_BUDGET;
     XrXirType declared=actual;EffectInvocationValueBound record={0};XrXirStatus status=XR_XIR_OK;
     const XrXirProvenance *instance=module->provenance;
-    if (instance && instance->kind==XR_XIR_EVIDENCE_INSTANCE) {
+    if (instance && xir_effect_kind_is_closed(instance->kind)) {
         const XrXirOrigin *origin=&instance->origins[function];
         const XrXirModule *source=&instance->source->module;
         const XrXirFunction *original=&source->functions[origin->function];
@@ -149,7 +149,7 @@ static XrXirStatus effect_body_advertisements_value(EffectBodyAdvertisementBuild
 static bool effect_body_advertisements_span_ready(const EffectBodyAdvertisementBuilder *builder,uint32_t f) {
     if (!builder || !builder->open || f!=builder->function || f>=builder->bounds->count ||
         builder->instructions || (builder->source->provenance &&
-        builder->source->provenance->kind==XR_XIR_EVIDENCE_INSTANCE)) return false;
+        xir_effect_kind_is_closed(builder->source->provenance->kind))) return false;
     const XrXirModule *source=builder->source;
     return !source->generics || !source->generics[f].parameter_count;
 }

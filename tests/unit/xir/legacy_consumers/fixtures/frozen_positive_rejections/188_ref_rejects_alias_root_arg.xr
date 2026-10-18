@@ -1,0 +1,16 @@
+class Node {
+    tag: i64
+    init(tag: i64) { this.tag = tag }
+}
+
+fn mutate_and_read(target: ref Node, snapshot: Node) {
+    target.tag = 9
+    print(snapshot.tag)
+}
+
+var a = Node(1)
+var b = a
+mutate_and_read(ref a, b)
+
+print(a.tag)
+print(b.tag)

@@ -1,0 +1,18 @@
+class Box {
+    items: Array<i64> = Array<i64>(1, 0)
+}
+
+fn appendOne(items: ref Array<i64>) {
+    items.push(3)
+}
+
+const box = Box()
+
+fn main() {
+    var items = box.items
+    appendOne(ref items)
+    print(len(box.items))
+    print(len(items))
+}
+
+main()

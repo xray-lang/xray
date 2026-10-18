@@ -1,0 +1,2 @@
+fn answer()->bool { var xs:Array<Array<string>>=[["a","b","c"]]; const old=xs; xs[0].fill("x\0y",1,2); xs[0].fill("unused",3,3); return xs[0][0]=="a" && xs[0][1]=="x\0y" && xs[0][2]=="c" && old[0][1]=="b" }
+export fn run()->bool { return comptime answer() }

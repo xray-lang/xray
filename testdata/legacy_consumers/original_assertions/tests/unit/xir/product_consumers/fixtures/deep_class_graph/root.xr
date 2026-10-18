@@ -1,0 +1,323 @@
+class C79 {
+  value: i64
+  init(value: i64) { this.value = value }
+}
+class C78 {
+  next: C79?
+  init(next: C79?) { this.next = next }
+}
+class C77 {
+  next: C78?
+  init(next: C78?) { this.next = next }
+}
+class C76 {
+  next: C77?
+  init(next: C77?) { this.next = next }
+}
+class C75 {
+  next: C76?
+  init(next: C76?) { this.next = next }
+}
+class C74 {
+  next: C75?
+  init(next: C75?) { this.next = next }
+}
+class C73 {
+  next: C74?
+  init(next: C74?) { this.next = next }
+}
+class C72 {
+  next: C73?
+  init(next: C73?) { this.next = next }
+}
+class C71 {
+  next: C72?
+  init(next: C72?) { this.next = next }
+}
+class C70 {
+  next: C71?
+  init(next: C71?) { this.next = next }
+}
+class C69 {
+  next: C70?
+  init(next: C70?) { this.next = next }
+}
+class C68 {
+  next: C69?
+  init(next: C69?) { this.next = next }
+}
+class C67 {
+  next: C68?
+  init(next: C68?) { this.next = next }
+}
+class C66 {
+  next: C67?
+  init(next: C67?) { this.next = next }
+}
+class C65 {
+  next: C66?
+  init(next: C66?) { this.next = next }
+}
+class C64 {
+  next: C65?
+  init(next: C65?) { this.next = next }
+}
+class C63 {
+  next: C64?
+  init(next: C64?) { this.next = next }
+}
+class C62 {
+  next: C63?
+  init(next: C63?) { this.next = next }
+}
+class C61 {
+  next: C62?
+  init(next: C62?) { this.next = next }
+}
+class C60 {
+  next: C61?
+  init(next: C61?) { this.next = next }
+}
+class C59 {
+  next: C60?
+  init(next: C60?) { this.next = next }
+}
+class C58 {
+  next: C59?
+  init(next: C59?) { this.next = next }
+}
+class C57 {
+  next: C58?
+  init(next: C58?) { this.next = next }
+}
+class C56 {
+  next: C57?
+  init(next: C57?) { this.next = next }
+}
+class C55 {
+  next: C56?
+  init(next: C56?) { this.next = next }
+}
+class C54 {
+  next: C55?
+  init(next: C55?) { this.next = next }
+}
+class C53 {
+  next: C54?
+  init(next: C54?) { this.next = next }
+}
+class C52 {
+  next: C53?
+  init(next: C53?) { this.next = next }
+}
+class C51 {
+  next: C52?
+  init(next: C52?) { this.next = next }
+}
+class C50 {
+  next: C51?
+  init(next: C51?) { this.next = next }
+}
+class C49 {
+  next: C50?
+  init(next: C50?) { this.next = next }
+}
+class C48 {
+  next: C49?
+  init(next: C49?) { this.next = next }
+}
+class C47 {
+  next: C48?
+  init(next: C48?) { this.next = next }
+}
+class C46 {
+  next: C47?
+  init(next: C47?) { this.next = next }
+}
+class C45 {
+  next: C46?
+  init(next: C46?) { this.next = next }
+}
+class C44 {
+  next: C45?
+  init(next: C45?) { this.next = next }
+}
+class C43 {
+  next: C44?
+  init(next: C44?) { this.next = next }
+}
+class C42 {
+  next: C43?
+  init(next: C43?) { this.next = next }
+}
+class C41 {
+  next: C42?
+  init(next: C42?) { this.next = next }
+}
+class C40 {
+  next: C41?
+  init(next: C41?) { this.next = next }
+}
+class C39 {
+  next: C40?
+  init(next: C40?) { this.next = next }
+}
+class C38 {
+  next: C39?
+  init(next: C39?) { this.next = next }
+}
+class C37 {
+  next: C38?
+  init(next: C38?) { this.next = next }
+}
+class C36 {
+  next: C37?
+  init(next: C37?) { this.next = next }
+}
+class C35 {
+  next: C36?
+  init(next: C36?) { this.next = next }
+}
+class C34 {
+  next: C35?
+  init(next: C35?) { this.next = next }
+}
+class C33 {
+  next: C34?
+  init(next: C34?) { this.next = next }
+}
+class C32 {
+  next: C33?
+  init(next: C33?) { this.next = next }
+}
+class C31 {
+  next: C32?
+  init(next: C32?) { this.next = next }
+}
+class C30 {
+  next: C31?
+  init(next: C31?) { this.next = next }
+}
+class C29 {
+  next: C30?
+  init(next: C30?) { this.next = next }
+}
+class C28 {
+  next: C29?
+  init(next: C29?) { this.next = next }
+}
+class C27 {
+  next: C28?
+  init(next: C28?) { this.next = next }
+}
+class C26 {
+  next: C27?
+  init(next: C27?) { this.next = next }
+}
+class C25 {
+  next: C26?
+  init(next: C26?) { this.next = next }
+}
+class C24 {
+  next: C25?
+  init(next: C25?) { this.next = next }
+}
+class C23 {
+  next: C24?
+  init(next: C24?) { this.next = next }
+}
+class C22 {
+  next: C23?
+  init(next: C23?) { this.next = next }
+}
+class C21 {
+  next: C22?
+  init(next: C22?) { this.next = next }
+}
+class C20 {
+  next: C21?
+  init(next: C21?) { this.next = next }
+}
+class C19 {
+  next: C20?
+  init(next: C20?) { this.next = next }
+}
+class C18 {
+  next: C19?
+  init(next: C19?) { this.next = next }
+}
+class C17 {
+  next: C18?
+  init(next: C18?) { this.next = next }
+}
+class C16 {
+  next: C17?
+  init(next: C17?) { this.next = next }
+}
+class C15 {
+  next: C16?
+  init(next: C16?) { this.next = next }
+}
+class C14 {
+  next: C15?
+  init(next: C15?) { this.next = next }
+}
+class C13 {
+  next: C14?
+  init(next: C14?) { this.next = next }
+}
+class C12 {
+  next: C13?
+  init(next: C13?) { this.next = next }
+}
+class C11 {
+  next: C12?
+  init(next: C12?) { this.next = next }
+}
+class C10 {
+  next: C11?
+  init(next: C11?) { this.next = next }
+}
+class C9 {
+  next: C10?
+  init(next: C10?) { this.next = next }
+}
+class C8 {
+  next: C9?
+  init(next: C9?) { this.next = next }
+}
+class C7 {
+  next: C8?
+  init(next: C8?) { this.next = next }
+}
+class C6 {
+  next: C7?
+  init(next: C7?) { this.next = next }
+}
+class C5 {
+  next: C6?
+  init(next: C6?) { this.next = next }
+}
+class C4 {
+  next: C5?
+  init(next: C5?) { this.next = next }
+}
+class C3 {
+  next: C4?
+  init(next: C4?) { this.next = next }
+}
+class C2 {
+  next: C3?
+  init(next: C3?) { this.next = next }
+}
+class C1 {
+  next: C2?
+  init(next: C2?) { this.next = next }
+}
+class C0 {
+  next: C1?
+  init(next: C1?) { this.next = next }
+}
+fn answer(root: C0) -> i64 {
+  return 42
+}

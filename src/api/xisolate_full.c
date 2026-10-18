@@ -19,6 +19,7 @@
 #include "../base/xchecks.h"
 #include "../runtime/mem/xobj_destroy_ops.h"
 #include "../runtime/value/xtype_pool.h"
+#include "../runtime/value/xtype_internal.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
 #include "../runtime/class/xclass_system.h"
@@ -46,6 +47,9 @@
 #include "../base/xglobal_indices.h"
 #include "../frontend/analyzer/xanalyzer_native_types.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../runtime/abi/xr_runtime_target_profile.h"
+#include "../plan/target/xr_target_profile.h"
+#include "../base/xsource_cache.h"
 #include "../os/os_fs.h"
 #include <stdio.h>
 #include <string.h>
@@ -74,14 +78,15 @@ static bool isolate_materialize_script_info(XrVMRuntime *isolate, const char *sc
     XrString *main_str = NULL;
     XrString *dir_str = NULL;
 
-    if (script_file && xr_fs_realpath(script_file, abs_path, sizeof(abs_path))) {
+    XrOsIoPolicy io = xr_os_io_system_policy();
+    if (script_file && xr_os_io_realpath(&io, script_file, abs_path, sizeof(abs_path)) == XR_OS_IO_OK) {
         main_str = xr_string_intern(isolate, abs_path, strlen(abs_path), 0);
         snprintf(dir_path, sizeof(dir_path), "%s", abs_path);
         char *last_slash = strrchr(dir_path, '/');
         if (last_slash) {
             *last_slash = '\0';
             dir_str = xr_string_intern(isolate, dir_path, strlen(dir_path), 0);
-        } else if (xr_fs_getcwd(dir_path, sizeof(dir_path))) {
+        } else if (xr_os_io_getcwd(&io, dir_path, sizeof(dir_path)) == XR_OS_IO_OK) {
             dir_str = xr_string_intern(isolate, dir_path, strlen(dir_path), 0);
         }
     } else if (script_file) {
@@ -125,14 +130,23 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     // Process-level type singletons (idempotent, safe to call multiple times)
     xr_type_global_init();
 
-    XrCompilerSessionConfig compiler_cfg = {
-        .vm_host = isolate,
-    };
-    isolate->compiler_session = xr_compiler_session_new(&compiler_cfg);
-    if (!isolate->compiler_session)
+    /* This host keeps one cumulative metadata ledger for its entire lifetime.
+     * Per-operation analyzers borrow it through the neutral parser session. */
+    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    XrCompileResources *resources = NULL;
+    if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK)
         return -1;
-    xr_compiler_session_install_analyzer_pool(isolate->compiler_session);
-    if (!xr_compiler_session_analyzer_pool(isolate->compiler_session))
+    XrCompilerSessionStatus session_status = xr_compile_session_new(resources, &isolate->compiler_session);
+    xr_compile_resources_release(resources);
+    if (session_status != XR_COMPILER_SESSION_OK)
+        return -1;
+    XrCompileState *state = xr_compile_session_compile_state(isolate->compiler_session);
+    if (xr_compile_type_pool_open(state, &isolate->native_type_pool) != XR_COMPILE_RESOURCE_OK)
+        return -1;
+    xr_type_set_current_pool(isolate->native_type_pool, NULL);
+    char profile_error[256] = {0};
+    if (!xr_runtime_target_profile_build_native_hosted(&isolate->native_target_profile,
+            profile_error, sizeof(profile_error)))
         return -1;
 
     // Symbol table
@@ -181,6 +195,8 @@ static int isolate_init_full(XrVMRuntime *isolate) {
 
     // Module system
     xr_module_system_init(isolate);
+    if (!xr_isolate_get_module_registry(isolate))
+        return -1;
 
     // Compiler hooks for import
     xr_module_set_compiler_hooks(isolate, isolate->compiler_session, xr_compile_module_source);
@@ -189,8 +205,7 @@ static int isolate_init_full(XrVMRuntime *isolate) {
     // front inside stdlib loaders. Pure stdlib classes such as
     // datetime.DateTime must be imported from their module.
 
-    // Source cache is owned by the compiler session and only borrowed by VM error display.
-    if (!xr_compiler_session_ensure_source_cache(isolate->compiler_session))
+    if (xr_compile_source_cache_open(state, &isolate->diagnostic_sources) != XR_COMPILE_RESOURCE_OK)
         return -1;
 
     // Register core classes to VM builtins array (must be after all classes created).
@@ -255,8 +270,14 @@ static void isolate_cleanup_full(XrVMRuntime *isolate) {
         isolate->core_rt->symbol_table = NULL;
     }
 
+    xr_owned_source_cache_close(isolate->diagnostic_sources);
+    isolate->diagnostic_sources = NULL;
+    xr_target_profile_free(isolate->native_target_profile);
+    isolate->native_target_profile = NULL;
+    xr_type_pool_free(isolate->native_type_pool);
+    isolate->native_type_pool = NULL;
     if (isolate->compiler_session) {
-        xr_compiler_session_delete(isolate->compiler_session);
+        xr_compile_session_free(isolate->compiler_session);
         isolate->compiler_session = NULL;
     }
 }
@@ -268,6 +289,7 @@ XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
         xr_log_warning("isolate", "invalid VM configuration");
         return NULL;
     }
+    XrTypePool *previous_type_pool = xr_type_get_current_pool();
     XrVMRuntime *isolate = (XrVMRuntime *) xr_malloc(sizeof(XrVMRuntime));
     if (!isolate) {
         xr_log_warning("isolate", "failed to allocate isolate");
@@ -314,6 +336,7 @@ XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
                                          isolate->params.script_argc, isolate->params.script_argv))
         init_result = -1;
     xr_exec_context_restore(previous);
+    xr_type_set_current_pool(previous_type_pool, NULL);
     if (init_result != 0) {
         xray_vm_delete(isolate);
         return NULL;

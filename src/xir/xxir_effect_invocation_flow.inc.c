@@ -283,9 +283,8 @@ static XrXirStatus effect_invocation_ref_target(EffectInvocationFlow *flow,
         if (xr_xir_type_span(module->types,parameter->type) ||
             xr_xir_type_span(module->types,target->parameters[p+op->args[1]])) return XR_XIR_OK;
         if (parameter->mode==XR_PARAM_REF) {
-            if (op->args[1]) return XR_XIR_BAD_TYPE;
             if (xr_xir_cell_provenance_role(flow->read->final->cells,
-                    (uint32_t)op->immediate,p)!=XR_XIR_CELL_PROOF_SCOPED_REF) return XR_XIR_OK;
+                    (uint32_t)op->immediate,p+op->args[1])!=XR_XIR_CELL_PROOF_SCOPED_REF) return XR_XIR_OK;
         }
     }
     if (xr_xir_type_span(module->types,signature->result) ||

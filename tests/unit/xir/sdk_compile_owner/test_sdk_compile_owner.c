@@ -37,7 +37,7 @@ typedef XrXirStatus (*CheckPrototype)(const XrXirCompileContext *, const XrXirMo
     const XrXirConstruction *, XrXirArtifact **, XrXirDiagnostic *);
 typedef XrXirStatus (*VerifyPrototype)(const XrXirCompileContext *, const XrXirModule *,
     const XrXirConstruction *, XrXirDiagnostic *);
-_Static_assert(_Generic(&xr_xir_compile_construction_new, ConstructionPrototype:1, default:0),
+_Static_assert(_Generic(&xr_xir_compile_construction_new_v3, ConstructionPrototype:1, default:0),
     "Explicit immutable construction owner");
 _Static_assert(_Generic(&xr_xir_compile_check_v2, CheckPrototype:1, default:0),
     "Mandatory construction check input");
@@ -99,7 +99,8 @@ static char *input(const char *path,size_t *length) {
 static XrXirRuntimeSdk *admit(const XrXirRuntimeSdkRequest *request) {
     XrXirRuntimeSdk *sdk=NULL;CHECK(xr_xir_runtime_sdk_load(request,&sdk)==XR_XIR_SDK_OK);
     const XrXirRuntimeSdkFacts *facts=xr_xir_runtime_sdk_facts(sdk);
-    CHECK(facts->value_abi==24 && facts->call_abi==29 && facts->program_abi==30 && facts->crt==2);
+    CHECK(facts->value_abi==XR_XIR_VALUE_ABI_VERSION && facts->call_abi==XR_XIR_CALL_ABI_VERSION &&
+        facts->program_abi==XR_XIR_PROGRAM_ABI_VERSION && facts->crt==2);
     const char *resource_library=NULL;
     CHECK(xr_xir_runtime_sdk_file(sdk,"lib/xray_compile_resources.lib",&resource_library)==XR_XIR_SDK_OK && resource_library);
     return sdk;
@@ -130,8 +131,8 @@ static void old_versions(const XrXirRuntimeSdkRequest *original) {
     CHECK(old_program_data()->entries[0].abi_version==21);
     for (unsigned version=0;version<3;++version) {
         XrXirProgramSpec spec=*old_program_data();
-        if (version>0) spec.abi_version=30;
-        if (version>1) spec.target.abi_version=24;
+        if (version>0) spec.abi_version=XR_XIR_PROGRAM_ABI_VERSION;
+        if (version>1) spec.target.abi_version=XR_XIR_VALUE_ABI_VERSION;
         XrXirProgram *program=NULL;XrCompileResourceStats before=sdk_stats(request.resources);
         SdkAbiPhysicalSnapshot physical=abi_physical();
         CHECK(xr_xir_compile_program_seal(&compile,&spec,&program)==XR_XIR_BAD_LAYOUT && !program);
@@ -283,7 +284,7 @@ static void failure_matrix(const XrXirRuntimeSdkRequest *original) {
         CHECK(xr_xir_compile_program_seal(&compile,&compile_owner_program,&program)==XR_XIR_OUT_OF_MEMORY && !program);
         runtime_fail_at=SIZE_MAX;
         CHECK(sdk_stats(request.resources).live_bytes==before.live_bytes && runtime_bytes==physical && handles()==sdk_handles);
-        CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==30);
+        CHECK(xr_xir_runtime_sdk_facts(sdk)->program_abi==XR_XIR_PROGRAM_ABI_VERSION);
         xr_xir_runtime_sdk_free(sdk);xr_compile_resources_release(request.resources);
         CHECK(!runtime_live && !runtime_bytes && handles()==initial);
     }

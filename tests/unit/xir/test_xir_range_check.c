@@ -27,7 +27,7 @@
 #include "xir_checked_range76_golden.h"
 _Static_assert(XR_XIR_RANGE_CHECK == 148 && XR_XIR_GO == 146 && XR_XIR_TASK_AWAIT == 147,
     "The range instruction preserves existing operation ordinals");
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 30 && XR_XIR_CHECKED_CONTRACT == 76,
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 31 && XR_XIR_CHECKED_CONTRACT == 76,
     "The unchanged wire schema carries the range semantic revision");
 
 typedef struct RangeView {

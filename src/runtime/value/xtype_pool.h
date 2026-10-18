@@ -26,10 +26,13 @@
 #include "../../base/xcompile_state.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdatomic.h>
 
 // Type pool structure
 typedef struct XrTypePool {
     bool initialized;
+    _Atomic uint64_t references;
+    atomic_bool creator_released;
     XrCompileState *state; /* retained by arena backing for the entire pool lifetime */
 
     // Per-pool ID counter (no global state)
@@ -40,10 +43,24 @@ typedef struct XrTypePool {
 
 } XrTypePool;
 
+/* A pin owns one reference to this exact pool, independently of its creator.
+ * Zero-initialize and do not copy live pins. Producers are caller-serialized;
+ * reference release may cross threads. Pins preserve arena storage, not the
+ * lifetime of nominal descriptors or AST pointers referenced by a type. */
+typedef struct XrTypePoolPin {
+    XrTypePool *pool;
+} XrTypePoolPin;
+
 // Pool lifecycle
 XR_FUNC XrCompileResourceStatus xr_compile_type_pool_open(XrCompileState *state, XrTypePool **output);
+/* Free releases the creator exactly once; pinned storage survives it. */
 XR_FUNC void xr_type_pool_free(XrTypePool *pool);
-XR_FUNC void xr_type_pool_reset(XrTypePool *pool);
+XR_FUNC XrCompileResourceStatus xr_type_pool_pin(XrCompileState *state, XrTypePool *pool,
+                                                XrTypePoolPin *output);
+/* Non-admitting cleanup consumes the pin; an empty pin is harmless. */
+XR_FUNC void xr_type_pool_unpin(XrTypePoolPin *pin);
+/* Only an open creator without pins may invalidate arena allocations. */
+XR_FUNC XrCompileResourceStatus xr_type_pool_reset(XrTypePool *pool);
 
 // Allocate a type from pool arena (used by xanalyzer_types.c)
 // Types allocated this way are freed when pool is reset or destroyed

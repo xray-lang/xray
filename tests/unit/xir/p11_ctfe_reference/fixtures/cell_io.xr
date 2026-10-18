@@ -1,0 +1,2 @@
+fn answer(n:i64)->i64 { var y=n; if (y<0) { print("x") }; return y }
+export fn run()->i64 { return comptime answer(42) }

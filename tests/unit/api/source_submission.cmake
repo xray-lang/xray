@@ -109,13 +109,13 @@ endif()
 add_test(NAME source_birth_storage COMMAND test_source_birth_storage)
 set_tests_properties(source_birth_storage PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;generation;checked;storage")
 add_test(NAME source_birth_storage_vectors COMMAND "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/compile_owner/derive_birth_storage76_golden.py"
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_combined_wire.py"
     --source-root "${PROJECT_SOURCE_DIR}")
 add_test(NAME checked_storage76_vectors COMMAND "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_storage76_vectors.py"
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_combined_wire.py"
     --source-root "${PROJECT_SOURCE_DIR}")
 add_test(NAME checked_sizing76_vectors COMMAND "${Python3_EXECUTABLE}"
-    "${PROJECT_SOURCE_DIR}/tests/unit/xir/compile_owner/derive_checked_sizing76_golden.py"
+    "${PROJECT_SOURCE_DIR}/tests/unit/xir/derive_combined_wire.py"
     --source-root "${PROJECT_SOURCE_DIR}")
 set_tests_properties(source_birth_storage_vectors checked_storage76_vectors checked_sizing76_vectors
     PROPERTIES TIMEOUT 120 LABELS "unit;api;source;generation;checked;storage;independent")

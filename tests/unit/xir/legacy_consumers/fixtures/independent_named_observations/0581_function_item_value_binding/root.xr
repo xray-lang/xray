@@ -1,0 +1,50 @@
+// Observe the original scalar exactly once and retain every original test body.
+@test
+fn test_function_item_hoists_before_definition() {
+    var p19Observed0 = item_later(41)
+    assertEqual(p19Observed0, 42)
+    print(p19Observed0)
+}
+
+fn item_later(x: i64) -> i64 {
+    return x + 1
+}
+
+@test
+fn test_const_function_value_call_after_binding() {
+    const f = fn(x: i64) -> i64 {
+        return x + 3
+    }
+    var p19Observed1 = f(39)
+    assertEqual(p19Observed1, 42)
+    print(p19Observed1)
+}
+
+@test
+fn test_var_function_value_can_rebind() {
+    var op = fn(x: i64) -> i64 {
+        return x + 1
+    }
+    var p19Observed2 = op(10)
+    assertEqual(p19Observed2, 11)
+    print(p19Observed2)
+
+    op = fn(x: i64) -> i64 {
+        return x * 2
+    }
+    var p19Observed3 = op(21)
+    assertEqual(p19Observed3, 42)
+    print(p19Observed3)
+}
+
+fn fact_item(n: i64) -> i64 {
+    if (n <= 1) { return 1 }
+    return n * fact_item(n - 1)
+}
+
+@test
+fn test_function_item_recursion() {
+    var p19Observed4 = fact_item(5)
+    assertEqual(p19Observed4, 120)
+    print(p19Observed4)
+}

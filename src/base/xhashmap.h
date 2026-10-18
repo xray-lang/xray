@@ -59,10 +59,17 @@ typedef struct XrHashMap {
  * and cumulative allocations stay consumed. Owned blocks keep a compile ledger
  * alive, while other policy contexts must outlive this map. */
 XR_FUNC XrOsIoStatus xr_hashmap_owned_new(const XrOsIoPolicy *policy, XrHashMap **output);
+/* Read-only identity check on a live owned map; invokes no policy callbacks. */
+XR_FUNC bool xr_hashmap_owned_uses_policy(const XrHashMap *map, const XrOsIoPolicy *policy);
 XR_FUNC void xr_hashmap_owned_free(XrHashMap *map);
 XR_FUNC XrOsIoStatus xr_hashmap_owned_set(XrHashMap *map, const char *key, void *value);
 /* Missing keys publish NULL on OK. Resource failures preserve output. */
 XR_FUNC XrOsIoStatus xr_hashmap_owned_get(const XrHashMap *map, const char *key, void **output);
+/* Both results describe the same entry and remain unchanged on failure.
+ * The stored key is borrowed until deletion or map disposal. A present entry
+ * can have a NULL value; only a NULL stored key denotes absence. */
+XR_FUNC XrOsIoStatus xr_hashmap_owned_get_pair(const XrHashMap *map, const char *key,
+    const char **stored_key, void **value);
 XR_FUNC XrOsIoStatus xr_hashmap_owned_has(const XrHashMap *map, const char *key, bool *output);
 XR_FUNC XrOsIoStatus xr_hashmap_owned_delete(XrHashMap *map, const char *key, bool *output);
 XR_FUNC XrOsIoStatus xr_hashmap_owned_clear(XrHashMap *map);
@@ -70,6 +77,12 @@ XR_FUNC XrOsIoStatus xr_hashmap_owned_clear(XrHashMap *map);
 typedef void (*XrHashMapIterFunc)(const char *key, void *value, void *userdata);
 /* Iteration callbacks cannot mutate the map. */
 XR_FUNC XrOsIoStatus xr_hashmap_owned_foreach(const XrHashMap *map, XrHashMapIterFunc func, void *userdata);
+typedef bool (*XrHashMapVisitFunc)(const char *key, void *value, void *userdata);
+/* A false callback stops successfully without reading or charging another
+ * slot. Its caller retains any semantic or resource cause from the callback.
+ * Like foreach, the callback cannot mutate the borrowed map. */
+XR_FUNC XrOsIoStatus xr_hashmap_owned_visit(const XrHashMap *map,
+    XrHashMapVisitFunc func, void *userdata);
 /* Cleanup invokes each callback once without fresh work admission, then frees
  * the map. Callbacks may release borrowed keys/values but cannot fail or mutate
  * the map. A NULL callback is equivalent to owned_free. */

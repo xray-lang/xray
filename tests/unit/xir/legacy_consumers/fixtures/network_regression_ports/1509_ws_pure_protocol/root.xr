@@ -1,0 +1,205 @@
+// Pure-Xray WebSocket protocol helpers.
+
+import ws
+import { WsConnectOptions, WsConn } from ws
+import net
+import { NetConn, NetListener } from net
+import time
+
+// listen/dial now throw; restricted environments without socket access
+// should still skip the networked tests quietly instead of failing them.
+fn tryListen(port: i64, backlog: i64) -> NetListener? {
+    try {
+        return net.listen(port, backlog)
+    } catch (e) {
+        return null
+    }
+}
+
+fn tryDial(host: string, port: i64) -> NetConn? {
+    try {
+        return net.dial(host, port)
+    } catch (e) {
+        return null
+    }
+}
+
+fn readText(conn: NetConn, maxBytes: i64) -> string? {
+    var bytes = net.readBytes(conn, maxBytes)
+    if (bytes == null) { return null }
+    return string.fromUtf8(bytes![:])
+}
+
+fn headerValue(headers: string, name: string) -> string? {
+    var prefix = name + ": "
+    var start = headers.indexOf(prefix)
+    if (start < 0) { return null }
+    start = start + len(prefix)
+    var end = headers.indexOf("\r\n", start)
+    if (end < 0) { return null }
+    return headers.slice(start, end)
+}
+
+fn serveMissingUpgradeResponse(lst: NetListener) {
+    var maybeConn = net.accept(lst)
+    if (maybeConn == null) {
+        net.close(lst)
+        return
+    }
+    var conn = maybeConn!
+    var req = readText(conn, 4096)
+    if (req != null) {
+        var key = headerValue(req!, "Sec-WebSocket-Key")
+        if (key != null) {
+            var response = "HTTP/1.1 101 Switching Protocols\r\n" +
+                "Connection: Upgrade\r\n" +
+                "Sec-WebSocket-Accept: " + ws.acceptKey(key!) + "\r\n\r\n"
+            net.writeBytes(conn, response.copyBytes())
+        }
+    }
+    net.close(conn)
+    net.close(lst)
+}
+
+fn startRejectingUpgradeServer(port: i64, running: Atomic<bool>) {
+    ws.serve(port, fn(conn: WsConn) {
+        conn.close()
+    }, running)
+}
+
+@test
+fn test_accept_key_and_upgrade_response() {
+    var key = "dGhlIHNhbXBsZSBub25jZQ=="
+    assertEqual(ws.acceptKey(key), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+
+    var response = ws.upgradeResponse(key)
+    assert(response.contains("HTTP/1.1 101 Switching Protocols\r\n"))
+    assert(response.contains("Upgrade: websocket\r\n"))
+    assert(response.contains("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"))
+    assert(response.endsWith("\r\n\r\n"))
+}
+
+@test
+fn test_upgrade_request_and_protocol_pick() {
+    var key = "dGhlIHNhbXBsZSBub25jZQ=="
+    var headers = "GET /chat HTTP/1.1\r\n" +
+        "Host: example.com\r\n" +
+        "Upgrade: websocket\r\n" +
+        "Connection: keep-alive, Upgrade\r\n" +
+        "Sec-WebSocket-Key: " + key + "\r\n" +
+        "Sec-WebSocket-Version: 13\r\n" +
+        "Sec-WebSocket-Protocol: superchat, chat\r\n\r\n"
+
+    var parsed = ws.parseUpgradeRequest(headers, ["chat", "superchat"])!
+    assertEqual(parsed.protocol!, "chat")
+    var fallback = ws.parseUpgradeRequest(headers, ["missing", "superchat"])!
+    assertEqual(fallback.protocol!, "superchat")
+    assert(ws.parseUpgradeRequest(headers.replace("Connection: keep-alive, Upgrade", "Connection: keep-alive"), ["chat"]) == null)
+    assert(ws.parseUpgradeRequest(headers.replace(key, "bad"), ["chat"]) == null)
+}
+
+@test
+fn test_connect_rejects_invalid_urls_before_network() {
+    // connect never returns optional: a rejected URL surfaces as a WsConn whose
+    // error is set, before any socket is touched.
+    var options = WsConnectOptions(25, 0, 40, 4096)
+    var zeroPort = ws.connect("ws://example.com:0/", options)
+    assertEqual(zeroPort.error, "URL parse error")
+
+    var badPort = ws.connect("ws://example.com:abc/", null)
+    assertEqual(badPort.error, "URL parse error")
+
+    var tooLargePort = ws.connect("ws://example.com:99999/", null)
+    assertEqual(tooLargePort.error, "URL parse error")
+
+    var emptyHost = ws.connect("ws://:80/", null)
+    assertEqual(emptyHost.error, "URL parse error")
+
+    var fragment = ws.connect("ws://example.com/#frag", null)
+    assertEqual(fragment.error, "URL parse error")
+
+    var badIpv6 = ws.connect("ws://[::1]x/", null)
+    assertEqual(badIpv6.error, "URL parse error")
+}
+
+@test
+fn test_connect_rejects_missing_upgrade_response_header() {
+    var maybeLst = tryListen(0, 8)
+    assert(maybeLst != null)
+    var lst = maybeLst!
+    var port = net.port(lst)
+
+    go serveMissingUpgradeResponse(lst)
+
+    var conn = ws.connect("ws://127.0.0.1:" + port.toString() + "/", null)
+    defer { conn.close() }
+    assertEqual(conn.error, "Handshake failed")
+}
+
+@test
+fn test_serve_rejects_missing_connection_upgrade_header() {
+    var port = 9191
+    var probe = tryListen(port, 1)
+    assert(probe != null)
+    net.close(probe!)
+
+    const running = Atomic(true)
+    defer { running.store(false) }
+    go startRejectingUpgradeServer(port, running)
+    time.sleep(100)
+
+    var tcp = tryDial("127.0.0.1", port)
+    if (tcp == null) {
+        running.store(false)
+        assert(false)
+    }
+
+    var request = "GET / HTTP/1.1\r\n" +
+        "Host: 127.0.0.1\r\n" +
+        "Upgrade: websocket\r\n" +
+        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+        "Sec-WebSocket-Version: 13\r\n\r\n"
+    net.writeBytes(tcp!, request.copyBytes())
+    var response = readText(tcp!, 4096)
+    assert(response != null)
+    assert(response!.startsWith("HTTP/1.1 400 Bad Request"))
+    net.close(tcp!)
+    running.store(false)
+}
+
+@test
+fn test_mask_payload_and_unmasked_frame() {
+    var masked = ws.maskPayload(Array<u8>([1, 2, 3, 4, 5]), Array<u8>([1, 1, 1, 1]))
+    assertEqual(masked[0], 0)
+    assertEqual(masked[1], 3)
+    assertEqual(masked[2], 2)
+    assertEqual(masked[3], 5)
+    assertEqual(masked[4], 4)
+
+    var f = ws.frame("Hi".copyBytes(), 1, false)
+    assertEqual(len(f), 4)
+    assertEqual(f[0], 129)
+    assertEqual(f[1], 2)
+    assertEqual(f[2], 72)
+    assertEqual(f[3], 105)
+
+    var payload = Array<u8>(126)
+    var ext = ws.frame(payload, 2, false)
+    assertEqual(ext[0], 130)
+    assertEqual(ext[1], 126)
+    assertEqual(ext[2], 0)
+    assertEqual(ext[3], 126)
+}
+
+@test
+fn test_close_payload_decodes_utf8_reason() {
+    var close = ws.parseClosePayload(Array<u8>([3, 232, 79, 75]))!
+    assertEqual(close.code, 1000)
+    assertEqual(close.reason, "OK")
+
+    var unicode = ws.parseClosePayload(Array<u8>([3, 232, 195, 169]))!
+    assertEqual(unicode.reason, "é")
+    assert(ws.parseClosePayload(Array<u8>([3, 232, 192, 175])) == null)
+}
+
+print("All pure websocket protocol tests passed")

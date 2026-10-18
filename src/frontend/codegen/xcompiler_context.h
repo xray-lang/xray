@@ -21,6 +21,20 @@
 typedef struct XrClassDescriptor XrClassDescriptor;
 struct XiModule;
 struct XrModuleGraph;
+struct XrTargetProfile;
+
+struct XrReplSymbolTable;
+
+typedef struct XrCompilerPolicy {
+    const struct XrTargetProfile *target_profile;
+    bool runtime_imports;
+    const struct XrReplSymbolTable *repl_symbols; /* Borrowed through context lifetime. */
+} XrCompilerPolicy;
+
+typedef struct XrCompilerInput {
+    XaAnalyzerInput analysis;
+    XrCompilerPolicy policy;
+} XrCompilerInput;
 
 typedef void (*XrCompilerPostAnalyzeHook)(struct XrCompilerContext *ctx, AstNode *ast,
                                           void *user_data);
@@ -31,6 +45,8 @@ typedef void (*XrCompilerPostAnalyzeHook)(struct XrCompilerContext *ctx, AstNode
 struct XrCompilerContext {
     struct XrCompilerSession *compiler_session;
     XrVMRuntime *X;  // Borrowed VM host, for bytecode VM shared/global state.
+    struct XrTargetProfile *target_profile; /* retained immutable authority, optional when unused */
+    bool runtime_imports;
 
     int current_line;
     int current_column;
@@ -46,7 +62,7 @@ struct XrCompilerContext {
 
     bool had_error;
     bool panic_mode;
-    bool repl_mode;  // REPL: emit OP_GETGLOBAL/OP_SETGLOBAL, skip shared slot allocation
+    const struct XrReplSymbolTable *repl_symbols; /* Explicit caller-owned incremental history. */
     XrCompilerPostAnalyzeHook post_analyze_hook;
     void *post_analyze_user_data;
     const struct XrModuleGraph *module_graph;
@@ -68,20 +84,20 @@ struct XrCompilerContext {
 
     /* Analyzer ownership.  When true, context_free destroys the analyzer
      * and its type pool; when false the analyzer outlives the context
-     * (REPL uses a session-owned analyzer so type and symbol state
+     * (REPL uses a caller-owned analyzer so type and symbol state
      * persists across compilation units). */
     bool owns_analyzer;
 };
 
 /* Create a compiler context with a fresh, owned analyzer. */
-XR_FUNC XrCompilerContext *xr_compiler_context_new(struct XrCompilerSession *session);
+XR_FUNC XrCompilerContext *xr_compiler_context_new(const XrCompilerInput *input);
 
 /* Create a compiler context that borrows an externally-owned analyzer.
  * The caller retains ownership; context_free leaves the analyzer alone.
  * Intended for REPL/LSP where analyzer state must survive per-input
  * compilation units. */
-XR_FUNC XrCompilerContext *xr_compiler_context_new_with_analyzer(struct XrCompilerSession *session,
-                                                                 XaAnalyzer *analyzer);
+XR_FUNC XrCompilerContext *xr_compiler_context_new_with_analyzer(XaAnalyzer *analyzer,
+                                                               const XrCompilerPolicy *policy);
 XR_FUNC void xr_compiler_context_free(XrCompilerContext *ctx);
 XR_FUNC void xr_compiler_context_reset(XrCompilerContext *ctx);
 

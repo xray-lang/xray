@@ -1,0 +1,15 @@
+// Retain all original calls and place kinds; capture actual scalar results once after their original argument evaluation.
+fn accept_int(value: i64) -> i64 {
+    return value
+}
+
+fn ref_identifier_expression(ref: i64) -> i64 {
+    return accept_int(ref + 1)
+}
+
+@test
+fn test_ref_identifier_call_argument_not_marker() {
+    var p19PlaceValue0 = ref_identifier_expression(41)
+    assert(p19PlaceValue0 == 42)
+    print(p19PlaceValue0)
+}

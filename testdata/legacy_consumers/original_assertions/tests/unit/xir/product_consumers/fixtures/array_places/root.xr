@@ -1,0 +1,6 @@
+fn answer() -> i64 {
+  var values: Array<i64> = [10, 20, 30]
+  values[1] = 42
+  return values[1]
+}
+export fn consumerAnswer() -> i64 { return answer() }

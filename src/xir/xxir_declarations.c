@@ -34,7 +34,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (!module->declarations->functions) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[index];
     if (!xir_compile_work(budget,1)) return XR_XIR_BUDGET;
-    if (identity->method_kind > XR_XIR_MEMBER_HELPER ||
+    if (identity->method_kind > XR_XIR_MATERIALIZER ||
         (!!identity->nominal_owner != (identity->method_kind != XR_XIR_NON_MEMBER)))
         return XR_XIR_BAD_STRUCTURE;
     if (!identity->nominal_owner) return XR_XIR_OK;
@@ -42,9 +42,9 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     uint32_t owner = identity->nominal_owner-1;
     if (!table || owner >= table->count || (!table->declarations && !table->identities))
         return XR_XIR_BAD_STRUCTURE;
-    if (identity->method_kind == XR_XIR_MEMBER_HELPER) return XR_XIR_OK;
+    if (identity->method_kind == XR_XIR_MEMBER_HELPER || identity->method_kind==XR_XIR_MATERIALIZER) return XR_XIR_OK;
     uint32_t count = table->declarations ? table->declarations[owner].parameter_count : table->identities[owner].arity;
-    if (!xir_effect_evidence_is_instance(module) && count > (module->generics ? module->generics[index].parameter_count : 0))
+    if (!xir_effect_evidence_is_closed(module) && count > (module->generics ? module->generics[index].parameter_count : 0))
         return XR_XIR_BAD_TYPE;
     const XrXirFunction *function = &module->functions[index];
     XrXirType subject;
@@ -60,7 +60,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (!receiver || receiver->kind != XR_XIR_TYPE_NOMINAL ||
         receiver->nominal.declaration != owner || receiver->nominal.argument_count != count ||
         (count && !receiver->nominal.arguments)) return XR_XIR_BAD_TYPE;
-    if (!xir_effect_evidence_is_instance(module)) {
+    if (!xir_effect_evidence_is_closed(module)) {
         if (!xir_compile_work(budget,count)) return XR_XIR_BUDGET;
         for (uint32_t a = 0; a < count; ++a)
             if (receiver->nominal.arguments[a] != (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a))
@@ -209,7 +209,7 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
         (d->slot_count && !d->slots) || (d->literal_count && !d->literals)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < functions; ++i)
         if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1 ||
-            d->functions[i].method_kind > XR_XIR_MEMBER_HELPER ||
+            d->functions[i].method_kind > XR_XIR_MATERIALIZER ||
             d->functions[i].test_role > XR_XIR_TEST_ROLE_AFTER_EACH ||
             (d->functions[i].test_role != XR_XIR_TEST_ROLE_TEST && d->functions[i].test_timeout_seconds) ||
             d->functions[i].test_timeout_seconds > INT_MAX ||

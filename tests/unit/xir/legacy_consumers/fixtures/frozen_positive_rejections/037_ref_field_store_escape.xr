@@ -1,0 +1,22 @@
+class Holder {
+    items: Array<i64>
+
+    init() {
+        this.items = []
+    }
+}
+
+fn stash(data: ref Array<i64>, holder: ref Holder) {
+    holder.items = data
+}
+
+var values: Array<i64> = [1, 2]
+var holder = Holder()
+stash(ref values, ref holder)
+
+values[0] = 9
+values.push(3)
+print(holder.items[0])
+print(len(holder.items))
+print(values[0])
+print(len(values))

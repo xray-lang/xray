@@ -1,0 +1,4 @@
+fn inc(x:i64)->i64{return x+1}
+fn dec(x:i64)->i64{return x-1}
+fn choose(yes:bool,x:i64)->i64{const f=yes?inc:dec;return f(x)}
+export fn run()->i64{return comptime {choose(true,41)+choose(false,43)}}

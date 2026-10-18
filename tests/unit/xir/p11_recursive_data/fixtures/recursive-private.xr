@@ -1,0 +1,9 @@
+struct Node{
+    private value:i64;private children:Array<Node>;
+    static make()->Node{
+        const child=Node{value:2,children:[]};
+        return Node{value:40,children:[child]}
+    };
+    sum()->i64{return this.value+this.children[0].value}
+}
+export fn answer()->i64{const value=comptime Node.make();return value.sum()}

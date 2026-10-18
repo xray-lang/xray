@@ -1,0 +1,40 @@
+// anchor: task-208-packed-nested-native-size-layout
+import mem
+
+packed struct PackedNativeSize {
+    tag: u8
+    length: usize
+    delta: isize
+}
+
+struct NativeSizeEnvelope {
+    prefix: u8
+    payload: PackedNativeSize
+}
+
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+}
+
+fn main() {
+    var raw = unsafe { malloc(mem.sizeOf<NativeSizeEnvelope>() as usize) }
+    unsafe {
+        mem.withSliceMut<NativeSizeEnvelope>(raw, 1, ref raw,
+            fn(envelopes: ref MutSlice<NativeSizeEnvelope>) {
+                envelopes[0].payload.tag = 7
+                envelopes[0].payload.length = 37
+                envelopes[0].payload.delta = -37
+                print(envelopes[0].payload.tag)
+                print(envelopes[0].payload.length)
+                print(envelopes[0].payload.delta)
+                envelopes[0].payload.length = 91
+                envelopes[0].payload.delta = -91
+                print(envelopes[0].payload.length)
+                print(envelopes[0].payload.delta)
+            })
+        free(raw)
+    }
+}
+
+main()

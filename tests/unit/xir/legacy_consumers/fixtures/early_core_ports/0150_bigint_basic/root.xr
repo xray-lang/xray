@@ -1,0 +1,74 @@
+// 0150_bigint_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：BigInt 大整数字面量
+// ===== 基本字面量 =====
+@test
+fn test_zero_bigint() {
+    var a = 0n
+    assertEqual(a.toString(), "0")
+}
+
+@test
+fn test_small_bigint() {
+    var a = 123n
+    assertEqual(a.toString(), "123")
+}
+
+@test
+fn test_negative_bigint() {
+    var a = -456n
+    assertEqual(a.toString(), "-456")
+}
+
+// ===== 大整数 =====
+@test
+fn test_large_bigint() {
+    var a = 12345678901234567890n
+    assertEqual(a.toString(), "12345678901234567890")
+}
+
+@test
+fn test_very_large_bigint() {
+    var a = 99999999999999999999999999999999n
+    assertEqual(a.toString(), "99999999999999999999999999999999")
+}
+
+// ===== 下划线分隔符 =====
+@test
+fn test_underscore_separator() {
+    var a = 1_000_000_000n
+    assertEqual(a.toString(), "1000000000")
+}
+
+// ===== 十六进制 =====
+@test
+fn test_hex_small() {
+    var a = 0xFFn
+    assertEqual(a.toString(), "255")
+}
+
+@test
+fn test_hex_large() {
+    var a = 0xFFFFFFFFFFFFFFFFn
+    assertEqual(a.toString(), "18446744073709551615")
+}
+
+// ===== 二进制 =====
+@test
+fn test_binary_small() {
+    var a = 0b1111n
+    assertEqual(a.toString(), "15")
+}
+
+@test
+fn test_binary_byte() {
+    var a = 0b11111111n
+    assertEqual(a.toString(), "255")
+}
+
+// ===== 八进制 =====
+@test
+fn test_octal() {
+    var a = 0o777n
+    assertEqual(a.toString(), "511")
+}

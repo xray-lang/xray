@@ -1,0 +1,22 @@
+// Dynamic JSON objects deliberately expose only the Map instance surface.
+
+@test
+fn test_as_object_map_value_copy_and_rebind() {
+    var value = JSON.parseValue("{\"x\":1,\"y\":2}")
+    var obj = JSON.asObject(value)
+    assert(obj != null)
+    assertEqual(len(obj!.keys()), 2)
+    assert(obj!.containsKey("x"))
+    var extracted = obj!
+    extracted.set("z", 3)
+    assertEqual(JSON.require<i64>(extracted, ["z"]), 3)
+    assertEqual(JSON.get<i64>(value, ["z"]), null)
+    value = extracted
+    assertEqual(JSON.require<i64>(value, ["z"]), 3)
+}
+
+@test
+fn test_as_object_rejects_non_object() {
+    var scalar: JSON.Value = 1
+    assertEqual(JSON.asObject(scalar), null)
+}

@@ -42,6 +42,7 @@ struct XrSourceAst {
     AstNode *program;
     char *source, *path, *namespace_id;
     uint32_t references;
+    size_t source_length;
 };
 struct XrSourceResult { XrXirCallResult value; XrCompileResources *resources; };
 struct XrSourceValue { XrXirValue value; XrCompileResources *resources; };
@@ -185,8 +186,8 @@ static XrSourceStatus api_build(XrSourceCompiler *compiler,const char *path,cons
     if(status==XR_SOURCE_OK) {
         XrSourceCompileStatus built;
         if(ast) {
-            XrSourceCompilerAst input={ast->path,ast->namespace_id,ast->program};
-            built=xr_source_compiler_build_ast(compiler,&input,&product,detail?&detail->detail:NULL);
+            XrSourceCompilerText input={ast->path,ast->namespace_id,ast->source,ast->source_length};
+            built=xr_source_compiler_build_ast(compiler,&input,ast->program,&product,detail?&detail->detail:NULL);
         } else if(text) {
             XrSourceCompilerText input={text->absolute_path,text->namespace_id,text->bytes,text->length};
             built=xr_source_compiler_build_text(compiler,&input,&product,detail?&detail->detail:NULL);

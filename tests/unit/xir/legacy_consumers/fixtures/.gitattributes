@@ -1,0 +1,3 @@
+# Arguments and stdin are frozen byte protocols, independent of host checkout EOL.
+*.args -text
+*.stdin -text

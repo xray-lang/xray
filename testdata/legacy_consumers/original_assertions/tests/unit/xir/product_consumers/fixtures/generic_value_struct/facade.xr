@@ -1,0 +1,5 @@
+export { Box as OriginBox } from "./library"
+export struct Box<R> {
+  value: R
+  readAs<U>(_marker: U) -> R { return this.value }
+}

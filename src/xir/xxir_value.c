@@ -127,6 +127,8 @@ static void domain_unlock(XrXirDomain *domain) {
     atomic_store_explicit(&domain->locked, false, memory_order_release);
 }
 static bool value_object_kind_known(uint32_t kind);
+static XrXirValueStatus struct_observe_operation(const XrXirValue *value,uint32_t field,
+    XrXirValueAdmission *admission,XrXirValue *output,bool receiving);
 #include "xxir_value_graph_control.inc.c"
 static bool unit_value(const XrXirValue *value) {
     return value && !value->type && !value->reserved && !value->payload;
@@ -335,6 +337,18 @@ XR_FUNC bool xr_xir_value_from_payload(const XrXirTypeArena *arena,XrXirType exp
     if (!xr_xir_value_argument(&value,arena,expected)) return false;
     *output=value;return true;
 }
+XR_FUNC XrXirValueStatus xr_xir_compile_value_arena_borrow(XrCompileResources *resources,
+    const XrXirValue *value, const XrXirTypeArena **output) {
+    if (!resources || !output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (xr_compile_resources_work(resources,64)!=XR_COMPILE_RESOURCE_OK) return XR_XIR_VALUE_LIMIT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status=XR_XIR_VALUE_BAD_ARGUMENT;
+    if (value && value->type>=XR_XIR_CONSTRUCTED_TYPE_BASE && value_header_valid(value)) {
+        const XrXirTypeArena *arena=object_pointer(value)->arena;
+        if (arena) { *output=arena;status=XR_XIR_VALUE_OK; }
+    }
+    xr_xir_value_graph_end();return status;
+}
 XR_FUNC XrXirValueStatus xr_xir_domain_new(uint64_t limit, XrXirDomain **output) {
     if (!output || *output) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (limit < sizeof(XrXirDomain)) return XR_XIR_VALUE_LIMIT;
@@ -354,6 +368,20 @@ static XrXirValueStatus domain_compile_status(XrCompileResourceStatus status) {
     return status == XR_COMPILE_RESOURCE_OK ? XR_XIR_VALUE_OK :
         status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY ? XR_XIR_VALUE_OOM :
         status == XR_COMPILE_RESOURCE_BUDGET ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;
+}
+XR_FUNC XrXirValueStatus xr_xir_compile_value_domain_borrow(XrCompileResources *resources,
+    const XrXirValue *value, const XrXirTypeArena *arena, XrXirDomain **output) {
+    if (!resources || !value || !arena || !output || *output ||
+        value->type<XR_XIR_CONSTRUCTED_TYPE_BASE || value->type>=XR_XIR_CONSTRUCTED_TYPE_LIMIT)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status=domain_compile_status(xr_compile_resources_work(resources,64));
+    if (status!=XR_XIR_VALUE_OK) return status;
+    if (!xr_xir_value_argument(value,arena,(XrXirType)value->type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XirObject *object=object_pointer(value);
+    if (object->kind!=XR_XIR_TYPE_ARRAY && object->kind!=XR_XIR_TYPE_NOMINAL &&
+        object->kind!=XR_XIR_TYPE_NULLABLE && object->kind!=XR_XIR_TYPE_TUPLE) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!object->domain || object->domain->compile_resources!=resources) return XR_XIR_VALUE_BAD_ARGUMENT;
+    *output=object->domain;return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_compile_domain_new(XrCompileResources *resources,
     uint64_t limit, XrXirDomain **output) {
@@ -681,7 +709,7 @@ static bool empty_enum_object(const XirObject *object) {
         !((const XirNominalValue *) object)->count &&
         xr_xir_type_is_enum(xr_xir_compile_type_arena_types(object->arena), object->type);
 }
-static XrXirValueStatus xr_xir_value_copy_graph_operation(const XrXirValue *source, XrXirValue *output) {
+static XrXirValueStatus value_copy_on_domain(const XrXirValue *source,XrXirDomain *work_owner,XrXirValue *output) {
     if (!unit_value(output) || !source ||
         !xr_xir_value_valid(source))
         return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -689,7 +717,8 @@ static XrXirValueStatus xr_xir_value_copy_graph_operation(const XrXirValue *sour
         XirObject *object = object_pointer(source);
         /* Empty enum storage belongs to its arena, with no value domain.
          * Execution owners charge their copy/admission work before retaining. */
-        if (!empty_enum_object(object) && !xr_xir_domain_work(object->domain, 1)) return XR_XIR_VALUE_LIMIT;
+        if ((work_owner || !empty_enum_object(object)) &&
+            !xr_xir_domain_work(work_owner?work_owner:object->domain,1)) return XR_XIR_VALUE_LIMIT;
         if (!(empty_enum_object(object) ? xr_xir_compile_type_arena_retain(object->arena) :
             graph_object_retain(object))) return XR_XIR_VALUE_REFCOUNT_LIMIT;
     }
@@ -698,7 +727,7 @@ static XrXirValueStatus xr_xir_value_copy_graph_operation(const XrXirValue *sour
 }
 XR_FUNC XrXirValueStatus xr_xir_value_copy(const XrXirValue *source, XrXirValue *output) {
     xr_xir_value_graph_begin();
-    XrXirValueStatus graph_outcome = xr_xir_value_copy_graph_operation(source, output);
+    XrXirValueStatus graph_outcome = value_copy_on_domain(source,NULL,output);
     xr_xir_value_graph_end();
     return graph_outcome;
 }

@@ -1,0 +1,1 @@
+export fn run()->string{var text="old";const f=fn(value:ref string)->string{value="ab";defer{value="changed"};return value};return f(ref text)}

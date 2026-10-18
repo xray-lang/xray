@@ -1,0 +1,76 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// Typed CSV document, diagnostics, limits, and error channel must agree in VM/AOT.
+
+import csv
+import {
+    CsvDelimiter,
+    CsvDocument,
+    CsvError,
+    CsvErrorKind,
+    CsvHeader,
+    defaultParseOptions
+} from csv
+
+var headerOptions = defaultParseOptions()
+headerOptions.header = CsvHeader.FirstRow
+var doc = csv.parse("name,age\nAlice,30\nBob,25", headerOptions)
+print(len(doc.headers))
+print(doc.headers[0])
+print(len(doc.rows))
+print(doc.rows[0][0])
+print(doc.rows[1][1])
+
+var report = csv.parseReport("a,b\n1,2\n3")
+print(len(report.document.rows))
+print(len(report.diagnostics))
+print(report.diagnostics[0].kind == CsvErrorKind.FieldCountMismatch)
+print(report.diagnostics[0].line)
+print(report.diagnostics[0].record)
+print(report.diagnostics[0].column)
+
+try {
+    csv.parse("a,b\n1")
+} catch (e: CsvError) {
+    print(match (e) {
+        CsvError.FieldCountMismatch { byteOffset: offset, line, record, column, message } -> record == 1,
+        _ -> false
+    })
+}
+
+var autoOptions = defaultParseOptions()
+autoOptions.delimiter = CsvDelimiter.Auto
+var auto = csv.parse("a;b;c\n1;2;3", autoOptions)
+print(auto.rows[1][2])
+
+var tsvOptions = defaultParseOptions()
+tsvOptions.delimiter = CsvDelimiter.Exact { delimiter: '\t' }
+var tsv = csv.parse("x\ty\n4\t5", tsvOptions)
+print(tsv.rows[1][1])
+
+var serial = CsvDocument()
+serial.headers.push("name")
+serial.headers.push("note")
+serial.rows.push(["Alice", "hello, world"])
+serial.rows.push(["Bob", "quote \" me"])
+var out = csv.stringify(serial)
+print(out.contains("\"hello, world\""))
+print(out.contains("\"quote \"\" me\""))
+var roundtrip = csv.parse(out, headerOptions)
+print(roundtrip.rows[1][1])
+
+var quotedComment = defaultParseOptions()
+quotedComment.commentPrefix = "#"
+var comments = csv.parse("\"# value\",x\n# ignored\ny,z", quotedComment)
+print(len(comments.rows))
+print(comments.rows[0][0])
+
+var limited = defaultParseOptions()
+limited.maxColumns = 1
+try {
+    csv.parse("a,b", limited)
+} catch (e: CsvError) {
+    print(match (e) {
+        CsvError.ColumnLimitExceeded { limit } -> limit == 1,
+        _                                   -> false
+    })
+}

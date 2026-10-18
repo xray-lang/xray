@@ -1,0 +1,2 @@
+class Box {value:i8=7; static answer()->bool{return comptime {const b=Box();b.value==7}}}
+export fn run()->bool{return comptime Box.answer()}

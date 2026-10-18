@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "sources": {
+    "object_width_json_as_extra_key": "tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr",
+    "object_width_nullable_field_omission": "tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr",
+    "object_destructure": "tests/diff/cases/semantics/object/object_destructure.xr",
+    "tbaa_raw_pointer_store_kills_array_load": "tests/diff/cases/semantics/optimizer/tbaa_raw_pointer_store_kills_array_load.xr",
+    "ws_connect_options_type_surface": "tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr",
+    "string_from_utf8_slice": "tests/diff/cases/semantics/slice/string_from_utf8_slice.xr",
+    "slice_reinterpret_value_struct": "tests/diff/cases/semantics/slice/slice_reinterpret_value_struct.xr"
+  },
+  "authorities": [
+    "spec/source/sections/003-2-type-system.md",
+    "spec/source/sections/004-3-expressions.md",
+    "spec/source/sections/006-5-declarations.md",
+    "spec/source/sections/015-14-built-in-type-methods.md",
+    "spec/source/sections/018-17-compilation-pipeline.md",
+    "stdlib/types/string.xr",
+    "stdlib/mem/mem.xr",
+    "stdlib/ws/ws.xr",
+    "src/xir/xxir_value.h"
+  ],
+  "inputs": {
+    "spec/source/sections/003-2-type-system.md": "b53fe65114ebc6cfe5d480e620fb9ed0d809c08e2392f0287061646b9fe1f677",
+    "spec/source/sections/004-3-expressions.md": "1fdce404c935a4208d94f20fd2701b1dae48ca469a944a45b64237f7609eba9c",
+    "spec/source/sections/006-5-declarations.md": "17b82ddba9472f20b882826910a089bd13a6b510fb36f2e4d83f08c5f6940b6d",
+    "spec/source/sections/015-14-built-in-type-methods.md": "0aa7a88b717533bd6bed274b5c7b7136ac355d1581db7122890fe5beb787295e",
+    "spec/source/sections/018-17-compilation-pipeline.md": "91e9ef4bc0ce560d6621a1dbf8bd6a3f23c58e073e97469b10b7dece5866e440",
+    "stdlib/types/string.xr": "95307d2e652f164c46b028ead9c6138f85ea783ee42143e4b6d8c60d89d607d7",
+    "stdlib/mem/mem.xr": "9750e120d6b22f5c2caffd2d59d13238393ac6939c17827090a3829c33fa9dab",
+    "stdlib/ws/ws.xr": "fd82ecd9793b8b8312aea5ab480367b1689517fbd1520c2653dfc96b52fcafb0",
+    "src/xir/xxir_value.h": "08ea52eeffffd623eaa2dfd66cfc74ebe8dc772a4dc82b170d2ed4551cda4adc",
+    "tests/diff/cases/semantics/object/object_width_json_as_extra_key.xr": "f0111fe78a6eb7e824178accc3f8c5c9a8cc547d524042f89d31b39ed2eac471",
+    "tests/diff/cases/semantics/object/object_width_nullable_field_omission.xr": "a639d105c31383cc77f81290a57fa36dc682303d10da64992ff6506e093f8581",
+    "tests/diff/cases/semantics/object/object_destructure.xr": "c163e9de6e5b796f74f4d2dca99a2312ca502bc33ab5e68b47e531f0ff1f8231",
+    "tests/diff/cases/semantics/optimizer/tbaa_raw_pointer_store_kills_array_load.xr": "06e0c557ed641238914c7892a85c9f611e6c386870ee0197018da739730f1c2f",
+    "tests/diff/cases/semantics/stdlib/ws_connect_options_type_surface.xr": "28e04325af0ecb133e45d9e2ade938f74e050b13ead9f1ab9400ebcdd13ca27d",
+    "tests/diff/cases/semantics/slice/string_from_utf8_slice.xr": "dc7dffe347cea843f995ae3c6fe024a93b6b39c67291a62b77b05e55ed643433",
+    "tests/diff/cases/semantics/slice/slice_reinterpret_value_struct.xr": "3d66607f8dbd6fc6a2a843b38ce3424ae983ab11b89bfe8a120b75b49a0f22b2"
+  },
+  "qualification": "NOT_RUN",
+  "scope": "Complete positive original programs; no source prefix, no mocked compiler, no inherited execution PASS."
+}

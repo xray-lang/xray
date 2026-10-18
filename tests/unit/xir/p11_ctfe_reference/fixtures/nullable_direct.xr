@@ -1,0 +1,4 @@
+fn identity(x:i8?)->i8? { return x }
+fn absent()->i8 { const x:i8?=null; return x! }
+fn present()->i8 { const x:i8?=7; return x! }
+export fn run() {}

@@ -1,0 +1,166 @@
+// Pure-Xray WebSocket protocol helpers.
+
+import ws
+import { acceptKey, maskPayload, frame, parseFrame } from ws
+
+var key = "dGhlIHNhbXBsZSBub25jZQ=="
+print(acceptKey(key))
+print(ws.upgradeResponse(key).contains("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"))
+
+var upgradeRequest = "GET /chat?room=1 HTTP/1.1\r\n" +
+    "Host: example.com\r\n" +
+    "Origin: https://app.example\r\n" +
+    "Upgrade: websocket\r\n" +
+    "Connection: keep-alive, Upgrade\r\n" +
+    "Sec-WebSocket-Key: " + key + "\r\n" +
+    "Sec-WebSocket-Version: 13\r\n" +
+    "Sec-WebSocket-Protocol: superchat, chat\r\n" +
+    "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover\r\n\r\n"
+var parsedRequest = ws.parseUpgradeRequest(upgradeRequest, ["chat"], true, ["https://app.example"])!
+print(parsedRequest.requestTarget)
+print(parsedRequest.secKey == key)
+print(parsedRequest.protocol!)
+print(parsedRequest.deflate)
+print(parsedRequest.origin!)
+var fallbackProtocol = ws.parseUpgradeRequest(upgradeRequest, ["missing", "superchat"], true, ["*"])!
+print(fallbackProtocol.protocol!)
+
+var noDeflateRequest = ws.parseUpgradeRequest(upgradeRequest, ["chat"], false, ["*"])!
+print(noDeflateRequest.deflate)
+print(ws.parseUpgradeRequest(upgradeRequest.replace("GET ", "POST "), ["chat"], true, ["*"]) == null)
+print(ws.parseUpgradeRequest(upgradeRequest.replace(key, "bad"), ["chat"], true, ["*"]) == null)
+print(ws.parseUpgradeRequest(upgradeRequest.replace("Sec-WebSocket-Version: 13", "Sec-WebSocket-Version: 12"), ["chat"], true, ["*"]) == null)
+print(ws.parseUpgradeRequest(upgradeRequest, ["chat"], true, ["https://other.example"]) == null)
+
+var url = ws.parseUrl("wss://example.com/chat?room=1")!
+print(url.secure)
+print(url.host)
+print(url.port)
+print(url.path)
+
+var ipv6 = ws.parseUrl("ws://[::1]:8080")!
+print(ipv6.secure)
+print(ipv6.host)
+print(ipv6.port)
+print(ipv6.path)
+
+var queryOnly = ws.parseUrl("ws://example.com?token=a")!
+print(queryOnly.path)
+
+var handshakeRequest = ws.clientHandshakeRequest(url, key, ["chat"], true)!
+print(handshakeRequest.contains("GET /chat?room=1 HTTP/1.1\r\n"))
+print(handshakeRequest.contains("Host: example.com\r\n"))
+print(handshakeRequest.contains("Sec-WebSocket-Protocol: chat\r\n"))
+print(handshakeRequest.contains("permessage-deflate"))
+
+var ipv6Handshake = ws.clientHandshakeRequest(ipv6, key, null, false)!
+print(ipv6Handshake.contains("Host: [::1]:8080\r\n"))
+print(ipv6Handshake.contains("permessage-deflate"))
+
+print(ws.clientHandshakeRequest(url, "bad", ["chat"], true) == null)
+print(ws.clientHandshakeRequest(url, key, ["chat\nbad"], true) == null)
+
+print(ws.parseUrl("http://example.com") == null)
+print(ws.parseUrl("ws://") == null)
+print(ws.parseUrl("ws://example.com:abc") == null)
+print(ws.parseUrl("ws://example.com:65536") == null)
+print(ws.parseUrl("ws://[::1") == null)
+print(ws.parseUrl("ws://example.com/#fragment") == null)
+
+var serverResponse = "HTTP/1.1 101 Switching Protocols\r\n" +
+    "Upgrade: websocket\r\n" +
+    "Connection: keep-alive, Upgrade\r\n" +
+    "Sec-WebSocket-Accept: " + ws.acceptKey(key) + "\r\n" +
+    "Sec-WebSocket-Protocol: chat\r\n" +
+    "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover\r\n\r\n"
+var parsedUpgrade = ws.parseUpgradeResponse(serverResponse, key, ["chat"], true)!
+print(parsedUpgrade.statusCode)
+print(parsedUpgrade.protocol!)
+print(parsedUpgrade.deflate)
+
+print(ws.parseUpgradeResponse(serverResponse.replace("101", "200"), key, ["chat"], true) == null)
+print(ws.parseUpgradeResponse(serverResponse.replace(ws.acceptKey(key), "bad"), key, ["chat"], true) == null)
+print(ws.parseUpgradeResponse(serverResponse.replace("Upgrade: websocket\r\n", ""), key, ["chat"], true) == null)
+print(ws.parseUpgradeResponse(serverResponse, key, ["other"], true) == null)
+print(ws.parseUpgradeResponse(serverResponse, key, ["chat"], false) == null)
+
+var closePayload = ws.parseClosePayload(Array<u8>([3, 232, 79, 75]))!
+print(closePayload.code)
+print(closePayload.reason)
+
+var emptyClose = ws.parseClosePayload(Array<u8>(0))!
+print(emptyClose.code)
+print(len(emptyClose.reason))
+
+print(ws.isValidCloseCode(1000))
+print(ws.isValidCloseCode(1005))
+print(ws.isValidCloseCode(3000))
+print(ws.isValidCloseCode(5000))
+print(ws.parseClosePayload(Array<u8>([3])) == null)
+print(ws.parseClosePayload(Array<u8>([3, 238])) == null)
+print(ws.parseClosePayload(Array<u8>([3, 232, 192, 175])) == null)
+print(ws.parseClosePayload(Array<u8>([3, 232, 226, 130])) == null)
+var oversizedClose = Array<u8>(126)
+oversizedClose[0] = 3
+oversizedClose[1] = 232
+print(ws.parseClosePayload(oversizedClose) == null)
+
+var masked = maskPayload(Array<u8>([1, 2, 3, 4, 5]), Array<u8>([1, 1, 1, 1]))
+print(masked[0])
+print(masked[1])
+print(masked[2])
+print(masked[3])
+print(masked[4])
+
+var f = frame("Hi".copyBytes(), 1, false)
+print(len(f))
+print(f[0])
+print(f[1])
+print(f[2])
+print(f[3])
+
+var payload = Array<u8>(126)
+var ext = ws.frame(payload, 2, false)
+print(ext[0])
+print(ext[1])
+print(ext[2])
+print(ext[3])
+
+var payload300 = Array<u8>(300)
+payload300[299] = 90
+var ext300 = ws.frame(payload300, 2, false)
+var parsed300 = parseFrame(ext300, false)!
+print(ext300[2])
+print(ext300[3])
+print(len(parsed300.payload))
+print(parsed300.payload[299])
+
+var parsed = parseFrame(f, false)!
+print(parsed.fin)
+print(parsed.rsv1)
+print(parsed.opcode)
+print(parsed.masked)
+print(string.fromUtf8(parsed.payload[:]))
+print(parsed.consumedBytes)
+
+var maskedFrame = Array<u8>([129, 130, 1, 2, 3, 4, 73, 107])
+var parsedMasked = parseFrame(maskedFrame, true)!
+print(parsedMasked.masked)
+print(string.fromUtf8(parsedMasked.payload[:]))
+
+var withTail = Array<u8>([129, 1, 65, 66])
+var parsedTail = parseFrame(withTail, false)!
+print(string.fromUtf8(parsedTail.payload[:]))
+print(parsedTail.consumedBytes)
+
+var rsv = parseFrame(Array<u8>([193, 0]), false, false, true)!
+print(rsv.rsv1)
+print(parseFrame(Array<u8>([193, 0]), false) == null)
+
+print(parseFrame(Array<u8>([131, 0]), false) == null)
+print(parseFrame(Array<u8>([9, 0]), false) == null)
+print(parseFrame(Array<u8>([137, 126, 0, 126]), false) == null)
+print(parseFrame(Array<u8>([129, 126, 0, 1, 65]), false) == null)
+print(parseFrame(Array<u8>([129, 127, 128, 0, 0, 0, 0, 0, 0, 1, 65]), false) == null)
+print(parseFrame(Array<u8>([129, 2, 65]), false) == null)
+print(parseFrame(maskedFrame, false, true) == null)

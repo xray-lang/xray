@@ -1,0 +1,15 @@
+class Box {
+    items: Array<i64> = Array<i64>(2, 5)
+}
+
+fn main() {
+    const box = Box()
+    var items = box.items
+    const overwrite = fn() {
+        items[0] = 9
+    }
+    overwrite()
+    print(box.items[0])
+    print(items[0])
+}
+main()

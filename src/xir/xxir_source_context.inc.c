@@ -106,7 +106,12 @@ typedef struct SourceContext {
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;
     SourceComptimeSite *comptime_sites;
+    const SourceInstanceBatch *instance_constants;
+    const XrXirModule *literal_definition;
     const SourceComptimeSite *comptime_input;
+    const XrXirTypes *comptime_input_types;
+    SourceMaterialization *materializations,*materialization_tail;
+    uint32_t materialization_begin,materialization_count;
     uint32_t comptime_capacity,comptime_count,comptime_matched;
     SourceExpressionPlan *active_expression;
     /* This exact argument plan owns the pre-loss role, never its children. */

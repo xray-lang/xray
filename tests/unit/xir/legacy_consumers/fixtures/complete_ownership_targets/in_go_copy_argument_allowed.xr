@@ -1,0 +1,13 @@
+fn launch(data: Array<i64>) {
+    var originalLength = len(data)
+    var task = go fn(buffer: Array<i64>) -> i64 {
+        var local = buffer
+        local.push(5)
+        return len(local)
+    }(data)
+    print(await task)
+    print(originalLength)
+}
+
+var values: Array<i64> = [1, 2, 3, 4]
+launch(values)

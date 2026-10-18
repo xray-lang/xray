@@ -1,0 +1,14 @@
+fn leak(data: ref Array<i64>) -> Array<i64> {
+    return data
+}
+
+var values: Array<i64> = [1, 2]
+var leaked = leak(ref values)
+print(len(leaked))
+
+values[0] = 9
+values.push(3)
+print(leaked[0])
+print(len(leaked))
+print(values[0])
+print(len(values))

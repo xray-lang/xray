@@ -1,0 +1,97 @@
+// Preserve all original tuple/generic/function-value bodies and module initialization; observe actual scalar components once.
+// 1320_tuple_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：tuple 字面量、字段访问、解构、函数返回，跨多个调用边界
+
+@test
+fn test_tuple_literal_and_field() {
+    var t = (1, 2, 3)
+    var p19TupleValue0 = t.0
+    assertEqual(p19TupleValue0, 1)
+    print(p19TupleValue0)
+    var p19TupleValue1 = t.1
+    assertEqual(p19TupleValue1, 2)
+    print(p19TupleValue1)
+    var p19TupleValue2 = t.2
+    assertEqual(p19TupleValue2, 3)
+    print(p19TupleValue2)
+}
+
+@test
+fn test_tuple_heterogeneous() {
+    var t = (10, "hi", true)
+    var p19TupleValue3 = t.0
+    assertEqual(p19TupleValue3, 10)
+    print(p19TupleValue3)
+    var p19TupleValue4 = t.1
+    assertEqual(p19TupleValue4, "hi")
+    print(p19TupleValue4)
+    var p19TupleValue5 = t.2
+    assertEqual(p19TupleValue5, true)
+    print(p19TupleValue5)
+}
+
+@test
+fn test_tuple_destructure() {
+    var pair = (42, "hello")
+    var (a, b) = pair
+    var p19TupleValue6 = a
+    assertEqual(p19TupleValue6, 42)
+    print(p19TupleValue6)
+    var p19TupleValue7 = b
+    assertEqual(p19TupleValue7, "hello")
+    print(p19TupleValue7)
+}
+
+fn make_pair() -> (i64, string) {
+    return (7, "ok")
+}
+
+@test
+fn test_tuple_function_return_field_access() {
+    var r = make_pair()
+    var p19TupleValue8 = r.0
+    assertEqual(p19TupleValue8, 7)
+    print(p19TupleValue8)
+    var p19TupleValue9 = r.1
+    assertEqual(p19TupleValue9, "ok")
+    print(p19TupleValue9)
+}
+
+@test
+fn test_tuple_function_return_destructure() {
+    var (n, s) = make_pair()
+    var p19TupleValue10 = n
+    assertEqual(p19TupleValue10, 7)
+    print(p19TupleValue10)
+    var p19TupleValue11 = s
+    assertEqual(p19TupleValue11, "ok")
+    print(p19TupleValue11)
+}
+
+@test
+fn test_tuple_nested_field_access() {
+    // Tuples can contain tuples; .N is still constant-time per level.
+    var t = ((1, 2), (3, 4))
+    var p19TupleValue12 = t.0.0
+    assertEqual(p19TupleValue12, 1)
+    print(p19TupleValue12)
+    var p19TupleValue13 = t.0.1
+    assertEqual(p19TupleValue13, 2)
+    print(p19TupleValue13)
+    var p19TupleValue14 = t.1.0
+    assertEqual(p19TupleValue14, 3)
+    print(p19TupleValue14)
+    var p19TupleValue15 = t.1.1
+    assertEqual(p19TupleValue15, 4)
+    print(p19TupleValue15)
+}
+
+@test
+fn test_tuple_unary() {
+    // Single-element tuple is structurally distinct from a scalar.
+    var t = (99,)
+    var p19TupleValue16 = t.0
+    assertEqual(p19TupleValue16, 99)
+    print(p19TupleValue16)
+}

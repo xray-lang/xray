@@ -230,8 +230,8 @@ static XrXirStatus source_generation_prepare(XrXirSourceGenerations *owner,
         (rooted ? !repl->absolute_path || !*repl->absolute_path || !repl->logical_path || !*repl->logical_path ||
             repl->authority->kind==XR_MODULE_IDENTITY_MEMORY || !repl->authority->physical_root :
             repl->absolute_path || repl->logical_path || repl->lockfile))) return XR_XIR_BAD_STRUCTURE;
-    if (ast && (!ast->input.program || (!rooted && ast->input.logical_path && *ast->input.logical_path) ||
-        (rooted && (!ast->input.logical_path || !*ast->input.logical_path)) ||
+    if (ast && (!ast->input.program || (!rooted && ast->input.source.logical_path && *ast->input.source.logical_path) ||
+        (rooted && (!ast->input.source.logical_path || !*ast->input.source.logical_path)) ||
         ast->resources!=owner->config.context.resources || !ast->owner || !ast->retain || !ast->release))
         return XR_XIR_BAD_STRUCTURE;
     if (owner->pending || (owner->published && owner->published->unit.interactive!=input->interactive))
@@ -252,7 +252,8 @@ static XrXirStatus source_generation_prepare(XrXirSourceGenerations *owner,
         status=generation_identity(owner,record);
     } else status=generation_source(owner,text,record);
     if (status!=XR_XIR_OK) goto done;
-    XrCompilerSessionStatus opened=xr_compile_session_new(owner->config.context.resources,&session);
+    XrCompilerSessionStatus opened=ast ? xr_compile_session_new_with_state(xr_compiler_arena_compile_state(ast->input.program->as.program.arena),&session) :
+        xr_compile_session_new(owner->config.context.resources,&session);
     if (opened!=XR_COMPILER_SESSION_OK) {
         status=opened==XR_COMPILER_SESSION_OUT_OF_MEMORY ? XR_XIR_OUT_OF_MEMORY :
             opened==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_BAD_STRUCTURE;goto done;
@@ -261,7 +262,8 @@ static XrXirStatus source_generation_prepare(XrXirSourceGenerations *owner,
     XrXirSourceRequest request={session,rooted?repl->absolute_path:NULL,rooted?repl->authority:&authority,
         &owner->config.context,owner->config.stdlib_path,rooted?repl->lockfile:owner->config.lockfile,
         XR_XIR_PROGRAM,owner->config.libraries};
-    SourceInput source={.supplied=text!=NULL,.text={rooted?repl->logical_path:NULL,record->source,text?text->length:0},
+    SourceInput source={.supplied=text!=NULL || (ast && ast->input.source.text),
+        .text={rooted?repl->logical_path:NULL,ast?ast->input.source.text:record->source,ast?ast->input.source.length:(text?text->length:0)},
         .ast=ast?ast->input.program:NULL,.ast_input=ast!=NULL,.ast_owner=ast?&record->ast_owner:NULL,
         .capture=&record->capture,.binding_readers=input->readers,.interactive=input->interactive,.type_query=input->type_query,
         .module_scope=input->interactive?record->namespace_id:NULL,

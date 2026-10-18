@@ -185,18 +185,21 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_build_logical_source(XrModuleGrap
     const XrModuleIdentityAuthority *authority, const char *logical_path,
     const char *source_path, const char *source, char **out_err);
 
-typedef struct XrModuleAstInput {
-    struct AstNode *program;
+typedef struct XrModuleSourceAstInput {
     const XrModuleIdentityAuthority *authority;
-    const char *logical_path, *source_path;
-} XrModuleAstInput;
-/* Borrow a complete owning parser AST until graph_free. Its authentic arena
- * must retain the same ledger, but its producing session may already be dead.
- * Imports use ordinary discovery. No entry bytes are read, synthesized or
- * parsed. Failure preserves the caller's AST; discard partial graph discovery.
- * An AST has no source-byte fingerprint; query metadata reports zero. */
-XR_FUNC XrModuleStatus xr_compile_module_graph_build_ast(XrModuleGraph *g,
-    const XrModuleAstInput *input, char **out_err);
+    const char *logical_path;
+    const char *source_path;
+    const char *source;
+    struct AstNode *program;
+} XrModuleSourceAstInput;
+/* Borrow an already-parsed entry on the exact active parser state, or a
+ * detached owning AST retaining the same original ledger. The graph never
+ * destroys this entry; the caller keeps its arena and source stable until graph
+ * destruction. Imports still use ordinary resolution and owned parsing. Source
+ * optional bytes provide diagnostic provenance; the supplied tree is the syntax input.
+ * Failure leaves the tree with the caller and any partial discovery in graph. */
+XR_FUNC XrModuleStatus xr_compile_module_graph_build_ast(XrModuleGraph *graph,
+    const XrModuleSourceAstInput *input, char **out_err);
 
 /* Include exact caller-owned logical source under the same typed authority
  * rules as build_logical_source. The original entry is preserved. Reusing a

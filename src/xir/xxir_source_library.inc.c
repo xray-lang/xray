@@ -147,7 +147,7 @@ static bool source_library_map(SourceContext *ctx, const XrXirModule *library,
     map.history=ctx->graph->specs[module].representation==XR_MODULE_CHECKED_HISTORY ?
         ctx->graph->specs[module].history : NULL;
     map.unit = source_library_unit(ctx,library);
-    if (library->types && !map.unit)
+    if (!map.unit)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library declaration map is missing");
     map.module_count = d->module_count; map.function_count = library->function_count;
     map.literal_begin = ctx->literal_count; map.literal_count = d->literal_count;
@@ -393,6 +393,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     if (helper || index == library->declarations->modules[original_module].initializer) return true;
     if (ctx->identities[target].nominal_owner &&
         (ctx->identities[target].method_kind==XR_XIR_CONSTRUCTOR ||
+         ctx->identities[target].method_kind==XR_XIR_MATERIALIZER ||
          ctx->identities[target].method_kind==XR_XIR_MEMBER_HELPER)) {
         uint32_t owner=ctx->identities[target].nominal_owner-1;
         ctx->bodies[target].declaration=ctx->nominal_sources[owner]->declaration;
@@ -547,6 +548,8 @@ static bool source_library_implementations(SourceContext *ctx,const XrXirModule 
     return true;
 }
 
+#include "xxir_source_library_materialization.inc.c"
+#include "xxir_source_library_comptime.inc.c"
 static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     const SourceLibraryMap *map) {
     for (uint32_t m=0;m<map->module_count;++m) {
@@ -566,7 +569,8 @@ static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     for (uint32_t f = 0; f < library->function_count; ++f) {
         if (!source_work(ctx, NULL) || !source_library_function(ctx, library, map, f)) return false;
     }
-    if (!source_library_initializers(ctx,library,map) ||
+    if (!source_library_initializers(ctx,library,map) || !source_library_materializations(ctx,map) ||
+        !source_library_comptime(ctx,map) ||
         !source_library_implementations(ctx,library,map)) return false;
     if (!library->defaults) return true;
     for (uint32_t i = 0; i < library->defaults->count; ++i) {

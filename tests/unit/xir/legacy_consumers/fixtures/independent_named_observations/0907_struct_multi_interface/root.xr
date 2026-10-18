@@ -1,0 +1,59 @@
+// Preserve all original generic/interface declarations and complete bodies; observe each original scalar result once.
+// Test: struct implementing multiple interfaces
+// Expected: struct can implement multiple interfaces simultaneously
+
+interface Printable {
+    toString() -> string
+}
+interface Measurable {
+    measure() -> i64
+}
+struct Score implements Printable, Measurable {
+    value: i64
+    label: string
+
+    toString() -> string {
+        return "${this.label}: ${this.value}"
+    }
+
+    measure() -> i64 {
+        return this.value
+    }
+}
+
+@test
+fn test_struct_multi_interface() {
+
+
+
+    // === Direct usage ===
+    var a = Score{value: 95, label: "Math"}
+    var b = Score{value: 88, label: "English"}
+
+    var p19GenericValue0 = a.toString()
+    assert(p19GenericValue0 == "Math: 95")
+    print(p19GenericValue0)
+    var p19GenericValue1 = b.toString()
+    assert(p19GenericValue1 == "English: 88")
+    print(p19GenericValue1)
+    var p19GenericValue2 = a.measure()
+    assert(p19GenericValue2 == 95)
+    print(p19GenericValue2)
+    var p19GenericValue3 = b.measure()
+    assert(p19GenericValue3 == 88)
+    print(p19GenericValue3)
+
+    // === Value semantics preserved ===
+    var c = a
+    c.value = 50
+    var p19GenericValue4 = a.value
+    assert(p19GenericValue4 == 95)
+    print(p19GenericValue4)
+    var p19GenericValue5 = a.measure()
+    assert(p19GenericValue5 == 95)
+    print(p19GenericValue5)
+    var p19GenericValue6 = c.measure()
+    assert(p19GenericValue6 == 50)
+    print(p19GenericValue6)
+}
+

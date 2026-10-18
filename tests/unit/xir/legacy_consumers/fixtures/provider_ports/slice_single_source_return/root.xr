@@ -1,0 +1,37 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
+    return data[start:]
+}
+
+fn forward(data: Slice<u8>, start: i64) -> Slice<u8> {
+    return tail(data, start)
+}
+
+class Window {
+    bytes: Array<u8>
+    start: i64
+
+    init(bytes: Array<u8>, start: i64) {
+        this.bytes = bytes
+        this.start = start
+    }
+
+    tail(data: Slice<u8>) -> Slice<u8> {
+        return data[this.start:]
+    }
+}
+
+fn main() {
+    var bytes: Array<u8> = [10, 20, 30, 40]
+    var source: Slice<u8> = bytes[:]
+    var result: Slice<u8> = forward(source, 2)
+    print(len(result))
+    print(result[0])
+    print(result[1])
+    var window = Window(bytes, 1)
+    var receiverSource: Slice<u8> = window.bytes[:]
+    var receiverResult: Slice<u8> = window.tail(receiverSource)
+    print(receiverResult[0])
+}
+
+main()

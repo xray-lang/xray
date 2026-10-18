@@ -1,0 +1,10 @@
+// anchor: ownership-move-local-heap
+fn run() {
+    var source: Array<i64> = [1, 2, 3]
+    var moved = source
+    moved.push(4)
+    print(len(moved))
+    print(moved[0] + moved[3])
+}
+
+run()

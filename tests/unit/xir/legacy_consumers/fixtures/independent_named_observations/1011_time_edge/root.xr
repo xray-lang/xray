@@ -1,0 +1,75 @@
+// Preserve every original clock read, sleep duration and loop bound; observe actual contract predicates at the original point.
+// 1011_time_edge.xr - Time module edge case tests
+
+import time
+
+// ===== Monotonic clock ordering =====
+
+@test
+fn test_monotonic_ordering() {
+    var t1 = time.monotonic()
+    var t2 = time.monotonic()
+    var t3 = time.monotonic()
+    var p19ClockPredicate0 = t3 >= t2
+    assert(p19ClockPredicate0)
+    print(p19ClockPredicate0)
+    var p19ClockPredicate1 = t2 >= t1
+    assert(p19ClockPredicate1)
+    print(p19ClockPredicate1)
+}
+
+// ===== time.now precision =====
+
+@test
+fn test_now_returns_milliseconds() {
+    var t = time.now()
+    // Should be in milliseconds (13+ digits since 2001)
+    var p19ClockPredicate2 = t > 1000000000000
+    assert(p19ClockPredicate2)
+    print(p19ClockPredicate2)
+}
+
+@test
+fn test_now_advances() {
+    var t1 = time.now()
+    time.sleep(10)
+    var t2 = time.now()
+    var p19ClockPredicate3 = t2 > t1
+    assert(p19ClockPredicate3)
+    print(p19ClockPredicate3)
+}
+
+// ===== time.clock accumulates =====
+
+@test
+fn test_clock_non_negative() {
+    var c = time.clock()
+    var p19ClockPredicate4 = c >= 0
+    assert(p19ClockPredicate4)
+    print(p19ClockPredicate4)
+}
+
+// ===== time.sleep boundary =====
+
+@test
+fn test_sleep_zero() {
+    var start = time.monotonic()
+    time.sleep(0)
+    var end = time.monotonic()
+    var p19ClockPredicate5 = end >= start
+    assert(p19ClockPredicate5)
+    print(p19ClockPredicate5)
+}
+
+@test
+fn test_sleep_small() {
+    var start = time.monotonic()
+    time.sleep(1)
+    var end = time.monotonic()
+    var p19ClockPredicate6 = end >= start
+    assert(p19ClockPredicate6)
+    print(p19ClockPredicate6)
+    var p19ClockPredicate7 = end - start >= 1
+    assert(p19ClockPredicate7)
+    print(p19ClockPredicate7)
+}

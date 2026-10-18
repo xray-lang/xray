@@ -18,12 +18,16 @@
 #include "ir/xi_lower.h"
 #include "runtime/value/xchunk.h"
 #include "toolchain/xcompiler_session.h"
+#include "module/xmodule_identity.h"
 #include "xray_vm.h"
 
 #include <stdlib.h>
 #include <string.h>
 
 static XrVMRuntime *g_iso = NULL;
+static XrCompileResources *g_resources;
+static XrCompilerSession *g_session;
+static char *g_module_identity;
 
 typedef struct ScalingResult {
     uint32_t xi_value_count;
@@ -37,9 +41,22 @@ typedef struct ScalingResult {
 static void setup(void) {
     XrVMConfig config = {0};
     g_iso = xray_vm_new_full(&config);
+    const XrCompileResourceLimits limits = {UINT64_MAX, UINT64_MAX, UINT64_MAX};
+    if (xr_compile_resources_new(&limits, &g_resources) != XR_COMPILE_RESOURCE_OK ||
+        xr_compile_session_new(g_resources, &g_session) != XR_COMPILER_SESSION_OK)
+        abort();
+    const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, "quoted-literal-scaling", NULL};
+    if (xr_compile_module_identity_from_logical(g_resources, &authority, "", &g_module_identity) != XR_MODULE_OK)
+        abort();
 }
 
 static void teardown(void) {
+    xr_compile_resources_free(g_module_identity);
+    g_module_identity = NULL;
+    xr_compile_session_free(g_session);
+    g_session = NULL;
+    xr_compile_resources_release(g_resources);
+    g_resources = NULL;
     if (g_iso)
         xray_vm_delete(g_iso);
     g_iso = NULL;
@@ -90,9 +107,10 @@ static bool run_scaling_case(size_t payload_length, ScalingResult *result) {
     if (!source)
         return false;
 
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
-    AstNode *program = xr_parse(session, source);
-    if (!program || program->type != AST_PROGRAM || program->as.program.count != 2) {
+    XrCompilerSession *session = g_session;
+    AstNode *program = NULL;
+    XrParseStatus parsed = xr_compile_parse(session, source, &program);
+    if (parsed != XR_PARSE_OK || !program || program->type != AST_PROGRAM || program->as.program.count != 2) {
         free(source);
         return false;
     }
@@ -107,7 +125,9 @@ static bool run_scaling_case(size_t payload_length, ScalingResult *result) {
         return false;
     }
 
-    XaAnalyzer *analyzer = xa_analyzer_new(session);
+    const XaAnalyzerInput analysis = {.session = session, .runtime = g_iso,
+        .target = xr_target_data_layout_host(), .module_identity = g_module_identity};
+    XaAnalyzer *analyzer = xa_analyzer_new(&analysis);
     if (!analyzer) {
         xr_program_destroy(program);
         free(source);
@@ -115,25 +135,30 @@ static bool run_scaling_case(size_t payload_length, ScalingResult *result) {
     }
     xa_analyzer_analyze(analyzer, "quoted_literal_scaling.xr", program);
 
-    XrCompilerSessionScope scope;
+    XrCompilerSessionScope scope = {0};
     bool pushed = program->as.program.arena &&
-                  xr_compiler_session_push_arena(session, program->as.program.arena,
-                                                 "quoted_literal_scaling.xr", &scope);
+        xr_compile_session_push_arena(session, program->as.program.arena, &scope) == XR_COMPILE_RESOURCE_OK;
+    if (!pushed) {
+        xa_analyzer_free(analyzer);
+        xr_program_destroy(program);
+        free(source);
+        return false;
+    }
     xr_canon_program(program, analyzer, session);
-    if (pushed)
-        xr_compiler_session_pop_arena(&scope);
+    (void) xr_compile_session_pop_arena(&scope);
 
     XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
-    /* Analysis clears the file cursor on its way out, but lowering attributes
-     * plans to exact source and reads it. A real compile is inside a file scope
-     * at this point; this harness has to say so too. */
-    analyzer->current_file = "quoted_literal_scaling.xr";
-    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
+    XaAnalyzerFileScope file_scope = {0};
+    bool file_pushed = xa_analyzer_push_file_scope(analyzer, "quoted_literal_scaling.xr", &file_scope);
+    XiFunc *func = typed.program && file_pushed ? xi_lower_program(typed.program, g_iso, NULL, NULL) : NULL;
     if (func)
         count_xi_values(func, payload_length, result);
 
     XrProto *proto = NULL;
-    XiEmitStatus emit_status = func ? xi_emit(func, g_iso, &proto) : XI_EMIT_ERR_INTERNAL;
+    const XiEmitInput input = {.state = xr_compile_session_compile_state(session),
+        .target = xa_analyzer_target_data_layout(analyzer), .module_identity = g_module_identity,
+        .import_mode = XI_EMIT_IMPORT_PROGRAM};
+    XiEmitStatus emit_status = func ? xi_emit(func, g_iso, &input, &proto) : XI_EMIT_ERR_INTERNAL;
     if (emit_status == XI_EMIT_OK && proto) {
         result->bytecode_instruction_count = (uint32_t) PROTO_CODE_COUNT(proto);
         result->struct_area_size = proto->struct_area_size;
@@ -148,6 +173,8 @@ static bool run_scaling_case(size_t payload_length, ScalingResult *result) {
     if (func)
         xi_func_free(func);
     xa_typed_program_free(typed.program);
+    if (file_pushed)
+        xa_analyzer_pop_file_scope(analyzer, &file_scope);
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
     free(source);

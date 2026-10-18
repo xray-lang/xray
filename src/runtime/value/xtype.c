@@ -822,22 +822,31 @@ static int view_origin_compare(const XrViewOrigin *a, const XrViewOrigin *b) {
     return a->param_ordinal < b->param_ordinal ? -1 : 1;
 }
 
-bool xr_type_function_set_view_origins(XrVMRuntime *X, XrType *type, const XrViewOrigin *origins,
-                                       int count, bool was_elided) {
-    if (!type || type->kind != XR_KIND_FUNCTION || count < 0 || (count > 0 && !origins))
-        return false;
+XR_FUNC XrViewOriginBindStatus xr_type_function_set_view_origins(XrVMRuntime *X, XrType *type,
+    const XrViewOrigin *origins, int count, bool was_elided) {
     X = resolve_isolate(X);
     XrTypePool *pool = resolve_type_pool(X);
+    if (!pool) return XR_VIEW_ORIGIN_BIND_INVALID;
+    XrCompileState *state = pool->state;
+    if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK)
+        return XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY;
+    if (!type || type->kind != XR_KIND_FUNCTION || count < 0 || (count > 0 && !origins))
+        return XR_VIEW_ORIGIN_BIND_INVALID;
     XrViewOrigin *normalized = NULL;
     if (count > 0) {
-        normalized = (XrViewOrigin *) xr_malloc(sizeof(XrViewOrigin) * (size_t) count);
-        if (!normalized)
-            return false;
-        memcpy(normalized, origins, sizeof(XrViewOrigin) * (size_t) count);
+        void *memory = NULL;
+        if (xr_compile_state_calloc(state, (size_t) count, sizeof(XrViewOrigin), &memory) != XR_COMPILE_RESOURCE_OK)
+            return XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY;
+        normalized = memory;
+        if (xr_compile_state_copy(state, normalized, origins, (size_t) count * sizeof(*origins)) != XR_COMPILE_RESOURCE_OK)
+            goto normalization_failed;
         for (int i = 1; i < count; i++) {
+            if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
             XrViewOrigin key = normalized[i];
             int j = i - 1;
-            while (j >= 0 && view_origin_compare(&normalized[j], &key) > 0) {
+            while (j >= 0) {
+                if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
+                if (view_origin_compare(&normalized[j], &key) <= 0) break;
                 normalized[j + 1] = normalized[j];
                 j--;
             }
@@ -845,27 +854,17 @@ bool xr_type_function_set_view_origins(XrVMRuntime *X, XrType *type, const XrVie
         }
         int unique = 0;
         for (int i = 0; i < count; i++) {
+            if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
             XrViewOrigin origin = normalized[i];
-            if (origin.kind == XR_VIEW_ORIGIN_PARAM) {
-                if (origin.param_ordinal < 0 ||
-                    origin.param_ordinal >= type->function.param_count ||
-                    xr_type_function_param_mode(type, origin.param_ordinal) != XR_PARAM_READ) {
-                    xr_free(normalized);
-                    return false;
-                }
-            } else if (origin.kind == XR_VIEW_ORIGIN_RECEIVER) {
-                if (origin.param_ordinal != -1 || type->function.receiver_mode != XR_PARAM_READ) {
-                    xr_free(normalized);
-                    return false;
-                }
-            } else if (origin.kind == XR_VIEW_ORIGIN_STATIC) {
-                if (origin.param_ordinal != -1) {
-                    xr_free(normalized);
-                    return false;
-                }
-            } else {
-                xr_free(normalized);
-                return false;
+            bool valid = origin.kind == XR_VIEW_ORIGIN_PARAM
+                ? origin.param_ordinal >= 0 && origin.param_ordinal < type->function.param_count &&
+                    xr_type_function_param_mode(type, origin.param_ordinal) == XR_PARAM_READ
+                : origin.kind == XR_VIEW_ORIGIN_RECEIVER
+                    ? origin.param_ordinal == -1 && type->function.receiver_mode == XR_PARAM_READ
+                    : origin.kind == XR_VIEW_ORIGIN_STATIC && origin.param_ordinal == -1;
+            if (!valid) {
+                xr_compile_state_free(normalized);
+                return XR_VIEW_ORIGIN_BIND_INVALID;
             }
             if (unique == 0 || view_origin_compare(&normalized[unique - 1], &origin) != 0)
                 normalized[unique++] = origin;
@@ -876,17 +875,20 @@ bool xr_type_function_set_view_origins(XrVMRuntime *X, XrType *type, const XrVie
     XrViewOrigin *stored = NULL;
     if (count > 0) {
         stored = (XrViewOrigin *) type_alloc_array(pool, sizeof(XrViewOrigin), count, NULL);
-        if (!stored) {
-            xr_free(normalized);
-            return false;
-        }
-        memcpy(stored, normalized, sizeof(XrViewOrigin) * (size_t) count);
+        if (!stored) goto normalization_failed;
+        if (xr_compile_state_copy(state, stored, normalized, (size_t) count * sizeof(*stored)) != XR_COMPILE_RESOURCE_OK)
+            goto normalization_failed;
     }
-    xr_free(normalized);
+    if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK) goto normalization_failed;
+    xr_compile_state_free(normalized);
     type->function.view_origin_set = stored;
     type->function.view_origin_count = count;
     type->function.view_origin_was_elided = was_elided;
-    return true;
+    return XR_VIEW_ORIGIN_BIND_OK;
+
+normalization_failed:
+    xr_compile_state_free(normalized);
+    return XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY;
 }
 
 bool xr_type_function_view_origins_equal(const XrType *a, const XrType *b) {
@@ -1064,9 +1066,7 @@ XrViewOriginBindStatus xr_type_function_bind_view_origins(XrVMRuntime *X, XrType
             return XR_VIEW_ORIGIN_BIND_HIDDEN_RETURN;
         if (syntax == XR_BORROW_ORIGIN_EXPLICIT_SET)
             return XR_VIEW_ORIGIN_BIND_NOT_VIEW;
-        return xr_type_function_set_view_origins(X, type, NULL, 0, false)
-                   ? XR_VIEW_ORIGIN_BIND_OK
-                   : XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY;
+        return xr_type_function_set_view_origins(X, type, NULL, 0, false);
     }
     if (!return_type->is_const)
         return XR_VIEW_ORIGIN_BIND_MUTABLE_RETURN;
@@ -1138,10 +1138,10 @@ XrViewOriginBindStatus xr_type_function_bind_view_origins(XrVMRuntime *X, XrType
             return XR_VIEW_ORIGIN_BIND_INVALID;
         }
     }
-    bool stored = xr_type_function_set_view_origins(X, type, normalized, count,
+    XrViewOriginBindStatus stored = xr_type_function_set_view_origins(X, type, normalized, count,
                                                     syntax == XR_BORROW_ORIGIN_OMITTED);
     xr_free(normalized);
-    return stored ? XR_VIEW_ORIGIN_BIND_OK : XR_VIEW_ORIGIN_BIND_OUT_OF_MEMORY;
+    return stored;
 }
 
 XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int param_count,
@@ -1646,9 +1646,9 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
             copy->function.is_c_abi = type->function.is_c_abi;
             copy->function.receiver_mode = type->function.receiver_mode;
             copy->function.throw_effect = type->function.throw_effect;  // task 216
-            if (!xr_type_function_set_view_origins(X, copy, type->function.view_origin_set,
+            if (xr_type_function_set_view_origins(X, copy, type->function.view_origin_set,
                                                    type->function.view_origin_count,
-                                                   type->function.view_origin_was_elided))
+                                                   type->function.view_origin_was_elided) != XR_VIEW_ORIGIN_BIND_OK)
                 return NULL;
             if (type->function.type_param_count > 0 && type->function.type_param_names) {
                 xr_type_set_function_type_params(

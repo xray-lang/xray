@@ -1,0 +1,4 @@
+fn inc(x:i64)->i64{return x+1}
+fn apply(f:fn(i64)->i64,x:i64)->i64{return f(x)}
+fn answer()->i64{return apply(inc,41)}
+export fn run()->i64{return comptime answer()}

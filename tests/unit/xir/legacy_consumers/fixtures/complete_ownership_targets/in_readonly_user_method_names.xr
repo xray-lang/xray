@@ -1,0 +1,22 @@
+class PureCounter {
+    value: i64
+
+    init(v: i64) {
+        this.value = v
+    }
+
+    push() -> i64 {
+        return this.value + 1
+    }
+
+    callPush() -> i64 {
+        return this.push()
+    }
+}
+
+fn view(counter: PureCounter) -> i64 {
+    return counter.push() + counter.callPush()
+}
+
+var counter = PureCounter(10)
+print(view(counter))

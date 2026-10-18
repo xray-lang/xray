@@ -1,0 +1,4 @@
+enum E{Bad{xs:Array<i8>}}
+fn fail(xs:ref Array<i8>)->i64{defer{xs[0]=9};throw E.Bad{xs:xs}}
+fn answer()->i64{var xs:Array<i8>=[40];try{return fail(ref xs)}catch(e:E){return xs[0] as i64+match(e){E.Bad{xs}->xs[0] as i64}-7}}
+export fn run()->i64{return comptime answer()}

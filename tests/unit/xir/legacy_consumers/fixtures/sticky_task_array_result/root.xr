@@ -1,0 +1,29 @@
+fn values() -> Array<i64> {
+    return [1, 2, 3]
+}
+
+fn main() {
+    var task = go values()
+    var first = task.awaitResult()
+    match (first) {
+        TaskResult.Success { value: values } -> print(len(values))
+        _ -> print("unexpected-first")
+    }
+
+    var second = task.awaitResult()
+    match (second) {
+        TaskResult.Success { value: values } -> print(len(values))
+        _ -> print("unexpected-second")
+    }
+    var a = await task
+    var b = await task
+    a[0] = 9
+    print(b[0])
+    print(a[0])
+    var again = await task
+    print(again[0])
+    print(b[0])
+    print(again[1])
+}
+
+main()

@@ -1,0 +1,2 @@
+fn answer()->bool { const a:Array<string>=["a\0b"]; const b:Array<string>=["z"]; const c=a.concat(b); const e=c.entries(); return c==["a\0b","z"] && e[0].0==0 && e[0].1=="a\0b" && e[1].0==1 && e[1].1=="z" && len(a)==1 }
+export fn run()->bool { return comptime answer() }

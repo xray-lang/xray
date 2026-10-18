@@ -1,0 +1,3 @@
+struct Wrap{action:fn()->i64}
+fn answer()->i64{var n=42;const w=Wrap{action:fn()->i64{return n}};const f=w.action;return f()}
+export fn run()->i64{return comptime answer()}

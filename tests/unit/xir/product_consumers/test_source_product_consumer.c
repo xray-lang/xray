@@ -10,6 +10,9 @@
  *   Fixed source results survive producer destruction in independent backends.
  */
 #include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_program_internal.h"
+#include "xir/xxir_compile_memory.h"
+#include "xir/xxir_value_place.h"
 #include "base/xmalloc.h"
 #include "base/xsha256.h"
 #include "program/xr_xir_source_product.h"
@@ -20,7 +23,23 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+static uint32_t mixed_factory_abi = XR_XIR_PROGRAM_ABI_VERSION;
+static unsigned mixed_binding_attack, mixed_binding_callbacks, mixed_code_releases;
+static bool mixed_recovery_probe;
+static XrXirVmBinding *mixed_attack_bindings;
+static void mixed_before_compile_allocation(size_t bytes) {
+    (void)bytes;
+    if (!mixed_attack_bindings)
+        return;
+    ++mixed_binding_callbacks;
+    if (mixed_binding_attack == 1)
+        mixed_attack_bindings[0].artifact = NULL;
+    else
+        mixed_attack_bindings[0].function = UINT32_MAX;
+}
+#define XR_INSTANCE_COMPILE_BEFORE_ALLOCATION(bytes) mixed_before_compile_allocation(bytes)
 #include "../xir_instance_compile_observer.h"
+#undef XR_INSTANCE_COMPILE_BEFORE_ALLOCATION
 #include "../xir_runtime_allocations.h"
 
 static const SourceProductConsumerFixture *consumer_fixture;
@@ -40,17 +59,20 @@ typedef struct Consumer {
 } Consumer;
 
 typedef struct MixedOwner {
-    XrXirArtifact *lowered;
     XrXirCallEntry *entries;
     XrXirVmBinding *bindings;
 } MixedOwner;
 
 static void mixed_free(void *pointer) {
     MixedOwner *owner = pointer;
-    xr_xir_compile_artifact_free(owner->lowered);
     xr_compile_resources_free(owner->bindings);
     xr_compile_resources_free(owner->entries);
     xr_compile_resources_free(owner);
+}
+
+static void mixed_release(void *pointer) {
+    ++mixed_code_releases;
+    mixed_free(pointer);
 }
 
 static XrXirStatus allocate(const XrXirCompileContext *context, size_t count, size_t size, void **out) {
@@ -107,57 +129,48 @@ static void closed_shape(const XrXirModule *module, uint32_t answer) {
     CHECK(integers == 2 && booleans == 1 && integer != boolean);
 }
 
+#include "source_product_consumer_owned.inc.c"
+
 static XrXirStatus seal(Consumer *run, XrXirSourceProduct *product, XrXirArtifact *closed, unsigned mode) {
     if (!mode)
         return xr_xir_compile_source_product_vm_take(product, &run->program);
     CHECK(consumer_fixture->native_program);
     if (mode == 1)
         return xr_xir_compile_program_seal(&run->context, &product_consumer_program, &run->program);
-    MixedOwner *owner = NULL;
-    XrXirStatus status = allocate(&run->context, 1, sizeof(*owner), (void **)&owner);
-    if (status != XR_XIR_OK)
-        return status;
+    XrXirArtifact *lowered = NULL;
     XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
-    status = xr_xir_compile_lower(closed, &target, &owner->lowered, NULL);
+    XrXirStatus status = xr_xir_compile_lower(closed, &target, &lowered, NULL);
     if (status != XR_XIR_OK)
-        goto failed;
-    const XrXirModule *module = xr_xir_compile_artifact_module(owner->lowered);
-    XrXirProgramPacket proof = xir_program_packet_borrow(owner->lowered);
-    CHECK(module->function_count == product_consumer_program.entry_count);
-    CHECK(proof.length == product_consumer_program.packet.length);
-    CHECK(!memcmp(proof.bytes, product_consumer_program.packet.bytes, proof.length));
-    CHECK(!memcmp(proof.identity, product_consumer_program.packet.identity, 32));
-    status = allocate(&run->context, module->function_count, sizeof(*owner->entries), (void **)&owner->entries);
-    if (status != XR_XIR_OK)
-        goto failed;
-    status = allocate(&run->context, module->function_count, sizeof(*owner->bindings), (void **)&owner->bindings);
-    if (status != XR_XIR_OK)
-        goto failed;
-    unsigned native = 0, vm = 0;
-    for (uint32_t f = 0; f < module->function_count; ++f) {
-        if ((f % 2 == 0) == (mode == 2)) {
-            owner->entries[f] = product_consumer_program.entries[f];
-            ++native;
-        } else {
-            status = xr_xir_compile_vm_bind(owner->lowered, f, &owner->bindings[f], &owner->entries[f]);
-            if (status != XR_XIR_OK)
-                goto failed;
-            ++vm;
-        }
-    }
-    CHECK(native && vm);
-    XrXirProgramSpec spec = product_consumer_program;
-    spec.entries = owner->entries;
-    spec.declarations = module->declarations;
-    spec.types = module->types;
-    spec.packet = proof;
-    spec.code = (XrXirCodeLease){owner, mixed_free};
-    status = xr_xir_compile_program_seal(&run->context, &spec, &run->program);
-    if (status == XR_XIR_OK)
         return status;
-failed:
-    CHECK(!run->program);
-    mixed_free(owner);
+    const XrXirModule *module = xr_xir_compile_artifact_module(lowered);
+    /* This original generated-C correspondence assertion grants no permission.
+     * The internal receiver below consumes the actual owning Input, not bytes. */
+    XrXirProgramPacket packet = xir_program_packet_borrow(lowered);
+    CHECK(module->function_count == product_consumer_program.entry_count);
+    CHECK(packet.length == product_consumer_program.packet.length);
+    CHECK(!memcmp(packet.bytes, product_consumer_program.packet.bytes, packet.length));
+    CHECK(!memcmp(packet.identity, product_consumer_program.packet.identity, 32));
+    if (mixed_recovery_probe) {
+        XrXirArtifact *retained = lowered;
+        XrCompileResourceStats before = stats(run);
+        unsigned releases = mixed_code_releases, callbacks = mixed_binding_callbacks;
+        XrXirStatus expected = mixed_binding_attack ? XR_XIR_BAD_STRUCTURE : XR_XIR_BAD_LAYOUT;
+        status = mixed_program_take(&run->context, &lowered, mode, &run->program);
+        CHECK(status == expected && lowered == retained && !run->program);
+        CHECK(mixed_code_releases == releases && stats(run).live_bytes == before.live_bytes);
+        if (mixed_binding_attack)
+            CHECK(mixed_binding_callbacks > callbacks);
+        printf("mixed-rejection case=%s mode=%u attack=%u callbacks=%u retained-artifact=1 lease=0\n",
+            XR_CONSUMER_NAME, mode, mixed_binding_attack, mixed_binding_callbacks - callbacks);
+        mixed_factory_abi = XR_XIR_PROGRAM_ABI_VERSION;
+        mixed_binding_attack = 0;
+    }
+    status = mixed_program_take(&run->context, &lowered, mode, &run->program);
+    if (status == XR_XIR_OK)
+        CHECK(!lowered && run->program);
+    else
+        CHECK(lowered && !run->program);
+    xr_xir_compile_artifact_free(lowered);
     return status;
 }
 
@@ -356,6 +369,28 @@ static void normal(Consumer *run) {
         puts("two detached instances; four independent fixed results; final physical release");
 }
 
+static void mixed_owned_recovery(unsigned mode) {
+    CHECK(mode == 2 || mode == 3);
+    for (unsigned attack = 0; attack < 3; ++attack) {
+        unsigned releases = mixed_code_releases;
+        mixed_recovery_probe = true;
+        mixed_factory_abi = attack ? XR_XIR_PROGRAM_ABI_VERSION : 0;
+        mixed_binding_attack = attack;
+        Consumer run = build(mode, NULL, SIZE_MAX, compiler_limits());
+        mixed_recovery_probe = false;
+        CHECK(run.status == XR_XIR_OK && run.program && mixed_code_releases == releases);
+        XrXirCompileContext producer = run.context;
+        run.context = (XrXirCompileContext){0};
+        xr_compile_resources_release(producer.resources);
+        memset(&producer, 0xa5, sizeof(producer));
+        normal(&run);
+        CHECK(mixed_code_releases == releases + 1);
+        release(&run);
+        printf("mixed-recovery case=%s mode=%u attack=%u producer-dead=1 lease=1 physical=0/0\n",
+            XR_CONSUMER_NAME, mode, attack);
+    }
+}
+
 static void compiler_axes(unsigned mode) {
     Consumer baseline = build(mode, NULL, SIZE_MAX, compiler_limits());
     CHECK(baseline.status == XR_XIR_OK);
@@ -411,6 +446,10 @@ int xr_source_product_consumer_main(const SourceProductConsumerFixture *fixture,
     unsigned mode = (unsigned)strtoul(argv[1], NULL, 10);
     CHECK(mode <= 3);
     CHECK(!mode || fixture->native_program);
+    if (argc == 3 && !strcmp(argv[2], "--owned-recovery")) {
+        mixed_owned_recovery(mode);
+        return 0;
+    }
     if (argc == 3 && !strcmp(argv[2], "--axes")) {
         compiler_axes(mode);
         return 0;

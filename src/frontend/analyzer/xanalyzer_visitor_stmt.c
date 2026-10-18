@@ -13,6 +13,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xanalyzer_export_query.h"
 #include "xaddressability.h"
 #include "xconsteval.h"
 #include "xtype_ref_resolve.h"
@@ -6995,7 +6996,9 @@ static XaSymbol *xa_module_member_export_symbol(XaInferContext *ctx, AstNode *no
                                   : module_expr->as.variable.name;
     XrHashMap *exports =
         module_name ? resolve_graph_export_symbols(ctx->analyzer, module_name) : NULL;
-    return exports ? (XaSymbol *) xr_hashmap_get(exports, member->name) : NULL;
+    XaSymbol *symbol = NULL;
+    if (!xa_find_export_symbol(ctx->analyzer, exports, member->name, &symbol)) return NULL;
+    return symbol;
 }
 
 static bool xa_call_is_fresh_constructor(XaInferContext *ctx, AstNode *value) {
@@ -7004,6 +7007,8 @@ static bool xa_call_is_fresh_constructor(XaInferContext *ctx, AstNode *value) {
     AstNode *callee = xa_whole_binding_value(value->as.call_expr.callee);
     if (callee && callee->type == AST_MEMBER_ACCESS) {
         XaSymbol *exported = xa_module_member_export_symbol(ctx, callee);
+        if (xr_compile_session_resource_status(ctx->analyzer->compiler_session) !=
+            XR_COMPILE_RESOURCE_OK) return false;
         if (exported && exported->kind == XA_SYM_CLASS)
             return true;
         MemberAccessNode *member = &callee->as.member_access;
@@ -7371,6 +7376,9 @@ static bool xa_return_function_effect_matches_return_summary(XaSymbolLinks *dst,
 
 static XaSymbolLinks *xa_call_return_function_effect_links(XaInferContext *ctx, AstNode *node,
                                                            const char **name_out) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
     if (name_out)
         *name_out = NULL;
     AstNode *direct = xa_storage_boundary_identity_source(node);
@@ -7388,6 +7396,7 @@ static XaSymbolLinks *xa_call_return_function_effect_links(XaInferContext *ctx, 
         *name_out = callee->as.variable.name;
     if (links && !links->return_fn_effect_scanned && !links->return_fn_effect_scan_in_progress)
         xa_ensure_function_return_function_effect_prepass(ctx, links);
+    if (xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK) return NULL;
     return links;
 }
 
@@ -7411,7 +7420,7 @@ static void xa_propagate_function_value_summary(XaInferContext *ctx, XaSymbol *d
         if (!src_links)
             return;
 
-        xa_symbol_links_copy_param_effect_summaries(dst_links, src_links);
+        if (xa_symbol_links_copy_param_effect_summaries(dst_links, src_links) != XR_COMPILE_RESOURCE_OK) return;
 
         if (src_sym->kind == XA_SYM_FUNCTION && !src_links->return_storage_scanned &&
             !src_links->return_storage_scan_in_progress)
@@ -7427,8 +7436,9 @@ static void xa_propagate_function_value_summary(XaInferContext *ctx, XaSymbol *d
         if (src_sym->kind == XA_SYM_FUNCTION && !src_links->return_fn_effect_scanned &&
             !src_links->return_fn_effect_scan_in_progress)
             xa_ensure_function_return_function_effect_prepass(ctx, src_links);
-        if (src_links->return_fn_effect_scanned)
-            xa_symbol_links_copy_return_function_effect_summary(dst_links, src_links);
+        if (src_links->return_fn_effect_scanned &&
+            xa_symbol_links_copy_return_function_effect_summary(dst_links, src_links) != XR_COMPILE_RESOURCE_OK)
+            return;
         return;
     }
 
@@ -7437,7 +7447,7 @@ static void xa_propagate_function_value_summary(XaInferContext *ctx, XaSymbol *d
         callee_links->return_fn_effect_mixed ||
         !xa_links_return_function_effect_is_ready(callee_links))
         return;
-    xa_symbol_links_copy_return_function_effect_to_param_summaries(dst_links, callee_links);
+    if (xa_symbol_links_copy_return_function_effect_to_param_summaries(dst_links, callee_links) != XR_COMPILE_RESOURCE_OK) return;
 }
 
 static bool xa_call_is_unknown_storage_function_value(XaInferContext *ctx, AstNode *node,
@@ -7893,6 +7903,7 @@ static void xa_reset_function_return_ownership_scope(XaInferContext *ctx, XaScop
         return;
     int count = 0;
     XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
+    if (xa_scope_resource_status(scope) != XR_COMPILE_RESOURCE_OK) return;
     for (int i = 0; i < count; i++) {
         XaSymbol *symbol = symbols ? symbols[i] : NULL;
         if (!symbol || symbol->is_imported ||
@@ -7904,7 +7915,7 @@ static void xa_reset_function_return_ownership_scope(XaInferContext *ctx, XaScop
         symbol->links.return_ownership_scanned = false;
         symbol->links.return_ownership_scan_in_progress = false;
     }
-    xr_free(symbols);
+    xr_compile_state_free(symbols);
     for (int i = 0; i < scope->child_count; i++)
         xa_reset_function_return_ownership_scope(ctx, scope->children[i]);
 }
@@ -7914,6 +7925,7 @@ static void xa_recompute_function_return_ownership_scope(XaInferContext *ctx, Xa
         return;
     int count = 0;
     XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
+    if (xa_scope_resource_status(scope) != XR_COMPILE_RESOURCE_OK) return;
     for (int i = 0; i < count; i++) {
         XaSymbol *symbol = symbols ? symbols[i] : NULL;
         if (!symbol || symbol->is_imported ||
@@ -7923,7 +7935,7 @@ static void xa_recompute_function_return_ownership_scope(XaInferContext *ctx, Xa
             continue;
         xa_ensure_function_return_ownership_prepass(ctx, &symbol->links);
     }
-    xr_free(symbols);
+    xr_compile_state_free(symbols);
     for (int i = 0; i < scope->child_count; i++)
         xa_recompute_function_return_ownership_scope(ctx, scope->children[i]);
 }
@@ -8352,6 +8364,9 @@ static void xa_return_function_effect_record_unknown(XaReturnFunctionEffectPrepa
 
 static void xa_return_function_effect_record_param_summary(XaReturnFunctionEffectPrepass *scan,
                                                            XaSymbolLinks *src) {
+    if (!scan || !scan->ctx || !scan->ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(scan->ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        return;
     if (!scan || !scan->target || !src)
         return;
     if (!xa_param_effect_summary_is_ready(src)) {
@@ -8359,7 +8374,7 @@ static void xa_return_function_effect_record_param_summary(XaReturnFunctionEffec
         return;
     }
     if (!scan->known) {
-        xa_symbol_links_set_return_function_effect_summary(scan->target, src);
+        if (xa_symbol_links_set_return_function_effect_summary(scan->target, src) != XR_COMPILE_RESOURCE_OK) return;
         scan->known = true;
         if (scan->unknown)
             scan->mixed = true;
@@ -8371,6 +8386,9 @@ static void xa_return_function_effect_record_param_summary(XaReturnFunctionEffec
 
 static void xa_return_function_effect_record_return_summary(XaReturnFunctionEffectPrepass *scan,
                                                             XaSymbolLinks *src) {
+    if (!scan || !scan->ctx || !scan->ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(scan->ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        return;
     if (!scan || !scan->target || !src)
         return;
     if (!src->return_fn_effect_scanned || src->return_fn_effect_mixed ||
@@ -8379,7 +8397,7 @@ static void xa_return_function_effect_record_return_summary(XaReturnFunctionEffe
         return;
     }
     if (!scan->known) {
-        xa_symbol_links_copy_return_function_effect_summary(scan->target, src);
+        if (xa_symbol_links_copy_return_function_effect_summary(scan->target, src) != XR_COMPILE_RESOURCE_OK) return;
         scan->target->return_fn_effect_scan_in_progress = true;
         scan->known = true;
         if (scan->unknown)
@@ -8392,6 +8410,9 @@ static void xa_return_function_effect_record_return_summary(XaReturnFunctionEffe
 
 static bool xa_return_function_effect_prepass_record_expr(XaReturnFunctionEffectPrepass *scan,
                                                           AstNode *expr) {
+    if (!scan || !scan->ctx || !scan->ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(scan->ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        return false;
     if (!scan || !expr)
         return false;
 
@@ -8426,6 +8447,9 @@ static void xa_return_function_effect_prepass_scan_stmt(XaReturnFunctionEffectPr
 
 static void xa_return_function_effect_prepass_scan_block(XaReturnFunctionEffectPrepass *scan,
                                                          AstNode *block) {
+    if (!scan || !scan->ctx || !scan->ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(scan->ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        return;
     if (!scan || !block)
         return;
     if (block->type == AST_BLOCK) {
@@ -8443,6 +8467,9 @@ static void xa_return_function_effect_prepass_scan_block(XaReturnFunctionEffectP
 
 static void xa_return_function_effect_prepass_scan_stmt(XaReturnFunctionEffectPrepass *scan,
                                                         AstNode *stmt) {
+    if (!scan || !scan->ctx || !scan->ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(scan->ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+        return;
     if (!scan || !stmt)
         return;
     switch (stmt->type) {
@@ -8493,7 +8520,9 @@ static void xa_return_function_effect_prepass_scan_stmt(XaReturnFunctionEffectPr
 
 static void xa_ensure_function_return_function_effect_prepass(XaInferContext *ctx,
                                                               XaSymbolLinks *links) {
-    if (!ctx || !links || links->return_fn_effect_scan_in_progress)
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK ||
+        !links || links->return_fn_effect_scan_in_progress)
         return;
     if (links->return_fn_effect_scanned)
         return;
@@ -8514,6 +8543,10 @@ static void xa_ensure_function_return_function_effect_prepass(XaInferContext *ct
     xa_symbol_links_clear_return_function_effect_summary(links);
     XaReturnFunctionEffectPrepass scan = {.ctx = ctx, .target = links};
     xa_return_function_effect_prepass_scan_block(&scan, fn_node->as.function_decl.body);
+    if (xr_compile_state_status(links->resource_state) != XR_COMPILE_RESOURCE_OK) {
+        links->return_fn_effect_scan_in_progress = false;
+        return;
+    }
 
     if (scan.known && !scan.mixed && !scan.unknown) {
         links->return_fn_effect_mixed = false;
@@ -8929,6 +8962,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         // (the canonical source for downstream codegen / LSP).
         xa_analyzer_set_node_type(ctx->analyzer, var->initializer, init_type);
         xa_propagate_function_value_summary(ctx, sym, var->initializer, init_type);
+        if (xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK)
+            return;
         xa_check_const_initializer_alias_boundary(ctx, node, init_type);
 
         if (links->declared_type && !XR_TYPE_IS_UNKNOWN(links->declared_type)) {
@@ -9119,7 +9154,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
 }
 
 void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node)
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) != XR_COMPILE_RESOURCE_OK || !node)
         return;
 
     AssignmentNode *assign = &node->as.assignment;
@@ -9144,7 +9180,8 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     if (links) {
         uint32_t end_col = node->column + (assign->name ? strlen(assign->name) : 0);
-        xa_symbol_add_ref(links, node->line, node->column, end_col, true);  // is_write=true
+        if (xa_symbol_add_ref(links, node->line, node->column, end_col, true) != XR_COMPILE_RESOURCE_OK)
+            return;
     }
 
     // Check immutable binding assignment
@@ -9335,13 +9372,19 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
 }
 
 void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     if (!ctx || !node)
         return;
 
     ForStmtNode *for_stmt = &node->as.for_stmt;
 
     // Enter loop scope
-    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node) != XR_COMPILE_RESOURCE_OK)
+        return;
 
     // Analyze initializer
     if (for_stmt->initializer) {
@@ -9695,10 +9738,16 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
 }
 
 void xa_visit_block_stmt(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer ||
+        xr_compile_state_status(xa_symbol_registry_state(ctx->analyzer->symbol_registry)) !=
+            XR_COMPILE_RESOURCE_OK)
+        return;
+
     if (!ctx || !node)
         return;
 
-    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+    if (xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node) != XR_COMPILE_RESOURCE_OK)
+        return;
 
     xa_visit_inline_statement_sequence_with_cursor(ctx, node);
 

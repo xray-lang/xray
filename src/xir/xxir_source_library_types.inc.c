@@ -10,6 +10,9 @@ struct SourceLibraryUnit {
     XrXirType *types;
     uint32_t type_count;
     XrXirImplementationTable implementations;
+    XrXirMaterializationBinding *materializations;
+    uint32_t materialization_count;
+    XrXirComptimeTable comptime;
 };
 static bool source_library_literal_same(SourceContext *ctx, XrXirLiteral a,
     const char *b, uint32_t count) {
@@ -408,9 +411,9 @@ static bool source_library_metadata(SourceContext *ctx) {
     for (SourceLibraryUnit *u=ctx->library_units; u && ok; u=u->next)
         ok=source_library_intern_types(ctx,u);
     for (SourceLibraryUnit *u=ctx->library_units; u && ok; u=u->next)
-        ok=source_library_declaration_constraints(ctx,u);
+        if (u->library->types) ok=source_library_declaration_constraints(ctx,u);
     for (SourceLibraryUnit *u=ctx->library_units; u && ok; u=u->next)
-        ok=source_library_fields(ctx,u) && source_library_interfaces(ctx,u);
+        if (u->library->types) ok=source_library_fields(ctx,u) && source_library_interfaces(ctx,u);
     ctx->module=module;ctx->function=function;ctx->type_scope=scope;
     return ok;
 }

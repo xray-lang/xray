@@ -1,0 +1,98 @@
+// 0230_type_annotation.xr
+// 作者：xingleixu@gmail.com
+// 测试：类型注解
+// ===== 基本类型注解 =====
+@test
+fn test_int_annotation() {
+    var x: i64 = 42
+    assertEqual(x, 42)
+    assertEqual(typeName(x), "i64")
+}
+
+@test
+fn test_float_annotation() {
+    var x: f64 = 3.14
+    assertEqual(x > 3, true)
+    assertEqual(typeName(x), "f64")
+}
+
+@test
+fn test_string_annotation() {
+    var s: string = "hello"
+    assertEqual(s, "hello")
+    assertEqual(typeName(s), "string")
+}
+
+@test
+fn test_bool_annotation() {
+    var flag: bool = true
+    assertEqual(flag, true)
+    assertEqual(typeName(flag), "bool")
+}
+
+// ===== 集合类型注解 =====
+@test
+fn test_array_annotation() {
+    var arr: Array<i64> = [1, 2, 3]
+    assertEqual(len(arr), 3)
+    assertEqual(typeName(arr), "Array")
+}
+
+@test
+fn test_map_annotation() {
+    var m: Map<string, i64> = #{"a": 1}
+    assertEqual(m.get("a"), 1)
+    assertEqual(typeName(m), "Map")
+}
+
+@test
+fn test_set_annotation() {
+    var s: Set<i64> = #[1, 2, 3]
+    assertEqual(len(s), 3)
+    assertEqual(typeName(s), "Set")
+}
+
+// ===== 函数参数类型注解 =====
+@test
+fn test_function_param_annotation() {
+    fn add(a: i64, b: i64) -> i64 {
+        return a + b
+    }
+    assertEqual(add(2, 3), 5)
+}
+
+@test
+fn test_function_return_annotation() {
+    fn double(x: i64) -> i64 {
+        return x * 2
+    }
+    assertEqual(double(5), 10)
+}
+
+// ===== 类字段类型注解 =====
+@test
+fn test_class_field_annotation() {
+    class Point {
+        x: i64
+        y: i64
+
+        init(x: i64, y: i64) {
+            this.x = x
+            this.y = y
+        }
+    }
+    var p = Point(3, 4)
+    assertEqual(p.x, 3)
+    assertEqual(p.y, 4)
+}
+
+// ===== 复杂类型 =====
+@test
+fn test_nullable_type() {
+    var x: i64 = 10
+    var y: i64? = null
+    if (y == null) {
+        y = x
+    }
+    assertEqual(y, 10)
+}

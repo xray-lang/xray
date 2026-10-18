@@ -193,7 +193,7 @@ static XrXirStatus sizing_packet(XrCompileResources *owner, unsigned variant) {
     if (status==XR_XIR_OK) status=checked_encode(&artifact,&packet,NULL);
     if (status != XR_XIR_OK) CHECK(packet.bytes == &sentinel && packet.length == 17 && sentinel == 0x5a);
     else {
-        CHECK(packet.bytes != &sentinel && packet.length == (variant == 2 ? 224 : 228));
+        CHECK(packet.bytes != &sentinel && packet.length == (variant == 2 ? 236 : 240));
         if (!variant) CHECK(!memcmp(packet.bytes,sizing76_golden,sizeof(sizing76_golden)));
         else if (variant == 1) CHECK(!memcmp(packet.bytes,sizing76_embedded_golden,sizeof(sizing76_embedded_golden)));
         else CHECK(!memcmp(packet.bytes,sizing76_empty_golden,sizeof(sizing76_empty_golden)));
@@ -209,23 +209,23 @@ static bool sizing_oracle_charge(uint64_t limit, uint64_t charge, uint64_t *spen
 static uint64_t sizing_prefix_work(uint64_t limit, uint64_t size) {
     /* Header fields, body fields, calloc and digest are atomic real operations. */
     static const uint64_t header[] = {8,4,4,4,4,8};
-    static const uint64_t body[] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,4,4};
+    static const uint64_t body[] = {4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,8,4,4,4,4,4,4,4,4,4,4,4,4,4};
     uint64_t spent = 1;
     if (!sizing_oracle_charge(limit,1+sizeof(XrXirConstruction),&spent)) return spent;
-    for (unsigned i = 0; i < 39; ++i) if (!sizing_oracle_charge(limit,1,&spent)) return spent;
+    for (unsigned i = 0; i < 42; ++i) if (!sizing_oracle_charge(limit,1,&spent)) return spent;
     if (!sizing_oracle_charge(limit,size+1,&spent)) return spent;
     for (size_t i = 0; i < sizeof(header)/sizeof(header[0]); ++i)
         if (!sizing_oracle_charge(limit,header[i],&spent)) return spent;
     for (size_t i = 0; i < sizeof(body)/sizeof(body[0]); ++i)
-        if (!sizing_oracle_charge(limit,i == 4 ? size-224 : body[i],&spent)) return spent;
+        if (!sizing_oracle_charge(limit,i == 4 ? size-236 : body[i],&spent)) return spent;
     (void)sizing_oracle_charge(limit,size-32,&spent);
     return spent;
 }
 static void sizing_packet_boundaries(unsigned variant) {
-    /* Mandatory empty facts calloc, thirty-eight integer fields plus blob advance.
-     * Wire body is 160+name bytes. Facts stay live through packet allocation. */
-    const uint64_t size = variant == 2 ? 224 : 228;
-    const uint64_t work = 1 + (1+sizeof(XrXirConstruction)) + 39 + (size+1) + (size-32) + (size-32);
+    /* Mandatory empty facts calloc, forty-one integer fields plus blob advance.
+     * Wire body is 172+name bytes. Facts stay live through packet allocation. */
+    const uint64_t size = variant == 2 ? 236 : 240;
+    const uint64_t work = 1 + (1+sizeof(XrXirConstruction)) + 42 + (size+1) + (size-32) + (size-32);
     const uint64_t storage = sizeof(XrCompileResources) + 2*sizeof(CompileAllocation) + sizeof(XrXirConstruction) + size;
     for (uint64_t cut = 1; cut <= work; ++cut) {
         reset(SIZE_MAX); XrCompileResources *owner = NULL;
@@ -251,7 +251,9 @@ static void sizing_packet_boundaries(unsigned variant) {
         else {
             CHECK(status == XR_COMPILE_RESOURCE_OK);
             CHECK(sizing_packet(owner,variant) == XR_XIR_OUT_OF_MEMORY && attempts == failure+1);
-            CHECK(stats(owner).work == (failure==1 ? 2 : 42+sizeof(XrXirConstruction))); xr_compile_resources_release(owner);
+            /* Owner bootstrap, successful construction, 42 sizing fields and
+             * the failed packet allocation attempt retain their exact debit. */
+            CHECK(stats(owner).work == (failure==1 ? 2 : 45+sizeof(XrXirConstruction))); xr_compile_resources_release(owner);
         }
         CHECK(!live && !live_count);
     }

@@ -1,0 +1,54 @@
+// Preserve every original clock read, sleep duration and loop bound; observe actual contract predicates at the original point.
+// 1030_module_import.xr
+// 作者：xingleixu@gmail.com
+// 测试：模块导入
+
+import time
+
+// ===== time 模块函数 =====
+
+@test
+fn test_time_now() {
+    var t = time.now()
+    var p19ClockPredicate0 = t > 0
+    assertEqual(p19ClockPredicate0, true)
+    print(p19ClockPredicate0)
+}
+
+@test
+fn test_time_clock() {
+    var c = time.clock()
+    var p19ClockPredicate1 = c >= 0
+    assertEqual(p19ClockPredicate1, true)
+    print(p19ClockPredicate1)
+}
+
+@test
+fn test_time_milliseconds() {
+    // time.now() returns milliseconds since epoch
+    var ms = time.now()
+    var p19ClockPredicate2 = ms > 0
+    assertEqual(p19ClockPredicate2, true)
+    print(p19ClockPredicate2)
+}
+
+@test
+fn test_time_monotonic() {
+    var m1 = time.monotonic()
+    var m2 = time.monotonic()
+    var p19ClockPredicate3 = m2 >= m1
+    assertEqual(p19ClockPredicate3, true)
+    print(p19ClockPredicate3)
+}
+
+// ===== 模块属性访问 =====
+
+@test
+fn test_module_method_call() {
+    var t1 = time.now()
+    var t2 = time.now()
+    var p19ClockPredicate4 = t2 >= t1
+    assertEqual(p19ClockPredicate4, true)
+    print(p19ClockPredicate4)
+}
+

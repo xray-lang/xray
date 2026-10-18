@@ -1,0 +1,135 @@
+struct OptionalData {
+    property: string
+    name: string
+}
+
+// 0130_bool_null.xr
+// 作者：xingleixu@gmail.com
+// 测试：布尔值和 null
+// ===== 布尔值基础 =====
+@test
+fn test_bool_true() {
+    assertEqual(true, true)
+    var b = true
+    assertEqual(b, true)
+}
+
+@test
+fn test_bool_false() {
+    assertEqual(false, false)
+    var b = false
+    assertEqual(b, false)
+}
+
+@test
+fn test_bool_equality() {
+    assertEqual(true == true, true)
+    assertEqual(false == false, true)
+    assertEqual(true == false, false)
+    assertEqual(true != false, true)
+}
+
+// ===== 布尔运算 =====
+@test
+fn test_bool_and() {
+    assertEqual(true && true, true)
+    assertEqual(true && false, false)
+    assertEqual(false && true, false)
+    assertEqual(false && false, false)
+}
+
+@test
+fn test_bool_or() {
+    assertEqual(true || true, true)
+    assertEqual(true || false, true)
+    assertEqual(false || true, true)
+    assertEqual(false || false, false)
+}
+
+@test
+fn test_bool_not() {
+    assertEqual(!true, false)
+    assertEqual(!false, true)
+    assertEqual(!!true, true)
+}
+
+// ===== null 基础 =====
+@test
+fn test_null_basic() {
+    var x: i64? = null
+    assertEqual(x, null)
+    assertEqual(x == null, true)
+}
+
+@test
+fn test_null_comparison() {
+    var x: i64? = null
+    var y: i64? = null
+    assertEqual(x == y, true)
+    assertEqual(x != null, false)
+}
+
+@test
+fn test_null_vs_value() {
+    var x: i64? = null
+    var y: i64? = 0
+    assertEqual(x == y, false)
+    assertEqual(x != y, true)
+}
+
+// ===== 显式条件 =====
+@test
+fn test_explicit_bool_condition() {
+    if (true) {
+        assert(true)
+    } else {
+        assert(false)
+    }
+    if (false) {
+        assert(false)
+    } else {
+        assert(true)
+    }
+}
+
+@test
+fn test_nullable_presence_condition() {
+    var s: string? = null
+    if (s != null) {
+        assert(false)
+    } else {
+        assert(true)
+    }
+    var empty: string? = ""
+    if (empty != null) {
+        assert(true)
+    } else {
+        assert(false)
+    }
+    var zero: i64? = 0
+    if (zero != null) {
+        assert(true)
+    } else {
+        assert(false)
+    }
+}
+
+// ===== 空值合并 =====
+@test
+fn test_nullish_coalesce() {
+    var x: string? = null
+    assertEqual(x ?? "default", "default")
+    var y: string? = "value"
+    assertEqual(y ?? "default", "value")
+    var z: i64? = 0
+    assertEqual(z ?? 100, 0)
+}
+
+// ===== 可选链 =====
+@test
+fn test_optional_chain() {
+    var obj: OptionalData? = null
+    assertEqual(obj?.property, null)
+    var data: OptionalData? = OptionalData{property: "unused", name: "test"}
+    assertEqual(data?.name, "test")
+}

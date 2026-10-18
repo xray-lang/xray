@@ -57,21 +57,21 @@ XR_FUNC XrXirStatus xr_xir_compile_source_check_text(const XrXirSourceRequest *r
     const XrXirSourceText *text,
     XrXirSourceResult *output, XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure);
 typedef struct XrXirSourceAst {
+    XrXirSourceText source;
     struct AstNode *program;
-    const char *logical_path;
 } XrXirSourceAst;
-/* Check the actual caller-owned AST through the same Source construction.
- * The complete owning parser program and all its arena data are borrowed
- * synchronously and preserved on success or failure. Its original compiler
- * ledger must match the request; the producing session may already be dead.
- * Identity/path rules match explicit text. No entry file or source text is
- * consumed. Imports and declaration obligations retain ordinary admission.
- * An AST has no source-byte digest: its query fingerprint is zero. The owned
- * result has independently verified IR and copied query data, and outlives
- * the AST, request and both sessions. No AST rendering/reparsing occurs. */
+/* Check the actual caller AST, without reparsing the entry or taking ownership.
+ * Its active arena must belong to request->session's exact state. An owning
+ * AST whose producer session has closed may retain its original ledger and
+ * enter another session on that ledger. Tree, optional diagnostic bytes and
+ * authority are borrowed exclusively for this call; results and diagnostics
+ * own all published data. Source text supplies diagnostic provenance, not an
+ * alternative syntax input. No entry file is read or synthesized, and an AST
+ * has no source-byte fingerprint. Imports use the ordinary graph and checker. */
 XR_FUNC XrXirStatus xr_xir_compile_source_check_ast(const XrXirSourceRequest *request,
-    const XrXirSourceAst *ast, XrXirSourceResult *output,
+    const XrXirSourceAst *input, XrXirSourceResult *output,
     XrXirSourceDiagnostic *diagnostic, XrXirSourceFailure *failure);
+
 /* Synchronously check a rooted entry with an immutable set of unsaved sources.
  * Entries are deep copied to the request ledger before discovery. The entry
  * may itself be absent on disk. Relative imports select each .xr or /index.xr

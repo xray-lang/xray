@@ -1,0 +1,4 @@
+struct Box { value:i8; text:string }
+enum Choice { Empty, Some { box:Box } }
+fn answer()->bool { const x=Choice.Some{box:Box{value:7,text:"a\0b"}}; return match(x) { Choice.Empty -> false, Choice.Some{box} -> box.value==7 && box.text=="a\0b" } }
+export fn run()->bool { return comptime answer() }

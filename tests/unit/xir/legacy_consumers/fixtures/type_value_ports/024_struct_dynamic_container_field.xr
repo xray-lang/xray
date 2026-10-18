@@ -1,0 +1,9 @@
+struct Bag {
+    data: Array<i64>
+}
+
+fn main() {
+    var bag = Bag{data: []}
+    print(len(bag.data))
+}
+main()

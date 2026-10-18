@@ -12,6 +12,7 @@
 #include "xa_memory_effect_db.h"
 #include "xa_selection.h"
 #include "xanalyzer.h"
+#include "xanalyzer_native_input.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_symbol.h"
 #include "xbuiltin_receiver_registry.h"
@@ -577,10 +578,10 @@ static void memory_scan_post(AstNode *node, void *userdata) {
 }
 
 static bool memory_apply_native_contract(XaMemoryPass *pass, XaMemoryFunctionRow *row) {
-    const XrNativePackagePlan *plan = xr_compiler_session_native_package_plan(
-        pass && pass->analyzer ? pass->analyzer->compiler_session : NULL);
-    const XrNativeSymbol *symbol =
-        xr_native_package_find_symbol(plan, row && row->symbol ? row->symbol->name : NULL);
+    const XrNativeSymbol *symbol = NULL;
+    if (xa_analyzer_find_native_symbol(pass ? pass->analyzer : NULL,
+            row && row->symbol ? row->symbol->name : NULL, &symbol) != XR_MANIFEST_OK)
+        return false;
     if (!symbol || !symbol->contract.complete)
         return false;
     /* Arity is validated at declaration collection, where the AST signature

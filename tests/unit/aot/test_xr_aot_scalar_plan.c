@@ -1252,11 +1252,13 @@ static void test_adt_enum_constructor_c_emission_recipe_is_exact(void) {
     static const char *payload_names[] = {"value"};
     static uint8_t payload_type_ids[] = {XR_TID_STRING};
     int payload_counts[] = {1};
-    XrEnumLayout *layout = xr_enum_layout_new("test.aot.scalar", "RecipeValue", variant_names, 1);
+    XrOsIoPolicy enum_policy_1 = xr_os_io_system_policy();
+    XrEnumLayout *layout = NULL;
+    REQUIRE(xr_enum_layout_new(&enum_policy_1, "test.aot.scalar", "RecipeValue", variant_names, 1, &layout) == XR_OS_IO_OK);
     REQUIRE(layout != NULL);
-    REQUIRE(xr_enum_layout_set_payload_counts(layout, payload_counts, 1));
+    REQUIRE((xr_enum_layout_set_payload_counts(layout, payload_counts, 1) == XR_OS_IO_OK));
     REQUIRE(
-        xr_enum_layout_set_variant_payload_metadata(layout, 0, payload_names, payload_type_ids, 1));
+        (xr_enum_layout_set_variant_payload_metadata(layout, 0, payload_names, payload_type_ids, 1) == XR_OS_IO_OK));
 
     XrType enum_type = {
         .kind = XR_KIND_ENUM,

@@ -94,7 +94,7 @@ static XrXirStatus build(XrCompileResourceLimits caps, const char *root, const c
     if (status == XR_XIR_OK) {
         XrXirSourceProductRequest request = {{consumer,root ? path : NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL},
             {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
-        XrXirSourceAst input = {ast,root ? "root.xr" : NULL};
+        XrXirSourceAst input = {{root ? "root.xr" : NULL,NULL,0},ast};
         status = xr_xir_compile_source_product_build_ast(&request,&input,&product,&diagnostic);
         CHECK(diagnostic.status == status);
         if (!root) CHECK(literal(ast)->as.literal.int_bits == 42 && ast->as.program.owns_arena);
@@ -119,7 +119,7 @@ static void rejections(void) {
     XrXirCompileContext context = {foreign,xr_xir_compile_default_limits()};
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY,"reject-ast",NULL};
     XrXirSourceRequest request = {consumer,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
-    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceAst input = {ast,NULL};
+    XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; XrXirSourceAst input = {{0},ast};
     CHECK(xr_xir_compile_source_check_ast(&request,&input,&result,&diagnostic,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(!result.checked && !result.snapshot && ast->as.program.owns_arena);
     xr_compile_session_free(consumer); consumer = NULL; xr_compile_resources_release(foreign);

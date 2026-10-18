@@ -1,0 +1,83 @@
+// Preserve all original generic/interface declarations and complete bodies; observe each original scalar result once.
+// Test: explicit generic value-struct type annotations are assignable from the
+// monomorphized struct literal (task 183 escalation, Option A).
+//
+// The declared annotation (`Box<int>`) and the monomorphized struct literal
+// (`Box$i64` after the mono pass) must resolve to one canonical type so the
+// annotation, parameters, return types, and struct fields all type-check.
+// Regression for: "Type 'Box$i64' is not assignable to type 'Box<int>'".
+
+struct Box<T> {
+    value: T
+}
+
+struct Pair<A, B> {
+    first: A
+    second: B
+}
+
+struct Holder {
+    b: Box<i64>
+}
+
+fn take(b: Box<i64>) -> i64 {
+    return b.value
+}
+
+fn make() -> Box<i64> {
+    return Box<i64>{value: 41}
+}
+
+@test
+fn test_var_annotation() {
+    // Explicit annotation must accept the inferred monomorphized literal.
+    var p: Box<i64> = Box<i64>{value: 41}
+    var p19GenericValue0 = p.value
+    assertEqual(p19GenericValue0, 41)
+    print(p19GenericValue0)
+
+    var q: Pair<i64, string> = Pair<i64, string>{first: 7, second: "hi"}
+    var p19GenericValue1 = q.first
+    assertEqual(p19GenericValue1, 7)
+    print(p19GenericValue1)
+    var p19GenericValue2 = q.second
+    assertEqual(p19GenericValue2, "hi")
+    print(p19GenericValue2)
+}
+
+@test
+fn test_param_annotation() {
+    var p = Box<i64>{value: 99}
+    var p19GenericValue3 = take(p)
+    assertEqual(p19GenericValue3, 99)
+    print(p19GenericValue3)
+    var p19GenericValue4 = take(Box<i64>{value: 5})
+    assertEqual(p19GenericValue4, 5)
+    print(p19GenericValue4)
+}
+
+@test
+fn test_return_annotation() {
+    var p = make()
+    var p19GenericValue5 = p.value
+    assertEqual(p19GenericValue5, 41)
+    print(p19GenericValue5)
+}
+
+@test
+fn test_struct_field_annotation() {
+    var h: Holder = Holder{b: Box<i64>{value: 41}}
+    var p19GenericValue6 = h.b.value
+    assertEqual(p19GenericValue6, 41)
+    print(p19GenericValue6)
+
+    // Value semantics: copying the outer struct deep-copies the nested value.
+    var h2 = h
+    h2.b.value = 100
+    var p19GenericValue7 = h.b.value
+    assertEqual(p19GenericValue7, 41)
+    print(p19GenericValue7)
+    var p19GenericValue8 = h2.b.value
+    assertEqual(p19GenericValue8, 100)
+    print(p19GenericValue8)
+}

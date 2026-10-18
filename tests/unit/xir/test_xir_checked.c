@@ -30,6 +30,7 @@
 #include "xir_checked_scalar72_golden.h"
 #include "xir_checked_scalar73_golden.h"
 #include "xir_checked_scalar76_golden.h"
+#include "combined_previous_wire.h"
 #include "xir_types_fixture.h"
 #include "xir_struct_ops_fixture.h"
 #include "xir_struct_set_fixture.h"
@@ -108,13 +109,14 @@ static void boundaries(XrXirCheckedPacket *packet) {
     XrXirCompileContext budget = consumer_context_default(); XrXirArtifact *decoded = NULL;
     for (unsigned i = 0; i < 9; ++i) {
         budget = consumer_context_default();
+        XrCompileResourceStats bootstrap=consumer_context_stats(&budget);
         if (i == 0) budget.limits.functions = 0;
         if (i == 1) budget.limits.blocks = 0;
         if (i == 2) budget.limits.instructions = 0;
-        if (i == 3) budget = consumer_context_limits((XrCompileResourceLimits){80,8388608,128000000});
+        if (i == 3) budget = consumer_context_limits((XrCompileResourceLimits){bootstrap.allocated_bytes,8388608,128000000});
         if (i == 4) budget = consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});
-        if (i == 5) budget = consumer_context_limits((XrCompileResourceLimits){67108864,80,128000000});
-        if (i == 6) budget = consumer_context_limits((XrCompileResourceLimits){packet->length+80,8388608,128000000});
+        if (i == 5) budget = consumer_context_limits((XrCompileResourceLimits){67108864,bootstrap.live_bytes,128000000});
+        if (i == 6) budget = consumer_context_limits((XrCompileResourceLimits){packet->length+bootstrap.allocated_bytes,8388608,128000000});
         if (i == 7) budget.limits.functions = 7;
         if (i == 8) budget.limits.parameters = 1;
         XrXirStatus status = xr_xir_compile_checked_read(&budget, packet->bytes, packet->length, &decoded, NULL);
@@ -186,7 +188,7 @@ static void byte_order(void) {
         XR_XIR_OWNED_RETAIN, XR_XIR_CONCAT_STRING, XR_XIR_OUTPUT, XR_XIR_WRITE_STREAM,
         XR_XIR_PRINT, XR_XIR_ADD_INT, XR_XIR_EQ_INT, XR_XIR_LT_INT, XR_XIR_CALL,
         XR_XIR_SUSPEND, XR_XIR_THROW, XR_XIR_JUMP, XR_XIR_BRANCH, XR_XIR_RETURN};
-    _Static_assert(XR_XIR_CHECKED_SCHEMA == 30 && XR_XIR_CHECKED_CONTRACT == 76 && XR_XIR_OP_COUNT == 154, "packet revision");
+    _Static_assert(XR_XIR_CHECKED_SCHEMA == 31 && XR_XIR_CHECKED_CONTRACT == 76 && XR_XIR_OP_COUNT == 154, "packet revision");
     _Static_assert(XR_XIR_NULLABLE_NONE == 126 && XR_XIR_NULLABLE_SOME == 127, "typed nullable operations");
     _Static_assert(XR_XIR_EQUAL == 125, "typed value equality operation");
     _Static_assert(XR_XIR_INVOKE_DISCARD == 124, "typed normal result discard operation");
@@ -220,7 +222,7 @@ static void byte_order(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     CHECK(!xr_xir_compile_artifact_module(checked)->provenance);
-    CHECK(packet.length == 225 && packet.bytes[24] == 161);
+    CHECK(packet.length == 237 && packet.bytes[24] == 173);
     CHECK(packet.bytes[101] == 0 && packet.bytes[105] == 0 && packet.bytes[109] == 2 && packet.bytes[113] == XR_XIR_CONST_INT);
     for (unsigned i = 0; i < 7; ++i) CHECK(packet.bytes[137 + i] == 0);
     CHECK(packet.bytes[144] == 128);
@@ -239,7 +241,7 @@ static void byte_order(void) {
     checked_previous_identity_rejected(checked_scalar58_golden,sizeof(checked_scalar58_golden));
     checked_previous_identity_rejected(checked_scalar59_golden,sizeof(checked_scalar59_golden));
     checked_previous_identity_rejected(checked_scalar60_golden,sizeof(checked_scalar60_golden));
-    uint8_t original[225]; memcpy(original, packet.bytes, sizeof(original));
+    uint8_t original[sizeof(checked_scalar76_golden)]; memcpy(original, packet.bytes, sizeof(original));
     for (unsigned offset = 145; offset <= 149; offset += 4) {
         put32(packet.bytes + offset, 1); digest_packet(&packet);
         rejected(packet.bytes, packet.length);
@@ -277,10 +279,10 @@ static void callable_contracts(void) {
         1, 0, 1, 2, 0, 3, 8,
         1, 0, 1, 256, 0, 256, 8,
         1, 0, 0, 0, 8};
-    CHECK(packet.length >= sizeof(signature_wire) + 12);
+    CHECK(packet.length >= sizeof(signature_wire) + 24);
     for (size_t i = 0; i < sizeof(signature_wire) / sizeof(signature_wire[0]); ++i)
         for (unsigned byte = 0; byte < 4; ++byte)
-            CHECK(packet.bytes[packet.length - 12 - sizeof(signature_wire) + i * 4 + byte] ==
+            CHECK(packet.bytes[packet.length - 24 - sizeof(signature_wire) + i * 4 + byte] ==
                 (uint8_t) (signature_wire[i] >> (byte * 8)));
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL; memset(packet.bytes, 0xCC, packet.length); xr_xir_compile_checked_packet_free(&packet);
@@ -405,10 +407,10 @@ static void generic_callable_contracts(void) {
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
     /* Two one-parameter signatures; the first span is independently forged. */
-    CHECK(packet.length > 64 && wire32(packet.bytes + packet.length - 64) == 1);
-    put32(packet.bytes + packet.length - 64,0); digest_packet(&packet);
+    CHECK(packet.length > 76 && wire32(packet.bytes + packet.length - 76) == 1);
+    put32(packet.bytes + packet.length - 76,0); digest_packet(&packet);
     rejected(packet.bytes,packet.length);
-    put32(packet.bytes + packet.length - 64,1); digest_packet(&packet);
+    put32(packet.bytes + packet.length - 76,1); digest_packet(&packet);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
     XrXirModule module = *xr_xir_compile_artifact_module(decoded);
@@ -495,11 +497,11 @@ static void constructed_contracts(void) {
     CHECK(packet.length == second.length && !memcmp(packet.bytes,second.bytes,packet.length));
     xr_xir_compile_checked_packet_free(&second);
     /* The final CELL node has a fixed kind/span/element wire payload. */
-    CHECK(wire32(packet.bytes+packet.length-24) == XR_XIR_TYPE_CELL);
-    put32(packet.bytes+packet.length-24,4); digest_packet(&packet);
+    CHECK(wire32(packet.bytes+packet.length-36) == XR_XIR_TYPE_CELL);
+    put32(packet.bytes+packet.length-36,4); digest_packet(&packet);
     rejected(packet.bytes,packet.length);
-    put32(packet.bytes+packet.length-24,XR_XIR_TYPE_CELL);
-    put32(packet.bytes+packet.length-16,267); digest_packet(&packet);
+    put32(packet.bytes+packet.length-36,XR_XIR_TYPE_CELL);
+    put32(packet.bytes+packet.length-28,267); digest_packet(&packet);
     rejected(packet.bytes,packet.length);
     xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(decoded, &closed, NULL) == XR_XIR_OK);
@@ -608,11 +610,12 @@ static void nominal_packet_cases(void) {
         CHECK(module_offset != 0);
         packet.bytes[module_offset] = 'z'; digest_packet(&packet); rejected(packet.bytes, packet.length);
         packet.bytes[module_offset] = 'a';
-        put32(packet.bytes + packet.length - 52, 8); digest_packet(&packet); rejected(packet.bytes, packet.length);
-        put32(packet.bytes + packet.length - 52, XR_XIR_FIELD_PRIVATE);
-        put32(packet.bytes + packet.length - 56, XR_XIR_TYPE_PARAMETER_BASE + 1);
+        CHECK(wire32(packet.bytes+packet.length-64)==XR_XIR_FIELD_PRIVATE && wire32(packet.bytes+packet.length-68)==XR_XIR_STRING);
+        put32(packet.bytes + packet.length - 64, 8); digest_packet(&packet); rejected(packet.bytes, packet.length);
+        put32(packet.bytes + packet.length - 64, XR_XIR_FIELD_PRIVATE);
+        put32(packet.bytes + packet.length - 68, XR_XIR_TYPE_PARAMETER_BASE + 1);
         digest_packet(&packet); rejected(packet.bytes, packet.length);
-        put32(packet.bytes + packet.length - 56, XR_XIR_STRING);
+        put32(packet.bytes + packet.length - 68, XR_XIR_STRING);
         digest_packet(&packet);
         boundaries(&packet);
         xr_xir_compile_artifact_free(source);source=NULL;
@@ -791,30 +794,44 @@ static void nominal_projection_cases(void) {
     xr_xir_compile_artifact_free(checked);checked=NULL;
 }
 
+static XrXirType nominal_authority_instance(const XrXirModule *module) {
+    XrXirType result=XR_XIR_UNIT;
+    for(uint32_t t=0;t<module->types->count;++t) {
+        const XrXirTypeNode *node=&module->types->nodes[t];
+        if(node->kind!=XR_XIR_TYPE_NOMINAL || node->nominal.declaration!=0 ||
+            node->nominal.argument_count!=1 || node->nominal.arguments[0]!=XR_XIR_I64)continue;
+        CHECK(result==XR_XIR_UNIT);result=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
+    }
+    CHECK(result!=XR_XIR_UNIT);return result;
+}
 static void nominal_member_authority(void) {
     XrXirArtifact *checked = nominal_checked_fixture(suite_context, 3), *decoded = NULL, *closed = NULL, *lowered = NULL;
     const XrXirModule *module = xr_xir_compile_artifact_module(checked);
+    XrXirType instance=nominal_authority_instance(module);
     XrXirFunctionIdentity *ids = (XrXirFunctionIdentity *) module->declarations->functions;
     XrXirCompileContext access=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,100001});
-    CHECK(xr_xir_compile_nominal_access(&access, module, 7, 0, 0, XR_XIR_NOMINAL_TYPE) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 5, 0, 0, XR_XIR_NOMINAL_TYPE) == XR_XIR_BAD_TYPE);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 7, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 3, 0, 0, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 5, 0, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 7, 0, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_BAD_TYPE);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 1, XR_XIR_NOMINAL_WRITE) == XR_XIR_BAD_TYPE);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 0, XR_XIR_NOMINAL_WRITE) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 2, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, XR_XIR_UNIT, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, XR_XIR_I64, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, (XrXirType)65535, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 7, instance, 0, XR_XIR_NOMINAL_TYPE) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 5, instance, 0, XR_XIR_NOMINAL_TYPE) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 7, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 3, instance, 0, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 5, instance, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 7, instance, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 1, XR_XIR_NOMINAL_WRITE) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 0, XR_XIR_NOMINAL_WRITE) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 2, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_STRUCTURE);
     XrXirNominalDeclaration *d = (XrXirNominalDeclaration *) module->types->nominals->declarations;
     d[0].exported = 0;
-    CHECK(xr_xir_compile_nominal_access(&access, module, 3, 0, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 3, instance, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
     d[0].exported = 1;
     XrXirNominalField *fields = (XrXirNominalField *) d[0].fields;
     fields[1].flags = XR_XIR_FIELD_PROTECTED;
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 7, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 7, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
     fields[1].flags = XR_XIR_FIELD_PRIVATE;
     const uint32_t invalid_functions[] = {7, 5, 2, 3};
     for (unsigned i = 0; i < 4; ++i) {
@@ -823,7 +840,7 @@ static void nominal_member_authority(void) {
         ids[invalid_functions[i]].nominal_owner = 0;
     }
     access=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,1});
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BUDGET);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 0, XR_XIR_NOMINAL_READ) == XR_XIR_BUDGET);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
@@ -834,9 +851,10 @@ static void nominal_member_authority(void) {
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed, &target, &lowered, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(closed);closed=NULL; module = xr_xir_compile_artifact_module(lowered); access=consumer_context_limits((XrCompileResourceLimits){67108864,8388608,10001});
+    instance=nominal_authority_instance(module);
     CHECK(module->declarations->functions[4].nominal_owner == 1);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 4, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
-    CHECK(xr_xir_compile_nominal_access(&access, module, 7, 0, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 4, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&access, module, 7, instance, 1, XR_XIR_NOMINAL_READ) == XR_XIR_BAD_TYPE);
     xr_xir_compile_artifact_free(lowered);lowered=NULL;
 }
 static void uninitialized_packet(void) {
@@ -855,10 +873,10 @@ static void uninitialized_packet(void) {
     CHECK(xir_fixture_check(suite_context, &built, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);checked=NULL;
-    CHECK(packet.length == 309 && packet.bytes[117] == XR_XIR_LOCAL_UNINIT && packet.bytes[157] == XR_XIR_LOCAL_WRITE);
+    CHECK(packet.length == sizeof(checked_scalar76_golden)+4+2*40 && packet.bytes[117] == XR_XIR_LOCAL_UNINIT && packet.bytes[157] == XR_XIR_LOCAL_WRITE);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded);decoded=NULL;
-    uint8_t original[309]; memcpy(original, packet.bytes, sizeof(original));
+    uint8_t original[sizeof(checked_scalar76_golden)+4+2*40]; memcpy(original, packet.bytes, sizeof(original));
     /* A second write is valid for mutable storage, but not initialize-once. */
     put32(packet.bytes + 197, XR_XIR_LOCAL_WRITE); put32(packet.bytes + 201, XR_XIR_UNIT);
     put32(packet.bytes + 209, 0); put32(packet.bytes + 245, 0); digest_packet(&packet);
@@ -1065,7 +1083,24 @@ static void match_fault_shape(void) {
 #include "xir_default_binding_cases.h"
 #include "xir_default_owner_tuple_cases.h"
 #include "xir_default_invoke_cases.h"
-int main(void) {
+int main(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--wire-smoke")) {
+        consumer_context=consumer_context_default();
+        byte_order();generic_method_packet_cases();
+        for (size_t i=0;i<sizeof(combined_previous_wire)/sizeof(*combined_previous_wire);++i)
+            checked_previous_identity_rejected(combined_previous_wire[i].bytes,combined_previous_wire[i].length);
+        consumer_contexts_free();
+        puts("Combined wire31 field bytes and complete parent packet rejection PASS");
+        return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--nominal-authority")) {
+        consumer_context=consumer_context_default();
+        nominal_member_authority();
+        consumer_contexts_free();
+        puts("Canonical nominal instance authority through Checked and Lowered PASS");
+        return 0;
+    }
+    CHECK(argc==1);
     consumer_context=consumer_context_default();
     consumer_context=consumer_context_default();
     default_invoke_cases();

@@ -1,0 +1,2 @@
+fn answer()->bool { const a:Array<f32>=[0.0/0.0,1.0/0.0,-1.0/0.0]; const b:Array<f64>=[0.00001]; return a.join(",")=="nan,inf,-inf" && b.join("")=="1e-5" }
+export fn run()->bool { return comptime answer() }

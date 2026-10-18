@@ -1,0 +1,3 @@
+enum Choice { Empty, Some { text:string } }
+export fn run()->Choice { return Choice.Some{text:"ab"} }
+fn echo(x:Choice)->Choice { return x }

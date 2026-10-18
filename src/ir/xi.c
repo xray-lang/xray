@@ -26,6 +26,8 @@
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../module/xmodule_identity.h"
+#include "../module/xnative_package.h"
+#include "../base/xcompile_state.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -90,6 +92,94 @@ static void *arena_alloc(XiFunc *f, uint32_t size) {
 
 void *xi_func_arena_alloc(XiFunc *f, uint32_t size) {
     return arena_alloc(f, size);
+}
+
+static void *xi_native_plan_copy_record(XiFunc *f, XrCompileState *state,
+                                        const void *source, uint32_t bytes) {
+    if (xr_compile_state_work(state, bytes) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
+    void *copy = xi_func_arena_alloc(f, bytes);
+    if (!copy) {
+        (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+        return NULL;
+    }
+    if (source && xr_compile_state_copy(state, copy, source, bytes) != XR_COMPILE_RESOURCE_OK)
+        return NULL;
+    return copy;
+}
+
+static bool xi_native_plan_copy_text(XiFunc *f, XrCompileState *state,
+                                     const char *source, char **output) {
+    if (!source) {
+        *output = NULL;
+        return true;
+    }
+    size_t length = 0;
+    if (xr_compile_state_string_length(state, source, &length) != XR_COMPILE_RESOURCE_OK)
+        return false;
+    if (length >= UINT32_MAX) {
+        (void) xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BUDGET);
+        return false;
+    }
+    char *copy = xi_native_plan_copy_record(f, state, source, (uint32_t) length + 1u);
+    if (!copy)
+        return false;
+    *output = copy;
+    return true;
+}
+
+static XrCExportPlan *xi_native_plan_copy_export(XiFunc *f, XrCompileState *state,
+                                                const XrCExportPlan *source) {
+    XrCExportPlan *copy = xi_native_plan_copy_record(f, state, source, sizeof(*copy));
+    if (!copy || !xi_native_plan_copy_text(f, state, source->xray_name, &copy->xray_name) ||
+        !xi_native_plan_copy_text(f, state, source->symbol, &copy->symbol) ||
+        !xi_native_plan_copy_text(f, state, source->visibility, &copy->visibility) ||
+        !xi_native_plan_copy_text(f, state, source->abi, &copy->abi))
+        return NULL;
+    return copy;
+}
+
+static XrLinkSymbolPlan *xi_native_plan_copy_link(XiFunc *f, XrCompileState *state,
+                                                const XrLinkSymbolPlan *source) {
+    XrLinkSymbolPlan *copy = xi_native_plan_copy_record(f, state, source, sizeof(*copy));
+    if (!copy || !xi_native_plan_copy_text(f, state, source->xray_name, &copy->xray_name) ||
+        !xi_native_plan_copy_text(f, state, source->section, &copy->section))
+        return NULL;
+    return copy;
+}
+
+static XrFreestandingEntryPlan *xi_native_plan_copy_entry(XiFunc *f, XrCompileState *state,
+                                                         const XrFreestandingEntryPlan *source) {
+    XrFreestandingEntryPlan *copy = xi_native_plan_copy_record(f, state, source, sizeof(*copy));
+    if (!copy || !xi_native_plan_copy_text(f, state, source->xray_name, &copy->xray_name) ||
+        !xi_native_plan_copy_text(f, state, source->symbol, &copy->symbol) ||
+        !xi_native_plan_copy_text(f, state, source->abi, &copy->abi) ||
+        !xi_native_plan_copy_text(f, state, source->section, &copy->section) ||
+        !xi_native_plan_copy_text(f, state, source->stub, &copy->stub))
+        return NULL;
+    return copy;
+}
+
+XR_FUNC bool xi_func_set_native_image_plans(XiFunc *f, XrCompileState *state,
+    const XrCExportPlan *export_plan, const XrLinkSymbolPlan *link_plan,
+    const XrFreestandingEntryPlan *entry_plan) {
+    if (!f || !state)
+        return false;
+    if (xr_compile_state_work(state, 1) != XR_COMPILE_RESOURCE_OK)
+        return false;
+    XrCExportPlan *owned_export = export_plan ? xi_native_plan_copy_export(f, state, export_plan) : NULL;
+    if (export_plan && !owned_export)
+        return false;
+    XrLinkSymbolPlan *owned_link = link_plan ? xi_native_plan_copy_link(f, state, link_plan) : NULL;
+    if (link_plan && !owned_link)
+        return false;
+    XrFreestandingEntryPlan *owned_entry = entry_plan ? xi_native_plan_copy_entry(f, state, entry_plan) : NULL;
+    if (entry_plan && !owned_entry)
+        return false;
+    f->export_plan = owned_export;
+    f->link_plan = owned_link;
+    f->entry_plan = owned_entry;
+    return true;
 }
 
 XR_FUNC bool xi_func_arena_contains(const XiFunc *f, const void *pointer, uint32_t size) {

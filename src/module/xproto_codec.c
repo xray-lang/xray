@@ -1328,9 +1328,9 @@ static XrValue bc_read_enum_type(BcReader *r) {
             if (enum_type) {
                 for (uint32_t i = 0; i < member_count; i++) {
                     if (payload_counts[i] > 0 &&
-                        !xr_enum_layout_set_variant_payload_metadata(
+                        xr_enum_layout_set_variant_payload_metadata(
                             enum_type->layout, i, (const char *const *) payload_names[i],
-                            payload_type_ids[i], (uint16_t) payload_counts[i])) {
+                            payload_type_ids[i], (uint16_t) payload_counts[i]) != XR_OS_IO_OK) {
                         r->error = XR_BOOTSTRAP_CONTAINER_ERR_CORRUPT;
                         enum_type = NULL;
                         break;

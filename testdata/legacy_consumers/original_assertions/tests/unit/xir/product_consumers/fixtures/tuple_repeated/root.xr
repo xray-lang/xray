@@ -1,0 +1,9 @@
+fn duplicate(s: string) -> (string, string, string) { return (s, s, s) }
+fn answer() -> i64 {
+ var builder = StringBuilder()
+ builder.append("abcdefghijklmn")
+ var p = duplicate(builder.toString())
+ builder.clear()
+ return len(p.0) + len(p.1) + len(p.2)
+}
+export fn consumerAnswer() -> i64 { return answer() }

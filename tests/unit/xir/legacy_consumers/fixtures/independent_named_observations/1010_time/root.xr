@@ -1,0 +1,67 @@
+// Preserve every original clock read, sleep duration and loop bound; observe actual contract predicates at the original point.
+// 1010_time.xr
+// 作者：xingleixu@gmail.com
+// 测试：time 模块
+// 注意：所有时间单位统一为毫秒（milliseconds）
+
+import time
+
+// ===== time.now =====
+// 返回当前时间戳（毫秒）
+
+@test
+fn test_time_now() {
+    var t = time.now()
+    var p19ClockPredicate0 = t > 0
+    assertEqual(p19ClockPredicate0, true)
+    print(p19ClockPredicate0)
+    // 时间戳应该是一个很大的数（毫秒级）
+    var p19ClockPredicate1 = t > 1000000000000
+    assertEqual(p19ClockPredicate1, true)
+    print(p19ClockPredicate1)
+}
+
+// ===== time.clock =====
+// 返回 CPU 时钟时间（毫秒）
+
+@test
+fn test_time_clock() {
+    var start = time.clock()
+    // 做一些简单计算
+    var sum = 0
+    for (i in 0..100) {
+        sum = sum + i
+    }
+    var end = time.clock()
+    var p19ClockPredicate2 = end >= start
+    assertEqual(p19ClockPredicate2, true)
+    print(p19ClockPredicate2)
+}
+
+// ===== time.monotonic =====
+// 返回单调递增时间（毫秒）
+
+@test
+fn test_time_monotonic() {
+    var t1 = time.monotonic()
+    var t2 = time.monotonic()
+    var p19ClockPredicate3 = t2 >= t1
+    assertEqual(p19ClockPredicate3, true)
+    print(p19ClockPredicate3)
+}
+
+// ===== time.sleep =====
+// 睡眠指定毫秒数
+
+@test
+fn test_time_sleep() {
+    var start = time.monotonic()
+    time.sleep(10)  // 睡眠 10 毫秒
+    var end = time.monotonic()
+    var p19ClockPredicate4 = end >= start
+    assertEqual(p19ClockPredicate4, true)
+    print(p19ClockPredicate4)
+    var p19ClockPredicate5 = end - start >= 10
+    assert(p19ClockPredicate5)
+    print(p19ClockPredicate5)
+}

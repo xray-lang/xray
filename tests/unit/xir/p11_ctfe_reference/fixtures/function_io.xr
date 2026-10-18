@@ -1,0 +1,3 @@
+fn bad()->i64{print(42);return 42}
+fn answer()->i64{const f=bad;return false?f():42}
+export fn run()->i64{return comptime answer()}

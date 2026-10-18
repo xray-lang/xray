@@ -1,0 +1,2 @@
+fn noop() {}
+export fn run()->i64 { comptime noop(); return 42 }

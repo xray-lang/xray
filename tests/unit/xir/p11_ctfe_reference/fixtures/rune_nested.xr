@@ -1,0 +1,2 @@
+fn identity(c:rune)->rune { return c }
+export fn run()->rune { return comptime identity(comptime rune(128512)) }

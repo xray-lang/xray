@@ -89,7 +89,15 @@ static XrOsIoStatus operation(XrHashMap *map, unsigned op) {
     case 3: return xr_hashmap_owned_clear(map);
     case 4: s = xr_hashmap_owned_get(map,keys[0],&v); if(s) CHECK(v == &canary); return s;
     case 5: s = xr_hashmap_owned_has(map,keys[1],&b); if(s) CHECK(b); return s;
-    default: return xr_hashmap_owned_foreach(map,counter,&count);
+    case 6: return xr_hashmap_owned_foreach(map,counter,&count);
+    default: {
+        const char *stored = (const char *)&canary;
+        s = xr_hashmap_owned_get_pair(map,op == 7 ? keys[0] : "absent",&stored,&v);
+        if (s) CHECK(stored == (const char *)&canary && v == &canary);
+        else if (op == 7) CHECK(stored == keys[0] && v == (void *)(uintptr_t)2);
+        else CHECK(!stored && !v);
+        return s;
+    }
     }
 }
 static size_t one_operation(unsigned op, size_t failure, XrOsIoStatus error) {
@@ -140,6 +148,9 @@ static void collisions(void) {
     bool removed = false; CHECK(xr_hashmap_owned_delete(map,a,&removed) == XR_OS_IO_OK && removed);
     CHECK(xr_hashmap_owned_has(map,b,&present) == XR_OS_IO_OK && present);
     void *value = &canary; CHECK(xr_hashmap_owned_get(map,b,&value) == XR_OS_IO_OK && !value);
+    const char *stored = NULL;
+    value = &canary;
+    CHECK(xr_hashmap_owned_get_pair(map,b,&stored,&value) == XR_OS_IO_OK && stored == b && !value);
     CHECK(xr_hashmap_owned_set(map,a,(void *)(uintptr_t)8) == XR_OS_IO_OK && map->count == 2);
     unsigned hashes = 0; for (unsigned i = 0; i < map->capacity; ++i) if (map->entries[i].key) {
         CHECK(map->entries[i].hash == UINT32_C(0x5e4daa9d)); ++hashes;
@@ -147,6 +158,49 @@ static void collisions(void) {
     CHECK(xr_hashmap_owned_delete(map,"missing",&removed) == XR_OS_IO_OK && !removed);
     xr_compile_resources_release(owner); CHECK(xr_hashmap_owned_get(map,a,&value) == XR_OS_IO_OK && value == (void *)(uintptr_t)8);
     xr_hashmap_owned_free(map); cleanup();
+}
+typedef struct StoppingVisit {
+    XrCompileResources *resources;
+    unsigned calls;
+    int mode;
+    uint64_t work_after_callback;
+    XrCompileResourceStatus child_status;
+} StoppingVisit;
+static bool stopping_visit(const char *key, void *value, void *context) {
+    StoppingVisit *visit = context;
+    CHECK(key && value); ++visit->calls;
+    if (visit->mode == 1) {
+        void *output = NULL;
+        fail_at = attempts;
+        visit->child_status = xr_compile_resources_alloc(visit->resources, 1, &output);
+        CHECK(visit->child_status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY && !output);
+    }
+    visit->work_after_callback = stats(visit->resources).work;
+    return visit->mode == 2;
+}
+static void stopping_visits(void) {
+    for (int mode = 0; mode < 3; ++mode) {
+        reset(SIZE_MAX); XrCompileResources *owner = NULL;
+        CHECK(xr_compile_resources_new(&unlimited, &owner) == XR_COMPILE_RESOURCE_OK);
+        XrOsIoPolicy policy = xr_compile_io_policy(owner); XrHashMap *map = NULL;
+        CHECK(xr_hashmap_owned_new(&policy, &map) == XR_OS_IO_OK);
+        CHECK(xr_hashmap_owned_set(map, "first", (void *)(uintptr_t)2) == XR_OS_IO_OK);
+        CHECK(xr_hashmap_owned_set(map, "second", (void *)(uintptr_t)3) == XR_OS_IO_OK);
+        StoppingVisit visit = {.resources = owner, .mode = mode};
+        CHECK(xr_hashmap_owned_visit(map, stopping_visit, &visit) == XR_OS_IO_OK);
+        CHECK(visit.calls == (mode == 2 ? 2u : 1u) && map->count == 2);
+        if (mode != 2) CHECK(stats(owner).work == visit.work_after_callback);
+        if (mode == 1) CHECK(visit.child_status == XR_COMPILE_RESOURCE_OUT_OF_MEMORY);
+        fail_at = SIZE_MAX; uint64_t before = stats(owner).work;
+        CHECK(xr_hashmap_owned_visit(map, NULL, &visit) == XR_OS_IO_BAD_ARGUMENT);
+        CHECK(xr_hashmap_owned_visit(NULL, stopping_visit, &visit) == XR_OS_IO_BAD_ARGUMENT);
+        CHECK(stats(owner).work == before);
+        void *value = NULL;
+        CHECK(xr_hashmap_owned_get(map, "first", &value) == XR_OS_IO_OK && value == (void *)(uintptr_t)2);
+        CHECK(xr_hashmap_owned_get(map, "second", &value) == XR_OS_IO_OK && value == (void *)(uintptr_t)3);
+        xr_hashmap_owned_free(map); xr_compile_resources_release(owner); cleanup();
+    }
+    puts("hashmap visitor: callback stop/OOM has no later read/work; full visit/content/physical0 PASS");
 }
 int main(void) {
     for (unsigned i = 0; i < 80; ++i) snprintf(keys[i],sizeof(keys[i]),"collision_candidate_%u",i);
@@ -160,14 +214,14 @@ int main(void) {
         sequence(&limits,SIZE_MAX,!below);
     }
     size_t boundaries = 0;
-    for (unsigned op = 0; op < 7; ++op) {
+    for (unsigned op = 0; op < 9; ++op) {
         size_t calls = one_operation(op,SIZE_MAX,XR_OS_IO_BUDGET);
         const XrOsIoStatus errors[] = {XR_OS_IO_BUDGET,XR_OS_IO_IO,XR_OS_IO_OUT_OF_MEMORY};
         for (size_t e = 0; e < 3; ++e) for (size_t i = 1; i <= calls; ++i) {
             one_operation(op,i,errors[e]); ++boundaries;
         }
     }
-    collisions(); growth_oom();
+    collisions(); growth_oom(); stopping_visits();
     printf("hashmap: %zu real OOM sites, %zu transactional work failures, 3-axis exact/minus1, FNV collision/tombstone, lifetime and physical zero PASS\n",sites,boundaries);
     return 0;
 }

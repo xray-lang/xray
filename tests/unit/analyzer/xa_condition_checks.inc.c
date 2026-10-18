@@ -24,9 +24,9 @@ TEST(analyzer_conditions_require_plain_bool) {
             char source[512];
             snprintf(source, sizeof(source), "class Holder {}\nfn probe(value: %s) { %s }\n",
                      types[type], bodies[body]);
-            XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+            XaAnalyzer *analyzer = fixture_analyzer();
             ASSERT(analyzer != NULL);
-            AstNode *program = xr_parse(g_session, source);
+            AstNode *program = fixture_parse(g_session, source);
             ASSERT(program != NULL);
             xa_analyzer_analyze(analyzer, "condition-types.xr", program);
             int count = 0, conditions = 0;
@@ -56,9 +56,9 @@ TEST(analyzer_explicit_presence_narrows_and_for_condition_is_optional) {
         " while (value != null) { result = len(value); break }\n"
         " for (var index = 0; ; index++) { break }\n"
         " return result\n}\n";
-    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    XaAnalyzer *analyzer = fixture_analyzer();
     ASSERT(analyzer != NULL);
-    AstNode *program = xr_parse(g_session, source);
+    AstNode *program = fixture_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(analyzer, "explicit-conditions.xr", program);
     int count = 0;

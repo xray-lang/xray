@@ -1,5 +1,5 @@
 /* Typed native outcomes retain their actual closed enum authority. */
-#include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_program_internal.h"
 #include "xir/xxir_enum.h"
 typedef struct TaskErrorState { XrXirValue field, error, erased; } TaskErrorState;
 typedef struct TaskErrorFixture { TaskFixture base; uint32_t mode; } TaskErrorFixture;
@@ -54,12 +54,11 @@ static void task_error_fixture_new(TaskErrorFixture *f) {
     XrXirArtifact *proof = NULL;
     CHECK(native_metadata_fixture(&f->base.compiler.context, &spec, &proof) == XR_XIR_OK);
     const XrXirModule *lowered = xr_xir_compile_artifact_module(proof);
-    spec.types = lowered->types; spec.declarations = lowered->declarations; spec.packet = xir_program_packet_borrow(proof);
-    CHECK(xr_xir_compile_program_seal(&f->base.compiler.context, &spec, &f->base.program) == XR_XIR_OK);
-    xr_xir_compile_artifact_free(proof);
+    spec.types = lowered->types; spec.declarations = lowered->declarations;
     const XrXirTypeNode task_node = {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64};
     const XrXirTypes task_types = {&task_node, 1, NULL, NULL};
     CHECK(xr_xir_compile_type_arena_new(&f->base.compiler.context, &task_types, &f->base.arena) == XR_XIR_VALUE_OK);
+    CHECK(task_owned_program_take(&f->base.compiler.context,&spec,&proof,&f->base.program)==XR_XIR_OK && !proof);
 }
 static XrXirValueStatus task_error_expected(const XrXirCallResult *result, uint32_t mode, XrXirDomain *domain) {
     if (mode == 3) { CHECK(result->status == XR_XIR_CALL_BAD_STATE && !result->value.type); return XR_XIR_VALUE_OK; }

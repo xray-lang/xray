@@ -1,0 +1,156 @@
+// Observe the original scalar exactly once and retain every original test body.
+// 0450_break_continue.xr
+// 作者：xingleixu@gmail.com
+// 测试：break 和 continue 语句
+
+// ===== while 中的 break =====
+
+@test
+fn test_while_break() {
+    var i = 0
+    var sum = 0
+    while (i < 100) {
+        if (i >= 5) {
+            break
+        }
+        sum = sum + i
+        i = i + 1
+    }
+    var p19Observed0 = sum
+    assertEqual(p19Observed0, 10)
+    print(p19Observed0)
+    var p19Observed1 = i
+    assertEqual(p19Observed1, 5)
+    print(p19Observed1)
+}
+
+// ===== while 中的 continue =====
+
+@test
+fn test_while_continue() {
+    var i = 0
+    var sum = 0
+    while (i < 10) {
+        i = i + 1
+        if (i % 2 == 0) {
+            continue
+        }
+        sum = sum + i
+    }
+    var p19Observed2 = sum
+    assertEqual(p19Observed2, 25)
+    print(p19Observed2)
+}
+
+// ===== for 中的 break =====
+
+@test
+fn test_for_break() {
+    var sum = 0
+    for (i in 0..100) {
+        if (i >= 5) {
+            break
+        }
+        sum = sum + i
+    }
+    var p19Observed3 = sum
+    assertEqual(p19Observed3, 10)
+    print(p19Observed3)
+}
+
+// ===== for 中的 continue =====
+
+@test
+fn test_for_continue() {
+    var sum = 0
+    for (i in 0..10) {
+        if (i % 2 == 0) {
+            continue
+        }
+        sum = sum + i
+    }
+    var p19Observed4 = sum
+    assertEqual(p19Observed4, 25)
+    print(p19Observed4)
+}
+
+// ===== 嵌套循环 break =====
+
+@test
+fn test_nested_break() {
+    var count = 0
+    for (i in 0..5) {
+        for (j in 0..5) {
+            if (j >= 2) {
+                break
+            }
+            count = count + 1
+        }
+    }
+    var p19Observed5 = count
+    assertEqual(p19Observed5, 10)
+    print(p19Observed5)
+}
+
+// ===== 条件 break =====
+
+@test
+fn test_conditional_break() {
+    var arr = [1, 2, 3, -1, 4, 5]
+    var sum = 0
+    for (x in arr) {
+        if (x < 0) {
+            break
+        }
+        sum = sum + x
+    }
+    var p19Observed6 = sum
+    assertEqual(p19Observed6, 6)
+    print(p19Observed6)
+}
+
+// ===== 条件 continue =====
+
+@test
+fn test_conditional_continue() {
+    var arr = [1, -2, 3, -4, 5]
+    var sum = 0
+    for (x in arr) {
+        if (x < 0) {
+            continue
+        }
+        sum = sum + x
+    }
+    var p19Observed7 = sum
+    assertEqual(p19Observed7, 9)
+    print(p19Observed7)
+}
+
+// ===== break 后代码不执行 =====
+
+@test
+fn test_code_after_break() {
+    var executed = false
+    for (i in 0..10) {
+        break
+        executed = true
+    }
+    var p19Observed8 = executed
+    assertEqual(p19Observed8, false)
+    print(p19Observed8)
+}
+
+// ===== 空循环体中的 break =====
+
+@test
+fn test_immediate_break() {
+    var count = 0
+    while (true) {
+        count = count + 1
+        break
+    }
+    var p19Observed9 = count
+    assertEqual(p19Observed9, 1)
+    print(p19Observed9)
+}
+

@@ -1,0 +1,6 @@
+fn answer() -> i64 {
+  Coro.yield()
+  Coro.yield()
+  return 42
+}
+export fn consumerAnswer() -> i64 { return answer() }

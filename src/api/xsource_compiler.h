@@ -41,11 +41,6 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_read_file(XrSourceCompiler *, c
     XrSourceCompilerFile *, XrSourceCompileDiagnostic *);
 XR_FUNC void xr_source_compiler_file_clear(XrSourceCompilerFile *);
 
-typedef struct XrSourceCompilerAst {
-    const char *absolute_path; /* NULL requires a MEMORY namespace. */
-    const char *namespace_id;
-    struct AstNode *program;
-} XrSourceCompilerAst;
 /* Config is borrowed only during construction. Every allocation pins its
  * original ledger; releasing the caller's resource reference is allowed.
  * Builds and all borrowed parser/state accesses require caller exclusion.
@@ -77,11 +72,10 @@ XR_FUNC XrSourceCompileStatus xr_source_compiler_build_file(XrSourceCompiler *, 
  * Returned products and diagnostics outlive the compiler and all source bytes. */
 XR_FUNC XrSourceCompileStatus xr_source_compiler_build_text(XrSourceCompiler *, const XrSourceCompilerText *,
     XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic);
-/* Borrow a complete owning parser AST on this compiler's actual ledger.
- * Rooted authority/lockfile discovery and public Program admission are shared
- * with other inputs. The entry may be absent on disk. Its producing session
- * may be dead; AST and all request fields remain caller-owned on every return.
- * The returned product owns its data independently of the AST and compiler. */
-XR_FUNC XrSourceCompileStatus xr_source_compiler_build_ast(XrSourceCompiler *, const XrSourceCompilerAst *,
-    XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic);
+/* The actual tree must belong to this compiler's exact parser state. Its
+ * syntax is checked without reparsing the entry; input text supplies owned
+ * diagnostic provenance. The tree is borrowed exclusively during this call.
+ * Imports, admission and cumulative failure use the ordinary source pipeline. */
+XR_FUNC XrSourceCompileStatus xr_source_compiler_build_ast(XrSourceCompiler *, const XrSourceCompilerText *,
+    struct AstNode *program, XrXirSourceProduct **output, XrSourceCompileDiagnostic *diagnostic);
 #endif // XSOURCE_COMPILER_H

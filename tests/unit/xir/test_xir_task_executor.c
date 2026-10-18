@@ -6,7 +6,7 @@
  *
  * test_xir_task_executor.c - Typed queued owners and complete physical release
  */
-#include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_program_internal.h"
 #include "xir/xxir_task_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,6 +82,7 @@ typedef struct TaskFixture {
     XrXirTypeArena *arena;
     XrXirCallBudget budget;
 } TaskFixture;
+#include "xir_task_owned_program.h"
 static void task_fixture_new(TaskFixture *fixture) {
     CHECK(native_fixture_owner_new(&fixture->compiler) == XR_XIR_OK);
     const XrXirType scalar = XR_XIR_I64, string = XR_XIR_STRING;
@@ -106,13 +107,11 @@ static void task_fixture_new(TaskFixture *fixture) {
     XrXirStatus proof_status = native_metadata_fixture(&fixture->compiler.context, &spec, &proof);
     if (proof_status != XR_XIR_OK) fprintf(stderr, "metadata proof status=%d\n", (int)proof_status);
     CHECK(proof_status == XR_XIR_OK);
-    spec.packet = xir_program_packet_borrow(proof);
-    CHECK(xr_xir_compile_program_seal(&fixture->compiler.context, &spec, &fixture->program) == XR_XIR_OK);
-    xr_xir_compile_artifact_free(proof);
     const XrXirTypeNode nodes[] = {{.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64},
         {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_STRING}};
     const XrXirTypes types = {nodes, 2, NULL, NULL};
     CHECK(xr_xir_compile_type_arena_new(&fixture->compiler.context, &types, &fixture->arena) == XR_XIR_VALUE_OK);
+    CHECK(task_owned_program_take(&fixture->compiler.context,&spec,&proof,&fixture->program)==XR_XIR_OK && !proof);
 }
 static void task_fixture_drop(TaskFixture *fixture) {
     xr_xir_compile_program_drop(fixture->program); fixture->program = NULL;
@@ -446,7 +445,29 @@ static void task_runtime_faults(void) {
 #include "task_root_activation_cases.h"
 #include "task_closed_result_cases.h"
 #include "task_cross_domain_cases.h"
+static void task_owned_recovery(void) {
+    task_receive_probe=true;task_receive_checks=0;
+    for(unsigned kind=0;kind<4;++kind){
+        TaskErrorFixture failure={0};TaskFixture normal={0};
+        TaskFixture *fixture=kind==3?&failure.base:&normal;
+        if(kind==0)task_fixture_new(fixture);
+        else if(kind==1)task_closed_fixture_new(fixture);
+        else if(kind==2)task_cross_fixture_new(fixture);
+        else task_error_fixture_new(&failure);
+        CHECK(task_receive_checks==kind+1 && fixture->program && fixture->arena &&
+            !fixture->witness.code_releases);
+        bool stable=runtime_attempts==task_publication_attempts && runtime_live==task_publication_live &&
+            runtime_bytes==task_publication_bytes;
+        task_fixture_drop(fixture);
+        CHECK(!fixture->program && !fixture->arena && fixture->witness.code_releases==1 &&
+            !runtime_live && !runtime_bytes);
+        CHECK(stable);
+    }
+    task_receive_probe=false;native_fixture_owner_report();
+    puts("Task four native inputs reject atomically, retry in the same ledger and release one code lease");
+}
 int main(int argc, char **argv) {
+    if(argc==2 && !strcmp(argv[1],"--owned-recovery")){task_owned_recovery();return 0;}
     if (argc == 2 && !strcmp(argv[1], "--cross-domain")) { task_cross_domain_cases(); return 0; }
     if (argc != 1) return 2;
     setvbuf(stdout, NULL, _IONBF, 0);

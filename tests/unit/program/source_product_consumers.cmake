@@ -218,3 +218,12 @@ add_test(NAME source_product_nominal_source_constructors
         --scratch "${CMAKE_BINARY_DIR}/consumer-nominal-constructor-evidence")
 set_tests_properties(source_product_nominal_source_constructors PROPERTIES TIMEOUT 120
     LABELS "unit;xir;source-product;program-consumer;inventory;nominal-graph")
+
+foreach(case IN ITEMS single_module cross_module_coroutine)
+    foreach(mode IN ITEMS 2 3)
+        add_test(NAME test_source_product_${case}_owned_recovery_${mode}
+            COMMAND test_source_product_${case}_native ${mode} --owned-recovery)
+        set_tests_properties(test_source_product_${case}_owned_recovery_${mode} PROPERTIES TIMEOUT 120
+            LABELS "unit;xir;source-product;program-consumer;ownership;atomic-receive")
+    endforeach()
+endforeach()

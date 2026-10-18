@@ -1,0 +1,120 @@
+// 0200_var_const.xr
+// 作者：xingleixu@gmail.com
+// 测试：变量声明 var 和 const
+// ===== var 基础 =====
+@test
+fn test_var_declaration() {
+    var x = 10
+    assertEqual(x, 10)
+}
+
+@test
+fn test_var_reassign() {
+    var x = 10
+    x = 20
+    assertEqual(x, 20)
+}
+
+@test
+fn test_var_multiple() {
+    var a = 1
+    var b = 2
+    var c = 3
+    assertEqual(a + b + c, 6)
+}
+
+@test
+fn test_var_different_types() {
+    var i = 42
+    var f = 3.14
+    var s = "hello"
+    var b = true
+    var n: i64? = null
+    assertEqual(i, 42)
+    assertEqual(f, 3.14)
+    assertEqual(s, "hello")
+    assertEqual(b, true)
+    assertEqual(n, null)
+}
+
+// ===== const 基础 =====
+@test
+fn test_const_declaration() {
+    const PI = 3.14159
+    assertEqual(PI, 3.14159)
+}
+
+@test
+fn test_const_string() {
+    const NAME = "xray"
+    assertEqual(NAME, "xray")
+}
+
+@test
+fn test_const_expression() {
+    const BASE = 10
+    const MULTIPLIED = BASE * 2
+    assertEqual(MULTIPLIED, 20)
+}
+
+@test
+fn test_const_destructure() {
+    const (a, b) = (1, 2)
+    assertEqual(a + b, 3)
+}
+
+// ===== 初始化 =====
+@test
+fn test_expression_init() {
+    var x = 5 + 3
+    assertEqual(x, 8)
+    var y = x * 2
+    assertEqual(y, 16)
+}
+
+@test
+fn test_function_call_init() {
+    fn getValue() -> i64 {
+        return 42
+    }
+    var x = getValue()
+    assertEqual(x, 42)
+}
+
+// ===== 类型注解 =====
+@test
+fn test_type_annotation_int() {
+    var x: i64 = 100
+    assertEqual(x, 100)
+}
+
+@test
+fn test_type_annotation_float() {
+    var f: f64 = 2.5
+    assertEqual(f, 2.5)
+}
+
+@test
+fn test_type_annotation_string() {
+    var s: string = "typed"
+    assertEqual(s, "typed")
+}
+
+// ===== 边界条件 =====
+@test
+fn test_same_name_different_scope() {
+    var x = 10
+{
+        var x = 20
+        assertEqual(x, 20)
+    }
+    assertEqual(x, 10)
+}
+
+@test
+fn test_reassign_different_type() {
+    var x = 10
+    x = 20
+    // 同类型
+    assertEqual(x, 20)
+}

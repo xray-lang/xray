@@ -1,0 +1,47 @@
+// Preserve all original tuple/generic/function-value bodies and module initialization; observe actual scalar components once.
+// 126-P3 / 216: the concrete error_set is analyzer metadata, not part of
+// function type identity. Task 216 adds only a typed throw-effect bit and the
+// build-time no-throw contract; it does not put enum/variant sets back into the
+// type. Functions with the same signature but different inferred error sets
+// therefore still unify in a may-throw `(int) -> int` array.
+
+enum E { A, B }
+
+fn fa(x: i64) -> i64 {
+    if (x < 0) {
+        throw E.A
+    }
+    return x + 1
+}
+
+fn fb(x: i64) -> i64 {
+    if (x < 0) {
+        throw E.B
+    }
+    return x + 2
+}
+
+fn call_first(fns: Array<fn(i64) -> i64>, x: i64) -> i64 {
+    return fns[0](x)
+}
+
+@test
+fn test_error_set_not_in_function_type() {
+    // [fa, fb] only type-checks as Array<fn(int) -> int> if fa and fb share the
+    // same function type despite throwing different enum errors.
+    var fns: Array<fn(i64) -> i64> = [fa, fb]
+    var p19TupleValue0 = len(fns)
+    assertEqual(p19TupleValue0, 2)
+    print(p19TupleValue0)
+    var p19TupleValue1 = fns[0](10)
+    assertEqual(p19TupleValue1, 11)
+    print(p19TupleValue1)
+    var p19TupleValue2 = fns[1](10)
+    assertEqual(p19TupleValue2, 12)
+    print(p19TupleValue2)
+    var p19TupleValue3 = call_first(fns, 5)
+    assertEqual(p19TupleValue3, 6)
+    print(p19TupleValue3)
+}
+
+test_error_set_not_in_function_type()

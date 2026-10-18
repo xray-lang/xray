@@ -1,0 +1,25 @@
+// P19 complete selected source preparation; product qualification NOT_RUN.
+// anchor: visibility-const
+// private accessible within the class (including another instance of the same
+// class), protected accessible within the class, const set in the constructor.
+class Account {
+    private balance: i64
+    protected owner: string
+    const id: i64
+    init(b: i64, o: string, i: i64) {
+        this.balance = b
+        this.owner = o
+        this.id = i
+    }
+    getBalance() -> i64 { return this.balance }
+    ownerName() -> string { return this.owner }
+    richerThan(other: Account) -> bool { return this.balance > other.balance }
+}
+
+var a = Account(100, "alice", 1)
+var b = Account(50, "bob", 2)
+print(a.getBalance())
+print(a.ownerName())
+print(a.id)
+print(a.richerThan(b))
+print(b.richerThan(a))

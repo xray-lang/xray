@@ -1,0 +1,52 @@
+// match `is T [name]` type pattern
+
+@test
+fn test_is_pattern_no_binding() {
+    fn classify(v: i64 | string) -> string {
+        return match (v) {
+            is i64 -> "integer",
+            is string -> "text",
+        }
+    }
+    assertEqual(classify(1), "integer")
+    assertEqual(classify("foo"), "text")
+}
+
+@test
+fn test_is_pattern_with_binding() {
+    fn describe(v: i64 | string) -> string {
+        return match (v) {
+            is i64 n -> "int:" + string(n),
+            is string s -> "str:" + s,
+        }
+    }
+    assertEqual(describe(42), "int:42")
+    assertEqual(describe("hi"), "str:hi")
+}
+
+@test
+fn test_is_pattern_three_arms() {
+    fn tag(v: i64 | string | bool) -> i64 {
+        return match (v) {
+            is i64 -> 1,
+            is string -> 2,
+            is bool -> 3,
+        }
+    }
+    assertEqual(tag(1), 1)
+    assertEqual(tag("a"), 2)
+    assertEqual(tag(true), 3)
+}
+
+@test
+fn test_is_pattern_with_wildcard_fallback() {
+    fn check(v: i64 | string | f64) -> string {
+        return match (v) {
+            is i64 -> "i",
+            _ -> "other",
+        }
+    }
+    assertEqual(check(1), "i")
+    assertEqual(check("x"), "other")
+    assertEqual(check(1.5), "other")
+}

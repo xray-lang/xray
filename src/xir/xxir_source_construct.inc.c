@@ -35,7 +35,12 @@ static bool source_construction_prepare(SourceContext *ctx) {
             fields[f]=function ? function+1 : 0;
         }
     }
-    XrXirStatus status=xr_xir_compile_construction_new(&ctx->compile,&ctx->types,rows,count,&ctx->construction);
+    XrXirMaterializationBinding *bindings=NULL;uint32_t binding_count=0;
+    if (!source_materialization_bindings(ctx,&bindings,&binding_count)) return false;
+    XrXirComptimeTable comptime={0};
+    if (!source_library_comptime_table(ctx,&comptime)) return false;
+    XrXirConstructionSpec input={rows,count,bindings,binding_count,&comptime};
+    XrXirStatus status=xr_xir_compile_construction_new_v3(&ctx->compile,&ctx->types,&input,&ctx->construction);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"source construction ownership failed");
 }
 #include "xxir_source_binding_readers.inc.c"
@@ -46,7 +51,7 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     ctx->declarations_building = false;
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
         source_implementations_bind(ctx) && build_bodies(ctx) && source_binding_readers(ctx) && source_history_graph_commit(ctx) &&
-        source_class_carriers(ctx) && source_effect_prepare(ctx) && source_construction_prepare(ctx)) {
+        source_instance_literals_finish(ctx) && source_materialization_finish(ctx) && source_class_carriers(ctx) && source_effect_prepare(ctx) && source_construction_prepare(ctx)) {
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(ctx,&declarations);
         XrXirDiagnostic location = {0};

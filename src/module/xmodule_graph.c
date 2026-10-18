@@ -33,7 +33,9 @@ static void spec_cleanup(XrModuleSpec *spec) {
 }
 XR_FUNC void xr_compile_module_graph_free(XrModuleGraph *graph) {
     if (!graph) return;
-    for (int i = 0; i < graph->spec_count; ++i) spec_cleanup(&graph->specs[i]);
+    for (int i = 0; i < graph->spec_count; ++i) {
+        spec_cleanup(&graph->specs[i]);
+    }
     xr_compile_resources_free(graph->specs); xr_hashmap_owned_free(graph->id_index);
     xr_compile_resources_free(graph->topo_order); xr_compile_resources_free(graph->cycle_desc);
     xr_compile_resources_free(graph->unresolved_error); xr_compile_resources_free(graph);
@@ -431,19 +433,20 @@ XR_FUNC XrModuleStatus xr_compile_module_graph_build_logical_source(XrModuleGrap
     return graph_include_logical_input(graph,authority,logical,path,(GraphLogicalInput){source,NULL},error);
 }
 XR_FUNC XrModuleStatus xr_compile_module_graph_build_ast(XrModuleGraph *graph,
-    const XrModuleAstInput *input, char **error) {
+    const XrModuleSourceAstInput *input, char **error) {
     if (!graph || !graph->resources || graph->spec_count || !input || !input->program ||
         input->program->type != AST_PROGRAM || !input->program->as.program.owns_arena ||
         input->program->as.program.count < 0 ||
         input->program->as.program.capacity < input->program->as.program.count ||
         (input->program->as.program.count && !input->program->as.program.statements)) return XR_MODULE_INVALID;
     XrCompileState *state = xr_compiler_arena_compile_state(input->program->as.program.arena);
-    if (!state || xr_compile_state_resources(state) != graph->resources) return XR_MODULE_INVALID;
+    if (!state || xr_compile_state_resources(state) != graph->resources ||
+        (state != xr_compile_session_compile_state(graph->compiler_session) && xr_compile_state_has_sessions(state))) return XR_MODULE_INVALID;
     XrCompileResourceStatus status = xr_compiler_arena_capture_status(input->program->as.program.arena,state);
     if (status != XR_COMPILE_RESOURCE_OK) return graph_failure(graph,module_resource_status(status));
     if (graph->resolver->overlay) return XR_MODULE_INVALID;
     return graph_include_logical_input(graph,input->authority,input->logical_path,input->source_path,
-        (GraphLogicalInput){NULL,input->program},error);
+        (GraphLogicalInput){input->source,input->program},error);
 }
 XR_FUNC XrModuleStatus xr_compile_module_graph_include_logical_source(XrModuleGraph *graph,
     const XrModuleIdentityAuthority *authority, const char *logical, const char *path, const char *source, char **error) {

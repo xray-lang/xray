@@ -34,6 +34,7 @@ XRAY_API void xray_source_ast_free(XrSourceAst *ast) {
 static XrSourceStatus api_parse_owned(XrSourceCompiler *compiler,const XrSourceText *text,
     XrSourceAst *ast,XrSourceDiagnostic *diagnostic,bool interactive) {
     XrCompileState *state=xr_source_compiler_state(compiler);
+    ast->source_length=text->length;
     XrSourceStatus status=api_resource(xr_compile_state_strndup(state,text->bytes,text->length,&ast->source));
     if(status==XR_SOURCE_OK && text->absolute_path)
         status=api_resource(xr_compile_state_strdup(state,text->absolute_path,&ast->path));
@@ -99,7 +100,7 @@ XRAY_API XrSourceStatus xray_source_parse_text(XrSourceCompiler *compiler,const 
 static XrXirStatus api_ast_retain(void *context,const XrXirSourceAst *input) {
     XrSourceAst *ast=context;
     if(!ast || !ast->state || !ast->program || !ast->references || !input ||
-        input->program!=ast->program || input->logical_path!=ast->path)return XR_XIR_BAD_STRUCTURE;
+        input->program!=ast->program || input->source.logical_path!=ast->path)return XR_XIR_BAD_STRUCTURE;
     if(ast->references==UINT32_MAX)return XR_XIR_BUDGET;
     XrCompileResourceStatus status=xr_compile_state_work(ast->state,1);
     if(status!=XR_COMPILE_RESOURCE_OK)return status==XR_COMPILE_RESOURCE_OUT_OF_MEMORY ?
@@ -109,9 +110,9 @@ static XrXirStatus api_ast_retain(void *context,const XrXirSourceAst *input) {
 static void api_ast_release(void *context) {xray_source_ast_free(context);}
 XR_FUNC XrSourceStatus xr_source_ast_owned_input(const XrSourceAst *ast,XrXirSourceAstOwner *output) {
     if(!ast || !ast->state || !ast->program || !ast->references || !output || output->input.program ||
-        output->input.logical_path || output->resources || output->owner || output->retain || output->release)
+        output->input.source.logical_path || output->resources || output->owner || output->retain || output->release)
         return XR_SOURCE_BAD_ARGUMENT;
-    *output=(XrXirSourceAstOwner){.input={ast->program,ast->path},
+    *output=(XrXirSourceAstOwner){.input={{ast->path,ast->source,ast->source_length},ast->program},
         .resources=xr_compile_state_resources(ast->state),.owner=(void *)ast,
         .retain=api_ast_retain,.release=api_ast_release};
     return XR_SOURCE_OK;
