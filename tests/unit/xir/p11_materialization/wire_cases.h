@@ -29,7 +29,7 @@ static void wire_built(const XrXirCompileContext *context) {
         {"entry",5,NULL,0,XR_XIR_I64,blocks+1,1,entry,3,operands,1},
         {"make",4,NULL,0,(XrXirType)256,blocks+2,1,make,4,operands,2},
         {"sum",3,&pair,1,XR_XIR_I64,blocks+2,1,sum,4,NULL,0}};
-    XrXirSourceModule source={"alpha",5,NULL,0,0};
+    XrXirSourceModule source={"alpha",5,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[]={
         {0},{.exported=1},{.nominal_owner=1,.method_kind=XR_XIR_MATERIALIZER},
         {.exported=1,.nominal_owner=1,.method_kind=XR_XIR_STATIC_METHOD}};
