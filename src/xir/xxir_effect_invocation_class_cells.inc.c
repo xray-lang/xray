@@ -9,15 +9,29 @@
  * The same provider proves each true place subject. Only the exact equation's
  * complete masks and descending ranks substitute its conservative Class bit.
  */
-static XrXirStatus effect_invocation_class_cells_match(const EffectInvocationRead *owner,
-    const EffectBodyRequest *body) {
+#include "xxir_effect_cell_replay.inc.c"
+
+static XrXirStatus effect_invocation_class_cells_begin(const EffectInvocationRead *owner,
+    const EffectBodyRequest *body,EffectCellReplayRows *rows) {
     if (!owner || !body || !owner->work || !effect_invocation_roles_shape(owner) || !owner->final->cells ||
         body->domain.function_count!=effect_body_count(owner->final->material))
         return XR_XIR_BAD_STRUCTURE;
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};
     XrXirStatus status=effect_cell_body_request(owner->work,body,&adapter,&read);
     if (status!=XR_XIR_OK) return status;
+    if (effect_body_request_sequence_owned(body)) {
+        status=effect_cell_replay_rows_create(owner->work,body,rows);
+        return status==XR_XIR_OK ?
+            xir_cell_provenance_module_matches(owner->work,owner->final->cells,&rows->module,NULL) : status;
+    }
     return xr_xir_compile_cell_provenance_body_matches(owner->work,owner->final->cells,&read,NULL);
+}
+
+static XrXirStatus effect_invocation_class_cells_match(const EffectInvocationRead *owner,
+    const EffectBodyRequest *body) {
+    EffectCellReplayRows rows={0};
+    XrXirStatus status=effect_invocation_class_cells_begin(owner,body,&rows);
+    effect_cell_replay_rows_free(&rows);return status;
 }
 
 static XrXirStatus effect_invocation_class_cell_subject(EffectInvocationFlow *flow,

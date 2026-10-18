@@ -374,7 +374,8 @@ static XrXirStatus proof_type_task(ConstraintProof *proof, XrXirType type) {
     } else if (node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_CHANNEL) {
         status = constraint_markers(&proof->environment, node->element, XR_XIR_CONSTRAINT_SENDABLE, proof->budget,proof->read);
         if (status == XR_XIR_OK) status = proof_type_edge(proof, index, node->element);
-    } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NULLABLE)
+    } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NULLABLE ||
+               node->kind == XR_XIR_TYPE_ITERATOR)
         status = proof_type_edge(proof,index,node->element);
     else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
         if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;
@@ -804,10 +805,13 @@ static XrXirStatus proof_nominal_declaration(const XrXirModule *module, uint32_t
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_NOMINAL,index,0}};
     const XrXirNominalDeclaration *d = &module->types->nominals->declarations[index];
     XrXirStatus status = xr_xir_compile_context_constraints_verify(budget, &context);
-    for (uint32_t f = 0; status == XR_XIR_OK && f < d->field_count; ++f)
+    for (uint32_t f = 0; status == XR_XIR_OK && f < d->field_count; ++f) {
         status = d->kind == XR_XIR_NOMINAL_CLASS ?
             xr_xir_compile_type_storage_prove(budget, &context, d->fields[f].type) :
             xr_xir_compile_type_use_verify_scratch(budget, &context, d->fields[f].type, scratch);
+        if (status==XR_XIR_OK && (d->flags & XR_XIR_NOMINAL_SENDABLE))
+            status=xr_xir_compile_type_markers_prove(budget,&context,d->fields[f].type,XR_XIR_CONSTRAINT_SENDABLE);
+    }
     return status;
 }
 static XrXirStatus proof_interface_declaration(const XrXirModule *module, uint32_t index, XrXirCompileContext *budget, XirConstraintScratch *scratch) {

@@ -40,7 +40,7 @@ static void effect_context_free(EffectContextResolved *resolved) {
 #endif
 
 static uint32_t effect_context_family(XrXirOp op) {
-    if (op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_GO) return XR_XIR_EFFECT_BINDING_DIRECT;
+    if (op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_GO || op==XR_XIR_GENERATOR_NEW) return XR_XIR_EFFECT_BINDING_DIRECT;
     if (op==XR_XIR_FUNCTION_REF) return XR_XIR_EFFECT_BINDING_CAPTURE;
     if (op==XR_XIR_CALL_DEFAULT || op==XR_XIR_INVOKE_DEFAULT) return XR_XIR_EFFECT_BINDING_DEFAULT;
     if (op==XR_XIR_CLEANUP_REGISTER) return 5;

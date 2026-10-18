@@ -243,3 +243,15 @@ foreach(kind class class-cell)
             LABELS "unit;xir;root-effects;higher-order;compiler;ownership;retirement" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
     endforeach()
 endforeach()
+
+# One immutable declaration proof rechecks every real reference edge.
+add_test(NAME test_xir_reference_root_operation
+    COMMAND test_xir_root_conditional_helpers --reference-root-operation)
+set_tests_properties(test_xir_reference_root_operation PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 300 PROCESSORS 1)
+
+add_test(NAME test_xir_cell_materialized_replay COMMAND test_xir_root_conditional_helpers --cell-materialized-replay)
+set_tests_properties(test_xir_cell_materialized_replay PROPERTIES TIMEOUT 300 PROCESSORS 1)
+
+add_test(NAME test_xir_class_physical_replay COMMAND test_xir_root_conditional_helpers --class-physical-replay)
+set_tests_properties(test_xir_class_physical_replay PROPERTIES TIMEOUT 300 PROCESSORS 1)

@@ -188,7 +188,7 @@ static XrXirStatus provenance_effect_proofs(ProvenanceMatch *c) {
             return XR_XIR_BAD_STRUCTURE;
         const XrXirInstruction *actual=&caller->instructions[proof->instruction];
         XrXirOp source=c->source->functions[origin->function].instructions[proof->instruction].op;
-        uint32_t family=source==XR_XIR_CALL || source==XR_XIR_INVOKE || source==XR_XIR_GO ? XR_XIR_EFFECT_BINDING_DIRECT :
+        uint32_t family=source==XR_XIR_CALL || source==XR_XIR_INVOKE || source==XR_XIR_GO || source==XR_XIR_GENERATOR_NEW ? XR_XIR_EFFECT_BINDING_DIRECT :
             source==XR_XIR_FUNCTION_REF ? XR_XIR_EFFECT_BINDING_CAPTURE :
             source==XR_XIR_CALL_DEFAULT || source==XR_XIR_INVOKE_DEFAULT ? XR_XIR_EFFECT_BINDING_DEFAULT :
             source==XR_XIR_CALL_REQUIREMENT ? XR_XIR_EFFECT_BINDING_REQUIREMENT : 0;
@@ -462,7 +462,7 @@ static XrXirStatus provenance_functions_match(ProvenanceMatch *c) {
                 return XR_XIR_BAD_STRUCTURE;
             if (c->effects && xr_xir_op_references_function(a->op)) {
                 uint32_t family=a->op==XR_XIR_FUNCTION_REF ? XR_XIR_EFFECT_BINDING_CAPTURE :
-                    a->op==XR_XIR_CALL || a->op==XR_XIR_INVOKE || a->op==XR_XIR_GO ? XR_XIR_EFFECT_BINDING_DIRECT :
+                    a->op==XR_XIR_CALL || a->op==XR_XIR_INVOKE || a->op==XR_XIR_GO || a->op==XR_XIR_GENERATOR_NEW ? XR_XIR_EFFECT_BINDING_DIRECT :
                     a->op==XR_XIR_CALL_DEFAULT || a->op==XR_XIR_INVOKE_DEFAULT ? XR_XIR_EFFECT_BINDING_DEFAULT :
                     a->op==XR_XIR_CALL_REQUIREMENT ? XR_XIR_EFFECT_BINDING_REQUIREMENT : 0;
                 XrXirStatus status=provenance_effect_call(c,f,i,family);

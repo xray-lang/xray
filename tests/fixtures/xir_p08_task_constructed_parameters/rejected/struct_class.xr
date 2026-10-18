@@ -1,0 +1,4 @@
+class Box { value:i64=7 }
+struct Payload { value:Box }
+fn worker(value:Payload)->i64 { return value.value.value }
+export fn main()->i64 { const value=Payload{value:Box()}; return await go worker(value) }

@@ -547,10 +547,27 @@ static void emit_resume_go(CBuffer *buffer, const XrXirFunction *function,
         op->args[1] ? "state->arguments" : "NULL", op->args[1], destination);
 }
 
+static void emit_resume_generator(CBuffer *buffer,const XrXirFunction *function,
+    const XrXirInstruction *op,const XrXirFunctionLayout *layout,uint32_t index,uint32_t destination) {
+    EMIT_STATIC(buffer, es_ff1a07ada386851d, " { XrXirValue output = {0};\n");
+    for(uint32_t p=0;p<op->args[1] && emit_work(buffer,1);++p) {
+        uint32_t id=function->operands[op->args[0]+p];
+        EMIT_FORMAT(buffer, et_700bb40b61790c72, " state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+            p,(uint32_t)xr_xir_operand_type(function,id),layout->offsets[id]);
+    }
+    EMIT_FORMAT(buffer, et_b78d6d2a0010d081, " XrXirCallStatus status = xr_xir_instance_generator_at(view, %uu, %s, %uu, &output);\n if (status != XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};\n xr_xir_owned_slot_move(state->frame, %uu, &output); }\n return (XrXirAction) {XR_XIR_ACTION_CONTINUE, 0, NULL, 0, {0}, {0}, 0};\n",
+        index,op->args[1] ? "state->arguments" : "NULL",op->args[1],destination);
+}
+
 static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
     const XrXirInstruction *op, const XrXirFunctionLayout *layout, uint32_t index) {
     if (!emit_work(buffer, 1)) return;
-    XrXirType expected = xr_xir_task_element(buffer->types, xr_xir_operand_type(function, op->args[0]));
+    XrXirType receiver=xr_xir_operand_type(function,op->args[0]);
+    XrXirType expected=op->op==XR_XIR_TASK_AWAIT ? xr_xir_task_element(buffer->types,receiver) :
+        op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_UNIT : xr_xir_iterator_element(buffer->types,receiver);
+    if(op->op!=XR_XIR_TASK_AWAIT && op->op!=XR_XIR_ITERATOR_CLOSE)
+        append(buffer," { XrXirCallStatus status = xr_xir_instance_iterator_at(view, %uu);\n"
+            " if (status != XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0}; }\n",index);
     uint32_t normal = function->blocks[op->targets[0]].first;
     uint32_t error = function->blocks[op->targets[1]].first;
     bool discard = function->instructions[normal].op == XR_XIR_INVOKE_DISCARD;
@@ -569,10 +586,18 @@ static void emit_resume_await(CBuffer *buffer, const XrXirFunction *function,
         if (emit_has_cleanup(buffer, function)) EMIT_U_SHAPE(buffer, et_c1b53604735e1cf4, " state->panic_frontier = %uu;\n", " state->panic_frontier = ", "u;\n",
             function->blocks[function->blocks[block].panic].frontier);
     }
-    EMIT_FORMAT(buffer, et_68f2567966206496, " state->waiting = true; state->destination = %uu; state->expected = %uu;\n"
-        " return (XrXirAction) {XR_XIR_ACTION_AWAIT_TASK, 0, NULL, 0,\n"
+    if(op->op==XR_XIR_ITERATOR_NTH)
+        EMIT_FORMAT(buffer, et_700bb40b61790c72, " state->arguments[%u] = (XrXirValue) {%uu, 0, xr_xir_scalar_load(state->frame, %uu)};\n",
+            0u,(uint32_t)XR_XIR_I64,layout->offsets[op->args[1]]);
+    EMIT_FORMAT(buffer, et_ad0f85267e6cf4eb, " state->waiting = true; state->destination = %uu; state->expected = %uu;\n"
+        " return (XrXirAction) {%s, %uu, %s, %uu,\n"
         " {%uu, 0, xr_xir_scalar_load(state->frame, %uu)}, {0}, %s};\n",
-        destination, (uint32_t) expected, (uint32_t) xr_xir_operand_type(function, op->args[0]),
+        destination, (uint32_t) expected,
+        op->op==XR_XIR_TASK_AWAIT ? "XR_XIR_ACTION_AWAIT_TASK" : "XR_XIR_ACTION_AWAIT_ITERATOR",
+        op->op==XR_XIR_TASK_AWAIT ? 0u : op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_WAIT_ITERATOR_HAS_NEXT :
+        op->op==XR_XIR_ITERATOR_NTH ? XR_XIR_WAIT_ITERATOR_NTH : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_WAIT_ITERATOR_CLOSE : XR_XIR_WAIT_ITERATOR_NEXT,
+        op->op==XR_XIR_ITERATOR_NTH ? "state->arguments" : "NULL",op->op==XR_XIR_ITERATOR_NTH ? 1u : 0u,
+        (uint32_t) xr_xir_operand_type(function, op->args[0]),
         layout->offsets[op->args[0]], protected_wait ? "XR_XIR_ACTION_PROTECTED" : "0u");
 }
 
@@ -1009,10 +1034,12 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
     case XR_XIR_BRANCH:
         emit_branch(buffer, function, layout, index, true);
         break;
+    case XR_XIR_GENERATOR_NEW:
+        emit_resume_generator(buffer,function,op,layout,index,destination);return;
     case XR_XIR_GO:
         emit_resume_go(buffer, function, op, layout, destination);
         return;
-    case XR_XIR_TASK_AWAIT:
+    case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
         emit_resume_await(buffer, function, op, layout, index);
         return;
     case XR_XIR_CALL: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE: case XR_XIR_INVOKE_INDIRECT:
@@ -1035,6 +1062,12 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         " status == XR_XIR_VALUE_UNSUPPORTED \? XR_XIR_RUN_UNSUPPORTED : XR_XIR_RUN_BAD_ARTIFACT);\n"
             " xr_xir_owned_slot_move(state->frame, %uu, &message); }\n", destination);
         break;
+    case XR_XIR_GENERATOR_YIELD:
+        EMIT_LITERAL(buffer," return (XrXirAction){XR_XIR_ACTION_GENERATOR_YIELD,0,NULL,0,");
+        if (xr_xir_iterator_element(module->types,function->result)==XR_XIR_UNIT) EMIT_LITERAL(buffer,"{0}");
+        else emit_value(buffer,function,layout,op->args[0]);
+        EMIT_LITERAL(buffer,",{0},0};\n");
+        return;
     case XR_XIR_SUSPEND:
         EMIT_STATIC(buffer, es_8f684e666599ad6f, " return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0, 0, 0}, {0}, 0};\n");
         return;
@@ -1131,7 +1164,7 @@ static void emit_resume_step(CBuffer *buffer, const XrXirModule *module,
         return;
     case XR_XIR_THROW:
     case XR_XIR_RETURN: {
-        uint32_t type = op->op == XR_XIR_THROW ? (uint32_t) xr_xir_operand_type(function, op->args[0]) : (uint32_t) function->result;
+        uint32_t type = op->op == XR_XIR_THROW ? (uint32_t) xr_xir_operand_type(function, op->args[0]) : (uint32_t) xr_xir_function_completion(module,(uint32_t)(function-module->functions));
         if (op->op == XR_XIR_THROW && type == XR_XIR_ERROR) {
             EMIT_LITERAL(buffer, " { XrXirValue erased = "); emit_value(buffer, function, layout, op->args[0]);
             EMIT_STATIC(buffer, es_6425bce0e09f44b7, "; XrXirValue concrete = {0};\n"
@@ -1618,7 +1651,7 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
     EMIT_LITERAL(buffer,"#include \"xir/xxir_call_native_source_internal.h\"\n");
     append(buffer,"_Static_assert(XIR_CALL_NATIVE_SOURCE_VERSION==%uu,\"native source observation version\");\n",XIR_CALL_NATIVE_SOURCE_VERSION);
     EMIT_FORMAT(buffer, et_cf4e352edfef925a, "#include \"xir/xxir_program.h\"\n#include \"xir/xxir_float.h\"\n"
-           "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
+           "#include \"xir/xxir_instance_function_internal.h\"\n#include \"xir/xxir_instance_generator_internal.h\"\n#include \"xir/xxir_instance_value.h\"\n#include \"xir/xxir_struct.h\"\n#include \"xir/xxir_class.h\"\n#include \"xir/xxir_enum.h\"\n#include \"xir/xxir_error.h\"\n"
            "#include \"xir/xxir_panic.h\"\n#include \"xir/xxir_equal.h\"\n#include \"xir/xxir_nullable.h\"\n#include \"xir/xxir_tuple.h\"\n"
            "#include \"xir/xxir_atomic.h\"\n"
            "#include \"xir/xxir_channel.h\"\n"
@@ -1657,8 +1690,9 @@ static void emit_native_unit(CBuffer *buffer, const XrXirArtifact *artifact,
         uint32_t owner = 0, flags = 0;
         if (module->declarations) {
             owner = module->declarations->functions[f].cleanup_owner;
+            if (xr_xir_function_is_generator(module,f)) flags|=XR_XIR_ENTRY_GENERATOR;
             for (uint32_t child = f + 1; child < module->function_count && emit_work(buffer, 1); ++child)
-                if (module->declarations->functions[child].cleanup_owner == f + 1) flags = XR_XIR_ENTRY_EXIT;
+                if (module->declarations->functions[child].cleanup_owner == f + 1) flags |= XR_XIR_ENTRY_EXIT;
         }
         append(buffer, ", %uu, (XrXirType) %u, (uint32_t) sizeof(%s_state_%u), %s_f%u, %s_release_%u, NULL, %uu, %uu},\n",
                function->parameter_count, (uint32_t) function->result, symbol_prefix, f, symbol_prefix, f,

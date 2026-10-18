@@ -1,0 +1,5 @@
+class Bad { x:i64; init(x:i64){this.x=x} }
+class C implements Sendable { x:i64; init(x:i64){this.x=x} }
+enum Problem { Good{value:C}, Bad{value:Bad} }
+fn worker(value:C){throw Problem.Good{value:value}}
+export fn main()->i64{const task=go worker(C(1));return 7}

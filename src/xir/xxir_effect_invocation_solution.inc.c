@@ -29,7 +29,8 @@ static void effect_invocation_result_free(EffectFinalFunctions *result) {
 static bool effect_invocation_frontier(XrXirOp op) {
     return op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_CALL_DEFAULT ||
         op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_CALL_REQUIREMENT ||
-        op==XR_XIR_CLEANUP_REGISTER || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT;
+        op==XR_XIR_CLEANUP_REGISTER || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT ||
+        effect_invocation_iterator_operation(op);
 }
 
 /* Compare the exact union of local contributions and executing children.
@@ -211,7 +212,7 @@ static XrXirStatus effect_invocation_result_terms(const EffectInvocationTermSour
     bool shared=node->root!=function;
     if (shared) for (uint32_t p=0;p<body->parameter_count;++p) {
         if (!xir_compile_work(source->work,3)) return XR_XIR_BUDGET;
-        if (xr_xir_callable_signature(source->equations->material->domain.types,body->parameters[p]) ||
+        if (effect_physical_origin(source->equations->material->domain.types,body->parameters[p]) ||
             xr_xir_type_is_cell(source->equations->material->domain.types,body->parameters[p])) return XR_XIR_BAD_STRUCTURE;
     }
     if (shared) {

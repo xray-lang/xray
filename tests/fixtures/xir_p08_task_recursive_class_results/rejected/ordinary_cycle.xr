@@ -1,0 +1,3 @@
+class Cycle { next:Cycle?; init(next:Cycle?){this.next=next} }
+fn worker(value:Cycle)->Cycle{return value}
+export fn main()->i64{const task=go worker(Cycle(null));return 7}

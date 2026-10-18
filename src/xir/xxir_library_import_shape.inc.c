@@ -25,7 +25,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     /* Suspension has only local body state; common verification retains
      * control obligations and the copied function preserves its effects. */
     case XR_XIR_SUSPEND:
-    case XR_XIR_TASK_AWAIT:
+    case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
     case XR_XIR_INVOKE_RESULT:
     case XR_XIR_INVOKE_ERROR:
     case XR_XIR_ERROR_ERASE:

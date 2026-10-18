@@ -1,0 +1,3 @@
+interface Sendable {}
+class C implements Sendable { x:i64; init(x:i64){this.x=x} }
+export fn main()->i64{return 7}

@@ -15,7 +15,8 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "Task constructed reject FAIL %d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_effect_execution_owner.h"
 int main(int argc, char **argv) {
-    CHECK(argc == 2);
+    CHECK(argc == 2 || (argc == 3 && !strcmp(argv[2],"bad-value")));
+    XrXirStatus expected=argc==3?XR_XIR_BAD_VALUE:XR_XIR_BAD_TYPE;
     const XrXirCompileContext *context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
@@ -25,9 +26,10 @@ int main(int argc, char **argv) {
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     xr_compile_session_free(session);
-    CHECK(status == XR_XIR_BAD_TYPE && !result.checked && !result.snapshot);
+    if (status!=expected) fprintf(stderr,"Task reject status=%u expected=%u %s\n",status,expected,diagnostic.message);
+    CHECK(status == expected && !result.checked && !result.snapshot);
     CHECK(diagnostic.message[0]);
-    printf("TASK_CONSTRUCTED_REJECT %s BAD_TYPE noArtifact %s\n", argv[1], diagnostic.message);
+    printf("TASK_CONSTRUCTED_REJECT %s status=%u noArtifact %s\n", argv[1], status, diagnostic.message);
     xr_compile_resources_free(failure); xr_xir_compile_source_result_free(&result);
     effects_source_owners_free(); CHECK(!effects_compile_live && !effects_compile_bytes); return 0;
 }

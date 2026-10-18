@@ -143,6 +143,9 @@ static void cleanup_instance_case(bool late_gate, bool malformed) {
     CHECK(drain_proof(&compiler.context,&declarations,&types,parameters,late_gate,&proof) == XR_XIR_OK);
     spec.packet = xir_program_packet_borrow(proof);
     XrXirProgram *program = NULL;
+    slot.type=XR_XIR_I64;
+    CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program)==XR_XIR_BAD_TYPE && !program);
+    slot.type=(XrXirType)257;
     spec.abi_version = 18;
     CHECK(xr_xir_compile_program_seal(&compiler.context,&spec,&program) == XR_XIR_BAD_LAYOUT && !program);
     spec.abi_version = XR_XIR_PROGRAM_ABI_VERSION;
@@ -234,7 +237,12 @@ static void cleanup_compiler_faults(bool late) {
         XrXirProgram *program=NULL;
         XrXirStatus status=cleanup_compiler_pipeline(&context,&f,&program);
         size_t seen=instance_compile_attempts; instance_compile_fail_at=SIZE_MAX;
-        if(!pass) {CHECK(status==XR_XIR_OK && program);sites=seen;CHECK(sites && sites<10000);}
+        if(!pass) {
+            if(status!=XR_XIR_OK) fprintf(stderr,"Cleanup compiler status=%u late=%u allocated=%llu peak=%llu work=%llu\n",
+                (unsigned)status,(unsigned)late,(unsigned long long)cleanup_compiler_stats(&context).allocated_bytes,
+                (unsigned long long)cleanup_compiler_stats(&context).peak_bytes,(unsigned long long)cleanup_compiler_stats(&context).work);
+            CHECK(status==XR_XIR_OK && program);sites=seen;CHECK(sites && sites<10000);
+        }
         else CHECK(status==XR_XIR_OUT_OF_MEMORY && !program && instance_compile_injected && seen>=pass);
         CHECK(!f.witness.leases);
         xr_xir_compile_program_drop(program);

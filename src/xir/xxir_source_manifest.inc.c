@@ -197,7 +197,7 @@ static bool source_manifests_bind(SourceContext *ctx) {
             if (target.requirement) {
                 if (!source_manifest_requirement(ctx,target,record)) return false;
             } else {
-                if (record->no_suspend) ctx->identities[target.function].promises = XR_XIR_FUNCTION_NO_SUSPEND;
+                if (record->no_suspend) ctx->identities[target.function].promises |= XR_XIR_FUNCTION_NO_SUSPEND;
                 if (!source_manifest_parameters(ctx,target.function,record)) return false;
             }
         }

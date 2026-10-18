@@ -55,7 +55,7 @@ static void config_guards(void) {
     CHECK(xr_xir_call_config_init(&call,sizeof(call)-1)==XR_XIR_CALL_BAD_ABI && !memcmp(&call,&before,sizeof(call)));
     CHECK(xr_xir_call_config_init(&call,sizeof(call)+1)==XR_XIR_CALL_BAD_ABI && !memcmp(&call,&before,sizeof(call)));
     CHECK(xr_xir_call_config_init(&call,sizeof(call))==XR_XIR_CALL_READY);
-    CHECK(call.abi_version==29 && call.struct_size==sizeof(call) && !call.output.write && !call.output.abi_version);
+    CHECK(call.abi_version==30 && call.struct_size==sizeof(call) && !call.output.write && !call.output.abi_version);
     CHECK(call.byte_limit==16777216 && call.poll_limit==1000000 && call.depth_limit==4096);
     CHECK(!call.entries && !call.entry_count && !call.instance && !call.accounting && !call.output.reserved && !call.output.context);
     XrXirInstanceConfig instance,saved;memset(&instance,0x5a,sizeof(instance));saved=instance;
@@ -64,7 +64,7 @@ static void config_guards(void) {
     CHECK(xr_xir_instance_config_init(&instance,sizeof(instance)+1)==XR_XIR_CALL_BAD_ABI && !memcmp(&instance,&saved,sizeof(instance)));
     CHECK(xr_xir_instance_config_init(&instance,120)==XR_XIR_CALL_BAD_ABI && !memcmp(&instance,&saved,sizeof(instance)));
     CHECK(xr_xir_instance_config_init(&instance,sizeof(instance))==XR_XIR_CALL_READY);
-    CHECK(instance.abi_version==29 && instance.struct_size==sizeof(instance));
+    CHECK(instance.abi_version==30 && instance.struct_size==sizeof(instance));
     CHECK(instance.metadata_limit==16777216 && instance.value_limit==16777216 && instance.call_limit==16777216);
     CHECK(instance.poll_limit==1000000 && instance.depth_limit==4096 && !instance.trace && !instance.trace_context);
     CHECK(!instance.output.abi_version && !instance.output.reserved && !instance.output.write && !instance.output.context);
@@ -100,7 +100,7 @@ static void config_guards(void) {
     CHECK(xr_xir_instance_new((XrXirProgram *)(uintptr_t)1,(const XrXirInstanceConfig *)&prefix,&owned)==XR_XIR_CALL_BAD_ABI && !owned && !runtime_attempts);
     prefix.size=120;
     CHECK(xr_xir_instance_new((XrXirProgram *)(uintptr_t)1,(const XrXirInstanceConfig *)&prefix,&owned)==XR_XIR_CALL_BAD_ABI && !owned && !runtime_attempts);
-    static const uint32_t retired_prefix_versions[]={26,27,28};
+    static const uint32_t retired_prefix_versions[]={26,27,28,29};
     for (unsigned i=0;i<sizeof(retired_prefix_versions)/sizeof(retired_prefix_versions[0]);++i) {
         prefix.version=retired_prefix_versions[i];prefix.size=136;
         CHECK(xr_xir_call_new((const XrXirCallConfig *)&prefix,0,NULL,0,&activation)==XR_XIR_CALL_BAD_ABI && !activation && !runtime_attempts);

@@ -89,10 +89,10 @@ static XrXirStatus conditional_generation_counted_instruction(const EffectBodyRe
 static uint32_t conditional_generation_head_reads;
 static bool conditional_generation_head_refused;
 static XrXirStatus conditional_generation_counted_callee_head(const EffectBodyRequest *request,
-    uint32_t function,EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions) {
+    uint32_t function,EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions,EffectBodyFunctionSignature *signature) {
     ++conditional_generation_head_reads;
     if (conditional_generation_head_refused) return XR_XIR_BAD_STRUCTURE;
-    return effect_body_owned_head(request,function,output,dimensions);
+    return effect_body_owned_head(request,function,output,dimensions,signature);
 }
 
 static XrXirStatus conditional_generation_decoded_controls(const XrXirCompileContext *context,
@@ -210,7 +210,7 @@ static XrXirStatus conditional_generation_decoded_controls(const XrXirCompileCon
 
 /* These are literal owned-reader observations, never a permission cache. */
 static uint32_t conditional_generation_shape_reads,conditional_generation_full_heads,
-    conditional_generation_dimension_heads;
+    conditional_generation_dimension_heads,conditional_generation_signature_heads;
 static bool conditional_generation_shape_refused,conditional_generation_dimensions_refused;
 static XrXirStatus conditional_generation_counted_shape(const EffectBodyRequest *request,
     uint32_t function,uint32_t ordinal,EffectBodyInstructionShape *output) {
@@ -219,12 +219,13 @@ static XrXirStatus conditional_generation_counted_shape(const EffectBodyRequest 
     return effect_body_owned_shape(request,function,ordinal,output);
 }
 static XrXirStatus conditional_generation_counted_head(const EffectBodyRequest *request,
-    uint32_t function,EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions) {
+    uint32_t function,EffectBodyFunctionHead *output,EffectBodyFunctionDimensions *dimensions,EffectBodyFunctionSignature *signature) {
     if (dimensions) {
         ++conditional_generation_dimension_heads;
         if (conditional_generation_dimensions_refused) return XR_XIR_BAD_STRUCTURE;
-    } else ++conditional_generation_full_heads;
-    return effect_body_owned_head(request,function,output,dimensions);
+    } else if (signature) ++conditional_generation_signature_heads;
+    else ++conditional_generation_full_heads;
+    return effect_body_owned_head(request,function,output,dimensions,signature);
 }
 
 static void conditional_generation_alias_fixture(InvocationDeferredFixture *fixture,
@@ -265,7 +266,7 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
     uint32_t dimensions=owner->final.count;
     for (uint32_t n=0;n<owner->final.count;++n)
         if (owner->final.nodes[n].root!=owner->final.nodes[n].body) ++dimensions;
-    conditional_generation_full_heads=conditional_generation_dimension_heads=0;
+    conditional_generation_full_heads=conditional_generation_dimension_heads=conditional_generation_signature_heads=0;
     conditional_generation_dimensions_refused=false;
     XrXirStatus producer_status=effect_invocation_discovery_verify(owner,&read);
     fprintf(stderr,"generation real producer replay status%u full%u functions%u dimensions%u expected%u\n",

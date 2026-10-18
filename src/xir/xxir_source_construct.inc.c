@@ -8,6 +8,7 @@
  */
 /* Dense construction facts freeze before Built enters the common checker.
  * The producer's bookkeeping supplies bindings, not independent authority. */
+#include "xxir_source_generator_methods.inc.c"
 static bool source_construction_prepare(SourceContext *ctx) {
     if (ctx->construction)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source construction owner was already published");
@@ -52,7 +53,7 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     bool declarations_ready = source_query_modules(ctx) && collect_declarations(ctx);
     ctx->declarations_building = false;
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
-        source_implementations_bind(ctx) && build_bodies(ctx) && source_binding_readers(ctx) && source_history_graph_commit(ctx) &&
+        source_implementations_bind(ctx) && source_generator_methods(ctx) && build_bodies(ctx) && source_binding_readers(ctx) && source_history_graph_commit(ctx) &&
         source_instance_literals_finish(ctx) && source_materialization_finish(ctx) && source_class_carriers(ctx) && source_effect_prepare(ctx) && source_construction_prepare(ctx)) {
         source_release_retired_arrays(ctx);
         if (!source_quiescent_storage(ctx)) return;

@@ -89,7 +89,7 @@ static bool scalar(XrXirType type) {
 }
 
 static uint32_t operand_count_metadata(const XrXirTypes *types,const XrXirDeclarations *declarations,
-    XrXirType result,XrXirType cell,const XrXirInstruction *op) {
+    XrXirType result,XrXirType cell,bool generator,const XrXirInstruction *op) {
     if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
         return declarations ? xr_xir_slot_payload_operands(declarations->slots,
             declarations->slot_count,op) : 1u;
@@ -97,14 +97,16 @@ static uint32_t operand_count_metadata(const XrXirTypes *types,const XrXirDeclar
         op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE)
         return xr_xir_cell_payload_operands(types,op->op == XR_XIR_CELL_NEW ? op->type : cell,op->op);
     if (xr_xir_op_uses_operand_table(op->op)) return op->args[1];
-    return op->op == XR_XIR_RETURN ? (result != XR_XIR_UNIT) : op_rules[op->op].operands;
+    if (op->op==XR_XIR_GENERATOR_YIELD) return xr_xir_iterator_element(types,result)!=XR_XIR_UNIT;
+    return op->op == XR_XIR_RETURN ? (!generator && result != XR_XIR_UNIT) : op_rules[op->op].operands;
 }
 static uint32_t operand_count(const XrXirFunction *function,const XrXirInstruction *op,
     const XrXirModule *module) {
     XrXirType cell=XR_XIR_UNIT;
     if (op->op == XR_XIR_CELL_READ || op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE)
         cell=xr_xir_operand_type(function,op->args[0]);
-    return operand_count_metadata(module->types,module->declarations,function->result,cell,op);
+    return operand_count_metadata(module->types,module->declarations,function->result,cell,
+        xr_xir_function_is_generator(module,(uint32_t)(function-module->functions)),op);
 }
 
 #include "xxir_cell_provenance.inc.c"
@@ -112,6 +114,8 @@ static uint32_t operand_count(const XrXirFunction *function,const XrXirInstructi
 static XrXirStatus declaration_instruction(const XrXirFunction *function,
                                            const XrXirInstruction *op, const XrXirModule *module) {
     const XrXirDeclarations *d = module->declarations;
+    if (op->op==XR_XIR_GENERATOR_YIELD &&
+        !xr_xir_function_is_generator(module,(uint32_t)(function-module->functions))) return XR_XIR_BAD_TYPE;
     if (op->op == XR_XIR_CONST_STRING)
         return d && op->immediate >= 0 && (uint64_t) op->immediate < d->literal_count ?
             XR_XIR_OK : XR_XIR_BAD_STRUCTURE;
@@ -139,6 +143,8 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
     uint32_t caller_id=(uint32_t)(function-module->functions);
     if (op->immediate < 0 || (uint64_t) op->immediate >= module->function_count)
         return XR_XIR_BAD_STRUCTURE;
+    if (xr_xir_function_is_generator(module,(uint32_t)op->immediate)!=
+        (op->op==XR_XIR_GENERATOR_NEW)) return XR_XIR_BAD_TYPE;
     bool bound_helper=false,default_authorized=false;
     XrXirStatus helper_status=xr_xir_compile_default_helper(remaining, module, (uint32_t)op->immediate, &bound_helper);
     if (helper_status!=XR_XIR_OK) return helper_status;
@@ -321,7 +327,7 @@ static XrXirStatus instruction_shape(const XrXirFunction *function,
     } else if (op->op == XR_XIR_CLEANUP_LEAVE || op->op == XR_XIR_CLEANUP_ERROR) {
         if (op->immediate < 0 || (uint64_t)op->immediate > function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     } else if (op->op != XR_XIR_CONST_INT && op->op != XR_XIR_CLEANUP_REGISTER && op->op != XR_XIR_CALL &&
-               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_GO && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
+               op->op != XR_XIR_FUNCTION_REF && op->op != XR_XIR_GO && op->op != XR_XIR_GENERATOR_NEW && op->op != XR_XIR_INVOKE && op->op != XR_XIR_INVOKE_INDIRECT &&
                op->op != XR_XIR_INVOKE_RESULT && op->op != XR_XIR_INVOKE_ERROR && op->op != XR_XIR_INVOKE_DISCARD && op->op != XR_XIR_CALL_INDIRECT &&
                op->op != XR_XIR_CONST_STRING && op->op != XR_XIR_SLOT_LOAD &&
                op->op != XR_XIR_SLOT_INIT && op->op != XR_XIR_SLOT_STORE && op->op != XR_XIR_SLOT_GROUP_INIT &&
@@ -373,6 +379,9 @@ static XrXirStatus function_shape(const XrXirFunction *function, XrXirStage stag
         function->parameter_count > UINT32_MAX - function->instruction_count)
         return XR_XIR_BAD_STRUCTURE;
     uint32_t function_id = (uint32_t) (function - context->module->functions);
+    if (xr_xir_function_is_generator(context->module,function_id) &&
+        (!xr_xir_type_node(context->module->types,function->result) ||
+         xr_xir_type_node(context->module->types,function->result)->kind!=XR_XIR_TYPE_ITERATOR)) return XR_XIR_BAD_TYPE;
     if (xr_xir_type_is_cell(context->module->types, function->result)) return XR_XIR_BAD_TYPE;
     if (function->result != XR_XIR_UNIT && !xr_xir_type_in_context(context->module, function_id, function->result))
         return XR_XIR_BAD_TYPE;
@@ -881,6 +890,12 @@ static XrXirStatus class_uses(const Graph *graph, const XrXirFunction *function,
 #include "xxir_atomic_verify.inc.c"
 
 #include "xxir_channel_verify.inc.c"
+/* Binding admission checks the exact actual; cold transport adds no execution. */
+static bool callable_binding_operation(XrXirOp op) {
+    return op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_GENERATOR_NEW ||
+        op==XR_XIR_FUNCTION_REF || op==XR_XIR_CLEANUP_REGISTER;
+}
+
 static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                             VerifyContext *context) {
     for (uint32_t i = 0; i < function->instruction_count; ++i) {
@@ -962,12 +977,13 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             continue;
         }
         XrXirType expected = op->type;
-        if (op->op == XR_XIR_TASK_AWAIT) {
+        if (op->op == XR_XIR_TASK_AWAIT || op->op==XR_XIR_ITERATOR_HAS_NEXT || op->op==XR_XIR_ITERATOR_NEXT || op->op==XR_XIR_ITERATOR_NTH || op->op==XR_XIR_ITERATOR_CLOSE) {
             expected = xr_xir_operand_type(function, op->args[0]);
             const XrXirTypeNode *task = xr_xir_type_node(context->module->types, expected);
-            if (!task || task->kind != XR_XIR_TYPE_TASK) return XR_XIR_BAD_TYPE;
+            if (!task || task->kind != (uint32_t)(op->op==XR_XIR_TASK_AWAIT ? XR_XIR_TYPE_TASK : XR_XIR_TYPE_ITERATOR))
+                return XR_XIR_BAD_TYPE;
             XrXirType result = task->element;
-            if (context->module->stage == XR_XIR_LOWERED && !xr_xir_task_result_supported(context->module->types, result))
+            if (op->op==XR_XIR_TASK_AWAIT && context->module->stage == XR_XIR_LOWERED && !xr_xir_task_result_supported(context->module->types, result))
                 return XR_XIR_UNSUPPORTED;
         }
         if (op->op == XR_XIR_NULLABLE_SOME)
@@ -982,8 +998,10 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
             XrXirStatus status = xr_xir_compile_callable_weakening(&context->remaining, context->module->types, expected, op->type);
             if (status != XR_XIR_OK) return status;
         }
-        if (op->op == XR_XIR_RETURN)
-            expected = function->result;
+        if (op->op==XR_XIR_GENERATOR_YIELD)
+            expected=xr_xir_iterator_element(context->module->types,function->result);
+        else if (op->op == XR_XIR_RETURN)
+            expected = xr_xir_function_completion(context->module,context->location.function);
         else if (op->op == XR_XIR_BRANCH)
             expected = XR_XIR_BOOL;
         else if (op->op == XR_XIR_EQ_INT || op->op == XR_XIR_LT_INT ||
@@ -1069,8 +1087,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 if (operand >= (uint64_t) function->parameter_count + function->instruction_count) return XR_XIR_BAD_VALUE;
                 operand_type = xr_xir_operand_type(function, operand);
                 XrXirStatus match = xr_xir_compile_call_type_matches(&context->remaining, context->module, context->location.function, op, context->module->functions[op->immediate].parameters[a], operand_type);
-                if (match == XR_XIR_BAD_TYPE && (op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE ||
-                    op->op == XR_XIR_FUNCTION_REF || op->op == XR_XIR_CLEANUP_REGISTER))
+                if (match == XR_XIR_BAD_TYPE && callable_binding_operation(op->op))
                     match = xir_effect_call_binding_candidate(&context->remaining,context->module,
                         context->location.function,i,a);
                 if (match != XR_XIR_OK) return match;
@@ -1079,7 +1096,7 @@ static XrXirStatus graph_uses(const Graph *graph, const XrXirFunction *function,
                 operand_type = xr_xir_operand_type(function, op->args[1]);
                 if (!xr_xir_type_is_integer(operand_type)) return XR_XIR_BAD_TYPE;
             }
-            if (op->op == XR_XIR_STRING_INDEX_OF && a == 2) operand_type = XR_XIR_I64;
+            if ((op->op == XR_XIR_STRING_INDEX_OF && a == 2) || (op->op == XR_XIR_ITERATOR_NTH && a == 1)) operand_type = XR_XIR_I64;
             if (op->op == XR_XIR_ASSERT_CONDITION) operand_type = a ? XR_XIR_STRING : XR_XIR_BOOL;
             if ((op->op == XR_XIR_CELL_WRITE || op->op == XR_XIR_CELL_LOCAL_WRITE) && a == 1) operand_type = xr_xir_cell_element(context->module->types, expected);
             if (op->op == XR_XIR_CELL_STRING_APPEND && a == 1) {

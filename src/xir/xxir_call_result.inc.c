@@ -14,13 +14,13 @@ XR_FUNCDEF bool xr_xir_call_result_empty(const XrXirCallResult *result) {
         boundary_value(result->value, XR_XIR_UNIT) && xr_xir_panic_empty(&result->panic);
 }
 XR_FUNCDEF bool xr_xir_call_result_valid(const XrXirCallResult *result) {
-    if (!result || result->status < XR_XIR_CALL_READY || result->status > XR_XIR_CALL_UNSUPPORTED ||
+    if (!result || result->status < XR_XIR_CALL_READY || result->status > XR_XIR_CALL_YIELDED ||
         !xr_xir_value_valid(&result->value)) return false;
     if (xr_xir_call_panic_status(result->status))
         return !result->wake && boundary_value(result->value, XR_XIR_UNIT) &&
             xr_xir_call_panic_payload(result->status, &result->panic);
     if (!xr_xir_panic_empty(&result->panic)) return false;
-    if (result->status == XR_XIR_CALL_RETURNED) return !result->wake;
+    if (result->status == XR_XIR_CALL_RETURNED || result->status == XR_XIR_CALL_YIELDED) return !result->wake;
     if (result->status == XR_XIR_CALL_THROWN) {
         const XrXirTypeArena *arena = xr_xir_value_arena(&result->value);
         return !result->wake && (result->value.type == XR_XIR_ERROR ||

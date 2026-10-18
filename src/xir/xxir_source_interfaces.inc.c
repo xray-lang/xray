@@ -10,6 +10,8 @@ static bool source_interface_declare(SourceContext *ctx, AstNode *node) {
     if (!node || node->type != AST_INTERFACE_DECL)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "interface declaration required");
     InterfaceDeclNode *declaration = &node->as.interface_decl;
+    if (source_text_same(ctx,node,declaration->name,"Sendable"))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Sendable is a reserved intrinsic marker, not an ordinary interface");
     if (declaration->type_param_count < 0 || declaration->type_param_count > 65536 ||
         declaration->extends_count < 0 || declaration->method_count < 0 || declaration->property_count ||
         (declaration->type_param_count && !declaration->type_params) ||

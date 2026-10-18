@@ -78,6 +78,13 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     }
     SourceExpectedType receiver;
     if (!source_ground_type(ctx,member->as.member_access.object,depth+1,&receiver)) return false;
+    const XrXirTypeNode *iterator=receiver.present ? xr_xir_type_node(&ctx->types,receiver.type) : NULL;
+    if(call && iterator && iterator->kind==XR_XIR_TYPE_ITERATOR) {
+        const XrNativeMemberDeclaration *native=source_iterator_member(ctx,member,member->as.member_access.name);
+        if(!native) return false;
+        *output=(SourceExpectedType){true,native->operation==XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT ?
+            XR_XIR_BOOL : iterator->element,false,false};return true;
+    }
     if (receiver.present && xr_xir_type_is_array(&ctx->types, receiver.type)) {
         const XrNativeMemberDeclaration *native = source_array_member(ctx, member, member->as.member_access.name);
         if (!native || native->is_method != call || native->is_static) return true;

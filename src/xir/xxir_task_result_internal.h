@@ -23,9 +23,15 @@ static inline bool xr_xir_task_result_supported(const XrXirTypes *types, XrXirTy
     if (xr_xir_task_scalar_result_supported(type)) return true;
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     if (!node || node->parameter_span) return false;
+    if (xr_xir_type_is_class(types,type)) {
+        const XrXirNominalTable *table=types->nominals;
+        uint32_t flags=table->declarations?table->declarations[node->nominal.declaration].flags:
+            table->identities[node->nominal.declaration].flags;
+        return (flags & XR_XIR_NOMINAL_SENDABLE)!=0;
+    }
     return node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_NULLABLE ||
         node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_ATOMIC ||
-        node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_CHANNEL ||
-        (node->kind == XR_XIR_TYPE_NOMINAL && xr_xir_type_is_enum(types, type));
+        node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_CHANNEL || (node->kind == XR_XIR_TYPE_NOMINAL &&
+        (xr_xir_type_is_enum(types,type) || xr_xir_type_is_struct(types,type)));
 }
 #endif // XXIR_TASK_RESULT_INTERNAL_H

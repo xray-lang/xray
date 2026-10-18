@@ -28,6 +28,23 @@ static XrXirStatus effect_cell_body_head(const XrXirCompileContext *work,const v
     const EffectCellBodyAdapter *adapter=owner;
     if (!effect_cell_body_adapter_valid(work,adapter) || !output) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,11)) return XR_XIR_BUDGET;
+    /* The canonical owner can write the six consumed fields directly. Keep
+     * every complete-head storage check, including unused name and blocks,
+     * without constructing and copying an unused intermediate full head. */
+    if (effect_body_request_sequence_owned(&adapter->request)) {
+        XrXirStatus status=effect_body_request_sequence_binding(&adapter->request);
+        if (status!=XR_XIR_OK) return status;
+        const EffectBodyMaterial *material=adapter->request.owner;
+        if (f>=effect_body_count(material)) return XR_XIR_BAD_STRUCTURE;
+        const EffectBodyFunction *head=&material->functions[f];
+        if ((head->name_length && !head->name) || (head->parameter_count && !head->parameters) ||
+            (head->block_count && !head->blocks) || (head->operand_count && !head->operands) ||
+            (head->instruction_count && (!head->runs || !head->run_count)) ||
+            head->run_count>head->run_capacity) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(work,17+sizeof(*output))) return XR_XIR_BUDGET;
+        *output=(XrXirCellProofBodyHead){head->parameters,head->parameter_count,head->result,
+            head->instruction_count,head->operands,head->operand_count};return XR_XIR_OK;
+    }
     EffectBodyFunctionHead head={0};
     XrXirStatus status=effect_body_request_head(&adapter->request,f,&head);
     if (status!=XR_XIR_OK) return status;

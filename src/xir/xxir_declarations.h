@@ -60,6 +60,7 @@ typedef struct XrXirFunctionIdentity {
 } XrXirFunctionIdentity;
 
 #define XR_XIR_FUNCTION_NO_SUSPEND 1u
+#define XR_XIR_FUNCTION_GENERATOR 2u
 typedef struct XrXirSlot {
     uint32_t module;
     XrXirType type;

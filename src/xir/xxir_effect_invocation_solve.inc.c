@@ -13,7 +13,8 @@ static bool effect_invocation_dispatch_precision(XrXirOp op) {
     return op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_CALL_DEFAULT ||
         op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_CALL_REQUIREMENT || op==XR_XIR_CLEANUP_REGISTER ||
         op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT ||
-        op==XR_XIR_GO || op==XR_XIR_FUNCTION_REF || effect_invocation_cell_terminal(op);
+        op==XR_XIR_GO || op==XR_XIR_GENERATOR_NEW || op==XR_XIR_FUNCTION_REF ||
+        effect_invocation_iterator_operation(op) || effect_invocation_cell_terminal(op);
 }
 
 /* Raw and mixed callbacks retain their original selected-row reader and
@@ -200,6 +201,7 @@ static XrXirStatus effect_invocation_expand(EffectInvocationWorkspace *owner,
             (owner->primitives[body].facts.requires_root ? XR_XIR_CALLABLE_ROOT_REQUIRED : 0)|
             (owner->primitives[body].facts.unresolved ? XR_XIR_CALLABLE_ROOT_UNRESOLVED : 0),changed);
     }
+    if (status==XR_XIR_OK) status=effect_invocation_class_origins(&flow);
     if (status==XR_XIR_OK) status=effect_invocation_dispatch(&flow,changed);
     if (status==XR_XIR_OK && owner->read.producer_enabled)
         status=effect_invocation_producer_step(&flow,changed,false);
@@ -223,6 +225,28 @@ static XrXirStatus effect_invocation_expand(EffectInvocationWorkspace *owner,
     return status;
 }
 
+/* A scalar equation has no producer or Class relation to refine. New child
+ * ROOT results still join below on the same queue. Current immutable body
+ * shape and result type determine this need, never a stored permission bit. */
+static XrXirStatus effect_invocation_precision_needed(const EffectInvocationRead *owner,
+    uint32_t node,bool *needed) {
+    if (!owner || !needed || node>=owner->final->count || !owner->final->physical ||
+        owner->final->physical->resources!=owner->work->resources ||
+        owner->final->physical->count!=owner->body.domain.function_count ||
+        !owner->final->physical->functions) return XR_XIR_BAD_STRUCTURE;
+    uint32_t body=owner->final->nodes[node].body;
+    if (body>=owner->final->physical->count) return XR_XIR_BAD_STRUCTURE;
+    const EffectPhysicalFunction *physical=&owner->final->physical->functions[body];
+    if (!xir_compile_work(owner->work,3)) return XR_XIR_BUDGET;
+    *needed=physical->origins || physical->classes;
+    if (*needed) return XR_XIR_OK;
+    EffectBodyFunctionHead head={0};
+    XrXirStatus status=effect_body_request_head(&owner->body,body,&head);
+    if (status==XR_XIR_OK) *needed=effect_physical_origin(owner->body.domain.types,head.result) ||
+        xr_xir_type_is_class(owner->body.domain.types,head.result);
+    return status;
+}
+
 /* Actual producer and Class precision revisit the same equation queue.
  * Immutable declaration seeds are never expanded again; delayed Cell
  * terminals add only their genuine local instruction evidence. */
@@ -231,6 +255,7 @@ static XrXirStatus effect_invocation_precision(EffectInvocationWorkspace *owner,
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=node,.instruction=UINT32_MAX,.precision=true};
     XrXirStatus status=effect_invocation_discovery_origins(&flow);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
+    if (status==XR_XIR_OK) status=effect_invocation_class_origins(&flow);
     if (status==XR_XIR_OK) status=effect_invocation_dispatch(&flow,changed);
     if (status==XR_XIR_OK && owner->read.producer_enabled) status=effect_invocation_producer_step(&flow,changed,false);
     if (status==XR_XIR_OK) status=effect_invocation_class_step(&flow,changed);
@@ -240,7 +265,7 @@ static XrXirStatus effect_invocation_precision(EffectInvocationWorkspace *owner,
 /* The local ROOT declaration seed is expanded once. Finite producer deltas
  * revisit real SSA transfers on this same queue; repeated keys do not copy
  * binding paths. Latent links wake precision without executing a body. */
-static XrXirStatus effect_invocations_solve(EffectInvocationWorkspace *owner) {
+static XrXirStatus effect_invocations_discover(EffectInvocationWorkspace *owner) {
     if (!owner || !owner->graph || !owner->read.work || !owner->states ||
         !effect_body_material_shape(owner->final.material) || !owner->final.count)
         return XR_XIR_BAD_STRUCTURE;
@@ -256,10 +281,14 @@ static XrXirStatus effect_invocations_solve(EffectInvocationWorkspace *owner) {
         if (node>=owner->final.count || !owner->states[node].queued) return XR_XIR_BAD_STRUCTURE;
         owner->front=owner->front+1==owner->final.capacity ? 0 : owner->front+1;
         --owner->pending;owner->states[node].queued=false;
+        bool precision=owner->states[node].precision_pending;owner->states[node].precision_pending=false;
         bool changed=false;
         XrXirStatus status=XR_XIR_OK;
         if (!owner->states[node].expanded) status=effect_invocation_expand(owner,node,&changed);
-        else if (owner->read.producer_enabled || owner->read.class_enabled) status=effect_invocation_precision(owner,node,&changed);
+        else if (precision && (owner->read.producer_enabled || owner->read.class_enabled)) {
+            bool needed=false;status=effect_invocation_precision_needed(&owner->read,node,&needed);
+            if (status==XR_XIR_OK && needed) status=effect_invocation_precision(owner,node,&changed);
+        }
         for (uint32_t e=status==XR_XIR_OK ? owner->final.nodes[node].edge_head : UINT32_MAX;
              e!=UINT32_MAX;e=owner->final.edges[e].next) {
             if (e>=owner->final.edge_count) return XR_XIR_BAD_STRUCTURE;
@@ -274,15 +303,63 @@ static XrXirStatus effect_invocations_solve(EffectInvocationWorkspace *owner) {
         for (uint32_t e=owner->read.consumers[node];e!=UINT32_MAX;e=owner->final.edges[e].consumer_next) {
             if (e>=owner->final.edge_count || owner->final.edges[e].target!=node) return XR_XIR_BAD_STRUCTURE;
             if (!xir_compile_work(owner->read.work,1)) return XR_XIR_BUDGET;
-            status=effect_invocation_enqueue(owner,owner->final.edges[e].caller);
+            status=owner->states[node].precision_pending?
+                effect_invocation_enqueue_precision(owner,owner->final.edges[e].caller):
+                effect_invocation_enqueue(owner,owner->final.edges[e].caller);
             if (status!=XR_XIR_OK) return status;
         }
     }
     for (uint32_t n=0;n<owner->final.count;++n) {
         if (!xir_compile_work(owner->read.work,2)) return XR_XIR_BUDGET;
-        if (!owner->states[n].expanded || owner->states[n].queued) return XR_XIR_BAD_STRUCTURE;
+        if (!owner->states[n].expanded || owner->states[n].queued || owner->states[n].precision_pending)
+            return XR_XIR_BAD_STRUCTURE;
     }
     return XR_XIR_OK;
+}
+
+/* No input or producer changes after residual classification. This last use
+ * of the same queue propagates only the actual executing child equations. */
+static XrXirStatus effect_invocations_propagate(EffectInvocationWorkspace *owner) {
+    while (owner->pending) {
+        if (!xir_compile_work(owner->read.work,3)) return XR_XIR_BUDGET;
+        uint32_t node=owner->graph->queue[owner->front];
+        if (node>=owner->final.count || !owner->states[node].queued) return XR_XIR_BAD_STRUCTURE;
+        owner->front=owner->front+1==owner->final.capacity?0:owner->front+1;
+        --owner->pending;owner->states[node].queued=false;bool changed=false;
+        for (uint32_t e=owner->final.nodes[node].edge_head;e!=UINT32_MAX;e=owner->final.edges[e].next) {
+            if (!xir_compile_work(owner->read.work,2)) return XR_XIR_BUDGET;
+            if (e>=owner->final.edge_count || owner->final.edges[e].caller!=node) return XR_XIR_BAD_STRUCTURE;
+            const EffectInvocationEdge edge=owner->final.edges[e];
+            if (edge.latent) continue;
+            XrXirStatus status=effect_invocation_join(owner,node,edge.target,edge.instruction,&changed);
+            if (status!=XR_XIR_OK) return status;
+        }
+        if (!changed) continue;
+        for (uint32_t e=owner->read.consumers[node];e!=UINT32_MAX;e=owner->final.edges[e].consumer_next) {
+            if (!xir_compile_work(owner->read.work,1)) return XR_XIR_BUDGET;
+            if (e>=owner->final.edge_count || owner->final.edges[e].target!=node) return XR_XIR_BAD_STRUCTURE;
+            XrXirStatus status=effect_invocation_enqueue(owner,owner->final.edges[e].caller);
+            if (status!=XR_XIR_OK) return status;
+        }
+    }
+    return XR_XIR_OK;
+}
+
+/* Origins close over the completed immutable input graph before execution
+ * residuals propagate. The same owning Final moves into publication later. */
+static XrXirStatus effect_invocation_origins_finalize(EffectInvocationWorkspace *owner) {
+    if (!owner || owner->pending || !owner->states) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_role_proof_build(owner->read.work,owner->final.material,&owner->final.role_proof);
+    if (status==XR_XIR_OK) status=effect_capture_build(owner->read.work,&owner->final,owner);
+    return status;
+}
+
+static XrXirStatus effect_invocations_solve(EffectInvocationWorkspace *owner) {
+    XrXirStatus status=effect_invocations_discover(owner);
+    if (status==XR_XIR_OK) status=effect_invocation_origins_finalize(owner);
+    if (status==XR_XIR_OK) status=effect_invocation_iterator_residual(owner);
+    if (status==XR_XIR_OK) status=effect_invocations_propagate(owner);
+    return status;
 }
 
 /* Constructor proposals come from actual owned Input after allocation.
@@ -360,7 +437,7 @@ static XrXirStatus effect_invocation_root_spaces(EffectInvocationWorkspace *owne
         for (uint32_t p=0;p<function->parameter_count;++p) {
             if (!xir_compile_work(owner->read.work,3)) return XR_XIR_BUDGET;
             XrXirType type=function->parameters[p];
-            if (xr_xir_callable_signature(owner->read.body.domain.types,type) || xr_xir_type_is_cell(owner->read.body.domain.types,type) ||
+            if (effect_physical_origin(owner->read.body.domain.types,type) || xr_xir_type_is_cell(owner->read.body.domain.types,type) ||
                 xr_xir_type_is_class(owner->read.body.domain.types,type))
                 tracked=true;
         }
@@ -434,7 +511,7 @@ static XrXirStatus effect_invocation_local_type(EffectInvocationLocalRead *read,
             arguments=node->nominal.arguments;arity=node->nominal.argument_count;
         } else if (node->kind==XR_XIR_TYPE_ARRAY || node->kind==XR_XIR_TYPE_CELL ||
             node->kind==XR_XIR_TYPE_NULLABLE || node->kind==XR_XIR_TYPE_ATOMIC ||
-            node->kind==XR_XIR_TYPE_TASK || node->kind==XR_XIR_TYPE_CHANNEL) {
+            node->kind==XR_XIR_TYPE_TASK || (node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL)) {
             status=effect_invocation_local_type_edge(read,node->element,i,&span);
         } else if (node->kind==XR_XIR_TYPE_CALLABLE || node->kind==XR_XIR_TYPE_TUPLE) {
             if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;

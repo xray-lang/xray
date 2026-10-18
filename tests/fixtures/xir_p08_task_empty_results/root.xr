@@ -1,0 +1,27 @@
+enum Choice { Empty, Selected { values:Array<i64> } }
+fn leaf()->() { Coro.yield(); return }
+fn worker_array()->Array<i64> { Coro.yield(); return [] }
+export fn await_array()->Array<i64> { const task=go worker_array(); const first=await task; return await task }
+export fn handle_array()->Task<Array<i64>> { return go worker_array() }
+fn worker_nested()->Array<Array<string>> { Coro.yield(); const inner:Array<string> = []; return [inner] }
+export fn await_nested()->Array<Array<string>> { const task=go worker_nested(); const first=await task; return await task }
+export fn handle_nested()->Task<Array<Array<string>>> { return go worker_nested() }
+fn worker_nullable()->i64? { Coro.yield(); return null }
+export fn await_nullable()->i64? { const task=go worker_nullable(); const first=await task; return await task }
+export fn handle_nullable()->Task<i64?> { return go worker_nullable() }
+fn worker_nullable_array()->Array<i64>? { Coro.yield(); const values:Array<i64> = []; return values }
+export fn await_nullable_array()->Array<i64>? { const task=go worker_nullable_array(); const first=await task; return await task }
+export fn handle_nullable_array()->Task<Array<i64>?> { return go worker_nullable_array() }
+fn worker_tuple()->(Array<i64>,i64?) { Coro.yield(); const pair:(Array<i64>,i64?) = ([],null); return pair }
+export fn await_tuple()->(Array<i64>,i64?) { const task=go worker_tuple(); const first=await task; return await task }
+export fn handle_tuple()->Task<(Array<i64>,i64?)> { return go worker_tuple() }
+fn worker_enum()->Choice { Coro.yield(); return Choice.Empty }
+export fn await_enum()->Choice { const task=go worker_enum(); const first=await task; return await task }
+export fn handle_enum()->Task<Choice> { return go worker_enum() }
+fn worker_atomic()->Atomic<i64> { Coro.yield(); return Atomic<i64>(0) }
+export fn await_atomic()->Atomic<i64> { const task=go worker_atomic(); const first=await task; return await task }
+export fn handle_atomic()->Task<Atomic<i64>> { return go worker_atomic() }
+fn worker_task()->Task<null> { Coro.yield(); return go leaf() }
+export fn await_task()->Task<null> { const task=go worker_task(); const first=await task; return await task }
+export fn handle_task()->Task<Task<null>> { return go worker_task() }
+export fn main()->i64 { return 7 }

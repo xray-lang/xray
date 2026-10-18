@@ -377,16 +377,15 @@ AstNode *xr_parse_for_statement(Parser *parser) {
 AstNode *xr_parse_for_in_statement(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     int line = parser->previous.line;
+    XrNameSpan keyword = {parser->current.line, parser->current.column};
     do {
         xr_parser_advance(parser);
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
-
     do {
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after for");
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
-
     /* Tuple destructuring head: `for ((x, y) in coll) { body }`.
      *
      * We consume the tuple pattern eagerly, synthesise a hidden iteration
@@ -540,7 +539,8 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
                     : xr_ast_for_in_stmt(parser->compiler_session, NULL, first_name, item_type,
                                          collection, body, line);
     if (!xr_parser_healthy(parser)) return NULL;
-    if (stmt) stmt->as.for_in_stmt.is_tuple_head = tuple_pattern != NULL;
+    if (stmt) { stmt->as.for_in_stmt.keyword_span = keyword;
+        stmt->as.for_in_stmt.is_tuple_head = tuple_pattern != NULL; }
     inherit_block_end(stmt, body);
     return stmt;
 }

@@ -121,15 +121,21 @@ static XrXirStatus effect_invocation_class_body_match(EffectInvocationFlow *flow
     if (!xr_xir_type_is_class(flow->body.domain.types,flow->function->result))
         return rows->return_mask || rows->return_rank?XR_XIR_BAD_STRUCTURE:XR_XIR_OK;
     EffectInvocationClassSources sources={.complete=true};uint32_t returns=0;
+    EffectBodyRecordCursor cursor;
+    XrXirStatus sequence=effect_body_request_sequence_begin(&flow->body,&cursor);
+    if (sequence!=XR_XIR_OK) return sequence;
     for (uint32_t i=0;i<flow->function->instruction_count;++i) {
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
         XrXirInstruction body_op_1;const XrXirInstruction *op=NULL;
-        XrXirStatus body_read_1=effect_invocation_flow_instruction(flow,i,&body_op_1,&op);
+        XrXirStatus body_read_1=effect_body_request_sequence_operation(&flow->body,
+            flow->read->final->nodes[flow->node].body,i,&cursor,&body_op_1,&op);
         if (body_read_1!=XR_XIR_OK) return body_read_1;
         if (op->op!=XR_XIR_RETURN) continue;
         ++returns;XrXirStatus status=effect_invocation_class_source(flow,op->args[0],&sources);
         if (status!=XR_XIR_OK) return status;
     }
+    sequence=effect_body_request_sequence_finish(&flow->body,flow->read->final->nodes[flow->node].body,&cursor);
+    if (sequence!=XR_XIR_OK) return sequence;
     if (!returns) sources.mask=EFFECT_CLASS_KNOWN|EFFECT_CLASS_UNKNOWN;
     EffectInvocationClassFact returned={.mask=rows->return_mask,.rank=rows->return_rank};
     return effect_invocation_class_fact_match(owner,&returned,&sources,limit);
@@ -145,13 +151,13 @@ static XrXirStatus effect_invocation_class_root_match(const EffectInvocationRead
     if (selected>=owner->final->count || owner->final->nodes[selected].body!=function ||
         owner->final->nodes[selected].root!=owner->final->root_spaces[function]) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationNode *node=&owner->final->nodes[selected];
-    EffectBodyFunctionHead body_head={0},root_head={0};
+    EffectBodyFunctionSignature body_head={0};EffectBodyFunctionDimensions root_head={0};
     if (!xir_compile_work(owner->work,sizeof(*request))) return XR_XIR_BUDGET;
     EffectInvocationFlow flow={.read=owner,.node=selected,.body=*request};
-    XrXirStatus status=effect_body_request_head(request,function,&body_head);
-    if (status==XR_XIR_OK) status=effect_body_request_head(request,node->root,&root_head);
+    XrXirStatus status=effect_body_request_signature(request,function,&body_head);
+    if (status==XR_XIR_OK) status=effect_body_request_dimensions(request,node->root,&root_head);
     if (status!=XR_XIR_OK) return status;
-    const EffectBodyFunctionHead *body=&body_head;
+    const EffectBodyFunctionSignature *body=&body_head;
     status=effect_invocation_basis_parameters(owner,root_head.parameter_count,&flow.basis);
     if (status!=XR_XIR_OK) return status;
     if (node->parameter_count!=body->parameter_count || (body->parameter_count && !body->parameters) ||
@@ -181,14 +187,15 @@ static XrXirStatus effect_invocation_class_discovery_verify(const EffectInvocati
     bool enabled=false;
     for (uint32_t f=0;f<request->domain.function_count;++f) {
         if (!xir_compile_work(owner->work,2)) return XR_XIR_BUDGET;
-        EffectBodyFunctionHead head={0};
-        XrXirStatus status=effect_body_request_head(request,f,&head);
+        EffectBodyFunctionSignature head={0};
+        XrXirStatus status=effect_body_request_signature(request,f,&head);
         if (status!=XR_XIR_OK) return status;
         enabled|=owner->final->physical->functions[f].classes!=0 ||
             xr_xir_type_is_class(request->domain.types,head.result);
     }
     if (enabled!=owner->class_enabled) return XR_XIR_BAD_STRUCTURE;
     if (!enabled) return XR_XIR_OK;
+
     uint64_t limit=0;XrXirStatus status=effect_invocation_class_cells_match(owner,request);
     if (status==XR_XIR_OK)
         status=effect_invocation_class_rank_limit_count(owner,request->domain.function_count,&limit);

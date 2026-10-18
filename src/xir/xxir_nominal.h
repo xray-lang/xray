@@ -28,6 +28,11 @@ typedef struct XrXirNominalField {
  * Calls retain their own constructor permissions; this flag grants none. */
 #define XR_XIR_NOMINAL_MODULE_LITERAL 2u
 
+/* An explicit class promise: every field is immutable after construction and
+ * proves Sendable in its declaration environment. Ordinary classes infer none. */
+#define XR_XIR_NOMINAL_SENDABLE 2u
+/* Equal flag bits are interpreted only within the declared nominal kind. */
+
 typedef enum XrXirNominalKind { XR_XIR_NOMINAL_STRUCT, XR_XIR_NOMINAL_ENUM, XR_XIR_NOMINAL_CLASS } XrXirNominalKind;
 typedef struct XrXirNominalVariant {
     XrXirLiteral name;

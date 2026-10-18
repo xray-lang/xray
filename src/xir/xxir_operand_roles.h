@@ -75,7 +75,15 @@ static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal)
 
 static inline bool xr_xir_op_references_function(XrXirOp op) {
     return op == XR_XIR_CALL || op == XR_XIR_INVOKE || op == XR_XIR_FUNCTION_REF ||
-        op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_GO;
+        op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_GO || op == XR_XIR_GENERATOR_NEW;
+}
+/* The declaration role is retained even when specialization removes every yield. */
+static inline bool xr_xir_function_is_generator(const XrXirModule *module,uint32_t function) {
+    return module && module->declarations && function<module->function_count &&
+        (module->declarations->functions[function].promises & XR_XIR_FUNCTION_GENERATOR)!=0;
+}
+static inline XrXirType xr_xir_function_completion(const XrXirModule *module,uint32_t function) {
+    return xr_xir_function_is_generator(module,function) ? XR_XIR_UNIT : module->functions[function].result;
 }
 /* Prior module/declaration verification is required; roles do not grant access. */
 static inline bool xr_xir_function_has_go_role(const XrXirModule *module, uint32_t function) {

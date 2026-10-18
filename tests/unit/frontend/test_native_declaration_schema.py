@@ -250,6 +250,34 @@ class NativeDeclarations(unittest.TestCase):
             subprocess.run([sys.executable, str(Path(embed.__file__)), str(root), '--check', str(output)],
                            check=True, capture_output=True)
 
+    def test_iterator_identity_has_exact_pull_recipes(self):
+        rows = schema.render_iterator_identity(ROOT)
+        self.assertEqual(rows, schema.render_iterator_identity(ROOT))
+        projected = '\n'.join(rows)
+        self.assertIn('8, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", "T", 1', projected)
+        self.assertEqual(projected.count('XR_NATIVE_OPERATION_NONE'), 2)
+        self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT'), 1)
+        self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_NEXT'), 1)
+        self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_NTH'), 1)
+        self.assertNotIn('XR_NATIVE_OPERATION_ARRAY_', projected)
+        with tempfile.TemporaryDirectory(prefix='xray-iterator-identity-') as directory:
+            root = Path(directory)
+            for relative in ['stdlib/types/iterator.xr', 'stdlib/prelude/builtin_symbols.def']:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((ROOT / relative).read_bytes())
+            source = root / 'stdlib/types/iterator.xr'
+            original = source.read_text(encoding='utf-8')
+            self.assertEqual(schema.render_iterator_identity(root), rows)
+            for old, new in [('next() -> T', 'next() -> i64'),
+                             ('Iterator<T>', 'Iterator<U>'),
+                             ('// @lowered\n    nth(', '// removed\n    nth('),
+                             ('// @lowered\n    hasNext()', '// removed\n    hasNext()'),
+                             ('// Built-in', '// @native-type id=6\n// Built-in')]:
+                source.write_text(original.replace(old, new, 1), encoding='utf-8')
+                with self.assertRaises(ValueError):
+                    schema.render_iterator_identity(root)
+
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
