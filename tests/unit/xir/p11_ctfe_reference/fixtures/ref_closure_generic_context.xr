@@ -1,0 +1,3 @@
+fn apply<T>(f:fn(ref T)->i64,x:ref T)->i64{return f(ref x)}
+fn answer()->i64{var x=40;return apply<i64>(fn(value)->i64{value+=2;return value},ref x)}
+export fn run()->i64{return comptime answer()}

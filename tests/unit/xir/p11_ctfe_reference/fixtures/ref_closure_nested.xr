@@ -1,0 +1,2 @@
+fn answer()->i64{fn inc(value:ref i64)->i64{value+=2;return value};var x=40;return inc(ref x)}
+export fn run()->i64{return comptime answer()}

@@ -46,7 +46,7 @@ static XrXirStatus prelude_source_operation(const XrXirCompileContext *context,v
     if (created!=XR_COMPILER_SESSION_OK) {
         status=created==XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY; goto done;
     }
-    XrXirSourceRequest request={session,fixture->entry,&fixture->authority,context,NULL,NULL,fixture->kind,catalog};
+    XrXirSourceRequest request={session,fixture->entry,&fixture->authority,context,NULL,NULL,fixture->kind,catalog,NULL};
     status=xr_xir_compile_source_check(&request,&result,NULL,NULL);
     if (status==XR_XIR_OK) status=prelude_roundtrip(context,result.checked,&read);
     else CHECK(!result.checked && !result.snapshot);
@@ -116,7 +116,7 @@ static void prelude_catalog_source_no_fallback(const XrXirCompileContext *contex
         XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
         XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/original_array_error_invoke_root.xr",&authority,
-            context,NULL,NULL,XR_XIR_PROGRAM,catalog};XrXirSourceResult result={0};
+            context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};XrXirSourceResult result={0};
         CHECK(xr_xir_compile_source_check(&request,&result,NULL,NULL)==XR_XIR_BAD_STRUCTURE && !result.checked && !result.snapshot);
         xr_compile_session_free(session);XrCompileResourceStats after=library_compile_stats(context);
         CHECK(after.allocated_bytes>=before.allocated_bytes && after.work>before.work && after.live_bytes==before.live_bytes);

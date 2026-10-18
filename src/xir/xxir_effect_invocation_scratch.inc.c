@@ -7,13 +7,12 @@
  * xxir_effect_invocation_scratch.inc.c - Request-owned replay storage
  *
  * KEY CONCEPT:
- *   Storage reuse does not retain a proof. Simultaneously live replays have
- *   separate blocks, charged to the same compiler resource owner.
+ *   Released storage retains no proof. Nested readers own separate blocks on
+ *   the original compiler ledger; immutable Final owns no scratch or pool.
  */
 static XrXirStatus effect_invocation_scratch_claim(const EffectInvocationRead *owner,
     size_t bytes,EffectInvocationScratch **output) {
-    if (!owner || !xir_compile_context_valid(owner->work) ||
-        owner->replay_scratch!=&owner->scratch_head || !output || *output)
+    if (!owner || !xir_compile_context_valid(owner->work) || !owner->replay_scratch || !output || *output)
         return XR_XIR_BAD_STRUCTURE;
     if (!bytes) return XR_XIR_OK;
     if (bytes>SIZE_MAX-sizeof(EffectInvocationScratch)) return XR_XIR_BUDGET;
@@ -39,24 +38,23 @@ static XrXirStatus effect_invocation_scratch_claim(const EffectInvocationRead *o
     if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
     memory->claimed=true;*output=memory;return XR_XIR_OK;
 }
-
 static void effect_invocation_scratch_release(const EffectInvocationRead *owner,
     EffectInvocationScratch *memory) {
-    if (!owner || owner->replay_scratch!=&owner->scratch_head || !memory) return;
+    if (!owner || !owner->replay_scratch || !memory) return;
     for (EffectInvocationScratch **slot=owner->replay_scratch;*slot;slot=&(*slot)->next) {
         if (*slot!=memory) continue;
-        /* Large one-off bodies do not extend their peak into later replays. */
+        /* Claim prepaid this traversal; cleanup cannot fail for more work.
+         * One-off large bodies do not extend their peak into later replays. */
         if (memory->capacity>4096) {
             *slot=memory->next;xr_compile_resources_free(memory);
         } else memory->claimed=false;
         return;
     }
 }
-
 static void effect_invocation_scratch_free(const EffectInvocationRead *owner) {
-    if (!owner || owner->replay_scratch!=&owner->scratch_head) return;
+    if (!owner || !owner->replay_scratch) return;
     while (*owner->replay_scratch) {
-        EffectInvocationScratch *next=(*owner->replay_scratch)->next;
-        xr_compile_resources_free(*owner->replay_scratch);*owner->replay_scratch=next;
+        EffectInvocationScratch *memory=*owner->replay_scratch;
+        *owner->replay_scratch=memory->next;xr_compile_resources_free(memory);
     }
 }

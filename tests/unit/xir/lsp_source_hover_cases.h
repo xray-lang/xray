@@ -14,7 +14,7 @@ static XrXirStatus lsp_hover_typed_once(const char *root,XrCompileResourceLimits
     XrXirStatus status=made==XR_COMPILER_SESSION_OK?XR_XIR_OK:made==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     char uri[XR_TEST_PATH_MAX];lsp_uri(uri,sizeof(uri),root,"typed.xr");
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     /* Nine actual nested constructors cross the renderer's initial eight-frame
      * allocation. Long complete signature crosses both text growth boundaries. */
 #define HOVER_SOURCE_TYPE "Array<Array<Array<Array<Array<Array<Array<Array<Array<string>>>>>>>>>"
@@ -69,7 +69,7 @@ static void lsp_hover_cases(const char *root) {
     XlspSourceDocument docs[2]={{uri,source_root_text,strlen(uri),sizeof(source_root_text)-1,1},
         {lib,source_library_text,strlen(lib),sizeof(source_library_text)-1,7}};
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XlspSourceSnapshot *snapshot=NULL;CHECK(xlsp_source_snapshot_build(&request,docs,2,0,&snapshot,NULL,NULL)==XR_XIR_OK);
     xr_compile_session_free(session);session=NULL;xr_compile_resources_release(context.resources);
     /* Snapshot pins the same resource ledger after caller/Session demise. */

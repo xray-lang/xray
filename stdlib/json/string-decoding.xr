@@ -1,0 +1,63 @@
+// Decode exactly one JSON string token. Whitespace belongs to the outer parser.
+fn jsonHexDigit(code:i64)->i64 {
+    if(code>=48 && code<=57){return code-48}
+    if(code>=65 && code<=70){return code-55}
+    if(code>=97 && code<=102){return code-87}
+    return -1
+}
+fn jsonHexWord(bytes:Array<u8>,start:i64,end:i64)->i64 {
+    if(start+4>end){return -1}
+    var word:i64=0
+    var i:i64=0
+    while(i<4) {
+        const digit=jsonHexDigit(bytes[start+i] as i64)
+        if(digit<0){return -1}
+        word=(word<<4)|digit
+        i=i+1
+    }
+    return word
+}
+// The low byte counts input bytes; the remaining bits hold one scalar.
+fn jsonEscapeScalar(bytes:Array<u8>,start:i64,end:i64)->i64 {
+    if(start+1>=end){return -1}
+    const escape=bytes[start+1] as i64
+    if(escape==34 || escape==92 || escape==47){return (escape<<8)|2}
+    if(escape==98){return (8<<8)|2}
+    if(escape==102){return (12<<8)|2}
+    if(escape==110){return (10<<8)|2}
+    if(escape==114){return (13<<8)|2}
+    if(escape==116){return (9<<8)|2}
+    if(escape!=117){return -1}
+    const scalar=jsonHexWord(bytes,start+2,end)
+    if(scalar<0 || (scalar>=56320 && scalar<=57343)){return -1}
+    if(scalar<55296 || scalar>56319){return (scalar<<8)|6}
+    if(start+12>end || bytes[start+6]!=92 || bytes[start+7]!=117){return -1}
+    const low=jsonHexWord(bytes,start+8,end)
+    if(low<56320 || low>57343){return -1}
+    return ((65536+((scalar-55296)<<10)+(low-56320))<<8)|12
+}
+// Only the validated String copy supplies raw scalars at known byte boundaries.
+fn jsonRawScalar(bytes:Array<u8>,start:i64)->i64 {
+    const first=bytes[start] as i64
+    if(first<128){return (first<<8)|1}
+    if(first<224){return ((((first&31)<<6)|((bytes[start+1] as i64)&63))<<8)|2}
+    if(first<240){return ((((first&15)<<12)|(((bytes[start+1] as i64)&63)<<6)|((bytes[start+2] as i64)&63))<<8)|3}
+    return ((((first&7)<<18)|(((bytes[start+1] as i64)&63)<<12)|
+        (((bytes[start+2] as i64)&63)<<6)|((bytes[start+3] as i64)&63))<<8)|4
+}
+export fn jsonUnquote(text:string)->string? {
+    const bytes=text.copyBytes()
+    const end=len(bytes)-1
+    if(end<1 || bytes[0]!=34 || bytes[end]!=34){return null}
+    var output=""
+    var i:i64=1
+    while(i<end) {
+        const first=bytes[i] as i64
+        if(first<32 || first==34){return null}
+        const scalar=(first==92)?jsonEscapeScalar(bytes,i,end):jsonRawScalar(bytes,i)
+        if(scalar<0){return null}
+        output=output+string(rune(scalar>>8))
+        i=i+(scalar&255)
+    }
+    return output
+}

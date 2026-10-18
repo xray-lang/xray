@@ -7,7 +7,7 @@ static void implementation_query_allocations(void) {
     for(size_t site=allocation_first();allocation_more(site,sites);site=allocation_next(site)) {
         XrXirType arguments[] = {XR_XIR_I64, XR_XIR_BOOL};
         XrXirImplementationBinding bindings[] = {{{0,arguments,1},0,2},{{0,arguments+1,1},0,3}};
-        XrXirImplementation record = {0,{1,NULL,0},bindings,2};
+        XrXirImplementation record = {0,{1,NULL,0},bindings,2, 0};
         XrXirImplementationTable table = {&record,1};
         XrXirSourceView view = {0}; view.implementations = &table;
         XrCompileResourceLimits limits = allocation_limits();

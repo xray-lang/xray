@@ -116,7 +116,7 @@ static XrXirArtifact *source_fixture_lower(const XrXirCompileContext *context,co
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK && session);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     source_fixture_compile_phase="Source check";
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);

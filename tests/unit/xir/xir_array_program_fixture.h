@@ -119,11 +119,11 @@ static XrXirArtifact *array_program_fixture(const XrXirCompileContext *context, 
         {"local",5,NULL,0,XR_XIR_STRING,&blocks[7],1,local,8,local_operands,3},
         {"captured",8,NULL,0,XR_XIR_STRING,&blocks[5],1,captured,9,captured_operands,3}};
     uint32_t dependency = 1;
-    XrXirSourceModule modules[] = {{"root",4,&dependency,1,0, 0},{"library",7,NULL,0,1, 0}};
-    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}};
-    XrXirSlot slots[] = {{1,a,0,0,0},{0,cell,1,0,0},{0,cell,1,0,0}};
+    XrXirSourceModule modules[] = {{.name="root",.name_length=4,.dependencies=&dependency,.dependency_count=1},{.name="library",.name_length=7,.initializer=1}};
+    XrXirFunctionIdentity identities[] = {{.method_kind=XR_XIR_NON_MEMBER},{.module=1,.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER},{.module=1,.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER}};
+    XrXirSlot slots[] = {{.module=1,.type=a},{.type=cell,.mutable=1},{.type=cell,.mutable=1}};
     XrXirLiteral literals[] = {{"red",3},{"blue",4},{"green",5}};
-    XrXirDeclarations declarations = {modules,2,identities,slots,3,literals,3,0,2, NULL};
+    XrXirDeclarations declarations = {modules,2,identities,slots,3,literals,3,0,2, NULL, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,8,&declarations,NULL,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL, *lowered = NULL;
     XrXirDiagnostic diagnostic = {0};

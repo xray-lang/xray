@@ -120,7 +120,7 @@ static FillCompile fill_build(size_t failure, XrCompileResourceLimits limits, un
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_FILL_FIXTURES};
     XrXirSourceRequest request = {session, XR_FILL_FIXTURES "/" XR_FILL_COMPONENT "/root.xr", &authority,
-        &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     fill_profile_stage(&run, "session-new");
     run.stage = 1; run.status = xr_xir_compile_source_check(&request, &result, &diagnostic, &path);
     if (run.status != XR_XIR_OK) {

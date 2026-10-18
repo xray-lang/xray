@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context.resources,&session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_STDLIB,argv[3],argv[1]};
-    XrXirSourceRequest request = {session,argv[2],&authority,&context,argv[1],NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request = {session,argv[2],&authority,&context,argv[1],NULL,XR_XIR_LIBRARY,NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if (status != XR_XIR_OK) fprintf(stderr,"Checked library status=%u %s\n",status,diagnostic.message);

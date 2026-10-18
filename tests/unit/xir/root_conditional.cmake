@@ -43,6 +43,34 @@ foreach(_root_conditional_gate helpers source)
 endforeach()
 
 # These literals remain reachable before the complete helper cost gate.
+add_test(NAME test_xir_root_conditional_existing_node
+    COMMAND test_xir_root_conditional_helpers --existing-node-literals)
+set_tests_properties(test_xir_root_conditional_existing_node PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_root_conditional_origin_operands
+    COMMAND test_xir_root_conditional_helpers --origin-operand-literals)
+set_tests_properties(test_xir_root_conditional_origin_operands PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_root_conditional_cell_type_projection
+    COMMAND test_xir_root_conditional_helpers --cell-type-projection)
+set_tests_properties(test_xir_root_conditional_cell_type_projection PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_root_conditional_write_index
+    COMMAND test_xir_root_conditional_helpers --invocation-write-index)
+set_tests_properties(test_xir_root_conditional_write_index PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_root_conditional_precision_selection
+    COMMAND test_xir_root_conditional_helpers --invocation-precision-selection)
+set_tests_properties(test_xir_root_conditional_precision_selection PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_root_conditional_type_projection
+    COMMAND test_xir_root_conditional_helpers --invocation-type-projection)
+set_tests_properties(test_xir_root_conditional_type_projection PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
+add_test(NAME test_xir_root_conditional_node_keys
+    COMMAND test_xir_root_conditional_helpers --invocation-node-keys)
+set_tests_properties(test_xir_root_conditional_node_keys PROPERTIES
+    LABELS "unit;xir;root-effects;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
 add_test(NAME test_xir_root_conditional_class_rows
     COMMAND test_xir_root_conditional_helpers --class-rows)
 set_tests_properties(test_xir_root_conditional_class_rows PROPERTIES
@@ -179,3 +207,24 @@ add_test(NAME test_xir_root_conditional_canonical_run_storage
     COMMAND test_xir_root_conditional_helpers --canonical-run-storage)
 set_tests_properties(test_xir_root_conditional_canonical_run_storage PROPERTIES
     LABELS "unit;xir;root-effects;compiler-fault;ownership" TIMEOUT 300 RUN_SERIAL TRUE PROCESSORS 1)
+
+# One immutable declaration proof rechecks every real reference edge.
+add_test(NAME test_xir_reference_root_operation
+    COMMAND test_xir_root_conditional_helpers --reference-root-operation)
+set_tests_properties(test_xir_reference_root_operation PROPERTIES
+    LABELS "unit;xir;root-effects;higher-order;compiler;ownership" TIMEOUT 300 PROCESSORS 1)
+
+add_test(NAME test_xir_cell_materialized_replay COMMAND test_xir_root_conditional_helpers --cell-materialized-replay)
+set_tests_properties(test_xir_cell_materialized_replay PROPERTIES TIMEOUT 300 PROCESSORS 1)
+
+add_test(NAME test_xir_class_physical_replay COMMAND test_xir_root_conditional_helpers --class-physical-replay)
+set_tests_properties(test_xir_class_physical_replay PROPERTIES TIMEOUT 300 PROCESSORS 1)
+
+add_test(NAME test_xir_effect_literal_body_storage
+    COMMAND test_xir_root_conditional_helpers --literal-body)
+set_tests_properties(test_xir_effect_literal_body_storage PROPERTIES
+    LABELS "unit;xir;compiler;ownership" TIMEOUT 60 RUN_SERIAL TRUE PROCESSORS 1)
+
+add_test(NAME test_xir_invocation_replay_scratch COMMAND test_xir_root_conditional_helpers --replay-scratch)
+set_tests_properties(test_xir_invocation_replay_scratch PROPERTIES
+    TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;root-effects;compiler;ownership;resources")

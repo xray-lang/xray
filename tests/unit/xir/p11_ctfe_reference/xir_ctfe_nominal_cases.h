@@ -87,8 +87,10 @@ static void reference_nominal(const XrXirCompileContext *context,XrXirSourceResu
     if (modes==2) {
         XrXirCtfeRequest external=request;external.function=reference_named(module,"echo");external.arguments=&output;external.argument_count=1;
         XrXirValue refused={0},unchanged=output;
-        CHECK(reference_text_evaluate(&external,false,&refused)==XR_XIR_CTFE_NOT_SUPPORTED && !refused.type && !refused.payload);
-        CHECK(reference_text_evaluate(&external,true,&refused)==XR_XIR_CTFE_NOT_SUPPORTED && !refused.type && !refused.payload);
+        CHECK(reference_text_evaluate(&external,false,&refused)==XR_XIR_CTFE_OK);
+        reference_nominal_value(&refused,selected,reader);xr_xir_value_drop(&refused);
+        CHECK(reference_text_evaluate(&external,true,&refused)==XR_XIR_CTFE_OK);
+        reference_nominal_value(&refused,selected,reader);xr_xir_value_drop(&refused);
         CHECK(!memcmp(&unchanged,&output,sizeof(output)));reference_nominal_value(&output,selected,reader);
     }
     xr_xir_compile_artifact_free(lowered);reference_nominal_value(&output,selected,reader);xr_xir_value_drop(&output);xr_xir_domain_drop(reader);

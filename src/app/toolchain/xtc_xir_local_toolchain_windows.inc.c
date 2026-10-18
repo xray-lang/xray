@@ -141,14 +141,14 @@ static bool local_paths(XtcXirLocalToolchain *owner, const char *const *values, 
     if (okay) okay = local_join_path(owner, include, "ucrt", true, &owner->view.msvc.ucrt_include) &&
         local_join_path(owner, include, "shared", true, &owner->view.msvc.shared_include) &&
         local_join_path(owner, include, "um", true, &owner->view.msvc.um_include);
-    static const char *const names[5] = {"lib/x64/msvcrt.lib", "lib/x64/oldnames.lib", "lib/x64/vcruntime.lib",
-        "ucrt/x64/ucrt.lib", "um/x64/kernel32.Lib"};
-    for (unsigned i = 0; okay && i < 5; ++i) {
+    static const char *const names[6] = {"lib/x64/msvcrt.lib", "lib/x64/oldnames.lib", "lib/x64/vcruntime.lib",
+        "ucrt/x64/ucrt.lib", "um/x64/kernel32.Lib", "um/x64/bcrypt.lib"};
+    for (unsigned i = 0; okay && i < 6; ++i) {
         okay = local_join_path(owner, i < 3 ? vc : libraries, names[i], false, &owner->view.libraries[i].path);
         if (okay) okay = local_work(owner, sizeof(owner->view.libraries[i].kind));
-        if (okay) owner->view.libraries[i].kind = i == 4 ? XR_XIR_INVOCATION_SYSTEM : XR_XIR_INVOCATION_CRT;
+        if (okay) owner->view.libraries[i].kind = i >= 4 ? XR_XIR_INVOCATION_SYSTEM : XR_XIR_INVOCATION_CRT;
     }
-    if (okay && local_work(owner, sizeof(owner->view.library_count))) owner->view.library_count = 5;
+    if (okay && local_work(owner, sizeof(owner->view.library_count))) owner->view.library_count = 6;
     else okay = false;
     xr_compile_resources_free(version); xr_compile_resources_free(include);
     xr_compile_resources_free(libraries); xr_compile_resources_free(joined); return okay;

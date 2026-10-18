@@ -33,7 +33,7 @@ typedef enum XrXirMemberAccess {
 } XrXirMemberAccess;
 typedef enum XrXirMethodKind {
     XR_XIR_NON_MEMBER, XR_XIR_READ_METHOD, XR_XIR_STATIC_METHOD,
-    XR_XIR_CONSTRUCTOR, XR_XIR_MEMBER_HELPER
+    XR_XIR_CONSTRUCTOR, XR_XIR_MEMBER_HELPER, XR_XIR_MATERIALIZER
 } XrXirMethodKind;
 typedef enum XrXirTestRole {
     XR_XIR_TEST_ROLE_NONE, XR_XIR_TEST_ROLE_TEST, XR_XIR_TEST_ROLE_SKIP,
@@ -41,6 +41,7 @@ typedef enum XrXirTestRole {
     XR_XIR_TEST_ROLE_BEFORE_EACH, XR_XIR_TEST_ROLE_AFTER_EACH
 } XrXirTestRole;
 typedef struct XrXirImplementationTable XrXirImplementationTable;
+typedef struct XrXirDerivationTable XrXirDerivationTable;
 
 typedef struct XrXirFunctionIdentity {
     uint32_t module, exported, nominal_owner, member_access;
@@ -51,9 +52,13 @@ typedef struct XrXirFunctionIdentity {
     uint32_t test_role, test_timeout_seconds;
     /* A rest declaration receives one ordinary READ Array as its last parameter. */
     uint32_t variadic;
+    /* Zero for an ordinary declaration; otherwise one plus its exact grant row.
+     * The index is data, never a private-operation or verification exemption. */
+    uint32_t derivation;
 } XrXirFunctionIdentity;
 
 #define XR_XIR_FUNCTION_NO_SUSPEND 1u
+#define XR_XIR_FUNCTION_GENERATOR 2u
 typedef struct XrXirSlot {
     uint32_t module;
     XrXirType type;
@@ -71,5 +76,6 @@ typedef struct XrXirDeclarations {
     uint32_t literal_count;
     uint32_t root_module, entry_function;
     const XrXirImplementationTable *implementations;
+    const XrXirDerivationTable *derivations;
 } XrXirDeclarations;
 #endif // XXIR_DECLARATIONS_H

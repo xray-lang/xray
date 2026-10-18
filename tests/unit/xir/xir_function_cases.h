@@ -59,11 +59,11 @@ static void function_case_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
 static void function_case_release(void *owner) { ++*(unsigned *) owner; }
 #include "xir_native_metadata_fixture.h"
 static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program) {
-    XrXirSourceModule module = {"root", 4, NULL, 0, 0, 0};
-    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}};
-    XrXirSlot slot = {0, (XrXirType)257, 1,0,0};
+    XrXirSourceModule module = {.name="root",.name_length=4};
+    XrXirFunctionIdentity identities[] = {{.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER}};
+    XrXirSlot slot = {.type=(XrXirType)257,.mutable=1};
     XrXirLiteral literal = {"owned callback result", 21};
-    XrXirDeclarations declarations = {&module, 1, identities, &slot, 1, &literal, 1, 0, 1, NULL};
+    XrXirDeclarations declarations = {&module, 1, identities, &slot, 1, &literal, 1, 0, 1, NULL, NULL};
     XrXirTypeNode nodes[] = {
         {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, .nominal={0}},
         {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_STRING}};

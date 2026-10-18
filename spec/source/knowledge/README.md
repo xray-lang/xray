@@ -123,7 +123,7 @@ source-derived API inventory，并在生成时自动注入 `## API` 表格，避
 ### 标准库 API 变更
 
 1. 修改标准库实现和源码 API 入口（analyzer builtin metadata、纯 Xray 导出、native type 声明等）。
-2. 通过 `xray builtin-dump` 导出 API metadata。
+2. 直接读取源码 API 入口；`builtin-dump` 只能描述其单一入口，不能替代完整清单。
 3. 通过 `scripts/gen_api_inventory.py` 合并标准库模块、纯 Xray 导出、native type、全局 builtin、prelude、接口、关键字和 IR intrinsic。
 4. 只在 `spec/source/cards/stdlib/*.json` 更新人工说明、示例和 gotchas。
 5. 重新生成 MCP knowledge。
@@ -142,7 +142,7 @@ cmake --build build --target regen-mcp-knowledge
 python3 scripts/gen_language_docs.py --root .
 ```
 
-然后运行 `xray builtin-dump`，生成完整 API inventory，再调用 MCP generator：
+随后直接从源码生成完整 API inventory，再调用 MCP generator；当前脚本不需要 CLI dump 参数：
 
 ```sh
 ./build/xray builtin-dump > build/xmcp_builtin_dump.json
@@ -164,7 +164,7 @@ python3 scripts/gen_mcp_knowledge.py \
 cmake --build build --target api-inventory
 ```
 
-`tests/mcp/test_knowledge_generation.py` 会检查：
+`tests/mcp/test_knowledge_generation.py` 的完整执行还要求提供实际新鲜 CLI。仅生成表、编译表或运行无 CLI 的结构检查，不代表示例解析与 prompt smoke 已通过。完整测试会检查：
 
 * `LANGUAGE_SPEC_CN.md` / `LANGUAGE_SPEC.md` 和 `docs/knowledge` 必须由
   `spec/source` 生成且保持最新。

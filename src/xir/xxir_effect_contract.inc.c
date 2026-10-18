@@ -358,7 +358,7 @@ XR_FUNC XrXirStatus xir_effect_binding_proof_lookup(const XrXirCompileContext *c
 
 static XrXirStatus effect_contract_instance(const XrXirCompileContext *context,
     const XrXirModule *module, const XrXirProvenance *p) {
-    if (!p->source || p->contracts || p->contract_count || p->count != module->function_count)
+    if (!p->source || p->source->evaluation_only || p->contracts || p->contract_count || p->count != module->function_count)
         return XR_XIR_BAD_STRUCTURE;
     if (module->stage == XR_XIR_BUILT || module->linkage_kind != XR_XIR_PROGRAM ||
         p->source->module.stage != XR_XIR_CHECKED || p->source->module.linkage_kind != XR_XIR_PROGRAM)
@@ -402,8 +402,10 @@ XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *
     if (!module->provenance) return XR_XIR_OK;
     if (!xir_compile_work(context, 8)) return XR_XIR_BUDGET;
     const XrXirProvenance *p = module->provenance;
+    if (p->kind!=XR_XIR_EVIDENCE_EVALUATION &&
+        (p->evaluation.caller || p->evaluation.instruction || p->evaluation.callee)) return XR_XIR_BAD_STRUCTURE;
     if (p->kind == XR_XIR_EVIDENCE_TEMPLATE) return effect_contract_template(context, module, p);
-    if (p->kind == XR_XIR_EVIDENCE_INSTANCE) return effect_contract_instance(context, module, p);
+    if (xir_effect_kind_is_closed(p->kind)) return effect_contract_instance(context, module, p);
     return XR_XIR_BAD_STRUCTURE;
 }
 
@@ -544,7 +546,7 @@ XR_FUNC XrXirStatus xir_effect_call_binding_candidate(const XrXirCompileContext 
         return XR_XIR_BAD_STRUCTURE;
     const XrXirProvenance *p = module->provenance;
     if (!p) return XR_XIR_BAD_TYPE;
-    if (p->kind==XR_XIR_EVIDENCE_INSTANCE)
+    if (xir_effect_kind_is_closed(p->kind))
         return effect_contract_instance_candidate(context,module,caller,instruction,parameter);
     if (p->kind!=XR_XIR_EVIDENCE_TEMPLATE) return XR_XIR_BAD_TYPE;
     if (!xir_compile_work(context, 8)) return XR_XIR_BUDGET;

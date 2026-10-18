@@ -16,6 +16,8 @@
 #include "xxir_array.h"
 #include "xxir_type_arena.h"
 static bool source_comptime_result_type(SourceContext *ctx,AstNode *node,XrXirType type) {
+    if (ctx->generics[ctx->function].parameter_count && xr_xir_type_span(&ctx->types,type))
+        return true;
     XrXirCtfeStatus status=xr_xir_compile_ctfe_type_admit(&ctx->compile,&ctx->types,type);
     if (status==XR_XIR_CTFE_OK) return true;
     if (status==XR_XIR_CTFE_BUDGET || status==XR_XIR_CTFE_OUT_OF_MEMORY)
@@ -70,13 +72,14 @@ static bool source_comptime_record_get(SourceContext *ctx,AstNode *node,
     if (status==XR_XIR_VALUE_OK) {
         XrXirValueAdmission admission={.arena=arena,.domain=domain,.work=UINT64_MAX,
             .scratch_bytes=XR_XIR_CTFE_MAX_FRAME_BYTES};
-        status=xr_xir_record_get(&frame->value,frame->next,&admission,output);
+        status=xr_xir_compile_value_observe(ctx->compile.resources,&frame->value,frame->next,&admission,output);
     }
     xr_xir_domain_drop(domain);
     return status==XR_XIR_VALUE_OK || source_fail(ctx,node,status==XR_XIR_VALUE_OOM?XR_XIR_OUT_OF_MEMORY:
         status==XR_XIR_VALUE_LIMIT || status==XR_XIR_VALUE_REFCOUNT_LIMIT?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE,
         "comptime record field receiving failed");
 }
+#include "xxir_source_materialization.inc.c"
 static bool source_comptime_constant_leaf(SourceContext *ctx,AstNode *node,
     const XrXirValue *input,XrXirType target,SourceValue *output) {
     if (target==XR_XIR_UNIT) { *output=(SourceValue){0,XR_XIR_UNIT};return !input->type && !input->reserved && !input->payload; }
@@ -103,6 +106,13 @@ static bool source_comptime_constant(SourceContext *ctx,AstNode *node,
         bool array=tuple && tuple->kind==XR_XIR_TYPE_ARRAY;
         bool nominal=tuple && tuple->kind==XR_XIR_TYPE_NOMINAL;
         bool enumeration=nominal && xr_xir_type_is_enum(&ctx->types,target);
+        bool materialized=false;
+        if (nominal && !source_materialization_receive(ctx,node,&current,target,&result,&materialized)) { ok=false;break; }
+        if (materialized) {
+            if (current_owned) xr_xir_value_drop(&current);current=(XrXirValue){0};current_owned=false;
+            goto receive_parent;
+        }
+        if (nominal) tuple=xr_xir_type_node(&ctx->types,target);
         if (nullable) {
             bool some=false;const XrXirValue *payload=NULL;
             if (!source_work_units(ctx,node,16)) { ok=false;break; }
@@ -126,6 +136,7 @@ static bool source_comptime_constant(SourceContext *ctx,AstNode *node,
             uint32_t count=nullable?1:tuple->parameter_count,variant=0,begin=0;int64_t length=0,reserved=0;XrXirType element=tuple->element;
             if (nominal) {
                 SourceComptimeNominalShape shape={0};if (!source_comptime_nominal_shape(ctx,node,&current,target,&shape)) { ok=false;break; }
+                tuple=xr_xir_type_node(&ctx->types,target);
                 count=shape.count;begin=shape.begin;variant=shape.variant;
             }
             if (array && !source_comptime_array_measure(ctx,node,&current,target,&length,&reserved)) { ok=false;break; }

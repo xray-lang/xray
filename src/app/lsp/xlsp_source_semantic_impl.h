@@ -47,7 +47,7 @@ static XrXirStatus semantic_kind(const XlspSourceSnapshot *s,const XrXirSourceVi
     if(!syntax||!d->id||d->id>syntax->declaration_count)return XR_XIR_BAD_STRUCTURE;
     const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[d->id-1];
     if(fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED)return XR_XIR_UNSUPPORTED;
-    if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD) {
+    if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD||fact->role==XR_XIR_SOURCE_SYNTAX_DERIVED_METHOD) {
         *kind=13;if(fact->flags&XR_XIR_SOURCE_SYNTAX_STATIC)*modifiers|=8;
         return XR_XIR_OK;
     }
@@ -208,7 +208,8 @@ XrXirStatus xlsp_source_semantic_tokens(const XlspSourceSnapshot *s,const char *
         const XrXirSourceDeclaration *decl=&view->declarations[i];bool matches=false;
         status=lsp_text_has_module(s,text,decl->range.module,&matches);if(status!=XR_XIR_OK)break;if(!matches)continue;
         const XrXirSourceDeclarationSyntax *fact=&syntax->declarations[i];
-        if(fact->role==XR_XIR_SOURCE_SYNTAX_NONE||fact->role==XR_XIR_SOURCE_SYNTAX_CLOSURE||fact->role==XR_XIR_SOURCE_SYNTAX_RECEIVER)continue;
+        if(fact->role==XR_XIR_SOURCE_SYNTAX_NONE||fact->role==XR_XIR_SOURCE_SYNTAX_CLOSURE||
+            fact->role==XR_XIR_SOURCE_SYNTAX_RECEIVER||fact->role==XR_XIR_SOURCE_SYNTAX_DERIVED_METHOD)continue;
         if(fact->role==XR_XIR_SOURCE_SYNTAX_UNRESOLVED){status=XR_XIR_UNSUPPORTED;break;}
         uint32_t target=decl->id;status=lsp_target(s,view,&target);if(status!=XR_XIR_OK)break;
         uint32_t kind=0,mods=0;status=semantic_kind(s,view,&view->declarations[target-1],&kind,&mods);if(status!=XR_XIR_OK)break;

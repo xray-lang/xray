@@ -173,13 +173,15 @@ static void graph_checked_imports(ModuleWork *work, XrModuleGraph *graph, int fr
     }
     for (uint32_t e = 0; e < owner->dependency_count && module_work(work,1); ++e) {
         const XrModuleResourceBinding *edge = owner->dependencies[e];
+        bool memory=edge && edge->authority.kind==XR_MODULE_IDENTITY_MEMORY;
         if (!edge || !edge->checked || edge->checked != owner->checked || !edge->canonical ||
-            !edge->logical_path || !edge->source_locator) { module_status(work,XR_MODULE_INVALID); break; }
+            (memory ? edge->logical_path || edge->source_locator || edge->authority.physical_root :
+                !edge->logical_path || !edge->source_locator)) { module_status(work,XR_MODULE_INVALID); break; }
         int target = -1;
         module_status(work,xr_compile_module_graph_find(graph,edge->canonical,&target));
         if (work->status != XR_MODULE_OK) break;
         bool fresh = target < 0;
-        XrModuleKind kind = edge->authority.kind == XR_MODULE_IDENTITY_STDLIB ? XR_MOD_STDLIB : XR_MOD_FILE;
+        XrModuleKind kind = memory ? XR_MOD_MEMORY : edge->authority.kind == XR_MODULE_IDENTITY_STDLIB ? XR_MOD_STDLIB : XR_MOD_FILE;
         if (fresh) target = graph_add_spec(work,graph,edge->canonical,edge->logical_path,edge->source_locator,kind,&edge->authority);
         if (work->status != XR_MODULE_OK) break;
         XrModuleSpec *spec = &graph->specs[target];

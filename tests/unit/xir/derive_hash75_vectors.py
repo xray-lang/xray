@@ -10,6 +10,7 @@ import argparse, contextlib, copy, hashlib, importlib.util, io, json, re, struct
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
+FIXED = HERE / 'hash_protocol28_inputs'
 
 
 def load(name, path=None):
@@ -37,7 +38,7 @@ def main():
                 with contextlib.redirect_stdout(io.StringIO()): load(script).main()
             finally: sys.argv = saved
         for previous in sorted((Path(temporary) / 'tests/unit/xir').glob('*74_golden.h')):
-            fixed = HERE / previous.name
+            fixed = FIXED / previous.name
             # Header transport line endings do not change frozen packet bytes.
             assert previous.read_text(encoding='utf-8') == fixed.read_text(encoding='utf-8'), previous.name
             rows = []
@@ -60,7 +61,7 @@ def main():
     rows = []
     for suffix, name in [('golden', b'main'), ('embedded_golden', b'm\0in'), ('empty_golden', b'')]:
         old = sizing.packet(name, 28, 74, 33, True)
-        assert old == sizing.literal(HERE / 'compile_owner/checked_sizing74_golden.h', 'sizing74_' + suffix)
+        assert old == sizing.literal(FIXED / 'compile_owner/checked_sizing74_golden.h', 'sizing74_' + suffix)
         rows.append(('sizing74_retired_' + suffix, old))
         rows.append(('sizing75_' + suffix, sizing.packet(name, 28, 75, 33, True)))
     fields.header(HERE / 'retired_hash75/checked_sizing75_golden.h', 'CHECKED_SIZING75_GOLDEN_H', rows, args.write)
@@ -75,14 +76,14 @@ def main():
     assert body[-8:] == bytes(8)
     body = body[:-8] + bytes(4) + body[-8:]
     packet = fields.frame(body, 28, 75)
-    fields.header(HERE / 'xir_hash75_golden.h', 'XIR_HASH75_GOLDEN_H', [('hash75_golden', packet)], args.write)
+    fields.header(FIXED / 'xir_hash75_golden.h', 'XIR_HASH75_GOLDEN_H', [('hash75_golden', packet)], args.write)
     identities = load('derive_source_product_identity')
     for filename, mapping in identities.frames().items():
         fixed = dict(arrays(HERE / filename))
         for name, expected in mapping.items(): assert fixed[name] == expected, (filename, name)
     current = identities.frames(25, 75, 28, 30)
     rows = [item for mapping in current.values() for item in mapping.items()]
-    fields.header(HERE / 'xir_hash75_identity.h', 'XIR_HASH75_IDENTITY_H', rows, args.write)
+    fields.header(FIXED / 'xir_hash75_identity.h', 'XIR_HASH75_IDENTITY_H', rows, args.write)
     print(json.dumps({'status': 'COMPLETE_INDEPENDENT_75_FIELD_MODELS', 'records': records,
                       'hash_model': model, 'hash_packet_bytes': len(packet),
                       'hash_packet_sha256': hashlib.sha256(packet).hexdigest(),

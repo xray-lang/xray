@@ -68,7 +68,8 @@ static XrXirCtfeStatus ctfe_error_unwind(CtfeCallExecution *execution,bool *done
     bool invoked=frame->invoked;XrXirValue held=frame->returned;frame->returned=(XrXirValue){0};
     execution->top=parent;--execution->depth;execution->live_bytes-=frame->bytes;ctfe_call_frame_free(frame);
     execution->owned.activation=parent;execution->owned.authority=(XrXirCellAuthority){execution,parent,parent->epoch};
-    execution->owned.frame_spare=execution->request->evaluation.limits.frame_bytes-execution->live_bytes;
+    execution->owned.frame_spare=execution->request->evaluation.limits.frame_bytes-execution->live_bytes-execution->loan_bytes;
+    execution->owned.loan_base=execution->loan_bytes;
     XrXirCtfeStatus status=XR_XIR_CTFE_OK;
     if (invoked) status=ctfe_invoke_deliver(execution,parent,&held,true);
     else {

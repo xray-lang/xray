@@ -18,7 +18,7 @@ static void source_iteration_allocations(void){
     FILE *file=fopen(path,"wb");CHECK(file);
     CHECK(fputs("export fn answer()->i64{var xs=[10,11,20];var n=0;for(i,x in xs){defer{n+=0};xs.push(99);if(i==1){n+=x;continue};n+=x};return n}\n",file)>=0 && fclose(file)==0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
-    XrXirSourceRequest request={NULL,path,&authority,NULL,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL};size_t sites=allocation_case_begin(25);
+    XrXirSourceRequest request={NULL,path,&authority,NULL,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL,NULL};size_t sites=allocation_case_begin(25);
     for(size_t site=allocation_first();allocation_more(site,sites);site=allocation_next(site)){
         source_fixture_compile_attempts=0;source_fixture_compile_fail_at=site?site-1:SIZE_MAX; source_fixture_compile_injected=false;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=allocation_source_check(&request,&result,&diagnostic);

@@ -33,8 +33,8 @@ static void hash_source_cases(const XrXirCompileContext *context) {
         {"fn echo<Map>(x:Map<i64,i64>)->i64{return 0}\n", XR_XIR_BAD_STRUCTURE},
         {"fn echo<Map>(x:Map)->Map{return x}\nconst f=echo<i64>\n", XR_XIR_OK},
         {"fn echo<K:Hashable,V>(x:Map<K,Array<V>>)->Map<K,Array<V>>{return x}\nconst f=echo<string,i64>\n", XR_XIR_OK},
-        {"fn missing(x:Map<string,i64>)->i64?{return x.get(\"key\")}\n", XR_XIR_BAD_TYPE},
-        {"fn missing(x:Set<i64>)->bool{return x.contains(1)}\n", XR_XIR_BAD_TYPE},
+        {"fn missing(x:Map<string,i64>)->i64?{return x.get(\"key\")}\n", XR_XIR_OK},
+        {"fn missing(x:Set<i64>)->bool{return x.contains(1)}\n", XR_XIR_OK},
         {"fn echo<V>(x:Map<string,V>)->Map<string,V>{return x}\nconst f=echo<()>\n", XR_XIR_BAD_TYPE},
     };
     unsigned failures = 0;

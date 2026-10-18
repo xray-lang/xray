@@ -43,13 +43,13 @@ XR_FUNC XrXirCallStatus xr_xir_instance_path_read(XrXirCallView *view,
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
     if (receiver->kind == XR_XIR_ROOT_CELL) {
         XrXirCallStatus access = instance_path_cell(view, instance, receiver);
-        return access == XR_XIR_CALL_READY ? value_call_status(
-            xr_xir_call_cell_path_read(view, &receiver->value, path, output, fault)) : access;
+        return access == XR_XIR_CALL_READY ? value_path_call_status(
+            xr_xir_call_cell_path_read(view, &receiver->value, path, output, fault), fault) : access;
     }
     XrXirValuePlace place = {0};
     XrXirCallStatus status = value_place(view, instance, receiver, false, admission, &place);
     if (status != XR_XIR_CALL_READY) return status;
-    return value_call_status(xr_xir_value_path_read(&place, path, admission, output, fault));
+    return value_path_call_status(xr_xir_value_path_read(&place, path, admission, output, fault), fault);
 }
 static XrXirCallStatus instance_path_mutate(XrXirCallView *view,
     const XrXirValueReceiver *receiver, const XrXirValuePath *path,
@@ -61,14 +61,14 @@ static XrXirCallStatus instance_path_mutate(XrXirCallView *view,
     XrXirValueAdmission *admission = xr_xir_call_admission(view);
     if (receiver->kind == XR_XIR_ROOT_CELL) {
         XrXirCallStatus access = instance_path_cell(view, instance, receiver);
-        return access == XR_XIR_CALL_READY ? value_call_status(
-            xr_xir_call_cell_path_write(view, &receiver->value, path, value, fault, append)) : access;
+        return access == XR_XIR_CALL_READY ? value_path_call_status(
+            xr_xir_call_cell_path_write(view, &receiver->value, path, value, fault, append), fault) : access;
     }
     XrXirValuePlace place = {0};
     XrXirCallStatus status = value_place(view, instance, receiver, true, admission, &place);
     if (status != XR_XIR_CALL_READY) return status;
-    return value_call_status(append ? xr_xir_value_path_push(&place, path, value, admission, fault) :
-        xr_xir_value_path_write(&place, path, value, admission, fault));
+    return value_path_call_status(append ? xr_xir_value_path_push(&place, path, value, admission, fault) :
+        xr_xir_value_path_write(&place, path, value, admission, fault), fault);
 }
 XR_FUNC XrXirCallStatus xr_xir_instance_path_length(XrXirCallView *view,
     const XrXirValueReceiver *receiver, const XrXirValuePath *path,

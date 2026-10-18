@@ -22,6 +22,29 @@ static uint32_t source_owned_module(const XrModuleSpec *spec) {
     return spec->representation==XR_MODULE_CHECKED_HISTORY ? spec->history_module :
         spec->resource ? spec->resource->checked_module : UINT32_MAX;
 }
+/* An immutable catalog artifact is admitted once per Source construction.
+ * Every module view still checks its own identity and exact dependency edges.
+ * The receiving construction starts with a distinct empty admission list. */
+struct SourceLibraryAdmission {
+    SourceLibraryAdmission *next;
+    const XrXirArtifact *artifact;
+};
+static bool source_library_admit(SourceContext *ctx,const XrXirArtifact *artifact) {
+    for (SourceLibraryAdmission *entry=ctx->library_admissions;entry;entry=entry->next) {
+        if (!source_work(ctx,NULL)) return false;
+        if (entry->artifact==artifact) return true;
+    }
+    const XrXirModule *library=xr_xir_compile_artifact_module(artifact);
+    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(artifact);
+    XrXirStatus status=xr_xir_compile_verify_v2(&ctx->compile,library,construction,NULL);
+    if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"Checked library verification failed");
+    status=library_catalog_shape(library,construction,&ctx->compile);
+    if (status!=XR_XIR_OK) return source_fail(ctx,NULL,status,"Checked library import subset is not admitted");
+    SourceLibraryAdmission *entry=source_alloc(ctx,1,sizeof(*entry));
+    if (!entry) return false;
+    entry->artifact=artifact;entry->next=ctx->library_admissions;ctx->library_admissions=entry;
+    return true;
+}
 static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t module) {
     const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
     if(!resource||!resource->checked){source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library resource is missing");return NULL;}
@@ -34,11 +57,7 @@ static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t modu
     if(library->linkage_kind!=XR_XIR_LIBRARY||!library->function_count){
         source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"Checked library kind is required");return NULL;
     }
-    const XrXirConstruction *construction=xr_xir_compile_artifact_construction(artifact);
-    XrXirStatus status=xr_xir_compile_verify_v2(&ctx->compile, library, construction, NULL);
-    if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library verification failed");return NULL;}
-    status=library_catalog_shape(library,construction,&ctx->compile);
-    if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library import subset is not admitted");return NULL;}
+    if (!source_library_admit(ctx,artifact)) return NULL;
     const XrXirDeclarations *d = library->declarations;
     const XrModuleSpec *spec = &ctx->graph->specs[module];
     if (!d || resource->checked_module >= d->module_count) {
@@ -203,7 +222,8 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
         break;
     case XR_XIR_CALL_REQUIREMENT:
         if (!map->unit || !map->unit->library->types->interfaces ||
-            result.targets[0]>=map->unit->library->types->interfaces->count)
+            result.targets[0]>=map->unit->library->types->interfaces->count ||
+            map->unit->interfaces[result.targets[0]]==UINT32_MAX)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library requirement declaration is not mapped");
         result.targets[0]=map->unit->interfaces[result.targets[0]];
         break;
@@ -226,10 +246,6 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
     case XR_XIR_PRINT: case XR_XIR_OUTPUT:
         if (!map->history)
             return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program output requires a history owner");
-        break;
-    case XR_XIR_TO_STRING:
-        if (!map->history)
-            return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program body operation requires a history owner");
         break;
     default:
         if (!library_catalog_local_instruction(result.op))
@@ -261,6 +277,7 @@ static void *source_library_bytes(SourceContext *ctx, const void *input,
     if (output && !source_copy_bytes(ctx, NULL, output, input, (size_t)count * size)) return NULL;
     return output;
 }
+#include "xxir_source_library_derivations.inc.c"
 
 /* Local binder ordinals remain local; each interface application and type ID
  * is deeply owned and remapped to the canonical receiver declarations. */
@@ -370,7 +387,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     if (ctx->identities[target].nominal_owner) {
         uint32_t owner=ctx->identities[target].nominal_owner-1;
         if (!map->unit || !library->types || !library->types->nominals ||
-            owner>=library->types->nominals->count)
+            owner>=library->types->nominals->count || map->unit->nominals[owner]==UINT32_MAX)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library member owner is not mapped");
         ctx->identities[target].nominal_owner=map->unit->nominals[owner]+1;
     }
@@ -384,6 +401,7 @@ static bool source_library_function(SourceContext *ctx, const XrXirModule *libra
     if (helper || index == library->declarations->modules[original_module].initializer) return true;
     if (ctx->identities[target].nominal_owner &&
         (ctx->identities[target].method_kind==XR_XIR_CONSTRUCTOR ||
+         ctx->identities[target].method_kind==XR_XIR_MATERIALIZER ||
          ctx->identities[target].method_kind==XR_XIR_MEMBER_HELPER)) {
         uint32_t owner=ctx->identities[target].nominal_owner-1;
         ctx->bodies[target].declaration=ctx->nominal_sources[owner]->declaration;
@@ -478,6 +496,7 @@ static bool source_library_initializers(SourceContext *ctx, const XrXirModule *l
     for (uint32_t n=0; table && n<table->count; ++n) {
         if (!source_work(ctx,NULL)) return false;
         uint32_t target=map->unit->nominals[n];
+        if (target==UINT32_MAX) continue;
         const XrXirNominalDeclaration *from=&table->declarations[n];
         const XrXirConstructionRow *row=xr_xir_compile_construction_row(map->unit->construction,n);
         if (!row || row->field_count!=from->field_count || (row->field_count && !row->field_initializers))
@@ -508,13 +527,24 @@ static bool source_library_implementations(SourceContext *ctx,const XrXirModule 
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library witness unit is missing or already installed");
     XrXirImplementation *records=source_alloc(ctx,input->count,sizeof(*records));
     if (!records) return false;
+    uint32_t count=0;
     for (uint32_t i=0; i<input->count; ++i) {
         if (!source_work(ctx,NULL)) return false;
         const XrXirImplementation *from=&input->records[i];
         if (!library->types->nominals || from->nominal_declaration>=library->types->nominals->count)
             return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library implementation owner is not mapped");
-        XrXirImplementation *to=&records[i];
-        to->nominal_declaration=map->unit->nominals[from->nominal_declaration];
+        uint32_t nominal=map->unit->nominals[from->nominal_declaration];
+        if (nominal==UINT32_MAX) continue;
+        XrXirImplementation *to=&records[count++];
+        if (from->derivation_policy) {
+            const XrXirDerivationTable *policies=library->declarations->derivations;
+            uint32_t p=from->derivation_policy-1;
+            if (!policies || p>=policies->policy_count || !map->unit->derivation_policies ||
+                map->unit->derivation_policies[p]==UINT32_MAX)
+                return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library witness derivation policy is not mapped");
+            to->derivation_policy=map->unit->derivation_policies[p]+1;
+        }
+        to->nominal_declaration=nominal;
         const XrXirInterfaceApplication *application=NULL;
         if (!source_library_applications(ctx,map->unit,&from->interface,1,&application)) return false;
         if (!source_work_units(ctx,NULL,sizeof(*application))) return false;
@@ -534,10 +564,11 @@ static bool source_library_implementations(SourceContext *ctx,const XrXirModule 
             bindings[b].member=binding->member;bindings[b].function=map->functions[binding->function];
         }
     }
-    map->unit->implementations=(XrXirImplementationTable){records,input->count};
+    map->unit->implementations=(XrXirImplementationTable){records,count};
     return true;
 }
 
+#include "xxir_source_library_materialization.inc.c"
 static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     const SourceLibraryMap *map) {
     for (uint32_t m=0;m<map->module_count;++m) {
@@ -554,7 +585,7 @@ static bool source_library_copy(SourceContext *ctx, const XrXirModule *library,
     for (uint32_t f = 0; f < library->function_count; ++f) {
         if (!source_work(ctx, NULL) || !source_library_function(ctx, library, map, f)) return false;
     }
-    if (!source_library_initializers(ctx,library,map) ||
+    if (!source_library_derivations(ctx,library,map) || !source_library_initializers(ctx,library,map) || !source_library_materializations(ctx,map) ||
         !source_library_implementations(ctx,library,map)) return false;
     if (!library->defaults) return true;
     for (uint32_t i = 0; i < library->defaults->count; ++i) {
@@ -576,6 +607,11 @@ static bool source_library_install(SourceContext *ctx, uint32_t module, uint32_t
     SourceLibraryMap map = {0};
     if (!source_library_map(ctx,library,module,*next_function,*next_slot,&map)) return false;
     bool ok = source_library_copy(ctx,library,&map);
+    if (ok && map.unit && ctx->derive_present) {
+        map.unit->functions=source_library_bytes(ctx,map.functions,map.function_count,sizeof(*map.functions));
+        map.unit->function_count=map.function_count;
+        ok=map.unit->functions!=NULL;
+    }
     if (ok) { *next_function = map.next_function; *next_slot = map.next_slot; }
     source_library_map_free(&map);
     return ok;

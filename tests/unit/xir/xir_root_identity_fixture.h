@@ -157,9 +157,9 @@ static void ri_graph(RiGraph *g, bool fail_initialization) {
     g->identities[RI_ROOT].exported = 1; g->identities[RI_READ].exported = 1;
     g->identities[RI_ROOT_EXIT].cleanup_owner = RI_ROOT + 1;
     g->identities[RI_CHILD_EXIT].cleanup_owner = RI_CHILD + 1;
-    g->source = (XrXirSourceModule){"identity", 8, NULL, 0, RI_INIT, 0};
-    g->slots[0] = (XrXirSlot){0, (XrXirType)RI_CELL_TYPE, 1,0,0};
-    g->slots[1] = (XrXirSlot){0, XR_XIR_I64, 0,0,0};
+    g->source = (XrXirSourceModule){.name="identity",.name_length=8,.initializer=RI_INIT};
+    g->slots[0] = (XrXirSlot){.type=(XrXirType)RI_CELL_TYPE,.mutable=1};
+    g->slots[1] = (XrXirSlot){.type=XR_XIR_I64};
     g->declarations = (XrXirDeclarations){.modules = &g->source, .module_count = 1,
         .functions = g->identities, .slots = g->slots, .slot_count = 2, .entry_function = RI_ENTRY};
     g->module = (XrXirModule){.stage = XR_XIR_BUILT, .functions = g->functions,

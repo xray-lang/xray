@@ -84,6 +84,32 @@ static XrXirStatus effect_invocation_class_rank_limit(const EffectInvocationRead
     return effect_invocation_class_rank_limit_count(owner,owner->body.domain.function_count,output);
 }
 
+/* Node membership and Class row counts never change after intern. Only this
+ * private construction workspace remembers the already validated prefix.
+ * Independent receiving and sealing still recount the complete graph. */
+static XrXirStatus effect_invocation_class_rank_current(EffectInvocationWorkspace *owner,
+    uint32_t functions,uint64_t *output) {
+    if (!owner || !output || !owner->final.physical ||
+        owner->final.physical->count!=functions || (functions && !owner->final.physical->functions) ||
+        owner->class_rank_nodes>owner->final.count ||
+        (owner->final.count && !owner->final.nodes)) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(owner->read.work,5)) return XR_XIR_BUDGET;
+    uint64_t maximum=owner->class_rank_limit;
+    for (uint32_t n=owner->class_rank_nodes;n<owner->final.count;++n) {
+        if (!xir_compile_work(owner->read.work,3)) return XR_XIR_BUDGET;
+        const EffectInvocationNode *node=&owner->final.nodes[n];
+        if (node->body>=functions || node->class_count!=owner->final.physical->functions[node->body].classes ||
+            (uint64_t)node->class_count+1>UINT64_MAX-maximum) return XR_XIR_BAD_STRUCTURE;
+        maximum+=(uint64_t)node->class_count+1;
+    }
+    if (owner->class_rank_nodes!=owner->final.count) {
+        if (!xir_compile_work(owner->read.work,sizeof(owner->class_rank_limit)+sizeof(owner->class_rank_nodes)))
+            return XR_XIR_BUDGET;
+        owner->class_rank_limit=maximum;owner->class_rank_nodes=owner->final.count;
+    }
+    *output=maximum;return XR_XIR_OK;
+}
+
 static XrXirStatus effect_invocation_class_fact_join(EffectInvocationWorkspace *owner,
     EffectInvocationClassFact *destination,uint32_t mask,uint64_t rank,
     uint64_t maximum,bool *changed) {

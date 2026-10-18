@@ -181,8 +181,8 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
     }
     if (!xir_compile_work(work,sizeof(EffectInvocationRead)+sizeof(EffectInvocationCertificate)+3*sizeof(void *)))
         return XR_XIR_BUDGET;
-    EffectInvocationRead owner={0};
-    XrXirStatus opening=effect_invocation_read_open(work,summary,certificate->declared,certificate->final,&owner);
+    EffectInvocationRead owner={0};EffectInvocationScratch *replay_storage=NULL;
+    XrXirStatus opening=effect_invocation_read_open(work,summary,certificate->declared,certificate->final,&replay_storage,&owner);
     if (opening!=XR_XIR_OK) return opening;
     EffectInvocationCertificate local=*certificate;local.terms.remaining=work;
     XrXirStatus status=effect_source_equation_shape(work,certificate);

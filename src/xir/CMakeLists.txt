@@ -2,7 +2,7 @@
 include("${CMAKE_CURRENT_LIST_DIR}/../toolchain/xcompiler_producer.cmake")
 add_library(xray_xir_admission STATIC xxir.c xxir_program_match.c xxir_verify.c xxir_defaults.c xxir_effects.c xxir_layout.c xxir_checked.c xxir_generic.c ../base/xsha256.c xxir_input_owned.c)
 add_library(xray_xir STATIC xxir_specialize.c)
-add_library(xray_xir_declarations STATIC xxir_declarations.c xxir_types.c xxir_record_shape.c xxir_constraints.c xxir_constraint_proof.c xxir_interface.c xxir_interface_members.c xxir_implementation.c xxir_implementation_verify.c xxir_type_layout.c ../shared/xnative_declaration.c)
+add_library(xray_xir_declarations STATIC xxir_declarations.c xxir_derivation.c xxir_derivation_verify.c xxir_types.c xxir_record_shape.c xxir_view_affine.c xxir_constraints.c xxir_constraint_proof.c xxir_interface.c xxir_interface_members.c xxir_implementation.c xxir_implementation_verify.c xxir_type_layout.c ../shared/xnative_declaration.c)
 add_dependencies(xray_xir_declarations gen-native-type-defs)
 target_include_directories(xray_xir_declarations PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir_declarations PUBLIC xray_compile_resources)
@@ -10,17 +10,27 @@ target_link_libraries(xray_xir_admission PUBLIC xray_xir_declarations)
 target_include_directories(xray_xir_admission PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir PUBLIC xray_xir_admission)
 target_include_directories(xray_xir PUBLIC ${PROJECT_SOURCE_DIR}/src)
-add_library(xray_xir_scalar STATIC xxir_scalar.c xxir_scalar_core.c xxir_float.c xxir_value.c xxir_type_arena.c xxir_call.c xxir_task.c xxir_task_budget.c xxir_program.c xxir_instance.c xxir_output.c xxir_format.c)
+add_library(xray_xir_scalar STATIC xxir_scalar.c xxir_scalar_core.c xxir_float.c xxir_math.c xxir_value.c xxir_type_arena.c xxir_call.c xxir_task.c xxir_task_budget.c xxir_program.c xxir_instance.c xxir_output.c xxir_format.c)
+if(MSVC)
+    set_source_files_properties(xxir_math.c PROPERTIES COMPILE_OPTIONS "/fp:strict")
+elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    set_source_files_properties(xxir_math.c PROPERTIES COMPILE_OPTIONS "-ffp-model=strict")
+elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(xxir_math.c PROPERTIES COMPILE_OPTIONS "-frounding-math;-ftrapping-math;-ffp-contract=off")
+endif()
+if(NOT WIN32)
+    target_link_libraries(xray_xir_scalar PUBLIC m)
+endif()
 target_include_directories(xray_xir_scalar PUBLIC ${PROJECT_SOURCE_DIR}/src)
-target_link_libraries(xray_xir_scalar PUBLIC xray_xir_admission)
-add_library(xray_xir_ctfe STATIC xxir_ctfe.c)
+target_link_libraries(xray_xir_scalar PUBLIC xray_xir_admission xray_native_provider_runtime)
+add_library(xray_xir_ctfe STATIC xxir_ctfe.c xxir_ctfe_instance.c)
 target_include_directories(xray_xir_ctfe PUBLIC ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(xray_xir_ctfe PUBLIC xray_xir_scalar)
 add_library(xray_xir_vm STATIC xxir_vm.c)
 target_link_libraries(xray_xir_vm PUBLIC xray_xir xray_xir_scalar xray_xir_ctfe)
 add_library(xray_xir_cgen STATIC xxir_emit_c.c ../aot/xi_cgen_verify_output.c)
 target_link_libraries(xray_xir_cgen PUBLIC xray_xir)
-add_library(xray_xir_source STATIC xxir_source.c xxir_source_query.c xxir_type_inference.c xxir_library_catalog.c)
+add_library(xray_xir_source STATIC xxir_source.c xxir_source_query.c xxir_type_inference.c xxir_library_catalog.c xxir_generated_data.c)
 target_sources(xray_xir_source PRIVATE
     ../module/xmodule_graph.c ../module/xmodule_resolver.c ../module/xmodule_identity.c ../module/xmodule_overlay.c
     ../module/xmodule_identity_view.c ../module/xmodule_fingerprint.c
@@ -34,6 +44,17 @@ else()
     target_sources(xray_xir_source PRIVATE ../os/unix/fs_unix.c ../os/unix/dir_unix.c ../os/unix/file_read_unix.c ../os/unix/proc_self_unix.c)
 endif()
 add_dependencies(xray_xir_source gen-stdlib-embedded-sources)
+
+set(XIR_REGEX_UNICODE_STAMP "${CMAKE_CURRENT_BINARY_DIR}/generated/regex_unicode_projection.check")
+add_custom_command(OUTPUT ${XIR_REGEX_UNICODE_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND ${XRAY_PYTHON} "${PROJECT_SOURCE_DIR}/scripts/gen_regex_unicode_projection.py" --root "${PROJECT_SOURCE_DIR}" --check
+    COMMAND ${CMAKE_COMMAND} -E touch ${XIR_REGEX_UNICODE_STAMP}
+    DEPENDS "${PROJECT_SOURCE_DIR}/scripts/gen_regex_unicode_projection.py" "${PROJECT_SOURCE_DIR}/src/base/xunicode.c"
+        "${PROJECT_SOURCE_DIR}/src/base/xunicode.h" "${PROJECT_SOURCE_DIR}/stdlib/regex/regex.xr"
+    VERBATIM)
+add_custom_target(check-regex-unicode-projection DEPENDS ${XIR_REGEX_UNICODE_STAMP})
+add_dependencies(gen-stdlib-embedded-sources check-regex-unicode-projection)
 target_include_directories(xray_xir_source PRIVATE "${CMAKE_BINARY_DIR}/generated")
 set(XIR_CORE_SOURCE ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_core_declarations_source.inc.c)
 add_custom_command(OUTPUT ${XIR_CORE_SOURCE}
@@ -43,6 +64,19 @@ add_custom_command(OUTPUT ${XIR_CORE_SOURCE}
     VERBATIM)
 add_custom_target(gen-xir-core-source DEPENDS ${XIR_CORE_SOURCE})
 add_dependencies(xray_xir_source gen-xir-core-source)
+set(XIR_MATH_DECLARATIONS ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_math_declarations.inc.c)
+file(GLOB XIR_MATH_DEFINITION_INPUTS CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/stdlib/defs/*.def)
+add_custom_command(OUTPUT ${XIR_MATH_DECLARATIONS}
+    COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/gen_xir_math_declarations.py
+        --root ${PROJECT_SOURCE_DIR} --output ${XIR_MATH_DECLARATIONS}
+    DEPENDS ${PROJECT_SOURCE_DIR}/scripts/gen_xir_math_declarations.py
+        ${PROJECT_SOURCE_DIR}/scripts/gen_native_declarations.py ${PROJECT_SOURCE_DIR}/scripts/stdlib_manifest.py
+        ${PROJECT_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py
+        ${PROJECT_SOURCE_DIR}/tools/stdlibgen/provider_declarations.py ${XIR_MATH_DEFINITION_INPUTS}
+        ${CMAKE_CURRENT_SOURCE_DIR}/xxir_math.def
+    VERBATIM)
+add_custom_target(gen-xir-math-declarations DEPENDS ${XIR_MATH_DECLARATIONS})
+add_dependencies(xray_xir_source gen-xir-math-declarations)
 target_include_directories(xray_xir_source PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_include_directories(xray_xir_source PRIVATE ${XRAY_COMMON_INCLUDES})
 target_link_libraries(xray_xir_source PUBLIC xray_xir xray_xir_scalar xray_xir_ctfe xray_compiler_parser)

@@ -8,13 +8,13 @@
  */
 #ifndef XIR_SOURCE_COMPTIME_CASES_H
 #define XIR_SOURCE_COMPTIME_CASES_H
-static void source_comptime_test_answer(const char *text,XrXirType type,int64_t expected) {
+static void source_comptime_test_result(const char *text,XrXirType type,int64_t expected,bool folded) {
     XrXirCompileContext context={0};
     CHECK(xr_compile_resources_new(&source_comptime_test_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrCompileResourceStats baseline=source_comptime_test_stats(&context);
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=source_comptime_test_build(&context,text,&source,&diagnostic);
-    if (status!=XR_XIR_OK) fprintf(stderr,"Source comptime status%u %d:%d %s\n",(unsigned)status,diagnostic.line,diagnostic.column,diagnostic.message);
+    if (status!=XR_XIR_OK) fprintf(stderr,"Source comptime status%u %d:%d %s\nInput: %s\n",(unsigned)status,diagnostic.line,diagnostic.column,diagnostic.message,text);
     CHECK(status==XR_XIR_OK && source.checked && source.snapshot);
     const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(source.snapshot);
     CHECK(view && view->complete && view->module_count && view->declaration_count && view->expression_count);
@@ -31,7 +31,21 @@ static void source_comptime_test_answer(const char *text,XrXirType type,int64_t 
     }
     CHECK(helper);
     CHECK(xr_xir_compile_artifact_verify(source.checked,NULL)==XR_XIR_OK);
-    source_comptime_test_fold(xr_xir_compile_artifact_module(source.checked),expected,type);
+    if (folded) source_comptime_test_fold(xr_xir_compile_artifact_module(source.checked),expected,type);
+    else {
+        const XrXirModule *module=xr_xir_compile_artifact_module(source.checked);
+        const XrXirFunction *body=&module->functions[source_comptime_test_function(module,"run")];
+        bool array=false,push=false,tuple=false,call=false;
+        for (uint32_t i=0;i<body->instruction_count;++i) {
+            array|=body->instructions[i].op==XR_XIR_ARRAY_WITH_CAPACITY;
+            push|=body->instructions[i].op==XR_XIR_ARRAY_PUSH;
+            tuple|=body->instructions[i].op==XR_XIR_TUPLE_NEW;
+            call|=body->instructions[i].op==XR_XIR_CALL;
+        }
+        if (!array || !push || !tuple || !call)
+            fprintf(stderr,"owning data replay capacity/push/tuple/runtime-call=%u/%u/%u/%u\n",array,push,tuple,call);
+        CHECK(array && push && tuple && call);
+    }
     XrXirCheckedPacket packet={0};XrXirArtifact *received=NULL,*closed=NULL,*lowered=NULL;
     CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);
@@ -45,7 +59,18 @@ static void source_comptime_test_answer(const char *text,XrXirType type,int64_t 
     CHECK(xr_xir_compile_artifact_verify(lowered,NULL)==XR_XIR_OK);
     uint32_t f=source_comptime_test_function(xr_xir_compile_artifact_module(lowered),"run");
     XrXirRunContext run={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,0,0,0,0};XrXirValue value={0};
-    CHECK(xr_xir_compile_vm_run(lowered,f,&run,NULL,0,&value)==XR_XIR_RUN_OK);
+    if (folded) CHECK(xr_xir_compile_vm_run(lowered,f,&run,NULL,0,&value)==XR_XIR_RUN_OK);
+    else {
+        XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK && !lowered);
+        XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+        XrXirInstance *instance=NULL;CHECK(xr_xir_instance_new(program,&config,&instance)==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_start(instance,f,NULL,0)==XR_XIR_CALL_READY);
+        XrXirInstanceResult outcome=xr_xir_instance_poll_bounded(instance,1024);
+        if(outcome.outcome.status!=XR_XIR_CALL_RETURNED)fprintf(stderr,"owned TypeInfo VM status=%u\n",(unsigned)outcome.outcome.status);
+        CHECK(outcome.outcome.status==XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);xr_xir_compile_program_drop(program);
+    }
     CHECK(value.type==(uint32_t)type && !value.reserved && value.payload==expected);
     CHECK(!run.live_bytes && run.allocations==run.frees);
     xr_xir_compile_artifact_free(lowered);XrCompileResourceStats spent=source_comptime_test_stats(&context);
@@ -53,6 +78,9 @@ static void source_comptime_test_answer(const char *text,XrXirType type,int64_t 
     CHECK(spent.allocated_bytes<=source_comptime_test_limits.allocated_bytes && spent.peak_bytes<=source_comptime_test_limits.live_bytes &&
         spent.work<=source_comptime_test_limits.work);
     xr_compile_resources_release(context.resources);CHECK(!source_fixture_compile_live && !source_fixture_compile_bytes);
+}
+static void source_comptime_test_answer(const char *text,XrXirType type,int64_t expected) {
+    source_comptime_test_result(text,type,expected,true);
 }
 static void source_comptime_test_semantics(void) {
     source_comptime_test_answer("export fn run()->i64 { return comptime (6*7) }\n",XR_XIR_I64,42);
@@ -95,7 +123,7 @@ static void source_comptime_test_occupied(void) {
     CHECK(source_comptime_test_build(&context,source_comptime_test_text,&output,&diagnostic)==XR_XIR_OK);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"source-comptime",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText text={NULL,source_comptime_test_text,sizeof(source_comptime_test_text)-1};
     XrXirSourceResult original=output;XrCompileResourceStats before=source_comptime_test_stats(&context);
     size_t attempts=source_fixture_compile_attempts;

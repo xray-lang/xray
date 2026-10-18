@@ -1,0 +1,19 @@
+class Identity{
+    values:Array<(i64,i64)>;
+    constructor(){this.values=[(20,20)]}
+}
+struct Box{identities:Array<Identity>;value:i64}
+fn assign(value:ref i64,identity:Identity){
+    identity.values.push((1,1));
+    value=len(identity.values)+40
+}
+fn relay(value:ref i64,identity:Identity){assign(ref value,identity)}
+fn eval()->i64{
+    const identity=Identity();
+    var box=Box{identities:[identity,identity,identity],value:0};
+    const before=box;
+    const alias=box.identities[1];
+    relay(ref box.value,alias);
+    return box.value+len(before.identities[0].values)-2
+}
+export fn answer()->i64{const value=comptime eval();return value}

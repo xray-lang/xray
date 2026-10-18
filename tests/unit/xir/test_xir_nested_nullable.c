@@ -26,6 +26,8 @@
 #include "xir_nested_nullable65_golden.h"
 #include "xir_nested_nullable72_golden.h"
 #include "xir_nested_nullable81_golden.h"
+#include "xir_nested_nullable84_golden.h"
+#include "composed_wire/packet_092.inc.c"
 #include "xir_nested_nullable_cases.h"
 #include "xir_nested_nullable_value_cases.h"
 static XrXirStatus nested_compile_pipeline(const XrXirCompileContext *context) {
@@ -34,8 +36,8 @@ static XrXirStatus nested_compile_pipeline(const XrXirCompileContext *context) {
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     XrXirStatus status=xir_fixture_check(context, &nested_built, &checked, NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_checked_write(checked,&packet,NULL);
-    if(status==XR_XIR_OK){CHECK(packet.length==sizeof(nested_nullable81_golden) &&
-        !memcmp(packet.bytes,nested_nullable81_golden,packet.length));
+    if(status==XR_XIR_OK){CHECK(packet.length==sizeof(packet_092_current) &&
+        !memcmp(packet.bytes,packet_092_current,packet.length));
         status=xr_xir_compile_checked_read(context,packet.bytes,packet.length,&read,NULL);}
     if(status==XR_XIR_OK)status=xr_xir_compile_specialize(read,&special,NULL);
     if(status==XR_XIR_OK)status=xr_xir_compile_artifact_verify(special,NULL);
@@ -101,12 +103,23 @@ int main(int argc,char **argv) {
     prior=(XrXirArtifact *)(uintptr_t)1;
     CHECK(xr_xir_compile_checked_read(&owner.context,nested_nullable72_golden,sizeof(nested_nullable72_golden),&prior,NULL)==XR_XIR_BAD_STRUCTURE && prior==(XrXirArtifact *)(uintptr_t)1);
     CHECK(nested_nullable_compile_attempts==prior_attempts && nested_nullable_compile_live==prior_live && nested_nullable_compile_bytes==prior_bytes);
+    const uint8_t *epochs[]={nested_nullable81_golden,nested_nullable84_golden,packet_092_original};
+    const size_t lengths[]={sizeof(nested_nullable81_golden),sizeof(nested_nullable84_golden),sizeof(packet_092_original)};
+    for(size_t epoch=0;epoch<sizeof(epochs)/sizeof(epochs[0]);++epoch) {
+        for(unsigned occupied=0;occupied<2;++occupied) {
+            prior=occupied?(XrXirArtifact *)(uintptr_t)1:NULL;
+            XrXirArtifact *saved=prior;
+            CHECK(xr_xir_compile_checked_read(&owner.context,epochs[epoch],lengths[epoch],&prior,NULL)==XR_XIR_BAD_STRUCTURE && prior==saved);
+        }
+        CHECK(nested_nullable_compile_attempts==prior_attempts && nested_nullable_compile_live==prior_live &&
+            nested_nullable_compile_bytes==prior_bytes && runtime_live==prior_runtime_live && runtime_bytes==prior_runtime_bytes);
+    }
     nested_type_rejections(&owner.context);nested_storage_vectors(&owner.context);nested_deep_admission(&owner.context,32);nested_deep_admission(&owner.context,256);
     XrXirArtifact *checked=NULL,*read=NULL,*special=NULL,*lowered=NULL;
     CHECK(xir_fixture_check(&owner.context, &nested_built, &checked, NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.length==sizeof(nested_nullable81_golden) && !memcmp(packet.bytes,nested_nullable81_golden,packet.length));
-    CHECK(xr_xir_compile_checked_read(&owner.context,nested_nullable81_golden,sizeof(nested_nullable81_golden),&read,NULL)==XR_XIR_OK);
+    CHECK(packet.length==sizeof(packet_092_current) && !memcmp(packet.bytes,packet_092_current,packet.length));
+    CHECK(xr_xir_compile_checked_read(&owner.context,packet_092_current,sizeof(packet_092_current),&read,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(read,&special,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     CHECK(xr_xir_compile_artifact_verify(special,NULL)==XR_XIR_OK);

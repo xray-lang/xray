@@ -6,7 +6,7 @@ static XrXirArtifact *source17_lower(const XrXirCompileContext *context,
     char path[1024];
     CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_GO_EXECUTION_FIXTURES, name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_GO_EXECUTION_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic source_diagnostic = {0};
     XrXirDiagnostic diagnostic = {0}; char *failure = NULL;
     XrXirArtifact *decoded = NULL, *closed = NULL, *lowered = NULL;

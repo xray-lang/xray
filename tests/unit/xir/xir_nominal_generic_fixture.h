@@ -22,10 +22,10 @@ static XrXirArtifact *nominal_generic_fixture(const XrXirCompileContext *context
     XrXirInstruction init = {XR_XIR_RETURN, XR_XIR_UNIT, {0}, {0}, 0, {0}};
     XrXirBlock block = {0, 1, 0, 0};
     functions[3] = (XrXirFunction) {"init", 4, NULL, 0, XR_XIR_UNIT, &block, 1, &init, 1, NULL, 0};
-    XrXirSourceModule module = {"alpha", 5, NULL, 0, 3, 0};
-    XrXirFunctionIdentity identities[4] = {{0, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}};
+    XrXirSourceModule module = {.name="alpha",.name_length=5,.initializer=3};
+    XrXirFunctionIdentity identities[4] = {{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER}};
     identities[1].nominal_owner = 1; identities[1].method_kind = XR_XIR_MEMBER_HELPER;
-    XrXirDeclarations declarations = {&module, 1, identities, NULL, 0, NULL, 0, 0, 0, NULL};
+    XrXirDeclarations declarations = {&module, 1, identities, NULL, 0, NULL, 0, 0, 0, NULL, NULL};
     NominalFixture f; nominal_fixture(&f); f.table.count = 1;
     XrXirType arguments[] = {XR_XIR_I64, XR_XIR_U8};
     XrXirTypeNode nodes[] = {built.types->nodes[0],

@@ -32,7 +32,7 @@ static void history_record_coordinates(XrXirSourceGenerations *owner,
     CHECK(records[0]!=records[1]);
 }
 static int history_function_value(bool record) {
-    
+
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     XrXirSourceGenerationConfig config={compiler.context,record?"birth-record-value":"birth-function-value",NULL,NULL,NULL};
     XrXirSourceGenerations *owner=NULL;
@@ -105,7 +105,7 @@ static int history_function_value(bool record) {
     return 0;
 }
 static int history_function_call(bool record) {
-    
+
     SourceFixtureOwner compiler={0};source_fixture_owner_new(&compiler);
     XrXirSourceGenerationConfig config={compiler.context,record?"birth-record-call":"birth-closure-probe",NULL,NULL,NULL};
     XrXirSourceGenerations *owner=NULL;CHECK(xr_xir_compile_source_generations_new(&config,&owner)==XR_XIR_OK);

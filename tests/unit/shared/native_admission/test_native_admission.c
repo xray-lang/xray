@@ -34,10 +34,10 @@ static uint64_t expected_admission(const XrNativeTypeDeclaration *declaration) {
     return units;
 }
 static void complete_declarations(void) {
-    static const char *const names[]={"Array","string","Atomic","Ordering","Task","i64","f64","bool","rune","Map","Set"};
-    const uint32_t members[]={32,19,10,5,6,29,12,1,6,13,15};
-    const uint32_t parameters[]={1,0,1,0,1,0,0,0,0,2,1};
-    for (uint32_t id=1;id<=11;++id) {
+    static const char *const names[]={"Array","string","Atomic","Ordering","Task","i64","f64","bool","rune","Map","Set","Iterator"};
+    const uint32_t members[]={32,19,10,5,6,29,12,1,6,13,15,5};
+    const uint32_t parameters[]={1,0,1,0,1,0,0,0,0,2,1,1};
+    for (uint32_t id=1;id<=12;++id) {
         const XrNativeTypeDeclaration *declaration=xr_native_declaration_by_id(id);
         CHECK(declaration && xr_native_declaration_validate(declaration));
         CHECK(!strcmp(declaration->name,names[id-1]));
@@ -94,15 +94,16 @@ static void lookup_boundaries(void) {
             (limit==12?XR_NATIVE_DECLARATION_OK:XR_NATIVE_DECLARATION_WORK_LIMIT));
         CHECK(limit==12 ? out==xr_native_declaration_by_id(1) : !out);
     }
-    /* Each governed name differs from '?' at its first byte. All eleven names
-     * must be inspected before absence can be established. */
-    Work ledger={20,0,0};XrNativeDeclarationWork work={&ledger,charge};
+    /* Every canonical name differs from this probe at its first byte. */
+    for (uint64_t limit=0;limit<=24;++limit) {
+        Work ledger={limit,0,0};XrNativeDeclarationWork work={&ledger,charge};
+        const XrNativeTypeDeclaration *out=NULL;
+        CHECK(xr_native_declaration_find(&work,"?",&out)==
+            (limit==24?XR_NATIVE_DECLARATION_NOT_FOUND:XR_NATIVE_DECLARATION_WORK_LIMIT));
+        CHECK(!out && ledger.used==2*(limit/2) && ledger.calls==(limit==24?12:limit/2+1));
+    }
+    Work ledger={0,0,0};XrNativeDeclarationWork work={&ledger,charge};
     const XrNativeTypeDeclaration *out=NULL;
-    CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_WORK_LIMIT);
-    CHECK(!out && ledger.used==20 && ledger.calls==11);
-    ledger=(Work){22,0,0};
-    CHECK(xr_native_declaration_find(&work,"?",&out)==XR_NATIVE_DECLARATION_NOT_FOUND);
-    CHECK(!out && ledger.used==22 && ledger.calls==11);
     ledger=(Work){0,0,0};
     CHECK(xr_native_declaration_find(&work,(const char *)(uintptr_t)1,&out)==XR_NATIVE_DECLARATION_WORK_LIMIT);
     CHECK(!out && !ledger.used && ledger.calls==1);

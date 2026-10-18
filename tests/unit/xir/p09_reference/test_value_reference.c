@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
     CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_REFERENCE_FIXTURES};
     XrXirSourceRequest request = {session, path, &authority, &owner.context,
-        XR_REFERENCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+        XR_REFERENCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     printf("%s source status=%u location=%u:%d:%d message=%s\n", argv[2],

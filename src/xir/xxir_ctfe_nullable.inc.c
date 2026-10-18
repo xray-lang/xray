@@ -12,18 +12,21 @@
  */
 #include "xxir_equal.h"
 static bool ctfe_nullable_opcode(const XrXirInstruction *op) {
-    return op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME ||
+    return op->op==XR_XIR_F64_TRY_PARSE || op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME ||
         op->op==XR_XIR_NULLABLE_IS_SOME || op->op==XR_XIR_NULLABLE_UNWRAP;
 }
 static XrXirCtfeStatus ctfe_nullable_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[*cursor];XrXirValue result={0};
-    bool create=op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME;
+    bool create=op->op==XR_XIR_F64_TRY_PARSE || op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME;
     XrXirType type=create?op->type:xr_xir_operand_type(run->function,op->args[0]);
     XrXirCtfeStatus status=ctfe_validation_work(run,state,type);
     if (status!=XR_XIR_CTFE_OK) return status;
     XrXirValueAdmission admission=ctfe_value_admission(state);
     XrXirValueStatus value_status=XR_XIR_VALUE_OK;
-    if (create) {
+    if (op->op==XR_XIR_F64_TRY_PARSE) {
+        XrXirValue text={XR_XIR_STRING,0,xr_xir_scalar_load(run->frame,run->layout->offsets[op->args[0]])};
+        value_status=xr_xir_f64_try_parse(&text,type,&admission,&result);
+    } else if (create) {
         XrXirValue payload={0};
         if (op->op==XR_XIR_NULLABLE_SOME) {
             XrXirType element=xr_xir_nullable_element(run->module->types,type);

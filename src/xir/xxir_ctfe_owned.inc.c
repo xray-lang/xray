@@ -28,7 +28,9 @@ typedef struct CtfeOwnedState {
     XrXirTypeArena *arena;
     const XrXirCompileContext *context;
     XrXirCtfeTypeShape *tuple_costs;
-    uint64_t frame_spare;
+    uint64_t frame_spare,loan_base;
+    uint64_t *loan_bytes;
+    uint32_t *identity_roots;
     uint64_t value_header_work;
     XrXirFaultDetail fault;
     struct CtfeCallFrame *activation;
@@ -42,15 +44,22 @@ typedef struct CtfeOwnedState {
     void *closure;
     uint8_t *reachable;
 } CtfeOwnedState;
+typedef XrXirCtfeStatus (*CtfeIdentityVisitor)(ScalarRun *,CtfeOwnedState *,const XrXirValue *,void *);
+static uint64_t ctfe_frame_spare(const CtfeOwnedState *state) {
+    uint64_t growth=state->loan_bytes && *state->loan_bytes>state->loan_base?*state->loan_bytes-state->loan_base:0;
+    return growth>state->frame_spare?0:state->frame_spare-growth;
+}
+static XrXirCtfeStatus ctfe_mutation_work(ScalarRun *run,CtfeOwnedState *state,
+    const XrXirValue *owner,const XrXirValue *incoming);
 
 static XrXirValueStatus ctfe_function_admit(void *context,const XrXirFunctionBinding *binding,XrXirType type,uint64_t *work);
 static XrXirCtfeStatus ctfe_function_binding(CtfeOwnedState *state,const XrXirValue *value,const XrXirFunctionBinding **output);
-static XrXirCtfeStatus ctfe_projection_access_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *value,bool mutate);
+static XrXirCtfeStatus ctfe_projection_access_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *value,bool mutate,uint32_t suffix);
 static XrXirCtfeStatus ctfe_projection_incoming_work(ScalarRun *run,CtfeOwnedState *state,const XrXirValue *cell,const XrXirValue *value);
 static XrXirCtfeStatus ctfe_projection_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state);
 static XrXirValueAdmission ctfe_value_admission(CtfeOwnedState *state) {
     return (XrXirValueAdmission){.arena=state->arena,.domain=state->domain,.function=ctfe_function_admit,
-        .context=state,.work=UINT64_MAX,.scratch_bytes=state->frame_spare};
+        .context=state,.work=UINT64_MAX,.scratch_bytes=ctfe_frame_spare(state)};
 }
 static XrXirCtfeStatus ctfe_value_status(XrXirValueStatus status) {
     return status==XR_XIR_VALUE_OK?XR_XIR_CTFE_OK:
@@ -71,7 +80,7 @@ static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFuncti
     const XrXirInstruction *op) {
     if (op->op==XR_XIR_INVOKE || op->op==XR_XIR_INVOKE_INDIRECT || op->op==XR_XIR_INVOKE_RESULT) return true;
     if (xr_xir_type_is_class(module->types,op->type)) return op->op==XR_XIR_CLASS_NEW || op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_OBJECT_PLACE ||
-        op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_RECORD_FIELD ||
+        op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_CELL_READ || op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_RECORD_FIELD || op->op==XR_XIR_ARRAY_GET ||
         op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_PLACE_READ || op->op==XR_XIR_PHI ||
         op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN;
     if (op->type==XR_XIR_PANIC_INFO) return op->op==XR_XIR_PANIC_CATCH || op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT ||
@@ -81,7 +90,7 @@ static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFuncti
     if (op->type==XR_XIR_ERROR) return op->op==XR_XIR_ERROR_ERASE || op->op==XR_XIR_INVOKE_ERROR || op->op==XR_XIR_CALL ||
         op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW ||
         op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN || op->op==XR_XIR_CELL_READ ||
-        op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_RECORD_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_STRUCT_GET;
+        op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_RECORD_FIELD || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ARRAY_GET;
     if (op->op==XR_XIR_CELL_STRING_APPEND) {
         XrXirType receiver=xr_xir_operand_type(body,op->args[0]);
         XrXirType suffix=xr_xir_operand_type(body,op->args[1]);
@@ -98,7 +107,7 @@ static bool ctfe_storage_instruction(const XrXirModule *module,const XrXirFuncti
         op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT || op->op==XR_XIR_OWNED_LOCAL_NEW ||
         op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_LOCAL_WRITE || op->op==XR_XIR_OWNED_RETAIN;
     if (ctfe_composite_node(module->types,op->type)) return op->op==XR_XIR_CLASS_GET || op->op==XR_XIR_ERROR_NARROW || op->op==XR_XIR_STRUCT_NEW || op->op==XR_XIR_STRUCT_GET || op->op==XR_XIR_ENUM_NEW || op->op==XR_XIR_ENUM_GET || op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_RECORD_NEW ||
-        op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_REPEAT ||
+        op->op==XR_XIR_NULLABLE_NONE || op->op==XR_XIR_NULLABLE_SOME || op->op==XR_XIR_NULLABLE_UNWRAP || op->op==XR_XIR_F64_TRY_PARSE || op->op==XR_XIR_STRING_COPY_BYTES || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_REPEAT ||
         op->op==XR_XIR_ARRAY_WITH_CAPACITY || op->op==XR_XIR_ARRAY_RESERVE || op->op==XR_XIR_ARRAY_GET || op->op==XR_XIR_CELL_PLACE || op->op==XR_XIR_INDEX_PLACE || op->op==XR_XIR_FIELD_PLACE || op->op==XR_XIR_PLACE_READ ||
         op->op==XR_XIR_TUPLE_FIELD || op->op==XR_XIR_RECORD_FIELD || op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_PHI || op->op==XR_XIR_LOCAL_UNINIT ||
         op->op==XR_XIR_OWNED_LOCAL_NEW || op->op==XR_XIR_OWNED_LOCAL_READ || op->op==XR_XIR_OWNED_RETAIN;
@@ -169,7 +178,7 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
     XrXirValue forbidden=state->forbidden_cell;
     if (!create && op->op!=XR_XIR_CELL_READ) state->forbidden_cell=cell;
     XrXirCtfeStatus paid=op->op==XR_XIR_CELL_READ?XR_XIR_CTFE_OK:projected?
-        ctfe_projection_incoming_work(run,state,&cell,&value):ctfe_admission_work(run,state,&value);
+        ctfe_projection_incoming_work(run,state,&cell,&value):create?ctfe_admission_work(run,state,&value):ctfe_mutation_work(run,state,&cell,&value);
     state->forbidden_cell=forbidden;
     if (op->op!=XR_XIR_CELL_READ && paid!=XR_XIR_CTFE_OK) return paid;
     /* Scalar admission has no child traversal. This local bound is not a
@@ -178,7 +187,7 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
     XrXirValueAdmission admission=ctfe_value_admission(state);admission.work=composite || projected?UINT64_MAX:8;
     XrXirValueStatus status;
     if (projected) {
-        paid=ctfe_projection_access_work(run,state,&cell,op->op!=XR_XIR_CELL_READ);
+        paid=ctfe_projection_access_work(run,state,&cell,op->op!=XR_XIR_CELL_READ,0);
         if (paid!=XR_XIR_CTFE_OK) return paid;
         XrXirValuePath empty={0};XrXirFaultDetail fault={0};
         status=op->op==XR_XIR_CELL_READ?xr_xir_cell_authorized_path_read(&cell,&state->authority,&empty,&admission,&result,&fault):
@@ -212,3 +221,6 @@ static const XrXirNominalVariant *ctfe_enum_variant_info(const XrXirTypes *types
 #include "xxir_ctfe_equal.inc.c"
 
 #include "xxir_ctfe_function.inc.c"
+
+#include "xxir_ctfe_identity.inc.c"
+#include "xxir_ctfe_import.inc.c"

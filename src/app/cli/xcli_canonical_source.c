@@ -160,7 +160,7 @@ XR_FUNC XrCliCompileSourceStatus xr_cli_compile_source_build(
         detail.stage = XR_CLI_COMPILE_SOURCE_PRODUCT;
         XrXirSourceProductRequest source = {
             {session, entry, xr_cli_compile_graph_authority_entry(authority), request->context,
-             stdlib, xr_cli_compile_graph_authority_lockfile(authority), XR_XIR_PROGRAM, libraries},
+             stdlib, xr_cli_compile_graph_authority_lockfile(authority), XR_XIR_PROGRAM, libraries,NULL},
             request->target};
         status = source_xir_status(xr_xir_compile_source_product_build(&source, &product, &detail.source));
         if (status == XR_CLI_COMPILE_SOURCE_OK) {

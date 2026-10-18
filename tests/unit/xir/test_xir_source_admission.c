@@ -109,7 +109,7 @@ static void primitive_authority(XrCompilerSession *session, const XrXirCompileCo
     const char *body = "export fn emit(value: string) -> bool { return __writeStderr(value) }\n";
     write_source(output, body); write_source(other, body);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, directory};
-    XrXirSourceRequest request = {session, output, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, output, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirArtifact *artifact = NULL;
     XrXirSourceResult query_result_1 = {0};
         admission_case_begin(&request,&case_owner);
@@ -694,7 +694,7 @@ static XrXirStatus admission_operation(const XrXirCompileContext *context,void *
     XrCompilerSession *session=NULL;
     XrCompilerSessionStatus creation=xr_compile_session_new(context->resources,&session);
     if(creation!=XR_COMPILER_SESSION_OK)return creation==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
-    XrXirSourceRequest request={session,fixture->path,fixture->authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,fixture->path,fixture->authority,context,XR_SOURCE_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult result={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,NULL,NULL);
     CHECK(status==XR_XIR_OK?(result.checked && result.snapshot):(!result.checked && !result.snapshot));
@@ -894,7 +894,7 @@ int main(void) {
     XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK && session);
     primitive_authority(session,&owner.context,absolute);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, absolute};
-    XrXirSourceRequest request = {session, root, &authority, &owner.context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, root, &authority, &owner.context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
     unit_slot_admission(&request,root);
     source_integer_contexts(&request, root);
     source_decimal_contexts(&request, root);

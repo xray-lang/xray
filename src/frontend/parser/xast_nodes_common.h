@@ -26,7 +26,6 @@
 
 #include "xast_types.h"
 #include "../lexer/xlex.h"
-#include "../../shared/xr_derive_flags.h"
 
 typedef struct AstNode AstNode;
 typedef struct XrType XrType;
@@ -95,14 +94,34 @@ typedef struct FixedBytesLiteralNode {
     XrLiteralSourceForm source_form;
 } FixedBytesLiteralNode;
 
+typedef enum XrDeriveFieldOperation {
+    XR_DERIVE_FIELD_DESCRIBE, XR_DERIVE_FIELD_READ, XR_DERIVE_FIELD_WRITE
+} XrDeriveFieldOperation;
+
+typedef struct XrDeriveFieldSyntax {
+    const char *name;
+    uint32_t operation;
+    int line,column;
+} XrDeriveFieldSyntax;
+
+/* Source spelling carries explicit intent only. The receiving compiler resolves
+ * every protocol, ordinary generator, field and constructor before granting it. */
+typedef struct XrDerivationSyntax {
+    XrTypeRef *protocol;
+    const char *generator_module,*generator;
+    XrDeriveFieldSyntax *fields;
+    int field_count;
+    bool construct;
+} XrDerivationSyntax;
+
 // Public attribute node.
 typedef struct XrAttribute {
     AttributeKind kind;
     int timeout;
     // Optional @deprecated message. Arena-allocated, NUL-terminated; NULL when absent.
     const char *str_arg;
-    // Bitmask of XR_DERIVE_* for ATTR_DERIVE; 0 otherwise.
-    uint32_t derive_flags;
+    XrDerivationSyntax *derivation;
+    int line,column;
 } XrAttribute;
 
 // Parser-owned recursive product binding pattern.

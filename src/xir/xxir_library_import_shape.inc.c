@@ -21,17 +21,25 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     /* Suspension has only local body state; common verification retains
      * control obligations and the copied function preserves its effects. */
     case XR_XIR_SUSPEND:
-    case XR_XIR_TASK_AWAIT:
+    case XR_XIR_TASK_AWAIT: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE:
     case XR_XIR_INVOKE_RESULT:
     case XR_XIR_INVOKE_ERROR:
     case XR_XIR_ERROR_ERASE:
     case XR_XIR_THROW:
     case XR_XIR_RETURN:
     case XR_XIR_CONST_INT:
+    case XR_XIR_CONST_FLOAT:
+    case XR_XIR_CONVERT_NUMBER:
+    case XR_XIR_NEG_FLOAT:
+    case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT:
+    case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
+    case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
     case XR_XIR_ADD_INT:
     case XR_XIR_CONST_BOOL:
     case XR_XIR_CONCAT_STRING:
     case XR_XIR_WRITE_STREAM:
+    case XR_XIR_MATH_UNARY_F64: case XR_XIR_MATH_BINARY_F64: case XR_XIR_MATH_UNARY_I64:
+    case XR_XIR_RANDOM_F64: case XR_XIR_RANDOM_I64:
     case XR_XIR_CLOCK_NANOS:
     case XR_XIR_UTC_OFFSET_AT:
     case XR_XIR_TIMER_AFTER_MS:
@@ -91,7 +99,23 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     case XR_XIR_MUL_INT:
     case XR_XIR_DIV_INT:
     case XR_XIR_REM_INT:
+    case XR_XIR_AND_INT:
+    case XR_XIR_OR_INT:
+    case XR_XIR_SHL_INT:
+    case XR_XIR_SHR_INT:
+    case XR_XIR_TO_STRING:
+    case XR_XIR_INTEGER_TO_RUNE:
     case XR_XIR_STRING_LEN:
+    case XR_XIR_F64_TRY_PARSE: case XR_XIR_STRING_COPY_BYTES:
+    case XR_XIR_STRING_CONTAINS:
+    case XR_XIR_STRING_STARTS_WITH:
+    case XR_XIR_STRING_ENDS_WITH:
+    case XR_XIR_STRING_INDEX_OF:
+    case XR_XIR_STRING_LAST_INDEX_OF:
+    case XR_XIR_ASSERT_CONDITION:
+    case XR_XIR_INVOKE_INDIRECT:
+    case XR_XIR_INVOKE_DISCARD:
+    case XR_XIR_PANIC_CATCH:
     case XR_XIR_EQ_STRING:
     case XR_XIR_NE_STRING:
     case XR_XIR_EQUAL:
@@ -100,7 +124,7 @@ static bool library_catalog_local_instruction(XrXirOp op) {
     }
 }
 static bool library_catalog_builtin(XrXirType type) {
-    return type == XR_XIR_I64 || type == XR_XIR_BOOL || type == XR_XIR_STRING;
+    return type == XR_XIR_I64 || type == XR_XIR_BOOL || type == XR_XIR_STRING || type == XR_XIR_F64;
 }
 /* Common verification validates access, ownership and every recursive type first.
  * Import admits only the ordinary value families whose full type and body
@@ -174,7 +198,7 @@ static XrXirStatus library_catalog_closed_types(const XrXirModule *m,
     return XR_XIR_OK;
 }
 static bool library_catalog_type(const XrXirModule *module, const XrXirGeneric *generic, XrXirType type) {
-    if (type == XR_XIR_I64 || type == XR_XIR_STRING || type == XR_XIR_BOOL) return true;
+    if (library_catalog_builtin(type)) return true;
     if (xr_xir_type_node(module->types,type)) return true;
     uint32_t ordinal = (uint32_t)type - XR_XIR_TYPE_PARAMETER_BASE;
     return generic && (uint32_t)type >= XR_XIR_TYPE_PARAMETER_BASE &&
@@ -186,7 +210,8 @@ static XrXirStatus library_catalog_generic(const XrXirModule *module, const XrXi
     for (uint32_t p = 0; p < generic->parameter_count; ++p) {
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
         const XrXirConstraint *constraint = &generic->constraints[p];
-        if (xr_xir_binder_kind(generic,p) != XR_XIR_BINDER_TYPE ||
+        uint32_t kind=xr_xir_binder_kind(generic,p);
+        if ((kind!=XR_XIR_BINDER_TYPE && kind!=XR_XIR_BINDER_RESULT_VARIABLE) ||
             (constraint->markers & ~XR_XIR_CONSTRAINT_MASK)) return XR_XIR_BAD_STAGE;
     }
     for (uint32_t a = 0; a < generic->argument_count; ++a) {
@@ -200,6 +225,9 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
     const XrXirDeclarations *d=m->declarations;
     uint32_t nominal_count=m->types && m->types->nominals ? m->types->nominals->count : 0;
     if (!construction || xr_xir_compile_construction_count(construction)!=nominal_count) return XR_XIR_BAD_STRUCTURE;
+    /* Import must relocate every canonical site before admitting its helpers. */
+    const XrXirComptimeTable *comptime=xr_xir_compile_construction_comptime(construction);
+    if (!comptime || comptime->site_count || comptime->binding_count) return XR_XIR_BAD_STAGE;
     if(m->linkage_kind!=XR_XIR_LIBRARY || m->stage!=XR_XIR_CHECKED) return XR_XIR_BAD_STAGE;
     if(!d || !d->module_count || !d->modules) return XR_XIR_BAD_STAGE;
     /* State remains lexically private. The shared checker has verified each
@@ -230,6 +258,7 @@ static XrXirStatus library_catalog_shape(const XrXirModule *m,
             (!d->functions[f].nominal_owner && d->functions[f].method_kind!=XR_XIR_NON_MEMBER) ||
             (d->functions[f].nominal_owner && d->functions[f].method_kind!=XR_XIR_CONSTRUCTOR &&
              d->functions[f].method_kind!=XR_XIR_MEMBER_HELPER &&
+             d->functions[f].method_kind!=XR_XIR_MATERIALIZER &&
              d->functions[f].method_kind!=XR_XIR_READ_METHOD &&
              d->functions[f].method_kind!=XR_XIR_STATIC_METHOD))
             return XR_XIR_BAD_STAGE;

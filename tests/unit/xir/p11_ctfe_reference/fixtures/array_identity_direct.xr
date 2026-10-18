@@ -1,0 +1,3 @@
+class Box{value:i64;init(value:i64){this.value=value}}
+fn grow(xs:ref Array<Box>){xs.push(Box(41));xs[0]=Box(1)}
+export fn run()->i64{var xs=[Box(0)];grow(ref xs);return xs[0].value+xs[1].value}

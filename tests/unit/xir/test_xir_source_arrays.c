@@ -9,6 +9,7 @@
 #include "xir/xxir_source.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_types.h"
 #include "toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,7 +25,7 @@ static void source_array_original(const char *checked_output, const char *bounds
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ARRAY_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, XR_ARRAY_SOURCE_FIXTURES "/root.xr", &authority, &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, XR_ARRAY_SOURCE_FIXTURES "/root.xr", &authority, &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "array source %u %u:%d:%d %s\n", status,
@@ -91,13 +92,13 @@ static void source_array_original(const char *checked_output, const char *bounds
     puts("Source Array VM: golden, COW, root rebinding, snapshots, result ownership and physical release passed");
 }
 
-static void source_array_reordering(const char *checked_output) {
+static void source_array_reordering(const char *checked_output, bool query_only) {
     SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ARRAY_REORDER_SOURCE_FIXTURES};
     XrXirSourceRequest request = {session, XR_ARRAY_REORDER_SOURCE_FIXTURES "/root.xr", &authority,
-        &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        &compiler.context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "array reorder source %u %u:%d:%d %s\n", status,
@@ -113,7 +114,12 @@ static void source_array_reordering(const char *checked_output) {
         CHECK(decl->signature && decl->range.module < view->module_count && decl->range.line > 0); ++members;
         if (!strcmp(decl->name, "reverse")) {
             CHECK(decl->native_identity == 18 && decl->mutable && decl->exported && !decl->parameter_count);
-            CHECK(!strcmp(decl->signature, "() -> Array<T>") && !decl->type.known); ++reverse;
+            fprintf(stderr,"reverse query known=%u type=%u parent=%u generic_owner=%u array=%u element=%u\n",
+                decl->type.known,(unsigned)decl->type.type,decl->parent,decl->type.generic_owner,
+                xr_xir_type_is_array(view->types,decl->type.type),(unsigned)xr_xir_array_element(view->types,decl->type.type));
+            CHECK(!strcmp(decl->signature, "() -> Array<T>") && decl->type.known);
+            CHECK(decl->type.generic_owner == decl->parent && xr_xir_type_is_array(view->types,decl->type.type));
+            CHECK(xr_xir_array_element(view->types,decl->type.type) == XR_XIR_TYPE_PARAMETER_BASE); ++reverse;
         } else if (!strcmp(decl->name, "unshift")) {
             CHECK(decl->native_identity == 10 && decl->mutable && decl->exported && decl->parameter_count == 1);
             CHECK(!strcmp(decl->signature, "(value: T)") && decl->type.known && decl->type.type == XR_XIR_UNIT);
@@ -122,6 +128,10 @@ static void source_array_reordering(const char *checked_output) {
         }
     }
     CHECK(members == 4 && reverse == 1 && unshift == 1);
+    if(query_only) {
+        xr_xir_compile_artifact_free(checked);xr_xir_compile_source_result_free(&result);
+        source_fixture_owner_free(&compiler);puts("Source Array complete reverse query PASS");return;
+    }
     xr_xir_compile_source_result_free(&result);
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
@@ -139,8 +149,9 @@ static void source_array_reordering(const char *checked_output) {
     puts("Source Array reordering VM: independent program, transaction, suspension and physical release passed");
 }
 int main(int argc, char **argv) {
-    CHECK(argc == 1 || argc == 4);
+    CHECK(argc == 1 || argc == 4 || (argc == 2 && !strcmp(argv[1],"--query-only")));
+    if(argc == 2){source_array_reordering(NULL,true);return 0;}
     source_array_original(argc == 4 ? argv[1] : NULL, argc == 4 ? argv[2] : NULL);
-    source_array_reordering(argc == 4 ? argv[3] : NULL);
+    source_array_reordering(argc == 4 ? argv[3] : NULL,false);
     return 0;
 }

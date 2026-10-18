@@ -114,7 +114,7 @@ def main():
         objects.append(obj)
     executable = args.output / 'program.exe'
     run('link', [args.linker, '/nologo', '/incremental:no', '/out:' + str(executable),
-                 *objects, *libraries, 'kernel32.lib', '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
+                 *objects, *libraries, 'kernel32.lib', 'bcrypt.lib', '/defaultlib:MSVCRT', '/defaultlib:OLDNAMES'])
     run('native-c-consumer', [executable], stdout=golden, stderr=b'')
     published = args.output / 'published-program.exe'
     run('public-native-build', [args.cli, 'build', fixture / 'root.xr', '-o', published], stderr=b'')

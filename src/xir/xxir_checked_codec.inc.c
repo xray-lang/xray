@@ -187,11 +187,12 @@ static void checked_implementations(CheckedCursor *c, XrXirDeclarations *d) {
     XrXirImplementationTable *table = checked_array(c, d->implementations, 1, sizeof(*table), 16);
     if (c->reading) d->implementations = table;
     if (!table) return;
-    XrXirImplementation *records = checked_array(c, table->records, count, sizeof(*records), 16);
+    XrXirImplementation *records = checked_array(c, table->records, count, sizeof(*records), 20);
     if (c->reading) { table->records = records; table->count = records ? count : 0; }
     for (uint32_t i = 0; records && i < count && c->status == XR_XIR_OK; ++i) {
         XrXirImplementation record = records[i];
         record.nominal_declaration = checked_u32(c, record.nominal_declaration);
+        record.derivation_policy = checked_u32(c, record.derivation_policy);
         checked_application(c, &record.interface);
         uint32_t bindings_count = checked_u32(c, record.binding_count);
         XrXirImplementationBinding *bindings = checked_array(c, record.bindings,
@@ -207,7 +208,10 @@ static void checked_implementations(CheckedCursor *c, XrXirDeclarations *d) {
         if (c->reading) records[i] = record;
     }
 }
-static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_t functions) {
+#include "xxir_derivation_codec.inc.c"
+
+static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, const XrXirModule *module) {
+    uint32_t functions=module->function_count;
     d->module_count = checked_u32(c, d->module_count);
     d->slot_count = checked_u32(c, d->slot_count);
     d->literal_count = checked_u32(c, d->literal_count);
@@ -242,6 +246,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         id.test_role = checked_u32(c, id.test_role);
         id.test_timeout_seconds = checked_u32(c, id.test_timeout_seconds);
         id.variadic = checked_u32(c, id.variadic);
+        id.derivation = checked_u32(c, id.derivation);
         if (c->reading) identities[i] = id;
     }
     XrXirSlot *slots = checked_array(c, d->slots, d->slot_count, sizeof(*slots), 20);
@@ -263,6 +268,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
         if (c->reading) literals[i] = literal;
     }
     checked_implementations(c, d);
+    checked_derivations(c, d, module);
 }
 static XrXirInterfaceApplication *checked_applications(CheckedCursor *c,
     const XrXirInterfaceApplication *source, uint32_t *count) {
@@ -480,7 +486,8 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
             s.element = (XrXirType)checked_u32(c, (uint32_t)s.element);
             s.result = (XrXirType)checked_u32(c, (uint32_t)s.result);
         } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_SET || s.kind == XR_XIR_TYPE_CELL ||
-                   s.kind == XR_XIR_TYPE_NULLABLE || s.kind == XR_XIR_TYPE_ATOMIC || s.kind == XR_XIR_TYPE_TASK) {
+                   s.kind == XR_XIR_TYPE_NULLABLE || s.kind == XR_XIR_TYPE_ATOMIC || s.kind == XR_XIR_TYPE_TASK ||
+                   s.kind == XR_XIR_TYPE_ITERATOR || s.kind == XR_XIR_TYPE_SLICE || s.kind == XR_XIR_TYPE_MUT_SLICE) {
             s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
         } else if (s.kind == XR_XIR_TYPE_NOMINAL) {
             s.nominal.declaration = checked_u32(c, s.nominal.declaration);
@@ -525,6 +532,7 @@ static void checked_defaults(CheckedCursor *c, XrXirModule *module) {
         if (c->reading) records[i] = record;
     }
 }
+#include "xxir_checked_comptime.inc.c"
 /* The exact dense denominators are wire facts, even when every helper is zero. */
 static void checked_construction(CheckedCursor *c, XrXirModule *module,
     XrXirConstruction **construction) {
@@ -563,6 +571,17 @@ static void checked_construction(CheckedCursor *c, XrXirModule *module,
             if (c->reading) values[f] = value;
         }
     }
+    uint32_t edges=checked_u32(c,c->reading?0:owner->materialization_count);
+    if (c->status!=XR_XIR_OK) return;
+    XrXirMaterializationBinding *bindings=checked_array(c,owner->materializations,edges,sizeof(*bindings),16);
+    if (c->reading) { owner->materializations=bindings;owner->materialization_count=bindings?edges:0; }
+    for (uint32_t i=0;i<edges && c->status==XR_XIR_OK;++i) {
+        XrXirMaterializationBinding row=bindings[i];
+        row.caller=checked_u32(c,row.caller);row.instruction=checked_u32(c,row.instruction);
+        row.function=checked_u32(c,row.function);row.nominal=checked_u32(c,row.nominal);
+        if (c->reading) bindings[i]=row;
+    }
+    if (c->status==XR_XIR_OK) checked_comptime(c,owner);
 }
 
 static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction **construction, uint32_t evidence_limit);
@@ -685,7 +704,7 @@ static void checked_effect_proofs(CheckedCursor *c, XrXirProvenance *p) {
 static void checked_provenance(CheckedCursor *c, XrXirModule *m, uint32_t evidence_limit) {
     uint32_t kind = checked_u32(c, m->provenance ? m->provenance->kind : XR_XIR_EVIDENCE_ABSENT);
     if (c->status != XR_XIR_OK) return;
-    if (kind > evidence_limit || kind > XR_XIR_EVIDENCE_INSTANCE) {
+    if (kind > evidence_limit || kind > XR_XIR_EVIDENCE_EVALUATION) {
         c->status = XR_XIR_BAD_STRUCTURE; return;
     }
     if (kind == XR_XIR_EVIDENCE_ABSENT) return;
@@ -729,7 +748,7 @@ static void checked_module(CheckedCursor *c, XrXirModule *m, XrXirConstruction *
         m->declarations = owned;
         if (!owned) return;
         XrXirDeclarations d = *owned;
-        checked_declarations(c, &d, count);
+        checked_declarations(c, &d, m);
         if (c->reading) *owned = d;
     }
     checked_generics(c, m);
@@ -749,7 +768,8 @@ static XrXirStatus checked_error(XrXirStatus status, XrXirDiagnostic *diagnostic
     if (diagnostic) *diagnostic = (XrXirDiagnostic) {status, UINT32_MAX, UINT32_MAX, UINT32_MAX, XR_XIR_DIAGNOSTIC_NONE};
     return status;
 }
-static XrXirStatus checked_encode(const XrXirArtifact *artifact, XrXirCheckedPacket *output, XrXirDiagnostic *diagnostic) {
+static XrXirStatus checked_encode_mode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,
+    XrXirDiagnostic *diagnostic,bool evaluation) {
     XrXirStatus allocation_status = XR_XIR_OK;
     if (!artifact) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = artifact->context;
@@ -758,12 +778,14 @@ static XrXirStatus checked_encode(const XrXirArtifact *artifact, XrXirCheckedPac
 
     if (!artifact || artifact->module.stage != XR_XIR_CHECKED)
         return checked_error(XR_XIR_BAD_STAGE, diagnostic);
+    if (evaluation?(!artifact->evaluation_only || !xir_effect_evidence_is_evaluation(&artifact->module)):
+        xir_artifact_is_evaluation(artifact)) return checked_error(XR_XIR_BAD_STAGE,diagnostic);
     XrXirCompileContext limits = *budget;
     size_t capacity = SIZE_MAX;
-    CheckedCursor c = {NULL, NULL, 64, capacity, limits.limits, limits, XR_XIR_OK, false};
+    CheckedCursor c = {NULL, NULL, evaluation?76u:64u, capacity, limits.limits, limits, XR_XIR_OK, false};
     XrXirModule module = artifact->module;
     XrXirConstruction *construction = artifact->construction;
-    checked_module(&c, &module, &construction, XR_XIR_EVIDENCE_INSTANCE);
+    checked_module(&c,&module,&construction,evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE);
     if (c.status != XR_XIR_OK) return checked_error(c.status, diagnostic);
     size_t size = c.position;
     uint8_t *bytes = xir_compile_calloc(&artifact->context, size, 1, &allocation_status);
@@ -771,13 +793,17 @@ static XrXirStatus checked_encode(const XrXirArtifact *artifact, XrXirCheckedPac
     if (!xir_compile_work(&limits, 8)) {
         xr_compile_resources_free(bytes); return checked_error(XR_XIR_BUDGET, diagnostic);
     }
-    memcpy(bytes, "XRCHK\0\0\0", 8);
+    memcpy(bytes,evaluation?"XRCEV\0\0\0":"XRCHK\0\0\0",8);
     c = (CheckedCursor) {NULL, bytes, 8, size, limits.limits, limits, XR_XIR_OK, false};
-    checked_u32(&c, XR_XIR_CHECKED_SCHEMA); checked_u32(&c, XR_XIR_CHECKED_CONTRACT);
+    checked_u32(&c,evaluation?1u:XR_XIR_CHECKED_SCHEMA); checked_u32(&c, XR_XIR_CHECKED_CONTRACT);
     checked_u32(&c, XR_XIR_CHECKED); checked_u32(&c, 0);
     checked_integer(&c, size - 64, 8);
     c.position = 64; module = artifact->module;
-    checked_module(&c, &module, &construction, XR_XIR_EVIDENCE_INSTANCE);
+    if (evaluation) {
+        const XirEvaluationRoot *root=&artifact->module.provenance->evaluation;
+        checked_u32(&c,root->caller);checked_u32(&c,root->instruction);checked_u32(&c,root->callee);
+    }
+    checked_module(&c,&module,&construction,evaluation?XR_XIR_EVIDENCE_EVALUATION:XR_XIR_EVIDENCE_INSTANCE);
     if (c.status != XR_XIR_OK || c.position != size) {
         xr_compile_resources_free(bytes); return checked_error(c.status != XR_XIR_OK ? c.status : XR_XIR_BAD_STRUCTURE, diagnostic);
     }
@@ -787,6 +813,12 @@ static XrXirStatus checked_encode(const XrXirArtifact *artifact, XrXirCheckedPac
     checked_digest(bytes, size, bytes + 32);
     *output = (XrXirCheckedPacket) {bytes, size};
     return XR_XIR_OK;
+}
+static XrXirStatus checked_encode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,XrXirDiagnostic *diagnostic) {
+    return checked_encode_mode(artifact,output,diagnostic,false);
+}
+static inline XrXirStatus checked_evaluation_encode(const XrXirArtifact *artifact,XrXirCheckedPacket *output,XrXirDiagnostic *diagnostic) {
+    return checked_encode_mode(artifact,output,diagnostic,true);
 }
 
 #endif // XXIR_CHECKED_CODEC_INC_C

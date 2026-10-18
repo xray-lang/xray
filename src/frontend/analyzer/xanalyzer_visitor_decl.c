@@ -2047,14 +2047,6 @@ XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, As
     }
 }
 
-static uint32_t xa_class_decl_derive_flags(XrAttribute **attrs, int count) {
-    uint32_t flags = 0;
-    for (int i = 0; i < count; i++) {
-        if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
-            flags |= attrs[i]->derive_flags;
-    }
-    return flags;
-}
 
 // Recursively collect all return types from a statement tree
 static void collect_return_types(XaInferContext *ctx, AstNode *node, XrType ***types, int *count,
@@ -3671,6 +3663,14 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
                          : is_struct_decl               ? &node->as.struct_decl
                                                         : &node->as.union_decl;
 
+    for (int i = 0; i < cls->attr_count; ++i) {
+        if (!cls->attributes[i] || cls->attributes[i]->kind != ATTR_DERIVE) continue;
+        XrLocation location = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+            "ordinary derivation requires the Source XIR compiler", &location);
+        return;
+    }
+
     if (xa_reject_builtin_name_redeclaration(ctx, node, decl_label, cls->name))
         return;
 
@@ -3740,7 +3740,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     if (!info) {
         info = xa_class_info_new(cls->name);
         info->explicit_final = cls->explicit_final;
-        info->derive_flags = xa_class_decl_derive_flags(cls->attributes, cls->attr_count);
+        info->derive_flags = 0;
         info->capability_flags = xa_declared_type_capability_flags(ctx->file_path, capability_name);
         info->location =
             (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -3751,7 +3751,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         links->owns_class_info = true;
     } else {
         info->explicit_final = cls->explicit_final;
-        info->derive_flags = xa_class_decl_derive_flags(cls->attributes, cls->attr_count);
+        info->derive_flags = 0;
         info->capability_flags = xa_declared_type_capability_flags(ctx->file_path, capability_name);
         info->location =
             (XrLocation) {.file = ctx->file_path, .line = node->line, .column = node->column};

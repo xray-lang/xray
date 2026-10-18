@@ -62,6 +62,8 @@ static XrXirStatus provenance_storage_shape(const XrXirCompileContext *context,
     const XrXirProvenance *source) {
     if (!source) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context, 8)) return XR_XIR_BUDGET;
+    if (source->kind!=XR_XIR_EVIDENCE_EVALUATION &&
+        (source->evaluation.caller || source->evaluation.instruction || source->evaluation.callee)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status;
     if (source->kind == XR_XIR_EVIDENCE_TEMPLATE) {
         if (source->source || source->origins || source->count || source->bindings ||
@@ -76,7 +78,7 @@ static XrXirStatus provenance_storage_shape(const XrXirCompileContext *context,
         }
         return XR_XIR_OK;
     }
-    if (source->kind != XR_XIR_EVIDENCE_INSTANCE || !source->source ||
+    if (!xir_effect_kind_is_closed(source->kind) || !source->source ||
         source->contracts || source->contract_count || !source->count) return XR_XIR_BAD_STRUCTURE;
     status = provenance_vector_shape(context, source->origins, source->count,
         sizeof(*source->origins));
@@ -157,6 +159,10 @@ static XrXirProvenance *provenance_clone(const XrXirCompileContext *context,
     if (!copy) return NULL;
     if (!xir_compile_work(context, 1)) { *allocation_status = XR_XIR_BUDGET; goto failed; }
     copy->kind = source->kind;
+    if (source->kind==XR_XIR_EVIDENCE_EVALUATION) {
+        if (!xir_compile_work(context,sizeof(source->evaluation))) { *allocation_status=XR_XIR_BUDGET;goto failed; }
+        copy->evaluation=source->evaluation;
+    }
     if (source->kind == XR_XIR_EVIDENCE_TEMPLATE) {
         copy->contracts = xir_compile_calloc(context, source->contract_count,
             sizeof(*copy->contracts), allocation_status);
@@ -185,7 +191,7 @@ static XrXirStatus provenance_copy_source(const XrXirCompileContext *context,
     if (!output || *output || !source) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = provenance_storage_shape(context, source);
     if (status != XR_XIR_OK) return status;
-    if (source->kind == XR_XIR_EVIDENCE_INSTANCE) {
+    if (xir_effect_kind_is_closed(source->kind)) {
         status = source_effects ? xr_xir_compile_verify_source_effects_v2(context,
             &source->source->module,source->source->construction,source_effects,NULL) :
             xr_xir_compile_verify_v2(context,&source->source->module,source->source->construction,NULL);
@@ -209,7 +215,7 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_copy(const XrXirCompileContext *co
 }
 XR_FUNC XrXirStatus xr_xir_compile_provenance_copy_source_effects(const XrXirCompileContext *context,
     const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output) {
-    if (!source_effects || !source || source->kind!=XR_XIR_EVIDENCE_INSTANCE)
+    if (!source_effects || !source || !xir_effect_kind_is_closed(source->kind))
         return XR_XIR_BAD_STRUCTURE;
     return provenance_copy_source(context,source,source_effects,output);
 }

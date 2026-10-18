@@ -9,7 +9,7 @@ import re
 
 
 TYPE_MARKER = re.compile(r'^\s*//\s*@native-type\s+id=([1-9][0-9]*)\s*$', re.M)
-OP_MARKER = re.compile(r'//\s*@native-operation\s+([A-Z_][A-Z_0-9]*)\s+allocation=(no_heap|may_heap)\s+'
+OP_MARKER = re.compile(r'//\s*@native-operation\s+([A-Z][A-Z0-9_]*)\s+allocation=(no_heap|may_heap)\s+'
                        r'failures=([a-z_,]+)\s+ownership=(owned|unit)\s*$')
 IDENT = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
 TOKENS = re.compile(r'\s*(\.\.\.|->|[A-Za-z_][A-Za-z0-9_]*|[<>()?,:])')
@@ -138,6 +138,8 @@ def simple_term(term, binder):
     if isinstance(binder, tuple):
         if len(binder) == 2:
             key, value = [('name', name, ()) for name in binder]
+            if term == TypeParser(f'fn(key: {binder[0]}, value: {binder[1]})').type():
+                return 'CALLBACK_KEY_VALUE_VISIT'
             return {key: 'KEY', value: 'VALUE', ('nullable', value): 'NULLABLE_VALUE',
                     ('name', 'Array', (key,)): 'ARRAY_KEY',
                     ('name', 'Array', (value,)): 'ARRAY_VALUE',
@@ -158,8 +160,14 @@ def simple_term(term, binder):
         return 'STRING'
     if term == ('name', 'bool', ()):
         return 'BOOL'
+    if term == ('name', 'f64', ()):
+        return 'F64'
+    if term == ('nullable', ('name', 'f64', ())):
+        return 'NULLABLE_F64'
     if term == ('name', 'Ordering', ()):
         return 'ORDERING'
+    if term == ('name', 'Array', (('name', 'u8', ()),)):
+        return 'ARRAY_U8'
     if binder and term == ('tuple', (('name', binder, ()), ('name', 'bool', ()))):
         return 'TUPLE_ELEMENT_BOOL'
     if binder and term == ('name', binder, ()):
@@ -167,6 +175,8 @@ def simple_term(term, binder):
     if binder:
         if term == ('name', 'U', ()):
             return 'RESULT_VARIABLE'
+        if term == ('name', 'Set', (('name', binder, ()),)):
+            return 'SET_ELEMENT'
         if term == ('name', 'Array', (('name', binder, ()),)):
             return 'ARRAY_ELEMENT'
         if term == ('name', 'Array', (('tuple', (('name', 'i64', ()), ('name', binder, ()))),)):
@@ -175,6 +185,8 @@ def simple_term(term, binder):
             return 'ARRAY_RESULT'
         if term == ('nullable', ('name', binder, ())):
             return 'NULLABLE_ELEMENT'
+        if term == TypeParser(f'fn(value: {binder})').type():
+            return 'CALLBACK_ELEMENT_VISIT'
         callback_terms = {
             f'fn(item: {binder}, index: i64) -> U': 'CALLBACK_MAP',
             f'fn(item: {binder}, index: i64) -> bool': 'CALLBACK_PREDICATE_INDEXED',
@@ -357,7 +369,8 @@ def parse_source(source, prelude):
                 'FLOAT_FLOOR': ('floor', '() -> i64', 'no_heap', 'numeric_range'),
                 'FLOAT_CEIL': ('ceil', '() -> i64', 'no_heap', 'numeric_range'),
                 'FLOAT_ROUND': ('round', '() -> i64', 'no_heap', 'numeric_range'),
-                'FLOAT_IS_NAN': ('isNaN', '() -> bool', 'no_heap', 'none')},
+                'FLOAT_IS_NAN': ('isNaN', '() -> bool', 'no_heap', 'none'),
+                'F64_TRY_PARSE': ('tryParse', '(text: string) -> f64?', 'may_heap', 'allocation,retain,limit')},
             8: {'BOOL_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit')},
             9: {'RUNE_TO_U32': ('toUInt32', '() -> u32', 'no_heap', 'none'),
                 'RUNE_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit')},
@@ -368,7 +381,8 @@ def parse_source(source, prelude):
                 continue
             shape = (member.name, member.signature, member.allocation, member.failures)
             if (shape != contracts.get(member.operation) or member.receiver != 'READ' or
-                    member.static or not member.method or member.lowered or member.ownership != 'owned' or
+                    member.static != (member.operation == 'F64_TRY_PARSE') or not member.method or
+                    member.lowered != (member.operation == 'F64_TRY_PARSE') or member.ownership != 'owned' or
                     member.operation in used):
                 raise ValueError('scalar operation disagrees with its complete declaration contract')
             used.add(member.operation)
@@ -439,23 +453,26 @@ def parse_source(source, prelude):
             'STRING_ENDS_WITH': ('endsWith', 'READ', ('STRING',), 'BOOL', 'no_heap', 'none', 'owned'),
             'STRING_TO_STRING': ('toString', 'READ', (), 'STRING', 'no_heap', 'retain', 'owned'),
             'STRING_REPEAT': ('repeat', 'READ', ('I64',), 'STRING', 'may_heap', 'allocation,retain,limit', 'owned'),
+            'STRING_COPY_BYTES': ('copyBytes', 'READ', (), 'ARRAY_U8', 'may_heap', 'allocation,retain,limit', 'owned'),
         }.get(member.operation)
         optional = tuple(p[3] for p in member.parameters)
         expected_optional = (False, True) if member.operation == 'STRING_INDEX_OF' else (False,) * len(member.parameters)
-        expected_static = member.operation == 'ARRAY_WITH_CAPACITY'
+        expected_static = member.operation in ('ARRAY_WITH_CAPACITY', 'F64_TRY_PARSE')
         expected_method = member.operation != 'ARRAY_CAPACITY'
-        if shape != expected or member.static != expected_static or member.method != expected_method or optional != expected_optional or any(p[4] for p in member.parameters):
+        if (shape != expected or member.static != expected_static or member.method != expected_method or
+                optional != expected_optional or any(p[4] for p in member.parameters) or
+                (member.operation == 'F64_TRY_PARSE' and not member.lowered)):
             raise ValueError('operation declaration disagrees with its semantic contract: ' + member.operation)
     required = {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY', 'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(recipes) if header[0] == 1 else {
         'STRING_CONTAINS', 'STRING_STARTS_WITH', 'STRING_ENDS_WITH', 'STRING_INDEX_OF', 'STRING_LAST_INDEX_OF',
-        'STRING_TO_STRING', 'STRING_REPEAT'}
+        'STRING_TO_STRING', 'STRING_REPEAT', 'STRING_COPY_BYTES'}
     if used != required:
         raise ValueError('incorrect admitted native operation set')
     return header, members
 
 
 def validate_hash_members(identity, members):
-    """Signatures describe the type; no member gains execution authority here."""
+    """Admitted members require their complete signature and operation contract."""
     contracts = {
         10: {'get': ('READ', '(key: K) -> V?'), 'set': ('REF', '(key: K, value: V)'),
             'containsKey': ('READ', '(key: K) -> bool'), 'containsValue': ('READ', '(value: V) -> bool'),
@@ -475,10 +492,26 @@ def validate_hash_members(identity, members):
     }[identity]
     if {member.name for member in members} != set(contracts):
         raise ValueError('incorrect native hash member inventory')
+    admitted = {10: {'get': 'MAP_GET', 'set': 'MAP_SET', 'containsKey': 'HASH_CONTAINS',
+                    'containsValue': 'MAP_CONTAINS_VALUE',
+                    'delete': 'HASH_DELETE', 'clear': 'HASH_CLEAR', 'keys': 'HASH_KEYS',
+                    'values': 'HASH_VALUES', 'entries': 'MAP_ENTRIES', 'forEach': 'HASH_FOR_EACH'},
+                11: {'add': 'SET_ADD', 'contains': 'HASH_CONTAINS',
+                    'delete': 'HASH_DELETE', 'clear': 'HASH_CLEAR', 'values': 'HASH_VALUES', 'toArray': 'HASH_VALUES',
+                    'union': 'SET_UNION', 'intersection': 'SET_INTERSECTION', 'difference': 'SET_DIFFERENCE',
+                    'symmetricDifference': 'SET_SYMMETRIC_DIFFERENCE',
+                    'isSubset': 'SET_IS_SUBSET', 'isSuperset': 'SET_IS_SUPERSET', 'forEach': 'HASH_FOR_EACH'}}[identity]
     for member in members:
         receiver, signature = contracts[member.name]
+        operation = admitted.get(member.name, 'NONE')
+        if operation != 'NONE':
+            ownership = 'unit' if member.name in ('set', 'add', 'clear', 'forEach') else 'owned'
+            failures = 'allocation,retain,limit,callback' if member.name == 'forEach' else 'allocation,retain,limit'
+            if (member.operation, member.allocation, member.failures, member.ownership) != (
+                    operation, 'may_heap', failures, ownership):
+                raise ValueError('native hash operation disagrees with its execution contract: ' + member.name)
         if (member.receiver != receiver or tokens(member.signature) != tokens(signature) or
-                member.static or not member.method or member.lowered or member.operation != 'NONE'):
+                member.static or not member.method or member.lowered or member.operation != operation):
             raise ValueError('native hash declaration disagrees with its signature contract: ' + member.name)
 
 
@@ -677,6 +710,81 @@ def render_task_identity(root):
 
 
 
+def parse_iterator_source(root):
+    """Read the whole governed identity without granting a native value body."""
+    source = (root / 'stdlib/types/iterator.xr').read_text(encoding='utf-8').replace('\r\n', '\n')
+    prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8')
+    binding = re.findall(r'XR_BUILTIN_PRELUDE_TYPE\("Iterator",\s*1,\s*XR_TINSTANCE,\s*GENERIC_1\)', prelude)
+    registrations = re.findall(r'XR_BUILTIN_[A-Z_]+\(\s*"Iterator"', prelude)
+    if len(binding) != 1 or len(registrations) != 1:
+        raise ValueError('Iterator registry needs one exact one-parameter binding')
+    if re.search(r'@native-', source):
+        raise ValueError('Iterator identity grants no native member operation')
+    rows = [(number, raw) for number, raw in enumerate(source.splitlines(), 1)
+            if raw.strip() and not raw.strip().startswith('//')]
+    expected = ['class Iterator<T> {', 'hasNext() -> bool', 'next() -> T',
+                'nth(index: i64) -> T', 'iterator() -> Iterator<T>', 'toString() -> string', '}']
+    if [raw.strip() for _, raw in rows] != expected:
+        raise ValueError('Iterator source differs from its complete governed declaration')
+    members = []
+    for number, raw in rows[1:-1]:
+        text = raw.strip()
+        name = IDENT.match(text).group()
+        signature = text[len(name):]
+        parser = TypeParser(signature)
+        parameters = parser.parameters()
+        parser.take('->')
+        result = parser.type()
+        if parser.peek() is not None:
+            raise ValueError('trailing Iterator member signature')
+        result_text = signature.split('->', 1)[1].strip()
+        lowered = number > 1 and source.splitlines()[number - 2].strip() == '// @lowered'
+        operation = {'hasNext': 'ITERATOR_HAS_NEXT', 'next': 'ITERATOR_NEXT',
+                     'nth': 'ITERATOR_NTH'}.get(name, 'NONE')
+        if operation != 'NONE' and not lowered:
+            raise ValueError('Iterator pull operation requires its exact lowered signature')
+        members.append(Member(name, signature, number, len(raw[:raw.index(name)].encode('utf-8')) + 1,
+            'READ', False, True, lowered, parameters, result, result_text, operation,
+            'may_heap' if operation != 'NONE' else 'unknown',
+            'IteratorExhausted' if name in ('next', 'nth') else '',
+            'owned' if operation != 'NONE' else 'unknown'))
+    number, raw = rows[0]
+    header = (12, 'Iterator', ('T',), number, len(raw[:raw.index('Iterator')].encode('utf-8')) + 1)
+    return source, header, members
+
+
+def render_iterator_identity(root):
+    """Bind the complete declaration and its compiler-owned pull recipes."""
+    source, header, members = parse_iterator_source(root)
+    output = []
+    for index, member in enumerate(members):
+        if member.parameters:
+            output.append(f'static const XrNativeParameter xr_native_iterator_parameters_{index}[] = {{')
+            for pname, term, spelling, optional, variadic in member.parameters:
+                output.append('    {' + ', '.join([c_string(pname), c_string(spelling),
+                    'XR_NATIVE_TERM_' + simple_term(term, 'T'), str(optional).lower(), str(variadic).lower()]) + '},')
+            output.append('};')
+    output.append('static const XrNativeMemberDeclaration xr_native_iterator_members[] = {')
+    for index, member in enumerate(members):
+        params = f'xr_native_iterator_parameters_{index}' if member.parameters else 'NULL'
+        output.append('    {' + ', '.join([str(index + 1), c_string(member.name), c_string(member.signature),
+            c_string(member.result_text), str(member.line), str(member.column),
+            'XR_NATIVE_RECEIVER_READ', 'false', 'true', str(member.lowered).lower(), 'true',
+            'XR_NATIVE_OPERATION_' + member.operation,
+            'XR_NATIVE_ALLOCATION_' + member.allocation.upper(), c_string(member.failures),
+            'XR_NATIVE_RESULT_OWNERSHIP_' + member.ownership.upper(), params, str(len(member.parameters)),
+            'XR_NATIVE_TERM_' + simple_term(member.result, 'T')]) + '},')
+    digest = hashlib.sha256(source.encode('utf-8')).digest()
+    output += ['};', 'static const char *const xr_native_iterator_type_parameters[] = {"T"};',
+        'static const XrNativeTypeDeclaration xr_native_iterator = {',
+        '    12, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", xr_native_iterator_type_parameters, 1,',
+        '    "stdlib/types/iterator.xr", "xray-native:prelude/Iterator", {{' +
+        ', '.join(str(byte) for byte in digest) + '}},',
+        f'    {header[3]}, {header[4]}, xr_native_iterator_members, 5', '};']
+    return output
+
+
+
 def render_prelude_source(root):
     """One fixed owned enum module; the complete input digest closes its identity."""
     prelude = (root / 'stdlib/prelude/builtin_symbols.def').read_text(encoding='utf-8').replace('\r\n', '\n')
@@ -726,6 +834,7 @@ def render(root):
         scalar_lines += generated
     lines += array_lines + string_lines + integer_lines + scalar_lines + render_atomic_identities(root) + render_task_identity(root)
     lines += render_type(root, 'map')[0] + render_type(root, 'set')[0]
+    lines += render_iterator_identity(root)
     binder = header[2]
     receiver = {}
     for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):

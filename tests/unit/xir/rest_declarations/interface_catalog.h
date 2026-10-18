@@ -25,7 +25,7 @@ static XrXirLibraryCatalog *rest_interface_catalog(const XrXirCompileContext *co
     XrXirInterfaceDeclaration declaration={{identity,sizeof(identity)-1},{"Rest",4},1,NULL,0,NULL,0,&method,1};
     XrXirInterfaceTable table={&declaration,1};XrXirTypes types={nodes,2,NULL,&table};
     XrXirSourceModule source={identity,sizeof(identity)-1,NULL,0,0,0};XrXirFunctionIdentity function_identity={0};
-    XrXirDeclarations declarations={&source,1,&function_identity,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
+    XrXirDeclarations declarations={&source,1,&function_identity,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL,NULL};
     XrXirModule built={XR_XIR_BUILT,&function,1,&declarations,NULL,&types,NULL,XR_XIR_LIBRARY,NULL};
     XrXirArtifact *checked=NULL;CHECK(xir_fixture_check(context,&built,&checked,NULL)==XR_XIR_OK);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);

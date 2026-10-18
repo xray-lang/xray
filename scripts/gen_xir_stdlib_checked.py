@@ -12,6 +12,7 @@ from pathlib import Path
 LIBRARIES = (
     ('output', 'io', 'io/output.xr', 'io/output/io-output.chk'),
     ('time', 'time', 'time/time.xr', 'time/time.chk'),
+    ('math', 'math', 'math/math.xr', 'math/math.chk'),
 )
 
 

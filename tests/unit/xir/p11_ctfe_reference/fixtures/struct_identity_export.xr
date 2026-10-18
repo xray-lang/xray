@@ -1,0 +1,3 @@
+class Box{value:i64;init(value:i64){this.value=value}}
+struct Wrap{item:Box}
+export fn run()->Wrap{return comptime Wrap{item:Box(42)}}

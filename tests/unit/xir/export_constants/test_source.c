@@ -25,7 +25,7 @@ static XrXirStatus constant_source(const XrXirCompileContext *context,const char
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,kind,catalog};
+    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,kind,catalog,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if (status==XR_XIR_OK) {

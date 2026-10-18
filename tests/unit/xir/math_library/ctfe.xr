@@ -1,0 +1,2 @@
+import math
+export fn folded() -> f64 {return comptime math.sqrt(81.0)}

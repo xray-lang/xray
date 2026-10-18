@@ -85,10 +85,13 @@ typedef struct XrXirSourceSnapshot XrXirSourceSnapshot;
 typedef enum XrXirSourceSyntaxRole {
     XR_XIR_SOURCE_SYNTAX_NONE, XR_XIR_SOURCE_SYNTAX_NAME,
     XR_XIR_SOURCE_SYNTAX_METHOD, XR_XIR_SOURCE_SYNTAX_CLOSURE,
-    XR_XIR_SOURCE_SYNTAX_RECEIVER, XR_XIR_SOURCE_SYNTAX_UNRESOLVED
+    XR_XIR_SOURCE_SYNTAX_RECEIVER, XR_XIR_SOURCE_SYNTAX_DERIVED_METHOD,
+    XR_XIR_SOURCE_SYNTAX_UNRESOLVED
 } XrXirSourceSyntaxRole;
 #define XR_XIR_SOURCE_SYNTAX_STATIC 1u
 typedef struct XrXirSourceDeclarationSyntax {
+    /* A derived method selects its real derive attribute, not an invented
+     * lexical method name. Ordinary name ranges retain their exact spelling. */
     XrXirSourceRange name;
     XrXirSourceSyntaxRole role;
     uint32_t flags;

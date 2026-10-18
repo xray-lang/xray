@@ -3231,6 +3231,13 @@ static void xa_visit_predeclare_enum_decl(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node || node->type != AST_ENUM_DECL)
         return;
     EnumDeclNode *edecl = &node->as.enum_decl;
+    for (int i = 0; i < edecl->attr_count; ++i) {
+        if (!edecl->attributes[i] || edecl->attributes[i]->kind != ATTR_DERIVE) continue;
+        XrLocation location = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+            "ordinary derivation requires the Source XIR compiler", &location);
+        return;
+    }
     if (!edecl->name || edecl->symbol_id != 0)
         return;
     if (xa_reject_builtin_name_redeclaration(ctx, node, "enum", edecl->name))

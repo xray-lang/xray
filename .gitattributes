@@ -70,16 +70,7 @@ tests/unit/xir/xir_error_marker77_golden.h text eol=lf
 tests/unit/xir/xir_generic_method77_golden.h text eol=lf
 tests/unit/xir/xir_rune77_golden.h text eol=lf
 
-# Complete independent packet preimages retain their original bytes on every host.
-tests/unit/xir/compile_owner/checked_sizing76_golden.h text eol=lf
-tests/unit/xir/root_construction72_goldens.h text eol=lf
-tests/unit/xir/unit_values/unit_wire_golden.h text eol=lf
-tests/unit/xir/xir_assert_panics76_golden.h text eol=lf
-tests/unit/xir/xir_checked_range76_golden.h text eol=lf
-tests/unit/xir/xir_checked_scalar76_golden.h text eol=lf
-tests/unit/xir/xir_error_marker76_golden.h text eol=lf
-tests/unit/xir/xir_generic_method76_golden.h text eol=lf
-tests/unit/xir/xir_rune76_golden.h text eol=lf
+# Retained semantic78 inputs keep their authenticated original LF bytes.
 tests/unit/xir/compile_owner/checked_sizing78_golden.h text eol=lf
 tests/unit/xir/root_construction78_goldens.h text eol=lf
 tests/unit/xir/unit_values/unit78_wire_golden.h text eol=lf
@@ -89,18 +80,54 @@ tests/unit/xir/xir_checked_scalar78_golden.h text eol=lf
 tests/unit/xir/xir_error_marker78_golden.h text eol=lf
 tests/unit/xir/xir_generic_method78_golden.h text eol=lf
 tests/unit/xir/xir_rune78_golden.h text eol=lf
+tests/unit/xir/sdk_previous78_identity_golden.h text eol=lf
+tests/unit/xir/export_constants/retired78_wire.h text eol=lf
+tests/unit/xir/rest_declarations/retired78_wire.h text eol=lf
+
+# Retained independent inputs from the hash declaration boundary.
+
+tests/unit/xir/compile_owner/checked_sizing76_golden.h text eol=lf
+
+tests/unit/xir/root_construction72_goldens.h text eol=lf
+
+tests/unit/xir/unit_values/unit_wire_golden.h text eol=lf
+
+tests/unit/xir/xir_assert_panics76_golden.h text eol=lf
+
+tests/unit/xir/xir_checked_range76_golden.h text eol=lf
+
+tests/unit/xir/xir_checked_scalar76_golden.h text eol=lf
+
+tests/unit/xir/xir_error_marker76_golden.h text eol=lf
+
+tests/unit/xir/xir_generic_method76_golden.h text eol=lf
+
+tests/unit/xir/xir_rune76_golden.h text eol=lf
+
 tests/unit/xir/xir_hash75_golden.h text eol=lf
+
 tests/unit/xir/xir_nullable75_golden.h text eol=lf
+
 tests/unit/xir/xir_nested_nullable75_golden.h text eol=lf
+
 tests/unit/xir/export_constants/wire78_golden.h text eol=lf
+
 tests/unit/xir/rest_declarations/wire78_golden.h text eol=lf
+
 tests/unit/xir/retired_hash75/checked_sizing75_golden.h text eol=lf
+
 tests/unit/xir/retired_hash75/xir_assert_panics75_golden.h text eol=lf
+
 tests/unit/xir/retired_hash75/xir_checked_range75_golden.h text eol=lf
+
 tests/unit/xir/retired_hash75/xir_checked_scalar75_golden.h text eol=lf
+
 tests/unit/xir/retired_hash75/xir_error_marker75_golden.h text eol=lf
+
 tests/unit/xir/retired_hash75/xir_generic_method75_golden.h text eol=lf
+
 tests/unit/xir/retired_hash75/xir_rune75_golden.h text eol=lf
+
 tests/unit/xir/root_construction75_goldens.h text eol=lf
 
 # Current record packet facts and retained preceding SDK framing.
@@ -121,3 +148,21 @@ tests/unit/xir/xir_semantic80_identity.h text eol=lf
 tests/unit/xir/xir_record80_golden.h text eol=lf
 tests/unit/xir/export_constants/wire80_golden.h text eol=lf
 tests/unit/xir/rest_declarations/wire80_golden.h text eol=lf
+
+# Full independent receiving inputs and current protocol models.
+tests/unit/xir/hash_protocol28_inputs/** text eol=lf
+tests/unit/xir/source_hash_receiving/** text eol=lf
+tests/unit/xir/*84*.h text eol=lf
+tests/unit/xir/compile_owner/*84*.h text eol=lf
+tests/unit/xir/unit_values/*84*.h text eol=lf
+tests/unit/xir/*/retired79_wire.h text eol=lf
+
+tests/unit/xir/sdk_retired/** text eol=lf
+tests/unit/xir/sdk_retired_packets.json text eol=lf
+tests/unit/xir/sdk_retired_catalog.inc.c text eol=lf
+
+# Complete original packets and field oracles bind exact LF bytes.
+tests/unit/xir/composed_wire/** text eol=lf
+
+# Generated emission tables participate in exact-byte freshness checks.
+src/xir/xxir_emit_literal_tables.inc.c text eol=lf

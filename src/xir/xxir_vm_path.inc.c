@@ -10,7 +10,7 @@ static XrXirCallStatus vm_path_receiver(const ScalarRun *run, VmState *state,
     const XrXirInstruction *op, XrXirValueReceiver *receiver, XrXirValuePath *path) {
     XrXirValueAdmission *admission = xr_xir_call_admission(run->view);
     if (!admission) return XR_XIR_CALL_BAD_STATE;
-    const uint32_t *args = op->op == XR_XIR_ARRAY_SET ? &run->function->operands[op->args[0]] : op->args;
+    const uint32_t *args = (op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_MAP_SET) ? &run->function->operands[op->args[0]] : op->args;
     uint32_t id = args[0], begin = run->layout->path_count;
     if (op->op == XR_XIR_ARRAY_GET || op->op == XR_XIR_ARRAY_SET || (op->op == XR_XIR_STRUCT_SET || op->op == XR_XIR_RECORD_SET)) {
         if (!begin) return XR_XIR_CALL_BAD_STATE;
@@ -24,9 +24,11 @@ static XrXirCallStatus vm_path_receiver(const ScalarRun *run, VmState *state,
         if (kind != XR_XIR_PLACE_FIELD && kind != XR_XIR_PLACE_INDEX) break;
         if (!begin) return XR_XIR_CALL_BAD_STATE;
         const XrXirInstruction *projection = &run->function->instructions[id - run->function->parameter_count];
+        XrXirType container = xr_xir_operand_type(run->function, projection->args[0]);
         state->path_steps[--begin] = (XrXirValuePathStep){
-            kind == XR_XIR_PLACE_FIELD ? XR_XIR_PATH_FIELD : XR_XIR_PATH_INDEX,
-            xr_xir_operand_type(run->function, projection->args[0]),
+            kind == XR_XIR_PLACE_FIELD ? XR_XIR_PATH_FIELD :
+                xr_xir_type_is_map(run->module->types, container) ? XR_XIR_PATH_KEY : XR_XIR_PATH_INDEX,
+            container,
             kind == XR_XIR_PLACE_FIELD ? projection->immediate : vm_value_operand(run, projection->args[1]).payload};
         id = projection->args[0];
     }
@@ -50,7 +52,7 @@ static XrXirRunStatus vm_path_step(ScalarRun *run, VmState *state,
         else if (op->op == XR_XIR_ARRAY_LEN)
             status = xr_xir_instance_path_length_at(run->view, (uint32_t)(op-run->function->instructions), &receiver, &path, &output, &fault);
         else {
-            uint32_t id = op->op == XR_XIR_ARRAY_SET ? run->function->operands[op->args[0] + 2] : op->args[1];
+            uint32_t id = (op->op == XR_XIR_ARRAY_SET || op->op == XR_XIR_MAP_SET) ? run->function->operands[op->args[0] + 2] : op->args[1];
             XrXirValue value = vm_value_operand(run, id);
             status = op->op == XR_XIR_ARRAY_PUSH ?
                 xr_xir_instance_path_push_at(run->view, (uint32_t)(op-run->function->instructions), &receiver, &path, &value, &fault) :

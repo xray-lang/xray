@@ -1,0 +1,7 @@
+enum E{Bad}
+class Box{items:Array<(i64,i64)>;constructor(items:Array<(i64,i64)>){this.items=items}}
+struct Wrap{item:Box;number:i64}
+fn fail(number:ref i64,box:Box){defer{number+=1};box.items.push((20,22));throw E.Bad}
+fn outer(number:ref i64,box:Box){try{fail(ref number,box)}catch(e:E){number+=1}}
+fn eval()->i64{const box=Box([]);var wrap=Wrap{item:box,number:40};const before=wrap;outer(ref wrap.number,box);return wrap.number+len(wrap.item.items)+before.number-41}
+export fn answer()->i64{return comptime eval()}

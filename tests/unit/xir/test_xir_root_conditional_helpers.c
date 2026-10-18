@@ -21,6 +21,10 @@
 #include "xir_root_conditional_raw_fixture.h"
 #include "xir_construction_fixture.h"
 #include "xir_invocation_core_cases.h"
+#include "xir_invocation_node_key_cases.h"
+#include "xir_invocation_type_projection_cases.h"
+#include "xir_invocation_precision_needed_cases.h"
+#include "xir_invocation_write_index_cases.h"
 #include "xir_invocation_rotation_cases.h"
 #include "xir_invocation_deferred_cases.h"
 #include "xir_invocation_lowered_context_cases.h"
@@ -44,12 +48,17 @@
 #include "xir_invocation_compact_snapshot_cases.h"
 #include "xir_invocation_early_generation_cases.h"
 #include "xir_invocation_generation_range_cases.h"
+#include "xir_invocation_origin_operand_cases.h"
+#include "xir_invocation_existing_node_cases.h"
 #include "xir_ordinary_initial_role_cases.h"
 #include "xir_ordinary_instruction_copy_cases.h"
 #include "xir_ordinary_material_continuation_cases.h"
 #include "xir_initial_ordinary_material_cases.h"
 #include "xir_error_owned_material_cases.h"
 #include "xir_cell_owned_run_cases.h"
+#include "xir_cell_type_projection_cases.h"
+#include "xir_cell_materialized_replay_cases.h"
+#include "xir_class_physical_replay_cases.h"
 #include "xir_invocation_edge_key_cases.h"
 #include "xir_context_constraint_vector_cases.h"
 #include "xir_invocation_replay_scratch_cases.h"
@@ -1752,10 +1761,59 @@ static void conditional_ordinary_environment_keys(void) {
     }
 }
 
+#include "xir_reference_root_operation_cases.h"
+#include "xir_literal_body_cases.h"
+static bool conditional_extended_cases(int argc,char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--existing-node-literals")) {
+        invocation_existing_node_literals();generation_range_controls();
+        CHECK(!rp_live && !rp_live_bytes);return true;
+    }
+    if (argc==2 && !strcmp(argv[1],"--origin-operand-literals")) {
+        invocation_origin_operand_literals();generation_range_controls();
+        CHECK(!rp_live && !rp_live_bytes);return true;
+    }
+    if (argc==2 && !strcmp(argv[1],"--cell-type-projection")) {
+        cell_type_projection_literals();CHECK(!rp_live && !rp_live_bytes);return true;
+    }
+    if (argc==2 && !strcmp(argv[1],"--invocation-write-index")) {
+        invocation_write_index_literals();CHECK(!rp_live && !rp_live_bytes);return true;
+    }
+    if (argc==2 && !strcmp(argv[1],"--invocation-precision-selection")) {
+        invocation_precision_needed_literals();CHECK(!rp_live && !rp_live_bytes);return true;
+    }
+    if (argc==2 && !strcmp(argv[1],"--invocation-type-projection")) {
+        invocation_type_projection_literals();CHECK(!rp_live && !rp_live_bytes);return true;
+    }
+    if (argc==2 && !strcmp(argv[1],"--invocation-node-keys")) {
+        invocation_node_key_literals();CHECK(!rp_live && !rp_live_bytes);return true;
+    }
+    if (argc==2 && !strcmp(argv[1],"--literal-body")) { literal_body_cases();return true; }
+    if (argc==2 && !strcmp(argv[1],"--replay-storage-values")) {
+        invocation_replay_scratch_literals();invocation_replay_scratch_owners();
+        CHECK(!rp_live && !rp_live_bytes);puts("Nested replay, clean reuse and request/ledger isolation PASS");return true;
+    }
+    if (argc==2 && !strcmp(argv[1],"--replay-storage-faults")) {
+        invocation_replay_scratch_failures();
+        CHECK(!rp_live && !rp_live_bytes);puts("Replay scratch allocation and unchanged-owner failure boundaries PASS");return true;
+    }
+    return false;
+}
+
 int main(int argc, char **argv) {
+    if (conditional_extended_cases(argc,argv)) return 0;
     if (argc==2 && !strcmp(argv[1],"--replay-scratch")) {
-        invocation_replay_scratch_literals();invocation_replay_scratch_failures();
+        invocation_replay_scratch_literals();invocation_replay_scratch_owners();invocation_replay_scratch_failures();
         CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--class-physical-replay")) {
+        conditional_class_physical_tests();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--cell-materialized-replay")) {
+        conditional_materialized_replay_tests();conditional_class_cell_literals();
+        CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--reference-root-operation")) {
+        root_operation_cases();return 0;
     }
     if (argc==2 && !strcmp(argv[1],"--read-allocation-bounds")) {
         RootParameterMark physical=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());

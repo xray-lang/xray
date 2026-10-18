@@ -16,8 +16,12 @@ EXPECTED_IDS = {
     "assertThrows": 3,
     "assertPanics": 4,
     "print": 5,
+    "len": 6,
+    "typeInfo": 7,
 }
 EXPECTED_CONTRACTS = {
+    "len": ("LENGTH", "LENGTHABLE_VALUE", 1, 1, "READS_VALUE", "NONE", "NONE", "LENGTH", "LENGTH_ALL"),
+    "typeInfo": ("TYPE_DESCRIPTION", "CLOSED_TYPE", 0, 0, "READS_TYPE", "NONE", "NONE", "TYPE_INFO", "STATIC_ALL"),
     "assert": (
         "ASSERTION",
         "BOOL_OPTIONAL_MESSAGE",
@@ -83,15 +87,17 @@ REMOVED_NAMES = {
     "assert_ne",
     "assert_throws",
 }
-VALID_CATEGORIES = {"ASSERTION", "OUTPUT"}
+VALID_CATEGORIES = {"ASSERTION", "OUTPUT", "LENGTH", "TYPE_DESCRIPTION"}
 VALID_CALL_FORMS = {"DIRECT_ONLY", "ORDINARY_CALLABLE"}
 VALID_PARAMETER_SHAPES = {
     "BOOL_OPTIONAL_MESSAGE",
     "SAME_TYPE_PAIR_OPTIONAL_MESSAGE",
     "ACTION_OPTIONAL_MESSAGE",
     "VARIADIC_VALUES",
+    "LENGTHABLE_VALUE",
+    "CLOSED_TYPE",
 }
-VALID_EFFECTS = {"MAY_PANIC", "INVOKES_ACTION_MAY_PANIC", "OUTPUT_MAY_PANIC"}
+VALID_EFFECTS = {"MAY_PANIC", "INVOKES_ACTION_MAY_PANIC", "OUTPUT_MAY_PANIC", "READS_VALUE", "READS_TYPE"}
 VALID_FLOW_RULES = {"NONE", "ASSERT_TRUE"}
 VALID_FAILURE_CHANNELS = {"NONE", "TYPED_ERROR", "PANIC"}
 VALID_SEMANTIC_OPS = {
@@ -100,8 +106,10 @@ VALID_SEMANTIC_OPS = {
     "ASSERT_THROWS",
     "ASSERT_PANICS",
     "PRINT_GROUP",
+    "LENGTH",
+    "TYPE_INFO",
 }
-VALID_TARGETS = {"ASSERTION_ALL", "OUTPUT_ALL"}
+VALID_TARGETS = {"ASSERTION_ALL", "OUTPUT_ALL", "LENGTH_ALL", "STATIC_ALL"}
 
 
 def _split_fields(body: str) -> list[str]:
@@ -200,8 +208,9 @@ def validate(root: Path) -> list[str]:
             errors.append(f"row {index}: invalid parameter shape {parameter_shape}")
         if min_arity < 0 or min_arity > max_arity or max_arity > 65535:
             errors.append(f"row {index}: invalid arity {min_arity_text}..{max_arity_text}")
-        if result_shape != "UNIT":
-            errors.append(f"row {index}: result shape must be UNIT")
+        expected_result = {"len": "I64", "typeInfo": "TYPE_INFO"}.get(source_name, "UNIT")
+        if result_shape != expected_result:
+            errors.append(f"row {index}: result shape must be {expected_result}")
         if effect not in VALID_EFFECTS:
             errors.append(f"row {index}: invalid effect {effect}")
         if flow_rule not in VALID_FLOW_RULES:
@@ -257,7 +266,7 @@ def main() -> int:
         for error in errors:
             print(f"core-intrinsic registry: {error}", file=sys.stderr)
         return 1
-    print("core-intrinsic registry: PASS (5 live rows, 7 removed names rejected)")
+    print(f"core-intrinsic registry: PASS ({len(EXPECTED_IDS)} live rows, {len(REMOVED_NAMES)} removed names rejected)")
     return 0
 
 

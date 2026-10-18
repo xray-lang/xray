@@ -88,7 +88,7 @@ static RejectionRun run(const RejectionCase *test, size_t failure, XrCompileReso
     }
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_REJECTION_ROOT};
     const XrXirSourceProductRequest request = {
-        {session, test->file, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL},
+        {session, test->file, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
     result.status = xr_xir_compile_source_product_build(&request, &product, &error);
     CHECK(!product);

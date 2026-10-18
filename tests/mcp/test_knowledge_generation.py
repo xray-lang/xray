@@ -161,8 +161,22 @@ def check_xray_fences(root: Path, xray: Path) -> list[str]:
     return errors
 
 
-def generated_symbol_index(generated: Path) -> dict[str, set[str]]:
+def generated_source(generated: Path) -> str:
     text = generated.read_text(encoding="utf-8")
+    pattern = re.compile(r'^#include "(' + re.escape(generated.stem) + r'_part[0-9]+\.inc\.c)"$', re.M)
+    def included(match: re.Match[str]) -> str:
+        part = generated.with_name(match[1])
+        content = part.read_text(encoding="utf-8")
+        if len(content.splitlines()) > 3000:
+            raise ValueError(f"{part}: generated C file exceeds 3000 lines")
+        return content
+    if len(text.splitlines()) > 3000:
+        raise ValueError(f"{generated}: generated C file exceeds 3000 lines")
+    return pattern.sub(included, text)
+
+
+def generated_symbol_index(generated: Path) -> dict[str, set[str]]:
+    text = generated_source(generated)
     arrays: dict[str, set[str]] = {}
     for match in SYMBOL_ARRAY_RE.finditer(text):
         arrays[match.group("name")] = set(SYMBOL_NAME_RE.findall(match.group("body")))
@@ -245,7 +259,7 @@ def check_generated_symbol_names(root: Path) -> list[str]:
 
 
 def check_generated_stdlib_api_tables(root: Path) -> list[str]:
-    text = (root / "src/app/mcp/xmcp_knowledge_generated.c").read_text(encoding="utf-8")
+    text = generated_source(root / "src/app/mcp/xmcp_knowledge_generated.c")
     required = [
         '"## API\\n"',
         '`csv.parseReport`',

@@ -1,0 +1,3 @@
+class Box{value:i64;init(value:i64){this.value=value}}
+fn answer()->i64{const b=Box(40);const xs=[b,b];xs[0].value=xs[0].value+2;return xs[1].value}
+export fn run()->i64{return comptime answer()}

@@ -56,15 +56,35 @@ static bool graph_edges_bounded(XirObject *object, GraphEdgeVisitor visit, void 
     GraphEdgeBudget *budget) {
     if (!graph_edge_work(budget)) return false;
     if (object->type == XR_XIR_STRING || object->kind == XR_XIR_TYPE_ATOMIC) return true;
+    if (object->kind==XR_XIR_TYPE_SLICE || object->kind==XR_XIR_TYPE_MUT_SLICE) {
+        XirView *view=(XirView *)object;
+        return graph_direct_edge(&view->storage.root,visit,context) && graph_direct_edge(&view->parent,visit,context);
+    }
     if (object->type == XR_XIR_PANIC_INFO)
         return graph_direct_edge(&((XirPanicInfo *)object)->panic.message, visit, context);
-    if (object->kind == XIR_OBJECT_CELL)
-        return graph_direct_edge(&((XirCell *)object)->value, visit, context);
+    if (object->kind == XIR_OBJECT_CELL) {
+        XirCell *cell = (XirCell *)object;
+        XrXirValuePathStep *steps = (XrXirValuePathStep *)(cell + 1);
+        for (uint32_t i = 0; i < cell->projection_count; ++i) {
+            if (!graph_edge_work(budget)) return false;
+            if (steps[i].kind != XR_XIR_PATH_KEY) continue;
+            XrXirValue key = path_key_value(&steps[i], object->arena);
+            if (!visit(&key, &steps[i].selector, context)) return false;
+        }
+        return graph_direct_edge(&cell->value, visit, context);
+    }
     if (object->kind == XIR_OBJECT_FUNCTION) {
         const XrXirFunctionBinding *binding = &((XirFunction *)object)->binding;
         for (uint32_t i = 0; i < binding->capture_count; ++i)
             if (!graph_edge_work(budget) || !graph_direct_edge(&binding->captures[i], visit, context)) return false;
         return true;
+    }
+    if(object->kind==XR_XIR_TYPE_ITERATOR) {
+        XirGenerator *generator=(XirGenerator *)object;
+        if(atomic_load_explicit(&generator->state,memory_order_acquire)!=XIR_GENERATOR_TERMINAL ||
+            generator->executor || generator->call) return true;
+        return graph_direct_edge(&generator->outcome.value,visit,context) &&
+            graph_direct_edge(&generator->outcome.panic.message,visit,context);
     }
     if (object->kind == XR_XIR_TYPE_TASK) {
         XirTask *task = (XirTask *)object;
@@ -192,6 +212,11 @@ static bool graph_release_empty_edge(const XrXirValue *value, void *payload, voi
     return true;
 }
 static bool graph_active_task(XirObject *object) {
+    if(object->kind==XR_XIR_TYPE_ITERATOR) {
+        XirGenerator *generator=(XirGenerator *)object;
+        return atomic_load_explicit(&generator->state,memory_order_acquire)!=XIR_GENERATOR_TERMINAL ||
+            generator->executor || generator->call;
+    }
     if (object->kind != XR_XIR_TYPE_TASK) return false;
     XirTask *task = (XirTask *)object;
     return atomic_load_explicit(&task->state, memory_order_acquire) != XIR_TASK_TERMINAL ||

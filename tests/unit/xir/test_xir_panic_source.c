@@ -55,7 +55,7 @@ static XrXirArtifact *panic_source_lower(const char *path) {
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context.resources, &session) == XR_COMPILER_SESSION_OK && session);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_PANIC_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, path, &authority, &context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "panic source %u at %u:%d:%d %s\n", status,

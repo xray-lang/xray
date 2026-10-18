@@ -401,7 +401,7 @@ XA_INTRINSIC(I64_TRY_PARSE, 6004, "core.i64.tryParse", CORE, SCALAR_PARSE, PURE,
              1, STATIC_RECEIVER, NONE, 0, I64, 1)
 XA_INTRINSIC(F64_PARSE, 6005, "core.f64.parse", CORE, SCALAR_PARSE, MAY_THROW, MAY_ALLOC, SAFE, 1,
              1, STATIC_RECEIVER, NONE, 0, F64, 1)
-XA_INTRINSIC(F64_TRY_PARSE, 6006, "core.f64.tryParse", CORE, SCALAR_PARSE, PURE, NO_ALLOC, SAFE, 1,
+XA_INTRINSIC(F64_TRY_PARSE, 6006, "core.f64.tryParse", CORE, SCALAR_PARSE, PURE, MAY_ALLOC, SAFE, 1,
              1, STATIC_RECEIVER, NONE, 0, F64, 1)
 
 /* StringBuilder.append is a compiler-owned mutating receiver operation.  Its

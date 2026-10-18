@@ -23,6 +23,9 @@ typedef struct XrXirImplementation {
     XrXirInterfaceApplication interface;
     const XrXirImplementationBinding *bindings;
     uint32_t binding_count;
+    /* Zero for an explicit ordinary implementation, otherwise one plus the
+     * definition policy that authorized this generated protocol application. */
+    uint32_t derivation_policy;
 } XrXirImplementation;
 struct XrXirImplementationTable {
     const XrXirImplementation *records;

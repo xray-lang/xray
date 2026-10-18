@@ -19,7 +19,9 @@
 #define XR_XIR_LIBRARY_C_INTERFACE_VERSION 2u
 
 typedef struct XrXirLibraryCatalog XrXirLibraryCatalog;
-/* Binding order is the exact Checked declarations.modules ordinal order. */
+/* Binding order is the exact Checked declarations.modules ordinal order.
+ * Memory modules use their exact authority namespace and null logical/physical
+ * paths. They are artifact dependencies, never filesystem import locations. */
 typedef struct XrXirLibraryModuleInput {
     XrModuleIdentityAuthority authority;
     const char *logical_path;

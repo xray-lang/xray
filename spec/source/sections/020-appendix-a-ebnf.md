@@ -335,7 +335,10 @@ AttrList ::= PublicAttribute*
 PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
                   | '@before_each' | '@after_each' | '@before_all' | '@after_all'
                   | '@deprecated' '(' StringLiteral ')'
-                  | '@derive' '(' Identifier (',' Identifier)* ')'
+                  | '@derive' '(' Type ',' DeriveGenerator (',' DeriveOption)* ','? ')'
+DeriveGenerator ::= Identifier ('.' Identifier)?
+DeriveOption ::= ('describe' | 'read' | 'write') ':' '[' (StringLiteral (',' StringLiteral)* ','?)? ']'
+               | 'construct' ':' ('true' | 'false')
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'
@@ -680,7 +683,10 @@ AttrList ::= PublicAttribute*
 PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
                   | '@before_each' | '@after_each' | '@before_all' | '@after_all'
                   | '@deprecated' '(' StringLiteral ')'
-                  | '@derive' '(' Identifier (',' Identifier)* ')'
+                  | '@derive' '(' Type ',' DeriveGenerator (',' DeriveOption)* ','? ')'
+DeriveGenerator ::= Identifier ('.' Identifier)?
+DeriveOption ::= ('describe' | 'read' | 'write') ':' '[' (StringLiteral (',' StringLiteral)* ','?)? ']'
+               | 'construct' ':' ('true' | 'false')
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

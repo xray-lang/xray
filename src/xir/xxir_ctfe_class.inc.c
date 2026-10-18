@@ -21,34 +21,19 @@ static XrXirCtfeStatus ctfe_class_member_read(ScalarRun *run,CtfeOwnedState *sta
     XrXirCtfeStatus status=ctfe_validation_work(run,state,(XrXirType)receiver->type);
     if (status==XR_XIR_CTFE_OK) status=ctfe_validation_work(run,state,node->nominal.fields[field]);
     if (status!=XR_XIR_CTFE_OK) return status;
-    if (state->frame_spare<256) return XR_XIR_CTFE_FRAME_LIMIT;
+    if (ctfe_frame_spare(state)<256) return XR_XIR_CTFE_FRAME_LIMIT;
     if (!scalar_compile_work(run,512)) return XR_XIR_CTFE_BUDGET;
     XrXirValueAdmission admission=ctfe_value_admission(state);admission.scratch_bytes-=256;
     return ctfe_value_status(xr_xir_class_get(receiver,field,&admission,output));
 }
 static XrXirCtfeStatus ctfe_class_loan_begin(ScalarRun *run,CtfeOwnedState *state,
     const XrXirValue *receiver,XrXirValueAdmission *admission,XrXirCellLoan *loan) {
-    if (state->frame_spare<256) return XR_XIR_CTFE_FRAME_LIMIT;
+    if (ctfe_frame_spare(state)<256) return XR_XIR_CTFE_FRAME_LIMIT;
     if (!scalar_compile_work(run,512+3*sizeof(*loan)+state->value_header_work)) return XR_XIR_CTFE_BUDGET;
     admission->scratch_bytes-=256;
     XrXirCtfeStatus status=ctfe_value_status(xr_xir_class_loan_prepare(receiver,&state->authority,admission,loan));
     if (status==XR_XIR_CTFE_OK) xr_xir_class_loan_commit(receiver,loan,&state->authority);
     return status;
-}
-static XrXirCtfeStatus ctfe_class_projection_type(ScalarRun *run,CtfeOwnedState *state,
-    const XrXirValue *root,XrXirType leaf,bool *variable) {
-    const XrXirTypeNode *node=xr_xir_type_node(run->module->types,(XrXirType)root->type);
-    if (!node || !xr_xir_type_is_class(run->module->types,(XrXirType)root->type)) return XR_XIR_CTFE_BAD_ARTIFACT;
-    for (uint32_t i=0;i<node->nominal.field_count;++i) {
-        if (!scalar_compile_work(run,4)) return XR_XIR_CTFE_BUDGET;
-        XrXirCtfeTypeShape shape={0};XrXirCtfeStatus status=ctfe_type_info(state->context,run->module->types,node->nominal.fields[i],false,&shape);
-        if (status!=XR_XIR_CTFE_OK) return status;
-    }
-    XrXirCtfeTypeShape shape={0};XrXirCtfeStatus status=ctfe_type_info(state->context,run->module->types,leaf,true,&shape);
-    if (status!=XR_XIR_CTFE_OK) return status;
-    /* A narrow loan cannot observe a mutable identity elsewhere in its root.
-     * Data-only dynamic leaves instead update every live parent reserve. */
-    *variable=shape.dynamic;return XR_XIR_CTFE_OK;
 }
 static XrXirCtfeStatus ctfe_class_step(ScalarRun *run,VmState *vm,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[vm->instruction];
@@ -71,8 +56,8 @@ static XrXirCtfeStatus ctfe_class_step(ScalarRun *run,VmState *vm,CtfeOwnedState
         if (op->op==XR_XIR_CLASS_GET) status=ctfe_class_member_read(run,state,&receiver,(uint32_t)op->immediate,&result);
         else {
             XrXirValue incoming=ctfe_nominal_operand(run,op->args[1]),previous=state->forbidden_class;
-            state->forbidden_class=receiver;status=ctfe_admission_work(run,state,&incoming);state->forbidden_class=previous;
-            if (status==XR_XIR_CTFE_OK) received=xr_xir_class_set(&receiver,(uint32_t)op->immediate,&incoming,&admission);
+            state->forbidden_class=receiver;status=ctfe_mutation_work(run,state,&receiver,&incoming);state->forbidden_class=previous;
+            if (status==XR_XIR_CTFE_OK) { admission=ctfe_value_admission(state);received=xr_xir_class_set(&receiver,(uint32_t)op->immediate,&incoming,&admission); }
         }
     }
     if (status==XR_XIR_CTFE_OK) status=ctfe_value_status(received);

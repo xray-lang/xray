@@ -115,7 +115,7 @@ static XrXirArtifact *rn_lower_source(const XrXirCompileContext *context, unsign
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ROOT_NATIVE_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, path, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult source = {0};
     XrXirSourceDiagnostic diagnostic = {0};
     char *failure_path = NULL;

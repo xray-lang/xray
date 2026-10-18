@@ -99,8 +99,8 @@ static XrXirArtifact *native_inbox_fixture(const XrXirCompileContext *context, u
         functions[0].instructions=same_frontier_root; functions[0].instruction_count=7;
         functions[0].blocks=same_frontier_blocks; functions[0].block_count=3;
     }
-    const XrXirSourceModule source={"alpha",5,NULL,0,3, 0};
-    const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,4,NULL};
+    const XrXirSourceModule source={.name="alpha",.name_length=5,.initializer=3};
+    const XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=4};
     ErrorFixture error; error_fixture_init(&error,false);
     const XrXirModule built={XR_XIR_BUILT,functions,5,&declarations,NULL,&error.types,NULL,XR_XIR_PROGRAM,NULL};
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

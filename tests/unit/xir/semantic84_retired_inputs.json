@@ -1,0 +1,140 @@
+[
+  {
+    "source": "source_hash_receiving\\retired32_79\\compile_owner\\checked_sizing79_golden.h",
+    "sha256": "960c537dbd84ab01b0ecb1326e4d8ff25c51e9b7bcd17875a667a5008672b9c6",
+    "models": [
+      "sizing79_golden",
+      "sizing79_embedded_golden",
+      "sizing79_empty_golden"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  },
+  {
+    "source": "source_hash_receiving\\retired32_79\\root_construction79_goldens.h",
+    "sha256": "a5315b8c8e7a20cb87ec76f9040fe2ffbbe2cf8a46fa61886219762f11605590",
+    "models": [
+      "root_construction72_checked",
+      "root_construction72_instance"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  },
+  {
+    "source": "source_hash_receiving\\retired32_79\\unit_values\\unit79_wire_golden.h",
+    "sha256": "6e94927c5652bc4aeeac83690b30ed8012b9935f16f7e1ddbddae35698f8bbcd",
+    "models": [
+      "unit79_packet"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  },
+  {
+    "source": "source_hash_receiving\\retired32_79\\xir_assert_panics79_golden.h",
+    "sha256": "2eb2915b95c6a54767319e3f7cab7f4c70bb9b6098a0800b30bd0bbee2f83cc9",
+    "models": [
+      "assert_panics79_golden"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  },
+  {
+    "source": "source_hash_receiving\\retired32_79\\xir_checked_range79_golden.h",
+    "sha256": "dbe0d5ba78753a9da08abe9d8fb26eb723a09d9f499a0983c5a53d63fd8492a6",
+    "models": [
+      "checked_range79_golden"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  },
+  {
+    "source": "source_hash_receiving\\retired32_79\\xir_checked_scalar79_golden.h",
+    "sha256": "ccc5a22c483618d7bea04bb9e15b92f2becf0dc148407c1cac74a192cec349b0",
+    "models": [
+      "checked_scalar79_golden"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  },
+  {
+    "source": "source_hash_receiving\\retired32_79\\xir_error_marker79_golden.h",
+    "sha256": "6e2e687afdca60d6a526522f77b713bf0e63f91e517d4c446d75233cebd07774",
+    "models": [
+      "error_marker79_golden"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  },
+  {
+    "source": "source_hash_receiving\\retired32_79\\xir_generic_method79_golden.h",
+    "sha256": "8138e49db316474f099948efbf2833bffadd8d7791bc0388011d03e7a4607786",
+    "models": [
+      "generic_method79_golden",
+      "generic_method79_invalid_flags0",
+      "generic_method79_invalid_flags1"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  },
+  {
+    "source": "source_hash_receiving\\retired32_79\\xir_hash79_golden.h",
+    "sha256": "30b91043c5e8155908c0dca851185c8300a505bfd4f1cfeebe0bf7126816d327",
+    "models": [
+      "hash79_golden"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  },
+  {
+    "source": "source_hash_receiving\\retired32_79\\xir_nested_nullable79_golden.h",
+    "sha256": "3f3d99fb0c0e5a06230f04a6c238fa27a8d4fe8a0b63fd3042ed4b701a5bb5d5",
+    "models": [
+      "nested_nullable79_golden"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  },
+  {
+    "source": "source_hash_receiving\\retired32_79\\xir_nullable79_golden.h",
+    "sha256": "1e41f3531f5a57e4100c939b351e99dab7240964c34b84653577ce474e7c90df",
+    "models": [
+      "nullable_none79_golden",
+      "nullable_some79_golden"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  },
+  {
+    "source": "source_hash_receiving\\retired32_79\\xir_rune79_golden.h",
+    "sha256": "b14a96ac93688f4ebaf9828384e5864afef9ce3b280c66160dba33fcdc483748",
+    "models": [
+      "rune79_golden"
+    ],
+    "identity": [
+      32,
+      79
+    ]
+  }
+]

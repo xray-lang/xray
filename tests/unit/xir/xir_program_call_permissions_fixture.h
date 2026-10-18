@@ -54,7 +54,7 @@ typedef struct PceWitness {
     bool empty_preserved, occupied_preserved;
     XrXirValue borrowed, taken, advertised;
     unsigned carrier_created, carrier_dropped;
-    XrXirValue slot_before;
+    XrXirValue slot_before, slot_value_before;
     XrXirInstanceState finished_state;
     XrXirCallStatus outcome, take_empty, take_occupied, stop, freed;
 } PceWitness;
@@ -132,7 +132,7 @@ static void pce_source_check(PceFixture *f, XrXirArtifact **checked) {
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(f->compiler.resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, f->root};
-    XrXirSourceRequest request = {session, f->file, &authority, &f->compiler, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, f->file, &authority, &f->compiler, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0};
     XrXirSourceDiagnostic diagnostic = {0};
     char *failure = NULL;
@@ -194,7 +194,8 @@ static void pce_build(PceFixture *f, PceMode mode) {
     const XrXirModule *m = xr_xir_compile_artifact_module(f->lowered);
     CHECK(m->function_count <= PCE_MAX_FUNCTIONS && m->declarations->module_count == 1);
     CHECK(m->declarations->slot_count == 1 && m->declarations->slots[0].mutable == 1);
-    CHECK(m->declarations->slots[0].type == XR_XIR_I64);
+    CHECK(xr_xir_type_is_cell(m->types, m->declarations->slots[0].type));
+    CHECK(xr_xir_cell_element(m->types, m->declarations->slots[0].type) == XR_XIR_I64);
     f->functions = m->function_count;
     f->module = m->declarations->root_module;
     f->initializer = m->declarations->modules[f->module].initializer;

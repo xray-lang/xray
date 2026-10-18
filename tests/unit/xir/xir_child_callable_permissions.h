@@ -22,7 +22,7 @@ enum { XRCP_PURE_NONE, XRCP_PURE_ROOT, XRCP_PURE_UNKNOWN, XRCP_PURE_MIXED,
 typedef struct CpGraph {
     XrXirTypeNode nodes[6];
     XrXirTypes types;
-    XrXirType none_parameter, unknown_parameter;
+    XrXirType none_parameter, unresolved_parameter;
     XrXirInstruction init[4], scalar[2], child[9], root[7], relay[2], leaf[3], unknown[3], mixed[6], unit;
     XrXirBlock init_block, scalar_block, child_blocks[3], root_blocks[3], pair_block, leaf_block, unknown_block, mixed_block, unit_block;
     uint32_t child_operands[2], root_operand;
@@ -61,7 +61,7 @@ static void cp_release(XrXirCallView *view, XrXirCallStatus reason);
 static void cp_graph(CpGraph *g) {
     *g = (CpGraph){0};
     g->none_parameter = (XrXirType)XRCP_NONE;
-    g->unknown_parameter=(XrXirType)XRCP_UNRESOLVED;
+    g->unresolved_parameter = (XrXirType)XRCP_UNRESOLVED;
     g->nodes[0] = (XrXirTypeNode){.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64};
     for (unsigned i = 1; i < 5; ++i)
         g->nodes[i] = (XrXirTypeNode){.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_I64};
@@ -69,12 +69,12 @@ static void cp_graph(CpGraph *g) {
     g->nodes[2].flags = XR_XIR_CALLABLE_ROOT_REQUIRED;
     g->nodes[3].flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED;
     g->nodes[4].flags = XR_XIR_CALLABLE_ROOT_REQUIRED | XR_XIR_CALLABLE_ROOT_UNRESOLVED;
-    g->nodes[5] = (XrXirTypeNode){.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64};
+    g->nodes[5] = (XrXirTypeNode){.kind = XR_XIR_TYPE_CELL, .element = XR_XIR_I64};
     g->types = (XrXirTypes){g->nodes, 6, NULL, NULL};
     g->unit = (XrXirInstruction){.op = XR_XIR_RETURN};
     g->unit_block = (XrXirBlock){.count = 1};
     g->init[0] = (XrXirInstruction){.op = XR_XIR_CONST_INT, .type = XR_XIR_I64, .immediate = 7};
-    g->init[1] = (XrXirInstruction){.op=XR_XIR_CELL_NEW,.type=(XrXirType)XRCP_CELL,.args={0}};
+    g->init[1] = (XrXirInstruction){.op = XR_XIR_CELL_NEW, .type = (XrXirType)XRCP_CELL, .args = {0}};
     g->init[2] = (XrXirInstruction){.op = XR_XIR_SLOT_INIT, .args = {1}};
     g->init[3] = g->unit;
     g->init_block = (XrXirBlock){.count = 4};
@@ -85,20 +85,20 @@ static void cp_graph(CpGraph *g) {
     g->relay[1] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {1}};
     g->pair_block = (XrXirBlock){.count = 2};
     g->leaf[0] = (XrXirInstruction){.op = XR_XIR_SLOT_LOAD, .type = (XrXirType)XRCP_CELL};
-    g->leaf[1] = (XrXirInstruction){.op=XR_XIR_CELL_READ,.type=XR_XIR_I64,.args={0}};
+    g->leaf[1] = (XrXirInstruction){.op = XR_XIR_CELL_READ, .type = XR_XIR_I64, .args = {0}};
     g->leaf[2] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {1}};
-    g->leaf_block=(XrXirBlock){.count=3};
-    g->unknown[0] = (XrXirInstruction){.op = XR_XIR_FUNCTION_REF, .type = (XrXirType)XRCP_UNRESOLVED, .immediate = XRCP_PURE};
-    g->unknown[1] = (XrXirInstruction){.op = XR_XIR_CALL_INDIRECT, .type = XR_XIR_I64, .immediate = 0};
-    g->unknown[2] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {2}};
-    g->unknown_block = (XrXirBlock){.count = 3};
+    g->leaf_block = (XrXirBlock){.count = 3};
+    /* A known FUNCTION_REF has exact body authority even under a weaker type.
+     * Only an unresolved argument supplies a genuinely unknown call target. */
+    g->unknown[0] = (XrXirInstruction){.op = XR_XIR_CALL_INDIRECT, .type = XR_XIR_I64};
+    g->unknown[1] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {1}};
+    g->unknown_block = (XrXirBlock){.count = 2};
     g->mixed[0] = g->leaf[0];
-    g->mixed[1] = (XrXirInstruction){.op=XR_XIR_CELL_READ,.type=XR_XIR_I64,.args={1}};
+    g->mixed[1] = (XrXirInstruction){.op = XR_XIR_CELL_READ, .type = XR_XIR_I64, .args = {1}};
     g->mixed[2] = g->unknown[0];
-    g->mixed[3] = (XrXirInstruction){.op = XR_XIR_CALL_INDIRECT, .type = XR_XIR_I64, .immediate = 0};
-    g->mixed[4] = (XrXirInstruction){.op = XR_XIR_ADD_INT, .type = XR_XIR_I64, .args = {2, 4}};
-    g->mixed[5] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {5}};
-    g->mixed_block = (XrXirBlock){.count = 6};
+    g->mixed[3] = (XrXirInstruction){.op = XR_XIR_ADD_INT, .type = XR_XIR_I64, .args = {2, 3}};
+    g->mixed[4] = (XrXirInstruction){.op = XR_XIR_RETURN, .args = {4}};
+    g->mixed_block = (XrXirBlock){.count = 5};
     g->child_operands[0] = 0;
     g->child_operands[1] = 3;
     g->child[0] = (XrXirInstruction){.op = XR_XIR_FUNCTION_REF, .type = (XrXirType)XRCP_NONE, .immediate = XRCP_PURE};
@@ -138,20 +138,22 @@ static void cp_graph(CpGraph *g) {
         &g->pair_block, 1, g->relay, 2, NULL, 0};
     g->functions[XRCP_ROOT_LEAF] = (XrXirFunction){"rootLeaf", 8, NULL, 0, XR_XIR_I64,
         &g->leaf_block, 1, g->leaf, 3, NULL, 0};
-    g->functions[XRCP_UNKNOWN] = (XrXirFunction){"unknown", 7, &g->unknown_parameter, 1, XR_XIR_I64,
-        &g->unknown_block, 1, g->unknown, 3, NULL, 0};
-    g->functions[XRCP_MIXED] = (XrXirFunction){"mixed", 5, &g->unknown_parameter, 1, XR_XIR_I64,
-        &g->mixed_block, 1, g->mixed, 6, NULL, 0};
+    g->functions[XRCP_UNKNOWN] = (XrXirFunction){"unknown", 7, &g->unresolved_parameter, 1, XR_XIR_I64,
+        &g->unknown_block, 1, g->unknown, 2, NULL, 0};
+    g->functions[XRCP_MIXED] = (XrXirFunction){"mixed", 5, &g->unresolved_parameter, 1, XR_XIR_I64,
+        &g->mixed_block, 1, g->mixed, 5, NULL, 0};
     g->functions[XRCP_FACTORY] = (XrXirFunction){"factory", 7, NULL, 0, XR_XIR_UNIT,
         &g->unit_block, 1, &g->unit, 1, NULL, 0};
     g->identities[XRCP_ROOT].exported = 1;
     g->identities[XRCP_FACTORY].exported = 1;
-    g->source = (XrXirSourceModule){"childCallable", 13, NULL, 0, XRCP_INIT, 0};
-    g->slot = (XrXirSlot){0, (XrXirType)XRCP_CELL, 1,0,0};
+    g->source = (XrXirSourceModule){.name="childCallable",.name_length=13,.initializer=XRCP_INIT};
+    /* Mutable module storage is an authentic Cell, never a naked scalar slot. */
+    g->slot = (XrXirSlot){.type=(XrXirType)XRCP_CELL,.mutable=1};
     g->declarations = (XrXirDeclarations){.modules = &g->source, .module_count = 1,
         .functions = g->identities, .slots = &g->slot, .slot_count = 1, .entry_function = XRCP_ENTRY};
     g->module = (XrXirModule){.stage = XR_XIR_BUILT, .functions = g->functions,
-        .function_count = XRCP_FUNCTIONS, .declarations = &g->declarations, .types = &g->types};
+        .function_count = XRCP_FUNCTIONS, .declarations = &g->declarations, .types = &g->types,
+        .linkage_kind = XR_XIR_PROGRAM};
 }
 
 static void cp_transport_rejection(const XrXirCompileContext *context) {
@@ -195,6 +197,9 @@ static void cp_build(CpFixture *f) {
     f->context = effects_source_owner(UINT64_C(67108864), UINT64_C(128000000));
     CpGraph g;
     cp_graph(&g);
+    CHECK(xr_xir_compile_types_structure_verify(f->context, &g.types) == XR_XIR_OK);
+    CHECK(xr_xir_compile_declarations_verify(f->context, &g.declarations, &g.types,
+        XRCP_FUNCTIONS, g.module.linkage_kind) == XR_XIR_OK);
     XrXirArtifact *checked = NULL, *decoded = NULL, *closed = NULL;
     XrXirDiagnostic d = {0};
     XrXirStatus status = xir_fixture_check(f->context, &g.module, &checked, &d);

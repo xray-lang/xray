@@ -38,7 +38,7 @@ static XrXirStatus cleanup_source_lower(const XrXirCompileContext *context,XrXir
     XrCompilerSessionStatus setup=xr_compile_session_new(context->resources,&session);
     if(setup!=XR_COMPILER_SESSION_OK)return setup==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CLEANUP_FIXTURES};
-    XrXirSourceRequest request={session,XR_CLEANUP_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_CLEANUP_FIXTURES "/root.xr",&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};XrXirCheckedPacket packet={0};
     XrXirArtifact *checked=NULL,*closed=NULL;
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);

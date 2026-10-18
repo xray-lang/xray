@@ -1,0 +1,2 @@
+fn worker(value:Array<i64>)->Array<i64> { return value }
+export fn main()->i64 { const input:Array<i32>=[10,20]; const task=go worker(input); return 7 }

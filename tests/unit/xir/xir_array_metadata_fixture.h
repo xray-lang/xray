@@ -65,9 +65,9 @@ static void xir_array_metadata_init(XirArrayMetadataFixture *f) {
     f->functions[0] = (XrXirFunction) {"init", 4, NULL, 0, XR_XIR_UNIT, &f->blocks[0], 1, f->init, 4, NULL, 0};
     f->functions[1] = (XrXirFunction) {"entry", 5, NULL, 0, XR_XIR_I64, &f->blocks[1], 1, f->ops, 15, f->operands, 5};
     f->functions[2] = (XrXirFunction) {"read", 4, &f->worker_parameter, 1, XR_XIR_I64, &f->blocks[2], 1, f->worker, 2, NULL, 0};
-    f->source = (XrXirSourceModule) {"app", 3, NULL, 0, 0, 0};
-    f->slot = (XrXirSlot) {0, cell, 1,0,0};
-    f->declarations = (XrXirDeclarations) {&f->source, 1, f->identities, &f->slot, 1, NULL, 0, 0, 1, NULL};
+    f->source = (XrXirSourceModule) {.name="app",.name_length=3};
+    f->slot = (XrXirSlot) {.type=cell,.mutable=1};
+    f->declarations = (XrXirDeclarations) {.modules=&f->source,.module_count=1,.functions=f->identities,.slots=&f->slot,.slot_count=1,.entry_function=1};
     f->module = (XrXirModule) {XR_XIR_BUILT, f->functions, 3, &f->declarations, NULL, &f->types, NULL, XR_XIR_PROGRAM, NULL};
 }
 #endif // XIR_ARRAY_METADATA_FIXTURE_H

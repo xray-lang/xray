@@ -1,0 +1,4 @@
+struct Wrap{action:fn()->i64;number:i64}
+fn change(number:ref i64,action:fn()->i64){action();number+=2}
+fn eval()->i64{var items:Array<(i64,i64)>=[];const action=fn()->i64{items.push((20,22));return 0};var wrap=Wrap{action:action,number:40};const before=wrap;change(ref wrap.number,wrap.action);return wrap.number+len(items)+before.number-41}
+export fn answer()->i64{return comptime eval()}

@@ -21,7 +21,7 @@ static void library_typed_closed_negative(XrXirLibraryCatalog *catalog,
     conflict_text("typed_reject.xr",text);
     size_t blocks=source_live,bytes=source_bytes,rblocks=runtime_live,rbytes=runtime_bytes;
     XrCompilerSession *session=library_session_new(library_context);
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/typed_reject.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/typed_reject.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=expected)fprintf(stderr,"typed negative expected=%u actual=%u %s\n",expected,status,diagnostic.message);
@@ -57,7 +57,7 @@ static void library_typed_closed_case(unsigned mode) {
         library_typed_closed_negative(catalog,authority,"import \"./typed_closed\" as lib;export fn result()->i64{const value=lib.Payload();return 41;}",XR_XIR_BAD_TYPE);
     }
     XrCompilerSession *session=library_session_new(library_context);
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/typed_receiver.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/typed_receiver.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"typed positive mode%u %u %s\n",mode,status,diagnostic.message);

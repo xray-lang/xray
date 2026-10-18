@@ -41,7 +41,7 @@ static XrXirStatus ctfe_phi_build(const XrXirCompileContext *context,
     XrXirInstruction init={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
     XrXirBlock init_block={0,1,0,0};
     XrXirFunction functions[]={fn,{"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0}};
-    XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,0,NULL};
+    XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,0,NULL, NULL};
     XrXirModule built={.stage=XR_XIR_BUILT,.functions=functions,.function_count=2,
         .declarations=ctfe_resource_no_declarations?NULL:&declarations,.linkage_kind=XR_XIR_PROGRAM};
     XrXirArtifact *checked=NULL,*copy=NULL,*closed=NULL;

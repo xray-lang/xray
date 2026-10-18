@@ -11,6 +11,7 @@
  *   publication, while partial known shapes can guide a later expression.
  */
 #include "xxir_type_inference.h"
+#include "xxir_view_types_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_record_names_internal.h"
 #include "../base/xmalloc.h"
@@ -84,6 +85,10 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
         if (index >= s->count || (task->pair.actual == XR_XIR_UNIT &&
             (!s->kinds || s->kinds[index] != XR_XIR_BINDER_RESULT_VARIABLE)) ||
             xr_xir_type_is_cell(w->types,task->pair.actual)) { s->status = XR_XIR_BAD_TYPE; return; }
+        uint32_t borrowed=0;
+        s->status=xr_xir_compile_view_type_flags(&s->context,w->types,task->pair.actual,&borrowed);
+        if (s->status!=XR_XIR_OK) return;
+        if (borrowed) {s->status=XR_XIR_BAD_TYPE;return;}
         if (s->solved[index]) s->status = inference_match(s,w->types,NULL,0,
             (XrXirInferencePair){s->arguments[index],task->pair.actual});
         else { s->arguments[index] = task->pair.actual; s->solved[index] = 1; }
@@ -116,7 +121,8 @@ static void inference_pair(InferenceWalk *w, const InferenceTask *task) {
         inference_enqueue(w, from->element, to->element, depth);
         inference_enqueue(w, from->result, to->result, depth);
     } else if (from->kind == XR_XIR_TYPE_ARRAY || from->kind == XR_XIR_TYPE_SET || from->kind == XR_XIR_TYPE_CELL ||
-               (from->kind == XR_XIR_TYPE_NULLABLE || from->kind == XR_XIR_TYPE_ATOMIC || from->kind == XR_XIR_TYPE_TASK))
+               from->kind == XR_XIR_TYPE_SLICE || from->kind == XR_XIR_TYPE_MUT_SLICE ||
+               (from->kind == XR_XIR_TYPE_NULLABLE || from->kind == XR_XIR_TYPE_ATOMIC || from->kind == XR_XIR_TYPE_TASK || from->kind == XR_XIR_TYPE_ITERATOR))
         inference_enqueue(w,from->element,to->element,depth);
     else s->status = XR_XIR_BAD_TYPE;
 }
@@ -155,6 +161,9 @@ XR_FUNC XrXirStatus xr_xir_compile_inference_begin(const XrXirCompileContext *co
         if ((r->prefix[p] == XR_XIR_UNIT && (!s->kinds || s->kinds[p] != XR_XIR_BINDER_RESULT_VARIABLE)) ||
             xr_xir_type_is_cell(r->types,r->prefix[p])) { s->status = XR_XIR_BAD_TYPE; break; }
         s->status = xr_xir_compile_type_expression_shape(budget, r->types, r->prefix[p], s->caller_count);
+        uint32_t borrowed=0;
+        if (s->status==XR_XIR_OK) s->status=xr_xir_compile_view_type_flags(budget,r->types,r->prefix[p],&borrowed);
+        if (s->status==XR_XIR_OK && borrowed) s->status=XR_XIR_BAD_TYPE;
         if (s->status == XR_XIR_OK) { s->arguments[p] = r->prefix[p]; s->solved[p] = 1; }
     }
     XrXirStatus status = s->status;

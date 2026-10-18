@@ -30,6 +30,7 @@ static inline bool xir_scalar_core_work(const XirScalarCoreRun *run,uint64_t uni
  * the complete current Artifact and the real function/layout first. */
 static inline bool xir_scalar_core_opcode(XrXirOp op) {
     switch (op) {
+    case XR_XIR_MATH_UNARY_F64:case XR_XIR_MATH_BINARY_F64:case XR_XIR_MATH_UNARY_I64:
     case XR_XIR_CONST_RUNE:case XR_XIR_CONST_BOOL:case XR_XIR_CONST_FLOAT:case XR_XIR_CONST_INT:
     case XR_XIR_LOCAL_UNINIT:case XR_XIR_SCALAR_LOCAL_NEW:case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_COPY:case XR_XIR_SCALAR_LOCAL_WRITE:case XR_XIR_OWNED_LOCAL_WRITE:

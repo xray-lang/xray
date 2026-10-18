@@ -9,15 +9,31 @@
  * The same provider proves each true place subject. Only the exact equation's
  * complete masks and descending ranks substitute its conservative Class bit.
  */
-static XrXirStatus effect_invocation_class_cells_match(const EffectInvocationRead *owner,
-    const EffectBodyRequest *body) {
-    if (!owner || !body || !owner->work || !owner->effects || !owner->final->cells ||
+#include "xxir_effect_cell_replay.inc.c"
+
+static XrXirStatus effect_invocation_class_cells_begin(const EffectInvocationRead *owner,
+    const EffectBodyRequest *body,EffectCellReplayRows *rows) {
+    if (!owner || !body || !rows || !owner->work || !owner->effects || !owner->final || !owner->final->cells ||
         !xir_effects_context_matches(owner->work,owner->effects,body->domain.function_count))
         return XR_XIR_BAD_STRUCTURE;
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};
     XrXirStatus status=effect_cell_body_request(owner->work,body,&adapter,&read);
     if (status!=XR_XIR_OK) return status;
-    return xr_xir_compile_cell_provenance_body_matches(owner->work,owner->final->cells,&read,NULL);
+    if (effect_body_request_sequence_owned(body)) {
+        status=effect_cell_replay_rows_create(owner->work,body,rows);
+        return status==XR_XIR_OK ?
+            xir_cell_provenance_module_matches(owner->work,owner->final->cells,&rows->module,NULL) : status;
+    }
+    status=effect_cell_body_project(&adapter);
+    if (status==XR_XIR_OK) status=xr_xir_compile_cell_provenance_body_matches(owner->work,owner->final->cells,&read,NULL);
+    effect_cell_body_projection_drop(&adapter);return status;
+}
+
+static XrXirStatus effect_invocation_class_cells_match(const EffectInvocationRead *owner,
+    const EffectBodyRequest *body) {
+    EffectCellReplayRows rows={0};
+    XrXirStatus status=effect_invocation_class_cells_begin(owner,body,&rows);
+    effect_cell_replay_rows_free(&rows);return status;
 }
 
 static XrXirStatus effect_invocation_class_cell_subject(EffectInvocationFlow *flow,

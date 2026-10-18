@@ -1,0 +1,4 @@
+enum Problem { Failed { values: Array<Array<i64>> } }
+fn worker() -> () { throw Problem.Failed{values: [[10,20],[30,40]]} }
+export fn handle() -> Task<null> { return go worker() }
+export fn main() -> i64 { return 7 }

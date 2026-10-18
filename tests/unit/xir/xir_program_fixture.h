@@ -96,11 +96,10 @@ static XrXirArtifact *program_fixture_checked(const XrXirCompileContext *context
     const XrXirSourceModule modules[] = {
         {"root", 4, imports, 2, 0, 0}, {"beta", 4, NULL, 0, 1, 0}, {"alpha", 5, NULL, 0, 2, 0}
     };
-    const XrXirFunctionIdentity identities[] = {{0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {1, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {2, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0, 0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {1, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {2, 1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}};
-    const XrXirSlot slots[] = {{2, atomic, 0,0,0}, {1, atomic, 0,0,0},
-        {2, XR_XIR_STRING, 0,0,0}, {1, XR_XIR_STRING, 0,0,0}, {0, string_cell, 1,0,0}};
+    const XrXirFunctionIdentity identities[] = {{.method_kind=XR_XIR_NON_MEMBER},{.module=1,.method_kind=XR_XIR_NON_MEMBER},{.module=2,.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER},{.module=2,.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.module=1,.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.module=2,.exported=1,.method_kind=XR_XIR_NON_MEMBER}};
+    const XrXirSlot slots[] = {{.module=2,.type=atomic},{.module=1,.type=atomic},{.module=2,.type=XR_XIR_STRING},{.module=1,.type=XR_XIR_STRING},{.type=string_cell,.mutable=1}};
     const XrXirLiteral literals[] = {{"A\0\xe4\xb8\xad", 5}, {"B\xf0\x9f\x98\x80", 5}, {"root", 4}, {"updated", 7}, {NULL, 0}};
-    const XrXirDeclarations declarations = {modules, 3, identities, slots, 5, literals, 5, 0, 3, NULL};
+    const XrXirDeclarations declarations = {modules, 3, identities, slots, 5, literals, 5, 0, 3, NULL, NULL};
     ErrorFixture error; error_fixture_init(&error,false);
     XrXirTypeNode nodes[3]={{.kind=XR_XIR_TYPE_ATOMIC,.element=XR_XIR_I64},
         {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_STRING}};

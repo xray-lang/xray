@@ -110,11 +110,13 @@ bool 文本方法由其固定治理声明准入，返回独立拥有的 string�
 | `startsWith(s)` / `endsWith(s)` | 前缀/后缀判断 |
 | `toString()` | 返回自身 |
 
-Checked Source 的 `toString()` 与 `repeat(count:i64)` 由固定 string 声明身份、完整 READ 签名及操作契约准入。`toString` 通过普通 COPY 返回独立持有的同一字符串值，不分配，但保留可能失败。`repeat` 对非正次数返回空串，按完整 UTF-8 字节重复，保留非 BMP 与内嵌 NUL；接收者在次数实参之前各求值一次并保持值快照。它用已有 Cell、位运算及 CONCAT 生成至多64轮的普通XIR倍增循环；空接收者立即退出，不对最大次数做线性遍历，也不在最高有效位之后做多余倍增。分配、持有、字节/工作限制沿共同失败路径，不发明替代值。当前共七项string方法具有治理准入，其余声明、视图/迭代器和拥有型CTFE仍未获完整资格。
+Checked Source 的 `toString()` 与 `repeat(count:i64)` 由固定 string 声明身份、完整 READ 签名及操作契约准入。`toString` 通过普通 COPY 返回独立持有的同一字符串值，不分配，但保留可能失败。`repeat` 对非正次数返回空串，按完整 UTF-8 字节重复，保留非 BMP 与内嵌 NUL；接收者在次数实参之前各求值一次并保持值快照。它用已有 Cell、位运算及 CONCAT 生成至多64轮的普通XIR倍增循环；空接收者立即退出，不对最大次数做线性遍历，也不在最高有效位之后做多余倍增。分配、持有、字节/工作限制沿共同失败路径，不发明替代值。当前共八项string方法具有治理准入，其余声明、视图/迭代器和拥有型CTFE仍未获完整资格。
 
-接收编译Domain与String执行接口后，String参数/结果、COPY、CONCAT、私有String Cell和上述七方法可由同一有界CTFE路径执行，源消费者把拥有结果复制为独立字面值。Unicode/NUL搜索和比较支付原compiler ledger的保守工作上界，保留范围/资源错误、步数/深度/输出帽，不借VM/Instance或native执行冒充CTFE。共同标量文本准入另有完整formatter预付与拥有结果接收，不从String类型或操作名推断权限。这些是当前开发准入，完整资源/全库资格仍须另证。
+接收编译Domain与String执行接口后，String参数/结果、COPY、CONCAT、私有String Cell和上述八方法可由同一有界CTFE路径执行，源消费者把拥有结果复制为独立字面值。Unicode/NUL搜索和比较支付原compiler ledger的保守工作上界，保留范围/资源错误、步数/深度/输出帽，不借VM/Instance或native执行冒充CTFE。共同标量文本准入另有完整formatter预付与拥有结果接收，不从String类型或操作名推断权限。这些是当前开发准入，完整资源/全库资格仍须另证。
 
 普通 String `+=` 的受认证 root 追加路径保留已保存值的 COW 快照、完整 Unicode/NUL 字节、自追加和原有限 Domain 的失败清理。只有足以证明 RHS 不会重绑定接收者的语句才使用 `CELL_STRING_APPEND`；调用、getter 以及用作表达式的复合赋值保留原先读旧值、完成 RHS 后写回的求值顺序。单标量模板可直接追加其 i64/u64、bool、rune 或浮点文本，不先创建临时 String；这不授予额外类型、成员或 root 权限。该操作使用 semantic74，旧 semantic73 包拒绝，不保留双路径协议；它可在原有界CTFE执行器中通过真实Value place追加到直接私有String Cell，按§17.66支付原账本；模块状态和投影Cell不获该opcode准入，也不意味着库私有 var、完整 StringBuilder 替代性能或全字符串族已获资格。
+
+`copyBytes()` 无参数，复制完整 UTF-8 字节序列为拥有式 `Array<u8>`，包含内嵌 NUL，不附加终止符，也不按 rune 拆分。空串产生空数组；修改结果不改变原字符串或另一次复制。接收者只求值一次，结果独立保有数组存储与类型寿命。CTFE、VM 与生成 C 使用同一拥有式复制操作，受原分配、保留和工作预算约束；较小的请求逻辑结果限额继续生效，0 字节限额只接收空结果。失败不发布部分数组。
 
 `len(s)` 读取已验证 UTF-8 的 Unicode scalar 计数并返回 i64，空串为 0，内嵌 NUL 计为一个 scalar。查询本身不分配；实参按普通表达式只求值一次，仍保留其求值、初始化和持有失败。`==`/`!=` 接受两个 string，按完整字节长度和内容比较，不依赖对象身份，不做大小写折叠或 Unicode 归一化；组合字符与预组合字符可以不相等。左右操作数按从左到右的值快照语义求值。普通无约束泛型不能借此获得字符串或 Lengthable 能力。
 
@@ -157,7 +159,7 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-下表保留完整32成员分母。截至本次容量合同冻结，实际治理已准入get/set/push、map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear、reverse/unshift/pop/shift/resize及entries/fill/concat，共23个operation；其余9个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+同源 Array 清单保留完整32成员：30个实例方法、1个静态方法和1个属性。当前结构化声明准入26个成员（24个实例方法、withCapacity和capacity）；未准入的六个实例方法为sort、iterator、entriesIterator、ptr、mutPtr和toString。操作身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于查找。准入是编译/执行边界，完整安全、资源与性能资格仍须各批实际证据。
 
 这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/rune/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
 
@@ -175,11 +177,11 @@ pop/shift资格为allocation=may_heap、failures=allocation,retain,limit、owner
 
 n≥0保前min(oldLength,n)项，增长项为fill逻辑副本，结果长度n；返回拥有式Array与发布receiver为独立逻辑副本，旧alias保旧值，复制在class／同步身份处停止且保Nullable层。n=0返回拥有空Array，同长度不承诺零分配或backing不变。n<0在两个实参后经现有NUMERIC_RANGE/E0422 panic拒绝且无发布；不可表示尺寸及有限额度沿现有LIMIT／预算拒绝。候选允许重选容量，capacity/withCapacity/reserve观察保证另冻。
 
-完整候选、结果cell读取和可失败持有先于唯一PLACE_WRITE；准备／发布失败及提交前取消保当前root／alias／identity并清临时owner，发布后父表达式／返回交接失败或取消不回滚方法副作用。内部无用户回调／语言挂起／跨挂起loan，外部量子取消按真实提交点；qualification=allocation:may_heap,failures:allocation,retain,limit,ownership:owned。resize现已准入，当前21/32；独立VM/native／两mixed固定预期、所有准入元素类、真实故障／三轴／逃逸结果与两域物理释放均须保留。
+完整候选、结果cell读取和可失败持有先于唯一PLACE_WRITE；准备／发布失败及提交前取消保当前root／alias／identity并清临时owner，发布后父表达式／返回交接失败或取消不回滚方法副作用。内部无用户回调／语言挂起／跨挂起loan，外部量子取消按真实提交点；qualification=allocation:may_heap,failures:allocation,retain,limit,ownership:owned。resize现已准入，当前同源准入清单；独立VM/native／两mixed固定预期、所有准入元素类、真实故障／三轴／逃逸结果与两域物理释放均须保留。
 
 只读声明族 `entries() -> Array<(i64, T)>` 现已准入：零显式／可选／默认／variadic／方法类型参数，receiver 表达式仅一次，形成拥有式 Array 逻辑快照 A。结果是独立拥有的 Array，长度 L 与快照一致，按递增 i64 索引产生 [(0,A[0]),...,(L-1,A[L-1])]；空数组返回拥有空 Array。每个 T 字段是普通拥有式逻辑副本，保内联值及 Nullable 层，复制在 class／同步身份处停止。不消费或改写 receiver，无 PLACE_WRITE；结果元素替换不改变源 Array 或旧别名，但同身份对象的修改仍按身份语义可见。只要求 Array 已有可复制／可保存能力，不额外要求 Equal、Compare、ToString、Sendable 或授予反射／构造权限；普通泛型定义处检查，Checked 特化后复验，const/read 参数与临时 Array 按 READ 权限合法。
 
-entries 的 qualification 为 allocation=may_heap、failures=allocation,retain,limit、ownership=owned，没有用户 callback／新增语言挂起／跨挂起 loan；receiver 表达式原有效应不变。完整结果在交接前准备，复制／持有／预算失败或取消清理未完成的 Tuple/元素/Array，不发布部分结果也不修改源值；已完成 receiver 副作用不回滚。空路径不承诺零分配／零retain、原 capacity 或底层地址。外逃结果按普通 owner 寿命保活到最后 drop。entries 已实施并准入，当前21/32；iterator()/entriesIterator()/用户迭代器／generator 须分别取得完整合同与资格，不能由这个物化 Array 结果推断。
+entries 的 qualification 为 allocation=may_heap、failures=allocation,retain,limit、ownership=owned，没有用户 callback／新增语言挂起／跨挂起 loan；receiver 表达式原有效应不变。完整结果在交接前准备，复制／持有／预算失败或取消清理未完成的 Tuple/元素/Array，不发布部分结果也不修改源值；已完成 receiver 副作用不回滚。空路径不承诺零分配／零retain、原 capacity 或底层地址。外逃结果按普通 owner 寿命保活到最后 drop。entries 已实施并准入，当前同源准入清单；iterator()/entriesIterator()/用户迭代器／generator 须分别取得完整合同与资格，不能由这个物化 Array 结果推断。
 
 冻结容量声明族：只读属性 `capacity: i64`、`static withCapacity(capacity: i64) -> Array<T>`、`ref reserve(capacity: i64) -> Array<T>`。静态构造与reserve各有一个必需精确i64的READ实参，无可选、默认、variadic或方法类型参数；T只须满足既有Array可复制、可保存约束，不要求Default、Equal、Compare、ToString或Sendable。普通泛型定义处检查，Checked特化后复验；只有实际治理Array身份取得这些内建操作，词法影子、同名用户声明和描述查询不能扩大构造、可见性或写权限。
 
@@ -187,7 +189,7 @@ capacity自身只读已认证Array的header、不分配，返回 `0≤len≤capa
 
 普通Array复制保复制当时的容量及全部逻辑值；reserve的返回和发布receiver为独立逻辑副本，旧alias保旧容量/内容。普通set/push、跨域或nested路径的COW分离不得降低操作前的容量；len增长仍保持len≤capacity。reverse/unshift/pop/shift/resize/clear/entries/fill/concat各自已冻结的候选容量选择规则不因此改成保容量。复制仍在class/同步身份边界停止，Nullable、嵌套值及NUL字节保持。闲置容量不是已初始化元素，不遍历、retain或析构未初始化slot；零尺寸的已准入T也使用有限i64逻辑容量，不返回usize最大值，不开放新的普通泛型Unit或资源域。
 
-withCapacity/reserve的n<0在全部实参后以现有NUMERIC_RANGE/E0422拒绝；真实不可表示尺寸与有限live/requested/work不足沿LIMIT/预算失败，不clamp、不溢出相乘或加法。所有实际heap请求包括realloc按完整请求预收费，OOM保累计费用，重试不补额。准备/发布失败及提交前取消保全当前root/alias/元素身份并清临时owner；已完成实参副作用或发布后父表达式失败不回滚。内部无用户callback、新语言挂起或跨挂起loan，真实量子取消及费用照常。capacity内核qualification=allocation:no_heap,failures:limit,ownership:owned；withCapacity/reserve为allocation:may_heap,failures:allocation,retain,limit,ownership:owned，不承诺精确容量、底层地址或复杂度。本次只冻结合同，三个成员实施及完整资格PENDING，当前实际治理仍23/32。
+withCapacity/reserve的n<0在全部实参后以现有NUMERIC_RANGE/E0422拒绝；真实不可表示尺寸与有限live/requested/work不足沿LIMIT/预算失败，不clamp、不溢出相乘或加法。所有实际heap请求包括realloc按完整请求预收费，OOM保累计费用，重试不补额。准备/发布失败及提交前取消保全当前root/alias/元素身份并清临时owner；已完成实参副作用或发布后父表达式失败不回滚。内部无用户callback、新语言挂起或跨挂起loan，真实量子取消及费用照常。capacity内核qualification=allocation:no_heap,failures:limit,ownership:owned；withCapacity/reserve为allocation:may_heap,failures:allocation,retain,limit,ownership:owned，不承诺精确容量、底层地址或复杂度。三个成员已取得结构化操作准入；完整故障、安全及性能资格仍以实际批次证据为准。
 
 冻结只读声明族 `concat(...arrays: Array<T>) -> Array<T>`：一个可为空的尾部variadic参数、无可选/默认参数或方法类型参数，每个显式实参精确为接收者的Array<T>，参数模式READ。receiver表达式先且仅一次求值形成拥有快照，然后从左到右每个实参仅一次求值并分别持有快照；后续实参对源binding的重绑/写入不改变此前快照。全部实参成功后构造结果，顺序为receiver全部元素，随后各实参数组全部元素；零实参也返回独立拥有的逻辑副本。允许const/read receiver与临时Array，只要求已有Array可复制/可保存能力，不增加Equal、Compare、ToString、Sendable或反射/构造权限。普通泛型定义处检查，Checked特化后复验。
 
@@ -231,12 +233,18 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `get(k)` / `set(k, v)` | `get` 在缺失时返回 `null`；`set` 写入 |
 | `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | 查询与删除 |
 | `keys()` / `values()` / `entries()` | 返回键、值、键值对 |
-| `forEach(fn)` | 遍历 |
+| `forEach(fn)` | 按插入序调用精确 `fn(K,V)->()` |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
 **Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于精确结构对象字面量 `{ field: value }`。
 
 `m[k]` 要求键存在；缺失键触发运行时错误 `E0431`。需要可选读取时使用 `m.get(k)`。
+
+`containsValue(value)` 是 READ 查询，receiver 后 value 各求值一次；value 按精确 V 检查。本方法单独要求定义处 V: Equal，不要求其他 Map 操作具有该条件。比较使用普通值相等而非键等价：NaN 不等于自身，正负零相等；Array 和 Nullable 沿现行 Equal 条件递归，不能按共享 backing 跳过浮点叶。空 Map 也不能绕过类型条件。结果为 bool，不消费输入；分配、保留或有限资源失败保留输入且不发布结果。
+
+`forEach(callback)` 是 READ 操作，返回 `()`。先取得 receiver 的拥有式逻辑快照，再求 callback 一次；空 Map 也求 callback，但不调用。回调必须精确接受两个 READ 参数 K、V 并返回 Unit，不接受额外 index 或省略参数，不额外要求 V:Equal/Compare/Sendable。按插入顺序逐项复制参数后进行普通间接调用，不会提前复制整批 entry。callback 修改原绑定不改变快照；class 和同步身份仍按普通身份语义共享。参数复制失败、throw、panic、挂起及取消沿普通 Call 管线处理，已经发生的实参和回调副作用不撤销，后续项不继续执行。泛型定义处的 Hashable 与普通调用效果义务保持。
+
+`keys()`、`values()` 和 `entries()` 是零参数 READ 查询，分别返回独立拥有的 `Array<K>`、`Array<V>` 和 `Array<(K,V)>`，保持插入顺序。覆盖已有键保留位置；删除后重新插入位于末尾。receiver 只求值一次；空 Map 返回拥有式空 Array。修改结果或其 COW 副本不改写 Map，后续 Map 修改也不改写既有结果。每个元素及元组字段按普通拥有式逻辑复制，复制在 class／同步身份处停止；身份对象的修改仍按身份语义共享可见。结果可在源容器、Instance 和 Program 释放后继续存活。查询不消费 receiver、不要求 REF，也不额外要求 V 具有 Equal、Compare 或 Sendable；分配、保留或有限资源失败不发布部分结果。
 
 ### 14.9 `Set<T>` 方法
 
@@ -246,10 +254,20 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `add(x)` / `contains(x)` / `delete(x)` | 插入、查询、删除 |
 | `clear()` | 清空 |
 | `values()` | 返回 `Array<T>` |
-| `forEach(fn)` | 遍历 |
+| `toArray()` | 返回独立拥有的 `Array<T>` |
+| `union(other)` / `intersection(other)` | 并集与交集，返回 `Set<T>` |
+| `difference(other)` / `symmetricDifference(other)` | 差集与对称差集，返回 `Set<T>` |
+| `isSubset(other)` / `isSuperset(other)` | 包含关系，返回 `bool`，相等时也成立 |
+| `forEach(fn)` | 按插入序调用精确 `fn(T)->()` |
 | `iterator()` | 迭代协议 |
 
 **Set 字面量**：`#[1, 2, 3]` 或 `#[]`。
+
+`values()` 以同样的零参数 READ 和拥有式快照规则返回 `Array<T>`，按首次插入顺序排列；重复添加不改变位置，删除后重新添加位于末尾。
+
+`forEach(callback)` 采用 Map 的 READ 快照、一次 callback 求值和普通调用失败/挂起规则，按插入顺序调用精确的 `fn(T)->()`。不接受 index 或省略参数；每项在调用前取得普通拥有式副本，空 Set 不调用 callback。T 的定义处 Hashable 义务保持，不新增 Equal/Compare/Sendable 条件。
+
+`toArray()` 使用与 `values()` 相同的拥有式快照规则。四种集合运算和两种包含关系均以零消费的 READ receiver 和普通 `other: Set<T>` 实参执行，要求相同的精确 T，使用 §9.2 键等价关系，按 receiver 后 other 各一次的顺序求值。并集先保留左侧顺序，再追加仅右侧存在的元素；交集和差集保留左侧中符合条件元素的顺序；对称差集先放仅左侧存在的元素，再放仅右侧存在的元素，各自保持原顺序。结果是独立拥有的 Set；两个输入、旧别名和已返回结果的后续修改不相互改写。空集是任意同型集合的子集；子集/超集包含相等情形。失败保留输入且不发布部分结果，不消费或要求 REF，不添加 Equal/Compare/Sendable 约束；T 已有 Hashable 义务保持。
 
 ### 14.10 `Channel<T>` 方法
 
@@ -510,11 +528,13 @@ Both methods prepare a private owned candidate: reverse reverses the element ord
 | `startsWith(s)` / `endsWith(s)` | prefix/suffix check |
 | `toString()` | return self |
 
-Checked Source admits `toString()` and `repeat(count:i64)` through the fixed string declaration identity, exact READ signature and operation contract. `toString` uses ordinary COPY to return an independently retained owner of the same string value, without allocation but with possible retention failure. `repeat` returns an empty string for nonpositive counts and repeats complete UTF-8 bytes, preserving non-BMP scalars and embedded NUL. The receiver and count evaluate once, in that order, with value snapshots. Existing Cell, bit and CONCAT operations implement at most 64 doubling rounds. An empty receiver exits immediately even for the largest count; there is no unused doubling after the highest significant bit. Allocation, retention and byte/work limits follow common failure paths without invented values. Seven string methods currently have governed admission; remaining declarations, views/iterators and owning CTFE do not qualify as a complete family.
+Checked Source admits `toString()` and `repeat(count:i64)` through the fixed string declaration identity, exact READ signature and operation contract. `toString` uses ordinary COPY to return an independently retained owner of the same string value, without allocation but with possible retention failure. `repeat` returns an empty string for nonpositive counts and repeats complete UTF-8 bytes, preserving non-BMP scalars and embedded NUL. The receiver and count evaluate once, in that order, with value snapshots. Existing Cell, bit and CONCAT operations implement at most 64 doubling rounds. An empty receiver exits immediately even for the largest count; there is no unused doubling after the highest significant bit. Allocation, retention and byte/work limits follow common failure paths without invented values. Eight string methods currently have governed admission; remaining declarations, views/iterators and owning CTFE do not qualify as a complete family.
 
-With the compiler Domain and String execution interfaces received, String parameters/results, COPY, CONCAT, private String Cells and these seven methods can execute in the same bounded CTFE path. Source consumers copy owning results into independent literals. Unicode/NUL searches and comparisons prepay a conservative work bound on the original compiler ledger and preserve range/resource failures and step/depth/output limits. No VM, Instance or native execution substitutes for CTFE. Common scalar text admission separately prepays its complete formatter and receives owned results; neither String type nor operation spelling grants authority. These are development admissions; complete resource and library qualification require separate evidence.
+With the compiler Domain and String execution interfaces received, String parameters/results, COPY, CONCAT, private String Cells and these eight methods can execute in the same bounded CTFE path. Source consumers copy owning results into independent literals. Unicode/NUL searches and comparisons prepay a conservative work bound on the original compiler ledger and preserve range/resource failures and step/depth/output limits. No VM, Instance or native execution substitutes for CTFE. Common scalar text admission separately prepays its complete formatter and receives owned results; neither String type nor operation spelling grants authority. These are development admissions; complete resource and library qualification require separate evidence.
 
 The authenticated root append path for ordinary String `+=` preserves saved COW snapshots, complete Unicode/NUL bytes, self append and failure cleanup on the original finite Domain. Only statements whose RHS provably cannot rebind the receiver use `CELL_STRING_APPEND`; calls, getters and compound assignments used as expressions retain the ordinary order of reading the old value, completing the RHS and then writing back. A single scalar template can append i64/u64, bool, rune or floating text directly without a temporary String; it grants no additional type, member or root authority. The operation uses semantic74 and rejects old semantic73 packets without a dual protocol. The existing bounded CTFE evaluator can execute it through the real Value place of a direct private String Cell, charging the original ledger under17.66. Module state and projected Cells gain no admission from this opcode, nor does this qualify private library variables, complete StringBuilder replacement performance or the whole String family.
+
+`copyBytes()` takes no arguments and copies the complete UTF-8 byte sequence into an owned `Array<u8>`, including embedded NUL, without a terminator or rune splitting. Empty strings produce empty arrays; mutating a result changes neither the source nor another copy. The receiver evaluates once, and the result independently retains array storage and type lifetime. CTFE, VM and generated C use the same owned copy operation under the original allocation, retention and work budgets. Smaller per-request logical result limits still apply; a zero-byte limit admits only an empty result. Failure publishes no partial array.
 
 `len(s)` reads the cached Unicode scalar count of validated UTF-8 and returns i64; the empty string has length zero and embedded NUL counts as one scalar. The query itself does not allocate; its argument evaluates exactly once with ordinary evaluation, initialization and retention failures. `==`/`!=` require two strings and compare their full byte lengths and contents, independently of object identity, with no case folding or Unicode normalization. Combining and precomposed sequences can differ. Operands evaluate left to right as value snapshots. These operations grant no string or Lengthable capability to an unconstrained generic definition.
 
@@ -557,7 +577,7 @@ a.push(a[0])
 print(a[0], a[1])           // head head
 ```
 
-The table retains all32 members. At this capacity-contract freeze, actual governed admission comprises get/set/push, map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear, reverse/unshift/pop/shift/resize and entries/fill/concat:23 operations, with9 members still unadmitted. Execution identities come from the same structured declarations in `stdlib/types/array.xr`; names serve member lookup only. Capacity is explicitly observable. Its growth/detachment guarantees must be frozen when that property is admitted; not all capacity behavior is an unobservable optimization.
+The source-derived Array inventory retains all32 members:30 instance methods, one static method and one field. Structured declarations currently admit26 members:24 instance methods, withCapacity and capacity. The six unadmitted instance methods are sort, iterator, entriesIterator, ptr, mutPtr and toString. Operation identities come from the same structured declarations in `stdlib/types/array.xr`; names serve lookup only. Admission defines a compiler/execution boundary, while full safety, resource and performance qualification still requires actual batch evidence.
 
 These READ callbacks/queries first own the receiver snapshot, then evaluate each explicit argument once in source order; reduce orders receiver, callback, initial. map/filter/forEach visit increasing indices and allow the trailing index argument to be omitted where the declaration permits it. find/findIndex/every/some short-circuit using a single-element bool callback. Empty reduce returns initial, empty every is true, empty some/contains is false, and no match produces none for find or -1 for findIndex/indexOf. contains/indexOf require T:Equal at the definition. This join subset admits string/bool/rune/admitted numeric elements, defaults its separator to the empty string and preserves UTF-8/NUL bytes. ref clear uses existing writable-place and writeback contracts; copied values remain independent. Callbacks keep ordinary indirect-call throw/panic/suspend/cancellation and ownership semantics; future instances cannot supply missing constraints. This paragraph freezes operation contracts; full regression, safety, OOM and physical-release qualification requires actual batch evidence.
 
@@ -572,7 +592,7 @@ The declaration family is frozen as `ref resize(length: i64, fill: T) -> Array<T
 
 For n>=0, the first min(oldLength,n) elements are preserved and growth uses logical copies of fill, producing length n. The owned return and published receiver are independent logical copies; old aliases retain their old value, copying stops at class/synchronization identity, and Nullable layers remain intact. Zero returns an owned empty Array; equal length promises neither zero allocation nor unchanged backing. Negative n rejects after both arguments with the existing NUMERIC_RANGE/E0422 panic and no publication. Unrepresentable sizes and finite resource exhaustion use existing LIMIT/budget failures. Candidates may reselect capacity; capacity/withCapacity/reserve observation guarantees remain separately frozen.
 
-The complete candidate, result cell read and every fallible hold precede one PLACE_WRITE. Preparation/publication failure or precommit cancellation preserves the current root, aliases and identities and drops temporary owners. Later parent-expression/result handoff failure or cancellation does not roll back the method effect. Internal loops introduce no user callback, language suspension or suspended loan; driver quantum cancellation observes the actual commit point. Qualification is allocation:may_heap, failures:allocation,retain,limit, ownership:owned. Resize is admitted: current21/32 retains independent VM/native/both mixed outputs, all admitted element categories, actual failure ordinals, resource axes, escaped results and physical release of both domains.
+The complete candidate, result cell read and every fallible hold precede one PLACE_WRITE. Preparation/publication failure or precommit cancellation preserves the current root, aliases and identities and drops temporary owners. Later parent-expression/result handoff failure or cancellation does not roll back the method effect. Internal loops introduce no user callback, language suspension or suspended loan; driver quantum cancellation observes the actual commit point. Qualification is allocation:may_heap, failures:allocation,retain,limit, ownership:owned. Resize is admitted: see the current same-source admission inventory retains independent VM/native/both mixed outputs, all admitted element categories, actual failure ordinals, resource axes, escaped results and physical release of both domains.
 
 The capacity declaration family freezes the READ property `capacity: i64`, `static withCapacity(capacity: i64) -> Array<T>` and `ref reserve(capacity: i64) -> Array<T>`. The constructor and reserve each take one required exact-i64 READ argument, without optional/default/variadic arguments or method type parameters. T needs only existing Array copy/store capabilities, without Default, Equal, Compare, ToString or Sendable additions. Check ordinary generic definitions before Checked specialization and revalidation. Only the actual governed Array identity receives these builtin operations; lexical shadows, same-named user declarations and descriptive queries grant no extra construction, visibility or write authority.
 
@@ -580,7 +600,7 @@ capacity itself reads an authenticated Array header without allocation and retur
 
 Ordinary Array copies preserve capacity and logical contents at copy time. The reserve return and published receiver are independent logical copies, and old aliases keep their capacity/contents. COW detachment for ordinary set/push, cross-domain values and nested paths must not reduce the prior capacity; growth keeps len<=capacity. Existing candidate-capacity rules for reverse/unshift/pop/shift/resize/clear/entries/fill/concat are not changed into capacity-preservation promises. Copying still stops at class/synchronization identity; Nullable layers, nested values and NUL bytes remain intact. Spare capacity is not initialized elements: never traverse, retain or destroy unused slots. Admitted zero-sized T still has finite i64 logical capacity, without usize-maximum behavior or new ordinary-generic Unit/resource admission.
 
-Negative constructor/reserve n rejects after argument evaluation with existing NUMERIC_RANGE/E0422. Unrepresentable sizes and finite live/requested/work exhaustion use existing LIMIT/budget failures without clamping or overflowing arithmetic. Precharge every actual heap request, including full realloc replacement bytes; OOM retains cumulative fees and retry does not refill them. Preparation/publication failure or precommit cancellation preserves the current root/aliases/element identities and drops temporary owners. Completed argument effects or later parent-expression failure do not roll back a published effect. There is no internal user callback, new language suspension or suspended loan; actual quantum cancellation and fees remain. The capacity kernel has allocation:no_heap, failures:limit and ownership:owned; constructor/reserve have allocation:may_heap, failures:allocation,retain,limit and ownership:owned, without exact-capacity, backing-address or complexity promises. This is a contract freeze only: implementation/full qualification of the three members is PENDING, with actual governed admission still23/32.
+Negative constructor/reserve n rejects after argument evaluation with existing NUMERIC_RANGE/E0422. Unrepresentable sizes and finite live/requested/work exhaustion use existing LIMIT/budget failures without clamping or overflowing arithmetic. Precharge every actual heap request, including full realloc replacement bytes; OOM retains cumulative fees and retry does not refill them. Preparation/publication failure or precommit cancellation preserves the current root/aliases/element identities and drops temporary owners. Completed argument effects or later parent-expression failure do not roll back a published effect. There is no internal user callback, new language suspension or suspended loan; actual quantum cancellation and fees remain. The capacity kernel has allocation:no_heap, failures:limit and ownership:owned; constructor/reserve have allocation:may_heap, failures:allocation,retain,limit and ownership:owned, without exact-capacity, backing-address or complexity promises. All three members have structured operation admission; full fault, safety and performance qualification still requires actual batch evidence.
 
 The READ declaration family `concat(...arrays: Array<T>) -> Array<T>` has one possibly empty trailing variadic parameter, no optional/default parameters or method type arguments, and exact Array<T> READ arguments. Evaluate the receiver once into an owned logical snapshot, then evaluate and retain each explicit argument once from left to right. Later argument effects on source bindings do not alter earlier snapshots. Only after all arguments succeed, construct the result from the receiver's elements followed by each argument's elements in order. Zero arguments returns an independently owned logical copy. Const/read and temporary receivers are allowed. Existing Array copy/store capabilities suffice; no Equal, Compare, ToString, Sendable or reflection/construction authority is added. Check ordinary generic definitions before Checked specialization and revalidation.
 
@@ -588,7 +608,7 @@ concat neither consumes nor writes its inputs and emits no PLACE_WRITE. Publish 
 
 The next READ declaration family is frozen as `entries() -> Array<(i64, T)>`, with no explicit, optional, default, variadic or method type parameters. The receiver expression evaluates once into an owned logical Array snapshot A. The independently owned result has the same length L and contains [(0,A[0]),...,(L-1,A[L-1])] in increasing i64 index order; empty input returns an owned empty Array. Every T field is an ordinary owned logical copy, preserving inline values and Nullable layers and stopping at class/synchronization identity. The operation neither consumes nor writes the receiver and has no PLACE_WRITE. Replacing result elements does not change the source Array or old aliases, while mutations of shared identity objects remain observable. Only existing Array copy/store capabilities are required; it neither requires Equal/Compare/ToString/Sendable nor grants reflection/construction authority. Ordinary definitions are checked before Checked specialization and revalidation. Const/read parameters and temporary Arrays are valid READ receivers.
 
-Qualification is allocation=may_heap, failures=allocation,retain,limit and ownership=owned. There is no user callback, new language suspension or suspended loan; existing receiver-expression effects are unchanged. Prepare the complete result before handoff. Copy/retain/budget failure or cancellation drops unfinished Tuple/element/Array owners without publishing a partial result or modifying the source. Completed receiver effects are not rolled back. Empty input promises neither zero allocation/retention nor preserved capacity or backing addresses. Escaped results retain their ordinary owners until the final drop. Entries is implemented and admitted: current21/32. iterator()/entriesIterator(), user iterators and generators require separate contracts and qualification; this materialized Array does not supply those protocols.
+Qualification is allocation=may_heap, failures=allocation,retain,limit and ownership=owned. There is no user callback, new language suspension or suspended loan; existing receiver-expression effects are unchanged. Prepare the complete result before handoff. Copy/retain/budget failure or cancellation drops unfinished Tuple/element/Array owners without publishing a partial result or modifying the source. Completed receiver effects are not rolled back. Empty input promises neither zero allocation/retention nor preserved capacity or backing addresses. Escaped results retain their ordinary owners until the final drop. Entries is implemented and admitted: see the current same-source admission inventory. iterator()/entriesIterator(), user iterators and generators require separate contracts and qualification; this materialized Array does not supply those protocols.
 
 | Member | Type / Description |
 |--|--|
@@ -622,12 +642,18 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 | `get(k)` / `set(k, v)` | `get` returns `null` when absent; `set` writes |
 | `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | query and remove |
 | `keys()` / `values()` / `entries()` | keys, values, key/value pairs |
-| `forEach(fn)` | traversal |
+| `forEach(fn)` | insertion-order traversal with exact `fn(K,V)->()` |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
 **Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished by the `#` prefix from exact structural-object literals of the form `{ field: value }`.
 
 `m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
+
+`containsValue(value)` is a READ query: evaluate the receiver, then value, once each and check value against exact V. This method alone requires definition-site V: Equal; other Map operations acquire no such condition. It uses ordinary value equality rather than key equivalence: NaN is unequal to itself and signed zeros are equal. Array and Nullable recurse under their existing Equal conditions, without skipping floating leaves through shared backing. An empty Map does not bypass the type condition. The bool query consumes neither input; allocation, retention and finite-resource failures preserve inputs and publish no result.
+
+`forEach(callback)` is a READ operation returning `()`. First own the receiver logical snapshot, then evaluate callback once, including for an empty Map, which invokes it zero times. The callback must take exactly two READ parameters K and V and return Unit, without an extra index or omitted parameters; V acquires no Equal/Compare/Sendable requirement. Copy the parameters for each entry immediately before its ordinary indirect call in insertion order, without copying all entries in advance. Callback mutation of the original binding preserves the snapshot; class and synchronized identities retain ordinary shared identity semantics. Parameter-copy failure, throw, panic, suspension and cancellation follow the ordinary Call pipeline. Completed argument and callback effects remain, and later entries do not execute. Definition-site Hashable and ordinary call-effect obligations remain.
+
+`keys()`, `values()` and `entries()` are zero-argument READ queries returning independently owned `Array<K>`, `Array<V>` and `Array<(K,V)>` snapshots in insertion order. Updating an existing key preserves its position; deleting and reinserting a key places it last. The receiver evaluates once, and an empty Map returns an owned empty Array. Mutating the result or its COW copy does not modify the Map, and later Map mutations do not change an existing result. Elements and tuple fields use ordinary owned logical copies, stopping at class/synchronization identity; mutations of shared identity objects remain observable. Results may outlive their source container, Instance and Program. Queries do not consume the receiver, require REF, or add Equal/Compare/Sendable constraints to V. Allocation, retention and finite-resource failures publish no partial result.
 
 The key position of a subscript is typed and checked against `K`, symmetrically with the value position against `V`: `m[1]` on a `Map<f64, V>` is the f64 key `1.0`, not an i64 key stored in a f64 map. Key matching uses the key equivalence relation from §9.2, not `==`.
 
@@ -639,10 +665,20 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `add(x)` / `contains(x)` / `delete(x)` | insert, query, remove |
 | `clear()` | empty the set |
 | `values()` | returns `Array<T>` |
-| `forEach(fn)` | traversal |
+| `toArray()` | independently owned `Array<T>` |
+| `union(other)` / `intersection(other)` | union/intersection returning `Set<T>` |
+| `difference(other)` / `symmetricDifference(other)` | difference/symmetric difference returning `Set<T>` |
+| `isSubset(other)` / `isSuperset(other)` | inclusive subset/superset relation returning `bool` |
+| `forEach(fn)` | insertion-order traversal with exact `fn(T)->()` |
 | `iterator()` | iteration protocol |
 
 **Set literal**: `#[1, 2, 3]` or `#[]`.
+
+`values()` returns `Array<T>` under the same zero-argument READ and owned-snapshot rules, preserving first insertion order. Adding an existing element preserves its position; deleting and adding it again places it last.
+
+`forEach(callback)` follows the Map READ snapshot, single callback evaluation and ordinary failure/suspension rules, invoking exact `fn(T)->()` in insertion order. No index or omitted parameter is accepted. Each item is an ordinary owned copy prepared immediately before its call; an empty Set invokes no callback. Definition-site T:Hashable remains, without an added Equal/Compare/Sendable condition.
+
+`toArray()` uses the same owned-snapshot rules as `values()`. The four algebra operations and two relations use a non-consuming READ receiver and an ordinary `other: Set<T>` argument with exactly the same T, under the key equivalence relation of §9.2. Evaluate the receiver once, followed by other once. Union preserves left order then appends right-only elements. Intersection and difference preserve the order of qualifying left elements. Symmetric difference preserves left-only order followed by right-only order. Results are independently owned Sets: later mutations of either input, an old alias or a returned result do not rewrite the others. The empty Set is a subset of every same-typed Set, and both relations include equality. Failure preserves the inputs and publishes no partial result. These operations neither consume nor require REF and add no Equal/Compare/Sendable constraints beyond T's existing Hashable obligation.
 
 ### 14.10 `Channel<T>` Methods
 

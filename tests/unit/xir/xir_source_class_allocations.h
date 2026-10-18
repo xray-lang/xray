@@ -18,7 +18,7 @@ static void source_class_allocations(void){
     FILE *file=fopen(path,"wb");CHECK(file);
     CHECK(fputs("final class Counter<T>{private n:i64;const label:string;init(n:i64,b:bool){this.n=n;if(b){this.label=\"counter\"}else{this.label=\"other\"}};add()->i64{this.n+=1;return this.n};static make()->Counter<T>{return Counter<T>(40,true)}}\nexport fn answer()->i64{const first=Counter<string>.make();const alias=first;return alias.add()}\n",file)>=0 && fclose(file)==0);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,absolute};
-    XrXirSourceRequest request={NULL,path,&authority,NULL,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL};size_t sites=allocation_case_begin(23);
+    XrXirSourceRequest request={NULL,path,&authority,NULL,XR_SOURCE_STDLIB,NULL, XR_XIR_PROGRAM, NULL,NULL};size_t sites=allocation_case_begin(23);
     for(size_t site=allocation_first();allocation_more(site,sites);site=allocation_next(site)){
         source_fixture_compile_attempts=0;source_fixture_compile_fail_at=site?site-1:SIZE_MAX; source_fixture_compile_injected=false;XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=allocation_source_check(&request,&result,&diagnostic);

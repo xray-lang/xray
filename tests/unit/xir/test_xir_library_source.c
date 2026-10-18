@@ -66,7 +66,7 @@ static void source_representation_conflicts(void) {
     for(unsigned mode=0;mode<2;++mode){
         conflict_text("collision.xr","export fn answer()->i64 { return 41; }");
         XrCompilerSession *producer=library_session_new(library_context);CHECK(producer);
-        XrXirSourceRequest request={producer,XR_SOURCE_FIXTURES "/collision.xr",&authority,library_context,NULL,NULL,XR_XIR_LIBRARY,NULL};
+        XrXirSourceRequest request={producer,XR_SOURCE_FIXTURES "/collision.xr",&authority,library_context,NULL,NULL,XR_XIR_LIBRARY,NULL,NULL};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         CHECK(xr_xir_compile_source_check(&request,&result,&diagnostic,NULL)==XR_XIR_OK);
         XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(result.checked,&packet,NULL)==XR_XIR_OK);
@@ -92,7 +92,7 @@ static void library_source_case(bool middle_case,const char *packet_path) {
  conflict_text("library.xr","fn secret(value:i64=41)->i64 { return value; }\nexport fn answer(value:i64=secret())->i64 { return value; }\n");
  XrCompilerSession *producer=library_session_new(library_context);CHECK(producer);
  XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
- XrXirSourceRequest library_request={producer,XR_SOURCE_FIXTURES "/library.xr",&authority,library_context,NULL,NULL,XR_XIR_LIBRARY,NULL};
+ XrXirSourceRequest library_request={producer,XR_SOURCE_FIXTURES "/library.xr",&authority,library_context,NULL,NULL,XR_XIR_LIBRARY,NULL,NULL};
  XrXirSourceResult library={0};XrXirSourceDiagnostic diagnostic={0};
  XrXirStatus status=xr_xir_compile_source_check(&library_request,&library,&diagnostic,NULL);
  if(status!=XR_XIR_OK)fprintf(stderr,"library %u %s\n",status,diagnostic.message);
@@ -171,7 +171,7 @@ static void library_source_case(bool middle_case,const char *packet_path) {
     CHECK(graph->specs[i].authority.kind==authority.kind&&!strcmp(graph->specs[i].authority.physical_root,authority.physical_root));checked_resource=true;}
  CHECK(checked_resource);xr_compile_module_graph_free(graph);xr_compile_module_resolver_free(resolver);xr_compile_session_free(graph_session);
  size_t graph_live=source_live,graph_bytes=source_bytes;
- graph_session=library_session_new(library_context);XrXirSourceRequest absent={graph_session,XR_SOURCE_FIXTURES "/root.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+ graph_session=library_session_new(library_context);XrXirSourceRequest absent={graph_session,XR_SOURCE_FIXTURES "/root.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
  XrXirSourceResult missing={0};XrXirStatus missing_status=xr_xir_compile_source_check(&absent,&missing,&diagnostic,NULL);fprintf(stderr,"Deleted-source no catalog status%u reason%s\n",missing_status,diagnostic.message);CHECK(missing_status==XR_XIR_UNRESOLVED&&!missing.checked&&!missing.snapshot&&!strcmp(diagnostic.message,"module not found"));
  xr_xir_compile_source_result_free(&missing);xr_compile_session_free(graph_session);CHECK(source_live==graph_live&&source_bytes==graph_bytes);
  graph_session=library_session_new(library_context);XrModuleResolverConfig absent_config={0};resolver=library_resolver_new(library_context,&absent_config);graph=NULL;error=NULL;
@@ -184,7 +184,7 @@ static void library_source_case(bool middle_case,const char *packet_path) {
  memset(replay_bytes,0,replay_input.length);free(replay_bytes);
 
  XrCompilerSession *session=library_session_new(library_context);CHECK(session);
- XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+ XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};
  fprintf(stderr,"catalog ready consumer begin\n");
  source_attempts=0;
  XrXirSourceResult private_result={0};
@@ -217,7 +217,7 @@ static void library_unit_boundary_cases(void) {
   conflict_text("unit.xr",cases[i]);
   XrCompilerSession *session=library_session_new(library_context);CHECK(session);
   XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
-  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/unit.xr",&authority,library_context,NULL,NULL,i<2?XR_XIR_LIBRARY:XR_XIR_PROGRAM,NULL};
+  XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/unit.xr",&authority,library_context,NULL,NULL,i<2?XR_XIR_LIBRARY:XR_XIR_PROGRAM,NULL,NULL};
   XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
   XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
   printf("Unit probe=%u status=%u diagnostic=%s\n",i,status,diagnostic.message);
@@ -227,8 +227,10 @@ static void library_unit_boundary_cases(void) {
   CHECK(!runtime_live&&!runtime_bytes);
  }
 }
+#include "xir_library_emit_fixture.h"
 int main(int argc,char **argv) {
- CHECK(argc==1||argc==2);
+ CHECK(argc>=1&&argc<=3);
+ if(argc==3){CHECK(!strcmp(argv[1],"--emit-only"));library_emit_fixture(argv[2]);return 0;}
  if(argc==2&&!strcmp(argv[1],"--views")){
   LibraryCompileOwner views_owner={0};
   for(unsigned mode=0;mode<5;++mode){

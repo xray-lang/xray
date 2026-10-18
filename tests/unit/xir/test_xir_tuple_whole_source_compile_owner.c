@@ -31,7 +31,7 @@ static XrXirStatus whole_source(const XrXirCompileContext *context,void *opaque)
     if(status!=XR_XIR_OK){CHECK(!session && runtime_live==runtime_blocks && runtime_bytes==runtime_size);return status;}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_TUPLE_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_TUPLE_FIXTURES "/root.xr",&authority,context,
-        XR_TUPLE_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        XR_TUPLE_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);
     if(status!=XR_XIR_OK)CHECK(!product);
     xr_xir_compile_source_product_diagnostic_free(&diagnostic);xr_compile_session_free(session);

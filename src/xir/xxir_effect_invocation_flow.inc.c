@@ -19,10 +19,13 @@ typedef struct EffectInvocationFlow {
     const EffectPhysicalFunction *physical;
     uint64_t *rows;
     uint64_t *fixed,*certified;
+    XrXirType *types;
+    XrXirInstruction *instructions;
+    uint32_t *write_heads,*write_next;
     void *memory;
     uint64_t *cell_row;
     EffectInvocationScratch *scratch;
-    bool changed,precision;
+    bool changed,precision,types_ready;
 } EffectInvocationFlow;
 
 /* Requests borrow only for this one replay. Every failed field read is
@@ -30,11 +33,28 @@ typedef struct EffectInvocationFlow {
 static XrXirStatus effect_invocation_flow_instruction(EffectInvocationFlow *flow,
     uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
     if (!flow || !flow->read || flow->node>=flow->read->final->count) return XR_XIR_BAD_STRUCTURE;
+    if (flow->types_ready && effect_body_request_sequence_owned(&flow->body)) {
+        XrXirStatus binding=effect_body_request_sequence_binding(&flow->body);
+        if (binding!=XR_XIR_OK) return binding;
+        if (flow->body.owner!=flow->read->final->material) return XR_XIR_BAD_STRUCTURE;
+        if (!storage || !output || !flow->function || i>=flow->function->instruction_count ||
+            !flow->instructions) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(flow->read->work,1+sizeof(*output))) return XR_XIR_BUDGET;
+        *output=&flow->instructions[i];return XR_XIR_OK;
+    }
     return effect_body_request_instruction(&flow->body,flow->read->final->nodes[flow->node].body,i,storage,output);
 }
 static XrXirStatus effect_invocation_flow_type(EffectInvocationFlow *flow,
     uint32_t value,XrXirType *output) {
     if (!flow || !flow->read || flow->node>=flow->read->final->count) return XR_XIR_BAD_STRUCTURE;
+    if (flow->types_ready && effect_body_request_sequence_owned(&flow->body)) {
+        XrXirStatus binding=effect_body_request_sequence_binding(&flow->body);
+        if (binding!=XR_XIR_OK) return binding;
+        if (flow->body.owner!=flow->read->final->material) return XR_XIR_BAD_STRUCTURE;
+        if (!output || value>=flow->values || !flow->types) return XR_XIR_BAD_STRUCTURE;
+        if (!xir_compile_work(flow->read->work,1+sizeof(*output))) return XR_XIR_BUDGET;
+        *output=flow->types[value];return XR_XIR_OK;
+    }
     return effect_body_request_type(&flow->body,flow->read->final->nodes[flow->node].body,value,output);
 }
 
@@ -54,8 +74,8 @@ static void effect_invocation_flow_finish(EffectInvocationFlow *flow) {
     if (!flow) return;
     effect_invocation_scratch_release(flow->read,flow->scratch);
     flow->scratch=NULL;flow->memory=NULL;flow->cell_row=NULL;
+    flow->rows=NULL;flow->fixed=NULL;flow->certified=NULL;flow->row_indices=NULL;
 }
-
 static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     const EffectBodyFunctionHead *function=flow->function;
     const EffectPhysicalDomain *domain=flow->read->final->physical;
@@ -77,7 +97,19 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     if (!xir_compile_work(flow->read->work,6+sizeof(flag_words))) return XR_XIR_BUDGET;
     uint64_t flag_offset=(words*sizeof(*flow->rows)+indices+7)&~UINT64_C(7);
     if (flag_words>(SIZE_MAX-flag_offset)/(2*sizeof(uint64_t))) return XR_XIR_BUDGET;
-    size_t bytes=(size_t)(flag_offset+2*flag_words*sizeof(uint64_t));
+    uint64_t type_offset=flag_offset+2*flag_words*sizeof(uint64_t);
+    bool owned=effect_body_request_sequence_owned(&flow->body);
+    uint64_t type_bytes=owned?values*sizeof(XrXirType):0;
+    if (type_bytes>SIZE_MAX-type_offset || type_offset+type_bytes>SIZE_MAX-7) return XR_XIR_BUDGET;
+    uint64_t instruction_offset=(type_offset+type_bytes+7)&~UINT64_C(7);
+    uint64_t instruction_bytes=owned?(uint64_t)function->instruction_count*sizeof(XrXirInstruction):0;
+    if (instruction_bytes>SIZE_MAX-instruction_offset) return XR_XIR_BUDGET;
+    uint64_t write_offset=instruction_offset+instruction_bytes;
+    uint64_t write_bytes=owned?(values+function->instruction_count)*sizeof(uint32_t):0;
+    if (write_bytes>SIZE_MAX-write_offset) return XR_XIR_BUDGET;
+    if (!xir_compile_work(flow->read->work,8+2*sizeof(void *))) return XR_XIR_BUDGET;
+    if (write_offset+write_bytes>SIZE_MAX-7) return XR_XIR_BUDGET;
+    size_t bytes=(size_t)((write_offset+write_bytes+7)&~UINT64_C(7));
     uint64_t cell_bytes=(uint64_t)flow->basis.cell_words*sizeof(uint64_t);
     if (cell_bytes>SIZE_MAX-bytes) return XR_XIR_BUDGET;
     if (flow->memory || flow->scratch) return XR_XIR_BAD_STRUCTURE;
@@ -92,6 +124,10 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     flow->row_indices=physical->rows?(uint32_t *)(flow->rows+(size_t)words):NULL;
     flow->fixed=flag_words?(uint64_t *)((uint8_t *)flow->memory+(size_t)flag_offset):NULL;
     flow->certified=flag_words?flow->fixed+(size_t)flag_words:NULL;
+    flow->types=type_bytes?(XrXirType *)((uint8_t *)flow->memory+(size_t)type_offset):NULL;
+    flow->instructions=instruction_bytes?(XrXirInstruction *)((uint8_t *)flow->memory+(size_t)instruction_offset):NULL;
+    flow->write_heads=owned && values?(uint32_t *)((uint8_t *)flow->memory+(size_t)write_offset):NULL;
+    flow->write_next=owned && function->instruction_count?flow->write_heads+(size_t)values:NULL;
     if (words) memset(flow->rows,0,(size_t)words*sizeof(*flow->rows));
     if (flag_words) memset(flow->fixed,0,(size_t)flag_words*2*sizeof(uint64_t));
     if (physical->rows) {
@@ -109,6 +145,8 @@ static XrXirStatus effect_invocation_flow_storage(EffectInvocationFlow *flow) {
     }
     return XR_XIR_OK;
 }
+
+#include "xxir_effect_invocation_types.inc.c"
 
 
 /* Both finite flags still represent every actual SSA, including non-callable
@@ -263,9 +301,8 @@ static XrXirStatus effect_invocation_ref_target(EffectInvocationFlow *flow,
         if (xr_xir_type_span(module->types,parameter->type) ||
             xr_xir_type_span(module->types,target->parameters[p+op->args[1]])) return XR_XIR_OK;
         if (parameter->mode==XR_PARAM_REF) {
-            if (op->args[1]) return XR_XIR_BAD_TYPE;
             if (xr_xir_cell_provenance_role(flow->read->final->cells,
-                    (uint32_t)op->immediate,p)!=XR_XIR_CELL_PROOF_SCOPED_REF) return XR_XIR_OK;
+                    (uint32_t)op->immediate,p+op->args[1])!=XR_XIR_CELL_PROOF_SCOPED_REF) return XR_XIR_OK;
         }
     }
     if (xr_xir_type_span(module->types,signature->result) ||
@@ -383,8 +420,8 @@ static XrXirStatus effect_invocation_barriers(EffectInvocationFlow *flow) {
         bool store=op->op==XR_XIR_CELL_NEW || op->op==XR_XIR_CELL_WRITE ||
             op->op==XR_XIR_CELL_LOCAL_WRITE || op->op==XR_XIR_PLACE_WRITE ||
             op->op==XR_XIR_SLOT_INIT || op->op==XR_XIR_SLOT_GROUP_INIT ||
-            op->op==XR_XIR_SLOT_STORE || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_SET ||
-            op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_STRUCT_NEW || (op->op==XR_XIR_STRUCT_SET || op->op==XR_XIR_RECORD_SET) ||
+            op->op==XR_XIR_SLOT_STORE || op->op==XR_XIR_MAP_NEW || op->op==XR_XIR_SET_NEW || op->op==XR_XIR_MAP_SET || op->op==XR_XIR_SET_ADD || op->op==XR_XIR_ARRAY_NEW || op->op==XR_XIR_ARRAY_SET ||
+            op->op==XR_XIR_ARRAY_PUSH || op->op==XR_XIR_STRUCT_NEW || op->op==XR_XIR_STRUCT_SET || op->op==XR_XIR_RECORD_SET ||
             op->op==XR_XIR_CLASS_NEW || op->op==XR_XIR_CLASS_SET || op->op==XR_XIR_ENUM_NEW ||
             (op->op==XR_XIR_TUPLE_NEW || op->op==XR_XIR_RECORD_NEW) || op->op==XR_XIR_NULLABLE_SOME;
         if (!store) continue;
@@ -538,6 +575,7 @@ static bool effect_invocation_origins_unused(const EffectInvocationFlow *flow,
  * actual constant opcode/type fields share an early-return classification;
  * every active physical transfer enters the unchanged complete handler. */
 static XrXirStatus effect_invocation_origins_pass(EffectInvocationFlow *flow) {
+    EffectBodyRun dense_range_storage;
     const EffectInvocationRead *owner=flow->read;
     if (flow->body.instruction!=effect_body_owned_instruction ||
         flow->body.head!=effect_body_owned_head || flow->body.type!=effect_body_owned_type ||
@@ -580,7 +618,7 @@ static XrXirStatus effect_invocation_origins_pass(EffectInvocationFlow *flow) {
     for (uint32_t run=0;run<body->run_count;++run) {
         const EffectBodyRun *ref;uint32_t opcode=XR_XIR_INVALID,type=XR_XIR_UNIT;
         if (!xir_compile_work(owner->work,2*sizeof(uint32_t))) return XR_XIR_BUDGET;
-        XrXirStatus status=effect_body_range_ref(&flow->body.read,body,&cursor,&ref);
+        XrXirStatus status=effect_body_range_take(&flow->body.read,body,&cursor,&ref,&dense_range_storage);
         if (status!=XR_XIR_OK) return status;
         bool constant=!(ref->mask&UINT32_C(3)),unused=false;
         if (!xir_compile_work(owner->work,sizeof(constant)+sizeof(unused))) return XR_XIR_BUDGET;
@@ -677,6 +715,8 @@ static XrXirStatus effect_invocation_origins_read(EffectInvocationFlow *flow,
     status=effect_invocation_basis_parameters(owner,root_parameters,&flow->basis);
     if (status!=XR_XIR_OK) return status;
     status=effect_invocation_flow_storage(flow);
+    if (status!=XR_XIR_OK) return status;
+    status=effect_invocation_flow_types(flow);
     if (status!=XR_XIR_OK) return status;
     for (uint32_t p=0;p<flow->function->parameter_count;++p) {
         uint64_t *row=effect_invocation_row(flow,p);

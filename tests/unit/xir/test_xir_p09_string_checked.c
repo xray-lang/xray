@@ -39,7 +39,7 @@ static void string_checked(unsigned attack) {
     XrXirFunctionIdentity identities[3] = {{0}};
     XrXirSourceModule source = {"root", 4, NULL, 0, 0, 0};
     XrXirLiteral literals[] = {{"a", 1}, {"b", 1}};
-    XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, literals, 2, 0, 1, NULL};
+    XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, literals, 2, 0, 1, NULL, NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, 2, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
     if (attack == 1) entry[3].type = XR_XIR_STRING;
     if (attack == 2) entry[3].args[0] = 0;
@@ -87,7 +87,7 @@ static void string_checked(unsigned attack) {
     consumer_context_ephemeral_free(&context, baseline);
 }
 int main(void) {
-    _Static_assert(XR_XIR_CELL_STRING_APPEND == 153 && XR_XIR_OP_COUNT == 158 && XR_XIR_CHECKED_CONTRACT == 81,
+    _Static_assert(XR_XIR_CELL_STRING_APPEND == 153 && XR_XIR_OP_COUNT == 193 && XR_XIR_CHECKED_CONTRACT == 90,
         "String mutation instruction and semantic identity");
     consumer_context = consumer_context_default();
     for (unsigned attack = 0; attack < 14; ++attack) string_checked(attack);

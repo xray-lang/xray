@@ -36,7 +36,7 @@ static void string_library_packet(const XrXirCompileContext *context,const char 
     char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%s",XR_SOURCE_FIXTURES,name)>0);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_SOURCE_FIXTURES};
-    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_LIBRARY,NULL,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"library %s: %u %s\n",name,status,diagnostic.message);
@@ -103,7 +103,7 @@ static void string_source_case(unsigned reverse,const char *output_path) {
     memset(inputs,0,sizeof(inputs));memset(names,0,sizeof(names));memset(catalog_root,0,sizeof(catalog_root));
     for(unsigned i=0;i<5;++i){memset(replay_bytes[i],0,replay_inputs[i].length);free(replay_bytes[i]);}
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(compiler.context.resources,&session)==XR_COMPILER_SESSION_OK);
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compiler.context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/root.xr",&authority,&compiler.context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     if(!reverse)library_string_source_negatives(&request);
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);

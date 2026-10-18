@@ -31,7 +31,77 @@ typedef struct CtfeReferenceCase {
 } CtfeReferenceCase;
 
 static const CtfeReferenceCase reference_cases[] = {
-    {"string_append_direct",XR_XIR_I64,42,XR_XIR_OK,NULL,0},
+    {"struct_identity_array", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_error", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_cow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_alias", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_acyclic_replace", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_function_cycle", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"struct_identity_class_cycle", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
+    {"struct_identity_export", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "closed value family", 3},
+    {"struct_identity_projected_root_refused", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_absent_loan", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_active_loan", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_owning_direct", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"struct_identity_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"struct_identity_class", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"struct_identity_function", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_result", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_unit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_return", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_explicit", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_context", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_arrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_readonly", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_cell_capture", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_array", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_projection", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_cleanup", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_generic_context", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_panic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_alias", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"ref_closure_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"ref_closure_owning_direct", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"ref_closure_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"array_identity_projected_root_refused", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_owning_direct", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"array_identity_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"array_identity_cow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_repeat", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_function_set_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"array_identity_function_path_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"array_identity_error", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_empty_ref", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_function_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 2},
+    {"array_identity_basic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_alias", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_mutate", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_nullable", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_function", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_field", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"array_identity_cycle", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
+    {"array_identity_export", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 3},
+    {"class_inactive_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_owning", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
+    {"class_inactive_nested", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_enum", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_tuple", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_dynamic", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_active_child", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
+    {"class_inactive_identity_leaf", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_ref_dynamic_fields", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_ref_dynamic_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_ref_dynamic_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
@@ -57,7 +127,7 @@ static const CtfeReferenceCase reference_cases[] = {
     {"class_ref_reborrow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_ref_grow", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_ref_dynamic_gap", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
-    {"class_deep_ref_gap", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 4},
+    {"class_deep_ref_gap", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_return_string", XR_XIR_STRING, 2, XR_XIR_OK, NULL, 0},
     {"class_owning_direct", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
     {"class_export", XR_XIR_I64, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 2},
@@ -232,8 +302,8 @@ static const CtfeReferenceCase reference_cases[] = {
     {"nominal_enum_direct", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
     {"nominal_field_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_large", XR_XIR_UNIT, 9, XR_XIR_OK, NULL, 0},
-    {"nominal_dynamic_gap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted deterministic", 3},
-    {"nominal_class_fields", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_dynamic_gap", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
+    {"nominal_class", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_struct", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"nominal_struct_method", XR_XIR_I64, 7, XR_XIR_OK, NULL, 0},
     {"nominal_struct_generic", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
@@ -286,8 +356,10 @@ static const CtfeReferenceCase reference_cases[] = {
     {"equal_array_nullable", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"equal_nullable_array", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"equal_array_direct", XR_XIR_UNIT, 0, XR_XIR_OK, NULL, 0},
+    {"string_append_direct",XR_XIR_I64,42,XR_XIR_OK,NULL,0},
+    {"nominal_class_fields", XR_XIR_BOOL, 1, XR_XIR_OK, NULL, 0},
     {"array_holder", XR_XIR_I64, 42, XR_XIR_OK, NULL, 0},
-    {"array_deep_gap", XR_XIR_UNIT, 0, XR_XIR_BAD_TYPE, "admitted closed value family", 1},
+    {"array_deep_gap", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
     {"array_repeat", XR_XIR_UNIT, 3, XR_XIR_OK, NULL, 0},
     {"array_reserve", XR_XIR_UNIT, 2, XR_XIR_OK, NULL, 0},
     {"array_export", XR_XIR_UNIT, 4, XR_XIR_OK, NULL, 0},
@@ -415,7 +487,7 @@ static XrXirStatus reference_source(const XrXirCompileContext *context, const ch
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, identity, NULL};
-    XrXirSourceRequest request = {session, NULL, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, NULL, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceText input = {NULL, text, bytes};
     XrXirStatus status = xr_xir_compile_source_check_text(&request, &input, result, diagnostic, NULL);
     xr_compile_session_free(session);
@@ -826,10 +898,16 @@ int main(int argc, char **argv) {
         if (!strncmp(selected->name,"output_",7)) reference_output(&context,&source,selected);
         else if ((!strncmp(selected->name,"nominal_",8) && selected->type==XR_XIR_UNIT) || !strcmp(selected->name,"lexical_private_direct")) reference_nominal(&context,&source,selected);
         else if (!strcmp(selected->name,"class_direct")) reference_class_direct(&context,&source);
-        else if (!strcmp(selected->name,"class_ref_dynamic_direct")) reference_dynamic_direct(&context,&source,false);
-        else if (!strcmp(selected->name,"class_ref_dynamic_owning_direct")) reference_dynamic_direct(&context,&source,true);
+        else if (!strcmp(selected->name,"struct_identity_direct") || !strcmp(selected->name,"ref_closure_direct")) reference_dynamic_direct(&context,&source,false,false);
+        else if (!strcmp(selected->name,"struct_identity_owning_direct") || !strcmp(selected->name,"ref_closure_owning_direct")) reference_dynamic_direct(&context,&source,true,false);
+        else if (!strcmp(selected->name,"struct_identity_owning") || !strcmp(selected->name,"ref_closure_owning")) reference_dynamic_source_string(&context,&source);
+        else if (!strcmp(selected->name,"array_identity_direct")) reference_dynamic_direct(&context,&source,false,false);
+        else if (!strcmp(selected->name,"array_identity_owning_direct")) reference_dynamic_direct(&context,&source,true,false);
+        else if (!strcmp(selected->name,"array_identity_owning")) reference_dynamic_source_string(&context,&source);
+        else if (!strcmp(selected->name,"class_ref_dynamic_direct") || !strcmp(selected->name,"class_inactive_direct")) reference_dynamic_direct(&context,&source,false,true);
+        else if (!strcmp(selected->name,"class_ref_dynamic_owning_direct") || !strcmp(selected->name,"class_inactive_owning_direct")) reference_dynamic_direct(&context,&source,true,true);
         else if (!strcmp(selected->name,"class_owning_direct")) reference_class_owning(&context,&source);
-        else if (!strcmp(selected->name,"class_ref_dynamic_owning")) reference_dynamic_source_string(&context,&source);
+        else if (!strcmp(selected->name,"class_ref_dynamic_owning") || !strcmp(selected->name,"class_inactive_owning")) reference_dynamic_source_string(&context,&source);
         else if (!strcmp(selected->name,"class_cycle_direct")) reference_class_cycle(&context,&source);
         else if (!strcmp(selected->name,"class_work_direct")) reference_class_work(&context,&source);
         else if (!strcmp(selected->name,"class_authority_direct")) reference_class_authority(&context,&source);
@@ -902,7 +980,8 @@ int main(int argc, char **argv) {
     if (!strcmp(selected->name,"cleanup_owning_direct")) reference_cleanup_last_owner();
     if (!strcmp(selected->name,"project_owning_direct")) reference_projection_last_owner();
     if (!strcmp(selected->name,"class_owning_direct")) reference_class_last_owner();
-    if (!strcmp(selected->name,"class_ref_dynamic_owning_direct")) reference_dynamic_last_owner();
+    if (!strcmp(selected->name,"struct_identity_owning_direct") || !strcmp(selected->name,"ref_closure_owning_direct")) reference_dynamic_last_owner(selected->name);
+    if (!strcmp(selected->name,"class_ref_dynamic_owning_direct") || !strcmp(selected->name,"class_inactive_owning_direct") || !strcmp(selected->name,"array_identity_owning_direct")) reference_dynamic_last_owner(selected->name);
     if (!strcmp(selected->name,"output_fibonacci_direct") || !strcmp(selected->name,"output_pair_direct")) reference_output_last_owner(selected);
     if (!strcmp(selected->name,"error_owning_direct")) reference_error_last_owner();
     if (!strcmp(selected->name,"panic_owning_direct")) reference_panic_last_owner();

@@ -162,6 +162,8 @@ static void physical_read_faults(const XrXirCompileContext *context,const Effect
     }
 }
 
+#include "xir_effect_literal_adapter_cases.h"
+
 int main(void) {
     const XrXirCompileContext *context=effects_source_owner(UINT64_C(64)*1024*1024,UINT64_C(128000000));
     XrXirInstruction *producer=physical_input(context),*expected_rows=physical_input(context);
@@ -174,5 +176,6 @@ int main(void) {
     memset(producer,0xCE,PHYSICAL_ROWS*sizeof(*producer));xr_compile_resources_free(producer);source=(XrXirFunction){0};
     physical_roundtrip(context,&body,&expected);physical_controls(context,&body,&expected);
     physical_read_faults(context,&body);xr_compile_resources_free(body.runs);
-    xr_compile_resources_free(expected_rows);effects_source_owners_free();return 0;
+    xr_compile_resources_free(expected_rows);effects_source_owners_free();
+    physical_literal_adapter_cases();return 0;
 }

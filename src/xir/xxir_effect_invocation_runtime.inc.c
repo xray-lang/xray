@@ -324,7 +324,7 @@ XR_FUNC XrXirStatus xir_effects_execution_edge(const XrXirEffects *effects,
     if (request->captures>request->count || op->args[1]!=request->count-request->captures)
         return XR_XIR_BAD_STRUCTURE;
     if (request->producer==UINT32_MAX) {
-        if (request->captures || (op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE) ||
+        if (request->captures || (op->op!=XR_XIR_CALL && op->op!=XR_XIR_INVOKE && op->op!=XR_XIR_GENERATOR_NEW) ||
             op->immediate!=(int64_t)request->target) return XR_XIR_BAD_STRUCTURE;
     } else {
         const EffectInvocationSite *site=&owner->sites[request->producer];
@@ -351,7 +351,8 @@ XR_FUNC XrXirStatus xir_effects_execution_edge(const XrXirEffects *effects,
         if (e>=owner->edge_count || ++walked>owner->edge_count) return XR_XIR_BAD_STRUCTURE;
         const EffectInvocationEdge *edge=&owner->edges[e];
         if (edge->caller!=parent || edge->target>=owner->count) return XR_XIR_BAD_STRUCTURE;
-        if (edge->instruction!=request->instruction || edge->producer!=request->producer || edge->latent ||
+        if (edge->instruction!=request->instruction || edge->producer!=request->producer ||
+            edge->latent!=(op->op==XR_XIR_GENERATOR_NEW) ||
             owner->nodes[edge->target].body!=request->target) continue;
         const EffectInvocationNode *node=&owner->nodes[edge->target];
         if (node->root!=owner->nodes[parent].root) return XR_XIR_BAD_STRUCTURE;

@@ -16,7 +16,7 @@
 #include "xir/xxir_map.h"
 #include "xir/xxir_program_internal.h"
 #include "xir/xxir_array.h"
-#include "xir_hash81_golden.h"
+#include "composed_wire/packet_053.inc.c"
 typedef struct HashPipelineFixture {
     XrXirTypeNode nodes[3]; XrXirTypes types;
     XrXirInstruction init, entry[2], echo, call[2], set_call[2];
@@ -63,13 +63,13 @@ static void hash_pipeline_known_bytes(const XrXirCompileContext *context) {
     XrXirArtifact *checked = NULL, *decoded = NULL; XrXirCheckedPacket packet = {0};
     CHECK(xir_fixture_check(context, &library, &checked, NULL) == XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(checked, &packet, NULL) == XR_XIR_OK);
-    if (packet.length != sizeof(hash81_golden) || memcmp(packet.bytes, hash81_golden, packet.length)) {
+    if (packet.length != sizeof(packet_053_current) || memcmp(packet.bytes, packet_053_current, packet.length)) {
         size_t at = 0;
-        while (at < packet.length && at < sizeof(hash81_golden) && packet.bytes[at] == hash81_golden[at]) ++at;
-        fprintf(stderr, "hash independent packet actual=%zu expected=%zu first=%zu\n", packet.length, sizeof(hash81_golden), at);
+        while (at < packet.length && at < sizeof(packet_053_current) && packet.bytes[at] == packet_053_current[at]) ++at;
+        fprintf(stderr, "hash independent packet actual=%zu expected=%zu first=%zu\n", packet.length, sizeof(packet_053_current), at);
     }
-    CHECK(packet.length == sizeof(hash81_golden) && !memcmp(packet.bytes, hash81_golden, packet.length));
-    CHECK(xr_xir_compile_checked_read(context, hash81_golden, sizeof(hash81_golden), &decoded, NULL) == XR_XIR_OK);
+    CHECK(packet.length == sizeof(packet_053_current) && !memcmp(packet.bytes, packet_053_current, packet.length));
+    CHECK(xr_xir_compile_checked_read(context, packet_053_current, sizeof(packet_053_current), &decoded, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); xr_xir_compile_checked_packet_free(&packet); xr_xir_compile_artifact_free(checked);
 }
 static void hash_pipeline_definition_proof(const XrXirCompileContext *context) {

@@ -28,8 +28,8 @@ static XrXirArtifact *cleanup_frontier_fixture(const XrXirCompileContext *contex
         {"cleanup", 7, &capture, 1, XR_XIR_UNIT, &one, 1, &done, 1, NULL, 0}};
     XrXirFunctionIdentity identities[3] = {{0}};
     identities[2].cleanup_owner = 2;
-    XrXirSourceModule source = {"root", 4, NULL, 0, 0, 0};
-    XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 1, NULL};
+    XrXirSourceModule source = {.name="root",.name_length=4};
+    XrXirDeclarations declarations = {.modules=&source,.module_count=1,.functions=identities,.entry_function=1};
     XrXirModule module = {XR_XIR_BUILT, functions, 3, &declarations, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     if (attack == 1) blocks[0].frontier = 2;
     if (attack == 2) blocks[1].frontier = UINT32_MAX;

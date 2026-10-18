@@ -8,17 +8,26 @@
  */
 #ifndef ROOT_CONSTRUCTION72_CASES_H
 #define ROOT_CONSTRUCTION72_CASES_H
+#include <stdint.h>
+#include "composed_wire/packet_044.inc.c"
+#include "composed_wire/packet_045.inc.c"
 #include "xir/xxir_internal.h"
 #include "xir/xxir_checked.h"
 #include "xir/xxir_nominal.h"
 #include "base/xsha256.h"
 #include "root_construction81_goldens.h"
 #include "root_construction74_goldens.h"
+#include "root_construction75_goldens.h"
+#define root_construction74_previous root_construction74_previous_by84
+#define root_construction71_previous root_construction71_previous_by84
+#include "root_construction84_goldens.h"
+#undef root_construction71_previous
+#undef root_construction74_previous
 _Static_assert(XR_XIR_CONST_INT == 2 && XR_XIR_ADD_INT == 25 && XR_XIR_CALL == 28 &&
     XR_XIR_RETURN == 33 && XR_XIR_STRUCT_NEW == 82 && XR_XIR_STRUCT_GET == 83,
     "Independent construction vector opcode identities changed");
 
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 33u && XR_XIR_CHECKED_CONTRACT == 81u &&
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 34u && XR_XIR_CHECKED_CONTRACT == 90u &&
     XR_XIR_CALLABLE_ROOT_REQUIRED == 4u, "Independent construction wire facts changed");
 
 static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
@@ -49,12 +58,12 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
         {"b",1,NULL,0,XR_XIR_I64,&blocks[3],1,b,2,NULL,0}};
     XrXirSourceModule construction_source_module = {"alpha",5,NULL,0,0, 0};
     XrXirFunctionIdentity identities[] = {
-        {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0,0},
-        {0,1,0,0,0,0,XR_XIR_NON_MEMBER,0,0,0},
-        {0,1,1,0,0,0,XR_XIR_CONSTRUCTOR,0,0,0},
-        {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0,0},
-        {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0,0}};
-    XrXirDeclarations declarations = {&construction_source_module,1,identities,NULL,0,NULL,0,0,1,NULL};
+        {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0,0,0},
+        {0,1,0,0,0,0,XR_XIR_NON_MEMBER,0,0,0,0},
+        {0,1,1,0,0,0,XR_XIR_CONSTRUCTOR,0,0,0,0},
+        {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0,0,0},
+        {0,1,1,0,0,0,XR_XIR_MEMBER_HELPER,0,0,0,0}};
+    XrXirDeclarations declarations = {&construction_source_module,1,identities,NULL,0,NULL,0,0,1,NULL,NULL};
     XrXirNominalField fields[] = {{{"a",1},XR_XIR_I64,0},{{"b",1},XR_XIR_I64,0}};
     XrXirNominalDeclaration nominal = {{"alpha",5},{"Pair",4},1,NULL,0,fields,2,
         XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}};
@@ -74,7 +83,7 @@ static XrXirStatus root_construction72_build(const XrXirCompileContext *context,
     uint32_t helpers[] = {4,5};
     XrXirConstructionRow row = {3,helpers,2};
     XrXirConstruction *facts = NULL;
-    XrXirStatus status = xr_xir_compile_construction_new(context,&types,&row,1,&facts);
+    XrXirStatus status = xr_xir_compile_construction_new_v3(context,&types,&(XrXirConstructionSpec){&row,1,NULL,0,NULL},&facts);
     if (status == XR_XIR_OK) status = xr_xir_compile_check_v2(context,&built,facts,output,NULL);
     xr_xir_compile_construction_free(facts);
     memset(helpers,0xCC,sizeof(helpers)); memset(fields,0xCC,sizeof(fields));
@@ -103,8 +112,8 @@ static XrXirStatus root_construction72_pipeline(XrCompileResources *resources) {
         status = xr_xir_compile_checked_write(checked,&packet,NULL);
     }
     if (status == XR_XIR_OK) {
-        CHECK(packet.length == sizeof(root_construction72_checked));
-        CHECK(!memcmp(packet.bytes,root_construction72_checked,packet.length));
+        CHECK(packet.length == sizeof(packet_044_current));
+        CHECK(!memcmp(packet.bytes,packet_044_current,packet.length));
         status = xr_xir_compile_specialize(checked,&instance,NULL);
     }
     xr_xir_compile_checked_packet_free(&packet);
@@ -117,8 +126,8 @@ static XrXirStatus root_construction72_pipeline(XrCompileResources *resources) {
         status = xr_xir_compile_checked_write(instance,&packet,NULL);
     }
     if (status == XR_XIR_OK) {
-        CHECK(packet.length == sizeof(root_construction72_instance));
-        CHECK(!memcmp(packet.bytes,root_construction72_instance,packet.length));
+        CHECK(packet.length == sizeof(packet_045_current));
+        CHECK(!memcmp(packet.bytes,packet_045_current,packet.length));
         status = xr_xir_compile_checked_read(&context,packet.bytes,packet.length,&decoded,NULL);
     }
     xr_xir_compile_artifact_free(instance); instance = NULL;
@@ -167,15 +176,24 @@ static void root_construction72_attacks(void) {
     CHECK(xr_xir_compile_checked_read(&context,root_construction74_previous,
         sizeof(root_construction74_previous),&decoded,NULL) == XR_XIR_BAD_STRUCTURE);
     CHECK(!decoded);
+    const uint8_t *retired[] = {root_construction72_checked,root_construction72_instance,root_construction75_checked,root_construction75_instance,root_construction84_checked,root_construction84_instance,root_construction74_previous_by84,root_construction71_previous_by84};
+    const size_t retired_lengths[] = {sizeof(root_construction72_checked),sizeof(root_construction72_instance),sizeof(root_construction75_checked),sizeof(root_construction75_instance),sizeof(root_construction84_checked),sizeof(root_construction84_instance),sizeof(root_construction74_previous_by84),sizeof(root_construction71_previous_by84)};
+    for (unsigned i=0;i<sizeof(retired)/sizeof(retired[0]);++i) {
+        decoded=NULL;
+        CHECK(xr_xir_compile_checked_read(&context,retired[i],retired_lengths[i],&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded && attempts==before);
+        decoded=(XrXirArtifact *)(uintptr_t)1;
+        CHECK(xr_xir_compile_checked_read(&context,retired[i],retired_lengths[i],&decoded,NULL)==XR_XIR_BAD_STRUCTURE && decoded==(XrXirArtifact *)(uintptr_t)1 && attempts==before);
+    }
+    decoded=NULL;
     /* A valid digest cannot hide a wrong dense denominator or helper identity. */
     static const unsigned offsets[] = {0,4,8,16};
     static const uint32_t values[] = {0,1,1,4};
     for (unsigned recursive = 0; recursive < 2; ++recursive)
         for (unsigned attack = 0; attack < 4; ++attack) {
-            uint8_t bytes[sizeof(root_construction72_instance)];
-            size_t length = recursive ? sizeof(root_construction72_instance) : sizeof(root_construction72_checked);
-            memcpy(bytes,recursive ? root_construction72_instance : root_construction72_checked,length);
-            size_t owner = recursive ? ROOT_CONSTRUCTION81_RECURSIVE_OWNER : ROOT_CONSTRUCTION81_CHECKED_OWNER;
+            uint8_t bytes[sizeof(packet_045_current)];
+            size_t length = recursive ? sizeof(packet_045_current) : sizeof(packet_044_current);
+            memcpy(bytes,recursive ? packet_045_current : packet_044_current,length);
+            size_t owner = recursive ? 2526u : 1271u;
             root_construction72_put(bytes + owner + offsets[attack],values[attack]);
             XrSHA256Context hash;
             xr_sha256_init(&hash); xr_sha256_update(&hash,bytes,32);

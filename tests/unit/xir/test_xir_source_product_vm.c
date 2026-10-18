@@ -36,7 +36,7 @@ static XrXirSourceProduct *product_vm_build(const XrXirCompileContext *context,
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(context->resources,&session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceProductRequest request = {{session,entry,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,catalog},
+    XrXirSourceProductRequest request = {{session,entry,&authority,context,stdlib,NULL,XR_XIR_PROGRAM,catalog,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProductDiagnostic diagnostic = {0}; XrXirSourceProduct *product = NULL;
     XrXirStatus status = xr_xir_compile_source_product_build(&request,&product,&diagnostic);

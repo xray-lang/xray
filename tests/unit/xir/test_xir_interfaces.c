@@ -154,9 +154,9 @@ static XrXirStatus check_interface_module(const XrXirCompileContext *context, co
         {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&block,1,&ret,1,NULL,0}};
     uint32_t dependency = 0;
-    XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1, 0},{"other",5,&dependency,1,2, 0}};
-    XrXirFunctionIdentity identities[] = {{0},{0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0,0}};
-    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
+    XrXirSourceModule modules[] = {{.name="alpha",.name_length=5,.initializer=1},{.name="other",.name_length=5,.dependencies=&dependency,.dependency_count=1,.initializer=2}};
+    XrXirFunctionIdentity identities[] = {{0},{0},{.module=1,.method_kind=XR_XIR_NON_MEMBER}};
+    XrXirDeclarations declarations = {.modules=modules,.module_count=2,.functions=identities};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,types,NULL, XR_XIR_PROGRAM, NULL};
     return xir_fixture_check(context, &module, checked, diagnostic);
 }
@@ -205,7 +205,7 @@ static XrXirStatus inherited_module_verify(Fixture *f, XrXirCompileContext *budg
     uint32_t dependency = 0;
     XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0, 0},{"other",5,&dependency,1,1, 0}};
     XrXirFunctionIdentity identities[] = {{0},{.module=1},{0}};
-    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2,NULL};
+    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,0,2,NULL, NULL};
     XrXirTypes types = f->types; types.interfaces = &f->table;
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     return xir_fixture_verify(budget, &module, NULL);

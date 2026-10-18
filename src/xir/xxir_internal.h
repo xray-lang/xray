@@ -37,6 +37,20 @@ XR_FUNC XrXirStatus xr_xir_compile_provenance_copy_source_effects(const XrXirCom
     const XrXirProvenance *source, const XrXirEffects *source_effects, XrXirProvenance **output);
 XR_FUNC XrXirStatus xir_effects_source_body_match(const XrXirCompileContext *context,
     const XrXirModule *source, const XrXirEffects *effects);
+/* Exact Lowered fields are compared without allocating or running callbacks.
+ * This supplies correspondence only; independent semantic proof remains required. */
+XR_FUNC XrXirStatus xir_effects_program_body_match(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirEffects *effects);
+/* These borrows are compare-only metadata of the same owned semantic input;
+ * current same-ledger payload bounds precede canonical metadata traversal.
+ * Bounds grant no effect proof. Callers must compare every current field
+ * before publishing a Program. */
+XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *context,
+    const XrXirEffects *effects, const XrXirTypes **types, const XrXirDeclarations **declarations);
+XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContext *context,
+    const XrXirEffects *effects, uint32_t function, const XrXirType *parameters,
+    uint32_t parameter_count, XrXirType result);
+
 /* Metadata shape cannot authorize substitutions; the common owner derives facts. */
 XR_FUNC XrXirStatus xir_effect_contract_shape_verify(const XrXirCompileContext *context,
     const XrXirModule *module);
@@ -102,7 +116,20 @@ struct XrXirArtifact {
     XrXirCheckedPacket checked_packet;
     uint8_t checked_identity[32];
     XirSourceFacts *source_facts;
+    uint32_t evaluation_only;
 };
+
+/* Purpose is a grammar fence, never a proof. Current full correspondence and
+ * the unique evaluation root are independently verified on every operation. */
+static inline bool xir_artifact_is_evaluation(const XrXirArtifact *artifact) {
+    return artifact && (artifact->evaluation_only || xir_effect_evidence_is_evaluation(&artifact->module));
+}
+/* The private packet grammar cannot enter ordinary Checked transport or a
+ * runtime Program. It owns the same complete current semantic field traversal. */
+XR_FUNC XrXirStatus xir_evaluation_write(const XrXirArtifact *artifact,
+    XrXirCheckedPacket *output,XrXirDiagnostic *diagnostic);
+XR_FUNC XrXirStatus xir_evaluation_read(const XrXirCompileContext *context,
+    const void *bytes,size_t length,XrXirArtifact **output,XrXirDiagnostic *diagnostic);
 
 /* Immutable Source inputs are owned only by a genuine final Checked Template.
  * Acquisition repeats full current field/permission and independent terminal

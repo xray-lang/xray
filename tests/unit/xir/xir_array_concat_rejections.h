@@ -21,7 +21,7 @@ static void concat_rejections(void) {
         XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
         char name[1024];CHECK(snprintf(name,sizeof(name),"%s/rejected/%s/root.xr",XR_CONCAT_FIXTURES,cases[n])>0);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CONCAT_FIXTURES};
-        XrXirSourceRequest request={session,name,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,name,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *path=NULL;
         XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&path);
         printf("concat rejected%u %s status%u line%d:%d reason=%s\n",n,cases[n],status,diagnostic.line,diagnostic.column,diagnostic.message);

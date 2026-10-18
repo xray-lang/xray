@@ -100,12 +100,36 @@ PUBLIC_STRUCTURES = [
  (4400, 'XrXirAtomicOutcome', [('status','enum'),('permission','enum'),('continuing','bool')]),
  (4500, 'XrXirClassEvent', [('serial','u64'),('type','u32'),('declaration','u32'),
      ('kind','u32'),('flags','u32'),('initialized_fields','u32'),('status','u32')]),
- (4700, 'XrXirFunctionIdentity', [('module','u32'),('exported','u32'),('nominal_owner','u32'),('member_access','u32'),('cleanup_owner','u32'),('promises','u32'),('method_kind','u32'),('test_role','u32'),('test_timeout_seconds','u32'),('variadic','u32')]),
+ (4700, 'XrXirFunctionIdentity', [('module','u32'),('exported','u32'),('nominal_owner','u32'),('member_access','u32'),('cleanup_owner','u32'),('promises','u32'),('method_kind','u32'),('test_role','u32'),('test_timeout_seconds','u32'),('variadic','u32'),('derivation','u32')]),
  (4600, 'XrXirSlot', [('module','u32'),('type','enum'),('mutable','u32'),('exported','u32'),('name','u32')]),
  (4800, 'XrXirRecordType', [('names','ptr')]),
  (4900, 'XrXirConstraint', [('markers','u32'),('interfaces','ptr'),('interface_count','u32'),
                             ('structural_requirements','ptr'),('structural_count','u32')]),
  (5000, 'XrXirStructuralRequirement', [('shape','enum'),('policy','u32')]),
+ (6000, 'XrXirHashRequest', [('operation','enum'),('result','enum'),('instruction','u32'),
+     ('receiver','ptr'),('path','ptr'),('key','ptr'),('value','ptr')]),
+ (6100, 'XrXirSourceModule', [('name','ptr'),('name_length','u32'),('dependencies','ptr'),
+     ('dependency_count','u32'),('initializer','u32'),('lexical_scope','u32')]),
+ (6200, 'XrXirDeclarations', [('modules','ptr'),('module_count','u32'),('functions','ptr'),
+     ('slots','ptr'),('slot_count','u32'),('literals','ptr'),('literal_count','u32'),
+     ('root_module','u32'),('entry_function','u32'),('implementations','ptr'),('derivations','ptr')]),
+ (6300, 'XrXirGeneratedText', [('bytes','ptr'),('length','u32')]),
+ (6400, 'XrXirGeneratedOrigin', [('module','XrXirGeneratedText'),('file','XrXirGeneratedText'),
+     ('field_path','XrXirGeneratedText'),('line','u32'),('column','u32')]),
+ (6500, 'XrXirGeneratedFunctionOrigins', [('entry','XrXirGeneratedOrigin'),('instructions','ptr'),
+     ('instruction_count','u32')]),
+ (6600, 'XrXirDerivationMember', [('field','u32'),('operations','u32')]),
+ (6700, 'XrXirInterfaceApplication', [('declaration','u32'),('arguments','ptr'),('argument_count','u32')]),
+ (6800, 'XrXirDerivationPolicy', [('grantor_module','u32'),('target','enum'),
+     ('protocol','XrXirInterfaceApplication'),('generator','u32'),('constructor','u32'),
+     ('members','ptr'),('member_count','u32'),('origin','XrXirGeneratedOrigin')]),
+ (6900, 'XrXirDerivationGrant', [('function','u32'),('policy','u32'),('source_row','u32'),
+     ('root','u32'),('target','enum'),('origins','XrXirGeneratedFunctionOrigins')]),
+ (7000, 'XrXirDerivationTable', [('policies','ptr'),('policy_count','u32'),('records','ptr'),('count','u32')]),
+ (7100, 'XrXirImplementation', [('nominal_declaration','u32'),('interface','XrXirInterfaceApplication'),
+     ('bindings','ptr'),('binding_count','u32'),('derivation_policy','u32')]),
+ (7200, 'XrXirImplementationBinding', [('requirement','XrXirInterfaceApplication'),('member','u32'),('function','u32')]),
+ (7300, 'XrXirImplementationTable', [('records','ptr'),('count','u32')]),
 ]
 
 # The tagged payload retains the nominal member's natural size/alignment.
@@ -146,14 +170,29 @@ OBSERVER_LINKS = '''    XrXirCallStatus (*volatile open_api)(XrXirInstance *, ui
     (void)open_api; (void)retain_api; (void)drop_api; (void)drain_api;
 '''
 
+SUPPLEMENTAL_STRUCTURES = [(7400,'XrXirMathEntropy',[('context','ptr'),('fill','ptr')]),
+                   (7406,'XrXirMathSignature',[('parameter','enum'),('result','enum'),('arity','u32'),('random','bool')])]
+
+HASH_PROTOTYPES = '''_Static_assert(_Generic(&xr_xir_instance_hash_new,
+    XrXirCallStatus (*)(XrXirCallView *, XrXirType, const XrXirValue *, uint32_t, XrXirValue *): 1,
+    default: 0), "hash construction prototype");
+_Static_assert(_Generic(&xr_xir_instance_hash_apply,
+    XrXirCallStatus (*)(XrXirCallView *, const XrXirHashRequest *, XrXirValue *, XrXirFaultDetail *): 1,
+    default: 0), "hash mutation prototype");
+static XrXirCallStatus (*volatile hash_new_link)(XrXirCallView *, XrXirType,
+    const XrXirValue *, uint32_t, XrXirValue *) = xr_xir_instance_hash_new;
+static XrXirCallStatus (*volatile hash_apply_link)(XrXirCallView *, const XrXirHashRequest *,
+    XrXirValue *, XrXirFaultDetail *) = xr_xir_instance_hash_apply;
+'''
+HASH_LINKS = 'if (!hash_new_link || !hash_apply_link) return 9;\n'
+
 def align(value: int, alignment: int) -> int:
     return (value + alignment - 1) // alignment * alignment
 
-def prepare(output: Path) -> None:
-    output.mkdir(parents=True, exist_ok=False)
+def measurements() -> list[dict]:
     layout = dict(PRIMITIVES)
     rows = [{'id':i,'name':name,'value':value,'expression':expression} for i,name,value,expression in SCALARS]
-    for base, name, fields in STRUCTURES + PUBLIC_STRUCTURES:
+    for base, name, fields in STRUCTURES + PUBLIC_STRUCTURES + SUPPLEMENTAL_STRUCTURES:
         offsets = []; size = 0; alignment = 1
         for field, kind in fields:
             width, boundary = layout[kind]
@@ -169,25 +208,22 @@ def prepare(output: Path) -> None:
     rows += [{'id':base,'name':f'{name}.array2.bytes','value':2*layout[name][0],
               'expression':f'sizeof({name}[2])'} for base,name in
              [(3200,'XrXirNominalDeclaration'),(3201,'XrXirNominalIdentity')]]
-    # Declaration facts append after the complete preceding inventory. Existing
-    # row order is part of the independently specified canonical SDK framing.
-    declaration_rows=[row for row in rows if 4700<=row['id']<4712]
-    assert len(declaration_rows)==12
-    record_rows=[row for row in rows if 4800<=row['id']<4804]
-    assert len(record_rows)==4
-    record_rows.sort(key=lambda row:row['id'])
-    structural_ids=set(range(4900,4907))|set(range(5000,5004))
-    structural_rows=sorted((row for row in rows if row['id'] in structural_ids),key=lambda row:row['id'])
-    assert len(structural_rows)==11
-    rows=[row for row in rows if not (4700<=row['id']<4712 or 4800<=row['id']<4804 or row['id'] in structural_ids)]
-    rows+=declaration_rows+record_rows+structural_rows
+    rows += [{'id':7404,'name':'MathEntropyFill.size','value':8,'expression':'sizeof(XrXirMathEntropyFill)'},
+             {'id':7405,'name':'MathEntropyFill.align','value':8,'expression':'_Alignof(XrXirMathEntropyFill)'}]
+    rows.sort(key=lambda row: row['id'])
     assert len({row['id'] for row in rows}) == len(rows), 'ABI field IDs must be unique'
+    return rows
+
+
+def prepare(output: Path) -> None:
+    output.mkdir(parents=True, exist_ok=False)
+    rows = measurements()
     document = {'recipe':'xray:xir-runtime-abi-measurements:v1','rows':rows,
                 'basis':'Independent natural Windows x86_64 C layout: pointer/size_t/u64 align8, '
                         'u32/int/enum align4, bool align1; declaration field sequence copied '
                         'from actual versioned runtime headers. Never from a compiler probe output.'}
     (output/'EXPECTED.json').write_text(json.dumps(document,indent=2)+'\n',encoding='utf-8',newline='\n')
-    source = '#include "xir/xxir_program.h"\n#include "xir/xxir_class_observation.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\n' + OBSERVER_PROTOTYPES + 'int main(void) { const uint32_t endian=1; puts("[");\n' + OBSERVER_LINKS
+    source = '#include "xir/xxir_math.h"\n#include "xir/xxir_program.h"\n#include "xir/xxir_instance_hash.h"\n#include "xir/xxir_derivation_internal.h"\n#include "xir/xxir_implementation.h"\n#include "xir/xxir_class_observation.h"\n#include "xir/xxir_atomic.h"\n#include "xir/xxir_nominal.h"\n#include "xir/xxir_output.h"\n#include "execution/xr_xir_host_execution.h"\n#include <limits.h>\n#include <float.h>\n#include <stdio.h>\n' + OBSERVER_PROTOTYPES + HASH_PROTOTYPES + 'int main(void) { const uint32_t endian=1; puts("[");\n' + OBSERVER_LINKS + HASH_LINKS
     for index, row in enumerate(rows):
         tail = ',' if index+1 < len(rows) else ''
         source += f'printf("  {{\\"id\\":{row["id"]},\\"value\\":%u}}{tail}\\n",(unsigned)({row["expression"]}));\n'

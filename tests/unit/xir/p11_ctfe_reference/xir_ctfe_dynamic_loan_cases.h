@@ -97,7 +97,7 @@ static void reference_dynamic_source_string(const XrXirCompileContext *context,X
     xr_xir_compile_artifact_free(lowered);xr_xir_compile_checked_packet_free(&wire);
     fprintf(stderr,"CTFE dynamic Class loan Source owning String literal ab, complete FI=%zu per-job same-owner retry, exact2/minus1 physical0\n",sites);
 }
-static void reference_dynamic_direct(const XrXirCompileContext *context,XrXirSourceResult *source,bool owning) {
+static void reference_dynamic_direct(const XrXirCompileContext *context,XrXirSourceResult *source,bool owning,bool require_projection) {
     XrXirArtifact *closed=NULL;XrXirCheckedPacket wire={0};
     CHECK(xr_xir_compile_specialize(source->checked,&closed,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_checked_write(closed,&wire,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
@@ -106,7 +106,7 @@ static void reference_dynamic_direct(const XrXirCompileContext *context,XrXirSou
     for (uint32_t f=0;f<module->function_count;++f)
         for (uint32_t i=0;i<module->functions[f].instruction_count;++i)
             if (module->functions[f].instructions[i].op==XR_XIR_CELL_PROJECT) ++projects;
-    CHECK(projects);XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(module),
+    CHECK(projects || !require_projection);XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(module),
         .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},
         .limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,XR_XIR_CTFE_MAX_OUTPUT_BYTES}};
     memcpy(request.checked_identity,identity,32);XrCompileResourceStats baseline=reference_stats(context);
@@ -158,10 +158,10 @@ static void reference_dynamic_direct(const XrXirCompileContext *context,XrXirSou
     fprintf(stderr,"CTFE dynamic Class loan owning=%u FI=%zu complete per-job same-owner retry/live; all steps0..%llu depth1..%u frame exact%llu/minus-one status%u output exact%u/minus-one; original owner work%llu/128000000 after%u successes then retry BUDGET physical0\n",
         (unsigned)owning,sites,(unsigned long long)steps,depth,(unsigned long long)low,(unsigned)short_frame,owning?2:8,(unsigned long long)spent,completed);
 }
-static void reference_dynamic_last_owner(void) {
+static void reference_dynamic_last_owner(const char *name) {
     XrXirCompileContext context={0};CHECK(xr_compile_resources_new(&reference_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};
-    CHECK(reference_source(&context,"class_ref_dynamic_owning_direct",&source,&diagnostic)==XR_XIR_OK);
+    CHECK(reference_source(&context,name,&source,&diagnostic)==XR_XIR_OK);
     uint8_t identity[32]={0};XrXirArtifact *lowered=reference_lower(&context,&source,identity);XrXirValue output={0};
     XrXirCtfeRequest request={.artifact=lowered,.function=reference_run_function(xr_xir_compile_artifact_module(lowered)),
         .target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},.limits={XR_XIR_CTFE_MAX_STEPS,XR_XIR_CTFE_MAX_FRAME_BYTES,2}};

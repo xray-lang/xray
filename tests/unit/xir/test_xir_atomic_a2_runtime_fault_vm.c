@@ -27,7 +27,7 @@ static XrXirStatus atomic_source_pipeline(const XrXirCompileContext *context,voi
     XrCompilerSessionStatus cs=xr_compile_session_new(context->resources,&session);
     if(cs!=XR_COMPILER_SESSION_OK)return cs==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ATOMIC_A2_FIXTURES};
-    XrXirSourceRequest request={session,XR_ATOMIC_A2_FIXTURES "/root.xr",&authority,context,XR_ATOMIC_A2_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_ATOMIC_A2_FIXTURES "/root.xr",&authority,context,XR_ATOMIC_A2_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirCheckedPacket packet={0};
     XrXirArtifact *read=NULL,*specialized=NULL,*lowered=NULL;XrXirCSource c={0};XrXirProgram *program=NULL;
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,NULL);

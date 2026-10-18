@@ -1,0 +1,5 @@
+#ifndef XR_REST_CURRENT_FIELDS_H
+#define XR_REST_CURRENT_FIELDS_H
+#include "../composed_wire/packet_004.inc.c"
+enum {REST_ENTRY=329,REST_IDENTITY=709,REST_ARRAY=869,REST_CALLABLE=881};
+#endif

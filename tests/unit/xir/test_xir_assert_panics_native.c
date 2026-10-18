@@ -68,8 +68,8 @@ static void panics_native_mixed(const XrXirProgramSpec *native,bool matrix,bool 
 int main(void) {
     assert_compile_begin();
     _Static_assert(sizeof(XrXirGeneric)==40 && sizeof(XrXirSourceDeclaration)==120,"internal result-role metadata requires fresh consumers");
-    _Static_assert(XR_XIR_VALUE_ABI_VERSION==22 && XR_XIR_CALL_ABI_VERSION==28 &&
-        XR_XIR_PROGRAM_ABI_VERSION==29,"current typed execution ABI");
+    _Static_assert(XR_XIR_VALUE_ABI_VERSION==28 && XR_XIR_CALL_ABI_VERSION==35 &&
+        XR_XIR_PROGRAM_ABI_VERSION==37,"current typed execution ABI");
     _Static_assert(sizeof(XrXirValue)==16 && _Alignof(XrXirValue)==8 &&
         offsetof(XrXirValue,type)==0 && offsetof(XrXirValue,reserved)==4 &&
         offsetof(XrXirValue,payload)==8,"XrXirValue complete current carrier layout");
@@ -112,5 +112,5 @@ int main(void) {
         panics_native_mixed(spec,matrix!=0,true);CHECK(!runtime_live && !runtime_bytes);
     }
     CHECK(panics_native_releases==4);
-    puts("18 independent outcomes: native and both VM/native directions PASS; Value22 Call28 Program29; complete carrier layouts verified; physical baseline restored");assert_compile_end();return 0;
+    puts("18 independent outcomes: native and both VM/native directions PASS; Value28 Call35 Program37; complete carrier layouts verified; physical baseline restored");assert_compile_end();return 0;
 }

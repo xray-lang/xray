@@ -20,10 +20,12 @@ static XrXirCallResult nested_poll(XrXirInstance *instance) {
     }
     CHECK(false);return result;
 }
-static XrXirCallStatus nested_run(XrXirInstance *instance,uint32_t entry,
-    const XrXirValue *arguments,XrXirValue *output) {
+static XrXirCallStatus nested_drive(XrXirInstance *instance,uint32_t entry,
+    const XrXirValue *arguments,XrXirValue *output,bool *started) {
+    *started=false;
     XrXirCallStatus status=xr_xir_instance_start(instance,entry,arguments,arguments?1:0);
     if (status!=XR_XIR_CALL_READY) return status;
+    *started=true;
     XrXirCallResult result=nested_poll(instance);
     if (result.status==XR_XIR_CALL_RETURNED)
         CHECK(xr_xir_instance_take_result(instance,output)==XR_XIR_CALL_RETURNED);
@@ -34,6 +36,10 @@ static XrXirCallStatus nested_run(XrXirInstance *instance,uint32_t entry,
         CHECK(!output->type && !output->reserved && !output->payload);
     }
     return result.status;
+}
+static XrXirCallStatus nested_run(XrXirInstance *instance,uint32_t entry,
+    const XrXirValue *arguments,XrXirValue *output) {
+    bool started=false;return nested_drive(instance,entry,arguments,output,&started);
 }
 static void nested_shape(const XrXirValue *value,uint32_t state) {
     CHECK(value->type==(uint32_t)NESTED_OUTER && xr_xir_value_valid(value));
@@ -96,12 +102,23 @@ static void nested_runtime_faults(XrXirProgram *program) {
             XrXirInstance *instance=NULL;XrXirInstanceConfig config;XrXirValue result={0};
             nested_instance_config(&config);
             runtime_attempts=0;runtime_fail_at=pass?pass-1:SIZE_MAX;
+            bool started=false;
             XrXirCallStatus status=xr_xir_instance_new(program,&config,&instance);
-            if (status==XR_XIR_CALL_READY) status=nested_run(instance,entry,NULL,&result);
+            if (status==XR_XIR_CALL_READY) status=nested_drive(instance,entry,NULL,&result,&started);
             size_t attempts=runtime_attempts;runtime_fail_at=SIZE_MAX;
             if (!pass) {CHECK(status==XR_XIR_CALL_RETURNED);points=attempts;CHECK(points && points<20000);}
             else CHECK(attempts>pass-1 && status==XR_XIR_CALL_OOM && !result.type && !result.payload);
-            xr_xir_value_drop(&result);if(instance) CHECK(xr_xir_instance_free(instance)==XR_XIR_CALL_READY);
+            xr_xir_value_drop(&result);
+            if (instance) {
+                /* A pre-start allocation rejection has no driven failure.
+                 * An accepted root retains its observed OOM through disposal. */
+                XrXirCallStatus expected=started && pass?XR_XIR_CALL_OOM:XR_XIR_CALL_READY;
+                XrXirCallStatus disposed=xr_xir_instance_free(instance);
+                if (disposed!=expected)
+                    fprintf(stderr,"nested runtime disposal entry%u pass%zu/%zu started%u operation%u dispose%u expected%u\n",
+                        entry,pass,points,started,status,disposed,expected);
+                CHECK(disposed==expected);
+            }
             CHECK(runtime_live==live && runtime_bytes==bytes);
         }
         printf("nested entry %u runtime OOM sites=%zu physical baseline restored\n",entry,points);

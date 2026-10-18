@@ -54,10 +54,10 @@ static void record_failure(const char *domain, const char *operation, bool has_s
     if (!receiver_failure_line) receiver_failure_line = __LINE__; \
     record_failure("CONSUMER_OBSERVATION_ASSERTION", receiver_operation, false, 0, 0, #c); \
     if (receiver_cleanup_enabled) { longjmp(receiver_failure, 1); } exit(1); } } while (0)
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 33u && XR_XIR_CHECKED_CONTRACT == 81u, "Formal Checked identity");
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 34u && XR_XIR_CHECKED_CONTRACT == 90u, "Formal Checked identity");
 _Static_assert(XR_XIR_LIBRARY_C_INTERFACE_VERSION == 2u, "Actual owned Catalog interface");
-_Static_assert(XR_XIR_VALUE_ABI_VERSION == 27u && XR_XIR_CALL_ABI_VERSION == 29u &&
-    XR_XIR_PROGRAM_ABI_VERSION == 36u, "Formal public runtime identity");
+_Static_assert(XR_XIR_VALUE_ABI_VERSION == 28u && XR_XIR_CALL_ABI_VERSION == 35u &&
+    XR_XIR_PROGRAM_ABI_VERSION == 37u, "Formal public runtime identity");
 
 typedef struct ReceiverRoles {
     uint32_t entry, answer, private_answer, child, constructor, nominal, library_module;
@@ -394,7 +394,7 @@ static bool library_catalog_build(ReceiverRun *run) {
     CHECK(session_completed(xr_compile_session_new(run->context->resources, &run->library_session), "Library-session-new"));
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, run->root};
     XrXirSourceRequest request = {run->library_session, run->paths[1], &authority,
-        run->context, run->stdlib, NULL, XR_XIR_LIBRARY, NULL};
+        run->context, run->stdlib, NULL, XR_XIR_LIBRARY, NULL,NULL};
     if (!completed(run, xr_xir_compile_source_check(&request, &run->library_source,
         &run->library_diagnostic, &run->library_failure_path), "Library-Source-check")) {
         fprintf(stderr, "Library-message=%.192s path=%s\n", run->library_diagnostic.message,
@@ -454,7 +454,7 @@ static void catalog_import_controls(ReceiverRun *run) {
     receiver_operation = run->operation = "no-Catalog-original-root-missing-Library-control";
     CHECK(session_completed(xr_compile_session_new(run->context->resources, &run->control_session), "no-Catalog-control-session-new"));
     XrXirSourceProductRequest absent = {{run->control_session, run->paths[0], &authority,
-        run->context, run->stdlib, NULL, XR_XIR_PROGRAM, NULL},
+        run->context, run->stdlib, NULL, XR_XIR_PROGRAM, NULL,NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
     XrXirStatus status = xr_xir_compile_source_product_build(&absent, &run->control_product, &run->control_diagnostic);
     CHECK(compile_expected(run, status, XR_XIR_UNRESOLVED, "no-Catalog-original-root-missing-Library-control"));
@@ -496,7 +496,7 @@ static bool program_source_build(ReceiverRun *run) {
     CHECK(session_completed(xr_compile_session_new(run->context->resources, &run->program_session), "Program-Catalog-import-session-new"));
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, run->root};
     XrXirSourceProductRequest request = {{run->program_session, run->paths[0], &authority,
-        run->context, run->stdlib, NULL, XR_XIR_PROGRAM, run->catalog},
+        run->context, run->stdlib, NULL, XR_XIR_PROGRAM, run->catalog,NULL},
         {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}};
     CHECK(request.source.libraries == run->catalog);
     if (!completed(run, xr_xir_compile_source_product_build(&request, &run->product,

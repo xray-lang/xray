@@ -27,7 +27,7 @@ static void unchanged(XrCompileResources *resources,XrCompileResourceStats befor
     CHECK(runtime_attempts==attempts && !old28_callback_count() && !old28_release_count() && !old28_lease_count());
 }
 int main(void) {
-    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==29 && XR_XIR_VALUE_ABI_VERSION==21 && XR_XIR_CALL_ABI_VERSION==26,"current identity");
+    _Static_assert(XR_XIR_PROGRAM_ABI_VERSION==31 && XR_XIR_VALUE_ABI_VERSION==21 && XR_XIR_CALL_ABI_VERSION==26,"current identity");
     _Static_assert(sizeof(XrXirNominalDeclaration)==128 && sizeof(XrXirNominalIdentity)==112,"actual new record strides");
     XrXirCompileContext context={sdk_ledger(&limits),xr_xir_compile_default_limits()};
     size_t base_live=runtime_live,base_bytes=runtime_bytes;

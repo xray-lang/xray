@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import re
 import struct
+from derive_current_product_identity import validate_current_header
 
 ROOT=Path(__file__).resolve().parent
 
@@ -35,7 +36,11 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write',action='store_true')
     args=parser.parse_args()
-    for filename,arrays in frames().items():
+    records=list(frames().items())
+    for version in (25,26,27):
+        arrays={name:data for group in frames(version,84,28,30).values() for name,data in group.items()}
+        records.append(('xir_hash84_identity.h' if version==25 else 'xir_view_value'+str(version)+'_identity.h',arrays))
+    for filename,arrays in records:
         path=ROOT/filename
         source=path.read_text(encoding='utf-8')
         for name,expected in arrays.items():
@@ -43,14 +48,15 @@ def main():
             match=re.search(pattern,source,re.S)
             assert match,name
             actual=bytes(int(value,16) for value in re.findall(r'0x([0-9a-fA-F]{2})',match[2]))
-            if args.write:
+            if args.write and filename not in ('xir_hash84_identity.h','xir_view_value26_identity.h'):
                 rows='\n'+''.join('    '+','.join(f'0x{byte:02x}' for byte in expected[i:i+12])+',\n' for i in range(0,len(expected),12))
                 source=source[:match.start(2)]+rows+source[match.end(2):]
             else:
                 assert actual==expected,(filename,name,actual.hex(),expected.hex())
-        if args.write:
+        if args.write and filename not in ('xir_hash84_identity.h','xir_view_value26_identity.h'):
             path.write_text(source,encoding='utf-8')
-    print('Independent historical SourceProduct layout/policy preimages: PASS (Value24/Call29/Program31)')
+    validate_current_header(ROOT/'xir_current_product_identity.h', ROOT.parents[2])
+    print('Independent historical SourceProduct Value24 through Value27 and all65 original full identity frames: PASS')
 
 if __name__=='__main__':
     main()

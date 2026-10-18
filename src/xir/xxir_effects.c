@@ -330,9 +330,10 @@ typedef enum EffectSeedProjection {
  * Metadata-dependent calls require their actual operand/signature fields. */
 static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *effect) {
     switch (op) {
-    case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT:
+    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_GENERATOR_YIELD:
         effect->suspend = XR_XIR_EFFECT_MAY; return EFFECT_SEED_LOCAL;
-    case XR_XIR_GO: return EFFECT_SEED_LOCAL;
+    /* Lifecycle drain performs scheduler work without a language suspension. */
+    case XR_XIR_ITERATOR_CLOSE: case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: return EFFECT_SEED_LOCAL;
     case XR_XIR_THROW: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CLEANUP_LEAVE: case XR_XIR_CLEANUP_ERROR: return EFFECT_SEED_LOCAL;
     case XR_XIR_CALL_REQUIREMENT: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
@@ -366,13 +367,19 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     case XR_XIR_LT_FLOAT: case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT:
     case XR_XIR_GE_FLOAT: case XR_XIR_CELL_PLACE: case XR_XIR_SLOT_PLACE: case XR_XIR_OBJECT_PLACE:
     case XR_XIR_FIELD_PLACE: case XR_XIR_INDEX_PLACE: case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:
+    case XR_XIR_MAP_NEW: case XR_XIR_SET_NEW: case XR_XIR_MAP_GET: case XR_XIR_MAP_INDEX: case XR_XIR_HASH_KEYS: case XR_XIR_HASH_VALUES: case XR_XIR_MAP_ENTRIES: case XR_XIR_HASH_CONTAINS:
+    case XR_XIR_HASH_KEY_AT: case XR_XIR_MAP_VALUE_AT:
+    case XR_XIR_MAP_CONTAINS_VALUE:
+    case XR_XIR_SET_UNION: case XR_XIR_SET_INTERSECTION: case XR_XIR_SET_DIFFERENCE:
+    case XR_XIR_SET_SYMMETRIC_DIFFERENCE: case XR_XIR_SET_IS_SUBSET: case XR_XIR_SET_IS_SUPERSET:
+    case XR_XIR_HASH_LEN: case XR_XIR_MAP_SET: case XR_XIR_SET_ADD: case XR_XIR_HASH_DELETE: case XR_XIR_HASH_CLEAR:
     case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET: case XR_XIR_ARRAY_SET:
     case XR_XIR_ARRAY_PUSH: case XR_XIR_ARRAY_LEN: case XR_XIR_ARRAY_CAPACITY:
     case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE: case XR_XIR_ADD_FLOAT:
     case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT: case XR_XIR_DIV_FLOAT:
     case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET: case XR_XIR_STRUCT_SET: case XR_XIR_RECORD_SET:
     case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_GET: case XR_XIR_CLASS_SET:
-    case XR_XIR_LOCAL_UNINIT: case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING:
+    case XR_XIR_LOCAL_UNINIT: case XR_XIR_F64_TRY_PARSE: case XR_XIR_STRING_COPY_BYTES: case XR_XIR_STRING_LEN: case XR_XIR_EQ_STRING:
     case XR_XIR_NE_STRING: case XR_XIR_STRING_CONTAINS: case XR_XIR_STRING_STARTS_WITH:
     case XR_XIR_STRING_ENDS_WITH: case XR_XIR_STRING_INDEX_OF: case XR_XIR_STRING_LAST_INDEX_OF:
     case XR_XIR_ENUM_NEW: case XR_XIR_ENUM_TAG: case XR_XIR_ENUM_GET:
@@ -380,6 +387,8 @@ static EffectSeedProjection effect_seed_opcode(XrXirOp op,XrXirFunctionEffects *
     case XR_XIR_RANGE_CHECK: case XR_XIR_EQUAL: case XR_XIR_ASSERT_CONDITION: case XR_XIR_MATCH_FAIL: case XR_XIR_ERROR_ERASE: case XR_XIR_INVOKE_RESULT:
     case XR_XIR_INVOKE_ERROR: case XR_XIR_INVOKE_DISCARD: case XR_XIR_ERROR_IS: case XR_XIR_ERROR_NARROW:
     case XR_XIR_PANIC_CATCH: case XR_XIR_PANIC_CODE: case XR_XIR_PANIC_MESSAGE:
+    case XR_XIR_MATH_UNARY_F64: case XR_XIR_MATH_BINARY_F64: case XR_XIR_MATH_UNARY_I64:
+    case XR_XIR_RANDOM_F64: case XR_XIR_RANDOM_I64:
     case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT:
     case XR_XIR_TUPLE_NEW: case XR_XIR_RECORD_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: case XR_XIR_FIELD_REQUIREMENT:
         return EFFECT_SEED_LOCAL;
@@ -484,6 +493,7 @@ typedef struct EffectGraphDependencyCounts {
 static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *remaining,
     XrXirEffects *effects,const EffectGraph *graph,uint32_t f,bool symbolic,
     EffectGraphDependencyCounts *counts) {
+    EffectBodyRun dense_range_storage;
     EffectBodyRequest request=effect_body_owned_request(remaining,graph->material);
     EffectBodyFunctionDimensions head={0};XrXirStatus status=effect_body_request_dimensions(&request,f,&head);
     if (status!=XR_XIR_OK) return status;
@@ -501,7 +511,7 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
     }
     for (uint32_t run=0;run<owned->run_count;++run) {
         const EffectBodyRun *ref;uint32_t opcode=XR_XIR_INVALID;
-        status=effect_body_range_ref(&request.read,owned,&cursor,&ref);
+        status=effect_body_range_take(&request.read,owned,&cursor,&ref,&dense_range_storage);
         if (status!=XR_XIR_OK) return status;
         if (!(ref->mask&UINT32_C(1))) {
             status=effect_body_run_word(&request.read,ref,ref->first,0,&opcode);
@@ -541,6 +551,7 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
 
 static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirEffects *effects,
     EffectGraph *graph, XrXirCompileContext *remaining) {
+    EffectBodyRun dense_range_storage;
     if (!xir_compile_context_valid(remaining) || !module || !effects || !graph ||
         effects->resources!=remaining->resources || effects->count!=module->function_count ||
         !effects->outcomes_work.functions || !effects->outcomes_work.task_creation || !effect_body_material_shape(graph->material) ||
@@ -599,7 +610,7 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
         for (uint32_t run=0;run<owned->run_count;++run) {
             const EffectBodyRun *ref;XrXirInstruction constant={0};bool decoded=false;
             if (!xir_compile_work(remaining,sizeof(constant)+sizeof(decoded))) return XR_XIR_BUDGET;
-            status=effect_body_range_ref(&request.read,owned,&cursor,&ref);
+            status=effect_body_range_take(&request.read,owned,&cursor,&ref,&dense_range_storage);
             if (status!=XR_XIR_OK) return status;
             while (r<physical->count && physical->records[r].value-function->parameter_count<ref->first+ref->count) {
                 if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
@@ -734,8 +745,8 @@ static XrXirStatus effect_witnesses(const XrXirModule *module, XrXirEffects *eff
             XrXirFunctionEffects local={0};
             if (!effect_seed_type(body.domain.types,callable,instruction,&local)) return XR_XIR_BAD_STRUCTURE;
             XrXirEffectCause cause = XR_XIR_EFFECT_CAUSE_NONE;
-            if (fact == XR_XIR_EFFECT_MAY && (op == XR_XIR_SUSPEND || op == XR_XIR_TIMER_AFTER_MS ||
-                op == XR_XIR_TASK_AWAIT)) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
+            if (fact == XR_XIR_EFFECT_MAY && (op == XR_XIR_GENERATOR_YIELD || op == XR_XIR_SUSPEND || op == XR_XIR_TIMER_AFTER_MS ||
+                op == XR_XIR_TASK_AWAIT || op==XR_XIR_ITERATOR_HAS_NEXT || (op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH))) cause = XR_XIR_EFFECT_CAUSE_SUSPEND;
             else if (fact == XR_XIR_EFFECT_UNKNOWN && local.suspend == XR_XIR_EFFECT_UNKNOWN)
                 cause = XR_XIR_EFFECT_CAUSE_INDIRECT;
             if (!cause) continue;
@@ -949,6 +960,58 @@ XR_FUNC XrXirStatus xir_effects_source_body_match(const XrXirCompileContext *con
         return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
     return effect_body_source_match(context,effects->invocations->body,source);
+}
+
+#include "xxir_effect_program_storage.inc.c"
+
+XR_FUNC XrXirStatus xir_effects_program_body_match(const XrXirCompileContext *context,
+    const XrXirModule *source, const XrXirEffects *effects) {
+    if (!xir_compile_context_valid(context) || !source || !effects) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyMaterial *body = NULL;
+    XrXirStatus status = effect_program_input_storage(context, effects, &body);
+    if (status == XR_XIR_OK) status = effect_program_projection_storage(context, source);
+    if (status != XR_XIR_OK) return status;
+    if (effects->count != source->function_count) return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+    if (body->stage!=source->stage || body->linkage_kind!=source->linkage_kind ||
+        !source->functions) return XR_XIR_BAD_STRUCTURE;
+    const XrXirTypes *types=source->types ? source->types : &effect_empty_types;
+    status=effect_lowered_snapshot_match(context,body->domain.types,types);
+    return status==XR_XIR_OK ? effect_body_rows_match(context,body,source) : status;
+}
+
+XR_FUNC XrXirStatus xir_effects_program_metadata(const XrXirCompileContext *context,
+    const XrXirEffects *effects, const XrXirTypes **types, const XrXirDeclarations **declarations) {
+    if (!xir_compile_context_valid(context) || !effects || !types || !declarations)
+        return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status = effect_program_metadata_storage(context, effects);
+    if (status != XR_XIR_OK) return status;
+    const EffectBodyMaterial *body=effects->invocations->body;
+    if (body->resources!=context->resources || body->stage!=XR_XIR_LOWERED ||
+        !body->domain.types || !body->domain.declarations || effect_body_count(body)!=effects->count)
+        return XR_XIR_BAD_STRUCTURE;
+    if (!xir_compile_work(context,4)) return XR_XIR_BUDGET;
+    *types=body->domain.types;*declarations=body->domain.declarations;
+    return XR_XIR_OK;
+}
+
+XR_FUNC XrXirStatus xir_effects_program_signature_match(const XrXirCompileContext *context,
+    const XrXirEffects *effects, uint32_t function, const XrXirType *parameters,
+    uint32_t parameter_count, XrXirType result) {
+    if (!xir_compile_context_valid(context) || !effects) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyMaterial *input = NULL;
+    XrXirStatus status = effect_program_body_storage(context, effects, &input);
+    if (status!=XR_XIR_OK) return status;
+    if (function>=effects->count || (parameter_count && !parameters)) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyFunction *body=&input->functions[function];
+    status = effect_program_range(context, body->parameters, body->parameter_count,
+        sizeof(*body->parameters), _Alignof(XrXirType));
+    if (status != XR_XIR_OK) return status;
+    if (!xir_compile_work(context,(uint64_t)parameter_count+2)) return XR_XIR_BUDGET;
+    if (parameter_count!=body->parameter_count || result!=body->result) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t p=0;p<parameter_count;++p)
+        if (parameters[p]!=body->parameters[p]) return XR_XIR_BAD_STRUCTURE;
+    return XR_XIR_OK;
 }
 
 XrXirStatus xr_xir_compile_effects_analyze(const XrXirArtifact *artifact, XrXirEffects **output) {

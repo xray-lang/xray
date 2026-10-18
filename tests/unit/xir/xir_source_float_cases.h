@@ -84,10 +84,13 @@ static void source_float_runtime_failures(XrXirProgram *program, uint32_t entry)
         XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
         config.output = (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, source_float_fault_render, &rendering};
         XrXirInstance *instance = NULL;
-        const char *phase = "new";
+        const char *phase = "new"; bool entered_oom = false;
         XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
         if (status == XR_XIR_CALL_READY) { phase = "start"; status = xr_xir_instance_start(instance, entry, NULL, 0); }
-        if (status == XR_XIR_CALL_READY) { phase = "poll"; status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status; }
+        if (status == XR_XIR_CALL_READY) {
+            phase = "poll"; status = xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status;
+            entered_oom = status == XR_XIR_CALL_OOM;
+        }
         if (!site) { CHECK(status == XR_XIR_CALL_RETURNED && output.count == 3); sites = runtime_attempts; }
         else {
             XrXirCallStatus expected = XR_XIR_CALL_OOM;
@@ -97,7 +100,7 @@ static void source_float_runtime_failures(XrXirProgram *program, uint32_t entry)
             CHECK(runtime_attempts > runtime_fail_at && status == expected);
         }
         runtime_fail_at = SIZE_MAX;
-        if (instance) CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+        if (instance) CHECK(xr_xir_instance_free(instance) == (entered_oom ? XR_XIR_CALL_OOM : XR_XIR_CALL_READY));
         CHECK(runtime_live == baseline_live && runtime_bytes == baseline_bytes);
     }
     printf("Source Float runtime: %zu allocation failure sites leave no live instance ownership\n", sites);
@@ -127,7 +130,7 @@ static void source_float_output_failures(XrXirProgram *program, uint32_t entry) 
             CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == expected);
             CHECK(output.count == mode);
         }
-        CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_free(instance) == expected);
         CHECK(runtime_live == baseline_live && runtime_bytes == baseline_bytes);
     }
 }
@@ -147,6 +150,7 @@ static void source_float_call_failures(XrXirProgram *program, const uint32_t *fu
             xr_xir_value_drop(&value);
             CHECK(output.count == 3);
             runtime_attempts = 0; runtime_fail_at = site ? site - 1 : SIZE_MAX;
+            bool entered_oom = false;
             XrXirCallStatus status = xr_xir_instance_start(instance, functions[calls[f]], NULL, 0);
             if (status == XR_XIR_CALL_READY) {
                 XrXirInstanceResult outcome = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
@@ -156,6 +160,7 @@ static void source_float_call_failures(XrXirProgram *program, const uint32_t *fu
                     outcome = xr_xir_instance_poll_bounded(instance, UINT64_MAX);
                 }
                 status = outcome.outcome.status;
+                entered_oom = status == XR_XIR_CALL_OOM;
             }
             if (!site) {
                 CHECK(status == XR_XIR_CALL_RETURNED);
@@ -170,7 +175,7 @@ static void source_float_call_failures(XrXirProgram *program, const uint32_t *fu
             }
             runtime_fail_at = SIZE_MAX;
             CHECK(output.count == 3);
-            CHECK(xr_xir_instance_free(instance) == XR_XIR_CALL_READY);
+            CHECK(xr_xir_instance_free(instance) == (entered_oom ? XR_XIR_CALL_OOM : XR_XIR_CALL_READY));
             CHECK(runtime_live == baseline_live && runtime_bytes == baseline_bytes);
         }
         CHECK(sites > 0);

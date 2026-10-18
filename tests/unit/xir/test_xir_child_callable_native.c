@@ -10,6 +10,7 @@
  *   Generated bodies share immutable code and independent execution domains.
  */
 #include "xir/xxir_program.h"
+#include "xir/xxir_checked.h"
 #include "xir/xxir_output.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,7 +25,9 @@ XR_DATA const XrXirCallEntry child_callable_native_entries[];
 #include "xir_child_callable_native_oracles.h"
 
 int main(void) {
-    _Static_assert(sizeof(XrXirFunctionIdentity)==40 && offsetof(XrXirFunctionIdentity,test_role)==28,
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==34u && XR_XIR_CHECKED_CONTRACT==90u, "current callable semantic contract");
+    _Static_assert(sizeof(XrXirFunctionIdentity)==44 && offsetof(XrXirFunctionIdentity,test_role)==28 &&
+        offsetof(XrXirFunctionIdentity,variadic)==36 && offsetof(XrXirFunctionIdentity,derivation)==40,
         "current role-bearing declaration layout");
     CHECK(!effects_compile_live && !effects_compile_bytes && !runtime_live && !runtime_bytes);
     CnFixture fixture = {0};

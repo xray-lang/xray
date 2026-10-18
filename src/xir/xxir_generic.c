@@ -13,6 +13,7 @@
 #include "xxir_metadata_domain_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_types.h"
+#include "xxir_view_types_internal.h"
 #include "xxir_constraints.h"
 #include "xxir_constraint_proof.h"
 #include "xxir_internal.h"
@@ -29,8 +30,9 @@ bool xr_xir_type_in_context(const XrXirModule *module, uint32_t function, XrXirT
     if (node) return (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_ARRAY ||
         node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET ||
         node->kind == XR_XIR_TYPE_CELL || node->kind == XR_XIR_TYPE_NOMINAL ||
-        node->kind == XR_XIR_TYPE_NULLABLE || (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD) || node->kind == XR_XIR_TYPE_ATOMIC ||
-        node->kind == XR_XIR_TYPE_TASK) && node->parameter_span <= count;
+        node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD || node->kind == XR_XIR_TYPE_ATOMIC ||
+        node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_SLICE ||
+        node->kind == XR_XIR_TYPE_MUT_SLICE || node->kind == XR_XIR_TYPE_ITERATOR) && node->parameter_span <= count;
     return (uint32_t) type >= XR_XIR_TYPE_PARAMETER_BASE && (uint32_t) type < XR_XIR_TYPE_PARAMETER_LIMIT &&
         (uint32_t) type - XR_XIR_TYPE_PARAMETER_BASE < count;
 }
@@ -45,6 +47,10 @@ XrXirStatus xr_xir_compile_type_constraints(const XrXirCompileContext *compile_c
         constraints.markers & ~XR_XIR_CONSTRAINT_MASK || !xr_xir_type_in_context(module, function, type) ||
         xr_xir_type_is_cell(module->types, type)) return XR_XIR_BAD_TYPE;
     XrXirProofContext context = {module,{XR_XIR_CONTEXT_FUNCTION,function,0}};
+    uint32_t borrowed=0;
+    XrXirStatus status=xr_xir_compile_view_type_flags(remaining,module->types,type,&borrowed);
+    if (status!=XR_XIR_OK) return status;
+    if (borrowed) return XR_XIR_BAD_TYPE;
     return xr_xir_compile_type_markers_prove(remaining, &context, type, constraints.markers);
 }
 XrXirStatus xr_xir_compile_type_satisfies(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type, XrXirConstraint constraints) {
@@ -96,6 +102,10 @@ XrXirStatus xr_xir_compile_generics_structure_verify(const XrXirCompileContext *
             if (xr_xir_type_is_cell(module->types,g->arguments[a])) return XR_XIR_BAD_TYPE;
             XrXirStatus status = xr_xir_compile_type_expression_shape(remaining, module->types, g->arguments[a], g->parameter_count);
             if (status != XR_XIR_OK) return status;
+            uint32_t borrowed=0;
+            status=xr_xir_compile_view_type_flags(remaining,module->types,g->arguments[a],&borrowed);
+            if (status!=XR_XIR_OK) return status;
+            if (borrowed) return XR_XIR_BAD_TYPE;
         }
     }
     return templates ? XR_XIR_OK : XR_XIR_BAD_STRUCTURE;

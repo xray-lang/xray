@@ -83,7 +83,7 @@ static void lsp_comptime_cases(const char *root) {
         {input_root_uri,root_text,strlen(input_root_uri),sizeof(root_text)-1,1},
         {input_library_uri,library_text,strlen(input_library_uri),sizeof(library_text)-1,7}};
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xlsp_source_snapshot_build(&request,documents,2,0,&snapshot,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"LSP comptime overlay status%u %d:%d %s\n",
@@ -133,7 +133,7 @@ static XrXirStatus lsp_once(const char *root, XrCompileResourceLimits limits, Xr
         {root_uri,root_text,strlen(root_uri),sizeof(root_text)-1,1},
         {library_uri,library_text,strlen(library_uri),sizeof(library_text)-1,7}};
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request = {session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request = {session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     if (status == XR_XIR_OK) status = xlsp_source_snapshot_build(&request,documents,2,0,&snapshot,NULL,NULL);
     memset(root_text,'?',sizeof(root_text)); memset(library_text,'?',sizeof(library_text));
     memset(documents,0,sizeof(documents)); memset(&request,0,sizeof(request));
@@ -177,7 +177,7 @@ static void lsp_versions(const char *root) {
         {root_uri,source_root_text,strlen(root_uri),sizeof(source_root_text)-1,1},
         {library_uri,source_library_text,strlen(library_uri),sizeof(source_library_text)-1,7}};
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request = {session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request = {session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XlspSourceSnapshot *old = NULL, *updated = NULL; bool matches = false;
     CHECK(xlsp_source_snapshot_build(&request,documents,2,0,&old,NULL,NULL) == XR_XIR_OK);
     CHECK(xlsp_source_snapshot_matches(old,documents,2,0,&matches) == XR_XIR_OK && matches);
@@ -208,7 +208,7 @@ static void lsp_rejections(const char *root) {
         char uri[XR_TEST_PATH_MAX]; lsp_uri(uri,sizeof(uri),root,tails[mode]);
         XlspSourceDocument document={uri,"",strlen(uri),0,1};
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-        XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
         XlspSourceSnapshot *snapshot=NULL;
         CHECK(xlsp_source_snapshot_build(&request,&document,1,0,&snapshot,NULL,NULL) == XR_XIR_BAD_STRUCTURE);
         CHECK(!snapshot); xr_compile_session_free(session); xr_compile_resources_release(context.resources); lsp_zero();

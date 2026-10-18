@@ -9,8 +9,9 @@
  */
 #ifndef PRODUCT_IDENTITY_GATES_H
 #define PRODUCT_IDENTITY_GATES_H
-#include "xir_hash75_identity.h"
-#include "xir_semantic81_identity.h"
+#include "xir_view_value27_identity.h"
+#include "xir_current_product_identity.h"
+#include "xir_previous_product_identities.inc.c"
 static const uint8_t product_layout_value21_digest[]={0x53,0x25,0xdf,0xf6,0x6e,0xbc,0x0d,0xb5,0x0f,0x20,0xdd,0xa2,0xed,0x30,0xb0,0x02,0xe4,0xb6,0xfb,0xbd,0xac,0x04,0xc9,0x5a,0x58,0x89,0xd7,0x55,0x40,0x7a,0x78,0x9a};
 
 static const uint8_t product_layout_value22_digest[]={
@@ -98,8 +99,8 @@ static void product_layout_vector(void) {
         {"init",4,NULL,0,XR_XIR_UNIT,&one,1,initialize,1,NULL,0},
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,entry,2,NULL,0}};
     const XrXirSourceModule source={"m",1,NULL,0,1, 0};
-    const XrXirFunctionIdentity ids[3]={{0,1,0,0,0,0,0, 0, 0,0},{0},{0}};
-    const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,2,NULL};
+    const XrXirFunctionIdentity ids[3]={{0,1,0,0,0,0,0, 0, 0,0,0},{0},{0}};
+    const XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,2,NULL,NULL};
     const XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     size_t live=runtime_live,bytes=runtime_bytes;
@@ -125,7 +126,8 @@ static void product_layout_vector(void) {
         XrXirStatus status=source_product_layout_digest(lowered,&facts,digest);
         if (bound==2) CHECK(status==XR_XIR_BUDGET && !memcmp(digest,saved,32));
         else {
-            CHECK(status==XR_XIR_OK && !memcmp(digest,product_layout81_digest,32));
+            CHECK(status==XR_XIR_OK && !memcmp(digest,product_layout_current_digest,32));
+            CHECK(memcmp(digest,product_layout_value27_digest,32));
             CHECK(memcmp(digest,product_layout_value24_digest,32));
             CHECK(memcmp(digest,product_layout_value21_digest,32) && memcmp(digest,product_layout_value22_digest,32));
             CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK);
@@ -142,10 +144,19 @@ static void product_layout_vector(void) {
             xr_sha256(layout_previous21_preimage,sizeof(layout_previous21_preimage),historical);
             xr_sha256(layout_current22_preimage,sizeof(layout_current22_preimage),current);
             CHECK(!memcmp(historical,product_layout_value21_digest,32) && !memcmp(current,product_layout_value22_digest,32));
-            xr_sha256(layout_current81_preimage,sizeof(layout_current81_preimage),current);
-            CHECK(!memcmp(current,product_layout81_digest,32));
-            _Static_assert(XR_XIR_VALUE_ABI_VERSION==27u && XR_XIR_CALL_ABI_VERSION==29u && XR_XIR_PROGRAM_ABI_VERSION==36u,"owned Domain layout identity");
-            for(unsigned previous=21;previous<25;++previous) {
+            xr_sha256(layout_current27_preimage,sizeof(layout_current27_preimage),current);
+            CHECK(!memcmp(current,product_layout_value27_digest,32));
+            xr_sha256(layout_current_product_preimage,sizeof(layout_current_product_preimage),current);
+            CHECK(!memcmp(current,product_layout_current_digest,32));
+            _Static_assert(sizeof(previous_product_layout_frames)/sizeof(previous_product_layout_frames[0])==11,
+                "every distinct original complete layout frame remains covered");
+            for (unsigned i=0;i<11;++i) {
+                const PreviousProductIdentityFrame *row=&previous_product_layout_frames[i];
+                xr_sha256(row->preimage,row->length,historical);
+                CHECK(!memcmp(historical,row->digest,32) && memcmp(digest,row->digest,32));
+            }
+            _Static_assert(XR_XIR_VALUE_ABI_VERSION==28u && XR_XIR_CALL_ABI_VERSION==35u && XR_XIR_PROGRAM_ABI_VERSION==37u,"owned Domain layout identity");
+            for(unsigned previous=21;previous<28;++previous) {
                 facts.target.abi_version=previous;
                 memset(digest,0x5a,sizeof(digest));memcpy(saved,digest,sizeof(saved));
                 CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
@@ -202,7 +213,7 @@ static void product_crossed_owners(XrXirSourceProduct *product,const char *direc
     int length=snprintf(path,sizeof(path),"%s/product2.xr",directory);CHECK(length>0 && (size_t)length<sizeof(path));
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(product->context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory};
-    XrXirSourceProductRequest request={{session,path,&authority,&product->context,stdlib,NULL,XR_XIR_PROGRAM,NULL},
+    XrXirSourceProductRequest request={{session,path,&authority,&product->context,stdlib,NULL,XR_XIR_PROGRAM,NULL,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *other=NULL;CHECK(xr_xir_compile_source_product_build(&request,&other,NULL)==XR_XIR_OK);
     xr_compile_session_free(session);memset(&request,0xcc,sizeof(request));memset(&authority,0xcc,sizeof(authority));

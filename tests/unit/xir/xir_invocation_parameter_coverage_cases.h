@@ -50,7 +50,7 @@ static uint32_t invocation_parameter_actual(EffectInvocationWorkspace *owner) {
         EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=edge->caller,.instruction=UINT32_MAX};
         XrXirStatus status=effect_invocation_origins(&flow);bool matched=false;
         if (status==XR_XIR_OK) status=effect_invocation_coverage_input(&flow,e,&matched);
-        xr_compile_resources_free(flow.memory);CHECK(status==XR_XIR_OK);
+        effect_invocation_flow_finish(&flow);CHECK(status==XR_XIR_OK);
         if (!matched) continue;
         CHECK(found==UINT32_MAX || found==edge->target);found=edge->target;
     }
@@ -167,8 +167,8 @@ static XrXirStatus conditional_parameter_case(const XrXirCompileContext *context
     effect_invocation_bounds_free(bounds);effect_graph_free(&graph);invocation_core_storage_free(&effects);
     xr_xir_compile_artifact_free(checked);memset(&fixture,0,sizeof(fixture));
     if (status==XR_XIR_OK) {
-        EffectInvocationRead replay={0};
-        status=effect_invocation_read_open(context,published,certificate->declared,certificate->final,&replay);
+        EffectInvocationRead replay={0};EffectInvocationScratch *replay_storage=NULL;
+        status=effect_invocation_read_open(context,published,certificate->declared,certificate->final,&replay_storage,&replay);
         replay.work=context;replay.effects=published;
         replay.declared=certificate->declared;
         EffectBodyRequest request=effect_body_owned_request(context,certificate->body);

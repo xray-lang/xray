@@ -1,4 +1,75 @@
 # Complete Source constants use the same sole compiler and scalar interpreter.
+add_test(NAME test_xir_source_type_info COMMAND test_xir_source_comptime --type-info)
+set_tests_properties(test_xir_source_type_info PROPERTIES TIMEOUT 60 LABELS "unit;xir;source;ctfe;description;ownership")
+add_executable(test_xir_type_info_library "${CMAKE_CURRENT_LIST_DIR}/test_xir_type_info_library.c")
+target_link_libraries(test_xir_type_info_library PRIVATE xray_xir_source xray_xir_vm)
+set_target_properties(test_xir_type_info_library PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+set(XR_TYPE_INFO_WORK "${CMAKE_CURRENT_BINARY_DIR}/type-info-library-work")
+file(MAKE_DIRECTORY "${XR_TYPE_INFO_WORK}")
+target_compile_definitions(test_xir_type_info_library PRIVATE XR_TYPE_INFO_WORK="${XR_TYPE_INFO_WORK}")
+if(MSVC)
+    target_compile_options(test_xir_type_info_library PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_type_info_library PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_type_info_library COMMAND test_xir_type_info_library)
+set_tests_properties(test_xir_type_info_library PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;description;library;ownership")
+add_executable(test_xir_generated_data "${CMAKE_CURRENT_LIST_DIR}/test_xir_generated_data.c")
+target_link_libraries(test_xir_generated_data PRIVATE xray_xir_source xray_xir_vm)
+set_target_properties(test_xir_generated_data PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+set(XR_GENERATED_DATA_WORK "${CMAKE_CURRENT_BINARY_DIR}/generated-data-work")
+file(MAKE_DIRECTORY "${XR_GENERATED_DATA_WORK}")
+target_compile_definitions(test_xir_generated_data PRIVATE XR_GENERATED_DATA_WORK="${XR_GENERATED_DATA_WORK}")
+if(MSVC)
+    target_compile_options(test_xir_generated_data PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_generated_data PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_generated_data COMMAND test_xir_generated_data)
+set_tests_properties(test_xir_generated_data PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;generated;library;ownership")
+include("${CMAKE_CURRENT_LIST_DIR}/source_comptime_limits.cmake")
+add_executable(test_xir_source_derivation "${CMAKE_CURRENT_LIST_DIR}/test_xir_source_derivation.c")
+target_link_libraries(test_xir_source_derivation PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen xray_lsp_source_query xray_frontend_format)
+set_target_properties(test_xir_source_derivation PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+set(XR_SOURCE_DERIVATION_WORK "${CMAKE_CURRENT_BINARY_DIR}/source-derivation-work")
+file(MAKE_DIRECTORY "${XR_SOURCE_DERIVATION_WORK}")
+target_compile_definitions(test_xir_source_derivation PRIVATE XR_SOURCE_DERIVATION_WORK="${XR_SOURCE_DERIVATION_WORK}")
+if(MSVC)
+    target_compile_options(test_xir_source_derivation PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_source_derivation PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_derivation COMMAND test_xir_source_derivation)
+set_tests_properties(test_xir_source_derivation PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;generated;library;ownership")
+add_executable(test_effect_derivation_snapshot "${CMAKE_CURRENT_LIST_DIR}/test_effect_derivation_snapshot.c")
+target_link_libraries(test_effect_derivation_snapshot PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen xray_lsp_source_query xray_frontend_format)
+set_target_properties(test_effect_derivation_snapshot PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/snapshot-regression-work")
+target_compile_definitions(test_effect_derivation_snapshot PRIVATE XR_SOURCE_DERIVATION_WORK="${CMAKE_CURRENT_BINARY_DIR}/snapshot-regression-work")
+if(MSVC)
+    target_compile_options(test_effect_derivation_snapshot PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_effect_derivation_snapshot PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_effect_derivation_snapshot COMMAND test_effect_derivation_snapshot)
+set_tests_properties(test_effect_derivation_snapshot PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;ownership;compiler-fault;metadata")
+
+add_test(NAME test_xir_source_derivation_compiler_controls COMMAND test_xir_source_derivation --compiler-controls)
+set_tests_properties(test_xir_source_derivation_compiler_controls PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;generated;ownership;budget")
+add_test(NAME test_xir_source_derivation_compiler_resources COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_LIST_DIR}/run_source_derivation_compiler_faults.py"
+    --exe $<TARGET_FILE:test_xir_source_derivation>
+    --output "${CMAKE_CURRENT_BINARY_DIR}/source-derivation-compiler-fi")
+set_tests_properties(test_xir_source_derivation_compiler_resources PROPERTIES TIMEOUT 600 COST 600 PROCESSORS 8 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;generated;ownership;compiler-fault;resources")
+include("${CMAKE_CURRENT_LIST_DIR}/source_derivation_native.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/source_derivation_json.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/json_strings.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/json_numbers.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/json_aggregate_encode.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/source_derive_constructor.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/source_decimal_parse.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/source_derivation_json_decode.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/source_derivation_enum.cmake")
 add_executable(test_xir_source_comptime "${CMAKE_CURRENT_LIST_DIR}/test_xir_source_comptime.c")
 target_link_libraries(test_xir_source_comptime PRIVATE xray_xir_source xray_xir_vm)
 set_target_properties(test_xir_source_comptime PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
@@ -134,3 +205,37 @@ set_tests_properties(test_xir_source_comptime_dynamic_loan PROPERTIES
 add_test(NAME test_xir_source_comptime_dynamic_loan_resources COMMAND test_xir_source_comptime --dynamic-loan-resources)
 set_tests_properties(test_xir_source_comptime_dynamic_loan_resources PROPERTIES
     LABELS "unit;xir;source;ctfe;ownership;compiler-fault;resources;class" TIMEOUT 600 RUN_SERIAL TRUE)
+
+add_test(NAME test_xir_source_comptime_inactive_loan COMMAND test_xir_source_comptime --inactive-loan)
+set_tests_properties(test_xir_source_comptime_inactive_loan PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;ctfe;source;ownership")
+add_test(NAME test_xir_source_comptime_inactive_loan_resources COMMAND test_xir_source_comptime --inactive-loan-resources)
+set_tests_properties(test_xir_source_comptime_inactive_loan_resources PROPERTIES
+    TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;ctfe;source;ownership;resources")
+
+add_test(NAME test_xir_source_comptime_array_identity COMMAND test_xir_source_comptime --array-identity)
+set_tests_properties(test_xir_source_comptime_array_identity PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;ctfe;source;ownership")
+add_test(NAME test_xir_source_comptime_array_identity_resources COMMAND test_xir_source_comptime --array-identity-resources)
+set_tests_properties(test_xir_source_comptime_array_identity_resources PROPERTIES
+    TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;ctfe;source;ownership;resources")
+
+add_test(NAME test_xir_source_comptime_ref_closure COMMAND test_xir_source_comptime --ref-closure)
+set_tests_properties(test_xir_source_comptime_ref_closure PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;ctfe;source;ownership;callable")
+add_test(NAME test_xir_source_comptime_ref_closure_resources COMMAND test_xir_source_comptime --ref-closure-resources)
+set_tests_properties(test_xir_source_comptime_ref_closure_resources PROPERTIES
+    TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;ctfe;source;ownership;resources;callable")
+
+add_test(NAME test_xir_source_comptime_struct_identity COMMAND test_xir_source_comptime --struct-identity)
+set_tests_properties(test_xir_source_comptime_struct_identity PROPERTIES
+    TIMEOUT 30 LABELS "unit;xir;ctfe;source;ownership;struct")
+add_test(NAME test_xir_source_comptime_struct_identity_resources COMMAND test_xir_source_comptime --struct-identity-resources)
+set_tests_properties(test_xir_source_comptime_struct_identity_resources PROPERTIES
+    TIMEOUT 600 RUN_SERIAL TRUE LABELS "unit;xir;ctfe;source;ownership;resources;struct")
+
+include("${CMAKE_CURRENT_LIST_DIR}/regex_precompile.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/string_copy_bytes.cmake")
+
+include("${CMAKE_CURRENT_LIST_DIR}/root_conditional_controls.cmake")

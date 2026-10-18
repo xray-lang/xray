@@ -1,0 +1,2 @@
+fn answer()->i64{var xs=[40];const f=fn(value:ref i64)->i64{value+=2;return value};return f(ref xs[0])}
+export fn run()->i64{return comptime answer()}

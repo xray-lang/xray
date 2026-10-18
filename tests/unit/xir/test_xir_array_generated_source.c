@@ -42,7 +42,7 @@ static XrXirStatus array_build(ArrayCompileOwner *owner,XrXirSourceProduct **pro
     if(ss!=XR_COMPILER_SESSION_OK)return ss==XR_COMPILER_SESSION_OUT_OF_MEMORY?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ARRAY_FIXTURES};
     XrXirSourceProductRequest request={{session,XR_ARRAY_FIXTURES "/root.xr",&authority,&owner->context,
-        XR_ARRAY_STDLIB,NULL,XR_XIR_PROGRAM,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
+        XR_ARRAY_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL},{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProductDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,product,&diagnostic);
     if(status!=XR_XIR_OK && !array_program_compile_injected)fprintf(stderr,"Array source status=%u stage=%u line=%d %s\n",status,diagnostic.stage,diagnostic.source.line,diagnostic.source.message);
@@ -118,7 +118,7 @@ static void array_source_reject(const char *file,const char *message) {
     char path[1024];int length=snprintf(path,sizeof(path),"%s/%s",XR_ARRAY_FIXTURES,file);
     CHECK(length>0 && (size_t)length<sizeof(path));
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ARRAY_FIXTURES};
-    XrXirSourceProductRequest request={{session,path,&authority,&owner.context,XR_ARRAY_STDLIB,NULL,XR_XIR_PROGRAM,NULL},
+    XrXirSourceProductRequest request={{session,path,&authority,&owner.context,XR_ARRAY_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product=NULL;XrXirSourceProductDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_product_build(&request,&product,&diagnostic);

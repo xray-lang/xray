@@ -17,6 +17,10 @@
 XR_FUNC XrXirValueStatus xr_xir_array_new(XrXirType array_type,
     const XrXirValue *values, size_t count, XrXirValueAdmission *admission,
     XrXirValue *output);
+/* Copies the complete UTF-8 byte sequence into an independent Array<U8>.
+ * The source and an occupied output remain unchanged on every failure. */
+XR_FUNC XrXirValueStatus xr_xir_string_copy_bytes(const XrXirValue *source,
+    XrXirType array_type, XrXirValueAdmission *admission, XrXirValue *output);
 /* A new array of `length` copies of `fill`; the caller rejects a negative length. */
 XR_FUNC XrXirValueStatus xr_xir_array_repeat(XrXirType array_type, int64_t length,
     const XrXirValue *fill, XrXirValueAdmission *admission, XrXirValue *output);
@@ -31,6 +35,13 @@ XR_FUNC XrXirValueStatus xr_xir_array_with_capacity(XrXirType array_type, int64_
 XR_FUNC XrXirValueStatus xr_xir_array_reserve(const XrXirValue *array, int64_t capacity,
     XrXirValueAdmission *admission, XrXirValue *output);
 XR_FUNC XrXirValueStatus xr_xir_array_get(const XrXirValue *array, int64_t index,
+    XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault);
+/* Observe one element of an already validated Array on its exact arena/Domain.
+ * The caller prepays the selected type's complete shallow validation and inline
+ * snapshot span on that same work owner. This operation charges its fixed header
+ * observation but does not admit unrelated descendants. The owned result grants
+ * no call, member or loan authority; ordinary receiving must still check those. */
+XR_FUNC XrXirValueStatus xr_xir_array_observe(const XrXirValue *array, int64_t index,
     XrXirValueAdmission *admission, XrXirValue *output, XrXirFaultDetail *fault);
 XR_FUNC XrXirValueStatus xr_xir_array_set(const XrXirValuePlace *place, int64_t index,
     const XrXirValue *element, XrXirValueAdmission *admission, XrXirFaultDetail *fault);

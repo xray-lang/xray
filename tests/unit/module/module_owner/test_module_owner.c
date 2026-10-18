@@ -87,9 +87,10 @@ static void make_packet(void) {
     const XrXirBlock init_block = {0,1,0,0}, block = {0,2,0,0};
     const XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,init_ops,1,NULL,0}, {"answer",6,NULL,0,XR_XIR_I64,&block,1,ops,2,NULL,0}};
     const char *canonical = "stdlib-module-v1:module=2:io:path=12:io/output.xr";
-    XrXirSourceModule source = {canonical,(uint32_t)strlen(canonical),NULL,0,0, 0};
-    const XrXirFunctionIdentity names[] = {{0,0,0,0,0,0,0, 0, 0,0},{0,1,0,0,0,0,0, 0, 0,0}};
-    XrXirDeclarations declarations = {&source,1,names,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
+    XrXirSourceModule source = {.name=canonical,.name_length=(uint32_t)strlen(canonical)};
+    const XrXirFunctionIdentity names[] = {{0},{.exported=1}};
+    XrXirDeclarations declarations = {.modules=&source,.module_count=1,.functions=names,
+        .root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     XrXirModule module = {XR_XIR_BUILT,functions,2,&declarations,NULL,NULL,NULL,XR_XIR_LIBRARY,NULL};
     XrXirArtifact *artifact = NULL; XrXirCheckedPacket packet = {0};
     CHECK(xir_fixture_check(&context, &module, &artifact, NULL) == XR_XIR_OK);

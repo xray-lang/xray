@@ -111,7 +111,9 @@ static bool sdk_json_files(XrJsonCursor *json, XrXirSdkManifest *manifest) {
 static bool sdk_json_libraries(XrJsonCursor *json) {
     const char *name = NULL;
     return xr_json_cursor_take(json, '[') && xr_json_cursor_string(json, 128, &name) &&
-        xr_json_cursor_equal(json, name, "kernel32") && xr_json_cursor_take(json, ']');
+        xr_json_cursor_equal(json, name, "kernel32") && xr_json_cursor_take(json, ',') &&
+        xr_json_cursor_string(json, 128, &name) && xr_json_cursor_equal(json, name, "bcrypt") &&
+        xr_json_cursor_take(json, ']');
 }
 static bool sdk_json_prefix(XrJsonCursor *json, const XrXirSdkManifest *manifest) {
     static const uint32_t fixed[] = {2, XR_XIR_CHECKED_SCHEMA, XR_XIR_CHECKED_CONTRACT,

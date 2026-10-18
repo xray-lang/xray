@@ -12,8 +12,9 @@
 #include "base/xsha256.h"
 
 /* Independent complete prior and current policy frames. */
-#include "xir_hash75_identity.h"
-#include "xir_semantic81_identity.h"
+#include "xir_view_value27_identity.h"
+#include "xir_current_product_identity.h"
+#include "xir_previous_product_identities.inc.c"
 static const uint8_t linked_policy71_preimage[71]={
     0x78,0x72,0x61,0x79,0x3a,0x78,0x69,0x72,0x2d,0x63,0x31,0x31,
     0x2d,0x63,0x6f,0x64,0x65,0x67,0x65,0x6e,0x2d,0x70,0x6f,0x6c,
@@ -140,7 +141,12 @@ static const uint8_t original_policy73[] = {
     0x81,0x75,0x2c,0x19,0x62,0xe2,0x51,0x4d,0x16,0x17,0xba,0x8d,0x69,0x66,0x79,0x6f,
     0xfa,0x6a,0x1d,0x1a,0x2c,0xa6,0x0c,0x90,0x3c,0xe9,0x6d,0x3b,0x43,0xc7,0xd7,0xdf,
 };
-    CHECK(!memcmp(input->codegen_policy_id.bytes,linked ? linked_policy81 : original_policy81,32));
+    CHECK(!memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_current : original_policy_current,32));
+    CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_value27 : original_policy_value27,32));
+    CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy75 : original_policy75,32));
+    CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy81 : original_policy81,32));
+    CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy82 : original_policy82,32));
+    CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy83 : original_policy83,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy_value24 : original_policy_value24,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy73 : original_policy73,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy72 : original_policy72,32));
@@ -156,9 +162,19 @@ static const uint8_t original_policy73[] = {
     xr_sha256(linked ? linked_policy73_preimage : original_policy73_preimage,
         linked ? sizeof(linked_policy73_preimage) : sizeof(original_policy73_preimage), framed);
     CHECK(!memcmp(framed,linked ? linked_policy73 : original_policy73,32));
-    xr_sha256(linked ? linked_policy81_preimage : original_policy81_preimage,
-        linked ? sizeof(linked_policy81_preimage) : sizeof(original_policy81_preimage), framed);
-    CHECK(!memcmp(framed,linked ? linked_policy81 : original_policy81,32));
+    xr_sha256(linked ? linked_policy_value27_preimage : original_policy_value27_preimage,
+        linked ? sizeof(linked_policy_value27_preimage) : sizeof(original_policy_value27_preimage), framed);
+    CHECK(!memcmp(framed,linked ? linked_policy_value27 : original_policy_value27,32));
+    xr_sha256(linked ? linked_policy_current_preimage : original_policy_current_preimage,
+        linked ? sizeof(linked_policy_current_preimage) : sizeof(original_policy_current_preimage), framed);
+    CHECK(!memcmp(framed,linked ? linked_policy_current : original_policy_current,32));
+    _Static_assert(sizeof(previous_product_policy_frames)/sizeof(previous_product_policy_frames[0])==54,
+        "every distinct original complete policy frame remains covered");
+    for (unsigned i=0;i<54;++i) {
+        const PreviousProductIdentityFrame *row=&previous_product_policy_frames[i];
+        xr_sha256(row->preimage,row->length,framed);
+        CHECK(!memcmp(framed,row->digest,32) && memcmp(input->codegen_policy_id.bytes,row->digest,32));
+    }
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy69 : original_policy69,32));
     CHECK(memcmp(input->codegen_policy_id.bytes,linked ? linked_policy : original_policy,32));
     uint8_t actual[32]; xr_sha256((const uint8_t *)source->text, source->length, actual);

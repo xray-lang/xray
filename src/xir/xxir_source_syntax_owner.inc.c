@@ -34,7 +34,7 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
             (fact->role!=XR_XIR_SOURCE_SYNTAX_UNRESOLVED&&!query_syntax_range(view,fact->name,absent))||
             (fact->flags&~XR_XIR_SOURCE_SYNTAX_STATIC)||
             (fact->flags&&fact->role!=XR_XIR_SOURCE_SYNTAX_METHOD))return XR_XIR_BAD_STRUCTURE;
-        if(fact->role==XR_XIR_SOURCE_SYNTAX_METHOD&&
+        if((fact->role==XR_XIR_SOURCE_SYNTAX_METHOD||fact->role==XR_XIR_SOURCE_SYNTAX_DERIVED_METHOD)&&
             ((decl->kind!=XR_XIR_SOURCE_FUNCTION&&decl->kind!=XR_XIR_SOURCE_MEMBER)||!decl->parent||decl->parent>view->declaration_count||
                 view->declarations[decl->parent-1].kind!=XR_XIR_SOURCE_TYPE))return XR_XIR_BAD_STRUCTURE;
         if(fact->role==XR_XIR_SOURCE_SYNTAX_CLOSURE&&
@@ -44,7 +44,8 @@ XR_FUNC XrXirStatus xr_xir_compile_source_snapshot_syntax_copy(XrXirSourceSnapsh
                         syntax->declarations[decl->parent-1].role!=XR_XIR_SOURCE_SYNTAX_NAME))))return XR_XIR_BAD_STRUCTURE;
         if(fact->role==XR_XIR_SOURCE_SYNTAX_RECEIVER&&
             ((decl->kind!=XR_XIR_SOURCE_PARAMETER&&decl->kind!=XR_XIR_SOURCE_BINDING)||!decl->parent||decl->parent>syntax->declaration_count||
-                syntax->declarations[decl->parent-1].role!=XR_XIR_SOURCE_SYNTAX_METHOD||
+                (syntax->declarations[decl->parent-1].role!=XR_XIR_SOURCE_SYNTAX_METHOD&&
+                 syntax->declarations[decl->parent-1].role!=XR_XIR_SOURCE_SYNTAX_DERIVED_METHOD)||
                 (syntax->declarations[decl->parent-1].flags&XR_XIR_SOURCE_SYNTAX_STATIC)))return XR_XIR_BAD_STRUCTURE;
     }
     for(uint32_t i=0;i<syntax->reference_count;++i) {

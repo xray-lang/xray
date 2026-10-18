@@ -42,7 +42,7 @@ static XrXirStatus atomic_source_control(const XrXirCompileContext *context,void
     XrCompilerSessionStatus cs=xr_compile_session_new(context->resources,&session);
     if(cs!=XR_COMPILER_SESSION_OK)return cs==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,directory_path};
-    XrXirSourceRequest request={session,root_path,&authority,context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,root_path,&authority,context,XR_ATOMIC_STDLIB,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult source={0};XrXirSourceDiagnostic diagnostic={0};XrXirCheckedPacket packet={0};
     XrXirArtifact *read=NULL,*specialized=NULL,*lowered=NULL;
     XrXirStatus status=xr_xir_compile_source_check(&request,&source,&diagnostic,NULL);

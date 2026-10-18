@@ -223,7 +223,7 @@ static void cell_proof_indirect_ref(void) {
     CHECK(xir_fixture_verify(&context,&fixture.module,NULL) == XR_XIR_BAD_TYPE);
     parameter.mode = XR_PARAM_REF; parameter.type = XR_XIR_I64;
     CHECK(xir_fixture_verify(&context,&fixture.module,NULL) == XR_XIR_BAD_TYPE);
-    /* A capture prefix cannot reuse the unbound scoped-ref protocol. */
+    /* A real owned prefix and a scoped suffix retain distinct origins. */
     parameter.type = (XrXirType)256;
     XrXirType captured_parameters[] = {(XrXirType)256,(XrXirType)256};
     fixture.functions[3].parameters = captured_parameters; fixture.functions[3].parameter_count = 2;
@@ -231,7 +231,37 @@ static void cell_proof_indirect_ref(void) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0,{0}}};
     fixture.functions[3].instructions = read;
     fixture.entry[2].args[1] = 1; fixture.entry[2].immediate = 3;
+    uint32_t actuals[] = {1,1,1,1};
+    fixture.functions[1].operands = actuals;fixture.functions[1].operand_count = 4;
+    fixture.entry[3].args[0] = 1;fixture.entry[4].args[0] = 2;fixture.entry[5].args[0] = 3;
+    diagnostic = (XrXirDiagnostic){XR_XIR_OK,UINT32_MAX,UINT32_MAX,UINT32_MAX,XR_XIR_DIAGNOSTIC_NONE};
+    status = xir_fixture_verify(&context,&fixture.module,&diagnostic);
+    if (status != XR_XIR_OK) fprintf(stderr,"mixed-ref status%u function%u instruction%u reason%u\n",
+        (unsigned)status,diagnostic.function,diagnostic.instruction,(unsigned)diagnostic.reason);
+    CHECK(status == XR_XIR_OK);
+    proof = NULL;
+    CHECK(xr_xir_compile_cell_provenance_verified(&context,&fixture.module,&proof,NULL) == XR_XIR_OK);
+    CHECK(xr_xir_cell_provenance_role(proof,3,0) == XR_XIR_CELL_PROOF_OWNED_CAPTURE);
+    CHECK(xr_xir_cell_provenance_role(proof,3,1) == XR_XIR_CELL_PROOF_SCOPED_REF);
+    CHECK(xr_xir_cell_provenance_origin(proof,3,0) == XR_XIR_CELL_ORIGIN_OWNED);
+    CHECK(xr_xir_cell_provenance_origin(proof,3,1) == XR_XIR_CELL_ORIGIN_SCOPED);
+    xr_xir_compile_cell_provenance_free(proof);
+    captured_parameters[1] = XR_XIR_I64;
     CHECK(xir_fixture_verify(&context,&fixture.module,NULL) == XR_XIR_BAD_TYPE);
+    captured_parameters[1] = (XrXirType)256;captured_parameters[0] = XR_XIR_I64;
+    CHECK(xir_fixture_verify(&context,&fixture.module,NULL) == XR_XIR_BAD_TYPE);
+    captured_parameters[0] = (XrXirType)256;actuals[0] = 0;
+    CHECK(xir_fixture_verify(&context,&fixture.module,NULL) == XR_XIR_BAD_TYPE);
+    actuals[0] = 1;
+    uint32_t borrowed = 0;
+    XrXirInstruction escaping[] = {
+        {XR_XIR_FUNCTION_REF,(XrXirType)257,{0,1},{0},3,{0}},
+        {XR_XIR_CELL_READ,XR_XIR_I64,{0},{0},0,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{2},{0},0,{0}}};
+    fixture.functions[2].instructions = escaping;fixture.functions[2].instruction_count = 3;
+    fixture.functions[2].blocks = &fixture.three;
+    fixture.functions[2].operands = &borrowed;fixture.functions[2].operand_count = 1;
+    CHECK(xir_fixture_verify(&context,&fixture.module,NULL) == XR_XIR_BAD_VALUE);
     cell_proof_close(&context,baseline);
 }
 #include "xir_cell_active_domain_cases.h"
@@ -239,7 +269,9 @@ static void cell_proof_indirect_ref(void) {
 #include "xir_cell_zero_tracked_cases.h"
 #include "xir_cell_class_fact_cases.h"
 #include "xir_cell_body_read_cases.h"
+#include "xir_cell_sink_receiving_cases.h"
 int main(void) {
+    cell_sink_receiving_cases();
     cell_body_read_cases();
     cell_class_fact_cases();
     cell_zero_tracked_cases();

@@ -17,6 +17,13 @@
 struct XrCompilerSession;
 struct XrLockfile;
 struct XrXirLibraryCatalog;
+/* A NULL request policy selects the compiler maximum. A present zero-byte
+ * policy admits only logically empty comptime results. Other quotas still
+ * belong to the original compiler ledger and evaluator limits. */
+typedef struct XrXirSourceComptimeLimits {
+    uint64_t output_bytes;
+} XrXirSourceComptimeLimits;
+
 typedef struct XrXirSourceRequest {
     struct XrCompilerSession *session;
     const char *entry_path;
@@ -27,6 +34,8 @@ typedef struct XrXirSourceRequest {
     struct XrLockfile *lockfile;
     XrXirLinkageKind linkage_kind;
     const struct XrXirLibraryCatalog *libraries;
+    /* Borrowed synchronously and copied before discovery or construction. */
+    const XrXirSourceComptimeLimits *comptime_limits;
 } XrXirSourceRequest;
 /* Failure preserves output. Optional failure_path must point to NULL. A
  * semantic failure with a known location transfers its already-owned UTF-8

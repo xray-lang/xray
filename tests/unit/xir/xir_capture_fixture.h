@@ -66,10 +66,10 @@ static XrXirArtifact *capture_checked(const XrXirCompileContext *context, bool t
         functions[5].blocks = blocks+2; functions[5].operands = &error_argument; functions[5].operand_count = 1;
     }
     XrXirGeneric generics[] = {{0},{0},{NULL,0,&concrete,1, NULL},{0},{0},{&constraint,1,NULL,0, NULL}};
-    XrXirSourceModule source = {"root",4,NULL,0,0, 0};
-    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}};
+    XrXirSourceModule source = {.name="root",.name_length=4};
+    XrXirFunctionIdentity identities[] = {{.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER}};
     XrXirLiteral literal = {"captured",8};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
+    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,6,&declarations,generics,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);

@@ -1,0 +1,2402 @@
+{
+  "bytes": 1360,
+  "sha256": "610b1c3c080e1ea5c8d34e5f142c8288d337bc96a29b0f231a22d325c747af3e",
+  "prior_profile_bytes": 1328,
+  "prior_field_offsets": {
+    "module.linkage": [
+      64,
+      4
+    ],
+    "module.functions.count": [
+      68,
+      4
+    ],
+    "module.declarations.present": [
+      72,
+      4
+    ],
+    "module.functions[0].name.length": [
+      76,
+      4
+    ],
+    "module.functions[0].name.bytes": [
+      80,
+      4
+    ],
+    "module.functions[0].parameters.count": [
+      84,
+      4
+    ],
+    "module.functions[0].result": [
+      88,
+      4
+    ],
+    "module.functions[0].blocks.count": [
+      92,
+      4
+    ],
+    "module.functions[0].blocks[0].first": [
+      96,
+      4
+    ],
+    "module.functions[0].blocks[0].count": [
+      100,
+      4
+    ],
+    "module.functions[0].blocks[0].panic": [
+      104,
+      4
+    ],
+    "module.functions[0].blocks[0].frontier": [
+      108,
+      4
+    ],
+    "module.functions[0].instructions.count": [
+      112,
+      4
+    ],
+    "module.functions[0].instructions[0].op": [
+      116,
+      4
+    ],
+    "module.functions[0].instructions[0].type": [
+      120,
+      4
+    ],
+    "module.functions[0].instructions[0].arg0": [
+      124,
+      4
+    ],
+    "module.functions[0].instructions[0].arg1": [
+      128,
+      4
+    ],
+    "module.functions[0].instructions[0].target0": [
+      132,
+      4
+    ],
+    "module.functions[0].instructions[0].target1": [
+      136,
+      4
+    ],
+    "module.functions[0].instructions[0].immediate": [
+      140,
+      8
+    ],
+    "module.functions[0].instructions[0].type_arg0": [
+      148,
+      4
+    ],
+    "module.functions[0].instructions[0].type_arg1": [
+      152,
+      4
+    ],
+    "module.functions[0].instructions[1].op": [
+      156,
+      4
+    ],
+    "module.functions[0].instructions[1].type": [
+      160,
+      4
+    ],
+    "module.functions[0].instructions[1].arg0": [
+      164,
+      4
+    ],
+    "module.functions[0].instructions[1].arg1": [
+      168,
+      4
+    ],
+    "module.functions[0].instructions[1].target0": [
+      172,
+      4
+    ],
+    "module.functions[0].instructions[1].target1": [
+      176,
+      4
+    ],
+    "module.functions[0].instructions[1].immediate": [
+      180,
+      8
+    ],
+    "module.functions[0].instructions[1].type_arg0": [
+      188,
+      4
+    ],
+    "module.functions[0].instructions[1].type_arg1": [
+      192,
+      4
+    ],
+    "module.functions[0].instructions[2].op": [
+      196,
+      4
+    ],
+    "module.functions[0].instructions[2].type": [
+      200,
+      4
+    ],
+    "module.functions[0].instructions[2].arg0": [
+      204,
+      4
+    ],
+    "module.functions[0].instructions[2].arg1": [
+      208,
+      4
+    ],
+    "module.functions[0].instructions[2].target0": [
+      212,
+      4
+    ],
+    "module.functions[0].instructions[2].target1": [
+      216,
+      4
+    ],
+    "module.functions[0].instructions[2].immediate": [
+      220,
+      8
+    ],
+    "module.functions[0].instructions[2].type_arg0": [
+      228,
+      4
+    ],
+    "module.functions[0].instructions[2].type_arg1": [
+      232,
+      4
+    ],
+    "module.functions[0].instructions[3].op": [
+      236,
+      4
+    ],
+    "module.functions[0].instructions[3].type": [
+      240,
+      4
+    ],
+    "module.functions[0].instructions[3].arg0": [
+      244,
+      4
+    ],
+    "module.functions[0].instructions[3].arg1": [
+      248,
+      4
+    ],
+    "module.functions[0].instructions[3].target0": [
+      252,
+      4
+    ],
+    "module.functions[0].instructions[3].target1": [
+      256,
+      4
+    ],
+    "module.functions[0].instructions[3].immediate": [
+      260,
+      8
+    ],
+    "module.functions[0].instructions[3].type_arg0": [
+      268,
+      4
+    ],
+    "module.functions[0].instructions[3].type_arg1": [
+      272,
+      4
+    ],
+    "module.functions[0].operands.count": [
+      276,
+      4
+    ],
+    "module.functions[1].name.length": [
+      280,
+      4
+    ],
+    "module.functions[1].name.bytes": [
+      284,
+      5
+    ],
+    "module.functions[1].parameters.count": [
+      289,
+      4
+    ],
+    "module.functions[1].result": [
+      293,
+      4
+    ],
+    "module.functions[1].blocks.count": [
+      297,
+      4
+    ],
+    "module.functions[1].blocks[0].first": [
+      301,
+      4
+    ],
+    "module.functions[1].blocks[0].count": [
+      305,
+      4
+    ],
+    "module.functions[1].blocks[0].panic": [
+      309,
+      4
+    ],
+    "module.functions[1].blocks[0].frontier": [
+      313,
+      4
+    ],
+    "module.functions[1].instructions.count": [
+      317,
+      4
+    ],
+    "module.functions[1].instructions[0].op": [
+      321,
+      4
+    ],
+    "module.functions[1].instructions[0].type": [
+      325,
+      4
+    ],
+    "module.functions[1].instructions[0].arg0": [
+      329,
+      4
+    ],
+    "module.functions[1].instructions[0].arg1": [
+      333,
+      4
+    ],
+    "module.functions[1].instructions[0].target0": [
+      337,
+      4
+    ],
+    "module.functions[1].instructions[0].target1": [
+      341,
+      4
+    ],
+    "module.functions[1].instructions[0].immediate": [
+      345,
+      8
+    ],
+    "module.functions[1].instructions[0].type_arg0": [
+      353,
+      4
+    ],
+    "module.functions[1].instructions[0].type_arg1": [
+      357,
+      4
+    ],
+    "module.functions[1].instructions[1].op": [
+      361,
+      4
+    ],
+    "module.functions[1].instructions[1].type": [
+      365,
+      4
+    ],
+    "module.functions[1].instructions[1].arg0": [
+      369,
+      4
+    ],
+    "module.functions[1].instructions[1].arg1": [
+      373,
+      4
+    ],
+    "module.functions[1].instructions[1].target0": [
+      377,
+      4
+    ],
+    "module.functions[1].instructions[1].target1": [
+      381,
+      4
+    ],
+    "module.functions[1].instructions[1].immediate": [
+      385,
+      8
+    ],
+    "module.functions[1].instructions[1].type_arg0": [
+      393,
+      4
+    ],
+    "module.functions[1].instructions[1].type_arg1": [
+      397,
+      4
+    ],
+    "module.functions[1].instructions[2].op": [
+      401,
+      4
+    ],
+    "module.functions[1].instructions[2].type": [
+      405,
+      4
+    ],
+    "module.functions[1].instructions[2].arg0": [
+      409,
+      4
+    ],
+    "module.functions[1].instructions[2].arg1": [
+      413,
+      4
+    ],
+    "module.functions[1].instructions[2].target0": [
+      417,
+      4
+    ],
+    "module.functions[1].instructions[2].target1": [
+      421,
+      4
+    ],
+    "module.functions[1].instructions[2].immediate": [
+      425,
+      8
+    ],
+    "module.functions[1].instructions[2].type_arg0": [
+      433,
+      4
+    ],
+    "module.functions[1].instructions[2].type_arg1": [
+      437,
+      4
+    ],
+    "module.functions[1].instructions[3].op": [
+      441,
+      4
+    ],
+    "module.functions[1].instructions[3].type": [
+      445,
+      4
+    ],
+    "module.functions[1].instructions[3].arg0": [
+      449,
+      4
+    ],
+    "module.functions[1].instructions[3].arg1": [
+      453,
+      4
+    ],
+    "module.functions[1].instructions[3].target0": [
+      457,
+      4
+    ],
+    "module.functions[1].instructions[3].target1": [
+      461,
+      4
+    ],
+    "module.functions[1].instructions[3].immediate": [
+      465,
+      8
+    ],
+    "module.functions[1].instructions[3].type_arg0": [
+      473,
+      4
+    ],
+    "module.functions[1].instructions[3].type_arg1": [
+      477,
+      4
+    ],
+    "module.functions[1].instructions[4].op": [
+      481,
+      4
+    ],
+    "module.functions[1].instructions[4].type": [
+      485,
+      4
+    ],
+    "module.functions[1].instructions[4].arg0": [
+      489,
+      4
+    ],
+    "module.functions[1].instructions[4].arg1": [
+      493,
+      4
+    ],
+    "module.functions[1].instructions[4].target0": [
+      497,
+      4
+    ],
+    "module.functions[1].instructions[4].target1": [
+      501,
+      4
+    ],
+    "module.functions[1].instructions[4].immediate": [
+      505,
+      8
+    ],
+    "module.functions[1].instructions[4].type_arg0": [
+      513,
+      4
+    ],
+    "module.functions[1].instructions[4].type_arg1": [
+      517,
+      4
+    ],
+    "module.functions[1].instructions[5].op": [
+      521,
+      4
+    ],
+    "module.functions[1].instructions[5].type": [
+      525,
+      4
+    ],
+    "module.functions[1].instructions[5].arg0": [
+      529,
+      4
+    ],
+    "module.functions[1].instructions[5].arg1": [
+      533,
+      4
+    ],
+    "module.functions[1].instructions[5].target0": [
+      537,
+      4
+    ],
+    "module.functions[1].instructions[5].target1": [
+      541,
+      4
+    ],
+    "module.functions[1].instructions[5].immediate": [
+      545,
+      8
+    ],
+    "module.functions[1].instructions[5].type_arg0": [
+      553,
+      4
+    ],
+    "module.functions[1].instructions[5].type_arg1": [
+      557,
+      4
+    ],
+    "module.functions[1].instructions[6].op": [
+      561,
+      4
+    ],
+    "module.functions[1].instructions[6].type": [
+      565,
+      4
+    ],
+    "module.functions[1].instructions[6].arg0": [
+      569,
+      4
+    ],
+    "module.functions[1].instructions[6].arg1": [
+      573,
+      4
+    ],
+    "module.functions[1].instructions[6].target0": [
+      577,
+      4
+    ],
+    "module.functions[1].instructions[6].target1": [
+      581,
+      4
+    ],
+    "module.functions[1].instructions[6].immediate": [
+      585,
+      8
+    ],
+    "module.functions[1].instructions[6].type_arg0": [
+      593,
+      4
+    ],
+    "module.functions[1].instructions[6].type_arg1": [
+      597,
+      4
+    ],
+    "module.functions[1].instructions[7].op": [
+      601,
+      4
+    ],
+    "module.functions[1].instructions[7].type": [
+      605,
+      4
+    ],
+    "module.functions[1].instructions[7].arg0": [
+      609,
+      4
+    ],
+    "module.functions[1].instructions[7].arg1": [
+      613,
+      4
+    ],
+    "module.functions[1].instructions[7].target0": [
+      617,
+      4
+    ],
+    "module.functions[1].instructions[7].target1": [
+      621,
+      4
+    ],
+    "module.functions[1].instructions[7].immediate": [
+      625,
+      8
+    ],
+    "module.functions[1].instructions[7].type_arg0": [
+      633,
+      4
+    ],
+    "module.functions[1].instructions[7].type_arg1": [
+      637,
+      4
+    ],
+    "module.functions[1].instructions[8].op": [
+      641,
+      4
+    ],
+    "module.functions[1].instructions[8].type": [
+      645,
+      4
+    ],
+    "module.functions[1].instructions[8].arg0": [
+      649,
+      4
+    ],
+    "module.functions[1].instructions[8].arg1": [
+      653,
+      4
+    ],
+    "module.functions[1].instructions[8].target0": [
+      657,
+      4
+    ],
+    "module.functions[1].instructions[8].target1": [
+      661,
+      4
+    ],
+    "module.functions[1].instructions[8].immediate": [
+      665,
+      8
+    ],
+    "module.functions[1].instructions[8].type_arg0": [
+      673,
+      4
+    ],
+    "module.functions[1].instructions[8].type_arg1": [
+      677,
+      4
+    ],
+    "module.functions[1].instructions[9].op": [
+      681,
+      4
+    ],
+    "module.functions[1].instructions[9].type": [
+      685,
+      4
+    ],
+    "module.functions[1].instructions[9].arg0": [
+      689,
+      4
+    ],
+    "module.functions[1].instructions[9].arg1": [
+      693,
+      4
+    ],
+    "module.functions[1].instructions[9].target0": [
+      697,
+      4
+    ],
+    "module.functions[1].instructions[9].target1": [
+      701,
+      4
+    ],
+    "module.functions[1].instructions[9].immediate": [
+      705,
+      8
+    ],
+    "module.functions[1].instructions[9].type_arg0": [
+      713,
+      4
+    ],
+    "module.functions[1].instructions[9].type_arg1": [
+      717,
+      4
+    ],
+    "module.functions[1].instructions[10].op": [
+      721,
+      4
+    ],
+    "module.functions[1].instructions[10].type": [
+      725,
+      4
+    ],
+    "module.functions[1].instructions[10].arg0": [
+      729,
+      4
+    ],
+    "module.functions[1].instructions[10].arg1": [
+      733,
+      4
+    ],
+    "module.functions[1].instructions[10].target0": [
+      737,
+      4
+    ],
+    "module.functions[1].instructions[10].target1": [
+      741,
+      4
+    ],
+    "module.functions[1].instructions[10].immediate": [
+      745,
+      8
+    ],
+    "module.functions[1].instructions[10].type_arg0": [
+      753,
+      4
+    ],
+    "module.functions[1].instructions[10].type_arg1": [
+      757,
+      4
+    ],
+    "module.functions[1].instructions[11].op": [
+      761,
+      4
+    ],
+    "module.functions[1].instructions[11].type": [
+      765,
+      4
+    ],
+    "module.functions[1].instructions[11].arg0": [
+      769,
+      4
+    ],
+    "module.functions[1].instructions[11].arg1": [
+      773,
+      4
+    ],
+    "module.functions[1].instructions[11].target0": [
+      777,
+      4
+    ],
+    "module.functions[1].instructions[11].target1": [
+      781,
+      4
+    ],
+    "module.functions[1].instructions[11].immediate": [
+      785,
+      8
+    ],
+    "module.functions[1].instructions[11].type_arg0": [
+      793,
+      4
+    ],
+    "module.functions[1].instructions[11].type_arg1": [
+      797,
+      4
+    ],
+    "module.functions[1].instructions[12].op": [
+      801,
+      4
+    ],
+    "module.functions[1].instructions[12].type": [
+      805,
+      4
+    ],
+    "module.functions[1].instructions[12].arg0": [
+      809,
+      4
+    ],
+    "module.functions[1].instructions[12].arg1": [
+      813,
+      4
+    ],
+    "module.functions[1].instructions[12].target0": [
+      817,
+      4
+    ],
+    "module.functions[1].instructions[12].target1": [
+      821,
+      4
+    ],
+    "module.functions[1].instructions[12].immediate": [
+      825,
+      8
+    ],
+    "module.functions[1].instructions[12].type_arg0": [
+      833,
+      4
+    ],
+    "module.functions[1].instructions[12].type_arg1": [
+      837,
+      4
+    ],
+    "module.functions[1].instructions[13].op": [
+      841,
+      4
+    ],
+    "module.functions[1].instructions[13].type": [
+      845,
+      4
+    ],
+    "module.functions[1].instructions[13].arg0": [
+      849,
+      4
+    ],
+    "module.functions[1].instructions[13].arg1": [
+      853,
+      4
+    ],
+    "module.functions[1].instructions[13].target0": [
+      857,
+      4
+    ],
+    "module.functions[1].instructions[13].target1": [
+      861,
+      4
+    ],
+    "module.functions[1].instructions[13].immediate": [
+      865,
+      8
+    ],
+    "module.functions[1].instructions[13].type_arg0": [
+      873,
+      4
+    ],
+    "module.functions[1].instructions[13].type_arg1": [
+      877,
+      4
+    ],
+    "module.functions[1].instructions[14].op": [
+      881,
+      4
+    ],
+    "module.functions[1].instructions[14].type": [
+      885,
+      4
+    ],
+    "module.functions[1].instructions[14].arg0": [
+      889,
+      4
+    ],
+    "module.functions[1].instructions[14].arg1": [
+      893,
+      4
+    ],
+    "module.functions[1].instructions[14].target0": [
+      897,
+      4
+    ],
+    "module.functions[1].instructions[14].target1": [
+      901,
+      4
+    ],
+    "module.functions[1].instructions[14].immediate": [
+      905,
+      8
+    ],
+    "module.functions[1].instructions[14].type_arg0": [
+      913,
+      4
+    ],
+    "module.functions[1].instructions[14].type_arg1": [
+      917,
+      4
+    ],
+    "module.functions[1].operands.count": [
+      921,
+      4
+    ],
+    "module.functions[1].operands[0]": [
+      925,
+      4
+    ],
+    "module.functions[1].operands[1]": [
+      929,
+      4
+    ],
+    "module.functions[1].operands[2]": [
+      933,
+      4
+    ],
+    "module.functions[1].operands[3]": [
+      937,
+      4
+    ],
+    "module.functions[1].operands[4]": [
+      941,
+      4
+    ],
+    "module.functions[2].name.length": [
+      945,
+      4
+    ],
+    "module.functions[2].name.bytes": [
+      949,
+      4
+    ],
+    "module.functions[2].parameters.count": [
+      953,
+      4
+    ],
+    "module.functions[2].parameters[0]": [
+      957,
+      4
+    ],
+    "module.functions[2].result": [
+      961,
+      4
+    ],
+    "module.functions[2].blocks.count": [
+      965,
+      4
+    ],
+    "module.functions[2].blocks[0].first": [
+      969,
+      4
+    ],
+    "module.functions[2].blocks[0].count": [
+      973,
+      4
+    ],
+    "module.functions[2].blocks[0].panic": [
+      977,
+      4
+    ],
+    "module.functions[2].blocks[0].frontier": [
+      981,
+      4
+    ],
+    "module.functions[2].instructions.count": [
+      985,
+      4
+    ],
+    "module.functions[2].instructions[0].op": [
+      989,
+      4
+    ],
+    "module.functions[2].instructions[0].type": [
+      993,
+      4
+    ],
+    "module.functions[2].instructions[0].arg0": [
+      997,
+      4
+    ],
+    "module.functions[2].instructions[0].arg1": [
+      1001,
+      4
+    ],
+    "module.functions[2].instructions[0].target0": [
+      1005,
+      4
+    ],
+    "module.functions[2].instructions[0].target1": [
+      1009,
+      4
+    ],
+    "module.functions[2].instructions[0].immediate": [
+      1013,
+      8
+    ],
+    "module.functions[2].instructions[0].type_arg0": [
+      1021,
+      4
+    ],
+    "module.functions[2].instructions[0].type_arg1": [
+      1025,
+      4
+    ],
+    "module.functions[2].instructions[1].op": [
+      1029,
+      4
+    ],
+    "module.functions[2].instructions[1].type": [
+      1033,
+      4
+    ],
+    "module.functions[2].instructions[1].arg0": [
+      1037,
+      4
+    ],
+    "module.functions[2].instructions[1].arg1": [
+      1041,
+      4
+    ],
+    "module.functions[2].instructions[1].target0": [
+      1045,
+      4
+    ],
+    "module.functions[2].instructions[1].target1": [
+      1049,
+      4
+    ],
+    "module.functions[2].instructions[1].immediate": [
+      1053,
+      8
+    ],
+    "module.functions[2].instructions[1].type_arg0": [
+      1061,
+      4
+    ],
+    "module.functions[2].instructions[1].type_arg1": [
+      1065,
+      4
+    ],
+    "module.functions[2].operands.count": [
+      1069,
+      4
+    ],
+    "module.declarations.modules.count": [
+      1073,
+      4
+    ],
+    "module.declarations.slots.count": [
+      1077,
+      4
+    ],
+    "module.declarations.literals.count": [
+      1081,
+      4
+    ],
+    "module.declarations.root": [
+      1085,
+      4
+    ],
+    "module.declarations.entry": [
+      1089,
+      4
+    ],
+    "module.declarations.modules[0].name.length": [
+      1093,
+      4
+    ],
+    "module.declarations.modules[0].name.bytes": [
+      1097,
+      3
+    ],
+    "module.declarations.modules[0].dependencies.count": [
+      1100,
+      4
+    ],
+    "module.declarations.modules[0].initializer": [
+      1104,
+      4
+    ],
+    "module.declarations.modules[0].lexical_scope": [
+      1108,
+      4
+    ],
+    "module.declarations.identities[0].module": [
+      1112,
+      4
+    ],
+    "module.declarations.identities[0].exported": [
+      1116,
+      4
+    ],
+    "module.declarations.identities[0].nominal_owner": [
+      1120,
+      4
+    ],
+    "module.declarations.identities[0].member_access": [
+      1124,
+      4
+    ],
+    "module.declarations.identities[0].cleanup_owner": [
+      1128,
+      4
+    ],
+    "module.declarations.identities[0].promises": [
+      1132,
+      4
+    ],
+    "module.declarations.identities[0].method_kind": [
+      1136,
+      4
+    ],
+    "module.declarations.identities[0].test_role": [
+      1140,
+      4
+    ],
+    "module.declarations.identities[0].test_timeout_seconds": [
+      1144,
+      4
+    ],
+    "module.declarations.identities[0].variadic": [
+      1148,
+      4
+    ],
+    "module.declarations.identities[1].module": [
+      1152,
+      4
+    ],
+    "module.declarations.identities[1].exported": [
+      1156,
+      4
+    ],
+    "module.declarations.identities[1].nominal_owner": [
+      1160,
+      4
+    ],
+    "module.declarations.identities[1].member_access": [
+      1164,
+      4
+    ],
+    "module.declarations.identities[1].cleanup_owner": [
+      1168,
+      4
+    ],
+    "module.declarations.identities[1].promises": [
+      1172,
+      4
+    ],
+    "module.declarations.identities[1].method_kind": [
+      1176,
+      4
+    ],
+    "module.declarations.identities[1].test_role": [
+      1180,
+      4
+    ],
+    "module.declarations.identities[1].test_timeout_seconds": [
+      1184,
+      4
+    ],
+    "module.declarations.identities[1].variadic": [
+      1188,
+      4
+    ],
+    "module.declarations.identities[2].module": [
+      1192,
+      4
+    ],
+    "module.declarations.identities[2].exported": [
+      1196,
+      4
+    ],
+    "module.declarations.identities[2].nominal_owner": [
+      1200,
+      4
+    ],
+    "module.declarations.identities[2].member_access": [
+      1204,
+      4
+    ],
+    "module.declarations.identities[2].cleanup_owner": [
+      1208,
+      4
+    ],
+    "module.declarations.identities[2].promises": [
+      1212,
+      4
+    ],
+    "module.declarations.identities[2].method_kind": [
+      1216,
+      4
+    ],
+    "module.declarations.identities[2].test_role": [
+      1220,
+      4
+    ],
+    "module.declarations.identities[2].test_timeout_seconds": [
+      1224,
+      4
+    ],
+    "module.declarations.identities[2].variadic": [
+      1228,
+      4
+    ],
+    "module.declarations.slots[0].module": [
+      1232,
+      4
+    ],
+    "module.declarations.slots[0].type": [
+      1236,
+      4
+    ],
+    "module.declarations.slots[0].mutable": [
+      1240,
+      4
+    ],
+    "module.declarations.slots[0].exported": [
+      1244,
+      4
+    ],
+    "module.declarations.slots[0].name": [
+      1248,
+      4
+    ],
+    "module.declarations.implementations.count": [
+      1252,
+      4
+    ],
+    "module.generics.present": [
+      1256,
+      4
+    ],
+    "module.nodes.count": [
+      1260,
+      4
+    ],
+    "module.nominals.count": [
+      1264,
+      4
+    ],
+    "module.interfaces.count": [
+      1268,
+      4
+    ],
+    "module.nodes[0].kind": [
+      1272,
+      4
+    ],
+    "module.nodes[0].span": [
+      1276,
+      4
+    ],
+    "module.nodes[0].element": [
+      1280,
+      4
+    ],
+    "module.nodes[1].kind": [
+      1284,
+      4
+    ],
+    "module.nodes[1].span": [
+      1288,
+      4
+    ],
+    "module.nodes[1].element": [
+      1292,
+      4
+    ],
+    "module.nodes[2].kind": [
+      1296,
+      4
+    ],
+    "module.nodes[2].span": [
+      1300,
+      4
+    ],
+    "module.nodes[2].parameters.count": [
+      1304,
+      4
+    ],
+    "module.nodes[2].result": [
+      1308,
+      4
+    ],
+    "module.nodes[2].flags": [
+      1312,
+      4
+    ],
+    "module.construction.count": [
+      1316,
+      4
+    ],
+    "module.defaults.count": [
+      1320,
+      4
+    ],
+    "module.provenance.kind": [
+      1324,
+      4
+    ]
+  },
+  "field_offsets": {
+    "module.linkage": [
+      64,
+      4
+    ],
+    "module.functions.count": [
+      68,
+      4
+    ],
+    "module.declarations.present": [
+      72,
+      4
+    ],
+    "module.functions[0].name.length": [
+      76,
+      4
+    ],
+    "module.functions[0].name.bytes": [
+      80,
+      4
+    ],
+    "module.functions[0].parameters.count": [
+      84,
+      4
+    ],
+    "module.functions[0].result": [
+      88,
+      4
+    ],
+    "module.functions[0].blocks.count": [
+      92,
+      4
+    ],
+    "module.functions[0].blocks[0].first": [
+      96,
+      4
+    ],
+    "module.functions[0].blocks[0].count": [
+      100,
+      4
+    ],
+    "module.functions[0].blocks[0].panic": [
+      104,
+      4
+    ],
+    "module.functions[0].blocks[0].frontier": [
+      108,
+      4
+    ],
+    "module.functions[0].instructions.count": [
+      112,
+      4
+    ],
+    "module.functions[0].instructions[0].op": [
+      116,
+      4
+    ],
+    "module.functions[0].instructions[0].type": [
+      120,
+      4
+    ],
+    "module.functions[0].instructions[0].arg0": [
+      124,
+      4
+    ],
+    "module.functions[0].instructions[0].arg1": [
+      128,
+      4
+    ],
+    "module.functions[0].instructions[0].target0": [
+      132,
+      4
+    ],
+    "module.functions[0].instructions[0].target1": [
+      136,
+      4
+    ],
+    "module.functions[0].instructions[0].immediate": [
+      140,
+      8
+    ],
+    "module.functions[0].instructions[0].type_arg0": [
+      148,
+      4
+    ],
+    "module.functions[0].instructions[0].type_arg1": [
+      152,
+      4
+    ],
+    "module.functions[0].instructions[1].op": [
+      156,
+      4
+    ],
+    "module.functions[0].instructions[1].type": [
+      160,
+      4
+    ],
+    "module.functions[0].instructions[1].arg0": [
+      164,
+      4
+    ],
+    "module.functions[0].instructions[1].arg1": [
+      168,
+      4
+    ],
+    "module.functions[0].instructions[1].target0": [
+      172,
+      4
+    ],
+    "module.functions[0].instructions[1].target1": [
+      176,
+      4
+    ],
+    "module.functions[0].instructions[1].immediate": [
+      180,
+      8
+    ],
+    "module.functions[0].instructions[1].type_arg0": [
+      188,
+      4
+    ],
+    "module.functions[0].instructions[1].type_arg1": [
+      192,
+      4
+    ],
+    "module.functions[0].instructions[2].op": [
+      196,
+      4
+    ],
+    "module.functions[0].instructions[2].type": [
+      200,
+      4
+    ],
+    "module.functions[0].instructions[2].arg0": [
+      204,
+      4
+    ],
+    "module.functions[0].instructions[2].arg1": [
+      208,
+      4
+    ],
+    "module.functions[0].instructions[2].target0": [
+      212,
+      4
+    ],
+    "module.functions[0].instructions[2].target1": [
+      216,
+      4
+    ],
+    "module.functions[0].instructions[2].immediate": [
+      220,
+      8
+    ],
+    "module.functions[0].instructions[2].type_arg0": [
+      228,
+      4
+    ],
+    "module.functions[0].instructions[2].type_arg1": [
+      232,
+      4
+    ],
+    "module.functions[0].instructions[3].op": [
+      236,
+      4
+    ],
+    "module.functions[0].instructions[3].type": [
+      240,
+      4
+    ],
+    "module.functions[0].instructions[3].arg0": [
+      244,
+      4
+    ],
+    "module.functions[0].instructions[3].arg1": [
+      248,
+      4
+    ],
+    "module.functions[0].instructions[3].target0": [
+      252,
+      4
+    ],
+    "module.functions[0].instructions[3].target1": [
+      256,
+      4
+    ],
+    "module.functions[0].instructions[3].immediate": [
+      260,
+      8
+    ],
+    "module.functions[0].instructions[3].type_arg0": [
+      268,
+      4
+    ],
+    "module.functions[0].instructions[3].type_arg1": [
+      272,
+      4
+    ],
+    "module.functions[0].operands.count": [
+      276,
+      4
+    ],
+    "module.functions[1].name.length": [
+      280,
+      4
+    ],
+    "module.functions[1].name.bytes": [
+      284,
+      5
+    ],
+    "module.functions[1].parameters.count": [
+      289,
+      4
+    ],
+    "module.functions[1].result": [
+      293,
+      4
+    ],
+    "module.functions[1].blocks.count": [
+      297,
+      4
+    ],
+    "module.functions[1].blocks[0].first": [
+      301,
+      4
+    ],
+    "module.functions[1].blocks[0].count": [
+      305,
+      4
+    ],
+    "module.functions[1].blocks[0].panic": [
+      309,
+      4
+    ],
+    "module.functions[1].blocks[0].frontier": [
+      313,
+      4
+    ],
+    "module.functions[1].instructions.count": [
+      317,
+      4
+    ],
+    "module.functions[1].instructions[0].op": [
+      321,
+      4
+    ],
+    "module.functions[1].instructions[0].type": [
+      325,
+      4
+    ],
+    "module.functions[1].instructions[0].arg0": [
+      329,
+      4
+    ],
+    "module.functions[1].instructions[0].arg1": [
+      333,
+      4
+    ],
+    "module.functions[1].instructions[0].target0": [
+      337,
+      4
+    ],
+    "module.functions[1].instructions[0].target1": [
+      341,
+      4
+    ],
+    "module.functions[1].instructions[0].immediate": [
+      345,
+      8
+    ],
+    "module.functions[1].instructions[0].type_arg0": [
+      353,
+      4
+    ],
+    "module.functions[1].instructions[0].type_arg1": [
+      357,
+      4
+    ],
+    "module.functions[1].instructions[1].op": [
+      361,
+      4
+    ],
+    "module.functions[1].instructions[1].type": [
+      365,
+      4
+    ],
+    "module.functions[1].instructions[1].arg0": [
+      369,
+      4
+    ],
+    "module.functions[1].instructions[1].arg1": [
+      373,
+      4
+    ],
+    "module.functions[1].instructions[1].target0": [
+      377,
+      4
+    ],
+    "module.functions[1].instructions[1].target1": [
+      381,
+      4
+    ],
+    "module.functions[1].instructions[1].immediate": [
+      385,
+      8
+    ],
+    "module.functions[1].instructions[1].type_arg0": [
+      393,
+      4
+    ],
+    "module.functions[1].instructions[1].type_arg1": [
+      397,
+      4
+    ],
+    "module.functions[1].instructions[2].op": [
+      401,
+      4
+    ],
+    "module.functions[1].instructions[2].type": [
+      405,
+      4
+    ],
+    "module.functions[1].instructions[2].arg0": [
+      409,
+      4
+    ],
+    "module.functions[1].instructions[2].arg1": [
+      413,
+      4
+    ],
+    "module.functions[1].instructions[2].target0": [
+      417,
+      4
+    ],
+    "module.functions[1].instructions[2].target1": [
+      421,
+      4
+    ],
+    "module.functions[1].instructions[2].immediate": [
+      425,
+      8
+    ],
+    "module.functions[1].instructions[2].type_arg0": [
+      433,
+      4
+    ],
+    "module.functions[1].instructions[2].type_arg1": [
+      437,
+      4
+    ],
+    "module.functions[1].instructions[3].op": [
+      441,
+      4
+    ],
+    "module.functions[1].instructions[3].type": [
+      445,
+      4
+    ],
+    "module.functions[1].instructions[3].arg0": [
+      449,
+      4
+    ],
+    "module.functions[1].instructions[3].arg1": [
+      453,
+      4
+    ],
+    "module.functions[1].instructions[3].target0": [
+      457,
+      4
+    ],
+    "module.functions[1].instructions[3].target1": [
+      461,
+      4
+    ],
+    "module.functions[1].instructions[3].immediate": [
+      465,
+      8
+    ],
+    "module.functions[1].instructions[3].type_arg0": [
+      473,
+      4
+    ],
+    "module.functions[1].instructions[3].type_arg1": [
+      477,
+      4
+    ],
+    "module.functions[1].instructions[4].op": [
+      481,
+      4
+    ],
+    "module.functions[1].instructions[4].type": [
+      485,
+      4
+    ],
+    "module.functions[1].instructions[4].arg0": [
+      489,
+      4
+    ],
+    "module.functions[1].instructions[4].arg1": [
+      493,
+      4
+    ],
+    "module.functions[1].instructions[4].target0": [
+      497,
+      4
+    ],
+    "module.functions[1].instructions[4].target1": [
+      501,
+      4
+    ],
+    "module.functions[1].instructions[4].immediate": [
+      505,
+      8
+    ],
+    "module.functions[1].instructions[4].type_arg0": [
+      513,
+      4
+    ],
+    "module.functions[1].instructions[4].type_arg1": [
+      517,
+      4
+    ],
+    "module.functions[1].instructions[5].op": [
+      521,
+      4
+    ],
+    "module.functions[1].instructions[5].type": [
+      525,
+      4
+    ],
+    "module.functions[1].instructions[5].arg0": [
+      529,
+      4
+    ],
+    "module.functions[1].instructions[5].arg1": [
+      533,
+      4
+    ],
+    "module.functions[1].instructions[5].target0": [
+      537,
+      4
+    ],
+    "module.functions[1].instructions[5].target1": [
+      541,
+      4
+    ],
+    "module.functions[1].instructions[5].immediate": [
+      545,
+      8
+    ],
+    "module.functions[1].instructions[5].type_arg0": [
+      553,
+      4
+    ],
+    "module.functions[1].instructions[5].type_arg1": [
+      557,
+      4
+    ],
+    "module.functions[1].instructions[6].op": [
+      561,
+      4
+    ],
+    "module.functions[1].instructions[6].type": [
+      565,
+      4
+    ],
+    "module.functions[1].instructions[6].arg0": [
+      569,
+      4
+    ],
+    "module.functions[1].instructions[6].arg1": [
+      573,
+      4
+    ],
+    "module.functions[1].instructions[6].target0": [
+      577,
+      4
+    ],
+    "module.functions[1].instructions[6].target1": [
+      581,
+      4
+    ],
+    "module.functions[1].instructions[6].immediate": [
+      585,
+      8
+    ],
+    "module.functions[1].instructions[6].type_arg0": [
+      593,
+      4
+    ],
+    "module.functions[1].instructions[6].type_arg1": [
+      597,
+      4
+    ],
+    "module.functions[1].instructions[7].op": [
+      601,
+      4
+    ],
+    "module.functions[1].instructions[7].type": [
+      605,
+      4
+    ],
+    "module.functions[1].instructions[7].arg0": [
+      609,
+      4
+    ],
+    "module.functions[1].instructions[7].arg1": [
+      613,
+      4
+    ],
+    "module.functions[1].instructions[7].target0": [
+      617,
+      4
+    ],
+    "module.functions[1].instructions[7].target1": [
+      621,
+      4
+    ],
+    "module.functions[1].instructions[7].immediate": [
+      625,
+      8
+    ],
+    "module.functions[1].instructions[7].type_arg0": [
+      633,
+      4
+    ],
+    "module.functions[1].instructions[7].type_arg1": [
+      637,
+      4
+    ],
+    "module.functions[1].instructions[8].op": [
+      641,
+      4
+    ],
+    "module.functions[1].instructions[8].type": [
+      645,
+      4
+    ],
+    "module.functions[1].instructions[8].arg0": [
+      649,
+      4
+    ],
+    "module.functions[1].instructions[8].arg1": [
+      653,
+      4
+    ],
+    "module.functions[1].instructions[8].target0": [
+      657,
+      4
+    ],
+    "module.functions[1].instructions[8].target1": [
+      661,
+      4
+    ],
+    "module.functions[1].instructions[8].immediate": [
+      665,
+      8
+    ],
+    "module.functions[1].instructions[8].type_arg0": [
+      673,
+      4
+    ],
+    "module.functions[1].instructions[8].type_arg1": [
+      677,
+      4
+    ],
+    "module.functions[1].instructions[9].op": [
+      681,
+      4
+    ],
+    "module.functions[1].instructions[9].type": [
+      685,
+      4
+    ],
+    "module.functions[1].instructions[9].arg0": [
+      689,
+      4
+    ],
+    "module.functions[1].instructions[9].arg1": [
+      693,
+      4
+    ],
+    "module.functions[1].instructions[9].target0": [
+      697,
+      4
+    ],
+    "module.functions[1].instructions[9].target1": [
+      701,
+      4
+    ],
+    "module.functions[1].instructions[9].immediate": [
+      705,
+      8
+    ],
+    "module.functions[1].instructions[9].type_arg0": [
+      713,
+      4
+    ],
+    "module.functions[1].instructions[9].type_arg1": [
+      717,
+      4
+    ],
+    "module.functions[1].instructions[10].op": [
+      721,
+      4
+    ],
+    "module.functions[1].instructions[10].type": [
+      725,
+      4
+    ],
+    "module.functions[1].instructions[10].arg0": [
+      729,
+      4
+    ],
+    "module.functions[1].instructions[10].arg1": [
+      733,
+      4
+    ],
+    "module.functions[1].instructions[10].target0": [
+      737,
+      4
+    ],
+    "module.functions[1].instructions[10].target1": [
+      741,
+      4
+    ],
+    "module.functions[1].instructions[10].immediate": [
+      745,
+      8
+    ],
+    "module.functions[1].instructions[10].type_arg0": [
+      753,
+      4
+    ],
+    "module.functions[1].instructions[10].type_arg1": [
+      757,
+      4
+    ],
+    "module.functions[1].instructions[11].op": [
+      761,
+      4
+    ],
+    "module.functions[1].instructions[11].type": [
+      765,
+      4
+    ],
+    "module.functions[1].instructions[11].arg0": [
+      769,
+      4
+    ],
+    "module.functions[1].instructions[11].arg1": [
+      773,
+      4
+    ],
+    "module.functions[1].instructions[11].target0": [
+      777,
+      4
+    ],
+    "module.functions[1].instructions[11].target1": [
+      781,
+      4
+    ],
+    "module.functions[1].instructions[11].immediate": [
+      785,
+      8
+    ],
+    "module.functions[1].instructions[11].type_arg0": [
+      793,
+      4
+    ],
+    "module.functions[1].instructions[11].type_arg1": [
+      797,
+      4
+    ],
+    "module.functions[1].instructions[12].op": [
+      801,
+      4
+    ],
+    "module.functions[1].instructions[12].type": [
+      805,
+      4
+    ],
+    "module.functions[1].instructions[12].arg0": [
+      809,
+      4
+    ],
+    "module.functions[1].instructions[12].arg1": [
+      813,
+      4
+    ],
+    "module.functions[1].instructions[12].target0": [
+      817,
+      4
+    ],
+    "module.functions[1].instructions[12].target1": [
+      821,
+      4
+    ],
+    "module.functions[1].instructions[12].immediate": [
+      825,
+      8
+    ],
+    "module.functions[1].instructions[12].type_arg0": [
+      833,
+      4
+    ],
+    "module.functions[1].instructions[12].type_arg1": [
+      837,
+      4
+    ],
+    "module.functions[1].instructions[13].op": [
+      841,
+      4
+    ],
+    "module.functions[1].instructions[13].type": [
+      845,
+      4
+    ],
+    "module.functions[1].instructions[13].arg0": [
+      849,
+      4
+    ],
+    "module.functions[1].instructions[13].arg1": [
+      853,
+      4
+    ],
+    "module.functions[1].instructions[13].target0": [
+      857,
+      4
+    ],
+    "module.functions[1].instructions[13].target1": [
+      861,
+      4
+    ],
+    "module.functions[1].instructions[13].immediate": [
+      865,
+      8
+    ],
+    "module.functions[1].instructions[13].type_arg0": [
+      873,
+      4
+    ],
+    "module.functions[1].instructions[13].type_arg1": [
+      877,
+      4
+    ],
+    "module.functions[1].instructions[14].op": [
+      881,
+      4
+    ],
+    "module.functions[1].instructions[14].type": [
+      885,
+      4
+    ],
+    "module.functions[1].instructions[14].arg0": [
+      889,
+      4
+    ],
+    "module.functions[1].instructions[14].arg1": [
+      893,
+      4
+    ],
+    "module.functions[1].instructions[14].target0": [
+      897,
+      4
+    ],
+    "module.functions[1].instructions[14].target1": [
+      901,
+      4
+    ],
+    "module.functions[1].instructions[14].immediate": [
+      905,
+      8
+    ],
+    "module.functions[1].instructions[14].type_arg0": [
+      913,
+      4
+    ],
+    "module.functions[1].instructions[14].type_arg1": [
+      917,
+      4
+    ],
+    "module.functions[1].operands.count": [
+      921,
+      4
+    ],
+    "module.functions[1].operands[0]": [
+      925,
+      4
+    ],
+    "module.functions[1].operands[1]": [
+      929,
+      4
+    ],
+    "module.functions[1].operands[2]": [
+      933,
+      4
+    ],
+    "module.functions[1].operands[3]": [
+      937,
+      4
+    ],
+    "module.functions[1].operands[4]": [
+      941,
+      4
+    ],
+    "module.functions[2].name.length": [
+      945,
+      4
+    ],
+    "module.functions[2].name.bytes": [
+      949,
+      4
+    ],
+    "module.functions[2].parameters.count": [
+      953,
+      4
+    ],
+    "module.functions[2].parameters[0]": [
+      957,
+      4
+    ],
+    "module.functions[2].result": [
+      961,
+      4
+    ],
+    "module.functions[2].blocks.count": [
+      965,
+      4
+    ],
+    "module.functions[2].blocks[0].first": [
+      969,
+      4
+    ],
+    "module.functions[2].blocks[0].count": [
+      973,
+      4
+    ],
+    "module.functions[2].blocks[0].panic": [
+      977,
+      4
+    ],
+    "module.functions[2].blocks[0].frontier": [
+      981,
+      4
+    ],
+    "module.functions[2].instructions.count": [
+      985,
+      4
+    ],
+    "module.functions[2].instructions[0].op": [
+      989,
+      4
+    ],
+    "module.functions[2].instructions[0].type": [
+      993,
+      4
+    ],
+    "module.functions[2].instructions[0].arg0": [
+      997,
+      4
+    ],
+    "module.functions[2].instructions[0].arg1": [
+      1001,
+      4
+    ],
+    "module.functions[2].instructions[0].target0": [
+      1005,
+      4
+    ],
+    "module.functions[2].instructions[0].target1": [
+      1009,
+      4
+    ],
+    "module.functions[2].instructions[0].immediate": [
+      1013,
+      8
+    ],
+    "module.functions[2].instructions[0].type_arg0": [
+      1021,
+      4
+    ],
+    "module.functions[2].instructions[0].type_arg1": [
+      1025,
+      4
+    ],
+    "module.functions[2].instructions[1].op": [
+      1029,
+      4
+    ],
+    "module.functions[2].instructions[1].type": [
+      1033,
+      4
+    ],
+    "module.functions[2].instructions[1].arg0": [
+      1037,
+      4
+    ],
+    "module.functions[2].instructions[1].arg1": [
+      1041,
+      4
+    ],
+    "module.functions[2].instructions[1].target0": [
+      1045,
+      4
+    ],
+    "module.functions[2].instructions[1].target1": [
+      1049,
+      4
+    ],
+    "module.functions[2].instructions[1].immediate": [
+      1053,
+      8
+    ],
+    "module.functions[2].instructions[1].type_arg0": [
+      1061,
+      4
+    ],
+    "module.functions[2].instructions[1].type_arg1": [
+      1065,
+      4
+    ],
+    "module.functions[2].operands.count": [
+      1069,
+      4
+    ],
+    "module.declarations.modules.count": [
+      1073,
+      4
+    ],
+    "module.declarations.slots.count": [
+      1077,
+      4
+    ],
+    "module.declarations.literals.count": [
+      1081,
+      4
+    ],
+    "module.declarations.root": [
+      1085,
+      4
+    ],
+    "module.declarations.entry": [
+      1089,
+      4
+    ],
+    "module.declarations.modules[0].name.length": [
+      1093,
+      4
+    ],
+    "module.declarations.modules[0].name.bytes": [
+      1097,
+      3
+    ],
+    "module.declarations.modules[0].dependencies.count": [
+      1100,
+      4
+    ],
+    "module.declarations.modules[0].initializer": [
+      1104,
+      4
+    ],
+    "module.declarations.modules[0].lexical_scope": [
+      1108,
+      4
+    ],
+    "module.declarations.identities[0].module": [
+      1112,
+      4
+    ],
+    "module.declarations.identities[0].exported": [
+      1116,
+      4
+    ],
+    "module.declarations.identities[0].nominal_owner": [
+      1120,
+      4
+    ],
+    "module.declarations.identities[0].member_access": [
+      1124,
+      4
+    ],
+    "module.declarations.identities[0].cleanup_owner": [
+      1128,
+      4
+    ],
+    "module.declarations.identities[0].promises": [
+      1132,
+      4
+    ],
+    "module.declarations.identities[0].method_kind": [
+      1136,
+      4
+    ],
+    "module.declarations.identities[0].test_role": [
+      1140,
+      4
+    ],
+    "module.declarations.identities[0].test_timeout_seconds": [
+      1144,
+      4
+    ],
+    "module.declarations.identities[0].variadic": [
+      1148,
+      4
+    ],
+    "module.declarations.identities[0].derivation": [
+      1152,
+      4
+    ],
+    "module.declarations.identities[1].module": [
+      1156,
+      4
+    ],
+    "module.declarations.identities[1].exported": [
+      1160,
+      4
+    ],
+    "module.declarations.identities[1].nominal_owner": [
+      1164,
+      4
+    ],
+    "module.declarations.identities[1].member_access": [
+      1168,
+      4
+    ],
+    "module.declarations.identities[1].cleanup_owner": [
+      1172,
+      4
+    ],
+    "module.declarations.identities[1].promises": [
+      1176,
+      4
+    ],
+    "module.declarations.identities[1].method_kind": [
+      1180,
+      4
+    ],
+    "module.declarations.identities[1].test_role": [
+      1184,
+      4
+    ],
+    "module.declarations.identities[1].test_timeout_seconds": [
+      1188,
+      4
+    ],
+    "module.declarations.identities[1].variadic": [
+      1192,
+      4
+    ],
+    "module.declarations.identities[1].derivation": [
+      1196,
+      4
+    ],
+    "module.declarations.identities[2].module": [
+      1200,
+      4
+    ],
+    "module.declarations.identities[2].exported": [
+      1204,
+      4
+    ],
+    "module.declarations.identities[2].nominal_owner": [
+      1208,
+      4
+    ],
+    "module.declarations.identities[2].member_access": [
+      1212,
+      4
+    ],
+    "module.declarations.identities[2].cleanup_owner": [
+      1216,
+      4
+    ],
+    "module.declarations.identities[2].promises": [
+      1220,
+      4
+    ],
+    "module.declarations.identities[2].method_kind": [
+      1224,
+      4
+    ],
+    "module.declarations.identities[2].test_role": [
+      1228,
+      4
+    ],
+    "module.declarations.identities[2].test_timeout_seconds": [
+      1232,
+      4
+    ],
+    "module.declarations.identities[2].variadic": [
+      1236,
+      4
+    ],
+    "module.declarations.identities[2].derivation": [
+      1240,
+      4
+    ],
+    "module.declarations.slots[0].module": [
+      1244,
+      4
+    ],
+    "module.declarations.slots[0].type": [
+      1248,
+      4
+    ],
+    "module.declarations.slots[0].mutable": [
+      1252,
+      4
+    ],
+    "module.declarations.slots[0].exported": [
+      1256,
+      4
+    ],
+    "module.declarations.slots[0].name": [
+      1260,
+      4
+    ],
+    "module.declarations.implementations.count": [
+      1264,
+      4
+    ],
+    "module.declarations.policies.count": [
+      1268,
+      4
+    ],
+    "module.declarations.grants.count": [
+      1272,
+      4
+    ],
+    "module.generics.present": [
+      1276,
+      4
+    ],
+    "module.nodes.count": [
+      1280,
+      4
+    ],
+    "module.nominals.count": [
+      1284,
+      4
+    ],
+    "module.interfaces.count": [
+      1288,
+      4
+    ],
+    "module.nodes[0].kind": [
+      1292,
+      4
+    ],
+    "module.nodes[0].span": [
+      1296,
+      4
+    ],
+    "module.nodes[0].element": [
+      1300,
+      4
+    ],
+    "module.nodes[1].kind": [
+      1304,
+      4
+    ],
+    "module.nodes[1].span": [
+      1308,
+      4
+    ],
+    "module.nodes[1].element": [
+      1312,
+      4
+    ],
+    "module.nodes[2].kind": [
+      1316,
+      4
+    ],
+    "module.nodes[2].span": [
+      1320,
+      4
+    ],
+    "module.nodes[2].parameters.count": [
+      1324,
+      4
+    ],
+    "module.nodes[2].result": [
+      1328,
+      4
+    ],
+    "module.nodes[2].flags": [
+      1332,
+      4
+    ],
+    "module.construction.count": [
+      1336,
+      4
+    ],
+    "module.materialization.count": [
+      1340,
+      4
+    ],
+    "module.comptime_sites.count": [
+      1344,
+      4
+    ],
+    "module.comptime_bindings.count": [
+      1348,
+      4
+    ],
+    "module.defaults.count": [
+      1352,
+      4
+    ],
+    "module.provenance.kind": [
+      1356,
+      4
+    ]
+  },
+  "product_writer_used": false
+}

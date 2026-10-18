@@ -106,26 +106,17 @@ static XrXirStatus effect_root_callable(const EffectRootSeedRecord *request,XrXi
 }
 /* Explicit classification makes a newly executing opcode fail closed until its
  * authority rule is recorded, even when control effects already know it. */
-static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,XrXirRootEffects *facts,
-    XrXirRootEffectWitness *required,XrXirRootEffectWitness *unresolved,
-    const XrXirCompileContext *work) {
-    if (!request || !request->domain || !request->instruction || !facts || !required || !unresolved ||
-        request->function>=request->domain->function_count)
-        return XR_XIR_BAD_STRUCTURE;
-    uint32_t i=request->ordinal;
-    const XrXirInstruction *op=request->instruction;
-    switch (op->op) {
+typedef enum EffectRootSeedRule {
+    EFFECT_ROOT_SEED_INVALID, EFFECT_ROOT_SEED_NONE, EFFECT_ROOT_SEED_SLOT,
+    EFFECT_ROOT_SEED_INITIALIZER, EFFECT_ROOT_SEED_CALLABLE
+} EffectRootSeedRule;
+static EffectRootSeedRule effect_root_seed_rule(XrXirOp op) {
+    switch (op) {
     case XR_XIR_SLOT_LOAD: case XR_XIR_SLOT_PLACE: case XR_XIR_SLOT_STORE:
-        return effect_root_slot(request,facts,required,work);
-    case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_GROUP_INIT: {
-        uint32_t slot = op->op == XR_XIR_SLOT_GROUP_INIT ?
-            (uint32_t)((uint64_t)op->immediate >> 32) : (uint32_t)op->immediate;
-        (*facts).requires_root = true;
-        effect_root_terminal(required,XR_XIR_ROOT_CAUSE_INITIALIZER,i,slot);
-        return XR_XIR_OK;
-    }
+        return EFFECT_ROOT_SEED_SLOT;
+    case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_GROUP_INIT:return EFFECT_ROOT_SEED_INITIALIZER;
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT: case XR_XIR_CALL_REQUIREMENT:
-        return effect_root_callable(request,facts,required,unresolved,work);
+        return EFFECT_ROOT_SEED_CALLABLE;
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING:
     case XR_XIR_ATOMIC_NEW: case XR_XIR_ATOMIC_LOAD: case XR_XIR_ATOMIC_STORE:
     case XR_XIR_ATOMIC_ADD: case XR_XIR_ATOMIC_SUB: case XR_XIR_ATOMIC_FETCH_ADD:
@@ -134,7 +125,7 @@ static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,X
     case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN: case XR_XIR_CONCAT_STRING:
     case XR_XIR_OUTPUT: case XR_XIR_WRITE_STREAM: case XR_XIR_PRINT:
     case XR_XIR_ADD_INT: case XR_XIR_EQ_INT: case XR_XIR_LT_INT:
-    case XR_XIR_CALL: case XR_XIR_SUSPEND: case XR_XIR_THROW:
+    case XR_XIR_CALL: case XR_XIR_SUSPEND: case XR_XIR_GENERATOR_YIELD: case XR_XIR_THROW:
     case XR_XIR_JUMP: case XR_XIR_BRANCH: case XR_XIR_RETURN:
     case XR_XIR_LOCAL_NEW: case XR_XIR_LOCAL_READ: case XR_XIR_LOCAL_WRITE:
     case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_WRITE:
@@ -149,11 +140,17 @@ static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,X
     case XR_XIR_CONVERT_NUMBER: case XR_XIR_CONST_FLOAT: case XR_XIR_NEG_FLOAT:
     case XR_XIR_EQ_FLOAT: case XR_XIR_NE_FLOAT: case XR_XIR_LT_FLOAT:
     case XR_XIR_LE_FLOAT: case XR_XIR_GT_FLOAT: case XR_XIR_GE_FLOAT:
-    case XR_XIR_CELL_PLACE: case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET:
+    case XR_XIR_CELL_PLACE: case XR_XIR_MAP_NEW: case XR_XIR_SET_NEW: case XR_XIR_MAP_GET: case XR_XIR_MAP_INDEX: case XR_XIR_HASH_KEYS: case XR_XIR_HASH_VALUES: case XR_XIR_MAP_ENTRIES: case XR_XIR_HASH_CONTAINS:
+    case XR_XIR_HASH_KEY_AT: case XR_XIR_MAP_VALUE_AT:
+    case XR_XIR_MAP_CONTAINS_VALUE:
+    case XR_XIR_SET_UNION: case XR_XIR_SET_INTERSECTION: case XR_XIR_SET_DIFFERENCE:
+    case XR_XIR_SET_SYMMETRIC_DIFFERENCE: case XR_XIR_SET_IS_SUBSET: case XR_XIR_SET_IS_SUPERSET:
+    case XR_XIR_HASH_LEN: case XR_XIR_MAP_SET: case XR_XIR_SET_ADD: case XR_XIR_HASH_DELETE: case XR_XIR_HASH_CLEAR:
+    case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_GET:
     case XR_XIR_ARRAY_SET: case XR_XIR_ARRAY_PUSH: case XR_XIR_ARRAY_LEN:
     case XR_XIR_ADD_FLOAT: case XR_XIR_SUB_FLOAT: case XR_XIR_MUL_FLOAT:
     case XR_XIR_DIV_FLOAT: case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_GET:
-    case XR_XIR_STRUCT_SET: case XR_XIR_RECORD_SET: case XR_XIR_LOCAL_UNINIT: case XR_XIR_STRING_LEN:
+    case XR_XIR_STRUCT_SET: case XR_XIR_RECORD_SET: case XR_XIR_LOCAL_UNINIT: case XR_XIR_F64_TRY_PARSE: case XR_XIR_STRING_COPY_BYTES: case XR_XIR_STRING_LEN:
     case XR_XIR_EQ_STRING: case XR_XIR_NE_STRING: case XR_XIR_STRING_CONTAINS:
     case XR_XIR_STRING_STARTS_WITH: case XR_XIR_STRING_ENDS_WITH: case XR_XIR_STRING_INDEX_OF:
     case XR_XIR_STRING_LAST_INDEX_OF: case XR_XIR_ENUM_NEW: case XR_XIR_ENUM_TAG:
@@ -167,16 +164,40 @@ static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,X
     case XR_XIR_CLASS_GET: case XR_XIR_CLASS_SET: case XR_XIR_CALL_DEFAULT:
     case XR_XIR_INVOKE_DEFAULT: case XR_XIR_ASSERT_CONDITION: case XR_XIR_INVOKE_DISCARD:
     case XR_XIR_EQUAL: case XR_XIR_NULLABLE_NONE: case XR_XIR_NULLABLE_SOME:
+    case XR_XIR_MATH_UNARY_F64: case XR_XIR_MATH_BINARY_F64: case XR_XIR_MATH_UNARY_I64:
+    case XR_XIR_RANDOM_F64: case XR_XIR_RANDOM_I64:
     case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT: case XR_XIR_TIMER_AFTER_MS:
     case XR_XIR_TO_STRING: case XR_XIR_OBJECT_PLACE: case XR_XIR_ARRAY_REPEAT:
     case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP: case XR_XIR_CONST_RUNE:
     case XR_XIR_RUNE_TO_INTEGER: case XR_XIR_INTEGER_TO_RUNE: case XR_XIR_LT_STRING:
     case XR_XIR_LE_STRING: case XR_XIR_GT_STRING: case XR_XIR_GE_STRING:
-    case XR_XIR_TUPLE_NEW: case XR_XIR_RECORD_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: case XR_XIR_FIELD_REQUIREMENT: case XR_XIR_GO:
-    case XR_XIR_TASK_AWAIT: case XR_XIR_RANGE_CHECK: case XR_XIR_ARRAY_CAPACITY:
+    case XR_XIR_TUPLE_NEW: case XR_XIR_RECORD_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: case XR_XIR_FIELD_REQUIREMENT: case XR_XIR_GO: case XR_XIR_GENERATOR_NEW:
+    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_ITERATOR_CLOSE: case XR_XIR_TASK_AWAIT: case XR_XIR_RANGE_CHECK: case XR_XIR_ARRAY_CAPACITY:
     case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE:
+        return EFFECT_ROOT_SEED_NONE;
+    default:return EFFECT_ROOT_SEED_INVALID;
+    }
+}
+static XrXirStatus effect_root_seed_output(const EffectRootSeedRecord *request,XrXirRootEffects *facts,
+    XrXirRootEffectWitness *required,XrXirRootEffectWitness *unresolved,
+    const XrXirCompileContext *work) {
+    if (!request || !request->domain || !request->instruction || !facts || !required || !unresolved ||
+        request->function>=request->domain->function_count)
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t i=request->ordinal;
+    const XrXirInstruction *op=request->instruction;
+    switch (effect_root_seed_rule(op->op)) {
+    case EFFECT_ROOT_SEED_NONE:return XR_XIR_OK;
+    case EFFECT_ROOT_SEED_SLOT:return effect_root_slot(request,facts,required,work);
+    case EFFECT_ROOT_SEED_INITIALIZER: {
+        uint32_t slot=op->op==XR_XIR_SLOT_GROUP_INIT?
+            (uint32_t)((uint64_t)op->immediate>>32):(uint32_t)op->immediate;
+        facts->requires_root=true;
+        effect_root_terminal(required,XR_XIR_ROOT_CAUSE_INITIALIZER,i,slot);
         return XR_XIR_OK;
-    default: return XR_XIR_BAD_STRUCTURE;
+    }
+    case EFFECT_ROOT_SEED_CALLABLE:return effect_root_callable(request,facts,required,unresolved,work);
+    default:return XR_XIR_BAD_STRUCTURE;
     }
 }
 /* Array ownership and the single receiving-row kernel are separate. Both

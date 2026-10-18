@@ -66,7 +66,7 @@ static XrXirStatus ctfe_fixture_build(const XrXirCompileContext *context,
     char producer[sizeof(ctfe_source)]; memcpy(producer, ctfe_source, sizeof(producer));
     char memory_name[] = "closed-scalar-leaf";
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_MEMORY, memory_name, NULL};
-    XrXirSourceRequest request = {NULL, NULL, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {NULL, NULL, &authority, context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceText text = {NULL, producer, sizeof(producer)-1};
     const XrXirTarget target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
     ctfe_chain_mark(trace, CTFE_CHAIN_SESSION);

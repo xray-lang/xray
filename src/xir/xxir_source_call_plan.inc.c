@@ -229,7 +229,7 @@ static bool source_call_complete_argument(SourceContext *ctx,AstNode *node,
     SourceValue *value=&plan->values[a+plan->value_offset];
     arguments[a].value->expected=expected;
     SourceExpressionPlan *previous_argument = ctx->effect_argument;
-    bool callback = expected.present &&
+    bool callback = expected.present && !source_call_caller_parameters(plan) &&
         xr_xir_callable_signature(&ctx->types,expected.type);
     if (callback) {
         arguments[a].value->conversion_ready = false;

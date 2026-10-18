@@ -13,15 +13,29 @@
 #include "xir/xxir_record.h"
 #include "xir/xxir_type_arena.h"
 #include "../xir_record81_golden.h"
+#include "../composed_wire/record90.inc.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
 #include "../xir_source_fixture_owner.h"
-_Static_assert(XR_XIR_CHECKED_SCHEMA==33 && XR_XIR_CHECKED_CONTRACT==81 &&
-    XR_XIR_VALUE_ABI_VERSION==27 && XR_XIR_PROGRAM_ABI_VERSION==36,"independent record identity");
-_Static_assert(XR_XIR_RECORD_NEW==154 && XR_XIR_RECORD_FIELD==155 && XR_XIR_RECORD_SET==156,
+#include "../composed_wire/retired.h"
+_Static_assert(XR_XIR_CHECKED_SCHEMA==34 && XR_XIR_CHECKED_CONTRACT==90 &&
+    XR_XIR_VALUE_ABI_VERSION==28 && XR_XIR_PROGRAM_ABI_VERSION==37,"independent record identity");
+_Static_assert(XR_XIR_RECORD_NEW==183 && XR_XIR_RECORD_FIELD==184 && XR_XIR_RECORD_SET==185,
     "independent record operation identities");
+static void record_wire_retired(SourceFixtureOwner *owner) {
+    const ComposedRetiredPacket packets[]={
+        {record81_empty,sizeof(record81_empty)},
+        {record81_unit_fields,sizeof(record81_unit_fields)},
+        {record81_generic,sizeof(record81_generic)},
+        {record81_mutate,sizeof(record81_mutate)},
+        {record81_duplicate,sizeof(record81_duplicate)},
+        {record81_unsorted,sizeof(record81_unsorted)},
+        {record81_invalid_name,sizeof(record81_invalid_name)}
+    };
+    composed_retired_reject(&owner->context,packets,sizeof(packets)/sizeof(*packets));
+}
 static XrXirArtifact *record_wire_lower(SourceFixtureOwner *owner,const uint8_t *bytes,size_t size) {
     XrXirArtifact *read=NULL,*closed=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_checked_read(&owner->context,bytes,size,&read,&diagnostic);
@@ -65,20 +79,21 @@ static void record_wire_run(XrXirArtifact *lowered,unsigned family,int64_t expec
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==3 && !strcmp(argv[1],"--emit")));
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
+    record_wire_retired(&owner);
     if (argc==3) {
-        XrXirArtifact *lowered=record_wire_lower(&owner,record81_mutate,sizeof(record81_mutate));
+        XrXirArtifact *lowered=record_wire_lower(&owner,record90_mutate,sizeof(record90_mutate));
         XrXirCSource source={0};CHECK(xr_xir_compile_emit_c(lowered,"language_reference",1048576,&source)==XR_XIR_OK);
         FILE *file=fopen(argv[2],"wb");CHECK(file && fwrite(source.text,1,source.length,file)==source.length && !fclose(file));
         xr_xir_compile_c_source_free(&source);record_wire_run(lowered,0,9);
     } else {
         const struct {const uint8_t *bytes;size_t size;unsigned family;int64_t expected;} accepted[]={
-            {record81_empty,sizeof(record81_empty),1,0},{record81_unit_fields,sizeof(record81_unit_fields),2,0},
-            {record81_generic,sizeof(record81_generic),0,7},{record81_mutate,sizeof(record81_mutate),0,9}};
+            {record90_empty,sizeof(record90_empty),1,0},{record90_unit_fields,sizeof(record90_unit_fields),2,0},
+            {record90_generic,sizeof(record90_generic),0,7},{record90_mutate,sizeof(record90_mutate),0,9}};
         for (size_t i=0;i<sizeof(accepted)/sizeof(*accepted);++i)
             record_wire_run(record_wire_lower(&owner,accepted[i].bytes,accepted[i].size),accepted[i].family,accepted[i].expected);
         const struct {const uint8_t *bytes;size_t size;} rejected[]={
-            {record81_duplicate,sizeof(record81_duplicate)},{record81_unsorted,sizeof(record81_unsorted)},
-            {record81_invalid_name,sizeof(record81_invalid_name)}};
+            {record90_duplicate,sizeof(record90_duplicate)},{record90_unsorted,sizeof(record90_unsorted)},
+            {record90_invalid_name,sizeof(record90_invalid_name)}};
         for (size_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i) {
             XrXirArtifact *output=NULL;CHECK(xr_xir_compile_checked_read(&owner.context,rejected[i].bytes,rejected[i].size,&output,NULL)==XR_XIR_BAD_STRUCTURE);
             CHECK(!output);

@@ -15,8 +15,8 @@ static void invocation_replay_scratch_literals(void) {
     EffectPhysicalDomain domain={.resources=context.resources,.count=1,.functions=&body};
     EffectInvocationNode node={.body=0};
     EffectInvocationFinal final={.count=1,.nodes=&node,.physical=&domain};
-    EffectInvocationRead owner={.work=&context,.final=&final};
-    owner.replay_scratch=&owner.scratch_head;
+    EffectInvocationScratch *storage=NULL;
+    const EffectInvocationRead owner={.work=&context,.final=&final,.replay_scratch=&storage};
     EffectBodyFunctionHead head={.parameter_count=1,.instruction_count=2};
     EffectInvocationBasis basis={.fn_words=1,.cell_words=1};
     EffectInvocationFlow first={.read=&owner,.function=&head,.basis=basis};
@@ -35,17 +35,41 @@ static void invocation_replay_scratch_literals(void) {
         again.row_indices[0]==0 && again.row_indices[1]==UINT32_MAX && again.row_indices[2]==UINT32_MAX);
     CHECK(first.rows[0]==17 && first.fixed[0]==3 && first.certified[0]==5);
     effect_invocation_flow_finish(&again);effect_invocation_flow_finish(&first);
-    EffectInvocationScratch *small=owner.scratch_head;
+    EffectInvocationScratch *small=*owner.replay_scratch;
     CHECK(small && !small->claimed);
     EffectInvocationScratch *large=NULL;
     CHECK(effect_invocation_scratch_claim(&owner,8192,&large)==XR_XIR_OK && large && large->claimed);
     effect_invocation_scratch_release(&owner,large);
-    for (EffectInvocationScratch *m=owner.scratch_head;m;m=m->next) CHECK(m->capacity<=4096 && !m->claimed);
+    for (EffectInvocationScratch *m=*owner.replay_scratch;m;m=m->next) CHECK(m->capacity<=4096 && !m->claimed);
     EffectInvocationScratch *blocked=NULL;
     CHECK(effect_invocation_scratch_claim(&owner,SIZE_MAX,&blocked)==XR_XIR_BUDGET && !blocked);
     effect_invocation_scratch_free(&owner);
-    CHECK(!owner.scratch_head && rp_stats(&context).live_bytes==baseline);
+    CHECK(!*owner.replay_scratch && rp_stats(&context).live_bytes==baseline);
     rp_owner_free(&context,baseline);rp_balanced(physical);
+}
+
+static void invocation_replay_scratch_owners(void) {
+    RootParameterMark physical=rp_mark();XrXirCompileContext first=rp_owner(rp_caps());
+    uint64_t baseline=rp_stats(&first).live_bytes;
+    EffectInvocationScratch *first_pool=NULL,*second_pool=NULL,*a=NULL,*b=NULL;
+    const EffectInvocationRead first_request={.work=&first,.replay_scratch=&first_pool};
+    const EffectInvocationRead second_request={.work=&first,.replay_scratch=&second_pool};
+    CHECK(effect_invocation_scratch_claim(&first_request,16,&a)==XR_XIR_OK);
+    CHECK(effect_invocation_scratch_claim(&second_request,16,&b)==XR_XIR_OK && a!=b);
+    effect_invocation_scratch_release(&first_request,a);
+    XrXirCompileContext foreign=rp_owner(rp_caps());
+    uint64_t foreign_baseline=rp_stats(&foreign).live_bytes;
+    const EffectInvocationRead wrong_ledger={.work=&foreign,.replay_scratch=&first_pool};
+    EffectInvocationScratch *refused=NULL;size_t attempts=rp_attempts;
+    uint64_t before=rp_stats(&first).work;
+    CHECK(effect_invocation_scratch_claim(&wrong_ledger,16,&refused)==XR_XIR_BAD_STRUCTURE &&
+        !refused && first_pool==a && !a->claimed && rp_attempts==attempts && rp_stats(&first).work==before);
+    rp_owner_free(&foreign,foreign_baseline);
+    effect_invocation_scratch_free(&first_request);
+    CHECK(!first_pool && second_pool==b && b->claimed);
+    effect_invocation_scratch_release(&second_request,b);
+    effect_invocation_scratch_free(&second_request);
+    CHECK(!second_pool);rp_owner_free(&first,baseline);rp_balanced(physical);
 }
 
 static void invocation_replay_scratch_failures(void) {
@@ -53,18 +77,18 @@ static void invocation_replay_scratch_failures(void) {
         RootParameterMark physical=rp_mark();XrCompileResourceLimits limits=rp_caps();
         if (mode==2) limits.work=sizeof(EffectInvocationScratch)-1;
         XrXirCompileContext context=rp_owner(limits);uint64_t baseline=rp_stats(&context).live_bytes;
-        EffectInvocationRead owner={.work=&context};EffectInvocationScratch *memory=NULL;
-        owner.replay_scratch=&owner.scratch_head;
+        EffectInvocationScratch *storage=NULL;
+        const EffectInvocationRead owner={.work=&context,.replay_scratch=&storage};EffectInvocationScratch *memory=NULL;
         if (mode==1) {
             CHECK(effect_invocation_scratch_claim(&owner,16,&memory)==XR_XIR_OK);
             effect_invocation_scratch_release(&owner,memory);memory=NULL;
         }
-        EffectInvocationScratch *retained=owner.scratch_head;
+        EffectInvocationScratch *retained=*owner.replay_scratch;
         uint64_t live=rp_stats(&context).live_bytes;size_t attempts=rp_attempts;rp_injected=false;
         if (mode<2) rp_fail_at=attempts;
         XrXirStatus expected=mode<2?XR_XIR_OUT_OF_MEMORY:XR_XIR_BUDGET;
         CHECK(effect_invocation_scratch_claim(&owner,32,&memory)==expected && !memory &&
-            owner.scratch_head==retained && rp_stats(&context).live_bytes==live);
+            *owner.replay_scratch==retained && rp_stats(&context).live_bytes==live);
         CHECK(mode<2 ? rp_injected && rp_attempts==attempts+1 : !rp_injected);
         rp_fail_at=SIZE_MAX;attempts=rp_attempts;
         if (mode<2) {

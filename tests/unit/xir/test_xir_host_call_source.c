@@ -30,7 +30,7 @@ static XrXirArtifact *host_source(void) {
     CHECK(xr_compile_session_new(resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_HOST_CALL_FIXTURES};
     XrXirSourceRequest request = {session, XR_HOST_CALL_FIXTURES "/root.xr", &authority,
-        &context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        &context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) fprintf(stderr, "host source %u at %d:%d: %s\n",

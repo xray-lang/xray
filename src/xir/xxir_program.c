@@ -12,6 +12,8 @@
  */
 
 #include "xxir_program_internal.h"
+#include "xxir_internal.h"
+#include "../base/xsha256.h"
 #include "xxir_compile_memory.h"
 #include "xxir_atomic.h"
 #include "../base/xchecks.h"
@@ -24,15 +26,19 @@ static bool program_value_type(const XrXirProgramSpec *spec, XrXirType type) {
     return type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || xr_xir_type_is_owned(spec->types, type);
 }
 static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXirProgramSpec *spec) {
-    if (!spec || !spec->entries || !spec->entry_count || !spec->declarations ||
-        (!!spec->code.owner != !!spec->code.release)) return XR_XIR_BAD_STRUCTURE;
+    if (!spec) return XR_XIR_BAD_STRUCTURE;
     if (spec->abi_version != XR_XIR_PROGRAM_ABI_VERSION ||
         spec->target.architecture != XR_XIR_ARCH_X86_64 || spec->target.abi_version != XR_XIR_VALUE_ABI_VERSION)
         return XR_XIR_BAD_LAYOUT;
+    if (!spec->entries || !spec->entry_count || !spec->declarations || !spec->declarations->functions ||
+        (!!spec->code.owner != !!spec->code.release)) return XR_XIR_BAD_STRUCTURE;
     if (spec->entry_count > 65535 || spec->entry_count > context->limits.functions) return XR_XIR_BUDGET;
     for (uint32_t i = 0; i < spec->entry_count; ++i) {
         if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
         if (spec->entries[i].abi_version != XR_XIR_CALL_ABI_VERSION) return XR_XIR_BAD_LAYOUT;
+        if ((spec->entries[i].flags & ~(XR_XIR_ENTRY_EXIT | XR_XIR_ENTRY_GENERATOR)) ||
+            (((spec->entries[i].flags & XR_XIR_ENTRY_GENERATOR)!=0)!=
+             ((spec->declarations->functions[i].promises & XR_XIR_FUNCTION_GENERATOR)!=0))) return XR_XIR_BAD_STRUCTURE;
     }
     if (spec->declarations->implementations || (spec->types && spec->types->interfaces)) return XR_XIR_BAD_STAGE;
     XrXirStatus status = xr_xir_compile_types_structure_verify(context, spec->types);
@@ -40,6 +46,8 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
     if (spec->types) for (uint32_t t = 0; t < spec->types->count; ++t) {
         if (!xir_compile_work(context, 1)) return XR_XIR_BUDGET;
         if (spec->types->nodes[t].parameter_span) return XR_XIR_BAD_TYPE;
+        if (spec->types->nodes[t].kind==XR_XIR_TYPE_SLICE || spec->types->nodes[t].kind==XR_XIR_TYPE_MUT_SLICE)
+            return XR_XIR_BAD_TYPE;
     }
     status = xr_xir_compile_declarations_verify(context, spec->declarations, spec->types,
         spec->entry_count, XR_XIR_PROGRAM);
@@ -57,7 +65,11 @@ static XrXirStatus program_shape(const XrXirCompileContext *context, const XrXir
         const XrXirCallEntry *entry = &spec->entries[i];
         if (spec->declarations->functions[i].test_role &&
             (entry->parameter_count || entry->result != XR_XIR_UNIT)) return XR_XIR_BAD_TYPE;
-        if ((entry->flags & ~XR_XIR_ENTRY_EXIT) ||
+        bool generator=(spec->declarations->functions[i].promises & XR_XIR_FUNCTION_GENERATOR)!=0;
+        const XrXirTypeNode *result=xr_xir_type_node(spec->types,entry->result);
+        if (generator && (!result || result->kind!=XR_XIR_TYPE_ITERATOR || result->parameter_span)) return XR_XIR_BAD_TYPE;
+        if ((entry->flags & ~(XR_XIR_ENTRY_EXIT | XR_XIR_ENTRY_GENERATOR)) ||
+            (((entry->flags & XR_XIR_ENTRY_GENERATOR)!=0)!=generator) ||
             entry->cleanup_owner != spec->declarations->functions[i].cleanup_owner ||
             (entry->cleanup_owner && (entry->result != XR_XIR_UNIT ||
              !(spec->entries[entry->cleanup_owner - 1].flags & XR_XIR_ENTRY_EXIT)))) return XR_XIR_BAD_STRUCTURE;
@@ -136,12 +148,21 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     if (!output || *output || !xir_compile_context_valid(context)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = program_shape(context, spec);
     if (status != XR_XIR_OK) return status;
+    const XrXirProgramSpec physical = *spec;
+    const XrXirCodeLease code = physical.code;
+    const XrXirProgramProof proof = physical.proof;
     XrXirProgramPermissions *permissions = NULL;
-    status = xr_xir_compile_program_proof_verify(context, spec, &spec->proof, &permissions);
+    status = xr_xir_compile_program_proof_verify(context, &physical, &proof, &permissions);
     if (status != XR_XIR_OK) return status;
-    if (spec->types) for (uint32_t i = 0; i < spec->types->count; ++i) {
+    const XrXirTypes *types = NULL;
+    const XrXirDeclarations *declarations = NULL;
+    status = xir_effects_program_metadata(context, permissions->effects, &types, &declarations);
+    if (status != XR_XIR_OK) { xir_program_permissions_free(permissions); return status; }
+    /* Preparation copies canonical semantic storage. The physical callback
+     * wiring remains borrowed until the final current-descriptor comparison. */
+    for (uint32_t i = 0; i < types->count; ++i) {
         if (!xir_compile_work(context, 1)) { xir_program_permissions_free(permissions); return XR_XIR_BUDGET; }
-        if (spec->types->nodes[i].kind == XR_XIR_TYPE_ATOMIC && !xr_xir_atomic_capability())
+        if (types->nodes[i].kind == XR_XIR_TYPE_ATOMIC && !xr_xir_atomic_capability())
             { xir_program_permissions_free(permissions); return XR_XIR_UNSUPPORTED; }
     }
     XrXirProgram *program = xir_compile_calloc(context, 1, sizeof(*program), &status);
@@ -152,16 +173,16 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
     if (!xir_compile_work(context, sizeof(program->target) + sizeof(program->checked_identity))) {
         status = XR_XIR_BUDGET; goto failed;
     }
-    program->target = spec->target;
-    memcpy(program->checked_identity, spec->proof.identity, sizeof(program->checked_identity));
-    program->entry_count = spec->entry_count;
-    status = program_copy_entries(program, spec);
-    program->order = xir_compile_calloc(context, spec->declarations->module_count, sizeof(*program->order), &status);
-    program->active_modules = xir_compile_calloc(context, spec->declarations->module_count, 1, &status);
-    program->module_slots = xir_compile_calloc(context, spec->declarations->module_count, sizeof(*program->module_slots), &status);
+    program->target = physical.target;
+    memcpy(program->checked_identity, proof.identity, sizeof(program->checked_identity));
+    program->entry_count = permissions->function_count;
+    status = program_copy_entries(program, &physical);
+    program->order = xir_compile_calloc(context, declarations->module_count, sizeof(*program->order), &status);
+    program->active_modules = xir_compile_calloc(context, declarations->module_count, 1, &status);
+    program->module_slots = xir_compile_calloc(context, declarations->module_count, sizeof(*program->module_slots), &status);
     if (status != XR_XIR_OK) goto failed;
-    if (spec->types) {
-        XrXirValueStatus value_status = xr_xir_compile_type_arena_new(context, spec->types, &program->arena);
+    if (physical.types) {
+        XrXirValueStatus value_status = xr_xir_compile_type_arena_new(context, types, &program->arena);
         if (value_status != XR_XIR_VALUE_OK) {
             status = value_status == XR_XIR_VALUE_OOM ? XR_XIR_OUT_OF_MEMORY :
                 value_status == XR_XIR_VALUE_BAD_ARGUMENT ? XR_XIR_BAD_TYPE :
@@ -170,7 +191,7 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
         }
         program->types = xr_xir_compile_type_arena_types(program->arena);
     }
-    status = xr_xir_compile_declarations_clone(context, spec->declarations, spec->entry_count, &program->declarations);
+    status = xr_xir_compile_declarations_clone(context, declarations, program->entry_count, &program->declarations);
     if (status != XR_XIR_OK) goto failed;
     status = program_execution_order(program);
     if (status != XR_XIR_OK) goto failed;
@@ -178,7 +199,28 @@ XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *conte
         if (!xir_compile_work(context, 1)) { status = XR_XIR_BUDGET; goto failed; }
         ++program->module_slots[program->declarations->slots[i].module];
     }
-    program->code = spec->code;
+    XrXirProgramSpec owned={XR_XIR_PROGRAM_ABI_VERSION,permissions->target,
+        program->entries,program->entry_count,program->declarations,{0},program->types,{0}};
+    /* Every preparation callback has finished. The independently checked
+     * canonical fields also prove the copied descriptors' structural shape. */
+    if (*output || spec->code.owner!=code.owner || spec->code.release!=code.release ||
+        spec->proof.bytes!=proof.bytes || spec->proof.length!=proof.length ||
+        spec->proof.identity!=proof.identity || spec->proof.layouts!=proof.layouts) {
+        status=XR_XIR_BAD_STRUCTURE;goto failed;
+    }
+    status=xr_xir_compile_program_descriptor_match(context,spec,permissions);
+    if (status==XR_XIR_OK) status=xr_xir_compile_program_descriptor_match(context,&owned,permissions);
+    if (status==XR_XIR_OK) {
+        if (proof.length>UINT64_MAX-32 || !xir_compile_work(context,proof.length+32)) status=XR_XIR_BUDGET;
+        else {
+            uint8_t digest[32];
+            xr_sha256(proof.bytes,proof.length,digest);
+            if (memcmp(digest,permissions->packet_identity,32) || memcmp(proof.identity,digest,32))
+                status=XR_XIR_BAD_STRUCTURE;
+        }
+    }
+    if (status!=XR_XIR_OK) goto failed;
+    program->code = code;
     *output = program;
     return XR_XIR_OK;
 failed:

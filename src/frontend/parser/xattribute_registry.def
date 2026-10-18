@@ -19,7 +19,7 @@ XR_PUBLIC_ATTRIBUTE(AFTER_ALL, "after_all", "function", "none", "test", "test-se
                     "test-only; no production ABI/effect/codegen impact", "stable")
 XR_PUBLIC_ATTRIBUTE(DEPRECATED, "deprecated", "declaration", "optional message:string",
                     "metadata", "diagnostic", true, "API metadata only; no ABI/effect/codegen impact", "stable")
-XR_PUBLIC_ATTRIBUTE(DERIVE, "derive", "class | struct | enum", "sealed target list", "derivation", "analysis",
+XR_PUBLIC_ATTRIBUTE(DERIVE, "derive", "class | struct | enum", "protocol, generator, describe:[fields], read:[fields], write:[fields], construct:bool", "derivation", "analysis",
                     true, "generates ordinary checked implementations", "stable")
 XR_PUBLIC_ATTRIBUTE(INLINE, "inline", "function | method", "none", "native-code-shape", "native-codegen", true,
                     "prefer native call-edge elimination; no semantic, effect, or ABI impact", "stable")

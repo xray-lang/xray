@@ -157,7 +157,7 @@ static RemoveCompile remove_build(size_t failure, XrCompileResourceLimits limits
     }
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_REMOVE_FIXTURES};
     XrXirSourceRequest request = {session, XR_REMOVE_FIXTURES "/" XR_REMOVE_COMPONENT "/root.xr", &authority,
-        &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+        &run.context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     remove_profile_stage(&run, "session-new");
     run.stage = 1; run.status = xr_xir_compile_source_check(&request, &result, &diagnostic, &path);
     if (run.status != XR_XIR_OK) {

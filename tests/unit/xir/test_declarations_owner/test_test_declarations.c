@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     CHECK(xr_compile_session_new(resources, &session) == XR_COMPILER_SESSION_OK);
     char input[1024]; CHECK(snprintf(input, sizeof(input), "%s/basic.xr", argv[1]) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, argv[1]};
-    XrXirSourceProductRequest request = {{session,input,&authority,&context,argv[2],NULL,XR_XIR_PROGRAM,NULL},
+    XrXirSourceProductRequest request = {{session,input,&authority,&context,argv[2],NULL,XR_XIR_PROGRAM,NULL,NULL},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION}};
     XrXirSourceProduct *product = NULL; XrXirSourceProductDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_product_build(&request,&product,&diagnostic);

@@ -51,8 +51,9 @@ static bool sdk_identity(XrJsonCursor *json, XrXirSdkManifest *manifest) {
             !sdk_identity_integer(json, &hash, file->length, 8) ||
             !sdk_identity_bytes(json, &hash, file->digest, 32)) return false;
     }
-    if (!sdk_identity_integer(json, &hash, 1, 4) ||
-        !sdk_identity_string(json, &hash, "kernel32")) return false;
+    if (!sdk_identity_integer(json, &hash, 2, 4) ||
+        !sdk_identity_string(json, &hash, "kernel32") ||
+        !sdk_identity_string(json, &hash, "bcrypt")) return false;
     if (!xr_json_cursor_work(json, 1)) return false;
     xr_sha256_final(&hash, manifest->digest);
     return true;

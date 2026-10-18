@@ -126,7 +126,7 @@ static void check_zero(void) {
     CHECK(!o.live && !o.count && o.owner_frees == 1);
 }
 
-typedef enum Operation { WORK, ALLOC, CALLOC, STRESS, OBSERVE, TRANSFER, FREE } Operation;
+typedef enum Operation { WORK, ALLOC, CALLOC, STRESS, EXTENT_STRESS, OBSERVE, TRANSFER, FREE } Operation;
 typedef struct Worker {
     XrCompileResources *owner;
     Operation operation;
@@ -166,10 +166,14 @@ static void worker_run(Worker *worker) {
             OK(xr_compile_resources_retain(worker->owner));
             void *memory = NULL;
             OK(xr_compile_resources_calloc(worker->owner, 4, 4, &memory));
+            if (worker->operation == EXTENT_STRESS)
+                OK(xr_compile_resources_extent(worker->owner, memory, 16));
             for (size_t j = 0; j < 16; ++j) CHECK(!((unsigned char *) memory)[j]);
             memset(memory, 0x5A, 16);
             OK(xr_compile_resources_resize(worker->owner, &memory, 48));
             OK(xr_compile_resources_resize(worker->owner, &memory, 8));
+            if (worker->operation == EXTENT_STRESS)
+                OK(xr_compile_resources_extent(worker->owner, (char *)memory + 7, 1));
             for (size_t j = 0; j < 8; ++j) CHECK(((unsigned char *) memory)[j] == 0x5A);
             OK(xr_compile_resources_work(worker->owner, 3));
             xr_compile_resources_free(memory);
@@ -274,6 +278,19 @@ static void mixed_operations(void) {
     xr_compile_resources_release(owner); check_zero();
 }
 
+static void concurrent_extents(void) {
+    reset_observer(); XrCompileResources *owner = new_owner(unlimited);
+    Worker workers[WORKERS]; TestThread threads[WORKERS];
+    for (unsigned i = 0; i < WORKERS; ++i) worker_init(&workers[i], owner, EXTENT_STRESS);
+    start_all(workers, threads); join_all(threads);
+    XrCompileResourceStats final = stats(owner);
+    CHECK(final.work >= 1 + WORKERS * ITERATIONS * 48);
+    CHECK(final.work <= 1 + WORKERS * ITERATIONS * (46 + 2 * WORKERS));
+    CHECK(final.allocation_count == 1 + WORKERS * ITERATIONS * 3);
+    check_physical(owner); CHECK(observation().count == 1);
+    xr_compile_resources_release(owner); check_zero();
+}
+
 static void delayed_last_release(void) {
     for (unsigned repeat = 0; repeat < 20; ++repeat) {
         reset_observer(); XrCompileResources *owner = new_owner(unlimited);
@@ -320,6 +337,7 @@ static void physical_free_barrier(void) {
 
 int main(void) {
     competing_limits(); concurrent_oom(); mixed_operations(); delayed_last_release(); physical_free_barrier();
+    concurrent_extents();
     puts("compile resources concurrency: exact/minus1, OOM, snapshots, delayed last release and physical free barrier passed");
     return 0;
 }

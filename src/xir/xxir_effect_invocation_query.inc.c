@@ -44,9 +44,9 @@ static XrXirStatus effect_invocation_edge_shape_request(const XrXirCompileContex
         edge.instruction>=request->instructions) return XR_XIR_BAD_STRUCTURE;
     const XrXirInstruction *op=request->op;const XrXirTypes *types=request->types;
     if (!xir_compile_work(work,8)) return XR_XIR_BUDGET;
-    if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_GO)
+    if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER || op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW)
         return edge.producer==UINT32_MAX && op->immediate>=0 && (uint64_t)op->immediate==to->body &&
-            edge.latent==(op->op==XR_XIR_GO)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
+            edge.latent==(op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW)?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
     if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
         const uint32_t *identity=xr_xir_default_identity(op);const XrXirDefaultBinding *binding=NULL;
         XrXirStatus status=xir_metadata_default_lookup(work,domain,identity[0],identity[1],&binding);
@@ -365,7 +365,7 @@ static inline XrXirStatus effect_invocation_certificate_edge_mask(const XrXirCom
     uint32_t root=equations->nodes[parent].root;
     bool executing=op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_CLEANUP_REGISTER ||
         op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT;
-    bool transport=op->op==XR_XIR_GO,reference=op->op==XR_XIR_FUNCTION_REF;
+    bool transport=op->op==XR_XIR_GO || op->op==XR_XIR_GENERATOR_NEW,reference=op->op==XR_XIR_FUNCTION_REF;
     if (!executing && !transport && !reference) return XR_XIR_BAD_STRUCTURE;
     uint32_t mask=0;bool found=false;uint64_t walked=0;
     for (uint32_t e=equations->nodes[parent].edge_head;e!=UINT32_MAX;e=equations->edges[e].next) {

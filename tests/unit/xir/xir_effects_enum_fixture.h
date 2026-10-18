@@ -41,10 +41,10 @@ static XrXirArtifact *effect_enum_ops_checked(const XrXirCompileContext *context
     XrXirFunction functions[] = {{"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,main_ops,2,NULL,0},
         {"make",4,NULL,0,(XrXirType)256,&block,1,entry,11,operands,6}};
-    XrXirSourceModule source = {"alpha",5,NULL,0,0, 0};
-    XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}};
+    XrXirSourceModule source = {.name="alpha",.name_length=5};
+    XrXirFunctionIdentity identities[] = {{.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER}};
     XrXirLiteral literal = {"constructed",11};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL};
+    XrXirDeclarations declarations = {&source,1,identities,NULL,0,&literal,1,0,1, NULL, NULL};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     if (wrong_variant) {
         entry[2].immediate = 0; entry[2].args[1] = 0; entry[8].args[0] = 0;
@@ -110,9 +110,9 @@ static XrXirArtifact *effect_enum_generic_checked(const XrXirCompileContext *con
         {"entry",5,NULL,0,XR_XIR_I64,&four,1,entry,4,&operand,1},
         {"make",4,&parameter,1,(XrXirType)256,&two,1,make,2,&operand,1},
         {"initB",5,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0}};
-    XrXirSourceModule modules[] = {{"alpha",5,NULL,0,0, 0},{"beta",4,&dependency,1,3, 0}};
-    XrXirFunctionIdentity identities[] = {{0,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{1,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{1,0,0,0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}};
-    XrXirDeclarations declarations = {modules,2,identities,NULL,0,NULL,0,1,1, NULL};
+    XrXirSourceModule modules[] = {{.name="alpha",.name_length=5},{.name="beta",.name_length=4,.dependencies=&dependency,.dependency_count=1,.initializer=3}};
+    XrXirFunctionIdentity identities[] = {{.method_kind=XR_XIR_NON_MEMBER},{.module=1,.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.module=1,.method_kind=XR_XIR_NON_MEMBER}};
+    XrXirDeclarations declarations = {.modules=modules,.module_count=2,.functions=identities,.root_module=1,.entry_function=1};
     XrXirGeneric generics[] = {{0},{NULL,0,&concrete,1, NULL},{&function_constraint,1,NULL,0, NULL},{0}};
     XrXirModule built = {XR_XIR_BUILT,functions,4,&declarations,generics,&types,NULL, XR_XIR_PROGRAM, NULL};
     if (mode == 1 || mode == 5) function_constraint.markers = 0;

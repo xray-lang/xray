@@ -1,0 +1,3 @@
+struct Node{value:i64;children:Array<Node>}
+fn eval()->i64{const child=Node{value:2,children:[]};const root=Node{value:40,children:[child]};return root.value+root.children[0].value}
+export fn answer()->i64{const value=comptime eval();return value}

@@ -138,6 +138,7 @@ static bool spec_effect_vector(SpecContext *c, uint32_t declaration,
         XirEffectContextInput request={c->source,&c->types,&origin,input->ordinal,owners,owner_count};
         XirEffectContextView selected={0};
         c->diagnostic.status=xir_effects_context_select(&c->remaining,c->effects,&request,&selected);
+
         if (c->diagnostic.status!=XR_XIR_OK || selected.declaration!=declaration ||
             selected.parameter_count!=count || selected.argument_count!=ordinary_count) {
             if (c->diagnostic.status==XR_XIR_OK) c->diagnostic.status=XR_XIR_BAD_STRUCTURE;
@@ -186,7 +187,7 @@ static bool spec_effect_default(SpecContext *c, const SpecInstance *instance, bo
 }
 
 static uint32_t spec_effect_family(XrXirOp op) {
-    if (op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_GO) return XR_XIR_EFFECT_BINDING_DIRECT;
+    if (op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_GO || op==XR_XIR_GENERATOR_NEW) return XR_XIR_EFFECT_BINDING_DIRECT;
     if (op==XR_XIR_FUNCTION_REF) return XR_XIR_EFFECT_BINDING_CAPTURE;
     if (op==XR_XIR_CALL_DEFAULT || op==XR_XIR_INVOKE_DEFAULT) return XR_XIR_EFFECT_BINDING_DEFAULT;
     return op==XR_XIR_CALL_REQUIREMENT ? XR_XIR_EFFECT_BINDING_REQUIREMENT : 0;

@@ -36,7 +36,7 @@ static XrXirStatus constraint_packet_fixture(const XrXirCompileContext *context,
     XrXirGeneric generics[] = {{0},{0},{&constraint,1,NULL,0, NULL}};
     XrXirSourceModule source = {"alpha",5,NULL,0,1, 0};
     XrXirFunctionIdentity identities[] = {{0},{0},{0}};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,0, NULL};
+    XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,0, NULL, NULL};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&declarations,generics,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
     XrXirStatus status=xir_fixture_check(context, &module, &artifact, NULL);

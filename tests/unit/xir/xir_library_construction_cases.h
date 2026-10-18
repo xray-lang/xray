@@ -39,7 +39,7 @@ static void library_construction_reject_rows(const XrXirModule *module,
     const XrXirConstructionRow *rows,uint32_t count) {
     size_t blocks=source_live,bytes=source_bytes;
     XrXirConstruction *bad=NULL;
-    CHECK(xr_xir_compile_construction_new(library_context,module->types,rows,count,&bad)==XR_XIR_OK && bad);
+    CHECK(xr_xir_compile_construction_new_v3(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},&bad)==XR_XIR_OK && bad);
     library_construction_reject(module,bad);
     xr_xir_compile_construction_free(bad);
     CHECK(source_live==blocks && source_bytes==bytes);
@@ -91,11 +91,11 @@ static void library_construction_attacks(const XrXirArtifact *artifact) {
     library_construction_reject(module,NULL);
     size_t blocks=source_live,bytes=source_bytes;
     XrXirConstruction *bad=NULL;
-    CHECK(xr_xir_compile_construction_new(library_context,module->types,rows,count-1,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
+    CHECK(xr_xir_compile_construction_new_v3(library_context,module->types,&(XrXirConstructionSpec){rows,count-1,NULL,0,NULL},&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
     rows[owner].field_count=nominal->field_count-1;
-    CHECK(xr_xir_compile_construction_new(library_context,module->types,rows,count,&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
+    CHECK(xr_xir_compile_construction_new_v3(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},&bad)==XR_XIR_BAD_STRUCTURE&&!bad);
     bad=(XrXirConstruction *)(uintptr_t)1;
-    CHECK(xr_xir_compile_construction_new(library_context,module->types,rows,count,&bad)==XR_XIR_BAD_STRUCTURE);
+    CHECK(xr_xir_compile_construction_new_v3(library_context,module->types,&(XrXirConstructionSpec){rows,count,NULL,0,NULL},&bad)==XR_XIR_BAD_STRUCTURE);
     CHECK(bad==(XrXirConstruction *)(uintptr_t)1 && source_live==blocks && source_bytes==bytes);
     free(fields);free(rows);
 }
@@ -154,7 +154,7 @@ static void library_construction_case(void) {
     library_typed_closed_negative(catalog,authority,"import \"./construction\" as lib;struct Holder{const value:lib.Explicit;}export fn result()->i64{const h=Holder();return h.value.n;}",XR_XIR_BAD_TYPE);
     library_typed_closed_negative(catalog,authority,"import \"./construction\" as lib;export fn result()->i64{return lib.PrivateCtor().n;}",XR_XIR_BAD_TYPE);
     XrCompilerSession *session=library_session_new(library_context);
-    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/construction_receiver.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/construction_receiver.xr",&authority,library_context,NULL,NULL,XR_XIR_PROGRAM,catalog,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if(status!=XR_XIR_OK)fprintf(stderr,"construction source %u %s\n",status,diagnostic.message);

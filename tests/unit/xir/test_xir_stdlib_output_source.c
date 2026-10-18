@@ -115,7 +115,7 @@ static void publication_exact(const XrXirLibraryInput *input,const XrXirSourceRe
 static XrXirCheckedPacket publication_packet(const char *root, const char *path) {
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_STDLIB,"io",root};
-    XrXirSourceRequest request = {session,path,&authority,publication_context,root,NULL,XR_XIR_LIBRARY,NULL};
+    XrXirSourceRequest request = {session,path,&authority,publication_context,root,NULL,XR_XIR_LIBRARY,NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
     if (status != XR_XIR_OK) fprintf(stderr,"producer %u %s\n",status,diagnostic.message);
@@ -212,7 +212,7 @@ static void publication_private_case(const XrXirLibraryInput *input, const char 
     xr_xir_compile_checked_packet_free(&packet);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request = {session,entry,&authority,publication_context,root,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request = {session,entry,&authority,publication_context,root,NULL,XR_XIR_PROGRAM,catalog,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     CHECK(xr_xir_compile_source_check(&request,&result,&diagnostic,NULL) != XR_XIR_OK && !result.checked);
     CHECK(!strcmp(diagnostic.message,"import requires an exported declaration"));
@@ -354,7 +354,7 @@ int main(int argc, char **argv) {
     CHECK(!remove(source)); publication_resolver_cases(catalog,root,entry);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(publication_context->resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,root};
-    XrXirSourceRequest request = {session,entry,&authority,publication_context,root,NULL,XR_XIR_PROGRAM,catalog};
+    XrXirSourceRequest request = {session,entry,&authority,publication_context,root,NULL,XR_XIR_PROGRAM,catalog,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     source_attempts = 0; runtime_attempts = 0;
     XrXirStatus status = xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);

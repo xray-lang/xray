@@ -18,8 +18,30 @@
 #include "xfmt_literal.h"
 #include "../parser/xattribute_registry.h"
 #include "../../runtime/value/xtype_names.h"
-#include "../../shared/xr_derive_flags.h"
 #include <string.h>
+
+static void xfmt_emit_derivation(XrFmtContext *ctx,const XrDerivationSyntax *syntax) {
+    xfmt_write_str(ctx,"@derive(");
+    if (!syntax) { xfmt_write_char(ctx,')');return; }
+    xfmt_emit_type(ctx,syntax->protocol);xfmt_write_str(ctx,", ");
+    if(syntax->generator_module){xfmt_write_str(ctx,syntax->generator_module);xfmt_write_char(ctx,'.');}
+    xfmt_write_str(ctx,syntax->generator);
+    const char *names[]={"describe","read","write"};
+    for(uint32_t operation=0;operation<3;++operation){
+        bool first=true;
+        for(int field=0;field<syntax->field_count;++field){
+            if(!xfmt_step(ctx))return;
+            const XrDeriveFieldSyntax *row=&syntax->fields[field];
+            if(row->operation!=operation)continue;
+            if(first){xfmt_write_str(ctx,", ");xfmt_write_str(ctx,names[operation]);xfmt_write_str(ctx,": [");}
+            else xfmt_write_str(ctx,", ");
+            xfmt_emit_escaped_inline_string(ctx,row->name,(int)xfmt_length(ctx,row->name));first=false;
+        }
+        if(!first)xfmt_write_char(ctx,']');
+    }
+    if(syntax->construct)xfmt_write_str(ctx,", construct: true");
+    xfmt_write_char(ctx,')');
+}
 
 static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
     if (!xfmt_step(ctx)) return;
@@ -55,36 +77,7 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
             }
             break;
         case ATTR_DERIVE: {
-            bool first = true;
-            xfmt_write_str(ctx, "@derive(");
-            if (attr->derive_flags & XR_DERIVE_INSPECT) {
-                xfmt_write_str(ctx, "Inspect");
-                first = false;
-            }
-            if (attr->derive_flags & XR_DERIVE_JSON) {
-                if (!first)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_write_str(ctx, "JSON");
-                first = false;
-            }
-            if (attr->derive_flags & XR_DERIVE_EQ) {
-                if (!first)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_write_str(ctx, "Eq");
-                first = false;
-            }
-            if (attr->derive_flags & XR_DERIVE_HASH) {
-                if (!first)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_write_str(ctx, "Hash");
-                first = false;
-            }
-            if (attr->derive_flags & XR_DERIVE_CLONE) {
-                if (!first)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_write_str(ctx, "Clone");
-            }
-            xfmt_write_char(ctx, ')');
+            xfmt_emit_derivation(ctx,attr->derivation);
             break;
         }
         default:

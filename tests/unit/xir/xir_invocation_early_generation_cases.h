@@ -99,7 +99,7 @@ static XrXirStatus conditional_generation_decoded_controls(const XrXirCompileCon
     EffectInvocationWorkspace *owner) {
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
     XrXirStatus status=effect_invocation_origins(&flow);
-    if (status!=XR_XIR_OK) { xr_compile_resources_free(flow.memory);return status; }
+    if (status!=XR_XIR_OK) { effect_invocation_flow_finish(&flow);return status; }
     uint32_t body=owner->final.nodes[flow.node].body,call=UINT32_MAX,reference=UINT32_MAX;
     for (uint32_t i=0;i<flow.function->instruction_count;++i) {
         XrXirInstruction storage;const XrXirInstruction *op=NULL;
@@ -205,7 +205,7 @@ static XrXirStatus conditional_generation_decoded_controls(const XrXirCompileCon
         }
     }
     conditional_generation_instruction_refused=false;
-    xr_compile_resources_free(flow.memory);return status;
+    effect_invocation_flow_finish(&flow);return status;
 }
 
 /* These are literal owned-reader observations, never a permission cache. */
@@ -254,11 +254,11 @@ static void conditional_generation_projected_controls(const XrXirCompileContext 
     conditional_generation_shape_reads=0;conditional_generation_shape_refused=false;
     CHECK(effect_invocation_origins_read(&flow,&read)==XR_XIR_OK &&
         conditional_generation_shape_reads==expected);
-    xr_compile_resources_free(flow.memory);flow.memory=NULL;
+    effect_invocation_flow_finish(&flow);flow.memory=NULL;
     conditional_generation_shape_refused=true;conditional_generation_shape_reads=0;
     CHECK(effect_invocation_origins_read(&flow,&read)==XR_XIR_BAD_STRUCTURE &&
         conditional_generation_shape_reads==1);
-    xr_compile_resources_free(flow.memory);flow.memory=NULL;
+    effect_invocation_flow_finish(&flow);flow.memory=NULL;
     conditional_generation_shape_refused=false;
     read.head=conditional_generation_counted_head;
     uint32_t dimensions=owner->final.count;

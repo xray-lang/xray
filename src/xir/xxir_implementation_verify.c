@@ -15,6 +15,7 @@
 #include "xxir_constraint_proof_internal.h"
 #include "xxir_interface_members.h"
 #include "xxir_types.h"
+#include "xxir_derivation_internal.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 static bool implementation_charge(XrXirCompileContext *budget, uint64_t bytes, uint64_t work) {
@@ -116,6 +117,9 @@ static XrXirStatus implementation_bindings(const XrXirModule *module, const XrXi
 }
 static XrXirStatus implementation_record_shape(const XrXirModule *module,
     const XrXirImplementation *record, XrXirCompileContext *budget) {
+    const XrXirDerivationTable *derivations=module->declarations->derivations;
+    if (record->derivation_policy && (!derivations ||
+        record->derivation_policy>derivations->policy_count)) return XR_XIR_BAD_STRUCTURE;
     const XrXirNominalTable *nominals = module->types ? module->types->nominals : NULL;
     if (!nominals || !nominals->declarations || record->nominal_declaration >= nominals->count ||
         (!!record->bindings != !!record->binding_count)) return XR_XIR_BAD_STRUCTURE;

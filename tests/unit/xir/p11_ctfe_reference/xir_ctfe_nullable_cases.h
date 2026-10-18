@@ -112,12 +112,15 @@ static void reference_nullable_direct(const XrXirCompileContext *context,XrXirSo
     XrXirValueAdmission admission={.arena=arena,.domain=domain,.work=128,.scratch_bytes=65536};XrXirValue argument={0};
     CHECK(xr_xir_nullable_new(module->functions[request.function].parameters[0],NULL,&admission,&argument)==XR_XIR_VALUE_OK);
     request.arguments=&argument;calls=(XrXirCtfeCallRequest){request,XR_XIR_CTFE_MAX_CALL_DEPTH};
-    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_NOT_SUPPORTED && !output.type && !output.payload);
-    CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_NOT_SUPPORTED && !output.type && !output.payload);
+    bool received_some=true;const XrXirValue *received_payload=NULL;
+    CHECK(xr_xir_compile_ctfe_leaf(&request,&output)==XR_XIR_CTFE_OK);
+    CHECK(xr_xir_nullable_view(&output,&received_some,&received_payload) && !received_some && !received_payload);xr_xir_value_drop(&output);
+    CHECK(xr_xir_compile_ctfe_calls(&calls,&output)==XR_XIR_CTFE_OK);
+    CHECK(xr_xir_nullable_view(&output,&received_some,&received_payload) && !received_some && !received_payload);xr_xir_value_drop(&output);
     bool some=true;const XrXirValue *payload=NULL;CHECK(xr_xir_nullable_view(&argument,&some,&payload) && !some && !payload);
     xr_xir_value_drop(&argument);xr_xir_domain_drop(domain);xr_xir_compile_type_arena_drop(arena);
     CHECK(reference_stats(context).live_bytes==baseline.live_bytes);xr_xir_compile_artifact_free(lowered);
-    fprintf(stderr,"CTFE Nullable unwrap Some/None both entries; failure releases owned frame; foreign arguments refuse without mutation; physical0\n");
+    fprintf(stderr,"CTFE Nullable unwrap Some/None both entries; failure releases owned frame; foreign data arguments copy independently without mutation; physical0\n");
 }
 static void reference_nullable_late_owner(void) {
     XrXirCompileContext context={0};CHECK(xr_compile_resources_new(&reference_limits,&context.resources)==XR_COMPILE_RESOURCE_OK);

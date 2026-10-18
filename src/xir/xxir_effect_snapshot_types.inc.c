@@ -61,6 +61,9 @@ typedef struct EffectBodyFunction {
     uint32_t operand_count;
     EffectBodyRun *runs;
     uint32_t run_count,run_capacity;
+    /* Exactly one layout owns the physical rows. Literal rows live in the
+     * material's receiving terms; each ordinal is one bounded range. */
+    const XrXirInstruction *literals;
     /* Concrete initial roles follow the constructor's real evidence proof. */
     const uint8_t *initial_roles;
 } EffectBodyFunction;
@@ -198,7 +201,7 @@ static inline bool effect_body_material_shape(const EffectBodyMaterial *body) {
  * physical-use derivation. This says nothing about the resulting ROOT equation. */
 static inline bool effect_body_variable_roles(const EffectBodyMaterial *body) {
     return body->ordinary_identities || body->evidence_kind==XR_XIR_EVIDENCE_TEMPLATE ||
-        body->evidence_kind==XR_XIR_EVIDENCE_INSTANCE;
+        xir_effect_kind_is_closed(body->evidence_kind);
 }
 static XrXirStatus effect_body_initial_roles_match(const XrXirCompileContext *work,
     const EffectBodyMaterial *body,uint32_t function) {

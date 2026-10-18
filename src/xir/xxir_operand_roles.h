@@ -63,6 +63,12 @@ static inline XrXirPlaceKind xr_xir_place_kind(const XrXirFunction *function, ui
 
 /* Ordinals describe expanded semantic operands, including ARRAY_SET's table. */
 static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal) {
+    if (!ordinal && (op == XR_XIR_MAP_GET || op == XR_XIR_MAP_INDEX || op == XR_XIR_HASH_KEYS ||
+        op == XR_XIR_HASH_VALUES || op == XR_XIR_MAP_ENTRIES || op == XR_XIR_HASH_CONTAINS || op == XR_XIR_HASH_LEN ||
+        (op >= XR_XIR_SET_UNION && op <= XR_XIR_MAP_VALUE_AT)))
+        return XR_XIR_OPERAND_READ;
+    if (!ordinal && (op == XR_XIR_MAP_SET || op == XR_XIR_SET_ADD ||
+        op == XR_XIR_HASH_DELETE || op == XR_XIR_HASH_CLEAR)) return XR_XIR_OPERAND_WRITE;
     if (!ordinal && (op == XR_XIR_ARRAY_GET || op == XR_XIR_ARRAY_LEN || op == XR_XIR_ARRAY_CAPACITY || op == XR_XIR_PLACE_READ ||
         op == XR_XIR_FIELD_PLACE || op == XR_XIR_INDEX_PLACE)) return XR_XIR_OPERAND_READ;
     if (!ordinal && (op == XR_XIR_ARRAY_SET || op == XR_XIR_ARRAY_PUSH || op == XR_XIR_STRUCT_SET || op == XR_XIR_RECORD_SET ||
@@ -72,7 +78,15 @@ static inline XrXirOperandRole xr_xir_operand_role(XrXirOp op, uint32_t ordinal)
 
 static inline bool xr_xir_op_references_function(XrXirOp op) {
     return op == XR_XIR_CALL || op == XR_XIR_INVOKE || op == XR_XIR_FUNCTION_REF ||
-        op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_GO;
+        op == XR_XIR_CLEANUP_REGISTER || op == XR_XIR_GO || op == XR_XIR_GENERATOR_NEW;
+}
+/* The declaration role is retained even when specialization removes every yield. */
+static inline bool xr_xir_function_is_generator(const XrXirModule *module,uint32_t function) {
+    return module && module->declarations && function<module->function_count &&
+        (module->declarations->functions[function].promises & XR_XIR_FUNCTION_GENERATOR)!=0;
+}
+static inline XrXirType xr_xir_function_completion(const XrXirModule *module,uint32_t function) {
+    return xr_xir_function_is_generator(module,function) ? XR_XIR_UNIT : module->functions[function].result;
 }
 /* Prior module/declaration verification is required; roles do not grant access. */
 static inline bool xr_xir_function_has_go_role(const XrXirModule *module, uint32_t function) {
@@ -95,13 +109,20 @@ static inline bool xr_xir_op_uses_operand_table(XrXirOp op) {
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_INDIRECT || op == XR_XIR_INVOKE_INDIRECT ||
         op == XR_XIR_PRINT || op == XR_XIR_PHI || op == XR_XIR_ARRAY_NEW || op == XR_XIR_ARRAY_SET ||
         op == XR_XIR_STRUCT_NEW || op == XR_XIR_ENUM_NEW || op == XR_XIR_CLASS_NEW || op == XR_XIR_STRING_INDEX_OF ||
-        op == XR_XIR_TUPLE_NEW || op == XR_XIR_RECORD_NEW || op == XR_XIR_SLOT_GROUP_INIT || op == XR_XIR_RANGE_CHECK || (xr_xir_op_is_atomic(op) && op != XR_XIR_ATOMIC_NEW);
+        op == XR_XIR_TUPLE_NEW || op == XR_XIR_RECORD_NEW || op == XR_XIR_SLOT_GROUP_INIT || op == XR_XIR_RANGE_CHECK ||
+        op == XR_XIR_MAP_NEW || op == XR_XIR_SET_NEW || op == XR_XIR_MAP_SET ||
+        (xr_xir_op_is_atomic(op) && op != XR_XIR_ATOMIC_NEW);
 }
 static inline bool xr_xir_op_uses_type_arguments(XrXirOp op) {
     return xr_xir_op_references_function(op) || op == XR_XIR_CALL_REQUIREMENT || op == XR_XIR_CALL_DEFAULT || op == XR_XIR_INVOKE_DEFAULT;
 }
 static inline bool xr_xir_op_uses_value_path(const XrXirFunction *function, const XrXirInstruction *op) {
     if (op->op == XR_XIR_PLACE_READ || op->op == XR_XIR_PLACE_WRITE || op->op == XR_XIR_CELL_PROJECT) return true;
+    if (op->op >= XR_XIR_MAP_GET && op->op <= XR_XIR_MAP_VALUE_AT) {
+        uint32_t id = xr_xir_op_uses_operand_table(op->op) ? function->operands[op->args[0]] : op->args[0];
+        XrXirPlaceKind kind = xr_xir_place_kind(function, id);
+        return kind == XR_XIR_PLACE_FIELD || kind == XR_XIR_PLACE_INDEX;
+    }
     if (op->op != XR_XIR_ARRAY_GET && op->op != XR_XIR_ARRAY_SET && op->op != XR_XIR_ARRAY_PUSH &&
         op->op != XR_XIR_ARRAY_LEN && op->op != XR_XIR_ARRAY_CAPACITY && op->op != XR_XIR_STRUCT_SET && op->op != XR_XIR_RECORD_SET) return false;
     uint32_t id = xr_xir_op_uses_operand_table(op->op) ? function->operands[op->args[0]] : op->args[0];

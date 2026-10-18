@@ -18,23 +18,23 @@
 #include "xir/xxir_types.h"
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}} while(0)
 #include "../xir_library_compile_owner.h"
-#include "wire81_golden.h"
-_Static_assert(XR_XIR_CHECKED_SCHEMA==33 && XR_XIR_CHECKED_CONTRACT==81 && XR_XIR_PROGRAM_ABI_VERSION==36,
+#include "current_fields.h"
+_Static_assert(XR_XIR_CHECKED_SCHEMA==34 && XR_XIR_CHECKED_CONTRACT==90 && XR_XIR_PROGRAM_ABI_VERSION==37,
     "Independent physical and semantic identities");
 _Static_assert(XR_XIR_ARRAY_NEW==73 && XR_XIR_FUNCTION_REF==57 && XR_XIR_CALL_INDIRECT==58 &&
-    XR_XIR_CALLABLE_VARIADIC==16 && sizeof(XrXirFunctionIdentity)==40 &&
+    XR_XIR_CALLABLE_VARIADIC==16 && sizeof(XrXirFunctionIdentity)==44 &&
     offsetof(XrXirFunctionIdentity,variadic)==36,"Independent rest fields");
 
 static XrXirStatus rest_wire_operation(const XrXirCompileContext *context,void *unused) {
     (void)unused;XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
     XrXirDiagnostic diagnostic={0};
-    XrXirStatus status=xr_xir_compile_checked_read(context,rest_wire,sizeof(rest_wire),&artifact,&diagnostic);
+    XrXirStatus status=xr_xir_compile_checked_read(context,packet_004_current,sizeof(packet_004_current),&artifact,&diagnostic);
     if (status!=XR_XIR_OK && status!=XR_XIR_OUT_OF_MEMORY && status!=XR_XIR_BUDGET)
         fprintf(stderr,"independent rest packet status%u function%u instruction%u reason%u\n",
             status,diagnostic.function,diagnostic.instruction,diagnostic.reason);
     if (status==XR_XIR_OK) {
         status=xr_xir_compile_checked_write(artifact,&packet,NULL);
-        if (status==XR_XIR_OK) CHECK(packet.length==sizeof(rest_wire) && !memcmp(packet.bytes,rest_wire,packet.length));
+        if (status==XR_XIR_OK) CHECK(packet.length==sizeof(packet_004_current) && !memcmp(packet.bytes,packet_004_current,packet.length));
     }
     xr_xir_compile_artifact_free(artifact);xr_xir_compile_checked_packet_free(&packet);return status;
 }
@@ -43,12 +43,12 @@ static void rest_word(uint8_t *bytes,uint32_t value) {
 }
 static void rest_attacks(const XrXirCompileContext *context) {
     const uint32_t fields[][2]={
-        {REST_IDENTITY+40+36,2},{REST_IDENTITY+40+36,0},{REST_IDENTITY+36,1},
-        {REST_IDENTITY+80+36,1},{REST_ARRAY,3},{REST_ARRAY+8,0},
+        {REST_IDENTITY+44+36,2},{REST_IDENTITY+44+36,0},{REST_IDENTITY+36,1},
+        {REST_IDENTITY+88+36,1},{REST_ARRAY,3},{REST_ARRAY+8,0},
         {REST_CALLABLE+24,2},{REST_CALLABLE+24,50},{REST_CALLABLE+16,1},
         {REST_ENTRY+4*40+4,258}};
     for (unsigned a=0;a<sizeof(fields)/sizeof(*fields);++a) {
-        uint8_t bytes[sizeof(rest_wire)];memcpy(bytes,rest_wire,sizeof(bytes));
+        uint8_t bytes[sizeof(packet_004_current)];memcpy(bytes,packet_004_current,sizeof(bytes));
         rest_word(bytes+fields[a][0],fields[a][1]);
         XrSHA256Context hash;xr_sha256_init(&hash);xr_sha256_update(&hash,bytes,32);
         xr_sha256_update(&hash,bytes+64,sizeof(bytes)-64);xr_sha256_final(&hash,bytes+32);
@@ -88,7 +88,7 @@ static XrXirAction rest_authentic_read(XrXirCallView *view) {
 }
 static void rest_execution(const XrXirCompileContext *context) {
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_checked_read(context,rest_wire,sizeof(rest_wire),&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context,packet_004_current,sizeof(packet_004_current),&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);

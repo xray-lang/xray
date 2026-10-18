@@ -12,6 +12,7 @@
  */
 
 #include "xxir_types.h"
+#include "xxir_derivation_internal.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_compile_memory.h"
 #include "xxir_type_scratch_internal.h"
@@ -35,7 +36,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (!module->declarations->functions) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunctionIdentity *identity = &module->declarations->functions[index];
     if (!xir_compile_work(budget,1)) return XR_XIR_BUDGET;
-    if (identity->method_kind > XR_XIR_MEMBER_HELPER ||
+    if (identity->method_kind > XR_XIR_MATERIALIZER ||
         (!!identity->nominal_owner != (identity->method_kind != XR_XIR_NON_MEMBER)))
         return XR_XIR_BAD_STRUCTURE;
     if (!identity->nominal_owner) return XR_XIR_OK;
@@ -43,9 +44,9 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     uint32_t owner = identity->nominal_owner-1;
     if (!table || owner >= table->count || (!table->declarations && !table->identities))
         return XR_XIR_BAD_STRUCTURE;
-    if (identity->method_kind == XR_XIR_MEMBER_HELPER) return XR_XIR_OK;
+    if (identity->method_kind == XR_XIR_MEMBER_HELPER || identity->method_kind==XR_XIR_MATERIALIZER) return XR_XIR_OK;
     uint32_t count = table->declarations ? table->declarations[owner].parameter_count : table->identities[owner].arity;
-    if (!xir_effect_evidence_is_instance(module) && count > (module->generics ? module->generics[index].parameter_count : 0))
+    if (!xir_effect_evidence_is_closed(module) && count > (module->generics ? module->generics[index].parameter_count : 0))
         return XR_XIR_BAD_TYPE;
     const XrXirFunction *function = &module->functions[index];
     XrXirType subject;
@@ -61,7 +62,7 @@ XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *co
     if (!receiver || receiver->kind != XR_XIR_TYPE_NOMINAL ||
         receiver->nominal.declaration != owner || receiver->nominal.argument_count != count ||
         (count && !receiver->nominal.arguments)) return XR_XIR_BAD_TYPE;
-    if (!xir_effect_evidence_is_instance(module)) {
+    if (!xir_effect_evidence_is_closed(module)) {
         if (!xir_compile_work(budget,count)) return XR_XIR_BUDGET;
         for (uint32_t a = 0; a < count; ++a)
             if (receiver->nominal.arguments[a] != (XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+a))
@@ -155,6 +156,7 @@ static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t func
             return XR_XIR_BAD_STRUCTURE;
         if (d->functions[module->initializer].module != m || d->functions[module->initializer].exported ||
             d->functions[module->initializer].test_role ||
+            (d->functions[module->initializer].promises & XR_XIR_FUNCTION_GENERATOR) ||
             d->functions[module->initializer].nominal_owner || module->initializer == d->entry_function) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < m; ++p) {
             if (!xir_compile_work(work, module->name_length)) return XR_XIR_BUDGET;
@@ -190,9 +192,16 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
         (kind == XR_XIR_PROGRAM ? (d->root_module >= d->module_count || d->entry_function >= functions) :
          (d->root_module != UINT32_MAX || d->entry_function != UINT32_MAX)) ||
         (d->slot_count && !d->slots) || (d->literal_count && !d->literals)) return XR_XIR_BAD_STRUCTURE;
+    if (d->derivations && ((!d->derivations->count && !d->derivations->policy_count) ||
+        ((d->derivations->count!=0)!=(d->derivations->records!=NULL)) ||
+        ((d->derivations->policy_count!=0)!=(d->derivations->policies!=NULL)) ||
+        d->derivations->count > functions)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i = 0; i < functions; ++i)
         if (d->functions[i].module >= d->module_count || d->functions[i].exported > 1 ||
-            d->functions[i].method_kind > XR_XIR_MEMBER_HELPER ||
+            (d->functions[i].derivation && (!d->derivations ||
+                d->functions[i].derivation > d->derivations->count ||
+                d->derivations->records[d->functions[i].derivation-1].function != i)) ||
+            d->functions[i].method_kind > XR_XIR_MATERIALIZER ||
             d->functions[i].variadic > 1 ||
             (d->functions[i].variadic && (d->functions[i].test_role || d->functions[i].cleanup_owner ||
                 i==d->entry_function || d->modules[d->functions[i].module].initializer==i)) ||
@@ -201,9 +210,19 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
             d->functions[i].test_timeout_seconds > INT_MAX ||
             (d->functions[i].test_role && (d->functions[i].nominal_owner || d->functions[i].cleanup_owner)) ||
             (!!d->functions[i].nominal_owner != (d->functions[i].method_kind != XR_XIR_NON_MEMBER)) ||
-            (d->functions[i].promises & ~XR_XIR_FUNCTION_NO_SUSPEND)) return XR_XIR_BAD_STRUCTURE;
+            (d->functions[i].promises & ~(XR_XIR_FUNCTION_NO_SUSPEND | XR_XIR_FUNCTION_GENERATOR)) ||
+            ((d->functions[i].promises & XR_XIR_FUNCTION_GENERATOR) &&
+             (d->functions[i].cleanup_owner || d->functions[i].test_role ||
+              (d->functions[i].promises & XR_XIR_FUNCTION_NO_SUSPEND)))) return XR_XIR_BAD_STRUCTURE;
+    for (uint32_t r = 0; d->derivations && r < d->derivations->count; ++r) {
+        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        uint32_t function=d->derivations->records[r].function;
+        if (function>=functions || d->functions[function].derivation!=r+1)
+            return XR_XIR_BAD_STRUCTURE;
+    }
     if (kind == XR_XIR_PROGRAM && (d->functions[d->entry_function].module != d->root_module ||
-        d->functions[d->entry_function].nominal_owner || d->functions[d->entry_function].test_role)) return XR_XIR_BAD_STRUCTURE;
+        d->functions[d->entry_function].nominal_owner || d->functions[d->entry_function].test_role ||
+        (d->functions[d->entry_function].promises & XR_XIR_FUNCTION_GENERATOR))) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = declaration_modules(d, functions, work);
     if (status != XR_XIR_OK) return status;
     for (uint32_t i = 0; i < functions; ++i) {
@@ -273,6 +292,7 @@ static void *declaration_copy(const XrXirCompileContext *compile_context, const 
 }
 void xr_xir_compile_declarations_free(XrXirDeclarations *d) {
     if (!d) return;
+    xir_derivations_free((XrXirDerivationTable *)d->derivations);
     xr_xir_compile_implementations_free((XrXirImplementationTable *)d->implementations);
     if (d->modules) for (uint32_t i = 0; i < d->module_count; ++i) {
         xr_compile_resources_free((void *) d->modules[i].name);
@@ -293,6 +313,7 @@ XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile
     if (!copy) return allocation_status;
     *copy = *source;
     copy->implementations = NULL;
+    copy->derivations = NULL;
     copy->modules = xir_compile_calloc(compile_context, source->module_count, sizeof(*source->modules), &allocation_status);
     copy->functions = declaration_copy(compile_context, source->functions, (size_t) functions * sizeof(*source->functions), &allocation_status);
     copy->slots = declaration_copy(compile_context, source->slots, (size_t) source->slot_count * sizeof(*source->slots), &allocation_status);
@@ -318,6 +339,10 @@ XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile
     XrXirStatus status = xr_xir_compile_implementations_copy_verified(compile_context, source->implementations, &implementations);
     if (status != XR_XIR_OK) { xr_xir_compile_declarations_free(copy); return status; }
     copy->implementations = implementations;
+    XrXirDerivationTable *derivations = NULL;
+    status = xir_derivations_copy(compile_context, source->derivations, &derivations);
+    if (status != XR_XIR_OK) { xr_xir_compile_declarations_free(copy); return status; }
+    copy->derivations = derivations;
     *output = copy;
     return XR_XIR_OK;
  failed:

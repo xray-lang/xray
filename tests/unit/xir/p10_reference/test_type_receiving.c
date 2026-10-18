@@ -37,6 +37,7 @@ static void no_change(const XrXirCompileContext *context,XrCompileResourceStats 
 #include "type_receiving_function.h"
 #include "type_receiving_equal.h"
 #include "type_receiving_hash.h"
+#include "type_receiving_hash_members.h"
 #include "type_receiving_hash_function.h"
 #include "type_receiving_record.h"
 int main(void) {
@@ -48,6 +49,7 @@ int main(void) {
     received_function_storage(&compiler);
     received_value_equality(&compiler);
     received_hash_storage(&compiler);
+    received_hash_members(&compiler);
     received_hash_functions(&compiler);
     received_record_storage(&compiler);
     XrXirTypeArena *source=arena(&compiler,0),*target=arena(&compiler,1),*unrelated=arena(&compiler,1);

@@ -25,7 +25,7 @@ static XrXirStatus overlay_package_once(const char *root,XrCompileResourceLimits
     XrModuleOverlayInput inputs[2]={{authority,"root.xr",entry,text,strlen(text)},
         {{XR_MODULE_IDENTITY_SCRIPT,NULL,base},"main.xr",path,leaf,strlen(leaf)}};
     if(status==XR_XIR_OK) {
-        XrXirSourceRequest request={session,entry,&authority,&context,NULL,mode==2?NULL:lock,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,entry,&authority,&context,NULL,mode==2?NULL:lock,XR_XIR_PROGRAM,NULL,NULL};
         status=xr_xir_compile_source_check_overlay(&request,inputs,2,&result,NULL,NULL);
     }
     xr_compile_session_free(session);xr_lockfile_free_owned(lock);
@@ -101,7 +101,7 @@ static XrXirStatus overlay_authority_once(const char *root,XrCompileResourceLimi
     if(mode==1){inputs[1].text="fn local()->i64 { return 41 }\n";inputs[1].length=strlen(inputs[1].text);}
     if(mode==2){inputs[2].text="export fn standard()->i64 { return \"bad\" }\n";inputs[2].length=strlen(inputs[2].text);}
     if(status==XR_XIR_OK) {
-        XrXirSourceRequest request={session,paths[0],&authority,&context,root,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,paths[0],&authority,&context,root,NULL,XR_XIR_PROGRAM,NULL,NULL};
         status=xr_xir_compile_source_check_overlay(&request,inputs,3,&result,NULL,NULL);
     }
     xr_compile_session_free(session);

@@ -15,6 +15,9 @@ static XrXirStatus class_field_leaf(const XrXirTypes *types, XrXirType type, boo
     if (type==XR_XIR_BOOL || type==XR_XIR_RUNE || xr_xir_type_is_number(type) || type==XR_XIR_STRING) return XR_XIR_OK;
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if (!node || node->parameter_span) return XR_XIR_BAD_TYPE;
+    /* The canonical Atomic carrier is an owned identity leaf; field storage
+     * retains that handle rather than copying the synchronized cell. */
+    if (node->kind==XR_XIR_TYPE_ATOMIC) return XR_XIR_OK;
     if (node->kind==XR_XIR_TYPE_NULLABLE || (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD)) { *leaf=false; return XR_XIR_OK; }
     /* Hash containers own separately admitted dense storage. A class field
      * retains only that handle, so recursive identities stop at this edge. */

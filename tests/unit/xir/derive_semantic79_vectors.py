@@ -1,18 +1,23 @@
-"""Independently traverse complete declaration and hash graphs into one identity.
+"""Independently authenticate complete old bodies and frame the new math identity.
 
-Every field, recursive source, zero denominator and owned declaration is consumed.
-Historical packets remain immutable inputs; the product writer is never called.
+Every field, including recursively owned specialization sources, is consumed.
+Physical fields remain byte-identical. No product writer or new product packet
+is imported or executed.
 """
 from pathlib import Path
 import argparse,hashlib,json,re,struct
+
 ROOT=Path(__file__).resolve().parent
 WORD=lambda value:struct.pack('<I',value)
 ARRAY=re.compile(r'static const uint8_t (\w+)\[\] = \{(.*?)\};',re.S)
+
 def octets(match):return bytes(int(v,16) for v in re.findall(r'0x([0-9a-fA-F]{2})',match[2]))
+
 def render(name,data):
     return 'static const uint8_t '+name+'[] = {\n'+''.join('    '+','.join('0x%02x'%v for v in data[i:i+12])+',\n' for i in range(0,len(data),12))+'};'
+
 class Cursor:
-    def __init__(self,data,wire):self.data=data;self.at=0;self.out=bytearray();self.insertions=[];self.wire=wire
+    def __init__(self,data):self.data=data;self.at=0;self.out=bytearray();self.insertions=[]
     def take(self,count):
         assert 0<=count<=len(self.data)-self.at,(self.at,count,len(self.data))
         value=self.data[self.at:self.at+count];self.at+=count;self.out+=value
@@ -34,9 +39,7 @@ class Cursor:
             modules,slots,literals=self.word(),self.word(),self.word();self.take(8)
             for _ in range(modules):self.blob();self.vector();self.take(8)
             for _ in range(functions):
-                self.take(40 if self.wire==31 else 36)
-                if self.wire==28:self.insertions.append(self.at);self.out+=WORD(0)
-            assert self.wire==31 or slots==0, "historical hash models have no slot records"
+                self.take(40)
             self.take(slots*20)
             for _ in range(literals):self.blob()
             for _ in range(self.word()):
@@ -53,8 +56,7 @@ class Cursor:
             kind=self.word();self.word()
             if kind==1:self.vector(8);self.take(8)
             elif kind==6:self.vector()
-            elif kind in (2,3,5,7,8,10):self.word()
-            elif kind==9:self.take(8)
+            elif kind in (2,3,5,7,8):self.word()
             elif kind==4:self.word();self.vector();self.vector()
             else:raise AssertionError(('type kind',kind,self.at))
         for _ in range(nominals):
@@ -76,65 +78,40 @@ class Cursor:
             for _ in range(count):self.word();self.vector();self.vector(8)
             self.vector(24)
 
-def nested_current_body():
-    from derive_nested_nullable_vectors import words, operation, function
-    semantic=65
-    def op(code, *args, **kwargs):
-        assert code not in (7,8,9)
-        return operation(code+8 if semantic in (64,65) and code>=10 else code,*args,**kwargs)
-    functions = [
-        function('$init', [], 0, [op(25)]),
-        function('root', [], 2, [op(20, 257, immediate=3), op(20, 256, right=1, immediate=5),
-                 op(126, 1, left=1), op(2, 2, immediate=41), op(25, left=3)], [0]),
-        function('none', [], 257, [op(118, 257), op(25)]),
-        function('some_none', [], 257, [op(118, 256), op(119, 257), op(25, left=1)]),
-        function('some7', [], 257, [op(2, 2, immediate=7), op(119, 256),
-                 op(119, 257, left=1), op(25, left=2)]),
-        function('unwrap_outer', [257], 256, [op(127, 256), op(25, left=1)]),
-        function('unwrap_inner', [256], 2, [op(127, 2), op(25, left=1)]),
-        function('presence', [257], 1, [op(126, 1), op(25, left=1)]),
-    ]
-    body = (words(0, 8, 1) + b''.join(functions) + (words(1,0,0,0,1,6)+b'nested'+words(0,0,0)+b''.join(words(0,int(i!=0),0,0,0,0,0,0,0,0) for i in range(8))+words(0))
-            + words(0, 2, 0, 0, 5, 0, 2, 5, 0, 256, 0, 0, 0))
-    return body
-
 def frame(packet):
-    assert packet[:8]==b'XRCHK\0\0\0'
-    wire,semantic=struct.unpack_from('<II',packet,8)
-    assert (wire,semantic) in ((31,78),(28,75))
+    assert packet[:8]==b'XRCHK\0\0\0' and struct.unpack_from('<II',packet,8)==(31,78)
     assert struct.unpack_from('<Q',packet,24)[0]==len(packet)-64
     assert hashlib.sha256(packet[:32]+packet[64:]).digest()==packet[32:64]
-    cursor=Cursor(packet[64:],wire);cursor.module();assert cursor.at==len(packet)-64
-    header=packet[:8]+struct.pack('<II',32,79)+packet[16:24]+struct.pack('<Q',len(cursor.out))
-    return header+hashlib.sha256(header+cursor.out).digest()+cursor.out
+    cursor=Cursor(packet[64:]);cursor.module();assert cursor.at==len(packet)-64
+    assert bytes(cursor.out)==packet[64:]
+    header=packet[:12]+struct.pack('<I',79)+packet[16:32]
+    return header+hashlib.sha256(header+packet[64:]).digest()+packet[64:]
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--write',action='store_true');args=parser.parse_args()
-    registry=json.loads((ROOT/'semantic79_inputs.json').read_text(encoding='utf-8'));count=0
+    registry=json.loads((ROOT/'semantic79_inputs.json').read_text(encoding='utf-8'));count=0;offsets=0
     for row in registry:
         raw=(ROOT/row['source']).read_bytes();assert hashlib.sha256(raw).hexdigest()==row['sha256'],row['source']
-        text=raw.decode().replace('\r\n','\n');packets={};digests={}
+        text=raw.decode().replace('\r\n','\n');packets={};digests={};originals={}
         for match in ARRAY.finditer(text):
             old=octets(match)
-            if match[1] not in row['models']:continue
-            if row['source']=='xir_nested_nullable75_golden.h':
-                body=nested_current_body()
-                cursor=Cursor(body,31);cursor.module();assert cursor.at==len(body)
-                header=b'XRCHK\0\0\0'+struct.pack('<4I',32,79,2,0)+struct.pack('<Q',len(body))
-                new=header+hashlib.sha256(header+body).digest()+body
-            else:new=frame(old)
-            packets[match[1]]=new;digests[old[32:64]]=new[32:64];count+=1
+            if old[:8]!=b'XRCHK\0\0\0' or struct.unpack_from('<II',old,8)!=(31,78):continue
+            assert match[1] in row['models'];new=frame(old);packets[match[1]]=new;originals[match[1]]=old
+            digests[old[32:64]]=new[32:64];count+=1
         assert set(packets)==set(row['models'])
+        for match in re.finditer(r'#define (\w+)\s+(\d+)u(?=\n|$)',text):
+            models=[model for prefix,model in row.get('offset_models',{}).items() if match[1].startswith(prefix)]
+            if not models:continue
+            assert len(models)==1;offset=int(match[2]);old=originals[models[0]];new=packets[models[0]]
+            assert 64<=offset<=len(old)-4 and old[offset:offset+4]==new[offset:offset+4];offsets+=1
         def replace(match):
-            old=octets(match)
-            name=match[1].replace(str(row['semantic']),'79')
-            return render(name,packets.get(match[1],digests.get(old,old)))
+            old=octets(match);return render(match[1],packets.get(match[1],digests.get(old,old)))
         output=ARRAY.sub(replace,text)
-        output=re.sub(r'\b[A-Za-z_]\w*(?:78|75)\w*\b',lambda m:m[0].replace(str(row['semantic']),'79'),output)
-        output=output.replace('SCHEMA == 31u','SCHEMA == 32u').replace('CONTRACT == 78u','CONTRACT == 79u')
+        output=re.sub(r'\b[A-Za-z_]\w*78\w*\b',lambda match:match[0].replace('78','79'),output)
+        output=output.replace('CONTRACT == 78u','CONTRACT == 79u')
         target=ROOT/row['target']
         if args.write:target.write_bytes(output.encode())
         else:assert target.read_text()==output,row['target']
-    assert count==18,count
-    print(json.dumps(dict(independent_complete_packets=count,retained_headers=len(registry),recursive_source_parsed=True,product_writer_used=False)))
+    assert count==14 and offsets==44
+    print(json.dumps(dict(independent_complete_packets=count,retained_headers=len(registry),authenticated_offsets=offsets,body_unchanged=True,recursive_source_parsed=True,product_writer_used=False)))
 if __name__=='__main__':main()

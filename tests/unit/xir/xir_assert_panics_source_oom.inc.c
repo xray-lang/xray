@@ -12,7 +12,7 @@ static XrXirStatus assert_source_operation(const XrXirCompileContext *context,vo
     XrCompilerSessionStatus created=xr_compile_session_new(context->resources,&session);
     if(created!=XR_COMPILER_SESSION_OK){CHECK(!session);return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;}
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,input->directory};
-    XrXirSourceRequest request={session,input->path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,input->path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,NULL,NULL);
     CHECK(status==XR_XIR_OK?(result.checked&&result.snapshot):(!result.checked&&!result.snapshot));
     xr_xir_compile_source_result_free(&result);xr_compile_session_free(session);return status;

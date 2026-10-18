@@ -106,7 +106,7 @@ static XrXirStatus root_source_operation(const XrXirCompileContext *context, voi
     if (created != XR_COMPILER_SESSION_OK)
         return created == XR_COMPILER_SESSION_BUDGET ? XR_XIR_BUDGET : XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CALLABLE_ROOT_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request = {session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
     XrXirStatus status = xr_xir_compile_source_check(&request,&result,&diagnostic,&failure);
     xr_compile_session_free(session); session = NULL;
@@ -139,7 +139,7 @@ static void root_source_reject(const char *file, XrXirStatus expected, const cha
     XrCompilerSession *session = NULL; CHECK(xr_compile_session_new(owner.context.resources,&session) == XR_COMPILER_SESSION_OK);
     char path[1024]; CHECK(snprintf(path,sizeof(path),"%s/%s",XR_CALLABLE_ROOT_SOURCE_FIXTURES,file) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CALLABLE_ROOT_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session,path,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request = {session,path,&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
     XrXirStatus status = xr_xir_compile_source_check(&request,&result,&diagnostic,&failure);
     if (status != expected) fprintf(stderr,"reject %s status%u %s\n",file,status,diagnostic.message);

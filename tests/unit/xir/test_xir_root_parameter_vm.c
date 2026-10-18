@@ -97,7 +97,7 @@ static void h1c_ledger(H1Compiler *c, const char *tag) {
 }
 static XrXirStatus h1c_source(H1Compiler *c) {
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_ROOT_PARAMETER_VM_FIXTURES};
-    XrXirSourceRequest request = {c->session, c->path, &authority, &c->context, NULL, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {c->session, c->path, &authority, &c->context, NULL, NULL, XR_XIR_PROGRAM, NULL,NULL};
     unsigned char before[sizeof(request)]; memcpy(before, &request, sizeof(request));
     XrXirSourceResult result = {0}, empty = {0};
     XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;

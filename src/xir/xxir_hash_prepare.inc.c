@@ -30,6 +30,22 @@ static XrXirValueStatus hash_admit(const XrXirValue *value, uint32_t kind,
     if (status == XR_XIR_VALUE_OK) *out = (XirHash *)object_pointer(value);
     return status;
 }
+static XrXirValueStatus hash_admit_received(const XrXirValue *value, uint32_t kind,
+    XrXirValueAdmission *admission, XirHash **out) {
+    XrXirValueAdmission local = {0};
+    XrXirValueStatus status = storage_admission_begin(value, admission, &local);
+    if (status != XR_XIR_VALUE_OK) return status;
+    status = hash_admit(value, kind, &local, out);
+    return storage_admission_end(admission, &local, status);
+}
+static XrXirValueStatus hash_received_type(const XirHash *map,
+    XrXirValueAdmission *admission, XrXirType *output) {
+    if (map->object.arena == admission->arena) { *output = map->object.type; return XR_XIR_VALUE_OK; }
+    XrXirValueStatus status = hash_charge(admission, xir_type_arena_lookup_work(admission->arena));
+    if (status != XR_XIR_VALUE_OK) return status;
+    return xir_type_arena_local_type(admission->arena, map->object.arena, map->object.type, output) ?
+        XR_XIR_VALUE_OK : XR_XIR_VALUE_BAD_ARGUMENT;
+}
 static bool hash_capacity(size_t required, uint32_t stride, size_t *output) {
     if (!required) { *output = 0; return true; }
     size_t capacity = 8, bytes = 0;

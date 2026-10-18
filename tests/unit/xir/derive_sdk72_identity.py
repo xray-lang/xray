@@ -1,4 +1,4 @@
-"""Complete SDK27/72 preimage from the unchanged independent351 layout model."""
+"""Complete SDK27/72 bytes from the original immutable 351-field packets."""
 from pathlib import Path
 import argparse,hashlib,importlib.util,json,re,sys
 def literal(text,symbol):
@@ -16,34 +16,61 @@ def previous_header(text):
  return title+'#ifndef '+guard+'\n#define '+guard+'\n#include <stdint.h>\n'+text+'\n#endif // '+guard+'\n'
 
 def main():
- p=argparse.ArgumentParser();p.add_argument('--source-root',type=Path,required=True)
- p.add_argument('--output-root',type=Path,required=True);p.add_argument('--facts-directory',type=Path,required=True)
- p.add_argument('--write',action='store_true');a=p.parse_args()
- sys.path.insert(0,str(a.source_root/'scripts'))
- from derive_xir_sdk_abi import prepare
- prepare(a.facts_directory)
- rows=json.loads((a.facts_directory/'EXPECTED.json').read_text())['rows'];assert len(rows)==351
- src=a.source_root/'tests/unit/xir';out=a.output_root/'tests/unit/xir'
- spec=importlib.util.spec_from_file_location('sdk71_model',src/'derive_sdk_current_identity.py')
- model=importlib.util.module_from_spec(spec);spec.loader.exec_module(model)
- historical=src/'sdk_previous71_identity_golden.h'
- old=(historical if historical.exists() else src/'sdk_current_identity_golden.h').read_text('utf-8')
- previous=model.current_preimage(rows,71,22,28,26,29);current=model.current_preimage(rows,72,22,28,27,29)
- names=['current_sdk_kat_preimage','current_sdk_kat_file_digest','current_sdk_kat_digest']
- for name,value in zip(names,previous):assert literal(old,name)==value
- wire=len(b'xray:xir-runtime-sdk:v1')+4
- assert previous[0][:wire]==current[0][:wire] and previous[0][wire+8:]==current[0][wire+8:]
- assert len(current[0])==3098 and current[1]==previous[1]
- text='/* Independent current SDK framing and natural Windows C layout facts. */\n'
- for name,value in zip(names,current):
-  text+='static const uint8_t '+name+'[] = {\n'
-  for i in range(0,len(value),16):text+='    '+','.join('0x%02x'%b for b in value[i:i+16])+',\n'
-  text+='};\n'
- if a.write:
-  out.mkdir(parents=True,exist_ok=True);(out/'sdk_previous71_identity_golden.h').write_text(previous_header(old),encoding='utf-8',newline='\n')
-  (out/'sdk_previous72_identity_golden.h').write_text(text,encoding='utf-8',newline='\n')
- else:assert literal((out/'sdk_previous72_identity_golden.h').read_text('utf-8'),names[0])==current[0] and literal((out/'sdk_previous72_identity_golden.h').read_text('utf-8'),names[1])==current[1] and literal((out/'sdk_previous72_identity_golden.h').read_text('utf-8'),names[2])==current[2]
- print(json.dumps({'wire':27,'semantic':72,'unchanged_independent_abi_fields':351,
-  'previous_full_preimage_reproduced':True,'previous_identity':previous[2].hex(),
-  'current_identity':current[2].hex(),'preimage_bytes':3098,'production_probe_or_writer_used':False},indent=2))
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--source-root',type=Path,required=True)
+    parser.add_argument('--output-root',type=Path,required=True)
+    parser.add_argument('--facts-directory',type=Path,required=True)
+    parser.add_argument('--write',action='store_true')
+    args=parser.parse_args()
+    sys.dont_write_bytecode=True
+    src=args.source_root/'tests/unit/xir'
+    out=args.output_root/'tests/unit/xir'
+    sys.path.insert(0,str(src))
+    from sdk_identity_model import c_array, frame, retired_packets
+    packets=retired_packets(src)
+    def original(name):
+        matches=[packet for packet in packets if any(
+            ref['label']=='P10' and ref['path']=='tests/unit/xir/'+name
+            for ref in packet['provenance'])]
+        assert len(matches)==1
+        return matches[0]
+    prior=original('sdk_previous71_identity_golden.h')
+    current=original('sdk_previous72_identity_golden.h')
+    rows=current['manifest']['abi_measurements']
+    assert len(rows)==351 and rows==prior['manifest']['abi_measurements']
+    assert (prior['manifest']['wire'],prior['manifest']['semantic'])==(26,71)
+    assert (current['manifest']['wire'],current['manifest']['semantic'])==(27,72)
+    previous=[frame(prior['manifest']),bytes.fromhex(prior['file_digest_hex']),bytes.fromhex(prior['digest_hex'])]
+    values=[frame(current['manifest']),bytes.fromhex(current['file_digest_hex']),bytes.fromhex(current['digest_hex'])]
+    assert all(hashlib.sha256(value[0]).digest()==value[2] for value in (previous,values))
+    names=['current_sdk_kat_preimage','current_sdk_kat_file_digest','current_sdk_kat_digest']
+    old=(src/'sdk_previous71_identity_golden.h').read_text(encoding='utf-8')
+    for name,value in zip(names,previous):
+        assert literal(old,name)==value
+    wire=len(b'xray:xir-runtime-sdk:v1')+4
+    assert previous[0][:wire]==values[0][:wire] and previous[0][wire+8:]==values[0][wire+8:]
+    assert len(values[0])==3098 and values[1]==previous[1]
+    args.facts_directory.mkdir(parents=True,exist_ok=False)
+    (args.facts_directory/'EXPECTED.json').write_text(json.dumps({
+        'recipe':'complete-retired-sdk27-72-fields',
+        'rows':rows,
+        'source_git_blob':current['git_blob'],
+        'basis':'Complete original immutable packet, independent of the current layout table',
+    },indent=2)+'\n',encoding='utf-8',newline='\n')
+    text='/* Independent complete historical SDK framing. */\n'
+    text+=''.join(c_array(name,value) for name,value in zip(names,values))
+    if args.write:
+        out.mkdir(parents=True,exist_ok=True)
+        (out/'sdk_previous71_identity_golden.h').write_text(previous_header(old),encoding='utf-8',newline='\n')
+        (out/'sdk_previous72_identity_golden.h').write_text(text,encoding='utf-8',newline='\n')
+    else:
+        checked=(out/'sdk_previous72_identity_golden.h').read_text(encoding='utf-8')
+        for name,value in zip(names,values):
+            assert literal(checked,name)==value
+    print(json.dumps({
+        'wire':27,'semantic':72,'unchanged_independent_abi_fields':351,
+        'previous_full_preimage_reproduced':True,'previous_identity':previous[2].hex(),
+        'current_identity':values[2].hex(),'preimage_bytes':3098,
+        'production_probe_or_writer_used':False,'current_layout_table_used':False,
+    },indent=2))
 if __name__=='__main__':main()

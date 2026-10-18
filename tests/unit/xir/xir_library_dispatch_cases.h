@@ -21,7 +21,7 @@ static void library_unmatched_source_imports(const XrModuleIdentityAuthority *au
     size_t live=runtime_live,bytes=runtime_bytes,source_count=source_live,source_size=source_bytes;
     for(unsigned mode=0;mode<2;++mode){
         XrCompilerSession *session=library_session_new(library_context);CHECK(session);
-        XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/nested.xr",authority,library_context,NULL,NULL,XR_XIR_PROGRAM,mode?catalog:NULL};
+        XrXirSourceRequest request={session,XR_SOURCE_FIXTURES "/nested.xr",authority,library_context,NULL,NULL,XR_XIR_PROGRAM,mode?catalog:NULL,NULL};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};
         XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,NULL);
         if(status!=XR_XIR_OK)fprintf(stderr,"nested import mode=%u status=%u %s\n",mode,status,diagnostic.message);

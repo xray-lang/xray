@@ -44,7 +44,7 @@ static XrXirStatus roles_once(const char *root,XrCompileResourceLimits limits,Xr
     context.limits=xr_xir_compile_default_limits();XrCompilerSessionStatus opened=xr_compile_session_new(context.resources,&session);
     XrXirStatus status=opened==XR_COMPILER_SESSION_OK?XR_XIR_OK:opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     char uri[XR_TEST_PATH_MAX],text[sizeof(roles_source)];lsp_uri(uri,sizeof(uri),root,"roles.xr");memcpy(text,roles_source,sizeof(text));
-    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XlspSourceDocument document={uri,text,strlen(uri),sizeof(text)-1,3};
     if(status==XR_XIR_OK)status=xlsp_source_snapshot_build(&request,&document,1,0,&snapshot,NULL,NULL);
     xr_compile_session_free(session);memset(text,'!',sizeof(text));
@@ -106,7 +106,7 @@ static void roles_owner_cases(const char *root) {
     XrCompileResourceLimits limits=lsp_limits();XrXirCompileContext context={0};XrCompilerSession *session=NULL;
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
-    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     char entry[XR_TEST_PATH_MAX];int entry_length=snprintf(entry,sizeof(entry),"%s/roles.xr",root);
     CHECK(entry_length>0&&(size_t)entry_length<sizeof(entry));request.entry_path=entry;
     XrXirSourceResult result={0};char text[sizeof(roles_source)];memcpy(text,roles_source,sizeof(text));
@@ -180,7 +180,7 @@ static void lsp_roles_cases(const char *root) {
     XrCompileResourceLimits limits=lsp_limits();XrXirCompileContext context={0};XrCompilerSession *session=NULL;
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
     context.limits=xr_xir_compile_default_limits();CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
-    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,root};XrXirSourceRequest request={session,NULL,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     char entry[XR_TEST_PATH_MAX];int entry_length=snprintf(entry,sizeof(entry),"%s/move-rejected.xr",root);
     CHECK(entry_length>0&&(size_t)entry_length<sizeof(entry));request.entry_path=entry;
     static const char rejected[]="fn denied(x:move i64)->i64{return x}\n";XrXirSourceResult result={0};

@@ -1,0 +1,6 @@
+class Marker{init(){}}
+struct Wrap{next:Marker?;number:i64}
+class Holder{data:Wrap;init(data:Wrap){this.data=data}}
+fn inc(value:ref i64){value+=2}
+fn answer()->i64{const h=Holder(Wrap{next:Marker(),number:40});inc(ref h.data.number);return h.data.number}
+export fn run()->i64{return comptime answer()}

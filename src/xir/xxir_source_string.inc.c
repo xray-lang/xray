@@ -33,7 +33,8 @@ static bool source_string_declaration(SourceContext *ctx) {
 }
 static bool source_string_member_reference(SourceContext *ctx, AstNode *node,
     const XrNativeMemberDeclaration *member) {
-    uint32_t index = (uint32_t)member->operation - XR_NATIVE_OPERATION_STRING_CONTAINS;
+    uint32_t index = member->operation==XR_NATIVE_OPERATION_STRING_COPY_BYTES ? 5 :
+        (uint32_t)member->operation - XR_NATIVE_OPERATION_STRING_CONTAINS;
     if (index >= sizeof(ctx->string_members) / sizeof(ctx->string_members[0]))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string member identity is not executable");
     if (!ctx->string_members[index]) {
@@ -43,15 +44,17 @@ static bool source_string_member_reference(SourceContext *ctx, AstNode *node,
             (int)member->line, (int)(member->column + source_text_size(ctx, member->name))};
         if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_MEMBER, ctx->string_declaration, range)) return false;
         ctx->string_members[index] = symbol.declaration;
-        XrXirSourceType *parameter = source_alloc(ctx, member->parameter_count, sizeof(*parameter));
-        if (!parameter) return false;
+        XrXirSourceType *parameter = member->parameter_count ? source_alloc(ctx, member->parameter_count, sizeof(*parameter)) : NULL;
+        if (member->parameter_count && !parameter) return false;
         for (uint32_t i = 0; i < member->parameter_count; ++i)
             parameter[i] = (XrXirSourceType) {i ? XR_XIR_I64 : XR_XIR_STRING, 0, true};
         XrXirSourceDeclaration *record = (XrXirSourceDeclaration *)&ctx->query.declarations[symbol.declaration - 1];
         record->native_identity = member->id;
         record->signature = source_owned_text(ctx, member->signature);
         if (!record->signature) return false;
-        record->type = (XrXirSourceType) {member->result == XR_NATIVE_TERM_BOOL ? XR_XIR_BOOL : XR_XIR_I64, 0, true};
+        XrXirType result=member->result==XR_NATIVE_TERM_BOOL ? XR_XIR_BOOL : XR_XIR_I64;
+        if (member->result==XR_NATIVE_TERM_ARRAY_U8 && !source_array_element_type(ctx,XR_XIR_U8,&result)) return false;
+        record->type = (XrXirSourceType) {result, 0, true};
         record->parameters = parameter; record->parameter_count = member->parameter_count; record->exported = true;
     }
     return source_query_target_token_reference(ctx,node,
@@ -66,6 +69,17 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
     if (member && (member->operation==XR_NATIVE_OPERATION_STRING_TO_STRING ||
         member->operation==XR_NATIVE_OPERATION_STRING_REPEAT))
         return source_string_owned_call(ctx,node,receiver,member,value);
+    if (member && member->operation==XR_NATIVE_OPERATION_STRING_COPY_BYTES) {
+        if (!member->is_public || member->is_static || member->receiver!=XR_NATIVE_RECEIVER_READ ||
+            member->parameter_count || member->result!=XR_NATIVE_TERM_ARRAY_U8 ||
+            member->allocation!=XR_NATIVE_ALLOCATION_MAY_HEAP || member->ownership!=XR_NATIVE_RESULT_OWNERSHIP_OWNED ||
+            call->arg_count || call->type_arg_count || call->default_arg_count)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"string byte copy requires its exact owned no-argument contract");
+        XrXirType array;
+        return source_array_element_type(ctx,XR_XIR_U8,&array) &&
+            source_recipe_record(ctx,(XrXirInstruction){XR_XIR_STRING_COPY_BYTES,array,{receiver.id,0},{0},0,{0}},value) &&
+            source_string_member_reference(ctx,call->callee,member);
+    }
     if (!member || !member->is_public || member->is_static || !member->parameter_count ||
         member->parameters[0].type != XR_NATIVE_TERM_STRING || member->receiver != XR_NATIVE_RECEIVER_READ)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string member has no admitted value-operation contract");

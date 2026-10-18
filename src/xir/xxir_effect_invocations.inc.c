@@ -142,8 +142,8 @@ typedef struct EffectInvocationFinal {
     uint32_t count,capacity,edge_count,edge_capacity;
 } EffectInvocationFinal;
 
-/* Replays share only released storage. Every live replay claims a distinct
- * block; no origin, flag or permission survives a new initialization. */
+/* Replays share only released storage; every live replay owns a distinct block.
+ * A new initialization preserves no origin, flag or permission from reuse. */
 typedef struct EffectInvocationScratch {
     struct EffectInvocationScratch *next;
     XrCompileResources *resources;
@@ -160,9 +160,9 @@ typedef struct EffectInvocationRead {
     const XrXirEffects *effects;
     const EffectInvocationDeclaredBounds *declared;
     EffectBodyRequest body;
-    uint32_t *consumers;
     EffectInvocationScratch *scratch_head;
     EffectInvocationScratch **replay_scratch;
+    uint32_t *consumers;
     bool producer_enabled,class_enabled;
 } EffectInvocationRead;
 
@@ -174,6 +174,10 @@ typedef struct EffectInvocationWorkspace {
     EffectFinalFunctions *prepared_result;
     uint32_t *edge_index;
     size_t edge_index_capacity;
+    uint32_t *node_index;
+    size_t node_index_capacity;
+    uint64_t class_rank_limit;
+    uint32_t class_rank_nodes;
 
     EffectInvocationState *states;
     uint32_t maximum;

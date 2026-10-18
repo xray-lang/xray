@@ -17,15 +17,15 @@
 #include "xir/xxir_program_internal.h"
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d %s\n",__LINE__,#x);exit(1);}} while(0)
 #include "../xir_library_compile_owner.h"
-#include "wire81_golden.h"
+#include "current_fields.h"
 #include "retired29_slot.h"
 #include "retired30_constants.h"
 static XrXirStatus constant_wire_operation(const XrXirCompileContext *context,void *unused) {
     (void)unused;XrXirArtifact *artifact=NULL;XrXirCheckedPacket packet={0};
-    XrXirStatus status=xr_xir_compile_checked_read(context,constant_wire,sizeof(constant_wire),&artifact,NULL);
+    XrXirStatus status=xr_xir_compile_checked_read(context,packet_003_current,sizeof(packet_003_current),&artifact,NULL);
     if (status==XR_XIR_OK) {
         status=xr_xir_compile_checked_write(artifact,&packet,NULL);
-        if (status==XR_XIR_OK) CHECK(packet.length==sizeof(constant_wire) && !memcmp(packet.bytes,constant_wire,packet.length));
+        if (status==XR_XIR_OK) CHECK(packet.length==sizeof(packet_003_current) && !memcmp(packet.bytes,packet_003_current,packet.length));
     }
     xr_xir_compile_artifact_free(artifact);xr_xir_compile_checked_packet_free(&packet);return status;
 }
@@ -39,7 +39,7 @@ static void constant_attacks(const XrXirCompileContext *context) {
         {CONSTANT_SLOT+12,0},{CONSTANT_READ+24,1},{CONSTANT_READ+4,XR_XIR_BOOL},
         {CONSTANT_DECL+20+19+12,1}};
     for (uint32_t a=0;a<sizeof(fields)/sizeof(fields[0]);++a) {
-        uint8_t bytes[sizeof(constant_wire)];memcpy(bytes,constant_wire,sizeof(bytes));
+        uint8_t bytes[sizeof(packet_003_current)];memcpy(bytes,packet_003_current,sizeof(bytes));
         constant_word(bytes+fields[a][0],fields[a][1]);
         XrSHA256Context hash;xr_sha256_init(&hash);xr_sha256_update(&hash,bytes,32);
         xr_sha256_update(&hash,bytes+64,sizeof(bytes)-64);xr_sha256_final(&hash,bytes+32);
@@ -51,7 +51,7 @@ static void constant_attacks(const XrXirCompileContext *context) {
 }
 static void constant_program_match(const XrXirCompileContext *context) {
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
-    CHECK(xr_xir_compile_checked_read(context,constant_wire,sizeof(constant_wire),&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context,packet_003_current,sizeof(packet_003_current),&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);

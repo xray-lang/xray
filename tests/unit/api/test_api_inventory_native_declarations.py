@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -40,6 +41,24 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         declaration = next(entry for entry in self.items if entry["kind"] == "type")
         self.assertEqual("Array<T>", declaration["signature"])
         self.assertEqual("struct", declaration["declaration_kind"])
+
+    def test_binary64_conversion_has_exact_owned_static_contract(self) -> None:
+        entries = [entry for entry in inventory.collect_native_types(ROOT)
+                   if entry["namespace"] == "f64"]
+        declaration = next(entry for entry in entries if entry["kind"] == "type")
+        self.assertEqual((declaration["native_type_id"], declaration["declaration_kind"]), (7, "class"))
+        members = [entry for entry in entries if entry["kind"] != "type"]
+        self.assertEqual(len(members), 12)
+        admitted = [entry for entry in members if entry["xir_admitted"]]
+        self.assertEqual({entry["name"] for entry in admitted},
+                         {"tryParse", "abs", "toString", "toI64", "floor", "ceil", "round", "isNaN"})
+        conversions = [entry for entry in admitted if entry["kind"] == "static-method"]
+        self.assertEqual(len(conversions), 1)
+        member = conversions[0]
+        self.assertEqual((member["name"], member["kind"], member["operation"],
+                          member["allocation"], member["ownership"]),
+                         ("tryParse", "static-method", "F64_TRY_PARSE", "may_heap", "owned"))
+        self.assertEqual(member["failures"], ["allocation", "retain", "limit"])
 
     def test_admitted_operations_have_exact_admission_contracts(self) -> None:
         members = [entry for entry in self.items if entry["kind"] != "type"]
@@ -131,14 +150,66 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
             self.assertEqual(entry["column"], member.column)
             self.assertEqual(entry["source"], "stdlib/types/string.xr")
             self.assertEqual(entry["operation"], member.operation)
-            self.assertEqual(entry["xir_admitted"], member.name in {"contains", "startsWith", "endsWith", "indexOf", "lastIndexOf", "toString", "repeat"})
+            self.assertEqual(entry["xir_admitted"], member.name in {"contains", "startsWith", "endsWith", "indexOf", "lastIndexOf", "toString", "repeat", "copyBytes"})
             if entry["xir_admitted"]:
-                self.assertEqual(entry["allocation"], "may_heap" if member.name=="repeat" else "no_heap")
-                self.assertEqual(entry["failures"], {"indexOf":["bounds","limit"],"lastIndexOf":["limit"],"toString":["retain"],"repeat":["allocation","retain","limit"]}.get(member.name,[]))
+                self.assertEqual(entry["allocation"], "may_heap" if member.name in {"repeat", "copyBytes"} else "no_heap")
+                self.assertEqual(entry["failures"], {"indexOf":["bounds","limit"],"lastIndexOf":["limit"],"toString":["retain"],"repeat":["allocation","retain","limit"],"copyBytes":["allocation","retain","limit"]}.get(member.name,[]))
                 self.assertEqual(entry["ownership"], "owned")
         with self.assertRaises(ValueError):
             inventory.collect_native_declaration(ROOT, path,
                 source.replace("contains(search: string)", "contains(search: i64)"), "stdlib", "string")
+
+    def test_iterator_inventory_uses_complete_identity_contracts(self) -> None:
+        rows = [entry for entry in inventory.collect_native_types(ROOT)
+                if entry["namespace"] == "Iterator"]
+        self.assertEqual(len(rows), 6)
+        declaration = next(entry for entry in rows if entry["kind"] == "type")
+        self.assertEqual((declaration["native_type_id"], declaration["declaration_kind"],
+                          declaration["native_declaration_kind"], declaration["signature"],
+                          declaration["generic_parameter_names"], declaration["generic_parameter_count"]),
+                         (12, "class", "identity", "Iterator<T>", ["T"], 1))
+        self.assertEqual((declaration["line"], declaration["column"]), (3, 7))
+        members = {entry["name"]: entry for entry in rows if entry["kind"] != "type"}
+        expected = [("hasNext",1,5,"ITERATOR_HAS_NEXT","(): bool",[]),
+                    ("next",2,7,"ITERATOR_NEXT","(): T",["IteratorExhausted"]),
+                    ("nth",3,9,"ITERATOR_NTH","(index: i64): T",["IteratorExhausted"])]
+        self.assertEqual({name for name, entry in members.items() if entry["xir_admitted"]},
+                         {"hasNext", "next", "nth"})
+        for name, member_id, line, operation, signature, failures in expected:
+            entry = members[name]
+            self.assertEqual((entry["native_type_id"],entry["native_member_id"],entry["line"],entry["column"]),
+                             (12,member_id,line,5))
+            self.assertEqual((entry["operation"],entry["signature"],entry["receiver"],
+                              entry["allocation"],entry["ownership"],entry["failures"]),
+                             (operation,signature,"read","may_heap","owned",failures))
+            self.assertEqual(entry["source"],"stdlib/types/iterator.xr")
+        for name, member_id in [("iterator",4),("toString",5)]:
+            entry = members[name]
+            self.assertEqual((entry["native_member_id"],entry["operation"],entry["allocation"],
+                              entry["ownership"],entry["xir_admitted"]),
+                             (member_id,"NONE","unknown","unknown",False))
+        with tempfile.TemporaryDirectory(prefix="xray-iterator-inventory-") as directory:
+            root = Path(directory)
+            for relative in ["stdlib/types/iterator.xr","stdlib/prelude/builtin_symbols.def"]:
+                target = root / relative
+                target.parent.mkdir(parents=True,exist_ok=True)
+                target.write_bytes((ROOT / relative).read_bytes())
+            source = root / "stdlib/types/iterator.xr"
+            original = source.read_text(encoding="utf-8")
+            for before, after in [("Iterator<T>","Iterator<U>"),("next() -> T","next() -> i64"),
+                                  ("// @lowered\n    nth(","// removed\n    nth("),
+                                  ("// Built-in","// @native-type id=12\n// Built-in")]:
+                self.assertIn(before,original)
+                source.write_text(original.replace(before,after,1),encoding="utf-8")
+                with self.subTest(before=before), self.assertRaises(ValueError):
+                    inventory.collect_iterator_declaration(root)
+            source.write_text(original,encoding="utf-8")
+            prelude = root / "stdlib/prelude/builtin_symbols.def"
+            prelude.write_text(prelude.read_text(encoding="utf-8") +
+                               '\nXR_BUILTIN_PRELUDE_TYPE("Iterator", 1, XR_TINSTANCE, GENERIC_1)\n',
+                               encoding="utf-8")
+            with self.assertRaises(ValueError):
+                inventory.collect_iterator_declaration(root)
 
     def test_native_identity_rejects_relocated_declarations(self) -> None:
         with self.assertRaises(ValueError):
@@ -156,7 +227,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
         entries = [entry for entry in inventory.collect_native_types(ROOT)
                    if entry["namespace"] == "i64"]
         declaration = next(entry for entry in entries if entry["kind"] == "type")
-        self.assertEqual((6, "i64", ""), header[:3])
+        self.assertEqual((6, "i64", ()), header[:3])
         self.assertEqual("class", declaration["declaration_kind"])
         self.assertEqual(6, declaration["native_type_id"])
         actual = {entry["name"]: entry for entry in entries if entry["kind"] != "type"}
@@ -181,7 +252,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
     def test_collector_uses_shared_parser_and_rejects_invalid_admission(self) -> None:
         with patch.object(declarations, "parse_source", wraps=declarations.parse_source) as parse:
             inventory.collect_native_types(ROOT)
-        self.assertEqual(parse.call_count, 6)
+        self.assertEqual(parse.call_count, 8)
         parse.assert_any_call(self.source, self.prelude)
         parse.assert_any_call((ROOT / "stdlib/types/string.xr").read_text(encoding="utf-8"), self.prelude)
         parse.assert_any_call((ROOT / "stdlib/types/i64.xr").read_text(encoding="utf-8"), self.prelude)
@@ -194,7 +265,7 @@ class NativeDeclarationInventoryTest(unittest.TestCase):
                 inventory.collect_native_declaration(ROOT, self.path, source, "stdlib", "array")
 
     def test_scalar_definition_inventory_is_complete_and_owner_bound(self) -> None:
-        families = [("f64",7,12,{"parse","tryParse","toFixed","sqrt","pow"}),
+        families = [("f64",7,12,{"parse","toFixed","sqrt","pow"}),
                     ("bool",8,1,set()),
                     ("rune",9,6,{"isLetter","isNumber","isAlphanumeric","isWhitespace"})]
         items=inventory.collect_native_types(ROOT)

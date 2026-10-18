@@ -10,18 +10,22 @@ static bool nominal_access_work(const XrXirCompileContext *work, uint64_t amount
     if (!work ||!xir_compile_work(work, amount)) return false;
      return true;
 }
-XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, uint32_t declaration, uint32_t field, XrXirNominalAccess access) {
+XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type, uint32_t field, XrXirNominalAccess access) {
     if (!xir_compile_context_valid(compile_context)) return XR_XIR_BAD_STRUCTURE;
     XrXirCompileContext compile_state = *compile_context;
     XrXirCompileContext *work = &compile_state;
     if (!nominal_access_work(work, 1)) return XR_XIR_BUDGET;
     if (!module || !module->declarations || !module->types || !module->types->nominals ||
-        function >= module->function_count || declaration >= module->types->nominals->count ||
+        function >= module->function_count ||
         access < XR_XIR_NOMINAL_CONSTRUCT || access > XR_XIR_NOMINAL_TYPE ||
         ((access == XR_XIR_NOMINAL_CONSTRUCT || access == XR_XIR_NOMINAL_TYPE) && field)) return XR_XIR_BAD_STRUCTURE;
     const XrXirDeclarations *scope = module->declarations;
     const XrXirFunctionIdentity *caller = &scope->functions[function];
     const XrXirNominalTable *table = module->types->nominals;
+    const XrXirTypeNode *node = xr_xir_type_node(module->types,type);
+    if (!node || node->kind != XR_XIR_TYPE_NOMINAL) return XR_XIR_BAD_TYPE;
+    uint32_t declaration=node->nominal.declaration;
+    if (declaration>=table->count) return XR_XIR_BAD_TYPE;
     XrXirNominalIdentity identity;
     if (table->declarations) {
         const XrXirNominalDeclaration *d = &table->declarations[declaration];
@@ -41,6 +45,11 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
         if (!xr_xir_module_imports(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;
     }
     if (access == XR_XIR_NOMINAL_TYPE) return XR_XIR_OK;
+    bool derived_authorized=false;
+    XrXirDerivationAccess derived={function,field,access==XR_XIR_NOMINAL_READ?
+        XR_XIR_DERIVE_READ:access==XR_XIR_NOMINAL_WRITE?XR_XIR_DERIVE_WRITE:0,type};
+    XrXirStatus derived_status=xir_derivation_access(work,module,&derived,&derived_authorized);
+    if (derived_status!=XR_XIR_OK) return derived_status;
     if (access == XR_XIR_NOMINAL_CONSTRUCT && identity.kind == XR_XIR_NOMINAL_STRUCT &&
         (identity.flags & XR_XIR_NOMINAL_MODULE_LITERAL) && !xr_xir_module_same_scope(scope, caller->module, declaring_module))
         return XR_XIR_BAD_TYPE;
@@ -50,7 +59,8 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
     for (uint32_t f = first; f < end; ++f) {
         if (!nominal_access_work(work, 1)) return XR_XIR_BUDGET;
         uint32_t flags = table->declarations ? table->declarations[declaration].fields[f].flags : identity.fields[f].flags;
-        if ((flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED)) && caller->nominal_owner != declaration + 1)
+        if ((flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED)) && !derived_authorized &&
+            (caller->derivation || caller->nominal_owner != declaration + 1))
             return XR_XIR_BAD_TYPE;
         if (access == XR_XIR_NOMINAL_WRITE && !(flags & XR_XIR_FIELD_MUTABLE)) return XR_XIR_BAD_TYPE;
     }
@@ -86,7 +96,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
         if (status!=XR_XIR_OK || !found) break;
         const XrXirTypeNode *node = &types->nodes[i];
         if (node->kind == XR_XIR_TYPE_NOMINAL) {
-            status = xr_xir_compile_nominal_access(remaining, module, function, node->nominal.declaration, 0, XR_XIR_NOMINAL_TYPE);
+            status = xr_xir_compile_nominal_access(remaining, module, function, (XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i), 0, XR_XIR_NOMINAL_TYPE);
             for (uint32_t a = 0; a < node->nominal.argument_count && status == XR_XIR_OK; ++a)
                 status = type_access_edge(types, node->nominal.arguments[a], i, pending, remaining);
         } else if (node->kind == XR_XIR_TYPE_CALLABLE || (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD)) {
@@ -97,7 +107,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
             status = type_access_edge(types, node->element, i, pending, remaining);
             if (status == XR_XIR_OK) status = type_access_edge(types, node->result, i, pending, remaining);
         } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_SET || node->kind == XR_XIR_TYPE_CELL ||
-                   node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK)
+                   node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_ITERATOR)
             status = type_access_edge(types, node->element, i, pending, remaining);
         else status = XR_XIR_BAD_TYPE;
     }

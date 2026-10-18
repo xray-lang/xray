@@ -84,6 +84,7 @@ static XrXirStatus effect_control_seed_apply(EffectControlCheck *check,uint32_t 
  * Field-dependent calls still decode every actual ordinal. All logical edges
  * are counted here and receive their real targets in the incoming index. */
 static XrXirStatus effect_control_seeds(EffectControlCheck *check,uint32_t f) {
+    EffectBodyRun dense_range_storage;
     const EffectBodyMaterial *body=check->input.owner;const EffectBodyFunction *owned=&body->functions[f];
     XrXirEffect actual=check->final->functions[f].suspend;XrXirFunctionEffects aggregate={0};
     if (actual<XR_XIR_EFFECT_NONE || actual>XR_XIR_EFFECT_MAY ||
@@ -91,7 +92,7 @@ static XrXirStatus effect_control_seeds(EffectControlCheck *check,uint32_t f) {
         return XR_XIR_BAD_STRUCTURE;
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
     for (uint32_t r=0;r<owned->run_count;++r) {
-        const EffectBodyRun *run=NULL;XrXirStatus status=effect_body_range_ref(&check->input.read,owned,&cursor,&run);
+        const EffectBodyRun *run=NULL;XrXirStatus status=effect_body_range_take(&check->input.read,owned,&cursor,&run,&dense_range_storage);
         if (status!=XR_XIR_OK) return status;
         uint32_t opcode=XR_XIR_INVALID;status=effect_body_run_word(&check->input.read,run,run->first,0,&opcode);
         if (status!=XR_XIR_OK) return status;
@@ -134,11 +135,12 @@ static XrXirStatus effect_control_seeds(EffectControlCheck *check,uint32_t f) {
 /* Prepending ascending Input IDs reproduces the published cause tie order.
  * Closure checks consume proposed values, never provisional solver values. */
 static XrXirStatus effect_control_incoming(EffectControlCheck *check) {
+    EffectBodyRun dense_range_storage;
     const XrXirCompileContext *work=check->input.read.owner;const EffectBodyMaterial *body=check->input.owner;uint32_t at=0;
     for (uint32_t f=0;f<check->count;++f) {
         const EffectBodyFunction *owned=&body->functions[f];EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
         for (uint32_t r=0;r<owned->run_count;++r) {
-            const EffectBodyRun *run=NULL;XrXirStatus status=effect_body_range_ref(&check->input.read,owned,&cursor,&run);
+            const EffectBodyRun *run=NULL;XrXirStatus status=effect_body_range_take(&check->input.read,owned,&cursor,&run,&dense_range_storage);
             if (status!=XR_XIR_OK) return status;
             uint32_t opcode=XR_XIR_INVALID;status=effect_body_run_word(&check->input.read,run,run->first,0,&opcode);
             if (status!=XR_XIR_OK) return status;

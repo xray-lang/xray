@@ -27,6 +27,9 @@ typedef struct XrXirNominalField {
 /* An explicit struct initializer limits field literals to its declaring module.
  * Calls retain their own constructor permissions; this flag grants none. */
 #define XR_XIR_NOMINAL_MODULE_LITERAL 2u
+/* An explicit class promise: every field is immutable after construction and
+ * proves Sendable in its declaration environment. Ordinary classes infer none. */
+#define XR_XIR_NOMINAL_SENDABLE 4u
 
 typedef enum XrXirNominalKind { XR_XIR_NOMINAL_STRUCT, XR_XIR_NOMINAL_ENUM, XR_XIR_NOMINAL_CLASS } XrXirNominalKind;
 typedef struct XrXirNominalVariant {
@@ -87,7 +90,8 @@ XR_FUNC void xr_xir_compile_nominal_free(XrXirNominalTable *table);
 typedef enum XrXirNominalAccess {
     XR_XIR_NOMINAL_CONSTRUCT, XR_XIR_NOMINAL_READ, XR_XIR_NOMINAL_WRITE, XR_XIR_NOMINAL_TYPE
 } XrXirNominalAccess;
-/* Requires a verified module; declaration ownership grants no generic facts. */
-XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, uint32_t declaration, uint32_t field, XrXirNominalAccess access);
+/* Requires a verified module and its actual canonical nominal instance. A
+ * declaration ordinal cannot identify ordered generic arguments or a pool. */
+XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type, uint32_t field, XrXirNominalAccess access);
 XR_FUNC XrXirStatus xr_xir_compile_type_access(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function, XrXirType type);
 #endif // XXIR_NOMINAL_H

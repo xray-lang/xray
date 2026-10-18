@@ -8,6 +8,7 @@
  */
 /* Dense construction facts freeze before Built enters the common checker.
  * The producer's bookkeeping supplies bindings, not independent authority. */
+#include "xxir_source_generator_methods.inc.c"
 static bool source_construction_prepare(SourceContext *ctx) {
     if (ctx->construction)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source construction owner was already published");
@@ -35,7 +36,10 @@ static bool source_construction_prepare(SourceContext *ctx) {
             fields[f]=function ? function+1 : 0;
         }
     }
-    XrXirStatus status=xr_xir_compile_construction_new(&ctx->compile,&ctx->types,rows,count,&ctx->construction);
+    XrXirMaterializationBinding *bindings=NULL;uint32_t binding_count=0;
+    if (!source_materialization_bindings(ctx,&bindings,&binding_count)) return false;
+    XrXirConstructionSpec input={rows,count,bindings,binding_count,NULL};
+    XrXirStatus status=xr_xir_compile_construction_new_v3(&ctx->compile,&ctx->types,&input,&ctx->construction);
     return status==XR_XIR_OK || source_fail(ctx,NULL,status,"source construction ownership failed");
 }
 static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
@@ -44,7 +48,8 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
     bool declarations_ready = source_query_modules(ctx) && collect_declarations(ctx);
     ctx->declarations_building = false;
     if (declarations_ready && (!ctx->core_factory || source_core_contract(ctx)) && source_manifests_bind(ctx) &&
-        source_implementations_bind(ctx) && build_bodies(ctx) && source_history_graph_commit(ctx) && source_class_carriers(ctx) && source_effect_prepare(ctx) && source_construction_prepare(ctx) && source_query_seal_storage(ctx) && source_function_seal_storage(ctx)) {
+        source_derivations_prepare(ctx) && source_derivations_execute(ctx) && source_implementations_bind(ctx) && source_generator_methods(ctx) && build_bodies(ctx) && source_instance_literals_finish(ctx) &&
+        source_materialization_finish(ctx) && source_history_graph_commit(ctx) && source_class_carriers(ctx) && source_effect_prepare(ctx) && source_construction_prepare(ctx) && source_query_seal_storage(ctx) && source_function_seal_storage(ctx)) {
         XrXirDeclarations declarations;
         XrXirModule built = source_module_view(ctx,&declarations);
         source_owned_text_index_clear(ctx);
@@ -60,6 +65,9 @@ static void source_construct(SourceContext *ctx, XrXirSourceResult *output) {
         }
         if (status != XR_XIR_OK) {
             xr_xir_compile_artifact_free(output->checked); output->checked=NULL;
+            if (source_derive_check_failure(ctx,&location,status)) {
+                source_vector_retired_free(ctx);return;
+            }
             char message[128] = {0};
             if (status != XR_XIR_BUDGET && status != XR_XIR_OUT_OF_MEMORY &&
                 source_format(ctx, message, sizeof(message),

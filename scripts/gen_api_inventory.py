@@ -1004,6 +1004,13 @@ def collect_native_declaration(root: Path, path: Path, text: str,
                        doc_surface=doc_surface, doc_module=doc_module)
     declaration.update(native_type_id=identity, declaration_kind="class" if 6 <= identity <= 9 else "struct", column=column,
                        generic_parameter_count=len(binders), generic_parameter_names=list(binders))
+    return native_declaration_members(root, path, declaration, members)
+
+
+def native_declaration_members(root: Path, path: Path, declaration: dict[str, Any],
+                               members: list[Any]) -> list[dict[str, Any]]:
+    identity, name = declaration["native_type_id"], declaration["name"]
+    doc_surface, doc_module = declaration["doc_surface"], declaration["doc_module"]
     out = [declaration]
     for member_id, member in enumerate(members, 1):
         if member.method:
@@ -1028,11 +1035,28 @@ def collect_native_declaration(root: Path, path: Path, text: str,
     return out
 
 
+
+def collect_iterator_declaration(root: Path) -> list[dict[str, Any]]:
+    source, header, members = gen_native_declarations.parse_iterator_source(root)
+    identity, name, binders, line, column = header
+    path = root / "stdlib/types/iterator.xr"
+    declaration = item(category="native-type", namespace=name, name=name, kind="type",
+                       signature="Iterator<T>", source=rel(root, path), line=line,
+                       doc_surface="", doc_module="")
+    declaration.update(native_type_id=identity, declaration_kind="class",
+                       native_declaration_kind="identity", column=column,
+                       generic_parameter_count=len(binders), generic_parameter_names=list(binders))
+    return native_declaration_members(root, path, declaration, members)
+
+
 def collect_native_types(root: Path) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     cards = {path.stem for path in (root / "spec/source/cards/stdlib").glob("*.json")}
     for path in sorted((root / "stdlib/types").glob("*.xr")):
         text = path.read_text(encoding="utf-8")
+        if path == root / "stdlib/types/iterator.xr":
+            out.extend(collect_iterator_declaration(root))
+            continue
         if gen_native_declarations.TYPE_MARKER.search(text):
             doc_module = path.stem if path.stem in cards else ""
             out.extend(collect_native_declaration(root, path, text,

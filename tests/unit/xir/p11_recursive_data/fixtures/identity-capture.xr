@@ -1,0 +1,11 @@
+struct Box{read:fn()->i64;value:i64}
+fn assign(value:ref i64,grow:fn(),read:fn()->i64){grow();value=read()+40}
+fn eval()->i64{
+    var values:Array<(i64,i64)>=[(20,20)];
+    const read=fn()->i64{return len(values)};
+    const grow=fn(){values.push((1,1))};
+    var box=Box{read:read,value:0};
+    assign(ref box.value,grow,read);
+    return box.value
+}
+export fn answer()->i64{const value=comptime eval();return value}

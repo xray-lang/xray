@@ -146,19 +146,35 @@ static bool source_nominal_constraints(SourceContext *ctx) {
     }
     ctx->type_scope = saved; ctx->module = module; return ok;
 }
+static bool source_nominal_attributes(SourceContext *ctx,AstNode *node,XrAttribute **attributes,int count) {
+    if (count<0 || (count && !attributes))
+        return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"nominal attributes are malformed");
+    if (count) ctx->derive_present=true;
+    for (int i=0;i<count;++i) {
+        if (!source_work(ctx,node)) return false;
+        if (!attributes[i] || attributes[i]->kind!=ATTR_DERIVE || !attributes[i]->derivation)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"nominal attribute is not admitted");
+    }
+    return true;
+}
 static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.struct_decl;
     if (decl->type_param_count < 0 || decl->type_param_count > 65536 || decl->super_name ||
-        decl->is_packed || decl->explicit_align || decl->attr_count || decl->field_count < 0)
+        decl->is_packed || decl->explicit_align || decl->field_count < 0)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "struct declaration contract is not admitted");
-    return source_nominal_declare(ctx, node, decl->name, decl->type_params,
+    return source_nominal_attributes(ctx,node,decl->attributes,decl->attr_count) && source_nominal_declare(ctx, node, decl->name, decl->type_params,
         (uint32_t) decl->type_param_count, XR_XIR_NOMINAL_STRUCT);
+}
+static bool source_sendable_marker(SourceContext *ctx,const XrTypeRef *ref) {
+    return ref && ref->kind==XR_TREF_NAMED && !ref->nchildren && ref->name &&
+        source_text_same(ctx,NULL,ref->name,"Sendable");
 }
 static bool source_class_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.class_decl;
     if (decl->super_name || decl->super_module || decl->is_packed ||
-        decl->explicit_align || decl->attr_count || decl->type_param_count < 0 ||
-        decl->type_param_count > 65536 || decl->field_count < 0)
+        decl->explicit_align || decl->type_param_count < 0 ||
+        decl->type_param_count > 65536 || decl->field_count < 0 || decl->interface_count<0 ||
+        (decl->interface_count && !decl->interfaces))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class execution currently requires a root declaration without inheritance");
     uint32_t constructors=0;
     for (int i=0;i<decl->method_count;++i) {
@@ -166,10 +182,18 @@ static bool source_class_declare(SourceContext *ctx, AstNode *node) {
         if (decl->methods[i]->type == AST_METHOD_DECL && decl->methods[i]->as.method_decl.is_constructor) ++constructors;
     }
     if (constructors>1) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"a class has at most one constructor");
-    if (!source_nominal_declare(ctx,node,decl->name,decl->type_params,
+    if (!source_nominal_attributes(ctx,node,decl->attributes,decl->attr_count) || !source_nominal_declare(ctx,node,decl->name,decl->type_params,
         (uint32_t)decl->type_param_count,XR_XIR_NOMINAL_CLASS)) return false;
-    ((XrXirNominalDeclaration *)ctx->nominals.declarations)[ctx->nominals.count-1].flags=
-        decl->explicit_final ? XR_XIR_NOMINAL_FINAL : 0;
+    uint32_t flags=decl->explicit_final?XR_XIR_NOMINAL_FINAL:0;
+    for (int i=0;i<decl->interface_count;++i) {
+        if (!source_work(ctx,node)) return false;
+        if (source_sendable_marker(ctx,decl->interfaces[i])) {
+            if (flags & XR_XIR_NOMINAL_SENDABLE)
+                return source_fail(ctx,node,XR_XIR_BAD_TYPE,"duplicate Sendable marker");
+            flags|=XR_XIR_NOMINAL_SENDABLE;
+        }
+    }
+    ((XrXirNominalDeclaration *)ctx->nominals.declarations)[ctx->nominals.count-1].flags=flags;
     return true;
 }
 static bool source_struct_fields(SourceContext *ctx) {
@@ -200,10 +224,10 @@ static bool source_struct_fields(SourceContext *ctx) {
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field requires an admitted value type");
                 fields[f] = (XrXirNominalField) {{field->name, (uint32_t) source_text_size(ctx, field->name)}, types[f],
                     (field->is_private ? XR_XIR_FIELD_PRIVATE : 0) | (field->is_protected ? XR_XIR_FIELD_PROTECTED : 0) |
-                    (field->is_const ? 0 : XR_XIR_FIELD_MUTABLE)};
+                    (field->is_const || (record->flags & XR_XIR_NOMINAL_SENDABLE) ? 0 : XR_XIR_FIELD_MUTABLE)};
                 SourceName member = {0}; member.name = source_owned_text(ctx, field->name); member.node = node;
                 if (!member.name) return false;
-                member.type = types[f]; member.mutable = !field->is_const;
+                member.type = types[f]; member.mutable = (fields[f].flags & XR_XIR_FIELD_MUTABLE)!=0;
                 if (!source_query_declare(ctx, &member, XR_XIR_SOURCE_MEMBER, symbol->declaration,
                     source_query_range(ctx, node, field->name))) return false;
                 source_query_binding_type(ctx, &member);
@@ -250,7 +274,7 @@ static bool source_struct_default_functions(SourceContext *ctx, uint32_t *next) 
                 if (!source_nominal_function_scope(ctx,index,symbol)) return false;
                 ctx->bodies[index].declaration = ctx->nominal_members[symbol->index][f];
                 bool visible = nominal->exported && !(nominal->fields[f].flags & (XR_XIR_FIELD_PRIVATE | XR_XIR_FIELD_PROTECTED));
-                ctx->identities[index] = (XrXirFunctionIdentity) {m, visible, symbol->index + 1, 0, 0, 0, XR_XIR_MEMBER_HELPER, 0, 0,0};
+                ctx->identities[index] = (XrXirFunctionIdentity) {m, visible, symbol->index + 1, 0, 0, 0, XR_XIR_MEMBER_HELPER, 0, 0, 0, 0};
             }
         }
     }

@@ -1,0 +1,43 @@
+add_executable(test_xir_string_copy_bytes "${CMAKE_CURRENT_LIST_DIR}/test_xir_string_copy_bytes.c")
+target_link_libraries(test_xir_string_copy_bytes PRIVATE xray_xir_source xray_xir_vm xray_xir_cgen)
+set_target_properties(test_xir_string_copy_bytes PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_string_copy_bytes PRIVATE /utf-8 /W4 /WX)
+else()
+    target_compile_options(test_xir_string_copy_bytes PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_string_copy_bytes COMMAND test_xir_string_copy_bytes)
+set_tests_properties(test_xir_string_copy_bytes PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;string;ownership")
+
+set(XIR_BYTES_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_string_copy_bytes.c")
+set(XIR_BYTES_PACKET "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_string_copy_bytes.chk")
+add_custom_command(OUTPUT ${XIR_BYTES_C} ${XIR_BYTES_PACKET}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_string_copy_bytes> --emit-native ${XIR_BYTES_C} ${XIR_BYTES_PACKET}
+    DEPENDS test_xir_string_copy_bytes VERBATIM)
+add_executable(test_xir_string_copy_bytes_native "${CMAKE_CURRENT_LIST_DIR}/test_xir_string_copy_bytes_native.c" ${XIR_BYTES_C})
+target_link_libraries(test_xir_string_copy_bytes_native PRIVATE xray_xir_scalar)
+add_executable(test_xir_string_copy_bytes_mixed "${CMAKE_CURRENT_LIST_DIR}/test_xir_string_copy_bytes_mixed.c" ${XIR_BYTES_C})
+target_link_libraries(test_xir_string_copy_bytes_mixed PRIVATE xray_xir_vm)
+target_compile_definitions(test_xir_string_copy_bytes_mixed PRIVATE XR_BYTE_COPY_PACKET="${XIR_BYTES_PACKET}")
+foreach(bytes_test IN ITEMS test_xir_string_copy_bytes_native test_xir_string_copy_bytes_mixed)
+    set_target_properties(${bytes_test} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${bytes_test} PRIVATE /utf-8 /W4 /WX)
+    else()
+        target_compile_options(${bytes_test} PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME ${bytes_test} COMMAND ${bytes_test})
+    set_tests_properties(${bytes_test} PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;string;ownership;execution;abi")
+    add_test(NAME ${bytes_test}_runtime_resources COMMAND ${bytes_test} --runtime-resources)
+    set_tests_properties(${bytes_test}_runtime_resources PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;string;ownership;runtime-fault;resources")
+endforeach()
+add_test(NAME test_xir_string_copy_bytes_runtime_resources COMMAND test_xir_string_copy_bytes_mixed --vm-runtime-resources)
+set_tests_properties(test_xir_string_copy_bytes_runtime_resources PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;string;ownership;runtime-fault;resources")
+add_test(NAME test_xir_string_copy_bytes_compiler_controls COMMAND test_xir_string_copy_bytes --compiler-controls)
+set_tests_properties(test_xir_string_copy_bytes_compiler_controls PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;string;ownership;budget")
+add_test(NAME test_xir_string_copy_bytes_compiler_resources COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_LIST_DIR}/run_string_copy_bytes_compiler_faults.py"
+    --exe $<TARGET_FILE:test_xir_string_copy_bytes>
+    --output "${CMAKE_CURRENT_BINARY_DIR}/string-copy-bytes-compiler-fi")
+set_tests_properties(test_xir_string_copy_bytes_compiler_resources PROPERTIES TIMEOUT 600 COST 600 PROCESSORS 8 RUN_SERIAL TRUE LABELS "unit;xir;source;ctfe;string;ownership;compiler-fault;resources")

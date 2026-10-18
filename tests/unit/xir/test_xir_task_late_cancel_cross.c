@@ -9,7 +9,8 @@
 static unsigned oc_phase, oc_instance, oc_hits, oc_denials, late_stage;
 static size_t cross_last_ordinal,cross_last_bytes;
 static unsigned cross_expected_instance=UINT32_MAX;
-static bool oc_cancel_accepted;
+static bool oc_cancel_accepted, oc_guard_enabled, oc_private_seen;
+static unsigned oc_guard_count;
 static void oracle_allocation_attempt(unsigned kind,size_t bytes,size_t ordinal) {
     cross_last_ordinal=ordinal;cross_last_bytes=bytes;
     printf("CONTROL_ALLOC {\"kind\":%u,\"bytes\":%zu,\"ordinal\":%zu,\"phase\":%u,\"instance\":%u,\"after_cancel\":%u}\n",
@@ -33,6 +34,29 @@ static void oracle_budget_rejected(void) { ++oc_denials; }
 #undef xr_xir_string_new
 #undef xr_xir_enum_new
 #undef xr_xir_value_admit
+/* Removed scratch heap requests still have exact work and capacity guards. */
+static void oc_admission_guards(const XrXirValue *value, XrXirValueAdmission *source, unsigned role) {
+    CHECK(value&&source&&xr_xir_value_valid(value));
+    const XirNominalValue *record=(const XirNominalValue *)(uintptr_t)value->payload;
+    CHECK(record->object.kind==XR_XIR_TYPE_NOMINAL&&record->count==1);
+    CHECK(((const XrXirValue *)(record+1))->type==XR_XIR_STRING);
+    const uint64_t works[]={2,1,2}, scratch[]={40,40,39}, fees[]={3,2,1};
+    XrXirValue original=*value;
+    for(unsigned control=0;control<3;++control) {
+        XrXirValueAdmission admission=*source;admission.work=works[control];admission.scratch_bytes=scratch[control];
+        size_t attempts=runtime_attempts;
+        XrXirDomainBudgetStats before=xr_xir_domain_budget_stats(source->domain);
+        XrXirValueStatus status=late_canonical_value_admit(value,(XrXirType)value->type,&admission);
+        XrXirDomainBudgetStats after=xr_xir_domain_budget_stats(source->domain);
+        CHECK(status==(control?XR_XIR_VALUE_LIMIT:XR_XIR_VALUE_OK));
+        CHECK(!memcmp(value,&original,sizeof(original))&&runtime_attempts==attempts);
+        CHECK(admission.scratch_bytes==scratch[control]&&after.work-before.work==fees[control]);
+        CHECK(after.requested_bytes==before.requested_bytes&&after.requested_call_bytes==before.requested_call_bytes);
+        ++oc_guard_count;
+        printf("CONTROL_GUARD {\"instance\":%u,\"role\":%u,\"control\":%u,\"status\":%u,\"work_fee\":%llu,\"scratch\":%llu,\"allocations\":0}\n",
+            oc_instance,role,control,(unsigned)status,(unsigned long long)(after.work-before.work),(unsigned long long)scratch[control]);
+    }
+}
 /* Each observer delegates once without modifying input, ownership or status. */
 XR_FUNC XrXirValueStatus xr_xir_string_new(XrXirDomain *domain,const char *bytes,size_t length,XrXirValue *output) {
     unsigned prior=late_stage;late_stage=1;
@@ -47,7 +71,15 @@ XR_FUNC XrXirValueStatus xr_xir_enum_new(XrXirType type,uint32_t variant,const X
 }
 XR_FUNC XrXirValueStatus xr_xir_value_admit(const XrXirValue *value,XrXirType type,XrXirValueAdmission *admission) {
     unsigned prior=late_stage;late_stage=3;
+    bool observe=oc_cancel_accepted&&oc_phase==3;
+    size_t attempts=runtime_attempts;
+    uint64_t work=admission?admission->work:0, scratch=admission?admission->scratch_bytes:0;
     XrXirValueStatus status=late_canonical_value_admit(value,type,admission);late_stage=prior;
+    if(observe&&oc_guard_enabled)oc_admission_guards(value,admission,1);
+    if(observe)printf("CONTROL_ADMISSION {\"instance\":%u,\"type\":%u,\"status\":%u,\"allocations\":%zu,\"work\":[%llu,%llu],\"scratch\":[%llu,%llu]}\n",
+        oc_instance,(unsigned)type,(unsigned)status,runtime_attempts-attempts,
+        (unsigned long long)work,(unsigned long long)(admission?admission->work:0),
+        (unsigned long long)scratch,(unsigned long long)(admission?admission->scratch_bytes:0));
     return status;
 }
 
@@ -131,6 +163,16 @@ static void oc_copies(const XrXirValue *task,XrXirCallStatus expected,bool error
 
 static void census_snapshot(XrXirInstance *instance,const XrXirValue *task,unsigned poll) {
     const XirTask *storage=task->payload?(const XirTask *)(uintptr_t)task->payload:NULL;
+    if(storage&&storage->call&&storage->call->top&&storage->call->top->exiting&&
+        storage->call->top->pending.status==XR_XIR_CALL_THROWN&&!oc_private_seen) {
+        oc_private_seen=true;
+        if(oc_cancel_accepted&&oc_phase==3) {
+            const XrXirValue *value=&storage->call->top->pending.value;
+            printf("CONTROL_CALL_ADMISSION {\"instance\":%u,\"type\":%u,\"status\":%u}\n",
+                oc_instance,value->type,(unsigned)storage->call->top->pending.status);
+            if(oc_guard_enabled)oc_admission_guards(value,&storage->call->config.admission,2);
+        }
+    }
     printf("CENSUS_POLL {\"instance\":%u,\"poll\":%u,\"root_state\":%u,\"instance_state\":%u,\"go\":%u,\"task_state\":%u,\"cached\":%u,\"next_malloc\":%zu}\n",
         oc_instance,poll,(unsigned)xr_xir_call_state(instance->call),(unsigned)instance->state,oc_go_calls,
         storage?(unsigned)storage->state:0,storage?(unsigned)storage->outcome.status:0,runtime_attempts);
@@ -138,11 +180,14 @@ static void census_snapshot(XrXirInstance *instance,const XrXirValue *task,unsig
 int main(int argc,char **argv) {
     CHECK(setvbuf(stdout,NULL,_IONBF,0)==0);
     unsigned prefix=argc>1?(unsigned)strtoul(argv[1],NULL,10):UINT32_MAX;
-    size_t fail_at=argc>2?(size_t)_strtoui64(argv[2],NULL,10):SIZE_MAX;
+    oc_guard_enabled=argc==3&&!strcmp(argv[2],"--guards");
+    size_t fail_at=argc==4?(size_t)_strtoui64(argv[2],NULL,10):SIZE_MAX;
     cross_expected_instance=argc>3?(unsigned)strtoul(argv[3],NULL,10):UINT32_MAX;
-    CHECK(argc==1||argc==2||argc==4);
+    CHECK(argc==1||argc==2||oc_guard_enabled||argc==4);
     if(fail_at!=SIZE_MAX)CHECK(prefix>=5&&prefix<=11&&cross_expected_instance<2);
-    _Static_assert(XR_XIR_CHECKED_CONTRACT==68, "The cross observer binds Checked contract 68");
+    _Static_assert(XR_XIR_CHECKED_CONTRACT==73, "The cross observer binds Checked contract 73");
+    printf("CENSUS_LAYOUT {\"string\":%zu,\"enum_one_field\":%zu,\"admission_frame\":%zu,\"call_result\":%zu}\n",
+        sizeof(XirString),sizeof(XirNominalValue)+sizeof(XrXirValue),sizeof(ValueAdmissionFrame),sizeof(XrXirCallResult));
     uint32_t entry=UINT32_MAX;oc_phase=0;
     XrXirProgram *program=unit_program(&unit_oracles[7],&entry);
     XrXirInstance *instances[2]={0};XrXirDomain *leases[2]={0};XrXirValue early[2]={{0}};
@@ -157,7 +202,7 @@ int main(int argc,char **argv) {
     }
     xr_xir_compile_program_drop(program);
     for(unsigned i=0;i<2;++i) {
-        oc_instance=i;oc_cancel_accepted=false;oc_early=&early[i];oc_go_calls=0;oc_phase=2;
+        oc_instance=i;oc_cancel_accepted=false;oc_private_seen=false;oc_early=&early[i];oc_go_calls=0;oc_phase=2;
         CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_READY);
         uint64_t epoch=instances[i]->epoch;XrXirInstanceResult result={0};unsigned polls=0;
         XrXirCallStatus cancel=XR_XIR_CALL_READY;size_t cancel_at=SIZE_MAX;oc_phase=3;
@@ -210,6 +255,6 @@ int main(int argc,char **argv) {
     }
     CHECK(oc_hits==(fail_at==SIZE_MAX?0u:1u));
     CHECK(!runtime_live&&!runtime_bytes);effects_source_owners_free();CHECK(!effects_compile_live&&!effects_compile_bytes);
-    printf("CENSUS_FINAL {\"physical\":[0,0],\"malloc_sites\":%zu,\"hits\":%u,\"semantic\":%u}\n",runtime_attempts,oc_hits,XR_XIR_CHECKED_CONTRACT);
+    printf("CENSUS_FINAL {\"physical\":[0,0],\"malloc_sites\":%zu,\"hits\":%u,\"semantic\":%u,\"guards\":%u}\n",runtime_attempts,oc_hits,XR_XIR_CHECKED_CONTRACT,oc_guard_count);
     return 0;
 }

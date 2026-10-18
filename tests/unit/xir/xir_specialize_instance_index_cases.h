@@ -96,7 +96,7 @@ static XrXirStatus spec_index_source_operation(const XrXirCompileContext *contex
     XrCompilerSession *session=NULL;XrCompilerSessionStatus opened=xr_compile_session_new(context->resources,&session);
     if (opened!=XR_COMPILER_SESSION_OK) return opened==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,"spec-index-scale",NULL};
-    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,NULL,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceText source_text={NULL,text,strlen(text)};XrXirSourceResult source={0};
     XrXirSourceDiagnostic source_diagnostic={0};char *failure=NULL;XrXirDiagnostic diagnostic={0};
     XrXirArtifact *read=NULL,*instance=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};

@@ -61,9 +61,8 @@ def main():
     spec.loader.exec_module(encoder)
     words = lambda *values: struct.pack('<' + 'I' * len(values), *values)
     original = model()
-    checked = (args.source_root / 'src/xir/xxir_checked.h').read_text(encoding='utf-8')
-    assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+32u', checked)
-    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+79u', checked)
+    # This historical model keeps its complete 28/75 bytes after retirement;
+    # current-reader authority belongs to the independently framed successor.
     body, _ = encoder.encode_body(original, 0)
     assert body[-8:] == bytes(8) and original['generics'] is None
     # Actual alpha.initializer is f0; none of the remaining five definitions
@@ -123,7 +122,7 @@ def main():
               '#define ROOT_CONSTRUCTION75_RECURSIVE_OWNER %du' % recursive_offset,
               '#endif // ROOT_CONSTRUCTION75_GOLDENS_H']
     text = '\n'.join(lines) + '\n'
-    output = args.output_root / 'tests/unit/xir/root_construction75_goldens.h'
+    output = args.output_root / 'tests/unit/xir/hash_protocol28_inputs/root_construction75_goldens.h'
     if args.write:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(text, encoding='utf-8', newline='\n')

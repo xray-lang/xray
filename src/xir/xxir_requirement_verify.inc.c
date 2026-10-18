@@ -17,7 +17,7 @@ static XrXirStatus instance_call_visibility(const XrXirModule *module,
     XrXirCompileContext *budget, bool *authorized) {
     *authorized = false;
     if (!xir_compile_work(budget, 8)) return XR_XIR_BUDGET;
-    if (!xir_effect_evidence_is_instance(module)) return XR_XIR_OK;
+    if (!xir_effect_evidence_is_closed(module)) return XR_XIR_OK;
     const XrXirProvenance *p = module->provenance;
     if (!p->source || !p->origins || p->count != module->function_count ||
         caller >= p->count || target >= p->count) return XR_XIR_BAD_STRUCTURE;
@@ -74,7 +74,7 @@ static XrXirStatus instance_call_visibility(const XrXirModule *module,
 
 static bool requirement_origin(const XrXirModule *module, uint32_t function, uint32_t instruction) {
     const XrXirProvenance *p = module->provenance;
-    if (!xir_effect_evidence_is_instance(module) || !p->source || !p->origins || p->count != module->function_count || function >= p->count)
+    if (!xir_effect_evidence_is_closed(module) || !p->source || !p->origins || p->count != module->function_count || function >= p->count)
         return false;
     const XrXirModule *source = &p->source->module;
     uint32_t origin = p->origins[function].function;
@@ -88,7 +88,7 @@ static XrXirStatus default_origin(const XrXirModule *m,uint32_t caller,uint32_t 
     uint32_t target,XrXirCompileContext *budget,bool *authorized) {
     *authorized=false;
     const XrXirProvenance *p=m->provenance;
-    if (!xir_effect_evidence_is_instance(m)) return XR_XIR_OK;
+    if (!xir_effect_evidence_is_closed(m)) return XR_XIR_OK;
     if (!p->source || !p->origins || caller>=p->count || target>=p->count) return XR_XIR_BAD_STRUCTURE;
     const XrXirModule *source=&p->source->module;
     if (p->origins[caller].function>=source->function_count || !source->functions) return XR_XIR_BAD_STRUCTURE;

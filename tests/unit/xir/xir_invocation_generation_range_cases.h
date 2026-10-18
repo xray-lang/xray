@@ -239,7 +239,22 @@ static void generation_range_dispatch_same(EffectInvocationFlow *flow,const XrXi
                     actual==XR_XIR_I64 && generation_range_type_reads==1);
             } else if (mixed==4) CHECK(flow->body.read.consume!=effect_body_compile_consume);
             XrCompileResourceStats before=rp_stats(owner->read.work);bool changed=false;
-            CHECK(effect_invocation_dispatch(flow,&changed)==XR_XIR_OK && !changed &&
+            size_t node_slots=owner->node_index_capacity,edge_slots=owner->edge_index_capacity;
+            XrXirStatus status=effect_invocation_dispatch(flow,&changed);
+            if (status!=XR_XIR_OK || changed || owner->final.count!=count ||
+                owner->final.edge_count!=edges || owner->pending ||
+                owner->final.nodes[flow->node].intrinsic_mask!=mask ||
+                owner->final.nodes[flow->node].deferred!=deferred ||
+                rp_stats(owner->read.work).live_bytes!=before.live_bytes)
+                fprintf(stderr,"generation dispatch refusal body%u precision%u mixed%u status%u changed%u nodes%u/%u edges%u/%u pending%u mask%u/%u deferred%u/%u live%llu/%llu work%llu/%llu node-slots%zu/%zu edge-slots%zu/%zu\n",
+                    owner->final.nodes[flow->node].body,precision,mixed,(unsigned)status,(unsigned)changed,
+                    owner->final.count,count,owner->final.edge_count,edges,owner->pending,
+                    owner->final.nodes[flow->node].intrinsic_mask,mask,(unsigned)owner->final.nodes[flow->node].deferred,
+                    (unsigned)deferred,(unsigned long long)rp_stats(owner->read.work).live_bytes,
+                    (unsigned long long)before.live_bytes,(unsigned long long)rp_stats(owner->read.work).work,
+                    (unsigned long long)before.work,owner->node_index_capacity,node_slots,
+                    owner->edge_index_capacity,edge_slots);
+            CHECK(status==XR_XIR_OK && !changed &&
                 owner->final.count==count && owner->final.edge_count==edges && !owner->pending &&
                 owner->final.nodes[flow->node].intrinsic_mask==mask &&
                 owner->final.nodes[flow->node].deferred==deferred &&
@@ -325,7 +340,7 @@ static void generation_range_dispatch_singleton(EffectInvocationWorkspace *owner
             rp_stats(owner->read.work).live_bytes==before.live_bytes);
         flow.body=original;
     }
-    xr_compile_resources_free(flow.memory);
+    effect_invocation_flow_finish(&flow);
 }
 
 static void generation_range_origin_bindings(const XrXirCompileContext *context,
@@ -368,7 +383,7 @@ static void generation_range_origin_bindings(const XrXirCompileContext *context,
     generation_range_mixed_origins(&flow);
     generation_range_dispatch_same(&flow,source);generation_range_dispatch_faults(&flow);
     generation_range_dispatch_singleton(owner);
-    xr_compile_resources_free(flow.memory);effect_invocation_free(owner);
+    effect_invocation_flow_finish(&flow);effect_invocation_free(owner);
     effect_body_material_free(other);effect_graph_free(&trial->graph);
     trial->graph=(EffectGraph){.material=material,.physical=material->physical};
     CHECK(effect_body_source_match(context,material,source)==XR_XIR_OK &&
@@ -387,7 +402,7 @@ static void generation_range_dispatch_other(const XrXirCompileContext *context,
     CHECK(effect_invocation_origins(&flow)==XR_XIR_OK && !flow.changed &&
         flow.physical->count>1 && material->functions[0].run_count>1);
     generation_range_dispatch_same(&flow,source);generation_range_dispatch_singleton(owner);
-    xr_compile_resources_free(flow.memory);effect_invocation_free(owner);effect_graph_free(&trial->graph);
+    effect_invocation_flow_finish(&flow);effect_invocation_free(owner);effect_graph_free(&trial->graph);
     trial->graph=(EffectGraph){.material=material,.physical=material->physical};
 }
 
@@ -513,7 +528,7 @@ static void generation_sequence_producers(void) {
         uint64_t returned=UINT64_MAX;
         CHECK(effect_invocation_coverage_return_read(&owner->read,&request,n,&returned)==XR_XIR_OK &&
             returned==owner->final.nodes[n].return_coverage);
-        xr_compile_resources_free(flow.memory);
+        effect_invocation_flow_finish(&flow);
     }
     CHECK(effect_invocation_producers_verify(owner)==XR_XIR_OK &&
         effect_invocation_coverage_verify(owner)==XR_XIR_OK);

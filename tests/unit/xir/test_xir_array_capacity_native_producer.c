@@ -37,7 +37,7 @@ int main(int argc,char **argv) {
     CHECK(argc==4);instance_compile_zero();SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
     XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(owner.context.resources,&session)==XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_CAP_NATIVE_FIXTURES};
-    XrXirSourceRequest request={session,XR_CAP_NATIVE_FIXTURES "/root.xr",&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,XR_CAP_NATIVE_FIXTURES "/root.xr",&authority,&owner.context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *path=NULL;
     XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&path);
     if(status!=XR_XIR_OK)fprintf(stderr,"native capacity Source status%u %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);

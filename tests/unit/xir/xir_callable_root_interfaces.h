@@ -42,7 +42,7 @@ static XrXirStatus bound_implementation(const XrXirCompileContext *context,
     identities[2].exported=1;identities[2].nominal_owner=1;identities[2].method_kind=XR_XIR_READ_METHOD;
     if(flags&1)identities[2].promises=XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirImplementationBinding binding={{0,NULL,0},0,2};
-    XrXirImplementation implementation={0,{0,NULL,0},&binding,1};XrXirImplementationTable table={&implementation,1};
+    XrXirImplementation implementation={.interface={0,NULL,0},.bindings=&binding,.binding_count=1};XrXirImplementationTable table={&implementation,1};
     XrXirSlot slot={0,(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2),1,0,0};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=0,.implementations=&table};

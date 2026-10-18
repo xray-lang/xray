@@ -30,6 +30,12 @@ static void generic_runtime_retiring(void *pointer);
 #define error_marker73_previous error_marker73_via74_previous
 #include "xir_error_marker74_golden.h"
 #undef error_marker73_previous
+#include "xir_error_marker84_golden.h"
+#define error_marker73_previous error_marker73_via75_previous
+#include "xir_error_marker75_golden.h"
+#undef error_marker73_previous
+#include "xir_error_marker73_golden.h"
+#include "composed_wire/packet_049.inc.c"
 #include "xir_nominal_generic_fixture.h"
 #include "xir_nominal_expression_fixture.h"
 #include "xir_nominal_checked_fixture.h"
@@ -99,6 +105,7 @@ static void nominal_verification_budget(uint64_t construction_work, uint64_t ver
         xr_xir_compile_artifact_free(checked);
     }
 }
+
 static void nominal_field_closure(void) {
     for (unsigned mode = 0; mode < 3; ++mode) {
         XrXirCompileContext measured=consumer_context_default();
@@ -111,7 +118,11 @@ static void nominal_field_closure(void) {
         if (mode==2) nominal_verification_budget(construction_work,prefix_work-construction_work);
         XrXirCompileContext bounded=mode==2?generic_work_context(prefix_work+10000):consumer_context_default();
         XrXirArtifact *checked = nominal_field_closure_fixture(&bounded, mode), *closed = NULL;
-        CHECK(xr_xir_compile_artifact_verify(checked, NULL) == XR_XIR_OK);
+        XrXirDiagnostic recheck={0};XrXirStatus rechecked=xr_xir_compile_artifact_verify(checked,&recheck);
+        if (rechecked!=XR_XIR_OK) fprintf(stderr,"field closure recheck mode=%u status=%u function=%u instruction=%u prefix=%llu consumed=%llu\n",
+            mode,(unsigned)rechecked,recheck.function,recheck.instruction,(unsigned long long)prefix_work,
+            (unsigned long long)consumer_context_stats(&bounded).work);
+        CHECK(rechecked == XR_XIR_OK);
         if (mode==2) CHECK(consumer_context_stats(&bounded).work==prefix_work);
         XrXirStatus expected = !mode ? XR_XIR_OK : mode == 1 ? XR_XIR_BAD_TYPE : XR_XIR_BUDGET;
         CHECK(xr_xir_compile_specialize(checked, &closed, NULL) == expected);
@@ -302,6 +313,7 @@ static void error_erasure_packet(void) {
     xr_xir_compile_artifact_free(decoded); decoded=NULL; xr_xir_compile_checked_packet_free(&packet);
 }
 static void error_marker_definition(void) {
+    enum {ERROR_MARKER_KINDS_PRESENT=169, ERROR_MARKER_MARKER=173};
     XrXirConstraint constraint = {.markers = XR_XIR_CONSTRAINT_ERROR};
     XrXirType parameter = (XrXirType)XR_XIR_TYPE_PARAMETER_BASE;
     XrXirInstruction instruction = {XR_XIR_THROW,XR_XIR_UNIT,{0},{0},0, {0}};
@@ -316,17 +328,30 @@ static void error_marker_definition(void) {
     xr_xir_compile_artifact_free(checked); checked=NULL;
     _Static_assert(XR_XIR_THROW==30 && XR_XIR_TYPE_PARAMETER_BASE==65536u &&
         XR_XIR_CONSTRAINT_ERROR==2u,"independent ERROR definition fields");
-    CHECK(packet.length==sizeof(error_marker81_golden) &&
-        !memcmp(packet.bytes,error_marker81_golden,packet.length));
-    CHECK(!packet.bytes[ERROR_MARKER81_KINDS_PRESENT] &&
-        packet.bytes[ERROR_MARKER81_MARKER]==XR_XIR_CONSTRAINT_ERROR);
+    CHECK(packet.length==sizeof(packet_049_current) &&
+        !memcmp(packet.bytes,packet_049_current,packet.length));
+    CHECK(!packet.bytes[ERROR_MARKER_KINDS_PRESENT] &&
+        packet.bytes[ERROR_MARKER_MARKER]==XR_XIR_CONSTRAINT_ERROR);
     CHECK(xr_xir_compile_checked_read(suite_context,error_marker73_previous,
         sizeof(error_marker73_previous),&decoded,NULL)==XR_XIR_BAD_STRUCTURE && !decoded);
+    const uint8_t *retired[]={error_marker72_previous,error_marker73_golden,error_marker73_previous,error_marker73_via74_previous,error_marker73_via75_previous,error_marker73_retained_by84_previous,error_marker74_golden,error_marker75_golden,error_marker81_golden,error_marker84_golden,packet_049_original};
+    const size_t lengths[]={sizeof(error_marker72_previous),sizeof(error_marker73_golden),sizeof(error_marker73_previous),sizeof(error_marker73_via74_previous),sizeof(error_marker73_via75_previous),sizeof(error_marker73_retained_by84_previous),sizeof(error_marker74_golden),sizeof(error_marker75_golden),sizeof(error_marker81_golden),sizeof(error_marker84_golden),sizeof(packet_049_original)};
+    for(size_t epoch=0;epoch<sizeof(retired)/sizeof(retired[0]);++epoch) {
+        XrCompileResourceStats before=consumer_context_stats(suite_context);
+        for(unsigned occupied=0;occupied<2;++occupied) {
+            decoded=occupied?(XrXirArtifact *)(uintptr_t)1:NULL;
+            XrXirArtifact *saved=decoded;
+            CHECK(xr_xir_compile_checked_read(suite_context,retired[epoch],lengths[epoch],&decoded,NULL)==XR_XIR_BAD_STRUCTURE && decoded==saved);
+        }
+        XrCompileResourceStats after=consumer_context_stats(suite_context);
+        CHECK(after.allocation_count==before.allocation_count && after.allocated_bytes==before.allocated_bytes && after.live_bytes==before.live_bytes);
+    }
+    decoded=NULL;
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(decoded); decoded=NULL; decoded=NULL;
     const uint8_t forged[]={0,XR_XIR_CONSTRAINT_SENDABLE,4};
     for (unsigned i=0;i<sizeof(forged);++i) {
-        packet.bytes[ERROR_MARKER81_MARKER]=forged[i]; rehash_generic(&packet);
+        packet.bytes[ERROR_MARKER_MARKER]=forged[i]; rehash_generic(&packet);
         CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &decoded, NULL)==XR_XIR_BAD_TYPE && !decoded);
     }
     xr_xir_compile_checked_packet_free(&packet);
@@ -364,6 +389,23 @@ static void rejected_templates(void) {
         xr_xir_compile_artifact_free(checked); checked=NULL;
     }
 }
+/* The complete wire grammar stores definition rows before generic records.
+ * Count the same named caller marker independently of trailing type tables. */
+static size_t generic_first_marker(const XrXirModule *module, size_t length) {
+    CHECK(module && !module->declarations && module->generics && module->function_count==2);
+    CHECK(module->generics[0].parameter_count==1 && !module->generics[0].parameter_kinds);
+    uint64_t offset=64+12;
+    for(uint32_t f=0;f<module->function_count;++f) {
+        const XrXirFunction *function=&module->functions[f];
+        offset+=4+function->name_length+4+UINT64_C(4)*function->parameter_count+4;
+        offset+=4+UINT64_C(16)*function->block_count;
+        offset+=4+UINT64_C(40)*function->instruction_count;
+        offset+=4+UINT64_C(4)*function->operand_count;
+    }
+    offset+=12;
+    CHECK(offset<=length && length-offset>=4);
+    return (size_t)offset;
+}
 static void forwarding(void) {
     XrXirArtifact *checked = generic_fixture(suite_context);
     XrXirFunction *functions = (XrXirFunction *) checked->module.functions;
@@ -387,8 +429,9 @@ static void forwarding(void) {
     XrXirCheckedPacket packet = {0};
     CHECK(xr_xir_compile_checked_write(valid, &packet, NULL) == XR_XIR_OK);
     xr_xir_compile_artifact_free(valid); valid=NULL;
-    CHECK(packet.length > 68 && packet.bytes[packet.length - 68] == XR_XIR_CONSTRAINT_SENDABLE);
-    packet.bytes[packet.length - 68] = 0; rehash_generic(&packet);
+    const size_t marker=generic_first_marker(&module,packet.length);
+    CHECK(packet.bytes[marker] == XR_XIR_CONSTRAINT_SENDABLE);
+    packet.bytes[marker] = 0; rehash_generic(&packet);
     CHECK(xr_xir_compile_checked_read(suite_context, packet.bytes, packet.length, &forged, NULL) == XR_XIR_BAD_TYPE && !forged);
     xr_xir_compile_checked_packet_free(&packet);
     xr_xir_compile_artifact_free(checked); checked=NULL;

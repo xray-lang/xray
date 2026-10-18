@@ -39,6 +39,13 @@ typedef struct SourceHistoryReceive {
     SourceHistoryEdge *edges;
     uint32_t edge_count, edge_capacity;
 } SourceHistoryReceive;
+typedef struct SourceInstanceBatch {
+    const XirCtfeInstanceView *views;
+    uint32_t *providers;
+    uint32_t count;
+} SourceInstanceBatch;
+typedef struct SourceMaterialization SourceMaterialization;
+typedef struct SourceDeriveJob SourceDeriveJob;
 typedef struct SourceContext {
     XrModuleGraph *graph;
     XrXirLinkageKind linkage_kind;
@@ -54,6 +61,9 @@ typedef struct SourceContext {
     const struct XrXirSourceHistoryUnit *history_input, *self_unit;
     struct SourceHistoryReceive *history;
     SourceLibraryUnit *library_units;
+    SourceLibraryAdmission *library_admissions;
+    XrXirDerivationTable derivations;
+    SourceDeriveJob *derive_jobs;const SourceDeriveJob *derive_input;
     SourceRootQuery *root_queries;
     SourceRootFlow *root_flow;
     XrXirProvenance *effect_evidence;
@@ -88,13 +98,19 @@ typedef struct SourceContext {
     uint32_t flow_alternatives;
     uint32_t function_count, slot_count, literal_count, literal_capacity;
     uint32_t module_count, entry_function;
-    bool core_factory;
+    bool core_factory,derive_present;
     SourceName *assertion, *assert_panics, *assert_equal;
     uint32_t first_closure, next_closure, closure_limit, function_capacity;
     uint32_t function, module, depth;
     SourceComptimeSite *comptime_sites;
+    const SourceInstanceBatch *instance_constants;
+    const XrXirModule *literal_definition;
     const SourceComptimeSite *comptime_input;
+    const XrXirTypes *comptime_input_types;
     uint32_t comptime_capacity,comptime_count,comptime_matched;
+    SourceMaterialization *materializations,*materialization_tail;
+    uint32_t materialization_begin,materialization_count;
+    uint64_t comptime_output_bytes;
     SourceExpressionPlan *active_expression;
     /* This exact argument plan owns the pre-loss role, never its children. */
     SourceExpressionPlan *effect_argument;
@@ -105,8 +121,11 @@ typedef struct SourceContext {
     uint32_t syntax_declaration_capacity, syntax_reference_capacity, syntax_marker_capacity;
     uint32_t declaration_capacity, reference_capacity, expression_capacity;
     uint32_t prelude_module; /* One-based actual graph index, zero when unused. */
+    uint32_t math_module;
     uint32_t atomic_module, atomic_declaration, atomic_members[10];
     uint32_t task_module, task_declaration;
+    uint32_t iterator_module, iterator_declaration, iterator_members[3];
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_COUNT], length_declaration;
-    uint32_t string_module, string_declaration, string_members[5];
+    uint32_t string_module, string_declaration, string_members[6];
+    uint32_t type_info_declaration,f64_module,f64_declaration,f64_parse_member;
 } SourceContext;

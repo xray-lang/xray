@@ -52,9 +52,17 @@ static void initialization_authority(SourceFixtureOwner *owner, const XrXirArtif
     }
     CHECK(box < 2 && plain < 2 && box != plain);
     CHECK(records[box].flags == XR_XIR_NOMINAL_MODULE_LITERAL && !records[plain].flags);
+    XrXirType box_type=XR_XIR_UNIT,plain_type=XR_XIR_UNIT;
+    for(uint32_t t=0;t<module->types->count;++t) {
+        const XrXirTypeNode *node=&module->types->nodes[t];
+        if(node->kind!=XR_XIR_TYPE_NOMINAL)continue;
+        if(node->nominal.declaration==box)box_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
+        if(node->nominal.declaration==plain)plain_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+t);
+    }
+    CHECK(box_type!=XR_XIR_UNIT && plain_type!=XR_XIR_UNIT);
     uint32_t caller = answer_entry(artifact);
-    CHECK(xr_xir_compile_nominal_access(&owner->context, module, caller, box, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_BAD_TYPE);
-    CHECK(xr_xir_compile_nominal_access(&owner->context, module, caller, plain, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_OK);
+    CHECK(xr_xir_compile_nominal_access(&owner->context, module, caller, box_type, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_BAD_TYPE);
+    CHECK(xr_xir_compile_nominal_access(&owner->context, module, caller, plain_type, 0, XR_XIR_NOMINAL_CONSTRUCT) == XR_XIR_OK);
     XrXirNominalTable table = {records, 2, NULL};
     XrXirTypes types = *module->types; types.nominals = &table;
     XrXirModule forged = *module; forged.types = &types;
@@ -165,7 +173,7 @@ int main(int argc, char **argv) {
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
     const XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_LANGUAGE_FIXTURES};
-    const XrXirSourceRequest request = {session, path, &authority, &owner.context, XR_LANGUAGE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    const XrXirSourceRequest request = {session, path, &authority, &owner.context, XR_LANGUAGE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, NULL);
     if (status != XR_XIR_OK) {

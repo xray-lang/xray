@@ -17,7 +17,7 @@ int main(void) {
     CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_REFERENCE_FIXTURES};
     XrXirSourceRequest request = {session, XR_REFERENCE_FIXTURES "/array_return_logical_copy.xr",
-        &authority, &owner.context, XR_REFERENCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+        &authority, &owner.context, XR_REFERENCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0};
     CHECK(xr_xir_compile_source_check(&request, &result, &diagnostic, NULL) == XR_XIR_OK);
     const XrXirModule *checked = xr_xir_compile_artifact_module(result.checked);

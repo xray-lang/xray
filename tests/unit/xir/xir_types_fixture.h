@@ -64,9 +64,9 @@ static XrXirArtifact *function_ir_fixture(const XrXirCompileContext *context) {
         {"root",4,NULL,0,XR_XIR_I64,&blocks[1],1,root,4,&argument,1},
         {"echo",4,&parameter,1,parameter,&blocks[2],1,target,2,NULL,0}
     };
-    XrXirSourceModule source = {"root",4,NULL,0,0, 0};
-    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}, {0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}};
-    XrXirDeclarations declarations = {&source,1,identities,NULL,0,NULL,0,0,1, NULL};
+    XrXirSourceModule source = {.name="root",.name_length=4};
+    XrXirFunctionIdentity identities[] = {{.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER}};
+    XrXirDeclarations declarations = {.modules=&source,.module_count=1,.functions=identities,.entry_function=1};
     XrXirModule built = {XR_XIR_BUILT,functions,3,&declarations,generics,&types, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xir_fixture_check(context, &built, &checked, NULL) == XR_XIR_OK && checked);

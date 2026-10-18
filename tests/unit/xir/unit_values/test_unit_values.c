@@ -10,6 +10,8 @@
  *   Complete independent wire fields and actual leaf execution distinguish a
  *   canonical Unit value from a statement that merely has a Unit result type.
  */
+#include <stdint.h>
+#include "../composed_wire/packet_226.inc.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,7 +24,7 @@
 #include "xir/xxir_tuple.h"
 #include "unit81_wire_golden.h"
 
-_Static_assert(XR_XIR_CHECKED_SCHEMA==33u && XR_XIR_CHECKED_CONTRACT==81u &&
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 34u && XR_XIR_CHECKED_CONTRACT == 90u &&
     XR_XIR_TUPLE_NEW==143 && XR_XIR_RETURN==33 && XR_XIR_I64==2 && XR_XIR_UNIT==0,
     "Independent Unit wire fields require an explicit protocol update");
 
@@ -42,8 +44,8 @@ static XrXirArtifact *unit_checked(const XrXirCompileContext *context,bool decla
         {"unit",4,&parameter,1,XR_XIR_I64,&blocks[1],1,unit_ops,3,NULL,0},
         {"entry",5,NULL,0,XR_XIR_I64,&blocks[2],1,entry_ops,2,NULL,0}};
     const XrXirSourceModule module={"root",4,NULL,0,0,0};
-    const XrXirFunctionIdentity identities[]={{0},{0,1,0,0,0,0,0,0,0,0},{0}};
-    const XrXirDeclarations owner={&module,1,identities,NULL,0,NULL,0,0,2,NULL};
+    const XrXirFunctionIdentity identities[]={{0},{0,1,0,0,0,0,0,0,0,0,0},{0}};
+    const XrXirDeclarations owner={&module,1,identities,NULL,0,NULL,0,0,2,NULL,NULL};
     const XrXirModule built={XR_XIR_BUILT,declarations?functions:&functions[1],declarations?3:1,
         declarations?&owner:NULL,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
     XrXirArtifact *checked=NULL;
@@ -63,9 +65,9 @@ static void unit_wire(const XrXirCompileContext *context) {
     XrXirArtifact *checked=unit_checked(context,false),*received=NULL;
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    CHECK(packet.length==sizeof(unit81_packet) && !memcmp(packet.bytes,unit81_packet,packet.length));
+    CHECK(packet.length==sizeof(packet_226_current) && !memcmp(packet.bytes,packet_226_current,packet.length));
     xr_xir_compile_artifact_free(checked);xr_xir_compile_checked_packet_free(&packet);
-    CHECK(xr_xir_compile_checked_read(context,unit81_packet,sizeof(unit81_packet),&received,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(context,packet_226_current,sizeof(packet_226_current),&received,NULL)==XR_XIR_OK);
     const XrXirModule *module=xr_xir_compile_artifact_module(received);
     CHECK(module->functions[0].parameter_count==1 && module->functions[0].parameters[0]==XR_XIR_UNIT);
     xr_xir_compile_artifact_free(received);received=NULL;

@@ -75,6 +75,7 @@ typedef enum XrForInDomainKind {
 
 typedef struct ForInStmtNode {
     char *label;
+    XrNameSpan keyword_span;
     char *item_name;
     char *value_name;
     bool is_keyvalue;

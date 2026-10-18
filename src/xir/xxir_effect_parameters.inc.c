@@ -62,7 +62,7 @@ static inline XrXirStatus effect_parameters_variable_domain(const XrXirModule *m
     if (!module || !output) return XR_XIR_BAD_STRUCTURE;
     const XrXirProvenance *provenance=module->provenance;
     bool variables=provenance && provenance->kind==XR_XIR_EVIDENCE_TEMPLATE;
-    if (provenance && provenance->kind==XR_XIR_EVIDENCE_INSTANCE) {
+    if (provenance && xir_effect_kind_is_closed(provenance->kind)) {
         XrXirStatus status=effect_contract_instance(work,module,provenance);
         if (status!=XR_XIR_OK) return status;
         variables=true;
@@ -209,7 +209,10 @@ static XrXirStatus effect_parameter_opaque(EffectParameterFlow *flow,
     const XrXirInstruction *op, uint32_t use) {
     if (xr_xir_op_uses_operand_table(op->op)) return effect_parameter_group(flow, op, use, false);
     uint32_t count = effect_parameter_operands[op->op];
-    if (op->op == XR_XIR_RETURN) count = flow->function->result != XR_XIR_UNIT;
+    if (op->op == XR_XIR_RETURN) count = flow->function->result != XR_XIR_UNIT &&
+        !(flow->body.domain.declarations && (flow->body.domain.declarations->functions[flow->function_index].promises & XR_XIR_FUNCTION_GENERATOR));
+    if (op->op==XR_XIR_GENERATOR_YIELD)
+        count=xr_xir_iterator_element(flow->body.domain.types,flow->function->result)!=XR_XIR_UNIT;
     if (op->op == XR_XIR_SLOT_INIT || op->op == XR_XIR_SLOT_STORE)
         count = xr_xir_slot_payload_operands(flow->body.domain.declarations->slots,
             flow->body.domain.declarations->slot_count, op);
@@ -257,9 +260,10 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     }
     case XR_XIR_FUNCTION_WEAKEN:
         return effect_parameter_use(flow, op->args[0], XR_XIR_EFFECT_USE_FIXED, false);
+    case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_RETURN:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_RETURN);
-    case XR_XIR_GO:
+    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_CHILD);
     case XR_XIR_CALL_REQUIREMENT:
         for (uint32_t a = 0; a < op->args[1]; ++a) {
@@ -277,8 +281,13 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_STORE);
     case XR_XIR_NULLABLE_SOME:
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_STORE);
+    case XR_XIR_SET_UNION: case XR_XIR_SET_INTERSECTION: case XR_XIR_SET_DIFFERENCE:
+    case XR_XIR_SET_SYMMETRIC_DIFFERENCE: {
+        XrXirStatus status = effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_COPY);
+        return status == XR_XIR_OK ? effect_parameter_transfer(flow, destination, op->args[1], XR_XIR_EFFECT_USE_COPY) : status;
+    }
     case XR_XIR_CELL_READ: case XR_XIR_NULLABLE_UNWRAP: case XR_XIR_PLACE_READ:
-    case XR_XIR_STRUCT_GET: case XR_XIR_CLASS_GET: case XR_XIR_ENUM_GET: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: case XR_XIR_FIELD_REQUIREMENT:
+    case XR_XIR_HASH_KEY_AT: case XR_XIR_MAP_VALUE_AT: case XR_XIR_MAP_GET: case XR_XIR_MAP_INDEX: case XR_XIR_HASH_KEYS: case XR_XIR_HASH_VALUES: case XR_XIR_MAP_ENTRIES: case XR_XIR_STRUCT_GET: case XR_XIR_CLASS_GET: case XR_XIR_ENUM_GET: case XR_XIR_TUPLE_FIELD: case XR_XIR_RECORD_FIELD: case XR_XIR_FIELD_REQUIREMENT:
         return effect_parameter_transfer(flow, destination, op->args[0], XR_XIR_EFFECT_USE_COPY);
     case XR_XIR_CELL_WRITE: case XR_XIR_CELL_LOCAL_WRITE: {
         XrXirType type;XrXirStatus status=effect_parameter_type(flow,op->args[0],&type);
@@ -288,11 +297,13 @@ static XrXirStatus effect_parameter_instruction(EffectParameterFlow *flow,
     }
     case XR_XIR_PLACE_WRITE:
         return effect_parameter_transfer(flow, op->args[0], op->args[1], XR_XIR_EFFECT_USE_STORE);
-    case XR_XIR_ARRAY_NEW: case XR_XIR_STRUCT_NEW: case XR_XIR_CLASS_NEW:
+    case XR_XIR_F64_TRY_PARSE: case XR_XIR_STRING_COPY_BYTES:
+        return effect_parameter_opaque(flow,op,XR_XIR_EFFECT_USE_OTHER);
+    case XR_XIR_MAP_NEW: case XR_XIR_SET_NEW: case XR_XIR_ARRAY_NEW: case XR_XIR_STRUCT_NEW: case XR_XIR_CLASS_NEW:
     case XR_XIR_ENUM_NEW: case XR_XIR_TUPLE_NEW: case XR_XIR_RECORD_NEW:
         return effect_parameter_group(flow, op, XR_XIR_EFFECT_USE_STORE, true);
     case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_GROUP_INIT: case XR_XIR_SLOT_STORE:
-    case XR_XIR_ARRAY_SET: case XR_XIR_ARRAY_PUSH: case XR_XIR_STRUCT_SET: case XR_XIR_RECORD_SET: case XR_XIR_CLASS_SET:
+    case XR_XIR_MAP_SET: case XR_XIR_SET_ADD: case XR_XIR_ARRAY_SET: case XR_XIR_ARRAY_PUSH: case XR_XIR_STRUCT_SET: case XR_XIR_RECORD_SET: case XR_XIR_CLASS_SET:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_STORE);
     default:
         return effect_parameter_opaque(flow, op, XR_XIR_EFFECT_USE_OTHER);

@@ -210,11 +210,10 @@ static void array_instance_cases(void) {
             {XR_XIR_TYPE_ARRAY,(XrXirType)256,NULL,0,XR_XIR_UNIT,0,0, .nominal={0}}};
         XrXirTypes types = {nodes,3, NULL, NULL};
         uint32_t dependency = 1;
-        XrXirSourceModule modules[] = {{"array",5,mode ? NULL : &dependency,mode ? 0 : 1,0, 0},
-            {"library",7,NULL,0,2, 0}};
-        XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{1,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0},{1,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0,0}};
-        XrXirSlot slots[] = {{0,(XrXirType)257,1,0,0},{0,(XrXirType)256,0,0,0},{1,(XrXirType)256,0,0,0}};
-        XrXirDeclarations declarations = {modules,mode ? 1 : 2,identities,slots,mode ? 0 : 3,NULL,0,0,1, NULL};
+        XrXirSourceModule modules[] = {{.name="array",.name_length=5,.dependencies=mode ? NULL : &dependency,.dependency_count=mode ? 0 : 1},{.name="library",.name_length=7,.initializer=2}};
+        XrXirFunctionIdentity identities[] = {{.method_kind=XR_XIR_NON_MEMBER},{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.module=1,.method_kind=XR_XIR_NON_MEMBER},{.module=1,.exported=1,.method_kind=XR_XIR_NON_MEMBER}};
+        XrXirSlot slots[] = {{.type=(XrXirType)257,.mutable=1},{.type=(XrXirType)256},{.module=1,.type=(XrXirType)256}};
+        XrXirDeclarations declarations = {.modules=modules,.module_count=mode ? 1 : 2,.functions=identities,.slots=slots,.slot_count=mode ? 0 : 3,.entry_function=1};
         XrXirCallEntry entries[] = {
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_UNIT,sizeof(ArrayAccessFrame),array_access_initializer,array_access_cleanup,&witness, 0, 0},
             {XR_XIR_CALL_ABI_VERSION,NULL,0,XR_XIR_I64,sizeof(ArrayAccessFrame),

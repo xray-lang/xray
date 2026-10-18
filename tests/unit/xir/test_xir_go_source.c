@@ -70,7 +70,7 @@ static XrXirStatus source_task_graph(const XrXirCompileContext *context, void *o
     char path[1024];
     CHECK(snprintf(path, sizeof(path), "%s/%s.xr", XR_GO_SOURCE_FIXTURES, fixture->name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_GO_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, path, &authority, context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
     XrXirCheckedPacket packet = {0}; XrXirArtifact *read = NULL, *specialized = NULL;
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
@@ -129,7 +129,7 @@ static void source_task_reject(const char *name, XrXirStatus expected) {
     CHECK(xr_compile_session_new(owner.context.resources, &session) == XR_COMPILER_SESSION_OK);
     char path[1024]; CHECK(snprintf(path, sizeof(path), "%s/rejected/%s.xr", XR_GO_SOURCE_FIXTURES, name) > 0);
     XrModuleIdentityAuthority authority = {XR_MODULE_IDENTITY_SCRIPT, NULL, XR_GO_SOURCE_FIXTURES};
-    XrXirSourceRequest request = {session, path, &authority, &owner.context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL};
+    XrXirSourceRequest request = {session, path, &authority, &owner.context, XR_SOURCE_STDLIB, NULL, XR_XIR_PROGRAM, NULL,NULL};
     XrXirSourceResult result = {0}; XrXirSourceDiagnostic diagnostic = {0}; char *failure = NULL;
     XrXirStatus status = xr_xir_compile_source_check(&request, &result, &diagnostic, &failure);
     fprintf(stderr, "reject %s status=%u location=%d:%d message=%s\n", name, status,

@@ -37,6 +37,10 @@ order: 014
 
 `i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` 都解析整个字符串：允许首尾空白与前导符号，其余必须符合十进制文法；`f64` 额外接受小数部分和指数，整数与小数部分合计有一位数字即可（`.5` 与 `1.` 都能解析）。尾部残留、十六进制、`inf` / `nan` 以及越界整数都解析失败。`parse` 用 typed error channel 报错，`tryParse` 返回 `null`。数值之间的转换只能写成显式 `as`，文本解析不经过数值 cast。
 
+`f64` 文本解析复用字面量的同一精确整数转换核，以 nearest / ties-to-even 一次舍入到 binary64；渐进下溢保留负零，合法十进制幅度溢出产生带符号无穷。文法仍拒绝 `inf` / `nan` 拼写，不依赖 libc、locale 或宿主浮点舍入环境。运行时文本的首尾 ASCII 空白与无下划线文法分别验证，字面量的数字间下划线规则不授予文本解析。
+
+当前 XIR 的 `f64.tryParse` 由受治理的 f64 静态声明准入；普通 Source、显式 comptime、VM 与生成 C11 共享同一精确转换和 Nullable Value 构造。语法无效构造拥有式 None，成功构造拥有式 Some；两者都可能分配。分配、retain 或有限 work 失败保持真实失败身份，不折叠成 `null`，失败不发布部分输出。声明在词法遮蔽检查后绑定；方法拼写不自行授予 native 权限。此项准入不代表其他数值转换或完整 JSON 已实现。
+
 ### 13.3 类型检查
 
 | 函数 / 表达式 | 签名 | 说明 |
@@ -144,6 +148,10 @@ These global functions and built-in constructor/static functions are usable with
 | `copy(x)` | `(value) -> fresh value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
 
 `i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` consume the whole string. Surrounding whitespace and a leading sign are accepted; `f64` additionally accepts a fractional part and exponent, with at least one digit across the integer and fractional parts (`.5` and `1.` are valid). Trailing residue, hexadecimal input, `inf` / `nan`, and out-of-range integers fail. `parse` reports failure through the typed error channel; `tryParse` returns `null`. Numeric conversions use explicit `as`; text parsing is not a numeric cast.
+
+`f64` text parsing uses the same exact integer conversion kernel as decimal literals, rounding once to binary64 with nearest / ties-to-even. Gradual underflow preserves negative zero; a syntactically valid decimal magnitude that overflows produces signed infinity. The grammar still rejects `inf` / `nan` spellings, independently of libc, locale, or the host floating-point rounding environment. Surrounding ASCII whitespace and the runtime text grammar without underscores are checked separately; literal digit separators do not extend the text grammar.
+
+Current XIR admits `f64.tryParse` through the governed f64 static declaration. Ordinary Source, explicit comptime, VM, and generated C11 share the exact conversion and Nullable Value constructor. Invalid syntax constructs owned None; valid syntax constructs owned Some. Both may allocate. Allocation, retain, or finite-work failure keeps its actual failure identity rather than becoming `null`, and publishes no partial output. Lexical shadowing is checked before declaration binding; a method spelling grants no native authority. This admission does not imply support for other numeric conversions or complete JSON.
 
 ### 13.3 Type Checking
 

@@ -47,7 +47,7 @@ static XrXirStatus nominal_variants(uint32_t kind, const XrXirNominalVariant *va
     return kind == XR_XIR_NOMINAL_ENUM && end != fields ? XR_XIR_BAD_STRUCTURE : XR_XIR_OK;
 }
 static bool nominal_flags_valid(uint32_t kind, uint32_t flags) {
-    if (kind == XR_XIR_NOMINAL_CLASS) return flags == XR_XIR_NOMINAL_FINAL || flags == 0;
+    if (kind == XR_XIR_NOMINAL_CLASS) return !(flags & ~(XR_XIR_NOMINAL_FINAL | XR_XIR_NOMINAL_SENDABLE));
     if (kind == XR_XIR_NOMINAL_STRUCT) return flags == XR_XIR_NOMINAL_MODULE_LITERAL || flags == 0;
     return flags == 0;
 }
@@ -76,7 +76,7 @@ static bool nominal_field_type(const XrXirTypes *types, XrXirType type, uint32_t
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
     return node && (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CALLABLE ||
         node->kind == XR_XIR_TYPE_NOMINAL || node->kind == XR_XIR_TYPE_NULLABLE || (node->kind == XR_XIR_TYPE_TUPLE || node->kind == XR_XIR_TYPE_RECORD) ||
-        node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET) &&
+        node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK || node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_MAP || node->kind == XR_XIR_TYPE_SET) &&
         node->parameter_span <= parameters;
 }
 static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
@@ -104,6 +104,8 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     }
     for (uint32_t f = 0; f < d->field_count; ++f) {
         const XrXirNominalField *field = &d->fields[f];
+        if ((d->flags & XR_XIR_NOMINAL_SENDABLE) && (field->flags & XR_XIR_FIELD_MUTABLE))
+            return XR_XIR_BAD_TYPE;
         if (d->kind == XR_XIR_NOMINAL_ENUM && field->flags) return XR_XIR_BAD_STRUCTURE;
         if (d->kind == XR_XIR_NOMINAL_CLASS && !xr_xir_type_span(types,field->type)) {
             status=xr_xir_compile_class_field_verify(b, types, field->type);

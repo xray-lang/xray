@@ -37,6 +37,8 @@ static XrXirStatus effect_body_application_match(const XrXirCompileContext *work
         left->argument_count,sizeof(*left->arguments),same);
 }
 
+#include "xxir_effect_snapshot_derivation_match.inc.c"
+
 static XrXirStatus effect_body_implementations_match(const XrXirCompileContext *work,
     const XrXirImplementationTable *left,const XrXirImplementationTable *right,bool *same) {
     if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
@@ -47,9 +49,10 @@ static XrXirStatus effect_body_implementations_match(const XrXirCompileContext *
     XrXirStatus status=XR_XIR_OK;
     for (uint32_t i=0;i<left->count && status==XR_XIR_OK;++i) {
         const XrXirImplementation *a=&left->records[i],*b=&right->records[i];
-        if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+        if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
         if ((a->binding_count && !a->bindings) || (b->binding_count && !b->bindings)) return XR_XIR_BAD_STRUCTURE;
-        if (a->nominal_declaration!=b->nominal_declaration || a->binding_count!=b->binding_count) {
+        if (a->nominal_declaration!=b->nominal_declaration || a->binding_count!=b->binding_count ||
+            a->derivation_policy!=b->derivation_policy) {
             return effect_body_difference(same);
         }
         status=effect_body_application_match(work,&a->interface,&b->interface,same);
@@ -101,6 +104,7 @@ static XrXirStatus effect_body_declarations_match(const XrXirCompileContext *wor
         status=effect_body_bytes_match(work,a->bytes,b->bytes,a->length,1,same);
     }
     if (status==XR_XIR_OK) status=effect_body_implementations_match(work,left->implementations,right->implementations,same);
+    if (status==XR_XIR_OK) status=effect_body_derivations_match(work,left->derivations,right->derivations,same);
     return status;
 }
 

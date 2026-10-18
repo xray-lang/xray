@@ -114,9 +114,36 @@ static XrXirStatus catalog_io_status(XrOsIoStatus status) {
     default: return XR_XIR_IO;
     }
 }
+/* Memory dependencies are reachable only through the exact authenticated
+ * artifact edges. They have no source locator and cannot initiate file I/O. */
+static XrXirStatus catalog_memory_module(XrXirLibraryCatalog *catalog,size_t index,
+    const XrXirLibraryModuleInput *input,XrXirArtifact *artifact,uint32_t ordinal) {
+    if (input->logical_path || input->authority.physical_root) return XR_XIR_BAD_STRUCTURE;
+    const XrXirCompileContext *context=&catalog->context;
+    XrModuleResourceBinding *resource=&catalog->resources[index];
+    char *identity=NULL;
+    XrXirStatus status=catalog_module_status(xr_compile_module_identity_from_logical(
+        context->resources,&input->authority,NULL,&identity));
+    if (status!=XR_XIR_OK) return status;
+    resource->canonical=identity;
+    size_t canonical=0,name=0;
+    if (!catalog_length(context,identity,&canonical) ||
+        !catalog_length(context,input->authority.namespace_id,&name)) return XR_XIR_BUDGET;
+    const XrXirModule *checked=xr_xir_compile_artifact_module(artifact);
+    const XrXirSourceModule *module=&checked->declarations->modules[ordinal];
+    if (!xir_compile_work(context,canonical)) return XR_XIR_BUDGET;
+    if (module->name_length!=canonical || memcmp(module->name,identity,canonical)) return XR_XIR_BAD_STRUCTURE;
+    resource->authority.kind=XR_MODULE_IDENTITY_MEMORY;
+    resource->authority.namespace_id=catalog_text(context,input->authority.namespace_id,name,&status);
+    if (status!=XR_XIR_OK) return status;
+    resource->checked=artifact;resource->checked_module=ordinal;
+    return XR_XIR_OK;
+}
 static XrXirStatus catalog_module(XrXirLibraryCatalog *catalog, size_t index,
     const XrXirLibraryModuleInput *input, XrXirArtifact *artifact, uint32_t ordinal) {
     const XrXirCompileContext *context = &catalog->context;
+    if (input->authority.kind==XR_MODULE_IDENTITY_MEMORY)
+        return catalog_memory_module(catalog,index,input,artifact,ordinal);
     if (!input->logical_path || !input->authority.physical_root) return XR_XIR_BAD_STRUCTURE;
     if (input->authority.kind != XR_MODULE_IDENTITY_SCRIPT &&
         input->authority.kind != XR_MODULE_IDENTITY_STDLIB) return XR_XIR_BAD_STAGE;

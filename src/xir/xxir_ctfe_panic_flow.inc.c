@@ -61,7 +61,7 @@ static XrXirCtfeStatus ctfe_panic_land(CtfeCallExecution *execution) {
     const XrXirInstruction *marker=&body->instructions[first];
     if (marker->op!=XR_XIR_PANIC_CATCH) return XR_XIR_CTFE_BAD_ARTIFACT;
     if (marker->type==XR_XIR_PANIC_INFO) {
-        if (execution->owned.frame_spare<512) return XR_XIR_CTFE_FRAME_LIMIT;
+        if (ctfe_frame_spare(&execution->owned)<512) return XR_XIR_CTFE_FRAME_LIMIT;
         if (!scalar_compile_work(&frame->run,1024)) return XR_XIR_CTFE_BUDGET;
         XrXirValue info={0};XrXirCtfeStatus status=ctfe_value_status(xr_xir_panic_info_new(execution->owned.domain,&frame->panic,&info));
         if (status!=XR_XIR_CTFE_OK) return status;
@@ -81,6 +81,7 @@ static XrXirCtfeStatus ctfe_panic_continue(CtfeCallExecution *execution,bool *do
     XrXirPanicPayload held={0};xr_xir_panic_move(&frame->panic,&held);
     execution->top=parent;--execution->depth;execution->live_bytes-=frame->bytes;ctfe_call_frame_free(frame);
     execution->owned.activation=parent;execution->owned.authority=(XrXirCellAuthority){execution,parent,parent->epoch};
-    execution->owned.frame_spare=execution->request->evaluation.limits.frame_bytes-execution->live_bytes;
+    execution->owned.frame_spare=execution->request->evaluation.limits.frame_bytes-execution->live_bytes-execution->loan_bytes;
+    execution->owned.loan_base=execution->loan_bytes;
     XrXirCtfeStatus status=ctfe_panic_begin(execution,&held,at);xr_xir_panic_drop(&held);return status;
 }

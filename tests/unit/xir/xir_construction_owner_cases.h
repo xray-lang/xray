@@ -28,7 +28,7 @@ static void construction_dense_owner(void) {
         XrXirNominalTable table={&declaration,1,NULL};XrXirTypes types={0};types.nominals=&table;
         uint32_t helpers[2]={0,0};XrXirConstructionRow row={0,helpers,2};
         XrXirConstruction *source=NULL,*copy=NULL;
-        CHECK(xr_xir_compile_construction_new(&producer,&types,&row,1,&source)==XR_XIR_OK);
+        CHECK(xr_xir_compile_construction_new_v3(&producer,&types,&(XrXirConstructionSpec){&row,1,NULL,0,NULL},&source)==XR_XIR_OK);
         helpers[0]=UINT32_MAX;
         CHECK(xr_xir_compile_construction_row(source,0)->field_initializers[0]==0);
         uint64_t exact_bytes=sizeof(XrCompileResources)+4*sizeof(CompileAllocation)+92;

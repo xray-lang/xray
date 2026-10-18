@@ -21,7 +21,7 @@ static void shadow_rejections(void) {
         XrCompilerSession *session=NULL;CHECK(xr_compile_session_new(context.resources,&session)==XR_COMPILER_SESSION_OK);
         char input[1024];CHECK(snprintf(input,sizeof(input),"%s/shadow_rejected/%s/root.xr",XR_REMOVE_FIXTURES,names[n])>0);
         XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_REMOVE_FIXTURES};
-        XrXirSourceRequest request={session,input,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+        XrXirSourceRequest request={session,input,&authority,&context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
         XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *path=NULL;
         const XrXirStatus status=xr_xir_compile_source_check(&request,&result,&diagnostic,&path);
         printf("shadow negative%u %s status%u line%d:%d %s\n",n,names[n],status,diagnostic.line,diagnostic.column,diagnostic.message);

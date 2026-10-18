@@ -34,9 +34,9 @@ static XrXirArtifact *interface_allocation_fixture(const XrXirCompileContext *co
         {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0}};
     uint32_t dependency = 0;
-    XrXirSourceModule modules[] = {{"alpha",5,NULL,0,1, 0},{"other",5,&dependency,1,2, 0}};
-    XrXirFunctionIdentity identities[] = {{0,1,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0,0},{0,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0,0},{1,0,0,0,0,0, XR_XIR_NON_MEMBER, 0, 0,0}};
-    XrXirDeclarations program = {modules,2,identities,NULL,0,NULL,0,0,0, NULL};
+    XrXirSourceModule modules[] = {{.name="alpha",.name_length=5,.initializer=1},{.name="other",.name_length=5,.dependencies=&dependency,.dependency_count=1,.initializer=2}};
+    XrXirFunctionIdentity identities[] = {{.exported=1,.method_kind=XR_XIR_NON_MEMBER},{.method_kind=XR_XIR_NON_MEMBER},{.module=1,.method_kind=XR_XIR_NON_MEMBER}};
+    XrXirDeclarations program = {.modules=modules,.module_count=2,.functions=identities};
     XrXirModule module = {XR_XIR_BUILT,functions,3,&program,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *checked = NULL;
     CHECK(xir_fixture_check(context, &module, &checked, NULL) == XR_XIR_OK);

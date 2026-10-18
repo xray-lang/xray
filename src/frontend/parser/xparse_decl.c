@@ -222,29 +222,7 @@ static AstNode *xr_parse_global_asm_declaration(Parser *parser) {
     return node;
 }
 
-static bool xr_derive_target_bit(Parser *parser, Token token, uint32_t *bit_out) {
-    if (token.length == 7 && xr_parser_compare_bytes(parser, token.start, "Inspect", 7) == 0) {
-        *bit_out = XR_DERIVE_INSPECT;
-        return true;
-    }
-    if (token.length == 4 && xr_parser_compare_bytes(parser, token.start, "JSON", 4) == 0) {
-        *bit_out = XR_DERIVE_JSON;
-        return true;
-    }
-    if (token.length == 2 && xr_parser_compare_bytes(parser, token.start, "Eq", 2) == 0) {
-        *bit_out = XR_DERIVE_EQ;
-        return true;
-    }
-    if (token.length == 4 && xr_parser_compare_bytes(parser, token.start, "Hash", 4) == 0) {
-        *bit_out = XR_DERIVE_HASH;
-        return true;
-    }
-    if (token.length == 5 && xr_parser_compare_bytes(parser, token.start, "Clone", 5) == 0) {
-        *bit_out = XR_DERIVE_CLONE;
-        return true;
-    }
-    return false;
-}
+#include "xparse_derivation.inc.c"
 
 // Parse single attribute: @test, @test(skip), @test(timeout: 30), etc.
 XrAttribute *xr_parse_single_attribute(Parser *parser) {
@@ -264,9 +242,10 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
     XrAttribute *attr = (XrAttribute *) ast_alloc(parser->compiler_session, sizeof(XrAttribute));
     if (!xr_parser_healthy(parser)) return NULL;
     attr->kind = ATTR_NONE;
+    attr->line=name_token.line;attr->column=name_token.column;
     attr->timeout = 0;
     attr->str_arg = NULL;
-    attr->derive_flags = 0;
+    attr->derivation = NULL;
     const XrPublicAttributeInfo *info =
         xr_compile_public_attribute_by_name(parser->state, name_token.start, (size_t) name_token.length);
     if (!xr_parser_healthy(parser)) return NULL;
@@ -345,70 +324,11 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
             } while (0);
         }
     } else if (attr->kind == ATTR_DERIVE) {
-        do {
-            xr_parser_consume(parser, TK_LPAREN, "expected '(' after @derive");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
-        if (xr_parser_check(parser, TK_RPAREN)) {
-            do {
-                xr_parser_error(
-                parser, "@derive requires at least one target: Inspect, JSON, Eq, Hash, or Clone");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-        } else {
-            uint32_t seen_flags = 0;
-            do {
-                do {
-                    xr_parser_consume(parser, TK_NAME, "expected derive target name");
-                    if (!xr_parser_healthy(parser)) return NULL;
-                } while (0);
-                Token target = parser->previous;
-                uint32_t bit = 0;
-                char name_buf[64];
-                int n = target.length < (int) sizeof(name_buf) - 1 ? target.length
-                                                                   : (int) sizeof(name_buf) - 1;
-                if (!xr_parser_healthy(parser)) return NULL;
-                do { if (!ast_copy(parser->compiler_session, name_buf, target.start, (size_t) n)) return NULL; } while (0);
-                do { if (!ast_work(parser->compiler_session, 1)) return NULL; name_buf[n] = '\0'; } while (0);
-                if (!xr_derive_target_bit(parser, target, &bit)) {
-                    char msg[160];
-                    xr_parser_format(parser, msg, sizeof(msg),
-                             "unknown derive target '%s'; expected Inspect, JSON, "
-                             "Eq, Hash, or Clone",
-                             name_buf);
-                    do {
-                        xr_parser_error(parser, msg);
-                        if (!xr_parser_healthy(parser)) return NULL;
-                    } while (0);
-                } else if ((seen_flags & bit) != 0) {
-                    char msg[160];
-                    xr_parser_format(parser, msg, sizeof(msg), "duplicate derive target '%s'", name_buf);
-                    do {
-                        xr_parser_error(parser, msg);
-                        if (!xr_parser_healthy(parser)) return NULL;
-                    } while (0);
-                } else {
-                    seen_flags |= bit;
-                    attr->derive_flags |= bit;
-                }
-            } while (xr_parser_healthy(parser) && xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
-        }
-        do {
-            xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @derive");
-            if (!xr_parser_healthy(parser)) return NULL;
-        } while (0);
+        attr->derivation = parse_derivation_intent(parser);
+        if (!attr->derivation || !xr_parser_healthy(parser)) return NULL;
     }
 
     return attr;
-}
-
-static uint32_t attrs_derive_flags(Parser *parser, XrAttribute **attrs, int count) {
-    uint32_t flags = 0;
-    for (int i = 0; xr_parser_step(parser) && i < count; i++) {
-        if (attrs[i] && attrs[i]->kind == ATTR_DERIVE)
-            flags |= attrs[i]->derive_flags;
-    }
-    return flags;
 }
 
 typedef enum XrAttributeTarget {
@@ -448,15 +368,6 @@ static bool validate_attribute_target(Parser *parser, XrAttribute **attrs, int c
     return true;
 }
 
-static void validate_decl_derive_contract(Parser *parser, uint32_t derive_flags) {
-    if (!xr_parser_healthy(parser)) return;
-    if ((derive_flags & XR_DERIVE_HASH) != 0 && (derive_flags & XR_DERIVE_EQ) == 0)
-        do {
-            xr_parser_error_at_previous(parser, "@derive(Hash) requires Eq in the same @derive(...)");
-            if (!xr_parser_healthy(parser)) return;
-        } while (0);
-}
-
 static AstNode *mark_direct_visibility(AstNode *declaration, bool is_exported) {
     if (declaration)
         declaration->is_exported = is_exported;
@@ -475,7 +386,7 @@ bool xr_parser_reject_duplicate_assertion_attrs(Parser *parser, XrAttribute **at
         has_inline = has_inline || attrs[i]->kind == ATTR_INLINE;
         has_noinline = has_noinline || attrs[i]->kind == ATTR_NOINLINE;
         for (int j = 0; xr_parser_step(parser) && (j < i); j++) {
-            if (attrs[j] && attrs[j]->kind == attrs[i]->kind) {
+            if (attrs[j] && attrs[j]->kind == attrs[i]->kind && attrs[i]->kind != ATTR_DERIVE) {
                 const XrPublicAttributeInfo *info = xr_compile_public_attribute_by_kind(parser->state, attrs[i]->kind);
                 if (!xr_parser_healthy(parser)) return false;
                 char msg[96];
@@ -570,7 +481,6 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         return NULL;
     }
 
-    uint32_t derive_flags = attrs_derive_flags(parser, attributes, attr_count);
     if (!xr_parser_healthy(parser)) return NULL;
     if (!xr_parser_reject_duplicate_assertion_attrs(parser, attributes, attr_count))
         return NULL;
@@ -602,7 +512,6 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         cls->as.class_decl.explicit_final = explicit_final;
         cls->as.class_decl.attributes = attributes;
         cls->as.class_decl.attr_count = attr_count;
-        validate_decl_derive_contract(parser, derive_flags);
         return mark_direct_visibility(cls, is_exported);
     }
 
@@ -625,20 +534,12 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         st->as.struct_decl.is_packed = is_packed_struct;
         st->as.class_decl.attributes = attributes;
         st->as.class_decl.attr_count = attr_count;
-        validate_decl_derive_contract(parser, derive_flags);
         return mark_direct_visibility(st, is_exported);
     }
 
     if (xr_parser_match(parser, TK_UNION)) {
         if (!validate_attribute_target(parser, attributes, attr_count, XR_ATTR_TARGET_UNION))
             return NULL;
-        if (derive_flags != 0) {
-            do {
-                xr_parser_error(parser, "@derive can only annotate class, struct, or enum");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return NULL;
-        }
         AstNode *un = xr_parse_union_declaration(parser);
         if (!xr_parser_healthy(parser)) return NULL;
         if (!un)
@@ -657,7 +558,6 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
             return NULL;
         en->as.enum_decl.attributes = attributes;
         en->as.enum_decl.attr_count = attr_count;
-        validate_decl_derive_contract(parser, derive_flags);
         return mark_direct_visibility(en, is_exported);
     }
 
@@ -665,13 +565,6 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     if (xr_parser_match(parser, TK_FN)) {
         if (!validate_attribute_target(parser, attributes, attr_count, XR_ATTR_TARGET_FUNCTION))
             return NULL;
-        if (derive_flags != 0) {
-            do {
-                xr_parser_error(parser, "@derive can only annotate class, struct, or enum");
-                if (!xr_parser_healthy(parser)) return NULL;
-            } while (0);
-            return NULL;
-        }
         AstNode *func = xr_parse_function_declaration(parser);
         if (!xr_parser_healthy(parser)) return NULL;
         if (!func)

@@ -63,8 +63,9 @@ def main():
     words = lambda *values: struct.pack('<' + 'I' * len(values), *values)
     original = model()
     checked = (args.source_root / 'src/xir/xxir_checked.h').read_text(encoding='utf-8')
-    assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+30u', checked)
-    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+77u', checked)
+    assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+34u', checked)
+    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+90u', checked)
+    # The complete historical frames below retain their fixed identities and bytes.
     body, _ = encoder.encode_body(original, 0)
     old_body = body
     body, _ = receive_scopes(body)

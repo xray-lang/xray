@@ -108,7 +108,7 @@ static XrXirStatus rps_operation(const XrXirCompileContext *context, void *opaqu
     if (created!=XR_COMPILER_SESSION_OK)
         return created==XR_COMPILER_SESSION_BUDGET?XR_XIR_BUDGET:XR_XIR_OUT_OF_MEMORY;
     XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_SCRIPT,NULL,XR_ROOT_PARAMETER_SOURCE_FIXTURES};
-    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirSourceRequest request={session,path,&authority,context,NULL,NULL,XR_XIR_PROGRAM,NULL,NULL};
     XrXirSourceResult result={0};XrXirSourceDiagnostic diagnostic={0};char *failure=NULL;
     XrXirArtifact *read=NULL,*instance=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};

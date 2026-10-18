@@ -1,0 +1,5 @@
+class Box{value:i64;constructor(value:i64){this.value=value}}
+struct Wrap{item:Box;number:i64}
+fn inc(value:ref i64){value+=2}
+fn eval()->i64{var wrap=Wrap{item:Box(0),number:40};inc(ref wrap.number);return wrap.number}
+export fn answer()->i64{return comptime eval()}

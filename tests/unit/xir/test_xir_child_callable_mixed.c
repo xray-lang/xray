@@ -26,7 +26,9 @@ XR_DATA const XrXirCallEntry child_callable_native_entries[];
 #include "xir_child_callable_mixed_oracles.h"
 
 int main(int argc, char **argv) {
-    _Static_assert(sizeof(XrXirFunctionIdentity)==40 && offsetof(XrXirFunctionIdentity,test_role)==28,
+    _Static_assert(XR_XIR_CHECKED_SCHEMA==34u && XR_XIR_CHECKED_CONTRACT==90u, "current callable semantic contract");
+    _Static_assert(sizeof(XrXirFunctionIdentity)==44 && offsetof(XrXirFunctionIdentity,test_role)==28 &&
+        offsetof(XrXirFunctionIdentity,variadic)==36 && offsetof(XrXirFunctionIdentity,derivation)==40,
         "current role-bearing declaration layout");
     CHECK(argc == 2);
     bool root_native = !strcmp(argv[1], "native-vm");

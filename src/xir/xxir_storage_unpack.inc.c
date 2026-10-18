@@ -17,10 +17,11 @@ typedef struct StorageUnpack {
     XrXirValueAdmission *admission;
     StorageUnpackFrame *frames;
     uint32_t depth, capacity;
+    bool receiving;
 } StorageUnpack;
 
 static XrXirValueStatus storage_unpack_leaf(StorageSpan span,
-    XrXirValueAdmission *admission, XrXirValue *output) {
+    XrXirValueAdmission *admission, XrXirValue *output,bool receiving) {
     XrXirLayout layout = {0};
     if (!xr_xir_compile_type_arena_layout(admission->arena, span.type, &layout) ||
         !layout.size || layout.size > sizeof(uint64_t) || !span.bytes) return XR_XIR_VALUE_BAD_ARGUMENT;
@@ -28,12 +29,12 @@ static XrXirValueStatus storage_unpack_leaf(StorageSpan span,
     if (!storage_leaf_value(admission->arena,span.type,span.bytes,layout.size,&value))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!xr_xir_value_argument(&value, admission->arena, span.type)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    return xr_xir_value_copy(&value, output);
+    return receiving?value_copy_on_domain(&value,admission->domain,output):xr_xir_value_copy(&value,output);
 }
 static XrXirValueStatus storage_unpack_enter(StorageUnpack *unpack,
     StorageSpan span, XrXirValue *ready) {
     const XrXirTypes *types = xr_xir_compile_type_arena_types(unpack->admission->arena);
-    if (!inline_nominal_type(types, span.type)) return storage_unpack_leaf(span, unpack->admission, ready);
+    if (!inline_nominal_type(types, span.type)) return storage_unpack_leaf(span,unpack->admission,ready,unpack->receiving);
     const XrXirTypeNode *node = xr_xir_type_node(types, span.type);
     const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(unpack->admission->arena, span.type);
     const XrXirNominalIdentity *identity = node->kind == XR_XIR_TYPE_NOMINAL ?
@@ -116,16 +117,16 @@ static void storage_unpack_discard(StorageUnpack *unpack) {
 /* Input belongs to a previously admitted owner and remains borrowed for this
  * synchronous operation. Materialization confers no new construction authority. */
 static XrXirValueStatus storage_unpack_operation(StorageSpan span,
-    XrXirValueAdmission *admission, XrXirValue *output) {
+    XrXirValueAdmission *admission, XrXirValue *output,bool receiving) {
     if (!admission || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!inline_nominal_type(xr_xir_compile_type_arena_types(admission->arena), span.type))
-        return storage_unpack_leaf(span, admission, output);
+        return storage_unpack_leaf(span,admission,output,receiving);
     if (!admission->domain) return XR_XIR_VALUE_BAD_ARGUMENT;
     const XrXirStorageLayout *layout = xr_xir_compile_type_arena_storage(admission->arena, span.type);
     uint64_t scratch = (uint64_t)layout->depth * sizeof(StorageUnpackFrame);
     if (scratch > SIZE_MAX || scratch > admission->scratch_bytes) return XR_XIR_VALUE_LIMIT;
     XrXirValueStatus status = XR_XIR_VALUE_OK;
-    StorageUnpack unpack = {admission, NULL, 0, layout->depth};
+    StorageUnpack unpack = {admission,NULL,0,layout->depth,receiving};
     unpack.frames = xr_xir_domain_allocate(admission->domain, (size_t)scratch, &status);
     if (!unpack.frames) return status;
     admission->scratch_bytes -= scratch;
@@ -140,7 +141,7 @@ static XrXirValueStatus storage_unpack(StorageSpan span,
     XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
     xr_xir_value_graph_begin();
-    XrXirValueStatus status = storage_unpack_operation(span, admission, output);
+    XrXirValueStatus status = storage_unpack_operation(span,admission,output,false);
     xr_xir_value_graph_end();
     return status;
 }

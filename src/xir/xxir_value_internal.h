@@ -23,7 +23,9 @@ enum { XIR_OBJECT_CLASS = 260u,
        XIR_OBJECT_CELL = 258u,
        XIR_OBJECT_FUNCTION = 259u };
 _Static_assert((uint32_t)XIR_OBJECT_CLASS > (uint32_t)XR_XIR_TYPE_RECORD &&
-    (uint32_t)XIR_OBJECT_CELL > (uint32_t)XR_XIR_TYPE_RECORD && (uint32_t)XIR_OBJECT_FUNCTION > (uint32_t)XR_XIR_TYPE_RECORD &&
+    (uint32_t)XIR_OBJECT_CLASS > (uint32_t)XR_XIR_TYPE_ITERATOR &&
+    (uint32_t)XIR_OBJECT_CELL > (uint32_t)XR_XIR_TYPE_RECORD && (uint32_t)XIR_OBJECT_CELL > (uint32_t)XR_XIR_TYPE_ITERATOR &&
+    (uint32_t)XIR_OBJECT_FUNCTION > (uint32_t)XR_XIR_TYPE_RECORD && (uint32_t)XIR_OBJECT_FUNCTION > (uint32_t)XR_XIR_TYPE_ITERATOR &&
     XIR_OBJECT_CLASS != 0x100u && XIR_OBJECT_CLASS != 257u && XIR_OBJECT_CELL != 0x100u &&
     XIR_OBJECT_FUNCTION != 0x100u, "storage tags exclude retired generations");
 _Static_assert(XIR_OBJECT_CLASS != XIR_OBJECT_CELL &&

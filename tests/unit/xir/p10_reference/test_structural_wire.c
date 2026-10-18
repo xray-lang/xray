@@ -11,19 +11,38 @@
 #include "xir/xxir_vm.h"
 #include "xir/xxir_emit_c.h"
 #include "../xir_structural81_golden.h"
+#include "../composed_wire/structural90.inc.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do {if (!(c)) {fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1);}} while (0)
 #include "../xir_source_fixture_owner.h"
-_Static_assert(XR_XIR_CHECKED_SCHEMA==33 && XR_XIR_CHECKED_CONTRACT==81 &&
-    XR_XIR_VALUE_ABI_VERSION==27 && XR_XIR_PROGRAM_ABI_VERSION==36,"structural packet identity");
-_Static_assert(XR_XIR_FIELD_REQUIREMENT==157,"definition-bound field operation");
+#include "../composed_wire/retired.h"
+_Static_assert(XR_XIR_CHECKED_SCHEMA==34 && XR_XIR_CHECKED_CONTRACT==90 &&
+    XR_XIR_VALUE_ABI_VERSION==28 && XR_XIR_PROGRAM_ABI_VERSION==37,"structural packet identity");
+_Static_assert(XR_XIR_FIELD_REQUIREMENT==186,"definition-bound field operation");
+static void structural_wire_retired(SourceFixtureOwner *owner) {
+    const ComposedRetiredPacket packets[]={
+        {structural81_relocated,sizeof(structural81_relocated)},
+        {structural81_policy_zero,sizeof(structural81_policy_zero)},
+        {structural81_policy_unknown,sizeof(structural81_policy_unknown)},
+        {structural81_tuple_shape,sizeof(structural81_tuple_shape)},
+        {structural81_extra_selection,sizeof(structural81_extra_selection)},
+        {structural81_result_mismatch,sizeof(structural81_result_mismatch)},
+        {structural81_missing,sizeof(structural81_missing)},
+        {structural81_field_mismatch,sizeof(structural81_field_mismatch)},
+        {structural81_unused_policy,sizeof(structural81_unused_policy)},
+        {structural81_unused_extra,sizeof(structural81_unused_extra)},
+        {structural81_outside_binder,sizeof(structural81_outside_binder)},
+        {structural81_conflict,sizeof(structural81_conflict)}
+    };
+    composed_retired_reject(&owner->context,packets,sizeof(packets)/sizeof(*packets));
+}
 static XrXirArtifact *structural_lower(SourceFixtureOwner *owner) {
     XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;XrXirDiagnostic diagnostic={0};
-    size_t length=sizeof(structural81_relocated);void *input=NULL;
+    size_t length=sizeof(structural90_relocated);void *input=NULL;
     CHECK(xr_compile_resources_alloc(owner->context.resources,length,&input)==XR_COMPILE_RESOURCE_OK);
-    memcpy(input,structural81_relocated,length);
+    memcpy(input,structural90_relocated,length);
     XrXirStatus status=xr_xir_compile_checked_read(&owner->context,input,length,&checked,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"structural read=%u f%u i%u\n",status,diagnostic.function,diagnostic.instruction);
     CHECK(status==XR_XIR_OK && checked);
@@ -36,7 +55,7 @@ static XrXirArtifact *structural_lower(SourceFixtureOwner *owner) {
     CHECK(module->functions[2].instructions[0].op==XR_XIR_FIELD_REQUIREMENT &&
         module->functions[2].instructions[0].immediate==0);
     XrXirCheckedPacket encoded={0};CHECK(xr_xir_compile_checked_write(checked,&encoded,NULL)==XR_XIR_OK);
-    CHECK(encoded.length==length && !memcmp(encoded.bytes,structural81_relocated,length));
+    CHECK(encoded.length==length && !memcmp(encoded.bytes,structural90_relocated,length));
     xr_xir_compile_checked_packet_free(&encoded);
     status=xr_xir_compile_specialize(checked,&closed,&diagnostic);
     if (status!=XR_XIR_OK) fprintf(stderr,"structural specialize=%u f%u i%u\n",status,diagnostic.function,diagnostic.instruction);
@@ -68,10 +87,10 @@ static void structural_run(XrXirArtifact *lowered) {
 static void structural_reject(SourceFixtureOwner *owner) {
     const struct {const char *name;const uint8_t *bytes;size_t length;} cases[]={
 #define BAD(name) {#name,name,sizeof(name)}
-        BAD(structural81_policy_zero),BAD(structural81_policy_unknown),BAD(structural81_tuple_shape),
-        BAD(structural81_extra_selection),BAD(structural81_result_mismatch),BAD(structural81_missing),
-        BAD(structural81_field_mismatch),BAD(structural81_unused_policy),BAD(structural81_unused_extra),
-        BAD(structural81_outside_binder),BAD(structural81_conflict)
+        BAD(structural90_policy_zero),BAD(structural90_policy_unknown),BAD(structural90_tuple_shape),
+        BAD(structural90_extra_selection),BAD(structural90_result_mismatch),BAD(structural90_missing),
+        BAD(structural90_field_mismatch),BAD(structural90_unused_policy),BAD(structural90_unused_extra),
+        BAD(structural90_outside_binder),BAD(structural90_conflict)
 #undef BAD
     };
     for (size_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
@@ -84,6 +103,7 @@ static void structural_reject(SourceFixtureOwner *owner) {
 int main(int argc,char **argv) {
     CHECK(argc==1 || (argc==3 && !strcmp(argv[1],"--emit")));
     SourceFixtureOwner owner={0};source_fixture_owner_new(&owner);
+    structural_wire_retired(&owner);
     XrXirArtifact *lowered=structural_lower(&owner);
     if (argc==3) {
         XrXirCSource source={0};CHECK(xr_xir_compile_emit_c(lowered,"language_reference",1048576,&source)==XR_XIR_OK);

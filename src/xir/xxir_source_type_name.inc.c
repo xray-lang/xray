@@ -66,6 +66,14 @@ static bool source_type_name_collect(SourceContext *ctx, AstNode *node, XrXirTyp
         }
         return true;
     }
+    case XR_XIR_TYPE_ITERATOR:
+        source_type_name_append(name, TYPE_NAME_ITERATOR, strlen(TYPE_NAME_ITERATOR));
+        if (!top) {
+            source_type_name_append(name, "<", 1);
+            if (!source_type_name_collect(ctx, node, shape->element, false, depth + 1, name)) return false;
+            source_type_name_append(name, ">", 1);
+        }
+        return true;
     case XR_XIR_TYPE_TASK:
         source_type_name_append(name, TYPE_NAME_TASK, strlen(TYPE_NAME_TASK));
         if (!top) {

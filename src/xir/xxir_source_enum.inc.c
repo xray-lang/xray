@@ -10,9 +10,9 @@ static bool source_enum_declare(SourceContext *ctx, AstNode *node) {
     EnumDeclNode *d = &node->as.enum_decl;
     if (d->type_param_count < 0 || d->type_param_count > 65536 || d->member_count <= 0 ||
         d->method_count < 0 || (d->method_count && !d->methods) ||
-        d->interface_count < 0 || (d->interface_count && !d->interfaces) || d->attr_count)
+        d->interface_count < 0 || (d->interface_count && !d->interfaces))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "enum declaration contract is not admitted");
-    return source_nominal_declare(ctx, node, d->name, d->type_params,
+    return source_nominal_attributes(ctx,node,d->attributes,d->attr_count) && source_nominal_declare(ctx, node, d->name, d->type_params,
         (uint32_t)d->type_param_count, XR_XIR_NOMINAL_ENUM);
 }
 static bool source_enum_fields(SourceContext *ctx) {

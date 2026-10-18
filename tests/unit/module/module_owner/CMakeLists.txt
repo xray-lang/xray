@@ -26,6 +26,7 @@ add_custom_command(OUTPUT "${generated}"
         "${XR_ROOT}/stdlib/stdlib_boundary.toml" "${XR_ROOT}/stdlib/io/io.xr" "${XR_ROOT}/stdlib/path/path.xr" VERBATIM)
 add_executable(test_module_owner test_module_owner.c "${generated}"
     "${XR_ROOT}/src/module/xmodule_graph.c" "${XR_ROOT}/src/module/xmodule_resolver.c"
+    "${XR_ROOT}/src/module/xmodule_overlay.c"
     "${XR_ROOT}/src/module/xmodule_identity.c" "${XR_ROOT}/src/module/xmodule_identity_view.c"
     "${XR_ROOT}/src/module/xmodule_fingerprint.c" "${XR_ROOT}/src/module/stdlib_embedded.c"
     "${XR_ROOT}/src/module/xlockfile.c" "${XR_ROOT}/src/module/xsemver.c"

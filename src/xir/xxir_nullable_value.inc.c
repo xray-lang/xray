@@ -6,6 +6,7 @@
  *
  * xxir_nullable_value.inc.c - Failure-atomic active payload construction
  */
+#include "../shared/xr_decimal_float.h"
 static XrXirValueStatus xr_xir_nullable_new_graph_operation(XrXirType type,
     const XrXirValue *payload, XrXirValueAdmission *admission, XrXirValue *output) {
     if (!admission || !admission->domain || !admission->arena || !unit_value(output))
@@ -56,4 +57,30 @@ XR_FUNC bool xr_xir_nullable_view(const XrXirValue *value, bool *some,
     bool graph_outcome = xr_xir_nullable_view_graph_operation(value, some, payload);
     xr_xir_value_graph_end();
     return graph_outcome;
+}
+static bool nullable_decimal_work(void *context, uint64_t units) {
+    XrXirValueAdmission *admission = context;
+    if (units > admission->work || !xr_xir_domain_work(admission->domain, units)) return false;
+    admission->work -= units; return true;
+}
+static XrXirValueStatus nullable_decimal_parse(const XrXirValue *text, XrXirType type,
+    XrXirValueAdmission *admission, XrXirValue *output) {
+    const char *bytes = NULL; size_t length = 0;
+    if (!admission || !admission->arena || !text || !unit_value(output) ||
+        xr_xir_nullable_element(xr_xir_compile_type_arena_types(admission->arena), type) != XR_XIR_F64)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!nullable_decimal_work(admission, sizeof(*text))) return XR_XIR_VALUE_LIMIT;
+    if (!xr_xir_string_view(text, &bytes, &length) || length > UINT32_MAX) return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrDecimalWork work = {admission, nullable_decimal_work, false}; uint64_t bits = 0;
+    XrDecimalStatus status = xr_decimal_float_text_work(&work, bytes, length, 64, &bits);
+    if (status == XR_DECIMAL_WORK_LIMIT) return XR_XIR_VALUE_LIMIT;
+    XrXirValue payload = {XR_XIR_F64, 0, 0}; memcpy(&payload.payload, &bits, sizeof(bits));
+    return xr_xir_nullable_new_graph_operation(type, status == XR_DECIMAL_OK ? &payload : NULL, admission, output);
+}
+XR_FUNC XrXirValueStatus xr_xir_f64_try_parse(const XrXirValue *text, XrXirType type,
+    XrXirValueAdmission *admission, XrXirValue *output) {
+    if (!admission_domain_current(admission)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    xr_xir_value_graph_begin();
+    XrXirValueStatus status = nullable_decimal_parse(text, type, admission, output);
+    xr_xir_value_graph_end(); return status;
 }

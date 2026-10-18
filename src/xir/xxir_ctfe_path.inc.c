@@ -23,7 +23,7 @@ static XrXirCtfeStatus ctfe_index_path_build(ScalarRun *run,const XrXirInstructi
     if (xr_xir_place_kind(run->function,id)!=XR_XIR_PLACE_CELL && xr_xir_place_kind(run->function,id)!=XR_XIR_PLACE_OBJECT) return XR_XIR_CTFE_NOT_SUPPORTED;
     if (!count) { *root=id;*path=(XrXirValuePath){0};return XR_XIR_CTFE_OK; }
     uint64_t bytes=(uint64_t)count*sizeof(XrXirValuePathStep);
-    if (bytes>SIZE_MAX || bytes>state->frame_spare) return XR_XIR_CTFE_FRAME_LIMIT;
+    if (bytes>SIZE_MAX || bytes>ctfe_frame_spare(state)) return XR_XIR_CTFE_FRAME_LIMIT;
     if (!scalar_compile_work(run,bytes)) return XR_XIR_CTFE_BUDGET;
     void *memory=NULL;XrXirCtfeStatus status=ctfe_compile_status(xir_compile_resource_status(
         xr_compile_resources_calloc(run->compile_resources,1,(size_t)bytes,&memory)));
@@ -93,7 +93,7 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
     status=ctfe_validation_work(run,&bounded,root_op->type);if (status!=XR_XIR_CTFE_OK) goto done;
     if (object) root=cell;
     else if (projected) {
-        status=ctfe_projection_access_work(run,&bounded,&cell,mutate);if (status!=XR_XIR_CTFE_OK) goto done;
+        status=ctfe_projection_access_work(run,&bounded,&cell,mutate,path.count);if (status!=XR_XIR_CTFE_OK) goto done;
         XrXirValuePath empty={0};XrXirValueStatus received=xr_xir_cell_authorized_path_read(&cell,&state->authority,&empty,&admission,&root,&fault);
         status=received==XR_XIR_VALUE_BOUNDS?ctfe_bounds_fault(run,&bounded,fault):ctfe_value_status(received);
         if (status!=XR_XIR_CTFE_OK) goto done;held=true;
@@ -110,7 +110,8 @@ static XrXirCtfeStatus ctfe_index_path_step(ScalarRun *run,VmState *vm,CtfeOwned
         const uint32_t *ids=op->op==XR_XIR_ARRAY_SET?&run->function->operands[op->args[0]]:op->args;
         XrXirValue incoming=ctfe_array_operand(run,ids[op->op==XR_XIR_ARRAY_SET?2:1]);
         if (object) bounded.forbidden_class=cell;else bounded.forbidden_cell=cell;
-        status=projected?ctfe_projection_incoming_work(run,&bounded,&cell,&incoming):ctfe_admission_work(run,&bounded,&incoming);
+        status=projected?ctfe_projection_incoming_work(run,&bounded,&cell,&incoming):ctfe_mutation_work(run,&bounded,&cell,&incoming);
+        admission=ctfe_value_admission(&bounded);
         if (status!=XR_XIR_CTFE_OK) goto done;
         if (op->op==XR_XIR_ARRAY_PUSH) {
             int64_t capacity=0;status=ctfe_value_status(xr_xir_array_capacity(&target,&admission,&capacity));
