@@ -194,10 +194,20 @@ static void source_array_reorder_limits(XrXirProgram *program, const uint32_t *f
             if (status != XR_XIR_CALL_LIMIT)
                 fprintf(stderr, "Array method %u limit mode %u status %u\n", method, mode, (unsigned) status);
             CHECK(status == XR_XIR_CALL_LIMIT);
-            printf("Array method %u limit mode %u start=%u final=%u\n",
-                method, mode, (unsigned) started, (unsigned) status);
+            CHECK(xr_xir_instance_state(instance) == XR_XIR_INSTANCE_READY);
+            /* A driven ordinary entry preserves its LIMIT completion. A
+             * rejected start leaves the previously consumed call in place. */
+            XrXirCallStatus expected = started == XR_XIR_CALL_READY ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_STATE;
             XrXirValue absent = {0};
-            CHECK(xr_xir_instance_take_result(instance, &absent) == XR_XIR_CALL_BAD_STATE && !absent.type && !absent.payload);
+            XrXirCallStatus extracted = xr_xir_instance_take_result(instance, &absent);
+            CHECK(extracted == expected && !absent.type && !absent.reserved && !absent.payload);
+            CHECK(xr_xir_instance_take_result(instance, &absent) == expected &&
+                !absent.type && !absent.reserved && !absent.payload);
+            XrXirCallResult failure = {0};
+            CHECK(xr_xir_instance_copy_failure(instance, &failure) == XR_XIR_CALL_BAD_STATE &&
+                xr_xir_call_result_empty(&failure));
+            printf("Array method %u limit mode %u start=%u final=%u take=%u\n",
+                method, mode, (unsigned) started, (unsigned) status, (unsigned) extracted);
             XrXirValue state = source_array_run(instance, functions[REORDER_ROOT_STATE]);
             CHECK(!source_array_reorder_state_kind(&state, method != 0)); xr_xir_value_drop(&state);
             CHECK(!source_array_reorder_state_kind(&saved, method != 0)); xr_xir_value_drop(&saved);
