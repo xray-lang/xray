@@ -256,8 +256,12 @@ static XrXirStatus effect_capture_iterator_call(EffectCaptureRead *read,const Ef
 
 static XrXirStatus effect_capture_instruction(EffectCaptureRead *read,const EffectCaptureNode *node,
     uint32_t instruction,const XrXirInstruction *op) {
-    uint32_t value=node->head.parameter_count+instruction,kind=0;XrXirStatus status=effect_capture_kind(read,node,value,&kind,NULL);
-    if(status==XR_XIR_OK) status=effect_capture_barrier(read,node,op);
+    if(!op || instruction>=node->head.instruction_count) return XR_XIR_BAD_STRUCTURE;
+    uint32_t value=node->head.parameter_count+instruction;
+    /* This operation was decoded from the current canonical body. Its type
+     * is the destination's exact SSA type, so no second directory walk is needed. */
+    uint32_t kind=effect_capture_type_kind(read->body.domain.types,op->type);
+    XrXirStatus status=effect_capture_barrier(read,node,op);
     if(status!=XR_XIR_OK) return status;
     if(!read->fixed_only && kind==EFFECT_CAPTURE_CELL) {
         status=effect_capture_cell(read,node,value);if(status!=XR_XIR_OK) return status;
