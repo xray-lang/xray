@@ -89,8 +89,9 @@ static void generator_previous86(const XrXirCompileContext *context) {
     };
     checked_legacy_packets(context,packets,sizeof(packets)/sizeof(*packets));
 }
-_Static_assert(XR_XIR_TYPE_ITERATOR==11,"Iterator excludes Map and Set descriptor ordinals");
-_Static_assert(XR_XIR_GENERATOR_YIELD==176,"independent Generator opcode ordinal");
+_Static_assert(XR_XIR_TYPE_MAP==9 && XR_XIR_TYPE_SET==10 && XR_XIR_TYPE_ITERATOR==13,
+    "Iterator follows hash containers and both view descriptors");
+_Static_assert(XR_XIR_GENERATOR_YIELD==184,"Generator follows the eight view operations");
 _Static_assert(XR_XIR_PROGRAM==0 && XR_XIR_LIBRARY==1,"independent packet linkage ordinals");
 static const char source_text[]=
     "export fn numbers() -> Iterator<i64> {\n yield 11\n Coro.yield()\n yield 22\n }\n"
