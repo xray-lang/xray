@@ -153,7 +153,7 @@ static void conditional_compact_tiny_masks(void) {
         conditional_compact_tiny_damage(&context,&body,expected);
         conditional_compact_read_failures(&context,&body,1,&expected[1]);
         conditional_compact_fields_failures(&context,&body,1,&expected[1]);
-        xr_compile_resources_free(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
+        effect_body_runs_release(body.runs);rp_owner_free(&context,baseline);rp_balanced(physical);
     }
     puts("compact tiny directories: all 1024 physical masks, one/two runs, damage and every read refusal passed");
 }
