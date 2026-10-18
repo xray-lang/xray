@@ -136,10 +136,27 @@ static void display_nominals(const XrXirCompileContext *context) {
         xr_xir_compile_source_snapshot_free(snapshot);
     }
 }
+static void display_field_defaults(const XrXirCompileContext *context) {
+    XrXirSourceSnapshot *snapshot=display_producer(context,
+        "struct FieldBox<Element> {const value:Element const structLabel:string=\"field\"}\n"
+        "final class FieldPair<Left,Right> {const first:Left const second:Right const classLabel:i64=7}\n");
+    display_names(snapshot,"FieldBox","Element",NULL);display_names(snapshot,"FieldPair","Left","Right");
+    const XrXirSourceView *view=xr_xir_compile_source_snapshot_view(snapshot);
+    const XrXirSourceSyntaxView *syntax=xr_xir_compile_source_snapshot_syntax(snapshot);
+    const char *fields[]={"structLabel","classLabel"};
+    const char *owners[]={"FieldBox","FieldPair"};
+    for(unsigned f=0;f<2;++f) {
+        uint32_t id=display_find(view,fields[f]),owner=display_find(view,owners[f]);
+        const XrXirSourceDeclaration *field=&view->declarations[id-1];
+        CHECK(field->kind==XR_XIR_SOURCE_MEMBER&&field->parent==owner&&!field->generic_parameter_count);
+        CHECK(!syntax->declarations[id-1].type_parameters&&!syntax->declarations[id-1].type_parameter_count);
+    }
+    xr_xir_compile_source_snapshot_free(snapshot);
+}
 int main(int argc,char **argv) {
     CHECK(argc==1||(argc==2&&!strcmp(argv[1],"--resources")));bool failures=argc==2;
     XrCompileResources *resources=sdk_ledger(&sdk_unlimited);XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
-    display_nominals(&context);
+    display_nominals(&context);display_field_defaults(&context);
     XrXirSourceSnapshot *producer=display_producer(&context,
         "const globalInferred=1\nconst globalExplicit:i64=2\n"
         "fn wrapper<ActualElement>(value:ActualElement)->ActualElement{\n"

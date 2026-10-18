@@ -75,8 +75,10 @@ static bool source_display_names_publish(SourceContext *ctx) {
     for(uint32_t f=0;f<ctx->function_count;++f) {
         if(!source_work(ctx,NULL))return false;
         const SourceFunction *body=&ctx->bodies[f];
+        /* A field initializer inherits its nominal scope; the field itself declares no type parameters. */
+        uint32_t declaration=body->node&&body->node->type==AST_FIELD_DECL?body->generic_owner:body->declaration;
         if(body->declaration&&body->node&&
-            !source_display_names(ctx,body->declaration,body->type_parameters,body->type_parameter_count))return false;
+            !source_display_names(ctx,declaration,body->type_parameters,body->type_parameter_count))return false;
     }
     for(uint32_t d=0;d<ctx->nominals.count;++d)
         if(!source_work(ctx,NULL)||!source_display_nominal_names(ctx,ctx->nominal_sources[d]))return false;
