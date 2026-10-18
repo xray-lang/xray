@@ -523,6 +523,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/reception_patterns.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/concat_spread.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/tuple_spread.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/call_spread.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/string_members.cmake")
 
 foreach(storage_kind IN ITEMS array array-const)
     string(REPLACE "-" "_" storage_suffix "${storage_kind}")

@@ -1,0 +1,8 @@
+export fn probe(s: string) -> i64 { s.copyBytes(); return 42 }
+var count: i64 = 0
+fn receiver() -> string { count = count + 1; return "é\0🙂" }
+export fn referenceAnswer() -> i64 {
+    count = 0
+    if (probe(receiver()) != 42 || probe(receiver()) != 42 || count != 2) { return 0 }
+    return 42
+}

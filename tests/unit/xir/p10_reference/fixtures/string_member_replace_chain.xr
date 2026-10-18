@@ -1,0 +1,7 @@
+export fn probe(s: string) -> i64 { return len(s.replace("a", "b").replace("b", "c")) }
+fn chain(s: string) -> string { return s.replace("a", "b").replace("b", "c") }
+export fn heldString() -> string { return chain("a\0a") }
+export fn referenceAnswer() -> i64 {
+    if (probe("aaa") != 3 || chain("aaa") != "caa" || chain("bbb") != "cbb") { return 0 }
+    return 42
+}

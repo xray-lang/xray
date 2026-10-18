@@ -1,0 +1,5 @@
+export fn probe(s: string, n: string) -> bool { return s.startsWith(n) }
+export fn referenceAnswer() -> i64 {
+    if (!probe("é🙂\0", "é🙂") || probe("é🙂\0", "🙂") || !probe("", "")) { return 0 }
+    return 42
+}

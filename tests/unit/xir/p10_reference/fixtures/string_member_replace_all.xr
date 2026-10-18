@@ -1,0 +1,9 @@
+export fn probe(s: string) -> i64 { return len(s.replaceAll("a", "b")) }
+export fn heldString() -> string { return "\0éé".replaceAll("é", "🙂") }
+export fn referenceAnswer() -> i64 {
+    if (probe("aa") != 2 || "aaaa".replaceAll("aa", "X") != "XX") { return 0 }
+    if ("aaa".replaceAll("aa", "a") != "aa" || "é\0é".replaceAll("é", "🙂") != "🙂\0🙂") { return 0 }
+    if ("abc".replaceAll("", "x") != "abc" || "abc".replaceAll("b", "") != "ac") { return 0 }
+    if ("".replaceAll("a", "b") != "" || "abc".replaceAll("abcdef", "x") != "abc") { return 0 }
+    return 42
+}
