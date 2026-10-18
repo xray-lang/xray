@@ -239,11 +239,15 @@ static XrXirStatus prefix_multiple(const XrXirCompileContext *context, unsigned 
     XrXirConstraintUse use={&f.module,{XR_XIR_CONTEXT_FUNCTION,0,0},0,arguments,3};
     return xr_xir_compile_constraints_prove(context,&proof,&use);
 }
-/* Seven distinct nodes, nine constructed visits, eight enqueues/runs and one
- * empty requirement. Ascending roots perform two prefix updates, descending
- * roots one; the unchanged traversal charge is the complete 17-node pool. */
+/* Selected-parameter proof checks all three arguments for borrowed views:
+ * each Nullable root costs one dispatch and a full pool scan, even a repeat.
+ * The separate traversal reservation is the complete 17-node pool. Seven
+ * distinct nodes cause nine constructed visits, eight enqueues/runs, one scalar
+ * leaf, one empty requirement and one allocation. Ascending roots perform two
+ * prefix updates, descending roots one; both clear seven seen bytes. */
 static uint64_t prefix_multiple_work(unsigned order) {
-    return 17 + 7 + (order?1u:2u) + 1 + 9 + 8 + 8 + 1 + 1;
+    const uint64_t pool=17, argument_views=3*(1+pool);
+    return argument_views + pool + 7 + (order?1u:2u) + 1 + 9 + 8 + 8 + 1 + 1;
 }
 static void prefix_multiple_faults(void) {
     for (unsigned order=0;order<2;++order) {
