@@ -1,2 +1,3 @@
 import {Box, make} from "./callee"
 export fn retained() -> Box { return make(40, "held-class") }
+export fn retained_array() -> Array<Box> { return [make(40, "held-class")] }
