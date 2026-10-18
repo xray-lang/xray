@@ -371,6 +371,7 @@ add_custom_command(OUTPUT ${XIR_CALL_GENERATED}
 add_executable(test_xir_call_native xir/test_xir_call_native.c ${XIR_CALL_GENERATED})
 target_link_libraries(test_xir_call_native PRIVATE xray_xir_scalar)
 target_sources(test_xir_calls PRIVATE ${XIR_CALL_GENERATED})
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/calls_owned_receive.cmake")
 set(XIR_SCALAR_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_scalar_fixture.c)
 add_custom_command(OUTPUT ${XIR_SCALAR_GENERATED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
