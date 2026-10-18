@@ -227,12 +227,6 @@ static bool source_library_instruction(SourceContext *ctx, const SourceLibraryMa
         if (!map->history)
             return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program output requires a history owner");
         break;
-    case XR_XIR_CLOCK_NANOS: case XR_XIR_UTC_OFFSET_AT: case XR_XIR_TIMER_AFTER_MS:
-        /* A checked history body retains its original host-clock semantics.
-         * These operands carry no artifact-global declaration coordinates. */
-        if (!map->history)
-            return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"program clock operations require a history owner");
-        break;
     case XR_XIR_ASSERT_CONDITION: case XR_XIR_INVOKE_INDIRECT:
     case XR_XIR_INVOKE_DISCARD: case XR_XIR_PANIC_CATCH:
         /* Values and invoke coordinates stay within the copied body. Literal
