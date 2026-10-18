@@ -85,7 +85,7 @@ static XrXirValueStatus debug_write_replacement(XrXirVmDebug *debug,const XirVmD
         if (!node || node->kind!=XR_XIR_TYPE_NOMINAL || step->selector<0 || (uint64_t)step->selector>UINT32_MAX)
             return XR_XIR_VALUE_BAD_ARGUMENT;
         XrXirStatus allowed=xr_xir_compile_nominal_access(&debug->artifact->context,module,function,
-            node->nominal.declaration,(uint32_t)step->selector,XR_XIR_NOMINAL_WRITE);
+            step->container,(uint32_t)step->selector,XR_XIR_NOMINAL_WRITE);
         if (allowed!=XR_XIR_OK) return allowed==XR_XIR_BUDGET ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;
     }
     XrXirValue root={0};XrXirValueStatus status=debug_write_status(xir_instance_observe_cell(point->view,cell,&root));

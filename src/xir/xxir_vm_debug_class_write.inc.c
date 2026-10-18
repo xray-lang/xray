@@ -24,7 +24,7 @@ static XrXirValueStatus debug_write_member(XrXirVmDebug *debug,uint32_t function
     if (!node || node->kind!=XR_XIR_TYPE_NOMINAL || step->selector<0 || (uint64_t)step->selector>UINT32_MAX)
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirStatus status=xr_xir_compile_nominal_access(&debug->artifact->context,module,function,
-        node->nominal.declaration,(uint32_t)step->selector,access);
+        step->container,(uint32_t)step->selector,access);
     return status==XR_XIR_OK ? XR_XIR_VALUE_OK : status==XR_XIR_BUDGET ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;
 }
 static XrXirValueStatus debug_class_write_read(XrXirCallView *view,const XrXirValue *value,

@@ -506,8 +506,16 @@ static XrXirValueStatus capture_read_scope(XrXirVmDebug *debug,uint32_t function
     frame->read_arena=(XrXirTypeArena *)view->arena;
     const XrXirTypes *types=xr_xir_compile_type_arena_types(view->arena);
     if (!types || !types->nominals || types->nominals->count!=count) return XR_XIR_VALUE_BAD_ARGUMENT;
-    for (uint32_t declaration=0;declaration<count;++declaration) {
-        XrXirStatus checked=xr_xir_compile_nominal_access(&debug->artifact->context,module,function,declaration,0,XR_XIR_NOMINAL_TYPE);
+    /* Access is checked through a constructed type; the snapshot records the
+     * resulting declaration visibility for every concrete instantiation. */
+    for (uint32_t i=0;i<module->types->count;++i) {
+        if (!xr_xir_domain_work(debug->domain,1)) return XR_XIR_VALUE_LIMIT;
+        const XrXirTypeNode *node=&module->types->nodes[i];
+        if (node->kind!=XR_XIR_TYPE_NOMINAL) continue;
+        uint32_t declaration=node->nominal.declaration;
+        if (declaration>=count) return XR_XIR_VALUE_BAD_ARGUMENT;
+        XrXirType type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+i);
+        XrXirStatus checked=xr_xir_compile_nominal_access(&debug->artifact->context,module,function,type,0,XR_XIR_NOMINAL_TYPE);
         if (checked==XR_XIR_OK) frame->nominal_visible[declaration]=1;
         else if (checked!=XR_XIR_BAD_TYPE) return checked==XR_XIR_BUDGET ? XR_XIR_VALUE_LIMIT : XR_XIR_VALUE_BAD_ARGUMENT;
     }
