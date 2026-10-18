@@ -44,6 +44,44 @@ static XrXirStatus seed_cursor_random_oracle(const XrXirCompileContext *work,
     *output=facts;return XR_XIR_OK;
 }
 
+/* Freeze the complete prior cursor replay as a second independent oracle. */
+static XrXirStatus seed_range_cursor_oracle(const XrXirCompileContext *work,
+    const EffectBodyMaterial *body,uint32_t function,XrXirRootEffects *output) {
+    if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) || !output ||
+        body->resources!=work->resources || function>=effect_body_count(body)) return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyFunction *head=&body->functions[function];
+    const XrXirDeclarations *decls=body->declarations;
+    XrXirRootEffects facts={0};XrXirRootEffectWitness witnesses[2]={{0},{0}};
+    if (decls) {
+        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
+        if (!decls->modules || !decls->functions || decls->functions[function].module>=decls->module_count)
+            return XR_XIR_BAD_STRUCTURE;
+        if (decls->modules[decls->functions[function].module].initializer==function) {
+            facts.requires_root=true;
+            witnesses[0]=(XrXirRootEffectWitness){XR_XIR_ROOT_CAUSE_INITIALIZER,
+                UINT32_MAX,UINT32_MAX,UINT32_MAX,0};
+        }
+    }
+    EffectBodyRead read=effect_body_compile_read(work);
+    EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
+    if (!xir_compile_work(work,sizeof(cursor))) return XR_XIR_BUDGET;
+    for (uint32_t i=0;i<head->instruction_count;++i) {
+        XrXirInstruction op;XrXirStatus status=effect_body_instruction_cursor_get(&read,head,i,&cursor,&op);
+        if (status!=XR_XIR_OK) return status;
+        if (op.op==XR_XIR_CALL_INDIRECT || op.op==XR_XIR_INVOKE_INDIRECT) continue;
+        if (op.op==XR_XIR_SLOT_LOAD || op.op==XR_XIR_SLOT_PLACE || op.op==XR_XIR_SLOT_STORE) {
+            if (!decls || !decls->slots || op.immediate<0 || (uint64_t)op.immediate>=decls->slot_count)
+                return XR_XIR_BAD_STRUCTURE;
+        }
+        const EffectRootSeedRecord request={&body->domain,&op,function,i,XR_XIR_UNIT};
+        status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work);
+        if (status!=XR_XIR_OK) return status;
+        if (op.op==XR_XIR_CALL_REQUIREMENT) { facts.unresolved=false;witnesses[1]=(XrXirRootEffectWitness){0}; }
+    }
+    if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=facts;return XR_XIR_OK;
+}
+
 typedef struct SeedCursorPhysical {
     EffectBodyMaterial body;
     EffectBodyFunction function;
@@ -79,6 +117,9 @@ static XrXirStatus seed_cursor_compare(const XrXirCompileContext *context,
     const XrXirRootEffects sentinel={true,true};XrXirRootEffects original=sentinel,current=sentinel;
     RootParameterMark held=rp_mark();uint64_t live=rp_stats(context).live_bytes;size_t attempts=rp_attempts;
     XrXirStatus before=seed_cursor_random_oracle(context,body,function,&original);
+    XrXirRootEffects cursor=sentinel;
+    XrXirStatus cursor_status=seed_range_cursor_oracle(context,body,function,&cursor);
+    CHECK(cursor_status==before && seed_cursor_equal(original,cursor));
     XrXirStatus status=effect_invocation_input_seed(context,body,function,&current);
     CHECK(status==before && seed_cursor_equal(original,current));
     if(status!=XR_XIR_OK)CHECK(seed_cursor_equal(current,sentinel));
@@ -125,6 +166,23 @@ static void seed_cursor_opcode_controls(void) {
     xr_compile_resources_free(p.function.runs);rp_owner_free(&context,live);rp_balanced(held);
 }
 static uint64_t seed_cursor_complete_work;
+static void seed_range_full_rows(const XrXirCompileContext *context,const EffectBodyFunction *body,
+    const XrXirInstruction *expected) {
+    EffectBodyRead read=effect_body_compile_read(context);EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
+    size_t attempts=rp_attempts;
+    for(uint32_t r=0;r<body->run_count;++r) {
+        const EffectBodyRun *ref=NULL;CHECK(effect_body_range_ref(&read,body,&cursor,&ref)==XR_XIR_OK);
+        for(uint32_t i=ref->first;i-ref->first<ref->count;++i) {
+            XrXirInstruction storage;const XrXirInstruction *actual=NULL;
+            CHECK(effect_body_instruction_ref_read(&read,ref,i,&storage,&actual)==XR_XIR_OK);
+            CHECK(conditional_compact_same(actual,&expected[i]));
+            if(ref->mask&EFFECT_BODY_LITERAL_ROWS)CHECK(actual==effect_body_literal_row(ref,i));
+            else if(ref->mask && i!=ref->first)CHECK(actual==&storage);
+            else CHECK(actual==&ref->base);
+        }
+    }
+    CHECK(cursor.first==body->instruction_count && cursor.run==body->run_count && rp_attempts==attempts);
+}
 static XrXirStatus seed_cursor_physical_run(const XrXirCompileContext *context,unsigned pattern,uint64_t cut) {
     SeedCursorPhysical p;seed_cursor_physical_init(context,&p);XrXirInstruction original[17],input[17];
     uint32_t count=pattern==3?0:17;literal_block_values(original);
@@ -135,7 +193,8 @@ static XrXirStatus seed_cursor_physical_run(const XrXirCompileContext *context,u
     memset(input,0xCE,sizeof(input));
     if(cut==UINT64_MAX){CHECK(seed_cursor_compare(context,&p.body,0,NULL)==XR_XIR_OK);
         EffectBodyRead read=effect_body_compile_read(context);
-        for(uint32_t i=0;i<count;++i){XrXirInstruction value;CHECK(effect_body_instruction_get(&read,&p.function,i,&value)==XR_XIR_OK && conditional_compact_same(&value,&original[i]));}}
+        for(uint32_t i=0;i<count;++i){XrXirInstruction value;CHECK(effect_body_instruction_get(&read,&p.function,i,&value)==XR_XIR_OK && conditional_compact_same(&value,&original[i]));}
+        seed_range_full_rows(context,&p.function,original);}
     uint64_t entry=rp_stats(context).work;size_t attempts=rp_attempts;RootParameterMark held=rp_mark();
     if(cut!=UINT64_MAX)context->resources->limits.work=entry+cut;
     const XrXirRootEffects sentinel={true,true};XrXirRootEffects value=sentinel;
@@ -201,7 +260,34 @@ static XrXirStatus seed_cursor_genuine(const XrXirCompileContext *context,uint32
     }
     xr_xir_compile_effects_free(effects);return status;
 }
+static void seed_range_bounded_literals(void) {
+    RootParameterMark held=rp_mark();uint64_t mutations=0;
+    for(uint32_t count=2;count<=8;++count) {
+        XrXirCompileContext context=rp_owner(rp_caps());uint64_t live=rp_stats(&context).live_bytes;
+        SeedCursorPhysical p;seed_cursor_physical_init(&context,&p);XrXirInstruction original[17],source_rows[17];
+        literal_block_values(original);memcpy(source_rows,original,sizeof(original));
+        XrXirFunction source={.instructions=source_rows,.instruction_count=count};p.function.instruction_count=count;
+        CHECK(effect_body_records_copy(&context,&source,&p.function)==XR_XIR_OK);
+        CHECK(p.function.run_count==1 && p.function.runs[0].count==count && p.function.runs[0].mask==EFFECT_BODY_LITERAL_ROWS);
+        memset(source_rows,0xce,sizeof(source_rows));seed_range_full_rows(&context,&p.function,original);
+        size_t attempts=rp_attempts;CHECK(seed_cursor_compare(&context,&p.body,0,NULL)==XR_XIR_OK);
+        for(uint32_t i=0;i<count;++i)for(unsigned field=0;field<10;++field) {
+            XrXirInstruction *row=i?&p.function.runs[0].literal_tail[i-1]:&p.function.runs[0].base;
+            XrXirInstruction saved=*row;conditional_compact_change(row,field);
+            (void)seed_cursor_compare(&context,&p.body,0,NULL);*row=saved;++mutations;
+        }
+        CHECK(rp_attempts==attempts);xr_compile_resources_free(p.function.runs);
+        rp_owner_free(&context,live);rp_balanced(held);
+    }
+    XrXirCompileContext context=rp_owner(rp_caps());uint64_t live=rp_stats(&context).live_bytes;
+    SeedCursorPhysical p;seed_cursor_physical_init(&context,&p);EffectBodyRun extra={.count=1,.base={.op=XR_XIR_RETURN}};
+    p.function.runs=&extra;p.function.run_count=p.function.run_capacity=1;
+    XrXirRootEffects value={true,true};CHECK(effect_invocation_input_seed(&context,&p.body,0,&value)==XR_XIR_BAD_STRUCTURE && value.requires_root && value.unresolved);
+    rp_owner_free(&context,live);rp_balanced(held);
+    fprintf(stderr,"Input seed ranges: complete prior cursor plus original random oracle, all literal lengths2..8 and%llu retained physical field mutations after Source death, exact native row identity/full ten words and affine scratch identity, invalid empty directory preserves failed facts, no allocation or escaped row pointer PASS\n",(unsigned long long)mutations);
+}
 static void invocation_input_seed_cursor_controls(void) {
+    seed_range_bounded_literals();
     seed_cursor_opcode_controls();seed_cursor_directory_faults();RootParameterMark held=rp_mark();
     for(unsigned pattern=0;pattern<4;++pattern){XrXirCompileContext context=rp_owner(rp_caps());uint64_t live=rp_stats(&context).live_bytes;
         CHECK(seed_cursor_physical_run(&context,pattern,UINT64_MAX)==XR_XIR_OK);rp_owner_free(&context,live);rp_balanced(held);}

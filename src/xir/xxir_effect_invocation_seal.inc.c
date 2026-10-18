@@ -304,19 +304,30 @@ static XrXirStatus effect_invocation_input_seed(const XrXirCompileContext *work,
     EffectBodyRead read=effect_body_compile_read(work);
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};
     if (!xir_compile_work(work,sizeof(cursor))) return XR_XIR_BUDGET;
-    for (uint32_t i=0;i<head->instruction_count;++i) {
-        XrXirInstruction op;XrXirStatus status=effect_body_instruction_cursor_get(&read,head,i,&cursor,&op);
+    for (uint32_t r=0;r<head->run_count;++r) {
+        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        const EffectBodyRun *ref=NULL;
+        XrXirStatus status=effect_body_range_ref(&read,head,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
-        if (op.op==XR_XIR_CALL_INDIRECT || op.op==XR_XIR_INVOKE_INDIRECT) continue;
-        if (op.op==XR_XIR_SLOT_LOAD || op.op==XR_XIR_SLOT_PLACE || op.op==XR_XIR_SLOT_STORE) {
-            if (!decls || !decls->slots || op.immediate<0 || (uint64_t)op.immediate>=decls->slot_count)
-                return XR_XIR_BAD_STRUCTURE;
+        /* Only this synchronous seed replay borrows complete current rows.
+         * Varying affine rows still use the original full value decoder. */
+        for (uint32_t i=ref->first;i<ref->first+ref->count;++i) {
+            XrXirInstruction storage;const XrXirInstruction *op=NULL;
+            status=effect_body_instruction_ref_read(&read,ref,i,&storage,&op);
+            if (status!=XR_XIR_OK) return status;
+            if (op->op==XR_XIR_CALL_INDIRECT || op->op==XR_XIR_INVOKE_INDIRECT) continue;
+            if (op->op==XR_XIR_SLOT_LOAD || op->op==XR_XIR_SLOT_PLACE || op->op==XR_XIR_SLOT_STORE) {
+                if (!decls || !decls->slots || op->immediate<0 || (uint64_t)op->immediate>=decls->slot_count)
+                    return XR_XIR_BAD_STRUCTURE;
+            }
+            const EffectRootSeedRecord request={&body->domain,op,function,i,XR_XIR_UNIT};
+            status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work);
+            if (status!=XR_XIR_OK) return status;
+            if (op->op==XR_XIR_CALL_REQUIREMENT) { facts.unresolved=false;witnesses[1]=(XrXirRootEffectWitness){0}; }
         }
-        const EffectRootSeedRecord request={&body->domain,&op,function,i,XR_XIR_UNIT};
-        status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work);
-        if (status!=XR_XIR_OK) return status;
-        if (op.op==XR_XIR_CALL_REQUIREMENT) { facts.unresolved=false;witnesses[1]=(XrXirRootEffectWitness){0}; }
     }
+    if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+    if (cursor.first!=head->instruction_count || cursor.run!=head->run_count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
     *output=facts;return XR_XIR_OK;
 }
