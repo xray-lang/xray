@@ -97,9 +97,6 @@ typedef struct EffectBodyMaterial {
     EffectPhysicalDomain *physical;
     XrXirCellProvenance *cells;
     EffectInvocationDeclaredBounds *declared;
-    XrXirFunctionEffects *control;
-    XrXirRootEffects *local_roots;
-    XrXirRootEffectWitness *local_witnesses;
 } EffectBodyMaterial;
 static XrXirStatus effect_body_ordinary_basis(const XrXirCompileContext *work,
     const EffectBodyOrdinaryInput *input,EffectBodyMaterial **output);
@@ -143,8 +140,6 @@ static inline bool effect_body_parent_shape(const EffectBodyMaterial *body,
         body->terms.types.interfaces==parent->terms.types.interfaces &&
         body->terms.memory==parent->terms.memory && body->owned_types==parent->owned_types &&
         body->physical==parent->physical && body->cells==parent->cells &&
-        body->control==parent->control && body->local_roots==parent->local_roots &&
-        body->local_witnesses==parent->local_witnesses &&
         !!body->domain.defaults==!!parent->domain.defaults &&
         body->defaults.records==parent->defaults.records && body->defaults.count==parent->defaults.count;
 }

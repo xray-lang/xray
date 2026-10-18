@@ -323,7 +323,10 @@ if(MSVC)
 else()
     target_compile_options(test_xir_allocations PRIVATE -Wall -Wextra -Werror)
 endif()
-add_test(NAME test_xir_allocations COMMAND test_xir_allocations)
+add_test(NAME test_xir_allocations
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/xir/run_allocation_case_faults.py
+        --executable $<TARGET_FILE:test_xir_allocations>
+        --source-root ${CMAKE_SOURCE_DIR} --build-root ${CMAKE_BINARY_DIR} --mode aggregate)
 set_tests_properties(test_xir_allocations PROPERTIES LABELS "unit;xir;memory;ownership")
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/allocation_feedback.cmake)
 
@@ -4600,6 +4603,7 @@ set_tests_properties(test_xir_cell_provenance PROPERTIES LABELS "xir;ownership" 
 include("${CMAKE_CURRENT_LIST_DIR}/xir/root_conditional.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_read.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_proof.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_ordinary_environment.cmake")
 
 include(xir/cell_owner_source.cmake)

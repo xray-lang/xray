@@ -8,8 +8,6 @@
  */
 #include "xxir_layout_input_internal.h"
 #include "xxir_effect_program_final_storage.inc.c"
-#include "xxir_effect_program_outcome_current.inc.c"
-#include "xxir_effect_program_error_leaf_current.inc.c"
 
 static XrXirStatus effect_program_layout_head(const XrXirCompileContext *work,
     const void *owner,uint32_t function,XirInputFunctionHead *output) {
@@ -64,6 +62,18 @@ static XrXirStatus effect_program_parameter_domains(const XrXirCompileContext *w
     return XR_XIR_OK;
 }
 
+/* Consume the sole Final's finite evidence against its current owned Input.
+ * These checks allocate no receiving graph, queue or scratch and run again
+ * after the last preparation callback before Program publication. */
+static XrXirStatus effect_program_semantics_current(const XrXirCompileContext *work,
+    const XrXirEffects *effects) {
+    XrXirStatus status=effect_source_terminal_roles(work,effects);
+    if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);
+    if (status==XR_XIR_OK) status=error_finite_outcomes_match(work,
+        effects->invocations->body,effect_final_outcomes(effects));
+    return status;
+}
+
 XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *work,
     const XrXirModule *source,const XrXirEffects *effects) {
     XrXirStatus status=xir_effects_program_body_match(work,source,effects);
@@ -72,7 +82,7 @@ XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *
     const EffectInvocationCertificate *certificate=effects->invocations;
     const EffectFinalOutcomes *final=effect_final_outcomes(effects);
     if (!final || effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
-    status=effect_source_certificate(work,certificate,effects);
+    status=effect_source_relations(work,certificate,effects);
     if(status==XR_XIR_OK) status=effect_program_parameter_domains(work,effects);
     bool contexts=source->provenance && source->provenance->kind==XR_XIR_EVIDENCE_TEMPLATE &&
         source->declarations && source->declarations->functions;
@@ -81,7 +91,7 @@ XR_FUNC XrXirStatus xir_effects_program_final_verify(const XrXirCompileContext *
         else if (final->contexts) status=XR_XIR_BAD_STRUCTURE;
     }
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
-    if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);
+    if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects);
     if (status==XR_XIR_OK) status=xir_effects_program_body_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,certificate->body);
     return status;
@@ -102,11 +112,7 @@ XR_FUNC XrXirStatus xir_effects_program_root_current(const XrXirCompileContext *
     if (status==XR_XIR_OK) status=effect_source_atoms(work,certificate);
     if (status==XR_XIR_OK) status=effect_source_projections(work,certificate);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
-    if (status==XR_XIR_OK) status=effect_program_suspension_current(work,effects);
-    bool empty=false;
-    if (status==XR_XIR_OK) status=effect_error_empty_current(work,effects,&empty);
-    if (status==XR_XIR_OK) status=effect_program_error_projection(work,effects);
-    if (status==XR_XIR_OK && !empty) status=effect_program_error_leaves_current(work,effects);
+    if (status==XR_XIR_OK) status=effect_program_semantics_current(work,effects);
     return status;
 }
 

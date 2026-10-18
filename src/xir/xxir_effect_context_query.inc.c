@@ -14,9 +14,12 @@ static XrXirStatus effect_context_owner_project(const XrXirCompileContext *conte
     }
     for (uint32_t f=0;f<effects->count;++f) {
         if (source->generics && source->generics[f].parameter_count) continue;
-        effects->outcomes_work.root[f]=fresh->forest->facts[f];
-        effects->outcomes_work.root_witnesses[f]=fresh->forest->witnesses[f];
-        effects->outcomes_work.unresolved_witnesses[f]=fresh->forest->witnesses[fresh->forest->count+f];
+        EffectContextRootValue value;
+        XrXirStatus status=effect_invocation_forest_values(context,fresh->forest,f,&value);
+        if(status!=XR_XIR_OK) return status;
+        effects->outcomes_work.root[f]=value.facts;
+        effects->outcomes_work.root_witnesses[f]=value.root;
+        effects->outcomes_work.unresolved_witnesses[f]=value.unresolved;
     }
     return XR_XIR_OK;
 }
@@ -190,7 +193,10 @@ static XrXirStatus effect_context_select_actual(const XrXirCompileContext *conte
             input->source->generics[input->origin->function].parameter_count) return XR_XIR_BAD_TYPE;
     }
     if (!xir_compile_work(context,sizeof(*output))) return XR_XIR_BUDGET;
-    const XrXirRootEffects *facts=&effect_contexts_read(effects)->forest->facts[target];
+    EffectContextRootValue value;
+    status=effect_invocation_forest_values(context,effect_contexts_read(effects)->forest,target,&value);
+    if(status!=XR_XIR_OK) return status;
+    const XrXirRootEffects *facts=&value.facts;
     uint32_t edge_mask=(facts->requires_root?XR_XIR_CALLABLE_ROOT_REQUIRED:0)|
         (facts->unresolved?XR_XIR_CALLABLE_ROOT_UNRESOLVED:0);
     if (input->instruction!=UINT32_MAX) {

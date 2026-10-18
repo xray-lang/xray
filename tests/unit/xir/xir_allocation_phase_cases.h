@@ -11,6 +11,7 @@
 #include "xir_allocation_phase_map.h"
 
 static void function_allocation_phase_case(bool cancel) {
+    allocation_phase_case_begin("Function",0,cancel);
     allocation_request_begin(&allocation_whole_requests);
     allocation_calls=0;fail_at=SIZE_MAX;CHECK(function_case_run(cancel) && !live);
     allocation_request_end();
@@ -29,6 +30,7 @@ static void function_allocation_phase_case(bool cancel) {
     CHECK(function_case_seal(&releases,&program)==XR_XIR_OK && allocation_calls==map.prefix);
     AllocationPhasePhysical physical=allocation_phase_physical();
     XrCompileResourceStats prefix=native_fixture_stats(&program->context);
+    allocation_stage="runtime-baseline";
     allocation_request_begin(&allocation_runtime_requests);
     allocation_calls=0;CHECK(xr_xir_compile_program_retain(program));
     CHECK(function_case_execute(program,&releases,cancel) && allocation_calls==map.runtime);
@@ -37,6 +39,7 @@ static void function_allocation_phase_case(bool cancel) {
     allocation_phase_restore(program,physical,&prefix);CHECK(!releases);
     for(size_t ordinal=0;(allocation_phase_selection&ALLOCATION_PHASE_RUNTIME) && ordinal<map.runtime;++ordinal) {
         if(allocation_phase_selection&ALLOCATION_PHASE_BRIDGE) {
+            allocation_stage="original-runtime-bridge";
             allocation_request_begin(&allocation_reference_requests);
             allocation_calls=0;fail_at=map.prefix+ordinal;
             CHECK(!function_case_run(cancel));allocation_request_end();fail_at=SIZE_MAX;
@@ -48,10 +51,12 @@ static void function_allocation_phase_case(bool cancel) {
         CHECK(!function_case_execute(program,&releases,cancel));
         allocation_phase_runtime_end(&map,ordinal,program,physical,&prefix);CHECK(!releases);
     }
+    allocation_stage="last-owner-drop";
     xr_xir_compile_program_drop(program);CHECK(releases==1);allocation_phase_complete(&map);
 }
 
 static void function_producer_allocation_phase_case(void) {
+    allocation_phase_case_begin("Producer",0,0);
     allocation_request_begin(&allocation_whole_requests);
     allocation_calls=0;fail_at=SIZE_MAX;CHECK(function_producer_owner_run() && !live);
     allocation_request_end();
@@ -71,6 +76,7 @@ static void function_producer_allocation_phase_case(void) {
     CHECK(producer_runtime_seal(&witness,&program,&make,&nested)==XR_XIR_OK && allocation_calls==map.prefix);
     AllocationPhasePhysical physical=allocation_phase_physical();
     XrCompileResourceStats prefix=native_fixture_stats(&program->context);
+    allocation_stage="runtime-baseline";
     allocation_request_begin(&allocation_runtime_requests);
     allocation_calls=0;CHECK(xr_xir_compile_program_retain(program));
     CHECK(function_producer_execute(program,&witness,make,nested) && allocation_calls==map.runtime);
@@ -79,6 +85,7 @@ static void function_producer_allocation_phase_case(void) {
     allocation_phase_restore(program,physical,&prefix);CHECK(!witness.releases);
     for(size_t ordinal=0;(allocation_phase_selection&ALLOCATION_PHASE_RUNTIME) && ordinal<map.runtime;++ordinal) {
         if(allocation_phase_selection&ALLOCATION_PHASE_BRIDGE) {
+            allocation_stage="original-runtime-bridge";
             allocation_request_begin(&allocation_reference_requests);
             allocation_calls=0;fail_at=map.prefix+ordinal;
             CHECK(!function_producer_owner_run());allocation_request_end();fail_at=SIZE_MAX;
@@ -90,10 +97,12 @@ static void function_producer_allocation_phase_case(void) {
         CHECK(!function_producer_execute(program,&witness,make,nested));
         allocation_phase_runtime_end(&map,ordinal,program,physical,&prefix);CHECK(!witness.releases);
     }
+    allocation_stage="last-owner-drop";
     xr_xir_compile_program_drop(program);CHECK(witness.releases==1);allocation_phase_complete(&map);
 }
 
 static void invocation_runtime_allocation_phase_case(unsigned mode) {
+    allocation_phase_case_begin("runtime",0,mode);
     allocation_request_begin(&allocation_whole_requests);
     allocation_calls=0;fail_at=SIZE_MAX;CHECK(invocation_runtime_owner_run(mode,NULL,NULL) && !live);
     allocation_request_end();
@@ -112,6 +121,7 @@ static void invocation_runtime_allocation_phase_case(unsigned mode) {
     CHECK(edge_runtime_seal(&witness,&program)==XR_XIR_OK && allocation_calls==map.prefix);
     AllocationPhasePhysical physical=allocation_phase_physical();
     XrCompileResourceStats prefix=native_fixture_stats(&program->context);
+    allocation_stage="runtime-baseline";
     allocation_request_begin(&allocation_runtime_requests);
     allocation_calls=0;CHECK(xr_xir_compile_program_retain(program));
     CHECK(invocation_runtime_execute(program,&witness,NULL,NULL) && allocation_calls==map.runtime);
@@ -120,6 +130,7 @@ static void invocation_runtime_allocation_phase_case(unsigned mode) {
     allocation_phase_restore(program,physical,&prefix);CHECK(!witness.releases);
     for(size_t ordinal=0;(allocation_phase_selection&ALLOCATION_PHASE_RUNTIME) && ordinal<map.runtime;++ordinal) {
         if(allocation_phase_selection&ALLOCATION_PHASE_BRIDGE) {
+            allocation_stage="original-runtime-bridge";
             allocation_request_begin(&allocation_reference_requests);
             allocation_calls=0;fail_at=map.prefix+ordinal;
             CHECK(!invocation_runtime_owner_run(mode,NULL,NULL));allocation_request_end();fail_at=SIZE_MAX;
@@ -131,10 +142,12 @@ static void invocation_runtime_allocation_phase_case(unsigned mode) {
         CHECK(!invocation_runtime_execute(program,&witness,NULL,NULL));
         allocation_phase_runtime_end(&map,ordinal,program,physical,&prefix);CHECK(!witness.releases);
     }
+    allocation_stage="last-owner-drop";
     xr_xir_compile_program_drop(program);CHECK(witness.releases==1);allocation_phase_complete(&map);
 }
 
 static void invocation_direct_allocation_phase_case(unsigned mode) {
+    allocation_phase_case_begin("direct",0,mode);
     allocation_request_begin(&allocation_whole_requests);
     allocation_calls=0;fail_at=SIZE_MAX;CHECK(invocation_direct_owner_run(mode,NULL,NULL) && !live);
     allocation_request_end();
@@ -153,6 +166,7 @@ static void invocation_direct_allocation_phase_case(unsigned mode) {
     CHECK(direct_runtime_seal(&witness,&program)==XR_XIR_OK && allocation_calls==map.prefix);
     AllocationPhasePhysical physical=allocation_phase_physical();
     XrCompileResourceStats prefix=native_fixture_stats(&program->context);
+    allocation_stage="runtime-baseline";
     allocation_request_begin(&allocation_runtime_requests);
     allocation_calls=0;CHECK(xr_xir_compile_program_retain(program));
     CHECK(invocation_direct_execute(program,&witness,NULL,NULL) && allocation_calls==map.runtime);
@@ -161,6 +175,7 @@ static void invocation_direct_allocation_phase_case(unsigned mode) {
     allocation_phase_restore(program,physical,&prefix);CHECK(!witness.releases);
     for(size_t ordinal=0;(allocation_phase_selection&ALLOCATION_PHASE_RUNTIME) && ordinal<map.runtime;++ordinal) {
         if(allocation_phase_selection&ALLOCATION_PHASE_BRIDGE) {
+            allocation_stage="original-runtime-bridge";
             allocation_request_begin(&allocation_reference_requests);
             allocation_calls=0;fail_at=map.prefix+ordinal;
             CHECK(!invocation_direct_owner_run(mode,NULL,NULL));allocation_request_end();fail_at=SIZE_MAX;
@@ -172,10 +187,12 @@ static void invocation_direct_allocation_phase_case(unsigned mode) {
         CHECK(!invocation_direct_execute(program,&witness,NULL,NULL));
         allocation_phase_runtime_end(&map,ordinal,program,physical,&prefix);CHECK(!witness.releases);
     }
+    allocation_stage="last-owner-drop";
     xr_xir_compile_program_drop(program);CHECK(witness.releases==1);allocation_phase_complete(&map);
 }
 
 static void invocation_capture_allocation_phase_case(unsigned mode,bool scalar) {
+    allocation_phase_case_begin("capture",scalar,mode);
     allocation_request_begin(&allocation_whole_requests);
     allocation_calls=0;fail_at=SIZE_MAX;CHECK(invocation_capture_owner_run(mode,scalar,NULL,NULL) && !live);
     allocation_request_end();
@@ -194,6 +211,7 @@ static void invocation_capture_allocation_phase_case(unsigned mode,bool scalar) 
     CHECK(capture_runtime_seal(&witness,&program)==XR_XIR_OK && allocation_calls==map.prefix);
     AllocationPhasePhysical physical=allocation_phase_physical();
     XrCompileResourceStats prefix=native_fixture_stats(&program->context);
+    allocation_stage="runtime-baseline";
     allocation_request_begin(&allocation_runtime_requests);
     allocation_calls=0;CHECK(xr_xir_compile_program_retain(program));
     CHECK(invocation_capture_execute(program,&witness,NULL,NULL) && allocation_calls==map.runtime);
@@ -202,6 +220,7 @@ static void invocation_capture_allocation_phase_case(unsigned mode,bool scalar) 
     allocation_phase_restore(program,physical,&prefix);CHECK(!witness.releases);
     for(size_t ordinal=0;(allocation_phase_selection&ALLOCATION_PHASE_RUNTIME) && ordinal<map.runtime;++ordinal) {
         if(allocation_phase_selection&ALLOCATION_PHASE_BRIDGE) {
+            allocation_stage="original-runtime-bridge";
             allocation_request_begin(&allocation_reference_requests);
             allocation_calls=0;fail_at=map.prefix+ordinal;
             CHECK(!invocation_capture_owner_run(mode,scalar,NULL,NULL));allocation_request_end();fail_at=SIZE_MAX;
@@ -213,10 +232,12 @@ static void invocation_capture_allocation_phase_case(unsigned mode,bool scalar) 
         CHECK(!invocation_capture_execute(program,&witness,NULL,NULL));
         allocation_phase_runtime_end(&map,ordinal,program,physical,&prefix);CHECK(!witness.releases);
     }
+    allocation_stage="last-owner-drop";
     xr_xir_compile_program_drop(program);CHECK(witness.releases==1);allocation_phase_complete(&map);
 }
 
 static void invocation_return_capture_allocation_phase_case(unsigned mode,bool scalar) {
+    allocation_phase_case_begin("return_capture",scalar,mode);
     allocation_request_begin(&allocation_whole_requests);
     allocation_calls=0;fail_at=SIZE_MAX;CHECK(invocation_return_capture_owner_run(mode,scalar,NULL,NULL) && !live);
     allocation_request_end();
@@ -235,6 +256,7 @@ static void invocation_return_capture_allocation_phase_case(unsigned mode,bool s
     CHECK(returned_capture_runtime_seal(&witness,&program)==XR_XIR_OK && allocation_calls==map.prefix);
     AllocationPhasePhysical physical=allocation_phase_physical();
     XrCompileResourceStats prefix=native_fixture_stats(&program->context);
+    allocation_stage="runtime-baseline";
     allocation_request_begin(&allocation_runtime_requests);
     allocation_calls=0;CHECK(xr_xir_compile_program_retain(program));
     CHECK(invocation_return_capture_execute(program,&witness,NULL,NULL) && allocation_calls==map.runtime);
@@ -243,6 +265,7 @@ static void invocation_return_capture_allocation_phase_case(unsigned mode,bool s
     allocation_phase_restore(program,physical,&prefix);CHECK(!witness.releases);
     for(size_t ordinal=0;(allocation_phase_selection&ALLOCATION_PHASE_RUNTIME) && ordinal<map.runtime;++ordinal) {
         if(allocation_phase_selection&ALLOCATION_PHASE_BRIDGE) {
+            allocation_stage="original-runtime-bridge";
             allocation_request_begin(&allocation_reference_requests);
             allocation_calls=0;fail_at=map.prefix+ordinal;
             CHECK(!invocation_return_capture_owner_run(mode,scalar,NULL,NULL));allocation_request_end();fail_at=SIZE_MAX;
@@ -254,10 +277,12 @@ static void invocation_return_capture_allocation_phase_case(unsigned mode,bool s
         CHECK(!invocation_return_capture_execute(program,&witness,NULL,NULL));
         allocation_phase_runtime_end(&map,ordinal,program,physical,&prefix);CHECK(!witness.releases);
     }
+    allocation_stage="last-owner-drop";
     xr_xir_compile_program_drop(program);CHECK(witness.releases==1);allocation_phase_complete(&map);
 }
 
 static void invocation_function_cell_allocation_phase_case(unsigned mode,bool scalar) {
+    allocation_phase_case_begin("function_cell",scalar,mode);
     allocation_request_begin(&allocation_whole_requests);
     allocation_calls=0;fail_at=SIZE_MAX;CHECK(invocation_function_cell_owner_run(mode,scalar,NULL,NULL) && !live);
     allocation_request_end();
@@ -276,6 +301,7 @@ static void invocation_function_cell_allocation_phase_case(unsigned mode,bool sc
     CHECK(function_cell_runtime_seal(&witness,&program)==XR_XIR_OK && allocation_calls==map.prefix);
     AllocationPhasePhysical physical=allocation_phase_physical();
     XrCompileResourceStats prefix=native_fixture_stats(&program->context);
+    allocation_stage="runtime-baseline";
     allocation_request_begin(&allocation_runtime_requests);
     allocation_calls=0;CHECK(xr_xir_compile_program_retain(program));
     CHECK(invocation_function_cell_execute(program,&witness,NULL,NULL) && allocation_calls==map.runtime);
@@ -284,6 +310,7 @@ static void invocation_function_cell_allocation_phase_case(unsigned mode,bool sc
     allocation_phase_restore(program,physical,&prefix);CHECK(!witness.releases);
     for(size_t ordinal=0;(allocation_phase_selection&ALLOCATION_PHASE_RUNTIME) && ordinal<map.runtime;++ordinal) {
         if(allocation_phase_selection&ALLOCATION_PHASE_BRIDGE) {
+            allocation_stage="original-runtime-bridge";
             allocation_request_begin(&allocation_reference_requests);
             allocation_calls=0;fail_at=map.prefix+ordinal;
             CHECK(!invocation_function_cell_owner_run(mode,scalar,NULL,NULL));allocation_request_end();fail_at=SIZE_MAX;
@@ -295,6 +322,7 @@ static void invocation_function_cell_allocation_phase_case(unsigned mode,bool sc
         CHECK(!invocation_function_cell_execute(program,&witness,NULL,NULL));
         allocation_phase_runtime_end(&map,ordinal,program,physical,&prefix);CHECK(!witness.releases);
     }
+    allocation_stage="last-owner-drop";
     xr_xir_compile_program_drop(program);CHECK(witness.releases==1);allocation_phase_complete(&map);
 }
 #endif // XIR_ALLOCATION_PHASE_CASES_H

@@ -15,18 +15,25 @@
 #include "xir_construction_fixture.h"
 #include "base/xmalloc.h"
 #include "xir/xxir.h"
+#include <stdio.h>
 #include <stdlib.h>
 
 static const XrXirTarget fixture_target = {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION};
 
+static size_t allocation_calls, live, class_live_bytes, fail_at = SIZE_MAX;
+static const char *allocation_case_name = "selection", *allocation_stage = "arguments";
+static unsigned allocation_case_scalar, allocation_case_mode;
+
 #define CHECK(condition) do { \
     if (!(condition)) { \
         fprintf(stderr, "allocation check failed at line %d: %s\n", __LINE__, #condition); \
+        fprintf(stderr, "family=%s scalar=%u mode=%u stage=%s calls=%zu fault_enabled=%u fault_ordinal=%zu\n", \
+            allocation_case_name, allocation_case_scalar, allocation_case_mode, allocation_stage, \
+            allocation_calls, (unsigned)(fail_at != SIZE_MAX), fail_at == SIZE_MAX ? 0 : fail_at); \
         exit(1); \
     } \
 } while (0)
 
-static size_t allocation_calls, live, class_live_bytes, fail_at = SIZE_MAX;
 typedef struct AllocationRecord { void *pointer; size_t bytes; uint64_t identity; } AllocationRecord;
 #include "xir_allocation_request_trace.h"
 static AllocationRecord *allocation_records;
@@ -85,6 +92,8 @@ static void *counted_realloc(void *pointer, size_t size) {
     }
     return replacement;
 }
+
+#include "xir_allocation_bookkeeping_cases.h"
 
 #undef xr_malloc
 #undef xr_calloc
@@ -574,6 +583,8 @@ static XrXirStatus allocation_check_operation(const XrXirCompileContext *context
 #include "xir_default_invoke_allocations.h"
 #include "xir_allocation_phase_cases.h"
 static void allocation_remaining_resources(void) {
+    allocation_case_name="resources";allocation_stage="complete-resource-cases";
+    allocation_case_scalar=0;allocation_case_mode=0;
     default_invoke_allocation_cases();
     class_owned_allocations();
     type_temporary_budget_cases();
@@ -700,30 +711,48 @@ static void allocation_remaining_resources(void) {
     initialization_region_allocations();
 }
 
-static void allocation_phase_matrix(void) {
+static void allocation_phase_matrix(bool axes) {
     function_allocation_phase_case(false);function_allocation_phase_case(true);
     function_producer_allocation_phase_case();
     for(unsigned mode=0;mode<8;++mode)invocation_runtime_allocation_phase_case(mode);
-    invocation_runtime_owner_axes();CHECK(!live);
+    if(axes) {
+        allocation_phase_case_begin("runtime",0,0);allocation_stage="resource-axes";
+        invocation_runtime_owner_axes();CHECK(!live);
+    }
     for(unsigned mode=0;mode<8;++mode)invocation_direct_allocation_phase_case(mode);
-    invocation_direct_owner_axes();CHECK(!live);
+    if(axes) {
+        allocation_phase_case_begin("direct",0,0);allocation_stage="resource-axes";
+        invocation_direct_owner_axes();CHECK(!live);
+    }
     for(unsigned scalar=0;scalar<2;++scalar) {
         for(unsigned mode=0;mode<8;++mode)invocation_capture_allocation_phase_case(mode,scalar!=0);
-        invocation_capture_owner_axes(scalar!=0);CHECK(!live);
+        if(axes) {
+            allocation_phase_case_begin("capture",scalar,0);allocation_stage="resource-axes";
+            invocation_capture_owner_axes(scalar!=0);CHECK(!live);
+        }
         for(unsigned mode=0;mode<8;++mode)invocation_return_capture_allocation_phase_case(mode,scalar!=0);
-        invocation_return_capture_owner_axes(scalar!=0);CHECK(!live);
+        if(axes) {
+            allocation_phase_case_begin("return_capture",scalar,0);allocation_stage="resource-axes";
+            invocation_return_capture_owner_axes(scalar!=0);CHECK(!live);
+        }
         for(unsigned mode=0;mode<8;++mode)invocation_function_cell_allocation_phase_case(mode,scalar!=0);
-        invocation_function_cell_owner_axes(scalar!=0);CHECK(!live);
+        if(axes) {
+            allocation_phase_case_begin("function_cell",scalar,0);allocation_stage="resource-axes";
+            invocation_function_cell_owner_axes(scalar!=0);CHECK(!live);
+        }
     }
     CHECK(allocation_phase_cases==67);
-    printf("FI map total: cases=%zu original_ordinals=%zu compiler=%zu runtime=%zu bridge=%zu axes=88\n",
+    printf("FI map total: cases=%zu original_ordinals=%zu compiler=%zu runtime=%zu bridge=%zu axes=%u\n",
         allocation_phase_cases,allocation_phase_ordinals,allocation_phase_compiler_ordinals,
-        allocation_phase_runtime_ordinals,allocation_phase_bridge_ordinals);
+        allocation_phase_runtime_ordinals,allocation_phase_bridge_ordinals,axes?88u:0u);
 }
+#include "xir_allocation_case_workers.h"
 int main(int argc,char **argv) {
+    if(allocation_worker_dispatch(argc,argv))return 0;
     CHECK(argc<=2);
     if(argc==2) {
-        if(!strcmp(argv[1],"--semantics"))allocation_phase_selection=0;
+        if(!strcmp(argv[1],"--bookkeeping")) {allocation_bookkeeping_cases();return 0;}
+        else if(!strcmp(argv[1],"--semantics"))allocation_phase_selection=0;
         else if(!strcmp(argv[1],"--producer"))allocation_phase_selection=ALLOCATION_PHASE_COMPILER;
         else if(!strcmp(argv[1],"--runtime"))allocation_phase_selection=ALLOCATION_PHASE_RUNTIME;
         else if(!strcmp(argv[1],"--first-case")) {
@@ -732,6 +761,6 @@ int main(int argc,char **argv) {
         else {fprintf(stderr,"unknown allocation test selection: %s\n",argv[1]);return 2;}
     }
     if(argc==1)allocation_remaining_resources();
-    allocation_phase_matrix();
+    allocation_phase_matrix(true);
     CHECK(!live && !class_live_bytes);return 0;
 }

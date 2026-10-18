@@ -40,7 +40,14 @@ int main(int argc,char **argv){
     printf("Enum generated C: %zu bytes / %u functions\n",emitted.length,module->function_count);
     if(argc>=2){file=fopen(argv[1],"wb");CHECK(file);CHECK(fwrite(emitted.text,1,emitted.length,file)==emitted.length);
         CHECK(fprintf(file,"\nconst uint32_t fixture_enum_values[4]={%uu,%uu,%uu,%uu};\nconst uint32_t fixture_enum_count=%uu;\n",entries.values[0],entries.values[1],entries.values[2],entries.values[3],entries.count)>0);CHECK(!fclose(file));}
-    xr_xir_compile_c_source_free(&emitted);XrXirProgram *program=NULL;
+    xr_xir_compile_c_source_free(&emitted);
+    if (argc>=2) {
+        xr_xir_compile_artifact_free(lowered);
+        effects_source_owners_free();
+        puts("Real enum C generated; full runtime FI not run");
+        return 0;
+    }
+    XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
     XrXirValue retained[2][4]={{{0}}};
     source_enum_identity_pair(program,entries,retained);

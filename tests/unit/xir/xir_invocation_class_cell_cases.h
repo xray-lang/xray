@@ -58,12 +58,12 @@ static void conditional_class_cell_controls(const XrXirCompileContext *context,
     XrXirEffects *effects,uint32_t place,uint32_t project,uint32_t mode) {
     EffectInvocationCertificate *certificate=effects->invocations;
     EffectInvocationRead replay={0};
-    XrXirStatus opening=effect_invocation_read_open(context,effects,certificate->declared,certificate->final,&replay);
+    XrXirStatus opening=effect_invocation_read_open(context,certificate,certificate->final,&replay);
     CHECK(opening==XR_XIR_OK);
-    replay.work=context;replay.effects=effects;replay.declared=certificate->declared;
+    replay.work=context;replay.roles=(EffectInvocationRoles){.sealed=certificate};replay.declared=certificate->declared;
     EffectInvocationFlow flow={.read=&replay,.node=replay.final->roots[3]};
     EffectBodyRequest body=effect_body_owned_request(context,certificate->body);
-    CHECK(effect_invocation_origins_read(&flow,&body)==XR_XIR_OK);
+    CHECK(effect_invocation_final_head(&flow,&body)==XR_XIR_OK);
     XrXirCellOriginView legacy={0},actual={0};
     CHECK(xr_xir_compile_cell_origin_view(context,effects->cells,3,project,&legacy)==XR_XIR_OK &&
         (legacy.intrinsic_mask&XR_XIR_CELL_ACCESS_UNKNOWN));
@@ -74,14 +74,19 @@ static void conditional_class_cell_controls(const XrXirCompileContext *context,
         sentinel.intrinsic_mask==9 && rp_stats(context).work==before);
     XrXirInstruction storage={0};const XrXirInstruction *op=NULL;
     CHECK(effect_invocation_flow_instruction(&flow,place,&storage,&op)==XR_XIR_OK);
-    uint32_t at=0;CHECK(op->op==XR_XIR_OBJECT_PLACE &&
-        effect_invocation_class_find(context,&replay.final->nodes[flow.node],op->args[0],&at)==XR_XIR_OK);
-    EffectInvocationClassFact *fact=&replay.final->nodes[flow.node].classes[at],saved=*fact;
-    fact->mask=0;fact->rank=0;actual=(XrXirCellOriginView){0};
+    CHECK(op->op==XR_XIR_OBJECT_PLACE);
+    EffectCaptureProof saved=replay.final->capture;XrXirStatus allocated=XR_XIR_OK;
+    EffectCaptureFact *facts=xir_compile_alloc(context,(size_t)saved.capacity*sizeof(*facts),&allocated);
+    CHECK(facts && allocated==XR_XIR_OK);memcpy(facts,saved.facts,(size_t)saved.count*sizeof(*facts));
+    certificate->final->capture=(EffectCaptureProof){facts,saved.count,saved.capacity};
+    conditional_class_finite_mask(context,effects,flow.node,op->args[0],0);actual=(XrXirCellOriginView){0};
     CHECK(effect_invocation_class_cell_view(&flow,project,&actual)==XR_XIR_UNRESOLVED &&
-        !actual.intrinsic_mask && !actual.dependencies && !actual.parameter_count);*fact=saved;
-    fact->mask=1;fact->rank=0;actual=(XrXirCellOriginView){0};
-    CHECK(effect_invocation_class_cell_view(&flow,project,&actual)==XR_XIR_BAD_STRUCTURE);*fact=saved;
+        !actual.intrinsic_mask && !actual.dependencies && !actual.parameter_count);
+    memcpy(facts,saved.facts,(size_t)saved.count*sizeof(*facts));certificate->final->capture.count=saved.count;
+    EffectCaptureFact *fact=conditional_class_finite_fact(context,effects,flow.node,op->args[0],2);CHECK(fact);
+    fact->rank=UINT32_MAX;actual=(XrXirCellOriginView){0};
+    CHECK(effect_invocation_class_cell_view(&flow,project,&actual)==XR_XIR_BAD_STRUCTURE);
+    certificate->final->capture=saved;xr_compile_resources_free(facts);
     CHECK(effect_invocation_class_terminals_match(&flow)==XR_XIR_OK);
     EffectInvocationNode *node=&replay.final->nodes[flow.node];
     uint32_t local_mask=node->local_mask,intrinsic_mask=node->intrinsic_mask;

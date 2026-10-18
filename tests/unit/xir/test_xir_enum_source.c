@@ -45,7 +45,13 @@ int main(int argc,char **argv){
     XrXirArtifact *checked=enum_checked(&context);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
     CHECK(packet.length<262144);
-    if(argc==2){FILE *file=fopen(argv[1],"wb");CHECK(file);CHECK(fwrite(packet.bytes,1,packet.length,file)==packet.length);CHECK(!fclose(file));}
+    if(argc==2){FILE *file=fopen(argv[1],"wb");CHECK(file);CHECK(fwrite(packet.bytes,1,packet.length,file)==packet.length);CHECK(!fclose(file));
+        xr_xir_compile_checked_packet_free(&packet);
+        xr_xir_compile_artifact_free(checked);
+        effects_source_owners_free();
+        puts("Real enum Checked packet generated; full runtime FI not run");
+        return 0;
+    }
     xr_xir_compile_checked_packet_free(&packet);XrXirArtifact *lowered=enum_lower(checked);
     SourceEnumIdentityEntries entries=source_enum_identity_select(xr_xir_compile_artifact_module(lowered));
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);

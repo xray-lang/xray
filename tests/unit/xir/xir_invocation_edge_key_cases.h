@@ -183,7 +183,7 @@ static XrXirStatus invocation_edge_operation(const XrXirCompileContext *context,
     if (status==XR_XIR_OK) CHECK(replay.outcomes_work.errors[1]==
         (mode==2?UINT64_C(0):mode?UINT64_C(4):UINT64_C(12)));
     error_storage_free(&flow);error_invocation_contexts_free(flow.invocations);
-    effect_terms_free(&terms);effect_source_outcomes_free(&replay);xr_xir_compile_effects_free(effects);return status;
+    effect_terms_free(&terms);effect_legacy_error_oracle_free(&replay);xr_xir_compile_effects_free(effects);return status;
 }
 
 static void invocation_edge_literals(void) {

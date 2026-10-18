@@ -40,3 +40,10 @@ foreach(class_inline_test IN ITEMS test_xir_class_inline_source test_xir_class_i
     add_test(NAME ${class_inline_test} COMMAND ${class_inline_test})
     set_tests_properties(${class_inline_test} PROPERTIES LABELS "unit;xir;execution;ownership;abi")
 endforeach()
+
+add_test(NAME test_xir_class_inline_mixed_owned_recovery COMMAND test_xir_class_inline_mixed --owned-recovery)
+set_tests_properties(test_xir_class_inline_mixed_owned_recovery PROPERTIES
+    LABELS "unit;xir;execution;ownership;abi;program;normal" TIMEOUT 60)
+add_test(NAME test_xir_class_inline_mixed_owned_compiler_faults COMMAND test_xir_class_inline_mixed --owned-compiler-faults)
+set_tests_properties(test_xir_class_inline_mixed_owned_compiler_faults PROPERTIES
+    LABELS "unit;xir;ownership;program;resources;compiler-fault" PROCESSORS 1 RUN_SERIAL TRUE)

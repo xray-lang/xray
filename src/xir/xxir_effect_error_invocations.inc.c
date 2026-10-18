@@ -105,7 +105,7 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
  * unrooted alternative is still an unknown error even with a NONE ROOT mask.
  * Every concrete site must have exactly one real edge for this full input. */
 static XrXirStatus error_invocation_indirect_check(EffectInvocationFlow *replay,
-    const ErrorInvocationContexts *contexts,const EffectInvocationCoverage *coverage,
+    const ErrorInvocationContexts *contexts,
     uint32_t instruction,const XrXirInstruction *op,bool *unknown) {
     if (!op || instruction>=replay->function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     if (op->immediate<0 || (uint64_t)op->immediate>=replay->values) return XR_XIR_BAD_STRUCTURE;
@@ -113,12 +113,15 @@ static XrXirStatus error_invocation_indirect_check(EffectInvocationFlow *replay,
     if (!row) return XR_XIR_BAD_STRUCTURE;
     const EffectInvocationRead *owner=replay->read;
     uint32_t opaque=owner->final->site_count+replay->basis.parameters;
-    bool unresolved=false,present=false;
+    bool unresolved=false,present=false,complete=false;
+    XrXirStatus status=effect_final_callable_complete(owner->work,owner->final,
+        replay->node,(uint32_t)op->immediate,&complete);
+    if(status!=XR_XIR_OK) return status;
     for (uint32_t bit=owner->final->site_count;bit<=opaque+2;++bit) {
         if (!xir_compile_work(owner->work,1)) return XR_XIR_BUDGET;
         /* The original ROOT advertisement stays intact. Only independently
          * certified exhaustive targets discharge its error-only residual. */
-        if (bit==opaque && coverage->ranks && coverage->ranks[(uint32_t)op->immediate]) continue;
+        if (bit==opaque && complete) continue;
         if (row[bit/64]&(UINT64_C(1)<<(bit%64))) unresolved=true;
     }
     for (uint32_t s=0;s<owner->final->site_count;++s) {
@@ -274,13 +277,10 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
     if (status==XR_XIR_OK) status=error_invocation_storage(flow,certificate,&contexts);
     EffectInvocationRead owner={0};
     if (status==XR_XIR_OK) status=effect_invocation_read_open(flow->remaining,
-        flow->effects,certificate->declared,sealed,&owner);
+        certificate,sealed,&owner);
     for (uint32_t n=0;status==XR_XIR_OK && n<owner.final->count;++n) {
         EffectInvocationFlow replay={.read=&owner,.node=n,.instruction=UINT32_MAX};
-        status=effect_invocation_origins(&replay);
-        EffectInvocationCoverage coverage={0};
-        if (status==XR_XIR_OK && owner.producer_enabled)
-            status=effect_invocation_coverage_values(&replay,&coverage);
+        status=effect_invocation_final_view(&replay);
         uint32_t walked=0;
         for (uint32_t e=owner.final->nodes[n].edge_head;status==XR_XIR_OK && e!=UINT32_MAX;e=owner.final->edges[e].next) {
             if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }
@@ -299,10 +299,9 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
                 status=XR_XIR_BAD_STRUCTURE;break;
             }
             if (op!=XR_XIR_CALL_INDIRECT && op!=XR_XIR_INVOKE_INDIRECT) continue;
-            status=error_invocation_indirect_check(&replay,contexts,&coverage,i,instruction,&call->unknown);
+            status=error_invocation_indirect_check(&replay,contexts,i,instruction,&call->unknown);
             call->handled=true;
         }
-        xr_compile_resources_free(coverage.memory);
         xr_compile_resources_free(replay.memory);
     }
     for (uint32_t n=0;status==XR_XIR_OK && n<owner.final->count;++n) {

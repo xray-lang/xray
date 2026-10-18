@@ -9,7 +9,7 @@
  * KEY CONCEPT:
  *   An immutable owner supplies storage, never a permission exemption. Each
  *   use checks physical inputs, closed equations and independent outcomes.
- *   Every temporary graph, type substitution and error summary dies here.
+ *   Temporary type and invocation scratch dies before the final pure checks.
  */
 /* Drop every borrowed constructor pointer before freeing the backbone's
  * real scratch. The owning immutable descriptors remain at the same addresses. */
@@ -46,11 +46,14 @@ static XrXirStatus effect_final_retire_construction(const XrXirCompileContext *w
         if (status==XR_XIR_OK) status=effect_final_retire_body(work,certificate->body);
         if (status==XR_XIR_OK) status=effect_final_retire_body(work,owner->ordinary->uses.generation);
         if (status==XR_XIR_OK && (owner->ordinary->resources!=work->resources ||
-            owner->ordinary->uses.resources!=work->resources)) status=XR_XIR_BAD_STRUCTURE;
-        if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(owner->ordinary->uses))) status=XR_XIR_BUDGET;
+            owner->ordinary->uses.resources!=work->resources ||
+            owner->dense->resources!=work->resources || owner->dense->uses.resources!=work->resources))
+            status=XR_XIR_BAD_STRUCTURE;
+        if (status==XR_XIR_OK && !xir_compile_work(work,sizeof(owner->ordinary->uses)+sizeof(owner->dense->uses))) status=XR_XIR_BUDGET;
         if (status==XR_XIR_OK) {
             effect_ordinary_results_free(owner->ordinary);
             owner->ordinary->uses=(XrXirEffects){0};
+            effect_ordinary_results_free(owner->dense);owner->dense->uses=(XrXirEffects){0};
         }
     }
     return status;
@@ -78,7 +81,7 @@ static XrXirStatus effect_source_equation_shape(const XrXirCompileContext *work,
         owner->deferred_count>owner->deferred_capacity ||
         !!owner->deferred_calls!=!!owner->deferred_capacity ||
         result->resources!=work->resources || result->count!=count || result->capacity!=count ||
-        !result->functions || !result->facts || !result->witnesses ||
+        !result->functions || !result->witnesses ||
         certificate->declarations!=certificate->body->declarations ||
         certificate->generics!=certificate->body->generics ||
         certificate->defaults.count!=certificate->body->defaults.count ||
@@ -86,15 +89,11 @@ static XrXirStatus effect_source_equation_shape(const XrXirCompileContext *work,
         certificate->terms.types.nodes!=certificate->body->terms.types.nodes ||
         certificate->terms.types.count!=certificate->body->terms.types.count ||
         certificate->terms.types.nominals!=certificate->body->terms.types.nominals ||
-        certificate->terms.types.interfaces!=certificate->body->terms.types.interfaces ||
-        owner->local_roots!=certificate->body->local_roots ||
-        owner->local_witnesses!=certificate->body->local_witnesses) return XR_XIR_BAD_STRUCTURE;
+        certificate->terms.types.interfaces!=certificate->body->terms.types.interfaces) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t f=0;f<count;++f) {
         if (!xir_compile_work(work,6)) return XR_XIR_BUDGET;
         const XrXirOrigin *origin=&certificate->origins[f];
-        uint32_t parameters=certificate->body->functions[f].parameter_count;
         if (owner->roots[f]>=owner->count || owner->root_spaces[f]>=count ||
-            !!certificate->parameter_kinds[f]!=!!parameters ||
             !!origin->arguments!=!!origin->argument_count ||
             origin->effect_arguments || origin->effect_argument_count ||
             (certificate->owners[f]!=UINT32_MAX && certificate->owners[f]>=count))
@@ -163,7 +162,9 @@ static XrXirStatus effect_source_projections(const XrXirCompileContext *work,
 /* Verification borrows the actual Final and its sole immutable Input.
  * Request scratch contains only the fresh incoming index; no construction
  * owner, queue or copied semantic inventory participates in this proof. */
-static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
+/* Constructor relations grant no final admission. The terminal inventory
+ * pass checks the sole finite source relation after all cleanup callbacks. */
+static XrXirStatus effect_source_relations(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const XrXirEffects *summary) {
     if (!certificate) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(work,7)) return XR_XIR_BUDGET;
@@ -178,8 +179,8 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
         certificate->final->material!=certificate->body ||
         certificate->final->physical!=certificate->body->physical ||
         certificate->final->cells!=certificate->body->cells ||
-        !summary || summary->count!=effect_body_count(certificate->body) ||
-        !effect_contracts_read(summary) || !certificate->origins || !certificate->owners || !certificate->parameter_kinds)
+        (summary && (summary->count!=effect_body_count(certificate->body) ||
+            !effect_contracts_read(summary))) || !certificate->origins || !certificate->owners)
         return XR_XIR_BAD_STRUCTURE;
     for (const EffectBodyMaterial *body=certificate->body;body;body=body->backbone) {
         if (!xir_compile_work(work,3)) return XR_XIR_BUDGET;
@@ -189,12 +190,12 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
     if (!xir_compile_work(work,sizeof(EffectInvocationRead)+sizeof(EffectInvocationCertificate)+3*sizeof(void *)))
         return XR_XIR_BUDGET;
     EffectInvocationRead owner={0};
-    XrXirStatus opening=effect_invocation_read_open(work,summary,certificate->declared,certificate->final,&owner);
+    XrXirStatus opening=effect_invocation_read_open(work,certificate,certificate->final,&owner);
     if (opening!=XR_XIR_OK) return opening;
     EffectInvocationCertificate local=*certificate;local.terms.remaining=work;
     XrXirStatus status=effect_source_equation_shape(work,certificate);
-    if (status==XR_XIR_OK) status=effect_source_result_views(work,certificate,summary);
-    for (uint32_t f=0;f<summary->count && status==XR_XIR_OK;++f) {
+    if (status==XR_XIR_OK && summary) status=effect_source_result_views(work,certificate,summary);
+    for (uint32_t f=0;summary && f<summary->count && status==XR_XIR_OK;++f) {
         const XrXirFunctionEffectContract *contract=&effect_contracts_read(summary)[f];
         uint32_t parameters=certificate->body->functions[f].parameter_count;
         if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
@@ -203,14 +204,14 @@ static XrXirStatus effect_source_certificate(const XrXirCompileContext *work,
         }
         for (uint32_t p=0;p<parameters && status==XR_XIR_OK;++p) {
             if (!xir_compile_work(work,2)) { status=XR_XIR_BUDGET;break; }
-            if (certificate->parameter_kinds[f][p]!=contract->parameters[p].kind)
-                status=XR_XIR_BAD_STRUCTURE;
+            uint32_t parameter_kind=UINT32_MAX;
+            status=effect_role_parameter_read(work,certificate->body,&certificate->final->role_proof,f,p,&parameter_kind);
+            if (status==XR_XIR_OK && parameter_kind!=contract->parameters[p].kind) status=XR_XIR_BAD_STRUCTURE;
         }
     }
     if (status==XR_XIR_OK) status=effect_body_physical_match(work,owner.final->physical,owner.final->material);
-    if (status==XR_XIR_OK) status=effect_invocation_producers_verify_read(&owner,&owner.body);
-    if (status==XR_XIR_OK) status=effect_invocation_coverage_verify_read(&owner,&owner.body);
-    if (status==XR_XIR_OK) status=effect_invocation_class_verify_read(&owner,&owner.body);
+    if (status==XR_XIR_OK) status=effect_role_proof_match(work,certificate->body,&certificate->final->role_proof);
+    if (status==XR_XIR_OK) status=effect_invocation_cell_terminals_read(&owner,&owner.body);
     if (status==XR_XIR_OK) status=effect_invocation_closed_read(work,certificate->final);
     if (status==XR_XIR_OK) status=effect_invocation_deferred_verify(&owner);
     if (status==XR_XIR_OK) status=effect_invocation_bind_bounds(&local,certificate->declared,owner.final->physical);
@@ -245,7 +246,7 @@ static XrXirStatus effect_source_contexts(const XrXirCompileContext *work,
     EffectTerms dense={.types=owner->dense->terms.types,.remaining=work};
     const EffectInvocationCertificate *certificate=owner->forest->invocations;
     XrXirStatus status=effect_context_dense_stable_read(work,owner,source,certificate,&ordinary,&dense);
-    if (status==XR_XIR_OK) status=effect_source_certificate(work,certificate,&owner->dense->uses);
+    if (status==XR_XIR_OK) status=effect_source_relations(work,certificate,NULL);
     if (status==XR_XIR_OK) status=effect_invocation_forest_match(work,owner->forest);
     effect_terms_free(&dense);effect_terms_free(&ordinary);return status;
 }
@@ -287,80 +288,43 @@ static XrXirStatus effect_source_publication_match(const XrXirCompileContext *wo
     return effect_public_root_match(work,effects);
 }
 
-/* Control and Error permissions retain their independent original algorithms.
- * These request-owned outputs borrow the already fully matched body and ROOT
- * certificate, while their real allocations, scans and fixed points are paid. */
-static void effect_source_outcomes_free(XrXirEffects *fresh) {
-    effect_outcomes_clear(&fresh->outcomes_work,fresh->count);
-}
-
-static XrXirStatus effect_source_outcomes_prepare(const XrXirCompileContext *work,
-    const XrXirEffects *effects,XrXirEffects *fresh) {
-    const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
-    if (!actual) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(work,sizeof(*fresh))) return XR_XIR_BUDGET;
-    *fresh=(XrXirEffects){.resources=work->resources,.count=effects->count,.root_input=actual,
-        .invocations=effects->invocations,
-        .result_borrow=effects->result_borrow,.generation=effects->invocations->body,
-        .cells=effects->cells};
-    fresh->outcomes_work.source_type_count=actual->source_type_count;
-    XrXirStatus status=XR_XIR_OK;
-    fresh->outcomes_work.functions=xir_compile_calloc(work,fresh->count,sizeof(*fresh->outcomes_work.functions),&status);
-    if (status==XR_XIR_OK) fresh->outcomes_work.task_errors=xir_compile_calloc(work,fresh->count,sizeof(*fresh->outcomes_work.task_errors),&status);
-    return status;
-}
-
-static XrXirStatus effect_source_outcomes_match(const XrXirCompileContext *work,
-    const XrXirEffects *effects,const XrXirEffects *fresh) {
-    const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
-    if (!actual || !actual->functions || !actual->task_errors) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t f=0;f<effects->count;++f) {
-        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
-        if (actual->functions[f].throws!=fresh->outcomes_work.functions[f].throws ||
-            actual->task_errors[f]!=fresh->outcomes_work.task_errors[f]) return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
-}
-
-static XrXirStatus effect_source_errors_match(const XrXirCompileContext *work,
-    const XrXirEffects *effects,const XrXirEffects *fresh) {
-    const EffectFinalOutcomes *actual=effect_final_outcomes(effects);
-    if (!actual) return XR_XIR_BAD_STRUCTURE;
-    if (actual->error_rows!=fresh->outcomes_work.error_rows ||
-        actual->atom_count!=fresh->outcomes_work.atom_count || actual->words!=fresh->outcomes_work.words ||
-        actual->atom_count>actual->atom_capacity || !!actual->atoms!=!!actual->atom_capacity ||
-        !actual->errors || !fresh->outcomes_work.errors) return XR_XIR_BAD_STRUCTURE;
-    for (uint32_t a=0;a<actual->atom_count;++a) {
-        if (!xir_compile_work(work,4)) return XR_XIR_BUDGET;
-        if (actual->atoms[a].type!=fresh->outcomes_work.atoms[a].type || actual->atoms[a].variant!=fresh->outcomes_work.atoms[a].variant)
-            return XR_XIR_BAD_STRUCTURE;
-    }
-    uint64_t words=(uint64_t)actual->error_rows*actual->words;
-    for (uint64_t w=0;w<words;++w) {
-        if (!xir_compile_work(work,2)) return XR_XIR_BUDGET;
-        if (actual->errors[w]!=fresh->outcomes_work.errors[w]) return XR_XIR_BAD_STRUCTURE;
-    }
-    return XR_XIR_OK;
-}
-
+/* Control and Error consume independent Final evidence after all earlier
+ * receiving cleanup callbacks. Neither domain reconstructs an Error Graph. */
 static XrXirStatus effect_source_outcomes(const XrXirCompileContext *work,const XrXirEffects *effects) {
-    XrXirCompileContext current=*work;XrXirEffects fresh={0};EffectControlCheck input={0};
-    EffectGraph graph={.material=effects->invocations->body,.physical=effects->invocations->body->physical};
-    if (!xir_compile_work(work,sizeof(current)+sizeof(fresh)+sizeof(graph)+sizeof(input))) return XR_XIR_BUDGET;
-    XrXirStatus status=effect_final_control_prepare(work,effects,&input);
-    bool empty=false;
-    if (status==XR_XIR_OK) status=effect_error_empty_current(work,effects,&empty);
-    if (status==XR_XIR_OK && !empty) status=effect_control_dependencies_move(work,&input,&graph);
-    if (status==XR_XIR_OK && !empty) status=effect_source_outcomes_prepare(work,effects,&fresh);
-    if (status==XR_XIR_OK && !empty) status=effect_errors_analyze(&fresh,&graph,&current);
-    if (status==XR_XIR_OK && !empty) status=effect_source_outcomes_match(work,effects,&fresh);
-    if (status==XR_XIR_OK && !empty) status=effect_source_errors_match(work,effects,&fresh);
-    effect_graph_free(&graph);effect_control_check_free(&input);effect_source_outcomes_free(&fresh);
-    if (status==XR_XIR_OK && empty) {
-        status=effect_error_empty_current(work,effects,&empty);
-        if (status==XR_XIR_OK && !empty) status=XR_XIR_BAD_STRUCTURE;
-    }
-    return status;
+    return effect_final_control_verify(work,effects);
+}
+
+/* This terminal role pass follows every receiving free callback. It has
+ * no mutable graph or scratch allocation and cannot retain a passed receipt. */
+static XrXirStatus effect_source_role_certificate(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate) {
+    XrXirStatus status=effect_role_range(work,certificate,1,sizeof(*certificate));
+    if (status!=XR_XIR_OK) return status;
+    if (certificate->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
+    status=effect_role_range(work,certificate->final,1,sizeof(*certificate->final));
+    if (status!=XR_XIR_OK) return status;
+    if (certificate->final->material!=certificate->body) return XR_XIR_BAD_STRUCTURE;
+    return effect_final_inventory_match(work,certificate->body,certificate->final);
+}
+static XrXirStatus effect_source_terminal_roles(const XrXirCompileContext *work,const XrXirEffects *effects) {
+    XrXirStatus status=effect_source_role_certificate(work,effects->invocations);
+    if (status!=XR_XIR_OK) return status;
+    const EffectInvocationCertificate *certificate=effects->invocations;
+    const EffectFinalOutcomes *outcomes=certificate->final->outcomes;
+    status=effect_role_range(work,outcomes,1,sizeof(*outcomes));if (status!=XR_XIR_OK) return status;
+    if (outcomes->resources!=work->resources || outcomes->count!=effects->count) return XR_XIR_BAD_STRUCTURE;
+    status=effect_role_contracts_match(work,certificate->body,&certificate->final->role_proof,
+        outcomes->contracts,outcomes->count);
+    if (status!=XR_XIR_OK || !outcomes->contexts) return status;
+    status=effect_role_range(work,outcomes->contexts,1,sizeof(*outcomes->contexts));
+    if (status!=XR_XIR_OK) return status;
+    const EffectContextForest *forest=outcomes->contexts->forest;
+    status=effect_role_range(work,forest,1,sizeof(*forest));if (status!=XR_XIR_OK) return status;
+    if (forest->resources!=work->resources) return XR_XIR_BAD_STRUCTURE;
+    status=effect_source_role_certificate(work,forest->invocations);if (status!=XR_XIR_OK) return status;
+    const EffectInvocationCertificate *nested=forest->invocations;
+    if (forest->count!=effect_body_count(nested->body)) return XR_XIR_BAD_STRUCTURE;
+    return XR_XIR_OK;
 }
 
 XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *work,
@@ -369,10 +333,12 @@ XR_FUNC XrXirStatus xir_effects_source_terminal(const XrXirCompileContext *work,
         !effect_final_outcomes(effects) || !source || source->stage!=XR_XIR_CHECKED || !source->provenance ||
         source->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE || !effects->invocations ||
         effects->generation || effects->refinement) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_source_certificate(work,effects->invocations,effects);
+    XrXirStatus status=effect_source_relations(work,effects->invocations,effects);
     if (status==XR_XIR_OK) status=effect_source_contexts(work,source,effects);
     if (status==XR_XIR_OK) status=effect_source_publication_match(work,source,effects);
     if (status==XR_XIR_OK) status=effect_source_outcomes(work,effects);
+    if (status==XR_XIR_OK) status=effect_source_terminal_roles(work,effects);
+    if (status==XR_XIR_OK) status=error_finite_outcomes_match(work,effects->invocations->body,effect_final_outcomes(effects));
     if (status==XR_XIR_OK) status=effect_invocation_current_input_match(work,source,effects->invocations->body);
     return status;
 }

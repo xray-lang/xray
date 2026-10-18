@@ -141,23 +141,9 @@ static XrXirStatus effect_body_writer_row(void *owner,uint32_t instruction,
     const EffectBodyFunction *function=&writer->material->functions[writer->function];
     if (instruction>=function->instruction_count) return XR_XIR_BAD_STRUCTURE;
     if (!xir_compile_work(writer->work,1)) return XR_XIR_BUDGET;
-    if (!effect_seed(writer->source,&writer->source->functions[writer->function],operation,
-        &writer->material->control[writer->function])) return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(writer->work,3*sizeof(void *))) return XR_XIR_BUDGET;
-    XrXirRootEffects *facts=&writer->material->local_roots[writer->function];
-    XrXirRootEffectWitness *required=&writer->material->local_witnesses[writer->function];
-    XrXirRootEffectWitness *unresolved=&writer->material->local_witnesses[
-        effect_body_count(writer->material)+writer->function];
-    if (operation->op!=XR_XIR_CALL_INDIRECT && operation->op!=XR_XIR_INVOKE_INDIRECT) {
-        EffectRootSeedRecord seed={&writer->material->domain,operation,writer->function,instruction,XR_XIR_UNIT};
-        XrXirStatus seeded=effect_root_seed_output(&seed,facts,required,unresolved,writer->work);
-        if (seeded!=XR_XIR_OK) return seeded;
-        if (operation->op==XR_XIR_CALL_REQUIREMENT) {
-            if (!xir_compile_work(writer->work,1+sizeof(XrXirRootEffectWitness))) return XR_XIR_BUDGET;
-            facts->unresolved=false;
-            *unresolved=(XrXirRootEffectWitness){0};
-        }
-    }
+    XrXirFunctionEffects local={0};
+    if (!effect_seed(writer->source,&writer->source->functions[writer->function],operation,&local))
+        return XR_XIR_BAD_STRUCTURE;
     uint32_t value=function->parameter_count+instruction;
     XrXirStatus status=effect_body_advertisements_value(writer->advertisements,writer->function,value,operation->type);
     if (status!=XR_XIR_OK) return status;
@@ -196,16 +182,9 @@ static XrXirStatus effect_body_writer_span(void *owner,uint32_t first,uint32_t c
     XrXirCellProofInstructionShape shape={operation->op,operation->type};
     XrXirStatus status=xir_cell_proof_builder_span(writer->cells,writer->function,first,count,&shape);
     if (status!=XR_XIR_OK) return status;
-    if (!effect_seed(writer->source,source,operation,&writer->material->control[writer->function]))
+    XrXirFunctionEffects local={0};
+    if (!effect_seed(writer->source,source,operation,&local))
         return XR_XIR_BAD_STRUCTURE;
-    if (!xir_compile_work(writer->work,3*sizeof(void *))) return XR_XIR_BUDGET;
-    XrXirRootEffects *facts=&writer->material->local_roots[writer->function];
-    XrXirRootEffectWitness *required=&writer->material->local_witnesses[writer->function];
-    XrXirRootEffectWitness *unresolved=&writer->material->local_witnesses[
-        effect_body_count(writer->material)+writer->function];
-    EffectRootSeedRecord seed={&writer->material->domain,operation,writer->function,first,XR_XIR_UNIT};
-    status=effect_root_seed_output(&seed,facts,required,unresolved,writer->work);
-    if (status!=XR_XIR_OK) return status;
     uint32_t value=function->parameter_count+first;
     status=effect_body_advertisements_span(writer->advertisements,writer->function,value,count,operation->type);
     if (status==XR_XIR_OK) status=effect_physical_value(writer->work,writer->material->domain.types,
@@ -282,13 +261,6 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
             if (status==XR_XIR_OK) body->physical->count=source->function_count;
         }
     }
-    if (status==XR_XIR_OK) {
-        body->control=effect_terms_alloc(&body->terms,source->function_count,sizeof(*body->control));
-        body->local_roots=effect_terms_alloc(&body->terms,source->function_count,sizeof(*body->local_roots));
-        body->local_witnesses=effect_terms_alloc(&body->terms,(uint64_t)source->function_count*2,
-            sizeof(*body->local_witnesses));
-        status=body->terms.status;
-    }
     EffectCellBodyAdapter adapter={0};XrXirCellProofBodyRead read={0};XrXirCellProofBuilder *cells=NULL;
     EffectBodyAdvertisementBuilder *advertisements=NULL;
     if (status==XR_XIR_OK) status=effect_body_advertisements_begin(work,source,refinement,&advertisements);
@@ -301,12 +273,6 @@ static XrXirStatus effect_body_material_generation_input(const XrXirCompileConte
             if (!declarations->functions || !declarations->modules ||
                 declarations->functions[f].module>=declarations->module_count) {
                 status=XR_XIR_BAD_STRUCTURE;break;
-            }
-            if (declarations->modules[declarations->functions[f].module].initializer==f) {
-                if (!xir_compile_work(work,1)) { status=XR_XIR_BUDGET;break; }
-                body->local_roots[f].requires_root=true;
-                body->local_witnesses[f]=(XrXirRootEffectWitness){.cause=XR_XIR_ROOT_CAUSE_INITIALIZER,
-                    .instruction=UINT32_MAX,.callee=UINT32_MAX,.slot=UINT32_MAX};
             }
         }
         uint64_t values=(uint64_t)function->parameter_count+function->instruction_count;

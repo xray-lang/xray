@@ -9,7 +9,6 @@
 #define main pending_fixture_entry
 #include "test_xir_error_cfg_pending.c"
 #undef main
-#include "xir/xxir_effect_error_equation_read.inc.c"
 
 typedef struct EquationSnapshot {
     uint32_t *active;

@@ -310,7 +310,7 @@ static void generation_range_dispatch_faults(EffectInvocationFlow *flow) {
  * original cost. Its declaration is neither empty-body permission nor NONE. */
 static void generation_range_dispatch_singleton(EffectInvocationWorkspace *owner) {
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[3],.instruction=UINT32_MAX};
-    CHECK(effect_invocation_origins(&flow)==XR_XIR_OK && !flow.changed &&
+    CHECK(effect_invocation_discovery_origins(&flow)==XR_XIR_OK && !flow.changed &&
         (flow.physical->count<=1 || owner->final.material->functions[3].run_count<=1));
     EffectBodyRequest original=flow.body;
     for (uint32_t precision=0;precision<2;++precision) {
@@ -339,7 +339,7 @@ static void generation_range_origin_bindings(const XrXirCompileContext *context,
     CHECK(!owner->read.producer_enabled && !owner->pending && owner->final.material==material &&
         owner->final.physical==material->physical);
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
-    CHECK(effect_invocation_origins(&flow)==XR_XIR_OK && !flow.changed);
+    CHECK(effect_invocation_discovery_origins(&flow)==XR_XIR_OK && !flow.changed);
     uint32_t function=owner->final.nodes[flow.node].body;
     CHECK(function==0 && flow.physical==&material->physical->functions[function] &&
         effect_invocation_origins_pass(&flow)==XR_XIR_OK && !flow.changed);
@@ -383,7 +383,7 @@ static void generation_range_dispatch_other(const XrXirCompileContext *context,
         effect_invocations_receive(context,source,&trial->effects,&trial->graph,
             material->declared,&owner)==XR_XIR_OK && effect_invocations_solve(owner)==XR_XIR_OK);
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
-    CHECK(effect_invocation_origins(&flow)==XR_XIR_OK && !flow.changed &&
+    CHECK(effect_invocation_discovery_origins(&flow)==XR_XIR_OK && !flow.changed &&
         flow.physical->count>1 && material->functions[0].run_count>1);
     generation_range_dispatch_same(&flow,source);generation_range_dispatch_singleton(owner);
     xr_compile_resources_free(flow.memory);effect_invocation_free(owner);effect_graph_free(&trial->graph);
@@ -481,7 +481,7 @@ static void generation_sequence_eof(const XrXirCompileContext *context,
 
 /* The existing returned-callback recipe supplies genuine producer and rank
  * equations. Replaying canonical and delegated requests must preserve their
- * complete stored input, settled producers and returned coverage. */
+ * complete stored input and settled producer causes. */
 static void generation_sequence_producers(void) {
     RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());
     uint64_t baseline=rp_stats(&context).live_bytes;
@@ -505,17 +505,13 @@ static void generation_sequence_producers(void) {
         EffectBodyRequest request=effect_body_owned_request(&context,owner->final.material);
         if (mixed) request.instruction=conditional_generation_counted_instruction;
         EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=n,.instruction=UINT32_MAX};
-        CHECK(effect_invocation_origins_read(&flow,&request)==XR_XIR_OK);
+        CHECK(effect_invocation_discovery_origins_read(&flow,&request)==XR_XIR_OK);
         bool changed=false;
         CHECK(effect_invocation_producer_step(&flow,&changed,true)==XR_XIR_OK && !changed &&
             owner->final.count==nodes && owner->final.edge_count==edges && !owner->pending);
-        uint64_t returned=UINT64_MAX;
-        CHECK(effect_invocation_coverage_return_read(&owner->read,&request,n,&returned)==XR_XIR_OK &&
-            returned==owner->final.nodes[n].return_coverage);
         xr_compile_resources_free(flow.memory);
     }
-    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_OK &&
-        effect_invocation_coverage_verify(owner)==XR_XIR_OK);
+    CHECK(effect_invocation_producers_verify(owner)==XR_XIR_OK);
     effect_invocation_free(owner);effect_invocation_bounds_free(bounds);
     effect_graph_free(&graph);invocation_core_storage_free(&effects);
     xr_xir_compile_artifact_free(checked);rp_owner_free(&context,baseline);rp_balanced(held);

@@ -31,8 +31,34 @@ static void invocation_core_storage_free(XrXirEffects *effects) {
  * The certificate remains private and cannot admit a Program or runtime call. */
 static void *invocation_retired_blocks[3];
 static uint32_t invocation_retired_counts[3];
+static void *invocation_discovery_blocks[8192];
+static uint32_t invocation_discovery_counts[8192],invocation_discovery_count;
+static uint32_t invocation_discovery_class_count;
+static bool invocation_discovery_reused[8192];
+static void *invocation_primitive_payload,*invocation_primitive_block;
+static size_t invocation_primitive_bytes;
+static bool invocation_primitive_poisoned;
+static const EffectInvocationWorkspace *invocation_primitive_workspace;
+/* A new physical allocation can reuse an already released discovery address.
+ * Its later release belongs to a different lifetime, not to the retired row. */
+static void invocation_discovery_allocated(void *memory) {
+    for(uint32_t i=0;i<invocation_discovery_count;++i)
+        if(memory==invocation_discovery_blocks[i] && invocation_discovery_counts[i]) invocation_discovery_reused[i]=true;
+}
+static void invocation_discovery_observe(void *memory) {
+    if(memory==invocation_primitive_block && !invocation_primitive_poisoned) {
+        CHECK(invocation_primitive_payload && invocation_primitive_bytes);
+        CHECK(invocation_primitive_workspace && !invocation_primitive_workspace->primitives &&
+            !invocation_primitive_workspace->primitive_count);
+        memset(invocation_primitive_payload,0xA5,invocation_primitive_bytes);
+        invocation_primitive_poisoned=true;
+    }
+    for(uint32_t i=0;i<invocation_discovery_count;++i)
+        if(memory==invocation_discovery_blocks[i] && !invocation_discovery_reused[i]) ++invocation_discovery_counts[i];
+}
 static void invocation_retired_observe(void *memory) {
     for (uint32_t i=0;i<3;++i) if (memory==invocation_retired_blocks[i]) ++invocation_retired_counts[i];
+    invocation_discovery_observe(memory);
 }
 /* Locate the payload only within extents recorded by our real allocator.
  * No allocation prefix or runtime metadata is guessed or inspected. */
@@ -45,6 +71,38 @@ static void *invocation_retired_block(const void *payload) {
     }
     CHECK(false);return NULL;
 }
+static void invocation_discovery_begin(const EffectInvocationWorkspace *workspace) {
+    invocation_discovery_count=0;invocation_discovery_class_count=0;
+    invocation_primitive_payload=workspace->primitives;
+    invocation_primitive_workspace=workspace;
+    invocation_primitive_block=invocation_retired_block(workspace->primitives);
+    invocation_primitive_bytes=(size_t)workspace->primitive_count*sizeof(*workspace->primitives);
+    invocation_primitive_poisoned=false;
+    CHECK(!!invocation_primitive_payload==!!invocation_primitive_bytes);
+    if(invocation_primitive_block) {
+        invocation_discovery_blocks[0]=invocation_primitive_block;
+        invocation_discovery_reused[0]=false;invocation_discovery_counts[0]=0;
+        ++invocation_discovery_count;
+    }
+    for(uint32_t n=0;n<workspace->final.count;++n) {
+        const void *payloads[2]={workspace->states[n].producers.facts,workspace->states[n].classes.facts};
+        for(uint32_t kind=0;kind<2;++kind) {
+            if(!payloads[kind]) continue;
+            if(kind) ++invocation_discovery_class_count;
+            CHECK(invocation_discovery_count<8192);
+            void *block=invocation_retired_block(payloads[kind]);
+            for(uint32_t i=0;i<invocation_discovery_count;++i) CHECK(block!=invocation_discovery_blocks[i]);
+            invocation_discovery_blocks[invocation_discovery_count]=block;
+            invocation_discovery_reused[invocation_discovery_count]=false;
+            invocation_discovery_counts[invocation_discovery_count++]=0;
+        }
+    }
+}
+static void invocation_discovery_finished(bool retired) {
+    CHECK(invocation_primitive_poisoned==(retired && !!invocation_primitive_payload));
+    for(uint32_t i=0;i<invocation_discovery_count;++i)
+        CHECK(invocation_discovery_counts[i]==(retired?1u:0u));
+}
 static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *input,
     EffectInvocationCertificate **output,EffectFinalFunctions **receiving) {
     EffectInvocationWorkspace *workspace=NULL;
@@ -53,7 +111,7 @@ static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *in
     if (status==XR_XIR_OK) status=effect_invocations_solve(workspace);
     if (status==XR_XIR_OK) status=effect_invocation_stage(workspace,receiving);
     if (status==XR_XIR_OK) {
-        CHECK(!rp_release_observer);
+        CHECK(!rp_release_observer && !rp_allocation_observer);
         invocation_retired_blocks[0]=invocation_retired_block(workspace);
         invocation_retired_blocks[1]=invocation_retired_block(workspace->read.consumers);
         invocation_retired_blocks[2]=invocation_retired_block(workspace->edge_index);
@@ -61,17 +119,22 @@ static XrXirStatus invocation_retired_seal(const EffectInvocationDriverInput *in
         for (uint32_t n=0;n<workspace->final.count;++n)
             CHECK(workspace->states[n].expanded && !workspace->states[n].queued);
         memset(invocation_retired_counts,0,sizeof(invocation_retired_counts));
+        invocation_discovery_begin(workspace);
         rp_release_observer=invocation_retired_observe;
+        rp_allocation_observer=invocation_discovery_allocated;
         EffectInvocationSealRequest request={&workspace,receiving,input->dense};
         status=effect_invocation_seal(input->work,&request,output,NULL);
         rp_release_observer=NULL;
+        rp_allocation_observer=NULL;
         if (status==XR_XIR_OK) {
             CHECK(!workspace && !*receiving && *output && (*output)->final);
             for (uint32_t i=0;i<3;++i)
                 CHECK(invocation_retired_counts[i]==(invocation_retired_blocks[i]?1u:0u));
+            invocation_discovery_finished(true);
         } else {
             CHECK(workspace && !*output);
             for (uint32_t i=0;i<3;++i) CHECK(!invocation_retired_counts[i]);
+            invocation_discovery_finished(!workspace->read.discovery);
         }
     }
     effect_invocation_free(workspace);return status;
@@ -84,34 +147,27 @@ static void invocation_final_initializer_erasure(const XrXirCompileContext *work
     const uint32_t function=3;
     EffectFinalFunctions *summary=&certificate->final->summary;
     EffectInvocationNode *node=&certificate->final->nodes[certificate->final->roots[function]];
-    CHECK(node->cause_count==3 && summary->facts[function].requires_root);
+    XrXirRootEffects current;CHECK(effect_invocation_certificate_facts(work,certificate,function,&current)==XR_XIR_OK);
+    CHECK(node->cause_count==3 && current.requires_root);
     uint32_t intrinsic=node->intrinsic_mask,local=node->local_mask;
     EffectInvocationCause causes[6];memcpy(causes,node->causes,sizeof(causes));
-    XrXirRootEffects facts=summary->facts[function],seed=certificate->body->local_roots[function];
     uint32_t constant=summary->functions[function].formula.constant_mask;
-    XrXirRootEffectWitness witnesses[4],local_witnesses[2];
+    XrXirRootEffectWitness witnesses[4];
     for (uint32_t d=0;d<4;++d) {
         size_t at=(size_t)d*summary->count+function;witnesses[d]=summary->witnesses[at];
         summary->witnesses[at]=(XrXirRootEffectWitness){0};
     }
-    for (uint32_t d=0;d<2;++d) {
-        size_t at=(size_t)d*summary->count+function;local_witnesses[d]=certificate->body->local_witnesses[at];
-        certificate->body->local_witnesses[at]=(XrXirRootEffectWitness){0};
-    }
     node->intrinsic_mask=node->local_mask=0;
     for (uint32_t a=0;a<6;++a) node->causes[a]=(EffectInvocationCause){
         .next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
-    summary->facts[function]=(XrXirRootEffects){0};summary->functions[function].formula.constant_mask=0;
-    certificate->body->local_roots[function]=(XrXirRootEffects){0};
+    summary->functions[function].formula.constant_mask=0;
     XrXirStatus status=effect_invocation_publication_match(work,certificate,summary);
     fprintf(stderr,"general Input initializer erasure status%u declaration%u\n",status,
         certificate->body->declarations->modules[0].initializer);
     CHECK(status==XR_XIR_BAD_STRUCTURE);
     node->intrinsic_mask=intrinsic;node->local_mask=local;memcpy(node->causes,causes,sizeof(causes));
-    summary->facts[function]=facts;summary->functions[function].formula.constant_mask=constant;
-    certificate->body->local_roots[function]=seed;
+    summary->functions[function].formula.constant_mask=constant;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+function]=witnesses[d];
-    for (uint32_t d=0;d<2;++d) certificate->body->local_witnesses[(size_t)d*summary->count+function]=local_witnesses[d];
     CHECK(effect_invocation_publication_match(work,certificate,summary)==XR_XIR_OK);
 }
 
@@ -126,7 +182,7 @@ static void invocation_trace_allocation_erase(void *memory) {
     node->intrinsic_mask=node->local_mask=0;
     for (uint32_t a=0;a<node->cause_count*2;++a) node->causes[a]=(EffectInvocationCause){
         .next=UINT32_MAX,.edge=UINT32_MAX,.distance=UINT32_MAX};
-    summary->facts[3]=(XrXirRootEffects){0};summary->functions[3].formula.constant_mask=0;
+    summary->functions[3].formula.constant_mask=0;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+3]=(XrXirRootEffectWitness){0};
 }
 
@@ -138,7 +194,8 @@ static void invocation_final_trace_callback(const XrXirCompileContext *work,
     EffectInvocationNode *node=&certificate->final->nodes[certificate->final->roots[3]];
     EffectInvocationNode saved=*node;EffectInvocationCause causes[6];
     CHECK(node->cause_count==3);memcpy(causes,node->causes,sizeof(causes));
-    XrXirRootEffects facts=summary->facts[3];uint32_t constant=summary->functions[3].formula.constant_mask;
+    XrXirRootEffects facts;CHECK(effect_invocation_certificate_facts(work,certificate,3,&facts)==XR_XIR_OK);
+    uint32_t constant=summary->functions[3].formula.constant_mask;
     XrXirRootEffectWitness witnesses[4];
     for (uint32_t d=0;d<4;++d) witnesses[d]=summary->witnesses[(size_t)d*summary->count+3];
     RootParameterMark retained=rp_mark();XrCompileResourceStats before=rp_stats(work);
@@ -149,7 +206,7 @@ static void invocation_final_trace_callback(const XrXirCompileContext *work,
     invocation_trace_callback_target=NULL;rp_balanced(retained);
     XrCompileResourceStats paid=rp_stats(work);CHECK(paid.work>before.work && paid.allocated_bytes>before.allocated_bytes);
     *node=saved;memcpy(node->causes,causes,sizeof(causes));
-    summary->facts[3]=facts;summary->functions[3].formula.constant_mask=constant;
+    summary->functions[3].formula.constant_mask=constant;
     for (uint32_t d=0;d<4;++d) summary->witnesses[(size_t)d*summary->count+3]=witnesses[d];
     CHECK(effect_invocation_public_trace(work,certificate,3,&facts,&output)==XR_XIR_OK && output);
     CHECK(output->counts[0]==1 && !output->counts[1] && output->facts.requires_root);
@@ -192,6 +249,7 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
     }
     XrXirArtifact *checked=NULL;XrXirDiagnostic diagnostic={0};
     XrXirStatus status=xir_fixture_check(context,&fixture.module,&checked,&diagnostic);
+    fprintf(stderr,"DIAG core check mode%u status%u reason%u types%u slotCount%u\n",mode,(unsigned)status,(unsigned)diagnostic.reason,fixture.types.count,fixture.declarations.slot_count);
     uint32_t phase=0;
     if (status==XR_XIR_OK) { phase=1;status=xr_xir_compile_artifact_verify(checked,&diagnostic); }
     const XrXirModule *module=checked?xr_xir_compile_artifact_module(checked):NULL;
@@ -229,8 +287,11 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             certificate->final->roots[1],&formal_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_edge_mask(context,certificate,0,2,1,&edge_mask);
         if (status==XR_XIR_OK) status=effect_invocation_certificate_trace(context,certificate,1,&trace);
-        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,1,&certificate->final->summary.facts[1],&public_trace);
-        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,3,&certificate->final->summary.facts[3],&root_trace);
+        XrXirRootEffects public_facts,root_facts;
+        if (status==XR_XIR_OK) status=effect_invocation_certificate_facts(context,certificate,1,&public_facts);
+        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,1,&public_facts,&public_trace);
+        if (status==XR_XIR_OK) status=effect_invocation_certificate_facts(context,certificate,3,&root_facts);
+        if (status==XR_XIR_OK) status=effect_invocation_public_trace(context,certificate,3,&root_facts,&root_trace);
         if (status==XR_XIR_OK && oracle) {
             if (primitive_slot) invocation_nonroot_slot_erasure(context,certificate);
             invocation_final_initializer_erasure(context,certificate);
@@ -238,11 +299,12 @@ static XrXirStatus conditional_invocation_core(const XrXirCompileContext *contex
             EffectInvocationFinal damaged=*certificate->final;
             damaged.physical=NULL;EffectInvocationRead refused={0};size_t admission_attempts=rp_attempts;
             XrCompileResourceStats before=rp_stats(context);
-            CHECK(effect_invocation_read_open(context,NULL,certificate->declared,&damaged,&refused)==XR_XIR_BAD_STRUCTURE &&
+            EffectInvocationFinal *saved_final=certificate->final;certificate->final=&damaged;
+            CHECK(effect_invocation_read_open(context,certificate,&damaged,&refused)==XR_XIR_BAD_STRUCTURE &&
                 !refused.work && !refused.consumers && !refused.final && rp_attempts==admission_attempts &&
                 rp_stats(context).work==before.work);
-            refused.work=context;
-            CHECK(effect_invocation_read_open(context,NULL,certificate->declared,certificate->final,&refused)==XR_XIR_BAD_STRUCTURE &&
+            certificate->final=saved_final;refused.work=context;
+            CHECK(effect_invocation_read_open(context,certificate,certificate->final,&refused)==XR_XIR_BAD_STRUCTURE &&
                 refused.work==context && !refused.consumers && rp_attempts==admission_attempts &&
                 rp_stats(context).work==before.work);
             CHECK(caller_mask==(primitive_slot && !(mode&1)?XR_XIR_CALLABLE_ROOT_REQUIRED:0) &&

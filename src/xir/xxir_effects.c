@@ -38,6 +38,11 @@ static XrXirStatus effect_final_retire_construction(const XrXirCompileContext *w
 static XrXirStatus effect_context_owner_trace(const XrXirCompileContext *context,
     const XrXirEffects *effects, uint32_t function, XrXirRootCauseTrace **output);
 
+typedef struct EffectErrorFinite EffectErrorFinite;
+static void error_finite_release(EffectErrorFinite *proof);
+typedef struct EffectControlProof EffectControlProof;
+static void effect_control_proof_free(EffectControlProof *proof);
+
 typedef struct EffectErrorAtom { XrXirType type; uint32_t variant; } EffectErrorAtom;
 typedef struct EffectFinalOutcomes {
     XrCompileResources *resources;
@@ -45,6 +50,8 @@ typedef struct EffectFinalOutcomes {
     XrXirFunctionEffects *functions;
     XrXirEffectWitness *witnesses;
     EffectErrorAtom *atoms;
+    EffectErrorFinite *error_proof;
+    EffectControlProof *control_proof;
     uint64_t *errors;
     XrXirStatus *task_errors,*go_safe;
     XrXirEffect *task_creation;
@@ -54,6 +61,10 @@ typedef struct EffectFinalOutcomes {
     XirEffectEntryRootView *entry_roots;
     EffectContextOwner *contexts;
 } EffectFinalOutcomes;
+static XrXirStatus effect_control_proof_build(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *claims,EffectControlProof **output);
+static XrXirStatus effect_control_proof_check(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *claims);
 
 /* Formula storage belongs to the canonical summary after ROOT publication.
  * Partial constructors alone own their provisional formula allocations. */
@@ -74,6 +85,8 @@ static void effect_outcomes_clear(EffectFinalOutcomes *outcomes,uint32_t count) 
             xr_compile_resources_free((void *)outcomes->entry_roots[f].parameters);
         xr_compile_resources_free(outcomes->entry_roots);
     }
+    error_finite_release(outcomes->error_proof);
+    effect_control_proof_free(outcomes->control_proof);
     effect_context_owner_free(outcomes->contexts);
     effect_contracts_clear(outcomes->contracts,count,false);
     xr_compile_resources_free(outcomes->functions);xr_compile_resources_free(outcomes->witnesses);
@@ -425,6 +438,7 @@ static bool effect_seed(const XrXirModule *module,const XrXirFunction *function,
         callable=xr_xir_operand_type(function,(uint32_t)instruction->immediate);
     return effect_seed_type(module->types,callable,instruction,effect);
 }
+#include "xxir_effect_control_primitive.inc.c"
 #include "xxir_effects_root.inc.c"
 
 static XrXirStatus effect_reference_graph(const XrXirModule *module,
@@ -494,6 +508,8 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
     status=effect_graph_owned_physical_function(remaining,graph,f,&physical);
     if (status!=XR_XIR_OK) return status;
     const EffectBodyFunction *owned=&graph->material->functions[f];
+    if(!xir_compile_work(remaining,sizeof(*effects->outcomes_work.functions))) return XR_XIR_BUDGET;
+    effects->outcomes_work.functions[f]=(XrXirFunctionEffects){0};
     EffectBodyRecordCursor cursor={0,0,UINT32_MAX};uint32_t r=0;
     if (!xir_compile_work(remaining,sizeof(cursor)+sizeof(r))) return XR_XIR_BUDGET;
     while (r<physical->count && physical->records[r].value<function->parameter_count) {
@@ -505,6 +521,8 @@ static XrXirStatus effect_graph_dependencies_count(const XrXirCompileContext *re
         const EffectBodyRun *ref;uint32_t opcode=XR_XIR_INVALID;
         status=effect_body_range_ref(&request.read,owned,&cursor,&ref);
         if (status!=XR_XIR_OK) return status;
+        status=effect_control_run_seed(&request,f,ref,&effects->outcomes_work.functions[f]);
+        if(status!=XR_XIR_OK) return status;
         if (!(ref->mask&UINT32_C(1))) {
             status=effect_body_run_word(&request.read,ref,ref->first,0,&opcode);
             if (status!=XR_XIR_OK) return status;
@@ -556,10 +574,6 @@ static XrXirStatus effect_graph_build_material(const XrXirModule *module, XrXirE
     EffectGraphDependencyCounts counts={0};
     if (!xir_compile_work(remaining,2*sizeof(counts))) return XR_XIR_BUDGET;
     XrXirStatus status=XR_XIR_OK;
-    if (!graph->material->control) return XR_XIR_BAD_STRUCTURE;
-    uint64_t control_bytes=(uint64_t)module->function_count*sizeof(*effects->outcomes_work.functions);
-    if (!xir_compile_work(remaining,control_bytes)) return XR_XIR_BUDGET;
-    memcpy(effects->outcomes_work.functions,graph->material->control,(size_t)control_bytes);
     bool symbolic=graph->material->ordinary_identities || graph->material->evidence_kind==XR_XIR_EVIDENCE_TEMPLATE;
     for (uint32_t t=0;t<graph->material->domain.types->count && !symbolic;++t) {
         if (!xir_compile_work(remaining,1)) return XR_XIR_BUDGET;
@@ -694,6 +708,11 @@ static XrXirStatus effect_propagate(XrXirEffects *effects, EffectGraph *graph, c
 #include "xxir_effect_invocations.inc.c"
 #include "xxir_effect_invocation_public_trace.inc.c"
 #include "xxir_effect_invocation_publish.inc.c"
+#include "xxir_effect_error_equation_read.inc.c"
+#include "xxir_effect_error_finite.inc.c"
+#include "xxir_effect_error_markers.inc.c"
+#include "xxir_effect_error_marker_build.inc.c"
+#include "xxir_effect_error_finite_build.inc.c"
 #include "xxir_effect_error_invocations.inc.c"
 
 /* A breadth-first forest over final facts cannot inherit a cyclic cause chain
@@ -839,9 +858,13 @@ XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
     *output=final->entry_roots[function];return XR_XIR_OK;
 }
 
+static XrXirStatus effect_final_inventories_match(const XrXirCompileContext *work,
+    const EffectInvocationCertificate *certificate,const EffectFinalOutcomes *outcomes);
 #include "xxir_effect_outcomes.inc.c"
 #include "xxir_effect_control_verify.inc.c"
-#include "xxir_effect_error_empty_current.inc.c"
+#include "xxir_effect_role_check.inc.c"
+#include "xxir_effect_invocation_inventory.inc.c"
+#include "xxir_effect_error_context_final_read.inc.c"
 #include "xxir_effect_source_terminal.inc.c"
 
 static XrXirStatus effect_infer_construct(const XrXirCompileContext *compile_context,
