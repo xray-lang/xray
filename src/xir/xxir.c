@@ -212,7 +212,8 @@ XrXirStatus xr_xir_compile_recheck_v2(const XrXirCompileContext *compile_context
 }
 
 static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
-    XrXirEffects **output, const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic);
+    XrXirEffects **output, const XrXirEffects *source_effects,
+    XrXirEffects **receiving_effects, XrXirDiagnostic *diagnostic);
 
 /* Reject overlapping request and owner/output slots before any dereference or
  * acceptance. Address comparison only refuses aliases; it proves no input. */
@@ -223,8 +224,8 @@ static bool provenance_receiving_slot_alias(const XirProvenanceReceiving *receiv
         request-location<sizeof(void *);
 }
 
-/* Only this producer's uniquely owned provenance is moved. Both complete
- * checks still reconstruct their own facts from the actual receiving body. */
+/* Only this producer's uniquely owned provenance is moved. One operation
+ * owns the finite derivation; both complete checks read their actual input. */
 XrXirStatus xr_xir_compile_recheck_provenance_take(const XrXirCompileContext *compile_context,
     const XrXirModule *checked, const XirProvenanceReceiving *receiving,
     XrXirProvenance **owned_provenance, XrXirArtifact **output, XrXirDiagnostic *diagnostic) {
@@ -241,8 +242,8 @@ XrXirStatus xr_xir_compile_recheck_provenance_take(const XrXirCompileContext *co
         return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
     XrXirProvenance *receiving_owner = *owned_provenance; *owned_provenance = NULL;
     XrXirStatus status = XR_XIR_OK;
-    XrXirArtifact *receiving_copy = NULL;
-    if (!xir_compile_work(compile_context, sizeof(XrXirModule) + 3 * sizeof(receiving_owner) +
+    XrXirArtifact *receiving_copy = NULL;XrXirEffects *receiving_effects=NULL;
+    if (!xir_compile_work(compile_context, sizeof(XrXirModule) + 4 * sizeof(receiving_owner) +
         sizeof(*receiving))) {
         status = transition_error(XR_XIR_BUDGET, diagnostic); goto done;
     }
@@ -250,16 +251,18 @@ XrXirStatus xr_xir_compile_recheck_provenance_take(const XrXirCompileContext *co
     XrXirModule receiving_module = *checked;
     receiving_module.provenance = receiving_owner;
     XrXirCompileContext limits = *compile_context;
-    status = xr_xir_compile_verify_provenance_effects_v2(&limits, &receiving_module,
-        request.construction, request.source_effects, diagnostic);
+    status = xir_compile_verify_receiving_collect(&limits, &receiving_module,
+        request.construction, request.source_effects, &receiving_effects, diagnostic);
     if (status != XR_XIR_OK) goto done;
     receiving_copy = clone_module_receiving(compile_context, &receiving_module, request.construction,
         &status, &receiving_owner);
     if (!receiving_copy) { status = transition_error(status, diagnostic); goto done; }
     receiving_copy->context = limits;
-    status = artifact_verify_owned_effects(receiving_copy, NULL, request.source_effects, diagnostic);
+    status = artifact_verify_owned_effects(receiving_copy, NULL, request.source_effects,
+        receiving_effects?&receiving_effects:NULL, diagnostic);
     if (status == XR_XIR_OK) { *output = receiving_copy; receiving_copy = NULL; }
 done:
+    xr_xir_compile_effects_free(receiving_effects);
     xr_xir_compile_artifact_free(receiving_copy);
     xr_xir_compile_provenance_free(receiving_owner);
     return status;
@@ -290,6 +293,7 @@ typedef XrXirStatus (*TransitionPacketWriter)(const XrXirArtifact *,
 typedef struct TransitionInputProof {
     TransitionPacketWriter writer;
     XrXirArtifact **owned_input;
+    XrXirEffects **receiving_effects;
 } TransitionInputProof;
 
 /* The private reader transfers its fully verified, unaliased decoded owner.
@@ -359,8 +363,8 @@ static XrXirStatus transition_owned(const XrXirModule *input, const XrXirConstru
         status=source_facts_prepare(copy,diagnostic);
     if (status == XR_XIR_OK)
         status = copy->module.stage==XR_XIR_LOWERED ?
-            artifact_verify_owned_effects(copy,&copy->program_final,NULL,diagnostic) :
-            xr_xir_compile_artifact_verify(copy,diagnostic);
+            artifact_verify_owned_effects(copy,&copy->program_final,NULL,NULL,diagnostic) :
+            artifact_verify_owned_effects(copy,NULL,NULL,proof->receiving_effects,diagnostic);
     if (status != XR_XIR_OK) {
         xr_xir_compile_artifact_free(copy);
         return status;
@@ -375,12 +379,17 @@ static XrXirStatus transition(const XrXirModule *input, const XrXirConstruction 
     if (!xir_compile_context_valid(budget) || !output || *output)
         return transition_error(XR_XIR_BAD_STRUCTURE, diagnostic);
     XrXirStatus status = transition_shape(input, source, budget, target, diagnostic);
-    if (status == XR_XIR_OK) status = xr_xir_compile_verify_v2(budget, input, construction, diagnostic);
+    XrXirEffects *receiving_effects=NULL;
+    bool collect=source==XR_XIR_BUILT && input && !input->provenance;
+    if (status == XR_XIR_OK) status = collect?
+        xir_compile_verify_built_collect(budget,input,construction,&receiving_effects,diagnostic):
+        xr_xir_compile_verify_v2(budget, input, construction, diagnostic);
     if (status != XR_XIR_OK) return status;
     /* Complete admission precedes the private exact clone. Its encoder needs
      * no second admission; complete receiving checks precede publication. */
-    const TransitionInputProof proof = {checked_encode, NULL};
-    return transition_owned(input, construction, budget, output, diagnostic, target, &proof);
+    const TransitionInputProof proof = {checked_encode,NULL,receiving_effects?&receiving_effects:NULL};
+    status=transition_owned(input, construction, budget, output, diagnostic, target, &proof);
+    xr_xir_compile_effects_free(receiving_effects);return status;
 }
 
 /* The reader owns and verifies the only input; no decoded view escapes. */
@@ -393,7 +402,7 @@ XR_FUNC XrXirStatus xr_xir_compile_checked_read_lower(const XrXirCompileContext 
     XrXirStatus status = xr_xir_compile_checked_read(context, bytes, length, &checked, diagnostic);
     if (status == XR_XIR_OK)
         status = transition_shape(&checked->module, XR_XIR_CHECKED, &checked->context, target, diagnostic);
-    const TransitionInputProof proof = {checked_encode,&checked};
+    const TransitionInputProof proof = {checked_encode,&checked,NULL};
     if (status == XR_XIR_OK)
         status = transition_owned(&checked->module, checked->construction, &checked->context, output, diagnostic, target, &proof);
     xr_xir_compile_artifact_free(checked);
@@ -446,7 +455,7 @@ XrXirStatus xr_xir_compile_lower(const XrXirArtifact *checked, const XrXirTarget
         return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
     XrXirStatus status=transition_shape(&checked->module,XR_XIR_CHECKED,&checked->context,target,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(checked,diagnostic);
-    const TransitionInputProof proof={checked->evaluation_only?checked_evaluation_encode:checked_encode,NULL};
+    const TransitionInputProof proof={checked->evaluation_only?checked_evaluation_encode:checked_encode,NULL,NULL};
     return status==XR_XIR_OK?transition_owned(&checked->module,checked->construction,
         &checked->context,output,diagnostic,target,&proof):status;
 }
@@ -470,7 +479,7 @@ XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **owned_input,
         status = xr_xir_compile_layout_verify(checked);
         if (status != XR_XIR_OK) status = transition_error(status, diagnostic);
     }
-    const TransitionInputProof proof = {checked->evaluation_only?checked_evaluation_encode:checked_encode,&checked};
+    const TransitionInputProof proof = {checked->evaluation_only?checked_evaluation_encode:checked_encode,&checked,NULL};
     if (status == XR_XIR_OK)
         status = transition_owned(&checked->module, checked->construction, &limits, output, diagnostic, target, &proof);
     xr_xir_compile_artifact_free(checked);
@@ -478,8 +487,12 @@ XR_FUNC XrXirStatus xr_xir_compile_lower_take(XrXirArtifact **owned_input,
 }
 
 static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
-    XrXirEffects **output, const XrXirEffects *source_effects, XrXirDiagnostic *diagnostic) {
-    if (!artifact || (output && (*output || source_effects))) return XR_XIR_BAD_STRUCTURE;
+    XrXirEffects **output, const XrXirEffects *source_effects,
+    XrXirEffects **receiving_effects, XrXirDiagnostic *diagnostic) {
+    if (!artifact || (output && (*output || source_effects || receiving_effects))) return XR_XIR_BAD_STRUCTURE;
+    if(receiving_effects && (!*receiving_effects || artifact->module.stage!=XR_XIR_CHECKED ||
+        (artifact->module.provenance && !xir_effect_kind_is_closed(artifact->module.provenance->kind))))
+        return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
     if (artifact->evaluation_only>1 ||
         !!artifact->evaluation_only!=xir_effect_evidence_is_evaluation(&artifact->module))
         return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
@@ -537,18 +550,24 @@ static XrXirStatus artifact_verify_owned_effects(const XrXirArtifact *artifact,
         if (!source_effects) source_effects=facts->effects;
     }
     XrXirEffects *owned=NULL;
-    XrXirStatus status = output ? xr_xir_compile_verify_receiving_effects_v2(&limits,
+    XrXirStatus status = receiving_effects ? (provenance?
+        xir_compile_verify_receiving_replay(&limits,xr_xir_compile_artifact_module(artifact),
+            artifact->construction,source_effects,*receiving_effects,diagnostic):
+        xir_compile_verify_built_replay(&limits,xr_xir_compile_artifact_module(artifact),
+            artifact->construction,*receiving_effects,diagnostic)) :
+        output ? xr_xir_compile_verify_receiving_effects_v2(&limits,
         xr_xir_compile_artifact_module(artifact),artifact->construction,source_effects,&owned,diagnostic) :
         xr_xir_compile_verify_provenance_effects_v2(&limits,xr_xir_compile_artifact_module(artifact),
             artifact->construction,source_effects,diagnostic);
     if (status != XR_XIR_OK) return status;
+    if(receiving_effects) { xr_xir_compile_effects_free(*receiving_effects);*receiving_effects=NULL; }
     status = xr_xir_compile_layout_match_verified(artifact);
     if (status!=XR_XIR_OK) { xr_xir_compile_effects_free(owned);return transition_error(status,diagnostic); }
     if (output) *output=owned;
     return XR_XIR_OK;
 }
 XrXirStatus xr_xir_compile_artifact_verify(const XrXirArtifact *artifact, XrXirDiagnostic *diagnostic) {
-    return artifact_verify_owned_effects(artifact,NULL,NULL,diagnostic);
+    return artifact_verify_owned_effects(artifact,NULL,NULL,NULL,diagnostic);
 }
 
 /* Raw implementation sources already need full inference. Keep its owner
@@ -558,7 +577,7 @@ XR_FUNC XrXirStatus xir_artifact_verify_raw_source_effects(const XrXirArtifact *
     if(!artifact || !output || *output || artifact->module.stage!=XR_XIR_CHECKED ||
         artifact->module.provenance || !artifact->module.declarations || !artifact->module.declarations->implementations)
         return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
-    return artifact_verify_owned_effects(artifact,output,NULL,diagnostic);
+    return artifact_verify_owned_effects(artifact,output,NULL,NULL,diagnostic);
 }
 
 /* An explicit owning collector still returns a new complete derivation.
@@ -571,5 +590,5 @@ XR_FUNC XrXirStatus xr_xir_compile_artifact_verify_owned_effects(const XrXirArti
     if (!module || module->stage!=XR_XIR_CHECKED) return transition_error(XR_XIR_BAD_STAGE,diagnostic);
     if (!module->provenance || module->provenance->kind!=XR_XIR_EVIDENCE_TEMPLATE)
         return transition_error(XR_XIR_BAD_STRUCTURE,diagnostic);
-    return artifact_verify_owned_effects(artifact,output,NULL,diagnostic);
+    return artifact_verify_owned_effects(artifact,output,NULL,NULL,diagnostic);
 }

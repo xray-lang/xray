@@ -395,10 +395,11 @@ static XrXirStatus effect_body_type_domain_match(const XrXirCompileContext *work
  * retained by the sole type clone. Reinterpreting those same numeric children
  * through a temporary substitution domain constructs no additional evidence.
  * Lowered identity projection still uses its independent semantic matcher. */
-static XrXirStatus effect_body_source_types_match(const XrXirCompileContext *work,
-    const EffectBodyMaterial *body,const XrXirModule *source) {
+static XrXirStatus effect_body_source_types_compare(const XrXirCompileContext *work,
+    const EffectBodyMaterial *body,const XrXirModule *source,bool checked_copy) {
     if (!xir_compile_context_valid(work) || !effect_body_material_shape(body) || !source ||
-        body->resources!=work->resources || source->stage!=body->stage ||
+        body->resources!=work->resources ||
+        (checked_copy?(body->stage!=XR_XIR_BUILT || source->stage!=XR_XIR_CHECKED):source->stage!=body->stage) ||
         source->linkage_kind!=body->linkage_kind ||
         source->function_count!=effect_body_count(body) ||
         (source->function_count && (!source->functions || !body->functions)))
@@ -408,6 +409,11 @@ static XrXirStatus effect_body_source_types_match(const XrXirCompileContext *wor
     XrXirStatus status=effect_body_type_nodes_match(work,body->domain.types,types);
     if (status==XR_XIR_OK) status=effect_body_type_tables_compare(work,body->domain.types,types,NULL);
     return status;
+}
+
+static XrXirStatus effect_body_source_types_match(const XrXirCompileContext *work,
+    const EffectBodyMaterial *body,const XrXirModule *source) {
+    return effect_body_source_types_compare(work,body,source,false);
 }
 
 /* Error/source fresh correspondence retains the complete independent body
@@ -442,6 +448,18 @@ static XrXirStatus effect_body_source_match(const XrXirCompileContext *work,
     XrXirStatus status=effect_body_source_types_match(work,body,source);
     if (status==XR_XIR_OK) status=xir_effect_contract_shape_verify(work,source);
     return status==XR_XIR_OK ? effect_body_rows_match(work,body,source) : status;
+}
+
+/* Only raw Built admission may use this exact receiving stage pair. The
+ * current Checked structure is independently verified by its caller; every
+ * physical field and metadata row still matches the sole owned input. */
+static XrXirStatus effect_body_checked_copy_match(const XrXirCompileContext *work,
+    const EffectBodyMaterial *body,const XrXirModule *source) {
+    if(!source || source->provenance || !effect_body_material_shape(body) ||
+        body->ordinary_identities || body->evidence_kind) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_body_source_types_compare(work,body,source,true);
+    if(status==XR_XIR_OK) status=xir_effect_contract_shape_verify(work,source);
+    return status==XR_XIR_OK?effect_body_rows_match(work,body,source):status;
 }
 
 /* The canonical empty pool has no descriptor owner to validate. All

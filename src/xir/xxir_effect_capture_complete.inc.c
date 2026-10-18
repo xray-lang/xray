@@ -258,7 +258,8 @@ static XrXirStatus effect_capture_complete_value(const EffectCaptureRead *read,
 }
 
 static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
-    EffectBodyCurrentRead *current,EffectCaptureNode *borrowed) {
+    EffectBodyCurrentRead *current,EffectCaptureNode *borrowed,
+    EffectCaptureNode *views,EffectCaptureActualRead *actuals) {
     if(read->final->binding_count>UINT32_MAX-EFFECT_CAPTURE_COMPLETE) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t n=0;n<read->final->count;++n) for(uint32_t value=0;;++value) {
         uint32_t column=0;bool present=false;
@@ -268,6 +269,16 @@ static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
                 XrXirStatus status=effect_body_current_open(read->work,read->final->material,current);
                 if(status!=XR_XIR_OK) return status;
                 read->body.current=current;
+                if(views && actuals) {
+                    if(read->final->count<=32) {
+                        for(uint32_t at=0;at<read->final->count;++at) {
+                            status=effect_capture_node(read,at,&views[at]);if(status!=XR_XIR_OK) return status;
+                        }
+                        read->node_views=views;read->node_view_count=read->final->count;
+                    }
+                    status=effect_capture_actuals_read(read,actuals);if(status!=XR_XIR_OK) return status;
+                    if(actuals->edges) read->actuals=actuals;
+                }
             }
             /* Heads remain borrowed only until an emit can invoke allocation
              * or release. No borrowed field survives that callback boundary. */
@@ -284,6 +295,24 @@ static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
                 end=(uint64_t)node->values+1+node->head.parameter_count;
                 if(value>=end) break;
                 present=true;
+                if(!column) {
+                    uint32_t kind=0;status=effect_capture_kind(read,node,value,&kind,NULL);
+                    if(status!=XR_XIR_OK) return status;
+                    if(kind!=EFFECT_CAPTURE_CALLABLE) {
+                        /* No Complete column belongs to a non-callable value.
+                         * One exact range absence proves every column, using
+                         * the current type and all possible stored flags. */
+                        EffectCaptureFact key={n,value,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_COMPLETE,0};uint32_t at=0;
+                        status=effect_capture_lower(read,&key,&at);if(status!=XR_XIR_OK) return status;
+                        if(at<read->final->capture.count) {
+                            if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+                            const EffectCaptureFact *fact=&read->final->capture.facts[at];
+                            if(fact->node==n && fact->value==value && fact->word==EFFECT_CAPTURE_FLAGS &&
+                                fact->bit>=EFFECT_CAPTURE_COMPLETE) return XR_XIR_BAD_STRUCTURE;
+                        }
+                        break;
+                    }
+                }
                 status=effect_capture_complete_value(read,node,value,column,&result);if(status!=XR_XIR_OK) return status;
             }
             EffectCaptureFact key={n,value,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_COMPLETE+column,result.rank};
@@ -294,6 +323,7 @@ static XrXirStatus effect_capture_complete_walk(EffectCaptureRead *read,
                 bool growing=read->builder && read->builder->count==read->builder->capacity && !stored;
                 if(growing) {
                     read->node_view=NULL;read->body.current=NULL;
+                    read->node_views=NULL;read->node_view_count=0;read->actuals=NULL;
                     *borrowed=(EffectCaptureNode){0};*current=(EffectBodyCurrentRead){0};
                 }
                 status=effect_capture_emit(read,key);if(status!=XR_XIR_OK) return status;
@@ -320,7 +350,23 @@ static XrXirStatus effect_capture_complete_clauses(EffectCaptureRead *read) {
     if(read->builder && (saved_current || saved_node)) return XR_XIR_BAD_STRUCTURE;
     EffectBodyCurrentRead current={0};EffectCaptureNode borrowed={0};
     read->node_view=NULL;
-    XrXirStatus status=effect_capture_complete_walk(read,&current,&borrowed);
+    XrXirStatus status=effect_capture_complete_walk(read,&current,&borrowed,NULL,NULL);
     read->body.current=saved_current;read->node_view=saved_node;
     return status;
+}
+
+/* Only Complete flags change during this construction interval. Source
+ * descriptors therefore remain current until a growing emit invokes a
+ * callback; the walk drops every projection first and rebuilds afterwards. */
+static XrXirStatus effect_capture_complete_construct(EffectCaptureRead *read) {
+    if(!read->builder || read->complete_scope || read->body.current || read->node_view || read->node_views || read->actuals)
+        return XR_XIR_BAD_STRUCTURE;
+    EffectBodyCurrentRead current={0};EffectCaptureNode borrowed={0},views[32];EffectCaptureActualRead actuals;
+    read->complete_scope=true;XrXirStatus status=XR_XIR_OK;
+    do {
+        read->changed=false;
+        status=effect_capture_complete_walk(read,&current,&borrowed,views,&actuals);
+    } while(status==XR_XIR_OK && read->changed);
+    read->complete_scope=false;read->body.current=NULL;read->node_view=NULL;
+    read->node_views=NULL;read->node_view_count=0;read->actuals=NULL;return status;
 }

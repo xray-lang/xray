@@ -17,8 +17,15 @@ typedef struct EffectCaptureActual {
     uint64_t rank;
     bool captured,unbound,opaque,active;
 } EffectCaptureActual;
+struct EffectCaptureActualRead {
+    uint32_t edges,offsets[65];
+    EffectCaptureActual values[64];
+    unsigned char known[64],origin_known[64];
+    uint64_t origin_rank[64];
+    bool origin_present[64];
+};
 
-static XrXirStatus effect_capture_edge_active(const EffectCaptureRead *read,uint32_t selected,
+static XrXirStatus effect_capture_edge_active_current(const EffectCaptureRead *read,uint32_t selected,
     uint64_t *rank,bool *active) {
     const EffectInvocationEdge *edge=&read->final->edges[selected];*rank=0;*active=false;
     if(edge->caller>=read->final->count || edge->target>=read->final->count) return XR_XIR_BAD_STRUCTURE;
@@ -37,6 +44,24 @@ static XrXirStatus effect_capture_edge_active(const EffectCaptureRead *read,uint
     status=effect_capture_find(read,(EffectCaptureFact){edge->caller,value,edge->producer/64,edge->producer%64,0},&fact);
     if(status!=XR_XIR_OK) return status;
     if(fact) { *rank=fact->rank;*active=true; }
+    return XR_XIR_OK;
+}
+/* Presence and rank are current origin data. No actual input row, universal
+ * Complete column or frontier verdict is retained with this projection. */
+static XrXirStatus effect_capture_edge_active(const EffectCaptureRead *read,uint32_t selected,
+    uint64_t *rank,bool *active) {
+    if(!read->actuals) return effect_capture_edge_active_current(read,selected,rank,active);
+    EffectCaptureActualRead *view=read->actuals;
+    if(selected>=view->edges || selected>=XR_COUNTOF(view->origin_known)) return XR_XIR_BAD_STRUCTURE;
+    if(!xir_compile_work(read->work,sizeof(unsigned char))) return XR_XIR_BUDGET;
+    if(view->origin_known[selected]) {
+        if(!xir_compile_work(read->work,sizeof(*rank)+sizeof(*active))) return XR_XIR_BUDGET;
+        *rank=view->origin_rank[selected];*active=view->origin_present[selected];return XR_XIR_OK;
+    }
+    XrXirStatus status=effect_capture_edge_active_current(read,selected,rank,active);
+    if(status!=XR_XIR_OK) return status;
+    if(!xir_compile_work(read->work,sizeof(*rank)+sizeof(*active)+sizeof(unsigned char))) return XR_XIR_BUDGET;
+    view->origin_rank[selected]=*rank;view->origin_present[selected]=*active;view->origin_known[selected]=1;
     return XR_XIR_OK;
 }
 static XrXirStatus effect_capture_argument_bound(const EffectCaptureRead *read,
@@ -68,7 +93,7 @@ static XrXirStatus effect_capture_argument_bound(const EffectCaptureRead *read,
     if(ref) actual->mask&=XR_XIR_CALLABLE_ROOT_REQUIRED;
     return XR_XIR_OK;
 }
-static XrXirStatus effect_capture_actual(const EffectCaptureRead *read,uint32_t selected,
+static XrXirStatus effect_capture_actual_current(const EffectCaptureRead *read,uint32_t selected,
     uint32_t parameter,EffectCaptureActual *output) {
     const EffectInvocationEdge *edge=&read->final->edges[selected];
     EffectCaptureNode caller_storage={0};
@@ -128,6 +153,50 @@ static XrXirStatus effect_capture_actual(const EffectCaptureRead *read,uint32_t 
     if(!xir_compile_work(read->work,sizeof(actual))) return XR_XIR_BUDGET;
     *output=actual;return XR_XIR_OK;
 }
+/* The table holds current source coordinates and rank facts, never an edge
+ * acceptance. Every initial-row, support and frontier consumer independently
+ * checks its own required bits and equations against these projections.
+ * First reads retain their original order; only successful data projections
+ * are materialized, and no failed read or permission verdict is retained. */
+static XrXirStatus effect_capture_actual(const EffectCaptureRead *read,uint32_t selected,
+    uint32_t parameter,EffectCaptureActual *output) {
+    if(read->actuals) {
+        EffectCaptureActualRead *view=read->actuals;
+        if(!output || selected>=view->edges || view->offsets[selected]>view->offsets[selected+1] ||
+            parameter>=view->offsets[selected+1]-view->offsets[selected] || view->offsets[selected+1]>XR_COUNTOF(view->values))
+            return XR_XIR_BAD_STRUCTURE;
+        uint32_t at=view->offsets[selected]+parameter;
+        if(!xir_compile_work(read->work,sizeof(unsigned char))) return XR_XIR_BUDGET;
+        if(view->known[at]) {
+            if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
+            *output=view->values[at];return XR_XIR_OK;
+        }
+        XrXirStatus status=effect_capture_actual_current(read,selected,parameter,output);
+        if(status!=XR_XIR_OK) return status;
+        if(!xir_compile_work(read->work,sizeof(*output)+sizeof(unsigned char))) return XR_XIR_BUDGET;
+        view->values[at]=*output;view->known[at]=1;return XR_XIR_OK;
+    }
+    return effect_capture_actual_current(read,selected,parameter,output);
+}
+static XrXirStatus effect_capture_actuals_read(EffectCaptureRead *read,EffectCaptureActualRead *output) {
+    if(!output || read->actuals || (read->builder && !read->complete_scope) || !read->body.current || read->fixed_only) return XR_XIR_BAD_STRUCTURE;
+    output->edges=0;
+    if(read->final->edge_count>=XR_COUNTOF(output->offsets)) return XR_XIR_OK;
+    uint32_t count=0;output->offsets[0]=0;
+    for(uint32_t e=0;e<read->final->edge_count;++e) {
+        if(!xir_compile_work(read->work,3+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        const EffectInvocationEdge *edge=&read->final->edges[e];
+        EffectCaptureNode storage={0};const EffectCaptureNode *target=NULL;
+        XrXirStatus status=effect_capture_node_borrow(read,edge->target,&storage,&target);
+        if(status!=XR_XIR_OK) return status;
+        if(target->head.parameter_count>XR_COUNTOF(output->values)-count) return XR_XIR_OK;
+        count+=target->head.parameter_count;output->offsets[e+1]=count;
+    }
+    if(!xir_compile_work(read->work,sizeof(output->known)+sizeof(output->origin_known))) return XR_XIR_BUDGET;
+    memset(output->known,0,sizeof(output->known));memset(output->origin_known,0,sizeof(output->origin_known));
+    output->edges=read->final->edge_count;return XR_XIR_OK;
+}
+
 
 /* Nested columns need one actual non-leaf origin as well as their own source
  * fact. Empty prefixes wait during construction and cannot close a real use. */
@@ -302,7 +371,7 @@ static XrXirStatus effect_capture_results(EffectCaptureRead *read,uint32_t selec
         if(read->selected && caller->head.parameter_count+i!=read->selected->value) continue;
         if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
         XrXirInstruction storage;const XrXirInstruction *op=NULL;
-        status=effect_body_request_instruction(&read->body,read->final->nodes[edge->caller].body,i,&storage,&op);
+        status=effect_body_request_operation(&read->body,read->final->nodes[edge->caller].body,i,&storage,&op);
         if(status!=XR_XIR_OK) return status;
         bool result=(op->op==XR_XIR_INVOKE_RESULT && op->immediate==(int64_t)edge->instruction) ||
             (i==edge->instruction && (op->op==XR_XIR_CALL || op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_CALL_INDIRECT));
@@ -364,23 +433,43 @@ static XrXirStatus effect_capture_results(EffectCaptureRead *read,uint32_t selec
     }
     return XR_XIR_OK;
 }
+static XrXirStatus effect_capture_edge_clauses(EffectCaptureRead *read,uint32_t e) {
+    if(e>=read->final->edge_count) return XR_XIR_BAD_STRUCTURE;
+    if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+    const EffectInvocationEdge *edge=&read->final->edges[e];
+    if(edge->caller>=read->final->count || edge->target>=read->final->count ||
+        read->final->nodes[edge->caller].root!=read->final->nodes[edge->target].root) return XR_XIR_BAD_STRUCTURE;
+    if(!read->selected || read->selected->node==edge->target) {
+        EffectCaptureNode storage={0};const EffectCaptureNode *target=NULL;
+        XrXirStatus status=effect_capture_node_borrow(read,edge->target,&storage,&target);
+        if(status!=XR_XIR_OK) return status;
+        for(uint32_t p=0;p<target->head.parameter_count;++p) {
+            if(read->selected && read->selected->value!=target->values+1+p) continue;
+            status=effect_capture_argument(read,e,p);if(status!=XR_XIR_OK) return status;
+        }
+    }
+    return effect_capture_results(read,e);
+}
+/* Heads describe the current Input, not capture facts. Only an edge-local
+ * constructor interval borrows them, and an emitting growth clears this loan
+ * before it can invoke a callback. Later reads reopen the actual heads. */
+static XrXirStatus effect_capture_edge(EffectCaptureRead *read,uint32_t e) {
+    if(read->edge_views || e>=read->final->edge_count) return XR_XIR_BAD_STRUCTURE;
+    EffectCaptureNode views[2];XrXirStatus status=XR_XIR_OK;
+    if(read->builder && !read->node_views) {
+        const EffectInvocationEdge *edge=&read->final->edges[e];
+        status=effect_capture_node(read,edge->caller,&views[0]);
+        if(status==XR_XIR_OK) status=effect_capture_node(read,edge->target,&views[1]);
+        if(status!=XR_XIR_OK) return status;
+        read->edge_views=views;read->edge_view_count=2;
+    }
+    status=effect_capture_edge_clauses(read,e);
+    read->edge_views=NULL;read->edge_view_count=0;return status;
+}
 static XrXirStatus effect_capture_edges(EffectCaptureRead *read) {
     for(uint32_t e=0;e<read->final->edge_count;++e) {
         if(read->selected && read->supported) return XR_XIR_OK;
-        if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
-        const EffectInvocationEdge *edge=&read->final->edges[e];
-        if(edge->caller>=read->final->count || edge->target>=read->final->count ||
-            read->final->nodes[edge->caller].root!=read->final->nodes[edge->target].root) return XR_XIR_BAD_STRUCTURE;
-        if(!read->selected || read->selected->node==edge->target) {
-            EffectCaptureNode storage={0};const EffectCaptureNode *target=NULL;
-            XrXirStatus status=effect_capture_node_borrow(read,edge->target,&storage,&target);
-            if(status!=XR_XIR_OK) return status;
-            for(uint32_t p=0;p<target->head.parameter_count;++p) {
-                if(read->selected && read->selected->value!=target->values+1+p) continue;
-                status=effect_capture_argument(read,e,p);if(status!=XR_XIR_OK) return status;
-            }
-        }
-        XrXirStatus status=effect_capture_results(read,e);if(status!=XR_XIR_OK) return status;
+        XrXirStatus status=effect_capture_edge(read,e);if(status!=XR_XIR_OK) return status;
     }
     return XR_XIR_OK;
 }
