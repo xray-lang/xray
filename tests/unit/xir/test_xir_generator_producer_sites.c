@@ -66,7 +66,9 @@ static void generator_site_rejected(const XrXirCompileContext *context,XrXirEffe
 }
 static XrXirStatus generator_site_replay(const XrXirCompileContext *context,XrXirEffects *effects) {
     EffectInvocationRead read={0};EffectInvocationCertificate *certificate=effects->invocations;
-    XrXirStatus status=effect_invocation_read_open(context,certificate,certificate->final,&read);
+    /* Complete metadata admission belongs to the current Final inventory. */
+    XrXirStatus status=effect_final_inventory_match(context,certificate->body,certificate->final);
+    if (status==XR_XIR_OK) status=effect_invocation_read_open(context,certificate,certificate->final,&read);
     effect_invocation_read_close(&read);return status;
 }
 static void generator_site_attacks(const XrXirCompileContext *context,XrXirEffects *effects,
