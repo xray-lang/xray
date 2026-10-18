@@ -74,7 +74,7 @@ static XrXirStatus ordering_checked_pipeline(const XrXirCompileContext *context,
         {.name="root_init",.name_length=9,.blocks=&unit_block,.block_count=1,.instructions=&unit,.instruction_count=1,.result=XR_XIR_UNIT},
         {.name="ordering_init",.name_length=13,.blocks=&unit_block,.block_count=1,.instructions=&unit,.instruction_count=1,.result=XR_XIR_UNIT},
         {.name="main",.name_length=4,.blocks=&main_block,.block_count=1,.instructions=main_ops,.instruction_count=2,.result=XR_XIR_I64}};
-    uint32_t dependency=1;XrXirSourceModule modules[2]={{"root",4,&dependency,1,0},{name,0,NULL,0,1}};
+    uint32_t dependency=1;XrXirSourceModule modules[2]={{"root",4,&dependency,1,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{name,0,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity identities[3]={{.module=0},{.module=1},{.module=0,.exported=1}};
     XrXirDeclarations declarations={.modules=modules,.module_count=2,.functions=identities,.root_module=0,.entry_function=2};
     XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,.declarations=&declarations,

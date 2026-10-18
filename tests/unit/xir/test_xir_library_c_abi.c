@@ -42,8 +42,8 @@ int main(void) {
                          "module-id-v1:kind=6:script:namespace=0::path=4:b.xr"};
     uint32_t dependency=1;
     XrXirSourceModule modules[]={
-        {names[0],(uint32_t)strlen(names[0]),&dependency,1,0},
-        {names[1],(uint32_t)strlen(names[1]),NULL,0,1}};
+        {names[0],(uint32_t)strlen(names[0]),&dependency,1,0, 0,XR_XIR_MODULE_FRESH_STORAGE},
+        {names[1],(uint32_t)strlen(names[1]),NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     const XrXirInstruction ops[]={{XR_XIR_RETURN,XR_XIR_UNIT,{0,0},{0,0},0,{0,0}}};
     const XrXirBlock block={0,1,0,0};
     const XrXirFunction functions[]={

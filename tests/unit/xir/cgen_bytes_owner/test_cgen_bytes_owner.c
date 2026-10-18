@@ -79,7 +79,7 @@ static void public_output(void) {
     const XrXirFunction functions[]={
         {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,init,1,NULL,0},
         {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,main_ops,2,NULL,0}};
-    const XrXirSourceModule source={"bytes",5,NULL,0,0};
+    const XrXirSourceModule source={"bytes",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[2]={{0},{0}};
     const XrXirLiteral literals[]={{payload,sizeof(payload)},{"",0}};
     const XrXirDeclarations declarations={&source,1,identities,NULL,0,literals,2,0,1,NULL};

@@ -95,7 +95,7 @@ set_tests_properties(test_xir_p11_comptime_instances_controls PROPERTIES TIMEOUT
 add_test(NAME test_xir_p11_comptime_binding COMMAND test_xir_p11_ctfe_instance binding)
 add_test(NAME test_xir_p11_comptime_binding_controls COMMAND test_xir_p11_ctfe_instance binding-controls)
 add_test(NAME test_xir_p11_comptime_binding_wire COMMAND test_xir_p11_ctfe_instance binding-wire)
-add_test(NAME test_xir_p11_comptime_binding_wire_model COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../derive_binding75_vector.py" --source-root "${PROJECT_SOURCE_DIR}" --output-root "${PROJECT_SOURCE_DIR}")
+add_test(NAME test_xir_p11_comptime_binding_wire_model COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../derive_combined_wire.py" --source-root "${PROJECT_SOURCE_DIR}" --output-root "${PROJECT_SOURCE_DIR}")
 set_tests_properties(test_xir_p11_comptime_binding_wire test_xir_p11_comptime_binding_wire_model PROPERTIES TIMEOUT 30)
 add_test(NAME test_xir_p11_comptime_binding_tamper COMMAND test_xir_p11_ctfe_instance binding-tamper)
 add_test(NAME test_xir_p11_comptime_binding_prefix COMMAND test_xir_p11_ctfe_instance binding-prefix)

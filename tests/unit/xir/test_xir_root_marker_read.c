@@ -42,7 +42,7 @@ static void mr_fixture(MarkerReadFixture *f,bool non_sendable) {
         .instruction_count=at,.blocks=&f->blocks[0],.block_count=1};
     f->functions[1]=(XrXirFunction){.name="read",.name_length=4,.result=XR_XIR_I64,.instructions=f->read,
         .instruction_count=3,.blocks=&f->blocks[1],.block_count=1};
-    f->source=(XrXirSourceModule){"marker",6,NULL,0,0};f->slot=(XrXirSlot){.type=type};
+    f->source=(XrXirSourceModule){.name="marker",.name_length=6};f->slot=(XrXirSlot){.type=type};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .slots=&f->slot,.slot_count=1,.root_module=0,.entry_function=1};
     f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=2,

@@ -31,6 +31,8 @@ struct AstNode;
 struct XrModule;
 struct XrCompilerSession;
 struct XrVMRuntime;
+struct XrXirSourceHistoryUnit;
+enum { XR_MODULE_GRAPH_MAX_MODULES = 1024 };
 
 /* ========== Module Spec Status ========== */
 
@@ -53,12 +55,15 @@ typedef struct XrModuleSpec {
     XrModuleKind kind;    /* stdlib / file / package */
     XrModuleRepresentation representation;
     const XrModuleResourceBinding *resource; /* Catalog outlives this graph. */
+    const struct XrXirSourceHistoryUnit *history; /* Exact owned Source record; never a Catalog binding. */
+    uint32_t history_module;
     XrModuleIdentityAuthority authority; /* Owned typed authority */
     bool embedded_source; /* source_path is a diagnostic-only embedded stdlib path */
-    XrFingerprint source_content_fingerprint; /* Full source bytes; never a locator */
+    XrFingerprint source_content_fingerprint; /* Source bytes; zero when only an AST was supplied. */
     XrModSpecStatus status;
 
-    struct AstNode *ast; /* Parsed AST (owned; freed via xr_program_destroy) */
+    struct AstNode *ast; /* Owned unless ast_borrowed; never moved within its arena. */
+    bool ast_borrowed; /* Synchronous caller-owned entry; imports remain graph-owned. */
 
     /* Dependency edges: indices into XrModuleGraph.specs[] */
     int *dep_indices; /* Array of spec indices this module imports from */
@@ -81,14 +86,18 @@ typedef struct XrModuleSpec {
 
 /* ========== Module Graph ========== */
 
-typedef struct XrModuleParseDiagnostic {
+typedef enum XrModuleSourceDiagnosticOrigin {
+    XR_MODULE_DIAGNOSTIC_PARSE, XR_MODULE_DIAGNOSTIC_INPUT
+} XrModuleSourceDiagnosticOrigin;
+typedef struct XrModuleSourceDiagnostic {
     bool present;
+    XrModuleSourceDiagnosticOrigin origin;
     uint32_t module;
     int line, column;
     char message[192];
     bool has_utf16_position;
     XrModuleSourcePosition utf16_position;
-} XrModuleParseDiagnostic;
+} XrModuleSourceDiagnostic;
 
 typedef struct XrModuleGraph {
     XrCompileResources *resources; /* Shared with the borrowed session and resolver. */
@@ -121,9 +130,6 @@ typedef struct XrModuleGraph {
     /* Compiler session used for parsing graph sources. */
     struct XrCompilerSession *compiler_session;
 
-    /* Caller-owned entry syntax, borrowed until graph destruction. */
-    struct AstNode *borrowed_entry_ast;
-
     /* Optional VM host association; compiler-only graphs leave this NULL. */
     struct XrVMRuntime *X;
 
@@ -131,9 +137,9 @@ typedef struct XrModuleGraph {
     int entry_index;
     /* Failure remains observable even when allocating its diagnostic fails. */
     XrModuleStatus resolution_status;
-    /* First parser callback, copied on the same ledger before parser teardown.
+    /* First parser or input failure, copied on the original ledger.
      * Its module selects this graph's independently owned source_path. */
-    XrModuleParseDiagnostic parse_diagnostic;
+    XrModuleSourceDiagnostic source_diagnostic;
 } XrModuleGraph;
 
 /* ========== API ========== */
@@ -186,10 +192,11 @@ typedef struct XrModuleSourceAstInput {
     const char *source;
     struct AstNode *program;
 } XrModuleSourceAstInput;
-/* Borrow an already-parsed entry on the exact parser state. The graph never
+/* Borrow an already-parsed entry on the exact active parser state, or a
+ * detached owning AST retaining the same original ledger. The graph never
  * destroys this entry; the caller keeps its arena and source stable until graph
  * destruction. Imports still use ordinary resolution and owned parsing. Source
- * bytes provide diagnostic provenance; the supplied tree is the syntax input.
+ * optional bytes provide diagnostic provenance; the supplied tree is the syntax input.
  * Failure leaves the tree with the caller and any partial discovery in graph. */
 XR_FUNC XrModuleStatus xr_compile_module_graph_build_ast(XrModuleGraph *graph,
     const XrModuleSourceAstInput *input, char **out_err);

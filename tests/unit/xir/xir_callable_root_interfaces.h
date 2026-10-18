@@ -13,30 +13,38 @@
 static XrXirStatus bound_implementation(const XrXirCompileContext *context,
     uint32_t flags,bool rooted,XrXirArtifact **output,XrXirDiagnostic *diagnostic) {
     XrXirType receiver=XR_XIR_CONSTRUCTED_TYPE_BASE;
+    const XrXirType cell_type=(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+2);
     XrXirTypeNode nodes[]={{.kind=XR_XIR_TYPE_NOMINAL},
-        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=flags}};
+        {.kind=XR_XIR_TYPE_CALLABLE,.result=XR_XIR_I64,.flags=flags},
+        {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_I64}};
     XrXirNominalDeclaration nominal={{"alpha",5},{"Meter",5},1,NULL,0,NULL,0,XR_XIR_NOMINAL_STRUCT,NULL,0,0,{0}};
     XrXirNominalTable nominals={&nominal,1,NULL};
     XrXirInterfaceMethod method={{"measure",7},(XrXirType)(XR_XIR_CONSTRUCTED_TYPE_BASE+1),0,0,NULL};
     XrXirInterfaceDeclaration interface={{"alpha",5},{"Measure",7},1,NULL,0,NULL,0,&method,1};
-    XrXirInterfaceTable interfaces={&interface,1};XrXirTypes types={nodes,2,&nominals,&interfaces};
+    XrXirInterfaceTable interfaces={&interface,1};XrXirTypes types={nodes,3,&nominals,&interfaces};
     XrXirInstruction init[]={
-        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7}, {.op=XR_XIR_SLOT_INIT,.args={0,0}}, {.op=XR_XIR_RETURN}};
+        {.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=7},
+        {.op=XR_XIR_CELL_NEW,.type=cell_type,.args={0,0}},
+        {.op=XR_XIR_SLOT_INIT,.args={1,0}}, {.op=XR_XIR_RETURN}};
     XrXirInstruction answer[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=41}, {.op=XR_XIR_RETURN,.args={0,0}}};
-    XrXirInstruction measure[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=41}, {.op=XR_XIR_RETURN,.args={1,0}}};
-    if(rooted)measure[0]=(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=XR_XIR_I64};
-    XrXirBlock two={.count=2},three={.count=3};
+    XrXirInstruction measure[]={{.op=XR_XIR_CONST_INT,.type=XR_XIR_I64,.immediate=41},
+        {.op=XR_XIR_RETURN,.args={1,0}}, {.op=XR_XIR_RETURN,.args={2,0}}};
+    if(rooted) {
+        measure[0]=(XrXirInstruction){.op=XR_XIR_SLOT_LOAD,.type=cell_type};
+        measure[1]=(XrXirInstruction){.op=XR_XIR_CELL_READ,.type=XR_XIR_I64,.args={1,0}};
+    }
+    XrXirBlock two={.count=2},four={.count=4},method_block={.count=rooted?3u:2u};
     XrXirFunction functions[]={
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,answer,2,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&three,1,init,3,NULL,0},
         {"measure",7,&receiver,1,XR_XIR_I64,&two,1,measure,2,NULL,0}};
-    XrXirSourceModule source={"alpha",5,NULL,0,1};
+    XrXirSourceModule source={"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[3]={{0}};
     identities[2].exported=1;identities[2].nominal_owner=1;identities[2].method_kind=XR_XIR_READ_METHOD;
     if(flags&1)identities[2].promises=XR_XIR_FUNCTION_NO_SUSPEND;
     XrXirImplementationBinding binding={{0,NULL,0},0,2};
     XrXirImplementation implementation={0,{0,NULL,0},&binding,1};XrXirImplementationTable table={&implementation,1};
-    XrXirSlot slot={0,XR_XIR_I64,1};
+    XrXirSlot slot={0,cell_type,1};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=0,.implementations=&table};
     XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
@@ -58,7 +66,7 @@ static XrXirStatus bound_requirement(const XrXirCompileContext *context,uint32_t
         {"caller",6,&parameter,1,XR_XIR_I64,&two,1,call,2,&operand,1}};
     XrXirInterfaceApplication application={0,NULL,0};XrXirConstraint constraint={0,&application,1};
     XrXirGeneric generics[3]={{0}};generics[2].constraints=&constraint;generics[2].parameter_count=1;
-    XrXirSourceModule source={"alpha",5,NULL,0,1};XrXirFunctionIdentity identities[3]={{0}};
+    XrXirSourceModule source={"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirFunctionIdentity identities[3]={{0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=0};
     XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,generics,&types,NULL,XR_XIR_PROGRAM,NULL};
     return xir_fixture_check(context, &module, output, diagnostic);
@@ -79,7 +87,7 @@ static XrXirStatus bound_invoke(const XrXirCompileContext *context,uint32_t flag
         {"entry",5,NULL,0,XR_XIR_I64,&two,1,answer,2,NULL,0},
         {"init",4,NULL,0,XR_XIR_UNIT,&one,1,&init,1,NULL,0},
         {"caller",6,&parameter,1,XR_XIR_I64,blocks,3,call,6,NULL,0}};
-    XrXirSourceModule source={"alpha",5,NULL,0,1};XrXirFunctionIdentity identities[3]={{0}};
+    XrXirSourceModule source={"alpha",5,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirFunctionIdentity identities[3]={{0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=0};
     XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,&types,NULL,XR_XIR_PROGRAM,NULL};
     return xir_fixture_check(context, &module, output, diagnostic);
@@ -106,12 +114,18 @@ static void bound_interfaces(void) {
             XrXirEffectFacts root_read=xr_xir_effects_read(effects,2);
             const XrXirRootEffects *root=(root_read.status==XR_XIR_OK?&root_read.root:NULL);CHECK(root);
             CHECK(root->requires_root==known[n] && root->unresolved==unknown[n]);
+            const XrXirFunctionEffectContract *contract=xir_effects_contract(effects,2);
+            CHECK(contract && contract->formula.constant_mask==((known[n]?4u:0u)|(invoke && unknown[n]?8u:0u)));
+            CHECK(contract->formula.term_count==(!invoke && unknown[n]?1u:0u));
+            if(!invoke && unknown[n])CHECK(contract->formula.terms &&
+                contract->formula.terms[0].kind==XR_XIR_ROOT_TERM_CONTEXT_CALL && !contract->formula.terms[0].index);
             XrXirEffectFacts k_read=xr_xir_effects_read(effects,2);
             const XrXirRootEffectWitness *k=(k_read.status==XR_XIR_OK && k_read.root_witness.cause!=0?&k_read.root_witness:NULL);XrXirEffectFacts u_read=xr_xir_effects_read(effects,2);
             const XrXirRootEffectWitness *u=(u_read.status==XR_XIR_OK && u_read.unresolved_witness.cause!=0?&u_read.unresolved_witness:NULL);
             CHECK((k!=NULL)==known[n] && (u!=NULL)==unknown[n]);
             if(k)CHECK(k->instruction==0 && k->cause==(invoke?XR_XIR_ROOT_CAUSE_INDIRECT:XR_XIR_ROOT_CAUSE_REQUIREMENT));
-            if(u)CHECK(u->instruction==0 && u->cause==(invoke?XR_XIR_ROOT_CAUSE_INDIRECT:XR_XIR_ROOT_CAUSE_REQUIREMENT));
+            if(u)CHECK(u->instruction==0 && u->cause==(invoke?XR_XIR_ROOT_CAUSE_INDIRECT:XR_XIR_ROOT_CAUSE_CONTEXT_CALL) &&
+                u->callee==UINT32_MAX && u->slot==UINT32_MAX && !u->distance);
             XrXirRootCauseTrace *trace=NULL;
             CHECK(xr_xir_compile_root_cause_trace_copy(&context,effects,2,&trace)==XR_XIR_OK && trace);
             xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);
@@ -124,7 +138,8 @@ static void bound_interfaces(void) {
                 CHECK(count==(present?1u:0u) && (steps!=NULL)==present);
                 if(present)CHECK(steps[0].function==2 && steps[0].instruction==0 &&
                     steps[0].callee==UINT32_MAX && steps[0].slot==UINT32_MAX && steps[0].distance==0 &&
-                    steps[0].cause==(invoke?XR_XIR_ROOT_CAUSE_INDIRECT:XR_XIR_ROOT_CAUSE_REQUIREMENT));
+                    steps[0].cause==(chain?(invoke?XR_XIR_ROOT_CAUSE_INDIRECT:XR_XIR_ROOT_CAUSE_CONTEXT_CALL):
+                        (invoke?XR_XIR_ROOT_CAUSE_INDIRECT:XR_XIR_ROOT_CAUSE_REQUIREMENT)));
             }
             xr_xir_compile_root_cause_trace_free(trace);
         }

@@ -73,6 +73,36 @@ static int module_name_compare(const XrXirSourceModule *a, const XrXirSourceModu
     int order = memcmp(a->name, b->name, count);
     return order ? order : a->name_length < b->name_length ? -1 : a->name_length != b->name_length;
 }
+XR_FUNC bool xr_xir_module_same_scope(const XrXirDeclarations *d, uint32_t from, uint32_t target) {
+    if (!d || !d->modules || from >= d->module_count || target >= d->module_count) return false;
+    uint32_t a = d->modules[from].lexical_scope, b = d->modules[target].lexical_scope;
+    if (a > d->module_count || b > d->module_count) return false;
+    if (a && d->modules[a - 1].lexical_scope) return false;
+    if (b && d->modules[b - 1].lexical_scope) return false;
+    return (a ? a - 1 : from) == (b ? b - 1 : target);
+}
+XR_FUNC XrXirStatus xr_xir_compile_declarations_active(const XrXirCompileContext *context,
+    const XrXirDeclarations *d,uint32_t *order,uint8_t *active,uint32_t *count) {
+    if(!xir_compile_context_valid(context) || !d || !d->module_count || !d->modules || !order || !active || !count || *count ||
+        d->root_module>=d->module_count)return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=xr_xir_compile_declarations_order(context,d,order);
+    if(status!=XR_XIR_OK)return status;
+    active[d->root_module]=1;
+    for(uint32_t i=d->module_count;i>0;--i) {
+        if(!xir_compile_work(context,1))return XR_XIR_BUDGET;
+        uint32_t id=order[i-1];if(!active[id])continue;
+        const XrXirSourceModule *module=&d->modules[id];
+        for(uint32_t dep=0;dep<module->dependency_count;++dep) {
+            if(!xir_compile_work(context,1))return XR_XIR_BUDGET;
+            active[module->dependencies[dep]]=1;
+        }
+    }
+    for(uint32_t i=0;i<d->module_count;++i) {
+        if(!xir_compile_work(context,1))return XR_XIR_BUDGET;
+        uint32_t id=order[i];if(active[id])order[(*count)++]=id;
+    }
+    return XR_XIR_OK;
+}
 bool xr_xir_module_imports(const XrXirDeclarations *d, uint32_t from, uint32_t target) {
     if (from == target) return true;
     const XrXirSourceModule *module = &d->modules[from];
@@ -98,9 +128,13 @@ XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext *compile
             if (done[m]) continue;
             bool ready = true;
             const XrXirSourceModule *module = &d->modules[m];
+            if((module->name_length && !module->name) || module->dependency_count>d->module_count ||
+                (module->dependency_count && !module->dependencies)){status=XR_XIR_BAD_STRUCTURE;goto finish;}
             for (uint32_t i = 0; i < module->dependency_count; ++i) {
                 if (!xir_compile_work(work, 1)) { status = XR_XIR_BUDGET; goto finish; }
-                if (!done[module->dependencies[i]]) ready = false;
+                uint32_t dependency=module->dependencies[i];
+                if(dependency>=d->module_count){status=XR_XIR_BAD_STRUCTURE;goto finish;}
+                if (!done[dependency]) ready = false;
             }
             if (ready) {
                 if (!xir_compile_work(work, module->name_length)) { status = XR_XIR_BUDGET; goto finish; }
@@ -128,6 +162,9 @@ static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t func
         if (!(module->name_length + (uint64_t) module->dependency_count * 4 <= SIZE_MAX) ||
             !xir_compile_work(work, module->name_length + (uint64_t) module->dependency_count + m + 1))
             return XR_XIR_BUDGET;
+        if (module->lexical_scope > d->module_count ||
+            (module->lexical_scope && (module->lexical_scope == m + 1 ||
+                d->modules[module->lexical_scope - 1].lexical_scope))) return XR_XIR_BAD_STRUCTURE;
         if (!module->name || !module->name_length || module->initializer >= functions ||
             (module->dependency_count && !module->dependencies) || module->dependency_count >= d->module_count ||
             memchr(module->name, 0, module->name_length) ||
@@ -135,6 +172,7 @@ static XrXirStatus declaration_modules(const XrXirDeclarations *d, uint32_t func
             return XR_XIR_BAD_STRUCTURE;
         if (d->functions[module->initializer].module != m || d->functions[module->initializer].exported ||
             d->functions[module->initializer].test_role ||
+            (d->functions[module->initializer].promises & XR_XIR_FUNCTION_GENERATOR) ||
             d->functions[module->initializer].nominal_owner || module->initializer == d->entry_function) return XR_XIR_BAD_STRUCTURE;
         for (uint32_t p = 0; p < m; ++p) {
             if (!xir_compile_work(work, module->name_length)) return XR_XIR_BUDGET;
@@ -178,11 +216,21 @@ XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext *compil
             d->functions[i].test_timeout_seconds > INT_MAX ||
             (d->functions[i].test_role && (d->functions[i].nominal_owner || d->functions[i].cleanup_owner)) ||
             (!!d->functions[i].nominal_owner != (d->functions[i].method_kind != XR_XIR_NON_MEMBER)) ||
-            (d->functions[i].promises & ~XR_XIR_FUNCTION_NO_SUSPEND)) return XR_XIR_BAD_STRUCTURE;
+            (d->functions[i].promises & ~(XR_XIR_FUNCTION_NO_SUSPEND | XR_XIR_FUNCTION_GENERATOR)) ||
+            ((d->functions[i].promises & XR_XIR_FUNCTION_GENERATOR) &&
+             (d->functions[i].cleanup_owner || d->functions[i].test_role ||
+              (d->functions[i].promises & XR_XIR_FUNCTION_NO_SUSPEND)))) return XR_XIR_BAD_STRUCTURE;
     if (kind == XR_XIR_PROGRAM && (d->functions[d->entry_function].module != d->root_module ||
-        d->functions[d->entry_function].nominal_owner || d->functions[d->entry_function].test_role)) return XR_XIR_BAD_STRUCTURE;
+        d->functions[d->entry_function].nominal_owner || d->functions[d->entry_function].test_role ||
+        (d->functions[d->entry_function].promises & XR_XIR_FUNCTION_GENERATOR))) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status = declaration_modules(d, functions, work);
     if (status != XR_XIR_OK) return status;
+    for (uint32_t m=0;m<d->module_count;++m) {
+        if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        if (d->modules[m].storage>XR_XIR_MODULE_BIRTH_STORAGE ||
+            (d->modules[m].storage==XR_XIR_MODULE_BIRTH_STORAGE &&
+                (kind!=XR_XIR_PROGRAM || m==d->root_module))) return XR_XIR_BAD_STRUCTURE;
+    }
     for (uint32_t i = 0; i < functions; ++i) {
         const XrXirFunctionIdentity *identity = &d->functions[i];
         if (identity->cleanup_owner) {

@@ -41,7 +41,7 @@ static void class_array_core_cases(void){
  XrXirBlock blocks[]={{0,1,0,0},{0,2,0,0},{0,3,0,0}};
  XrXirFunction functions[]={ {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0}, {"new",3,cp,2,ct,&blocks[1],1,ctor,2,operands,2}, {"replace",7,ap,2,(XrXirType)256,&blocks[2],1,add,3,NULL,0}, {"entry",5,NULL,0,XR_XIR_I64,&entryblock,1,entry,2,NULL,0}};
  XrXirFunctionIdentity ids[]={{0},{.nominal_owner=1,.method_kind=XR_XIR_CONSTRUCTOR},{.nominal_owner=1,.method_kind=XR_XIR_READ_METHOD},{0}};
- XrXirLiteral text={"counter",7};XrXirSourceModule sm={"root",4,NULL,0,0};XrXirDeclarations ds={.modules=&sm,.module_count=1,.functions=ids,.entry_function=3,.literals=&text,.literal_count=1};
+ XrXirLiteral text={"counter",7};XrXirSourceModule sm={"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirDeclarations ds={.modules=&sm,.module_count=1,.functions=ids,.entry_function=3,.literals=&text,.literal_count=1};
  XrXirModule m={XR_XIR_BUILT,functions,4,&ds,NULL,&types,NULL, XR_XIR_PROGRAM, NULL};XrXirDiagnostic d;XrXirStatus s=xir_fixture_verify(&stage_context, &m, &d);
  if(s!=XR_XIR_OK)fprintf(stderr,"class array core status %u fn %u block %u instruction %u reason %u\n",s,d.function,d.block,d.instruction,d.reason);
  CLASS_CHECK(s==XR_XIR_OK);
@@ -54,7 +54,7 @@ static void class_array_core_cases(void){
  CLASS_CHECK(xr_xir_compile_storage_layouts(&budget, xr_xir_compile_artifact_module(lowered)->types, &target, layouts, 3)==XR_XIR_OK);
  CLASS_CHECK(layouts[2].value.size==8 && layouts[2].body.size==16 && offsets[0]==0 && offsets[1]==8);
  decl.flags=0;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_OK);
- decl.flags=XR_XIR_NOMINAL_FINAL<<1;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_STRUCTURE);decl.flags=XR_XIR_NOMINAL_FINAL;
+ decl.flags=XR_XIR_NOMINAL_SENDABLE<<1;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_STRUCTURE);decl.flags=XR_XIR_NOMINAL_FINAL;
  fields[0].flags=XR_XIR_FIELD_PRIVATE;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_TYPE);fields[0].flags|=XR_XIR_FIELD_MUTABLE;
  ids[2].nominal_owner=0;ids[2].method_kind=XR_XIR_NON_MEMBER;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_TYPE);ids[2].nominal_owner=1;ids[2].method_kind=XR_XIR_READ_METHOD;
  add[0].immediate=2;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_STRUCTURE);add[0].immediate=0;
@@ -65,7 +65,7 @@ static void class_array_core_cases(void){
  ctor[0].args[1]=1;CLASS_CHECK(xir_fixture_verify(&stage_context, &m, &d)==XR_XIR_BAD_STRUCTURE);ctor[0].args[1]=2;
  XrXirNominalIdentity *identity=(XrXirNominalIdentity *)xr_xir_compile_artifact_module(lowered)->types->nominals->identities;
  identity[0].flags=0;CLASS_CHECK(xr_xir_compile_verify_v2(&stage_context, xr_xir_compile_artifact_module(lowered), xr_xir_compile_artifact_construction(lowered), &d)==XR_XIR_OK);
- identity[0].flags=XR_XIR_NOMINAL_FINAL<<1;CLASS_CHECK(xr_xir_compile_verify_v2(&stage_context, xr_xir_compile_artifact_module(lowered), xr_xir_compile_artifact_construction(lowered), &d)==XR_XIR_BAD_STRUCTURE);identity[0].flags=XR_XIR_NOMINAL_FINAL;
+ identity[0].flags=XR_XIR_NOMINAL_SENDABLE<<1;CLASS_CHECK(xr_xir_compile_verify_v2(&stage_context, xr_xir_compile_artifact_module(lowered), xr_xir_compile_artifact_construction(lowered), &d)==XR_XIR_BAD_STRUCTURE);identity[0].flags=XR_XIR_NOMINAL_FINAL;
  XrXirCompileContext denied = stage_context_limited(STAGE_ALLOCATED_BYTES, (0), STAGE_WORK);XrXirArtifact *rejected=NULL;
  CLASS_CHECK(xir_fixture_check(&denied, &m, &rejected, &d)==XR_XIR_BUDGET && rejected==NULL);
  xr_xir_compile_artifact_free(lowered);xr_xir_compile_artifact_free(special);xr_xir_compile_artifact_free(read);xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);

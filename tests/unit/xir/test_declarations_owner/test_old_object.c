@@ -16,7 +16,7 @@ int main(void) {
     XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
     XrXirCompileContext context={NULL,xr_xir_compile_default_limits()};
     CHECK(xr_compile_resources_new(&limits,&context.resources)==XR_COMPILE_RESOURCE_OK);
-    CHECK(compile_owner_program.abi_version==27 && XR_XIR_PROGRAM_ABI_VERSION==31);
+    CHECK(compile_owner_program.abi_version==27 && XR_XIR_PROGRAM_ABI_VERSION==33);
     _Static_assert(XR_XIR_VALUE_ABI_VERSION==24 && XR_XIR_CALL_ABI_VERSION==29,"current value and call ABI");
     XrXirProgram *program=NULL;
     CHECK(xr_xir_compile_program_seal(&context,&compile_owner_program,&program)==XR_XIR_BAD_LAYOUT && !program);

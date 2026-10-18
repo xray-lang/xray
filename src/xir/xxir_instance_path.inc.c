@@ -8,9 +8,12 @@
  */
 static XrXirCallStatus instance_path_cell(XrXirCallView *view,
     const XrXirInstance *instance, const XrXirValueReceiver *receiver) {
+    const XrXirTypeArena *arena=xr_xir_value_arena(&receiver->value);
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(arena);
     if (receiver->kind != XR_XIR_ROOT_CELL || receiver->local_payload || receiver->slot ||
-        !xr_xir_type_is_cell(instance->program->types, (XrXirType)receiver->value.type) ||
-        xr_xir_cell_element(instance->program->types, (XrXirType)receiver->value.type) != receiver->type)
+        !xr_xir_type_is_cell(types,(XrXirType)receiver->value.type) ||
+        !xir_type_arena_same_type(arena,xr_xir_cell_element(types,(XrXirType)receiver->value.type),
+            instance->program->arena,receiver->type))
         return XR_XIR_CALL_BAD_STATE;
     return instance_cell_access(view, instance, &receiver->value);
 }

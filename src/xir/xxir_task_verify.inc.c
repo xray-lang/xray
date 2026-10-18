@@ -17,8 +17,7 @@ static XrXirStatus task_go_shape(const XrXirModule *module, const XrXirInstructi
     uint32_t callee = (uint32_t)op->immediate;
     const XrXirFunction *function = &module->functions[callee];
     if (module->stage == XR_XIR_LOWERED) {
-        if (function->result != XR_XIR_UNIT && function->result != XR_XIR_BOOL &&
-            function->result != XR_XIR_I64 && function->result != XR_XIR_STRING)
+        if (!xr_xir_task_result_supported(module->types, function->result))
             return XR_XIR_UNSUPPORTED;
         for (uint32_t p = 0; p < function->parameter_count; ++p) {
             if (!xir_compile_work(remaining, 1)) return XR_XIR_BUDGET;
@@ -38,5 +37,7 @@ static XrXirStatus task_go_shape(const XrXirModule *module, const XrXirInstructi
 }
 static XrXirType task_await_result(const XrXirModule *module, const XrXirFunction *function,
     const XrXirInstruction *op) {
-    return xr_xir_task_element(module->types, xr_xir_operand_type(function, op->args[0]));
+    XrXirType receiver=xr_xir_operand_type(function,op->args[0]);
+    return op->op==XR_XIR_TASK_AWAIT ? xr_xir_task_element(module->types,receiver) :
+        op->op==XR_XIR_ITERATOR_HAS_NEXT ? XR_XIR_BOOL : op->op==XR_XIR_ITERATOR_CLOSE ? XR_XIR_UNIT : xr_xir_iterator_element(module->types,receiver);
 }

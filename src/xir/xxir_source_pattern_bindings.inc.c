@@ -30,7 +30,9 @@ static bool source_pattern_bindings(SourceContext *ctx, SourceMatchPattern *patt
             if (symbol) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"duplicate pattern binding");
             symbol=source_alloc(ctx,1,sizeof(*symbol));
             if (!symbol) return false;
-            *symbol=(SourceName){arm->bindings,name,NULL,node,SOURCE_LOCAL,1,ctx->module,pattern->type,false,false,0, false, false,0,0};
+            *symbol=(SourceName){.next=arm->bindings,.name=name,.imported=NULL,.node=node,.kind=SOURCE_LOCAL,
+            .index=1,.module=ctx->module,.type=pattern->type,.mutable=false,
+            .construction=false,.declaration=0,.inferred=false,.checked_library=false};
             arm->bindings=symbol;
             if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_BINDING,ctx->bodies[ctx->function].declaration,
                 source_query_range(ctx,node,name))) return false;

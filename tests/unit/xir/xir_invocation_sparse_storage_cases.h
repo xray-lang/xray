@@ -206,7 +206,7 @@ static XrXirStatus conditional_storage_case(const XrXirCompileContext *context,u
 static uint64_t invocation_storage_geometry(const XrXirCompileContext *context,
     uint32_t values,uint32_t rows,bool check_bits,XrXirStatus expected) {
     EffectPhysicalRecord record={.value=0,.mask=EFFECT_PHYSICAL_CALLABLE};
-    EffectPhysicalFunction physical={.instructions=values,.values=values,.rows=rows,
+    EffectPhysicalFunction physical={.instructions=values,.values=values,.rows=rows,.origins=rows,
         .count=rows,.capacity=rows,.records=rows?&record:NULL};
     EffectPhysicalDomain domain={.resources=context->resources,.count=1,.functions=&physical};
     EffectInvocationNode node={.body=0};
@@ -217,7 +217,7 @@ static uint64_t invocation_storage_geometry(const XrXirCompileContext *context,
     flow.local_flags[0]=UINT64_MAX;flow.local_flags[1]=UINT64_MAX;
     uint64_t before=rp_stats(context).work,allocated=rp_stats(context).allocated_bytes;
     size_t attempts=rp_attempts;
-    XrXirStatus status=effect_invocation_flow_storage(&flow);
+    XrXirStatus status=effect_invocation_flow_storage(&flow,NULL);
     uint64_t used=rp_stats(context).work-before;
     CHECK(status==expected);
     if (status==XR_XIR_OK && check_bits) {

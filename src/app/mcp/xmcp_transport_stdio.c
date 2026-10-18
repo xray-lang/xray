@@ -12,6 +12,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
 #include <errno.h>
+#include <limits.h>
 #include <string.h>
 
 #ifdef XR_OS_WINDOWS
@@ -20,8 +21,16 @@
 #else
 #include <io.h>
 #endif
-#define xmcp_read_fd _read
-#define xmcp_write_fd _write
+/* Windows descriptor calls accept a bounded unsigned count. Chunking also
+ * preserves large logical messages without narrowing their remaining size. */
+static ssize_t xmcp_read_fd(int fd, void *bytes, size_t length) {
+    unsigned int count = length > INT_MAX ? (unsigned int)INT_MAX : (unsigned int)length;
+    return _read(fd, bytes, count);
+}
+static ssize_t xmcp_write_fd(int fd, const void *bytes, size_t length) {
+    unsigned int count = length > INT_MAX ? (unsigned int)INT_MAX : (unsigned int)length;
+    return _write(fd, bytes, count);
+}
 #else
 #include <unistd.h>
 #define xmcp_read_fd read

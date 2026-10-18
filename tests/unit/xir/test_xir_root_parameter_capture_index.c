@@ -80,7 +80,7 @@ static void capture_index_fixture(CaptureIndexFixture *f) {
     for (uint32_t i=2;i<=4;++i) { f->contracts[i].values=&f->values[i];f->contracts[i].value_count=1; }
     f->contracts[5].formula.constant_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
     f->contracts[6].formula.constant_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
-    f->slot=(XrXirSlot){0,XR_XIR_I64,1};f->source=(XrXirSourceModule){"capture",7,NULL,0,6};
+    f->slot=(XrXirSlot){0,XR_XIR_I64,1};f->source=(XrXirSourceModule){"capture",7,NULL,0,6, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .slots=&f->slot,.slot_count=1,.entry_function=0};
     f->evidence=(XrXirProvenance){.kind=XR_XIR_EVIDENCE_TEMPLATE,.contracts=f->contracts,.contract_count=7};

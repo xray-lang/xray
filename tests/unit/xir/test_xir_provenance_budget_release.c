@@ -62,7 +62,7 @@ static void fixture(ProvenanceFixture *f) {
     memset(f,0,sizeof(*f));f->instruction=(XrXirInstruction){.op=XR_XIR_RETURN,.type=XR_XIR_UNIT};
     f->block=(XrXirBlock){.first=0,.count=1};
     f->function=(XrXirFunction){.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&f->block,.block_count=1,.instructions=&f->instruction,.instruction_count=1};
-    f->source=(XrXirSourceModule){"owner",5,NULL,0,0};
+    f->source=(XrXirSourceModule){"owner",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=&f->identity,.root_module=UINT32_MAX,.entry_function=UINT32_MAX};
     f->module=(XrXirModule){.stage=XR_XIR_CHECKED,.functions=&f->function,.function_count=1,.declarations=&f->declarations,.linkage_kind=XR_XIR_LIBRARY};
     f->origin=(XrXirOrigin){.function=0,.argument_count=0,.arguments=NULL};
@@ -289,7 +289,7 @@ static void scope_generic_owner_control(void) {
         {.constraints=&constraints[2],.parameter_count=1},
         {.arguments=ordinary,.argument_count=2},{0}};
     XrXirFunctionIdentity identities[5]={0};identities[1].cleanup_owner=1;identities[2].cleanup_owner=2;
-    XrXirSourceModule identity={"zero-cleanup",12,NULL,0,4};
+    XrXirSourceModule identity={"zero-cleanup",12,NULL,0,4, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={.modules=&identity,.module_count=1,.functions=identities,.entry_function=3};
     XrXirFunctionEffectContract contracts[5]={0};contracts[4].formula.constant_mask=XR_XIR_CALLABLE_ROOT_REQUIRED;
     XrXirProvenance evidence={.kind=XR_XIR_EVIDENCE_TEMPLATE,.contracts=contracts,.contract_count=5};

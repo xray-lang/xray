@@ -32,6 +32,9 @@ static bool source_binding_read(SourceContext *ctx, const SourceName *symbol, So
         *value = (SourceValue){UINT32_MAX, XR_XIR_UNIT};
         return true;
     }
+    if ((symbol->kind==SOURCE_SLOT || symbol->kind==SOURCE_UNIT_SLOT) &&
+        symbol->module!=ctx->bodies[ctx->function].module && ctx->history)
+        return source_history_binding_read(ctx,symbol,value);
     if (symbol->mutable) {
         SourceValue cell = {0};
         return source_binding_cell(ctx, symbol, &cell) &&
@@ -49,6 +52,9 @@ static bool source_binding_write(SourceContext *ctx, const SourceName *symbol, S
     if (symbol->kind == SOURCE_UNIT_LOCAL) return true;
     if (value.type != symbol->type)
         return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "binding write changes its logical type");
+    if ((symbol->kind==SOURCE_SLOT || symbol->kind==SOURCE_UNIT_SLOT) &&
+        symbol->module!=ctx->bodies[ctx->function].module && ctx->history)
+        return source_history_binding_write(ctx,symbol,value);
     SourceValue cell = {0};
     return source_binding_cell(ctx, symbol, &cell) &&
         source_recipe_record(ctx, (XrXirInstruction){XR_XIR_CELL_WRITE, XR_XIR_UNIT,

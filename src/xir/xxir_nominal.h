@@ -28,6 +28,11 @@ typedef struct XrXirNominalField {
  * Calls retain their own constructor permissions; this flag grants none. */
 #define XR_XIR_NOMINAL_MODULE_LITERAL 2u
 
+/* An explicit class promise: every field is immutable after construction and
+ * proves Sendable in its declaration environment. Ordinary classes infer none. */
+#define XR_XIR_NOMINAL_SENDABLE 2u
+/* Equal flag bits are interpreted only within the declared nominal kind. */
+
 typedef enum XrXirNominalKind { XR_XIR_NOMINAL_STRUCT, XR_XIR_NOMINAL_ENUM, XR_XIR_NOMINAL_CLASS } XrXirNominalKind;
 typedef struct XrXirNominalVariant {
     XrXirLiteral name;
@@ -77,6 +82,9 @@ typedef struct XrXirNominalTable {
 XR_FUNC const XrXirNominalNativeRecord *xr_xir_nominal_native_record(const XrXirTypes *types, XrXirType type);
 /* A verified pool record must match the actual governed value declaration. */
 XR_FUNC bool xr_xir_nominal_native_ordering(const XrXirTypes *types, XrXirType type);
+/* Verified owned pools still require the exact instantiated payload projection. */
+XR_FUNC bool xr_xir_nominal_native_recv(const XrXirTypes *types, XrXirType type, XrXirType element);
+XR_FUNC bool xr_xir_nominal_native_send_result(const XrXirTypes *types, XrXirType type);
 /* Metadata helpers grant no executable type or source admission.
  * Outputs publish only after complete successful validation; work is never refunded. */
 XR_FUNC XrXirStatus xr_xir_compile_nominal_structure_verify(const XrXirCompileContext *compile_context, const XrXirNominalTable *table, const XrXirTypes *types);

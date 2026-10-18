@@ -155,7 +155,7 @@ static XrXirArtifact *fuel_lowered(const XrXirCompileContext *context) {
     const XrXirFunction functions[]={
         {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,1,NULL,0},
         {"main",4,NULL,0,XR_XIR_I64,&blocks[1],1,main_rows,2,NULL,0}};
-    const XrXirSourceModule module={"fuel",4,NULL,0,0};
+    const XrXirSourceModule module={"fuel",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[]={{0},{.exported=1}};
     const XrXirDeclarations declarations={.modules=&module,.module_count=1,
         .functions=identities,.root_module=0,.entry_function=1};

@@ -56,7 +56,7 @@ static XrXirArtifact *effect_fixture(bool suspends) {
         {"reference", 9, NULL, 0, XR_XIR_UNIT, &pair, 1, reference, 2, NULL, 0},
         {"init", 4, NULL, 0, XR_XIR_UNIT, &init_block, 1, &init, 1, NULL, 0},
         {"entry", 5, NULL, 0, XR_XIR_I64, &pair, 1, entry, 2, NULL, 0}};
-    XrXirSourceModule source = {"root", 4, NULL, 0, 6};
+    XrXirSourceModule source = {"root", 4, NULL, 0, 6, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[8] = {{0}};
     XrXirDeclarations declarations = {&source, 1, identities, NULL, 0, NULL, 0, 0, 7, NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, 8, &declarations, NULL, &types, NULL, XR_XIR_PROGRAM, NULL};
@@ -72,6 +72,25 @@ static void effect_expect(const XrXirEffects *effects, uint32_t f, XrXirEffect s
     XrXirEffectFacts fact_read=xr_xir_effects_read(effects, f);
     const XrXirFunctionEffects *fact=(fact_read.status==XR_XIR_OK?&fact_read.control:NULL);
     CHECK(fact && fact->suspend == suspend && fact->throws == throws);
+}
+static void effect_error_query_work(void) {
+    XrXirArtifact *artifact=effect_fixture(false);XrXirEffects *effects=NULL;
+    CHECK(effect_analyze(artifact,&effects)==XR_XIR_OK);
+    effect_artifact_free(artifact);
+    XrCompileResourceStats before={0},after={0};
+    CHECK(xr_compile_resources_stats(effects->resources,&before)==XR_COMPILE_RESOURCE_OK);
+    size_t calls=attempts;uint64_t work=77;
+    CHECK(xr_xir_effects_error_query_work(NULL,0,&work)==XR_XIR_BAD_STRUCTURE && work==77);
+    CHECK(xr_xir_effects_error_query_work(effects,8,&work)==XR_XIR_BAD_STRUCTURE && work==77);
+    CHECK(xr_xir_effects_error_query_work(effects,0,NULL)==XR_XIR_BAD_STRUCTURE);
+    for (uint32_t f=0;f<8;++f) {
+        CHECK(xr_xir_effects_error_query_work(effects,f,&work)==XR_XIR_OK && work==2);
+        CHECK(!xr_xir_effects_error(effects,f,XR_XIR_I64,0));
+    }
+    CHECK(xr_compile_resources_stats(effects->resources,&after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(calls==attempts && !memcmp(&before,&after,sizeof(before)));
+    effect_summary_free(effects);CHECK(effect_balanced());
+    puts("Immutable Error query work: producer retired, exact empty bound, invalid outputs preserved, no compiler debit PASS");
 }
 static size_t effect_failures(XrXirArtifact *artifact) {
     XrXirEffects *summary = NULL; attempts = 0; fail_at = SIZE_MAX;
@@ -148,7 +167,7 @@ static void effect_long_cycle(void) {
     XrXirBlock init_block={0,1,0,0}, entry_block={0,2,0,0};
     functions[COUNT]=(XrXirFunction){"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0};
     functions[COUNT+1]=(XrXirFunction){"entry",5,NULL,0,XR_XIR_I64,&entry_block,1,entry,2,NULL,0};
-    XrXirSourceModule source={"cycle",5,NULL,0,COUNT}; XrXirFunctionIdentity ids[COUNT+2]={{0}};
+    XrXirSourceModule source={"cycle",5,NULL,0,COUNT, 0,XR_XIR_MODULE_FRESH_STORAGE}; XrXirFunctionIdentity ids[COUNT+2]={{0}};
     XrXirDeclarations declarations={&source,1,ids,NULL,0,NULL,0,0,COUNT+1,NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, COUNT+2, &declarations, NULL, NULL, NULL, XR_XIR_PROGRAM, NULL};
     XrXirArtifact *artifact = NULL;
@@ -417,7 +436,7 @@ static void effect_declared_promises(void) {
                 CHECK(lowered->module.declarations->functions[f].promises == XR_XIR_FUNCTION_NO_SUSPEND);
                 effect_artifact_free(decoded); effect_artifact_free(lowered);
             }
-            ids[f].promises = 2;
+            ids[f].promises = UINT32_MAX;
             CHECK(xir_fixture_verify(&effect_context, &built, NULL) == XR_XIR_BAD_STRUCTURE);
             ids[f].promises = 0;
         }
@@ -503,7 +522,7 @@ static void effect_callable_weakening(void) {
     XrXirFunction function = {"weaken", 6, &source, 1, (XrXirType)256, &block, 1, ops, 2, NULL, 0};
     XrXirInstruction init={.op=XR_XIR_RETURN,.type=XR_XIR_UNIT}; XrXirBlock init_block={0,1,0,0};
     XrXirFunction functions[2]={function,{"init",4,NULL,0,XR_XIR_UNIT,&init_block,1,&init,1,NULL,0}};
-    XrXirSourceModule source_module={"weaken",6,NULL,0,1}; XrXirFunctionIdentity ids[2]={{0}};
+    XrXirSourceModule source_module={"weaken",6,NULL,0,1, 0,XR_XIR_MODULE_FRESH_STORAGE}; XrXirFunctionIdentity ids[2]={{0}};
     XrXirDeclarations declarations={&source_module,1,ids,NULL,0,NULL,0,UINT32_MAX,UINT32_MAX,NULL};
     XrXirModule module = {XR_XIR_BUILT, functions, 2, &declarations, NULL, &types, NULL, XR_XIR_LIBRARY, NULL};
     XrXirArtifact *checked = NULL;
@@ -540,7 +559,10 @@ static void effect_callable_weakening(void) {
 }
 #define EFFECT_CASE(call) do { effect_case_begin(); call; effect_case_end(); } while (0)
 #include "xir_effect_collector_cases.h"
-int main(void) {
+int main(int argc,char **argv) {
+    CHECK(argc==1 || (argc==2 && !strcmp(argv[1],"--error-query-work")));
+    if (argc==2) { EFFECT_CASE(effect_error_query_work());return 0; }
+    EFFECT_CASE(effect_error_query_work());
     EFFECT_CASE(collector_bare_case(false)); EFFECT_CASE(collector_bare_case(true));
     EFFECT_CASE(collector_declaration_cases());
     EFFECT_CASE(effect_callable_weakening());

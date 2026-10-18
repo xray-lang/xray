@@ -40,13 +40,13 @@ XR_FUNC XrXirStatus xr_xir_compile_nominal_access(const XrXirCompileContext *com
     }
     if (declaring_module == UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
     if (declaring_module != caller->module) {
-        if (!identity.exported) return XR_XIR_BAD_TYPE;
+        if (!identity.exported && !xr_xir_module_same_scope(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;
         if (!nominal_access_work(work, scope->modules[caller->module].dependency_count)) return XR_XIR_BUDGET;
         if (!xr_xir_module_imports(scope, caller->module, declaring_module)) return XR_XIR_BAD_TYPE;
     }
     if (access == XR_XIR_NOMINAL_TYPE) return XR_XIR_OK;
     if (access == XR_XIR_NOMINAL_CONSTRUCT && identity.kind == XR_XIR_NOMINAL_STRUCT &&
-        (identity.flags & XR_XIR_NOMINAL_MODULE_LITERAL) && declaring_module != caller->module)
+        (identity.flags & XR_XIR_NOMINAL_MODULE_LITERAL) && !xr_xir_module_same_scope(scope, caller->module, declaring_module))
         return XR_XIR_BAD_TYPE;
     if (access != XR_XIR_NOMINAL_CONSTRUCT && field >= identity.field_count) return XR_XIR_BAD_STRUCTURE;
     uint32_t first = access == XR_XIR_NOMINAL_CONSTRUCT ? 0 : field;
@@ -98,7 +98,7 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
             for (uint32_t p = 0; p < node->parameter_count && status == XR_XIR_OK; ++p)
                 status = type_access_edge(types, node->parameters[p].type, i, pending, remaining);
         } else if (node->kind == XR_XIR_TYPE_ARRAY || node->kind == XR_XIR_TYPE_CELL ||
-                   node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK)
+                   node->kind == XR_XIR_TYPE_NULLABLE || node->kind == XR_XIR_TYPE_ATOMIC || node->kind == XR_XIR_TYPE_TASK || (node->kind == XR_XIR_TYPE_ITERATOR || node->kind == XR_XIR_TYPE_CHANNEL))
             status = type_access_edge(types, node->element, i, pending, remaining);
         else status = XR_XIR_BAD_TYPE;
     }

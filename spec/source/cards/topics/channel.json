@@ -2,21 +2,44 @@
   "id": "channel",
   "title": "Channel",
   "spec_anchor": "#105-channel",
-  "aliases": ["channels", "chan", "Channel", "send", "recv", "buffered"],
+  "aliases": [
+    "channels",
+    "chan",
+    "Channel",
+    "send",
+    "recv",
+    "buffered"
+  ],
   "lead": "Channels are the primary inter-coroutine communication mechanism.",
   "sections": [
     {
       "heading": "Declaration",
-      "fences": ["channel-decl-variants"],
+      "fences": [
+        "channel-decl-variants"
+      ],
       "after_text": "Name a channel with `const`. `Channel<T>` is an audited synchronization handle: its binding is stable while `send`/`recv` mutate protected runtime state."
     },
     {
       "heading": "Operations",
-      "fences": ["channel-basic-ops"]
+      "fences": [
+        "channel-basic-ops"
+      ]
+    },
+    {
+      "heading": "Timed operations",
+      "bullets": [
+        "`sendTimeout(value, milliseconds)` returns SendResult; `recvTimeout(milliseconds)` returns Recv<T>. Closed results remain distinct from Timeout.",
+        "The duration is i64 in 0..86_400_000; out-of-range values raise NumericRange before the Channel operation. Zero performs one queue attempt.",
+        "A positive duration uses one monotonic deadline. The host supplies the clock; failed, zero or backward readings raise HostError rather than Timeout. Repeated waits never restart the deadline.",
+        "Evaluate receiver, message and duration once in source order, including Unit message side effects. Pending polls reuse those values; committed peer delivery wins over later withdrawal.",
+        "Both methods conservatively may suspend. Type admission and Sendable evidence remain separate from root permission and value Error effects."
+      ]
     },
     {
       "heading": "Function parameter type",
-      "fences": ["channel-param-type"]
+      "fences": [
+        "channel-param-type"
+      ]
     },
     {
       "heading": "Concurrency rules",

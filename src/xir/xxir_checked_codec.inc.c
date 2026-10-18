@@ -213,7 +213,7 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
     d->literal_count = checked_u32(c, d->literal_count);
     d->root_module = checked_u32(c, d->root_module);
     d->entry_function = checked_u32(c, d->entry_function);
-    XrXirSourceModule *modules = checked_array(c, d->modules, d->module_count, sizeof(*modules), 12);
+    XrXirSourceModule *modules = checked_array(c, d->modules, d->module_count, sizeof(*modules), 20);
     d->modules = modules;
     for (uint32_t i = 0; i < d->module_count && c->status == XR_XIR_OK; ++i) {
         XrXirSourceModule m = modules[i];
@@ -226,6 +226,8 @@ static void checked_declarations(CheckedCursor *c, XrXirDeclarations *d, uint32_
             if (c->reading) dependencies[j] = id;
         }
         m.initializer = checked_u32(c, m.initializer);
+        m.lexical_scope = checked_u32(c, m.lexical_scope);
+        m.storage = checked_u32(c,m.storage);
         if (c->reading) modules[i] = m;
     }
     XrXirFunctionIdentity *identities = checked_array(c, d->functions, functions, sizeof(*identities), 36);
@@ -449,7 +451,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
                 if (c->reading) fields[p] = (XrXirCallableParameter){field,0};
             }
         } else if (s.kind == XR_XIR_TYPE_ARRAY || s.kind == XR_XIR_TYPE_CELL ||
-                   s.kind == XR_XIR_TYPE_NULLABLE || s.kind == XR_XIR_TYPE_ATOMIC || s.kind == XR_XIR_TYPE_TASK) {
+                   s.kind == XR_XIR_TYPE_NULLABLE || s.kind == XR_XIR_TYPE_ATOMIC || s.kind == XR_XIR_TYPE_TASK || (s.kind == XR_XIR_TYPE_ITERATOR || s.kind == XR_XIR_TYPE_CHANNEL)) {
             s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
         } else if (s.kind == XR_XIR_TYPE_NOMINAL) {
             s.nominal.declaration = checked_u32(c, s.nominal.declaration);

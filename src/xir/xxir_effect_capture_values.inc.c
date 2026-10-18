@@ -36,6 +36,7 @@ static XrXirStatus effect_capture_finish(EffectCaptureRead *read,const EffectCap
     if(fixed) {
         EffectCaptureFact destination={node->node,value,0,0,fixed->rank+1};
         const XrXirTypeNode *signature=xr_xir_callable_signature(read->body.domain.types,type);
+        if(!signature) return XR_XIR_BAD_STRUCTURE;
         status=effect_capture_opaque(read,node,&destination,signature->flags,true);if(status!=XR_XIR_OK) return status;
     }
     if(read->fallback) {
@@ -99,7 +100,9 @@ static XrXirStatus effect_capture_barrier(EffectCaptureRead *read,const EffectCa
         uint32_t value=table?node->head.operands[op->args[0]+p]:op->args[p],kind=0;
         if(value>=node->values) return XR_XIR_BAD_STRUCTURE;
         XrXirStatus status=effect_capture_kind(read,node,value,&kind,NULL);if(status!=XR_XIR_OK) return status;
-        if(kind==EFFECT_CAPTURE_CALLABLE) {
+        XrXirType type=0;status=effect_body_request_type(&read->body,read->final->nodes[node->node].body,value,&type);
+        if(status!=XR_XIR_OK) return status;
+        if(kind==EFFECT_CAPTURE_CALLABLE && !effect_physical_iterator(read->body.domain.types,type)) {
             status=effect_capture_emit(read,(EffectCaptureFact){node->node,value,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_FIXED,0});
             if(status!=XR_XIR_OK) return status;
         }
@@ -199,7 +202,7 @@ static XrXirStatus effect_capture_reference(EffectCaptureRead *read,const Effect
         uint64_t binding=node->basis.origin_words+((uint64_t)reference->binding+p)*
             (node->basis.origin_words+(uint64_t)node->basis.cell_words);
         if(binding>UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-        if(xr_xir_callable_signature(read->body.domain.types,target.parameters[p])) {
+        if(effect_physical_origin(read->body.domain.types,target.parameters[p])) {
             if(kind!=EFFECT_CAPTURE_CALLABLE) return XR_XIR_BAD_TYPE;
             EffectCaptureTransfer prefix={.from=node->node,.value=source,.to=node->node,.destination=value,
                 .first=0,.word=(uint32_t)binding,.words=node->basis.origin_words};
@@ -207,9 +210,11 @@ static XrXirStatus effect_capture_reference(EffectCaptureRead *read,const Effect
             EffectCaptureTransfer nested={.from=node->node,.value=source,.to=node->node,.destination=value,
                 .first=node->basis.origin_words,.word=node->basis.origin_words,.words=node->basis.fn_words-node->basis.origin_words};
             status=effect_capture_transfer(read,&nested);if(status!=XR_XIR_OK) return status;
-        } else if(xr_xir_type_is_cell(read->body.domain.types,target.parameters[p])) {
-            if(kind!=EFFECT_CAPTURE_CELL) return XR_XIR_BAD_TYPE;
-            if(xr_xir_cell_provenance_role(read->final->cells,reference->target,p)!=XR_XIR_CELL_PROOF_OWNED_CAPTURE)
+        } else if(xr_xir_type_is_cell(read->body.domain.types,target.parameters[p]) ||
+            xr_xir_type_is_class(read->body.domain.types,target.parameters[p])) {
+            bool object=xr_xir_type_is_class(read->body.domain.types,target.parameters[p]);
+            if(kind!=(uint32_t)(object?EFFECT_CAPTURE_CLASS:EFFECT_CAPTURE_CELL)) return XR_XIR_BAD_TYPE;
+            if(!object && xr_xir_cell_provenance_role(read->final->cells,reference->target,p)!=XR_XIR_CELL_PROOF_OWNED_CAPTURE)
                 return XR_XIR_BAD_STRUCTURE;
             EffectCaptureTransfer cell={.from=node->node,.value=source,.to=node->node,.destination=value,
                 .first=node->basis.fn_words,.word=(uint32_t)binding+node->basis.origin_words,.words=node->basis.cell_words};
@@ -249,12 +254,12 @@ static XrXirStatus effect_capture_instruction(EffectCaptureRead *read,const Effe
         for(uint32_t p=1;p<op->args[1];p+=2) {
             status=effect_capture_alias(read,node,node->head.operands[op->args[0]+p],value);if(status!=XR_XIR_OK) return status;
         }
-    } else if(!read->fixed_only && op->op==XR_XIR_FUNCTION_REF) {
+    } else if(!read->fixed_only && (op->op==XR_XIR_FUNCTION_REF || op->op==XR_XIR_GENERATOR_NEW)) {
         status=effect_capture_reference(read,node,instruction,op);if(status!=XR_XIR_OK) return status;
     } else if(!read->fixed_only && kind==EFFECT_CAPTURE_CALLABLE) {
         const XrXirTypeNode *signature=xr_xir_callable_signature(read->body.domain.types,op->type);
         EffectCaptureFact destination={node->node,value,0,0,0};
-        status=effect_capture_opaque(read,node,&destination,signature->flags,true);if(status!=XR_XIR_OK) return status;
+        status=effect_capture_opaque(read,node,&destination,signature?signature->flags:XR_XIR_CALLABLE_ROOT_UNRESOLVED,true);if(status!=XR_XIR_OK) return status;
     } else if(!read->fixed_only && kind==EFFECT_CAPTURE_CLASS) {
         status=effect_capture_class_intrinsic(read,node,instruction,op);if(status!=XR_XIR_OK) return status;
     }

@@ -16,19 +16,15 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
-#include "../../api/xisolate_profile.h"
 #include "xcli_output.h"
-#include "xray.h"
-#include "xray_vm.h"
-#include "../../api/xrepl.h"
-#include "../../runtime/xisolate_api.h"
-#include "../../module/xmodule_identity.h"
-#include "../../vm/xvm_internal.h"
-#include "../../toolchain/xcompiler_session.h"
+#include "xray_source_repl.h"
+#include "xray_version.h"
+#include "../../execution/xr_xir_host_time.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 #include "../../os/os_fd.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -36,8 +32,10 @@
 #ifdef XR_OS_WINDOWS
 #if defined(_MSC_VER)
 #include <corecrt_io.h>
+#include <fcntl.h>
 #else
 #include <io.h>
+#include <fcntl.h>
 #endif
 #else
 #include <unistd.h>
@@ -52,19 +50,14 @@
 #define REPL_HISTORY_FILE ".xray_history"
 #define REPL_MAX_HISTORY 1000
 
-// Proto list for tracking compiled protos (freed on .reset / exit)
-#define REPL_PROTO_INITIAL_CAP 32
-
 typedef struct {
-    XrVMRuntime *isolate;
-    char *buffer;  // Current input buffer
-    size_t buffer_size;
-    size_t buffer_len;
-    bool use_color;    // Use color output
-    XrProto **protos;  // Compiled protos (not freed per-input)
-    int proto_count;
-    int proto_capacity;
-    XrModuleIdentityAuthority authority;
+    XrSourceRepl *owner;
+    const char *namespace_id;
+    char *buffer;
+    size_t buffer_size, buffer_len;
+    bool use_color, failed;
+    char *history[REPL_MAX_HISTORY];
+    size_t history_count;
 } ReplState;
 
 #ifdef HAS_READLINE
@@ -106,7 +99,7 @@ static const char *const k_repl_keywords[] = {
 };
 
 /* Set during repl_run() so the readline generator can reach the
- * current ReplState (and through it, the active session's repl_symbols).
+ * current ReplState (and through it, the active owner's published bindings).
  * Readline's generator signature has no userdata pointer, so a
  * file-scope static is the conventional approach.  Cleared at exit. */
 static ReplState *g_completion_state = NULL;
@@ -130,7 +123,7 @@ static char *repl_completion_generator(const char *text, int state) {
         dot_only = (len > 0 && text[0] == '.');
     }
 
-    /* Phase 0: dot commands (always scanned; cheap and tiny). */
+    /* Dot commands precede language completions. */
     if (phase == 0) {
         while (k_repl_dot_commands[idx]) {
             const char *cmd = k_repl_dot_commands[idx++];
@@ -146,7 +139,7 @@ static char *repl_completion_generator(const char *text, int state) {
     if (dot_only)
         return NULL;
 
-    /* Phase 1: keywords + builtins. */
+    /* Language keywords and builtins precede bindings. */
     if (phase == 1) {
         while (k_repl_keywords[idx]) {
             const char *kw = k_repl_keywords[idx++];
@@ -157,7 +150,7 @@ static char *repl_completion_generator(const char *text, int state) {
         idx = 0;
     }
 
-    /* Phase 2: exact scalar keywords come from their semantic registry. */
+    /* Exact scalar keywords come from their semantic registry. */
     if (phase == 2) {
         size_t scalar_count = 0;
         const XrExactScalarDesc *scalars = xr_exact_scalar_rows(&scalar_count);
@@ -170,29 +163,23 @@ static char *repl_completion_generator(const char *text, int state) {
         idx = 0;
     }
 
-    /* Phase 3: user-defined top-level REPL bindings. */
-    if (phase == 3 && g_completion_state && g_completion_state->isolate) {
-        XrReplSymbolTable *table = xr_repl_symbols_of(g_completion_state->isolate);
-        if (table) {
-            while (idx < table->count) {
-                const XrReplSymbol *sym = &table->symbols[idx++];
-                const char *name = xr_repl_symbol_cname(sym);
-                if (!name)
-                    continue;
-                if (strncmp(name, text, len) == 0)
-                    return xr_strdup(name);
+    /* Published display observations borrow the actual Source owner. */
+    const XrSourceReplBindingInfo *rows=NULL;size_t count=0;
+    if(g_completion_state && g_completion_state->owner &&
+        xray_source_repl_bindings(g_completion_state->owner,&rows,&count)==XR_SOURCE_OK) {
+        if(phase==3) {
+            while((size_t)idx<count) {
+                const XrSourceReplBindingInfo *row=&rows[idx++];
+                if(!row->implicit_result && strncmp(row->name,text,len)==0)return xr_strdup(row->name);
+            }
+            phase=4;idx=0;
+        }
+        if(phase==4) {
+            while((size_t)idx<count) {
+                const XrSourceReplBindingInfo *row=&rows[idx++];
+                if(row->implicit_result && strncmp(row->name,text,len)==0)return xr_strdup(row->name);
             }
         }
-        phase = 4;
-        idx = 0;
-    }
-
-    /* Phase 4: the virtual last-result binding.  Its versioned storage
-     * names are deliberately absent from completion. */
-    if (phase == 4 && g_completion_state && g_completion_state->isolate && idx == 0) {
-        idx++;
-        if (xr_repl_has_last_result(g_completion_state->isolate) && strncmp("it", text, len) == 0)
-            return xr_strdup("it");
     }
 
     return NULL;
@@ -228,15 +215,18 @@ static bool terminal_supports_color(void) {
 }
 
 // Get history file path
+#ifdef HAS_READLINE
 static char *get_history_file(void) {
     const char *home = getenv("HOME");
     if (!home)
         return NULL;
 
     char *path = (char *) xr_malloc(512);
+    if(!path)return NULL;
     snprintf(path, 512, "%s/%s", home, REPL_HISTORY_FILE);
     return path;
 }
+#endif
 
 #define get_time_ms() xr_cli_get_time_ms()
 
@@ -280,9 +270,7 @@ static void print_help_brief(ReplState *state) {
     printf("  .time <expr>       Measure execution time\n");
     printf("  .vars              Show all bindings\n");
     printf("  .type <expr>       Show type of expression\n");
-#ifdef HAS_READLINE
     printf("  .history           Show recent history\n");
-#endif
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Keyboard\n");
     printf("  Tab      Complete    Ctrl+C   Cancel\n");
@@ -311,7 +299,7 @@ static void print_help_syntax(ReplState *state) {
     print_colored(state, XR_CLR_BOLD, "Class:\n");
     printf("  class Point {\n");
     printf("    x = 0; y = 0\n");
-    printf("    constructor(x, y) { this.x = x; this.y = y }\n");
+    printf("    init(x, y) { this.x = x; this.y = y }\n");
     printf("    distance() { (this.x**2 + this.y**2)**0.5 }\n");
     printf("  }\n");
     printf("\n");
@@ -432,89 +420,152 @@ static void clear_screen(void) {
     fflush(stdout);
 }
 
-// Check if input is structurally complete using the lexer.
-// Delegates to xr_repl_check_input() which scans tokens and tracks bracket depth.
+static const char *repl_status_text(XrSourceStatus status) {
+    static const char *const names[]={"success","invalid argument","source not found","invalid source",
+        "resource limit reached","compiler budget exhausted","out of memory","I/O failure","unsupported operation",
+        "source rejected","stopped session","operation busy","execution failed"};
+    return (unsigned)status<sizeof(names)/sizeof(*names)?names[status]:"internal failure";
+}
+static void repl_failure(ReplState *state,XrSourceStatus status,XrSourceDiagnostic *diagnostic) {
+    XrSourceDiagnosticInfo info={0};
+    if(diagnostic && xray_source_diagnostic_info(diagnostic,&info)==XR_SOURCE_OK) {
+        if(info.path)fprintf(stderr,"%s:%d:%d: %s\n",info.path,info.line,info.column,info.message);
+        else fprintf(stderr,"Error: %s\n",info.message);
+    } else xr_cli_error("repl","%s",repl_status_text(status));
+    if(status==XR_SOURCE_BUDGET || status==XR_SOURCE_OUT_OF_MEMORY || status==XR_SOURCE_LIMIT ||
+        status==XR_SOURCE_IO || status==XR_SOURCE_BAD_STATE || status==XR_SOURCE_EXECUTION_FAILED)state->failed=true;
+}
+static bool repl_open(ReplState *state,XrSourceRepl **output) {
+    XrSourceCompilerOptions compiler;XrSourceCallOptions runtime;
+    XrSourceStatus status=xray_source_compiler_options_init(&compiler,sizeof(compiler));
+    if(status==XR_SOURCE_OK)status=xray_source_call_options_init(&runtime,sizeof(runtime));
+    if(status==XR_SOURCE_OK)status=xray_source_repl_new(&compiler,state->namespace_id,&runtime,output);
+    if(status!=XR_SOURCE_OK)repl_failure(state,status,NULL);
+    return status==XR_SOURCE_OK;
+}
+static bool repl_close(ReplState *state,XrSourceRepl **owner) {
+    XrSourceEvent cleanup={0};XrSourceStatus status=xray_source_repl_drop(owner,&cleanup);
+    if(status!=XR_SOURCE_OK || cleanup.state!=XR_SOURCE_RUN_READY) {
+        repl_failure(state,status==XR_SOURCE_OK?XR_SOURCE_EXECUTION_FAILED:status,NULL);return false;
+    }
+    return true;
+}
 static bool is_input_complete(ReplState *state) {
-    return xr_repl_check_input(state->buffer) == XR_INPUT_COMPLETE;
+    XrSourceInputState complete=XR_SOURCE_INPUT_COMPLETE;
+    XrSourceStatus status=xray_source_repl_check_input(state->owner,state->buffer,state->buffer_len,&complete);
+    if(status!=XR_SOURCE_OK){repl_failure(state,status,NULL);state->failed=true;return false;}
+    return complete==XR_SOURCE_INPUT_COMPLETE;
 }
-
-// Append to buffer
-static void append_to_buffer(ReplState *state, const char *line) {
-    size_t len = strlen(line);
-
-    // Ensure capacity
-    if (state->buffer_len + len + 2 >= state->buffer_size) {
-        state->buffer_size *= 2;
-        XR_REALLOC_OR_ABORT(state->buffer, state->buffer_size, "repl buffer grow");
+static void append_to_buffer(ReplState *state,const char *line) {
+    size_t length=strlen(line);
+    if(length>SIZE_MAX-state->buffer_len-2){state->failed=true;return;}
+    size_t needed=state->buffer_len+length+2;
+    if(needed>state->buffer_size) {
+        size_t capacity=state->buffer_size;
+        while(capacity<needed && capacity<=SIZE_MAX/2)capacity*=2;
+        if(capacity<needed){state->failed=true;return;}
+        char *grown=xr_realloc(state->buffer,capacity);
+        if(!grown){repl_failure(state,XR_SOURCE_OUT_OF_MEMORY,NULL);return;}
+        state->buffer=grown;state->buffer_size=capacity;
     }
-
-    // Append
-    if (state->buffer_len > 0) {
-        state->buffer[state->buffer_len++] = '\n';
-    }
-    memcpy(state->buffer + state->buffer_len, line, len);
-    state->buffer_len += len;
-    state->buffer[state->buffer_len] = '\0';
+    if(state->buffer_len)state->buffer[state->buffer_len++]='\n';
+    memcpy(state->buffer+state->buffer_len,line,length);state->buffer_len+=length;state->buffer[state->buffer_len]=0;
 }
-
-// Reset buffer
-static void reset_buffer(ReplState *state) {
-    state->buffer_len = 0;
-    state->buffer[0] = '\0';
+static void reset_buffer(ReplState *state) {state->buffer_len=0;state->buffer[0]=0;}
+static void repl_history_add(ReplState *state) {
+    char *copy=xr_strdup(state->buffer);if(!copy){repl_failure(state,XR_SOURCE_OUT_OF_MEMORY,NULL);return;}
+    if(state->history_count==REPL_MAX_HISTORY) {
+        xr_free(state->history[0]);memmove(state->history,state->history+1,(REPL_MAX_HISTORY-1)*sizeof(*state->history));
+        --state->history_count;
+    }
+    state->history[state->history_count++]=copy;
+#ifdef HAS_READLINE
+    add_history(state->buffer);
+#endif
 }
-
-// Incremental execution on a persistent isolate+runtime.
-// Definitions survive across inputs via the REPL symbol table + globals dict.
-// Runtime stays alive across inputs (heap objects like closures must not be freed).
-// Free all tracked protos
-static void repl_free_protos(ReplState *state) {
-    for (int i = 0; i < state->proto_count; i++) {
-        xr_free_code(state->isolate, state->protos[i]);
-    }
-    state->proto_count = 0;
+static bool repl_wait(ReplState *state,const XrSourceEvent *event) {
+    XrSourceWait request={0};XrSourceStatus status=xray_source_repl_wait_request(state->owner,event->epoch,event->wake,&request,sizeof(request));
+    if(status!=XR_SOURCE_OK){repl_failure(state,status,NULL);return false;}
+    if(request.kind==XR_SOURCE_WAIT_TASK){repl_failure(state,XR_SOURCE_UNSUPPORTED,NULL);state->failed=true;return false;}
+    XrXirWaitRequest timer={0};timer.kind=request.kind==XR_SOURCE_WAIT_TIMER?XR_XIR_WAIT_TIMER_MS:XR_XIR_WAIT_YIELD;
+    timer.after_ms=request.after_ms;
+    XrXirHostWait wait={0};XrXirHostWaitStatus waiting=xr_xir_host_wait_begin(&wait,&timer);
+    while(waiting==XR_XIR_HOST_WAIT_PENDING && !g_repl_interrupted)
+        waiting=xr_xir_host_wait_poll(&wait,UINT64_C(10000000));
+    if(g_repl_interrupted)return true;
+    if(waiting!=XR_XIR_HOST_WAIT_DUE){repl_failure(state,XR_SOURCE_IO,NULL);return false;}
+    status=xray_source_repl_resume(state->owner,event->epoch,event->wake);
+    if(status!=XR_SOURCE_OK){repl_failure(state,status,NULL);return false;}
+    return true;
 }
-
-static void execute_code(ReplState *state, const char *code) {
-    // Compile and execute once. Publishing declarations and `it` is part of
-    // xr_repl_eval's successful-transaction boundary.
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(state->isolate);
-    XrReplEvalResult result =
-        xr_repl_eval(session, state->isolate, code, &state->authority);
-    if (!result.proto) {
-        return;  // compile error already reported
+static void repl_drive(ReplState *state) {
+    XrSourceEvent event={0};XrSourceStatus status=XR_SOURCE_OK;
+    for(;;) {
+        if(g_repl_interrupted) {
+            g_repl_interrupted=0;status=xray_source_repl_cancel(state->owner);
+            if(status!=XR_SOURCE_OK)break;
+        }
+        status=xray_source_repl_poll(state->owner,256,&event);if(status!=XR_SOURCE_OK)break;
+        if(event.state==XR_SOURCE_RUN_READY)continue;
+        if(event.state==XR_SOURCE_RUN_SUSPENDED){if(!repl_wait(state,&event))return;continue;}
+        break;
     }
-
-    // Track proto for later cleanup (closures reference sub-protos)
-    if (state->proto_count >= state->proto_capacity) {
-        state->proto_capacity *= 2;
-        XR_REALLOC_OR_ABORT(state->protos, (size_t) state->proto_capacity * sizeof(XrProto *),
-                            "repl protos grow");
+    if(status!=XR_SOURCE_OK){repl_failure(state,status,NULL);state->failed=true;return;}
+    XrSourceResult *result=NULL;status=xray_source_repl_take(state->owner,&result);
+    if(status!=XR_SOURCE_OK){repl_failure(state,status,NULL);state->failed=true;return;}
+    if(event.state==XR_SOURCE_RUN_CANCELLED)fputs("Interrupted\n",stderr);
+    else if(event.state!=XR_SOURCE_RUN_RETURNED) {
+        if(xray_source_result_format(result,NULL,NULL)!=XR_SOURCE_OK)repl_failure(state,XR_SOURCE_EXECUTION_FAILED,NULL);
+        if(event.state!=XR_SOURCE_RUN_PANICKED && event.state!=XR_SOURCE_RUN_THROWN)state->failed=true;
     }
-    state->protos[state->proto_count++] = result.proto;
+    xray_source_result_free(result);
 }
-
-// Handle .load command (uses incremental compilation path)
-static void cmd_load(ReplState *state, const char *filename) {
-    if (!filename || strlen(filename) == 0) {
-        print_colored(state, XR_CLR_RED, "Error: please specify filename\n");
-        printf("Usage: .load <filename>\n");
-        return;
+static void execute_code(ReplState *state,const char *code,bool query) {
+    const XrSourceText input={NULL,state->namespace_id,code,strlen(code)};XrSourceDiagnostic *diagnostic=NULL;
+    XrSourceStatus status=query?xray_source_repl_begin_type(state->owner,&input,&diagnostic):
+        xray_source_repl_begin(state->owner,&input,&diagnostic);
+    if(status==XR_SOURCE_OK)repl_drive(state);else repl_failure(state,status,diagnostic);
+    xray_source_diagnostic_free(diagnostic);
+}
+static void cmd_load(ReplState *state,const char *filename) {
+    while(filename && isspace((unsigned char)*filename))++filename;
+    if(!filename || !*filename){fputs("Error: please specify filename\nUsage: .load <filename>\n",stderr);return;}
+    printf("Loading %s...\n",filename);XrSourceDiagnostic *diagnostic=NULL;
+    XrSourceStatus status=xray_source_repl_begin_file(state->owner,filename,&diagnostic);
+    if(status==XR_SOURCE_OK)repl_drive(state);else repl_failure(state,status,diagnostic);
+    xray_source_diagnostic_free(diagnostic);
+}
+typedef struct ReplVarsBuffer {char bytes[4096];size_t used;bool truncated;} ReplVarsBuffer;
+static XrSourceWriteStatus repl_vars_write(void *context,XrSourceOutputStream stream,const char *bytes,size_t length) {
+    ReplVarsBuffer *buffer=context;(void)stream;
+    size_t available=sizeof(buffer->bytes)-buffer->used,copy=length<available?length:available;
+    memcpy(buffer->bytes+buffer->used,bytes,copy);buffer->used+=copy;if(length>copy)buffer->truncated=true;
+    return XR_SOURCE_WRITE_OK;
+}
+static void repl_vars(ReplState *state) {
+    const XrSourceReplBindingInfo *rows=NULL;size_t count=0;
+    XrSourceStatus status=xray_source_repl_bindings(state->owner,&rows,&count);
+    if(status!=XR_SOURCE_OK){repl_failure(state,status,NULL);return;}
+    if(!count){puts("  (no bindings)");return;}
+    for(size_t i=0;i<count;++i) {
+        const XrSourceReplBindingInfo *row=&rows[i];ReplVarsBuffer buffer={0};XrSourceValue *value=NULL;
+        if(row->kind==XR_SOURCE_REPL_VALUE || row->kind==XR_SOURCE_REPL_FUNCTION) {
+            status=xray_source_repl_read(state->owner,row->name,&value);
+            if(status==XR_SOURCE_OK)status=xray_source_value_format(value,repl_vars_write,&buffer);
+            xray_source_value_free(value);
+            if(status!=XR_SOURCE_OK){repl_failure(state,status,NULL);return;}
+        } else {
+            const char *display=row->kind==XR_SOURCE_REPL_TYPE?"<type>":row->kind==XR_SOURCE_REPL_MODULE?"<module>":"<import>";
+            (void)repl_vars_write(&buffer,XR_SOURCE_STDOUT,display,strlen(display));
+        }
+        const char *kind=row->kind==XR_SOURCE_REPL_VALUE?(row->is_const?"const":"var  "):
+            row->kind==XR_SOURCE_REPL_FUNCTION?"fn   ":row->kind==XR_SOURCE_REPL_TYPE?"type ":
+            row->kind==XR_SOURCE_REPL_MODULE?"mod  ":"import";
+        printf("  %s %s : %s =",kind,row->name,row->type_name?row->type_name:"<unavailable>");
+        fputs(buffer.used<=72 && !buffer.truncated?" ":"\n        ",stdout);
+        if(buffer.used && fwrite(buffer.bytes,1,buffer.used,stdout)!=buffer.used){repl_failure(state,XR_SOURCE_IO,NULL);return;}
+        puts(buffer.truncated?" ..":"");
     }
-
-    // Skip leading spaces
-    while (*filename == ' ')
-        filename++;
-
-    char *source = xr_cli_read_file(filename);
-    if (!source) {
-        print_colored(state, XR_CLR_RED, "Error: ");
-        printf("cannot open file '%s'\n", filename);
-        return;
-    }
-
-    printf("Loading %s...\n", filename);
-    execute_code(state, source);
-    xr_free(source);
 }
 
 // Handle .time command (uses incremental compilation path)
@@ -530,7 +581,7 @@ static void cmd_time(ReplState *state, const char *expr) {
         expr++;
 
     double start = get_time_ms();
-    execute_code(state, expr);
+    execute_code(state, expr, false);
     double end = get_time_ms();
 
     printf("%s%.3f ms%s\n", state->use_color ? XR_CLR_GRAY : "", end - start,
@@ -564,14 +615,10 @@ static bool handle_command(ReplState *state, const char *input) {
 
     // .reset
     if (strcmp(input, ".reset") == 0) {
-        repl_free_protos(state);
-        xray_vm_delete(state->isolate);
-        state->isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
-        if (!state->isolate) {
-            fprintf(stderr, "Error: failed to create isolate\n");
-            return true;
-        }
-        xr_isolate_multicore_init(state->isolate, 0);
+        XrSourceRepl *replacement=NULL;
+        if(!repl_open(state,&replacement))return true;
+        if(!repl_close(state,&state->owner)){(void)repl_close(state,&replacement);return true;}
+        state->owner=replacement;
         print_colored(state, XR_CLR_GREEN, "Environment reset\n");
         return true;
     }
@@ -590,31 +637,27 @@ static bool handle_command(ReplState *state, const char *input) {
 
     // .vars — list top-level REPL bindings
     if (strcmp(input, ".vars") == 0) {
-        xr_repl_print_vars(state->isolate);
+        repl_vars(state);
         return true;
     }
 
     // .type <expr> — show runtime type of an expression
     if (strncmp(input, ".type", 5) == 0 && (input[5] == '\0' || input[5] == ' ')) {
-        xr_repl_print_type(state->isolate, input + 5, &state->authority);
+        const char *expression=input+5;while(isspace((unsigned char)*expression))++expression;
+        if(!*expression)puts("Usage: .type <expression>");else execute_code(state,expression,true);
         return true;
     }
 
+    if(strcmp(input,".history")==0) {
 #ifdef HAS_READLINE
-    // .history
-    if (strcmp(input, ".history") == 0) {
-        int len = history_length;
-        int start = len > 20 ? len - 20 : 1;
-        for (int i = start; i <= len; i++) {
-            HIST_ENTRY *entry = history_get(i);
-            if (entry) {
-                printf("%s%4d%s  %s\n", state->use_color ? XR_CLR_GRAY : "", i,
-                       state->use_color ? XR_CLR_RESET : "", entry->line);
-            }
-        }
+        int start=history_length>20?history_length-19:1;
+        for(int i=start;i<=history_length;++i){HIST_ENTRY *entry=history_get(i);if(entry)printf("%4d  %s\n",i,entry->line);}
+#else
+        size_t start=state->history_count>20?state->history_count-20:0;
+        for(size_t i=start;i<state->history_count;++i)printf("%4zu  %s\n",i+1,state->history[i]);
+#endif
         return true;
     }
-#endif
 
     // Unknown command
     if (input[0] == '.') {
@@ -674,59 +717,59 @@ static char *read_line(ReplState *state, bool is_continuation) {
     printf("%s", prompt);
     fflush(stdout);
 
-    static char buffer[REPL_BUFFER_SIZE];
-    if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
-        return NULL;
+    size_t length=0,capacity=REPL_BUFFER_SIZE;char *line=xr_malloc(capacity);
+    if(!line){repl_failure(state,XR_SOURCE_OUT_OF_MEMORY,NULL);return NULL;}
+    int byte=0;
+    while(!g_repl_interrupted && (byte=fgetc(stdin))!=EOF && byte!='\n') {
+        if(byte==0){xr_cli_error("repl","input contains a zero byte");state->failed=true;xr_free(line);return NULL;}
+        if(length==capacity-1) {
+            if(capacity>SIZE_MAX/2){repl_failure(state,XR_SOURCE_LIMIT,NULL);xr_free(line);return NULL;}
+            char *grown=xr_realloc(line,capacity*2);
+            if(!grown){repl_failure(state,XR_SOURCE_OUT_OF_MEMORY,NULL);xr_free(line);return NULL;}
+            line=grown;capacity*=2;
+        }
+        line[length++]=(char)byte;
     }
-
-    // Remove newline
-    size_t len = strlen(buffer);
-    if (len > 0 && buffer[len - 1] == '\n') {
-        buffer[len - 1] = '\0';
-    }
-
-    return xr_strdup(buffer);
+    if(ferror(stdin) && !g_repl_interrupted){repl_failure(state,XR_SOURCE_IO,NULL);xr_free(line);return NULL;}
+    if(byte==EOF && !length){xr_free(line);return NULL;}
+    line[length]=0;return line;
 #endif
 }
 
 XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
-    XR_DCHECK(inv != NULL, "inv is NULL");
+    if(!inv)return XR_CLI_EXIT_INTERNAL;
 
     ReplState state = {0};
-    state.authority = (XrModuleIdentityAuthority) {
-        .kind = XR_MODULE_IDENTITY_MEMORY,
-        .namespace_id = xr_cli_opt_string(&inv->options, "module-id", NULL),
-    };
-    if (!xr_module_identity_authority_valid(&state.authority)) {
-        xr_cli_error("repl", "--module-id must be an explicit valid memory-module identity");
-        return XR_CLI_EXIT_USAGE;
+    state.namespace_id=xr_cli_opt_string(&inv->options,"module-id",NULL);
+    if(!state.namespace_id || !*state.namespace_id) {
+        xr_cli_error("repl","--module-id must be an explicit valid memory-module identity");return XR_CLI_EXIT_USAGE;
     }
-    state.use_color = terminal_supports_color();
-    if (xr_cli_opt_bool(&inv->options, "no-color"))
-        state.use_color = false;
+    state.use_color=inv->ctx && inv->ctx->color && terminal_supports_color();
+#if XR_OS_WINDOWS
+    if(_setmode(_fileno(stdout),_O_BINARY)==-1 || _setmode(_fileno(stderr),_O_BINARY)==-1)return XR_CLI_EXIT_INTERNAL;
+#endif
+    if(!repl_open(&state,&state.owner))return XR_CLI_EXIT_FAIL;
 
     /* Initialize buffer */
     state.buffer_size = REPL_BUFFER_SIZE;
-    XR_MALLOC_OR_ABORT(state.buffer, state.buffer_size, "repl buffer init");
+    state.buffer=xr_malloc(state.buffer_size);
+    if(!state.buffer){(void)repl_close(&state,&state.owner);return XR_CLI_EXIT_INTERNAL;}
     state.buffer[0] = '\0';
     state.buffer_len = 0;
 
-    // Initialize proto tracking
-    state.proto_capacity = REPL_PROTO_INITIAL_CAP;
-    XR_MALLOC_OR_ABORT(state.protos, state.proto_capacity * sizeof(XrProto *), "repl protos init");
-    state.proto_count = 0;
-
     // Setup SIGINT handler
-    signal(SIGINT, repl_sigint_handler);
+    g_repl_interrupted=0;
+    void (*previous_sigint)(int)=signal(SIGINT,repl_sigint_handler);
 
     // Load history
 #ifdef HAS_READLINE
+    stifle_history(REPL_MAX_HISTORY);
     char *history_file = get_history_file();
     if (history_file) {
         read_history(history_file);
     }
     /* Wire tab completion.  Set the generator and make `g_completion_state`
-     * point at the live ReplState so phase-2 completion can see live
+     * point at the live ReplState so completion can see live
      * REPL bindings.  Cleared after the loop exits below. */
     g_completion_state = &state;
     rl_attempted_completion_function = repl_completion;
@@ -736,21 +779,11 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
     rl_basic_word_break_characters = (char *) " \t\n\"\\'`@$><=;|&{(";
 #endif
 
-    // Create Isolate + Runtime (persistent across inputs for GC safety)
-    state.isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
-    if (!state.isolate) {
-        xr_cli_error("repl", "failed to create isolate");
-        xr_free(state.buffer);
-        xr_free(state.protos);
-        return XR_CLI_EXIT_INTERNAL;
-    }
-    xr_isolate_multicore_init(state.isolate, 0);
-
     // Print welcome
     print_welcome(&state);
 
     // REPL main loop
-    while (1) {
+    while (!state.failed) {
         // Check interrupt flag
         if (g_repl_interrupted) {
             g_repl_interrupted = 0;
@@ -813,16 +846,15 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
 
         // Check if input is complete
         if (is_input_complete(&state)) {
-#ifdef HAS_READLINE
             /* Record the whole buffer (possibly multi-line) as one
              * history entry.  Empty buffers are skipped so users do
              * not see blank entries when they press Enter on an
              * empty prompt. */
             if (state.buffer_len > 0) {
-                add_history(state.buffer);
+                repl_history_add(&state);
             }
-#endif
-            execute_code(&state, state.buffer);
+
+            if(!state.failed)execute_code(&state, state.buffer, false);
             reset_buffer(&state);
         }
     }
@@ -838,17 +870,16 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
 #endif
 
     // Restore default SIGINT handler
-    signal(SIGINT, SIG_DFL);
+    if(previous_sigint!=SIG_ERR)signal(SIGINT,previous_sigint);
 
     // Cleanup
     if (state.use_color)
         printf("%sbye%s\n", XR_CLR_DIM, XR_CLR_RESET);
     else
         printf("bye\n");
-    repl_free_protos(&state);
-    xray_vm_delete(state.isolate);
-    xr_free(state.protos);
+    (void)repl_close(&state,&state.owner);
+    for(size_t i=0;i<state.history_count;++i)xr_free(state.history[i]);
     xr_free(state.buffer);
 
-    return XR_CLI_EXIT_OK;
+    return state.failed?XR_CLI_EXIT_FAIL:XR_CLI_EXIT_OK;
 }

@@ -29,14 +29,13 @@ static XrCompilerSessionStatus session_status(XrCompileResourceStatus status) {
     }
 }
 
-XrCompilerSessionStatus xr_compile_session_new(XrCompileResources *resources, XrCompilerSession **output) {
-    if (!resources || !output || *output) return XR_COMPILER_SESSION_BAD_ARGUMENT;
-    XrCompileState *state = NULL;
-    XrCompileResourceStatus status = xr_compile_state_new(resources, &state);
-    if (status != XR_COMPILE_RESOURCE_OK) return session_status(status);
+static XrCompilerSessionStatus session_receive(XrCompileState *state,XrCompilerSession **output) {
+    XrCompileResourceStatus status=xr_compile_state_session_open(state);
+    if (status!=XR_COMPILE_RESOURCE_OK) {xr_compile_state_release(state);return session_status(status);}
     void *memory = NULL;
     status = xr_compile_state_calloc(state, 1, sizeof(XrCompilerSession), &memory);
     if (status != XR_COMPILE_RESOURCE_OK) {
+        xr_compile_state_session_close(state);
         xr_compile_state_release(state);
         return session_status(status);
     }
@@ -44,6 +43,17 @@ XrCompilerSessionStatus xr_compile_session_new(XrCompileResources *resources, Xr
     session->state = state;
     *output = session;
     return XR_COMPILER_SESSION_OK;
+}
+XrCompilerSessionStatus xr_compile_session_new(XrCompileResources *resources, XrCompilerSession **output) {
+    if (!resources || !output || *output) return XR_COMPILER_SESSION_BAD_ARGUMENT;
+    XrCompileState *state=NULL;
+    XrCompileResourceStatus status=xr_compile_state_new(resources,&state);
+    return status==XR_COMPILE_RESOURCE_OK ? session_receive(state,output) : session_status(status);
+}
+XrCompilerSessionStatus xr_compile_session_new_with_state(XrCompileState *state,XrCompilerSession **output) {
+    if (!state || !output || *output) return XR_COMPILER_SESSION_BAD_ARGUMENT;
+    XrCompileResourceStatus status=xr_compile_state_retain(state);
+    return status==XR_COMPILE_RESOURCE_OK ? session_receive(state,output) : session_status(status);
 }
 
 void xr_compile_session_free(XrCompilerSession *session) {
@@ -56,6 +66,7 @@ void xr_compile_session_free(XrCompilerSession *session) {
         *scope = (XrCompilerSessionScope) {0};
     }
     xr_compile_state_free(session);
+    xr_compile_state_session_close(state);
     xr_compile_state_release(state);
 }
 

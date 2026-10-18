@@ -46,7 +46,7 @@ static XrXirAction weaken_authority_resume(XrXirCallView *view) {
 }
 static void weaken_authority_cases(void) {
     WeakenWitness witness = {0}; uint32_t dependency = 1;
-    XrXirSourceModule modules[] = {{"root", 4, &dependency, 1, 0}, {"library", 7, NULL, 0, 5}};
+    XrXirSourceModule modules[] = {{"root", 4, &dependency, 1, 0, 0,XR_XIR_MODULE_FRESH_STORAGE}, {"library", 7, NULL, 0, 5, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity ids[7] = {{0}};
     ids[1].exported = ids[2].exported = ids[4].exported = ids[6].exported = 1;
     ids[2].module = ids[3].module = ids[5].module = 1;
@@ -87,6 +87,7 @@ static void weaken_authority_cases(void) {
     CHECK(xr_xir_instance_poll_bounded(instance, UINT64_MAX).outcome.status == XR_XIR_CALL_RETURNED);
     CHECK(xr_xir_instance_take_result(instance, &weak) == XR_XIR_CALL_RETURNED);
     CHECK(strong.type == 257 && weak.type == 256 && strong.payload != weak.payload);
+    CHECK(!xr_xir_function_producer(&strong) && !xr_xir_function_producer(&weak));
     const XrXirFunctionBinding *a = xr_xir_function_binding(&strong), *b = xr_xir_function_binding(&weak);
     CHECK(a && b && a->owner == b->owner && a->entry == b->entry && a->capture_count == 1 && b->capture_count == 1);
     CHECK(a->captures[0].payload == b->captures[0].payload);

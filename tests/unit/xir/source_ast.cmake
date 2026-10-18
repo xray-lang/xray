@@ -1,0 +1,12 @@
+add_executable(test_xir_source_ast "${CMAKE_CURRENT_LIST_DIR}/test_xir_source_ast.c")
+target_link_libraries(test_xir_source_ast PRIVATE xray_xir_native_projection)
+if(MSVC)
+    target_compile_options(test_xir_source_ast PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_source_ast PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_ast COMMAND test_xir_source_ast)
+set_tests_properties(test_xir_source_ast PROPERTIES LABELS "unit;xir;ownership;metadata" TIMEOUT 60)
+add_test(NAME test_xir_source_ast_resources COMMAND test_xir_source_ast --resources)
+set_tests_properties(test_xir_source_ast_resources PROPERTIES
+    LABELS "unit;xir;ownership;budget;compiler-faults" TIMEOUT 600 COST 60 RUN_SERIAL TRUE)

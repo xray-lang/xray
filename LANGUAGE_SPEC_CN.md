@@ -2369,33 +2369,23 @@ yield expr                  // 生成器产出一个值并挂起
 
 协作让出 CPU 使用 `Coro.yield()`（见 §10.10）；裸 `yield` 不是表达式。
 
-#### 3.16.1 两种挂起是不同的语义
+#### 3.16.1 产值与调度挂起
 
-`yield expr` 与 `Coro.yield()` 共用词根，但**不是同一种挂起**，二者在调用方能观察到的每一个性质上都不同：
+yield expr交付一个拥有式元素并停驻producer；yield ()也交付一个真实Unit元素，不表示结束。Coro.yield()没有元素，只把当前activation交回执行器队列。两者都不会在宿主C栈上保留待恢复调用。
 
-| | `yield expr` | `Coro.yield()` |
-|---|---|---|
-| 转移目标 | 对称转移回驱动该生成器的迭代器 | 非对称让出给调度器 |
-| 是否可能换 OS 线程 | 否 | 是（work-stealing） |
-| 是否是取消检查点 | **否** | 是（§10.5） |
-| 是否向调用方传播 | **否**——驱动生成器不会挂起驱动方自己的帧 | 是，沿调用边传递 |
-| 效应契约 | `no_suspend` 拒绝，`no_reschedule` 接受 | 两者都拒绝 |
+hasNext()可以推进producer直到下一个产值、终态或真实外部等待；重复hasNext()保留缓存而不重复推进。next()转移一个元素的所有权，耗尽按§5.3.6报告E0432。消费可能沿producer遇到挂起，因此定义处不能承诺no_suspend；创建惰性Iterator本身不立即执行producer，也不立即继承其throw。
 
-因此 `xray verify` 把挂起拆成两个独立维度：`no_reschedule` 断言"不进调度器、不是取消点、不迁移线程"，`no_suspend` 是更强的"控制流从不离开本帧"。纯生成器满足前者而不满足后者；**只是驱动生成器的函数两者都满足**。
+#### 3.16.2 生成器等待与单消费者
 
-#### 3.16.2 生成器体内不得抵达调度器
+producer拥有独立frame，由原Instance执行器推进；I/O或Timer等真实等待暂停当前消费操作，不能把暂时无值解释为EOS。一个Iterator同一时间只接受一个驱动者。重入、自驱动、第二驱动以及外部取消的仲裁由真实owner、activation、世代和单次wake认证，不允许递归驱动后端。
 
-生成器帧由驱动它的一方恢复，而非由调度器恢复。因此生成器函数体内**不得出现任何调度器挂起点**，包括：`await`、`select`、`scope` 块、`Coro.yield()`、Channel 的阻塞方法、`time.sleep()`，以及对任何可能挂起的函数的调用。违反时报 `E0385`。
+具体Source类型、操作、借用环境和平台的实现范围及未资格部分见§17.39；这不把尚未准入的await/select/Channel或并行平台路径声明为已实现。
 
-该规则是**效应规则而非语法规则**：它按 §8 的效应产品逐层传播，因此调用一个内部 `await` 的函数同样被拒绝。证据不完整时**失败关闭**——生成器体内通过未解析的函数值（如函数类型参数）发起调用会被拒绝，因为该目标可能挂起。这与 `sys.Thread.spawn` 体和 parallel 回调的边界规则一致。
+#### 3.16.3 提前放弃与已登记清理
 
-> 该限制是有意的作用域决定，不是实现缺口：本版本的生成器是拉取式迭代器，不是异步流。
+提前离开或丢弃Iterator不再执行producer的普通剩余body，但必须关闭它并执行已经登记而未完成的cleanup恰好一次。消费者取消和producer失败遵守相同退出驱动。最后外部owner释放只发布关闭请求，由原执行器迭代排空；Instance关闭必须在代码退休前完成排空，drop回调不递归执行后端。
 
-#### 3.16.3 提前放弃的生成器不再执行任何代码
-
-`for-in` 通过 `break` / `return` / 抛错提前离开，或迭代器被丢弃时，生成器帧**不会被恢复**，其函数体的剩余部分永不执行。回收时机不属于可观察语义契约（§16.8）。
-
-因此**生成器体内不得使用 `defer`**（`E0386`）：`defer` 是本语言唯一的确定性清理机制，而在此处它可能永远不执行，一个可能不运行的清理比没有清理更危险。需要清理时，由调用方持有资源并作为参数传入。
+生成器允许defer，并沿用普通函数的登记、退出次序和禁止异步cleanup规则。未启动的producer没有执行登记，因此关闭不能凭空运行defer。物理内存释放不是语言cleanup执行的证据。Iterator不增加Source close()方法；内部关闭由生命周期和取消请求驱动。
 
 ---
 
@@ -3409,7 +3399,7 @@ interface Iterable<T> {
 - `next()` 返回 `T` 而非 `T?`：**耗尽不由返回值表示**。协议是两步的——每次 `next()` / `nth()` 之前必须先由 `hasNext()` 返回 `true`。在 `hasNext()` 为 `false` 后调用 `next()` 属于契约违规：运行时以 `E0432` panic 报告，不返回零值，也不返回 `T` 所禁止的 `null`（§18.3）。
 - `Iterator<T>` 是**一次性**的：耗尽后 `hasNext()` 恒为 `false`，不可重置。需要再次遍历时重新调用 `iterator()` 或重新调用生成器函数。
 - 迭代期间修改集合的行为由该集合定义。内建 `Array<T>` 的 for-in 持有拥有式逻辑值快照，修改或重绑源数组不使该快照失效（§14.7）；其它集合与身份 iterator 的失效规则由各自合同定义。
-- `Iterator<T>` **没有** `close()`：提前放弃一个迭代器不执行任何清理（§3.16.3），这也是生成器体内禁止 `defer` 的原因。
+- `Iterator<T>` 没有 Source `close()` 方法。生命周期关闭会排空已经登记的生成器清理；提前放弃不再执行普通剩余 body（§3.16.3）。
 
 生成器函数（体内使用 `yield expr`）由编译器自动实现该接口，无需手写。
 
@@ -5499,6 +5489,8 @@ const cha = Channel(3)          // 元素类型从首次 send 推断
 | `close()` | `() -> ()` | 关闭 channel；幂等 |
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
+**超时语义**：`ms` 必须是 `0..86_400_000` 范围内的 `i64`；越界在 Channel 操作前产生 `NumericRange`。零毫秒只尝试一次队列操作。正毫秒从首次尝试记录单一单调截止时间，反复等待或重新登记不能延长期限；宿主必须提供有效时钟，读数失败、为零或倒退产生 `HostError`，不冒充超时。发送关闭返回 `SendResult.Closed`，接收关闭且排空返回 `Recv.Closed`。receiver、消息和毫秒表达式按源码顺序各求值一次，Unit 消息也保留求值副作用；等待期间复用原值。peer 完成与 timeout/cancel 的首个原子终态决定结果，已提交交付不可撤回。两方法保守视为可能挂起，零毫秒不改变这一静态效果。
+
 ```xray
 const ch = Channel<i64>(10)
 ch.send(42)                             // 阻塞发送
@@ -5525,7 +5517,7 @@ for (msg in ch) {
 var value = ch.recvOr(-1)
 ```
 
-**send/recv 与 `move`**：发送大对象时用 `ch.send(move payload)` 转移所有权，避免拷贝；接收方独占。
+**载荷所有权**：`Channel<T>` 要求 copyable、storable、Sendable 的 `T`。发送普通值保持逻辑副本，Array 后续修改相互隔离；class 和同步句柄保持其共享身份，不复制对象身份，也不以 `const` 代替 Sendable 证明。
 
 Channel 在类型位置写作 `Channel<T>`，可用于函数参数、字段和返回类型：
 
@@ -5826,7 +5818,9 @@ xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5
 
 跨 Task 边界的完整终态必须满足拥有式与 Sendable 规则，不能只检查成功值 T。worker 及可达调用的逃逸值错误由现有效应摘要证明：真实 Error 枚举的全部变体载荷均须 Sendable，不能只看实际 throw 的变体或名义类型标记；泛型错误须在定义处具有 Error 与 Sendable 约束。首片对未知或无真实身份的逃逸错误明确未准入。未逃逸的局部非 Sendable 值及普通同步 throw 不因本边界改变。运行时在发布 Task 终态前按真实封闭类型与字段权限准入 native 的 THROWN 载荷；异常载荷、OOM、LIMIT 和宿主故障保各自准确状态并完成清理，不伪装成 PanicInfo。当前 panic 载体仅包含标量 fault detail 与拥有式字符串；未来扩展须重新证明完整载荷的 Sendable 与生命周期。
 
-当前新 XIR 执行核的 Error 载荷能力包含以既有标量或 string 为叶子的 Array 字段及嵌套 Array。运行时检查封闭枚举的全部变体字段，Array 类型边逐一消耗同一累计 work，并继续按真实 arena、Domain 和值图准入；不因容器形式跳过 Sendable 或所有权证明。类型链循环、未封闭类型、Cell、callable 和 class 不获该能力；其它合法 Sendable 载荷族仍需各自接通执行能力。此扩展不改变普通 root 故障与 Task 值错误的区分。
+当前新 XIR 执行核的 Error 载荷能力包含 Array、嵌套 Array、Nullable、Tuple、enum、struct、Atomic 和 Task 字段，包括直接 Task 与 Array<Task>。编译证明仍检查真实 Error 枚举全部变体的完整 Sendable 性质。运行时按真实 worker entry 的同一 Program 证书检查实际 enum 类型和变体；先在实际 arena、Domain 上执行有界完整值图准入，再从同一不可变 Effects 取得扫描上界并预付到同一累计 runtime work，才查询成员资格。没有第二份错误集合，也不以查询消耗编译期账本。未知/无身份错误、错误变体或外域 arena 明确拒绝；值图 OOM/LIMIT 保准确状态并清理，不发布半终态。公开 Task 句柄在 Instance 与最后代码 lease 退休后仍持有完整 Error，重复副本不消费粘滞结果。此能力不授予未闭合类型、Cell/callable 或未验证 class 载荷的执行资格，不改变普通 root 故障与 Task 值错误的区分；完整参数族、生成器和调度能力仍分别验收。
+
+当前可执行 Task 结果族包含 Unit、bool、rune、既有全部整数/浮点类型及 string，以及封闭的 Array、Nullable、Tuple、enum、struct、显式 Sendable class、Atomic 和 Task。除不属于普通实参域的 Unit 外，这些可复制载体也准入 Task 参数；struct 按完整字段参加同一有界 Sendable 图证明，不能借结构壳绕过非 Sendable class、callable 或未闭合类型；仍须通过同一 Checked 的完整 Sendable 图证明和真实 worker 的 root 效果检查。Call 在发布子 Task 前准备参数的完整拥有式图；父方随后修改 Array 或嵌套 Array 不改变子方逻辑副本，Atomic 和 Task 参数保留同步身份。私有 spawn 同样必须匹配真实 worker 认证入口，参数类型不以描述符种类取得额外权限。await 与粘滞终态副本保留准确类型及规范标量位表示；值语义副本的修改不污染后续 await，同步句柄与 Task 在复制时保留身份。非标量成功值在发布前按真实 arena、Domain 和有界值图准入；直接嵌套的终态 Task 验证沿不可变类型池严格下降，以迭代方式避免 C 栈随嵌套深度增长。终态 Task 在 Instance 和执行代码租约释放后仍持有拥有式结果。复制失败保全空输出和粘滞终态，沿同一累计预算收费，不退款。显式 `implements Sendable` 的 class 使用唯一名义元数据标记，全部字段在真实声明环境中证明 Sendable，构造后字段不可重绑；普通 class 不自动推导，Sendable 不能由普通同名接口伪造。class 及其 Atomic 字段复制保留身份，取出的 Array 字段按值复制。当前 class 片段覆盖无继承声明及有界泛型；同一有界图允许通过已验证只读 class 身份边闭合递归类型，仍检查全部其余字段。纯值类型循环以及只有循环外 class 的非法值循环均拒绝。真实有限链式 class 的参数、结果和 Error 在代码退休后继续拥有完整值图；继承、其它未接通载荷、完整参数资源/FI和产品安全资格仍分别验收。
 
 runtime capability 只从 executable entry、manifest C export 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
 
@@ -7563,7 +7557,7 @@ NUL/深度257、逐实际OOM与exact/minus1、producer销毁/双Instance/physica
 
 PRINT失败保留准确Call状态。WRITE_STREAM在合法已配置provider下将OK映为true、OUTPUT_ERROR映为false；缺provider仍为Call OUTPUT_ERROR，OOM/LIMIT/BAD_ARGUMENT/BAD_ABI不得映为false。取消保持既有优先级。资源失败不成为panic，不能被assertPanics消费为成功。
 
-当前Call ABI为21。Provider/Sink以abi_version与reserved=0开头；有callback先验21，无provider仅准canonical全零。CallConfig/InstanceConfig以abi_version和struct_size开头，在读取其它字段前验21及exact sizeof。Windows x86_64实测Provider24、Sink32、CallConfig136、InstanceConfig88；这些数值不代替其它target的实际ABI验证。唯一xr_xir_call_config_init(config,size)与xr_xir_instance_config_init(config,size)返回CallStatus，成功才写，失败保留全部output bytes；旧按值defaults符号删除，无别名或wrapper。旧Call20 entry必须在执行callback前拒绝；旧embedding defaults对象必须链接拒绝，不能用重编旧对象替代证据。
+当前 Call ABI 只由 §17.6 的实现常量定义。Provider/Sink 先检查该 ABI 与 reserved=0；无 callback 只接受 canonical 全零。CallConfig/InstanceConfig 先检查现行 abi_version 和 exact struct_size，再读取其余字段。唯一 xr_xir_call_config_init(config,size) 与 xr_xir_instance_config_init(config,size) 返回 CallStatus，失败保留全部 output bytes。CallConfig 的 TimeProvider 由宿主借出，context 必须活到全部接收 Call/Instance 退休；Task 子 Call 从真实 parent 或 root 继承同一 provider。实际 SDK 的目标探针核对布局，单个 Windows 布局不能授予其它 target 资格。旧 entry 在 callback 前拒绝，退休 embedding 符号保持链接拒绝；重编旧对象不构成历史二进制证据。
 
 Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移不授Source/Target/SDK权限，不证明完整安全、默认stdlib缓存或最终旧链删除。VM/native独立预期、每个真实分配失败、准确状态、旧对象拒绝、producer寿命及物理释放分别验证。
 
@@ -8078,6 +8072,124 @@ LSP文档打开、编辑与诊断使用既定64MiB累计分配、8MiB存活量�
 成功发布者拥有该URI的完整空诊断清除参数；该JSON独立拥有字符串，在文档Source替换时显式转移，不借用已死亡的源文本或ledger。相同URI被新的发布者接管后，原发布者不得再清除它。编辑后目标URI变化先清除旧接收者再发布新结果，两份JSON和序列化体均在首字节写出前准备；准备失败不花费发送拥有权，已被操作系统接受的字节不可回滚，写失败终止发送。
 
 文档关闭清除自身和指向关闭编辑器的既有发布；清除全部诊断同时覆盖关闭依赖与开放文档。无法定位的新语言错误只撤销已过期的自有发布，不伪造当前文本的空成功。清理拥有权不再补做分配或资源work；显式清除准备与传输失败保持原拥有权或进入终止状态，不制造部分JSON帧。
+### 17.50 已发布Source定义的历史接收
+
+持续Source拥有者只向下一候选输入提供本拥有者已发布的真实Checked Program和实际注册绑定。历史输入使用独立于Catalog Library的内部模块表示；不重新解析或拼接旧Source，不修改Program的linkage，也不以查询名称构造函数、泛型或名义类型身份。接收复制并重定位完整Checked声明闭包，仍进入唯一Built→Checked→特化复验→Lowered管线。
+
+词法作用域与模块出生身份独立：模块的`lexical_scope=0`表示独立作用域，非零值为同一作用域规范模块编号加一；引用必须在界内，不能指向自身或另一条引用。当前会话输入与准确接收的历史会话根共享词法作用域，普通导入模块继续独立。该关系只替代跨输入的模块私有可见性检查，不授予缺失依赖、私有成员、initializer调用或运行时存储权限。函数、名义类型、slot和初始化归属仍保留准确模块。
+
+作用域关系由拥有式声明、Checked packet、特化来源匹配、效果快照和Program proof保留并核对；所有接收族共用当前权威协议版本，旧布局直接拒绝。普通历史函数、泛型与名义类型正控已通过检查并在VM返回42；这些无历史状态正控不证明旧slot/cell复用、历史初始化仅一次或REPL成对发布。相应运行时对应和完整故障/安全门仍须单独完成。
+
+运行时接收须先把准备中的Source记录绑定到真实封装Program：普通编译器重新推导准确特化/Lowered证明，并核对已验证Program保存的证明摘要及目标。记录拥有接收时产生的模块、函数、slot和类型映射；Checked函数编号不直接作为特化后函数编号。随后同一Source拥有者保留首个实际运行域，只接受该域的后继Instance事务。Program相同不授权另一个运行域。
+
+接收事务在运行域预算内拥有模块与slot路由，直接指向实际出生代；多代路由展平。仅实际出生模块已完成初始化时，接收代才继承其就绪状态并跳过旧initializer；不复制旧值或制造空initializer。读取须继续通过当前静态模块权限、实际出生槽发布状态和普通值准入，收到的槽不能再次发布。
+
+实际Source接收映射与已封装Program证明共同确定准确存储类型根；只有这些根及其组成类型可接收已有类型身份。类型图检查核对这种真实对应，不以同名、相同外形或相同编号建立身份。接收类型池保留出生类型池，形成无环拥有链；共享或已使用的目标不能修改，失败不发布半成品。值及紧凑存储恢复保留对象的实际出生类型和类型池，不把旧句柄改标为当前类型。身份对应不授予Domain、模块发布、borrow、构造或调用权限。
+
+Array的长度、容量、索引读取、reserve、索引写入与追加在接收身份核对后，使用实际数据拥有类型池中的元素类型和布局。只读ROOT_SLOT路径继续指向真实出生槽，并检查原发布状态。路径保存每条数据边的类型池，用准确身份核对静态container与实际container；紧凑叶的打包、解包、图扫描和释放均恢复真实对象头。已有Error抹除视图继续保留Error标签与实际enum拥有者，不能恢复成具体enum标签。接收类型池中新建的Array可以存入出生池的紧凑元素，共享子树的写入仍先复制，副本保持独立。上述类型坐标转换不改变对象头，也不代替Domain或借用权限。
+
+函数深层准入回调使用实际函数对象的出生类型池，核验真实gate、Program、entry、完整声明上界及捕获角色；接收方上下文和原work账本不变，嵌套准入及失败返回均恢复接收方类型池。显式弱化先验证准确接收身份和完整签名上界。规范身份未改变时，新建的无producer印记carrier仍属于实际出生类型池，并保留真实出生gate、entry和捕获。上界改变时，只有普通编译器已证明对应的接收body才能创建接收carrier；不能按外形匹配或复制producer权限。
+
+根执行流的间接调用从实际函数gate选择出生Program的entries、类型池、准入上下文和Cell角色，每个frame保留自己的元数据坐标。同一个Call继续使用原executor、帧栈、深度、resume、取消、cleanup和累计账本；实参准备失败及子frame退出恢复父元数据，不复制或重置work。VM调用实参、间接callee、RETURN及生成C的RETURN/THROW保留真实对象头，不能用接收方数字类型编号重建旧对象的值视图。worker跨Program调用仍要求独立封装的producer与invocation对应，缺失时拒绝，RootNone或Sendable不能代替该证明。
+
+宿主调用旧函数仅为当次执行选择出生代。后续Source存储接收从准确的已发布代开始，不把最近执行的旧Program当作Source发布身份。pending候选、foreign Instance与stopped拥有者仍拒绝；逃逸函数在Source、Instance及调用者Program引用释放后仍保留实际出生Program和拥有的捕获，最终drop释放这些lease。本语义不宣称完整闭包族、额外函数/泛型类型根、完整G2/G3、REPL成对协调或完整资源/安全资格。
+
+Cell读取与写入使用实际出生存储；跨池写入的身份查找在原工作量账本内有界计费，实际存储操作仍检查原Domain和借用权限。普通旧Cell副作用在后继候选失败后保留；只撤销候选的新绑定和拥有存储。I64/String与Cell<i64>历史、嵌套Cell/Array身份和写回已验证；真实Source的旧Cell读写也覆盖VM、native及两个混合方向。Class/Array全部操作、完整闭包/调用族、其他历史类型根与完整G2/G3、P14协调及全部资源/安全门仍未完成。
+
+公共Source REPL拥有者一次性拥有真实Compiler、其Catalog与同一个累计Instance。完整MEMORY输入必须匹配构造时的namespace，经一次解析的真实AST进入同一Source成对事务；正常返回才发布，编译与运行失败不发布新声明，旧普通写入和已扣费用保留。poll/wait/resume/cancel共用真实运行驱动，输出回调期间的mutation返回BUSY。结果、读值与诊断拥有其真实数据，整个REPL及Compiler销毁后仍有效。若实际候选清理继续报告LIMIT/OOM，观察事件报告CLEANUP_FAILED并停止拥有者，同时保留原终态结果，不重新授予额度。
+
+公共拥有者通过原有REPL解析规则接入共同Source检查器。真实类型推导后的非Unit尾表达式生成普通不可变声明、实际slot及typed reader，来源仍是调用者未经改写的AST节点。Program默认入口继续返回i64；协调者通过普通specialization与lowering对应启动该真实reader，初始化只求值一次。共享格式器从实际拥有的返回值准备完整显示，在同一累计输出额度内成功写出后才成对发布；宿主显示失败中止候选并停止拥有者，旧普通副作用保留。后续输入的it选择准确的已发布声明及出生代，Unit与失败候选不替换它；None不显示但发布实际可选值。顶层it声明保留，局部可遮蔽；历史函数继续绑定定义时的旧结果。函数显示采用既有规范文本 `<fn>`。普通与交互历史不能混用。完整CLI资格、原38项、额外代际用例、既有profile/TLS/scheduler行为、完整FI/安全及SDK/provider退出门仍须独立完成。
+
+公共REPL的rooted文本要求真实绝对路径及空namespace，由原Compiler的Catalog、manifest限制和累计ledger发现最近project或SCRIPT authority、lockfile及普通相对导入；无效近层配置不退回SCRIPT。调用者路径和字节只借至begin返回，原AST拥有者的描述不改写；authority的逻辑路径另传共同Source内核，模块图拥有已准入authority和路径副本。交互代的新模块声明身份以真实会话namespace、输入序号和原canonical身份作长度分界；resolver身份与物理I/O根保持原值，历史Checked名字保持出生值。相同文件再次输入及同名同形类型仍有不同声明出生身份；名称和范围观察不能授权历史存储。真实FILE入口在原Compiler累计ledger上解析相对路径、准入最近authority并读取普通文件快照，同一次AST事务拥有字节；begin返回后路径和文件可改变，缺失或非普通文件不退回MEMORY。输入完整性观察在相同ledger上运行真实lexer，开放分隔符和未终止字面量需要续行，其他语法错误留给原parser；pending、重入及资源失败保持观察输出不变。CLI的repl --module-id接入该拥有者，保留十个交互命令，.load调用FILE入口，.vars读取真实绑定，.type使用普通非发布查询。历史Program的时钟/时区/计时器指令保原host语义与效果，不扩大普通库导入范围；yield与计时器只以真实epoch/wake恢复，Task subject观察不授予执行权限。原38项及其余完整退出门仍须迁移和验证。
+
+结构体字段读取先由出生arena与序号经原精确接收表取得当前arena的本地类型，再执行原值准入。跨池查找计入当前work额度；不按形状授权、不重标记carrier、不把出生序号直接当接收池序号。无关的同形arena、缺失work及越界字段仍拒绝并保空输出。
+
+可见REPL名字和类型显示事实在候选执行前由真实Source声明准备，只有成对发布后才替换公开观察；内部结果及函数值槽不进入用户声明计数，当前it另有明确标记。函数声明在根初始化中构造一次真实函数值并保存到普通不可变私有slot；读取经该slot的真实出生reader，不调用用户函数体。观察中的出生Source序号、名字及类型文字不能授予编译、构造或执行权限；没有已准入显示文字的类型以缺失观察表示，不能编造替代名字或因此拒绝合法输入。
+
+.type接收一次解析的单个表达式，在共同Source检查器中求值并调用真实typeName逻辑，返回拥有的String。该临时候选只能中止，Source发布入口也拒绝发布它；旧普通副作用和累计费用保留，可见元数据与it不替换。赋值和Unit表达式同样按真实typeName语义处理，不拼接或渲染源码。CLI调用者已接入真实公共拥有者；原38项以及完整profile、生命周期、资源和安全资格仍须完成，公共观察与查询用例不替代这些退出门。
+
+
+跨输入的可变Array push通过出生Program中的普通已检查操作函数修改其真实Cell；接收方只传已求值一次的精确元素值。这个函数在出生模块内执行SLOT_LOAD/CELL_PLACE/ARRAY_PUSH，不将Cell作为返回值泄出，不直接访问外模块slot，不复制另一个可变存储。普通只读Array访问调用真实出生reader，const写入仍拒绝。操作函数的序号和完整签名来自原Compiler拥有的语义记录及实际Checked接收表，并随其深拥有、收费及销毁；名称观察不授予权限。该接线不代表全部Array/结构路径/ref或额外可调用族已经完成。原REPL夹具迁到现行语法：类字段不写var、构造器写init；空结果由有准确Optional返回类型的匿名函数产生，独立保不显示、it存在及用户绑定为零的预期；无上下文null与旧字段修饰符继续拒绝。
+
+公共C写入借用真实Value，通过最新已发布可变声明的普通出生writer执行。writer的准确Checked签名经特化与Lowered对应登记到同一Instance；名字只选择声明，实际参数类型、arena身份、出生权限和运行预算由普通Instance准入决定。不转换或重标记值，不隐式创建声明，不发布新输入或替换it；const、函数声明、缺失名字、错误类型及无关同形arena拒绝。pending与回调重入返回BUSY，写入共享原累计ledger并在返回前清理实际activation；失败清理停止拥有者。旧函数仍读取同一出生Cell，返回的拥有读值可在整个拥有者销毁后存活。原字典测试以显式类型声明为前置，保真实C写入/读取、覆盖数量不变及缺失输出为空；损坏真实Checked类型表或函数范围不能授权后续输入。
+
+Class字段读取和即时贷款也保真实出生carrier：VM以当前已检查operand类型准入，值存储经原精确类型接收表回到真实owner arena，Class贷款、模块存储、worker和字段权限继续由原检查决定。历史Cell与Class的carrier序号不当作当前池序号，不重标记或按形状授予权限。
+
+宿主产品共用本机Lowered目标和Instance默认配置；后者重置全部trace/provider上下文并安装真实系统时间provider，调用者随后显式设置输出与预算覆盖。Compiler保存已准入目标，REPL沿用同一值；目标/ABI观察与旧profile名字均不授予权限，真实Catalog、Checked、sealed Program与Instance仍决定准入。缺失目标或错误Value ABI在Compiler构造前拒绝且不扣资源，错误配置前缀保持输出不变。
+
+公开交互调用总是选择显式拥有者，不按线程中最后创建的VM选择会话；多个拥有者各保Compiler账本、Domain、执行器、回调上下文及终态寿命。普通Array分配的同步根使用执行器内联的真实根Call，不创建子Task；go才在同一拥有者中建立真实子Task及FIFO。子Task的yield由共同执行器调度，根的真实对外yield才按观察到的epoch/wake恢复。一个拥有者销毁不改变另一个仍待执行的子Task；拥有读值和结果在两者销毁后仍有效。这些入口检查不代替完整worker/ref/Task、资源与安全资格。
+
+
+### 17.51 公共 Task 的终态数据观察
+
+公共拥有型 Task 可将已经完成的真实终态复制为独立拥有的 Result。观察成功返回 OK；调用者再读取 Result 的 RETURNED、THROWN、PANICKED、CANCELLED 或其他真实终态。终态自身的 LIMIT/OOM 不能与复制失败混淆：只有内核实际复制出的完整结果才可发布；复制或最后外壳分配失败保持空输出。读取和拷贝继续消耗原 Task Domain 与原 Compiler 的累计账本，不重置资源或访问已经死亡的 Compiler。
+
+Pending 只返回 BAD_STATE，不分配结果外壳、不推进、等待、取消或取得 executor lease。重复观察与 alias 保同一真实终态；Task、Program、Compiler 和 Instance 可以在成功后释放，结果继续拥有准确类型、Error/Panic 与 UTF-8/NUL 字节。结果数据的拥有不授予 Task 执行、跨 Instance、Class 成员、借用或 callable 权限。Array 和名义成员的受信内核 getter 不能因存在而直接成为公共权限；完整访问与推进 lease 仍须实际 owner 的独立接收和验证。
+
+### 17.52 公共 Source 的解析失败诊断
+
+格式有效的宿主请求遇到源码语法错误时，file、text、AST 编译以及 REPL 输入和类型查询返回 INVALID。诊断接收实际解析器的首条消息、行列和失败模块路径；导入语法错误指向被导入文件，MEMORY 根没有物理路径时为 NULL。消息与路径由诊断拥有，调用者输入、AST、Compiler 或 REPL 销毁后仍有效。请求诊断与否不改变语法失败状态，拥有诊断消费者的解析不另向进程 stderr 打印错误。
+
+坏宿主请求仍返回 BAD_ARGUMENT。解析或诊断接收中的真实 OOM/BUDGET/IO 保留资源失败，不映为语法错误。普通语法失败不发布 Program 或新 REPL 声明，且同一 Compiler/REPL 可继续接受合法输入；资源失败保持既有累计额度与粘滞状态。
+
+### 17.53 公共 Source 的 NUL 字节拒绝
+
+显式输入长度中的 NUL 和实际源文件中的 NUL 在解析前被拒绝，合法宿主请求返回 INVALID。诊断使用真实验证位置的一基行号和字节列、固定消息 `source text contains an embedded NUL` 以及拥有型失败文件路径；MEMORY 根路径为 NULL。导入错误指向该被导入文件。诊断可在源字节、路径、AST、Compiler 和 REPL 销毁后继续使用，同 owner 后续合法输入仍可成功。
+
+NUL 验证具有独立的 SOURCE_INPUT 来源，不伪称 parser 回调。根文本、rooted overlay、真实文件和 AST/REPL 扫描继续使用各自原累计账本；诊断或路径接收失败保真实 OOM/BUDGET。不可表示的行列返回 BUDGET。失败不发布 Program、新声明或 authority，不回退 SCRIPT，不在清理时分配。run、check、check --syntax-only 和 REPL .load 报告实际失败位置；语法检查仍只检查被指定文件。
+
+### 17.54 公共 Source 的拥有型 Program 接收
+
+公共 Source/REPL 的 Program 构造消费真实 Lowered Input 与 Final 的共同拥有型接收者。内部转交只移动实际物理 owner，不保存语义验证结果、不授执行权限；外部 packet 只借用当前同步输入，由 reader 解码成同一种拥有型 Input。接收者在准备前和准备回调完成后独立验证当前语义、完整声明、body、layout 与实际描述符，成功才一起转交 Input、入口及参数表，失败保全调用者 owner 和空输出。Program 直接保活所接 Input 的规范声明，销毁和失败清理不申请新资源。
+
+出生函数的 Source 对应关系通过真实特化映射及新 Lowered body/layout 与 Program 所拥有的 Input/Final 比对建立，不以 wire 摘要相同代替该接收证明。模块 lexical_scope、storage 和既有出生身份继续逐字段核验；函数、成员、ref、Task 的执行权限仍来自真实 Program/Instance/Call。
+
+此接收布局使用 Program ABI33；Value24/Call29 和 Checked30/semantic76 不变。旧 Program32 及更早前缀拒绝，不保留借用 Proof/layout reader 或兼容别名。SDK 的 Packet/ProgramSpec 真实布局由独立声明模型和宿主 C11 核验；完整旧 SDK 向量继续保存为拒例。全部复制、深读、比对、失败与寿命继续使用原累计账本及既有首错状态。
+
+
+共同Checked身份为wire30/semantic77：同时编码CTFE稠密分母、materialization/site/binding完整事实及Channel的十一条操作。Value29/Call33/Program35对应实际载荷、计时与拥有式Input布局，不为组合递增。完整旧30/75与28/76包在任何分配前拒绝，空及占用输出均保全；两侧独立字段构造器、历史字节与旧控制保留，不能以生产writer输出更新golden。名义权限必须从当前canonical pool实例读取，声明序号不能替代泛型实参或pool身份。C11策略和SDK身份使用同一30/77边界。
+
+### 17.83 Iterator 与 Generator body 规范开发切片
+
+Iterator使用唯一Type池中的元素描述符kind11。编号9/10属于固定Map/Set输入，不能表示Iterator；本独占输入在接收其治理实现前拒绝这两个编号。操作153–175保留给相同固定输入，缺少实现时没有任何准入stage；GENERATOR_YIELD为176。参数数组、result、flags及nominal字段均为空，parameter_span等于元素的真实span；元素可为Unit或已准入普通类型，内部Cell、未知类型及自身/前向边拒绝。同元素描述符不得重复。Checked沿现有kind/span/element字段编码，独立重读、克隆、定义上下文、普通泛型替换/推断、访问与Lowered验证仍检查真实元素。协议版本只由§17.6定义，本切片不增加公开Value/Call/Program字段或布局。
+
+Source的Iterator<T>类型拼写绑定stdlib/types/iterator.xr及prelude唯一注册；共同生成器拥有完整声明、真实位置及源码指纹，不以同名用户声明或接收上下文制造原生权限。泛型元素没有额外Sendable要求；隐藏frame可能保存非Sendable环境，因此元素Sendable不构成Iterator的Sendable证明，Task<Iterator<T>>仍拒绝。
+
+有真实yield的Iterator<T>函数按所属词法body标记Generator角色；不信任旧analyzer的is_generator，也不把嵌套函数的yield算入外层。角色保存在既有FunctionIdentity的独立GENERATOR位；NoSuspend义务只读取自己的位，不能把非零角色当作NoSuspend承诺。合成defer helper不继承外层Generator角色。规范GENERATOR_YIELD操作的指令类型为Unit，可选操作数必须匹配Iterator真实元素；Unit元素没有SSA载荷。声明结果仍为Iterator，generator body的正常RETURN完成类型为Unit，因此产值与EOS不同。当前可验证范围包括真实Source→Checked独立重读→特化/Lowered→VM及真实生成C的本机执行，含调度Coro.yield()与yield ()的区分。
+
+认证拥有式Cell、nth消费及词法循环关闭以Checked89/Call34原子接收，固定组合使用wire30/Value27/Call34/Program31，并保留当前独立元数据和共同Call/Instance布局约束；Iterator需求动作、四种内部等待和单消费者私有存储继续沿唯一协议。完整旧Value24/26 Domain前缀在访问新字段前拒绝；完整旧73/74/84/85/86/87/88包在头部拒绝且不分配。新Generator完整包从独立命名字段模型构造，正例与角色、元素、Unit载荷、ref参数及未知位拒例不得以product writer输出推导。generator入口必须具有封闭Iterator结果，产值经共同Call的拥有式YIELDED状态转移；正常完成返回Unit。取走产值恢复同一frame就绪，不分配wake；只有真实调度挂起产生wake。普通结果take、Task终态和resume都不能消费产值，取消须释放尚未取走的owner。
+
+Source对真实generator声明的直接调用语法生成唯一GENERATOR_NEW177；普通CALL/FUNCTION_REF/GO操作仍不能执行body。创建在当前认证view下按封存Program的真实调用者/指令站点选择完整callee、结果和参数数；相同latent证书与独立provenance接收检查保留完整特化身份，创建不执行body，也不继承body的立即挂起/语言错误。每个Iterator在原Instance执行器和同一预算下拥有独立非移动Call frame；停驻producer不阻止普通root返回。最后一个外部owner释放只发布关闭信号，由共同FIFO执行器迭代取消并完成cleanup；Instance关闭先排空活动producer再退休代码，终态Iterator仅持有类型Arena和Domain存储。未启动producer的defer没有注册，关闭不得凭空执行。没有增加共同Call/Instance字段。
+
+Source命名嵌套函数和匿名函数中的真实yield现在同样产生独立producer body；闭包值引用普通工厂，工厂仅以相同封存GENERATOR_NEW创建producer。闭包调用不执行producer body，命名闭包的自引用也指向工厂。拥有式常量String及Array逻辑快照可进入隐藏参数并跨挂起，普通泛型特化保留相同类型和capture对应关系；创建者修改原Array不改变已捕获的快照。词法函数清点为实际含yield的闭包独立保留工厂，不以旧analyzer标记授予角色。外部ref捕获仍精确拒绝；内部视图尚未接通。
+
+可变捕获保留既定共享Cell身份，不能以值快照替代。GENERATOR_NEW沿真实操作数向producer参数传递拥有式来源；只有完整来源为OWNED且角色为OWNED_CAPTURE的Cell可进入隐藏frame。SCOPED、MODULE、UNKNOWN及混合来源均拒绝，未绑定的Cell参数也不能授予拥有式角色。Source直接ref参数与外部ref捕获继续拒绝；Program接收重新推导角色，真实Instance工厂从不可变权限表取resolver，frame准备再次检查Cell未借出且非模块存储。公开低层构造没有resolver时不能制造此权限。拥有式参数不建立跨挂起贷款，清理helper仍按原LEXICAL_CLEANUP协议借用父frame；代码退休前排空，逃逸产值保持自己的拥有权。
+
+Source hasNext()/next()绑定完整治理声明的native身份8（6/7保留给固定Map/Set），分别生成ITERATOR_HAS_NEXT178/ITERATOR_NEXT179。两操作以Unit控制指令、一个真实Iterator操作数和独占正常/错误后继表示；正常值通过INVOKE_RESULT取得bool或元素，Unit没有SSA载荷。二者均MAY_SUSPEND；工厂值携带producer的延迟Error事实，消费错误后继读取该事实，不能使创建立即throw。普通copy/local/参数传递保留身份，同一个Iterator在同一时间只能有一个已绑定消费者，self/重入/第二驱动准确拒绝且不扰动原等待。
+
+消费者通过现有Call等待槽保留拥有式lease，wake同时认证executor、activation、世代及ticket。hasNext保留已产出的缓存值，重复查询不推进producer；next只转移一次缓存owner。缺少缓存时只由共同FIFO执行器推进独立producer，不在回调内递归执行后端；Coro.yield只让出调度，不交付值或EOS。producer完成全部cleanup后再交付终态。正常耗尽/关闭的hasNext为false，next以既定E0432报告；真实producer Error/panic保留供后续消费准确观察。消费者取消解绑并请求producer关闭，最后外部drop和Instance关闭仍由同一执行器排空。
+
+宿主wake选择属于当前root operation，即使实际外部请求来自独立producer或Task。root取消成功立即撤销已选宿主票据；仍独立存活的Task等待在后续poll重选新票据，旧票据不能先于producer取消排空被再次接受。经过完整身份认证的自驱动是运行失败，沿原frame的结构化退出执行已登记cleanup；错误Domain/世代/身份仍按协议错误关闭。真实Source标准time.sleep、两级producer的Timer等待、正常/取消/stop/free/drop、伪票据、自驱动和循环第二消费者已有定向VM/native及两向mixed验证；这不代替完整外部事件、并发、FI和安全矩阵。
+
+Source nth(index:i64)绑定相同治理声明并生成ITERATOR_NTH180，以Unit控制指令、Iterator与精确i64两个操作数及独占正常/错误后继表示。它丢弃当前位置起的index个产值，再转移一个产值；index为0等同next，负数在推进producer之前报告E0430，跳过期间耗尽报告E0432。每个被丢弃的owner立即释放，Unit仍是一个产值。消费全程保留同一消费者绑定，通过现有FIFO执行器逐项推进，不使用C递归；真实Timer仍按原请求等待。既有WaitRequest.after_ms仅在内部NTH等待中保存剩余丢弃数，每次递减使旧token失效；它不会成为宿主Timer时长。取消先解绑，再完成producer清理；错误与panic沿原后继传播，终态错误保持可重复观察。
+
+Source对内建Iterator<T>的for-in只求值一次接收者，并通过相同hasNext/next规范操作逐次取得拥有式值；Unit绑定没有SSA载荷，循环变量保持只读且每次迭代闭包独立捕获该次值。进入循环前登记真实词法cleanup helper，continue保留登记，break、return、throw、panic和取消沿既有cleanup frontier关闭；Array快照和范围循环保留原路径，不登记Iterator helper。普通T泛型参数域不因Iterator<Unit>循环而扩大。
+
+自定义值的for-in沿同一普通方法规则只调用一次iterator()，得到规范Iterator后复用上述词法循环。名义类型的READ方法与声明接口上的泛型见证保留可见性、完整参数/默认值、泛型证明、调用效果及真实Source引用；不是按方法名制造权限。ref receiver使用原可写路径和一次求值的选择器，普通factory返回后结束借用，不能从值副本恢复写权限；真正含yield的方法仍禁止保留外部ref参数。方法所属真实body的yield登记相同Generator角色；每个READ或静态生成器方法的公开身份是普通创建factory，原body成为私有Generator入口。直接调用、绑定方法值、静态方法值及声明接口见证均选择同一个公开factory；默认参数归属该factory，词法receiver与body局部仍归属原方法声明。factory只用GENERATOR_NEW创建停驻producer，不用普通CALL执行body。声明的函数自身no_suspend约束创建，不能误约束可能等待的producer；参数义务仍保持其真实声明类型。已验证的自定义入口包括普通/生成器方法、逃逸绑定值、泛型方法值、显式调用、声明接口见证与见证值、静态方法默认参数、工厂真实等待/抛Error和ref factory。prelude Iterable治理、其余receiver/callable捕获与worker上下文的完整适配、标签/tuple等循环头及其余合法协议仍未完整接通，不把普通用户接口改称已准入的内建Iterable。
+
+内部ITERATOR_CLOSE181是一个Iterator操作数、Unit结果、独占正常/错误后继的生命周期控制；它不新增Source close()方法。关闭跳过普通producer body，仅由共同FIFO执行器完成已经登记且不抛语言Error、不发生语言挂起的cleanup，再恢复消费者。内部WAIT_ITERATOR_CLOSE7沿既有Call等待槽认证全部身份，取消期间保留该join，不重复入队或提前解除。它没有语言Error或挂起效应；这不是允许用户defer调用hasNext/next、time.sleep、Coro.yield或抛Error，E0387/E0392义务保留。已终态关闭返回Unit，不重新抛出sticky body Error；执行失败和panic仍沿共同退出协议传播。
+
+普通闭包factory返回Iterator或Task时，唯一Error CFG分别保存调用逃逸Error与返回值携带的延迟Error，沿相同封存actual边求固定点。已知空集合不被物理类型改写为未识别Error，真实不安全或未知集合仍拒绝GO。Task activation创建但不消费producer时，不因body的ROOT需求提前拒绝；冷丢弃不执行body或未登记的defer。实际推进必须同时检查producer及消费者执行角色，在hasNext/next缺少缓存及nth每次中间丢弃后再次推进之前拒绝非法worker body；缓存/终态交付及内部关闭不执行普通body。已准入worker producer在实际frame准备完成后复验全部输入，并从相同封存GENERATOR_NEW latent边选择完整上下文，写入现有producer frame的invocation字段；名义worker资格不能代替该证明，Cell仍须OWNED_CAPTURE、同Domain、未借出且非模块存储。当前静态消费来源ROOT精度尚未完整闭合，运行防线不授静态资格。
+
+认证Instance的普通Call若将较精确callable实参交给同形状的较弱物理形参，须先通过既有weakening关系与完整值/gate准入；只在真实活动caller view下为尚未发布的callee frame建立独立拥有式carrier。原实参、声明与效果分类不改；承诺加强、参数/结果/模式变化、损坏值及外Instance/Arena仍拒绝。失败在frame发布前回收部分拥有者，OOM/LIMIT保留原状态；宿主start和没有认证view的低层Call仍要求精确物理类型。这是值表示转换，不以较强实参替代callee执行权限；固定/opaque来源及潜伏worker资格继续沿同一actual proof复验。
+
+认证Instance的weakening若输入已持有私有Fn创建站点身份，必须先以当前Program/Effects owner、真实站点、目标、完整capture binding与原站点类型到当前carrier类型的单向弱化关系重新认证，再保留同一来源；没有来源的公开构造不能据此制造站点。输出carrier仍使用目的广告类型，原输入不变。来源只用于核对真实环境，固定UNKNOWN/ROOT及全部原SSA当前输入仍由同一封存方程与执行边复验，不能从来源地址恢复较强权限。关系读取与身份检查消耗实际Call及Domain工作预算，失败不发布carrier/输出，保原OOM/LIMIT和代码owner回收。
+
+绑定struct/Class方法值保留真实接收者环境；Class捕获沿同一调用方程图保存当前完整ROOT/UNKNOWN/KNOWN关系，执行接收同时核对真实对象的模块发布状态，不能用物理local擦掉UNKNOWN或选择历史较小环境。局部、直接创建且身份未逃逸的函数载荷Cell，将初始化及全部写入的真实生产者合并到同一SSA关系，独立接收重新验证每条下降来源；别名或逃逸Cell不由此获得精确来源。原opaque函数承诺仍保留，显式未决返回类型不因返回值真实来源被加强。已验证子集包含绑定struct/Class接收者、返回接收者后绑定、PHI与参数传递，以及Cell重新绑定后的冷创建；完整消费ROOT、其余隐藏环境与借用规则仍需独立闭合。
+
+这些是规范类型、body、工厂、hasNext/next/nth与内建Iterator循环关闭的开发输入，不授完整Generator或Channel资格。Program封装仍核对真实角色/自有body proof，普通Instance.start/Function拒绝直接generator body；低层驱动不替代认证工厂。当前子集已覆盖真实VM/native及双向混合producer/consumer、已启动清理、多activation和root更换；完整Iterable/自定义协议及循环头、其余隐藏环境/内部视图、完整等待竞争/取消/GC/代码lease、原全部FI/预算/安全和平台矩阵仍须实施与资格验证。没有增加Source close()方法。
+
+此固定组合仅在Workspace保留producer与Class发现。Generator/Iterator来源、完整捕获列、Error绑定及运行期当前输入匹配共同消费唯一不可变Final的角色与捕获关系；旧coverage rank和构造结论均不授予权限。此前定向结果只对应原固定输入，此接收组合须重新定向验证，不授完整能力资格。
 
 ---
 
@@ -8165,8 +8277,8 @@ LSP文档打开、编辑与诊断使用既定64MiB累计分配、8MiB存活量�
 | `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | 借用（`Slice<T>` 视图或 `ref` / 原始指针）存活期间使 owner 失效 |
 | `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | 借用值逃逸出 owner 作用域（返回、字段、容器、闭包捕获、跨执行边界） |
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | 借用来源不是稳定且唯一可推断的 owner（临时 owner、多来源返回、借自局部值） |
-| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 生成器体内抵达调度器挂起点（`await` / `select` / `scope` / `Coro.yield()` / 阻塞句柄方法 / 可挂起调用），或证据不完整（经未解析函数值调用）——见 §3.16.2 |
-| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | 生成器体内使用 `defer`；提前放弃的生成器不再恢复，该清理可能永不执行——见 §3.16.3 |
+| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 旧分析器的生成器调度禁令；当前 Checked 生成器按 §3.16.2 的独立 frame/消费者等待规则及 §17.39 的实际准入边界检查 |
+| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | 旧分析器的生成器 defer 禁令；当前 Checked 生成器已由 §3.16.3 的登记清理和关闭规则替代，不使用此禁令 |
 | `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | 错误可从 `defer` cleanup 块逃逸（见 §8.3.1） |
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | 程序超出单态化实例预算（广度）；每个实例克隆一份完整声明——见 §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | 单态化嵌套超出深度预算；多态递归（`f<T>` 请求 `f<Box<T>>`）没有有限特化，必然触发——见 §9.4 |

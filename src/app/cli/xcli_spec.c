@@ -20,6 +20,10 @@
 
 /* ========== Option Specs per Command ========== */
 
+static const XrCliOptionSpec repl_options[] = {
+    {"module-id",0,XR_CLI_VALUE_STRING,false,false,"NAMESPACE","Explicit interactive MEMORY namespace"},
+    XR_CLI_OPT_END};
+
 static const XrCliOptionSpec run_options[] = {XR_CLI_OPT_END};
 
 static const XrCliOptionSpec test_options[] = {
@@ -136,6 +140,12 @@ static const XrCliOptionSpec dap_options[] = {
     XR_CLI_OPT_END};
 #endif
 static const XrCliOptionSpec empty_options[] = {XR_CLI_OPT_END};
+static const XrCliOptionSpec toolchain_options[] = {
+    {"target", 0, XR_CLI_VALUE_STRING, false, false, "TARGET", "Preference target or native"},
+    {"cc", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Compiler path to store for use"},
+    {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Zig path to store for use"},
+    {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "Emit preference facts as JSON"},
+    XR_CLI_OPT_END};
 
 static const XrCliOptionSpec info_options[] = {
     {"installation", 0, XR_CLI_VALUE_NONE, false, false, NULL,
@@ -159,11 +169,20 @@ static const XrCliCommandSpec doctor_subcommands[] = {
      false, NULL, NULL, 0},
     {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
 
+#ifdef XR_HAS_MCP
+static const XrCliOptionSpec mcp_options[] = {
+    {"enable-runner", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Enable bounded source execution"},
+    {"log-level", 0, XR_CLI_VALUE_STRING, false, false, "LEVEL", "Logging: error, warn, info, debug"},
+    {"log-file", 0, XR_CLI_VALUE_STRING, false, false, "FILE", "Append diagnostics to this log file"},
+    XR_CLI_OPT_END};
+#endif
+
 /* ========== Top-level Command Table ========== */
 
 static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
     {"run", "Run one exact .xr source entry", NULL, run_options, 1, 1, true, false, NULL, NULL, 0},
+    {"repl", "Interactive Source session", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
     {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},
     {"fmt", "Format source code", NULL, fmt_options, 0, -1, false, false, NULL, NULL, 0},
@@ -173,8 +192,16 @@ static XrCliCommandSpec cli_commands[] = {
     /* Artifact commands */
     {"build", "Compile to a native binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},
 
+#ifdef XR_HAS_MCP
+    {"mcp-server", "Serve Xray tools over stdio", NULL, mcp_options, 0, 0, false, false, NULL, NULL, 0},
+#endif
+
     /* Utility commands */
     {"deps", "Analyze source dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
+    {"toolchain", "List, use or reset toolchain preferences",
+     "list [--target TARGET]; config-path; use --target TARGET PROVIDER [--cc PATH | --zig PATH]; reset [--target TARGET]",
+     toolchain_options, 1, 2, false,
+     false, NULL, NULL, 0},
     {"info", "Environment and installation info", NULL, info_options, 0, 0, false, false, NULL,
      NULL, 0},
     {"doctor", "Diagnose Xray installation state", NULL, info_options, 0, 1, false, false, NULL,

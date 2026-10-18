@@ -66,12 +66,16 @@ static bool source_root_slots_prepare(SourceContext *ctx) {
     for (uint32_t slot = 0; slot < ctx->slot_count; ++slot) flow->slot_heads[slot] = UINT32_MAX;
     /* Internal Checked core modules have no source namespace. The name table
      * is allocated for the source graph, independently of artifact modules. */
-    for (uint32_t m = 0; m < (uint32_t)ctx->graph->spec_count; ++m)
+    for (uint32_t m = 0; m < (uint32_t)ctx->graph->spec_count; ++m) {
+        /* Received Checked slots already own their exact inferred bounds. Their
+         * original syntax did not enter this Source equation construction. */
+        if (source_owned_checked(&ctx->graph->specs[m])) continue;
         for (SourceName *name = ctx->names[m]; name; name = name->next) {
             if (!source_work(ctx,NULL)) return false;
             if ((name->kind == SOURCE_SLOT || name->kind == SOURCE_UNIT_SLOT) && name->index < ctx->slot_count)
                 flow->slot_names[name->index] = name;
         }
+    }
     uint32_t at = 0;
     for (uint32_t f = 0; f < ctx->function_count; ++f) {
         const XrXirFunction *body = &ctx->functions[f];

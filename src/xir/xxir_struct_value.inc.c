@@ -55,11 +55,23 @@ XR_FUNC XrXirValueStatus xr_xir_struct_new(XrXirType type, const XrXirValue *fie
 }
 static XrXirValueStatus xr_xir_struct_get_graph_operation(const XrXirValue *value, uint32_t field,
     XrXirValueAdmission *admission, XrXirValue *output) {
-    if (!value || !unit_value(output) || !admission) return XR_XIR_VALUE_BAD_ARGUMENT;
-    const XrXirTypeNode *node = xr_xir_type_node(xr_xir_compile_type_arena_types(admission->arena), (XrXirType) value->type);
-    if (!node || !xr_xir_type_is_struct(xr_xir_compile_type_arena_types(admission->arena), (XrXirType) value->type) ||
-        field >= node->nominal.field_count) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValueStatus status = xr_xir_value_admit(value, (XrXirType) value->type, admission);
+    if (!value || !unit_value(output) || !admission || !admission->arena) return XR_XIR_VALUE_BAD_ARGUMENT;
+    /* The handle retains its birth arena and ordinal. A receiving arena must
+     * select its exact admitted identity before interpreting that ordinal. */
+    XrXirType local=(XrXirType)value->type;
+    const XrXirTypeArena *birth=xr_xir_value_arena(value);
+    if(birth!=admission->arena) {
+        uint64_t work=xir_type_arena_lookup_work(admission->arena);
+        if(work>admission->work || (admission->domain && !xr_xir_domain_work(admission->domain,work)))
+            return XR_XIR_VALUE_LIMIT;
+        admission->work-=work;
+        if(!xir_type_arena_local_type(admission->arena,birth,local,&local))return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);
+    const XrXirTypeNode *node=xr_xir_type_node(types,local);
+    if (!node || !xr_xir_type_is_struct(types,local) || field >= node->nominal.field_count)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueStatus status = xr_xir_value_admit(value, local, admission);
     if (status != XR_XIR_VALUE_OK) return status;
     return xr_xir_value_copy(&((XirNominalValue *) object_pointer(value))->fields[field], output);
 }

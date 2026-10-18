@@ -19,6 +19,8 @@
 #define XR_XIR_EFFECT_CONTEXT_TESTS 1
 #include "xir/xxir_effects.c"
 #include "xir_legacy_error_oracle.h"
+#include "xir_invocation_cause_order_cases.h"
+#include "xir_sequence_borrow_cases.h"
 #include "xir_root_conditional_raw_fixture.h"
 #include "xir_construction_fixture.h"
 #include "xir_invocation_core_cases.h"
@@ -53,6 +55,8 @@
 #include "xir_initial_ordinary_material_cases.h"
 #include "xir_error_owned_material_cases.h"
 #include "xir_cell_owned_run_cases.h"
+#include "xir_cell_materialized_replay_cases.h"
+#include "xir_class_physical_replay_cases.h"
 #include "xir_invocation_edge_key_cases.h"
 #include "xir_context_constraint_vector_cases.h"
 #include "xir_parameter_schedule_cases.h"
@@ -489,7 +493,7 @@ static XrXirStatus conditional_cleanup_owner(const XrXirCompileContext *context,
         {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&init_block,.block_count=1,
          .instructions=&done,.instruction_count=1}};
     XrXirFunctionIdentity identities[4]={0};identities[1].cleanup_owner=1;
-    XrXirSourceModule source={"cleanup-context",15,NULL,0,3};
+    XrXirSourceModule source={"cleanup-context",15,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.entry_function=2};
     XrXirProvenance template={.kind=XR_XIR_EVIDENCE_TEMPLATE};
     XrXirModule module={.stage=XR_XIR_CHECKED,.functions=functions,.function_count=4,.declarations=&declarations,
@@ -555,7 +559,7 @@ static XrXirStatus conditional_cell_owner(const XrXirCompileContext *context, bo
          .blocks=&blocks[4],.block_count=1,.instructions=read_unit,.instruction_count=2},
         {.name="localUnit",.name_length=9,.result=XR_XIR_UNIT,.blocks=&blocks[5],.block_count=1,
          .instructions=local_unit,.instruction_count=3,.operands=&shared_operand,.operand_count=1}};
-    XrXirFunctionIdentity identities[6]={0};XrXirSourceModule source={"cell-effects",12,NULL,0,3};
+    XrXirFunctionIdentity identities[6]={0};XrXirSourceModule source={"cell-effects",12,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirSlot slot={0,(XrXirType)256,1};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
@@ -637,7 +641,7 @@ static XrXirStatus conditional_cell_payload(const XrXirCompileContext *context, 
          .instructions=pure,.instruction_count=2},
         {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[3],.block_count=1,
          .instructions=initialize,.instruction_count=3}};
-    XrXirFunctionIdentity identities[4]={0};XrXirSourceModule source={"cell-payload",12,NULL,0,3};
+    XrXirFunctionIdentity identities[4]={0};XrXirSourceModule source={"cell-payload",12,NULL,0,3, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirSlot slot={0,(XrXirType)257,1};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=0};
@@ -684,7 +688,7 @@ static void conditional_empty_domains(const XrXirCompileContext *context) {
          .instructions=call,.instruction_count=2},
         {.name="init",.name_length=4,.result=XR_XIR_UNIT,.blocks=&blocks[2],.block_count=1,
          .instructions=&done,.instruction_count=1}};
-    XrXirFunctionIdentity identities[3]={0};XrXirSourceModule module_identity={"empty",5,NULL,0,2};
+    XrXirFunctionIdentity identities[3]={0};XrXirSourceModule module_identity={"empty",5,NULL,0,2, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={.modules=&module_identity,.module_count=1,
         .functions=identities,.entry_function=1};
     XrXirProvenance template={.kind=XR_XIR_EVIDENCE_TEMPLATE};
@@ -804,7 +808,7 @@ static XrXirStatus conditional_zero_module_fn(const XrXirCompileContext *context
         {.name="init",.name_length=4,.result=XR_XIR_UNIT,.instructions=init,.instruction_count=4,
          .blocks=&blocks[2],.block_count=1}};
     XrXirFunctionIdentity identities[3]={[1]={.promises=XR_XIR_FUNCTION_NO_SUSPEND}};
-    XrXirSourceModule source={"zero-module-fn",14,NULL,0,2};
+    XrXirSourceModule source={"zero-module-fn",14,NULL,0,2, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirSlot slot={0,(XrXirType)257,1};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};
@@ -853,7 +857,7 @@ static XrXirStatus conditional_zero_arity(const XrXirCompileContext *context,boo
     XrXirType ordinary[2]={XR_XIR_I64,XR_XIR_F64};XrXirConstraint constraint={0};
     XrXirGeneric generics[3]={{.constraints=&constraint,.parameter_count=1},
         {.arguments=ordinary,.argument_count=2},{0}};
-    XrXirFunctionIdentity identities[3]={0};XrXirSourceModule identity={"zero-arity",10,NULL,0,2};
+    XrXirFunctionIdentity identities[3]={0};XrXirSourceModule identity={"zero-arity",10,NULL,0,2, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={.modules=&identity,.module_count=1,
         .functions=identities,.entry_function=1};
     XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=3,
@@ -938,7 +942,7 @@ static XrXirStatus conditional_zero_arity_cleanup(const XrXirCompileContext *con
         {.constraints=&constraints[2],.parameter_count=1},
         {.arguments=ordinary,.argument_count=2},{0}};
     XrXirFunctionIdentity identities[5]={0};identities[1].cleanup_owner=1;identities[2].cleanup_owner=2;
-    XrXirSourceModule identity={"zero-cleanup",12,NULL,0,4};
+    XrXirSourceModule identity={"zero-cleanup",12,NULL,0,4, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirDeclarations declarations={.modules=&identity,.module_count=1,.functions=identities,.entry_function=3};
     XrXirModule module={.stage=XR_XIR_BUILT,.functions=functions,.function_count=5,.declarations=&declarations,
         .generics=generics,.linkage_kind=XR_XIR_PROGRAM};
@@ -1045,7 +1049,7 @@ static XrXirStatus conditional_base_cleanup_reference(const XrXirCompileContext 
         {.name="init",.name_length=4,.blocks=&three,.block_count=1,.instructions=init,.instruction_count=3}};
     XrXirFunctionIdentity identities[7]={[1]={.cleanup_owner=1},[2]={.cleanup_owner=2},
         [3]={.promises=XR_XIR_FUNCTION_NO_SUSPEND},[4]={.promises=XR_XIR_FUNCTION_NO_SUSPEND}};
-    XrXirSourceModule identity={"nested-reference",16,NULL,0,6};
+    XrXirSourceModule identity={"nested-reference",16,NULL,0,6, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirSlot slot={0,(XrXirType)257,1};
     XrXirDeclarations declarations={.modules=&identity,.module_count=1,.functions=identities,
         .entry_function=5,.slots=&slot,.slot_count=1};
@@ -1776,8 +1780,20 @@ static void conditional_ordinary_environment_keys(void) {
 }
 
 #include "xir_input_seed_run_cases.h"
+#include "xir_reference_root_operation_cases.h"
 
 int main(int argc, char **argv) {
+    invocation_cause_order_cases();sequence_borrow_cases();
+    if (argc==2 && !strcmp(argv[1],"--class-physical-replay")) {
+        conditional_class_physical_tests();CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--cell-materialized-replay")) {
+        conditional_materialized_replay_tests();conditional_class_cell_literals();
+        CHECK(!rp_live && !rp_live_bytes);return 0;
+    }
+    if (argc==2 && !strcmp(argv[1],"--reference-root-operation")) {
+        root_operation_cases();return 0;
+    }
     if(argc==3 && !strcmp(argv[1],"--class-discovery-lifetime")) {
         uint32_t mode=(uint32_t)strtoul(argv[2],NULL,10);CHECK(mode<4);
         RootParameterMark held=rp_mark();XrXirCompileContext context=rp_owner(rp_caps());

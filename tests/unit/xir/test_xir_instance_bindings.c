@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "xir/xxir_instance_binding.h"
+#include "xir/xxir_program_packet_internal.h"
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c);exit(1); } } while (0)
 #include "xir_instance_compile_observer.h"
 #include "xir_runtime_allocations.h"
@@ -72,7 +73,7 @@ static void binding_program(bool boolean,int64_t answer,bool exported,unsigned *
         {.name="read",.name_length=4,.result=element,.blocks=&blocks[3],.block_count=1,.instructions=reader,.instruction_count=3}};
     XrXirFunctionIdentity identities[4]={0};
     identities[2].exported=exported;identities[3].exported=exported;
-    XrXirSourceModule source={.name="root",.name_length=4,.initializer=0};
+    XrXirSourceModule source={"root",4,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirSlot slot={0,(XrXirType)256,1};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,
         .slots=&slot,.slot_count=1,.entry_function=1};

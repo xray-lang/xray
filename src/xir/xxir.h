@@ -162,7 +162,9 @@ typedef enum XrXirTypeKind {
     XR_XIR_TYPE_NULLABLE = 5,
     XR_XIR_TYPE_TUPLE = 6,
     XR_XIR_TYPE_ATOMIC = 7,
-    XR_XIR_TYPE_TASK = 8
+    XR_XIR_TYPE_TASK = 8,
+    XR_XIR_TYPE_CHANNEL = 9,
+    XR_XIR_TYPE_ITERATOR = 11
 } XrXirTypeKind;
 typedef struct XrXirNominalType {
     uint32_t declaration;
@@ -265,8 +267,14 @@ XR_FUNC XrXirStatus xr_xir_compile_declarations_verify(const XrXirCompileContext
 XR_FUNC XrXirStatus xr_xir_compile_method_signature_verify(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t function);
 /* Internal snapshot helpers require successful declaration verification first. */
 XR_FUNC XrXirStatus xr_xir_compile_declarations_order(const XrXirCompileContext *compile_context, const XrXirDeclarations *declarations, uint32_t *order);
+/* Scratch spans have module_count entries and active starts zeroed. Derives the
+ * same root dependency closure used by Program initialization. Scratch outputs
+ * may be partial on failure; no execution or storage authority is granted. */
+XR_FUNC XrXirStatus xr_xir_compile_declarations_active(const XrXirCompileContext *,
+    const XrXirDeclarations *, uint32_t *order, uint8_t *active, uint32_t *count);
 XR_FUNC XrXirStatus xr_xir_compile_declarations_clone(const XrXirCompileContext *compile_context, const XrXirDeclarations *source, uint32_t functions, XrXirDeclarations **output);
 XR_FUNC void xr_xir_compile_declarations_free(XrXirDeclarations *declarations);
 XR_FUNC bool xr_xir_module_imports(const XrXirDeclarations *declarations, uint32_t from, uint32_t target);
+XR_FUNC bool xr_xir_module_same_scope(const XrXirDeclarations *declarations, uint32_t from, uint32_t target);
 
 #endif // XXIR_H

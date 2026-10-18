@@ -9,7 +9,12 @@
  * KEY CONCEPT:
  *   Input selection precedes the same checked construction and owned publication.
  */
-typedef struct SourceInputCapture { AstNode *ast; uint32_t module; } SourceInputCapture;
+#include "xxir_source_ast_owner.h"
+typedef struct SourceInputCapture {
+    AstNode *ast;
+    uint32_t module;
+    SourceSemanticEnvironment *semantic;
+} SourceInputCapture;
 typedef struct SourceInstanceOperation {
     const XirSourceInstanceRequest *request;
     uint32_t *providers;
@@ -25,14 +30,35 @@ typedef struct SourceInput {
     size_t overlay_count;
     bool prelude_factory;
     SourceInputCapture *capture;
+    AstNode *ast;
+    const XrXirSourceAstOwner *ast_owner;
+    bool ast_input;
+    bool binding_readers;
+    bool interactive, type_query;
+    const char *module_scope;
+    const SourceHistoryUnit *history, *self;
     const size_t *included;
     size_t included_count;
-    AstNode *program;
     const SourceInstanceOperation *instances;
     const SourceComptimeInstancesOperation *comptime_instances;
 } SourceInput;
+static void source_input_nul(SourceContext *ctx,const char *path,size_t line,size_t column,XrXirSourceFailure *failure) {
+    if(line>INT_MAX || column>INT_MAX) {
+        source_fail(ctx,NULL,XR_XIR_BUDGET,"source location is not representable");return;
+    }
+    char *owned_path=NULL;
+    if(failure && path) {
+        size_t length=0;if(!source_text_length(ctx,NULL,path,&length))return;
+        XrXirStatus status=XR_XIR_OK;
+        owned_path=xir_compile_copy(&ctx->compile,path,length+1,&status);
+        if(!owned_path){source_fail(ctx,NULL,status,"source failure path copy failed");return;}
+    }
+    source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"source text contains an embedded NUL");
+    ctx->diagnostic.line=(int)line;ctx->diagnostic.column=(int)column;
+    if(failure)*failure=(XrXirSourceFailure){.path=owned_path,.origin=XR_XIR_SOURCE_DIAGNOSTIC_INPUT};
+}
 static bool source_graph_fail(SourceContext *ctx,XrModuleStatus status,const char *message) {
-    const XrModuleParseDiagnostic *parse=ctx->graph?&ctx->graph->parse_diagnostic:NULL;
+    const XrModuleSourceDiagnostic *parse=ctx->graph?&ctx->graph->source_diagnostic:NULL;
     source_module_fail(ctx,NULL,status,parse&&parse->present&&parse->message[0]?parse->message:message);
     if(parse&&parse->present) {
         ctx->diagnostic.module=parse->module;ctx->diagnostic.line=parse->line;ctx->diagnostic.column=parse->column;
@@ -74,13 +100,21 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     char *error = NULL;
     bool semantic_started = false;
     if (!request || !xir_compile_context_valid(request->context) || !request->session ||
-        (!supplied && !request->entry_path) || !request->authority ||
+        (!supplied && !input.ast_input && !request->entry_path) || !request->authority ||
         (supplied && !text) || !output || output->checked || output->snapshot ||
+        (input.ast_input && (!input.ast || overlays || overlay_count ||
+            (input.capture && (!input.ast_owner || input.ast_owner->input.program!=input.ast ||
+                input.ast_owner->resources!=request->context->resources)))) ||
+        (input.binding_readers && (!input.capture || request->linkage_kind!=XR_XIR_PROGRAM)) ||
         (input.included_count && (!input.included || !overlays)) ||
         !xr_xir_compile_source_failure_empty(failure)) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source request is incomplete"); goto done;
     }
     ctx.compile = *request->context;
+    ctx.semantic_output=input.capture ? &input.capture->semantic : NULL;
+    ctx.binding_readers=input.binding_readers;
+    ctx.interactive=input.interactive;ctx.type_query=input.type_query;ctx.module_scope=input.module_scope;
+    ctx.history_input=input.history;ctx.self_unit=input.self;
     ctx.remaining_blocks = ctx.compile.limits.blocks;
     ctx.remaining_instructions = ctx.compile.limits.instructions;
     XrOsIoPolicy policy = xr_compile_io_policy(ctx.compile.resources);
@@ -112,22 +146,27 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
         }
         char *terminated = source_alloc(&ctx, length + 1, 1);
         if (!terminated) goto done;
+        size_t line=1,line_start=0;
         for (size_t i = 0; i < length; ++i) {
             if (!source_work(&ctx, NULL)) goto done;
             if (!text[i]) {
-                source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, "source text contains an embedded NUL"); goto done;
+                source_input_nul(&ctx,request->entry_path,line,i-line_start+1,failure);goto done;
             }
+            if(text[i]=='\n'){++line;line_start=i+1;}
         }
         if (!source_copy_bytes(&ctx, NULL, terminated, text, length)) goto done;
-        if (input.program) {
+        if (input.ast_input) {
             XrModuleSourceAstInput syntax = {request->authority, logical_path,
-                request->entry_path, terminated, input.program};
+                request->entry_path, terminated, input.ast};
             module_status = xr_compile_module_graph_build_ast(ctx.graph, &syntax, &error);
         } else {
             module_status = xr_compile_module_graph_build_logical_source(ctx.graph,
                 request->authority, logical_path, request->entry_path, terminated, &error);
         }
         source_release_private(terminated);
+    } else if (input.ast_input) {
+        XrModuleSourceAstInput syntax = {request->authority,logical_path,request->entry_path,NULL,input.ast};
+        module_status = xr_compile_module_graph_build_ast(ctx.graph,&syntax,&error);
     } else if (resolver->overlay) {
         char *canonical = NULL, *logical = NULL; const XrModuleOverlayEntry *entry = NULL;
         module_status = xr_compile_module_identity_from_source(ctx.compile.resources,
@@ -148,6 +187,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     if (!source_include_corpus(&ctx, input, &error)) goto done;
     if (input.prelude_factory) ctx.prelude_module=(uint32_t)ctx.graph->entry_index+1;
     if (!source_manifests_load(&ctx) || (!input.prelude_factory && !source_prelude_discover(&ctx))) goto done;
+    if (!source_history_input(&ctx)) goto done;
     module_status = xr_compile_module_graph_topological_sort(ctx.graph);
     if (module_status != XR_MODULE_OK) {
         source_module_fail(&ctx, NULL, module_status, "module graph ordering failed"); goto done;
@@ -155,6 +195,7 @@ static XrXirStatus source_check_input(const XrXirSourceRequest *request, SourceI
     if (ctx.graph->has_cycle || ctx.graph->entry_index < 0) {
         source_fail(&ctx, NULL, XR_XIR_BAD_STRUCTURE, error ? error : "module graph is not an acyclic source closure"); goto done;
     }
+    if(!source_repl_select_tail(&ctx))goto done;
     semantic_started = true;
     source_construct(&ctx, &result);
     if (comptime_instances) source_comptime_instances_prepare(&ctx,result.checked,comptime_instances->request,comptime_instances->output);
@@ -166,23 +207,27 @@ done:
     /* A comptime receiver has already copied the complete final query from its
      * own construction. The original context publishes only its own result. */
     if (!comptime_instances && !result.snapshot) source_query_publish(&ctx, &result);
-    const XrModuleParseDiagnostic *parse=ctx.graph?&ctx.graph->parse_diagnostic:NULL;
+    const XrModuleSourceDiagnostic *parse=ctx.graph?&ctx.graph->source_diagnostic:NULL;
     if (failure && (semantic_started||(parse&&parse->present)) && ctx.diagnostic.status != XR_XIR_OK &&
         ctx.diagnostic.line > 0 && ctx.graph &&
         ctx.diagnostic.module < (uint32_t)ctx.graph->spec_count) {
         XrModuleSpec *module = &ctx.graph->specs[ctx.diagnostic.module];
         XrXirSourceFailure owned={.path=module->source_path};
         if(parse&&parse->present) {
-            owned.origin=XR_XIR_SOURCE_DIAGNOSTIC_PARSE;owned.has_utf16_position=parse->has_utf16_position;
+            owned.origin=parse->origin==XR_MODULE_DIAGNOSTIC_INPUT?XR_XIR_SOURCE_DIAGNOSTIC_INPUT:XR_XIR_SOURCE_DIAGNOSTIC_PARSE;owned.has_utf16_position=parse->has_utf16_position;
             if(parse->has_utf16_position){owned.utf16_line=parse->utf16_position.line;owned.utf16_column=parse->utf16_position.column;}
         }
         *failure=owned;
         module->source_path = NULL;
     }
     if (ctx.diagnostic.status == XR_XIR_OK && input.capture) {
-        input.capture->module = (uint32_t)ctx.graph->entry_index;
-        input.capture->ast = ctx.graph->specs[ctx.graph->entry_index].ast;
-        ctx.graph->specs[ctx.graph->entry_index].ast = NULL;
+        if (!input.capture->semantic) source_fail(&ctx,NULL,XR_XIR_BAD_STRUCTURE,"final Source semantic environment is missing");
+        else {
+            input.capture->module=(uint32_t)ctx.graph->entry_index;
+            input.capture->ast=ctx.graph->specs[ctx.graph->entry_index].ast;
+            input.capture->semantic->graph=ctx.graph;
+            ctx.graph->compiler_session=NULL;ctx.graph->resolver=NULL;ctx.graph=NULL;
+        }
     }
     xr_compile_resources_free(error);
     for (SourceManifest *manifest = ctx.manifests; manifest; manifest = manifest->next)
@@ -215,7 +260,7 @@ XrXirStatus xr_xir_compile_source_check_ast(const XrXirSourceRequest *request,
         if (diagnostic) *diagnostic = (XrXirSourceDiagnostic){.status=XR_XIR_BAD_STRUCTURE};
         return XR_XIR_BAD_STRUCTURE;
     }
-    SourceInput input = {.supplied=true, .text=syntax->source, .program=syntax->program};
+    SourceInput input = {.supplied=syntax->source.text!=NULL, .text=syntax->source, .ast=syntax->program, .ast_input=true};
     return source_check_input(request, input, output, diagnostic, failure);
 }
 
@@ -305,7 +350,7 @@ XR_FUNC XrXirStatus xr_xir_compile_prelude_library(const XrXirCompileContext *co
         }
         ++length;
     }
-    SourceInput input={.supplied=true, .text={XIR_PRELUDE_LOGICAL,xir_prelude_source.text,length}, .prelude_factory=true};
+    SourceInput input={.supplied=true,.text={XIR_PRELUDE_LOGICAL,xir_prelude_source.text,length},.prelude_factory=true};
     XrXirSourceResult result={0};
     XrXirStatus status=source_check_input(&request,input,&result,diagnostic,NULL);
     if (status==XR_XIR_OK) {

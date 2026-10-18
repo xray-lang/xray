@@ -13,7 +13,7 @@ static void access_temporary_cases(void) {
     XrXirNominalDeclaration nominal={.module={"a",1},.name={"S",1}};XrXirNominalTable table={&nominal,1,NULL};
     XrXirTypeNode node={.kind=XR_XIR_TYPE_NOMINAL};XrXirTypes types={&node,1,&table,NULL};
     XrXirType type=(XrXirType)XR_XIR_CONSTRUCTED_TYPE_BASE;
-    XrXirFunctionIdentity identities[2]={{0},{0}};XrXirSourceModule source={"a",1,NULL,0,0};XrXirSlot slot={0,type,0};
+    XrXirFunctionIdentity identities[2]={{0},{0}};XrXirSourceModule source={"a",1,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};XrXirSlot slot={0,type,0};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=identities,.slots=&slot,.slot_count=1,.entry_function=1};
     XrXirModule module={.stage=XR_XIR_CHECKED,.function_count=2,.declarations=&declarations,.types=&types};
     AccessTemporaryFixture f={&module,type};
@@ -29,7 +29,7 @@ static void access_temporary_cases(void) {
     allocation_compile_operation_cases("type access",access_temporary_operation,&f);
     allocation_compile_operation_cases("declaration graph",declarations_temporary_operation,&f);
     uint32_t dependencies[2]={1,0};
-    XrXirSourceModule modules[2]={{"a",1,dependencies,1,0},{"b",1,dependencies+1,1,1}};
+    XrXirSourceModule modules[2]={{"a",1,dependencies,1,0, 0,XR_XIR_MODULE_FRESH_STORAGE},{"b",1,dependencies+1,1,1, 0,XR_XIR_MODULE_FRESH_STORAGE}};
     XrXirFunctionIdentity cycle_ids[3]={{0},{.module=1},{0}};
     XrXirDeclarations cycle={.modules=modules,.module_count=2,.functions=cycle_ids,.entry_function=2};
     allocation_compile_owner_new(&owner,&allocation_compile_limits);

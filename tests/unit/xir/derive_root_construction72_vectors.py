@@ -8,6 +8,8 @@ import json
 import re
 import struct
 import sys
+from checked_scope_wire import receive_scopes
+from checked_storage_wire import receive_storage
 
 sys.dont_write_bytecode = True
 
@@ -62,9 +64,13 @@ def main():
     words = lambda *values: struct.pack('<' + 'I' * len(values), *values)
     original = model()
     checked = (args.source_root / 'src/xir/xxir_checked.h').read_text(encoding='utf-8')
-    assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+28u', checked)
-    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+74u', checked)
+    assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+30u', checked)
+    assert re.search(r'XR_XIR_CHECKED_CONTRACT\s+76u', checked)
     body, _ = encoder.encode_body(original, 0)
+    old_body = body
+    body, _ = receive_scopes(body)
+    scoped_body = body
+    body, _ = receive_storage(body)
     assert body[-8:] == bytes(8) and original['generics'] is None
     # Actual alpha.initializer is f0; none of the remaining five definitions
     # has a callable/Cell formal, indirect edge, deferred frontier or unknown.
@@ -83,15 +89,28 @@ def main():
     instance['generics'] = None
     instance['nodes'][0][4] = [2, 2]
     projected, _ = encoder.encode_body(instance, 0)
+    projected, _ = receive_scopes(projected)
+    scoped_projected = projected
+    projected, _ = receive_storage(projected)
     assert projected[-8:] == bytes(8)
     zeros = words(1, 0, 2, 0, 0)
     prefix = projected[:-8] + zeros + words(0, 2)
     recursive_offset = 64 + len(prefix) + len(body) - 8
     origins = words(5) + b''.join(words(f, 0, 0) for f in range(5)) + words(0)
     instance_body = prefix + checked_body + origins
-    def frame(payload, schema=28, semantic=74):
+    def frame(payload, schema=30, semantic=76):
         header = b'XRCHK\0\0\0' + words(schema, semantic, 2, 0) + struct.pack('<Q', len(payload))
         return header + hashlib.sha256(header + payload).digest() + payload
+    # Reproduce both complete former packets from the same independent fields.
+    previous_checked = scoped_body[:-8] + owner + words(0) + template
+    previous_instance = scoped_projected[:-8] + zeros + words(0, 2) + previous_checked + origins
+    previous_text = (args.source_root / 'tests/unit/xir/root_construction75_previous_goldens.h').read_text(encoding='utf-8')
+    for kind, payload in [('checked', previous_checked), ('instance', previous_instance)]:
+        symbol = 'root_construction75_' + kind + '_previous'
+        literal = re.search(r'static const uint8_t ' + symbol + r'\[\] = \{(.*?)\};', previous_text, re.S)
+        assert literal
+        data = bytes(int(v, 16) for v in re.findall(r'0x([0-9a-fA-F]{2})', literal[1]))
+        assert data == frame(payload, 29, 75), symbol
     # Preserve the independent historical 26/71 malformed/previous input:
     # its old noncanonical empty generic table is part of that original byte map.
     legacy = copy.deepcopy(original)
@@ -99,6 +118,7 @@ def main():
     legacy_body, _ = encoder.encode_body(legacy, 0)
     rows = [('root_construction72_checked', frame(checked_body)),
             ('root_construction72_instance', frame(instance_body)),
+            ('root_construction74_previous', frame(old_body[:-8] + owner + words(0) + template, 28, 74)),
             ('root_construction71_previous', frame(legacy_body, 26, 71))]
     lines = ['/*',
              ' * xray - Lightweight typed scripting with native concurrency',

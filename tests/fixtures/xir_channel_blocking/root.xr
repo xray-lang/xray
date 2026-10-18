@@ -1,0 +1,150 @@
+fn unpack(result: Recv<i64>) -> i64 {
+    return match (result) {
+        Recv.Value { value: item } -> item,
+        Recv.Empty -> -1,
+        Recv.Timeout -> -2,
+        Recv.Closed -> -3,
+    }
+}
+fn sendWorker(channel: Channel<i64>, value: i64) -> i64 {
+    channel.send(value)
+    return value + 1
+}
+fn recvWorker(channel: Channel<i64>) -> i64 { return unpack(channel.recv()) }
+fn failSend(channel: Channel<i64>) -> i64 { channel.send(88); return -99 }
+fn caughtSend(channel: Channel<i64>) -> i64 {
+    try { return failSend(channel) }
+    catch(e: SendResult) {
+        return match(e) {
+            SendResult.Sent -> -10,
+            SendResult.Full -> -11,
+            SendResult.Timeout -> -12,
+            SendResult.Closed -> 61,
+        }
+    }
+}
+fn tick(counter: Atomic<i64>) { counter.add(1) }
+fn sendUnitWorker(channel: Channel<()>, counter: Atomic<i64>) -> i64 {
+    channel.send(tick(counter))
+    return counter.load()
+}
+fn directCaught(channel: Channel<i64>, counter: Atomic<i64>) -> i64 {
+    try { defer { tick(counter) }; channel.send(88); return -99 }
+    catch(e: SendResult) {
+        return match(e) {
+            SendResult.Sent -> -10,
+            SendResult.Full -> -11,
+            SendResult.Timeout -> -12,
+            SendResult.Closed -> 62,
+        }
+    }
+}
+fn rethrowSend(channel: Channel<i64>) -> i64 {
+    try { return failSend(channel) }
+    catch(e: SendResult) { throw e }
+}
+fn caughtRethrow(channel: Channel<i64>) -> i64 {
+    try { return rethrowSend(channel) }
+    catch(e: SendResult) {
+        return match(e) {
+            SendResult.Sent -> -10,
+            SendResult.Full -> -11,
+            SendResult.Timeout -> -12,
+            SendResult.Closed -> 63,
+        }
+    }
+}
+fn genericRecv<T: Sendable>(channel: Channel<T>) -> Recv<T> { return channel.recv() }
+fn escapedTaskError(channel: Channel<i64>) -> i64 {
+    const failing = go failSend(channel)
+    try { return await failing }
+    catch(e: SendResult) {
+        return match(e) {
+            SendResult.Sent -> -10,
+            SendResult.Full -> -11,
+            SendResult.Timeout -> -12,
+            SendResult.Closed -> 64,
+        }
+    }
+}
+export fn newBlockingUnit() -> Channel<()> { return Channel<()>() }
+export fn blockingUnitSend(channel: Channel<()>) -> i64 {
+    const counter = Atomic<i64>(0)
+    channel.send(tick(counter))
+    return counter.load()
+}
+export fn blockingUnitRecv(channel: Channel<()>) -> i64 {
+    return match(channel.recv()) {
+        Recv.Value { value: ignored } -> 41,
+        Recv.Empty -> -21,
+        Recv.Timeout -> -22,
+        Recv.Closed -> 44,
+    }
+}
+export fn blockingUnitDefault(channel: Channel<()>) -> i64 {
+    const counter = Atomic<i64>(0)
+    channel.recvOr(tick(counter))
+    return counter.load()
+}
+export fn blockingClose(channel: Channel<()>) -> i64 { channel.close(); return 7 }
+export fn main() -> i64 {
+    const channel = Channel<i64>(2)
+    channel.send(42)
+    channel.send(7)
+    channel.close()
+    print(unpack(channel.recv()), channel.recvOr(-1), unpack(channel.recv()), channel.recvOr(-5))
+    const zeroSend = Channel<i64>()
+    const sender = go sendWorker(zeroSend, 113)
+    print(unpack(zeroSend.recv()), await sender)
+    const zeroRecv = Channel<i64>()
+    const receiver = go recvWorker(zeroRecv)
+    zeroRecv.send(211)
+    print(await receiver)
+    const closed = Channel<i64>()
+    closed.close()
+    print(caughtSend(closed), await go caughtSend(closed))
+    const counter = Atomic<i64>(0)
+    const units = Channel<()>(1)
+    units.send(tick(counter))
+    units.recvOr(tick(counter))
+    units.close()
+    units.recvOr(tick(counter))
+    const seen = match(units.recv()) {
+        Recv.Value { value: ignored } -> -20,
+        Recv.Empty -> -21,
+        Recv.Timeout -> -22,
+        Recv.Closed -> 31,
+    }
+    print(counter.load(), seen, unpack(genericRecv<i64>(closed)))
+    const bare = Channel<i64>()
+    const bareSender = go sendWorker(bare, 317)
+    print(bare.recvOr(-901), await bareSender)
+    print(directCaught(closed, counter), caughtRethrow(closed), counter.load())
+    const unitBare = Channel<()>()
+    const unitBareSender = go sendUnitWorker(unitBare, counter)
+    unitBare.recvOr(tick(counter))
+    print(await unitBareSender, counter.load())
+    const unitWrapped = Channel<()>()
+    const unitWrappedSender = go sendUnitWorker(unitWrapped, counter)
+    const unitValue = match(unitWrapped.recv()) {
+        Recv.Value { value: ignored } -> 41,
+        Recv.Empty -> -21,
+        Recv.Timeout -> -22,
+        Recv.Closed -> -23,
+    }
+    print(unitValue, await unitWrappedSender, counter.load())
+    const arrays = Channel<Array<i64>>(1)
+    var payload = [17, 19]
+    arrays.send(payload)
+    payload[0] = 95
+    const original = arrays.recvOr([0])
+    print(original[0], payload[0])
+    const inner = Channel<i64>(1)
+    const nested = Channel<Channel<i64>>(1)
+    nested.send(inner)
+    const alias = nested.recvOr(Channel<i64>(1))
+    alias.send(451)
+    print(inner.recvOr(-1))
+    print(escapedTaskError(closed))
+    return 99
+}

@@ -44,6 +44,15 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output, bool
     uint32_t weakenings = 0, root_only = 0, same_bound = 0, captured_bound = 0;
     for (uint32_t f = 0; f < input->function_count; ++f) {
         const XrXirFunction *function = &input->functions[f];
+        const char *callbacks[] = {"dynamic", "weaken", "literalDefault", "namedDefault", "effectDefault"};
+        for (uint32_t c = 0; c < 5; ++c) {
+            if (function->name_length != strlen(callbacks[c]) ||
+                memcmp(function->name, callbacks[c], function->name_length)) continue;
+            CHECK(function->parameter_count == 1);
+            const XrXirTypeNode *parameter = xr_xir_callable_signature(input->types, function->parameters[0]);
+            CHECK(parameter && parameter->flags == (XR_XIR_CALLABLE_ROOT_UNRESOLVED | XR_XIR_CALLABLE_NO_SUSPEND));
+            ++qualified;
+        }
         for (uint32_t i = 0; i < function->instruction_count; ++i) {
             const XrXirInstruction *instruction = &function->instructions[i];
             if (instruction->op != XR_XIR_FUNCTION_WEAKEN) continue;
@@ -100,7 +109,13 @@ static void source_qualified_vm(XrXirArtifact *checked, const char *output, bool
     }
     CHECK(entry != UINT32_MAX && captured != UINT32_MAX);
     XrXirCSource source = {0};
-    CHECK(xr_xir_compile_emit_c(lowered, "effect_source", 4194304, &source) == XR_XIR_OK);
+    XrXirStatus emit_status=xr_xir_compile_emit_c(lowered,"effect_source",4194304,&source);
+    if(emit_status!=XR_XIR_OK) {
+        XrCompileResourceStats stats={0};
+        CHECK(xr_compile_resources_stats(context.resources,&stats)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"Effects C emission status%u work%llu\n",emit_status,(unsigned long long)stats.work);
+    }
+    CHECK(emit_status==XR_XIR_OK);
     CHECK(!strstr(source.text, "({") && !strstr(source.text, "xr_xir_vm"));
     if (output) {
         FILE *file = fopen(output, "wb"); CHECK(file);

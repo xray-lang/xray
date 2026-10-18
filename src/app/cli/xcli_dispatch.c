@@ -62,6 +62,7 @@ static int string_distance(const char *s1, const char *s2) {
 
 /* ========== Handler Forward Declarations ========== */
 
+XR_FUNC int cmd_repl(const XrCliInvocation *inv);
 XR_FUNC int cmd_run(const XrCliInvocation *inv);
 XR_FUNC int cmd_test(const XrCliInvocation *inv);
 XR_FUNC int cmd_check(const XrCliInvocation *inv);
@@ -70,6 +71,10 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv);
 XR_FUNC int cmd_deps(const XrCliInvocation *inv);
 #ifdef XR_HAS_DAP
 XR_FUNC int cmd_dap(const XrCliInvocation *inv);
+#endif
+XR_FUNC int cmd_toolchain(const XrCliInvocation *inv);
+#ifdef XR_HAS_MCP
+XR_FUNC int cmd_mcp_server(const XrCliInvocation *inv);
 #endif
 /* Defined below in this file */
 XR_FUNC int cmd_info(const XrCliInvocation *inv);
@@ -80,6 +85,7 @@ XR_FUNC int cmd_help(const XrCliInvocation *inv);
 /* Register all command handlers into the spec table.
  * Must be called once before xr_cli_main(). */
 void xr_cli_register_all_handlers(void) {
+    xr_cli_register_handler("repl", cmd_repl);
     xr_cli_register_handler("run", cmd_run);
     xr_cli_register_handler("test", cmd_test);
     xr_cli_register_handler("check", cmd_check);
@@ -88,6 +94,10 @@ void xr_cli_register_all_handlers(void) {
     xr_cli_register_handler("deps", cmd_deps);
 #ifdef XR_HAS_DAP
     xr_cli_register_handler("dap", cmd_dap);
+#endif
+    xr_cli_register_handler("toolchain", cmd_toolchain);
+#ifdef XR_HAS_MCP
+    xr_cli_register_handler("mcp-server", cmd_mcp_server);
 #endif
     xr_cli_register_handler("info", cmd_info);
     xr_cli_register_handler("self", cmd_self);

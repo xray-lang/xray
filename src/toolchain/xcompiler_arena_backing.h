@@ -27,6 +27,9 @@ XR_FUNC XrArenaStatus xr_compiler_arena_state_backing(
     struct XrCompileState *state, XrArenaBacking *output);
 XR_FUNC bool xr_compiler_arena_matches_state(
     const struct XrArena *arena, const struct XrCompileState *state);
+/* Borrow the authentic compiler state retained by this arena. Foreign backing
+ * tables return NULL without interpreting their opaque context. */
+XR_FUNC struct XrCompileState *xr_compiler_arena_compile_state(const struct XrArena *arena);
 XR_FUNC XrCompileResourceStatus xr_compiler_arena_capture_status(
     const struct XrArena *arena, struct XrCompileState *state);
 

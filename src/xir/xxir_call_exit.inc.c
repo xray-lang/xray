@@ -11,6 +11,7 @@
  *   survives cleanup failures and later cancellation.
  */
 static void request_exit(XrXirCall *call, XrXirCallResult *result, bool scope) {
+    clear_channel_wait(call);
     CallFrame *frame = call->top;
     if (call->budget && call->budget->native_hold==call) call->budget->native_hold=NULL;
     frame->native_pending=false;

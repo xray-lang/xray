@@ -15,21 +15,28 @@ static XrXirStatus effect_capture_reference_seed(const EffectCaptureRead *read,
     EffectBodyFunctionHead target={0};XrXirInstruction storage;const XrXirInstruction *op=NULL;
     XrXirStatus status=effect_body_request_head(&read->body,reference->target,&target);
     if(status==XR_XIR_OK) status=effect_body_request_instruction(&read->body,reference->function,reference->instruction,&storage,&op);
-    const XrXirTypeNode *signature=NULL;
-    if(status==XR_XIR_OK) status=effect_final_edge_signature(read->work,read->body.domain.types,op->type,&signature);
     if(status!=XR_XIR_OK) return status;
-    if(signature->parameter_span || xr_xir_type_span(read->body.domain.types,target.result)) return XR_XIR_OK;
     if(reference->captures>target.parameter_count) return XR_XIR_BAD_STRUCTURE;
-    if(signature->result!=target.result || signature->parameter_count!=target.parameter_count-reference->captures)
-        return XR_XIR_BAD_TYPE;
-    for(uint32_t p=0;p<signature->parameter_count;++p) {
-        if(!xir_compile_work(read->work,7)) return XR_XIR_BUDGET;
-        const XrXirCallableParameter *parameter=&signature->parameters[p];
-        /* A REF suffix names the target's real Cell formal. It carries no
-         * captured prefix and grants no callable identity from an advertisement. */
-        if(!xr_xir_callable_parameter_storage_valid(read->body.domain.types,parameter) ||
-            (parameter->mode==XR_PARAM_REF && reference->captures)) return XR_XIR_BAD_TYPE;
-        if(parameter->type!=target.parameters[reference->captures+p]) return XR_XIR_BAD_TYPE;
+    if(op->op==XR_XIR_GENERATOR_NEW) {
+        const XrXirDeclarations *d=read->body.domain.declarations;
+        if(!d || !d->functions || !(d->functions[reference->target].promises&XR_XIR_FUNCTION_GENERATOR) ||
+            op->type!=target.result || !effect_physical_iterator(read->body.domain.types,op->type) ||
+            reference->captures!=target.parameter_count) return XR_XIR_BAD_TYPE;
+        if(xr_xir_type_span(read->body.domain.types,target.result)) return XR_XIR_OK;
+    } else {
+        const XrXirTypeNode *signature=NULL;
+        status=effect_final_edge_signature(read->work,read->body.domain.types,op->type,&signature);
+        if(status!=XR_XIR_OK) return status;
+        if(signature->parameter_span || xr_xir_type_span(read->body.domain.types,target.result)) return XR_XIR_OK;
+        if(signature->result!=target.result || signature->parameter_count!=target.parameter_count-reference->captures)
+            return XR_XIR_BAD_TYPE;
+        for(uint32_t p=0;p<signature->parameter_count;++p) {
+            if(!xir_compile_work(read->work,7)) return XR_XIR_BUDGET;
+            const XrXirCallableParameter *parameter=&signature->parameters[p];
+            if(!xr_xir_callable_parameter_storage_valid(read->body.domain.types,parameter) ||
+                (parameter->mode==XR_PARAM_REF && reference->captures)) return XR_XIR_BAD_TYPE;
+            if(parameter->type!=target.parameters[reference->captures+p]) return XR_XIR_BAD_TYPE;
+        }
     }
     EffectBodyFunctionHead source={0};status=effect_body_request_head(&read->body,reference->function,&source);
     if(status!=XR_XIR_OK) return status;

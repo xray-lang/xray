@@ -1977,7 +1977,11 @@ foreach(XR_SYNC_PART atomic_compat semantic_owner_ids_gen sync_core)
     list(APPEND XRAY_SYNC_KERNEL_EMBEDS ${XR_SYNC_OUTPUT})
 endforeach()
 foreach(XR_CHANNEL_PART buffer storage)
-    set(XR_CHANNEL_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_channel_${XR_CHANNEL_PART}.h)
+    if(XR_CHANNEL_PART STREQUAL "buffer")
+        set(XR_CHANNEL_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_channel_buffer.h)
+    else()
+        set(XR_CHANNEL_INPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core/xr_channel_${XR_CHANNEL_PART}.h)
+    endif()
     set(XR_CHANNEL_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/generated/xr_channel_${XR_CHANNEL_PART}_embedded.inc.c)
     add_custom_command(OUTPUT ${XR_CHANNEL_OUTPUT}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
@@ -2477,6 +2481,7 @@ endif()
 # Source -> Checked -> Lowered pipeline. The Source adapter, path policy and
 # graph authority live in xray_source_compile and are linked, not recompiled here.
 set(XRAY_CLI_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli)
+include("${XRAY_CLI_ROOT}/toolchain_config.cmake")
 set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcli.c
     ${XRAY_CLI_ROOT}/xcli_dispatch.c
@@ -2486,9 +2491,11 @@ set(XRAY_CLI_SOURCES
     ${XRAY_CLI_ROOT}/xcli_diag.c
     ${XRAY_CLI_ROOT}/xcli_output.c
     ${XRAY_CLI_ROOT}/xcli_installation.c
+    ${XRAY_CLI_ROOT}/xcmd_repl.c
     ${XRAY_CLI_ROOT}/xcmd_run.c
     ${XRAY_CLI_ROOT}/xcmd_build.c
     ${XRAY_CLI_ROOT}/xcmd_deps.c
+    ${XRAY_CLI_ROOT}/xcmd_toolchain.c
     ${XRAY_CLI_ROOT}/xcmd_check.c
     ${XRAY_CLI_ROOT}/xcmd_fmt.c
     ${XRAY_CLI_ROOT}/xcmd_test.c
@@ -2573,9 +2580,10 @@ else()
     message(STATUS "Spec source not found — using committed generated files")
 endif()
 
-# MCP optional module. The tool surface runs the retired analyzer and VM, so
-# it is not linked into the public executable until it is migrated.
+# MCP consumes owned Source/Program/HostCall through one service library.
 if(XR_BUILD_MCP)
+    include(src/app/mcp/mcp.cmake)
+    list(APPEND XRAY_CLI_SOURCES ${XRAY_CLI_ROOT}/xcmd_mcp_server.c)
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp)
 
     add_compile_definitions(XR_HAS_MCP=1)
@@ -2634,6 +2642,10 @@ add_executable(xray ${XRAY_CLI_SOURCES})
 if(XR_BUILD_DAP)
     target_link_libraries(xray PRIVATE xray_dap_current)
 endif()
+target_link_libraries(xray PRIVATE xray_cli_toolchain_config)
+if(TARGET xray_cli_toolchain_update)
+    target_link_libraries(xray PRIVATE xray_cli_toolchain_update)
+endif()
 
 # The compiler's recursive IR/AOT passes can exceed the PE/COFF default 1 MiB
 # stack on larger programs. Match the usual Unix main-thread allowance so
@@ -2651,7 +2663,14 @@ if(WIN32)
         xray_xir_publication xray_toolchain_dependencies)
 endif()
 
+if(XR_BUILD_MCP)
+    target_link_libraries(xray PRIVATE xray_mcp)
+endif()
+
 target_include_directories(xray PRIVATE ${XRAY_CLI_INCLUDES})
+if(READLINE_LIB)
+    target_link_libraries(xray PRIVATE ${READLINE_LIB})
+endif()
 
 if(WIN32 AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.21")
     add_custom_command(TARGET xray POST_BUILD
@@ -4529,6 +4548,12 @@ if(BUILD_TESTS)
         LABELS "cli;module;identity;package"
         TIMEOUT 60
     )
+
+    add_test(NAME source_repl_cli
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_source_repl_tests.py
+            --binary $<TARGET_FILE:xray> --stdlib ${CMAKE_CURRENT_SOURCE_DIR}/stdlib
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    set_tests_properties(source_repl_cli PROPERTIES TIMEOUT 120 LABELS "cli;source;repl;ownership")
 
     add_test(
         NAME canonical_source_run_cli

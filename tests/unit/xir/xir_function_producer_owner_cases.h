@@ -64,7 +64,7 @@ static void producer_runtime_fixture(ProducerRuntimeFixture *f) {
     f->functions[4].parameters=&f->callback;f->functions[4].parameter_count=1;
     f->functions[5].parameters=&f->callback;f->functions[5].parameter_count=1;
     f->functions[5].operands=&f->forward_capture;f->functions[5].operand_count=1;
-    f->source=(XrXirSourceModule){"producer",8,NULL,0,0};
+    f->source=(XrXirSourceModule){"producer",8,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     f->declarations=(XrXirDeclarations){.modules=&f->source,.module_count=1,.functions=f->identities,
         .entry_function=1};
     f->module=(XrXirModule){.stage=XR_XIR_BUILT,.functions=f->functions,.function_count=6,
@@ -77,6 +77,25 @@ static void producer_runtime_frame_release(XrXirCallView *view,XrXirCallStatus s
     (void)status;xr_xir_value_drop(&((ProducerRuntimeFrame *)view->state)->owned);
 }
 static void producer_runtime_code_release(void *owner) { ++((ProducerRuntimeWitness *)owner)->releases; }
+static XrXirCallStatus producer_runtime_carrier(XrXirCallView *view,XrXirType type,
+    const XrXirValue *input,unsigned mode,XrXirValue *output) {
+    const XrXirFunctionBinding *binding=xr_xir_function_binding(input);
+    CHECK(binding && (mode==1 || mode==2 || mode==8));
+    XrXirCallStatus status=mode==1?
+        xr_xir_instance_function(view,type,binding->entry,binding->captures,binding->capture_count,output):
+        xr_xir_instance_weaken_function(view,type,input,output);
+    if (status!=XR_XIR_CALL_READY) return status;
+    XirFunctionProducer *retained=(XirFunctionProducer *)xr_xir_function_producer(output);
+    if (mode==1) CHECK(!retained);
+    else {
+        const XirFunctionProducer *origin=xr_xir_function_producer(input);
+        CHECK(origin && retained && retained->owner==origin->owner && retained->function==origin->function &&
+            retained->instruction==origin->instruction && retained->site==origin->site);
+        /* Keep the missing-origin attack after legal weakening preserves it. */
+        if (mode==2) { retained->owner=NULL;CHECK(!xr_xir_function_producer(output)); }
+    }
+    return XR_XIR_CALL_READY;
+}
 static XrXirCallStatus producer_runtime_negative(XrXirCallView *view,const XrXirValue *actual) {
     const XrXirFunctionBinding *binding=xr_xir_function_binding(actual);
     CHECK(binding);XirEffectProducerView real={0};
@@ -104,8 +123,10 @@ static XrXirCallStatus producer_runtime_negative(XrXirCallView *view,const XrXir
             !memcmp(&real,&untouched,sizeof(real)));
         status=xr_xir_instance_weaken_function(view,(XrXirType)actual->type,actual,&weakened);
         if (status==XR_XIR_CALL_READY) {
-            CHECK(!xr_xir_function_producer(&weakened));
-            CHECK(xr_xir_instance_function_producer(view,&weakened,&untouched)==XR_XIR_CALL_BAD_ARGUMENT &&
+            const XirFunctionProducer *retained=xr_xir_function_producer(&weakened);
+            CHECK(retained && retained->owner==saved.owner && retained->function==saved.function &&
+                retained->instruction==saved.instruction && retained->site==saved.site);
+            CHECK(xr_xir_instance_function_producer(view,&weakened,&untouched)==XR_XIR_CALL_READY &&
                 !memcmp(&real,&untouched,sizeof(real)));
         }
     }

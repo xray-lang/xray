@@ -22,12 +22,15 @@ enum {
     EFFECT_PHYSICAL_CONTROL=256,
     EFFECT_PHYSICAL_GO=512,
     EFFECT_PHYSICAL_SLOT_PLACE=1024,
-    EFFECT_PHYSICAL_ERROR_ESCAPE=2048
+    EFFECT_PHYSICAL_ERROR_ESCAPE=2048,
+    EFFECT_PHYSICAL_GENERATOR=4096,
+    EFFECT_PHYSICAL_ITERATOR=8192,
+    EFFECT_PHYSICAL_ITERATOR_ADVANCE=16384
 };
 
 typedef struct EffectPhysicalRecord { uint32_t value,mask; } EffectPhysicalRecord;
 typedef struct EffectPhysicalFunction {
-    uint32_t parameters,instructions,values,rows,classes,count,capacity;
+    uint32_t parameters,instructions,values,rows,origins,classes,count,capacity;
     EffectPhysicalRecord *records;
 } EffectPhysicalFunction;
 typedef struct EffectPhysicalDomain {
@@ -36,17 +39,33 @@ typedef struct EffectPhysicalDomain {
     EffectPhysicalFunction *functions;
 } EffectPhysicalDomain;
 
+static bool effect_invocation_iterator_operation(XrXirOp op) {
+    return op==XR_XIR_ITERATOR_HAS_NEXT || op==XR_XIR_ITERATOR_NEXT || op==XR_XIR_ITERATOR_NTH;
+}
+
+static bool effect_physical_iterator(const XrXirTypes *types,XrXirType type) {
+    const XrXirTypeNode *node=xr_xir_type_node(types,type);
+    return node && node->kind==XR_XIR_TYPE_ITERATOR;
+}
+static bool effect_physical_origin(const XrXirTypes *types,XrXirType type) {
+    return xr_xir_callable_signature(types,type)!=NULL || effect_physical_iterator(types,type);
+}
+
 /* The Error CFG and raw classifier use this one exhaustive opcode core.
  * Call identity, ROOT or NO_SUSPEND never substitute for its answer. */
 static bool effect_physical_error_empty_opcode(XrXirOp op) {
     switch (op) {
     case XR_XIR_CONST_BOOL: case XR_XIR_CONST_INT: case XR_XIR_CONST_STRING: case XR_XIR_SLOT_LOAD:
-    case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE: case XR_XIR_ATOMIC_NEW: case XR_XIR_ATOMIC_LOAD:
+    case XR_XIR_SLOT_INIT: case XR_XIR_SLOT_STORE: case XR_XIR_CHANNEL_TRY_SEND: case XR_XIR_CHANNEL_TRY_RECV:
+    case XR_XIR_CHANNEL_SEND: case XR_XIR_CHANNEL_RECV: case XR_XIR_CHANNEL_RECV_OR:
+    case XR_XIR_CHANNEL_SEND_TIMEOUT: case XR_XIR_CHANNEL_RECV_TIMEOUT:
+    case XR_XIR_CHANNEL_NEW: case XR_XIR_CHANNEL_CAPACITY: case XR_XIR_CHANNEL_IS_CLOSED: case XR_XIR_CHANNEL_CLOSE:
+    case XR_XIR_ATOMIC_NEW: case XR_XIR_ATOMIC_LOAD:
     case XR_XIR_ATOMIC_STORE: case XR_XIR_ATOMIC_ADD: case XR_XIR_ATOMIC_SUB: case XR_XIR_ATOMIC_FETCH_ADD:
     case XR_XIR_ATOMIC_FETCH_SUB: case XR_XIR_ATOMIC_SWAP: case XR_XIR_ATOMIC_COMPARE_EXCHANGE: case XR_XIR_ATOMIC_TOGGLE:
     case XR_XIR_ATOMIC_TO_STRING: case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_CONCAT_STRING: case XR_XIR_OUTPUT: case XR_XIR_WRITE_STREAM: case XR_XIR_PRINT:
-    case XR_XIR_ADD_INT: case XR_XIR_EQ_INT: case XR_XIR_LT_INT: case XR_XIR_SUSPEND:
+    case XR_XIR_ADD_INT: case XR_XIR_EQ_INT: case XR_XIR_LT_INT: case XR_XIR_SUSPEND: case XR_XIR_GENERATOR_YIELD:
     case XR_XIR_JUMP: case XR_XIR_BRANCH: case XR_XIR_RETURN: case XR_XIR_LOCAL_NEW:
     case XR_XIR_LOCAL_READ: case XR_XIR_LOCAL_WRITE: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_READ:
     case XR_XIR_SCALAR_LOCAL_WRITE: case XR_XIR_OWNED_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_READ: case XR_XIR_OWNED_LOCAL_WRITE:
@@ -75,7 +94,7 @@ static bool effect_physical_error_empty_opcode(XrXirOp op) {
     case XR_XIR_NULLABLE_IS_SOME: case XR_XIR_NULLABLE_UNWRAP: case XR_XIR_CONST_RUNE: case XR_XIR_RUNE_TO_INTEGER:
     case XR_XIR_INTEGER_TO_RUNE: case XR_XIR_LT_STRING: case XR_XIR_LE_STRING: case XR_XIR_GT_STRING:
     case XR_XIR_GE_STRING: case XR_XIR_TUPLE_NEW: case XR_XIR_TUPLE_FIELD: case XR_XIR_SLOT_GROUP_INIT:
-    case XR_XIR_RANGE_CHECK: case XR_XIR_ARRAY_CAPACITY: case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE:
+    case XR_XIR_ITERATOR_CLOSE: case XR_XIR_RANGE_CHECK: case XR_XIR_ARRAY_CAPACITY: case XR_XIR_ARRAY_WITH_CAPACITY: case XR_XIR_ARRAY_RESERVE:
         return true;
     default: return false;
     }
@@ -86,12 +105,16 @@ static bool effect_physical_error_empty_opcode(XrXirOp op) {
 static uint32_t effect_physical_opcode(XrXirOp op) {
     uint32_t mask=0;
     if (op==XR_XIR_FUNCTION_REF) mask|=EFFECT_PHYSICAL_REFERENCE;
+    if (op==XR_XIR_GENERATOR_NEW) mask|=EFFECT_PHYSICAL_GENERATOR;
+    if (effect_invocation_iterator_operation(op)) mask|=EFFECT_PHYSICAL_ITERATOR_ADVANCE;
     if (op==XR_XIR_RETURN) mask|=EFFECT_PHYSICAL_RETURN;
     if (op==XR_XIR_SLOT_PLACE) mask|=EFFECT_PHYSICAL_SLOT_PLACE;
     if (!effect_physical_error_empty_opcode(op)) mask|=EFFECT_PHYSICAL_ERROR_ESCAPE;
     if (op==XR_XIR_GO) mask|=EFFECT_PHYSICAL_GO;
     switch (op) {
-    case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT:
+    case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH: case XR_XIR_SUSPEND: case XR_XIR_TIMER_AFTER_MS: case XR_XIR_TASK_AWAIT: case XR_XIR_GENERATOR_YIELD:
+    case XR_XIR_CHANNEL_SEND: case XR_XIR_CHANNEL_RECV: case XR_XIR_CHANNEL_RECV_OR:
+    case XR_XIR_CHANNEL_SEND_TIMEOUT: case XR_XIR_CHANNEL_RECV_TIMEOUT:
     case XR_XIR_GO: case XR_XIR_CALL_REQUIREMENT:
     case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
         mask|=EFFECT_PHYSICAL_CONTROL;break;
@@ -109,13 +132,13 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     case XR_XIR_SLOT_STORE: case XR_XIR_ARRAY_NEW: case XR_XIR_ARRAY_SET:
     case XR_XIR_ARRAY_PUSH: case XR_XIR_STRUCT_NEW: case XR_XIR_STRUCT_SET:
     case XR_XIR_CLASS_NEW: case XR_XIR_CLASS_SET: case XR_XIR_ENUM_NEW:
-    case XR_XIR_TUPLE_NEW: case XR_XIR_NULLABLE_SOME:
+    case XR_XIR_TUPLE_NEW: case XR_XIR_NULLABLE_SOME: case XR_XIR_GENERATOR_NEW:
         mask|=EFFECT_PHYSICAL_BARRIER;break;
     default:break;
     }
     switch (op) {
     case XR_XIR_CALL: case XR_XIR_CALL_DEFAULT: case XR_XIR_CALL_INDIRECT:
-    case XR_XIR_INVOKE_RESULT: case XR_XIR_FUNCTION_REF:
+    case XR_XIR_INVOKE_RESULT: case XR_XIR_FUNCTION_REF: case XR_XIR_GENERATOR_NEW: case XR_XIR_CELL_READ:
     case XR_XIR_COPY: case XR_XIR_SCALAR_COPY: case XR_XIR_OWNED_RETAIN:
     case XR_XIR_LOCAL_NEW: case XR_XIR_SCALAR_LOCAL_NEW: case XR_XIR_OWNED_LOCAL_NEW:
     case XR_XIR_LOCAL_READ: case XR_XIR_SCALAR_LOCAL_READ: case XR_XIR_OWNED_LOCAL_READ:
@@ -127,8 +150,9 @@ static uint32_t effect_physical_opcode(XrXirOp op) {
     switch (op) {
     case XR_XIR_CALL: case XR_XIR_INVOKE: case XR_XIR_CLEANUP_REGISTER:
     case XR_XIR_CALL_DEFAULT: case XR_XIR_INVOKE_DEFAULT: case XR_XIR_CALL_REQUIREMENT:
-    case XR_XIR_GO: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
-    case XR_XIR_FUNCTION_REF: case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND:
+    case XR_XIR_GO: case XR_XIR_GENERATOR_NEW: case XR_XIR_CALL_INDIRECT: case XR_XIR_INVOKE_INDIRECT:
+    case XR_XIR_FUNCTION_REF: case XR_XIR_ITERATOR_HAS_NEXT: case XR_XIR_ITERATOR_NEXT: case XR_XIR_ITERATOR_NTH:
+    case XR_XIR_CELL_READ: case XR_XIR_CELL_WRITE: case XR_XIR_CELL_STRING_APPEND:
     case XR_XIR_CELL_LOCAL_WRITE: case XR_XIR_PLACE_READ: case XR_XIR_PLACE_WRITE:
     case XR_XIR_CELL_PROJECT:
         mask|=EFFECT_PHYSICAL_INVOCATION;break;
@@ -184,6 +208,7 @@ static XrXirStatus effect_physical_value(const XrXirCompileContext *work,
         mask=effect_physical_opcode(op);
     }
     if (xr_xir_callable_signature(types,type)) mask|=EFFECT_PHYSICAL_CALLABLE;
+    if (effect_physical_iterator(types,type)) mask|=EFFECT_PHYSICAL_ITERATOR;
     if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
     if (xr_xir_type_is_class(types,type)) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
@@ -192,6 +217,10 @@ static XrXirStatus effect_physical_value(const XrXirCompileContext *work,
     if (mask&EFFECT_PHYSICAL_CALLABLE) {
         if (!xir_compile_work(work,1)) return XR_XIR_BUDGET;
         ++body->rows;
+    }
+    if(mask&(EFFECT_PHYSICAL_CALLABLE|EFFECT_PHYSICAL_ITERATOR)) {
+        if(!xir_compile_work(work,1)) return XR_XIR_BUDGET;
+        ++body->origins;
     }
     return mask?effect_physical_record(work,body,value,mask):XR_XIR_OK;
 }

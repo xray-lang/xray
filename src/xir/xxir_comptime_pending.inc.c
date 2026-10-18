@@ -58,7 +58,7 @@ XR_FUNC XrXirStatus xr_xir_compile_comptime_pending(const XrXirArtifact *definit
     status=xr_xir_compile_checked_write(definition,&owner->packet,diagnostic);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_read(&owner->context,owner->packet.bytes,owner->packet.length,&owner->definition,diagnostic);
     if (status==XR_XIR_OK && owner->definition->construction->comptime.site_count)
-        status=spec_run(owner->definition,&unexpected,diagnostic,&point,NULL);
+        status=spec_run(owner->definition,&unexpected,diagnostic,&point,NULL,NULL);
     if (unexpected) status=XR_XIR_BAD_STRUCTURE;
     if (status==XR_XIR_OK && point.found) status=pending_definition_receive(owner,&point,diagnostic);
     if (status==XR_XIR_OK && point.found) {
@@ -83,7 +83,7 @@ XR_FUNC XrXirStatus xr_xir_compile_comptime_pending_view(const XirComptimePendin
         if (!xir_compile_work(&owner->context,(uint64_t)current.length+sizeof(owner->site))) status=XR_XIR_BUDGET;
         else if (current.length!=owner->packet.length || !owner->packet.bytes || memcmp(current.bytes,owner->packet.bytes,current.length)) status=XR_XIR_BAD_STRUCTURE;
     }
-    if (status==XR_XIR_OK) status=spec_run(owner->definition,&unexpected,diagnostic,&point,NULL);
+    if (status==XR_XIR_OK) status=spec_run(owner->definition,&unexpected,diagnostic,&point,NULL,NULL);
     if (status==XR_XIR_OK && (!point.found || point.count!=owner->count || point.site.caller!=owner->site.caller ||
         point.site.instruction!=owner->site.instruction || point.site.helper!=owner->site.helper || unexpected)) status=XR_XIR_BAD_STRUCTURE;
     for (uint32_t a=0;status==XR_XIR_OK && a<owner->count;++a)
@@ -99,7 +99,7 @@ XR_FUNC XrXirStatus xr_xir_compile_comptime_pending_specialize(const XirComptime
     XirComptimePendingView view={0};
     XrXirStatus status=xr_xir_compile_comptime_pending_view(owner,&view,diagnostic);
     XrXirArtifact *received=NULL;XirEvaluationRoot root={0};
-    if (status==XR_XIR_OK) status=spec_run(view.definition,&received,diagnostic,NULL,&root);
+    if (status==XR_XIR_OK) status=spec_run(view.definition,&received,diagnostic,NULL,&root,NULL);
     if (status==XR_XIR_OK) {
         const XrXirProvenance *proof=received->module.provenance;
         const XrXirOrigin *caller=&proof->origins[root.caller],*callee=&proof->origins[root.callee];

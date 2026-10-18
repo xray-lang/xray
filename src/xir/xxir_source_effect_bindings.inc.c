@@ -129,7 +129,8 @@ static bool source_effect_records(SourceContext *ctx, uint32_t f, bool prepare) 
       for (uint32_t i = 0; i < function->instruction_count; ++i) {
         if (!source_work(ctx,NULL)) return false;
         const XrXirInstruction *op = &function->instructions[i];
-        uint32_t actual_family = op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE ?
+        uint32_t actual_family = op->op == XR_XIR_CALL || op->op == XR_XIR_INVOKE ||
+            op->op == XR_XIR_GENERATOR_NEW ?
             XR_XIR_EFFECT_BINDING_DIRECT : op->op == XR_XIR_FUNCTION_REF ?
             XR_XIR_EFFECT_BINDING_CAPTURE : op->op == XR_XIR_CALL_REQUIREMENT ?
             XR_XIR_EFFECT_BINDING_REQUIREMENT : 0;

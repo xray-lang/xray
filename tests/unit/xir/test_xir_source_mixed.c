@@ -10,6 +10,7 @@
  *   One code lease owns VM environments while native entries use the same slots.
  */
 #include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_program_internal.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_vm.h"
 #include "xir/xxir_generic.h"
@@ -37,12 +38,13 @@ XR_DATA const uint32_t fixture_source_result, fixture_source_advance, fixture_so
 typedef struct MixedSource {
     XrXirArtifact *artifact;
     XrXirCallEntry *entries;
-    XrXirProgram *vm_program;
+    XrXirVmBinding *bindings;
 } MixedSource;
 static uint32_t released;
 static void mixed_release(void *pointer) {
     MixedSource *owner = pointer;
-    xr_xir_compile_artifact_free(owner->artifact); xr_compile_resources_free(owner->entries); xr_xir_compile_program_drop(owner->vm_program); xr_compile_resources_free(owner); ++released;
+    CHECK(!owner->artifact);xr_compile_resources_free(owner->bindings);
+    xr_compile_resources_free(owner->entries);xr_compile_resources_free(owner);++released;
 }
 int main(void) {
     SourceLateResultEntries late_result_entries = {{fixture_source_late_result_values[0],fixture_source_late_result_values[1],fixture_source_late_result_values[2]},fixture_source_late_result_count};
@@ -58,16 +60,14 @@ int main(void) {
     XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
     const XrXirModule *module = xr_xir_compile_artifact_module(owner->artifact);
     CHECK(module->function_count == fixture_source_program.entry_count);
-    CHECK(xr_compile_resources_calloc(context.resources,module->function_count,sizeof(*owner->entries),(void **)&owner->entries)==XR_COMPILE_RESOURCE_OK);
+    CHECK(xr_xir_compile_vm_bind_table(owner->artifact,&owner->bindings,&owner->entries)==XR_XIR_OK &&
+        owner->bindings && owner->entries);
     XrXirProgramPacket proof=xir_program_packet_borrow(owner->artifact);
     CHECK(proof.length==fixture_source_program.packet.length && !memcmp(proof.bytes,fixture_source_program.packet.bytes,proof.length));
-    CHECK(xr_xir_compile_vm_program_take(&owner->artifact,&owner->vm_program)==XR_XIR_OK && !owner->artifact);
-    CHECK(owner->entries && owner->vm_program && owner->vm_program->entry_count==module->function_count);
     unsigned native_resumes = 0, vm_pauses = 0, pause_types = 0;
     for (uint32_t i = 0; i < module->function_count; ++i) {
-        /* Test assembly copies the actual sealed table. Its code lease remains
-         * owned until the mixed Program has fully exited and released. */
-        owner->entries[i]=owner->vm_program->entries[i];
+        /* Both providers describe the same canonical Input. The receiving
+         * Program owns that Input until all Instances release their code. */
         CHECK(owner->entries[i].result == fixture_source_program.entries[i].result);
         CHECK(owner->entries[i].parameter_count == fixture_source_program.entries[i].parameter_count);
         if ((module->functions[i].name_length == 11 && (!memcmp(module->functions[i].name, "writeStdout", 11) ||
@@ -111,10 +111,12 @@ int main(void) {
     CHECK(owner->entries[fixture_source_numeric_pause].resume == fixture_source_program.entries[fixture_source_numeric_pause].resume);
     CHECK(owner->entries[fixture_source_resume_text].resume != fixture_source_program.entries[fixture_source_resume_text].resume);
     XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, target, owner->entries, module->function_count,
-        module->declarations, {owner, mixed_release}, module->types, proof};
+        module->declarations, {owner, mixed_release}, module->types, {0}};
     uint32_t entry = module->declarations->entry_function;
+    XrXirProgramInput *input=NULL;
+    CHECK(xir_program_input_take(&context,&owner->artifact,&input)==XR_XIR_OK && !owner->artifact);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_compile_program_seal(&context,&spec, &program) == XR_XIR_OK);
+    CHECK(xir_program_receive(&context,&spec,&input,NULL,&program)==XR_XIR_OK && !input);
     XrXirValue results[2] = {{0}, {0}};
     source_pair(program, entry, (SourceFunctions) {fixture_source_result, fixture_source_advance, fixture_source_update, fixture_source_calculate, fixture_source_resume_text, fixture_source_stack_depth, fixture_source_numeric_pause, fixture_source_bound_result, fixture_source_witness_result, fixture_source_enum_witness_result, fixture_source_enum_generic_witness_result, fixture_source_generic_method_number, fixture_source_generic_method_text, fixture_source_generic_method_array}, results);
     runtime_source_failures(program, (RuntimeSourceEntries){entry, fixture_source_resume_text, fixture_source_numeric_pause, fixture_source_enum_witness_result, fixture_source_enum_generic_witness_result, fixture_source_generic_method_number, fixture_source_generic_method_text, fixture_source_generic_method_array});

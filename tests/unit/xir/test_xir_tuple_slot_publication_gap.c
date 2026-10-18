@@ -49,7 +49,7 @@ static XrXirArtifact *gap_lower(const XrXirCompileContext *context) {
     XrXirFunction functions[]={
         {"init",4,NULL,0,XR_XIR_UNIT,&blocks[0],1,init,9,operands,4},
         {"main",4,NULL,0,XR_XIR_I64,&blocks[1],1,entry,2,NULL,0}};
-    XrXirSourceModule source_module={"root",4,NULL,0,0};
+    XrXirSourceModule source_module={"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[]={{.module=0},{.module=0,.exported=true}};
     XrXirSlot slots[]={{0,tuple,false},{0,tuple,false}};
     XrXirDeclarations declarations={&source_module,1,identities,slots,2,NULL,0,0,1,NULL};

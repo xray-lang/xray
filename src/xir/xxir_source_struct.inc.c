@@ -94,7 +94,7 @@ static bool source_nominal_declare(SourceContext *ctx, AstNode *node, const char
     symbol->kind = SOURCE_NOMINAL; symbol->index = ctx->nominals.count++;
     symbol->module = ctx->module; ctx->nominal_sources[symbol->index] = symbol;
     XrXirNominalDeclaration *record = (XrXirNominalDeclaration *) &ctx->nominals.declarations[symbol->index];
-    const char *module = ctx->graph->specs[ctx->module].canonical;
+    const char *module = ctx->modules[ctx->module].name;
     *record = (XrXirNominalDeclaration) {{module, (uint32_t) source_text_size(ctx, module)},
         {name, (uint32_t) source_text_size(ctx, name)}, node->is_exported, NULL, 0, NULL, 0, kind, NULL, 0, 0, {0}};
     if (!source_prelude_bind(ctx, symbol, record)) return false;
@@ -154,11 +154,16 @@ static bool source_struct_declare(SourceContext *ctx, AstNode *node) {
     return source_nominal_declare(ctx, node, decl->name, decl->type_params,
         (uint32_t) decl->type_param_count, XR_XIR_NOMINAL_STRUCT);
 }
+static bool source_sendable_marker(SourceContext *ctx,const XrTypeRef *ref) {
+    return ref && ref->kind==XR_TREF_NAMED && !ref->nchildren && ref->name &&
+        source_text_same(ctx,NULL,ref->name,"Sendable");
+}
 static bool source_class_declare(SourceContext *ctx, AstNode *node) {
     ClassDeclNode *decl = &node->as.class_decl;
     if (decl->super_name || decl->super_module || decl->is_packed ||
         decl->explicit_align || decl->attr_count || decl->type_param_count < 0 ||
-        decl->type_param_count > 65536 || decl->field_count < 0)
+        decl->type_param_count > 65536 || decl->field_count < 0 || decl->interface_count<0 ||
+        (decl->interface_count && !decl->interfaces))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"class execution currently requires a root declaration without inheritance");
     uint32_t constructors=0;
     for (int i=0;i<decl->method_count;++i) {
@@ -168,8 +173,16 @@ static bool source_class_declare(SourceContext *ctx, AstNode *node) {
     if (constructors>1) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"a class has at most one constructor");
     if (!source_nominal_declare(ctx,node,decl->name,decl->type_params,
         (uint32_t)decl->type_param_count,XR_XIR_NOMINAL_CLASS)) return false;
-    ((XrXirNominalDeclaration *)ctx->nominals.declarations)[ctx->nominals.count-1].flags=
-        decl->explicit_final ? XR_XIR_NOMINAL_FINAL : 0;
+    uint32_t flags=decl->explicit_final?XR_XIR_NOMINAL_FINAL:0;
+    for (int i=0;i<decl->interface_count;++i) {
+        if (!source_work(ctx,node)) return false;
+        if (source_sendable_marker(ctx,decl->interfaces[i])) {
+            if (flags & XR_XIR_NOMINAL_SENDABLE)
+                return source_fail(ctx,node,XR_XIR_BAD_TYPE,"duplicate Sendable marker");
+            flags|=XR_XIR_NOMINAL_SENDABLE;
+        }
+    }
+    ((XrXirNominalDeclaration *)ctx->nominals.declarations)[ctx->nominals.count-1].flags=flags;
     return true;
 }
 static bool source_struct_fields(SourceContext *ctx) {
@@ -200,10 +213,10 @@ static bool source_struct_fields(SourceContext *ctx) {
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field requires an admitted value type");
                 fields[f] = (XrXirNominalField) {{field->name, (uint32_t) source_text_size(ctx, field->name)}, types[f],
                     (field->is_private ? XR_XIR_FIELD_PRIVATE : 0) | (field->is_protected ? XR_XIR_FIELD_PROTECTED : 0) |
-                    (field->is_const ? 0 : XR_XIR_FIELD_MUTABLE)};
+                    (field->is_const || (record->flags & XR_XIR_NOMINAL_SENDABLE) ? 0 : XR_XIR_FIELD_MUTABLE)};
                 SourceName member = {0}; member.name = source_owned_text(ctx, field->name); member.node = node;
                 if (!member.name) return false;
-                member.type = types[f]; member.mutable = !field->is_const;
+                member.type = types[f]; member.mutable = (fields[f].flags & XR_XIR_FIELD_MUTABLE)!=0;
                 if (!source_query_declare(ctx, &member, XR_XIR_SOURCE_MEMBER, symbol->declaration,
                     source_query_range(ctx, node, field->name))) return false;
                 source_query_binding_type(ctx, &member);

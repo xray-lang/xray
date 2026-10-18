@@ -22,6 +22,12 @@ typedef struct XrCompileState XrCompileState;
 XR_FUNC XrCompileResourceStatus xr_compile_state_new(XrCompileResources *resources, XrCompileState **output);
 XR_FUNC XrCompileResourceStatus xr_compile_state_retain(XrCompileState *state);
 XR_FUNC void xr_compile_state_release(XrCompileState *state);
+/* Parser sessions register their real lifetime separately from retained ASTs.
+ * A detached owning AST may cross sessions on its original ledger; an active
+ * parser state remains exclusive to that exact state. */
+XR_FUNC XrCompileResourceStatus xr_compile_state_session_open(XrCompileState *state);
+XR_FUNC void xr_compile_state_session_close(XrCompileState *state);
+XR_FUNC bool xr_compile_state_has_sessions(const XrCompileState *state);
 XR_FUNC XrCompileResources *xr_compile_state_resources(const XrCompileState *state);
 XR_FUNC XrCompileResourceStatus xr_compile_state_status(const XrCompileState *state);
 XR_FUNC XrCompileResourceStatus xr_compile_state_fail(XrCompileState *state, XrCompileResourceStatus status);

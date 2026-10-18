@@ -61,7 +61,7 @@ typedef struct XrXirSourceProductDiagnostic {
     XrXirSourceDiagnostic source;
     XrXirDiagnostic xir;
     XrXirSourceSnapshot *snapshot;
-    char *source_path;
+    XrXirSourceFailure failure;
 } XrXirSourceProductDiagnostic;
 /* Failure preserves output. Diagnostics own their semantic failure path and
  * any complete query snapshot retained after a later projection failure. */
@@ -74,12 +74,11 @@ XR_FUNC XrXirStatus xr_xir_compile_source_product_build(const XrXirSourceProduct
  * Failure preserves output and owns any published diagnostic path/snapshot. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build_text(const XrXirSourceProductRequest *request,
     const XrXirSourceText *text, XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic);
-/* The caller AST enters the same Checked/specialization/Lowered pipeline.
- * It is borrowed only synchronously under source_check_ast's contract. No
- * XrProto adapter or alternate execution representation is produced. */
+/* The actual owning AST is borrowed with source_check_ast's lifetime and
+ * authority contract. The same Checked, specialization, Lowered and genuine
+ * transferable Program pipeline owns the result independently of that AST. */
 XR_FUNC XrXirStatus xr_xir_compile_source_product_build_ast(const XrXirSourceProductRequest *request,
-    const XrXirSourceAst *syntax, XrXirSourceProduct **output,
-    XrXirSourceProductDiagnostic *diagnostic);
+    const XrXirSourceAst *ast, XrXirSourceProduct **output, XrXirSourceProductDiagnostic *diagnostic);
 XR_FUNC void xr_xir_compile_source_product_free(XrXirSourceProduct *product);
 XR_FUNC void xr_xir_compile_source_product_diagnostic_free(XrXirSourceProductDiagnostic *diagnostic);
 /* Public execution admission reads the owner's authentic Program root and all

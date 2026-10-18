@@ -14,6 +14,7 @@
 #include "xxir_call.h"
 #include "xxir_cell_owner_internal.h"
 #include "xxir_effect_contract_internal.h"
+#include "xxir_channel_rendezvous_internal.h"
 typedef struct XrXirCallObserver XrXirCallObserver;
 typedef struct XirCallNativeObserver XirCallNativeObserver;
 typedef struct XirCallNativeSourceObserver XirCallNativeSourceObserver;
@@ -40,6 +41,17 @@ typedef enum XrXirCellParameterRole {
 /* The resolver consumes complete checked provenance, never parameter shape alone. */
 typedef XrXirCellParameterRole (*XrXirCellRoleResolver)(void *context,
     uint32_t entry, uint32_t parameter);
+/* Metadata is borrowed from a sealed live Instance generation. The Call keeps
+ * one admission ledger, executor binding and frame stack across all tables. */
+typedef struct XrXirCallMetadata {
+    const XrXirCallEntry *entries;
+    uint32_t entry_count;
+    const XrXirTypeArena *arena;
+    void *admission_context;
+    XrXirCellRoleResolver cell_role;
+    void *cell_context;
+} XrXirCallMetadata;
+
 typedef struct XrXirCallRequest {
     uint32_t entry;
     const XrXirValue *arguments;
@@ -54,6 +66,12 @@ XR_FUNC bool xr_xir_call_invocation_pending(const XrXirCallView *view,uint32_t *
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_stage(XrXirCallView *view,uint32_t instruction);
 XR_FUNC XrXirCallStatus xr_xir_call_invocation_accept(XrXirCallView *view,
     const XirEffectInvocationSelection *selection);
+/* This view borrows the existing root frame only during a synchronous read. */
+typedef struct XirGeneratorCaptureView {
+    const XrXirValue *values;uint32_t count,entry;
+} XirGeneratorCaptureView;
+XR_FUNC XrXirCallStatus xr_xir_call_generator_captures(const XrXirCall *call,
+    XrXirValueAdmission *admission,XirGeneratorCaptureView *output);
 typedef struct XrXirCallClassAccess {
     const XrXirValue *value;
     XrXirCellAuthority authority;
@@ -81,6 +99,8 @@ XR_FUNC XrXirValueStatus xr_xir_call_cell_path_write(const XrXirCallView *view,
     const XrXirValue *value, XrXirFaultDetail *fault, bool append);
 XR_FUNC void *xr_xir_call_budget_allocate(XrXirCallBudget *budget, uint64_t bytes, XrXirCallStatus *status);
 XR_FUNC void xr_xir_call_budget_deallocate(XrXirCallBudget *budget, void *memory, uint64_t bytes);
+XR_FUNC XrXirCallStatus xr_xir_call_generator_new_budgeted(const XrXirCallConfig *config,
+    const XrXirCallRequest *request, XrXirCallBudget *budget, XrXirCall **output);
 XR_FUNC XrXirCallStatus xr_xir_call_new_budgeted(const XrXirCallConfig *config,
     const XrXirCallRequest *request, XrXirCallBudget *budget, XrXirCall **output);
 /* A registered language cleanup was physically released before retirement. */
@@ -112,5 +132,44 @@ XR_FUNC XrXirCallStatus xr_xir_call_complete_task_wait(XrXirCall *call, const Xr
     XrXirCallResult *outcome);
 /* A failed copy terminates only the waiting activation, never the sticky Task. */
 XR_FUNC XrXirCallStatus xr_xir_call_fail_task_wait(XrXirCall *call, const XrXirTaskWaitToken *token,
+    XrXirCallStatus reason);
+/* Only the active callback may stage a watch. SUSPENDED requires returning an
+ * empty AWAIT_CHANNEL action; READY observed a changed frontier, BUSY a held lock.
+ * No view, frame, or admission callback is borrowed by the notification node. */
+XR_FUNC XrXirCallStatus xr_xir_call_watch_channel(XrXirCallView *view,
+    const XrXirValue *channel, uint64_t sequence);
+/* Allocation-free after payload publication. SUSPENDED moves the unique owner
+ * into the Call and requires an empty AWAIT_CHANNEL action. Completion delivers
+ * an I64 SendWaitState inbox. READY leaves an already completed owner untouched. */
+XR_FUNC XrXirCallStatus xr_xir_call_wait_channel_send(XrXirCallView *view,XrXirChannelSendWait **owner);
+/* SUSPENDED moves the unique receive owner with no allocation. Completion
+ * moves its actual native Recv<T> into the current frame's owned inbox.
+ * READY preserves an already completed owner for immediate local take. */
+XR_FUNC XrXirCallStatus xr_xir_call_wait_channel_recv(XrXirCallView *view,XrXirChannelRecvWait **owner);
+/* Move one actual returned inbox owner into canonical Unit storage. The exact
+ * active view and expected closed type must match; failure preserves both.
+ * Moving an acknowledged Channel result allocates nothing and retains nothing. */
+XR_FUNC XrXirCallStatus xr_xir_call_take_inbox(XrXirCallView *view,XrXirType expected,XrXirValue *output);
+XR_FUNC bool xr_xir_call_channel_waiting(const XrXirCall *call);
+XR_FUNC bool xr_xir_call_channel_ready(const XrXirCall *call);
+/* Executor accounting failure removes only its exact activation's owned watch. */
+XR_FUNC XrXirCallStatus xr_xir_call_fail_channel_wait(XrXirCall *call,
+    const XrXirExecutorBinding *binding, XrXirCallStatus reason);
+/* Iterator waits reuse the exact binding/wake/request token representation. */
+/* Borrowed facts belong to one exact pending wait, never an execution grant. */
+struct XrXirInstance;
+typedef struct XirIteratorWaitContext {
+    struct XrXirInstance *instance;XrXirValueAdmission *admission;
+    const XrXirValue *iterator;const XirEffectInvocationSelection *invocation;
+    uint32_t caller,instruction;
+} XirIteratorWaitContext;
+XR_FUNC XrXirCallStatus xr_xir_call_iterator_context(XrXirCall *call,
+    const XrXirTaskWaitToken *token,XirIteratorWaitContext *output);
+/* Rechecks the real demand before binding the parked producer root context. */
+XR_FUNC XrXirCallStatus xr_xir_call_iterator_prepare(XrXirCall *call,const XrXirTaskWaitToken *token);
+XR_FUNC bool xr_xir_call_iterator_wait_token(const XrXirCall *call,XrXirTaskWaitToken *output);
+XR_FUNC XrXirCallStatus xr_xir_call_link_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token);
+XR_FUNC XrXirCallStatus xr_xir_call_complete_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token);
+XR_FUNC XrXirCallStatus xr_xir_call_fail_iterator_wait(XrXirCall *call,const XrXirTaskWaitToken *token,
     XrXirCallStatus reason);
 #endif // XXIR_CALL_INTERNAL_H

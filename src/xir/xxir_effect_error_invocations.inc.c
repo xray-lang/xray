@@ -10,7 +10,7 @@
  *   The existing error CFG interprets exact sealed inputs. Unknown callable
  *   alternatives remain unknown errors independently of their ROOT bound.
  */
-typedef struct ErrorInvocationNode { uint32_t body,summary,calls; } ErrorInvocationNode;
+typedef struct ErrorInvocationNode { uint32_t body,summary,calls,returned; } ErrorInvocationNode;
 typedef struct ErrorInvocationCall { uint32_t head; bool unknown,handled,frontier; } ErrorInvocationCall;
 typedef struct ErrorInvocationLink { uint32_t caller,target,producer,next,consumer_next; } ErrorInvocationLink;
 struct ErrorInvocationContexts {
@@ -70,7 +70,7 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
     uint32_t at=0;
     for (uint32_t n=0;n<owner->count;++n) {
         if (!xir_compile_work(flow->remaining,4)) { status=XR_XIR_BUDGET;break; }
-        contexts->nodes[n]=(ErrorInvocationNode){owner->nodes[n].body,UINT32_MAX,at};
+        contexts->nodes[n]=(ErrorInvocationNode){owner->nodes[n].body,UINT32_MAX,at,UINT32_MAX};
         contexts->consumers[n]=UINT32_MAX;
         EffectBodyFunctionDimensions head={0};
         status=effect_body_request_dimensions(&flow->body,owner->nodes[n].body,&head);
@@ -97,13 +97,31 @@ static XrXirStatus error_invocation_storage(ErrorFlow *flow,
         if (contexts->summaries==UINT32_MAX) { status=XR_XIR_BUDGET;break; }
         contexts->nodes[n].summary=contexts->summaries++;
     }
+    /* Returned Task and Iterator values carry latent Error sets separately
+     * from errors escaping the factory invocation. Both use the same CFG. */
+    for (uint32_t n=0;status==XR_XIR_OK && n<owner->count;++n) {
+        if (!xir_compile_work(flow->remaining,6)) { status=XR_XIR_BUDGET;break; }
+        uint32_t body=contexts->nodes[n].body;
+        const XrXirDeclarations *declarations=flow->body.domain.declarations;
+        if (declarations && declarations->functions &&
+            (declarations->functions[body].promises&XR_XIR_FUNCTION_GENERATOR)) continue;
+        EffectBodyFunctionHead head={0};
+        status=effect_body_request_head(&flow->body,body,&head);
+        if (status!=XR_XIR_OK) break;
+        const XrXirTypeNode *type=xr_xir_type_node(flow->body.domain.types,head.result);
+        if (!type || (type->kind!=XR_XIR_TYPE_TASK && type->kind!=XR_XIR_TYPE_ITERATOR)) continue;
+        if (contexts->summaries==UINT32_MAX) { status=XR_XIR_BUDGET;break; }
+        if (!xir_compile_work(flow->remaining,1)) { status=XR_XIR_BUDGET;break; }
+        contexts->nodes[n].returned=contexts->summaries++;
+    }
     if (status!=XR_XIR_OK) { error_invocation_contexts_free(contexts);return status; }
     *output=contexts;return XR_XIR_OK;
 }
 
 /* Replay the original complete finite descriptor. Any opaque, symbolic or
  * unrooted alternative is still an unknown error even with a NONE ROOT mask.
- * Every concrete site must have exactly one real edge for this full input. */
+ * Every discovered complete input has one real edge. An original pending
+ * Iterator input keeps Unknown Error until its genuine origin is discovered. */
 static XrXirStatus error_invocation_indirect_check(EffectInvocationFlow *replay,
     const ErrorInvocationContexts *contexts,
     uint32_t instruction,const XrXirInstruction *op,bool *unknown) {
@@ -134,7 +152,16 @@ static XrXirStatus error_invocation_indirect_check(EffectInvocationFlow *replay,
             if (e>=contexts->link_count) return XR_XIR_BAD_STRUCTURE;
             if (contexts->links[e].producer==s) ++matched;
         }
-        if (matched!=1) return XR_XIR_BAD_STRUCTURE;
+        if(matched!=1) {
+            if(matched) return XR_XIR_BAD_STRUCTURE;
+            bool pending=false;
+            status=effect_invocation_iterator_pending(replay,op,&pending);
+            if(status!=XR_XIR_OK) return status;
+            if(!pending) return XR_XIR_BAD_STRUCTURE;
+            /* The same original discovery rule withheld this call's edge.
+             * Missing Iterator input keeps an unknown Error, never NONE. */
+            unresolved=true;
+        }
     }
     *unknown=unresolved || !present;return XR_XIR_OK;
 }
@@ -167,8 +194,9 @@ static XrXirStatus error_invocation_input_match(EffectInvocationFlow *replay,
     }
     const uint64_t *closure=NULL;
     if (edge.producer!=UINT32_MAX) {
-        if (op->immediate<0 || (uint64_t)op->immediate>=replay->values) return XR_XIR_BAD_STRUCTURE;
-        closure=effect_invocation_row(replay,(uint32_t)op->immediate);
+        uint64_t value=effect_invocation_iterator_operation(op->op)?op->args[0]:(uint64_t)op->immediate;
+        if (value>=replay->values) return XR_XIR_BAD_STRUCTURE;
+        closure=effect_invocation_row(replay,(uint32_t)value);
         if (!closure) return XR_XIR_BAD_STRUCTURE;
     }
     uint64_t *input=NULL;replay->instruction=edge.instruction;
@@ -218,17 +246,20 @@ static XrXirStatus error_invocation_link(ErrorFlow *flow,ErrorInvocationContexts
 /* An open generic direct call keeps its original conservative public summary
  * and typed substitution. Its error dependency still wakes the actual caller;
  * this link is not an invocation/ROOT edge or a callable authority proof. */
-static XrXirStatus error_invocation_fallback(ErrorFlow *flow,ErrorInvocationContexts *contexts,
-    const EffectInvocationCertificate *certificate,uint32_t n,uint32_t instruction) {
+static bool error_invocation_fallback_direct(XrXirOp op) {
+    return op==XR_XIR_CALL || op==XR_XIR_INVOKE || op==XR_XIR_GO;
+}
+static bool error_invocation_fallback_default(XrXirOp op) {
+    return op==XR_XIR_CALL_DEFAULT || op==XR_XIR_INVOKE_DEFAULT;
+}
+static XrXirStatus error_invocation_fallback_row(ErrorFlow *flow,ErrorInvocationContexts *contexts,
+    const EffectInvocationCertificate *certificate,uint32_t n,uint32_t instruction,const XrXirInstruction *op) {
     ErrorInvocationCall *call=&contexts->calls[contexts->nodes[n].calls+instruction];
     if (call->handled) return XR_XIR_OK;
-    XrXirInstruction storage;const XrXirInstruction *op=NULL;
-    XrXirStatus read=error_operation(flow,contexts->nodes[n].body,instruction,&storage,&op);
-    if (read!=XR_XIR_OK) return read;
     uint32_t target=UINT32_MAX;
-    if (op->op==XR_XIR_CALL || op->op==XR_XIR_INVOKE || op->op==XR_XIR_GO)
+    if (error_invocation_fallback_direct(op->op))
         target=op->immediate<0 || (uint64_t)op->immediate>=flow->effects->count?UINT32_MAX:(uint32_t)op->immediate;
-    else if (op->op==XR_XIR_CALL_DEFAULT || op->op==XR_XIR_INVOKE_DEFAULT) {
+    else if (error_invocation_fallback_default(op->op)) {
         const uint32_t *identity=xr_xir_default_identity(op);const XrXirDefaultBinding *binding=NULL;
         XrXirStatus status=xir_metadata_default_lookup(flow->remaining,&flow->body.domain,identity[0],identity[1],&binding);
         if (status!=XR_XIR_OK) return status;
@@ -243,6 +274,130 @@ static XrXirStatus error_invocation_fallback(ErrorFlow *flow,ErrorInvocationCont
     if (!xir_compile_work(flow->remaining,5)) return XR_XIR_BUDGET;
     contexts->links[link]=(ErrorInvocationLink){n,target,UINT32_MAX,call->head,contexts->consumers[target]};
     call->head=link;contexts->consumers[target]=link;return XR_XIR_OK;
+}
+
+static XrXirStatus error_invocation_fallback(ErrorFlow *flow,ErrorInvocationContexts *contexts,
+    const EffectInvocationCertificate *certificate,uint32_t n,uint32_t instruction) {
+    ErrorInvocationCall *call=&contexts->calls[contexts->nodes[n].calls+instruction];
+    if (call->handled) return XR_XIR_OK;
+    XrXirInstruction storage;const XrXirInstruction *op=NULL;
+    XrXirStatus status=error_operation(flow,contexts->nodes[n].body,instruction,&storage,&op);
+    return status==XR_XIR_OK?error_invocation_fallback_row(flow,contexts,certificate,n,instruction,op):status;
+}
+/* Only the actual current opcode can exclude this fallback action. Selected
+ * calls use the complete original row receiver; no context fact is cached. */
+static XrXirStatus error_invocation_fallback_body(ErrorFlow *flow,ErrorInvocationContexts *contexts,
+    const EffectInvocationCertificate *certificate,uint32_t n,uint32_t count) {
+    if (!effect_body_request_sequence_owned(&flow->body)) {
+        for (uint32_t i=0;i<count;++i) {
+            XrXirStatus status=error_invocation_fallback(flow,contexts,certificate,n,i);
+            if (status!=XR_XIR_OK) return status;
+        }
+        return XR_XIR_OK;
+    }
+    if (flow->body.read.owner!=flow->remaining) return XR_XIR_BAD_STRUCTURE;
+    EffectBodyRecordCursor cursor;
+    XrXirStatus status=effect_body_request_sequence_begin(&flow->body,&cursor);
+    if (status!=XR_XIR_OK) return status;
+    uint32_t f=contexts->nodes[n].body;
+    const EffectBodyMaterial *material=flow->body.owner;
+    if (f>=effect_body_count(material) || count!=material->functions[f].instruction_count)
+        return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyFunction *function=&material->functions[f];
+    if (!xir_compile_work(flow->remaining,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
+    EffectBodyRecordCursor finish={0,0,UINT32_MAX};
+    while (cursor.first<count) {
+        if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+        const EffectBodyRun *ref=NULL;
+        status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(flow->remaining,sizeof(finish))) return XR_XIR_BUDGET;
+        finish=(EffectBodyRecordCursor){ref->first,cursor.run-1,cursor.first-1};
+        uint32_t opcode;
+        status=effect_body_run_word(&flow->body.read,ref,ref->first,0,&opcode);
+        if (status!=XR_XIR_OK) return status;
+        if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+        if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        if (!(ref->mask&UINT32_C(1)) && !error_invocation_fallback_direct((XrXirOp)opcode) &&
+            !error_invocation_fallback_default((XrXirOp)opcode)) continue;
+        for (uint32_t i=ref->first;i-ref->first<ref->count;++i) {
+            if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+            if (contexts->calls[contexts->nodes[n].calls+i].handled) continue;
+            if (i!=ref->first && (ref->mask&UINT32_C(1))) {
+                status=effect_body_run_word(&flow->body.read,ref,i,0,&opcode);
+                if (status!=XR_XIR_OK) return status;
+                if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+                if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+            }
+            if (!error_invocation_fallback_direct((XrXirOp)opcode) &&
+                !error_invocation_fallback_default((XrXirOp)opcode)) continue;
+            XrXirInstruction operation;
+            status=effect_body_instruction_ref_value(&flow->body.read,ref,i,&operation);
+            if (status!=XR_XIR_OK) return status;
+            status=error_invocation_fallback_row(flow,contexts,certificate,n,i,&operation);
+            if (status!=XR_XIR_OK) return status;
+        }
+    }
+    return effect_body_request_sequence_finish(&flow->body,f,&finish);
+}
+
+static bool error_invocation_indirect_opcode(XrXirOp op) {
+    return op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT;
+}
+/* This storage census reads actual opcodes only. Constant physical runs merge
+ * absence; genuine targets retain all later correspondence and edge proofs. */
+static XrXirStatus error_invocation_has_indirect(ErrorFlow *flow,bool *output) {
+    if (!flow || !output) return XR_XIR_BAD_STRUCTURE;
+    bool found=false;
+    for (uint32_t f=0;f<flow->body.domain.function_count && !found;++f) {
+        EffectBodyFunctionDimensions head={0};
+        XrXirStatus status=effect_body_request_dimensions(&flow->body,f,&head);
+        if (status!=XR_XIR_OK) return status;
+        if (!effect_body_request_sequence_owned(&flow->body)) {
+            for (uint32_t i=0;i<head.instruction_count;++i) {
+                if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+                EffectBodyInstructionShape shape={0};status=error_shape(flow,f,i,&shape);
+                if (status!=XR_XIR_OK) return status;
+                if (error_invocation_indirect_opcode(shape.op)) {found=true;break;}
+            }
+            continue;
+        }
+        if (flow->body.read.owner!=flow->remaining) return XR_XIR_BAD_STRUCTURE;
+        EffectBodyRecordCursor cursor;
+        status=effect_body_request_sequence_begin(&flow->body,&cursor);
+        if (status!=XR_XIR_OK) return status;
+        const EffectBodyMaterial *material=flow->body.owner;
+        const EffectBodyFunction *function=&material->functions[f];
+        if (!xir_compile_work(flow->remaining,sizeof(EffectBodyRecordCursor))) return XR_XIR_BUDGET;
+        EffectBodyRecordCursor finish={0,0,UINT32_MAX};
+        while (cursor.first<head.instruction_count) {
+            if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
+            const EffectBodyRun *ref=NULL;
+            status=effect_body_range_ref(&flow->body.read,function,&cursor,&ref);
+            if (status!=XR_XIR_OK) return status;
+            if (!xir_compile_work(flow->remaining,sizeof(finish))) return XR_XIR_BUDGET;
+            finish=(EffectBodyRecordCursor){ref->first,cursor.run-1,cursor.first-1};
+            if (found) continue;
+            uint32_t opcode;
+            status=effect_body_run_word(&flow->body.read,ref,ref->first,0,&opcode);
+            if (status!=XR_XIR_OK) return status;
+            if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+            if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+            found=error_invocation_indirect_opcode((XrXirOp)opcode);
+            if (!(ref->mask&UINT32_C(1))) continue;
+            for (uint32_t i=ref->first+1;!found && i<ref->first+ref->count;++i) {
+                status=effect_body_run_word(&flow->body.read,ref,i,0,&opcode);
+                if (status!=XR_XIR_OK) return status;
+                if (!xir_compile_work(flow->remaining,2)) return XR_XIR_BUDGET;
+                if (opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+                found=error_invocation_indirect_opcode((XrXirOp)opcode);
+            }
+        }
+        status=effect_body_request_sequence_finish(&flow->body,f,&finish);
+        if (status!=XR_XIR_OK) return status;
+    }
+    if (!xir_compile_work(flow->remaining,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=found;return XR_XIR_OK;
 }
 
 static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocationContexts **output) {
@@ -260,17 +415,8 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
     const EffectInvocationFinal *sealed=certificate->final;
     if (!sealed->site_count) return XR_XIR_OK;
     bool indirect=false;
-    for (uint32_t f=0;f<flow->body.domain.function_count && !indirect;++f) {
-        EffectBodyFunctionDimensions head={0};
-        XrXirStatus read=effect_body_request_dimensions(&flow->body,f,&head);
-        if (read!=XR_XIR_OK) return read;
-        for (uint32_t i=0;i<head.instruction_count;++i) {
-            if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;
-            EffectBodyInstructionShape shape={0};read=error_shape(flow,f,i,&shape);
-            if (read!=XR_XIR_OK) return read;
-            if (shape.op==XR_XIR_CALL_INDIRECT || shape.op==XR_XIR_INVOKE_INDIRECT) { indirect=true;break; }
-        }
-    }
+    XrXirStatus probe=error_invocation_has_indirect(flow,&indirect);
+    if (probe!=XR_XIR_OK) return probe;
     if (!indirect) return XR_XIR_OK;
     XrXirStatus status=effect_body_physical_match(flow->remaining,sealed->physical,certificate->body);
     ErrorInvocationContexts *contexts=NULL;
@@ -307,8 +453,7 @@ static XrXirStatus error_invocation_contexts_new(ErrorFlow *flow,ErrorInvocation
     for (uint32_t n=0;status==XR_XIR_OK && n<owner.final->count;++n) {
         EffectBodyFunctionDimensions head={0};
         status=effect_body_request_dimensions(&flow->body,contexts->nodes[n].body,&head);
-        for (uint32_t i=0;status==XR_XIR_OK && i<head.instruction_count;++i)
-            status=error_invocation_fallback(flow,contexts,certificate,n,i);
+        if (status==XR_XIR_OK) status=error_invocation_fallback_body(flow,contexts,certificate,n,head.instruction_count);
     }
     effect_invocation_read_close(&owner);
     if (status!=XR_XIR_OK) { error_invocation_contexts_free(contexts);return status; }
@@ -356,6 +501,8 @@ static XrXirStatus error_invocation_call(ErrorFlow *flow,const XrXirInstruction 
     return XR_XIR_OK;
 }
 
+#include "xxir_effect_error_returns.inc.c"
+
 static XrXirStatus error_invocation_enqueue(ErrorFlow *flow,uint32_t n) {
     ErrorInvocationContexts *contexts=flow->invocations;
     if (n>=contexts->count || contexts->pending>contexts->count) return XR_XIR_BAD_STRUCTURE;
@@ -386,12 +533,12 @@ static XrXirStatus error_invocation_functions(ErrorFlow *flow) {
             --contexts->pending;contexts->queued[n]=0;flow->invocation=n;flow->summary_changed=false;
             bool empty=false;uint32_t f=contexts->nodes[n].body;
             status=error_empty_escaping_read(&flow->body,f,flow->remaining,&empty);
-            if (status==XR_XIR_OK && empty) {
+            if (status==XR_XIR_OK && empty && contexts->nodes[n].returned==UINT32_MAX) {
                 if (!xir_compile_work(flow->remaining,flow->effects->outcomes_work.words)) return XR_XIR_BUDGET;
                 empty=!error_any(flow->effects->outcomes_work.errors+(size_t)contexts->nodes[n].summary*
                     flow->effects->outcomes_work.words,flow->effects->outcomes_work.words);
             }
-            if (status==XR_XIR_OK && !empty) status=error_function(flow,f);
+            if (status==XR_XIR_OK && (!empty || contexts->nodes[n].returned!=UINT32_MAX)) status=error_function(flow,f);
             if (status!=XR_XIR_OK || flow->restart || !flow->summary_changed) continue;
             for (uint32_t e=contexts->consumers[n];e!=UINT32_MAX;e=contexts->links[e].consumer_next) {
                 if (!xir_compile_work(flow->remaining,1)) return XR_XIR_BUDGET;

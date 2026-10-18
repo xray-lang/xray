@@ -16,7 +16,7 @@
 #include "xxir_call.h"
 #include "xxir_class_observation.h"
 
-#define XR_XIR_PROGRAM_ABI_VERSION 31u
+#define XR_XIR_PROGRAM_ABI_VERSION 36u
 typedef struct XrXirProgram XrXirProgram;
 typedef struct XrXirProgramInput XrXirProgramInput;
 typedef struct XrXirInstance XrXirInstance;
@@ -72,6 +72,8 @@ XR_FUNC void xr_xir_compile_program_drop(XrXirProgram *program);
 XR_FUNC XrXirCallStatus xr_xir_instance_config_init(XrXirInstanceConfig *config, size_t size);
 XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
     XrXirType type, const XrXirValue *input, XrXirValue *output);
+/* Output must be empty before configuration or Program access. Refusal preserves
+ * it; a retired config prefix is checked before reading any Program payload. */
 XR_FUNC XrXirCallStatus xr_xir_instance_new(XrXirProgram *program, const XrXirInstanceConfig *config,
                                           XrXirInstance **output);
 XR_FUNC XrXirInstanceState xr_xir_instance_state(const XrXirInstance *instance);

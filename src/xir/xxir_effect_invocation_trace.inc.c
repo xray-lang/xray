@@ -46,21 +46,24 @@ static XrXirStatus effect_invocation_trace_finish(const XrXirCompileContext *wor
  * equation edge, and public ordinals are emitted only after that proof. */
 static XrXirStatus effect_invocation_trace_walk_selected(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const EffectInvocationTraceRequest *request,
-    uint32_t *length,EffectInvocationTraceSelection *selection) {
+    uint32_t *length,EffectInvocationTraceSelection *selection,const EffectInvocationTraceSelection *chosen) {
     if (!certificate || !effect_body_material_shape(certificate->body) ||
         certificate->body->resources!=certificate->resources || certificate->resources!=work->resources || !request || !length ||
         request->domain>=4 || request->function>=effect_body_count(certificate->body) ||
         !certificate->final)
         return XR_XIR_BAD_STRUCTURE;
-    uint32_t atom=UINT32_MAX;XrXirRootEffectWitness witness={0};
-    XrXirStatus status=effect_invocation_projection_select(work,certificate,request->function,request->domain,
-        &atom,&witness);
+    uint32_t scalar_atom=UINT32_MAX;XrXirRootEffectWitness scalar_witness={0};
+    XrXirStatus status=chosen?XR_XIR_OK:effect_invocation_projection_select(work,certificate,request->function,request->domain,
+        &scalar_atom,&scalar_witness);
     if (status!=XR_XIR_OK) return status;
+    if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+    uint32_t atom=chosen?chosen->atom:scalar_atom;
+    const XrXirRootEffectWitness *witness=chosen?&chosen->witness:&scalar_witness;
     status=effect_invocation_projection_result_match(work,certificate,request->function,request->domain,
-        atom,&witness);
+        atom,witness);
     if (status!=XR_XIR_OK) return status;
     bool fact=atom!=UINT32_MAX;
-    if (!fact) return effect_invocation_trace_finish(work,0,atom,witness,length,selection);
+    if (!fact) return effect_invocation_trace_finish(work,0,atom,*witness,length,selection);
     const EffectInvocationFinal *equations=certificate->final;
     uint32_t current=equations->roots[request->function],count=0;
     for (;;) {
@@ -81,7 +84,7 @@ static XrXirStatus effect_invocation_trace_walk_selected(const XrXirCompileConte
         ++count;
         if (!cause->distance) {
             if (cause->next!=UINT32_MAX || cause->edge!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
-            return effect_invocation_trace_finish(work,count,atom,witness,length,selection);
+            return effect_invocation_trace_finish(work,count,atom,*witness,length,selection);
         }
         if (cause->next>=equations->count || cause->edge>=equations->edge_count ||
             equations->edges[cause->edge].caller!=current ||
@@ -95,7 +98,7 @@ static XrXirStatus effect_invocation_trace_walk_selected(const XrXirCompileConte
 static XrXirStatus effect_invocation_trace_walk(const XrXirCompileContext *work,
     const EffectInvocationCertificate *certificate,const EffectInvocationTraceRequest *request,
     uint32_t *length) {
-    return effect_invocation_trace_walk_selected(work,certificate,request,length,NULL);
+    return effect_invocation_trace_walk_selected(work,certificate,request,length,NULL,NULL);
 }
 
 static inline XrXirStatus effect_invocation_certificate_trace(const XrXirCompileContext *work,

@@ -1,0 +1,6 @@
+@test
+fn hosted_case() {
+    const xs = [1, 2, 3]
+    assert(len(xs) == 3)
+    print(42)
+}

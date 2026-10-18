@@ -29,7 +29,7 @@ static void wire_built(const XrXirCompileContext *context) {
         {"entry",5,NULL,0,XR_XIR_I64,blocks+1,1,entry,3,operands,1},
         {"make",4,NULL,0,(XrXirType)256,blocks+2,1,make,4,operands,2},
         {"sum",3,&pair,1,XR_XIR_I64,blocks+2,1,sum,4,NULL,0}};
-    XrXirSourceModule source={"alpha",5,NULL,0,0};
+    XrXirSourceModule source={"alpha",5,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity identities[]={
         {0},{.exported=1},{.nominal_owner=1,.method_kind=XR_XIR_MATERIALIZER},
         {.exported=1,.nominal_owner=1,.method_kind=XR_XIR_STATIC_METHOD}};
@@ -62,10 +62,10 @@ static void wire_built(const XrXirCompileContext *context) {
     node.nominal.fields=field_types;node.nominal.field_count=2;
     xr_xir_compile_construction_free(owner);
     XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
-    if (packet.length!=sizeof(materialization75_golden) || memcmp(packet.bytes,materialization75_golden,packet.length)) {
-        size_t at=0;while (at<packet.length && at<sizeof(materialization75_golden) && packet.bytes[at]==materialization75_golden[at]) ++at;
-        fprintf(stderr,"Independent materializer comparison actual=%zu literal=%zu first=%zu\n",packet.length,sizeof(materialization75_golden),at);
+    if (packet.length!=sizeof(materialization76_golden) || memcmp(packet.bytes,materialization76_golden,packet.length)) {
+        size_t at=0;while (at<packet.length && at<sizeof(materialization76_golden) && packet.bytes[at]==materialization76_golden[at]) ++at;
+        fprintf(stderr,"Independent materializer comparison actual=%zu literal=%zu first=%zu\n",packet.length,sizeof(materialization76_golden),at);
     }
-    CHECK(packet.length==sizeof(materialization75_golden) && !memcmp(packet.bytes,materialization75_golden,packet.length));
+    CHECK(packet.length==sizeof(materialization76_golden) && !memcmp(packet.bytes,materialization76_golden,packet.length));
     xr_xir_compile_checked_packet_free(&packet);xr_xir_compile_artifact_free(checked);
 }

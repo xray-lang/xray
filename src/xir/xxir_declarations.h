@@ -18,12 +18,23 @@ typedef struct XrXirLiteral {
     const char *bytes;
     uint32_t length;
 } XrXirLiteral;
+typedef enum XrXirModuleStorage {
+    XR_XIR_MODULE_FRESH_STORAGE,
+    XR_XIR_MODULE_BIRTH_STORAGE
+} XrXirModuleStorage;
 typedef struct XrXirSourceModule {
     const char *name;
     uint32_t name_length;
     const uint32_t *dependencies;
     uint32_t dependency_count;
     uint32_t initializer;
+    /* Zero owns a lexical scope; otherwise one plus its canonical module.
+     * Storage and initialization retain this module's independent identity. */
+    uint32_t lexical_scope;
+    /* Birth storage cannot initialize in a fresh Instance. Actual receiving
+     * must bind its published module and every slot before execution. This
+     * requirement is independent of lexical visibility and Sendable. */
+    uint32_t storage;
 } XrXirSourceModule;
 typedef enum XrXirMemberAccess {
     XR_XIR_MEMBER_PUBLIC, XR_XIR_MEMBER_PRIVATE, XR_XIR_MEMBER_PROTECTED
@@ -49,6 +60,7 @@ typedef struct XrXirFunctionIdentity {
 } XrXirFunctionIdentity;
 
 #define XR_XIR_FUNCTION_NO_SUSPEND 1u
+#define XR_XIR_FUNCTION_GENERATOR 2u
 typedef struct XrXirSlot {
     uint32_t module;
     XrXirType type;

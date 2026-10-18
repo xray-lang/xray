@@ -25,7 +25,9 @@ static XrXirValueStatus storage_unpack_leaf(StorageSpan span,
     XrXirLayout layout = {0};
     if (!xr_xir_compile_type_arena_layout(admission->arena, span.type, &layout) ||
         !layout.size || layout.size > sizeof(uint64_t) || !span.bytes) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XrXirValue value = storage_leaf_value(span.type, span.bytes, layout.size);
+    XrXirValue value = {0};
+    if (!storage_leaf_value(admission->arena,span.type,span.bytes,layout.size,&value))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
     if (!xr_xir_value_argument(&value, admission->arena, span.type)) return XR_XIR_VALUE_BAD_ARGUMENT;
     return receiving?value_copy_on_domain(&value,admission->domain,output):xr_xir_value_copy(&value,output);
 }
@@ -90,7 +92,11 @@ static XrXirValueStatus storage_unpack_walk(StorageUnpack *unpack,
                 span = (StorageSpan){nullable ? frame->node->element : frame->node->nominal.fields[field],
                     frame->bytes ? frame->bytes +
                         (nullable ? frame->layout->value.alignment : frame->layout->field_offsets[field]) : NULL};
-                status = storage_unpack_enter(unpack, span, &ready);
+                if (span.type==XR_XIR_UNIT && xr_xir_nominal_native_recv(
+                    xr_xir_compile_type_arena_types(unpack->admission->arena),frame->record->object.type,XR_XIR_UNIT)) {
+                    /* A logical Unit field is initialized without reading payload bytes. */
+                    frame->record->fields[frame->next++]=(XrXirValue){0};
+                } else status=storage_unpack_enter(unpack,span,&ready);
             }
         }
         if (status != XR_XIR_VALUE_OK) return status;

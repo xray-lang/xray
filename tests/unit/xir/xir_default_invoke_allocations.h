@@ -32,7 +32,7 @@ static XrXirStatus default_invoke_allocation_case(const XrXirCompileContext *con
         {"entry",5,NULL,0,XR_XIR_I64,blocks,3,entry,6,NULL,0},
         {"owner",5,&i64,1,XR_XIR_I64,&one,1,&ret,1,NULL,0},
         {"default",7,NULL,0,XR_XIR_I64,&two,1,helper,2,NULL,0}};
-    XrXirSourceModule source={"root",4,NULL,0,0};
+    XrXirSourceModule source={"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     XrXirFunctionIdentity ids[4]={{0},{0},{0},{0}};
     XrXirDeclarations declarations={.modules=&source,.module_count=1,.functions=ids,.entry_function=1};
     XrXirDefaultBinding binding={XR_XIR_DEFAULT_PARAMETER,2,0,3};

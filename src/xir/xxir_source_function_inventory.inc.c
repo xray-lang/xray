@@ -6,7 +6,7 @@
  *
  * xxir_source_function_inventory.inc.c - Complete nested Source function inventory
  */
-typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth, defaults, members, comptime; } SourceClosureCount;
+typedef struct SourceClosureCount { SourceContext *ctx; uint32_t count, depth, defaults, helpers, comptime; bool yielded; } SourceClosureCount;
 static bool count_closures(AstNode *node, void *pointer) {
     SourceClosureCount *scan = pointer;
     if (!node) return true;
@@ -17,15 +17,18 @@ static bool count_closures(AstNode *node, void *pointer) {
     if (scan->depth == 128 || (closure && scan->count == scan->ctx->compile.limits.functions))
         return source_fail(scan->ctx,node,XR_XIR_BUDGET,"closure declaration budget exhausted");
     if (closure) ++scan->count;
+    bool function=node->type==AST_FUNCTION_EXPR || node->type==AST_FUNCTION_DECL || node->type==AST_METHOD_DECL;
+    bool outer_yield=scan->yielded;if(function) scan->yielded=false;
+    if(node->type==AST_YIELD_STMT) scan->yielded=true;
     if (node->type==AST_COMPTIME_EXPR) {
         if (scan->comptime==scan->ctx->compile.limits.functions)
             return source_fail(scan->ctx,node,XR_XIR_BUDGET,"comptime helper capacity exhausted");
         ++scan->comptime;
     }
-    if (node->type == AST_MEMBER_ACCESS) {
-        if (scan->members == UINT32_MAX)
-            return source_fail(scan->ctx,node,XR_XIR_BUDGET,"member helper capacity exhausted");
-        ++scan->members;
+    if (node->type == AST_MEMBER_ACCESS || node->type == AST_FOR_IN_STMT) {
+        if (scan->helpers == UINT32_MAX)
+            return source_fail(scan->ctx,node,XR_XIR_BUDGET,"synthetic helper capacity exhausted");
+        ++scan->helpers;
     }
     XrParamNode **parameters = node->type == AST_FUNCTION_DECL ? node->as.function_decl.params :
         node->type == AST_METHOD_DECL ? node->as.method_decl.params : NULL;
@@ -42,12 +45,23 @@ static bool count_closures(AstNode *node, void *pointer) {
     ++scan->depth;
     bool ok = xr_ast_for_each_child(node,count_closures,scan);
     --scan->depth;
+    if(closure && function && scan->yielded) {
+        if(scan->count==scan->ctx->compile.limits.functions)
+            return source_fail(scan->ctx,node,XR_XIR_BUDGET,"generator factory inventory exhausted");
+        ++scan->count;
+    }
+    if(node->type==AST_METHOD_DECL && scan->yielded) {
+        if(scan->helpers==UINT32_MAX)
+            return source_fail(scan->ctx,node,XR_XIR_BUDGET,"generator method factory inventory exhausted");
+        ++scan->helpers;
+    }
+    if(function) scan->yielded=outer_yield;
     return ok || source_fail(scan->ctx,node,XR_XIR_BAD_STRUCTURE,"unknown source declaration shape");
 }
 /* Code after return, throw, break or continue never runs and has no control-flow edge, so it is dropped.
  * Closures in it are rejected because their declarations are counted ahead of lowering and must each be lowered. */
 static bool source_unreachable_statement(SourceContext *ctx, AstNode *node) {
-    SourceClosureCount scan = {ctx, 0, 2, 0, 0, 0};
+    SourceClosureCount scan = {ctx, 0, 2, 0, 0, 0, false};
     if (!count_closures(node, &scan)) return false;
     if (scan.count || scan.comptime) return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "closures or comptime in unreachable statements are not admitted");
     return true;

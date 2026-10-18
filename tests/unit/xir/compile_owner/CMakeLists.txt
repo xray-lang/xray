@@ -50,7 +50,7 @@ add_test(NAME test_compile_owner COMMAND test_compile_owner)
 set_tests_properties(test_compile_owner PROPERTIES LABELS "unit;xir;compiler;ownership;budget" TIMEOUT 120)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME test_root_construction72_vectors
-    COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/derive_root_comptime75_vectors.py"
+    COMMAND "${Python3_EXECUTABLE}" "${XR_ROOT}/tests/unit/xir/derive_combined_wire.py"
         --source-root "${XR_ROOT}" --output-root "${XR_ROOT}")
 set_tests_properties(test_root_construction72_vectors PROPERTIES
     LABELS "unit;xir;compiler;wire;independent" TIMEOUT 120)

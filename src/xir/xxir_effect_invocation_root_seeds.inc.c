@@ -72,12 +72,16 @@ static XrXirStatus effect_invocation_seed_bits(const EffectInvocationSeedRead *r
             table->identities[node->nominal.declaration].kind;
         object=category==XR_XIR_NOMINAL_CLASS;
     }
-    if(node->kind!=XR_XIR_TYPE_CELL && node->kind!=XR_XIR_TYPE_CALLABLE && !object) return XR_XIR_OK;
+    if(node->kind!=XR_XIR_TYPE_CELL && node->kind!=XR_XIR_TYPE_CALLABLE && node->kind!=XR_XIR_TYPE_ITERATOR && !object) return XR_XIR_OK;
     if(parameter>=read->basis.parameters) return XR_XIR_BAD_STRUCTURE;
     if(node->kind==XR_XIR_TYPE_CELL || object) {
         if(!xir_compile_work(read->work,2*sizeof(uint32_t)+1)) return XR_XIR_BUDGET;
         output->cells[0]=object?read->basis.parameters+1:parameter;
         output->cells[1]=read->basis.parameters+2;output->cell_count=2;return XR_XIR_OK;
+    }
+    if(node->kind==XR_XIR_TYPE_ITERATOR) {
+        if(!xir_compile_work(read->work,1+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        output->origins[0]=read->sites+parameter;output->origin_count=1;return XR_XIR_OK;
     }
     if(!xr_xir_callable_flags_valid(node->flags) || !!node->parameters!=!!node->parameter_count) return XR_XIR_BAD_TYPE;
     XrXirStatus status=effect_role_range(read->work,node->parameters,node->parameter_count,sizeof(*node->parameters));

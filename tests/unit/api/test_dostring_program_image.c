@@ -22,26 +22,13 @@
  */
 
 #include "../test_framework.h"
-#include "xray_vm.h"
-#include "runtime/xisolate_api.h"
-#include "module/xmodule_identity.h"
+#include "source_legacy_script.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
-static const XrModuleIdentityAuthority k_program_image_memory_authority = {
-    .kind = XR_MODULE_IDENTITY_MEMORY,
-    .namespace_id = "dostring-program-image-fixture-v1",
-};
-
 static int run_eval_script(const char *source) {
-    XrVMConfig params = {0};
-    XrVMRuntime *iso = xray_vm_new_full(&params);
-    if (!iso)
-        return -1;
-    int rc = xr_isolate_dostring(iso, source, &k_program_image_memory_authority);
-    xray_vm_delete(iso);
-    return rc;
+    return legacy_source_script(source,NULL,"dostring-program-image-fixture-v1");
 }
 
 /* A generic class declared by an embedded standard library module,
@@ -93,7 +80,7 @@ static bool write_program_file(const char *path, const char *source) {
 }
 
 TEST(dofile_fills_defaults_that_call_exports_of_their_module) {
-    char template[] = "/tmp/xray_dofile_defaults_XXXXXX";
+    char template[] = XR_PROGRAM_IMAGE_TEMP_ROOT "/xray_dofile_defaults_XXXXXX";
     char *directory = xr_test_mkdtemp(template);
     ASSERT(directory != NULL);
     char resolved_directory[4096];
@@ -119,15 +106,7 @@ TEST(dofile_fills_defaults_that_call_exports_of_their_module) {
                                           "assert(viaConst() == 2)\n"
                                           "assert(lib.viaCall(lib.DEFAULT_OPTS) == 2)\n"));
 
-    XrVMConfig params = {0};
-    XrVMRuntime *iso = xray_vm_new_full(&params);
-    ASSERT(iso != NULL);
-    XrModuleIdentityAuthority authority = {
-        .kind = XR_MODULE_IDENTITY_SCRIPT,
-        .physical_root = resolved_directory,
-    };
-    int rc = xr_isolate_dofile(iso, entry_path, &authority);
-    xray_vm_delete(iso);
+    int rc = legacy_source_script(NULL,entry_path,NULL);
     xr_test_unlink(library_path);
     xr_test_unlink(entry_path);
     xr_test_rmdir(resolved_directory);

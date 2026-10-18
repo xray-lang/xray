@@ -1,0 +1,3 @@
+var state:i64=1
+fn worker(value:Array<i64>)->Array<i64> { if(state==1){return value}; return [0,0] }
+export fn main()->i64 { const task=go worker([10,20]); const result=await task; return result[0] }

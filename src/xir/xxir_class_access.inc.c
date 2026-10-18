@@ -6,18 +6,25 @@
  *
  * xxir_class_access.inc.c - Short whole-object loans for immediate access
  */
-static XirClassObject *class_access_owner(const XrXirValue *value,XrXirValueAdmission *admission) {
-    if (!admission_domain_current(admission) || !xr_xir_value_valid(value) ||
-        !owned_carrier_type((XrXirType)value->type)) return NULL;
+static XrXirValueStatus class_access_owner(const XrXirValue *value,XrXirValueAdmission *admission,
+    XirClassObject **output) {
+    if (!output || *output || !xr_xir_value_valid(value) || !owned_carrier_type((XrXirType)value->type))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    XrXirValueAdmission local={0};
+    XrXirValueStatus status=storage_admission_begin(value,admission,&local);
+    if (status!=XR_XIR_VALUE_OK) return status;
     XirObject *object=object_pointer(value);
-    return object->kind==XIR_OBJECT_CLASS && admission_owner(admission,object->arena,object->domain)?
-        (XirClassObject *)object:NULL;
+    if (object->kind!=XIR_OBJECT_CLASS || !admission_owner(&local,object->arena,object->domain))
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    *output=(XirClassObject *)object;return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_class_loan_prepare(const XrXirValue *value,
     const XrXirCellAuthority *parent,XrXirValueAdmission *admission,XrXirCellLoan *output) {
     if (!cell_loan_empty(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    XirClassObject *identity=class_access_owner(value,admission);
-    if (!identity || !cell_authority_valid(parent) || !class_origin_reserve(identity,true))
+    XirClassObject *identity=NULL;
+    XrXirValueStatus status=class_access_owner(value,admission,&identity);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    if (!cell_authority_valid(parent) || !class_origin_reserve(identity,true))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirCellLoan *top=identity->borrow_top;
     uint32_t state=class_origin_state(identity);
@@ -34,9 +41,11 @@ XR_FUNC XrXirValueStatus xr_xir_class_access_loan_prepare(const XrXirValue *valu
         return XR_XIR_VALUE_BAD_ARGUMENT;
     XirCell *cell=cell_owner(value);
     if (!cell) return xr_xir_class_loan_prepare(value,parent,admission,output);
-    XirObject *owner=cell_root_object(cell);
+    XirObject *owner=cell_root_object(cell);XrXirValueAdmission local={0};
+    XrXirValueStatus status=storage_admission_begin(value,admission,&local);
+    if (status!=XR_XIR_VALUE_OK) return status;
     if (!owner || owner->kind!=XIR_OBJECT_CLASS ||
-        !admission_owner(admission,cell->object.arena,cell->object.domain))
+        !admission_owner(&local,cell->object.arena,cell->object.domain))
         return XR_XIR_VALUE_BAD_ARGUMENT;
     /* A projected child can compare its complete selector prefix with its
      * existing parent. This real bounded walk is paid before the CAS. */
@@ -56,22 +65,27 @@ XR_FUNC void xr_xir_class_loan_commit(const XrXirValue *value,XrXirCellLoan *loa
     atomic_store_explicit(&identity->publication_state,
         (state|XIR_CLASS_ORIGIN_BORROWED)&~(uint32_t)XIR_CLASS_ORIGIN_PREPARED,memory_order_release);
 }
-static XirClassObject *class_access_live(const XrXirValue *value,
-    const XrXirCellAuthority *authority,XrXirValueAdmission *admission) {
-    XirClassObject *identity=class_access_owner(value,admission);
-    if (!identity || !(class_origin_state(identity)&XIR_CLASS_ORIGIN_BORROWED) ||
+static XrXirValueStatus class_access_live(const XrXirValue *value,
+    const XrXirCellAuthority *authority,XrXirValueAdmission *admission,XirClassObject **output) {
+    XirClassObject *identity=NULL;
+    XrXirValueStatus status=class_access_owner(value,admission,&identity);
+    if (status!=XR_XIR_VALUE_OK) return status;
+    if (!(class_origin_state(identity)&XIR_CLASS_ORIGIN_BORROWED) ||
         !identity->borrow_top || identity->borrow_top->scope ||
         !cell_authority_equal(&identity->borrow_top->authority,authority) ||
-        (class_origin_state(identity)&XIR_CLASS_ORIGIN_PREPARED)) return NULL;
-    return identity;
+        (class_origin_state(identity)&XIR_CLASS_ORIGIN_PREPARED)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    *output=identity;return XR_XIR_VALUE_OK;
 }
 XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_read(const XrXirValue *value,
     const XrXirCellAuthority *authority,const XrXirValuePath *path,
     XrXirValueAdmission *admission,XrXirValue *output,XrXirFaultDetail *fault) {
-    XirClassObject *identity=class_access_live(value,authority,admission);
+    XirClassObject *identity=NULL;
+    XrXirValueStatus admitted=class_access_live(value,authority,admission,&identity);
+    if (admitted!=XR_XIR_VALUE_OK) return admitted;
     if (!identity || !path || !fault || !unit_value(output)) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValuePlace place={(XrXirType)value->type,(void *)&value->payload};
-    ValuePathRoute route={{0},*path,&identity->object,xr_xir_class_module_storage(value)};
+    ValuePathRoute route={.suffix=*path,.borrow_owner=&identity->object,
+        .module_publication=xr_xir_class_module_storage(value),.root_arena=identity->object.arena};
     xr_xir_value_graph_begin();
     XrXirValueStatus status=value_path_read_route(&place,&route,admission,output,fault);
     xr_xir_value_graph_end();return status;
@@ -79,10 +93,13 @@ XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_read(const XrXirValue *val
 XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_write(const XrXirValue *value,
     const XrXirCellAuthority *authority,const XrXirValuePath *path,
     const XrXirValue *replacement,XrXirValueAdmission *admission,XrXirFaultDetail *fault) {
-    XirClassObject *identity=class_access_live(value,authority,admission);
+    XirClassObject *identity=NULL;
+    XrXirValueStatus admitted=class_access_live(value,authority,admission,&identity);
+    if (admitted!=XR_XIR_VALUE_OK) return admitted;
     if (!identity || !path || !replacement || !fault) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValuePlace place={(XrXirType)value->type,(void *)&value->payload};
-    ValuePathRoute route={{0},*path,&identity->object,xr_xir_class_module_storage(value)};
+    ValuePathRoute route={.suffix=*path,.borrow_owner=&identity->object,
+        .module_publication=xr_xir_class_module_storage(value),.root_arena=identity->object.arena};
     xr_xir_value_graph_begin();
     XrXirValueStatus status=path_mutate_route(&place,&route,replacement,admission,fault,false);
     xr_xir_value_graph_end();return status;
@@ -90,10 +107,13 @@ XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_write(const XrXirValue *va
 XR_FUNC XrXirValueStatus xr_xir_class_authorized_path_push(const XrXirValue *value,
     const XrXirCellAuthority *authority,const XrXirValuePath *path,
     const XrXirValue *replacement,XrXirValueAdmission *admission,XrXirFaultDetail *fault) {
-    XirClassObject *identity=class_access_live(value,authority,admission);
+    XirClassObject *identity=NULL;
+    XrXirValueStatus admitted=class_access_live(value,authority,admission,&identity);
+    if (admitted!=XR_XIR_VALUE_OK) return admitted;
     if (!identity || !path || !replacement || !fault) return XR_XIR_VALUE_BAD_ARGUMENT;
     XrXirValuePlace place={(XrXirType)value->type,(void *)&value->payload};
-    ValuePathRoute route={{0},*path,&identity->object,xr_xir_class_module_storage(value)};
+    ValuePathRoute route={.suffix=*path,.borrow_owner=&identity->object,
+        .module_publication=xr_xir_class_module_storage(value),.root_arena=identity->object.arena};
     xr_xir_value_graph_begin();
     XrXirValueStatus status=path_mutate_route(&place,&route,replacement,admission,fault,true);
     xr_xir_value_graph_end();return status;

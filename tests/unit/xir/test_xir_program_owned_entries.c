@@ -16,7 +16,7 @@ static XrXirArtifact *entries_artifact(const XrXirCompileContext *context) {
         {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,&init,1,NULL,0},
         {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,main_ops,3,&operand,1},
         {"identity",8,&parameter,1,XR_XIR_I64,blocks+2,1,&identity,1,NULL,0}};
-    const XrXirSourceModule source={"root",4,NULL,0,0};
+    const XrXirSourceModule source={"root",4,NULL,0,0,0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[]={
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0},
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER,0,0},

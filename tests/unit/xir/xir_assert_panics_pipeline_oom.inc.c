@@ -13,7 +13,7 @@ static void panics_pipeline_oom(const char *directory,const char *path) {
     assert_compile_stage_cases(result.checked,ASSERT_COMPILE_LOWER,"Assertion lower/replay");
     assert_compile_stage_cases(result.checked,ASSERT_COMPILE_TAKE,"Assertion owned VM take/replay");
     size_t kept=0,kept_bytes=0,sites=0;
-    XrXirArtifact *lowered=panics_lower(&result);uint32_t entry=panics_find(xr_xir_compile_artifact_module(lowered),"run");
+    XrXirArtifact *lowered=panics_lower(&result,false);uint32_t entry=panics_find(xr_xir_compile_artifact_module(lowered),"run");
     XrXirProgram *program=NULL;CHECK(xr_xir_compile_vm_program_take(&lowered,&program)==XR_XIR_OK);
     kept=runtime_live;kept_bytes=runtime_bytes;sites=0;
     for (size_t point=0;point<=sites;++point) {

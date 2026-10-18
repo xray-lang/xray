@@ -26,9 +26,9 @@
 #include "xir_source_program_compile_owner.h"
 #include "xir_runtime_allocations.h"
 #include "static_methods_source_shape.h"
-_Static_assert(XR_XIR_CHECKED_SCHEMA == 30u && XR_XIR_CHECKED_CONTRACT == 75u, "Exact formal Checked identity");
+_Static_assert(XR_XIR_CHECKED_SCHEMA == 30u && XR_XIR_CHECKED_CONTRACT == 76u, "Exact formal Checked identity");
 _Static_assert(XR_XIR_VALUE_ABI_VERSION == 24u && XR_XIR_CALL_ABI_VERSION == 29u &&
-    XR_XIR_PROGRAM_ABI_VERSION == 31u, "Exact formal public runtime identity");
+    XR_XIR_PROGRAM_ABI_VERSION == 33u, "Exact formal public runtime identity");
 
 /* Observe an actual owner. Complete admission belongs to the public verifier. */
 static void construction_owner(const XrXirArtifact *artifact, const XrXirCompileContext *caller) {
@@ -149,16 +149,16 @@ int main(int argc, char **argv) {
     } else CHECK(!product && diagnostic.status == status && diagnostic.source.message[0]);
     XrXirSourceProductDiagnostic saved = diagnostic;
     char owned_path[2048] = {0};
-    if (diagnostic.source_path) {
-        CHECK(strlen(diagnostic.source_path) < sizeof(owned_path));
-        strcpy(owned_path, diagnostic.source_path);
+    if (diagnostic.failure.path) {
+        CHECK(strlen(diagnostic.failure.path) < sizeof(owned_path));
+        strcpy(owned_path, diagnostic.failure.path);
     }
     xr_compile_session_free(session); session = NULL;
     xr_xir_compile_source_product_free(product); product = NULL;
     memset(root, 0xa5, sizeof(root)); memset(file, 0xa5, sizeof(file));
     memset(&request, 0xa5, sizeof(request)); memset(&authority, 0xa5, sizeof(authority));
     CHECK(!memcmp(&saved, &diagnostic, sizeof(saved)));
-    if (owned_path[0]) CHECK(!strcmp(owned_path, diagnostic.source_path));
+    if (owned_path[0]) CHECK(!strcmp(owned_path, diagnostic.failure.path));
     if (source_checked) {
         CHECK(xr_xir_compile_artifact_verify(source_checked, NULL) == XR_XIR_OK);
         construction_owner(source_checked, context);

@@ -52,7 +52,7 @@ static XrXirStatus effect_final_inventory_tracked(const XrXirCompileContext *wor
     const EffectBodyMaterial *material,XrXirType type,bool *output) {
     const XrXirTypes *types=material->domain.types;const XrXirTypeNode *node=xr_xir_type_node(types,type);
     if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
-    *output=node && (node->kind==XR_XIR_TYPE_CELL || node->kind==XR_XIR_TYPE_CALLABLE);
+    *output=node && (node->kind==XR_XIR_TYPE_CELL || node->kind==XR_XIR_TYPE_CALLABLE || node->kind==XR_XIR_TYPE_ITERATOR);
     if(!node || node->kind!=XR_XIR_TYPE_NOMINAL) return XR_XIR_OK;
     const XrXirNominalTable *table=types->nominals;
     XrXirStatus status=effect_role_range(work,table,1,sizeof(*table));if(status!=XR_XIR_OK) return status;

@@ -1,0 +1,5 @@
+class Box { value:i64=7 }
+struct Payload { values:Array<i64> }
+enum Problem { Good { value:Payload }, Bad { value:Box } }
+fn worker() { throw Problem.Good{value:Payload{values:[10,20]}} }
+export fn main()->i64 { await go worker(); return 7 }

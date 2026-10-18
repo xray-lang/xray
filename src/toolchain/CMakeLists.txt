@@ -31,6 +31,9 @@ if(WIN32)
         get_filename_component(parent ${path} DIRECTORY)
         install(FILES ${XIR_SDK_DIR}/${path} DESTINATION lib/xray/xir-runtime-sdk/${parent} COMPONENT XraySDK)
     endforeach()
+    # Include edges can change without adding a source file. Refresh the recipe
+    # before the bundle so its consumer and manifest retain the same file list.
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${XIR_SDK_DEPENDENCIES})
     add_custom_command(OUTPUT ${XIR_SDK_DIR}/sdk_generated.h ${XIR_SDK_DIR}/sdk_manifest.json
         COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/build_xir_runtime_sdk.py
             --root ${PROJECT_SOURCE_DIR} --output ${XIR_SDK_DIR}

@@ -161,7 +161,9 @@ def main():
     parser.add_argument('--core-root',type=Path,required=True);parser.add_argument('--write',action='store_true');args=parser.parse_args()
     root=args.source_root;historical=root/'tests/unit/xir';core=args.core_root/'tests/unit/xir'
     model_bytes=(historical/'library2671_models.json').read_bytes()
-    assert hashlib.sha256(model_bytes).hexdigest()==MODEL_SHA
+    # Match the frozen Windows field stream independently of checkout newlines.
+    model_frame=model_bytes.replace(b'\r\n',b'\n').replace(b'\n',b'\r\n')
+    assert hashlib.sha256(model_frame).hexdigest()==MODEL_SHA
     models=json.loads(model_bytes);records=[];headers={}
     checked=(args.core_root/'src/xir/xxir_checked.h').read_text('utf-8')
     assert re.search(r'XR_XIR_CHECKED_SCHEMA\s+27u',checked) and re.search(r'XR_XIR_CHECKED_CONTRACT\s+72u',checked)

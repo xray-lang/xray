@@ -1,0 +1,3 @@
+[package]
+name = "tests/hosted-entry"
+version = "1.0.0"

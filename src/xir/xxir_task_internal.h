@@ -24,6 +24,7 @@ typedef struct XirTaskActivation {
     struct XirTask *task;
     struct XirTaskActivation *ready_next;
     uint64_t ticket;
+    uint32_t entry;
     bool queued;
 } XirTaskActivation;
 typedef struct XirTask {
@@ -72,9 +73,16 @@ XR_FUNC XrXirCallStatus xr_xir_task_executor_root_wait(const XrXirTaskExecutor *
     XrXirWaitRequest *output);
 XR_FUNC bool xr_xir_task_executor_view_member(const XrXirTaskExecutor *executor,
     const XrXirCallView *view, bool *child);
+/* The actual parked activation must still belong to the original owner lists. */
+XR_FUNC XrXirCallStatus xr_xir_task_executor_pending_member(const XrXirTaskExecutor *executor,
+    XrXirCall *call,const XrXirTaskWaitToken *token,XrXirValueAdmission *admission);
 XR_FUNC bool xr_xir_task_executor_cleanup_active(const XrXirTaskExecutor *executor);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_cancel_root(XrXirTaskExecutor *executor);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_stop(XrXirTaskExecutor *executor);
+/* Stops and drains the whole activation group with no control allocation.
+ * Language cleanup keeps its ordinary budget. The stopped executor remains
+ * owned so its actual terminal root can still be observed. */
+XR_FUNC XrXirCallStatus xr_xir_task_executor_drain(XrXirTaskExecutor *executor);
 XR_FUNC XrXirCallStatus xr_xir_task_executor_free(XrXirTaskExecutor *executor, XrXirCallBudget *accounting);
 XR_FUNC bool xr_xir_task_storage_valid(const XirTask *task);
 #endif // XXIR_TASK_INTERNAL_H

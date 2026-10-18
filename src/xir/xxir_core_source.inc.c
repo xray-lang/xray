@@ -244,6 +244,51 @@ static bool source_core_function_copy(SourceContext *ctx, const XrXirModule *mod
     return true;
 }
 
+/* Each installed copy belongs to its receiving Source birth. The immutable
+ * factory identity does not identify two distinct copies inside one Program. */
+static bool source_core_install_identity(SourceContext *ctx,const XrXirSourceModule *original,
+    char **output,uint32_t *length) {
+    if (!ctx->graph || ctx->graph->entry_index<0 || ctx->graph->entry_index>=ctx->graph->spec_count)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"core receiving module is absent");
+    const char *root=ctx->graph->specs[ctx->graph->entry_index].canonical;
+    size_t count=0;
+    if (!source_text_length(ctx,NULL,root,&count)) return false;
+    if (count>UINT32_MAX)
+        return source_fail(ctx,NULL,XR_XIR_BUDGET,"core receiving identity is too long");
+    static const char prefix[]="xray-core-copy-v1.";
+    uint64_t extent=sizeof(prefix)-1+(uint64_t)count*2+1+(uint64_t)original->name_length*2;
+    if (extent>UINT32_MAX)
+        return source_fail(ctx,NULL,XR_XIR_BUDGET,"core receiving identity is too long");
+    uint32_t size=(uint32_t)extent;
+    char *identity=source_alloc(ctx,(uint64_t)size+1,1);
+    if (!identity || !source_copy_bytes(ctx,NULL,identity,prefix,sizeof(prefix)-1)) return false;
+    size_t at=sizeof(prefix)-1;
+    static const char hex[]="0123456789abcdef";
+    for(unsigned part=0;part<2;++part) {
+        const unsigned char *bytes=(const unsigned char *)(part ? original->name : root);
+        size_t segment_length=part ? original->name_length : count;
+        for(size_t i=0;i<segment_length;++i) {
+            if (!source_work(ctx,NULL)) return false;
+            identity[at++]=hex[bytes[i]>>4];identity[at++]=hex[bytes[i]&15];
+        }
+        if (!part) identity[at++]='.';
+    }
+    identity[size]=0;
+    const XrModuleIdentityAuthority authority={XR_MODULE_IDENTITY_MEMORY,identity,NULL};
+    char *canonical=NULL;
+    XrModuleStatus status=xr_compile_module_identity_from_logical(ctx->compile.resources,&authority,"",&canonical);
+    if (status!=XR_MODULE_OK)
+        return source_module_fail(ctx,NULL,status,"core receiving identity construction failed");
+    size_t canonical_length=0;char *owned=NULL;
+    if (source_text_length(ctx,NULL,canonical,&canonical_length)) {
+        if (canonical_length>UINT32_MAX)
+            source_fail(ctx,NULL,XR_XIR_BUDGET,"core receiving identity is too long");
+        else owned=source_core_text(ctx,canonical,(uint32_t)canonical_length);
+    }
+    xr_compile_resources_free(canonical);
+    if (!owned) return false;
+    *output=owned;*length=(uint32_t)canonical_length;return true;
+}
 static bool source_core_install(SourceContext *ctx, const SourceContext *core,
     const XrXirArtifact *artifact) {
     const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
@@ -271,9 +316,9 @@ static bool source_core_install(SourceContext *ctx, const SourceContext *core,
     if (!modules) return false;
     if (!source_copy_bytes(ctx, NULL, modules, ctx->modules, ctx->module_count*sizeof(*modules))) return false;
     const XrXirSourceModule *original=&module->declarations->modules[0];
-    char *identity=source_core_text(ctx,original->name,original->name_length);
-    if (!identity) return false;
-    modules[ctx->module_count]=(XrXirSourceModule){identity,original->name_length,NULL,0,first};
+    char *identity=NULL;uint32_t length=0;
+    if (!source_core_install_identity(ctx,original,&identity,&length)) return false;
+    modules[ctx->module_count]=(XrXirSourceModule){identity,length,NULL,0,first,0,XR_XIR_MODULE_FRESH_STORAGE};
     ctx->modules=modules;
     for (uint32_t d=0;d<module->defaults->count;++d) {
         const XrXirDefaultBinding *binding=&module->defaults->records[d];

@@ -1,0 +1,3 @@
+struct Payload { action:fn()->i64 }
+fn worker(value:Payload)->i64 { return 1 }
+export fn main()->i64 { const value=Payload{action:fn()->i64{return 42}}; return await go worker(value) }

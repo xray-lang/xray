@@ -32,13 +32,14 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
     }
     case AST_INC: case AST_DEC: return source_increment(ctx, node);
     case AST_BREAK_STMT: case AST_CONTINUE_STMT: return source_loop_exit(ctx, node);
-    case AST_FUNCTION_DECL: return top || source_nested_function(ctx, node);
+    case AST_FUNCTION_DECL: return top ? source_repl_function_binding(ctx,node) : source_nested_function(ctx,node);
     case AST_TYPE_ALIAS: return true;
     case AST_IMPORT_STMT: case AST_STRUCT_DECL: case AST_CLASS_DECL: case AST_ENUM_DECL: case AST_INTERFACE_DECL:
         return top || source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "nested declarations are not admitted");
     case AST_VAR_DECL: case AST_CONST_DECL: return source_binding(ctx, node, top);
     case AST_DESTRUCTURE_DECL: return source_destructure_binding(ctx,node,top);
     case AST_EXPR_STMT: {
+        if(top && node==ctx->repl_tail)return source_repl_result(ctx,node);
         SourceValue value; AstNode *expr=node->as.expr_stmt;
         bool appended = false;
         if (!source_string_append_statement(ctx, expr, &appended)) return false;
@@ -50,6 +51,7 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
         return source_plan_complete(ctx,plan,&value);
     }
     case AST_THROW_STMT: return source_throw(ctx,node);
+    case AST_YIELD_STMT: return source_generator_yield(ctx,node,top);
     case AST_RETURN_STMT: {
         if (ctx->identities[ctx->function].cleanup_owner)
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "E0395: defer cannot return from its owning function");
@@ -58,11 +60,13 @@ static bool source_statement_body(SourceContext *ctx, AstNode *node, bool top) {
             return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "invalid return placement or arity");
         SourceValue value = {0};
         SourceFunction *body = &ctx->bodies[ctx->function];
-        XrXirType expected = body->infer_result ? XR_XIR_UNIT : ctx->functions[ctx->function].result;
+        bool generator=(ctx->identities[ctx->function].promises & XR_XIR_FUNCTION_GENERATOR)!=0;
+        XrXirType completion=generator ? XR_XIR_UNIT : ctx->functions[ctx->function].result;
+        XrXirType expected = body->infer_result ? XR_XIR_UNIT : completion;
         if (node->as.return_stmt.value_count && !source_plan_expression(ctx, node->as.return_stmt.values[0], (SourceExpectedType){!body->infer_result,expected, false, false}, &value)) return false;
         if (body->infer_result && !body->saw_return) ctx->functions[ctx->function].result = value.type;
         body->saw_return = true;
-        if (value.type != ctx->functions[ctx->function].result)
+        if (value.type != (generator ? XR_XIR_UNIT : ctx->functions[ctx->function].result))
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "return type does not match declaration");
         ctx->returned = true;
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {value.type == XR_XIR_UNIT ? 0 : value.id, 0}, {0, 0}, 0, {0}}, NULL);

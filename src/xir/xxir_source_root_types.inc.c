@@ -35,6 +35,7 @@ static bool source_root_join_type(SourceContext *ctx, XrXirType left,
 static bool source_root_copy_bound(SourceContext *ctx, uint32_t f, uint32_t value,
     XrXirType bound, bool *changed) {
     const XrXirFunction *body = &ctx->functions[f];
+    if (ctx->bodies[f].checked_library) return source_root_operand(ctx,f,value)==bound;
     if (value < body->parameter_count || value - body->parameter_count >= body->instruction_count)
         return source_root_operand(ctx,f,value) == bound;
     uint32_t i = value - body->parameter_count;
@@ -56,6 +57,7 @@ static bool source_root_copy_bound(SourceContext *ctx, uint32_t f, uint32_t valu
  * the common bound only after all predecessors have been considered. */
 static uint32_t source_root_join_origin(SourceContext *ctx, uint32_t f, uint32_t id) {
     const XrXirFunction *body = &ctx->functions[f];
+    if (ctx->bodies[f].checked_library) return id;
     if (id >= body->parameter_count && id - body->parameter_count < body->instruction_count &&
         (ctx->bodies[f].root_values[id - body->parameter_count].kind == 2 ||
         ctx->bodies[f].root_values[id - body->parameter_count].kind == 4)) {

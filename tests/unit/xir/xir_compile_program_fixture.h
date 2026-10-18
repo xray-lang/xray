@@ -22,7 +22,7 @@ static XrXirArtifact *owner_lowered(const XrXirCompileContext *context) {
         {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,&init,1,NULL,0},
         {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,main_code,2,NULL,0},
         {"text",4,NULL,0,XR_XIR_STRING,blocks+1,1,text,2,NULL,0}};
-    const XrXirSourceModule source = {"root",4,NULL,0,0};
+    const XrXirSourceModule source = {"root",4,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[] = {
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0},
         {0,0,0,0,0,0,XR_XIR_NON_MEMBER, 0, 0},

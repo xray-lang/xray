@@ -61,7 +61,7 @@ static void diagnostic(const RejectionCase *test, const XrXirSourceProductDiagno
     CHECK(value->source.line == 1);
     if (test->column >= 0) CHECK(value->source.column == test->column);
     CHECK(!strcmp(value->source.message, test->message));
-    CHECK(same_path(value->source_path, test->file));
+    CHECK(same_path(value->failure.path, test->file));
     CHECK(!value->snapshot);
 }
 
@@ -105,10 +105,10 @@ release:
         diagnostic(test, &error);
         printf("rejection case=%s stage=%u status=%u module=%u line=%d column=%d path=%s owned-after-ledger-drop=1\n",
             test->name, error.stage, error.status, error.source.module, error.source.line,
-            error.source.column, error.source_path);
+            error.source.column, error.failure.path);
     }
     xr_xir_compile_source_product_diagnostic_free(&error);
-    CHECK(!error.snapshot && !error.source_path && !error.source.message[0]);
+    CHECK(!error.snapshot && xr_xir_compile_source_failure_empty(&error.failure) && !error.source.message[0]);
     xr_xir_compile_source_product_diagnostic_free(&error);
 done:
     result.attempts = instance_compile_attempts;

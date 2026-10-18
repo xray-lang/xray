@@ -16,7 +16,7 @@
 #include "xxir_panic.h"
 #include "xxir_output_status.h"
 
-#define XR_XIR_CALL_ABI_VERSION 29u
+#define XR_XIR_CALL_ABI_VERSION 35u
 #define XR_XIR_CALL_STATE_ALIGNMENT 16u
 typedef struct XrXirCall XrXirCall;
 typedef enum XrXirCallStatus {
@@ -30,7 +30,9 @@ typedef enum XrXirCallStatus {
     /* A host service failed. It is never a language panic and no handler observes it. */
     XR_XIR_CALL_HOST_ERROR,
     /* A language panic whose detail code alone names it, such as unwrapping null. */
-    XR_XIR_CALL_RUNTIME_PANIC, XR_XIR_CALL_UNSUPPORTED
+    XR_XIR_CALL_RUNTIME_PANIC, XR_XIR_CALL_UNSUPPORTED,
+    /* A pull-produced owner; its activation remains live and has no wake. */
+    XR_XIR_CALL_YIELDED
 } XrXirCallStatus;
 typedef struct XrXirCallResult {
     XrXirCallStatus status;
@@ -46,7 +48,12 @@ typedef enum XrXirActionKind {
     /* value is the nonzero I64 millisecond duration the activation waits for. */
     XR_XIR_ACTION_TIMER,
     /* value borrows the true Task handle until the driver retains its wait lease. */
-    XR_XIR_ACTION_AWAIT_TASK
+    XR_XIR_ACTION_AWAIT_TASK,
+    XR_XIR_ACTION_GENERATOR_YIELD,
+    /* callee selects a cached probe or one owned element transfer. */
+    XR_XIR_ACTION_AWAIT_ITERATOR,
+    /* An authenticated callback staged an owned Channel frontier watch. */
+    XR_XIR_ACTION_AWAIT_CHANNEL
 } XrXirActionKind;
 /* A PROTECTED call delivers a panic of its callee subtree back to the caller. */
 #define XR_XIR_ACTION_PROTECTED 1u
@@ -54,6 +61,7 @@ typedef enum XrXirActionKind {
 #define XR_XIR_ACTION_LEAVE_ERROR 4u
 #define XR_XIR_ACTION_LEAVE_PANIC 8u
 #define XR_XIR_ENTRY_EXIT 1u
+#define XR_XIR_ENTRY_GENERATOR 2u
 typedef enum XrXirCallPhase { XR_XIR_CALL_NORMAL, XR_XIR_CALL_EXIT } XrXirCallPhase;
 typedef struct XrXirAction {
     XrXirActionKind kind;
@@ -144,9 +152,10 @@ typedef struct XrXirOutputProvider {
     XrXirOutputEntry write;
     void *context;
 } XrXirOutputProvider;
-/* Clock reads and UTC offsets are synchronous services of the instance; they
+/* Clock reads and UTC offsets are synchronous services of the activation; they
  * never suspend. An absent provider is all zero and every service then fails
- * as a host error. The provider context stays host-owned. */
+ * as a host error. The provider context stays host-owned until every receiving
+ * Call or Instance retires. Child Calls inherit the exact provider. */
 typedef enum XrXirTimeStatus {
     XR_XIR_TIME_OK, XR_XIR_TIME_RANGE, XR_XIR_TIME_FAILED
 } XrXirTimeStatus;
@@ -167,10 +176,12 @@ static inline bool xr_xir_time_provider_valid(const XrXirTimeProvider *provider)
 }
 /* A suspension asks its host for nothing (YIELD) or for a duration (TIMER). The
  * request is published only for the exact pending wake token. */
-typedef enum XrXirWaitKind { XR_XIR_WAIT_NONE, XR_XIR_WAIT_YIELD, XR_XIR_WAIT_TIMER_MS, XR_XIR_WAIT_TASK } XrXirWaitKind;
+typedef enum XrXirWaitKind { XR_XIR_WAIT_NONE, XR_XIR_WAIT_YIELD, XR_XIR_WAIT_TIMER_MS, XR_XIR_WAIT_TASK,
+    XR_XIR_WAIT_ITERATOR_HAS_NEXT, XR_XIR_WAIT_ITERATOR_NEXT, XR_XIR_WAIT_ITERATOR_NTH, XR_XIR_WAIT_ITERATOR_CLOSE, XR_XIR_WAIT_CHANNEL } XrXirWaitKind;
 #define XR_XIR_TIMER_MAX_MS UINT64_C(86400000)
 typedef struct XrXirWaitRequest {
     uint32_t kind, reserved;
+    /* Timer duration, or the remaining discard count for internal ITERATOR_NTH. */
     uint64_t after_ms;
     const void *subject;
     uint64_t generation, ticket;
@@ -186,6 +197,7 @@ typedef struct XrXirCallConfig {
     XrXirCallAccounting *accounting;
     XrXirOutputProvider output;
     XrXirValueAdmission admission;
+    XrXirTimeProvider time;
 } XrXirCallConfig;
 
 /* Failed initialization leaves the complete caller buffer unchanged. */

@@ -12,3 +12,6 @@ add_test(NAME api_source_product_text COMMAND test_api_source_product_text)
 add_test(NAME api_source_product_text_compiler_faults COMMAND test_api_source_product_text --compiler-faults)
 set_tests_properties(api_source_product_text PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership")
 set_tests_properties(api_source_product_text_compiler_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 100 LABELS "unit;api;source;ownership;compiler-faults")
+
+add_test(NAME api_source_product_text_ast_smoke COMMAND test_api_source_product_text --ast-smoke)
+set_tests_properties(api_source_product_text_ast_smoke PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership")

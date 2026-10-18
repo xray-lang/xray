@@ -692,33 +692,23 @@ yield expr                  // 生成器产出一个值并挂起
 
 协作让出 CPU 使用 `Coro.yield()`（见 §10.10）；裸 `yield` 不是表达式。
 
-#### 3.16.1 两种挂起是不同的语义
+#### 3.16.1 产值与调度挂起
 
-`yield expr` 与 `Coro.yield()` 共用词根，但**不是同一种挂起**，二者在调用方能观察到的每一个性质上都不同：
+yield expr交付一个拥有式元素并停驻producer；yield ()也交付一个真实Unit元素，不表示结束。Coro.yield()没有元素，只把当前activation交回执行器队列。两者都不会在宿主C栈上保留待恢复调用。
 
-| | `yield expr` | `Coro.yield()` |
-|---|---|---|
-| 转移目标 | 对称转移回驱动该生成器的迭代器 | 非对称让出给调度器 |
-| 是否可能换 OS 线程 | 否 | 是（work-stealing） |
-| 是否是取消检查点 | **否** | 是（§10.5） |
-| 是否向调用方传播 | **否**——驱动生成器不会挂起驱动方自己的帧 | 是，沿调用边传递 |
-| 效应契约 | `no_suspend` 拒绝，`no_reschedule` 接受 | 两者都拒绝 |
+hasNext()可以推进producer直到下一个产值、终态或真实外部等待；重复hasNext()保留缓存而不重复推进。next()转移一个元素的所有权，耗尽按§5.3.6报告E0432。消费可能沿producer遇到挂起，因此定义处不能承诺no_suspend；创建惰性Iterator本身不立即执行producer，也不立即继承其throw。
 
-因此 `xray verify` 把挂起拆成两个独立维度：`no_reschedule` 断言"不进调度器、不是取消点、不迁移线程"，`no_suspend` 是更强的"控制流从不离开本帧"。纯生成器满足前者而不满足后者；**只是驱动生成器的函数两者都满足**。
+#### 3.16.2 生成器等待与单消费者
 
-#### 3.16.2 生成器体内不得抵达调度器
+producer拥有独立frame，由原Instance执行器推进；I/O或Timer等真实等待暂停当前消费操作，不能把暂时无值解释为EOS。一个Iterator同一时间只接受一个驱动者。重入、自驱动、第二驱动以及外部取消的仲裁由真实owner、activation、世代和单次wake认证，不允许递归驱动后端。
 
-生成器帧由驱动它的一方恢复，而非由调度器恢复。因此生成器函数体内**不得出现任何调度器挂起点**，包括：`await`、`select`、`scope` 块、`Coro.yield()`、Channel 的阻塞方法、`time.sleep()`，以及对任何可能挂起的函数的调用。违反时报 `E0385`。
+具体Source类型、操作、借用环境和平台的实现范围及未资格部分见§17.39；这不把尚未准入的await/select/Channel或并行平台路径声明为已实现。
 
-该规则是**效应规则而非语法规则**：它按 §8 的效应产品逐层传播，因此调用一个内部 `await` 的函数同样被拒绝。证据不完整时**失败关闭**——生成器体内通过未解析的函数值（如函数类型参数）发起调用会被拒绝，因为该目标可能挂起。这与 `sys.Thread.spawn` 体和 parallel 回调的边界规则一致。
+#### 3.16.3 提前放弃与已登记清理
 
-> 该限制是有意的作用域决定，不是实现缺口：本版本的生成器是拉取式迭代器，不是异步流。
+提前离开或丢弃Iterator不再执行producer的普通剩余body，但必须关闭它并执行已经登记而未完成的cleanup恰好一次。消费者取消和producer失败遵守相同退出驱动。最后外部owner释放只发布关闭请求，由原执行器迭代排空；Instance关闭必须在代码退休前完成排空，drop回调不递归执行后端。
 
-#### 3.16.3 提前放弃的生成器不再执行任何代码
-
-`for-in` 通过 `break` / `return` / 抛错提前离开，或迭代器被丢弃时，生成器帧**不会被恢复**，其函数体的剩余部分永不执行。回收时机不属于可观察语义契约（§16.8）。
-
-因此**生成器体内不得使用 `defer`**（`E0386`）：`defer` 是本语言唯一的确定性清理机制，而在此处它可能永远不执行，一个可能不运行的清理比没有清理更危险。需要清理时，由调用方持有资源并作为参数传入。
+生成器允许defer，并沿用普通函数的登记、退出次序和禁止异步cleanup规则。未启动的producer没有执行登记，因此关闭不能凭空运行defer。物理内存释放不是语言cleanup执行的证据。Iterator不增加Source close()方法；内部关闭由生命周期和取消请求驱动。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1410,31 +1400,21 @@ yield expr                  // produce one generator value and suspend
 
 Cooperative CPU yielding uses `Coro.yield()` (see §10.10); bare `yield` is not an expression.
 
-#### 3.16.1 The two suspensions are different semantics
+#### 3.16.1 Production and scheduling suspension
 
-`yield expr` and `Coro.yield()` share a word root but are **not the same kind of suspension**. They differ in every property a caller can observe:
+yield expr delivers one owned element and parks the producer; yield () delivers a real Unit element rather than EOS. Coro.yield() produces no element and returns the activation to its executor queue. Neither keeps a suspended call on the host C stack.
 
-| | `yield expr` | `Coro.yield()` |
-|---|---|---|
-| Transfer target | symmetric transfer back to the iterator driving the generator | asymmetric yield to the scheduler |
-| Can migrate OS threads | no | yes (work stealing) |
-| Is a cancellation checkpoint | **no** | yes (§10.5) |
-| Propagates to the caller | **no** — driving a generator does not suspend the driver's own frame | yes, along call edges |
-| Effect contract | rejected by `no_suspend`, accepted by `no_reschedule` | rejected by both |
+hasNext() may advance the producer to a yield, terminal outcome or actual external wait. Repeated hasNext() preserves a cache without advancing again. next() transfers one element owner and reports E0432 on exhaustion (§5.3.6). Consumption may suspend through the producer and cannot promise no_suspend at its definition. Creating a lazy Iterator neither executes production nor immediately inherits its throw.
 
-`xray verify` therefore treats suspension as two independent dimensions: `no_reschedule` asserts "never reaches the scheduler, is not a cancellation point, cannot migrate threads", and `no_suspend` is the stronger "control never leaves this frame". A pure generator satisfies the first but not the second; **a function that merely drives a generator satisfies both**.
+#### 3.16.2 Generator waits and one consumer
 
-#### 3.16.2 A generator body must not reach the scheduler
+A producer owns an independent frame driven by its original Instance executor. Actual I/O or Timer waits suspend the current consumption; temporary absence of an element never means EOS. One Iterator admits one driver at a time. Reentry, self-driving, second drivers and cancellation arbitration authenticate the actual owner, activation, generation and one-shot wake; backends are never recursively driven.
 
-A generator frame is resumed by whoever drives it, never by the scheduler. A generator function body therefore **must not contain any scheduler suspension point**: `await`, `select`, a `scope` block, `Coro.yield()`, the blocking channel methods, `time.sleep()`, or a call to any function that may suspend. Violations report `E0385`.
+See §17.39 for implemented Source types, operations, borrowed-environment and platform limits. This grants no implementation claim for unadmitted await/select/Channel or parallel platform paths.
 
-The rule is an **effect rule, not a syntactic one**: it composes through the §8 effect product, so calling a function that awaits internally is rejected the same way. Incomplete evidence **fails closed** — a generator that calls through an unresolved function value (such as a function-typed parameter) is rejected, because that target may suspend. This matches the boundary rules for `sys.Thread.spawn` bodies and parallel callbacks.
+#### 3.16.3 Early abandonment and registered cleanup
 
-> The restriction is a deliberate scope decision, not an implementation gap: generators in this version are pull-driven iterators, not async streams.
+Early exit or dropping an Iterator never resumes the producer's ordinary remaining body, but must close it and run every registered, unfinished cleanup exactly once. Consumer cancellation and producer failure use the same exit driver. Final external drop only publishes a close request; the original executor drains it iteratively. Instance close drains before code retirement, and drop callbacks never recursively execute a backend.
 
-#### 3.16.3 An abandoned generator runs no further code
-
-When `for-in` leaves early through `break` / `return` / a thrown error, or the iterator is discarded, the generator frame is **not resumed** and the rest of its body never executes. Reclamation timing is not part of the observable semantic contract (§16.8).
-
-A generator body therefore **must not use `defer`** (`E0386`). `defer` is the language's only deterministic cleanup mechanism, and here it might never run; a cleanup that may not run is more dangerous than no cleanup. When cleanup is required, the caller owns the resource and passes it in.
+Generators allow defer with ordinary registration, exit order and the prohibition on asynchronous cleanup. An unstarted producer has registered nothing, so close must not invent defer execution. Physical memory release does not prove language cleanup. Iterator adds no Source close() method; lifecycle and cancellation drive internal close.
 <!-- /xr-spec:en -->

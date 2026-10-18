@@ -11,8 +11,10 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
+#include "xir_persistent_host_cases.h"
 XR_DATA const XrXirProgramSpec host_call_source_program;
 XR_DATA const uint32_t host_call_entries[3];
+XR_DATA const uint32_t host_call_bounded_entries[4];
 typedef struct LinkedTrace { int64_t values[3]; unsigned count; } LinkedTrace;
 static XrXirOutputStatus linked_output(void *context, const XrXirOutputGroup *group) {
     LinkedTrace *trace = context;
@@ -29,6 +31,7 @@ int main(void) {
     XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
     CHECK(xr_xir_compile_program_seal(&context,&host_call_source_program,&program) == XR_XIR_OK);
     xr_compile_resources_release(resources);
+    persistent_host_cases(program,host_call_entries[0],host_call_bounded_entries[0],host_call_bounded_entries[2],host_call_bounded_entries[3]);
     XrXirHostCall *calls[2] = {0}; LinkedTrace traces[2] = {0};
     for (unsigned i = 0; i < 2; ++i) {
         XrXirInstanceConfig config;

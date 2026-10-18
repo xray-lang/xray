@@ -28,8 +28,15 @@ static XrXirValueStatus xr_xir_enum_new_graph_operation(XrXirType type, uint32_t
     }
     uint32_t begin = identity->variants[variant].field_begin;
     for (uint32_t i = 0; i < count; ++i) {
-        XrXirValueStatus status = xr_xir_value_admit(&fields[i], node->nominal.fields[begin + i], admission);
-        if (status != XR_XIR_VALUE_OK) return status;
+        if (node->nominal.fields[begin+i]==XR_XIR_UNIT) {
+            if (!xr_xir_nominal_native_recv(types,type,XR_XIR_UNIT) || !unit_value(&fields[i]))
+                return XR_XIR_VALUE_BAD_ARGUMENT;
+            if (!admission->work || !xr_xir_domain_work(admission->domain,1)) return XR_XIR_VALUE_LIMIT;
+            --admission->work;
+        } else {
+            XrXirValueStatus status=xr_xir_value_admit(&fields[i],node->nominal.fields[begin+i],admission);
+            if (status!=XR_XIR_VALUE_OK) return status;
+        }
     }
     uint64_t bytes = sizeof(XirNominalValue) + (uint64_t) count * sizeof(XrXirValue);
     if (bytes > SIZE_MAX) return XR_XIR_VALUE_LIMIT;

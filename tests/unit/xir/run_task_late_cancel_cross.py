@@ -102,7 +102,7 @@ try:
         if prefix!='baseline':measured.extend((prefix,x['instance'],x['ordinal'],x['bytes']) for x in late)
         admission_assert(row,prefix)
         print(row['tag'],'PASS',flush=True)
-    # Stop before injecting if the actual current topology differs at all.
+    # Stop before injecting if the current Checked topology differs at all.
     assert measured==PLAN,{'actual':measured,'independent_plan':PLAN}
     if a.phase=='full':
         for prefix in range(5,12):

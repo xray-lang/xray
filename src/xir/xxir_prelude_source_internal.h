@@ -10,7 +10,7 @@
 #include <stdint.h>
 typedef struct XirPreludeEnum {
     const char *name;
-    uint32_t native_id, variant_count;
+    uint32_t native_id, variant_count, parameter_count, field_count;
     const char *const *variants;
 } XirPreludeEnum;
 typedef struct XirPreludeSource {

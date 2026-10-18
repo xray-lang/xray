@@ -5,6 +5,7 @@ struct SourceLibraryUnit {
     const XrXirModule *library;
     const XrXirArtifact *artifact;
     const XrXirConstruction *construction;
+    const SourceHistoryUnit *history;
     uint32_t *nominals, *interfaces;
     XrXirType *types;
     uint32_t type_count;
@@ -21,8 +22,7 @@ static bool source_library_literal_same(SourceContext *ctx, XrXirLiteral a,
 static bool source_library_declaration_inventory(SourceContext *ctx, uint32_t module,
     const XrXirModule *library, uint32_t *nominals, uint32_t *interfaces) {
     if (!library->types) return true;
-    const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
-    const XrXirSourceModule *owner=&library->declarations->modules[resource->checked_module];
+    const XrXirSourceModule *owner=&library->declarations->modules[source_owned_module(&ctx->graph->specs[module])];
     const XrXirNominalTable *nt=library->types->nominals;
     const XrXirInterfaceTable *it=library->types->interfaces;
     for (uint32_t n=0; nt && n<nt->count; ++n) {
@@ -51,9 +51,8 @@ static uint32_t source_library_declaration_module(SourceContext *ctx,
     for (uint32_t m=0; m<(uint32_t)ctx->graph->spec_count; ++m) {
         if (!source_work(ctx,NULL)) return UINT32_MAX;
         const XrModuleSpec *spec=&ctx->graph->specs[m];
-        const XrModuleResourceBinding *r=spec->resource;
-        if (spec->representation!=XR_MODULE_CHECKED_LIBRARY || !r || r->checked!=unit->artifact) continue;
-        const XrXirSourceModule *owner=&unit->library->declarations->modules[r->checked_module];
+        if (!source_owned_checked(spec) || source_owned_artifact(spec)!=unit->artifact) continue;
+        const XrXirSourceModule *owner=&unit->library->declarations->modules[source_owned_module(spec)];
         if (source_library_literal_same(ctx,module,owner->name,owner->name_length)) return m;
     }
     return UINT32_MAX;
@@ -64,22 +63,24 @@ static char *source_library_name(SourceContext *ctx, XrXirLiteral literal) {
     s[literal.length]=0; return s;
 }
 static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
-    const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
-    const XrXirModule *library=xr_xir_compile_artifact_module(resource->checked);
+    const XrModuleSpec *spec=&ctx->graph->specs[module];
+    const XrXirArtifact *artifact=source_owned_artifact(spec);
+    const XrXirModule *library=xr_xir_compile_artifact_module(artifact);
+    if (!library->types && spec->representation!=XR_MODULE_CHECKED_HISTORY) return true;
     SourceLibraryUnit *unit=source_alloc(ctx,1,sizeof(*unit));
     if (!unit) return false;
-    unit->library=library; unit->artifact=resource->checked;
+    unit->library=library;unit->artifact=artifact;unit->history=spec->history;
     unit->construction=xr_xir_compile_artifact_construction(unit->artifact);
-    const XrXirNominalTable *source_nominals=library->types?library->types->nominals:NULL;
+    const XrXirNominalTable *source_nominals=library->types ? library->types->nominals : NULL;
     uint32_t source_count=source_nominals ? source_nominals->count : 0;
     if (!unit->construction || xr_xir_compile_construction_count(unit->construction)!=source_count)
         return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"library construction owner is missing or incomplete");
     unit->next=ctx->library_units; ctx->library_units=unit;
-    const XrXirNominalTable *nt=library->types?library->types->nominals:NULL;
-    const XrXirInterfaceTable *it=library->types?library->types->interfaces:NULL;
+    const XrXirNominalTable *nt=library->types ? library->types->nominals : NULL;
+    const XrXirInterfaceTable *it=library->types ? library->types->interfaces : NULL;
     unit->nominals=nt && nt->count ? source_alloc(ctx,nt->count,sizeof(*unit->nominals)) : NULL;
     unit->interfaces=it && it->count ? source_alloc(ctx,it->count,sizeof(*unit->interfaces)) : NULL;
-    unit->type_count=library->types?library->types->count:0;
+    unit->type_count=library->types ? library->types->count : 0;
     unit->types=unit->type_count ? source_alloc(ctx,unit->type_count,sizeof(*unit->types)) : NULL;
     if ((nt && nt->count && !unit->nominals) || (it && it->count && !unit->interfaces) ||
         (unit->type_count && !unit->types)) return false;
@@ -103,7 +104,7 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
         unit->nominals[n]=symbol->index; ctx->nominal_sources[symbol->index]=symbol;
         XrXirNominalDeclaration *out=(XrXirNominalDeclaration *)&ctx->nominals.declarations[symbol->index];
         *out=*in;
-        out->module=(XrXirLiteral){ctx->graph->specs[m].canonical,(uint32_t)source_text_size(ctx,ctx->graph->specs[m].canonical)};
+        out->module=(XrXirLiteral){ctx->modules[m].name,ctx->modules[m].name_length};
         out->name=(XrXirLiteral){name,in->name.length};
         out->constraints=NULL; out->fields=NULL; out->field_count=0; out->variants=NULL;
         const XrXirConstructionRow *construction=xr_xir_compile_construction_row(unit->construction,n);
@@ -128,7 +129,7 @@ static bool source_library_reserve(SourceContext *ctx, uint32_t module) {
         unit->interfaces[i]=symbol->index; ctx->interface_sources[symbol->index]=symbol;
         XrXirInterfaceDeclaration *out=(XrXirInterfaceDeclaration *)&ctx->interfaces.declarations[symbol->index];
         *out=*in;
-        out->module=(XrXirLiteral){ctx->graph->specs[m].canonical,(uint32_t)source_text_size(ctx,ctx->graph->specs[m].canonical)};
+        out->module=(XrXirLiteral){ctx->modules[m].name,ctx->modules[m].name_length};
         out->name=(XrXirLiteral){name,in->name.length};
         out->constraints=NULL;out->parents=NULL;out->methods=NULL;out->method_count=0;
         if (!source_query_declare(ctx,symbol,XR_XIR_SOURCE_TYPE,0,(XrXirSourceRange){m,0,0,0,0})) return false;
@@ -216,7 +217,8 @@ static bool source_library_intern_types(SourceContext *ctx, SourceLibraryUnit *u
             out.parameters=parameters;
             if (!source_library_type(ctx,unit,in->result,&out.result)) return false;
         } else if (in->kind==XR_XIR_TYPE_ARRAY || in->kind==XR_XIR_TYPE_CELL ||
-            in->kind==XR_XIR_TYPE_NULLABLE || in->kind==XR_XIR_TYPE_ATOMIC || in->kind==XR_XIR_TYPE_TASK) {
+            in->kind==XR_XIR_TYPE_NULLABLE || in->kind==XR_XIR_TYPE_ATOMIC || in->kind==XR_XIR_TYPE_TASK ||
+            (in->kind == XR_XIR_TYPE_ITERATOR || in->kind == XR_XIR_TYPE_CHANNEL)) {
             if (!source_library_type(ctx,unit,in->element,&out.element)) return false;
         } else return source_fail(ctx,NULL,XR_XIR_BAD_STAGE,"library type remapping is not admitted");
         if (!source_intern_type(ctx,out,&unit->types[t])) return false;
@@ -226,6 +228,7 @@ static bool source_library_intern_types(SourceContext *ctx, SourceLibraryUnit *u
 /* Skeleton IDs exist for all declarations before any application is copied.
  * Type IDs above are canonical intern results, not an arithmetic pool offset. */
 static bool source_library_declaration_constraints(SourceContext *ctx,SourceLibraryUnit *unit) {
+    if (!unit->library->types) return true;
     const XrXirNominalTable *nominals=unit->library->types->nominals;
     const XrXirInterfaceTable *interfaces=unit->library->types->interfaces;
     for (uint32_t n=0; nominals && n<nominals->count; ++n) {
@@ -295,6 +298,7 @@ static bool source_library_enum_query(SourceContext *ctx,SourceName *owner) {
     return true;
 }
 static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
+    if (!unit->library->types) return true;
     const XrXirNominalTable *table=unit->library->types->nominals;
     for (uint32_t n=0; table && n<table->count; ++n) {
         if (!source_work(ctx,NULL)) return false;
@@ -356,6 +360,7 @@ static bool source_library_fields(SourceContext *ctx, SourceLibraryUnit *unit) {
     return true;
 }
 static bool source_library_interfaces(SourceContext *ctx, SourceLibraryUnit *unit) {
+    if (!unit->library->types) return true;
     const XrXirInterfaceTable *table=unit->library->types->interfaces;
     for (uint32_t i=0; table && i<table->count; ++i) {
         if (!source_work(ctx,NULL)) return false;

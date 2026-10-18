@@ -27,7 +27,8 @@ class NativeDeclarations(unittest.TestCase):
         self.assertEqual(header[:3], (1, 'Array', 'T'))
         self.assertEqual(len(members), 32)
         self.assertEqual({m.operation for m in members if m.operation != 'NONE'},
-                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'} | set(schema.array_recipe_contracts('T')))
+                         {'ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH', 'ARRAY_CAPACITY',
+                          'ARRAY_WITH_CAPACITY', 'ARRAY_RESERVE'} | set(schema.array_recipe_contracts('T')))
         self.assertEqual(next(m for m in members if m.name == 'map').operation, 'ARRAY_MAP')
         self.assertNotIn('xr_native_def_array', embed.render(ROOT / 'stdlib/types'))
 
@@ -74,8 +75,7 @@ class NativeDeclarations(unittest.TestCase):
         clear = next(member for member in members if member.name == 'clear')
         self.assertEqual((clear.receiver, clear.ownership, clear.result), ('REF', 'unit', ('tuple', ())))
         self.assertEqual({m.name for m in members if m.operation == 'NONE'},
-                         {'withCapacity', 'capacity', 'ptr', 'mutPtr',
-                          'reserve', 'concat', 'sort', 'fill', 'toString',
+                         {'ptr', 'mutPtr', 'sort', 'toString',
                           'iterator', 'entriesIterator'})
 
     def test_array_recipe_shape_permission_and_result_rejections(self):
@@ -250,10 +250,39 @@ class NativeDeclarations(unittest.TestCase):
             subprocess.run([sys.executable, str(Path(embed.__file__)), str(root), '--check', str(output)],
                            check=True, capture_output=True)
 
+    def test_iterator_identity_has_exact_pull_recipes(self):
+        rows = schema.render_iterator_identity(ROOT)
+        self.assertEqual(rows, schema.render_iterator_identity(ROOT))
+        projected = '\n'.join(rows)
+        self.assertIn('8, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", "T", 1', projected)
+        self.assertEqual(projected.count('XR_NATIVE_OPERATION_NONE'), 2)
+        self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_HAS_NEXT'), 1)
+        self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_NEXT'), 1)
+        self.assertEqual(projected.count('XR_NATIVE_OPERATION_ITERATOR_NTH'), 1)
+        self.assertNotIn('XR_NATIVE_OPERATION_ARRAY_', projected)
+        with tempfile.TemporaryDirectory(prefix='xray-iterator-identity-') as directory:
+            root = Path(directory)
+            for relative in ['stdlib/types/iterator.xr', 'stdlib/prelude/builtin_symbols.def']:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((ROOT / relative).read_bytes())
+            source = root / 'stdlib/types/iterator.xr'
+            original = source.read_text(encoding='utf-8')
+            self.assertEqual(schema.render_iterator_identity(root), rows)
+            for old, new in [('next() -> T', 'next() -> i64'),
+                             ('Iterator<T>', 'Iterator<U>'),
+                             ('// @lowered\n    nth(', '// removed\n    nth('),
+                             ('// @lowered\n    hasNext()', '// removed\n    hasNext()'),
+                             ('// Built-in', '// @native-type id=6\n// Built-in')]:
+                source.write_text(original.replace(old, new, 1), encoding='utf-8')
+                with self.assertRaises(ValueError):
+                    schema.render_iterator_identity(root)
+
     def test_generation_preserves_unchanged_outputs(self):
         with tempfile.TemporaryDirectory(prefix='xray-native-generation-') as directory:
             root = Path(directory)
-            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr', 'stdlib/prelude/builtin_symbols.def']:
+            for relative in ['stdlib/types/array.xr', 'stdlib/types/string.xr', 'stdlib/types/atomic.xr',
+                             'stdlib/types/coroutine.xr', 'stdlib/types/channel.xr', 'stdlib/prelude/builtin_symbols.def']:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((ROOT / relative).read_bytes())
@@ -293,6 +322,75 @@ class NativeDeclarations(unittest.TestCase):
                     self.assertEqual(target.stat().st_mtime_ns, expected[relative][1], relative)
                 else:
                     self.assertNotEqual(target.stat().st_mtime_ns, expected[relative][1], relative)
+
+
+    def test_channel_identity_covers_complete_source_with_exact_execution_recipes(self):
+        with tempfile.TemporaryDirectory(prefix='xray-channel-identity-') as directory:
+            root = Path(directory)
+            for relative in ['stdlib/types/channel.xr', 'stdlib/prelude/builtin_symbols.def']:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((ROOT / relative).read_bytes())
+            source_path = root / 'stdlib/types/channel.xr'
+            source = source_path.read_text(encoding='utf-8')
+            original = '\n'.join(schema.render_channel_identity(root))
+            self.assertIn('6, XR_NATIVE_DECLARATION_IDENTITY, "Channel", "T", 1,', original)
+            self.assertEqual(original.count('XR_NATIVE_OPERATION_NONE'), 0)
+            for operation in ['CHANNEL_CAPACITY', 'CHANNEL_IS_CLOSED', 'CHANNEL_CLOSE', 'CHANNEL_TRY_SEND',
+                              'CHANNEL_TRY_RECV', 'CHANNEL_SEND', 'CHANNEL_RECV', 'CHANNEL_RECV_OR',
+                              'CHANNEL_SEND_TIMEOUT', 'CHANNEL_RECV_TIMEOUT']:
+                self.assertEqual(original.count('XR_NATIVE_OPERATION_' + operation + ','), 1)
+            for member in ['sendTimeout', 'recvTimeout']:
+                rows = [row for row in original.splitlines() if '"' + member + '",' in row]
+                self.assertEqual(len(rows), 1)
+                operation = 'CHANNEL_SEND_TIMEOUT' if member == 'sendTimeout' else 'CHANNEL_RECV_TIMEOUT'
+                self.assertIn('XR_NATIVE_OPERATION_' + operation, rows[0])
+                self.assertIn('allocation,retain,limit,numeric_range,host', rows[0])
+            for before, after in [('send(value: T)', 'send(value: i64)'),
+                                  ('sendTimeout(value: T, timeout: i64)', 'sendTimeout(value: T, timeout: i32)'),
+                                  ('recvTimeout(timeout: i64)', 'recvTimeout()'),
+                                  ('recvTimeout(timeout: i64) -> Recv<T>', 'recvTimeout(timeout: i64) -> T'),
+                                  ('capacity: i64', 'capacity: i32'),
+                                  ('recv() -> Recv<T>', 'recv() -> T'),
+                                  ('class Channel<T>', 'class Channel'),
+                                  ('close()', 'ref close()'),
+                                  ('class Channel<T>', '// @native-operation CHANNEL_NEW\nclass Channel<T>')]:
+                with self.subTest(before=before):
+                    mutated = source.replace(before, after)
+                    self.assertNotEqual(mutated, source)
+                    source_path.write_text(mutated, encoding='utf-8')
+                    with self.assertRaises(ValueError):
+                        schema.render_channel_identity(root)
+            source_path.write_text('// Full source provenance.\n' + source, encoding='utf-8')
+            self.assertNotEqual('\n'.join(schema.render_channel_identity(root)), original)
+
+    def test_channel_result_registry_has_exact_payload_and_variant_authority(self):
+        with tempfile.TemporaryDirectory(prefix='xray-channel-results-') as directory:
+            root = Path(directory)
+            target = root / 'stdlib/prelude/builtin_symbols.def'
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(self.prelude, encoding='utf-8')
+            _, rows = schema.channel_result_rows(root)
+            self.assertEqual(rows[-2:], [
+                ('Recv', 'RECV', [('Value', 'TYPE_PARAM_0'), ('Empty', 'NONE'),
+                                  ('Timeout', 'NONE'), ('Closed', 'NONE')], 7, 1),
+                ('SendResult', 'SEND_RESULT', [('Sent', 'NONE'), ('Full', 'NONE'),
+                                              ('Timeout', 'NONE'), ('Closed', 'NONE')], 8, 0)])
+            for before, after in [('"Recv", 1, RECV', '"Recv", 0, RECV'),
+                                  ('"Recv", 1, RECV', '"Recv", 1, SEND_RESULT'),
+                                  ('"Value", TYPE_PARAM_0', '"Value", NONE'),
+                                  ('"Value", TYPE_PARAM_0', '"Other", TYPE_PARAM_0'),
+                                  ('"Sent", NONE', '"Sent", TYPE_PARAM_0'),
+                                  ('"SendResult", 0, SEND_RESULT', '"SendResult", 1, SEND_RESULT')]:
+                with self.subTest(before=before):
+                    mutated = self.prelude.replace(before, after)
+                    self.assertNotEqual(mutated, self.prelude)
+                    target.write_text(mutated, encoding='utf-8')
+                    with self.assertRaises(ValueError):
+                        schema.channel_result_rows(root)
+            target.write_text(self.prelude + '\nXR_BUILTIN_ENUM("Recv", 1, RECV,)\n', encoding='utf-8')
+            with self.assertRaises(ValueError):
+                schema.channel_result_rows(root)
 
 
 if __name__ == '__main__':

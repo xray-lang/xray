@@ -1,0 +1,2 @@
+fn worker(value:(i64,string))->(i64,string) { return value }
+export fn main()->i64 { const input:(i32,string)=(42,"owned"); const task=go worker(input); return 7 }
