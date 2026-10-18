@@ -129,7 +129,8 @@ static void ed_negative(void){
 }
 /* Sixty-one enum atoms plus one symbolic parameter fill a one-word set.
  * Substitution creates atom 62 at bit 64, requiring both restart and resize. */
-static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload){
+#include "xir_error_substitution_cases.h"
+static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload,bool inspect){
     XrXirConstraint constraint={.markers=XR_XIR_CONSTRAINT_SENDABLE};
     XrXirType parameter=(XrXirType)XR_XIR_TYPE_PARAMETER_BASE,concrete=XR_XIR_I64;
     XrXirNominalVariant variants[61];char names[61][4];
@@ -187,6 +188,12 @@ static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload){
         CHECK(xr_xir_effects_error(e,2,(XrXirType)256,60));
         CHECK(!xr_xir_effects_error(e,1,(XrXirType)257,60));
     }else CHECK(!e);
+    if(status==XR_XIR_OK && inspect) {
+        memset(functions,0xCE,sizeof(functions));memset(call,0xCE,sizeof(call));
+        memset(leaf,0xCE,sizeof(leaf));memset(variants,0xCE,sizeof(variants));
+        memset(generics,0xCE,sizeof(generics));node=(XrXirTypeNode){0};module=(XrXirModule){0};
+        ed_substitution_controls(c,e);xr_xir_compile_effects_free(e);return XR_XIR_OK;
+    }
     if(status!=XR_XIR_OK && fail_at==SIZE_MAX)fprintf(stderr,"restart status%u f%u b%u i%u\n",
         (unsigned)status,d.function,d.block,d.instruction);
     XrXirRootCauseTrace *definition_trace=NULL;
@@ -244,17 +251,26 @@ static XrXirStatus ed_restart_case(const XrXirCompileContext *c,bool payload){
 }
 /* Phantom parameters still affect identity. Payload enums lacking authentic
  * projections remain an independent worker-error qualification rejection. */
-static XrXirStatus ed_restart_whole(const XrXirCompileContext *c){return ed_restart_case(c,false);}
+static XrXirStatus ed_restart_whole(const XrXirCompileContext *c){return ed_restart_case(c,false,false);}
 #include "xir_error_dependency_resources.h"
-int main(void){
+static void ed_restart_literals(void){
+    {XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
+        CHECK(ed_restart_whole(&c)==XR_XIR_OK);ed_release(&c,baseline);}
+    {XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
+        CHECK(ed_restart_case(&c,true,false)==XR_XIR_OK);ed_release(&c,baseline);}
+    {XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
+        CHECK(ed_restart_case(&c,false,true)==XR_XIR_OK);ed_release(&c,baseline);}
+}
+int main(int argc,char **argv){
+    if(argc==2 && !strcmp(argv[1],"--restart-literals")) { ed_restart_literals();return 0; }
+    if(argc==2 && !strcmp(argv[1],"--restart-limits")) { ed_limits();return 0; }
+    if(argc==2 && !strcmp(argv[1],"--restart-resources")) { ed_faults();ed_limits();ed_occupied();return 0; }
+    CHECK(argc==1);
     for(unsigned mode=ED_DIRECT;mode<=ED_UNKNOWN;++mode){
         XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
         CHECK(ed_whole(&c,(ErrorDependencyMode)mode,false)==XR_XIR_OK);ed_release(&c,baseline);
     }
-    {XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
-        CHECK(ed_restart_whole(&c)==XR_XIR_OK);ed_release(&c,baseline);}
-    {XrXirCompileContext c=ed_owner(ed_caps());uint64_t baseline=ed_stats(&c).live_bytes;
-        CHECK(ed_restart_case(&c,true)==XR_XIR_OK);ed_release(&c,baseline);}
+    ed_restart_literals();
     ed_cost();ed_graph_isolation();ed_negative();ed_faults();ed_limits();ed_occupied();
     puts("dependency error summaries, isolated GO edges, complete resource ownership PASS");return 0;
 }

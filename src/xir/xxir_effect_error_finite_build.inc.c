@@ -8,7 +8,9 @@
  */
 static void error_finite_release(EffectErrorFinite *proof) {
     if(!proof) return;
+    error_bindings_free(proof->bindings);
     error_markers_free(proof->markers);
+    effect_terms_free(&proof->terms);
     xr_compile_resources_free(proof->rows);xr_compile_resources_free(proof->facts);
     xr_compile_resources_free(proof);
 }
@@ -97,7 +99,7 @@ static XrXirStatus error_finite_derive(const XrXirCompileContext *work,EffectErr
  * frames freshly derived facts before markers read them. Complete closure and
  * support remain mandatory after marker callbacks at final publication. */
 static XrXirStatus error_finite_construct(const XrXirCompileContext *work,const EffectInvocationCertificate *certificate,
-    const EffectFinalOutcomes *outcomes,EffectErrorFinite **output) {
+    const EffectFinalOutcomes *outcomes,EffectTerms *types,EffectErrorFinite **output) {
     if(!output || *output || !outcomes || !xir_compile_context_valid(work)) return XR_XIR_BAD_STRUCTURE;
     XrXirStatus status=effect_role_range(work,certificate,1,sizeof(*certificate));
     if(status!=XR_XIR_OK) return status;
@@ -112,6 +114,18 @@ static XrXirStatus error_finite_construct(const XrXirCompileContext *work,const 
     proof->resources=work->resources;proof->material=material;proof->atoms=outcomes->atoms;
     proof->atom_count=outcomes->atom_count;proof->words=outcomes->words;proof->functions=functions;
     proof->invocations=certificate->final;
+    if(types) {
+        if(!xir_compile_work(work,2*sizeof(*types))) { error_finite_release(proof);return XR_XIR_BUDGET; }
+        proof->terms=*types;*types=(EffectTerms){0};
+    } else {
+        const XrXirTypes *domain=material->domain.types;
+        if(outcomes->error_proof) {
+            status=effect_role_range(work,outcomes->error_proof,1,sizeof(*outcomes->error_proof));
+            if(status!=XR_XIR_OK) { error_finite_release(proof);return status; }
+            domain=error_finite_types(outcomes->error_proof);
+        }
+        proof->terms.types=*domain;
+    }
     status=error_finite_context_count(work,proof,&proof->contexts,&proof->contextual);
     if(status==XR_XIR_OK && proof->contexts!=outcomes->error_rows) status=XR_XIR_BAD_STRUCTURE;
     if(status!=XR_XIR_OK) { error_finite_release(proof);return status; }
@@ -130,6 +144,9 @@ static XrXirStatus error_finite_construct(const XrXirCompileContext *work,const 
         if(!xir_compile_work(work,sizeof(*proof->rows))) { status=XR_XIR_BUDGET;break; }
         proof->rows[f]=(EffectErrorFiniteRow){at,at+size,head->block_count,(uint32_t)values,node};at+=size;
     }
+    if(status==XR_XIR_OK) status=error_finite_types_frame(work,proof);
+    if(status==XR_XIR_OK) status=error_bindings_build(work,proof);
+    if(status==XR_XIR_OK) status=effect_terms_retire(work,&proof->terms,true);
     if(status==XR_XIR_OK) status=error_finite_derive(work,proof);
     if(status==XR_XIR_OK) status=error_finite_geometry(work,proof);
     if(status==XR_XIR_OK) status=error_marker_build(work,proof,&proof->markers);
@@ -148,7 +165,8 @@ static XrXirStatus error_finite_outcomes_project(const XrXirCompileContext *work
     const EffectErrorFinite *proof=outcomes->error_proof;
     XrXirStatus status=error_finite_geometry(work,proof);if(status!=XR_XIR_OK) return status;
     if(proof->atoms!=outcomes->atoms || proof->atom_count!=outcomes->atom_count ||
-        proof->words!=outcomes->words || proof->contexts!=outcomes->error_rows) return XR_XIR_BAD_STRUCTURE;
+        proof->words!=outcomes->words || proof->contexts!=outcomes->error_rows ||
+        outcomes->source_type_count!=proof->material->domain.types->count) return XR_XIR_BAD_STRUCTURE;
     status=effect_role_range(work,outcomes->errors,(uint64_t)proof->contexts*proof->words,sizeof(*outcomes->errors));
     if(status==XR_XIR_OK) status=effect_role_range(work,outcomes->functions,proof->functions,sizeof(*outcomes->functions));
     if(status==XR_XIR_OK) status=effect_role_range(work,outcomes->task_errors,proof->functions,sizeof(*outcomes->task_errors));
@@ -181,7 +199,8 @@ static XrXirStatus error_finite_outcomes_match(const XrXirCompileContext *work,
     status=error_finite_check(work,outcomes->error_proof);if(status!=XR_XIR_OK) return status;
     const EffectErrorFinite *proof=outcomes->error_proof;
     if(proof->material!=material || proof->atoms!=outcomes->atoms || proof->atom_count!=outcomes->atom_count ||
-        proof->words!=outcomes->words || proof->contexts!=outcomes->error_rows) return XR_XIR_BAD_STRUCTURE;
+        proof->words!=outcomes->words || proof->contexts!=outcomes->error_rows ||
+        outcomes->source_type_count!=material->domain.types->count) return XR_XIR_BAD_STRUCTURE;
     status=effect_role_range(work,outcomes->errors,(uint64_t)proof->contexts*proof->words,sizeof(*outcomes->errors));
     if(status==XR_XIR_OK) status=effect_role_range(work,outcomes->functions,proof->functions,sizeof(*outcomes->functions));
     if(status==XR_XIR_OK) status=effect_role_range(work,outcomes->task_errors,proof->functions,sizeof(*outcomes->task_errors));

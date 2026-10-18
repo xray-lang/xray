@@ -18,6 +18,8 @@ typedef struct EffectErrorFiniteFact { uint64_t coordinate;uint32_t rank; } Effe
 typedef struct EffectErrorFiniteRow { uint64_t first,end;uint32_t blocks,values,node; } EffectErrorFiniteRow;
 typedef struct EffectErrorMarkers EffectErrorMarkers;
 static void error_markers_free(EffectErrorMarkers *markers);
+typedef struct EffectErrorBindings EffectErrorBindings;
+static void error_bindings_free(EffectErrorBindings *bindings);
 typedef struct EffectErrorFinite {
     XrCompileResources *resources;
     const EffectBodyMaterial *material;
@@ -26,9 +28,20 @@ typedef struct EffectErrorFinite {
     EffectErrorFiniteRow *rows;
     EffectErrorFiniteFact *facts;
     EffectErrorMarkers *markers;
+    EffectErrorBindings *bindings;
+    EffectTerms terms;
     uint32_t functions,contexts,atom_count,words,count,capacity;
     bool contextual;
 } EffectErrorFinite;
+static XrXirStatus error_finite_substitution(const XrXirCompileContext *work,
+    const EffectErrorFinite *proof,uint32_t function,uint32_t instruction,XrXirType source,XrXirType *output);
+static const XrXirTypes *error_finite_types(const EffectErrorFinite *proof) {
+    const XrXirTypes *input=proof->material->domain.types,*types=&proof->terms.types;
+    if(!types->nodes && !types->count) return input;
+    return types->nodes==input->nodes && types->count==input->count &&
+        types->nominals==input->nominals && types->interfaces==input->interfaces?input:types;
+}
+#include "xxir_effect_error_types.inc.c"
 /* This identity belongs only to the current callback-free receiving walk.
  * It retains no rows, computed facts or admission result. A full construction
  * buffer unwinds its walk before allocating and opens a fresh view afterward. */
@@ -198,7 +211,8 @@ static XrXirStatus error_finite_rhs(const EffectErrorFiniteRead *read,
 #include "xxir_effect_error_finite_walk.inc.c"
 
 static XrXirStatus error_finite_atoms(const XrXirCompileContext *work,const EffectErrorFinite *proof) {
-    const XrXirTypes *types=proof->material->domain.types;
+    const XrXirTypes *types=error_finite_types(proof);
+    uint32_t source_types=proof->material->domain.types->count;
     XrXirStatus status=effect_role_range(work,types->nodes,types->count,sizeof(*types->nodes));
     if(status!=XR_XIR_OK) return status;
     const XrXirNominalTable *nominals=types->nominals;
@@ -218,7 +232,7 @@ static XrXirStatus error_finite_atoms(const XrXirCompileContext *work,const Effe
             if(proof->material->generics[f].parameter_count>parameters) parameters=proof->material->generics[f].parameter_count;
         }
     }
-    for(uint32_t t=0;t<types->count;++t) {
+    for(uint32_t t=0;t<source_types;++t) {
         if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
         const XrXirTypeNode *node=&types->nodes[t];if(node->kind!=XR_XIR_TYPE_NOMINAL) continue;
         if(!nominals || node->nominal.declaration>=nominals->count) return XR_XIR_BAD_STRUCTURE;
@@ -234,11 +248,25 @@ static XrXirStatus error_finite_atoms(const XrXirCompileContext *work,const Effe
             ++at;
         }
     }
-    if(parameters!=proof->atom_count-at) return XR_XIR_BAD_STRUCTURE;
+    if(parameters>proof->atom_count-at) return XR_XIR_BAD_STRUCTURE;
     for(uint32_t p=0;p<parameters;++p,++at) {
         if(!xir_compile_work(work,3)) return XR_XIR_BUDGET;
         if(proof->atoms[at].type!=(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE+p) ||
             proof->atoms[at].variant!=XR_XIR_ERROR_SYMBOLIC_VARIANT) return XR_XIR_BAD_STRUCTURE;
+    }
+    uint32_t seeded=at;
+    for(;at<proof->atom_count;++at) {
+        if(!xir_compile_work(work,6)) return XR_XIR_BUDGET;
+        const EffectErrorAtom *atom=&proof->atoms[at];uint32_t type=(uint32_t)atom->type;
+        if(type<XR_XIR_CONSTRUCTED_TYPE_BASE || type>=XR_XIR_CONSTRUCTED_TYPE_LIMIT ||
+            type-XR_XIR_CONSTRUCTED_TYPE_BASE<source_types ||
+            type-XR_XIR_CONSTRUCTED_TYPE_BASE>=types->count || !xr_xir_type_is_enum(types,atom->type) ||
+            atom->variant>=error_variant_count(types,type-XR_XIR_CONSTRUCTED_TYPE_BASE)) return XR_XIR_BAD_STRUCTURE;
+        for(uint32_t prior=seeded;prior<at;++prior) {
+            if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
+            if(proof->atoms[prior].type==atom->type && proof->atoms[prior].variant==atom->variant)
+                return XR_XIR_BAD_STRUCTURE;
+        }
     }
     return XR_XIR_OK;
 }
@@ -248,6 +276,7 @@ static XrXirStatus error_finite_geometry(const XrXirCompileContext *work,const E
         !!proof->facts!=!!proof->capacity || !!proof->atoms!=!!proof->atom_count || !proof->words ||
         proof->words!=((uint64_t)proof->atom_count+65)/64) return XR_XIR_BAD_STRUCTURE;
     status=effect_role_material_frame(work,proof->material);if(status!=XR_XIR_OK) return status;
+    status=error_finite_types_frame(work,proof);if(status!=XR_XIR_OK) return status;
     if(proof->functions!=effect_body_count(proof->material)) return XR_XIR_BAD_STRUCTURE;
     uint32_t contexts=0;bool contextual=false;
     status=error_finite_context_count(work,proof,&contexts,&contextual);

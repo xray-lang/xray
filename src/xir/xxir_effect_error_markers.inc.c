@@ -10,7 +10,7 @@
  *   Type claims have complete actual children or a real failing child. A
  *   reference to an active type proves a cycle, never positive sendability.
  */
-enum { ERROR_MARKER_ERROR=1,ERROR_MARKER_SENDABLE=2,ERROR_MARKER_PAIR=3 };
+enum { ERROR_MARKER_ERROR=1,ERROR_MARKER_SENDABLE=2,ERROR_MARKER_PAIR=3,ERROR_MARKER_CALL_PAIR=4 };
 typedef struct ErrorMarkerGoal { uint32_t scope,kind,left,right,binder,bound; } ErrorMarkerGoal;
 typedef struct ErrorMarkerNode {
     ErrorMarkerGoal goal;
@@ -68,7 +68,7 @@ static XrXirStatus error_marker_parameter(const XrXirCompileContext *work,const 
 }
 static XrXirStatus error_marker_type_node(const XrXirCompileContext *work,const EffectErrorFinite *proof,
     XrXirType type,const XrXirTypeNode **output) {
-    const XrXirTypes *types=proof->material->domain.types;
+    const XrXirTypes *types=error_finite_types(proof);
     XrXirStatus status=effect_role_range(work,types->nodes,types->count,sizeof(*types->nodes));if(status!=XR_XIR_OK) return status;
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     uint32_t id=(uint32_t)type;
@@ -84,7 +84,7 @@ static XrXirStatus error_marker_type_node(const XrXirCompileContext *work,const 
 }
 static XrXirStatus error_marker_enum(const XrXirCompileContext *work,const EffectErrorFinite *proof,
     const XrXirTypeNode *node,ErrorMarkerEnum *output,bool *is_enum) {
-    const XrXirNominalTable *table=proof->material->domain.types->nominals;
+    const XrXirNominalTable *table=error_finite_types(proof)->nominals;
     XrXirStatus status=effect_role_range(work,table,1,sizeof(*table));if(status!=XR_XIR_OK) return status;
     if(!!table->declarations==!!table->identities || node->nominal.declaration>=table->count) return XR_XIR_BAD_STRUCTURE;
     const XrXirNominalDeclaration *declaration=NULL;const XrXirNominalIdentity *identity=NULL;
@@ -104,7 +104,7 @@ static XrXirStatus error_marker_enum(const XrXirCompileContext *work,const Effec
     const XrXirNominalVariant *items=declaration?declaration->variants:identity->variants;
     if(!variants || !items || node->nominal.argument_count!=arity || !!node->nominal.arguments!=!!arity ||
         !!node->nominal.fields!=!!node->nominal.field_count) return XR_XIR_BAD_STRUCTURE;
-    if(node->nominal.field_count!=fields && (!declaration || arity || node->nominal.field_count || (fields && !declaration->fields)))
+    if(node->nominal.field_count!=fields && (!declaration || node->nominal.field_count || (fields && !declaration->fields)))
         return XR_XIR_BAD_STRUCTURE;
     status=effect_role_range(work,items,variants,sizeof(*items));
     if(status==XR_XIR_OK && declaration) status=effect_role_range(work,declaration->fields,fields,sizeof(*declaration->fields));
@@ -131,10 +131,34 @@ static XrXirStatus error_marker_enum(const XrXirCompileContext *work,const Effec
     if(bounds>UINT32_MAX-fields*2) return XR_XIR_BAD_STRUCTURE;
     *output=(ErrorMarkerEnum){declaration,identity,fields,arity,bounds,declaration && node->nominal.field_count};return XR_XIR_OK;
 }
+/* The binder is an actual current call ordinal. Its arguments remain in the
+ * sole Input; a stored pair never supplies a substituted argument itself. */
+static XrXirStatus error_marker_call_argument(const XrXirCompileContext *work,const EffectErrorFinite *proof,
+    const ErrorMarkerGoal *goal,XrXirType *output) {
+    uint32_t function=UINT32_MAX;
+    XrXirStatus status=error_finite_context_body(work,proof,goal->scope,&function);
+    if(status!=XR_XIR_OK) return status;
+    EffectBodyRequest body=effect_body_owned_request(work,proof->material);XrXirInstruction op;
+    status=error_equation_operation(&(EffectErrorEquationRead){.body=body,.work=work,.function=function},goal->binder,&op);
+    if(status!=XR_XIR_OK) return status;
+    if(op.op!=XR_XIR_CALL && op.op!=XR_XIR_INVOKE && op.op!=XR_XIR_GO &&
+        op.op!=XR_XIR_CALL_DEFAULT && op.op!=XR_XIR_INVOKE_DEFAULT) return XR_XIR_BAD_STRUCTURE;
+    const XrXirGeneric *generic=NULL;status=error_marker_scope(work,proof,goal->scope,&generic);
+    if(status!=XR_XIR_OK) return status;
+    uint32_t begin=op.type_arguments[0],count=op.type_arguments[1];
+    uint32_t parameter=goal->left-XR_XIR_TYPE_PARAMETER_BASE;
+    if(!generic || !count || parameter>=count || begin>generic->argument_count ||
+        count>generic->argument_count-begin) return XR_XIR_BAD_STRUCTURE;
+    status=effect_role_range(work,generic->arguments,generic->argument_count,sizeof(*generic->arguments));
+    if(status!=XR_XIR_OK) return status;
+    if(!xir_compile_work(work,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=generic->arguments[begin+parameter];return XR_XIR_OK;
+}
 static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const EffectErrorFinite *proof,
     const ErrorMarkerGoal *goal,ErrorMarkerRule *output) {
-    if(goal->kind<ERROR_MARKER_ERROR || goal->kind>ERROR_MARKER_PAIR || goal->bound>1 ||
-        (goal->kind!=ERROR_MARKER_PAIR && (goal->right || goal->bound || goal->binder!=UINT32_MAX))) return XR_XIR_BAD_STRUCTURE;
+    if(goal->kind<ERROR_MARKER_ERROR || goal->kind>ERROR_MARKER_CALL_PAIR || goal->bound>1 ||
+        (goal->kind<ERROR_MARKER_PAIR && (goal->right || goal->bound || goal->binder!=UINT32_MAX)) ||
+        (goal->kind==ERROR_MARKER_CALL_PAIR && (!goal->bound || goal->binder==UINT32_MAX))) return XR_XIR_BAD_STRUCTURE;
     const XrXirGeneric *generic=NULL;XrXirStatus status=error_marker_scope(work,proof,goal->scope,&generic);
     if(status!=XR_XIR_OK) return status;
     if(!xir_compile_work(work,sizeof(*output)+sizeof(*goal))) return XR_XIR_BUDGET;
@@ -142,9 +166,14 @@ static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const Effec
     XrXirType type=(XrXirType)goal->left;uint32_t id=goal->left;
     bool parameter=id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT;
     const XrXirTypeNode *node=NULL;status=error_marker_type_node(work,proof,type,&node);if(status!=XR_XIR_OK) return status;
-    if(goal->kind==ERROR_MARKER_PAIR) {
+    if(goal->kind==ERROR_MARKER_PAIR || goal->kind==ERROR_MARKER_CALL_PAIR) {
         if(!goal->bound && goal->binder!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
         if(parameter && goal->bound) {
+            if(goal->kind==ERROR_MARKER_CALL_PAIR) {
+                XrXirType actual=XR_XIR_UNIT;status=error_marker_call_argument(work,proof,goal,&actual);
+                if(status!=XR_XIR_OK) return status;
+                *output=(ErrorMarkerRule){.children=1};return XR_XIR_OK;
+            }
             const XrXirTypeNode *binder=NULL;status=error_marker_type_node(work,proof,(XrXirType)goal->binder,&binder);
             if(status!=XR_XIR_OK) return status;
             if(!binder || binder->kind!=XR_XIR_TYPE_NOMINAL || id-XR_XIR_TYPE_PARAMETER_BASE>=binder->nominal.argument_count)
@@ -199,6 +228,7 @@ static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const Effec
     if(node->kind==XR_XIR_TYPE_NOMINAL) {
         ErrorMarkerEnum view={0};bool is_enum=false;status=error_marker_enum(work,proof,node,&view,&is_enum);
         if(status!=XR_XIR_OK || !is_enum) return status;
+        if(view.arity && view.fields && !view.projected) return XR_XIR_OK;
         output->children=view.bounds+view.fields*(view.projected?2u:1u);
     } else if(node->kind==XR_XIR_TYPE_TUPLE) {
         if(!node->parameter_count || !node->parameters) return XR_XIR_BAD_STRUCTURE;
@@ -216,8 +246,14 @@ static XrXirStatus error_marker_child(const XrXirCompileContext *work,const Effe
     if(rule.terminal || ordinal>=rule.children) return XR_XIR_BAD_STRUCTURE;
     if(goal->kind==ERROR_MARKER_ERROR) { *output=error_marker_type_goal(goal->scope,ERROR_MARKER_SENDABLE,(XrXirType)goal->left);return XR_XIR_OK; }
     const XrXirTypeNode *node=NULL;status=error_marker_type_node(work,proof,(XrXirType)goal->left,&node);if(status!=XR_XIR_OK) return status;
-    if(goal->kind==ERROR_MARKER_PAIR) {
+    if(goal->kind==ERROR_MARKER_PAIR || goal->kind==ERROR_MARKER_CALL_PAIR) {
         if(goal->bound && goal->left>=XR_XIR_TYPE_PARAMETER_BASE && goal->left<XR_XIR_TYPE_PARAMETER_LIMIT) {
+            if(goal->kind==ERROR_MARKER_CALL_PAIR) {
+                XrXirType actual=XR_XIR_UNIT;status=error_marker_call_argument(work,proof,goal,&actual);
+                if(status!=XR_XIR_OK) return status;
+                *output=error_marker_pair_goal(goal->scope,actual,(XrXirType)goal->right,UINT32_MAX,false);
+                return XR_XIR_OK;
+            }
             const XrXirTypeNode *binder=NULL;status=error_marker_type_node(work,proof,(XrXirType)goal->binder,&binder);
             if(status!=XR_XIR_OK || !binder) return status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:status;
             *output=error_marker_pair_goal(goal->scope,binder->nominal.arguments[goal->left-XR_XIR_TYPE_PARAMETER_BASE],(XrXirType)goal->right,UINT32_MAX,false);return XR_XIR_OK;
@@ -230,7 +266,8 @@ static XrXirStatus error_marker_child(const XrXirCompileContext *work,const Effe
         else if(node->kind==XR_XIR_TYPE_CALLABLE || node->kind==XR_XIR_TYPE_TUPLE) {
             uint32_t at=ordinal-(node->kind==XR_XIR_TYPE_CALLABLE?1u:0u);left=node->parameters[at].type;right=target->parameters[at].type;
         } else { left=node->element;right=target->element; }
-        *output=error_marker_pair_goal(goal->scope,left,right,goal->binder,goal->bound!=0);return XR_XIR_OK;
+        *output=error_marker_pair_goal(goal->scope,left,right,goal->binder,goal->bound!=0);
+        output->kind=goal->kind;return XR_XIR_OK;
     }
     if(!node) return XR_XIR_BAD_STRUCTURE;
     XrXirType child;
@@ -260,8 +297,8 @@ static XrXirStatus error_marker_child(const XrXirCompileContext *work,const Effe
     else child=node->element;
     *output=error_marker_type_goal(goal->scope,ERROR_MARKER_SENDABLE,child);return XR_XIR_OK;
 }
-static XrXirStatus error_marker_nodes_match(const XrXirCompileContext *work,const EffectErrorFinite *proof) {
-    const EffectErrorMarkers *markers=proof->markers;
+static XrXirStatus error_marker_nodes_match(const XrXirCompileContext *work,const EffectErrorFinite *proof,
+    const EffectErrorMarkers *markers) {
     XrXirStatus status=effect_role_range(work,markers,1,sizeof(*markers));if(status!=XR_XIR_OK) return status;
     if(markers->resources!=work->resources || markers->count>markers->capacity || markers->root_count>markers->root_capacity ||
         !!markers->nodes!=!!markers->capacity || !!markers->roots!=!!markers->root_capacity) return XR_XIR_BAD_STRUCTURE;
@@ -277,6 +314,7 @@ static XrXirStatus error_marker_nodes_match(const XrXirCompileContext *work,cons
             const ErrorMarkerNode *other=&markers->nodes[node->reference];
             if(!error_marker_goal_equal(&node->goal,&other->goal)) return XR_XIR_BAD_STRUCTURE;
             if(other->end>i) {
+                if(node->goal.kind==ERROR_MARKER_CALL_PAIR) return XR_XIR_BAD_STRUCTURE;
                 if(node->goal.kind==ERROR_MARKER_PAIR) { if(!node->value) return XR_XIR_BAD_STRUCTURE; }
                 else if(node->value) return XR_XIR_BAD_STRUCTURE;
                 uint32_t parent=node->parent;bool ancestor=false;
@@ -314,7 +352,7 @@ static XrXirStatus error_marker_nodes_match(const XrXirCompileContext *work,cons
 static XrXirStatus error_marker_permissions_fold(const XrXirCompileContext *work,const EffectErrorFinite *proof,
     const XrXirStatus *permissions,XrXirStatus *projection) {
     if(!!permissions==!!projection) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=error_marker_nodes_match(work,proof);if(status!=XR_XIR_OK) return status;
+    XrXirStatus status=error_marker_nodes_match(work,proof,proof->markers);if(status!=XR_XIR_OK) return status;
     const EffectErrorMarkers *markers=proof->markers;EffectErrorFiniteRead read={proof,work,UINT32_MAX,NULL};
     uint32_t root=0,next=0;
     for(uint32_t f=0;f<proof->contexts;++f) {

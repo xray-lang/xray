@@ -27,7 +27,7 @@ static XrXirStatus invocation_seed_scalar_reference(const XrXirCompileContext *w
                 return XR_XIR_BAD_STRUCTURE;
         }
         const EffectRootSeedRecord request={&body->domain,&op,0,i,XR_XIR_UNIT};
-        status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work);
+        status=effect_root_seed_output(&request,&facts,&witnesses[0],&witnesses[1],work,NULL);
         if (status!=XR_XIR_OK) return status;
         if (op.op==XR_XIR_CALL_REQUIREMENT) {facts.unresolved=false;witnesses[1]=(XrXirRootEffectWitness){0};}
     }

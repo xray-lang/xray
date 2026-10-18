@@ -69,7 +69,7 @@ static void marker_verify(const XrXirCompileContext *work, EffectErrorFinite *pr
     XrXirStatus expected, bool permission) {
     size_t before=attempts;uint64_t physical=live_bytes;
     pc_allocate_hook=finite_no_callback;pc_free_hook=finite_no_callback;
-    XrXirStatus actual=permission?error_marker_permissions_match(work,proof,&expected):error_marker_nodes_match(work,proof);
+    XrXirStatus actual=permission?error_marker_permissions_match(work,proof,&expected):error_marker_nodes_match(work,proof,proof->markers);
     pc_allocate_hook=NULL;pc_free_hook=NULL;
     if(actual!=(permission?XR_XIR_OK:expected)) fprintf(stderr,"marker verify actual%u expected%u permission%u\n",actual,expected,permission);
     CHECK(actual==(permission?XR_XIR_OK:expected) && before==attempts && physical==live_bytes);
