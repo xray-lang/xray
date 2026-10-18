@@ -8,6 +8,8 @@
  */
 #include "xir/xxir_vm.h"
 #include "xir/xxir_class.h"
+#include "xir/xxir_array.h"
+#include "xir/xxir_types.h"
 #include "xir/xxir_checked.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +19,7 @@
 #include "xir_runtime_allocations.h"
 XR_DATA const XrXirProgramSpec class_lifetime_fixture_program;
 XR_DATA const uint32_t class_lifetime_entry;
+XR_DATA const uint32_t class_lifetime_array_entry;
 typedef struct ClassLifetimeCode { XrXirProgram *vm; XrXirCallEntry *entries; } ClassLifetimeCode;
 static unsigned class_code_releases;
 static const char *class_backends[] = {"vm-native", "native-vm", "vm", "native"};
@@ -94,6 +97,33 @@ static void class_lifetime_fields(const XrXirValue *value, XrXirValue *text) {
     const char *bytes = NULL; size_t length = 0;
     CHECK(xr_xir_string_view(text, &bytes, &length) && length == 10 && !memcmp(bytes, "held-class", 10));
 }
+static void class_lifetime_array_fields(const XrXirValue *value,XrXirValue *text) {
+    CHECK(xr_xir_value_valid(value));
+    CHECK(xr_xir_type_is_array(xr_xir_compile_type_arena_types(xr_xir_value_arena(value)),(XrXirType)value->type));
+    /* Inline Class elements materialize a snapshot in the retained Array owner Domain. */
+    const XirObject *owner=(const XirObject *)(uintptr_t)value->payload;
+    XrXirValueAdmission admission={.arena=xr_xir_value_arena(value),.domain=owner->domain,
+        .work=10000,.scratch_bytes=65536};
+    int64_t length=-1;
+    CHECK(xr_xir_array_len(value,&admission,&length)==XR_XIR_VALUE_OK && length==1);
+    XrXirFaultDetail fault={0};XrXirValue object={0};
+    XrXirValueStatus status=xr_xir_array_get(value,0,&admission,&object,&fault);
+    if(status!=XR_XIR_VALUE_OK) fprintf(stderr,"Late Source Array<Box> get status%u type%u length%lld workLeft%llu fault%u\n",
+        status,value->type,(long long)length,(unsigned long long)admission.work,fault.code);
+    CHECK(status==XR_XIR_VALUE_OK);
+    class_lifetime_fields(&object,text);xr_xir_value_drop(&object);
+}
+static void class_lifetime_round(XrXirInstance *instances[2],uint32_t entry,XrXirValue output[2]) {
+    for(unsigned i=0;i<2;++i) CHECK(xr_xir_instance_start(instances[i],entry,NULL,0)==XR_XIR_CALL_READY);
+    bool done[2]={false,false};unsigned polls=0;
+    while(!done[0] || !done[1]) for(unsigned i=0;i<2;++i) {
+        if(done[i]) continue;
+        XrXirCallStatus status=xr_xir_instance_poll_bounded(instances[i],1).outcome.status;
+        CHECK(++polls<4096 && (status==XR_XIR_CALL_READY || status==XR_XIR_CALL_RETURNED));
+        done[i]=status==XR_XIR_CALL_RETURNED;
+    }
+    for(unsigned i=0;i<2;++i) CHECK(xr_xir_instance_take_result(instances[i],&output[i])==XR_XIR_CALL_RETURNED);
+}
 int main(int argc, char **argv) {
     CHECK(argc == 2); unsigned backend = 0;
     while (backend < 4 && strcmp(argv[1], class_backends[backend])) ++backend;
@@ -105,18 +135,11 @@ int main(int argc, char **argv) {
         CHECK(xr_xir_instance_new(program, &config, &instances[i]) == XR_XIR_CALL_READY);
     }
     xr_xir_compile_program_drop(program);
-    XrXirValue retained[4] = {{0}}, alias = {0}, texts[4] = {{0}};
-    for (unsigned round = 0; round < 2; ++round) {
-        for (unsigned i = 0; i < 2; ++i) CHECK(xr_xir_instance_start(instances[i], class_lifetime_entry, NULL, 0) == XR_XIR_CALL_READY);
-        bool done[2] = {false, false}; unsigned polls = 0;
-        while (!done[0] || !done[1]) for (unsigned i = 0; i < 2; ++i) {
-            if (done[i]) continue;
-            XrXirCallStatus status = xr_xir_instance_poll_bounded(instances[i], 1).outcome.status;
-            CHECK(++polls < 4096 && (status == XR_XIR_CALL_READY || status == XR_XIR_CALL_RETURNED));
-            done[i] = status == XR_XIR_CALL_RETURNED;
-        }
-        for (unsigned i = 0; i < 2; ++i)
-            CHECK(xr_xir_instance_take_result(instances[i], &retained[2*round+i]) == XR_XIR_CALL_RETURNED);
+    XrXirValue retained[4]={{0}},alias={0},texts[4]={{0}};
+    XrXirValue arrays[4]={{0}},array_alias={0},array_texts[4]={{0}};
+    for(unsigned round=0;round<2;++round) {
+        class_lifetime_round(instances,class_lifetime_entry,&retained[2*round]);
+        class_lifetime_round(instances,class_lifetime_array_entry,&arrays[2*round]);
     }
     CHECK(xr_xir_instance_free(instances[0]) == XR_XIR_CALL_READY && !class_code_releases);
     CHECK(xr_xir_instance_free(instances[1]) == XR_XIR_CALL_READY && class_code_releases == 1);
@@ -124,19 +147,31 @@ int main(int argc, char **argv) {
     for(unsigned i=0;i<3;++i) CHECK(!class_metadata_live(class_metadata[i]));
     CHECK(runtime_live && runtime_bytes && xr_xir_value_copy(&retained[0], &alias) == XR_XIR_VALUE_OK);
     for (unsigned i = 0; i < 4; ++i) class_lifetime_fields(&retained[i], &texts[i]);
-    for (unsigned i = 0; i < 4; ++i) xr_xir_value_drop(&retained[i]);
+    CHECK(xr_xir_value_copy(&arrays[0],&array_alias)==XR_XIR_VALUE_OK);
+    for(unsigned i=0;i<4;++i) class_lifetime_array_fields(&arrays[i],&array_texts[i]);
+    for (unsigned i = 0; i < 4; ++i) {xr_xir_value_drop(&retained[i]);xr_xir_value_drop(&arrays[i]);}
     XrXirValue last = {0}; class_lifetime_fields(&alias, &last); xr_xir_value_drop(&alias);
     for (unsigned i = 0; i < 4; ++i) {
         const char *bytes = NULL; size_t length = 0;
         CHECK(xr_xir_string_view(&texts[i], &bytes, &length) && length == 10 && !memcmp(bytes, "held-class", 10));
         xr_xir_value_drop(&texts[i]);
     }
-    xr_xir_value_drop(&last); CHECK(class_code_releases == 1 && !runtime_live && !runtime_bytes);
+    xr_xir_value_drop(&last);
+    XrXirValue array_last={0};class_lifetime_array_fields(&array_alias,&array_last);xr_xir_value_drop(&array_alias);
+    for(unsigned i=0;i<4;++i) {
+        const char *bytes=NULL;size_t length=0;
+        CHECK(xr_xir_string_view(&array_texts[i],&bytes,&length) && length==10 && !memcmp(bytes,"held-class",10));
+        xr_xir_value_drop(&array_texts[i]);
+    }
+    const char *array_bytes=NULL;size_t array_length=0;
+    CHECK(xr_xir_string_view(&array_last,&array_bytes,&array_length) && array_length==10 && !memcmp(array_bytes,"held-class",10));
+    xr_xir_value_drop(&array_last);
+    CHECK(class_code_releases == 1 && !runtime_live && !runtime_bytes);
     CHECK(!effects_compile_live && !effects_compile_bytes);
     CHECK(backend<2 ? class_callbacks[0] && class_callbacks[1] :
         backend==2 ? class_callbacks[0] && !class_callbacks[1] : class_callbacks[1] && !class_callbacks[0]);
     effects_source_owners_free();
-    printf("Class lifetime backend=%s two Instances two rounds, class40/held-class, VM%u native%u callbacks, compilerOwnerGone metadataGone3 codeLease1 before late alias/String reads, physical0/0\n",
+    printf("Class lifetime backend=%s two Instances two rounds, Source Class/Array/String40/held-class, VM%u native%u callbacks, compilerOwnerGone metadataGone3 codeLease1 before late alias/String reads, physical0/0\n",
         class_backends[backend],class_callbacks[0],class_callbacks[1]);
     return 0;
 }
