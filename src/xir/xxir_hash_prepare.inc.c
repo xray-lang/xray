@@ -110,9 +110,9 @@ static XrXirValueStatus hash_place_current(const XrXirValuePlace *place, uint32_
 static XrXirValueStatus hash_prepare_field(StoragePrepared *prepared, const XrXirValue *value,
     XrXirType type, XrXirValueAdmission *admission) {
     XrXirLayout layout = {0};
-    if (!value || value->type != (uint32_t)type ||
+    if (!xr_xir_value_argument(value,admission->arena,type) ||
         !xr_xir_compile_type_arena_layout(admission->arena, type, &layout)) return XR_XIR_VALUE_BAD_ARGUMENT;
-    return storage_prepared_begin(prepared, value, layout.size, admission);
+    return storage_prepared_begin(prepared, type, value, layout.size, admission);
 }
 static void hash_transfer(StoragePrepared *prepared, XirHash *map, size_t index, bool value) {
     XR_CHECK(prepared->owns, "hash publication transfers exactly one prepared owner");

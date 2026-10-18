@@ -296,8 +296,9 @@ static const XrNativeMemberDeclaration xr_native_channel_members[] = {
     {9, "recvTimeout", "(timeout: i64) -> Recv<T>", "Recv<T>", 28, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_CHANNEL_RECV_TIMEOUT, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit,numeric_range,host", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_channel_parameters_8, 1, XR_NATIVE_TERM_RECV_ELEMENT},
     {10, "close", "()", "()", 30, 5, XR_NATIVE_RECEIVER_READ, false, true, true, true, XR_NATIVE_OPERATION_CHANNEL_CLOSE, XR_NATIVE_ALLOCATION_NO_HEAP, "limit", XR_NATIVE_RESULT_OWNERSHIP_UNIT, NULL, 0, XR_NATIVE_TERM_UNIT},
 };
+static const char *const xr_native_channel_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_channel = {
-    6, XR_NATIVE_DECLARATION_IDENTITY, "Channel", "T", 1,
+    6, XR_NATIVE_DECLARATION_IDENTITY, "Channel", xr_native_channel_type_parameters, 1,
     "stdlib/types/channel.xr", "xray-native:prelude/Channel", {{255, 43, 224, 43, 204, 40, 190, 68, 247, 146, 123, 116, 109, 49, 110, 236, 127, 239, 78, 129, 95, 38, 147, 32, 126, 240, 113, 118, 187, 191, 18, 132}},
     16, 7, xr_native_channel_members, 10
 };
@@ -310,8 +311,9 @@ static const XrNativeMemberDeclaration xr_native_recv_members[] = {
     {3, "Timeout", "Timeout", "Recv<T>", 211, 42, XR_NATIVE_RECEIVER_READ, true, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
     {4, "Closed", "Closed", "Recv<T>", 212, 42, XR_NATIVE_RECEIVER_READ, true, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
 };
+static const char *const xr_native_recv_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_recv = {
-    7, XR_NATIVE_DECLARATION_VALUE, "Recv", "T", 1,
+    7, XR_NATIVE_DECLARATION_VALUE, "Recv", xr_native_recv_type_parameters, 1,
     "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/Recv", {{124, 126, 23, 73, 236, 174, 73, 173, 193, 42, 87, 150, 20, 153, 31, 52, 35, 108, 2, 246, 20, 151, 180, 57, 203, 97, 7, 63, 152, 147, 209, 140}},
     208, 18, xr_native_recv_members, 4
 };
@@ -322,7 +324,7 @@ static const XrNativeMemberDeclaration xr_native_send_result_members[] = {
     {4, "Closed", "Closed", "SendResult", 218, 42, XR_NATIVE_RECEIVER_READ, true, false, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
 };
 static const XrNativeTypeDeclaration xr_native_send_result = {
-    8, XR_NATIVE_DECLARATION_VALUE, "SendResult", "", 0,
+    8, XR_NATIVE_DECLARATION_VALUE, "SendResult", NULL, 0,
     "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/SendResult", {{124, 126, 23, 73, 236, 174, 73, 173, 193, 42, 87, 150, 20, 153, 31, 52, 35, 108, 2, 246, 20, 151, 180, 57, 203, 97, 7, 63, 152, 147, 209, 140}},
     214, 18, xr_native_send_result_members, 4
 };
@@ -336,8 +338,9 @@ static const XrNativeMemberDeclaration xr_native_iterator_members[] = {
     {4, "iterator", "() -> Iterator<T>", "Iterator<T>", 12, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_UNADMITTED},
     {5, "toString", "() -> string", "string", 13, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_NONE, XR_NATIVE_ALLOCATION_UNKNOWN, "", XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, NULL, 0, XR_NATIVE_TERM_STRING},
 };
+static const char *const xr_native_iterator_type_parameters[] = {"T"};
 static const XrNativeTypeDeclaration xr_native_iterator = {
-    9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", "T", 1,
+    9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", xr_native_iterator_type_parameters, 1,
     "stdlib/types/iterator.xr", "xray-native:prelude/Iterator", {{37, 29, 8, 208, 105, 216, 104, 232, 72, 124, 174, 16, 249, 46, 62, 173, 123, 96, 18, 98, 161, 187, 193, 211, 152, 159, 181, 135, 28, 44, 127, 148}},
     3, 7, xr_native_iterator_members, 5
 };

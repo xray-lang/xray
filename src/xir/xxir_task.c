@@ -497,7 +497,7 @@ static void task_core_reject_closed_wait(XrXirTaskExecutor *executor) {
 #include "xxir_task_channel.inc.c"
 static void task_core_dispatch_result(XrXirTaskExecutor *executor,XirTaskActivation *activation,XrXirCallResult result) {
     XirTask *task=activation->task;
-    XirGenerator *generator=activation->generator;
+    XirGenerator *generator=generator_core_activation(executor,activation);
     if (result.status==XR_XIR_CALL_READY) task_core_enqueue(executor,activation);
     else if (result.status==XR_XIR_CALL_SUSPENDED) {
         XrXirWaitRequest wait={0};

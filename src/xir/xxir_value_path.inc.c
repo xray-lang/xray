@@ -387,7 +387,7 @@ XR_FUNC XrXirValueStatus xir_value_path_replacement(const XrXirValue *root,const
     const XrXirTypes *types=xr_xir_compile_type_arena_types(admission->arena);
     for (uint32_t i=0;status==XR_XIR_VALUE_OK && i<path->count;++i) {
         if (xr_xir_type_is_class(types,slot.type)) { status=XR_XIR_VALUE_UNSUPPORTED;break; }
-        status=path_step(&slot,&path->steps[i],admission,NULL,fault,NULL);
+        status=path_step(&slot,(ValuePathSelector){&path->steps[i],admission->arena},admission,NULL,fault,NULL);
     }
     XrXirValue owned={0};
     if (status==XR_XIR_VALUE_OK) status=xr_xir_value_copy(root,&owned);

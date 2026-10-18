@@ -679,8 +679,9 @@ def render_iterator_identity(root):
             'XR_NATIVE_TERM_' + simple_term(result, 'T')]) + '},')
     number, raw = rows[0]
     digest = hashlib.sha256(source.encode('utf-8')).digest()
-    output += ['};', 'static const XrNativeTypeDeclaration xr_native_iterator = {',
-        '    9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", "T", 1,',
+    output += ['};', 'static const char *const xr_native_iterator_type_parameters[] = {"T"};',
+        'static const XrNativeTypeDeclaration xr_native_iterator = {',
+        '    9, XR_NATIVE_DECLARATION_IDENTITY, "Iterator", xr_native_iterator_type_parameters, 1,',
         '    "stdlib/types/iterator.xr", "xray-native:prelude/Iterator", {{' +
         ', '.join(str(byte) for byte in digest) + '}},',
         f'    {number}, {len(raw[:raw.index("Iterator")].encode("utf-8")) + 1}, xr_native_iterator_members, 5', '};']
@@ -746,8 +747,9 @@ def render_channel_identity(root):
                 if admitted else 'XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN', params, str(len(parameters)),
             'XR_NATIVE_TERM_'+(admitted[1] if admitted else 'UNADMITTED')]) + '},')
     number, raw = rows[12]; digest = hashlib.sha256(source.encode('utf-8')).digest()
-    output += ['};', 'static const XrNativeTypeDeclaration xr_native_channel = {',
-        '    6, XR_NATIVE_DECLARATION_IDENTITY, "Channel", "T", 1,',
+    output += ['};', 'static const char *const xr_native_channel_type_parameters[] = {"T"};',
+        'static const XrNativeTypeDeclaration xr_native_channel = {',
+        '    6, XR_NATIVE_DECLARATION_IDENTITY, "Channel", xr_native_channel_type_parameters, 1,',
         '    "stdlib/types/channel.xr", "xray-native:prelude/Channel", {{' +
         ', '.join(str(byte) for byte in digest) + '}},',
         f'    {number}, {len(raw[:raw.index("Channel")].encode("utf-8")) + 1}, xr_native_channel_members, 10', '};']
@@ -793,8 +795,11 @@ def render_channel_result_identities(root):
                 str(member_line),str(member_raw.index(variant)+1),'XR_NATIVE_RECEIVER_READ','true','false','false','true',
                 'XR_NATIVE_OPERATION_NONE','XR_NATIVE_ALLOCATION_UNKNOWN','""','XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN',
                 'xr_native_recv_value_parameters' if count else 'NULL',str(count),'XR_NATIVE_TERM_UNADMITTED'])+'},')
-        lines += ['};','static const XrNativeTypeDeclaration xr_native_'+variable+' = {',
-                  '    '+str(native_id)+', XR_NATIVE_DECLARATION_VALUE, '+c_string(name)+', '+c_string('T' if arity else '')+', '+str(arity)+',',
+        lines.append('};')
+        if arity: lines.append('static const char *const xr_native_'+variable+'_type_parameters[] = {"T"};')
+        lines += ['static const XrNativeTypeDeclaration xr_native_'+variable+' = {',
+                  '    '+str(native_id)+', XR_NATIVE_DECLARATION_VALUE, '+c_string(name)+', '+
+                  ('xr_native_'+variable+'_type_parameters' if arity else 'NULL')+', '+str(arity)+',',
                   '    "stdlib/prelude/builtin_symbols.def", "xray-native:prelude/'+name+'", {{'+', '.join(str(byte) for byte in digest)+'}},',
                   '    '+str(line)+', '+str(raw.index(name)+1)+', xr_native_'+variable+'_members, '+str(len(variants)), '};']
     return lines
