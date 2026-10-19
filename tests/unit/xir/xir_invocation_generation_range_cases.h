@@ -172,19 +172,68 @@ static void generation_range_origins_refused(EffectInvocationFlow *flow) {
         rp_stats(context).live_bytes==before.live_bytes);
 }
 
+/* Site identities follow the four literal recipes: REF/COPY/apply in the
+ * first two, and no callable values in the two DEFAULT-only recipes. */
+static void generation_range_literal_producers(const EffectInvocationWorkspace *owner,uint32_t expected_sites) {
+    CHECK(expected_sites<=1 && owner->read.producer_enabled==(expected_sites!=0) &&
+        owner->final.site_count==expected_sites && !owner->final.binding_count && !owner->pending);
+    if(!expected_sites) {
+        for(uint32_t n=0;n<owner->final.count;++n) {
+            const EffectInvocationProducerSet *records=effect_invocation_discovery_read(&owner->read,n);
+            CHECK(records && !records->count);
+        }
+        return;
+    }
+    /* The original local-Cell fixture has one target2 REF at instruction2,
+     * followed by COPY3 and the direct apply CALL4. Zero captures need no
+     * binding columns, but identity still has three descending producer facts:
+     * the reference, its alias and the actual apply callable formal. */
+    const EffectInvocationSite *site=&owner->final.sites[0];
+    CHECK(site->function==0 && site->instruction==2 && site->target==2 && !site->captures && !site->binding);
+    uint32_t entry=owner->final.roots[0],seeds=0,aliases=0,actuals=0;
+    for(uint32_t n=0;n<owner->final.count;++n) {
+        const EffectInvocationProducerSet *records=effect_invocation_discovery_read(&owner->read,n);
+        CHECK(records);
+        for(uint32_t p=0;p<records->count;++p) {
+            const EffectInvocationProducer *fact=&records->facts[p];
+            CHECK(!fact->site && !fact->atom);
+            if(n==entry && fact->value==2) {
+                CHECK(!fact->distance && fact->instruction==2 && fact->next_node==UINT32_MAX &&
+                    fact->next_value==UINT32_MAX && fact->edge==UINT32_MAX);++seeds;
+            } else if(n==entry && fact->value==3) {
+                CHECK(fact->distance==1 && fact->instruction==3 && fact->next_node==entry &&
+                    fact->next_value==2 && fact->edge==UINT32_MAX);++aliases;
+            } else {
+                CHECK(owner->final.nodes[n].root==0 && owner->final.nodes[n].body==1 &&
+                    !fact->value && fact->distance==2 && fact->instruction==4 &&
+                    fact->next_node==entry && fact->next_value==3 && fact->edge<owner->final.edge_count);
+                const EffectInvocationEdge *edge=&owner->final.edges[fact->edge];
+                CHECK(edge->caller==entry && edge->target==n && edge->instruction==4 &&
+                    edge->producer==UINT32_MAX && !edge->latent);++actuals;
+            }
+        }
+    }
+    CHECK(seeds==1 && aliases==1 && actuals==1);
+}
+
 /* Each delegated callback changes only request dispatch. The reference pass
  * uses the counted instruction reader; all other mixed passes must preserve
  * the original scalar pass's real fees and settled origin rows. */
 static void generation_range_mixed_origins(EffectInvocationFlow *flow) {
     EffectBodyRequest original=flow->body;uint32_t transfers=0;
-    for (uint32_t r=0;r<flow->physical->count;++r)
-        transfers+=!!(flow->physical->records[r].mask&EFFECT_PHYSICAL_TRANSFER);
-    CHECK(transfers && !flow->changed && !flow->read->producer_enabled);
+    for (uint32_t r=0;r<flow->physical->count;++r) {
+        if(!(flow->physical->records[r].mask&EFFECT_PHYSICAL_TRANSFER)) continue;
+        CHECK(flow->physical->records[r].value==2+transfers);++transfers;
+    }
+    CHECK(transfers==3 && !flow->changed);
+    generation_range_literal_producers(flow->owner,1);
     uint64_t scalar_work=0;conditional_generation_instruction_refused=false;
     conditional_generation_shape_refused=conditional_generation_dimensions_refused=false;
     for (uint32_t mixed=0;mixed<5;++mixed) {
         flow->body=original;conditional_generation_instruction_reads=0;
         generation_range_type_reads=generation_range_consume_reads=0;
+        conditional_generation_full_heads=conditional_generation_dimension_heads=conditional_generation_signature_heads=0;
+        conditional_generation_shape_reads=0;
         if (!mixed) flow->body.instruction=conditional_generation_counted_instruction;
         else if (mixed==1) flow->body.head=conditional_generation_counted_head;
         else if (mixed==2) flow->body.type=generation_range_counted_type;
@@ -203,10 +252,15 @@ static void generation_range_mixed_origins(EffectInvocationFlow *flow) {
         if (!mixed) {
             CHECK(conditional_generation_instruction_reads==transfers && cost);scalar_work=cost;
         } else CHECK(cost==scalar_work);
+        if (mixed==1) CHECK(!conditional_generation_full_heads && !conditional_generation_dimension_heads &&
+            conditional_generation_signature_heads==1);
+        CHECK(generation_range_type_reads==(mixed==2?1u:0u) && !conditional_generation_shape_reads);
         if (mixed==4) CHECK(generation_range_consume_reads);
+        generation_range_literal_producers(flow->owner,1);
     }
     flow->body=original;
     CHECK(effect_invocation_origins_pass(flow)==XR_XIR_OK && !flow->changed);
+    generation_range_literal_producers(flow->owner,1);
 }
 
 /* Replaying a settled equation preserves every actual key, edge and ROOT
@@ -336,38 +390,8 @@ static void generation_range_origin_bindings(const XrXirCompileContext *context,
     EffectInvocationWorkspace *owner=NULL;
     CHECK(effect_invocations_receive(context,source,&trial->effects,&trial->graph,
         material->declared,&owner)==XR_XIR_OK && effect_invocations_solve(owner)==XR_XIR_OK);
-    /* The original local-Cell fixture has one target2 REF at instruction2,
-     * followed by COPY3 and the direct apply CALL4. Zero captures need no
-     * binding columns, but identity still has three descending producer facts:
-     * the reference, its alias and the actual apply callable formal. */
-    CHECK(owner->read.producer_enabled && owner->final.site_count==1 && !owner->final.binding_count &&
-        !owner->pending && owner->final.material==material && owner->final.physical==material->physical);
-    const EffectInvocationSite *site=&owner->final.sites[0];
-    CHECK(site->function==0 && site->instruction==2 && site->target==2 && !site->captures && !site->binding);
-    uint32_t entry=owner->final.roots[0],seeds=0,aliases=0,actuals=0;
-    for(uint32_t n=0;n<owner->final.count;++n) {
-        const EffectInvocationProducerSet *records=effect_invocation_discovery_read(&owner->read,n);
-        CHECK(records);
-        for(uint32_t p=0;p<records->count;++p) {
-            const EffectInvocationProducer *fact=&records->facts[p];
-            CHECK(!fact->site && !fact->atom);
-            if(n==entry && fact->value==2) {
-                CHECK(!fact->distance && fact->instruction==2 && fact->next_node==UINT32_MAX &&
-                    fact->next_value==UINT32_MAX && fact->edge==UINT32_MAX);++seeds;
-            } else if(n==entry && fact->value==3) {
-                CHECK(fact->distance==1 && fact->instruction==3 && fact->next_node==entry &&
-                    fact->next_value==2 && fact->edge==UINT32_MAX);++aliases;
-            } else {
-                CHECK(owner->final.nodes[n].root==0 && owner->final.nodes[n].body==1 &&
-                    !fact->value && fact->distance==2 && fact->instruction==4 &&
-                    fact->next_node==entry && fact->next_value==3 && fact->edge<owner->final.edge_count);
-                const EffectInvocationEdge *edge=&owner->final.edges[fact->edge];
-                CHECK(edge->caller==entry && edge->target==n && edge->instruction==4 &&
-                    edge->producer==UINT32_MAX && !edge->latent);++actuals;
-            }
-        }
-    }
-    CHECK(seeds==1 && aliases==1 && actuals==1);
+    CHECK(owner->final.material==material && owner->final.physical==material->physical);
+    generation_range_literal_producers(owner,1);
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
     CHECK(effect_invocation_discovery_origins(&flow)==XR_XIR_OK && !flow.changed);
     uint32_t function=owner->final.nodes[flow.node].body;
@@ -405,7 +429,7 @@ static void generation_range_origin_bindings(const XrXirCompileContext *context,
 }
 
 static void generation_range_dispatch_other(const XrXirCompileContext *context,
-    GenerationRangeTrial *trial) {
+    GenerationRangeTrial *trial,uint32_t mode) {
     const XrXirModule *source=xr_xir_compile_artifact_module(trial->checked);
     EffectBodyMaterial *material=trial->effects.generation;EffectInvocationWorkspace *owner=NULL;
     CHECK(effect_graph_build_material(source,&trial->effects,&trial->graph,
@@ -415,7 +439,9 @@ static void generation_range_dispatch_other(const XrXirCompileContext *context,
     EffectInvocationFlow flow={.owner=owner,.read=&owner->read,.node=owner->final.roots[0],.instruction=UINT32_MAX};
     CHECK(effect_invocation_discovery_origins(&flow)==XR_XIR_OK && !flow.changed &&
         flow.physical->count>1 && material->functions[0].run_count>1);
+    generation_range_literal_producers(owner,mode==1?1u:0u);
     generation_range_dispatch_same(&flow,source);generation_range_dispatch_singleton(owner);
+    generation_range_literal_producers(owner,mode==1?1u:0u);
     xr_compile_resources_free(flow.memory);effect_invocation_free(owner);effect_graph_free(&trial->graph);
     trial->graph=(EffectGraph){.material=material,.physical=material->physical};
 }
@@ -627,7 +653,7 @@ static void generation_range_controls(void) {
             binding->function=function;
             generation_range_build(&context,&trial,XR_XIR_OK,false,mode==2?2u:4u);
         }
-        if (mode) generation_range_dispatch_other(&context,&trial);
+        if (mode) generation_range_dispatch_other(&context,&trial,mode);
         const XrXirModule *source=xr_xir_compile_artifact_module(trial.checked);
         CHECK(effect_body_source_match(&context,material,source)==XR_XIR_OK &&
             effect_body_physical_match(&context,material->physical,material)==XR_XIR_OK);
