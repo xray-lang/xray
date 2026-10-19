@@ -112,7 +112,8 @@ static XrXirStatus nominal_declaration(const XrXirNominalDeclaration *d,
     }
     for (uint32_t f = 0; f < d->field_count; ++f) {
         const XrXirNominalField *field = &d->fields[f];
-        if ((d->flags & XR_XIR_NOMINAL_SENDABLE) && (field->flags & XR_XIR_FIELD_MUTABLE))
+        if (d->kind == XR_XIR_NOMINAL_CLASS && (d->flags & XR_XIR_NOMINAL_SENDABLE) &&
+            (field->flags & XR_XIR_FIELD_MUTABLE))
             return XR_XIR_BAD_TYPE;
         if (d->kind == XR_XIR_NOMINAL_ENUM && field->flags) return XR_XIR_BAD_STRUCTURE;
         if (d->kind == XR_XIR_NOMINAL_CLASS && !xr_xir_type_span(types,field->type)) {

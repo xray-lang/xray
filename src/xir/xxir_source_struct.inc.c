@@ -213,7 +213,8 @@ static bool source_struct_fields(SourceContext *ctx) {
                     return source_fail(ctx, node, XR_XIR_BAD_TYPE, "field requires an admitted value type");
                 fields[f] = (XrXirNominalField) {{field->name, (uint32_t) source_text_size(ctx, field->name)}, types[f],
                     (field->is_private ? XR_XIR_FIELD_PRIVATE : 0) | (field->is_protected ? XR_XIR_FIELD_PROTECTED : 0) |
-                    (field->is_const || (record->flags & XR_XIR_NOMINAL_SENDABLE) ? 0 : XR_XIR_FIELD_MUTABLE)};
+                    (field->is_const || (record->kind == XR_XIR_NOMINAL_CLASS &&
+                     (record->flags & XR_XIR_NOMINAL_SENDABLE)) ? 0 : XR_XIR_FIELD_MUTABLE)};
                 SourceName member = {0}; member.name = source_owned_text(ctx, field->name); member.node = node;
                 if (!member.name) return false;
                 member.type = types[f]; member.mutable = (fields[f].flags & XR_XIR_FIELD_MUTABLE)!=0;

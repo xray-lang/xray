@@ -1,0 +1,2 @@
+class ReadOnly implements Sendable {value:i64 init(value:i64){this.value=value}}
+export fn referenceAnswer()->i64 {const value=ReadOnly(41);value.value=42;return value.value}

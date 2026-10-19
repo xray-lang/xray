@@ -1,0 +1,25 @@
+class LocalValue {
+    value: i64
+    init(value: i64) { this.value = value }
+}
+struct LocalBox {
+    value: LocalValue
+    init(value: LocalValue) { this.value = value }
+}
+struct FloatBox {
+    value: f64
+    init(value: f64) { this.value = value }
+}
+class ReadOnly implements Sendable {
+    value: i64
+    init(value: i64) { this.value = value }
+}
+fn requireSendable<T:Sendable>(value:T)->T { return value }
+export fn referenceAnswer() -> i64 {
+    var box = LocalBox(LocalValue(41))
+    box.value = LocalValue(42)
+    var floating = FloatBox(1.0)
+    floating.value = 2.0
+    const sent = requireSendable(ReadOnly(box.value.value))
+    return floating.value == 2.0 ? sent.value : 0
+}

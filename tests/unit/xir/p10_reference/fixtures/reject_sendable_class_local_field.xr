@@ -1,0 +1,6 @@
+class LocalValue { value:i64 init(value:i64){this.value=value} }
+class ReadOnly implements Sendable {
+    value:LocalValue
+    init(value:LocalValue){this.value=value}
+}
+export fn referenceAnswer()->i64 { return ReadOnly(LocalValue(42)).value.value }

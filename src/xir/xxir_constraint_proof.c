@@ -882,7 +882,7 @@ static XrXirStatus proof_nominal_declaration(const XrXirModule *module, uint32_t
         status = d->kind == XR_XIR_NOMINAL_CLASS ?
             xr_xir_compile_type_storage_prove(budget, &context, d->fields[f].type) :
             xr_xir_compile_type_use_verify_scratch(budget, &context, d->fields[f].type, scratch);
-        if (status==XR_XIR_OK && (d->flags & XR_XIR_NOMINAL_SENDABLE))
+        if (status==XR_XIR_OK && d->kind==XR_XIR_NOMINAL_CLASS && (d->flags & XR_XIR_NOMINAL_SENDABLE))
             status=xr_xir_compile_type_markers_prove(budget,&context,d->fields[f].type,XR_XIR_CONSTRAINT_SENDABLE);
     }
     return status;
