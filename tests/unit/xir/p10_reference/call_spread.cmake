@@ -1,5 +1,6 @@
 set(call_spread_native_targets)
-foreach(case IN ITEMS basic order empty nested context generic owned defaults ref callable)
+foreach(case IN ITEMS basic order empty nested context generic owned defaults ref callable
+    cow_order nullable_defaults empty_effects indirect_ref)
     set(expected 42)
     if(case STREQUAL "order")
         set(expected 12303111758)
@@ -7,6 +8,14 @@ foreach(case IN ITEMS basic order empty nested context generic owned defaults re
         set(expected 127828)
     elseif(case STREQUAL "defaults")
         set(expected 711)
+    elseif(case STREQUAL "cow_order")
+        set(expected 12303111755)
+    elseif(case STREQUAL "nullable_defaults")
+        set(expected 1204117)
+    elseif(case STREQUAL "empty_effects")
+        set(expected 1312205)
+    elseif(case STREQUAL "indirect_ref")
+        set(expected 1021)
     endif()
     add_test(NAME test_xir_p10_call_spread_${case}
         COMMAND test_xir_p10_reference --accept call_spread_${case} ${expected})

@@ -299,11 +299,12 @@ static bool source_call_spread_events(SourceContext *ctx,AstNode *node,const Sou
             if (!source_call_spread_context(ctx,spread,literal,formal)) return false;
             continue;
         }
-        XrXirCallableParameter *fields=source_recipe_storage(ctx,spread->count,sizeof(*fields));
+        SourceExpectedType *fields=source_recipe_storage(ctx,spread->count,sizeof(*fields));
         if (!fields) return false;
-        bool complete=true;
         for (uint32_t f=0;f<spread->count;++f) {
-            if (spread->field_known[f]) {fields[f].type=spread->known_fields[f];continue;}
+            if (spread->field_known[f]) {
+                fields[f]=(SourceExpectedType){true,spread->known_fields[f],false,false};continue;
+            }
             uint32_t parameter=spread->first+f+formal->parameter_offset;
             XrXirType wanted=source_call_parameter_type(formal,parameter);
             SourceSubstitution substitution=formal->substitution;
@@ -311,17 +312,18 @@ static bool source_call_spread_events(SourceContext *ctx,AstNode *node,const Sou
                 XrXirInferenceKnown known={0};
                 XrXirStatus status=xr_xir_compile_inference_expected_known(state,&ctx->types,wanted,&known);
                 if (status!=XR_XIR_OK) return source_fail(ctx,node,status,"call spread context is invalid");
-                if (!known.known) {complete=false;break;}
+                if (!known.known) continue;
                 substitution=(SourceSubstitution){known.arguments,known.argument_count};
             }
             if (source_call_caller_parameters(formal)) fields[f].type=wanted;
             else if (!source_substitute(ctx,&substitution,wanted,0,&fields[f].type)) return false;
+            fields[f].present=true;
         }
-        if (complete) {
-            SourceTuplePrefix *prefix=source_recipe_storage(ctx,1,sizeof(*prefix));
-            if (!prefix) return false;
-            *prefix=(SourceTuplePrefix){fields,spread->count,false,XR_XIR_UNIT,NULL,NULL};literal->tuple_prefix=prefix;
-        }
+        /* Unknown generic fields still infer from their own values. Concrete
+         * siblings keep their contexts, including empty Array literals. */
+        SourceTuplePrefix *prefix=source_recipe_storage(ctx,1,sizeof(*prefix));
+        if (!prefix) return false;
+        *prefix=(SourceTuplePrefix){NULL,spread->count,false,XR_XIR_UNIT,fields,NULL};literal->tuple_prefix=prefix;
     }
     return true;
 }

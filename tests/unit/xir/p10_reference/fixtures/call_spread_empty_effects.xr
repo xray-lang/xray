@@ -1,0 +1,11 @@
+var trace: i64 = 0
+fn empty() { trace = trace * 10 + 1 }
+fn mark() -> i64 { trace = trace * 10 + 2; return 3 }
+fn noargs() -> i64 { trace = trace * 10 + 3; return 7 }
+fn combine(first: i64, last: i64) -> i64 { return first * 10 + last }
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    const first = noargs(...empty())
+    const second = combine(...empty(), mark(), ...(), 5, ...empty())
+    return trace * 100 + first * 10 + second
+}
