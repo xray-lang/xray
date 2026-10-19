@@ -1,0 +1,2 @@
+fn local()->i64{var value:i64=6;value=value+1;return value}
+export fn run()->i64{return await go local()}

@@ -1,0 +1,4 @@
+export fn words()->Array<string> {
+    Coro.yield()
+    return ["cedar", "birch"]
+}

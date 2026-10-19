@@ -1,0 +1,5 @@
+export fn inspect() -> i64 {
+    const values: Array<i64> = [17, 25]
+    const cursor = values.iterator()
+    return cursor.next() + cursor.next()
+}

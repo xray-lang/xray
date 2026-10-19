@@ -1,0 +1,9 @@
+import "../xir_p20_cell_cycles/worker" as linear
+import "./branch" as branch
+
+export fn run(shape: i64, mode: i64) -> fn(i64) -> i64 {
+    if (shape == 0) {
+        return linear.make(mode)
+    }
+    return branch.make_branch(mode)
+}

@@ -1,0 +1,3 @@
+import "./state" as state
+fn relay()->i64 {return state.mutableI64Read()}
+export fn run()->i64 {return await go relay()}

@@ -124,7 +124,7 @@ static void class_lifetime_round(XrXirInstance *instances[2],uint32_t entry,XrXi
     }
     for(unsigned i=0;i<2;++i) CHECK(xr_xir_instance_take_result(instances[i],&output[i])==XR_XIR_CALL_RETURNED);
 }
-int main(int argc, char **argv) {
+static int class_lifetime_normal_main(int argc, char **argv) {
     CHECK(argc == 2); unsigned backend = 0;
     while (backend < 4 && strcmp(argv[1], class_backends[backend])) ++backend;
     CHECK(backend < 4);
@@ -175,3 +175,7 @@ int main(int argc, char **argv) {
         class_backends[backend],class_callbacks[0],class_callbacks[1]);
     return 0;
 }
+
+#ifndef XR_CLASS_LIFETIME_RESOURCE_MAIN
+int main(int argc, char **argv) { return class_lifetime_normal_main(argc, argv); }
+#endif

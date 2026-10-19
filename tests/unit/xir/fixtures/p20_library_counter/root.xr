@@ -1,0 +1,2 @@
+import {next} from "./library"
+export fn advance() -> i64 { return next() }

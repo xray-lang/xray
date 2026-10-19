@@ -1,0 +1,3 @@
+var state:i64=7
+fn read()->i64{return state}
+export fn run()->i64{return await go read()}

@@ -1,0 +1,17 @@
+import "../xir_p20_atomic_permissions/state" as state
+import "./worker" as worker
+export fn constI64()->i64 {return await go state.fixedI64Read()}
+export fn aliasI64()->i64 {return await go state.aliasI64Read()}
+export fn rootParamI64()->i64 {return await go state.readI64Param(state.currentI64())}
+export fn rootAliasI64()->i64 {const value=state.currentI64();return await go state.readI64Param(value)}
+export fn workerLocalI64()->i64 {return await go worker.localI64()}
+export fn pureLibrary()->i64 {return await go state.pure(40)}
+export fn constF64()->f64 {return await go state.fixedF64Read()}
+export fn rootParamF64()->f64 {return await go state.readF64Param(state.currentF64())}
+export fn constBool()->bool {return await go state.fixedBoolRead()}
+export fn rootParamBool()->bool {return await go state.readBoolParam(state.currentBool())}
+export fn holdFixedI64()->Atomic<i64> {return state.fixedI64Handle()}
+export fn holdI64()->Atomic<i64> {return state.currentI64()}
+export fn holdF64()->Atomic<f64> {return state.currentF64()}
+export fn holdBool()->Atomic<bool> {return state.currentBool()}
+export fn rebindI64() {state.resetI64()}

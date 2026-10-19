@@ -1,0 +1,23 @@
+var mutableI64=Atomic<i64>(0)
+const fixedI64=Atomic<i64>(40)
+const aliasI64=fixedI64
+var mutableF64=Atomic<f64>(1.5)
+const fixedF64=Atomic<f64>(40.5)
+var mutableBool=Atomic<bool>(false)
+const fixedBool=Atomic<bool>(true)
+export fn fixedI64Read()->i64 {return fixedI64.load(Ordering.Acquire)}
+export fn aliasI64Read()->i64 {return aliasI64.load(Ordering.Acquire)}
+export fn fixedI64Handle()->Atomic<i64> {return fixedI64}
+export fn mutableI64Read()->i64 {return mutableI64.load(Ordering.Acquire)}
+export fn currentI64()->Atomic<i64> {return mutableI64}
+export fn readI64Param(value:Atomic<i64>)->i64 {return value.load(Ordering.Acquire)}
+export fn resetI64() {mutableI64=Atomic<i64>(30)}
+export fn pure(value:i64)->i64 {return value+1}
+export fn fixedF64Read()->f64 {return fixedF64.load(Ordering.Acquire)}
+export fn mutableF64Read()->f64 {return mutableF64.load(Ordering.Acquire)}
+export fn currentF64()->Atomic<f64> {return mutableF64}
+export fn readF64Param(value:Atomic<f64>)->f64 {return value.load(Ordering.Acquire)}
+export fn fixedBoolRead()->bool {return fixedBool.load(Ordering.Acquire)}
+export fn mutableBoolRead()->bool {return mutableBool.load(Ordering.Acquire)}
+export fn currentBool()->Atomic<bool> {return mutableBool}
+export fn readBoolParam(value:Atomic<bool>)->bool {return value.load(Ordering.Acquire)}

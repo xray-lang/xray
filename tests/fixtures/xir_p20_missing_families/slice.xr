@@ -1,0 +1,5 @@
+export fn inspect() -> i64 {
+    var values: Array<i64> = [17, 25]
+    var view: const Slice<i64> = values[:]
+    return view[0] + view[1]
+}

@@ -1,0 +1,3 @@
+import "./state" as state
+fn nested()->i64 {return await go state.mutableI64Read()}
+export fn run()->i64 {return await go nested()}

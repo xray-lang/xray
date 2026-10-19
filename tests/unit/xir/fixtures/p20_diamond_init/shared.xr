@@ -1,0 +1,7 @@
+var count:i64=0
+var trace:string=""
+export fn mark(text:string)->i64{count=count+1;trace=trace+text;return count}
+var initialized:i64=mark("S")
+export fn shared()->i64{return initialized}
+export fn total()->i64{return count}
+export fn snapshot()->string{return trace}

@@ -1,0 +1,2 @@
+import {worker} from "./callee"
+export fn run()->string{return await go worker("A\0B")}

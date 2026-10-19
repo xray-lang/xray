@@ -1,0 +1,2 @@
+import {tick} from "./library"
+export fn rejected()->i64{return await go tick()}

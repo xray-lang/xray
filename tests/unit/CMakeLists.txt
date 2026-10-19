@@ -747,8 +747,8 @@ set(XIR_ARRAY_REORDER_CHECKED_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xi
 set(XIR_ARRAY_REORDER_GENERATED ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_array_reorder.c)
 add_custom_command(OUTPUT ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/generated
-    COMMAND $<TARGET_FILE:test_xir_source_arrays> ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
-    DEPENDS test_xir_source_arrays
+    COMMAND $<TARGET_FILE:test_xir_source_array_packets> ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
+    DEPENDS test_xir_source_array_packets
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/root.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/producer.xr
         ${CMAKE_SOURCE_DIR}/tests/fixtures/xir_array_source/bounds.xr
@@ -761,8 +761,8 @@ target_compile_definitions(test_xir_array_packet_vm PRIVATE XR_ARRAY_CHECKED_FIX
 target_compile_definitions(test_xir_array_packet_vm PRIVATE XR_ARRAY_BOUNDS_CHECKED_FIXTURE="${XIR_ARRAY_BOUNDS_CHECKED_GENERATED}"
     XR_ARRAY_REORDER_CHECKED_FIXTURE="${XIR_ARRAY_REORDER_CHECKED_GENERATED}")
 add_custom_command(OUTPUT ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED}
-    COMMAND $<TARGET_FILE:test_xir_array_packet_vm> ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED}
-    DEPENDS test_xir_array_packet_vm ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
+    COMMAND $<TARGET_FILE:test_xir_array_c_producer> ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED}
+    DEPENDS test_xir_array_c_producer ${XIR_ARRAY_CHECKED_GENERATED} ${XIR_ARRAY_BOUNDS_CHECKED_GENERATED} ${XIR_ARRAY_REORDER_CHECKED_GENERATED}
     VERBATIM)
 add_executable(test_xir_source_array_native xir/test_xir_source_array_native.c ${XIR_ARRAY_SOURCE_GENERATED} ${XIR_ARRAY_REORDER_GENERATED})
 target_link_libraries(test_xir_source_array_native PRIVATE xray_xir_scalar)
@@ -809,6 +809,15 @@ add_executable(test_xir_cleanup_mixed xir/test_xir_cleanup_mixed.c ${XIR_CLEANUP
 target_link_libraries(test_xir_cleanup_mixed PRIVATE xray_xir_vm)
 include(xir/mixed_lifecycle.cmake)
 include(xir/mixed_terminals.cmake)
+include(xir/mixed_observation.cmake)
+include(xir/mixed_class_lifetime.cmake)
+include(xir/mixed_library_counter.cmake)
+include(xir/mixed_root_permissions.cmake)
+include(xir/mixed_worker_controls.cmake)
+include(xir/mixed_string_worker.cmake)
+include(xir/mixed_diamond.cmake)
+include(xir/mixed_worker_waits.cmake)
+include(xir/mixed_deep_recursion.cmake)
 if(MSVC)
     foreach(cleanup_host IN ITEMS test_xir_cleanup_source test_xir_cleanup_native test_xir_cleanup_mixed)
         target_compile_options(${cleanup_host} PRIVATE /O2 /Ob2 /Oy-)
@@ -4657,7 +4666,6 @@ include(xir/source_function_boundary.cmake)
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_retirement.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_read.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_final_proof.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/xir/effect_ordinary_environment.cmake")
 
 include(xir/cell_owner_source.cmake)
 
@@ -4844,3 +4852,5 @@ add_test(NAME test_xir_shared_interfaces_vectors COMMAND ${XRAY_PYTHON}
     ${CMAKE_CURRENT_LIST_DIR}/xir/derive_shared_interfaces_vectors.py)
 set_tests_properties(test_xir_shared_interfaces test_xir_shared_interfaces_vectors PROPERTIES
     TIMEOUT 120 LABELS "unit;xir;checked;independent;ownership")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/forin_full_runtime_fi.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/atomic_control_full_runtime_fi.cmake")

@@ -1,0 +1,2 @@
+import time
+export fn worker(seed:string)->string{time.sleep(7);return seed+"!tail"}

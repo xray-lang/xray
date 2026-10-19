@@ -1,0 +1,7 @@
+import {tick, pure} from "./library"
+export fn advance() -> i64 {
+    const before = tick()
+    const value = await go pure()
+    const after = tick()
+    return before * 100 + value * 10 + after
+}

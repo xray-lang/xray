@@ -1,0 +1,16 @@
+export fn make(mode: i64) -> fn(i64) -> i64 {
+    var callback: fn(i64) -> i64 = fn(value: i64) -> i64 { return value + 100 }
+    callback = fn(command: i64) -> i64 {
+        if (command == 0) {
+            callback = fn(value: i64) -> i64 { return value + 200 }
+            return 17
+        }
+        return 42
+    }
+    const original = callback
+    Coro.yield()
+    if (mode != 0) {
+        original(0)
+    }
+    return original
+}

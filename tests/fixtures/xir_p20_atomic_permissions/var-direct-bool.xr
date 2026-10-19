@@ -1,0 +1,2 @@
+import "./state" as state
+export fn run()->bool {return await go state.mutableBoolRead()}

@@ -1,0 +1,78 @@
+import "../xir_p20_iterators/worker" as original
+import "./worker" as library
+
+enum LoopError { Bad }
+
+fn count<T>(it: Iterator<T>) -> i64 {
+    var count = 0
+    for (value in it) { count = count + 1 }
+    return count
+}
+
+export fn make() -> Iterator<string> { return original.source() }
+
+export fn next(it: Iterator<string>) -> string {
+    var selected = "empty"
+    for (value in it) { selected = value; break }
+    print(801)
+    return selected
+}
+
+export fn has(it: Iterator<string>) -> bool {
+    var count = 0
+    for (value in it) { count = count + 1 }
+    print(802)
+    return count == 2
+}
+
+export fn nth(it: Iterator<string>, mode: i64) -> string {
+    defer { print(810) }
+    if (mode == 0) {
+        for (value in it) { return value }
+    }
+    if (mode == 1) {
+        var joined = ""
+        for (value in it) { joined = joined + value; continue }
+        return joined
+    }
+    if (mode == 2) {
+        try { for (value in it) { throw LoopError.Bad } }
+        catch (error) { return "caught" }
+    }
+    if (mode == 3) {
+        for (value in it) { const data = ["only"]; return data[2] }
+    }
+    if (mode == 4) {
+        const inner = original.source()
+        for (outer in it) {
+            for (value in inner) { break }
+            print(820)
+            return outer
+        }
+    }
+    if (mode == 5) {
+        for (outer in it) {
+            for (value in it) { break }
+            print(820)
+            return outer
+        }
+    }
+    if (mode == 6) {
+        var actions: Array<fn() -> string> = []
+        for (value in it) { actions.push(fn() -> string { return value }) }
+        return actions[0]() + actions[1]()
+    }
+    if (mode == 7) {
+        if (count(it) == 2) { return "generic" }
+    }
+    if (mode == 8) {
+        try { for (value in library.failed()) {} }
+        catch (error) { return "thrown" }
+    }
+    if (mode == 9) {
+        var seen = 0
+        for (value in library.units()) { const held = value; seen = seen + 1 }
+        if (seen == 2) { return "unit" }
+    }
+    return "empty"
+}

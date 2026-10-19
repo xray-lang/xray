@@ -1,0 +1,3 @@
+export fn inspect() -> i64 {
+    return 42
+}

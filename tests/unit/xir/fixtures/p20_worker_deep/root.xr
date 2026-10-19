@@ -1,0 +1,2 @@
+import {worker} from "./callee"
+export fn run(depth:i64)->i64{return await go worker(depth)}

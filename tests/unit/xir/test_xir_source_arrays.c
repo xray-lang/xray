@@ -20,7 +20,7 @@
 #include "xir_source_array_cases.h"
 #include "xir_source_array_reordering_cases.h"
 #include "xir_source_array_pipeline.h"
-static void source_array_original(const char *checked_output, const char *bounds_output) {
+static void source_array_original(const char *checked_output, const char *bounds_output, bool execute) {
     SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
@@ -68,11 +68,13 @@ static void source_array_original(const char *checked_output, const char *bounds
         CHECK(fwrite(packet.bytes, 1, packet.length, file) == packet.length && fclose(file) == 0);
     }
     xr_xir_compile_checked_packet_free(&packet);
-    XrXirArtifact *lowered = source_array_lower(checked);
-    uint32_t functions[ARRAY_FUNCTION_COUNT]; source_array_find(xr_xir_compile_artifact_module(lowered), functions);
-    XrXirProgram *program = NULL;
-    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
-    source_array_program_cases(program, functions); program = NULL;
+    if (execute) {
+        XrXirArtifact *lowered = source_array_lower(checked);
+        uint32_t functions[ARRAY_FUNCTION_COUNT]; source_array_find(xr_xir_compile_artifact_module(lowered), functions);
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
+        source_array_program_cases(program, functions); program = NULL;
+    } else xr_xir_compile_artifact_free(checked);
     CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
     request.session = session; request.entry_path = XR_ARRAY_SOURCE_FIXTURES "/bounds.xr";
     CHECK(xr_xir_compile_source_check(&request, &result, &diagnostic, NULL) == XR_XIR_OK);
@@ -84,15 +86,18 @@ static void source_array_original(const char *checked_output, const char *bounds
         CHECK(fwrite(packet.bytes, 1, packet.length, file) == packet.length && fclose(file) == 0);
     }
     xr_xir_compile_checked_packet_free(&packet);
-    lowered = source_array_lower(checked);
-    uint32_t entry = xr_xir_compile_artifact_module(lowered)->declarations->entry_function;
-    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
-    source_array_sticky_bounds(program, entry); program = NULL;
+    if (execute) {
+        XrXirArtifact *lowered = source_array_lower(checked);
+        uint32_t entry = xr_xir_compile_artifact_module(lowered)->declarations->entry_function;
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
+        source_array_sticky_bounds(program, entry); program = NULL;
+    } else xr_xir_compile_artifact_free(checked);
     source_fixture_owner_free(&compiler);
-    puts("Source Array VM: golden, COW, root rebinding, snapshots, result ownership and physical release passed");
+    if (execute) puts("Source Array VM: golden, COW, root rebinding, snapshots, result ownership and physical release passed");
 }
 
-static void source_array_reordering(const char *checked_output, bool query_only) {
+static void source_array_reordering(const char *checked_output, bool query_only, bool execute) {
     SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     XrCompilerSession *session = NULL;
     CHECK(xr_compile_session_new(compiler.context.resources, &session) == XR_COMPILER_SESSION_OK && session);
@@ -140,18 +145,23 @@ static void source_array_reordering(const char *checked_output, bool query_only)
         CHECK(fwrite(packet.bytes, 1, packet.length, file) == packet.length && fclose(file) == 0);
     }
     xr_xir_compile_checked_packet_free(&packet);
-    XrXirArtifact *lowered = source_array_lower(checked);
-    uint32_t functions[REORDER_FUNCTION_COUNT]; source_array_reorder_find(xr_xir_compile_artifact_module(lowered), functions);
-    XrXirProgram *program = NULL;
-    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
-    source_array_reordering_program_cases(program, functions);
+    if (execute) {
+        XrXirArtifact *lowered = source_array_lower(checked);
+        uint32_t functions[REORDER_FUNCTION_COUNT]; source_array_reorder_find(xr_xir_compile_artifact_module(lowered), functions);
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
+        source_array_reordering_program_cases(program, functions);
+    } else xr_xir_compile_artifact_free(checked);
     source_fixture_owner_free(&compiler);
-    puts("Source Array reordering VM: independent program, transaction, suspension and physical release passed");
+    if (execute) puts("Source Array reordering VM: independent program, transaction, suspension and physical release passed");
 }
-int main(int argc, char **argv) {
+static int source_array_main(int argc, char **argv) {
     CHECK(argc == 1 || argc == 4 || (argc == 2 && !strcmp(argv[1],"--query-only")));
-    if(argc == 2){source_array_reordering(NULL,true);return 0;}
-    source_array_original(argc == 4 ? argv[1] : NULL, argc == 4 ? argv[2] : NULL);
-    source_array_reordering(argc == 4 ? argv[3] : NULL,false);
+    if(argc == 2){source_array_reordering(NULL,true,false);return 0;}
+    source_array_original(argc == 4 ? argv[1] : NULL, argc == 4 ? argv[2] : NULL, true);
+    source_array_reordering(argc == 4 ? argv[3] : NULL,false,true);
     return 0;
 }
+#ifndef XR_SOURCE_ARRAY_CUSTOM_MAIN
+int main(int argc, char **argv) { return source_array_main(argc, argv); }
+#endif

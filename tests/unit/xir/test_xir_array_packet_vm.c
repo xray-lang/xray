@@ -18,7 +18,7 @@
 #include "xir_source_array_cases.h"
 #include "xir_source_array_reordering_cases.h"
 #include "xir_source_array_pipeline.h"
-static void source_array_bounds_packet(SourceFixtureOwner *compiler, const char *output) {
+static void source_array_bounds_packet(SourceFixtureOwner *compiler, const char *output, bool execute) {
     FILE *file = fopen(XR_ARRAY_BOUNDS_CHECKED_FIXTURE, "rb"); CHECK(file);
     CHECK(fseek(file, 0, SEEK_END) == 0);
     long size = ftell(file); CHECK(size > 0 && size < 1048576 && fseek(file, 0, SEEK_SET) == 0);
@@ -36,11 +36,14 @@ static void source_array_bounds_packet(SourceFixtureOwner *compiler, const char 
         CHECK(fwrite(source.text, 1, source.length, file) == source.length && fclose(file) == 0);
     }
     xr_xir_compile_c_source_free(&source);
-    XrXirProgram *program = NULL;
-    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
-    source_array_sticky_bounds(program, entry); program = NULL;
+    if (execute) {
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
+        source_array_sticky_bounds(program, entry); program = NULL;
+    } else xr_xir_compile_artifact_free(lowered);
+
 }
-static void source_array_original_packet(const char *output) {
+static void source_array_original_packet(const char *output, bool execute) {
     SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     FILE *file = fopen(XR_ARRAY_CHECKED_FIXTURE, "rb"); CHECK(file);
     CHECK(fseek(file, 0, SEEK_END) == 0);
@@ -71,20 +74,22 @@ static void source_array_original_packet(const char *output) {
         CHECK(fputs("};\n", file) >= 0 && fclose(file) == 0);
     }
     xr_xir_compile_c_source_free(&source);
-    XrXirProgram *program = NULL;
-    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
-    source_array_program_cases(program, functions); program = NULL;
-    source_array_bounds_packet(&compiler, output);
+    if (execute) {
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
+        source_array_program_cases(program, functions); program = NULL;
+    } else xr_xir_compile_artifact_free(lowered);
+    source_array_bounds_packet(&compiler, output, execute);
     if (output) {
         file = fopen(output, "rb"); CHECK(file && fseek(file, 0, SEEK_END) == 0);
         long emitted_bytes = ftell(file); CHECK(emitted_bytes > 0 && emitted_bytes < 1048576 && fclose(file) == 0);
         printf("Array original plus bounds C: %ld bytes (cap 1048576)\n", emitted_bytes);
     }
     source_fixture_owner_free(&compiler);
-    puts("Parser-free Array Checked consumer matched independent expectations and generated native C");
+    if (execute) puts("Parser-free Array Checked consumer matched independent expectations and generated native C");
 }
 
-static void source_array_reordering_packet(const char *output) {
+static void source_array_reordering_packet(const char *output, bool execute) {
     SourceFixtureOwner compiler = {0}; source_fixture_owner_new(&compiler);
     FILE *file = fopen(XR_ARRAY_REORDER_CHECKED_FIXTURE, "rb"); CHECK(file);
     CHECK(fseek(file, 0, SEEK_END) == 0);
@@ -116,14 +121,19 @@ static void source_array_reordering_packet(const char *output) {
     }
     printf("Array reorder generated C: %zu bytes (cap 1048576)\n", source.length);
     xr_xir_compile_c_source_free(&source);
-    XrXirProgram *program = NULL;
-    CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
-    source_array_reordering_program_cases(program, functions);
+    if (execute) {
+        XrXirProgram *program = NULL;
+        CHECK(xr_xir_compile_vm_program_take(&lowered, &program) == XR_XIR_OK && !lowered);
+        source_array_reordering_program_cases(program, functions);
+    } else xr_xir_compile_artifact_free(lowered);
     source_fixture_owner_free(&compiler);
 }
-int main(int argc, char **argv) {
+static int array_packet_vm_main(int argc, char **argv) {
     CHECK(argc == 1 || argc == 3);
-    source_array_original_packet(argc == 3 ? argv[1] : NULL);
-    source_array_reordering_packet(argc == 3 ? argv[2] : NULL);
+    source_array_original_packet(argc == 3 ? argv[1] : NULL, true);
+    source_array_reordering_packet(argc == 3 ? argv[2] : NULL, true);
     return 0;
 }
+#ifndef XR_ARRAY_PACKET_CUSTOM_MAIN
+int main(int argc, char **argv) { return array_packet_vm_main(argc, argv); }
+#endif

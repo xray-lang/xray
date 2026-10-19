@@ -1,3 +1,4 @@
+include_guard(GLOBAL)
 add_executable(test_xir_mixed_iterator_producer xir/test_xir_mixed_iterator_producer.c)
 target_link_libraries(test_xir_mixed_iterator_producer PRIVATE xray_xir_source xray_xir_cgen)
 target_compile_definitions(test_xir_mixed_iterator_producer PRIVATE

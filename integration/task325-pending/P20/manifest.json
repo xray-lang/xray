@@ -1,0 +1,74 @@
+{
+  "incoming": "5e33ec704f2cee7772476f44a0b2d0d61fbd05a6",
+  "decisions": [
+    {
+      "path": "tests/fixtures/xir_mixed_terminals/root.xr",
+      "preserved": "integration/task325-pending/P20/tests/fixtures/xir_mixed_terminals/root.xr",
+      "sha256": "f3d231afefd8a777b969ed1ce89ddf9d97a90e06e631def19ff3579ffa1e0f91",
+      "reason": "Current owned packet, specialization and runtime/late-value observations retained. Historical expanded oracle kept as unfinished source for porting."
+    },
+    {
+      "path": "tests/unit/xir/fixtures/p20_retained_class/callee.xr",
+      "preserved": "integration/task325-pending/P20/tests/unit/xir/fixtures/p20_retained_class/callee.xr",
+      "sha256": "cd2bc8df39caecb063132c0d536b2fb6ae0441ed0dec79f680ad1d1f53d01e90",
+      "reason": "Current owned packet, specialization and runtime/late-value observations retained. Historical expanded oracle kept as unfinished source for porting."
+    },
+    {
+      "path": "tests/unit/xir/fixtures/p20_retained_class/root.xr",
+      "preserved": "integration/task325-pending/P20/tests/unit/xir/fixtures/p20_retained_class/root.xr",
+      "sha256": "25f51a4ee74f2d0684db3bdec66719673f6ae200bd035d976a5e9f3b0867d446",
+      "reason": "Current owned packet, specialization and runtime/late-value observations retained. Historical expanded oracle kept as unfinished source for porting."
+    },
+    {
+      "path": "tests/unit/xir/mixed_terminals.cmake",
+      "preserved": "integration/task325-pending/P20/tests/unit/xir/mixed_terminals.cmake",
+      "sha256": "3a03b6ddfb0e8f5adda7a2212a0b61a83de0cfe642e7d461550ea45617db3d7a",
+      "reason": "Current owned packet, specialization and runtime/late-value observations retained. Historical expanded oracle kept as unfinished source for porting."
+    },
+    {
+      "path": "tests/unit/xir/test_xir_mixed_callback_boundary.c",
+      "preserved": "integration/task325-pending/P20/tests/unit/xir/test_xir_mixed_callback_boundary.c",
+      "sha256": "591ab2f8ead1de1c34718f659559f4be2bd71e6d24b11c5ac20cd4bc0cfb379a",
+      "reason": "Current owned packet, specialization and runtime/late-value observations retained. Historical expanded oracle kept as unfinished source for porting."
+    },
+    {
+      "path": "tests/unit/xir/test_xir_mixed_class_lifetime.c",
+      "preserved": "integration/task325-pending/P20/tests/unit/xir/test_xir_mixed_class_lifetime.c",
+      "sha256": "fdf4af62cd28e9f36ea96bf5301726e8d5a5ac88e1a048315547bb88f3a6b0fb",
+      "reason": "Current owned packet, specialization and runtime/late-value observations retained. Historical expanded oracle kept as unfinished source for porting."
+    },
+    {
+      "path": "tests/unit/xir/test_xir_mixed_class_producer.c",
+      "preserved": "integration/task325-pending/P20/tests/unit/xir/test_xir_mixed_class_producer.c",
+      "sha256": "3e95926ed3040a0e68706b82719ddc66839b187cc58c7ba5bd514e9cffa58a10",
+      "reason": "Current owned packet, specialization and runtime/late-value observations retained. Historical expanded oracle kept as unfinished source for porting."
+    },
+    {
+      "path": "tests/unit/xir/test_xir_mixed_iterator_lifetime.c",
+      "preserved": "integration/task325-pending/P20/tests/unit/xir/test_xir_mixed_iterator_lifetime.c",
+      "sha256": "e22d6bea47bdcc8b3ab1ebe3e4945d1a423a09d0e7382ceeb49996c7e2098ac5",
+      "reason": "Current owned packet, specialization and runtime/late-value observations retained. Historical expanded oracle kept as unfinished source for porting."
+    },
+    {
+      "path": "tests/unit/xir/test_xir_mixed_iterator_producer.c",
+      "preserved": "integration/task325-pending/P20/tests/unit/xir/test_xir_mixed_iterator_producer.c",
+      "sha256": "c2c7eedf23c1238cc3bdfd8a4e532cf185c9374a3a332c5a2b9a9eac6beed622",
+      "reason": "Current owned packet, specialization and runtime/late-value observations retained. Historical expanded oracle kept as unfinished source for porting."
+    },
+    {
+      "path": "tests/unit/xir/test_xir_mixed_terminal_producer.c",
+      "preserved": "integration/task325-pending/P20/tests/unit/xir/test_xir_mixed_terminal_producer.c",
+      "sha256": "249a473ad191013c4588d1cf0c784280ce9d31ccfd4b90ce3ebda7245fc48505",
+      "reason": "Current owned packet, specialization and runtime/late-value observations retained. Historical expanded oracle kept as unfinished source for porting."
+    },
+    {
+      "path": "tests/unit/xir/test_xir_mixed_terminals.c",
+      "preserved": "integration/task325-pending/P20/tests/unit/xir/test_xir_mixed_terminals.c",
+      "sha256": "2302a00ea88ed2f226bc4238c19d50a00e7644716b2463424d2a91d059b8dd83",
+      "reason": "Current owned packet, specialization and runtime/late-value observations retained. Historical expanded oracle kept as unfinished source for porting."
+    }
+  ],
+  "registration_union": "Reused current canonical callback and iterator registrations; include guards prevent duplicate target declarations",
+  "status": "CURRENT_ORACLES_PRESERVED_HISTORICAL_EXPANSIONS_PENDING_PORT",
+  "qualification": "Configuration passes. Expanded test code includes incomplete current-API ports; no runtime PASS or full qualification claimed."
+}

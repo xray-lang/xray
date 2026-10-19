@@ -1,0 +1,3 @@
+import "./state" as state
+fn worker()->i64 {return state.readI64Param(state.currentI64())}
+export fn run()->i64 {return await go worker()}
