@@ -1,0 +1,2450 @@
+{
+  "repository_databases": 24,
+  "branch_ref_count": 303,
+  "rows": [
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/intake/325-p10-229ccf91-20261018",
+      "head": "229ccf91cd5054d0c09ea9ea2bbda0aa126f29d9",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/integration/325-all-reception-20261018",
+      "head": "d3a11fe84c625e69c834ce105ba1842f88b40741",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/integration/325-central-freeze-20261018",
+      "head": "f81bbda51e40622de29eaef74f205b3857192a89",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/integration/325-development-20261018",
+      "head": "f81bbda51e40622de29eaef74f205b3857192a89",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/integration/325-handoff-all-20261019",
+      "head": "18547e3f9026d3bded2e79ad538f3faec9439847",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/integration/325-p15-reception-20261018",
+      "head": "fc01a6862ada90b7c949ee3c6ad1cfea96d6153a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-continuous-core-20261018",
+      "head": "ef1f6b4030ab9223858351c3a36c474f8caebbbe",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-continuous-features-20261018",
+      "head": "8b1aa140fa4350a875344f3fffd543ae24379d8d",
+      "C08_descendant": true,
+      "disposition": "EXCLUDED_PLATFORM_REJECTED_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-continuous-runtime-20261018",
+      "head": "4fb87713c97e983256f8c2a19a6fd15b27137cf2",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-json-decode-core-20261016",
+      "head": "d3e88d4dd5ff43f5e7f5dca59fff8fb79ab59226",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p00-20261013",
+      "head": "e16797c62636f1d138583ead18d234c86a3cde6e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p01-20261013",
+      "head": "bc443bc159db137e6c25aab6dab15ecdade52b4b",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p02-20261013",
+      "head": "2fc320507b3757f175db59424c11f08edf3b07f7",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p03-20261013",
+      "head": "2a6c71abb187ca26938c58bb9cf47ae48f5f9c1c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p04-20261013",
+      "head": "3eda9f99d464e0fa9ce1c1bf90c0df511ef89d23",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p05-20261013",
+      "head": "5c234930201a0d95a82b28b7a4ac3ec717250acb",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p05-dev484-20261018",
+      "head": "2266ae37944b0f3401d0fae7a89099d4efacd55c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p06-20261013",
+      "head": "47692fa70618fd8cc4e75fd126787e361efee740",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p06-226-20261018",
+      "head": "17a47a120bed820c3b3d817bef37bcc4a00c791d",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-20261013",
+      "head": "5b6f4222990ce651cab5add1144c5cde300b862a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-abort-consumer-20261016",
+      "head": "4d92244a6dacb5f2c93f8fe59504edb3ec84882f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-call-carriers-20261016",
+      "head": "bd7eb8e2a75495d67f03998e94a75013dad7b515",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-call-frontier-20261015",
+      "head": "7d65ab4cfd26e10696da7bd8d929c2d615428885",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-cell-range-shapes-20261016",
+      "head": "c411b72eab9a951e74dd0931e54787c2081b5c16",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-class-get-type-20261016",
+      "head": "62bfaae960e4d68201dab181e6d552743fffb2a4",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-class-head-joint-20261016",
+      "head": "05f15b9fc2526ee0471a2677d782a8467a0d237e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-class-init-followup-20261016",
+      "head": "4e49e18e58026ec0e5559293d3754e5ff3e839f2",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-class-init-receiving-20261016",
+      "head": "a120760242ef34781f2a3ad94684dfd31e8f8100",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-class-native-20261016",
+      "head": "4223910fc300f0b862202e74654a2fc4cabe9a81",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-class-native-naming-20261016",
+      "head": "30e7c05304060e1d8ed300fb3b98878106f7339a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-class-receiving-20261016",
+      "head": "1e272f66daadcec4fe95dc0306c94093e5953cf5",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-class-ref-receiving-20261016",
+      "head": "9e4c68a3fd364b47d94b5dc21d026cff8a339b99",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-class-storage-physical-20261016",
+      "head": "b3f2fb134bd548b9da529d7b1a814ff8b42ca78a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-class-storage-receive-preflight-20261016",
+      "head": "4bf7ff8d8ec7eae55ed0b0359e7cc501ceb367cf",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-class-storage-thread-20261016",
+      "head": "f38b41373b2bc0d24f3bf6c17628265f26363791",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-context-preflight-20261016",
+      "head": "4058c8cfcf71bf352cb2476f2b12f7d7f62d0db9",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-emitter-lf-20261016",
+      "head": "33df838f5658b7717e5ced007a82410fca4a9713",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-final-owner-preflight-20261015",
+      "head": "c746ed44489278f8cde758ecb8c398b245183af5",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-head-dimensions-20261016",
+      "head": "72c9ef5077bdc5cedba4f1eae40ab0685bd8fff1",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-head-dimensions2-20261016",
+      "head": "f6b17bed8611b1200c9dca3fe7ee9ff0357c9df7",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-head-existing2-20261016",
+      "head": "cfb71f83460f920d7b8bfb2650b8e9fe62189c12",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-head-formals-20261016",
+      "head": "ea047bc77702dcde4a1b78a5cf08c3b2c6c14634",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-head-results-20261016",
+      "head": "46d6c47c17f4dbe4d71f57fce49620f249e118d4",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-history-domain-preflight-20261016",
+      "head": "a2944b53e181d1fa071703a6959dcab57d55295a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-history-preflight-20261016",
+      "head": "46ae04a8437265cb6cf016f9964b5365aae9c0fb",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-history-scope-preflight-20261016",
+      "head": "dd50aa862896ca64703edbd74d60e735a6a05e42",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-native-class-get-type-20261016",
+      "head": "f700c261f39e29f5dcbba7bdc503422881e623f8",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-ordinary-retirement-20261016",
+      "head": "a8b7c8d39a31cdff6ace328b76762164b5451c6a",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-owned-root-runs-preflight-20261016",
+      "head": "82641337419121f8d85bb469bc0fc6c77ef4787f",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-p02-d2ba-preflight-20261016",
+      "head": "0f1850b9dad5d78b561f0c7aca7811cd89b27ccf",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-program-live-preflight-20261016",
+      "head": "942ddf7c42a9b42b1efe1139d097fc136ccd2b87",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-program-live-scope-preflight-20261016",
+      "head": "546a81de961dece467a4b0f8f3f0e431ca4ed5cb",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-root-contract-20261016",
+      "head": "66de4c1d460e8d3415d44d3d25c8d12bb59cd4e1",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-root-integer-guarded-20261016",
+      "head": "f3170804a4e611230cbfb71d83cc297173261d31",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-root-integer-preflight-20261016",
+      "head": "1158096382a01c303fea713b957b058553bf6b29",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-root-wire-20261015",
+      "head": "15b51dd5c643602fafc37011c868611f9367e174",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-seed-opcode-20261016",
+      "head": "b4e91735a4ed3deee0ea58ddd9c49eaa1b8320ba",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-seed-prefilter-20261016",
+      "head": "967fb9aa84b41af7144057c11c9f0bc3db7af43b",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-source-class-20261016",
+      "head": "f88c825b41f357ea0711b1a5924a7172d9b08f41",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-source-init-20261016",
+      "head": "57b409e4c13596c7b4fdb8104f6f66fe906a4685",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-source-string-20261016",
+      "head": "95aa5a68225604124e72545d60a58e68d1a540d8",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-struct-history-20261016",
+      "head": "11847988b9c2f3072642652037260a192d841a69",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-struct-private-receiving-20261016",
+      "head": "7547a284a5a57af889ff48acd3fe73dbe90d1572",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-type-receiving-preflight-20261016",
+      "head": "e64c054091e5151b86f37dd1c2bdd4aafe41c87d",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-typed-output-20261015",
+      "head": "a48b23bcb24b4de77c8ff4d54aeceb43d35f2e2d",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-visibility-consumer-20261016",
+      "head": "6462e38e4c1ea2add47d87a5851be378de440e41",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p07-visibility-receiving-20261016",
+      "head": "331d28e145149d51d517829b914d6abcd3bf250a",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p08-20261013",
+      "head": "03e0791c06f64cbf52f2312181d222e513dd7c84",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p09-20261013",
+      "head": "e72288ded032d1f738e1d9dbce508e6f33ed1039",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p09-consolidate-20261018",
+      "head": "d4d4faf5d84dd729a3129e7c0c8740230cfd43e8",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p09-effects-join-20261018",
+      "head": "8b2a2e27fef325d5dbcb39ab7efa124009126dd5",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p09-fc01-20261018",
+      "head": "58e094e9334b8ba8f84391e4925d302ad7b08e61",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p10-20261013",
+      "head": "540321a0da71fd4affa4b454273eda41bd015c22",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p11-20261013",
+      "head": "16d2edbe2fb711e00716b9dcccf8dc4f2b88f479",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p11-fc01-20261018",
+      "head": "bf6ee8f3901f03ab0d906cab80c112cf627dbce9",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p12-20261013",
+      "head": "b8f3214891685b479b7795c506f5e4304b85ca47",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p12-fc01-20261018",
+      "head": "3434ef82c1e260e7c86db095ea8721bdf3455a1b",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p12-handoff-adapter-20261019",
+      "head": "78c27a54ec1c80bb955338ce93f99f5efdc38ad4",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p13-20261013",
+      "head": "4f0eebd715d3801acbe647c064ffa7bc890ef786",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p13-checkpoint93-20261019",
+      "head": "4709902c5b063482f8959591c052b26ece32ba53",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p13-fc01-clock-20261018",
+      "head": "2aff6e216666a9f0e75bd5d4b1b343eee7c70abc",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p13-fc01-init-receivers-20261018",
+      "head": "b3f1a3c1a1581b65cd7daa3c62d842829d6caf61",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p13-fc01-receiver-facts-20261018",
+      "head": "b65bd5c05d9df244ad02617bce7e7c7fc14dfdf8",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p13-fc01-receivers-20261018",
+      "head": "efcf666c46c7275e45fbcac51e36aca0bf7d30b0",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p13-handoff-adapter-20261019",
+      "head": "2ae5276854708be467ca5ceafbdbe234f8e211d0",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p14-20261013",
+      "head": "994deab5aeefecaec66b956282c3b7006d3c74a5",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-20261013",
+      "head": "f5f05a9886b8549a2cd5e77e9709f778f8110fa7",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-alias-parser-20261016",
+      "head": "bf370cae9b8d155a138ae14bb608fa6dbfe41637",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-alias-spans-20261016",
+      "head": "371f2c638b016207510615eb38055a29a78a13ed",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-argument-spans-20261016",
+      "head": "86a45c60784f75eb38bca89df4df9ae2b16245e0",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-async-hierarchy-20261016",
+      "head": "221f194bde0c05b7e87c067ae2143bb90ace101a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-call-hierarchy-20261016",
+      "head": "2e24cc793efa1245e15d6cd110918631ff956278",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-call-signature-dependency-20261016",
+      "head": "54e2f3290bfcec8a1b2a117ccdbdc18dc1e7706f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-call-syntax-dependency-20261016",
+      "head": "c27589b6702ec6a91c8e8e5094d0e734a28fc536",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-cancel-ledger-20261016",
+      "head": "cf4a45e3a4fde7d961dbf510d018d40983534e38",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-cancel-state-20261016",
+      "head": "a000613f99444d1026a1a4d1be49b88a65dd5e90",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-cancel-state-test-20261016",
+      "head": "686397b8e292bb9199acdc57c37cbfc332e6ebd0",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-cleanup-call-body-20261017",
+      "head": "5d4fee4e72b0be7bdbce5c0afd31195e6b4caad8",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-cleanup-query-tests-20261017",
+      "head": "cd6c1efa1ce8f5141884fe590eebb1cb4140010e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-completion-resolve-20261017",
+      "head": "2b7c1b401f67ac193d3dbd6033c894342609293a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-consumer-fixtures-20261016",
+      "head": "2f0f9a4e22832fa4fc8550a259208c458793048e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-core-call-observations-20261016",
+      "head": "8b91b54a024d2e59cf0adf101549ab71e7128d42",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-diagnostic-queue-20261016",
+      "head": "8cccd6d97316254d915bd634d8a57c8879f68382",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-display-facts-20261016",
+      "head": "4218548bc74fdc2622ccf92bd382d58cce738b6f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-display-positions-20261015",
+      "head": "57527e24a5df30f60cb7c6c0daf833e67b43b8cf",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-document-notify-20261016",
+      "head": "257e94276080afadd114c58fde93174480e3347d",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-edit-task-20261017",
+      "head": "384712226ccf9423c152edf97d45695950fed3b3",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-enum-completion-20261018",
+      "head": "d890db0c6bd4e8d9d9f996f61696f2ef0036478d",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-envelope-20261016",
+      "head": "697c33db2bf680e34d8bb96099d3c8747320bc15",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-folding-task-20261016",
+      "head": "cbc871ef336609204baa459f21bdca8c12d950c7",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-frame-readiness-20261017",
+      "head": "a65146130fa4794334a9cde73547e406b6a21b62",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-generic-signature-20261016",
+      "head": "6e2e154106ff44d629cf48b24f59367a3e96d174",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-hover-closed-20261018",
+      "head": "8c30be3412b52ee18942bbab7ed73ddfe37b768b",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-hover-retirement-20261018",
+      "head": "e56126e01291139ef7eec3702601678539fd2e6f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-import-rename-20261017",
+      "head": "fb2ee997afb18d88268261b0b08556c4443c958e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-import-selector-kind-20261017",
+      "head": "feaa37d8dc8638550274229d2e83de43e6e7d891",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-import-source-20261017",
+      "head": "4887be9d3acb312a386b66b5e4ec6f8ec2fe8eb2",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-import-usage-20261017",
+      "head": "2428171a6731fa043bfa84a27c7b635c95d7385c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-inlay-json-20261016",
+      "head": "850b9a9fe14b164a9b5e36135344e2fa78aa34c9",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-interface-uses-20261016",
+      "head": "f9701adaae700fcd67d9007e0e1729e15454f11e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-json-clone-20261016",
+      "head": "4c7166a8623a9d85702fe5aa3ef9f1b0044b1d74",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-json-decode-20261016",
+      "head": "711d9add46e32fdaa05eb7005a160f5071bdbf33",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-lens-task-20261016",
+      "head": "919fcb94771fddd82e1ae5896f783c80b13ba25c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-links-task-20261016",
+      "head": "8cfa67fda7ae238f814710e695f3eb4b84de7b71",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-native-call-dependency-20261016",
+      "head": "e921eb88390dd55994449cc33c5372aba4adcce9",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-native-signature-20261016",
+      "head": "670e1d63a0d931ee09c1f6039dff67759648fff6",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-nav-worker-resources-20261016",
+      "head": "4b849d59826b9cf883a1588568bdd6a118141fd2",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-navigation-admission-20261016",
+      "head": "d3ab1cacc64aea231c06afdcacb92306f0512274",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-owned-notification-20261017",
+      "head": "05bbf0922213b2fdb15270c0b5486db60a1cf060",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-parameter-hints-20261016",
+      "head": "fbf21336884ea3a5052efaaa1c0b416809f8232e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-parameter-json-20261016",
+      "head": "ea95a997f7d21ec733ef5d845a72dd3b1f82756e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-parser-array-oracle-20261017",
+      "head": "e07d19e1b9afbf2c823e23c27633c8b496871d2b",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-parser-diagnostic-registration-20261017",
+      "head": "9acada846ad1f34356d351fa00f254bc329e290b",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-parser-diagnostics-20261017",
+      "head": "7610ce442c1955f6bc5120ce82a25b451235efdd",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-parser-failure-owner-20261017",
+      "head": "ce5a0b752ccecc2591e2e7988da045bee9f3df6c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-pattern-rename-20261015",
+      "head": "ca54f6d5c78016b9a26655bf5bf8d25952f2029a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-query-roots-20261016",
+      "head": "960e78d17ceff5cf1ddec038dd55104e75e3c331",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-reexport-links-20261015",
+      "head": "f7e8fa8f2d8e6e8a49ab050d139fd9004528c9c1",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-rename-admission-limit-20261017",
+      "head": "76b531f006c7feae1a9dd7214982e2ea2fb29b18",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-rename-cutover-20261017",
+      "head": "01519bb91bb6fa21519d2fba638d273f9598ce18",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-rename-faults-20261016",
+      "head": "48c55ad1f6180612cae01d21de1a034c7ca085b9",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-rename-task-20261017",
+      "head": "31f31059805ef0c4dcb22817075e75f4d1eddeff",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-resolve-errors-20261017",
+      "head": "bd9705fd8f3361c08dcd85e5a37c2c5ce4ea468f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-semantic-task-20261016",
+      "head": "bbb81ba66565dee412c9699b9192f8b8345026dd",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-shared-json-20261016",
+      "head": "93c48432e9aa521c2e6d5a4f86df158106d69f21",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-signature-source-20261016",
+      "head": "799c77fb03b81a36c1575c530d89f028ec832d0c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-source-calls-20261016",
+      "head": "ec31aa4fd47759311cf6d172c95fb4ab7a3496b1",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-source-cancel-20261016",
+      "head": "3461d9b43e7c80af58be8cf59deccf303dd09f2d",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-source-corpus-20261016",
+      "head": "19d3e04d116e5e41b72aaf6d33bdc47a9245025e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-source-function-limits-20261015",
+      "head": "ffb2ed29cf272aa73324c0565bae2f23234d010b",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-source-types-20261016",
+      "head": "99c9e9f4e499552c3f1382e547d1b49cbbf0ee62",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-syntax-task-20261017",
+      "head": "3f01d492af0d44a7d64523a2366d801d3522c6ca",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-task-budget-20261016",
+      "head": "0d1dea29a6b12d0ac88fadb1137d9ec724a3083f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-task-evidence-20261016",
+      "head": "0bcd6de09d17a0c5efef28f92ae41494921ea12d",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-type-handlers-20261016",
+      "head": "81fc142aeb157ac8a371cd602bf7efd2b6fa014b",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-type-hints-20261016",
+      "head": "6a13527b920ad1416594f37be7cd4ea4f739f7ee",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-type-hints-fixtures-20261016",
+      "head": "bd8d9da52cc707cc55370b935d7255fc08511946",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-type-hints-ledger-20261016",
+      "head": "20df712db92ef260c1974ccbbedee8b2917c35e3",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-type-observations-20261016",
+      "head": "623242753ad4dfdd903565c37e823a087b8e4da3",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p15-workspace-symbol-task-20261017",
+      "head": "0a5dfbfdd72fd7a29664bba913c4507e71207495",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p16-20261013",
+      "head": "fa8077c9bb152f678b7941290170f0e7df5ba599",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p16-consumers-3cd-20261019",
+      "head": "839cdf51f4aa8f0b779e159c039866f8cdacfdc3",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p17-20261013",
+      "head": "2594208dccdcfcf59e4e58c02ac953cec31a2af8",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p17-dev484-20261018",
+      "head": "3d4cb6c2abb64e776e78d5ae17315749017cd6f3",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p17-sdk-install-d9-20261018",
+      "head": "c6bd7abf10c5629cf73d1f41f590c5791e12822c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p17-sdk-repair-6d675-20261018",
+      "head": "d03802b9f9b80cb4bbaffae0375655744e305738",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p18-20261013",
+      "head": "85bf9a90e0d6f791750e945c4bf58481d46d0a0f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-20261013",
+      "head": "e1b3eeb8c7e27916540dbed54893ef0fce41790a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-active-plan-close-fixed",
+      "head": "ea31439579b79f4a8d6c5002b98a9a2bbbe781aa",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-array-format-storage-fixed",
+      "head": "ebb117a6fe3268edc7798a6109c0aef96afa0c09",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-array-print-fixed",
+      "head": "9b1e33fb98710033054bd86a2433f313ccdfa64c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-await-timeout-fixed",
+      "head": "97d2e5f875416d8ca76210e77dfebb831c3c85be",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-borrowed-views",
+      "head": "1e2037e67e0db32a134a58d9be62689dbbfcd318",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-borrowed-views-fixed",
+      "head": "cb04b3cc17c1a7c947e8981f229afc6d467d75a4",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-buffer-allocation-fixed",
+      "head": "8917e6b5b7cc995c02911f0f6d4693463180431e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-byte-pod-fixed",
+      "head": "5c1bd15ff96e8715fb62f82570ebdc2b6d846ec6",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-callable-model-fixed",
+      "head": "9ea8bfac2485870dd502f7a8820382a7ae670720",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-canonical-map-diagnostic-fixed",
+      "head": "b4f633a0908dca10044879ed7f63870c1671b8d9",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-channel-timeout-fixed",
+      "head": "3202f28d0134aea339bd3b6bd96c00e512c5623f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-cluster-wire-fixed",
+      "head": "f821b2e4aeb2e457d5e8cd368972daafc7a42df2",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-collection-protocols-fixed",
+      "head": "47b007c616e4be8876e5c682d8bedb8a820a2769",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-complete-generics-fixed",
+      "head": "571ba6ac46a445668cade89e659f0cbe0dbbf37e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-complete-network-fixed",
+      "head": "6bf8379d3c0e52c008f802e331a40b6ec176a460",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-complete-traversal-fixed",
+      "head": "c8532e15925536e0633a926ecbf95e937ee821c2",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-coordination-fixed",
+      "head": "ec3947dcca7c11ae82b7dbf527f3e0938956bb1f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-coro-boundaries-fixed",
+      "head": "6a458e4c11c5944ad6478b3b820d2b76955308f2",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-declared-selectors-fixed",
+      "head": "6637a8884e89aeb467d645ddc7a3146d190a694b",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-descriptor-reexport-fixed",
+      "head": "ee10ff25ae1c2fce388af2c28e1b1feee81c9937",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-development-closure",
+      "head": "3602002eae0ffb798b52684938ee5237c87c245f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-display-surfaces-fixed",
+      "head": "fe42dc9fdc6b24fc9226909d070e4c90ad3e8e54",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-dylib-handle-fixed",
+      "head": "b29d3edd6daf3cbe399b083209ff9bc2c7bbc10a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-empty-call-unit-fixed",
+      "head": "bbf057b10055e41a5c01230f53caa5b7d57628c4",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-enum-surfaces-fixed",
+      "head": "242d6fd9669f3b625d2ed1922b818e12410f22ed",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-ffi-expectations-fixed",
+      "head": "bf900adc415ce0f96a2385bf28cafe9dfc72f2af",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-ffi-view-permissions-fixed",
+      "head": "6a3b562d91fa0779ee93286d3552a93429e02018",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-filesystem-io-fixed",
+      "head": "83ac0d47a485c0e41c212f350a0c4012806ef38a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-fixed-layout-numeric",
+      "head": "a2144da4fd14f7ed59f24d1db8a4c7a6c5429421",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-fixed-product-inputs",
+      "head": "b2852fea6294b983b748e6b07010c9509cc9a1b2",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-fixed-source-owner",
+      "head": "8e27c3154f9e20a5b85adac834723bbb9afef507",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-frame-release-fixed",
+      "head": "8bbf31427772e0a9245a5126144ce421cd6b8e86",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-full-audit-budget-fixed",
+      "head": "efa58e70ddcee5e4a548dea3da34e14203abe710",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-json-boundary-fixed",
+      "head": "c02ff4dec80e420b55e0707aecd70e31b08a084e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-library-boundaries-fixed",
+      "head": "8995db87db0ddfaba74fdbc2cf603ae56e22243a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-log-module-reachability-fixed",
+      "head": "5d141c4e61b43f9be59624f978cb251bd69cf7ff",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-map-boundaries-fixed",
+      "head": "e59c82647c4b991ecbef37dbb8d39eadeabd921f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-math-random-domain-fixed",
+      "head": "7bfcf32f6babdf7929887c5d1c8ca24ea51c844b",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-memory-primitives-fixed",
+      "head": "e528098de281560313d9a43de6eb4fddb3f45b0c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-mixed-array-fixed",
+      "head": "02bde70dec6ca748a9a9235fc0768f7a936927f9",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-model-inputs-fixed",
+      "head": "54ccebd575bb6d95be9b184844cbd2f011d35ae0",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-module-stack-fixed",
+      "head": "9638d22992fa896e502df3e178c393e8463bc9cd",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-named-channel-bodies-fixed",
+      "head": "cb9049ca81c9b1620276ca0948576ab889924236",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-net-function-reference-fixed",
+      "head": "f630c2a7bc2b840372caaaaff03b6781702c663a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-noarg-provider-fixed",
+      "head": "a79f7db9075e853b1b5a832541b5fd83c4ec6229",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-null-unwrap-fixed",
+      "head": "015d41debd32bc8a270e2442d396fd537b60bdfc",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-owned-text-fixed",
+      "head": "2e8c8baab0a4f537845c2857a6c423090c7c12e9",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-p09-map-borrow-input",
+      "head": "460622cf45c82ab0bc93be14d2f0ac3fce21bef6",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-p10-record-birth-fixed-input",
+      "head": "ef5ddba4f3e0180d30c88a20357ac4e815424d46",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-p10-record-shape-input",
+      "head": "a1780748fa7f72cd79e5f3037cdd089c8b64cfd0",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-p10-type-container-input",
+      "head": "d7a12cd9996af4c14d2db8730935434123699375",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-p12-decimal-fixed-input",
+      "head": "efa01c8b862a058abc3af8507e1b73e9ea24d758",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-p13-atomic-class-fixed-input",
+      "head": "8226027b58eb20fddb0232d8e287c5873e25f114",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-p13-literal-map-fixed-input",
+      "head": "55cecf9927cd1d8807adb063cfb0251a2f548525",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-p13-math-replay-input",
+      "head": "942d263ed983e86133a3ce346bf08d118ce97219",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-p13-rest-input-fixed",
+      "head": "e6bbcd70acc57cc12a2f1907f6ae98d48a28037d",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-parallel-api-fixed",
+      "head": "9c11ed547e4dedaeaf2d345a133c638dc2e8c037",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-parallel-workloads-fixed",
+      "head": "ea680cd8f4fd80e259a18959a8a00f88b8525090",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-plain-scope-fixed",
+      "head": "cb6c8d3c6f97636d453810028e0384a686ea7cab",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-plan-cleanup-fixed",
+      "head": "aa906734c3cb46958a0fc520a49dfc19c3aad842",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-recovery70",
+      "head": "07702acc9ffed476f1cb1a2c0596c9bddb5f9fbf",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-sdk-order-fixed",
+      "head": "e1b3eeb8c7e27916540dbed54893ef0fce41790a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-simd-vectors-fixed",
+      "head": "70a156ef822e069f2e45ff795f65c6c2fa7195f6",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-sleep-channel-fixed",
+      "head": "ee3ecb75ed424a32090f4eb4b97530db5e962870",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-source-history-fixed",
+      "head": "c555eeba309b9fad2be82ad8ec9878ab9ccd7235",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-string-members-acyclic-closures-fixed",
+      "head": "842031ff3efbf644ba6d83e3ef66ebbc18f7c4be",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-structural-calls-fixed",
+      "head": "a334d8820500488cc37ff2a8ccc0b17d4a3bf969",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-synchronization-fixed",
+      "head": "8d145383154e049fba2678daa39b7f5f7ac4dcda",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-system-query-fixed",
+      "head": "cfcf02da124cb4d686dce1a981dfccc070beeaf2",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-task-cancel-nullable-fixed",
+      "head": "b85e5aa3a4e1741c5811a340eff00dc1c4515a61",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-task-event-boundaries-fixed",
+      "head": "5f876870d81fe1d7d6b2ee14ab844131078a545e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-task-link-results-fixed",
+      "head": "2d3865806da918252b5c823aeb4f68b27716337c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-task-regression-fixed",
+      "head": "73bb34e8ae4ba3fc2952f3746619635e564b8e27",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-task-status-fixed",
+      "head": "0610952cb6f3de7da0f2fcf8cb8dc8df87548a1d",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-type-names-json-path-fixed",
+      "head": "632f6078d68ecb7ca90d8123f0ebdb6e8524970c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-type-reception-fixed",
+      "head": "3dbd2b33f6282d5348e7d3a92c98365f84ed2978",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-typed-headers-fixed",
+      "head": "4bb07378cc625e466bac7d915714de654a691be5",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-u64-slot-view-fixed",
+      "head": "d9ca66127fb976a8c953c3c04c579c6eb5c02065",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-unaligned-memory-fixed",
+      "head": "0da3a30eec9281fa26df79329ed222dcf463ea05",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-unit-display-fixed",
+      "head": "3214b6e0cd9c64c89240e0c5d315631e710cc6fc",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-unit-reception-fixed",
+      "head": "c9ee5d7c2dc8586863d06e2e49efd9e6bb103ef5",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-value-ffi-boundaries-fixed",
+      "head": "a9ae8b7bf2c0257c85bf376c62e65f1cdd784948",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p19-websocket-protocol-fixed",
+      "head": "14a377ad9c3018e3bcf756f035dd61a600281742",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p20-20261013",
+      "head": "5e33ec704f2cee7772476f44a0b2d0d61fbd05a6",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p20-array-query-20261015",
+      "head": "4c133661026bed4cd58b4aa76f8cebf18a8e4619",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p20-dev2266-short-gates-20261018",
+      "head": "cf7d58fe147ca91a88d0a30d9be5a5fdb754df6f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p20-dev484-short-gates-20261018",
+      "head": "f26bcae9386a15234d958e7a3f827149c6a3770a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p21-20261013",
+      "head": "967164141d944a33ac199820f7acb8f8a9c67b9a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-p21-dev484-20261018",
+      "head": "9036eab5f200af5a7cd411d79c1dfe9bc7dd0726",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-runtime-enum-equal-20261019",
+      "head": "ef7eeb247dcd2be95bb108e43c0473dc0e3d5430",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-runtime-normal-generics-20261019",
+      "head": "c82a143b5cd9ecd55e11b439d09f6e3cd3f5887b",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P05\\dev484-source",
+      "ref": "refs/heads/worker/325-runtime-receiver-diagnostic-20261019",
+      "head": "8e0b5cd760c77b9a16a047c6e9bdb73384ed9013",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P10\\adaptation-fc01\\source",
+      "ref": "refs/heads/adapt/p10-d3a",
+      "head": "abf81672edc4b47d48f6bc266bb56d5091a4ff3e",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P10\\adaptation-fc01\\source",
+      "ref": "refs/heads/adapt/p10-fc01",
+      "head": "b61cc8761f71fc1b409a4b5aad0386e2eb3194fe",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P18\\combine106\\source",
+      "ref": "refs/heads/worker/325-p18-20261013",
+      "head": "85bf9a90e0d6f791750e945c4bf58481d46d0a0f",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P18\\combine106\\source",
+      "ref": "refs/heads/worker/325-p18-integration-fc01",
+      "head": "64ddb46b561ab45a514e1c9ec44611df651e86fe",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P18\\repair114\\source",
+      "ref": "refs/heads/worker/325-p18-integration-fc01",
+      "head": "64ddb46b561ab45a514e1c9ec44611df651e86fe",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P18\\repair114\\source",
+      "ref": "refs/heads/worker/325-p18-repair-650de5",
+      "head": "52d63f5cdd3b1baa02a5f5241075eecad0adbaa3",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P18\\shared126\\source",
+      "ref": "refs/heads/worker/325-p18-repair-650de5",
+      "head": "52d63f5cdd3b1baa02a5f5241075eecad0adbaa3",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P18\\shared126\\source",
+      "ref": "refs/heads/worker/325-p18-shared-interfaces-5b7",
+      "head": "32569e78ed1d0f8ee67974eabb5f078ceea29d96",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-build-cache\\task325\\P19\\recovery154-fc01-adaptation\\xray",
+      "ref": "refs/heads/p19-fc01-adaptation",
+      "head": "aac8fd193f03c14bce2e7d457bc74c30f50b36a7",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-integration\\task325-20261018\\workers\\P07\\generation-join-b076",
+      "ref": "refs/heads/integration/325-central-freeze-20261018",
+      "head": "4e35d547983acec18e1021660eabc39585964b27",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-integration\\task325-20261018\\workers\\P07\\generation-join-b076",
+      "ref": "refs/heads/worker/325-p07-generation-join-b076-20261018",
+      "head": "b0766e9a8ccd2d26e58ef1ce94b8a52272fcc465",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-integration\\task325-20261018\\workers\\P07\\repair-6d",
+      "ref": "refs/heads/worker/325-p07-repair-6d-20261018",
+      "head": "41ae39b94c8546f6eef3fc6c16996055eec21540",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-integration\\task325-20261018\\workers\\P07\\repair-6d",
+      "ref": "refs/heads/worker/325-p14-public-integration-20261018",
+      "head": "437f6692f3c33deff75260cc3d0741c0aafda553",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-integration\\task325-20261018\\workers\\P14\\candidate-p15",
+      "ref": "refs/heads/rewrite/293-canonical-program",
+      "head": "140e459f62bed980e76b85cc2af285d63ad92c73",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-integration\\task325-20261018\\workers\\P14\\candidate-p15",
+      "ref": "refs/heads/worker/325-p14-public-integration-20261018",
+      "head": "437f6692f3c33deff75260cc3d0741c0aafda553",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-integration\\task325-20261018\\workers\\P14\\candidate-p15",
+      "ref": "refs/heads/worker/325-p14-public-p15-20261018",
+      "head": "f0e9360091d7c4dcb66a1fa1e32112498e6a9b78",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "D:\\xray-integration\\task325-20261018\\workers\\P14\\candidate-p15",
+      "ref": "refs/heads/worker/325-p14-repair-650-20261018",
+      "head": "6d6754d9b77e8799658113a9c2bad2e561f8f2ae",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p10\\build-b7\\p10-array-match-candidate\\source",
+      "ref": "refs/heads/worker/325-p10-source-alignment",
+      "head": "229ccf91cd5054d0c09ea9ea2bbda0aa126f29d9",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p10\\build-b7\\p10-array-match-candidate\\source",
+      "ref": "refs/heads/worker/325-p10-unit-array-storage-candidate",
+      "head": "9958e7bd76f8e8b24acc6e638c7aae4d24edee38",
+      "C08_descendant": false,
+      "included_before_final_history": false,
+      "disposition": "RETAIN_HISTORY_NOT_REPLAY_OLD_IMPLEMENTATION"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\dependency-reception",
+      "ref": "refs/heads/p10/fixed-next",
+      "head": "17b96e7c75c9d5d28487b14228dd080d7e357d59",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\dependency-reception",
+      "ref": "refs/heads/p13/fixed-next",
+      "head": "974e5c32ef1f7161b58ec607ec7e25fc9dda626c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\dependency-reception",
+      "ref": "refs/heads/p19-fixed-reception",
+      "head": "54ccebd575bb6d95be9b184844cbd2f011d35ae0",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\dependency-reception",
+      "ref": "refs/heads/worker/325-p19-20261013",
+      "head": "e1b3eeb8c7e27916540dbed54893ef0fce41790a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\development-closure",
+      "ref": "refs/heads/p10/fixed-20261016-next",
+      "head": "17b96e7c75c9d5d28487b14228dd080d7e357d59",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\development-closure",
+      "ref": "refs/heads/p13/fixed-20261016-next",
+      "head": "974e5c32ef1f7161b58ec607ec7e25fc9dda626c",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\development-closure",
+      "ref": "refs/heads/p19-development-closure",
+      "head": "e1b3eeb8c7e27916540dbed54893ef0fce41790a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\development-closure",
+      "ref": "refs/heads/p19/current-sdk-order",
+      "head": "e1b3eeb8c7e27916540dbed54893ef0fce41790a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\development-closure",
+      "ref": "refs/heads/worker/325-p19-20261013",
+      "head": "fb23941f35cb4037dec77f58cc8c03e69114d73a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\display-closure",
+      "ref": "refs/heads/p19-display-closure",
+      "head": "3214b6e0cd9c64c89240e0c5d315631e710cc6fc",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\display-closure",
+      "ref": "refs/heads/p19-model-closure",
+      "head": "c9ee5d7c2dc8586863d06e2e49efd9e6bb103ef5",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\expectation-closure",
+      "ref": "refs/heads/p19-expectation-closure",
+      "head": "8bbf31427772e0a9245a5126144ce421cd6b8e86",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\expectation-closure",
+      "ref": "refs/heads/p19-model-closure",
+      "head": "8a31d823865043d25043f71489e41092b1fe6098",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\fixed-p09-map-borrow-input",
+      "ref": "refs/heads/worker/325-p19-20261013",
+      "head": "e1b3eeb8c7e27916540dbed54893ef0fce41790a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\fixed-p10-record-birth-input",
+      "ref": "refs/heads/worker/325-p10-20261013",
+      "head": "ef5ddba4f3e0180d30c88a20357ac4e815424d46",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\fixed-p10-record-shape-input",
+      "ref": "refs/heads/worker/325-p19-20261013",
+      "head": "e1b3eeb8c7e27916540dbed54893ef0fce41790a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\fixed-p10-type-container-input",
+      "ref": "refs/heads/worker/325-p19-20261013",
+      "head": "e1b3eeb8c7e27916540dbed54893ef0fce41790a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\fixed-p12-decimal-input",
+      "ref": "refs/heads/worker/325-p12-20261013",
+      "head": "efa01c8b862a058abc3af8507e1b73e9ea24d758",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\fixed-p13-math-replay-input",
+      "ref": "refs/heads/worker/325-p19-20261013",
+      "head": "e1b3eeb8c7e27916540dbed54893ef0fce41790a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\fixed-p13-rest-input",
+      "ref": "refs/heads/worker/325-p19-20261013",
+      "head": "e1b3eeb8c7e27916540dbed54893ef0fce41790a",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\fixed-source-owner-fi",
+      "ref": "refs/heads/p19-expectation-closure",
+      "head": "8e27c3154f9e20a5b85adac834723bbb9afef507",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\fixed-source-owner-fi",
+      "ref": "refs/heads/p19-fixed-source-owner-fi",
+      "head": "8e27c3154f9e20a5b85adac834723bbb9afef507",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\model-closure",
+      "ref": "refs/heads/p19-model-closure",
+      "head": "8a31d823865043d25043f71489e41092b1fe6098",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    },
+    {
+      "repository": "E:\\xxl\\xray-lang\\.worktrees\\325-p19\\.tmp_p19\\model-closure",
+      "ref": "refs/heads/worker/325-p19-type-reception-fixed",
+      "head": "3dbd2b33f6282d5348e7d3a92c98365f84ed2978",
+      "C08_descendant": false,
+      "included_before_final_history": true,
+      "disposition": "CURRENT_HISTORY"
+    }
+  ],
+  "additional_history_parents": [
+    "0f1850b9dad5d78b561f0c7aca7811cd89b27ccf",
+    "1158096382a01c303fea713b957b058553bf6b29",
+    "331d28e145149d51d517829b914d6abcd3bf250a",
+    "46d6c47c17f4dbe4d71f57fce49620f249e118d4",
+    "4f0eebd715d3801acbe647c064ffa7bc890ef786",
+    "4fb87713c97e983256f8c2a19a6fd15b27137cf2",
+    "6462e38e4c1ea2add47d87a5851be378de440e41",
+    "72c9ef5077bdc5cedba4f1eae40ab0685bd8fff1",
+    "8226027b58eb20fddb0232d8e287c5873e25f114",
+    "82641337419121f8d85bb469bc0fc6c77ef4787f",
+    "8e0b5cd760c77b9a16a047c6e9bdb73384ed9013",
+    "9958e7bd76f8e8b24acc6e638c7aae4d24edee38",
+    "a8b7c8d39a31cdff6ace328b76762164b5451c6a",
+    "c411b72eab9a951e74dd0931e54787c2081b5c16",
+    "c82a143b5cd9ecd55e11b439d09f6e3cd3f5887b",
+    "ea047bc77702dcde4a1b78a5cf08c3b2c6c14634",
+    "f3170804a4e611230cbfb71d83cc297173261d31",
+    "f6b17bed8611b1200c9dca3fe7ee9ff0357c9df7"
+  ],
+  "note": "P13 original class-receiver migration and Atomic class carrier have current equivalents; replay would duplicate registrations. P07 experimental branches are retained as historical alternatives, not active optimization claims."
+}
