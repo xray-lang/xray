@@ -117,8 +117,16 @@ static XrXirStatus error_finite_walk(const EffectErrorFiniteRead *read,
 static XrXirStatus error_finite_compare(const EffectErrorFiniteRead *read,
     uint32_t function,uint64_t coordinate,void *owner,bool *paused) {
     (void)owner;*paused=false;uint64_t expected=0,actual=0;uint32_t bits=0;
-    XrXirStatus status=error_finite_rhs(read,function,coordinate,&expected,&bits);
-    if(status==XR_XIR_OK) status=error_finite_word(read,coordinate,bits,&actual);
+    const EffectErrorFiniteRow *row=&read->proof->rows[function];
+    if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
+    bool reach=coordinate>=row->first && coordinate-row->first<row->blocks;
+    XrXirStatus status=error_finite_word(read,coordinate,reach?1:64,&actual);
+    if(status!=XR_XIR_OK) return status;
+    /* A positive Boolean row is already top. The independent strict-rank
+     * support pass still proves its equality and groundedness.
+     * Zero reachability rows and every carrier word need full closure. */
+    if(reach && actual) return XR_XIR_OK;
+    status=error_finite_rhs(read,function,coordinate,&expected,&bits);
     if(status!=XR_XIR_OK) return status;
     return actual==expected?XR_XIR_OK:XR_XIR_BAD_STRUCTURE;
 }
