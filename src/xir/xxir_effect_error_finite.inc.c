@@ -130,6 +130,39 @@ static XrXirStatus error_finite_edge(const EffectErrorEquationRead *equation,
     if(status==XR_XIR_OK && possible) query->result|=result;
     return status;
 }
+/* A predecessor census needs only the current opcode and successor ordinals.
+ * The live view has framed every canonical column; matching edges still replay
+ * their complete transfer. No decoded row or successor inventory survives. */
+static XrXirStatus error_finite_successors(const EffectErrorEquationRead *equation,
+    uint32_t instruction,uint32_t targets[2],uint32_t *count) {
+    const EffectBodyRequest *body=&equation->body;
+    const EffectBodyRun *ref=NULL;XrXirInstruction full;uint32_t opcode=XR_XIR_INVALID;
+    bool projected=body->current && effect_body_request_sequence_owned(body);
+    XrXirStatus status;
+    if(projected) {
+        status=effect_body_current_record(body,equation->function,instruction,&ref);
+        if(status==XR_XIR_OK) status=effect_body_run_word(&body->read,ref,instruction,0,&opcode);
+    } else {
+        status=error_equation_operation(equation,instruction,&full);
+        if(status==XR_XIR_OK) opcode=(uint32_t)full.op;
+    }
+    if(status!=XR_XIR_OK) return status;
+    if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    if(!xir_compile_work(equation->work,1+sizeof(*count))) return XR_XIR_BUDGET;
+    *count=opcode==XR_XIR_BRANCH || opcode==XR_XIR_INVOKE || opcode==XR_XIR_INVOKE_DEFAULT ||
+        opcode==XR_XIR_INVOKE_INDIRECT || opcode==XR_XIR_TASK_AWAIT?2:
+        opcode==XR_XIR_JUMP || opcode==XR_XIR_CLEANUP_REGISTER || opcode==XR_XIR_CLEANUP_LEAVE ||
+        opcode==XR_XIR_CLEANUP_ERROR?1:0;
+    for(uint32_t side=0;side<*count;++side) {
+        if(projected) status=effect_body_run_word(&body->read,ref,instruction,4+side,&targets[side]);
+        else {
+            if(!xir_compile_work(equation->work,sizeof(targets[side]))) return XR_XIR_BUDGET;
+            targets[side]=full.targets[side];
+        }
+        if(status!=XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
 static XrXirStatus error_finite_predecessors(const EffectErrorEquationRead *equation,
     EffectErrorFiniteEdgeQuery *query) {
     const EffectErrorFiniteRead *read=equation->owner;
@@ -144,14 +177,11 @@ static XrXirStatus error_finite_predecessors(const EffectErrorEquationRead *equa
             EffectErrorEdgeRead edge={b,query->to,i,EFFECT_ERROR_EDGE_PANIC};
             status=error_finite_edge(equation,&edge,query);if(status!=XR_XIR_OK) return status;
         }
-        XrXirInstruction end;status=error_equation_operation(equation,block->first+block->count-1,&end);
+        uint32_t targets[2]={0},count=0;
+        status=error_finite_successors(equation,block->first+block->count-1,targets,&count);
         if(status!=XR_XIR_OK) return status;
-        uint32_t count=end.op==XR_XIR_BRANCH || end.op==XR_XIR_INVOKE || end.op==XR_XIR_INVOKE_DEFAULT ||
-            end.op==XR_XIR_INVOKE_INDIRECT || end.op==XR_XIR_TASK_AWAIT?2:
-            end.op==XR_XIR_JUMP || end.op==XR_XIR_CLEANUP_REGISTER || end.op==XR_XIR_CLEANUP_LEAVE ||
-            end.op==XR_XIR_CLEANUP_ERROR?1:0;
         for(uint32_t side=0;side<count;++side) {
-            EffectErrorEdgeRead edge={b,end.targets[side],block->first+block->count,
+            EffectErrorEdgeRead edge={b,targets[side],block->first+block->count,
                 side?EFFECT_ERROR_EDGE_ALTERNATE:EFFECT_ERROR_EDGE_NORMAL};
             status=error_finite_edge(equation,&edge,query);if(status!=XR_XIR_OK) return status;
         }
