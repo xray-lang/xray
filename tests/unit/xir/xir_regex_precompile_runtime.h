@@ -49,7 +49,12 @@ static inline void regex_runtime_attempt(XrXirProgram *program,uint32_t entry,un
  unsigned polls=0;while(status==XR_XIR_CALL_READY){CHECK(++polls<=4096);status=xr_xir_instance_poll_bounded(instance,1024).outcome.status;driven|=status==XR_XIR_CALL_OOM;}
  CHECK(status==XR_XIR_CALL_RETURNED || (runtime_fail_at!=SIZE_MAX && status==XR_XIR_CALL_OOM));
  if(status==XR_XIR_CALL_RETURNED){CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_RETURNED);regex_value(&value,which);}
- else if(instance){CHECK(xr_xir_instance_take_result(instance,&value)==XR_XIR_CALL_BAD_STATE);CHECK(!value.type && !value.reserved && !value.payload);}
+ else if(instance){
+  XrXirCallStatus expected=xr_xir_instance_state(instance)==XR_XIR_INSTANCE_FAILED || !driven?XR_XIR_CALL_BAD_STATE:XR_XIR_CALL_OOM;
+  XrXirCallStatus taken=xr_xir_instance_take_result(instance,&value);
+  if(taken!=expected)fprintf(stderr,"Regex fault%zu state%u driven%u take%u expected%u\n",runtime_fail_at,(unsigned)xr_xir_instance_state(instance),driven,(unsigned)taken,(unsigned)expected);
+  CHECK(taken==expected);CHECK(!value.type && !value.reserved && !value.payload);
+ }
  if(instance)CHECK(xr_xir_instance_free(instance)==(driven?XR_XIR_CALL_OOM:XR_XIR_CALL_READY));
  if(value.type){regex_value(&value,which);xr_xir_value_drop(&value);}
 }

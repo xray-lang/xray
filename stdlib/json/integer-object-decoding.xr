@@ -1,0 +1,73 @@
+fn jsonIntegerObjectSpace(bytes:Array<u8>,start:i64)->i64 {
+    var i=start
+    while(i<len(bytes) && (bytes[i]==32 || bytes[i]==9 || bytes[i]==10 || bytes[i]==13)){i=i+1}
+    return i
+}
+// String values already guarantee UTF-8; escapes still require JSON validation.
+fn jsonIntegerObjectKey(bytes:Array<u8>,start:i64)->(i64,string) {
+    if(start>=len(bytes) || bytes[start]!=34){return (-1,"")}
+    var key=""
+    var i=start+1
+    while(i<len(bytes)) {
+        const first=bytes[i] as i64
+        if(first==34){return (i+1,key)}
+        if(first<32){return (-1,"")}
+        const scalar=(first==92)?jsonEscapeScalar(bytes,i,len(bytes)):jsonRawScalar(bytes,i)
+        if(scalar<0){return (-1,"")}
+        key=key+string(rune(scalar>>8))
+        i=i+(scalar&255)
+    }
+    return (-1,"")
+}
+fn jsonIntegerObjectMember(bytes:Array<u8>,start:i64,keys:Array<string>)->(i64,i64,i64?) {
+    const key=jsonIntegerObjectKey(bytes,start)
+    if(key.0<0){return (-1,-1,null)}
+    var slot:i64=-1
+    var k:i64=0
+    while(k<len(keys)){if(keys[k]==key.1){slot=k};k=k+1}
+    var i=jsonIntegerObjectSpace(bytes,key.0)
+    if(slot<0 || i>=len(bytes) || bytes[i]!=58){return (-1,-1,null)}
+    i=jsonIntegerObjectSpace(bytes,i+1)
+    const end=jsonNumberEnd(bytes,i)
+    if(end<0){return (-1,-1,null)}
+    var token=""
+    while(i<end){token=token+string(rune(bytes[i] as i64));i=i+1}
+    return (end,slot,jsonInteger(token))
+}
+// Exact schemas reject unknown, duplicate and missing decoded names.
+// Values follow the requested key order, independently of JSON member order.
+export fn jsonIntegerObject(text:string,keys:Array<string>)->Array<i64>? {
+    var values:Array<i64>=[]
+    var seen:Array<bool>=[]
+    var k:i64=0
+    while(k<len(keys)) {
+        var previous:i64=0
+        while(previous<k){if(keys[previous]==keys[k]){return null};previous=previous+1}
+        values.push(0);seen.push(false);k=k+1
+    }
+    const bytes=text.copyBytes()
+    var i=jsonIntegerObjectSpace(bytes,0)
+    if(i>=len(bytes) || bytes[i]!=123){return null}
+    i=jsonIntegerObjectSpace(bytes,i+1)
+    if(i<len(bytes) && bytes[i]==125) {
+        if(len(keys)==0 && jsonIntegerObjectSpace(bytes,i+1)==len(bytes)){return values}
+        return null
+    }
+    var count:i64=0
+    while(i<len(bytes)) {
+        const member=jsonIntegerObjectMember(bytes,i,keys)
+        if(member.0<0 || member.2==null){return null}
+        const slot=member.1
+        if(seen[slot]){return null}
+        values[slot]=member.2!;seen[slot]=true;count=count+1
+        i=jsonIntegerObjectSpace(bytes,member.0)
+        if(i>=len(bytes)){return null}
+        if(bytes[i]==125) {
+            if(count==len(keys) && jsonIntegerObjectSpace(bytes,i+1)==len(bytes)){return values}
+            return null
+        }
+        if(bytes[i]!=44){return null}
+        i=jsonIntegerObjectSpace(bytes,i+1)
+    }
+    return null
+}

@@ -17,7 +17,7 @@ static XrXirOutputStatus prelude_output(void *context,XrXirOutputStream stream,c
     PreludeOutput *output=context;(void)stream;(void)bytes;output->bytes+=length;return XR_XIR_OUTPUT_OK;
 }
 static bool prelude_pair(XrXirProgram *program,uint32_t answer) {
-    XrXirInstance *instances[2]={0};PreludeOutput output[2]={{0}};XrXirOutputSink sinks[2]={{0}};bool ok=false;
+    XrXirInstance *instances[2]={0};PreludeOutput output[2]={{0}};XrXirOutputSink sinks[2]={{0}};bool ok=false,driven[2]={false,false};
     for (unsigned i=0;i<2;++i) {
         XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
         sinks[i]=(XrXirOutputSink){XR_XIR_CALL_ABI_VERSION,0,prelude_output,&output[i],64};
@@ -29,7 +29,7 @@ static bool prelude_pair(XrXirProgram *program,uint32_t answer) {
     for (unsigned repeat=0;repeat<2;++repeat) for (unsigned i=0;i<2;++i) {
         uint64_t peer=instances[1-i]->epoch;
         XrXirCallStatus status=xr_xir_instance_start(instances[i],answer,NULL,0);
-        if (status==XR_XIR_CALL_READY) status=xr_xir_instance_poll_bounded(instances[i],UINT64_MAX).outcome.status;
+        if (status==XR_XIR_CALL_READY) {status=xr_xir_instance_poll_bounded(instances[i],UINT64_MAX).outcome.status;driven[i]=status==XR_XIR_CALL_OOM;}
         if (status==XR_XIR_CALL_OOM) goto done;
         CHECK(status==XR_XIR_CALL_RETURNED);
         XrXirValue result={0};status=xr_xir_instance_take_result(instances[i],&result);
@@ -40,7 +40,7 @@ static bool prelude_pair(XrXirProgram *program,uint32_t answer) {
     }
     ok=true;
 done:
-    for (unsigned i=0;i<2;++i) if(instances[i]) CHECK(xr_xir_instance_free(instances[i])==XR_XIR_CALL_READY);
+    for (unsigned i=0;i<2;++i) if(instances[i]) CHECK(xr_xir_instance_free(instances[i])==(driven[i]?XR_XIR_CALL_OOM:XR_XIR_CALL_READY));
     return ok;
 }
 static XrXirStatus prelude_seal_operation(const XrXirCompileContext *context,void *opaque) {
