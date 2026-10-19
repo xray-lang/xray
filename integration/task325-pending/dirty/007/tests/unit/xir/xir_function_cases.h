@@ -1,0 +1,190 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xir_function_cases.h - Function result leases and revocable instance admission
+ *
+ * KEY CONCEPT:
+ *   An escaped callable retains code while instance slots are physically released.
+ */
+#ifndef XIR_FUNCTION_CASES_H
+#define XIR_FUNCTION_CASES_H
+#include "xir/xxir_program_packet_internal.h"
+#include "xir/xxir_program.h"
+#include "xir/xxir_program_internal.h"
+#include "xir/xxir_task_internal.h"
+#include "xir_instance_retirement_probe.h"
+#include <string.h>
+typedef struct FunctionCaseFrame { uint32_t phase; XrXirValue owned, cell; } FunctionCaseFrame;
+static XrXirAction function_case_fault(XrXirCallStatus status) {
+    return (XrXirAction) {XR_XIR_ACTION_FAULT, 0, NULL, 0, {XR_XIR_I64, 0, status}, {0}, 0};
+}
+static XrXirAction function_case_resume(XrXirCallView *view) {
+    FunctionCaseFrame *frame = view->state;
+    uint32_t entry = xr_xir_call_current_entry(view->activation);
+    XrXirCallStatus status = XR_XIR_CALL_READY;
+    if (entry == 0) {
+        status = xr_xir_instance_literal(view, 0, &frame->owned);
+        if (status == XR_XIR_CALL_READY)
+            status = xr_xir_instance_cell(view, (XrXirType)257, &frame->owned, &frame->cell);
+        if (status == XR_XIR_CALL_READY) status = xr_xir_instance_slot_write(view, 0, &frame->cell, true);
+    } else if (entry == 1) return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, {XR_XIR_I64, 0, 17}, {0}, 0};
+    else if (entry == 2) {
+        XrXirValue capture = {0};
+        status = xr_xir_instance_slot_read(view, 0, &frame->cell);
+        if (status == XR_XIR_CALL_READY) status = xr_xir_instance_cell_read(view, &frame->cell, &capture);
+        if (status == XR_XIR_CALL_READY)
+            status = xr_xir_instance_function(view, (XrXirType) 256, 3, &capture, 1, &frame->owned);
+        xr_xir_value_drop(&capture);
+    }
+    else if (entry == 3 && !frame->phase++) {
+        status = xr_xir_value_copy(&view->arguments[0], &frame->owned) == XR_XIR_VALUE_OK ?
+            XR_XIR_CALL_READY : XR_XIR_CALL_LIMIT;
+        if (status == XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_SUSPEND, 0, NULL, 0, {0}, {0}, 0};
+    } else if (entry == 4) {
+        if (!frame->phase++) {
+            uint32_t target = UINT32_MAX;
+            status = xr_xir_instance_resolve_function(view, &view->arguments[0], &target);
+            if (status == XR_XIR_CALL_READY) return (XrXirAction) {XR_XIR_ACTION_CALL, target, NULL, 0, view->arguments[0], {0}, 0};
+        } else return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, view->inbox.value, {0}, 0};
+    }
+    if (status != XR_XIR_CALL_READY) return function_case_fault(status);
+    return (XrXirAction) {XR_XIR_ACTION_RETURN, 0, NULL, 0, entry ? frame->owned : (XrXirValue) {0}, {0}, 0};
+}
+static void function_case_cleanup(XrXirCallView *view, XrXirCallStatus reason) {
+    (void) reason;FunctionCaseFrame *frame=view->state;
+    xr_xir_value_drop(&frame->owned);xr_xir_value_drop(&frame->cell);
+}
+static void function_case_release(void *owner) { ++*(unsigned *) owner; }
+#include "xir_native_metadata_fixture.h"
+static XrXirStatus function_case_seal(unsigned *releases, XrXirProgram **program) {
+    XrXirSourceModule module = {"root", 4, NULL, 0, 0};
+    XrXirFunctionIdentity identities[] = {{0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,0, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}, {0,1, 0, 0, 0, 0, XR_XIR_NON_MEMBER, 0, 0}};
+    XrXirSlot slot = {0, (XrXirType)257, 1};
+    XrXirLiteral literal = {"owned callback result", 21};
+    XrXirDeclarations declarations = {&module, 1, identities, &slot, 1, &literal, 1, 0, 1, NULL};
+    XrXirTypeNode nodes[] = {
+        {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT, NULL, 0, XR_XIR_STRING, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}},
+        {.kind=XR_XIR_TYPE_CELL,.element=XR_XIR_STRING}};
+    XrXirTypes types = {nodes, 2, NULL, NULL};
+    XrXirType callback_type = (XrXirType) 256, capture_type = XR_XIR_STRING;
+    XrXirCallEntry entries[5];
+    for (unsigned i = 0; i < 5; ++i) entries[i] = (XrXirCallEntry) {XR_XIR_CALL_ABI_VERSION,
+        i == 4 ? &callback_type : i == 3 ? &capture_type : NULL, i >= 3 ? 1u : 0u,
+        i == 0 ? XR_XIR_UNIT : i == 1 ? XR_XIR_I64 : i == 2 ? callback_type : XR_XIR_STRING,
+        sizeof(FunctionCaseFrame), function_case_resume, function_case_cleanup, NULL, 0, 0};
+    XrXirProgramSpec spec = {XR_XIR_PROGRAM_ABI_VERSION, {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION},
+        entries, 5, &declarations, {releases, function_case_release}, &types, {0}};
+    NativeFixtureOwner compiler = {0};
+    XrXirStatus status = native_fixture_owner_new(&compiler);
+    if (status != XR_XIR_OK) return status;
+    XrXirArtifact *proof = NULL;
+    XrXirStatus prepared = native_metadata_fixture(&compiler.context, &spec, &proof);
+    if (prepared != XR_XIR_OK) { native_fixture_owner_free(&compiler); return prepared; }
+    spec.packet = xir_program_packet_borrow(proof);
+    nodes[0].result = (XrXirType) XR_XIR_TYPE_PARAMETER_BASE; nodes[0].parameter_span = 1;
+    XrXirStatus rejected = xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, program);
+    if (rejected == XR_XIR_OUT_OF_MEMORY) { xr_xir_compile_artifact_free(proof); native_fixture_owner_free(&compiler); return rejected; }
+    CHECK(rejected == XR_XIR_BAD_TYPE && !*program);
+    nodes[0].result = XR_XIR_STRING; nodes[0].parameter_span = 0;
+    status = xr_xir_compile_program_seal(xr_xir_compile_artifact_context(proof), &spec, program);
+    xr_xir_compile_artifact_free(proof); native_fixture_owner_free(&compiler); return status;
+}
+static inline XrXirInstanceResult function_case_poll(XrXirInstance *instance,XrXirCallStatus *fault) {
+    XrXirInstanceResult result=xr_xir_instance_poll_bounded(instance,UINT64_MAX);
+    if(result.outcome.status==XR_XIR_CALL_OOM || result.outcome.status==XR_XIR_CALL_LIMIT ||
+        result.outcome.status==XR_XIR_CALL_BAD_ARGUMENT || result.outcome.status==XR_XIR_CALL_BAD_STATE)
+        *fault=result.outcome.status;
+    return result;
+}
+static inline XrXirCallStatus function_case_retirement(XrXirInstance *instance,XrXirCallStatus fault) {
+    return xr_test_instance_retirement(instance,fault);
+}
+/* Consumes a real Program reference; caller owns the code lease lifetime. */
+static inline bool function_case_execute(XrXirProgram *program,unsigned *releases,bool cancel) {
+    CHECK(program && releases && !*releases);
+    const uint32_t initial_refs=atomic_load(&program->references);
+    XrXirInstance *instance=NULL,*other=NULL;
+    XrXirValue function={0},result={0},second={0},copy={0};
+    bool success=false;XrXirCallStatus retirement=XR_XIR_CALL_READY;
+    XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    XrXirCallStatus status = xr_xir_instance_new(program, &config, &instance);
+    if (status != XR_XIR_CALL_READY) goto failed;
+    status = xr_xir_instance_new(program, &config, &other);
+    if (status != XR_XIR_CALL_READY) goto failed;
+    status = xr_xir_instance_start(instance, 2, NULL, 0);
+    if (status != XR_XIR_CALL_READY) goto failed;
+    status = function_case_poll(instance,&retirement).outcome.status;
+    if (status != XR_XIR_CALL_RETURNED) goto failed;
+    CHECK(xr_xir_instance_take_result(instance, &function) == XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_function_binding(&function) && xr_xir_function_binding(&function)->entry == 3);
+    CHECK(xr_xir_instance_start(instance, 3, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
+    CHECK(xr_xir_instance_start_function(other, &function, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
+    CHECK(xr_xir_instance_start(other, 4, &function, 1) == XR_XIR_CALL_BAD_ARGUMENT);
+    status = xr_xir_instance_start_function(instance, &function, NULL, 0);
+    if (status != XR_XIR_CALL_READY) goto failed;
+    XrXirInstanceResult wait = function_case_poll(instance,&retirement);
+    if(wait.outcome.status==XR_XIR_CALL_OOM || wait.outcome.status==XR_XIR_CALL_LIMIT) {
+        status=wait.outcome.status;goto failed;
+    }
+    CHECK(wait.outcome.status == XR_XIR_CALL_SUSPENDED);
+    CHECK(xr_xir_instance_resume(instance, wait.epoch, wait.outcome.wake) == XR_XIR_CALL_READY);
+    wait=function_case_poll(instance,&retirement);
+    if(wait.outcome.status==XR_XIR_CALL_OOM || wait.outcome.status==XR_XIR_CALL_LIMIT) {
+        status=wait.outcome.status;goto failed;
+    }
+    CHECK(wait.outcome.status==XR_XIR_CALL_RETURNED);
+    CHECK(xr_xir_instance_take_result(instance, &result) == XR_XIR_CALL_RETURNED);
+    status = xr_xir_instance_start(instance, 4, &function, 1);
+    if (status != XR_XIR_CALL_READY) goto failed;
+    wait = function_case_poll(instance,&retirement);
+    if (wait.outcome.status != XR_XIR_CALL_SUSPENDED) { status = wait.outcome.status; goto failed; }
+    if (cancel) {
+        CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
+        CHECK(function_case_poll(instance,&retirement).outcome.status == XR_XIR_CALL_CANCELLED);
+    } else {
+        CHECK(xr_xir_instance_resume(instance, wait.epoch, wait.outcome.wake) == XR_XIR_CALL_READY);
+        wait=function_case_poll(instance,&retirement);
+        if(wait.outcome.status==XR_XIR_CALL_OOM || wait.outcome.status==XR_XIR_CALL_LIMIT) {
+            status=wait.outcome.status;goto failed;
+        }
+        CHECK(wait.outcome.status==XR_XIR_CALL_RETURNED);
+        CHECK(xr_xir_instance_take_result(instance, &second) == XR_XIR_CALL_RETURNED);
+    }
+    CHECK(xr_xir_instance_stop(instance) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_start_function(instance, &function, NULL, 0) == XR_XIR_CALL_BAD_STATE);
+    success = true;
+    goto finish;
+ failed:
+    CHECK(status == XR_XIR_CALL_OOM || status == XR_XIR_CALL_LIMIT);
+ finish:
+    retirement=function_case_retirement(instance,retirement);
+    CHECK(xr_xir_instance_free(instance)==retirement);
+    xr_xir_compile_program_drop(program);
+    if (function.type) {
+        CHECK(!*releases && xr_xir_value_copy(&function, &copy) == XR_XIR_VALUE_OK);
+        CHECK(xr_xir_instance_start_function(other, &function, NULL, 0) == XR_XIR_CALL_BAD_ARGUMENT);
+    }
+    CHECK(xr_xir_instance_free(other) == XR_XIR_CALL_READY);
+    if(function.type)CHECK(atomic_load(&program->references)>=initial_refs);
+    if (success) {
+        const char *bytes; size_t length;
+        CHECK(xr_xir_string_view(&result, &bytes, &length) && length == 21 && !memcmp(bytes, "owned callback result", 21));
+        if (!cancel) CHECK(xr_xir_string_view(&second, &bytes, &length) && length == 21);
+    }
+    xr_xir_value_drop(&result); xr_xir_value_drop(&second);
+    xr_xir_value_drop(&function);
+    if (copy.type) CHECK(!*releases);
+    xr_xir_value_drop(&copy);
+    return success;
+}
+static bool function_case_run(bool cancel) {
+    unsigned releases=0;XrXirProgram *program=NULL;
+    XrXirStatus sealed=function_case_seal(&releases,&program);
+    if(sealed!=XR_XIR_OK) { CHECK(sealed==XR_XIR_OUT_OF_MEMORY && !program && !releases);return false; }
+    bool success=function_case_execute(program,&releases,cancel);
+    CHECK(releases==1);return success;
+}
+#endif // XIR_FUNCTION_CASES_H

@@ -1,0 +1,1038 @@
+// xml - typed pure-Xray XML parser and writer.
+//
+// XML is an L4 format module: the public parse/stringify/node-builder
+// semantics live here. The node model is a typed `XmlNode` ADT (no JSON.Value
+// discriminator tree). src/base/xxml remains as a low-level C parser for base
+// unit tests and non-stdlib tooling boundaries.
+
+import io
+
+const XML_MAX_DEPTH = 256
+
+// ===== Node model =====
+
+export class XmlName {
+    prefix: string
+    local: string
+
+    init(prefix: string, local: string) {
+        this.prefix = prefix
+        this.local = local
+    }
+
+    // Reconstruct the source form `prefix:local` (or just `local` when the
+    // name has no prefix).
+    qualified() -> string {
+        if (len(this.prefix) == 0) { return this.local }
+        return this.prefix + ":" + this.local
+    }
+}
+
+export class XmlAttribute {
+    name: XmlName
+    value: string
+
+    init(name: XmlName, value: string) {
+        this.name = name
+        this.value = value
+    }
+}
+
+export enum XmlNode {
+    Document { children: Array<XmlNode> },
+    Element { name: XmlName, attributes: Array<XmlAttribute>, children: Array<XmlNode> },
+    Text { content: string },
+    Comment { content: string },
+    CData { content: string },
+    ProcessingInstruction { target: string, data: string }
+}
+
+// ===== Access API =====
+//
+// The typed accessors are module-level functions (matching internally) rather
+// than methods on the `XmlNode` enum: enum instance methods are not currently
+// callable across a module boundary (the receiver is misreported as possibly
+// null), so a `node.tag()` form would break for importers. Free functions that
+// `match` internally are unaffected. `match` on `XmlNode` remains available to
+// callers who prefer pattern matching directly.
+
+// Local name of an Element, or null for non-element nodes.
+export fn tag(node: XmlNode) -> string? {
+    return match (node) {
+        XmlNode.Element { name, attributes: attrs, children: kids } -> name.local,
+        _                                  -> null
+    }
+}
+
+// Fully qualified name (prefix + local) of an Element.
+// NOTE: written with block arms rather than a match expression. Returning the
+// class-typed payload binding `name` directly from a match-expression arm in an
+// `XmlName?` context contaminates the enum payload-field type to nullable
+// globally, which then breaks unrelated Element matches.
+export fn qualifiedName(node: XmlNode) -> XmlName? {
+    match (node) {
+        XmlNode.Element { name, attributes: attrs, children: kids } -> { return name }
+        _ -> { return null }
+    }
+    return null
+}
+
+// Ordered attributes of an Element (empty for other node kinds).
+export fn attributes(node: XmlNode) -> Array<XmlAttribute> {
+    return match (node) {
+        XmlNode.Element { name, attributes: attrs, children: kids } -> copy(attrs),
+        _                                  -> copy(_emptyAttrs())
+    }
+}
+
+// First attribute value whose local name matches `key` (ASCII exact match).
+export fn attr(node: XmlNode, key: string) -> string? {
+    var attrs = attributes(node)
+    for (a in attrs) {
+        if (a.name.local == key) { return a.value }
+    }
+    return null
+}
+
+// Namespace URI bound to `prefix` via an `xmlns`/`xmlns:x` attribute on this
+// Element, or null when undeclared here.
+export fn namespace(node: XmlNode, prefix: string) -> string? {
+    var attrs = attributes(node)
+    for (a in attrs) {
+        if (len(prefix) == 0) {
+            if (a.name.prefix == "" && a.name.local == "xmlns") { return a.value }
+        } else {
+            if (a.name.prefix == "xmlns" && a.name.local == prefix) { return a.value }
+        }
+    }
+    return null
+}
+
+// Direct children of a Document or Element (empty otherwise).
+export fn children(node: XmlNode) -> Array<XmlNode> {
+    return match (node) {
+        XmlNode.Document { children: kids }             -> copy(kids),
+        XmlNode.Element { name, attributes: attrs, children: kids } -> copy(kids),
+        _                                  -> copy(_emptyNodes())
+    }
+}
+
+// Own textual payload of a Text/Comment/CData node.
+export fn nodeText(node: XmlNode) -> string? {
+    return match (node) {
+        XmlNode.Text { content: s }    -> s,
+        XmlNode.Comment { content: s } -> s,
+        XmlNode.CData { content: s }   -> s,
+        _                  -> null
+    }
+}
+
+// Concatenation of the direct Text/CData children (or the node's own text for a
+// Text/CData leaf).
+export fn textContent(node: XmlNode) -> string {
+    return match (node) {
+        XmlNode.Element { name, attributes: attrs, children: kids } -> _directText(kids),
+        XmlNode.Document { children: kids }             -> _directText(kids),
+        XmlNode.Text { content: s }                    -> s,
+        XmlNode.CData { content: s }                   -> s,
+        _                                  -> ""
+    }
+}
+
+// ===== Diagnostics & errors =====
+
+export enum XmlErrorKind {
+    InvalidTag,
+    MismatchedTag,
+    UnclosedTag,
+    InvalidAttr,
+    UnterminatedAttr,
+    UnterminatedComment,
+    UnterminatedCData,
+    UnterminatedPI,
+    UnterminatedDoctype,
+    InvalidEntity,
+    MaxDepthExceeded
+}
+
+export class XmlDiagnostic {
+    kind: XmlErrorKind
+    line: i64
+    column: i64
+    message: string
+
+    init(kind: XmlErrorKind, line: i64, column: i64, message: string) {
+        this.kind = kind
+        this.line = line
+        this.column = column
+        this.message = message
+    }
+}
+
+export enum XmlError {
+    Parse { diagnostic: XmlDiagnostic },
+    Io { message: string }
+}
+
+// ===== Options =====
+
+export type XmlOptions = {
+    preserveWhitespace: bool,
+    preserveComments: bool,
+    preserveCData: bool,
+    validateEntities: bool
+}
+
+export type XmlWriteOptions = {
+    indent: i64,
+    declaration: bool,
+    encoding: string
+}
+
+export const XML_DEFAULT_OPTIONS: XmlOptions = {
+    preserveWhitespace: false,
+    preserveComments: false,
+    preserveCData: true,
+    validateEntities: true
+}
+
+export const XML_DEFAULT_WRITE_OPTIONS: XmlWriteOptions = {
+    indent: 0,
+    declaration: true,
+    encoding: "UTF-8"
+}
+
+export class XmlParseReport {
+    doc: XmlNode?
+    diagnostics: Array<XmlDiagnostic>
+
+    init(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>) {
+        this.doc = doc
+        this.diagnostics = diagnostics
+    }
+}
+
+// ===== Character / entity helpers =====
+
+fn _startsWithAt(s: string, pos: i64, prefix: string) -> bool {
+    if (pos < 0 || pos + len(prefix) > len(s)) { return false }
+    return s.slice(pos, pos + len(prefix)) == prefix
+}
+
+fn _asciiFold(c: string) -> i64 {
+    if (len(c) == 0) { return -1 }
+    var o = c.runes().nth(0).toUInt32()
+    if (o >= 65 && o <= 90) { return (o + 32) as i64 }
+    return o as i64
+}
+
+fn _startsWithAtIgnoreCase(s: string, pos: i64, prefix: string) -> bool {
+    if (pos < 0 || pos + len(prefix) > len(s)) { return false }
+    for (var i = 0; i < len(prefix); i++) {
+        if (_asciiFold(s.slice(pos + i, (pos + i) + 1)) != _asciiFold(prefix.slice(i, (i) + 1))) {
+            return false
+        }
+    }
+    return true
+}
+
+fn _isWhitespace(c: string) -> bool {
+    return c == " " || c == "\t" || c == "\n" || c == "\r"
+}
+
+fn _isAlpha(c: string) -> bool {
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
+    return (o >= 65 && o <= 90) || (o >= 97 && o <= 122)
+}
+
+fn _isDigit(c: string) -> bool {
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
+    return o >= 48 && o <= 57
+}
+
+fn _isNameStart(c: string) -> bool {
+    return _isAlpha(c) || c == "_"
+}
+
+fn _isNameChar(c: string) -> bool {
+    return _isAlpha(c) || _isDigit(c) || c == "_" || c == "-" || c == ":" || c == "."
+}
+
+fn _isHexDigit(c: string) -> bool {
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
+    return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
+}
+
+fn _hexValue(c: string) -> i64 {
+    var o = c.runes().nth(0).toUInt32()
+    if (o >= 48 && o <= 57) { return (o - 48) as i64 }
+    if (o >= 65 && o <= 70) { return (o - 55) as i64 }
+    if (o >= 97 && o <= 102) { return (o - 87) as i64 }
+    return -1
+}
+
+fn _allWhitespace(s: string) -> bool {
+    for (var i = 0; i < len(s); i++) {
+        if (!_isWhitespace(s.slice(i, (i) + 1))) { return false }
+    }
+    return true
+}
+
+fn _utf8Len(cp: i64) -> i64 {
+    if (cp < 0x80) { return 1 }
+    if (cp < 0x800) { return 2 }
+    if (cp < 0x10000) { return 3 }
+    return 4
+}
+
+fn _putUtf8(out: ref Array<u8>, oi: i64, cp: i64) -> i64 {
+    if (cp < 0x80) {
+        out[oi] = cp as u8
+        return oi + 1
+    } else if (cp < 0x800) {
+        out[oi] = (0xC0 | (cp >> 6)) as u8
+        out[oi + 1] = (0x80 | (cp & 0x3F)) as u8
+        return oi + 2
+    } else if (cp < 0x10000) {
+        out[oi] = (0xE0 | (cp >> 12)) as u8
+        out[oi + 1] = (0x80 | ((cp >> 6) & 0x3F)) as u8
+        out[oi + 2] = (0x80 | (cp & 0x3F)) as u8
+        return oi + 3
+    }
+    out[oi] = (0xF0 | (cp >> 18)) as u8
+    out[oi + 1] = (0x80 | ((cp >> 12) & 0x3F)) as u8
+    out[oi + 2] = (0x80 | ((cp >> 6) & 0x3F)) as u8
+    out[oi + 3] = (0x80 | (cp & 0x3F)) as u8
+    return oi + 4
+}
+
+fn _codepointString(cp: i64) -> string? {
+    if (cp <= 0 || cp > 0x10FFFF) { return null }
+    var out = Array<u8>(_utf8Len(cp))
+    _putUtf8(ref out, 0, cp)
+    return string.fromUtf8(out[:])
+}
+
+fn _namedEntity(name: string) -> string? {
+    if (name == "lt") { return "<" }
+    if (name == "gt") { return ">" }
+    if (name == "amp") { return "&" }
+    if (name == "quot") { return "\"" }
+    if (name == "apos") { return "'" }
+    if (name == "nbsp") { return _codepointString(0x00A0) }
+    if (name == "copy") { return _codepointString(0x00A9) }
+    if (name == "reg") { return _codepointString(0x00AE) }
+    if (name == "trade") { return _codepointString(0x2122) }
+    if (name == "hellip") { return _codepointString(0x2026) }
+    if (name == "ndash") { return _codepointString(0x2013) }
+    if (name == "mdash") { return _codepointString(0x2014) }
+    if (name == "lsquo") { return _codepointString(0x2018) }
+    if (name == "rsquo") { return _codepointString(0x2019) }
+    if (name == "ldquo") { return _codepointString(0x201C) }
+    if (name == "rdquo") { return _codepointString(0x201D) }
+    if (name == "laquo") { return _codepointString(0x00AB) }
+    if (name == "raquo") { return _codepointString(0x00BB) }
+    if (name == "middot") { return _codepointString(0x00B7) }
+    if (name == "bull") { return _codepointString(0x2022) }
+    if (name == "sect") { return _codepointString(0x00A7) }
+    if (name == "para") { return _codepointString(0x00B6) }
+    if (name == "deg") { return _codepointString(0x00B0) }
+    if (name == "plusmn") { return _codepointString(0x00B1) }
+    if (name == "times") { return _codepointString(0x00D7) }
+    if (name == "divide") { return _codepointString(0x00F7) }
+    if (name == "euro") { return _codepointString(0x20AC) }
+    if (name == "pound") { return _codepointString(0x00A3) }
+    if (name == "yen") { return _codepointString(0x00A5) }
+    if (name == "cent") { return _codepointString(0x00A2) }
+    return null
+}
+
+fn _numericEntity(name: string) -> string? {
+    if (!name.startsWith("#")) { return null }
+    var base = 10
+    var pos = 1
+    if (len(name) >= 3 && (name.slice(1, (1) + 1) == "x" || name.slice(1, (1) + 1) == "X")) {
+        base = 16
+        pos = 2
+    }
+    if (pos >= len(name)) { return null }
+    var cp = 0
+    while (pos < len(name)) {
+        var c = name.slice(pos, (pos) + 1)
+        var d = -1
+        if (base == 16) {
+            if (!_isHexDigit(c)) { return null }
+            d = _hexValue(c)
+        } else {
+            if (!_isDigit(c)) { return null }
+            d = (c.runes().nth(0).toUInt32() - 48) as i64
+        }
+        cp = cp * base + d
+        if (cp > 0x10FFFF) { return null }
+        pos = pos + 1
+    }
+    return _codepointString(cp)
+}
+
+fn _indentText(level: i64, spaces: i64) -> string {
+    if (spaces <= 0 || level <= 0) { return "" }
+    var out = StringBuilder()
+    for (var i = 0; i < level * spaces; i++) { out.append(" ") }
+    return out.toString()
+}
+
+fn _escapeText(value: string) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < len(value); i++) {
+        var c = value.slice(i, (i) + 1)
+        if (c == "<") {
+            out.append("&lt;")
+        } else if (c == ">") {
+            out.append("&gt;")
+        } else if (c == "&") {
+            out.append("&amp;")
+        } else {
+            out.append(c)
+        }
+    }
+    return out.toString()
+}
+
+fn _escapeAttr(value: string) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < len(value); i++) {
+        var c = value.slice(i, (i) + 1)
+        if (c == "<") {
+            out.append("&lt;")
+        } else if (c == ">") {
+            out.append("&gt;")
+        } else if (c == "&") {
+            out.append("&amp;")
+        } else if (c == "\"") {
+            out.append("&quot;")
+        } else {
+            out.append(c)
+        }
+    }
+    return out.toString()
+}
+
+// ===== Node helpers =====
+
+// Split a raw tag/attribute name into `prefix:local`. A leading or trailing
+// colon (or no colon) yields an empty prefix and the whole name as local.
+fn _splitName(raw: string) -> XmlName {
+    var idx = raw.indexOf(":")
+    if (idx <= 0 || idx >= len(raw) - 1) {
+        return XmlName("", raw)
+    }
+    return XmlName(raw.slice(0, idx), raw.slice(idx + 1, len(raw)))
+}
+
+fn _qualifiedName(name: XmlName) -> string {
+    if (len(name.prefix) == 0) { return name.local }
+    return name.prefix + ":" + name.local
+}
+
+fn _emptyAttrs() -> Array<XmlAttribute> {
+    var out: Array<XmlAttribute> = []
+    return out
+}
+
+fn _emptyNodes() -> Array<XmlNode> {
+    var out: Array<XmlNode> = []
+    return out
+}
+
+fn _isTextNode(node: XmlNode) -> bool {
+    return match (node) {
+        XmlNode.Text { content: s } -> true,
+        _               -> false
+    }
+}
+
+fn _textOf(node: XmlNode) -> string {
+    return match (node) {
+        XmlNode.Text { content: s } -> s,
+        _               -> ""
+    }
+}
+
+fn _directText(kids: Array<XmlNode>) -> string {
+    var out = StringBuilder()
+    for (child in kids) {
+        var piece = match (child) {
+            XmlNode.Text { content: s }  -> s,
+            XmlNode.CData { content: s } -> s,
+            _                -> ""
+        }
+        out.append(piece)
+    }
+    return out.toString()
+}
+
+// ===== Parser =====
+
+class XmlParser {
+    data: string
+    pos: i64
+    line: i64
+    column: i64
+    preserveWhitespace: bool
+    preserveComments: bool
+    preserveCData: bool
+    validateEntities: bool
+    errors: Array<XmlDiagnostic>
+    root: XmlNode?
+    hasRoot: bool
+
+    init(data: string, options: XmlOptions) {
+        this.data = data
+        this.pos = 0
+        this.line = 1
+        this.column = 1
+        this.preserveWhitespace = options.preserveWhitespace
+        this.preserveComments = options.preserveComments
+        this.preserveCData = options.preserveCData
+        this.validateEntities = options.validateEntities
+        this.errors = []
+        this.root = null
+        this.hasRoot = false
+    }
+
+    atEnd() -> bool {
+        return this.pos >= len(this.data)
+    }
+
+    peek() -> string {
+        if (this.atEnd()) { return "" }
+        return this.data.slice(this.pos, (this.pos) + 1)
+    }
+
+    peekAt(offset: i64) -> string {
+        var p = this.pos + offset
+        if (p < 0 || p >= len(this.data)) { return "" }
+        return this.data.slice(p, (p) + 1)
+    }
+
+    startsWith(prefix: string) -> bool {
+        return _startsWithAt(this.data, this.pos, prefix)
+    }
+
+    startsWithIgnoreCase(prefix: string) -> bool {
+        return _startsWithAtIgnoreCase(this.data, this.pos, prefix)
+    }
+
+    ref advance() -> string {
+        var c = this.peek()
+        if (len(c) == 0) { return c }
+        this.pos = this.pos + 1
+        if (c == "\n") {
+            this.line = this.line + 1
+            this.column = 1
+        } else {
+            this.column = this.column + 1
+        }
+        return c
+    }
+
+    ref addError(kind: XmlErrorKind, message: string) {
+        this.errors.push(XmlDiagnostic(kind, this.line, this.column, message))
+    }
+
+    ref skipWhitespace() {
+        while (!this.atEnd() && _isWhitespace(this.peek())) {
+            this.advance()
+        }
+    }
+
+    ref parseName() -> string {
+        if (!_isNameStart(this.peek())) { return "" }
+        var start = this.pos
+        this.advance()
+        while (!this.atEnd() && _isNameChar(this.peek())) {
+            this.advance()
+        }
+        return this.data.slice(start, this.pos)
+    }
+
+    ref decodeEntity(name: string) -> string {
+        var named = _namedEntity(name)
+        if (named != null) { return named! }
+        var numeric = _numericEntity(name)
+        if (numeric != null) { return numeric! }
+        if (this.validateEntities) {
+            this.addError(XmlErrorKind.InvalidEntity, "Unknown entity reference '&" + name + ";'")
+        }
+        return "&" + name + ";"
+    }
+
+    ref decodeEntities(value: string) -> string {
+        var out = StringBuilder()
+        var i = 0
+        while (i < len(value)) {
+            var c = value.slice(i, (i) + 1)
+            if (c == "&") {
+                var j = i + 1
+                while (j < len(value) && value.slice(j, (j) + 1) != ";" && j - i < 12) {
+                    j = j + 1
+                }
+                if (j < len(value) && value.slice(j, (j) + 1) == ";") {
+                    var name = value.slice(i + 1, j)
+                    out.append(this.decodeEntity(name))
+                    i = j + 1
+                    continue
+                }
+            }
+            out.append(c)
+            i = i + 1
+        }
+        return out.toString()
+    }
+
+    ref skipProcessingInstruction() {
+        if (!this.startsWith("<?")) { return }
+        this.advance()
+        this.advance()
+        while (!this.atEnd()) {
+            if (this.startsWith("?>")) {
+                this.advance()
+                this.advance()
+                return
+            }
+            this.advance()
+        }
+        this.addError(XmlErrorKind.UnterminatedPI, "Unterminated processing instruction")
+    }
+
+    ref skipDoctype() {
+        if (!this.startsWithIgnoreCase("<!DOCTYPE")) { return }
+        this.advance()
+        this.advance()
+        for (var i = 0; i < 7; i++) { this.advance() }
+        var bracketDepth = 0
+        while (!this.atEnd()) {
+            var c = this.peek()
+            if (c == "[") {
+                bracketDepth = bracketDepth + 1
+            } else if (c == "]") {
+                bracketDepth = bracketDepth - 1
+            } else if (c == ">" && bracketDepth <= 0) {
+                this.advance()
+                return
+            }
+            this.advance()
+        }
+        this.addError(XmlErrorKind.UnterminatedDoctype, "Unterminated DOCTYPE")
+    }
+
+    ref skipTopLevelComment() {
+        if (!this.startsWith("<!--")) { return }
+        for (var i = 0; i < 4; i++) { this.advance() }
+        while (!this.atEnd()) {
+            if (this.startsWith("-->")) {
+                this.advance()
+                this.advance()
+                this.advance()
+                return
+            }
+            this.advance()
+        }
+        this.addError(XmlErrorKind.UnterminatedComment, "Unterminated comment")
+    }
+
+    ref parseCommentNode() -> XmlNode? {
+        if (!this.startsWith("<!--")) { return null }
+        for (var i = 0; i < 4; i++) { this.advance() }
+        var start = this.pos
+        while (!this.atEnd()) {
+            if (this.startsWith("-->")) {
+                var content = this.data.slice(start, this.pos)
+                this.advance()
+                this.advance()
+                this.advance()
+                return XmlNode.Comment { content: content }
+            }
+            this.advance()
+        }
+        this.addError(XmlErrorKind.UnterminatedComment, "Unterminated comment")
+        return XmlNode.Comment { content: this.data.slice(start, this.pos) }
+    }
+
+    ref parseCDataNode() -> XmlNode? {
+        if (!this.startsWith("<![CDATA[")) { return null }
+        for (var i = 0; i < 9; i++) { this.advance() }
+        var start = this.pos
+        while (!this.atEnd()) {
+            if (this.startsWith("]]>")) {
+                var content = this.data.slice(start, this.pos)
+                this.advance()
+                this.advance()
+                this.advance()
+                if (this.preserveCData) { return XmlNode.CData { content: content } }
+                return XmlNode.Text { content: content }
+            }
+            this.advance()
+        }
+        this.addError(XmlErrorKind.UnterminatedCData, "Unterminated CDATA")
+        var content = this.data.slice(start, this.pos)
+        if (this.preserveCData) { return XmlNode.CData { content: content } }
+        return XmlNode.Text { content: content }
+    }
+
+    ref parseTextNode() -> XmlNode? {
+        var start = this.pos
+        while (!this.atEnd() && this.peek() != "<") {
+            this.advance()
+        }
+        if (this.pos == start) { return null }
+        var value = this.decodeEntities(this.data.slice(start, this.pos))
+        if (!this.preserveWhitespace && _allWhitespace(value)) { return null }
+        return XmlNode.Text { content: value }
+    }
+
+    ref parseAttributeValue() -> string {
+        var quote = this.peek()
+        if (quote != "\"" && quote != "'") {
+            this.addError(XmlErrorKind.InvalidAttr, "Expected quote after =")
+            return ""
+        }
+        this.advance()
+        var start = this.pos
+        while (!this.atEnd() && this.peek() != quote) {
+            this.advance()
+        }
+        var raw = this.data.slice(start, this.pos)
+        if (this.peek() == quote) {
+            this.advance()
+        } else {
+            this.addError(XmlErrorKind.UnterminatedAttr, "Unterminated attribute value")
+        }
+        return this.decodeEntities(raw)
+    }
+
+    ref parseElement(depth: i64) -> XmlNode? {
+        if (depth > XML_MAX_DEPTH) {
+            this.addError(XmlErrorKind.MaxDepthExceeded, "Maximum nesting depth exceeded")
+            return null
+        }
+        if (this.peek() != "<") { return null }
+        this.advance()
+        var rawTag = this.parseName()
+        if (len(rawTag) == 0) {
+            this.addError(XmlErrorKind.InvalidTag, "Invalid tag start")
+            return null
+        }
+        var attrs: Array<XmlAttribute> = []
+        var children: Array<XmlNode> = []
+
+        while (!this.atEnd()) {
+            this.skipWhitespace()
+            if (this.startsWith("/>")) {
+                this.advance()
+                this.advance()
+                return XmlNode.Element { name: _splitName(rawTag), attributes: attrs, children: children }
+            }
+            if (this.peek() == ">") {
+                this.advance()
+                break
+            }
+            var attrName = this.parseName()
+            if (len(attrName) == 0) {
+                this.addError(XmlErrorKind.InvalidAttr, "Invalid attribute")
+                while (!this.atEnd() && this.peek() != ">" && !this.startsWith("/>")) {
+                    this.advance()
+                }
+                continue
+            }
+            this.skipWhitespace()
+            if (this.peek() != "=") {
+                this.addError(XmlErrorKind.InvalidAttr, "Expected = after attribute name")
+                attrs.push(XmlAttribute(_splitName(attrName), ""))
+                continue
+            }
+            this.advance()
+            this.skipWhitespace()
+            var attrValue = this.parseAttributeValue()
+            attrs.push(XmlAttribute(_splitName(attrName), attrValue))
+        }
+
+        while (!this.atEnd()) {
+            if (this.startsWith("</")) {
+                this.advance()
+                this.advance()
+                var closeTag = this.parseName()
+                this.skipWhitespace()
+                if (this.peek() == ">") {
+                    this.advance()
+                } else {
+                    this.addError(XmlErrorKind.InvalidTag, "Expected > after closing tag")
+                }
+                if (closeTag != rawTag) {
+                    this.addError(XmlErrorKind.MismatchedTag, "Mismatched closing tag")
+                }
+                return XmlNode.Element { name: _splitName(rawTag), attributes: attrs, children: children }
+            }
+
+            if (this.startsWith("<!--")) {
+                var commentNode = this.parseCommentNode()
+                if (this.preserveComments && commentNode != null) {
+                    children.push(commentNode!)
+                }
+                continue
+            }
+
+            if (this.startsWith("<![CDATA[")) {
+                var cdataNode = this.parseCDataNode()
+                if (cdataNode != null) { children.push(cdataNode!) }
+                continue
+            }
+
+            if (this.startsWith("<?")) {
+                this.skipProcessingInstruction()
+                continue
+            }
+
+            if (this.startsWithIgnoreCase("<!DOCTYPE")) {
+                this.skipDoctype()
+                continue
+            }
+
+            if (this.peek() == "<") {
+                var child = this.parseElement(depth + 1)
+                if (child != null) { children.push(child!) }
+                continue
+            }
+
+            var textNode = this.parseTextNode()
+            if (textNode != null) { children.push(textNode!) }
+        }
+
+        this.addError(XmlErrorKind.UnclosedTag, "Unclosed tag")
+        return XmlNode.Element { name: _splitName(rawTag), attributes: attrs, children: children }
+    }
+
+    ref parseDocument() {
+        while (!this.atEnd()) {
+            this.skipWhitespace()
+            if (this.atEnd()) { break }
+
+            if (this.startsWith("<?")) {
+                this.skipProcessingInstruction()
+                continue
+            }
+            if (this.startsWith("<!--")) {
+                this.skipTopLevelComment()
+                continue
+            }
+            if (this.startsWithIgnoreCase("<!DOCTYPE")) {
+                this.skipDoctype()
+                continue
+            }
+            if (this.peek() == "<") {
+                var node = this.parseElement(0)
+                if (node != null) {
+                    this.root = node
+                    this.hasRoot = true
+                    return
+                }
+                break
+            }
+            this.advance()
+        }
+    }
+}
+
+fn _parse(data: string, options: XmlOptions) -> XmlParser {
+    var parser = XmlParser(data, options)
+    parser.parseDocument()
+    return parser
+}
+
+// ===== Serializer =====
+
+fn _serializeChildren(kids: Array<XmlNode>, config: XmlWriteOptions, level: i64, depth: i64) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < len(kids); i++) {
+        out.append(_serializeNode(kids[i], config, level, depth + 1))
+    }
+    return out.toString()
+}
+
+fn _serializeElement(name: XmlName, attrs: Array<XmlAttribute>, kids: Array<XmlNode>,
+                     config: XmlWriteOptions, level: i64, depth: i64) -> string {
+    var tag = _qualifiedName(name)
+    if (len(tag) == 0) { return "" }
+    var out = StringBuilder()
+    out.append(_indentText(level, config.indent))
+    out.append("<")
+    out.append(tag)
+
+    for (var i = 0; i < len(attrs); i++) {
+        var a = attrs[i]
+        out.append(" ")
+        out.append(_qualifiedName(a.name))
+        out.append("=\"")
+        out.append(_escapeAttr(a.value))
+        out.append("\"")
+    }
+
+    if (len(kids) > 0) {
+        out.append(">")
+        var textOnly = false
+        if (len(kids) == 1) { textOnly = _isTextNode(kids[0]) }
+        if (textOnly) {
+            out.append(_escapeText(_textOf(kids[0])))
+        } else {
+            if (config.indent > 0) { out.append("\n") }
+            for (var i = 0; i < len(kids); i++) {
+                out.append(_serializeNode(kids[i], config, level + 1, depth + 1))
+            }
+            out.append(_indentText(level, config.indent))
+        }
+        out.append("</")
+        out.append(tag)
+        out.append(">")
+    } else {
+        out.append("/>")
+    }
+    if (depth > 0 && config.indent > 0) { out.append("\n") }
+    return out.toString()
+}
+
+fn _serializeText(value: string, config: XmlWriteOptions, level: i64) -> string {
+    var out = StringBuilder()
+    out.append(_indentText(level, config.indent))
+    out.append(_escapeText(value))
+    if (config.indent > 0) { out.append("\n") }
+    return out.toString()
+}
+
+fn _serializeComment(value: string, config: XmlWriteOptions, level: i64) -> string {
+    var out = StringBuilder()
+    out.append(_indentText(level, config.indent))
+    out.append("<!--")
+    out.append(value)
+    out.append("-->")
+    if (config.indent > 0) { out.append("\n") }
+    return out.toString()
+}
+
+fn _serializeCData(value: string, config: XmlWriteOptions, level: i64) -> string {
+    var out = StringBuilder()
+    out.append(_indentText(level, config.indent))
+    out.append("<![CDATA[")
+    out.append(value)
+    out.append("]]>")
+    if (config.indent > 0) { out.append("\n") }
+    return out.toString()
+}
+
+fn _serializePI(instructionTarget: string, data: string, config: XmlWriteOptions,
+                level: i64) -> string {
+    var out = StringBuilder()
+    out.append(_indentText(level, config.indent))
+    out.append("<?")
+    out.append(instructionTarget)
+    if (len(data) > 0) {
+        out.append(" ")
+        out.append(data)
+    }
+    out.append("?>")
+    if (config.indent > 0) { out.append("\n") }
+    return out.toString()
+}
+
+fn _serializeNode(node: XmlNode, config: XmlWriteOptions, level: i64, depth: i64) -> string {
+    if (depth > XML_MAX_DEPTH) { return "" }
+    return match (node) {
+        XmlNode.Document { children: kids }                          -> _serializeChildren(kids, config, level, depth),
+        XmlNode.Element { name, attributes: attrs, children: kids }              -> _serializeElement(name, attrs, kids, config, level, depth),
+        XmlNode.Text { content: value }                             -> _serializeText(value, config, level),
+        XmlNode.Comment { content: value }                          -> _serializeComment(value, config, level),
+        XmlNode.CData { content: value }                            -> _serializeCData(value, config, level),
+        XmlNode.ProcessingInstruction { target: instructionTarget, data: piData } ->
+            _serializePI(instructionTarget, piData, config, level)
+    }
+}
+
+// ===== Public API =====
+
+// parse is strict: any recoverable diagnostic or a missing root element enters
+// the typed error channel via `throw XmlError.Parse { diagnostic: value }`.
+export fn parse(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlNode {
+    var parser = _parse(data, options)
+    if (len(parser.errors) > 0) {
+        throw XmlError.Parse { diagnostic: parser.errors[0] }
+    }
+    if (!parser.hasRoot) {
+        throw XmlError.Parse { diagnostic: XmlDiagnostic(XmlErrorKind.InvalidTag, parser.line, parser.column,
+                                           "No root element") }
+    }
+    return parser.root!
+}
+
+// parseReport opts into recovery and returns any partial document together with
+// the typed diagnostics collected during parsing.
+export fn parseReport(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlParseReport {
+    var parser = _parse(data, options)
+    var doc: XmlNode? = null
+    if (parser.hasRoot) { doc = parser.root }
+    return XmlParseReport(doc, parser.errors)
+}
+
+export fn parseFile(path: Path, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlNode {
+    var content = io.readFile(path)
+    if (content == null) {
+        throw XmlError.Io { message: "Failed to read file" }
+    }
+    return parse(content!, options)
+}
+
+export fn stringify(node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS) -> string {
+    var config = options
+    var out = StringBuilder()
+    if (config.declaration) {
+        var encoding = config.encoding
+        if (len(encoding) == 0) { encoding = "UTF-8" }
+        out.append("<?xml version=\"1.0\" encoding=\"")
+        out.append(encoding)
+        out.append("\"?>")
+        if (config.indent > 0) { out.append("\n") }
+    }
+    out.append(_serializeNode(node, config, 0, 0))
+    return out.toString()
+}
+
+export fn writeFile(path: Path, node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS) -> bool {
+    return io.writeFile(path, stringify(node, options))
+}
+
+// ===== Builders =====
+
+export fn document(children: Array<XmlNode>? = null) -> XmlNode {
+    if (children == null) { return XmlNode.Document { children: _emptyNodes() } }
+    return XmlNode.Document { children: children! }
+}
+
+export fn element(tag: string, attrs: Array<XmlAttribute>? = null,
+                  children: Array<XmlNode>? = null) -> XmlNode {
+    var resolvedAttrs = attrs ?? _emptyAttrs()
+    var resolvedChildren = children ?? _emptyNodes()
+    return XmlNode.Element { name: _splitName(tag), attributes: resolvedAttrs, children: resolvedChildren }
+}
+
+export fn text(content: string) -> XmlNode {
+    return XmlNode.Text { content: content }
+}
+
+export fn comment(content: string) -> XmlNode {
+    return XmlNode.Comment { content: content }
+}
+
+export fn cdata(content: string) -> XmlNode {
+    return XmlNode.CData { content: content }
+}

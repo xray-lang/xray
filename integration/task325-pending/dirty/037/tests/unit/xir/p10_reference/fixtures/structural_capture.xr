@@ -1,0 +1,2 @@
+fn make<T:{n:i64}>(value:T)->fn()->i64 { return fn()->i64 { return value.n } }
+export fn referenceAnswer()->i64 { const action=make({extra:true,n:42}); return action() }

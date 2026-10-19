@@ -1,0 +1,3 @@
+class A implements Sendable { next:B?; constructor(next:B?){this.next=next} }
+class B { next:A?; constructor(next:A?){this.next=next} }
+export fn main()->i64{return 7}

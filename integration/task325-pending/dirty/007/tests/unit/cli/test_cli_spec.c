@@ -1,0 +1,857 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * test_cli_spec.c - Unit tests for CLI spec, parser, and dispatch
+ *
+ * Tests the new declarative CLI infrastructure:
+ *   - Command registry (find, list)
+ *   - Option map accessors
+ *   - Parser (global flags, command options, positionals)
+ *   - Help generation (smoke test: no crash)
+ *   - Dispatch routing logic
+ */
+
+#include "../test_framework.h"
+#include "app/cli/xcli_spec.h"
+#include "app/cli/xcli_parser.h"
+#include "app/cli/xcli_help.h"
+#include "app/cli/xcli_diag.h"
+
+/* ========== Command Registry ========== */
+
+TEST(spec_get_commands_not_null) {
+    const XrCliCommandSpec *cmds = xr_cli_get_commands();
+    ASSERT_NOT_NULL(cmds);
+    /* First command should be "run" */
+    ASSERT_STR_EQ(cmds[0].name, "run");
+}
+
+TEST(spec_find_command_run) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("run");
+    ASSERT_NOT_NULL(spec);
+    ASSERT_STR_EQ(spec->name, "run");
+    ASSERT_NOT_NULL(spec->options);
+    ASSERT_TRUE(spec->allow_passthrough);
+}
+
+TEST(spec_retired_eval_command_removed) {
+    ASSERT_NULL(xr_cli_find_command("eval"));
+}
+
+TEST(spec_find_command_test_options) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("test");
+    ASSERT_NOT_NULL(spec);
+    ASSERT_EQ_INT(xr_cli_option_count(spec->options), 6);
+    ASSERT_EQ_INT(spec->positional_min, 0);
+    ASSERT_EQ_INT(spec->positional_max, -1);
+}
+
+TEST(spec_find_command_self_subcommands) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("self");
+    ASSERT_NOT_NULL(spec);
+    ASSERT_NOT_NULL(spec->subcommands);
+    ASSERT_EQ_INT(spec->subcommand_count, 2);
+    ASSERT_STR_EQ(spec->subcommands[0].name, "update");
+    ASSERT_STR_EQ(spec->subcommands[1].name, "uninstall");
+}
+
+TEST(spec_retired_fix_command_removed) {
+    ASSERT_NULL(xr_cli_find_command("fix"));
+}
+
+TEST(spec_find_command_unknown) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("nonexistent");
+    ASSERT_NULL(spec);
+}
+
+TEST(spec_aliases_removed) {
+    /* Package management aliases should NOT be in the command table */
+    ASSERT_NULL(xr_cli_find_command("init"));
+    ASSERT_NULL(xr_cli_find_command("add"));
+    ASSERT_NULL(xr_cli_find_command("remove"));
+    ASSERT_NULL(xr_cli_find_command("install"));
+    ASSERT_NULL(xr_cli_find_command("update"));
+    ASSERT_NULL(xr_cli_find_command("tree"));
+    ASSERT_NULL(xr_cli_find_command("publish"));
+    ASSERT_NULL(xr_cli_find_command("login"));
+}
+
+TEST(spec_option_count) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("run");
+    ASSERT_NOT_NULL(spec);
+    int count = xr_cli_option_count(spec->options);
+    /* Source validation is mandatory; run has no legacy optimizer policy. */
+    ASSERT_EQ_INT(count, 0);
+}
+
+TEST(spec_option_count_empty) {
+    int count = xr_cli_option_count(NULL);
+    ASSERT_EQ_INT(count, 0);
+}
+
+/* ========== Option Map Accessors ========== */
+
+static int test_find_option_index(const XrCliOptionSpec *options, const char *name) {
+    int index = 0;
+    while (options && options[index].long_name) {
+        if (strcmp(options[index].long_name, name) == 0)
+            return index;
+        index++;
+    }
+    return -1;
+}
+
+TEST(optmap_not_present) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("run");
+    ASSERT_NOT_NULL(spec);
+
+    int count = xr_cli_option_count(spec->options);
+    bool present[16] = {false};
+    const char *values[16] = {NULL};
+
+    XrCliOptionMap map = {
+        .spec = spec->options,
+        .count = count,
+        .present = present,
+        .values = values,
+    };
+
+    ASSERT_FALSE(xr_cli_opt_present(&map, "trace"));
+    ASSERT_FALSE(xr_cli_opt_bool(&map, "trace"));
+    ASSERT_EQ_INT(xr_cli_opt_int(&map, "workers", 42), 42);
+}
+
+TEST(optmap_present_flag) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("check");
+    ASSERT_NOT_NULL(spec);
+
+    int count = xr_cli_option_count(spec->options);
+    bool present[16] = {false};
+    const char *values[16] = {NULL};
+
+    int verbose_index = test_find_option_index(spec->options, "verbose");
+    ASSERT_GE(verbose_index, 0);
+    present[verbose_index] = true;
+
+    XrCliOptionMap map = {
+        .spec = spec->options,
+        .count = count,
+        .present = present,
+        .values = values,
+    };
+
+    ASSERT_TRUE(xr_cli_opt_present(&map, "verbose"));
+    ASSERT_TRUE(xr_cli_opt_bool(&map, "verbose"));
+}
+
+TEST(optmap_present_string) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    int count = xr_cli_option_count(spec->options);
+    bool present[16] = {false};
+    const char *values[16] = {NULL};
+
+    /* Set "output" (index 0) as present */
+    present[0] = true;
+    values[0] = "out.c";
+
+    XrCliOptionMap map = {
+        .spec = spec->options,
+        .count = count,
+        .present = present,
+        .values = values,
+    };
+
+    ASSERT_TRUE(xr_cli_opt_present(&map, "output"));
+    ASSERT_STR_EQ(xr_cli_opt_string(&map, "output", NULL), "out.c");
+}
+
+TEST(optmap_present_int) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("test");
+    ASSERT_NOT_NULL(spec);
+
+    int count = xr_cli_option_count(spec->options);
+    bool present[16] = {false};
+    const char *values[16] = {NULL};
+
+    int jobs_index = test_find_option_index(spec->options, "jobs");
+    ASSERT_GE(jobs_index, 0);
+    present[jobs_index] = true;
+    values[jobs_index] = "8";
+
+    XrCliOptionMap map = {
+        .spec = spec->options,
+        .count = count,
+        .present = present,
+        .values = values,
+    };
+
+    ASSERT_EQ_INT(xr_cli_opt_int(&map, "jobs", 0), 8);
+}
+
+TEST(optmap_nonexistent_option) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("run");
+    ASSERT_NOT_NULL(spec);
+
+    int count = xr_cli_option_count(spec->options);
+    bool present[16] = {false};
+    const char *values[16] = {NULL};
+
+    XrCliOptionMap map = {
+        .spec = spec->options,
+        .count = count,
+        .present = present,
+        .values = values,
+    };
+
+    ASSERT_FALSE(xr_cli_opt_present(&map, "nonexistent"));
+    ASSERT_EQ_INT(xr_cli_opt_int(&map, "nonexistent", -1), -1);
+}
+
+/* ========== Global Flag Parsing ========== */
+
+TEST(parse_global_no_args) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray"};
+    int consumed = xr_cli_parse_global(1, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 0);
+    ASSERT_STR_EQ(ctx.program, "xray");
+}
+
+TEST(parse_global_help) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--help"};
+    int consumed = xr_cli_parse_global(2, argv, &ctx);
+    ASSERT_EQ_INT(consumed, -1);
+}
+
+TEST(parse_global_version) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--version"};
+    int consumed = xr_cli_parse_global(2, argv, &ctx);
+    ASSERT_EQ_INT(consumed, -2);
+}
+
+TEST(parse_global_version_short) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "-v"};
+    int consumed = xr_cli_parse_global(2, argv, &ctx);
+    ASSERT_EQ_INT(consumed, -2);
+}
+
+TEST(parse_global_version_json_any_order) {
+    XrCliContext ctx = {0};
+    char *argv_after[] = {"xray", "--version", "--json"};
+    int consumed = xr_cli_parse_global(3, argv_after, &ctx);
+    ASSERT_EQ_INT(consumed, -2);
+    ASSERT_TRUE(ctx.json_output);
+
+    ctx = (XrCliContext) {0};
+    char *argv_before[] = {"xray", "--json", "--version"};
+    consumed = xr_cli_parse_global(3, argv_before, &ctx);
+    ASSERT_EQ_INT(consumed, -2);
+    ASSERT_TRUE(ctx.json_output);
+}
+
+TEST(parse_global_no_color) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--no-color"};
+    int consumed = xr_cli_parse_global(2, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    ASSERT_FALSE(ctx.color);
+}
+
+TEST(parse_global_color) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--color"};
+    int consumed = xr_cli_parse_global(2, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    ASSERT_TRUE(ctx.color);
+}
+
+TEST(parse_global_command_not_consumed) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "run", "file.xr"};
+    int consumed = xr_cli_parse_global(3, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 0);
+}
+
+TEST(parse_global_retired_verify_arc_not_consumed) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--no-color", "--verify-arc", "run", "file.xr"};
+    int consumed = xr_cli_parse_global(5, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    /* The dispatcher uses the first unconsumed token as its command name. */
+    ASSERT_NULL(xr_cli_find_command(argv[consumed + 1]));
+    ASSERT_FALSE(ctx.color);
+}
+
+TEST(parse_retired_verifier_options_rejected) {
+    const char *commands[] = {"run", "check", "build"};
+    XrCliContext ctx = {.program = "xray"};
+    for (size_t i = 0; i < sizeof(commands) / sizeof(*commands); ++i) {
+        const XrCliCommandSpec *spec = xr_cli_find_command(commands[i]);
+        ASSERT_NOT_NULL(spec);
+        XrCliInvocation inv;
+        char *argv[] = {"--verify-arc", "file.xr"};
+        ASSERT_EQ_INT(xr_cli_parse_command(spec, 2, argv, &ctx, &inv), XR_CLI_EXIT_USAGE);
+        char *policy[] = {"--xi-opt", "vm=full", "file.xr"};
+        ASSERT_EQ_INT(xr_cli_parse_command(spec, 3, policy, &ctx, &inv), XR_CLI_EXIT_USAGE);
+    }
+    XrCliInvocation inv;
+    const XrCliCommandSpec *check = xr_cli_find_command("check");
+    char *strict[] = {"--strict", "file.xr"};
+    ASSERT_EQ_INT(xr_cli_parse_command(check, 2, strict, &ctx, &inv), XR_CLI_EXIT_USAGE);
+}
+
+/* ========== Command Parser ========== */
+
+TEST(parse_cmd_simple_flag) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("check");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--verbose", "src/"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 2, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "verbose"));
+    ASSERT_EQ_INT(inv.positional_count, 1);
+    ASSERT_STR_EQ(inv.positionals[0], "src/");
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_cmd_short_flag) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("check");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"-v", "-S", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 3, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "verbose"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "syntax-only"));
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_build_native_verbose) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native", "--verbose", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 3, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "verbose"));
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_build_native_debug_strip) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native", "-g", "--strip", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 4, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "debug"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "strip"));
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_build_native_freestanding_profile) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native", "--profile", "freestanding", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 4, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "profile", NULL), "freestanding");
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_build_native_linker_script) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native",        "--profile",      "freestanding",
+                    "--linker-script", "/tmp/kernel.ld", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 6, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "profile", NULL), "freestanding");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "linker-script", NULL), "/tmp/kernel.ld");
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_build_native_simd_mode) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native", "--simd", "dispatch", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 4, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "simd", NULL), "dispatch");
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_build_restricted_c90_dialect) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native",       "--target",  "x86_64-linux-gnu", "--artifact",
+                    "shared-library", "--profile", "freestanding",     "--simd",
+                    "scalar",         "--c-only",  "--c-dialect",      "c90",
+                    "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 13, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "artifact", NULL), "shared-library");
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "c-only"));
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "c-dialect", NULL), "c90");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "target", NULL), "x86_64-linux-gnu");
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_build_hosted_fragment_artifact) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native", "--artifact", "hosted-fragment", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 4, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "artifact", NULL), "hosted-fragment");
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_build_cross_toolchain_options) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native", "--target", "x86_64-linux-musl",   "--toolchain",    "zig",
+                    "--zig",    "/opt/zig", "--dump-link-command", "--dry-run-link", "--keep-c",
+                    "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 11, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "target", NULL), "x86_64-linux-musl");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "toolchain", NULL), "zig");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "zig", NULL), "/opt/zig");
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "dump-link-command"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "dry-run-link"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "keep-c"));
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_build_global_evidence_dump_option) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native", "--dump-global-evidence", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 3, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "dump-global-evidence"));
+    ASSERT_FALSE(xr_cli_opt_present(&inv.options, "dump-global-summary"));
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_build_xi_evidence_dump_option) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native", "--dump-xi-evidence", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 3, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "dump-xi-evidence"));
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_build_global_summary_dump_rejected) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native", "--dump-global-summary", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 3, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_USAGE);
+}
+
+TEST(parse_fmt_branch_arrow_options) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("fmt");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--no-align-branch-arrows", "input.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 2, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "no-align-branch-arrows"));
+    ASSERT_FALSE(xr_cli_opt_bool(&inv.options, "align-branch-arrows"));
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_fmt_legacy_align_match_rejected) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("fmt");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--align-match", "input.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 2, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_USAGE);
+}
+
+TEST(parse_cmd_long_option_with_value) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--output", "out.c", "--c-dialect", "c11", "input.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 5, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "output", NULL), "out.c");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "c-dialect", NULL), "c11");
+    ASSERT_EQ_INT(inv.positional_count, 1);
+    ASSERT_STR_EQ(inv.positionals[0], "input.xr");
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_cmd_long_option_eq_form) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--output=out.c", "input.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 2, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "output", NULL), "out.c");
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_cmd_short_with_value) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"-oout.c", "input.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 2, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "output", NULL), "out.c");
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_cmd_unknown_option) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("check");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--foobar"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 1, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_USAGE);
+}
+
+TEST(parse_cmd_missing_value) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--output"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 1, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_USAGE);
+}
+
+TEST(parse_cmd_no_positionals) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("info");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 0, NULL, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_EQ_INT(inv.positional_count, 0);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_cmd_passthrough) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("run");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"file.xr", "--", "arg1", "arg2"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 4, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_EQ_INT(inv.positional_count, 1);
+    ASSERT_STR_EQ(inv.positionals[0], "file.xr");
+    ASSERT_EQ_INT(inv.passthrough_argc, 2);
+    ASSERT_STR_EQ(inv.passthrough_argv[0], "arg1");
+    ASSERT_STR_EQ(inv.passthrough_argv[1], "arg2");
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_cmd_passthrough_rejected) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("check");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"file.xr", "--", "arg"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 3, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_USAGE);
+}
+
+TEST(parse_global_verbose) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--verbose", "run"};
+    int consumed = xr_cli_parse_global(3, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    ASSERT_TRUE(ctx.verbose);
+}
+
+TEST(parse_global_quiet) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--quiet", "check"};
+    int consumed = xr_cli_parse_global(3, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    ASSERT_TRUE(ctx.quiet);
+}
+
+TEST(parse_global_quiet_short) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "-q", "check"};
+    int consumed = xr_cli_parse_global(3, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    ASSERT_TRUE(ctx.quiet);
+}
+
+TEST(parse_global_json) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--json", "test"};
+    int consumed = xr_cli_parse_global(3, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    ASSERT_TRUE(ctx.json_output);
+}
+
+TEST(parse_global_multiple_flags) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--no-color", "--verbose", "run"};
+    int consumed = xr_cli_parse_global(4, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 2);
+    ASSERT_FALSE(ctx.color);
+    ASSERT_TRUE(ctx.verbose);
+}
+
+TEST(spec_handler_null_before_register) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("run");
+    ASSERT_NOT_NULL(spec);
+    /* Handler may be NULL (test binary doesn't link handlers) */
+}
+
+/* ========== Help Generation (smoke tests) ========== */
+
+// Redirect stdout to a null device so help-printing tests stay silent.
+// MSVC does not allow direct stdout assignment; use freopen + freopen.
+#ifdef _WIN32
+#define SUPPRESS_STDOUT_BEGIN() freopen("NUL", "w", stdout)
+#define SUPPRESS_STDOUT_END() freopen("CON", "w", stdout)
+#else
+#define SUPPRESS_STDOUT_BEGIN() freopen("/dev/null", "w", stdout)
+#define SUPPRESS_STDOUT_END() freopen("/dev/tty", "w", stdout)
+#endif
+
+TEST(help_print_usage_no_crash) {
+    SUPPRESS_STDOUT_BEGIN();
+    xr_cli_print_usage();
+    SUPPRESS_STDOUT_END();
+}
+
+TEST(help_print_command_help_no_crash) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("run");
+    ASSERT_NOT_NULL(spec);
+
+    SUPPRESS_STDOUT_BEGIN();
+    xr_cli_print_command_help(spec);
+    SUPPRESS_STDOUT_END();
+}
+
+TEST(help_print_subcommand_help_no_crash) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("self");
+    ASSERT_NOT_NULL(spec);
+
+    SUPPRESS_STDOUT_BEGIN();
+    xr_cli_print_command_help(spec);
+    SUPPRESS_STDOUT_END();
+}
+
+TEST(help_print_version_no_crash) {
+    SUPPRESS_STDOUT_BEGIN();
+    xr_cli_print_version(false);
+    xr_cli_print_version(true);
+    SUPPRESS_STDOUT_END();
+}
+
+/* ========== Test Main ========== */
+
+TEST_MAIN_BEGIN()
+
+RUN_TEST_SUITE("Command Registry");
+RUN_TEST(spec_get_commands_not_null);
+RUN_TEST(spec_find_command_run);
+RUN_TEST(spec_retired_eval_command_removed);
+RUN_TEST(spec_find_command_test_options);
+RUN_TEST(spec_find_command_self_subcommands);
+RUN_TEST(spec_retired_fix_command_removed);
+RUN_TEST(spec_find_command_unknown);
+RUN_TEST(spec_aliases_removed);
+RUN_TEST(spec_option_count);
+RUN_TEST(spec_option_count_empty);
+
+RUN_TEST_SUITE("Option Map Accessors");
+RUN_TEST(optmap_not_present);
+RUN_TEST(optmap_present_flag);
+RUN_TEST(optmap_present_string);
+RUN_TEST(optmap_present_int);
+RUN_TEST(optmap_nonexistent_option);
+
+RUN_TEST_SUITE("Global Flag Parsing");
+RUN_TEST(parse_global_no_args);
+RUN_TEST(parse_global_help);
+RUN_TEST(parse_global_version);
+RUN_TEST(parse_global_version_short);
+RUN_TEST(parse_global_version_json_any_order);
+RUN_TEST(parse_global_no_color);
+RUN_TEST(parse_global_color);
+RUN_TEST(parse_global_command_not_consumed);
+RUN_TEST(parse_global_retired_verify_arc_not_consumed);
+RUN_TEST(parse_retired_verifier_options_rejected);
+RUN_TEST(parse_global_verbose);
+RUN_TEST(parse_global_quiet);
+RUN_TEST(parse_global_quiet_short);
+RUN_TEST(parse_global_json);
+RUN_TEST(parse_global_multiple_flags);
+
+RUN_TEST_SUITE("Handler Registration");
+RUN_TEST(spec_handler_null_before_register);
+
+RUN_TEST_SUITE("Command Parser");
+RUN_TEST(parse_cmd_simple_flag);
+RUN_TEST(parse_cmd_short_flag);
+RUN_TEST(parse_build_native_verbose);
+RUN_TEST(parse_build_native_debug_strip);
+RUN_TEST(parse_build_native_freestanding_profile);
+RUN_TEST(parse_build_native_linker_script);
+RUN_TEST(parse_build_native_simd_mode);
+RUN_TEST(parse_build_restricted_c90_dialect);
+RUN_TEST(parse_build_hosted_fragment_artifact);
+RUN_TEST(parse_build_cross_toolchain_options);
+RUN_TEST(parse_build_global_evidence_dump_option);
+RUN_TEST(parse_build_xi_evidence_dump_option);
+RUN_TEST(parse_build_global_summary_dump_rejected);
+RUN_TEST(parse_fmt_branch_arrow_options);
+RUN_TEST(parse_fmt_legacy_align_match_rejected);
+RUN_TEST(parse_cmd_long_option_with_value);
+RUN_TEST(parse_cmd_long_option_eq_form);
+RUN_TEST(parse_cmd_short_with_value);
+RUN_TEST(parse_cmd_unknown_option);
+RUN_TEST(parse_cmd_missing_value);
+RUN_TEST(parse_cmd_no_positionals);
+RUN_TEST(parse_cmd_passthrough);
+RUN_TEST(parse_cmd_passthrough_rejected);
+
+RUN_TEST_SUITE("Help Generation");
+RUN_TEST(help_print_usage_no_crash);
+RUN_TEST(help_print_command_help_no_crash);
+RUN_TEST(help_print_subcommand_help_no_crash);
+RUN_TEST(help_print_version_no_crash);
+
+TEST_MAIN_END()

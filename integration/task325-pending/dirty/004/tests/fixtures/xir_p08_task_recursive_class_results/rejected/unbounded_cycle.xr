@@ -1,0 +1,2 @@
+class Cycle<T> implements Sendable { next:Cycle<T>?; value:T; constructor(next:Cycle<T>?,value:T){this.next=next;this.value=value} }
+export fn main()->i64{return 7}

@@ -1,0 +1,1986 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * test_lsp_document.c - Unit tests for LSP document management
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "../../../src/app/lsp/xlsp_server.h"
+#include "../../../src/app/lsp/xlsp_analysis.h"
+#include "../../../src/app/lsp/xlsp_builtins.h"
+#include "../../../src/app/lsp/xlsp_code_action.h"
+#include "../../../src/app/lsp/xlsp_cycle_report.h"
+#include "../../../src/base/xmalloc.h"
+#include <errno.h>
+#include <sys/stat.h>
+#include "../../../src/app/lsp/xlsp_completion.h"
+#include "../../../src/app/lsp/xlsp_inlay_hints.h"
+#include "../../../src/app/lsp/xlsp_imports.h"
+#include "../../../src/app/lsp/xlsp_navigation.h"
+#include "test_lsp_rename_params.h"
+#include "test_lsp_hover_params.h"
+#include "../../../src/app/lsp/xlsp_semantic_tokens.h"
+#include "../../../src/app/lsp/xlsp_index_pool.h"
+#include "../../../src/app/lsp/xlsp_workspace.h"
+#include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/module/xmodule_graph.h"
+#include "../../../src/base/xjson.h"
+#include "../test_win_compat.h"
+
+static int tests_passed = 0;
+static int tests_failed = 0;
+/* A failing ASSERT returns from the case body, so only the runner knows
+ * whether the case as a whole survived. Counting the verdict here rather
+ * than at the assertion keeps every case worth exactly one tally. */
+static bool current_test_failed = false;
+
+#define TEST(name) static void test_##name(void)
+#define RUN_TEST(name)                                                                             \
+    do {                                                                                           \
+        printf("  Testing %s... ", #name);                                                         \
+        current_test_failed = false;                                                               \
+        test_##name();                                                                             \
+        if (current_test_failed) {                                                                 \
+            tests_failed++;                                                                        \
+        } else {                                                                                   \
+            printf("PASS\n");                                                                      \
+            tests_passed++;                                                                        \
+        }                                                                                          \
+    } while (0)
+
+#define ASSERT(cond)                                                                               \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("FAIL at line %d: %s\n", __LINE__, #cond);                                      \
+            current_test_failed = true;                                                            \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
+
+#define ASSERT_EQ(a, b) ASSERT((a) == (b))
+#define ASSERT_STR_EQ(a, b) ASSERT(strcmp((a), (b)) == 0)
+
+static bool json_array_contains_label(XrJsonValue *items, const char *label) {
+    if (!items || !label)
+        return false;
+    int n = xjson_array_len(items);
+    for (int i = 0; i < n; i++) {
+        XrJsonValue *item = xjson_array_get(items, i);
+        const char *candidate = xjson_get_string(item, "label");
+        if (candidate && strcmp(candidate, label) == 0)
+            return true;
+    }
+    return false;
+}
+
+static XrJsonValue *json_array_find_label(XrJsonValue *items, const char *label) {
+    if (!items || !label)
+        return NULL;
+    int n = xjson_array_len(items);
+    for (int i = 0; i < n; i++) {
+        XrJsonValue *item = xjson_array_get(items, i);
+        const char *candidate = xjson_get_string(item, "label");
+        if (candidate && strcmp(candidate, label) == 0)
+            return item;
+    }
+    return NULL;
+}
+
+static XrJsonValue *json_array_find_label_tooltip(XrJsonValue *items, const char *label,
+                                                  const char *tooltip) {
+    if (!items || !label || !tooltip)
+        return NULL;
+    int n = xjson_array_len(items);
+    for (int i = 0; i < n; i++) {
+        XrJsonValue *item = xjson_array_get(items, i);
+        const char *candidate = xjson_get_string(item, "label");
+        const char *candidate_tooltip = xjson_get_string(item, "tooltip");
+        if (candidate && candidate_tooltip && strcmp(candidate, label) == 0 &&
+            strcmp(candidate_tooltip, tooltip) == 0) {
+            return item;
+        }
+    }
+    return NULL;
+}
+
+static const char *hover_markdown_value(XrJsonValue *hover) {
+    XrJsonValue *contents = xjson_get_object(hover, "contents");
+    return contents ? xjson_get_string(contents, "value") : NULL;
+}
+
+static bool analyzer_file_enum_has_layout(XrLspServer *server, const char *uri,
+                                          const char *enum_name) {
+    if (!server || !server->workspace_analyzer || !uri || !enum_name)
+        return false;
+
+    XaAnalyzerFileScope file_scope;
+    if (!xa_analyzer_push_file_scope(server->workspace_analyzer, uri, &file_scope))
+        return false;
+    XaSymbol *symbol = xa_analyzer_lookup(server->workspace_analyzer, enum_name);
+    XaSymbolLinks *links = xa_analyzer_get_links(server->workspace_analyzer, symbol);
+    bool has_layout = symbol && symbol->kind == XA_SYM_ENUM && links && links->enum_info &&
+                      links->enum_info->nominal_owner && links->enum_info->layout;
+    xa_analyzer_pop_file_scope(server->workspace_analyzer, &file_scope);
+    return has_layout;
+}
+
+static bool content_position_of_nth(const char *content, const char *needle, int occurrence,
+                                    int *out_line, int *out_col) {
+    if (!content || !needle || occurrence <= 0)
+        return false;
+
+    const char *p = content;
+    for (int seen = 0; seen < occurrence; seen++) {
+        p = strstr(p, needle);
+        if (!p)
+            return false;
+        if (seen + 1 < occurrence)
+            p += strlen(needle);
+    }
+
+    int line = 0;
+    int col = 0;
+    for (const char *scan = content; scan < p; scan++) {
+        if (*scan == '\n') {
+            line++;
+            col = 0;
+        } else {
+            col++;
+        }
+    }
+    if (out_line)
+        *out_line = line;
+    if (out_col)
+        *out_col = col;
+    return true;
+}
+
+static bool write_text_file(const char *path, const char *content) {
+    FILE *file = fopen(path, "wb");
+    if (!file)
+        return false;
+    bool wrote = fputs(content, file) >= 0;
+    bool closed = fclose(file) == 0;
+    return wrote && closed;
+}
+
+static bool file_uri_for_test(const char *path, char *uri, size_t uri_size) {
+    char resolved[XR_TEST_PATH_MAX];
+    if (!xr_test_realpath_buf(path, resolved, sizeof(resolved)))
+        return false;
+    for (char *p = resolved; *p; p++) {
+        if (*p == '\\')
+            *p = '/';
+    }
+#ifdef _WIN32
+    int written = snprintf(uri, uri_size, "file:///%s", resolved);
+#else
+    int written = snprintf(uri, uri_size, "file://%s", resolved);
+#endif
+    return written >= 0 && (size_t) written < uri_size;
+}
+
+TEST(block_import_path_uses_shared_quoted_literal_decoder) {
+    const char *content = "import \"\"\"\n"
+                          "    ./nested/module\n"
+                          "    \"\"\"\n";
+    XlspImportInfo *imports = xlsp_parse_imports(content, "file:///tmp/xray214/main.xr");
+    ASSERT(imports != NULL);
+    ASSERT_STR_EQ(imports->import_path, "./nested/module");
+    ASSERT_STR_EQ(imports->module_name, "module");
+    ASSERT(imports->next == NULL);
+    xlsp_free_imports(imports);
+}
+
+static XrJsonValue *semantic_tokens_for_test(XrLspServer *server,XrLspDocument *doc) {
+    XrJsonValue *params=xjson_new_object(),*document=xjson_new_object();
+    if(!params||!document){xjson_free(params);xjson_free(document);return NULL;}
+    xjson_object_set_new(document,"uri",xjson_new_string(doc->uri));
+    xjson_object_set_new(params,"textDocument",document);
+    XrJsonValue *result=xlsp_semantic_handle(server,params,0);xjson_free(params);return result;
+}
+static int semantic_token_count(XrJsonValue *result) {
+    XrJsonValue *data=xjson_get_array(result,"data");
+    return data&&data->as.array.count>=0&&data->as.array.count%5==0?data->as.array.count/5:-1;
+}
+static bool semantic_token_word(XrJsonValue *data,int index,uint32_t *out) {
+    XrJsonValue *value=xjson_array_get(data,index);
+    if(!value||value->type!=XR_JSON_NUMBER||!(value->as.number>=0&&value->as.number<=INT32_MAX)||
+       value->as.number!=(double)(uint32_t)value->as.number)return false;
+    *out=(uint32_t)value->as.number;return true;
+}
+static bool semantic_token_at(XrJsonValue *result,int index,XlspSourceToken *out) {
+    if(index<0||index>=semantic_token_count(result))return false;
+    XrJsonValue *data=xjson_get_array(result,"data");XlspSourceToken token={0};
+    for(int i=0;i<=index;++i) {
+        uint32_t row=0,column=0;
+        if(!semantic_token_word(data,i*5,&row)||!semantic_token_word(data,i*5+1,&column)||
+           !semantic_token_word(data,i*5+2,&token.length)||!semantic_token_word(data,i*5+3,&token.type)||
+           !semantic_token_word(data,i*5+4,&token.modifiers)||row>INT32_MAX-token.line)return false;
+        token.line+=row;if(row)token.column=0;
+        if(column>INT32_MAX-token.column)return false;token.column+=column;
+        if(!token.length||token.length>INT32_MAX-token.column||token.type>=XLSP_TOKEN_COUNT)return false;
+    }
+    *out=token;return true;
+}
+static bool semantic_token_exists(XrJsonValue *tokens,int line,int col,const char *text,XlspSemanticTokenType type) {
+    if(!tokens||!text||line<0||col<0)return false;
+    for(int i=0;i<semantic_token_count(tokens);++i) {
+        XlspSourceToken token={0};if(!semantic_token_at(tokens,i,&token))return false;
+        if(token.line==(uint32_t)line&&token.column==(uint32_t)col&&token.length==strlen(text)&&token.type==(uint32_t)type)return true;
+    }
+    return false;
+}
+static bool semantic_test_uri(const char *name,char *uri,size_t size) {
+    char root[XR_TEST_PATH_MAX],path[XR_TEST_PATH_MAX];
+    if(!xr_test_realpath_buf(".",root,sizeof(root)))return false;
+    int n=snprintf(path,sizeof(path),"%s/%s",root,name);if(n<=0||(size_t)n>=sizeof(path))return false;
+    XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrCompileResources *resources=NULL;char *owned=NULL;bool ok=false;
+    if(xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK)return false;
+    if(xlsp_index_file_uri(resources,path,&owned)==XR_XIR_OK) {
+        size_t length=strlen(owned);if(length<size){memcpy(uri,owned,length+1);ok=true;}
+    }
+    xr_compile_resources_free(owned);xr_compile_resources_release(resources);return ok;
+}
+
+// ============================================================================
+// Server and Document Lifecycle Tests
+// ============================================================================
+
+TEST(server_create_destroy) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    ASSERT(server->initialized == false);
+    ASSERT(server->doc_table != NULL);
+    ASSERT(server->doc_table->doc_count == 0);
+    xlsp_server_free(server);
+}
+
+TEST(document_open) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var x = 1\nvar y = 2\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", content, strlen("file:///test.xr"), strlen(content), 1});
+
+    ASSERT(doc != NULL);
+    ASSERT_STR_EQ(doc->uri, "file:///test.xr");
+    ASSERT_EQ(doc->version, 1);
+    ASSERT(doc->content != NULL);
+    ASSERT_EQ(doc->length, strlen(content));
+
+    xlsp_server_free(server);
+}
+
+TEST(document_get) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///test1.xr", "content1", strlen("file:///test1.xr"), strlen("content1"), 1});
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///test2.xr", "content2", strlen("file:///test2.xr"), strlen("content2"), 1});
+
+    XrLspDocument *doc1 = xlsp_document_get(server, "file:///test1.xr");
+    ASSERT(doc1 != NULL);
+    ASSERT_STR_EQ(doc1->uri, "file:///test1.xr");
+
+    XrLspDocument *doc2 = xlsp_document_get(server, "file:///test2.xr");
+    ASSERT(doc2 != NULL);
+    ASSERT_STR_EQ(doc2->uri, "file:///test2.xr");
+
+    XrLspDocument *doc3 = xlsp_document_get(server, "file:///nonexistent.xr");
+    ASSERT(doc3 == NULL);
+
+    xlsp_server_free(server);
+}
+
+TEST(document_close) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", "content", strlen("file:///test.xr"), strlen("content"), 1});
+    ASSERT(xlsp_document_get(server, "file:///test.xr") != NULL);
+
+    xlsp_document_close(server, "file:///test.xr");
+    ASSERT(xlsp_document_get(server, "file:///test.xr") == NULL);
+
+    xlsp_server_free(server);
+}
+
+TEST(document_multiple) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///a.xr", "a", strlen("file:///a.xr"), strlen("a"), 1});
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///b.xr", "b", strlen("file:///b.xr"), strlen("b"), 1});
+    xlsp_document_open(server, &(XlspSourceDocument){"file:///c.xr", "c", strlen("file:///c.xr"), strlen("c"), 1});
+
+    ASSERT(xlsp_document_get(server, "file:///a.xr") != NULL);
+    ASSERT(xlsp_document_get(server, "file:///b.xr") != NULL);
+    ASSERT(xlsp_document_get(server, "file:///c.xr") != NULL);
+
+    xlsp_document_close(server, "file:///b.xr");
+
+    ASSERT(xlsp_document_get(server, "file:///a.xr") != NULL);
+    ASSERT(xlsp_document_get(server, "file:///b.xr") == NULL);
+    ASSERT(xlsp_document_get(server, "file:///c.xr") != NULL);
+
+    xlsp_server_free(server);
+}
+
+// ============================================================================
+// Line Index Tests
+// ============================================================================
+
+TEST(document_line_count) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "line1\nline2\nline3\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", content, strlen("file:///test.xr"), strlen(content), 1});
+
+    ASSERT(doc != NULL);
+    ASSERT(doc->line_count >= 3);
+
+    xlsp_server_free(server);
+}
+
+TEST(position_to_offset) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    // "var x = 1\nvar y = 2\n"
+    // Line 0: "var x = 1\n" (10 chars)
+    // Line 1: "var y = 2\n" (10 chars)
+    const char *content = "var x = 1\nvar y = 2\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", content, strlen("file:///test.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+
+    XrLspPosition pos0 = {0, 0};  // Start of line 0
+    uint32_t offset0 = xlsp_position_to_offset(doc, pos0);
+    ASSERT_EQ(offset0, 0);
+
+    XrLspPosition pos1 = {0, 4};  // "var x" -> position of 'x'
+    uint32_t offset1 = xlsp_position_to_offset(doc, pos1);
+    ASSERT_EQ(offset1, 4);
+
+    XrLspPosition pos2 = {1, 0};  // Start of line 1
+    uint32_t offset2 = xlsp_position_to_offset(doc, pos2);
+    ASSERT_EQ(offset2, 10);
+
+    XrLspPosition pos3 = {1, 4};  // "var y" -> position of 'y' on line 1
+    uint32_t offset3 = xlsp_position_to_offset(doc, pos3);
+    ASSERT_EQ(offset3, 14);
+
+    xlsp_server_free(server);
+}
+
+TEST(offset_to_position) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var x = 1\nvar y = 2\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", content, strlen("file:///test.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+
+    XrLspPosition pos0 = xlsp_offset_to_position(doc, 0);
+    ASSERT_EQ(pos0.line, 0);
+    ASSERT_EQ(pos0.character, 0);
+
+    XrLspPosition pos4 = xlsp_offset_to_position(doc, 4);
+    ASSERT_EQ(pos4.line, 0);
+    ASSERT_EQ(pos4.character, 4);
+
+    XrLspPosition pos10 = xlsp_offset_to_position(doc, 10);
+    ASSERT_EQ(pos10.line, 1);
+    ASSERT_EQ(pos10.character, 0);
+
+    XrLspPosition pos14 = xlsp_offset_to_position(doc, 14);
+    ASSERT_EQ(pos14.line, 1);
+    ASSERT_EQ(pos14.character, 4);
+
+    xlsp_server_free(server);
+}
+
+TEST(position_roundtrip) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "fn main() {\n    var x = 1\n    print(x)\n}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", content, strlen("file:///test.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+
+    // Test roundtrip for valid positions only (within line bounds)
+    // Line 0: "fn main() {" (11 chars)
+    // Line 1: "    var x = 1" (13 chars)
+    // Line 2: "    print(x)" (12 chars)
+    // Line 3: "}" (1 char)
+    int line_lengths[] = {11, 13, 12, 1};
+
+    for (int line = 0; line < 4; line++) {
+        for (int col = 0; col < line_lengths[line]; col++) {
+            XrLspPosition pos = {line, col};
+            uint32_t offset = xlsp_position_to_offset(doc, pos);
+            XrLspPosition pos2 = xlsp_offset_to_position(doc, offset);
+            ASSERT_EQ(pos.line, pos2.line);
+            ASSERT_EQ(pos.character, pos2.character);
+        }
+    }
+
+    xlsp_server_free(server);
+}
+
+// ============================================================================
+// Document Version Tests
+// ============================================================================
+
+TEST(document_version) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", "content", strlen("file:///test.xr"), strlen("content"), 1});
+    ASSERT_EQ(doc->version, 1);
+
+    // Close and reopen with new version
+    xlsp_document_close(server, "file:///test.xr");
+    doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///test.xr", "new content", strlen("file:///test.xr"), strlen("new content"), 5});
+    ASSERT_EQ(doc->version, 5);
+
+    xlsp_server_free(server);
+}
+
+// ============================================================================
+// Completion Tests
+// ============================================================================
+
+TEST(completion_shared_channel_member) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "const ch = Channel<i64>(1)\n"
+                          "ch.\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///completion.xr", content, strlen("file:///completion.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 3};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "send"));
+    ASSERT(json_array_contains_label(items, "recv"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(completion_inferred_int_members) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "fn main() {\n"
+                          "    var a = 10\n"
+                          "    a.\n"
+                          "}\n";
+    XrLspDocument *doc =
+        xlsp_document_open(server, &(XlspSourceDocument){"file:///completion_inferred_int.xr", content, strlen("file:///completion_inferred_int.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, (XrLspPosition) {2, 6});
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "abs"));
+    ASSERT(json_array_contains_label(items, "toString"));
+    ASSERT(json_array_contains_label(items, "checkedAdd"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(contextual_u32_literal_preserves_completion_and_hover_type) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "fn main() {\n"
+                          "    var a: u32 = 10\n"
+                          "    a.\n"
+                          "}\n";
+    XrLspDocument *doc =
+        xlsp_document_open(server, &(XlspSourceDocument){"file:///completion_explicit_u32.xr", content, strlen("file:///completion_explicit_u32.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, (XrLspPosition) {2, 6});
+    ASSERT(items != NULL);
+    XrJsonValue *rotate = json_array_find_label(items, "rotateLeft");
+    ASSERT(rotate != NULL);
+    ASSERT_STR_EQ(xjson_get_string(rotate, "detail"), "rotateLeft(count: i64): u32");
+
+    xjson_free(items);
+
+    const char *hover_content = "fn value() -> u32 {\n"
+                                "    var a: u32 = 10\n"
+                                "    return a.rotateLeft(1)\n"
+                                "}\n";
+    XrLspDocument *hover_doc =
+        xlsp_document_open(server, &(XlspSourceDocument){"file:///hover_contextual_u32.xr", hover_content, strlen("file:///hover_contextual_u32.xr"), strlen(hover_content), 1});
+    ASSERT(hover_doc != NULL);
+    xlsp_parse_document(hover_doc, server);
+    XrJsonValue *hover = hover_test_at(server, hover_doc, (XrLspPosition) {2, 15});
+    ASSERT(hover != NULL);
+    const char *hover_text = hover_markdown_value(hover);
+    ASSERT(hover_text != NULL);
+    ASSERT(strstr(hover_text, "u32.rotateLeft") != NULL);
+    xjson_free(hover);
+
+    xlsp_server_free(server);
+}
+
+TEST(completion_enum_static_variants_descriptor) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "enum Color { Red, Green }\n"
+                          "Color.\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///enum_static.xr", content, strlen("file:///enum_static.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 6};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "Red"));
+    ASSERT(json_array_contains_label(items, "Green"));
+    XrJsonValue *variants = json_array_find_label(items, "variants");
+    ASSERT(variants != NULL);
+    const char *detail = xjson_get_string(variants, "detail");
+    ASSERT(detail != NULL);
+    ASSERT(strstr(detail, "EnumVariants<Color>") != NULL);
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(dirty_open_import_refresh_preserves_enum_identity) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *import_uri = "file:///identity/dirty_dependency";
+    const char *import_content = "enum ImportedState { Ready, Busy }\n";
+    XrLspDocument *import_doc = xlsp_document_open(server, &(XlspSourceDocument){import_uri, import_content, strlen(import_uri), strlen(import_content), 1});
+    ASSERT(import_doc != NULL);
+    xlsp_parse_document(import_doc, server);
+    ASSERT(analyzer_file_enum_has_layout(server, import_uri, "ImportedState"));
+
+    /* didChange leaves the previous AST installed until the next parse.  Parsing
+     * an importer refreshes that dirty open AST through the on-demand path. */
+    XrJsonValue *edits=xjson_new_array(),*edit=xjson_new_object();
+    ASSERT(edits&&edit);
+    xjson_object_set_new(edit,"text",xjson_new_string("enum ImportedState { Ready, Busy }\n\n"));
+    xjson_array_push(edits,edit);
+    ASSERT_EQ(xlsp_document_apply_changes(import_doc,edits,import_doc->version+1),XR_XIR_OK);
+    xjson_free(edits);
+    ASSERT(import_doc->dirty);
+
+    const char *owner_uri = "file:///identity/main.xr";
+    XrLspDocument *owner_doc =
+        xlsp_document_open(server, &(XlspSourceDocument){owner_uri, "import \"./dirty_dependency\" as dep\n", strlen(owner_uri), strlen("import \"./dirty_dependency\" as dep\n"), 1});
+    ASSERT(owner_doc != NULL);
+    xlsp_parse_document(owner_doc, server);
+
+    ASSERT(!import_doc->dirty);
+    ASSERT(analyzer_file_enum_has_layout(server, import_uri, "ImportedState"));
+    xlsp_server_free(server);
+}
+
+TEST(watched_file_refresh_installs_enum_identity) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    char path[] = "xray-lsp-watched-XXXXXX.xr";
+    int fd = xr_test_mkstemps(path, 3);
+    ASSERT(fd >= 0);
+    FILE *file = xr_test_fdopen(fd, "wb");
+    ASSERT(file != NULL);
+    ASSERT(fputs("enum WatchedState { Ready, Busy }\n", file) >= 0);
+    ASSERT(fclose(file) == 0);
+
+    char uri[128];
+    ASSERT(snprintf(uri, sizeof(uri), "file://%s", path) > 0);
+    xlsp_workspace_index_file(server, uri, path);
+    ASSERT(analyzer_file_enum_has_layout(server, uri, "WatchedState"));
+
+    ASSERT(remove(path) == 0);
+    xlsp_server_free(server);
+}
+
+TEST(relative_import_from_disk_provides_precise_hover) {
+    char directory[] = "xray-lsp-module-graph-XXXXXX";
+    ASSERT(xr_test_mkdtemp(directory) != NULL);
+
+    char dependency_path[XR_TEST_PATH_MAX];
+    char entry_path[XR_TEST_PATH_MAX];
+    ASSERT(snprintf(dependency_path, sizeof(dependency_path), "%s/palette.xr", directory) > 0);
+    ASSERT(snprintf(entry_path, sizeof(entry_path), "%s/main.xr", directory) > 0);
+
+    const char *dependency = "export enum Shade { Light, Dark }\n";
+    const char *entry = "import { Shade } from \"./palette\"\n"
+                        "var selected = Shade.Light\n";
+    ASSERT(write_text_file(dependency_path, dependency));
+    ASSERT(write_text_file(entry_path, entry));
+
+    char entry_uri[XR_TEST_PATH_MAX + 16];
+    ASSERT(file_uri_for_test(entry_path, entry_uri, sizeof(entry_uri)));
+
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){entry_uri, entry, strlen(entry_uri), strlen(entry), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    ASSERT(server->module_graph != NULL);
+    ASSERT(server->module_graph->spec_count == 2);
+    XrJsonValue *diagnostics = xlsp_analyze_diagnostics(doc);
+    ASSERT(diagnostics != NULL);
+    ASSERT_EQ(xjson_array_len(diagnostics), 0);
+    xjson_free(diagnostics);
+
+    int hover_line = 0;
+    int hover_col = 0;
+    ASSERT(content_position_of_nth(entry, "Shade", 2, &hover_line, &hover_col));
+    XrJsonValue *hover = hover_test_at(
+        server, doc, (XrLspPosition) {(uint32_t) hover_line, (uint32_t) hover_col + 1});
+    ASSERT(hover != NULL);
+    const char *hover_text = hover_markdown_value(hover);
+    ASSERT(hover_text != NULL);
+    ASSERT(strstr(hover_text, "enum Shade") != NULL);
+    xjson_free(hover);
+
+    xlsp_server_free(server);
+    ASSERT(xr_test_unlink(entry_path) == 0);
+    ASSERT(xr_test_unlink(dependency_path) == 0);
+    ASSERT(xr_test_rmdir(directory) == 0);
+}
+
+TEST(completion_enum_descriptor_properties) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "enum Event { Data { value: i64 } }\n"
+                          "for (variant in Event.variants) {\n"
+                          "    for (field in variant.payloads) {\n"
+                          "        field.\n"
+                          "    }\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///enum_payload_loop.xr", content, strlen("file:///enum_payload_loop.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {3, 14};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "index"));
+    ASSERT(json_array_contains_label(items, "name"));
+    ASSERT(json_array_contains_label(items, "type"));
+    ASSERT(!json_array_contains_label(items, "Data"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(hover_enum_descriptor_keeps_precise_type) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "enum Color { Red, Green }\n"
+                          "for (variant in Color.variants) {\n"
+                          "    print(variant.ordinal)\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///enum_hover.xr", content, strlen("file:///enum_hover.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {2, 20};
+    XrJsonValue *hover = hover_test_at(server, doc, pos);
+    ASSERT(hover != NULL);
+    const char *value = hover_markdown_value(hover);
+    ASSERT(value != NULL);
+    ASSERT(strstr(value, "EnumVariant<Color>.ordinal: i64") != NULL);
+    ASSERT(strstr(value, "Allocation: none") != NULL);
+
+    xjson_free(hover);
+    xlsp_server_free(server);
+}
+
+TEST(completion_enum_iteration_variable_is_descriptor) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "enum Color { Red, Green }\n"
+                          "for (variant in Color.variants) {\n"
+                          "    variant.\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///enum_loop.xr", content, strlen("file:///enum_loop.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {2, 12};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "ordinal"));
+    ASSERT(json_array_contains_label(items, "payloads"));
+    ASSERT(!json_array_contains_label(items, "Red"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(completion_u8_array_registry_methods) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var bytes = Array<u8>(0)\n"
+                          "bytes.\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///u8_array.xr", content, strlen("file:///u8_array.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 6};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "appendFrom"));
+    ASSERT(json_array_contains_label(items, "repeatFrom"));
+    ASSERT(json_array_contains_label(items, "push"));
+    XrJsonValue *append = json_array_find_label(items, "appendFrom");
+    ASSERT(append != NULL);
+    const char *doc_text = xjson_get_string(append, "documentation");
+    ASSERT(doc_text != NULL);
+    ASSERT(strstr(doc_text, "Array<u8> byte bulk methods") != NULL);
+    ASSERT(strstr(doc_text, "Availability: heap-capable profiles") != NULL);
+    ASSERT(strstr(doc_text, "Lowering: xi.byte.array.append.from") != NULL);
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(completion_uint8_array_uses_canonical_byte_docs) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var bytes = Array<u8>(0)\n"
+                          "bytes.\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///uint8_array.xr", content, strlen("file:///uint8_array.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 6};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    XrJsonValue *append = json_array_find_label(items, "appendFrom");
+    ASSERT(append != NULL);
+    const char *doc_text = xjson_get_string(append, "documentation");
+    ASSERT(doc_text != NULL);
+    ASSERT(strstr(doc_text, "Array<u8> byte bulk methods") != NULL);
+    ASSERT(strstr(doc_text, "Array<byte>") == NULL);
+    ASSERT(strstr(doc_text, "Slice<byte>") == NULL);
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(completion_int_array_excludes_u8_registry_methods) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var ints = Array<i64>(0)\n"
+                          "ints.\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///int_array.xr", content, strlen("file:///int_array.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 5};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "push"));
+    ASSERT(!json_array_contains_label(items, "appendFrom"));
+    ASSERT(!json_array_contains_label(items, "repeatFrom"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(completion_u8_slice_registry_methods) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var bytes = Array<u8>(4)\n"
+                          "var view: Slice<u8> = bytes[:]\n"
+                          "view.\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///u8_slice.xr", content, strlen("file:///u8_slice.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {2, 5};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "load"));
+    ASSERT(json_array_contains_label(items, "store"));
+    ASSERT(json_array_contains_label(items, "reinterpret"));
+    ASSERT(json_array_contains_label(items, "asBytes"));
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(hover_u8_array_registry_method) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var bytes = Array<u8>(0)\n"
+                          "bytes.appendFrom(bytes[:])\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///hover_u8_array.xr", content, strlen("file:///hover_u8_array.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 8};
+    XrJsonValue *hover = hover_test_at(server, doc, pos);
+    ASSERT(hover != NULL);
+    const char *value = hover_markdown_value(hover);
+    ASSERT(value != NULL);
+    ASSERT(strstr(value, "Array<u8>.appendFrom") != NULL);
+    ASSERT(strstr(value, "Slice<u8>") != NULL);
+    ASSERT(strstr(value, "Array<u8> byte bulk methods") != NULL);
+    ASSERT(strstr(value, "Availability: heap-capable profiles") != NULL);
+    ASSERT(strstr(value, "Lowering: xi.byte.array.append.from") != NULL);
+
+    xjson_free(hover);
+    xlsp_server_free(server);
+}
+
+TEST(hover_deprecated_message_roundtrip) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "@deprecated(\"use modern\")\n"
+                          "export fn legacy(x: i64) -> i64 { return x + 1 }\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///hover_deprecated.xr", content, strlen("file:///hover_deprecated.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    int line = 0;
+    int col = 0;
+    ASSERT(content_position_of_nth(content, "legacy", 1, &line, &col));
+    XrJsonValue *hover =
+        hover_test_at(server, doc, (XrLspPosition) {(uint32_t) line, (uint32_t) col});
+    ASSERT(hover != NULL);
+    const char *text = hover_markdown_value(hover);
+    ASSERT(text != NULL);
+    ASSERT(strstr(text, "fn legacy") != NULL);
+    ASSERT(strstr(text, "Deprecated: use modern.") != NULL);
+    xjson_free(hover);
+
+    xlsp_server_free(server);
+}
+
+TEST(signature_help_u8_array_registry_method) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "var bytes = Array<u8>(0)\n"
+                          "bytes.appendFrom(bytes[:])\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///sig_u8_array.xr", content, strlen("file:///sig_u8_array.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {1, 17};
+    XrJsonValue *help = xlsp_analyze_signature_help(doc, pos);
+    ASSERT(help != NULL);
+    XrJsonValue *signatures = xjson_get_array(help, "signatures");
+    ASSERT(signatures != NULL);
+    XrJsonValue *sig0 = xjson_array_get(signatures, 0);
+    ASSERT(sig0 != NULL);
+    const char *label = xjson_get_string(sig0, "label");
+    ASSERT(label != NULL);
+    ASSERT(strstr(label, "appendFrom") != NULL);
+    ASSERT(strstr(label, "Slice<u8>") != NULL);
+
+    xjson_free(help);
+    xlsp_server_free(server);
+}
+
+TEST(builtin_generic_array_uses_error_placeholder) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    XrLspDocument *doc =
+        xlsp_document_open(server, &(XlspSourceDocument){"file:///generic_array_completion.xr", "Array.\n", strlen("file:///generic_array_completion.xr"), strlen("Array.\n"), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition pos = {0, 6};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
+    ASSERT(items != NULL);
+    XrJsonValue *push = json_array_find_label(items, "push");
+    ASSERT(push != NULL);
+    const char *detail = xjson_get_string(push, "detail");
+    ASSERT(detail != NULL);
+    ASSERT(strstr(detail, "unknown") == NULL);
+    ASSERT(strstr(detail, "<error>") != NULL);
+
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(global_type_query_builtins_use_canonical_names) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "typeOf(1)\n"
+                          "typeName(1)\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///type_query.xr", content, strlen("file:///type_query.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+
+    XrLspPosition completion_pos = {0, 0};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, completion_pos);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "typeOf"));
+    ASSERT(json_array_contains_label(items, "typeName"));
+    ASSERT(!json_array_contains_label(items, "typeof"));
+    ASSERT(!json_array_contains_label(items, "typename"));
+    xjson_free(items);
+
+    XrLspPosition type_of_hover_pos = {0, 1};
+    XrJsonValue *type_of_hover = hover_test_at(server, doc, type_of_hover_pos);
+    ASSERT(type_of_hover != NULL);
+    const char *type_of_hover_text = hover_markdown_value(type_of_hover);
+    ASSERT(type_of_hover_text != NULL);
+    ASSERT(strstr(type_of_hover_text, "typeOf(value): Type") != NULL);
+    ASSERT(strstr(type_of_hover_text, "typeof") == NULL);
+    xjson_free(type_of_hover);
+
+    XrLspPosition type_name_hover_pos = {1, 1};
+    XrJsonValue *type_name_hover = hover_test_at(server, doc, type_name_hover_pos);
+    ASSERT(type_name_hover != NULL);
+    const char *type_name_hover_text = hover_markdown_value(type_name_hover);
+    ASSERT(type_name_hover_text != NULL);
+    ASSERT(strstr(type_name_hover_text, "typeName(value): string") != NULL);
+    ASSERT(strstr(type_name_hover_text, "typeName<T>(): string") != NULL);
+    ASSERT(strstr(type_name_hover_text, "typename") == NULL);
+    xjson_free(type_name_hover);
+
+    XrLspPosition type_of_sig_pos = {0, 7};
+    XrJsonValue *type_of_sig = xlsp_analyze_signature_help(doc, type_of_sig_pos);
+    ASSERT(type_of_sig != NULL);
+    XrJsonValue *type_of_signatures = xjson_get_array(type_of_sig, "signatures");
+    ASSERT(type_of_signatures != NULL);
+    XrJsonValue *type_of_sig0 = xjson_array_get(type_of_signatures, 0);
+    ASSERT(type_of_sig0 != NULL);
+    const char *type_of_label = xjson_get_string(type_of_sig0, "label");
+    ASSERT(type_of_label != NULL);
+    ASSERT(strstr(type_of_label, "typeOf(value): Type") != NULL);
+    ASSERT(strstr(type_of_label, "typeof") == NULL);
+    xjson_free(type_of_sig);
+
+    XrLspPosition type_name_sig_pos = {1, 9};
+    XrJsonValue *type_name_sig = xlsp_analyze_signature_help(doc, type_name_sig_pos);
+    ASSERT(type_name_sig != NULL);
+    XrJsonValue *type_name_signatures = xjson_get_array(type_name_sig, "signatures");
+    ASSERT(type_name_signatures != NULL);
+    XrJsonValue *type_name_sig0 = xjson_array_get(type_name_signatures, 0);
+    ASSERT(type_name_sig0 != NULL);
+    const char *type_name_label = xjson_get_string(type_name_sig0, "label");
+    ASSERT(type_name_label != NULL);
+    ASSERT(strstr(type_name_label, "typeName(value): string") != NULL);
+    ASSERT(strstr(type_name_label, "typeName<T>(): string") != NULL);
+    ASSERT(strstr(type_name_label, "typename") == NULL);
+    xjson_free(type_name_sig);
+
+    xlsp_server_free(server);
+}
+
+TEST(completion_public_attributes_use_registry) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///attributes.xr", "\n", strlen("file:///attributes.xr"), strlen("\n"), 1});
+    ASSERT(doc != NULL);
+
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, (XrLspPosition) {0, 0});
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "@test"));
+    ASSERT(json_array_contains_label(items, "@before_each"));
+    ASSERT(json_array_contains_label(items, "@after_each"));
+    ASSERT(json_array_contains_label(items, "@before_all"));
+    ASSERT(json_array_contains_label(items, "@after_all"));
+    ASSERT(json_array_contains_label(items, "@deprecated"));
+    ASSERT(json_array_contains_label(items, "@derive"));
+    ASSERT(!json_array_contains_label(items, "@no_alloc"));
+    ASSERT(!json_array_contains_label(items, "@native"));
+    ASSERT(!json_array_contains_label(items, "@c_export"));
+    xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(exact_integer_bit_builtins_use_receiver_specialized_registry) {
+    XrType u32;
+    memset(&u32, 0, sizeof(u32));
+    u32.kind = XR_KIND_INT;
+    u32.scalar_rep = XR_NATIVE_U32;
+
+    XrJsonValue *items = xlsp_builtin_get_completions_for_type(&u32);
+    ASSERT(items != NULL);
+    ASSERT(json_array_contains_label(items, "rotateLeft"));
+    ASSERT(json_array_contains_label(items, "rotateRight"));
+    ASSERT(json_array_contains_label(items, "byteswap"));
+    ASSERT(json_array_contains_label(items, "popcount"));
+    ASSERT(json_array_contains_label(items, "leadingZeros"));
+    ASSERT(json_array_contains_label(items, "trailingZeros"));
+
+    XrJsonValue *rotate = json_array_find_label(items, "rotateLeft");
+    ASSERT(rotate != NULL);
+    ASSERT_STR_EQ(xjson_get_string(rotate, "detail"), "rotateLeft(count: i64): u32");
+    const char *documentation = xjson_get_string(rotate, "documentation");
+    ASSERT(documentation != NULL);
+    ASSERT(strstr(documentation, "Allocation: no heap allocation") != NULL);
+    ASSERT(strstr(documentation, "Lowering: xi.bit.rotl") != NULL);
+
+    char signature[160];
+    ASSERT(xlsp_builtin_get_signature_for_type(&u32, "byteswap", signature, sizeof(signature)) !=
+           NULL);
+    ASSERT_STR_EQ(signature, "byteswap(): u32");
+    ASSERT(xlsp_builtin_get_signature_for_type(&u32, "popcount", signature, sizeof(signature)) !=
+           NULL);
+    ASSERT_STR_EQ(signature, "popcount(): i64");
+
+    xjson_free(items);
+}
+
+TEST(param_mode_user_function_lsp_display) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "fn adjust(view: i64, slot: ref i64, payload: move Array<i64>) -> i64 {\n"
+                          "    slot = slot + view + len(payload)\n"
+                          "    return slot\n"
+                          "}\n"
+                          "\n"
+                          "fn main() {\n"
+                          "    var value = 1\n"
+                          "    var slot = 2\n"
+                          "    var payload = [3]\n"
+                          "    adjust(value, ref slot, move payload)\n"
+                          "    adj\n"
+                          "}\n";
+    const char *expected = "fn adjust(view: i64, slot: ref i64, payload: move Array<i64>): i64";
+
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///param_mode_lsp.xr", content, strlen("file:///param_mode_lsp.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspPosition completion_pos = {10, 7};
+    XrJsonValue *items = xlsp_analyze_completion(server, doc, completion_pos);
+    ASSERT(items != NULL);
+    XrJsonValue *adjust_item = json_array_find_label(items, "adjust");
+    ASSERT(adjust_item != NULL);
+    const char *detail = xjson_get_string(adjust_item, "detail");
+    ASSERT(detail != NULL);
+    ASSERT_STR_EQ(detail, expected);
+    xjson_free(items);
+
+    XrLspPosition hover_pos = {9, 6};
+    XrJsonValue *hover = hover_test_at(server, doc, hover_pos);
+    ASSERT(hover != NULL);
+    const char *hover_text = hover_markdown_value(hover);
+    ASSERT(hover_text != NULL);
+    ASSERT(strstr(hover_text, expected) != NULL);
+    xjson_free(hover);
+
+    XrLspPosition sig_pos = {9, 12};
+    XrJsonValue *help = xlsp_analyze_signature_help(doc, sig_pos);
+    ASSERT(help != NULL);
+    XrJsonValue *signatures = xjson_get_array(help, "signatures");
+    ASSERT(signatures != NULL);
+    XrJsonValue *sig0 = xjson_array_get(signatures, 0);
+    ASSERT(sig0 != NULL);
+    const char *label = xjson_get_string(sig0, "label");
+    ASSERT(label != NULL);
+    ASSERT_STR_EQ(label, expected);
+
+    XrJsonValue *params = xjson_get_array(sig0, "parameters");
+    ASSERT(params != NULL);
+    ASSERT(xjson_array_len(params) == 3);
+    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 0), "label"), "view: i64");
+    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 1), "label"), "slot: ref i64");
+    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 2), "label"),
+                  "payload: move Array<i64>");
+
+    xjson_free(help);
+    xlsp_server_free(server);
+}
+
+TEST(param_mode_semantic_tokens_mark_modes_and_call_access) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "fn adjust(view: i64, slot: ref i64, payload: move Array<i64>) -> i64 {\n"
+                          "    slot = slot + view + len(payload)\n"
+                          "    return slot\n"
+                          "}\n"
+                          "\n"
+                          "fn main() {\n"
+                          "    var value = 1\n"
+                          "    var slot = 2\n"
+                          "    var payload = [3]\n"
+                          "    adjust(value, ref slot, move payload)\n"
+                          "}\n";
+
+    char uri[XR_TEST_PATH_MAX];ASSERT(semantic_test_uri("param_mode_tokens.xr",uri,sizeof(uri)));
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri,content,strlen(uri),strlen(content),1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *tokens = semantic_tokens_for_test(server,doc);
+    ASSERT(tokens != NULL);
+
+    int line = -1;
+    int col = -1;
+    ASSERT(content_position_of_nth(content, "ref", 1, &line, &col));
+    ASSERT(semantic_token_exists(tokens, line, col, "ref", XLSP_TOKEN_MODIFIER));
+    ASSERT(content_position_of_nth(content, "move", 1, &line, &col));
+    ASSERT(semantic_token_exists(tokens, line, col, "move", XLSP_TOKEN_MODIFIER));
+    ASSERT(content_position_of_nth(content, "ref", 2, &line, &col));
+    ASSERT(semantic_token_exists(tokens, line, col, "ref", XLSP_TOKEN_MODIFIER));
+    ASSERT(content_position_of_nth(content, "move", 2, &line, &col));
+    ASSERT(semantic_token_exists(tokens, line, col, "move", XLSP_TOKEN_MODIFIER));
+
+    xjson_free(tokens);
+    xlsp_server_free(server);
+}
+
+TEST(block_quoted_literals_preserve_lsp_positions_and_semantic_boundaries) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    const char *content = "var page = r\"\"\"\n"
+                          "<div title=\"quoted\">{ not_xray }</div>\n"
+                          "\"\"\"\n"
+                          "var bytes = br\"\"\"\"\n"
+                          "${HOME} // literal { bytes }\n"
+                          "\"\"\"\"\n"
+                          "var after = 7\n";
+    char uri[XR_TEST_PATH_MAX];ASSERT(semantic_test_uri("quoted_literal_positions.xr",uri,sizeof(uri)));
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri,content,strlen(uri),strlen(content),1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+    ASSERT(doc->ast != NULL);
+
+    int after_line = -1;
+    int after_col = -1;
+    ASSERT(content_position_of_nth(content, "after", 1, &after_line, &after_col));
+    XrLspPosition after_pos = {after_line, after_col};
+    uint32_t after_offset = xlsp_position_to_offset(doc, after_pos);
+    XrLspPosition roundtrip = xlsp_offset_to_position(doc, after_offset);
+    ASSERT_EQ(roundtrip.line, (uint32_t) after_line);
+    ASSERT_EQ(roundtrip.character, (uint32_t) after_col);
+
+    XrJsonValue *tokens = semantic_tokens_for_test(server,doc);
+    ASSERT(tokens != NULL);
+    ASSERT(semantic_token_exists(tokens, after_line, after_col, "after", XLSP_TOKEN_VARIABLE));
+    ASSERT(semantic_token_count(tokens)>=0);
+    for (int i = 0; i < semantic_token_count(tokens); i++) {
+        XlspSourceToken token={0};ASSERT(semantic_token_at(tokens,i,&token));
+        ASSERT(token.line != 1);
+        ASSERT(token.line != 4);
+    }
+
+    xjson_free(tokens);
+    xlsp_server_free(server);
+}
+
+TEST(param_mode_inlay_hints_describe_modes) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *content = "fn adjust(view: i64, slot: ref i64, payload: move Array<i64>) -> i64 {\n"
+                          "    slot = slot + view + len(payload)\n"
+                          "    return slot\n"
+                          "}\n"
+                          "\n"
+                          "fn main() {\n"
+                          "    var value = 1\n"
+                          "    var target = 2\n"
+                          "    var payload = [3]\n"
+                          "    adjust(value, ref target, move payload)\n"
+                          "}\n";
+
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///param_mode_inlay.xr", content, strlen("file:///param_mode_inlay.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspRange range = {{0, 0}, {20, 0}};
+    XrJsonValue *hints = xlsp_analyze_inlay_hints(server, doc, range);
+    ASSERT(hints != NULL);
+    ASSERT(json_array_find_label(hints, "view:") != NULL);
+    ASSERT(json_array_find_label_tooltip(hints, "slot:", "parameter mode: ref") != NULL);
+    ASSERT(json_array_find_label_tooltip(hints, "payload:", "parameter mode: move") != NULL);
+
+    xjson_free(hints);
+    xlsp_server_free(server);
+}
+
+TEST(throw_effect_inlay_hints_show_inferred_result) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    const char *content = "enum HintError { Boom }\n"
+                          "fn pure(value: i64) -> i64 { return value + 1 }\n"
+                          "fn fallible() { throw HintError.Boom }\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///throw_effect_inlay.xr", content, strlen("file:///throw_effect_inlay.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrLspRange range = {{0, 0}, {10, 0}};
+    XrJsonValue *hints = xlsp_analyze_inlay_hints(server, doc, range);
+    ASSERT(hints != NULL);
+    ASSERT(json_array_find_label_tooltip(hints, " · no_throw ✓", "inferred error effect") != NULL);
+    ASSERT(json_array_find_label_tooltip(hints, " · may throw {HintError}",
+                                         "inferred error effect") != NULL);
+    xjson_free(hints);
+    xlsp_server_free(server);
+}
+
+TEST(enum_record_fields_share_one_semantic_identity) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    char uri[XR_TEST_PATH_MAX];ASSERT(semantic_test_uri("enum_record_fields.xr",uri,sizeof(uri)));
+    const char *content = "enum Result {\n"
+                          "    Ok { value: i64, code: i64 },\n"
+                          "    Err { value: string }\n"
+                          "}\n"
+                          "var made = Result.Ok { code: 7, value: 42 }\n"
+                          "var selected = match (made) {\n"
+                          "    Result.Ok { value, code: _ } -> value\n"
+                          "    Result.Err { value: message } -> 0\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+    ASSERT(doc->ast != NULL);
+    ASSERT(!doc->parse_error);
+
+    int declaration_line = 0;
+    int declaration_col = 0;
+    int construct_line = 0;
+    int construct_col = 0;
+    int pattern_line = 0;
+    int pattern_col = 0;
+    ASSERT(content_position_of_nth(content, "value", 1, &declaration_line, &declaration_col));
+    ASSERT(content_position_of_nth(content, "value", 3, &construct_line, &construct_col));
+    ASSERT(content_position_of_nth(content, "value", 4, &pattern_line, &pattern_col));
+
+    XrLspPosition construct_pos = {(uint32_t) construct_line, (uint32_t) construct_col + 1};
+    XrJsonValue *definition = xlsp_analyze_definition(server, doc, construct_pos);
+    ASSERT(definition != NULL);
+    ASSERT_STR_EQ(xjson_get_string(definition, "uri"), uri);
+    XrJsonValue *definition_start =
+        xjson_get_object(xjson_get_object(definition, "range"), "start");
+    ASSERT_EQ(xjson_get_int(definition_start, "line"), declaration_line);
+    ASSERT_EQ(xjson_get_int(definition_start, "character"), declaration_col);
+    xjson_free(definition);
+
+    XrJsonValue *references = xlsp_analyze_references(server, doc, construct_pos, true);
+    ASSERT(references != NULL);
+    ASSERT_EQ(xjson_array_len(references), 3);
+    xjson_free(references);
+
+    XrJsonValue *hover = hover_test_at(
+        server, doc, (XrLspPosition) {(uint32_t) pattern_line, (uint32_t) pattern_col + 1});
+    ASSERT(hover != NULL);
+    const char *hover_text = hover_markdown_value(hover);
+    ASSERT(hover_text != NULL);
+    ASSERT(strstr(hover_text, "Result.Ok.value: i64") != NULL);
+    xjson_free(hover);
+
+    XrJsonValue *rename_params=rename_test_params(uri,construct_pos,"payload");ASSERT(rename_params != NULL);
+    XrJsonValue *rename = xlsp_handle_td_rename(server,rename_params);xjson_free(rename_params);
+    ASSERT(rename != NULL);
+    XrJsonValue *changes = xjson_get_array(rename, "documentChanges");
+    ASSERT(changes != NULL);ASSERT_EQ(xjson_array_len(changes),1);
+    XrJsonValue *change=xjson_array_get(changes,0),*text_document=xjson_get_object(change,"textDocument");
+    ASSERT(text_document != NULL);ASSERT_STR_EQ(xjson_get_string(text_document,"uri"),uri);
+    ASSERT_EQ(xjson_get_int(text_document,"version"),1);
+    XrJsonValue *edits = xjson_get_array(change,"edits");
+    ASSERT(edits != NULL);
+    ASSERT_EQ(xjson_array_len(edits), 3);
+    for(int i=0;i<3;++i) {
+        XrJsonValue *edit=xjson_array_get(edits,i),*start=xjson_get_object(xjson_get_object(edit,"range"),"start");
+        ASSERT(start != NULL);
+        ASSERT_STR_EQ(xjson_get_string(edit,"newText"),xjson_get_int(start,"line")==pattern_line?"payload: value":"payload");
+    }
+    xjson_free(rename);
+
+    XrJsonValue *tokens = semantic_tokens_for_test(server,doc);
+    ASSERT(tokens != NULL);
+    int property_count = 0;
+    bool declaration_is_property = false;
+    bool construct_is_property = false;
+    bool pattern_is_property = false;
+    ASSERT(semantic_token_count(tokens)>=0);
+    for (int i = 0; i < semantic_token_count(tokens); i++) {
+        XlspSourceToken decoded={0};ASSERT(semantic_token_at(tokens,i,&decoded));
+        XlspSourceToken *token = &decoded;
+        if (token->type != XLSP_TOKEN_PROPERTY || token->length != 5)
+            continue;
+        property_count++;
+        if (token->line == (uint32_t) declaration_line && token->column == (uint32_t) declaration_col)
+            declaration_is_property = true;
+        if (token->line == (uint32_t) construct_line && token->column == (uint32_t) construct_col)
+            construct_is_property = true;
+        if (token->line == (uint32_t) pattern_line && token->column == (uint32_t) pattern_col)
+            pattern_is_property = true;
+    }
+    ASSERT(property_count >= 5);
+    ASSERT(declaration_is_property);
+    ASSERT(construct_is_property);
+    ASSERT(pattern_is_property);
+    xjson_free(tokens);
+    xlsp_server_free(server);
+}
+
+TEST(enum_payload_completion_distinguishes_constructor_and_pattern) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *expression_uri = "file:///enum_constructor_completion.xr";
+    const char *expression = "enum Result { Ok { value: i64, code: string } }\n"
+                             "var made = Result.";
+    XrLspDocument *expression_doc = xlsp_document_open(server, &(XlspSourceDocument){expression_uri, expression, strlen(expression_uri), strlen(expression), 1});
+    ASSERT(expression_doc != NULL);
+    xlsp_parse_document(expression_doc, server);
+    XrJsonValue *expression_items = xlsp_analyze_completion(
+        server, expression_doc, (XrLspPosition) {1, (uint32_t) strlen("var made = Result.")});
+    XrJsonValue *constructor = json_array_find_label(expression_items, "Ok");
+    ASSERT(constructor != NULL);
+    ASSERT_STR_EQ(xjson_get_string(constructor, "insertText"), "Ok { value: ${1}, code: ${2} }");
+    ASSERT_EQ(xjson_get_int(constructor, "insertTextFormat"), 2);
+    xjson_free(expression_items);
+
+    const char *pattern_uri = "file:///enum_pattern_completion.xr";
+    const char *pattern = "enum Result { Ok { value: i64, code: string } }\n"
+                          "var made = Result.Ok { value: 1, code: \"x\" }\n"
+                          "var selected = match (made) {\n"
+                          "    Result.\n"
+                          "}\n";
+    XrLspDocument *pattern_doc = xlsp_document_open(server, &(XlspSourceDocument){pattern_uri, pattern, strlen(pattern_uri), strlen(pattern), 1});
+    ASSERT(pattern_doc != NULL);
+    xlsp_parse_document(pattern_doc, server);
+    XrJsonValue *pattern_items = xlsp_analyze_completion(
+        server, pattern_doc, (XrLspPosition) {3, (uint32_t) strlen("    Result.")});
+    XrJsonValue *pattern_item = json_array_find_label(pattern_items, "Ok");
+    ASSERT(pattern_item != NULL);
+    ASSERT_STR_EQ(xjson_get_string(pattern_item, "insertText"), "Ok { value, code }");
+    ASSERT_EQ(xjson_get_int(pattern_item, "insertTextFormat"), 0);
+    xjson_free(pattern_items);
+    xlsp_server_free(server);
+}
+
+// ============================================================================
+// Code Action Quick-Fix Tests (concurrency diagnostics)
+// ============================================================================
+
+// Build a minimal code_action params JSON with a single diagnostic whose
+// message matches the given text.
+static XrJsonValue *make_code_action_params(const char *uri, int line, int start_col, int end_col,
+                                            const char *diag_message) {
+    XrJsonValue *params = xjson_new_object();
+
+    XrJsonValue *text_doc = xjson_new_object();
+    xjson_object_set(text_doc, "uri", xjson_new_string(uri));
+    xjson_object_set(params, "textDocument", text_doc);
+
+    xjson_object_set(params, "range", xjson_make_range(line, start_col, line, end_col));
+
+    XrJsonValue *context = xjson_new_object();
+    XrJsonValue *diagnostics = xjson_new_array();
+    XrJsonValue *diag = xjson_new_object();
+    xjson_object_set(diag, "message", xjson_new_string(diag_message));
+    xjson_object_set(diag, "range", xjson_make_range(line, start_col, line, end_col));
+    xjson_array_push(diagnostics, diag);
+    xjson_object_set(context, "diagnostics", diagnostics);
+    xjson_object_set(params, "context", context);
+    return params;
+}
+
+// Return true if any action in the array has a title containing all the
+// given substrings.
+static bool actions_contain_title_with(XrJsonValue *actions, const char *s1, const char *s2) {
+    if (!actions)
+        return false;
+    int n = xjson_array_len(actions);
+    for (int i = 0; i < n; i++) {
+        XrJsonValue *a = xjson_array_get(actions, i);
+        const char *title = xjson_get_string(a, "title");
+        if (!title)
+            continue;
+        if (s1 && !strstr(title, s1))
+            continue;
+        if (s2 && !strstr(title, s2))
+            continue;
+        return true;
+    }
+    return false;
+}
+
+static XrJsonValue *find_action_with_title(XrJsonValue *actions, const char *needle) {
+    if (!actions || !needle)
+        return NULL;
+    int n = xjson_array_len(actions);
+    for (int i = 0; i < n; i++) {
+        XrJsonValue *action = xjson_array_get(actions, i);
+        const char *title = xjson_get_string(action, "title");
+        if (title && strstr(title, needle))
+            return action;
+    }
+    return NULL;
+}
+
+TEST(code_action_payload_enum_iteration_to_variants) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *uri = "file:///enum_quickfix.xr";
+    const char *content = "enum Result { Ok { value: i64 }, Error { message: string } }\n"
+                          "for (value in Result) {\n"
+                          "    print(value)\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
+    ASSERT(doc != NULL);
+
+    XrJsonValue *params = make_code_action_params(
+        uri, 1, 0, 21,
+        "payload enum 'Result' is not directly iterable because its value set is not finite; "
+        "use `Result.variants` to iterate variant descriptors, or construct concrete payload "
+        "values explicitly");
+    XrJsonValue *actions = xlsp_handle_code_action(server, params);
+    ASSERT(actions != NULL);
+    XrJsonValue *action = find_action_with_title(actions, "Result.variants");
+    ASSERT(action != NULL);
+    XrJsonValue *edit = xjson_get_object(action, "edit");
+    XrJsonValue *changes = edit ? xjson_get_object(edit, "changes") : NULL;
+    XrJsonValue *edits = changes ? xjson_get_array(changes, uri) : NULL;
+    ASSERT(edits != NULL);
+    ASSERT_EQ(xjson_array_len(edits), 1);
+    XrJsonValue *text_edit = xjson_array_get(edits, 0);
+    ASSERT_STR_EQ(xjson_get_string(text_edit, "newText"), ".variants");
+    XrJsonValue *range = xjson_get_object(text_edit, "range");
+    XrJsonValue *start = range ? xjson_get_object(range, "start") : NULL;
+    ASSERT(start != NULL);
+    ASSERT_EQ(xjson_get_int(start, "line"), 1);
+    ASSERT_EQ(xjson_get_int(start, "character"), 20);
+
+    xjson_free(actions);
+    xjson_free(params);
+    xlsp_server_free(server);
+}
+
+TEST(code_action_fills_only_missing_constructor_fields_in_declaration_order) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *uri = "file:///enum_missing_fields.xr";
+    const char *content = "enum Result {\n"
+                          "    Ok { value: i64, code: string, ready: bool },\n"
+                          "    Err { message: string }\n"
+                          "}\n"
+                          "var made = Result.Ok { value: 1 }\n"
+                          "var selected = match (made) {\n"
+                          "    Result.Ok { value } -> value\n"
+                          "    Result.Err { message } -> 0\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+    ASSERT(doc->ast != NULL);
+
+    XrJsonValue *params = make_code_action_params(
+        uri, 4, 18, 19, "enum construction 'Result.Ok' is missing field 'code'");
+    XrJsonValue *actions = xlsp_handle_code_action(server, params);
+    ASSERT(actions != NULL);
+    XrJsonValue *action = find_action_with_title(actions, "Add missing fields to 'Result.Ok'");
+    ASSERT(action != NULL);
+    XrJsonValue *edit = xjson_get_object(action, "edit");
+    XrJsonValue *changes = edit ? xjson_get_object(edit, "changes") : NULL;
+    XrJsonValue *edits = changes ? xjson_get_array(changes, uri) : NULL;
+    ASSERT(edits != NULL);
+    ASSERT_EQ(xjson_array_len(edits), 1);
+    XrJsonValue *text_edit = xjson_array_get(edits, 0);
+    ASSERT_STR_EQ(xjson_get_string(text_edit, "newText"), ", code: code, ready: ready");
+    XrJsonValue *edit_range = xjson_get_object(text_edit, "range");
+    XrJsonValue *edit_start = edit_range ? xjson_get_object(edit_range, "start") : NULL;
+    ASSERT(edit_start != NULL);
+    ASSERT_EQ(xjson_get_int(edit_start, "line"), 4);
+    ASSERT_EQ(xjson_get_int(edit_start, "character"), 31);
+    xjson_free(actions);
+    xjson_free(params);
+
+    params =
+        make_code_action_params(uri, 6, 4, 13, "enum pattern 'Result.Ok' is missing field 'code'");
+    actions = xlsp_handle_code_action(server, params);
+    ASSERT(find_action_with_title(actions, "Add missing fields") == NULL);
+    xjson_free(actions);
+    xjson_free(params);
+    xlsp_server_free(server);
+}
+
+TEST(code_action_go_capture_has_no_keyword_rewrite) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    // Line 0: fn t() {
+    // Line 1:     var counter = 0
+    // Line 2:     go fn() { print(counter) }()
+    // Line 3: }
+    const char *content = "fn t() {\n"
+                          "    var counter = 0\n"
+                          "    go fn() { print(counter) }()\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){"file:///t.xr", content, strlen("file:///t.xr"), strlen(content), 1});
+    ASSERT(doc != NULL);
+
+    XrJsonValue *params = make_code_action_params(
+        "file:///t.xr", 2, 21, 28,
+        "go closure cannot capture mutable variable 'counter'\n"
+        "hint: bind a Channel/Atomic/Mutex handle as const, or transfer one owner with "
+        "go worker(move counter)");
+
+    XrJsonValue *actions = xlsp_handle_code_action(server, params);
+    ASSERT(actions != NULL);
+    // Concurrent ownership cannot be repaired by replacing `var` with a
+    // keyword. The user must choose a state-owner channel, a synchronized
+    // handle, or an explicit single-owner transfer.
+    ASSERT(!actions_contain_title_with(actions, "shared", "counter"));
+
+    xjson_free(params);
+    xjson_free(actions);
+    xlsp_server_free(server);
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
+// ============================================================================
+// Reference-cycle code actions
+// ============================================================================
+
+// Point the server's workspace at a temp dir and drop a sidecar report in it,
+// the same way a development-build run of the program would.
+static char g_cycle_workspace[512];
+
+static bool write_sidecar(XrLspServer *server, const char *json) {
+    const char *tmp = getenv("TMPDIR");
+    snprintf(g_cycle_workspace, sizeof(g_cycle_workspace), "%s/xray-lsp-cycle-test",
+             tmp ? tmp : "/tmp");
+    if (xr_test_mkdir(g_cycle_workspace) != 0 && errno != EEXIST)
+        return false;
+
+    server->workspace_folder_count = 1;
+    xr_free(server->workspace_folders[0].path);
+    server->workspace_folders[0].path = xr_strdup(g_cycle_workspace);
+
+    char path[640];
+    snprintf(path, sizeof(path), "%s/.xray-cycles.json", g_cycle_workspace);
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return false;
+    fputs(json, f);
+    fclose(f);
+    return true;
+}
+
+static void remove_sidecar(void) {
+    char path[640];
+    snprintf(path, sizeof(path), "%s/.xray-cycles.json", g_cycle_workspace);
+    remove(path);
+}
+
+static const char *CYCLE_SIDECAR =
+    "{\"version\":1,\"source\":\"cycle-detector\",\"cycles\":[{\"objects\":2,\"bytes\":112,"
+    "\"edges\":[{\"from\":\"Node\",\"to\":\"Node\",\"field\":\"peer\",\"kind\":\"field\","
+    "\"weak_annotatable\":true},"
+    "{\"from\":\"Node\",\"to\":\"Node\",\"field\":\"owner\",\"kind\":\"field\","
+    "\"weak_annotatable\":true}]}]}\n";
+
+TEST(cycle_report_diagnoses_every_candidate_field) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    ASSERT(write_sidecar(server, CYCLE_SIDECAR));
+
+    const char *uri = "file:///cycle.xr";
+    const char *content = "class Node {\n"
+                          "    peer: Node?\n"
+                          "    owner: Node?\n"
+                          "    tag: i64\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
+    ASSERT(doc != NULL);
+
+    // The publish path parses before it diagnoses; do the same here so the
+    // walk has an AST to find the field declarations in.
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *diagnostics = xjson_new_array();
+    xlsp_cycle_report_refresh(server);
+    xlsp_cycle_report_diagnostics(doc, diagnostics);
+
+    // Both reported edges get a diagnostic; the field that is not on a cycle
+    // gets none. Completeness is the point -- a missing candidate is
+    // an edge the user cannot choose.
+    ASSERT_EQ(xjson_array_len(diagnostics), 2);
+    bool saw_peer = false, saw_owner = false, saw_tag = false;
+    for (int i = 0; i < xjson_array_len(diagnostics); i++) {
+        const char *msg = xjson_get_string(xjson_array_get(diagnostics, i), "message");
+        ASSERT(msg != NULL);
+        if (strstr(msg, "`Node.peer`"))
+            saw_peer = true;
+        if (strstr(msg, "`Node.owner`"))
+            saw_owner = true;
+        if (strstr(msg, "`Node.tag`"))
+            saw_tag = true;
+    }
+    ASSERT(saw_peer);
+    ASSERT(saw_owner);
+    ASSERT(!saw_tag);
+
+    // Diagnostics land on the field's own declaration line, which is where the
+    // `weak` insertion has to go.
+    XrJsonValue *first = xjson_array_get(diagnostics, 0);
+    XrJsonValue *start = xjson_get_object(xjson_get_object(first, "range"), "start");
+    ASSERT_EQ(xjson_get_int(start, "line"), 1);
+
+    xjson_free(diagnostics);
+    remove_sidecar();
+    xlsp_server_free(server);
+}
+
+TEST(cycle_report_skips_already_weak_field) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    ASSERT(write_sidecar(server, CYCLE_SIDECAR));
+
+    const char *uri = "file:///cycle_fixed.xr";
+    const char *content = "class Node {\n"
+                          "    weak peer: Node?\n"
+                          "    owner: Node?\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
+    ASSERT(doc != NULL);
+
+    // The publish path parses before it diagnoses; do the same here so the
+    // walk has an AST to find the field declarations in.
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *diagnostics = xjson_new_array();
+    xlsp_cycle_report_refresh(server);
+    xlsp_cycle_report_diagnostics(doc, diagnostics);
+
+    // The report predates the fix: an annotated field is no longer a candidate.
+    ASSERT_EQ(xjson_array_len(diagnostics), 1);
+    ASSERT(strstr(xjson_get_string(xjson_array_get(diagnostics, 0), "message"), "`Node.owner`"));
+
+    xjson_free(diagnostics);
+    remove_sidecar();
+    xlsp_server_free(server);
+}
+
+TEST(code_action_cycle_offers_weak_without_default_or_batch) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *uri = "file:///cycle_action.xr";
+    const char *content = "class Node {\n"
+                          "    peer: Node?\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
+    ASSERT(doc != NULL);
+
+    XrJsonValue *params = make_code_action_params(
+        uri, 1, 4, 8,
+        XLSP_CYCLE_DIAG_PREFIX
+        "`Node.peer` is on a cycle that kept 2 object(s) / 112 bytes alive past teardown.\n"
+        "Marking this field `weak` breaks the cycle, and asserts that Node does NOT own the Node "
+        "it points at -- the field reads as null once the target is gone.");
+    XrJsonValue *actions = xlsp_handle_code_action(server, params);
+    ASSERT(actions != NULL);
+
+    XrJsonValue *action = find_action_with_title(actions, "Mark `peer` weak");
+    ASSERT(action != NULL);
+
+    // The title states the ownership claim, so the choice can be made before
+    // clicking.
+    ASSERT(strstr(xjson_get_string(action, "title"), "does not own"));
+
+    // The edit inserts the modifier ahead of the field name.
+    XrJsonValue *edits =
+        xjson_get_array(xjson_get_object(xjson_get_object(action, "edit"), "changes"), uri);
+    ASSERT(edits != NULL);
+    ASSERT_EQ(xjson_array_len(edits), 1);
+    XrJsonValue *text_edit = xjson_array_get(edits, 0);
+    ASSERT_STR_EQ(xjson_get_string(text_edit, "newText"), "weak ");
+    XrJsonValue *er = xjson_get_object(text_edit, "range");
+    ASSERT_EQ(xjson_get_int(xjson_get_object(er, "start"), "character"), 4);
+    // An insertion, not a replacement: nothing existing is overwritten.
+    ASSERT_EQ(xjson_get_int(xjson_get_object(er, "end"), "character"), 4);
+
+    // The ownership rule is asserted rather than described: no action may be preferred, and
+    // none may claim to fix more than the one edge it names. Choosing the wrong
+    // edge does not leak -- it nulls a field that was still being read.
+    for (int i = 0; i < xjson_array_len(actions); i++) {
+        XrJsonValue *a = xjson_array_get(actions, i);
+        ASSERT(xjson_get(a, "isPreferred") == NULL);
+        const char *title = xjson_get_string(a, "title");
+        ASSERT(title == NULL || (!strstr(title, "all") && !strstr(title, "All")));
+    }
+
+    xjson_free(actions);
+    xjson_free(params);
+    xlsp_server_free(server);
+}
+
+TEST(code_action_closure_cycle_offers_defer) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *uri = "file:///closure_cycle.xr";
+    const char *content = "fn wire(b: Button) {\n"
+                          "    b.onClick = fn() { print(b.label) }\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
+    ASSERT(doc != NULL);
+
+    XrJsonValue *params = make_code_action_params(
+        uri, 1, 4, 13,
+        "closure cycle: this closure captures 'b' and is stored into 'b.onClick'\n"
+        "Xray does not reclaim reference cycles, and `weak` is a field modifier that cannot break "
+        "a capture edge.\n"
+        "hint: clear the field when the scope ends -- defer { b.onClick = null } -- or pass 'b' as "
+        "a "
+        "parameter instead of capturing it");
+    XrJsonValue *actions = xlsp_handle_code_action(server, params);
+    ASSERT(actions != NULL);
+
+    XrJsonValue *action = find_action_with_title(actions, "defer { b.onClick = null }");
+    ASSERT(action != NULL);
+
+    XrJsonValue *edits =
+        xjson_get_array(xjson_get_object(xjson_get_object(action, "edit"), "changes"), uri);
+    ASSERT(edits != NULL);
+    ASSERT_EQ(xjson_array_len(edits), 1);
+    XrJsonValue *text_edit = xjson_array_get(edits, 0);
+    // Indentation is carried over from the assignment, so the result reads as
+    // hand-written code rather than something to clean up after.
+    ASSERT_STR_EQ(xjson_get_string(text_edit, "newText"), "    defer { b.onClick = null }\n");
+    XrJsonValue *start = xjson_get_object(xjson_get_object(text_edit, "range"), "start");
+    ASSERT_EQ(xjson_get_int(start, "line"), 2);
+    ASSERT_EQ(xjson_get_int(start, "character"), 0);
+
+    xjson_free(actions);
+    xjson_free(params);
+    xlsp_server_free(server);
+}
+
+// A verify contract file, dropped in the workspace root the way a project
+// keeps one next to its build.
+static bool write_contract(XrLspServer *server, const char *toml) {
+    const char *tmp = getenv("TMPDIR");
+    snprintf(g_cycle_workspace, sizeof(g_cycle_workspace), "%s/xray-lsp-cycle-test",
+             tmp ? tmp : "/tmp");
+    if (xr_test_mkdir(g_cycle_workspace) != 0 && errno != EEXIST)
+        return false;
+
+    server->workspace_folder_count = 1;
+    xr_free(server->workspace_folders[0].path);
+    server->workspace_folders[0].path = xr_strdup(g_cycle_workspace);
+
+    char path[640];
+    snprintf(path, sizeof(path), "%s/contracts.toml", g_cycle_workspace);
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return false;
+    fputs(toml, f);
+    fclose(f);
+    return true;
+}
+
+static void remove_contract(void) {
+    char path[640];
+    snprintf(path, sizeof(path), "%s/contracts.toml", g_cycle_workspace);
+    remove(path);
+}
+
+TEST(contract_cycle_diagnoses_candidates_only_under_contract) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    ASSERT(write_contract(server, "version = 1\n\n"
+                                  "[[function]]\n"
+                                  "symbol = \"Guarded\"\n"
+                                  "scope = \"semantic\"\n"
+                                  "requires = [\"no_reference_cycles\"]\n"));
+
+    // Guarded is recursive AND under contract -> every edge that can close the
+    // cycle is a candidate. Unguarded is just as recursive but nobody asked for
+    // a proof, and a recursive type is legal -- reporting it
+    // would be a false positive on ordinary code.
+    const char *uri = "file:///contract_cycle.xr";
+    const char *content = "class Guarded {\n"
+                          "    next: Guarded?\n"
+                          "    label: string\n"
+                          "}\n"
+                          "class Unguarded {\n"
+                          "    next: Unguarded?\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *diagnostics = xjson_new_array();
+    xlsp_contract_cycles_diagnostics(doc, diagnostics);
+
+    ASSERT_EQ(xjson_array_len(diagnostics), 1);
+    XrJsonValue *diag = xjson_array_get(diagnostics, 0);
+    const char *msg = xjson_get_string(diag, "message");
+    ASSERT(msg != NULL);
+    ASSERT(strstr(msg, "`Guarded.next`"));
+    // The claim has to stay "cannot be proven", not "a cycle was detected":
+    // those are different statements and only the first one is true here.
+    ASSERT(strstr(msg, "cannot be proven"));
+    // An error, not a warning: the user wrote the contract and the build fails.
+    ASSERT_EQ(xjson_get_int(diag, "severity"), 1);
+    XrJsonValue *start = xjson_get_object(xjson_get_object(diag, "range"), "start");
+    ASSERT_EQ(xjson_get_int(start, "line"), 1);
+
+    // Same code action as the runtime-report path: one shared fix, two sources.
+    XrJsonValue *params = make_code_action_params(uri, 1, 4, 8, msg);
+    XrJsonValue *actions = xlsp_handle_code_action(server, params);
+    ASSERT(find_action_with_title(actions, "Mark `next` weak") != NULL);
+
+    xjson_free(actions);
+    xjson_free(params);
+    xjson_free(diagnostics);
+    remove_contract();
+    xlsp_server_free(server);
+}
+
+static const char *UNWEAKABLE_SIDECAR =
+    "{\"version\":1,\"source\":\"cycle-detector\",\"cycles\":[{\"objects\":2,\"bytes\":96,"
+    "\"edges\":[{\"from\":\"Mixed\",\"to\":\"Mixed\",\"field\":\"loose\",\"kind\":\"field\","
+    "\"weak_annotatable\":true},"
+    "{\"from\":\"Mixed\",\"to\":\"Mixed\",\"field\":\"pinned\",\"kind\":\"field\","
+    "\"weak_annotatable\":true},"
+    "{\"from\":\"Mixed\",\"to\":\"Mixed\",\"field\":\"ok\",\"kind\":\"field\","
+    "\"weak_annotatable\":true}]}]}\n";
+
+TEST(cycle_report_offers_weak_only_where_it_compiles) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+    ASSERT(write_sidecar(server, UNWEAKABLE_SIDECAR));
+
+    // The detector sees a runtime object graph, where all three of these edges
+    // look the same. Only `ok` can actually carry the modifier: `weak` needs a
+    // nullable reference type (E0394 / W2). An action on the other two would
+    // produce an edit that does not compile, which is worse than no action.
+    const char *uri = "file:///unweakable.xr";
+    const char *content = "class Mixed {\n"
+                          "    loose: i64 | string | Mixed | null\n"
+                          "    pinned: Mixed\n"
+                          "    ok: Mixed?\n"
+                          "}\n";
+    XrLspDocument *doc = xlsp_document_open(server, &(XlspSourceDocument){uri, content, strlen(uri), strlen(content), 1});
+    ASSERT(doc != NULL);
+    xlsp_parse_document(doc, server);
+
+    XrJsonValue *diagnostics = xjson_new_array();
+    xlsp_cycle_report_refresh(server);
+    xlsp_cycle_report_diagnostics(doc, diagnostics);
+
+    ASSERT_EQ(xjson_array_len(diagnostics), 1);
+    ASSERT(strstr(xjson_get_string(xjson_array_get(diagnostics, 0), "message"), "`Mixed.ok`"));
+
+    xjson_free(diagnostics);
+    remove_sidecar();
+    xlsp_server_free(server);
+}
+
+int main(int argc, char **argv) {
+    xr_test_suppress_dialogs();
+    (void) argc;
+    (void) argv;
+
+    printf("\n=== LSP Document Management Unit Tests ===\n\n");
+
+    printf("Server and document lifecycle tests:\n");
+    RUN_TEST(server_create_destroy);
+    RUN_TEST(document_open);
+    RUN_TEST(document_get);
+    RUN_TEST(document_close);
+    RUN_TEST(document_multiple);
+
+    printf("\nLine index tests:\n");
+    RUN_TEST(document_line_count);
+    RUN_TEST(position_to_offset);
+    RUN_TEST(offset_to_position);
+    RUN_TEST(position_roundtrip);
+
+    printf("\nDocument version tests:\n");
+    RUN_TEST(document_version);
+
+    printf("\nCompletion tests:\n");
+    RUN_TEST(completion_shared_channel_member);
+    RUN_TEST(completion_inferred_int_members);
+    RUN_TEST(contextual_u32_literal_preserves_completion_and_hover_type);
+    RUN_TEST(completion_enum_static_variants_descriptor);
+    RUN_TEST(dirty_open_import_refresh_preserves_enum_identity);
+    RUN_TEST(watched_file_refresh_installs_enum_identity);
+    RUN_TEST(relative_import_from_disk_provides_precise_hover);
+    RUN_TEST(completion_enum_descriptor_properties);
+    RUN_TEST(completion_enum_iteration_variable_is_descriptor);
+    RUN_TEST(hover_enum_descriptor_keeps_precise_type);
+    RUN_TEST(completion_u8_array_registry_methods);
+    RUN_TEST(completion_uint8_array_uses_canonical_byte_docs);
+    RUN_TEST(completion_int_array_excludes_u8_registry_methods);
+    RUN_TEST(completion_u8_slice_registry_methods);
+    RUN_TEST(hover_u8_array_registry_method);
+    RUN_TEST(hover_deprecated_message_roundtrip);
+    RUN_TEST(signature_help_u8_array_registry_method);
+    RUN_TEST(builtin_generic_array_uses_error_placeholder);
+    RUN_TEST(global_type_query_builtins_use_canonical_names);
+    RUN_TEST(completion_public_attributes_use_registry);
+    RUN_TEST(exact_integer_bit_builtins_use_receiver_specialized_registry);
+    RUN_TEST(param_mode_user_function_lsp_display);
+    RUN_TEST(param_mode_semantic_tokens_mark_modes_and_call_access);
+    RUN_TEST(block_quoted_literals_preserve_lsp_positions_and_semantic_boundaries);
+    RUN_TEST(block_import_path_uses_shared_quoted_literal_decoder);
+    RUN_TEST(param_mode_inlay_hints_describe_modes);
+    RUN_TEST(throw_effect_inlay_hints_show_inferred_result);
+    RUN_TEST(enum_record_fields_share_one_semantic_identity);
+    RUN_TEST(enum_payload_completion_distinguishes_constructor_and_pattern);
+
+    printf("\nCode action concurrency quick-fix tests:\n");
+    RUN_TEST(code_action_payload_enum_iteration_to_variants);
+    RUN_TEST(code_action_fills_only_missing_constructor_fields_in_declaration_order);
+    RUN_TEST(code_action_go_capture_has_no_keyword_rewrite);
+
+    printf("\nReference-cycle code actions (task 247 phase H):\n");
+    RUN_TEST(cycle_report_diagnoses_every_candidate_field);
+    RUN_TEST(cycle_report_skips_already_weak_field);
+    RUN_TEST(code_action_cycle_offers_weak_without_default_or_batch);
+    RUN_TEST(code_action_closure_cycle_offers_defer);
+    RUN_TEST(contract_cycle_diagnoses_candidates_only_under_contract);
+    RUN_TEST(cycle_report_offers_weak_only_where_it_compiles);
+
+    printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
+
+    return tests_failed > 0 ? 1 : 0;
+}

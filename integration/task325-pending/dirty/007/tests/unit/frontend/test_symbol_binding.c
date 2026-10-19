@@ -1,0 +1,654 @@
+/*
+ * test_symbol_binding.c - Symbol binding invariant tests
+ *
+ * Verifies that the analyzer correctly binds all variable references
+ * (symbol_id must be non-zero after analysis), and that the lowerer
+ * successfully processes all binding patterns without hard-fail.
+ *
+ * Each test parses a source snippet, runs the analyzer, then lowers
+ * to Xi IR.  Successful lowering proves the binding contract held.
+ * A simple AST walker also spot-checks that AST_VARIABLE nodes
+ * received non-zero symbol_id from the analyzer.
+ */
+
+#include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_lower.h"
+#include "../../../src/frontend/canonical/xcanon.h"
+#include "../../../src/frontend/parser/xparse.h"
+#include "../../../src/frontend/parser/xast_nodes.h"
+#include "../../../src/frontend/parser/xast_types.h"
+#include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/frontend/analyzer/xa_typed_program.h"
+#include "../../../src/toolchain/xcompiler_session.h"
+#include "../../../include/xray_vm.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
+/* ========== Infrastructure ========== */
+
+static XrVMRuntime *g_iso = NULL;
+static XrCompilerSession *g_session = NULL;
+static int tests_passed = 0;
+static int tests_failed = 0;
+
+static void setup(void) {
+    if (!g_iso) {
+        XrVMConfig p = {0};
+        g_iso = xray_vm_new_full(&p);
+        g_session = xr_compiler_session_current_for_isolate(g_iso);
+        assert(g_session != NULL);
+    }
+}
+
+static void teardown(void) {
+    if (g_iso) {
+        xray_vm_delete(g_iso);
+        g_iso = NULL;
+        g_session = NULL;
+    }
+}
+
+/* ========== AST Variable Walker ========== */
+
+/* Count AST_VARIABLE nodes with unresolved symbol_id (== 0).
+ * Recursively walks only the most common child-bearing node types. */
+static int count_unresolved_vars(AstNode *node) {
+    if (!node)
+        return 0;
+    int count = 0;
+
+    if (node->type == AST_VARIABLE) {
+        if (node->as.variable.symbol_id == 0)
+            count++;
+        return count;
+    }
+
+    /* Comprehensive AST walker — covers ALL node types that can contain
+     * AST_VARIABLE children.  Missing a node type here means we silently
+     * skip unresolved variables inside it. */
+    switch (node->type) {
+        case AST_PROGRAM:
+            for (int i = 0; i < node->as.program.count; i++)
+                count += count_unresolved_vars(node->as.program.statements[i]);
+            break;
+        case AST_BLOCK:
+            for (int i = 0; i < node->as.block.count; i++)
+                count += count_unresolved_vars(node->as.block.statements[i]);
+            break;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+            count += count_unresolved_vars(node->as.var_decl.initializer);
+            break;
+        case AST_ASSIGNMENT:
+            count += count_unresolved_vars(node->as.assignment.value);
+            break;
+        case AST_COMPOUND_ASSIGNMENT:
+            count += count_unresolved_vars(node->as.compound_assignment.value);
+            break;
+        case AST_INC:
+        case AST_DEC:
+            break;
+        case AST_EXPR_STMT:
+            count += count_unresolved_vars(node->as.expr_stmt);
+            break;
+        case AST_RETURN_STMT:
+            for (int i = 0; i < node->as.return_stmt.value_count; i++)
+                count += count_unresolved_vars(node->as.return_stmt.values[i]);
+            break;
+        case AST_IF_STMT:
+            count += count_unresolved_vars(node->as.if_stmt.condition);
+            count += count_unresolved_vars(node->as.if_stmt.then_branch);
+            count += count_unresolved_vars(node->as.if_stmt.else_branch);
+            break;
+        case AST_WHILE_STMT:
+            count += count_unresolved_vars(node->as.while_stmt.condition);
+            count += count_unresolved_vars(node->as.while_stmt.body);
+            break;
+        case AST_FOR_STMT:
+            count += count_unresolved_vars(node->as.for_stmt.initializer);
+            count += count_unresolved_vars(node->as.for_stmt.condition);
+            count += count_unresolved_vars(node->as.for_stmt.increment);
+            count += count_unresolved_vars(node->as.for_stmt.body);
+            break;
+        case AST_FOR_IN_STMT:
+            count += count_unresolved_vars(node->as.for_in_stmt.collection);
+            count += count_unresolved_vars(node->as.for_in_stmt.body);
+            break;
+        case AST_THROW_STMT:
+            count += count_unresolved_vars(node->as.throw_stmt.expression);
+            break;
+        case AST_TRY_CATCH:
+            count += count_unresolved_vars(node->as.try_catch.try_body);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc)
+                    count += count_unresolved_vars(cc->body);
+            }
+            break;
+        case AST_FUNCTION_DECL:
+        case AST_FUNCTION_EXPR:
+            count += count_unresolved_vars(node->as.function_decl.body);
+            break;
+        case AST_CALL_EXPR:
+            count += count_unresolved_vars(node->as.call_expr.callee);
+            for (int i = 0; i < node->as.call_expr.arg_count; i++)
+                count += count_unresolved_vars(node->as.call_expr.arguments[i]);
+            break;
+        case AST_MEMBER_ACCESS:
+            count += count_unresolved_vars(node->as.member_access.object);
+            break;
+        case AST_MEMBER_SET:
+            count += count_unresolved_vars(node->as.member_set.object);
+            count += count_unresolved_vars(node->as.member_set.value);
+            break;
+        case AST_INDEX_GET:
+            count += count_unresolved_vars(node->as.index_get.array);
+            count += count_unresolved_vars(node->as.index_get.index);
+            break;
+        case AST_INDEX_SET:
+            count += count_unresolved_vars(node->as.index_set.array);
+            count += count_unresolved_vars(node->as.index_set.index);
+            count += count_unresolved_vars(node->as.index_set.value);
+            break;
+        case AST_SLICE_EXPR:
+            count += count_unresolved_vars(node->as.slice_expr.source);
+            count += count_unresolved_vars(node->as.slice_expr.start);
+            count += count_unresolved_vars(node->as.slice_expr.end);
+            break;
+        case AST_TERNARY:
+            count += count_unresolved_vars(node->as.ternary.condition);
+            count += count_unresolved_vars(node->as.ternary.true_expr);
+            count += count_unresolved_vars(node->as.ternary.false_expr);
+            break;
+        case AST_NULLISH_COALESCE:
+        case AST_RANGE:
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+            count += count_unresolved_vars(node->as.binary.left);
+            count += count_unresolved_vars(node->as.binary.right);
+            break;
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+            count += count_unresolved_vars(node->as.unary.operand);
+            break;
+        case AST_GROUPING:
+            count += count_unresolved_vars(node->as.grouping);
+            break;
+        case AST_FORCE_UNWRAP:
+            count += count_unresolved_vars(node->as.unary.operand);
+            break;
+        case AST_IS_EXPR:
+            count += count_unresolved_vars(node->as.is_expr.expr);
+            break;
+        case AST_AS_EXPR:
+            count += count_unresolved_vars(node->as.as_expr.expr);
+            break;
+        case AST_OPTIONAL_CHAIN:
+            count += count_unresolved_vars(node->as.optional_chain.object);
+            if (node->as.optional_chain.index)
+                count += count_unresolved_vars(node->as.optional_chain.index);
+            break;
+        case AST_ARRAY_LITERAL:
+            if (node->as.array_literal.is_repeat) {
+                count += count_unresolved_vars(node->as.array_literal.repeat_value);
+                count += count_unresolved_vars(node->as.array_literal.repeat_count);
+            } else {
+                for (int i = 0; i < node->as.array_literal.count; i++)
+                    count += count_unresolved_vars(node->as.array_literal.elements[i]);
+            }
+            break;
+        case AST_MAP_LITERAL:
+            for (int i = 0; i < node->as.map_literal.count; i++) {
+                count += count_unresolved_vars(node->as.map_literal.keys[i]);
+                count += count_unresolved_vars(node->as.map_literal.values[i]);
+            }
+            break;
+        case AST_SET_LITERAL:
+            for (int i = 0; i < node->as.set_literal.count; i++)
+                count += count_unresolved_vars(node->as.set_literal.elements[i]);
+            break;
+        case AST_OBJECT_LITERAL:
+            for (int i = 0; i < node->as.object_literal.count; i++)
+                count += count_unresolved_vars(node->as.object_literal.values[i]);
+            break;
+        case AST_STRUCT_LITERAL:
+            for (int i = 0; i < node->as.struct_literal.field_count; i++)
+                count += count_unresolved_vars(node->as.struct_literal.field_values[i]);
+            break;
+        case AST_TEMPLATE_STRING:
+            for (int i = 0; i < node->as.template_str.part_count; i++)
+                count += count_unresolved_vars(node->as.template_str.parts[i]);
+            break;
+        case AST_NEW_EXPR:
+            for (int i = 0; i < node->as.new_expr.arg_count; i++)
+                count += count_unresolved_vars(node->as.new_expr.arguments[i]);
+            break;
+        case AST_SUPER_CALL:
+            for (int i = 0; i < node->as.super_call.arg_count; i++)
+                count += count_unresolved_vars(node->as.super_call.arguments[i]);
+            break;
+        case AST_CLASS_DECL:
+        case AST_STRUCT_DECL: {
+            ClassDeclNode *cls = &node->as.class_decl;
+            for (int i = 0; i < cls->field_count; i++)
+                count += count_unresolved_vars(cls->fields[i]);
+            for (int i = 0; i < cls->method_count; i++)
+                count += count_unresolved_vars(cls->methods[i]);
+            break;
+        }
+        case AST_FIELD_DECL:
+            count += count_unresolved_vars(node->as.field_decl.initializer);
+            break;
+        case AST_ENUM_DECL:
+            for (int i = 0; i < node->as.enum_decl.member_count; i++)
+                count += count_unresolved_vars(node->as.enum_decl.members[i]);
+            break;
+        case AST_ENUM_INDEX:
+            count += count_unresolved_vars(node->as.enum_index.collection);
+            count += count_unresolved_vars(node->as.enum_index.index_expr);
+            break;
+        case AST_MATCH_EXPR:
+            count += count_unresolved_vars(node->as.match_expr.expr);
+            for (int i = 0; i < node->as.match_expr.arm_count; i++)
+                count += count_unresolved_vars(node->as.match_expr.arms[i]);
+            break;
+        case AST_MATCH_ARM:
+            count += count_unresolved_vars(node->as.match_arm.guard);
+            count += count_unresolved_vars(node->as.match_arm.body);
+            break;
+        case AST_GO_EXPR:
+            count += count_unresolved_vars(node->as.go_expr.expr);
+            break;
+        case AST_AWAIT_EXPR:
+            count += count_unresolved_vars(node->as.await_expr.expr);
+            if (node->as.await_expr.timeout)
+                count += count_unresolved_vars(node->as.await_expr.timeout);
+            break;
+        case AST_CHANNEL_NEW:
+            count += count_unresolved_vars(node->as.channel_new.buffer_size);
+            break;
+        case AST_MOVE_EXPR:
+            count += count_unresolved_vars(node->as.move_expr.expr);
+            break;
+        case AST_UNSAFE_EXPR:
+            count += count_unresolved_vars(node->as.unsafe_expr.operand);
+            break;
+        case AST_SELECT_STMT: {
+            SelectStmtNode *sel = &node->as.select_stmt;
+            for (int i = 0; i < sel->case_count; i++) {
+                if (!sel->cases[i])
+                    continue;
+                SelectCaseNode *sc = &sel->cases[i]->as.select_case;
+                count += count_unresolved_vars(sc->channel);
+                count += count_unresolved_vars(sc->value);
+                count += count_unresolved_vars(sc->body);
+            }
+            break;
+        }
+        case AST_DEFER_STMT:
+            count += count_unresolved_vars(node->as.defer_stmt.body);
+            break;
+        case AST_SCOPE_BLOCK:
+            count += count_unresolved_vars(node->as.scope_block.body);
+            break;
+        case AST_DESTRUCTURE_DECL:
+            count += count_unresolved_vars(node->as.destructure_decl.initializer);
+            break;
+        case AST_DESTRUCTURE_ASSIGN:
+            count += count_unresolved_vars(node->as.destructure_assign.value);
+            break;
+        case AST_EXPORT_STMT:
+            break;
+        /* Leaf nodes with no variable children */
+        case AST_VARIABLE:
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_STRING:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_LITERAL_NULL:
+        case AST_LITERAL_BIGINT:
+        case AST_LITERAL_REGEX:
+        case AST_BREAK_STMT:
+        case AST_CONTINUE_STMT:
+        case AST_THIS_EXPR:
+        case AST_CANCELLED_EXPR:
+        case AST_ENUM_ACCESS:
+        case AST_ENUM_MEMBER:
+        case AST_IMPORT_STMT:
+        case AST_TYPE_ALIAS:
+        case AST_INTERFACE_DECL:
+        case AST_INTERFACE_METHOD:
+        case AST_YIELD_STMT:
+        case AST_METHOD_DECL:
+        case AST_PATTERN_LITERAL:
+        case AST_PATTERN_RANGE:
+        case AST_PATTERN_WILDCARD:
+        case AST_PATTERN_MULTI:
+        case AST_CHAN_SEND:
+        case AST_CHAN_RECV:
+            break;
+        default:
+            break;
+    }
+    return count;
+}
+
+/* Parse + analyze + lower; check binding invariant.
+ * Returns true if all bindings resolved and lowering succeeded. */
+static bool check_bindings(const char *source, const char *label) {
+    XrCompilerSession *session = g_session;
+    AstNode *program = xr_parse(session, source);
+    if (!program) {
+        fprintf(stderr, "  [%s] PARSE FAILED\n", label);
+        return false;
+    }
+
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
+    xa_analyzer_analyze(analyzer, "binding_test.xr", program);
+
+    /* Spot-check: no AST_VARIABLE nodes should have symbol_id=0 */
+    int unresolved = count_unresolved_vars(program);
+    if (unresolved > 0) {
+        fprintf(stderr, "  [%s] %d unresolved variable(s) after analysis\n", label, unresolved);
+    }
+
+    /* Redirect stderr during lowering to suppress expected diagnostics */
+#ifdef _WIN32
+    freopen("NUL", "w", stderr);
+#else
+    int saved_fd = dup(STDERR_FILENO);
+    freopen("/dev/null", "w", stderr);
+#endif
+    XrCompilerSessionScope canon_scope;
+    bool has_canon_scope = program->type == AST_PROGRAM && program->as.program.arena &&
+                           xr_compiler_session_push_arena(session, program->as.program.arena,
+                                                          "binding_test.xr", &canon_scope);
+    xr_canon_program(program, analyzer, session);
+    if (has_canon_scope)
+        xr_compiler_session_pop_arena(&canon_scope);
+    XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
+    xa_typed_program_free(typed.program);
+#ifdef _WIN32
+    freopen("CON", "w", stderr);
+#else
+    fflush(stderr);
+    dup2(saved_fd, STDERR_FILENO);
+    close(saved_fd);
+#endif
+
+    bool ok = (func != NULL);
+    if (func)
+        xi_func_free(func);
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+
+    if (!ok) {
+        fprintf(stderr, "  [%s] LOWER FAILED (binding contract violated)\n", label);
+    }
+    return ok && (unresolved == 0);
+}
+
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- %s ---\n", #name);                                                             \
+        test_##name();                                                                             \
+        printf("  PASS\n");                                                                        \
+        tests_passed++;                                                                            \
+    }                                                                                              \
+    static void test_##name(void)
+
+/* ========== Binding Pattern Tests ========== */
+
+TEST(simple_var_decl) {
+    assert(check_bindings("var x = 42\nprint(x)", "simple_var_decl"));
+}
+
+TEST(const_decl) {
+    assert(check_bindings("const PI = 3.14\nprint(PI)", "const_decl"));
+}
+
+TEST(variable_reassignment) {
+    assert(check_bindings("var x = 1\nx = x + 2\nprint(x)", "var_reassign"));
+}
+
+TEST(compound_assignment) {
+    assert(check_bindings("var x = 10\nx += 5\nprint(x)", "compound_assign"));
+}
+
+TEST(shadowing) {
+    assert(check_bindings("var x = 1\n"
+                          "{\n"
+                          "    var x = 2\n"
+                          "    print(x)\n"
+                          "}\n"
+                          "print(x)\n",
+                          "shadowing"));
+}
+
+TEST(nested_scope) {
+    assert(check_bindings("var a = 1\n"
+                          "{\n"
+                          "    var b = a + 1\n"
+                          "    {\n"
+                          "        var c = b + 1\n"
+                          "        print(c)\n"
+                          "    }\n"
+                          "}\n",
+                          "nested_scope"));
+}
+
+TEST(function_params) {
+    assert(check_bindings("fn add(a: i64, b: i64) -> i64 {\n"
+                          "    return a + b\n"
+                          "}\n"
+                          "print(add(1, 2))\n",
+                          "function_params"));
+}
+
+TEST(closure_capture) {
+    assert(check_bindings("var x = 10\n"
+                          "fn foo() -> i64 {\n"
+                          "    return x + 1\n"
+                          "}\n"
+                          "print(foo())\n",
+                          "closure_capture"));
+}
+
+TEST(nested_closure) {
+    assert(check_bindings("var outer = 1\n"
+                          "fn foo() -> i64 {\n"
+                          "    var mid = 2\n"
+                          "    fn bar() -> i64 {\n"
+                          "        return outer + mid\n"
+                          "    }\n"
+                          "    return bar()\n"
+                          "}\n",
+                          "nested_closure"));
+}
+
+TEST(for_in_binding) {
+    assert(check_bindings("const arr = [1, 2, 3]\n"
+                          "for (item in arr) {\n"
+                          "    print(item)\n"
+                          "}\n",
+                          "for_in_binding"));
+}
+
+TEST(for_in_kv_binding) {
+    assert(check_bindings("const arr = [10, 20, 30]\n"
+                          "for (i, val in arr) {\n"
+                          "    print(i)\n"
+                          "    print(val)\n"
+                          "}\n",
+                          "for_in_kv_binding"));
+}
+
+TEST(if_else_scoping) {
+    assert(check_bindings("var x = 10\n"
+                          "if (x > 5) {\n"
+                          "    var y = x + 1\n"
+                          "    print(y)\n"
+                          "} else {\n"
+                          "    var z = x - 1\n"
+                          "    print(z)\n"
+                          "}\n",
+                          "if_else_scoping"));
+}
+
+TEST(while_loop_scoping) {
+    assert(check_bindings("var i = 0\n"
+                          "while (i < 10) {\n"
+                          "    print(i)\n"
+                          "    i += 1\n"
+                          "}\n",
+                          "while_loop_scoping"));
+}
+
+TEST(ternary_binding) {
+    assert(check_bindings("var x = 5\n"
+                          "var y = x > 3 ? x + 1 : x - 1\n"
+                          "print(y)\n",
+                          "ternary_binding"));
+}
+
+TEST(template_string_binding) {
+    assert(check_bindings("var name = \"world\"\n"
+                          "var msg = \"hello ${name}\"\n"
+                          "print(msg)\n",
+                          "template_string_binding"));
+}
+
+TEST(multiple_functions) {
+    assert(check_bindings("fn a() -> i64 { return 1 }\n"
+                          "fn b() -> i64 { return a() + 1 }\n"
+                          "print(b())\n",
+                          "multiple_functions"));
+}
+
+TEST(class_method_this) {
+    assert(check_bindings("class Foo {\n"
+                          "    x: i64\n"
+                          "    ref init(val: i64) {\n"
+                          "        this.x = val\n"
+                          "    }\n"
+                          "    get() -> i64 {\n"
+                          "        return this.x\n"
+                          "    }\n"
+                          "}\n",
+                          "class_method_this"));
+}
+
+TEST(try_catch_binding) {
+    assert(check_bindings("try {\n"
+                          "    var x = 42\n"
+                          "    print(x)\n"
+                          "} catch (e) {\n"
+                          "    print(e)\n"
+                          "}\n",
+                          "try_catch_binding"));
+}
+
+TEST(array_and_map_literal) {
+    assert(check_bindings("var a = [1, 2, 3]\n"
+                          "var m = {\"key\": a}\n"
+                          "print(a)\n"
+                          "print(m)\n",
+                          "array_and_map_literal"));
+}
+
+TEST(select_receive_binding_preserves_element_type) {
+    const char *source = "fn consume(ch: Channel<i64>) {\n"
+                         "    select {\n"
+                         "        value from ch -> { var exact: i64 = value }\n"
+                         "    }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    if (!program || program->type != AST_PROGRAM || program->as.program.count != 1)
+        abort();
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    if (!analyzer)
+        abort();
+    xa_analyzer_analyze(analyzer, "select_binding_test.xr", program);
+
+    AstNode *function = program->as.program.statements[0];
+    if (!function || function->type != AST_FUNCTION_DECL)
+        abort();
+    AstNode *body = function->as.function_decl.body;
+    if (!body || body->type != AST_BLOCK || body->as.block.count != 1)
+        abort();
+    AstNode *select = body->as.block.statements[0];
+    if (!select || select->type != AST_SELECT_STMT || select->as.select_stmt.case_count != 1)
+        abort();
+    AstNode *case_node = select->as.select_stmt.cases[0];
+    if (!case_node || case_node->type != AST_SELECT_CASE)
+        abort();
+    uint32_t binding_id = case_node->as.select_case.var_symbol_id;
+    XaSymbol *binding = xa_scope_lookup_by_id(analyzer->global_scope, binding_id);
+    XaSymbolLinks *links = binding ? xa_analyzer_get_links(analyzer, binding) : NULL;
+    if (!links || !links->type || links->type->kind != XR_KIND_INT) {
+        fprintf(stderr, "select receive binding did not preserve Channel<i64> element type\n");
+        abort();
+    }
+
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+}
+
+/* ========== Main ========== */
+
+int main(void) {
+    setup();
+
+    run_simple_var_decl();
+    run_const_decl();
+    run_variable_reassignment();
+    run_compound_assignment();
+    run_shadowing();
+    run_nested_scope();
+    run_function_params();
+    run_closure_capture();
+    run_nested_closure();
+    run_for_in_binding();
+    run_for_in_kv_binding();
+    run_if_else_scoping();
+    run_while_loop_scoping();
+    run_ternary_binding();
+    run_template_string_binding();
+    run_multiple_functions();
+    run_class_method_this();
+    run_try_catch_binding();
+    run_array_and_map_literal();
+    run_select_receive_binding_preserves_element_type();
+
+    teardown();
+
+    printf("\n=== %d/%d Symbol Binding tests passed ===\n", tests_passed,
+           tests_passed + tests_failed);
+    return tests_failed > 0 ? 1 : 0;
+}

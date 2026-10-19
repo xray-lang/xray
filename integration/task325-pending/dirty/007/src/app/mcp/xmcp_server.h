@@ -1,0 +1,76 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xmcp_server.h - MCP (Model Context Protocol) server
+ *
+ * KEY CONCEPT:
+ *   Exposes Xray language tools to AI assistants via MCP over stdio.
+ *   Enables AI to check code, look up syntax, and search stdlib.
+ *   Table-driven method dispatch with signal-safe shutdown.
+ */
+
+#ifndef XMCP_SERVER_H
+#define XMCP_SERVER_H
+
+#include "../../base/xdefs.h"
+#include "xmcp_registry.h"
+#include "xmcp_transport_stdio.h"
+#include <stdbool.h>
+#include <stdio.h>
+#include <signal.h>
+
+/* Forward declarations */
+typedef struct XrJsonValue XrJsonValue;
+typedef struct XrVMRuntime XrVMRuntime;
+typedef struct XmcpKnowledge XmcpKnowledge;
+
+typedef enum XmcpLifecycleState {
+    XMCP_LIFECYCLE_CREATED = 0,
+    XMCP_LIFECYCLE_INITIALIZE_SENT,
+    XMCP_LIFECYCLE_READY
+} XmcpLifecycleState;
+
+/* MCP server state */
+typedef struct XmcpServer {
+    /* stdio transport */
+    XmcpStdioTransport transport;
+
+    /* Analyzer isolate for MCP code analysis tools */
+    XrVMRuntime *isolate;
+
+    /* Knowledge base (syntax spec + stdlib index) */
+    XmcpKnowledge *knowledge;
+
+    /* Logging */
+    FILE *log_file; /* NULL = stderr only */
+    int log_level;  /* 0=error, 1=warn, 2=info, 3=debug */
+
+    /* Feature registry */
+    XmcpRegistry registry;
+
+    /* Server lifecycle */
+    XmcpLifecycleState lifecycle_state;
+    volatile sig_atomic_t shutdown; /* signal-safe shutdown flag */
+} XmcpServer;
+
+typedef struct XmcpServerOptions {
+    bool enable_runner;
+} XmcpServerOptions;
+
+XR_FUNC void xmcp_server_options_default(XmcpServerOptions *options);
+
+/* Create a new MCP server. Returns NULL on allocation failure. */
+XR_FUNC XmcpServer *xmcp_server_new(const XmcpServerOptions *options);
+
+/* Destroy server and free all resources. */
+XR_FUNC void xmcp_server_free(XmcpServer *server);
+
+/* Run the server main loop (blocking, reads stdin, writes stdout).
+ * Returns 0 on clean shutdown, non-zero on error. */
+XR_FUNC int xmcp_server_run(XmcpServer *server);
+
+#endif  // XMCP_SERVER_H

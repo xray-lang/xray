@@ -1,0 +1,144 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xnative_declaration.h - Source-backed immutable native declaration facts
+ *
+ * KEY CONCEPT:
+ *   A governed declaration selects language identity before any lowering.
+ */
+#ifndef XNATIVE_DECLARATION_H
+#define XNATIVE_DECLARATION_H
+#include "../base/xdefs.h"
+#include "../base/xstable_id.h"
+#include <stdbool.h>
+#include <stddef.h>
+
+typedef enum XrNativeDeclarationKind {
+    XR_NATIVE_DECLARATION_UNSPECIFIED, XR_NATIVE_DECLARATION_VALUE,
+    XR_NATIVE_DECLARATION_IDENTITY
+} XrNativeDeclarationKind;
+typedef enum XrNativeDeclarationId { XR_NATIVE_DECLARATION_ARRAY = 1, XR_NATIVE_DECLARATION_STRING = 2,
+    XR_NATIVE_DECLARATION_ATOMIC = 3, XR_NATIVE_DECLARATION_ORDERING = 4,
+    XR_NATIVE_DECLARATION_TASK = 5, XR_NATIVE_DECLARATION_MAP = 6,
+    XR_NATIVE_DECLARATION_SET = 7 } XrNativeDeclarationId;
+typedef enum XrNativeTypeTerm {
+    XR_NATIVE_TERM_UNADMITTED, XR_NATIVE_TERM_UNIT, XR_NATIVE_TERM_I64,
+    XR_NATIVE_TERM_ELEMENT, XR_NATIVE_TERM_STRING, XR_NATIVE_TERM_BOOL,
+    XR_NATIVE_TERM_RESULT_VARIABLE, XR_NATIVE_TERM_ARRAY_ELEMENT,
+    XR_NATIVE_TERM_ARRAY_RESULT, XR_NATIVE_TERM_NULLABLE_ELEMENT,
+    XR_NATIVE_TERM_CALLBACK_MAP, XR_NATIVE_TERM_CALLBACK_PREDICATE_INDEXED,
+    XR_NATIVE_TERM_CALLBACK_REDUCE, XR_NATIVE_TERM_CALLBACK_VISIT,
+    XR_NATIVE_TERM_CALLBACK_PREDICATE, XR_NATIVE_TERM_ORDERING,
+    XR_NATIVE_TERM_TUPLE_ELEMENT_BOOL, XR_NATIVE_TERM_ARRAY_INDEX_ELEMENT,
+    XR_NATIVE_TERM_KEY, XR_NATIVE_TERM_VALUE, XR_NATIVE_TERM_NULLABLE_VALUE,
+    XR_NATIVE_TERM_ARRAY_KEY, XR_NATIVE_TERM_ARRAY_VALUE, XR_NATIVE_TERM_ARRAY_KEY_VALUE, XR_NATIVE_TERM_SET_ELEMENT,
+    XR_NATIVE_TERM_CALLBACK_KEY_VALUE_VISIT, XR_NATIVE_TERM_CALLBACK_ELEMENT_VISIT
+} XrNativeTypeTerm;
+/* RESULT_VARIABLE and the callback terms require an admitted recipe's exact
+ * signature. They never grant authority to an arbitrary unparsed signature. */
+typedef enum XrNativeReceiverMode {
+    XR_NATIVE_RECEIVER_READ, XR_NATIVE_RECEIVER_REF, XR_NATIVE_RECEIVER_MOVE
+} XrNativeReceiverMode;
+typedef enum XrNativeOperation {
+    XR_NATIVE_OPERATION_NONE, XR_NATIVE_OPERATION_ARRAY_GET,
+    XR_NATIVE_OPERATION_ARRAY_SET, XR_NATIVE_OPERATION_ARRAY_PUSH,
+    XR_NATIVE_OPERATION_STRING_CONTAINS, XR_NATIVE_OPERATION_STRING_STARTS_WITH,
+    XR_NATIVE_OPERATION_STRING_ENDS_WITH, XR_NATIVE_OPERATION_STRING_INDEX_OF,
+    XR_NATIVE_OPERATION_STRING_LAST_INDEX_OF,
+    XR_NATIVE_OPERATION_ARRAY_MAP, XR_NATIVE_OPERATION_ARRAY_FILTER,
+    XR_NATIVE_OPERATION_ARRAY_REDUCE, XR_NATIVE_OPERATION_ARRAY_FOR_EACH,
+    XR_NATIVE_OPERATION_ARRAY_FIND, XR_NATIVE_OPERATION_ARRAY_FIND_INDEX,
+    XR_NATIVE_OPERATION_ARRAY_EVERY, XR_NATIVE_OPERATION_ARRAY_SOME,
+    XR_NATIVE_OPERATION_ARRAY_CONTAINS, XR_NATIVE_OPERATION_ARRAY_INDEX_OF,
+    XR_NATIVE_OPERATION_ARRAY_JOIN, XR_NATIVE_OPERATION_ARRAY_CLEAR,
+    XR_NATIVE_OPERATION_ARRAY_REVERSE, XR_NATIVE_OPERATION_ARRAY_UNSHIFT,
+    XR_NATIVE_OPERATION_ATOMIC_LOAD,
+    XR_NATIVE_OPERATION_ATOMIC_STORE,
+    XR_NATIVE_OPERATION_ATOMIC_ADD,
+    XR_NATIVE_OPERATION_ATOMIC_SUB,
+    XR_NATIVE_OPERATION_ATOMIC_FETCH_ADD,
+    XR_NATIVE_OPERATION_ATOMIC_FETCH_SUB,
+    XR_NATIVE_OPERATION_ATOMIC_SWAP,
+    XR_NATIVE_OPERATION_ATOMIC_COMPARE_EXCHANGE,
+    XR_NATIVE_OPERATION_ATOMIC_TOGGLE,
+    XR_NATIVE_OPERATION_ATOMIC_TO_STRING,
+    XR_NATIVE_OPERATION_ARRAY_POP, XR_NATIVE_OPERATION_ARRAY_SHIFT,
+    XR_NATIVE_OPERATION_ARRAY_RESIZE,
+    XR_NATIVE_OPERATION_ARRAY_ENTRIES,
+    XR_NATIVE_OPERATION_ARRAY_FILL,
+    XR_NATIVE_OPERATION_ARRAY_CONCAT,
+    XR_NATIVE_OPERATION_ARRAY_CAPACITY,
+    XR_NATIVE_OPERATION_ARRAY_WITH_CAPACITY,
+    XR_NATIVE_OPERATION_ARRAY_RESERVE,
+    XR_NATIVE_OPERATION_MAP_GET, XR_NATIVE_OPERATION_MAP_SET,
+    XR_NATIVE_OPERATION_HASH_CONTAINS, XR_NATIVE_OPERATION_SET_ADD,
+    XR_NATIVE_OPERATION_HASH_DELETE, XR_NATIVE_OPERATION_HASH_CLEAR,
+    XR_NATIVE_OPERATION_HASH_KEYS, XR_NATIVE_OPERATION_HASH_VALUES, XR_NATIVE_OPERATION_MAP_ENTRIES,
+    XR_NATIVE_OPERATION_SET_UNION, XR_NATIVE_OPERATION_SET_INTERSECTION, XR_NATIVE_OPERATION_SET_DIFFERENCE, XR_NATIVE_OPERATION_SET_SYMMETRIC_DIFFERENCE, XR_NATIVE_OPERATION_SET_IS_SUBSET, XR_NATIVE_OPERATION_SET_IS_SUPERSET,
+    XR_NATIVE_OPERATION_MAP_CONTAINS_VALUE,
+    XR_NATIVE_OPERATION_HASH_FOR_EACH,
+    XR_NATIVE_OPERATION_COUNT
+} XrNativeOperation;
+typedef enum XrNativeAllocation {
+    XR_NATIVE_ALLOCATION_UNKNOWN, XR_NATIVE_ALLOCATION_NO_HEAP, XR_NATIVE_ALLOCATION_MAY_HEAP
+} XrNativeAllocation;
+typedef enum XrNativeResultOwnership {
+    XR_NATIVE_RESULT_OWNERSHIP_UNKNOWN, XR_NATIVE_RESULT_OWNERSHIP_OWNED, XR_NATIVE_RESULT_OWNERSHIP_UNIT
+} XrNativeResultOwnership;
+typedef struct XrNativeParameter {
+    const char *name, *type_text;
+    XrNativeTypeTerm type;
+    bool optional, variadic;
+} XrNativeParameter;
+typedef struct XrNativeMemberDeclaration {
+    uint32_t id;
+    const char *name, *signature, *result_text;
+    uint32_t line, column;
+    XrNativeReceiverMode receiver;
+    bool is_static, is_method, lowered, is_public;
+    XrNativeOperation operation;
+    XrNativeAllocation allocation;
+    const char *failures;
+    XrNativeResultOwnership ownership;
+    const XrNativeParameter *parameters;
+    uint32_t parameter_count;
+    XrNativeTypeTerm result;
+} XrNativeMemberDeclaration;
+typedef struct XrNativeTypeDeclaration {
+    uint32_t id;
+    XrNativeDeclarationKind kind;
+    const char *name;
+    const char *const *parameter_names;
+    uint32_t parameter_count;
+    const char *source_path, *identity;
+    XrFingerprint source_fingerprint;
+    uint32_t line, column;
+    const XrNativeMemberDeclaration *members;
+    uint32_t member_count;
+} XrNativeTypeDeclaration;
+XR_FUNC const XrNativeTypeDeclaration *xr_native_declaration_by_id(uint32_t id);
+XR_FUNC const XrNativeTypeDeclaration *xr_native_declaration_by_name(const char *name);
+XR_FUNC const XrNativeMemberDeclaration *xr_native_declaration_member(
+    const XrNativeTypeDeclaration *declaration, const char *name);
+XR_FUNC bool xr_native_declaration_validate(const XrNativeTypeDeclaration *declaration);
+typedef struct XrNativeDeclarationWork {
+    void *context;
+    bool (*charge)(void *context, uint64_t units);
+} XrNativeDeclarationWork;
+typedef enum XrNativeDeclarationStatus {
+    XR_NATIVE_DECLARATION_OK, XR_NATIVE_DECLARATION_NOT_FOUND,
+    XR_NATIVE_DECLARATION_INVALID, XR_NATIVE_DECLARATION_WORK_LIMIT
+} XrNativeDeclarationStatus;
+/* Work callbacks are borrowed for this synchronous operation. Every input
+ * comparison is admitted before reading; failures leave output unchanged. */
+XR_FUNC XrNativeDeclarationStatus xr_native_declaration_admit(
+    const XrNativeDeclarationWork *work, const XrNativeTypeDeclaration *declaration);
+XR_FUNC XrNativeDeclarationStatus xr_native_declaration_find(
+    const XrNativeDeclarationWork *work, const char *name, const XrNativeTypeDeclaration **output);
+XR_FUNC XrNativeDeclarationStatus xr_native_declaration_find_member(
+    const XrNativeDeclarationWork *work, const XrNativeTypeDeclaration *declaration,
+    const char *name, const XrNativeMemberDeclaration **output);
+#endif // XNATIVE_DECLARATION_H

@@ -1,0 +1,160 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_source_native.inc.c - Governed native declaration binding in the source owner
+ *
+ * KEY CONCEPT:
+ *   Generated declaration identities grant authority only after lexical lookup.
+ */
+static const char *source_owned_text(SourceContext *ctx, const char *text) {
+    size_t length;
+    if (!source_text_length(ctx,NULL,text,&length)) return NULL;
+    char *copy = source_alloc(ctx, length + 1, 1);
+    return copy && source_copy_bytes(ctx,NULL,copy,text,length+1) ? copy : NULL;
+}
+static bool source_query_target_selected_reference(SourceContext *ctx, XrXirSourceRange range, XrXirSourceRange selection,
+    uint32_t declaration, XrXirSourceAccess access) {
+    XrXirSourceReference *records = source_query_append(ctx, ctx->query.references,
+        &ctx->query.reference_count, &ctx->reference_capacity, sizeof(*records));
+    if (!records) return false;
+    ctx->query.references = records;
+    records[ctx->query.reference_count - 1] = (XrXirSourceReference) {range, declaration, declaration, access};
+    return source_query_syntax_reference(ctx, selection);
+}
+static bool source_query_target_reference(SourceContext *ctx, XrXirSourceRange range,
+    uint32_t declaration, XrXirSourceAccess access) {
+    return source_query_target_selected_reference(ctx,range,range,declaration,access);
+}
+static bool source_query_target_token_reference(SourceContext *ctx, AstNode *node,
+    uint32_t declaration, XrXirSourceAccess access) {
+    XrXirSourceRange selection=source_query_token_range(ctx,node);
+    return ctx->diagnostic.status==XR_XIR_OK&&source_query_target_selected_reference(ctx,
+        source_query_range(ctx,node,NULL),selection,declaration,access);
+}
+static bool source_native_array_declaration(SourceContext *ctx) {
+    if (ctx->array_declaration) return true;
+    const XrNativeTypeDeclaration *native = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
+    if (!source_work(ctx, NULL)) return false;
+    if (!source_native_admit(ctx,native)) return false;
+    XrXirSourceQueryModule *modules = source_query_append(ctx, ctx->query.modules,
+        &ctx->query.module_count, &ctx->query_module_capacity, sizeof(*modules));
+    if (!modules) return false;
+    ctx->query.modules = modules; ctx->array_module = ctx->query.module_count - 1;
+    modules[ctx->array_module] = (XrXirSourceQueryModule) {
+        native->identity, native->source_path, native->source_fingerprint};
+    SourceName symbol = {0}; symbol.name = source_owned_text(ctx, native->name);
+    if (!symbol.name) return false;
+    XrXirSourceRange range = {ctx->array_module, (int) native->line, (int) native->column,
+        (int) native->line, (int) (native->column + source_text_size(ctx, native->name))};
+    if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_TYPE, 0, range)) return false;
+    ctx->array_declaration = symbol.declaration;
+    XrXirSourceDeclaration *record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
+    record->native_identity = native->id; record->exported = true;
+    record->generic_parameter_count = 1;
+    record->generic_constraints = source_alloc(ctx, 1, sizeof(*record->generic_constraints));
+    if (!record->generic_constraints) return false;
+    symbol = (SourceName) {0}; symbol.name = source_owned_text(ctx, native->parameter_names[0]);
+    if (!symbol.name) return false;
+    if (!source_query_declare(ctx, &symbol, XR_XIR_SOURCE_TYPE_PARAMETER, ctx->array_declaration,
+        (XrXirSourceRange) {ctx->array_module, 0, 0, 0, 0})) return false;
+    record = (XrXirSourceDeclaration *) &ctx->query.declarations[symbol.declaration - 1];
+    record->type = (XrXirSourceType) {(XrXirType) XR_XIR_TYPE_PARAMETER_BASE, ctx->array_declaration, true};
+    return true;
+}
+static bool source_array_element_type(SourceContext *ctx, XrXirType element, XrXirType *type) {
+    XrXirDeclarations declarations;
+    XrXirModule module = source_module_view(ctx,&declarations);
+    XrXirStatus status;
+    if (ctx->type_scope.active) {
+        AstNode *node = ctx->type_scope.node;
+        const char *name = node->type == AST_INTERFACE_DECL ? node->as.interface_decl.name :
+            node->type == AST_CLASS_DECL ? node->as.class_decl.name :
+            node->type == AST_STRUCT_DECL ? node->as.struct_decl.name :
+            node->type == AST_ENUM_DECL ? node->as.enum_decl.name : NULL;
+        SourceName *owner = name ? find_name(ctx, ctx->names[ctx->module], name) : NULL;
+        if (!owner || owner->node != node || (owner->kind != SOURCE_INTERFACE && owner->kind != SOURCE_NOMINAL))
+            return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"type scope has no authentic declaration owner");
+        uint32_t count = owner->kind == SOURCE_INTERFACE ? ctx->interfaces.declarations[owner->index].parameter_count :
+            ctx->nominals.declarations[owner->index].parameter_count;
+        if (ctx->type_scope.interface_member) {
+            uint32_t member = ctx->type_scope.interface_member - 1;
+            if (owner->kind != SOURCE_INTERFACE || member >= (uint32_t)node->as.interface_decl.method_count)
+                return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"type scope method owner is invalid");
+            AstNode *method = node->as.interface_decl.methods[member];
+            if (!method || method->type != AST_INTERFACE_METHOD || method->as.interface_method.type_param_count < 0 ||
+                (uint32_t)method->as.interface_method.type_param_count > 65536 - count)
+                return source_fail(ctx,node,XR_XIR_BAD_STRUCTURE,"type scope method parameters are invalid");
+            count += (uint32_t)method->as.interface_method.type_param_count;
+        }
+        status = element != XR_XIR_UNIT && !xr_xir_type_is_cell(&ctx->types,element) &&
+            xr_xir_type_span(&ctx->types,element) <= count ? XR_XIR_OK : XR_XIR_BAD_TYPE;
+        /* This is declaration construction only. The complete module discharges
+         * nested type obligations after all explicit implementations are bound. */
+    } else if (ctx->declarations_building) {
+        if (ctx->function >= ctx->function_count || !ctx->generics)
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"function type declaration context is missing");
+        uint32_t count = ctx->generics[ctx->function].parameter_count;
+        status = element == XR_XIR_UNIT || xr_xir_type_is_cell(&ctx->types,element) ? XR_XIR_BAD_TYPE :
+            xr_xir_compile_type_expression_shape(&ctx->compile, &ctx->types, element, count);
+        /* Explicit implementations are bound after every signature exists.
+         * Module constraint verification must discharge this use before bodies. */
+    } else {
+        XrXirProofContext context = {&module,{XR_XIR_CONTEXT_FUNCTION,ctx->function,0}};
+        status = xr_xir_compile_type_use_verify(&ctx->compile, &context, element);
+        if (status == XR_XIR_OK) status = xr_xir_compile_type_access(&ctx->compile, &module, ctx->function, element);
+    }
+    if (status != XR_XIR_OK)
+        return source_fail(ctx, NULL, status, "Array element must be a copyable storable type in this declaration");
+    return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_ARRAY, element, NULL, 0, XR_XIR_UNIT, 0, 0, {0}}, type);
+}
+static bool source_native_type_shadowed(SourceContext *ctx, const char *name) {
+    if (find_name(ctx, ctx->locals, name) || find_name(ctx, ctx->names[ctx->module], name)) return true;
+    AstNode *owner = ctx->bodies[ctx->function].type_owner;
+    int count;
+    XrGenericParam **parameters = source_type_parameters(ctx, &count);
+    for (int i = 0; i < count; ++i) {
+        if (!source_work(ctx, owner)) return true;
+        if (source_text_same(ctx, NULL, name, parameters[i]->name)) return true;
+    }
+    /* Module declarations are hoisted, including ones whose signatures follow this one. */
+    AstNode *module = ctx->graph->specs[ctx->module].ast;
+    for (int i = 0; i < module->as.program.count; ++i) {
+        AstNode *node = module->as.program.statements[i];
+        if (!source_work(ctx, node)) return true;
+        const char *declared = node->type == AST_FUNCTION_DECL ? node->as.function_decl.name :
+            node->type == AST_CLASS_DECL ? node->as.class_decl.name :
+            node->type == AST_STRUCT_DECL ? node->as.struct_decl.name :
+            node->type == AST_ENUM_DECL ? node->as.enum_decl.name :
+            node->type == AST_VAR_DECL || node->type == AST_CONST_DECL ? node->as.var_decl.name : NULL;
+        if (declared && source_text_same(ctx, NULL, declared, name)) return true;
+        if (node->type == AST_IMPORT_STMT) {
+            ImportStmtNode *import = &node->as.import_stmt;
+            if (!import->member_count && import->alias && source_text_same(ctx, NULL, import->alias, name)) return true;
+            for (int m = 0; m < import->member_count; ++m) {
+                if (!source_work(ctx, node)) return true;
+                const char *alias = import->members[m].alias ? import->members[m].alias : import->members[m].name;
+                if (source_text_same(ctx, NULL, alias, name)) return true;
+            }
+        }
+    }
+    return false;
+}
+static bool source_native_array_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
+    const XrNativeTypeDeclaration *native = source_native_find(ctx,ref->name);
+    if (!native || native->id != XR_NATIVE_DECLARATION_ARRAY || ref->nchildren != native->parameter_count ||
+        !ref->children || source_native_type_shadowed(ctx, ref->name))
+        return source_fail(ctx, NULL, XR_XIR_BAD_TYPE, "type name does not bind the governed Array declaration");
+    if (ctx->depth >= 128) return source_fail(ctx, NULL, XR_XIR_BUDGET, "source type depth exhausted");
+    ++ctx->depth;
+    XrXirType element;
+    bool ok = source_type(ctx, ref->children[0], &element);
+    --ctx->depth;
+    if (!ok || !source_array_element_type(ctx, element, type) || !source_native_array_declaration(ctx)) return false;
+    XrXirSourceRange range = {ctx->module, ref->line, ref->column, ref->line, 0};
+    if (range.column > 0 && source_text_size(ctx, ref->name) <= (size_t) (INT_MAX - range.column))
+        range.end_column = range.column + (int) source_text_size(ctx, ref->name);
+    return source_query_target_reference(ctx, range, ctx->array_declaration, XR_XIR_SOURCE_TYPE_USE);
+}

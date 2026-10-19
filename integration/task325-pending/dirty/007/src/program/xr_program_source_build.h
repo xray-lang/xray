@@ -1,0 +1,182 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xr_program_source_build.h - App-neutral source-to-XrProgram build owner
+ *
+ * KEY CONCEPT:
+ *   One owner keeps the module graph, analyzer evidence, and Xi graph alive
+ *   until a canonical artifact and its retained validated view are complete.
+ */
+
+#ifndef XR_PROGRAM_SOURCE_BUILD_H
+#define XR_PROGRAM_SOURCE_BUILD_H
+
+#include "xr_program.h"
+#include "xr_program_verify.h"
+#include "../module/xnative_package.h"
+
+struct XrCompilerSession;
+struct XrModuleIdentityAuthority;
+struct XrModuleResolver;
+
+#define XR_PROGRAM_SOURCE_BUILD_SCHEMA_VERSION UINT32_C(8)
+#define XR_PROGRAM_SOURCE_BUILD_DEFAULT_MAX_MODULES UINT32_C(1024)
+#define XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE 512u
+#define XR_PROGRAM_SOURCE_DIAGNOSTIC_PATH_SIZE 4096u
+
+/* Requests may tighten but never expand these limits.
+ * Specialization usage spans the complete
+ * module graph.
+ * max_program_bytes bounds the final canonical artifact. */
+typedef struct XrProgramSourceBuildBudget {
+    uint32_t max_modules;
+    uint32_t max_monomorphization_depth;
+    uint32_t max_monomorphization_instances;
+    uint32_t max_program_bytes;
+} XrProgramSourceBuildBudget;
+
+XR_FUNC XrProgramSourceBuildBudget xr_program_source_build_default_budget(void);
+
+typedef enum XrProgramSourceProfile {
+    XR_PROGRAM_SOURCE_PROFILE_INVALID = 0,
+    XR_PROGRAM_SOURCE_PROFILE_CHECK,
+    XR_PROGRAM_SOURCE_PROFILE_DEVELOPMENT,
+    XR_PROGRAM_SOURCE_PROFILE_NATIVE_RELEASE,
+    XR_PROGRAM_SOURCE_PROFILE_FREESTANDING,
+    XR_PROGRAM_SOURCE_PROFILE_DEBUG_TOOLING,
+} XrProgramSourceProfile;
+
+typedef enum XrProgramSourceEntryKind {
+    XR_PROGRAM_SOURCE_ENTRY_INVALID = 0,
+    XR_PROGRAM_SOURCE_ENTRY_FUNCTION,
+    XR_PROGRAM_SOURCE_ENTRY_MODULE_INITIALIZER,
+} XrProgramSourceEntryKind;
+
+/* A source entry is identified before compiler-local evidence IDs exist.
+ * Canonical module identity, exact source bytes, and the source declaration
+ * name select one function without consulting an insertion-order ID. A module
+ * initializer has no declaration name and therefore requires function_name to
+ * be NULL. */
+typedef struct XrProgramSourceEntryIdentity {
+    uint8_t kind;
+    uint8_t reserved8[3];
+    const char *module_identity;
+    const char *function_name;
+    XrFingerprint source_content_fingerprint;
+} XrProgramSourceEntryIdentity;
+
+typedef struct XrProgramSourceBuildInput {
+    uint32_t schema_version;
+    XrProgramSourceBuildBudget budget;
+    struct XrCompilerSession *session;
+    struct XrModuleResolver *resolver;
+    const char *entry_source_path;
+    const struct XrModuleIdentityAuthority *entry_authority;
+    XrProgramSourceEntryIdentity entry;
+    /* Additional named functions anywhere in the authoritative import graph.
+     * Duplicate declarations, missing modules and stale source hashes reject.
+     * The request order affects only returned IDs, never canonical bytes. */
+    const XrProgramSourceEntryIdentity *retained_entries;
+    uint32_t retained_entry_count;
+    uint8_t source_profile;
+    /* Retain top-level test declarations from the entry module in source order. */
+    uint8_t discover_tests;
+    /* Retain manifest C exports from the authoritative entry module. */
+    uint8_t discover_exports;
+    uint8_t reserved8[5];
+    XrFingerprint semantic_profile_fingerprint;
+} XrProgramSourceBuildInput;
+
+typedef enum XrProgramSourceBuildStage {
+    XR_PROGRAM_SOURCE_STAGE_NONE = 0,
+    XR_PROGRAM_SOURCE_STAGE_REQUEST,
+    XR_PROGRAM_SOURCE_STAGE_MODULE_GRAPH,
+    XR_PROGRAM_SOURCE_STAGE_ANALYSIS,
+    XR_PROGRAM_SOURCE_STAGE_MONOMORPHIZATION,
+    XR_PROGRAM_SOURCE_STAGE_CANONICALIZATION,
+    XR_PROGRAM_SOURCE_STAGE_GLOBAL_EVIDENCE,
+    XR_PROGRAM_SOURCE_STAGE_XI_PIPELINE,
+    XR_PROGRAM_SOURCE_STAGE_IMPORT_RESOLUTION,
+    XR_PROGRAM_SOURCE_STAGE_ENTRY_SELECTION,
+    XR_PROGRAM_SOURCE_STAGE_PROGRAM_WRITE,
+    XR_PROGRAM_SOURCE_STAGE_SESSION_COMMIT,
+} XrProgramSourceBuildStage;
+
+typedef enum XrProgramSourceBuildStatus {
+    XR_PROGRAM_SOURCE_BUILD_OK = 0,
+    XR_PROGRAM_SOURCE_BUILD_INVALID_INPUT,
+    XR_PROGRAM_SOURCE_BUILD_RESOURCE_LIMIT,
+    XR_PROGRAM_SOURCE_BUILD_OUT_OF_MEMORY,
+    XR_PROGRAM_SOURCE_BUILD_GRAPH_REJECTED,
+    XR_PROGRAM_SOURCE_BUILD_ANALYSIS_REJECTED,
+    XR_PROGRAM_SOURCE_BUILD_MONOMORPHIZATION_REJECTED,
+    XR_PROGRAM_SOURCE_BUILD_CANONICALIZATION_REJECTED,
+    XR_PROGRAM_SOURCE_BUILD_EVIDENCE_REJECTED,
+    XR_PROGRAM_SOURCE_BUILD_PIPELINE_REJECTED,
+    XR_PROGRAM_SOURCE_BUILD_ENTRY_REJECTED,
+    XR_PROGRAM_SOURCE_BUILD_PROGRAM_REJECTED,
+    XR_PROGRAM_SOURCE_BUILD_SESSION_REJECTED,
+} XrProgramSourceBuildStatus;
+
+typedef struct XrProgramSourceDiagnostic {
+    XrProgramSourceBuildStatus status;
+    XrProgramSourceBuildStage stage;
+    uint32_t module_index;
+    uint32_t source_line;
+    uint32_t source_column;
+    uint32_t underlying_status;
+    XrProgramBuildStatus writer_status;
+    char source_path[XR_PROGRAM_SOURCE_DIAGNOSTIC_PATH_SIZE];
+    char message[XR_PROGRAM_SOURCE_DIAGNOSTIC_MESSAGE_SIZE];
+} XrProgramSourceDiagnostic;
+
+typedef enum XrProgramSourceTestKind {
+    XR_PROGRAM_TEST_NONE = 0,
+    XR_PROGRAM_TEST_CASE,
+    XR_PROGRAM_TEST_SKIP,
+    XR_PROGRAM_TEST_BEFORE_EACH,
+    XR_PROGRAM_TEST_AFTER_EACH,
+    XR_PROGRAM_TEST_BEFORE_ALL,
+    XR_PROGRAM_TEST_AFTER_ALL,
+} XrProgramSourceTestKind;
+
+typedef struct XrProgramSourceTestEntry {
+    char *name;
+    uint32_t function_id;
+    XrProgramSourceTestKind kind;
+    uint32_t timeout_seconds;
+} XrProgramSourceTestEntry;
+
+typedef struct XrProgramSourceProduct {
+    XrProgramArtifact artifact;
+    XrValidatedProgram *program;
+    /* Exact Program-local IDs in retained_entries request order. Owned by this
+     * product,
+     * independent of source buffers and the compiler session. */
+    uint32_t *retained_function_ids;
+    uint32_t retained_function_count;
+    /* Owned metadata; it never borrows syntax, Xi or compiler-session storage. */
+    XrProgramSourceTestEntry *tests;
+    uint32_t test_entry_count;
+    /* Detached manifest declarations and exact IDs in manifest order. */
+    XrCExportPlan *exports;
+    uint32_t *export_function_ids;
+    uint32_t export_count;
+} XrProgramSourceProduct;
+
+/* product_out must be zero-initialized or previously freed. On success it owns
+ * both the artifact and one validated-program reference; neither borrows the
+ * compiler session, source graph, or the other's byte storage. The program is
+ * transferred from the Xi writer under the default admission policy; request
+ * limits can only tighten that budget, and rejection releases both outputs. */
+XR_FUNC XrProgramSourceBuildStatus
+xr_program_source_build(const XrProgramSourceBuildInput *input, XrProgramSourceProduct *product_out,
+                        XrProgramSourceDiagnostic *diagnostic_out);
+XR_FUNC void xr_program_source_product_free(XrProgramSourceProduct *product);
+XR_FUNC const char *xr_program_source_build_status_name(XrProgramSourceBuildStatus status);
+
+#endif /* XR_PROGRAM_SOURCE_BUILD_H */

@@ -1,0 +1,2 @@
+fn read<T:{items:Array<i64>}>(value:T)->i64 { return value.items[1] }
+export fn referenceAnswer()->i64 { return read({name:"array",items:[7,42]}) }

@@ -1,0 +1,8644 @@
+# Xray Language Reference
+
+> Version: based on the `xray` source tree version v0.9.0 (audited on 2026-07-18).
+> Status: this is a reference manual for the implemented language. When this document and the implementation disagree, the implementation is authoritative and this document must be updated.
+> Chinese version: [`LANGUAGE_SPEC_CN.md`](LANGUAGE_SPEC_CN.md).
+
+## Table of Contents
+
+- [0. Preface](#0-preface)
+- [1. Lexical Structure](#1-lexical-structure)
+- [2. Type System](#2-type-system)
+- [3. Expressions](#3-expressions)
+- [4. Statements](#4-statements)
+- [5. Declarations](#5-declarations)
+- [6. Patterns](#6-patterns)
+- [7. Scoping and Name Resolution](#7-scoping-and-name-resolution)
+- [8. Error Handling](#8-error-handling)
+- [9. Generics](#9-generics)
+- [10. Concurrency and Coroutines](#10-concurrency-and-coroutines)
+- [11. Modules](#11-modules)
+- [12. Testing](#12-testing)
+- [13. Built-in Functions](#13-built-in-functions)
+- [14. Built-in Type Methods](#14-built-in-type-methods)
+- [15. Standard Library](#15-standard-library)
+- [16. Runtime Model](#16-runtime-model)
+- [17. Compilation Pipeline](#17-compilation-pipeline)
+- [18. Error Codes](#18-error-codes)
+- [Appendix A. EBNF](#appendix-a-ebnf)
+- [Appendix B. Keyword Index](#appendix-b-keyword-index)
+- [Appendix C. Operator Index](#appendix-c-operator-index)
+- [Appendix D. Standard Library Module Index](#appendix-d-standard-library-module-index)
+- [Appendix E. Differences from Other Languages](#appendix-e-differences-from-other-languages)
+- [Appendix F. Glossary](#appendix-f-glossary)
+
+---
+
+## 0. Preface
+
+### 0.1 About This Specification
+
+This document is the **reference manual** for the Xray programming language. It describes the lexical structure, syntax, type system, semantics, concurrency model, runtime, and standard-library surface. Its goals are:
+
+1. Allow a human reader to write valid Xray code with predictable behavior.
+2. Serve as a **structured source of truth** for compilers, analyzers, IDEs, AI assistants, documentation generators, and other tooling.
+3. Stay aligned with the actual implementation in the main `xray` repository — any divergence is a bug in either the document or the code.
+
+**This manual is not a tutorial.** For introductory material, see the Xray website and the `demos/` directory.
+
+### 0.2 Versioning
+
+The version of this manual is kept in strict lock-step with the main `xray` repository (the `project(Xray VERSION x.y.z)` line in `CMakeLists.txt`). Major breaking changes are noted in-section as "since vX.Y.Z".
+
+Xray is currently in the `v0.x` series. **No backward compatibility is promised.** Each release of the spec may introduce breaking changes.
+
+### 0.3 Language Design Philosophy
+
+Xray is a **lightweight statically typed scripting language with native concurrency support**. Design goals:
+
+| Dimension | Choice |
+|--|--|
+| **Types** | Static typing + type inference; declarations rarely require explicit type annotations, but the type system is fully visible at compile time |
+| **Concurrency** | Built-in M:N coroutines (go / await / Channel / scope / select); concurrency safety is enforced at compile time by the "explicit sharing" rules |
+| **Execution** | Bytecode VM and the `xray build --native` AOT path; there is currently no JIT, and differential tests guard cross-backend semantics |
+| **Error handling** | Value-return error channel (throw / try / catch + enum errors) + panic boundary (catch panic) + nullable types (T?) + `defer`-based resource management |
+| **Metaprogramming** | Attributes (`@test` / `@deprecated` / `@derive`) + compile-time metadata + monomorphized generics |
+| **Interop** | C ABI is built-in; stdlib modules can be authored in C and exposed via `XR_DEFINE_BUILTIN` |
+
+Design influences: TypeScript (type inference + nullable), Go (structured concurrency + Channel), Rust (a lightweight take on ownership/`move`), Swift (protocols + optional chaining). **Xray is not a clone of any of them.**
+
+### 0.4 Reading Conventions
+
+#### 0.4.1 Grammar Notation
+
+This document uses a lightweight EBNF-style notation:
+
+| Symbol | Meaning |
+|--|--|
+| `Term` | non-terminal (capitalised) |
+| `'literal'` | literal token |
+| `A B` | sequence |
+| `A \| B` | choice |
+| `A?` | optional |
+| `A*` | zero or more |
+| `A+` | one or more |
+| `(A)` | grouping |
+
+The complete EBNF is in [Appendix A](#appendix-a-ebnf).
+
+#### 0.4.2 Source-Code References
+
+This document references the main `xray` repository extensively as its source of truth. Citation format:
+
+```
+path:lineno
+```
+
+Examples: `src/frontend/lexer/xkeywords.def`, `src/frontend/parser/xast_types.h:42-58`.
+
+#### 0.4.3 Status Markers
+
+| Marker | Meaning |
+|--|--|
+| **Stable** | default state; behavior will not change without notice |
+| **Experimental** | implementation exists but may change |
+| **Reserved** | keyword/syntax recognized but currently disabled |
+| **Unimplemented** | described in the spec but not yet supported in code; must be marked explicitly |
+
+#### 0.4.4 Error-Code References
+
+Error codes use the `E0xxx` format (e.g., `E0101`); the full list is in [Chapter 18](#18-error-code-reference). Source-level definitions are in `src/runtime/xerror_codes.h` and `src/runtime/xerror.h`.
+
+---
+
+## 1. Lexical Structure
+
+> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (52 general keywords), `src/shared/xr_exact_scalar_registry.def` (12 exact scalar keywords), and `src/frontend/lexer/xlex.c` (scanner implementation).
+
+### 1.1 Character Encoding
+
+Xray source files **must** be valid UTF-8. Before producing the first token, the scanner strictly validates the entire input. Strings, comments, and identifiers may all contain non-ASCII characters (see §1.4 for identifier rules).
+
+A UTF-8 BOM (`EF BB BF`) is optional; the scanner skips a leading BOM.
+
+### 1.2 Line Endings and Whitespace
+
+Line numbers advance on `\n`. Windows `\r\n` works because `\r` is skipped as horizontal whitespace. A standalone `\r` is also skipped, but it does **not** advance the line counter or end a statement, and therefore should not be used as a source line break.
+
+**Whitespace**: space (`U+0020`), horizontal tab (`U+0009`), and line terminators. Whitespace separates tokens and carries no semantics.
+
+**The one whitespace-sensitive rule**: whether `<` opens a generic argument list depends on whether whitespace **precedes** it. `f<T>(x)` is a call with explicit type arguments; `f < T` is a comparison. Splitting consecutive `>` does **not** depend on whitespace: `Array<Array<i64>>` and `Array<Array<i64> >` are exactly equivalent, decided by grammatical position rather than spacing.
+
+#### 1.2.1 Statement Boundaries
+
+Xray does not require a trailing `;`: **a line ending terminates a statement**. When a line ending is reached while an expression is still open, the compiler decides whether the next line continues it or starts a new statement.
+
+A line ending **terminates** the current expression if and only if all of the following hold:
+
+1. The last consumed token can **end** an expression (identifier, literal, `)`, `]`, `}`, postfix `!`, `++`, `--`, `?`, a scalar type name); and
+2. The first token of the new line can **begin** an expression; and
+3. The parser is not inside `(` or `[` — no statement can begin inside a bracket group, so line endings are transparent there.
+
+Conditions 1 and 2 are only ever both true for tokens that carry **both a prefix and an infix role**: `!` (logical not / force unwrap), `-` (negate / subtract), `/` (regex literal / divide), `++`, `--`, `(`, `[`. Hence:
+
+```xray
+var x = a
+!b            // two statements; NOT var x = a!
+```
+
+When a line begins with a token that has **no prefix role** (`.`, `?`, `:`, `&&`, `||`, `+`, `*`, `as`, `is`, …) there is no ambiguity and continuation works as usual:
+
+```xray
+var ok = check(a)
+    && check(b)      // continuation
+
+var total = base +
+            extra    // operator parked at end of line; continuation
+```
+
+To continue a line with `-` or `/`, move the operator to the end of the previous line or wrap the whole expression in `( )`:
+
+```xray
+var d = (total
+    - used)          // line endings are transparent inside a bracket group
+```
+
+> The value of an expression statement is discarded, so **an expression statement with no effect is an error** (`E0208`). This pairs with the boundary rule above: a continuation line that was correctly split off does not become a silent no-op — it is reported immediately, with the rewrite suggested. The REPL is exempt, since it prints the value of a trailing bare expression and that value is therefore observed.
+
+### 1.3 Comments
+
+Xray supports two kinds of comments: line comments do not nest; block comments nest:
+
+```xray
+// line comment, from // to end-of-line
+/* block comment,
+   may span lines;
+   supports /* nested */ layers to any reasonable depth */
+```
+
+Comments may appear wherever whitespace is allowed. Formatters and language servers may read comment trivia; trivia does not participate in parsing.
+
+Doc comments (no syntactic difference from ordinary comments): conventionally `///` or `/** */` for tooling. The compiler does not currently enforce this convention.
+
+### 1.4 Identifiers
+
+```ebnf
+Identifier ::= IdentStart IdentCont*
+IdentStart ::= 'a'..'z' | 'A'..'Z' | '_' | Utf8NonAsciiByteSequence
+IdentCont  ::= IdentStart | '0'..'9'
+```
+
+After strict input validation, the scanner accepts non-ASCII UTF-8 byte sequences as identifier content, so `中文` and `café` are valid identifiers. The current scanner does not apply Unicode XID classification or NFC normalization; visually equivalent but differently encoded names remain distinct.
+
+**Reservation rule**: identifiers cannot collide with reserved keywords (see §1.5); they **may** collide with **context-sensitive keywords** (such as `from`, `to`, `default`, `ref`, `move`, `linked`, `after`).
+
+The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
+
+- In `match` patterns it represents a **wildcard** (see §6.7).
+- In `for-in`, it can ignore the key or the value: `for (_, v in m) { ... }`.
+- In destructuring binding it can ignore positions: `var (a, _) = (1, 2)`.
+- It **cannot** appear as `var _ = expr`, as a function-parameter name, or as a referenced variable; the compiler reports "expected variable name".
+- Multi-underscore names (such as `__tmp`) are ordinary identifiers.
+
+### 1.5 Keywords
+
+Xray has **64 reserved keywords** in total, grouped by purpose below:
+
+#### 1.5.1 Declarations and Control Flow
+
+| Keyword | Purpose |
+|--|--|
+| `var` | mutable variable declaration |
+| `const` | stable binding declaration; deep-read-only capability in type position |
+| `comptime` | expression prefix that forces compile-time evaluation |
+| `fn` | function declaration |
+| `return` | function return |
+| `yield` | generator value-yield statement |
+| `if` `else` | conditional branches |
+| `while` | loop |
+| `for` `in` | loops (C-style + for-in) |
+| `break` `continue` | loop control |
+| `match` | pattern matching |
+
+#### 1.5.2 Object Orientation and Types
+
+| Keyword | Purpose |
+|--|--|
+| `class` `struct` | class / struct declaration |
+| `packed` `union` | FFI layout declarations |
+| `extends` | class inheritance |
+| `interface` `implements` | interface declaration / implementation |
+| `enum` | enum declaration |
+| `type` | type alias |
+| `new` | reserved; construct objects with `T(...)` (see §3.14) |
+| `this` `super` | self / parent reference |
+| `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
+| `const` | immutable field/binding modifier |
+| `final` | `final class` cannot be inherited |
+| `operator` | operator overloading |
+| `is` `as` | runtime type check / cast |
+
+`abstract` and `override` are not keywords and may be used as identifiers in ordinary expression positions. `override` is a contextual modifier on class instance methods and is required for actual overrides. Interfaces express abstract contracts.
+
+#### 1.5.3 Error Handling
+
+`try` `catch` `throw` `defer`
+
+#### 1.5.4 Module System
+
+`import` `export`
+
+#### 1.5.5 Coroutines and Concurrency
+
+`go` `await` `select` `defer` `scope` `unsafe`
+
+`parallel` is an explicitly imported standard-library module name, not a lexical keyword.
+
+#### 1.5.6 Type Names (reserved)
+
+`i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
+`f32` `f64` `bool` `string` `rune`
+
+Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
+
+> **Note**: the following names are **not** lexer keywords; `stdlib/prelude/builtin_symbols.def` introduces them automatically:
+> `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`.
+> `Array<u8>` is an `Array` specialization, not a separate name. Module-owned types such as `DateTime` and `Logger` require explicit imports from their modules.
+> These names **cannot be redeclared**: `class Array {}`, `enum TaskResult {}` and `interface Stringable {}` are all compile errors.
+> The reserved set is every entry in that registry -- types, enums and constraint interfaces -- not only the prelude types listed above.
+> The standard library's own declarations of them are the **definitions** of those names and are exempt.
+
+#### 1.5.7 Literal Keywords
+
+`true` `false` `null`
+
+#### 1.5.8 Context-sensitive Keywords
+
+These are not in the lexer keyword table; the parser recognizes them by position. They **may** be used as ordinary identifiers:
+
+| Token | Where it appears |
+|--|--|
+| `init` | class/struct initializer member declaration; ordinary identifier elsewhere |
+| `from` | `select` receive arm (`x from ch`); also in named import / re-export (`import { x } from "module"`) |
+| `to` | `select` send arm (`value to ch`) |
+| `default` | reserved, currently disabled |
+| `cancelled` | `cancelled()` cancellation check (actually a builtin function) |
+| `ref` | parameter mode and call-site authorization (`fn f(p: ref T)` / `f(ref p)`) |
+| `move` | ownership transfer (`move x`) |
+| `linked` | `linked go` / `linked scope` modifier |
+| `after` | `select` timeout arm (`after 1000 -> ...`) |
+| `panic` | panic-channel boundary in `catch panic (p)` |
+
+### 1.6 Literals
+
+#### 1.6.1 Integer Literals
+
+```ebnf
+IntLiteral ::= DecLit | HexLit | OctLit | BinLit
+DecLit ::= Digit (Digit | '_')*
+HexLit ::= '0x' HexDigit (HexDigit | '_')*
+OctLit ::= '0o' OctDigit (OctDigit | '_')*
+BinLit ::= '0b' BinDigit (BinDigit | '_')*
+```
+
+- Digit separators `_` exist purely for readability and may appear anywhere between digits.
+- An integer literal without a unique numeric context defaults to `i64`. The `n` suffix promotes to `BigInt` (see §1.6.3).
+- Range: the default `i64` context covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
+- When an integer literal appears directly in a unique numeric context (variable initialization, assignment, argument, return value, collection element, or another already-typed numeric operand), it acquires the target type directly instead of first becoming `i64` and then being converted. An integer target must represent the value; a floating target must represent it exactly. Otherwise compilation fails and an explicit `as` is required to express truncation, sign change, or rounding intent.
+
+```xray
+42
+0xFF
+0b1010
+0o77
+1_000_000      // one million
+```
+
+#### 1.6.2 Floating-Point Literals
+
+```ebnf
+FloatLiteral ::= Digit+ '.' Digit* Exp?
+              | Digit+ Exp
+              | '.' Digit+ Exp?
+Exp ::= ('e' | 'E') ('+' | '-')? Digit+
+```
+
+Without a unique floating context the literal type is `f64` (IEEE-754 double precision); a unique `f32`/`f64` context directly selects rounding precision. Complete spelling and rounding follow §17.25. The lexical target includes leading/trailing-dot forms; the current XIR source subset does not yet admit them, and converter support does not qualify the full lexical grammar.
+
+```xray
+3.14
+1.0e10
+2.5E-3
+.5             // equivalent to 0.5
+```
+
+#### 1.6.3 BigInt Literals
+
+```ebnf
+BigIntLiteral ::= (DecLit | HexLit | OctLit | BinLit) 'n'
+```
+
+```xray
+123n
+0xFFn
+0b1010n
+```
+
+Arbitrary-precision integers; arithmetic never overflows. See §14.8 for the type.
+
+#### 1.6.4 Boolean and Null Literals
+
+```xray
+true
+false
+null
+```
+
+- `true` / `false`: type `bool`.
+- `null`: type `null` (semantically the zero value of every nullable type `T?`).
+
+#### 1.6.5 String Literals
+
+Xray quoted literals use double quotes only; single quotes are reserved for `rune`, and backtick strings do not exist. The literal prefix, escape mode, and delimiter form are orthogonal dimensions; the unified rules follow below.
+
+##### Inline escaped strings (Q = 1)
+
+```ebnf
+InlineEscapedString ::= '"' StrChar* '"'
+StrChar ::= any character that is not a double quote, backslash, or newline
+          | EscapeSeq
+          | Interpolation
+EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
+                  | 'x' HexDigit{2}
+                  | 'u' HexDigit{4}
+                  | 'u{' HexDigit{1,6} '}')
+Interpolation ::= '${' Expression '}'
+```
+
+- An inline literal cannot cross a physical line; use an escape or block form for line breaks.
+- Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
+- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / rune literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
+
+```xray
+"hello"
+"Hello, ${name}! ${1 + 2}"
+"tab\there\nnewline"
+"\u4F60\u597D"        // "你好"
+"\u{1F600}"            // emoji
+```
+
+Interpolation expressions may themselves contain nested interpolation; `}` characters inside nested strings do not close the outer `${...}`.
+
+##### Inline raw strings (`r` prefix, Q = 1)
+
+```ebnf
+InlineRawString ::= 'r' '"' RawChar* '"'
+RawChar ::= any character except double quote (including `\`, which is not processed)
+```
+
+- **No** escape processing (`\n`, `\t`, etc. are kept as-is).
+- `${...}` interpolation is still supported.
+- The identifier `r` standing alone is still a regular identifier (`TK_NAME`); it is recognized as a raw-string prefix only when immediately followed by a double quote.
+- Raw strings use `r"..."`; single-quoted strings continue to use the ordinary escape rules.
+
+```xray
+r"C:\path\to\file"          // literal contains two backslashes
+r"C:\Users\${USER}"         // backslash is not escaped, but ${USER} still interpolates
+```
+
+##### Unified prefixes and variable quote delimiters
+
+```ebnf
+QuotedLiteral ::= LiteralPrefix InlineQuoted | LiteralPrefix BlockQuoted
+LiteralPrefix ::= '' | 'r' | 'b' | 'br' | 'c' | 'cr'
+InlineQuoted ::= '"' InlinePayload* '"' | '""'
+BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
+QuoteRun ::= '"'{Q}                         // Q >= 3
+BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
+```
+
+- No prefix / `r` produces a valid UTF-8 `string`; no prefix processes escapes, while `r` preserves backslashes literally.
+- Decoded string payloads carry explicit byte lengths in the AST and subsequent value boundaries. A storage terminator is not a content boundary; copying, equality, signatures and formatting must not truncate at embedded NUL. Structural field names and C literals retain their separate no-NUL restrictions.
+- `b/br` produces `[u8; L]`; `c/cr` produces `[u8; L+1]` with an appended NUL. `b/c` processes escapes, while `br/cr` preserves raw bytes.
+- `${...}` interpolates only in the no-prefix / `r` family. It is always ordinary payload bytes in `b/br/c/cr`.
+- The only prefixes are no prefix, `r`, `b`, `br`, `c`, and `cr`; `rb/rc` are not aliases. A prefix must immediately precede the quote run.
+- `c/cr` rejects every interior NUL after escape decoding, newline normalization, and margin removal.
+
+```xray
+"Hello, ${name}!"
+r"C:\\path\\${name}"   // backslashes are raw; interpolation remains active
+b"\\x89PNG"              // escaped [u8; 4]
+br"${HOME}\\bin"         // raw bytes; `${HOME}` does not interpolate
+c"puts"                   // [u8; 5], ending in the appended NUL
+cr"C:\\assets"           // raw C bytes + appended NUL
+```
+
+One quote is the inline delimiter. Two consecutive quotes represent only an empty payload in the selected prefix family and never open a block:
+
+```xray
+"" r"" b"" br"" c"" cr""
+```
+
+Three or more consecutive quotes form a block delimiter. The opener must be followed immediately by LF or CRLF. The closer must start on its own line and may contain only “margin + exactly the opener's quote count + line ending or EOF”. No trailing whitespace, comment, comma, semicolon, or bracket is allowed on the closer line; subsequent tokens start on the next line.
+
+```xray
+const HTML = r"""
+<div class="card">
+  ${title}
+</div>
+"""
+
+const SCRIPT = br""""
+echo ${HOME}
+"""
+""""
+```
+
+The structural newline after the opener and before the closer is not part of the value. CRLF inside the body normalizes to LF. Spaces/tabs before the closer define the margin; every non-empty body line must begin with that exact byte prefix, which is removed from the payload. Tabs and spaces are not compared by visual columns.
+
+Only a complete standalone quote-only line matching the closer shape ends the block; ordinary quote runs within body lines are content. If the body needs a line that conflicts with the current closer, the author or formatter increases `Q`. The formatter preserves the prefix and inline/block form but selects the smallest safe `Q >= 3`.
+
+Interpolation expressions are scanned in expression mode with balanced braces; nested quoted literals and rune literals are skipped as units, so same-quote nesting is legal. The fixed-byte family never enters interpolation scanning.
+
+#### 1.6.6 `rune` Literals
+
+```ebnf
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
+```
+
+- `'a'` has type `rune` and represents one Unicode scalar value.
+- The valid range is `U+0000..U+10FFFF`, excluding surrogates `U+D800..U+DFFF`.
+- A literal must contain exactly one scalar; `''`, `'ab'`, `'🇨🇳'`, and `'é'` are compile errors.
+- Escapes such as `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\''`, `'\\'`, and `'\u{1F600}'` are supported.
+- Char literals do not support `${...}` interpolation.
+
+```xray
+var a: rune = 'a'
+var zh: rune = '中'
+var smile: rune = '\u{1F600}'
+```
+
+##### String interpolation
+
+String templates use ordinary double quotes with `${...}` interpolation.
+
+#### 1.6.7 Regex Literals
+
+```ebnf
+RegexLiteral ::= '/' RegexBody '/' RegexFlag*
+RegexFlag ::= 'g' | 'i' | 'm' | 's'
+```
+
+```xray
+/[a-z]+/i
+/\d+\.\d+/g
+```
+
+- Flags: `g` (global), `i` (case-insensitive), `m` (multi-line), `s` (dot matches newline).
+- **Disambiguation**: when `/` appears in a position that can accept a unary `/` (e.g., right after `=`, `,`, `(`, an operator), the scanner treats it as a regex; elsewhere it is division.
+
+### 1.7 Operators and Tokens
+
+Full token table (by category):
+
+#### 1.7.1 Punctuation
+
+| Token | Use |
+|--|--|
+| `(` `)` | grouping, calls, parameter lists |
+| `{` `}` | blocks, object literals |
+| `[` `]` | array literals, indexing |
+| `,` | separator |
+| `.` | member access |
+| `:` | type annotation, map kv, ternary |
+| `;` | for-loop separator (optional elsewhere) |
+| `?` | nullable type, ternary |
+| `@` | attribute marker (`@test`) |
+
+#### 1.7.2 Arithmetic
+
+`+` `-` `*` `/` `%`
+
+#### 1.7.3 Bitwise
+
+`&` `|` `^` `~` `<<` `>>`
+
+#### 1.7.4 Comparison
+
+`==` `!=` `<` `<=` `>` `>=`
+
+- `==` `!=`: value equality; numeric operands must have the same type or require only same-signed integer widening / `f32 → f64`. An integer literal may directly acquire the other operand's numeric type.
+- `<` etc.: supported by numbers and strings; not supported by other types.
+
+#### 1.7.5 Logical
+
+`&&` `||` `!`
+
+Short-circuit evaluation.
+
+#### 1.7.6 Assignment
+
+`=` `+=` `-=` `*=` `/=` `%=` `&=` `|=` `^=` `<<=` `>>=`
+
+#### 1.7.7 Increment / Decrement
+
+`++` `--`
+
+Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++x` / `--x` and expression-position `x++` / `x--` are compile errors. See §4.1.
+
+#### 1.7.8 Type-related
+
+| Token | Use |
+|--|--|
+| `?` | nullable type (`T?`), ternary, optional-chain prefix |
+| `?.` | optional chain property/method (`obj?.prop`, `obj?.method()`) |
+| `?[` | optional chain index (`arr?[0]`) |
+| `??` | null coalescing (`a ?? b`) |
+| `!` | force unwrap (postfix, `expr!`) / logical not (prefix) |
+| `\|` | union type (`i64 \| string`) / bitwise or |
+| `->` | unified arrow: function return type, closures, `match` / `select` arms; a function type is led by `fn` (`fn(T) -> R`) and drops the arrow when it returns unit (`fn(T)`) |
+| `...` | rest / spread |
+| `..` | half-open range (`0..10`) |
+| `..=` | inclusive range (`0..=10`) |
+| `is` | runtime type check |
+| `as` | type cast |
+
+`!` ambiguity is resolved at parse time by **line**, not by whitespace: after an expression on the same line it is force-unwrap; in prefix position (including at the start of a line) it is logical not. Whitespace plays no part — `a !b` and `a! b` are both "two statements on one line" and both require a separating `;`. For the cross-line rule see §1.2.1.
+
+#### 1.7.9 Collection-literal Starters
+
+| Token | Use |
+|--|--|
+| `#{` | empty Map literal |
+| `#[` | Set literal start |
+
+Examples:
+
+```xray
+var empty_map = #{}
+var primes = #[2, 3, 5, 7]
+```
+
+#### 1.7.10 Patterns
+
+| Token | Use |
+|--|--|
+| `_` | `match` wildcard |
+
+#### 1.7.11 Operator Precedence
+
+The full precedence table is in [§3.1](#31-precedence-and-associativity).
+
+---
+
+## 2. Type System
+
+> Type-syntax and built-in identity anchors: `src/frontend/parser/xparse_type.c` and `stdlib/prelude/builtin_symbols.def`. This chapter defines language contracts; existing runtime or analyzer representations do not determine value-semantic legality. See §17 for current new XIR implementation qualification.
+
+### 2.1 Overview
+
+Xray is statically typed; every expression has a determined type at compile time. Core features of the type system:
+
+1. **Type inference**: variable declarations rarely require type annotations; the analyzer infers from the initializer / context.
+2. **Distinct Optional layers**: `T?` denotes the language item `Optional<T>`; every layer keeps its own presence tag without decomposing into a union with null.
+3. **Union types**: `A | B | ...` (up to 6 members).
+4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
+5. **Three type domains with distinct responsibilities**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `structural object` is structural and exact in ordinary type positions, while generic constraint positions may require a minimum field set; `JSON.Value` is the schema-less recursive data-exchange domain. JSON scalars widen without materialization, while typed composites require explicit `JSON.value` encoding.
+6. **Minimal type identity**: `typeOf`, `typeName`, `is`, and `as`; there is no default runtime `Reflect` module.
+
+### 2.2 Type Categories
+
+| Category | Examples |
+|--|--|
+| Primitive | `i64`, `f64`, `bool`, `string`, `rune`, `()` (Unit, no return value) |
+| Sized integers | `i8`, `i16`, `i32`, `i64`, `u8`..`u64` |
+| Sized floats | `f32`, `f64` |
+| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<u8>` is the contiguous-byte specialization of `Array` |
+| Fixed layout | `[T; N]` |
+| Borrowed view | `Slice<T>` / `MutSlice<T>` (shared read-only / exclusive writable; no element ownership, see §2.4.2) |
+| Special prelude types/namespaces | `JSON` (including `JSON.Value` / `JSON.Object`), `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, and the `Os*` synchronization types |
+| Module-exported types | `DateTime`, `Logger`, `NetConn`, `NetListener`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
+| Error-handling prelude | `PanicInfo` (see §8) |
+| Nullable | `T?` |
+| Union | `A \| B \| ...` |
+| Tuple | `(T1, T2, ...)` |
+| Function | `fn(T1, T2) -> R` |
+| FFI / C ABI | `Ptr<T>`, `MutPtr<T>`, `CFn<fn(T) -> R>`, `usize`, `isize` |
+| Class / Struct / Interface | user-defined (nominal) |
+| Enum | user-defined (incl. ADT enum, see §5.6) |
+| Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
+
+The built-in registry is an implementation projection, not the new XIR declaration-family admission list. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
+
+<!-- xr-builtin-registry:begin -->
+
+#### 2.2.1 Built-in symbol registry
+
+Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of names available without an import. The compiler, the LSP and this table read the same source of truth; any capitalized name outside it comes from an import or a user declaration.
+
+**Built-in types**
+
+| Symbol | Construction |
+|--|--|
+| `Array<T>` | prelude |
+| `Atomic<T>` | prelude |
+| `BigInt` | prelude |
+| `CFn<T>` | resolver built-in |
+| `Channel<T>` | prelude |
+| `CoroLocal<T>` | resolver built-in |
+| `EnumPayloadField<T>` | resolver built-in |
+| `EnumPayloads<T>` | resolver built-in |
+| `EnumVariant<T>` | resolver built-in |
+| `EnumVariants<T>` | resolver built-in |
+| `Iterator<T>` | prelude |
+| `JSON.Decodable` | resolver built-in |
+| `JSON.Encodable` | resolver built-in |
+| `JSON.Object` | resolver built-in |
+| `JSON.Path` | resolver built-in |
+| `JSON.PathSegment` | resolver built-in |
+| `JSON.UnknownFields` | resolver built-in |
+| `JSON.Value` | resolver built-in |
+| `JSON.WithRest<T>` | resolver built-in |
+| `Map<K, V>` | prelude |
+| `MutPtr<T>` | resolver built-in |
+| `OsBarrier` | prelude |
+| `OsCondvar` | prelude |
+| `OsMutex` | prelude |
+| `OsOnce` | prelude |
+| `OsRwLock` | prelude |
+| `PanicInfo` | prelude |
+| `Path` | prelude |
+| `Ptr<T>` | resolver built-in |
+| `Range` | prelude |
+| `Set<T>` | prelude |
+| `Slice<T>` | prelude |
+| `StringBuilder` | prelude |
+| `Task<T>` | resolver built-in |
+| `Thread<T>` | prelude |
+
+**Built-in enums**
+
+| Symbol | Variants |
+|--|--|
+| `Ordering` | `Relaxed` \| `Acquire` \| `Release` \| `AcquireRelease` \| `SeqCst` |
+| `Endian` | `Native` \| `LE` \| `BE` |
+| `Utf8Error` | `InvalidUtf8` |
+| `NumberParseError` | `InvalidSyntax` \| `OutOfRange` |
+| `StringSliceError` | `InvalidByteRange` |
+| `CompressionError` | `InvalidData` |
+| `CryptoError` | `InvalidLength` |
+| `Recv<T>` | `Value` \| `Empty` \| `Timeout` \| `Closed` |
+| `SendResult` | `Sent` \| `Full` \| `Timeout` \| `Closed` |
+| `TaskResult<T>` | `Success` \| `Failed` \| `Cancelled` \| `Timeout` \| `Pending` |
+| `TaskStatus` | `Pending` \| `Running` \| `Success` \| `Failed` \| `Cancelled` |
+
+**Built-in constraint interfaces**
+
+| Symbol |
+|--|
+| `Callable<T>` |
+| `Closeable` |
+| `Comparable` |
+| `Equatable` |
+| `Error` |
+| `Hashable` |
+| `Indexable<K, V>` |
+| `Iterable<T>` |
+| `Lengthable` |
+| `Stringable` |
+
+**Built-in constraint predicates**
+
+| Symbol |
+|--|
+| `Equal` |
+
+**Deliberately absent names**
+
+| Symbol | Diagnostic hint |
+|--|--|
+| `Self` | Xray has no 'Self' type; write the declaring type's own name, e.g. operator==(other: Token) -> bool |
+| `Box` | 'Box' is not a built-in type; indirect recursive data through a class node or a container slot such as Array<T> |
+
+<!-- xr-builtin-registry:end -->
+
+The new XIR finite value-equality contract freezes the built-in operation predicate `Equal`;
+see §9.2, §13.5 and §17.33. It is neither a user interface nor an alias for legacy `Equatable`,
+and grants no ordering, key equivalence or reflexivity. Implementation remains pending. The
+generated registry above still reflects existing symbol sources; manual entries cannot replace
+source registration, probes and removal after the last legacy consumer migrates.
+
+### 2.3 Primitive Types
+
+#### 2.3.1 Integer Types
+
+| Type | Range | Default role |
+|--|--|--|
+| `i8` | `[-128, 127]` | — |
+| `i16` | `[-32768, 32767]` | — |
+| `i32` | `[-2³¹, 2³¹-1]` | — |
+| `i64` | `[-2⁶³, 2⁶³-1]` | default integer type |
+| `u8`..`u64` | unsigned counterparts | — |
+
+- An integer literal without a unique numeric context defaults to `i64`; in a unique integer context it directly acquires that type and must fit its range (`var x: i8 = 200` is rejected at compile time). In a unique floating context it directly acquires that floating type, but its integer value must be exactly representable.
+- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Operations on the same integer type keep that type and wrap at its width (`u8 + u8 -> u8`); different widths with the same signedness use the unique wider type. There is no implicit promotion across signedness, between fixed-width integers and `isize`/`usize`, or between integers and floats; shift results keep the left operand's type.
+- Values with static type `u8`..`u64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `u64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
+- Integer division truncates toward zero; a nonzero remainder has the dividend's sign. A zero divisor faults. For every signed integer type, `MIN / -1` wraps to that type's `MIN`, and `MIN % -1` is zero.
+- `i64.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `i64` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
+- An already-typed expression cannot be implicitly narrowed, change signedness, or cross a target-dependent width at assignment. Such conversions require an explicit `as`. Explicit integer conversion reduces modulo the target width and interprets the resulting two's-complement bit pattern as the target type.
+- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `JSON.Value` / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value in the appropriate exact unsigned static type (`u8`, `u16`, `u32`, or `u64`) when unsigned semantics are required.
+
+#### 2.3.2 Floating-Point Types
+
+| Type | Standard |
+|--|--|
+| `f32` | IEEE-754 single precision |
+| `f64` | IEEE-754 double precision; default floating type |
+
+Literals default to `f64`.
+
+Floating `+ - * /` rounds each operation at the common operand precision,
+nearest with ties to even; a mixed f32/f64 pair first widens f32 exactly to
+f64. Subnormals use gradual underflow and overflow produces signed infinity.
+Division by zero follows IEEE rules rather than raising an integer division
+fault. Invalid operations and NaN results produce the positive canonical quiet
+NaN. Operations are not implicitly fused or reassociated and neither depend on
+nor alter host rounding state or exception flags. Floating remainder and bitwise
+operations reject; already typed integer/float mixing still requires an explicit cast.
+
+Runtime `f64` values admit every binary64 payload, including signed, payload-bearing quiet and signaling NaNs. Copying, storage, parameters, returns and admitted containers preserve exact bits. This carrier rule neither makes NaN ordinarily equal nor changes runtime `f32`: its high 32 bits remain zero and its only NaN is the positive canonical quiet NaN. CONST_FLOAT wire encoding still requires canonical NaN. Arithmetic, conversions including same-width conversion, and negation still canonicalize NaN results; transporting a value is not a numeric operation. §17.24/§17.27 govern the common VM/native/typed-output boundary. No raw-bit literal or reflection bypass is introduced.
+
+#### 2.3.3 `bool`
+
+`true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `var x: i64 = true` or `var b: bool = 1`).
+
+**Condition expression rules** (`if` / `while` / `for` conditions / ternary `?:` / `match` guards):
+
+| Condition type | Allowed | Meaning |
+|---|---|---|
+| `bool` | yes | direct boolean test |
+| `T?` with `T != bool` | compile error | write `value != null` to test presence explicitly |
+| `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
+| `i64` / `f64` / `string` / `rune` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `len(s) != 0` |
+
+Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
+
+```xray
+var ok = true
+if (ok) { }
+
+var user: User? = findUser()
+if (user != null) {      // explicit presence check
+    print(user.name)     // user is narrowed to User here
+}
+
+var flag: bool? = maybeFlag()
+if (flag == true) { }    // OK
+if (flag != null) { }    // OK
+// if (flag) { }         // compile error: bare bool? cannot be a condition
+
+var s = ""
+if (len(s) != 0) { }     // OK
+// if (s) { }            // compile error
+```
+
+#### 2.3.4 `string`
+
+Immutable strings that always contain valid UTF-8. `len(s)` returns the Unicode scalar count in O(1), and `len(s.bytes())` returns the UTF-8 byte count in O(1). Default iteration yields `rune`; integer indexing and the slice operator do not apply to strings. See §14.5 for explicit access.
+
+Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool. Cross-execution strings consume a verified storage plan; the boundary does not promote or copy them implicitly.
+
+#### 2.3.5 `rune`
+
+`rune` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `u32`.
+
+```xray
+var a: rune = 'a'
+var zh = '中'
+var smile = '\u{1F600}'
+print(typeName(a))        // "rune"
+print(smile.toUInt32())   // 128512
+```
+
+- A rune literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
+- `rune` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: u32 = 'a'` are rejected by the analyzer.
+- Explicit conversions: `i64(c)` returns the scalar code point; `rune(n)` accepts one i64 and validates scalar legality; `string(c)` / `c.toString()` returns an owned one-scalar string, preserving U+0000 as one NUL byte.
+- `rune(n)` evaluates its argument once. Negative, above-0x10FFFF or surrogate values trigger range panic E0422, handled by `catch panic` and not by an ordinary Error catch. The conversion adds no ordinary Error effect or suspension. Failure publishes no result and leaves the destination place unchanged; completed argument effects are not rolled back. Invalid literals reject at compilation.
+- The rune default is U+0000. Compare code points numerically after explicit `i64(c)` or `c.toUInt32()` conversion; direct rune relational operators are not defined.
+- Common methods are listed in §14.4.1.
+
+#### 2.3.6 Unit `()` (no return value)
+
+Xray uses the **0-tuple `()`** to represent "no return value" (the Unit type):
+
+```xray
+fn log(msg: string) -> () { print(msg) }   // explicit Unit return
+fn ping() { print("pong") }                  // omitted return type = ()
+var r: () = log("hi")                        // allowed; r is a Unit value
+```
+
+- A function omitting its return type is equivalent to `-> ()`.
+- `void` is not a type name: `fn f() -> void` is rejected (`E0804`); use `-> ()` or omit the return type to indicate no return value.
+
+#### 2.3.7 FFI Scalars and C ABI Boundary Types
+
+Xray's C FFI uses explicit boundary types so ordinary xray objects are not implicitly interpreted as C data:
+
+| Type | C ABI meaning | Notes |
+|--|--|--|
+| `usize` | `size_t` | width comes from the compilation target; it must not be substituted with the host's `u64` |
+| `isize` | `ptrdiff_t` / platform signed width | width comes from the compilation target; it must not be substituted with the host's `i64` |
+| `Ptr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
+| `MutPtr<T>` | `void *` boundary value | mutable raw pointer; assignable where `Ptr<T>` is expected |
+| `CFn<fn(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `extern "C"` function |
+
+Raw pointer values may be stored, passed, compared, and offset with `offset(i)` using element-width scaling in safe code; actually reading or writing foreign memory must be inside `unsafe { }`:
+
+```xray
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+}
+
+var p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(p.deref())
+    free(p)
+}
+```
+
+`Ptr<T>` is read-only; writes require `MutPtr<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
+
+`usize` / `isize` use one target-ABI scalar descriptor across FFI calls, `mem.load/store<T>`, extern-layout fields, and generated C. The VM, AOT backend, and layout introspection must use the compilation target's width and alignment; cross-compilation never derives language semantics from the build host's `sizeof(size_t)`.
+
+`CFn<fn(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and extern functions themselves cannot be used as `CFn` callback arguments.
+
+### 2.4 Composite Types
+
+#### 2.4.1 `Array<T>`
+
+`Array<T>` is an ordered, growable value type. Assignment, saving a parameter, and returning a value preserve distinct logical copies. Implementations may share element storage, but mutation or append through one writable binding must not change other logical copies. Copying follows value-semantic components and copies only references at class or synchronized identity boundaries; it neither copies nor freezes the referenced objects. See §14.7 for methods and §2.14 for ownership.
+
+```xray
+var a: Array<i64> = [1, 2, 3]
+var b = a                        // b is a logical copy
+b[0] = 9                         // a[0] is still 1
+var c: Array<string> = []         // explicit empty array
+```
+
+`T` must be determined at compile time and must be copyable and storable. Borrowed views and noncopyable resources cannot be ordinary Array elements. An empty `[]` requires a type context; without one it is a compile error: `Empty array '[]' requires a type annotation`. A non-nullable Array requires explicit initialization; uninitialized storage is not an empty array.
+
+Reading an element produces a logical copy of type `T`. Writes are checked against `T`, using only assignment conversions already allowed for that type. `Array<T>` is invariant: an element conversion does not permit an implicit conversion of the whole array, such as `Array<i8>` to `Array<i64>`. `Array<rune>` preserves `rune` identity for both reads and writes.
+
+The container itself requires only the capabilities needed for storage; it does not require every `T` to support comparison, sorting, hashing, or string conversion. Conditional method requirements must be explicit in the corresponding declaration. Members incidentally present on a concrete instance cannot supply missing constraints at an ordinary generic definition.
+
+This section defines the language contract, not implementation admission for every Array method, aggregate element, or borrowed view in the new XIR source entry. See §17 for current implementation qualification. Unadmitted declaration families must be rejected explicitly.
+
+#### 2.4.1.1 Fixed Arrays `[T; N]`
+
+`[T; N]` is a fixed-layout array type for `N` elements of type `T`. `N` is part of the type and must evaluate during analysis to a positive compile-time integer expression. The current expression subset includes integer literals, `const` integer identifiers, grouping, unary `-`/`~`, and integer arithmetic/bitwise operators. The current backend encoding limit is 65535 elements.
+
+Fixed arrays work as inline struct fields and local variables. They support struct, nested fixed-array, and owned-container element types, so fixed arrays compose recursively:
+
+```xray
+var bytes: [u8; 4] = [1, 2, 3, 4]
+var zero: [u8; 64] = [0; 64]
+var names: [string; 2] = ["a", "b"]
+var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
+```
+
+A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
+
+Fixed arrays support `len(array)`, indexed reads, indexed writes to writable places, and `ref` parameters. Borrowed views distinguish shared `Slice<T>` from exclusive `MutSlice<T>` as specified in §2.4.2:
+
+```xray
+var data: [u8; 4] = [5, 6, 7, 8]
+var view: MutSlice<u8> = data[1:4]
+view[1] = 99
+```
+
+```xray
+struct Packet {
+    magic: [u8; 4]
+    payload: [u8; 128]
+}
+
+var key: [u8; 4] = [1, 2, 3, 4]
+key[1] = 9
+
+fn first(packet: Packet) -> u8 {
+    return packet.magic[0]
+}
+```
+
+`[T; N]` has different semantics from `Array<T>`:
+
+- `[T; N]`: fixed length, value semantics, fixed layout; suited for inline struct fields, local small buffers, and FFI/freestanding data.
+- `Array<T>`: a growable value type with dynamic length; element storage may be shared on the heap and detached when needed.
+- `Slice<T>` / `MutSlice<T>`: shared / exclusive borrowed views over contiguous storage; they do not own elements (see §2.4.2).
+
+The old `[N]T` syntax is not part of the Xray language.
+
+#### 2.4.2 `Slice<T>` / `MutSlice<T>`
+
+`Slice<T>` is a shared read-only borrow; `MutSlice<T>` is an exclusive writable borrow. They describe contiguous element storage owned by another value and do not own the elements. A borrow remains attached to a proven owner and access permission. These are view contracts, not a claim that the new XIR source entry already admits the view declaration family; see §17 for implementation qualification and validation.
+
+##### Construction and access
+
+Slicing uses an explicit target view type. `array[start:end]` and `fixedArray[start:end]` may form shared views. Forming a `MutSlice<T>` additionally requires an exclusively writable owner place and completion of any necessary COW detachment before publishing the view. The string byte view `str.bytes()` is a `Slice<u8>` and cannot mutate the string.
+
+`len(view)` reads the length and `view[i]` reads an element. Only `MutSlice<T>` permits `view[i] = value`, which updates the owner's logical value. Views have no member methods or `.length`. A view derived from a `const` owner is read-only; type positions reject `const T`: read-only views use `Slice<T>` and writable views use `MutSlice<T>`.
+
+An owner must be a named local place, parameter, or receiver field path with a proven lifetime; a temporary cannot be borrowed. Nested projections protect their root and the necessary access path. Borrowing a class field must retain the object and check exclusive access dynamically. A local proof of no conflict may eliminate that dynamic check.
+
+Assignment of a `MutSlice<T>` transfers its borrow; ordinary calls temporarily reborrow it. Conversion from `MutSlice<T>` to `Slice<T>` is a shared reborrow. The original writable view cannot write while the derived read-only view is live. Subslices obey the same borrow permissions.
+
+```xray
+fn main() {
+    var arr: Array<i64> = [10, 20, 30, 40]
+    var view: Slice<i64> = arr[1:3]
+    print(view[0])                         // 20; last use of view
+    var writable: MutSlice<i64> = arr[1:3]
+    writable[1] = 31                       // last use of writable
+    print(arr[2])                          // 31
+    var owned: Array<i64> = copy(arr[1:3]) // materialize an owned copy
+    arr.push(50)                           // no live borrow
+    print(len(owned))                      // 2
+}
+
+main()
+```
+
+##### Borrow rules
+
+Let view `v` borrow owner `o`. Borrow liveness ends at last use, not at the end of the lexical block:
+
+1. While a `Slice<T>` is live, `o` must not be mutated, including element writes. The possibility that a write preserves a physical address does not permit it.
+2. While a `MutSlice<T>` is live, `o` must not be read, written, or copied through the owner or another path. Only the exclusive view and its valid reborrows may access that storage.
+3. Rebinding, destruction, consumption, or other invalidation of a live borrow is rejected (`E0382`). Operation effects must account for COW detachment and relocation; Array element replacement is not unconditionally address-stable.
+4. Views are allowed only in locals, parameters, returns, and tuple / Optional wrappers. Wrappers inherit every borrow restriction. Views cannot enter ordinary collections, user aggregates, module storage, or execution boundaries such as `go`, and `as` cannot erase these restrictions (`E0383`).
+5. A variable captured by an ordinary closure through a shared cell cannot produce a view. A closure capturing a view may be called immediately. Passing it as a parameter requires an explicit, frozen borrowing-call contract that prevents saving or returning it and guarantees completion before the call ends. Inference from the callee body cannot replace that public contract; a closure literal in argument position does not by itself prove no escape.
+6. A borrow in an ordinary call may survive suspension only while the owner remains alive and access permissions hold. Frame address stability is not such a proof. Generators initially must not save borrowed parameters.
+
+```xray
+fn rejected() {
+    var bytes: Array<u8> = [1, 2]
+    var view: Slice<u8> = bytes[:]
+    bytes[0] = 3                    // E0382: shared borrow is still live
+    print(view[0])
+}
+```
+
+##### Across functions: return-source contracts
+
+The initial return-source rule uses the signature alone: the entire signature must contain exactly one view input or `ref` input candidate. A `ref` receiver counts as a candidate. Zero or multiple candidates are rejected (`E0384`), even if the body always returns one particular parameter. Neither body inference nor a static-storage exception supplies a cross-module source contract. Returning a view of a local value is also invalid.
+
+Each returned view inside a tuple / Optional attaches to that unique candidate and is checked separately for write permission. A writable result cannot originate from a read-only candidate. Returning two `MutSlice` values additionally requires an explicit non-overlapping construction contract; ordinary user functions cannot establish it merely from index arithmetic.
+
+```xray
+fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
+    return data[start:]              // data is the unique candidate
+}
+
+fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
+    return a                        // E0384: two signature candidates
+}
+```
+
+##### Materializing an owned copy
+
+`copy(view)` materializes borrowed data as an `Array<T>` whose elements follow the logical-copy and identity-boundary rules in §2.14. Class elements still reference the same objects. The result no longer borrows the original owner. This use does not decide the public `copy(array)` spelling and does not make it a prerequisite for ordinary Array assignment.
+
+`ref` parameters and `Ptr<T>` / `MutPtr<T>` must also satisfy source, permission, lifetime, and non-escape requirements. The relevant diagnostics are `E0382` (live-borrow conflict), `E0383` (borrow escape), and `E0384` (unstable or non-unique source). `unsafe` relaxes none of them.
+
+#### 2.4.3 `Map<K, V>`
+
+Hash table that **preserves insertion order**. See §14.8.
+
+**Map literals** must use the `#{ ... }` prefix with `:` separators; `JSON.Object` uses the same Map literal:
+
+```xray
+var m: Map<string, i64> = #{"a": 1, "b": 2}
+var m2 = #{"a": 1, "b": 2}
+var empty = #{}                                     // empty Map
+
+m["c"] = 3                                          // insert / update
+var v = m["a"]                                      // lookup; a missing key panics with E0431
+var maybe = m.get("missing")                        // safe lookup; returns null if absent
+```
+
+| Literal form | Type | Purpose |
+|---|---|---|
+| `{ key: value }` (no prefix) | exact `structural object` | see §2.4.7 |
+| `#{ "k": v }` (`#` prefix + `:`) | `Map<K, V>` (hash table) | this section |
+| `#{}` | `Map<K, V>` (empty) | explicit empty Map |
+| `[]` | `Array<T>` | array |
+| `#[]` | `Set<T>` | set |
+
+`K` must satisfy `Hashable` (see §9.2): typically `i64`, `f64`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `operator==` and `hash() -> i64` (the parameter type of `operator==` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
+
+#### 2.4.4 `Set<T>`
+
+Deduplicated collection. See §14.9.
+
+```xray
+var s: Set<i64> = #[1, 2, 3]
+```
+
+#### 2.4.5 `Channel<T>`
+
+Inter-coroutine communication channel. A named channel uses a stable `const` binding; its synchronized interior-mutation capability comes from the audited registry (see §10.5).
+
+```xray
+const ch: Channel<i64> = Channel<i64>(10)
+```
+
+#### 2.4.6 `Array<u8>`
+
+Typed byte buffer. Semantically equivalent to `Array<u8>`, but stored as contiguous memory.
+
+```xray
+var buf = Array<u8>(1024)
+var init = Array<u8>([72, 101, 108, 108, 111])
+```
+
+#### 2.4.7 Static Structural Objects, `JSON.Value`, and Object Literals
+
+A bare object literal always forms a static structural object with an exact field set. It is used for ordinary business objects, options, and multi-field returns. Runtime-unknown keys belong to `Map`; the canonical JSON-object spelling `JSON.Object` is a pure alias of `Map<string, JSON.Value>`. `JSON` is a prelude namespace that needs no import, not a value type.
+
+The key difference between an **object literal** `{ field: value, ... }` and a Map literal:
+
+```xray
+// Structural-object literal: identifier or static string key + colon ':'
+var user = { name: "Bob", age: 25 }       // exact object shape
+typeName(user)                            // "object"
+user.name              // type: string; direct ordinal
+user["name"]           // exactly equivalent to user.name; same direct ordinal
+
+// Field shorthand: when a field name matches a variable name
+var name = "Alice"
+var age = 30
+var user = { name, age }                  // equivalent to { name: name, age: age }
+
+// Map literal: `#{}` prefix + `:`
+var m = #{"k1": 1, "k2": 2}           // type: Map<string, i64>
+var data: JSON.Object = #{"name": "Alice", "age": 30}
+data["traceId"] = "req-1"               // only Map has dynamic keys
+```
+
+**Comparison**:
+
+| Form | Type | Notes |
+|---|---|---|
+| `{ name: "x", age: 1 }` | exact anonymous object shape | identifier or string key followed by `:` |
+| `{ x: y }` (`x` is field name, `y` is variable) | exact anonymous object shape | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
+| `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
+| `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object; supports iteration and dynamic-key mutation |
+| `Point{x: 1.0, y: 2.0}` | `Point` (struct) | type name + `{...}` literal |
+
+**Object-shape types**: bare object literals and `type T = {...}` are exact object shapes, so accessing or assigning an undeclared field is a compile error. Structural width exists only in generic constraint satisfaction: `T: { name: string }` means that T contains at least that field, while each call is still monomorphized for the argument's concrete exact shape. A trailing `...` is not type syntax.
+
+```xray
+type User = { name: string, age: i64 }
+
+var u: User = { name: "Alice", age: 30 }
+print(u.name)         // OK
+// u.extra = "x"      // compile error: sealed type User has no field 'extra'
+
+var u2 = { name: "Alice", age: 30 }      // exact object shape
+// u2.extra = "x"     // compile error
+
+type Named = { name: string }
+fn showName<T: Named>(value: T) {
+    print(value.name)                     // the constraint exposes declared fields only
+    print(value["name"])                  // identical to .name
+    // print(value.age)                    // compile error: hidden field
+}
+showName(u)                               // OK: u has a wider concrete exact shape
+
+var j: JSON.Object = #{"name": "Alice", "age": 30}
+j["extra"] = "x"                        // OK: a Map dynamic key
+var encoded: JSON.Value = JSON.value(u)  // composites enter JSON explicitly
+```
+
+**Responsibilities of product types**:
+
+| | Identity | Field set | User-defined methods | Use for |
+|---|---|---|---|---|
+| object shape | structural | exact; a generic constraint may require a minimum field set | **no** | options, multi-field returns, ordinary business data |
+| `JSON.Object` | Map alias | arbitrary string keys resolved at run time | Map API | schema-less JSON objects |
+| `struct` | nominal | declared, checked at compile time | yes | value semantics, fixed layout, FFI aggregates, math types |
+| `class` | nominal | declared, checked at compile time | yes | reference semantics, inheritance, encapsulation |
+
+Structural-object fields may carry any statically typed value allowed by the ordinary type rules, including function references, Maps, and class instances; users cannot declare methods on a structural-object type. Storage does not imply serialization: `JSON.value` and `JSON.stringify` require `JSON.Encodable` at compile time, so unsupported types such as function fields are rejected.
+
+#### 2.4.8 `BigInt`
+
+Arbitrary-precision integer. See §14.8.
+
+#### 2.4.9 `Range`
+
+`Range` represents an integer interval and is produced by `a..b` or `a..=b`:
+
+- `a..b` is the half-open interval `[a, b)` and excludes `b`.
+- `a..=b` is the inclusive interval `[a, b]` and includes `b`.
+
+```xray
+var halfOpen = 1..4       // 1, 2, 3
+var inclusive = 1..=4     // 1, 2, 3, 4
+
+print(len(halfOpen))              // 3
+print(inclusive.contains(4))      // true
+print(inclusive.toArray())        // [1, 2, 3, 4]
+
+for (i in 3..=5) {
+    print(i)
+}
+```
+
+Ranges work with `for-in`, range patterns in `match`, and collection queries. See §3.9 for expression semantics and §14.12 for members.
+
+#### 2.4.10 `DateTime` / `Regex` / `StringBuilder`
+
+`Regex` and `StringBuilder` are prelude types. `DateTime` is not a prelude name; bring it into scope with `import { DateTime } from datetime` (or another explicit import). See §14 for the member index.
+
+### 2.5 Nullable Types
+
+`T?` denotes the language item `Optional<T>`, with an absent state and a present state carrying an exact T. None / Some(T) name these semantic states; the concrete source spelling for explicit construction and matching remains undecided. This section introduces no `Some(...)` / `None` builtin name or call syntax.
+
+`T??` keeps two layers, `Optional<Optional<T>>`, and does not normalize to `T?`. Outer None, outer Some(inner None), and outer Some(inner Some(value)) are distinct states; generic substitution preserves every layer. `T | null` rewrites to `T?` only at the syntax boundary, and `A | B | null` rewrites to `(A | B)?`; null is not a union member. An existing Optional member is neither decomposed nor flattened.
+
+Assignments and ordinary calls try exact type matching first; an exact match adds no wrapper. A single T→T? widening is permitted only when the source type is exactly the target Optional's element type T. When T is itself Optional, this adds only one outer layer and preserves its inner state. A bare `null` constructs the outermost None under an exact Optional expected type; the nesting depth does not select an inner state. A context-free `null` does not invent an Optional type.
+
+`x == null` / `x != null` inspect only the outer presence tag of the Optional operand in that operation, without requiring Equal for its element. `x!` unwraps one layer and produces a null-unwrap panic for outer None; `x ?? d` handles only the outer layer and evaluates d only when that layer is absent. Optional access adds one Optional layer around its result without flattening an already Optional result. Narrowing subjects and propagation remain governed by §2.13; nested read provenance and explicit claims for the same binding follow the rules below.
+
+#### Reading and Explicit Consumption of Nested Optional
+
+A binding keeps its declared storage type D. For the same binding permitted by §2.13 N-1, flow facts record a consecutive outer Some prefix p. A normal read consumes those p layers, produces its exact read type R, and records q=p layers that explicit operations in this expression may still claim. Each step obtains an owned exact payload; inner None is never treated as outer None.
+
+`!` first claims a layer from q: when q>0 it decreases q and returns the value already read, without another unwrap or reverse wrapping to an intermediate declared type. At q=0 it actually unwraps one layer only if the current value is Optional; None produces the existing null-unwrap panic, while a non-Optional value remains unchanged. `??` also first claims q: at q>0 it never evaluates the default and keeps result type R; only at q=0 does it inspect the current outer layer and handle absence. An external expected conversion follows its own exact conversion contract and cannot fabricate a narrowing claim by wrapping.
+
+| Declared D / known p | Normal read R | After first `!` | After second `!` |
+|---|---|---|---|
+| i64?? / 0 | i64?? | i64? | i64 |
+| i64?? / 1 | i64? | i64? | i64 |
+| i64?? / 2 | i64 | i64 | i64 |
+| i64??? / 2 | i64? | i64? | i64? |
+
+With outer Some proven, Some(None) therefore remains inner None after `x!`, and `x!!` panics. In the last row only the third `!` actually consumes the third layer. Grouping forwards the same read plan; `(x!)!` continues the child's decreased q without restoring it. A separate `x!` starts its own normal read and q. Assignment to a new binding, argument passing, return/call results, arithmetic, construction, conversion, and phi do not transfer the original binding's q. A receiving binding may establish only its own declaration/flow facts. A factory result obtains no binding fact: `factory()!!` evaluates the factory once and then consumes layers in order.
+
+A null test always observes the outer layer of this read's R. The first test proves D's first layer; inside its Some branch a second test proves the next layer. Evidence identifies the binding, D, tested layer, and binding mutation generation rather than one non-null Boolean. After ref/assignment changes the generation, earlier Some evidence cannot be resurrected in a short-circuit true branch; it must be checked against the current generation. The right side of a short-circuit condition is checked under left-side facts. A join keeps only the common consecutive prefix min; assignment/ref/closure/loop invalidation continues to follow N-11. Fields, indexing, and calls gain no simple-binding fact, and a None direction does not promote the tested layer to Some. Read type, queries, and emission share the same checked plan; they must not infer facts from the last IR opcode, infer the operand again, or evaluate it again.
+
+For an unclaimed Optional<E>, `??` first selects exact E when no expected type is present. A null default keeps E if E is already Optional, and selects Optional<E> only when E is not Optional. An exact expected Optional<E> permits the existing single wrapper conversion: the Some branch keeps/wraps E once and the absent branch constructs the expected outer None. For example, Some(None):i64?? with context-free `x ?? null` yields None:i64?, while exact expected i64?? yields Some(None). When q>0, the default is checked against the corresponding claimed declaration layer's contract and the result remains R; no intermediate D layer is restored.
+
+Laziness controls runtime evaluation only. Even an unreachable default must undergo full type, visibility, construction-authority, generic-constraint, and effect checking in the same Built→Checked→specialization/reverification pipeline. Neither an early narrowed return nor a discarded marker may hide an invalid body. Default side effects occur only on the required absent branch. This rule adds no concrete Some/None spelling, leaves the original N-4 table/examples unchanged, and makes no claim that this Source slice is execution-qualified.
+
+This is the language contract. See §17 for execution qualification and unfinished Source/VM/native declaration families; implementation records identify the actual tests and remaining gates.
+
+```xray
+var x: i64? = null      // OK
+var y: i64? = 42        // OK
+var z: i64 = null       // compile error: null is not i64
+```
+
+`JSON.Value` includes JSON null in its own domain, but `JSON.Value?` is a distinct outer Optional and is legal. It distinguishes outer absence from a present JSON-null payload. `JSON.Value | null` rewrites to that outer Optional at the syntax boundary and is not rejected because the JSON domain already contains null. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a structural object with an explicit status field. Do not introduce a global `Result<T,E>`.
+
+**Nullable primitives are first-class**: `i64?` / `f64?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
+
+> `bool?` is tri-state (`true` / `false` / `null`). It is legal but **cannot be used directly as a condition** (a bare `if (b)` where `b: bool?` is a compile error; see §5 / task 128); write `b == true` / `b != null` / `b ?? false`.
+
+#### Unwrapping
+
+```xray
+// 1. Null coalescing
+var v = x ?? 0
+
+// 2. Optional chaining (whole-chain short-circuit, nullable result)
+var city = user?.address.city
+
+// 3. Force unwrap
+var v: i64 = x!           // panics with NullError at runtime if x is null
+
+// 4. Flow-sensitive narrowing (full rules in §2.13)
+if (x != null) {
+    print(x + 1)          // x is narrowed to i64 in this branch
+}
+if (x is i64) {
+    print(x + 1)
+}
+```
+
+### 2.6 Union Types
+
+```xray
+var v: i64 | string = 42
+v = "hello"             // OK
+```
+
+Constraints:
+- Up to **6 members** (checked at compile time; over the limit → error).
+- Members must not be subtypes of each other (otherwise normalized).
+- **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one f64-family member**. `i16 | i32` and `f32 | f64` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
+- Working with a union value requires `match` or `is`-based narrowing:
+
+```xray
+var v: i64 | string = ...
+match v {
+    is i64    -> print("i64: ${v}"),
+    is string -> print("str: ${v}"),
+}
+```
+
+**Member selection**: a union value carries the member selected where it was assigned. The rule is deterministic and independent of the order the members were written:
+
+- The source type is **exactly** one member → that member is selected.
+- Otherwise the single member reachable by an implicit conversion from §2.10.1 is selected. Discriminability guarantees at most one member per numeric family, so at most one member qualifies.
+- A numeric literal selects within its own family: an integer literal prefers the integer-family member, falling back to the f64-family member when the union has none (matching "an integer literal types into a unique floating context"); a f64 literal selects the f64-family member. The literal must be exactly representable in the selected member.
+
+```xray
+var a: i64 | f64 = 1        // exact match: i64
+var b: i64 | f64 = 1.0      // exact match: f64
+var c: i32 | string = 7       // sole integer-family member: i32
+var d: f32 | string = 1.5     // sole f64-family member: f32
+```
+
+`is T` asks about the runtime value: for a fixed-width numeric type it asks whether the value is exactly representable in `T`, because an erased value does not carry its width and that is the only answerable form. Inside a well-formed union the selected member always passes its own `is` and every other member always fails, so the arms are mutually exclusive.
+
+**Special cases**:
+- `i64 | null` normalizes to `i64?`.
+- An Optional inside a union remains one distinct member: `i64? | string` keeps `Optional<i64>` and `string`; it neither decomposes into `i64 | string | null` nor normalizes to `(i64 | string)?`.
+
+### 2.7 Tuple Types
+
+Xray's tuples are **first-class** — they may appear as any value, be stored as fields, and nest.
+
+```xray
+// Literals
+var t = (1, 2, 3)                 // type inferred as (i64, i64, i64)
+var h = (10, "hi", true)          // heterogeneous tuple
+var single = (99,)                // single-element tuple: note trailing comma
+
+// Type annotation
+var p: (i64, string) = (7, "ok")
+
+// Field access: .N (N is a compile-time constant integer index)
+var first = t.0                   // 1
+var mid   = t.1                   // 2
+var nest  = ((1, 2), (3, 4))
+var a     = nest.0.0              // 1
+var b     = nest.1.1              // 4
+
+// Function return and destructuring
+fn divmod(a: i64, b: i64) -> (i64, i64) { return (a / b, a % b) }
+var (q, r) = divmod(17, 5)        // tuple destructure
+
+// Generic
+fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
+var p2 = pair(1, "x")             // (i64, string)
+```
+
+**Notes**:
+
+- A **single-element tuple** must use a trailing comma `(x,)` — `(x)` without a comma is a grouping parenthesis (a plain expression).
+- In field access `t.N`, N **must be an integer literal**; using a variable or string is the compile error `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` / `_RANGE`.
+- Tuples are **immutable**: `t.0 = v` is a compile error. To modify, build a new tuple.
+
+**Ownership and evaluation contract (frozen 2026-10-05; complete new XIR implementation pending)**: evaluate fields once each, left to right, and preserve their ordered type vector. `()` remains Unit; `(x,)` differs from `x`. Copying, saving parameters, returning, and projecting a field obtain independently owned values according to each field's contract. Copying stops at class and Atomic synchronization identities. Physical sharing does not permit field mutation. Destructuring evaluates its RHS once and prepares every field result before publishing the complete set of bindings; preparation failure releases partial results and publishes no new binding. Arguments and returns use the same Checked type, permission, layout, and value admission; untyped multiple returns or fabricated nominal declarations do not represent tuples.
+
+See §5.1.3/§17.35 for admitted flat destructuring and atomic module publication; admitted nested tuple values do not admit nested patterns. A zero-payload Unit field does not widen ordinary Unit formal or generic-argument domains.
+
+Sendable is the conjunction of all fields; this family does not automatically extend Equal to Tuple. Wrapping a view or noncopyable field inherits its borrowing, copying, and escape restrictions without granting ordinary-generic or cross-execution permissions. The first owned implementation must support currently admitted storable fields, strings, arrays, Atomic handles, and nested tuples. Unsupported view/resource combinations reject explicitly and remain obligations of §2.4/§2.14. The current parser represents at most 255 type fields: 256 requires an explicit bounded rejection, never truncation or acceptance of a different type. This temporary implementation bound is not a permanent language restriction.
+
+#### Worked Examples
+
+```xray
+fn main() {
+    var pair = (1, "hello")
+    print(pair.0)   // => 1
+    print(pair.1)   // => hello
+    var (a, b) = pair    // destructuring
+    print(a)        // => 1
+    print(b)        // => hello
+}
+
+main()
+```
+
+### 2.8 Type Aliases
+
+```xray
+type Result = i64 | string
+type Mapper = fn(i64) -> i64
+type Point = { x: f64, y: f64 }
+type Pair<T> = { first: T, second: T }
+type Mapper2<T, U> = fn(T) -> U
+```
+
+Aliases are **purely syntactic** equivalences; they do not introduce new types,
+runtime metadata, or AOT branches. A generic alias is substituted at its use
+site:
+
+```xray
+var p: Pair<i64> = { first: 1, second: 2 }  // equivalent to { first: i64, second: i64 }
+var f: Mapper2<i64, string> = (n) -> string(n)
+```
+
+Generic alias parameters are a name list only (`<T, U>`); constraints are not
+part of type-alias syntax. Put constraints on the generic function, class /
+struct / enum / interface that uses the alias. Aliases may be forward
+referenced, but cyclic aliases, including recursive object aliases, are compile
+errors.
+
+**Function-type syntax.** A function type is led by `fn`, written
+`fn(T1, T2) -> R`; parameters may carry a `ref` / `move` mode (e.g.
+`fn(ref i64) -> i64`). When the return is `unit` the arrow segment is omitted,
+written `fn(T)` / `fn()` — an explicit `-> ()` is **not** allowed in type
+position. This is a deliberate asymmetry with the declaration position, where
+both `fn f() -> ()` and `fn f()` are valid (§5.2); a type appears in dense
+inline positions (parameters, generic arguments, container elements) and keeps
+a single spelling. A bare `(` in type position is only a tuple or a grouping,
+matching the expression side and §2.7 — a comma makes a tuple, `(T)` groups — so
+a nullable function type is written directly as `(fn() -> i64)?`. `CFn<...>`
+uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
+
+### 2.9 Type Inference
+
+See §7.4 for details. In summary:
+
+```xray
+var x = 1               // x: i64
+var y = 1.5             // y: f64
+var z = "hello"         // z: string
+var a = [1, 2, 3]       // a: Array<i64>
+var m = #{"a": 1}    // m: Map<string, i64>
+var p = { name: "A" }   // p: { name: string } — structured object type
+var f = (x: i64) -> x   // f: fn(i64) -> i64 — explicit parameter, inferred return
+```
+
+### 2.10 Type Compatibility and Conversion
+
+#### 2.10.1 Implicit Conversion
+
+| From | To | Allowed and condition |
+|--|--|--|
+| `T` | `T` | ✅ identity |
+| `i8 → i16 → i32 → i64` | a wider type on the chain | ✅ lossless widening |
+| `u8 → u16 → u32 → u64` | a wider type on the chain | ✅ lossless widening |
+| `f32` | `f64` | ✅ lossless widening |
+| Integer literal | a unique integer / floating context | ✅ direct typing; the integer target represents it, or the floating target represents it exactly |
+| Typed integer | another signedness, a narrower type, or fixed-width ↔ `isize`/`usize` | ❌ explicit `as` required |
+| Typed integer | any floating type | ❌ explicit `as` required |
+| Typed f64 | any integer type or `f64 → f32` | ❌ explicit `as` required |
+| `T` | `T?` | ✅ |
+| `i64` / `f64` / `string` / `bool` / `null` | `JSON.Value` | ✅ zero-materialization JSON scalar widening |
+| composite type | `JSON.Value` | ❌ `JSON.value(value)` required, and the type must satisfy `JSON.Encodable` |
+| `Map<string, JSON.Value>` | `JSON.Object` | ✅ pure-alias identity |
+| `null` | `T?` | ✅ |
+| Subtype | Supertype (class) | ✅ |
+| exact object shape with a different field set | exact object shape | ❌ an exact target requires an exact field set |
+| exact object shape | generic constraint `T: { a: A }` | ✅ constraint satisfaction; not an ordinary assignment conversion |
+
+> **Exact / width-constraint rule**: an ordinary type position requires an **exact field set** — source field names must match the target; nullable target fields may be omitted. A structural type in generic constraint position means "contains at least these fields", with invariant types for common fields. It creates neither a runtime width object nor a dynamic dictionary.
+> ```xray
+> type User = { name: string }
+> var full = { name: "A", age: 18 }
+> // var u: User = full            // compile error E0352: extra field 'age'
+> fn nameOf<T: User>(value: T) -> string { return value.name }
+> print(nameOf(full))              // OK: T retains full's concrete exact shape
+>
+> type Opt = { name: string, age: i64? }
+> var o: Opt = { name: "A" }       // OK: age is nullable and may be omitted
+> ```
+
+> **Static objects and the dynamic JSON boundary**: known schemas use exact targets and `JSON.parse<T>`; schema-less objects use `JSON.Object` / Map. Typed composites are encoded explicitly with `JSON.value(value)`, and a dynamically processed object is validated back to a typed target with `JSON.decodeObject<T>(object)`.
+
+#### 2.10.2 Explicit `as`
+
+```xray
+var n = x as i64        // throws TypeError on failure
+var n = x as i64?       // returns null on failure (safe cast)
+```
+
+Applies to:
+- Between numeric types (including `JSON.Value → i64`, checked at runtime).
+- Runtime checks from `JSON.Value` to scalar types; composite typed decoding uses `JSON.decode<T>` / `JSON.decodeObject<T>`.
+- Parent → child (downcast).
+
+Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-f64 and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN is normalized to Xray's canonical quiet NaN; f64-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
+
+An integer as operand is typed independently of the target. A direct positive literal (parentheses allowed) above the i64 maximum and at most the u64 maximum retains its u64 source magnitude before reducing to the target width. `18446744073709551615 as i8` is -1; `200 as i8` still wraps explicitly rather than first range-checking the literal as i8.
+
+`expr as T?` is reserved for fallible dynamic / structural conversion; it is not a numeric checked-cast form. Numeric conversions use `expr as T` and follow the deterministic rules above.
+
+#### 2.10.3 `is` Check
+
+```xray
+if (v is User) {
+    // In this branch the compiler narrows v's type to User
+}
+```
+
+Acts only as a type guard; does not change the value.
+
+### 2.11 typeOf / typeName / Type Enum
+
+```xray
+typeOf(value)     // returns a Type enum value (an i64 representation)
+typeName(value)   // returns the type name as a string
+```
+
+`Type` enum members:
+
+`Type.i64`, `Type.f64`, `Type.string`, `Type.bool`, `Type.null`,
+`Type.Array`, `Type.Map`, `Type.Set`, `Type.Channel`,
+`Type.function`, `Type.class`, `Type.struct`, `Type.enum`, `Type.module`, `Type.bigint`, ...
+
+Use `typeName(value)` to obtain the concrete debug name of a value's type.
+
+### 2.12 Metadata and Type Identity Boundary
+
+Xray keeps only the minimal type identity layer by default:
+
+- `typeOf(x)` returns a stable `Type` / `TypeId` for branches, `match`, and analyzer narrowing.
+- `typeName(x)` returns a debug/logging type-name string and is a cold-path capability.
+- See §13.3 for the current XIR closed-value subset, the Unit/null distinction and unimplemented generic/Error/static-query forms; debug names grant no additional type capability.
+- Nominal type checks use `x is T` / `x as T`; do not compare type-name strings.
+- Field, method, and constructor enumeration is not a default runtime capability. Structured metadata for serialization, inspect, RPC schema, and similar use cases is generated explicitly by `@derive(...)` or compile-time tooling.
+
+Runtime type queries use `typeOf(value)`, `typeName(value)`, and `TypeId`. Reflection metadata is not exposed as a traversable or callable object graph.
+
+### 2.13 Flow-Sensitive Type Narrowing
+
+> Source of truth: `src/frontend/analyzer/xanalyzer_flow.c` (fact operators and control-flow propagation), `src/frontend/analyzer/xanalyzer_visitor_expr.c` (reference-site query and `E0379`).
+
+**Narrowing** tightens the **static type** of a binding at a specific control-flow position to a subtype of its declared type. Narrowed types feed member lookup, overload resolution, `match` exhaustiveness, and **code generation**, so narrowing is **semantics**, not a diagnostic optimization: for the same program the VM and AOT backends must compute identical narrowing results.
+
+Rules `N-1` … `N-13` in this section are normative. Each has a conformance case under `tests/compile_errors/narrowing/` or `tests/regression/16_narrowing/`.
+
+#### 2.13.1 Narrowable Subjects
+
+**N-1** Only **simple bindings** narrow: local `var` / `const` bindings and bare parameter identifiers.
+
+**N-2** The following positions **never narrow**, even after a null check or an `is` check: field access `p.f`, `this.f`, index `a[i]`, tuple component `t.0`, call results `f()`, and any other non-identifier expression. A check on such a position determines the type of the check expression itself only; it does not affect later accesses spelled the same way.
+
+> Rationale: only a simple binding has all of its write sites statically enumerable within the function. Fields and elements can change through an alias, another coroutine, or a method call; narrowing them would require place equivalence plus alias invalidation analysis, whose cost and uncertainty exceed the benefit.
+
+**N-3** To get flow sensitivity for a non-narrowable position, extract a local binding first:
+
+```xray
+class Address { city: string
+    init(city: string) { this.city = city } }
+class User { address: Address?
+    init(address: Address?) { this.address = address } }
+
+fn show(u: User) {
+    var addr = u.address          // extract into a simple binding
+    if (addr != null) {
+        print(addr.city)          // OK: addr is narrowed to Address
+    }
+}
+```
+
+#### 2.13.2 Facts and Operators
+
+**N-4** A condition expression produces **facts** in two directions: a true fact and a false fact. The table below is the complete list; forms not listed produce no facts in either direction. `x` is a narrowable subject (N-1); `e` is any condition expression.
+
+| Condition form | True branch | False branch |
+|--|--|--|
+| `x: bool` | no type-narrowing fact | no type-narrowing fact |
+| `!e` | false fact of `e` | true fact of `e` |
+| `(e)` | true fact of `e` | false fact of `e` |
+| `x == null` / `null == x` | keep only `null` | remove `null` |
+| `x != null` / `null != x` | remove `null` | keep only `null` |
+| `x is T` | intersect with `T` | remove the part intersecting `T` |
+| `typeOf(x) == Type.K` | keep members of kind `K` | remove members of kind `K` |
+| `typeOf(x) != Type.K` | remove members of kind `K` | keep members of kind `K` |
+| `e1 && e2` | true facts of `e1` then `e2` | no fact |
+| `e1 \|\| e2` | no fact | false facts of `e1` then `e2` |
+
+**N-5 (short-circuit inheritance)** In `e1 && e2`, `e2` is analyzed under the true fact of `e1`; in `e1 || e2`, `e2` is analyzed under the false fact of `e1`. Because `T?` cannot be used directly as a condition (§2.5), this rule makes the two forms below the standard way to work with nullable values:
+
+```xray
+fn check(a: string?) -> bool {
+    if (a != null && len(a) > 0) { return true }     // e2 analyzed with a: string
+    if (a == null || len(a) == 0) { return false }   // e2 analyzed with a: string
+    return true
+}
+```
+
+**N-6 (intersection semantics)** True direction of `x is T`: when the declared type is a union, keep the members that intersect `T` (none → `never`); otherwise the result is `T` when the two intersect and `never` when they do not. The false direction symmetrically removes the intersecting part. `x is T` treats primitive types, named types, and generic instances alike.
+
+#### 2.13.3 Propagation
+
+**N-7** Facts take effect in: the then / else body of `if`, both arms of a conditional expression `c ? a : b`, the loop-body entry and the code after `while` / `for` (false fact), the right operand of `&&` / `||`, and the code following `assert(c)`.
+
+**N-8 (early exit)** When a branch necessarily terminates (`return` / `throw` / `break` / `continue`), the code after it inherits the opposite-direction fact:
+
+```xray
+fn nameLen(s: string?) -> i64 {
+    if (s == null) { return 0 }
+    return len(s)                 // s is narrowed to string here
+}
+```
+
+**N-9 (join)** The type at a join point is the union of the types on all predecessor paths; unreachable predecessors contribute `never` and are absorbed by the union.
+
+**N-10 (loops)** The type at a loop header is the union of the entry edge and every back edge. A back edge that assigns the binding contributes the assigned expression's type; a back edge that reaches the header **without** an assignment leaves the value unchanged and contributes nothing to the union. An assignment inside the loop body therefore makes the next iteration re-derive the condition narrowing from the joined type, while a narrowing established before the loop survives a body that never writes the binding:
+
+```xray
+fn drain(first: string?) {
+    var cur = first
+    while (cur != null) {         // cur is string at loop-body entry
+        print(cur)
+        cur = null                // back edge contributes null; header re-joins
+    }
+}
+```
+
+#### 2.13.4 Invalidation
+
+**N-11** Narrowing is invalidated by:
+
+1. **assignment** / compound assignment / `++` / `--`: the static type resets to the static type of the assigned expression;
+2. being passed as a `ref` argument: resets to the declared type;
+3. after successful consumption of `x`: the binding becomes unusable (§2.14.5);
+4. being **assigned inside any closure body**: the binding does not narrow anywhere in the function body, because when the closure runs is unknowable. The rule does not depend on where the closure appears — one written after the narrowing site suppresses it just the same. The diagnostic names this cause; the fix is a fresh binding that is never written;
+5. an ordinary function call does **not** invalidate narrowing — N-1 / N-2 guarantee a narrowable subject cannot be written by a callee.
+
+**N-11.1 (function-body boundary)** Every function body — named function, method, or closure — owns its flow graph: facts from the enclosing body do **not** enter a closure body, and facts inside a closure do not escape it. Re-check inside the closure when narrowing is needed there.
+
+```xray
+fn f(a: string?) {
+    if (a != null) {
+        print(len(a))             // OK
+        a = null                  // assignment invalidates the narrowing
+        print(a ?? "")            // must be unwrapped again
+    }
+}
+```
+
+#### 2.13.5 Narrowing and Null Diagnostics
+
+**N-12** When the static type of a receiver can still be `null` (including a type that is always `null`), member access, indexing, calls, arithmetic, `len()`, and iteration all report `E0379` (`XR_ERR_ANALYZE_POSSIBLY_NULL`); see §18.2. Three exceptions: `==` / `!=`, which is how narrowing starts; `&&` / `||`, whose operands are checked as conditions; and **string concatenation** — when either side of `+` is a `string`, a null operand renders as `"null"` per §2.5.
+
+**N-13** There are exactly three unwrapping forms, each independent of N-4:
+
+- `x!`: takes the exact element type and value from one outer Optional layer; outer absence produces a null-unwrap panic, which is **not** undefined behavior. It does not recursively unwrap an Optional element;
+- `x ?? d`: inspects only the outer layer, taking its payload when present and evaluating d only when absent. Its result is checked under the expected context and ordinary type rules without flattening an Optional payload;
+- `x?.f`: optional chaining with **whole-chain short-circuit**; the optional access adds one Optional layer around its result and preserves any Optional already in that result (§3.6).
+### 2.14 Values, Identity, and Borrows
+
+This section defines language contracts determined by declared types, parameter modes, and intraprocedural dataflow. Layout, reference counting, and COW are implementation mechanisms and must not change source legality. Built→Checked checks these rules; specialization operates on Checked and is rechecked before Lowered selects concrete copy, detachment, and release operations. See §17 for implementation qualification of complete declaration families. Freezing a specification is not completion of its implementation.
+
+#### 2.14.1 Logical values and identity boundaries
+
+Array / Map / Set / string, copyable structs, enums, tuples, and anonymous records copy by value. A copy is a distinct logical value. Implementations may share immutable storage or use COW, but mutation of value-semantic components through one copy must not change another. An Array returned by a call obeys the same contract; callers need not inspect the callee body to prove storage uniqueness.
+
+Class instances and synchronized objects have identity. A copied reference still names the same object; recursive aggregate copying stops at that boundary. Copying an Array of class elements therefore does not copy the class objects. Object-state mutation may be visible through other references, while replacing an Array element affects only that array's logical value.
+
+`const` fixes the binding and its value-semantic components, not the entire reachable graph. `const xs = [Counter()]` prevents replacing or appending array elements through `xs` but does not freeze Counter's identity state. Object methods and synchronized APIs retain their own contracts. Sharing across execution boundaries depends on the complete type's Sendable property; neither `const` nor atomic reference counting proves it.
+
+#### 2.14.2 Initialization, permissions, and borrow facts
+
+At each program point the following must be proved separately:
+
+| Fact | Required condition |
+|--|--|
+| Initialization and consumption state | A read requires complete initialization; operations needing ownership cannot use a consumed or possibly consumed value |
+| Place permission | A write requires a writable destination; READ parameters and the value-semantic components of `const` cannot be written directly |
+| Value and declaration contract | Type, copy or consumption capability, parameter mode, storage, and return permissions satisfy the declaration |
+| Active borrows | Access does not conflict with a live shared or exclusive borrow, whose source and lifetime remain valid |
+
+Initialization and consumption are control-flow facts, permissions come from bindings and declarations, and borrows protect specific places and necessary paths. These proofs cannot substitute for each other. Missing a required proof is an error, but uniqueness of an Array backing store is not a language admission condition for ordinary assignment, saving a copy, returning, or mutation. Non-nullable Arrays still require explicit initialization (§5.1.1).
+
+#### 2.14.3 Ordinary copies and storage sharing
+
+`var b = a`, saving a READ parameter, returning an Array, and storing a copyable Array in another permitted container or aggregate preserve logical copies. They do not create a language-level alias to the source array's mutable storage, do not permanently mark its binding `ESCAPED`, and do not require other copies to die before the source can be mutated. Backing-store uniqueness may only optimize away detachment or copying.
+
+```xray
+var a = [1, 2, 3]
+var b = a
+const snapshot = a
+b[0] = 9
+a.push(a[0])                 // evaluate arguments before exclusive receiver access
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
+print(b[0])                 // 9
+print(len(a))               // 4
+```
+
+A copy must acquire independently releasable result ownership; failure must not publish a partially initialized result. Self-assignment and reading an element before replacing or appending it must preserve this responsibility, without double release or access to freed storage caused by physical sharing. Evaluation follows §3.0 E2/E5. Copy or automatic-move optimizations must not change the established order of errors, destruction, or external side effects.
+
+#### 2.14.4 Place borrows and captures
+
+`ref` is an exclusive writable place borrow. E2 evaluates the receiver and all arguments before establishing the borrow and entering the callee. Conflicting access through another path is forbidden while it is live. Assignment still follows E5: location subexpressions, index, right-hand side, then storage. COW implementation does not change that order.
+
+Shared `Slice` and exclusive `MutSlice` borrows follow §2.4.2. Class-field borrows additionally retain the object and check dynamic exclusivity. Sharing a backing store cannot remove these checks. Conversely, ordinary Array logical copies do not become borrows merely because they share backing storage.
+
+Ordinary closures capture outer `var` bindings through shared cells; `const` and ordinary READ parameters of copyable non-view types are captured by value. Shared-cell identity must not be disguised as a temporary non-escaping loan; its storage and release responsibilities remain explicit. Variables captured through shared cells cannot produce views. View captures and borrowing callbacks require the explicit contracts in §2.4.2, not guesses from a callee body or argument syntax.
+
+#### 2.14.5 Consumption and unadmitted surfaces
+
+Consumption of a noncopyable resource transfers ownership and final destruction responsibility. Whether a call consumes is determined by the declared parameter or receiver mode; `move x` optionally marks such a transfer explicitly. Successful consumption makes the source binding unusable. Consuming it again in a loop without reinitialization on every relevant path must be rejected. READ and `ref` borrows do not consume ownership. A rejected operation must not incorrectly mark a valid source as consumed.
+
+Copyable types, including Array, cannot declare `move` parameters or receivers. The general type-position `const T` form is removed and creates no type identity or conversion. Whether a standalone `move x` expression is allowed for copyable values and whether ordinary `copy(array)` retains a public spelling still require separate decisions before admission. These open surfaces do not block ordinary Array copying. Old unique-root, terminal heap-escape, or whole-graph deep-freeze rules must not supply default answers.
+
+#### 2.14.6 Struct-field copying and initialization
+
+A copyable struct copies fields according to their declared types. Array / Map / Set and other container fields preserve logical copies, string retains immutable value semantics, and class or synchronized fields copy identity references only. A struct must not be rejected merely because it contains an Array, another owned container, or a class reference. Nor may a struct with class fields be described as a wholly independent reachable graph.
+
+Fields still satisfy ordinary storage, initialization, and copyability requirements. Views cannot enter ordinary user aggregates. A noncopyable field or payload requires its containing struct / enum to be noncopyable, with that declaration family admitted separately. A non-nullable Array field cannot be unconditionally zero-initialized; default construction must obey §5's field rules.
+
+### 2.15 Worked Examples
+
+Self-contained programs that run as-is and pass `xray check` (comments show the real output).
+
+Arrays:
+
+```xray
+fn main() {
+    var nums = [1, 2, 3]
+    nums.push(4)
+    print(nums)          // => [1, 2, 3, 4]
+    print(len(nums))     // => 4
+    var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
+    print(doubled)       // => [2, 4, 6, 8]
+    var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
+    print(evens)         // => [2, 4]
+}
+
+main()
+```
+
+Maps and Sets:
+
+```xray
+fn main() {
+    var scores = #{"alice": 95, "bob": 88}
+    scores.set("carol", 77)
+    print(scores.get("alice") ?? 0)   // => 95
+    print(len(scores))                 // => 3
+
+    var seen = Set<i64>()
+    seen.add(1)
+    seen.add(2)
+    seen.add(2)
+    print(len(seen))          // => 2
+    print(seen.contains(1))   // => true
+}
+
+main()
+```
+
+Nullable types with `??`:
+
+```xray
+fn main() {
+    var name: string? = null
+    print(name ?? "anonymous")   // => anonymous
+    var city: string? = "NYC"
+    print(city ?? "unknown")     // => NYC
+}
+
+main()
+```
+
+---
+
+## 3. Expressions
+
+> Source of truth: `src/frontend/parser/xparse_expr.c`, AST node types in `src/frontend/parser/xast_types.h` such as `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*`.
+
+### 3.0 Evaluation Order
+
+> Source of truth: `src/frontend/canonical/xcanon.c`, `src/ir/xi_lower_expr.c`. This section defines where the sequenced-before relation of the §16.9 memory model comes from. Precedence (§3.1) fixes only the **structure** of an expression; this section fixes **when** its parts are evaluated. They are independent rules.
+
+xray's evaluation order is **fully determined**: the language has no unspecified and no undefined evaluation order, and the VM and AOT backends must produce exactly the same sequence of side effects.
+
+This is a requirement rather than a conservative preference. Differential testing uses "the same program is byte-identical on both backends" as its correctness criterion; the moment an order is declared unspecified, a backend divergence at that point stops being a defect and the criterion itself stops working. The `tests/diff/cases/semantics/evaluation_order/` gate enforces the agreement.
+
+**E1 (general rule)**: expressions are evaluated **left to right, depth first**. A subexpression is fully evaluated, side effects included, before its parent expression uses its value.
+
+**E2 (calls)**: `callee(a1, …, an)` evaluates the callee expression (the receiver for a method call) → `a1` → … → `an`, and then enters the call. Borrows are established after every argument has been evaluated and before the callee is entered. Default arguments are evaluated at the call site in declaration order, after all explicit arguments.
+
+**E3 (binary operators)**: the left operand is fully evaluated, side effects included, before evaluation of the right operand begins. The short-circuit operators (E4) are the only exception.
+
+**E4 (short-circuit points)**: `&&`, `||`, `??`, `?:`, `?.` and `?[` are **all** of the language's short-circuit points. No other operand is ever conditionally skipped.
+
+**E5 (assignment)**: `place = rhs` evaluates the place's location subexpressions (receiver, or array expression → index expression) → `rhs` → the store. Place before value, as in C# and Java, and unlike Rust.
+
+**Array value and writable receivers**: reading `a[index]` or read-only `a.get(index)` first takes a logical value snapshot of the receiver, then evaluates index, then checks bounds against that snapshot and copies the element. A call inside index may rebind a without changing this read's snapshot. A `ref` method or index assignment instead binds the root place once, without reading its Array value or establishing exclusive access yet. After every argument, or index and RHS, has been evaluated, exclusive access is established to the binding's **current value**. If an argument or the RHS rebinds the same root, mutation applies to the new value and bounds use its new length.
+
+A physical receiver snapshot may be eliminated only for a named place whose index contains no call, write or suspension, with proof that the owner cannot change in between. This permission does not waive resource errors: the omitted allocation/retain must be proven unable to fail, or equivalent failure checks must remain at the original receiver-evaluation point. OOM/retention failures may not be removed, delayed or reordered relative to index errors. Absence of side effects alone is insufficient. Saving an Array still preserves a logical copy; an element result still independently owns T.
+
+The initial execution subset may restrict a GET-place index to a literal or ordinary i64 name whose evaluation is proven free of calls, writes, suspension, allocation and runtime faults. One synchronous helper can transiently retain the receiver, check bounds and copy the element, then drop the receiver, without keeping that temporary owner until activation exit. Reordering index evaluation with this retain still requires the stated no-failure proof. This preserves retention failures while preventing a completed read's temporary Array alias from forcing COW in `a.push(a[0])`; zero-retain optimization is not required initially.
+
+**E6 (compound assignment)**: `place op= rhs` is equivalent to `place = place op rhs`, **except that each subexpression of the place is evaluated exactly once**. The order is: place subexpressions → read the place → `rhs` → compute → write the place back. `x++` / `x--` are equivalent to `x += 1` / `x -= 1` and follow the same rule. Compound assignment targets are restricted to variables and member accesses (see §3.4).
+
+**E7 (literals)**: Array, Set and tuple elements are evaluated in source order; Map and object literals are evaluated entry by entry in source order, key before value within an entry; a spread `...` is evaluated in sequence at the position where it appears.
+
+**E8 (string interpolation)**: interpolated fragments are evaluated left to right in source order.
+
+**E9 (match)**: the scrutinee is evaluated before any arm, exactly once. Arms are tried in source order; an `if` guard is evaluated only once its pattern has matched.
+
+**E10 (slices and ranges)**: `a[lo:hi]` evaluates a → lo → hi; `lo..hi` and `lo..=hi` evaluate lo → hi.
+
+**E11 (statements)**: statements are evaluated in source order. A `defer` establishes a static cleanup edge where it appears, while its outer bindings are read when cleanup executes; see §4.9 for timing.
+
+```xray
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
+fn add(a: i64, b: i64) -> i64 { return a + b }
+fn pick(tag: string) -> fn(i64, i64) -> i64 { print(tag); return add }
+
+class Counter {
+    hits: i64 = 0
+}
+
+fn mk(tag: string) -> Counter { print(tag); return Counter() }
+
+// E2: the callee is evaluated before the arguments
+var sum = pick("callee")(t("arg1", 1), t("arg2", 2))   // callee, arg1, arg2
+
+// E5: place subexpressions are evaluated before the right-hand side
+var arr = [0, 0, 0]
+arr[t("index", 0)] = t("value", 5)                     // index, value
+
+// E6: a complex receiver is evaluated exactly once
+mk("receiver").hits += t("delta", 1)                   // receiver, delta
+```
+
+### 3.1 Precedence and Associativity
+
+Full precedence table (highest → lowest; operators at the same level share associativity):
+
+| Level | Operators | Assoc. | Description |
+|--|--|--|--|
+| 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | left | postfix: grouping, index, member, optional chain, call, force unwrap |
+| 16 | prefix `-` `+` `!` `~` `move` `await` `go` `unsafe` `comptime` | right | unary prefix + coroutine/FFI/compile-time boundary operators |
+| 15 | `as` `is` | left | type cast / check (`as T?` is the safe form via a nullable target type, not a separate `as?` operator) |
+| 14 | `*` `/` `%` | left | multiplication / division / modulo |
+| 13 | `+` `-` | left | addition / subtraction |
+| 12 | `<<` `>>` | left | shifts |
+| 11 | `..` `..=` | none | range: endpoints are arithmetic, so `0..n+1` is `0..(n+1)`; non-associative, `a..b..c` is a syntax error |
+| 10 | `<` `<=` `>` `>=` | left | relational |
+| 9 | `==` `!=` | left | equality |
+| 8 | `&` | left | bitwise AND |
+| 7 | `^` | left | bitwise XOR |
+| 6 | `\|` | left | bitwise OR (also union types) |
+| 5 | `&&` | left | logical AND (short-circuit) |
+| 4 | `\|\|` | left | logical OR (short-circuit) |
+| 3 | `??` | left | null coalescing |
+| 2 | `? :` | right | ternary |
+| 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
+| 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
+
+
+### 3.2 Unary Expressions
+
+```ebnf
+UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
+            | 'move' UnaryExpr
+            | 'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
+            | 'go' (Block | PostfixExpr)
+            | 'unsafe' Block
+            | 'comptime' (Expression | Block)
+            | PostfixExpr
+```
+
+| Operator | Applicable types | Result type | Notes |
+|--|--|--|--|
+| `-x` | numeric | same | negation; preserves f64 NaN |
+| `+x` | numeric | same | identity, almost never useful |
+| `!x` | `bool` | `bool` | logical not; **rejects non-bool** (unlike JS) |
+| `~x` | integer | same | bitwise complement |
+`++` / `--` are **not expressions**: expression-position uses such as `var y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors. Statement-level increment/decrement is specified in §4.1.
+
+#### `unsafe { }`
+
+`unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `extern "C"` functions, reads/writes through `Ptr<T>` / `MutPtr<T>` foreign memory, and `deref()` calls that dereference raw pointers.
+
+```xray
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+}
+
+var p = unsafe { malloc(1) }      // the final expression is the block result
+unsafe {
+    p[0] = 7                      // MutPtr writes must be inside unsafe
+    print(p.deref())              // dereference must be inside unsafe
+    free(p)                       // extern calls must be inside unsafe
+}
+```
+
+`unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `Ptr<T>` is still read-only, and writes require `MutPtr<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
+
+#### `comptime expr` / `comptime { ... }`
+
+`comptime` requires an expression or block to evaluate during analysis; failure is a compile error and never falls back to runtime. Constant expressions are not limited to integers: the current evaluator supports scalar constants, TypeIds, fixed arrays, tuples, struct aggregates and their member/index accesses, plus const-evaluable unary and binary operations. Static integer positions such as fixed-array lengths still require a positive integer result.
+
+```xray
+const SCALE = comptime 8 * 4
+var buf: [u8; comptime SCALE + 2] = [0; SCALE + 2]
+```
+
+`comptime { ... }` has a restricted interpreter. A block supports local `const`/`var` declarations, local assignments and compound assignments, `if`/`while`, C-style `for`, fixed-array `for-in`, labeled or unlabeled `break`/`continue` inside loops, `compile_assert(...)`, and `compile_error(...)`. A statement block is erased from runtime; use `return <consteval-expression>` when the block must produce a value. Function calls are not currently consteval-safe, and unsupported statements are rejected during analysis.
+
+```xray
+const TABLE_SIZE = comptime 4 * 8
+
+comptime {
+    var sum = comptime 0
+    for (var i = 0; i < 4; i += 1) {
+        sum += i
+    }
+    compile_assert(sum == 6, "comptime loop")
+}
+```
+
+### 3.3 Binary Expressions
+
+```ebnf
+BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
+BinOp ::= '+' | '-' | '*' | '/' | '%'
+       | '&' | '|' | '^' | '<<' | '>>'
+       | '<' | '<=' | '>' | '>='
+       | '==' | '!='
+       | '&&' | '||'
+       | '??'
+```
+
+#### 3.3.1 Arithmetic Operators
+
+| Operator | same-kind integers | same-kind floats | losslessly widenable numeric | integer×f64 | string / other |
+|--|--|--|--|--|--|
+| `+` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | `string + string` concatenates; other ❌ |
+| `-` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | ❌ |
+| `*` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | ❌ |
+| `/` | original integer type (truncating) | original floating type | unique wider type | ❌ (explicit `as` required) | ❌ |
+| `%` | original integer type | ❌ | unique wider integer type | ❌ | ❌ |
+
+“Losslessly widenable” means only a same-signed integer chain or `f32 → f64`. A direct numeric literal may acquire the unique context of the other already-typed operand; two already-typed operands never use C-style usual arithmetic conversions.
+
+**Special semantics**:
+- `i64 / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
+- `i64 % 0` → throws `XR_ERR_MOD_BY_ZERO` (E0421) at runtime.
+- Division whose result type is `f64`/`f32` follows IEEE-754: `1.0 / 0.0` produces `+inf`, `-1.0 / 0.0` produces `-inf`, and `0.0 / 0.0` produces `NaN`; use `x.isNaN()` or `math.isNaN(x)` to test NaN.
+- `%` accepts integer operands only; modulo with a static type that contains f64 (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
+- Integer overflow: see §2.3.1.
+- `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
+- `rune` is an independent Unicode scalar type and does not participate in arithmetic; use `i64(c)` explicitly when the code point is needed.
+
+#### 3.3.2 Bitwise Operators
+
+`&` `|` `^` `~` `<<` `>>`
+
+- Apply only to integer types.
+- Shift counts for every fixed-width integer are taken modulo 64, including negative counts. The result keeps the left operand's type: narrow left shifts truncate to that width; right shifts by an effective count at least that width produce zero or -1 for signed negative values. For example, a u8 value of 1 shifted left by 8 is 0, and shifted left by 64 is 1.
+- `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding exact type (`u8`, `u16`, `u32`, or `u64`).
+- `bool` does not participate in bitwise operations (use `&&` `||`).
+- `rune` does not participate in bitwise operations; use `i64(c)` explicitly when the code point is needed.
+
+#### 3.3.3 Comparison Operators
+
+| Operator | Semantics |
+|--|--|
+| `==` | value equality. Numeric operands must have the same type or a unique lossless common type; integer-vs-f64 and different-signedness integers require an explicit conversion first. Strings compare by content. class/struct uses `==` overload or default identity. |
+| `!=` | inverse of `==` |
+| `<` `<=` `>` `>=` | supported by numbers and strings; other types are unsupported by default (enable via `operator<` overload). |
+
+**Difference vs. JS / C**: xray's `==` does not perform string↔number conversion, integer↔f64 promotion, or implicit signedness changes.
+
+#### 3.3.4 Logical Operators
+
+`&&` `||`:
+
+- Both operands **must** be `bool` (checked at compile time).
+- Short-circuit evaluation: `false && X` does not evaluate `X`; `true || X` does not evaluate `X`.
+- Result type is `bool` (unlike JS, which returns one of the operands).
+- **Narrowing inheritance (§2.13 N-5)**: in `e1 && e2`, `e2` is analyzed under the true fact of `e1`; in `e1 || e2`, `e2` is analyzed under the false fact of `e1`. Since `T?` cannot be used directly as a condition, `a != null && a.f` and `a == null || a.f` are the standard forms for nullable values.
+
+#### 3.3.5 Null Coalescing `??`
+
+```xray
+var v = nullable_expr ?? default_value
+```
+
+- Returns `default_value` when `nullable_expr` is `null`; otherwise returns `nullable_expr` itself.
+- **Short-circuit**: `default_value` is evaluated only when the left side is null.
+- Type inference: if `nullable_expr: T?` and `default_value: T`, the result type is `T` (non-null).
+- Applies only to nullable types; using `??` on a non-null `T` is a compile warning/error.
+
+### 3.4 Assignment and Compound Assignment
+
+```ebnf
+AssignExpr   ::= AssignLValue '=' Expression
+               | CompoundLValue CompoundOp Expression
+AssignLValue ::= Identifier | MemberAccess | IndexAccess
+CompoundLValue ::= Identifier | MemberAccess
+CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
+               | '&=' | '|=' | '^=' | '<<=' | '>>='
+```
+
+**Semantics**:
+- Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`). Array assignment saves a logical copy. The destination and expression result each retain their value obligations; the result must not borrow an element slot that can later be overwritten. An implementation may reuse the already owned right-hand result. All fallible ownership acquisition precedes the store commit; the replaced value is released afterwards. Failure does not undo earlier right-hand side effects.
+- `x op= y` is equivalent to `x = x op y`, but each subexpression of `x` is evaluated exactly once (important: `obj.f += 1` does not call `f`'s getter twice, and `mk().f += 1` calls `mk()` once). For the full ordering see §3.0 E6.
+- **Compound assignment does not accept an index target**: `a[i] += v` is a compile error; write `a[i] = a[i] + v`. Plain assignment `a[i] = v` is unaffected.
+- Cannot assign to a `const` (compile error `E0303`).
+
+**Special cases**:
+- An ordinary read parameter permits reading or saving a logical copy of a copyable value. It does not permit modifying that value through the parameter. A class reference may still invoke methods that change the referenced identity. `ref` grants exclusive writable access to a place; a declared `move` parameter transfers ownership of a noncopyable resource.
+- Array/Map field assignment: `a[i] = v` calls `operator[]=` or the built-in setter.
+
+### 3.5 Ternary `? :`
+
+```ebnf
+TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
+```
+
+```xray
+var max = a > b ? a : b
+```
+
+- **Right-associative**: `a ? b : c ? d : e` = `a ? b : (c ? d : e)`.
+- The condition must be `bool`. The condition is evaluated once and only the selected branch executes; both branches are statically checked, including branches skipped by a constant condition.
+- The two branches share a unified type (taken as the common supertype or a union). Without outer context, same-signedness integer branches are typed independently and then use the wider type, converting only on the selected path. Direct branch literals independently default to i64.
+- **Narrowing (§2.13 N-7)**: the true fact of the condition applies to the then arm and the false fact to the else arm, exactly as in `if` — `a != null ? len(a) : 0` is legal.
+
+### 3.6 Null Coalescing `??` and Optional Chaining `?.` / `?[`
+
+See §3.3.5 (`??`) and below (`?.` / `?[`).
+
+#### Optional chaining `?.` / `?[`
+
+```ebnf
+OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr ']')+
+```
+
+```xray
+var city = user?.address        // optional property access
+var item = arr?[0]              // optional index
+var value = callback?.(input)   // optional function call
+var road = user?.address.street // whole-chain short-circuit: null when user is null
+```
+
+**Semantics**:
+- If the LHS of `?.` or `?[` is `null`, the **entire postfix chain** short-circuits to `null`; every later `.` / `[` / `(` in the chain is skipped.
+- `?.` is for property access, method calls, and function calls: `obj?.prop`, `obj?.method()`, `func?.(args)`.
+- `?[` is for index access: `arr?[0]`. Symmetric with regular indexing `arr[0]` — just add `?` before `[`.
+- `func?.(args)` does not evaluate its arguments when the function value is `null`; it returns `null` directly.
+- **Whole-chain short-circuit**: `a?.b.c.d` means "`null` when `a` is `null`, otherwise evaluate `a.b.c.d`". Every `?.` is a short-circuit point; a `.` after a short-circuit point needs no `?` and does **not** raise `E0379`, because it is evaluated only when the prefix is non-null.
+- When a link itself yields a nullable value (`b: T?` in `a?.b`), continuing with `.` on that value still requires `?.`: the short-circuit covers a null LHS of `?.`, not a null result on its RHS.
+- Result type: the type of the whole chain plus `?` (already-nullable types remain unchanged). §2.13 N-13.
+
+### 3.7 Force Unwrap `!`
+
+> Full error-handling semantics are in §8. This section only lists the expression syntax and brief semantics.
+
+#### Force unwrap `expr!`
+
+```xray
+var v: i64 = nullable_int!      // throws NullThrowError (E0410) at runtime when null
+```
+
+Legal only when `expr` is known to be a nullable type (`T?`) at compile time; using `!` on a non-null `T` is a compile error.
+
+### 3.8 `as` / `is`
+
+#### `is` runtime type check
+
+```ebnf
+IsExpr ::= UnaryExpr 'is' Type
+```
+
+```xray
+if (v is User) {
+    // v is narrowed to User in this branch
+    print(v.name)
+}
+```
+
+- Result type: `bool`.
+- **Type guard**: when `v` is a simple binding, the analyzer narrows it to its intersection with `T` in the true branch and removes that intersection in the false branch, per §2.13 N-4 / N-6.
+- Applies to unions, nullable values, class hierarchies, and runtime category checks on `JSON.Value`.
+- **Fixed-width numeric types**: a dynamically erased value keeps only its i64 or f64 family, not its width, so `v is i32` asks whether the value is exactly representable in `i32` — the only form the erased value can answer. `is i64` / `is f64` hold for the whole family. `v as T?` uses the same predicate and yields `null` when it does not hold.
+
+#### `as` type cast
+
+```ebnf
+AsExpr ::= UnaryExpr 'as' Type
+        |  UnaryExpr 'as' Type '?'
+```
+
+```xray
+var n = v as i64           // throws TypeError on failure
+var n = v as i64?          // returns null on failure (the "as nullable" safe form)
+```
+
+| Form | Failure behavior | Use case |
+|--|--|--|
+| `expr as T` | throws `XR_ERR_TYPE_MISMATCH` (E0404) | a cast that must succeed |
+| `expr as T?` | returns `null` | a fallible dynamic / structural cast; not a numeric conversion |
+
+**Supported conversions**:
+- Between numeric types: integer-to-integer reduces modulo the target width and is interpreted with the target signedness; integer-to-f64 and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even; f64-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422) for NaN, infinity, or an out-of-range value. Numeric conversion uses only `expr as T`, never the nullable form.
+- `JSON.Value →` scalar type (runtime category check); use `JSON.decode<T>` for composites.
+- Parent → child (runtime `instanceof`).
+- Union member → concrete member.
+
+### 3.9 Range `..` / `..=` and Spread `...`
+
+#### Range `a..b` / `a..=b`
+
+```ebnf
+RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
+```
+
+```xray
+var halfOpen = 0..10   // left-closed right-open (includes 0, excludes 10)
+var closed = 0..=10    // closed interval (includes both 0 and 10)
+var r = 1..100
+var n = 10
+for (i in 0..n) { print(i) }
+for (i in 0..=n) { print(i) }
+for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
+```
+
+- Type: `Range` (i64 ranges only).
+- **Precedence (see §3.1)**: `..` / `..=` bind looser than every arithmetic operator (`* / % + - << >>`), so endpoints group first — `0..n+1` is `0..(n+1)` and `1..2*3` is `1..(2*3)`; they bind tighter than comparison and logical operators, so `0..n == 0..m` is `(0..n) == (0..m)`.
+- **Non-associative**: ranges do not chain; `a..b..c` is a syntax error. Parenthesize an endpoint if a nested range is intended.
+- `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
+- `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
+- `for-in`, `Range.contains`, `len(range)`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
+- Primary uses: `for-in` loops, range checks in pattern matching.
+
+#### Spread `...`
+
+Allowed in the following positions only:
+- **Function rest parameter declaration**: `fn f(...args: i64)`
+- **Function call spread**: `f(...args)`; the spread source must be a tuple whose arity is statically known.
+- **Tuple literal spread**: `(head, ...tail)`; the spread source must be a tuple whose arity is statically known.
+- **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
+- **Object-literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
+
+```xray
+var a = [1, 2]
+var b = [3, 4]
+var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
+
+var base = { x: 1, y: 2 }
+var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+```
+
+### 3.10 Literal Construction
+
+#### Array `[...]`
+
+```ebnf
+ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expr | Expr
+```
+
+```xray
+var a = [1, 2, 3]
+var empty: Array<i64> = []
+var mixed = [1, "hello"]    // type Array<i64 | string>
+```
+
+#### Map `#{k: v, ...}` and `#{}`
+
+```ebnf
+MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= Expression ':' Expression
+EmptyMap ::= '#{' '}'    // note: '#{' is a single token
+```
+
+```xray
+var m = #{"a": 1, "b": 2}
+var empty = #{}                           // empty Map
+```
+
+**Key distinction**: `{}` is always an exact **structural object**; `#{}` is always a **Map**, and is also the literal form of `JSON.Object`. Both use `:` between key and value; the `#` prefix is the disambiguator.
+
+#### Set `#[...]`
+
+```ebnf
+SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
+```
+
+```xray
+var s = #[1, 2, 3]
+var empty = #[]
+```
+
+#### Object (structured object) `{ field: value, ... }`
+
+```ebnf
+ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
+ObjectField ::= Identifier ':' Expr
+              | Identifier            // shorthand: `{ x }` ≡ `{ x: x }`
+              | '...' Expr            // spread: `{ ...base }` merges fields
+```
+
+```xray
+var p = { name: "Alice", age: 30 }
+var users = "Bob"
+var obj = { users }              // shorthand
+```
+
+- Defaults to an exact object shape (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
+- An object literal never becomes dynamic because of its expected type. Use `JSON.value(value)` for a typed composite crossing the JSON boundary, and use `JSON.Object` / Map for a dynamic object.
+- Name the structural object with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
+
+#### Array<u8> `Array<u8>(...)`
+
+See §2.4.6 and §14.5.
+
+#### Channel `Channel<T>(buf?)`
+
+```xray
+const ch: Channel<i64> = Channel<i64>(10)
+```
+
+See §10.5.
+
+### 3.11 Calls / Member Access / Indexing / Slicing
+
+#### Function call
+
+```ebnf
+CallExpr ::= Primary '(' ArgList? ')'
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out')? Expr
+```
+
+- Arguments are passed positionally; named arguments are not supported.
+- A `ref` or `out` parameter repeats the same marker at the call site and must receive an addressable place; ordinary `in`/value parameters have no call-site marker.
+- A rest parameter collects extra arguments into an array.
+- Argument-count mismatch → compile error `E0307` / `E0450`.
+
+#### Member access
+
+```ebnf
+MemberAccess ::= Primary '.' Identifier
+```
+
+```xray
+obj.field
+obj.method(args)
+ClassName.staticMethod()
+EnumName.MemberName
+```
+
+- Field access: compile-time check that the type has the field.
+- Method call: resolved to invoke (with IC cache optimization).
+- Module member: `module.export_name`.
+- Enum member: `Color.Red`.
+
+#### Index access
+
+```ebnf
+IndexAccess ::= Primary '[' Expr ']'
+```
+
+```xray
+arr[0]
+arr[0] = 10
+map["key"]
+var bytes: Slice<u8> = text.bytes()
+bytes[i]                // explicit byte-view index
+```
+
+- An `Array<T>` index has type `i64`, with valid range `0 <= i < len(array)`. Reading produces a logical copy of T. Writing requires a writable place and checks/converts the right-hand value against T. Negative indices and indices equal to the length enter the `E0430` panic channel, not a business throw.
+- Index assignment follows E5: evaluate the root place and index once, then finish the right-hand side. Only then establish exclusive access, check bounds against the binding's current array, detach shared storage and commit. If the RHS rebinds the root, the new array is written; the old length cannot cause an early rejection. A raw element address cannot survive right-hand evaluation. Failure preserves the pre-commit array and other logical copies; earlier RHS effects, including rebinding, remain. Reads follow the receiver-snapshot rule in §3.0 and check the snapshot's bounds before copying the element.
+- `Map` indexing: key type; missing key → `E0431`.
+- Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
+- User classes: via `operator[]` overload.
+
+```xray
+var a: Array<string> = ["old"]
+fn replaceForIndex() -> i64 {
+    print("index")
+    a = ["new"]
+    return 0
+}
+print(a[replaceForIndex()])  // Prints index, then old
+print(a[0])                 // new
+```
+
+```xray
+var a: Array<string> = ["old"]
+fn index() -> i64 { print("index"); return 1 }
+fn replacement() -> string {
+    print("rhs")
+    a = ["new0", "new1"]
+    return "stored"
+}
+var written = (a[index()] = replacement())
+print(written, a[1])        // Prints index, rhs, then stored stored; no old-length rejection
+```
+
+```xray
+var a: Array<string> = ["old0", "old1"]
+fn shrink() -> string { print("rhs"); a = ["new"]; return "stored" }
+a[1] = shrink()             // Prints rhs, then E0430 panic; rebinding to ["new"] remains
+```
+
+```xray
+fn invalid(values: Array<string>) {
+    values.push("x")       // Compile error: a read parameter is not a writable receiver
+}
+```
+
+#### Slice
+
+```ebnf
+Slice ::= Primary '[' Expr? ':' Expr? ']'
+```
+
+```xray
+arr[1:4]                // elements [1, 4)
+arr[:3]                 // first 3
+arr[2:]                 // from index 2 to the end
+arr[:]                  // full-length view (not a copy)
+var view: Slice<i64> = arr[1:4]
+```
+
+- Half-open interval `[start, end)`.
+- Array slicing supports negative indices: a negative index is converted using `len(array) + index` and then clamped to the valid range.
+- Strings do not support the slice operator; use strict rune-ordinal `s.slice(start, end)`.
+- A slice targeting `Slice<T>` is a **shared read-only borrowed view**; no elements are copied. Neither writing through it nor mutating its owner is allowed while it is live. A writable view requires the explicitly admitted exclusive `MutSlice<T>` borrow in §2.4.2; a `Slice<T>` never silently gains write permission. Every form, including `arr[:]`, is a view rather than a logical copy. Use `copy(arr[1:4])` when you need independent data.
+- A slice expression is a borrow: while the view is live the owner is constrained by the borrow rules in §2.4.2, and the view itself must not escape the owner's scope. See §2.4.2 for the full rules.
+
+### 3.12 Anonymous Functions and Lambdas
+
+Xray has only two anonymous-function concepts: **arrow lambdas** and **fn lambdas**. A single unannotated read parameter may omit parentheses, so `x -> expr` and `(x) -> expr` are two parenthesizations of one concept, not two function kinds. Both compile to the same `AST_FUNCTION_EXPR` node; they differ in the signature information that source code may carry.
+
+```ebnf
+AnonFunction  ::= ArrowLambda | FnExpression
+ArrowLambda   ::= Identifier '->' ArrowBody
+                | '(' ArrowParams? ')' '->' ArrowBody
+ArrowBody     ::= Expression | Block
+ArrowParams   ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam    ::= Identifier (':' ParamMode? Type)?
+ParamMode     ::= 'ref' | 'move'
+FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
+```
+
+```xray
+// ── Arrow lambda: each parameter may be annotated or inferred independently ──
+arr.map(x -> x * 2)
+var add = (x: i64, y) -> x + y
+
+// Expression bodies return implicitly; ref only grants a writable loan
+var calculate = (x: ref i64) -> x * 2
+var doubleInPlace = (x: ref i64) -> { x = x * 2 }
+
+// ── fn lambda: explicit return type, generics, or a full parameter contract ──
+var inc = fn(x: i64) -> i64 {
+    var y = x + 1
+    return y
+}
+var identity = fn<T>(x: T) -> T { return x }     // generic
+```
+
+**Selection rule**:
+
+| Concept | Syntax | Capability and selection rule |
+|---------|--------|-------------------------------|
+| Arrow lambda | `x -> expr` / `(x: T, y) -> expr` / `(x: ref T) -> { ... }` | Parameters may be annotated independently; the return type is always inferred; expression bodies return implicitly and block bodies explicitly |
+| fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | Use for an explicit return type, generics, or a full declaration-style signature |
+
+**Key rules**:
+- Arrow parameter annotations are independent, so `(x: i64, y) -> ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
+- Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) -> ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
+- An arrow lambda has no return-type position. Both `(x: T): R -> ...` and `(x: T) -> R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
+- `-> expr` implicitly returns the expression value. `-> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
+- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
+- Tooling may emit a non-mandatory hint when an anonymous-function parameter is explicitly written as `ref` and complete effect analysis proves it is never mutated. The hint is suppressed when an expected callable contract requires `ref`, the mode was inferred, or effect analysis is incomplete; it never changes type checking or runtime semantics.
+- Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline values, published const values, and audited synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments.
+
+### 3.13 `match` Expression
+
+```ebnf
+MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm ::= Pattern ('if' Expr)? '->' Expression
+```
+
+```xray
+var result = match (x) {
+    1 -> "one",
+    2, 3, 4 -> "few",                 // multi-value
+    10..20 -> "teen",                 // range
+    n if (n > 100) -> "big",          // guard
+    Color.Red -> "red",               // enum
+    is User -> "a user",              // type pattern
+    _ -> "default"                    // wildcard
+}
+```
+
+**Semantics**:
+- Matches top-down, taking the first successful arm.
+- All arm expressions must yield the same type (or a union).
+- **Exhaustiveness**: for enum scrutinees (ADT and simple enums), the compiler enforces exhaustiveness. Otherwise it is not enforced, and an unmatched value at runtime throws `PanicInfo(E0442)`.
+- For pattern details see [§6](#6-patterns).
+
+### 3.14 Construction expressions
+
+```ebnf
+ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
+```
+
+Construction has the same form as a function call: `TypeName(args)`. `new` is reserved and does not form an expression.
+
+```xray
+var p = Point(1.0, 2.0)
+var arr = Array<i64>()
+const ch = Channel<i64>(10)
+var m = Map<string, i64>()
+```
+
+**Used for**:
+- Class and struct instantiation (`TypeName(args)`).
+- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Array<u8>` / `StringBuilder`, etc.; also `TypeName(args)`).
+- Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
+
+**Relation to literals**:
+```xray
+var a = [1, 2, 3]              // equivalent to Array<i64>() + push
+var m = #{}                    // equivalent to Map<...>()
+var p = Point{x: 1, y: 2}      // struct literal
+```
+
+### 3.15 String Interpolation
+
+See §1.6.5. In brief:
+
+```xray
+var greeting = "Hello, ${name}! Age: ${user.age + 1}"
+```
+
+- `${...}` accepts any expression (calls, object access, arithmetic).
+- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / rune literals.
+- The expression's type must be convertible to a string (implement `toString()` or be a primitive).
+
+### 3.16 `yield` Statement
+
+```xray
+yield expr                  // produce one generator value and suspend
+```
+
+`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>` (protocol in §5.3.6). `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
+
+Cooperative CPU yielding uses `Coro.yield()` (see §10.10); bare `yield` is not an expression.
+
+#### 3.16.1 Production and scheduling suspension
+
+yield expr delivers one owned element and parks the producer; yield () delivers a real Unit element rather than EOS. Coro.yield() produces no element and returns the activation to its executor queue. Neither keeps a suspended call on the host C stack.
+
+hasNext() may advance the producer to a yield, terminal outcome or actual external wait. Repeated hasNext() preserves a cache without advancing again. next() transfers one element owner and reports E0432 on exhaustion (§5.3.6). Consumption may suspend through the producer and cannot promise no_suspend at its definition. Creating a lazy Iterator neither executes production nor immediately inherits its throw.
+
+#### 3.16.2 Generator waits and one consumer
+
+A producer owns an independent frame driven by its original Instance executor. Actual I/O or Timer waits suspend the current consumption; temporary absence of an element never means EOS. One Iterator admits one driver at a time. Reentry, self-driving, second drivers and cancellation arbitration authenticate the actual owner, activation, generation and one-shot wake; backends are never recursively driven.
+
+See §17.39 for implemented Source types, operations, borrowed-environment and platform limits. This grants no implementation claim for unadmitted await/select/Channel or parallel platform paths.
+
+#### 3.16.3 Early abandonment and registered cleanup
+
+Early exit or dropping an Iterator never resumes the producer's ordinary remaining body, but must close it and run every registered, unfinished cleanup exactly once. Consumer cancellation and producer failure use the same exit driver. Final external drop only publishes a close request; the original executor drains it iteratively. Instance close drains before code retirement, and drop callbacks never recursively execute a backend.
+
+Generators allow defer with ordinary registration, exit order and the prohibition on asynchronous cleanup. An unstarted producer has registered nothing, so close must not invent defer execution. Physical memory release does not prove language cleanup. Iterator adds no Source close() method; lifecycle and cancellation drive internal close.
+
+---
+
+## 4. Statements
+
+> Source of truth: `src/frontend/parser/xparse_stmt.c`, `src/frontend/parser/xast_nodes_stmt.h`.
+
+Xray statements are separated by `\n` or `;`; the trailing `;` is optional in most positions, only the three sections of a `for` loop (init / cond / step) require `;` separators.
+
+### 4.1 Expression Statements and Blocks
+
+```ebnf
+ExprStmt   ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
+Block      ::= '{' Statement* '}'
+```
+
+```xray
+foo()                  // expression statement
+x = 1                  // assignment expression as a statement
+x++                    // increment statement; produces no expression value
+{                      // block
+    var y = 2
+    y + 1              // expression with discarded result
+}
+```
+
+`++` / `--` are pure statements or `for` step items, and can only be written as `name++` / `name--`. They are equivalent to `name = name + 1` / `name = name - 1` and produce no value; expression-position uses such as `var y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors.
+
+**Note**: a block is **not an expression** — it has no value. To get a value out of a block, use `match` or wrap it in an immediately-invoked function.
+
+### 4.2 `if` / `else`
+
+```ebnf
+IfStmt ::= 'if' '(' Expression ')' Block ElseIfChain? ElseClause?
+ElseIfChain ::= ('else' 'if' '(' Expression ')' Block)+
+ElseClause  ::= 'else' Block
+```
+
+```xray
+if (x > 0) {
+    print("positive")
+} else if (x == 0) {
+    print("zero")
+} else {
+    print("negative")
+}
+```
+
+**Constraints**:
+- The condition **must** be parenthesized (unlike Go/Rust).
+- The condition must be `bool`; every nullable `T?`, bare `i64`, `string`, collection, etc. is a compile error. Test presence explicitly with `value != null` (see §2.3.3).
+- Branch bodies must be blocks `{...}`; **no** single-statement-without-braces form.
+- `if` is not an expression; for an expression form use the ternary `? :` or `match`.
+
+### 4.3 `while`
+
+```ebnf
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
+```
+
+```xray
+var i = 0
+while (i < 10) {
+    print(i)
+    i++
+}
+```
+
+There is no `do-while` form.
+
+### 4.4 `for` (C-style) and `for-in`
+
+#### C-style `for`
+
+```ebnf
+ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
+ForInit ::= VarDecl | ExprStmt
+ForStep ::= Expression | Identifier ('++' | '--')
+```
+
+```xray
+for (var i = 0; i < 10; i++) {
+    print(i)
+}
+for (var j = 100; j > 90; j--) {
+    print(j)
+}
+```
+
+- Variables declared in `ForInit` are scoped to the loop body.
+- `i++` / `i--` in the step position must be the entire step; put multiple updates at the end of the loop body.
+- All three sections may be omitted: `for (;;)` is an infinite loop.
+
+#### Single-variable `for-in`
+
+```ebnf
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
+```
+
+The `for-in` iteration variable is a fresh immutable binding for each iteration; a closure captures the value of that iteration's binding when the closure is created.
+
+The collection expression of a built-in `Array<T>` is evaluated once and iteration owns a snapshot of that logical value. Mutating or rebinding the original array in the loop does not change the sequence being traversed. A pair binding uses a zero-based `i64` index; `_` creates no referenceable binding. Class elements preserve object identity rather than deeply copying objects (§14.7). Binding type annotations are not accepted.
+
+```xray
+for (item in [1, 2, 3]) { print(item) }
+for (i in 0..n) { print(i) }                  // range iteration (half-open)
+for (ch in "hello") { print(ch) }             // string characters (by Unicode scalar)
+for (key in someMap) { print(key) }           // single variable over Map → key
+for (key in jsonObject) { print(key) }        // JSON.Object is a Map; single variable → key
+for (color in Color) { print(color.name) }    // unit-only enum; yields Color values
+for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>
+    print(variant.name)
+}
+for (_ in 0..n) { count++ }                   // discard with placeholder
+```
+
+#### Two-variable `for-in` destructuring
+
+Xray supports two equivalent two-variable forms:
+
+```ebnf
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+```
+
+```xray
+// Form A: two bare identifiers (more common)
+for (k, v in someMap) { print("${k}=${v}") }     // Map → (key, value)
+for (i, e in someArray) { print("${i}: ${e}") }  // Array → (index, element)
+for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
+
+// Form B: tuple-parenthesized (pairs well with .entries())
+for ((i, e) in someArray.entries()) { print("${i}=${e}") }
+for ((i, c) in "hi".entries()) { print("${i}-${c}") }
+```
+
+Iteration source / yield mapping:
+
+| Collection type | Single-variable yield | Two-variable yield |
+|---|---|---|
+| `Array<T>` / `T[]` | element | (index, element) |
+| `Map<K, V>` | key | (key, value) |
+| `JSON.Object` / Map | key | (key, value) |
+| `string` | `rune` | (index, rune) |
+| `Range` (`a..b`) | i64 | — |
+| Concrete enum type `E` with unit-only variants | actual `E` values (declaration order) | — |
+| Enum type `E` containing a payload variant | **compile error**; use `E.variants` | — |
+| `EnumVariants<E>` | `EnumVariant<E>` descriptors (declaration order) | — |
+| `EnumPayloads<E>` | `EnumPayloadField<E>` descriptors (declaration order) | — |
+| Custom `Iterator<T>` | T | — |
+
+Enum type domains and descriptor views are compiler-recognized static domains. They do not make enums conform to `Iterable`, and they do not implicitly construct arrays or iterator objects. `E` must have a compile-time-known concrete enum layout; `E.variants` on an unconstrained type parameter is rejected. See §5.6.5.
+
+#### Custom iterators
+
+Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §5.3.6.
+
+### 4.5 `match` Statement
+
+```ebnf
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+```
+
+**Key syntax**:
+- The matched expression **must** be parenthesized: `match (x) {...}`.
+- Commas between arms are **optional** — both styles can be mixed in the same `match` (omitting commas is more common).
+- Guard expressions following `if` must be parenthesized: `n if (n > 0)`.
+
+```xray
+match (x) { 1 -> print("one"), _ -> print("other") }
+
+match (action) {
+    "start" -> {
+        log.info("starting")
+        start_engine()
+    }
+    "stop" -> stop_engine()
+    _ -> log.warn("unknown")
+}
+```
+
+`match` may serve as either a statement or an expression (see §3.13); when used as an expression, the arm body must be a single expression or end with one as the last expression of a block.
+
+For pattern details see [§6](#6-patterns).
+
+### 4.6 `break` / `continue`
+
+```xray
+break                  // exit the innermost loop
+continue               // proceed to the innermost loop's next iteration
+break outer            // exit the loop labeled outer
+continue outer         // proceed to the next iteration of the loop labeled outer
+
+outer: for (i in 0..10) {
+    for (j in 0..10) {
+        if (j == 3) { continue outer }
+        if (i * j > 20) { break outer }
+    }
+}
+```
+
+**Constraints**:
+- Must appear inside a `while` / `for`; otherwise the compile errors `E0304` / `E0305`.
+- `break` / `continue` inside a `match` does **not** affect `match` itself; it exits the enclosing loop.
+- Loop labels are written as `label: for (...)` or `label: while (...)` and may only annotate loops; `label:` before a non-loop statement is a compile error.
+- `break label` / `continue label` must refer to an active enclosing loop label; unknown labels and duplicate labels in the active loop stack are compile errors.
+- Unlabeled `continue` targets the innermost loop. Labeled `continue` targets the named loop: `while` rechecks its condition, C-style `for` runs its step before rechecking, and `for-in` advances to the next item.
+
+### 4.7 `return`
+
+```ebnf
+ReturnStmt ::= 'return' ReturnValue? (';' | LineBreak)
+ReturnValue ::= Expression | '(' Expression (',' Expression)+ ')'
+```
+
+```xray
+fn done() {
+    return                 // implicitly returns () (Unit)
+}
+
+fn answer() -> i64 {
+    return 42
+}
+
+fn pair(a: i64, b: i64) -> (i64, i64) {
+    return (a, b)          // multi-value return must wrap a tuple in parens
+}
+```
+
+> **Note**: multi-value returns must use the tuple form `return (a, b)`; the bare-comma form `return a, b` is the compile error `E0801`.
+
+**Constraints**:
+- Allowed only inside a function body (including closures); a top-level `return` is the compile error `E0306`.
+- The returned value's type must be compatible with the function's declared return type.
+
+### 4.8 `throw` / `try` / `catch`
+
+```ebnf
+ThrowStmt     ::= 'throw' Expression
+
+TryStmt       ::= 'try' Block CatchClause+
+CatchClause   ::= 'catch' '(' CatchHeader ')' Block
+                | 'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader   ::= Identifier (':' Type)?
+                | EnumPattern (',' EnumPattern)*
+```
+
+```xray
+enum AppError { NotFound, Timeout { milliseconds: i64 } }
+
+// Recoverable errors: enum values flow through the value-return channel,
+// caught by catch (e)
+try { throw AppError.NotFound } catch (e) {
+    match (e) {
+        AppError.NotFound -> log.error("not found"),
+        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
+    }
+}
+
+// catch panic (p) is a separate boundary for runtime faults
+// (div-by-zero, out-of-bounds, expr!)
+try { risky() } catch panic (p) {
+    log.error("fault:", p)
+}
+
+throw AppError.NotFound                      // value-return error channel
+// There is no finally; use defer for deterministic cleanup (see §4.9)
+```
+
+**Semantics**:
+- A `try` must be followed by at least one `catch` or `catch panic` clause.
+- `catch (e)` catches recoverable errors propagated through the value-return channel (a user `throw <enum>`); use `match (e)` to destructure the error value.
+- `catch (e: T)` filters by a concrete enum type, and `catch (Enum.Variant { … })` filters by variant patterns of one enum (see §8.1.2); an ordinary `catch` header is always parenthesized.
+- `catch panic (p)` catches runtime faults (div-by-zero, out-of-bounds, `expr!`, `assert`), strictly separated from recoverable errors.
+- The `throw` operand is an error value (typically an enum) propagated through the value-return channel: no `PanicInfo` allocation, no stack unwinding, and only a predictable branch at call boundaries that may propagate or catch errors.
+- There is no `finally`: use `defer` (§4.9) for deterministic cleanup.
+- For full error semantics see [§8](#8-error-handling).
+
+### 4.9 `defer`
+
+```ebnf
+DeferStmt ::= 'defer' Block
+```
+
+```xray
+fn read_file(path: string) -> string {
+    var f = open(path)
+    defer { f.close() }              // always runs before the function returns
+    return f.readAll()
+}
+
+fn process() {
+    defer {
+        log.info("done")
+        cleanup()
+    }
+    do_work()
+}
+
+fn late_binding_and_copy() {
+    var n = 1
+    defer { print("late", n) }        // reads 2 at exit
+    const saved = copy(n)
+    defer { print("saved", saved) }   // explicit copy remains 1
+    n = 2
+}                                      // prints saved 1, then late 2
+```
+
+**Semantics**:
+- `defer` accepts only a block. A call expression, assignment, bare value, or any other non-block body is a syntax error.
+- The body runs at block exit and reads the local bindings that exist then (late binding). Code that needs a registration-time value must first create an explicit copy with `copy(...)` or an ordinary value binding and read that copy from the block.
+- A movable owner read by a cleanup block is under a lexical loan until the owning block exits. Moving or returning it earlier reports `E0382`; ordinary rebinding and mutation remain legal.
+- A `defer` belongs to the nearest enclosing real block `{ ... }`. A function body is a block, so a top-level function-body `defer` still runs before the function exits.
+- **LIFO**: multiple `defer` statements in the same block run in reverse declaration order.
+- **Always executes**: runs when the owning block falls through or exits by `break`, `continue`, `return`, value-error propagation, or panic unwinding.
+- A `defer` inside a loop body runs at the end of each iteration, not at the end of the function.
+- `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to lexical block exits, not to a single function tail.
+- **No error may escape a `defer` body**: `E0387` is reported when the cleanup block's inferred escaping error set is non-empty; errors must be absorbed inside the `defer` body with `try` / `catch`. What static analysis cannot decide is backstopped at runtime by `E0443`. Full rules in §8.3.1.
+- A cleanup block must not directly or transitively suspend, create a task, return from the owning function, or break/continue to a target outside the block. A dynamically unknown call fails closed before any scheduling or task-spawn side effect.
+- A cleanup block may contain local branches, loops, local `try` / `catch`, and nested `defer`; nested cleanup also runs LIFO.
+
+### 4.10 Built-in Print Functions
+
+`print` / `dump` are **built-in global functions** (not keywords; see §13.1), listed here for convenience:
+
+```xray
+print("hello")                 // appends exactly one newline
+print("a:", a, "b:", b)        // arguments separated by exactly one space
+print()                        // writes just that newline
+dump(some_obj)                 // debug output, with type info and structure
+```
+
+**Behavior**:
+- Accepts any type and any number of arguments (variadic); each argument is automatically converted via its `toString()` or built-in formatter.
+- Arguments are evaluated left to right, exactly once each, before rendering begins.
+- Multiple arguments are separated by exactly one space.
+- Exactly one newline is appended; `print()` with no arguments writes that newline and nothing else.
+- Output goes to stdout. Formatting runs user code, so `print` can panic through it; it has no error channel of its own.
+- `dump` is for debugging; output includes type tags and internal structure.
+### 4.11 Worked Examples
+
+Combining `if` / `match` / `for-in` control flow:
+
+```xray
+fn classify(n: i64) -> string {
+    if (n < 0) { return "negative" }
+    return match (n) {
+        0 -> "zero"
+        1..=9 -> "small"
+        _ -> "large"
+    }
+}
+
+fn main() {
+    for (i in [-1, 0, 5, 100]) {
+        print(classify(i))
+    }
+}
+
+main()
+```
+
+Output:
+
+```
+negative
+zero
+small
+large
+```
+
+---
+
+## 5. Declarations
+
+> Declaration-syntax anchors: `src/frontend/parser/xparse_decl.c` and `src/frontend/parser/xast_nodes_decl.h`. The frontend checks this chapter's language contracts uniformly. See §17 for current new XIR declaration-family qualification; old analyzer behavior does not replace these rules.
+
+### 5.1 `var` / `const`
+
+```ebnf
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+Binding ::= Pattern (':' Type)? ('=' Expression)?
+Pattern ::= Identifier
+         | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
+         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
+         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
+ObjectBinding ::= Identifier (':' Identifier)?
+```
+
+#### 5.1.1 `var` — mutable binding
+
+```xray
+var x = 1                         // type inferred as i64
+var name: string = "Alice"        // explicit type
+var count: i64                    // no initializer: zero value used
+var maybeName: string?            // OK: defaults to null
+var empty: string = ""            // string requires an explicit initializer
+```
+
+- Reassignable.
+- Must have an initializer **or** a type annotation; otherwise compile error `E0303`.
+- Omitted initializers are allowed only for **default-initializable** types: numeric types default to `0` / `0.0`, `bool` defaults to `false`, `()` defaults to unit, `T?` defaults to `null`, and structs are allowed only when every field is default-initializable.
+- Non-nullable `string`, class instances, `Array` / `Map` / `Set`, `Channel`, `Task`, function / closure, interface / union, and similar types require an explicit initializer. `var a: Array<T>` does not default-construct an empty array.
+
+#### 5.1.2 `const` — immutable binding
+
+```xray
+const PI = 3.14159
+const MAX_LEN: i64 = 1024
+```
+
+- An initializer is **required** and reassignment is forbidden (compile error `E0303`). The type may be inferred or annotated.
+- Like `var`, each declaration binds one name or destructuring pattern. Use separate declarations for independent names, or destructure related values with `const (a, b) = pair`.
+- `const` fixes the binding and its value-semantic components: Array elements, appends, and value-type fields cannot be mutated through it. Ordinary `const snapshot = source` is legal and preserves a logical copy; it does not require explicit `move` / `copy` or a unique source backing store.
+- Value semantics stop at class and synchronized identity boundaries. `const xs = [Counter()]` does not freeze Counter; ordinary class methods may still mutate the referenced object. Replacing an array element through a writable copy does not change the elements of `xs`.
+- Audited synchronization handles such as `Channel`, `Atomic`, and `Mutex` may use `const` to fix the binding. Their audited APIs can still change protected internal state. `const` alone proves neither Sendable nor concurrency safety.
+- Saving a copyable read-only value into `var` produces a writable logical copy. It does not acquire a writable borrow of the original place or remove the referenced class object's own permission restrictions.
+
+```xray
+const channel = Channel<i64>(16)
+const counter = Atomic(0)
+
+var source = [1, 2, 3]
+const snapshot = source
+source[0] = 9
+var current = snapshot
+current.push(4)
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
+```
+
+`const` modifies only bindings or fields. The general `const T` type form is removed: its old spelling in parameters, return types, aliases, field types, function types, tuples, unions, and generic arguments is a syntax error, with no type identity, implicit conversion, or compatibility alias. Read-only permissions follow value components and stop at class or synchronization identity boundaries; old whole-graph deep-freeze rules must not be inherited. The public `copy(array)` spelling and standalone `move` expressions for copyable values are likewise not prerequisites for these binding rules; see §2.14.5.
+
+These are language contracts. See §17 for current new XIR implementation qualification of complete declaration families; these examples do not claim implementation completion. Cross-execution sharing additionally requires the type and boundary contracts in §10.
+
+#### 5.1.3 Destructuring bindings
+
+```xray
+// array destructuring
+var [a, b, c] = [1, 2, 3]
+var [first, , third] = [10, 20, 30]         // skip elements
+
+// tuple destructuring (multi-return)
+var (q, r) = divmod(17, 5)
+
+// object destructuring (extract by field name; local binding may be renamed)
+var { name, age } = { name: "Alice", age: 30 }
+var { name: localName, age } = { name: "Alice", age: 30 }
+```
+
+Constraints:
+- The number of destructured bindings must match (except with rest patterns).
+- Object destructuring field names must be `Identifier`s; `field: localName` changes only the local binding name, not the field being read.
+
+The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `_` leaves, exact ordered arity, Unit and comma-marked singletons, for locals, module bindings and closure capture. Evaluate the RHS once and prepare every FIELD, Cell and owned hold before publishing the binding group. Modules use the shared SLOT_GROUP_INIT transaction; its first trace observes every committed slot. `_` creates no name and ordinary generics retain definition-time constraints and permissions. Nested patterns, rest, array/object destructuring, spread and match remain separate legal but unimplemented obligations and reject at the current entry; this flat subset does not complete all destructuring. Leaf type annotations are not yet admitted. See §17.35 for exact preparation, failure and publication rules.
+
+### 5.2 `fn` function declaration
+
+```ebnf
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+ParamList ::= Param (',' Param)*
+Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
+            | '...' Identifier ':' Type
+ParamType ::= ParamMode? Type
+ParamMode ::= 'ref' | 'move'
+ReturnType ::= '->' Type
+            |  '->' '(' Type (',' Type)+ ')'   // tuple return
+TypeParams ::= '<' Identifier (',' Identifier)* '>'
+AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+```
+
+#### 5.2.1 Basic form
+
+```xray
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
+}
+
+fn greet(name: string) -> () {         // explicit Unit
+    print("Hi ${name}")
+}
+
+fn echo(x: i64) {                       // omitted return type = ()
+    print(x)
+}
+```
+
+**Key points**:
+- Parameters **must** carry type annotations (consistent with arrow functions).
+- An omitted return type means `()` (Unit); explicit annotation is recommended for readability.
+- The function body must be a block.
+
+#### 5.2.2 Default parameter values
+
+```xray
+fn connect(host: string, port: i64 = 8080, tls: bool = false) {
+    print(host, port, tls)
+}
+
+connect("localhost")              // port=8080, tls=false
+connect("localhost", 443)         // tls=false
+connect("localhost", 443, true)
+```
+
+- Default values are evaluated at the **call site**: when a trailing argument is omitted, the compiler completes the call with the default expression, evaluating it once per omitting call in argument order.
+- Passing an explicit `null` passes `null`; it does **not** trigger the default (defaults are used only when the argument is omitted).
+- Parameters with default values must appear consecutively at the tail of the parameter list.
+- Default arguments apply only to **direct calls of a named function/method/constructor**. A call through a function value (a function-typed variable) carries no default expressions and must pass every argument.
+- Default expressions are checked against the parameter type in the declaring module, type-parameter and member-authority scope, including unused declarations; they cannot reference caller locals. Parameters of this invocation (including preceding parameters) and `this` are not in default-expression scope. Ordinary generics use only their definition constraints, without gaining capabilities from a concrete instance.
+- Evaluate the receiver or callee first, explicit arguments left to right next, and omitted trailing defaults once each in declaration order last. An explicit argument suppresses its default. Defaults permit ordinary admitted function effects; suspension, failure and owned-result cleanup follow ordinary call rules. Failure preserves earlier side effects and does not enter a callee body that has not started.
+- Defaults may use private names accessible to their declaration; exported callers gain no direct access to those names. Check defaults at their declaration and execute through the same Checked specialization and revalidation pipeline, without caller-side rebinding or runtime AST expansion that bypasses authority. Constructor argument defaults run before field defaults and the constructor body and cannot observe partially constructed `this`.
+
+- Ordinary generic calls complete type-argument inference and all constraint proofs from explicit arguments and existing result context before evaluating omitted defaults. An omitted default contributes no additional caller-side inference evidence; its definition still checks against the formal generic type and original constraints.
+- Default computation does not inherit the body promises of the called function or constructor. Expecting a `no_suspend` callable constrains that returned callable, not automatically the computation producing it. A constructor body's `no_suspend` promise does not automatically forbid suspension in defaults evaluated beforehand by the caller; complete evaluation must still satisfy the actual caller's promises.
+
+#### 5.2.3 Multiple return values
+
+```xray
+fn divmod(a: i64, b: i64) -> (i64, i64) {
+    return (a / b, a % b)
+}
+
+var (q, r) = divmod(17, 5)
+var result = divmod(10, 3)        // result has type (i64, i64)
+```
+
+**Constraints**:
+- The return type wraps the tuple in parentheses: `(i64, bool)`.
+- A single return value omits the parentheses: `: i64`.
+- `return (a, b)` requires the parentheses; bare comma `return a, b` is a compile error (`E0801`).
+
+#### 5.2.4 Parameter modes
+
+Ordinary parameters default to READ. Writable borrowing uses `name: ref T`; consuming a noncopyable resource uses `name: move T`. A parameter mode is a declaration contract, independent of whether the concrete ABI passes a value, pointer, or handle.
+
+```xray
+fn length_sq(v: Vec2) -> f64 {
+    return v.x * v.x + v.y * v.y
+}
+
+fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
+    v.x += dx
+    v.y += dy
+}
+
+fn appended(xs: Array<string>, value: string) -> Array<string> {
+    var result = xs
+    result.push(value)
+    return result
+}
+
+translate(ref point, 1.0, 2.0)
+```
+
+| Parameter mode | Semantics |
+|--|--|
+| none (READ) | The parameter binding cannot be rebound and its value-semantic components are read-only; copyable, storable values may be saved or returned as logical copies |
+| `ref` | Exclusive writable place borrow; mutations write back to the caller, and the call site must write `ref place` |
+| `move` | Restricted to noncopyable types; transfers ownership and final destruction responsibility. The declaration mode determines consumption; `move value` optionally marks that transfer |
+
+A READ Array parameter cannot be indexed for writing, passed as a receiver to `push`, or rebound. Saving it into a local `var` permits mutation of the copy without changing the original argument. Saving a copyable value does not permit a borrow to escape; views and noncopyable resources cannot thereby become ordinary owned copies. A READ class parameter also cannot be rebound, but may invoke methods that mutate the same object. READ does not mean that the entire reachable graph is immutable.
+
+A `ref` argument must be an exactly typed writable place, not a `const`, READ parameter, or temporary. `ref` types are invariant. §3.0 E2 evaluates the receiver and every argument before exclusive access begins. That access covers checks, necessary COW detachment, mutation, and writeback. Borrowing the receiver early must not reject `a.push(a[0])`. Assignment still follows E5: location subexpressions, index, right-hand side, then storage.
+
+Copyable types, including Array, cannot declare `move` parameters or receivers. Initialization, use after consumption, and active borrows of noncopyable resources still require checking; see §2.14.5. See §17 for current implementation qualification of resource declarations and complete `ref` / view calls; these language contracts do not imply implementation completion.
+
+Ordinary outputs use return values, tuples, or structs. Business errors follow §8's typed `throw` / `catch` channel; no global `Result<T,E>` is introduced. C ABI output locations use `MutPtr<T>` rather than an output parameter mode in ordinary Xray functions.
+
+#### 5.2.5 Rest parameters
+
+```xray
+fn sum(...nums: i64) -> i64 {
+    var total = 0
+    for (n in nums) { total += n }
+    return total
+}
+
+sum(1, 2, 3)        // total = 6
+```
+
+- The rest parameter must be **last**.
+- The actual internal type of `...T` is `Array<T>`.
+- Only one rest parameter is allowed.
+
+#### 5.2.6 Function hoisting
+
+```xray
+main()                       // OK: the function declaration is hoisted
+
+fn main() { ... }
+```
+
+- Top-level `fn` declarations are hoisted to the top of the current scope.
+- `var f = (x: i64) -> x` (an arrow function bound to a variable) is **not** hoisted.
+
+#### 5.2.7 Tail-call optimization
+
+The Xi optimizer rewrites proven self-tail calls into loops, and the VM also has constant-stack tail-call opcodes. This is not a blanket constant-stack guarantee for every back end or every indirect/mutually-recursive call: constructors and calls that cannot be proven safe remain ordinary calls. See [§17](#17-compilation-pipeline).
+
+```xray
+fn factorial(n: i64, acc: i64 = 1) -> i64 {
+    if (n <= 1) { return acc }
+    return factorial(n - 1, acc * n)     // tail call: optimized to a loop
+}
+```
+
+#### 5.2.8 Program entry point
+
+xray has **no implicit `main` entry**: scripts/modules execute their top level in declaration order. `fn` declarations are hoisted and registered; expressions and statements run immediately.
+
+```xray
+// hello.xr
+print("loading")          // top-level statement, runs immediately
+fn greet() { print("hi") }
+greet()                   // must be called explicitly
+```
+
+- `fn main()` has no special meaning; call `main()` explicitly if desired.
+- Top-level `return` is forbidden (compile error `E0306`).
+- Multi-file projects specify the entry with the `main` field under `[project]` (or `[package]` for a package manifest), for example `main = "src/main.xr"`; that file follows the script execution rules above.
+
+#### 5.2.9 `extern "C"` C FFI Declaration Blocks
+
+An `extern "C"` block declares external **function symbols** that share the C ABI. External functions have no Xray body, and calls must appear explicitly inside `unsafe { }`:
+
+```xray
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+    fn cos(x: f64) -> f64
+}
+
+var p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(cos(0.0))
+    free(p)
+}
+```
+
+Libraries, targets, symbol renames, native sources/objects, typed flags, hashes, and licenses belong to the NativePackagePlan in `xray.toml`, not ordinary source. An `extern "C"` block does not accept `dylib`/`link` clauses, bodies, data/globals, structs, unions, packed layouts, or flexible members.
+
+C ABI aggregates use ordinary Xray structs bound to a C header/type by `[[native.layout]]`. Before linking, the builder compiles static assertions for `sizeof`, `_Alignof`, and every `offsetof`; any mismatch fails closed:
+
+```xray
+import mem
+
+struct CHeader {
+    tag: u8
+    count: u32
+}
+
+print(mem.sizeOf<CHeader>())
+print(mem.alignOf<CHeader>())
+print(mem.offsetOf<CHeader>("count"))
+```
+
+Rules:
+- The ABI string is mandatory; `"C"` is currently the only supported value.
+- Functions inside an extern block declare signatures only and cannot have `{ }` bodies.
+- Every declaration must have a unique symbol mapping and a complete typed contract in the NativePackagePlan. A shipping package with missing contract, hash, target, or provenance is rejected.
+- C output pointers write raw `Buffer` storage first. A success path may materialize `T` only with `unsafe { mem.assumeInitialized<T>(move buffer) }`, after exact size/alignment, complete output validity, success-path dominance, and header-layout evidence are proven. Partial or failed writes never produce `T`.
+- Ordinary Xray functions have no output parameter mode. Returns always use `return value`, never `return move value`.
+- Each target has one canonical data layout shared by the analyzer, VM, AOT, Slice/layout queries, and header verifier.
+- The aligned VM/AOT boundary types are `bool`, sized integers, `f32` / `f64`, `usize` / `isize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
+- C callbacks use `CFn<fn(A, B) -> R>`, not ordinary Xray function types. A `CFn` value must be a module-level, noncapturing Xray function with an exact signature match.
+
+```xray
+extern "C" {
+    fn bsearch(
+        key: Ptr<u8>,
+        base: Ptr<u8>,
+        count: usize,
+        size: usize,
+        cmp: CFn<fn(Ptr<u8>, Ptr<u8>) -> i32>
+    ) -> Ptr<u8>
+}
+
+fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
+    return 0
+}
+
+// zeroCmp is a module-level noncapturing function and can be used as a CFn callback.
+```
+
+#### 5.2.10 Manifest C ABI Exports
+
+A module-level Xray function remains an ordinary `fn` in source. Its C ABI export name and visibility are selected by the typed export plan in `xray.toml`:
+
+```xray
+fn add(a: i32, b: i32) -> i32 {
+    return a + b
+}
+```
+
+```toml
+[[export.c]]
+xray = "add"
+symbol = "xr_add_i32"
+visibility = "default"
+header = true
+```
+
+The Xray target must resolve uniquely to a module-level function with a body; methods, closures, nested functions, and extern declarations are rejected. Xray targets and C symbols must be unique. The plan selects exports but never bypasses the ABI verifier or changes VM/ordinary-call semantics. `xray build --native --c-header FILE` emits prototypes for entries with `header = true`; current shared exports are restricted to scalar/raw-pointer boundaries that need no runtime initialization.
+
+#### 5.2.11 Inferred Effects and `xray verify` Contracts
+
+Allocation, error sets, suspension, blocking, panic/abort, and AOT residue are always inferred by the compiler. Source functions do not declare them with effect or zero-cost attributes. Publication and performance gates live in a versioned contract:
+
+```toml
+version = 1
+
+[[function]]
+symbol = "math.addOne"
+scope = "semantic"
+requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
+
+[[function]]
+symbol = "codec.hotAdd"
+scope = "backend"
+backend = "aot"
+target = "aarch64-apple-darwin"
+profile = "release"
+requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+
+[function.shape]
+forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
+allow = []
+```
+
+Run `xray verify --contract perf-contracts.toml`. A contract checks existing semantic/effect evidence and target artifact shape; it never grants optimization permission or changes runtime semantics. A semantic contract may be target-independent, while backend/shape contracts require concrete backend, target, and profile values. Dynamic calls, native unknowns, missing symbols, and incomplete proofs fail closed with a witness.
+
+**What a native unknown is**: a bodyless `extern "C"` declaration has no inferable Xray semantics, so the only admissible evidence about it is that symbol's `[native.symbol.contract]` in `xray.toml`. Fields the contract declares (`allocation`, `suspend`, and so on) enter the caller's effect conclusion as axioms; without a complete contract the corresponding semantic bits are marked unknown and any contract covering them fails closed. **An absent body is not a proof.**
+
+**Inference coverage** (status: partially implemented): `requires` values backed by a real analysis pass today are `no_semantic_alloc`, `no_suspend`, `no_throw` (semantic scope) and `no_runtime_heap` (backend scope). The semantic effect bits behind `no_block`, `no_thread_block`, `no_panic`, and `no_abort` are computed by no pass, so `xray verify` rejects those four with a "no inference source" witness instead of granting them vacuously. They become accepted once their analyses land.
+
+#### Package-owned declaration promises (implementation pending)
+
+A project or package may declare stable function interface obligations in its root `xray.toml`. This section is distinct from `xray verify` requirements and native-provider axioms: the same Checked checker must prove every Xray promise at its definition, without obtaining it from a particular specialization or inferred properties of a selected implementation.
+
+```toml
+[declarations]
+version = 1
+
+[[declarations.function]]
+module = "src/worker.xr"
+name = "apply"
+no_suspend = true
+no_suspend_parameters = ["callback"]
+
+[[declarations.function]]
+module = "src/box.xr"
+owner = "Box"
+name = "get"
+no_suspend = true
+```
+
+An absent `declarations` section supplies no explicit promises through this carrier. A present section requires integer `version = 1` and a nonempty `function` record array. Unknown fields in the section or records, unknown versions, and incorrect types reject rather than being ignored. Every record requires nonempty `module` and `name` strings. Omitting `owner` selects a top-level function; a supplied owner must be a nonempty exact declaration name. `no_suspend` accepts only boolean `true`; a supplied `no_suspend_parameters` must be a nonempty array of distinct explicit parameter names. Each record supplies at least a function obligation or a parameter obligation. A module/owner/name selection may occur only once.
+
+`module` is a `/`-separated logical `.xr` file path inside the owning authority root, not an import alias or canonical identity. Absolute paths, backslashes, empty segments, `.` and `..`, another package namespace, and physical paths resolving outside the root reject. Parameter names bind at the definition, excluding an instance receiver; missing, ambiguous, or non-callable parameters reject. The current new-XIR carrier selects top-level functions, ordinary instance/static methods of an exact nominal owner, and admitted ordinary read-method requirements of an exact interface owner. Interface selectors bind requirement signatures. All manifest signature promises are bound before explicit implementation mappings are checked, and implementation methods must prove the corresponding obligations at definition time. Constructors, cleanup functions, and synthetic helpers cannot be named by external selectors. This subset does not remove remaining declaration families or nested/result callable qualifiers from the language objective.
+
+Each manifest constrains only its owning project or package. A consumer cannot strengthen an imported package's promises, and the loader must not search parents or inherit another declaration section. Selection grants no private access, field or construction permission, and changes no generic definition-context constraints. All explicit records must resolve to actual definitions and be checked, including unused targets and modules not imported by the current entry. Additional package checking must not add initialized modules or effects to the entry's execution graph. Published Checked identities retain proved obligations; specialization and generated-content rechecking cannot add or remove promises. This public carrier is not yet connected to product entry points; the examples do not claim existing CLI configuration support.
+
+#### Worked Examples
+
+A function literal directly checked against an explicitly declared `no_suspend` callable context receives that obligation for its new function definition. Its body is checked under the current generic constraints; unknown or potentially suspending calls reject, and specialization cannot supply a missing proof. Captured ordinary callables do not acquire the promise. This rule adds no source effect annotation, does not turn performance `verify` requirements into declarations, and cannot strengthen an already constructed ordinary function value from inferred body effects. Without a restricted context, a function literal remains an ordinary callable.
+
+A default argument expression uses the parameter's declared expected type and is checked at its definition, even if no call omits that argument. Returning a restricted callable does not promise that computing the default cannot suspend; default evaluation effects still belong to the caller when an argument is omitted.
+
+Closure capture and higher-order functions:
+
+```xray
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
+    return f(x)
+}
+
+fn main() {
+    var base = 10
+    var addBase = fn(x: i64) -> i64 { return x + base }   // closure captures base
+    print(addBase(5))            // => 15
+    print(apply(addBase, 7))     // => 17 (function passed as an argument)
+}
+
+main()
+```
+
+Multiple return values (a tuple):
+
+```xray
+fn divmod(a: i64, b: i64) -> (i64, i64) {
+    return (a / b, a % b)
+}
+
+fn main() {
+    var (q, r) = divmod(17, 5)
+    print(q)   // => 3
+    print(r)   // => 2
+}
+
+main()
+```
+
+### 5.3 `class` declaration
+
+Classes have identity; assignment and saving a parameter copy references only. Class methods do not declare `ref` / `move` receivers. Ordinary methods invoked through a READ parameter or `const` binding may still mutate the object, but cannot rebind that parameter or binding. A `ref` / view access to a class field must retain the object and check dynamic exclusivity. A local proof of no conflict may eliminate that check, not change the permission contract.
+
+```ebnf
+ClassDecl ::= 'final'? 'class' Identifier TypeParams?
+              ('extends' Identifier TypeArgs?)?
+              ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
+              '{' ClassMember* '}'
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
+FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
+            |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' Block          // parameter types may be omitted
+Modifier ::= 'private' | 'protected' | 'static' | 'const'
+```
+
+> **About default public visibility and explicit overrides**:
+>
+> - Public is the **default visibility**—every field/method without `private` / `protected` is public; the language has no `public` modifier.
+> - Visibility is **compile-time enforced**: accessing a `private` / `protected` member from outside the class, or a `protected` member from a non-subclass, reports `E0377`.
+> - Every actual override must declare `override`. The compiler independently checks the non-private parent-chain target, signature and receiver contract; a missing marker, absent target or mismatch is an error.
+> - Implementing an interface alone does not require `override`. Same-name different-signature methods and member hiding remain compile errors.
+>
+> The standard library and the regression tests consistently use the "omit the default modifier" style.
+
+#### 5.3.1 Basic class
+
+```xray
+class Animal {
+    name: string                       // field
+    private _age: i64 = 0              // private field with default value
+
+    init(name: string) {
+        this.name = name
+    }
+
+    speak() -> string {
+        return "..."
+    }
+
+    static create(name: string) -> Animal {
+        return Animal(name)
+    }
+}
+
+var a = Animal("Rex")
+print(a.speak())
+print(Animal.create("Bob").name)
+```
+
+#### 5.3.2 Inheritance
+
+```xray
+class Dog extends Animal {
+    init(name: string) {
+        super(name)                    // **must** be the first statement (derived classes only)
+    }
+
+    override speak() -> string {         // Explicit parent method override
+        return "woof"
+    }
+}
+```
+
+**Constraints**:
+- A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
+- `this` must not be accessed before `super(...)`.
+- **Overriding requires `override`**, only on class instance methods. Fields, constructors, static methods, struct and enum methods cannot declare it. Modifier order is optional visibility followed by `override`; class methods do not declare `ref` / `move` receivers.
+- Same-name different-signature methods are not overloads or hiding; rename the method or use default arguments / named factories.
+- A `final class` cannot be inherited.
+- `super.method()` invokes the shadowed parent method from inside an override.
+
+#### 5.3.3 Modifiers
+
+| Modifier | Applies to | Semantics |
+|--|--|--|
+| (none) | field/method | Default public—externally visible |
+| `private` | field/method | Accessible only inside the declaring class (including other instances of the same class); subclass and external access report `E0377` |
+| `protected` | field/method | Accessible inside the declaring class and its subclasses; external access reports `E0377` |
+| `override` | class instance method | Requires a matching non-private inherited signature and receiver contract; cannot narrow visibility to private |
+| `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
+| `const` | field | Immutable field—assignable once via `this` in the declaring class's constructor; later writes report `E0378` |
+| `final` | class declaration prefix | `final class C` cannot be inherited; `final` is not used on fields or methods |
+
+**Modifiers may combine**: `private const secret: string = "key123"`, `protected static counter: i64 = 0`.
+
+Static methods are qualified by their declaring type, for example `Box<i64>.make(value)` or `module.Box<i64>.make(value)`. Instance-qualified static access and type-qualified instance method calls or values are invalid. Ordinary name resolution lets a local binding shadow a type. Static methods have no implicit receiver and provide no `this` in their body or parameter defaults. Type arguments belong to the declaring type; a method's own type arguments belong to that method and cannot substitute for the former. Ordinary generic bodies are checked against definition constraints; instantiation cannot expand visibility or construction authority.
+
+Direct static calls obey the trailing default-argument, left-to-right evaluation, effect, suspension and failure-cleanup contracts. Their function values capture no receiver and indirect calls require the full signature. Private static methods and private construction inside a static factory require declaration-owner authority; a public factory grants callers no direct access to private members. Results obey ordinary function value and ownership rules. Admitting static methods does not implicitly admit static fields, static initialization or inheritance rules.
+
+> `const` = immutable field/binding, `final class` = cannot be inherited. Immutable fields use `const` only; writing `final` on a field or method is an error.
+
+#### 5.3.4 Constructors
+
+```xray
+class Point {
+    x: f64
+    y: f64
+    init(x: f64, y: f64) {
+        this.x = x
+        this.y = y
+    }
+}
+
+// Parameter types may be omitted (inferred from same-named fields)
+class Vector2 {
+    x: f64
+    y: f64
+    init(x, y) {         // equivalent to (x: f64, y: f64)
+        this.x = x
+        this.y = y
+    }
+}
+```
+
+- `init` is contextual at a type member declaration. The retired `constructor` declaration spelling is rejected without an alias. Elsewhere `init` remains an ordinary identifier.
+- A class has **at most one constructor** (no overloading); multiple creation paths use `static` factory methods.
+- Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise an explicit type is required; call sites do not infer definition types or capabilities.
+- The constructor implicitly returns `this` (compiler-injected).
+- An explicit struct constructor evaluates declaration defaults in field declaration order before its body. Fields without a declaration default remain uninitialized, including numeric fields. A legal default constructor is synthesized only when no explicit constructor is declared.
+- A field read requires initialization on every incoming path. Returning the whole `this`, calling a method on it, or capturing it requires every field to be initialized. Normal completion and bare `return` return the complete `this`; constructors cannot explicitly return another value. Failure publishes no partial struct and does not roll back prior external effects.
+- Constructor fallthrough and bare `return` both execute exit cleanup before assembling and publishing the complete `this` from initialized fields. Permitted cleanup updates to mutable fields become part of the constructed result; failure publishes no result. This does not change ordinary explicit return expressions, whose values are evaluated and snapshotted before cleanup.
+- A const field is initialized exactly once by its declaration default or a body assignment. A write is rejected if any incoming path may already have initialized it, including loop backedges. Mutable fields permit subsequent updates.
+- A struct declaring explicit `init` admits field literals only in its declaring module; outside callers use `Type(...)` or a named factory. Structs without explicit `init` retain ordinary field-literal rules. Spread cannot bypass this boundary, and neither form grants private-field permission.
+- Derived class constructors must call `super(...)` first.
+- A `struct` may have **no** constructor, but omission still requires a valid default initializer for every field (§5.1, §5.4). Numeric fields of `Point()` may start at zero; this does not permit zero-initializing a non-nullable Array or similar field without an explicit initializer.
+
+#### 5.3.5 Operator overloading
+
+```xray
+class Vec2 {
+    x: f64
+    y: f64
+
+    init(x: f64, y: f64) {
+        this.x = x; this.y = y
+    }
+
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+
+    operator==(other: Vec2) -> bool {
+        return this.x == other.x && this.y == other.y
+    }
+
+    operator[](index: i64) -> f64 {
+        if (index == 0) { return this.x }
+        return this.y
+    }
+}
+```
+
+**Overloadable operators** (full list, source: `xparse_oop.c`):
+
+| Category | Operators | Arity | Notes |
+|--|--|--|--|
+| Binary arithmetic | `+` `-` `*` `/` `%` | 1 | A unary `-` with no parameters acts as unary minus |
+| Bitwise | `&` `\|` `^` `<<` `>>` | 1 | |
+| Comparison | `==` `!=` `<` `<=` `>` `>=` | 1 | Typically implement `==`/`!=` and `<`/`<=`/`>`/`>=` as pairs |
+| Indexing | `[]` (getter), `[]=` (setter) | 1 / 2 | The setter is `(index, value)` |
+| Unary | `!` `~` `++` `--` | 0 | |
+| Compound assignment | `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 1 | |
+
+```xray
+class Counter {
+    n: i64 = 0
+    operator++() -> Counter { this.n = this.n + 1; return this }
+    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
+    operator[](i: i64) -> i64 { return this.n + i }
+    operator[]=(i: i64, v: i64) { this.n = v - i }
+}
+```
+
+**Cannot** be overloaded: `&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
+
+#### 5.3.6 `Iterator<T>` and `Iterable<T>`
+
+`Iterator<T>` is a built-in prelude interface. It is the pull protocol behind `for-in` and the return type of a generator function (§3.16):
+
+```xray
+interface Iterator<T> {
+    hasNext() -> bool       // is another element available; does not consume one
+    next() -> T             // take the next element and advance
+    nth(index: i64) -> T    // advance index elements from the current position and return it
+}
+
+interface Iterable<T> {
+    iterator() -> Iterator<T>
+}
+```
+
+Rules:
+
+- Any type implementing `iterator()` can be used with `for-in`; the built-in collections and `string` (by `rune`) already do.
+- `for-in` guarantees only that it pulls through `hasNext()` / `next()`; nothing beyond the number and ordering of those calls is guaranteed.
+- `next()` returns `T`, not `T?`: **exhaustion is not encoded in the return value**. The protocol is two-step — every `next()` / `nth()` must be preceded by a `hasNext()` that returned `true`. Calling `next()` after `hasNext()` is `false` violates the contract: the runtime reports it as an `E0432` panic rather than returning a zero value or a `null` that `T` forbids (§18.3).
+- `Iterator<T>` is **single-use**: once exhausted, `hasNext()` stays `false` and it cannot be reset. Call `iterator()` again, or call the generator function again, to traverse again.
+- Mutation during iteration follows the collection contract. Built-in `Array<T>` for-in owns a logical value snapshot; mutation or rebinding of the source array does not invalidate that snapshot (§14.7). Other collections and identity iterators define their own invalidation rules.
+- `Iterator<T>` has no Source `close()` method. Lifecycle close drains registered generator cleanup; early abandonment never executes the ordinary remaining body (§3.16.3).
+
+A generator function (one whose body uses `yield expr`) implements this interface automatically; it is never written by hand.
+
+#### 5.3.7 Computed Properties
+
+A field name followed by an accessor block declares a **computed property**: it has no storage slot, and reads and writes become accessor calls.
+
+```xray
+class Rect {
+    _w: i64
+    _h: i64
+    init(w: i64, h: i64) { this._w = w; this._h = h }
+
+    // Read-only: getter alone
+    area: i64 { fn() { return this._w * this._h } }
+
+    // Readable and writable: getter + setter
+    width: i64 {
+        fn() { return this._w }
+        fn(v: i64) { this._w = v }
+    }
+}
+
+fn main() {
+    var r = Rect(3, 4)
+    print(r.area)       // => 12
+    r.width = 10
+    print(r.area)       // => 40
+}
+```
+
+Rules:
+
+- An accessor block contains only `fn` definitions. The one taking **no parameter** is the getter; the one taking **exactly one** is the setter. At most one of each; more than one parameter is a compile error.
+- The getter's return type defaults to the declared property type, as does the setter's parameter type; both may be omitted.
+- The property type is the type of a read. A property with only a getter is **read-only**; writing it reports `E0380` as an undeclared member.
+- `obj.p` and `obj.p = v` are ordinary calls, **not** slot accesses: an accessor may compute and may have effects, and it costs one method call.
+- A computed property satisfies an interface's property requirement — an interface does not distinguish a slot from an accessor.
+- Accessors live in the class method table as `get:<name>` / `set:<name>`. That name contains `:`, which no identifier can, so it never collides with a declared method; this is an implementation detail, not writable syntax.
+
+#### 5.3.8 Worked Examples
+
+Self-contained programs that run as-is and pass `xray check` (comments show the real output).
+
+Inheritance with explicit override:
+
+```xray
+class Animal {
+    name: string
+    init(name: string) { this.name = name }
+    speak() -> string { return "..." }
+}
+
+class Dog extends Animal {
+    init(name: string) { super(name) }
+    override speak() -> string { return "woof" }
+}
+
+fn main() {
+    var d = Dog("Rex")
+    print(d.name)      // => Rex
+    print(d.speak())   // => woof
+}
+
+main()
+```
+
+Operator overloading (call with named values):
+
+```xray
+class Vec2 {
+    x: i64
+    y: i64
+    init(x: i64, y: i64) { this.x = x; this.y = y }
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+}
+
+fn main() {
+    var a = Vec2(1, 2)
+    var b = Vec2(3, 4)
+    var sum = a + b
+    print(sum.x)   // => 4
+    print(sum.y)   // => 6
+}
+
+main()
+```
+
+### 5.4 `struct` declaration
+
+A copyable struct preserves logical copies according to the declared type of each field. Owned container fields such as Array retain value semantics; class and synchronized fields copy identity references only. Fields may be Arrays or classes. Structs are not restricted to scalars and strings, and copying a struct does not copy an entire class object graph. Fields still satisfy initialization, storage, and copyability requirements (§2.14.6).
+
+A struct / enum method that mutates its own value-semantic components explicitly uses a `ref` receiver. A READ receiver may save a copyable value but cannot mutate itself directly. Copyable types cannot declare `move` receivers. See §17 for implementation qualification of complete aggregate, receiver, and borrow declaration families.
+
+```ebnf
+StructDecl ::= 'struct' Identifier TypeParams?
+               ('implements' Identifier (',' Identifier)*)?
+               '{' StructMember* '}'
+```
+
+```xray
+struct Point {
+    x: f64
+    y: f64
+
+    magnitude_sq() -> f64 {
+        return this.x * this.x + this.y * this.y
+    }
+}
+
+// Two creation styles
+var p = Point()                  // default-construct (zero-valued fields), then assign
+p.x = 3.0
+p.y = 4.0
+
+var q = Point{x: 3.0, y: 4.0}        // struct literal: TypeName + { field: value }
+var pt = Point{x: 1.0, y: 2.0}
+
+// Value semantics: assignment and parameter passing copy
+var b = q                            // b is an independent copy of q
+b.x = 99.0
+// q.x is still 3.0
+```
+
+**Field rules for aggregate literals** (identical to sealed Records):
+
+- Every field name in the literal must be declared by the type; an undeclared name is compile error `E0380`.
+- Every declared field must be set. Only fields that carry a **declaration default** or whose **type admits null** may be omitted; any other omission is compile error `E0381`.
+- Struct field defaults are checked in the declaring module and type-parameter scope, including unused declarations; they cannot capture a construction caller's locals. Literals evaluate explicit fields in written order, followed by omitted fields' defaults in declaration order. An explicitly supplied field does not run its default. Defaults permit ordinary admitted function effects; failure preserves earlier side effects but publishes no partial struct value.
+- Use `Point()` when a whole zero value is what you want; do not obtain zero values implicitly by omitting literal fields.
+- **`union` is the exception**: its members share one storage location and exactly one is live, so a union literal sets **exactly one** member. Setting none (which member is live would be undefined) or several (the writes overwrite one another) is `E0381`.
+
+```xray
+struct Config {
+    host: string
+    port: i64 = 8080        // declaration default: omittable in a literal
+    label: string?          // nullable: omittable in a literal
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // compile error E0380: no field 'ports'
+// Config{port: 1}                   // compile error E0381: missing field 'host'
+```
+
+**Differences from `class`**:
+
+| Dimension | `class` | `struct` |
+|--|--|--|
+| Memory model | Identity reference | Logical value; physical layout does not change the copy contract |
+| Assign / save parameter | Copy identity reference | **Field-wise copy** (`var b = a` preserves a logical copy) |
+| Inheritance | Supports `extends` | **No** inheritance |
+| `implements` | ✅ | ✅ |
+| Generics | ✅ | ✅ |
+| `static` / `private` / `protected` / `const` | ✅ | ✅ |
+| Operator overload | ✅ | ✅ |
+| Constructor | `init(...)` | Omission still requires a valid default initializer for every field; a non-nullable Array cannot be zero-initialized |
+| Literal | none | `TypeName{field: value, ...}` |
+
+**When to use**:
+- Math types (Vec2/Vec3/Quat/Color)
+- Short-lived values (iterator state, ad-hoc tuples)
+- Performance-sensitive data where heap allocation should be avoided
+
+#### 5.4.1 Value-semantics example
+
+A copyable `struct` is a value type: assignment and saving a parameter preserve logical copies field by field. An ordinary READ parameter accesses the value read-only and may save a copy, without requiring a particular physical ABI.
+
+```xray
+struct Point {
+    x: i64
+    y: i64
+}
+
+fn main() {
+    var p = Point{x: 3, y: 4}
+    var q = p            // struct assignment copies
+    q.x = 99
+    print(p.x)           // => 3 (unchanged)
+    print(q.x)           // => 99
+}
+
+main()
+```
+
+### 5.5 `interface` and `implements`
+
+xray's interface implementation is **explicit** (unlike Go's structural implementation): a class/struct must list interfaces with `implements`.
+
+```ebnf
+InterfaceDecl ::= 'interface' Identifier TypeParams?
+                  ('extends' NamedType (',' NamedType)*)?
+                  '{' InterfaceMember* '}'
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?       // method signature
+                 |  ('const')? Identifier ':' Type                   // property signature (`const` for read-only)
+```
+
+```xray
+interface Shape {
+    area() -> f64
+    perimeter() -> f64
+}
+
+// Interface method return types may be omitted (default ())
+interface Greeter {
+    greet(name: string)             // same as greet(name: string) -> ()
+    log()                           // no parameters, no return value
+}
+
+class Circle implements Shape {
+    radius: f64
+    init(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
+}
+
+// Implement multiple interfaces
+class Logger implements Shape, Greeter {
+    radius: f64
+    init(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
+    greet(name: string) { print("hello,", name) }
+    log() { print("logging") }
+}
+
+fn describe(s: Shape) -> string {
+    return "area=${s.area()}, perimeter=${s.perimeter()}"
+}
+```
+
+**Constraints**:
+
+- Interfaces may extend other interfaces (`extends`); generics (`interface Container<T>`) and constraints (`interface Stats<T: Numeric>`) are supported.
+- Classes/structs use `implements I1, I2, ...` to declare implementation of one or more interfaces (**explicit**; structural implementation is not supported).
+- The implementing type **must** provide every interface member (matching name/parameters/return type for methods; matching name/type for properties).
+- **Return types in interface method declarations may be omitted** (default `()`).
+- Interface methods are `abstract` by default (no body).
+- Interfaces may declare **property signatures** (`length: i64`, `const id: i64`); the implementing type may provide a field or accessors of the same type. A const property requires reading; an ordinary property requires reading and writing. Implementation read/write access cannot be narrower than the corresponding interface requirement.
+- Implementing types may add additional methods (the interface defines the minimum surface).
+
+#### Method Requirement Identity and Static Generic Witnesses
+
+An interface is identified by its canonical module and declaration name; an application additionally includes ordered type arguments. A member belongs to its original interface declaration; expanding inheritance creates no new identity. Type parameters bind by owning declaration and ordinal. Explicit `implements` on the nominal declaration establishes conformance, with at most one declaration per type and interface application; a same-named method alone proves no conformance.
+
+Inheritance must be acyclic, including unused declarations. The same originating member under the same substitution is deduplicated; same-named members from different origins merge for lookup only when their complete contracts are identical, retaining every implementation obligation. Contracts include member kind, receiver, parameter count/modes/types, result type and callable promises. A mismatch rejects as ambiguous, without choosing by inheritance, constraint or import order. Redeclaring an inherited member also requires an exact match. Parameter names do not affect signature equality, but each declaration's manifest binds its own parameter names.
+
+A witness must be a public instance method of the implementing type, exactly matching parameter, result and receiver contracts. Static, private, protected, constructor and cleanup functions cannot serve as witnesses. No general covariance/contravariance conversion is introduced. An implementation may strengthen its own function-level `no_suspend` guarantee, but cannot strengthen caller parameter obligations or weaken interface guarantees. Merged same-named requirements must bind the same method identity of that type.
+
+Generic constraints conjoin markers and interface applications, with identical duplicates idempotent. A derived interface entails ancestor requirements through explicit type substitution. Definition-site member access must bind a requirement identity and complete signature provided by the constraints; extra methods of a concrete argument cannot supply missing proof, and unused invalid generics reject too. Proof and cache identity must include the parameter environment. An abstract method has no checked implementation body: its public contract bounds effects, with undeclared effects using the unknown-callable upper bound. Implementations prove these obligations at definition time.
+
+An interface requirement may declare its own type parameters, such as `I<A>.map<U:C<A>>(value:U)->U`. Interface parents and method parameters bind to authentic owners and ordinals in `[interface parent, method own]` order. Own names cannot shadow parents, and conditions may refer to later own parameters. A method where clause constrains only its own parameters. Explicit call arguments fill only the own suffix; the prefix comes from definition-site constraint applications, and the caller proves every condition. Inherited same-named methods compare own arity, complete signatures and alpha-aligned conditions by mutual entailment; duplicate and redundant ancestors are idempotent while all original identities remain. An implementation uses `[nominal parent, method own]`, and its conditions must follow from nominal and original requirement-method premises without using its own conditions to prove itself. Its body still checks against its own declaration. Checked specialization and independent provenance retain the complete nominal-plus-own tuple, even for parameters absent from the physical signature.
+
+Interface method values on constrained receivers, such as `receiver.read` and `receiver.map<i64>`, check the original requirement application and complete conditions before capture. The receiver evaluates once and saves its current value. The first execution family admits zero own parameters or a complete explicit own list; the callable has no defaults and retains the original signature and promises, without borrowing capabilities from a future concrete implementation. An ordinary typed helper and FUNCTION_REF preserve the authentic caller parameters and conditions. The inner requirement call retains parent+own, the outer reference retains the full caller tuple, and both origins are independently reverified. Capture, copy, suspension, result ownership and physical release follow ordinary function-value contracts; no format, dictionary or additional execution path is introduced.
+
+Checked owns constraints, interface applications, requirement identities and explicit implementation maps. Monomorphization selects only proved witnesses, converts them to ordinary calls and rechecks before Lowered; it cannot guess an implementation by looking up the concrete type's member name again. Ordinary instances complete before immutable Program sealing, without runtime generic dictionaries or unresolved-witness fallback. This rule does not remove dynamic dispatch for interface values or overridable class methods.
+
+New XIR now admits ordinary read-receiver methods, explicit struct/enum implementations, and generic member calls checked at definition time. Checked retains original requirement identities and implementation mappings; witness selection and specialization occur on Checked and are reverified before Lowered. Generic struct/enum implementations depend on their nominal declaration premises; additional method conditions cannot supply missing type premises. Ordinary enum READ/static methods reuse nominal method production and require match before payload extraction; method and builtin member collisions reject at declaration time under §5.6.7. This subset has Windows VM/native validation against independent expectations, without claiming complete declaration-family or safety qualification. Complete explicit own arguments and inline conditions of generic interface methods have the Windows scope qualification above. Own where and value-shape inference have Windows scope qualification; late result completion and explicit method values form the next qualification family. Full bidirectional and contextual function-value inference remain OPEN. Properties, other receivers, unimplemented enum name/toString/variants consumers, class/override, and interface values still require separate implementation and verification. Unimplemented surfaces reject explicitly; these language objectives remain unchanged.
+
+```xray
+// property signatures + interface inheritance
+interface HasLength {
+    length: i64
+}
+interface SizedCollection<T> extends HasLength {
+    first() -> T
+}
+
+class Buffer implements SizedCollection<i64> {
+    length: i64                       // implements the property signature
+    private data: Array<i64>
+    init(n: i64) {
+        this.length = n
+        this.data = []
+    }
+    first() -> i64 { return this.data[0] }
+}
+```
+
+#### Worked Examples
+
+Interface + `implements` + polymorphism:
+
+```xray
+interface Shape {
+    area() -> f64
+}
+
+class Circle implements Shape {
+    r: f64
+    init(r: f64) { this.r = r }
+    area() -> f64 { return 3.14159 * this.r * this.r }
+}
+
+fn main() {
+    var s: Shape = Circle(2.0)
+    print(s.area())   // => 12.56636
+}
+
+main()
+```
+
+### 5.6 `enum` declaration
+
+xray's `enum` is a **safe tagged aggregate**: each value contains a compiler-assigned declaration-order tag, and only the payload for the active tag may be read. A payload-free enum is just a tagged aggregate whose variants have payload size 0; payload enums are the same model used as a safe sum type.
+
+```ebnf
+EnumDecl       ::= 'enum' Identifier TypeParams?
+                   ('implements' NamedType (',' NamedType)*)?
+                   '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+```
+
+> Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
+
+An enum type is identified by its declaring module, declaration and ordered type arguments; a local type index or matching ordinal is not sufficient identity. A non-nullable enum requires explicit initialization and never implicitly selects its first variant. A declaration has at least one variant; variant names are unique within the declaration, while payload field names need only be unique within their own variant. Copy and destruction affect only the active payload; escaping values do not extend the execution authority of a Program or Instance.
+
+#### 5.6.1 Simple enums (0-payload enum)
+
+```xray
+enum Color { Red, Green, Blue }
+
+Color.Red.ordinal     // 0
+Color.Blue.ordinal    // 2
+Color.Red.name        // "Red"
+Color.Red.toString()  // "Color.Red"
+
+enum HttpStatus {
+    OK,
+    NotFound,
+    InternalError
+
+    code() -> i64 {
+        return match (this) {
+            HttpStatus.OK -> 200,
+            HttpStatus.NotFound -> 404,
+            HttpStatus.InternalError -> 500
+        }
+    }
+}
+```
+
+Enum variants use declaration order for their stable `ordinal` and do not declare a separate backing value. Express protocol numbers, string symbols, and similar external representations with `const`, methods, or explicit conversion functions.
+
+#### 5.6.2 Payload enum
+
+Payload variants use named record fields. Every field has a non-empty name unique within the variant:
+
+```xray
+enum Option<T> {
+    Some { value: T },
+    None,
+}
+
+enum NetEvent {
+    Connected,
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
+}
+
+// A recursive enum payload must be indirected through a class node
+class ExprNode {
+    expr: Expr
+    init(expr: Expr) { this.expr = expr }
+    get() -> Expr { return this.expr }
+}
+
+enum Expr {
+    Number { value: i64 },
+    Binary { op: string, left: ExprNode, right: ExprNode },
+    Call { name: string, args: Array<Expr> },
+}
+```
+
+A directly recursive enum payload would have infinite size and is rejected at compile time (`E0352`). Recursive data structures must use explicit indirection, in one of two forms:
+
+- **Class node**: classes are reference types, so the field costs one pointer and `Binary(left: ExprNode, ...)` has a finite layout.
+- **Container slot**: `Array<Expr>`, `Map<K, Expr>`, and other containers keep elements in their own storage, so the payload holds only the container handle.
+
+`T?` is not indirection — nullable does not change the by-value layout of the payload, so `Binary(left: Expr?, ...)` is rejected by `E0352` as well.
+
+#### 5.6.3 Construction and destructuring
+
+Construction:
+
+```xray
+var c = Color.Red
+var r1 = Option.Some { value: 42 }
+var e1 = NetEvent.DataReceived { bytes: b }
+var e2 = NetEvent.Error { code: 404, message: "not found" }
+var e3 = NetEvent.Connected                         // unit variant: no braces
+```
+
+Destructuring (match):
+
+```xray
+match (event) {
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+}
+```
+
+See §6.3.
+
+#### 5.6.4 Enum value API
+
+Instance properties (act on the enum value):
+
+```xray
+Color.Red.name        // "Red"          variant name (string)
+Color.Red.ordinal     // 0              declaration-order tag (i64, zero-based)
+Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
+```
+
+Enum values provide `name`, `ordinal`, and `toString()`. name returns the active variant declaration name; toString returns only the original enum declaration name and active variant name. Neither appends generic arguments, reads or formats payloads, or invokes payload callbacks. Original type and member permissions still apply; these operations grant no construction authority or implicit Stringable witness, and descriptive queries cannot supply missing generic premises. They do not expose implicit backing-value/reflection APIs such as `value`, `rawValue`, `fromName`, or `fromOrdinal`.
+
+#### 5.6.5 Iteration
+
+A concrete enum containing only payload-free variants can be iterated directly as actual enum values. Every concrete enum can expose declaration metadata through `.variants`:
+
+```xray
+for (color in Color) {
+    print(color.name)                     // color: Color; Red, Green, Blue
+}
+
+for (variant in NetEvent.variants) {
+    print(variant.ordinal)                // variant: EnumVariant<NetEvent>
+    print(variant.name)
+    for (field in variant.payloads) {
+        print(field.name)                 // field: EnumPayloadField<NetEvent>
+        print(field.type)                 // i64: canonical TypeId for the concrete field type
+    }
+}
+```
+
+The two loop forms deliberately yield different types:
+
+| Expression | Availability | Loop variable | Meaning |
+|---|---|---|---|
+| `E` | concrete unit-only enum | `E` | actual enum values in declaration order |
+| `E.variants` | any concrete enum | `EnumVariant<E>` | read-only variant descriptors in declaration order |
+| `variant.payloads` | an `EnumVariant<E>` | `EnumPayloadField<E>` | read-only payload-field descriptors in declaration order |
+
+If `E` contains any payload variant, `for (value in E)` is a compile error and the diagnostic recommends `E.variants`; the compiler never invents payload values. `for (variant in Color.variants)` is also valid for a unit-only enum, but `variant` remains a descriptor, not a `Color` value. A loop does not print by itself; only explicit effects in its body produce output.
+
+The descriptor API is a closed whitelist:
+
+| Type | Properties / operations |
+|---|---|
+| `EnumVariants<E>` | `length: i64`, checked `[index] -> EnumVariant<E>`, and `for-in` |
+| `EnumVariant<E>` | `ordinal: i64`, `name: string`, `payloadCount: i64`, `isUnit: bool`, `payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: i64`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
+| `EnumPayloadField<E>` | `index: i64`, `name: string`, `type: i64` (canonical TypeId) |
+
+Every payload-field `name` is its source declaration name. Metadata with an empty name, duplicate names within one variant, or mismatched name/type counts is rejected.
+
+Users cannot construct these types, descriptors are not callable, and they do not provide name/ordinal-to-value construction. Out-of-range access fails like other checked indexing. Descriptors have no C ABI and are rejected at FFI boundaries.
+
+This facility is a compiler-recognized static type domain, not an `Iterable` conformance. Direct loops and non-escaping descriptors may use ordinal/index scalars in Lowered without allocating an array or iterator. Description values crossing a union, generic storage, container, closure or cross-coroutine channel must preserve their concrete declaration identity and valid metadata lifetime. Description queries cannot bypass generic constraints, visibility or construction authority. Descriptor references or unused metadata may be eliminated only when query results and lifetime remain unchanged.
+
+Actual unit-only enum values follow the same nominal identity rules as payload enums. An ordinal cannot replace the declaring module, declaration and ordered type arguments. Across calls, storage and suspension, `.name`, `toString()`, equality and string formatting must retain their complete semantics, without extending execution authority for escaped values. The single Lowered pipeline determines physical carriers; reducing a value to an ordinal requires proof that identity is recoverable and metadata lifetime remains safe. The language requires neither a legacy carrier width nor a separate allocation per value.
+
+Generic code must identify a concrete enum layout. `Option<i64>.variants` is valid; `E.variants` on an unconstrained type parameter is not. Aliases, imports, and separate compilation preserve declaration order and concrete type substitution.
+
+#### 5.6.6 Reverse lookup (value to member)
+
+`Enum(value)` and reverse lookup from backing values are not supported by default. Protocol parsing should be written as an explicit function:
+
+```xray
+fn statusFromCode(code: i64) -> HttpStatus? {
+    if (code == 200) { return HttpStatus.OK }
+    if (code == 404) { return HttpStatus.NotFound }
+    if (code == 500) { return HttpStatus.InternalError }
+    return null
+}
+```
+
+#### 5.6.7 Enum methods
+
+An enum resolves members separately in its type-access and value-access domains. The value-domain builtin properties `name` and `ordinal`, and builtin method `toString`, cannot be replaced by user instance methods. The type-domain builtin member `variants` cannot be replaced by a variant or a user static method. These identifiers are not globally reserved: subject to the other uniqueness rules, variants and static methods named `name`, `ordinal`, or `toString`, and instance methods named `variants`, are allowed. All user method names within one enum are unique; static and instance methods cannot form a same-name overload. No user method may share a name with a variant. Collisions reject at declaration time, rather than choosing a meaning according to whether a use reads a property, calls a method, or takes a method value. A builtin member name establishes neither interface conformance nor an automatic witness.
+
+Instance and static methods may be defined inside `enum` bodies with the same syntax as `class` methods (no `impl` keyword is introduced). Instance methods are callable on every variant; method bodies typically `match (this)` to dispatch on the variant:
+
+```xray
+enum Shape {
+    Circle { radius: f64 },
+    Rect { width: f64, height: f64 },
+    Triangle { a: f64, b: f64, c: f64 }
+
+    area() -> f64 {
+        return match (this) {
+            Shape.Circle { radius } -> 3.14159 * radius * radius,
+            Shape.Rect { width, height } -> width * height,
+            Shape.Triangle { a, b, c } -> {
+                var s = (a + b + c) / 2.0
+                return (s * (s-a) * (s-b) * (s-c)).sqrt()
+            },
+        }
+    }
+
+    isRound() -> bool {
+        return match (this) {
+            Shape.Circle {} -> true,
+            _               -> false,
+        }
+    }
+}
+
+var s = Shape.Circle { radius: 1.0 }
+print(s.area())          // 3.14159
+print(s.isRound())       // true
+```
+
+Static methods use `static name(...)`. Instance methods have a READ receiver by default and use `ref` to mutate value-semantic components. A `move` receiver is restricted to noncopyable enums and is forbidden for copyable enums; see §17 for admission of noncopyable declarations. Enum methods do not write `fn`:
+
+```xray
+enum Color {
+    Red, Green, Blue
+
+    static fromInt(v: i64) -> Color {
+        if (v == 1) { return Color.Red }
+        if (v == 2) { return Color.Green }
+        return Color.Blue
+    }
+
+    label() -> string {
+        return this.name
+    }
+}
+
+print(Color.fromInt(2).label())     // "Green"
+```
+
+> Note that `Triangle { ... }` is not followed by a comma — the last variant is separated from the method block by whitespace (a trailing comma is allowed but not required).
+
+**Rules**:
+
+- Type-body method forms are `name(...)`, `ref name(...)`, `move name(...)`, and `static name(...)`; enum methods do not write `fn`.
+- Inside a method, the static type of `this` is the enum itself (e.g. `Option<T>`); use `match (this)` to extract a variant's payload.
+- Static methods have no `this`; call them as `EnumName.method(args...)`.
+- `constructor` is **not** supported (variant syntax already serves as the constructor).
+- Inheritance is **not** supported (`enum E extends ...` is illegal); for shared behaviour use interface implementation (`enum E implements Iface`) or top-level functions.
+- Simple (payload-free) enums may also define methods; inside such methods `this` is the enum value and can be compared directly with `==`:
+  ```xray
+  enum Color {
+      Red, Green, Blue
+
+      isWarm() -> bool { return this == Color.Red }
+  }
+  ```
+- Methods **may not** share a name with a variant.
+
+> This design matches Java enums, Swift enums, and Kotlin sealed classes. Rust's `impl` blocks are **not** introduced in xray—xray defines methods inside the type body uniformly.
+
+### 5.7 `type` aliases
+
+```ebnf
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
+```
+
+```xray
+type Outcome = i64 | string                          // union alias
+type Mapper = fn(i64) -> i64                           // function-type alias
+type Point = { x: f64, y: f64 }                  // structural object alias (sealed)
+type Pair<T> = { first: T, second: T }                // generic alias
+```
+
+**Semantics**:
+- An alias is **purely a syntactic** substitution; it does not introduce a new nominal type.
+- A generic alias substitutes type arguments at the use site; substitution happens at compile time and introduces no runtime representation or AOT branch.
+- Generic alias parameters are only a name list; constraints are not supported. Put constraints on the generic declaration that uses the alias.
+- A `type Point = {...}` object alias is **sealed** when used as an annotation: accessing or assigning an undeclared field is a compile error.
+- `type T = JSON.Value` equals `JSON.Value`; `type O = JSON.Object` equals `Map<string, JSON.Value>`.
+- Aliases may be referenced before their declaration but **must not be cyclic**.
+
+See [§2.4.7](#247-json) and [§2.8](#28-type-aliases).
+
+### 5.8 `import` / `export`
+
+See [§11](#11-modules). Syntax highlights:
+
+```xray
+// stdlib / third-party packages: bare identifiers; alias auto-derived
+import time
+import http
+import alice/utils as utils
+
+// File path or directory path: string, with explicit `as` or alias derived from the trailing segment
+import "./modules/mod_a.xr" as a
+import "../utils/string_utils.xr" as utils
+import "models/user" as user
+
+// Named import: supports quoted paths or bare module names; members may be renamed with `as`
+import { readFile, writeFile as write } from io
+import { publicFn } from "./modules/mod_a.xr"
+
+// Exports
+export fn publicFn() -> string { return "hi" }
+export const VERSION = "1.0"
+export { name1, name2 as alias } from "./other"
+export * from "./other"
+```
+
+**xray does not support** the JavaScript default-import form `import name from "module"`. Use `import "module" as name`, `import module`, or `import { name } from module`.
+
+For full rules, path resolution, and visibility details see [§11 Modules](#11-modules).
+
+---
+
+## 6. Patterns
+
+> Source of truth: `src/frontend/parser/xparse_match.c`, `src/frontend/analyzer/xanalyzer_visitor_pattern.c`, `src/ir/xi_lower_expr.c` / `xi_lower_stmt.c`, and the VM/AOT match lowerings.
+
+Patterns appear in `match` expressions/statements, in `var` / `const` destructuring, and in parenthesized `catch` headers (enum variant patterns only, see §8.1.2).
+
+### 6.1 Literal Patterns
+
+```xray
+match (x) {
+    0 -> "zero"
+    3.14 -> "pi"
+    "hello" -> "greeting"
+    true -> "yes"
+    null -> "nothing"
+    _ -> "other"
+}
+```
+
+- Matching uses the same semantics as `==`.
+- The `null` pattern matches only `null` itself.
+
+### 6.2 Range Patterns `a..b` / `a..=b`
+
+```xray
+match (age) {
+    0..13 -> "child"
+    13..20 -> "teen"
+    20..=65 -> "adult"
+    _ -> "senior"
+}
+```
+
+- `a..b` is the half-open interval `[a, b)`; `a..=b` is the inclusive interval `[a, b]`.
+- Integer-only.
+
+### 6.3 Enum Patterns
+
+#### 6.3.1 Simple variants (no payload)
+
+```xray
+match (color) {
+    Color.Red   -> "red",
+    Color.Green -> "green",
+    Color.Blue  -> "blue",
+}
+```
+
+- Must be fully qualified as `EnumName.Variant`.
+
+#### 6.3.2 ADT variant (with payload) destructuring
+
+The scrutinee is evaluated once. Pattern bindings are immutable values scoped to the arm's guard and body; a pattern cannot bind the same name twice. Ordinary copy and ownership rules apply, with no authority to write back into the scrutinee. Payload lifetime remains valid across suspension and escaping closures. Generic variant patterns take omitted type arguments from the scrutinee's static type without supplying missing definition-site constraints.
+
+ADT variant patterns select payload fields by name. Omitted fields are ignored, and `{}` tests only the tag of a payload variant:
+
+```xray
+match (event) {
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+}
+
+// Same-name binding shorthand
+match (opt) {
+    Option.Some { value: v } -> print("got:", v),
+    Option.None    -> print("nothing"),
+}
+
+// List only fields that are observed
+match (event) {
+    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
+    _                                        -> continue,
+}
+
+// Nested destructuring
+match (msg) {
+    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
+    Option.None                                           -> skip(),
+    _                                                     -> skip(),
+}
+```
+
+#### 6.3.3 Exhaustiveness check
+
+When `match` is performed on an ADT enum, the compiler runs **exhaustiveness analysis**:
+
+- The check passes when unguarded patterns cover every payload value of every variant (including an unguarded `_` catch-all). Naming a variant while restricting its fields with refutable patterns does not cover that entire variant.
+- If a variant is missed, compilation fails with `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`, naming the missing variants.
+
+```xray
+enum NetEvent {
+    Connected,
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
+}
+
+match (event) {
+    NetEvent.Connected                     -> "ok",
+    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
+    // ❌ E0371: missing variants DataReceived and Error; add `_ -> ...` as catch-all
+}
+```
+
+> Both simple enums (no payload) and ADT enums **require** exhaustiveness; an unguarded `_` catch-all covers every remaining value; guarded arms do not count as unconditional coverage. Non-enum operands (such as `i64`) are not subject to the check.
+
+### 6.4 Type Patterns `is T`
+
+```xray
+match (value) {
+    is i64 n -> "i64: ${n}"       // bind the narrowed value
+    is string -> "a string"
+    is User u -> "user: ${u.name}"
+    _ -> "unknown"
+}
+```
+
+- Tests the dynamic type; optionally binds a narrowed variable.
+
+### 6.5 Guard Conditions `if`
+
+```xray
+match (x) {
+    n if (n > 0 && n < 10) -> "small positive"
+    n if (n < 0) -> "negative"
+    _ -> "other"
+}
+```
+
+- The guard must be `bool`; nullable values require an explicit comparison (see §2.3.3), identical to `if` / `while` condition rules.
+- On guard failure, matching falls through to the next arm.
+
+### 6.6 Multi-value Patterns
+
+```xray
+match (x) {
+    1, 2, 3 -> "small"
+    Color.Red, Color.Yellow -> "warm"
+    _ -> "other"
+}
+```
+
+- Alternatives are tried in source order; the first success skips the remaining alternatives of that arm.
+- Every alternative must bind the same names with exactly the same static types. Bindings are immutable and belong to the common arm scope.
+- After joining the successful bindings, the arm guard runs once. A false guard advances to the next arm without retrying the remaining alternatives of the current arm.
+- Unguarded alternatives contribute coverage together; a guarded arm contributes no unconditional coverage.
+
+### 6.7 Wildcard `_`
+
+- Matches any value without binding.
+- Typically used as the trailing default arm.
+- Usable in destructuring to skip positions: `var [_, b, _] = arr`.
+
+### 6.8 Variable-binding Patterns
+
+```xray
+match (http_status) {
+    200 -> "ok"
+    code if (code >= 400) -> "error: ${code}"
+    code -> "other: ${code}"
+}
+```
+
+- A bare `Identifier` always matches and binds the value.
+
+### 6.9 Destructuring Patterns
+
+```xray
+var [a, b, c] = some_array
+var (q, r) = divmod(17, 5)
+var { name, age } = user
+```
+
+See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:
+
+```xray
+match (p) {
+    { x, y } -> ...           // object field destructure (shorthand binding)
+    { name: n, age } -> ...   // field rename + shorthand mixed
+    [a, b, ..rest] -> ...     // array destructure; `..rest` captures the tail as a new array
+    [_, mid, _] -> ...        // element-position wildcards
+}
+```
+
+- An object pattern matches an exact structural object whose static type contains the named fields. For schema-less JSON, first commit the structure with `JSON.get/require` or `JSON.decodeObject<T>`. Field sub-patterns may be refutable (e.g. `{ mode: 2 }`).
+- An array pattern matches by **length**: without `..rest`, the length must equal the element count; with `..rest`, the length must be ≥ the element count. Element sub-patterns may only be bindings or wildcards (non-rest elements are not value-tested — an out-of-bounds element read traps); use an `if` guard to test element values.
+- The or-pattern `|` is not supported (comma-separated multi-values cover the equivalent need).
+
+### 6.10 Exhaustiveness and Match Failure
+
+- `match` over an enum expression is exhaustive (error code `E0371`, see §6.3.3).
+- Other operand types are not enforced; if no arm matches at runtime, an `PanicInfo` with code `E0442` is raised (see §18.x).
+- Always providing a `_` fallback is recommended.
+
+---
+
+## 7. Scoping and Name Resolution
+
+> Source of truth: `src/frontend/analyzer/xanalyzer_symbol.c`, `xanalyzer_escape.c`, `xaddressability.c`, `xanalyzer_visitor_stmt.c`, and the capture/storage plans produced by `src/analysis/xglobal_producer.c`.
+
+### 7.1 Lexical Scoping and Hoisting
+
+Xray uses **lexical scoping**: a name's visibility is determined entirely by the source code structure.
+
+**Scope kinds**:
+
+| Scope | Triggered by | Example |
+|--|--|--|
+| Module | Each `.xr` file | top-level `var` `const` `fn` `class` |
+| Function / closure | Entering `fn` / arrow function | parameters + function body |
+| Block | `{...}` | `if` `while` `for` `match` arm body |
+| `scope` block | `scope { ... }` keyword | explicit lexical scope + structured concurrency (see §10.7) |
+| `for` header | `for (var i=0; ...)` | `i` is visible only within the loop body |
+| `catch` parameter | `catch (e)`, `catch (E.V { x })` | `e` and pattern binding `x` are visible only within the catch body |
+| Class body | `class` definition | fields, methods |
+
+**Hoisting rules**:
+
+- Top-level `fn` `class` `struct` `interface` `enum` `type` are **hoisted** to the top of the current scope — they may be referenced before their textual definition.
+- `var` / `const` are **not hoisted** — they must appear before any use.
+- Duplicate names: declaring two same-named variables in the same scope is a compile error (nested scopes may shadow).
+
+```xray
+main()                    // OK: uses the hoisted fn
+fn main() { ... }
+
+var y = x                 // error: x is not declared
+var x = 10
+```
+
+#### Shadow rules
+
+A nested block may shadow a same-named variable in an outer scope:
+
+```xray
+var x = 1
+{
+    var x = "hello"           // shadow: OK
+    print(x)                 // "hello"
+}
+print(x)                     // 1
+```
+
+### 7.2 Closure Capture Semantics
+
+A closure captures variables from outer scopes as **upvalues**.
+
+#### Plain synchronous closures
+
+Ordinary `var` captures retain a shared cell; copyable non-view `const` and ordinary read parameters are captured by logical value copy:
+
+```xray
+fn make_counter() -> (() -> i64) {
+    var count = 0
+    return fn() -> i64 {
+        count += 1                  // mutates the outer count
+        return count
+    }
+}
+
+var c = make_counter()
+print(c())      // 1
+print(c())      // 2
+```
+
+- The closure and the original variable **share state**.
+- After the outer scope exits, a captured variable remains alive through its closure cell/upvalue and the corresponding reference counts.
+- Every read/write capture has exactly one shared cell. Outer assignments and
+  every capturing closure access that same cell; the cell and each newly stored
+  value follow ordinary strong-reference transfers and releases, with no hidden
+  keepalive rule.
+
+#### Closure optimization
+
+The compiler analyzes upvalues:
+- read-only → may be implicitly copied (avoiding closure conversion).
+- read/write → promoted to a closure box.
+- See §17.5 for details.
+
+#### XIR source closure admission
+
+Ordinary closures capture according to the binding: local const and ordinary read parameters of copyable, non-view types produce logical value copies; local var retains one shared cell. Only lexically used free bindings are collected, once per binding. Shadowing, invisibility before initialization and for-header scope obey ordinary name resolution. Free variables needed by nested closures pass through each enclosing closure. Module names continue to use module state and authority rules rather than local environment snapshots.
+
+The XIR source producer admits fn expressions and arrow closures with explicitly typed parameters. An omitted return annotation infers one exact type from return expressions at definition; all returns must agree and a non-unit result must cover every path. No parameter, constraint or effect is inferred from an invocation target or one instantiation. A closure cannot declare first-class generic parameters of its own. Enclosing type parameters and frozen constraints belong to its private implementation, specialized and rechecked with capture types on Checked before sealing.
+
+Immutable value captures and ordinary var shared cells are admitted; unused external bindings do not enter environments. Shared cells permit only same-instance access, convey no Sendable or cross-worker capability, and retain the OPEN strong-cycle reclamation boundary in section 17.19. Ref/move/view captures and unadmitted noescape, Sendable or effect promises fail closed instead of becoming copies or implicit promises. Source functions and captures use only the XIR/environment path in section 17.18.
+
+### 7.3 Ownership and `move`
+
+Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
+
+```xray
+var big_buffer = Array<u8>(1024 * 1024)
+
+var t = go fn(b: Array<u8>) -> i64 {
+    return process(b)
+}(big_buffer)             // compile error: an execution-local heap value cannot cross bare
+
+var t2 = go fn(b: Array<u8>) -> i64 {
+    return process(b)
+}(move big_buffer)        // OK: ownership transferred
+
+print(len(big_buffer))    // compile error: accessed after move
+```
+
+**`move` usage**: `move` is a unary ownership-transfer expression commonly used in arguments and initializers (see §5.1.4 / §10.8):
+
+- `go f(move x)`, `go fn(...){...}(move x)`: transfer ownership to the coroutine.
+- `ch.send(move data)`: transfer ownership when sending across coroutines (avoiding a copy).
+- Plain function call `f(move x)`: transfer ownership into the function (which becomes the sole owner).
+- `var dst = move src` / `const dst = move src`: transfer a verifier-proven unique local `var` root to a new owner or const capability.
+- Function returns are always written `return value`. The return edge terminates the current continuation, so the compiler automatically publishes owner-forward proof for a unique local or `move` parameter; `return move value` is not a public form.
+
+### 7.4 Cross-Coroutine Data Transfer Rules (Race Avoidance)
+
+"Statically eliminating data races at compile time" is a core design principle of xray's concurrency model.
+
+Every cross-execution boundary (`go` closure, `go` argument, Channel send, deferred task, thread entry, and exported callback) consumes the same verified capture plan. Legality is determined jointly by the value's **storage owner, provenance, mutability, and type representation**, never by the `var` / `const` keyword alone:
+
+| Capture action | Values | Boundary behavior |
+|---|---|---|
+| inline value | scalars and small immutable values passed as explicit `go` arguments | copy the bits directly |
+| deep copy | execution-local graph under explicit `copy(x)` | materialize an independent graph in the destination storage domain |
+| move | inferred-unique local `var` under explicit `move x` | transfer ownership and statically invalidate the source binding |
+| module readonly | sealed and published module values | retain the module-readonly owner; do not copy into a root/task heap |
+| synchronized ref | audited stable identities such as Channel, Task, and Atomic | retain a reference in the verified synchronized domain |
+| reject | execution-local graphs, mutable module state, dangling slices/pointers/upvalues | compile error reporting the owner/provenance and required explicit action |
+
+Consequently, a local `const` containing only inline values may cross directly. A managed/aggregate const graph may cross only when StoragePlan proves direct construction or O(1) publication seal; the boundary never copies implicitly. A module-level `const` becomes module-readonly only after seal-and-publish. A module-level `var` is module-mutable and is not made thread-safe merely by being globally visible.
+
+`go` closures additionally follow one simple, stronger surface rule: **they may not capture any outer `var`, whether they only read it or mutate it, and whether the current program launches one coroutine or many.** Pass data as explicit `go` arguments and state `copy(...)`, `move`, or an audited synchronization capability at the boundary. Mutable state shared by multiple coroutines must flow through `Channel`, `Atomic`, or audited `sync` locks/handles. Directly capturing and modifying an ordinary `var` is a compile error, and `unsafe` does not relax this rule.
+
+```xray
+var local = 0
+go fn() { local += 1 }()                 // ❌ compile error: cannot capture mutable local
+```
+
+#### Recommended patterns
+
+```xray
+// Pattern 1: explicitly copy an execution-local graph
+var arr = [1, 2, 3]
+var t = go fn(data: Array<i64>) -> i64 {
+    data.push(4)            // mutates the copy, original is unaffected
+    return len(data)
+}(copy(arr))
+print(arr)                  // [1, 2, 3] unchanged
+
+// Pattern 2: const, zero-copy read-only (capturable)
+const config = { rate: 100 }
+var t2 = go fn(c: JSON.Object) -> i64 {
+    return c.rate
+}(config)
+
+// Pattern 3: move ownership
+var big = Array<u8>(1024)
+var t3 = go fn(b: Array<u8>) -> i64 {
+    return process(b)
+}(move big)
+// big is inaccessible from this point
+
+// Pattern 4: Channel communication (capturable)
+const ch = Channel<i64>(10)
+var t4 = go fn(c: Channel<i64>) -> i64 {
+    return match (c.recv()) {
+        Recv.Value { value: v } -> v
+        _ -> 0
+    }
+}(ch)
+ch.send(42)
+```
+
+### 7.5 Memory Management and Object Lifetimes
+
+Xray uses a layered memory management strategy:
+
+| Storage | Mechanism | Reclamation |
+|--|--|--|
+| Module-readonly storage (top-level `const`) | consteval rodata, or module allocator followed by seal + publish | at module unload |
+| Module-mutable storage (top-level `var`) | module owner; not concurrency-safe by default | at module unload |
+| Const/synchronized shared domain | verified const root or synchronized handle with root-only atomic reference counting | when the last cross-execution strong reference is released |
+| Execution-local reclamation domain (ordinary local objects) | compiler-inserted reference counting plus a VM coroutine heap or AOT execution arena | immediately when the last strong reference is released; a reference cycle is not collected and the residual graph is disposed in bulk when the physical coroutine ends (§16.8) |
+| Stack (`struct` values, locals) | lexical storage duration | scope exit; the language exposes no deterministic destructor / `Drop` hook |
+| Arena (low-level temporary allocations) | bulk free | at arena end |
+
+**Memory observation points**:
+- The compiler inserts retain/drop operations for ordinary local objects; releasing the last strong reference enters the RC destruction path.
+- The compiler marks only types that may form reference cycles as cycle candidates; the mark serves diagnostics and drives no runtime reclamation.
+- Reference cycles are not collected at runtime: they are prevented statically (L0), broken explicitly with `weak` (L1), and bounded by bulk disposal of the execution-local reclamation domain (L2).
+- No cycle-reclaiming mechanism exists at runtime — neither a concurrent tracing GC nor a cycle collector. A development build can enable a cycle detector, which only observes and reports; it never mutates the heap.
+
+
+A READ struct method value `receiver.method` evaluates the receiver once at binding and saves its logical value snapshot without executing the method body. The callable signature contains only explicit parameters and the result, after substituting the struct arguments. Later writes to the original binding do not change the snapshot; identity handles retain their identity semantics. Private/protected access is checked at binding; a declaring body may explicitly return an authorized callable without granting callers direct member access. The callable remains subject to its originating Instance's revocation and cleanup, with no implicit Sendable/no_suspend promise. Ref/move receivers must not degrade to READ binding.
+
+---
+
+## 8. Error Handling
+
+> Value semantics and single-XIR implementation entry points: `src/xir/xxir_verify.c`, `src/xir/xxir_error_value.inc.c`, and `src/xir/xxir_call.c`. Task 316 tracks catch, effects, and panic/defer migration; the previous analyzer/IR/VM code is migration reference material, not a second target execution pipeline.
+
+### 8.0 Design philosophy: value-return + panic boundary
+
+Xray's error handling is split into two strictly separated channels:
+
+| Channel | Syntax | Use case | Runtime cost |
+|--|--|--|--|
+| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Low overhead** (no `PanicInfo` allocation and no unwind; only a predictable branch at call boundaries that may propagate or catch errors) |
+| **Panic channel** (`catch panic`) | Runtime faults (OOB, division by zero, non-exhaustive match) | Limited stack unwinding |
+
+Design principles:
+
+- **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no PanicInfo allocation.
+- **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
+- **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
+- **Error sets are not part of public function types**: concrete error enum/variant sets belong to effect analysis of the same checked program. Internal three-state throw-effect facts (`UNKNOWN` / `MAY_THROW` / `NO_THROW`) are associated with the corresponding functions and callable nodes for safety constraints and code generation.
+- **No-throw is always inferred**: use an `xray verify` contract to freeze a no-throw guarantee; unknown or incomplete evidence is treated as may-throw.
+- **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses **block-scoped** `defer` (bound to the nearest real `{}` block, see §4.9 / §8.3).
+- **A cleanup edge is not an error-propagation edge**: no error may escape a `defer` body. The constraint is enforced at compile time (`E0387`), see §8.3.1.
+
+### 8.1 Value-return error channel
+
+#### 8.1.1 `throw` statement
+
+`throw expr` raises an enum error value. Its actual value must be an enum variant; its static type may be a concrete enum, the built-in `Error`, or an ordinary type parameter whose `Error` constraint is proved at definition:
+
+```xray
+enum AppErr { NotFound, InvalidInput { message: string } }
+
+throw AppErr.NotFound                       // ✅ simple enum variant
+throw AppErr.InvalidInput { message: "bad format" } // ✅ ADT enum variant with payload
+```
+
+After a throw:
+
+```
+throw point → deliver an independently owned error value → return up the call stack → run static cleanup regions on every crossed scope edge → catch handles → otherwise keep returning → top-level diagnostic
+```
+
+- No stack frame unwinding (unlike traditional exception unwinding)
+- No object allocation and no stack unwinding on the happy path; call boundaries that may propagate or catch errors go through only a predictable error-flag branch
+- Unhandled top-level errors print `[Uncaught Error] <enum value>`, exit code = 1
+
+#### 8.1.2 `try` / `catch`
+
+```xray
+enum IOErr { Timeout, Refused { reason: string } }
+
+try {
+    connect(host)
+} catch (e) {
+    match (e) {
+        IOErr.Timeout -> log("timeout"),
+        IOErr.Refused { reason } -> log("refused: " + reason),
+    }
+}
+```
+
+**Execution order**:
+
+1. Run the `try` block.
+2. If a `throw` escapes, try each `catch` clause in declaration order; the first match runs its body.
+3. If no `catch` matches, the error keeps propagating up the call stack.
+
+**Typed catch and multiple catch clauses**:
+
+A `catch` variable may be typed `catch (e: T)`; the runtime uses `is T` to test the enum type. Multiple `catch` clauses are matched in declaration order:
+
+```xray
+enum NetErr { Timeout, Refused }
+enum DbErr { ConnLost, QueryFailed { query: string } }
+
+try {
+    riskyIO()
+} catch (e: NetErr) {
+    log("network:", e)
+} catch (e: DbErr) {
+    log("database:", e)
+} catch (e) {
+    log("unexpected:", e)
+}
+```
+
+**Rules**:
+- An untyped `catch (e)` is the catch-all and matches any error value; its binding has the built-in static type `Error`.
+- A typed `catch (e: SomeErr)` matches only when the error value satisfies `is SomeErr`, where `SomeErr` is a concrete enum error type.
+- Multiple `catch` clauses are tried in declaration order; the first match wins.
+- If every typed clause fails and there is no catch-all, the error continues propagating.
+- A `try` **must** be followed by at least one of `catch` or `catch panic`.
+
+The built-in `Error` is an owned value type containing only enums. Converting an enum to Error preserves its concrete nominal identity, generic arguments, active variant, and payload; copying, storing, returning, and rethrowing obey the same value-ownership rules. Error grants no arbitrary field, construction, or visibility authority and does not implicitly prove `Sendable`. Accessing a concrete variant payload requires authorized type narrowing. Ordinary generic conversion is checked against constraints at definition and rechecked after specialization; a concrete enum at a call site cannot supply a missing definition-time proof.
+
+Catch bindings are visible only in their handler, and both the binding and its value-semantic portion are read-only. Create a local logical copy with `var local = e` when rebinding is needed. Every handler undergoes complete static checking even when the try body has no error predecessor: invalid names, types, generic constraints, visibility, initialization, and read-only writes must still be rejected. An unexecutable constructor handler is checked from the initialization state at try entry; writes inside it cannot establish initialization in the normal successor. Branches and loops within the handler follow the ordinary must/may initialization rules. Handler returns still participate in the enclosing function's return-type inference.
+
+**Enum variant pattern catch**:
+
+An ordinary `catch` header is always parenthesized. Inside the parentheses, an identifier followed by `:` or `)` is a binding (`catch (e)`, `catch (e: T)`); anything else is an enum variant pattern:
+
+```xray
+enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
+
+try {
+    runQuery()
+} catch (DbErr.QueryFailed { query, code: 500..=599 }) {
+    log("server rejected:", query)
+} catch (DbErr.ConnLost, DbErr.Timeout) {
+    retry()
+}
+```
+
+- Every alternative is `Enum.Variant` or `Enum.Variant { fields }`, optionally module-qualified; field sub-patterns follow §6 (literals, ranges, nested enums, `_`, and bindings). A payload variant must write its braces, and `{}` tests only the tag; a unit variant cannot use `{}`.
+- Comma-separated alternatives must belong to one enum type. The first alternative determines the handler's enum type. An Error carries no static type arguments, so a generic enum must state all of its type arguments there (for example `Event<string>.Failed { message }`); later alternatives must name the same declaration, take omitted type arguments from that type, and must repeat explicit ones exactly.
+- The handler first tests whether the error value has that enum type, then tries the alternatives in source order. A type, variant, literal, or range mismatch continues with the next `catch` clause; if none matches, the original error keeps propagating unchanged. A pattern handler needs no exhaustiveness and never raises a match failure (`E0442`).
+- All alternatives must bind the same names with exactly the same static types. Pattern bindings are read-only and visible only in their handler, like a catch binding.
+- A bare identifier inside the parentheses is a catch-all binding: `catch (NetErr)` binds an Error value named `NetErr`; it is not a type filter. Filter by type with `catch (e: NetErr)`. `_`, literals, ranges, and tuple, object, array, and `is` type patterns cannot form a catch header.
+- An ordinary `catch` cannot omit its header; only `catch panic` may.
+- Generic enum targets are checked against their constraints at definition. An unexecutable pattern handler still receives complete name, type, constraint, visibility, field, and binding checks.
+
+#### 8.1.3 Rethrowing and error conversion
+
+A `catch` block may rethrow the original error or throw a different enum variant:
+
+```xray
+enum LowErr { Fail }
+enum HighErr { Upstream }
+
+try {
+    lowLevelCall()
+} catch (e: LowErr) {
+    log("low-level failed")
+    throw HighErr.Upstream
+}
+```
+
+#### 8.1.4 Recommended enum error design
+
+Define business errors as ADT enums with context-carrying payloads:
+
+```xray
+enum HttpErr {
+    NotFound { message: string },
+    ServerError { code: i64, message: string },
+    Timeout,
+}
+
+enum ParseErr {
+    Empty,
+    InvalidChar { value: string, offset: i64 },
+    Overflow,
+}
+
+fn fetchUser(id: i64) -> User {
+    if (id <= 0) { throw HttpErr.NotFound { message: "user not found" } }
+    // ...
+}
+
+try {
+    var user = fetchUser(-1)
+} catch (e: HttpErr) {
+    match (e) {
+        HttpErr.NotFound { message: msg } -> log("404:", msg),
+        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
+        HttpErr.Timeout -> log("timeout"),
+    }
+}
+```
+
+ADT enums allow `match` to check exhaustiveness at compile time.
+
+#### 8.1.5 Errors and coroutine boundaries
+
+Value-return errors **do not propagate across coroutines automatically**. An uncaught error in a child coroutine:
+
+- Terminates the child, error recorded in `coro.error`
+- The parent is **not** notified automatically
+
+Ways to pass child coroutine errors:
+
+1. **Explicit Channel**:
+
+```xray
+enum WorkerErr { Failed { message: string } }
+const err_ch = Channel<string>(1)
+
+go fn() {
+    try {
+        riskyWork()
+        err_ch.send("ok")
+    } catch (e) {
+        err_ch.send("error")
+    }
+}()
+
+var result = match (err_ch.recv()) {
+    Recv.Value { value: v } -> v
+    _ -> "error"
+}
+if (result != "ok") { log("worker failed") }
+```
+
+2. **`linked go call()`** (see §10.2): failure of a standalone child Task cancels its parent Task and linked subtree; the returned Task still exposes the precise error to its caller.
+
+3. **Structured concurrency `linked scope`** (recommended, see §10.5): an error from any child in the scope propagates to the parent scope automatically, routed through the correct channel (value-return enum errors via `catch`, panics via `catch panic`).
+
+### 8.2 Panic channel
+
+#### 8.2.1 What is a panic
+
+A panic represents a **program bug or runtime invariant violation**, not business logic:
+
+- Array out-of-bounds access
+- Integer division by zero
+- Non-exhaustive match
+- Null reference dereference
+- Runtime type assertion failure
+
+Panics propagate via limited stack unwinding and generate `PanicInfo` objects with stack traces.
+
+#### 8.2.2 `catch panic`
+
+`catch panic` catches runtime faults from the panic channel:
+
+```xray
+try {
+    var arr: Array<i64> = [1, 2, 3]
+    var v = arr[10]                          // OOB → panic
+} catch panic {
+    log("runtime fault caught")
+}
+
+try {
+    var n = 10 / 0                           // division by zero → panic
+} catch panic {
+    log("division by zero caught")
+}
+```
+
+**`catch` and `catch panic` can coexist**, handling both channels:
+
+```xray
+enum AppErr { InvalidArg }
+
+try {
+    process(input)
+} catch (e: AppErr) {
+    log("business error:", e)                // value-return channel
+} catch panic {
+    log("runtime fault!")                    // panic channel
+}
+```
+
+**Binding and scope rules**: A `try` has at most one `catch panic`, since it matches that channel unconditionally. Its header may be omitted or written as `catch panic (p)` / `catch panic (p: PanicInfo)`; the annotation must be `PanicInfo`, not a runtime type filter. The binding is read-only and scoped to the handler. Copying or returning the reference follows class identity and ownership rules and does not grant `Sendable`. A handler protects its try body, not sibling handlers; a new panic in a handler searches the enclosing handlers. Ordinary enum errors never enter a panic handler, and panics never enter ordinary catch handlers.
+
+#### 8.2.3 The `PanicInfo` class
+
+`PanicInfo` is now **used only by the panic channel**. The VM constructs `PanicInfo` objects automatically on runtime faults:
+
+```xray
+class PanicInfo {
+    message: string             // human-readable message (e.g. "index out of bounds")
+    stack: Array<string>        // automatically captured call stack
+    cause: PanicInfo?           // chained cause
+    code: i64                   // error code
+    data: JSON.Value            // additional data; JSON null when absent
+
+    init(message: string = "", cause: PanicInfo? = null)
+    fn toString() -> string
+}
+```
+
+User code generally does not construct `PanicInfo` directly — use `throw <enum>` for business errors.
+
+**Reading panic details in `catch panic`**: `catch panic (p)` binds the `PanicInfo` object to `p`, so you can read `message`, `code`, `stack`, and the other fields:
+
+```xray
+fn main() {
+    var arr: Array<i64> = [1, 2, 3]
+    try {
+        print(arr[10])                       // out of bounds → panic
+    } catch panic (p) {
+        print("message:", p.message)         // array index out of range: 10 (length 3)
+        print("code:", p.code)               // 430
+    }
+}
+
+main()
+```
+
+#### 8.2.4 Top-level diagnostic for an uncaught panic
+
+A panic that reaches the top level uncaught by any `catch panic` prints one line
+to stderr and exits with code 1:
+
+```
+[Uncaught Panic] E<code>: <message>
+```
+
+For example, division by zero prints `[Uncaught Panic] E0420: division by zero`,
+and an out-of-bounds write prints
+`[Uncaught Panic] E0430: array index out of range: 9 (length 3)`.
+
+**Backend contract**: the VM and AOT (`xray build --native`) produce
+**byte-identical** observable results for the same fault — exit code, stdout, and
+this stderr line (both the code and the message come from the same shared
+formatters). The contract covers exactly that surface.
+
+**Presentation details, outside the contract**:
+
+- The **stack trace** is an opt-in diagnostic, off by default. With
+  `XRAY_BACKTRACE=1` the VM appends a `Stack trace:` frame list after the report
+  line; the AOT native path carries no unwind state and appends nothing. Keeping
+  the trace off by default is exactly what lets the two backends' default output
+  agree.
+- **Colour** follows whether stderr is a TTY: the `[Uncaught Panic]` tag is bold
+  red on an interactive terminal and plain text when piped or redirected.
+
+> Compare the value-return channel (§8.1.1): an uncaught top-level error prints
+> `[Uncaught Error] <enum value>` and likewise exits 1. The two channels share
+> the `[Uncaught Error]` / `[Uncaught Panic]` prefix style.
+
+### 8.3 `defer` — resource cleanup
+
+`defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
+
+A cleanup block reads its outer bindings at exit. A movable owner read by the block may not be moved or returned before the block exits (`E0382`); code that needs a registration-time value must create an explicit copy first. This owner-lifetime rule is independent of the error-channel rules below.
+
+```xray
+fn fetch(url: string) -> string {
+    var conn = open(url)
+    defer { conn.close() }                   // conn is guaranteed to close
+
+    var data = conn.read()
+    if (len(data) == 0) {
+        throw FetchErr.Empty                 // defer still runs
+    }
+    return data
+}
+```
+
+**Rules**:
+- `defer` belongs to the nearest real `{}` block; a top-level function-body `defer` still runs when the function exits
+- Multiple `defer`s in the same block run in **LIFO** order
+- `defer` executes on block fallthrough, `break`, `continue`, `return`, `throw`, and panic unwinding
+- A `defer` in a loop body runs as each iteration exits
+- No error may escape a `defer` body (see §8.3.1)
+- A `defer` body must not directly or transitively suspend or create a task (`E0392`); an unresolved dynamic call fails closed with `E0444` before the side effect
+- `return` and any `break` / `continue` that crosses the cleanup boundary are illegal (`E0395`); a local jump within a cleanup-owned loop is legal
+- Each registration point lowers to a program-point-sensitive static cleanup frontier; no closure, callback object, or dynamic defer stack is generated
+
+#### 8.3.1 `defer` and errors
+
+`defer` is a **resource-cleanup edge**, not an error-propagation edge. A failure on the cleanup path means the resource state is no longer known, so the language neither lets a cleanup error overwrite an in-flight error (the Go model) nor silently swallows it.
+
+**Rule D1 (static, normative)**: if the inferred escaping error set of a `defer` block is **non-empty**, the compiler reports `E0387`.
+
+Unlike the throw-effect bit in §8.0, D1 is **not** fail-closed: xray has no user-writable no-throw annotation, so rejecting everything that cannot be proven non-throwing would leave an author facing an indirect call, a higher-order builtin, or a native member whose contract is not yet written with no way to discharge the obligation. What cannot be proven is left to rule D3's runtime backstop — that is what the layering is for. Should a user-writable no-throw annotation ever be added, D1 can tighten to "must be proven" and D3 becomes unreachable by construction.
+
+```xray
+fn close(c: Conn) { throw IoErr.Closed }
+
+fn bad(c: Conn) {
+    defer { close(c) }                       // ❌ E0387: error escapes cleanup
+}
+
+fn good(c: Conn) {
+    defer {                                  // ✅ handle it inside the defer body
+        try { close(c) } catch (e) { log.warn("close failed") }
+    }
+}
+```
+
+**Rule D2 (how to satisfy it)**: absorb the error inside the `defer` body with `try` / `catch`, or call a cleanup API that does not throw. This is the only legal form — it forces the author to answer "what happens when cleanup fails?".
+
+**Rule D3 (runtime backstop, normative)**: if an error still escapes a `defer` body — an indirect call D1 could not decide statically, or a panic raised inside the body — the runtime **terminates the process** with `E0443` and exit status `70`:
+
+- The termination is **not catchable** — neither `catch` nor `catch panic` intercepts it. An error or panic the `defer` body catches **itself** has not escaped; that is the ordinary form rule D2 prescribes.
+- The in-flight error is neither replaced nor suppressed; the diagnostic reports the escaping error, and the in-flight one alongside it when there is one (an enum error value carries no message, and shows as `<no message>`).
+- The VM and AOT backends must agree verbatim on this behaviour, including exit code and diagnostic text.
+
+**Why not Go's "replace" semantics**: in Go, rewriting the error from a defer requires an explicit assignment to a named return value — visible and local. xray puts `throws` in neither the signature nor the call site (§8.0), so an implicit error replacement would be entirely invisible in the source, and multiple simultaneously-throwing `defer`s would additionally need a replacement-chain rule. Fail-fast is the only option that is defined, hides nothing, and adds no further rules.
+
+### 8.4 Optional and error handling
+
+`T?` is sugar for `T | null` and fits the binary "value or absent" case. See §2.5. Relation to error handling:
+
+- **Failure with no cause**: `T?` (e.g. map lookup returns `null` for "key not found").
+- Pairs with `??` (default value) / `?.` (optional chain) / `e!` (force unwrap).
+- Do not use `T?` as a generic error return — if a cause is needed, use `throw <enum>` + `catch`.
+
+### 8.5 Decision tree: which mechanism to choose
+
+Choose by "**how the caller has to handle the failure**":
+
+```
+Does the caller need to handle the failure?
+│
+├─ No (fatal / unrecoverable / program bug)
+│   ↓
+│   panic (triggered automatically by the runtime; catch panic for outer fallback)
+│
+├─ Yes, with structured causes
+│   ↓
+│   throw <enum>, catch to handle (low-overhead value-return channel)
+│
+├─ Yes, but the failure simply means "no value"
+│   ↓
+│   T? + ?? / ?.
+│
+├─ Yes, and the function has ≥3 normal states
+│   ↓
+│   User ADT enum directly as the return type
+│
+└─ Yes, returning multiple co-equal values (not success/failure)
+    ↓
+    tuple (a, b, ...)
+```
+
+Reference table:
+
+| Case | Recommended | Example |
+|--|--|--|
+| Business errors, recoverable failures | `throw <enum>` + `catch` | `throw ParseErr.Empty` |
+| Map lookup, optional fields | `T?` | `map.get(k) -> Value?` |
+| Runtime fault fallback | `catch panic` | Array OOB, division by zero |
+| Multi-branch result | enum | `nextEvent() -> NetEvent` |
+| Primary result + metadata | tuple | `parse(s) -> (Ast, i64)` |
+
+### 8.6 Common patterns
+
+#### Pattern 1: enum errors + defer for resource cleanup
+
+```xray
+enum ConnErr { Refused, Timeout }
+
+// A tiny stand-in "connection" so the example runs on its own.
+class Conn {
+    alive: bool
+    init(alive: bool) { this.alive = alive }
+    isAlive() -> bool { return this.alive }
+    close() { print("closed") }
+}
+
+fn fetchData(alive: bool) -> string {
+    var conn = Conn(alive)
+    defer { conn.close() }             // runs whether we succeed or throw
+    if (!conn.isAlive()) { throw ConnErr.Timeout }
+    return "payload"
+}
+
+fn main() {
+    try {
+        print(fetchData(true))         // => closed, then payload
+    } catch (e: ConnErr) {
+        print("connection error")
+    }
+}
+
+main()
+```
+
+#### Pattern 2: throw + catch for library APIs
+
+```xray
+enum ConfigErr { Missing { field: string } }
+
+fn requirePort(cfg: JSON.Object) {
+    if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
+    print("port:", cfg["port"])
+}
+
+fn main() {
+    try {
+        requirePort(JSON.parseObject("{\"port\": 8080}"))   // => port: 8080
+        requirePort(JSON.parseObject("{}"))                  // throws ConfigErr.Missing
+    } catch (e: ConfigErr) {
+        match (e) {
+            ConfigErr.Missing { field: f } -> print("missing field:", f), // => missing field: port
+        }
+    }
+}
+
+main()
+```
+
+#### Pattern 3: `??` for default values
+
+```xray
+var port = config?.port ?? 8080
+var user = db.findUser(id) ?? guestUser
+```
+
+#### Pattern 4: catch panic for runtime fault fallback
+
+```xray
+fn safeDivide(a: i64, b: i64) -> string {
+    try {
+        return string(a / b)
+    } catch panic {
+        return "error: division by zero"
+    }
+}
+```
+
+### 8.7 Worked Examples
+
+These are self-contained programs that run as-is and pass `xray check` (comments show the real output).
+
+#### Example 1: `throw` / `catch` / `match`
+
+```xray
+enum ParseErr { Empty, BadChar { value: string } }
+
+fn parseDigit(s: string) -> i64 {
+    if (len(s) == 0) { throw ParseErr.Empty }
+    if (s == "x") { throw ParseErr.BadChar { value: s } }
+    return 42
+}
+
+fn main() {
+    try {
+        print(parseDigit(""))
+    } catch (e: ParseErr) {
+        match (e) {
+            ParseErr.Empty -> print("empty input"),        // => empty input
+            ParseErr.BadChar { value: c } -> print("bad char:", c),
+        }
+    }
+}
+
+main()
+```
+
+#### Example 2: `defer` order (LIFO) on the error path
+
+```xray
+enum E { Boom }
+
+fn work() {
+    defer { print("defer 1") }
+    defer { print("defer 2") }
+    print("body")
+    throw E.Boom                             // defers still run when throwing
+}
+
+fn main() {
+    try { work() } catch (e) { print("caught") }
+}
+
+main()
+```
+
+Output (`defer` runs in LIFO order):
+
+```
+body
+defer 2
+defer 1
+caught
+```
+
+#### Example 3: `catch panic` with fault details
+
+```xray
+fn main() {
+    var arr: Array<i64> = [1, 2, 3]
+    try {
+        print(arr[10])
+    } catch panic (p) {
+        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // => code: 430
+    }
+}
+
+main()
+```
+
+---
+
+## 9. Generics
+
+> New XIR generic sources of truth: `src/xir/xxir_source.c`, `xxir_generic.c`, and `xxir_specialize.c`; the admitted subset is specified in §17.11. Other inference, class/interface and container facilities in this section still require migration; the legacy analyzer does not qualify the new pipeline.
+
+### 9.1 Type Parameter Syntax `<T>`
+
+```ebnf
+TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
+TypeParam  ::= Identifier (':' ConstraintList)?
+ConstraintList ::= Type ('&' Type)*               // intersection constraints joined by '&'
+TypeArgs   ::= '<' Type (',' Type)* '>'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
+```
+
+```xray
+// Generic function
+fn identity<T>(x: T) -> T {
+    return x
+}
+
+var a = identity<i64>(42)
+var b = identity("hello")               // T inferred as string
+
+// Generic class
+class Box<T> {
+    value: T
+    init(v: T) { this.value = v }
+    get() -> T { return this.value }
+}
+
+var b1 = Box<i64>(42)
+var b2 = Box<string>("hi")
+
+// Multi-parameter generic
+class Pair<K, V> {
+    key: K
+    value: V
+    init(k: K, v: V) {
+        this.key = k; this.value = v
+    }
+}
+
+// Generic interface
+interface Comparable<T> {
+    compareTo(other: T) -> i64
+}
+
+// Generic type alias: transparent syntax substitution, not a new type
+type PairAlias<T> = { first: T, second: T }
+```
+
+Generic `type` aliases use `AliasTypeParams`: only a name list is allowed, with
+no constraints. At each use site, the type arguments are substituted directly
+into the alias RHS, so `PairAlias<i64>` is equivalent to `{ first: i64, second:
+i64 }`. This happens at compile time and creates no runtime metadata,
+monomorphization instance, or AOT branch; cyclic aliases are rejected.
+
+### 9.2 Type Constraints: `<T: Constraint>` and Intersection Constraints `&`
+
+Methods may declare their own type parameters, such as `map<U>(value: U)` inside `struct Box<T>`. Enclosing and method parameters have distinct declaration identities; method parameters cannot duplicate or shadow enclosing type parameters. In `Box<i64>.make<string>(value)`, the first argument group belongs to the type and the second to the static method. An instance call `box.map<string>(value)` obtains enclosing arguments from the receiver type. Explicit method function values use the same grouping: `Box<i64>.make<string>` and `box.map<string>`. Explicit lists must be complete; partial explicit lists are not filled automatically and one group cannot substitute for another. Wholly omitted call lists infer through original signatures and type evidence under §9.3. Contextual inference of method function values remains part of the later complete target.
+
+Ordinary generic method signatures, bodies, defaults and nested closures are checked against both declared constraint scopes at definition time, even when unused; future arguments grant no additional capabilities. Defaults and captures inherit their original type-parameter identities and authority. Specialization substitutes only Checked parameters and rechecks before Lowered; ordinary instances exist before Program sealing. An instance method value evaluates and saves its receiver once, while a static value has no receiver. Both retain the full indirect-call signature and ordinary value ownership, effect, suspension and failure-cleanup rules.
+
+Xray's constraint syntax uses a colon `:` uniformly, with multiple constraints joined by `&` (read as "must satisfy simultaneously"). It **does not use** Java/TS `extends` / `implements` as constraint keywords.
+
+```xray
+// Single constraint
+fn first<T: Comparable>(a: T, b: T) -> T {
+    return a
+}
+
+// Multiple constraints (intersection) — T must satisfy Comparable, Hashable, and Stringable
+fn passThrough<T: Comparable & Hashable & Stringable>(x: T) -> T {
+    return x
+}
+
+// Multiple type parameters, each independently constrained
+fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
+    return v
+}
+```
+
+**Finite value-equality operation constraint (frozen contract, implementation PENDING)**:
+`Equal` is a built-in predicate rather than a user-implementable interface. Its first domain is
+bool, the eight fixed-width integers, f32/f64, string and recursive Array<T> where T: Equal.
+`<T: Equal>` and `where T: Equal` mean the same condition and conjoin other requirements.
+An unused unconstrained T definition cannot compare or forward to assertEqual. Comparable,
+Hashable and a same-named user interface do not supply this proof. Equal grants only same-T
+==, != and assertEqual, without reflexivity, ordering, key equivalence, display, member or
+construction authority. Nominal/derive, nullable, Map/Set/JSON and other domains require
+separate admission; unimplemented operations reject explicitly. See §17.33.
+
+**Closed Atomic type predicates (frozen 2026-10-05; implementation pending)**: canonical prelude `AtomicValue` is exactly `{i64, f64, bool}`, `AtomicNumber` exactly `{i64, f64}`, and `AtomicBoolean` exactly `{bool}`. Number/Boolean entail Value, and Value entails Sendable. They grant no extra interface, member, reflection or construction permission, or implicit Equal proof. Users cannot implement these canonical predicates; visible same-named user declarations resolve normally and acquire no built-in identity.
+
+Type uses, construction and common methods of `Atomic<T: AtomicValue>` require a Value proof at definition time. Method `where T: AtomicNumber` governs add/sub/fetchAdd/fetchSub; `where T: AtomicBoolean` governs toggle without restricting the other methods. Reuse existing `<T: C>`, `&`, and method-where syntax rather than introducing union constraints. Unused definitions with unconstrained `T` reject too. Instantiation and description queries cannot supply missing proofs. Specialize Checked content and reverify it; ordinary instances exist before Program sealing.
+
+**Built-in constraint interfaces**:
+
+| Interface | Meaning |
+|---|---|
+| `Comparable` | usable with `<` `<=` `>` `>=`; i64/f64/string and types implementing `Comparable` |
+| `Hashable` | usable as a `Map` key or `Set` element; built-in `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==` and `hash() -> i64` (signature below) |
+| `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
+| `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Slice, Map (including `JSON.Object`), Set, string, Range, the `Iterator<T>` a generator returns, and types with a custom `iterator()` satisfy this constraint. `JSON.Value` is not directly iterable. `Channel<T>` is receivable with `for-in` but drives a dedicated receive loop instead of the iterator protocol, so it does not satisfy it. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
+
+`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==` and `hash() -> i64`. The parameter type of `operator==` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
+
+```xray
+class Token implements Hashable {
+    value: i64
+
+    init(value: i64) { this.value = value }
+
+    // the parameter is spelled Token, not Self
+    operator==(other: Token) -> bool { return this.value == other.value }
+
+    hash() -> i64 { return this.value }
+}
+
+var counts: Map<Token, i64> = #{}
+counts.set(Token(7), 99)
+```
+
+Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, i64>)`.
+
+#### `where` clauses
+
+Constraints may also be written after the signature. `where` and `<T: C>` use the same constraint mechanism; requirements **intersect** on a shared parameter rather than overriding each other. Additional method requirements belong to the method declaration and do not modify the enclosing nominal type's parameter contract.
+
+```ebnf
+WhereClause ::= 'where' WhereItem (',' WhereItem)*
+WhereItem   ::= Identifier ':' ConstraintList
+```
+
+```xray
+// A long constraint list after the signature keeps the parameters on one line
+fn maxOf<T>(a: T, b: T) -> T where T: Comparable {
+    if (a > b) { return a }
+    return b
+}
+
+// Inline and where intersect on T: it must satisfy Comparable and Stringable
+fn describe<T: Comparable>(a: T, b: T) -> T where T: Stringable { ... }
+
+class Registry<K, V> where K: Hashable { ... }
+struct Holder<T> where T: Comparable { ... }
+interface Seq<T> where T: Comparable { ... }
+enum Wrap<T> where T: Comparable { ... }
+```
+
+An ordinary instance or static method's `where` clause may constrain its own type parameters and those of its enclosing nominal type, even when the method introduces no `<...>` parameters. Its effective requirements conjoin the enclosing declaration's requirements, its own inline requirements and its `where` requirements. They apply only to that method, without strengthening type construction, storage or other methods. The body, defaults and nested closures are checked in this definition context. Direct calls and method values require proof in the caller's context; concrete instantiation cannot supply a missing generic proof. Names remain unique: a failed condition does not select another overload or grant visibility, receiver authority or effect promises.
+
+Other declarations' `where` clauses constrain only their own type parameters. Unknown subjects and parameter shadowing are errors. Repeating the same admitted marker is equivalent to one requirement and remains charged to checking budgets; repetition or specialization cannot admit an unknown marker. New XIR supports conjunctions of Sendable/Error markers and named interface applications for ordinary nominal value types' read/static conditional methods. Applications retain their complete ordered arguments, and proof uses the full enclosing and method parameter environment. Ordinary read interface requirements, explicit struct/enum implementations, and constrained generic member calls now use static witnesses. For a requirement without own parameters, the implementation cannot add method parameters and its conditions must follow from nominal premises. For a requirement with Q own parameters, the implementation must have the same own arity, rebased by ordinal; its conditions follow from nominal and original requirement-method premises, while its body checks against its own declaration. Explicit generic interface calls and inline constraints have Windows scope qualification, while full safety remains unqualified. Own where parsing and value-shape inference have Windows scope qualification. Late result completion and explicit interface method values form the next qualification family; full bidirectional inference and contextual function-value inference remain OPEN. Existing ordinary generic methods do not replace interface-method validation. Conditional constructors, accessors, overrides, interface member conditions, and remaining witness declaration families still require separate implementation and reject until admitted; they remain part of the language target.
+
+#### The key relation
+
+Hash containers store and retrieve by a **key equivalence relation**, which is a different relation from the `==` operator:
+
+- Key equivalence must be **reflexive, symmetric, and transitive**. Reflexivity is a container invariant: a stored key must find itself, or insert stops replacing, lookup stops hitting, and delete stops reclaiming.
+- `a == b` implies `a` and `b` are key-equivalent (the converse does not hold).
+- Key equivalence implies `hash(a) == hash(b)`.
+
+Built-in `f64` compares with IEEE `==`, which is not reflexive on NaN, so its key relation adds: **all NaNs are one key**, and `-0.0` is the same key as `+0.0`. `nan == nan` therefore stays `false`, while `m[nan] = v` followed by `m[nan]` always finds the value.
+
+Operations that ask "is this value in here" use the key relation rather than `==`: `Map`'s `containsKey` / `containsValue` / subscript read and write / `delete`, `Set`'s `add` / `contains` / `delete`, and `Array`'s `indexOf` / `contains`.
+
+A user type's `operator==` serves as its own key relation, so **it must be reflexive**. A type with f64 fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
+
+**Current limitations**:
+- **Higher-kinded types** (`F<_>` as a parameter) are not supported — see §9.6.1; this is an explicit non-goal, not a deferral.
+- Default type parameters (`<T = i64>`) are not supported.
+- `where` accepts exactly the expressiveness of an inline constraint (`T: A & B`); constraints on associated or nested types (`where T.Item: Hashable`) are not supported, because associated types do not exist.
+- Duplicate names in one type-parameter list (`<T, T>`) are rejected.
+- Interface implementation still requires **explicit `implements`** at the class declaration site (not at the constraint site; see §5.4).
+
+### 9.3 Type Inference and Explicit Instantiation
+
+#### Type inference
+
+```xray
+identity(42)                    // T inferred as i64
+Box("hello")                // T inferred as string
+Pair("key", 100)            // K=string, V=i64
+```
+
+The inference algorithm is **bidirectional**:
+- From arguments (call-site argument types → type parameters).
+- From the return type (contextual expected type → type parameters).
+
+Inference collects type evidence from original signatures, actual values, determined earlier-argument context and expected results; constraints or concrete implements cannot invent an argument. Enclosing nominal or original interface arguments are fixed before solving the callee own suffix, and caller symbols retain their authentic declaration identities. Each argument checks and emits once in language evaluation order, without speculative replay. Complete explicit and inferred tuples use the same constraint proof, access, conversion, Checked identity and provenance verification. Value shapes and earlier complete context are admitted. The next increment completes unresolved own result dependencies from a real non-Unit expected result after explicit arguments have been checked. Already determined results retain their bindings and use original result conversions: identity with a typed i8 argument keeps T=i8 under an i64 result expectation, then widens. Defaults run only after the complete tuple and original proof and cannot invent phantom arguments. First lambdas, empty arrays and bare literals depending on unresolved context still require the later type plan; the complete bidirectional objective is unchanged.
+
+#### Explicit instantiation
+
+When inference fails or precision is needed:
+
+```xray
+var empty = Array<i64>()              // no element to infer from
+var m = Map<string, i64>()
+var result = identity<f64>(0)            // the type argument supplies a unique context; 0 is directly typed as f64
+```
+
+### 9.4 Specialization and Monomorphization
+
+**Implementation strategy**: build-time monomorphization. **The source generic declaration identity and ordered concrete type-argument tuple jointly form the instance identity**, and the same rule applies to generic functions and to generic classes / structs alike; same-named generics in different modules remain distinct even for the same arguments. Every cross-module specialization—whether reached by direct selective import, a selective re-export alias, or a namespace through that re-export—binds to the exact instance owned by the defining module, never by falling back to a local alias, facade spelling, or bare function name. A facade's public export map contains only its declared source names; compiler-only specialization bindings remain private and never publish mangled names through the facade.
+
+- **Instance identity**: `identity<string>` and `identity<MyClass>` are two instances, and so are `Box<string>` and `Box<MyClass>` — even though both use the PTR runtime representation. Generic bodies are checked at definition time against constraints; member identities cannot be rediscovered against a concrete argument. Equal ABI representation does not imply equal declarations, witnesses or ownership semantics.
+- **Nominal type-argument identity**: declaration-backed class / struct / interface / enum arguments are identified by their exact declarations, not by source spelling. A caller's `LocalCounter` and a same-named private type in the defining module must produce different specializations; explicit and inferred uses of the same caller type must merge into one specialization.
+- **Definition and call contexts**: the generic declaration body is always analyzed in its defining module's lexical context, while concrete type arguments resolved at a call site retain their exact semantic identities from the calling module. The compiler stores that binding outside syntax type references; if the declaration identity is missing or cannot be proven complete, the build is rejected rather than falling back to a bare type name.
+- **Code sharing is an AOT decision, not a frontend one**: size-driven merging happens after resolution, in the backend plan (`generic-body-plan` / `generic-code-size-plan` evidence rows decide `share_canonical_body` against a size threshold), and it carries evidence. The frontend keeps identity exact; the backend owns size.
+- Name mangling: `identity<i64>` → `identity$i64`, `Pair<string, i64>` → `Pair$str_i64`. The mangled name *is* the instance identity, so it must never drop a type argument.
+- Strict compile-time type checking ensures safety; cold-path type-name metadata may retain concrete type-parameter display information when the names/debug profile enables it.
+
+> Ordinary specialization operates on Checked XIR and is reverified; see §17.11. The legacy depth/instance budgets and advanced-interface table below remain migration obligations, not implemented XIR coverage.
+
+#### Monomorphization budgets
+
+Two budgets guard two different risks, and they are not interchangeable:
+
+| Budget | Value | Guards | On breach |
+|---|:---:|---|---|
+| `XR_MONO_MAX_DEPTH` | 128 | **Nesting**. A specialized body may instantiate further generics (`Router<i64>` building `RouteMatch<i64>` building `Map<string, i64>`), so expansion is a fixpoint. Polymorphic recursion (`fn f<T>() { f<Box<T>>() }`) makes that fixpoint diverge, and depth is the only quantity that can detect it: every round produces a genuinely new type tuple, so neither dedup nor a counter can tell divergence from legitimate breadth | `E0389` |
+| `XR_MONO_MAX_INSTANCES` | 16384 | **Breadth**. Each instance clones a whole declaration, so this is a compile-time memory backstop rather than a language rule. It sits far above any realistic program | `E0387` |
+
+**Exceeding a budget is always a hard error, never a silent downgrade.** Leaving a call generic would reintroduce boxing underneath an `xray verify` `forbid=["box"]` contract that just "proved" it absent — exactly the kind of invisible de-optimization versioned effect contracts exist to rule out.
+
+The `E0389` diagnostic prints the full instantiation chain (`a$i64 -> b$Box_i64 -> ...`); without it the reported type is one the user never wrote and cannot search for.
+
+**Performance impact**:
+- Monomorphization lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations.
+- Per-type specialization grows code and metadata size roughly with "type combinations x declaration size"; this buys exact layout, faithful debug type names, and per-type specialization. Size is recovered by the AOT sharing plan above, against its threshold.
+- Built-in specialized containers (`Array<i64>`, `Array<u8>`) further avoid boxing overhead.
+- Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
+
+**Error-effect specialization for higher-order functions**: callback parameters are effect-polymorphic by default. Monomorphization selects a `NO_THROW` or `MAY_THROW` version from the argument callback's throw-effect summary, so a callback proven no-throw does not generate unnecessary error checks; an unknown dynamic target conservatively selects the may-throw version. Strong guarantees at higher-order call boundaries use `xray verify` contracts and reject incomplete proof.
+
+**Feature status** (using the §0.4.3 status markers):
+
+| Feature | Status | Notes |
+|---|---|---|
+| `where` clauses | **Stable** | see §9.2 |
+| Declaration-site variance (`out T` / `in T`) | **Unimplemented** | has a prerequisite, see §9.6 |
+| Default type parameters (`<T = i64>`) | **Unimplemented** | the syntax is currently an error, not silently ignored |
+| Higher-kinded types (HKT) | **Explicitly not provided** | conflicts with whole-program monomorphization, see §9.6.1 |
+
+### 9.5 Protocols (Duck Typing) vs. Nominal Typing
+
+#### Nominal typing dominates
+
+Xray's interface implementations require **explicit `implements`** — unlike Go's "implicit interface implementation".
+
+```xray
+interface Drawable { draw() -> () }
+
+class Square implements Drawable {        // explicit implements required
+    draw() { print("square") }
+}
+
+class Wrong {
+    draw() { print("wrong") }
+}
+
+fn render(d: Drawable) { d.draw() }
+render(Square())     // OK
+// render(Wrong())   // compile error: Wrong is not Drawable
+```
+
+#### Structural objects
+
+Only `object literal` and `type T = {...}` use structural matching. Structural matching requires an **exact field set** (see §2.10.1): neither extra nor missing fields, except that fields whose declared type admits null may be omitted.
+
+```xray
+type Point = { x: f64, y: f64 }
+
+fn describe(p: Point) { ... }
+
+describe({ x: 1.0, y: 2.0 })          // OK: exact field set
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // compile error E0356: extra field 'z'
+describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
+```
+
+### 9.6 Variance
+
+**Status: Unimplemented** (declaration-site variance annotations `out T` / `in T`). The current behavior is a complete and sound baseline, not a placeholder:
+
+- Container types: **invariant** (`Array<Dog>` is not a subtype of `Array<Animal>`).
+- Function types: parameters contravariant, return values covariant (the standard rule).
+
+**Why not in this round**: variance states rules *on top of* the subtype relation, so it has a prerequisite — the width direction for structural types must be settled first (see the exact-field-set rule in §2.10.1). Introducing declaration-site variance while the subtype relation itself has not converged multiplies an undecided semantics by another layer, and it cannot be patched backward-compatibly afterwards. Invariance is the safe, AOT-friendly starting point, and it can be relaxed at any time.
+
+### 9.6.1 Higher-Kinded Types (HKT)
+
+**Status: explicitly not provided** — a non-goal, not a deferral. Xray has no type-constructor parameters (the functor abstraction other languages spell `F<_>`).
+
+**Why this is permanent**: HKT is fundamentally at odds with whole-program monomorphization. Abstracting over a type constructor means the instance set is no longer finitely enumerable at compile time, leaving only dictionary passing or type erasure — and both reintroduce exactly the indirection that Xray's AOT line (unboxed representations, exact layout, `xray verify` shape contracts) exists to remove. It is also inconsistent with the lightweight-scripting-language positioning.
+
+Where similar abstraction is wanted, use an interface with concrete type parameters (signatures like `interface Mappable { map(f: fn(T) -> U) -> Self<U> }` are likewise not provided), or instantiate concretely at the call site.
+
+### 9.7 Generics and Type Identity
+
+Because of monomorphization, every concrete instantiation has its own class/function definition. Runtime checks use nominal identity, and debug output goes through `typeName`'s cold-path name table:
+
+```xray
+class Container<T> {
+    items: Array<T>
+}
+var c = Container<i64>()
+print(c is Container<i64>)     // true
+print(typeName(c))             // "Container<i64>" when type names are enabled
+```
+
+Structured field/method metadata is not provided automatically by the default runtime; use explicit derive or compile-time generation for inspect/serialization use cases.
+
+### 9.8 Explicit Generic Function Values
+
+`identity<string>` and `module.identity<string>` form ordinary function values
+without calling the target. The opening angle must be adjacent to the name.
+After the complete type list, an expression delimiter (comma, semicolon, closing
+parenthesis/bracket/brace, colon or end of input), member dot or new line admits a
+reference. A following opening parenthesis retains direct generic-call syntax.
+`(identity<string>)(value)` constructs a value and invokes it indirectly. Otherwise
+parsing restores comparison interpretation, including `a<b>c` and `a < b`.
+
+References require the exact explicit type-argument count and declaration
+constraints proved in the enclosing definition, with unchanged visibility and
+import permissions. Ordinary variables and type constructors cannot be specialized
+as functions. There is no inference or runtime generic dictionary. Reference-only
+instances join the same Checked instance closure before Program sealing; references
+inside generic bodies can use enclosing parameters without deferring definition
+checking until concrete instantiation.
+
+---
+
+## 10. Concurrency and Coroutines
+
+> Source of truth: `src/coro/xcoro*.c`, `src/coro/xtask*.c`, `src/coro/xchannel.c`, `src/coro/xscope*.c`, `src/frontend/analyzer/xanalyzer_escape.c`, and `docs/rules/design-principles.md`.
+
+xray's concurrency model is **goroutine-style coroutines + channels + strong static guarantees**. The design makes `go worker(args)` use the same explicit argument and ownership boundary as an ordinary call, while the **compiler guarantees no data race** within the language's safe subset. The precise form of that guarantee, its boundary, and the synchronisation edges each construct in this section establishes are defined in §16.9.
+
+### 10.1 Coroutine model
+
+| Dimension | Choice |
+|--|--|
+| Scheduling model | M:N (user-space coroutines on multiple OS threads) |
+| Scheduling policy | Cooperative (back edges, channels, `await`, `Coro.yield()`, and similar scheduling/suspension points) + work stealing |
+| Stack model | Stackless (per-coroutine VM value stack + frame array, grows on demand, no native C stack) |
+| Creation cost | ~microsecond (initial VM value stack ~64 slots + 4 frames, not a native stack) |
+| Context switch | VM context switch (save/restore VM frames), no native stack switch, no syscall |
+
+Coroutines are distributed across multiple worker threads by default; the runtime sets a Go-style `GOMAXPROCS` parallelism level based on the CPU core count.
+
+### 10.2 `go` — start a coroutine
+
+```ebnf
+GoExpr   ::= 'linked'? 'go' GoOptions? CallExpr
+GoOptions ::= '(' GoOption (',' GoOption)* ')'
+GoOption ::= 'name' ':' StringLiteral
+```
+
+`go` is an **expression** returning a `Task<T>` handle. It accepts only a call expression; inline logic must be an immediately invoked lambda:
+
+```xray
+// Form 1: call an existing function
+var t1 = go worker(0, channel)
+
+// Inline logic: a lambda must still form a complete call with explicit arguments
+var t2 = go fn(d: JSON.Object) -> i64 {
+    return d.value * 2
+}(payload)
+
+// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist
+var t3 = go fn() -> i64 {
+    return compute()
+}()
+
+// Optional debugging name
+var named = go(name: "worker-1") worker(1, channel)
+```
+
+**Pass according to the declaration**: copyable Sendable arguments retain owned logical copies, without requiring `copy(...)` or unique backing. A noncopyable Sendable resource transfers only to a consuming parameter; optional `move resource` marks that same transfer, not a `go` option. Task results must be copyable and Sendable; resources are not Task results:
+
+```xray
+var data = [10]
+var task = go fn(d: Array<i64>) -> i64 {
+    return d[0] + 1
+}(data)            // retain a logical copy; the caller can still use data
+```
+
+`go { ... }` is not syntax. The single call form guarantees that every entry passes through the same argument evaluation, capture plan, and cross-coroutine transfer plan. Use a lambda call for inline logic and handle arguments through their declared READ or consuming mode:
+
+```xray
+var n = 10
+var task = go fn(x: i64) -> i64 {
+    return x + 1
+}(n)
+```
+
+**Semantics**:
+- Every `go` expression returns a `Task<T>`, where `T` is the callee's return type; functions returning `()` correspond to `Task<null>`.
+- Coroutines are scheduled on idle worker threads (M:N).
+- `go(name: ...)` only sets the debugging name and does not affect scheduling order.
+- Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
+- Arguments, owned captures and results must satisfy Sendable by their actual types. Ordinary generics are checked by constraints at the definition and reverified after Checked specialization. Copyable values retain declared logical copies, stopping at class and synchronization identities. Array qualification depends on every element; const, COW, reference counts and a single worker grant no additional Sendable authority. Ref, Slice/MutSlice, Cell and non-Sendable values cannot cross this boundary. Noncopyable Sendable resources transfer only through consuming parameters and do not enter ordinary copyable captures or Task results.
+- `name` inside `go(name: ...)` is diagnostic/debug metadata only. The semantic modifier is the `linked go` prefix and is not a `GoOptions` entry.
+- An ordinary outer `var` may never be captured by a `go` closure, for either reads or writes. This rule does not depend on coroutine count or scheduling. Mutable state shared across coroutines must flow through audited `Channel`, `Atomic`, or `sync` handles; direct captured mutation is a compile error.
+- `linked go call()` still accepts only a call expression and returns an ordinary `Task<T>`. Outside a scope it attaches the child Task to the current parent Task: parent cancellation recursively cancels the child, child failure cancels the parent and its linked subtree, and a parent that has finished its own body still waits for linked children to terminate. Inside a scope, membership and failure propagation are owned solely by that scope's policy; no second parent-child relation is layered on top.
+
+### 10.3 `await` — wait for a result
+
+```ebnf
+AwaitExpr ::= 'await' Expression
+           |  'await' 'all' Expression       // wait for all to complete
+           |  'await' 'any' Expression       // wait for any one to complete
+```
+
+```xray
+// single task
+var task = go fetch("https://example.com")
+var result = await task                    // yields the current coroutine until task completes
+
+// await all: wait for all, returns the result array (in input order)
+var t1 = go compute(2)
+var t2 = go compute(3)
+var t3 = go compute(4)
+var results: Array<i64> = await all [t1, t2, t3]
+// also works on a variable directly, no brackets needed
+var tasks = [t1, t2, t3]
+var results2: Array<i64> = await all tasks
+
+// await any: wait for the first to complete, return its result; the others keep running
+var first = await any [t1, t2, t3]
+
+// await anySuccess: skip failing tasks; wait for the first successful one
+var firstOk = await anySuccess [t1, t2, t3]
+```
+
+**Semantics**:
+
+- `await` only applies to `Task<T>`; other types are a compile error.
+- Users always write `await task`, never `await (move task)`. Task results must be copyable and Sendable. A task keeps its complete owned terminal outcome; repeated awaits receive separate logical copies, stopping at class and synchronization identities. Copy or retain failure affects that waiter alone without consuming or modifying the sticky outcome. Backing uniqueness or reference counts cannot select single-take semantics.
+- The current coroutine **yields** until the target completes (without blocking the OS thread).
+- PanicInfo propagation:
+  - `await t` re-raises `t`'s failure on the channel `t` raised it on. A `throw <enum>` inside the coroutine is re-raised as a value error, so the awaiting frame's `catch (e)` catches it and, with no catch, it propagates by value like any other throw. A panic inside the coroutine is re-raised as a panic and keeps unwinding.
+  - `await t` therefore inherits the error set of the awaited coroutine's body, and a function containing such an `await` is fallible exactly when that body is. A task whose coroutine cannot be named at the await — read out of a collection, received as a parameter — is fail-closed: may-throw.
+  - The same holds at a `linked scope`'s exit, which re-raises its first failed child in the enclosing frame on that child's channel.
+  - The forms that report an outcome as a value — `awaitResult()`, `awaitTimeout(ms)` — never re-raise, and so never enter the enclosing function's error set.
+  - On success, `await t` returns `T`; if `T` is nullable, a returned `null` is the task's real result, not a cancellation or failure marker.
+  - `await all` throws if any task throws (the others are cancelled).
+  - `await any` throws only when **every** task fails; if any one completes, its result is returned.
+  - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
+- `all` / `any` / `anySuccess` are **contextual keywords** after `await`; they apply only in this position.
+- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<i64>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a common enum / union / `JSON.Value` result type.
+
+### 10.4 `Task<T>` handle
+
+`go expr` returns `Task<T>`, where `T` is the callee's return type. Task handles support:
+
+| Method / property | Type | Description |
+|--|--|--|
+| `t.done` | `bool` (property) | Whether the task has completed (success, failure, or cancellation) |
+| `t.status` | `TaskStatus` (property) | `Pending` / `Running` / `Success` / `Failed` / `Cancelled` |
+| `t.cancel()` | `() -> ()` | Request cooperative cancellation |
+| `t.poll()` | `() -> TaskResult<T>` | Non-blocking observation; returns `TaskResult.Pending` while incomplete |
+| `t.awaitResult()` | `() -> TaskResult<T>` | Waits and returns a status result without rethrowing |
+| `t.awaitTimeout(ms)` | `(i64) -> TaskResult<T>` | Waits until completion or timeout; timeout returns `TaskResult.Timeout` |
+
+```xray
+var t = go fetch(url)
+if (!t.done) { /* still running */ }
+var r = await t
+
+match (t.poll()) {
+    TaskResult.Pending -> print("running")
+    TaskResult.Success { value } -> print(value)
+    TaskResult.Failed { error: err } -> print(err)
+    TaskResult.Cancelled -> print("cancelled")
+    TaskResult.Timeout -> print("timeout")
+}
+```
+
+The current public shape of `TaskResult<T>` is `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, and `Pending`. Runtime faults enter `Failed` as `PanicInfo`; business enum errors still use the language error channel, so plain `await task` propagates through the matching error path, and callers that need a status value keep an explicit task handle and call `awaitResult()` / `awaitTimeout(ms)`.
+
+**Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next scheduling/suspension point (back edge, channel operation, `await`, `Coro.yield()`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
+
+**Watchdog policy**: the runtime monitor thread (sysmon) observes the heartbeat of RUNNING coroutines. Pure Xray loops advance the heartbeat at back-edge safepoints, so they are observed as making progress; sysmon is mainly for long native/FFI calls or no-safepoint regions that stop progressing. If a heartbeat stays frozen for too long, the default behavior is **warn-only**: a stuck warning is printed after roughly 100ms, but the coroutine is not silently cancelled. Forced cancellation is explicit opt-in: set `XRAY_SYSMON_CANCEL_MS=N` (`N > 0`, milliseconds) to mark a coroutine for cancellation after its heartbeat remains frozen past that threshold; unset or `0` keeps warn-only behavior. Long pure-CPU loops may insert `Coro.yield()` to improve scheduling fairness and cancellation responsiveness.
+
+### 10.5 Channel
+
+```ebnf
+ChannelType ::= 'Channel' '<' Type '>'
+ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
+```
+
+Channels use stable `const` bindings. Their audited synchronization capability permits `send`/`recv` to mutate protected internal state:
+
+```xray
+const ch  = Channel<i64>(10)    // buffered, capacity = 10
+const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)
+const cha = Channel(3)          // element type inferred from the first send
+```
+
+**API** (note that all method names are **camelCase**):
+
+| Method | Signature | Behaviour |
+|--|--|--|
+| `send(v)` | `(T) -> ()` | Blocking send; waits for a consumer when full; throws if the channel is closed |
+| `recv()` | `() -> Recv<T>` | Blocking receive; returns `Recv.Closed` when closed and drained |
+| `recvOr(default)` | `(T) -> T` | Blocking receive; returns the payload directly, or `default` when closed and drained, without allocating a `Recv<T>` wrapper |
+| `trySend(v)` | `(T) -> SendResult` | Non-blocking send; returns `Sent` / `Full` / `Closed` |
+| `tryRecv()` | `() -> Recv<T>` | Non-blocking receive; returns `Recv.Empty` when empty |
+| `sendTimeout(v, ms)` | `(T, i64) -> SendResult` | Send with timeout; timeout returns `SendResult.Timeout` |
+| `recvTimeout(ms)` | `(i64) -> Recv<T>` | Receive with timeout; timeout returns `Recv.Timeout` |
+| `close()` | `() -> ()` | Close the channel; idempotent |
+| `isClosed` | `bool` (property) | Whether the channel is closed |
+
+```xray
+const ch = Channel<i64>(10)
+ch.send(42)                             // blocking send
+var v = match (ch.recv()) {
+    Recv.Value { value } -> value
+    Recv.Closed -> -1
+    _ -> -1
+}
+
+var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
+match (ch.tryRecv()) {
+    Recv.Value { value: next } -> print(next)
+    Recv.Empty -> print("empty")
+    Recv.Closed -> print("closed")
+    Recv.Timeout -> print("timeout")
+}
+
+ch.send(7)
+ch.close()
+for (msg in ch) {
+    print(msg)
+}
+
+var value = ch.recvOr(-1)
+```
+
+**send/recv with `move`**: when sending a large object, use `ch.send(move payload)` to transfer ownership and avoid copying; the receiver becomes the sole owner.
+
+In type position, a channel is written as `Channel<T>` and may be used in function parameters, fields, and return types:
+
+```xray
+fn producer(ch: Channel<i64>) {
+    ch.send(42)
+}
+```
+
+**Semantics**:
+- **MPMC** (multi-producer, multi-consumer).
+- Buffered channel: senders suspend when full; receivers suspend when empty.
+- Unbuffered channel: send and receive must rendezvous (synchronous handshake).
+- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value { value: v }`, then `Recv.Closed`; `recvOr(default)` returns remaining buffered values, then `default`; `tryRecv` returns `Recv.Empty` when empty and not closed.
+- `for (msg in ch)` is equivalent to blocking receive until the channel is closed and drained; the loop variable has type `T`. Channels do not support key-value iteration.
+
+### 10.6 `select`
+
+`select` multiplexes multiple channel operations. The non-blocking default branch uses `_`.
+
+```ebnf
+SelectStmt ::= 'select' '{' SelectArm+ '}'
+SelectArm  ::= RecvArm | SendArm | TimeoutArm | DefaultArm
+RecvArm    ::= Identifier 'from' Expression '->' Block
+SendArm    ::= Expression 'to' Expression '->' Block
+TimeoutArm ::= 'after' Expression '->' Block
+DefaultArm ::= '_' '->' Block
+```
+
+```xray
+const ch1 = Channel<i64>(2)
+const ch2 = Channel<i64>(2)
+
+select {
+    msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
+    msg from ch2 -> { print("got from ch2:", msg) }      // receive arm
+    100  to   ch1 -> { print("sent 100 to ch1") }        // send arm
+    _ -> { print("no channel ready") }                   // default arm (non-blocking)
+}
+```
+
+**Semantics**:
+- Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value { value: name }` payload to `name`.
+- Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity; `value` follows the same transfer plan as `ch.send` — an execution-local heap value must be written as explicit `copy(v)` or `move v`.
+- Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
+- When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
+
+### 10.7 `scope` (structured concurrency / lexical scope)
+
+`scope` is a **statement keyword** that introduces a new lexical block. It serves two purposes:
+
+1. **Pure lexical scope**: identical to a C/Rust `{ ... }` local block; `var` inside the block does not affect outer same-named variables.
+2. **Structured concurrency** (semantic enhancement): coroutines started via `go` inside the block are **awaited automatically** before the block exits.
+
+```ebnf
+ScopeStmt       ::= 'scope' Block
+LinkedScopeStmt ::= 'linked' 'scope' Block          // sibling failure -> cancel all + rethrow
+```
+
+```xray
+// lexical scope use
+var x = 1
+scope {
+    var x = 10            // shadow the outer x; in effect inside the block
+    print(x)              // 10
+}
+print(x)                  // 1
+
+// structured concurrency use (with go)
+scope {
+    go worker_a()
+    go worker_b()
+    // before the block exits, both a/b are awaited; an exception in either does not affect siblings
+}
+```
+
+**Two scope variants**:
+
+| Form | Behaviour when a child coroutine throws | Return value |
+|---|---|---|
+| `scope { ... }` | Siblings are not cancelled; exceptions do not propagate outward (each task is independent) | none (statement form) |
+| `linked scope { ... }` | **Cancels all siblings** and **rethrows** the first exception outward | none |
+
+Neither form returns an aggregate result. To observe a specific child status, keep an explicit task handle and call `awaitResult()` or `awaitTimeout(ms)`; to aggregate by result, use `await all` / `await any` / `await anySuccess`.
+
+```xray
+// linked scope: failure propagation
+try {
+    linked scope {
+        go ok_worker()
+        go failing_worker()         // throws
+    }
+} catch (e) {
+    print("caught:", e)              // hits this branch
+}
+
+// scope: keep task handles and inspect each outcome after the block
+var first: Task<i64>?
+var second: Task<i64>?
+var third: Task<i64>?
+scope {
+    first = go failing("error1")
+    second = go failing("error2")
+    third = go ok()
+}
+var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]
+print(len(outcomes))                 // 3 (one outcome per child)
+```
+
+**General semantics**:
+- `scope` is not a function call and does not require an import; it is a keyword block statement.
+- Both forms await every coroutine started by `go` inside the block before exiting.
+- Both forms are statements only; neither may appear in an expression position.
+
+### 10.8 `move` — cross-coroutine ownership transfer
+
+```ebnf
+MoveExpr ::= 'move' Identifier
+```
+
+`move` is a consuming source action (not a `go` option) accepted in initializers, assignments, returns, and call arguments.
+
+**The decision procedure is §2.14**: `move` requires a rebindable local `var` root that satisfies all four evidence axes at once — binding live, root unique, capability mutable, no live loan. Syntactically it accepts an identifier only: `move x.field`, `move arr[i]`, and `move f()` are syntax errors. After `move`, the variable is statically marked **moved**, and any later reference is a compile error; a rejected move does not poison the source state. A `const` capability is not a mutable-owner move source.
+
+A transfer across a coroutine boundary reads the same decision procedure, so the guarantee that coroutines do not share a mutable graph rests on the uniqueness evidence in §2.14, not on a separate concurrency-only rule.
+
+```xray
+var buf = Array<u8>(1024 * 1024)
+
+// hand off to a coroutine
+var t = go fn(b: Array<u8>) -> i64 {
+    return process(b)
+}(move buf)
+// compile error: buf has been moved
+// print(len(buf))
+
+// hand off to a channel
+const ch = Channel<Array<u8>>(1)
+var payload = Array<u8>(4096)
+ch.send(move payload)
+// compile error: payload has been moved
+```
+
+See §7.3 and §7.4 for the coroutine transfer rules of `var` and `const` capabilities.
+
+### 10.9 Synchronisation primitives
+
+xray's default concurrency model favours **message passing + verified capability sharing + explicit ownership transfer**: `const`/synchronization capabilities, `Channel`, `move`, and `scope` make cross-coroutine data boundaries visible in source, so raw mutexes/locks are **discouraged**.
+
+When mutual exclusion or atomic operations are unavoidable, the runtime provides:
+
+| Primitive | Form | Description |
+|---|---|---|
+| Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
+| `const`/synchronized capability | Stable read-only value or synchronized identity | Ordinary graphs are deeply read-only; audited handles expose only capability-approved interior mutation |
+| `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `i64`/`f64`/`bool` |
+| `sync.Mutex<T>` / `sync.RwLock<T>` | Coroutine-domain locks | Require explicit `import sync`; wait by suspending a coroutine, not by blocking a worker; not allowed in `sys.Thread` bodies |
+| `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar`, etc. | OS-thread-domain locks | Require explicit `import sys`; block the current OS thread, suitable for `sys.Thread`, runtime components, and short critical sections |
+
+> **Design note**: xray does not expose bare `Mutex`/`RwLock` in the prelude. Prefer `Channel`, stable `const` synchronization handles, `move`, and `Atomic<T>` by default. When a lock is required, choose the execution domain explicitly through `sync` or `sys` so coroutine-suspending locks are not confused with OS-thread-blocking locks.
+
+#### `Atomic<T>` — lock-free atomic type
+
+`Atomic<T>` wraps `i64`, `f64`, or `bool`, allocated on the system heap, using C11 atomic instructions for lock-free cross-coroutine reads and writes.
+
+**Declaration constraint**: name an `Atomic<T>` handle with `const`; its atomic methods come from an audited synchronized interior-mutation capability.
+
+```xray
+const counter = Atomic(0)         // Atomic<i64>
+const flag = Atomic(false)        // Atomic<bool>
+const rate = Atomic(3.14)         // Atomic<f64>
+```
+
+**Method overview** (full signatures in §14.19):
+
+| Method | Description |
+|---|---|
+| `load(ord?)` | Atomic read |
+| `store(val, ord?)` | Atomic write |
+| `add(val, ord?)` / `sub(val, ord?)` | Atomic add/subtract (i64/f64) |
+| `fetchAdd(val, ord?)` / `fetchSub(val, ord?)` | Atomic add/subtract returning old value |
+| `swap(val, ord?)` | Atomic swap, returns old value |
+| `compareExchange(expected, desired, ord?)` | CAS, returns `(old, bool)` |
+| `toggle(ord?)` | Atomic negate (bool), returns old value |
+| `toString()` | Returns string representation of current value |
+
+#### `Ordering` enum
+
+All methods accepting an `ord?` parameter take an `Ordering` enum to specify memory ordering. Default is `SeqCst` (strongest guarantee).
+
+```xray
+enum Ordering {
+    Relaxed,          // No cross-thread ordering guarantee
+    Acquire,          // Read barrier
+    Release,          // Write barrier
+    AcquireRelease,   // Read-write barrier
+    SeqCst,           // Sequential consistency (default)
+}
+```
+
+The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed. Low-level intrinsics read the declaration-order tag and do not rely on user-visible backing values.
+
+**Complete family contract (frozen 2026-10-05; the current fixed i64 subset is not a complete implementation)**: `Atomic<T>` uses the closed AtomicValue/Number/Boolean proofs in §9.2. Handle copies share one synchronization identity. Each constructor creates an independent object, including separate module initializations of separate Instances. Construction and owned results may allocate. Value operations promise lock freedom, not wait freedom, and have no mutex fallback. A provider must freshly compile and run `atomic_is_lock_free` on an actual aligned cell and verify layout/ABI; unsupported providers reject explicitly rather than relying only on `ATOMIC_*_LOCK_FREE == 2`.
+
+| Operation | Legal memory orders |
+|---|---|
+| load | Relaxed / Acquire / SeqCst |
+| store | Relaxed / Release / SeqCst |
+| add/sub/fetchAdd/fetchSub/swap/toggle/compareExchange | All five Ordering variants |
+
+Omission or a valid None selects SeqCst. Admit the exact prelude Ordering declaration and variant identity, never a spelling, integer or user backing value. Reject statically known invalid load/store orders in Checked. A dynamic invalid order terminates as CALL_BAD_ARGUMENT after evaluating the receiver and all arguments once in their original order, before any atomic access: fault detail is zero, no result is published and atomic state is unchanged. This terminal state is neither ordinary Error nor panic and is not consumed by a protected panic handler; existing initializer stickiness and cleanup apply. Forged variants reject at value admission. Never weaken an order, accept an unknown tag or pass an invalid C11 order to a provider. Existing structural RUN_BAD_ARGUMENT→CALL_BAD_STATE remains unchanged; invalid Atomic ordering needs a separate reason and exact mapping.
+
+The Ordering declaring module is generated by the actual identity factory with STDLIB authority, namespace_id="prelude" and logical="prelude/builtin_symbols.def"; physical roots never enter identity. Source still needs the real source-derived generated module, Unit initializer and normal dependency/permission checks, without inventing an importable prelude.xr or authorizing a query URI. Nominal Declaration/Identity own a native id and 32-byte source-governance fingerprint persistently. Ordering uses id4 in this family; ordinary user nominal records are all zero. Checked and specialization reverification validate the governed VALUE record and complete ENUM shape: no type parameters, constraints or fields, exported with zero flags, five exact ordered payload-free variants, the canonical prelude declaring module and legal initializer/dependencies. Clone, wire, projection, TypeArena and Program correspondence preserve these facts. Lexical/hoisted/import lookup precedes prelude; a same-named user enum remains a different nominal identity without builtin qualification. Ids, flags and query pointers never bypass visibility, construction or module-dependency checks. The public fingerprint is governance data, not an uncopyable authentication signature. A complete legal public builtin descriptor may pass ordinary Checked reverification without granting user-private authority or authenticating an external package.
+
+compareExchange is strong CAS and returns a real `(T, bool)` Tuple without visible spurious failure. One ordering determines the success/failure pair:
+
+| ordering | Success | Failure |
+|---|---|---|
+| Relaxed | Relaxed | Relaxed |
+| Acquire | Acquire | Acquire |
+| Release | Release | Relaxed |
+| AcquireRelease | AcquireRelease | Acquire |
+| SeqCst | SeqCst | SeqCst |
+
+Failure returns the actually observed old value without writing state; success returns the value before linearization. Before CAS, privately prepare a real exact `(T,bool)` Tuple with valid scalar fields and every fallible carrier/domain/arena-retain, admission/work/budget, empty result slot and publication permission; check cancellation/execution permission last. The prepared value has no aliases, borrows or public setter. Preparation failure neither accesses the cell nor publishes a result and releases partial owners. After CAS, infallibly fill the observed and success scalar payloads and move the already permitted result; never allocate, retain, copy, admit or perform fallible validation. Later caller-frame/budget failure or cancellation does not roll back success. Failed CAS returns the actual observed value rather than the original expected copy.
+
+i64 addition/subtraction wraps modulo 2^64 as in §2.3.1; subtracting a MIN delta does not perform host signed negation. f64 construction/load/store/swap/CAS preserve all binary64 bits; CAS compares bits, distinguishing signed zeros and different NaN payloads while matching an identical NaN payload. Ordinary float equality is unchanged. Each f64 RMW computes its candidate with the existing software ADD/SUBTRACT kernel and CAS on u64 bits, recomputing from the latest observed value after failure. Preserve §2.3.2 ties-even, subnormals and canonical arithmetic NaNs; do not use host FPU/fenv, fuse operations or replace subtraction with addition of a negated operand. Charge and check cancellation/limits for each actual attempt without treating a later limit failure as rollback of success. toString takes one SeqCst snapshot and then produces an independently owned string with the existing bool/i64/software-f64 formatter.
+
+Each resume of f64 add/sub/fetchAdd/fetchSub attempts at most one value-cell CAS. On failure preserve the latest observed value and once-evaluated arguments, return canonical Unit CONTINUE, and keep the active frame/pc READY; the next resume recomputes the software candidate. CONTINUE creates no SUSPEND, wake token, language yield or second execution pipeline. Real poll/frame/work charging, cancellation and release use the same Call driver; no unbounded retry loop hides in one resume. Stopping before success leaves the cell unchanged; cancellation after success does not roll it back. The initial load also uses a legal read order.
+
+Unsupported targets use one explicit UNSUPPORTED route. Host lock-free capability does not determine language legality in Checked, queries, specialization reverification or ordinary Lower. Provider/SDK/Target admission requires the exact target, flags, real cell/reference layout and executed capability probe; missing execution or malformed evidence grants no admission. After version/shape/full proof checks, before publication or any initializer, a closed Program containing constructed Atomic checks the linked common runtime capability; failure publishes no Program and does not transfer the original Lowered owner. Construction defensively checks the actual aligned unpublished cell again; false performs no value load/store/CAS/RMW, publishes no value and releases temporary owners. atomic_init is unpublished preparation, not a zero-write or allocation-free promise; reference-cell capability is checked first. Runtime UNSUPPORTED is a nonpanic terminal with canonical Unit, zero wake and empty panic, never consumed by a handler. Invalid objects, OOM, budgets and reference saturation retain their own first failure, while sticky initialization failure and release follow existing nonpanic paths. There is no mutex/libatomic non-lock-free fallback, and unknown or unverified targets are not treated as already supported.
+
+> `Ordering` describes the memory order of **one atomic operation**; that alone is not enough to derive program behaviour. How these values combine with the language-level synchronisation edges of channels, `go`, `await`, `scope` and `const` publication into happens-before is defined in §16.9, which also governs ordinary concurrent code that never mentions `Ordering`.
+
+```xray
+const counter = Atomic(0)
+counter.store(42, Ordering.Release)
+var val = counter.load(Ordering.Acquire)
+```
+
+
+### 10.10 `Coro.yield()` — yield the CPU
+
+```ebnf
+CoroYieldCall ::= 'Coro' '.' 'yield' '(' ')'
+```
+
+```xray
+for (i in 0..1000) {
+    do_chunk(i)
+    Coro.yield()                // explicit safepoint, lets other coroutines run
+}
+```
+
+`Coro.yield()` is a cooperative scheduling point, equivalent to an explicit safepoint where the scheduler can run other coroutines and observe cancellation. `yield expr` is reserved for generator value production; bare `yield` is rejected.
+
+The call accepts no value or type arguments and returns unit; ordinary functions need no async annotation. A lexical binding shadowing `Coro` is resolved normally and cannot silently invoke the scheduling primitive. The new XIR source entry uses the same SUSPEND/resume protocol: its current single-host driver resumes a suspension with the matching instance epoch/wake. Full multithreaded scheduling and generator qualification remain separate.
+
+The two share a word root but are not the same suspension: `Coro.yield()` yields to the scheduler (can migrate OS threads, is a cancellation point, propagates to callers along call edges), while `yield expr` transfers symmetrically back to the driver (none of those hold). See §3.16.1 for the point-by-point comparison. **A generator body must not call `Coro.yield()`** (`E0385`, see §3.16.2).
+
+### 10.11 Concurrency safety model
+
+xray eliminates data races at compile time through the type system. The precise statement is the theorem in §16.9.5: **a program containing no `unsafe` block and using none of the escape hatches listed in §16.9.5 has no data race, and its behaviour is equivalent to some sequentially consistent interleaving (SC-DRF)**. Inside the safe subset you may therefore reason in terms of interleaved statements without needing the happens-before detail; the rules below are how that theorem is enforced. The escape-hatch list and the language-level synchronisation edges are defined in §16.9.
+
+The compiler enforces:
+
+| Rule | Enforced |
+|--|--|
+| Every cross-execution boundary consumes the same provenance-based capture plan | ✅ |
+| An execution-local graph requires explicit `copy`, or `move` from a local `var` | ✅ |
+| Module-readonly values may retain the module owner; module-mutable state may not cross directly | ✅ |
+| Published `const` values and audited synchronization handles may cross through a verified plan | ✅ |
+| `move` only applies to explicit ownership transfer of ordinary local `var` values | ✅ |
+| Channels for cross-coroutine values | ✅ |
+| `Atomic<T>` uses a stable `const` binding and only audited methods mutate internal state | ✅ |
+
+**What compile-time enforcement does not cover**:
+- Channels never copy a mutable class reference implicitly. If uniqueness transfer or const publication cannot be proven, compilation fails; use explicit `copy` or `move`.
+- The escape hatches of §16.9.5 (`unsafe`, `Array.mutPtr()`, raw `mem.*` memory, `sys.Thread` bodies, `CFn` callback bodies) sit outside the theorem's guarantee; a data race through them has implementation-defined consequences.
+
+#### 10.11.1 Outside the model: `unsafe` and C callbacks
+
+The guarantees above cover ownership and capability decisions for Xray values. Three places sit **outside the model**, where the obligation moves to the author. `unsafe` relaxes none of the existing rules and supplies no substitute guarantee:
+
+- **`mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`** operate on raw memory: no ownership root, no reference count, no aliasing decision. The compiler assumes nothing about those addresses and produces none of the §2.14 evidence for them. Data-race freedom of any shared structure built from them is the author's proof obligation.
+- **`Ptr<T>` / `MutPtr<T>`** are borrow-tracked (§2.4.2), but the tracking reaches only as far as the owner's scope. Address validity, alignment, and aliasing correctness at the dereference belong to the author of the `unsafe` block.
+- **A `CFn` C callback may run on any OS thread**, including threads the runtime does not manage. A callback body may reach only: the scalars and raw pointers passed in, values whose allocation plan is shared (§16.3.1), and a unique root transferred in through a `Channel`. It must **not** reach the calling coroutine's coroutine-local object graph — those objects' reference counts are in the non-atomic band, and touching them from another thread is memory corruption. A callback body must also not assume a current coroutine, a current worker, or an available scheduler.
+
+These three are the model's **boundary**, not holes in it: each has to be written explicitly in source (an `unsafe` block, a `mem` import, a `CFn` declaration), so which code runs outside compile-time protection is always auditable from the source.
+
+### 10.12 Logical root task and reachable runtime capabilities
+
+Program semantics expose one logical root task. Its physical representation is derived from the final artifact's reachable roots: a pure synchronous entry is **ELIDED**; an entry that only spawns children without suspending uses a **DESCRIPTOR**; an entry that suspends directly or transitively uses a **RESUMABLE_FRAME**. Ordinary non-suspendable functions keep the plain ABI, with no implicit coroutine context, frame, safepoint, or current-task lookup.
+
+An ordinary non-root parent does not implicitly join ordinary go children when its body completes; linked/scope waits follow their separate structured contracts. Dropping the last public Task handle neither cancels, drives nor blocks the task; the executor retains a running lease until the actual terminal state. The logical root first stores its owned body outcome. Within finite cumulative limits, the host drives all work already accepted by that executor to terminal states before reporting external completion. An ordinary child failure does not implicitly replace the root outcome. Exhaustion or explicit stop closes admission, revokes waits, performs bounded cleanup and release, then reports the actual LIMIT/cancellation/cleanup failure. A closed dependency with no ready work and no real external wake source is rejected by a bounded check, without spinning or detaching.
+
+The first new XIR go/Task/await contract admits direct go calls, Task<i64>/Task<string> and plain await. One FIFO performs at most one canonical Call transition per dispatch; waits leave the C stack. All arguments and result ownership are prepared before queue publication; failure publishes neither queue entry nor handle. A worker and its reachable direct calls cannot read ordinary mutable module slots or write/initialize any module slot. Const slots still require Sendable, existing read permission and initialization state. Unknown indirect calls, loans, Cell captures and unconnected types fail as unimplemented; these implementation boundaries do not restrict the future complete language. This freeze does not claim Source/VM/native implementation: formal identities remain 25/65/21/26/29. Full M:N, Channel, generators, linked/scope, Task<null>/Unit and public status methods require separate qualification.
+
+The complete outcome crossing a Task boundary must satisfy owned and Sendable rules; checking the successful T alone is insufficient. Existing effect summaries prove escaping value errors from the worker and reachable calls: every variant payload of the authentic Error enum must be Sendable, rather than only the thrown variant or a nominal type marker. Generic errors require both Error and Sendable constraints at the definition. The first slice rejects unknown or unauthenticated escaping errors as unimplemented. Local non-Sendable values that do not escape and ordinary synchronous throws are unaffected. Before Task terminal publication, the runtime admits native THROWN payloads using the actual closed type and field authority. Malformed payloads, OOM, LIMIT and host faults retain their accurate statuses through cleanup instead of becoming PanicInfo. The current panic carrier contains only scalar fault detail and owned strings; future extensions must prove Sendable and lifetime for the complete payload again.
+
+The new XIR runtime supports Error fields containing Arrays, nested Arrays, Nullable, Tuples, enums, structs, Atomic and Task, including direct Task fields and Arrays of Tasks. The compiler still proves complete Sendable properties for every variant of the authentic Error enum. At runtime, the actual worker entry's certificate in the same Program authorizes the concrete enum type and variant. Bounded complete value-graph admission uses the actual arena and Domain; membership then reads a scan bound from the same immutable Effects and prepays it to that runtime Domain before scanning. There is no second error set and the query never debits the compiler ledger. Unknown or unidentified errors, wrong variants and foreign arenas reject explicitly. Value-graph OOM and LIMIT keep accurate statuses and clean up without publishing partial outcomes. Public Task handles retain the complete Error after Instance and final code-lease retirement; repeated copies do not consume the sticky outcome. This capability grants no execution qualification for unclosed types, Cell/callable or unverified class payloads, and preserves the distinction between ordinary root faults and Task value errors. Full parameter, generator and scheduling families remain separately qualified.
+
+The executable Task result families include Unit, bool, rune, all existing integer and floating-point types, string, and closed Array, Nullable, Tuple, enum, struct, explicitly Sendable class, Atomic and Task types. These copyable carriers also admit Task arguments, except Unit, which is outside the ordinary argument domain. The same Checked route still proves their complete Sendable graph and the actual worker's root effects. Every struct field contributes to that bounded proof; a struct wrapper does not bypass non-Sendable class, callable or unclosed-type rejection. Call prepares complete owned argument graphs before publishing a child Task. Later parent mutation of an Array or nested Array does not change the child's logical copy; Atomic and Task arguments preserve synchronization identity. Private spawn also requires an authentic worker-certified entry: a descriptor kind confers no extra authority. Await and sticky terminal copies preserve exact types and canonical scalar bits. Mutating a value copy does not alter later awaits, while synchronization handles and Tasks preserve identity. Nonscalar successes undergo bounded admission against the actual arena and Domain before publication. Directly nested terminal Tasks descend strictly through the immutable type pool and validate iteratively, keeping C stack use independent of depth. Terminal Tasks retain owned results after Instance and executable code leases retire. Failed copies preserve empty output and the sticky outcome while charging the same cumulative budget without refunds. An explicit `implements Sendable` class uses the sole nominal metadata flag. Every field must prove Sendable in its authentic declaration environment, and fields cannot be rebound after construction. Ordinary classes do not infer the marker, and an ordinary interface with the same name cannot forge it. Class and Atomic field copies preserve identity; an extracted Array field is a value copy. The current class slice covers declarations without inheritance, including bounded generics. The same bounded graph closes recursive types only through previously verified readonly class identity edges and still visits every remaining field. Value-only cycles reject, including cycles merely wrapped in an outer class. Real finite class chains retain their complete owned argument, result and Error graphs after code retirement. Inheritance, other unsupported payloads, complete parameter resource/fault-injection and product safety qualification remain separate.
+
+Runtime capabilities propagate only from final artifact roots such as the executable entry and manifest-selected C exports. An unreachable helper containing `go`, `await`, or Channel operations does not force the artifact to link a scheduler, timer, netpoll, or hosted runtime.
+
+A hosted target selects a NONE / SINGLE / MULTI scheduler from the verified entry plan. A freestanding target remains coroutine-runtime-free when reachable code needs only core. If reachable code needs task/frame allocation, submit, park/wake, timer, interrupt completion, or an executor pump, the target manifest must provide a versioned provider ABI and the required hooks; missing capabilities fail before generation or linking. The provider is a target/build contract and introduces no `async main`, `static main`, or freestanding-only source-language keyword.
+
+---
+
+## 11. Modules
+
+> Source of truth: `src/module/xmodule.c`, `src/module/xmodule_resolver.c`, `src/module/xmodule_graph.c`, `src/frontend/parser/xparse_import.c`.
+
+### 11.1 Module Definition
+
+- Each `.xr` file is one module.
+- Module name = file name (with the `.xr` suffix removed).
+- A file module's canonical identity comes from its resolver-normalized path. Source normally imports it through a relative or package path; code should not depend on a display-only dotted-directory derivation.
+
+### 11.2 Project Layout
+
+```
+my_project/
+├── xray.toml              # package manifest (name, dependencies, main)
+├── src/
+│   ├── main.xr            # entry
+│   ├── utils.xr
+│   └── lib/
+│       └── helper.xr
+├── tests/
+│   └── test_utils.xr
+└── docs/
+```
+
+`xray.toml` example:
+
+```toml
+[package]
+name = "acme/my_project"
+version = "0.1.0"
+main = "src/main.xr"
+
+[dependencies]
+local_utils = { path = "../local_utils" }
+```
+
+### 11.3 `import` Syntax
+
+`import` declarations **must appear at the module top level**. Using `import` inside a function, class, or any nested scope is a compile error.
+
+```ebnf
+ImportStmt ::= 'import' ImportMembers 'from' ImportModule
+            |  'import' ImportModule ('as' Identifier)?
+ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
+ImportMember  ::= Identifier ('as' Identifier)?
+ImportModule  ::= StringLiteral | ModuleName
+ModuleName    ::= Identifier
+```
+
+```xray
+// 1. stdlib: bare identifier; without `as`, the alias equals the module name
+import time
+import datetime
+import http as httpClient
+
+// 2. third-party packages: quoted owner/name form
+import "alice/utils"
+import "bob/http_client" as httpClient
+
+// 3. path: string literal, optional explicit alias, otherwise inferred from the trailing path segment (no .xr extension)
+import "./modules/mod_a" as a
+import "../utils/string_utils" as utils
+
+// 4. named imports: members may be renamed; the `from` operand may be a quoted path or a bare module name
+import { readFile, writeFile as write } from io
+import { publicFn } from "./modules/mod_a"
+```
+
+**Not supported**:
+- JavaScript-style default import (`import name from "module"`). Use `import "module" as name`, `import module`, or `import { name } from module`.
+- Dynamic import (`import("module")`). All imports must be static declarations.
+
+**Resolution algorithm**: the specifier's **shape** decides, and the four shapes do not overlap. Quoting plays no part in it.
+1. **Named module**: a name with no separator, `import time` → the built-in stdlib module table; `.xrd`-declared native modules share this namespace.
+2. **Path**: `"./xxx"` and `"../xxx"` are resolved relative to the current file (auto-appends `.xr` extension or `index.xr` directory entry).
+3. **Standard-library source submodule**: `"std/io/output"` resolves under an explicit stdlib source root. ASCII identifier segments name one exact file without index fallback, parent traversal or top-level aliases. Identity includes the stdlib namespace and logical path; matching local/package names confer no privilege. Checked/native publication requires separate qualification.
+4. **Third-party package**: `"owner/name"` (`std/` is reserved for standard-library submodules) is resolved through the `[dependencies]` section in `xray.toml`.
+
+Quoting is only how text that is not an identifier gets written, which is why a path and a package need it and a module name does not. An import that resolves to nothing is a compile error.
+
+**Specifier validation** (compile errors):
+- Including `.xr` extension: `import "./a.xr"` → error
+- Trailing slash: `import "./a/"` → error
+- Explicit `index`: `import "./a/index"` → error
+- Absolute paths: `import "/etc/foo"` → error
+
+### 11.4 `export` and Visibility
+
+`export` visibility **must appear on a module-level declaration**. Cross-module re-exports remain declarations of their own:
+
+```ebnf
+Declaration ::= Attribute* Visibility? Modifier* DeclarationBody
+Visibility  ::= 'export'
+ReexportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
+              | 'export' '*' 'from' StringLiteral
+ExportSpec ::= Identifier ('as' Identifier)?
+```
+
+```xray
+// 1. visibility belongs to the declaration
+export fn helper() { return }
+export final class MyClass {
+    value: i64
+    init() { this.value = 1 }
+}
+export const VERSION = "1.0"
+
+// 2. re-export (with optional renaming)
+export { getUser, getUserAge as getAge } from "./user"
+
+// 3. wildcard re-export (forward all exports of another module)
+export * from "./product"
+```
+
+**Restrictions**:
+- Declarations not marked `export` are **private** to the module.
+- Post-hoc local `export { LocalName }` is removed; put `export` on the declaration.
+- `export var` is not supported. Mutable bindings cannot be shared across modules; use `export const` instead.
+- Internal state does not collide across modules even with the same name.
+- Re-exports and wildcard re-exports are commonly used in `index.xr` to aggregate public APIs of submodules.
+
+### 11.5 Naming Conventions
+
+- Module names: `snake_case` (`http_client.xr` / `string_utils.xr`).
+- Public symbols: `camelCase` or `PascalCase` (for classes / interfaces).
+- Internal symbols: prefix with `_` (`_internal_helper`).
+
+### 11.6 Compile-Time Module Graph and Circular Dependencies
+
+Xray builds a complete **module dependency graph** (DAG) at compile time:
+
+1. Starting from the entry file, all `import` declarations are recursively resolved to build the dependency graph.
+2. The graph is topologically sorted to determine module initialization order.
+3. If a **circular dependency** is detected (SCC size > 1 or self-loop), compilation fails with `E0504` and reports a concrete cycle path such as `a.xr -> b.xr -> a.xr`.
+4. Modules are initialized in topological order, from leaf modules (no dependencies) to the entry module.
+
+Selective imports (`import { foo } from "./m"`) are resolved at compile time to fixed module indices and export slots, resulting in O(1) indexed access at runtime with no string lookup.
+
+Xray does not use partial module initialization or cache-based cycle breaking. A module that is still loading is not observable through `import`; mutual dependencies must be refactored into a DAG.
+
+### 11.7 Native Modules
+
+Modules exposed from the C layer (`time`, `http`, `os`, etc.) are registered through the native ABI:
+
+```c
+// C side
+XRAY_API void register_time_module(xray_vm_t* vm) {
+    xray_module_t* m = xray_module_create(vm, "time");
+    xray_module_add_fn(m, "now", time_now);
+    xray_module_add_fn(m, "sleep", time_sleep);
+    xray_module_register(vm, m);
+}
+```
+
+Usage from Xray code is identical:
+
+```xray
+import time
+var t = time.now()
+time.sleep(100)
+```
+### 11.8 Worked Examples
+
+Selective import and namespace import from the standard library:
+
+```xray
+import { sha256 } from crypto
+import math
+
+fn main() {
+    print(math.sqrt(144.0))   // => 12.0
+    print(sha256("xray"))     // => 1a46e6a6... (SHA-256 digest)
+}
+
+main()
+```
+
+---
+
+## 12. Testing
+
+> Declaration sources of truth: `src/frontend/parser/xparse_decl.c`, `src/xir/xxir_source.c`, `src/xir/xxir_declarations.h`, `src/program/xr_xir_source_product.c`, and `src/xir/xxir_instance.c`. Public runner scheduling, timeouts, and asynchronous behavior below remain requirements of the complete test system; declaration discovery and restricted starts alone do not complete the public runner.
+
+### 12.1 Declaring Tests: the `@test` Attribute
+
+Xray marks test functions with the **`@test` attribute**, **not** with a `test("...")` function call.
+
+```ebnf
+TestDecl ::= '@test' FnDecl
+```
+
+```xray
+@test
+fn test_addition() {
+    assertEqual(1 + 1, 2)
+}
+
+@test
+fn test_with_assertions() {
+    var result = compute()
+    assertEqual(result, 42)
+    assert(result > 0)
+}
+```
+
+**Semantics**:
+- Functions annotated with `@test` are auto-discovered and run by `xray test`; ordinary functions are not.
+- Test naming convention: `test_xxx` (snake_case), descriptive.
+- Test functions take no parameters and return nothing; expectations are expressed via the `assert*` family.
+- Tests and hooks must be non-generic top-level functions with bodies, not methods, nested functions, or closures. A function that only throws is valid. A role does not change export permissions or effects and does not imply `no_suspend`.
+- Discovery selects declarations in the current entry module only. Imported tests do not run automatically. Each test file may own module state when used as an entry; this does not relax the state restrictions on imported modules.
+- A file may contain **any number** of `@test` functions; they run in declaration order within that file. Multiple files may run in parallel with `-j N`, each in its own isolate.
+
+### 12.2 Test Entry Points
+
+`xray test` enforces no directory or filename convention. A directory argument is scanned recursively for every `.xr` file, sorted by path. This repository's `tests/regression/XXXX_topic.xr` form is only a project convention.
+
+Run:
+
+```bash
+xray test tests/                           # at least one file or directory is required
+xray test tests/regression/01_literals/    # run a whole group
+xray test tests/regression/01_literals/0100_int_basic.xr   # single file
+xray test -j 4 tests/                      # file-level parallelism
+```
+
+### 12.3 Assertion API
+
+Xray provides assertion functions as **global builtins** (no `import test` needed). Full signatures are in [§13.5](#135-assertions-for-testing).
+
+| Function | Semantics |
+|--|--|
+| `assert(cond, msg?)` | throws when `cond` is false |
+| `assertEqual(a, b, msg?)` | deep-equal values of the same static type; renders both on failure |
+| `assertThrows(action, msg?)` | passes only when `action()` returns a typed error |
+| `assertPanics(action, msg?)` | passes only when `action()` panics |
+
+`assert` accepts only `bool`; use `assert(!cond)` for a negative boolean condition. Typed
+errors and panics are distinct failure channels and their assertions are not interchangeable.
+
+### 12.4 Async Tests
+
+A `@test` function body may use `go` / `await` / `await all` / `await any`:
+
+```xray
+@test
+fn test_async_fetch() {
+    var task = go fetch_data("http://...")
+    var result = await task
+    assertEqual(result.status, 200)
+}
+```
+
+### 12.5 Attribute Overview
+
+Public Xray attributes come from one registry, exposed by `xray language attributes`. The test runner recognizes:
+
+| Attribute | Description |
+|---|---|
+| `@test` / `@test(skip)` / `@test(timeout: N)` | test, skipped test, or per-test timeout in seconds |
+| `@before_all` / `@after_all` | run once before/after the file's suite |
+| `@before_each` / `@after_each` | run before/after every non-skipped test |
+
+`N` is an integer literal in `0..2147483647`; zero leaves the file deadline unchanged. Empty parentheses, unknown parameters, and repeated or conflicting roles are invalid. `@test(skip)` prevents automatic test-entry execution, but its body is still fully type checked and otherwise valid ordinary calls remain legal. Test roles grant no additional ordinary function-call permission.
+
+Hooks and tests within a file share one Instance. The first selected call runs normal module initialization once; later calls retain that Instance's state. Failed initialization remains sticky and cannot be retried or bypassed by starting the next item. The Source-owned directory records actual specialized function identities. The directory grants no authority: restricted starts still validate the sealed Program's role and root-module identity.
+
+Other public attributes include `@deprecated("...")`, `@derive(Inspect, JSON, Eq, Hash, Clone)` (`Hash` requires `Eq`), plus the stable, low-level AOT code-shape directives `@inline` / `@noinline`. The public surface is seven ordinary/test/metadata attributes plus two code-shape directives; the count is not a compatibility goal, while category and semantic orthogonality are constraints. The latter two apply only to functions or methods, take no arguments, and cannot annotate the same declaration together. They do not change language semantics, effects, or ABI: the VM ignores them, while AOT respectively prefers expansion or preservation of a native call boundary. They are only for low-level hot paths backed by real benchmarks and generated-code shape gates; they neither unlock ordinary optimization nor guarantee that every call edge is eligible.
+
+`codegen.opaque(value)` and `codegen.compilerFence()` belong to the same expert-control layer but are standard-library intrinsics, not attributes. The former blocks native constant propagation while preserving an integer or pointer's exact static type, value, ownership, and provenance. The latter only prevents memory-effecting operations from moving across that compiler scheduling point. `compilerFence` is not a CPU memory fence, establishes no happens-before relation, and cannot repair a data race. Ordinary code does not need these controls; hard shape requirements are checked by `xray verify --contract`, not self-certified by the source request.
+
+Effects, native identity, C exports, link symbols, and freestanding entries are inferred facts or typed manifest plans, not source attributes. External C functions use an `extern "C" ... {}` declaration block.
+
+```xray
+import codegen
+
+@test                                 // mark as a test
+fn test_basic() { return }
+
+@test(skip)                           // skip this test
+fn test_wip() { return }
+
+@before_each
+fn reset_fixture() { resetState() }
+
+@deprecated("use newAPI() instead")
+fn oldAPI() { return }
+
+@inline
+fn smallHotHelper(value: u64) -> u64 { return value ^ (value >> 33) }
+
+@noinline
+fn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }
+
+fn measuredKernel(value: u64) -> u64 {
+    var hidden = codegen.opaque(value)
+    codegen.compilerFence()
+    return measuredDispatchBoundary(hidden)
+}
+```
+
+> `@async`, `@override`, and camel-case spellings such as `@beforeEach` are not in the current table and trigger `unknown attribute name`. Use `go` / `await` directly in an async test body.
+
+### 12.6 `xray run` / `xray test` / `xray repl`
+
+| Command | Purpose |
+|--|--|
+| `xray run main.xr` | run the main program |
+| `xray test` | run the test suite |
+| `xray repl` | start the REPL |
+| `xray build --native main.xr` | AOT native compile |
+| `xray fmt` | format code |
+
+---
+
+## 13. Built-in Functions
+
+> Source of truth: `src/ir/xi_lower_expr.c`, `src/vm/xvm_dispatch_*.inc.c`, `src/runtime/object/builtins/`, `src/frontend/analyzer/xanalyzer_builtins.c`.
+
+These global functions and built-in constructor/static functions are usable without any `import`. In the tables below, `value` denotes "any runtime value"; it is a documentation placeholder rather than a writable source-language type.
+
+### 13.1 I/O and Debugging
+
+| Function | Signature | Description |
+|--|--|--|
+| `print` | `(...values) -> ()` | print to stdout, appending exactly one newline; arguments are separated by exactly one space; `print()` writes just the newline. One call is one indivisible group: every argument is evaluated left to right exactly once, then all of them are rendered, then the group is written in a single act |
+| `dump` | `(value, indent?) -> ()` | structured debug output |
+| `len` | `(value) -> i64` | length of strings, containers, Range, Slice, and other `Lengthable` values; `JSON.Value` is not `Lengthable` |
+
+### 13.2 Type Conversion
+
+| Function | Signature | Description |
+|--|--|--|
+| `x as T` | `numeric -> T` | explicit numeric conversion among the 12 exact scalar types; `T` is `i8` / `i16` / `i32` / `i64` / `u8` / `u16` / `u32` / `u64` / `f32` / `f64` / `isize` / `usize` |
+| `i64.parse(s)` | `(string) -> i64` | strict decimal integer parse; throws on failure |
+| `i64.tryParse(s)` | `(string) -> i64?` | strict decimal integer parse; returns `null` on failure |
+| `f64.parse(s)` | `(string) -> f64` | strict decimal floating-point parse; throws on failure |
+| `f64.tryParse(s)` | `(string) -> f64?` | strict decimal floating-point parse; returns `null` on failure |
+| `string(x)` | `(value) -> string` | convert to string; `rune` converts to a one-scalar string |
+| `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
+| `rune(n)` | `(i64) -> rune` | construct a Unicode scalar from i64; negative, surrogate and out-of-range values trigger range panic E0422 |
+| `chr(n)` | `(i64) -> string` | Unicode code point → one-scalar string |
+| `copy(x)` | `(value) -> fresh value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
+
+`i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` consume the whole string. Surrounding whitespace and a leading sign are accepted; `f64` additionally accepts a fractional part and exponent, with at least one digit across the integer and fractional parts (`.5` and `1.` are valid). Trailing residue, hexadecimal input, `inf` / `nan`, and out-of-range integers fail. `parse` reports failure through the typed error channel; `tryParse` returns `null`. Numeric conversions use explicit `as`; text parsing is not a numeric cast.
+
+### 13.3 Type Checking
+
+| Function / expression | Signature | Description |
+|---|---|---|
+| `typeOf(x)` | `(value) -> Type` | returns a stable TypeId / `Type.xxx` value |
+| `typeName(x)` | `(value) -> string` | returns the debug/logging type-name string |
+| `typeName<T>()` | `() -> string` | returns the name of static type `T` |
+| `x is T` | expression | runtime type check; the analyzer may narrow types |
+
+The current XIR value-query subset admits `typeName(value)` only when no lexical or module binding shadows the builtin. One ordinary READ argument is evaluated once under normal semantics. Admitted scalars and Atomic/PanicInfo use shared type names; Unit is `()`, while bare or grouped null is `null`. Top-level Array/callable values report `Array`/`function`; concrete nominal values report their declaration name and closed type arguments, with Array arguments showing their element type. A present Nullable reports the element's family or nominal name; none reports `null`. Name bytes belong to the receiving owner. The 256-byte name and 32-level recursion limits report budget failure without truncation.
+
+Generic Array<T>/callable<T> family names are available at the definition. Queries of T itself, nominal types with open arguments and T?, concrete dynamic enum names through Error existentials, `typeName<T>()` and full reflection remain unimplemented. This admission boundary preserves those legal language forms. Their later implementation must retain the query in Checked, specialize and recheck it without revisiting AST to invent capabilities. The query grants no visibility, construction or constraint authority.
+
+The global read-only environment values are not functions: `process` (entry arguments/file/directory), `__file__`, and `__dir__`. They are initialized for a real file/project entry; `process` may be `null` in a pure `eval` context.
+
+```xray
+var x = 42
+print(typeOf(x) == Type.i64)    // true
+print(typeName(x))              // "i64"
+print(x is i64)                 // true
+// typeOf(x) == "i64"           // compile error: use Type.i64 or typeName(x)
+```
+
+### 13.4 Coroutines
+
+Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `await all`, `await any`, `await anySuccess`. For sleeping, use `time.sleep(ms)`.
+
+### 13.5 Assertions (for testing)
+
+| Function | Signature | Description |
+|---|---|---|
+| `assert(cond, msg?)` | `(cond: bool, msg: string = "") -> ()` | false produces an assertion panic |
+| `assertEqual<T: Equal>(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | ordinary TYPE parameter with definition-site Equal proof for same-T comparison |
+| `assertThrows(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | expects only the action call's typed error |
+| `assertPanics(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | expects only the action call's panic |
+
+`msg?` denotes omission, not `string?`; explicit null, nullable strings and other types are invalid.
+The condition/action and message expressions are each evaluated once in source order, including
+success. Omission uses the single parameter-default mechanism. `R` is the builtin's exact result
+variable from the checked callable signature, not an ordinary source generic parameter or `any`.
+A Unit action has type `fn()` with zero payload and no ordinary result slot. Other results require
+the admitted copyable, storable result contract. A normal result is destroyed exactly once before
+the missing expected failure produces an assertion panic. View and noncopyable results require
+their own return contracts; ordinary generic Unit and storage rules are not relaxed.
+
+When a condition assertion fails, `PanicInfo.message` preserves the exact bytes and length of the
+evaluated `msg`; an omitted message is the empty string. Diagnostics render the error code,
+source location and display prefix separately, without adding them to the message, truncating
+its bytes or treating a C string terminator as its boundary.
+
+The protected region covers only the action call and cleanup, not evaluation of action/message
+expressions. Typed errors and panics differ; OOM, LIMIT, cancellation and provider/ABI/admission
+failures cannot satisfy an expectation. Unknown callable effects remain unknown, rather than being
+inferred from a concrete instance's body. Lexical bindings precede builtin names. The complete
+assertEqual capability/type domain is admitted by definition-site constraints, not by granting an
+unconstrained T deep comparison authority during specialization. Ordinary equality differs from
+container key equivalence. Arrays containing NaN preserve element-wise equality even with shared
+backing; memcmp needs an additional bytewise proof. The first finite Equal domain is bool,
+the eight fixed-width integers, f32/f64, string and recursive Array<T: Equal>; see §9.2/§17.33.
+Ordinary ==, != and this assertion use the same relation and proof. Equal promises neither
+reflexivity nor key equivalence, and is not an Equatable alias. Evaluate a, b and msg once in
+source order, including success; only a successful false comparison triggers an assertion panic,
+while comparison OOM/LIMIT retains its resource channel. The complete domain and implementation
+qualification remain open; this section does not claim that the assertion execution family
+missing from §17 has been implemented.
+
+### 13.6 Container Constructors and Static Functions
+
+| Function | Description |
+|--|--|
+| `Array()` / `Array(n)` / `Array(n, value)` | create an empty array, an array of given length, or a value-filled array |
+| `Array.from(iterable)` | create an array from a string / Array / Set / Map |
+| `Array.range(start, end)` | inclusive integer array `[start, ..., end]` |
+| `Array.withCapacity(n)` | array with `length=0` and `capacity=n` |
+| `Map()` | empty Map |
+| `Map.from(entries)` | Map from `[key, value]` pair array |
+| `Map.from(keys, values)` | Map from key array and value array |
+| `Set()` / `Set(array)` | empty Set or Set from an array |
+| `Set.from(iterable)` | Set from a string / Array / Set |
+| `Set.range(start, end)` | inclusive integer Set |
+
+BigInt uses the `123n` literal or `i64.toBigInt()`; JSON uses `JSON.parse<T>` / `JSON.parseObject` / `JSON.value` / `JSON.stringify`; DateTime uses factory functions in the `datetime` module.
+
+---
+
+## 14. Built-in Type Methods
+
+> Source of truth: prelude / analyzer / runtime built-in type registration and method definitions.
+> MCP knowledge only consumes the generated analyzer metadata; it does not maintain its own copy of built-in method signatures.
+
+This section summarizes the methods, signatures, and behavior of each built-in type by topic.
+
+### 14.1 `i64` Methods
+
+| Method | Signature | Description |
+|--|--|--|
+| `abs()` | `() -> i64` | absolute value |
+| `toString()` | `() -> string` | decimal string |
+| `toBigInt()` | `() -> BigInt` | convert to BigInt |
+| `toF64()` | `() -> f64` | convert to f64 |
+| `toHex()` | `() -> string` | hexadecimal string |
+| `max(other)` / `min(other)` | `(i64) -> i64` | binary max/min |
+| `sqrt()` | `() -> f64` | square root |
+| `pow(exp)` | `(f64) -> f64` | power |
+| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(i64) -> i64?` | returns `null` on overflow |
+| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(i64) -> i64` | clamps overflow to the `i64` boundary |
+| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(i64) -> i64` | explicit two's-complement wrap |
+| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(i64) -> bool` | reports signed overflow only (use `checked*` for the value) |
+| `popcount()` | `() -> i64` | number of set bits in the two's-complement representation |
+| `leadingZeros()` / `trailingZeros()` | `() -> i64` | leading/trailing zero bit count (`0` yields `64`) |
+| `byteswap()` | `() -> i64` | reverses the byte order |
+| `rotateLeft(n)` / `rotateRight(n)` | `(i64) -> i64` | bit rotation (`n` taken modulo 64) |
+
+`abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. Bit-manipulation methods and overflow predicates have the same semantics in VM and AOT builds.
+
+### 14.2 `f64` Methods
+
+| Method | Signature | Description |
+|--|--|--|
+| `abs()` | `() -> f64` | absolute value |
+| `toString()` | `() -> string` | string conversion |
+| `toFixed(decimals?)` | `(i64?) -> string` | fixed-decimal string |
+| `toI64()` | `() -> i64` | convert to i64 |
+| `floor()` / `ceil()` / `round()` | `() -> i64` | rounding |
+| `sqrt()` | `() -> f64` | square root |
+| `pow(exp)` | `(f64) -> f64` | power |
+| `isNaN()` | `() -> bool` | whether the value is IEEE NaN |
+
+### 14.3 `BigInt` Methods
+
+| Method | Signature | Description |
+|--|--|--|
+| `abs()` | `() -> BigInt` | absolute value |
+| `toString()` | `() -> string` | string conversion |
+| `sign()` | `() -> i64` | -1 / 0 / 1 |
+| `isZero()` / `isNegative()` / `isPositive()` | `() -> bool` | sign predicates |
+| `toI64()` | `() -> i64?` | returns null when not representable as `i64` |
+| `toF64()` | `() -> f64` | convert to f64 |
+
+### 14.4 `bool` Methods
+
+| Method | Signature | Description |
+|--|--|--|
+| `toString()` | `() -> string` | returns `"true"` or `"false"` |
+
+### 14.4.1 `rune` Methods
+
+| Method | Signature | Description |
+|--|--|--|
+| `toString()` | `() -> string` | return a one-Unicode-scalar string |
+| `toUInt32()` | `() -> u32` | return the Unicode scalar code point |
+| `isLetter()` | `() -> bool` | whether the scalar is a Unicode letter |
+| `isNumber()` | `() -> bool` | whether the scalar is a Unicode number |
+| `isAlphanumeric()` | `() -> bool` | whether the scalar is a letter or number |
+| `isWhitespace()` | `() -> bool` | whether the scalar is whitespace |
+
+`rune` is an independent primitive type and does not inherit integer methods; use `toUInt32()` explicitly when the code point is needed. `toUInt32()` / `i64(c)` return the complete code point without failure, allocation or suspension. `toString()` / `string(c)` produce owned UTF-8; U+0000 preserves one NUL byte with length one.
+
+### 14.5 `string` Methods
+
+The next declaration slice freezes `ref unshift(value: T)` (one ordinary READ argument of exactly T, returning unit) and `ref reverse() -> Array<T>` (no explicit arguments, an owned result). Freezing does not establish admission or qualification. Both require only the existing copyable/storable Array element capabilities, without Equal, Compare or ToString. Ordinary generic definitions are checked under their declared capabilities; future instances grant no missing authority. The receiver must be a writable logical place whose root/path selectors are evaluated once. unshift reads that binding's current Array after its argument succeeds; completed argument side effects are not rolled back. A negative integer T is an ordinary element, not a length argument.
+
+Both methods prepare a private owned candidate: reverse reverses the element order, while unshift places the input before the original elements. Empty reverse returns an empty Array; unshift on an empty Array creates one element. Element copying stops at class identity. reverse prepares its result ownership before the final single writeback; its result and receiver are independent logical copies after publication. Failure during method preparation/publication, or cancellation before publication, preserves the pre-commit logical value and releases temporary ownership normally. Later statements, whole-function result handoff failures, and cancellation after method publication follow ordinary call semantics without undoing completed method effects. Internal loops introduce no language suspension point or user callback. Candidate construction may choose a different backing capacity and does not promise to preserve the old capacity; public growth/detachment guarantees for capacity/withCapacity/reserve remain subject to their separate declaration-family admission.
+
+| Member | Type / Description |
+|--|--|
+| `len(s)` | O(1) Unicode scalar count |
+| `bytes()` / `copyBytes()` | borrowed `Slice<u8>` / independent `Array<u8>` |
+| `runes()` | `Iterator<rune>`; bare `for (r in s)` has the same semantics |
+| `string.fromRune(r)` | constructs a string from one Unicode scalar |
+| `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<u8>`; invalid UTF-8 throws `Utf8Error.InvalidUtf8` |
+| `string.fromUtf8Lossy(bytes)` | copies a `Slice<u8>`, replacing invalid sequences with U+FFFD |
+| `string.join(parts, separator?)` | joins an `Array<string>` |
+| `contains(s)` | substring containment test |
+| `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
+| `slice(start, end?)` | independent rune-ordinal slice; the range must be valid |
+| `sliceBytes(start, end)` | slice by byte offset; invalid boundaries throw `StringSliceError.InvalidByteRange` |
+| `split(sep, limit?)` | split into `Array<string>` |
+| `replace(from, to)` / `replaceAll(from, to)` | replacement |
+| `repeat(n)` | repeat |
+| `startsWith(s)` / `endsWith(s)` | prefix/suffix check |
+| `toString()` | return self |
+
+`len(s)` reads the cached Unicode scalar count of validated UTF-8 and returns i64; the empty string has length zero and embedded NUL counts as one scalar. The query itself does not allocate; its argument evaluates exactly once with ordinary evaluation, initialization and retention failures. `==`/`!=` require two strings and compare their full byte lengths and contents, independently of object identity, with no case folding or Unicode normalization. Combining and precomposed sequences can differ. Operands evaluate left to right as value snapshots. These operations grant no string or Lengthable capability to an unconstrained generic definition.
+
+`contains`, `startsWith`, and `endsWith` accept one string and return bool over complete UTF-8 bytes, without case folding or normalization; NUL does not end matching. Empty patterns match every string; nonempty patterns do not match empty strings. The receiver evaluates once into a value snapshot before the pattern evaluates once; changing the original variable during argument evaluation cannot change the snapshot. Queries allocate nothing, do not mutate or transfer inputs, and introduce no suspension or language exception; operand evaluation and retention can still fail. Generic definitions must have the required capability when checked.
+
+`indexOf(search, start?)` takes a rune ordinal start, defaulting to 0, in the inclusive range `0..len(receiver)`; negative or excessive starts cause a bounds panic without clamping. It returns the first matching rune ordinal at or after start, -1 for no match, and start for an empty pattern. `lastIndexOf(search)` returns the last matching rune ordinal, -1 for no match, and `len(receiver)` for an empty pattern. Matching uses complete UTF-8 bytes without normalization; runes are Unicode scalars, not graphemes. Receiver, pattern and start are evaluated once in that order with value snapshots. The query allocates nothing, does not suspend or change ownership; argument evaluation and retention failures still propagate. Unicode coordinate conversion may scan a prefix; repeated queries have no constant-time guarantee.
+
+String `<`, `<=`, `>` and `>=` compare the complete explicitly sized UTF-8 values in unsigned byte lexicographic order. Embedded NUL participates; after an equal prefix the shorter string is smaller. No locale, normalization or grapheme ordering applies.
+
+Strings do not support integer indexing or the slice operator; use `s.runes().nth(i)`, `s.bytes()[i]`, or `s.slice(start, end)` explicitly. Concatenation uses `+`; Unicode text transforms such as case conversion, trimming, padding, and reversal belong to the `text` module.
+
+### 14.6 `Array<u8>`
+
+`Array<u8>` is a directly available specialization of `Array`; construction is handled via builtin paths such as `Array<u8>(n)` / `Array<u8>(n, fill)`. Its `toString()` uses the same container formatting as every Array; decode text explicitly with `string.fromUtf8(bytes[:])` or `string.fromUtf8Lossy(bytes[:])`. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not treat it as a second, Array-isomorphic API surface.
+
+### 14.7 `Array<T>` Methods
+
+`Array<T>` is a growable value type whose element type is copyable and storable. Assignment, saved parameters, index reads and returns preserve logical copies; shared backing does not permit mutation of other copies. Storage alone does not require comparison, hashing or string conversion; each corresponding method has its own admission contract.
+
+The first owned-array execution subset freezes `len(array: Array<T>) -> i64`, read-only `get(index: i64) -> T`, `ref set(index: i64, value: T) -> ()`, `ref push(value: T) -> ()`, array literals and the index expressions in §3.4/§3.11. The set method returns unit; an index-assignment expression returns the converted right-hand T. len itself does not allocate; reads/copies can reach retention limits; construction and mutation can fail for budget, allocation or retention limits. Both set and push can relocate element storage when detaching shared backing.
+
+Read-only get and indexing follow the value-receiver snapshot rule in §3.0: take the Array logical snapshot before evaluating index; an index that rebinds the variable cannot cause a late read of its current value. Ref set/push instead bind the root place once. Only after all arguments finish do they establish exclusive access to the binding's current value, check bounds, detach, mutate and write back. If an argument rebinds that root, the operation applies to the new value; set checks its new length. `a.push(a[0])` is valid and independently owns its element result before push. Failure publishes no partial array and preserves the pre-commit logical value; earlier argument effects and rebinding are not rolled back.
+
+An ordinary read parameter cannot be a writable receiver for these ref methods. Copyable Array has no move receiver; pop removes an element without consuming the whole Array. Ref in the table is a declaration mode: the dot call remains `a.push(x)`. Pure-index GET-place snapshot elimination and transient retain/copy/drop must preserve failures as required by §3.0; backing uniqueness never bypasses access permissions.
+
+```xray
+var a: Array<string> = ["old"]
+fn replaceForPush() -> string {
+    print("arg")
+    a = ["new"]
+    return "tail"
+}
+a.push(replaceForPush())
+print(a[0], a[1])           // Prints arg, then new tail
+```
+
+```xray
+var a: Array<string> = ["head"]
+a.push(a[0])
+print(a[0], a[1])           // head head
+```
+
+The table retains all32 members. At this capacity-contract freeze, actual governed admission comprises get/set/push, map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear, reverse/unshift/pop/shift/resize and entries/fill/concat:23 operations, with9 members still unadmitted. Execution identities come from the same structured declarations in `stdlib/types/array.xr`; names serve member lookup only. Capacity is explicitly observable. Its growth/detachment guarantees must be frozen when that property is admitted; not all capacity behavior is an unobservable optimization.
+
+These READ callbacks/queries first own the receiver snapshot, then evaluate each explicit argument once in source order; reduce orders receiver, callback, initial. map/filter/forEach visit increasing indices and allow the trailing index argument to be omitted where the declaration permits it. find/findIndex/every/some short-circuit using a single-element bool callback. Empty reduce returns initial, empty every is true, empty some/contains is false, and no match produces none for find or -1 for findIndex/indexOf. contains/indexOf require T:Equal at the definition. This join subset admits string/bool/rune/admitted numeric elements, defaults its separator to the empty string and preserves UTF-8/NUL bytes. ref clear uses existing writable-place and writeback contracts; copied values remain independent. Callbacks keep ordinary indirect-call throw/panic/suspend/cancellation and ownership semantics; future instances cannot supply missing constraints. This paragraph freezes operation contracts; full regression, safety, OOM and physical-release qualification requires actual batch evidence.
+
+
+The `ref pop() -> T?` and `ref shift() -> T?` declarations are frozen: no explicit, optional, default, variadic or method type arguments; they remove the tail/head element without consuming the receiver. An empty Array returns outer None without publishing an Array write. A nonempty result owns an exact T logical copy wrapped in one Some. Nullable elements are not flattened: removing null from Array<i64?> returns Some(None):i64??, removing 7 returns Some(Some(7)):i64??, and only an empty Array returns None:i64??. This adds neither Some/None source syntax nor Equal/Compare/ToString/NotNullable requirements. Ordinary generic definitions are checked before Checked specialization and revalidation.
+
+The receiver is an already authorized writable logical place. Root/path selectors run once; after path evaluation the current bound Array is read, and completed path effects are not rolled back. Const/read Array value parameters, temporary Arrays, inaccessible and const fields reject. Mutable Array fields reached through read class handles retain existing class identity and field authority. Before the sole publication, nonempty removal prepares the complete owned Nullable result and a private Array candidate: pop retains the first n-1 elements; shift retains the last n-1 in their original order. Copying stops at class or synchronization identity, and results never borrow backing interior addresses. Every fallible method result hold/cell read precedes publication. Preparation/publication failure or prepublication cancellation preserves the logical root, aliases and identities and releases temporary ownership normally. Later parent-expression/function result handoff failure or cancellation does not undo the method effect. Internal loops introduce no language suspension or user callback. The empty path reads no element and publishes no write, but promises neither zero allocation nor exemption from admission, retain or budget failure.
+
+Both declarations have allocation=may_heap, failures=allocation,retain,limit and ownership=owned, without callback effects. Candidates may select another backing capacity; old capacity is not preserved by contract. Public growth/detachment guarantees for capacity/withCapacity/reserve remain separately frozen on that family's admission, as for reverse/unshift. Freezing this contract does not qualify the new operations.
+
+The declaration family is frozen as `ref resize(length: i64, fill: T) -> Array<T>`. Its two required READ arguments evaluate length then fill once each; there are no defaults, optional/variadic arguments or method type parameters. Length is exactly i64 and fill exactly T. Only existing copy/store capabilities are required, without Equal/Compare/ToString/NotNullable additions; ordinary generic definitions are checked before Checked specialization and revalidation. The receiver is an authorized writable logical place. Selectors run once, and the current bound Array is read after both arguments succeed; completed effects are not rolled back. Const/read Array value parameters, temporaries and unauthorized fields reject, while mutable fields reached through read class handles retain existing authority.
+
+For n>=0, the first min(oldLength,n) elements are preserved and growth uses logical copies of fill, producing length n. The owned return and published receiver are independent logical copies; old aliases retain their old value, copying stops at class/synchronization identity, and Nullable layers remain intact. Zero returns an owned empty Array; equal length promises neither zero allocation nor unchanged backing. Negative n rejects after both arguments with the existing NUMERIC_RANGE/E0422 panic and no publication. Unrepresentable sizes and finite resource exhaustion use existing LIMIT/budget failures. Candidates may reselect capacity; capacity/withCapacity/reserve observation guarantees remain separately frozen.
+
+The complete candidate, result cell read and every fallible hold precede one PLACE_WRITE. Preparation/publication failure or precommit cancellation preserves the current root, aliases and identities and drops temporary owners. Later parent-expression/result handoff failure or cancellation does not roll back the method effect. Internal loops introduce no user callback, language suspension or suspended loan; driver quantum cancellation observes the actual commit point. Qualification is allocation:may_heap, failures:allocation,retain,limit, ownership:owned. Resize is admitted: current21/32 retains independent VM/native/both mixed outputs, all admitted element categories, actual failure ordinals, resource axes, escaped results and physical release of both domains.
+
+The capacity declaration family freezes the READ property `capacity: i64`, `static withCapacity(capacity: i64) -> Array<T>` and `ref reserve(capacity: i64) -> Array<T>`. The constructor and reserve each take one required exact-i64 READ argument, without optional/default/variadic arguments or method type parameters. T needs only existing Array copy/store capabilities, without Default, Equal, Compare, ToString or Sendable additions. Check ordinary generic definitions before Checked specialization and revalidation. Only the actual governed Array identity receives these builtin operations; lexical shadows, same-named user declarations and descriptive queries grant no extra construction, visibility or write authority.
+
+capacity itself reads an authenticated Array header without allocation and returns a capacity satisfying `0<=len<=capacity<=INT64_MAX`; receiver evaluation, place resolution and required retention propagate ordinary failures and consume finite work. Const/read and temporary Arrays permit this query. After evaluating its argument once, withCapacity(n) constructs an owned empty Array with len=0 and capacity>=n, without constructing any T or default elements. reserve(n) uses an absolute total-capacity lower bound, not an additional count: resolve the logical root/path once, evaluate n once, then read the Array currently bound after the argument. Prepare a complete owned candidate and return owner with unchanged length/elements/order and capacity>=max(oldCapacity,n), followed by one authorized PLACE_WRITE. Even n<=oldCapacity promises neither zero allocation/retention nor unchanged physical backing. Const/read value receivers, temporaries and unauthorized fields cannot reserve.
+
+Ordinary Array copies preserve capacity and logical contents at copy time. The reserve return and published receiver are independent logical copies, and old aliases keep their capacity/contents. COW detachment for ordinary set/push, cross-domain values and nested paths must not reduce the prior capacity; growth keeps len<=capacity. Existing candidate-capacity rules for reverse/unshift/pop/shift/resize/clear/entries/fill/concat are not changed into capacity-preservation promises. Copying still stops at class/synchronization identity; Nullable layers, nested values and NUL bytes remain intact. Spare capacity is not initialized elements: never traverse, retain or destroy unused slots. Admitted zero-sized T still has finite i64 logical capacity, without usize-maximum behavior or new ordinary-generic Unit/resource admission.
+
+Negative constructor/reserve n rejects after argument evaluation with existing NUMERIC_RANGE/E0422. Unrepresentable sizes and finite live/requested/work exhaustion use existing LIMIT/budget failures without clamping or overflowing arithmetic. Precharge every actual heap request, including full realloc replacement bytes; OOM retains cumulative fees and retry does not refill them. Preparation/publication failure or precommit cancellation preserves the current root/aliases/element identities and drops temporary owners. Completed argument effects or later parent-expression failure do not roll back a published effect. There is no internal user callback, new language suspension or suspended loan; actual quantum cancellation and fees remain. The capacity kernel has allocation:no_heap, failures:limit and ownership:owned; constructor/reserve have allocation:may_heap, failures:allocation,retain,limit and ownership:owned, without exact-capacity, backing-address or complexity promises. This is a contract freeze only: implementation/full qualification of the three members is PENDING, with actual governed admission still23/32.
+
+The READ declaration family `concat(...arrays: Array<T>) -> Array<T>` has one possibly empty trailing variadic parameter, no optional/default parameters or method type arguments, and exact Array<T> READ arguments. Evaluate the receiver once into an owned logical snapshot, then evaluate and retain each explicit argument once from left to right. Later argument effects on source bindings do not alter earlier snapshots. Only after all arguments succeed, construct the result from the receiver's elements followed by each argument's elements in order. Zero arguments returns an independently owned logical copy. Const/read and temporary receivers are allowed. Existing Array copy/store capabilities suffice; no Equal, Compare, ToString, Sendable or reflection/construction authority is added. Check ordinary generic definitions before Checked specialization and revalidation.
+
+concat neither consumes nor writes its inputs and emits no PLACE_WRITE. Publish only a completely constructed, retained result. Inputs and result can be modified independently; nested values, Nullable layers and exact String bytes including NUL are preserved, with copying stopping at class/synchronization identity. Earlier receiver, argument or retain failures take priority; completed argument effects are not rolled back. Result preparation failure or cancellation releases temporary owners without publishing a partial result. The operation has no internal user callback, new language suspension or cross-suspension loan; argument effects use the ordinary pipeline. Existing finite-size and resource limits apply without an overflowing total-length sum. Its qualifications are allocation:may_heap, failures:allocation,retain,limit and ownership:owned, without capacity, address, zero-allocation or complexity promises. Complete Source/VM/native/mixed, fault, resource-axis, cancellation, escape and physical-release qualification remains outstanding.
+
+The next READ declaration family is frozen as `entries() -> Array<(i64, T)>`, with no explicit, optional, default, variadic or method type parameters. The receiver expression evaluates once into an owned logical Array snapshot A. The independently owned result has the same length L and contains [(0,A[0]),...,(L-1,A[L-1])] in increasing i64 index order; empty input returns an owned empty Array. Every T field is an ordinary owned logical copy, preserving inline values and Nullable layers and stopping at class/synchronization identity. The operation neither consumes nor writes the receiver and has no PLACE_WRITE. Replacing result elements does not change the source Array or old aliases, while mutations of shared identity objects remain observable. Only existing Array copy/store capabilities are required; it neither requires Equal/Compare/ToString/Sendable nor grants reflection/construction authority. Ordinary definitions are checked before Checked specialization and revalidation. Const/read parameters and temporary Arrays are valid READ receivers.
+
+Qualification is allocation=may_heap, failures=allocation,retain,limit and ownership=owned. There is no user callback, new language suspension or suspended loan; existing receiver-expression effects are unchanged. Prepare the complete result before handoff. Copy/retain/budget failure or cancellation drops unfinished Tuple/element/Array owners without publishing a partial result or modifying the source. Completed receiver effects are not rolled back. Empty input promises neither zero allocation/retention nor preserved capacity or backing addresses. Escaped results retain their ordinary owners until the final drop. Entries is implemented and admitted: current21/32. iterator()/entriesIterator(), user iterators and generators require separate contracts and qualification; this materialized Array does not supply those protocols.
+
+| Member | Type / Description |
+|--|--|
+| `len(arr)` | global `i64` query |
+| `capacity` / `arr[i]` / `arr[i] = v` | read-only capacity/index query and writable-place assignment; get is read-only and set is ref |
+| `ref push(x)` / `ref pop()` | tail insert/remove; pop is not a move receiver |
+| `ref shift()` / `ref unshift(x)` | head insert/remove |
+| `concat(...arrays)` | read-only receiver; produces a concatenated result |
+| `indexOf(x)` / `contains(x)` | read-only query |
+| `join(sep?)` | read-only receiver; concatenates into a string |
+| `ref reverse()` / `ref sort(cmp?)` | changes the receiver's ordering |
+| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | read snapshot; map/filter callbacks may take an index; reduce uses `fn(U,T)->U` |
+| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | read snapshot; forEach may take an index; the others short-circuit with `fn(T)->bool` |
+| `ref fill(v, start?, end?)` / `ref clear()` | fill or clear |
+| `ref reserve(capacity)` / `ref resize(length, fill)` | capacity and length management |
+| `ptr()` / `mutPtr()` | returned-borrow contracts remain to be frozen; mutPtr cannot grant writable access through an ordinary read receiver |
+| `toString()` | read-only receiver; container representation |
+| `entries()` | READ snapshot, independently owned Array<(i64,T)>; admitted |
+| `iterator()` / `entriesIterator()` | READ receiver; result types, ownership and iteration protocols freeze separately before admission |
+
+Array for-in evaluates its collection expression once and owns a logical value snapshot. Element replacement, append, or rebinding of the source does not change that sequence; element access produces an owned value copy. Copying stops at class identity, so changes to a referenced object remain observable through references to the same identity. Each iteration binding is immutable, an empty array runs the body zero times, and continue cleans up the iteration before advancing once. Suspension retains the snapshot and index; cancellation releases their ownership. A generic `Array<T>` can be traversed using its shape known at the definition; arbitrary `T` does not gain iteration authority because one instance happens to be an Array. Iterator methods, other collections, and borrowed views require their own admission checks.
+
+Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[start:end]` produces a borrowed `Slice<T>` whose target type must be explicit and whose lifetime follows the borrow rules in §2.4.2; use `copy(arr[start:end])` for independent data.
+
+### 14.8 `Map<K, V>` Methods
+
+| Member | Type / Description |
+|--|--|
+| `len(m)` | global `i64` query |
+| `m[k]` / `m[k] = v` | indexed read/write |
+| `get(k)` / `set(k, v)` | `get` returns `null` when absent; `set` writes |
+| `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | query and remove |
+| `keys()` / `values()` / `entries()` | keys, values, key/value pairs |
+| `forEach(fn)` | traversal |
+| `iterator()` / `entriesIterator()` | iteration protocol |
+
+**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished by the `#` prefix from exact structural-object literals of the form `{ field: value }`.
+
+`m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
+
+The key position of a subscript is typed and checked against `K`, symmetrically with the value position against `V`: `m[1]` on a `Map<f64, V>` is the f64 key `1.0`, not an i64 key stored in a f64 map. Key matching uses the key equivalence relation from §9.2, not `==`.
+
+### 14.9 `Set<T>` Methods
+
+| Member | Type / Description |
+|--|--|
+| `len(set)` | global `i64` query |
+| `add(x)` / `contains(x)` / `delete(x)` | insert, query, remove |
+| `clear()` | empty the set |
+| `values()` | returns `Array<T>` |
+| `forEach(fn)` | traversal |
+| `iterator()` | iteration protocol |
+
+**Set literal**: `#[1, 2, 3]` or `#[]`.
+
+### 14.10 `Channel<T>` Methods
+
+| Member | Type / Description |
+|--|--|
+| `send(v)` | blocking send; throws if the channel is closed |
+| `recv()` | blocking receive, returns `Recv<T>`; closed and drained is `Recv.Closed` |
+| `recvOr(default)` | receives a payload, or returns the supplied default when none is available |
+| `trySend(v)` | non-blocking send, returns `SendResult` |
+| `tryRecv()` | non-blocking receive, returns `Recv<T>`; empty is `Recv.Empty` |
+| `sendTimeout(v, ms)` | timed send, returns `SendResult`; timeout is `SendResult.Timeout` |
+| `recvTimeout(ms)` | timed receive, returns `Recv<T>`; timeout is `Recv.Timeout` |
+| `close()` | close the channel |
+| `capacity` / `isClosed` | capacity and closed-state fields |
+
+`Recv.Value { value: v }` carries the channel payload, so `Channel<i64?>` can distinguish a real `Recv.Value { value: null }` from `Recv.Closed`.
+
+### 14.11 `JSON` Namespace
+
+`JSON` is a prelude namespace, not a value type that variables can use, and it needs no `import json`. Use `JSON.Value` for schema-less JSON and `JSON.Object` when the dynamic value is known to be an object. `JSON.Object` is a pure alias for `Map<string, JSON.Value>`, so enumeration, dynamic subscripts, field insertion/removal, and `len` use the Map API in §14.8 directly.
+
+`JSON.Value` is the recursive boundary domain `null | bool | i64 | f64 | string | Array<JSON.Value> | JSON.Object`. It has no magic dot access, subscript, iteration, or `len`: commit to a schema with typed decode, explicitly unwrap it with `asObject` / `asArray`, or use the path API for arbitrary depth.
+
+| Static function | Description |
+|--|--|
+| `JSON.parse<T>(text, unknown?)` | constructs a typed value directly; unknown fields default to `Reject`, with explicit `JSON.UnknownFields.Ignore` available |
+| `JSON.parseObject(text)` / `JSON.parseValue(text)` | parses an object root or any JSON root without a structural-object intermediate |
+| `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | constructs known fields as `value: T` and keeps unknown top-level fields in `rest: JSON.Object` |
+| `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | attempts to construct `T` from an existing schema-less value; failure returns `null` |
+| `JSON.value<T>(value)` | explicitly materializes an encodable composite value as `JSON.Value` |
+| `JSON.stringify<T>(value, indent?)` | serializes an encodable value; `indent` must be a non-null `i64` |
+| `JSON.isValid(text, strict?)` | validates JSON text |
+| `JSON.kindOf(value)` / `JSON.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | inspects the active JSON arm |
+| `JSON.asObject(value)` / `JSON.asArray(value)` | returns a nullable view sharing the underlying object/array storage, without copying |
+| `JSON.get<T>(root, path)` / `JSON.require<T>(root, path)` | reads and decodes at a `JSON.Path`; the former returns `null` on failure, the latter throws `JSON.PathError` |
+| `JSON.containsPath(root, path)` | tests whether the complete path exists |
+| `JSON.set(root, path, value, createParents?)` / `JSON.remove(root, path)` | mutates or removes a path through object keys and array indices |
+| `JSON.merge(parts)` | recombines the typed and top-level rest parts of `JSON.WithRest<T>` as a `JSON.Object` |
+
+`JSON.Path` is `Array<string | i64>`: a string segment is one complete object key, and an i64 segment is an array index. `["user", "profile", "name"]` addresses nested fields; `"user.profile"` is only one key containing dots. A dynamic object key can also use the Map subscript and methods on `JSON.Object` directly.
+
+```xray
+type Request = { action: string, userId: i64 }
+
+var request = JSON.parse<Request>(body)       // unknown fields reject by default
+var payload = JSON.parseObject(body)          // JSON.Object, therefore a Map
+payload["traceId"] = "req-42"               // scalar widening is implicit
+
+var path: JSON.Path = ["user", "profile", "name"]
+var name = JSON.get<string>(payload, path)
+JSON.set(payload, path, "Ada", true)
+```
+
+JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly when an explicit `JSON.Value` target exists. Structural objects, arrays, and other composites require `JSON.value(...)`. Therefore `{ name: "alice" }` always remains an exact structural object; context never silently turns it into a dynamic object.
+
+### 14.12 `Range`
+
+`a..b` is the half-open interval `[a, b)`, while `a..=b` is the inclusive interval `[a, b]`. Both forms work in expressions, `for-in`, and range patterns in `match`.
+
+| Member | Description |
+|--|--|
+| `start` / `end` | The start and the declared endpoint |
+| `contains(x)` | Tests membership using the range's half-open or inclusive semantics |
+| `toArray()` | Produces an independent `Array<i64>` in iteration order |
+| `toString()` | Returns an `a..b` or `a..=b` string |
+| `iterator()` | iteration protocol; yields the same elements as `toArray()`, lazily |
+| `len(range)` | Returns the number of elements in the range |
+
+```xray
+var pages = 1..=3
+print(pages.start)          // 1
+print(pages.end)            // 3
+print(pages.contains(3))    // true
+print(len(pages))           // 3
+print(pages.toArray())      // [1, 2, 3]
+
+var empty = 5..5
+print(len(empty))           // 0
+```
+
+### 14.13 `DateTime`
+
+The `datetime` module provides factory functions through `import datetime`: `now`, `utc`, `create`, `createUTC`, `fromTimestamp`, `fromTimestampMs`, `parse`, and `offset`. `DateTime` is not a prelude type; import it explicitly with `import { DateTime } from datetime` when the name is used as a type.
+
+| Member | Type / Description |
+|--|--|
+| `year` / `month` / `day` | date-component properties |
+| `hour` / `minute` / `second` / `millisecond` | time-component properties |
+| `weekday` / `yearday` / `timestamp` | derived properties |
+| `toString()` / `format(pattern?)` / `toISOString()` | formatting |
+| `add(amount, unit)` / `diff(other, unit?)` | date arithmetic |
+| `toUTC()` / `toLocal()` | timezone conversion |
+| `isBefore(other)` / `isAfter(other)` / `equals(other)` | comparison |
+| `isLeapYear()` / `daysInMonth()` | calendar queries |
+
+### 14.14 `Regex`
+
+| Method | Description |
+|--|--|
+| `test(s)` | match predicate |
+| `find(s)` | first match |
+| `findAll(s)` | all matches |
+| `findText(s)` / `findGroup(s, index)` | first matched text / capture-group text |
+| `replace(s, replacement)` | replacement |
+| `split(s, limit?)` | split |
+
+### 14.15 `StringBuilder`
+
+| Method | Description |
+|--|--|
+| `len(builder)` | current rune count |
+| `append(s)` | append and return self |
+| `toString()` | output string |
+| `clear()` | empty and return self |
+
+### 14.16 `PanicInfo`
+
+The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `init(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
+
+### 14.17 `Task<T>` and Enum Values
+
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>` as `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, or `Pending`. Plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation; results must be copyable and Sendable; the Task keeps its complete owned sticky outcome and repeated awaits obtain logical copies, stopping at class and synchronization identities, without an `await (move task)` form or reference-count-selected single take. Enum values provide the cold-path `name`, `ordinal`, and `toString()` surface.
+
+### 14.18 Thread and Synchronization Handles
+
+`Thread<T>` is a prelude handle type with the `done` field and the `join()` / `detach()` methods. After importing `sys`, create an OS thread with `sys.Thread.spawn(body)` or `sys.Thread.spawn(ThreadOptions{...}, body)`, then call `join()` or `detach()` on the returned handle. Import `CountdownLatch`, `EventCount`, `ResultGroup`, `Semaphore`, and `WorkQueue` from `sync`; import `Logger` from `log`; and import connection and listener types from `net`.
+
+### 14.19 `Atomic<T>` Methods
+
+`Atomic<T>` wraps `i64`, `f64`, or `bool` with lock-free atomic operations. Name the handle with `const`; audited atomic methods provide synchronized interior mutation.
+
+| Method | Signature | Description |
+|--|--|--|
+| `load(ord?)` | `(Ordering?) -> T` | Atomically read the current value |
+| `store(val, ord?)` | `(T, Ordering?) -> ()` | Atomic write |
+| `add(val, ord?)` | `(T, Ordering?) -> ()` | Atomic add |
+| `sub(val, ord?)` | `(T, Ordering?) -> ()` | Atomic subtract |
+| `fetchAdd(val, ord?)` | `(T, Ordering?) -> T` | Atomic add, returning old value |
+| `fetchSub(val, ord?)` | `(T, Ordering?) -> T` | Atomic subtract, returning old value |
+| `swap(val, ord?)` | `(T, Ordering?) -> T` | Atomic swap, returns old value |
+| `compareExchange(expected, desired, ord?)` | `(T, T, Ordering?) -> (T, bool)` | CAS, returns `(old_value, success)` |
+| `toggle(ord?)` | `(Ordering?) -> bool` | Atomic negate (bool only), returns old value |
+| `toString()` | `() -> string` | Returns string representation of current value |
+
+The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. See §10.9.
+
+The complete constraints and operation admission follow §9.2/§10.9: the type requires `T: AtomicValue`; each of the four numeric methods requires method `where T: AtomicNumber`, while toggle requires `where T: AtomicBoolean`. Other methods keep the full AtomicValue domain. load/store reject invalid orders. compareExchange returns an owned real Tuple with all result resources prepared before its side effect. f64 bits/CAS and software RMW, i64 wrapping and the single-snapshot toString follow §10.9. The unconstrained declaration currently in `stdlib/types/atomic.xr` and the fixed i64 instructions still await an atomic complete-family migration; they do not establish implementation of this frozen contract.
+
+---
+
+## 15. Standard Library Overview
+
+> Source of truth: `stdlib/defs/*.def`, pure-Xray `stdlib/<module>/<module>.xr` exports, `stdlib/types/*.xr` native type declarations, and `scripts/gen_api_inventory.py`, which merges those sources.
+> MCP knowledge and the API inventory use the source-derived inventory; `xray builtin-dump` is only one runtime builtin-view input.
+> See [Appendix D — stdlib module index](#d-stdlib-module-index).
+
+> **Authoritative stdlib module list** (27 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
+>
+> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `http`, `io`, `log`, `math`, `mem`, `net`, `os`, `parallel`, `path`, `regex`, `runtime`, `sync`, `sys`, `text`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
+>
+> The exact prelude type/namespace set is: `Array`, `Atomic`, `OsBarrier`, `BigInt`, `Channel`, `OsCondvar`, `PanicInfo`, `JSON` (including `JSON.Value` / `JSON.Object`), `Map`, `OsMutex`, `OsOnce`, `Path`, `Range`, `Regex`, `OsRwLock`, `Set`, `StringBuilder`, and `Thread`. `Array<u8>` is an `Array` specialization; module types such as `DateTime`, `Logger`, `NetConn`, and `NetListener` must be imported. See §1.5.6 / §2.2.
+
+### 15.1 File I/O and System
+
+| Module | Topic | Key APIs |
+|--|--|--|
+| `io` | file I/O + filesystem | `readFile` `writeFile` `readFileBytes` `writeFileBytes` `exists` `mkdir` `mkdirp` `remove` `readDir` `stat` `readStdin` |
+| `path` | path manipulation | `join` `dirname` `basename` `extname` `normalize` `isAbsolute` `resolve` `relative` `parse` `format` |
+| `os` | OS interface | `platform()` `arch()` `sep()` `eol()` `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec` |
+
+> Xray has **no** standalone `fs` module; filesystem operations live in `io`. Process arguments / process information are exposed through the global `process` object (`process.args` / `process.file` / `process.dir`, see §16.5), not `os`.
+> `os.platform()` / `os.arch()` query host facts; `os.sep()` / `os.eol()` are derived from the platform name in the Xray module.
+
+### 15.2 Networking
+
+| Module | Topic | Key APIs |
+|--|--|--|
+| `net` | TCP / UDP / TLS sockets + DNS | `listen` `dial` `accept` `readInto` `readBytes` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `TlsClientContext` `TlsServerContext` `NetConn` `NetListener` |
+| `http` | HTTP / HTTPS client + server + HTTP/2 | `request` `h2Request` `listen` `router` `routeHandler` `requestText` `responseText` `parseResponseText` |
+| `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
+| `url` | URL parsing and construction | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
+
+> DNS lookups go through `net.lookup(host)`; there is no standalone `dns` module.
+
+#### 15.2.1 TCP Data Paths
+
+The `net` TCP API intentionally has three data paths:
+
+- `read(conn)` / `write(conn, data)`: message path. Payload is exposed as an Xray `string`, suitable for protocol parsing, text handling, and logic that must inspect bytes.
+- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`: reusable `Array<u8>` buffer path for binary protocol hot loops without per-packet temporary strings.
+- `copy(src, dst)` / `copyBidirectional(a, b)`: native stream path. Payload stays in a reusable C buffer, suitable for proxy, relay, `copy(conn, conn)` echo, and other high-throughput workloads that do not need to inspect every byte in Xray code.
+
+Design rule: raw streams should not allocate temporary strings merely to pass through the language layer; use string APIs only when application logic needs the bytes.
+
+TCP waiting operations use the coroutine-friendly netpoll path. `setReadDeadline(conn, deadline)`, `setWriteDeadline(conn, deadline)`, `setDeadline(conn, deadline)`, and `setAcceptDeadline(listener, deadline)` accept `time.monotonic()` millisecond deadlines; after a timeout, operations return their normal `null` or `-1` failure shape, and `lastError(handle)` / `lastErrno(handle)` expose diagnostic causes.
+
+`shutdownRead(conn)`, `shutdownWrite(conn)`, and `shutdown(conn)` expose TCP half-close semantics. Generic proxy and relay code should prefer `copyBidirectional(a, b)`, which half-closes the opposite write side after one-way EOF and returns byte counts for both directions.
+
+TLS clients use the single `dial(host, port, DialOptions(timeoutMs, true, alpnProtocols))` entry point. `TlsClientContext` supplies custom trust, client identity, and STARTTLS policy. `TlsServerContext` accepts an ALPN list in server-preference order, while `negotiatedProtocol(conn)` returns the selected protocol or `null`. ALPN configures negotiation only; HTTP/2, WebSocket, and other protocol modules own acceptance of the selected value. TLS read/write/copy share the same deadline, diagnostic error, and typed-handle lifecycle semantics as plain TCP.
+
+### 15.3 Data Formats
+
+| Module | Topic |
+|--|--|
+| `yaml` | YAML |
+| `toml` | TOML |
+| `xml` | XML |
+| `csv` | CSV |
+| `base64` | Base64 encode / decode |
+| `encoding` | hex / UTF-8 and other generic encodings (Base64 lives in its own module) |
+
+> JSON encoding/decoding is **not** in a separate `json` module; use the prelude `JSON` namespace through `JSON.parse<T>(s)` / `JSON.parseObject(s)` / `JSON.value(v)` / `JSON.stringify(v)` (no import required; see §14.11).
+
+### 15.4 Cryptography and Hashing
+
+| Module | Key APIs |
+|--|--|
+| `crypto` | `md5` `sha1` `sha256` `sha512` `hmac` `encrypt` `decrypt` `randomBytes` `timingSafeEqual` `uuid` |
+
+> stdlib has **no** standalone `random` module; for pseudo-random numbers use `crypto`'s random source or `math` utilities.
+
+### 15.5 Compression
+
+| Module | Key APIs |
+|--|--|
+| `compress` | `gzip` / `gunzip`, `deflate` / `inflate`, etc. |
+
+### 15.6 Time
+
+| Module | Key APIs |
+|--|--|
+| `time` | `now()` `monotonic()` `clock()` `micros()` `nanos()` `sleep(ms)` `localOffset()` `localOffsetAt()` |
+| `datetime` | `DateTime` plus factories such as `now()` `utc()` `create()` `createUTC()` `fromTimestamp()` and `parse()` (see §14.13) |
+
+### 15.7 Math
+
+| Module | Key APIs |
+|--|--|
+| `math` | `sin` `cos` `tan` `log` `pow` `sqrt` `floor` `ceil` `round` `abs` `min` `max` etc.; constants `PI` / `E` / `MAX_I64` / `MIN_I64` |
+
+### 15.8 Text
+
+| Module | Key APIs |
+|--|--|
+| `regex` | `compile(pattern)` returns `Regex`; see §14.14. The `/pattern/flags` literal form is also supported |
+| `text` | `lower` `upper` `trim` `trimStart` `trimEnd` `padStart` `padEnd` `reverseRunes` `translate` |
+Decimal text parsing is owned by exact scalar static namespaces: `i64.parse(s)` / `i64.tryParse(s)` and `f64.parse(s)` / `f64.tryParse(s)`. Numeric conversions use explicit `as`.
+
+### 15.9 Logging and Diagnostics
+
+| Module | Key APIs |
+|--|--|
+| `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`, source-position toggles, async write mode |
+| `runtime` | `liveBytes()` `liveObjects()` `info()` |
+| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` return managed `Buffer`; `pageAlloc()` / `pageFree()`; `copy()` / `move()` / `set()` / `compare()`; `volatileLoad()` / `volatileStore()`; `fence()` |
+| `sync` | coroutine-domain synchronization: `Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()`, with explicit `import sync` |
+| `sys` | low-level OS/thread surface: compiler-defined `sys.Thread.spawn(...)` with `ThreadOptions`, plus `ThreadLocal`, `OsMutex`, `OsRwLock`, `OsCondvar`, `OsBarrier`, `OsOnce`, process/dylib/pipe handles, `threadYield()`, `pinToCpu()`, and `onSignal()`; use `os.cpuCount()` for host CPU topology and `time.sleep(ms)` for coroutine-friendly delays |
+
+### 15.10 Parallelism
+
+`parallel` exports `forEach` and the `Plan` abstraction for structured CPU-parallel work. `parallel` is not a language keyword; import the module explicitly.
+
+### 15.11 Distributed
+
+| Module | Topic |
+|--|--|
+| `cluster` | node discovery, health checks, topic-based message bus (see `stdlib/cluster/`) |
+
+### 15.12 Testing
+
+The `@test` attribute together with the global `assert*` family is enough; **no** separate `test` module is needed (see §12).
+
+### 15.13 Modules That **Do Not Exist**
+
+Modules that may have been referenced historically but are **not** part of the current stdlib (to avoid confusion):
+
+`fs` · `process` · `dns` · `random` · `json`
+
+Their functionality has either moved into other modules (see the per-section notes above) or has not yet been implemented.
+
+> **Full index**: see [Appendix D](#d-stdlib-module-index).
+
+---
+
+## 16. Runtime Model
+
+> Source of truth: `src/runtime/`, `src/vm/`, `src/runtime/mem/`, `docs/rules/architecture.md`.
+
+### 16.1 Value Representation
+
+Xray values are uniformly represented as `XrValue`. The current implementation requires a 64-bit platform and uses a **16-byte tagged struct-of-union**:
+
+- **Descriptor (8 bytes)**: `tag: u8`, `flags: u8`, `heap_type: u16`, and `ext: u32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
+- **Payload (8 bytes)**: one of `i64`, `double`, or pointer, interpreted by the tag.
+- **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
+- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; literals/symbols, explicit `intern()`, and map/set keys use the global pool. Cross-execution storage is selected from verified context at construction/publication time; a boundary never copies or promotes the payload implicitly. These are object-storage policies and do not change the `XrValue` representation.
+
+| Value type | Internal representation |
+|--|--|
+| `i64` | `XR_TAG_I64` + 64-bit signed payload |
+| `f64` | `XR_TAG_F64` + IEEE-754 double payload |
+| `bool` | `XR_TAG_BOOL` + `0/1` payload |
+| `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
+| `null` | `XR_TAG_NULL` + zero payload |
+| `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
+| `Array<u8>` | `XR_TAG_PTR` + `XR_TARRAY`, with byte element layout |
+| Other objects | `XR_TAG_PTR` + heap type + heap pointer |
+
+Typed-array element layout is part of the container metadata. `Array<rune>` uses `XR_ELEM_RUNE`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_RUNE`, and stores reject non-`rune` values, so it cannot be confused with `Array<u32>`.
+
+### 16.2 Semantic Ownership Domains
+
+Storage is described by **two orthogonal axes**. Conflating them yields wrong conclusions:
+
+- **Semantic ownership domain** (this section): who owns the storage, how long it lives, and what rule governs its migration across an execution boundary. This is a **semantic contract**.
+- **Backend materialization** (§16.2.1): where the backend actually puts it (inline, stack, static data, some heap). This is an **implementation choice**.
+
+> Source of truth: `XrSemanticStorageDomain`, `XrBackendMaterialization`, and `XrTransferAction` in `src/base/xstorage.h`.
+
+Every value belongs to exactly one of six semantic domains:
+
+| Domain | Ownership and lifetime | Reference counting | Typical origin |
+|--|--|--|--|
+| **`EXEC_LOCAL`** | Owned exclusively by the current execution (coroutine); ends with that execution's heap | Non-atomic | Ordinary local objects; containers and instances built from literals |
+| **`TRANSFERABLE`** | Unique ownership that can be **handed over whole** across an execution boundary; unusable on the source side afterwards | Non-atomic | The target of a `move`; unique values passed between coroutines |
+| **`CONST_SHARED`** | A published immutable root, read concurrently by several executions | Atomic | A published `const` root; the result of `freeze` |
+| **`SYNC_SHARED`** | An audited concurrency handle accessed by several executions, where the handle itself provides the synchronization | Atomic | Values held by channels, mutexes, and other concurrency primitives |
+| **`MODULE_STATIC`** | Owned by the module, alive until it unloads; **not concurrency-safe by default** | Per module owner | Top-level `const` / `var` |
+| **`FOREIGN`** | Owned by an allocator outside Xray; the runtime does not manage its lifetime | None | FFI pointers, external buffers |
+
+**A domain fixes concurrency visibility and reclamation responsibility, not physical location.** An `EXEC_LOCAL` value may be inlined into its holder, placed on the stack, or allocated on the execution heap — none of the three changes the contract that it ends with that coroutine.
+
+#### 16.2.1 Backend Materialization
+
+Subject to the semantic domain's contract, the backend picks one materialization per value:
+
+| Materialization | Meaning |
+|--|--|
+| `INLINE` | Inlined into the holder's storage, with no separate address identity |
+| `STACK` | On the function frame; dies with the frame, cannot grow, cannot be freed |
+| `STATIC_DATA` | Read-only static data (consteval results, literal pools) |
+| `EXEC_HEAP` | The current execution's heap (`XrCoroHeap`), reclaimed by reference counting |
+| `SYSTEM_HEAP` | The system heap; objects visible across executions live here |
+| `SROA` | Scalar-replaced into registers; the aggregate no longer exists concretely |
+| `EXTERNAL` | Held by an external allocator |
+| `INVALID` | Undecided; reaching a final plan is an internal error |
+
+> **Changing materialization must never grant a stronger semantic domain or transfer capability.** Materializing an `EXEC_LOCAL` value on the `SYSTEM_HEAP` does not make it shareable across executions; conversely, materializing a `CONST_SHARED` value on the stack is invalid, because its domain requires a stable address for as long as it is shared. Materialization is **downstream** of the semantic domain, never a justification.
+
+#### 16.2.2 Domain Migration Across Execution Boundaries
+
+When a value crosses an execution boundary (captured into `go`, sent through a channel, returned as a task result), its **source domain** and mutability select a transfer action. This is decided at compile time; it is not a runtime downgrade:
+
+| Action | Selected when | Semantics |
+|--|--|--|
+| `INLINE_COPY` | Scalar, and not a mutable capture | Copied by value; the two sides are independent afterwards |
+| `CONST_SHARE` | Source domain is `CONST_SHARED` | Shares the same immutable root under atomic reference counting |
+| `SYNC_SHARE` | Source domain is `SYNC_SHARED`, or the capture is itself a concurrency handle | Shares the same handle; the handle provides synchronization |
+| `MOVE_UNIQUE` | Source domain is `TRANSFERABLE` | Ownership is handed over whole; the source is unusable afterwards |
+| `EXPLICIT_COPY` | **Only** where the source wrote `copy(...)` | Materializes an independent value, then migrates it |
+| `MODULE_READ` | Source domain is `MODULE_STATIC` and immutable | Reads the module binding by reference |
+| **`REJECT`** | **None of the above holds** | **Compile error** |
+
+`REJECT` is the most important row: **there is no implicit deep-copy fallback across an execution boundary.** A mutable module binding, an ordinary capture that is mutable or reassigned, and a managed value with no const/sync/move evidence are all compile errors rather than a silent copy. Where an independent copy is wanted, the source must say `copy(...)`.
+
+### 16.3 Object Lifetime and Reclamation
+
+- Ordinary local objects use compiler-inserted **per-coroutine reference counting** and enter the RC destruction path as soon as their last strong reference is released. Shared objects use atomic RC; module and runtime objects follow their respective owners' lifetimes.
+- **Cycles are not reclaimed at runtime**: reclamation has exactly one rule — an object dies when its last strong reference goes. Cycles are handled in three layers instead: a compile-time type graph proves most programs never form one (L0), a `weak` field is the sole explicit way to break one (L1), and bulk disposal of the execution-local reclamation domain bounds whatever remains (L2). The development-mode detector reports cycles; it never collects them.
+- **Execution-local reclamation-domain boundary (L2)**: every physical coroutine owns one domain. The VM realizes it as a per-coroutine Region heap; hosted AOT uses an execution arena that registers still-live ordinary ARC allocations. Acyclic objects still die immediately at their last strong reference; when the coroutine ends, the domain disposes the complete residual graph. Thus **an object reference counting did not reclaim — a cycle — leaks no further than the lifetime of the coroutine that built it**. Cross-execution publication must first detach the complete owned graph of a shared or transferred root. Only `MODULE_STATIC` / `CONST_SHARED` / `SYNC_SHARED` domains and the main execution's root domain may live for the process lifetime.
+- **Closure boundary for host-owned results**: after all Calls and Tasks have drained and internal roots are withdrawn, the execution owner disposes its residual graph unreachable from external owned roots and logically transfers the remaining complete graph to one host residual owner. Logical detachment need not move physical addresses or replace the allocator and cumulative ledger; it grants no cross-execution sharing permission. Retained host values remain readable, copyable, and mutable under their original types and permissions. While any external strong root of that host residual owner remains, cycles formed or orphaned later remain until the owner ends; individual releases must not collect a subset of those cycles. The last external root ends the owner and disposes the complete remaining graph. Ordinary RC zero still destroys immediately, and an OPEN execution domain neither scans nor collects cycles.
+- **This property is unusual among pure reference-counted languages**: an Rc/RefCell cycle in Rust, or a strong-reference cycle in Swift, leaks until the process exits — both allocate refcounted objects on a process-wide heap, with no boundary smaller than the process that can be dropped wholesale. Xray's execution-local reclamation domain is that boundary, so forgetting a `weak` costs a **bounded** leak rather than a permanent one. This caps the lifetime; it is not cycle collection.
+- Xray has no concurrent tracing GC and no cycle collector; no GC hooks remain at function calls or backward branches.
+- **User-visible introspection**: `runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` report the current execution-local reclamation domain (a VM coroutine heap or AOT execution arena), falling back to the main/root domain when no coroutine is current (`import runtime`; the `mem` module carries raw-memory capabilities only).
+
+#### 16.3.1 The two reference-count bands
+
+There is one reference-count field, and its **sign** selects between two bands:
+
+| Band | Encoding | Used by | Atomicity |
+|--|--|--|--|
+| coroutine-local | positive | ordinary local object graphs | non-atomic (relaxed fast path) |
+| shared | negative (`N` references stored as `-N`) | published const values, synchronization handles, module and runtime objects | atomic |
+
+A sign test on the hot path routes each object to the right path automatically, so the two bands coexist without an extra branch. Immortal objects store a sticky value and never participate in counting.
+
+**Which band an object lands in is decided at compile time**, by the storage plan of its allocation site (the capability axis of §2.14.2 plus the allocation domain); it is not a runtime conversion, and a live object is never silently re-banded when it crosses a boundary. That is load-bearing: re-banding at runtime would have to synchronize with concurrent non-atomic read-modify-writes, which is exactly what the non-atomic band assumes cannot happen.
+
+Only two shapes therefore cross an execution boundary:
+
+1. **Sharing**: the value's allocation plan is const-shared or sync-shared, so it is in the atomic band from creation. Published `const` values and audited handles such as `Channel`, `Atomic`, and `Semaphore` are of this kind.
+2. **Transfer**: `move` hands over a unique root. Exactly one owner exists at any moment, so a non-atomic count stays correct.
+
+**The correctness of the second shape rests directly on the uniqueness evidence in §2.14.** If a root that still has an alias or a live loan were transferred out, two execution contexts would read-modify-write one non-atomic counter — which is not a data race but memory corruption (a double free or a premature free). That is why §2.14 counts closure captures and heap stores as evidence: the ownership decision is a precondition for reference-count correctness, not merely a programming discipline.
+
+Real OS threads (a `sys.Thread.spawn` body, a `CFn` callback) follow the same rules with no relaxation: a thread body may reach only values whose allocation plan is shared, or a unique root transferred in through a `Channel`.
+
+See `src/runtime/mem/` and `src/shared/xr_obj_header.h` for details.
+
+### 16.4 Coroutine Scheduling
+
+- M:N scheduling (M OS threads × N coroutines).
+- **work-stealing**: idle workers steal tasks from other workers' queues.
+- **Cooperative preemption**: coroutines yield at safepoints (no forced preemption).
+- **Fairness**: a single runnable queue works with local run-next, global injection, and work-stealing; scheduling order does not expose user-level priorities.
+- **Stack management**: VM register/frame stacks grow on demand and may relocate their backing storage; the runtime re-derives pointers from slot offsets.
+
+See `src/coro/` and `src/vm/xvm_coro_backend.c` for details.
+
+### 16.5 Process-Level Global Access
+
+- `process` (global builtin, no import required): self-process information.
+- `os` (requires `import os`): operating system, environment, process control.
+
+```xray
+// Self-process information — global object
+process.file              // current script path (equivalent to __file__)
+process.args              // Array<string>, process command-line arguments
+process.dir               // script directory (equivalent to __dir__)
+
+// OS / environment — requires import
+import os
+os.getenv("PATH")         // read environment variable -> string?
+os.environ()              // get all environment variables -> Map<string, string>
+os.exit(0)                // exit the process
+os.getpid()               // process ID
+os.getcwd()               // current working directory
+os.hostname()             // host name
+os.tmpdir()               // temporary directory
+os.platform()             // "darwin" / "linux" / "windows"
+os.arch()                 // "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
+os.sep()                  // path separator
+os.eol()                  // end-of-line
+```
+
+> **Naming convention**: `os.*` follows POSIX function names (`getenv` / `getcwd` / `getpid`); it does not track Node.js. Node-style `process.env` mapping is not provided — use `os.getenv(name)` / `os.environ()`.
+
+See `stdlib/os/` for details.
+
+### 16.6 Panic Runtime
+
+The built-in `PanicInfo` class is a prelude type (declared in `stdlib/types/panic_info.xr`) and belongs only to the **panic channel**. Runtime faults (out-of-bounds, division by zero, non-exhaustive `match`, runtime invariant violations, and similar faults) are represented by `PanicInfo` objects constructed by the VM/AOT runtime:
+
+```xray
+class PanicInfo {
+    message: string             // human-readable message
+    stack: Array<string>        // automatically captured call stack, one formatted line per frame
+    cause: PanicInfo?           // chained cause
+    code: i64                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
+    data: JSON.Value            // structured data for a runtime fault; JSON null when absent
+
+    init(message: string = "", cause: PanicInfo? = null)
+    fn toString() -> string
+}
+```
+
+Recoverable user-level errors do not use `PanicInfo`: a `throw` statement accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
+
+Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers. Every edge that crosses a cleanup's owning scope enters a statically generated cleanup region, runs it in LIFO order, then releases locals and continues unwinding; the runtime maintains no dynamic defer stack. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
+
+### 16.7 Value-return Error Channel Runtime
+
+`throw <enum>` writes the enum value into the frame's `pending_error` slot, sets the error flag, and returns. The caller detects the flag via `OP_ERR_CHECK` and either enters a `catch` handler or continues returning upward. This channel performs no stack unwinding and allocates no `PanicInfo`; at call boundaries that may propagate or catch errors, the happy path goes through only a predictable error-flag branch.
+
+### 16.8 Object Reclamation & Finalizer Timing Contract
+
+**The reclamation point is exact, with no exceptions**: an object is reclaimed the moment its last strong reference is released. VM and AOT give the same answer here.
+
+- The promise can be universal because reference counting is the only reclamation mechanism. There is no cycle collector, no tracing GC, and no indeterminate "some GC point" at runtime (task 247).
+- The one shape RC does not reclaim is a **reference cycle**, and that too is determinate: cycles are not collected at runtime, and what they cost is capped by the execution-local reclamation-domain boundary (L2 in §16.3). Disposing the residual graph when its domain ends is not cycle collection. Cycles are prevented by the compile-time type graph (L0) and broken explicitly with `weak` (L1); the development detector reports them and never reclaims.
+- What is still **not** offered is a user-visible deterministic destructor (destructor / finalizer / `Drop`) surface: a program must not depend on whether a type has a finalization hook, in what order such hooks run, or on which thread. What is exact is the **moment of reclamation**, not the ability to attach code to it.
+
+The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is **`defer`**, which runs at owning-scope exit in LIFO order, independent of object reclamation timing. Code that must deterministically release external resources (files / handles / locks) must use `defer` rather than relying on object finalization.
+
+**`defer` runs on every exit edge that crosses its owning lexical scope**: normal fallthrough, `return`, `break`, `continue`, outward value-error propagation, panic unwinding, and **coroutine cancellation**. The frontend compiles each registration point into a program-point-sensitive static cleanup frontier; there is no closure, callback object, or dynamic runtime stack. Cancellation is not an external kill: a suspendable frame stores only fixed-layout cleanup-region identifiers and depth, and the scheduler invokes the generated static frontier on that coroutine's worker before marking it cancelled. `task.cancel()` correspondingly does not let an `await` observe cancellation before cleanup has run.
+
+For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point or create a task** (`E0392`, see §4.9 / §8.3.1). Suspension cannot guarantee completion of the static cleanup region before the frame leaves; task creation would let work escape the cleanup boundary. Static analysis rejects direct, transitive, and unresolved dynamic cases conservatively, and VM/AOT fail closed with `E0444` before a task-creation or scheduling side effect. Cancellation is masked while a defer body runs, so cleanup itself cannot be interrupted by cancellation.
+
+> Evolution note: once deterministic destruction (RAII / `Drop`) is formally added to the language, this section will be upgraded to a **deterministic reclamation contract** (specifying destruction points and order), gated byte-for-byte by cross-backend differential tests. Until then, "reclamation timing / finalizer behavior" is explicitly declared an implementation-defined, non-deterministic aspect.
+
+### 16.9 Concurrency Memory Model
+
+> Source of truth: `src/coro/xchannel.c`, `src/coro/xtask.c`, `src/coro/xtask_await.c`, the `:sync` column of `xisa/xi/ops.def`.
+
+This section defines when accesses by two execution agents to the same memory location are **ordered**. The `Ordering` enum in §10.9 describes one atomic operation; it is not enough to derive program behaviour. This section is.
+
+#### 16.9.1 Basic definitions
+
+**Execution agent**: coroutines and OS threads are both execution agents. A coroutine may be moved between worker threads by the work-stealing scheduler during its lifetime and remains the same agent (see edge 12).
+
+**Sequenced-before**: the total order of evaluation within one agent, given by §3.0 Evaluation Order. Because §3.0 leaves no order unspecified, this relation is total rather than partial.
+
+**Synchronizes-with**: given by the edge table in §16.9.2. **That table is exhaustive**: no runtime behaviour outside it establishes synchronizes-with.
+
+**Happens-before**: the transitive closure of (sequenced-before ∪ synchronizes-with).
+
+**Conflicting accesses**: accesses by two agents to the same memory location, at least one of which is a write.
+
+**Data race**: a pair of conflicting accesses with **no** happens-before between them in either direction, where the two are **not both** atomic operations on the same atomic object.
+
+Reference-count updates are themselves memory accesses: concurrent retain/release on a non-atomic RC is a data race whose consequence is memory corruption, not merely a wrong number. The promotion rules are in §16.9.4.
+
+#### 16.9.2 Synchronisation edges (exhaustive)
+
+| # | Edge | Relation established |
+|--:|---|---|
+| 1 | Channel send → recv | Everything sequenced **before** the k-th successful `send(v)` happens-before everything sequenced **after** the `recv` / `recvOr` / `tryRecv` / `for-in` iteration that receives v. Buffered and unbuffered channels follow the same rule |
+| 2 | Channel recv → later send (capacity edge) | On a channel of capacity N, completion of the k-th `recv` happens-before completion of the (k + N)-th `send`. This edge is what makes `Channel(N)` correct as a semaphore or rate limiter |
+| 3 | Channel close | Everything before `close()` happens-before everything after any observation of `Recv.Closed` or `isClosed == true` |
+| 4 | `go` spawn | Evaluation of the arguments, capture plan and `move` transfers at the `go expr` happens-before the first statement of the coroutine body |
+| 5 | Task completion → await | The task body's last action happens-before everything after any `await t` / `awaitResult()` / `awaitTimeout()` return, or after observing `t.done == true`, a terminal `t.poll()` result, or a terminal `t.status` |
+| 6 | scope exit | Completion of every child task in a scope happens-before the statements after the scope block. `await all` / `any` / `anySuccess` establish the same edge under their respective completion conditions |
+| 7 | `const` publish / seal | Initialisation and sealing of a top-level `const` happens-before any agent's first read of that const root |
+| 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with the `load(Acquire)` that reads v; RMWs form a release sequence; `SeqCst` operations additionally participate in one single total order. `AcquireRelease` carries both sides |
+| 9 | Coroutine-domain locks | `sync.Mutex` / `sync.RwLock`: an unlock synchronizes-with a later successful lock |
+| 10 | OS-thread-domain primitives | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` / `sys.OsBarrier`: as above; a `sys.OsOnce` initialisation happens-before every call that observes it as complete |
+| 11 | `sys.Thread` | Everything before `spawn` happens-before the thread body; the thread body happens-before everything after `join` returns |
+| 12 | Coroutine migration | A coroutine suspended on worker A and resumed on worker B: everything before the suspension happens-before everything after the resumption. The runtime guarantees this edge; user code never names it, but **without it no ordering argument holds under work-stealing at all** |
+| 13 | `select` | The selected arm establishes the edge of its channel operation (edges 1 / 2 / 3) |
+
+#### 16.9.3 Non-edges (exhaustively denied)
+
+The following establish **no** happens-before and must not be used to synchronise:
+
+- `Coro.yield()`: a scheduling yield point, not a synchronisation point.
+- `codegen.compilerFence()`: it only prevents memory-effecting operations from moving across that compiler scheduling point. It is not a CPU fence, establishes no happens-before, and cannot repair a data race (see §12).
+- Atomic operations with `Ordering.Relaxed`: they keep that location's accesses from tearing; they order nothing with respect to other locations.
+- Object reclamation, an RC reaching zero, or a cycle-collector run: reclamation timing is not observable semantics (§16.8), so it cannot carry an ordering relation.
+- The sysmon heartbeat and the `XRAY_SYSMON_CANCEL_MS` cancellation flag.
+- Time: neither `time.sleep` nor any timeout expiry establishes ordering.
+
+#### 16.9.4 Reference-count promotion rules
+
+Ordinary local objects use **coroutine-local, non-atomic RC** (§16.3). Once an object can be reached by two agents, its reference count **must** already have been promoted to atomic RC; otherwise concurrent retain/release is a data race whose consequence is heap corruption.
+
+The promotion points are exhaustive, and each applies to the reachable graph **deeply** (the object and every managed member reachable from it):
+
+| Promotion point | Notes |
+|---|---|
+| The value of a Channel `send` | Including a `move` send; the value stays atomically counted after the receiver takes exclusive ownership |
+| `go` / `scope` arguments and capture-plan members | Determined statically by the capture plan |
+| Task / scope result values | Delivered through edge 5 / edge 6 |
+| The reachable graph of a `const` publish / seal | Promoted once; the graph is deeply read-only afterwards |
+| Everything reachable across a `sys.Thread` boundary or from a `CFn` callback | See §16.9.5: that channel is currently outside the safe subset |
+
+`string` promotion is described separately in §16.1 (short strings are coroutine-local, promoted to shared atomic RC on demand when they cross a boundary). That is this same rule instantiated for `XrString`, not an exception to it.
+
+#### 16.9.5 The data-race-freedom guarantee and its boundary
+
+**Theorem (DRF for the safe subset)**: a program containing no `unsafe` block and using none of the escape hatches below has no data race, and its behaviour is equivalent to some sequentially consistent interleaving. That is SC-DRF: inside the safe subset you may reason in terms of interleaved statements and never need the happens-before detail in this section.
+
+**Escape hatches (exhaustive)**: the following capabilities can introduce a data race. Their consequences are **implementation-defined and may include memory corruption**; the proof obligation is the user's:
+
+- Any raw memory access inside an `unsafe` block
+- The writable raw pointer from `Array.mutPtr()` (as an **argument** a pointer crosses a coroutine boundary without passing through capture-plan checking)
+- `mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`
+- The body of a `sys.Thread`
+- The body of a `CFn` C callback (which may be invoked on any thread)
+
+> This is the **precise form** of the claim that xray eliminates data races at compile time: a theorem with a stated boundary, not an unconditional assertion. Shrinking the escape-hatch list is a goal of the language's evolution, and each shrink must come with the mechanism that brings that capability inside the guarantee.
+
+#### 16.9.6 Obligations on the compiler
+
+A synchronisation edge is not only a runtime promise; it also constrains optimisation. The `:sync` column of `xisa/xi/ops.def` declares the edge each Xi operation establishes (`none` / `acquire` / `release` / `acq-rel` / `seq-cst`). Where the edge's strength is chosen at run time by an `Ordering` argument, the declaration is the **strongest** edge that operation can carry — a fail-closed upper bound.
+
+From this follows one hard rule for every pass: **alias disjointness is not a licence to reorder**. Two memory operations must not be moved across an operation that carries a `:sync` edge or that may suspend, even when TBAA proves them disjoint. `xi_op_is_ordering_barrier()` is the single answer to that question.
+
+---
+
+## 17. Compilation Pipeline
+
+> Sources of truth: `src/frontend/`, `src/ir/`, `src/vm/`, `src/aot/`, `src/toolchain/`, `src/app/cli/xcmd_build.c`, and `src/app/cli/xcmd_compile.c`.
+
+### 17.1 Two Execution Paths
+
+```
+source (.xr) -> lexer -> AST -> analyzer / canonical evidence
+   -> xi_lower -> Xi IR -> optimization
+        |-> tagged representations                  -> xi_emit -> XrProto -> VM
+        `-> native representations + backend lower  -> C source
+                 -> host/cross C toolchain -> native binary
+```
+
+Xray currently has no JIT. `xray run` and default `xray build` use the bytecode/VM path; `xray build --native` selects AOT.
+
+Both paths share the parser, analyzer, module graph, **Xi IR**, and runtime semantics. They diverge inside the Xi pipeline at representation selection and backend lowering (`xi_pipeline_default_config` versus `xi_pipeline_aot_config`): the VM path uses the tagged representation policy, runs neither select-rep nor backend lowering, and emits an `XrProto` through `xi_emit`; the AOT path runs select-rep under the native representation policy plus backend lowering, and then generates C from `src/aot/`. Their output representations and backend optimizations therefore differ.
+
+### 17.2 Frontend
+
+- Lexer: `src/frontend/lexer/xlex.c` / `xlex.h`, with `xkeywords.def` as the keyword table; input must be valid UTF-8.
+- Parser: handwritten recursive-descent and precedence expression parsing in `src/frontend/parser/xparse*.c`, producing an `AstNode` module tree.
+- Analyzer: `src/frontend/analyzer/` performs name, type, generic, visibility, ownership, capture, and error-set checks.
+- Canonical evidence: `src/frontend/canonical/` plus the module/toolchain layer stabilize cross-module facts for backend consumers.
+
+### 17.3 Bytecode and VM
+
+`src/frontend/codegen/xcompiler.c` runs the analysis pipeline (type inference, monomorphization, escape analysis) and then delegates to the Xi IR pipeline `xi_pipeline_compile_program` for lowering, verification, optimization, and bytecode emission, producing an `XrProto`; there is no bytecode path independent of Xi IR. The single opcode list is `src/runtime/value/xinstruction_table.h`; the VM lives in `src/vm/`. Its register-oriented instruction set includes property/call fast paths and dedicated coroutine, error-channel, and tail-call operations.
+
+The standalone `.xrc` product is removed. `xray compile file.xr` requires explicit `--format c|header --output FILE.c|FILE.h` to emit an offline C source/header bytecode container for compiler development. The `bytecode`/`bc` formats and `.xrc` outputs are rejected before isolate creation, and the runtime does not execute XRC. `--format c` here is **not** the native AOT C backend.
+
+Bytecode must serialize extern aggregate layouts and the target ABI fingerprint in deterministic order. Before execution, the loader must validate layout depth, recursion cycles, field bounds, total size, trailing data, and ABI compatibility; corrupt or target-mismatched input is rejected rather than falling back to host layout.
+
+### 17.4 Xi IR and Optimization
+
+Both paths lower the program to Xi IR in `src/ir/`; they differ in optimization level and representation policy — light and tagged for the VM path, full and native for the AOT path. `xi_pipeline.c` / `xi_pass.h` organize passes including SCCP, DCE/CFG simplification, inlining, devirtualization, tail-call rewriting, escape/ownership processing, loop transforms, GVN/PRE, bounds-check elimination, and vectorization. The enabled set depends on optimization level, target, and legality; the existence of a pass does not guarantee that every program is transformed by it.
+
+### 17.5 Native AOT
+
+`xray build --native file.xr` uses the prepare/verify/representation/container/link plans in `src/aot/`, generates C from Xi IR, and invokes a host, Clang, or Zig C toolchain. Hosted native binaries still link the Xray runtime; `--profile freestanding` uses a restricted freestanding capability set. Consult `xray build --help` for current `--target`, `--toolchain`, `--cpu`, `--lto`, and related options.
+
+Native AOT does not emit machine code directly from SSA and is not a JIT; the selected C toolchain produces the final machine code.
+### 17.6 Staged XIR Contract
+
+Current internal protocol revisions are defined only by the implementation constants below.
+Language sections describe responsibilities rather than duplicating incrementing numbers.
+Every admitted family shares these revisions; sections do not select different protocols.
+Older versions reject without compatibility readers or adapters.
+
+| Protocol | Authoritative revision definition |
+|---|---|
+| Value boundary | `src/xir/xxir_value.h`: `XR_XIR_VALUE_ABI_VERSION` |
+| Resumable calls | `src/xir/xxir_call.h`: `XR_XIR_CALL_ABI_VERSION` |
+| Immutable Program | `src/xir/xxir_program.h`: `XR_XIR_PROGRAM_ABI_VERSION` |
+| Checked wire | `src/xir/xxir_checked.h`: `XR_XIR_CHECKED_SCHEMA` |
+| Checked semantics | `src/xir/xxir_checked.h`: `XR_XIR_CHECKED_CONTRACT` |
+
+The new compiler has one stage order: `Built → Checked → specialization and
+reverification → Lowered`. This section freezes the nongeneric scalar subset;
+the preceding legacy product implementation has not migrated and no CLI cutover
+is claimed. Ordinary generics are checked against constraints at definition and
+specialized on Checked. Explicitly derived content is checked again. Ordinary
+instances close before immutable executable-image sealing; the VM executes Lowered.
+
+The initial internal subset admits unit, bool, and i64. Scalar copy preserves the
+value; signed i64 addition wraps modulo 2^64; equality and signed less-than produce bool; branches
+require bool; returns match their declaration. Parameters in this internal subset
+are bool/i64; unit is a result/terminator type without a value ID. Managed values, borrowing, generics, and new source spellings are absent;
+unsupported operations reject. Internal direct calls are defined below.
+Blocks partition instructions, are reachable from the entry, and end in exactly
+one terminator; entry has no predecessors. SSA uses require an earlier same-block
+definition or a dominating definition; unit instructions do not produce values.
+Abstract copy belongs to Built/Checked and physical scalar-copy to Lowered;
+changing a stage tag is insufficient. Transitions reverify and copy all metadata,
+publish no partial artifact on failure, and never borrow input storage. Structure,
+types, dominance, and verification work are bounded. Unknown stages, operations,
+and types reject. The exact internal fields are verified by assertions such as
+`test_xir_stages`; these assertions do not grant execution qualification.
+
+Internal scalar execution is verified by `test_xir_execution` and `test_xir_native`.
+The initial target is little-endian x86_64 with the current value boundary ABI defined in this section. Layout
+queries include type, target, context, and ABI. Lowering stores authoritative
+frame offsets and boundary layouts; VM/C consumers cannot choose another layout.
+Bool/i64 SSA and frame lanes use eight bytes. Boundary values use sixteen bytes
+(type, zero reserved field, i64 payload); bool payloads are zero or one and unit
+has no frame lane. Arguments match exactly and failures clear the result. Each
+instruction consumes one step; frames and steps are bounded. Signed addition
+avoids host signed overflow, every exit releases its frame, and inline
+scalar results survive independently. Checked cannot execute; unknown target/ABI
+rejects. This subset does not qualify module, call, or resumable ABI behavior.
+
+Internal resumable calls are verified by `test_xir_calls` and `test_xir_call_native`.
+Direct CALL names a module function and passes an owned operand-table range;
+argument count, types and result exactly match the declaration. SUSPEND saves the next
+instruction; THROW carries an i64 error token. These are internal XIR operations,
+not new source keywords or qualification of modules, generics, or stdlib caches.
+VM and generated C return typed frame/result actions to the same trampoline.
+A caller never keeps a resumable child on its native stack. Frames do not move;
+depth, physical bytes, and resume work have separate budgets. Wake tokens are
+single-use; reentrant drive/destruction rejects. Cancellation cleans children
+before parents after the running callback yields control. Cleanup cannot suspend
+or reopen completion arbitration. The current interface admits exclusive driving
+by one host thread; concurrent cancellation, segmented pools, and
+complete image/instance ownership remain unqualified. Verified closed scalar
+leaves may use a non-suspending entry, but CALL/SUSPEND/THROW cannot fall back to it.
+
+### 17.7 Internal Managed Values and Result Transfer
+
+The value and call boundaries use the current ABIs in §17.6 without aliases.
+Strings own strict UTF-8 with embedded NUL, no implicit normalization/replacement,
+atomic reference counts, and copy-on-write mutation under an exclusive handle
+borrow. Byte length and Unicode scalar count are distinct from grapheme count.
+A budgeted allocation domain outlives its host handle when strings still own it;
+strings never depend on activation, instance, or code-image lifetime.
+
+Call admission owns argument copies. Resume views and return actions borrow values.
+The driver owns returns before child cleanup, and owns inboxes and terminal results.
+Poll borrows; take transfers a result exactly once. Untaken results are destroyed
+with the activation. Typed synchronous output carries an explicit stdout/stderr
+stream and a borrowed bool/i64/string group to the configured provider. Raw groups
+contain one value without separators or a newline. Print evaluates arguments left
+to right before one group call, renders one ASCII space between values and one
+final LF (also for zero arguments). Validation, budget checks and complete buffer
+allocation precede one byte-sink call; failures publish no partial group. The
+PRINT and native groups both admit 0–65536 values within resource budgets.
+Unimplemented source types and display protocols require separate qualification.
+Missing/rejecting providers are runtime failures. Source admission and complete
+Program/Instance qualification remain separate from this internal contract.
+String parameters/results, COPY to OWNED_RETAIN, CONCAT_STRING and OUTPUT
+consume a lowering-owned, reverified list of owned frame slots. Both backends
+release previous values on replacement and clear slots on all exits. Literal tables are sealed with Program metadata; source production remains to be connected.
+
+
+WRITE_STREAM borrows one string, selects stdout/stderr with immediate 1/2 and
+returns bool through a typed inbox. A configured provider's refusal returns false;
+a missing provider remains runtime OUTPUT_ERROR. PRINT/OUTPUT rejection still
+terminates execution. Reentrant cancellation takes precedence over the result;
+accepted bytes are not rolled back. This primitive does not qualify source stdlib
+binding, host flushing or filesystem short-write policy. Old call ABIs reject.
+
+### 17.8 Immutable Programs and Module Instances
+
+A Lowered module closure is sealed before execution. Programs own declaration,
+dependency, literal, initialization-order and code-environment metadata; instances
+own runtime slots and allocation domains. Dependencies initialize first, choosing
+the lexicographically smallest UTF-8 name among ready modules. Cycles, duplicate
+edges and modules outside the root closure reject. Private zero-argument unit
+initializers execute once; the zero-argument i64 root entry is a distinct function.
+
+CONST slots publish once from their declaring initializer. Module var is confined
+to the root module's execution flow. Const Atomic<i64> handles refer to per-instance
+synchronized identity objects; copies share identity instead of using string CoW.
+The initial SeqCst load and fetchAdd operations use two's-complement wrapping for
+fetchAdd and return the old value. Initialization retains one publisher across
+suspension, rejects unpublished reads and keeps failures sticky after reverse
+cleanup. Shutdown stops admission and drains execution; independent results do not
+retain unrelated module state. Resume matches both execution epoch and wake token.
+The initial instance interface admits exclusive driving by one host thread only.
+The precise internal interface is verified by `test_xir_instances`; source and
+serialized/cache admission require separate qualification.
+
+Internal VM reception transfers the actual Lowered Artifact and its canonical
+Input/Final into the Program, without decoding an internal packet or lowering
+it again. External native descriptors carry only the bytes, length and identity
+of `XrXirProgramPacket`; one boundary decode enters the same owning receiver.
+Packets carry no caller-supplied layout authority. Reception independently
+checks current semantics, bodies, declarations, layouts and wiring before
+transferring the Input, entry table and code lease. Failure preserves caller
+inputs and publishes no Program. Preparation borrows a caller-owned entry table
+and its parameter blocks. Refusal retains the same Input, table and parameters
+for retry without ledger refill; only the final callback-free commit clears both
+owning slots. VM failure cleanup uses the actual fixed allocation count rather
+than a module count changed by a preparation callback. Owning Input, Artifact,
+entry tables and nonempty parameter blocks must start at live allocations on
+the receiving ledger; a readable interior extent cannot transfer a releasable
+owner. Check table and parameter storage before deep reads and again before
+publication, including current pointers and counts. Empty parameter rows have
+null owning pointers, and rows cannot transfer the same parameter block twice.
+Malformed physical input creates no new receiving objects; its actual checking
+work remains charged to the original ledger. Internal carrier transfer checks
+ledger ownership and canonical body/layout correspondence for bounded binding
+reads, without granting semantic or execution authority. The sole receiver
+independently verifies current Input/Final semantics during preparation and
+after the last callback; neither a duplicate constructor verification nor a
+saved PASS grants permission. Mismatched physical bodies/layouts do not move.
+A physically valid carrier with forged semantic facts must still reject before
+Program publication and retain its inputs. The Program uses the immutable declarations
+owned by its transferred canonical Input without a second deep clone. Failed
+Program disposal leaves caller-owned Input declarations live. The runtime type
+arena keeps its independent ownership for escaping values. Internal packet destruction before reception
+and external packet/spec destruction afterwards cannot invalidate a successful
+Program. Old Program ABIs and the old Proof/getter interface reject without an
+adapter path.
+
+After the last preparation callback, a complete current Input containing only
+empty escaping transfers and internal direct calls has the least empty Error
+solution, including recursive call components without a seed. Current Error
+rows and both public throws/task_errors projections must match that solution.
+This check allocates and releases nothing, charges actual reads, and rejects a
+joint forgery of a row and its two projections. Inputs with real error seeds,
+precise indirect calls or general generic bindings retain the separate complete
+current Error verification obligation. Even when another function has a real Error seed,
+a complete leaf without calls or deferred cleanup independently proves its Error row and
+both public projections empty from current Input; this local check grants no authority to
+other functions. An owning carrier does not qualify the
+general Final proof, retirement of every construction Workspace, or complete
+fault, resource and safety gates.
+
+### 17.9 New XIR Source Admission Boundary
+
+The source owner reuses the real parser and module resolver/graph, checks source
+declarations directly into Built, and publishes only owned Checked snapshots.
+It does not invoke the legacy analyzer, IR or executors. Initial admission covers
+bool/i64/string, ordinary named functions with read parameters, direct calls,
+local/module bindings, string concatenation, print, and default SeqCst Atomic<i64>
+construction/load/fetchAdd. Unimplemented syntax fails closed. All function bodies
+are checked, including unreachable ones; value-return inference without an
+annotation is not yet admitted. Generic bodies cannot bypass constraints.
+
+Functions are hoisted, while top-level statements and initializers run once per
+instance in source order. A function named main is ordinary. Private unit module
+initializers precede a separate synthesized i64 entry returning zero. Library
+state must be const Sendable; initial carriers are scalar/string/Atomic<i64>.
+Later type admission follows this chapter, including Array in §17.26.
+Root mutable state belongs to the instance. Cross-module calls require direct
+imports and export visibility, using resolver-owned identities. Duplicate,
+private, unresolved and cyclic declarations fail. Parser string payloads are
+already decoded and must not be decoded again.
+
+CALL/PRINT args[0]/args[1] encode first/count ranges into owned function operand
+tables. Nonempty ranges partition each table in instruction order; empty ranges
+are zero/zero and PRINT immediate is zero. Each group admits up to 65536 values,
+all type- and dominance-checked. Nested arguments evaluate left to right before
+appending the outer range. Lowered records and reverifies the maximum outgoing
+count; stable frames reserve typed-value staging and charge its physical bytes.
+Full generics, stdlib, coroutine
+syntax, foreign providers, parser OOM/input budgets, default CLI and product
+qualification remain separate. The interface is verified by `test_xir_source_admission` and `test_xir_source`.
+
+The standard-library source submodule std/io/output publishes ordinary
+writeStdout(string)->bool and writeStderr(string)->bool functions reporting host
+provider acceptance. Only its exact stdlib identity admits private
+__writeStdout/__writeStderr calls, lowered to WRITE_STREAM. Imports and bodies
+remain normally checked; matching local paths or names confer no privileges.
+This does not promise File flush/short-write behavior or replace yieldable file
+operations. Same-source Checked/native publication requires separate qualification.
+
+### 17.10 Owned Checked Packet Boundary
+
+The current closed declaration/type/op subset has one canonical target-neutral
+Checked packet format. Its header binds schema and semantic-contract revisions,
+the Checked stage, exact payload length and SHA-256 content identity. The digest
+is not authentication. Fixed little-endian field encoding excludes host pointers,
+physical layouts, native code, runtime state and cached verification decisions.
+Unknown revisions, malformed lengths, reserved fields and trailing bytes reject;
+there is no Built, Lowered or legacy format reader.
+
+The reader bounds wire bytes, aggregate counts, allocation bytes and work before
+allocation/traversal, owns every decoded buffer, and runs the existing full
+Checked semantic and layout verification before publication. Recomputed digests
+cannot bypass types, CFG/dominance, visibility, imports, initialization or slot
+permissions. Input storage may be destroyed immediately after loading. Failure
+publishes nothing and frees all partial storage. Both VM and native consumers
+then use the same reverified Lowered transition. The precise wire and budget
+rules are verified by `test_xir_checked`.
+
+This subset (including §17.11 marker templates) does not qualify full member constraints/witnesses,
+effects, diagnostic provenance, package linking, Checked library publication, installer
+publication or complete source-free standard-library distribution.
+
+Program publication compares the current descriptors and their owned copies
+against independently checked canonical types, declarations, signatures and
+physical layouts after all preparation allocator callbacks have finished. VM
+ownership transfer additionally compares the actual executable body and binding
+wiring to that same input. These final comparisons allocate and release no
+storage. A content digest only detects packet drift; it grants no semantic
+permission. Failure leaves the caller's artifact and code lease unconsumed and
+publishes no Program. This boundary does not authenticate arbitrary native
+callback behavior or replace general independent Final verification and
+retirement of every construction Workspace.
+
+Preparation copies semantic metadata from the independent canonical input,
+so a caller metadata table invalidated by a preparation callback is never used
+as the source of an owned copy. The final comparison rejects missing storage
+for every nonempty table before traversing it, including module and function
+tables. Restoring the caller's original storage permits a retry on the same
+cumulative ledger; rejection does not refund work or allocation charges.
+
+Before reading either canonical body or Lowered projection storage, current
+Program body correspondence checks the actual live allocation ranges on the
+same cumulative ledger for headers, names, signatures, blocks, instructions,
+operands, compressed records and default records. Each typed read requires its
+alignment and complete range; record counts cannot exceed capacity. These
+checks allocate nothing and charge actual scans. A valid range proves neither
+field correspondence, semantics, historical allocation generation nor a
+complete Final. Current fields still require independent comparison after the
+last preparation callback; rejection preserves inputs and the empty output.
+
+### 17.11 Definition Checking and Checked Generic Specialization
+
+Ordinary type parameters admit copyable, storable values, excluding unit, views
+and noncopyable resources. The initial concrete domain is bool/i64/string/Atomic<i64>;
+later numeric, function and Array admission follows this chapter.
+Named functions can declare `<T, U:Sendable>` or an own-parameter `where U:Sendable`;
+calls supply all type arguments explicitly. Parameter names are distinct and
+Sendable is a reserved marker name. Conjunctions of admitted markers are sets;
+repeated requirements are idempotent. The conditional-method implementation contract
+allows method-owned Sendable/Error requirements on enclosing and own parameters,
+without strengthening the nominal type itself. Definition proofs and call obligations
+use the same Checked path. Default type parameters, full member/witness constraints
+and inference remain unavailable; conditional-method execution requires separate qualification.
+
+Every body, including unused templates, is checked at its definition. Copying,
+read passing, storage and return follow from the ordinary domain. Sendable adds
+no member, arithmetic, display or default-construction capability. Unconstrained
+T cannot be forwarded to a Sendable requirement merely because every currently
+implemented concrete type is Sendable. Forwarding proves constraints from the
+caller declaration. Copies preserve string values and Atomic identity; concrete
+retains, cleanup and layout are determined after specialization.
+
+Built/Checked retain function-local type parameter IDs, constraints and separate
+call type-argument tables. CALL type and value ranges are canonical and reverified;
+substituted parameters/results match exactly, with normal visibility, module and
+dominance rules. The current Checked schema and semantic contract in §17.6 preserve templates
+and local places (§17.12). Older schema or semantic revisions reject. Loading rechecks definitions and forwarding proofs.
+
+Specialization consumes only Checked, never AST. A bounded work queue interns
+declaration identity plus ordered concrete arguments, reusing recursive instances.
+The instance closure is completed and reverified before the sole Lowered pipeline.
+The current host function-ID interface retains all ordinary definitions as roots;
+only generic instances reachable from these roots are emitted. A template-only
+package with no ordinary roots is not directly executable. Instance, aggregate
+parameter/block/instruction, memory and work budgets bound construction; failure
+publishes no result and releases temporary storage. Lowered and immutable Programs
+contain no open parameters and acquire no execution-time instances. Debug names
+are not native-cache identity proofs.
+
+Member witnesses, symbolic callback effects, user-declared generic type constructors, inference,
+diagnostic provenance serialization and complete stdlib package/cache pairing are
+still unavailable. Unadmitted effect/borrow/callable declarations continue to
+reject. The precise interface is verified by `test_xir_generics` and `test_xir_source_generics`;
+this family does not qualify all ordinary generic facilities.
+
+### 17.12 Mutable Local Places and Structured Control Flow
+
+A local var needs an initializer and denotes a typed activation-local place;
+const bindings and read parameters remain values. Reading makes an independent
+value snapshot; assignment evaluates its right side before replacement. Existing
+string copies remain unchanged, while Atomic copies preserve identity. Places
+cannot escape, be returned or serve directly as value arguments. Initialization
+dominates every access and types match exactly, including at generic definitions.
+Built/Checked carry LOCAL_NEW/READ/WRITE; Lowered alone selects scalar/owned
+storage actions and frame offsets. Owned writes retain before dropping. Every
+activation exit clears owned offsets; precise last-use release and noncopyable
+scope destructors are not qualified by this family.
+
+If/else and while require bool conditions. Only the selected branch executes and
+loop conditions are reevaluated. Local updates survive joins and backedges while
+block names stay scoped. Unlabelled break/continue target the innermost while.
+Every live path in a value function must return; statements after a return, throw, break or continue are unreachable and are not lowered, and closures in them reject.
+Concrete i64 addition/equality/less-than and existing string addition are admitted;
+unconstrained T acquires no operator witness. Block/instruction/memory/depth/work
+budgets and runtime step/cancellation contracts continue to apply. Checked wire
+schema and semantic revisions follow §17.6; older revisions reject without a second checking path. The interface is verified by
+`test_xir_locals` and `test_xir_local_native`.
+
+### 17.13 Boolean Short Circuit and C-style For
+
+The new source owner requires bool for !, && and ||. Both operands are checked
+at definition time even if runtime evaluation necessarily skips the right side.
+The left side runs once first; && evaluates the right side only when true and ||
+only when false. ! negates its operand. Existing CFG and typed places express
+these forms without new runtime or IR operations. Nullable narrowing is not yet
+qualified by this implementation.
+
+For(init; condition; step) initializes once with loop-local bindings; an absent
+condition is true. Normal iteration and continue run the step before the next
+condition; break/return skip it. The step cannot see body-local bindings. Nested
+while/for exits select the innermost loop. A step with no incoming path is still
+source-typechecked; temporary instructions, blocks, operand and type-argument
+ranges are discarded without refunding budgets, so executable CFG has no dead
+blocks. Literals keep the existing whole-closure table policy. Standalone and
+for-step name++/name-- require mutable i64 and use the same wrapping add/store path. They cannot be used as expressions. Labels,
+for-in protocols and other numeric families remain unqualified. Existing Checked
+semantics fully describe these constructs; packet and ABI revisions are unchanged.
+
+### 17.14 XIR i64 Arithmetic and Comparisons
+
+The admitted source family follows §2.3.1: +, -, *, unary negation and increment/decrement
+wrap modulo 2^64, replacing the initial internal checked-add subset. Binary operands
+evaluate once, left to right. Signed ==, !=, <, <=, > and >= return canonical bool;
+comparison never subtracts or reorders side effects. Division truncates toward zero,
+and a nonzero remainder has the dividend's sign. INT64_MIN/-1 wraps to INT64_MIN;
+INT64_MIN%-1 is zero. A zero divisor faults with DIVIDE_BY_ZERO, has no result and
+unwinds owned frames. Initializer failure is sticky; later ordinary calls may proceed
+after an arithmetic fault in an initialized instance. Generated C guards special pairs
+before host / or % and never executes signed overflow. Negation lowers to zero minus
+the operand. Current Checked and value/call/Program boundaries follow §17.6 without a compatibility reader or adapter.
+Concrete arithmetic cannot supply a missing generic constraint. Other numeric families
+and explicit checked/saturating library methods remain outside this admitted subset.
+
+### 17.15 XIR i64 Bitwise Operations
+
+Concrete i64 &, | and ^ operate on 64-bit two's-complement patterns; ~ lowers to
+xor with -1. Left shift discards high bits and zero-fills. Right shift is arithmetic
+and sign-fills. Counts are normalized modulo 64, including negatives: -1 selects
+63, -64 selects 0, and an effective zero count preserves the value. The host only
+shifts unsigned patterns; complement transformations define negative right shift
+without depending on C signed right-shift behavior. Operands evaluate once, left
+to right. Bitwise operators reject bool, string, Atomic and unconstrained T. Variable
+compound assignments read the old value before evaluating the RHS, compute, store
+and return the new value; an RHS assignment cannot change that earlier snapshot.
+Failure skips the store. String += also admits owned concat snapshots; other compound
+operators require i64. Const/read, member and indexed targets are not admitted. Current Checked and execution boundaries follow §17.6 without compatibility paths. Other
+integer widths and conversions are not yet admitted.
+
+### 17.16 XIR Owned Function Values and Indirect Calls
+
+This family uses the function-type spelling in §2.8: read parameters (including
+enclosing generic parameters under §17.17),
+ordinary named function values, nested callable parameters/results, mutable local
+storage, root-module slots, conditional selection and ordinary generic identity
+transmission. Unadmitted ref/move, captures, borrow origins,
+Sendable and explicit effects remain rejected. A selected body cannot
+supply a missing proof. Module-owned canonical tables preserve ordered parameter
+types/modes, results and promises; nested references point strictly backwards.
+References enforce declaration visibility and imports and cannot name initializers.
+Indirect calls capture the callee before evaluating arguments left to right; value
+role, dominance, full signature and result checks never enumerate possible targets
+as a replacement for the declared contract.
+
+Built-to-Checked owns copied descriptions. After specialization and rechecking,
+the unique Lowered layout includes explicit function copy/drop, local places and
+PHI ownership. VM and generated native code use the same resumable CALL and result
+protocol. Sealed Programs own all signatures, entries and required code. Function
+values retain their allocation domain and a separate admission record; that record
+retains Program code but only observes its instance. It does not retain all module
+slots, providers or frames, so function-valued root slots create no instance cycle.
+Stopping/freeing the instance revokes admission before cleanup. Escaped values remain
+readable, copyable and releasable; the last lease releases code. The current single
+host-thread driver admits calls only in the originating instance. Another instance
+or Program rejects coincident numeric IDs. Cross-instance transfer and concurrent
+admission still require implementation and qualification.
+
+The unique packet and execution boundaries use the current revisions in §17.6; old versions reject
+without readers, boxed adapters or alternate execution. Source/packet validation,
+independent VM/native expectations, suspension/cancellation, escaped results, code
+leases and individual allocation failures are covered by machine contracts. This
+family does not certify the complete language or product.
+
+### 17.17 Enclosing generic parameters in callable signatures
+
+The admitted ordinary read callable family includes `fn(T)->T` and nested
+signatures in generic definitions. A free type ordinal is interpreted in the
+enclosing function, and every use is checked against its declared constraints
+before specialization. Calling a supplied function uses that signature alone.
+Explicit call type arguments substitute recursively through parameter and result
+signatures; structural equality neither grants Sendable nor inspects a body.
+
+Checked stores the exact free-parameter span of each canonical signature,
+including nested signatures. The verifier independently recomputes that span
+from backward references. Global slots require closed types. Specialization
+builds a fresh canonical closed type table and remaps parameters, results,
+instructions, explicit type arguments and slots before rechecking. No open
+signature may enter Lowered or an immutable Program. Traversal spends work and
+metadata budgets and admits at most 128 active structural substitution levels.
+Checked and Program boundaries use the current revisions in §17.6 and reject earlier versions.
+Captures, other parameter modes, effect promises, inference and member witnesses
+remain outside this admitted subset and retain their independent gates.
+
+### 17.18 XIR owned immutable capture environments
+
+A function value may own an ordered sequence of value captures. The operand range of FUNCTION_REF contains captures. The target parameter prefix matches their types; its remaining parameters and result match the public callable signature. Checked verification enforces explicit generic substitution, value roles, dominance, visibility and initializer restrictions, and specialization rechecks them. Captures grant no additional authority.
+
+A closed captured leaf Function value requires its authentic Program producer, target, declared type and complete captures; a NONE advertisement or address alone grants no admission. Runtime checks the owned original FUNCTION_REF capture operand's declared bound and matches the complete actual row against the sealed execution node. A concrete leaf with no environment does not inherit unrelated columns from its enclosing closure; symbolic or owning producers keep their complete relation and ordinary exact verification. This finite capability does not admit other constructed captures or relax Function transport across GO, Sendable, NO_SUSPEND, private visibility or resource obligations.
+
+Construction obtains a logical copy of every captured value and publishes no partial value on failure. Function copies share the immutable environment. Strings preserve value semantics, Atomic preserves synchronized identity, and captured functions retain their existing admission. No caller frame pointer is stored. The last function reference releases all captures and its code lease. Nested environment destruction uses neither host recursion proportional to depth nor cleanup allocations.
+
+An indirect call publishes the same resumable CALL action with a borrowed function value. The sole frame driver copies the environment prefix and explicit arguments into the new frame while the caller still owns the environment. Suspension, throw, cancellation and return use the existing cleanup path. Host function entry likewise retains captures and arguments before releasing a previous result. Instance stop/free revokes execution admission while escaped environments remain readable, copyable and releasable.
+
+This internal contract does not turn var captures into copies or grant Sendable, noescape or no_suspend. Shared mutable cells, cycle reclamation and the source closure producer require separate implementation and qualification. Internal construction does not certify source closures. The implementation constants listed in §17.6 define the sole current revisions; predecessors are rejected.
+
+### 17.19 XIR shared capture cells
+
+An internal cell type is `0x40000000 | element type`. Elements are non-unit ordinary values or in-scope type parameters, never nested cells. This implementation capability is not a source type or Sendable proof. Public callable signatures and module slots do not expose cells; private capture prefixes may carry them. Checked substitution preserves the wrapper and rechecks the element; Lowered requires closed elements. CELL_NEW copies an initial value, CELL_READ produces an owned logical copy, and CELL_WRITE copies before exchanging and dropping the old content. Failure leaves content unchanged.
+
+Ordinary var captures retain one shared storage identity; every alias observes updates while read results keep value semantics. Cell RC is atomic, but content access only has the current instance's single-host-thread admission, not a cross-worker or atomic-update promise. Function contents and captured cells belong to the same instance value domain, so cells cannot bypass callable instance isolation. Last-reference release queues contents on the existing allocation-free destruction worklist, without recursive environment destruction. Strong cycles remain possible and can be explicitly broken while an owner remains. Unreachable strong-cycle reclamation stays OPEN; this introduces no collector or universal leak-freedom claim.
+
+The unique current revisions follow §17.6, without old readers or ABI adapters. Source var capture must not substitute snapshots for shared cells.
+### 17.20 Fixed-width integer runtime foundation
+
+The sole allocation-free integer core receives an explicit 8/16/32/64-bit width and signedness. Signed payloads are sign extended; unsigned payloads are zero extended, with u64 retaining all 64 bits. Noncanonical payloads and invalid widths reject. Arithmetic, comparison, explicit conversion and the shifts in §3.3.2 follow §2.3.1; failure returns a status and clears the numeric output. Current i64 VM and native arithmetic use this core; the old entry point is removed and the current call ABI rejects old native entries. Checked and value/Program boundaries follow §17.6. This section qualifies the runtime foundation. Typed XIR, explicit casts, same-signedness arithmetic widening and output follow §17.21; full contextual inference and other containers remain OPEN; the Array subset follows §17.26.
+
+### 17.21 Typed fixed-width integer XIR
+
+Integer type IDs are i64=2, i8=5, i16=6, i32=7, u8=8, u16=9, u32=10 and u64=11. The sole CONST_INT and arithmetic/comparison/shift INT family replace the old i64-specific names. CONVERT_NUMBER explicitly converts concrete integers. All instructions retain type, value-role and dominance checks. Arithmetic operands and results share an exact type; comparison operands share a type and return bool; shifts keep the left type and accept any integer count. Unconstrained T gains no arithmetic authority from specialization.
+
+Constants and boundaries preserve canonical payloads. Copy, phi, calls, module slots, cells, callable signatures and output retain exact type identity. Storage width/alignment is 1/2/4/8 bytes; frame slots remain 8 bytes, boxed/parameter/result boundaries remain 16 bytes aligned to 8. Unsigned output uses the complete unsigned decimal value, including 18446744073709551615 for all-ones u64. Output budgets and single publication remain unchanged. Only the current revisions in §17.6 are admitted; old packets and entries reject. The source producer admits all eight names, concrete integer as, same-signedness widening of already typed arithmetic operands, width-preserving unary/increment operations, shared cells, module state and print. Nullable casts and bool/rune/float or unconstrained-T conversion reject. Direct integer literal contexts and assignment/parameter/return widening follow §17.22; full inference, floating point and other containers remain OPEN; the Array subset follows §17.26.
+
+
+### 17.22 Integer contexts and lossless widening
+
+Binding annotations, assignment targets, declared return types and direct/indirect call parameters (after explicit generic substitution) provide a unique context. Direct integer literals include parentheses and one direct negation. Without an integer context they default to i64; with one, the mathematical value is range checked before producing that type. The u64 maximum and i64 minimum avoid host signed overflow; negative zero can represent unsigned zero. Already typed expressions only widen within the same signedness, never implicitly narrow, change signedness or treat unconstrained T as an integer. Conversion becomes explicit CONVERT_NUMBER and is rechecked by Checked. Inferred-result closures gain no unimplemented inference authority from an outer callable signature.
+
+A direct literal in binary arithmetic/comparison uses the other typed operand's context. Two direct literals use an outer integer context, otherwise i64. Context does not penetrate arbitrary formed subexpressions to fold constants. A direct literal under complement can use the outer integer context; typed unary operations preserve the operand type. A direct shift-left operand can use outer context, but the count is typed independently and is not restricted by a narrow left operand: 256 and negative counts remain legal under §3.3.2. Non-shift compound RHS uses the binding type; read the left snapshot before evaluating the RHS and write only on success. Explicit as types its input independently, so `200 as i8` still wraps rather than becoming a literal range error. The sole exception is a direct positive literal above the i64 maximum but representable in u64 (including parentheses): it retains its complete u64 magnitude as the conversion source before reducing to the target width. Negative literals cannot bypass the i64 lower bound this way.
+
+A conditional with explicit context checks and widens each branch in its own predecessor block; only the selected branch executes. Without outer context, both branches are first typed independently. Same-signedness integers use the wider type, converting on the corresponding predecessor path before PHI. Direct branch literals still default independently to i64 and do not infer a narrow type from the other arm. Other branch types must match; unions and general branch inference are not qualified here. Calls evaluate the callee then arguments in order. Only effect-free direct literals may defer IR emission to obtain the other operand's type. Uncalled functions and generic definitions are checked without specialization bypasses. This producer extension does not alter XIR operation semantics, wire or ABI versions. Floating point, full inference and other containers remain OPEN; the Array subset follows §17.26.
+
+
+### 17.23 Binary floating conversion foundation
+
+The common runtime floating core takes explicit IEEE binary32/binary64 bit patterns (binary32 must have zero upper bits); integers retain explicit width/signedness and canonical payloads. Integer-to-float and f64-to-f32 conversions use round-to-nearest ties-to-even, overflow to signed infinity, preserve gradual subnormal underflow and signed zero, and widen f32 to f64 exactly. Every NaN pattern normalizes to positive canonical quiet NaN: 0x7fc00000 for f32 and 0x7ff8000000000000 for f64. Same-width conversion also normalizes NaN.
+
+Float-to-integer truncates toward zero before checking the complete target range; (-1,0) may produce unsigned zero. NaN, infinity and out-of-range truncated values return RANGE. Invalid widths/encodings return BAD_ARGUMENT; failures clear outputs. Comparison returns less/equal/greater/unordered, any NaN is unordered, and signed zeros compare equal. Negation flips a non-NaN sign and canonicalizes NaN. All operations use integer bits, allocate nothing, execute no host floating arithmetic or conversion, preserve host rounding/exception state, and depend on no legacy scalar tags or generated metadata.
+
+This section defines the common conversion/comparison/negation foundation. XIR type, packet, layout and source execution admission is specified in 17.24; floating arithmetic and typed output follow §17.27. Helper tests alone do not qualify VM/native execution. Section 17.24 revises the sole protocol/ABI versions. Full float and cross-platform qualification remain OPEN.
+
+
+### 17.24 XIR floating values and execution boundary
+
+Runtime f64 accepts all binary64 encodings, including signed quiet/signaling NaNs with arbitrary payloads. Runtime f32 retains zero high bits and only the positive canonical quiet NaN.
+CONST_FLOAT is a separate wire-encoding boundary: NaN constants at either width still require positive canonical quiet encoding; expanded runtime f64 never admits noncanonical packet constants.
+Storage uses 4/8 bytes, SSA/frame payloads use 8 bytes, and boxed/parameter/result values use 16 bytes aligned to 8.
+CONST_FLOAT, NEG_FLOAT, six floating comparisons and the sole CONVERT_NUMBER run through the same Checked/Lowered pipeline.
+CONVERT_NUMBER atomically replaces the former integer-only conversion. Float-to-integer truncates then checks the full range; NUMERIC_RANGE faults clean up with a unit result.
+NaN yields false for EQ, true for NE and false for ordered relations; signed zeros compare equal. Conversions follow 17.23 without changing the host floating environment.
+Source admits explicit numeric casts, floating negation/comparison, implicit f32-to-f64 widening and conditional joins; integer/float mixing requires explicit casts.
+Copies, slots, cells, closures, generic instances, parameters/returns, Tuple/Array/Nullable/admitted nominal storage and suspension preserve exact admitted bits. Boundaries still check exact type, arena, ownership and existing execution authority. Floating comparison with any NaN is unordered: EQ is false, NE is true and ordered relations are false; integer-payload transport never silently canonicalizes. Decimal literals and exact contextual integers follow §17.25. Arithmetic, conversion and negation NaN results remain canonical; floating output follows §17.27.
+The sole current revisions follow §17.6; older versions reject without compatibility paths.
+
+### 17.25 Exact decimal literals
+
+The AST owns each complete decimal floating token. Shared conversion never truncates input or uses strtod, locale or host floating instructions. It rounds once at the requested binary32/binary64 precision, ties to even; overflow produces signed infinity and gradual underflow preserves signed zero. Every exponent digit and separator is validated. A bounded integer rational with 1152 significant digits and a nonzero sticky tail distinguishes all IEEE rounding boundaries; buffer truncation never substitutes for mathematical rounding.
+Without a unique floating context the default is f64. Annotations, assignments, declared returns and substituted parameters directly select f32/f64; grouping and direct negation retain context. Formed f64 expressions never narrow implicitly. Direct integers in a floating context must be exactly representable in full; explicit as permits rounding. Generic definitions remain constraint checked. Formatting preserves spelling and AST cloning copies it into the destination owner. Existing CONST_FLOAT, Checked revalidation and the sole Lowered execution remain unchanged; floating arithmetic/output follow §17.27.
+
+### 17.26 XIR Array values and source boundary
+
+The `struct Array<T>` declaration in `stdlib/types/array.xr` is this family's sole source authority. The compiler, member adapters and API inventory consume the same structured declaration. Of its current 32 members, the frozen boundary contains the three READ `get(index: i64) -> T`, REF `set(index: i64, value: T) -> ()` and REF `push(value: T) -> ()` primitives plus twelve declaration recipes: map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear. Together with reverse/unshift/pop/shift/resize these are 20 operations; the other 12 retain inventory identities without execution authority. Source finds the exact public member declaration before selecting implementation by its admitted native operation/recipe identity; queries record the declaration identity and CALL reference without a separate name-based execution table. See §14.7 for callback/query/clear typing, evaluation, effects and ownership. Index reads/writes use the same operations. Global `len` resolves separately by its core intrinsic identity; this subset accepts only Array and returns i64. Lexical, module and import resolution precede the prelude, so a user function named `len` remains an ordinary function.
+
+Source admits explicit `Array<T>`, homogeneous literals, empty literals with an Array context, ordinary assignment copies, parameters, returns, locals and entry-module state. An empty literal without an element context rejects. Elements evaluate left to right under ordinary contextual typing. Nested arrays and function elements use the unified constructed pool's copyable/storable admission; unit, internal CELL, views and unadmitted noncopyable resources are not ordinary elements. Generic bodies using `Array<T>` are checked against their declared constraints, specialized on Checked, then reverified. Ordinary instances finish before Program sealing; concrete arguments cannot invent capabilities missing at definition checking. Other container and user struct/class families require separate admission.
+
+Array copies preserve independent logical values without explicit `copy` or `move`. Shared backing detaches before mutation; unique storage with enough capacity may mutate in place. Compact elements use the sole type layout and copy/drop rules. Const and READ parameters cannot supply writable receivers, but saving their copyable values into an ordinary local var permits mutation of that copy. Backing uniqueness grants no write authority. Existing cross-module visibility and restrictions on mutable library-module state remain in force.
+
+A cross-allocation-domain write must not plant the current execution domain’s sensitive identities in a foreign copyable container. The existing budgeted admission traversal summarizes actual Cell, Function, Class and Task identities during the same visits, without an uncharged type walk or a second value walk; Error follows its actual enum backing and active payload. For an identity-bearing write, Array SET/PUSH, standalone struct SET and every foreign copyable ancestor on a field/index path obtain storage owned by the current admission domain, even for unique backing with spare capacity. Cell/Class retain identity semantics and their original domain authority. Pure scalar/String aggregates keep their available in-place paths; a pure String write into unique foreign spare storage still allocates nothing. Preparation, copying, peak storage and cumulative costs use the existing ledgers; failure preserves old values and aliases. Unique SET relocation transfers the prepared replacement slot, publishes the complete new value, then runs old-slot release callbacks; cleanup allocates nothing. This protects the covered sensitive write edges, without establishing complete cross-domain Task closure, arbitrary Source graph reachability or universal cycle handling.
+
+GET and index reads return independently owned elements and preserve the receiver value selected before evaluating the index. SET, index writes and PUSH first bind a supported root, evaluate arguments in order, then resolve that binding's current Array; an RHS that rebinds the root changes the target value. `a.push(a[0])` is valid. Bounds strictly require `0 <= index < len`; failure produces E0430 with the signed index and observed length, including the existing sticky initialization-failure behavior. Set/push return unit. An index-assignment expression returns an independent logical copy of its converted RHS, with fallible result retention completed before commit. Failure does not commit the mutation or undo earlier argument effects. Len borrows the receiver and reads length with bounded constant work, without allocation or element traversal. GET's transitive admission of nested function elements can allocate bounded scratch.
+
+An escaped Array owns the TypeArena and backing lifetime needed for reading, copying and release after the originating call, Instance and Program host handles are gone. Pure arrays do not retain Program code merely for type metadata. Pure arrays may pass by value between Instances of one Program; different arenas reject even matching numeric type IDs. Function elements still require their real live execution gate; wrapping them in Array grants no call authority. New detach/growth storage is charged to the receiving Instance's current physical allocation domain; existing storage remains charged to its original domain. Admission, element relocation and call work obey cumulative budgets. Final release returns physical storage to its actual owner without recursive destruction proportional to nesting depth.
+
+Source query snapshots independently own Array type nodes, member signatures, generic declaration owners, source positions and content identities, and remain valid after compiler-session release. Queries do not resolve, infer or execute. Native declaration provenance does not create an executable initializer. Failed private, alias or unadmitted-member lookups publish no successful binding; resource failure publishes neither Checked nor a snapshot. A core len query records its stable identity and leaves unknown source provenance unknown.
+
+Source call observations additionally own direct-call display signatures after the canonical argument inference and conversion pass: the actual substituted parameter vector, the real receiver prefix and the result type. A remaining type parameter retains its caller declaration owner and exact parameter name; the ordered name vector is independently owned and is never synthesized from an ordinal. Attachment validates the declaration arity, receiver identity and type expressions, deeply copies the vector into the receiving snapshot and rolls back on failure without resetting its resource ledger. Signature queries use these observations together with declaration names and parameter modes; they do not repeat inference. Unknown indirect or unadmitted native observations remain unknown. These display facts neither construct executable calls nor establish Final or effect authority.
+
+Admitted Array calls also retain the actual instantiated owner, checked and converted explicit parameter types, result and governed optional/variadic parameter flags. Native value operations acquire no invented receiver parameter. Parameter names come from governed native declarations. Attachment independently checks native owner/member identities, names, source path, content fingerprint, ranges and arity; a display label or a same-named user type cannot establish identity. The consumer selects the real final variadic parameter and compares declaration provenance across entry snapshots. Native provenance invents neither an editor document version nor a navigation URI.
+
+An open Array<T> native declaration schema belongs only to the owned query type pool. After successful Checked construction, query projection preserves the complete executable type-ID prefix and either reuses an existing canonical open node or appends a separate query node. Declaration schemas never enter the executable pool. Array recipe temporaries retain the declared type bound of the checked receiver element rather than becoming new user inference variables. This boundary grants no execution, construction, Final or effect authority.
+
+Checked observations for assert, assertEqual and assertPanics retain the INTRINSIC declaration family rather than impersonating ordinary functions. Before accepting their known signatures, attachment checks governed stable IDs, names, arity, Unit result, generic arity, actual name locations, and the unique builtin source memory-module identity and domain- and length-framed content fingerprint. Origin checks reuse the module identity and fingerprint algorithms. Resource failure leaves attachment unpublished without resetting the receiving ledger. Query facts establish no intrinsic execution binding and invent no file URI for memory provenance.
+
+Declaration display facts also independently own the actual ordered generic names in the definition scope, including a method or closure's real enclosing prefix. Missing names remain explicitly unavailable and are never synthesized from parameter ordinals. Attachment validates vector shape, arity and declaration family, deeply copies every string and preserves the original snapshot and resource ledger on failure. Only variable or constant declarations with an initializer and no explicit type annotation carry the inferred-binding flag. Readonly type hints use this flag, Checked types and actual name positions, select a strict UTF-16 half-open range and own complete untruncated labels. They do not repeat inference, establish function-effect proofs or qualify the complete public inlay handler.
+
+Parameter-hint syntax independently owns completed calls reachable from the final AST and complete argument-token ranges, including parentheses, explicit access markers and multiline tokens. Calls discarded during recovery never publish. Numeric positions, actual variable selections, URI, version and canonical content fingerprint are owned on the original ledger and survive syntax-session death. Readonly queries validate that ledger and exact document identity before deriving complete name labels from checked call targets, actual declaration parameters and modes; they neither parse display signatures nor repeat inference. Native parameter names may come from governed declarations without separate token positions, and builtin memory origins acquire no invented file path or editor URI. Results own target declaration family, native identity, module identity, path, content fingerprint and actual name range; equal labels alone never justify merging roots. Indeterminate call targets or parameter facts remain explicitly unavailable. These observations qualify neither positive noncopyable MOVE, general Final, complete effects nor the public inlay process.
+
+Parameter hints across roots compare authentic target provenance, including the declaration editor URI, version and strict UTF-16 selection when available, canonical module identity, content fingerprint, path, declaration family, native identity and actual name range. Root-local module ordinals are not identities. Only roots containing the call document participate; any provenance conflict rejects atomically, and empty results still participate in agreement. Foreign-ledger roots reject before their facts are accessed. Owned parameter requests capture the range, open texts and parameter-name configuration, allowing all producers to die before worker execution. Disabled configuration still validates UTF-16 coordinates. Publication requires the original request identity, revision and cancellation state; it never writes semantic-token caches. Prepared parameter requests do not replace the full public inlay requirements for type and effect facts.
+
+Type hints additionally own a display identity independent of local type and declaration ordinals. Encoding observes checked builtins, authentic generic owners, constructed nodes, callable flags and modes, arguments and field types. Nominal types include canonical module identity, source fingerprint, actual declaration facts and editor versions. Cyclic graphs use finite active-path backreferences without inference. Before producing any hints, multi-root type JSON validates the complete requested text and version, then compares labels, positions and authentic type identities; empty regions do not excuse document-version conflicts. The same prepared binding-hint request captures both type and parameter controls, constructs independent JSON on the original ledger and uses bounded stable merge sorting by position and hint kind. Any failure releases preparation in both allocation domains without publishing partial output. Public inlay still requires complete effect proof.
+
+
+
+The Windows source VM, native, mixed-entry and Checked-reload paths verify the two-module string program against independent expectations: `red\nblue\n2\ngreen\nblue\ngreen\n3\n`. Separate assertions cover instance isolation, result lifetime, sticky initialization bounds and physical release after allocation failure. The output golden does not replace OOM, retain, work-budget or full sanitizer gates. Complete batch qualification still requires fresh affected targets, regression, contract and sanitizer gates; this section does not claim those complete gates or macOS have passed.
+
+The other 13 Array members, and unfinished capacity, slice, ptr/mutPtr and iterator method families, still require individual admission; freezing existing recipes does not complete them automatically. Full move, user-struct families, cross-Program structural import, stdlib Checked/native package publication and final old-chain deletion are outside this subset. Source Array for-in follows its existing owned-snapshot contract and does not qualify iterator APIs. The sole current protocols remain defined by the implementation constants in §17.6, without old readers or compatibility interfaces. This contract update claims neither full safety nor full regression success.
+
+### 17.27 Floating arithmetic and typed output
+
+ADD/SUB/MUL/DIV_FLOAT were introduced with tags70–73 and OP_COUNT74; current opcode numbers come only from the implementation table. They use stage mask7, two equal concrete f32/f64 operands, the same result type, and zero unused fields. The sole Checked semantic, schema and value/call/Program versions are defined by the implementation constants in §17.6. The new admission rejects older semantic packets while preserving existing value and call layouts. Ordinary generic definitions need concrete numeric proof; specialization and revalidation grant no additional permission. Source arithmetic and compound assignment preserve existing evaluation/commit order. Mixed f32/f64 widens exactly first; typed integer/float mixing, floating remainder and bitwise operations reject.
+
+Each operation rounds at its original width, nearest with ties to even, without fusion, reassociation or host FPU dependence. Wide multiplication and division remainders preserve final rounding information. Subnormals and signed zero survive; overflow yields signed infinity. Zero/zero, infinity/infinity, zero times infinity, opposite infinities added and NaN operands produce canonical NaN. Finite nonzero division by zero yields signed infinity, not an integer division fault.
+
+PRINT/OUTPUT admit runtime f32/f64 values under §17.24, including every f64 NaN payload. Every NaN still formats as `nan` without modifying the input bits. Finite nonzero text uses the fewest significant decimal digits that round back at the original precision. Equal-length candidates choose the nearest exact decimal; an exact midpoint chooses an even last digit. Binary32 is not widened before formatting. The shortest coefficient has no trailing zeros. Decimal exponent k in [-4,16) uses ordinary notation, adding `.0` to integral results; other values use one leading digit, lowercase `e`, an explicit exponent sign and no redundant exponent zeros. Specials are exactly `nan`, `inf`, `-inf`, `0.0`, `-0.0`. Formatting uses ASCII and fixed integer workspace without heap allocation; 32 bytes suffice including termination. Locale, host rounding mode and exception flags do not affect results.
+
+All arguments still evaluate before complete-group budgeting/rendering and one publication. Failures publish no partial group and retain existing OUTPUT_ERROR/cleanup rules. These contracts do not establish complete source, default product, safety or cross-platform qualification: rebuilt independent VM/native/packet/mixed programs, ownership/physical release, fault injection and batch gates must prove those separately.
+
+### 17.28 Class field definition proofs and Unit module slots
+
+Ordinary class T fields are checked at their authentic declaration owner using the existing copy/save premise, without new Scalar, Copyable or Sendable constraints. Inline bounds and where clauses share one condition representation. Symbolic fields remain in Checked; instances substitute complete ordered arguments and reverify provenance before Lowered. Closed carrier capability is separate from generic proof, and unsupported carriers never masquerade as missing constraints. Explicit final root classes retain construction, private/const, must/may and no_suspend rules. Class identity is the copy boundary; field GET creates an owned logical snapshot and whole SET is visible to all references of that identity.
+
+Unit module declarations retain authentic owners, slot ordinals, known types, mutability and publication bits. Unit INIT/STORE have one encoding: zero value operands and both args zero. LOAD still checks publication and authority without payload SSA/frame storage. RHS effects, yield, throw and cleanup execute once, and publication follows success. Const initializer, mutable-root, sticky failure and reverse cleanup rules remain. This family admits inferred const x = Coro.yield(), explicit const x:() and default var x:(), while const x:i64 = Coro.yield() rejects. A Unit Sendable marker proof does not admit ordinary parameters or generic storage.
+
+### 17.29 Finite inline class fields and physical ownership
+
+This family admits only acyclic inline struct/enum field graphs with existing numeric/bool/string and Array<i64>/Array<string> leaves. One bounded capability traversal checks closed graphs after complete Source field collection; real temporary scratch is refunded and work consumed cumulatively. Ordinary T's legal language domain is unchanged. Unreified generic inline fields, nested Arrays, callable/Cell/Error, class-reference graphs, resources and views remain explicit implementation boundaries.
+
+The sole four-argument GET runtime interface receives the actual arena, work/scratch and optional allocation domain. Scalar/string/Array-handle reads allocate nothing and use retained metadata after Program/Instance destruction. Inline snapshot materialization requires the caller's live domain; new bytes belong to that domain while existing leaves refund their original backing owners, without execution authority. SET uses one owned-storage transaction helper, completing all fallible work before a commit region releases old storage and publishes the replacement without an observable intermediate state. Failure preserves the field, aliases and prior snapshots. NEW never publishes partial this. Creation reserves release frames; drop iterates actual active enum payloads without allocation and refunds actual owners. This acyclic subset does not establish complete L0/weak/L2 residual-graph disposal.
+
+The sole current protocols follow implementation constants in §17.6. Real seal/read consumers reject old value targets, valid-digest old Checked packets and old embedded proofs in the same Program ABI, without an old GET alias or second reader. Independent VM/native/packet/mixed expectations, authentic old caches, each OOM point, owned-result lifetimes, physical release and full applicable safety are separate verification obligations. This section does not claim complete language, complete stdlib Checked publication, default product or cross-platform qualification.
+
+### 17.30 Entryless Checked Libraries and authentic imports
+
+Compiler Modules carry an explicit PROGRAM/LIBRARY kind; an entry sentinel never determines authority. A Library retains authentic declarations, initializers, imports and definition-time constraint checks without allocating a user entry during inventory. It can be owned, checked, reverified, written and read, but cannot specialize directly into an executable Program, lower or seal. The linked PROGRAM requires authentic legal root/entry facts. Ordinary instantiation and provenance reverification still occur on Checked before immutable Program sealing. Every wire module, including provenance, encodes its kind. Unknown kinds, fake Library entries, missing Program entries and old formats reject without a second reader or synthetic entry.
+
+A borrowed opaque compiler catalog independently owns checked library bodies. Complete packet digests, actual resolver authority, canonical/logical identities and source locators must match. Graph representation binds once at discovery; an existing SOURCE node cannot become CHECKED_LIBRARY through an import. A matched invalid library never falls back to AST, while unmatched imports continue ordinary Source resolution. Export queries grant no call authority; private calls still reject at the authentic declaration owner. The first owned Checked result deep-copies required facts and remains verifiable and executable after SourceResult, Session, graph and catalog destruction, without reparsing library source to supplement capability.
+
+One remapper reserves all used target identities before copying bodies and relocating CALL. The authentic initializer may appear anywhere in the input function array. Temporary maps reserve actual scratch and free/refund it after success, OOM, work exhaustion or copy failure. Each mapped element consumes cumulative work; permanent bodies/names consume metadata. One reader cumulatively charges header, digest, payload decoding and ordinary reverification. Continuous reads and malicious valid-digest prefixes never reset the remaining work. Owned metadata is charged for the single published representation and temporary scratch refunded on exit. This reader contract does not claim that every Source phase now shares a single cumulative budget.
+
+Within the Source construction context, metadata_bytes is the sole actual remaining balance. Complete SourceMemory headers/payloads, retained declaration manifests, Library/implementation reverification and query snapshot copying use that balance. Successfully owned storage is charged immediately, without subtracting a second cumulative allocated counter. Failure must not replenish the quota through unsigned underflow or continue allocating beyond it. Early release of private Source arena storage does not refund cumulative metadata charges; existing temporary scratch-map refunds remain unchanged. Final Built-to-Checked checking still has its independent stage budget. This correction does not establish a cumulative budget across every Source phase.
+
+The first library-import implementation admits same-directory file-backed script authority, one module, zero-parameter Unit/i64 functions and CONST_INT/ADD_INT/CALL/RETURN. Unconnected tables fail explicitly without narrowing legal generics, nominals, interfaces, defaults or export const. Complete canonical remapping, declaration/default-helper facts, public const authority, package authentication and same-source stdlib Checked/native pairs with cache hits/misses remain obligations of the same pipeline. Source/packet/native/mixed expectations, instances, every OOM point, physical release and authentic old-identity rejection for this finite import loop do not establish complete language, safety or product qualification.
+
+
+### 17.31 Checked purpose relations for parameter defaults
+
+The original Built/Checked owns one DefaultTable containing authentic owners, full formal ordinals and helper identities. Names, Source-private ID arrays, queries and export order do not authenticate it. Validate every relation and unused default body in its declaration scope. Helpers have zero runtime parameters, are not exported entries, initializers or cleanup bodies, and carry the owner's isomorphic complete nominal-parent plus method-own parameters/constraints and exact formal result type. Their declaration scope can use private names without inheriting constructor, cleanup or body-effect promises. Valid defer children inside helpers retain ordinary cleanup origins.
+
+Built/Checked CALL_DEFAULT and INVOKE_DEFAULT prove the caller's complete owner constraints, module/member and construction permissions before resolving the helper from owner/ordinal. Ordinary CALL/INVOKE/FUNCTION_REF cannot directly obtain helper authority. Within a local error handler, default computation uses INVOKE_DEFAULT with ordinary success/error continuations, result/error projections and owned cleanup. Errors cannot bypass catch or disappear when the owner call succeeds. CALL_DEFAULT targets hold owner/ordinal; INVOKE_DEFAULT args hold the same declaration metadata and its targets hold actual CFG edges. Metadata is not an SSA operand. Both have zero runtime arguments, zero immediate, the complete type argument vector and the exact formal result type. Migrate every existing local free/static/READ/constructor and generic default family atomically; finite initial library admission does not reduce the local language contract.
+
+Specialization uses the existing Checked instance collector and per-instruction Origin proof, replacing CALL_DEFAULT only with ordinary CALL and INVOKE_DEFAULT only with ordinary INVOKE, clearing purpose metadata and independently revalidating it. Error edges and projection identities remain exact. Specialized Checked/Lowered keep no second instance-default table: the sole original table is deeply owned by provenance.source. Recompute owner/ordinal/helper and the full argument vector at the same caller/instruction position, with exact operation and CFG correspondence; equal-signature substitutes, role labels or arbitrary provenance grant no exemption. Local catches derive errors through the error continuation rather than joining ordinary CALL escape summaries. A fully explicit call to a generic owner does not instantiate unused helpers merely to populate a table. Closed original modules with defaults use the same specialization pipeline; Lowered rejects remaining purpose operations, and runtime has no separate default interpreter.
+
+Tables, wire, cloning, provenance and canonical remapping account for actual metadata/scratch/work and publish nothing on failure. Ordinary instantiation completes before Program sealing. The sole format includes default records for every module and nested source, rejecting older formats. The implementation constants described in §17.6 own the actual sole schema/semantic and runtime ABI: compiler metadata or operations do not mechanically bump public runtime ABI, while actual consumers must still reject stale mandatory proofs at the same ABI. Complete capability requires freshly built independent VM/native expectations, producer-destruction lifetimes, all actual fault/physical-release points and batch qualification.
+
+### 17.32 Multiple Checked Catalog inputs and Library strings
+
+Extend the same Catalog, reader and Source remapper from §17.30 without a second linker or execution path. The sole constructor is xr_xir_compile_library_catalog_new(context,inputs,size_t count,output), replacing the old single-input signature. The sole resource view is xr_xir_compile_library_catalog_resources(catalog,size_t *count), removing the singular accessor. Construction requires output, non-NULL inputs and count>0; failures preserve output. A NULL SourceRequest catalog represents absence; no owned empty catalog. The view requires count, clears it first, returns NULL for NULL catalog, otherwise borrows the actual contiguous immutable bindings until catalog_free. NULL count returns NULL. Each independently owned Checked artifact and all identity text survive input packet/descriptor/text destruction. Separately zero-initialized binding and artifact-owner arrays are charged for actual storage, safely destroy any partial prefix, and publish only after every input succeeds.
+
+Each input remains one independent dependency-free SCRIPT Library with a leaf logical path. Actual authority, complete packet SHA, existing canonical identity algorithm and declaration identity must agree. Every duplicate canonical rejects BAD_STRUCTURE, regardless of equal/different content, authority or physical root; no deduplication, first/last winner or new (canonical,root) key. Distinct canonicals may share an authority; actual resolution still checks exact authority and never falls back to AST for a matched bad binding. Multiple inputs do not imply inter-Library dependencies, package authentication, generic or general declaration linking.
+
+Create one actual remaining budget. Check count storage multiplication/addition, metadata capacity and count<=remaining.work before dereferencing any input. Container, both arrays, actual text, every hash, read_remaining, shape and duplicate check cumulatively consume that balance without per-input resets or duplicate owned-reader charges. Charge at least one work unit for each input visit and duplicate candidate comparison, plus the bytes actually compared. A bounded pairwise scan is allowed; an uncharged quadratic loop is not. Refund temporary scratch on every exit, never cumulative work/metadata. Publish all inputs atomically, never a partial Catalog.
+
+Finite Catalog admission adds STRING alongside existing i64 formals and Unit/i64 results, and only existing CONST_STRING/CONCAT_STRING to CONST_INT/ADD_INT/CALL/CALL_DEFAULT/RETURN. Unit formals, constructed types, generics, slots, implementations, provenance and dependencies remain unconnected; this consumer does not incidentally admit INVOKE_DEFAULT or error CFG and does not restrict the complete legal language. The ordinary Checked verifier checks every definition, unused literal and private/default helper; ordinary and default call permissions remain §17.31. Existing literal-length wire, STRING operations and runtime semantics add no proof authority or runtime payload, so retain sole Checked21/53 and Program25/Value15/Call19. Any discovered actual semantic/layout change requires renewed analysis and a freeze before implementation.
+
+One no-emission source_literal_append(ctx,node,bytes,length,&id) manages the existing Source literal table. Local AST and already owned enum bytes retain established borrowed lifetimes; source_string_literal appends then emits the original CONST_STRING recipe. Reject invalid lengths/counts, nonempty NULL and growth overflow before charging legal append work. Charge one per legal append and the actual old element count when moving a vector; retain initial capacity16 and doubling. Failure publishes neither count nor ID. For imported nonempty literals, own exact length in SourceMemory and charge length copy work before append. Empty literals use NULL/0 without payload allocation. Never use strlen, terminator framing or content deduplication. Charge full headers/payloads through the true §17.30 balance, without an allocated shadow counter or early-release metadata refunds. Query has no runtime literal table or new authority API.
+
+The sole SourceLibraryMap records literal_begin/count for a contiguous original-order range. Check CONST_STRING's nonnegative original ID against its own Library count before overflow-checked base addition; a valid merged index cannot rescue an invalid original definition. CONCAT_STRING still uses SSA operands and CALL_DEFAULT uses the existing function/default map. Refund the original function scratch map on all exits and commit next_function only after copying the complete Library. Never publish a partial Checked builder. Ordinary semantic-failure query snapshots retain the existing complete contract rather than requiring NULL for every failure.
+
+Qualification includes two real Libraries each owning literal0 with different bytes, reversed Catalog order with fixed results, omitted/explicit STRING arguments, private-helper rejection, the original OwnedChecked executed after all producers die, Source/independent packet VM/actual native/mixed, two Instances, retained owned bytes read by length after Program destruction, and final physical zero. Empty, UTF8 and low-level three-byte a\0b literals must survive all four consumers; Source parser NUL rejection remains unchanged. Independent manual packets and correctly rehashed attacks cover original-ID-outside-source-but-inside-merged, unused invalid UTF8, length/count overflow, identities/authority/digests and every duplicate canonical variant. Fail every new actual allocation, release the first Library when the second fails, test cumulative exact/minus1 budgets and scratch refunds. Preserve all existing default, origin, budget and fault gates. This finite extension does not qualify mutable Library state isolation, complete Checked stdlib publication, complete product safety or final legacy deletion.
+
+### 17.33 Finite typed value equality
+
+The sole Checked57/wire22 carries this finite domain; the complete equality family and
+public CLI migration remain incomplete. Equal uses bit4 of the existing marker:u32, with ordinary TYPE
+definition-site proofs, inline/where conjunction and provenance revalidation. The first domain
+is only bool, eight integers, f32/f64, string and recursive Array<D>. Other domains still reject
+explicitly and remain goals. Same-T ==, != and real Core assertEqual<T: Equal> share one typed
+relation. EQUAL=117, OP_COUNT=118 and stage mask7 take two VALUE operands and produce BOOL;
+immediate is only0(EQ)/1(NE), with zero unused fields. NE inverts only a successful comparison.
+Correctly rehashed56 and older packets reject before body allocation.
+
+FLOAT retains IEEE NaN inequality and signed-zero equality; STRING compares full length/bytes;
+Array compares length then indexed leaves, without pointer/shared-backing shortcuts around NaN.
+Use budgeted explicit DFS rather than C recursion or a depth cutoff returning false. VM/native
+consume one typed helper: borrowed inputs are neither copied nor dropped, and only OK publishes
+bool. BAD_ARGUMENT/OOM/LIMIT preserve output and input owners; all exits refund real scratch/domain
+allocations. Charge cumulative STRING bytes, Array elements and growth work. Exhaustion cannot
+mean inequality or satisfy assertPanics.
+
+Source/Owned query/clone, default helpers, Library, writer/reader, Checked specialization and
+Lowered revalidation retain one constraint identity. No legacy Equatable, boxed-value adapter,
+name whitelist or second executor grants authority. This family adds no public Value/Program
+fields; current Value16/Call21/Program26 are defined by §17.6 and §17.34 and require actual
+fresh layout/provider-rejection/generated-C gates. Require
+independent full packets/valid-rehash, unused unconstrained definitions, same-named user
+interfaces, shared-backing NaN, NUL/depth257, every actual OOM and exact/minus1, dead producers,
+two Instances and physical refunds, separate fixed VM/native/mixed outcomes and central
+default/ASan. Complete assertions/containers/CLI, paired stdlib publication and full safety remain OPEN.
+
+### 17.34 Typed output and explicit configuration initialization
+
+The sole XrXirOutputStatus is OK=0, OOM=1, LIMIT=2, OUTPUT_ERROR=3, BAD_ARGUMENT=4 or BAD_ABI=5. Renderer, byte sink and group provider return the same closed status. Failure while preparing a complete group never calls the sink; success calls it at most once, preserving actual lengths, embedded NUL, UTF8, empty-print newline and long strings. Already written IO bytes do not promise rollback. Unknown statuses become BAD_ARGUMENT, without a boolean conversion that loses resource failures.
+
+PRINT failure preserves the exact Call status. For a valid configured provider, WRITE_STREAM maps OK to true and OUTPUT_ERROR to false. An absent provider remains Call OUTPUT_ERROR; OOM/LIMIT/BAD_ARGUMENT/BAD_ABI never become false. Existing cancellation priority remains. Resource failure is not panic and cannot satisfy assertPanics.
+
+Current Call ABI is21. Provider/Sink start with abi_version and reserved=0: callbacks require21, while no provider requires canonical all-zero state. CallConfig/InstanceConfig start with abi_version and struct_size, checking21 and exact sizeof before reading other fields. Actual Windows x86_64 sizes are Provider24, Sink32, CallConfig136 and InstanceConfig88; these do not qualify other targets. Sole xr_xir_call_config_init(config,size) and xr_xir_instance_config_init(config,size) return CallStatus, writing only on success and preserving all output bytes on failure. Old by-value defaults symbols are removed without aliases or wrappers. Actual Call20 entries reject before callbacks; old embedding defaults objects must fail to link rather than being rebuilt as purported old evidence.
+
+Checked22/57, Value16 and Program26 retain their own actual contracts. Output migration grants no Source/Target/SDK authority and does not qualify complete safety, default stdlib caching or final legacy deletion. Independently expected VM/native behavior, every actual allocation failure, exact status, old-object rejection, producer lifetimes and physical release need separate verification.
+
+### 17.35 Flat Tuple destructuring and atomic module publication
+
+Flat `var` / `const` patterns admit identifier or `_` leaves, exact ordered arity, Unit and `(x,)` singletons. Evaluate the RHS once and prepare all field projections and mutable Cells before publishing local names; closure capture retains the existing Cell/ownership contract. An empty pattern accepts only Unit and an all-discard pattern creates no binding or module group. Actual types, Sendable, visibility, construction/execution authority and definition-time constraints with Checked specialization/revalidation remain mandatory; wrapping does not widen ordinary Unit or resource permissions. Nested/rest, array/object patterns, spread, match and leaf annotations reject specifically at the current entry while remaining language obligations.
+
+The sole new SLOT_GROUP_INIT appends ordinal145; current OP_COUNT146 preserves every earlier ordinal. type=Unit; args0 is an operand-table offset and args1=m counts non-Unit payloads. The immediate packs first_slot in high u32 and n contiguous actual bindings in low u32. Prevalidate n>0, the entire same-module range, actual initializer, unpublished state, exact n/m, types and permissions. Unused fields are zero; Unit consumes no SSA/payload and forged placeholder IDs reject. Outgoing layout is m. Every stage shares this operation and VM/generated C call the sole xr_xir_instance_slot_group_init(view,first,n,compact_values,m).
+
+The actual Call allocation domain, scratch, value limit and bounded work own preparation. Obtain every admission, copy, retained hold and cleanup resource in a private owned table before checking execution_status. Any failure or precommit cancellation frees preparation without a published slot or trace. The infallible commit installs all slots, flags/count/order before tracing; trace reentry sees the complete group and cancellation on the first trace does not roll back committed bindings. Cleanup allocates nothing and refunds each actual backing owner; initialization failures remain sticky.
+
+This operation uses Checked semantic65 while wire25 and Value21/Call26/Program29 structures remain unchanged; §17.6 implementation constants still solely define current versions. Complete previous25/64 packets reject at the header with zero allocation. Independent fixed family roles construct current packets and preserve complete64 preimages as rejection evidence rather than deriving expectations from the writer. The new SDK helper needs same-source qualification through the actual165-entry (160 source+5 archive) recipe and five-archive consumers; all original345 ABI expressions and139 object responsibilities remain. Qualification retains forged Checked shapes, independent VM/native/mixed outcomes, every actual OOM/three-axis boundary, retain saturation, cancellation, producer/Program/Instance first-drop lifetimes and final physical zero. The flat subset does not replace full default/product safety or final legacy deletion.
+
+### 17.36 Ordinary generic imports from Checked Libraries
+
+This freezes the next import family; implementation and qualification remain pending. Extend the sole Catalog, reader and Source remapper from sections17.30–17.32 with ordinary free generic functions and their private function closure. The Library itself has one dependency-free module, TYPE binders and existing builtin marker constraints without interface witnesses. Parameters/results use admitted i64/string/bool, Unit results or that function's binders; operations remain the Catalog's admitted set. Ordinary definition checking proves unconstrained parameters, explicit/inferred/forwarded arguments and every unused definition. Sendable grants no arithmetic, member or construction authority. Valid new caller-defined types instantiate through the receiving Checked type pool; absence of Library-owned nominal tables must not restrict callers to scalar arguments. RESULT binders, Library-owned constructed/nominal tables, slots, implementations, provenance and dependencies await authentic mapping, without opening unconnected tables or new operations.
+
+Reserve destination IDs for the authentic initializer and ordinary/private functions before relocating CALL, CALL_DEFAULT and literals through the same SourceLibraryMap. Deeply own each Generic's constraints, arguments, parameter_kinds and counts on the receiving ledger. Binder BASE+p remains declaration-local and instruction type_arguments ranges belong to the receiving function; blocks/SSA stay function-local. SourceContext.has_generics, SourceFunction.generic_owner and query generic counts/constraints/kinds represent the receiving declaration; free functions have no generic_parent and queries grant neither verification exemptions nor access. After all producers die, use the original owned Checked for specialization/revalidation, Lowering and Program sealing, without missing ASTs or runtime instantiation. Charge actual metadata/work, refund scratch on every exit and publish only a complete import. Do not mechanically bump versions if wire, Checked structural semantics and runtime ABI are unchanged; freeze any actual discovered change first and add independent rejection evidence.
+
+Qualification includes a private generic helper, two Libraries both using binder0/function0, reversed input order and shifted destination ordinals, explicit/inferred/forwarded calls, new caller types, unused invalid definitions and denied external private calls. Execute VM, independent packets and actual native output after producers die, with two Instances and owned results. Preserve existing library/string/output gates and every new actual OOM, exact/minus1 axis, cancellation, physical-release and applicable safety responsibility. This finite family does not qualify complete Library state/dependencies, complete Checked library publication, installation or the whole product.
+
+### 17.37 Checked standard library publication and ordinary execution
+
+The standard library supplies one Checked XIR semantic input, including declarations, generic definitions, private implementation closure, module initialization, effects and ownership facts. The current published family is io/output; this does not qualify the remaining library families. Library templates are verified input rather than executable Program authority. Catalog admission verifies the complete Checked body, its canonical module identity and dependencies under the caller's cumulative resource ledger. Byte digests never replace semantic verification. Catalog ownership survives input/source destruction and copies physical roots. Missing or malformed advertised input rejects without a source fallback.
+
+The Checked producer performs Source checking and Checked encoding without CGen, native compilation, object inventory or a runtime SDK dependency. Building the producer executable still needs the supported host C toolchain. Embedded immutable Checked bytes and their own component manifest contain no machine-code callbacks. CLI, LSP, VM and AOT obtain library input from this same Catalog independently of native code. VM specializes, reverifies and lowers reachable instances before ordinary immutable Program sealing. VM binding does not look up or replace standard library functions with cached native entries and needs no C compiler at execution time. AOT compiles library and user XIR together through the ordinary C backend.
+
+Standard library native registries, matching factories, cache leases, paired build identities, object/C mirrors and cache-specific sealing APIs are removed. No compatibility flag, empty cache or second execution path remains. Ordinary native functions, bidirectional VM/native mixed execution, shared Value/Call/Program/Instance, resumable ABI, CGen, necessary platform hosts and the independently verified runtime SDK remain. Actual SDK target/profile/ABI and generated native code admission retain their own rejection boundaries.
+
+Core publication installs only the Checked component and its exact module/length/digest manifest. The SDK component verifies its own target, ABI, source and archive manifest independently; SDK-only installation needs no standard library pair. Components and canonical relative paths reject before publication, and failed verification preserves any previously published manifest. Real Core/SDK/full installs, relocation, source-free VM/AOT, user-created generic types and missing/corrupt components require independent tests. Complete library delivery is separate from removal of the cache for the currently supported family.
+
+Preserve the independent seven stdout bytes out\0 followed by U+4E2D, four stderr bytes err! and empty; two Instances, four provider outcomes, imported leaves and user wrappers, same-spelling user declarations, producer death, escaped Function/result lifetimes and physical release. Retire only cache match/lease/object-pair assertions. Every actual preparation and bind/seal allocation failure, exact/minus1 resource axis, retry without ledger refill, failure-preserving take and zero-allocation cleanup remains covered on the ordinary paths. W1–W4, portable C11, applicable provider/sanitizer gates and all existing generic/library/output obligations remain.
+
+### 17.38 Shared root execution facts and owned causes
+
+After complete Checked/Lowered verification, the sole owned XrXirEffects derives independent requires_root and unresolved facts per function; both may be true. Missing data, zero initialization and failed inference never prove NONE. Mutable module slot reads/writes/PLACE and authentic module initializer identities require root. Const reads/PLACE prove Sendable in the actual definition context; a type failure requires root, while allocation/budget failures abort unchanged. Group initialization uses the existing high32 first-slot encoding. Library mutable variables and nonSendable constants remain forbidden.
+
+Use the sole reverse execution graph for CALL/INVOKE, authentic default helpers and registered cleanup. Cleanup propagates root facts without changing control-effect rules. Indirect/requirement calls consume the authentic callable closed upper bound; NO_SUSPEND remains independent of root permission. FUNCTION_REF does not execute its body, and local variables/cells are not root state merely because they are mutable. A GO child is not a same-flow parent call edge; actual parent argument preparation still contributes to the parent. Unclassified executing operations reject, and runtime paths conservatively join independently of optimization.
+
+Queries borrow facts and two separate shortest numeric cause chains from the same summary, which survives producer artifact destruction until freed. Local terminals have distance0; CALL/cleanup steps strictly decrease callee distance. Equal-distance choices order actual instruction/callee/cause/slot identities rather than adjacency insertion. Solving, causes and type proofs share cumulative resources; failure publishes no partial summary and never overwrites occupied output. The nonparameterized boolean graph costs O(I+F+C), excluding type proofs and higher-order variables. This query contract changes no wire/opcode/ABI and does not complete GO consumers, callable parameter bounds, execution identities or library-state protection.
+
+GO consumers obtain permission from the final root facts in that same summary, without repeating slot or indirect-call root inference. Known root and unresolved both reject; when both occur, the primary diagnostic selects known root while retaining both causes. The current SLOT_PLACE borrow-shape limit propagates independently: root NONE for Sendable const does not remove this unqualified limit, and shape failure is never mislabeled root or unknown. Roles, parameter/result and capture Sendable, Task errors and all type/ownership/visibility obligations stay separate; GO argument preparation still executes in the parent. Source distinguishes required instance-root execution from missing worker-effect proof. This slice keeps the existing function-level location; complete user function/variable cause payloads and precise GO-expression locations remain open.
+
+The owned cause-trace copy interface copies finite known and unresolved numeric chains from the same effects owner. Facts and steps borrow only the independent trace; they remain readable after effects, Checked/Lowered artifacts and their original producer are released. Valid NONE may produce an owned empty trace. Copy requires the same actual resource owner and an empty output, rejects invalid arguments before work, admits cumulative resources before atomic publication, and releases temporary ownership on OOM or budget failure without refunding charges. Free neither allocates nor formats; the final real resource references and physical counts reach zero. This interface adds no wire or runtime ABI and is not complete Source-name, origin or GO-location reporting.
+
+Closed callable root bounds occupy the existing u32 flags: NO_SUSPEND=1, ROOT_NONE=2, ROOT_REQUIRED=4, ROOT_UNRESOLVED=8. Only root masks 2/4/8/12 are valid; 12 retains both requires_root and unresolved. Old 0/1, NONE combined with another root bit and unknown bits reject. Ordinary explicit fn defaults to UNKNOWN; NO_SUSPEND never proves NONE. Identity includes all flags and nested signatures. Only the outer callable can weaken with unchanged parameter types/modes, result and nested identities: NONE fits NONE/ROOT/UNKNOWN/mixed, ROOT fits ROOT/UNKNOWN/mixed, and UNKNOWN or mixed fits only UNKNOWN/mixed. NO_SUSPEND may remain or be discarded. Lost precision cannot be recovered from a target address. Joining unions the two root facts with NONE as neutral; NO_SUSPEND survives only when both operands promise it.
+
+FUNCTION_REF construction does not execute its body, but its advertised bound must cover the authentic target facts from the same effects owner, even when unused. Every authentic interface implementation body must also satisfy its original requirement bound; receiving context does not grant a body promise. The common Checker validates complete structure/types/constraints/access before using the sole execution graph for root bounds and GO obligations. Precise ordinary references subsequently use an unpublished owned prepared owner bound exactly to the verified Module and owned INFERRED/FIXED value-flow records. Fixed explicit fn boundaries cannot refine by guessed targets; unknown dependencies remain UNKNOWN. Before the finite worklist closes and ordinary reverification succeeds, prepared state proves neither Checked nor NONE. There is no skip_go, unchecked public entry or second product pipeline, and no recipe/AST borrow survives its owner.
+
+This flags meaning uses the sole Checked semantic70; schema25 retains its existing u32 shape. Public Value22/Call28/Program29 fields and layouts remain unchanged. Old semantic69 and old 0/1 callable flags reject without a second reader. SDK source fingerprints, independent stdlib Checked components and consumer vectors require actual renewed qualification. This freezes only closed-bound foundations; precise Source references, sealed Program authentic entry-bound admission, real child indirect execution, finite parameter formulas, complete Library type mapping, full user causes and Library-state protection still require separate implementation and validation.
+
+Prepared ordinary reference refinement records owned INFERRED/FIXED value identities before region recipes are released. Ordinary direct references and closure sites close against authentic targets on the existing effects owner. Explicit callable parameters, annotations, results and conversion contexts remain fixed upper bounds; equal provisional UNKNOWN identities do not erase a boundary. A private COPY preserves it and becomes the sole ordinary FUNCTION_WEAKEN when closed identities differ. Private structure/SSA/constraint/access preparation publishes no Checked. The common complete Checker verifies all effects and permissions on both construction memory and its independent owned copy before publishing only that copy.
+
+COPY/PHI/local Cell, closed captures, Nullable wrappers and readonly Tuple/Array construction and projection synchronize identities. Callable PHI and uniform Array inputs use the sole outer weakening relation; the two root facts close independently. Fixed composite nested identities cannot vary. Unsupported nested weakening, shared mutation, element updates or Nullable branch joins retain a conservative bound or reject; finite higher-order dependencies and container alias flow remain incomplete. NO_SUSPEND, GO borrow shapes, errors and Sendable obligations remain independent. Preparation, closure and query copying share the original finite ledger without wire, schema, semantic or public ABI additions. This implementation candidate still requires fresh builds and both configurations' resource and safety gates; it grants no runtime or VM/native execution qualification.
+
+<<<<<<< HEAD
+Authentic callable targets may coexist with an opaque advertisement. Error unknown may discharge that advertisement only when actual sources are exhaustive. Finite evidence obligates every argument, copy/PHI input, local write, target matching the complete call key and actual RETURN exit. Positive dependencies strictly decrease rank; unrooted cycles and deletion of all completeness facts reject. Declaration-root formals retain external sources; fixed boundaries and FUNCTION_WEAKEN grant no precise identity. The receiver checks closure and positive support against current owned Input and the same finite relation, without deriving authority from legacy coverage ranks. Persistent return and parameter coverage fields, their separate rank solver and receiving replay are removed. Error completeness queries consume the same finite relation, whose full validation remains mandatory after the final callback. Every captured callable column has its own completeness fact, including empty columns: an empty descriptor does not prove absence of hidden environments. A complete callee identity cannot substitute for column evidence. Returned closures retain actual nested columns, typed at each column's declaring formal. Construction writes candidate Error rows, throws and Task Error permissions from geometrically framed finite facts. After the last callback, the independent receiver checks complete closure, positive support and every projection before publication. Published effects cannot regain construction write capability. Producer discovery records belong only to Workspace and are physically released before finite evidence is admitted. Final retains no old producer table; sealed returned-source and capture projections read the same finite relation and cannot recover constructor capability. Class discovery rows and their returned masks and ranks also belong only to Workspace and are physically released after finite construction and before sealed projection. Final retains no old Class inventory. Compiler and runtime Class queries read the same finite relation. Cell terminals still check actual ROOT contributions and their witnesses; removing old Class replay does not remove terminal validation. Primitive ROOT contributions and terminal witnesses are read from current owned Input. Input and Final retain no precomputed local ROOT seed rows. Constructor proposals belong only to Workspace and are cleared and released before finite proof construction. Sealed readers do not rerun callable-origin fixed points or returned-origin replay. Error and deferred correspondence project the same finite relation into request-local scratch, without storing or querying constructor-certified identity bits. Class and Cell terminals borrow only current heads, bases and the common Cell evidence. Before scratch allocation, only bounded dimensions are calculated. Afterwards the actual Input, key, namespace counts and array geometry are framed again. A local view never replaces complete semantic validation after the final callback. Completeness construction borrows current Input and heads only within one callback-free interval. A possible fact-relation growth discards those views before emission and reframes actual Input and Final afterwards; no stack address survives the call. Local Control seeds are not cached in Input. Construction and receiving share read-only primitives for current opcodes and actual callable signatures. Construction writes private result rows during the complete canonical run walk; receiving checks real seeds, call edges and finite support. Complete physical correspondence between Source and Input remains necessary, but their agreement cannot replace independent effect evidence in Final. Finite Error construction and receiving borrow current Input geometry only within one callback-free interval, without retaining semantic conclusions. A full fact buffer first unwinds the equation walk, then invalidates its view before growth. Current ranges are reframed after allocation; constructor fields are cleared before old facts are released. Ranges are reframed after that release callback, and a subsequent walk opens a fresh view. Complete closure equations and strictly descending finite support remain mandatory. Complete higher-order and generic families, complete effect verification and retirement of the old solver remain unfinished.
+
+ROOT primitive marker queries for immutable constructed slots use request-local capacity scratch. The original complete predicates still check types, generic constraints, interface closures, projected fields and Sendable. An attempt only claims or logically releases existing buffers and invokes no allocation or release callback. Missing capacity unwinds all head, run and descriptor borrows before growth; current Input and the function namespace are framed again, and the next attempt starts with no proof facts. Capacity retains no domain pointer or semantic verdict. Failure leaves output untouched and never refunds work. Actual release still requires current geometry checks. This does not replace complete semantic ROOT RHS, general V or typed allocation identity evidence after the final release callback; those obligations remain unfinished.
+
+### 17.39 Bounded CTFE scalar local storage and short circuiting
+
+Compiler execution receives completely reverified Lowered input. It admits the entire reachable direct-call closure of bool/integer ordinary functions before execution. SCALAR_LOCAL_NEW, SCALAR_LOCAL_READ and SCALAR_LOCAL_WRITE use the same scalar step and target frame offsets as the VM. A local write produces Unit and falls through; it is not a control-flow terminator. Actual frame accesses consume work. Existing steps, whole-stack depth/frame bytes, output bytes and cumulative compiler ledger limits remain; a callee does not reset them, failures refund no charges and preserve canonical Unit output.
+
+Source &&/|| preserve short-circuit semantics through this storage, the ordinary Checked→specialization reverification→Lowered CTFE pipeline, and an independent complete Source replay that checks ordinary constant recipes. An unexecuted pure arithmetic error may be skipped; reachable I/O in an unexecuted branch still rejects the entire closure. Root authority or effect=NONE grants no determinism.
+
+This section does not admit owned Cells produced by ordinary var, owned/path operations, aggregate/string exports, unknown function values or native/Instance execution. Each requires authentic type, lifetime and charging interfaces plus independent qualification; stack scalar storage does not establish those capabilities.
+
+
+### 17.40 Source failure diagnostics and editor publication
+
+Source failure diagnostics retain one-based byte line/column coordinates. Editor positions do not change the original diagnostic or SourceContext/Final layout. The optional failure output uses an independently owned XrXirSourceFailure: an empty receiver obtains the canonical module path for an actual located failure, parser provenance and available zero-based UTF-16 scalars. The parameter cuts over atomically to this type without a legacy path-output signature alias. Path transfer and cleanup allocate no memory or work; explicit free releases receiving ownership.
+
+The module graph copies the first actual parser callback message, module and original location, and projects UTF-16 while that exact text is alive on the original ledger. CRLF is one editor newline; standalone CR follows the existing compiler-byte and editor-row rules. Invalid boundaries are not clamped, and half-UTF8 or half-CRLF boundaries are not positions. Parse failures in later corpus inclusions retain their actual producer too. Resource failure never becomes a language error or partial success.
+
+LSP only consumes those failure facts: open text authenticates its actual module and projection and retains its version; a closed dependency uses the canonical path encoded as a URI and a null version. It neither rereads changed disk bytes nor converts dependency bytes against entry text. The selected editor's independent syntax diagnostics keep precedence. Unknown provenance or coordinates fail rather than inventing position zero or empty success. These are display facts, with no type, call, effect or execution authority.
+
+
+LSP document open, edit and diagnostics use the established limits of 64 MiB cumulative allocation, 8 MiB live storage and 128000000 work, without borrowing CLI defaults. Publication checks the server revision of the Source text snapshot and the open target version. An actual closed dependency retains a null version; an absent editor bucket does not discard existing parser facts.
+
+The successful publisher owns complete empty-diagnostic params for that URI. This JSON independently owns its strings and explicitly transfers when the document Source owner is replaced, without borrowing dead source text or ledgers. A later publisher taking the same URI revokes the previous publisher's clearing right. A changed target URI clears the former recipient before publishing the new result. Both JSON envelopes and serialized bodies are ready before the first byte write. Preparation failure does not spend publication ownership. Bytes accepted by the operating system cannot be rolled back; a failed write terminates publication.
+
+Document close clears its own publication and existing publications targeting that editor. Clear-all covers closed dependencies and open documents. A new language error without an authentic position only revokes the obsolete owned publication; it does not invent an empty successful result for current text. Ownership cleanup allocates and charges no further work. Explicit clear preparation and transport failures preserve prior ownership or enter terminal state, without creating partial JSON frames.
+=======
+### 17.39 Canonical Iterator and Generator body development slice
+
+Iterator has one element descriptor, kind11, in the sole Type pool. Descriptor ordinals9/10 belong to the fixed Map/Set input and cannot name Iterator; this isolated input rejects them until their governed implementations are consumed. Operations153–175 remain reserved for that same fixed input and have no admitted stage while their implementation is absent; GENERATOR_YIELD is176. Parameters, result, flags and nominal fields are empty; parameter_span equals the actual element span. Unit and admitted ordinary elements are allowed; internal Cell, unknown types and self/forward edges reject. Equal element descriptors cannot be duplicated. Checked uses the existing kind/span/element fields. Independent decode, cloning, definition contexts, ordinary substitution/inference, access and Lowered verification still inspect the actual element. Protocol revisions are defined only by §17.6; this slice adds no public Value/Call/Program fields or layouts.
+
+Source Iterator<T> binds the complete stdlib/types/iterator.xr declaration and its unique prelude registration. The shared generator owns real locations and source fingerprints; same-name user declarations and receiving contexts grant no native authority. The element gains no additional Sendable requirement. A hidden frame may retain a nonSendable environment, so a Sendable element never proves Iterator Sendable; Task<Iterator<T>> still rejects.
+
+An Iterator<T> function with real yields acquires the Generator role from its own lexical body. The old analyzer is_generator flag grants no role, and nested function yields do not belong to an outer body. The role uses an independent GENERATOR bit in the existing FunctionIdentity. NoSuspend obligations inspect only their own bit. A synthetic defer helper never inherits its enclosing Generator role. Canonical GENERATOR_YIELD has Unit instruction type and an optional operand matching the actual Iterator element; Unit elements have no SSA payload. The declared result remains Iterator while normal body RETURN completes with Unit, so production differs from end of sequence. The qualified body subset covers real Source, independent Checked decode, specialization/Lowered, VM and execution of actual generated native C, including separate Coro.yield() scheduling and yield () production.
+
+Authenticated owned Cell parameters, nth consumption and lexical loop close enter through an atomic Checked89/Call34 cutover. Wire28/Value27/Program30 and common Call/Instance layouts remain unchanged. The Iterator demand action, its four internal wait kinds and private single-consumer storage remain on the sole protocol. Complete retired Value24/26 Domain prefixes reject before accessing new fields. Complete semantic73, semantic74, semantic84, semantic85, semantic86, semantic87 and semantic88 packets reject at the header without allocation. Independent named-field models derive complete new Generator packets and precise role, element, Unit-payload, ref-parameter and reserved-bit refusals without using product writer output as expectations. A generator entry requires a closed Iterator result and transfers each produced owner through the common Call YIELDED state; normal completion returns Unit. Taking production readies the same frame without allocating a wake. Only actual scheduling suspension owns a wake; ordinary outcome take, Task completion and resume cannot consume a produced value. Cancellation releases any untaken owner.
+
+A direct Source call to a real generator declaration becomes GENERATOR_NEW177; ordinary CALL/FUNCTION_REF/GO operations still cannot execute its body. Creation uses the authenticated current view and the sealed Program caller/instruction site to select the complete callee, result and argument count. The same latent certificate and independent provenance receiving preserve specialization identity; creation executes no body and inherits neither its immediate suspension nor its language errors. Each Iterator owns an independent nonmoving Call frame on the original Instance executor and budget. A parked producer does not block an ordinary root return. Releasing the last external owner only publishes a close signal; the common FIFO executor drains cancellation and cleanup iteratively. Instance close drains active producers before retiring code. Terminal Iterators retain only type Arena and Domain storage. An unstarted producer has not registered its defer, so close must not invent cleanup execution. No common Call/Instance fields are added.
+
+Real yields in named nested and anonymous Source functions likewise belong to independent producer bodies. The closure value refers to an ordinary factory, which only creates the producer through the same sealed GENERATOR_NEW site. Calling the closure does not execute the producer body; a named closure rebuilds its self-reference against the factory. Owned constant String values and logical Array snapshots can remain in hidden producer parameters across suspension. Ordinary generic specialization preserves the same type and capture correspondence; mutation of the creator's Array does not change the captured snapshot. Lexical inventory reserves a separate factory for each closure that actually yields, without granting a role from the legacy analyzer flag. External ref captures still reject exactly. Internal views remain unimplemented.
+
+Mutable captures retain their established shared Cell identity rather than becoming value snapshots. GENERATOR_NEW propagates real operand ownership origins to producer parameters. Only a Cell with the complete OWNED origin and OWNED_CAPTURE role can enter the hidden frame. SCOPED, MODULE, UNKNOWN and mixed origins reject; an unbound Cell parameter grants no ownership role. Direct Source ref parameters and external ref captures still reject. Program receiving derives roles again, the authentic Instance factory obtains its resolver from immutable permissions, and frame preparation rechecks that the Cell is unborrowed and not module storage. A public low-level constructor without that resolver cannot invent this authority. Owned parameters create no loan across suspension. Cleanup helpers retain the existing LEXICAL_CLEANUP protocol against their parent frame. Drain precedes code retirement; an escaped yield retains its own owner.
+
+Source hasNext()/next() bind native identity8 from the complete governed declaration; identities6/7 remain reserved for the fixed Map/Set input. They produce ITERATOR_HAS_NEXT178 and ITERATOR_NEXT179: Unit control instructions with one actual Iterator operand and dedicated normal/error successors. INVOKE_RESULT receives bool or the element; Unit has no SSA payload. Both operations MAY_SUSPEND. Factory values carry latent producer Error facts, which consumption reads without making creation immediately throw. One Iterator admits only one bound consumer at a time; self, reentry and second drivers reject without changing the original wait.
+
+The consumer retains an owned lease in its existing Call wait slot. The wake authenticates executor, activation, generation and ticket. hasNext preserves a cached yield; repeated probes do not advance production. next transfers its cached owner exactly once. Demand without a cache only queues the independent producer on the common FIFO executor; a callback never recursively drives a backend. Coro.yield schedules without producing an element or EOS. Terminal delivery follows all producer cleanup. Normal exhaustion or close makes hasNext false and next report the established E0432 panic. Actual producer Error/panic remains observable on later consumption. Consumer cancellation unlinks and requests producer close; final external drop and Instance close use the same drain.
+
+A selected host wake belongs to the current root operation even when an independent producer or Task owns the actual external request. Successful root cancellation immediately revokes that host ticket. A still independent Task wait is selected again by a later poll with a new ticket; an old ticket cannot be accepted before producer cancellation drains. Fully authenticated self-demand is an execution failure and uses the original frame for structured registered cleanup. Wrong Domain/generation/identity remains a protocol rejection. Focused real Source time.sleep, two-level producer Timer waits, normal/cancel/stop/free/drop, forged tickets, self-demand and cyclic second-consumer cases have VM/native and both mixed-direction coverage. This never substitutes for complete external-event, concurrency, FI or safety matrices.
+
+Source nth(index:i64) binds the same governed declaration and produces ITERATOR_NTH180: a Unit control instruction with Iterator and exact i64 operands and dedicated normal/error successors. It discards index produced values from the current position and transfers the next owner. Zero behaves as next; negative indices report E0430 before advancing the producer, and exhaustion during skipping reports E0432. Every discarded owner releases immediately; Unit still counts as one produced value. The same consumer remains bound while the existing FIFO executor advances each production without C recursion. Actual Timers retain their original wait requests. The existing WaitRequest.after_ms word holds a remaining discard count only for internal NTH waits; decrementing it invalidates the old token and never becomes a host Timer duration. Cancellation unlinks before producer cleanup. Errors and panics follow the existing successors, and terminal errors remain repeatably observable.
+
+Source for-in over a built-in Iterator<T> evaluates its receiver once and obtains each owned value through the same canonical hasNext/next operations. Unit bindings have no SSA payload. Loop bindings stay readonly, and a closure captures the value from its own iteration. A real lexical cleanup helper registers before loop entry. Continue retains that registration; break, return, throw, panic and cancellation close through the existing cleanup frontier. Array snapshots and ranges retain their original path without an Iterator helper. Iterator<Unit> loops do not widen ordinary generic T argument domains.
+
+A for-in over a custom value calls iterator() exactly once through ordinary method rules, then uses the same lexical loop on its canonical Iterator result. Nominal READ methods and generic witnesses from declared interfaces retain visibility, complete arguments and defaults, generic proofs, invocation effects and real Source references. A method spelling grants no authority. A ref receiver borrows its original writable path with each selector evaluated once; the ordinary factory return ends that loan, and no value copy recovers write authority. A method that actually yields still cannot retain external ref parameters. A yield in the method's own body installs the same Generator role. Every READ or static generator method exposes one ordinary creation factory while its original body becomes a private Generator entry. Direct calls, bound method values, static method values and declared-interface witnesses select that same public factory. Defaults belong to the factory; the lexical receiver and body locals retain their original method declaration. The factory only creates a parked producer through GENERATOR_NEW; ordinary CALL never executes production. A declared function-level no_suspend constrains creation, not a producer that may wait; parameter obligations retain their actual declared types. Verified custom entries cover ordinary and generator methods, escaping bound values, generic method values, explicit calls, declared-interface witnesses and witness values, static defaults, actual factory waits/Errors and ref factories. Prelude Iterable governance, complete remaining receiver/callable capture and worker contexts, labelled/tuple loop heads and remaining legal protocols are not yet complete. An ordinary user interface is not qualified as built-in Iterable.
+
+Internal ITERATOR_CLOSE181 has one Iterator operand, a Unit result and dedicated normal/error successors. It adds no Source close() method. Close skips ordinary producer execution and uses the common FIFO executor to finish only already registered cleanup admitted to neither throw a language Error nor suspend in the language, then resumes the consumer. Internal WAIT_ITERATOR_CLOSE7 authenticates the complete identity in the existing Call wait slot. Cancellation preserves this join without duplicate enqueue or premature unlink. The operation has no language Error or suspension effect. User defer calls to hasNext/next, time.sleep or Coro.yield, and escaping Errors, retain the E0387/E0392 obligations. Closing an already terminal producer returns Unit without replaying its sticky body Error. Execution failures and panics retain the common exit protocol.
+
+When an ordinary closure factory returns an Iterator or Task, the sole Error CFG keeps invocation escapes separate from the latent Errors carried by the returned value and solves them on the same sealed actual edges. A known empty set is not replaced by an unidentified Error from its physical type; unsafe or unknown sets still reject GO. Creating an unused producer in a Task activation does not reject the producer body's ROOT requirement early. Dropping it cold executes neither its body nor unregistered defer. Actual advancement checks both producer and consumer execution roles before an uncached hasNext/next and before each further advance after an intermediate nth discard. Cached or terminal delivery and internal close execute no ordinary body. For an admitted worker producer, actual inputs are rechecked after fallible frame preparation. The same sealed GENERATOR_NEW latent edge selects its complete context into the existing producer frame invocation field. Nominal worker eligibility cannot substitute for this proof. Cells must still have OWNED_CAPTURE roles, the same Domain, no active loan and no module storage. Precise static consumer-origin ROOT propagation remains incomplete; the runtime defense grants no static qualification.
+
+When an ordinary Call in an authenticated Instance passes a more precise callable to a weaker physical formal of the same shape, the existing weakening relation and complete value/gate admission apply first. Only the actual live caller view may create a separately owned carrier for the unpublished callee frame. The caller value, declaration and effect classification remain unchanged. Promise strengthening, parameter/result/mode changes, malformed values and foreign Instance/Arena values still reject. Failure releases partial ownership before frame publication and preserves OOM/LIMIT. Host start and low-level Calls without an authenticated view still require exact physical types. This representation conversion never substitutes a stronger argument for callee execution permission; fixed/opaque origins and latent worker eligibility still pass the same actual proof.
+
+When weakening in an authenticated Instance receives a private Fn creation origin, it must first reauthenticate the current Program/Effects owner, actual site, target, complete capture binding, and the one-way weakening relation from the original site type to the current carrier type before preserving that origin. Public construction without an origin cannot manufacture a site. The output carrier still uses the destination advertisement and the input remains unchanged. Origin identifies the real environment only: fixed UNKNOWN/ROOT and every original current SSA input still pass the same sealed equations and execution edge, without recovering stronger permission from an address. Relation and identity reads consume actual Call and Domain work; failure publishes no carrier or output and preserves OOM/LIMIT and code-owner cleanup.
+
+Bound struct/Class method values retain their actual receiver environments. Class captures preserve the complete current ROOT/UNKNOWN/KNOWN relation on the same invocation equations. Execution receiving also checks actual module publication; a physical local object cannot erase UNKNOWN or select a historical smaller environment. For a directly allocated local callable Cell whose identity never escapes, its initializer and every write join genuine producers into the same SSA relation. Independent receiving replays every descending cause. Aliased or escaped Cells gain no precise origin from this rule. Original opaque callable promises remain, and actual return origins never strengthen an explicitly unresolved return type. The verified subset includes bound struct/Class receivers, binding after returning a receiver, PHI and parameter transport, and cold creation after Cell rebinding. Complete consumer ROOT, remaining hidden environments and borrowing rules still require independent closure.
+
+These are development inputs for canonical types, bodies, factories, hasNext/next/nth and built-in Iterator loop close, not qualification of complete Generators or Channels. Program receiving still checks actual roles and its owned body proof; ordinary Instance.start/Function binding reject direct generator bodies. Low-level drivers never replace the authenticated factory. The current subset covers real VM/native and both mixed producer/consumer directions, started cleanup, multiple activations and root replacement. complete Iterable/custom protocols and loop heads, remaining hidden environments and internal views, complete wait races/cancellation/GC/code leases, all original FI/budget/safety and platform matrices remain open. No Source close() method is added.
+>>>>>>> ec41df298c2bc6370d94c5388706bef85cb6fb12
+
+---
+
+## 18. Error Codes
+
+> The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `i64` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
+
+### 18.1 Lexer and Parser
+
+| Code | C name | Meaning |
+|--|--|--|
+| `E0101` | `XR_ERR_LEX_INVALID_CHAR` | invalid character |
+| `E0102` | `XR_ERR_LEX_UNTERMINATED_STR` | unterminated string |
+| `E0103` | `XR_ERR_LEX_INVALID_NUMBER` | invalid numeric literal |
+| `E0104` | `XR_ERR_LEX_INVALID_ESCAPE` | invalid escape |
+
+#### Parser
+
+| Code | C name | Meaning |
+|--|--|--|
+| `E0201` | `XR_ERR_SYN_UNEXPECTED_TOKEN` | unexpected token |
+| `E0202` | `XR_ERR_SYN_EXPECTED_EXPR` | expression expected |
+| `E0203` | `XR_ERR_SYN_EXPECTED_STMT` | statement expected |
+| `E0204` | `XR_ERR_SYN_UNCLOSED_PAREN` | unclosed parenthesis |
+| `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | unclosed brace |
+| `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | unclosed bracket |
+| `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | invalid assignment target or form |
+| `E0208` | `XR_ERR_SYN_EFFECTLESS_STMT` | expression statement has no effect; its result is discarded (see §1.2.1) |
+
+### 18.2 Compilation and Static Analysis
+
+| Code | C name | Meaning |
+|--|--|--|
+| `E0301` | `XR_ERR_CMP_UNDEFINED_VAR` | undefined variable at compiler stage |
+| `E0302` | `XR_ERR_CMP_REDEFINED_VAR` | redefined variable |
+| `E0303` | `XR_ERR_CMP_CONST_ASSIGN` | assignment to a constant |
+| `E0304` | `XR_ERR_CMP_INVALID_BREAK` | invalid `break` |
+| `E0305` | `XR_ERR_CMP_INVALID_CONTINUE` | invalid `continue` |
+| `E0306` | `XR_ERR_CMP_INVALID_RETURN` | invalid `return` |
+| `E0307` | `XR_ERR_CMP_TOO_MANY_PARAMS` | too many parameters |
+| `E0308` | `XR_ERR_CMP_TOO_MANY_LOCALS` | too many locals |
+| `E0309` | `XR_ERR_CMP_TOO_MANY_CONSTANTS` | too many constants |
+| `E0310` | `XR_ERR_CMP_TOO_MANY_UPVALUES` | too many upvalues |
+| `E0311` | `XR_ERR_CMP_JUMP_TOO_LARGE` | jump offset too large |
+| `E0321` | `XR_ERR_TYPE_NOT_CALLABLE` | static type is not callable |
+| `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | static type is not indexable |
+| `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | static type is not iterable |
+| `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | invalid operand type |
+
+#### Analyzer
+
+| Code | C name | Meaning |
+|--|--|--|
+| `E0350` | `XR_ERR_ANALYZE` | generic analyzer error |
+| `E0351` | `XR_ERR_ANALYZE_UNDEFINED_VAR` | undefined name |
+| `E0352` | `XR_ERR_ANALYZE_TYPE_MISMATCH` | type mismatch |
+| `E0353` | `XR_ERR_ANALYZE_CONST_ASSIGN` | analyzer-detected const assignment |
+| `E0354` | `XR_ERR_ANALYZE_NOT_CALLABLE` | called value is not callable |
+| `E0355` | `XR_ERR_ANALYZE_WRONG_ARG_COUNT` | wrong argument count |
+| `E0356` | `XR_ERR_ANALYZE_ARG_TYPE` | wrong argument type |
+| `E0357` | `XR_ERR_ANALYZE_GENERIC_COUNT` | wrong generic argument count |
+| `E0358` | `XR_ERR_ANALYZE_GENERIC_CONSTRAINT` | generic constraint not satisfied |
+| `E0359` | `XR_ERR_ANALYZE_SUPER_FIRST` | `super(...)` is not the first construction action |
+| `E0360` | `XR_ERR_ANALYZE_SUPER_THIS` | `this` accessed before `super(...)` |
+| `E0361` | `XR_ERR_ANALYZE_SUPER_REQUIRED` | derived constructor omits `super(...)` |
+| `E0362` | `XR_ERR_ANALYZE_SUPER_INVALID` | invalid `super` in a non-derived class |
+| `E0363` | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | unsafe closure capture |
+| `E0364` | `XR_ERR_ANALYZE_AWAIT_TYPE` | invalid `await` operand type |
+| `E0365` | `XR_ERR_ANALYZE_MISSING_TYPE` | no inferable type or initializer |
+| `E0367` | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | incomplete interface implementation |
+| `E0368` | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | invalid tuple field name |
+| `E0369` | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field out of range |
+| `E0370` | `XR_ERR_ANALYZE_THROW_NON_EXCEPTION` | `throw` operand is not an allowed enum error value |
+| `E0371` | `XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE` | non-exhaustive `match` |
+| `E0372` | `XR_ERR_ANALYZE_USED_BEFORE_ASSIGN` | use before assignment |
+| `E0373` | `XR_ERR_ANALYZE_TUPLE_IMMUTABLE` | mutation of an immutable tuple |
+| `E0374` | `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | override contract mismatch |
+| `E0375` | `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | Map/Set element lacks hash/equality contract |
+| `E0376` | `XR_ERR_ANALYZE_CONDITION_TYPE` | invalid condition type |
+| `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | visibility violation |
+| `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | mutation of a const field |
+| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | unsafe use of a possibly-null value (trigger rules in §2.13 N-12) |
+| `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | reading or setting a field / member the type does not declare |
+| `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | aggregate literal omits a required field |
+| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | owner invalidated while a borrow (`Slice<T>` view, `ref`, or raw pointer) is live |
+| `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | a borrowed value escapes its owner's scope (return, field, container, closure capture, execution boundary) |
+| `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
+| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | Legacy analyzer prohibition on generator scheduling; current Checked generators use the independent frame/consumer wait rules of §3.16.2 and actual admission limits of §17.39 |
+| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | Legacy analyzer prohibition on generator defer; current Checked generators use the registered-cleanup and close rules of §3.16.3 instead |
+| `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | an error can escape a `defer` cleanup block (see §8.3.1) |
+| `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | the program exceeds the monomorphization instance budget (breadth); each instance clones a whole declaration; see §9.4 |
+| `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | monomorphization nested past the depth budget; polymorphic recursion (`f<T>` requesting `f<Box<T>>`) has no finite specialization and always reaches it; see §9.4 |
+| `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union members are not discriminable at run time (two members of the same numeric family) |
+| `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | the uniqueness evidence `move` requires does not hold (live alias, published root, unknown provenance, incomplete storage plan) |
+| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point or creates a task; see §4.9 / §8.3.1 |
+| `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | a defer body exits its function with `return`, or crosses the cleanup boundary with `break` / `continue` |
+
+### 18.3 Runtime
+
+| Code | C name | Meaning |
+|--|--|--|
+| `E0400` | `XR_ERR_RUNTIME` | generic runtime error |
+| `E0401` | `XR_ERR_TYPE_NO_PROPERTY` | property absent on type |
+| `E0402` | `XR_ERR_TYPE_NO_INDEX` | value is not indexable |
+| `E0403` | `XR_ERR_TYPE_NO_CALL` | value is not callable |
+| `E0404` | `XR_ERR_TYPE_MISMATCH` | runtime type mismatch |
+| `E0405` | `XR_ERR_TYPE_NO_METHOD` | method absent on type |
+| `E0406` | `XR_ERR_TYPE_NO_OPERATOR` | operator unsupported by type |
+
+#### Null, Arithmetic, and Containers
+
+| Code | C name | Meaning |
+|--|--|--|
+| `E0410` | `XR_ERR_NULL_PROPERTY` | property access on null |
+| `E0411` | `XR_ERR_NULL_INDEX` | index on null |
+| `E0412` | `XR_ERR_NULL_CALL` | call on null |
+| `E0413` | `XR_ERR_NULL_UNWRAP` | force-unwrapping null |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | division by zero |
+| `E0421` | `XR_ERR_MOD_BY_ZERO` | modulo by zero |
+| `E0422` | `XR_ERR_OVERFLOW` | arithmetic overflow or out-of-range numeric conversion (including NaN / infinity to integer) |
+| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | index out of bounds |
+| `E0431` | `XR_ERR_KEY_NOT_FOUND` | missing Map key |
+| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | `next()` / `nth()` on an exhausted `Iterator<T>`, violating the two-step pull protocol; see §5.3.6 |
+
+#### System, Calls, Coroutines, and Stdlib
+
+| Code | C name | Meaning |
+|--|--|--|
+| `E0440` | `XR_ERR_STACK_OVERFLOW` | stack overflow |
+| `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
+| `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
+| `E0443` | `XR_ERR_DEFER_THROW` | an error escaped a `defer` body; uncatchable, terminates the process (see §8.3.1 rule D3) |
+| `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup attempted to create a task or reach the scheduler; fails closed before any such side effect |
+| `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
+| `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
+| `E0460` | `XR_ERR_CORO_DEAD` | operation on a dead coroutine |
+| `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine cancelled |
+| `E0462` | `XR_ERR_TASK_ALREADY_TAKEN` | a Task's transferable result has already been taken and cannot be taken again |
+| `E0470` | `XR_ERR_JSON_PARSE` | JSON parse failure |
+| `E0471` | `XR_ERR_JSON_INVALID` | invalid JSON value or operation |
+| `E0475` | `XR_ERR_REGEX_COMPILE` | regex compilation failure |
+| `E0476` | `XR_ERR_REGEX_PATTERN` | invalid regex pattern |
+| `E0480` | `XR_ERR_TLS_UNAVAILABLE` | TLS capability unavailable |
+
+### 18.4 Modules, I/O, and Coroutines
+
+| Code | C name | Meaning |
+|--|--|--|
+| `E0501` | `XR_ERR_MOD_NOT_FOUND` | module not found |
+| `E0502` | `XR_ERR_MOD_LOAD_FAILED` | module load failed |
+| `E0503` | `XR_ERR_MOD_NO_EXPORT` | name is not exported |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | circular module dependency |
+| `E0601` | `XR_ERR_IO_FILE_NOT_FOUND` | file not found |
+| `E0602` | `XR_ERR_IO_READ_FAILED` | read failed |
+| `E0603` | `XR_ERR_IO_WRITE_FAILED` | write failed |
+| `E0604` | `XR_ERR_IO_PERMISSION_DENIED` | I/O permission denied |
+| `E0701` | `XR_ERR_CORO_DEADLOCK` | coroutine deadlock |
+| `E0702` | `XR_ERR_CORO_CHANNEL_CLOSED` | channel closed |
+| `E0703` | `XR_ERR_CORO_LIMIT_EXCEEDED` | coroutine limit exceeded |
+
+### 18.5 Syntax Guidance and Internal Errors
+
+| Code | C name | Rejected form / meaning |
+|--|--|--|
+| `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` is invalid; return a tuple with `return (a, b)` |
+| `E0802` | `XR_ERR_SYN_BINDING_CAPABILITY_REMOVED` | `owned` / `shared` binding syntax is invalid; use `var` or `const` — ownership and sharing are inferred from value capability and explicit copy/move boundaries |
+| `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | bare key/value `for` form is invalid |
+| `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` is invalid; use `-> ()` or omit the return type |
+| `E0805` | `XR_ERR_SYN_PARAM_MODE_PREFIX_REMOVED` | parameter modes belong between the colon and the type |
+| `E0806` | `XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED` | `move` is an argument transfer expression, not a parameter mode |
+| `E0807` | `XR_ERR_SYN_PARAM_MODE_COMBINED_REMOVED` | invalid combined parameter modes |
+| `E0808` | `XR_ERR_SYN_PARAM_MODE_POSTFIX_REMOVED` | parameter modes cannot follow the type |
+| `E0809` | `XR_ERR_SYN_CALL_IN_MARKER_REMOVED` | call-site `in` marker; ordinary `in` calls have no marker |
+| `E0900` | `XR_ERR_INTERNAL` | internal error |
+| `E0901` | `XR_ERR_NOT_IMPLEMENTED` | not implemented |
+| `E0999` | `XR_ERR_UNKNOWN` | unknown error |
+
+The runtime panic channel uses the prelude `PanicInfo`; user-level `throw <enum>` uses the value-return error channel. See §8 and §16 for propagation semantics; the numeric range alone does not determine the channel.
+
+---
+
+## Appendix A. EBNF Grammar
+
+> Source of truth: `src/frontend/parser/xparse_*.c`. This appendix is a compact, curated EBNF; the parser implementation is the authoritative resolver of any conflicts.
+
+### A.1 Lexical Layer
+
+```ebnf
+SourceFile ::= Statement*
+
+Comment ::= '//' [^\n]*
+         |  '/*' .* '*/'
+
+Identifier ::= IdStart IdContinue*
+IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
+IdContinue ::= IdStart | '0'..'9'
+// The source is first validated as UTF-8. The lexer accepts every non-ASCII UTF-8 byte in identifiers; it does not currently apply XID/NFC normalization.
+
+IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
+DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
+HexInt       ::= '0x' HexDigit ('_'? HexDigit)*
+BinInt       ::= '0b' ('0' | '1') ('_'? ('0' | '1'))*
+OctInt       ::= '0o' ('0'..'7') ('_'? ('0'..'7'))*
+
+FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
+              |  DecimalInt Exponent
+Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
+
+BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
+
+QuotedLiteral ::= StringLiteral | FixedByteLiteral
+StringLiteral ::= StringPrefix (InlineQuoted | BlockQuoted)
+FixedByteLiteral ::= FixedBytePrefix (InlineQuoted | BlockQuoted)
+StringPrefix ::= '' | 'r'
+FixedBytePrefix ::= 'b' | 'br' | 'c' | 'cr'
+InlineQuoted ::= '"' InlinePayload* '"' | '""'
+BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
+QuoteRun ::= '"'{Q}                         // Q >= 3
+BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
+RegexLiteral ::= '/' RegexBody '/' RegexFlag*
+RegexFlag ::= 'i' | 'm' | 's' | 'g' | 'u'
+
+BoolLiteral ::= 'true' | 'false'
+NullLiteral ::= 'null'
+```
+
+### A.2 Types
+
+```ebnf
+Type ::= UnionType
+UnionType ::= IntersectionType ('|' IntersectionType)*
+IntersectionType ::= NullableType
+NullableType ::= PrimaryType '?'?
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
+CFunctionType ::= 'CFn' '<' FunctionType '>'
+NamedType   ::= QualifiedIdent TypeArgs?
+FunctionType ::= '(' TypeList? ')' '->' Type
+TupleType   ::= '(' Type (',' Type)+ ')'
+ObjectType  ::= '{' FieldList? '}'
+FieldList   ::= ObjectField (',' ObjectField)* ','?
+ObjectField ::= Identifier ':' Type
+QualifiedIdent ::= Identifier ('.' Identifier)*
+TypeArgs    ::= '<' Type (',' Type)* '>'
+TypeList    ::= Type (',' Type)*
+```
+
+### A.3 Expressions
+
+```ebnf
+Expression ::= AssignExpr
+AssignExpr ::= TernaryExpr (AssignOp Expression)?
+AssignOp   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
+            |  '&=' | '|=' | '^=' | '<<=' | '>>='
+
+TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
+NullCoalesceExpr ::= LogicOrExpr ('??' LogicOrExpr)*
+LogicOrExpr ::= LogicAndExpr ('||' LogicAndExpr)*
+LogicAndExpr ::= BitOrExpr ('&&' BitOrExpr)*
+BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
+BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
+BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
+EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
+RelationalExpr ::= RangeExpr ((('<' | '<=' | '>' | '>=') RangeExpr) | (('as' | 'is') Type))*
+RangeExpr   ::= ShiftExpr (('..' | '..=') ShiftExpr)?
+ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
+AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
+// range binds looser than every arithmetic operator, tighter than comparison, and is non-associative (a..b..c is a syntax error). A safe cast is `x as T?`, where T? is nullable.
+
+UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
+           |  'move' UnaryExpr
+           |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
+           |  GoExpr
+           |  'unsafe' Block
+           |  PostfixExpr
+
+GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
+GoOptions ::= '(' 'name' ':' StringLiteral ')'
+CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
+
+PostfixExpr ::= Primary PostfixOp*
+PostfixOp   ::= '(' ArgList? ')'              // call
+             |  '.' Identifier                 // member
+             |  '?.' Identifier                 // optional chain property
+             |  '?.' Identifier '(' ArgList? ')'  // optional chain method
+             |  '?[' Expression ']'            // optional chain index
+             |  '[' Expression ']'             // index
+             |  '[' Expression? ':' Expression? ']'  // slice
+             |  '!'                            // force unwrap
+
+Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
+         |  QuotedLiteral | CharLiteral | RegexLiteral
+         |  BoolLiteral | NullLiteral
+         |  Identifier
+         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrowLambda
+         |  FnExpression
+         |  ComptimeExpr
+         |  MatchExpr
+         |  '(' Expression ')'
+         |  '(' Expression (',' Expression)+ ')'  // tuple
+
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
+MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= Expression ':' Expression
+SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
+ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
+ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
+
+ArrowLambda ::= Identifier '->' (Expression | Block)
+              | '(' ArrowParams? ')' '->' (Expression | Block)
+ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam  ::= Identifier (':' ParamType)?
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
+// Note: arrow lambdas cannot declare an explicit return type;
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
+
+ComptimeExpr ::= 'comptime' (Expression | Block)
+
+MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out') Expression
+          | '...' Expression
+          | '_'
+          | Expression
+```
+
+### A.4 Patterns
+
+```ebnf
+Pattern ::= LiteralPattern
+         |  RangePattern
+         |  EnumPattern
+         |  TypePattern
+         |  WildcardPattern
+         |  BindingPattern
+         |  MultiPattern
+
+LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
+RangePattern    ::= Expression ('..' | '..=') Expression
+EnumPattern     ::= EnumVariantPath
+                  | EnumVariantPath '{' EnumFieldPatternList? '}'
+EnumVariantPath ::= QualifiedIdent
+                  | QualifiedIdent TypeArgs '.' Identifier
+EnumFieldPatternList ::= EnumFieldPattern (',' EnumFieldPattern)* ','?
+EnumFieldPattern ::= Identifier | Identifier ':' Pattern
+TypePattern     ::= 'is' Type Identifier?
+WildcardPattern ::= '_'
+BindingPattern  ::= Identifier
+MultiPattern    ::= Pattern (',' Pattern)+
+```
+
+### A.5 Statements
+
+```ebnf
+Statement ::= ExprStmt
+           |  IncDecStmt
+           |  VarDecl
+           |  ConstDecl
+           |  FnDecl
+           |  ExternBlock
+           |  ClassDecl
+           |  StructDecl
+           |  InterfaceDecl
+           |  EnumDecl
+           |  TypeAliasDecl
+           |  ImportDecl
+           |  ExportDecl
+           |  IfStmt
+           |  WhileStmt
+           |  ForStmt
+           |  ForInStmt
+           |  ForInPairStmt
+           |  MatchStmt
+           |  ScopeStmt
+           |  SelectStmt
+           |  ReturnStmt
+           |  BreakStmt
+           |  ContinueStmt
+           |  ThrowStmt
+           |  TryStmt
+           |  DeferStmt
+           |  YieldStmt
+           |  Block
+           // Note: print/dump are calls inside ExprStmt; go is an expression (GoExpr)
+
+// LineBreak is not a token: it is the outcome of deciding that a line ending
+// terminates the statement here. That decision (previous token can end an
+// expression + the new line's first token can begin one + not inside '(' / '[')
+// is normative; see §1.2.1 for the full definition.
+ExprStmt ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
+Block    ::= '{' Statement* '}'
+
+IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
+ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+             |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
+
+ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
+BreakStmt    ::= 'break' Identifier?
+ContinueStmt ::= 'continue' Identifier?
+
+ThrowStmt ::= 'throw' Expression
+TryStmt   ::= 'try' Block CatchClause+
+CatchClause ::= 'catch' '(' CatchHeader ')' Block
+             |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader ::= Identifier (':' Type)?
+             |  EnumPattern (',' EnumPattern)*
+
+DeferStmt ::= 'defer' Block
+
+// print is a normal global function call, syntactically an ExprStmt.
+
+// go is an expression returning Task<T>. It is not a separate statement category (it appears wrapped in ExprStmt).
+
+ScopeStmt ::= 'linked'? 'scope' Block
+
+SelectStmt ::= 'select' '{' SelectArm+ '}'
+SelectArm  ::= Identifier 'from' Expression '->' Block      // receive
+            |  Expression 'to' Expression '->' Block        // send
+            |  'after' Expression '->' Block                // timeout
+            |  '_' '->' Block                                // default
+
+YieldStmt ::= 'yield' Expression
+```
+
+### A.6 Declarations
+
+```ebnf
+Visibility ::= 'export'
+VarDecl ::= 'var' Binding
+ConstDecl ::= AttrList? Visibility? 'const' Binding
+Binding ::= BindingPattern (':' Type)? ('=' Expression)?
+BindingPattern ::= Identifier
+                |  '[' BindingPattern (',' BindingPattern)* ','? ']'
+                |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
+                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
+ObjectBinding ::= Identifier (':' Identifier)?
+
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
+ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
+ParamList ::= Param (',' Param)* ','?
+Param     ::= Identifier ':' ParamType ('=' Expression)?
+           |  '...' Identifier ':' Type
+ParamType ::= ParamMode? Type
+ParamMode ::= 'ref' | 'move'
+ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
+Modifier  ::= 'private' | 'protected' | 'static' | 'const'
+              // public visibility is the default; final is only a class prefix
+
+TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
+TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
+
+ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
+              ('extends' NamedType)?
+              ('implements' NamedType (',' NamedType)*)?
+              '{' ClassMember* '}'
+ClassMember ::= FieldDecl | MethodDecl | InitDecl
+FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
+            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' Block
+
+StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('implements' NamedType (',' NamedType)*)?
+               '{' ClassMember* '}'
+
+InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
+                  ('extends' NamedType (',' NamedType)*)?
+                  '{' InterfaceMember* '}'
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?
+
+EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
+                   ('implements' NamedType (',' NamedType)*)?
+                   '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
+
+TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
+
+ImportDecl ::= 'import' ImportMembers 'from' ImportModule
+            |  'import' ImportModule ('as' Identifier)?
+ExportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* ','? '}' 'from' StringLiteral
+            |  'export' '*' 'from' StringLiteral
+ExportSpec ::= Identifier ('as' Identifier)?
+ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
+ImportMember  ::= Identifier ('as' Identifier)?
+ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
+
+AttrList ::= PublicAttribute*
+PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
+                  | '@before_each' | '@after_each' | '@before_all' | '@after_all'
+                  | '@deprecated' '(' StringLiteral ')'
+                  | '@derive' '(' Identifier (',' Identifier)* ')'
+
+OperatorToken ::= '+' | '-' | '*' | '/' | '%'
+               |  '&' | '|' | '^'
+               |  '==' | '!=' | '<' | '<=' | '>' | '>='
+               |  '[]' | '[]='
+               |  '!' | '~'
+```
+
+> Note: this EBNF is curated for guidance. Precedence, associativity, and disambiguation are determined by the parser implementation; in case of ambiguity, treat `src/frontend/parser/xparse_*.c` as authoritative.
+
+---
+
+## Appendix B. Keyword Index
+
+These **63 keywords** are the union of the 51 general keywords in `src/frontend/lexer/xkeywords.def` and the 12 exact scalar type names in `src/shared/xr_exact_scalar_registry.def`, shown in ASCII lexical order. `init`, `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
+
+| Keyword | Section |
+|--|--|
+| `as` | §3.8 |
+| `await` | §10.3 |
+| `bool` | §2.3.3 |
+| `break` | §4.6 |
+| `catch` | §8 |
+| `class` | §5.3 |
+| `comptime` | §3.2 |
+| `const` | §5.1 |
+| `continue` | §4.6 |
+| `defer` | §4.9 |
+| `else` | §4.2 |
+| `enum` | §5.6 |
+| `export` | §11 |
+| `extends` | §5.3 |
+| `f32` | §2.3.2 |
+| `f64` | §2.3.2 |
+| `false` | §1.6.4 |
+| `final` | §5.3 |
+| `fn` | §5.2 |
+| `for` | §4.4 |
+| `go` | §10.2 |
+| `i16` | §2.3.1 |
+| `i32` | §2.3.1 |
+| `i64` | §2.3.1 |
+| `i8` | §2.3.1 |
+| `if` | §4.2 |
+| `implements` | §5.5 |
+| `import` | §11 |
+| `in` | §4.4 |
+| `interface` | §5.5 |
+| `is` | §3.8 |
+| `isize` | §2.3.1 |
+| `match` | §3.13 / §4.5 |
+| `new` | §3.14 |
+| `null` | §1.6.4 |
+| `operator` | §5.3 |
+| `packed` | §5.2.9 |
+| `private` | §5.3 |
+| `protected` | §5.3 |
+| `return` | §4.7 |
+| `rune` | §2.3.5 |
+| `scope` | §10.7 |
+| `select` | §10.6 |
+| `static` | §5.3 |
+| `string` | §2.3.4 |
+| `struct` | §5.4 |
+| `super` | §5.3 |
+| `this` | §5.3 |
+| `throw` | §8 |
+| `true` | §1.6.4 |
+| `try` | §8 |
+| `type` | §5.7 |
+| `u16` | §2.3.1 |
+| `u32` | §2.3.1 |
+| `u64` | §2.3.1 |
+| `u8` | §2.3.1 |
+| `union` | §5.2.9 |
+| `unsafe` | §3.2 / §5.2 |
+| `usize` | §2.3.1 |
+| `var` | §5.1 |
+| `where` | §9.1 |
+| `while` | §4.3 |
+| `yield` | §3.16 |
+
+---
+
+## Appendix C. Operator Index
+
+The complete operator listing organized by purpose is in [§1.7](#17-operators-and-tokens); detailed precedence is in [§3.1](#31-precedence-and-associativity).
+
+| Group | Operators |
+|--|--|
+| Arithmetic | `+` `-` `*` `/` `%` |
+| Bitwise | `&` `\|` `^` `~` `<<` `>>` |
+| Comparison | `==` `!=` `<` `<=` `>` `>=` |
+| Logical | `&&` `\|\|` `!` |
+| Assignment | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
+| Statements | `++` `--` |
+| Types, ranges, and spread | `?` `??` `?.` `?[` `!` `\|` `->` `...` `..` `..=` `is` `as` |
+
+---
+
+## Appendix D. Standard Library Module Index
+
+The full set of 27 stdlib modules (native, pure Xray, or mixed) is documented in [§15](#15-standard-library-overview).
+
+| Module | Purpose |
+|--|--|
+| `base64` | Base64 encode/decode |
+| `cluster` | distributed cluster |
+| `compress` | compression (gzip/zlib/deflate) |
+| `crypto` | cryptographic hashes |
+| `csv` | CSV parsing/serialization |
+| `datetime` | date and time |
+| `encoding` | character encoding conversion |
+| `http` | HTTP/REST |
+| `io` | file I/O |
+| `log` | structured logging |
+| `math` | math functions |
+| `mem` | raw memory and managed Buffer |
+| `net` | TCP/UDP/TLS |
+| `os` | operating system |
+| `parallel` | structured CPU parallelism |
+| `path` | path manipulation |
+| `regex` | regular expressions |
+| `runtime` | runtime information and heap introspection |
+| `sync` | coroutine synchronization primitives |
+| `sys` | OS-thread and low-level synchronization surface |
+| `text` | Unicode text transforms |
+| `time` | time / timer / sleep |
+| `toml` | TOML parsing |
+| `url` | URL parsing/construction |
+| `ws` | WebSocket |
+| `xml` | XML parsing |
+| `yaml` | YAML parsing |
+
+---
+
+## Appendix E. Differences from Other Languages
+
+Xray draws inspiration from many existing languages but has notable differences worth highlighting.
+
+### E.1 vs JavaScript / TypeScript
+
+| Dimension | JS/TS | xray |
+|--|--|--|
+| Static typing | Optional in TS | **Mandatory**; schema-less data explicitly uses `JSON.Value` / `JSON.Object` |
+| Numerics | Single `number` (double) | `i64`, `f64`, `BigInt` strictly distinguished |
+| Conditions | truthy / falsy | conditions must be `bool`; nullable presence requires `value != null`; i64/string have no truthy conversion |
+| Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric i64↔f64, and `===`/`!==` are not operators |
+| Closure capture | by reference | by reference (default); `go` closures are strictly restricted |
+| Objects | dynamic fields | `{...}` creates an exact structural object; dynamic keys use `Map` / `JSON.Object` |
+| import | ES Modules | xray-specific syntax (stdlib uses unquoted form) |
+| Concurrency | async / Promise | coroutines + channels |
+
+### E.2 vs Go
+
+| Dimension | Go | xray |
+|--|--|--|
+| Type system | simple + implicit interfaces | richer + explicit `implements` |
+| Error handling | multiple return values + `err != nil` | value-return error channel (`throw` / `catch`) + `T?` |
+| Coroutines | `go func() {}` (statement) | `go expr` (expression returning `Task<T>`) |
+| Awaiting | no direct equivalent (channels/WaitGroup) | `await t`, `await all [...]`, `await any [...]` |
+| Channels | built-in `chan T`, `<-` operator | `Channel<T>` class with `send`/`recv`/`trySend`/`tryRecv` methods |
+| `select` arms | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
+| Memory management | concurrent tri-color tracing GC | coroutine-local reference counting, no cycle collector; cycles are handled by static proof, `weak`, and the coroutine-heap bound. Published const roots and synchronized handles use a verified shared domain |
+| Classes / inheritance | none (struct + interface only) | classes with inheritance |
+| Generics | since 1.18 | yes; monomorphized by concrete type or backend representation |
+
+### E.3 vs Rust
+
+| Dimension | Rust | xray |
+|--|--|--|
+| Memory safety | full borrow checker | inferred uniqueness, `move`, and const/synchronized capabilities across execution boundaries; borrowed views such as `Slice` have static lifetime restrictions (see §2.4.2) |
+| Errors | `Result<T, E>` | value-return error channel (`throw` / `catch`) |
+| Type inference | strong Hindley-Milner | bidirectional inference |
+| Traits | full | similar to `interface`, fewer features |
+| Performance | near C | bytecode VM, or native AOT through a C toolchain |
+| Compile-time | macros / const | restricted `comptime` evaluator plus optimizer constant folding |
+
+### E.4 vs Python
+
+| Dimension | Python | xray |
+|--|--|--|
+| Typing | dynamic (optional hints) | static |
+| GIL | yes | none (M:N coroutines) |
+| Strings | unicode str | utf-8 string |
+| Indentation | mandatory | free-form (`{}`) |
+| Classes | dynamic attributes | static fields |
+| Performance | CPython slow | bytecode VM; performance-sensitive programs may use `xray build --native` |
+
+### E.5 vs Swift
+
+| Dimension | Swift | xray |
+|--|--|--|
+| Optional `?` | yes | yes |
+| `!` unwrap | yes | yes |
+| Error handling | `try?` collapses to nil; `try!` aborts | `throw` / `catch` value-return channel; `T?` + `??` |
+| struct vs class | value/reference | value/reference |
+| Protocols | strong | `interface`, weaker |
+| Concurrency | actors + async/await | coroutines + channels + `go`/`await all`/`scope` |
+
+---
+
+## Appendix F. Glossary
+
+| Term | Definition |
+|--|--|
+| **AOT** | Ahead-of-Time compilation: Xi IR generates C and the selected C toolchain produces a native binary at build time |
+| **AST** | Abstract Syntax Tree: intermediate representation produced by the parser |
+| **Arena** | Bulk allocator: every allocation is freed together |
+| **Array<u8>** | Byte buffer type (see §2.4.6) |
+| **Slice<T>** | Borrowed view over contiguous element storage owned by another value; owns no data and is constrained by borrow lifetimes (see §2.4.2) |
+| **borrow** | Access to another value's storage without taking ownership; `Slice<T>`, `ref` parameters, and `Ptr<T>` / `MutPtr<T>` are all borrows and share the `E0382` / `E0383` / `E0384` rules |
+| **rune** | Primitive type for one Unicode scalar value; not numeric and not an alias of `u32` (see §2.3.5) |
+| **Channel** | Typed inter-coroutine communication pipe (see §10.5) |
+| **closure** | Function value that captures outer variables |
+| **coroutine** | User-space, suspendable/resumable execution flow |
+| **defer** | Static deferred cleanup that runs in LIFO order on every exit edge crossing its owning lexical scope (see §4.9) |
+| **enum** | Enumeration type (see §5.6) |
+| **GC** | Generic term for garbage collection; Xray has no tracing GC or cycle collector. Object death is driven only by reference counting, which makes its point exact; a cycle is not collected but ruled out statically, broken with a `weak` field, or bounded by its execution-local reclamation domain and disposed with the residual graph when the physical coroutine ends (§16.8) |
+| **safepoint** | Safe location where the scheduler can observe preemption, cancellation, or suspension state |
+| **goroutine** | Equivalent of an xray coroutine; launched by `go CallExpr`, with inline logic written as an immediately invoked lambda |
+| **hoisting** | Implicit declaration of a name before its first use |
+| **IC** | Inline Cache: optimization of property/method dispatch |
+| **interface** | Interface type (see §5.5) |
+| **JIT** | Just-In-Time compilation; Xray does not currently implement a JIT |
+| **lvalue / rvalue** | Assignable left-hand-side value vs. value-only right-hand-side |
+| **monomorphization** | Build-time specialization of generics into concrete type/representation versions; generic functions may share I64 / F64 / PTR / BOOL representation versions, while generic classes / structs are fully specialized by concrete type |
+| **move** | Ownership transfer for an inferred-unique root with no live alias/loan (see §7.3) |
+| **nullable** | A nullable type `T?` whose value may be `null` |
+| **pattern** | A pattern used in `match` and destructuring (see §6) |
+| **scope** | Lexical scope |
+| **synchronized shared capability** | Internal compiler-granted capability for audited handles such as Channel/Atomic/Mutex; not a public storage modifier |
+| **SSA** | Static Single Assignment: IR where each variable is assigned only once |
+| **struct** | Value-type class (see §5.4) |
+| **TCO** | Tail-Call Optimization |
+| **trait** | Rust terminology; xray uses `interface` |
+| **condition expression** | Control-flow condition: must be `bool`; nullable values require an explicit comparison; see §2.3.3 |
+| **grapheme cluster** | User-perceived character that may contain multiple Unicode scalars; `len(string)` and rune iteration operate on Unicode scalars, not grapheme clusters |
+| **union** | Union type `A \| B` |
+| **Unicode scalar value** | Legal Unicode code point in `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF` |
+| **upvalue** | Outer variable captured by a closure |
+| **VM** | Virtual Machine: xray bytecode VM |
+| **write barrier** | Hook inserted by the GC on pointer updates |

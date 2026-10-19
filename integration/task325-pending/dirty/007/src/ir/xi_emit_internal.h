@@ -1,0 +1,448 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xi_emit_internal.h - Shared internals for the Xi IR bytecode emitter
+ *
+ * Declares EmitCtx and utility functions used by all xi_emit_*.c sub-files.
+ * Not part of the public API — only included by emitter implementation files.
+ */
+
+#ifndef XI_EMIT_INTERNAL_H
+#define XI_EMIT_INTERNAL_H
+
+#include "xi_emit.h"
+#include "xi.h"
+#include "xi_module.h"
+#include "../base/xdefs.h"
+#include "../base/xchecks.h"
+#include "../base/xmalloc.h"
+#include "../base/xtarget_data_layout.h"
+#include "../runtime/value/xchunk.h"
+#include "../runtime/value/xvalue.h"
+#include "../runtime/value/xtype.h"
+#include <string.h>
+
+struct XrAggregateLayout;
+
+/* ========== Constants ========== */
+
+typedef uint16_t XiEmitReg;
+
+/* 0xffff is reserved as the emitter's "no register" sentinel. */
+#define MAX_REGS ((uint32_t) UINT16_MAX)
+#define NO_REG ((XiEmitReg) UINT16_MAX)
+
+#define XI_EMIT_STRUCT_PROMOTED_BIT ((int64_t) 1 << 32)
+#define XI_EMIT_STRUCT_IS_PROMOTED(v) (((v)->aux_int & XI_EMIT_STRUCT_PROMOTED_BIT) != 0)
+
+static inline XiValue *xi_emit_trace_struct_origin(XiValue *v) {
+    while (v && (xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op)) && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+static inline bool xi_emit_type_is_int_like(const XrType *type) {
+    return type && type->kind == XR_KIND_INT && !type->is_nullable;
+}
+
+static inline int xi_emit_tostring_hint_for_type(const XrType *type) {
+    if (!type || type->is_nullable)
+        return 0;
+    if (xr_type_is_exact_unsigned_integer(type))
+        return 3;
+    if (type->kind == XR_KIND_INT)
+        return 1;
+    if (type->kind == XR_KIND_FLOAT)
+        return 2;
+    return 0;
+}
+
+static inline bool xi_emit_compare_uses_unsigned(const XiValue *v) {
+    if (!v || v->nargs < 2)
+        return false;
+    if (v->op != XI_LT && v->op != XI_LE && v->op != XI_GT && v->op != XI_GE)
+        return false;
+    const XrType *left = v->args[0] ? v->args[0]->type : NULL;
+    const XrType *right = v->args[1] ? v->args[1]->type : NULL;
+    return xi_emit_type_is_int_like(left) && xi_emit_type_is_int_like(right) &&
+           (xr_type_is_exact_unsigned_integer(left) || xr_type_is_exact_unsigned_integer(right));
+}
+
+/* XI_SHR on a statically-unsigned lhs is a logical shift (OP_SHR_U). Keyed on
+ * the lhs only: xray shift results take the left operand's width/signedness.
+ * The VM and the AOT backend read the same judgement for this, so a widening
+ * of what counts as unsigned reaches both at once. */
+static inline bool xi_emit_shr_uses_unsigned(const XiValue *v) {
+    if (!v || v->op != XI_SHR || v->nargs < 1)
+        return false;
+    return xr_type_is_exact_unsigned_integer(v->args[0] ? v->args[0]->type : NULL);
+}
+
+/* XI_DIV / XI_MOD on statically-unsigned integer operands are unsigned
+ * (OP_DIV_U / OP_MOD_U). The i64 value slot has no signedness tag, so the
+ * signed OP_DIV/OP_MOD would divide u64/usize top-bit-set values as negative.
+ * Mirrors the uint64_t-typed division the AOT backend emits. */
+static inline bool xi_emit_divmod_uses_unsigned(const XiValue *v) {
+    if (!v || (v->op != XI_DIV && v->op != XI_MOD) || v->nargs < 2)
+        return false;
+    const XrType *left = v->args[0] ? v->args[0]->type : NULL;
+    const XrType *right = v->args[1] ? v->args[1]->type : NULL;
+    return xi_emit_type_is_int_like(left) && xi_emit_type_is_int_like(right) &&
+           (xr_type_is_exact_unsigned_integer(left) || xr_type_is_exact_unsigned_integer(right));
+}
+
+/* ========== Emit Context ========== */
+
+typedef struct {
+    XiFunc *func;
+    XrProto *proto;
+    struct XrVMRuntime *isolate; /* for string interning; may be NULL */
+    const XrTargetDataLayout *target_data_layout;
+    XiEmitStatus status;
+
+    /* Register allocation: value_id -> register number */
+    XiEmitReg *reg_map; /* [next_value_id] */
+    uint32_t reg_map_size;
+    uint32_t next_reg; /* next free register */
+    uint32_t max_reg;  /* high-water mark */
+
+    /* Free register stack for register recycling */
+    XiEmitReg free_regs[MAX_REGS];
+    uint16_t nfree; /* count of free registers on the stack */
+
+    /* Liveness: per-value last-use tracking (value_id -> last-use ordinal) */
+    uint32_t *last_use;       /* [next_value_id], 0 = unused/dead */
+    uint32_t current_ordinal; /* monotonic instruction counter */
+
+    /* Line number tracking for debug info */
+    int current_line; /* line of the value being emitted */
+
+    /* Struct-area slot allocator: tracks byte offset for OP_AGG_NEW.
+     * Each struct occupies ceil16(xr_aggregate_layout_storage_size(layout)) bytes.
+     * Proto->struct_area_size is set to this at end of emit. */
+    uint32_t struct_area_offset; /* running byte offset (in 16-byte units) */
+
+    /* Block linearization */
+    XiBlock **rpo_order; /* blocks in RPO order */
+    uint32_t rpo_count;
+
+    /* Jump patching: block_id -> start PC */
+    int *block_pc; /* [next_block_id], -1 = not yet emitted */
+    uint32_t block_pc_size;
+
+    /* Pending jump patches: instructions that need target PCs */
+    struct {
+        int pc;              /* instruction PC to patch */
+        uint32_t target_bid; /* target block ID */
+    } *patches;
+    uint32_t npatch;
+    uint32_t patch_cap;
+
+    /* OP_TRY patches: absolute target PC patching (catch block) */
+    struct {
+        int pc;              /* OP_TRY instruction PC */
+        uint32_t target_bid; /* catch block ID */
+    } *try_patches;
+    uint32_t ntry_patch;
+    uint32_t try_patch_cap;
+
+    /* Comparison-branch fusion: if the block control is a comparison with
+     * no other consumers, skip emitting OP_CMP_* and instead emit the
+     * branch-form opcode (OP_LT/LE/EQ) directly in the terminator. */
+    XiValue *fused_cmp;
+
+    /* Per-var_id state capacity, sized to max(var_id)+1 for this function. */
+    uint32_t var_state_count;
+
+    /* Variable-based register coalescing: all SSA definitions of the same
+     * source variable share one VM register.  This is required for correct
+     * exception semantics — the VM's OP_THROW bypasses SSA phi resolution,
+     * so catch-block modifications must write to the same register that
+     * post-try-catch code reads from. */
+    XiEmitReg *var_reg; /* [var_state_count], var_id -> pinned register (NO_REG = unassigned) */
+
+    /* Source variables whose content can change without a definition that
+     * carries their var_id: the address of the local was taken, or it is read
+     * and written through a place.  Their shared register is what makes the
+     * IR's stand-in names resolve to the variable's current content, so their
+     * live ranges must never be split. */
+    bool *var_addressed; /* [var_state_count] */
+
+    /* Ownership live-range splits active inside the block being emitted.
+     * Each entry is a copy of a coalesced variable's content taken just before
+     * a later definition of the same variable overwrote the shared register.
+     * Only ownership-release lowering reads them; every other consumer keeps
+     * the shared register and therefore the variable's current content. */
+    struct {
+        uint32_t value_id;
+        XiEmitReg reg;
+    } *owner_saves;
+    uint32_t nowner_saves;
+    uint32_t owner_save_cap;
+
+    /* Whether an import reference may be emitted as a position in the runtime
+     * module table.  A program compiled with its own module graph runs
+     * against a table laid out in that graph's topological order, so the
+     * position resolved from the graph is exact.  A standard library unit is
+     * embedded and loaded by name into whichever program imports it; the
+     * graph it was compiled in says nothing about that program's table, so
+     * its imports bind by module name at load time instead. */
+    bool bind_module_positions;
+} EmitCtx;
+
+/* VM class instances are allocated before their constructor body runs.  Every
+ * otherwise-normal allocation in that body must follow the receiver's chosen
+ * storage domain so the object graph never straddles the execution and system
+ * heaps.  AOT deliberately keeps the Xi mode normal and promotes the completed
+ * reachable graph at the constructor call site. */
+static inline uint8_t xi_emit_allocation_storage_mode(const EmitCtx *ctx, uint8_t storage_mode) {
+    if (storage_mode == XR_OBJ_STORAGE_NORMAL && ctx && ctx->func && ctx->func->is_constructor)
+        return XR_OBJ_STORAGE_INHERIT;
+    return storage_mode;
+}
+
+static inline bool xi_emit_var_id_in_state(const EmitCtx *ctx, XiVarId var_id) {
+    return ctx && xi_var_id_is_valid(var_id) && var_id < ctx->var_state_count;
+}
+
+/* ========== Shared Utility Functions ========== */
+
+XR_FUNC void emit_error(EmitCtx *ctx, XiEmitStatus s);
+XR_FUNC int current_pc(EmitCtx *ctx);
+XR_FUNC void emit_inst(EmitCtx *ctx, XrInstruction inst);
+XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const struct XrAggregateLayout *layout,
+                                            uint16_t *slot_out);
+XR_FUNC bool xi_emit_alloc_struct_area_bytes(EmitCtx *ctx, uint32_t bytes_needed,
+                                             uint16_t *slot_out);
+XR_FUNC bool xi_emit_alloc_struct_area_bytes_wide(EmitCtx *ctx, uint32_t bytes_needed,
+                                                  uint32_t *slot_out);
+XR_FUNC void free_reg(EmitCtx *ctx, XiEmitReg reg);
+XR_FUNC XiEmitReg reg_of(EmitCtx *ctx, const XiValue *v);
+XR_FUNC XiEmitReg alloc_reg_fresh(EmitCtx *ctx, const XiValue *v);
+XR_FUNC void try_free_args(EmitCtx *ctx, const XiValue *v);
+XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val);
+XR_FUNC int add_const_float(EmitCtx *ctx, double val);
+XR_FUNC int add_const_char(EmitCtx *ctx, uint32_t cp);
+XR_FUNC int add_const_string_n(EmitCtx *ctx, const char *str, size_t len);
+XR_FUNC int add_const_string(EmitCtx *ctx, const char *str);
+XR_FUNC int add_symbol(EmitCtx *ctx, const char *name);
+
+static inline bool xi_emit_u16_arg(EmitCtx *ctx, int64_t value, XiEmitStatus error, uint16_t *out) {
+    if (value < 0 || (uint64_t) value > MAXARG_A) {
+        emit_error(ctx, error);
+        return false;
+    }
+    *out = (uint16_t) value;
+    return true;
+}
+
+static inline bool xi_emit_const_index_to_c(EmitCtx *ctx, int ki, uint16_t *out) {
+    return xi_emit_u16_arg(ctx, ki, XI_EMIT_ERR_TOO_MANY_CONSTS, out);
+}
+
+static inline bool xi_emit_symbol_index_to_arg(EmitCtx *ctx, int si, uint16_t *out) {
+    return xi_emit_u16_arg(ctx, si, XI_EMIT_ERR_TOO_MANY_CONSTS, out);
+}
+
+static inline bool xi_emit_index_to_arg(EmitCtx *ctx, int64_t idx, XiEmitStatus error,
+                                        uint16_t *out) {
+    return xi_emit_u16_arg(ctx, idx, error, out);
+}
+
+XR_FUNC void xi_emit_add_patch(EmitCtx *ctx, int pc, uint32_t target_bid);
+XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid);
+
+/* ========== Functions from xi_emit_reg.c ========== */
+XR_FUNC void compute_last_use(EmitCtx *ctx);
+XR_FUNC void check_var_interference(EmitCtx *ctx);
+XR_FUNC void collect_addressed_vars(EmitCtx *ctx, XiFunc *f);
+XR_FUNC void alloc_registers(EmitCtx *ctx);
+XR_FUNC void split_owner_live_range(EmitCtx *ctx, XiBlock *blk, uint32_t index);
+XR_FUNC void discard_owner_saves(EmitCtx *ctx);
+XR_FUNC XiEmitReg owner_save_reg_of(const EmitCtx *ctx, const XiValue *v);
+
+/* ========== Functions from xi_emit_cf.c ========== */
+XR_FUNC void emit_phi_moves(EmitCtx *ctx, XiBlock *pred, XiBlock *succ);
+XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk);
+XR_FUNC void patch_jumps(EmitCtx *ctx);
+
+/* emit_value is defined in xi_emit.c (driver) and called by emit_block */
+XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v);
+
+/* ========== Generated byte-slice and byte-array lowering drivers ========== */
+XR_FUNC void xi_emit_byte_slice_load_u16(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_load_u32(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_load_u64(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_load_f32(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_load_f64(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_store_u16(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_store_u32(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_store_u64(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_store_f32(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_store_f64(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_fill(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_compare(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_common_prefix(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_slice_repeat(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_span_window(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_slice_from_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_buffer_materialize(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_span_as_bytes(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_span_fill(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_span_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_span_compare(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_span_reinterpret(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_array_copy_within(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_array_copy_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_array_append_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_byte_array_repeat_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_array_data_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_static_bytes_ptr(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+
+/* ========== Generated FFI raw-pointer lowering drivers ========== */
+XR_FUNC void xi_emit_ptr_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_ptr_store(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_local_addr(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_place_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_place_store(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_ptr_copy_nonoverlap(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+
+/* ========== Emit Handler Type ========== */
+
+/* Signature for opcode-specific emission handlers.
+ * ctx:  emitter context
+ * v:    the Xi IR value to emit
+ * dst:  pre-allocated destination register */
+typedef void (*XiEmitHandler)(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+
+/* Handler table: indexed by XiOp, NULL entries fall back to error. */
+extern const XiEmitHandler xi_emit_handlers[XI_OP_COUNT];
+
+/* ========== Handler Declarations (xi_emit_arith.c) ========== */
+XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_neg(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_not(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_bnot(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_exact_bit(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_cmp(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_convert(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_box(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_unbox(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_enum_descriptor_box(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_enum_descriptor_unbox(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_i64_const_reg(EmitCtx *ctx, XiEmitReg dst, int64_t value);
+XR_FUNC void xi_emit_narrow(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_widen(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_isnull(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_is(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_checktype(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_typeid(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_typename(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_len(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+
+/* ========== Handler Declarations (xi_emit_call.c) ========== */
+XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_semantic_intrinsic_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_tail_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_print(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+
+/* ========== Handler Declarations (xi_emit_object.c) ========== */
+XR_FUNC void xi_emit_load_field(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_store_field(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_struct_update(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_fixed_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_fixed_bytes_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_index_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_index_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_enum_variant_at(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_enum_payload_at(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_enum_meta_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_array_push(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_array_extend(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_tuple_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_tuple_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_variant_construct(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_sum_inject(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_variant_test(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_variant_project(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_object_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_object_init_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_object_get_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_object_set_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_object_merge(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_range(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_slice(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_cell_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_cell_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_cell_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_load_upval(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_store_upval(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_get_shared(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_set_shared(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_get_global(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_set_global(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_get_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_iter(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_class_create(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC const char *xi_emit_runtime_import_path(EmitCtx *ctx, const char *specifier,
+                                                int exact_spec_index);
+XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+
+/* ========== Handler Declarations (xi_emit_eh.c) ========== */
+XR_FUNC void xi_emit_throw(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_retain(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_release(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_move(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_err_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_err_return(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_err_check(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_err_catch(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_cleanup_enter(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_cleanup_leave(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_cleanup_err_check(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_try(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_catch(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_end_try(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_thread_spawn(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_gen_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_par_for(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_par_map(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_par_reduce(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_gen_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_chan_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_chan_send(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_chan_recv(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_chan_recv_status(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_chan_try_send(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_chan_try_recv(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_chan_is_closed(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_time_after(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_chan_timer_dispose(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_select_block(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_scope_enter(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_scope_exit(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_assertion(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+
+#endif  // XI_EMIT_INTERNAL_H

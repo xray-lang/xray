@@ -1,0 +1,15 @@
+// Aggregate spelling uses ordinary owning Array, nullable and String values.
+export fn jsonIntegerArray(values:Array<i64>)->string {
+    var output="["
+    var i:i64=0
+    while(i<len(values)) {
+        if(i!=0){output=output+","}
+        output=output+string(values[i])
+        i=i+1
+    }
+    return output+"]"
+}
+export fn jsonOptionalInteger(value:i64?)->string {
+    if(value==null){return "null"}
+    return string(value!)
+}

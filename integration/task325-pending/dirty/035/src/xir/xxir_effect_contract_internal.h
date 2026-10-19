@@ -1,0 +1,280 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xxir_effect_contract_internal.h - Owned symbolic callable effect evidence
+ *
+ * KEY CONCEPT:
+ *   Stored formulas and origins describe independently checked correspondence.
+ *   Their presence does not grant declaration or execution authority.
+ */
+
+#ifndef XXIR_EFFECT_CONTRACT_INTERNAL_H
+#define XXIR_EFFECT_CONTRACT_INTERNAL_H
+
+#include "xxir.h"
+
+typedef enum XrXirEvidenceKind {
+    XR_XIR_EVIDENCE_ABSENT = 0,
+    XR_XIR_EVIDENCE_TEMPLATE = 1,
+    XR_XIR_EVIDENCE_INSTANCE = 2
+} XrXirEvidenceKind;
+
+typedef enum XrXirEffectParameterKind {
+    XR_XIR_EFFECT_PARAMETER_FIXED = 0,
+    XR_XIR_EFFECT_PARAMETER_VARIABLE = 1,
+    XR_XIR_EFFECT_PARAMETER_CONDITIONAL_STATIC = 2
+} XrXirEffectParameterKind;
+
+typedef enum XrXirRootTermKind {
+    XR_XIR_ROOT_TERM_PARAMETER = 1,
+    XR_XIR_ROOT_TERM_CONTEXT_CALL = 2,
+    XR_XIR_ROOT_TERM_CELL_PARAMETER = 3
+} XrXirRootTermKind;
+
+typedef enum XrXirEffectValueMode {
+    XR_XIR_EFFECT_VALUE_FIXED = 1,
+    XR_XIR_EFFECT_VALUE_PROPAGATE = 2,
+    XR_XIR_EFFECT_VALUE_CALL_BIND = 3,
+    XR_XIR_EFFECT_VALUE_AUTHENTIC_REF = 4
+} XrXirEffectValueMode;
+
+typedef enum XrXirEffectBindingFamily {
+    XR_XIR_EFFECT_BINDING_DIRECT = 1,
+    XR_XIR_EFFECT_BINDING_CAPTURE = 2,
+    XR_XIR_EFFECT_BINDING_DEFAULT = 3,
+    XR_XIR_EFFECT_BINDING_REQUIREMENT = 4
+} XrXirEffectBindingFamily;
+
+enum XrXirEffectParameterUse {
+    XR_XIR_EFFECT_USE_INVOKE = 1,
+    XR_XIR_EFFECT_USE_FORWARD = 2,
+    XR_XIR_EFFECT_USE_COPY = 4,
+    XR_XIR_EFFECT_USE_FIXED = 8,
+    XR_XIR_EFFECT_USE_CONST_CAPTURE = 16,
+    XR_XIR_EFFECT_USE_STORE = 32,
+    XR_XIR_EFFECT_USE_RETURN = 64,
+    XR_XIR_EFFECT_USE_CHILD = 128,
+    XR_XIR_EFFECT_USE_OTHER = 256
+};
+
+typedef struct XrXirEffectParameter {
+    uint32_t kind;
+    uint32_t uses;
+} XrXirEffectParameter;
+
+typedef struct XrXirRootTerm {
+    uint32_t kind;
+    uint32_t index;
+} XrXirRootTerm;
+
+typedef struct XrXirRootFormula {
+    uint32_t constant_mask;
+    uint32_t term_count;
+    const XrXirRootTerm *terms;
+} XrXirRootFormula;
+
+typedef struct XrXirRootValueIdentity {
+    uint32_t instruction;
+    uint32_t mode;
+    XrXirType declared_type;
+} XrXirRootValueIdentity;
+
+typedef struct XrXirEffectCallBinding {
+    uint32_t family;
+    uint32_t instruction;
+    uint32_t parameter;
+    uint32_t value;
+} XrXirEffectCallBinding;
+
+typedef struct XrXirFunctionEffectContract {
+    uint32_t parameter_count;
+    const XrXirEffectParameter *parameters;
+    XrXirRootFormula formula;
+    uint32_t value_count;
+    const XrXirRootValueIdentity *values;
+    uint32_t binding_count;
+    const XrXirEffectCallBinding *bindings;
+} XrXirFunctionEffectContract;
+
+typedef struct XrXirEffectArgument {
+    uint32_t parameter;
+    XrXirType type;
+} XrXirEffectArgument;
+
+typedef struct XrXirEffectBindingProof {
+    uint32_t family;
+    uint32_t caller;
+    uint32_t instruction;
+    uint32_t callee;
+    uint32_t parameter;
+    uint32_t actual_value;
+} XrXirEffectBindingProof;
+
+typedef struct XrXirOrigin {
+    uint32_t function;
+    const XrXirType *arguments;
+    uint32_t argument_count;
+    const XrXirEffectArgument *effect_arguments;
+    uint32_t effect_argument_count;
+} XrXirOrigin;
+
+typedef struct XrXirProvenance {
+    uint32_t kind;
+    XrXirArtifact *source;
+    XrXirOrigin *origins;
+    uint32_t count;
+    XrXirFunctionEffectContract *contracts;
+    uint32_t contract_count;
+    XrXirEffectBindingProof *bindings;
+    uint32_t binding_count;
+} XrXirProvenance;
+
+/* Each raw correspondence entry replays the complete order/unique/range
+ * inventory on its current input. These helpers publish membership only;
+ * independent Source, destination, owner and permission checks still decide. */
+XR_FUNC XrXirStatus xir_effect_binding_proofs_shape(const XrXirCompileContext *context,
+    const XrXirModule *module,const XrXirProvenance *instance);
+XR_FUNC XrXirStatus xir_effect_binding_proof_lookup(const XrXirCompileContext *context,
+    const XrXirProvenance *instance,const XrXirEffectBindingProof *wanted,bool *output);
+
+struct XrXirEffects;
+
+/* Context selection rechecks a full structural origin against the owned
+ * source-derived graph. A returned view borrows only its Effects owner. */
+typedef struct XirEffectContextInput {
+    const XrXirModule *source;
+    const XrXirTypes *types;
+    const XrXirOrigin *origin;
+    uint32_t instruction;
+    const XrXirOrigin *owners;
+    uint32_t owner_count;
+} XirEffectContextInput;
+typedef struct XirEffectContextView {
+    const XrXirTypes *types;
+    const XrXirFunction *function;
+    const XrXirType *physical_types, *arguments;
+    uint32_t declaration, parameter_count, argument_count;
+    bool requires_root, unresolved;
+} XirEffectContextView;
+XR_FUNC XrXirStatus xir_effects_refinement_capture(const XrXirCompileContext *context,
+    const XrXirModule *source, const struct XrXirEffects *effects);
+XR_FUNC bool xir_effects_context_available(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects);
+/* Only a genuine unpublished Source constructor can refresh contexts.
+ * A completed Final rejects the call without work or output changes. */
+XR_FUNC XrXirStatus xir_effects_context_refresh(const XrXirCompileContext *context,
+    const XrXirModule *source, const struct XrXirEffects *effects);
+XR_FUNC XrXirStatus xir_effects_context_select(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects, const XirEffectContextInput *input, XirEffectContextView *output);
+/* This private lexical scope belongs to one read-only correspondence call.
+ * Only its constructor creates a scope; no stored fact or caller flag can
+ * complete the first full source/body/destination admission. The callback
+ * cannot retain the scope or mutate either borrowed input. Every selection
+ * still verifies its complete origin, physical arguments and actual edge.
+ * Every rejected scoped request is terminal for this operation. The first
+ * error also overrides a callback that ignores it; later requests do no work. */
+typedef struct XirEffectContextScope XirEffectContextScope;
+typedef XrXirStatus (*XirEffectContextOperation)(void *data,XirEffectContextScope *scope);
+XR_FUNC XrXirStatus xir_effects_context_operation(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects,const XrXirModule *source,const XrXirTypes *types,
+    XirEffectContextOperation operation,void *data);
+XR_FUNC XrXirStatus xir_effects_context_select_scoped(XirEffectContextScope *scope,
+    const XirEffectContextInput *input,XirEffectContextView *output);
+/* The common verifier calls this with its freshly derived owner and the same
+ * verified module. It consumes the real reference edge, never a target hint. */
+XR_FUNC XrXirStatus xir_effects_reference_root(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects, const XrXirModule *module,
+    uint32_t function, uint32_t instruction, uint32_t *output);
+
+/* Sealed entry facts borrow only Effects, never the source module or formula.
+ * Intrinsic ROOT flags retain every non-Cell unknown; sorted physical Cell
+ * parameter IDs are closed by real runtime arguments and existing loan checks.
+ * The view itself grants no execution or reference authority. */
+typedef struct XirEffectEntryRootView {
+    uint32_t intrinsic_mask;
+    const uint32_t *parameters;
+    uint32_t parameter_count;
+} XirEffectEntryRootView;
+XR_FUNC XrXirStatus xir_effects_entry_root(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects, uint32_t function, XirEffectEntryRootView *output);
+
+/* A producer view names a real instruction from the sealed owned body. It
+ * contains no permission bit, and a consumer keeps its Effects owner alive. */
+typedef struct XirEffectProducerView {
+    uint32_t site, function, instruction, target, capture_count;
+    XrXirType type;
+} XirEffectProducerView;
+XR_FUNC XrXirStatus xir_effects_producer(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects, uint32_t function, uint32_t instruction,
+    XirEffectProducerView *output);
+
+/* Runtime matching reads only existing completed equations. The callback
+ * consumes the live runtime ledger, never the retired compile context. */
+/* A request-local value is a borrowed physical handle, not a permission.
+ * Child reads authenticate the same real parent before exposing its capture.
+ * Iterator publication is zero only after authenticated Frame retirement;
+ * active Iterator and all Function origins retain UINT32_MAX. */
+typedef struct XirEffectRuntimeValue {
+    uint32_t type,reserved,producer,publication;
+    int64_t payload;
+} XirEffectRuntimeValue;
+typedef struct XirEffectRuntimeRead {
+    void *owner;
+    bool (*work)(void *owner,uint64_t units);
+    uint32_t (*cell)(void *owner,uint32_t parameter);
+    XrXirStatus (*class_value)(void *owner,uint32_t parameter,uint32_t *module_storage);
+    XrXirStatus (*value)(void *owner,uint32_t parameter,const XirEffectRuntimeValue *parent,
+        uint32_t capture,XirEffectRuntimeValue *output);
+    void *(*allocate)(void *owner,size_t bytes,XrXirStatus *status);
+    void (*deallocate)(void *owner,void *memory,size_t bytes);
+} XirEffectRuntimeRead;
+typedef enum XirEffectClassAccessKind {
+    XIR_EFFECT_ACCESS_CELL_READ,XIR_EFFECT_ACCESS_CELL_WRITE,XIR_EFFECT_ACCESS_PROJECT,
+    XIR_EFFECT_ACCESS_PATH_READ,XIR_EFFECT_ACCESS_PATH_WRITE,XIR_EFFECT_ACCESS_PUSH,
+    XIR_EFFECT_ACCESS_LENGTH,XIR_EFFECT_ACCESS_CAPACITY
+} XirEffectClassAccessKind;
+typedef struct XirEffectClassAccessRequest {
+    uint32_t caller,instruction,node;
+    bool contextual,pure;
+    XirEffectClassAccessKind kind;
+    XrXirType input_type,root_type;
+    XirEffectRuntimeRead read;
+} XirEffectClassAccessRequest;
+/* The genuine Instance keeps its Class reservation across this exact query. */
+XR_FUNC XrXirStatus xir_effects_class_access(const struct XrXirEffects *effects,
+    const XirEffectClassAccessRequest *request);
+
+/* Original operation facts from the same sealed body, without a verdict. */
+typedef struct XirEffectIteratorInstruction {uint32_t opcode;XrXirType receiver;} XirEffectIteratorInstruction;
+XR_FUNC XrXirStatus xir_effects_iterator_instruction(const struct XrXirEffects *effects,
+    uint32_t caller,uint32_t instruction,const XirEffectRuntimeRead *read,XirEffectIteratorInstruction *output);
+
+typedef struct XirEffectInvocationRequest {
+    uint32_t caller,instruction,target,producer,node,count,captures;
+    bool contextual;
+    XirEffectRuntimeRead read;
+} XirEffectInvocationRequest;
+typedef struct XirEffectInvocationSelection {
+    const struct XrXirEffects *owner;
+    uint32_t caller,instruction,target,producer,parent,node,edge;
+} XirEffectInvocationSelection;
+XR_FUNC XrXirStatus xir_effects_execution_edge(const struct XrXirEffects *effects,
+    const XirEffectInvocationRequest *request,XirEffectInvocationSelection *output);
+
+/* This private view reports complete owned Class sources. It grants no
+ * execution permission and requires an empty scalar output. */
+XR_FUNC XrXirStatus xir_effects_class_value(const XrXirCompileContext *context,
+    const struct XrXirEffects *effects,uint32_t node,uint32_t function,
+    uint32_t value,uint32_t *mask);
+
+/* A discriminant is only a grammar choice. Complete checking proves authority. */
+static inline bool xir_effect_evidence_is_instance(const XrXirModule *module) {
+    return module && module->provenance &&
+        module->provenance->kind == XR_XIR_EVIDENCE_INSTANCE;
+}
+
+#endif // XXIR_EFFECT_CONTRACT_INTERNAL_H

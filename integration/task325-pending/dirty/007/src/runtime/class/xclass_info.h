@@ -1,0 +1,151 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xclass_info.h - Class metadata descriptor (runtime class layer)
+ *
+ * KEY CONCEPT:
+ *   XrClassInfo is the canonical class metadata structure. It is populated
+ *   by the analyzer during compilation and read by runtime/type, runtime/class
+ *   and VM/AOT during execution.
+ *
+ * WHY THIS LAYER:
+ *   Previously defined in frontend/analyzer and caused runtime/value -> frontend
+ *   upward dependencies. Class metadata belongs to the class layer; analyzer
+ *   is merely one of its producers.
+ *
+ * LAYERING:
+ *   Only primitive types and opaque forward declarations are used here so the
+ *   header can be included by any runtime/ module without pulling analyzer in.
+ */
+
+#ifndef XCLASS_INFO_H
+#define XCLASS_INFO_H
+
+#include "../../base/xdefs.h"
+#include "../../base/xlocation.h"
+#include "../value/xtype.h"  // XrType* (runtime/value is lower than runtime/class)
+
+#include <stdbool.h>
+#include <stdint.h>
+
+// Forward declarations (analyzer-owned; only ever used as pointers here)
+typedef struct XaSymbol XaSymbol;
+typedef struct XaScope XaScope;
+struct XrHashMap;
+struct XrAggregateLayout;
+
+// Virtual method slot for static (compile-time) devirtualization.
+// Populated by the analyzer (Pass 1.5); consumed by the xi_opt_devirt pass.
+typedef struct XaMethodSlot {
+    const char *name;    // Method name for diagnostics/dumps only
+    int32_t symbol_id;   // Runtime symbol-table ID used by dispatch/devirt plans
+    XaSymbol *symbol;    // Method symbol (analyzer-owned)
+    bool is_overridden;  // Overridden by a subclass
+    bool is_final;       // No subclass overrides (safe for direct call)
+    int vtable_index;    // Slot index in vtable (-1 if not virtual)
+} XaMethodSlot;
+
+/* A declaration-backed interface conformance is resolved once by the
+ * analyzer.  Downstream
+ * stages consume these exact symbols; they must never
+ * reconstruct a witness table from method
+ * names or backend body shape. */
+typedef enum XaNominalKind {
+    XA_NOMINAL_INVALID = 0,
+    XA_NOMINAL_CLASS,
+    XA_NOMINAL_STRUCT,
+    XA_NOMINAL_ENUM,
+} XaNominalKind;
+
+typedef struct XaInterfaceWitness {
+    XaSymbol *requirement;
+    XaSymbol *implementation;
+    uint32_t slot;
+    bool complete;
+} XaInterfaceWitness;
+
+typedef struct XaInterfaceConformance {
+    struct XrClassInfo *interface_info;
+    XrType *interface_type;
+    XaInterfaceWitness *witnesses;
+    int witness_count;
+    bool constraint_eligible;
+    bool existential_eligible;
+    bool complete;
+} XaInterfaceConformance;
+
+// Class metadata. Fields are filled during analysis and remain stable at runtime.
+typedef struct XrClassInfo XrClassInfo;
+struct XrClassInfo {
+    const char *name;
+    const char *base_name;  // Base class name (for deferred linking)
+    XrClassInfo *base;      // Base class (NULL if none, linked after collect)
+
+    XaScope *scope;  // Class body scope (analyzer-owned)
+
+    // Members (computed from scope)
+    XaSymbol **fields;
+    int field_count;
+    XaSymbol **methods;
+    int method_count;
+    XaSymbol **static_fields;
+    int static_field_count;
+    XaSymbol **static_methods;
+    int static_method_count;
+
+    // O(1) member lookup (name -> XaSymbol*, own members only; inherited via base chain)
+    struct XrHashMap *members_map;
+
+    // Constructor info (set during class collection)
+    bool has_constructor;             // true if class explicitly defines a constructor
+    int constructor_required_params;  // number of params without default values
+    XrType **constructor_params;
+    int constructor_param_count;
+
+    // Virtual method table (built in Pass 1.5 for static devirtualization)
+    XaMethodSlot *vtable;       // Virtual method slots (NULL if not built)
+    int vtable_size;            // Number of vtable entries
+    bool explicit_final;        // explicit final class: cannot be extended
+    bool has_subclass;          // true if any class extends this one
+    uint32_t derive_flags;      // XR_DERIVE_* declaration metadata flags
+    uint32_t capability_flags;  // compiler-owned XaTypeCapability proof bits
+    // Struct layout (VALUE_TYPE only, computed by analyzer)
+    struct XrAggregateLayout *struct_layout;  // NULL for class, set for struct
+    // Declared with `union`, so the fields overlay one another instead of
+    // sitting side by side. A struct and a union are both value types with the
+    // same member shape, so nothing else here distinguishes them -- and the
+    // rules that count fields differ: exactly one union member is live.
+    bool is_overlay_union;
+
+    // Implemented interfaces (populated from 'implements' clause).
+    // Each entry is a fully resolved XrType*: built-in interfaces become
+    // XR_KIND_INTERFACE singletons, parameterized forms (Iterable<int>)
+    // carry their resolved type_args alongside the interface name.
+    XrType **interface_types;
+    int interface_count;
+
+    /* Immutable analyzer verdicts for declaration-backed interfaces. */
+    XaInterfaceConformance *interface_conformances;
+    int interface_conformance_count;
+    uint8_t nominal_kind;         /* XaNominalKind */
+    XaSymbol *declaration_symbol; /* exact analyzer declaration identity */
+    uint64_t declaration_key;     /* module/declaration identity, independent of evidence rows */
+
+    // Stable global-evidence class id for this declaration (0 = none). The
+    // evidence producer backfills it while building the class summary so that
+    // IR lowering can resolve a field access to the exact declaring class even
+    // when two modules export classes that share a name -- name-based lookup is
+    // ambiguous across such twins, this id is not.
+    uint32_t xg_class_id;
+    uint32_t xg_decl_id;
+    uint32_t xg_interface_id;
+    uint64_t xg_nominal_key;
+
+    XrLocation location;
+};
+
+#endif  // XCLASS_INFO_H

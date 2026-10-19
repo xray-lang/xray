@@ -1,0 +1,1231 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xanalyzer_symbol.c - Symbol and scope implementation
+ */
+
+#include "xanalyzer_symbol.h"
+#include "xanalyzer.h"
+#include "../parser/xast_nodes_common.h"
+#include "../../base/xchecks.h"
+#include "../../base/xhashmap.h"
+#include "../../base/xintmap.h"
+#include "../../base/xmalloc.h"
+#include "../../runtime/value/xstruct_layout.h"
+#include <string.h>
+
+// Thread-local symbol ID counter pointer (set by analyzer)
+// No fallback - must be explicitly set via xa_symbol_set_id_counter()
+static XR_THREAD_LOCAL uint32_t *g_symbol_id_ptr = NULL;
+
+// Thread-local symbol registry for O(1) ID lookup (set by analyzer)
+static XR_THREAD_LOCAL XrIntMap *g_symbol_registry = NULL;
+
+XaEnumInfo *xa_enum_info_new(const char *nominal_owner, const char *name, uint32_t variant_count) {
+    if (!nominal_owner || !nominal_owner[0] || !name || variant_count == 0)
+        return NULL;
+    XaEnumInfo *info = (XaEnumInfo *) xr_calloc(1, sizeof(*info));
+    if (!info)
+        return NULL;
+    info->variants =
+        (XaEnumVariantInfo *) xr_calloc((size_t) variant_count, sizeof(*info->variants));
+    if (!info->variants) {
+        xr_free(info);
+        return NULL;
+    }
+    info->nominal_owner = xr_strdup(nominal_owner);
+    if (!info->nominal_owner) {
+        xr_free(info->variants);
+        xr_free(info);
+        return NULL;
+    }
+    info->name = name;
+    info->variant_count = variant_count;
+    for (uint32_t i = 0; i < variant_count; i++) {
+        info->variants[i].symbol = -1;
+        info->variants[i].tag = i;
+    }
+    return info;
+}
+
+bool xa_enum_variant_set_payload_names(XaEnumVariantInfo *variant, const char *const *payload_names,
+                                       uint16_t payload_count) {
+    if (!variant || variant->payload_names || variant->payload_count != payload_count ||
+        (payload_count > 0 && !payload_names))
+        return false;
+    if (payload_count == 0)
+        return true;
+
+    const char **names = xr_calloc((size_t) payload_count, sizeof(*names));
+    if (!names)
+        return false;
+    for (uint16_t i = 0; i < payload_count; i++) {
+        if (!payload_names[i] || !payload_names[i][0]) {
+            for (uint16_t j = 0; j < i; j++)
+                xr_free((void *) names[j]);
+            xr_free(names);
+            return false;
+        }
+        for (uint16_t j = 0; j < i; j++) {
+            if (strcmp(payload_names[i], payload_names[j]) == 0) {
+                for (uint16_t k = 0; k < i; k++)
+                    xr_free((void *) names[k]);
+                xr_free(names);
+                return false;
+            }
+        }
+        names[i] = xr_strdup(payload_names[i]);
+        if (!names[i]) {
+            for (uint16_t j = 0; j < i; j++)
+                xr_free((void *) names[j]);
+            xr_free(names);
+            return false;
+        }
+    }
+    variant->payload_names = names;
+    return true;
+}
+
+bool xa_enum_variant_set_payload_locations(XaEnumVariantInfo *variant, const char *file,
+                                           const XrNameSpan *payload_name_spans,
+                                           uint16_t payload_count) {
+    if (!variant || variant->payload_locations || variant->payload_count != payload_count ||
+        (payload_count > 0 && (!file || !file[0] || !payload_name_spans)))
+        return false;
+    if (payload_count == 0)
+        return true;
+
+    XrLocation *locations = xr_calloc((size_t) payload_count, sizeof(*locations));
+    if (!locations)
+        return false;
+    for (uint16_t i = 0; i < payload_count; i++) {
+        const XrNameSpan span = payload_name_spans[i];
+        if (span.line <= 0 || span.column <= 0) {
+            for (uint16_t j = 0; j < i; j++)
+                xr_free((void *) locations[j].file);
+            xr_free(locations);
+            return false;
+        }
+        locations[i].file = xr_strdup(file);
+        if (!locations[i].file) {
+            for (uint16_t j = 0; j < i; j++)
+                xr_free((void *) locations[j].file);
+            xr_free(locations);
+            return false;
+        }
+        locations[i].line = (uint32_t) span.line;
+        locations[i].column = (uint32_t) span.column;
+        locations[i].end_line = (uint32_t) span.line;
+        locations[i].end_column =
+            (uint32_t) span.column + (uint32_t) strlen(variant->payload_names[i]);
+    }
+    variant->payload_locations = locations;
+    return true;
+}
+
+bool xa_enum_info_finalize_layout(XaEnumInfo *info) {
+    if (!info || !info->variants || info->variant_count == 0)
+        return false;
+
+    for (uint32_t i = 0; i < info->variant_count; i++) {
+        const XaEnumVariantInfo *variant = &info->variants[i];
+        if (variant->payload_count == 0)
+            continue;
+        if (!variant->payload_names || !variant->payload_types)
+            return false;
+        for (uint16_t p = 0; p < variant->payload_count; p++) {
+            if (!variant->payload_names[p] || !variant->payload_names[p][0])
+                return false;
+            for (uint16_t q = 0; q < p; q++) {
+                if (strcmp(variant->payload_names[p], variant->payload_names[q]) == 0)
+                    return false;
+            }
+        }
+    }
+
+    const char **names = (const char **) xr_malloc(sizeof(*names) * (size_t) info->variant_count);
+    int *payload_counts = (int *) xr_calloc((size_t) info->variant_count, sizeof(int));
+    if (!names || !payload_counts) {
+        if (names)
+            xr_free(names);
+        if (payload_counts)
+            xr_free(payload_counts);
+        return false;
+    }
+
+    bool has_payloads = false;
+    for (uint32_t i = 0; i < info->variant_count; i++) {
+        names[i] = info->variants[i].name;
+        payload_counts[i] = info->variants[i].payload_count;
+        if (info->variants[i].payload_count > 0)
+            has_payloads = true;
+    }
+
+    XrEnumLayout *layout =
+        xr_enum_layout_new(info->nominal_owner, info->name, names, info->variant_count);
+    if (layout && has_payloads &&
+        !xr_enum_layout_set_payload_counts(layout, payload_counts, info->variant_count)) {
+        xr_enum_layout_free(layout);
+        layout = NULL;
+    }
+    xr_free(names);
+    xr_free(payload_counts);
+
+    if (!layout)
+        return false;
+    for (uint32_t i = 0; i < info->variant_count; i++) {
+        XaEnumVariantInfo *variant = &info->variants[i];
+        if (variant->payload_count == 0)
+            continue;
+        uint8_t *type_ids =
+            (uint8_t *) xr_calloc((size_t) variant->payload_count, sizeof(*type_ids));
+        if (!type_ids) {
+            xr_enum_layout_free(layout);
+            return false;
+        }
+        for (uint16_t p = 0; p < variant->payload_count; p++)
+            type_ids[p] = xr_type_to_tid(variant->payload_types ? variant->payload_types[p] : NULL);
+        bool metadata_ok = xr_enum_layout_set_variant_payload_metadata(
+            layout, i, (const char *const *) variant->payload_names, type_ids,
+            variant->payload_count);
+        xr_free(type_ids);
+        if (!metadata_ok) {
+            xr_enum_layout_free(layout);
+            return false;
+        }
+    }
+    if (info->layout)
+        xr_enum_layout_free(info->layout);
+    info->layout = layout;
+    info->is_payload_enum = !layout->is_zero_payload;
+    return true;
+}
+
+XaEnumInfo *xa_enum_info_clone(const XaEnumInfo *src) {
+    if (!src)
+        return NULL;
+    XaEnumInfo *dst = xa_enum_info_new(src->nominal_owner, src->name, src->variant_count);
+    if (!dst)
+        return NULL;
+    for (uint32_t i = 0; i < src->variant_count; i++) {
+        const XaEnumVariantInfo *sv = &src->variants[i];
+        XaEnumVariantInfo *dv = &dst->variants[i];
+        dv->name = sv->name;
+        dv->symbol = sv->symbol;
+        dv->tag = sv->tag;
+        dv->payload_count = sv->payload_count;
+        if (!xa_enum_variant_set_payload_names(dv, (const char *const *) sv->payload_names,
+                                               sv->payload_count)) {
+            xa_enum_info_free(dst);
+            return NULL;
+        }
+        if (sv->payload_count > 0 && sv->payload_locations) {
+            XrNameSpan *spans = xr_malloc((size_t) sv->payload_count * sizeof(*spans));
+            if (!spans) {
+                xa_enum_info_free(dst);
+                return NULL;
+            }
+            for (uint16_t p = 0; p < sv->payload_count; p++) {
+                spans[p].line = (int) sv->payload_locations[p].line;
+                spans[p].column = (int) sv->payload_locations[p].column;
+            }
+            bool locations_ok = xa_enum_variant_set_payload_locations(
+                dv, sv->payload_locations[0].file, spans, sv->payload_count);
+            xr_free(spans);
+            if (!locations_ok) {
+                xa_enum_info_free(dst);
+                return NULL;
+            }
+        }
+        if (sv->payload_count > 0 && sv->payload_types) {
+            dv->payload_types =
+                (XrType **) xr_malloc((size_t) sv->payload_count * sizeof(XrType *));
+            if (dv->payload_types)
+                memcpy(dv->payload_types, sv->payload_types,
+                       (size_t) sv->payload_count * sizeof(XrType *));
+        }
+    }
+    if (!xa_enum_info_finalize_layout(dst)) {
+        xa_enum_info_free(dst);
+        return NULL;
+    }
+    /* A metadata clone describes the same enum declaration.  Its physical
+     * layout storage is independent, but the runtime identity must remain
+     * stable across imports and re-exports. */
+    if (src->layout && dst->layout)
+        dst->layout->layout_id = src->layout->layout_id;
+    return dst;
+}
+
+void xa_enum_info_free(XaEnumInfo *info) {
+    if (!info)
+        return;
+    if (info->variants) {
+        for (uint32_t i = 0; i < info->variant_count; i++) {
+            for (uint16_t p = 0; p < info->variants[i].payload_count; p++)
+                xr_free((void *) (info->variants[i].payload_names
+                                      ? info->variants[i].payload_names[p]
+                                      : NULL));
+            xr_free((void *) info->variants[i].payload_names);
+            if (info->variants[i].payload_locations) {
+                for (uint16_t p = 0; p < info->variants[i].payload_count; p++)
+                    xr_free((void *) info->variants[i].payload_locations[p].file);
+                xr_free(info->variants[i].payload_locations);
+            }
+            if (info->variants[i].payload_types)
+                xr_free(info->variants[i].payload_types);
+        }
+        xr_free(info->variants);
+    }
+    if (info->layout)
+        xr_enum_layout_free(info->layout);
+    xr_free((void *) info->nominal_owner);
+    xr_free(info);
+}
+
+int xa_enum_info_find_variant(const XaEnumInfo *info, const char *name) {
+    if (!info || !name)
+        return -1;
+    for (uint32_t i = 0; i < info->variant_count; i++) {
+        const char *variant_name = info->variants[i].name;
+        if (variant_name && strcmp(variant_name, name) == 0)
+            return (int) i;
+    }
+    return -1;
+}
+
+// Set current symbol ID counter (called by XaAnalyzer before analysis)
+void xa_symbol_set_id_counter(uint32_t *counter) {
+    g_symbol_id_ptr = counter;
+}
+
+// Set symbol registry for O(1) ID lookup (called by XaAnalyzer)
+void xa_symbol_set_registry(void *intmap) {
+    g_symbol_registry = (XrIntMap *) intmap;
+}
+
+// Get next symbol ID (returns 0 if counter not set)
+static uint32_t next_symbol_id(void) {
+    if (g_symbol_id_ptr)
+        return (*g_symbol_id_ptr)++;
+    return 0;
+}
+
+// Create a new symbol
+XaSymbol *xa_symbol_new(const char *name, XaSymbolKind kind) {
+    XR_DCHECK(name != NULL, "xa_symbol_new: name is NULL");
+    XaSymbol *sym = xr_calloc(1, sizeof(XaSymbol));
+    if (!sym)
+        return NULL;
+
+    sym->name = name ? xr_strdup(name) : NULL;
+    sym->kind = kind;
+    sym->id = next_symbol_id();
+    sym->is_rebindable = kind == XA_SYM_VARIABLE || kind == XA_SYM_PARAMETER;
+    sym->links.binding_use = XA_BINDING_UNINITIALIZED;
+    sym->links.root_id = sym->id;
+    sym->links.root_alias = XA_ROOT_UNIQUE;
+    sym->links.binding_mutability = sym->is_rebindable ? XA_BINDING_REBINDABLE : XA_BINDING_STABLE;
+    /* A variable or parameter is a binding in the frame that declares it, and
+     * it is mutable unless something narrows it. Both facts come from the
+     * declaration itself, not from a guess standing in for analysis: escape,
+     * transfer, shared publication and const narrowing all overwrite them
+     * later when they prove something else. Anything that is not a binding --
+     * a class, a function, a module -- stays unknown until stated.
+     *
+     * Left unknown, a capture of such a variable reaches the semantic plan
+     * with neither fact and the plan refuses every closure over it. */
+    bool binding = kind == XA_SYM_VARIABLE || kind == XA_SYM_PARAMETER;
+    sym->links.value_capability = binding ? XA_CAP_MUTABLE : XA_CAP_UNKNOWN;
+    sym->links.storage_domain = binding ? XR_STORAGE_EXEC_LOCAL : XR_STORAGE_DOMAIN_UNKNOWN;
+    sym->links.return_ownership.param_index = -1;
+
+    return sym;
+}
+
+// Release dynamic fields owned by XaSymbolLinks (inline helper, no free of struct itself)
+static void links_release_dynamic(XaSymbolLinks *links) {
+    if (!links)
+        return;
+    if (links->param_types)
+        xr_free(links->param_types);
+    if (links->param_names) {
+        for (int i = 0; i < links->param_count; i++) {
+            if (links->param_names[i])
+                xr_free((char *) links->param_names[i]);
+        }
+        xr_free(links->param_names);
+    }
+    if (links->param_effects)
+        xr_free(links->param_effects);
+    if (links->return_view.origins)
+        xr_free(links->return_view.origins);
+    if (links->return_fn_param_effects)
+        xr_free(links->return_fn_param_effects);
+    if (links->inferred_param_types)
+        xr_free(links->inferred_param_types);
+    if (links->deprecated_message)
+        xr_free((void *) links->deprecated_message);
+    if (links->type_param_names) {
+        for (int i = 0; i < links->type_param_count; i++) {
+            if (links->type_param_names[i])
+                xr_free((char *) links->type_param_names[i]);
+        }
+        xr_free(links->type_param_names);
+    }
+    if (links->type_param_constraints) {
+        for (int i = 0; i < links->type_param_count; i++) {
+            if (links->type_param_constraints[i])
+                xr_free(links->type_param_constraints[i]);
+        }
+        xr_free(links->type_param_constraints);
+    }
+    if (links->type_param_constraint_counts)
+        xr_free(links->type_param_constraint_counts);
+    if (links->enum_info) {
+        xa_enum_info_free(links->enum_info);
+        links->enum_info = NULL;
+    }
+    if (links->owns_class_info && links->class_info)
+        xa_class_info_free(links->class_info);
+    links->class_info = NULL;
+    links->owns_class_info = false;
+    XaRefLocation *ref = links->references;
+    while (ref) {
+        XaRefLocation *next = ref->next;
+        xr_free(ref);
+        ref = next;
+    }
+}
+
+// Free a symbol (also releases its inline links dynamic fields)
+void xa_symbol_free(XaSymbol *symbol) {
+    if (!symbol)
+        return;
+    links_release_dynamic(&symbol->links);
+    if (symbol->name)
+        xr_free((void *) symbol->name);
+    xr_free(symbol);
+}
+
+// Add a reference to symbol links
+void xa_symbol_add_ref(XaSymbolLinks *links, uint32_t line, uint32_t col, uint32_t end_col,
+                       bool is_write) {
+    if (!links)
+        return;
+
+    XaRefLocation *ref = xr_malloc(sizeof(XaRefLocation));
+    if (!ref)
+        return;
+
+    ref->line = line;
+    ref->column = col;
+    ref->end_column = end_col;
+    ref->is_write = is_write;
+    ref->next = links->references;
+    links->references = ref;
+    links->ref_count++;
+}
+
+// Get references from symbol links
+XaRefLocation *xa_symbol_get_refs(XaSymbolLinks *links, int *count) {
+    if (!links) {
+        if (count)
+            *count = 0;
+        return NULL;
+    }
+    if (count)
+        *count = links->ref_count;
+    return links->references;
+}
+
+// Create a new scope
+XaScope *xa_scope_new(XaScopeKind kind, XaScope *parent) {
+    XR_DCHECK(kind >= 0, "scope_new: invalid scope kind");
+    XaScope *scope = xr_calloc(1, sizeof(XaScope));
+    if (!scope)
+        return NULL;
+
+    scope->kind = kind;
+    scope->parent = parent;
+    scope->symbols = xr_hashmap_new();
+    scope->aliases = xr_hashmap_new();
+    XR_CHECK(scope->symbols != NULL && scope->aliases != NULL,
+             "scope maps allocation failed (out of memory)");
+
+    // Add to parent's children
+    if (parent) {
+        if (parent->child_count >= parent->child_capacity) {
+            int new_cap = parent->child_capacity == 0 ? 4 : parent->child_capacity * 2;
+            XR_REALLOC_OR_ABORT(parent->children, sizeof(XaScope *) * (size_t) new_cap,
+                                "scope children grow");
+            parent->child_capacity = new_cap;
+        }
+        parent->children[parent->child_count++] = scope;
+        XR_DCHECK(parent->child_count <= parent->child_capacity,
+                  "scope_new: child_count > child_capacity");
+    }
+
+    return scope;
+}
+
+// Free a scope (and its children)
+void xa_scope_free(XaScope *scope) {
+    if (!scope)
+        return;
+
+    // Free children first
+    for (int i = 0; i < scope->child_count; i++) {
+        xa_scope_free(scope->children[i]);
+    }
+    if (scope->children)
+        xr_free(scope->children);
+
+    // The lookup map can replace same-name bindings during error recovery or
+    // incremental analysis, so it is not an ownership inventory.  Reclaim
+    // every symbol from the scope's append-only ownership chain instead.
+    XaSymbol *symbol = scope->owned_symbols;
+    while (symbol) {
+        XaSymbol *next = symbol->scope_owned_next;
+        symbol->scope = NULL;
+        symbol->scope_owned_next = NULL;
+        xa_symbol_free(symbol);
+        symbol = next;
+    }
+    scope->owned_symbols = NULL;
+
+    // Free lookup maps after their non-owning value pointers are no longer used.
+    xr_hashmap_free(scope->symbols);
+    xr_hashmap_free(scope->aliases);
+
+    xr_free(scope);
+}
+
+// Add symbol to scope
+void xa_scope_add_symbol(XaScope *scope, XaSymbol *symbol) {
+    if (!scope || !symbol || !symbol->name)
+        return;
+    XR_CHECK(symbol->scope == NULL || symbol->scope == scope,
+             "symbol cannot be owned by multiple scopes");
+    if (symbol->scope == NULL) {
+        symbol->scope = scope;
+        symbol->scope_owned_next = scope->owned_symbols;
+        scope->owned_symbols = symbol;
+    }
+    // The map is the active name-resolution index; a dropped insert would
+    // silently corrupt lookup even though the ownership chain is intact.
+    XR_CHECK(xr_hashmap_set(scope->symbols, symbol->name, symbol),
+             "scope symbol insert failed (out of memory)");
+    // Auto-register for O(1) ID lookup
+    if (g_symbol_registry && symbol->id != 0) {
+        xr_intmap_set(g_symbol_registry, symbol->id, symbol);
+    }
+}
+
+// Remove symbol from scope (does NOT free the symbol)
+bool xa_scope_remove_symbol(XaScope *scope, const char *name) {
+    if (!scope || !name)
+        return false;
+    XaSymbol *symbol = (XaSymbol *) xr_hashmap_get(scope->symbols, name);
+    if (!symbol || !xr_hashmap_delete(scope->symbols, name))
+        return false;
+
+    XaSymbol **owned = &scope->owned_symbols;
+    while (*owned && *owned != symbol)
+        owned = &(*owned)->scope_owned_next;
+    XR_CHECK(*owned == symbol, "scope lookup symbol missing from ownership chain");
+    *owned = symbol->scope_owned_next;
+    symbol->scope = NULL;
+    symbol->scope_owned_next = NULL;
+
+    if (g_symbol_registry && symbol->id != 0 &&
+        xr_intmap_get(g_symbol_registry, symbol->id) == symbol)
+        xr_intmap_delete(g_symbol_registry, symbol->id);
+    return true;
+}
+
+// Bind a lookup-only alias to an existing symbol. The alias does not own the
+// symbol and does not appear in xa_scope_get_all_symbols().
+XR_FUNC bool xa_scope_set_alias(XaScope *scope, const char *alias, XaSymbol *symbol) {
+    if (!scope || !scope->aliases || !alias || !symbol)
+        return false;
+    return xr_hashmap_set(scope->aliases, alias, symbol);
+}
+
+bool xa_scope_remove_alias(XaScope *scope, const char *alias) {
+    if (!scope || !scope->aliases || !alias)
+        return false;
+    return xr_hashmap_delete(scope->aliases, alias);
+}
+
+// Look up symbol (search up through parent scopes)
+XaSymbol *xa_scope_lookup(XaScope *scope, const char *name) {
+    XR_DCHECK(name != NULL, "scope_lookup: NULL name");
+    while (scope) {
+        XaSymbol *sym = xr_hashmap_get(scope->symbols, name);
+        if (!sym && scope->aliases)
+            sym = xr_hashmap_get(scope->aliases, name);
+        if (sym)
+            return sym;
+        scope = scope->parent;
+    }
+    return NULL;
+}
+
+// Look up symbol only in current scope
+XaSymbol *xa_scope_lookup_local(XaScope *scope, const char *name) {
+    if (!scope)
+        return NULL;
+    XaSymbol *sym = xr_hashmap_get(scope->symbols, name);
+    if (!sym && scope->aliases)
+        sym = xr_hashmap_get(scope->aliases, name);
+    return sym;
+}
+
+// Check if child_scope is a descendant of (or equal to) ancestor_scope
+bool xa_scope_is_descendant(XaScope *child, XaScope *ancestor) {
+    if (!child || !ancestor)
+        return false;
+    XaScope *scope = child;
+    while (scope) {
+        if (scope == ancestor)
+            return true;
+        scope = scope->parent;
+    }
+    return false;
+}
+
+// Find the scope where a symbol is defined (searching up through parents)
+XaScope *xa_scope_find_definition(XaScope *scope, const char *name) {
+    while (scope) {
+        if (xa_scope_lookup_local(scope, name)) {
+            return scope;
+        }
+        scope = scope->parent;
+    }
+    return NULL;
+}
+
+// Find scope by AST node (recursive search through children)
+static XaScope *find_scope_by_node_recursive(XaScope *scope, void *ast_node) {
+    if (!scope)
+        return NULL;
+    if (scope->ast_node == ast_node)
+        return scope;
+
+    for (int i = 0; i < scope->child_count; i++) {
+        XaScope *found = find_scope_by_node_recursive(scope->children[i], ast_node);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
+
+XaScope *xa_scope_find_by_node(XaScope *root, void *ast_node) {
+    if (!root || !ast_node)
+        return NULL;
+    return find_scope_by_node_recursive(root, ast_node);
+}
+
+static XaSymbol *xa_class_info_lookup_member_owner_filtered(XrClassInfo *info, const char *name,
+                                                            bool want_static,
+                                                            XrClassInfo **owner_out) {
+    if (owner_out)
+        *owner_out = NULL;
+    if (!info || !name)
+        return NULL;
+
+    if (want_static) {
+        for (int i = 0; i < info->static_field_count; i++) {
+            if (strcmp(info->static_fields[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
+                return info->static_fields[i];
+            }
+        }
+        for (int i = 0; i < info->static_method_count; i++) {
+            if (strcmp(info->static_methods[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
+                return info->static_methods[i];
+            }
+        }
+    } else {
+        for (int i = 0; i < info->field_count; i++) {
+            if (strcmp(info->fields[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
+                return info->fields[i];
+            }
+        }
+        for (int i = 0; i < info->method_count; i++) {
+            if (strcmp(info->methods[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
+                return info->methods[i];
+            }
+        }
+    }
+
+    return info->base ? xa_class_info_lookup_member_owner_filtered(info->base, name, want_static,
+                                                                   owner_out)
+                      : NULL;
+}
+
+// Look up member in class (searches base classes too)
+XaSymbol *xa_class_info_lookup_instance_member(XrClassInfo *info, const char *name) {
+    return xa_class_info_lookup_member_owner_filtered(info, name, false, NULL);
+}
+
+XaSymbol *xa_class_info_lookup_static_member(XrClassInfo *info, const char *name) {
+    return xa_class_info_lookup_member_owner_filtered(info, name, true, NULL);
+}
+
+XaSymbol *xa_class_info_lookup_member(XrClassInfo *info, const char *name) {
+    XaSymbol *member = xa_class_info_lookup_instance_member(info, name);
+    return member ? member : xa_class_info_lookup_static_member(info, name);
+}
+
+XaSymbol *xa_class_info_lookup_instance_member_owner(XrClassInfo *info, const char *name,
+                                                     XrClassInfo **owner_out) {
+    return xa_class_info_lookup_member_owner_filtered(info, name, false, owner_out);
+}
+
+XaSymbol *xa_class_info_lookup_static_member_owner(XrClassInfo *info, const char *name,
+                                                   XrClassInfo **owner_out) {
+    return xa_class_info_lookup_member_owner_filtered(info, name, true, owner_out);
+}
+
+XaSymbol *xa_class_info_lookup_member_owner(XrClassInfo *info, const char *name,
+                                            XrClassInfo **owner_out) {
+    XaSymbol *member = xa_class_info_lookup_instance_member_owner(info, name, owner_out);
+    return member ? member : xa_class_info_lookup_static_member_owner(info, name, owner_out);
+}
+
+// Function signature helpers
+void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types,
+                                      const char **param_names, int param_count,
+                                      XrType *return_type) {
+    if (!links)
+        return;
+
+    // Free old param types
+    if (links->param_types) {
+        xr_free(links->param_types);
+        links->param_types = NULL;
+    }
+
+    // Free old param names
+    if (links->param_names) {
+        for (int i = 0; i < links->param_count; i++) {
+            xr_free((char *) links->param_names[i]);
+        }
+        xr_free(links->param_names);
+        links->param_names = NULL;
+    }
+    if (links->param_effects) {
+        xr_free(links->param_effects);
+        links->param_effects = NULL;
+        links->param_effect_count = 0;
+    }
+    if (links->return_view.origins) {
+        xr_free(links->return_view.origins);
+        links->return_view.origins = NULL;
+    }
+    links->return_view.origin_count = 0;
+    links->return_view.was_elided = false;
+    links->return_view.checked = false;
+    links->return_view.valid = false;
+    xa_symbol_links_clear_return_function_effect_summary(links);
+    links->return_fn_effect_scanned = false;
+    links->return_fn_effect_scan_in_progress = false;
+    // Default-value expressions are reset together with the signature; call
+    // xa_symbol_links_set_param_defaults afterwards to repopulate them.
+    if (links->param_defaults) {
+        xr_free(links->param_defaults);
+        links->param_defaults = NULL;
+    }
+
+    // Copy param types
+    if (param_count > 0 && param_types) {
+        links->param_types = xr_malloc(sizeof(XrType *) * param_count);
+        if (links->param_types) {
+            memcpy(links->param_types, param_types, sizeof(XrType *) * param_count);
+        }
+    }
+
+    // Copy param names
+    if (param_count > 0 && param_names) {
+        links->param_names = xr_malloc(sizeof(char *) * param_count);
+        if (links->param_names) {
+            for (int i = 0; i < param_count; i++) {
+                links->param_names[i] = param_names[i] ? xr_strdup(param_names[i]) : NULL;
+            }
+        }
+    }
+
+    links->param_count = param_count;
+    links->return_type = return_type;
+}
+
+void xa_symbol_links_set_param_defaults(XaSymbolLinks *links, struct AstNode **defaults,
+                                        int count) {
+    if (!links)
+        return;
+    if (links->param_defaults) {
+        xr_free(links->param_defaults);
+        links->param_defaults = NULL;
+    }
+    if (!defaults || count <= 0)
+        return;
+    bool any = false;
+    for (int i = 0; i < count; i++) {
+        if (defaults[i]) {
+            any = true;
+            break;
+        }
+    }
+    if (!any)
+        return;
+    struct AstNode **copy = (struct AstNode **) xr_calloc((size_t) count, sizeof(struct AstNode *));
+    if (!copy)
+        return;
+    for (int i = 0; i < count; i++)
+        copy[i] = defaults[i];
+    links->param_defaults = copy;
+}
+
+XrType *xa_symbol_links_get_return_type(XaSymbolLinks *links) {
+    return links ? links->return_type : NULL;
+}
+
+XrType **xa_symbol_links_get_param_types(XaSymbolLinks *links, int *count) {
+    if (!links) {
+        if (count)
+            *count = 0;
+        return NULL;
+    }
+    if (count)
+        *count = links->param_count;
+    return links->param_types;
+}
+
+const char **xa_symbol_links_get_param_names(XaSymbolLinks *links, int *count) {
+    if (!links) {
+        if (count)
+            *count = 0;
+        return NULL;
+    }
+    if (count)
+        *count = links->param_count;
+    return links->param_names;
+}
+
+bool xa_symbol_is_function(XaSymbol *symbol) {
+    if (!symbol)
+        return false;
+    return symbol->kind == XA_SYM_FUNCTION || symbol->kind == XA_SYM_METHOD;
+}
+
+static void xa_copy_param_effect_summary(XaParamEffectSummary **dst, int *dst_count,
+                                         const XaParamEffectSummary *src, int src_count) {
+    if (!dst || !dst_count)
+        return;
+    if (*dst) {
+        xr_free(*dst);
+        *dst = NULL;
+    }
+    *dst_count = 0;
+    if (!src || src_count <= 0)
+        return;
+    XaParamEffectSummary *copy = xr_malloc((size_t) src_count * sizeof(XaParamEffectSummary));
+    if (!copy)
+        return;
+    memcpy(copy, src, (size_t) src_count * sizeof(XaParamEffectSummary));
+    *dst = copy;
+    *dst_count = src_count;
+}
+
+void xa_symbol_links_copy_param_effect_summaries(XaSymbolLinks *dst, const XaSymbolLinks *src) {
+    if (!dst)
+        return;
+    xa_copy_param_effect_summary(&dst->param_effects, &dst->param_effect_count,
+                                 src ? src->param_effects : NULL,
+                                 src ? src->param_effect_count : 0);
+}
+
+void xa_symbol_links_clear_return_function_effect_summary(XaSymbolLinks *links) {
+    if (!links)
+        return;
+    xa_copy_param_effect_summary(&links->return_fn_param_effects,
+                                 &links->return_fn_param_effect_count, NULL, 0);
+    links->return_fn_effect_mixed = false;
+}
+
+void xa_symbol_links_set_return_function_effect_summary(XaSymbolLinks *dst,
+                                                        const XaSymbolLinks *src) {
+    if (!dst)
+        return;
+    xa_copy_param_effect_summary(&dst->return_fn_param_effects, &dst->return_fn_param_effect_count,
+                                 src ? src->param_effects : NULL,
+                                 src ? src->param_effect_count : 0);
+    dst->return_fn_effect_mixed = false;
+}
+
+void xa_symbol_links_copy_return_function_effect_summary(XaSymbolLinks *dst,
+                                                         const XaSymbolLinks *src) {
+    if (!dst)
+        return;
+    xa_copy_param_effect_summary(&dst->return_fn_param_effects, &dst->return_fn_param_effect_count,
+                                 src ? src->return_fn_param_effects : NULL,
+                                 src ? src->return_fn_param_effect_count : 0);
+    dst->return_fn_effect_mixed = src ? src->return_fn_effect_mixed : false;
+    dst->return_fn_effect_scanned = src ? src->return_fn_effect_scanned : false;
+    dst->return_fn_effect_scan_in_progress = false;
+}
+
+void xa_symbol_links_copy_return_function_effect_to_param_summaries(XaSymbolLinks *dst,
+                                                                    const XaSymbolLinks *src) {
+    if (!dst)
+        return;
+    xa_copy_param_effect_summary(&dst->param_effects, &dst->param_effect_count,
+                                 src ? src->return_fn_param_effects : NULL,
+                                 src ? src->return_fn_param_effect_count : 0);
+}
+
+// Set generic type parameters for a function/class.  Each parameter may
+// carry an intersection-style constraint list (T: A & B & C); the lists
+// are deep-copied into the symbol storage so callers retain ownership of
+// their original buffers.
+void xa_symbol_links_set_type_params(XaSymbolLinks *links, const char **names,
+                                     XrType ***constraint_lists, const int *constraint_counts,
+                                     int count) {
+    if (!links)
+        return;
+
+    if (links->type_param_names || links->type_param_constraints ||
+        links->type_param_constraint_counts) {
+        if (links->type_param_names) {
+            for (int i = 0; i < links->type_param_count; i++) {
+                if (links->type_param_names[i])
+                    xr_free((char *) links->type_param_names[i]);
+            }
+        }
+        if (links->type_param_constraints) {
+            for (int i = 0; i < links->type_param_count; i++) {
+                if (links->type_param_constraints[i])
+                    xr_free(links->type_param_constraints[i]);
+            }
+        }
+        xr_free(links->type_param_names);
+        xr_free(links->type_param_constraints);
+        xr_free(links->type_param_constraint_counts);
+        links->type_param_names = NULL;
+        links->type_param_constraints = NULL;
+        links->type_param_constraint_counts = NULL;
+        links->type_param_count = 0;
+    }
+
+    if (count <= 0)
+        return;
+
+    links->type_param_count = count;
+    links->type_param_names = xr_malloc(sizeof(const char *) * count);
+    links->type_param_constraints = xr_malloc(sizeof(XrType **) * count);
+    links->type_param_constraint_counts = xr_malloc(sizeof(int) * count);
+    if (!links->type_param_names || !links->type_param_constraints ||
+        !links->type_param_constraint_counts) {
+        xr_free(links->type_param_names);
+        xr_free(links->type_param_constraints);
+        xr_free(links->type_param_constraint_counts);
+        links->type_param_names = NULL;
+        links->type_param_constraints = NULL;
+        links->type_param_constraint_counts = NULL;
+        links->type_param_count = 0;
+        return;
+    }
+
+    for (int i = 0; i < count; i++) {
+        links->type_param_names[i] = names[i] ? xr_strdup(names[i]) : NULL;
+
+        int n = constraint_counts ? constraint_counts[i] : 0;
+        XrType **src = constraint_lists ? constraint_lists[i] : NULL;
+        if (n > 0 && src) {
+            XrType **copy = xr_malloc(sizeof(XrType *) * n);
+            for (int j = 0; j < n; j++) {
+                copy[j] = src[j];
+            }
+            links->type_param_constraints[i] = copy;
+            links->type_param_constraint_counts[i] = n;
+        } else {
+            links->type_param_constraints[i] = NULL;
+            links->type_param_constraint_counts[i] = 0;
+        }
+    }
+}
+
+int xa_symbol_links_get_type_param_count(XaSymbolLinks *links) {
+    return links ? links->type_param_count : 0;
+}
+
+const char *xa_symbol_links_get_type_param_name(XaSymbolLinks *links, int index) {
+    if (!links || index < 0 || index >= links->type_param_count)
+        return NULL;
+    return links->type_param_names[index];
+}
+
+XrType **xa_symbol_links_get_type_param_constraints(XaSymbolLinks *links, int index,
+                                                    int *out_count) {
+    if (out_count)
+        *out_count = 0;
+    if (!links || index < 0 || index >= links->type_param_count)
+        return NULL;
+    if (out_count)
+        *out_count = links->type_param_constraint_counts[index];
+    return links->type_param_constraints[index];
+}
+
+void xa_symbol_links_copy_export_metadata(XaAnalyzer *dst_analyzer, XaSymbolLinks *dst,
+                                          const XaSymbolLinks *src) {
+    if (!dst)
+        return;
+
+    XaAnalyzer *src_analyzer = src ? src->summary_owner : NULL;
+    links_release_dynamic(dst);
+    memset(dst, 0, sizeof(*dst));
+    dst->summary_owner = dst_analyzer;
+    if (!src)
+        return;
+
+    dst->type = src->type;
+    dst->declared_type = src->declared_type;
+    dst->type_computed = src->type_computed;
+    dst->is_definitely_assigned = src->is_definitely_assigned;
+    dst->binding_use = XA_BINDING_LIVE;
+    dst->root_id = 0;
+    dst->root_alias = XA_ROOT_ALIAS_UNKNOWN;
+    dst->binding_mutability = XA_BINDING_STABLE;
+    dst->value_capability = src->value_capability;
+    dst->storage_domain = src->storage_domain;
+    dst->allocation_plan = src->allocation_plan;
+    dst->moved_line = 0;
+    dst->moved_column = 0;
+
+    xa_symbol_links_set_function_sig(dst, src->param_types, src->param_names, src->param_count,
+                                     src->return_type);
+    if (src->param_defaults)
+        xa_symbol_links_set_param_defaults(dst, src->param_defaults, src->param_count);
+    xa_symbol_links_copy_param_effect_summaries(dst, src);
+    dst->return_type_inferred = src->return_type_inferred;
+    dst->return_storage_domain = src->return_storage_domain;
+    dst->return_storage_known = src->return_storage_known;
+    dst->return_storage_mixed = src->return_storage_mixed;
+    dst->return_storage_scanned = src->return_storage_scanned;
+    dst->return_storage_scan_in_progress = false;
+    dst->return_ownership = src->return_ownership;
+    dst->return_ownership_scanned = src->return_ownership_scanned;
+    dst->return_ownership_scan_in_progress = false;
+    dst->return_view.was_elided = src->return_view.was_elided;
+    dst->return_view.checked = src->return_view.checked;
+    dst->return_view.valid = src->return_view.valid;
+    if (src->return_view.origin_count > 0 && src->return_view.origins) {
+        dst->return_view.origins = (XrViewOrigin *) xr_malloc(
+            sizeof(XrViewOrigin) * (size_t) src->return_view.origin_count);
+        if (dst->return_view.origins) {
+            memcpy(dst->return_view.origins, src->return_view.origins,
+                   sizeof(XrViewOrigin) * (size_t) src->return_view.origin_count);
+            dst->return_view.origin_count = src->return_view.origin_count;
+        }
+    }
+    xa_symbol_links_copy_return_function_effect_summary(dst, src);
+    dst->function_decl_node = src->function_decl_node;
+    dst->nominal_decl_node = src->nominal_decl_node;
+    dst->interface_decl_node = src->interface_decl_node;
+    dst->is_deprecated = src->is_deprecated;
+    dst->deprecated_message = src->deprecated_message ? xr_strdup(src->deprecated_message) : NULL;
+    dst->is_extern = src->is_extern;
+    if (src_analyzer && dst_analyzer && src_analyzer != dst_analyzer) {
+        dst->effect_id =
+            xa_effect_db_import(dst_analyzer->effect_db, src_analyzer->effect_db, src->effect_id);
+        const XaMemoryEffectSummary *memory =
+            xa_memory_effect_db_get(src_analyzer->memory_effect_db, src->memory_effect_id);
+        dst->memory_effect_id =
+            memory ? xa_memory_effect_db_intern(dst_analyzer->memory_effect_db, memory)
+                   : XA_MEMORY_EFFECT_NONE;
+        const XaAllocationSummary *allocation =
+            xa_allocation_db_get(src_analyzer->allocation_db, src->alloc_effect_id);
+        if (allocation) {
+            XaAllocationSummary imported = *allocation;
+            imported.first_site_node_id = 0;
+            imported.first_callee_symbol_id = 0;
+            imported.callee_effect_id = XA_ALLOC_EFFECT_NONE;
+            dst->alloc_effect_id = xa_allocation_db_intern(dst_analyzer->allocation_db, &imported);
+        }
+    } else if (src_analyzer && src_analyzer == dst_analyzer) {
+        dst->effect_id = src->effect_id;
+        dst->memory_effect_id = src->memory_effect_id;
+        dst->alloc_effect_id = src->alloc_effect_id;
+    }
+    dst->throw_effect = src->throw_effect;
+    /* The typed throw-effect bit is an invariant of both the symbol links and
+     * its function type. Import metadata used to copy only the links field,
+     * leaving the freshly reconstructed function type at its fail-closed
+     * MAY_THROW default. Xi lowering consults the type, so every cross-module
+     * call retained a dead error-channel check even when the exported callee
+     * had already been proven NO_THROW. */
+    if (dst->type && dst->type->kind == XR_KIND_FUNCTION)
+        xr_type_function_set_throw_effect(dst->type, dst->throw_effect);
+    dst->intrinsic_id = src->intrinsic_id;
+    dst->alloc_state = src->alloc_state;
+    dst->alloc_reason_bits = src->alloc_reason_bits;
+    dst->alloc_fingerprint = src->alloc_fingerprint;
+    dst->alloc_effect_complete = src->alloc_effect_complete;
+    for (int i = 0; i < dst->param_effect_count; i++) {
+        dst->param_effects[i].callable_effects = dst->effect_id;
+        dst->param_effects[i].memory_effects = dst->memory_effect_id;
+    }
+
+    if (src->type_param_count > 0) {
+        xa_symbol_links_set_type_params(dst, src->type_param_names, src->type_param_constraints,
+                                        src->type_param_constraint_counts, src->type_param_count);
+    }
+
+    /* Export metadata observes the declaration owner's canonical class graph.
+     * The source symbol remains its sole owner; imported symbol views must not
+     * reclaim that graph when their own scope is destroyed. */
+    dst->class_info = src->class_info;
+    dst->owns_class_info = false;
+    dst->enum_info = xa_enum_info_clone(src->enum_info);
+
+    dst->module_name = src->module_name;
+    dst->import_member_name = src->import_member_name;
+    dst->file_path = src->file_path;
+    dst->assign_count = src->assign_count;
+    dst->value_mutated = src->value_mutated;
+    dst->is_const_foldable = src->is_const_foldable;
+    dst->const_initializer = src->const_initializer;
+    dst->has_ct_value = src->has_ct_value;
+    dst->ct_value = src->ct_value;
+    dst->is_loop_variable = src->is_loop_variable;
+}
+
+const XaMemoryEffectSummary *xa_symbol_links_memory_effect_summary(const XaSymbolLinks *links) {
+    XaAnalyzer *owner = links ? links->summary_owner : NULL;
+    if (!owner || !owner->memory_effect_db || links->memory_effect_id == XA_MEMORY_EFFECT_NONE)
+        return NULL;
+    return xa_memory_effect_db_get(owner->memory_effect_db, links->memory_effect_id);
+}
+
+void xa_symbol_links_set_deprecated(XaSymbolLinks *links, bool present, const char *message) {
+    if (!links)
+        return;
+    xr_free((void *) links->deprecated_message);
+    links->deprecated_message = message ? xr_strdup(message) : NULL;
+    links->is_deprecated = present;
+}
+
+// Callback context for collecting symbols
+struct SymbolCollectCtx {
+    XaSymbol **result;
+    int idx;
+};
+
+static void collect_symbol_cb(const char *key, void *value, void *userdata) {
+    (void) key;
+    struct SymbolCollectCtx *ctx = (struct SymbolCollectCtx *) userdata;
+    ctx->result[ctx->idx++] = (XaSymbol *) value;
+}
+
+// Get all symbols in a scope (for LSP completion)
+XaSymbol **xa_scope_get_all_symbols(XaScope *scope, int *count) {
+    *count = 0;
+    if (!scope || !scope->symbols)
+        return NULL;
+
+    uint32_t n = xr_hashmap_count((XrHashMap *) scope->symbols);
+    if (n == 0)
+        return NULL;
+
+    XaSymbol **result = xr_malloc(sizeof(XaSymbol *) * n);
+    if (!result)
+        return NULL;
+
+    struct SymbolCollectCtx ctx = {result, 0};
+    xr_hashmap_foreach((XrHashMap *) scope->symbols, collect_symbol_cb, &ctx);
+
+    *count = ctx.idx;
+    return result;
+}
+
+int xa_scope_count_symbols(XaScope *scope) {
+    if (!scope || !scope->symbols)
+        return 0;
+    return (int) xr_hashmap_count((XrHashMap *) scope->symbols);
+}
+
+// Lookup symbol by ID — O(1) via registry, fallback to O(n) scan
+XaSymbol *xa_scope_lookup_by_id(XaScope *scope, uint32_t id) {
+    if (id == 0)
+        return NULL;
+
+    // Fast path: O(1) registry lookup
+    if (g_symbol_registry) {
+        return (XaSymbol *) xr_intmap_get(g_symbol_registry, id);
+    }
+
+    // Slow fallback (should not happen when analyzer is active)
+    if (!scope || !scope->symbols)
+        return NULL;
+    XrHashMap *map = (XrHashMap *) scope->symbols;
+    for (uint32_t i = 0; i < map->capacity; i++) {
+        XrHashMapEntry *entry = &map->entries[i];
+        if (entry->key && entry->value != XR_HASHMAP_TOMBSTONE) {
+            XaSymbol *sym = (XaSymbol *) entry->value;
+            if (sym && sym->id == id)
+                return sym;
+        }
+    }
+    if (scope->parent)
+        return xa_scope_lookup_by_id(scope->parent, id);
+    return NULL;
+}
+
+// Type alias helpers
+XaSymbol *xa_scope_define_type_alias(XaScope *scope, const char *name, void *type) {
+    if (!scope || !name)
+        return NULL;
+
+    // Check if already exists
+    XaSymbol *existing = xa_scope_lookup_local(scope, name);
+    if (existing)
+        return NULL;  // Already defined
+
+    // Create type alias symbol
+    XaSymbol *sym = xa_symbol_new(name, XA_SYM_TYPE_ALIAS);
+    if (!sym)
+        return NULL;
+
+    sym->alias_type = type;  // Store type directly in symbol
+    xa_scope_add_symbol(scope, sym);
+
+    return sym;
+}
+
+void *xa_scope_resolve_type_alias(XaScope *scope, const char *name) {
+    if (!scope || !name)
+        return NULL;
+
+    XaSymbol *sym = xa_scope_lookup(scope, name);
+    if (!sym || sym->kind != XA_SYM_TYPE_ALIAS)
+        return NULL;
+
+    return sym->alias_type;
+}
+
+bool xa_symbol_is_type_alias(XaSymbol *symbol) {
+    return symbol && symbol->kind == XA_SYM_TYPE_ALIAS;
+}

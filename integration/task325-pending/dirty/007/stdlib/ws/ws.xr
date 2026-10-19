@@ -1,0 +1,1243 @@
+import text
+
+// ws - pure-Xray WebSocket protocol helpers.
+//
+// TCP/TLS readiness, connection registries, HTTP accept-loop integration, and
+// permessage-deflate remain native runtime boundaries for now. RFC 6455
+// handshake formatting, header-token checks, frame assembly, and masking live
+// here so the protocol math has a single Xray semantic source.
+
+import crypto
+import base64
+import net
+import { DialOptions, NetConn, NetError, NetListener } from net
+import time
+
+const _GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+const _B64_STD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+const _OP_CONTINUATION = 0
+const _OP_TEXT = 1
+const _OP_BINARY = 2
+const _OP_CLOSE = 8
+const _OP_PING = 9
+const _OP_PONG = 10
+
+export class ParsedFrame {
+    fin: bool
+    rsv1: bool
+    opcode: i64
+    masked: bool
+    payload: Array<u8>
+    consumedBytes: i64
+
+    init(
+        fin: bool,
+        rsv1: bool,
+        opcode: i64,
+        masked: bool,
+        payload: Array<u8>,
+        consumedBytes: i64
+    ) {
+        this.fin = fin
+        this.rsv1 = rsv1
+        this.opcode = opcode
+        this.masked = masked
+        this.payload = payload
+        this.consumedBytes = consumedBytes
+    }
+}
+
+export class WsUrl {
+    secure: bool
+    host: string
+    port: i64
+    path: string
+
+    init(secure: bool, host: string, port: i64, path: string) {
+        this.secure = secure
+        this.host = host
+        this.port = port
+        this.path = path
+    }
+}
+
+export class ClosePayload {
+    code: i64
+    reason: string
+
+    init(code: i64, reason: string) {
+        this.code = code
+        this.reason = reason
+    }
+}
+
+export class ParsedUpgradeResponse {
+    statusCode: i64
+    protocol: string?
+    deflate: bool
+
+    init(statusCode: i64, protocol: string? = null, deflate: bool = false) {
+        this.statusCode = statusCode
+        this.protocol = protocol
+        this.deflate = deflate
+    }
+}
+
+export class ParsedUpgradeRequest {
+    requestTarget: string
+    secKey: string
+    protocol: string?
+    deflate: bool
+    origin: string?
+
+    init(
+        requestTarget: string,
+        secKey: string,
+        protocol: string? = null,
+        deflate: bool = false,
+        origin: string? = null
+    ) {
+        this.requestTarget = requestTarget
+        this.secKey = secKey
+        this.protocol = protocol
+        this.deflate = deflate
+        this.origin = origin
+    }
+}
+
+fn _startsWithAt(s: string, pos: i64, prefix: string) -> bool {
+    if (pos < 0 || pos + len(prefix) > len(s)) { return false }
+    for (var i = 0; i < len(prefix); i++) {
+        if (s.runes().nth(pos + i) != prefix.runes().nth(i)) { return false }
+    }
+    return true
+}
+
+fn _indexOfFrom(s: string, needle: string, start: i64) -> i64 {
+    if (len(needle) == 0) { return start }
+    var i = start
+    while (i + len(needle) <= len(s)) {
+        if (_startsWithAt(s, i, needle)) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+fn _trim(s: string) -> string {
+    var start = 0
+    var end = len(s)
+    while (start < end) {
+        var c = s.runes().nth(start)
+        if (c != ' ' && c != '\t') { break }
+        start = start + 1
+    }
+    while (end > start) {
+        var c = s.runes().nth(end - 1)
+        if (c != ' ' && c != '\t' && c != '\r' && c != '\n') { break }
+        end = end - 1
+    }
+    return s.slice(start, end)
+}
+
+fn _hexNibble(c: rune) -> i64 {
+    var n = c.toUInt32()
+    if (n >= 48 && n <= 57) { return (n - 48) as i64 }
+    if (n >= 65 && n <= 70) { return (n - 55) as i64 }
+    if (n >= 97 && n <= 102) { return (n - 87) as i64 }
+    return -1
+}
+
+fn _hexBytes(hex: string) -> Array<u8> {
+    if (len(hex) % 2 != 0) { return Array<u8>(0) }
+    var out = Array<u8>(len(hex) / 2)
+    var oi = 0
+    var i = 0
+    while (i + 1 < len(hex)) {
+        var hi = _hexNibble(hex.runes().nth(i))
+        var lo = _hexNibble(hex.runes().nth(i + 1))
+        if (hi < 0 || lo < 0) { return Array<u8>(0) }
+        out[oi] = (((hi << 4) | lo) & 255) as u8
+        oi = oi + 1
+        i = i + 2
+    }
+    return out
+}
+
+fn _base64Encode(data: Array<u8>) -> string {
+    var n = len(data)
+    var out = StringBuilder()
+    var i = 0
+    while (i + 3 <= n) {
+        var b0 = data[i] as i64
+        var b1 = data[i + 1] as i64
+        var b2 = data[i + 2] as i64
+        out.append(_B64_STD.runes().nth(b0 >> 2))
+        out.append(_B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
+        out.append(_B64_STD.runes().nth(((b1 & 15) << 2) | (b2 >> 6)))
+        out.append(_B64_STD.runes().nth(b2 & 63))
+        i = i + 3
+    }
+    var rem = n - i
+    if (rem == 1) {
+        var b0 = data[i] as i64
+        out.append(_B64_STD.runes().nth(b0 >> 2))
+        out.append(_B64_STD.runes().nth((b0 & 3) << 4))
+        out.append("==")
+    } else if (rem == 2) {
+        var b0 = data[i] as i64
+        var b1 = data[i + 1] as i64
+        out.append(_B64_STD.runes().nth(b0 >> 2))
+        out.append(_B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
+        out.append(_B64_STD.runes().nth((b1 & 15) << 2))
+        out.append("=")
+    }
+    return out.toString()
+}
+
+fn _isDigit(c: rune) -> bool {
+    var n = c.toUInt32()
+    return n >= 48 && n <= 57
+}
+
+fn _parsePort(s: string, start: i64, end: i64) -> i64 {
+    if (start >= end) { return -1 }
+    var n = 0
+    for (var i = start; i < end; i++) {
+        var c = s.runes().nth(i)
+        if (!_isDigit(c)) { return -1 }
+        n = n * 10 + ((c.toUInt32() - 48) as i64)
+        if (n > 65535) { return -1 }
+    }
+    if (n <= 0) { return -1 }
+    return n
+}
+
+fn _isContinuationByte(b: i64) -> bool {
+    return b >= 0x80 && b <= 0xBF
+}
+
+fn _validUtf8Bytes(data: Array<u8>, start: i64, end: i64) -> bool {
+    var i = start
+    while (i < end) {
+        var b = data[i] as i64
+        if (b <= 0x7F) {
+            i = i + 1
+        } else if (b >= 0xC2 && b <= 0xDF) {
+            if (i + 1 >= end || !_isContinuationByte(data[i + 1] as i64)) { return false }
+            i = i + 2
+        } else if (b == 0xE0) {
+            if (i + 2 >= end) { return false }
+            var b1 = data[i + 1] as i64
+            var b2 = data[i + 2] as i64
+            if (b1 < 0xA0 || b1 > 0xBF || !_isContinuationByte(b2)) { return false }
+            i = i + 3
+        } else if (b >= 0xE1 && b <= 0xEC) {
+            if (i + 2 >= end ||
+                !_isContinuationByte(data[i + 1] as i64) ||
+                !_isContinuationByte(data[i + 2] as i64)) { return false }
+            i = i + 3
+        } else if (b == 0xED) {
+            if (i + 2 >= end) { return false }
+            var b1 = data[i + 1] as i64
+            var b2 = data[i + 2] as i64
+            if (b1 < 0x80 || b1 > 0x9F || !_isContinuationByte(b2)) { return false }
+            i = i + 3
+        } else if (b >= 0xEE && b <= 0xEF) {
+            if (i + 2 >= end ||
+                !_isContinuationByte(data[i + 1] as i64) ||
+                !_isContinuationByte(data[i + 2] as i64)) { return false }
+            i = i + 3
+        } else if (b == 0xF0) {
+            if (i + 3 >= end) { return false }
+            var b1 = data[i + 1] as i64
+            if (b1 < 0x90 || b1 > 0xBF ||
+                !_isContinuationByte(data[i + 2] as i64) ||
+                !_isContinuationByte(data[i + 3] as i64)) { return false }
+            i = i + 4
+        } else if (b >= 0xF1 && b <= 0xF3) {
+            if (i + 3 >= end ||
+                !_isContinuationByte(data[i + 1] as i64) ||
+                !_isContinuationByte(data[i + 2] as i64) ||
+                !_isContinuationByte(data[i + 3] as i64)) { return false }
+            i = i + 4
+        } else if (b == 0xF4) {
+            if (i + 3 >= end) { return false }
+            var b1 = data[i + 1] as i64
+            if (b1 < 0x80 || b1 > 0x8F ||
+                !_isContinuationByte(data[i + 2] as i64) ||
+                !_isContinuationByte(data[i + 3] as i64)) { return false }
+            i = i + 4
+        } else {
+            return false
+        }
+    }
+    return true
+}
+
+fn _bytesToString(data: Array<u8>, start: i64, end: i64) -> string {
+    if (start >= end) { return "" }
+    var out = Array<u8>(end - start)
+    for (var i = start; i < end; i++) {
+        out[i - start] = data[i]
+    }
+    // parseClosePayload validates the byte range before decoding it, so the
+    // UTF-8 conversion is total here. Array.toString() renders numeric lanes
+    // (for example "[79, 75]") and is not a WebSocket close reason.
+    return string.fromUtf8(out[:])!
+}
+
+fn _randomBytes(n: i64) -> Array<u8> {
+    return _hexBytes(crypto.randomBytes(n))
+}
+
+fn _header(headers: string, name: string) -> string? {
+    var headerName = text.lower(name)
+    var start = 0
+    while (start < len(headers)) {
+        var end = _indexOfFrom(headers, "\r\n", start)
+        if (end < 0) { end = len(headers) }
+        var line = headers.slice(start, end)
+        var colon = line.indexOf(":")
+        if (colon > 0 && text.lower(line.slice(0, colon)) == headerName) {
+            return _trim(line.slice(colon + 1))
+        }
+        start = end + 2
+    }
+    return null
+}
+
+fn _headerHasToken(value: string, token: string) -> bool {
+    var needle = text.lower(token)
+    var start = 0
+    while (start <= len(value)) {
+        var comma = _indexOfFrom(value, ",", start)
+        var end = comma >= 0 ? comma : len(value)
+        if (text.lower(_trim(value.slice(start, end))) == needle) { return true }
+        if (comma < 0) { break }
+        start = comma + 1
+    }
+    return false
+}
+
+fn _headerHasElementToken(value: string, token: string) -> bool {
+    var needle = text.lower(token)
+    var start = 0
+    while (start <= len(value)) {
+        var comma = _indexOfFrom(value, ",", start)
+        var end = comma >= 0 ? comma : len(value)
+        var item = _trim(value.slice(start, end))
+        var semi = item.indexOf(";")
+        if (semi >= 0) { item = _trim(item.slice(0, semi)) }
+        if (text.lower(item) == needle) { return true }
+        if (comma < 0) { break }
+        start = comma + 1
+    }
+    return false
+}
+
+fn _parseStatusCode(line: string) -> i64 {
+    if (!_startsWithAt(line, 0, "HTTP/1.1 ")) { return -1 }
+    if (len(line) < 12) { return -1 }
+    if (len(line) > 12 && line.runes().nth(12) != ' ') { return -1 }
+    var code = 0
+    for (var i = 9; i < 12; i++) {
+        var c = line.runes().nth(i)
+        if (!_isDigit(c)) { return -1 }
+        code = code * 10 + ((c.toUInt32() - 48) as i64)
+    }
+    return code
+}
+
+fn _firstLine(s: string) -> string {
+    var end = _indexOfFrom(s, "\r\n", 0)
+    if (end < 0) { end = _indexOfFrom(s, "\n", 0) }
+    if (end < 0) { return s }
+    return s.slice(0, end)
+}
+
+fn _containsString(values: Array<string>, value: string) -> bool {
+    for (var i = 0; i < len(values); i++) {
+        if (values[i] == value) { return true }
+    }
+    return false
+}
+
+fn _originAllowed(origin: string?, allowedOrigins: Array<string>?) -> bool {
+    if (allowedOrigins == null || len(allowedOrigins!) == 0) { return true }
+    for (var i = 0; i < len(allowedOrigins!); i++) {
+        if (allowedOrigins![i] == "*") { return true }
+    }
+    if (origin == null || len(origin!) == 0) { return false }
+    return _containsString(allowedOrigins!, origin!)
+}
+
+fn _validSecKey(secKey: string) -> bool {
+    if (!base64.isValid(secKey)) { return false }
+    var raw = base64.decode(secKey)
+    return len(raw) == 16
+}
+
+fn _hasCrLf(s: string) -> bool {
+    return _indexOfFrom(s, "\r", 0) >= 0 || _indexOfFrom(s, "\n", 0) >= 0
+}
+
+fn _hostHeader(url: WsUrl) -> string {
+    var host = url.host
+    if (_indexOfFrom(host, ":", 0) >= 0 && !_startsWithAt(host, 0, "[")) {
+        host = "[" + host + "]"
+    }
+    if ((url.secure && url.port != 443) || (!url.secure && url.port != 80)) {
+        host = host + ":" + url.port.toString()
+    }
+    return host
+}
+
+export fn acceptKey(secKey: string) -> string {
+    var digestBytes = _hexBytes(crypto.sha1(secKey + _GUID))
+    if (len(digestBytes) != 20) { return "" }
+    return _base64Encode(digestBytes)
+}
+
+export fn randomKey() -> string {
+    var bytes = _randomBytes(16)
+    return _base64Encode(bytes)
+}
+
+fn _pickSubprotocol(headers: string, serverProtocols: Array<string>) -> string? {
+    var offered = _header(headers, "Sec-WebSocket-Protocol")
+    if (offered == null) { return null }
+    for (var i = 0; i < len(serverProtocols); i++) {
+        if (_headerHasToken(offered!, serverProtocols[i])) {
+            return serverProtocols[i]
+        }
+    }
+    return null
+}
+
+export fn parseUpgradeRequest(
+    request: string,
+    serverProtocols: Array<string>? = null,
+    allowDeflate: bool = true,
+    allowedOrigins: Array<string>? = null
+) -> ParsedUpgradeRequest? {
+    var line = _firstLine(request)
+    if (!_startsWithAt(line, 0, "GET ")) { return null }
+    var versionStart = _indexOfFrom(line, " ", 4)
+    if (versionStart <= 4) { return null }
+    var requestTarget = line.slice(4, versionStart)
+    if (len(requestTarget) == 0 || requestTarget.runes().nth(0) != '/') { return null }
+    if (line.slice(versionStart + 1, len(line)) != "HTTP/1.1") { return null }
+
+    var upgrade = _header(request, "Upgrade")
+    var connection = _header(request, "Connection")
+    var secKey = _header(request, "Sec-WebSocket-Key")
+    var version = _header(request, "Sec-WebSocket-Version")
+    if (upgrade == null || text.lower(upgrade!) != "websocket") { return null }
+    if (connection == null || !_headerHasElementToken(connection!, "upgrade")) { return null }
+    if (secKey == null || !_validSecKey(secKey!)) { return null }
+    if (version == null || _trim(version!) != "13") { return null }
+
+    var origin = _header(request, "Origin")
+    if (!_originAllowed(origin, allowedOrigins)) { return null }
+
+    var protocol: string? = null
+    if (serverProtocols != null) {
+        protocol = _pickSubprotocol(request, serverProtocols!)
+    }
+
+    var deflate = false
+    var extensions = _header(request, "Sec-WebSocket-Extensions")
+    if (allowDeflate && extensions != null) {
+        deflate = _headerHasElementToken(extensions!, "permessage-deflate")
+    }
+
+    return ParsedUpgradeRequest(requestTarget, secKey!, protocol, deflate, origin)
+}
+
+export fn upgradeResponse(secKey: string, protocol: string? = null, deflate: bool = false) -> string {
+    var out = StringBuilder()
+    out.append("HTTP/1.1 101 Switching Protocols\r\n")
+    out.append("Upgrade: websocket\r\n")
+    out.append("Connection: Upgrade\r\n")
+    out.append("Sec-WebSocket-Accept: ")
+    out.append(acceptKey(secKey))
+    out.append("\r\n")
+    if (protocol != null && len(protocol!) > 0) {
+        out.append("Sec-WebSocket-Protocol: ")
+        out.append(protocol!)
+        out.append("\r\n")
+    }
+    if (deflate) {
+        out.append("Sec-WebSocket-Extensions: permessage-deflate\r\n")
+    }
+    out.append("\r\n")
+    return out.toString()
+}
+
+export fn clientHandshakeRequest(
+    url: WsUrl,
+    secKey: string,
+    protocols: Array<string>? = null,
+    deflate: bool = true
+) -> string? {
+    if (!_validSecKey(secKey) || _hasCrLf(secKey)) { return null }
+    if (len(url.path) == 0 || url.path.runes().nth(0) != '/' || _hasCrLf(url.path)) { return null }
+    if (_hasCrLf(url.host)) { return null }
+
+    var out = StringBuilder()
+    out.append("GET ")
+    out.append(url.path)
+    out.append(" HTTP/1.1\r\n")
+    out.append("Host: ")
+    out.append(_hostHeader(url))
+    out.append("\r\n")
+    out.append("Upgrade: websocket\r\n")
+    out.append("Connection: Upgrade\r\n")
+    out.append("Sec-WebSocket-Key: ")
+    out.append(secKey)
+    out.append("\r\n")
+    out.append("Sec-WebSocket-Version: 13\r\n")
+
+    if (deflate) {
+        out.append("Sec-WebSocket-Extensions: permessage-deflate; ")
+        out.append("client_no_context_takeover; server_no_context_takeover\r\n")
+    }
+
+    if (protocols != null && len(protocols!) > 0) {
+        out.append("Sec-WebSocket-Protocol: ")
+        for (var i = 0; i < len(protocols!); i++) {
+            if (len(protocols![i]) == 0 || _hasCrLf(protocols![i])) { return null }
+            if (i > 0) { out.append(", ") }
+            out.append(protocols![i])
+        }
+        out.append("\r\n")
+    }
+
+    out.append("\r\n")
+    return out.toString()
+}
+
+export fn parseUpgradeResponse(
+    response: string,
+    secKey: string,
+    protocols: Array<string>? = null,
+    allowDeflate: bool = true
+) -> ParsedUpgradeResponse? {
+    var statusCode = _parseStatusCode(_firstLine(response))
+    if (statusCode != 101) { return null }
+
+    var upgrade = _header(response, "Upgrade")
+    if (upgrade == null || text.lower(upgrade!) != "websocket") { return null }
+
+    var connection = _header(response, "Connection")
+    if (connection == null || !_headerHasElementToken(connection!, "upgrade")) { return null }
+
+    var accept = _header(response, "Sec-WebSocket-Accept")
+    if (accept == null || accept! != acceptKey(secKey)) { return null }
+
+    var protocol: string? = null
+    var selected = _header(response, "Sec-WebSocket-Protocol")
+    if (selected != null) {
+        var p = _trim(selected!)
+        if (len(p) == 0) { return null }
+        if (protocols != null && !_containsString(protocols!, p)) { return null }
+        protocol = p
+    }
+
+    var deflate = false
+    var extensions = _header(response, "Sec-WebSocket-Extensions")
+    if (extensions != null) {
+        deflate = _headerHasElementToken(extensions!, "permessage-deflate")
+        if (deflate && !allowDeflate) { return null }
+    }
+
+    return ParsedUpgradeResponse(statusCode, protocol, deflate)
+}
+
+export fn parseUrl(url: string) -> WsUrl? {
+    if (_indexOfFrom(url, "#", 0) >= 0) { return null }
+
+    var secure = false
+    var pos = 0
+    var lower = text.lower(url)
+    if (_startsWithAt(lower, 0, "wss://")) {
+        secure = true
+        pos = 6
+    } else if (_startsWithAt(lower, 0, "ws://")) {
+        pos = 5
+    } else {
+        return null
+    }
+
+    var host = ""
+    if (pos < len(url) && url.runes().nth(pos) == '[') {
+        var endBracket = _indexOfFrom(url, "]", pos + 1)
+        if (endBracket < 0 || endBracket == pos + 1) { return null }
+        host = url.slice(pos + 1, endBracket)
+        pos = endBracket + 1
+        if (pos < len(url)) {
+            var c = url.runes().nth(pos)
+            if (c != ':' && c != '/' && c != '?') { return null }
+        }
+    } else {
+        var hostStart = pos
+        while (pos < len(url)) {
+            var c = url.runes().nth(pos)
+            if (c == ':' || c == '/' || c == '?') { break }
+            pos = pos + 1
+        }
+        if (pos == hostStart) { return null }
+        host = url.slice(hostStart, pos)
+    }
+
+    var port = secure ? 443 : 80
+    if (pos < len(url) && url.runes().nth(pos) == ':') {
+        var portStart = pos + 1
+        pos = portStart
+        while (pos < len(url)) {
+            var c = url.runes().nth(pos)
+            if (c == '/' || c == '?') { break }
+            pos = pos + 1
+        }
+        port = _parsePort(url, portStart, pos)
+        if (port < 0) { return null }
+    }
+
+    var path = "/"
+    if (pos < len(url)) {
+        var c = url.runes().nth(pos)
+        if (c == '/') {
+            path = url.slice(pos, len(url))
+        } else if (c == '?') {
+            path = "/" + url.slice(pos, len(url))
+        } else {
+            return null
+        }
+    }
+
+    return WsUrl(secure, host, port, path)
+}
+
+export fn isValidCloseCode(code: i64) -> bool {
+    return code == 1000 || code == 1001 || code == 1002 || code == 1003 ||
+        code == 1007 || code == 1008 || code == 1009 || code == 1010 ||
+        code == 1011 || (code >= 3000 && code <= 4999)
+}
+
+export fn parseClosePayload(payload: Array<u8>) -> ClosePayload? {
+    if (len(payload) > 125 || len(payload) == 1) { return null }
+    if (len(payload) == 0) { return ClosePayload(1005, "") }
+
+    var codeHi: i64 = payload[0] as i64
+    var codeLo: i64 = payload[1] as i64
+    var code = (codeHi << 8) | codeLo
+    if (!isValidCloseCode(code)) { return null }
+    if (!_validUtf8Bytes(payload, 2, len(payload))) { return null }
+
+    return ClosePayload(code, _bytesToString(payload, 2, len(payload)))
+}
+
+fn _copyInto(dst: ref Array<u8>, off: i64, src: Array<u8>) {
+    for (var i = 0; i < len(src); i++) {
+        dst[off + i] = src[i]
+    }
+}
+
+fn _validOpcode(opcode: i64) -> bool {
+    return opcode == 0 || opcode == _OP_TEXT || opcode == _OP_BINARY ||
+        opcode == _OP_CLOSE || opcode == _OP_PING || opcode == _OP_PONG
+}
+
+export fn maskPayload(payload: Array<u8>, key: Array<u8>) -> Array<u8> {
+    var out = Array<u8>(len(payload))
+    if (len(key) < 4) { return out }
+    for (var i = 0; i < len(payload); i++) {
+        out[i] = (payload[i] ^ key[i % 4]) & 255
+    }
+    return out
+}
+
+export fn parseFrame(
+    raw: Array<u8>,
+    expectMasked: bool = false,
+    enforceMask: bool = false,
+    allowRsv1: bool = false,
+    maxPayloadBytes: i64 = 67108864
+) -> ParsedFrame? {
+    if (len(raw) < 2) { return null }
+
+    var first: i64 = raw[0] as i64
+    var second: i64 = raw[1] as i64
+    var rsv1 = (first & 64) != 0
+    var rsv23 = (first & 48) != 0
+    if (rsv23 || (rsv1 && !allowRsv1)) { return null }
+
+    var fin = (first & 128) != 0
+    var opcode: i64 = first & 15
+    if (!_validOpcode(opcode)) { return null }
+
+    var control = (opcode & 8) != 0
+    if (control && !fin) { return null }
+
+    var maskMode = ((second & 128) != 0) ? 1 : 0
+    var expectedMaskMode = expectMasked ? 1 : 0
+    if (enforceMask && maskMode != expectedMaskMode) { return null }
+
+    var payloadLen: i64 = second & 127
+    var offset = 2
+    if (control && payloadLen > 125) { return null }
+
+    if (payloadLen == 126) {
+        if (len(raw) < 4) { return null }
+        var lenHi: i64 = raw[2] as i64
+        var lenLo: i64 = raw[3] as i64
+        payloadLen = (lenHi << 8) | lenLo
+        if (payloadLen < 126) { return null }
+        offset = 4
+    } else if (payloadLen == 127) {
+        if (len(raw) < 10) { return null }
+        if ((raw[2] & 128) != 0) { return null }
+        var n = 0
+        for (var i = 0; i < 8; i++) {
+            n = (n << 8) | (raw[2 + i] as i64)
+        }
+        if (n <= 65535) { return null }
+        payloadLen = n
+        offset = 10
+    }
+
+    if (maxPayloadBytes > 0 && payloadLen > maxPayloadBytes) { return null }
+
+    var maskStart = offset
+    if (maskMode == 1) {
+        if (len(raw) < offset + 4) { return null }
+        offset = offset + 4
+    }
+
+    if (len(raw) < offset + payloadLen) { return null }
+    var payload = Array<u8>(payloadLen)
+    for (var i = 0; i < payloadLen; i++) {
+        var b = raw[offset + i] as i64
+        if (maskMode == 1) {
+            b = (b ^ (raw[maskStart + (i % 4)] as i64)) & 255
+        }
+        payload[i] = b as u8
+    }
+
+    return ParsedFrame(fin, rsv1, opcode, maskMode == 1, payload, offset + payloadLen)
+}
+
+export fn frame(payload: Array<u8>, opcode: i64 = _OP_TEXT, mask: bool = true) -> Array<u8> {
+    var ext = 0
+    if (len(payload) > 65535) { ext = 8 }
+    else if (len(payload) > 125) { ext = 2 }
+    var maskLen = mask ? 4 : 0
+    var headerLen = 2 + ext + maskLen
+    var out = Array<u8>(headerLen + len(payload))
+    out[0] = ((128 | (opcode & 15)) & 255) as u8
+    if (ext == 8) {
+        out[1] = ((mask ? 128 : 0) | 127) as u8
+        var n = len(payload)
+        for (var i = 7; i >= 0; i = i - 1) {
+            out[2 + i] = (n & 255) as u8
+            n = n >> 8
+        }
+    } else if (ext == 2) {
+        out[1] = ((mask ? 128 : 0) | 126) as u8
+        out[2] = ((len(payload) >> 8) & 255) as u8
+        out[3] = (len(payload) & 255) as u8
+    } else {
+        out[1] = ((mask ? 128 : 0) | len(payload)) as u8
+    }
+
+    var body = payload
+    if (mask) {
+        var key = _randomBytes(4)
+        _copyInto(ref out, 2 + ext, key)
+        body = maskPayload(payload, key)
+    }
+    _copyInto(ref out, headerLen, body)
+    return out
+}
+
+export fn textFrame(data: string, mask: bool = true) -> Array<u8> {
+    return frame(data.copyBytes(), _OP_TEXT, mask)
+}
+
+export fn binaryFrame(data: Array<u8>, mask: bool = true) -> Array<u8> {
+    return frame(data, _OP_BINARY, mask)
+}
+
+export fn closeFrame(code: i64 = 1000, reason: string = "", mask: bool = true) -> Array<u8> {
+    var reasonBytes = reason.copyBytes()
+    var payload = Array<u8>(2 + len(reasonBytes))
+    payload[0] = ((code >> 8) & 255) as u8
+    payload[1] = (code & 255) as u8
+    _copyInto(ref payload, 2, reasonBytes)
+    return frame(payload, _OP_CLOSE, mask)
+}
+
+export fn pingFrame(data: Array<u8>? = null, mask: bool = true) -> Array<u8> {
+    var payload = data != null ? data! : Array<u8>(0)
+    return frame(payload, _OP_PING, mask)
+}
+
+export fn pongFrame(data: Array<u8>? = null, mask: bool = true) -> Array<u8> {
+    var payload = data != null ? data! : Array<u8>(0)
+    return frame(payload, _OP_PONG, mask)
+}
+
+// ========== Connection layer ==========
+//
+// The RFC 6455 protocol math above is composed here into live connections
+// over the net module. net owns TLS, partial-write draining, deadlines and
+// coroutine I/O, so this layer only sequences the handshake, frames, control
+// messages and fragmentation — it never touches sockets or TLS directly.
+// permessage-deflate is not offered: the wire stays uncompressed until a
+// bounded inflate primitive lands, which keeps this layer dependency-free.
+
+const _WS_MAX_MESSAGE_BYTES = 67108864
+const _WS_READ_CHUNK = 8192
+const _WS_ACCEPT_POLL_MS = 100
+const _WS_UPGRADE_MAX_BYTES = 16384
+const _WS_CLOSE_NORMAL = 1000
+const _WS_CLOSE_GOING_AWAY = 1001
+const _WS_CLOSE_PROTOCOL_ERROR = 1002
+const _WS_CLOSE_TOO_LARGE = 1009
+
+export final class WsConnectOptions {
+    timeoutMs: i64
+    pingIntervalMs: i64
+    pongTimeoutMs: i64
+    maxMessageSize: i64
+
+    init(
+        timeoutMs: i64 = 30000,
+        pingIntervalMs: i64 = 0,
+        pongTimeoutMs: i64 = 0,
+        maxMessageSize: i64 = _WS_MAX_MESSAGE_BYTES
+    ) {
+        this.timeoutMs = timeoutMs
+        this.pingIntervalMs = pingIntervalMs
+        this.pongTimeoutMs = pongTimeoutMs
+        this.maxMessageSize = maxMessageSize
+    }
+}
+
+// A received application message. Bodies are bytes so binary frames are never
+// forced through UTF-8; text() decodes on demand. error is set (with data
+// null) when the peer closed or the stream faulted, so recv callers can loop
+// on `msg.error == null`.
+export final class WsMessage {
+    data: Array<u8>?
+    binary: bool
+    error: string?
+
+    init(data: Array<u8>? = null, binary: bool = false, error: string? = null) {
+        this.data = data
+        this.binary = binary
+        this.error = error
+    }
+
+    text() -> string? {
+        if (this.data == null) { return null }
+        return string.fromUtf8(this.data![:])
+    }
+}
+
+// Total byte span of the frame at the front of raw: a positive complete-frame
+// length, 0 when more bytes are needed, or -1 on a protocol violation. This
+// gives recv the three-way verdict parseFrame's nullable result cannot, so a
+// malformed frame closes with 1002 instead of blocking for more data.
+fn _frameSpan(raw: Array<u8>, maxPayload: i64) -> i64 {
+    var n = len(raw)
+    if (n < 2) { return 0 }
+    var first: i64 = raw[0] as i64
+    var rsv23 = (first & 48) != 0
+    if (rsv23) { return -1 }
+    var opcode: i64 = first & 15
+    if (!_validOpcode(opcode)) { return -1 }
+    var control = (opcode & 8) != 0
+    var fin = (first & 128) != 0
+    if (control && !fin) { return -1 }
+
+    var second: i64 = raw[1] as i64
+    var masked = (second & 128) != 0
+    var lenCode: i64 = second & 127
+    if (control && lenCode > 125) { return -1 }
+
+    var offset = 2
+    var payloadLen = lenCode
+    if (lenCode == 126) {
+        if (n < 4) { return 0 }
+        payloadLen = ((raw[2] as i64) << 8) | (raw[3] as i64)
+        offset = 4
+    } else if (lenCode == 127) {
+        if (n < 10) { return 0 }
+        payloadLen = 0
+        for (var i = 0; i < 8; i++) {
+            if (i < 4 && raw[2 + i] != 0) { return -1 }
+            payloadLen = (payloadLen << 8) | (raw[2 + i] as i64)
+        }
+        if (payloadLen < 0) { return -1 }
+        offset = 10
+    }
+    if (payloadLen > maxPayload) { return -1 }
+    if (masked) { offset = offset + 4 }
+    var total = offset + payloadLen
+    if (n < total) { return 0 }
+    return total
+}
+
+// A WebSocket connection. Wraps a net connection plus the read buffer and the
+// fragmentation and close state needed to reassemble messages.
+export final class WsConn {
+    private _conn: NetConn?
+    private _isServer: bool
+    private _rbuf: Array<u8>
+    private _fragBuf: Array<u8>?
+    private _fragBinary: bool
+    private _closed: bool
+    private _maxMessage: i64
+    url: string
+    error: string?
+
+    init(
+        conn: NetConn?,
+        isServer: bool,
+        url: string,
+        error: string?,
+        maxMessage: i64
+    ) {
+        this._conn = conn
+        this._isServer = isServer
+        this._rbuf = Array<u8>()
+        this._fragBuf = null
+        this._fragBinary = false
+        this._closed = conn == null
+        this._maxMessage = maxMessage
+        this.url = url
+        this.error = error
+    }
+
+    isOpen() -> bool { return !this._closed && this._conn != null }
+
+    // Send one frame; a client masks, a server does not (RFC 6455 5.1).
+    private _sendFrame(payload: Array<u8>, opcode: i64) -> bool {
+        if (this._conn == null) { return false }
+        var f = frame(payload, opcode, !this._isServer)
+        return net.writeBytes(this._conn!, f) == len(f)
+    }
+
+    // Pull more bytes into the read buffer; false at EOF or on error.
+    private ref _fill() -> bool {
+        if (this._conn == null) { return false }
+        var chunk = Array<u8>(_WS_READ_CHUNK)
+        var n = net.readInto(this._conn!, ref chunk, _WS_READ_CHUNK)
+        if (n <= 0) { return false }
+        for (var i = 0; i < n; i++) { this._rbuf.push(chunk[i]) }
+        return true
+    }
+
+    private ref _consume(count: i64) {
+        if (count <= 0) { return }
+        var rest = Array<u8>()
+        for (var i = count; i < len(this._rbuf); i++) { rest.push(this._rbuf[i]) }
+        this._rbuf = rest
+    }
+
+    private ref _writeClose(code: i64, reason: string) {
+        if (this._conn == null) { return }
+        var f = closeFrame(code, reason, !this._isServer)
+        net.writeBytes(this._conn!, f)
+    }
+
+    // Close the transport after an error and surface it as a WsMessage.
+    private ref _fail(code: i64, reason: string) -> WsMessage {
+        if (!this._closed) { this._writeClose(code, reason) }
+        this._closed = true
+        if (this._conn != null) {
+            net.close(this._conn!)
+            this._conn = null
+        }
+        return WsMessage(null, false, reason)
+    }
+
+    // Reassemble the next application message. Control frames (ping/pong/close)
+    // are handled inline and never surface. A returned message with a non-null
+    // error marks a clean close or a fault; null means the read deadline
+    // elapsed with no complete frame.
+    ref recv(timeout: i64 = -1) -> WsMessage? {
+        if (this._conn == null) { return WsMessage(null, false, "closed") }
+        net.setReadDeadline(this._conn!, timeout >= 0 ? time.monotonic() + timeout : 0)
+        while (true) {
+            var span = _frameSpan(this._rbuf, this._maxMessage)
+            if (span < 0) { return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error") }
+            if (span == 0) {
+                if (!this._fill()) {
+                    if (this._conn != null && net.lastError(this._conn!) == NetError.Timeout) {
+                        return null
+                    }
+                    return this._fail(_WS_CLOSE_GOING_AWAY, "closed")
+                }
+                continue
+            }
+
+            var enforce = this._isServer
+            var parsed = parseFrame(this._rbuf, enforce, enforce, false, this._maxMessage)
+            if (parsed == null) { return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error") }
+            this._consume(parsed!.consumedBytes)
+            var opcode = parsed!.opcode
+            var payload = parsed!.payload
+
+            if (opcode == _OP_CLOSE) {
+                if (len(payload) == 1) {
+                    return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error")
+                }
+                if (len(payload) >= 2 && parseClosePayload(payload) == null) {
+                    return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error")
+                }
+                if (!this._closed) { this._writeClose(_WS_CLOSE_NORMAL, "") }
+                this._closed = true
+                net.close(this._conn!)
+                this._conn = null
+                return WsMessage(null, false, "closed")
+            }
+            if (opcode == _OP_PING) {
+                this._sendFrame(payload, _OP_PONG)
+                continue
+            }
+            if (opcode == _OP_PONG) { continue }
+
+            if (opcode == _OP_CONTINUATION) {
+                if (this._fragBuf == null) {
+                    return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error")
+                }
+                if (len(this._fragBuf!) + len(payload) > this._maxMessage) {
+                    return this._fail(_WS_CLOSE_TOO_LARGE, "message too large")
+                }
+                for (var i = 0; i < len(payload); i++) { this._fragBuf!.push(payload[i]) }
+                if (parsed!.fin) {
+                    var whole = this._fragBuf!
+                    var binary = this._fragBinary
+                    this._fragBuf = null
+                    if (!binary && !_validUtf8Bytes(whole, 0, len(whole))) {
+                        return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "invalid utf8")
+                    }
+                    return WsMessage(whole, binary, null)
+                }
+                continue
+            }
+
+            if (this._fragBuf != null) {
+                return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error")
+            }
+            var binary = opcode == _OP_BINARY
+            if (!parsed!.fin) {
+                this._fragBuf = payload
+                this._fragBinary = binary
+                continue
+            }
+            if (!binary && !_validUtf8Bytes(payload, 0, len(payload))) {
+                return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "invalid utf8")
+            }
+            return WsMessage(payload, binary, null)
+        }
+        return null
+    }
+
+    sendText(data: string) -> bool {
+        return this._sendFrame(data.copyBytes(), _OP_TEXT)
+    }
+
+    sendBytes(data: Array<u8>, binary: bool = false) -> bool {
+        return this._sendFrame(data, binary ? _OP_BINARY : _OP_TEXT)
+    }
+
+    ping() -> bool { return this._sendFrame(Array<u8>(0), _OP_PING) }
+
+    ref close(code: i64 = _WS_CLOSE_NORMAL, reason: string = "") -> bool {
+        if (this._closed || this._conn == null) { return true }
+        this._writeClose(code, reason)
+        this._closed = true
+        net.close(this._conn!)
+        this._conn = null
+        return true
+    }
+}
+
+// Find the byte after the CRLFCRLF that ends an HTTP head, or -1.
+fn _crlfCrlf(raw: Array<u8>) -> i64 {
+    for (var i = 0; i + 3 < len(raw); i++) {
+        if (raw[i] == 13 && raw[i + 1] == 10 && raw[i + 2] == 13 && raw[i + 3] == 10) {
+            return i + 4
+        }
+    }
+    return -1
+}
+
+// Read an HTTP upgrade head (through the terminating CRLFCRLF) as text.
+fn _wsReadHandshake(conn: NetConn, timeoutMs: i64) -> string? {
+    var raw = Array<u8>()
+    net.setReadDeadline(conn, time.monotonic() + timeoutMs)
+    while (len(raw) < _WS_UPGRADE_MAX_BYTES) {
+        var end = _crlfCrlf(raw)
+        if (end >= 0) {
+            var head: Slice<u8> = raw[0:end]
+            return string.fromUtf8Lossy(head)
+        }
+        var chunk = Array<u8>(_WS_READ_CHUNK)
+        var n = net.readInto(conn, ref chunk, _WS_READ_CHUNK)
+        if (n <= 0) { return null }
+        for (var i = 0; i < n; i++) { raw.push(chunk[i]) }
+    }
+    return null
+}
+
+// Connect to a ws:// or wss:// endpoint. Never throws: a failed connection is
+// a WsConn whose error explains why, matching the streaming recv/send surface.
+export fn connect(url: string, options: WsConnectOptions? = null) -> WsConn {
+    var opts = options ?? WsConnectOptions()
+    var parsed = parseUrl(url)
+    if (parsed == null) { return WsConn(null, false, url, "URL parse error", opts.maxMessageSize) }
+    var wsurl = parsed!
+
+    var conn: NetConn? = null
+    try {
+        conn = net.dial(wsurl.host, wsurl.port, DialOptions(opts.timeoutMs, wsurl.secure))
+    } catch (e: NetError) {
+        return WsConn(null, false, url, "Connection failed", opts.maxMessageSize)
+    }
+    var live = conn!
+
+    var key = randomKey()
+    var request = clientHandshakeRequest(wsurl, key, null, false)
+    if (request == null) {
+        net.close(live)
+        return WsConn(null, false, url, "Invalid request", opts.maxMessageSize)
+    }
+    var reqBytes = request!.copyBytes()
+    if (net.writeBytes(live, reqBytes) != len(reqBytes)) {
+        net.close(live)
+        return WsConn(null, false, url, "Handshake failed", opts.maxMessageSize)
+    }
+
+    var responseText = _wsReadHandshake(live, opts.timeoutMs)
+    if (responseText == null) {
+        net.close(live)
+        return WsConn(null, false, url, "Handshake failed", opts.maxMessageSize)
+    }
+    var upgrade = parseUpgradeResponse(responseText!, key, null, false)
+    if (upgrade == null || upgrade!.statusCode != 101) {
+        net.close(live)
+        return WsConn(null, false, url, "Handshake failed", opts.maxMessageSize)
+    }
+    return WsConn(live, false, url, null, opts.maxMessageSize)
+}
+
+// Accept and upgrade one client, then run the handler for its lifetime.
+// Per-connection service context, shared read-only into each connection
+// coroutine. Boxing the handler in a const-shareable object (rather than
+// passing the function value straight into `go`) is what the AOT
+// cross-execution transfer planner can verify — the same shape http's server
+// uses for its route snapshot.
+final class _WsServeCtx {
+    handler: fn(ref WsConn)
+    maxMessage: i64
+
+    init(handler: fn(ref WsConn), maxMessage: i64) {
+        this.handler = handler
+        this.maxMessage = maxMessage
+    }
+}
+
+fn _wsServeConn(conn: move NetConn, ctx: _WsServeCtx) {
+    var live = conn
+    var head = _wsReadHandshake(live, 30000)
+    if (head == null) {
+        net.close(live)
+        return
+    }
+    var request = parseUpgradeRequest(head!, null, false, null)
+    if (request == null) {
+        net.writeBytes(live, "HTTP/1.1 400 Bad Request\r\n\r\n".copyBytes())
+        net.close(live)
+        return
+    }
+    var response = upgradeResponse(request!.secKey, request!.protocol, false)
+    var respBytes = response.copyBytes()
+    if (net.writeBytes(live, respBytes) != len(respBytes)) {
+        net.close(live)
+        return
+    }
+    var wsconn = WsConn(live, true, request!.requestTarget, null, ctx.maxMessage)
+    ctx.handler(ref wsconn)
+    wsconn.close()
+}
+
+// Public delegators over the WsConn methods, so callers may write either
+// ws.send(conn, data) or conn.send(data).
+export fn sendText(conn: ref WsConn, data: string) -> bool {
+    return conn.sendText(data)
+}
+
+export fn sendBytes(conn: ref WsConn, data: Array<u8>, binary: bool = false) -> bool {
+    return conn.sendBytes(data, binary)
+}
+
+export fn recv(conn: ref WsConn, timeout: i64 = -1) -> WsMessage? {
+    return conn.recv(timeout)
+}
+
+export fn ping(conn: ref WsConn) -> bool { return conn.ping() }
+
+export fn close(conn: ref WsConn, code: i64 = _WS_CLOSE_NORMAL, reason: string = "") -> bool {
+    return conn.close(code, reason)
+}
+
+// Listen, returning null instead of throwing so the caller keeps a clean
+// ownership summary (a try-assigned local defeats the move analysis).
+fn _wsListen(port: i64) -> NetListener? {
+    try {
+        return net.listen(port, 1024)
+    } catch (e: NetError) {
+        return null
+    }
+}
+
+// Serve WebSocket connections while `running` stays true, one coroutine per
+// accepted connection (the http server shape). Setting running to false stops
+// the accept loop and the linked scope cancels in-flight handlers.
+export fn serve(
+    port: i64,
+    handler: fn(ref WsConn),
+    running: Atomic<bool>,
+    maxMessage: i64 = _WS_MAX_MESSAGE_BYTES
+) -> bool {
+    if (!running.load()) { return false }
+    var maybeListener = _wsListen(port)
+    if (maybeListener == null) { return false }
+    var live = maybeListener!
+    const ctx = _WsServeCtx(handler, maxMessage)
+    var healthy = true
+    linked scope {
+        while (running.load()) {
+            net.setAcceptDeadline(live, time.monotonic() + _WS_ACCEPT_POLL_MS)
+            var accepted = net.accept(live)
+            if (accepted != null) {
+                var client: NetConn = accepted!
+                accepted = null
+                go _wsServeConn(move client, ctx)
+                continue
+            }
+            var err = net.lastError(live)
+            if (!running.load() || err == NetError.Closed) { break }
+            if (err == NetError.Timeout) { continue }
+            healthy = false
+            running.store(false)
+            break
+        }
+    }
+    net.close(live)
+    return healthy
+}

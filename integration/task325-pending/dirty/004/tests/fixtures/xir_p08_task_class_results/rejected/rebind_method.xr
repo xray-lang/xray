@@ -1,0 +1,2 @@
+class C implements Sendable { x:i64; constructor(x:i64){this.x=x}; change(){this.x=2} }
+export fn main()->i64{return 7}

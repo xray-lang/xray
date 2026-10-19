@@ -1,0 +1,17 @@
+// Built-in f64 type — implementation in src/runtime/value/xf64_methods.c
+class f64 {
+    // @lowered
+    static parse(text: string) -> f64
+    // @lowered
+    static tryParse(text: string) -> f64?
+    abs() -> f64
+    toString() -> string
+    toFixed(decimals?: i64) -> string
+    toI64() -> i64
+    floor() -> i64
+    ceil() -> i64
+    round() -> i64
+    sqrt() -> f64
+    pow(exp: f64) -> f64
+    isNaN() -> bool
+}

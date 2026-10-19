@@ -1,0 +1,31 @@
+{
+  "id": "channel",
+  "title": "Channel",
+  "spec_anchor": "#105-channel",
+  "aliases": ["channels", "chan", "Channel", "send", "recv", "buffered"],
+  "lead": "Channels are the primary inter-coroutine communication mechanism.",
+  "sections": [
+    {
+      "heading": "Declaration",
+      "fences": ["channel-decl-variants"],
+      "after_text": "Name a channel with `const`. `Channel<T>` is an audited synchronization handle: its binding is stable while `send`/`recv` mutate protected runtime state."
+    },
+    {
+      "heading": "Operations",
+      "fences": ["channel-basic-ops"]
+    },
+    {
+      "heading": "Function parameter type",
+      "fences": ["channel-param-type"]
+    },
+    {
+      "heading": "Concurrency rules",
+      "bullets": [
+        "The target Channel<T> payload domain requires copyable, storable, Sendable T; complete channel/go qualification remains separate from this contract",
+        "Qualified channel handles may be captured by go closures when the full type satisfies Sendable",
+        "Array payloads preserve logical copies without a required copy/move marker; class and synchronized identities are not duplicated or frozen",
+        "Noncopyable resources are outside the first Channel<T> payload domain; const or a synchronization wrapper cannot bypass Sendable checks"
+      ]
+    }
+  ]
+}

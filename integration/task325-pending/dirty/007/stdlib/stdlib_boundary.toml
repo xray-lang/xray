@@ -1,0 +1,514 @@
+# Task 196: canonical standard-library ownership and backend-boundary policy.
+# Signatures remain source-derived from .xr/.def/native type declarations.
+schema = 3
+
+[governance]
+vm_fastpath_option = "XRAY_STDLIB_VM_FASTPATHS"
+export_authority = "boundary_manifest_semantic_source"
+l4_algorithm_review_task = "task-256"
+l4_algorithm_reviewed = [
+  "_probe", "base64", "csv", "datetime", "encoding", "path",
+  "sync", "text", "toml", "url", "xml", "yaml",
+]
+error_model = "enum_value_channel"
+failure_as_data = "domain_adt"
+forbidden_prelude_symbols = ["Result"]
+regex_reassessment_triggers = [
+  "generated_stdlib_vm_fastpaths_fully_landed",
+  "freestanding_runtime_requires_regex_without_native_library",
+]
+
+[object_abi]
+version = 1
+value_layout = "include/xray_value_abi.h"
+object_header = "src/shared/xr_obj_header.h"
+entry_abi = "XrValue(XrHostedFragmentContext*,XrValue*,uint32_t;signal)"
+error_channel = "vm_pending_error"
+ownership = "borrow_args_owned_result"
+unsupported_policy = "fail_closed"
+
+# `log` owns mutable module state shared by its variadic source implementation.
+# A hosted fragment has a separate generated-C module image, so exporting only
+# the fixed-arity control functions would split one logical logger into two
+# state stores. Keep the complete stateful surface on the canonical VM module
+# until hosted fragments can bind directly to VM-owned module slots.
+[[hosted_fragment_deferred]]
+symbol = "log.enableAsync"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.enableSource"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.flush"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.isEnabled"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.setFormat"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.setLevel"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "cluster.join"
+reason = "canonical-source-method-dependency"
+
+# The cluster runtime generation, source state, and peer directory are mutable
+# module slots. A hosted fragment would read and write its own generated-C
+# image of them while `join` updates the VM module, so every entry that touches
+# that state stays on the canonical VM module with `join`.
+[[hosted_fragment_deferred]]
+symbol = "cluster.discover"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "cluster.nodes"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "cluster.self"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "cluster.stop"
+reason = "stateful-module-slot-identity"
+
+[dynamic_audit]
+# These modules still expose fixed-shape dynamic APIs and must be migrated
+# by task 196 after the typed enum error-channel and 191/197 consumer prerequisites land.
+migration_modules = [
+  "Coro", "CoroPool", "csv", "log", "toml", "url", "xml", "yaml",
+]
+# No dynamic boundary is allowed today: the log and HTTP surfaces that used to
+# accepted values of any shape now carry exact types. An entry may only be added
+# back for a symbol the source API still exposes dynamically, and it must carry
+# complete ownership and domain metadata.
+
+[[module]]
+name = "time"
+public = true
+layer = "L1"
+policy = "xray_semantic"
+semantic_source = "stdlib/time/time.xr"
+public_native = []
+private_native_sources = ["stdlib/time/*.c"]
+private_native_reason = "Host clock reads and the yieldable timer suspension consumed by time.xr"
+perf_suite = "stdlib/time"
+
+[[module]]
+name = "math"
+public = true
+layer = "L1"
+policy = "xray_semantic"
+semantic_source = "stdlib/math/math.xr"
+public_native = []
+private_native_sources = ["stdlib/math/math.c"]
+private_native_reason = "libm routines whose accuracy contract Xray arithmetic cannot restate, plus the system entropy source, consumed by math.xr"
+perf_suite = "stdlib/math"
+
+[[module]]
+name = "simd"
+public = true
+layer = "L1"
+policy = "xray_semantic"
+semantic_source = "stdlib/simd/simd.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/simd"
+
+[[module]]
+name = "path"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/path/path.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+# Exact runtime representation adapters used by native IO/AOT direct calls.
+# They do not implement path algorithms or public path-module semantics.
+aot_runtime_adapters = [
+  "xrt_path_data", "xrt_path_len", "xrt_path_raw_value",
+]
+aot_runtime_adapter_reason = "Bridge the typed Path owner representation at native IO and AOT call boundaries"
+perf_suite = "stdlib/path"
+
+[[module]]
+name = "base64"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/base64/base64.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/base64"
+
+[[module]]
+name = "regex"
+public = true
+layer = "L3"
+policy = "xray_semantic"
+semantic_source = "stdlib/regex/regex.xr"
+# Regex, RegexMatch, flag policy, caching and every module function are source
+# declarations. Literal syntax canonicalizes to the source Regex constructor.
+public_native = []
+private_native_sources = ["stdlib/regex/*.c"]
+private_native_reason = "Canonical Unicode property table queries"
+perf_suite = "stdlib/regex"
+
+[[module]]
+name = "mem"
+public = true
+layer = "L1"
+policy = "xray_semantic"
+semantic_source = "stdlib/mem/mem.xr"
+# Buffer's public class and methods are source-owned. The private storage handle
+# is registered when the module loads because it carries the runtime destructor
+# that the language intentionally does not expose as a user hook.
+load_time_classes = ["__BufferStorage"]
+# Layout, pointer and borrow intrinsics are declared by
+# src/frontend/analyzer/xa_intrinsic_registry.def instead, because their result
+# type comes from an explicit type argument and they lower to backend ops
+# rather than to calls, so a .def row could only restate a signature nothing
+# reads.
+public_native = []
+private_native_sources = ["stdlib/mem/mem.c"]
+private_native_reason = "Private allocator, page, overlap-move and machine-intrinsic leaves consumed by mem.xr"
+perf_suite = "stdlib/mem"
+
+[[module]]
+name = "codegen"
+public = true
+layer = "L1"
+policy = "xray_semantic"
+semantic_source = "stdlib/codegen/codegen.xr"
+public_native = []
+def_migration_complete = true
+perf_suite = "stdlib/codegen"
+
+[[module]]
+name = "runtime"
+public = true
+layer = "L0"
+policy = "xray_semantic"
+semantic_source = "stdlib/runtime/runtime.xr"
+public_native = []
+private_native_sources = ["stdlib/runtime/*.c"]
+private_native_reason = "Private reclamation-domain and system-heap counter reads consumed by runtime.xr"
+perf_suite = "stdlib/runtime"
+
+[[module]]
+name = "sync"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/sync/sync.xr"
+public_native = []
+def_migration_complete = true
+perf_suite = "stdlib/sync"
+
+[[module]]
+name = "parallel"
+public = true
+layer = "L5"
+policy = "xray_semantic"
+semantic_source = "stdlib/parallel/parallel.xr"
+public_native = []
+def_migration_complete = true
+perf_suite = "stdlib/parallel"
+
+[[module]]
+name = "sys"
+public = true
+layer = "L2"
+policy = "xray_semantic"
+semantic_source = "stdlib/sys/sys.xr"
+public_native = []
+private_native_sources = ["stdlib/sys/sys.c"]
+private_native_reason = "OS thread, process, pipe, signal, and dynamic-loader thin boundary"
+perf_suite = "stdlib/sys"
+
+[[module]]
+name = "url"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/url/url.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/url"
+
+[[module]]
+name = "datetime"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/datetime/datetime.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/datetime"
+
+[[module]]
+name = "log"
+public = true
+layer = "L5"
+policy = "xray_semantic"
+semantic_source = "stdlib/log/log.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/log"
+
+[[module]]
+name = "encoding"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/encoding/encoding.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/encoding"
+
+[[module]]
+name = "text"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/text/text.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/text"
+
+[[module]]
+name = "_probe"
+public = false
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/_probe/_probe.xr"
+public_native = []
+def_migration_complete = true
+perf_suite = "stdlib/_probe"
+
+[[module]]
+name = "io"
+public = true
+layer = "L2"
+policy = "xray_semantic"
+semantic_source = "stdlib/io/io.xr"
+public_native = []
+private_native_sources = ["stdlib/io/*.c"]
+private_native_reason = "Private POSIX, Win32, file-descriptor and stdio leaves consumed by io.xr"
+perf_suite = "stdlib/io"
+
+[[module]]
+name = "os"
+public = true
+layer = "L2"
+policy = "xray_semantic"
+semantic_source = "stdlib/os/os.xr"
+public_native = []
+private_native_sources = ["stdlib/os/*.c"]
+private_native_reason = "Private environment, platform and scheduler leaves consumed by os.xr"
+perf_suite = "stdlib/os"
+
+[[module]]
+name = "test_yield"
+public = false
+layer = "L0"
+policy = "native_primitive"
+semantic_source = "stdlib/test_yield/test_yield.c"
+public_native = []
+# This module has no Xray source to derive an export set from: every entry is a
+# scheduler test stub whose point is the native binding kind it is bound with.
+# Declaring the set here is what lets the generic loader carry it too.
+native_fn_exports = [
+  { name = "simple", vm = "test_yield_simple", vm_binding = "yieldable" },
+  { name = "add", vm = "test_yield_add", vm_binding = "yieldable" },
+  { name = "sync", vm = "test_yield_sync", vm_binding = "normal" },
+  { name = "blocking_sleep", vm = "test_yield_blocking_sleep", vm_binding = "slow" },
+  { name = "multi_yield", vm = "test_yield_multi", vm_binding = "yieldable" },
+  { name = "chain", vm = "test_yield_chain", vm_binding = "yieldable" },
+  { name = "error_test", vm = "test_yield_error", vm_binding = "yieldable" },
+  { name = "cancel_test", vm = "test_yield_cancel", vm_binding = "yieldable" },
+  { name = "nested", vm = "test_yield_nested", vm_binding = "yieldable" },
+  { name = "long_task", vm = "test_yield_long_task", vm_binding = "yieldable" },
+  { name = "counter_inc", vm = "test_yield_counter_inc", vm_binding = "yieldable" },
+  { name = "counter_get", vm = "test_yield_counter_get", vm_binding = "normal" },
+  { name = "counter_reset", vm = "test_yield_counter_reset", vm_binding = "normal" },
+]
+private_native_sources = ["stdlib/test_yield/*.c"]
+private_native_reason = "Internal scheduler/yieldable test module"
+perf_suite = "stdlib/test_yield"
+
+[[module]]
+name = "net"
+public = true
+layer = "L2"
+policy = "xray_semantic"
+semantic_source = "stdlib/net/net.xr"
+# Public TLS context classes live in net.xr. This private immutable storage
+# class owns the OpenSSL context and its native-body destructor.
+load_time_classes = ["__TlsContextStorage"]
+public_native = []
+private_native_sources = ["src/io/xnet_provider.c"]
+private_native_reason = "Runtime-owned socket, TLS, deadline and netpoll providers for the private leaves consumed by net.xr"
+perf_suite = "stdlib/net"
+
+[[module]]
+name = "http"
+public = true
+layer = "L5"
+policy = "xray_semantic"
+semantic_source = "stdlib/http/http.xr"
+public_native = []
+private_native_reason = "Pure-Xray module factory only; HTTP semantics are source-owned"
+perf_suite = "stdlib/http"
+
+[[module]]
+name = "ws"
+public = true
+layer = "L5"
+policy = "xray_semantic"
+semantic_source = "stdlib/ws/ws.xr"
+public_native = []
+perf_suite = "stdlib/ws"
+
+[[module]]
+name = "http2"
+public = true
+layer = "L5"
+policy = "xray_semantic"
+semantic_source = "stdlib/http2/http2.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/http2"
+
+[[module]]
+name = "crypto"
+public = true
+layer = "L3"
+policy = "xray_semantic"
+semantic_source = "stdlib/crypto/crypto.xr"
+public_native = []
+private_native_sources = ["stdlib/crypto/*.c"]
+private_native_reason = "Platform CSPRNG and constant-time comparison consumed by crypto.xr"
+perf_suite = "stdlib/crypto"
+
+[[module]]
+name = "compress"
+public = true
+layer = "L3"
+policy = "xray_semantic"
+semantic_source = "stdlib/compress/compress.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/compress"
+
+[[module]]
+name = "cluster"
+public = true
+layer = "L5"
+policy = "xray_semantic"
+semantic_source = "stdlib/cluster/cluster.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/cluster"
+
+[[module]]
+name = "csv"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/csv/csv.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/csv"
+
+[[module]]
+name = "toml"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/toml/toml.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/toml"
+
+[[module]]
+name = "yaml"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/yaml/yaml.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/yaml"
+
+[[module]]
+name = "xml"
+public = true
+layer = "L4"
+policy = "xray_semantic"
+semantic_source = "stdlib/xml/xml.xr"
+public_native = []
+def_migration_complete = true
+aot_helper_forbidden = true
+perf_suite = "stdlib/xml"
+
+# Generated VM-native entries use the canonical hosted object ABI above. New
+# entries fail closed unless the generator supports their exact ABI batch and
+# they provide source, old-C oracle, direct ABI gate, workload benchmark, diff
+# coverage, and the global switch. ABI microbenchmarks deliberately do not use
+# the process-level VM/AOT benchmark runner: that runner mostly measures process
+# startup, while the ABI gate compares generated and legacy-C adapters directly.
+
+[[vm_fastpath]]
+symbol = "http.isRedirectStatus"
+module = "http"
+member = "isRedirectStatus"
+reference = "stdlib/http/http.xr::isRedirectStatus"
+native = "xr_generated_http_is_redirect_status"
+abi = "i64->bool"
+batch = "scalar"
+reason = "Pure scalar protocol predicate; first generated-native ABI batch"
+abi_gate = "test_stdlib_vm_fastpath_abi"
+workload_benchmark = "http.head.contract"
+diff_case = "tests/diff/cases/semantics/stdlib/http_redirect_status_direct.xr"
+oracle = "src/shared/xr_http_url.c::is_redirect_status"
+review_date = "2026-08-02"
+disable_build_option = "XRAY_STDLIB_VM_FASTPATHS"
+
+[[vm_fastpath]]
+symbol = "ws.isValidCloseCode"
+module = "ws"
+member = "isValidCloseCode"
+reference = "stdlib/ws/ws.xr::isValidCloseCode"
+native = "xr_generated_ws_is_valid_close_code"
+abi = "i64->bool"
+batch = "scalar"
+reason = "Pure scalar protocol predicate; first generated-native ABI batch"
+abi_gate = "test_stdlib_vm_fastpath_abi"
+workload_benchmark = "ws.protocol.contract"
+diff_case = "tests/diff/cases/semantics/stdlib/ws_close_code_fastpath_direct.xr"
+oracle = "tests/unit/stdlib/test_stdlib_vm_fastpath_abi.c::legacy_ws_valid_close_code"
+review_date = "2026-08-02"
+disable_build_option = "XRAY_STDLIB_VM_FASTPATHS"

@@ -1,0 +1,3 @@
+fn require<T:Sendable>(value:T)->i64 { return 42 }
+fn read<T:{n:i64}>(value:T)->i64 { return require<T>(value) }
+export fn referenceAnswer()->i64 { return read({n:42}) }

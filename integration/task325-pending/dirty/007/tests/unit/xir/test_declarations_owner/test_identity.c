@@ -1,0 +1,179 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * test_identity.c - Roles are verified semantics and proof-bound identity
+ */
+#include "../xir_program_input_fixture.h"
+#include "xir/xxir_program_packet_internal.h"
+#include "../xir_construction_fixture.h"
+#include "xir/xxir_vm.h"
+#include "xir/xxir_generic.h"
+#include "xir/xxir_program_internal.h"
+#include "xir/xxir_checked.h"
+#include "base/xsha256.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define CHECK(c) do { if (!(c)) { fprintf(stderr,"%d: %s\n",__LINE__,#c); exit(1); } } while (0)
+#include "../xir_library_compile_owner.h"
+static const char *packet_directory;
+static XrXirArtifact *make(const XrXirCompileContext *context,uint32_t role,uint32_t timeout) {
+    const XrXirInstruction unit={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
+    const XrXirInstruction code[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},42,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
+    const XrXirBlock blocks[]={{0,1,0,0},{0,2,0,0}};
+    const XrXirFunction functions[]={{"init",4,NULL,0,XR_XIR_UNIT,blocks,1,&unit,1,NULL,0},
+        {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,code,2,NULL,0},
+        {"test",4,NULL,0,XR_XIR_UNIT,blocks,1,&unit,1,NULL,0},
+        {"unused_generic",14,NULL,0,XR_XIR_UNIT,blocks,1,&unit,1,NULL,0}};
+    XrXirFunctionIdentity identities[4]={{0},{0},{.test_role=role,.test_timeout_seconds=timeout},{0}};
+    const XrXirConstraint unconstrained={0};
+    const XrXirGeneric generics[4]={{0},{0},{0},{&unconstrained,1,NULL,0,NULL}};
+    const XrXirSourceModule source={"root",4,NULL,0,0};
+    const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
+    XrXirModule module={XR_XIR_BUILT,functions,4,&declarations,generics,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    XrXirArtifact *checked=NULL,*closed=NULL,*lowered=NULL;
+    CHECK(xir_fixture_check(context, &module, &checked, NULL)==XR_XIR_OK);
+    XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(checked,&packet,NULL)==XR_XIR_OK);
+    if(packet_directory) {
+        char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%u-%u.chk",packet_directory,role,timeout)>0);
+        FILE *file=fopen(path,"wb");CHECK(file && fwrite(packet.bytes,1,packet.length,file)==packet.length && !fclose(file));
+    }
+    XrXirArtifact *roundtrip=NULL;
+    CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&roundtrip,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_module(roundtrip)->declarations->functions[2].test_role==role);
+    CHECK(xr_xir_compile_artifact_module(roundtrip)->declarations->functions[2].test_timeout_seconds==timeout);
+    uint8_t current_digest[32];memcpy(current_digest,packet.bytes+32,32);
+    /* Rehashed header rejection is separate from the full historical models. */
+    CHECK(packet.bytes[8]==28 && packet.bytes[12]==73);packet.bytes[12]=62;
+    XrSHA256Context hash;xr_sha256_init(&hash);xr_sha256_update(&hash,packet.bytes,32);
+    xr_sha256_update(&hash,packet.bytes+64,packet.length-64);xr_sha256_final(&hash,packet.bytes+32);
+    XrCompileResourceStats old_before={0},old_after={0};
+    CHECK(xr_compile_resources_stats(context->resources,&old_before)==XR_COMPILE_RESOURCE_OK);
+    for(unsigned occupied=0;occupied<2;++occupied) {
+        XrXirArtifact *old=occupied?(XrXirArtifact *)(uintptr_t)1:NULL;
+        XrXirArtifact *saved=old;XrXirDiagnostic diagnostic={0};
+        CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&old,&diagnostic)==XR_XIR_BAD_STRUCTURE);
+        CHECK(old==saved && diagnostic.status==XR_XIR_BAD_STRUCTURE);
+    }
+    CHECK(xr_compile_resources_stats(context->resources,&old_after)==XR_COMPILE_RESOURCE_OK);
+    CHECK(old_after.allocation_count==old_before.allocation_count && old_after.allocated_bytes==old_before.allocated_bytes &&
+        old_after.live_bytes==old_before.live_bytes && old_after.peak_bytes==old_before.peak_bytes);
+    packet.bytes[12]=73;memcpy(packet.bytes+32,current_digest,32);
+    for(uint32_t field=0;field<2;++field) {
+        size_t offset=field?12:8;uint8_t saved=packet.bytes[offset];packet.bytes[offset]=(uint8_t)(saved-1);
+        XrXirArtifact *sentinel=NULL;
+        CHECK(xr_xir_compile_checked_read(context,packet.bytes,packet.length,&sentinel,NULL)==XR_XIR_BAD_STRUCTURE);
+        CHECK(!sentinel);packet.bytes[offset]=saved;
+    }
+    if(packet_directory){
+        const char *history[]={"old24-62","old24-63","old25-64","old25-65","old25-70","old26-71","old27-72"};
+        for(size_t h=0;h<sizeof(history)/sizeof(*history);++h){
+            char path[1024];CHECK(snprintf(path,sizeof(path),"%s/%u-%u-%s.chk",packet_directory,role,timeout,history[h])>0);
+            FILE *file=fopen(path,"rb");CHECK(file&&!fseek(file,0,SEEK_END));long length=ftell(file);CHECK(length>64&&length<16384&&!fseek(file,0,SEEK_SET));
+            uint8_t bytes[16384];CHECK(fread(bytes,1,(size_t)length,file)==(size_t)length&&!fclose(file));
+            XrCompileResourceStats before=library_compile_stats(context);
+            for(unsigned occupied=0;occupied<2;++occupied){XrXirArtifact *out=occupied?(XrXirArtifact *)(uintptr_t)1:NULL,*saved=out;
+                CHECK(xr_xir_compile_checked_read(context,bytes,(size_t)length,&out,NULL)==XR_XIR_BAD_STRUCTURE&&out==saved);}
+            XrCompileResourceStats after=library_compile_stats(context);
+            CHECK(after.allocation_count==before.allocation_count&&after.allocated_bytes==before.allocated_bytes&&after.live_bytes==before.live_bytes&&after.peak_bytes==before.peak_bytes);
+        }
+    }
+    xr_xir_compile_artifact_free(roundtrip);xr_xir_compile_checked_packet_free(&packet);
+    CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_artifact_module(closed)->provenance &&
+        xr_xir_compile_artifact_module(closed)->function_count==3);
+    XrXirFunctionIdentity *owned=(XrXirFunctionIdentity *)xr_xir_compile_artifact_module(closed)->declarations->functions;
+    XrXirFunctionIdentity original=owned[2];
+    if(timeout) owned[2].test_timeout_seconds=timeout+1;
+    else owned[2].test_role=role==XR_XIR_TEST_ROLE_TEST?XR_XIR_TEST_ROLE_NONE:XR_XIR_TEST_ROLE_TEST;
+    CHECK(xr_xir_compile_artifact_verify(closed,NULL)==XR_XIR_BAD_STRUCTURE);owned[2]=original;
+    const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
+    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
+    xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(closed);
+    return lowered;
+}
+static void match(const XrXirCompileContext *context,uint32_t role_a,uint32_t timeout_a,uint32_t role_b,uint32_t timeout_b) {
+    XrXirArtifact *a=make(context,role_a,timeout_a),*b=make(context,role_b,timeout_b);
+    XrXirVmBinding bindings[3];XrXirCallEntry entries[3];
+    for(uint32_t f=0;f<3;++f)CHECK(xr_xir_compile_vm_bind(a,f,&bindings[f],&entries[f])==XR_XIR_OK);
+    const XrXirModule *module=xr_xir_compile_artifact_module(a);
+    XrXirFunctionIdentity identities[3];memcpy(identities,module->declarations->functions,sizeof(identities));
+    identities[2].test_role=role_b;identities[2].test_timeout_seconds=timeout_b;
+    XrXirDeclarations declarations=*module->declarations;declarations.functions=identities;
+    XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,*xr_xir_compile_artifact_target(a),entries,3,
+        &declarations,{0},module->types,xir_program_packet_borrow(b)};
+    XrXirProgram *program=NULL;
+    CHECK(xr_xir_compile_program_seal(context,&spec,&program)==XR_XIR_OK);
+    xr_xir_compile_program_drop(program);program=NULL;
+    spec.packet=xir_program_packet_borrow(a);
+    CHECK(xr_xir_compile_program_match(context,&spec,xr_xir_compile_artifact_layout(a, 0),a)==XR_XIR_BAD_STRUCTURE);
+    XrXirProgramPermissions *permissions=NULL;
+    XrXirProgramInput *program_input=NULL;
+    CHECK(program_fixture_decode_prepare(context,&spec,&spec.packet,&program_input,&permissions)==XR_XIR_BAD_STRUCTURE && !permissions);
+    xir_program_input_free(program_input);
+    CHECK(xr_xir_compile_program_seal(context,&spec,&program)==XR_XIR_BAD_STRUCTURE && !program);
+    xr_xir_compile_artifact_free(a);xr_xir_compile_artifact_free(b);
+}
+static void invalid(const XrXirCompileContext *context) {
+    const XrXirInstruction unit={XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}};
+    const XrXirInstruction code[]={{XR_XIR_CONST_INT,XR_XIR_I64,{0},{0},0,{0}},
+        {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
+    const XrXirBlock blocks[]={{0,1,0,0},{0,2,0,0}};
+    XrXirFunction functions[]={{"init",4,NULL,0,XR_XIR_UNIT,blocks,1,&unit,1,NULL,0},
+        {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,code,2,NULL,0},
+        {"test",4,NULL,0,XR_XIR_UNIT,blocks,1,&unit,1,NULL,0}};
+    XrXirFunctionIdentity identities[3]={{0},{0},{0}};
+    const XrXirSourceModule source={"root",4,NULL,0,0};
+    const XrXirDeclarations declarations={&source,1,identities,NULL,0,NULL,0,0,1,NULL};
+    XrXirModule module={XR_XIR_BUILT,functions,3,&declarations,NULL,NULL,NULL,XR_XIR_PROGRAM,NULL};
+    const XrXirFunctionIdentity malformed[]={
+        {.test_role=7},{.test_timeout_seconds=1},
+        {.test_role=XR_XIR_TEST_ROLE_SKIP,.test_timeout_seconds=1},
+        {.test_role=XR_XIR_TEST_ROLE_BEFORE_ALL,.test_timeout_seconds=1},
+        {.test_role=XR_XIR_TEST_ROLE_TEST,.test_timeout_seconds=UINT32_MAX},
+        {.test_role=XR_XIR_TEST_ROLE_TEST,.nominal_owner=1,.method_kind=XR_XIR_STATIC_METHOD},
+        {.test_role=XR_XIR_TEST_ROLE_TEST,.cleanup_owner=1}};
+    for(size_t i=0;i<sizeof(malformed)/sizeof(*malformed);++i) {
+        identities[2]=malformed[i];XrXirArtifact *out=NULL;
+        CHECK(xir_fixture_check(context, &module, &out, NULL)==XR_XIR_BAD_STRUCTURE);
+        CHECK(!out);
+    }
+    identities[2]=(XrXirFunctionIdentity){.test_role=XR_XIR_TEST_ROLE_TEST};
+    const XrXirType parameter=XR_XIR_I64;
+    const XrXirConstraint constraint={0};
+    const XrXirGeneric generics[3]={{0},{0},{&constraint,1,NULL,0,NULL}};
+    for(unsigned i=0;i<3;++i) {
+        XrXirFunction saved=functions[2];
+        if(i==0) {functions[2].parameters=&parameter;functions[2].parameter_count=1;}
+        if(i==1) functions[2].result=XR_XIR_I64;
+        if(i==2) module.generics=generics;
+        XrXirArtifact *out=NULL;
+        CHECK(xir_fixture_check(context, &module, &out, NULL)==XR_XIR_BAD_TYPE);
+        CHECK(!out);functions[2]=saved;module.generics=NULL;
+    }
+    identities[2]=(XrXirFunctionIdentity){0};
+    for(uint32_t f=0;f<2;++f) {
+        identities[f].test_role=XR_XIR_TEST_ROLE_TEST;XrXirArtifact *out=NULL;
+        CHECK(xir_fixture_check(context, &module, &out, NULL)==XR_XIR_BAD_STRUCTURE && !out);
+        identities[f].test_role=XR_XIR_TEST_ROLE_NONE;
+    }
+}
+int main(int argc,char **argv) {
+    CHECK(argc==1 || argc==2);if(argc==2)packet_directory=argv[1];
+    LibraryCompileOwner compiler={0};CHECK(library_compile_owner_new(&compiler,&library_compile_limits)==XR_XIR_OK);
+    XrXirCompileContext context=compiler.context;
+    XrCompileResourceStats before={0},after={0};CHECK(xr_compile_resources_stats(context.resources,&before)==XR_COMPILE_RESOURCE_OK);
+    invalid(&context);
+    match(&context,XR_XIR_TEST_ROLE_TEST,0,XR_XIR_TEST_ROLE_BEFORE_ALL,0);
+    match(&context,XR_XIR_TEST_ROLE_BEFORE_ALL,0,XR_XIR_TEST_ROLE_TEST,0);
+    match(&context,XR_XIR_TEST_ROLE_TEST,7,XR_XIR_TEST_ROLE_TEST,8);
+    match(&context,XR_XIR_TEST_ROLE_TEST,8,XR_XIR_TEST_ROLE_TEST,7);
+    CHECK(xr_compile_resources_stats(context.resources,&after)==XR_COMPILE_RESOURCE_OK && after.live_bytes==before.live_bytes);
+    fprintf(stderr,"role finite allocated=%llu peak=%llu work=%llu\n",(unsigned long long)after.allocated_bytes,(unsigned long long)after.peak_bytes,(unsigned long long)after.work);
+    library_compile_owner_drop(&compiler);library_compile_observer_free();
+    puts("role/timeout: valid alternate proofs, Checked/provenance/native mismatch rejection PASS");return 0;
+}

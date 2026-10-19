@@ -1,0 +1,128 @@
+# The XIR compiler core is independent of legacy executors and stdlib bootstrap.
+include("${CMAKE_CURRENT_LIST_DIR}/../toolchain/xcompiler_producer.cmake")
+add_library(xray_xir_admission STATIC xxir.c xxir_program_match.c xxir_program_input.c xxir_verify.c xxir_defaults.c xxir_effects.c xxir_layout.c xxir_checked.c xxir_generic.c ../base/xsha256.c xxir_input_owned.c)
+add_library(xray_xir STATIC xxir_specialize.c)
+add_library(xray_xir_declarations STATIC xxir_declarations.c xxir_types.c xxir_view_affine.c xxir_constraints.c xxir_constraint_proof.c xxir_interface.c xxir_interface_members.c xxir_implementation.c xxir_implementation_verify.c xxir_type_layout.c ../shared/xnative_declaration.c)
+add_dependencies(xray_xir_declarations gen-native-type-defs)
+target_include_directories(xray_xir_declarations PUBLIC ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(xray_xir_declarations PUBLIC xray_compile_resources)
+target_link_libraries(xray_xir_admission PUBLIC xray_xir_declarations)
+target_include_directories(xray_xir_admission PUBLIC ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(xray_xir PUBLIC xray_xir_admission)
+target_include_directories(xray_xir PUBLIC ${PROJECT_SOURCE_DIR}/src)
+add_library(xray_xir_scalar STATIC xxir_scalar.c xxir_scalar_core.c xxir_float.c xxir_value.c xxir_type_arena.c xxir_call.c xxir_task.c xxir_task_budget.c xxir_program.c xxir_instance.c xxir_output.c xxir_format.c)
+target_include_directories(xray_xir_scalar PUBLIC ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(xray_xir_scalar PUBLIC xray_xir_admission)
+add_library(xray_xir_ctfe STATIC xxir_ctfe.c)
+target_include_directories(xray_xir_ctfe PUBLIC ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(xray_xir_ctfe PUBLIC xray_xir_scalar)
+add_library(xray_xir_vm STATIC xxir_vm.c)
+target_link_libraries(xray_xir_vm PUBLIC xray_xir xray_xir_scalar xray_xir_ctfe)
+add_library(xray_xir_cgen STATIC xxir_emit_c.c ../aot/xi_cgen_verify_output.c)
+target_link_libraries(xray_xir_cgen PUBLIC xray_xir)
+add_library(xray_xir_source STATIC xxir_source.c xxir_source_query.c xxir_source_failure.c xxir_type_inference.c xxir_library_catalog.c)
+target_sources(xray_xir_source PRIVATE
+    ../module/xmodule_graph.c ../module/xmodule_position.c ../module/xmodule_resolver.c ../module/xmodule_identity.c ../module/xmodule_overlay.c
+    ../module/xmodule_identity_view.c ../module/xmodule_fingerprint.c
+    ../module/xdeclaration_manifest.c ../module/xdeclaration_load.c
+    ../module/xlockfile.c ../module/xsemver.c ../module/stdlib_embedded.c
+    ../base/xhashmap.c ../base/xfileio.c ../base/xio_policy.c ../base/xtoml.c
+    ../shared/xr_core_intrinsic_registry.c)
+if(WIN32)
+    target_sources(xray_xir_source PRIVATE ../os/win/fs_win.c ../os/win/dir_win.c ../os/win/file_read_win.c ../os/win/proc_self_win.c)
+else()
+    target_sources(xray_xir_source PRIVATE ../os/unix/fs_unix.c ../os/unix/dir_unix.c ../os/unix/file_read_unix.c ../os/unix/proc_self_unix.c)
+endif()
+add_dependencies(xray_xir_source gen-stdlib-embedded-sources)
+target_include_directories(xray_xir_source PRIVATE "${CMAKE_BINARY_DIR}/generated")
+set(XIR_CORE_SOURCE ${CMAKE_CURRENT_BINARY_DIR}/generated/xir_core_declarations_source.inc.c)
+add_custom_command(OUTPUT ${XIR_CORE_SOURCE}
+    COMMAND ${XRAY_PYTHON} ${PROJECT_SOURCE_DIR}/scripts/embed_xir_core_source.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/xcore_declarations.xr --output ${XIR_CORE_SOURCE}
+    DEPENDS ${PROJECT_SOURCE_DIR}/scripts/embed_xir_core_source.py ${CMAKE_CURRENT_SOURCE_DIR}/xcore_declarations.xr
+    VERBATIM)
+add_custom_target(gen-xir-core-source DEPENDS ${XIR_CORE_SOURCE})
+add_dependencies(xray_xir_source gen-xir-core-source)
+target_include_directories(xray_xir_source PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_include_directories(xray_xir_source PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(xray_xir_source PUBLIC xray_xir xray_xir_scalar xray_xir_ctfe xray_compiler_parser)
+# The LSP query owner consumes the same Source pipeline without legacy VM/analyzer.
+add_library(xray_lsp_source_query STATIC ../app/lsp/xlsp_source_query.c ../app/lsp/xlsp_source_file_uri.c
+    ../app/lsp/xlsp_source_navigation.c ../base/xjson.c)
+target_link_libraries(xray_lsp_source_query PUBLIC xray_xir_source)
+if(MSVC)
+    target_compile_options(xray_lsp_source_query PRIVATE /W4 /WX)
+else()
+    target_compile_options(xray_lsp_source_query PRIVATE -Wall -Wextra -Werror)
+endif()
+add_library(xray_xir_source_product STATIC ../program/xr_xir_source_product.c)
+target_link_libraries(xray_xir_source_product PUBLIC xray_xir_source xray_xir_vm xray_xir_cgen)
+foreach(target xray_xir xray_xir_admission xray_xir_declarations xray_xir_scalar xray_xir_ctfe xray_xir_vm xray_xir_cgen xray_xir_source xray_xir_source_product)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+endforeach()
+
+include("${CMAKE_CURRENT_LIST_DIR}/stdlib_checked.cmake")
+
+# Server query owner uses the actual CLI stdlib/Catalog/authority kernel.
+add_library(xray_lsp_source_workspace STATIC ../app/lsp/xlsp_source_workspace.c ../app/lsp/xlsp_source_request.c
+    ../app/lsp/xlsp_source_code_lens.c)
+target_sources(xray_lsp_source_workspace PRIVATE ../app/lsp/xlsp_source_signature.c)
+target_sources(xray_lsp_source_workspace PRIVATE ../app/lsp/xlsp_source_workspace_declaration.c)
+target_sources(xray_lsp_source_workspace PRIVATE ../app/lsp/xlsp_source_parameter_json.c ../app/lsp/xlsp_source_type_json.c)
+target_link_libraries(xray_lsp_source_workspace PUBLIC xray_lsp_source_query xray_source_compile xray_lsp_source_syntax)
+target_compile_features(xray_lsp_source_workspace PUBLIC c_std_11)
+if(MSVC)
+    target_compile_options(xray_lsp_source_workspace PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(xray_lsp_source_workspace PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+
+# Immutable syntax owner uses the same modern parser/ledger as Source.
+add_library(xray_lsp_source_syntax STATIC ../app/lsp/xlsp_source_syntax.c ../app/lsp/xlsp_source_buffer.c)
+target_link_libraries(xray_lsp_source_syntax PUBLIC xray_lsp_source_query)
+target_compile_features(xray_lsp_source_syntax PUBLIC c_std_11)
+if(MSVC)
+    target_compile_options(xray_lsp_source_syntax PRIVATE /W4 /WX)
+else()
+    target_compile_options(xray_lsp_source_syntax PRIVATE -Wall -Wextra -Werror)
+endif()
+
+add_library(xray_lsp_document_open STATIC ../app/lsp/xlsp_source_open.c ../app/lsp/xlsp_document_store.c
+    ../app/lsp/xlsp_document_position.c ../app/lsp/xlsp_token_update.c)
+target_link_libraries(xray_lsp_document_open PUBLIC xray_lsp_source_workspace xray_lsp_source_syntax)
+target_compile_features(xray_lsp_document_open PUBLIC c_std_11)
+add_library(xray_lsp_source_hierarchy STATIC ../app/lsp/xlsp_source_call_hierarchy.c ../app/lsp/xlsp_source_type_hierarchy.c ../app/lsp/xlsp_source_bindings.c)
+target_sources(xray_lsp_source_hierarchy PRIVATE ../app/lsp/xlsp_source_rename.c)
+target_link_libraries(xray_lsp_source_hierarchy PUBLIC xray_lsp_source_workspace)
+target_compile_features(xray_lsp_source_hierarchy PUBLIC c_std_11)
+add_library(xray_lsp_hierarchy_handlers STATIC ../app/lsp/xlsp_hierarchy_handlers.c ../app/lsp/xlsp_source_scope.c
+    ../app/lsp/xlsp_hierarchy_request.c ../app/lsp/xlsp_source_params.c ../app/lsp/xlsp_source_selection.c
+    ../app/lsp/xlsp_source_format.c ../app/lsp/xlsp_source_on_type.c
+    ../app/lsp/xlsp_workspace_symbols.c ../app/lsp/xlsp_source_index_store.c
+    ../app/lsp/xlsp_source_links.c ../app/lsp/xlsp_source_imports.c
+    ../app/lsp/xlsp_source_binding_lenses.c
+    ../app/lsp/xlsp_ignore.c ../app/lsp/xlsp_index_scan.c ../app/lsp/xlsp_index_pool.c ../app/lsp/xlsp_source_index.c)
+target_link_libraries(xray_lsp_hierarchy_handlers PUBLIC xray_lsp_document_open xray_lsp_source_hierarchy xray_frontend_format)
+target_compile_features(xray_lsp_hierarchy_handlers PUBLIC c_std_11)
+target_include_directories(xray_lsp_hierarchy_handlers PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../base")
+if(WIN32)
+    target_sources(xray_lsp_hierarchy_handlers PRIVATE ../os/win/thread_win.c)
+else()
+    target_sources(xray_lsp_hierarchy_handlers PRIVATE ../os/unix/thread_unix.c)
+endif()
+foreach(call_target xray_lsp_source_hierarchy xray_lsp_hierarchy_handlers)
+    if(MSVC)
+        target_compile_options(${call_target} PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(${call_target} PRIVATE -Wall -Wextra -Werror -pedantic)
+    endif()
+endforeach()
+if(MSVC)
+    target_compile_options(xray_lsp_document_open PRIVATE /W4 /WX)
+else()
+    target_compile_options(xray_lsp_document_open PRIVATE -Wall -Wextra -Werror)
+endif()

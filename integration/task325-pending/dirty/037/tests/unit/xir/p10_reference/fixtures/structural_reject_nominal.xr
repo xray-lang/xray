@@ -1,0 +1,3 @@
+struct Row { n:i64 }
+fn read<T:{n:i64}>(value:T)->i64 { return value.n }
+export fn referenceAnswer()->i64 { return read(Row{n:42}) }

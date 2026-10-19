@@ -1,0 +1,1114 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xcmd_test.c - 'xray test' command implementation
+ *
+ * KEY CONCEPT:
+ *   Each file builds one Source product on its own compiler ledger, takes the
+ *   Lowered Program and runs its tests and hooks in one module instance.
+ *   Execution advances in bounded slices; the wall-clock deadline is checked
+ *   between slices and a late activation is cancelled, drained and reported
+ *   without ending the instance. File workers share no execution state.
+ */
+
+#include "xcli.h"
+#include "xcli_spec.h"
+#include "xcli_output.h"
+#include "../../api/xsource_compile.h"
+#include "../../api/xsource_paths.h"
+#include "../../base/xmalloc.h"
+#include "../../base/xchecks.h"
+#include "../../execution/xr_xir_host_cli.h"
+#include "../../execution/xr_xir_host_time.h"
+#include "../../os/os_dir.h"
+#include "../../os/os_fs.h"
+#include "../../os/os_thread.h"
+#include "../../xir/xxir_output.h"
+#include <stdio.h>
+#include <stdatomic.h>
+#include <string.h>
+#if XR_OS_WINDOWS
+#include <fcntl.h>
+#include <io.h>
+#endif
+
+#define TEST_FILE_TIMEOUT_SEC 120
+#define TEST_WORKER_STACK_SIZE (8u * 1024u * 1024u)
+/* Interpreter actions between two deadline checks. */
+#define TEST_SLICE_QUANTUM 4096u
+/* Longest single sleep while a timer is pending; bounds deadline latency. */
+#define TEST_WAIT_SLICE_NS UINT64_C(10000000)
+#define TEST_PATH_MAX 1024
+#define TEST_MESSAGE_MAX 512
+
+typedef enum {
+    TEST_PASSED,
+    TEST_FAILED,
+    TEST_ERROR,
+    TEST_SKIPPED,
+    TEST_TIMEOUT
+} XrTestStatus;
+
+typedef struct XrTestConfig {
+    bool verbose;
+    bool fail_fast;
+    const char *filter;  // NULL = run all
+} XrTestConfig;
+
+// Failure record for end-of-run summary
+typedef struct XrTestFailureRecord {
+    char *file;       // owned copy
+    char *test_name;  // owned copy
+    char *message;    // owned copy
+    XrTestStatus status;
+} XrTestFailureRecord;
+
+/* One executed or skipped test, kept for the machine-readable report. */
+typedef struct XrTestCaseRecord {
+    char *name;
+    char *message;
+    XrTestStatus status;
+} XrTestCaseRecord;
+
+/* ========== Per-File Result (thread-safe, no shared state) ========== */
+
+typedef struct {
+    char filepath[TEST_PATH_MAX];
+
+    // Counters
+    int test_count;
+    int passed, failed, errors, skipped, timeout;
+    double duration_ms;
+
+    // Failure details (owned copies)
+    XrTestFailureRecord *failures;
+    int failure_count;
+    int failure_cap;
+
+    // Every test outcome in declaration order (owned copies)
+    XrTestCaseRecord *cases;
+    int case_count;
+    int case_cap;
+
+    // Compilation/execution error
+    bool has_error;
+    char error_msg[TEST_MESSAGE_MAX];
+} XrTestFileResult;
+
+static void file_result_add_failure(XrTestFileResult *r, const char *test_name, const char *message,
+                                    XrTestStatus status) {
+    if (r->failure_count >= r->failure_cap) {
+        r->failure_cap = r->failure_cap == 0 ? 8 : r->failure_cap * 2;
+        XR_REALLOC_OR_ABORT(r->failures, r->failure_cap * sizeof(XrTestFailureRecord),
+                            "xcmd_test failures grow");
+    }
+    XrTestFailureRecord *rec = &r->failures[r->failure_count++];
+    rec->file = xr_strdup(r->filepath);
+    rec->test_name = xr_strdup(test_name ? test_name : "<anonymous>");
+    rec->message = xr_strdup(message ? message : "");
+    rec->status = status;
+}
+
+static void file_result_add_case(XrTestFileResult *r, const char *name, XrTestStatus status,
+                                 const char *message) {
+    if (r->case_count >= r->case_cap) {
+        r->case_cap = r->case_cap == 0 ? 8 : r->case_cap * 2;
+        XR_REALLOC_OR_ABORT(r->cases, r->case_cap * sizeof(XrTestCaseRecord),
+                            "xcmd_test cases grow");
+    }
+    XrTestCaseRecord *record = &r->cases[r->case_count++];
+    record->name = xr_strdup(name ? name : "<anonymous>");
+    record->message = xr_strdup(message ? message : "");
+    record->status = status;
+}
+
+static void file_result_free(XrTestFileResult *r) {
+    for (int i = 0; i < r->failure_count; i++) {
+        xr_free(r->failures[i].file);
+        xr_free(r->failures[i].test_name);
+        xr_free(r->failures[i].message);
+    }
+    xr_free(r->failures);
+    for (int i = 0; i < r->case_count; i++) {
+        xr_free(r->cases[i].name);
+        xr_free(r->cases[i].message);
+    }
+    xr_free(r->cases);
+}
+
+/* ========== Display Helpers ========== */
+
+// Extract filename without .xr extension into caller-provided buffer
+static void get_display_name(const char *filepath, char *buf, size_t bufsz) {
+    const char *base = strrchr(filepath, '/');
+    base = base ? base + 1 : filepath;
+    strncpy(buf, base, bufsz - 1);
+    buf[bufsz - 1] = '\0';
+    char *dot = strrchr(buf, '.');
+    if (dot && strcmp(dot, ".xr") == 0)
+        *dot = '\0';
+}
+
+#define get_time_ms() xr_cli_get_time_ms()
+
+/* ========== Test Catalog ========== */
+
+static bool role_is_case(uint32_t role) {
+    return role == XR_XIR_TEST_ROLE_TEST || role == XR_XIR_TEST_ROLE_SKIP;
+}
+
+static bool test_entry_selected(const XrXirSourceTestEntry *entry, const XrTestConfig *config) {
+    return entry->role == XR_XIR_TEST_ROLE_TEST &&
+           (!config->filter || strstr(entry->name, config->filter));
+}
+
+/* ========== Bounded Invocation ========== */
+
+typedef struct XrTestMessageSink {
+    char *message;
+    size_t size;
+    size_t used;
+} XrTestMessageSink;
+
+static int test_message_write(void *context, const void *bytes, size_t size) {
+    XrTestMessageSink *sink = context;
+    if (!sink->size)
+        return 0;
+    size_t room = sink->size - sink->used - 1u;
+    size_t copied = size < room ? size : room;
+    if (copied)
+        memcpy(sink->message + sink->used, bytes, copied);
+    sink->used += copied;
+    sink->message[sink->used] = '\0';
+    if (copied != size && sink->size >= 4u)
+        memcpy(sink->message + sink->size - 4u, "...", 4u);
+    return 1;
+}
+
+static void trim_trailing_newlines(char *message) {
+    size_t length = strlen(message);
+    while (length && (message[length - 1u] == '\n' || message[length - 1u] == '\r'))
+        message[--length] = '\0';
+}
+
+/* Renders a typed failure outcome into a plain, single-owner message. */
+static void render_failure(const XrXirCallResult *outcome, char *message, size_t size) {
+    XrTestMessageSink capture = {message, size, 0u};
+    message[0] = '\0';
+    XrXirHostReportStatus reported = xr_xir_host_report_result(
+        outcome, (XrValueFormatSink) {&capture, test_message_write}, false);
+    if (reported != XR_XIR_HOST_REPORT_OK && !message[0])
+        snprintf(message, size, "cannot render typed failure");
+    trim_trailing_newlines(message);
+}
+
+static XrXirOutputStatus test_output_bytes(void *context, XrXirOutputStream stream,
+                                           const char *bytes, size_t length) {
+    (void) context;
+    FILE *file = stream == XR_XIR_STDOUT ? stdout : stream == XR_XIR_STDERR ? stderr : NULL;
+    if (!file)
+        return XR_XIR_OUTPUT_BAD_ABI;
+    return fwrite(bytes, 1, length, file) == length && fflush(file) == 0 ? XR_XIR_OUTPUT_OK
+                                                                         : XR_XIR_OUTPUT_ERROR;
+}
+
+static XrTestStatus classify_terminal(const XrXirCallResult *outcome, bool cancelling,
+                                      char *message, size_t size) {
+    switch (outcome->status) {
+        case XR_XIR_CALL_RETURNED:
+            return TEST_PASSED;
+        case XR_XIR_CALL_CANCELLED:
+            if (cancelling) {
+                snprintf(message, size, "exceeded timeout");
+                return TEST_TIMEOUT;
+            }
+            snprintf(message, size, "execution was cancelled");
+            return TEST_ERROR;
+        case XR_XIR_CALL_LIMIT:
+            snprintf(message, size, "execution exceeded its resource budget");
+            return TEST_ERROR;
+        case XR_XIR_CALL_OOM:
+            snprintf(message, size, "execution ran out of memory");
+            return TEST_ERROR;
+        case XR_XIR_CALL_OUTPUT_ERROR:
+            snprintf(message, size, "test output failed");
+            return TEST_ERROR;
+        case XR_XIR_CALL_HOST_ERROR:
+            snprintf(message, size, "a host clock or timer service failed");
+            return TEST_ERROR;
+        default:
+            break;
+    }
+    if (outcome->status == XR_XIR_CALL_THROWN || xr_xir_call_panic_status(outcome->status)) {
+        render_failure(outcome, message, size);
+        return TEST_FAILED;
+    }
+    snprintf(message, size, "execution failed (status=%u)", (unsigned) outcome->status);
+    return TEST_ERROR;
+}
+
+/* A failed initialization is sticky: the instance owns the failure and every
+ * later start reports it again. */
+static XrTestStatus classify_start_failure(XrXirInstance *instance, XrXirCallStatus started,
+                                           char *message, size_t size) {
+    if (xr_xir_instance_state(instance) == XR_XIR_INSTANCE_FAILED) {
+        XrXirCallResult failure = {0};
+        XrXirCallStatus copied = xr_xir_instance_copy_failure(instance, &failure);
+        XrTestStatus status = copied == failure.status && failure.status != XR_XIR_CALL_READY
+                                  ? classify_terminal(&failure, false, message, size)
+                                  : TEST_ERROR;
+        if (status == TEST_ERROR && !message[0])
+            snprintf(message, size, "module initialization failed (status=%u)", (unsigned) copied);
+        xr_xir_call_result_drop(&failure);
+        return status == TEST_PASSED ? TEST_ERROR : status;
+    }
+    snprintf(message, size, "cannot start test (status=%u)", (unsigned) started);
+    return TEST_ERROR;
+}
+
+/* Runs one admitted test or hook to a terminal outcome. */
+static XrTestStatus invoke_entry(XrXirInstance *instance, uint32_t function, double deadline,
+                                 char *message, size_t size) {
+    message[0] = '\0';
+    XrXirCallStatus started = xr_xir_instance_start_test(instance, function);
+    if (started != XR_XIR_CALL_READY)
+        return classify_start_failure(instance, started, message, size);
+    bool cancelling = false, waiting = false, host_failed = false;
+    XrXirHostWait wait = {0};
+    uint64_t epoch = 0, wake = 0;
+    for (;;) {
+        if (waiting) {
+            /* A suspended activation is resumed only once the host has seen its full duration. */
+            XrXirHostWaitStatus due = xr_xir_host_wait_poll(&wait, TEST_WAIT_SLICE_NS);
+            if (due == XR_XIR_HOST_WAIT_DUE) {
+                XrXirCallStatus resumed = xr_xir_instance_resume(instance, epoch, wake);
+                if (resumed != XR_XIR_CALL_READY) {
+                    snprintf(message, size, "cannot resume suspension (status=%u)", (unsigned) resumed);
+                    return TEST_ERROR;
+                }
+                waiting = false;
+            } else if (due != XR_XIR_HOST_WAIT_PENDING) host_failed = true;
+        } else {
+            XrXirInstanceResult slice = xr_xir_instance_poll_bounded(instance, TEST_SLICE_QUANTUM);
+            XrXirCallStatus status = slice.outcome.status;
+            if (status == XR_XIR_CALL_SUSPENDED) {
+                XrXirWaitRequest request = {0};
+                epoch = slice.epoch;
+                wake = slice.outcome.wake;
+                if (xr_xir_instance_wait_request(instance, epoch, wake, &request) != XR_XIR_CALL_READY ||
+                    xr_xir_host_wait_begin(&wait, &request) != XR_XIR_HOST_WAIT_PENDING) host_failed = true;
+                else waiting = true;
+            } else if (status != XR_XIR_CALL_READY) {
+                return classify_terminal(&slice.outcome, cancelling, message, size);
+            }
+        }
+        if (!cancelling && (host_failed || get_time_ms() >= deadline)) {
+            waiting = false;
+            XrXirCallStatus requested = xr_xir_instance_cancel_current(instance);
+            if (requested != XR_XIR_CALL_CANCEL_REQUESTED) {
+                snprintf(message, size, "cannot cancel timed-out test (status=%u)",
+                         (unsigned) requested);
+                return TEST_ERROR;
+            }
+            cancelling = true;
+        }
+        if (host_failed && cancelling) {
+            /* Drain the cancelled activation, then report the host failure as its own error. */
+            XrXirInstanceResult drained;
+            do drained = xr_xir_instance_poll_bounded(instance, TEST_SLICE_QUANTUM);
+            while (drained.outcome.status == XR_XIR_CALL_READY);
+            snprintf(message, size, "a host clock or timer service failed");
+            return TEST_ERROR;
+        }
+    }
+}
+
+static bool run_hooks(XrXirInstance *instance, const XrXirSourceTests *tests, uint32_t role,
+                      double deadline, char *message, size_t size) {
+    bool passed = true;
+    for (uint32_t index = 0u; index < tests->count; ++index) {
+        const XrXirSourceTestEntry *hook = &tests->entries[index];
+        if (hook->role != role)
+            continue;
+        char failure[TEST_MESSAGE_MAX] = {0};
+        if (invoke_entry(instance, hook->function, deadline, failure, sizeof(failure)) !=
+            TEST_PASSED) {
+            if (passed)
+                snprintf(message, size, "hook '%s': %s", hook->name, failure);
+            passed = false;
+            if (role == XR_XIR_TEST_ROLE_BEFORE_ALL || role == XR_XIR_TEST_ROLE_BEFORE_EACH)
+                break;
+        }
+    }
+    return passed;
+}
+
+/* ========== One Test File ========== */
+
+static void run_selected(XrXirInstance *instance, const XrXirSourceTests *tests,
+                         const XrTestConfig *config, XrTestFileResult *result,
+                         double file_deadline) {
+    char error[TEST_MESSAGE_MAX] = {0};
+    bool setup = run_hooks(instance, tests, XR_XIR_TEST_ROLE_BEFORE_ALL, file_deadline, error,
+                           sizeof(error));
+    if (!setup) {
+        for (uint32_t index = 0u; index < tests->count; ++index) {
+            const XrXirSourceTestEntry *entry = &tests->entries[index];
+            if (test_entry_selected(entry, config)) {
+                ++result->errors;
+                file_result_add_failure(result, entry->name, error, TEST_ERROR);
+                file_result_add_case(result, entry->name, TEST_ERROR, error);
+            }
+        }
+    }
+    for (uint32_t index = 0u; setup && index < tests->count; ++index) {
+        const XrXirSourceTestEntry *entry = &tests->entries[index];
+        if (!test_entry_selected(entry, config))
+            continue;
+        XrTestStatus status = TEST_ERROR;
+        error[0] = '\0';
+        if (run_hooks(instance, tests, XR_XIR_TEST_ROLE_BEFORE_EACH, file_deadline, error,
+                      sizeof(error))) {
+            double deadline = file_deadline;
+            if (entry->timeout_seconds) {
+                double test_deadline = get_time_ms() + entry->timeout_seconds * 1000.0;
+                if (test_deadline < deadline)
+                    deadline = test_deadline;
+            }
+            status = invoke_entry(instance, entry->function, deadline, error, sizeof(error));
+        }
+        char hook_error[TEST_MESSAGE_MAX] = {0};
+        if (!run_hooks(instance, tests, XR_XIR_TEST_ROLE_AFTER_EACH, file_deadline, hook_error,
+                       sizeof(hook_error))) {
+            if (status == TEST_PASSED) {
+                status = TEST_ERROR;
+                snprintf(error, sizeof(error), "%s", hook_error);
+            } else {
+                file_result_add_failure(result, entry->name, hook_error, TEST_ERROR);
+            }
+        }
+        file_result_add_case(result, entry->name, status, status == TEST_PASSED ? "" : error);
+        if (status == TEST_PASSED)
+            ++result->passed;
+        else {
+            if (status == TEST_TIMEOUT)
+                ++result->timeout;
+            else if (status == TEST_ERROR)
+                ++result->errors;
+            else
+                ++result->failed;
+            file_result_add_failure(result, entry->name, error, status);
+        }
+        if (config->fail_fast && status != TEST_PASSED)
+            break;
+        if (get_time_ms() >= file_deadline)
+            break;
+    }
+    if (!run_hooks(instance, tests, XR_XIR_TEST_ROLE_AFTER_ALL, file_deadline, error,
+                   sizeof(error))) {
+        ++result->errors;
+        file_result_add_failure(result, "@after_all", error, TEST_ERROR);
+    }
+}
+
+static void fail_file(XrTestFileResult *result, const char *message) {
+    result->has_error = true;
+    ++result->errors;
+    snprintf(result->error_msg, sizeof(result->error_msg), "%s", message);
+}
+
+static void run_test_file(const char *filepath, const XrTestConfig *config,
+                          XrTestFileResult *result) {
+    memset(result, 0, sizeof(*result));
+    snprintf(result->filepath, sizeof(result->filepath), "%s", filepath);
+    double file_start = get_time_ms();
+#if !defined(XR_ARCH_X86_64)
+    fail_file(result, "source VM does not support this host architecture");
+#else
+    char error[TEST_MESSAGE_MAX] = {0};
+    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+    XrCompileResources *resources = NULL;
+    if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK) {
+        fail_file(result, "cannot initialize source resources");
+        goto done;
+    }
+    XrXirCompileContext context = {resources, xr_xir_compile_default_limits()};
+    XrSourcePaths paths = {0};
+    XrSourcePathsDiagnostic path_diagnostic = {0};
+    XrXirSourceProduct *product = NULL;
+    XrXirProgram *program = NULL;
+    XrXirInstance *instance = NULL;
+    XrSourceCompileDiagnostic diagnostic = {0};
+    XrSourceCompileStatus status =
+        xr_source_paths(resources, filepath, &paths, &path_diagnostic);
+    if (status != XR_SOURCE_COMPILE_OK) {
+        snprintf(error, sizeof(error), "source path lookup failed (stage=%u status=%s)",
+                 (unsigned) path_diagnostic.stage, xr_source_compile_status_name(status));
+        fail_file(result, error);
+        goto release;
+    }
+    XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
+        xr_source_compile_default_manifest_limits(), {XR_XIR_ARCH_X86_64, XR_XIR_VALUE_ABI_VERSION}, NULL};
+    status = xr_source_compile_build(&request, &product, &diagnostic);
+    if (status != XR_SOURCE_COMPILE_OK) {
+        xr_source_compile_diagnostic_format(&diagnostic, error, sizeof(error));
+        fail_file(result, error);
+        goto release;
+    }
+    const XrXirSourceTests *tests = xr_xir_compile_source_product_tests(product);
+    if (!tests) {
+        fail_file(result, "source product has no test catalog");
+        goto release;
+    }
+    int selected = 0;
+    for (uint32_t index = 0u; index < tests->count; ++index) {
+        const XrXirSourceTestEntry *entry = &tests->entries[index];
+        if (role_is_case(entry->role)) {
+            ++result->test_count;
+            if (test_entry_selected(entry, config))
+                ++selected;
+            else {
+                ++result->skipped;
+                file_result_add_case(result, entry->name, TEST_SKIPPED, "");
+            }
+        }
+    }
+    if (!selected)
+        goto release;
+    XrXirStatus taken = xr_xir_compile_source_product_vm_take(product, &program);
+    if (taken != XR_XIR_OK) {
+        snprintf(error, sizeof(error), "cannot prepare VM program (status=%u)", (unsigned) taken);
+        fail_file(result, error);
+        goto release;
+    }
+    XrXirInstanceConfig instance_config;
+    if (xr_xir_instance_config_init(&instance_config, sizeof(instance_config)) !=
+        XR_XIR_CALL_READY) {
+        fail_file(result, "cannot initialize execution configuration");
+        goto release;
+    }
+    /* The wall-clock deadline bounds a test; the embedding poll cap does not apply. */
+    instance_config.poll_limit = UINT64_MAX;
+    xr_xir_host_time_provider(&instance_config.time);
+    XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, test_output_bytes, NULL,
+                            instance_config.value_limit};
+    instance_config.output =
+        (XrXirOutputProvider) {XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};
+    if (xr_xir_instance_new(program, &instance_config, &instance) != XR_XIR_CALL_READY) {
+        fail_file(result, "cannot create execution instance");
+        goto release;
+    }
+    run_selected(instance, tests, config, result, get_time_ms() + TEST_FILE_TIMEOUT_SEC * 1000.0);
+release:
+    if (instance && xr_xir_instance_free(instance) != XR_XIR_CALL_READY)
+        fail_file(result, "execution instance did not retire");
+    xr_xir_compile_program_drop(program);
+    xr_xir_compile_source_product_free(product);
+    xr_source_compile_diagnostic_free(&diagnostic);
+    xr_source_paths_free(&paths);
+    xr_compile_resources_release(resources);
+done:
+#endif
+    result->duration_ms = get_time_ms() - file_start;
+}
+
+/* ========== File Collection ========== */
+
+typedef struct {
+    char **paths;
+    int count;
+    int capacity;
+} XrFileList;
+
+static void filelist_add(XrFileList *fl, const char *path) {
+    if (fl->count >= fl->capacity) {
+        fl->capacity = fl->capacity == 0 ? 64 : fl->capacity * 2;
+        XR_REALLOC_OR_ABORT(fl->paths, fl->capacity * sizeof(char *), "xcmd_test filelist grow");
+    }
+    fl->paths[fl->count++] = xr_strdup(path);
+}
+
+static void filelist_free(XrFileList *fl) {
+    for (int i = 0; i < fl->count; i++)
+        xr_free(fl->paths[i]);
+    xr_free(fl->paths);
+}
+
+static int cmp_strings(const void *a, const void *b) {
+    return strcmp(*(const char **) a, *(const char **) b);
+}
+
+static bool is_xr_file_name(const char *name) {
+    size_t length = strlen(name);
+    return length >= 4u && strcmp(name + length - 3u, ".xr") == 0;
+}
+
+// Build clean path without double slashes
+static void build_path(char *buf, size_t size, const char *dir, const char *name) {
+    size_t dlen = strlen(dir);
+    while (dlen > 0 && dir[dlen - 1] == '/')
+        dlen--;
+    snprintf(buf, size, "%.*s/%s", (int) dlen, dir, name);
+}
+
+/* Directory enumeration failure is reported, never silently treated as empty. */
+static bool collect_files_recursive(const XrOsIoPolicy *policy, const char *path, XrFileList *fl) {
+    XrDirIter *it = NULL;
+    if (xr_os_io_dir_open(policy, path, &it) != XR_OS_IO_OK)
+        return false;
+
+    // Collect entries first for sorted order
+    char **subdirs = NULL;
+    int ndir = 0, dcap = 0;
+    char **xrfiles = NULL;
+    int nfile = 0, fcap = 0;
+
+    char filepath[TEST_PATH_MAX];
+    XrDirEntry e;
+    XrOsIoStatus next;
+    while ((next = xr_os_io_dir_next(it, &e)) == XR_OS_IO_OK) {
+        if (e.name[0] == '.' || e.name[0] == '_')
+            continue;
+        build_path(filepath, sizeof(filepath), path, e.name);
+        if (e.is_dir) {
+            if (ndir >= dcap) {
+                dcap = dcap == 0 ? 16 : dcap * 2;
+                XR_REALLOC_OR_ABORT(subdirs, dcap * sizeof(char *), "xcmd_test subdirs grow");
+            }
+            subdirs[ndir++] = xr_strdup(filepath);
+        } else if (is_xr_file_name(e.name)) {
+            if (nfile >= fcap) {
+                fcap = fcap == 0 ? 16 : fcap * 2;
+                XR_REALLOC_OR_ABORT(xrfiles, fcap * sizeof(char *), "xcmd_test xrfiles grow");
+            }
+            xrfiles[nfile++] = xr_strdup(filepath);
+        }
+    }
+    xr_os_io_dir_close(it);
+    bool ok = next == XR_OS_IO_END;
+
+    if (nfile > 1)
+        qsort(xrfiles, nfile, sizeof(char *), cmp_strings);
+    if (ndir > 1)
+        qsort(subdirs, ndir, sizeof(char *), cmp_strings);
+
+    for (int i = 0; i < nfile; i++) {
+        filelist_add(fl, xrfiles[i]);
+        xr_free(xrfiles[i]);
+    }
+    xr_free(xrfiles);
+
+    for (int i = 0; i < ndir; i++) {
+        if (ok && !collect_files_recursive(policy, subdirs[i], fl))
+            ok = false;
+        xr_free(subdirs[i]);
+    }
+    xr_free(subdirs);
+    return ok;
+}
+
+/* ========== Parallel Execution ========== */
+
+typedef struct {
+    char **files;
+    int file_count;
+    _Atomic int next_idx;
+    XrTestFileResult *results;
+    XrTestConfig config;
+} XrTestParallelCtx;
+
+static void *test_worker_thread(void *arg) {
+    XrTestParallelCtx *ctx = (XrTestParallelCtx *) arg;
+    while (1) {
+        int idx = atomic_fetch_add(&ctx->next_idx, 1);
+        if (idx >= ctx->file_count)
+            break;
+        run_test_file(ctx->files[idx], &ctx->config, &ctx->results[idx]);
+    }
+    return NULL;
+}
+
+/* ========== Output Formatting ========== */
+
+// Compute max display name length for dot-padding alignment
+static int compute_align_width(char **files, int count) {
+    int max_w = 0;
+    for (int i = 0; i < count; i++) {
+        char buf[256];
+        get_display_name(files[i], buf, sizeof(buf));
+        int len = (int) strlen(buf);
+        if (len > max_w)
+            max_w = len;
+    }
+    return max_w;
+}
+
+// Print results for a single file
+static void print_file_result(XrTestFileResult *r, int align_width, bool verbose) {
+    if (r->test_count == 0 && !r->has_error)
+        return;
+
+    char name[256];
+    get_display_name(r->filepath, name, sizeof(name));
+
+    if (r->has_error) {
+        printf("   %sx%s %s: %s\n", xr_cli_clr(XR_CLR_RED), xr_cli_clr(XR_CLR_RESET), name,
+               r->error_msg);
+        return;
+    }
+
+    int problems = r->failed + r->errors + r->timeout;
+    int ran = r->passed + r->failed + r->errors + r->timeout;
+
+    if (verbose) {
+        const char *plural = (r->test_count == 1) ? "" : "s";
+        printf("   %s%s%s %s(%d test%s)%s\n", xr_cli_clr(XR_CLR_CYAN), name,
+               xr_cli_clr(XR_CLR_RESET), xr_cli_clr(XR_CLR_DIM), r->test_count, plural,
+               xr_cli_clr(XR_CLR_RESET));
+
+        // Print individual failures
+        for (int i = 0; i < r->failure_count; i++) {
+            XrTestFailureRecord *f = &r->failures[i];
+            const char *color =
+                xr_cli_clr((f->status == TEST_TIMEOUT) ? XR_CLR_YELLOW : XR_CLR_RED);
+            printf("     %sx%s %s: %s\n", color, xr_cli_clr(XR_CLR_RESET), f->test_name,
+                   f->message);
+        }
+
+        // Summary line
+        if (problems > 0) {
+            printf("     %s%d passed,%s %s%d failed%s", xr_cli_clr(XR_CLR_DIM), r->passed,
+                   xr_cli_clr(XR_CLR_RESET), xr_cli_clr(XR_CLR_RED), problems,
+                   xr_cli_clr(XR_CLR_RESET));
+        } else {
+            printf("     %s%d passed%s", xr_cli_clr(XR_CLR_GREEN), r->passed,
+                   xr_cli_clr(XR_CLR_RESET));
+        }
+        if (r->skipped > 0)
+            printf("%s, %d skipped%s", xr_cli_clr(XR_CLR_DIM), r->skipped,
+                   xr_cli_clr(XR_CLR_RESET));
+        printf("  %s(%.0fms)%s\n", xr_cli_clr(XR_CLR_DIM), r->duration_ms,
+               xr_cli_clr(XR_CLR_RESET));
+    } else {
+        if (problems == 0) {
+            int name_len = (int) strlen(name);
+            int aw = align_width > name_len ? align_width : name_len;
+            int dots = aw - name_len + 4;
+            if (dots < 3)
+                dots = 3;
+            if (dots > 255)
+                dots = 255;
+            char dot_buf[256];
+            dot_buf[0] = ' ';
+            for (int d = 1; d < dots; d++)
+                dot_buf[d] = '.';
+            dot_buf[dots] = '\0';
+
+            printf("   %s+%s %s%s%s%s %d/%d", xr_cli_clr(XR_CLR_GREEN), xr_cli_clr(XR_CLR_RESET),
+                   name, xr_cli_clr(XR_CLR_DIM), dot_buf, xr_cli_clr(XR_CLR_RESET), r->passed,
+                   ran + r->skipped);
+            if (r->skipped > 0)
+                printf("  %s%d skipped%s", xr_cli_clr(XR_CLR_DIM), r->skipped,
+                       xr_cli_clr(XR_CLR_RESET));
+            printf("  %s(%.0fms)%s\n", xr_cli_clr(XR_CLR_DIM), r->duration_ms,
+                   xr_cli_clr(XR_CLR_RESET));
+        } else {
+            printf("   %sx%s %s %s(%d test%s)%s\n", xr_cli_clr(XR_CLR_RED),
+                   xr_cli_clr(XR_CLR_RESET), name, xr_cli_clr(XR_CLR_DIM), r->test_count,
+                   r->test_count == 1 ? "" : "s", xr_cli_clr(XR_CLR_RESET));
+            for (int i = 0; i < r->failure_count; i++) {
+                XrTestFailureRecord *f = &r->failures[i];
+                const char *color =
+                    xr_cli_clr((f->status == TEST_TIMEOUT) ? XR_CLR_YELLOW : XR_CLR_RED);
+                printf("       %sx%s %s: %s\n", color, xr_cli_clr(XR_CLR_RESET), f->test_name,
+                       f->message);
+            }
+            printf("     %s%d passed,%s %s%d failed%s", xr_cli_clr(XR_CLR_DIM), r->passed,
+                   xr_cli_clr(XR_CLR_RESET), xr_cli_clr(XR_CLR_RED), problems,
+                   xr_cli_clr(XR_CLR_RESET));
+            if (r->skipped > 0)
+                printf(", %d skipped", r->skipped);
+            printf("  %s(%.0fms)%s\n", xr_cli_clr(XR_CLR_DIM), r->duration_ms,
+                   xr_cli_clr(XR_CLR_RESET));
+        }
+    }
+}
+
+/* Directory name of FILE's parent, written to DIR_BUF; returns the last path
+ * component of that directory. */
+static const char *parent_directory_name(const char *filepath, char *dir_buf, size_t size) {
+    strncpy(dir_buf, filepath, size - 1);
+    dir_buf[size - 1] = '\0';
+    char *last_slash = strrchr(dir_buf, '/');
+    if (last_slash)
+        *last_slash = '\0';
+    const char *dir_name = strrchr(dir_buf, '/');
+    return dir_name ? dir_name + 1 : dir_buf;
+}
+
+// Print directory group headers and file results in order
+static void print_all_results(XrTestFileResult *results, char **files, int count, int align_width,
+                              bool verbose) {
+    char last_dir[TEST_PATH_MAX] = "";
+    bool have_dir = false;
+    for (int i = 0; i < count; i++) {
+        if (results[i].test_count == 0 && !results[i].has_error)
+            continue;
+
+        char dir_buf[TEST_PATH_MAX];
+        const char *dir_name = parent_directory_name(files[i], dir_buf, sizeof(dir_buf));
+        if (!have_dir || strcmp(last_dir, dir_buf) != 0) {
+            snprintf(last_dir, sizeof(last_dir), "%s", dir_buf);
+            have_dir = true;
+            printf(" %s%s%s\n", xr_cli_clr(XR_CLR_BOLD), dir_name, xr_cli_clr(XR_CLR_RESET));
+        }
+
+        print_file_result(&results[i], align_width, verbose);
+    }
+}
+
+// Print final summary report
+static void print_summary(int file_count, int total_passed, int total_failed, int total_errors,
+                          int total_skipped, int total_timeout, double total_time_ms,
+                          const char *filter, XrTestFileResult *results, int result_count) {
+    int total_problems = total_failed + total_errors + total_timeout;
+
+    // Failures detail section
+    int total_failure_records = 0;
+    for (int i = 0; i < result_count; i++)
+        total_failure_records += results[i].failure_count;
+
+    if (total_failure_records > 0) {
+        printf("\n %s%sFailed Tests%s\n\n", xr_cli_clr(XR_CLR_RED), xr_cli_clr(XR_CLR_BOLD),
+               xr_cli_clr(XR_CLR_RESET));
+        for (int i = 0; i < result_count; i++) {
+            for (int j = 0; j < results[i].failure_count; j++) {
+                XrTestFailureRecord *rec = &results[i].failures[j];
+                char fname[256];
+                get_display_name(rec->file, fname, sizeof(fname));
+                printf("  %s✗%s %s %s>%s %s\n", xr_cli_clr(XR_CLR_RED), xr_cli_clr(XR_CLR_RESET),
+                       fname, xr_cli_clr(XR_CLR_DIM), xr_cli_clr(XR_CLR_RESET), rec->test_name);
+                if (rec->message[0] != '\0')
+                    printf("    %s%s%s\n", xr_cli_clr(XR_CLR_DIM), rec->message,
+                           xr_cli_clr(XR_CLR_RESET));
+            }
+        }
+    }
+
+    // Summary
+    printf("\n %s────────────────────────────────────────────────%s\n", xr_cli_clr(XR_CLR_DIM),
+           xr_cli_clr(XR_CLR_RESET));
+
+    printf(" %s Tests%s  ", xr_cli_clr(XR_CLR_BOLD), xr_cli_clr(XR_CLR_RESET));
+    printf("%d file%s", file_count, file_count == 1 ? "" : "s");
+    printf("%s | %s", xr_cli_clr(XR_CLR_DIM), xr_cli_clr(XR_CLR_RESET));
+    if (total_problems == 0) {
+        printf("%s%s%d passed%s", xr_cli_clr(XR_CLR_GREEN), xr_cli_clr(XR_CLR_BOLD), total_passed,
+               xr_cli_clr(XR_CLR_RESET));
+    } else {
+        printf("%s%d passed%s", xr_cli_clr(XR_CLR_GREEN), total_passed, xr_cli_clr(XR_CLR_RESET));
+        printf("%s | %s", xr_cli_clr(XR_CLR_DIM), xr_cli_clr(XR_CLR_RESET));
+        printf("%s%s%d failed%s", xr_cli_clr(XR_CLR_RED), xr_cli_clr(XR_CLR_BOLD), total_problems,
+               xr_cli_clr(XR_CLR_RESET));
+    }
+    if (total_skipped > 0) {
+        printf("%s | %s", xr_cli_clr(XR_CLR_DIM), xr_cli_clr(XR_CLR_RESET));
+        printf("%s%d skipped%s", xr_cli_clr(XR_CLR_DIM), total_skipped, xr_cli_clr(XR_CLR_RESET));
+    }
+    if (filter)
+        printf("  %s(filter: \"%s\")%s", xr_cli_clr(XR_CLR_DIM), filter, xr_cli_clr(XR_CLR_RESET));
+    printf("\n");
+
+    printf(" %s  Time%s  ", xr_cli_clr(XR_CLR_BOLD), xr_cli_clr(XR_CLR_RESET));
+    if (total_time_ms >= 1000.0)
+        printf("%.2fs\n", total_time_ms / 1000.0);
+    else
+        printf("%.0fms\n", total_time_ms);
+
+    printf(" %s────────────────────────────────────────────────%s\n", xr_cli_clr(XR_CLR_DIM),
+           xr_cli_clr(XR_CLR_RESET));
+
+    if (total_problems == 0)
+        printf("\n %s%s✓ All tests passed%s\n\n", xr_cli_clr(XR_CLR_GREEN), xr_cli_clr(XR_CLR_BOLD),
+               xr_cli_clr(XR_CLR_RESET));
+    else
+        printf("\n %s%s✗ %d test%s failed%s\n\n", xr_cli_clr(XR_CLR_RED), xr_cli_clr(XR_CLR_BOLD),
+               total_problems, total_problems == 1 ? "" : "s", xr_cli_clr(XR_CLR_RESET));
+}
+
+/* ========== Machine-Readable Report ========== */
+
+static const char *status_name(XrTestStatus status) {
+    switch (status) {
+        case TEST_PASSED: return "passed";
+        case TEST_FAILED: return "failed";
+        case TEST_ERROR: return "error";
+        case TEST_SKIPPED: return "skipped";
+        case TEST_TIMEOUT: return "timeout";
+    }
+    return "error";
+}
+
+/* Writes TEXT as a JSON string. Bytes that are not well-formed UTF-8 become U+FFFD so the
+ * report stays valid whatever a test printed. */
+static void json_string(FILE *out, const char *text) {
+    const unsigned char *p = (const unsigned char *) text;
+    fputc('"', out);
+    while (*p) {
+        unsigned char c = *p;
+        if (c == '"' || c == '\\') {
+            fputc('\\', out);
+            fputc((int) c, out);
+            ++p;
+        } else if (c < 0x20) {
+            fprintf(out, "\\u%04x", c);
+            ++p;
+        } else if (c < 0x80) {
+            fputc((int) c, out);
+            ++p;
+        } else {
+            size_t length = c >= 0xf0 && c < 0xf5 ? 4u : c >= 0xe0 ? 3u : c >= 0xc2 && c < 0xe0 ? 2u : 0u;
+            bool valid = length != 0u && c < 0xf5;
+            for (size_t i = 1u; valid && i < length; ++i)
+                valid = (p[i] & 0xc0u) == 0x80u;
+            if (valid) {
+                fwrite(p, 1, length, out);
+                p += length;
+            } else {
+                fputs("\\ufffd", out);
+                ++p;
+            }
+        }
+    }
+    fputc('"', out);
+}
+
+static bool write_report(const char *path, XrTestFileResult *results, int count, double total_ms) {
+    FILE *out = fopen(path, "wb");
+    if (!out)
+        return false;
+    fputs("{\"schema\":1,\"files\":[", out);
+    for (int i = 0; i < count; i++) {
+        const XrTestFileResult *r = &results[i];
+        fputs(i ? ",\n" : "\n", out);
+        fputs("{\"path\":", out);
+        json_string(out, r->filepath);
+        fprintf(out, ",\"tests\":%d,\"passed\":%d,\"failed\":%d,\"errors\":%d,\"timeouts\":%d,"
+                     "\"skipped\":%d",
+                r->test_count, r->passed, r->failed, r->errors, r->timeout, r->skipped);
+        if (r->has_error) {
+            fputs(",\"error\":", out);
+            json_string(out, r->error_msg);
+        }
+        fputs(",\"cases\":[", out);
+        for (int j = 0; j < r->case_count; j++) {
+            fputs(j ? "," : "", out);
+            fputs("{\"name\":", out);
+            json_string(out, r->cases[j].name);
+            fprintf(out, ",\"status\":\"%s\"", status_name(r->cases[j].status));
+            if (r->cases[j].message[0]) {
+                fputs(",\"message\":", out);
+                json_string(out, r->cases[j].message);
+            }
+            fputc('}', out);
+        }
+        fputs("]}", out);
+    }
+    fprintf(out, "\n],\"duration_ms\":%.0f}\n", total_ms);
+    return fclose(out) == 0;
+}
+
+/* ========== CLI Entry Point ========== */
+
+/* Joins every worker. A failed join keeps the live thread's owner; its shared
+ * state must then stay allocated, so the caller reports an internal failure. */
+static bool join_workers(xr_thread_t *threads, int count) {
+    bool joined = true;
+    for (int i = 0; i < count; i++) {
+        int attempts = 0;
+        while (xr_thread_join(threads[i], NULL) != 0) {
+            if (++attempts >= 3) {
+                joined = false;
+                break;
+            }
+        }
+    }
+    return joined;
+}
+
+XR_FUNC int cmd_test(const XrCliInvocation *inv) {
+    XR_DCHECK(inv != NULL, "inv is NULL");
+
+    bool verbose = xr_cli_opt_bool(&inv->options, "verbose");
+    bool quiet = xr_cli_opt_bool(&inv->options, "quiet");
+    bool fail_fast = xr_cli_opt_bool(&inv->options, "fail-fast");
+    const char *filter = xr_cli_opt_string(&inv->options, "filter", NULL);
+    const char *report_path = xr_cli_opt_string(&inv->options, "report", NULL);
+    int num_threads = xr_cli_opt_int(&inv->options, "jobs", 1);
+    if (num_threads < 1)
+        num_threads = 1;
+
+    if (inv->positional_count < 1) {
+        xr_cli_error("test", "please specify test file or directory");
+        return XR_CLI_EXIT_USAGE;
+    }
+
+    /* Test output is program data: keep stdout/stderr byte exact. */
+#if XR_OS_WINDOWS
+    if (_setmode(_fileno(stdout), _O_BINARY) == -1 || _setmode(_fileno(stderr), _O_BINARY) == -1)
+        return XR_CLI_EXIT_INTERNAL;
+#endif
+
+    /* Collect test files from all positional args */
+    XrOsIoPolicy policy = xr_os_io_system_policy();
+    XrFileList fl = {0};
+    for (int i = 0; i < inv->positional_count; i++) {
+        const char *test_path = inv->positionals[i];
+        XrFsStat st;
+        if (xr_os_io_stat(&policy, test_path, &st) != XR_OS_IO_OK) {
+            xr_cli_error("test", "path does not exist '%s'", test_path);
+            filelist_free(&fl);
+            return XR_CLI_EXIT_FAIL;
+        }
+        if (st.kind == XR_FS_DIR) {
+            if (!collect_files_recursive(&policy, test_path, &fl)) {
+                xr_cli_error("test", "cannot enumerate directory '%s'", test_path);
+                filelist_free(&fl);
+                return XR_CLI_EXIT_FAIL;
+            }
+        } else {
+            filelist_add(&fl, test_path);
+        }
+    }
+
+    if (fl.count == 0) {
+        if (!quiet)
+            fprintf(stderr, "No test files found\n");
+        filelist_free(&fl);
+        return XR_CLI_EXIT_OK;
+    }
+
+    XrTestConfig config = {.verbose = verbose, .fail_fast = fail_fast, .filter = filter};
+
+    /* Allocate results */
+    XrTestFileResult *results = xr_calloc(fl.count, sizeof(XrTestFileResult));
+
+    double total_start = get_time_ms();
+
+    if (!quiet)
+        printf("\n");
+
+    if (num_threads <= 1 || fl.count == 1) {
+        /* Serial execution */
+        int aw = quiet ? 0 : compute_align_width(fl.paths, fl.count);
+        char last_dir[TEST_PATH_MAX] = "";
+        bool have_dir = false;
+        for (int i = 0; i < fl.count; i++) {
+            run_test_file(fl.paths[i], &config, &results[i]);
+
+            if (!quiet) {
+                char dir_buf[TEST_PATH_MAX];
+                const char *dn = parent_directory_name(fl.paths[i], dir_buf, sizeof(dir_buf));
+                if (!have_dir || strcmp(last_dir, dir_buf) != 0) {
+                    snprintf(last_dir, sizeof(last_dir), "%s", dir_buf);
+                    have_dir = true;
+                    if (results[i].test_count > 0 || results[i].has_error)
+                        printf(" %s%s%s\n", xr_cli_clr(XR_CLR_BOLD), dn,
+                               xr_cli_clr(XR_CLR_RESET));
+                }
+                print_file_result(&results[i], aw, verbose);
+            }
+
+            if (fail_fast && (results[i].failed + results[i].errors + results[i].timeout) > 0)
+                break;
+        }
+    } else {
+        /* Parallel execution */
+        XrTestParallelCtx pctx = {
+            .files = fl.paths,
+            .file_count = fl.count,
+            .next_idx = 0,
+            .results = results,
+            .config = config,
+        };
+
+        int nworkers = num_threads;
+        if (nworkers > fl.count)
+            nworkers = fl.count;
+
+        if (!quiet)
+            printf(" %sRunning %d files on %d threads...%s\n\n", xr_cli_clr(XR_CLR_DIM),
+                   fl.count, nworkers, xr_cli_clr(XR_CLR_RESET));
+
+        xr_thread_t *threads = xr_calloc(nworkers, sizeof(xr_thread_t));
+        int started = 0;
+        for (int i = 0; i < nworkers; i++) {
+            if (!xr_thread_create_ex(&threads[i], test_worker_thread, &pctx,
+                                     TEST_WORKER_STACK_SIZE))
+                break;
+            ++started;
+        }
+        if (started == 0)
+            test_worker_thread(&pctx);
+        if (!join_workers(threads, started)) {
+            /* A worker may still be running against the shared state: keep it. */
+            xr_cli_error("test", "a test worker could not be joined");
+            return XR_CLI_EXIT_INTERNAL;
+        }
+        xr_free(threads);
+
+        if (!quiet) {
+            int aw = compute_align_width(fl.paths, fl.count);
+            print_all_results(results, fl.paths, fl.count, aw, verbose);
+        }
+    }
+
+    double total_time = get_time_ms() - total_start;
+    if (report_path && !write_report(report_path, results, fl.count, total_time)) {
+        xr_cli_error("test", "cannot write report '%s'", report_path);
+        return XR_CLI_EXIT_FAIL;
+    }
+
+    /* Aggregate stats */
+    int file_count = 0, total_passed = 0, total_failed = 0;
+    int total_errors = 0, total_skipped = 0, total_timeout = 0;
+    for (int i = 0; i < fl.count; i++) {
+        if (results[i].test_count > 0 || results[i].has_error)
+            file_count++;
+        total_passed += results[i].passed;
+        total_failed += results[i].failed;
+        total_errors += results[i].errors;
+        total_skipped += results[i].skipped;
+        total_timeout += results[i].timeout;
+    }
+    int total_executed = total_passed + total_failed + total_errors + total_timeout;
+
+    if (!quiet) {
+        print_summary(file_count, total_passed, total_failed, total_errors, total_skipped,
+                      total_timeout, total_time, filter, results, fl.count);
+    }
+
+    int exit_code;
+    if ((total_failed + total_errors + total_timeout) > 0) {
+        exit_code = XR_CLI_EXIT_FAIL;
+    } else if (total_executed == 0) {
+        /* No tests were executed at all — treat as error to prevent
+         * silent false-pass when test files lack @test functions. */
+        if (!quiet)
+            fprintf(stderr, "Error: 0 tests executed across %d file(s)\n", fl.count);
+        exit_code = XR_CLI_EXIT_FAIL;
+    } else {
+        exit_code = XR_CLI_EXIT_OK;
+    }
+
+    for (int i = 0; i < fl.count; i++)
+        file_result_free(&results[i]);
+    xr_free(results);
+    filelist_free(&fl);
+
+    return exit_code;
+}

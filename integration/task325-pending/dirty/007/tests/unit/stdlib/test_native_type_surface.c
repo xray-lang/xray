@@ -1,0 +1,358 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * test_native_type_surface.c - CI gate for stdlib type native method
+ *                              declarations versus runtime method tables.
+ */
+
+#include "../test_framework.h"
+
+#include "xray_vm.h"
+#include "runtime/xisolate_api.h"
+#include "module/xmodule_identity.h"
+#include "../../../src/frontend/analyzer/xanalyzer_builtins.h"
+#include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/toolchain/xcompiler_session.h"
+#include "../../../src/frontend/analyzer/xanalyzer_native_types.h"
+#include "../../../src/shared/xnative_declaration.h"
+#include "../../../src/analysis/xglobal_summary.h"
+#include "../../../src/runtime/class/xclass.h"
+#include "../../../src/runtime/class/xenum.h"
+#include "../../../src/shared/xobject_shape.h"
+#include "../../../src/stdlib/xstdlib_metadata.h"
+#include "../../../src/module/xstdlib_runtime_cache.h"
+#include "../../../src/plan/semantic/xr_semantic_ids.h"
+
+static const XrModuleIdentityAuthority k_native_surface_memory_authority = {
+    .kind = XR_MODULE_IDENTITY_MEMORY,
+    .namespace_id = "native-surface-fixture-v1",
+};
+
+static XrVMRuntime *make_full_isolate(void) {
+    XrVMConfig params = {0};
+    return xray_vm_new_full(&params);
+}
+
+static const XaBuiltinMember *find_module_member(const char *module_name, const char *member_name) {
+    const XaBuiltinModule *module = xa_builtin_get_module_info(module_name);
+    if (!module || !member_name)
+        return NULL;
+    for (int i = 0; i < module->function_count; i++) {
+        if (module->functions[i].name && strcmp(module->functions[i].name, member_name) == 0)
+            return &module->functions[i];
+    }
+    return NULL;
+}
+
+static const XaBuiltinMember *find_type_member(const char *type_name, const char *member_name) {
+    const XaBuiltinType *type = xa_builtin_get_by_name(type_name);
+    if (!type || !member_name)
+        return NULL;
+    for (int i = 0; i < type->member_count; i++) {
+        if (type->members[i].name && strcmp(type->members[i].name, member_name) == 0)
+            return &type->members[i];
+    }
+    return NULL;
+}
+
+TEST(native_type_methods_match_runtime_tables) {
+    XrVMRuntime *iso = make_full_isolate();
+    ASSERT_NOT_NULL(iso);
+    ASSERT_EQ_INT(xr_isolate_dostring(iso, "import mem\n", &k_native_surface_memory_authority), 0);
+
+    int mismatches = xa_native_verify_protocol(iso);
+    xray_vm_delete(iso);
+
+    ASSERT_EQ_INT(mismatches, 0);
+}
+
+TEST(native_type_protocol_rejects_null_isolate) {
+    ASSERT_EQ_INT(xa_native_verify_protocol(NULL), -1);
+}
+
+TEST(native_array_value_declaration_is_shared) {
+    const XrNativeTypeDeclaration *declaration = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
+    ASSERT_NOT_NULL(declaration);
+    ASSERT_TRUE(xr_native_declaration_validate(declaration));
+    const XaBuiltinType *array = xa_builtin_get_by_name(declaration->name);
+    ASSERT_NOT_NULL(array);
+    ASSERT_EQ_INT(array->declaration_kind, XR_NATIVE_DECLARATION_VALUE);
+    ASSERT_EQ_INT(array->member_count, declaration->member_count);
+    const XrNativeMemberDeclaration *get = xr_native_declaration_member(declaration, "get");
+    const XrNativeMemberDeclaration *set = xr_native_declaration_member(declaration, "set");
+    const XrNativeMemberDeclaration *push = xr_native_declaration_member(declaration, "push");
+    ASSERT_NOT_NULL(get); ASSERT_NOT_NULL(set); ASSERT_NOT_NULL(push);
+    ASSERT_EQ_INT(get->result, XR_NATIVE_TERM_ELEMENT);
+    ASSERT_EQ_INT(get->allocation, XR_NATIVE_ALLOCATION_MAY_HEAP);
+    ASSERT_TRUE(strstr(get->failures, "allocation") != NULL);
+    ASSERT_EQ_INT(set->allocation, XR_NATIVE_ALLOCATION_MAY_HEAP);
+    ASSERT_EQ_INT(push->result, XR_NATIVE_TERM_UNIT);
+    for (uint32_t i = 0; i < declaration->member_count; ++i) {
+        const XaBuiltinMember *member = find_type_member(declaration->name, declaration->members[i].name);
+        ASSERT_NOT_NULL(member);
+        ASSERT_STR_EQ(member->signature, declaration->members[i].signature);
+    }
+    ASSERT_EQ_INT(find_type_member("Array", "set")->allocation_contract, XA_ALLOCATION_CONTRACT_MAY_HEAP);
+    ASSERT_EQ_INT(find_type_member("Array", "get")->return_ownership, XA_BUILTIN_RETURN_FRESH);
+    XrNativeTypeDeclaration mutation = *declaration;
+    mutation.kind = XR_NATIVE_DECLARATION_IDENTITY;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+    mutation = *declaration;
+    mutation.source_fingerprint.bytes[0] ^= 1;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+    mutation = *declaration;
+    mutation.member_count--;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+}
+
+TEST(native_string_value_declaration_is_shared) {
+    const XrNativeTypeDeclaration *declaration = xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
+    ASSERT_NOT_NULL(declaration);
+    ASSERT_TRUE(xr_native_declaration_validate(declaration));
+    ASSERT_EQ_INT(declaration->parameter_count, 0);
+    const XaBuiltinType *string = xa_builtin_get_by_name("string");
+    ASSERT_NOT_NULL(string);
+    ASSERT_EQ_INT(string->declaration_kind, XR_NATIVE_DECLARATION_VALUE);
+    ASSERT_EQ_INT(string->member_count, declaration->member_count);
+    const char *names[] = {"contains", "startsWith", "endsWith"};
+    for (unsigned i = 0; i < 3; ++i) {
+        const XrNativeMemberDeclaration *source = xr_native_declaration_member(declaration, names[i]);
+        const XaBuiltinMember *member = find_type_member("string", names[i]);
+        ASSERT_NOT_NULL(source); ASSERT_NOT_NULL(member);
+        ASSERT_EQ_INT(source->result, XR_NATIVE_TERM_BOOL);
+        ASSERT_EQ_INT(source->parameters[0].type, XR_NATIVE_TERM_STRING);
+        ASSERT_EQ_INT(member->allocation_contract, XA_ALLOCATION_CONTRACT_NO_HEAP);
+        ASSERT_EQ_INT(member->return_ownership, XA_BUILTIN_RETURN_UNKNOWN);
+        ASSERT_STR_EQ(member->signature, source->signature);
+    }
+    XrNativeTypeDeclaration mutation = *declaration;
+    mutation.parameter_count = 1;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+    mutation = *declaration; mutation.line++;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+    mutation = *declaration; mutation.id = UINT32_MAX;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+    XrNativeMemberDeclaration members[64];
+    memcpy(members, declaration->members, declaration->member_count * sizeof(*members));
+    mutation = *declaration; mutation.members = members; members[0].column++;
+    ASSERT_FALSE(xr_native_declaration_validate(&mutation));
+}
+
+TEST(native_receiver_alias_contracts_are_typed_data) {
+    XrVMRuntime *iso = make_full_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    XrType *array_type = xr_type_new_array(iso, xr_type_new_int(iso));
+    ASSERT_NOT_NULL(array_type);
+    ASSERT_TRUE(xa_builtin_member_returns_receiver(array_type, "reserve"));
+    ASSERT_TRUE(xa_builtin_member_returns_receiver(array_type, "resize"));
+    ASSERT_TRUE(xa_builtin_member_returns_receiver(array_type, "reverse"));
+    ASSERT_TRUE(xa_builtin_member_returns_receiver(array_type, "sort"));
+    ASSERT_TRUE(xa_builtin_member_returns_receiver(array_type, "fill"));
+    ASSERT_FALSE(xa_builtin_member_returns_receiver(array_type, "concat"));
+
+    static const struct {
+        const char *type;
+        const char *member;
+    } receiver_aliases[] = {
+        {"Array", "reserve"},        {"Array", "resize"},        {"Array", "reverse"},
+        {"Array", "sort"},           {"Array", "fill"},          {"iterator", "iterator"},
+        {"StringBuilder", "append"}, {"StringBuilder", "clear"},
+    };
+    for (size_t i = 0; i < sizeof(receiver_aliases) / sizeof(receiver_aliases[0]); i++) {
+        const XaBuiltinMember *member =
+            find_type_member(receiver_aliases[i].type, receiver_aliases[i].member);
+        ASSERT_NOT_NULL(member);
+        ASSERT_EQ_INT(member->return_ownership, XA_BUILTIN_RETURN_RECEIVER);
+    }
+    const XaBuiltinMember *concat = find_type_member("Array", "concat");
+    ASSERT_NOT_NULL(concat);
+    ASSERT_EQ_INT(concat->return_ownership, XA_BUILTIN_RETURN_FRESH);
+
+    xray_vm_delete(iso);
+}
+
+TEST(native_type_lookup_and_typed_json_contract_are_total) {
+    ASSERT_NULL(xa_builtin_get_type_info(NULL));
+
+    const XaBuiltinType *json = xa_builtin_get_by_name("JSON");
+    ASSERT_NOT_NULL(json);
+    const XaEffectContract *decode =
+        xa_builtin_get_named_type_member_effect_contract("JSON", "decode", true);
+    ASSERT_NOT_NULL(decode);
+    ASSERT_EQ_INT(decode->kind, XA_EFFECT_CONTRACT_NOTHROW);
+}
+
+TEST(native_module_object_and_enum_metadata) {
+    XrVMRuntime *iso = make_full_isolate();
+    ASSERT_NOT_NULL(iso);
+    XaAnalyzer *analyzer = xa_analyzer_new(xr_compiler_session_current_for_isolate(iso));
+    ASSERT_NOT_NULL(analyzer);
+
+    const XaBuiltinObjectShape *object_shape = xa_builtin_get_object_shape("Coro", "CoroDeadlock");
+    ASSERT_NOT_NULL(object_shape);
+    ASSERT_TRUE(object_shape->is_exact);
+    ASSERT_EQ_INT(object_shape->field_count, 2);
+    ASSERT_TRUE(strcmp(object_shape->fields[0].name, "members") == 0);
+    ASSERT_TRUE(strcmp(object_shape->fields[1].name, "reason") == 0);
+
+    XrType *object_shape_type = xa_builtin_object_shape_decl_type(iso, object_shape);
+    ASSERT_NOT_NULL(object_shape_type);
+    ASSERT_EQ_INT(object_shape_type->kind, XR_KIND_STRUCT_OBJECT);
+    ASSERT_EQ_INT(object_shape_type->object.field_count, 2);
+
+    const XaBuiltinMember *connect_fd = find_module_member("net", "__connectFd");
+    ASSERT_NOT_NULL(connect_fd);
+    ASSERT_TRUE(connect_fd->is_internal);
+    XrType *fn = xa_builtin_parse_full_signature_for_module(analyzer, "net", connect_fd->signature);
+    ASSERT_NOT_NULL(fn);
+    ASSERT_EQ_INT(fn->kind, XR_KIND_FUNCTION);
+    ASSERT_NOT_NULL(fn->function.return_type);
+    /* __connectFd returns private nullable provider storage. Public NetConn
+     * identity is declared only by net.xr and wraps a successful result. */
+    ASSERT_EQ_INT(fn->function.return_type->kind, XR_KIND_INSTANCE);
+    ASSERT_TRUE(fn->function.return_type->is_nullable);
+    ASSERT_STR_EQ(fn->function.return_type->instance.class_name, "__NetConnStorage");
+
+    const XaBuiltinClass *conn_bridge = xa_builtin_find_source_provider_bridge("net", "NetConn");
+    ASSERT_NOT_NULL(conn_bridge);
+    ASSERT_TRUE(conn_bridge->is_internal);
+    ASSERT_STR_EQ(conn_bridge->name, "__NetConnStorage");
+    ASSERT_STR_EQ(conn_bridge->source_storage_field, "_storage");
+    ASSERT_NULL(xa_builtin_find_source_provider_bridge("http", "NetConn"));
+
+    XrType *net_conn_leaf_type =
+        xa_builtin_parse_type_string_for_module(analyzer, "net", "NetConn");
+    ASSERT_NOT_NULL(net_conn_leaf_type);
+    ASSERT_EQ_INT(net_conn_leaf_type->kind, XR_KIND_INSTANCE);
+    ASSERT_STR_EQ(net_conn_leaf_type->instance.class_name, "NetConn");
+    ASSERT_EQ_INT(xa_builtin_parse_type_string_for_module(analyzer, "http", "NetConn")->kind,
+                  XR_KIND_ERROR);
+    ASSERT_EQ_INT(
+        xa_builtin_parse_type_string_for_module(analyzer, "http", "__NetConnStorage")->kind,
+        XR_KIND_ERROR);
+
+    /* ws is a pure-script module: its entire connection layer (WsConn,
+     * connect, send/recv, serve) lives in stdlib/ws/ws.xr, so ws exposes no
+     * native object shapes and no native module-function signatures. Both
+     * lookups must resolve to NULL; a non-NULL result means ws regressed
+     * back into a dual C/script track. */
+    ASSERT_NULL(xa_builtin_get_object_shape("ws", "WsConnectOptions"));
+    ASSERT_NULL(xa_builtin_get_module_func_signature("ws", "connect"));
+
+    /* Peer records, metrics, framing, queues and lifecycle are pure cluster.xr
+     * state. Native metadata therefore exposes no source records, transport
+     * snapshot shapes or private lifecycle leaves. */
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "ClusterConfig"));
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "ClusterInfo"));
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "__ClusterNodeSnapshot"));
+    ASSERT_NULL(xa_builtin_get_object_shape("cluster", "__ClusterRuntimeSnapshot"));
+    ASSERT_NULL(xr_stdlib_record_class_get(iso, "cluster", "__ClusterNodeSnapshot"));
+
+    const XaBuiltinEnum *cluster_state = xa_builtin_get_enum_type("cluster", "ClusterNodeState");
+    ASSERT_NULL(cluster_state);
+    ASSERT_NULL(xr_stdlib_enum_type_get(iso, "cluster", "ClusterNodeState"));
+
+    ASSERT_NULL(xa_builtin_get_module_func_signature("cluster", "start"));
+    ASSERT_NULL(xa_builtin_get_module_func_signature("cluster", "info"));
+    ASSERT_NULL(find_module_member("cluster", "__start"));
+    ASSERT_NULL(find_module_member("cluster", "__stop"));
+    ASSERT_NULL(find_module_member("cluster", "__info"));
+    ASSERT_NULL(find_module_member("cluster", "__registerNodeMonitor"));
+    ASSERT_NULL(find_module_member("cluster", "__registerCoroutineMonitor"));
+    ASSERT_NULL(find_module_member("cluster", "__peerName"));
+    ASSERT_NULL(find_module_member("cluster", "__peerGeneration"));
+    ASSERT_NULL(find_module_member("cluster", "__readPeer"));
+    ASSERT_NULL(find_module_member("cluster", "__writePeer"));
+    ASSERT_NULL(find_module_member("cluster", "__peerEnqueue"));
+    ASSERT_NULL(find_module_member("cluster", "__broadcast"));
+
+    /* Whole-input buffering and path metadata projections are io.xr policy.
+     * The native registry retains only the descriptor read and stat leaves. */
+    ASSERT_NULL(find_module_member("io", "__readFile"));
+    ASSERT_NULL(find_module_member("io", "__readFileBytes"));
+    ASSERT_NULL(find_module_member("io", "__readStdin"));
+    ASSERT_NULL(find_module_member("io", "__readStdinBytes"));
+    ASSERT_NULL(find_module_member("io", "__exists"));
+    ASSERT_NULL(find_module_member("io", "__fileSize"));
+    ASSERT_NULL(find_module_member("io", "__isDir"));
+    ASSERT_NULL(find_module_member("io", "__isFile"));
+    ASSERT_NULL(find_module_member("io", "__isSymlink"));
+    ASSERT_NOT_NULL(find_module_member("io", "__fileRead"));
+    ASSERT_NOT_NULL(find_module_member("io", "__stat"));
+
+    xa_analyzer_free(analyzer);
+    xray_vm_delete(iso);
+}
+
+TEST(native_direct_member_resolves_private_page_alloc_leaf) {
+    const XrStdlibDefEntry *leaf =
+        xr_stdlib_metadata_exact_native_direct_member("mem", "__pageAlloc", 2);
+
+    ASSERT_NOT_NULL(leaf);
+    ASSERT_EQ_INT(leaf->argc, 2);
+    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "__pageAlloc", 1));
+    ASSERT_NULL(xr_stdlib_metadata_exact_native_direct_member("mem", "pageAlloc", 2));
+}
+
+TEST(native_direct_fresh_net_results_publish_exact_provider_abi) {
+    const XrStdlibDefEntry *udp_bind =
+        xr_stdlib_metadata_exact_native_direct_member("net", "__udpBind", 2);
+    const XrStdlibDefEntry *multicast =
+        xr_stdlib_metadata_exact_native_direct_member("net", "__udpMulticastBind", 4);
+
+    ASSERT_NOT_NULL(udp_bind);
+    ASSERT_NOT_NULL(multicast);
+    ASSERT_STR_EQ(udp_bind->return_ownership, "fresh");
+    ASSERT_STR_EQ(multicast->return_ownership, "fresh");
+    ASSERT_STR_EQ(udp_bind->arg_spec, "vv");
+    ASSERT_STR_EQ(multicast->arg_spec, "vvvv");
+    const XrStdlibNativeClassDefEntry *storage =
+        xr_stdlib_metadata_fresh_result_native_class(multicast);
+    ASSERT_NOT_NULL(storage);
+    ASSERT_STR_EQ(storage->module, "net");
+    ASSERT_STR_EQ(storage->name, "__NetConnStorage");
+    ASSERT_STR_EQ(storage->builtin_kind, "XR_BK_NET_CONN_STORAGE");
+    ASSERT_TRUE(xr_stdlib_metadata_unique_native_class_span("net", 3, "__NetConnStorage", 16) ==
+                storage);
+    ASSERT_NULL(xr_stdlib_metadata_unique_native_class_span("http", 4, "__NetConnStorage", 16));
+
+    XrFingerprint identity;
+    XrFingerprint mutated_identity;
+    xr_stdlib_metadata_native_class_fingerprint(storage, &identity);
+    XrStdlibNativeClassDefEntry mutation = *storage;
+    mutation.builtin_kind = "XR_BK_NET_LISTENER_STORAGE";
+    xr_stdlib_metadata_native_class_fingerprint(&mutation, &mutated_identity);
+    ASSERT_FALSE(xr_fingerprint_equal(identity, mutated_identity));
+}
+
+TEST(native_direct_member_identity_rejects_duplicate_tuple) {
+    const XrStdlibDefEntry entries[] = {
+        {.module = "fixture", .name = "call", .argc = 1},
+        {.module = "fixture", .name = "call", .argc = 2},
+        {.module = "fixture", .name = "call", .argc = 1},
+    };
+
+    ASSERT_NULL(xr_stdlib_metadata_unique_func_arity_in_entries(entries, 3, "fixture", "call", 1));
+    ASSERT_TRUE(xr_stdlib_metadata_unique_func_arity_in_entries(entries, 3, "fixture", "call", 2) ==
+                &entries[1]);
+    ASSERT_NULL(xr_stdlib_metadata_unique_func_arity_in_entries(entries, 3, ".fixture", "call", 2));
+    ASSERT_NULL(xr_stdlib_metadata_unique_func_arity_in_entries(entries, 3, "fixture", "", 2));
+}
+
+TEST_MAIN_BEGIN()
+RUN_TEST_SUITE("stdlib/native-type-surface");
+RUN_TEST(native_type_methods_match_runtime_tables);
+RUN_TEST(native_type_protocol_rejects_null_isolate);
+RUN_TEST(native_array_value_declaration_is_shared);
+RUN_TEST(native_receiver_alias_contracts_are_typed_data);
+RUN_TEST(native_type_lookup_and_typed_json_contract_are_total);
+RUN_TEST(native_module_object_and_enum_metadata);
+RUN_TEST(native_direct_member_resolves_private_page_alloc_leaf);
+RUN_TEST(native_direct_fresh_net_results_publish_exact_provider_abi);
+RUN_TEST(native_direct_member_identity_rejects_duplicate_tuple);
+TEST_MAIN_END()

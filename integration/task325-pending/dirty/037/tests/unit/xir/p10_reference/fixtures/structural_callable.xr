@@ -1,0 +1,3 @@
+fn plus(value:i64)->i64 { return value + 1 }
+fn read<T:{apply:fn(i64)->i64}>(value:T)->i64 { return value.apply(41) }
+export fn referenceAnswer()->i64 { const value:{apply:fn(i64)->i64}={apply:plus}; return read(value) }

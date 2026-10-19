@@ -1,0 +1,66 @@
+fn merge<T:Hashable>(left:Set<T>,right:Set<T>)->Set<T>{return left.union(right)}
+fn order(u:Set<i64>,i:Set<i64>,d:Set<i64>,x:Set<i64>)->i64{
+const ua=u.toArray()
+const ia=i.toArray()
+const da=d.toArray()
+const xa=x.toArray()
+if(len(ua)!=5||ua[0]!=3||ua[1]!=1||ua[2]!=2||ua[3]!=4||ua[4]!=5){return -1}
+if(len(ia)!=2||ia[0]!=1||ia[1]!=2||len(da)!=1||da[0]!=3){return -2}
+if(len(xa)!=3||xa[0]!=3||xa[1]!=4||xa[2]!=5){return -3}
+return 0}
+fn relations(a:Set<i64>,i:Set<i64>)->i64{
+const e=Set<i64>()
+if(!e.isSubset(a)||a.isSubset(e)||!a.isSubset(a)||!a.isSuperset(i)||i.isSuperset(a)){return -4}
+if(len(a.difference(a))!=0||len(a.symmetricDifference(a))!=0||len(e.union(e))!=0){return -5}
+return 0}
+export fn entry()->i64{var a=#[3,1,2]
+var b=#[2,4,1,5]
+const old=a
+var u=a.union(b)
+const i=a.intersection(b)
+const d=a.difference(b)
+const x=a.symmetricDifference(b)
+const checked=order(u,i,d,x)
+if(checked!=0){return checked}
+const related=relations(a,i)
+if(related!=0){return related}
+const saved=u
+u.delete(3)
+a.clear()
+b.add(9)
+if(!saved.contains(3)||u.contains(3)||len(old)!=3||len(a)!=0||saved.contains(9)){return -6}
+var trace=0
+var s=#[1]
+fn receiver()->Set<i64>{trace=trace*10+1
+return s}
+fn other()->Set<i64>{trace=trace*10+2
+s=#[9]
+return #[2]}
+const ordered=receiver().union(other())
+if(trace!=12||!ordered.contains(1)||!ordered.contains(2)||ordered.contains(9)){return -7}
+s=#[1]
+const snap=s.union(other())
+if(!snap.contains(1)||snap.contains(9)){return -8}
+return 123}
+export fn late_union()->Set<string>{var a=#["a","b"]
+var b=#["b","c"]
+const u=a.union(b)
+const v=u.toArray()
+if(v[0]!="a"){return a}
+a.clear()
+b.clear()
+return u}
+export fn late_intersection()->Set<string>{var a=#["a","b"]
+var b=#["b","c"]
+const i=a.intersection(b)
+a.clear()
+b.clear()
+return i}
+export fn generic()->Set<i64>{var a=#[3,1]
+const u=merge(a,#[1,2])
+a.clear()
+return u}
+export fn nested()->Set<i64>{var sets=[#[9,4,1]]
+const u=sets[0].union(#[4,2])
+sets[0].clear()
+return u}

@@ -1,0 +1,134 @@
+[
+  {
+    "source": "compile_owner/checked_sizing80_golden.h",
+    "target": "compile_owner/checked_sizing81_golden.h",
+    "sha256": "7f0ef2d23b8524fdcf6a1411a63eb00158a62cc2a1d4b71c551ff95f363da2c5",
+    "models": [
+      "sizing80_golden",
+      "sizing80_embedded_golden",
+      "sizing80_empty_golden"
+    ]
+  },
+  {
+    "source": "root_construction80_goldens.h",
+    "target": "root_construction81_goldens.h",
+    "sha256": "f1445141ef6ee050d4d499f84cd0f76e7f294a627345e9ca2961bf147341e649",
+    "models": [
+      "root_construction72_checked",
+      "root_construction72_instance"
+    ]
+  },
+  {
+    "source": "unit_values/unit80_wire_golden.h",
+    "target": "unit_values/unit81_wire_golden.h",
+    "sha256": "2a12b27f6b74f9f6688bcab020420c16d5765246398d03311d0967f2ad25c55b",
+    "models": [
+      "unit80_packet"
+    ]
+  },
+  {
+    "source": "xir_assert_panics80_golden.h",
+    "target": "xir_assert_panics81_golden.h",
+    "sha256": "b836de22f78acfd06968f2abbbb17bd9cbe774b672b51bbb567c4e9c41a1f3b5",
+    "models": [
+      "assert_panics80_golden"
+    ]
+  },
+  {
+    "source": "xir_checked_range80_golden.h",
+    "target": "xir_checked_range81_golden.h",
+    "sha256": "86c3a9bed901721e8ffa9b2f2a2e1f0a0b2fbf8cca7dd04c5691db7e771d86bb",
+    "models": [
+      "checked_range80_golden"
+    ]
+  },
+  {
+    "source": "xir_checked_scalar80_golden.h",
+    "target": "xir_checked_scalar81_golden.h",
+    "sha256": "42d7d60d3e25e222c60e4d236e010ba206442e1d4996f58fd6ad12fe1bddf68a",
+    "models": [
+      "checked_scalar80_golden"
+    ]
+  },
+  {
+    "source": "xir_error_marker80_golden.h",
+    "target": "xir_error_marker81_golden.h",
+    "sha256": "377c00113559fdc1f5b59f201658a9cf55f1c4618de57a56f88327ec0307c7b7",
+    "models": [
+      "error_marker80_golden"
+    ]
+  },
+  {
+    "source": "xir_generic_method80_golden.h",
+    "target": "xir_generic_method81_golden.h",
+    "sha256": "74d525de333f1aedc1a31f51a948adf87d67faf2112f0d11f71d0433b50dce1d",
+    "models": [
+      "generic_method80_golden",
+      "generic_method80_invalid_flags0",
+      "generic_method80_invalid_flags1"
+    ]
+  },
+  {
+    "source": "xir_rune80_golden.h",
+    "target": "xir_rune81_golden.h",
+    "sha256": "1eceda027c2309a8f3b9b1df5899126ea985b4cff0b643eba048798eaf1e2143",
+    "models": [
+      "rune80_golden"
+    ]
+  },
+  {
+    "source": "xir_hash80_golden.h",
+    "target": "xir_hash81_golden.h",
+    "sha256": "04999471e357f262136dbac678a5802be9ff8ac95eb8d76e59587bed321cecb8",
+    "models": [
+      "hash80_golden"
+    ]
+  },
+  {
+    "source": "xir_nullable80_golden.h",
+    "target": "xir_nullable81_golden.h",
+    "sha256": "9bb2834c555f08506458a0a053d6b4c536e56dd8c52404e65869778d855c44f8",
+    "models": [
+      "nullable_none80_golden",
+      "nullable_some80_golden"
+    ]
+  },
+  {
+    "source": "xir_nested_nullable80_golden.h",
+    "target": "xir_nested_nullable81_golden.h",
+    "sha256": "f30bcaec252134da9c31a7a0131486e471835c8e99ae606cb61e4df118053dc4",
+    "models": [
+      "nested_nullable80_golden"
+    ]
+  },
+  {
+    "source": "export_constants/wire80_golden.h",
+    "target": "export_constants/wire81_golden.h",
+    "sha256": "129fed985a1a466cb9083039adbfaa9859dde562bf09e09d1eb526333ff9d2db",
+    "models": [
+      "constant_wire"
+    ]
+  },
+  {
+    "source": "rest_declarations/wire80_golden.h",
+    "target": "rest_declarations/wire81_golden.h",
+    "sha256": "e23d9466e903fd529e13678c1203e33188cd42ec798045a7d4bc8432dd63d195",
+    "models": [
+      "rest_wire"
+    ]
+  },
+  {
+    "source": "xir_record80_golden.h",
+    "target": "xir_record81_golden.h",
+    "sha256": "11614a58bcc6b7bdb8b1be11862a00e537a54dc6ce72975748ef1704b06a0dfe",
+    "models": [
+      "record80_empty",
+      "record80_unit_fields",
+      "record80_generic",
+      "record80_mutate",
+      "record80_duplicate",
+      "record80_unsorted",
+      "record80_invalid_name"
+    ]
+  }
+]

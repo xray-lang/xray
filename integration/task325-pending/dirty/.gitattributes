@@ -1,0 +1,2 @@
+# Preserve historical input bytes verbatim; these are not active build inputs.
+** -text -diff linguist-vendored=true

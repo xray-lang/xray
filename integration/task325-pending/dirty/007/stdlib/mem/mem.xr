@@ -1,0 +1,176 @@
+// mem — raw-memory capability surface composed in Xray over private native
+// leaves.
+//
+// What stays native, and why, is decided by one rule: a symbol lives here when
+// its meaning can be stated in Xray, and stays in the .def when the compiler
+// owns its meaning.
+//
+// Buffer itself is source-owned. Only its storage is a private runtime handle:
+// Xray has no user-visible destructor hook, so the handle owns reclamation while
+// this class owns the public shape, construction policy and every operation.
+//
+// The layout, pointer and borrow intrinsics — sizeOf, alignOf, offsetOf, ptr,
+// mutPtr, addr, slice, load, store, withSliceMut, assumeInitialized — have no
+// row anywhere in this module. They are not calls the VM can make: the analyzer
+// computes their result type from an explicit type argument, and lowering
+// encodes the selected T, endian, and owner evidence directly onto the backend
+// op. Xray has no way to spell "the caller's T decides my return type and my
+// element layout", and a .def signature could only restate something no backend
+// reads, so their declaration is a row in
+// src/frontend/analyzer/xa_intrinsic_registry.def instead.
+//
+// Everything else is either implemented here or crosses one minimal private
+// host leaf. Validation, normalization and byte-range policy stay in Xray so
+// the VM and AOT compile one implementation.
+
+// Page protection bits for pageAlloc/pageProtect.
+//
+// These are xray's own abstract bits (XrMemProt in src/os/os_mem.h), not the
+// host's PROT_* values: prot_to_posix / prot_to_win translate them per platform,
+// so the numbers below are the same on every target and belong in source rather
+// than behind a host query.
+export const PROT_NONE: i64 = 0
+export const PROT_READ: i64 = 1
+export const PROT_WRITE: i64 = 2
+export const PROT_EXEC: i64 = 4
+
+export final class Buffer implements Lengthable {
+    private _storage: __BufferStorage
+
+    init(n: i64, zeroed: bool = false, align: i64 = 0) {
+        var size = _allocationSize(n)
+        if (align != 0) {
+            assert(_validAlignment(align),
+                   "Buffer alignment must be a power of two >= 8")
+            this._storage = __allocAligned(size, align)
+        } else if (zeroed) {
+            this._storage = __allocZeroed(size)
+        } else {
+            this._storage = __alloc(size)
+        }
+    }
+
+    operator len() -> i64 { return __bufferLength(this._storage) }
+
+    asBytes() -> Slice<u8> from this { return __bufferAsBytes(this._storage) }
+
+    // Writable access is deliberately composed with the module's existing
+    // scoped intrinsic: withSliceMut(buffer.borrowPtr(), len(buffer),
+    // ref buffer, callback). No mutable Slice may escape this owner.
+    borrowPtr() -> MutPtr<u8> { return __bufferBorrowPtr(this._storage) }
+
+    ref resize(n: i64) -> bool {
+        return __bufferResize(this._storage, _allocationSize(n))
+    }
+}
+
+// Memory ordering fence. `ordering` mirrors the Ordering enum ordinals
+// (0 Relaxed .. 4 SeqCst).
+export fn fence(ordering: i64) {
+    __fence(ordering >= 0 && ordering <= 4 ? ordering : 4)
+}
+
+// Prefetch a cache line at ptr; rw != 0 signals write intent. A pure
+// performance hint with no observable effect: a VM no-op, __builtin_prefetch
+// under AOT.
+export fn prefetch(ptr: Ptr<u8>, rw: i64) { __prefetch(ptr, rw) }
+
+// Best-effort cache maintenance over a byte range. Neither call may alter
+// memory contents; unsupported platforms lower them to a fence or a no-op.
+export fn cacheFlush(ptr: Ptr<u8>, n: i64) {
+    if (n > 0) { __cacheFlush(ptr, n) }
+}
+export fn cacheInvalidate(ptr: Ptr<u8>, n: i64) {
+    // The current target primitive has one coherent cache-maintenance
+    // operation. Keep that truth in one source path rather than exposing two
+    // indistinguishable native leaves.
+    cacheFlush(ptr, n)
+}
+
+// Best-effort non-temporal sized store; size in {1, 2, 4, 8}. The VM stores
+// normally, AOT emits streaming stores where the target has them.
+export fn nontemporalStore(ptr: MutPtr<u8>, v: i64, size: i64) {
+    if (_validAccessSize(size)) { __nontemporalStore(ptr, v, size) }
+}
+
+// CPU cache line size in bytes.
+export fn cacheLineSize() -> i64 { return __cacheLineSize() }
+
+// Managed allocation. Each returns a Buffer that owns its bytes and releases
+// them when dropped.
+fn _allocationSize(n: i64) -> i64 {
+    return n > 0 ? n : 0
+}
+
+fn _validAlignment(align: i64) -> bool {
+    if (align < 8) { return false }
+    var candidate: i64 = 8
+    while (candidate < align) {
+        if (candidate > align / 2) { return false }
+        candidate = candidate * 2
+    }
+    return candidate == align
+}
+
+export fn alloc(n: i64) -> Buffer { return Buffer(n) }
+export fn allocZeroed(n: i64) -> Buffer { return Buffer(n, true) }
+export fn allocAligned(n: i64, align: i64) -> Buffer {
+    assert(_validAlignment(align), "mem.allocAligned alignment must be a power of two >= 8")
+    return Buffer(n, false, align)
+}
+
+// Anonymous page lifetime. The public default belongs to this declaration;
+// the native layer exposes one exact mapping primitive.
+export fn pageAlloc(bytes: i64,
+                    prot: i64 = PROT_READ | PROT_WRITE) -> MutPtr<u8> {
+    if (bytes <= 0 || prot < PROT_NONE || prot > (PROT_READ | PROT_WRITE | PROT_EXEC)) {
+        return MutPtr<u8>.null()
+    }
+    return __pageAlloc(bytes, prot)
+}
+export fn pageProtect(ptr: MutPtr<u8>, bytes: i64, prot: i64) -> bool {
+    if (bytes <= 0 || prot < PROT_NONE || prot > (PROT_READ | PROT_WRITE | PROT_EXEC)) {
+        return false
+    }
+    return __pageProtect(ptr, bytes, prot)
+}
+export fn pageFree(ptr: MutPtr<u8>, bytes: i64) -> bool {
+    if (bytes <= 0) { return false }
+    return __pageFree(ptr, bytes)
+}
+
+// Bulk byte policy is source-owned. The compiler lowers the non-overlapping
+// pointer operation to its native fast path; fill and comparison remain simple
+// Xray loops that optimizers may recognize. Only overlap-tolerant move needs a
+// host primitive because Xray intentionally has no pointer-order comparison.
+export fn copy(dst: MutPtr<u8>, src: Ptr<u8>, n: i64) {
+    if (n > 0) { unsafe { dst.copyFromNonOverlapping(src, n) } }
+}
+export fn move(dst: MutPtr<u8>, src: Ptr<u8>, n: i64) {
+    if (n > 0) { __move(dst, src, n) }
+}
+export fn set(dst: MutPtr<u8>, byte: i64, n: i64) {
+    var output = dst
+    for (var i = 0; i < n; i++) { unsafe { output[i] = (byte & 255) as u8 } }
+}
+export fn compare(a: Ptr<u8>, b: Ptr<u8>, n: i64) -> i64 {
+    for (var i = 0; i < n; i++) {
+        var av = (unsafe { a[i] }) as i64
+        var bv = (unsafe { b[i] }) as i64
+        if (av < bv) { return -1 }
+        if (av > bv) { return 1 }
+    }
+    return 0
+}
+
+// Volatile MMIO access of size bytes; size in {1, 2, 4, 8}, native byte order.
+fn _validAccessSize(size: i64) -> bool {
+    return size == 1 || size == 2 || size == 4 || size == 8
+}
+
+export fn volatileLoad(ptr: Ptr<u8>, size: i64) -> i64 {
+    return _validAccessSize(size) ? __volatileLoad(ptr, size) : 0
+}
+export fn volatileStore(ptr: MutPtr<u8>, v: i64, size: i64) {
+    if (_validAccessSize(size)) { __volatileStore(ptr, v, size) }
+}

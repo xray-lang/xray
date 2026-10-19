@@ -1,0 +1,311 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xmodule.h - Module system core
+ *
+ * KEY CONCEPT:
+ *   - Module loading and caching
+ *   - Export table management
+ *   - Native and Script module support
+ *   - Path resolution (supports index.xr directory entry)
+ */
+
+#ifndef XMODULE_H
+#define XMODULE_H
+
+#include "../base/xforward_decl.h"
+#include "../runtime/value/xvalue.h"
+#include <stdatomic.h>
+#include "../base/xhashmap.h"
+#include "../runtime/symbol/xsymbol_table.h"
+#include <stdbool.h>
+#include "../base/xdefs.h"
+
+// Forward declaration (full definition in pkg/xproject.h, only needed in xmodule.c)
+typedef struct XrProject XrProject;
+
+/* ========== Module Types ========== */
+
+typedef enum {
+    MODULE_TYPE_NATIVE,  // Native module implemented in C (stdlib)
+    MODULE_TYPE_SCRIPT,  // Xray script module
+    MODULE_TYPE_MIXED,   // Mixed module (C + Xray)
+} ModuleType;
+
+/* ========== Module Object ========== */
+
+/*
+** XrModule - Dedicated Module type
+**
+** Design:
+** - SymbolId-indexed flat export table for O(1) property access
+** - Sparse array maps SymbolId range to dense index
+** - No XrMap/XrHashMap overhead, direct array indexing in VM hot path
+*/
+
+#define XR_EXPORT_CONST 0x01
+
+typedef enum XrModuleState {
+    XR_MODULE_NEW = 0,
+    XR_MODULE_INITIALIZING,
+    XR_MODULE_PUBLISHED,
+    XR_MODULE_FAILED,
+} XrModuleState;
+
+typedef void (*XrModuleNativeHandleDestroy)(void *handle);
+
+typedef struct XrModule {
+    XrObjHeader hdr;
+
+    char *name;  // Module name (e.g. "time")
+    char *path;  // Module path (e.g. "std/time/time.xr")
+    ModuleType module_type;
+
+    // SymbolId-indexed export table
+    XrValue *export_values;    // Dense array of export values [export_count]
+    SymbolId *export_symbols;  // Dense array of SymbolIds [export_count] (for iteration)
+    uint8_t *export_flags;     // Dense array of flags [export_count] (bit 0 = const)
+
+    int32_t *symbol_to_index;  // Sparse lookup: [max_symbol - min_symbol + 1], -1 = not found
+    SymbolId min_symbol;
+    SymbolId max_symbol;
+    uint16_t export_count;
+    uint16_t export_capacity;
+
+    /* Module state is the publication boundary. Export arrays and every
+     * module-owned readonly graph reachable from them are written only while
+     * INITIALIZING, then made visible by the PUBLISHED release-store. Readers
+     * must observe PUBLISHED with acquire semantics before touching exports. */
+    _Atomic uint8_t state; /* XrModuleState */
+
+    /* Pure-Xray stdlib module: the stdlib/<name>/<name>.xr script layer
+     * provides all exports, so a missing script file is a hard load
+     * error instead of a silently empty module. Set by the C factory. */
+    bool requires_script;
+
+    void *native_handle;
+    XrModuleNativeHandleDestroy native_handle_destroy;
+    struct XrClosure *init_fn;
+    XrProto *initializer; /* Owned through PUBLISHED and FAILED; closures borrow it. */
+} XrModule;
+
+/* ========== Inline O(1) Export Access ========== */
+
+static inline XrValue xr_module_get_sym(XrModule *m, SymbolId sym) {
+    if (!m || atomic_load_explicit(&m->state, memory_order_acquire) != XR_MODULE_PUBLISHED)
+        return xr_null();
+    if (m->symbol_to_index) {
+        if (sym < m->min_symbol || sym > m->max_symbol)
+            return xr_null();
+        int32_t idx = m->symbol_to_index[sym - m->min_symbol];
+        return (idx >= 0) ? m->export_values[idx] : xr_null();
+    }
+    // Fallback: linear scan when a published module has no sparse index.
+    for (uint16_t i = 0; i < m->export_count; i++) {
+        if (m->export_symbols[i] == sym)
+            return m->export_values[i];
+    }
+    return xr_null();
+}
+
+static inline bool xr_module_is_const_sym(XrModule *m, SymbolId sym) {
+    if (!m || atomic_load_explicit(&m->state, memory_order_acquire) != XR_MODULE_PUBLISHED)
+        return false;
+    if (m->symbol_to_index) {
+        if (sym < m->min_symbol || sym > m->max_symbol)
+            return false;
+        int32_t idx = m->symbol_to_index[sym - m->min_symbol];
+        return (idx >= 0) && (m->export_flags[idx] & XR_EXPORT_CONST);
+    }
+    for (uint16_t i = 0; i < m->export_count; i++) {
+        if (m->export_symbols[i] == sym)
+            return (m->export_flags[i] & XR_EXPORT_CONST) != 0;
+    }
+    return false;
+}
+
+static inline bool xr_module_has_sym(XrModule *m, SymbolId sym) {
+    if (!m || atomic_load_explicit(&m->state, memory_order_acquire) != XR_MODULE_PUBLISHED)
+        return false;
+    if (m->symbol_to_index) {
+        if (sym < m->min_symbol || sym > m->max_symbol)
+            return false;
+        return m->symbol_to_index[sym - m->min_symbol] >= 0;
+    }
+    for (uint16_t i = 0; i < m->export_count; i++) {
+        if (m->export_symbols[i] == sym)
+            return true;
+    }
+    return false;
+}
+
+/* Mutable module exports keep their stable module-owned slot after
+ * publication. This does not grant cross-execution synchronization: the
+ * analyzer rejects unsynchronized module-var access at such boundaries. */
+static inline bool xr_module_set_sym(XrModule *m, SymbolId sym, XrValue val) {
+    if (!m || atomic_load_explicit(&m->state, memory_order_acquire) != XR_MODULE_PUBLISHED)
+        return false;
+    if (m->symbol_to_index) {
+        if (sym < m->min_symbol || sym > m->max_symbol)
+            return false;
+        int32_t idx = m->symbol_to_index[sym - m->min_symbol];
+        if (idx < 0 || (m->export_flags[idx] & XR_EXPORT_CONST) != 0)
+            return false;
+        m->export_values[idx] = val;
+        return true;
+    }
+    for (uint16_t i = 0; i < m->export_count; i++) {
+        if (m->export_symbols[i] == sym && (m->export_flags[i] & XR_EXPORT_CONST) == 0) {
+            m->export_values[i] = val;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* ========== Module Registry ========== */
+
+struct XrModuleResolver;
+struct XrBytecodeModule;
+struct XrModuleIdentityAuthority;
+
+/* The initializer transfers to the module. The compiler context is consumed
+ * after initialization on every exit and restores the surrounding program. */
+typedef struct XrModuleSourceCompilation {
+    XrProto *initializer;
+    void *context;
+    bool (*dispose_context)(void *context, bool succeeded);
+} XrModuleSourceCompilation;
+
+typedef bool (*XrModuleCompileSourceHook)(XrCompilerSession *session, const char *source,
+                                          const char *source_file,
+                                          const struct XrModuleIdentityAuthority *authority,
+                                          XrModuleSourceCompilation *out);
+
+typedef struct XrModuleRegistry {
+    XrHashMap *loaded_modules;   // Module path -> XrModule*
+
+    char *stdlib_path;  // Stdlib path (default: stdlib/)
+
+    // Project config (optional, for package management)
+    XrProject *project;
+
+    // Unified specifier → source path resolver (created during init)
+    struct XrModuleResolver *resolver;
+
+    // Topo-ordered module table for OP_LOAD_MODULE_SLOT.
+    // Populated during graph-driven initialization; indexed by topo position.
+    XrModule **module_table;
+    int module_table_count;
+
+    // Bytecode modules embedded by `xray build`; borrowed from static artifact data.
+    const struct XrBytecodeModule *embedded_modules;
+    size_t embedded_module_count;
+
+    // Compiler hooks — per-Isolate, NULL in lite/bytecode-only mode.
+    // The module runtime stores an opaque compiler session pointer and only
+    // passes it back into toolchain-owned hook functions.
+    XrCompilerSession *compiler_session;
+    XrModuleCompileSourceHook fn_compile_src;
+} XrModuleRegistry;
+
+/* ========== Module System API ========== */
+
+XR_FUNC void xr_module_system_init(struct XrVMRuntime *isolate);
+
+/*
+** Initialize module system (with script path)
+** Loads project config (if xray.toml exists)
+**
+** @param isolate     Isolate instance
+** @param script_path Entry script path
+*/
+XR_FUNC void xr_module_system_init_with_script(struct XrVMRuntime *isolate,
+                                               const char *script_path);
+XR_FUNC void xr_module_system_free(struct XrVMRuntime *isolate);
+
+/*
+** Import module (called by VM instruction)
+**
+** @param isolate     Isolate instance
+** @param module_name Module name (e.g. "time")
+** @return            Module object (contains export table) or XR_NULL
+**
+** Flow:
+** 1. Check cache
+** 2. Resolve path
+** 3. Load module (native or script)
+** 4. Execute initialization
+** 5. Cache and return
+*/
+XR_FUNC XrValue xr_module_import(struct XrVMRuntime *isolate, const char *module_name);
+XR_FUNC XrValue xr_module_import_member(struct XrVMRuntime *isolate, const char *module_name,
+                                        const char *member_name);
+XR_FUNC void xr_module_add_current_export(struct XrVMRuntime *isolate, const char *name,
+                                          XrValue value, bool is_const);
+XR_FUNC bool xr_module_is_export_const(struct XrVMRuntime *isolate, struct XrModule *module,
+                                       const char *name);
+
+/* ========== Module Object Operations ========== */
+
+XR_FUNC XrModule *xr_module_create_native(struct XrVMRuntime *isolate, const char *name);
+XR_FUNC XrModule *xr_module_create_script(struct XrVMRuntime *isolate, const char *name,
+                                          const char *path);
+XR_FUNC void xr_module_add_export(struct XrVMRuntime *isolate, XrModule *module, const char *name,
+                                  XrValue value);
+
+/*
+** Export an already-registered VM builtin type class under a module name.
+** Generated binders call this for the modules whose classes the runtime owns.
+*/
+XR_FUNC void xr_module_export_native_type_class(struct XrVMRuntime *isolate, XrModule *module,
+                                                const char *name, uint8_t type_id);
+XR_FUNC void xr_module_add_export_sym(struct XrVMRuntime *isolate, XrModule *module, SymbolId sym,
+                                      XrValue value, bool is_const);
+XR_FUNC bool xr_module_set_initializing_export(struct XrVMRuntime *isolate, XrModule *module,
+                                               const char *name, XrValue value, bool is_const);
+XR_FUNC XrValue xr_module_get_export(struct XrVMRuntime *isolate, XrModule *module,
+                                     const char *name);
+XR_FUNC void xr_module_build_export_index(XrModule *module);
+XR_FUNC XrModuleState xr_module_state(const XrModule *module);
+XR_FUNC bool xr_module_begin_initialization(XrModule *module);
+XR_FUNC bool xr_module_publish(XrModule *module);
+XR_FUNC void xr_module_fail(XrModule *module);
+XR_FUNC void xr_module_free(XrModule *module);
+
+/* ========== Resolver Access ========== */
+
+/* Get the registry's resolver, creating it lazily if needed.
+ * The returned pointer is owned by the registry and must NOT be freed. */
+XR_FUNC struct XrModuleResolver *xr_module_registry_get_resolver(XrModuleRegistry *registry);
+
+/* ========== Module Path Resolution ========== */
+
+/*
+** Resolve module path
+**
+** @param isolate     Isolate instance
+** @param module_name Module name
+** @return            Full path or NULL
+**
+** Resolution rules:
+** - "time"           → the generated stdlib module descriptor
+** - "./mylib.xr"     → Relative path
+** - "/path/to/lib.xr" → Absolute path
+*/
+XR_FUNC char *xr_module_resolve_path(struct XrVMRuntime *isolate, const char *module_name);
+XR_FUNC ModuleType xr_module_detect_type(const char *path);
+
+/* ========== Compiler Hook Registration ========== */
+
+// Set compiler hooks for module loading (per-Isolate, called during full isolate init).
+// The module runtime borrows `compiler_session`; it does not own or free it.
+XR_FUNC void xr_module_set_compiler_hooks(struct XrVMRuntime *isolate,
+                                          XrCompilerSession *compiler_session,
+                                          XrModuleCompileSourceHook compile_src_fn);
+
+#endif  // XMODULE_H

@@ -1,0 +1,2 @@
+class C<T> implements Sendable { x:T; constructor(x:T){this.x=x} }
+export fn main()->i64{return 7}

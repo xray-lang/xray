@@ -1,0 +1,4 @@
+// Built-in bool type — implementation in src/runtime/value/xbool_methods.c
+class bool {
+    toString() -> string
+}

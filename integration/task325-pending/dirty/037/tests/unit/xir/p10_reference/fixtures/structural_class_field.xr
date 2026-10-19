@@ -1,0 +1,3 @@
+class Box { value:i64; init(value) { this.value=value } }
+fn read<T:{child:Box}>(value:T)->i64 { value.child.value+=1; return value.child.value }
+export fn referenceAnswer()->i64 { return read({extra:true,child:Box(41)}) }

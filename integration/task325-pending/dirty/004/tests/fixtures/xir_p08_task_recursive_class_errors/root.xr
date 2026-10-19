@@ -1,0 +1,24 @@
+class Payload implements Sendable {
+    values:Array<i64>
+    counter:Atomic<i64>
+    next:Payload?
+    constructor(values:Array<i64>,counter:Atomic<i64>,next:Payload?) { this.values=values; this.counter=counter; this.next=next }
+}
+enum Problem { Struct { value:Payload } }
+class Box<T:Sendable> implements Sendable { value:T; constructor(value:T){this.value=value} }
+fn carry(value:Payload)->Payload { return Box<Payload>(value).value }
+
+fn worker_structure(value:Payload) { Coro.yield(); value.counter.fetchAdd(41); throw Problem.Struct{value:value} }
+export fn await_structure() {
+    var values=[10,20]
+    const task=go worker_structure(carry(Payload(values,Atomic<i64>(1),Payload([30,40],Atomic<i64>(3),null))))
+    values[0]=99
+    await task
+}
+export fn handle_structure()->Task<null> {
+    var values=[10,20]
+    const task=go worker_structure(carry(Payload(values,Atomic<i64>(1),Payload([30,40],Atomic<i64>(3),null))))
+    values[0]=99
+    return task
+}
+export fn main()->i64 { return 7 }

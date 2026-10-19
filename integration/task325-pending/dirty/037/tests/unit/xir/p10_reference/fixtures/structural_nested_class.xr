@@ -1,0 +1,6 @@
+class Box { value:i64; init(value) { this.value=value } }
+fn read<T:{items:Array<Box>}>(value:T)->i64 {
+    value.items[0].value+=1
+    return value.items[0].value
+}
+export fn referenceAnswer()->i64 { return read({extra:true,items:[Box(41)]}) }

@@ -1,0 +1,3 @@
+type Row = {extra:bool,n:i64}
+fn read<A,T:{n:A}>(value:T)->A { return value.n }
+export fn referenceAnswer()->i64 { const value:Row={n:42,extra:true}; return read<i64,Row>(value) }

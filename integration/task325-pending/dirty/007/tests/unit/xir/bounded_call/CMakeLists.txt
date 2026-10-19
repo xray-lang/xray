@@ -1,0 +1,11 @@
+# Link the same production owner used by VM, emitted native code and the SDK.
+foreach(target test_xir_bounded_call test_xir_bounded_call_injected)
+    add_executable(${target} test_bounded_call.c)
+    target_link_libraries(${target} PRIVATE xray_xir_scalar xray_compile_resources)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+    endif()
+    add_test(NAME ${target} COMMAND ${target})
+    set_tests_properties(${target} PROPERTIES LABELS "unit;xir;ownership;bounded-call" TIMEOUT 60)
+endforeach()
+target_compile_definitions(test_xir_bounded_call_injected PRIVATE XR_BOUNDED_INJECTED=1)

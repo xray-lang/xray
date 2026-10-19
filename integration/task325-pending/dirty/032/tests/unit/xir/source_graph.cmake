@@ -1,0 +1,16 @@
+add_executable(test_xir_source_graph ${CMAKE_CURRENT_LIST_DIR}/test_xir_source_graph.c)
+target_include_directories(test_xir_source_graph PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xir_source_graph PRIVATE xray_source_compile xray_xir_stdlib_catalog)
+if(MSVC)
+    target_compile_options(test_xir_source_graph PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_source_graph PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_source_graph COMMAND test_xir_source_graph ${PROJECT_SOURCE_DIR}/stdlib)
+set_tests_properties(test_xir_source_graph PROPERTIES TIMEOUT 120 LABELS "unit;xir;source;ownership;metadata")
+add_test(NAME test_xir_source_graph_resources COMMAND test_xir_source_graph ${PROJECT_SOURCE_DIR}/stdlib --resources)
+set_tests_properties(test_xir_source_graph_resources PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 100
+    LABELS "unit;xir;source;ownership;budget;memory")
+add_test(NAME test_xir_source_graph_bounds COMMAND test_xir_source_graph ${PROJECT_SOURCE_DIR}/stdlib --bounds)
+set_tests_properties(test_xir_source_graph_bounds PROPERTIES TIMEOUT 120
+    LABELS "unit;xir;source;ownership;budget;partial-feedback")

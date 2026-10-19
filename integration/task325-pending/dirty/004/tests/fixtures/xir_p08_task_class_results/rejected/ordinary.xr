@@ -1,0 +1,3 @@
+class C { x:i64; constructor(x:i64){this.x=x} }
+fn worker(value:C)->C{return value}
+export fn main()->i64{const task=go worker(C(1));return 7}

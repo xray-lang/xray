@@ -1,0 +1,80 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xir_json_named_decode_source.h - Ordinary actual-name initializer generation
+ */
+#ifndef XIR_JSON_NAMED_DECODE_SOURCE_H
+#define XIR_JSON_NAMED_DECODE_SOURCE_H
+static const char named_generator[]=
+    "%s\n"
+    "type MethodInfo=(string,i64,i64,i64,i64)\n"
+    "type CalleeInfo=(string,string,i64,i64,i64,i64)\n"
+    "type Context=(Array<MethodInfo>,Array<CalleeInfo>,Array<i64>,i64,Array<string>)\n"
+    "fn unsupported()->Generated {\n"
+    " const f:Array<FunctionRow>=[];const p:Array<i64>=[];const b:Array<BlockRow>=[]\n"
+    " const c:Array<InstructionRow>=[];const l:Array<string>=[];return (0,f,p,b,c,p,l,p)\n"
+    "}\n"
+    "export fn generate(info:TypeInfo,context:Context)->Generated {\n"
+    " const integer:i64=%u;const text:i64=%u;const nullable:i64=%u;const array:i64=%u\n"
+    " if(context.3<0 || len(context.0)!=1){return unsupported()}\n"
+    " const method=context.0[0];const ctor=context.1[context.3];const count=len(context.4)\n"
+    " if(method.3!=1 || method.4!=0 || ctor.4!=count ||\n"
+    "  info.1[context.2[method.2]].1!=text || info.1[method.1].0!=nullable){return unsupported()}\n"
+    " var i:i64=0\n"
+    " while(i<count){if(info.1[context.2[ctor.3+i]].1!=integer){return unsupported()};i=i+1}\n"
+    " var parse:i64=-1;var parsed:i64=-1;var keysType:i64=-1;var valuesType:i64=-1;i=0\n"
+    " while(i<len(context.1)) {\n"
+    "  const callee=context.1[i];const result=info.1[callee.5]\n"
+    "  if(callee.1==\"jsonIntegerObject\" && callee.4==2 && result.0==nullable &&\n"
+    "   info.1[context.2[callee.3]].1==text) {\n"
+    "   const keys=info.1[context.2[callee.3+1]];const values=info.1[result.10]\n"
+    "   if(keys.0==array && info.1[keys.10].1==text && values.0==array && info.1[values.10].1==integer) {\n"
+    "    if(parse>=0){return unsupported()}\n"
+    "    parse=callee.2;parsed=callee.5;keysType=context.2[callee.3+1];valuesType=result.10\n"
+    "   }\n"
+    "  };i=i+1\n"
+    " }\n"
+    " if(parse<0){return unsupported()}\n"
+    " const literal:i64=%u;const makeArray:i64=%u;const call:i64=%u;const some:i64=%u\n"
+    " const branch:i64=%u;const unwrap:i64=%u;const intOp:i64=%u;const get:i64=%u\n"
+    " const wrap:i64=%u;const none:i64=%u;const ret:i64=%u;const boolType:i64=-%u;const intType=-integer-1\n"
+    " var code:Array<InstructionRow>=[];var operands:Array<i64>=[];i=0\n"
+    " while(i<count) {\n"
+    "  operands.push(len(code)+2);code.push((literal,-text-1,0,0,0,0,i,0,0,-1));i=i+1\n"
+    " }\n"
+    " const keyValues=len(code)+2;code.push((makeArray,keysType,0,count,0,0,0,0,0,-1))\n"
+    " const parseArgs=len(operands);operands.push(1);operands.push(keyValues)\n"
+    " const parsedValue=len(code)+2;code.push((call,parsed,parseArgs,2,0,0,-parse-1,0,0,-1))\n"
+    " const condition=len(code)+2;code.push((some,boolType,parsedValue,0,0,0,0,0,0,-1))\n"
+    " code.push((branch,-1,condition,0,1,2,0,0,0,-1));const success=len(code)\n"
+    " const values=len(code)+2;code.push((unwrap,valuesType,parsedValue,0,0,0,0,0,0,-1))\n"
+    " const ctorArgs=len(operands);i=0\n"
+    " while(i<count) {\n"
+    "  const index=len(code)+2;code.push((intOp,intType,0,0,0,0,i,0,0,-1))\n"
+    "  operands.push(len(code)+2);code.push((get,intType,values,index,0,0,0,0,0,-1));i=i+1\n"
+    " }\n"
+    " const made=len(code)+2;code.push((call,info.0,ctorArgs,count,0,0,-ctor.2-1,0,0,-1))\n"
+    " const wrapped=len(code)+2;code.push((wrap,method.1,made,0,0,0,0,0,0,-1))\n"
+    " code.push((ret,-1,wrapped,0,0,0,0,0,0,-1));const failure=len(code)\n"
+    " const absent=len(code)+2;code.push((none,method.1,0,0,0,0,0,0,0,-1));code.push((ret,-1,absent,0,0,0,0,0,0,-1))\n"
+    " const functions:Array<FunctionRow>=[(method.0,0,0,method.1,0,2,0,3,0,len(code),0,len(operands),0,0)]\n"
+    " const parameters:Array<i64>=[info.0,context.2[method.2]]\n"
+    " const blocks:Array<BlockRow>=[(0,success,0,0),(success,failure-success,0,0),(failure,2,0,0)]\n"
+    " const arguments:Array<i64>=[]\n"
+    " return (1,functions,parameters,blocks,code,operands,context.4,arguments)\n"
+    "}\n";
+static const char named_user[]=
+    "import {generate,jsonIntegerObject} from \"./generator_json_named\"\n"
+    "interface DecodeNamed<T> {decodeJSON(text:string)->T?}\n"
+    "@derive(DecodeNamed<Future>,generate%s)\n"
+    "struct Future {private const encoded:i64\n"
+    " private init(%s:i64,%s:i64){this.encoded=((%s<0)?0:%s)*1000+%s}\n"
+    " static seed()->Future{return Future(0,0)}\n"
+    " observed()->i64{return this.encoded} }\n"
+    "export fn decode(text:string)->i64? {const value=Future.seed().decodeJSON(text)\n"
+    " if(value==null){return null};return value!.observed()}\n"
+    "export fn main()->i64 {const value=%sdecode(\"{\\\"%s\\\":0,\\\"%s\\\":42}\");return ((value ?? -1)==42)?42:0}\n";
+#endif // XIR_JSON_NAMED_DECODE_SOURCE_H

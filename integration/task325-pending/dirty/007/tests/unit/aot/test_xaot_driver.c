@@ -1,0 +1,2137 @@
+#include "../../../src/aot/xaot_driver.h"
+#include "../../../src/analysis/xglobal_producer.h"
+#include "../../../src/base/xfileio.h"
+#include "../../../src/base/xmalloc.h"
+#include "../../../src/module/xmodule_graph.h"
+#include "../../../src/module/xmodule_resolver.h"
+#include "../../../src/module/xlockfile.h"
+#include "../../../src/module/xproject.h"
+#include "../../../src/incremental/xr_program_target_plan_build.h"
+#include "../../../src/app/toolchain/xtc_target_profile.h"
+#include "../../../src/os/os_dir.h"
+#include "../../../src/os/os_temp.h"
+#include "../test_win_compat.h"
+
+#include <errno.h>
+#include <inttypes.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
+static int passed;
+static int failed;
+
+static bool install_native_target_profile(XaotBuildOptions *options, const XaotTarget *target) {
+    XrTargetCodegenFacts codegen;
+    char error[256];
+    return options && xaot_target_profile_codegen_facts(target, &codegen) &&
+           xtc_target_profile_build_current_native_hosted(&codegen, &options->target_profile, error,
+                                                          sizeof(error));
+}
+
+static void release_target_profile(XaotBuildOptions *options) {
+    if (!options)
+        return;
+    xr_target_profile_free(options->target_profile);
+    options->target_profile = NULL;
+}
+
+static int xaot_build_script(const char *source_path, XaotBuildOptions *options,
+                             XaotBuildResult *result) {
+    XrModuleIdentityAuthority authority = {0};
+    char *authority_root = NULL;
+    if (!options ||
+        !(xr_module_identity_script_authority_from_source(source_path, &authority, &authority_root) == XR_MODULE_OK))
+        return 1;
+    options->entry_module_authority = authority;
+    int rc = xaot_build(source_path, options, result);
+    options->entry_module_authority = (XrModuleIdentityAuthority) {0};
+    xr_free(authority_root);
+    return rc;
+}
+
+#define ASSERT_TRUE(cond)                                                                          \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond);                                 \
+            failed++;                                                                              \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
+
+static bool write_temp_source(char *path, size_t path_sz) {
+    FILE *f;
+    int n = snprintf(path, path_sz, "/tmp/xray-xaot-driver-%ld.xr", (long) xr_test_getpid());
+    if (n < 0 || (size_t) n >= path_sz)
+        return false;
+    f = fopen(path, "w");
+    if (!f)
+        return false;
+    if (fputs("fn value() -> i64 {\n    return 7\n}\n", f) < 0) {
+        fclose(f);
+        xr_test_unlink(path);
+        return false;
+    }
+    if (fclose(f) != 0) {
+        xr_test_unlink(path);
+        return false;
+    }
+    return true;
+}
+
+static bool corrupt_first_xtp_cache_object(const char *root) {
+    char directory[XR_TEST_PATH_MAX];
+    if (snprintf(directory, sizeof(directory), "%s/xtp", root) < 0 ||
+        strlen(directory) >= sizeof(directory))
+        return false;
+    XrDirIter *iterator = xr_dir_open(directory);
+    if (!iterator)
+        return false;
+    XrDirEntry entry;
+    bool corrupted = false;
+    while (xr_dir_next(iterator, &entry)) {
+        if (entry.is_dir || entry.name[0] == '.')
+            continue;
+        char path[XR_TEST_PATH_MAX];
+        if (snprintf(path, sizeof(path), "%s/%s", directory, entry.name) < 0 ||
+            strlen(path) >= sizeof(path))
+            break;
+        FILE *file = fopen(path, "r+b");
+        if (!file)
+            break;
+        if (fseek(file, -1L, SEEK_END) == 0) {
+            int byte = fgetc(file);
+            if (byte != EOF && fseek(file, -1L, SEEK_END) == 0 && fputc(byte ^ 1, file) != EOF &&
+                fclose(file) == 0) {
+                corrupted = true;
+                break;
+            }
+        }
+        fclose(file);
+        break;
+    }
+    xr_dir_close(iterator);
+    return corrupted;
+}
+
+static bool add_package_link_dependency(XgGlobalEvidence *package, XgModuleId module_id) {
+    XgLinkDependencySummary dep;
+    memset(&dep, 0, sizeof(dep));
+    dep.link_id = 1;
+    dep.module_id = module_id;
+    dep.kind = XG_LINK_DEP_STDLIB_SYMBOL;
+    dep.name_id = xg_name_id("math.abs");
+    snprintf(dep.name, sizeof(dep.name), "%s", "math.abs");
+    return xg_global_evidence_add_link_dependency(package, &dep) != NULL;
+}
+
+static bool add_package_function_storage_decls(XgGlobalEvidence *package, XgModuleId module_id,
+                                               const char *source_path) {
+    FILE *f;
+    long size;
+    char *source;
+    char *cursor;
+    if (!package || !source_path || !(f = fopen(source_path, "rb")))
+        return false;
+    if (fseek(f, 0, SEEK_END) != 0 || (size = ftell(f)) < 0 || fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return false;
+    }
+    source = (char *) xr_malloc((size_t) size + 1);
+    if (!source || fread(source, 1, (size_t) size, f) != (size_t) size) {
+        xr_free(source);
+        fclose(f);
+        return false;
+    }
+    fclose(f);
+    source[size] = '\0';
+    cursor = source;
+    while ((cursor = strstr(cursor, "fn ")) != NULL) {
+        char name[128];
+        size_t len = 0;
+        XgDeclSummary decl;
+        cursor += 3;
+        while ((cursor[len] == '_' || (cursor[len] >= 'a' && cursor[len] <= 'z') ||
+                (cursor[len] >= 'A' && cursor[len] <= 'Z') ||
+                (len > 0 && cursor[len] >= '0' && cursor[len] <= '9')) &&
+               len + 1 < sizeof(name))
+            len++;
+        if (len == 0)
+            continue;
+        memcpy(name, cursor, len);
+        name[len] = '\0';
+        memset(&decl, 0, sizeof(decl));
+        decl.module_id = module_id;
+        decl.decl_id = package->ndecls + 1;
+        decl.source_node_id = xg_stable_source_node_id(module_id, 1, decl.decl_id, 1);
+        decl.kind = XG_DECL_FUNC;
+        decl.name_id = xg_name_id(name);
+        decl.source_span_id = decl.decl_id;
+        decl.storage_domain = XR_STORAGE_MODULE_STATIC;
+        decl.storage_mutability = XR_STORAGE_READONLY;
+        decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+        decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
+        if (!xg_global_evidence_add_decl(package, &decl)) {
+            xr_free(source);
+            return false;
+        }
+        {
+            XgBodySummary body;
+            memset(&body, 0, sizeof(body));
+            body.func_id = package->nbodies + 1;
+            body.module_id = module_id;
+            body.source_node_id = decl.source_node_id;
+            body.owner_decl_id = decl.decl_id;
+            body.name_id = decl.name_id;
+            body.source_span_id = decl.source_span_id;
+            body.kind = XG_BODY_FUNCTION;
+            body.body_hash = (uint64_t) decl.name_id + 1;
+            if (!xg_global_evidence_add_body(package, &body)) {
+                xr_free(source);
+                return false;
+            }
+        }
+        cursor += len;
+    }
+    cursor = source;
+    while ((cursor = strstr(cursor, "import \"")) != NULL) {
+        char *line_end = strchr(cursor, '\n');
+        char *as = strstr(cursor, "\" as ");
+        char name[128];
+        size_t len = 0;
+        XgDeclSummary decl;
+        if (!as || (line_end && as >= line_end)) {
+            cursor += 8;
+            continue;
+        }
+        as += 5;
+        while ((as[len] == '_' || (as[len] >= 'a' && as[len] <= 'z') ||
+                (as[len] >= 'A' && as[len] <= 'Z') ||
+                (len > 0 && as[len] >= '0' && as[len] <= '9')) &&
+               len + 1 < sizeof(name))
+            len++;
+        if (len == 0) {
+            cursor = as;
+            continue;
+        }
+        memcpy(name, as, len);
+        name[len] = '\0';
+        memset(&decl, 0, sizeof(decl));
+        decl.module_id = module_id;
+        decl.decl_id = package->ndecls + 1;
+        decl.source_node_id = xg_stable_source_node_id(module_id, 2, decl.decl_id, 1);
+        decl.kind = XG_DECL_GLOBAL;
+        decl.name_id = xg_name_id(name);
+        decl.source_span_id = decl.decl_id;
+        decl.storage_domain = XR_STORAGE_MODULE_STATIC;
+        decl.storage_mutability = XR_STORAGE_READONLY;
+        decl.address_identity = XR_ADDRESS_MODULE_STABLE;
+        decl.materialization_kind = XR_MATERIALIZE_STATIC_DATA;
+        if (!xg_global_evidence_add_decl(package, &decl)) {
+            xr_free(source);
+            return false;
+        }
+        cursor = as + len;
+    }
+    xr_free(source);
+    return true;
+}
+
+static bool write_file_text(const char *path, const char *text) {
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return false;
+    if (fputs(text, f) < 0) {
+        fclose(f);
+        return false;
+    }
+    return fclose(f) == 0;
+}
+
+
+static bool save_driver_authority_generated_c(const XaotBuildResult *result, const char *name) {
+    const char *directory = getenv("XRAY_TEST_AUTHORITY_OUTPUT_DIR");
+    if (!directory || !directory[0])
+        return true;
+    char path[XR_TEST_PATH_MAX];
+    int length = snprintf(path, sizeof(path), "%s/%s.c", directory, name);
+    if (length < 0 || (size_t) length >= sizeof(path))
+        return false;
+    size_t size = 0;
+    char *source = xaot_build_result_amalgamate(result, &size);
+    bool written = source && size && write_file_text(path, source);
+    xr_free(source);
+    return written;
+}
+
+static bool mkdir_one(const char *path) {
+    if (xr_test_mkdir(path) == 0)
+        return true;
+    return errno == EEXIST;
+}
+
+static bool mkdir_p(const char *path) {
+    char buf[XR_TEST_PATH_MAX];
+    size_t len;
+    if (!path)
+        return false;
+    len = strlen(path);
+    if (len == 0 || len >= sizeof(buf))
+        return false;
+    memcpy(buf, path, len + 1);
+    for (char *p = buf + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (!mkdir_one(buf))
+                return false;
+            *p = '/';
+        }
+    }
+    return mkdir_one(buf);
+}
+
+static XrLockfile *make_package_lockfile(const char *home_dir, const char *const *coordinates,
+                                         uint32_t count) {
+    XrLockfile *lockfile = NULL;
+    char cache_dir[XR_TEST_PATH_MAX];
+    int n;
+    if (!home_dir || !coordinates || count == 0)
+        return NULL;
+    n = snprintf(cache_dir, sizeof(cache_dir), "%s/.xray/cache", home_dir);
+    if (n < 0 || (size_t) n >= sizeof(cache_dir) || !mkdir_p(cache_dir))
+        return NULL;
+    lockfile = xr_lockfile_new();
+    if (!lockfile)
+        return NULL;
+    for (uint32_t i = 0; i < count; i++) {
+        const char *coordinate = coordinates[i];
+        const char *slash = coordinate ? strchr(coordinate, '/') : NULL;
+        char archive_path[XR_TEST_PATH_MAX];
+        char checksum[72];
+        if (!slash || slash == coordinate || !slash[1])
+            goto fail;
+        size_t owner_len = (size_t) (slash - coordinate);
+        n = snprintf(archive_path, sizeof(archive_path), "%s/%.*s-%s-1.0.0.tar.gz", cache_dir,
+                     (int) owner_len, coordinate, slash + 1);
+        if (n < 0 || (size_t) n >= sizeof(archive_path) ||
+            !write_file_text(archive_path, coordinate) ||
+            !xr_lockfile_checksum_file(archive_path, checksum) ||
+            !xr_lockfile_add_package(lockfile, coordinate, "1.0.0", "fixture://package", checksum))
+            goto fail;
+    }
+    return lockfile;
+
+fail:
+    xr_lockfile_free(lockfile);
+    return NULL;
+}
+
+typedef struct PackageModuleSpecFixture {
+    XrModuleSpec spec;
+    char namespace_id[256];
+    char physical_root[XR_TEST_PATH_MAX];
+} PackageModuleSpecFixture;
+
+static void package_module_spec_fixture_free(PackageModuleSpecFixture *fixture) {
+    if (!fixture)
+        return;
+    xr_free(fixture->spec.canonical);
+    xr_free(fixture->spec.logical_path);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
+static bool package_module_spec_fixture_init(PackageModuleSpecFixture *fixture,
+                                             const char *home_dir, const char *coordinate,
+                                             const char *source_path) {
+    const char *slash;
+    size_t owner_len;
+    char *source = NULL;
+    int n;
+    if (!fixture || !home_dir || !coordinate || !source_path)
+        return false;
+    memset(fixture, 0, sizeof(*fixture));
+    slash = strchr(coordinate, '/');
+    if (!slash || slash == coordinate || !slash[1])
+        return false;
+    owner_len = (size_t) (slash - coordinate);
+    n = snprintf(fixture->physical_root, sizeof(fixture->physical_root),
+                 "%s/.xray/packages/%.*s/%s/1.0.0", home_dir, (int) owner_len, coordinate,
+                 slash + 1);
+    if (n < 0 || (size_t) n >= sizeof(fixture->physical_root))
+        return false;
+    /* The source path this root is compared against has already been through
+     * realpath, and identity containment is a byte comparison, so the root has
+     * to be canonical too. On Darwin the temporary tree reaches us through the
+     * /var symlink, which would make the package escape its own root. */
+    char canonical_root[XR_TEST_PATH_MAX];
+    if (!xr_test_realpath_buf(fixture->physical_root, canonical_root, sizeof(canonical_root)))
+        return false;
+    n = snprintf(fixture->physical_root, sizeof(fixture->physical_root), "%s", canonical_root);
+    if (n < 0 || (size_t) n >= sizeof(fixture->physical_root))
+        return false;
+    n = snprintf(fixture->namespace_id, sizeof(fixture->namespace_id), "%s@1.0.0", coordinate);
+    if (n < 0 || (size_t) n >= sizeof(fixture->namespace_id))
+        return false;
+    fixture->spec.authority = (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_PACKAGE,
+        .namespace_id = fixture->namespace_id,
+        .physical_root = fixture->physical_root,
+    };
+    if (!(xr_module_identity_from_source(&fixture->spec.authority, source_path,
+                                        &fixture->spec.canonical, &fixture->spec.logical_path) == XR_MODULE_OK))
+        return false;
+    source = xr_file_read_all(source_path, "r", NULL);
+    if (!source) {
+        package_module_spec_fixture_free(fixture);
+        return false;
+    }
+    fixture->spec.source_path = (char *) source_path;
+    fixture->spec.kind = XR_MOD_PACKAGE;
+    xr_module_source_fingerprint(source, &fixture->spec.source_content_fingerprint);
+    xr_free(source);
+    return true;
+}
+
+static char *make_package_payload_for_source(const char *home_dir, const char *coordinate,
+                                             const char *source_path) {
+    PackageModuleSpecFixture fixture = {0};
+    XgBuildKey key;
+    XgModuleSummary module;
+    XgGlobalEvidence package = {0};
+    char *payload = NULL;
+    if (!package_module_spec_fixture_init(&fixture, home_dir, coordinate, source_path))
+        return NULL;
+    if (!xg_standalone_build_key_from_module_spec(&key, &fixture.spec, XG_BUILD_NATIVE_RELEASE,
+                                                  0) ||
+        !xg_module_summary_from_module_spec(&module, 1, &fixture.spec))
+        goto done;
+    xg_global_evidence_init(&package, key);
+    if (!xg_global_evidence_add_module(&package, &module) ||
+        !add_package_function_storage_decls(&package, module.module_id, source_path) ||
+        !add_package_link_dependency(&package, module.module_id))
+        goto done;
+    payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+
+done:
+    xg_global_evidence_free(&package);
+    package_module_spec_fixture_free(&fixture);
+    return payload;
+}
+
+static char *make_package_payload_for_ordered_sources(const char *home_dir,
+                                                      const char *const *coordinates,
+                                                      const char *const *source_paths,
+                                                      uint32_t count) {
+    PackageModuleSpecFixture *fixtures = NULL;
+    const XrModuleSpec **ordered_specs = NULL;
+    XgBuildKey key;
+    XgGlobalEvidence package = {0};
+    char *payload = NULL;
+    if (!home_dir || !coordinates || !source_paths || count == 0)
+        return NULL;
+    fixtures = (PackageModuleSpecFixture *) xr_calloc(count, sizeof(*fixtures));
+    ordered_specs = (const XrModuleSpec **) xr_calloc(count, sizeof(*ordered_specs));
+    if (!fixtures || !ordered_specs)
+        goto done;
+    for (uint32_t i = 0; i < count; i++) {
+        if (!package_module_spec_fixture_init(&fixtures[i], home_dir, coordinates[i],
+                                              source_paths[i]))
+            goto done;
+        ordered_specs[i] = &fixtures[i].spec;
+    }
+    if (!xg_build_key_from_ordered_module_specs(&key, ordered_specs, count, XG_BUILD_NATIVE_RELEASE,
+                                                0))
+        goto done;
+    xg_global_evidence_init(&package, key);
+    for (uint32_t i = 0; i < count; i++) {
+        XgModuleSummary module;
+        if (!xg_module_summary_from_module_spec(&module, i + 1, &fixtures[i].spec) ||
+            !xg_global_evidence_add_module(&package, &module) ||
+            !add_package_function_storage_decls(&package, module.module_id, source_paths[i]))
+            goto done;
+    }
+    if (!add_package_link_dependency(&package, 1))
+        goto done;
+    payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+
+done:
+    xg_global_evidence_free(&package);
+    if (fixtures) {
+        for (uint32_t i = 0; i < count; i++)
+            package_module_spec_fixture_free(&fixtures[i]);
+    }
+    xr_free(ordered_specs);
+    xr_free(fixtures);
+    return payload;
+}
+
+static bool write_global_payload_to_cache(const char *cache_dir, const char *payload) {
+    XgEvidenceCachePayloadInfo info;
+    char phase_dir[XR_TEST_PATH_MAX];
+    char payload_path[XR_TEST_PATH_MAX];
+    int n;
+    if (!cache_dir || !payload || !xg_evidence_cache_payload_parse(payload, &info))
+        return false;
+    n = snprintf(phase_dir, sizeof(phase_dir), "%s/evidence/%s", cache_dir,
+                 xg_evidence_cache_phase_name(XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE));
+    if (n < 0 || (size_t) n >= sizeof(phase_dir) || !mkdir_p(phase_dir))
+        return false;
+    n = snprintf(payload_path, sizeof(payload_path), "%s/%016" PRIx64 ".xgpayload", phase_dir,
+                 info.key_hash);
+    if (n < 0 || (size_t) n >= sizeof(payload_path))
+        return false;
+    return write_file_text(payload_path, payload);
+}
+
+static bool write_package_source(const char *home_dir, const char *canonical,
+                                 const char *source_text, char *out_real_path,
+                                 size_t out_real_path_size) {
+    const char *slash;
+    size_t owner_len;
+    char pkg_dir[XR_TEST_PATH_MAX];
+    char pkg_source[XR_TEST_PATH_MAX];
+    char real_pkg_source[XR_TEST_PATH_MAX];
+    int n;
+    if (!home_dir || !canonical || !source_text || !out_real_path || out_real_path_size == 0)
+        return false;
+    slash = strchr(canonical, '/');
+    if (!slash || slash == canonical || !slash[1])
+        return false;
+    owner_len = (size_t) (slash - canonical);
+    if (owner_len > 120 || strlen(slash + 1) > 120)
+        return false;
+    n = snprintf(pkg_dir, sizeof(pkg_dir), "%s/.xray/packages/%.*s/%s/1.0.0/src", home_dir,
+                 (int) owner_len, canonical, slash + 1);
+    if (n < 0 || (size_t) n >= sizeof(pkg_dir) || !mkdir_p(pkg_dir))
+        return false;
+    n = snprintf(pkg_source, sizeof(pkg_source), "%s/main.xr", pkg_dir);
+    if (n < 0 || (size_t) n >= sizeof(pkg_source) || !write_file_text(pkg_source, source_text))
+        return false;
+    if (!xr_test_realpath_buf(pkg_source, real_pkg_source, sizeof(real_pkg_source)))
+        return false;
+    n = snprintf(out_real_path, out_real_path_size, "%s", real_pkg_source);
+    return n >= 0 && (size_t) n < out_real_path_size;
+}
+
+static char *install_package_payload(const char *home_dir, const char *cache_dir,
+                                     const char *canonical, const char *source_text) {
+    char real_pkg_source[XR_TEST_PATH_MAX];
+    char *payload;
+    if (!home_dir || !cache_dir ||
+        !write_package_source(home_dir, canonical, source_text, real_pkg_source,
+                              sizeof(real_pkg_source)))
+        return NULL;
+    payload = make_package_payload_for_source(home_dir, canonical, real_pkg_source);
+    if (!payload)
+        return NULL;
+    if (!write_global_payload_to_cache(cache_dir, payload)) {
+        xr_free(payload);
+        return NULL;
+    }
+    return payload;
+}
+
+static char *dup_env_value(const char *name) {
+    const char *value = getenv(name);
+    return value ? xr_strdup(value) : NULL;
+}
+
+static void restore_env_value(const char *name, char *value) {
+    if (value) {
+        xr_test_setenv(name, value, 1);
+        xr_free(value);
+    } else {
+        xr_test_unsetenv(name);
+    }
+}
+
+static char *make_package_payload(void) {
+    XgGlobalEvidence package = {0};
+    XgBuildKey key = {
+        .module_id = 7,
+        .profile = XG_BUILD_NATIVE_RELEASE,
+        .source_hash = 0x7100,
+        .compiler_semver_hash = 0x7200,
+        .profile_hash = 0x7300,
+        .imported_summary_hash = 0,
+    };
+    XgModuleSummary module = {
+        .module_id = 7,
+        .name_id = xg_name_id("pkg.driver"),
+        .canonical_hash = 0x7101,
+        .source_hash = 0x7102,
+        .kind = XR_MOD_PACKAGE,
+        .flags = 0,
+    };
+    char *payload;
+    xg_global_evidence_init(&package, key);
+    if (!xg_global_evidence_add_module(&package, &module) ||
+        !add_package_link_dependency(&package, module.module_id)) {
+        xg_global_evidence_free(&package);
+        return NULL;
+    }
+    payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+    xg_global_evidence_free(&package);
+    return payload;
+}
+
+static bool dump_contains_import_hash(const char *dump, uint64_t imported_hash) {
+    char needle[64];
+    snprintf(needle, sizeof(needle), "imports=%016" PRIx64, imported_hash);
+    return dump && strstr(dump, needle) != NULL;
+}
+
+static bool dump_contains_imported_package_link_dep(const char *dump) {
+    return dump && strstr(dump, "link-dep") && strstr(dump, "name=math.abs");
+}
+
+static void test_target_simd_plan_is_explicit_and_fail_closed(void) {
+    XaotTarget x86 = {0};
+    XaotTarget arm = {0};
+    XaotTarget arm32 = {0};
+    XaotTarget x86_32 = {0};
+    XaotTarget powerpc64 = {0};
+    XaotTarget powerpc64le = {0};
+    XaotTarget loongarch64 = {0};
+    XaotLinkManifest manifest = {0};
+    XaotSimdMode parsed = XAOT_SIMD_AUTO;
+    char err[192];
+
+    ASSERT_TRUE(xaot_simd_mode_parse("scalar", &parsed));
+    ASSERT_TRUE(parsed == XAOT_SIMD_SCALAR);
+    ASSERT_TRUE(!xaot_simd_mode_parse("host-macros", &parsed));
+
+    ASSERT_TRUE(xaot_target_init(&x86, "x86_64-linux-musl"));
+    ASSERT_TRUE(x86.simd_mode == XAOT_SIMD_AUTO);
+    ASSERT_TRUE(x86.simd_features == XAOT_SIMD_FEATURE_SSE2);
+    ASSERT_TRUE(xaot_target_configure_simd(&x86, XAOT_SIMD_AVX2, "haswell", err, sizeof(err)));
+    ASSERT_TRUE(x86.simd_features == (XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2));
+    ASSERT_TRUE(strcmp(x86.cpu, "haswell") == 0);
+    ASSERT_TRUE(xaot_simd_mode_parse("avx512", &parsed));
+    ASSERT_TRUE(parsed == XAOT_SIMD_AVX512);
+    ASSERT_TRUE(
+        xaot_target_configure_simd(&x86, XAOT_SIMD_AVX512, "skylake-avx512", err, sizeof(err)));
+    ASSERT_TRUE(x86.simd_features ==
+                (XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_AVX512));
+    ASSERT_TRUE(xaot_simd_mode_parse("dispatch", &parsed));
+    ASSERT_TRUE(parsed == XAOT_SIMD_DISPATCH);
+    ASSERT_TRUE(xaot_target_configure_simd(&x86, XAOT_SIMD_DISPATCH, NULL, err, sizeof(err)));
+    ASSERT_TRUE(x86.simd_features ==
+                (XAOT_SIMD_FEATURE_SSE2 | XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_AVX512));
+    ASSERT_TRUE(!xaot_target_configure_simd(&x86, XAOT_SIMD_NEON, NULL, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "AArch64") != NULL);
+
+    ASSERT_TRUE(xaot_target_init(&powerpc64le, "powerpc64le-linux-musl"));
+    ASSERT_TRUE(powerpc64le.pointer_bits == 64);
+    ASSERT_TRUE(strcmp(powerpc64le.endian, "little") == 0);
+    ASSERT_TRUE(powerpc64le.data_layout.endian == XR_TARGET_ENDIAN_LITTLE);
+    ASSERT_TRUE(powerpc64le.simd_features == 0);
+    ASSERT_TRUE(xaot_target_configure_simd(&powerpc64le, XAOT_SIMD_VSX, NULL, err, sizeof(err)));
+    ASSERT_TRUE(powerpc64le.simd_features == XAOT_SIMD_FEATURE_VSX);
+
+    ASSERT_TRUE(xaot_target_init(&loongarch64, "loongarch64-linux-musl"));
+    ASSERT_TRUE(loongarch64.pointer_bits == 64);
+    ASSERT_TRUE(strcmp(loongarch64.endian, "little") == 0);
+    ASSERT_TRUE(loongarch64.data_layout.endian == XR_TARGET_ENDIAN_LITTLE);
+    ASSERT_TRUE(loongarch64.simd_features == 0);
+    ASSERT_TRUE(xaot_simd_mode_parse("lsx", &parsed));
+    ASSERT_TRUE(parsed == XAOT_SIMD_LSX);
+    ASSERT_TRUE(xaot_target_configure_simd(&loongarch64, XAOT_SIMD_LSX, NULL, err, sizeof(err)));
+    ASSERT_TRUE(loongarch64.simd_features == XAOT_SIMD_FEATURE_LSX);
+    ASSERT_TRUE(xaot_target_configure_simd(&loongarch64, XAOT_SIMD_NATIVE, NULL, err, sizeof(err)));
+    ASSERT_TRUE(loongarch64.simd_features == XAOT_SIMD_FEATURE_LSX);
+    ASSERT_TRUE(!xaot_target_configure_simd(&loongarch64, XAOT_SIMD_VSX, NULL, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "PowerPC64") != NULL);
+
+    ASSERT_TRUE(xaot_target_init(&arm, "aarch64-linux-musl"));
+    ASSERT_TRUE(arm.simd_features == XAOT_SIMD_FEATURE_NEON);
+    ASSERT_TRUE(xaot_simd_mode_parse("sve", &parsed));
+    ASSERT_TRUE(parsed == XAOT_SIMD_SVE);
+    ASSERT_TRUE(xaot_target_configure_simd(&arm, XAOT_SIMD_SVE, NULL, err, sizeof(err)));
+    ASSERT_TRUE(arm.simd_features == XAOT_SIMD_FEATURE_SVE);
+    ASSERT_TRUE(!xaot_target_configure_simd(&x86, XAOT_SIMD_SVE, NULL, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "AArch64") != NULL);
+    ASSERT_TRUE(!xaot_target_configure_simd(&arm, XAOT_SIMD_AVX2, NULL, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "x86_64") != NULL);
+    ASSERT_TRUE(!xaot_target_configure_simd(&arm, XAOT_SIMD_DISPATCH, NULL, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "x86_64") != NULL);
+    ASSERT_TRUE(xaot_target_configure_simd(&arm, XAOT_SIMD_SCALAR, NULL, err, sizeof(err)));
+    ASSERT_TRUE(arm.simd_features == 0);
+
+    ASSERT_TRUE(xaot_target_init(&arm32, "arm-linux-gnueabi"));
+    ASSERT_TRUE(strcmp(arm32.arch, "arm") == 0);
+    ASSERT_TRUE(strcmp(arm32.abi, "gnu") == 0);
+    ASSERT_TRUE(arm32.pointer_bits == 32);
+    ASSERT_TRUE(strcmp(arm32.endian, "little") == 0);
+    ASSERT_TRUE(arm32.data_layout.pointer.size == 4);
+    ASSERT_TRUE(arm32.data_layout.endian == XR_TARGET_ENDIAN_LITTLE);
+    ASSERT_TRUE(arm32.simd_features == 0);
+
+    ASSERT_TRUE(xaot_target_init(&x86_32, "i386-linux-musl"));
+    ASSERT_TRUE(x86_32.pointer_bits == 32);
+    ASSERT_TRUE(strcmp(x86_32.endian, "little") == 0);
+    ASSERT_TRUE(x86_32.data_layout.pointer.size == 4);
+    ASSERT_TRUE(x86_32.simd_features == 0);
+
+    ASSERT_TRUE(xaot_target_init(&powerpc64, "powerpc64-linux-musl"));
+    ASSERT_TRUE(powerpc64.pointer_bits == 64);
+    ASSERT_TRUE(strcmp(powerpc64.endian, "big") == 0);
+    ASSERT_TRUE(powerpc64.data_layout.pointer.size == 8);
+    ASSERT_TRUE(powerpc64.data_layout.endian == XR_TARGET_ENDIAN_BIG);
+    ASSERT_TRUE(powerpc64.simd_features == 0);
+    ASSERT_TRUE(xaot_simd_mode_parse("vsx", &parsed));
+    ASSERT_TRUE(parsed == XAOT_SIMD_VSX);
+    ASSERT_TRUE(xaot_target_configure_simd(&powerpc64, XAOT_SIMD_VSX, NULL, err, sizeof(err)));
+    ASSERT_TRUE(powerpc64.simd_features == XAOT_SIMD_FEATURE_VSX);
+    ASSERT_TRUE(xaot_target_configure_simd(&powerpc64, XAOT_SIMD_NATIVE, NULL, err, sizeof(err)));
+    ASSERT_TRUE(powerpc64.simd_features == XAOT_SIMD_FEATURE_VSX);
+    ASSERT_TRUE(!xaot_target_configure_simd(&powerpc64, XAOT_SIMD_NEON, NULL, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "AArch64") != NULL);
+
+    ASSERT_TRUE(xaot_link_manifest_init(&manifest, &x86));
+    char *json = xaot_link_manifest_dump_json(&manifest);
+    ASSERT_TRUE(json != NULL);
+    ASSERT_TRUE(strstr(json, "\"simd_mode\": \"dispatch\"") != NULL);
+    ASSERT_TRUE(strstr(json, "\"simd_features\": 22") != NULL);
+    xr_free(json);
+    xaot_link_manifest_free(&manifest);
+    xaot_target_free(&powerpc64le);
+    xaot_target_free(&loongarch64);
+    xaot_target_free(&powerpc64);
+    xaot_target_free(&x86_32);
+    xaot_target_free(&arm32);
+    xaot_target_free(&arm);
+    xaot_target_free(&x86);
+    passed++;
+}
+
+static void test_driver_consumes_imported_summary_payload_set(void) {
+    char source_path[256];
+    char cache_dir[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+    char *payload = NULL;
+    const char *payloads[1];
+    uint64_t imported_hash = 0;
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(write_temp_source(source_path, sizeof(source_path)));
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-target-plan-cache", cache_dir, sizeof(cache_dir)) ==
+                0);
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    payload = make_package_payload();
+    ASSERT_TRUE(payload != NULL);
+    payloads[0] = payload;
+    ASSERT_TRUE(xg_imported_summary_hash_from_package_payloads(0, payloads, 1, &imported_hash));
+
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.emit_global_evidence_dump = true;
+    options.imported_summary_payloads = payloads;
+    options.imported_summary_payload_count = 1;
+    options.incremental_cache_dir = cache_dir;
+    options.module_summary_workers = 8;
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
+    ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
+    ASSERT_TRUE(result.target_plan_cache.misses == 1);
+    ASSERT_TRUE(result.target_plan_cache.published == 1);
+
+    xaot_build_result_free(&result);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.target_plan_cache.hits == 1);
+    ASSERT_TRUE(result.target_plan_cache.misses == 0);
+    xaot_build_result_free(&result);
+    ASSERT_TRUE(corrupt_first_xtp_cache_object(cache_dir));
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.target_plan_cache.hits == 0);
+    ASSERT_TRUE(result.target_plan_cache.misses == 1);
+    ASSERT_TRUE(result.target_plan_cache.rejected == 1);
+    ASSERT_TRUE(result.target_plan_cache.published == 1);
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_free(payload);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static void test_driver_program_graph_uses_one_target_plan_cache_route(void) {
+    char root[XR_TEST_PATH_MAX];
+    char producer_source[XR_TEST_PATH_MAX];
+    char entry_source[XR_TEST_PATH_MAX];
+    char cache_dir[XR_TEST_PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-program-graph-cache", root, sizeof(root)) == 0);
+    ASSERT_TRUE(snprintf(producer_source, sizeof(producer_source), "%s/producer.xr", root) > 0);
+    ASSERT_TRUE(snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root) > 0);
+    ASSERT_TRUE(snprintf(cache_dir, sizeof(cache_dir), "%s/cache", root) > 0);
+    ASSERT_TRUE(write_file_text(producer_source,
+                                "export fn add1(value: i64) -> i64 { return value + 1 }\n"));
+    ASSERT_TRUE(write_file_text(entry_source, "import { add1 } from \"./producer\"\n"
+                                              "fn root() -> i64 { return add1(41) }\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.incremental_cache_dir = cache_dir;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 2);
+    ASSERT_TRUE(result.target_plan_cache.hits == 0u);
+    ASSERT_TRUE(result.target_plan_cache.misses == 1u);
+    ASSERT_TRUE(result.target_plan_cache.rejected == 0u);
+    ASSERT_TRUE(result.target_plan_cache.published == 1u);
+    xaot_build_result_free(&result);
+
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.target_plan_cache.hits == 1u);
+    ASSERT_TRUE(result.target_plan_cache.misses == 0u);
+    ASSERT_TRUE(result.target_plan_cache.published == 0u);
+    xaot_build_result_free(&result);
+
+    options.incremental_cache_rebuild = true;
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.target_plan_cache.hits == 0u);
+    ASSERT_TRUE(result.target_plan_cache.misses == 1u);
+    ASSERT_TRUE(result.target_plan_cache.published == 0u);
+    xaot_build_result_free(&result);
+    options.incremental_cache_rebuild = false;
+
+    XrProgramTargetPlanCancellationToken cancellation;
+    xr_program_target_plan_cancellation_token_init(&cancellation);
+    xr_program_target_plan_cancellation_token_request(&cancellation);
+    options.program_target_plan_cancellation = &cancellation;
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
+    ASSERT_TRUE(result.target_plan_cache.cancelled == 1u);
+    ASSERT_TRUE(result.n_sources == 0);
+    xaot_build_result_free(&result);
+    options.program_target_plan_cancellation = NULL;
+
+    ASSERT_TRUE(corrupt_first_xtp_cache_object(cache_dir));
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.target_plan_cache.hits == 0u);
+    ASSERT_TRUE(result.target_plan_cache.misses == 1u);
+    ASSERT_TRUE(result.target_plan_cache.rejected == 1u);
+    ASSERT_TRUE(result.target_plan_cache.published == 1u);
+    xaot_build_result_free(&result);
+
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(entry_source);
+    xr_test_unlink(producer_source);
+    passed++;
+}
+
+static void test_driver_dumps_subject_bound_local_evidence(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(write_temp_source(source_path, sizeof(source_path)));
+    ASSERT_TRUE(write_file_text(source_path, "fn first(input: Slice<u8>) -> u8 {\n"
+                                             "    return input[0]\n"
+                                             "}\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.emit_local_evidence_dump = true;
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.local_evidence_dump != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "xi-evidence function=") != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "revision=") != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "subject=") != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "producer=") != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "source=") != NULL);
+    ASSERT_TRUE(strstr(result.local_evidence_dump, "view-param function=first param=0") != NULL);
+    ASSERT_TRUE(
+        strstr(result.local_evidence_dump, "capability=read lifetime=caller complete=yes") != NULL);
+
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static void test_driver_rejects_invalid_imported_summary_payload_set(void) {
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+    const char *payloads[1] = {"not-a-valid-payload"};
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.imported_summary_payloads = payloads;
+    options.imported_summary_payload_count = 1;
+
+    ASSERT_TRUE(xaot_build_script("/tmp/xray-xaot-driver-missing.xr", &options, &result) != 0);
+    ASSERT_TRUE(result.n_sources == 0);
+
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    passed++;
+}
+
+static void test_driver_analyzes_aggregate_layout_with_selected_target(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-target-layout-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(
+        source_path, "import mem\n"
+                     "struct TargetPair {\n"
+                     "    ptr: Ptr<u8>\n"
+                     "    size: usize\n"
+                     "}\n"
+                     "comptime {\n"
+                     "    compile_assert(mem.sizeOf<TargetPair>() == 8)\n"
+                     "    compile_assert(mem.alignOf<TargetPair>() == 4)\n"
+                     "    compile_assert(mem.offsetOf<TargetPair>(\"size\") == 4)\n"
+                     "}\n"
+                     "fn target_pair_size() -> i64 { return mem.sizeOf<TargetPair>() }\n"));
+    ASSERT_TRUE(xaot_target_init(&target, "riscv32-freestanding-none"));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_FREESTANDING;
+    options.emit_plan_dump = true;
+    memset(&result, 0, sizeof(result));
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) != 0);
+    ASSERT_TRUE(result.plan_dump == NULL);
+    ASSERT_TRUE(result.n_sources == 0);
+
+    xaot_build_result_free(&result);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static void test_driver_analyzes_riscv64_layout_with_selected_target(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-riscv64-layout-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(
+        source_path, "import mem\n"
+                     "struct TargetPair {\n"
+                     "    ptr: Ptr<u8>\n"
+                     "    size: usize\n"
+                     "}\n"
+                     "comptime {\n"
+                     "    compile_assert(mem.sizeOf<TargetPair>() == 16)\n"
+                     "    compile_assert(mem.alignOf<TargetPair>() == 8)\n"
+                     "    compile_assert(mem.offsetOf<TargetPair>(\"size\") == 8)\n"
+                     "}\n"
+                     "fn target_pair_size() -> i64 { return mem.sizeOf<TargetPair>() }\n"));
+    ASSERT_TRUE(xaot_target_init(&target, "riscv64-freestanding-none"));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_FREESTANDING;
+    options.emit_plan_dump = true;
+    memset(&result, 0, sizeof(result));
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) != 0);
+    ASSERT_TRUE(result.plan_dump == NULL);
+    ASSERT_TRUE(result.n_sources == 0);
+
+    xaot_build_result_free(&result);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static bool manifest_has_define(const XaotLinkManifest *manifest, const char *needle) {
+    if (!manifest || !needle)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_defines; i++) {
+        if (manifest->defines[i] && strcmp(manifest->defines[i], needle) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool manifest_has_runtime_cap(const XaotLinkManifest *manifest, const char *needle) {
+    if (!manifest || !needle)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_runtime_caps; i++) {
+        if (manifest->runtime_caps[i] && strcmp(manifest->runtime_caps[i], needle) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool manifest_has_runtime_object(const XaotLinkManifest *manifest, const char *needle) {
+    if (!manifest || !needle)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_runtime_objects; i++) {
+        if (manifest->runtime_objects[i] && strcmp(manifest->runtime_objects[i], needle) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool manifest_has_system_lib(const XaotLinkManifest *manifest, const char *needle) {
+    if (!manifest || !needle)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_system_libs; i++) {
+        if (manifest->system_libs[i] && strcmp(manifest->system_libs[i], needle) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void test_net_tls_link_manifest_tracks_built_runtime(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-net-tls-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(source_path, "import net\nprint(net.hasTLS())\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    memset(&result, 0, sizeof(result));
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(!manifest_has_system_lib(&result.link_manifest, "ssl"));
+    ASSERT_TRUE(!manifest_has_system_lib(&result.link_manifest, "crypto"));
+#if defined(XR_ENABLE_TLS)
+    ASSERT_TRUE(manifest_has_runtime_cap(&result.link_manifest, "tls"));
+    ASSERT_TRUE(manifest_has_define(&result.link_manifest, "XRT_ENABLE_TLS"));
+    ASSERT_TRUE(manifest_has_runtime_object(&result.link_manifest, "xray_rt_coro"));
+    ASSERT_TRUE(manifest_has_runtime_object(&result.link_manifest, "xray_tls_ssl"));
+    ASSERT_TRUE(manifest_has_runtime_object(&result.link_manifest, "xray_tls_crypto"));
+#else
+    ASSERT_TRUE(!manifest_has_runtime_cap(&result.link_manifest, "tls"));
+    ASSERT_TRUE(!manifest_has_define(&result.link_manifest, "XRT_ENABLE_TLS"));
+    ASSERT_TRUE(!manifest_has_runtime_object(&result.link_manifest, "xray_tls_ssl"));
+    ASSERT_TRUE(!manifest_has_runtime_object(&result.link_manifest, "xray_tls_crypto"));
+#endif
+
+    size_t size = 0;
+    char *source = xaot_build_result_amalgamate(&result, &size);
+    ASSERT_TRUE(source && size && strstr(source, "xrt_net_has_tls("));
+    ASSERT_TRUE(strstr(source, "(uint8_t)XR_TO_BOOL(xrt_net_has_tls())"));
+    ASSERT_TRUE(!strstr(source, "unreachable closure:"));
+    const char *output = getenv("XRAY_TEST_OUTPUT_C");
+    if (output && output[0])
+        ASSERT_TRUE(write_file_text(output, source));
+    xr_free(source);
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static void test_driver_native_resolution_owned_result(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-native-resolution-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(source_path,
+                                "import net\n"
+                                "var address = net.resolve(\"127.0.0.1\")\n"
+                                "assert(address != null)\n"
+                                "print(address!.value)\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(manifest_has_runtime_cap(&result.link_manifest, "coro"));
+    ASSERT_TRUE(manifest_has_runtime_cap(&result.link_manifest, "netpoll"));
+    size_t size = 0;
+    char *source = xaot_build_result_amalgamate(&result, &size);
+    ASSERT_TRUE(source && size && strstr(source, "xr_aot_async_submit") &&
+                strstr(source, "xrt_net_resolve_request_invoke") &&
+                strstr(source, "xr_aot_async_resume") &&
+                strstr(source, "xrt_net_resolve_materialize"));
+    ASSERT_TRUE(!strstr(source, "xrt_net_resolve_all("));
+    const char *output = getenv("XRAY_TEST_OUTPUT_C");
+    if (output && output[0])
+        ASSERT_TRUE(write_file_text(output, source));
+    xr_free(source);
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static bool dump_line_contains(const char *dump, const char *anchor, const char *needle) {
+    const char *line;
+    const char *end;
+    const char *match;
+    if (!dump || !anchor || !needle || !(line = strstr(dump, anchor)))
+        return false;
+    end = strchr(line, '\n');
+    match = strstr(line, needle);
+    return match && (!end || match < end);
+}
+
+static void test_spawn_target_contributes_artifact_runtime_capabilities(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-spawn-caps-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(source_path, "import time\n"
+                                             "fn worker() {\n"
+                                             "    time.sleep(1)\n"
+                                             "}\n"
+                                             "await go worker()\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.emit_plan_dump = true;
+    memset(&result, 0, sizeof(result));
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(manifest_has_runtime_cap(&result.link_manifest, "timer"));
+    ASSERT_TRUE(result.plan_dump != NULL);
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=worker", "reachable=1"));
+    const char *output = getenv("XRAY_TEST_OUTPUT_C");
+    if (output && output[0]) {
+        size_t size = 0;
+        char *source = xaot_build_result_amalgamate(&result, &size);
+        ASSERT_TRUE(source && size && write_file_text(output, source));
+        xr_free(source);
+    }
+
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static void test_driver_hosted_fragment_borrows_runtime_ownership(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(write_temp_source(source_path, sizeof(source_path)));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.n_sources > 0);
+    ASSERT_TRUE(!manifest_has_define(&result.link_manifest, "XRT_IMPL"));
+    for (int i = 0; i < result.n_sources; i++) {
+        const char *source = result.sources[i].c_source;
+        ASSERT_TRUE(source != NULL);
+        ASSERT_TRUE(strstr(source, "#define XRT_IMPL") == NULL);
+        ASSERT_TRUE(strstr(source, "i64 main(") == NULL);
+        ASSERT_TRUE(strstr(source, "xrt_shared_lib_ctor") == NULL);
+    }
+
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static void test_driver_validates_freestanding_runtime_provider(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+    XaotTargetCapabilityProvider provider = {
+        .abi_version = XAOT_PROVIDER_ABI_VERSION,
+        .provided_capability_bits = XG_CAP_COROUTINE | XG_CAP_TASK,
+        .hook_bits = XAOT_PROVIDER_HOOK_TASK_ALLOC | XAOT_PROVIDER_HOOK_SUBMIT |
+                     XAOT_PROVIDER_HOOK_PARK_WAKE | XAOT_PROVIDER_HOOK_EXECUTOR_PUMP,
+        .target_metadata_hash = 0x197195,
+    };
+
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-provider-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(source_path, "fn worker() -> i64 {\n"
+                                             "    return 1\n"
+                                             "}\n"
+                                             "await go worker()\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_FREESTANDING;
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) != 0);
+    xaot_build_result_free(&result);
+
+    provider.hook_bits &= ~XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
+    options.capability_provider = &provider;
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) != 0);
+    xaot_build_result_free(&result);
+
+    provider.hook_bits |= XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) != 0);
+    xaot_build_result_free(&result);
+
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static void test_driver_requires_source_for_cached_package(void) {
+    char root[XR_TEST_PATH_MAX];
+    char home_dir[XR_TEST_PATH_MAX];
+    char entry_source[XR_TEST_PATH_MAX];
+    char cache_dir[XR_TEST_PATH_MAX];
+    char package_source[XR_TEST_PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+    char *payload = NULL;
+    const char *coordinates[1] = {"codex/pkg"};
+    XrLockfile *lockfile = NULL;
+    char *old_home;
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-driver-auto", root, sizeof(root)) == 0);
+    snprintf(home_dir, sizeof(home_dir), "%s/home", root);
+    snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
+    ASSERT_TRUE(write_package_source(home_dir, "codex/pkg",
+                                     "export fn package_value() -> i64 { return 5 }\n",
+                                     package_source, sizeof(package_source)));
+    payload = make_package_payload_for_source(home_dir, "codex/pkg", package_source);
+    ASSERT_TRUE(payload && write_global_payload_to_cache(cache_dir, payload));
+    ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkg\" as pkg\n"
+                                              "fn value() -> i64 {\n"
+                                              "    return pkg.package_value()\n"
+                                              "}\n"
+                                              "print(value())\n"));
+    lockfile = make_package_lockfile(home_dir, coordinates, 1);
+    ASSERT_TRUE(lockfile != NULL);
+    old_home = dup_env_value("HOME");
+    xr_test_setenv("HOME", home_dir, 1);
+
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.incremental_cache_dir = cache_dir;
+    options.lockfile = lockfile;
+
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 2 && result.n_sources == 2 && result.sources);
+    ASSERT_TRUE(save_driver_authority_generated_c(&result, "package-source"));
+    xaot_build_result_free(&result);
+    /* A warm summary cannot replace the source authority of an imported module. */
+    ASSERT_TRUE(xr_test_unlink(package_source) == 0);
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
+    ASSERT_TRUE(result.module_summary_cache.tasks == 0u);
+    ASSERT_TRUE(result.n_sources == 0);
+    ASSERT_TRUE(result.sources == NULL);
+    ASSERT_TRUE(result.total_compiled == 0);
+    xaot_build_result_free(&result);
+    options.lockfile = NULL;
+    xr_lockfile_free(lockfile);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    restore_env_value("HOME", old_home);
+    xr_free(payload);
+    xr_test_unlink(entry_source);
+    passed++;
+}
+
+static void test_driver_requires_target_profile_for_cached_program(void) {
+    char root[XR_TEST_PATH_MAX];
+    char home_dir[XR_TEST_PATH_MAX];
+    char entry_source[XR_TEST_PATH_MAX];
+    char cache_dir[XR_TEST_PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+    char *payload_a = NULL;
+    char *payload_b = NULL;
+    const char *coordinates[2] = {"codex/pkga", "codex/pkgb"};
+    XrLockfile *lockfile = NULL;
+    char *old_home;
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-driver-auto-multi", root, sizeof(root)) == 0);
+    snprintf(home_dir, sizeof(home_dir), "%s/home", root);
+    snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
+    payload_a = install_package_payload(home_dir, cache_dir, "codex/pkga",
+                                        "export fn package_a() -> i64 {\n"
+                                        "    return 11\n"
+                                        "}\n");
+    payload_b = install_package_payload(home_dir, cache_dir, "codex/pkgb",
+                                        "export fn package_b() -> i64 {\n"
+                                        "    return 13\n"
+                                        "}\n");
+    ASSERT_TRUE(payload_a != NULL);
+    ASSERT_TRUE(payload_b != NULL);
+    ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkga\" as a\n"
+                                              "import \"codex/pkgb\" as b\n"
+                                              "fn value() -> i64 {\n"
+                                              "    return a.package_a() + b.package_b()\n"
+                                              "}\n"
+                                              "print(value())\n"));
+    lockfile = make_package_lockfile(home_dir, coordinates, 2);
+    ASSERT_TRUE(lockfile != NULL);
+    old_home = dup_env_value("HOME");
+    xr_test_setenv("HOME", home_dir, 1);
+
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.incremental_cache_dir = cache_dir;
+    options.lockfile = lockfile;
+    options.module_summary_workers = 8u;
+
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 3 && result.n_sources == 3 && result.sources);
+    ASSERT_TRUE(save_driver_authority_generated_c(&result, "package-target"));
+    xaot_build_result_free(&result);
+    XrTargetProfile *profile = options.target_profile;
+    options.target_profile = NULL;
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
+    options.target_profile = profile;
+    ASSERT_TRUE(result.target_plan_cache.hits == 0u);
+    ASSERT_TRUE(result.target_plan_cache.misses == 0u);
+    ASSERT_TRUE(result.target_plan_cache.rejected == 0u);
+    ASSERT_TRUE(result.target_plan_cache.published == 0u);
+    ASSERT_TRUE(result.target_plan_cache.cancelled == 0u);
+    ASSERT_TRUE(result.n_sources == 0);
+    ASSERT_TRUE(result.sources == NULL);
+    ASSERT_TRUE(result.total_compiled == 0);
+
+    xaot_build_result_free(&result);
+    options.lockfile = NULL;
+    xr_lockfile_free(lockfile);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    restore_env_value("HOME", old_home);
+    xr_free(payload_a);
+    xr_free(payload_b);
+    xr_test_unlink(entry_source);
+    passed++;
+}
+
+static void test_driver_requires_transitive_source_for_cached_package(void) {
+    char root[XR_TEST_PATH_MAX];
+    char home_dir[XR_TEST_PATH_MAX];
+    char entry_source[XR_TEST_PATH_MAX];
+    char cache_dir[XR_TEST_PATH_MAX];
+    char pkg_a_source[XR_TEST_PATH_MAX];
+    char pkg_b_source[XR_TEST_PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+    char *payload_ab = NULL;
+    char *payload_b = NULL;
+    const char *ordered_canonicals[2] = {"codex/pkgb", "codex/pkga"};
+    const char *ordered_sources[2];
+    XrLockfile *lockfile = NULL;
+    char *old_home;
+
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-driver-auto-graph", root, sizeof(root)) == 0);
+    snprintf(home_dir, sizeof(home_dir), "%s/home", root);
+    snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
+    ASSERT_TRUE(write_package_source(home_dir, "codex/pkgb",
+                                     "export fn package_b() -> i64 {\n"
+                                     "    return 23\n"
+                                     "}\n",
+                                     pkg_b_source, sizeof(pkg_b_source)));
+    ASSERT_TRUE(write_package_source(home_dir, "codex/pkga",
+                                     "import \"codex/pkgb\" as b\n"
+                                     "export fn package_a() -> i64 {\n"
+                                     "    return b.package_b() + 19\n"
+                                     "}\n",
+                                     pkg_a_source, sizeof(pkg_a_source)));
+    ordered_sources[0] = pkg_b_source;
+    ordered_sources[1] = pkg_a_source;
+    payload_ab =
+        make_package_payload_for_ordered_sources(home_dir, ordered_canonicals, ordered_sources, 2);
+    payload_b = make_package_payload_for_source(home_dir, "codex/pkgb", pkg_b_source);
+    ASSERT_TRUE(payload_ab != NULL);
+    ASSERT_TRUE(payload_b != NULL);
+    ASSERT_TRUE(write_global_payload_to_cache(cache_dir, payload_ab));
+    ASSERT_TRUE(write_global_payload_to_cache(cache_dir, payload_b));
+    ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkga\" as a\n"
+                                              "fn value() -> i64 {\n"
+                                              "    return a.package_a() + 29\n"
+                                              "}\n"
+                                              "print(value())\n"));
+    lockfile = make_package_lockfile(home_dir, ordered_canonicals, 2);
+    ASSERT_TRUE(lockfile != NULL);
+    old_home = dup_env_value("HOME");
+    xr_test_setenv("HOME", home_dir, 1);
+
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.incremental_cache_dir = cache_dir;
+    options.lockfile = lockfile;
+
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 3 && result.n_sources == 3 && result.sources);
+    ASSERT_TRUE(save_driver_authority_generated_c(&result, "package-transitive"));
+    xaot_build_result_free(&result);
+    /* Both cached summaries remain present when the transitive source is removed. */
+    ASSERT_TRUE(xr_test_unlink(pkg_b_source) == 0);
+    memset(&result, 0, sizeof(result));
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
+    ASSERT_TRUE(result.module_summary_cache.tasks == 0u);
+    ASSERT_TRUE(result.n_sources == 0);
+    ASSERT_TRUE(result.sources == NULL);
+    ASSERT_TRUE(result.total_compiled == 0);
+
+    xaot_build_result_free(&result);
+    options.lockfile = NULL;
+    xr_lockfile_free(lockfile);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    restore_env_value("HOME", old_home);
+    xr_free(payload_ab);
+    xr_free(payload_b);
+    xr_test_unlink(entry_source);
+    passed++;
+}
+
+static void test_driver_requires_exact_typed_entry_authority(void) {
+    char source_path[256];
+    char *physical_root = NULL;
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    XrModuleIdentityAuthority script_authority = {0};
+
+    ASSERT_TRUE(write_temp_source(source_path, sizeof(source_path)));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    ASSERT_TRUE((xr_module_identity_script_authority_from_source(source_path, &script_authority,
+                                                                &physical_root) == XR_MODULE_OK));
+
+    options.entry_module_authority = script_authority;
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    xaot_build_result_free(&result);
+
+    options.entry_module_authority = (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_PROJECT,
+        .namespace_id = "identity-fixture",
+        .physical_root = physical_root,
+    };
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    xaot_build_result_free(&result);
+
+    options.entry_module_authority = (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_PACKAGE,
+        .namespace_id = "xray/identity-fixture@1.0.0",
+        .physical_root = physical_root,
+    };
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    xaot_build_result_free(&result);
+
+    const XrModuleIdentityAuthority rejected[] = {
+        {0},
+        {
+            .kind = XR_MODULE_IDENTITY_PROJECT,
+            .namespace_id = "xray/identity-fixture",
+            .physical_root = physical_root,
+        },
+        {
+            .kind = XR_MODULE_IDENTITY_PACKAGE,
+            .namespace_id = "identity-fixture@1.0.0",
+            .physical_root = physical_root,
+        },
+        {
+            .kind = XR_MODULE_IDENTITY_PACKAGE,
+            .namespace_id = "xray/identity-fixture@^1.0.0",
+            .physical_root = physical_root,
+        },
+        {
+            .kind = XR_MODULE_IDENTITY_SCRIPT,
+            .namespace_id = "identity-fixture",
+            .physical_root = physical_root,
+        },
+        {
+            .kind = XR_MODULE_IDENTITY_PROJECT,
+            .namespace_id = "identity-fixture",
+            .physical_root = NULL,
+        },
+    };
+    for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); i++) {
+        options.entry_module_authority = rejected[i];
+        ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+        ASSERT_TRUE(result.n_sources == 0);
+        xaot_build_result_free(&result);
+    }
+
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_free(physical_root);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static bool span_contains(const char *begin, const char *end, const char *needle) {
+    const char *match = begin && end && needle ? strstr(begin, needle) : NULL;
+    return match && match < end;
+}
+
+static const char *find_function_definition(const char *source, const char *name_fragment) {
+    const char *cursor = source;
+    while (cursor && (cursor = strstr(cursor, name_fragment)) != NULL) {
+        const char *line_end = strchr(cursor, '\n');
+        const char *body = strstr(cursor, ") {");
+        if (body && (!line_end || body < line_end))
+            return cursor;
+        cursor++;
+    }
+    return NULL;
+}
+
+static void test_driver_direct_i64_call_consumes_target_plan(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-direct-i64-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(source_path, "fn add1(value: i64) -> i64 { return value + 1 }\n"
+                                             "fn root() -> i64 { return add1(41) }\n"
+                                             "print(root())\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.emit_plan_dump = true;
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.n_sources == 1 && result.sources && result.sources[0].c_source);
+    ASSERT_TRUE(result.plan_dump != NULL);
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=add1", "abi_owner=target-plan"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=root", "abi_owner=legacy"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=root", "legacy_values=0"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "value v1 op=GET_SHARED", "authority=target"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "value v1 op=GET_SHARED", "slot=4294967295"));
+    ASSERT_TRUE(!dump_line_contains(result.plan_dump, "kind=value-rep func=root", "value=v1"));
+
+    const char *source = result.sources[0].c_source;
+    const char *root = find_function_definition(source, "_root_");
+    const char *root_end = root ? strstr(root, "\n}\n") : NULL;
+    ASSERT_TRUE(root != NULL && root_end != NULL);
+    const char *call_site = root ? strstr(root, "_add1_") : NULL;
+    const char *call_line_end = call_site ? strchr(call_site, '\n') : NULL;
+    ASSERT_TRUE(call_site != NULL && call_site < root_end && call_line_end != NULL &&
+                call_line_end <= root_end &&
+                span_contains(call_site, call_line_end, "(NULL, INT64_C(41))"));
+    ASSERT_TRUE(!span_contains(call_site, call_line_end, "XrValue") &&
+                !span_contains(call_site, call_line_end, "_boxed") &&
+                !span_contains(call_site, call_line_end, "XR_FROM_INT") &&
+                !span_contains(call_site, call_line_end, "XR_TO_INT") &&
+                !span_contains(call_site, call_line_end, "xrt_call"));
+    ASSERT_TRUE(
+        !span_contains(root, root_end, "_boxed") && !span_contains(root, root_end, "XR_FROM_INT") &&
+        !span_contains(root, root_end, "XR_TO_INT") && !span_contains(root, root_end, "xrt_call"));
+
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static bool leaf_aggregate_generated_span_has_no_legacy_owner(const char *begin, const char *end) {
+    if (!begin || !end || begin >= end)
+        return false;
+    static const char *const forbidden[] = {
+        "XrValue",   "XR_TAG_PLACE", "XR_TAG_AGG_REF", "xr_aggregate_ref(",
+        "xr_mkptr(", "xrt_call",     "xrt_entry_cell", "xrt_dynamic_entry",
+        "_boxed",    "_unbox",       "xrt_getprop",    "xr_struct_layout_field_index",
+    };
+    for (size_t i = 0; i < sizeof(forbidden) / sizeof(forbidden[0]); i++) {
+        if (span_contains(begin, end, forbidden[i]))
+            return false;
+    }
+    return true;
+}
+
+static void test_driver_leaf_aggregate_call_consumes_target_plan(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-leaf-aggregate-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(
+        source_path,
+        "struct Pair { left: i64; right: i64 }\n"
+        "fn swap(value: Pair) -> Pair { return Pair{left: value.right, right: value.left} }\n"
+        "export fn root() -> Pair { return swap(Pair{left: 1, right: 41}) }\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.artifact_kind = XAOT_ARTIFACT_SHARED_LIBRARY;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.emit_plan_dump = true;
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.n_sources == 1 && result.sources && result.sources[0].c_source);
+    ASSERT_TRUE(result.plan_dump != NULL);
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=swap", "abi_owner=target-plan"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=root", "abi_owner=target-plan"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=swap", "legacy_values=0"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=root", "legacy_values=0"));
+    ASSERT_TRUE(!dump_line_contains(result.plan_dump, "kind=value-rep func=swap", "value="));
+    ASSERT_TRUE(!dump_line_contains(result.plan_dump, "kind=value-rep func=root", "value="));
+
+    const char *source = result.sources[0].c_source;
+    const char *swap = find_function_definition(source, "_swap_");
+    const char *root = find_function_definition(source, "_root_");
+    const char *swap_end = swap ? strstr(swap, "\n}\n") : NULL;
+    const char *root_end = root ? strstr(root, "\n}\n") : NULL;
+    ASSERT_TRUE(swap != NULL && swap_end != NULL && root != NULL && root_end != NULL);
+    const char *call_site = root ? strstr(root, "_swap_") : NULL;
+    ASSERT_TRUE(call_site != NULL && call_site < root_end);
+    ASSERT_TRUE(leaf_aggregate_generated_span_has_no_legacy_owner(swap, swap_end));
+    ASSERT_TRUE(leaf_aggregate_generated_span_has_no_legacy_owner(root, root_end));
+    ASSERT_TRUE(strstr(source, "_boxed") == NULL);
+    ASSERT_TRUE(strstr(source, "xrt_closure_new") == NULL);
+    ASSERT_TRUE(strstr(source, "XR_TAG_CLOSURE") == NULL);
+    ASSERT_TRUE(strstr(source, "({") == NULL);
+
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static void test_driver_borrowed_call_result_preserves_caller_type(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-borrowed-result-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(
+        source_path, "import mem\n"
+                     "import { Buffer } from mem\n"
+                     "fn materialize(buffer: Buffer) -> Array<u8> {\n"
+                     "    var count = len(buffer.asBytes())\n"
+                     "    var out = Array<u8>(count)\n"
+                     "    for (var i = 0; i < count; i++) { out[i] = buffer.asBytes()[i] }\n"
+                     "    return out\n"
+                     "}\n"
+                     "print(42)\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    int rc = xaot_build_script(source_path, &options, &result);
+    ASSERT_TRUE(rc == 0);
+    ASSERT_TRUE(result.n_sources > 0 && result.sources && result.sources[0].c_source);
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
+static void test_driver_module_ref_uses_verified_address_storage(void) {
+    char root[XR_TEST_PATH_MAX], entry[XR_TEST_PATH_MAX], library[XR_TEST_PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    ASSERT_TRUE(xr_temp_dir_create("xray-module-ref", root, sizeof(root)) == 0);
+    ASSERT_TRUE(snprintf(entry, sizeof(entry), "%s/main.xr", root) > 0);
+    ASSERT_TRUE(snprintf(library, sizeof(library), "%s/library.xr", root) > 0);
+    ASSERT_TRUE(write_file_text(library, "fn adjust(full: ref i64, stopped: ref i64) -> i64 {\n"
+                                         "    full = full + 1\n"
+                                         "    stopped = stopped + 2\n"
+                                         "    return full + stopped\n"
+                                         "}\n"
+                                         "export fn deliver() -> i64 {\n"
+                                         "    var full = 0\n"
+                                         "    var stopped = 0\n"
+                                         "    var value = adjust(ref full, ref stopped)\n"
+                                         "    return full + stopped + value\n"
+                                         "}\n"
+                                         "export fn identity(value: i64) -> i64 { return value }\n"
+                                         "export fn snapshot(values: Slice<i64>) -> Array<i64> {\n"
+                                         "    return copy(values)\n"
+                                         "}\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    const char *entries[] = {
+        "import { deliver } from \"./library\"\nprint(42)\n",
+        "import { deliver, identity, snapshot } from \"./library\"\n"
+        "fn optional(value: i64) -> i64? { return value }\n"
+        "var value = optional(40)\n"
+        "print(deliver())\nprint(identity(value!))\n"
+        "var values = [4, 5]\n"
+        "var copied = snapshot(values[:])\n"
+        "values[0] = 99\n"
+        "print(copied[0] + copied[1])\n",
+    };
+    for (unsigned i = 0; i < 2u; ++i) {
+        ASSERT_TRUE(write_file_text(entry, entries[i]));
+        ASSERT_TRUE(xaot_build_script(entry, &options, &result) == 0);
+        ASSERT_TRUE(result.nmodules == 2 && result.n_sources == 2);
+        const char *output = getenv("XRAY_TEST_OUTPUT_C");
+        if (i == 1u && output && output[0]) {
+            size_t size = 0;
+            char *source = xaot_build_result_amalgamate(&result, &size);
+            ASSERT_TRUE(source && size != 0 && write_file_text(output, source));
+            xr_free(source);
+        }
+        xaot_build_result_free(&result);
+    }
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    ASSERT_TRUE(xr_test_unlink(entry) == 0);
+    ASSERT_TRUE(xr_test_unlink(library) == 0);
+    ASSERT_TRUE(xr_test_rmdir(root) == 0);
+    passed++;
+}
+
+static void test_driver_entry_closure_owns_physical_bodies(void) {
+    char root[XR_TEST_PATH_MAX], entry[XR_TEST_PATH_MAX], library[XR_TEST_PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    ASSERT_TRUE(xr_temp_dir_create("xray-entry-closure", root, sizeof(root)) == 0);
+    ASSERT_TRUE(snprintf(entry, sizeof(entry), "%s/main.xr", root) > 0);
+    ASSERT_TRUE(snprintf(library, sizeof(library), "%s/library.xr", root) > 0);
+    ASSERT_TRUE(write_file_text(library, "import text\n"
+                                         "print(\"library ready\")\n"
+                                         "export class Options {\n"
+                                         "    value: i64 = 42\n"
+                                         "}\n"
+                                         "export fn readOptions(options: Options?) -> i64 {\n"
+                                         "    if (options == null) { return 7 }\n"
+                                         "    return options!.value\n"
+                                         "}\n"
+                                         "fn clampLevel(value: i64) -> i64 {\n"
+                                         "    if (value < 0) { return 0 }\n"
+                                         "    if (value > 99) { return 99 }\n"
+                                         "    return value\n"
+                                         "}\n"
+                                         "export fn increment(value: i64) -> i64 {\n"
+                                         "    var bytes = Array<u8>()\n"
+                                         "    bytes.push(7 as u8)\n"
+                                         "    return clampLevel(value) + len(bytes)\n"
+                                         "}\n"
+                                         "export fn makeBytes() -> Array<u8> {\n"
+                                         "    var bytes = Array<u8>()\n"
+                                         "    bytes.push(9 as u8)\n"
+                                         "    return bytes\n"
+                                         "}\n"));
+    ASSERT_TRUE(write_file_text(entry, "import { increment, makeBytes, Options, readOptions } "
+                                       "from \"./library\"\n"
+                                       "fn setOptions(options: Options, value: i64) -> i64 {\n"
+                                       "    var receiver = options\n"
+                                       "    receiver.value = value\n"
+                                       "    return receiver.value\n"
+                                       "}\n"
+                                       "var bytes = makeBytes()\n"
+                                       "print(increment(40) + len(bytes))\n"
+                                       "print(readOptions(null), readOptions(Options()))\n"
+                                       "print(setOptions(Options(), 99))\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.emit_plan_dump = true;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    ASSERT_TRUE(xaot_build_script(entry, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 3 && result.n_sources == 3);
+    ASSERT_TRUE(result.plan_dump != NULL);
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=translate", "reachable=0"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=translate", "legacy_values=0"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=translate", "backend_adapters=0"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=increment", "reachable=1"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=increment", "abi_owner=legacy"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=clampLevel", "abi_owner=legacy"));
+    size_t size = 0;
+    char *source = xaot_build_result_amalgamate(&result, &size);
+    ASSERT_TRUE(source && size != 0);
+    ASSERT_TRUE(find_function_definition(source, "_translate_") == NULL);
+    ASSERT_TRUE(find_function_definition(source, "_increment_") != NULL);
+    ASSERT_TRUE(find_function_definition(source, "_makeBytes_") != NULL);
+    ASSERT_TRUE(strstr(source, "({") == NULL);
+    const char *output = getenv("XRAY_TEST_OUTPUT_C");
+    if (output && output[0])
+        ASSERT_TRUE(write_file_text(output, source));
+    xr_free(source);
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    ASSERT_TRUE(xr_test_unlink(entry) == 0);
+    ASSERT_TRUE(xr_test_unlink(library) == 0);
+    ASSERT_TRUE(xr_test_rmdir(root) == 0);
+    passed++;
+}
+
+static void test_driver_boxed_adapter_scan_respects_cold_body_authority(void) {
+    char root[XR_TEST_PATH_MAX], entry[XR_TEST_PATH_MAX], library[XR_TEST_PATH_MAX];
+    char manifest[XR_TEST_PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    ASSERT_TRUE(xr_temp_dir_create("xray-cold-boxed-adapter", root, sizeof(root)) == 0);
+    ASSERT_TRUE(snprintf(entry, sizeof(entry), "%s/main.xr", root) > 0);
+    ASSERT_TRUE(snprintf(library, sizeof(library), "%s/library.xr", root) > 0);
+    ASSERT_TRUE(snprintf(manifest, sizeof(manifest), "%s/xray.toml", root) > 0);
+    ASSERT_TRUE(write_file_text(library,
+        "export class Payload {\n"
+        "    value: i64\n"
+        "    init(value: i64) { this.value = value }\n"
+        "}\n"
+        "export enum Envelope { Some { payload: Payload }, None }\n"
+        "export fn cold(node: Envelope) -> i64 {\n"
+        "    return match (node) {\n"
+        "        Envelope.Some { payload } -> payload.value,\n"
+        "        _ -> 0\n"
+        "    }\n"
+        "}\n"));
+    ASSERT_TRUE(write_file_text(entry,
+        "import \"./library\"\n"
+        "class Counter {\n"
+        "    init() {}\n"
+        "}\n"
+        "export fn probe() -> i64 {\n"
+        "    var counter = Counter()\n"
+        "    return 7\n"
+        "}\n"));
+    ASSERT_TRUE(write_file_text(manifest,
+        "[project]\nname = \"cold-boxed-adapter\"\nmain = \"main.xr\"\n"
+        "[[export.c]]\nxray = \"probe\"\nsymbol = \"cold_boxed_adapter_probe\"\n"
+        "visibility = \"hidden\"\nabi = \"hosted-vm-v1\"\nheader = true\n"));
+    XrProject *project = xr_project_load(NULL, root);
+    ASSERT_TRUE(project && project->initialized && project->native_plan);
+    ASSERT_TRUE(xaot_target_init(&target, "native-c90"));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
+    options.native_package_plan = project->native_plan;
+    options.emit_plan_dump = true;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    ASSERT_TRUE(xaot_build_script(entry, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 2 && result.plan_dump && result.c_export_header);
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=cold", "reachable=0"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=cold", "legacy_values=0"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=cold", "backend_adapters=0"));
+    /* The importing entry follows the library in this two-module fixture. */
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=constructor module=1 ", "reachable=1"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=probe", "reachable=1"));
+    size_t size = 0;
+    char *source = xaot_build_result_amalgamate(&result, &size);
+    ASSERT_TRUE(source && size && strstr(source, "cold_boxed_adapter_probe("));
+    ASSERT_TRUE(find_function_definition(source, "_cold_") == NULL);
+    ASSERT_TRUE(find_function_definition(source, "_constructor_") != NULL);
+    ASSERT_TRUE(find_function_definition(source, "_probe_") != NULL);
+    ASSERT_TRUE(strstr(source, "({") == NULL);
+    xr_free(source);
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_project_free(project);
+    ASSERT_TRUE(xr_test_unlink(entry) == 0);
+    ASSERT_TRUE(xr_test_unlink(library) == 0);
+    ASSERT_TRUE(xr_test_unlink(manifest) == 0);
+    ASSERT_TRUE(xr_test_rmdir(root) == 0);
+    passed++;
+}
+
+static void test_driver_hosted_export_keeps_callee_abi(void) {
+    char root[XR_TEST_PATH_MAX], entry[XR_TEST_PATH_MAX], library[XR_TEST_PATH_MAX];
+    char manifest[XR_TEST_PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    ASSERT_TRUE(xr_temp_dir_create("xray-hosted-callee", root, sizeof(root)) == 0);
+    ASSERT_TRUE(snprintf(entry, sizeof(entry), "%s/main.xr", root) > 0);
+    ASSERT_TRUE(snprintf(library, sizeof(library), "%s/library.xr", root) > 0);
+    ASSERT_TRUE(snprintf(manifest, sizeof(manifest), "%s/xray.toml", root) > 0);
+    ASSERT_TRUE(write_file_text(library, "export class ProbeOptions {\n"
+                                         "    value: i64 = 42\n"
+                                         "}\n"
+                                         "fn clampLevel(level: i64) -> i64 {\n"
+                                         "    if (level < 0) { return 0 }\n"
+                                         "    if (level > 9) { return 9 }\n"
+                                         "    return level\n"
+                                         "}\n"
+                                         "export fn boundedCount(level: i64) -> i64 {\n"
+                                         "    var bytes = Array<u8>()\n"
+                                         "    bytes.push(7 as u8)\n"
+                                         "    return clampLevel(level) + len(bytes)\n"
+                                         "}\n"
+                                         "export fn byteCount(text: string) -> i64 {\n"
+                                         "    var bytes: Slice<u8> = text.bytes()\n"
+                                         "    return len(bytes)\n"
+                                         "}\n"
+                                         "export fn makeBytes() -> Array<u8> {\n"
+                                         "    var bytes: Array<u8> = []\n"
+                                         "    bytes.push(7)\n"
+                                         "    return bytes\n"
+                                         "}\n"));
+    ASSERT_TRUE(write_file_text(entry, "import \"./library\"\n"
+                                       "import { ProbeOptions } from \"./library\"\n"
+                                       "export fn probeOptional(options: ProbeOptions?) -> i64 {\n"
+                                       "    if (options == null) { return 7 }\n"
+                                       "    return options!.value\n"
+                                       "}\n"
+                                       "export fn probeSet(options: ProbeOptions, value: i64) -> i64 {\n"
+                                       "    var receiver = options\n"
+                                       "    receiver.value = value\n"
+                                       "    return receiver.value\n"
+                                       "}\n"
+                                       "export fn probe(level: i64) -> i64 {\n"
+                                       "    return library.boundedCount(level)\n"
+                                       "}\n"
+                                       "export fn probeBytes(text: string) -> i64 {\n"
+                                       "    return library.byteCount(text)\n"
+                                       "}\n"
+                                       "export fn probeArray() -> i64 {\n"
+                                       "    return len(library.makeBytes())\n"
+                                       "}\n"));
+    ASSERT_TRUE(write_file_text(
+        manifest, "[project]\nname = \"hosted-callee\"\nmain = \"main.xr\"\n"
+                  "[[export.c]]\nxray = \"probe\"\nsymbol = \"hosted_probe\"\n"
+                  "visibility = \"hidden\"\nabi = \"hosted-vm-v1\"\nheader = true\n"
+                  "[[export.c]]\nxray = \"probeBytes\"\nsymbol = \"hosted_bytes\"\n"
+                  "visibility = \"hidden\"\nabi = \"hosted-vm-v1\"\nheader = true\n"
+                  "[[export.c]]\nxray = \"probeArray\"\nsymbol = \"hosted_array\"\n"
+                  "visibility = \"hidden\"\nabi = \"hosted-vm-v1\"\nheader = true\n"
+                  "[[export.c]]\nxray = \"probeOptional\"\nsymbol = \"hosted_optional\"\n"
+                  "visibility = \"hidden\"\nabi = \"hosted-vm-v1\"\nheader = true\n"
+                  "[[export.c]]\nxray = \"probeSet\"\nsymbol = \"hosted_set\"\n"
+                  "visibility = \"hidden\"\nabi = \"hosted-vm-v1\"\nheader = true\n"));
+    XrProject *project = xr_project_load(NULL, root);
+    ASSERT_TRUE(project && project->initialized && project->native_plan);
+    ASSERT_TRUE(xaot_target_init(&target, "native-c90"));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
+    options.native_package_plan = project->native_plan;
+    options.emit_plan_dump = true;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    ASSERT_TRUE(xaot_build_script(entry, &options, &result) == 0);
+    ASSERT_TRUE(result.plan_dump && result.c_export_header);
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=clampLevel", "abi_owner=legacy"));
+    size_t size = 0;
+    char *source = xaot_build_result_amalgamate(&result, &size);
+    ASSERT_TRUE(source && size && strstr(source, "hosted_probe("));
+    ASSERT_TRUE(strstr(source, "hosted_bytes(") && strstr(source, "xrt_span_from_string_bytes("));
+    ASSERT_TRUE(strstr(source, "hosted_array("));
+    ASSERT_TRUE(strstr(source, "hosted_optional("));
+    ASSERT_TRUE(strstr(source, "hosted_set("));
+    xr_free(source);
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_project_free(project);
+    ASSERT_TRUE(xr_test_unlink(entry) == 0);
+    ASSERT_TRUE(xr_test_unlink(library) == 0);
+    ASSERT_TRUE(xr_test_unlink(manifest) == 0);
+    ASSERT_TRUE(xr_test_rmdir(root) == 0);
+    passed++;
+}
+
+static void test_driver_native_storage_construction(void) {
+    char root[XR_TEST_PATH_MAX], entry[XR_TEST_PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    ASSERT_TRUE(xr_temp_dir_create("xray-native-storage", root, sizeof(root)) == 0);
+    ASSERT_TRUE(snprintf(entry, sizeof(entry), "%s/main.xr", root) > 0);
+    ASSERT_TRUE(write_file_text(entry, "import { Buffer } from mem\n"
+                                       "var plain = Buffer(2)\n"
+                                       "var zeroed = Buffer(3, true)\n"
+                                       "var aligned = Buffer(5, false, 8)\n"
+                                       "print(len(plain) + len(zeroed) + len(aligned))\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.emit_plan_dump = true;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    ASSERT_TRUE(xaot_build_script(entry, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 2 && result.n_sources == 2 && result.plan_dump);
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=constructor", "reachable=1"));
+    size_t size = 0;
+    char *source = xaot_build_result_amalgamate(&result, &size);
+    ASSERT_TRUE(source && size != 0);
+    const char *output = getenv("XRAY_TEST_OUTPUT_C");
+    if (output && output[0])
+        ASSERT_TRUE(write_file_text(output, source));
+    xr_free(source);
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    ASSERT_TRUE(xr_test_unlink(entry) == 0);
+    ASSERT_TRUE(xr_test_rmdir(root) == 0);
+    passed++;
+}
+
+int main(void) {
+    const char *filter = getenv("XRAY_TEST_FILTER");
+    if (filter && strcmp(filter, "runtime_capabilities") == 0) {
+        test_spawn_target_contributes_artifact_runtime_capabilities();
+        test_driver_native_resolution_owned_result();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "timer_capability") == 0) {
+        test_spawn_target_contributes_artifact_runtime_capabilities();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "native_resolution") == 0) {
+        test_driver_native_resolution_owned_result();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "net_tls") == 0) {
+        test_net_tls_link_manifest_tracks_built_runtime();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "hosted_callee_abi") == 0) {
+        test_driver_hosted_export_keeps_callee_abi();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "cold_boxed_adapter") == 0) {
+        test_driver_boxed_adapter_scan_respects_cold_body_authority();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "native_storage") == 0) {
+        test_driver_native_storage_construction();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "entry_closure") == 0) {
+        test_driver_entry_closure_owns_physical_bodies();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "module_ref") == 0) {
+        test_driver_module_ref_uses_verified_address_storage();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "borrowed_call_result") == 0) {
+        test_driver_borrowed_call_result_preserves_caller_type();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "target_plan_cache") == 0) {
+        test_driver_consumes_imported_summary_payload_set();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "program_graph_target_plan_cache") == 0) {
+        test_driver_program_graph_uses_one_target_plan_cache_route();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "package_target_profile_authority") == 0) {
+        test_driver_requires_target_profile_for_cached_program();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "package_source_authority") == 0) {
+        test_driver_requires_source_for_cached_package();
+        test_driver_requires_transitive_source_for_cached_package();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "identity_authority") == 0) {
+        test_driver_requires_exact_typed_entry_authority();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "direct_i64_target_plan") == 0) {
+        test_driver_direct_i64_call_consumes_target_plan();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    if (filter && strcmp(filter, "leaf_aggregate_target_plan") == 0) {
+        test_driver_leaf_aggregate_call_consumes_target_plan();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
+    test_target_simd_plan_is_explicit_and_fail_closed();
+    test_driver_consumes_imported_summary_payload_set();
+    test_driver_program_graph_uses_one_target_plan_cache_route();
+    test_driver_dumps_subject_bound_local_evidence();
+    test_driver_rejects_invalid_imported_summary_payload_set();
+    test_driver_analyzes_aggregate_layout_with_selected_target();
+    test_driver_analyzes_riscv64_layout_with_selected_target();
+    test_spawn_target_contributes_artifact_runtime_capabilities();
+    test_driver_native_resolution_owned_result();
+    test_net_tls_link_manifest_tracks_built_runtime();
+    test_driver_hosted_fragment_borrows_runtime_ownership();
+    test_driver_validates_freestanding_runtime_provider();
+    test_driver_requires_source_for_cached_package();
+    test_driver_requires_target_profile_for_cached_program();
+    test_driver_requires_transitive_source_for_cached_package();
+    test_driver_requires_exact_typed_entry_authority();
+    test_driver_direct_i64_call_consumes_target_plan();
+    test_driver_leaf_aggregate_call_consumes_target_plan();
+    test_driver_borrowed_call_result_preserves_caller_type();
+    test_driver_module_ref_uses_verified_address_storage();
+    test_driver_entry_closure_owns_physical_bodies();
+    test_driver_boxed_adapter_scan_respects_cold_body_authority();
+    test_driver_hosted_export_keeps_callee_abi();
+    test_driver_native_storage_construction();
+    printf("%d passed, %d failed\n", passed, failed);
+    return failed ? 1 : 0;
+}

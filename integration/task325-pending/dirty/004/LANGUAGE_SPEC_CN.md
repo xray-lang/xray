@@ -1,0 +1,8430 @@
+# Xray 语言参考手册
+
+> 版本：基于 `xray` v0.9.0 源码（校对日期 2026-07-18）
+> 性质：语言规范与参考手册。本文档是描述 xray 语言**实际行为**的真值源。
+> 实现：所有语义以 `xray` 当前主仓代码为准；本文档与代码不一致以代码为准并视为本文档需更新。
+> 受众：xray 编写者、IDE / AI 工具实现者、编译器内部贡献者。
+
+## 目录
+
+- [0. 前言](#0-前言)
+- [1. 词法结构 (Lexical Structure)](#1-词法结构-lexical-structure)
+- [2. 类型系统 (Type System)](#2-类型系统-type-system)
+- [3. 表达式 (Expressions)](#3-表达式-expressions)
+- [4. 语句 (Statements)](#4-语句-statements)
+- [5. 声明 (Declarations)](#5-声明-declarations)
+- [6. 模式 (Patterns)](#6-模式-patterns)
+- [7. 作用域与名字解析 (Scoping)](#7-作用域与名字解析-scoping)
+- [8. 错误处理 (Error Handling)](#8-错误处理-error-handling)
+- [9. 泛型 (Generics)](#9-泛型-generics)
+- [10. 并发与协程 (Concurrency)](#10-并发与协程-concurrency)
+- [11. 模块系统 (Modules)](#11-模块系统-modules)
+- [12. 测试 (Testing)](#12-测试-testing)
+- [13. 内置函数 (Built-in Functions)](#13-内置函数-built-in-functions)
+- [14. 内置类型方法 (Built-in Type Methods)](#14-内置类型方法-built-in-type-methods)
+- [15. 标准库概览 (Standard Library)](#15-标准库概览-standard-library)
+- [16. 运行时模型 (Runtime Model)](#16-运行时模型-runtime-model)
+- [17. 编译流水线 (Compilation Pipeline)](#17-编译流水线-compilation-pipeline)
+- [18. 错误码 (Error Codes)](#18-错误码-error-codes)
+- [附录 A. EBNF 语法](#附录-a-ebnf-语法)
+- [附录 B. 关键字索引](#附录-b-关键字索引)
+- [附录 C. 操作符索引](#附录-c-操作符索引)
+- [附录 D. 标准库模块索引](#附录-d-标准库模块索引)
+- [附录 E. 与其他语言的差异](#附录-e-与其他语言的差异)
+- [附录 F. 词汇表](#附录-f-词汇表)
+
+---
+
+## 0. 前言
+
+### 0.1 关于本规范
+
+本文档是 Xray 编程语言的**参考手册**（reference manual），描述语言的词法、语法、类型系统、语义、并发模型、运行时与标准库的接口。它的目标是：
+
+1. 让人类阅读后能写出合法且行为可预测的 xray 代码；
+2. 作为编译器、分析器、IDE、AI 助手、文档生成器等工具的**结构化真值源**；
+3. 与 `xray` 主仓的实际实现保持一致——任何不一致都视为本文档或代码的 bug。
+
+**本手册不是教程**。完整的入门材料见 xray 官网与 `demos/` 目录。
+
+### 0.2 版本约定
+
+本手册版本号与 `xray` 主仓 (`CMakeLists.txt` 的 `project(Xray VERSION x.y.z)`) 严格一致。重大破坏性改动以章节内的"自 vX.Y.Z 起"标注。
+
+xray 当前处于 v0.x 阶段。**不承诺任何向后兼容**。规范每次发版可能引入破坏性改动。
+
+### 0.3 语言设计哲学
+
+Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设计目标：
+
+| 维度 | 取舍 |
+|--|--|
+| **类型** | 静态类型 + 类型推断；变量声明几乎不需要写类型标注，但类型系统在编译期完全可见 |
+| **并发** | 内置 M:N 协程（go / await / Channel / scope / select），并发安全在编译期由"显式共享"规则保证 |
+| **运行模式** | 字节码 VM 与 `xray build --native` AOT 两条路径；当前没有 JIT，跨后端语义由差分测试守门 |
+| **错误处理** | 值返回错误通道（throw / try / catch + enum 错误）+ panic 边界（catch panic）+ 可空类型（T?）+ defer 资源管理 |
+| **元编程** | 注解（`@test` / `@deprecated` / `@derive`）+ 编译期元数据 + 泛型单态化 |
+| **互操作** | C ABI 内置；stdlib 模块可由 C 编写并通过 `XR_DEFINE_BUILTIN` 暴露 |
+
+设计参考来源：TypeScript（类型推断 + nullable）、Go（结构化并发 + Channel）、Rust（所有权语义的轻量版 move）、Swift（协议 + 可空链）。**Xray 不是其中任何一者的克隆**。
+
+### 0.4 阅读约定
+
+#### 0.4.1 语法记法
+
+本文档使用一种轻量化的 EBNF 风格描述语法：
+
+| 符号 | 含义 |
+|--|--|
+| `Term` | 非终结符（capitalised） |
+| `'literal'` | 字面 token |
+| `A B` | 序列 |
+| `A \| B` | 选择 |
+| `A?` | 可选 |
+| `A*` | 零次或多次 |
+| `A+` | 一次或多次 |
+| `(A)` | 分组 |
+
+完整 EBNF 见 [附录 A](#附录-a-ebnf-语法)。
+
+#### 0.4.2 源码引用
+
+本文档大量引用 xray 主仓源码作为真值源。引用格式：
+
+```
+路径:行号
+```
+
+例：`src/frontend/lexer/xkeywords.def`、`src/frontend/parser/xast_types.h:42-58`。
+
+#### 0.4.3 状态标记
+
+| 标记 | 含义 |
+|--|--|
+| **稳定** | 默认状态；行为不会无预警变化 |
+| **实验性** | 实现存在但可能改变 |
+| **保留** | 关键字/语法已识别但当前禁用 |
+| **未实现** | spec 中描述但代码暂未支持，应显式标注实现状态 |
+
+#### 0.4.4 错误码引用
+
+错误码使用 `E0xxx` 格式（如 `E0101`），完整列表见 [第 18 章](#18-错误码参考-error-code-reference)。源码定义在 `src/runtime/xerror_codes.h` 与 `src/runtime/xerror.h`。
+
+---
+
+## 1. 词法结构 (Lexical Structure)
+
+> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（通用关键字表，52 条）、`src/shared/xr_exact_scalar_registry.def`（exact 标量关键字表，12 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+
+### 1.1 字符编码
+
+xray 源文件**必须**是合法 UTF-8。scanner 在产生首个 token 前对整个输入做严格 UTF-8 校验；字符串、注释和标识符都可包含非 ASCII 字符（标识符规则见 §1.4）。
+
+文件可选 UTF-8 BOM（`EF BB BF`）；扫描器跳过开头的 BOM。
+
+### 1.2 行结尾与空白
+
+行结尾以 `\n` 计数；Windows `\r\n` 因 `\r` 被当作横向空白而正常工作。单独的 `\r` 也会被跳过，但**不会**增加行号或触发语句结束，因此不应当作源码换行使用。
+
+**空白字符**：空格 (`U+0020`)、水平制表符 (`U+0009`)、行结尾。空白用于分隔 token，不传递语义。
+
+**唯一的空白敏感规则**：`<` 是否引入泛型实参列表，取决于它**前面**是否有空白。`f<T>(x)` 是带显式类型实参的调用，`f < T` 是比较。连续 `>` 的拆分**不**依赖空白：`Array<Array<i64>>` 与 `Array<Array<i64> >` 完全等价，由语法位置而非空白决定。
+
+#### 1.2.1 语句边界
+
+xray 不要求语句末尾的 `;`：**行结尾结束语句**。当一个表达式尚未结束而遇到行结尾时，编译器按下列规则判定下一行是续行还是新语句。
+
+行结尾**结束**当前表达式，当且仅当同时满足：
+
+1. 已消耗的最后一个 token 可以**结束**一个表达式（标识符、字面量、`)`、`]`、`}`、后缀 `!`、`++`、`--`、`?`、标量类型名）；且
+2. 新行的首个 token 可以**开始**一个表达式；且
+3. 当前不在 `(` 或 `[` 之内——括号组内不可能开始新语句，因此行结尾在其中完全透明。
+
+条件 1 与 2 只对**同时具有前缀与中缀两种角色**的 token 同时成立，即 `!`（逻辑非 / 强制解包）、`-`（取负 / 减法）、`/`（正则字面量 / 除法）、`++`、`--`、`(`、`[`。因此：
+
+```xray
+var x = a
+!b            // 两条语句；不是 var x = a!
+```
+
+行首为**无前缀角色**的 token（`.`、`?`、`:`、`&&`、`||`、`+`、`*`、`as`、`is` 等）时不存在歧义，续行照常工作：
+
+```xray
+var ok = check(a)
+    && check(b)      // 续行
+
+var total = base +
+            extra    // 运算符置于行尾，续行
+```
+
+若需要以 `-` 或 `/` 续行，把运算符移到上一行末尾，或用 `( )` 括住整个表达式：
+
+```xray
+var d = (total
+    - used)          // 括号组内行结尾透明
+```
+
+> 表达式语句的值会被丢弃，因此**没有任何效果的表达式语句是错误**（`E0208`）。这条规则与上面的语句边界规则配套：被正确断开的续行不会变成静默的空操作，而是立刻报错并提示改写方式。REPL 例外——它会打印末尾裸表达式的值，该值属于被观察的结果。
+
+### 1.3 注释
+
+xray 支持两种注释：行注释不嵌套，块注释支持嵌套：
+
+```xray
+// 行注释，从 // 到行尾
+/* 块注释，
+   可跨行；
+   支持 /* 嵌套 */ 到任意合理深度 */
+```
+
+注释可出现在任何空白能出现的地方。formatter 与 LSP 可以读取注释 trivia；trivia 不参与语法分析。
+
+文档注释（与普通注释无语法差异）：约定以 `///` 或 `/** */` 开头，用于工具识别。当前编译器不强制此约定。
+
+### 1.4 标识符
+
+```ebnf
+Identifier ::= IdentStart IdentCont*
+IdentStart ::= 'a'..'z' | 'A'..'Z' | '_' | Utf8NonAsciiByteSequence
+IdentCont  ::= IdentStart | '0'..'9'
+```
+
+输入先经过严格 UTF-8 校验；随后 scanner 把非 ASCII UTF-8 字节序列作为标识符的一部分。因此 `中文`、`café` 都是合法标识符。当前 scanner 不做 Unicode XID 分类或 NFC 规范化，视觉等价但编码不同的名字仍是不同标识符。
+
+**保留约束**：标识符不能与保留关键字相同（见 §1.5）；可与**上下文敏感关键字**相同（如 `from`、`to`、`default`、`ref`、`move`、`linked`、`after` 可作为普通标识符）。
+
+字符 `_` 是**专用通配符 token**，不是普通标识符：
+
+- 在 `match` 模式中表示**通配符**（见 §6.7）。
+- 在 `for-in` 中可用于忽略键或值：`for (_, v in m) { ... }`。
+- 在解构绑定中可用于忽略位置：`var (a, _) = (1, 2)`。
+- **不能**作为 `var _ = expr`、函数参数名或被引用的变量名；编译器会报"expected variable name"。
+- 多下划线名（如 `__tmp`）是普通标识符。
+
+### 1.5 关键字
+
+xray 共 **64 个保留关键字**，按用途分组如下：
+
+#### 1.5.1 声明与流程控制
+
+| 关键字 | 用途 |
+|--|--|
+| `var` | 可变变量声明 |
+| `const` | 稳定绑定声明；在类型位置表达深只读能力 |
+| `comptime` | 强制编译期求值的表达式前缀 |
+| `fn` | 函数声明 |
+| `return` | 函数返回 |
+| `yield` | 生成器产值语句 |
+| `if` `else` | 条件分支 |
+| `while` | 循环 |
+| `for` `in` | 循环（C 风格 + for-in） |
+| `break` `continue` | 循环控制 |
+| `match` | 模式匹配 |
+
+#### 1.5.2 面向对象与类型
+
+| 关键字 | 用途 |
+|--|--|
+| `class` `struct` | 类/结构体声明 |
+| `packed` `union` | FFI 布局声明 |
+| `extends` | 类继承 |
+| `interface` `implements` | 接口声明/实现 |
+| `enum` | 枚举声明 |
+| `type` | 类型别名 |
+| `new` | 保留字；对象构造统一写 `T(...)`（见 §3.14） |
+| `this` `super` | 自我/父类引用 |
+| `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
+| `const` | 不可变字段/绑定修饰符 |
+| `final` | `final class` 禁止继承 |
+| `operator` | 运算符重载 |
+| `is` `as` | 运行时类型检查 / 转换 |
+
+`abstract` 与 `override` 不是关键字；它们在普通表达式位置可作为标识符。`override` 在类实例方法声明中作为上下文修饰符，实际覆写必须显式标记；类的抽象约束通过接口表达。
+
+#### 1.5.3 错误处理
+
+`try` `catch` `throw` `defer`
+
+#### 1.5.4 模块系统
+
+`import` `export`
+
+#### 1.5.5 协程与并发
+
+`go` `await` `select` `defer` `scope` `unsafe`
+
+`parallel` 是需要显式 import 的标准库模块名，不是词法关键字。
+
+#### 1.5.6 类型名（保留）
+
+`i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
+`f32` `f64` `bool` `string` `rune`
+
+类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
+
+> **注意**：以下名字**不是**词法关键字，而是 `stdlib/prelude/builtin_symbols.def` 自动引入的类型符号：
+> `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`。
+> `DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
+> 这些名字**不可被重新声明**：`class Array {}`、`enum TaskResult {}`、`interface Stringable {}` 一律是编译错误。
+> 完整的保留集是该注册表的全部条目（类型、枚举、约束接口），不止上面列出的 prelude 类型；
+> 标准库自身对它们的声明是这些名字的**定义**，不受此限制。
+
+#### 1.5.7 字面量关键字
+
+`true` `false` `null`
+
+#### 1.5.8 上下文敏感关键字
+
+不在 lexer 关键字表中，由 parser 按位置识别。**可以**作为普通标识符使用：
+
+| Token | 出现位置 |
+|--|--|
+| `init` | class/struct 的初始化成员声明；在其它位置仍为普通标识符 |
+| `from` | `select` 的接收分支 (`x from ch`)；也用于命名 import / re-export (`import { x } from "module"`) |
+| `to` | `select` 的发送分支 (`value to ch`) |
+| `default` | 保留，当前未启用 |
+| `cancelled` | `cancelled()` 协程取消检查（实际上是 builtin 函数）|
+| `ref` | 参数模式与调用授权 (`fn f(p: ref T)` / `f(ref p)`) |
+| `move` | 所有权转移 (`move x`) |
+| `linked` | `linked go` / `linked scope` 修饰符 |
+| `after` | `select` 的超时分支 (`after 1000 -> ...`) |
+| `panic` | `catch panic (p)` 的 panic 通道边界 |
+
+### 1.6 字面量
+
+#### 1.6.1 整数字面量
+
+```ebnf
+IntLiteral ::= DecLit | HexLit | OctLit | BinLit
+DecLit ::= Digit (Digit | '_')*
+HexLit ::= '0x' HexDigit (HexDigit | '_')*
+OctLit ::= '0o' OctDigit (OctDigit | '_')*
+BinLit ::= '0b' BinDigit (BinDigit | '_')*
+```
+
+- 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
+- 无唯一数值上下文的整数字面量默认类型为 `i64`。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
+- 范围：默认 `i64` 上下文为 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
+- 当整数字面量直接出现在唯一数值上下文（变量初始化、赋值、参数、返回值、集合元素或另一已定型数值操作数）时，字面量直接取得目标类型，而不是先构造 `i64` 再转换。整数目标必须能表示该值；浮点目标必须能精确表示该值。否则编译器拒绝，并要求用显式 `as` 表达截断、符号变化或舍入意图。
+
+```xray
+42
+0xFF
+0b1010
+0o77
+1_000_000      // 一百万
+```
+
+#### 1.6.2 浮点字面量
+
+```ebnf
+FloatLiteral ::= Digit+ '.' Digit* Exp?
+              | Digit+ Exp
+              | '.' Digit+ Exp?
+Exp ::= ('e' | 'E') ('+' | '-')? Digit+
+```
+
+无唯一浮点上下文时，字面量类型为 `f64`（IEEE-754 双精度）；唯一的 `f32`/`f64` 上下文直接选择舍入精度，完整拼写和舍入合同见 §17.25。词法目标包含前导/尾随点号形式；当前 XIR 源码子集尚未准入这些形式，不能将转换核心的支持计为完整词法实现。
+
+```xray
+3.14
+1.0e10
+2.5E-3
+.5             // 等价 0.5
+```
+
+#### 1.6.3 BigInt 字面量
+
+```ebnf
+BigIntLiteral ::= (DecLit | HexLit | OctLit | BinLit) 'n'
+```
+
+```xray
+123n
+0xFFn
+0b1010n
+```
+
+任意精度整数，运算永不溢出。类型见 §14.8。
+
+#### 1.6.4 布尔与 null 字面量
+
+```xray
+true
+false
+null
+```
+
+- `true` / `false`：类型 `bool`。
+- `null`：类型 `null`（语义上是所有可空类型 `T?` 的零值）。
+
+#### 1.6.5 字符串字面量
+
+Xray 的 quoted literal 只使用双引号；单引号专用于 `rune`，反引号字符串不存在。literal prefix、escape mode 与 delimiter form 是正交维度；完整的统一规则见下文。
+
+##### Inline escaped string（Q = 1）
+
+```ebnf
+InlineEscapedString ::= '"' StrChar* '"'
+StrChar ::= 任何非双引号、非反斜杠、非换行符
+          | EscapeSeq
+          | Interpolation
+EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
+                  | 'x' HexDigit{2}
+                  | 'u' HexDigit{4}
+                  | 'u{' HexDigit{1,6} '}')
+Interpolation ::= '${' Expression '}'
+```
+
+- inline literal 不能跨物理行；需要换行时使用 escape 或 block form。
+- 包含插值的字面量在 lexer 内部产出 `TK_TEMPLATE_STRING`；不含插值的产出 `TK_LITERAL_STRING`。
+- `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string / rune 字面量会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。
+
+```xray
+"hello"
+"Hello, ${name}! ${1 + 2}"
+"tab\there\nnewline"
+"\u4F60\u597D"        // "你好"
+"\u{1F600}"            // emoji
+```
+
+插值表达式可以继续包含嵌套插值；内层字符串中的 `}` 不会结束外层 `${...}`。
+
+##### Inline raw string（`r` prefix，Q = 1）
+
+```ebnf
+InlineRawString ::= 'r' '"' RawChar* '"'
+RawChar ::= 任何非双引号字符（包括 `\`，不做转义处理）
+```
+
+- **不**处理任何转义（`\n`、`\t` 等保持原样）。
+- 仍然支持 `${...}` 插值。
+- 标识符 `r` 单独使用时仍为普通标识符（`TK_NAME`），仅当后紧接双引号才识别为原始字符串前缀。
+- raw string 使用 `r"..."`；单引号只解析为 `rune`。
+
+```xray
+r"C:\path\to\file"          // 字面量包含两个反斜杠
+r"C:\Users\${USER}"         // 反斜杠不转义，但 ${USER} 仍插值
+```
+
+##### 统一 prefix 与可变 quote delimiter
+
+```ebnf
+QuotedLiteral ::= LiteralPrefix InlineQuoted | LiteralPrefix BlockQuoted
+LiteralPrefix ::= '' | 'r' | 'b' | 'br' | 'c' | 'cr'
+InlineQuoted ::= '"' InlinePayload* '"' | '""'
+BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
+QuoteRun ::= '"'{Q}                         // Q >= 3
+BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
+```
+
+- 无 prefix / `r` 产生合法 UTF-8 `string`；无 prefix 处理 escape，`r` 保留反斜杠原文。
+- 已解码字符串在 AST 与后续值边界保存显式字节长度；末尾存储终止符不是内容边界，复制、相等、签名与格式化不得在内嵌 NUL 处截断。结构对象字段名和 C literal 仍遵守各自的无 NUL 限制。
+- `b/br` 产生 `[u8; L]`；`c/cr` 产生 `[u8; L+1]` 并自动追加 NUL。`b/c` 处理 escape，`br/cr` 保留原始 bytes。
+- `${...}` 只在无 prefix / `r` 中插值；在 `b/br/c/cr` 中永远是普通 payload bytes。
+- 只接受无 prefix、`r`、`b`、`br`、`c`、`cr`；`rb/rc` 不是 alias。prefix 必须无空格紧接 quote run。
+- `c/cr` 在 escape、换行规范化与 margin 移除后拒绝任何 interior NUL。
+
+```xray
+"Hello, ${name}!"
+r"C:\\path\\${name}"   // 反斜杠原样，仍插值
+b"\\x89PNG"              // escaped [u8; 4]
+br"${HOME}\\bin"         // raw bytes；`${HOME}` 不插值
+c"puts"                   // [u8; 5]，最后一项是 appended NUL
+cr"C:\\assets"           // raw C bytes + appended NUL
+```
+
+一个双引号是 inline delimiter；两个连续双引号只表示当前 prefix family 的空 payload，不是 block opener：
+
+```xray
+"" r"" b"" br"" c"" cr""
+```
+
+三个及以上连续双引号形成 block delimiter。opener 后必须立即是 LF 或 CRLF；closer 必须从自己的行开始，形状只能是“margin + 与 opener 完全相同数量的双引号 + 换行或 EOF”。closer 行不能有尾随空白、注释、逗号、分号或括号；后续 token 从下一行开始。
+
+```xray
+const HTML = r"""
+<div class="card">
+  ${title}
+</div>
+"""
+
+const SCRIPT = br""""
+echo ${HOME}
+"""
+""""
+```
+
+opener 后与 closer 前的结构性换行不进入结果值。正文 CRLF 统一为 LF。closer 前的 spaces/tabs 是 margin；每个非空正文行必须以完全相同的 byte prefix 开头，移除后才形成 payload。tabs 与 spaces 不按可视列等价。
+
+只有形状完整匹配的独立 quote-only 行才结束 block；正文内普通 quote run 都是内容。若正文需要一条与当前 closer 冲突的行，作者或 formatter 增加 `Q`。formatter 保留 prefix 与 inline/block form，但会选择最小安全 `Q >= 3`。
+
+插值表达式按表达式模式扫描并配对大括号；内部 quoted literal 与 rune literal 会被整体跳过，因此允许同种引号嵌套。fixed-byte family 不进入插值扫描器。
+
+#### 1.6.6 `rune` 字面量
+
+```ebnf
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
+```
+
+- `'a'` 的类型是 `rune`，表示一个 Unicode scalar value。
+- 合法范围为 `U+0000..U+10FFFF`，排除 surrogate `U+D800..U+DFFF`。
+- 字面量必须恰好包含一个 scalar；`''`、`'ab'`、`'🇨🇳'`、`'é'` 均编译失败。
+- 支持 `'\n'`、`'\t'`、`'\r'`、`'\0'`、`'\''`、`'\\'`、`'\u{1F600}'` 等转义。
+- rune 字面量不支持 `${...}` 插值。
+
+```xray
+var a: rune = 'a'
+var zh: rune = '中'
+var smile: rune = '\u{1F600}'
+```
+
+##### 字符串插值
+
+字符串模板使用普通双引号和 `${...}` 插值。
+
+#### 1.6.7 正则字面量
+
+```ebnf
+RegexLiteral ::= '/' RegexBody '/' RegexFlag*
+RegexFlag ::= 'g' | 'i' | 'm' | 's'
+```
+
+```xray
+/[a-z]+/i
+/\d+\.\d+/g
+```
+
+- flags：`g`（全局）、`i`（忽略大小写）、`m`（多行）、`s`（dot 匹配换行）。
+- **歧义消解**：当 `/` 出现在能接受一元 `/` 的位置（如紧跟 `=`、`,`、`(`、操作符），扫描器识别为正则；其他位置识别为除法。
+
+### 1.7 操作符与 Token
+
+完整 token 表（按类别）：
+
+#### 1.7.1 标点
+
+| Token | 用途 |
+|--|--|
+| `(` `)` | 分组、调用、参数列表 |
+| `{` `}` | 块、对象字面量 |
+| `[` `]` | 数组字面量、索引 |
+| `,` | 分隔符 |
+| `.` | 成员访问 |
+| `:` | 类型注解、map kv、ternary |
+| `;` | for 循环分隔（其他位置可选） |
+| `?` | 可空类型、ternary |
+| `@` | 注解标记 (`@test`) |
+
+#### 1.7.2 算术
+
+`+` `-` `*` `/` `%`
+
+#### 1.7.3 位运算
+
+`&` `|` `^` `~` `<<` `>>`
+
+#### 1.7.4 比较
+
+`==` `!=` `<` `<=` `>` `>=`
+
+- `==` `!=`：值相等；数值操作数必须具有相同类型，或仅需同符号整数加宽 / `f32 → f64`。整数字面量可直接取得另一操作数的数值类型。
+- `<` 等：数字、字符串支持；其他类型不支持
+
+#### 1.7.5 逻辑
+
+`&&` `||` `!`
+
+短路求值。
+
+#### 1.7.6 赋值
+
+`=` `+=` `-=` `*=` `/=` `%=` `&=` `|=` `^=` `<<=` `>>=`
+
+#### 1.7.7 自增自减
+
+`++` `--`
+
+仅支持**语句级后缀**形式 `x++` / `x--`；前缀 `++x` / `--x`、以及表达式位置的 `x++` / `x--` 均编译报错。详见 §4.1。
+
+#### 1.7.8 类型相关
+
+| Token | 用途 |
+|--|--|
+| `?` | 可空类型 (`T?`)、ternary、可选链前缀 |
+| `?.` | 可选链属性/方法 (`obj?.prop`, `obj?.method()`) |
+| `?[` | 可选链索引 (`arr?[0]`) |
+| `??` | 空值合并 (`a ?? b`) |
+| `!` | 强制解包（后缀，`expr!`）/ 逻辑非（前缀） |
+| `\|` | union 类型 (`i64 \| string`) / 位或 |
+| `->` | 统一箭头：函数返回类型、闭包、`match` / `select` 分支；函数类型以 `fn` 引导（`fn(T) -> R`），返回 unit 时省略箭头（`fn(T)`） |
+| `...` | rest / spread |
+| `..` | 半开范围 (`0..10`) |
+| `..=` | 闭区间范围 (`0..=10`) |
+| `is` | 运行时类型检查 |
+| `as` | 类型转换 |
+
+`!` 的歧义在 parser 阶段消解，由**行**而非空白决定：跟在同一行的表达式之后识别为强制解包；位于前缀位置（含行首）识别为逻辑非。空白不参与判定，`a !b` 与 `a! b` 都是"同一行两条语句"，一律要求 `;` 分隔。跨行的判定规则见 §1.2.1。
+
+#### 1.7.9 集合字面量起始符
+
+| Token | 用途 |
+|--|--|
+| `#{` | 空 Map 字面量 |
+| `#[` | Set 字面量起始 |
+
+例：
+
+```xray
+var empty_map = #{}
+var primes = #[2, 3, 5, 7]
+```
+
+#### 1.7.10 模式
+
+| Token | 用途 |
+|--|--|
+| `_` | `match` 通配符 |
+
+#### 1.7.11 操作符优先级
+
+完整优先级表见 [§3.1](#31-优先级与结合性)。
+
+---
+
+## 2. 类型系统 (Type System)
+
+> 类型语法与内置身份锚点：`src/frontend/parser/xparse_type.c`、`stdlib/prelude/builtin_symbols.def`。本章定义语言合同；既有运行时或 analyzer 的表示不是值语义合法性的来源。当前新 XIR 实现资格见 §17。
+
+### 2.1 概述
+
+Xray 是静态类型语言；每个表达式在编译期有确定类型。类型系统的核心特性：
+
+1. **类型推断**：变量声明几乎不用写类型；分析器从初始值/上下文推导。
+2. **Optional 层独立**：`T?` 是语言项 `Optional<T>` 的写法；每层保留独立的存在标签，不拆成含 null 的 union。
+3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
+4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
+5. **三个职责清晰的类型域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`structural object` 按**结构**兼容且普通类型位置字段集精确，泛型约束位置可表达最小字段集；`JSON.Value` 是 schema-less 递归数据交换值域。JSON 标量可零物化 widening，复合 typed value 必须经 `JSON.value` 显式编码。
+6. **最小类型身份**：`typeOf` / `typeName` / `is` / `as`；默认没有运行时 `Reflect` 模块。
+
+### 2.2 类型分类
+
+| 类别 | 示例 |
+|--|--|
+| Primitive | `i64`、`f64`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
+| 精确整数 | `i8`、`i16`、`i32`、`i64`、`u8`..`u64` |
+| 精确浮点 | `f32`、`f64` |
+| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>` |
+| 定长布局 | `[T; N]` |
+| 借用视图 | `Slice<T>` / `MutSlice<T>`（共享只读 / 独占可写，不拥有元素，见 §2.4.2） |
+| Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`Os*` 同步类型 |
+| 模块导出类型 | `DateTime`、`Logger`、`NetConn`、`NetListener`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
+| 错误处理 prelude | `PanicInfo`（见 §8） |
+| Nullable | `T?` |
+| Union | `A \| B \| ...` |
+| Tuple | `(T1, T2, ...)` |
+| Function | `fn(T1, T2) -> R` |
+| FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<fn(T) -> R>`、`usize`、`isize` |
+| Class / Struct / Interface | 用户定义（nominal） |
+| Enum | 用户定义（含 ADT enum，见 §5.6） |
+| Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
+
+内置登记表是实现投影，不是新 XIR 声明族的准入清单。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
+
+<!-- xr-builtin-registry:begin -->
+
+#### 2.2.1 内置符号登记表
+
+下表由 `stdlib/prelude/builtin_symbols.def` 生成，是无需 import 即可命名的符号全集。编译器、LSP 与本表读同一份真值源；表外的大写名字必须来自 import 或用户声明。
+
+**内置类型**
+
+| 符号 | 构造 |
+|--|--|
+| `Array<T>` | prelude |
+| `Atomic<T>` | prelude |
+| `BigInt` | prelude |
+| `CFn<T>` | 解析器内建 |
+| `Channel<T>` | prelude |
+| `CoroLocal<T>` | 解析器内建 |
+| `EnumPayloadField<T>` | 解析器内建 |
+| `EnumPayloads<T>` | 解析器内建 |
+| `EnumVariant<T>` | 解析器内建 |
+| `EnumVariants<T>` | 解析器内建 |
+| `Iterator<T>` | prelude |
+| `JSON.Decodable` | 解析器内建 |
+| `JSON.Encodable` | 解析器内建 |
+| `JSON.Object` | 解析器内建 |
+| `JSON.Path` | 解析器内建 |
+| `JSON.PathSegment` | 解析器内建 |
+| `JSON.UnknownFields` | 解析器内建 |
+| `JSON.Value` | 解析器内建 |
+| `JSON.WithRest<T>` | 解析器内建 |
+| `Map<K, V>` | prelude |
+| `MutPtr<T>` | 解析器内建 |
+| `OsBarrier` | prelude |
+| `OsCondvar` | prelude |
+| `OsMutex` | prelude |
+| `OsOnce` | prelude |
+| `OsRwLock` | prelude |
+| `PanicInfo` | prelude |
+| `Path` | prelude |
+| `Ptr<T>` | 解析器内建 |
+| `Range` | prelude |
+| `Set<T>` | prelude |
+| `Slice<T>` | prelude |
+| `StringBuilder` | prelude |
+| `Task<T>` | 解析器内建 |
+| `Thread<T>` | prelude |
+
+**内置 enum**
+
+| 符号 | 变体 |
+|--|--|
+| `Ordering` | `Relaxed` \| `Acquire` \| `Release` \| `AcquireRelease` \| `SeqCst` |
+| `Endian` | `Native` \| `LE` \| `BE` |
+| `Utf8Error` | `InvalidUtf8` |
+| `NumberParseError` | `InvalidSyntax` \| `OutOfRange` |
+| `StringSliceError` | `InvalidByteRange` |
+| `CompressionError` | `InvalidData` |
+| `CryptoError` | `InvalidLength` |
+| `Recv<T>` | `Value` \| `Empty` \| `Timeout` \| `Closed` |
+| `SendResult` | `Sent` \| `Full` \| `Timeout` \| `Closed` |
+| `TaskResult<T>` | `Success` \| `Failed` \| `Cancelled` \| `Timeout` \| `Pending` |
+| `TaskStatus` | `Pending` \| `Running` \| `Success` \| `Failed` \| `Cancelled` |
+
+**内置约束接口**
+
+| 符号 |
+|--|
+| `Callable<T>` |
+| `Closeable` |
+| `Comparable` |
+| `Equatable` |
+| `Error` |
+| `Hashable` |
+| `Indexable<K, V>` |
+| `Iterable<T>` |
+| `Lengthable` |
+| `Stringable` |
+
+**内置约束谓词**
+
+| 符号 |
+|--|
+| `Equal` |
+
+**故意不提供的名字**
+
+| 符号 | 诊断提示（编译器原文） |
+|--|--|
+| `Self` | Xray has no 'Self' type; write the declaring type's own name, e.g. operator==(other: Token) -> bool |
+| `Box` | 'Box' is not a built-in type; indirect recursive data through a class node or a container slot such as Array<T> |
+
+<!-- xr-builtin-registry:end -->
+
+有限值相等的新 XIR 合同另冻结内置操作谓词 `Equal`，见 §9.2、§13.5 和 §17.33。
+它不是用户接口或旧 `Equatable` 的别名，不授予排序、键等价或自反性。正式实施尚待完成；
+上面的生成登记表仍反映现存符号来源，不能用手工表项替代来源登记、探针和最后旧消费者删除。
+
+### 2.3 基本类型
+
+#### 2.3.1 整数类型
+
+| 类型 | 范围 | 默认角色 |
+|--|--|--|
+| `i8` | `[-128, 127]` | — |
+| `i16` | `[-32768, 32767]` | — |
+| `i32` | `[-2³¹, 2³¹-1]` | — |
+| `i64` | `[-2⁶³, 2⁶³-1]` | 默认整数类型 |
+| `u8`..`u64` | 无符号对应 | — |
+
+- 无唯一数值上下文的整数字面量默认 `i64`；有唯一整数上下文时直接取得该类型且必须落在其范围内（`var x: i8 = 200` 编译拒绝）。有唯一浮点上下文时也直接取得该浮点类型，但整数值必须能被它精确表示。
+- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同类型整数运算保留该类型并按其宽度环绕（`u8 + u8 -> u8`）；同符号异宽整数使用唯一的较宽类型。不同符号、固定宽度与 `isize`/`usize`、整数与浮点之间不做隐式提升；移位结果取左操作数类型。
+- 静态类型为 `u8`..`u64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `u64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
+- 整数除法向零截断，非零余数与被除数同号；除数为零报错。任一有符号整数类型的 `MIN / -1` 按其位宽环绕为 `MIN`，`MIN % -1` 为零。
+- `i64` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `i64` 边界；`wrapping*` 显式执行默认二补码环绕。
+- 已定型表达式不能通过赋值隐式窄化、改变符号或改变目标相关宽度；这些转换必须显式写 `as`。显式整数转换按目标位宽取模并以目标类型的二补码位型解释。
+- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `JSON.Value` / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持适当的 exact 无符号静态类型（`u8` / `u16` / `u32` / `u64`）。
+
+#### 2.3.2 浮点类型
+
+| 类型 | 标准 |
+|--|--|
+| `f32` | IEEE-754 单精度 |
+| `f64` | IEEE-754 双精度；默认浮点类型 |
+
+字面量默认 `f64`。
+
+浮点 `+ - * /` 每次在操作数的共同精度按 round-to-nearest, ties-to-even 舍入；`f32` 与 `f64` 混合时先无损加宽到 `f64`。保留次正规数并渐进下溢，溢出为带符号无穷大。除零遵循 IEEE 规则，不触发整数除零错误；无效操作与 NaN 结果统一为正 canonical quiet NaN。禁止隐式融合或重排操作，不依赖或改变宿主浮点舍入状态与异常标志。浮点 `%` 与位运算不成立，已定型整数与浮点混合仍须显式转换。
+
+运行 `f64` 值允许全部 binary64 payload，包括带符号/载荷的 quiet 和 signaling NaN；合法值的复制、保存、参数、返回及已准入容器保留精确位型。这个载体合同不把 NaN 改成普通相等值，也不改变 `f32` 高32位为零且只准正 canonical quiet NaN 的运行值规则。CONST_FLOAT 的 wire 编码仍只准 canonical NaN；四则、转换（包括同宽转换）和负号的 NaN 结果仍 canonical，不能把运行值搬运当作数值运算。§17.24/§17.27 规定同一 VM/native/typed output 边界；不新增 raw-bit 字面量或编译器反射后门。
+
+#### 2.3.3 `bool`
+
+`true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `var x: i64 = true`，也不能 `var b: bool = 1`）。
+
+**条件表达式规则**（`if` / `while` / `for` 条件 / 三元 `?:` / `match` 守卫）：
+
+| 条件类型 | 是否允许 | 语义 |
+|---|---|---|
+| `bool` | 允许 | 直接布尔判断 |
+| `T?` 且 `T != bool` | 编译错误 | 显式写 `value != null` 检查存在性 |
+| `bool?` | 编译错误 | 三态歧义；写 `flag == true` / `flag != null` / `flag ?? false` |
+| `i64` / `f64` / `string` / `rune` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`len(s) != 0` |
+
+`&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
+
+```xray
+var ok = true
+if (ok) { }
+
+var user: User? = findUser()
+if (user != null) {      // 显式存在性检查
+    print(user.name)     // 此分支 user 窄化为 User
+}
+
+var flag: bool? = maybeFlag()
+if (flag == true) { }    // OK
+if (flag != null) { }    // OK
+// if (flag) { }         // 编译错误：裸 bool? 不能作条件
+
+var s = ""
+if (len(s) != 0) { }     // OK
+// if (s) { }            // 编译错误
+```
+
+#### 2.3.4 `string`
+
+不可变且始终合法的 UTF-8 字符串。`len(s)` 以 O(1) 返回 Unicode scalar 数量，`len(s.bytes())` 以 O(1) 返回 UTF-8 byte 数量。默认迭代元素是 `rune`；整数下标与 slice operator 均不适用于 string，显式访问见 §14.5。
+
+底层使用引用计数（ARC）；运行期短串默认协程本地（无锁分配），字面量/符号、显式 `intern()` 与 map/set 键走全局驻留池，跨协程边界按需提升为共享。
+
+#### 2.3.5 `rune`
+
+`rune` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `u32` 的别名。
+
+```xray
+var a: rune = 'a'
+var zh = '中'
+var smile = '\u{1F600}'
+print(typeName(a))        // "rune"
+print(smile.toUInt32())   // 128512
+```
+
+- rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
+- `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: u32 = 'a'` 都会在分析期拒绝。
+- 显式转换：`i64(c)` 得到 scalar code point；`rune(n)` 接受一个 i64 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到拥有式单 scalar 字符串，U+0000 保留为一个 NUL 字节。
+- `rune(n)` 的实参只求值一次；负数、超过 0x10FFFF 或 surrogate 触发范围 panic E0422，可由 `catch panic` 接收，普通 Error catch 不截获。转换不引入普通 Error 效果或挂起；失败不发布结果、不改变目标 place，已完成的实参副作用不回滚。非法字面量在编译期拒绝。
+- rune 默认值为 U+0000。码点排序使用显式 `i64(c)` 或 `c.toUInt32()` 后的数值比较；不定义 rune 直接关系运算。
+- 常用方法见 §14.4.1。
+
+#### 2.3.6 Unit `()`（无返回值）
+
+xray 用 **0-元组 `()`** 表示"无返回值"（Unit 类型）：
+
+```xray
+fn log(msg: string) -> () { print(msg) }   // 显式 Unit 返回
+fn ping() { print("pong") }                  // 省略返回类型 = ()
+var r: () = log("hi")                        // 允许；r 是 Unit 值
+```
+
+- 一个函数省略返回类型等同于 `-> ()`。
+- `void` 不是类型名：写 `fn f() -> void` 会被拒绝（`E0804`）；无返回值使用 `-> ()` 或省略返回类型。
+
+#### 2.3.7 FFI 标量与 C ABI 边界类型
+
+xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐式解释成 C 数据：
+
+| 类型 | C ABI 含义 | 备注 |
+|--|--|--|
+| `usize` | `size_t` | 宽度由编译目标决定；不得按宿主机 `u64` 代用 |
+| `isize` | `ptrdiff_t` / 平台有符号宽度 | 宽度由编译目标决定；不得按宿主机 `i64` 代用 |
+| `Ptr<T>` | `const void *` 边界值 | 只读裸指针；`T` 用于 xray 端解引用/索引宽度 |
+| `MutPtr<T>` | `void *` 边界值 | 可写裸指针；可传给需要 `Ptr<T>` 的位置 |
+| `CFn<fn(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `extern "C"` 函数 |
+
+裸指针值可以安全地保存、传递、比较和用 `offset(i)` 做按元素宽度缩放的指针偏移；真正读写外部内存必须写在 `unsafe { }` 内：
+
+```xray
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+}
+
+var p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(p.deref())
+    free(p)
+}
+```
+
+`Ptr<T>` 只能读取，写入必须使用 `MutPtr<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
+
+`usize` / `isize` 在 FFI 调用、`mem.load/store<T>`、manifest 绑定的 C layout 和生成 C 中使用同一份目标 ABI 标量描述。VM、AOT 与布局 introspection 必须采用编译目标的宽度和对齐；交叉编译时不得读取构建宿主机的 `sizeof(size_t)` 作为语义。
+
+`CFn<fn(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 extern 函数本身不能作为 `CFn` 回调实参。
+
+### 2.4 复合类型
+
+#### 2.4.1 `Array<T>`
+
+`Array<T>` 是有序、可增长的值类型。赋值、保存参数和返回值保留独立的逻辑副本；实现可以共享元素存储，但经一个可写绑定修改或追加元素不得改变其他逻辑副本。复制沿值语义部分递归，在 class 或同步身份处只复制引用，不复制或冻结所引用的对象。方法见 §14.7，所有权规则见 §2.14。
+
+```xray
+var a: Array<i64> = [1, 2, 3]
+var b = a                        // b 是逻辑副本
+b[0] = 9                         // a[0] 仍为 1
+var c: Array<string> = []         // 显式空数组
+```
+
+`T` 必须在编译期确定，且可复制、可保存；借用视图和不可复制资源不能作为普通 Array 元素。空 `[]` 需要类型上下文，无上下文时是编译错误：`Empty array '[]' requires a type annotation`。非 nullable Array 必须显式初始化，不从未初始化存储推定为空数组。
+
+读出元素产生类型为 `T` 的逻辑副本；写入按 `T` 检查，只采用该类型已允许的赋值转换。`Array<T>` 不变：元素可转换不意味着整个数组可隐式转换，例如 `Array<i8>` 不能整体隐式转换为 `Array<i64>`。`Array<rune>` 保留 `rune` 身份，读写均按 `rune` 检查。
+
+容器本身只要求存储所需能力，不要求所有 `T` 都可比较、排序、哈希或字符串化。条件方法的约束必须由相应声明明确给出；具体实例恰好提供某成员不能补足普通泛型定义处的约束。
+
+本节规定语言合同，不表示所有 Array 方法、聚合元素或借用视图已获新 XIR 源入口准入；当前实现资格见 §17。未准入的声明族必须明确拒绝。
+
+#### 2.4.1.1 定长数组 `[T; N]`
+
+`[T; N]` 是定长布局数组类型，表示 `N` 个 `T` 元素。`N` 是类型的一部分，必须能在分析期求值为正的编译期整数表达式；当前支持整数字面量、`const` 整数标识符、括号、一元 `-`/`~`，以及整数算术/位运算。当前后端编码上限为 65535 个元素。
+
+定长数组可用于 struct inline 字段和局部变量，并支持 struct、嵌套定长数组和拥有式容器等元素类型，因此可以递归组合：
+
+```xray
+var bytes: [u8; 4] = [1, 2, 3, 4]
+var zero: [u8; 64] = [0; 64]
+var names: [string; 2] = ["a", "b"]
+var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
+```
+
+有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
+
+定长数组支持 `len(array)`、索引读取、可写 place 上的索引写入和 `ref` 参数传递。借用视图按 §2.4.2 区分共享 `Slice<T>` 与独占 `MutSlice<T>`：
+
+```xray
+var data: [u8; 4] = [5, 6, 7, 8]
+var view: MutSlice<u8> = data[1:4]
+view[1] = 99
+```
+
+```xray
+struct Packet {
+    magic: [u8; 4]
+    payload: [u8; 128]
+}
+
+var key: [u8; 4] = [1, 2, 3, 4]
+key[1] = 9
+
+fn first(packet: Packet) -> u8 {
+    return packet.magic[0]
+}
+```
+
+`[T; N]` 与 `Array<T>` 语义不同：
+
+- `[T; N]`：定长、值语义、固定布局，适合 struct inline 字段、局部小缓冲、FFI/freestanding 数据。
+- `Array<T>`：动态长度、可增长的值类型；元素存储可在堆上共享并按需分离。
+- `Slice<T>` / `MutSlice<T>`：借用连续存储的共享 / 独占视图，不拥有元素（见 §2.4.2）。
+
+旧的 `[N]T` 语法不属于 Xray 语言。
+
+#### 2.4.2 `Slice<T>` / `MutSlice<T>`
+
+`Slice<T>` 是共享只读借用，`MutSlice<T>` 是独占可写借用。它们描述另一个值拥有的连续元素存储，自身不拥有元素；借用始终依附可证明的 owner 和访问权限。以下规则定义视图合同，不表示新 XIR 源入口已经支持视图声明族；其完整准入与验证见 §17。
+
+##### 构造与访问
+
+切片使用显式目标视图类型。`array[start:end]` 或 `fixedArray[start:end]` 可形成共享视图；形成 `MutSlice<T>` 还要求 owner 是独占可写 place，并在视图产生前完成必要的 COW 分离。字符串字节视图 `str.bytes()` 是 `Slice<u8>`，不能用于修改字符串。
+
+`len(view)` 读取长度，`view[i]` 读取元素；只有 `MutSlice<T>` 允许 `view[i] = value`，写入对应 owner 的逻辑值。视图不提供成员方法或 `.length`。从 `const` owner 派生的视图只能只读；类型位置不接受 `const T`；只读视图使用 `Slice<T>`，可写视图使用 `MutSlice<T>`。
+
+owner 必须是可证明存活的具名局部 place、参数或 receiver 字段路径，不能借用临时值。嵌套投影保护所属根及必要路径。class 字段借用须保活对象并动态检查独占；只有局部无冲突证明才可省去动态检查。
+
+`MutSlice<T>` 赋值转移借用，普通调用暂时重借用。`MutSlice<T>` 到 `Slice<T>` 是共享重借用；派生的只读视图存活期间，原可写视图不能写入。子切片也必须遵守同一借用权限。
+
+```xray
+fn main() {
+    var arr: Array<i64> = [10, 20, 30, 40]
+    var view: Slice<i64> = arr[1:3]
+    print(view[0])                         // 20；view 的最后一次使用
+    var writable: MutSlice<i64> = arr[1:3]
+    writable[1] = 31                       // writable 的最后一次使用
+    print(arr[2])                          // 31
+    var owned: Array<i64> = copy(arr[1:3]) // 物化拥有式副本
+    arr.push(50)                           // 没有存活借用
+    print(len(owned))                      // 2
+}
+
+main()
+```
+
+##### 借用规则
+
+设视图 `v` 借用 owner `o`。借用存活期按最后一次使用而非词法块末尾判定：
+
+1. `Slice<T>` 存活期间不得修改 `o`，包括元素写入；不能因为一次写入可能不改变物理地址就放行。
+2. `MutSlice<T>` 存活期间不得经 owner 或其他路径读取、写入或复制 `o`。只有当前独占视图及合法重借用可访问该存储。
+3. 重新绑定、销毁、消费或其他使借用失效的操作被拒绝（`E0382`）。操作效应必须反映 COW 分离与重定位；不得把 Array 元素替换一概标为地址稳定。
+4. 视图仅可用于局部、参数、返回及 tuple / Optional 包装；包装继承全部借用限制。视图不得进入普通集合、用户聚合、模块存储或 `go` 等跨执行边界，不得借 `as` 擦除限制（`E0383`）。
+5. 被普通闭包以共享 cell 捕获的变量不能产生视图。捕获视图的闭包可以立即调用；跨参数传递要求显式、已冻结的借用调用合同，保证不保存、不返回且调用结束前完成。被调方实现推断不能代替该公开合同，也不因闭包字面量写在实参位置就认定不逃逸。
+6. 普通调用中的借用可以跨挂起，但须始终保活 owner 并维持访问权限。帧地址稳定不能代替这些证明；生成器首版不得保存借用参数。
+
+```xray
+fn rejected() {
+    var bytes: Array<u8> = [1, 2]
+    var view: Slice<u8> = bytes[:]
+    bytes[0] = 3                    // E0382：共享借用仍存活
+    print(view[0])
+}
+```
+
+##### 跨函数：返回来源合同
+
+返回视图的来源首版只由签名确定：整个签名必须恰有一个视图输入或 `ref` 输入候选；`ref` receiver 也计入候选。零候选或多个候选均拒绝（`E0384`），即使函数体始终返回某一个参数；不得从函数体或静态存储特例推导跨模块来源。返回局部值的视图同样非法。
+
+tuple / Optional 中的每个返回视图都依附该唯一候选，并单独验证可写性；可写返回不能来自只读候选。返回两个 `MutSlice` 还要求显式的不重叠构造合同，普通用户函数不能只凭下标算式建立该保证。
+
+```xray
+fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
+    return data[start:]              // 唯一候选为 data
+}
+
+fn rejected(a: Slice<u8>, b: Slice<u8>) -> Slice<u8> {
+    return a                        // E0384：签名中有两个候选
+}
+```
+
+##### 物化拥有式副本
+
+`copy(view)` 将借用数据物化为 `Array<T>`，其元素遵循 §2.14 的逻辑复制与身份边界；class 元素仍引用同一个对象。结果不再借用原 owner。此用途不裁决 `copy(array)` 的公开拼写，也不使其成为普通 Array 赋值的前置条件。
+
+`ref` 参数和 `Ptr<T>` / `MutPtr<T>` 同样必须满足来源、权限、存活与不逃逸要求。相关诊断为 `E0382`（存活借用冲突）、`E0383`（借用逃逸）、`E0384`（来源不稳定或不唯一）；`unsafe` 不放宽这些要求。
+
+#### 2.4.3 `Map<K, V>`
+
+哈希字典，**保持插入顺序**。详见 §14.8。
+
+**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`；`JSON.Object` 使用同一个 Map 字面量：
+
+```xray
+var m: Map<string, i64> = #{"a": 1, "b": 2}
+var m2 = #{"a": 1, "b": 2}
+var empty = #{}                                     // 空 Map
+
+m["c"] = 3                                          // 添加/修改
+var v = m["a"]                                      // 取值；键不存在时 panic E0431
+var maybe = m.get("missing")                        // 安全查询；不存在返回 null
+```
+
+| 字面量形式 | 类型 | 用途 |
+|---|---|---|
+| `{ key: value }`（无前缀） | exact `structural object` | 见 §2.4.7 |
+| `#{ "k": v }`（`#` 前缀 + `:`） | `Map<K, V>`（哈希字典） | 本节 |
+| `#{}` | `Map<K, V>`（空） | 显式空 Map |
+| `[]` | `Array<T>` | 数组 |
+| `#[]` | `Set<T>` | 集合 |
+
+`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `i64`、`f64`、`string`、`bool`、`enum`、`BigInt`，或同时提供 `operator==` 与 `hash() -> i64` 的自定义类型（`operator==` 的参数类型写该类型自己的名字，Xray 没有 `Self` 类型）。泛型键类型必须显式写成 `K: Hashable`。
+
+#### 2.4.4 `Set<T>`
+
+去重集合。详见 §14.9。
+
+```xray
+var s: Set<i64> = #[1, 2, 3]
+```
+
+#### 2.4.5 `Channel<T>`
+
+协程间通信通道。命名通道句柄使用稳定 `const` 绑定；其同步内部可变能力来自受审计 registry（见 §10.5）。
+
+```xray
+const ch: Channel<i64> = Channel<i64>(10)
+```
+
+#### 2.4.6 `Array<u8>`
+
+类型化字节缓冲。语义等价 `Array<u8>`，但底层是连续内存。
+
+```xray
+var buf = Array<u8>(1024)
+var init = Array<u8>([72, 101, 108, 108, 111])
+```
+
+#### 2.4.7 静态结构对象、`JSON.Value` 与对象字面量
+
+裸对象字面量永远形成字段集精确的静态结构对象，用于普通业务对象、options 和多字段返回值。运行期未知键由 `Map` 承担；JSON object 的标准拼写 `JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名。`JSON` 是无需 import 的 prelude 命名空间，不是值类型。
+
+**对象字面量** `{ field: value, ... }` 与 Map 字面量的关键区别：
+
+```xray
+// 结构对象字面量：标识符或静态字符串 key + 冒号 ':'
+var user = { name: "Bob", age: 25 }       // exact 对象形状
+typeName(user)                            // "object"
+user.name              // 类型: string；direct ordinal
+user["name"]           // 与 user.name 完全等价；同一 direct ordinal
+
+// 字段简写：当字段名与变量名相同
+var name = "Alice"
+var age = 30
+var user = { name, age }                  // 等价 { name: name, age: age }
+
+// Map 字面量：`#{}` 前缀 + `:`
+var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, i64>
+var data: JSON.Object = #{"name": "Alice", "age": 30}
+data["traceId"] = "req-1"               // 动态键只属于 Map
+```
+
+**对照表**：
+
+| 写法 | 类型 | 备注 |
+|---|---|---|
+| `{ name: "x", age: 1 }` | exact 匿名对象形状 | 标识符或字符串 key 后跟 `:` |
+| `{ x: y }`（`x` 是字段名，`y` 是变量名） | exact 匿名对象形状 | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
+| `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
+| `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object；可遍历、增删动态键 |
+| `Point{x: 1.0, y: 2.0}` | `Point`（struct） | 类型名 + `{...}` 字面量 |
+
+**对象形状类型**：裸对象字面量和 `type T = {...}` 都是 exact 对象形状；访问或赋值未声明字段是编译错误。结构宽度只出现在泛型约束满足关系中：`T: { name: string }` 表示 T 至少包含该字段，调用点仍按实参的具体 exact shape 单态化。尾部 `...` 不属于类型语法。
+
+```xray
+type User = { name: string, age: i64 }
+
+var u: User = { name: "Alice", age: 30 }
+print(u.name)         // OK
+// u.extra = "x"      // 编译错误：sealed type User has no field 'extra'
+
+var u2 = { name: "Alice", age: 30 }      // exact 对象形状
+// u2.extra = "x"     // 编译错误
+
+type Named = { name: string }
+fn showName<T: Named>(value: T) {
+    print(value.name)                     // 约束只暴露已声明字段
+    print(value["name"])                  // 与 .name 相同
+    // print(value.age)                    // 编译错误：隐藏字段不可见
+}
+showName(u)                               // OK：u 的 concrete exact shape 更宽
+
+var j: JSON.Object = #{"name": "Alice", "age": 30}
+j["extra"] = "x"                        // OK：Map 动态键
+var encoded: JSON.Value = JSON.value(u)  // 复合值显式进入 JSON 值域
+```
+
+**乘积类型的职责划分**：
+
+| | 身份 | 字段集 | 用户可定义方法 | 用途 |
+|---|---|---|---|---|
+| 对象形状 | 结构化 | exact；泛型约束可要求最小字段集 | **否** | options、多字段返回值、普通业务数据 |
+| `JSON.Object` | Map 别名 | 任意字符串键，运行期确定 | Map API | schema-less JSON object |
+| `struct` | 名义 | 声明的，编译期检查 | 是 | 值语义、固定布局、FFI 聚合、数学类型 |
+| `class` | 名义 | 声明的，编译期检查 | 是 | 引用语义、继承、封装 |
+
+结构对象字段可承载任意满足普通类型规则的静态值，包括函数引用、Map 或 class 实例；用户不能在结构对象类型上声明方法。能存储不等于能序列化：`JSON.value` / `JSON.stringify` 在编译期要求 `JSON.Encodable`，函数字段等不支持类型会被拒绝。
+
+#### 2.4.8 `BigInt`
+
+任意精度整数。见 §14.8。
+
+#### 2.4.9 `Range`
+
+`Range` 表示整数区间，由 `a..b` 或 `a..=b` 产生：
+
+- `a..b` 是半开区间 `[a, b)`，不包含终点 `b`。
+- `a..=b` 是闭区间 `[a, b]`，包含终点 `b`。
+
+```xray
+var halfOpen = 1..4       // 1, 2, 3
+var inclusive = 1..=4     // 1, 2, 3, 4
+
+print(len(halfOpen))              // 3
+print(inclusive.contains(4))      // true
+print(inclusive.toArray())        // [1, 2, 3, 4]
+
+for (i in 3..=5) {
+    print(i)
+}
+```
+
+范围可用于 `for-in`、`match` 范围模式以及集合查询。完整表达式语义见 §3.9，成员见 §14.12。
+
+#### 2.4.10 `DateTime` / `Regex` / `StringBuilder`
+
+`Regex` 与 `StringBuilder` 是 prelude 类型。`DateTime` 不是 prelude 名字，必须通过 `import { DateTime } from datetime`（或其它显式 import）进入当前作用域。成员索引见 §14。
+
+### 2.5 可空类型
+
+`T?` 是语言项 `Optional<T>` 的写法，具有“缺席”和“有值且载荷为准确 T”两个状态。这里的 None / Some(T) 是语义状态名称；显式构造和匹配这些状态的具体源码拼写尚未冻结，本节不新增 `Some(...)` / `None` 内建名字或调用语法。
+
+`T??` 保留两层 `Optional<Optional<T>>`，不规范化为 `T?`。外层 None、外层 Some(inner None) 和外层 Some(inner Some(value)) 是三个不同状态；泛型代换必须保留每一层。`T | null` 只在语法层改写为 `T?`，`A | B | null` 改写为 `(A | B)?`；`null` 不进入 union 成员集合。已有 Optional 成员不被拆开或展平。
+
+赋值和普通调用先尝试准确类型匹配；准确匹配不增加包装层。只有源类型准确为目标 `T?` 的元素类型 T 时，才允许一次 T→T? widening。即使 T 本身是 Optional，该转换也只增加外层一层并保留内层状态。裸 `null` 在准确的 Optional 期望类型下构造最外层 None，不从嵌套层数猜测内层状态；无期望类型的 `null` 不自动发明一个 Optional 类型。
+
+`x == null` / `x != null` 只检查本次 Optional 操作数的最外层存在标签，元素不需要 Equal；`x!` 只解包一层，外层 None 产生 null-unwrap panic；`x ?? d` 只处理外层，只有该层缺席才求值 d。可选访问为本次结果增加一层 Optional，不隐式展平结果已有的 Optional。流敏感收窄的主体与传播仍由 §2.13 负责；同 binding 的嵌套读取 provenance 与显式认领遵守下方规则。
+
+#### 嵌套 Optional 的读取与显式消费
+
+绑定的声明存储类型 D 不变。对 §2.13 N-1 允许的同一 binding，流事实记录已经证明为 Some 的连续外层前缀 p；本次正常读取消费这 p 层，产生准确读取类型 R，并为本表达式记录尚可由显式消费认领的层数 q=p。每层取得准确的拥有式载荷，不把 inner None 当作 outer None。
+
+`!` 先认领一层 q：q>0 时只令 q减一并返回已经读取的值，不再解包，也不反向重新包装为声明中间类型。q=0 时，当前值仍为 Optional 才实际解包一层；None 产生原 null-unwrap panic，当前非 Optional 保持恒等行为。`??` 同样先认领一层 q：q>0 时不执行 default，结果类型保持 R；q=0 时才检查当前值最外层并按缺席分支处理。合法的外部 expected 转换是独立转换合同，不能拿包装伪造收窄的显式认领。
+
+| 声明 D／已知 p | 裸读取 R | 第一个 `!` 后 | 第二个 `!` 后 |
+|---|---|---|---|
+| i64??／0 | i64?? | i64? | i64 |
+| i64??／1 | i64? | i64? | i64 |
+| i64??／2 | i64 | i64 | i64 |
+| i64???／2 | i64? | i64? | i64? |
+
+因此，已知 outer Some 的 Some(None) 在 `x!` 后仍为 inner None，`x!!` 才 panic；最后一行的第三个 `!` 才实际消费第三层。括号透传同一读取计划，`(x!)!` 接续 child 已减的 q，不重新恢复额度。另一个独立的 `x!` 有自己的正常读取与 q。赋给新 binding、实参传递、函数返回/call 结果、算术、构造、类型转换与 phi 不传播原 binding 的 q；接收 binding 只能建立自己的声明/流事实。工厂结果不获 binding 事实，`factory()!!` 求值工厂恰一次，再逐层消费。
+
+null 测试始终观察本次 R 的最外层；同一 binding 的第一次测试证明 D 的第一层，进入 Some 分支后第二次测试才证明下一层。事实携带 binding、D、被检查层及 binding mutation generation，不是单个“非空”布尔值。ref/赋值改变generation后，较早Some证据不能在短路true分支重新加入，必须以当前generation检查。短路右侧在左侧事实下检查；join 只保两路径共有的连续前缀 min，赋值/ref/闭包/loop 失效仍遵守 N-11。字段、索引、call 不因此取得简单绑定事实，None 方向不升级被检查层为 Some。读取类型、查询及发射共用同一次检查的计划，不能从最后 IR opcode 猜事实、再次推断或再次执行 operand。
+
+对未认领的 Optional<E>，`??` 无 expected 时首先选择准确 E；default 为 null 且 E 已是 Optional 时仍选择 E，E 非 Optional 时才选择 Optional<E>。显式 expected 准确为 Optional<E> 时，按原准确转换允许一次包装；Some 分支保留/包装 E 一次，None 分支形成准确 expected 的 outer None。例如 Some(None):i64?? 的无 expected `x ?? null` 得 i64? 的 None，准确 expected i64?? 时得 Some(None)。对 q>0 的 `??`，检查对应已认领声明层的 default 合同而结果仍 R；不恢复 D 的中间层。
+
+惰性只限制运行时求值。default 即使在已证明不可达的分支也必须由同一 Built→Checked→特化复验管线完整检查类型、可见性、构造权限、泛型约束和效应；不得以收窄早返回或 discarded 标记跳过非法 body。default 的实际副作用只在需要的缺席分支发生。本规则不新增 Some/None 源码拼写，不改变 N-4 的原形态表/例子，也不代表本 Source 切片已有执行资格。
+
+这是语言合同；各 Source／VM／native 声明族的实际执行资格与未完成表面见 §17，具体测试与剩余门由同批实现记录说明。
+
+```xray
+var x: i64? = null      // OK
+var y: i64? = 42        // OK
+var z: i64 = null       // 编译错误：null 不是 i64
+```
+
+`JSON.Value` 的值域本身包含 JSON null，但 `JSON.Value?` 是另一个独立的外层 Optional，因此是合法类型。它区分外层缺席和有值且载荷为 JSON null；`JSON.Value | null` 只在语法层改写为同一个外层 Optional，不因 JSON 值域已有 null 而拒绝。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 structural object。不要引入全局 `Result<T,E>`。
+
+**可空原始类型一等公民**：`i64?` / `f64?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
+
+> `bool?` 是三态（`true` / `false` / `null`）。它合法，但**不能直接作条件**（裸 `if (b)` where `b: bool?` 是编译错误，见 §5 / 任务 128）；需显式写 `b == true` / `b != null` / `b ?? false`。
+
+#### 解包
+
+```xray
+// 1. 空合并
+var v = x ?? 0
+
+// 2. 可选链（整链短路，结果可空）
+var city = user?.address.city
+
+// 3. 强制解包
+var v: i64 = x!           // 若 x 为 null，运行时 panic NullError
+
+// 4. 流敏感收窄（完整规则见 §2.13）
+if (x != null) {
+    print(x + 1)          // 此分支内 x 已收窄为 i64
+}
+if (x is i64) {
+    print(x + 1)
+}
+```
+
+### 2.6 Union 类型
+
+```xray
+var v: i64 | string = 42
+v = "hello"             // OK
+```
+
+约束：
+- 最多 **6 个成员**（编译期检查；超限 → 错误）。
+- 成员互不为彼此的子类型（否则会被规范化）。
+- **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | f64` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
+- 处理 union 值需用 `match` 或 `is` 窄化：
+
+```xray
+var v: i64 | string = ...
+match v {
+    is i64    -> print("i64: ${v}"),
+    is string -> print("str: ${v}"),
+}
+```
+
+**成员选择**：union 值携带它被赋值时选定的成员。选择规则是确定的，与成员书写顺序无关：
+
+- 源类型与某个成员**完全相同** → 选该成员。
+- 否则选唯一一个可经 §2.10.1 隐式转换到达的成员。可判别性规则保证每个数值族至多一个成员，所以这个成员至多有一个。
+- 数值字面量按自己的族选：整数字面量优先选整数族成员，union 没有整数族成员时选浮点族成员（与"整数字面量定型进唯一浮点上下文"一致）；浮点字面量选浮点族成员。字面量必须能被目标精确表示。
+
+```xray
+var a: i64 | f64 = 1        // 精确匹配 i64
+var b: i64 | f64 = 1.0      // 精确匹配 f64
+var c: i32 | string = 7       // 唯一整数族成员：i32
+var d: f32 | string = 1.5     // 唯一浮点族成员：f32
+```
+
+`is T` 检查的是运行期值：对定宽数值类型，它问的是"该值能否被 `T` 精确表示"——擦除后的值不保存位宽，这是唯一可回答的形式。在一个合法 union 内，选定成员总能通过它自己的 `is`，其余成员一定失败，因此各分支互斥。
+
+**特殊化**：
+- `i64 | null` 规范化为 `i64?`。
+- `T?` 出现在 union 时保留独立 Optional 成员：`i64? | string` 保留 `Optional<i64>` 与 `string`，不拆成 `i64 | string | null`，也不规范化为 `(i64 | string)?`。
+
+### 2.7 元组类型
+
+xray 的元组**是头等公民**——可以作为任意值出现、作为字段保存、嵌套。
+
+```xray
+// 字面量
+var t = (1, 2, 3)                 // 类型推断为 (i64, i64, i64)
+var h = (10, "hi", true)          // 异构元组
+var single = (99,)                // 单元素元组：注意尾逗号
+
+// 类型注解
+var p: (i64, string) = (7, "ok")
+
+// 字段访问：.N（N 是编译期常量整数下标）
+var first = t.0                   // 1
+var mid   = t.1                   // 2
+var nest  = ((1, 2), (3, 4))
+var a     = nest.0.0              // 1
+var b     = nest.1.1              // 4
+
+// 函数返回与解构
+fn divmod(a: i64, b: i64) -> (i64, i64) { return (a / b, a % b) }
+var (q, r) = divmod(17, 5)        // tuple destructure
+
+// 泛型
+fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
+var p2 = pair(1, "x")             // (i64, string)
+```
+
+**注意事项**：
+
+- **单元素元组**必须用尾逗号 `(x,)`——不带逗号的 `(x)` 是分组括号（普通表达式）。
+- 字段访问 `t.N` 中 N **必须是字面量整数**；用变量或字符串访问是编译错误 `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` / `_RANGE`。
+- 元组**不可变**：`t.0 = v` 是编译错误。修改必须重新构造。
+
+**拥有与求值合同（2026-10-05 冻结，完整新 XIR 实施待完成）**：字段按源码从左到右各求值一次，类型保留有序字段向量；`()` 沿用 Unit，`(x,)` 与 `x` 不同。复制、保存参数、返回、字段投影取得符合字段合同的独立拥有式值，复制在 class/Atomic 同步身份边界停止；普通可复制元组不能因物理共享而允许修改字段。解构的 RHS 只求值一次，所有字段结果先准备，准备失败释放已取得的部分且不发布任何新绑定；准备完成后才发布整组绑定。调用参数和返回经过同一 Checked 类型/权限/布局与值准入，不能用无类型双返回或伪名义声明代替元组。
+
+当前平坦解构的准入与模块原子发布见 §5.1.3/§17.35；嵌套元组值合法不等于嵌套 pattern 已准入。Unit 字段零 payload 不扩大普通 Unit 形参或泛型实参域。
+
+Sendable 按全部字段合取；本族不自动增加 Tuple 的 Equal 资格。包含视图或不可复制字段时继承字段的借用、复制和逃逸限制，不能借 Tuple 包装扩大普通泛型或跨执行权限。首个拥有式实现须支持当前准入的可保存字段、string/Array/Atomic 和嵌套元组；尚未接通的视图/资源组合明确拒绝并继续承接 §2.4/§2.14，不删除这些语言目标。当前 parser 类型字段计数有 255 的实现边界，必须对 256 给出明确有界拒绝，不能截断、接受不同类型或把该临时边界写成永久语言限制。
+
+#### 完整可运行示例
+
+```xray
+fn main() {
+    var pair = (1, "hello")
+    print(pair.0)   // => 1
+    print(pair.1)   // => hello
+    var (a, b) = pair    // 解构
+    print(a)        // => 1
+    print(b)        // => hello
+}
+
+main()
+```
+
+### 2.8 类型别名
+
+```xray
+type Result = i64 | string
+type Mapper = fn(i64) -> i64
+type Point = { x: f64, y: f64 }
+type Pair<T> = { first: T, second: T }
+type Mapper2<T, U> = fn(T) -> U
+```
+
+别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
+
+```xray
+var p: Pair<i64> = { first: 1, second: 2 }  // 等价于 { first: i64, second: i64 }
+var f: Mapper2<i64, string> = (n) -> string(n)
+```
+
+泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
+
+**函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref i64) -> i64`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> i64)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
+
+### 2.9 类型推断
+
+详见 §7.4。简述：
+
+```xray
+var x = 1               // x: i64
+var y = 1.5             // y: f64
+var z = "hello"         // z: string
+var a = [1, 2, 3]       // a: Array<i64>
+var m = #{"a": 1}    // m: Map<string, i64>
+var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
+var f = (x: i64) -> x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断
+```
+
+### 2.10 类型兼容性与转换
+
+#### 2.10.1 隐式转换
+
+| 源 | 目标 | 允许与条件 |
+|--|--|--|
+| `T` | `T` | ✅ identity |
+| `i8 → i16 → i32 → i64` | 链上更宽的类型 | ✅ 无损加宽 |
+| `u8 → u16 → u32 → u64` | 链上更宽的类型 | ✅ 无损加宽 |
+| `f32` | `f64` | ✅ 无损加宽 |
+| 整数字面量 | 唯一整数 / 浮点上下文 | ✅ 直接定型；目标整数可表示，或目标浮点精确可表示 |
+| 已定型整数 | 不同符号、较窄或 `isize`/`usize` 与固定宽度之间 | ❌ 必须显式 `as` |
+| 已定型整数 | 任意浮点类型 | ❌ 必须显式 `as` |
+| 已定型浮点 | 任意整数类型或 `f64 → f32` | ❌ 必须显式 `as` |
+| `T` | `T?` | ✅ |
+| `i64` / `f64` / `string` / `bool` / `null` | `JSON.Value` | ✅ JSON 标量零物化 widening |
+| 复合类型 | `JSON.Value` | ❌ 必须写 `JSON.value(value)`，并满足 `JSON.Encodable` |
+| `Map<string, JSON.Value>` | `JSON.Object` | ✅ 纯别名 identity |
+| `null` | `T?` | ✅ |
+| Subtype | Supertype（class）| ✅ |
+| 字段集不同的 exact 对象形状 | exact 对象形状 | ❌ exact target 要求精确字段集 |
+| exact 对象形状 | 泛型约束 `T: { a: A }` | ✅ 约束满足关系；不是普通赋值转换 |
+
+> **exact / width-constraint 规则**：普通类型位置要求**精确字段集**——源字段名集合必须与目标一致；目标中类型可空的字段允许缺省。泛型约束位置的结构类型表示“至少包含这些字段”，同名字段类型保持不变；它不产生运行时宽度对象或动态字典。
+> ```xray
+> type User = { name: string }
+> var full = { name: "A", age: 18 }
+> // var u: User = full            // 编译错误 E0352：extra field 'age'
+> fn nameOf<T: User>(value: T) -> string { return value.name }
+> print(nameOf(full))              // OK：T 保留 full 的 concrete exact shape
+>
+> type Opt = { name: string, age: i64? }
+> var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
+> ```
+
+> **静态对象与 JSON 动态边界**：已知 schema 使用 exact target 与 `JSON.parse<T>`；schema-less object 使用 `JSON.Object` / Map。typed 复合值通过 `JSON.value(value)` 显式编码，动态 object 通过 `JSON.decodeObject<T>(object)` 显式验证回 typed target。
+
+#### 2.10.2 显式 `as`
+
+```xray
+var n = x as i64        // 失败抛 TypeError
+var n = x as i64?       // 失败返回 null（安全转换）
+```
+
+适用于：
+- 数值之间（含 `JSON.Value → i64`，运行时检查）。
+- `JSON.Value` 到标量类型的运行期检查；复合 typed 解码使用 `JSON.decode<T>` / `JSON.decodeObject<T>`。
+- 父类 → 子类（向下转）。
+
+数值 `as` 的结果与主机 C 编译器、优化级别和 VM/AOT 后端无关：整数到整数按目标位宽取模，并按目标有符号性解释同一位型；整数到浮点以及 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even，溢出产生带原符号的无穷大，NaN 规范化为 Xray 的 canonical quiet NaN；浮点到整数向零截断，NaN、无穷大或超出目标范围时抛 `XR_ERR_OVERFLOW` (E0422)，消息为 `numeric conversion is out of range`。
+
+整数as操作数独立于目标定型；直接正字面量（允许括号）超过i64最大值但不超过u64最大值时，保留u64源幅度后再按目标取模。`18446744073709551615 as i8`为-1；`200 as i8`仍按显式转换环绕，不要求字面量先满足i8范围。
+
+`expr as T?` 仅用于可能失败的动态 / 结构化转换；它不是数值 checked-cast 语法。数值转换必须写 `expr as T`，并遵循上面的确定性规则。
+
+#### 2.10.3 `is` 检查
+
+```xray
+if (v is User) {
+    // 编译器在此分支窄化 v 的类型为 User
+}
+```
+
+仅作类型守卫；不改变值。
+
+### 2.11 typeOf / typeName / Type 枚举
+
+```xray
+typeOf(value)     // 返回 Type 枚举值（i64 表示）
+typeName(value)   // 返回类型名字符串
+```
+
+`Type` 枚举成员：
+
+`Type.i64`、`Type.f64`、`Type.string`、`Type.bool`、`Type.null`、
+`Type.Array`、`Type.Map`、`Type.Set`、`Type.Channel`、
+`Type.function`、`Type.class`、`Type.struct`、`Type.enum`、`Type.module`、`Type.bigint`、...
+
+使用 `typeName(value)` 可以取得具体值的调试类型名。
+
+### 2.12 元数据与类型身份边界
+
+Xray 默认只保留最小类型身份层：
+
+- `typeOf(x)` 返回稳定的 `Type` / `TypeId`，适合分支、`match` 和 analyzer narrowing。
+- `typeName(x)` 返回调试/日志用的类型名字符串，是冷路径能力。
+- 当前 XIR 已闭合值的有限准入、Unit/null 区别及泛型/Error/静态查询的未实现边界见 §13.3；调试名字不授予额外类型能力。
+- 名义类型判断使用 `x is T` / `x as T`，不要通过字符串比较类型名。
+- 字段/方法/构造器遍历不属于默认运行时能力；序列化、inspect、RPC schema 等结构化元数据由 `@derive(...)` 或编译期工具显式生成。
+
+运行时类型查询使用 `typeOf(value)`、`typeName(value)` 和 `TypeId`。反射元数据不会暴露为可遍历、可调用的对象图。
+
+### 2.13 流敏感类型收窄
+
+> 真值源：`src/frontend/analyzer/xanalyzer_flow.c`（事实算子与控制流传播）、`src/frontend/analyzer/xanalyzer_visitor_expr.c`（引用点查询与 `E0379`）。
+
+**收窄（narrowing）**指在特定控制流位置上把一个绑定的**静态类型**收紧为其声明类型的子类型。收窄结果参与成员查找、重载解析、`match` 穷尽性判定与**代码生成**，因此收窄是**语义**而非诊断优化：对同一程序，VM 与 AOT 两条后端必须得到相同的收窄结果。
+
+本节规则编号 `N-1` … `N-13` 是规范性条文，每条在 `tests/compile_errors/narrowing/` 或 `tests/regression/16_narrowing/` 下有对应的一致性用例。
+
+#### 2.13.1 可收窄主体
+
+**N-1** 只有**简单绑定**可被收窄：局部 `var` / `const` 绑定，以及函数参数的裸标识符。
+
+**N-2** 以下位置**不可收窄**，即使对其做了空检查或 `is` 检查：字段访问 `p.f`、`this.f`、索引 `a[i]`、元组分量 `t.0`、调用结果 `f()`，以及任何其它非标识符表达式。对这些位置的检查只决定该检查表达式自身的类型，不影响后续对同一写法的访问。
+
+> 理由：只有简单绑定的全部写入点可在函数内被静态枚举。字段与元素可经别名、其它协程或方法调用改变；收窄它们需要引入位置（place）等价与别名失效分析，其代价与不确定性超过收益。
+
+**N-3** 需要对不可收窄位置做流敏感处理时，先提取一个局部绑定：
+
+```xray
+class Address { city: string
+    init(city: string) { this.city = city } }
+class User { address: Address?
+    init(address: Address?) { this.address = address } }
+
+fn show(u: User) {
+    var addr = u.address          // 提取为简单绑定
+    if (addr != null) {
+        print(addr.city)          // OK：addr 已收窄为 Address
+    }
+}
+```
+
+#### 2.13.2 事实与算子
+
+**N-4** 条件表达式在两个方向上产生**事实**：true 事实与 false 事实。下表是完整清单，未列出的形态两个方向都不产生事实。表中 `x` 表示可收窄主体（N-1），`e` 表示任意条件表达式。
+
+| 条件形态 | true 分支 | false 分支 |
+|--|--|--|
+| `x: bool` | 无类型窄化事实 | 无类型窄化事实 |
+| `!e` | `e` 的 false 事实 | `e` 的 true 事实 |
+| `(e)` | `e` 的 true 事实 | `e` 的 false 事实 |
+| `x == null` / `null == x` | 只保留 `null` | 去掉 `null` |
+| `x != null` / `null != x` | 去掉 `null` | 只保留 `null` |
+| `x is T` | 与 `T` 相交 | 去掉与 `T` 相交的部分 |
+| `typeOf(x) == Type.K` | 保留 kind 为 `K` 的成员 | 去掉 kind 为 `K` 的成员 |
+| `typeOf(x) != Type.K` | 去掉 kind 为 `K` 的成员 | 保留 kind 为 `K` 的成员 |
+| `e1 && e2` | `e1` 与 `e2` 的 true 事实依次施加 | 无事实 |
+| `e1 \|\| e2` | 无事实 | `e1` 与 `e2` 的 false 事实依次施加 |
+
+**N-5（短路继承）** `e1 && e2` 的 `e2` 在 `e1` 的 true 事实下分析；`e1 \|\| e2` 的 `e2` 在 `e1` 的 false 事实下分析。由于 `T?` 不能直接作条件（§2.5），这条规则使下面两种写法成为处理可空值的标准形式：
+
+```xray
+fn check(a: string?) -> bool {
+    if (a != null && len(a) > 0) { return true }     // e2 在 a: string 下分析
+    if (a == null || len(a) == 0) { return false }   // e2 在 a: string 下分析
+    return true
+}
+```
+
+**N-6（相交语义）** `x is T` 的 true 方向：声明类型为 union 时保留与 `T` 相交的成员（无成员相交 → `never`）；非 union 时若可交则为 `T`，否则为 `never`。false 方向对称地移除相交部分。`x is T` 对基元类型、命名类型、泛型实例一视同仁。
+
+#### 2.13.3 传播
+
+**N-7** 事实在以下位置生效：`if` 的 then / else 体、条件表达式 `c ? a : b` 的两支、`while` / `for` 的循环体入口与循环之后（false 事实）、`&&` / `||` 的右操作数、`assert(c)` 之后的后继代码。
+
+**N-8（早返回）** 当分支必然终止（`return` / `throw` / `break` / `continue`），其后的代码继承该条件的相反方向事实：
+
+```xray
+fn nameLen(s: string?) -> i64 {
+    if (s == null) { return 0 }
+    return len(s)                 // 此处 s 已收窄为 string
+}
+```
+
+**N-9（合流）** 合流点的类型是各前驱路径类型的并集；不可达前驱贡献 `never` 并被并集吸收。
+
+**N-10（循环）** 循环头的类型是入口边与所有回边的并集。回边上若存在对该绑定的赋值，则该回边贡献被赋值表达式的类型；若一条回边回到循环头时**没有**经过任何赋值，则绑定的值未变，该回边不向并集贡献任何类型。因此循环体内对该绑定的赋值会使下一轮迭代的条件收窄按合流后的类型重新计算，而循环前建立的收窄在循环体不写该绑定时保持有效：
+
+```xray
+fn drain(first: string?) {
+    var cur = first
+    while (cur != null) {         // 循环体入口 cur: string
+        print(cur)
+        cur = null                // 回边贡献 null，循环头重新合流
+    }
+}
+```
+
+#### 2.13.4 失效
+
+**N-11** 收窄在以下事件失效：
+
+1. **赋值** / 复合赋值 / `++` / `--`：绑定的静态类型重置为被赋值表达式的静态类型；
+2. 作为 `ref` 实参传出：重置为声明类型；
+3. 成功消费 `x` 之后：绑定不可用（见 §2.14.5）；
+4. **在任意闭包体内被赋值**的绑定：在整个函数体内不可收窄（闭包何时运行不可知）。该规则与闭包在源码中的位置无关——写在收窄点之后同样生效。诊断会指出该原因，修法是改用不被写入的新绑定；
+5. 普通函数调用**不**使收窄失效——N-1 / N-2 保证可收窄主体不可能被被调用方改写。
+
+**N-11.1（函数体边界）** 每个函数体（具名函数、方法、闭包）拥有独立的流图：外层的收窄事实**不**进入闭包体，闭包体内的事实也不流出。闭包内需要收窄时在闭包内重新检查。
+
+```xray
+fn f(a: string?) {
+    if (a != null) {
+        print(len(a))             // OK
+        a = null                  // 赋值使收窄失效
+        print(a ?? "")            // 必须重新解包
+    }
+}
+```
+
+#### 2.13.5 收窄与 null 诊断
+
+**N-12** 当接收者的静态类型仍可能为 `null`（含恒为 `null` 的类型）时，成员访问、索引、调用、算术、`len()` 与迭代都报 `E0379`（`XR_ERR_ANALYZE_POSSIBLY_NULL`），见 §18.2。三个例外：`==` / `!=`（与 `null` 比较正是收窄的入口）、`&&` / `||`（其操作数按条件检查），以及**字符串拼接**——`s + x` 中任一侧为 `string` 时，`null` 按 §2.5 渲染为 `"null"`。
+
+**N-13** 解包途径共三条，均在 N-4 之外独立生效：
+
+- `x!`：对 Optional 操作数只取最外层的准确元素类型和值；外层缺席时产生 null-unwrap panic，**不是未定义行为**，不递归解包元素的 Optional；
+- `x ?? d`：只检查最外层；有值时取该层载荷，缺席时才求值 d，结果按期望上下文与普通类型规则合流，不展平载荷中的 Optional；
+- `x?.f`：可选链，**整链短路**；本次可选访问为结果包装一层 Optional，结果原有 Optional 层仍保留（见 §3.6）。
+### 2.14 值、身份与借用
+
+本节定义声明类型、参数模式及函数内数据流共同决定的语言合同。存储布局、引用计数和 COW 是实现机制，不能反向改变源程序合法性。Built→Checked 检查这些规则；特化在 Checked 上完成并复验，Lowered 才选择具体复制、分离和释放操作。完整声明族的实现资格见 §17，规格冻结不等于实现完成。
+
+#### 2.14.1 逻辑值与身份边界
+
+Array / Map / Set / string、可复制 struct、enum、tuple 和匿名记录按值复制。复制获得独立的逻辑值；实现允许共享不可变存储或采用 COW，但经一个副本修改值语义部分不得污染其他副本。调用返回的 Array 也遵守同一合同，不要求调用方分析被调方函数体以证明其存储唯一。
+
+class 实例和同步对象具有身份。复制其引用仍指向同一个对象；递归复制聚合时在这个身份边界停止。因而复制含 class 元素的 Array 不复制 class 对象，修改对象状态可经其他引用观察到；替换某个 Array 元素则仅影响该数组的逻辑值。
+
+`const` 固定绑定及其值语义部分，不冻结整个可达图。`const xs = [Counter()]` 禁止经 `xs` 改写或追加数组元素，但不冻结 Counter 的身份状态；对象方法与同步 API 仍受各自合同控制。是否能跨执行共享由完整类型的 Sendable 性质决定，不能由 `const` 或底层原子引用计数推导。
+
+#### 2.14.2 初始化、权限与借用事实
+
+每个程序点都必须分别证明：
+
+| 事实 | 必须证明的条件 |
+|--|--|
+| 初始化和消费状态 | 读取前已完整初始化；需要持有权的操作不得使用已消费或可能已消费的值 |
+| place 权限 | 写入目标可写；只读参数和 `const` 的值语义部分不能直接写入 |
+| 值与声明合同 | 类型、复制或消费能力、参数模式、保存与返回权限符合声明 |
+| 活动借用 | 访问不与仍存活的共享或独占借用冲突，借用来源和存活期有效 |
+
+初始化与消费状态是控制流事实，权限来自绑定和声明，借用保护具体 place 及必要路径；这些证明不能互相代替。缺少真实所需证明必须拒绝，但 Array backing 是否唯一不是普通赋值、保存副本、返回或修改的语言准入条件。非 nullable Array 仍须显式初始化（§5.1.1）。
+
+#### 2.14.3 普通复制与存储共享
+
+`var b = a`、保存只读参数、返回 Array，以及把可复制 Array 存入另一个合法容器或聚合，均保留逻辑副本，不建立对源数组可变存储的语言级别名。它们不会把源绑定标为永久 `ESCAPED`，也不要求其他副本先结束存活期才能修改源值。底层存储的唯一性只可用于省略分离或复制的优化。
+
+```xray
+var a = [1, 2, 3]
+var b = a
+const snapshot = a
+b[0] = 9
+a.push(a[0])                 // 先求值实参，再建立 ref receiver 的独占访问
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
+print(b[0])                 // 9
+print(len(a))               // 4
+```
+
+复制必须取得可独立释放的结果责任；失败不得发布部分初始化的结果。自赋值、读取自身元素后写回或追加均须维持这一责任，不能因物理共享造成重复释放或使用已释放存储。求值顺序遵循 §3.0 E2/E5；复制或自动移动优化不能改变既定错误、析构或外部副作用顺序。
+
+#### 2.14.4 place 借用与捕获
+
+`ref` 是独占可写 place 借用。调用先按 E2 求值 receiver 和全部实参，再在进入被调方前建立借用；存活期间不得通过其他路径冲突访问借出的 place。赋值仍按 E5 求值位置子表达式、索引、右值，再存储，不因 COW 实现更改顺序。
+
+`Slice` 共享借用与 `MutSlice` 独占借用遵循 §2.4.2；class 字段借用还须保活对象并检查动态独占。底层 backing 共享不能成为取消这些检查的理由。反过来，普通 Array 逻辑副本不因共享 backing 自动成为借用。
+
+普通闭包的外层 `var` 捕获共享 cell，`const` 与可复制非视图的普通 READ 参数按值捕获。共享 cell 的身份不能伪装成不可逃逸的临时 loan；其存储和释放责任必须显式保留。被共享 cell 捕获的变量不能产生视图。视图捕获与借用回调的准入遵循 §2.4.2 的显式合同，不能从被调方实现或实参语法形状猜测。
+
+#### 2.14.5 消费与尚未准入的表面
+
+不可复制资源的消费转移持有权和最终析构责任，调用是否消费由声明的参数或 receiver 模式决定。对这类转移，`move x` 是可选的显式标记；源绑定成功消费后不可再用，未被所有路径重新初始化的循环再次消费也必须拒绝。只读与 `ref` 借用不消费持有权。被拒绝的操作不能把有效源状态错误地标为已消费。
+
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver。通用 type-position `const T` 已删除，不产生类型身份或转换。可复制值是否另行允许独立的 `move x` 表达式、普通值 `copy(array)` 是否保留公开拼写，仍须在准入前单独确定。这些待定表面不阻塞普通 Array 复制；不得继承旧唯一根、堆逃逸终态或整个图深冻结规则作为默认答案。
+
+#### 2.14.6 struct 字段的复制与初始化
+
+可复制 struct 按字段的声明类型复制：Array / Map / Set 等容器字段保留逻辑副本，string 保持不可变值语义，class 和同步字段只复制身份引用。不得仅因字段是 Array、其他拥有式容器或 class 引用而拒绝该 struct；也不能把带 class 字段的 struct 描述成整个可达图都独立。
+
+字段仍须满足普通存储、初始化和可复制性要求。视图不能进入普通用户聚合；不可复制字段或载荷要求所属 struct / enum 也不可复制，其声明族另行准入。含非 nullable Array 的字段不能无条件零初始化，默认构造须满足 §5 的字段规则。
+
+### 2.15 完整可运行示例
+
+以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
+
+数组：
+
+```xray
+fn main() {
+    var nums = [1, 2, 3]
+    nums.push(4)
+    print(nums)          // => [1, 2, 3, 4]
+    print(len(nums))     // => 4
+    var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
+    print(doubled)       // => [2, 4, 6, 8]
+    var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
+    print(evens)         // => [2, 4]
+}
+
+main()
+```
+
+Map 与 Set：
+
+```xray
+fn main() {
+    var scores = #{"alice": 95, "bob": 88}
+    scores.set("carol", 77)
+    print(scores.get("alice") ?? 0)   // => 95
+    print(len(scores))                 // => 3
+
+    var seen = Set<i64>()
+    seen.add(1)
+    seen.add(2)
+    seen.add(2)
+    print(len(seen))          // => 2
+    print(seen.contains(1))   // => true
+}
+
+main()
+```
+
+可空类型与 `??`：
+
+```xray
+fn main() {
+    var name: string? = null
+    print(name ?? "anonymous")   // => anonymous
+    var city: string? = "NYC"
+    print(city ?? "unknown")     // => NYC
+}
+
+main()
+```
+
+---
+
+## 3. 表达式 (Expressions)
+
+> 真值源：`src/frontend/parser/xparse_expr.c`、`src/frontend/parser/xast_types.h` 的 `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*` 等节点。
+
+### 3.0 求值顺序
+
+> 真值源：`src/frontend/canonical/xcanon.c`、`src/ir/xi_lower_expr.c`。本节定义 §16.9 内存模型中 sequenced-before 关系的来源；优先级（§3.1）只决定表达式的**结构**，本节决定其**求值时序**，两者是独立的规则。
+
+xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）或未定义（undefined）的求值顺序，VM 与 AOT 后端必须产生完全相同的副作用序列。
+
+这不是保守取舍而是必要条件：差分测试以"同一程序在两条后端上逐字节相同"为正确性判据，一旦承认某处顺序未指定，该处的后端分歧就不再算缺陷，判据本身随之失效。该一致性由 `tests/diff/cases/semantics/evaluation_order/` 门禁强制。
+
+**E1（总则）**：表达式按**从左到右、深度优先**求值。子表达式在其父表达式使用其值之前完成求值，包含全部副作用。
+
+**E2（函数调用）**：`callee(a1, …, an)` 依次求值被调表达式 `callee`（成员调用时为 receiver）→ `a1` → … → `an`，随后进入调用。借用在全部实参求值完成之后、进入被调函数之前建立。缺省参数在调用点按声明顺序求值，且排在全部显式实参之后。
+
+**E3（二元运算符）**：左操作数完全求值（含副作用）先于右操作数开始求值。唯一例外是短路运算符（E4）。
+
+**E4（短路点）**：`&&`、`||`、`??`、`?:`、`?.`、`?[` 是语言中**全部**的短路点。除此之外没有任何操作数会被条件性跳过求值。
+
+**E5（赋值）**：`place = rhs` 依次求值 place 的位置子表达式（receiver 或数组表达式 → 索引表达式）→ `rhs` → 执行存储。位置子表达式先于右值，与 C# / Java 一致，与 Rust 相反。
+
+**Array 的值 receiver 与可写 receiver**：读取 `a[index]` 或只读 `a.get(index)` 时，先取得 receiver 的逻辑值快照，再求值 index，最后针对该快照检查边界并复制元素。index 中的调用即使改绑 a，也不改变此次读取的快照。`ref` 方法和下标赋值则先绑定根 place 一次，不提前读取其 Array 值或建立独占访问；全部实参或 index/RHS 求值完成后，才对该 binding 的**当前值**建立独占访问。若实参或 RHS 改绑同一根变量，修改作用于新值，并按新长度检查边界。
+
+只有具名 place 的 index 不含调用、写入或挂起，并且可证明中间没有 owner 变化时，才可消去读取 receiver 的物理快照。此许可不豁免资源错误：必须证明被省略的分配/retain 不可能失败，或在原 receiver 求值位置保留等效失败检查；不得删除、延后 OOM/持有计数失败，也不得改变它与 index 错误的先后顺序。仅证明“无副作用”不够。保存 Array 值仍须保留逻辑副本；元素结果仍是独立拥有的 T。
+
+首个执行子集可仅将字面量或普通 i64 名称作为 GET-place 的 index，证明其求值无调用、写入、挂起、分配或运行时 fault。实现可在一个同步 helper 内临时 retain receiver、检查边界并复制元素、drop receiver，不把该临时 owner 留到 activation 退出；index 与这次 retain 的调序仍须满足上述无失败证明。此实现保留 retain 失败，又使后续 `a.push(a[0])` 不受已完成读取的数组临时别名影响；不要求立即实现零 retain 优化。
+
+**E6（复合赋值）**：`place op= rhs` 等价于 `place = place op rhs`，**但 place 的每个子表达式只求值一次**。求值顺序为：place 子表达式 → 读取 place → `rhs` → 计算 → 写回 place。`x++` / `x--` 等价于 `x += 1` / `x -= 1`，遵循同一规则。复合赋值的目标限于变量与成员访问（见 §3.4）。
+
+**E7（字面量）**：Array / Set / tuple 元素按源码顺序求值；Map 与对象字面量按源码顺序逐项求值，每项内 key 先于 value；展开 `...` 在其出现位置按序求值。
+
+**E8（字符串插值）**：插值片段按源码从左到右求值。
+
+**E9（match）**：scrutinee 先于任何 arm 求值，且只求值一次。arm 按源码顺序尝试；`if` 守卫只在其所属模式已匹配时求值。
+
+**E10（切片与范围）**：`a[lo:hi]` 依次求值 a → lo → hi；`lo..hi` 与 `lo..=hi` 依次求值 lo → hi。
+
+**E11（语句）**：语句按源码顺序求值。`defer` 在注册处建立静态 cleanup 边，块内外部绑定在 cleanup 执行时读取；执行时机见 §4.9。
+
+```xray
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
+fn add(a: i64, b: i64) -> i64 { return a + b }
+fn pick(tag: string) -> fn(i64, i64) -> i64 { print(tag); return add }
+
+class Counter {
+    hits: i64 = 0
+}
+
+fn mk(tag: string) -> Counter { print(tag); return Counter() }
+
+// E2：被调表达式先于实参
+var sum = pick("callee")(t("arg1", 1), t("arg2", 2))   // callee, arg1, arg2
+
+// E5：place 子表达式先于右值
+var arr = [0, 0, 0]
+arr[t("index", 0)] = t("value", 5)                     // index, value
+
+// E6：复杂 receiver 只求值一次
+mk("receiver").hits += t("delta", 1)                   // receiver, delta
+```
+
+### 3.1 优先级与结合性
+
+完整优先级表（自**高至低**；同级运算符按结合性分组）：
+
+| 级 | 运算符 | 结合性 | 说明 |
+|--|--|--|--|
+| 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | 左 | 后缀：分组、索引、成员、可选链、调用、强制解包 |
+| 16 | 前缀 `-` `+` `!` `~` `move` `await` `go` `unsafe` `comptime` | 右 | 一元前缀 + 协程/FFI/编译期边界操作 |
+| 15 | `as` `is` | 左 | 类型转换 / 检查（`as T?` 安全形式靠目标类型可空，非独立 `as?` 运算符） |
+| 14 | `*` `/` `%` | 左 | 乘除取模 |
+| 13 | `+` `-` | 左 | 加减 |
+| 12 | `<<` `>>` | 左 | 移位 |
+| 11 | `..` `..=` | 无 | 范围：端点是算术表达式，故 `0..n+1` = `0..(n+1)`；非结合，`a..b..c` 是语法错误 |
+| 10 | `<` `<=` `>` `>=` | 左 | 关系比较 |
+| 9 | `==` `!=` | 左 | 相等比较 |
+| 8 | `&` | 左 | 位与 |
+| 7 | `^` | 左 | 位异或 |
+| 6 | `\|` | 左 | 位或（亦用于 union 类型） |
+| 5 | `&&` | 左 | 逻辑与（短路） |
+| 4 | `\|\|` | 左 | 逻辑或（短路） |
+| 3 | `??` | 左 | 空值合并 |
+| 2 | `? :` | 右 | 三元 |
+| 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 右 | 赋值与复合赋值 |
+| 0 | `,`（仅 `match` 多值、参数列表等特定位置）| — | 不是真正运算符 |
+
+
+### 3.2 一元表达式
+
+```ebnf
+UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
+            | 'move' UnaryExpr
+            | 'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
+            | 'go' (Block | PostfixExpr)
+            | 'unsafe' Block
+            | 'comptime' (Expression | Block)
+            | PostfixExpr
+```
+
+| 运算符 | 适用类型 | 结果类型 | 备注 |
+|--|--|--|--|
+| `-x` | 数值 | 同 | 负号；浮点 NaN 保留 |
+| `+x` | 数值 | 同 | 标识，几乎无用 |
+| `!x` | `bool` | `bool` | 逻辑非；**不接受非 bool**（不像 JS） |
+| `~x` | 整数 | 同 | 按位取反 |
+`++` / `--` **不是表达式**：`var y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译报错。语句级自增/自减见 §4.1。
+
+#### `unsafe { }`
+
+`unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `extern "C"` 函数、读取/写入 `Ptr<T>` / `MutPtr<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
+
+```xray
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+}
+
+var p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
+unsafe {
+    p[0] = 7                      // MutPtr 写入必须在 unsafe 内
+    print(p.deref())              // 解引用必须在 unsafe 内
+    free(p)                       // extern 调用必须在 unsafe 内
+}
+```
+
+`unsafe` 不改变表达式的结果类型；多语句块的最后一个表达式语句产生块值，否则结果为 `()`。`unsafe` 也不关闭普通类型检查：`Ptr<T>` 仍不可写，`MutPtr<T>` 才能写入；空指针、越界、生命周期和对齐由调用方负责。
+
+#### `comptime expr` / `comptime { ... }`
+
+`comptime` 要求表达式或块在分析阶段求值；失败是编译错误，不会退回运行期。常量表达式不限于整数：当前支持标量常量、TypeId、定长数组、tuple、struct 聚合及其成员/索引访问，以及可求值的一元/二元运算。固定数组长度等静态整数位置仍要求最终值是正整数。
+
+```xray
+const SCALE = comptime 8 * 4
+var buf: [u8; comptime SCALE + 2] = [0; SCALE + 2]
+```
+
+`comptime { ... }` 已实现受限解释执行。块支持局部 `const`/`var`、局部变量赋值和复合赋值、`if`/`while`、C 风格 `for`、定长数组 `for-in`、循环内带标签或不带标签的 `break`/`continue`、`compile_assert(...)` 与 `compile_error(...)`。块只产生编译期副作用并在运行时被擦除；需要把值带出块时使用 `return <consteval-expression>`。当前函数调用不属于 consteval-safe 表达式，unsupported 语句会在分析期拒绝。
+
+```xray
+const TABLE_SIZE = comptime 4 * 8
+
+comptime {
+    var sum = comptime 0
+    for (var i = 0; i < 4; i += 1) {
+        sum += i
+    }
+    compile_assert(sum == 6, "comptime loop")
+}
+```
+
+### 3.3 二元表达式
+
+```ebnf
+BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
+BinOp ::= '+' | '-' | '*' | '/' | '%'
+       | '&' | '|' | '^' | '<<' | '>>'
+       | '<' | '<=' | '>' | '>='
+       | '==' | '!='
+       | '&&' | '||'
+       | '??'
+```
+
+#### 3.3.1 算术运算符
+
+| 运算符 | 同类整数 | 同类浮点 | 可无损加宽的数值 | 整数×浮点 | string / 其他 |
+|--|--|--|--|--|--|
+| `+` | 原整数类型 | 原浮点类型 | 唯一较宽类型 | ❌（需显式 `as`） | `string + string` 拼接；其他 ❌ |
+| `-` | 原整数类型 | 原浮点类型 | 唯一较宽类型 | ❌（需显式 `as`） | ❌ |
+| `*` | 原整数类型 | 原浮点类型 | 唯一较宽类型 | ❌（需显式 `as`） | ❌ |
+| `/` | 原整数类型（整除） | 原浮点类型 | 唯一较宽类型 | ❌（需显式 `as`） | ❌ |
+| `%` | 原整数类型 | ❌ | 唯一较宽整数类型 | ❌ | ❌ |
+
+“可无损加宽”仅指同符号整数链和 `f32 → f64`。一个直接数值字面量可由另一已定型操作数取得唯一上下文；两个已定型操作数不存在 C 风格 usual arithmetic conversions。
+
+**特殊语义**：
+- `i64 / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
+- `i64 % 0` → 运行时抛 `XR_ERR_MOD_BY_ZERO` (E0421)。
+- 结果类型为 `f64`/`f32` 的除法遵循 IEEE-754：`1.0 / 0.0` 产生 `+inf`，`-1.0 / 0.0` 产生 `-inf`，`0.0 / 0.0` 产生 `NaN`；可用 `x.isNaN()` 或 `math.isNaN(x)` 检测 NaN。
+- `%` 仅接受整数操作数；静态类型包含 f64 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
+- 整数溢出：见 §2.3.1。
+- 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
+- `rune` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `i64(c)`。
+
+#### 3.3.2 位运算
+
+`&` `|` `^` `~` `<<` `>>`
+
+- 仅作用于整数类型。
+- 所有定宽整数的移位计数取模 64，包括负数计数。结果保留左操作数类型：窄整数左移后按位宽截断；有效计数达到或超过其位宽时，右移结果为零或有符号负数的 -1。例如 `u8` 值 1 左移 8 位为 0，左移 64 位为 1。
+- `>>` 是**算术右移**（保留符号位）。无符号类型使用对应的 exact 类型（`u8` / `u16` / `u32` / `u64`）。
+- bool 不参与位运算（用 `&&` `||`）。
+- `rune` 不参与位运算；需要码点时显式写 `i64(c)`。
+
+#### 3.3.3 比较运算符
+
+| 运算符 | 语义 |
+|--|--|
+| `==` | 值相等。数值操作数必须同型或存在唯一无损共同类型；整数与浮点、不同符号整数之间必须先显式转换。字符串按内容比较。class/struct 使用 `==` 重载或默认 identity。 |
+| `!=` | `==` 的反 |
+| `<` `<=` `>` `>=` | 数值与字符串支持；其他类型默认不支持（可通过 `operator<` 重载启用）。 |
+
+**与 JS / C 的区别**：xray 的 `==` 不做 string↔number 转换，也不做整数↔浮点或符号变化的隐式提升。
+
+#### 3.3.4 逻辑运算符
+
+`&&` `||`：
+
+- 两操作数**必须**是 `bool` 类型（编译期检查）。
+- 短路求值：`false && X` 不求值 `X`；`true || X` 不求值 `X`。
+- 结果类型 `bool`（不像 JS 返回操作数）。
+- **收窄继承（§2.13 N-5）**：`e1 && e2` 的 `e2` 在 `e1` 的 true 事实下分析，`e1 || e2` 的 `e2` 在 `e1` 的 false 事实下分析。因为 `T?` 不能直接作条件，`a != null && a.f` 与 `a == null || a.f` 是处理可空值的标准写法。
+
+#### 3.3.5 空值合并 `??`
+
+```xray
+var v = nullable_expr ?? default_value
+```
+
+- 当 `nullable_expr` 为 `null` 时返回 `default_value`，否则返回 `nullable_expr` 本身。
+- **短路**：`default_value` 只在前者为 null 时求值。
+- 类型推导：若 `nullable_expr: T?` 且 `default_value: T`，结果类型 `T`（非空）。
+- 仅作用于可空类型；对 `T`（非空）使用 `??` 是编译警告/错误。
+
+### 3.4 赋值与复合赋值
+
+```ebnf
+AssignExpr   ::= AssignLValue '=' Expression
+               | CompoundLValue CompoundOp Expression
+AssignLValue ::= Identifier | MemberAccess | IndexAccess
+CompoundLValue ::= Identifier | MemberAccess
+CompoundOp   ::= '+=' | '-=' | '*=' | '/=' | '%='
+               | '&=' | '|=' | '^=' | '<<=' | '>>='
+```
+
+**语义**：
+- 赋值是**表达式**，结果是赋值后的值（可链式：`a = b = 0`）。Array 赋值保存逻辑副本；目标与表达式结果各自保有值责任，不能让结果借用一个随后可被覆盖的元素槽。实现可复用已持有的右侧结果，所有可能失败的持有工作必须先于存储提交，提交后再释放被替换的旧值。失败不回滚此前完成的右侧副作用。
+- `x op= y` 等价于 `x = x op y`，但 `x` 的每个子表达式只求值一次（重要：`obj.f += 1` 不会调用 `f` 的 getter 两次；`mk().f += 1` 只调用 `mk()` 一次）。完整时序见 §3.0 E6。
+- **复合赋值的目标不含索引**：`a[i] += v` 是编译错误，写作 `a[i] = a[i] + v`。简单赋值 `a[i] = v` 不受此限。
+- 不能赋值给 `const`（编译错误 `E0303`）。
+
+**特殊**：
+- 普通 read 参数允许读取或保存可复制值的逻辑副本，不允许通过该参数修改值语义部分；class 引用仍可调用修改对象身份的方法。`ref` 参数授予 place 的独占可写访问；声明为 `move` 的参数转移不可复制资源的持有权。
+- 数组/Map 字面量字段：`a[i] = v` 调用 `operator[]=` 或内置 setter。
+
+### 3.5 三元 `? :`
+
+```ebnf
+TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
+```
+
+```xray
+var max = a > b ? a : b
+```
+
+- **右结合**：`a ? b : c ? d : e` = `a ? b : (c ? d : e)`。
+- 条件必须是 `bool`。条件恰好求值一次，只执行被选择的分支；两个分支都参与静态检查，包括常量条件未选中的分支。
+- 两分支类型统一：取共同超类型（或 union）。无外部上下文的同符号整数分支先独立定型，再取较宽类型；仅在选中路径转换。直接分支字面量独立默认i64。
+- **收窄（§2.13 N-7）**：条件的 true 事实在 `then` 分支生效，false 事实在 `else` 分支生效，与 `if` 一致：`a != null ? len(a) : 0` 合法。
+
+### 3.6 空合并 `??` 与可选链 `?.` / `?[`
+
+详见 §3.3.5（`??`）与下方（`?.` / `?[`）。
+
+#### 可选链 `?.` / `?[`
+
+```ebnf
+OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr ']')+
+```
+
+```xray
+var city = user?.address        // 可选属性访问
+var item = arr?[0]              // 可选索引
+var value = callback?.(input)   // 可选函数调用
+var road = user?.address.street // 整链短路：user 为 null 时结果为 null
+```
+
+**语义**：
+- 若 `?.` 或 `?[` 左侧为 `null`，**整条后缀链**短路返回 `null`，链上后续的 `.` / `[` / `(` 一律不求值。
+- `?.` 用于属性访问、方法调用和函数调用：`obj?.prop`、`obj?.method()`、`func?.(args)`。
+- `?[` 用于索引访问：`arr?[0]`。与普通索引 `arr[0]` 对称，只需在 `[` 前加 `?`。
+- `func?.(args)` 在函数值为 `null` 时不求值实参，直接返回 `null`。
+- **整链短路**：`a?.b.c.d` 等价于「`a` 为 `null` 时结果为 `null`，否则求值 `a.b.c.d`」。链中每个 `?.` 都是一个短路点；短路点之后的 `.` 不再需要 `?`，也**不会**产生 `E0379`——因为它只在前缀非 null 时求值。
+- 若链中某一段自身返回可空值（`a?.b` 中 `b: T?`），则对该值继续用 `.` 访问仍需 `?.`：短路只覆盖 `?.` 左侧为 null 的情形，不覆盖右侧结果为 null 的情形。
+- 结果类型：整条链的类型加 `?`（若已经 `?` 则保持）。§2.13 N-13。
+
+### 3.7 强制解包 `!`
+
+> 完整错误处理语义见 §8。本节只列表达式语法与简要语义。
+
+#### 强制解包 `expr!`
+
+```xray
+var v: i64 = nullable_int!      // null 时运行时抛 NullThrowError (E0410)
+```
+
+仅当编译期可确定 `expr` 是可空类型 (`T?`) 时合法；对非空类型 `T` 使用 `!` 是编译错误。
+
+### 3.8 `as` / `is`
+
+#### `is` 运行时类型检查
+
+```ebnf
+IsExpr ::= UnaryExpr 'is' Type
+```
+
+```xray
+if (v is User) {
+    // 此分支内 v 窄化为 User
+    print(v.name)
+}
+```
+
+- 结果类型 `bool`。
+- **类型守卫**：`v` 是简单绑定时，分析器按 §2.13 N-4 / N-6 在 true 分支把 `v` 收窄为与 `T` 的交，在 false 分支移除该交集。
+- 适用于 union、可空、class 层级与 `JSON.Value` 运行期类别检查。
+- **定宽数值类型**：动态擦除后的值只保留 i64 / f64 两个族，不保留位宽，因此 `v is i32` 问的是"该值能否被 `i32` 精确表示"——这是擦除后唯一可回答的形式。`is i64` / `is f64` 对整个族恒为真；`v as T?` 用同一个判定，不通过时返回 `null`。
+
+#### `as` 类型转换
+
+```ebnf
+AsExpr ::= UnaryExpr 'as' Type
+        |  UnaryExpr 'as' Type '?'
+```
+
+```xray
+var n = v as i64           // 失败抛 TypeError
+var n = v as i64?          // 失败返回 null（"as nullable" 安全形式）
+```
+
+| 形式 | 失败行为 | 用途 |
+|--|--|--|
+| `expr as T` | 抛 `XR_ERR_TYPE_MISMATCH` (E0404) | 必须成功的转换 |
+| `expr as T?` | 返回 `null` | 不确定能否成功的动态 / 结构化转换；不适用于数值转换 |
+
+**支持的转换**：
+- 数值之间：整数到整数按目标位宽取模后按目标有符号性解释；整数到浮点和 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even；浮点到整数向零截断，NaN、无穷大或越界抛 `XR_ERR_OVERFLOW` (E0422)。数值转换只使用 `expr as T`，不用 nullable 形式。
+- `JSON.Value →` 标量类型（运行期类别检查）；复合解码使用 `JSON.decode<T>`。
+- 父类 → 子类（运行时 instanceof）。
+- Union 成员 → 具体成员。
+
+### 3.9 范围 `..` / `..=` 与展开 `...`
+
+#### 范围 `a..b` / `a..=b`
+
+```ebnf
+RangeExpr ::= ShiftExpr (('..' | '..=') ShiftExpr)?
+```
+
+```xray
+var halfOpen = 0..10   // 左闭右开（包含 0，不包含 10）
+var closed = 0..=10    // 闭区间（包含 0 和 10）
+var r = 1..100
+var n = 10
+for (i in 0..n) { print(i) }
+for (i in 0..=n) { print(i) }
+for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
+```
+
+- 类型 `Range`（仅 i64 范围）。
+- **优先级（见 §3.1）**：`..` / `..=` 比所有算术运算符（`* / % + - << >>`）都松，故端点先结合——`0..n+1` 是 `0..(n+1)`，`1..2*3` 是 `1..(2*3)`；它比比较与逻辑运算符紧，故 `0..n == 0..m` 是 `(0..n) == (0..m)`。
+- **非结合**：范围不能链式书写，`a..b..c` 是语法错误；确需嵌套时给端点加括号。
+- `a..b` 是半开区间 `[a, b)`：`a` 包含、`b` 不包含。
+- `a..=b` 是闭区间 `[a, b]`：两端都包含。
+- `for-in`、`Range.contains`、`len(range)`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
+- 主要用途：`for-in` 循环、模式匹配中的范围判定。
+
+#### 展开 `...`
+
+仅在以下位置使用：
+- **函数 rest 参数声明**：`fn f(...args: i64)`
+- **函数调用展开**：`f(...args)`，展开源必须是静态 arity 已知的 tuple。
+- **tuple 字面量展开**：`(head, ...tail)`，展开源必须是静态 arity 已知的 tuple。
+- **数组字面量展开**：`[...a, x, ...b]`，展开源必须是数组，运行期拼接成新数组（O(n)）。
+- **对象字面量展开**：`{...base, x: 1}`，展开源必须是对象；字段合并成新对象，同名字段后者覆盖前者，结果字段集为各展开源字段与字面量字段的并集。
+
+```xray
+var a = [1, 2]
+var b = [3, 4]
+var nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
+
+var base = { x: 1, y: 2 }
+var point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+```
+
+### 3.10 字面量构造
+
+#### Array `[...]`
+
+```ebnf
+ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expr | Expr
+```
+
+```xray
+var a = [1, 2, 3]
+var empty: Array<i64> = []
+var mixed = [1, "hello"]    // 类型 Array<i64 | string>
+```
+
+#### Map `#{k: v, ...}` 与 `#{}`
+
+```ebnf
+MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= Expression ':' Expression
+EmptyMap ::= '#{' '}'    // 注意：'#{' 是单个 token
+```
+
+```xray
+var m = #{"a": 1, "b": 2}
+var empty = #{}                           // 空 Map
+```
+
+**关键区别**：`{}` 始终是 exact **structural object**；`#{}` 始终是 **Map**，也是 `JSON.Object` 的字面量形式。两者都用 `:` 作键值分隔，靠 `#` 前缀区分。
+
+#### Set `#[...]`
+
+```ebnf
+SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
+```
+
+```xray
+var s = #[1, 2, 3]
+var empty = #[]
+```
+
+#### Object（结构化对象）`{ field: value, ... }`
+
+```ebnf
+ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
+ObjectField ::= Identifier ':' Expr
+              | Identifier            // shorthand: `{ x }` 等价 `{ x: x }`
+              | '...' Expr            // spread: `{ ...base }` 合并字段
+```
+
+```xray
+var p = { name: "Alice", age: 30 }
+var users = "Bob"
+var obj = { users }              // shorthand
+```
+
+- 默认推断为 exact 对象形状（见 §2.4.7），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
+- 对象字面量不因期望类型变成动态对象；typed 复合值进入 JSON 边界使用 `JSON.value(value)`，动态 object 使用 `JSON.Object` / Map。
+- 用 `type` 别名命名 structural object：`var u: User = {...}`（编译期检查字段集，密封）。
+
+#### Array<u8> `Array<u8>(...)`
+
+详见 §2.4.6 与 §14.5。
+
+#### Channel `Channel<T>(buf?)`
+
+```xray
+const ch: Channel<i64> = Channel<i64>(10)
+```
+
+详见 §10.5。
+
+### 3.11 调用 / 成员访问 / 索引 / 切片
+
+#### 函数调用
+
+```ebnf
+CallExpr ::= Primary '(' ArgList? ')'
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out')? Expr
+```
+
+- 参数按位置传递；不支持命名参数。
+- `ref` / `out` 参数必须在调用点重复写同名 marker，并传入可寻址 place；普通 `in`/值参数不写调用点 marker。
+- rest 参数收集多余参数到数组。
+- 参数计数不匹配 → 编译错误 `E0307` / `E0450`。
+
+#### 成员访问
+
+```ebnf
+MemberAccess ::= Primary '.' Identifier
+```
+
+```xray
+obj.field
+obj.method(args)
+ClassName.staticMethod()
+EnumName.MemberName
+```
+
+- 字段访问：编译期检查类型有此字段。
+- 方法调用：解析为 invoke（带 IC 缓存优化）。
+- 模块成员：`module.export_name`。
+- 枚举成员：`Color.Red`。
+
+#### 索引访问
+
+```ebnf
+IndexAccess ::= Primary '[' Expr ']'
+```
+
+```xray
+arr[0]
+arr[0] = 10
+map["key"]
+var bytes: Slice<u8> = text.bytes()
+bytes[i]                // 显式 byte 视图索引
+```
+
+- `Array<T>` 索引的类型为 `i64`，合法范围为 `0 <= i < len(array)`。读取产生 T 的逻辑副本；写入要求可写 place，右侧按 T 检查及转换。负索引及等于长度的索引均进入 `E0430` panic 通道，不是业务 throw。
+- 下标写入遵循 E5：根 place 和下标各求值一次，再完成右侧求值；随后建立独占访问、按该 binding 的当前数组检查边界、分离共享存储并提交。RHS 改绑根变量时，写入新数组；不能提前按旧长度拒绝。不得跨右侧求值保存裸元素地址。失败不修改提交前的数组或其他逻辑副本；已经发生的右侧副作用（包括改绑）保留。读取则遵循 §3.0 的 receiver 快照规则，针对快照在读取元素前检查边界。
+- `Map` 索引：键类型；找不到键 → `E0431`。
+- `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
+- 自定义类：通过 `operator[]` 重载。
+
+```xray
+var a: Array<string> = ["old"]
+fn replaceForIndex() -> i64 {
+    print("index")
+    a = ["new"]
+    return 0
+}
+print(a[replaceForIndex()])  // 依次输出 index、old
+print(a[0])                 // new
+```
+
+```xray
+var a: Array<string> = ["old"]
+fn index() -> i64 { print("index"); return 1 }
+fn replacement() -> string {
+    print("rhs")
+    a = ["new0", "new1"]
+    return "stored"
+}
+var written = (a[index()] = replacement())
+print(written, a[1])        // 依次输出 index、rhs、stored stored；旧长度不提前拒绝
+```
+
+```xray
+var a: Array<string> = ["old0", "old1"]
+fn shrink() -> string { print("rhs"); a = ["new"]; return "stored" }
+a[1] = shrink()             // 输出 rhs 后 E0430 panic；改绑为 ["new"] 不回滚
+```
+
+```xray
+fn invalid(values: Array<string>) {
+    values.push("x")       // 编译错误：普通 read 参数不是可写 receiver
+}
+```
+
+#### 切片
+
+```ebnf
+Slice ::= Primary '[' Expr? ':' Expr? ']'
+```
+
+```xray
+arr[1:4]                // 元素 [1,4)
+arr[:3]                 // 前 3 个
+arr[2:]                 // 从索引 2 到末尾
+arr[:]                  // 全长视图（不是拷贝）
+var view: Slice<i64> = arr[1:4]
+```
+
+- 半开区间 `[start, end)`。
+- Array 切片支持负索引：负数先按 `len(array) + index` 从末尾计数，再夹到合法范围。
+- string 不支持 slice operator；使用严格 rune ordinal 的 `s.slice(start, end)`。
+- 目标类型为 `Slice<T>` 的切片是**共享只读借用视图**，不复制元素；不能通过它写入，其存活期间 owner 也不能修改。可写视图必须使用 §2.4.2 明确准入的 `MutSlice<T>` 独占借用，不能由 `Slice<T>` 默默获得写权限。包括 `arr[:]` 在内的形式都不是逻辑副本；需要独立数据时写 `copy(arr[1:4])`。
+- 切片是一次借用：owner 在视图存活期间受 §2.4.2 的借用规则约束，视图本身不得逃逸出 owner 的作用域。完整规则见 §2.4.2。
+
+### 3.12 匿名函数与 Lambda
+
+xray 只有两个匿名函数概念：**arrow lambda** 与 **fn lambda**。单个、无标注的只读参数可省略括号，因此 `x -> expr` 与 `(x) -> expr` 是同一概念的两种括号拼写，而不是两种函数。两类都编译为相同的 `AST_FUNCTION_EXPR` 节点；差异在源代码可携带的签名信息。
+
+```ebnf
+AnonFunction  ::= ArrowLambda | FnExpression
+ArrowLambda   ::= Identifier '->' ArrowBody
+                | '(' ArrowParams? ')' '->' ArrowBody
+ArrowBody     ::= Expression | Block
+ArrowParams   ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam    ::= Identifier (':' ParamMode? Type)?
+ParamMode     ::= 'ref' | 'move'
+FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
+```
+
+```xray
+// ── arrow lambda：每个参数都可独立标注或推断 ──
+arr.map(x -> x * 2)
+var add = (x: i64, y) -> x + y
+
+// 表达式体隐式返回；ref 只授予可写借用，不会自动写回
+var calculate = (x: ref i64) -> x * 2
+var doubleInPlace = (x: ref i64) -> { x = x * 2 }
+
+// ── fn lambda：显式返回类型、泛型或完整参数契约 ──
+var inc = fn(x: i64) -> i64 {
+    var y = x + 1
+    return y
+}
+var identity = fn<T>(x: T) -> T { return x }     // 泛型
+```
+
+**选择规则**：
+
+| 概念 | 语法 | 能力与选择条件 |
+|------|------|----------------|
+| arrow lambda | `x -> expr` / `(x: T, y) -> expr` / `(x: ref T) -> { ... }` | 参数可逐个标注；返回类型始终推断；表达式体隐式返回，块体显式返回 |
+| fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | 需要显式返回类型、泛型或完整声明式签名时选择 |
+
+**关键规则**：
+- arrow 参数的类型标注相互独立，可以混写 `(x: i64, y) -> ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
+- 参数 mode 使用统一的后缀标注：`x: ref T`、`x: move T`。`(ref x) -> ...`、默认值和 rest 参数不是 arrow 语法；默认值和 rest 参数属于具名函数声明。
+- arrow 没有返回类型位置。`(x: T): R -> ...` 与 `(x: T) -> R { ... }` 都是错误；显式返回类型必须写成 `fn(x: T) -> R { ... }`。
+- `-> expr` 隐式返回表达式值。`-> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
+- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
+- 工具可对“源码显式写了 `ref`、函数体确定未修改该参数”的匿名函数给出非强制 hint。期望函数契约要求 `ref`、mode 来自推断或效果分析不完整时不提示；该提示不改变类型检查或运行时语义。
+- 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、已发布 const 值与受审计同步句柄可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move`。
+
+### 3.13 `match` 表达式
+
+```ebnf
+MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm ::= Pattern ('if' Expr)? '->' Expression
+```
+
+```xray
+var result = match (x) {
+    1 -> "one",
+    2, 3, 4 -> "few",                 // 多值
+    10..20 -> "teen",                 // 范围
+    n if (n > 100) -> "big",          // 守卫
+    Color.Red -> "red",               // 枚举
+    is User -> "a user",              // 类型模式
+    _ -> "default"                    // 通配符
+}
+```
+
+**语义**：
+- 自上而下匹配第一个成功的分支。
+- 所有分支表达式必须返回相同类型（或 union）。
+- **穷举性**：对 enum 变量（ADT 与简单枚举）编译器强制穷举。对其他表达式不强制，运行时无匹配抛 `PanicInfo(E0442)`。
+- 模式详见 [§6](#6-模式-patterns)。
+
+### 3.14 构造表达式
+
+```ebnf
+ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
+```
+
+构造与普通函数调用同形：`TypeName(args)`。`new` 是保留字，不构成合法表达式。
+
+```xray
+var p = Point(1.0, 2.0)
+var arr = Array<i64>()
+const ch = Channel<i64>(10)
+var m = Map<string, i64>()
+```
+
+**用于**：
+- 类与 struct 实例化（`TypeName(args)`）。
+- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Array<u8>`/`StringBuilder` 等，同样是 `TypeName(args)`）。
+- 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
+
+**与字面量的关系**：
+```xray
+var a = [1, 2, 3]              // 等价 Array<i64>() + push
+var m = #{}                    // 等价 Map<...>()
+var p = Point{x: 1, y: 2}      // struct literal
+```
+
+### 3.15 字符串插值
+
+详见 §1.6.5。简要：
+
+```xray
+var greeting = "Hello, ${name}! Age: ${user.age + 1}"
+```
+
+- `${...}` 内任意表达式（含函数调用、对象访问、算术）。
+- `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string / rune 字面量。
+- 表达式类型必须可转为字符串（实现 `toString()` 或为基本类型）。
+
+### 3.16 `yield` 语句
+
+```xray
+yield expr                  // 生成器产出一个值并挂起
+```
+
+`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`（协议见 §5.3.6）；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
+
+协作让出 CPU 使用 `Coro.yield()`（见 §10.10）；裸 `yield` 不是表达式。
+
+#### 3.16.1 产值与调度挂起
+
+yield expr交付一个拥有式元素并停驻producer；yield ()也交付一个真实Unit元素，不表示结束。Coro.yield()没有元素，只把当前activation交回执行器队列。两者都不会在宿主C栈上保留待恢复调用。
+
+hasNext()可以推进producer直到下一个产值、终态或真实外部等待；重复hasNext()保留缓存而不重复推进。next()转移一个元素的所有权，耗尽按§5.3.6报告E0432。消费可能沿producer遇到挂起，因此定义处不能承诺no_suspend；创建惰性Iterator本身不立即执行producer，也不立即继承其throw。
+
+#### 3.16.2 生成器等待与单消费者
+
+producer拥有独立frame，由原Instance执行器推进；I/O或Timer等真实等待暂停当前消费操作，不能把暂时无值解释为EOS。一个Iterator同一时间只接受一个驱动者。重入、自驱动、第二驱动以及外部取消的仲裁由真实owner、activation、世代和单次wake认证，不允许递归驱动后端。
+
+具体Source类型、操作、借用环境和平台的实现范围及未资格部分见§17.39；这不把尚未准入的await/select/Channel或并行平台路径声明为已实现。
+
+#### 3.16.3 提前放弃与已登记清理
+
+提前离开或丢弃Iterator不再执行producer的普通剩余body，但必须关闭它并执行已经登记而未完成的cleanup恰好一次。消费者取消和producer失败遵守相同退出驱动。最后外部owner释放只发布关闭请求，由原执行器迭代排空；Instance关闭必须在代码退休前完成排空，drop回调不递归执行后端。
+
+生成器允许defer，并沿用普通函数的登记、退出次序和禁止异步cleanup规则。未启动的producer没有执行登记，因此关闭不能凭空运行defer。物理内存释放不是语言cleanup执行的证据。Iterator不增加Source close()方法；内部关闭由生命周期和取消请求驱动。
+
+---
+
+## 4. 语句 (Statements)
+
+> 真值源：`src/frontend/parser/xparse_stmt.c`、`src/frontend/parser/xast_nodes_stmt.h`。
+
+Xray 语句以 `\n` 或 `;` 分隔；语句末尾的 `;` 在大多数位置可省略，仅 `for` 循环的初始化/条件/步进三段必须用 `;` 分隔。
+
+### 4.1 表达式语句与块
+
+```ebnf
+ExprStmt   ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
+Block      ::= '{' Statement* '}'
+```
+
+```xray
+foo()                  // 表达式语句
+x = 1                  // 赋值表达式作为语句
+x++                    // 自增语句；不产生表达式值
+{                      // 块
+    var y = 2
+    y + 1              // 表达式但结果被丢弃
+}
+```
+
+`++` / `--` 是纯语句或 `for` 步进项，只能写作 `name++` / `name--`。它们等价于 `name = name + 1` / `name = name - 1`，没有返回值；`var y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译失败。
+
+**注**：块**不是表达式**——它没有值。如果需要从块求值，用 `match` 或包装成立即调用函数。
+
+### 4.2 `if` / `else`
+
+```ebnf
+IfStmt ::= 'if' '(' Expression ')' Block ElseIfChain? ElseClause?
+ElseIfChain ::= ('else' 'if' '(' Expression ')' Block)+
+ElseClause  ::= 'else' Block
+```
+
+```xray
+if (x > 0) {
+    print("positive")
+} else if (x == 0) {
+    print("zero")
+} else {
+    print("negative")
+}
+```
+
+**约束**：
+- 条件**必须**用括号包裹（与 Go/Rust 不同）。
+- 条件必须是 `bool`；所有 nullable `T?`、裸 `i64` / `string` / 集合等均为编译错误，存在性须显式比较 `value != null`（见 §2.3.3）。
+- 分支体必须是块 `{...}`，**不允许**单语句省略括号。
+- `if` 不是表达式；要表达式形式用三元 `? :` 或 `match`。
+
+### 4.3 `while`
+
+```ebnf
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
+```
+
+```xray
+var i = 0
+while (i < 10) {
+    print(i)
+    i++
+}
+```
+
+无 `do-while` 形式。
+
+### 4.4 `for`（C 风格）与 `for-in`
+
+#### C 风格 `for`
+
+```ebnf
+ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
+ForInit ::= VarDecl | ExprStmt
+ForStep ::= Expression | Identifier ('++' | '--')
+```
+
+```xray
+for (var i = 0; i < 10; i++) {
+    print(i)
+}
+for (var j = 100; j > 90; j--) {
+    print(j)
+}
+```
+
+- `ForInit` 中声明的变量作用域限于循环体。
+- 步进项里的 `i++` / `i--` 必须是整个 step；若要多个更新，写在循环体末尾。
+- 三个部分都可省略：`for (;;)` 是无限循环。
+
+#### `for-in` 单变量
+
+```ebnf
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
+```
+
+`for-in` 迭代变量是每次迭代新建的不可变绑定；闭包捕获的是创建闭包时该轮绑定的值。
+
+内建 `Array<T>` 的集合表达式求值一次，遍历拥有该次逻辑值的快照；循环内修改或重绑原数组不改变当前序列。双变量索引是从零开始的 `i64`，`_` 不建立可引用绑定。元素为 class 时保留对象身份，不作对象深复制（§14.7）。绑定不接受类型注解。
+
+```xray
+for (item in [1, 2, 3]) { print(item) }
+for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
+for (ch in "hello") { print(ch) }             // 字符串字符（按 Unicode scalar）
+for (key in someMap) { print(key) }           // Map 单变量 → key
+for (key in jsonObject) { print(key) }        // JSON.Object 即 Map，单变量 → key
+for (color in Color) { print(color.name) }    // 仅无 payload enum；产出 Color 值
+for (variant in Event.variants) {             // 任意具体 enum；产出 EnumVariant<Event>
+    print(variant.name)
+}
+for (_ in 0..n) { count++ }                   // 占位符忽略
+```
+
+#### `for-in` 双变量解构
+
+xray 支持两种等价的双变量形式：
+
+```ebnf
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+```
+
+```xray
+// 形式 A：直接两标识符（更常见）
+for (k, v in someMap) { print("${k}=${v}") }     // Map → (key, value)
+for (i, e in someArray) { print("${i}: ${e}") }  // Array → (index, element)
+for (i, c in "hello") { print("${i}:${c}") }     // string → (index, rune)
+
+// 形式 B：元组括号包裹（与 .entries() 配合）
+for ((i, e) in someArray.entries()) { print("${i}=${e}") }
+for ((i, c) in "hi".entries()) { print("${i}-${c}") }
+```
+
+迭代来源与产出对应关系：
+
+| 集合类型 | 单变量产出 | 双变量产出 |
+|---|---|---|
+| `Array<T>` / `T[]` | element | (index, element) |
+| `Map<K, V>` | key | (key, value) |
+| `JSON.Object` / Map | key | (key, value) |
+| `string` | `rune` | (index, rune) |
+| `Range`（`a..b`） | i64 | — |
+| 仅含无 payload 变体的具体 enum 类型 `E` | `E` 的实际值（声明顺序） | — |
+| 含 payload 变体的 enum 类型 `E` | **编译错误**；使用 `E.variants` | — |
+| `EnumVariants<E>` | `EnumVariant<E>` 描述符（声明顺序） | — |
+| `EnumPayloads<E>` | `EnumPayloadField<E>` 描述符（声明顺序） | — |
+| 自定义 `Iterator<T>` | T | — |
+
+enum 类型域与 descriptor view 由编译器静态识别，不意味着 enum 实现 `Iterable`，也不会隐式构造数组或迭代器对象。`E` 必须是编译期可确定布局的具体 enum；未约束类型参数上的 `E.variants` 会被拒绝。详见 §5.6.5。
+
+#### 自定义迭代器
+
+实现 `iterator()` 方法返回 `Iterator<T>` 协议对象（含 `hasNext()` 和 `next()`）即可在 `for-in` 中使用。详见 §5.3.6。
+
+### 4.5 `match` 语句
+
+```ebnf
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+```
+
+**关键语法**：
+- 被匹配的表达式**必须**用括号包裹：`match (x) {...}`。
+- 分支之间的逗号**可选**——同一个 match 中可以混用（不写更常见）。
+- 守卫条件 `if` 后的表达式必须用括号：`n if (n > 0)`。
+
+```xray
+match (x) { 1 -> print("one"), _ -> print("other") }
+
+match (action) {
+    "start" -> {
+        log.info("starting")
+        start_engine()
+    }
+    "stop" -> stop_engine()
+    _ -> log.warn("unknown")
+}
+```
+
+`match` 既可作语句也可作表达式（详见 §3.13）；当作表达式时分支体必须是单一表达式或块的最后一个表达式。
+
+模式细节见 [§6](#6-模式-patterns)。
+
+### 4.6 `break` / `continue`
+
+```xray
+break                  // 跳出最内层循环
+continue               // 进入最内层循环的下一次迭代
+break outer            // 跳出标签为 outer 的循环
+continue outer         // 进入标签为 outer 的循环的下一次迭代
+
+outer: for (i in 0..10) {
+    for (j in 0..10) {
+        if (j == 3) { continue outer }
+        if (i * j > 20) { break outer }
+    }
+}
+```
+
+**约束**：
+- 必须在 `while` / `for` 内部；否则编译错误 `E0304` / `E0305`。
+- `match` 内部的 `break` / `continue` **不**作用于 `match`，而是跳出包裹 `match` 的循环。
+- 循环标签写作 `label: for (...)` 或 `label: while (...)`，只能标在循环上；`label:` 后接非循环语句是编译错误。
+- `break label` / `continue label` 必须引用当前活跃的外层循环标签；未知标签或同一活跃循环栈中重复标签是编译错误。
+- 无标签 `continue` 作用于最内层循环；带标签 `continue` 作用于目标循环：`while` 重新检查条件，C 风格 `for` 执行 step 后再检查条件，`for-in` 进入下一项。
+
+### 4.7 `return`
+
+```ebnf
+ReturnStmt ::= 'return' ReturnValue? (';' | LineBreak)
+ReturnValue ::= Expression | '(' Expression (',' Expression)+ ')'
+```
+
+```xray
+fn done() {
+    return                 // 隐式返回 ()（Unit）
+}
+
+fn answer() -> i64 {
+    return 42
+}
+
+fn pair(a: i64, b: i64) -> (i64, i64) {
+    return (a, b)          // 多返回值，必须用括号包裹元组
+}
+```
+
+> **注意**：多返回值必须用元组形式 `return (a, b)`；裸逗号 `return a, b` 是编译错误（`E0801`）。
+
+**约束**：
+- 只能在函数体内（含闭包）；顶层 return 是编译错误 `E0306`。
+- 返回值类型必须与函数声明的返回类型兼容。
+
+### 4.8 `throw` / `try` / `catch`
+
+```ebnf
+ThrowStmt     ::= 'throw' Expression
+
+TryStmt       ::= 'try' Block CatchClause+
+CatchClause   ::= 'catch' '(' CatchHeader ')' Block
+                | 'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader   ::= Identifier (':' Type)?
+                | EnumPattern (',' EnumPattern)*
+```
+
+```xray
+enum AppError { NotFound, Timeout { milliseconds: i64 } }
+
+// 可恢复错误：enum 值经值返回通道传播，由 catch (e) 捕获
+try { throw AppError.NotFound } catch (e) {
+    match (e) {
+        AppError.NotFound -> log.error("not found"),
+        AppError.Timeout { milliseconds: ms } -> log.error("timeout after ${ms}ms")
+    }
+}
+
+// catch panic (p) 是运行时故障（除零、越界、expr!）的独立边界
+try { risky() } catch panic (p) {
+    log.error("fault:", p)
+}
+
+throw AppError.NotFound                      // 值返回错误通道
+// 没有 finally；用 defer 做确定性清理（见 §4.9）
+```
+
+**语义**：
+- `try` 必须至少跟一个 `catch` 或 `catch panic` 子句。
+- `catch (e)` 捕获经值返回通道传播的可恢复错误（用户 `throw <enum>`）；用 `match (e)` 解构错误值。
+- `catch (e: T)` 按具体 enum 类型过滤，`catch (Enum.Variant { … })` 按同一 enum 的 variant pattern 过滤（见 §8.1.2）；普通 `catch` 的头部必须写在括号内。
+- `catch panic (p)` 捕获运行时故障（除零、越界、`expr!`、`assert`），与可恢复错误严格分离。
+- `throw` 的操作数是错误值（通常为 enum），经值返回通道传播：不分配 `PanicInfo`、不展开栈；需要传播或捕获错误的调用边界只经过可预测分支。
+- 没有 `finally`：用 `defer`（§4.9）做确定性清理。
+- 完整错误语义见 [§8](#8-错误处理-error-handling)。
+
+### 4.9 `defer`
+
+```ebnf
+DeferStmt ::= 'defer' Block
+```
+
+```xray
+fn read_file(path: string) -> string {
+    var f = open(path)
+    defer { f.close() }              // 函数返回前必执行
+    return f.readAll()
+}
+
+fn process() {
+    defer {
+        log.info("done")
+        cleanup()
+    }
+    do_work()
+}
+
+fn late_binding_and_copy() {
+    var n = 1
+    defer { print("late", n) }        // 退出时读取 2
+    const saved = copy(n)
+    defer { print("saved", saved) }   // 显式副本保持 1
+    n = 2
+}                                      // 输出 saved 1，再输出 late 2
+```
+
+**语义**：
+- `defer` 仅接受块；调用表达式、赋值、裸值及其他非块正文都是语法错误。
+- 块体在退出时执行，并读取届时的局部绑定值（late binding）。需要注册时值时，必须先用 `copy(...)` 或普通值绑定创建显式副本，再在块中读取该副本。
+- cleanup 块读取的可移动 owner 会形成持续到所属块退出的词法 loan；在此之前 `move` 或返回该 owner 报 `E0382`。普通重绑定/修改仍然允许。
+- `defer` 绑定到包含它的**最近真实块** `{ ... }`。函数体本身也是块，因此写在函数体顶层的 `defer` 仍在函数退出前执行。
+- **LIFO**：同一块内多个 `defer` 按声明的逆序执行。
+- **必执行**：所属块正常结束，或通过 `break`、`continue`、`return`、值错误传播、panic 展开退出时都执行。
+- 循环体内的 `defer` 每轮迭代结束时执行，不会堆积到函数尾。
+- `defer` 是 Xray 唯一的确定性清理机制（取代其他语言的 `finally`）：它绑定词法块退出边，而不是整个函数的单一栈尾。
+- **`defer` 体不得让错误逃逸**：cleanup 块的推断逃逸错误集非空时报 `E0387`；错误须在 `defer` 体内用 `try` / `catch` 消化。静态判定不了的由运行时 `E0443` 兜底终止。完整规则见 §8.3.1。
+- cleanup 块不得直接或传递地挂起、创建任务、`return` 外层函数，或 `break` / `continue` 到块外目标；动态未知调用在产生调度或派生副作用前由运行时 fail-closed。
+- cleanup 块可包含本地分支、循环、本地 `try` / `catch` 和嵌套 `defer`；嵌套 cleanup 同样按 LIFO 执行。
+
+### 4.10 内置打印函数
+
+`print` / `dump` 是**内置全局函数**（非关键字，详见 §13.1），列于此处便于查阅：
+
+```xray
+print("hello")                 // 追加恰好一个换行
+print("a:", a, "b:", b)        // 多参以恰好一个空格分隔
+print()                        // 只输出一个换行
+dump(some_obj)                 // 调试输出，含类型信息与结构布局
+```
+
+**行为说明**：
+- 接受任意类型与任意数量参数（变长）；每个参数自动调用其 `toString()` 或内置格式化。
+- 参数从左到右求值，各求值一次，全部求值完成后才开始渲染。
+- 多参时以恰好一个空格分隔。
+- 末尾恰好追加一个换行；`print()` 无参数时只输出这一个换行。
+- 输出到 stdout。格式化会调用用户代码，因此 `print` 可能因此 panic；它没有自己的错误通道。
+- `dump` 用于调试，输出格式包含类型标注与对象内部结构。
+### 4.11 完整可运行示例
+
+综合 `if` / `match` / `for-in` 的控制流：
+
+```xray
+fn classify(n: i64) -> string {
+    if (n < 0) { return "negative" }
+    return match (n) {
+        0 -> "zero"
+        1..=9 -> "small"
+        _ -> "large"
+    }
+}
+
+fn main() {
+    for (i in [-1, 0, 5, 100]) {
+        print(classify(i))
+    }
+}
+
+main()
+```
+
+输出：
+
+```
+negative
+zero
+small
+large
+```
+
+---
+
+## 5. 声明 (Declarations)
+
+> 声明语法锚点：`src/frontend/parser/xparse_decl.c`、`src/frontend/parser/xast_nodes_decl.h`。本章语言合同由前端统一检查；当前新 XIR 声明族实现资格见 §17，不能由旧 analyzer 行为替代本章规则。
+
+### 5.1 `var` / `const`
+
+```ebnf
+VarDecl ::= 'var' Binding
+ConstDecl ::= 'const' Binding
+Binding ::= Pattern (':' Type)? ('=' Expression)?
+Pattern ::= Identifier
+         | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
+         | '(' (BindingPattern ',' (BindingPattern (',' BindingPattern)* ','?)?)? ')' // tuple or Unit destructure
+         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
+ObjectBinding ::= Identifier (':' Identifier)?
+```
+
+#### 5.1.1 `var` — 可变绑定
+
+```xray
+var x = 1                         // 类型推断为 i64
+var name: string = "Alice"        // 显式类型
+var count: i64                    // 仅声明无初值：使用零值
+var maybeName: string?            // OK：默认 null
+var empty: string = ""            // string 必须显式初始化
+```
+
+- 可重新赋值。
+- 必须有初值**或**类型标注；否则编译错误 `E0303`。
+- 无初值只允许 **default-initializable** 类型：数值类型默认 `0` / `0.0`，`bool` 默认 `false`，`()` 默认 unit，`T?` 默认 `null`，struct 仅当所有字段都可默认初始化时允许。
+- 非 nullable 的 `string`、class instance、`Array` / `Map` / `Set`、`Channel`、`Task`、function / closure、interface / union 等必须显式初始化。`var a: Array<T>` 不默认构造空数组。
+
+#### 5.1.2 `const` — 不可变绑定
+
+```xray
+const PI = 3.14159
+const MAX_LEN: i64 = 1024
+```
+
+- **必须**有初值，不能重新赋值（编译错误 `E0303`）；类型可推断或显式标注。
+- 与 `var` 一样，每条声明绑定一个名字或解构模式。多个独立名字使用多条声明；相关值可用 `const (a, b) = pair` 解构。
+- `const` 固定绑定及其值语义部分：不得经该绑定改写 Array 元素、追加元素或修改值类型字段。普通 `const snapshot = source` 合法并保留逻辑副本，不要求显式 `move` / `copy` 或源数组 backing 唯一。
+- 值语义在 class 和同步身份边界停止。`const xs = [Counter()]` 不冻结 Counter；普通 class 方法仍可修改所引用的对象。经一个可写副本替换数组元素，不影响 `xs` 的元素。
+- `Channel`、`Atomic`、`Mutex` 等受审计同步句柄可用 `const` 固定绑定；其受审计 API 仍可改变同步保护的内部状态。`const` 本身不是 Sendable 或并发安全的证明。
+- 从只读可复制值保存到 `var` 时得到可写的逻辑副本；不能借此取得原 place 的可写借用，或解除 class 对象自身的权限限制。
+
+```xray
+const channel = Channel<i64>(16)
+const counter = Atomic(0)
+
+var source = [1, 2, 3]
+const snapshot = source
+source[0] = 9
+var current = snapshot
+current.push(4)
+print(snapshot[0])          // 1
+print(len(snapshot))        // 3
+```
+
+`const` 只修饰绑定或字段。通用类型形式 `const T` 已删除：参数、返回类型、类型别名、字段类型、函数类型、元组、union 和泛型实参中的旧拼写均为语法错误，不产生类型身份、隐式转换或兼容别名。只读权限沿值语义部分传播，并在 class 或同步身份边界停止；不能沿用旧的整个图深冻结规则。普通值 `copy(array)` 的公开拼写和可复制值的独立 `move` 表达式同样不作为上述绑定规则的前置条件，见 §2.14.5。
+
+这些是语言合同；完整声明族的当前新 XIR 实现资格见 §17，不因本节示例而宣称实现完成。跨执行共享还须满足 §10 的类型与边界合同。
+
+#### 5.1.3 解构绑定
+
+```xray
+// 数组解构
+var [a, b, c] = [1, 2, 3]
+var [first, , third] = [10, 20, 30]         // 跳过元素
+
+// 元组解构（多返回值）
+var (q, r) = divmod(17, 5)
+
+// 对象解构（按字段名提取，可重命名本地绑定）
+var { name, age } = { name: "Alice", age: 30 }
+var { name: localName, age } = { name: "Alice", age: 30 }
+```
+
+约束：
+- 解构变量数必须匹配（除 rest 模式外）。
+- 对象解构字段名必须是 `Identifier`；`field: localName` 只改变本地绑定名，不改变被读取的字段名。
+
+当前新 XIR 准入平坦 Tuple 的 `var` / `const` 解构：名字或 `_` 叶、精确有序 arity、Unit 和必须带逗号的 singleton，适用于局部、模块及闭包捕获。RHS 只求值一次，所有 FIELD / Cell / 持有准备先于整组绑定发布；模块通过共同 SLOT_GROUP_INIT 原子发布，首个 trace 可观察全部 slots。`_` 不建立名字；泛型定义按原约束检查，不因解构取得额外权限。嵌套 pattern、rest、数组/对象解构、spread 与 match 仍是独立合法未实现责任，当前入口明确拒绝；平坦子片不代表全部解构已完成。叶上类型注解当前尚未准入。精确准备、失败及发布合同见 §17.35。
+
+### 5.2 `fn` 函数声明
+
+```ebnf
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+ParamList ::= Param (',' Param)*
+Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
+            | '...' Identifier ':' Type
+ParamType ::= ParamMode? Type
+ParamMode ::= 'ref' | 'move'
+ReturnType ::= '->' Type
+            |  '->' '(' Type (',' Type)+ ')'   // 元组返回
+TypeParams ::= '<' Identifier (',' Identifier)* '>'
+AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+```
+
+#### 5.2.1 基本形式
+
+```xray
+fn add(a: i64, b: i64) -> i64 {
+    return a + b
+}
+
+fn greet(name: string) -> () {         // 显式 Unit
+    print("Hi ${name}")
+}
+
+fn echo(x: i64) {                       // 省略返回类型 = ()
+    print(x)
+}
+```
+
+**关键**：
+- 参数**必须**带类型标注（与箭头函数一致）。
+- 返回类型省略 = `()`（Unit）；推荐显式标注以增强可读性。
+- 函数体必须是块。
+
+#### 5.2.2 默认参数值
+
+```xray
+fn connect(host: string, port: i64 = 8080, tls: bool = false) {
+    print(host, port, tls)
+}
+
+connect("localhost")              // port=8080, tls=false
+connect("localhost", 443)         // tls=false
+connect("localhost", 443, true)
+```
+
+- 默认值在**调用点**求值：省略某个尾部参数时，编译器在该调用点补入默认表达式，按实参顺序、每次省略调用各求值一次。
+- 显式传 `null` 就是传入 `null`，**不会**触发默认值（默认值只在参数被省略时使用）。
+- 有默认值的参数必须在尾部连续出现。
+- 默认参数只作用于**具名函数/方法/构造器的直接调用**。通过函数值（函数类型变量）的间接调用不携带默认表达式，必须传入全部实参。
+- 默认表达式在声明方模块、类型参数和成员权限作用域内按参数类型检查，包括未使用的声明；不引用调用方局部变量。本次调用的形参（包括前面的形参）及 `this` 不在默认表达式作用域内。普通泛型只使用定义处约束，不因某个具体实例而获得额外能力。
+- 接收者或被调用表达式先求值，然后显式实参从左到右求值，最后省略的尾部参数按声明顺序各求值一次。显式实参不执行对应默认表达式。默认表达式可以有普通已准入函数效应；挂起、失败和拥有式结果清理遵循普通调用规则，失败不回滚先前副作用，也不进入尚未开始的被调用函数体。
+- 默认表达式可以使用声明方可访问的私有名称；导出调用方不因此获得这些名称的直接访问权限。默认表达式先在声明处检查，再通过同一 Checked 特化与复验管线执行；不能依靠调用方重新绑定名称或运行时 AST 展开绕过权限。构造参数默认值在字段默认初始化及构造器体之前执行，不可观察部分构造的 `this`。
+
+- 普通泛型调用先从显式参数和已有结果期待完成实参推导及完整约束验证，再计算缺省参数；被省略的默认表达式不额外提供调用方类型推导证据。默认表达式自身仍在声明处按泛型参数类型及原约束检查。
+- 默认表达式的计算效应不继承被调用函数或构造器体的效应承诺。期待返回 `no_suspend` callable 只约束该 callable，不自动约束计算它的表达式；构造器体的 `no_suspend` 不自动禁止在调用方先计算的默认值挂起。完整求值仍须符合实际调用方的效应承诺。
+
+#### 5.2.3 多返回值
+
+```xray
+fn divmod(a: i64, b: i64) -> (i64, i64) {
+    return (a / b, a % b)
+}
+
+var (q, r) = divmod(17, 5)
+var result = divmod(10, 3)        // result 类型 (i64, i64)
+```
+
+**约束**：
+- 返回类型用括号包裹元组：`(i64, bool)`。
+- 单返回值不写括号：`: i64`。
+- `return (a, b)` 必须带括号；裸逗号 `return a, b` 是编译错误（`E0801`）。
+
+#### 5.2.4 参数模式
+
+普通参数默认为 READ；写借用使用 `name: ref T`，不可复制资源的消费交接使用 `name: move T`。参数模式属于声明合同，不由具体 ABI 是传值、指针还是句柄决定。
+
+```xray
+fn length_sq(v: Vec2) -> f64 {
+    return v.x * v.x + v.y * v.y
+}
+
+fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
+    v.x += dx
+    v.y += dy
+}
+
+fn appended(xs: Array<string>, value: string) -> Array<string> {
+    var result = xs
+    result.push(value)
+    return result
+}
+
+translate(ref point, 1.0, 2.0)
+```
+
+| 参数模式 | 语义 |
+|--|--|
+| 无（READ） | 参数绑定不可重绑，其值语义部分只读；可复制、可保存的值可以保存或返回逻辑副本 |
+| `ref` | 独占可写 place 借用，修改回写调用方；调用点必须写 `ref place` |
+| `move` | 仅用于不可复制类型，转移持有权及最终析构责任；调用是否消费由声明模式决定，`move value` 可选标明该转移 |
+
+READ Array 参数不能直接索引写入、调用 `push` 或重绑参数；保存到本地 `var` 后可以修改副本，原实参不受影响。保存可复制值不等于允许借用逃逸；视图或不可复制资源不能借此成为普通拥有式副本。READ class 参数同样不能重绑，但可调用修改同一对象的方法，不能把 READ 解释为整个可达图不可变。
+
+`ref` 实参必须是类型精确匹配的可写 place，不能是 `const`、只读参数或临时值；`ref` 类型不变。调用先按 §3.0 E2 完成 receiver 与全部实参求值，再建立独占借用，覆盖检查、必要的 COW 分离、修改及回写。不得提前借用 receiver 而拒绝 `a.push(a[0])`。赋值仍遵循 E5 的位置子表达式、索引、右值、存储顺序。
+
+可复制类型（包括 Array）不能声明 `move` 参数或 receiver；不可复制资源的初始化、消费后使用和活动借用仍须检查，详见 §2.14.5。资源声明族和完整 `ref` / 视图调用的当前实现资格见 §17，不能由该语言合同推定已经实现。
+
+普通输出使用返回值、tuple 或 struct；业务错误按 §8 的类型化 `throw` / `catch` 通道处理，不引入全局 `Result<T,E>`。C ABI 输出位置使用 `MutPtr<T>`，不把输出参数模式引入普通 Xray 函数。
+
+#### 5.2.5 rest 参数
+
+```xray
+fn sum(...nums: i64) -> i64 {
+    var total = 0
+    for (n in nums) { total += n }
+    return total
+}
+
+sum(1, 2, 3)        // total = 6
+```
+
+- rest 参数在参数列表**最后**。
+- 类型 `...T` 内部实际是 `Array<T>`。
+- 只能有一个 rest 参数。
+
+#### 5.2.6 函数提升
+
+```xray
+main()                       // OK：函数声明被提升
+
+fn main() { ... }
+```
+
+- 顶层 `fn` 声明被提升到当前作用域顶部。
+- `var f = (x: i64) -> x`（赋值给变量的箭头函数）**不**提升。
+
+#### 5.2.7 尾递归优化
+
+Xi 优化器会把可证明的自尾调用改写为循环；VM 也有常量栈空间的 tail-call opcode。不要把这一点理解为所有后端、所有间接/互递归调用的通用常量栈保证：构造调用和无法证明安全的调用仍按普通调用执行。详见 [§17](#17-编译流水线-compilation-pipeline)。
+
+```xray
+fn factorial(n: i64, acc: i64 = 1) -> i64 {
+    if (n <= 1) { return acc }
+    return factorial(n - 1, acc * n)     // 尾调用：自动优化为循环
+}
+```
+
+#### 5.2.8 程序入口
+
+xray **没有隐式 `main` 入口**：脚本/模块从顶层开始顺序执行，遇到 `fn` 声明被提升注册，遇到表达式或语句被立即执行。
+
+```xray
+// hello.xr
+print("loading")          // 顶层语句，立即执行
+fn greet() { print("hi") }
+greet()                   // 必须显式调用
+```
+
+- `fn main()` 没有任何特殊含义；如需手动调用，写 `main()`。
+- 顶层不允许 `return`（编译错误 `E0306`）。
+- 多文件项目的入口由 `xray.toml` 的 `[project]`（或 package manifest 的 `[package]`）中的 `main` 字段指定，例如 `main = "src/main.xr"`；对应文件按上述脚本规则执行。
+
+#### 5.2.9 `extern "C"` C FFI 声明块
+
+`extern "C"` 块只声明共享 C ABI 的外部**函数符号**。外部函数没有 Xray 函数体，调用点必须显式写在 `unsafe { }` 内：
+
+```xray
+extern "C" {
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+    fn cos(x: f64) -> f64
+}
+
+var p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(cos(0.0))
+    free(p)
+}
+```
+
+库、目标、symbol rename、原生源码/对象、typed flags、hash 与许可证都属于 `xray.toml` 的 NativePackagePlan，不写在普通源码中。`extern "C"` 不允许 `dylib/link` 子句、函数体、data/global，也不允许在块内声明 struct/union/packed/flex。
+
+C ABI 聚合使用普通 Xray struct，并由 manifest 的 `[[native.layout]]` 绑定 C header/type。构建器生成 `sizeof`、`_Alignof` 与 `offsetof` 静态断言；任何不一致都在链接前失败：
+
+```xray
+import mem
+
+struct CHeader {
+    tag: u8
+    count: u32
+}
+
+print(mem.sizeOf<CHeader>())
+print(mem.alignOf<CHeader>())
+print(mem.offsetOf<CHeader>("count"))
+```
+
+规则：
+- ABI 字符串必须显式写出；当前唯一支持值是 `"C"`。
+- extern 块内函数只能声明签名，不能带 `{ }` 函数体；普通函数必须带块体。
+- 每个声明必须在 NativePackagePlan 中有唯一 symbol mapping 与完整 typed contract；shipping package 缺合同、hash、目标或来源信息时 fail closed。
+- C 输出指针先写入 raw `Buffer`。成功路径仅可在 `unsafe` 中调用 `mem.assumeInitialized<T>(move buffer)`；编译器要求 exact size/alignment、完整 output validity、success-path dominance 与 header layout evidence。失败/partial write 不能物化为 `T`。
+- 普通 Xray 函数没有 output parameter mode，返回值统一写 `return value`，不写 `return move value`。
+- 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、Slice/layout 查询与 header verifier共用 size/alignment/field-offset 结果。
+- 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`f32` / `f64`、`usize` / `isize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
+- C 回调参数必须写成 `CFn<fn(A, B) -> R>`，不能使用普通 xray 函数类型 `fn(A, B) -> R`。
+- 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
+
+```xray
+extern "C" {
+    fn bsearch(
+        key: Ptr<u8>,
+        base: Ptr<u8>,
+        count: usize,
+        size: usize,
+        cmp: CFn<fn(Ptr<u8>, Ptr<u8>) -> i32>
+    ) -> Ptr<u8>
+}
+
+fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
+    return 0
+}
+
+// zeroCmp 是模块级非捕获函数，可作为 CFn 回调。
+```
+
+#### 5.2.10 Manifest C ABI 导出
+
+模块级 Xray 函数在源码中保持普通 `fn`；是否导出 C ABI、导出符号与可见性都由 `xray.toml` 的 typed export plan 指定：
+
+```xray
+fn add(a: i32, b: i32) -> i32 {
+    return a + b
+}
+
+print(add(19, 23))        // Xray 内部仍是普通函数调用
+```
+
+```toml
+[[export.c]]
+xray = "add"
+symbol = "xr_add_i32"
+visibility = "default"
+header = true
+```
+
+规则：
+- `xray` 必须唯一解析到模块级、有函数体的普通函数；方法、匿名函数、嵌套函数与 extern 声明不能成为导出目标。
+- `symbol` 必须是非空 C identifier；同一 AOT bundle 的 Xray target 与 C symbol 均不得重复。
+- 当前支持的导出边界类型是 `bool`、精确整数、`f32` / `f64`、`usize` / `isize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
+- 当前不直接导出 Xray managed value 或 by-value aggregate；与 C 共享结构体内存时通过 `Ptr<T>` / `MutPtr<T>` 传递地址。
+- `xray build --native --c-header FILE` 为 `header = true` 的 export 生成 C 原型；`--shared` 只接受无需 runtime 初始化的 scalar/raw-pointer 边界。
+- export plan 只选择导出目标，不绕过 ABI verifier，也不改变 VM 语义或普通 Xray 调用。
+
+#### 5.2.11 推导 effect 与 `xray verify` 合同
+
+分配、错误集、挂起、阻塞、panic/abort 与 AOT residue 全部由编译器推导，不由源码注解声明；需要发布或性能门禁时，把要求写入版本化合同：
+
+```toml
+version = 1
+
+[[function]]
+symbol = "math.addOne"
+scope = "semantic"
+requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
+
+[[function]]
+symbol = "codec.hotAdd"
+scope = "backend"
+backend = "aot"
+target = "aarch64-apple-darwin"
+profile = "release"
+requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+
+[function.shape]
+forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
+allow = []
+```
+
+运行 `xray verify --contract perf-contracts.toml`。合同只验证已有语义/effect 与目标产物形状，不授予优化许可，也不能改变运行语义。semantic 合同可与目标无关；backend/shape 合同必须写出具体 backend、target 与 profile。动态调用、native unknown、缺失 symbol 或不完整证明均 fail closed，并报告 witness。
+
+**native unknown 的含义**：无函数体的 `extern "C"` 声明没有可推导的 Xray 语义，唯一可采信的证据是 `xray.toml` 中该 symbol 的 `[native.symbol.contract]`。契约声明 `allocation` / `suspend` 等字段时，这些字段作为公理进入被调用方的 effect 结论；没有完整契约时，相应语义位标记为 unknown，任何覆盖它的合同 fail closed。**空的函数体不是证明。**
+
+**推导覆盖面**（状态：部分实现）：`requires` 目前只有 `no_semantic_alloc`、`no_suspend`、`no_throw`（semantic scope）与 `no_runtime_heap`（backend scope）由真实分析 pass 支撑。`no_block`、`no_thread_block`、`no_panic`、`no_abort` 所对应的语义 effect 位当前没有任何 pass 推导，因此 `xray verify` 拒绝这四项并报告"无推导来源"，而不是空真地通过。相应分析实现后，这四项才会被接受。
+
+#### 包拥有的声明承诺（实现待接通）
+
+项目或包可在其根目录的 `xray.toml` 中声明稳定的函数接口义务。该区与 `xray verify` 要求及 native provider 公理分开：每条 Xray 承诺必须在定义处由同一 Checked 检查器证明，不能从某次特化或被选函数的推导结果反向取得。
+
+```toml
+[declarations]
+version = 1
+
+[[declarations.function]]
+module = "src/worker.xr"
+name = "apply"
+no_suspend = true
+no_suspend_parameters = ["callback"]
+
+[[declarations.function]]
+module = "src/box.xr"
+owner = "Box"
+name = "get"
+no_suspend = true
+```
+
+没有 `declarations` 区表示没有此载体提供的显式承诺；存在时，必须包含整数 `version = 1` 和非空 `function` 记录数组。该区及记录中的未知字段、未知版本或错误类型均拒绝，不默默忽略。每条记录必须有非空 `module` 和 `name`；`owner` 省略表示顶层函数，出现时必须为非空且精确的声明名。`no_suspend` 只接受布尔 `true`；`no_suspend_parameters` 出现时必须为非空、无重复的显式参数名数组。每条记录至少提供函数自身义务或参数义务；同一 module/owner/name 只能有一条记录。
+
+`module` 是所属 authority 根内的、使用 `/` 的 `.xr` 逻辑文件路径，不是 import alias 或 canonical identity。绝对路径、反斜杠、空路径段、`.`、`..`、另一包的 namespace 及物理解析后越出根的路径均拒绝。参数名在定义处绑定，排除 instance receiver；缺失、歧义、非 callable 参数拒绝。当前新 XIR 载体支持顶层函数、精确名义 owner 下的普通 instance/static 方法，以及精确接口 owner 下已准入的普通 read 方法要求。接口选择器绑定要求签名，全部 manifest 签名承诺先于显式实现映射检查完成；实现方法必须在定义处证明对应义务。构造器、清理器和合成辅助函数不能由外部选择器命名。尚未准入的声明族及嵌套/返回 callable 限定不因本子集从语言目标中删除。
+
+每份 manifest 只约束它所属项目或包，消费者不能加强导入包的承诺，不向父目录搜索或继承另一份声明区。选择不给予私有访问、字段或构造权限，也不改变泛型定义处约束。全部显式记录都必须解析到实际定义并检查，包括未调用或未被当前入口 import 的目标；但额外的包级检查不能增加入口运行图中的初始化模块或副作用。Checked 发布身份保留已证明的义务，特化和生成内容复验不可以增删承诺。该公开载体尚未接通产品入口，不能把示例视为现有 CLI 已支持的配置。
+
+#### 完整可运行示例
+
+当匿名函数字面量直接处于已声明的 `no_suspend` callable 期望上下文时，该上下文为这个新函数建立必须验证的承诺。函数体在定义处按当前泛型约束检查，未知或可能挂起的调用均拒绝；特化不得补足缺失证明。捕获的普通 callable 不会因此获得承诺。该规则不添加源码效应注解，不把 `verify` 性能要求当作声明，也不允许将已构造的普通函数值按实现体推导强化；脱离受限上下文的匿名函数仍是普通 callable。
+
+默认参数表达式采用参数声明的相同期望类型，并在定义处检查，即使没有调用省略该参数。返回受限 callable 不意味着默认值计算过程也承诺不挂起；省略参数时，默认值计算的效应仍属于调用方。
+
+闭包捕获与高阶函数：
+
+```xray
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
+    return f(x)
+}
+
+fn main() {
+    var base = 10
+    var addBase = fn(x: i64) -> i64 { return x + base }   // 闭包捕获 base
+    print(addBase(5))            // => 15
+    print(apply(addBase, 7))     // => 17（函数作为参数传入）
+}
+
+main()
+```
+
+多返回值（元组）：
+
+```xray
+fn divmod(a: i64, b: i64) -> (i64, i64) {
+    return (a / b, a % b)
+}
+
+fn main() {
+    var (q, r) = divmod(17, 5)
+    print(q)   // => 3
+    print(r)   // => 2
+}
+
+main()
+```
+
+### 5.3 `class` 声明
+
+class 具有身份，赋值与保存参数只复制引用。class 方法不写 `ref` / `move` receiver；经只读参数或 `const` 绑定调用普通方法仍可修改对象，但不能重绑该参数或绑定。class 字段的 `ref` / 视图访问须保活对象并检查动态独占；局部无冲突证明只可消除检查，不能改变权限合同。
+
+```ebnf
+ClassDecl ::= 'final'? 'class' Identifier TypeParams?
+              ('extends' Identifier TypeArgs?)?
+              ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
+              '{' ClassMember* '}'
+ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
+FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
+            |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' Block          // 参数类型可省
+Modifier ::= 'private' | 'protected' | 'static' | 'const'
+```
+
+> **关于默认公开可见性和显式覆写**：
+>
+> - 公开是**默认可见性**——所有未带 `private` / `protected` 的字段/方法都是公开的；语言没有 `public` 修饰符。
+> - 可见性受**编译期强制**：从类外访问 `private` / `protected` 成员、或从非子类访问 `protected` 成员，均报 `E0377`。
+> - 实际覆写必须声明 `override`：编译器独立验证父类链中非私有实例方法的名称、签名和 receiver 权限；漏标、无对应目标或合同不匹配均拒绝。
+> - 单纯实现接口方法不写 `override`。不支持 `abstract` / `final method`；同名不同签、字段/方法隐藏、静态方法隐藏均为编译错误。
+>
+> 标准库和回归测试一致采用"省略默认修饰符"风格。
+
+#### 5.3.1 基本类
+
+```xray
+class Animal {
+    name: string                       // 字段
+    private _age: i64 = 0              // 私有字段，可有默认值
+
+    init(name: string) {
+        this.name = name
+    }
+
+    speak() -> string {
+        return "..."
+    }
+
+    static create(name: string) -> Animal {
+        return Animal(name)
+    }
+}
+
+var a = Animal("Rex")
+print(a.speak())
+print(Animal.create("Bob").name)
+```
+
+#### 5.3.2 继承
+
+```xray
+class Dog extends Animal {
+    init(name: string) {
+        super(name)                    // **必须**首语句（仅限派生类）
+    }
+
+    override speak() -> string {         // 显式覆写父方法
+        return "woof"
+    }
+}
+```
+
+**约束**：
+- 派生类构造器**第一行**必须是 `super(...)`（除非未声明构造器）；否则编译错误。
+- 不能在 `super(...)` 之前访问 `this`。
+- **覆写父类方法必须写 `override`**；该修饰符只用于类实例方法，不用于字段、构造器、静态方法、struct 或 enum。顺序为可选可见性、`override`；class 方法不声明 `ref` / `move` receiver。
+- 同名不同签不是重载，也不是隐藏；必须改名或使用默认参数 / 命名工厂。
+- 父类标 `final class` 则不可继承。
+- `super.method()` 可在重写的方法体内调用被屏蔽的父类方法。
+
+#### 5.3.3 修饰符
+
+| 修饰符 | 适用 | 语义 |
+|--|--|--|
+| （无） | 字段/方法 | 默认 public——公开可见 |
+| `private` | 字段/方法 | 仅声明类内部可访问（含同类其它实例）；子类与外部访问均报 `E0377` |
+| `protected` | 字段/方法 | 声明类及其子类内部可访问；外部访问报 `E0377` |
+| `override` | 类实例方法 | 必须匹配非私有父方法的签名与 receiver 权限；不可降低为 private |
+| `static` | 字段/方法 | 类级别，不属于实例；调用为 `ClassName.method()` |
+| `const` | 字段 | 不可变字段——只能在声明类的构造器中经 `this` 赋值一次，之后重写报 `E0378` |
+| `final` | 类声明前缀 | `final class C` 禁止继承；`final` 不用于字段或方法 |
+
+**修饰符可组合**：`private const secret: string = "key123"`、`protected static counter: i64 = 0`。
+
+静态方法通过声明类型限定访问，例如 `Box<i64>.make(value)` 或 `module.Box<i64>.make(value)`；实例限定的静态访问和类型限定的实例方法调用/取值均非法。局部同名绑定按正常名称解析遮蔽类型。静态方法没有隐式接收者，体内及默认参数中不提供 `this`。类型实参属于声明类型；方法自身的类型实参属于方法，不能互相代替。普通泛型体按定义处约束检查，实例化不得扩大可见性或构造权限。
+
+静态方法的直接调用沿用尾部默认参数、从左到右求值、效应、挂起和失败清理合同；其函数值不捕获接收者，间接调用必须提供完整签名参数。私有静态方法以及静态工厂中的私有构造操作按声明所有者授权；公开工厂不会使调用方获得私有成员的直接访问权。返回值沿用普通函数的值语义和所有权规则。静态字段、静态初始化及继承规则不由静态方法准入隐式开启。
+
+> `const` = 不可变字段/绑定，`final class` = 禁止继承。字段不可变只用 `const`；对字段或方法写 `final` 会报错。
+
+#### 5.3.4 构造器
+
+```xray
+class Point {
+    x: f64
+    y: f64
+    init(x: f64, y: f64) {
+        this.x = x
+        this.y = y
+    }
+}
+
+// 参数类型可省（从同名字段推断）
+class Vector2 {
+    x: f64
+    y: f64
+    init(x, y) {         // 等价于显式写 (x: f64, y: f64)
+        this.x = x
+        this.y = y
+    }
+}
+```
+
+- `init` 是类型成员位置的上下文关键字；旧 `constructor` 声明拼写拒绝，不保留别名。其它位置的 `init` 仍是普通标识符。
+- 一个类**只有一个构造器**（不支持构造器重载）；要多种创建方式用 `static` 工厂方法。
+- 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况必须显式声明类型，不得从调用位点倒推定义的类型或能力。
+- 构造器隐式返回 `this`（编译期注入）。
+- struct 显式构造器按字段声明顺序先执行声明处的默认表达式；无声明默认表达式的字段保持未初始化（包括数值字段），由构造体负责初始化。只有没有显式构造器时才生成合法的默认构造器。
+- 字段读取前必须在每条到达路径上完成初始化；整体 `this` 的返回、方法调用或闭包捕获要求所有字段初始化。正常结束和无值 `return` 都返回完整的 `this`，构造器不能显式返回另一个值。失败不发布部分结构体，已执行的外部副作用不回滚。
+- const 字段的声明默认表达式或构造体赋值构成唯一初始化；存在任一路径已初始化时不能再次赋值，循环回边也参与检查。mutable 字段初始化后可继续更新。
+- 构造器的自然结束与无值 `return` 都先执行退出清理，再从已初始化字段组装并发布完整的 `this`。清理对 mutable 字段的合法更新进入最终构造结果；失败不发布结果。普通函数显式返回表达式先取值、再清理的值快照规则不因此改变。
+- 有显式 `init` 的 struct 只允许在其声明模块内使用字段字面量；外部经 `Type(...)` 或具名工厂构造。无显式 `init` 的 struct 保留正常字段字面量规则。展开字面量不能绕过此权限，任何形式均不扩大私有字段权限。
+- 派生类构造器必须首行调 `super(...)`。
+- struct 可以**没有**构造器，但省略构造器仍须为每个字段提供合法的默认初值（§5.1、§5.4）。`Point()` 的数值字段可初始化为零；没有显式初值的非 nullable Array 等字段不能因此被零初始化。
+
+#### 5.3.5 运算符重载
+
+```xray
+class Vec2 {
+    x: f64
+    y: f64
+
+    init(x: f64, y: f64) {
+        this.x = x; this.y = y
+    }
+
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+
+    operator==(other: Vec2) -> bool {
+        return this.x == other.x && this.y == other.y
+    }
+
+    operator[](index: i64) -> f64 {
+        if (index == 0) { return this.x }
+        return this.y
+    }
+}
+```
+
+**可重载的运算符**（完整列表，源自 `xparse_oop.c`）：
+
+| 类别 | 运算符 | 参数数 | 备注 |
+|--|--|--|--|
+| 二元算术 | `+` `-` `*` `/` `%` | 1 | `-` 单参数视为一元负号 |
+| 位运算 | `&` `\|` `^` `<<` `>>` | 1 | |
+| 比较 | `==` `!=` `<` `<=` `>` `>=` | 1 | 一般成对实现 `==`/`!=`、`<`/`<=`/`>`/`>=` |
+| 下标 | `[]`（getter）`[]=`（setter） | 1 / 2 | setter 是 `(index, value)` |
+| 一元 | `!` `~` `++` `--` | 0 | |
+| 复合赋值 | `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 1 | |
+
+```xray
+class Counter {
+    n: i64 = 0
+    operator++() -> Counter { this.n = this.n + 1; return this }
+    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
+    operator[](i: i64) -> i64 { return this.n + i }
+    operator[]=(i: i64, v: i64) { this.n = v - i }
+}
+```
+
+**不能**重载：`&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
+
+#### 5.3.6 `Iterator<T>` 与 `Iterable<T>`
+
+`Iterator<T>` 是 prelude 内建接口，是 `for-in` 的拉取协议，也是生成器函数（§3.16）的返回类型：
+
+```xray
+interface Iterator<T> {
+    hasNext() -> bool       // 是否还有下一个元素；不消费元素
+    next() -> T             // 取下一个元素并前进
+    nth(index: i64) -> T    // 从当前位置起前进 index 个元素并返回
+}
+
+interface Iterable<T> {
+    iterator() -> Iterator<T>
+}
+```
+
+规则：
+
+- 任何实现 `iterator()` 的类型都可用于 `for-in`；内建集合与 `string`（按 `rune`）已实现。
+- `for-in` 只保证按 `hasNext()` / `next()` 拉取，**不保证**调用次数与调用时机之外的任何行为。
+- `next()` 返回 `T` 而非 `T?`：**耗尽不由返回值表示**。协议是两步的——每次 `next()` / `nth()` 之前必须先由 `hasNext()` 返回 `true`。在 `hasNext()` 为 `false` 后调用 `next()` 属于契约违规：运行时以 `E0432` panic 报告，不返回零值，也不返回 `T` 所禁止的 `null`（§18.3）。
+- `Iterator<T>` 是**一次性**的：耗尽后 `hasNext()` 恒为 `false`，不可重置。需要再次遍历时重新调用 `iterator()` 或重新调用生成器函数。
+- 迭代期间修改集合的行为由该集合定义。内建 `Array<T>` 的 for-in 持有拥有式逻辑值快照，修改或重绑源数组不使该快照失效（§14.7）；其它集合与身份 iterator 的失效规则由各自合同定义。
+- `Iterator<T>` 没有 Source `close()` 方法。生命周期关闭会排空已经登记的生成器清理；提前放弃不再执行普通剩余 body（§3.16.3）。
+
+生成器函数（体内使用 `yield expr`）由编译器自动实现该接口，无需手写。
+
+#### 5.3.7 计算属性
+
+字段名后跟一个访问器块，即声明一个**计算属性**：它没有存储槽，读写都转成访问器调用。
+
+```xray
+class Rect {
+    _w: i64
+    _h: i64
+    init(w: i64, h: i64) { this._w = w; this._h = h }
+
+    // 只读：只有 getter
+    area: i64 { fn() { return this._w * this._h } }
+
+    // 可读可写：getter + setter
+    width: i64 {
+        fn() { return this._w }
+        fn(v: i64) { this._w = v }
+    }
+}
+
+fn main() {
+    var r = Rect(3, 4)
+    print(r.area)       // => 12
+    r.width = 10
+    print(r.area)       // => 40
+}
+```
+
+规则：
+
+- 访问器块只能含 `fn` 定义。**无参**的是 getter，**一个参数**的是 setter；各自最多一个，参数多于一个是编译错误。
+- getter 的返回类型默认为属性声明的类型，setter 的参数类型同理，二者都可省略。
+- 属性类型即读取表达式的类型。只有 getter 的属性是**只读**的，写它按未声明成员报 `E0380`。
+- `obj.p` 与 `obj.p = v` 是普通调用，**不是**槽读写：访问器可以计算、可以带副作用，其开销就是一次方法调用。
+- 计算属性可满足 interface 要求的属性——interface 不区分它由槽还是访问器提供。
+- 访问器在类的方法表中以 `get:<名>` / `set:<名>` 存在。该名字含 `:`，标识符里不可能出现，因此不会与声明的方法冲突；这是实现细节，不是可书写的语法。
+
+#### 5.3.8 完整可运行示例
+
+以下为自包含、可运行并通过 `xray check` 验证的完整程序（注释标注真实输出）。
+
+继承与显式覆写：
+
+```xray
+class Animal {
+    name: string
+    init(name: string) { this.name = name }
+    speak() -> string { return "..." }
+}
+
+class Dog extends Animal {
+    init(name: string) { super(name) }
+    override speak() -> string { return "woof" }
+}
+
+fn main() {
+    var d = Dog("Rex")
+    print(d.name)      // => Rex
+    print(d.speak())   // => woof
+}
+
+main()
+```
+
+运算符重载（用具名变量调用）：
+
+```xray
+class Vec2 {
+    x: i64
+    y: i64
+    init(x: i64, y: i64) { this.x = x; this.y = y }
+    operator+(other: Vec2) -> Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+}
+
+fn main() {
+    var a = Vec2(1, 2)
+    var b = Vec2(3, 4)
+    var sum = a + b
+    print(sum.x)   // => 4
+    print(sum.y)   // => 6
+}
+
+main()
+```
+
+### 5.4 `struct` 声明
+
+可复制 struct 按字段声明类型保留逻辑副本：Array 等拥有式容器字段保持值语义，class 与同步字段只复制身份引用。字段可以是 Array 或 class；不能将 struct 限制为仅含标量和 string，也不能把 struct 复制误写为复制整个 class 对象图。字段仍须满足初始化、存储及可复制性要求（§2.14.6）。
+
+struct / enum 修改自身值语义部分的方法显式使用 `ref` receiver；只读 receiver 可以保存可复制副本，不能直接修改自身。可复制类型不得声明 `move` receiver。完整聚合、receiver 和借用声明族的实现资格见 §17。
+
+```ebnf
+StructDecl ::= 'struct' Identifier TypeParams?
+               ('implements' Identifier (',' Identifier)*)?
+               '{' StructMember* '}'
+```
+
+```xray
+struct Point {
+    x: f64
+    y: f64
+
+    magnitude_sq() -> f64 {
+        return this.x * this.x + this.y * this.y
+    }
+}
+
+// 两种创建方式
+var p = Point()                  // 默认构造（字段为零值）后逐个赋值
+p.x = 3.0
+p.y = 4.0
+
+var q = Point{x: 3.0, y: 4.0}        // struct 字面量：类型名 + { field: value }
+var pt = Point{x: 1.0, y: 2.0}
+
+// 值语义：赋值与传参都是拷贝
+var b = q                            // b 是 q 的独立拷贝
+b.x = 99.0
+// q.x 仍为 3.0
+```
+
+**聚合字面量的字段规则**（与 sealed structural object 一致）：
+
+- 字面量中出现的每个字段名必须是该类型声明过的字段；未声明的名字是编译错误 `E0380`。
+- 每个声明过的字段都必须被设置；只有**声明处带默认值**或**类型可空**的字段允许缺省，其余缺省是编译错误 `E0381`。
+- struct 字段默认表达式在声明模块和声明类型参数作用域内检查，包括未使用的声明；不能捕获构造调用方的局部变量。字面量先按书写顺序求值显式字段，再按字段声明顺序求值被省略字段的默认表达式；显式提供的字段不执行其默认表达式。默认表达式允许普通已准入函数效应，失败不撤销之前的副作用，但不发布部分结构体值。
+- 需要整体零值时写 `Point()`，不要靠字面量缺省字段来隐式取零值。
+- **`union` 例外**：union 的成员共享同一块存储，同时只有一个成员是活的，因此 union 字面量必须**恰好**设置一个成员。设置 0 个（活成员未定义）或多个（写入互相覆盖）都是 `E0381`。
+
+```xray
+struct Config {
+    host: string
+    port: i64 = 8080        // 声明默认值：字面量中可省
+    label: string?          // 可空：字面量中可省
+}
+
+var c = Config{host: "localhost"}    // OK
+// Config{host: "h", ports: 1}       // 编译错误 E0380：没有字段 'ports'
+// Config{port: 1}                   // 编译错误 E0381：缺少字段 'host'
+```
+
+**与 `class` 的差异**：
+
+| 维度 | `class` | `struct` |
+|--|--|--|
+| 内存语义 | 身份引用 | 逻辑值；物理布局不改变复制合同 |
+| 赋值/保存参数 | 复制身份引用 | **按字段复制**（`var b = a` 保留逻辑副本） |
+| 继承 | 支持 `extends` | **不支持**继承 |
+| `implements` | ✅ | ✅ |
+| 泛型 | ✅ | ✅ |
+| `static` / `private` / `protected` / `const` | ✅ | ✅ |
+| 运算符重载 | ✅ | ✅ |
+| 构造器 | `init(...)` | 省略时仍须为每个字段提供合法默认初值；不能将非 nullable Array 零初始化 |
+| 字面量 | 无 | `TypeName{field: value, ...}` |
+
+**适用场景**：
+- 数学类型（Vec2/Vec3/Quat/Color）
+- 短生命周期值（迭代器状态、临时元组替代）
+- 性能敏感、希望避免堆分配的数据
+
+#### 5.4.1 值语义示例
+
+可复制 `struct` 是值类型，赋值与保存参数按字段保留逻辑副本；普通 READ 参数只读访问该值，允许保存副本，不强制某一种物理 ABI：
+
+```xray
+struct Point {
+    x: i64
+    y: i64
+}
+
+fn main() {
+    var p = Point{x: 3, y: 4}
+    var q = p            // struct 赋值是拷贝
+    q.x = 99
+    print(p.x)           // => 3（不受影响）
+    print(q.x)           // => 99
+}
+
+main()
+```
+
+### 5.5 `interface` 与 `implements`
+
+xray 接口实现是**显式声明的**（与 Go 的隐式实现不同）：类 / struct 必须用 `implements` 列出实现的接口。
+
+```ebnf
+InterfaceDecl ::= 'interface' Identifier TypeParams?
+                  ('extends' NamedType (',' NamedType)*)?
+                  '{' InterfaceMember* '}'
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?       // 方法签名
+                 |  ('const')? Identifier ':' Type                   // 属性签名（可加 const 表示只读）
+```
+
+```xray
+interface Shape {
+    area() -> f64
+    perimeter() -> f64
+}
+
+// 接口方法返回类型可省略（默认 ()）
+interface Greeter {
+    greet(name: string)             // 等价于 greet(name: string) -> ()
+    log()                           // 无参无返回
+}
+
+class Circle implements Shape {
+    radius: f64
+    init(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
+}
+
+// 实现多个接口
+class Logger implements Shape, Greeter {
+    radius: f64
+    init(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
+    greet(name: string) { print("hello,", name) }
+    log() { print("logging") }
+}
+
+fn describe(s: Shape) -> string {
+    return "area=${s.area()}, perimeter=${s.perimeter()}"
+}
+```
+
+**约束**：
+
+- 接口可继承其他接口（`extends`）；支持泛型 `interface Container<T>` 与受约束 `interface Stats<T: Numeric>`。
+- 类 / struct 用 `implements I1, I2, ...` 声明实现一个或多个接口（**显式**，不存在隐式实现）。
+- 实现类**必须**提供所有接口成员（方法同名同参同返回；属性同名同类型）。
+- 接口方法声明中的**返回类型可省略**（默认 `()`）。
+- 接口方法默认 `abstract`（无方法体）。
+- 接口可声明**属性签名**（`length: i64`、`const id: i64`）；实现类型可提供同类型的字段或访问器。const 属性要求可读，普通属性要求可读可写；实现的读取/写入权限不能窄于对应接口要求。
+- 实现类可以提供额外的方法（接口仅定义最小集）。
+
+#### 方法要求身份与静态泛型见证
+
+接口身份由 canonical module 与声明名确定，接口应用另含有序类型实参。成员身份属于其原始接口声明；继承展开不创建新的身份。类型参数按所属声明和序号绑定。实现关系由名义类型声明中的显式 `implements` 建立，一个类型与一个接口应用至多声明一次；同名方法本身不证明实现关系。
+
+继承必须无环，包括未使用的声明。同源成员经相同类型替换到达时去重；不同来源的同名成员仅在完整合同完全相同时合并查找，同时保留全部实现义务。合同包括成员种类、receiver、参数数目/模式/类型、结果类型与 callable 承诺；不相同则拒绝歧义，不按继承、约束或导入顺序挑选。重新声明继承成员同样须精确匹配。参数名字不参与签名比较，但 manifest 按各声明自己的参数名字绑定。
+
+实现方法必须是该类型的公开实例方法，精确满足参数、结果及 receiver 合同；静态、私有、受保护、构造和 cleanup 函数不能充当见证。不新增一般协变/逆变转换。实现可提供更强的函数自身 `no_suspend` 保证，但不能加强调用者的参数义务或弱化接口保证。同名合并要求须绑定该类型的同一个方法身份。
+
+泛型约束为标记与接口应用的合取，相同约束重复幂等；派生接口通过明确的类型替换蕴含祖先要求。定义处成员访问必须绑定到约束所提供的要求身份及完整签名；具体实参的额外方法不能补足证明，未使用的非法泛型也拒绝。证明及其缓存必须包含参数环境。抽象方法没有已检查实现体，其效应由公开合同给出，未承诺者按未知 callable 上界处理；实现须在定义处证明这些义务。
+
+接口要求可有自身类型参数，例如 `I<A>.map<U:C<A>>(value:U)->U`。接口外围与方法自身参数按真实owner及ordinal分别绑定，完整空间为 `[interface parent, method own]`；自身名字不遮蔽外围，条件可引用后续自身参数。自身where仅约束自身参数。调用的显式列表只填own，parent来自定义处约束应用；调用方必须证明全部条件。继承同名方法按own数量、完整签名和alpha对齐后的条件双向蕴含比较，重复与冗余祖先幂等，同时保留全部原要求身份。实现向量为 `[nominal parent, method own]`；其条件只能由名义前提与原要求方法前提蕴含，不能用实现自身条件自证，实现体仍按自身声明检查。Checked特化及独立来源复验保留完整nominal+own实参，即使own未出现在物理签名中也不能省略。
+
+受约束接收者的接口方法取值 `receiver.read` 或 `receiver.map<i64>` 先以原要求应用及完整条件检查；接收者只求值一次并保存当时的值。首个执行族支持没有own参数或完整显式own列表，所得callable无默认参数并保留原签名及承诺，不从未来具体实现增加能力。函数值采用普通typed helper与FUNCTION_REF；helper继承真实调用者参数/条件，内部要求调用保留完整parent+own，外层函数引用保留完整caller参数，两层来源各自复验。捕获、复制、挂起、结果所有权和物理释放遵循普通函数值合同；不增加格式、字典或独立执行路径。
+
+Checked 拥有约束、接口应用、要求身份和显式实现映射。单态化只选择已证明的见证，转换为普通调用并复验后进入 Lowered；不得重新按具体类型的成员名猜选实现。普通实例在不可变 Program 封存前完成，无运行时泛型字典或未解见证 fallback。此规则不取消接口值及可覆写 class 方法的动态分派。
+
+当前新 XIR 已接通普通 read receiver 方法、显式 struct/enum 实现与定义处泛型成员调用：Checked 保存原要求身份及实现映射，在 Checked 上选择见证、特化并复验后进入 Lowered。泛型 struct/enum 的实现受其名义声明前提约束，方法额外条件不得补足缺失的类型前提。enum 普通 READ/static 方法复用名义方法机制，载荷先经 match 解构；方法及内建成员碰撞按 §5.6.7 在声明处拒绝。该子集已有 Windows VM/native 独立预期验证，不代表完整声明族或全部安全资格完成。接口方法自身泛型的完整显式列表、内联/where条件及调用值形状推断已取得上述Windows范围验证；晚结果上下文补足和显式方法取值为下一验证族，完整双向和函数值上下文推断仍OPEN。属性、其他 receiver、未接通的 enum name/toString/variants 消费、class/override 和接口值仍须分别实现和验证，未接通的表面明确拒绝；上述语言目标不因此缩减。
+
+```xray
+// 属性签名 + 接口继承
+interface HasLength {
+    length: i64
+}
+interface SizedCollection<T> extends HasLength {
+    first() -> T
+}
+
+class Buffer implements SizedCollection<i64> {
+    length: i64                       // 实现属性签名
+    private data: Array<i64>
+    init(n: i64) {
+        this.length = n
+        this.data = []
+    }
+    first() -> i64 { return this.data[0] }
+}
+```
+
+#### 完整可运行示例
+
+接口 + `implements` + 多态：
+
+```xray
+interface Shape {
+    area() -> f64
+}
+
+class Circle implements Shape {
+    r: f64
+    init(r: f64) { this.r = r }
+    area() -> f64 { return 3.14159 * this.r * this.r }
+}
+
+fn main() {
+    var s: Shape = Circle(2.0)
+    print(s.area())   // => 12.56636
+}
+
+main()
+```
+
+### 5.6 `enum` 声明
+
+xray 的 `enum` 是**安全 tagged aggregate**：每个值包含编译器分配的声明顺序 tag，并且只有当前 tag 对应的 payload 可读。无 payload 的简单 enum 只是 payload size 为 0 的 tagged aggregate；带 payload 的 enum 是同一模型下的安全 sum type。
+
+```ebnf
+EnumDecl       ::= 'enum' Identifier TypeParams?
+                   ('implements' NamedType (',' NamedType)*)?
+                   '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+```
+
+> 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
+
+枚举类型的身份由所属模块、声明及有序类型实参共同确定；局部类型编号或相同 ordinal 不足以识别枚举类型。非 nullable enum 必须显式初始化，不隐式选择第一个变体。声明至少包含一个变体；变体名在声明内唯一，payload 字段名只须在所属变体内唯一。复制和销毁仅作用于活动变体的载荷；值逃逸不延长 Program 或 Instance 的执行权限。
+
+#### 5.6.1 简单枚举（0-payload enum）
+
+```xray
+enum Color { Red, Green, Blue }
+
+Color.Red.ordinal     // 0
+Color.Blue.ordinal    // 2
+Color.Red.name        // "Red"
+Color.Red.toString()  // "Color.Red"
+
+enum HttpStatus {
+    OK,
+    NotFound,
+    InternalError
+
+    code() -> i64 {
+        return match (this) {
+            HttpStatus.OK -> 200,
+            HttpStatus.NotFound -> 404,
+            HttpStatus.InternalError -> 500
+        }
+    }
+}
+```
+
+enum variant 使用声明顺序形成稳定的 `ordinal`，不声明额外 backing value。协议数值、字符串符号等外部表示通过 `const`、方法或显式转换函数表达。
+
+#### 5.6.2 Payload enum
+
+payload 变体使用具名记录字段；每个字段必须有非空且唯一的名称：
+
+```xray
+enum Option<T> {
+    Some { value: T },
+    None,
+}
+
+enum NetEvent {
+    Connected,
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
+}
+
+// 递归 enum 的 payload 必须经 class 节点间接化
+class ExprNode {
+    expr: Expr
+    init(expr: Expr) { this.expr = expr }
+    get() -> Expr { return this.expr }
+}
+
+enum Expr {
+    Number { value: i64 },
+    Binary { op: string, left: ExprNode, right: ExprNode },
+    Call { name: string, args: Array<Expr> },
+}
+```
+
+直接按值递归的 enum payload 会导致无限大小，必须编译拒绝（`E0352`）。递归数据结构必须显式间接化，有两种手段：
+
+- **class 节点**：class 是引用类型，字段只占一个指针宽度，因此 `Binary(left: ExprNode, ...)` 布局有限。
+- **容器槽**：`Array<Expr>`、`Map<K, Expr>` 等容器把元素存在自己的存储里，payload 只保存容器句柄。
+
+`T?` 不构成间接化——nullable 不改变 payload 的按值布局，`Binary(left: Expr?, ...)` 同样被 `E0352` 拒绝。
+
+#### 5.6.3 构造与解构
+
+构造：
+
+```xray
+var c = Color.Red
+var r1 = Option.Some { value: 42 }
+var e1 = NetEvent.DataReceived { bytes: b }
+var e2 = NetEvent.Error { code: 404, message: "not found" }
+var e3 = NetEvent.Connected                         // unit 变体不写 braces
+```
+
+解构（match）：
+
+```xray
+match (event) {
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+}
+```
+
+详见 §6.3。
+
+#### 5.6.4 enum 值 API
+
+实例属性（作用在枚举值上）：
+
+```xray
+Color.Red.name        // "Red"          变体名 (string)
+Color.Red.ordinal     // 0              声明顺序 tag (i64，从 0)
+Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
+```
+
+enum 值提供 `name`、`ordinal` 与 `toString()`。name只返回活动变体的声明名，toString只返回原enum声明名和活动变体名，不附加泛型实参、不读取或格式化payload、不调用载荷回调。两者按原类型与成员权限检查，不能授予构造权限或隐式Stringable见证；描述查询也不能补足原泛型约束。它们不提供 `value`、`rawValue`、`fromName` 或 `fromOrdinal` 等隐式 backing-value/reflection API。
+
+#### 5.6.5 遍历
+
+仅由无 payload 变体组成的具体 enum 可以直接迭代实际 enum 值；任意具体 enum 都可通过 `.variants` 迭代声明级描述符：
+
+```xray
+for (color in Color) {
+    print(color.name)                     // color: Color；Red、Green、Blue
+}
+
+for (variant in NetEvent.variants) {
+    print(variant.ordinal)                // variant: EnumVariant<NetEvent>
+    print(variant.name)
+    for (field in variant.payloads) {
+        print(field.name)                 // field: EnumPayloadField<NetEvent>
+        print(field.type)                 // i64：具体字段类型的 canonical TypeId
+    }
+}
+```
+
+两种循环语法相似，但产出类型有意不同：
+
+| 表达式 | 适用范围 | 循环变量类型 | 语义 |
+|---|---|---|---|
+| `E` | 仅 unit-only 具体 enum | `E` | 按声明顺序产出实际 enum 值 |
+| `E.variants` | 任意具体 enum | `EnumVariant<E>` | 按声明顺序产出只读变体描述符 |
+| `variant.payloads` | 一个 `EnumVariant<E>` | `EnumPayloadField<E>` | 按声明顺序产出只读 payload 字段描述符 |
+
+若 `E` 含任一 payload 变体，`for (value in E)` 是编译错误，诊断会建议 `E.variants`；编译器不会虚构 payload 值。`for (variant in Color.variants)` 对 unit-only enum 也完全合法，但 `variant` 仍是描述符而不是 `Color` 值。循环本身不打印任何内容；只有循环体显式执行的副作用会产生输出。
+
+descriptor API 是封闭白名单：
+
+| 类型 | 属性 / 操作 |
+|---|---|
+| `EnumVariants<E>` | `length: i64`、检查边界的 `[index] -> EnumVariant<E>`、`for-in` |
+| `EnumVariant<E>` | `ordinal: i64`、`name: string`、`payloadCount: i64`、`isUnit: bool`、`payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: i64`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
+| `EnumPayloadField<E>` | `index: i64`、`name: string`、`type: i64`（canonical TypeId） |
+
+payload 字段的 `name` 始终是源码声明名；空名称、同一变体内重复名称或名称/类型计数不一致的 metadata 必须拒绝。
+
+这些类型不可由用户构造，描述符不可调用，也不提供从名字/ordinal 构造 enum 值的入口。越界索引按普通 checked index 失败。descriptor 不进入 C ABI，FFI 边界会编译拒绝。
+
+该能力是编译器静态类型域，不是 `Iterable` 协议实现。直接循环和不逃逸 descriptor 可在 Lowered 中以 ordinal/index 标量表示，无需分配数组或 iterator。流入 union、泛型存储、容器、闭包或跨协程通道的描述值必须保留具体声明身份及有效的元数据生命周期；描述查询不得绕过泛型约束、可见性或构造权限。只有证明查询结果及生命周期不受影响时，才可消除描述符引用或裁剪未使用的元数据。
+
+unit-only enum 的实际值与带载荷 enum 具有相同的名义身份规则。保存 ordinal 不能替代所属模块、声明及有序类型实参；值跨越调用、存储或挂起边界后，`.name`、`toString()`、相等性和字符串格式化仍须保持完整语义，且逃逸值不得延长执行权限。物理载体由统一 Lowered 管线决定；仅在证明身份可恢复且元数据生命周期安全时，才可将值缩减为 ordinal。规范不要求保留某个旧载体宽度，也不要求每个值独立分配。
+
+泛型时必须知道具体 enum layout，例如 `Option<i64>.variants` 合法；未约束类型参数 `E.variants` 不合法。别名、导入和跨模块编译保留同一声明顺序与具体类型替换。
+
+#### 5.6.6 反查（从值到成员）
+
+默认不支持 `Enum(value)` 或从 backing value 反查 enum。协议解析应写成显式函数：
+
+```xray
+fn statusFromCode(code: i64) -> HttpStatus? {
+    if (code == 200) { return HttpStatus.OK }
+    if (code == 404) { return HttpStatus.NotFound }
+    if (code == 500) { return HttpStatus.InternalError }
+    return null
+}
+```
+
+#### 5.6.7 enum 方法
+
+枚举的类型访问域与值访问域分别解析成员。值访问域的内建 `name`、`ordinal` 属性及 `toString` 方法不能被用户实例方法替换；类型访问域的内建 `variants` 成员不能被变体或用户 static 方法替换。这些标识符不作全局保留：在不违反其他唯一性规则时，允许名为 `name`、`ordinal`、`toString` 的变体或 static 方法，以及名为 `variants` 的实例方法。同一枚举内，所有用户方法名唯一，static 与实例方法不能以同名构成重载；任何用户方法也不能与变体同名。碰撞在声明处拒绝，不因使用方采用属性访问、调用或方法取值而选择不同含义。内建成员名本身不建立接口实现关系，也不自动提供见证。
+
+`enum` 体内可定义实例方法和静态方法，语法与 `class` 内的方法一致（不引入 `impl` 关键字）。实例方法在所有变体上可调用；方法体内通过 `match (this)` 区分变体行为：
+
+```xray
+enum Shape {
+    Circle { radius: f64 },
+    Rect { width: f64, height: f64 },
+    Triangle { a: f64, b: f64, c: f64 }
+
+    area() -> f64 {
+        return match (this) {
+            Shape.Circle { radius } -> 3.14159 * radius * radius,
+            Shape.Rect { width, height } -> width * height,
+            Shape.Triangle { a, b, c } -> {
+                var s = (a + b + c) / 2.0
+                return (s * (s-a) * (s-b) * (s-c)).sqrt()
+            },
+        }
+    }
+
+    isRound() -> bool {
+        return match (this) {
+            Shape.Circle {} -> true,
+            _               -> false,
+        }
+    }
+}
+
+var s = Shape.Circle { radius: 1.0 }
+print(s.area())          // 3.14159
+print(s.isRound())       // true
+```
+
+静态方法使用 `static name(...)`；实例方法默认 READ receiver，修改值语义部分使用 `ref` receiver。`move` receiver 仅适用于不可复制 enum，可复制 enum 不得声明；不可复制声明族的准入见 §17。enum 方法不写 `fn`：
+
+```xray
+enum Color {
+    Red, Green, Blue
+
+    static fromInt(v: i64) -> Color {
+        if (v == 1) { return Color.Red }
+        if (v == 2) { return Color.Green }
+        return Color.Blue
+    }
+
+    label() -> string {
+        return this.name
+    }
+}
+
+print(Color.fromInt(2).label())     // "Green"
+```
+
+> 注意 `Triangle { ... }` 后没有逗号——最后一个变体与方法块之间用空白分隔（trailing comma 允许但不强制）。
+
+**规则**：
+
+- 方法语法与类型体内方法一致：`name(...)`、`ref name(...)`、`move name(...)` 或 `static name(...)`；不写 `fn`
+- 方法体内 `this` 的静态类型是 enum 自身（如 `Option<T>`），需要 `match (this)` 才能取出变体 payload
+- 静态方法没有 `this`；调用形式是 `EnumName.method(args...)`
+- **不**支持 `init`（变体语法本身就是构造器）
+- **不**支持继承（`enum E extends ...` 是非法）；如需共享行为，用接口实现（`enum E implements Iface`）或顶层函数
+- 简单枚举（无 payload）也可定义方法，但方法体内 `this` 是该 enum 的值，可用 `==` 直接比较：
+  ```xray
+  enum Color {
+      Red, Green, Blue
+
+      isWarm() -> bool { return this == Color.Red }
+  }
+  ```
+- 方法**不能**和变体名同名
+
+> 此设计与 Java enum / Swift enum / Kotlin sealed class 一致。Rust 的 `impl` 块在 xray 中**不**引入——xray 的方法定义统一在类型体内。
+
+### 5.7 `type` 别名
+
+```ebnf
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
+```
+
+```xray
+type Outcome = i64 | string                          // union 别名
+type Mapper = fn(i64) -> i64                              // 函数类型别名
+type Point = { x: f64, y: f64 }                  // 结构化对象别名（sealed）
+type Pair<T> = { first: T, second: T }                // 泛型别名
+```
+
+**语义**：
+- 别名是**纯语法**替换，不产生新名义类型。
+- 泛型别名在使用处做类型实参代入；代入发生在编译期，不引入运行时表示或 AOT 分支。
+- 泛型别名形参只允许名字列表；不支持约束。约束应写在使用该别名的泛型声明上。
+- `type Point = {...}` 的对象类型在使用此别名标注时**密封**：未声明的字段访问/赋值是编译错误。
+- `type T = JSON.Value` 等于 `JSON.Value`；`type O = JSON.Object` 等于 `Map<string, JSON.Value>`。
+- 别名可前向引用，但**禁止循环别名**。
+
+详见 [§2.4.7](#247-json) 与 [§2.8](#28-类型别名)。
+
+### 5.8 `import` / `export`
+
+详见 [§11](#11-模块系统-modules)。语法要点：
+
+```xray
+// stdlib / 第三方包：裸标识符，可自动生成别名
+import time
+import http
+import alice/utils as utils
+
+// 文件路径或目录路径：字符串，可显式 `as`，否则从路径尾段推导别名
+import "./modules/mod_a.xr" as a
+import "../utils/string_utils.xr" as utils
+import "models/user" as user
+
+// 命名 import：支持 quoted path 或裸模块名，成员可用 `as` 重命名
+import { readFile, writeFile as write } from io
+import { publicFn } from "./modules/mod_a.xr"
+
+// 导出
+export fn publicFn() -> string { return "hi" }
+export const VERSION = "1.0"
+export { name1, name2 as alias } from "./other"
+export * from "./other"
+```
+
+**xray 不支持** JavaScript 默认导入 `import name from "module"`。使用 `import "module" as name`、`import module` 或 `import { name } from module`。
+
+完整规则、路径解析、可见性细则见 [§11 模块系统](#11-模块系统-modules)。
+
+---
+
+## 6. 模式 (Patterns)
+
+> 真值源：`src/frontend/parser/xparse_match.c`、`src/frontend/analyzer/xanalyzer_visitor_pattern.c`、`src/ir/xi_lower_expr.c` / `xi_lower_stmt.c` 与 VM/AOT 的 match lowering。
+
+模式出现在 `match` 表达式/语句、`var` / `const` 解构，以及括号内的 `catch` 头部（仅 enum variant pattern，见 §8.1.2）中。
+
+### 6.1 字面量模式
+
+```xray
+match (x) {
+    0 -> "zero"
+    3.14 -> "pi"
+    "hello" -> "greeting"
+    true -> "yes"
+    null -> "nothing"
+    _ -> "other"
+}
+```
+
+- 匹配使用与 `==` 相同的语义。
+- `null` 模式只匹配 `null` 本身。
+
+### 6.2 范围模式 `a..b` / `a..=b`
+
+```xray
+match (age) {
+    0..13 -> "child"
+    13..20 -> "teen"
+    20..=65 -> "adult"
+    _ -> "senior"
+}
+```
+
+- `a..b` 为半开区间 `[a, b)`；`a..=b` 为闭区间 `[a, b]`。
+- 仅整数。
+
+### 6.3 枚举模式
+
+#### 6.3.1 简单变体（无 payload）
+
+```xray
+match (color) {
+    Color.Red   -> "red",
+    Color.Green -> "green",
+    Color.Blue  -> "blue",
+}
+```
+
+- 需完整限定 `EnumName.Variant`。
+
+#### 6.3.2 ADT 变体（带 payload）解构
+
+被匹配值只求值一次。分支绑定为不可变值，作用域仅覆盖该分支的 guard 和分支体；同一模式不能重复绑定同名变量。绑定遵守普通值复制与所有权规则，不获得写回被匹配值的权限，跨挂起和闭包逃逸仍须保留有效载荷。泛型变体模式省略的类型实参来自被匹配值的具体静态类型，不补足声明处缺失的约束。
+
+ADT 变体模式按名称选择需要观察的 payload 字段。未列字段自动忽略，`{}` 只检查 payload variant 的 tag：
+
+```xray
+match (event) {
+    NetEvent.Connected                         -> print("connected"),
+    NetEvent.Disconnected { reason }           -> print("by:", reason),
+    NetEvent.DataReceived { bytes }            -> process(bytes),
+    NetEvent.Error { code, message: msg }      -> log.error(code, msg),
+}
+
+// 同名 binding shorthand
+match (opt) {
+    Option.Some { value: v } -> print("got:", v),
+    Option.None    -> print("nothing"),
+}
+
+// 只列需要观察的字段
+match (event) {
+    NetEvent.Error { code } if (code >= 500) -> throw NetErr.ServerFault { code: code },
+    _                                        -> continue,
+}
+
+// 嵌套解构
+match (msg) {
+    Option.Some { value: NetEvent.DataReceived { bytes } } -> process(bytes),
+    Option.None                                           -> skip(),
+    _                                                     -> skip(),
+}
+```
+
+#### 6.3.3 穷举性检查
+
+`match` 一个 ADT enum 时，编译器执行**穷举性分析**：
+
+- 若所有变体的全部载荷取值均被无 guard 的模式覆盖（含无 guard 的 `_` 兜底），通过；只列出变体名但对子字段施加可失败模式，不足以覆盖整个变体
+- 若漏写某变体，编译报错 `E0371 XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE`，并提示缺失的变体名
+
+```xray
+enum NetEvent {
+    Connected,
+    Disconnected { reason: string },
+    DataReceived { bytes: Array<u8> },
+    Error { code: i64, message: string },
+}
+
+match (event) {
+    NetEvent.Connected                     -> "ok",
+    NetEvent.Disconnected { reason: r }    -> "down: ${r}",
+    // ❌ E0371: 缺失变体 DataReceived 和 Error；可加 `_ -> ...` 兜底
+}
+```
+
+> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；无 guard 的 `_` 兜底分支覆盖所有剩余值；带 guard 的分支不计作无条件覆盖。对非 enum 变量（如 `i64`）不强制。
+
+### 6.4 类型模式 `is T`
+
+```xray
+match (value) {
+    is i64 n -> "i64: ${n}"       // 绑定窄化值
+    is string -> "a string"
+    is User u -> "user: ${u.name}"
+    _ -> "unknown"
+}
+```
+
+- 检查动态类型；可选绑定窄化变量。
+
+### 6.5 守卫条件 `if`
+
+```xray
+match (x) {
+    n if (n > 0 && n < 10) -> "small positive"
+    n if (n < 0) -> "negative"
+    _ -> "other"
+}
+```
+
+- 守卫表达式必须是 `bool`，nullable 值须显式比较（见 §2.3.3），与 `if` / `while` 条件规则一致。
+- 失败时继续尝试下一分支。
+
+### 6.6 多值模式
+
+```xray
+match (x) {
+    1, 2, 3 -> "small"
+    Color.Red, Color.Yellow -> "warm"
+    _ -> "other"
+}
+```
+
+- 按源码顺序尝试备选，首次成功后不再尝试该 arm 的其他备选。
+- 所有备选必须绑定相同的名称集合，且每个同名绑定的确切静态类型相同；绑定不可变，属于该 arm 的共同作用域。
+- 成功备选的绑定合并后，arm 的 guard 只求值一次；guard 失败进入下一 arm，不重试当前 arm 的剩余备选。
+- 无 guard 的备选共同贡献穷举覆盖；有 guard 的整个 arm 不贡献无条件覆盖。
+
+### 6.7 通配符 `_`
+
+- 匹配任意值，不绑定变量。
+- 通常作为最后的 default 分支。
+- 解构中可用于跳过位置：`var [_, b, _] = arr`。
+
+### 6.8 变量绑定模式
+
+```xray
+match (http_status) {
+    200 -> "ok"
+    code if (code >= 400) -> "error: ${code}"
+    code -> "other: ${code}"
+}
+```
+
+- 裸 `Identifier` 总匹配并绑定为值。
+
+### 6.9 解构模式
+
+```xray
+var [a, b, c] = some_array
+var (q, r) = divmod(17, 5)
+var { name, age } = user
+```
+
+详见 §5.1.5。`match` 支持 tuple、ADT variant、对象与数组结构解构：
+
+```xray
+match (p) {
+    { x, y } -> ...           // 对象字段解构（簡寫绑定）
+    { name: n, age } -> ...   // 对象字段重命名 + 簡寫混用
+    [a, b, ..rest] -> ...     // 数组解构，`..rest` 捕获尾部为新数组
+    [_, mid, _] -> ...        // 元素位通配
+}
+```
+
+- 对象模式匹配静态类型已知包含这些字段的 exact structural object；schema-less JSON 请先用 `JSON.get/require` 或 `JSON.decodeObject<T>` 提交结构。字段子模式可为可反驳模式（如 `{ mode: 2 }`）。
+- 数组模式按**长度**匹配：无 `..rest` 时要求长度恰等于元素数，有 `..rest` 时要求长度 ≥ 元素数。元素子模式只能是绑定或通配（`..rest` 之外的元素不做按值测试——元素越界读取会陷入 panic）；需要按元素值判断时改用 `if` 守卫。
+- or-pattern `|` 暂不支持（逗号多值已覆盖等价能力）。
+
+### 6.10 穷举性与匹配失败
+
+- 对 enum 表达式的 `match` 强制穷举（错误码 `E0371`，见 §6.3.3）。
+- 其他类型不强制；运行时无分支匹配 → 抛 `PanicInfo` 错误码 `E0442`（见 §18.x）。
+- 建议总是提供 `_` 兜底。
+
+---
+
+## 7. 作用域与名字解析 (Scoping)
+
+> 真值源：`src/frontend/analyzer/xanalyzer_symbol.c`、`xanalyzer_escape.c`、`xaddressability.c`、`xanalyzer_visitor_stmt.c` 与 `src/analysis/xglobal_producer.c` 的 capture/storage plan。
+
+### 7.1 词法作用域与提升
+
+Xray 采用**词法作用域**：名字的可见性由源代码结构决定。
+
+**作用域类型**：
+
+| 作用域 | 触发 | 示例 |
+|--|--|--|
+| 模块 | 每个 `.xr` 文件 | 顶层 `var` `const` `fn` `class` |
+| 函数 / 闭包 | `fn` / 箭头函数进入 | 参数 + 函数体 |
+| 块 | `{...}` | `if` `while` `for` `match` 分支体 |
+| `scope` 块 | `scope { ... }` 关键字 | 显式词法作用域 + 结构化并发（见 §10.7） |
+| `for` 头 | `for (var i=0; ...)` | `i` 仅循环体可见 |
+| `catch` 参数 | `catch (e)`、`catch (E.V { x })` | `e` 与 pattern 绑定 `x` 仅 catch 体可见 |
+| 类体 | `class` 定义 | 字段、方法 |
+
+**提升规则**：
+
+- 顶层 `fn` `class` `struct` `interface` `enum` `type` **提升**至当前作用域顶部——可在定义前引用。
+- `var` / `const` **不提升**——必须在定义后使用。
+- 同名重复声明：同作用域内 2 个同名变量 → 编译错误（嵌套作用域可 shadow）。
+
+```xray
+main()                    // OK：使用提升后的 fn
+fn main() { ... }
+
+var y = x                 // 错误：x 未声明
+var x = 10
+```
+
+#### Shadow 规则
+
+嵌套块可 shadow 外层同名变量：
+
+```xray
+var x = 1
+{
+    var x = "hello"           // shadow：OK
+    print(x)                 // "hello"
+}
+print(x)                     // 1
+```
+
+### 7.2 闭包捕获语义
+
+闭包捕获外层作用域的变量为 **upvalue**。
+
+#### 普通同步闭包
+
+可变 `var` 按 **共享 cell 引用捕获**，`const` 按值捕获：
+
+```xray
+fn make_counter() -> (() -> i64) {
+    var count = 0
+    return fn() -> i64 {
+        count += 1                  // 修改外层 count
+        return count
+    }
+}
+
+var c = make_counter()
+print(c())      // 1
+print(c())      // 2
+```
+
+- 闭包与原变量**共享**。
+- 外层作用域退出后，被捕获变量由闭包 cell / upvalue 与相应引用计数继续保活。
+- 每个被读写捕获的变量只有一个共享 cell。外层赋值与所有闭包读写都访问同一 cell；
+  cell 及其中的新值按普通强引用计数转移和释放，不存在额外的隐藏保活规则。
+
+#### 闭包优化
+
+编译器会分析 upvalue：
+- 仅读 → 可能隐式复制（避免闭包转换）。
+- 读写 → 提升为闭包 box。
+- 详见 §17.5。
+
+#### XIR 源码闭包准入
+
+普通闭包按绑定类别捕获：局部 `const` 与可复制、非视图的普通 read 参数保存逻辑副本；局部 `var` 保持一个共享 cell。仅按实际词法使用收集自由变量，重复使用同一绑定只捕获一次；shadow、初始化前不可见以及for头作用域遵循普通名字解析。嵌套闭包需要的自由变量逐层传递。模块名字仍经原有模块状态与权限规则访问，不作为局部环境快照。
+
+XIR源码入口准入参数显式标注类型的 `fn(...) -> R { ... }` 与箭头闭包。没有返回标注时，在定义处从返回表达式推导唯一精确类型；所有返回必须一致，非unit结果必须覆盖所有路径。不从调用目标或一次实例化推断参数、约束或效应。闭包不能声明自己的一等泛型参数；外围T及其已冻结约束进入私有实现函数，在Checked上与捕获类型一起特化、复验并封存。
+
+此族支持不可变按值捕获与普通var共享cell捕获；未使用的外层绑定不进入环境。共享cell只允许单实例内访问，不授予Sendable或跨worker能力；强环回收仍按§17.19保持OPEN。ref/move/视图捕获、noescape及Sendable/效应承诺仍按尚未准入的合同拒绝，不将它们降成普通复制或静默添加承诺。源码生成的函数和捕获仅进入§17.18的唯一XIR/环境路径。
+
+### 7.3 所有权与 move
+
+Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
+
+```xray
+var big_buffer = Array<u8>(1024 * 1024)
+
+var t = go fn(b: Array<u8>) -> i64 {
+    return process(b)
+}(big_buffer)             // 编译错误：execution-local heap 值不能裸跨协程传递
+
+var t2 = go fn(b: Array<u8>) -> i64 {
+    return process(b)
+}(move big_buffer)        // OK：所有权转移
+
+print(len(big_buffer))    // 编译错误：move 后访问
+```
+
+**move 使用场景**：`move` 是一元所有权转移表达式，常见于实参与初始化器（参见 §5.1.4 / §10.8）：
+
+- `go f(move x)`、`go fn(...){...}(move x)`：把所有权转给协程。
+- `ch.send(move data)`：跨协程发送时转移所有权（避免拷贝）。
+- 普通函数调用 `f(move x)`：把所有权传入函数（被调函数独占）。
+- `var dst = move src` / `const dst = move src`：把 verifier 证明为唯一的局部 `var` 根转给新的 owner 或 const 能力。
+- 函数返回统一写 `return value`。返回边终结当前 continuation，编译器对 unique local 或 `move` 参数自动发布 owner-forward proof；`return move value` 不属于公开写法。
+
+### 7.4 协程数据传递规则（避免数据竞争）
+
+"保证编译期消除数据竞争"是 xray 并发模型的核心设计原则。
+
+所有跨 execution 边界（`go` 闭包、`go` 实参、Channel send、deferred task、线程入口和导出 callback）消费同一个已验证 capture plan。合法性由值的 **storage owner、provenance、可变性与类型表示**共同决定，不由 `var` / `const` 关键字单独决定：
+
+| Capture action | 适用值 | 边界行为 |
+|---|---|---|
+| inline value | 显式 go 实参中的标量、不可变小值 | 直接复制位表示 |
+| deep copy | 显式 `copy(x)` 的 execution-local graph | 在目标 storage domain 中物化独立图 |
+| move | 显式 `move x` 的推断唯一局部 `var` | 转移所有权并静态废弃源绑定 |
+| module readonly | 已 seal 并发布的模块只读值 | 保留模块只读 owner，不复制到 root/task heap |
+| synchronized ref | Channel、Task、Atomic 等受审计稳定身份 | 保留 verified synchronized domain 的引用 |
+| reject | execution-local graph、可变 module state、悬垂 slice/pointer/upvalue | 编译错误并报告 owner/provenance 与所需显式动作 |
+
+因此，局部 `const` 若只含 inline 值可以直接跨界；managed/aggregate const 图只有在 StoragePlan 证明其直接构造或 O(1) seal 可发布时才能跨界，不存在边界隐式复制。模块级 `const` 只有在完成 seal 与发布后才属于 module readonly；模块级 `var` 属于 module mutable，并不因“全局可见”而自动线程安全。
+
+`go` 闭包还有一条更强、易记的表面规则：**不得捕获任何外层 `var`，无论闭包只读还是写入，也无论当前程序只启动一个还是多个协程。** 需要的数据必须作为 `go` 的显式实参传入，并在边界写清 `copy(...)`、`move` 或同步共享能力。多个协程共享可变状态只能通过 `Channel`、`Atomic`、`sync` 锁/句柄等受审计并发原语；直接捕获修改普通 `var` 是编译错误，`unsafe` 也不能放宽。
+
+```xray
+var local = 0
+go fn() { local += 1 }()                 // ❌ 编译错误：不能捕获可变局部变量
+```
+
+#### 正确姿势
+
+```xray
+// 方法 1：显式复制 execution-local graph
+var arr = [1, 2, 3]
+var t = go fn(data: Array<i64>) -> i64 {
+    data.push(4)            // 拷贝上修改，不影响原值
+    return len(data)
+}(copy(arr))
+print(arr)                  // [1, 2, 3] 未变
+
+// 方法 2：const 零拷贝只读（可被捕获）
+const config = { rate: 100 }
+var t2 = go fn(c: JSON.Object) -> i64 {
+    return c.rate
+}(config)
+
+// 方法 3：move 转移所有权
+var big = Array<u8>(1024)
+var t3 = go fn(b: Array<u8>) -> i64 {
+    return process(b)
+}(move big)
+// big 在此处不可访问
+
+// 方法 4：Channel 通信（可被捕获）
+const ch = Channel<i64>(10)
+var t4 = go fn(c: Channel<i64>) -> i64 {
+    return match (c.recv()) {
+        Recv.Value { value: v } -> v
+        _ -> 0
+    }
+}(ch)
+ch.send(42)
+```
+
+### 7.5 内存管理与对象生命周期
+
+Xray 采用多层内存管理：
+
+| 存储 | 机制 | 释放时机 |
+|--|--|--|
+| 模块只读存储（顶层 `const`） | consteval rodata，或 module allocator 初始化后 seal + publish | 模块卸载 |
+| 模块可变存储（顶层 `var`） | module owner；默认不具备并发安全性 | 模块卸载 |
+| const/sync 共享域 | verified const root 或同步句柄的 root-only 原子引用计数 | 最后跨执行强引用释放 |
+| execution-local 回收域（一般局部对象） | 编译器插入的引用计数 + VM coroutine heap / AOT execution arena | 最后强引用释放时立即回收；引用环不被收集，随 physical coroutine 结束与域内残余图一起批量处置（§16.8） |
+| 栈（`struct` 值、本地） | 词法存储期 | 作用域退出；语言没有用户可见的确定性析构 / `Drop` hook |
+| Arena（底层临时分配） | 批量释放 | arena 结束 |
+
+**内存观察点**：
+- 普通局部对象由编译器插入 retain/drop；最后一个强引用释放时进入 RC 销毁路径。
+- 编译器只把可能形成引用环的类型标为 cycle candidate；该标记服务于诊断，不驱动任何运行时回收动作。
+- 引用环不由运行时收集：静态证明（L0）、`weak` 显式断环（L1）、执行局部回收域批量处置封顶（L2）。
+- 运行时不存在任何环回收机制——既不是并发 tracing GC，也不是 cycle collector。开发构建可开启环检测器，它只观察和报告，不改变堆。
+
+
+READ结构体方法值 `receiver.method` 在绑定时对receiver求值一次，保存其逻辑值快照，不执行方法体。所得函数签名只包含显式参数与返回类型，结构体泛型实参先替换；原绑定后续写入不改变快照，身份句柄仍保持其身份语义。私有/protected访问在绑定处检查，声明内部可显式返回已授权的函数值，调用者不会因此取得直接成员访问权。函数值仍受所属Instance的撤销与清理约束，不隐含Sendable/no_suspend承诺。ref/move接收者不得退化为READ绑定。
+
+---
+
+## 8. 错误处理 (Error Handling)
+
+> 值语义与单一 XIR 实现入口：`src/xir/xxir_verify.c`、`src/xir/xxir_error_value.inc.c`、`src/xir/xxir_call.c`。catch、效应与 panic/defer 的迁移状态见 Task 316；旧 analyzer/IR/VM 代码作为迁移参考，不构成第二条目标执行管线。
+
+### 8.0 设计哲学：值返回 + panic 边界
+
+Xray 的错误处理分为两个严格分离的通道：
+
+| 通道 | 语法 | 适用场景 | 运行时开销 |
+|--|--|--|--|
+| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **低开销**（不分配 `PanicInfo`、不 unwind；需传播/捕获错误的调用边界只有可预测分支） |
+| **panic 通道**（`catch panic`） | 运行时故障（越界、除零、不完整 match） | 有限栈展开 |
+
+设计原则：
+
+- **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 PanicInfo 对象。
+- **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
+- **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
+- **错误集合不进入公开函数类型**：具体错误 enum/variant 集合由同一已检查程序的效应分析维护；内部三态 throw-effect 事实（`UNKNOWN` / `MAY_THROW` / `NO_THROW`）关联相应函数与可调用节点，供安全约束和代码生成消费。
+- **no-throw 始终推导**：需要冻结 no-throw 保证时使用 `xray verify` 合同；未知或不完整证明按 may-throw 处理。
+- **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用**块作用域**的 `defer`（绑定最近的真实 `{}` 块，见 §4.9 / §8.3）。
+- **清理边不是错误传播边**：`defer` 体不得让错误逃逸，该约束由编译期规则强制（`E0387`），见 §8.3.1。
+
+### 8.1 值返回错误通道
+
+#### 8.1.1 `throw` 语句
+
+`throw expr` 抛出一个枚举错误值。其实际值必须是枚举变体；静态类型可以是具体 enum、内置 `Error`，或定义处已证明 `Error` 约束的普通类型参数：
+
+```xray
+enum AppErr { NotFound, InvalidInput { message: string } }
+
+throw AppErr.NotFound                       // ✅ 简单枚举变体
+throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚举变体
+```
+
+抛出后行为：
+
+```
+抛出点 → 交付拥有独立所有权的错误值 → 沿调用栈返回 → 执行每条跨域边上的静态 cleanup 区域 → catch 处理 → 否则继续返回 → 顶层诊断
+```
+
+- 不展开栈帧（不同于传统异常的 unwind）
+- 正常路径不分配对象、不展开栈；在需传播或捕获错误的调用边界只经过可预测的错误标志分支
+- 未捕获的顶层错误打印 `[Uncaught Error] <enum value>`，退出码 = 1
+
+#### 8.1.2 `try` / `catch`
+
+```xray
+enum IOErr { Timeout, Refused { reason: string } }
+
+try {
+    connect(host)
+} catch (e) {
+    match (e) {
+        IOErr.Timeout -> log("timeout"),
+        IOErr.Refused { reason } -> log("refused: " + reason),
+    }
+}
+```
+
+**执行顺序**：
+
+1. 执行 `try` 块
+2. 若有 `throw` 逃出，按声明顺序逐一尝试匹配 `catch` 子句；首个匹配者执行其块体
+3. 无 `catch` 匹配时，错误继续沿调用栈向上传播
+
+**类型化 catch 与多 catch 子句**：
+
+`catch` 变量可带类型注解 `catch (e: T)`，运行时用 `is T` 判断枚举类型是否匹配。支持多个 `catch` 子句，按声明顺序匹配：
+
+```xray
+enum NetErr { Timeout, Refused }
+enum DbErr { ConnLost, QueryFailed { query: string } }
+
+try {
+    riskyIO()
+} catch (e: NetErr) {
+    log("network:", e)
+} catch (e: DbErr) {
+    log("database:", e)
+} catch (e) {
+    log("unexpected:", e)
+}
+```
+
+**规则**：
+- 无类型注解的 `catch (e)` 是 catch-all，匹配所有错误值，绑定的静态类型为内置 `Error`
+- 有类型注解的 `catch (e: SomeErr)` 仅当错误值 `is SomeErr` 为真时匹配，其中 `SomeErr` 是具体 enum 错误类型
+- 多个 `catch` 子句按声明顺序匹配，首个匹配者执行
+- 若所有类型化子句均不匹配且没有 catch-all，错误继续向上传播
+- 一个 `try` **必须**至少跟随 `catch`（普通 `catch` 或 `catch panic`）
+
+内置 `Error` 是只容纳 enum 的持有值类型。enum 到 Error 的值转换保留实际名义身份、泛型实参、活动变体与载荷；复制、保存、返回和重新抛出均遵守相同值所有权规则。Error 不提供任意字段、构造或可见性权限，也不隐式证明 `Sendable`。读取具体变体载荷前必须完成有权限的类型窄化。普通泛型转换在定义处按约束检查，特化后复验，不能等调用处看到具体 enum 才补充证明。
+
+catch 绑定仅在对应 handler 内可见，绑定及其值语义部分只读；需要重新赋值时先用 `var local = e` 创建局部逻辑副本。所有 handler 都接受完整静态检查，即使 try 块没有错误前驱，名称、类型、泛型约束、可见性、初始化和只读错误仍必须拒绝。不可执行的构造器 handler 从 try 入口的初始化状态开始检查，其内部写入不能成为正常后继已初始化的证据；handler 内部分支和循环遵循通常的必定/可能初始化规则。handler 的 return 仍参与所在函数的返回类型推断。
+
+**enum variant pattern catch**：
+
+普通 `catch` 的头部始终写在括号内。括号内是标识符且后跟 `:` 或 `)` 时为绑定（`catch (e)`、`catch (e: T)`），否则为 enum variant pattern：
+
+```xray
+enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
+
+try {
+    runQuery()
+} catch (DbErr.QueryFailed { query, code: 500..=599 }) {
+    log("server rejected:", query)
+} catch (DbErr.ConnLost, DbErr.Timeout) {
+    retry()
+}
+```
+
+- 每个备选都是 `Enum.Variant` 或 `Enum.Variant { 字段 }`，可带模块限定；字段子模式遵循 §6（字面量、范围、嵌套 enum、`_` 与绑定）。payload variant 必须写出花括号，`{}` 只测试 tag；unit variant 不能写 `{}`。
+- 逗号分隔的备选必须属于同一个 enum 类型。首个备选确定该 handler 的 enum 类型：Error 不携带静态类型实参，所以泛型 enum 必须在首个备选写全类型实参（如 `Event<string>.Failed { message }`）；其余备选须命名同一声明，省略的类型实参取自该类型，显式写出的必须完全相同。
+- 先判断错误值是否属于该 enum 类型，再按源码顺序测试备选。类型、变体、字面量或范围任何一项不匹配时，继续尝试下一个 `catch` 子句；全部不匹配时原错误值不变地继续传播。pattern handler 不要求穷举，也不会产生匹配失败（`E0442`）。
+- 各备选必须绑定同名、同静态类型的变量。pattern 绑定只读，仅在该 handler 内可见，与 catch 绑定规则相同。
+- 括号内的裸标识符是 catch-all 绑定：`catch (NetErr)` 绑定一个名为 `NetErr` 的 Error 值，而不是类型过滤；按类型过滤写 `catch (e: NetErr)`。`_`、字面量、范围，以及元组、对象、数组和 `is` 类型模式都不能作为 catch 头部。
+- 普通 `catch` 不能省略头部；只有 `catch panic` 可以省略。
+- 泛型 enum 目标在定义处按约束检查。不可执行的 pattern handler 同样完整检查名称、类型、约束、可见性、字段与绑定。
+
+#### 8.1.3 重抛与错误转换
+
+`catch` 块内可重抛原错误或抛出不同枚举的新错误：
+
+```xray
+enum LowErr { Fail }
+enum HighErr { Upstream }
+
+try {
+    lowLevelCall()
+} catch (e: LowErr) {
+    log("low-level failed")
+    throw HighErr.Upstream
+}
+```
+
+#### 8.1.4 错误枚举设计推荐
+
+定义业务错误推荐使用 ADT enum，载荷携带上下文信息：
+
+```xray
+enum HttpErr {
+    NotFound { message: string },
+    ServerError { code: i64, message: string },
+    Timeout,
+}
+
+enum ParseErr {
+    Empty,
+    InvalidChar { value: string, offset: i64 },
+    Overflow,
+}
+
+fn fetchUser(id: i64) -> User {
+    if (id <= 0) { throw HttpErr.NotFound { message: "user not found" } }
+    // ...
+}
+
+try {
+    var user = fetchUser(-1)
+} catch (e: HttpErr) {
+    match (e) {
+        HttpErr.NotFound { message: msg } -> log("404:", msg),
+        HttpErr.ServerError { code, message: msg } -> log(string(code) + ":", msg),
+        HttpErr.Timeout -> log("timeout"),
+    }
+}
+```
+
+ADT enum 可让 `match` 在编译期检查错因穷举性。
+
+#### 8.1.5 错误的协程边界
+
+值返回通道的错误**不自动跨协程传播**。子协程内未捕获的错误：
+
+- 子协程终止，错误记录到 `coro.error`
+- 父协程**不**自动感知
+
+传递子协程错误的方式：
+
+1. **Channel 显式传递**：
+
+```xray
+enum WorkerErr { Failed { message: string } }
+const err_ch = Channel<string>(1)
+
+go fn() {
+    try {
+        riskyWork()
+        err_ch.send("ok")
+    } catch (e) {
+        err_ch.send("error")
+    }
+}()
+
+var result = match (err_ch.recv()) {
+    Recv.Value { value: v } -> v
+    _ -> "error"
+}
+if (result != "ok") { log("worker failed") }
+```
+
+2. **`linked go call()`**（见 §10.2）：独立启动的子 Task 失败会取消其父 Task 与关联子树；调用方仍可通过返回的 Task 观察精确错误。
+
+3. **结构化并发 `linked scope`**（推荐，见 §10.5）：scope 内任一子协程的错误自动传播给父 scope，按正确的通道路由（值返回通道的 enum 错误通过 `catch` 捕获）。
+
+### 8.2 Panic 通道
+
+#### 8.2.1 什么是 panic
+
+panic 表示**程序 bug 或运行时不变量违背**，不应用于业务逻辑：
+
+- 数组越界访问
+- 整数除以零
+- 不完整的 match（non-exhaustive）
+- 空引用解引用
+- 运行时类型断言失败
+
+panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信息。
+
+#### 8.2.2 `catch panic`
+
+`catch panic` 捕获 panic 通道的运行时故障：
+
+```xray
+try {
+    var arr: Array<i64> = [1, 2, 3]
+    var v = arr[10]                          // 越界 → panic
+} catch panic {
+    log("runtime fault caught")
+}
+
+try {
+    var n = 10 / 0                           // 除零 → panic
+} catch panic {
+    log("division by zero caught")
+}
+```
+
+**`catch` 与 `catch panic` 可共存**，分别处理两个通道：
+
+```xray
+enum AppErr { InvalidArg }
+
+try {
+    process(input)
+} catch (e: AppErr) {
+    log("business error:", e)                // 值返回通道
+} catch panic {
+    log("runtime fault!")                    // panic 通道
+}
+```
+
+**绑定与作用域规则**：每个 `try` 至多有一个 `catch panic`，因为它无条件匹配该通道。可省略头部，或写 `catch panic (p)` / `catch panic (p: PanicInfo)`；注解必须是 `PanicInfo`，不是运行时类型过滤器。绑定只读且仅在 handler 内可见，复制或返回该引用遵守 class 的身份与所有权规则，不自动获得 `Sendable`。handler 只保护对应的 try 主体，不保护同级 handler；handler 中的新 panic 继续寻找外层处理器。普通 enum 错误不能进入 panic handler，panic 也不能进入普通 catch。
+
+#### 8.2.3 `PanicInfo` 类
+
+`PanicInfo` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `PanicInfo` 对象：
+
+```xray
+class PanicInfo {
+    message: string             // 人类可读消息（如 "index out of bounds"）
+    stack: Array<string>        // 自动捕获的调用栈
+    cause: PanicInfo?           // 链式 cause
+    code: i64                   // 错误码
+    data: JSON.Value            // 附加数据；无数据时为 JSON null
+
+    init(message: string = "", cause: PanicInfo? = null)
+    fn toString() -> string
+}
+```
+
+用户代码一般不直接构造 `PanicInfo`——业务错误用 `throw <enum>`。
+
+**在 `catch panic` 中读取 panic 信息**：`catch panic (p)` 会把 `PanicInfo` 对象绑定到 `p`，可读取 `message`、`code`、`stack` 等字段：
+
+```xray
+fn main() {
+    var arr: Array<i64> = [1, 2, 3]
+    try {
+        print(arr[10])                       // 越界 → panic
+    } catch panic (p) {
+        print("message:", p.message)         // array index out of range: 10 (length 3)
+        print("code:", p.code)               // 430
+    }
+}
+
+main()
+```
+
+#### 8.2.4 未捕获 panic 的顶层诊断
+
+未被任何 `catch panic` 捕获的 panic 到达顶层时，打印一行到 stderr 并以退出码 1 结束：
+
+```
+[Uncaught Panic] E<code>: <message>
+```
+
+例如除零打印 `[Uncaught Panic] E0420: division by zero`，越界打印
+`[Uncaught Panic] E0430: array index out of range: 9 (length 3)`。
+
+**后端契约**：VM 与 AOT（`xray build --native`）对同一故障产生**逐字节相同**的可观测结果——退出码、stdout、以及这一行 stderr（错误码 + 消息均取自同一套共享格式化器）。契约内容仅限于此。
+
+**不属于契约的呈现细节**：
+
+- **调用栈**是 opt-in 诊断，默认不打印。设 `XRAY_BACKTRACE=1` 时，VM 在报告行后追加 `Stack trace:` 帧列表；AOT 原生路径不携带 unwind 状态，故不追加。让栈保持默认关闭，正是两个后端默认输出得以一致的原因。
+- **颜色**按 stderr 是否为 TTY 决定：交互终端下 `[Uncaught Panic]` 标签为粗红色，管道/重定向时为纯文本。
+
+> 对照值返回通道（§8.1.1）：未捕获的顶层 error 打印 `[Uncaught Error] <enum value>`，退出码同为 1。两个通道的前缀风格一致（`[Uncaught Error]` / `[Uncaught Panic]`）。
+
+### 8.3 `defer` — 资源清理
+
+`defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
+
+cleanup 块在退出时读取外部绑定。被读取的可移动 owner 在块退出前不得被 `move` 或返回，否则报 `E0382`；需要注册时值时必须先创建显式副本。这个 owner-lifetime 规则与下述错误通道规则相互独立。
+
+```xray
+fn fetch(url: string) -> string {
+    var conn = open(url)
+    defer { conn.close() }                   // 无论后续如何，conn 一定关闭
+
+    var data = conn.read()
+    if (len(data) == 0) {
+        throw FetchErr.Empty                 // defer 仍执行
+    }
+    return data
+}
+```
+
+**规则**：
+- `defer` 绑定最近的真实 `{}` 块；函数体顶层 `defer` 仍在函数退出时执行
+- 同一块可有多个 `defer`，按 **LIFO** 顺序执行
+- `defer` 在块正常结束、`break`、`continue`、`return`、`throw`、panic 展开时均执行
+- 循环体中的 `defer` 每轮迭代退出时执行
+- `defer` 体不得让错误逃逸（见 §8.3.1）
+- `defer` 体不得直接或传递地挂起或创建任务（`E0392`）；动态未知调用在侧效前以 `E0444` 失败关闭
+- `return` 及跳出 cleanup 边界的 `break` / `continue` 非法（`E0395`）；cleanup 内部循环的本地跳转合法
+- 每个注册点降低为程序点相关的静态 cleanup frontier；不生成闭包、回调对象或动态 defer 栈
+
+#### 8.3.1 `defer` 与错误
+
+`defer` 是**资源清理边**，不是错误传播边。清理路径失败意味着资源状态已不可知，因此语言既不允许清理错误覆盖在途错误（Go 模型），也不允许静默吞掉它。
+
+**规则 D1（静态，规范性）**：若 `defer` 块的推断逃逸错误集**非空**，编译器报 `E0387`。
+
+与 §8.0 的 throw-effect bit 不同，D1 **不是** fail-closed：xray 没有用户可书写的 no-throw 标注，若"无法证明不抛"即报错，作者面对间接调用、高阶内建方法、尚未登记契约的原生成员时将无从消解。无法证明的那部分交给规则 D3 的运行时兜底——这正是分层的意义。若将来引入用户可写的 no-throw 标注，D1 可收紧为"必须被证明"，D3 随之变为构造上不可达。
+
+```xray
+fn close(c: Conn) { throw IoErr.Closed }
+
+fn bad(c: Conn) {
+    defer { close(c) }                       // ❌ E0387：错误会逃出 cleanup
+}
+
+fn good(c: Conn) {
+    defer {                                  // ✅ 在 defer 体内自行处理
+        try { close(c) } catch (e) { log.warn("close failed") }
+    }
+}
+```
+
+**规则 D2（满足方式）**：在 `defer` 体内用 `try` / `catch` 消化错误，或调用不抛错的清理 API。这是唯一合法形式——它强制作者回答"清理失败了怎么办"。
+
+**规则 D3（运行时兜底，规范性）**：若错误仍从 `defer` 体逃逸——D1 未能静态判定的间接调用，或 `defer` 体内发生的 panic——运行时以 `E0443` **终止进程**，退出码 `70`：
+
+- 该终止**不可捕获**——`catch` 与 `catch panic` 都不拦截它。在 `defer` 体**内部**被自己 `catch` 住的错误或 panic 不算逃逸，属规则 D2 的正常写法。
+- 在途错误既不被替换也不被抑制；终止诊断报告逃逸的错误，并在存在在途错误时一并报告（枚举错误值不携带 message，此时显示 `<no message>`）。
+- VM 与 AOT 后端在此行为上必须逐字一致（含退出码与诊断文本）。
+
+**为什么不采用 Go 的"取代"语义**：Go 的 defer 要改写错误必须显式赋值给具名返回值，是可见的、局部的。xray 的函数签名不标 `throws`、调用点也无标记（§8.0），隐式的错误替换在源码上将完全不可见，且多个 `defer` 同时抛出时还需要一套替换链规则。fail-fast 是唯一既有定义、又不隐藏信息、又不引入额外规则的选项。
+
+### 8.4 Optional 与错误处理
+
+`T?` 是 `T | null` 的语法糖，用于"二态：有值/无值"场景。详见 §2.5。与错误处理的关系：
+
+- **不带错因的失败**：用 `T?`（如字典查找返回 `null` 表示"无此键"）
+- 与 `??`（默认值）/ `?.`（可选链）/ `e!`（强制解包）配合
+- 不要把 `T?` 当通用错误返回——需要错因时用 `throw <enum>` + `catch`
+
+### 8.5 决策树：选择哪种机制
+
+按"**调用方对失败的处理需求**"选择：
+
+```
+失败需要被调用方处理吗？
+│
+├─ 不需要（致命、不可恢复、运行时 bug）
+│   ↓
+│   panic（由运行时自动触发；catch panic 用于最外层兜底）
+│
+├─ 需要，且失败有结构化错因
+│   ↓
+│   throw <enum>，catch 处理（低开销值返回通道）
+│
+├─ 需要，但失败只表示"没值"，无错因意义
+│   ↓
+│   T? + ?? / ?.
+│
+├─ 需要，且函数有 ≥3 种正常状态
+│   ↓
+│   用户 ADT enum 直接作为返回类型
+│
+└─ 需要返回多个对等值（不是"成功/失败"二元）
+    ↓
+    tuple (a, b, ...)
+```
+
+完整对照：
+
+| 场景 | 推荐 | 例 |
+|--|--|--|
+| 业务错误、可恢复失败 | `throw <enum>` + `catch` | `throw ParseErr.Empty` |
+| 字典查找、可选字段 | `T?` | `map.get(k) -> Value?` |
+| 运行时故障兜底 | `catch panic` | 数组越界、除零 |
+| 多分支结果 | enum | `nextEvent() -> NetEvent` |
+| 主结果 + 元数据 | tuple | `parse(s) -> (Ast, i64)` |
+
+### 8.6 常用模式
+
+#### 模式 1：enum 错误 + defer 资源清理
+
+```xray
+enum ConnErr { Refused, Timeout }
+
+// 用一个极简的 "连接" 替身让示例自成一体。
+class Conn {
+    alive: bool
+    init(alive: bool) { this.alive = alive }
+    isAlive() -> bool { return this.alive }
+    close() { print("closed") }
+}
+
+fn fetchData(alive: bool) -> string {
+    var conn = Conn(alive)
+    defer { conn.close() }             // 无论成功或抛错都会执行
+    if (!conn.isAlive()) { throw ConnErr.Timeout }
+    return "payload"
+}
+
+fn main() {
+    try {
+        print(fetchData(true))         // => closed 然后 payload
+    } catch (e: ConnErr) {
+        print("connection error")
+    }
+}
+
+main()
+```
+
+#### 模式 2：throw + catch 用于库 API
+
+```xray
+enum ConfigErr { Missing { field: string } }
+
+fn requirePort(cfg: JSON.Object) {
+    if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
+    print("port:", cfg["port"])
+}
+
+fn main() {
+    try {
+        requirePort(JSON.parseObject("{\"port\": 8080}"))   // => port: 8080
+        requirePort(JSON.parseObject("{}"))                  // 抛出 ConfigErr.Missing
+    } catch (e: ConfigErr) {
+        match (e) {
+            ConfigErr.Missing { field: f } -> print("missing field:", f), // => missing field: port
+        }
+    }
+}
+
+main()
+```
+
+#### 模式 3：`??` 提供默认值
+
+```xray
+var port = config?.port ?? 8080
+var user = db.findUser(id) ?? guestUser
+```
+
+#### 模式 4：catch panic 兜底运行时故障
+
+```xray
+fn safeDivide(a: i64, b: i64) -> string {
+    try {
+        return string(a / b)
+    } catch panic {
+        return "error: division by zero"
+    }
+}
+```
+
+### 8.7 完整可运行示例
+
+以下均为自包含、可直接运行并通过 `xray check` 验证的完整程序（注释标注了真实输出）。
+
+#### 示例 1：`throw` / `catch` / `match`
+
+```xray
+enum ParseErr { Empty, BadChar { value: string } }
+
+fn parseDigit(s: string) -> i64 {
+    if (len(s) == 0) { throw ParseErr.Empty }
+    if (s == "x") { throw ParseErr.BadChar { value: s } }
+    return 42
+}
+
+fn main() {
+    try {
+        print(parseDigit(""))
+    } catch (e: ParseErr) {
+        match (e) {
+            ParseErr.Empty -> print("empty input"),        // => empty input
+            ParseErr.BadChar { value: c } -> print("bad char:", c),
+        }
+    }
+}
+
+main()
+```
+
+#### 示例 2：`defer` 的 LIFO 顺序与异常路径
+
+```xray
+enum E { Boom }
+
+fn work() {
+    defer { print("defer 1") }
+    defer { print("defer 2") }
+    print("body")
+    throw E.Boom                             // 抛错时 defer 仍会执行
+}
+
+fn main() {
+    try { work() } catch (e) { print("caught") }
+}
+
+main()
+```
+
+输出（`defer` 按 LIFO 逆序执行）：
+
+```
+body
+defer 2
+defer 1
+caught
+```
+
+#### 示例 3：`catch panic` 兜底并读取故障信息
+
+```xray
+fn main() {
+    var arr: Array<i64> = [1, 2, 3]
+    try {
+        print(arr[10])
+    } catch panic (p) {
+        print("message:", p.message)         // => message: array index out of range: 10 (length 3)
+        print("code:", p.code)               // => code: 430
+    }
+}
+
+main()
+```
+
+---
+
+## 9. 泛型 (Generics)
+
+> 新 XIR 泛型真值源：`src/xir/xxir_source.c`、`xxir_generic.c` 与 `xxir_specialize.c`，已准入的具体子集见 §17.11。本节其他类型推断、类/接口与容器能力仍待迁移，不以旧 analyzer 的实现证明新链资格。
+
+### 9.1 类型参数语法 `<T>`
+
+```ebnf
+TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
+TypeParam  ::= Identifier (':' ConstraintList)?
+ConstraintList ::= Type ('&' Type)*               // 交叉约束用 '&' 连接
+TypeArgs   ::= '<' Type (',' Type)* '>'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
+```
+
+```xray
+// 泛型函数
+fn identity<T>(x: T) -> T {
+    return x
+}
+
+var a = identity<i64>(42)
+var b = identity("hello")               // 推断 T=string
+
+// 泛型类
+class Box<T> {
+    value: T
+    init(v: T) { this.value = v }
+    get() -> T { return this.value }
+}
+
+var b1 = Box<i64>(42)
+var b2 = Box<string>("hi")
+
+// 多参数泛型
+class Pair<K, V> {
+    key: K
+    value: V
+    init(k: K, v: V) {
+        this.key = k; this.value = v
+    }
+}
+
+// 泛型接口
+interface Comparable<T> {
+    compareTo(other: T) -> i64
+}
+
+// 泛型 type alias：透明语法替换，不产生新类型
+type PairAlias<T> = { first: T, second: T }
+```
+
+`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<i64>` 等价于 `{ first: i64, second: i64 }`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
+
+### 9.2 类型约束：`<T: Constraint>` 与交叉约束 `&`
+
+方法可声明自己的类型参数，例如 `struct Box<T>` 中的 `map<U>(value: U)`。外层类型参数与方法参数按声明身份区分；方法参数不得重复或遮蔽外层类型参数。`Box<i64>.make<string>(value)` 的前一组实参属于类型，后一组属于静态方法；实例方法 `box.map<string>(value)` 从接收者类型取得外层实参。显式方法函数值使用同样的分组，例如 `Box<i64>.make<string>` 和 `box.map<string>`。显式列表必须完整，部分显式实参不自动补齐，也不允许把一组用于另一组。整体省略调用列表时按 §9.3 从原签名和类型证据推断；方法函数值的上下文推断属于同一完整目标的后续阶段。
+
+普通泛型方法的签名、体、默认参数和嵌套闭包在定义处按两层已声明约束检查，即使方法未使用；不从未来实参增加能力。默认参数与捕获继承原声明的类型参数身份和权限。特化仅替换已Checked的参数，复验后进入Lowered，普通实例在Program封存前形成。实例方法函数值只求值并保存接收者一次；静态函数值没有接收者。两者沿用完整间接调用签名、值所有权、效应、挂起和失败清理规则。
+
+xray 的约束语法统一用冒号 `:`，多个约束用 `&` 连接（读作“同时满足”）。**不使用** Java/TS 的 `extends` / `implements` 作为约束关键字。
+
+```xray
+// 单一约束
+fn first<T: Comparable>(a: T, b: T) -> T {
+    return a
+}
+
+// 多个约束（交叉）——T 必须同时满足 Comparable、Hashable、Stringable
+fn passThrough<T: Comparable & Hashable & Stringable>(x: T) -> T {
+    return x
+}
+
+// 多个类型参数，每个独立约束
+fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
+    return v
+}
+```
+
+**有限值相等操作约束（合同冻结，正式实施 PENDING）**：`Equal` 是内置谓词，
+不是用户可 implements 的接口。首域为 bool、八种定宽整数、f32/f64、string 和递归 Array<T>
+（T: Equal）。`<T: Equal>` 与 `where T: Equal` 相同并合取其他条件；无约束 T 的未调用定义
+也不能使用相等操作或转发到 assertEqual。Comparable、Hashable 或同名用户接口不能补此证明。
+它只授同T的 ==、!= 与 assertEqual，不承诺自反性、排序、键等价、显示、成员或构造权限。
+名义/derive、nullable、Map/Set/JSON 等其余域待逐族准入，未实施者明确拒绝，见 §17.33。
+
+**Atomic 闭合类型谓词（2026-10-05 冻结，实施待完成）**：prelude 的 canonical `AtomicValue` 恰为 `{i64, f64, bool}`，`AtomicNumber` 恰为 `{i64, f64}`，`AtomicBoolean` 恰为 `{bool}`。Number/Boolean 蕴含 Value，Value 蕴含 Sendable；不额外授予接口、成员、反射、构造权限或隐含 Equal 证明。用户不能 implements 这些 canonical 谓词；可见的同名用户声明按普通名称解析，不获得内建身份。
+
+`Atomic<T: AtomicValue>` 的类型使用、构造及共有方法在定义处要求 Value 证明；add/sub/fetchAdd/fetchSub 的方法 `where T: AtomicNumber`、toggle 的 `where T: AtomicBoolean` 只约束该方法。复用 `<T: C>`、`&` 与方法 where 现有语法，无新增 union 约束语法。未调用的无约束 `T` 定义同样拒绝，不等实例化、不从描述查询补证明；Checked 上特化后复验，普通实例在 Program 封存前完成。
+
+**内置约束接口**：
+
+| 接口 | 含义 |
+|---|---|
+| `Comparable` | 可用 `<` `<=` `>` `>=` 比较；i64/f64/string/Comparable 实现者 |
+| `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==` 与 `hash() -> i64`（签名见下） |
+| `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
+| `Iterable<T>` | 通过 iterator 协议被 `for-in` 遍历；Array、Slice、Map（含 `JSON.Object`）、Set、string、Range、生成器返回的 `Iterator<T>` 与自定义 `iterator()` 满足此约束。`JSON.Value` 不可直接迭代。`Channel<T>` 虽可用 `for-in` 接收，但走专用接收循环而非 iterator 协议，不满足此约束。unit-only enum 的 `for (value in E)` 与 concrete enum 的 `E.variants` 是编译期有限域语法，不使 enum 满足 `Iterable<T>`，也不能替代泛型 `Iterable<T>` 约束 |
+
+`Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==` 与 `hash() -> i64`。`operator==` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
+
+```xray
+class Token implements Hashable {
+    value: i64
+
+    init(value: i64) { this.value = value }
+
+    // 参数写 Token，不写 Self
+    operator==(other: Token) -> bool { return this.value == other.value }
+
+    hash() -> i64 { return this.value }
+}
+
+var counts: Map<Token, i64> = #{}
+counts.set(Token(7), 99)
+```
+
+只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, i64>)`。
+
+#### `where` 子句
+
+约束也可以写在签名之后。`where` 与 `<T: C>` 使用同一约束机制，同一个参数上的要求**取交集**而非互相覆盖。方法的附加要求属于方法声明，不修改外层名义类型的参数合同。
+
+```ebnf
+WhereClause ::= 'where' WhereItem (',' WhereItem)*
+WhereItem   ::= Identifier ':' ConstraintList
+```
+
+```xray
+// 约束列表长时，写在后面不会把参数挤出一行
+fn maxOf<T>(a: T, b: T) -> T where T: Comparable {
+    if (a > b) { return a }
+    return b
+}
+
+// 内联与 where 在同一参数上取交集：T 必须同时满足 Comparable 与 Stringable
+fn describe<T: Comparable>(a: T, b: T) -> T where T: Stringable { ... }
+
+class Registry<K, V> where K: Hashable { ... }
+struct Holder<T> where T: Comparable { ... }
+interface Seq<T> where T: Comparable { ... }
+enum Wrap<T> where T: Comparable { ... }
+```
+
+普通实例方法或静态方法的 `where` 可以约束方法自身及外层名义类型的类型参数；方法不必另有 `<...>`。其有效条件为外层声明条件、自身内联条件与方法 `where` 条件的合取，只作用于该方法，不改变类型本身的构造、保存或其他方法准入。方法体、默认值及嵌套闭包在此定义上下文检查；直接调用和方法取值都必须由调用方证明条件，不能等具体实例补足缺失的泛型证明。名称仍唯一，条件失败不触发另选重载，也不扩大可见性、receiver 权限或效应承诺。
+
+其他声明的 `where` 只约束该声明自身的类型参数。未知约束主体及类型参数遮蔽是编译错误。同一已准入标记条件重复出现等同单次条件，仍计入检查预算；未知标记不能因重复或特化而获准。当前新 XIR 普通名义值类型的 read/static 条件方法支持 Sendable/Error 标记与具名接口应用的合取，保留接口完整有序实参，并按方法外层及自身的整组参数环境证明。普通 read 接口要求、显式 struct/enum 实现及受约束泛型成员调用已接入静态见证；对于没有自身参数的接口要求，实现候选不能额外增加方法类型参数，条件必须由名义声明前提蕴含。对于有Q个自身参数的要求，实现必须有相同own数量并按ordinal重定基；条件由名义前提与原要求方法前提蕴含，实现体仍按自身声明检查。接口方法自身泛型的显式调用和内联约束已有Windows范围验证，完整安全资格未取得；自身where解析与值形状推断已有Windows范围验证；晚结果上下文补足和显式接口方法取值为下一验证族，完整双向推断与函数值上下文指导仍OPEN。已有普通方法泛型能力不代替接口方法验证。条件构造器、accessor、override、接口成员条件和其余见证声明族仍待分别实现，未接通者拒绝；不代表语言目标被删除。
+
+#### 键等价关系
+
+哈希容器按**键等价关系**存取，它与 `==` 运算符是两个关系：
+
+- 键等价必须**自反、对称、传递**。自反性是容器不变量：存进去的键必须能被它自己找回来，否则插入不再覆盖、查找不再命中、删除不再回收。
+- `a == b` 蕴含 `a` 与 `b` 键等价（反之不成立）。
+- 键等价蕴含 `hash(a) == hash(b)`。
+
+内置 `f64` 的 `==` 是 IEEE 语义，对 NaN 不自反，所以它的键等价额外规定：**所有 NaN 是同一个键**，`-0.0` 与 `+0.0` 是同一个键。于是 `nan == nan` 仍为 `false`，而 `m[nan] = v` 之后 `m[nan]` 一定取得到。
+
+按"值是否在其中"提问的操作走键等价关系，不走 `==`：`Map` 的 `containsKey` / `containsValue` / 下标读写 / `delete`，`Set` 的 `add` / `contains` / `delete`，以及 `Array` 的 `indexOf` / `contains`。
+
+用户类型的 `operator==` 直接充当它自己的键等价关系，因此**它必须自反**。带浮点字段的类型若原样转发 IEEE 比较，就会把上面的不变量带回来。
+
+**当前限制**：
+- 不支持**高阶类型**（`F<_>` 作为参数）——见 §9.6.1，这是明确不提供，不是暂缓。
+- 不支持默认类型参数（`<T = i64>`）。
+- `where` 只接受与内联约束相同的表达力（`T: A & B`）；不支持对关联类型或嵌套类型的约束（`where T.Item: Hashable`），因为关联类型本身不存在。
+- 同一个类型参数列表中不得出现重名参数（`<T, T>`）。
+- 接口实现仍需**显式 `implements`**（在类声明位置，不是约束位置，详见 §5.4）。
+
+### 9.3 类型推断与显式实例化
+
+#### 类型推断
+
+```xray
+identity(42)                    // T 推断为 i64
+Box("hello")                // T 推断为 string
+Pair("key", 100)            // K=string, V=i64
+```
+
+推断算法是**双向推断**：
+- 从参数推断（调用位置实参类型 → 类型参数）。
+- 从返回值推断（上下文期望类型 → 类型参数）。
+
+推断只从原签名与实际值类型、已确定的前序实参上下文和期望结果收集类型证据；约束和具体implements不能凭空选择类型。外层类型或原接口应用的参数先固定，仅求解被调用声明的自身参数；调用者符号保留真实声明身份。实参按语言求值顺序各检查并发射一次，不能试探后重跑。完整实参组形成后，显式与推断调用使用相同约束证明、权限检查、转换、Checked实例身份和来源复验。当前值形状与前序完整上下文已接通；下一增量在显式实参检查后用真实非Unit期望结果补足仍未解的自身参数。结果依赖已确定时不重新绑定，仍执行原结果转换，例如 typed i8 实参的 identity 在 i64 结果上下文中保留 T=i8 再宽化。默认实参在完整组与原约束证明后求值，不为无证据参数提供猜测。首lambda、空数组或裸字面量依赖尚未确定的上下文时仍须后续类型计划实现，完整双向目标不缩减。
+
+#### 显式实例化
+
+在推断失败或需要明确时：
+
+```xray
+var empty = Array<i64>()              // 无元素可推
+var m = Map<string, i64>()
+var result = identity<f64>(0)            // 泛型实参提供唯一上下文，0 直接定型为 f64
+```
+
+### 9.4 特化与 monomorphization
+
+**实现策略**：构建期 monomorphization（单态化）。**泛型源声明身份与有序具体类型实参元组共同构成实例身份**，函数泛型与 class / struct 泛型适用同一条规则；两个模块中同名、同实参的泛型仍是不同实例。跨模块选择性导入的每个特化绑定到定义模块导出的精确实例，不按本地别名或裸函数名回退。
+
+- **实例身份**：`identity<string>` 与 `identity<MyClass>` 是两个实例，`Box<string>` 与 `Box<MyClass>` 也是两个实例——即使它们的运行时表示同为 PTR。泛型体在定义处按约束检查；成员身份不能等具体类型实参到来后重新寻找。ABI 表示相同不意味着声明、约束见证或所有权语义相同。
+- **名义类型实参身份**：声明型 class / struct / interface / enum 实参由其精确声明身份标识，而不是由源码拼写标识。调用模块的 `LocalCounter` 与定义模块中同名的私有类型必须产生不同特化；显式和推断得到的同一调用方类型则必须合并为同一特化。
+- **定义上下文与调用上下文**：泛型声明体始终在定义模块的词法上下文分析，调用点解析出的具体类型实参则保留调用模块中的精确语义身份。编译器在语法类型引用之外保存该绑定；缺少或无法完整证明声明身份时必须拒绝构建，不得按裸类型名回退。
+- **代码共享是 AOT 决策，不是前端决策**：体积合并发生在解析之后的后端计划里（`generic-body-plan` / `generic-code-size-plan` 证据行，按体积阈值决定 `share_canonical_body`），并且带证据。前端保持精确身份，后端负责体积。
+- 名字修饰（name mangling）：`identity<i64>` → `identity$i64`，`Pair<string, i64>` → `Pair$str_i64`。修饰名承载实例身份，因此不得丢失任何类型实参。
+- 编译期严格类型检查保证安全；冷路径类型名元数据可在启用 names/debug profile 时保留具体类型参数显示信息。
+
+> 普通特化在 Checked XIR 上执行并复验，见 §17.11。下面旧链深度/实例预算与高级接口表保留为待迁移分母，不是新 XIR 已实现范围。
+
+#### 单态化预算
+
+两个预算防的是两类不同的风险，互不可替代：
+
+| 预算 | 值 | 防什么 | 超限 |
+|---|:---:|---|---|
+| `XR_MONO_MAX_DEPTH` | 128 | **嵌套深度**。特化体可以再实例化别的泛型（`Router<i64>` 构造 `RouteMatch<i64>` 构造 `Map<string, i64>`），因此展开是一个不动点迭代。多态递归（`fn f<T>() { f<Box<T>>() }`）让该迭代发散，而深度是唯一能识别它的量——每一轮都产生真正全新的类型元组，去重与计数都无法把发散和合法的广度区分开 | `E0389` |
+| `XR_MONO_MAX_INSTANCES` | 16384 | **广度**。每个实例克隆一份完整声明，因此这是编译期内存兜底，不是语言规则。取值远高于任何现实程序 | `E0387` |
+
+**超限一律是硬错误，绝不静默降级。** 把调用留在泛型状态会在 `xray verify` 的 `forbid=["box"]` 合同下面重新引入装箱，而合同刚刚"证明"了它不存在——这类不可见的去优化正是版本化 effect 合同要排除的东西。
+
+`E0389` 的诊断会打印完整实例化链（`a$i64 -> b$Box_i64 -> ...`），否则报出的类型是用户从未写过、也无法检索的。
+
+**性能影响**：
+- 单态化让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path。
+- 逐类型特化会增加代码和元数据体积（大致按“类型组合数 × 声明体积”增长），换来精确布局、调试类型名保真和按类型特化；体积回收由上述 AOT 共享计划按阈值完成。
+- 内置特化容器（`Array<i64>`、`Array<u8>`）进一步避免装箱开销。
+- 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
+
+**高阶函数的错误效应特化**：回调参数默认是 effect-polymorphic。单态化会按实参回调的 throw-effect summary 选择 `NO_THROW` 或 `MAY_THROW` 版本，使已证明 no-throw 的回调路径不生成无用 error-check；未知动态目标保守进入 may-throw 版本。需要强保证的高阶调用边界使用 `xray verify` 合同，证明不足即拒绝。
+
+**特性状态**（使用 §0.4.3 的状态标记）：
+
+| 特性 | 状态 | 说明 |
+|---|---|---|
+| `where` 子句 | **稳定** | 见 §9.2 |
+| 声明点方差（`out T` / `in T`） | **未实现** | 有前置依赖，见 §9.6 |
+| 默认类型参数（`<T = i64>`） | **未实现** | 语法当前是错误，不是被忽略 |
+| 高阶类型（HKT） | **明确不提供** | 与全程序单态化冲突，见 §9.6.1 |
+
+### 9.5 协议（duck typing）与名义类型
+
+#### 名义类型为主
+
+xray 的接口实现需**显式 `implements`**——这与 Go 的"隐式接口实现"不同。
+
+```xray
+interface Drawable { draw() -> () }
+
+class Square implements Drawable {        // 必须显式 implements
+    draw() { print("square") }
+}
+
+class Wrong {
+    draw() { print("wrong") }
+}
+
+fn render(d: Drawable) { d.draw() }
+render(Square())     // OK
+// render(Wrong())   // 编译错误：Wrong 不是 Drawable
+```
+
+#### 结构化对象
+
+仅 `object literal` 与 `type T = {...}` 是结构化匹配。结构化匹配要求**精确字段集**（详见 §2.10.1）：既不能多也不能少，只有类型可空的字段允许缺省。
+
+```xray
+type Point = { x: f64, y: f64 }
+
+fn describe(p: Point) { ... }
+
+describe({ x: 1.0, y: 2.0 })          // OK：字段集精确匹配
+describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误 E0356：extra field 'z'
+describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
+```
+
+### 9.6 方差（Variance）
+
+**状态：未实现**（声明点方差标注 `out T` / `in T`）。当前行为是完整且健全的基线，不是占位：
+
+- 容器类型：**不变**（`Array<Dog>` 不是 `Array<Animal>` 的子类型）。
+- 函数类型：参数逆变、返回值协变（标准规则）。
+
+**为什么不在本轮提供**：方差是在子类型关系之上定规则，因此它有一个前置依赖——结构化类型的宽度方向必须先定死（见 §2.10.1 的精确字段集规则）。在子类型关系本身尚未收敛时引入声明点方差，会把一个未定的语义再乘以一层，且不可向后兼容地修补。不变性是安全的、AOT 友好的、可随时放宽的起点。
+
+### 9.6.1 高阶类型（HKT）
+
+**状态：明确不提供**（不是"暂缓"）。Xray 不支持类型构造器参数（其它语言里写作 `F<_>` 的那种 functor 抽象）。
+
+**为什么是永久决定**：HKT 与全程序单态化在根本上冲突。对类型构造器抽象意味着实例集合在编译期不再有限可枚举，实现只能退回字典传递或类型擦除——两者都会重新引入 Xray 的整条 AOT 路线（无装箱表示、精确布局、`xray verify` 的 shape 合同）明确要消除的间接层。这与"轻量脚本语言"的定位也不一致。
+
+需要类似抽象能力时，使用 interface + 具体类型参数（`interface Mappable { map(f: fn(T) -> U) -> Self<U> }` 这类签名同样不提供），或在调用点用具体实例化。
+
+### 9.7 泛型与类型身份
+
+由于 monomorphization，每个具体实例化都有独立的类/函数定义。运行时类型判断使用名义身份，调试输出通过 `typeName` 的冷路径名字表提供：
+
+```xray
+class Container<T> {
+    items: Array<T>
+}
+var c = Container<i64>()
+print(c is Container<i64>)     // true
+print(typeName(c))             // "Container<i64>" when type names are enabled
+```
+
+结构化字段/方法元数据不会由默认运行时自动提供；需要 inspect/serialization 等能力时应使用显式 derive 或编译期生成。
+
+### 9.8 显式泛型函数取值
+
+`identity<string>`与`module.identity<string>`表示已给出完整类型实参的普通函数值，
+不会调用函数。`<`紧邻名字，与显式调用保持同一消歧规则。完整类型列表后为表达式分隔符
+（逗号、分号、右圆/方/花括号、冒号、输入结束）、成员点或换行时可解析为取值；后跟左圆括号
+继续解析为直接泛型调用。`(identity<string>)(value)`先构造值再间接调用。
+不符合这些边界时恢复比较解析，`a<b>c`与`a < b`不改变解释。
+
+取值要求准确数量的显式类型实参，并在外围定义处证明声明约束；可见性与import权限保持不变。
+不能特化普通变量或借此构造类型；不引入类型推断或运行时泛型字典。
+引用使用同一Checked实例闭包，只有函数值引用到的实例也在Program封存前完成特化和复验。
+泛型体中的引用可使用外围T，不能等具体实参到来后补救非法定义。
+
+---
+
+## 10. 并发与协程 (Concurrency)
+
+> 真值源：`src/coro/xcoro*.c`、`src/coro/xtask*.c`、`src/coro/xchannel.c`、`src/coro/xscope*.c`、`src/frontend/analyzer/xanalyzer_escape.c` 与 `docs/rules/design-principles.md`。
+
+xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设计目标：让 `go worker(args)` 与普通调用具有同一套显式参数和所有权边界，同时在语言的安全子集内**编译期保证不发生数据竞争**——这条保证的精确形式、它的边界，以及本节各构造建立的同步边，定义在 §16.9。
+
+### 10.1 协程模型
+
+| 维度 | 选择 |
+|--|--|
+| 调度模型 | M:N（用户态协程 + 多 OS 线程） |
+| 调度策略 | 协作式（后向跳转、Channel、`await`、`Coro.yield()` 等调度/挂起点）+ work-stealing |
+| 栈模型 | Stackless（每协程独立 VM 值栈 + 帧数组，按需增长，无原生 C 栈） |
+| 创建开销 | ~微秒级（初始 VM 值栈约 64 槽 + 4 帧，非原生栈） |
+| 上下文切换 | VM 上下文切换（保存/恢复 VM 帧），无原生栈切换、无 syscall |
+
+协程默认分布在多个 worker 线程上；运行时根据 CPU 核数自动设置 GOMAXPROCS 风格的并行度。
+
+### 10.2 `go` — 启动协程
+
+```ebnf
+GoExpr   ::= 'linked'? 'go' GoOptions? CallExpr
+GoOptions ::= '(' GoOption (',' GoOption)* ')'
+GoOption ::= 'name' ':' StringLiteral
+```
+
+`go` 是**表达式**，返回 `Task<T>` 句柄。它只接受调用表达式；内联逻辑必须写成被立即调用的 lambda：
+
+```xray
+// 形式 1：调用一个已声明的函数
+var t1 = go worker(0, channel)
+
+// 内联逻辑：lambda 也必须形成完整调用，并显式传参
+var t2 = go fn(d: JSON.Object) -> i64 {
+    return d.value * 2
+}(payload)
+
+// 无参数内联逻辑仍写成零参 lambda 调用；不存在 go { ... } 语法
+var t3 = go fn() -> i64 {
+    return compute()
+}()
+
+// 可选调试名称
+var named = go(name: "worker-1") worker(1, channel)
+```
+
+**按声明传值**：可复制且 Sendable 的实参形成拥有式逻辑副本，不要求 `copy(...)` 或 backing 唯一。不可复制且 Sendable 的资源仅按消费参数接管；可选 `move resource` 标记同一转移，不是 `go` 的选项。Task 结果必须可复制且 Sendable，资源不成为 Task 结果：
+
+```xray
+var data = [10]
+var task = go fn(d: Array<i64>) -> i64 {
+    return d[0] + 1
+}(data)            // 保存逻辑副本，调用方 data 仍可使用
+```
+
+`go { ... }` 不是语法。这个单一调用形式保证所有入口都经过同一套参数求值、capture plan 与跨协程 transfer plan；需要内联逻辑时使用 lambda 调用，参数按声明的 READ 或消费模式处理：
+
+```xray
+var n = 10
+var task = go fn(x: i64) -> i64 {
+    return x + 1
+}(n)
+```
+
+**语义**：
+- 每个 `go` 表达式都返回一个 `Task<T>`，其中 `T` 是被调函数的返回类型；返回 `()` 的函数对应 `Task<null>`。
+- 协程在闲置 worker 线程中调度（M:N）。
+- `go(name: ...)` 只设置调试名称，不影响调度顺序。
+- 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
+- 参数、拥有式捕获和结果均按真实类型检查 Sendable；普通泛型在定义处按约束检查，Checked 特化后复验。可复制值按声明保留逻辑副本，复制在 class 与同步身份边界停止；Array 的资格由全部元素决定，const、COW、引用计数或单 worker 不额外授予 Sendable。借用 ref、Slice/MutSlice、Cell 与非 Sendable 值不能跨此边界。不可复制且 Sendable 的资源仅可按消费参数转移，不进入普通可复制捕获或 Task 结果。
+- `go(name: ...)` 中 `name` 仅是诊断/调试元数据；语义修饰符是前缀 `linked go`，不进入 `GoOptions`。
+- 普通外层 `var` 禁止被 `go` 闭包捕获，读和写都一样；这条规则不依赖协程数量或调度时序。多个协程的共享可变状态必须通过 `Channel`、`Atomic` 或 `sync` 的受审计句柄传递，直接捕获修改时报编译错误。
+- `linked go call()` 仍只接受调用表达式并返回普通 `Task<T>`。在独立 scope 之外，它把子 Task 挂到当前父 Task：父任务取消会递归取消子任务，子任务失败会取消父任务及其关联子树，父任务在已完成自身正文后仍等待链接子任务终结。在 `scope` 内，成员关系与错误传播统一由该 scope 的策略管理，不再叠加第二套父子关系。
+
+### 10.3 `await` — 等待结果
+
+```ebnf
+AwaitExpr ::= 'await' Expression
+           |  'await' 'all' Expression       // 等待全部完成
+           |  'await' 'any' Expression       // 等待任一完成
+```
+
+```xray
+// 单 task
+var task = go fetch("https://example.com")
+var result = await task                    // 让出当前协程直到 task 完成
+
+// await all：等待全部完成，返回结果数组（与输入顺序一致）
+var t1 = go compute(2)
+var t2 = go compute(3)
+var t3 = go compute(4)
+var results: Array<i64> = await all [t1, t2, t3]
+// 也可直接对变量使用，无需中括号
+var tasks = [t1, t2, t3]
+var results2: Array<i64> = await all tasks
+
+// await any：等待任一完成，返回该任务结果；其他任务继续运行
+var first = await any [t1, t2, t3]
+
+// await anySuccess：跳过失败任务，等待第一个成功的任务
+var firstOk = await anySuccess [t1, t2, t3]
+```
+
+**语义**：
+
+- `await` 仅作用于 `Task<T>` 类型；其他类型为编译错误。
+- 用户统一写 `await task`，不写 `await (move task)`。Task 结果必须可复制且 Sendable；任务保留完整拥有式终态，重复 await 得到各自的逻辑副本，复制在 class 与同步身份边界停止。复制或持有失败只失败该等待者，不消费或修改 Task 的粘滞结果；不能由 backing 唯一性或引用计数选择单次 take 语义。
+- 当前协程**让出**直到目标完成（不阻塞 OS 线程）。
+- 异常传播：
+  - `await t` 按 t 抛出时所属的通道重抛它的失败。协程内的 `throw <enum>` 以值错误重抛，因此 await 所在栈帧的 `catch (e)` 能抓住它；没有 catch 时按值向上传播，与普通 throw 一致。协程内的 panic 仍以 panic 重抛并继续展开。
+  - 因此 `await t` 继承被等待协程体的错误集：含此类 `await` 的函数，其可失败性与该协程体一致。若 await 处无法确定 task 绑定的协程（从集合中取出、由参数传入等），则 fail-closed 按 may-throw 处理。
+  - `linked scope` 出口同理：它在所属栈帧中按子协程的通道重抛第一个失败的子协程。
+  - 把结果作为值报告的形式——`awaitResult()`、`awaitTimeout(ms)`——从不重抛，因此也不进入所在函数的错误集。
+  - `await t` 成功时返回 `T`；如果 `T` 是 `T?`，返回的 `null` 是任务真实结果，不代表取消或失败。
+  - `await all` 中任一任务抛异常即整体抛异常（其余任务会被取消）。
+  - `await any` 仅当**全部失败**时抛异常；只要有一个完成，返回该任务结果。
+  - `await anySuccess` 类似 `await any`，但**跳过**抛异常的任务，只等成功完成的。
+- `all` / `any` / `anySuccess` 在 `await` 后面是**上下文关键字**，仅在此位置生效。
+- `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<i64>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / `JSON.Value` 结果类型。
+
+### 10.4 `Task<T>` 句柄
+
+`go expr` 返回 `Task<T>`，其中 `T` 为被调函数的返回类型。Task 句柄支持：
+
+| 方法 / 属性 | 类型 | 说明 |
+|--|--|--|
+| `t.done` | `bool`（属性） | 任务是否已完成（成功、失败或取消） |
+| `t.status` | `TaskStatus`（属性） | `Pending` / `Running` / `Success` / `Failed` / `Cancelled` |
+| `t.cancel()` | `() -> ()` | 请求取消任务（合作式） |
+| `t.poll()` | `() -> TaskResult<T>` | 非阻塞观察；未完成返回 `TaskResult.Pending` |
+| `t.awaitResult()` | `() -> TaskResult<T>` | 阻塞等待并返回状态结果，不重抛异常 |
+| `t.awaitTimeout(ms)` | `(i64) -> TaskResult<T>` | 阻塞到完成或超时，超时返回 `TaskResult.Timeout` |
+
+```xray
+var t = go fetch(url)
+if (!t.done) { /* 还在跑 */ }
+var r = await t
+
+match (t.poll()) {
+    TaskResult.Pending -> print("running")
+    TaskResult.Success { value } -> print(value)
+    TaskResult.Failed { error: err } -> print(err)
+    TaskResult.Cancelled -> print("cancelled")
+    TaskResult.Timeout -> print("timeout")
+}
+```
+
+`TaskResult<T>` 的当前公开形状为 `Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。运行时故障通过 `PanicInfo` 进入 `Failed`；业务 enum 错误仍走语言的错误通道，plain `await task` 会按对应错误路径传播，调用方需要状态值时使用显式 task handle 与 `awaitResult()` / `awaitTimeout(ms)`。
+
+**取消语义**：`cancel()` 设置取消标志；协程在下一个调度/挂起检查点（后向跳转、Channel 操作、`await`、`Coro.yield()`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
+
+**看门狗策略**：运行时监控线程（sysmon）会观察 RUNNING 协程的心跳。纯 Xray 循环在后向跳转 safepoint 推进心跳，因此会被观测为持续进展；sysmon 主要用于发现长时间 native/FFI 或无 safepoint 区域卡住。如果心跳长时间冻结，默认行为是 **warn-only**：约 100ms 后打印一次 stuck warning，但不静默取消协程。强制取消是显式 opt-in：设置环境变量 `XRAY_SYSMON_CANCEL_MS=N`（`N > 0`，单位毫秒）后，心跳冻结超过该阈值的协程会被标记取消；未设置或设为 `0` 时保持仅告警。纯 CPU 长循环可在循环内插入 `Coro.yield()`，以改善调度公平性和取消响应性。
+
+### 10.5 Channel
+
+```ebnf
+ChannelType ::= 'Channel' '<' Type '>'
+ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
+```
+
+Channel 以稳定的 `const` 绑定命名；其类型来自受审计的同步能力 registry，因此 `send`/`recv` 可修改受保护的内部状态：
+
+```xray
+const ch  = Channel<i64>(10)    // 有缓冲，capacity = 10
+const ch0 = Channel<i64>(0)     // 无缓冲（同步握手）
+const cha = Channel(3)          // 元素类型从首次 send 推断
+```
+
+**API**（注意全部为 **camelCase**）：
+
+| 方法 | 签名 | 行为 |
+|--|--|--|
+| `send(v)` | `(T) -> ()` | 阻塞发送；满则等待消费者；channel 已关闭时抛异常 |
+| `recv()` | `() -> Recv<T>` | 阻塞接收；关闭且缓冲为空时返回 `Recv.Closed` |
+| `recvOr(default)` | `(T) -> T` | 阻塞接收；收到值时直接返回 `T`，关闭且缓冲为空时返回 `default`，不分配 `Recv<T>` 包装 |
+| `trySend(v)` | `(T) -> SendResult` | 非阻塞发送；返回 `Sent` / `Full` / `Closed` |
+| `tryRecv()` | `() -> Recv<T>` | 非阻塞接收；空时返回 `Recv.Empty` |
+| `sendTimeout(v, ms)` | `(T, i64) -> SendResult` | 带超时发送；超时返回 `SendResult.Timeout` |
+| `recvTimeout(ms)` | `(i64) -> Recv<T>` | 带超时接收；超时返回 `Recv.Timeout` |
+| `close()` | `() -> ()` | 关闭 channel；幂等 |
+| `isClosed` | `bool`（属性） | channel 是否已关闭 |
+
+```xray
+const ch = Channel<i64>(10)
+ch.send(42)                             // 阻塞发送
+var v = match (ch.recv()) {
+    Recv.Value { value } -> value
+    Recv.Closed -> -1
+    _ -> -1
+}
+
+var sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
+match (ch.tryRecv()) {
+    Recv.Value { value: next } -> print(next)
+    Recv.Empty -> print("empty")
+    Recv.Closed -> print("closed")
+    Recv.Timeout -> print("timeout")
+}
+
+ch.send(7)
+ch.close()
+for (msg in ch) {
+    print(msg)
+}
+
+var value = ch.recvOr(-1)
+```
+
+**send/recv 与 `move`**：发送大对象时用 `ch.send(move payload)` 转移所有权，避免拷贝；接收方独占。
+
+Channel 在类型位置写作 `Channel<T>`，可用于函数参数、字段和返回类型：
+
+```xray
+fn producer(ch: Channel<i64>) {
+    ch.send(42)
+}
+```
+
+**语义**：
+- **MPMC**（多生产者多消费者）。
+- 有缓冲 ch：满则发送方挂起，空则接收方挂起。
+- 无缓冲 ch：发送/接收必须同时握手（rendezvous）。
+- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value { value: v }`，取完后返回 `Recv.Closed`；`recvOr(default)` 返回剩余 buffered value，取完后返回 `default`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
+- `for (msg in ch)` 等价于阻塞接收直到 channel 关闭且 drained；循环变量类型为 `T`。Channel 不支持 key-value 迭代。
+
+### 10.6 `select`
+
+`select` 在多个 channel 操作中多路复用；非阻塞分支用 `_` 占位。
+
+```ebnf
+SelectStmt ::= 'select' '{' SelectArm+ '}'
+SelectArm  ::= RecvArm | SendArm | TimeoutArm | DefaultArm
+RecvArm    ::= Identifier 'from' Expression '->' Block
+SendArm    ::= Expression 'to' Expression '->' Block
+TimeoutArm ::= 'after' Expression '->' Block
+DefaultArm ::= '_' '->' Block
+```
+
+```xray
+const ch1 = Channel<i64>(2)
+const ch2 = Channel<i64>(2)
+
+select {
+    msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
+    msg from ch2 -> { print("got from ch2:", msg) }      // 接收分支
+    100  to   ch1 -> { print("sent 100 to ch1") }        // 发送分支
+    _ -> { print("no channel ready") }                   // 默认分支（非阻塞）
+}
+```
+
+**语义**：
+- 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value { value: name }` 的 payload 绑定到 `name`。
+- 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中；`value` 与 `ch.send` 遵守同一 transfer plan——execution-local heap 值必须显式写成 `copy(v)` 或 `move v`。
+- 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
+- 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
+
+### 10.7 `scope` 块（结构化并发 / 词法作用域）
+
+`scope` 是**语句关键字**，建立一个新的词法作用域块。它服务两个目的：
+
+1. **纯词法作用域**：与 C/Rust `{ ... }` 局部块一致，块内 `var` 不影响外层同名变量。
+2. **结构化并发**（语义增强）：在 `scope` 块内 `go` 启动的协程，块退出前**自动等待**全部完成或取消。
+
+```ebnf
+ScopeStmt       ::= 'scope' Block
+LinkedScopeStmt ::= 'linked' 'scope' Block          // 兄弟失败 -> 取消所有 + 重抛
+```
+
+```xray
+// 词法作用域用途
+var x = 1
+scope {
+    var x = 10            // shadow 外层 x，块内有效
+    print(x)              // 10
+}
+print(x)                  // 1
+
+// 结构化并发用途（与 go 配合）
+scope {
+    go worker_a()
+    go worker_b()
+    // scope 块退出前，等待 a/b 全部完成；任一抛异常不影响兄弟
+}
+```
+
+**两种 scope 变体**：
+
+| 形式 | 子协程抛异常时的行为 | 返回值 |
+|---|---|---|
+| `scope { ... }` | 不取消兄弟；异常不向外传播（每个 task 独立） | 无（语句形式） |
+| `linked scope { ... }` | **取消所有兄弟**协程，并向外**重抛**最先抛出的异常 | 无 |
+
+两种形式都不返回聚合结果。需要观察某个子任务状态时，显式保留 task handle 并调用 `awaitResult()` 或 `awaitTimeout(ms)`；需要按结果聚合时用 `await all` / `await any` / `await anySuccess`。
+
+```xray
+// linked scope：失败传播
+try {
+    linked scope {
+        go ok_worker()
+        go failing_worker()         // 抛异常
+    }
+} catch (e) {
+    print("caught:", e)              // 命中此分支
+}
+
+// scope：保留 task handle，块退出后逐个观察 outcome
+var first: Task<i64>?
+var second: Task<i64>?
+var third: Task<i64>?
+scope {
+    first = go failing("error1")
+    second = go failing("error2")
+    third = go ok()
+}
+var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]
+print(len(outcomes))                 // 3（每个子协程一个 outcome）
+```
+
+**通用语义**：
+- `scope` 不是函数调用，也不需要 import；是关键字块语句。
+- 两种形式都在块退出前等待所有 `go` 启动的子协程完成。
+- 两种形式都只能作为语句出现，不能用在表达式位置。
+
+### 10.8 `move` — 跨协程所有权转移
+
+```ebnf
+MoveExpr ::= 'move' Identifier
+```
+
+`move` 是消费源动作（不是 `go` 的选项），可用于初始化、赋值、返回和调用实参。
+
+**判定规则见 §2.14**：`move` 要求可重绑定的局部 `var` 根同时满足四条证据轴——绑定存活、根唯一、能力可变、无存活借用。语法上只接受标识符：`move x.field`、`move arr[i]`、`move f()` 都是语法错误。move 后原变量在编译期标记为**已 moved**，再次引用是编译错误；被拒绝的 move 不污染源状态。`const` 能力不能作为可变 owner 的 `move` 源。
+
+跨协程边界的转移读的是同一套判定，因此「协程之间不共享可变图」这条保证依赖 §2.14 的唯一性证据，而不是另一套并发专用规则。
+
+```xray
+var buf = Array<u8>(1024 * 1024)
+
+// 移交给协程
+var t = go fn(b: Array<u8>) -> i64 {
+    return process(b)
+}(move buf)
+// 编译错误：buf has been moved
+// print(len(buf))
+
+// 移交给 channel
+const ch = Channel<Array<u8>>(1)
+var payload = Array<u8>(4096)
+ch.send(move payload)
+// 编译错误：payload has been moved
+```
+
+详见 §7.3、§7.4 关于 `var` / `const` 能力的协程传递规则。
+
+### 10.9 同步原语
+
+xray 的默认并发模型偏向**消息传递 + 验证后能力共享 + 显式所有权转移**——通过 `const`/同步能力、`Channel`、`move`、`scope` 把跨协程数据边界写在源码里，因此**不**鼓励使用裸 Mutex/锁。
+
+如确需互斥锁/原子操作，运行时层面提供：
+
+| 原语 | 形态 | 说明 |
+|---|---|---|
+| Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
+| `const`/同步能力 | 稳定只读值或同步身份 | 普通图深只读；受审计同步句柄只允许其能力方法修改内部状态 |
+| `Atomic<T>` | 无锁原子包装 | 对 `i64`/`f64`/`bool` 提供 C11 原子操作 |
+| `sync.Mutex<T>` / `sync.RwLock<T>` | 协程域锁 | 需显式 `import sync`；等待时挂起协程，不阻塞 worker；不得在 `sys.Thread` 线程体中使用 |
+| `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` 等 | OS 线程域锁 | 需显式 `import sys`；阻塞当前 OS 线程，适合 `sys.Thread`、运行时组件和短临界区 |
+
+> **设计说明**：xray 不在 prelude 暴露裸 `Mutex`/`RwLock`。默认推荐 `Channel`、`const` 同步句柄、`move` 与 `Atomic<T>`；确需锁时必须通过 `sync` 或 `sys` 显式选定执行域，避免把协程挂起锁和 OS 阻塞锁混用。
+
+#### `Atomic<T>` — 无锁原子类型
+
+`Atomic<T>` 包装 `i64`、`f64` 或 `bool`，在系统堆上分配，底层使用 C11 原子指令，无需锁即可跨协程安全读写。
+
+**声明约束**：`Atomic<T>` 句柄以 `const` 命名；其原子方法来自受审计的同步内部可变能力。
+
+```xray
+const counter = Atomic(0)         // Atomic<i64>
+const flag = Atomic(false)        // Atomic<bool>
+const rate = Atomic(3.14)         // Atomic<f64>
+```
+
+**方法一览**（完整签名见 §14.19）：
+
+| 方法 | 说明 |
+|---|---|
+| `load(ord?)` | 原子读取 |
+| `store(val, ord?)` | 原子写入 |
+| `add(val, ord?)` / `sub(val, ord?)` | 原子加减（i64/f64） |
+| `fetchAdd(val, ord?)` / `fetchSub(val, ord?)` | 原子加减并返回旧值 |
+| `swap(val, ord?)` | 原子交换，返回旧值 |
+| `compareExchange(expected, desired, ord?)` | CAS，返回 `(old, bool)` |
+| `toggle(ord?)` | 原子取反（bool），返回旧值 |
+| `toString()` | 返回当前值的字符串表示 |
+
+#### `Ordering` 枚举
+
+所有接受 `ord?` 参数的方法均可传入 `Ordering` 枚举指定内存序，默认 `SeqCst`（最强保证）。
+
+```xray
+enum Ordering {
+    Relaxed,          // 无跨线程排序保证
+    Acquire,          // 读屏障
+    Release,          // 写屏障
+    AcquireRelease,   // 读写屏障
+    SeqCst,           // 顺序一致（默认）
+}
+```
+
+`Ordering` 枚举由编译器自动注入（prelude），无需 import；底层 intrinsic 读取声明顺序 tag，不依赖用户可见 backing value。
+
+**完整族合同（2026-10-05 冻结，当前固定 i64 子集不等于完整实现）**：`Atomic<T>` 使用 §9.2 的闭合 AtomicValue/Number/Boolean 证明；复制句柄共享同一个同步身份，构造器每次产生独立对象，各 Instance 的模块初始化不能共享静态对象。构造和拥有式结果可能分配；值原子操作承诺无锁，不承诺 wait-free，也不以互斥锁后备。provider 必须用真实对齐 cell 鲜编/运行 `atomic_is_lock_free` 并核布局/ABI；不支持者明确拒绝，不只检查 `ATOMIC_*_LOCK_FREE == 2`。
+
+| 操作 | 合法内存序 |
+|---|---|
+| load | Relaxed / Acquire / SeqCst |
+| store | Relaxed / Release / SeqCst |
+| add/sub/fetchAdd/fetchSub/swap/toggle/compareExchange | 五种 Ordering |
+
+省略 ordering 或合法 None 使用 SeqCst。必须是精确 prelude Ordering 声明/variant 身份，不按名字、整数或用户 backing value 准入。静态已知非法 load/store 序在 Checked 拒绝；动态非法序在 receiver 和所有实参按原顺序各一次求值后、任何原子读写前，结束为 CALL_BAD_ARGUMENT，fault detail 全零、不发布结果、不修改原子状态。此终态不属于普通 Error 或 panic，不被保护 panic handler 消费；初始化失败粘滞和清理沿既有合同。伪造 variant 在值准入先拒绝；不能降级为其他序、接受未知 tag 或将非法 C11 order 传给 provider。结构错误原 RUN_BAD_ARGUMENT→CALL_BAD_STATE 规则不变，Atomic 无效序使用独立 reason 精确接线。
+
+Ordering 的声明 module 由实际身份 factory 使用 STDLIB authority、namespace_id="prelude"、logical="prelude/builtin_symbols.def" 生成，physical root 不进入身份；Source 仍需真实同源 generated module、Unit initializer 与正常依赖/权限检查，不造可导入 prelude.xr 或按 query URI 授权。Ordering 的名义 Declaration/Identity 持久拥有 native id 与32字节同源治理 fingerprint；本族的 Ordering id 为4，普通用户名义声明的该记录必须全零。Checked/特化复验完整检查 governed VALUE 登记与 ENUM shape：零类型参数/约束/字段、exported、flags为零、五个精确有序无载荷 variant，以及 canonical prelude 声明 module、合法 initializer/dependency。clone、wire、投影、TypeArena 和 Program 对应检查保留这一事实。词法/hoisted/import 解析优先于 prelude；同名用户 enum 仍是不同名义身份，不获得内建资格。原可见性、构造和模块依赖检查不得被 id/flags/query 指针绕过。fingerprint 是公开同源治理事实而非不可复制认证签名；完整合法公共 builtin descriptor 可经普通 Checked 复验接受，但不授予任何用户私有权限或外部包真实性。
+
+compareExchange 是 strong CAS，公开结果 `(T, bool)` 是真正 Tuple，不可见虚假失败。单个 ordering 决定成功/失败序：
+
+| ordering | 成功 | 失败 |
+|---|---|---|
+| Relaxed | Relaxed | Relaxed |
+| Acquire | Acquire | Acquire |
+| Release | Release | Relaxed |
+| AcquireRelease | AcquireRelease | Acquire |
+| SeqCst | SeqCst | SeqCst |
+
+失败返回实际观察到的 old 且不写状态；成功返回线性化前 old。CAS 前以唯一真实 Tuple 表示私有预备精确 `(T,bool)` 的合法 scalar 字段和全部可失败 carrier/domain/arena retain、admission/work/预算、空结果槽及发布许可，最后检查取消/执行许可；预备值无别名、borrow 或公开 setter。准备失败不读写 cell、不发布结果，释放部分 owner。CAS 后只能不可失败地填 observed 和 success 两个 scalar payload 并转移已许可结果，不能再分配/retain/copy/admit或运行可能失败的验证。CAS 成功之后的父帧失败、预算失败或取消不能回滚已发生的操作；失败 CAS 仍返回实际 observed，不能返回原 expected 的副本。
+
+i64 加减沿 §2.3.1 的模 2^64 环绕；MIN delta 的 sub 不执行宿主有符号取负。f64 构造/load/store/swap/CAS 保完整 binary64 位型，CAS 按 bits 比较：正负零不同，同 payload NaN 可匹配，不同 payload 不匹配；不改变普通浮点相等规则。f64 RMW 每次用当前软件浮点核的 ADD/SUBTRACT 计算候选，再对 u64 bits CAS；失败须按最新 observed 重新计算，沿 §2.3.2 的 ties-even、次正规数与 canonical 算术 NaN，不用宿主 FPU/fenv、不融合或用加负数替代减法。每次实际尝试收费并检查取消/限额；成功后不把限额失败当作原子回滚。toString 取一次 SeqCst 快照，之后按既有 bool/i64/软件 f64 格式化产生独立拥有式 string。
+
+f64 add/sub/fetchAdd/fetchSub 每次 resume 至多尝试一次值 cell CAS。失败保存最新 observed 与已一次求值的实参，返回 canonical Unit CONTINUE；活动帧和 pc 保持 READY，下一 resume 重算软件候选。CONTINUE 不产生 SUSPEND、wake、language yield 或第二执行管线；poll/frame/work 真实收费、取消和释放沿同一个 Call driver，不能把无界内部重试藏在单次 resume。停止在成功之前不改 cell，成功后的取消不回滚；无竞争下的首次 load 仍只用合法读序。
+
+不支持目标使用唯一显式 UNSUPPORTED 路线。Checked、查询、特化复验及普通 Lower 的合法性不由宿主无锁能力决定；provider/SDK/Target 须以准确目标、flags、真实 cell/ref 布局及运行探针核能力，未运行或坏形结果不授准入。含 constructed Atomic 的闭合 Program 在版本/shape/完整 proof 后、发布及任何 initializer 前由所链接共同 runtime 核实际能力；不足不发布 Program、不转移原 Lowered owner。构造的未发布真实对齐 cell 再作防御性 lock-free 检查；false 不执行值 load/store/CAS/RMW、不发布值并释放所有临时 owner。atomic_init 仅为未发布准备，不承诺零写或零分配；引用 cell 能力先核查。运行时 UNSUPPORTED 是 canonical Unit、wake零、panic空的非panic终态，handler不可消费；原非法对象、OOM、预算和引用饱和保各自first failure，初始化失败粘滞/释放沿原非panic失败路线。无 mutex/libatomic 非无锁后备，也不把未知或未验证 target 伪装为已有能力。
+
+> `Ordering` 只描述**单个原子操作**的内存序，不足以推导程序行为。这些值与 Channel、`go`、`await`、`scope`、`const` 发布等语言级同步边如何共同构成 happens-before，定义在 §16.9；不写 `Ordering` 的普通并发代码同样受 §16.9 约束。
+
+```xray
+const counter = Atomic(0)
+counter.store(42, Ordering.Release)
+var val = counter.load(Ordering.Acquire)
+```
+
+
+### 10.10 `Coro.yield()` — 让出 CPU
+
+```ebnf
+CoroYieldCall ::= 'Coro' '.' 'yield' '(' ')'
+```
+
+```xray
+for (i in 0..1000) {
+    do_chunk(i)
+    Coro.yield()                // 主动 safepoint，让其他协程有机会跑
+}
+```
+
+`Coro.yield()` 是协作式调度让出点，等价于显式 safepoint，让调度器有机会运行其他协程并响应取消。`yield expr` 已专用于生成器产值；裸 `yield` 被拒绝。
+
+此调用不接收值参数或类型实参，结果为 unit；普通函数不需要 async 标注。词法绑定若遮蔽 `Coro`，仍按该绑定解析，不能偷偷调用调度原语。新 XIR 源码入口按同一 SUSPEND/恢复协议执行，当前单宿主驱动的挂起结果须以匹配的实例 epoch/wake 恢复；完整多线程调度与生成器资格单独验收。
+
+两者共用词根但不是同一种挂起：`Coro.yield()` 让出给调度器（可换 OS 线程、是取消点、沿调用边向调用方传播），`yield expr` 对称转移回驱动方（以上三条都不成立）。逐条对照见 §3.16.1。**生成器体内不得调用 `Coro.yield()`**（`E0385`，见 §3.16.2）。
+
+### 10.11 并发安全模型
+
+xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5 的定理：**不含 `unsafe` 块、且不使用 §16.9.5 所列逃逸口的程序不存在数据竞争，其行为等价于某个顺序一致的交错执行（SC-DRF）**。因此在安全子集内可以按"语句交错"推理，不需要理解 happens-before 细节；本节的规则表就是这条定理的强制手段。逃逸口清单与语言级同步边定义在 §16.9。
+
+下列规则由编译器强制：
+
+| 规则 | 强制 |
+|--|--|
+| 所有跨 execution 边界消费同一个 provenance-based capture plan | ✅ |
+| execution-local graph 必须显式 `copy` 或从局部 `var` 执行 `move` | ✅ |
+| 模块只读值可保留 module owner；模块可变状态不得直接跨界 | ✅ |
+| 已发布 `const` 值与受审计同步句柄可按 verified plan 跨协程传递/捕获 | ✅ |
+| `move` 只适用于普通局部 `var` 的显式所有权转移 | ✅ |
+| Channel 跨协程传值 | ✅ |
+| `Atomic<T>` 以 `const` 命名，只有受审计方法可执行同步内部修改 | ✅ |
+
+**编译期不覆盖的部分**：
+- Channel 不会隐式复制可变 class 引用；无法证明唯一转移或 const 发布时编译失败，应显式 `copy` 或 `move`。
+- §16.9.5 的逃逸口（`unsafe`、`Array.mutPtr()`、`mem.*` 裸内存、`sys.Thread` 线程体、`CFn` 回调体）不在定理的保证范围内，其数据竞争后果是实现定义的。
+
+#### 10.11.1 模型之外：`unsafe` 与 C 回调
+
+上表的保证覆盖 Xray 值的所有权与能力判定。有三处**位于模型之外**，此时义务转移给使用者，`unsafe` 不放宽任何一条已有规则、也不提供任何替代保证：
+
+- **`mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`** 操作的是裸内存，没有所有权根、没有引用计数、也没有别名判定。编译器对这些地址不做任何假设，也不为它们提供 §2.14 的任何证据。用它们构造的共享结构，其数据竞争自由由使用者负责证明。
+- **`Ptr<T>` / `MutPtr<T>`** 有借用跟踪（§2.4.2），但跟踪只到 owner 的作用域为止；解引用的地址有效性、对齐与别名正确性由 `unsafe` 块的作者承担。
+- **`CFn` C 回调可能在任意 OS 线程上发生**，包括运行时并不管理的线程。回调体只能触及：传入的标量与裸指针、分配计划为共享的值（§16.3.1）、以及通过 `Channel` 转移进来的唯一根。回调体**不得**触及调用方协程的 coroutine-local 对象图——那些对象的引用计数在非原子带，跨线程接触即内存损坏。回调体也不得假定存在当前协程、当前 worker 或可用的调度器。
+
+这三处是模型的**边界**而不是漏洞：它们在源码上都必须显式写出（`unsafe` 块、`mem` 模块导入、`CFn` 声明），因此"哪些代码不受编译期保护"始终可以从源码审计出来。
+
+### 10.12 逻辑根任务与可达运行时能力
+
+程序语义只有一个逻辑 root task；物理实现由编译器从最终产物的可达 root 集合推导：纯同步入口使用 **ELIDED**，只启动子任务但自身不挂起时使用 **DESCRIPTOR**，入口或其可达调用发生挂起时使用 **RESUMABLE_FRAME**。普通不可挂起函数始终保留普通 ABI，不隐式增加 coroutine context、frame、safepoint 或 current-task 查询。
+
+普通非 root 父任务的正文完成不隐式等待普通 go 子任务；linked/scope 的结构化等待另按其合同。丢弃最后一个公开 Task 句柄不取消、不执行也不阻塞任务；执行器持运行 lease 到真实终态。逻辑 root 正文完成先保存其拥有式结果，host 在有限累计预算内驱动同一执行器已接管的任务到终态，再交付外部完成；普通子任务失败不隐式改写 root 结果。额度耗尽或显式停止时，先停止接收、撤销等待、执行有限清理及释放，再报告准确 LIMIT/取消/清理失败；无 ready 且无真实外部唤醒来源的闭合依赖必须有界拒绝，不自旋或 detach。
+
+首个新 XIR go/Task/await 片段合同为 direct go 调用、Task<i64>/Task<string> 与 plain await；单 FIFO 每 dispatch 至多一次 canonical Call transition，等待真实退 C 栈。参数及结果先拥有式准备，失败不入队或发布句柄。worker 及其可达 direct 调用不得读取普通可变模块槽或写/初始化任何模块槽；const 槽仍需 Sendable、既有读取权限及初始化状态。未知间接调用、借用、Cell 捕获及未接通类型明确未准入，不能把此实现边界变成未来完整语言的限制。此合同冻结不代表 Source/VM/native 已实现：正式身份仍 25/65/21/26/29，完整 M:N、Channel、generator、linked/scope、Task<null>/Unit 与公开状态方法仍须分别取得资格。
+
+跨 Task 边界的完整终态必须满足拥有式与 Sendable 规则，不能只检查成功值 T。worker 及可达调用的逃逸值错误由现有效应摘要证明：真实 Error 枚举的全部变体载荷均须 Sendable，不能只看实际 throw 的变体或名义类型标记；泛型错误须在定义处具有 Error 与 Sendable 约束。首片对未知或无真实身份的逃逸错误明确未准入。未逃逸的局部非 Sendable 值及普通同步 throw 不因本边界改变。运行时在发布 Task 终态前按真实封闭类型与字段权限准入 native 的 THROWN 载荷；异常载荷、OOM、LIMIT 和宿主故障保各自准确状态并完成清理，不伪装成 PanicInfo。当前 panic 载体仅包含标量 fault detail 与拥有式字符串；未来扩展须重新证明完整载荷的 Sendable 与生命周期。
+
+当前新 XIR 执行核的 Error 载荷能力包含 Array、嵌套 Array、Nullable、Tuple、enum、struct、Atomic 和 Task 字段，包括直接 Task 与 Array<Task>。编译证明仍检查真实 Error 枚举全部变体的完整 Sendable 性质。运行时按真实 worker entry 的同一 Program 证书检查实际 enum 类型和变体；先在实际 arena、Domain 上执行有界完整值图准入，再从同一不可变 Effects 取得扫描上界并预付到同一累计 runtime work，才查询成员资格。没有第二份错误集合，也不以查询消耗编译期账本。未知/无身份错误、错误变体或外域 arena 明确拒绝；值图 OOM/LIMIT 保准确状态并清理，不发布半终态。公开 Task 句柄在 Instance 与最后代码 lease 退休后仍持有完整 Error，重复副本不消费粘滞结果。此能力不授予未闭合类型、Cell/callable 或未验证 class 载荷的执行资格，不改变普通 root 故障与 Task 值错误的区分；完整参数族、生成器和调度能力仍分别验收。
+
+当前可执行 Task 结果族包含 Unit、bool、rune、既有全部整数/浮点类型及 string，以及封闭的 Array、Nullable、Tuple、enum、struct、显式 Sendable class、Atomic 和 Task。除不属于普通实参域的 Unit 外，这些可复制载体也准入 Task 参数；struct 按完整字段参加同一有界 Sendable 图证明，不能借结构壳绕过非 Sendable class、callable 或未闭合类型；仍须通过同一 Checked 的完整 Sendable 图证明和真实 worker 的 root 效果检查。Call 在发布子 Task 前准备参数的完整拥有式图；父方随后修改 Array 或嵌套 Array 不改变子方逻辑副本，Atomic 和 Task 参数保留同步身份。私有 spawn 同样必须匹配真实 worker 认证入口，参数类型不以描述符种类取得额外权限。await 与粘滞终态副本保留准确类型及规范标量位表示；值语义副本的修改不污染后续 await，同步句柄与 Task 在复制时保留身份。非标量成功值在发布前按真实 arena、Domain 和有界值图准入；直接嵌套的终态 Task 验证沿不可变类型池严格下降，以迭代方式避免 C 栈随嵌套深度增长。终态 Task 在 Instance 和执行代码租约释放后仍持有拥有式结果。复制失败保全空输出和粘滞终态，沿同一累计预算收费，不退款。显式 `implements Sendable` 的 class 使用唯一名义元数据标记，全部字段在真实声明环境中证明 Sendable，构造后字段不可重绑；普通 class 不自动推导，Sendable 不能由普通同名接口伪造。class 及其 Atomic 字段复制保留身份，取出的 Array 字段按值复制。当前 class 片段覆盖无继承声明及有界泛型；同一有界图允许通过已验证只读 class 身份边闭合递归类型，仍检查全部其余字段。纯值类型循环以及只有循环外 class 的非法值循环均拒绝。真实有限链式 class 的参数、结果和 Error 在代码退休后继续拥有完整值图；继承、其它未接通载荷、完整参数资源/FI和产品安全资格仍分别验收。
+
+runtime capability 只从 executable entry、manifest C export 等最终 artifact roots 传播。不可达的 `go` / `await` / Channel helper 不会迫使产物链接 scheduler、timer、netpoll 或 hosted runtime。
+
+Hosted target 按 verified entry plan 选择 NONE / SINGLE / MULTI scheduler。Freestanding target 若可达代码只需要 core，则保持零 coroutine runtime；若需要 task、frame、submit、park/wake、timer、interrupt completion 或 executor pump，target manifest 必须提供版本化 provider ABI 及所需 hooks，缺失能力在生成或链接前硬失败。provider 是 target/build 契约，不引入 `async main`、`static main` 或 freestanding 专用源语言关键字。
+
+---
+
+## 11. 模块系统 (Modules)
+
+> 真值源：`src/module/xmodule.c`、`src/module/xmodule_resolver.c`、`src/module/xmodule_graph.c`、`src/frontend/parser/xparse_import.c`。
+
+### 11.1 模块定义
+
+- 每个 `.xr` 文件是一个模块。
+- 模块名 = 文件名（去除 `.xr` 后缀）。
+- 文件模块的规范身份由 resolver 归一化后的路径决定；源码中通常通过相对路径或包路径 import，不应依赖把目录分隔符展示成点号的推导规则。
+
+### 11.2 项目结构
+
+```
+my_project/
+├── xray.toml              # 包清单（包名、依赖、main）
+├── src/
+│   ├── main.xr            # 入口
+│   ├── utils.xr
+│   └── lib/
+│       └── helper.xr
+├── tests/
+│   └── test_utils.xr
+└── docs/
+```
+
+`xray.toml` 示例：
+
+```toml
+[package]
+name = "acme/my_project"
+version = "0.1.0"
+main = "src/main.xr"
+
+[dependencies]
+local_utils = { path = "../local_utils" }
+```
+
+### 11.3 `import` 语法
+
+`import` 声明**只能出现在模块顶层**。在函数、类或任何嵌套作用域内使用 `import` 会产生编译错误。
+
+```ebnf
+ImportStmt ::= 'import' ImportMembers 'from' ImportModule
+            |  'import' ImportModule ('as' Identifier)?
+ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
+ImportMember  ::= Identifier ('as' Identifier)?
+ImportModule  ::= StringLiteral | ModuleName
+ModuleName    ::= Identifier
+```
+
+```xray
+// 1. stdlib：裸标识符；没有 `as` 时别名等于模块名
+import time
+import datetime
+import http as httpClient
+
+// 2. 第三方包：引号 + owner/name 形式
+import "alice/utils"
+import "bob/http_client" as httpClient
+
+// 3. 文件路径或目录路径：字符串字面量，可显式 alias，也可从路径尾段推导（不含 .xr 扩展名）
+import "./modules/mod_a" as a
+import "../utils/string_utils" as utils
+
+// 4. 命名 import：成员可重命名；`from` 后可接字符串路径或裸模块名
+import { readFile, writeFile as write } from io
+import { publicFn } from "./modules/mod_a"
+```
+
+**不支持**：
+- JavaScript 默认导入 `import name from "module"`。使用 `import "module" as name`、`import module` 或 `import { name } from module`。
+- 动态导入 `import("module")`。所有导入必须是静态声明。
+
+**解析算法**：由 specifier 的**形状**决定，四种形状互不重叠，与是否带引号无关。
+1. **具名模块**：不含分隔符的名字 `import time` → 内置 stdlib 模块表与 `.xrd` 声明的原生模块共用这一命名空间。
+2. **路径**：`"./xxx"` 与 `"../xxx"` 相对当前文件解析（自动补 `.xr` 扩展名或 `index.xr` 目录入口）。
+3. **标准库源码子模块**：`"std/io/output"`由显式标准库源码根解析；路径各段为ASCII标识符，必须精确命中文件，不补index、不允许父路径或顶层模块别名。身份包含标准库namespace与逻辑路径；普通项目或包同名文件没有标准库权限。该入口不代表Checked包或native缓存发布已完成。
+4. **第三方包**：`"owner/name"`（`std/`为标准库保留前缀） 由 `xray.toml` 的 `[dependencies]` 解析。
+
+引号只是书写非标识符文本的手段，本身不表示任何含义——路径和包需要它，模块名不需要。
+解析不到的 import 是编译错误。
+
+**Specifier 校验**（编译错误）：
+- 禁止包含 `.xr` 扩展名：`import "./a.xr"` → 错误
+- 禁止末尾斜杠：`import "./a/"` → 错误
+- 禁止显式 `index`：`import "./a/index"` → 错误
+- 禁止绝对路径：`import "/etc/foo"` → 错误
+
+### 11.4 `export` 与可见性
+
+`export` 可见性**只能出现在模块顶层声明上**。跨模块重导出仍是独立声明：
+
+```ebnf
+Declaration ::= Attribute* Visibility? Modifier* DeclarationBody
+Visibility  ::= 'export'
+ReexportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
+              | 'export' '*' 'from' StringLiteral
+ExportSpec ::= Identifier ('as' Identifier)?
+```
+
+```xray
+// 1. 声明自身携带 export 可见性
+export fn helper() { return }
+export final class MyClass {
+    value: i64
+    init() { this.value = 1 }
+}
+export const VERSION = "1.0"
+
+// 2. 重导出（带可选重命名）
+export { getUser, getUserAge as getAge } from "./user"
+
+// 3. 通配重导出（把另一个模块的全部 export 转出）
+export * from "./product"
+```
+
+**限制**：
+- 未标 `export` 的声明仅模块内可见（**私有**）。
+- 同模块事后 `export { LocalName }` 已删除；在声明处写 `export`。
+- `export var` 不被支持。可变绑定不能跨模块共享，使用 `export const` 代替。
+- 模块的内部状态在不同模块中互不冲突，即使同名。
+- 重导出与通配重导出常用于 `index.xr` 聚合子模块的公开 API。
+
+### 11.5 命名约定
+
+- 模块名 `snake_case`：`http_client.xr` / `string_utils.xr`。
+- 公开符号 `camelCase` 或 `PascalCase`（类/接口）。
+- 内部符号约定前缀 `_`：`_internal_helper`。
+
+### 11.6 编译期模块图与循环依赖
+
+xray 在编译期构建完整的**模块依赖图**（DAG）：
+
+1. 从入口文件开始，递归解析所有 `import` 声明，构建依赖图。
+2. 对依赖图进行拓扑排序，确定模块初始化顺序。
+3. 如果检测到**循环依赖**（SCC 大小 > 1 或自环），产生编译错误。
+4. 按拓扑序从叶子模块（无依赖）到入口模块依次初始化。
+
+选择性导入（`import { foo } from "./m"`）在编译期解析为固定的模块索引和导出槽位，运行时为 O(1) 索引访问，不涉及字符串查找。
+
+### 11.7 native 模块
+
+C 层暴露的模块（如 `time`、`http`、`os`）通过 native ABI 注册：
+
+```c
+// C 端
+XRAY_API void register_time_module(xray_vm_t* vm) {
+    xray_module_t* m = xray_module_create(vm, "time");
+    xray_module_add_fn(m, "now", time_now);
+    xray_module_add_fn(m, "sleep", time_sleep);
+    xray_module_register(vm, m);
+}
+```
+
+xray 端用法相同：
+
+```xray
+import time
+var t = time.now()
+time.sleep(100)
+```
+### 11.8 完整可运行示例
+
+从标准库按需导入与命名空间导入：
+
+```xray
+import { sha256 } from crypto
+import math
+
+fn main() {
+    print(math.sqrt(144.0))   // => 12.0
+    print(sha256("xray"))     // => 1a46e6a6...（SHA-256 摘要）
+}
+
+main()
+```
+
+---
+
+## 12. 测试系统 (Testing)
+
+> 声明真值源：`src/frontend/parser/xparse_decl.c`、`src/xir/xxir_source.c`、`src/xir/xxir_declarations.h`、`src/program/xr_xir_source_product.c` 与 `src/xir/xxir_instance.c`。下述公共 runner 调度、超时及异步行为仍是完整测试系统的要求；仅声明目录与受限启动实现不代表公共 runner 已完成。
+
+### 12.1 测试声明：`@test` 注解
+
+xray 用 **`@test` 注解**标注测试函数，**不**通过 `test("...")` 函数调用形式。
+
+```ebnf
+TestDecl ::= '@test' FnDecl
+```
+
+```xray
+@test
+fn test_addition() {
+    assertEqual(1 + 1, 2)
+}
+
+@test
+fn test_with_assertions() {
+    var result = compute()
+    assertEqual(result, 42)
+    assert(result > 0)
+}
+```
+
+**语义**：
+- `@test` 标注的函数会被 `xray test` 自动发现并运行；普通函数不会。
+- 测试函数命名约定：`test_xxx`（snake_case），描述性命名。
+- 测试函数无参数无返回值；通过 assert 系列函数表达预期。
+- 测试与 hook 必须是有函数体的非泛型顶层函数，不能是成员、嵌套函数或 closure；只抛出错误而不正常返回的函数合法。角色不改变原有 export 权限或 effect，不隐含 `no_suspend`。
+- 测试目录只选择本次入口模块的声明；导入模块中的测试不自动运行。每个测试文件作为自己的入口时可以拥有模块状态，不能因此放宽被导入模块的状态规则。
+- 同一文件可包含**任意数量**的 `@test` 函数；单文件内按声明顺序运行。多个文件可用 `-j N` 并行，每个文件使用独立 isolate。
+
+### 12.2 测试入口
+
+`xray test` 不强制测试目录或文件名；目录输入会递归收集所有 `.xr` 文件，并按路径排序。仓库自己的 regression suite 使用 `tests/regression/XXXX_topic.xr` 只是项目约定。
+
+运行：
+
+```bash
+xray test tests/                           # 必须显式给出至少一个文件或目录
+xray test tests/regression/01_literals/    # 整个分组
+xray test tests/regression/01_literals/0100_int_basic.xr   # 单文件
+xray test -j 4 tests/                      # 文件级并行
+```
+
+### 12.3 断言 API
+
+xray 把断言函数作为**全局内置**（不需 `import test`）。完整签名见 [§13.5](#135-断言测试用)。
+
+| 函数 | 语义 |
+|--|--|
+| `assert(cond, msg?)` | `cond` 为 false 时抛异常 |
+| `assertEqual(a, b, msg?)` | 同一静态类型的两个值深相等，否则输出两值 |
+| `assertThrows(action, msg?)` | 仅当 `action()` 返回 typed error 时通过 |
+| `assertPanics(action, msg?)` | 仅当 `action()` 触发 panic 时通过 |
+
+`assert` 只接受 `bool`；用 `assert(!cond)` 表达反向布尔条件。typed error 与 panic
+是互斥失败通道，错误通道的断言不能互换。
+
+### 12.4 异步测试
+
+`@test` 函数体内可使用 `go` / `await` / `await all` / `await any`：
+
+```xray
+@test
+fn test_async_fetch() {
+    var task = go fetch_data("http://...")
+    var result = await task
+    assertEqual(result.status, 200)
+}
+```
+
+### 12.5 注解（Attributes）总览
+
+xray 的公开注解来自唯一 attribute registry；可用 `xray language attributes` 查看。测试 runner 识别以下测试注解：
+
+| 注解 | 说明 |
+|---|---|
+| `@test` / `@test(skip)` / `@test(timeout: N)` | 测试、跳过测试、单测试超时秒数 |
+| `@before_all` / `@after_all` | 单文件 suite 前后各执行一次 |
+| `@before_each` / `@after_each` | 每个未跳过测试前后执行 |
+
+`N` 是 `0..2147483647` 的整数字面量；0 不覆盖文件级 deadline。空括号、未知参数、重复或冲突角色均非法。`@test(skip)` 只禁止测试入口自动执行，函数体仍进行完整类型检查，语言中合法的普通调用不受影响。测试角色不构成普通函数的额外调用权限。
+
+同一文件中的 hook/test 复用同一 Instance：第一次选中的调用执行正常模块初始化一次，后续调用保留该 Instance 的状态。初始化失败保持失败状态，不能通过启动下一项重试或绕过。Source 拥有的测试目录记录特化后的真实函数身份；目录本身不授予运行权限，受限测试入口仍校验 sealed Program 的角色与入口模块身份。
+
+其它公开注解包括 `@deprecated("...")`、`@derive(Inspect, JSON, Eq, Hash, Clone)`（其中 `Hash` 要求同时 `Eq`），以及稳定但仅面向低层代码的 AOT code-shape directive：`@inline` / `@noinline`。公开表面是 7 个普通/test/metadata 注解加 2 个 code-shape directive；数量不是兼容目标，类别与语义正交性才是约束。后两者只能标注函数或方法、不能带参数，也不能同时标注同一声明；它们不改变语言语义、effect 或 ABI，VM 会忽略它们，AOT 则分别优先请求展开或保留原生调用边界。它们只应用于有真实基准与生成代码形态门禁的低层热路径，不会解锁普通优化，也不保证所有调用边均可兑现。
+
+`codegen.opaque(value)` 与 `codegen.compilerFence()` 属于同一专家控制层，但它们是标准库 intrinsic，不是注解。前者在保持整数或指针的静态类型、值、ownership 与 provenance 不变的同时阻断原生常量传播；后者只阻止有内存效果的操作跨越该编译器调度点。`compilerFence` 不是 CPU memory fence，不建立 happens-before，也不能用于修复 data race。普通代码无需使用这些控制；硬形状要求由 `xray verify --contract` 验证，而不是由源码请求自行宣称成功。
+
+effect、native identity、C export、link symbol 和 freestanding entry 都由推导结果或 typed manifest plan 表示，不是源码注解。外部 C 函数声明使用 `extern "C" ... {}` 块。
+
+```xray
+import codegen
+
+@test                                 // 标记测试
+fn test_basic() { return }
+
+@test(skip)                           // 跳过此测试
+fn test_wip() { return }
+
+@before_each
+fn reset_fixture() { resetState() }
+
+@deprecated("use newAPI() instead")
+fn oldAPI() { return }
+
+@inline
+fn smallHotHelper(value: u64) -> u64 { return value ^ (value >> 33) }
+
+@noinline
+fn measuredDispatchBoundary(value: u64) -> u64 { return smallHotHelper(value) }
+
+fn measuredKernel(value: u64) -> u64 {
+    var hidden = codegen.opaque(value)
+    codegen.compilerFence()
+    return measuredDispatchBoundary(hidden)
+}
+```
+
+> `@async`、`@override`、`@beforeEach` 等不在当前表中，会触发 `unknown attribute name`。异步能力直接在测试体内使用 `go` / `await`。
+
+### 12.6 `xray run` / `xray test` / `xray repl`
+
+| 命令 | 用途 |
+|--|--|
+| `xray run main.xr` | 执行主程序 |
+| `xray test` | 运行测试套件 |
+| `xray repl` | 启动 REPL |
+| `xray build --native main.xr` | AOT native 编译 |
+| `xray fmt` | 格式化 |
+
+---
+
+## 13. 内置函数 (Built-in Functions)
+
+> 真值源：`src/ir/xi_lower_expr.c`、`src/vm/xvm_dispatch_*.inc.c`、`src/runtime/object/builtins/`、`src/frontend/analyzer/xanalyzer_builtins.c`。
+
+不需要 `import` 即可使用的全局函数和内置构造/静态函数。下列表格中的 `value` 表示“任意运行时值”，只是文档占位符，不是源码中的类型名。
+
+### 13.1 I/O 与调试
+
+| 函数 | 签名 | 说明 |
+|--|--|--|
+| `print` | `(...values) -> ()` | 输出到 stdout，追加恰好一个换行；多参以恰好一个空格分隔；`print()` 只输出换行。一次调用是一个不可分割的组：所有参数先从左到右各求值一次，再全部渲染，最后一次性写出 |
+| `dump` | `(value, indent?) -> ()` | 结构化调试输出 |
+| `len` | `(value) -> i64` | 查询实现 `Lengthable` 的 string、容器、Range、Slice 等长度；`JSON.Value` 不实现 `Lengthable` |
+
+### 13.2 类型转换
+
+| 函数 | 签名 | 说明 |
+|--|--|--|
+| `x as T` | `numeric -> T` | 在 12 个 exact scalar 类型间做显式数值转换；`T` 必须是 `i8` / `i16` / `i32` / `i64` / `u8` / `u16` / `u32` / `u64` / `f32` / `f64` / `isize` / `usize` |
+| `i64.parse(s)` | `(string) -> i64` | 严格解析十进制整数；失败抛异常 |
+| `i64.tryParse(s)` | `(string) -> i64?` | 严格解析十进制整数；失败返回 `null` |
+| `f64.parse(s)` | `(string) -> f64` | 严格解析十进制浮点数；失败抛异常 |
+| `f64.tryParse(s)` | `(string) -> f64?` | 严格解析十进制浮点数；失败返回 `null` |
+| `string(x)` | `(value) -> string` | 转为字符串；`rune` 转为单 scalar 字符串 |
+| `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
+| `rune(n)` | `(i64) -> rune` | 从 i64 构造 Unicode scalar；负数、surrogate 或越界值触发范围 panic E0422 |
+| `chr(n)` | `(i64) -> string` | Unicode 码点转单 scalar 字符串 |
+| `copy(x)` | `(value) -> fresh value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
+
+`i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` 都解析整个字符串：允许首尾空白与前导符号，其余必须符合十进制文法；`f64` 额外接受小数部分和指数，整数与小数部分合计有一位数字即可（`.5` 与 `1.` 都能解析）。尾部残留、十六进制、`inf` / `nan` 以及越界整数都解析失败。`parse` 用 typed error channel 报错，`tryParse` 返回 `null`。数值之间的转换只能写成显式 `as`，文本解析不经过数值 cast。
+
+### 13.3 类型检查
+
+| 函数 / 表达式 | 签名 | 说明 |
+|---|---|---|
+| `typeOf(x)` | `(value) -> Type` | 返回稳定 TypeId / `Type.xxx` 值 |
+| `typeName(x)` | `(value) -> string` | 返回调试/日志用类型名字符串 |
+| `typeName<T>()` | `() -> string` | 返回静态类型 `T` 的名称 |
+| `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
+
+当前 XIR 值查询子集只准入未被词法或模块绑定遮蔽的 `typeName(value)`，实参是一个普通 READ 值并按普通语义求值一次。已准入标量、Atomic/PanicInfo 使用共享类型名；Unit 为 `()`，裸 null 与括号 null 为 `null`。Array/callable 顶层返回 `Array`/`function`，具体名义类型显示声明名与闭合类型参数，参数中的 Array 显示元素类型。Nullable present 返回 element 的家族或名义名，none 返回 `null`。结果字符串进入接收 owner；名称上限 256 字节、递归上限 32 层，超限报告预算失败，不截断。
+
+普通泛型 Array<T>/callable<T> 的家族名在定义处可得；T 自身、含开放参数的名义类型及 T? 的完整查询、Error existential 的具体动态 enum 名、`typeName<T>()` 与完整反射仍未接通。这是当前实现准入边界，保留上述合法语言形式；后续须在 Checked 上保留查询、特化并复验，不回到 AST 补造能力。查询不授予可见性、构造或约束权限。
+
+全局只读环境值不是函数：`process`（入口参数/文件/目录信息）、`__file__`、`__dir__`。它们由真实文件/项目入口初始化；纯 `eval` 场景中 `process` 可为 `null`。
+
+```xray
+var x = 42
+print(typeOf(x) == Type.i64)    // true
+print(typeName(x))              // "i64"
+print(x is i64)                 // true
+// typeOf(x) == "i64"           // compile error: use Type.i64 or typeName(x)
+```
+
+### 13.4 协程
+
+协程启动和等待是语法而不是全局函数：`go`、`await`、`await all`、`await any`、`await anySuccess`。休眠使用 `time.sleep(ms)`。
+
+### 13.5 断言（测试用）
+
+| 函数 | 签名 | 说明 |
+|---|---|---|
+| `assert(cond, msg?)` | `(cond: bool, msg: string = "") -> ()` | false 产生 assertion panic |
+| `assertEqual<T: Equal>(a, b, msg?)` | `(a: T, b: T, msg: string = "") -> ()` | 普通 TYPE 参数，在定义处证明 Equal 的同T比较 |
+| `assertThrows(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | 仅期望 action 调用的 typed error |
+| `assertPanics(action, msg?)` | `(action: fn() -> R, msg: string = "") -> ()` | 仅期望 action 调用的 panic |
+
+`msg?` 只表示可以省略，不表示 `string?`；显式 null、可空字符串及非字符串均非法。
+条件/action 表达式和消息按源序各求值一次，成功路径也求值消息；省略使用唯一默认参数机制。
+条件断言失败时，`PanicInfo.message` 精确保存已求值的 `msg` 字节与长度；省略消息得到空字符串。
+错误码、源码位置及显示前缀由诊断层单独呈现，不拼入该消息，不截断或按 C 字符串终止符读取。
+`R` 是 builtin 从已检查 callable 签名取得的精确结果变量，不是普通源码泛型形参或 `any`。
+Unit action 类型写 `fn()`，零 payload，不创建普通结果槽；其它结果须满足已准入的
+可复制、可保存结果合同。正常返回先销毁结果恰好一次，再产生缺失期望的 assertion panic。
+视图及不可复制结果须待各自返回合同准入，不放宽普通泛型 Unit 或存储规则。
+
+保护域只包括 action 调用及清理，action/msg 表达式本身的失败不在域内。typed error/panic
+不同；OOM、LIMIT、取消及 provider/ABI/准入失败不能使断言成功。未知 callable 效应保持未知，
+不凭具体实例函数体补承诺；词法绑定优先于 builtin 名称。assertEqual 的完整能力及类型域
+按定义处约束合同逐族准入，无约束 T 不在特化时获得深比较权限。普通相等与容器键等价保持
+区别；含 NaN 的数组即使共享 backing 也遵守逐元素关系，memcmp 须有额外 bytewise 证明。
+首个有限 Equal 域为 bool、八种定宽整数、f32/f64、string 和递归 Array<T: Equal>，
+详见 §9.2/§17.33；普通 ==、!= 与本断言使用同一关系和证明。Equal 不授自反性或键等价，
+也不是 Equatable 别名。a、b、msg 各按源序求值一次，成功也求值消息；仅正常比较得到 false
+才触发 assertion panic，比较 OOM/LIMIT 保持资源通道。完整相等能力域与正式实现资格仍未完成。
+本节是声明合同，不代表 §17 尚未准入的断言执行族已实现。
+
+### 13.6 容器构造与静态函数
+
+| 函数 | 说明 |
+|--|--|
+| `Array()` / `Array(n)` / `Array(n, value)` | 创建空数组、指定长度数组或填充值数组 |
+| `Array.from(iterable)` | 从 string / Array / Set / Map 创建数组 |
+| `Array.range(start, end)` | 创建闭区间整数数组 `[start, ..., end]` |
+| `Array.withCapacity(n)` | 创建 length=0、capacity=n 的数组 |
+| `Map()` | 创建空 Map |
+| `Map.from(entries)` | 从 `[key, value]` pair 数组创建 Map |
+| `Map.from(keys, values)` | 从键数组和值数组创建 Map |
+| `Set()` / `Set(array)` | 创建空 Set 或从数组创建 Set |
+| `Set.from(iterable)` | 从 string / Array / Set 创建 Set |
+| `Set.range(start, end)` | 创建闭区间整数 Set |
+
+BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>` / `JSON.parseObject` / `JSON.value` / `JSON.stringify`；DateTime 使用 `datetime` 模块工厂函数。
+
+---
+
+## 14. 内置类型方法 (Built-in Type Methods)
+
+> 真值源：prelude / analyzer / runtime 中的内置类型注册与方法定义。
+> MCP knowledge 只消费生成后的 analyzer metadata，不独立维护内置类型方法签名。
+
+本节按主题汇总每种内置类型的方法、签名和行为。
+
+### 14.1 `i64` 方法
+
+| 方法 | 签名 | 说明 |
+|--|--|--|
+| `abs()` | `() -> i64` | 绝对值 |
+| `toString()` | `() -> string` | 十进制字符串 |
+| `toBigInt()` | `() -> BigInt` | 转 BigInt |
+| `toF64()` | `() -> f64` | 转 f64 |
+| `toHex()` | `() -> string` | 十六进制字符串 |
+| `max(other)` / `min(other)` | `(i64) -> i64` | 双值最值 |
+| `sqrt()` | `() -> f64` | 平方根 |
+| `pow(exp)` | `(f64) -> f64` | 幂运算 |
+| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(i64) -> i64?` | 溢出返回 `null` |
+| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(i64) -> i64` | 溢出饱和到 `i64` 边界 |
+| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(i64) -> i64` | 显式二补码环绕 |
+| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(i64) -> bool` | 仅报告有符号溢出（要结果用 `checked*`） |
+| `popcount()` | `() -> i64` | 二补码位表示中置位的个数 |
+| `leadingZeros()` / `trailingZeros()` | `() -> i64` | 前导/后缀零比特数（`0` 返回 `64`） |
+| `byteswap()` | `() -> i64` | 反转字节序 |
+| `rotateLeft(n)` / `rotateRight(n)` | `(i64) -> i64` | 循环移位（`n` 按模 64） |
+
+`abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词在 VM 与 AOT 中具有相同语义。
+
+### 14.2 `f64` 方法
+
+| 方法 | 签名 | 说明 |
+|--|--|--|
+| `abs()` | `() -> f64` | 绝对值 |
+| `toString()` | `() -> string` | 字符串化 |
+| `toFixed(decimals?)` | `(i64?) -> string` | 固定位数小数字符串 |
+| `toI64()` | `() -> i64` | 转 i64 |
+| `floor()` / `ceil()` / `round()` | `() -> i64` | 取整 |
+| `sqrt()` | `() -> f64` | 平方根 |
+| `pow(exp)` | `(f64) -> f64` | 幂运算 |
+| `isNaN()` | `() -> bool` | 是否为 IEEE NaN |
+
+### 14.3 `BigInt` 方法
+
+| 方法 | 签名 | 说明 |
+|--|--|--|
+| `abs()` | `() -> BigInt` | 绝对值 |
+| `toString()` | `() -> string` | 字符串化 |
+| `sign()` | `() -> i64` | -1 / 0 / 1 |
+| `isZero()` / `isNegative()` / `isPositive()` | `() -> bool` | 符号判断 |
+| `toI64()` | `() -> i64?` | 无法表示时返回 null |
+| `toF64()` | `() -> f64` | 转 f64 |
+
+### 14.4 `bool` 方法
+
+| 方法 | 签名 | 说明 |
+|--|--|--|
+| `toString()` | `() -> string` | 返回 `"true"` 或 `"false"` |
+
+### 14.4.1 `rune` 方法
+
+| 方法 | 签名 | 说明 |
+|--|--|--|
+| `toString()` | `() -> string` | 返回单 Unicode scalar 字符串 |
+| `toUInt32()` | `() -> u32` | 返回 Unicode scalar code point |
+| `isLetter()` | `() -> bool` | 是否为 Unicode 字母 |
+| `isNumber()` | `() -> bool` | 是否为 Unicode 数字 |
+| `isAlphanumeric()` | `() -> bool` | 是否为字母或数字 |
+| `isWhitespace()` | `() -> bool` | 是否为空白字符 |
+
+`rune` 是独立原始类型，不继承整数方法；需要码点时显式使用 `toUInt32()`。 `toUInt32()`／`i64(c)` 返回完整码点，不失败、不分配、不挂起；`toString()`／`string(c)` 产生拥有式 UTF-8，U+0000 保留长度为 1 的 NUL 字节。
+
+### 14.5 `string` 方法
+
+| 成员 | 类型 / 说明 |
+|--|--|
+| `len(s)` | O(1) Unicode scalar 数量 |
+| `bytes()` / `copyBytes()` | 借用的 `Slice<u8>` / 独立的 `Array<u8>` |
+| `runes()` | `Iterator<rune>`；裸 `for (r in s)` 使用相同语义 |
+| `string.fromRune(r)` | 从一个 Unicode scalar 构造字符串 |
+| `string.fromUtf8(bytes)` | 复制并严格验证 `Slice<u8>`；非法 UTF-8 抛 `Utf8Error.InvalidUtf8` |
+| `string.fromUtf8Lossy(bytes)` | 复制 `Slice<u8>`，非法序列替换为 U+FFFD |
+| `string.join(parts, separator?)` | 拼接 `Array<string>` |
+| `contains(s)` | 是否包含子串 |
+| `indexOf(s, start?)` / `lastIndexOf(s)` | 返回 rune ordinal |
+| `slice(start, end?)` | 按 rune ordinal 取得独立 string；范围必须合法 |
+| `sliceBytes(start, end)` | 按 byte offset 切片；边界非法时抛 `StringSliceError.InvalidByteRange` |
+| `split(sep, limit?)` | 分割为 `Array<string>` |
+| `replace(from, to)` / `replaceAll(from, to)` | 替换 |
+| `repeat(n)` | 重复 |
+| `startsWith(s)` / `endsWith(s)` | 前缀/后缀判断 |
+| `toString()` | 返回自身 |
+
+`len(s)` 读取已验证 UTF-8 的 Unicode scalar 计数并返回 i64，空串为 0，内嵌 NUL 计为一个 scalar。查询本身不分配；实参按普通表达式只求值一次，仍保留其求值、初始化和持有失败。`==`/`!=` 接受两个 string，按完整字节长度和内容比较，不依赖对象身份，不做大小写折叠或 Unicode 归一化；组合字符与预组合字符可以不相等。左右操作数按从左到右的值快照语义求值。普通无约束泛型不能借此获得字符串或 Lengthable 能力。
+
+`contains`、`startsWith`、`endsWith` 接受一个 string 并返回 bool，按完整 UTF-8 字节查询，不做大小写折叠或 Unicode 归一化，NUL 不终止匹配。空模式对任意字符串返回 true，非空模式对空字符串返回 false。接收者先求值并取得值快照，再求值模式，各一次；实参求值期间修改原变量不改变快照。查询本身不分配、不修改或转移输入，不引入挂起或语言异常；操作数求值及持有仍可失败。普通泛型必须在定义处具备相应能力。
+
+`indexOf(search, start?)` 的 start 是 rune 序号，省略为 0，合法范围为 `0..len(receiver)`（含两端）；负数或超界触发 bounds panic，不截断。查询返回从 start 开始的首个匹配的 rune 序号，未命中为 -1，空模式返回 start。`lastIndexOf(search)` 返回最后匹配的 rune 序号，未命中为 -1，空模式返回 `len(receiver)`。匹配按完整 UTF-8 字节，不归一化；rune 是 Unicode scalar，不是 grapheme。接收者、模式、start 按该顺序各求值一次并保留值快照。查询自身无分配、不挂起、不改变所有权；实参求值/持有失败照常传播。Unicode 坐标转换可能扫描前缀；连续查询不承诺恒定时间。
+
+string 的 `<`、`<=`、`>`、`>=` 比较完整显式长度的 UTF-8 无符号字节字典序；嵌入 NUL 参与比较，相同前缀后较短字符串较小。不使用 locale、归一化或 grapheme 排序。
+
+string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`、`s.bytes()[i]` 或 `s.slice(start, end)`。字符串拼接使用 `+`；大小写、去空白、填充和反转等 Unicode 文本操作属于 `text` 模块。
+
+### 14.6 `Array<u8>`
+
+`Array<u8>` 是可直接使用的 `Array` 具体化，构造由 `Array<u8>(n)` / `Array<u8>(n, fill)` 等内置路径处理。它的 `toString()` 与所有 Array 一样返回容器格式；文本解码必须显式使用 `string.fromUtf8(bytes[:])` 或 `string.fromUtf8Lossy(bytes[:])`。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要把它当成另一套与 Array 同构的独立 API。
+
+### 14.7 `Array<T>` 方法
+
+`Array<T>` 是可增长值类型，T 必须可复制且可保存。普通赋值、保存参数、索引读和返回遵循逻辑副本语义；共享 backing 不授予修改其他副本的权限。容器存储本身不要求 T 可比较、可哈希或可字符串化，相关方法另按各自合同准入。
+
+首个拥有式数组执行子集冻结以下接口：`len(array: Array<T>) -> i64`、只读 `get(index: i64) -> T`、`ref set(index: i64, value: T) -> ()`、`ref push(value: T) -> ()`，以及数组字面量和 §3.4/§3.11 的索引表达式。`set` 方法返回 unit；索引赋值表达式返回右侧转换后的 T。len 自身不分配；读取/复制可能遇到持有计数限制；构造和写入可能因预算、分配或持有限制失败。set 和 push 都可能因 COW 分离而迁移元素存储。
+
+只读 get 与索引读取遵循 §3.0 的值 receiver 快照规则：先取得 Array 逻辑快照，再求 index；不能因 index 中的改绑而晚读当前值。ref set/push 则先绑定根 place 一次，全部实参求值完成后才对 binding 的当前值建立独占访问，执行边界检查、分离、写入和回写。实参改绑同一 root 时，操作作用于新值；set 按新长度检查。`a.push(a[0])` 合法，元素结果必须在 push 前独立持有。失败不发布部分数组或改变提交前的逻辑值；已经完成的实参副作用和改绑不回滚。
+
+普通 read 参数不能成为这些 ref 方法的可写 receiver；可复制 Array 不声明 move receiver，pop 删除元素也不消费整个 Array。下表的 ref 是声明模式，dot-call 仍写 `a.push(x)`。纯索引 GET-place 的快照消除及瞬时 retain/copy/drop 必须遵守 §3.0 的错误保持要求，不能以共享 backing 的唯一性猜测绕过访问权限。
+
+```xray
+var a: Array<string> = ["old"]
+fn replaceForPush() -> string {
+    print("arg")
+    a = ["new"]
+    return "tail"
+}
+a.push(replaceForPush())
+print(a[0], a[1])           // 依次输出 arg、new tail
+```
+
+```xray
+var a: Array<string> = ["head"]
+a.push(a[0])
+print(a[0], a[1])           // head head
+```
+
+下表保留完整32成员分母。截至本次容量合同冻结，实际治理已准入get/set/push、map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear、reverse/unshift/pop/shift/resize及entries/fill/concat，共23个operation；其余9个仍未准入。执行身份来自 `stdlib/types/array.xr` 的同源结构化声明，名字只用于成员查找。capacity 是显式可观察属性，其增长与分离保证须在该属性接入时冻结；不能把所有容量行为称为不可观察的优化。
+
+这些 READ 回调/查询先取得 receiver 的拥有式快照，再按源码顺序各求实参一次；reduce 的顺序为 receiver、callback、initial。map/filter/forEach 按递增索引执行，可接受声明允许的省略尾 index 回调；find/findIndex/every/some 按单元素 bool 回调短路。空 reduce 返回 initial，空 every 为 true，空 some/contains 为 false，无匹配 find 为 none、findIndex/indexOf 为 -1。contains/indexOf 在定义处要求 T:Equal；join 本片只支持 string/bool/rune/已准入数值，separator 默认为空字符串并保留 UTF-8/NUL 字节。ref clear 使用既有可写 place 与写回合同，复制值保持独立。回调继续使用普通间接调用的 throw/panic/suspend/取消与所有权管线，不能从未来实例补足约束。本段冻结操作合同，完整回归、安全、OOM 与物理释放资格以实际批次证据为准。
+
+下一声明片冻结 `ref unshift(value: T)`（普通 READ 的精确 T，返回 unit）和 `ref reverse() -> Array<T>`（零参数，拥有式结果）；冻结不表示已准入或验证。两者只要求 Array 原有的可复制、可保存能力，不额外要求 Equal、Compare 或 ToString；普通泛型在定义处检查，不从未来实例补权限。receiver 必须是可写逻辑 place，root/path 的选择器只求一次；unshift 实参成功后读取 binding 的当前 Array，实参的已完成副作用不回滚。负整数 T 是普通元素，不是长度参数。
+
+两方法先准备独立拥有式候选，reverse 取反向排列，unshift 将输入置于原元素之前；空 reverse 返回空 Array，空 unshift 得到单元素 Array。元素复制在 class 身份处停止。reverse 的结果拥有关系在最终单次回写前准备完成，发布后结果与 receiver 是独立逻辑副本；方法准备或发布失败、发布前取消不改变提交前的逻辑值，临时拥有关系正常释放。方法发布后的后续语句、整个函数的结果交接失败或取消遵循普通调用规则，不撤销已完成的方法副作用；内部循环不新增语言挂起点或用户回调。私有候选构造可能重选 backing 容量，不能声称保持旧容量；capacity/withCapacity/reserve 的公开增长与分离保证仍在该声明族准入时另冻。
+
+冻结 `ref pop() -> T?` 与 `ref shift() -> T?`：零显式、可选、默认、variadic及方法类型参数，分别移除尾／头元素，receiver不被消费。空数组返回外层None且不发布Array写入；非空取得精确T的独立拥有式逻辑副本，再包一层Some。T本身Nullable时不展平：Array<i64?>删除null得到Some(None):i64??，删除7得到Some(Some(7)):i64??，空数组才得到None:i64??。不增加Some/None源码构造语法或Equal/Compare/ToString/NotNullable要求；普通泛型定义处检查，Checked特化后复验。
+
+receiver须为已有权限的可写逻辑place；root/path选择器只求值一次，路径完成后读取绑定当前Array，已完成路径副作用不回滚。const/read Array值参数、临时Array、不可访问或const字段拒绝；read class handle的可变Array字段沿用既有class身份与字段权限。非空先准备完整拥有式Nullable结果及私有Array候选（pop保前n−1项，shift保后n−1项原序），再只向真实place发布一次。复制在class或同步身份处停止，结果不借backing内部地址。所有可失败的方法结果持有／cell读取在发布前完成；准备／发布失败和发布前取消保全提交前逻辑值、别名及身份，正常释放临时拥有关系。发布后的普通父表达式、函数结果交接失败或取消不撤销方法副作用。内部循环不增加语言挂起点或用户回调；空路径无元素读取／发布，但不承诺零分配或免于准入、持有及预算失败。
+
+pop/shift资格为allocation=may_heap、failures=allocation,retain,limit、ownership=owned，无callback效应。候选可重选backing容量，不保证旧capacity；capacity/withCapacity/reserve的公开增长／分离保证仍属其声明族另冻，与reverse/unshift一致。合同冻结不等于新操作已经通过实施验收。
+
+冻结声明族 `ref resize(length: i64, fill: T) -> Array<T>`，两个必需READ实参按length、fill各一次，无默认／可选／variadic／方法类型参数，length精确i64、fill精确T。只要求原可复制／可保存能力，不加Equal/Compare/ToString/NotNullable；普通泛型定义处检查并在Checked特化后复验。receiver为有权限的可写逻辑place，选择器仅一次，全部实参成功后读binding当前Array，已完成副作用不回滚；const/read Array值参数、临时值及无权字段拒绝，read class handle可变字段沿既有权限。
+
+n≥0保前min(oldLength,n)项，增长项为fill逻辑副本，结果长度n；返回拥有式Array与发布receiver为独立逻辑副本，旧alias保旧值，复制在class／同步身份处停止且保Nullable层。n=0返回拥有空Array，同长度不承诺零分配或backing不变。n<0在两个实参后经现有NUMERIC_RANGE/E0422 panic拒绝且无发布；不可表示尺寸及有限额度沿现有LIMIT／预算拒绝。候选允许重选容量，capacity/withCapacity/reserve观察保证另冻。
+
+完整候选、结果cell读取和可失败持有先于唯一PLACE_WRITE；准备／发布失败及提交前取消保当前root／alias／identity并清临时owner，发布后父表达式／返回交接失败或取消不回滚方法副作用。内部无用户回调／语言挂起／跨挂起loan，外部量子取消按真实提交点；qualification=allocation:may_heap,failures:allocation,retain,limit,ownership:owned。resize现已准入，当前21/32；独立VM/native／两mixed固定预期、所有准入元素类、真实故障／三轴／逃逸结果与两域物理释放均须保留。
+
+只读声明族 `entries() -> Array<(i64, T)>` 现已准入：零显式／可选／默认／variadic／方法类型参数，receiver 表达式仅一次，形成拥有式 Array 逻辑快照 A。结果是独立拥有的 Array，长度 L 与快照一致，按递增 i64 索引产生 [(0,A[0]),...,(L-1,A[L-1])]；空数组返回拥有空 Array。每个 T 字段是普通拥有式逻辑副本，保内联值及 Nullable 层，复制在 class／同步身份处停止。不消费或改写 receiver，无 PLACE_WRITE；结果元素替换不改变源 Array 或旧别名，但同身份对象的修改仍按身份语义可见。只要求 Array 已有可复制／可保存能力，不额外要求 Equal、Compare、ToString、Sendable 或授予反射／构造权限；普通泛型定义处检查，Checked 特化后复验，const/read 参数与临时 Array 按 READ 权限合法。
+
+entries 的 qualification 为 allocation=may_heap、failures=allocation,retain,limit、ownership=owned，没有用户 callback／新增语言挂起／跨挂起 loan；receiver 表达式原有效应不变。完整结果在交接前准备，复制／持有／预算失败或取消清理未完成的 Tuple/元素/Array，不发布部分结果也不修改源值；已完成 receiver 副作用不回滚。空路径不承诺零分配／零retain、原 capacity 或底层地址。外逃结果按普通 owner 寿命保活到最后 drop。entries 已实施并准入，当前21/32；iterator()/entriesIterator()/用户迭代器／generator 须分别取得完整合同与资格，不能由这个物化 Array 结果推断。
+
+冻结容量声明族：只读属性 `capacity: i64`、`static withCapacity(capacity: i64) -> Array<T>`、`ref reserve(capacity: i64) -> Array<T>`。静态构造与reserve各有一个必需精确i64的READ实参，无可选、默认、variadic或方法类型参数；T只须满足既有Array可复制、可保存约束，不要求Default、Equal、Compare、ToString或Sendable。普通泛型定义处检查，Checked特化后复验；只有实际治理Array身份取得这些内建操作，词法影子、同名用户声明和描述查询不能扩大构造、可见性或写权限。
+
+capacity自身只读已认证Array的header、不分配，返回 `0≤len≤capacity≤INT64_MAX` 的容量；receiver求值、地点解析与必要持有按普通规则传播失败并消耗有限work，const/read与临时Array可读。withCapacity(n)在n实参仅一次求值后构造拥有式空Array，len=0且capacity≥n，不构造任何T或默认元素。reserve(n)的n是总容量绝对下界，不是追加数量：选择逻辑root/path仅一次，求n仅一次，再读取实参完成后的当前Array，准备len不变、元素及次序不变、capacity≥max(oldCapacity,n)的完整拥有候选与返回owner，最后仅一次授权PLACE_WRITE。n≤oldCapacity也不承诺零分配、零持有或物理不分离；const/read值receiver、临时值、无权字段不可调用reserve。
+
+普通Array复制保复制当时的容量及全部逻辑值；reserve的返回和发布receiver为独立逻辑副本，旧alias保旧容量/内容。普通set/push、跨域或nested路径的COW分离不得降低操作前的容量；len增长仍保持len≤capacity。reverse/unshift/pop/shift/resize/clear/entries/fill/concat各自已冻结的候选容量选择规则不因此改成保容量。复制仍在class/同步身份边界停止，Nullable、嵌套值及NUL字节保持。闲置容量不是已初始化元素，不遍历、retain或析构未初始化slot；零尺寸的已准入T也使用有限i64逻辑容量，不返回usize最大值，不开放新的普通泛型Unit或资源域。
+
+withCapacity/reserve的n<0在全部实参后以现有NUMERIC_RANGE/E0422拒绝；真实不可表示尺寸与有限live/requested/work不足沿LIMIT/预算失败，不clamp、不溢出相乘或加法。所有实际heap请求包括realloc按完整请求预收费，OOM保累计费用，重试不补额。准备/发布失败及提交前取消保全当前root/alias/元素身份并清临时owner；已完成实参副作用或发布后父表达式失败不回滚。内部无用户callback、新语言挂起或跨挂起loan，真实量子取消及费用照常。capacity内核qualification=allocation:no_heap,failures:limit,ownership:owned；withCapacity/reserve为allocation:may_heap,failures:allocation,retain,limit,ownership:owned，不承诺精确容量、底层地址或复杂度。本次只冻结合同，三个成员实施及完整资格PENDING，当前实际治理仍23/32。
+
+冻结只读声明族 `concat(...arrays: Array<T>) -> Array<T>`：一个可为空的尾部variadic参数、无可选/默认参数或方法类型参数，每个显式实参精确为接收者的Array<T>，参数模式READ。receiver表达式先且仅一次求值形成拥有快照，然后从左到右每个实参仅一次求值并分别持有快照；后续实参对源binding的重绑/写入不改变此前快照。全部实参成功后构造结果，顺序为receiver全部元素，随后各实参数组全部元素；零实参也返回独立拥有的逻辑副本。允许const/read receiver与临时Array，只要求已有Array可复制/可保存能力，不增加Equal、Compare、ToString、Sendable或反射/构造权限。普通泛型定义处检查，Checked特化后复验。
+
+concat不消费或回写receiver/实参，不产生PLACE_WRITE；完整结果构造并持有成功后才交给调用者。结果及输入可独立修改，嵌套值和Nullable各层保持，复制在class/同步身份处停止，String保留NUL与准确字节。更早receiver/实参/持有失败保优先级，已完成的参数副作用不回滚；结果准备失败/取消清理所有临时owner而不发布部分返回值。内部没有用户callback、新增语言挂起或跨挂起loan；参数本身的效应仍走普通管线。有限尺寸/费用沿现有LIMIT/预算失败，不先作可能溢出的长度和。qualification=allocation:may_heap,failures:allocation,retain,limit,ownership:owned，不承诺capacity/地址/零分配或复杂度；完整Source/VM/native/mixed、故障/三轴/取消/逃逸和物理释放资格尚未完成。
+
+冻结声明族 `ref fill(value: T, start?: i64, end?: i64) -> Array<T>`，value 是一个必需普通READ实参，start/end 是按声明顺序省略的两个尾部可选i64实参；没有方法类型参数、variadic或额外隐式约束。显式实参按value、start、end各一次，receiver的可写place选择器先求值且仅一次；全部显式实参成功后读取该binding当前Array及长度L。省略start取0，省略end取此时L，不能在实参之前抓取长度。const/read Array值、临时Array或无权/const字段拒绝，read class handle的可变字段沿既有身份与字段权限。只要求Array原有可复制/可保存能力；普通泛型在定义处检查，Checked特化后复验，描述查询不授予额外调用、可见性或构造权限。
+
+fill使用严格半开区间 `[start,end)`，必须 `0≤start≤end≤L`；不使用负索引归一化或clamp，不能继承Array切片的范围政策。合法空区间含 `[0,0)` 和 `[L,L)`，保全部元素；L=0时默认区间合法。非法负值、反序或越界在全部显式实参之后、任何填充候选或root发布之前，经真实NUMERIC_RANGE/E0422 panic拒绝。沿现有E0422 detail `{code=422,reserved=0,index=0,length=0}` 与消息，不伪造bounds、ASSERT或故意坏GET；更早已实际发生的选择器、求值、读取、持有或预算失败保持其原优先级，既有副作用不回滚。
+
+合法时保持长度L，区间内各元素为value的普通拥有式逻辑副本，其余元素原序保留。返回拥有式Array<T>与发布receiver为独立逻辑值，旧alias保旧值；复制在class/同步身份边界停止，保所有Nullable层、String NUL和其它已准入元素类别。不承诺底层地址、capacity、零分配、零retain或线性复杂度；容量观察与reserve合同另冻。完整私有候选、拥有返回和可失败持有先于唯一PLACE_WRITE，准备/发布失败及提交前取消保全发布前root/alias/identity并清临时owner；发布后父表达式或结果交接失败/取消不回滚已提交方法副作用。内部无用户callback、语言yield/await或跨挂起loan，原真实量子取消与费用仍生效。qualification为allocation=may_heap、failures=allocation,retain,limit、ownership=owned。冻结不等于已准入；当前正式Array仍21/32。
+
+| 成员 | 类型/说明 |
+|--|--|
+| `len(arr)` | `i64` 全局查询 |
+| `capacity` / `arr[i]` / `arr[i] = v` | 只读容量查询、只读索引与可写 place 赋值；get 为只读，set 为 ref |
+| `ref push(x)` / `ref pop()` | 尾部增删；pop 不是 move receiver |
+| `ref shift()` / `ref unshift(x)` | 头部增删 |
+| `concat(...arrays)` | 只读 receiver，产生拼接结果 |
+| `indexOf(x)` / `contains(x)` | 只读查询 |
+| `join(sep?)` | 只读 receiver，拼接为字符串 |
+| `ref reverse()` / `ref sort(cmp?)` | 修改 receiver 的排列 |
+| `map(fn)` / `filter(fn)` / `reduce(fn, init)` | 只读快照；map/filter 的元素回调可带 index，reduce 为 `fn(U,T)->U` |
+| `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 只读快照；forEach 可带 index，其余为 `fn(T)->bool` 的短路查询 |
+| `ref fill(v, start?, end?)` / `ref clear()` | 填充或清空 |
+| `ref reserve(capacity)` / `ref resize(length, fill)` | 容量与长度管理 |
+| `ptr()` / `mutPtr()` | 返回借用的合同须另冻；mutPtr 不能以普通只读 receiver 授予可写访问 |
+| `toString()` | 只读 receiver，容器字符串表示 |
+| `entries()` | 只读快照，独立拥有 Array<(i64,T)>；现已准入 |
+| `iterator()` / `entriesIterator()` | 只读 receiver；结果类型、所有权与迭代协议在准入前另冻 |
+
+Array for-in 的集合表达式求值一次并持有拥有式逻辑值快照。源绑定的元素替换、追加或重绑不改变本次序列；获取元素形成拥有式值副本。复制在 class 身份处停止，修改被引用对象仍可被其它同身份引用观察。每轮绑定不可变，空数组执行零次 body，continue 先清理本轮再前进一次；挂起保留快照与索引，取消释放所有拥有关系。普通泛型的 `Array<T>` 可按定义处已知形状遍历，任意 `T` 不因某实例恰为 Array 获得迭代权限。iterator 方法族、其它集合和借用视图的准入分别验证，不能以快照遍历替代它们。
+
+Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[start:end]` 产生借用的 `Slice<T>`，必须有显式目标类型并遵守 §2.4.2 的借用规则；需要独立数据时使用 `copy(arr[start:end])`。
+
+### 14.8 `Map<K, V>` 方法
+
+| 成员 | 类型/说明 |
+|--|--|
+| `len(m)` | `i64` 全局查询 |
+| `m[k]` / `m[k] = v` | 下标读写 |
+| `get(k)` / `set(k, v)` | `get` 在缺失时返回 `null`；`set` 写入 |
+| `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | 查询与删除 |
+| `keys()` / `values()` / `entries()` | 返回键、值、键值对 |
+| `forEach(fn)` | 遍历 |
+| `iterator()` / `entriesIterator()` | 迭代协议 |
+
+**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于精确结构对象字面量 `{ field: value }`。
+
+`m[k]` 要求键存在；缺失键触发运行时错误 `E0431`。需要可选读取时使用 `m.get(k)`。
+
+### 14.9 `Set<T>` 方法
+
+| 成员 | 类型/说明 |
+|--|--|
+| `len(set)` | `i64` 全局查询 |
+| `add(x)` / `contains(x)` / `delete(x)` | 插入、查询、删除 |
+| `clear()` | 清空 |
+| `values()` | 返回 `Array<T>` |
+| `forEach(fn)` | 遍历 |
+| `iterator()` | 迭代协议 |
+
+**Set 字面量**：`#[1, 2, 3]` 或 `#[]`。
+
+### 14.10 `Channel<T>` 方法
+
+| 成员 | 类型/说明 |
+|--|--|
+| `send(v)` | 阻塞发送；channel 已关闭时抛异常 |
+| `recv()` | 阻塞接收，返回 `Recv<T>`；关闭且缓冲为空时为 `Recv.Closed` |
+| `recvOr(default)` | 接收 payload；没有值时返回给定默认值 |
+| `trySend(v)` | 非阻塞发送，返回 `SendResult` |
+| `tryRecv()` | 非阻塞接收，返回 `Recv<T>`；空时为 `Recv.Empty` |
+| `sendTimeout(v, ms)` | 带超时发送，返回 `SendResult`；超时为 `SendResult.Timeout` |
+| `recvTimeout(ms)` | 带超时接收，返回 `Recv<T>`；超时为 `Recv.Timeout` |
+| `close()` | 关闭 channel |
+| `capacity` / `isClosed` | 容量和关闭状态属性 |
+
+`Recv.Value { value: v }` 中的 `v` 就是 channel payload，因此 `Channel<i64?>` 可以区分真实的 `Recv.Value { value: null }` 和 `Recv.Closed`。
+
+### 14.11 `JSON` 命名空间
+
+`JSON` 是 prelude 命名空间，不是可声明变量的值类型，也不需要 `import json`。schema-less JSON 使用 `JSON.Value`；确定为 object 的动态 JSON 使用 `JSON.Object`。`JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名，因此枚举、动态下标、增删字段和 `len` 都直接使用 §14.8 的 Map API。
+
+`JSON.Value` 是 `null | bool | i64 | f64 | string | Array<JSON.Value> | JSON.Object` 的递归边界值。它没有 dot、下标、迭代或 `len` 魔法：先用 typed decode 提交 schema，用 `asObject` / `asArray` 显式解包，或用 path API 访问任意深度。
+
+| 静态函数 | 说明 |
+|--|--|
+| `JSON.parse<T>(text, unknown?)` | 直接按 `T` 构造 typed value；未知字段默认 `Reject`，可显式传 `JSON.UnknownFields.Ignore` |
+| `JSON.parseObject(text)` / `JSON.parseValue(text)` | 分别解析 object 根或任意 JSON 根，不构造结构对象中间层 |
+| `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | 构造已知字段 `value: T`，并将顶层未知字段保留在 `rest: JSON.Object` |
+| `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | 从已有 schema-less 值尝试构造 `T`，失败返回 `null` |
+| `JSON.value<T>(value)` | 显式把可编码的复合值物化为 `JSON.Value` |
+| `JSON.stringify<T>(value, indent?)` | 序列化可编码值；`indent` 必须是非空 `i64` |
+| `JSON.isValid(text, strict?)` | 校验 JSON 文本 |
+| `JSON.kindOf(value)` / `JSON.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | 查询 JSON arm |
+| `JSON.asObject(value)` / `JSON.asArray(value)` | 返回共享底层存储的可空 object/array 视图，不复制 |
+| `JSON.get<T>(root, path)` / `JSON.require<T>(root, path)` | 按 `JSON.Path` 读取并解码；前者失败返回 `null`，后者抛 `JSON.PathError` |
+| `JSON.containsPath(root, path)` | 判断完整路径是否存在 |
+| `JSON.set(root, path, value, createParents?)` / `JSON.remove(root, path)` | 修改或删除路径；路径可穿过 object key 与 array index |
+| `JSON.merge(parts)` | 将 `JSON.WithRest<T>` 的 typed 部分和顶层 rest 重新组成 `JSON.Object` |
+
+`JSON.Path` 是 `Array<string | i64>`：string segment 是完整 object key，i64 segment 是 array index。`["user", "profile", "name"]` 表示深层字段；`"user.profile"` 只是一个含点号的 key，不会解析成三段。动态 object key 也可直接使用 `JSON.Object` 的 Map 下标和方法。
+
+```xray
+type Request = { action: string, userId: i64 }
+
+var request = JSON.parse<Request>(body)       // 未知字段默认拒绝
+var payload = JSON.parseObject(body)          // JSON.Object，即 Map
+payload["traceId"] = "req-42"               // 标量隐式 widening
+
+var path: JSON.Path = ["user", "profile", "name"]
+var name = JSON.get<string>(payload, path)
+JSON.set(payload, path, "Ada", true)
+```
+
+JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；结构对象、数组和其他复合值必须写 `JSON.value(...)`。因此 `{ name: "alice" }` 始终是精确结构对象，不会因上下文悄悄变成动态 object。
+
+### 14.12 `Range`
+
+`a..b` 是半开区间 `[a, b)`，`a..=b` 是闭区间 `[a, b]`；两种范围都可用于表达式、`for-in` 和 `match` 范围模式。
+
+| 成员 | 说明 |
+|--|--|
+| `start` / `end` | 起点与声明的终点 |
+| `contains(x)` | 按半开或闭区间语义判断 `x` 是否在范围内 |
+| `toArray()` | 按迭代顺序生成独立的 `Array<i64>` |
+| `toString()` | 返回 `a..b` 或 `a..=b` 形式的字符串 |
+| `iterator()` | 迭代协议；惰性产出与 `toArray()` 相同的元素序列 |
+| `len(range)` | 返回范围中的元素数量 |
+
+```xray
+var pages = 1..=3
+print(pages.start)          // 1
+print(pages.end)            // 3
+print(pages.contains(3))    // true
+print(len(pages))           // 3
+print(pages.toArray())      // [1, 2, 3]
+
+var empty = 5..5
+print(len(empty))           // 0
+```
+
+### 14.13 `DateTime`
+
+通过 `import datetime` 获得工厂函数：`now`、`utc`、`create`、`createUTC`、`fromTimestamp`、`fromTimestampMs`、`parse`、`offset`。`DateTime` 不是 prelude 类型；需要类型名时使用 `import { DateTime } from datetime`。
+
+| 成员 | 类型/说明 |
+|--|--|
+| `year` / `month` / `day` | 日期分量属性 |
+| `hour` / `minute` / `second` / `millisecond` | 时间分量属性 |
+| `weekday` / `yearday` / `timestamp` | 派生属性 |
+| `toString()` / `format(pattern?)` / `toISOString()` | 格式化 |
+| `add(amount, unit)` / `diff(other, unit?)` | 日期运算 |
+| `toUTC()` / `toLocal()` | 时区转换 |
+| `isBefore(other)` / `isAfter(other)` / `equals(other)` | 比较 |
+| `isLeapYear()` / `daysInMonth()` | 日历查询 |
+
+### 14.14 `Regex`
+
+| 方法 | 说明 |
+|--|--|
+| `test(s)` | 是否匹配 |
+| `find(s)` | 首个匹配 |
+| `findAll(s)` | 所有匹配 |
+| `findText(s)` / `findGroup(s, index)` | 首个匹配文本 / 捕获组文本 |
+| `replace(s, replacement)` | 替换 |
+| `split(s, limit?)` | 分割 |
+
+### 14.15 `StringBuilder`
+
+| 方法 | 说明 |
+|--|--|
+| `len(builder)` | 当前 rune 数量 |
+| `append(s)` | 追加并返回自身 |
+| `toString()` | 输出字符串 |
+| `clear()` | 清空并返回自身 |
+
+### 14.16 `PanicInfo`
+
+内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `init(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
+
+### 14.17 `Task<T>` 与 enum 值
+
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`：`Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径；结果必须可复制且 Sendable；Task 保留完整拥有式粘滞终态，重复 await 各取得逻辑副本，复制在 class 与同步身份边界停止，不使用 `await (move task)`，也不依引用计数选择单次 take。enum 值提供冷路径属性 `name`、`ordinal` 与方法 `toString()`。
+
+### 14.18 线程与同步 handle
+
+`Thread<T>` 是 prelude handle 类型，公开 `done` 属性以及 `join()`、`detach()` 方法。导入 `sys` 后，使用 `sys.Thread.spawn(body)` 或 `sys.Thread.spawn(ThreadOptions{...}, body)` 创建 OS 线程，并对返回的 handle 调用 `join()` 或 `detach()`。`CountdownLatch`、`EventCount`、`ResultGroup`、`Semaphore`、`WorkQueue` 等类型从 `sync` 模块导入；`Logger` 从 `log` 模块导入；连接与监听器类型从 `net` 模块导入。
+
+### 14.19 `Atomic<T>` 方法
+
+`Atomic<T>` 包装 `i64`、`f64` 或 `bool`，提供无锁原子操作。句柄以 `const` 命名；受审计原子方法提供同步内部修改。
+
+| 方法 | 签名 | 说明 |
+|--|--|--|
+| `load(ord?)` | `(Ordering?) -> T` | 原子读取当前值 |
+| `store(val, ord?)` | `(T, Ordering?) -> ()` | 原子写入 |
+| `add(val, ord?)` | `(T, Ordering?) -> ()` | 原子加 |
+| `sub(val, ord?)` | `(T, Ordering?) -> ()` | 原子减 |
+| `fetchAdd(val, ord?)` | `(T, Ordering?) -> T` | 原子加并返回旧值 |
+| `fetchSub(val, ord?)` | `(T, Ordering?) -> T` | 原子减并返回旧值 |
+| `swap(val, ord?)` | `(T, Ordering?) -> T` | 原子交换，返回旧值 |
+| `compareExchange(expected, desired, ord?)` | `(T, T, Ordering?) -> (T, bool)` | CAS，返回 `(旧值, 是否成功)` |
+| `toggle(ord?)` | `(Ordering?) -> bool` | 原子取反（仅 bool），返回旧值 |
+| `toString()` | `() -> string` | 返回当前值的字符串表示 |
+
+`ord?` 参数接受 `Ordering` 枚举，默认 `Ordering.SeqCst`。详见 §10.9。
+
+整族约束与操作准入按 §9.2/§10.9：类型声明要求 `T: AtomicValue`，数字四方法分别要求方法 `where T: AtomicNumber`，toggle 要求 `where T: AtomicBoolean`，其他方法不因这些附加条件缩小 AtomicValue 域。load/store 不接受非法内存序；compareExchange 返回拥有式真 Tuple，副作用前完成全部结果资源准备；f64 位型/CAS 与软件 RMW、i64 环绕和一次快照 toString 均沿 §10.9。当前 `stdlib/types/atomic.xr` 的无约束声明及固定 i64 指令仍待完整原子迁移，不代表本冻结合同已实现。
+
+---
+
+## 15. 标准库概览 (Standard Library)
+
+> 真值源：`stdlib/defs/*.def`、纯 Xray `stdlib/<module>/<module>.xr` export、`stdlib/types/*.xr` native type 声明，以及合并这些来源的 `scripts/gen_api_inventory.py`。
+> MCP knowledge 和 API inventory 使用 source-derived inventory；`xray builtin-dump` 只作为运行时 builtin 视图输入之一。
+> 详见 [附录 D stdlib 模块索引](#d-stdlib-模块索引)。
+
+> **真实 stdlib 模块清单**（27 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
+>
+> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
+>
+> 不需要 import 的 prelude 类型/命名空间为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`JSON`（含 `JSON.Value` / `JSON.Object`）、`Map`、`OsMutex`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<u8>` 是 `Array` 的具体化；`DateTime`、`Logger`、`NetConn`、`NetListener` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
+
+### 15.1 文件 IO 与系统
+
+| 模块 | 主题 | 关键 API |
+|--|--|--|
+| `io` | 文件 IO + 文件系统 | `readFile` `writeFile` `readFileBytes` `writeFileBytes` `exists` `mkdir` `mkdirp` `remove` `readDir` `stat` `readStdin` |
+| `path` | 路径操作 | `join` `dirname` `basename` `extname` `normalize` `isAbsolute` `resolve` `relative` `parse` `format` |
+| `os` | 操作系统接口 | `platform()` `arch()` `sep()` `eol()` `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec` |
+
+> xray **没有**独立的 `fs` 模块，文件系统操作在 `io` 中；进程参数 / 进程信息走全局 `process` 对象（`process.args` / `process.file` / `process.dir`，见 §16.5），不在 `os` 中。
+> `os.platform()` / `os.arch()` 查询主机事实；`os.sep()` / `os.eol()` 在 Xray 模块中从平台名派生。
+
+### 15.2 网络
+
+| 模块 | 主题 | 关键 API |
+|--|--|--|
+| `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `readInto` `readBytes` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `TlsClientContext` `TlsServerContext` `NetConn` `NetListener` |
+| `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `request` `h2Request` `listen` `router` `routeHandler` `requestText` `responseText` `parseResponseText` |
+| `ws` | WebSocket | `connect` `serve` `send` `recv` `close` `parseFrame` `parseUrl` `parseUpgradeRequest` `clientHandshakeRequest` |
+| `url` | URL 解析与构造 | `URL` `QueryParams` `parse` `format` `parseQuery` `encode` `decode` |
+
+> DNS 查询通过 `net.lookup(host)` 完成；没有独立的 `dns` 模块。
+
+#### 15.2.1 TCP 数据路径
+
+`net` 的 TCP API 明确区分三类数据路径：
+
+- `read(conn)` / `write(conn, data)`：消息型路径，把 payload 暴露为 Xray `string`，适合协议解析、文本处理和需要检查内容的逻辑。
+- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Array<u8>` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
+- `copy(src, dst)` / `copyBidirectional(a, b)`：流式 native 路径，payload 保持在可复用 C buffer 中，适合 proxy、relay、`copy(conn, conn)` echo 和其他不需要语言层查看每个字节的高吞吐场景。
+
+设计原则：raw stream 不应为了“经过语言层”而创建临时字符串；只有业务逻辑需要看数据时才使用字符串 API。
+
+TCP 等待操作使用协程友好的 netpoll 路径。`setReadDeadline(conn, deadline)`、`setWriteDeadline(conn, deadline)`、`setDeadline(conn, deadline)` 和 `setAcceptDeadline(listener, deadline)` 接受 `time.monotonic()` 毫秒 deadline；超时后操作按自身返回形态返回 `null` 或 `-1`，并通过 `lastError(handle)` / `lastErrno(handle)` 暴露诊断原因。
+
+`shutdownRead(conn)`、`shutdownWrite(conn)` 和 `shutdown(conn)` 暴露 TCP 半关闭语义。通用 proxy/relay 应优先使用 `copyBidirectional(a, b)`，它会在单向 EOF 后半关闭对端写侧，并返回两个方向的字节统计。
+
+TLS 客户端连接统一使用 `dial(host, port, DialOptions(timeoutMs, true, alpnProtocols))`；需要自定义 CA、客户端证书或 STARTTLS 时使用 `TlsClientContext`。`TlsServerContext` 接受按服务端优先级排列的 ALPN 列表，`negotiatedProtocol(conn)` 返回双方协商的协议或 `null`。ALPN 只配置协商能力，是否接受选中结果仍由 HTTP/2、WebSocket 等协议模块决定。TLS read/write/copy 与 plain TCP 共享同一套 deadline、错误诊断和 typed handle 生命周期语义。
+
+### 15.3 数据格式
+
+| 模块 | 主题 |
+|--|--|
+| `yaml` | YAML |
+| `toml` | TOML |
+| `xml` | XML |
+| `csv` | CSV |
+| `base64` | Base64 编/解 |
+| `encoding` | hex / UTF-8 等通用编码（不含 Base64，base64 在自身模块） |
+
+> JSON 编解码**不在**单独的 `json` 模块；通过 prelude `JSON` 命名空间的 `JSON.parse<T>(s)` / `JSON.parseObject(s)` / `JSON.value(v)` / `JSON.stringify(v)` 使用（无需 import；见 §14.11）。
+
+### 15.4 加密与哈希
+
+| 模块 | 关键 API |
+|--|--|
+| `crypto` | `md5` `sha1` `sha256` `sha512` `hmac` `encrypt` `decrypt` `randomBytes` `timingSafeEqual` `uuid` |
+
+> stdlib **没有**独立的 `random` 模块；如需伪随机数请使用 `crypto` 模块的随机源或 `math` 模块的工具函数。
+
+### 15.5 压缩
+
+| 模块 | 关键 API |
+|--|--|
+| `compress` | `gzip` / `gunzip`、`deflate` / `inflate` 等 |
+
+### 15.6 时间
+
+| 模块 | 关键 API |
+|--|--|
+| `time` | `now()` `monotonic()` `clock()` `micros()` `nanos()` `sleep(ms)` `localOffset()` `localOffsetAt()` |
+| `datetime` | `DateTime` 及 `now()` `utc()` `create()` `createUTC()` `fromTimestamp()` `parse()` 等工厂（详见 §14.13） |
+
+### 15.7 数学
+
+| 模块 | 关键 API |
+|--|--|
+| `math` | `sin` `cos` `tan` `log` `pow` `sqrt` `floor` `ceil` `round` `abs` `min` `max` 等；常量 `PI` / `E` / `MAX_I64` / `MIN_I64` |
+
+### 15.8 文本
+
+| 模块 | 关键 API |
+|--|--|
+| `regex` | `compile(pattern)` 返回 `Regex`；详见 §14.14。也支持 `/pattern/flags` 字面量 |
+| `text` | `lower` `upper` `trim` `trimStart` `trimEnd` `padStart` `padEnd` `reverseRunes` `translate` |
+十进制文本解析由 exact scalar 静态命名空间提供：`i64.parse(s)` / `i64.tryParse(s)` 与 `f64.parse(s)` / `f64.tryParse(s)`。数值间转换使用显式 `as`。
+
+### 15.9 日志与诊断
+
+| 模块 | 关键 API |
+|--|--|
+| `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`、source 位置开关、异步写入模式 |
+| `runtime` | `liveBytes()` `liveObjects()` `info()` |
+| `mem` | `alloc()` / `allocZeroed()` / `allocAligned()` 返回受管 `Buffer`；`pageAlloc()` / `pageFree()`；`copy()` / `move()` / `set()` / `compare()`；`volatileLoad()` / `volatileStore()`；`fence()` |
+| `sync` | 协程域同步：`Mutex` `RwLock` `Once` `Barrier` `Condvar` `CachePadded` `fence()` 等，需显式 `import sync` |
+| `sys` | OS / 线程底层接口：编译器定义的 `sys.Thread.spawn(...)` 与 `ThreadOptions`，以及 `ThreadLocal`、`OsMutex` `OsRwLock` `OsCondvar` `OsBarrier` `OsOnce`、process/dylib/pipe handle、`threadYield()`、`pinToCpu()`、`onSignal()`；主机 CPU 拓扑统一使用 `os.cpuCount()`，协程友好延时统一使用 `time.sleep(ms)` |
+
+### 15.10 并行
+
+`parallel` 导出 `forEach` 以及 `Plan` 抽象，用于结构化 CPU 并行工作；语言关键字表中没有 `parallel` 关键字，需显式导入模块。
+
+### 15.11 分布式
+
+| 模块 | 主题 |
+|--|--|
+| `cluster` | 节点发现、健康检查、Topic 消息总线（见 stdlib/cluster/）|
+
+### 15.12 测试
+
+`@test` 注解 + 全局 `assert*` 函数即可，**不需要**额外的 `test` 模块（见 §12）。
+
+### 15.13 已**不存在**的模块
+
+文档中可能引用过、但当前 stdlib 中**确实没有**的模块（避免误导）：
+
+`fs` · `process` · `dns` · `random` · `json`
+
+这些功能或者归入其他模块（见上面各小节注），或者尚未实现。
+
+> **完整索引**：见[附录 D](#d-stdlib-模块索引)。
+
+---
+
+## 16. 运行时模型 (Runtime Model)
+
+> 真值源：`src/runtime/`、`src/vm/`、`src/runtime/mem/`、`docs/rules/architecture.md`。
+
+### 16.1 值表示
+
+Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用 **16 字节 tagged struct-of-union**：
+
+- **Descriptor（8 字节）**：`tag: u8`、`flags: u8`、`heap_type: u16`、`ext: u32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
+- **Payload（8 字节）**：`i64` / `double` / 指针三选一，按 `tag` 解释。
+- **无 NaN-boxing / 无指针低位标记**：整数保留完整 64 位；对象引用是普通堆指针，类型信息在 descriptor 中。
+- **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。运行期短串默认协程本地无锁分配，仅字面量/符号、显式 `intern()` 与 map/set 键驻留全局池；跨协程边界（channel send、`go` 实参、task/scope 结果）按需提升为共享原子 RC。这些都是对象层存储策略，不改变 `XrValue` 表示。
+
+| 值类型 | 内部表示 |
+|--|--|
+| `i64` | `XR_TAG_I64` + 64-bit signed payload |
+| `f64` | `XR_TAG_F64` + IEEE-754 double payload |
+| `bool` | `XR_TAG_BOOL` + `0/1` payload |
+| `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
+| `null` | `XR_TAG_NULL` + zero payload |
+| `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
+| `Array<u8>` | `XR_TAG_PTR` + `XR_TARRAY`，元素布局为 byte |
+| 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
+
+Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<u32>` 混淆。
+
+### 16.2 语义所有权域
+
+存储由**两个正交的轴**描述，任何一处混用都会得出错误结论：
+
+- **语义所有权域**（本节）：谁拥有这块存储、它活多久、跨执行边界时按什么规则迁移。这是**语义契约**。
+- **后端物化**（§16.2.1）：后端实际把它放在哪（内联、栈、静态数据、某个堆）。这是**实现选择**。
+
+> 真值源：`src/base/xstorage.h` 的 `XrSemanticStorageDomain`、`XrBackendMaterialization`、`XrTransferAction`。
+
+一个值恰好属于六个语义域之一：
+
+| 域 | 归属与生命周期 | 引用计数 | 典型来源 |
+|--|--|--|--|
+| **`EXEC_LOCAL`** | 当前执行体（协程）独占；随该执行体的堆一起结束 | 非原子 | 普通局部对象、字面量构造的容器与实例 |
+| **`TRANSFERABLE`** | 唯一所有权，可跨执行边界**整体移交**；移交后源侧不再可用 | 非原子 | `move` 的目标、跨协程传递的唯一值 |
+| **`CONST_SHARED`** | 已发布的不可变根，多个执行体并发只读共享 | 原子 | 发布后的 `const` 根、`freeze` 的结果 |
+| **`SYNC_SHARED`** | 受审计的并发句柄，多个执行体并发访问，同步由句柄自身保证 | 原子 | channel、mutex 等并发原语持有的值 |
+| **`MODULE_STATIC`** | 归属模块，活到模块卸载；**默认不提供并发安全性** | 按模块 owner | 顶层 `const` / `var` |
+| **`FOREIGN`** | 由 Xray 之外的分配器拥有；运行时不管理其生命周期 | 无 | FFI 指针、外部缓冲 |
+
+**域决定并发可见性与回收责任，不决定物理位置。** 例如 `EXEC_LOCAL` 的值可能被内联进持有者、放在栈上、或分配在执行堆上——三种物化都不改变"它随该协程结束"这一契约。
+
+#### 16.2.1 后端物化
+
+后端在满足语义域契约的前提下，为每个值选择一种物化：
+
+| 物化 | 含义 |
+|--|--|
+| `INLINE` | 内联在持有者的存储里，无独立地址身份 |
+| `STACK` | 函数帧上；随帧退出而失效，不可增长、不可释放 |
+| `STATIC_DATA` | 只读静态数据段（consteval 结果、字面量池） |
+| `EXEC_HEAP` | 当前执行体的堆（`XrCoroHeap`）；引用计数回收 |
+| `SYSTEM_HEAP` | 系统堆；跨执行体可见的对象走这里 |
+| `SROA` | 被标量替换后拆散到寄存器，聚合体本身不再具体存在 |
+| `EXTERNAL` | 外部分配器持有 |
+| `INVALID` | 未决定；出现在最终计划里即为内部错误 |
+
+> **改变物化不得授予更强的语义域或迁移能力。** 把一个 `EXEC_LOCAL` 的值物化到 `SYSTEM_HEAP` 不会让它变得可以跨执行体共享；反过来，把 `CONST_SHARED` 的值物化到栈上是非法的——它的域要求地址在共享期内稳定。物化是语义域的**下游**，永远不是理由。
+
+#### 16.2.2 跨执行边界的域迁移
+
+值跨越执行边界（闭包捕获进 `go`、送入 channel、作为 task 结果返回）时，由其**源域**与可变性决定一个迁移动作。这是编译期判定，不是运行时降级：
+
+| 动作 | 何时选用 | 语义 |
+|--|--|--|
+| `INLINE_COPY` | 标量、且非可变捕获 | 按值复制，两侧此后独立 |
+| `CONST_SHARE` | 源域为 `CONST_SHARED` | 共享同一不可变根，原子引用计数 |
+| `SYNC_SHARE` | 源域为 `SYNC_SHARED`，或捕获形态本身是并发句柄 | 共享同一句柄，同步由句柄保证 |
+| `MOVE_UNIQUE` | 源域为 `TRANSFERABLE` | 整体移交所有权，源侧此后不可用 |
+| `EXPLICIT_COPY` | **仅**源码写了 `copy(...)` | 物化一个独立的值再迁移 |
+| `MODULE_READ` | 源域为 `MODULE_STATIC` 且不可变 | 只读引用模块绑定 |
+| **`REJECT`** | **以上都不成立** | **编译错误** |
+
+`REJECT` 是这张表里最重要的一项：**跨执行边界没有隐式深拷贝兜底**。可变的模块绑定、可变或被重新赋值的普通捕获、没有 const/sync/move 证据的托管值，全部是编译错误而不是"悄悄拷一份"。需要独立副本时，源码必须显式写 `copy(...)`。
+
+### 16.3 对象生命周期与回收
+
+- 默认由编译器插入的 **per-coroutine reference counting** 回收普通局部对象；最后一个强引用释放时立即进入 RC 销毁路径。共享对象使用 atomic RC，模块/运行时对象按各自 owner 的生命周期管理。
+- **循环引用不由运行时回收**：回收只有一条规则 —— 对象在最后一个强引用释放的那一刻死亡。环由三层处理：编译期类型图证明大多数程序根本不产生环（L0）；`weak` 字段是唯一的显式断环机制（L1）；执行局部回收域批量释放为剩余的环设定泄漏上界（L2）。开发期检测器只报告、不回收。
+- **执行局部回收域边界（L2）**：每个物理协程拥有独立回收域。VM 用 per-coroutine Region heap 实现；hosted AOT 用 execution arena 登记仍然存活的普通 ARC 分配。无环对象仍在最后强引用处立即回收；协程结束时，回收域整体处置剩余对象图。因此**未被引用计数回收的对象（引用环），其泄漏范围不超过所属协程的生命周期**。跨执行发布必须先把共享或转移根的完整所有图从源域脱离；仅 MODULE_STATIC / CONST_SHARED / SYNC_SHARED 三个所有权域，以及主执行流的根回收域，可以存活到进程结束。
+- **宿主拥有式结果的关闭边界**：执行 owner 在所有 Call/Task 排空并撤去内部根后，处置没有外部 owned 根可达的执行残余图，并把其余完整图逻辑移交同一个宿主残余 owner。逻辑脱离不要求搬动物理地址或更换分配器与累计账本；它也不授予跨执行共享权限。宿主保留的值仍可按原类型和权限读、复制与修改。只要该宿主残余 owner 还有任意外部强根，后来形成或失去外根的环都留到 owner 结束；不得在每次释放时部分收环。最后一个外部根释放后，整体处置剩余图。普通 RC 归零仍立即析构，OPEN 执行域不扫描或收环。
+- **这条性质在纯 RC 语言里并不常见**：Rust 的 Rc/RefCell 环与 Swift 的强引用环都会泄漏到进程结束，因为两者的引用计数对象都分配在进程级堆上，没有一个比进程更小的、可以整体丢弃的边界。Xray 的执行局部回收域提供了这个边界，于是「忘了标 `weak`」的代价从**永久泄漏**降为**有界泄漏**。这不是环回收，是生命周期封顶。
+- Xray 没有并发 tracing GC，也没有环收集器；函数调用与后向跳转处不保留任何 GC hook。
+- **用户可见 introspection**：`runtime.liveBytes()` / `runtime.liveObjects()` / `runtime.info()` 报告当前执行局部回收域（VM coroutine heap 或 AOT execution arena；无当前 coroutine 时回退到 main/root 域）的 live-memory 视图（`import runtime`；`mem` 模块只承载裸内存能力）。
+
+#### 16.3.1 引用计数的两个带
+
+引用计数只有一个字段，用**符号**区分两个带：
+
+| 带 | 编码 | 使用者 | 原子性 |
+|--|--|--|--|
+| coroutine-local | 正数 | 普通局部对象图 | 非原子（relaxed 快路径） |
+| shared | 负数（`N` 个引用存为 `-N`） | const 发布值、同步句柄、模块/运行时对象 | 原子 |
+
+热路径的符号测试把每个对象自动路由到正确的路径，因此两个带共存不需要额外分支。不可变的常驻对象存 sticky 值，永不参与计数。
+
+**对象落在哪个带是编译期决定的**，由该分配点的存储计划确定（§2.14.2 的能力轴 + 分配域），不是运行时转换：一个存活对象不会在跨边界时被静默改带。这条是承重的——运行时改带需要与并发的非原子读改写同步，而那正是非原子带成立的前提所排除的。
+
+因此跨执行边界只有两种合法形态：
+
+1. **共享**：值的分配计划本身就是 const-shared 或 sync-shared，从创建起就在原子带。`const` 发布值、`Channel` / `Atomic` / `Semaphore` 等受审计句柄属于此类。
+2. **转移**：`move` 把唯一根交出去，任一时刻只有一个所有者，因此非原子计数依然正确。
+
+**第 2 条的正确性直接依赖 §2.14 的唯一性证据。** 如果一个仍有别名或存活借用的根被转移出去，两个执行上下文会同时对同一个非原子计数做读改写——那不是数据竞争而是内存损坏（重复释放或提前释放）。这就是 §2.14 把闭包捕获与堆存储都算作证据的原因：所有权判定是引用计数正确性的前提，不只是一条编程纪律。
+
+真正的 OS 线程（`sys.Thread.spawn` 体、`CFn` 回调）适用同一套规则，且没有任何放宽：线程体只能触及分配计划为共享的值，或通过 `Channel` 转移进来的唯一根。
+
+详见 `src/runtime/mem/`、`src/shared/xr_obj_header.h`。
+
+### 16.4 协程调度
+
+- M:N 调度（M OS 线程 × N 协程）。
+- **work-stealing**：空闲 worker 从其他 worker 队列偷任务。
+- **协作式抢占**：协程在 safepoint 让出（非强制抢占）。
+- **公平性**：单一 runnable 队列配合本地 run-next、全局注入队列和 work-stealing；调度顺序不暴露用户级优先级。
+- **栈管理**：VM 的 register/frame stack 在需要时扩容，扩容可能搬迁底层存储；运行时以 slot offset 重建指针。
+
+详见 `src/coro/` 与 `src/vm/xvm_coro_backend.c`。
+
+### 16.5 进程级全局访问
+
+- `process`（全局内置，无需 import）：进程自身信息。
+- `os`（需 `import os`）：操作系统、环境、进程控制。
+
+```xray
+// 进程自身信息 — 全局对象
+process.file              // 当前脚本路径（与 __file__ 等价）
+process.args              // Array<string>，进程命令行参数
+process.dir               // 脚本所在目录（与 __dir__ 等价）
+
+// OS / 环境 — 需 import
+import os
+os.getenv("PATH")         // 读取环境变量 -> string?
+os.environ()              // 获取全部环境变量 -> Map<string, string>
+os.exit(0)                // 退出进程
+os.getpid()               // 进程 ID
+os.getcwd()               // 当前工作目录
+os.hostname()             // 主机名
+os.tmpdir()               // 临时目录
+os.platform()             // "darwin" / "linux" / "windows"
+os.arch()                 // "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
+os.sep()                  // 路径分隔符
+os.eol()                  // 行尾
+```
+
+> **命名约定**：`os.*` 以 POSIX 函数名为主（`getenv` / `getcwd` / `getpid`）；不随 Node.js。Node 风格的 `process.env` 映射不提供，请用 `os.getenv(name)` / `os.environ()`。
+
+详见 `stdlib/os/`。
+
+### 16.6 Panic 运行时
+
+内置 `PanicInfo` 类是 prelude 类型（声明：`stdlib/types/panic_info.xr`），仅属于 **panic 通道**。运行时故障（越界、除零、不完整 `match`、运行时不变量违背等）由 VM/AOT runtime 构造 `PanicInfo` 对象：
+
+```xray
+class PanicInfo {
+    message: string             // 人类可读消息
+    stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
+    cause: PanicInfo?           // 链式 cause
+    code: i64                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
+    data: JSON.Value            // 运行时故障的结构化附加数据；无数据时为 JSON null
+
+    init(message: string = "", cause: PanicInfo? = null)
+    fn toString() -> string
+}
+```
+
+用户级可恢复错误不使用 `PanicInfo`：`throw` 语句只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
+
+栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler。每条跨越 cleanup 所属作用域的边都进入编译期生成的静态 cleanup 区域，按 LIFO 顺序执行后再释放局部并继续展开；运行时不维护动态 defer 栈。可恢复错误走值返回通道，不展开栈。详见 §8。
+
+### 16.7 值返回错误通道运行时
+
+`throw <enum>` 将枚举值写入帧的 `pending_error` 槽位，设置错误标志位并返回。调用方通过 `OP_ERR_CHECK` 检测标志位，决定进入 `catch` handler 或继续向上返回。该通道不展开栈、不分配 `PanicInfo`；在需要传播或捕获错误的调用边界，正常路径只经过可预测的错误标志分支。
+
+### 16.8 对象回收与析构时机契约
+
+**回收点是精确的，且没有例外**：对象在它的最后一个强引用被释放的那一刻回收。VM 与 AOT 在这一点上给出相同的答案。
+
+- 这条承诺之所以能是全称的，是因为回收只有引用计数这一个机制。运行时没有环收集器、没有 tracing GC、没有任何"某次 GC 时"的不确定时点（任务 247）。
+- 唯一不由 RC 回收的形态是**引用环**，而它同样是确定的：环不由运行时收集，其泄漏范围由执行局部回收域边界封顶（§16.3 的 L2）；域结束时处置残余图不是环收集。环由编译期类型图预防（L0）、`weak` 显式断开（L1），开发期检测器只报告、不回收。
+- 仍**不提供**用户可见的确定性析构（destructor / finalizer / `Drop`）表面：程序不得依赖某个类型的析构钩子是否存在、以何顺序运行、或运行在哪个线程。精确的是**回收时刻**，不是"你能挂一段代码上去"。
+
+唯一保证确定性、且跨后端（VM / AOT）一致的资源清理机制是 **`defer`**：它在所属作用域退出时按 LIFO 顺序执行，与对象回收时机无关。需要确定性释放外部资源（文件 / 句柄 / 锁）的代码必须使用 `defer`，而非依赖对象析构。
+
+**`defer` 在每一条跨越其所属词法作用域的退出边上都执行**，包括：正常落出、`return`、`break`、`continue`、值错误向外传播、panic 展开，以及**协程被取消**。前端把每个注册点编译为程序点相关的静态 cleanup frontier；没有闭包、回调对象或动态运行时栈。取消不是一次外部击杀：可挂起帧仅保存定长 cleanup 区域标识与深度，调度器在该协程的 worker 上调用生成的静态 frontier，清理完成后才标记为已取消；`task.cancel()` 也因此不会在清理完成前让 `await` 观察到取消结果。
+
+为了让这条保证是**全称**的，defer 体**不得抵达调度器挂起点，也不得创建任务**（`E0392`，见 §4.9 / §8.3.1）。挂起无法保证静态 cleanup 区域在帧离开前完成；创建任务则会让工作逃逸清理边界。静态分析对直接、传递与动态调用保守拒绝，VM/AOT 还在任务创建或调度侧效之前以 `E0444` 失败关闭。清理期间取消被屏蔽，因此清理本身不会被取消打断。
+
+> 演进说明：当确定性析构（RAII / `Drop`）被正式纳入语言时，本节将升级为**确定性回收契约**（明确析构点与顺序），并由跨后端差分测试逐字节守门。在此之前，"回收时机 / finalizer 行为"被显式声明为实现定义的非确定项。
+
+### 16.9 并发内存模型
+
+> 真值源：`src/coro/xchannel.c`、`src/coro/xtask.c`、`src/coro/xtask_await.c`、`xisa/xi/ops.def` 的 `:sync` 列。
+
+本节定义两个执行体对同一内存位置的访问何时是**有序的**。§10.9 的 `Ordering` 枚举只描述单个原子操作，不足以推导程序行为；能推导的是本节。
+
+#### 16.9.1 基本定义
+
+**执行体 (execution agent)**：协程与 OS 线程都是执行体。一个协程在其生命周期内可能被 work-stealing 调度器搬到不同的 worker 线程上，它仍然是同一个执行体（见边 12）。
+
+**sequenced-before**：单个执行体内部的求值全序，由 §3.0 求值顺序给出。§3.0 不留未指定顺序，因此这个关系是全序而非偏序。
+
+**synchronizes-with**：由 §16.9.2 的同步边表给出。**该表是穷举的**：表中没有的运行时行为不建立 synchronizes-with。
+
+**happens-before**：(sequenced-before ∪ synchronizes-with) 的传递闭包。
+
+**冲突访问**：两个执行体对同一内存位置的访问，其中至少一个是写。
+
+**数据竞争 (data race)**：一对冲突访问，二者之间**不存在**任一方向的 happens-before，且二者**不都是**同一原子对象上的原子操作。
+
+引用计数的更新本身就是内存访问：非原子 RC 上的并发 retain/release 是数据竞争，其后果是内存损坏而不仅仅是数值错误。RC 提升规则见 §16.9.4。
+
+#### 16.9.2 同步边（穷举）
+
+| # | 边 | 建立的关系 |
+|--:|---|---|
+| 1 | Channel send → recv | 第 k 次成功 `send(v)` **之前**发生的一切，happens-before 接收到 v 的那次 `recv` / `recvOr` / `tryRecv` / `for-in` 迭代**之后**发生的一切。有缓冲与无缓冲同规则 |
+| 2 | Channel recv → 后续 send（容量边） | 容量为 N 的 channel 上，第 k 次 `recv` 完成 happens-before 第 (k + N) 次 `send` 完成。这条边是把 `Channel(N)` 当信号量/限流器使用的正确性基础 |
+| 3 | Channel close | `close()` 之前发生的一切，happens-before 任何观测到 `Recv.Closed` 或 `isClosed == true` 之后发生的一切 |
+| 4 | `go` 启动 | `go expr` 处对实参、capture plan 与 `move` 转移的求值，happens-before 协程体的第一条语句 |
+| 5 | Task 完成 → await | 任务体的最后一个动作，happens-before 任何 `await t` / `awaitResult()` / `awaitTimeout()` 返回之后、或观测到 `t.done == true`、`t.poll()` 返回终态、`t.status` 为终态之后发生的一切 |
+| 6 | scope 退出 | scope 内全部子任务的完成，happens-before scope 块之后的语句。`await all` / `any` / `anySuccess` 按其各自的完成条件建立同样的边 |
+| 7 | `const` publish / seal | 顶层 `const` 的初始化与 seal，happens-before 任何执行体对该 const 根的首次读取 |
+| 8 | Atomic release / acquire | `store(v, Release)` synchronizes-with 读到 v 的 `load(Acquire)`；RMW 构成 release sequence；`SeqCst` 操作另外参与一个单一全序。`AcquireRelease` 同时具备两侧 |
+| 9 | 协程域锁 | `sync.Mutex` / `sync.RwLock`：一次 unlock synchronizes-with 后续成功的 lock |
+| 10 | OS 线程域原语 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` / `sys.OsBarrier`：同上；`sys.OsOnce` 的初始化 happens-before 所有观测到其已完成的调用 |
+| 11 | `sys.Thread` | `spawn` 之前发生的一切 happens-before 线程体；线程体 happens-before `join` 返回之后 |
+| 12 | 协程迁移 | 协程在 worker A 上挂起、在 worker B 上恢复：挂起前发生的一切 happens-before 恢复后发生的一切。这条边由运行时保证，用户代码看不见它，但**没有它，work-stealing 下的任何顺序推理都不成立** |
+| 13 | `select` | 被选中的分支建立其对应 channel 操作的边（第 1 / 2 / 3 条） |
+
+#### 16.9.3 非边（穷举地否定）
+
+以下行为**不**建立 happens-before，不得用于同步：
+
+- `Coro.yield()`：它是调度让出点，不是同步点。
+- `codegen.compilerFence()`：只阻止有内存效果的操作跨越该编译器调度点，不是 CPU 屏障，不建立 happens-before，不能修复数据竞争（见 §12）。
+- `Ordering.Relaxed` 的原子操作：保证该位置的访问不撕裂，不建立与其他位置的顺序关系。
+- 对象回收 / RC 归零：回收点虽然精确（§16.8），但不建立跨执行体的顺序关系，因此不能用来承载同步语义。
+- sysmon 心跳与 `XRAY_SYSMON_CANCEL_MS` 取消标记。
+- 时间：`time.sleep` 与任何超时到期都不建立顺序关系。
+
+#### 16.9.4 引用计数提升规则
+
+普通局部对象使用**协程本地非原子 RC**（§16.3）。一个对象一旦可以被两个执行体同时到达，其引用计数**必须**已经提升为原子 RC；否则并发 retain/release 是数据竞争，后果是堆损坏。
+
+提升点是穷举的，每个提升点对可达图**深度生效**（对象自身及其可达的全部 managed 成员）：
+
+| 提升点 | 说明 |
+|---|---|
+| Channel `send` 的值 | 含 `move` 发送；接收方独占后仍保持原子 RC |
+| `go` / `scope` 的实参与 capture plan 成员 | 由 capture plan 静态确定 |
+| task / scope 的结果值 | 经由边 5 / 边 6 传出 |
+| `const` publish / seal 的可达图 | 一次性提升，之后图为深只读 |
+| 跨 `sys.Thread` 边界或 `CFn` 回调可达的一切 | 见 §16.9.5：这条通道当前不在安全子集内 |
+
+`string` 的提升在 §16.1 另有描述（短串协程本地、跨界按需提升为共享原子 RC）；那是同一规则在 `XrString` 上的实例，不是例外。
+
+#### 16.9.5 数据竞争自由的保证与边界
+
+**定理（安全子集的 DRF）**：不含 `unsafe` 块、且不使用下方"逃逸口"能力的程序，不存在数据竞争；其行为等价于某个顺序一致（sequentially consistent）的交错执行。这就是 SC-DRF：在安全子集里可以按"语句交错"来推理，不需要理解本节的 happens-before 细节。
+
+**逃逸口（穷举）**：以下能力可以引入数据竞争。它们的后果是**实现定义的，可能包含内存损坏**，证明责任在使用者：
+
+- `unsafe` 块内的一切原始内存访问
+- `Array.mutPtr()` 产生的可写原始指针（指针作为**实参**跨协程边界时不经过 capture plan 检查）
+- `mem.volatileLoad` / `volatileStore` / `fence` / `pageAlloc`
+- `sys.Thread` 的线程体
+- `CFn` C 回调体（可在任意线程被调用）
+
+> 这是本语言"编译期消除数据竞争"这一说法的**准确形式**：它是一个带明确边界的定理，不是无条件断言。缩小逃逸口清单是语言演进的目标之一；每次缩小都必须同时给出该能力被纳入保证的机制。
+
+#### 16.9.6 对编译器的约束
+
+同步边不只是运行时承诺，它同时约束优化。`xisa/xi/ops.def` 的 `:sync` 列为每个 Xi 操作声明它建立的边（`none` / `acquire` / `release` / `acq-rel` / `seq-cst`）；当边的强度由运行期 `Ordering` 实参决定时，声明的是该操作可能承载的**最强**边，即 fail-closed 上界。
+
+由此得到一条对所有 pass 的硬性规则：**别名不相交不构成重排许可**。两个内存操作即使 TBAA 证明不相交，也不得跨越携带 `:sync` 边或可挂起的操作移动。该规则由 `xi_op_is_ordering_barrier()` 统一回答。
+
+---
+
+## 17. 编译流水线 (Compilation Pipeline)
+
+> 真值源：`src/frontend/`、`src/ir/`、`src/vm/`、`src/aot/`、`src/toolchain/`、`src/app/cli/xcmd_build.c`、`src/app/cli/xcmd_compile.c`。
+
+### 17.1 两条执行路径
+
+```
+源码 (.xr) -> lexer -> AST -> analyzer / canonical evidence
+   -> xi_lower -> Xi IR -> optimization
+        |-> tagged 表示                        -> xi_emit -> XrProto -> VM
+        `-> native 表示 + backend lowering     -> C source
+                 -> host/cross C toolchain -> native binary
+```
+
+Xray 当前没有 JIT。默认 `xray run` 和默认 `xray build` 使用字节码/VM 路径；`xray build --native` 才选择 AOT 路径。
+
+两条路径共享 parser、analyzer、模块图、**Xi IR** 与运行时语义。分叉发生在 Xi 流水线内部的表示选择与后端下降阶段（`xi_pipeline_default_config` 与 `xi_pipeline_aot_config`）：VM 路径使用 tagged 表示政策，不运行 select-rep 与 backend lowering，由 `xi_emit` 发射 `XrProto`；AOT 路径运行 select-rep（native 表示政策）与 backend lowering，再由 `src/aot/` 生成 C。因此两者的输出表示和后端优化并不相同。
+
+### 17.2 前端
+
+- lexer：`src/frontend/lexer/xlex.c` / `xlex.h`，关键字表为 `xkeywords.def`；输入必须是合法 UTF-8。
+- parser：`src/frontend/parser/xparse*.c`，手写递归下降与优先级表达式解析，输出 `AstNode` 模块树。
+- analyzer：`src/frontend/analyzer/`，执行名称解析、类型/泛型/可见性/所有权/捕获/错误集检查。
+- canonical evidence：`src/frontend/canonical/` 与 module/toolchain 层把跨模块事实收敛成供后端消费的稳定证据。
+
+### 17.3 字节码与 VM
+
+`src/frontend/codegen/xcompiler.c` 运行分析流水线（类型推断、单态化、逃逸分析）后委托 Xi IR 流水线 `xi_pipeline_compile_program` 完成 lowering、验证、优化与字节码发射，产物是 `XrProto`；它没有独立于 Xi IR 的字节码生成路径。opcode 的唯一清单是 `src/runtime/value/xinstruction_table.h`，VM 实现在 `src/vm/`。VM 使用寄存器式指令布局，并包含属性/调用快路径以及 coroutine、错误通道、tail-call 等专用 opcode。
+
+独立 `.xrc` 产品已移除；`xray compile file.xr` 必须使用 `--format c|header --output FILE.c|FILE.h` 显式生成供编译器开发使用的离线 C 源/头文件字节码容器。`bytecode`/`bc` 格式和 `.xrc` 输出会在创建 isolate 前拒绝，运行时也不会执行 XRC。这里的 `--format c` 是**字节码容器的 C 表示**，不是 native AOT C 后端。
+
+字节码必须以确定性顺序序列化 extern 聚合布局及目标 ABI 指纹。加载器必须在执行前校验布局深度、递归环、字段范围、总大小、尾随数据和 ABI 一致性；任何损坏或目标不匹配都必须拒绝加载，不能回退到宿主机布局。
+
+### 17.4 Xi IR 与优化
+
+两条路径都将程序 lowering 为 `src/ir/` 中的 Xi IR，区别在优化等级与表示政策：VM 路径为 light 等级、tagged 表示政策，AOT 路径为 full 等级、native 表示政策。优化流水线由 `xi_pipeline.c` / `xi_pass.h` 组织，当前实现包括 SCCP、DCE/CFG 简化、内联、devirtualization、tail-call、escape/ownership、循环优化、GVN/PRE、边界检查消除和向量化等 passes；具体启用集合由优化等级、目标和合法性检查决定，不能把某个 pass 的存在理解为每个程序都保证发生该优化。
+
+### 17.5 Native AOT
+
+`xray build --native file.xr` 经 `src/aot/` 的 prepare/verify/representation/container/link plan，把 Xi IR 生成 C，再调用 host、Clang 或 Zig C toolchain 编译链接。hosted native 仍链接 Xray runtime；`--profile freestanding` 使用受限的 freestanding capability 集。`--target`、`--toolchain`、`--cpu`、`--lto` 等选项以 `xray build --help` 为准。
+
+native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码由所选 C toolchain 产生。
+### 17.6 分阶段 XIR 合同
+
+内部协议的现行版本只由下列实现常量定义；语言章节引用其责任，不复制递增编号。
+所有声明族共享这些现行协议，不存在按章节选择的版本。旧版本拒绝，不保留兼容reader或适配。
+
+| 协议 | 唯一版本定义 |
+|---|---|
+| 值边界 | `src/xir/xxir_value.h`：`XR_XIR_VALUE_ABI_VERSION` |
+| 可恢复调用 | `src/xir/xxir_call.h`：`XR_XIR_CALL_ABI_VERSION` |
+| 不可变Program | `src/xir/xxir_program.h`：`XR_XIR_PROGRAM_ABI_VERSION` |
+| Checked wire | `src/xir/xxir_checked.h`：`XR_XIR_CHECKED_SCHEMA` |
+| Checked语义 | `src/xir/xxir_checked.h`：`XR_XIR_CHECKED_CONTRACT` |
+
+新编译主干唯一阶段顺序为 `Built → Checked → 特化与复验 → Lowered`。
+本节先冻结非泛型标量子集；前述旧产品实现尚未迁移，本节不宣称 CLI 已切换。
+普通泛型定义按约束检查，单态化位于 Checked；显式派生的新内容重新检查。
+普通实例在不可变可执行 image 封存前完成，VM 只执行 Lowered。
+
+首个内部子集接受 `unit`、`bool`、`i64`，标量复制保持值，`i64` 加法按二补码环绕，
+相等及有符号小于比较产生 `bool`，条件分支只接受 `bool`，返回类型须与声明相同。此内部子集参数
+只含 bool/i64；unit 可作结果和终结操作类型，不产生值 ID。
+此子集没有托管值、借用、泛型或新源码拼写；未实现操作必须拒绝。内部直接调用另见下文。
+CFG 的块完整划分指令，均从入口可达，并以一个终结操作结束；入口无前驱。
+SSA 使用必须由同块较早定义或支配块定义提供；unit 指令不能作为值使用。
+抽象 copy 只在 Built/Checked，物理 scalar-copy 只在 Lowered，不能仅改阶段标签。
+阶段转换重新验证并复制所有元数据，成功产物不借用输入；失败不发布部分产物。
+验证的结构、类型、支配关系和工作量有预算，未知阶段、操作和类型均拒绝。
+精确内部字段由 `test_xir_stages` 等断言验证；这些断言不授予执行资格。
+
+内部标量执行由 `test_xir_execution` 与 `test_xir_native` 验证：首个目标为x86_64小端、
+值边界使用本节所列现行 ABI。布局查询同时包含类型、目标、用途与ABI；lowering保存唯一的
+帧槽偏移和边界布局，VM/C后端不得另行决定。bool/i64的SSA及帧槽为8字节，
+边界值为16字节（类型、零保留字段、i64载荷），bool载荷只准0/1，unit无帧槽。
+参数必须精确匹配，错误清空结果；每条指令消耗一步，帧和步骤均受预算限制。
+有符号算术须用无符号计算及受检除法避免宿主未定义行为，所有退出释放帧，标量结果独立存活。
+Checked不可执行；未知目标/ABI拒绝。此内部子集不授予模块、调用或可恢复ABI资格。
+
+内部可恢复调用由 `test_xir_calls` 与 `test_xir_call_native` 验证。直接CALL引用模块函数身份，
+CALL参数通过函数自有操作数表传递，数量和类型须精确匹配声明；SUSPEND保存下一指令，THROW传递i64错误token。
+这些是内部XIR操作，不引入源码关键字，也不授予模块、泛型或stdlib缓存资格。
+VM与生成C均通过同一typed帧/结果协议交还trampoline，调用者不把待恢复的子调用留在C栈上。
+帧地址稳定，深度、实际字节与恢复工作分别有预算；挂起token只可消费一次，重入驱动/销毁拒绝。
+取消在回调交还控制后按子帧到父帧清理；清理不能再次挂起或重新争取完成权。
+当前内部接口只允许单宿主线程独占驱动，不声称并发取消、分段池或完整image/instance已完成；托管string扩展见17.7。
+闭合标量叶子可使用经明确验证的非挂起入口，但CALL/SUSPEND/THROW不能退回该入口。
+
+### 17.7 内部托管值与结果交接
+
+内部值与调用使用§17.6的现行 ABI，不保留旧边界别名。string 保存严格 UTF-8，
+允许内嵌 NUL，不隐式归一化或替换；字节数、Unicode 标量数与字素数是不同概念。
+复制保留原子引用，修改执行独占窗口内的写时复制；共享副本不因其他副本修改而改变。
+所有分配属于显式、计费且可独立存活的域，字符串不依赖执行帧、实例或代码镜像寿命。
+借用字节视图不能跨越所有者修改或释放。计数溢出拒绝，非法释放不因 Release 构建而忽略。
+
+调用参数在准入时复制到帧，恢复回调和 return action 的值是借用。调用驱动器在子帧清理前
+取得结果的拥有权；poll 返回借用结果，take 仅一次转移拥有权，未取走结果由调用销毁释放。
+独立结果在调用、输入和镜像释放后仍有效。typed output 按显式 stdout/stderr 流和真实
+bool/i64/string 类型以借用组调用实例配置的同步 provider；缺失或拒绝是运行时失败。
+原始输出组只有一个值，不加空格或换行；print 输出组在参数从左到右求值后一次发布，
+渲染时值间恰一个 ASCII 空格，末尾一个 LF，零参数也输出 LF。渲染器先完整验证、
+预算检查和分配，再调用字节 sink 一次，失败不发布部分组。PRINT 和 native group 均准入
+0–65536 个值，并受资源预算限制；未实现的源码类型与显示协议仍需单独验证。
+
+以上仅冻结内部 C 边界；源码 string 声明、模块实例、泛型库发布和最终产品资格仍分别验收。
+实际预算、并发、失败原子性及释放义务由 `test_xir_values` 与 `test_xir_value_allocations` 验证。
+XIR准入string参数/结果、COPY→OWNED_RETAIN、CONCAT_STRING与OUTPUT；
+lowering保存并复验全部拥有槽，VM与生成C在覆盖和退出时按此清理。字面量表由Program封存，源码生产仍待接入。
+
+
+WRITE_STREAM借用一个string并以immediate 1/2选择stdout/stderr，结果为bool。
+已配置provider的拒绝返回false；缺失provider仍为运行时OUTPUT_ERROR。PRINT/OUTPUT的
+拒绝仍终止执行。provider重入取消优先于写入结果，已接受字节不回滚。该内部原语不代表
+源码stdlib绑定、host flush或文件短写策略已实现；旧调用ABI准入失败，无适配路径。
+
+### 17.8 不可变Program与模块实例
+
+内部多模块闭包在Lowered后封存；Program拥有模块/函数身份、依赖、声明槽、字面量、
+初始化顺序及代码环境租约，Instance拥有运行时状态和分配域。模块DAG依赖优先，
+同批可初始化模块按UTF-8名称字节序选最小者；循环、重复依赖与闭包外模块拒绝。
+每模块的私有无参unit initializer仅执行一次，入口为另一个无参i64函数。
+
+const槽仅由所属initializer发布一次；模块var仅准入根模块主执行流，不扩大库级var。
+const Atomic<i64>持有每实例创建的同步身份对象，复制保留同一对象；首批SeqCst load和
+fetchAdd遵循原子合同，fetchAdd返回旧值并按二进制补码环绕。它不采用string CoW。
+初始化跨挂起保留单发布者；未发布读拒绝，失败清理逆序执行并保持失败粘滞。
+实例销毁禁止新准入并完成活动调用清理；独立结果不保留无关模块状态。
+恢复必须匹配执行epoch和wake，防止跨调用迟到恢复。首版仅准入单宿主线程独占驱动。
+精确准入、预算与租约责任由 `test_xir_instances` 验证；这不授予源码或缓存格式资格。
+
+内部 VM 接收把真实 Lowered Artifact 及其规范 Input/Final 转交给 Program，
+不借内部 packet 重新解码或重新 Lower。外部 native 描述只携带
+`XrXirProgramPacket` 的 bytes、length、identity，边界解码一次后进入同一拥有型接收核；
+packet 不携带调用者提供的布局权限。接收核独立检查当前语义、body、声明、布局和接线，
+成功才转交 Input、入口表及代码租约，失败保全调用者输入且不发表 Program。
+准备期只借用调用者拥有的入口表和参数块；失败保留同一 Input、表与参数，可在不重置账本下重试，成功无回调提交时才一并清空拥有槽。VM失败清理按实际分配的固定数量遍历，不能采用末次回调改变的模块计数。
+拥有型 Input、Artifact、入口表和非空参数块须分别位于原账本中的存活分配起点，不能将可读的内部区间当成可释放的拥有指针。拥有表及其参数在深读前检查物理范围，发布前再检查当前表、参数、数量及归属；零参数行的拥有指针须为空，多个拥有行不能重复转交同一参数块。失败不分配新的接收对象来修补畸形的物理输入，检查所用 work 仍计入原账本。
+内部载体转交核验原账本拥有、规范 body 与布局对应，使后续绑定可安全读取；载体本身不授语义或执行权限。完整当前 Input/Final 语义核验由统一 receiver 在准备期和末次回调后承担，不能把载体构造时的重复核验或保存的 PASS 当作权限依据。物理 body/布局不对应时不转交；语义事实被篡改的物理载体仍必须在发表 Program 前拒绝并保全输入。
+Program直接使用所转交规范Input拥有的不可变声明；不再深复制另一份声明，失败销毁Program时也不释放调用者仍拥有的Input声明。运行时类型arena仍独立拥有其类型，以支持逃逸值寿命。
+内部 packet 先死亡、外部 packet/spec 随后死亡均不能使成功 Program 借用失效存储。
+旧 Program ABI 及旧 Proof/getter 接口拒绝，不保留适配分支。
+
+末次准备回调后的 Error 检查，若从完整当前 Input 证明所有操作只有空逃逸传递和
+内部直接调用，则其最小解必须全空，包括无种子递归调用环；当前 Error 行及
+throws/task_errors 公开投影须同时匹配。此检查不分配或释放，按真实读取收费，
+拒绝联合伪造行与两个公开字段。即使其他函数有真实Error种子，完整无调用且无deferred cleanup的叶子函数仍须从当前Input独立证明Error行及两个公开投影全空；此局部检查不为其他函数授予权限。含真实错误种子、精确间接调用或一般泛型绑定的
+完整当前 Error V 仍有独立责任；拥有型载体不代表一般 Final 证明、全部构造
+Workspace 退役或完整故障/资源/安全资格已经完成。
+
+### 17.9 新 XIR 源码准入边界
+
+新 source owner 复用实际 parser 与模块 resolver/graph，直接检查声明和构造 Built，
+只发布拥有数据的 Checked；不调用旧 analyzer、IR 或执行器。首批按声明族准入
+bool/i64/string、只读参数的普通具名函数、直接调用、局部绑定、模块状态、string拼接、
+print及默认SeqCst的Atomic<i64>构造/load/fetchAdd。未实施语法明确拒绝；不将未约束泛型
+按实例猜测检查。每个函数体都检查，包括不可达函数。未标注返回类型的值返回推断尚不准入。
+
+顶层函数提升，顶层执行语句及绑定初始化按源码顺序每实例执行一次；main只是普通函数。
+各模块私有unit initializer与返回0的合成i64入口分开。库模块状态必须是const Sendable，
+最初准入scalar/string/Atomic<i64>；后续类型按本章各节准入，Array见§17.26。根var属于实例。跨模块调用要求直接导入与export，
+模块身份来自resolver，重复/私有/未解析声明与环拒绝。字符串AST已经解码，不重复解码。
+
+CALL/PRINT用args[0]/args[1]表示函数自有操作数表的起点/数量；非空范围按指令顺序
+完整分割该表，空范围必须为0/0，PRINT immediate为0。单组上限65536，每个值均检查
+类型与支配关系。嵌套参数从左到右求值完成后才追加外层范围。Lowered保存并复验最大
+出站参数数量，稳定帧为其分配typed value暂存区并计入物理字节预算。
+泛型、完整stdlib、协程语法、foreign provider、parser完整
+OOM恢复与输入预算、默认CLI及产品资格仍单独验收。接口由 `test_xir_source_admission` 与 `test_xir_source` 验证。
+
+标准库源码子模块`std/io/output`以普通函数发布writeStdout(string)->bool和
+writeStderr(string)->bool，只报告宿主typed provider接受结果。该模块的精确stdlib身份
+才可调用私有__writeStdout/__writeStderr，降为WRITE_STREAM；导入与函数体仍正常检查。
+文件路径、函数拼写或项目同名模块不能取得权限。此接口不承诺File的flush/短写行为，
+也不替代既有yieldable文件操作；同源Checked/native产物发布另行验收。
+
+### 17.10 自持有 Checked 产物边界
+
+当前已实现的封闭声明、类型与操作子集使用唯一的目标无关 Checked 包。
+头部绑定 schema 和语义合同版本、Checked 阶段、精确负载长度及 SHA-256 内容标识。
+摘要不是认证。固定小端字段编码不包含宿主指针、物理布局、native 代码、运行时状态
+或已验证标记。未知版本、非法长度、保留字段和尾随字节必须拒绝；不提供 Built、
+Lowered 或旧格式读取器。
+
+读取器在分配和遍历前限制字节数、累计计数、分配内存和工作量，自持有全部解码数据，
+发布前执行现有完整 Checked 语义与布局复验。重算摘要不能绕过类型、CFG/支配关系、
+可见性、import、初始化或槽权限。加载成功后输入存储可立即销毁；失败不发布产物，
+释放全部部分构造。VM 与 native 消费者继续使用同一复验后的 Lowered 转换。
+精确字段与预算由 `test_xir_checked` 验证。
+
+该子集（含§17.11的标记约束模板）不代表完整成员约束/见证、效应、诊断来源序列化、包链接、native 缓存配对、
+installer 发布或完整无源码标准库分发已经验收。
+
+Program 在所有准备分配及释放回调结束后，将当前描述和拥有副本分别与独立检查的规范类型、声明、签名及物理布局比较；VM 拥有权交接还将实际执行 body 和绑定接线对应到同一输入。最终比较不分配或释放存储。摘要仅检查 packet 漂移，不授语义权限。失败不取得调用者 artifact 或代码租约，不发表 Program；此边界不认证任意 native 回调行为，也不替代一般 Final 独立验证与全部构造 Workspace 退役要求。
+
+准备阶段从独立规范输入复制语义元数据，避免把被准备回调失效的调用者表作为拥有副本的来源。最终比较先拒绝所有非空表缺失的存储，再逐项遍历，包括模块表及函数表。恢复原调用者存储后，可在同一累计账本重试；拒绝不退还工作量或分配费用。
+
+Program 的当前 body 对应检查在读取前，用同一累计账本的实际活分配范围核验规范 body 和 Lowered 投影的头、名称、签名、块、指令、操作数、压缩记录及默认记录；按所读类型检查对齐和完整范围，并拒绝记录计数越过容量。检查不分配，实际扫描仍计费。合法物理范围不证明字段对应、语义、历史分配代际或完整 Final；最后准备回调后的当前字段仍须独立比较，拒绝保全输入与空输出。
+
+### 17.11 定义处检查与 Checked 泛型特化
+
+普通类型参数准入域为可复制、可保存的值，不包括 unit、视图和 noncopyable 资源。
+最初具体类型为 bool/i64/string/Atomic<i64>；后续数值、函数与Array类型按本章各节准入。函数可以声明 `<T, U:Sendable>`，
+或使用该声明自身参数的 `where U:Sendable`；调用须显式给出全部类型实参。
+参数名不重复，Sendable 是保留标记名。已准入标记的合取按集合处理，重复要求幂等。
+条件方法的实施合同允许方法对外层及自身参数增加 Sendable/Error 要求，要求归方法所有，
+不加强名义类型本身；定义处证明和调用处义务沿同一 Checked 路径处理。
+默认类型参数、完整成员/见证约束及类型推断尚未准入；条件方法的执行资格须单独验证。
+
+每个模板体（包括未使用模板）在定义处检查。复制、读传参、保存与返回由普通准入域
+保证；Sendable 不授予成员、算术、显示或默认构造。无约束 T 不能调用要求 Sendable
+的泛型，即使当前具体类型恰好全都 Sendable。泛型转发必须从声明本身证明约束。
+复制保持 string 值语义、Atomic 身份语义；具体 retain/清理和布局在特化后确定。
+
+Built/Checked 使用函数局部类型参数 ID，保存约束和独立调用类型实参表。
+CALL 的类型实参范围与值实参范围分别规范化并复验；替换后的参数/结果须精确匹配，
+正常可见性、模块和支配关系规则仍有效。Checked 包使用§17.6的现行 schema与语义合同（局部存储见§17.12，整数见§17.14），
+旧schema或语义版本直接拒绝。解码后重新验证模板定义与转发证明。
+
+特化只读取 Checked，不访问 AST。按声明身份与有序具体类型实参建立有界工作队列，
+重复或递归实例复用同一条目；先完成实例闭包并复验，再进入唯一 Lowered 管线。
+当前宿主函数 ID 接口保留所有普通定义为根；仅发射从这些根可达的泛型实例。
+模板独占包没有普通根时不能直接成为可执行程序。实例数、累计参数/块/指令、内存
+及工作量有预算，失败发布空结果并释放临时存储。Lowered 和不可变 Program 不保留
+开放类型参数，不在执行期追加实例。实例调试名字不是 native 缓存身份凭证。
+
+成员见证、符号回调效应、用户声明的泛型类型构造器、类型推断、诊断来源序列化与完整标准库包
+链接/缓存配对仍待实现；本族未准入的效应/借用/callable 声明仍拒绝。精确接口由
+`test_xir_generics` 与 `test_xir_source_generics` 验证，不得用本族通过代替普通泛型完整资格。
+
+### 17.12 局部可变存储与结构化控制流
+
+局部var必须有初始化值；它表示当前调用帧中的typed place，const与read参数仍是值。
+读取取得独立值快照，赋值先完整求值再替换，不改变之前保存的string副本；Atomic复制仍保留身份。
+place不能逃逸、返回或直接作为值实参。初始化支配每次访问，类型精确一致；泛型在定义处检查。
+Built/Checked保留LOCAL_NEW/READ/WRITE，Lowered唯一选择标量或托管存储动作和帧偏移。
+托管写入先retain后drop，帧所有退出路径负责清理；精确最后使用释放和不可复制资源析构尚未据此验收。
+
+if/else与while条件必须bool；只执行选中分支，循环每次重新求条件。局部更新跨分支与回边保存，
+块内名字不外泄；无标签break/continue指向最内层while。值函数每条存活路径必须返回；return、throw、break、continue 之后的语句不可达，不被降级，其中的闭包被拒绝。
+本族接通具体i64加法/相等/小于与既有string加法；不授予无约束T任何运算见证。
+块/指令/内存/深度/工作预算以及运行步数/取消合同继续有效。Checked wire schema与语义合同遵循§17.6，
+旧语义版本拒绝；没有第二条兼容检查路径。精确接口由 `test_xir_locals` 与 `test_xir_local_native` 验证。
+
+### 17.13 布尔短路与C风格for
+
+新源码入口的!、&&、||严格要求bool；定义处检查右侧，即使运行时必然跳过也不放松约束。
+左侧先且仅求值一次，&&在true时、||在false时才求右侧；!返回反值。统一降为已有CFG与typed place，
+没有新增运行时或IR分支。可空收窄尚未据此接通。
+
+for(init; condition; step)初始化一次，循环初始化绑定只在该循环内可见；省略条件为true。
+正常迭代和continue先执行step再求条件，break/return跳过step；step看不到循环体内的绑定。
+嵌套while/for的无标签出口指向最内层。即使step没有入边也检查其源码类型，丢弃其临时指令/块及
+操作数、类型实参范围且不返还预算，最终CFG不保留不可达块；字面量仍按现有闭包表政策保留。
+独立语句及step中的name++/name--只接受可变i64，使用同一环绕加法与赋值路径，
+不能用作表达式。标签、for-in协议与其他数值族仍待接通。现有Checked语义已完整表达这些构造，包与ABI版本不变。
+
+### 17.14 XIR i64算术与关系比较
+
+新源码族按§2.3.1统一采用二补码环绕：+、-、*、一元负号与增减均按2^64取模；
+取代早期内部checked-add子集。二元实参从左到右各求值一次，不因交换比较方向重排副作用。
+==、!=、<、<=、>、>=按有符号值比较并返回规范bool，不能通过减法比较。
+除法向零截断，非零余数与被除数同号；INT64_MIN/-1为INT64_MIN，INT64_MIN%-1为零。
+除数为零产生独立DIVIDE_BY_ZERO fault，没有结果并逆序清理所有帧；初始化中失败保持粘滞，
+已初始化实例的普通调用失败允许后续调用。生成C在宿主/和%之前检查特殊对，不执行有符号溢出。
+一元负号降为零减操作数，其他运算经同一Checked→Lowered→共享标量运行时。
+当前Checked包及值/调用/Program边界统一遵循§17.6，无旧reader或适配路径。
+具体i64能力不能通过实例化补给普通泛型；其他数值族与显式checked/saturating库方法尚未接通。
+
+### 17.15 XIR i64位运算
+
+具体i64的&、|、^按64位二补码位型运算，~降为与-1异或。<<丢弃高位并补零；
+>>为算术右移并补符号位。计数按64取模，包括负数：-1为63、-64为0，零有效计数保持原值。
+宿主实现仅移位无符号位型；负数右移用补码变换明确补符号，不依赖C有符号右移。
+操作数从左到右各求值一次，位运算拒绝bool/string/Atomic及未约束T。变量复合赋值先读左值，
+再求右侧，计算后写回并返回新值；右侧即使修改同一变量也不能改变已读取的快照，失败不写回。
++=另准入string拼接及快照，其余复合运算要求i64；const/read、成员与索引目标暂不准入。
+当前Checked包及执行边界遵循§17.6，无旧包或ABI适配。其他定宽整数与显式转换见§17.21，完整上下文推导仍未准入。
+
+### 17.16 XIR拥有式函数值与间接调用
+
+本族沿用§2.8的函数类型拼写，准入read参数（外围泛型参数遵循§17.17）、普通具名函数值、嵌套函数参数/返回、
+局部可变存储、入口模块槽、条件选择及普通泛型身份传递。未准入的ref/move、捕获闭包、
+借用来源、Sendable和显式效应承诺继续拒绝，不能从选中的函数体补充证明。
+函数类型按有序参数type/mode、返回和承诺形成模块拥有的规范表；嵌套条目严格后向引用。
+函数引用检查声明可见性和import权限，不允许取initializer；间接调用先捕获callee，
+再从左到右求实参，验证callee的值角色、支配关系、完整签名及结果，不能枚举目标替代合同。
+
+Built→Checked深复制描述；普通特化和复验后，唯一Lowered布局把函数值纳入明确的copy/drop、
+局部place和PHI所有权。VM与生成native均使用相同可恢复CALL和结果协议。Program封存时拥有
+全部签名、入口和必要代码。函数值只保活分配域及独立准入记录；记录保活Program代码租约，
+但不强持有全部Instance槽、provider和执行帧，因而入口槽持有函数值不会构成Instance引用环。
+停止/释放Instance先撤销准入；外逃值仍可读取、复制和合法释放，最后租约释放代码。
+当前同一宿主线程的驱动器只接受原实例内调用；另一实例或Program即使数字ID相同也拒绝。
+跨实例转交及并发准入仍待完整资格，不能据当前拒绝边界缩减总任务。
+
+当前唯一包和执行边界使用§17.6的现行版本；
+没有旧reader、boxed适配器或第二执行链。源码/包验证、VM/native独立预期、挂起/取消、
+结果外逃、代码租约和逐处分配失败测试按机器合同验证；这不构成完整语言或产品资格。
+
+### 17.17 函数签名中的外围泛型参数
+
+普通read函数类型准入`fn(T)->T`及嵌套签名。自由参数序号在使用该类型的函数中解释；
+所有使用在定义处按外围声明参数和约束检查，调用传入函数只依据其签名。
+显式类型实参递归替换参数和结果签名；结构相等不产生Sendable，不读取未来实例的函数体。
+
+Checked保存每个规范签名的准确自由参数范围，含嵌套签名贡献；验证器沿后向引用独立复算。
+全局槽必须闭合。特化重新生成闭合规范类型表，并重映射参数、结果、指令、显式实参和槽，
+随后复验。Lowered和不可变Program拒绝全部残留开放签名，包括未使用条目。
+结构替换与匹配消耗工作量和元数据预算，最多允许128层活动结构替换。
+Checked与Program、值和调用边界使用§17.6的现行版本，不接受先前版本。
+捕获、其他mode、效应承诺、类型推断及成员见证继续按各自合同和门独立接通。
+
+### 17.18 XIR 拥有式不可变捕获环境
+
+函数值可以保存一组有序的按值捕获。FUNCTION_REF 的操作数范围是捕获值；目标函数的参数前缀逐项匹配捕获类型，剩余参数和返回匹配公开函数签名。显式泛型替换、值角色、支配、可见性和初始化限制全部在 Checked 验证，特化后复验；捕获不授予额外调用权限。
+
+已闭合的按值叶 Function 捕获须验证其真实 Program producer、目标、声明类型及完整 captures，不能仅凭 NONE 广告或地址取得准入。运行期以原 FUNCTION_REF 捕获操作数的已拥有声明上界验证捕获前缀，并与封存执行节点的完整实参行逐字相符。无环境的具体叶函数不继承外层 closure 的无关环境列；symbolic 或有环境的 producer 保留完整关系并继续普通精确验证。其它 constructed 捕获、Function 跨 GO 的 Sendable、NO_SUSPEND、私有可见性及资源责任不因这一有限能力解除。
+
+捕获环境在构造时取得每个值的逻辑副本，失败不发布部分函数值；复制函数值共享不可变环境。string 保持值语义，Atomic 保持同步身份，函数捕获保留原有执行准入。环境不得保存调用方帧指针。最后一个函数引用释放全部捕获及代码租约；嵌套环境清理不得随捕获深度递归消耗宿主栈，也不得为清理再次分配。
+
+间接调用仍发布同一可恢复 CALL action，携带借用的函数值；唯一帧驱动器把环境前缀和显式实参复制到新帧。在新帧完成拥有前，调用方帧继续保活环境；挂起、抛出、取消和返回沿用统一清理。宿主函数调用入口同样保留捕获和实参，再释放前次结果。实例 stop/free 撤销执行准入，但外逃环境和值仍可读取、复制和释放。
+
+该内部合同不把 var 变成按值捕获，也不授予 Sendable、noescape 或 no_suspend。普通 var 的共享 cell、循环回收及源码闭包生产入口须分别接通并验收；内部构造通过不代表源码闭包完成。唯一现行协议由§17.6列出的实现常量定义，旧版本拒绝。
+
+### 17.19 XIR 共享捕获 cell
+
+内部cell类型编码为`0x40000000 | 元素类型`；元素是非unit普通值类型或作用域内类型参数，不允许cell嵌套。它是实现能力，不是源码类型或Sendable证明；公开callable签名及模块槽不暴露cell，私有实现的捕获参数前缀可携带cell。Checked替换保留包装并复验元素，Lowered只接收闭合元素。CELL_NEW复制初值，CELL_READ产生拥有式逻辑副本，CELL_WRITE先复制新值、再交换并drop旧值；失败不改变内容。
+
+普通var捕获保留同一共享存储身份，所有别名看到相同更新；读取结果自身仍具有值语义。cell RC始终原子，但内容访问只获当前Instance单宿主线程准入，不授予跨worker或原子换值承诺。cell内函数与捕获的cell必须属于同一实例值域，不能经cell绕过函数能力的实例隔离。最后引用释放使用现有无分配工作链处理内容，不递归销毁环境。强环仍可能形成，可在保留owner时显式断环；不可达强环回收保持OPEN，不引入收集器，也不据此声称所有合法图无泄漏。
+
+当前唯一协议遵循§17.6，无旧版本读取或ABI适配。源码var不得以快照冒充共享cell。
+### 17.20 定宽整数运行时基础
+
+统一无分配整数核心显式接收8/16/32/64位和符号；有符号payload符号扩展，无符号payload零扩展，u64保留全部64位。非规范payload和非法宽度拒绝。算术、比较、显式转换及§3.3.2移位遵循§2.3.1；失败返回状态并将数值输出清零。当前i64的VM与native路径均使用该核心，旧入口已删除，现行调用ABI拒绝旧native条目。Checked与值/Program边界遵循§17.6。本节确认运行时基础；八种整数的XIR、显式cast、同符号运算提升和输出接入见§17.21，完整上下文推导与其他容器仍OPEN；Array子集见§17.26。
+
+### 17.21 类型化定宽整数XIR
+
+整数类型ID为i64=2、i8=5、i16=6、i32=7、u8=8、u16=9、u32=10、u64=11。唯一CONST_INT与算术/比较/移位INT操作族替代旧i64专用名称；CONVERT_NUMBER显式转换具体整数，所有指令继续检查类型、值角色和支配。算术两侧及结果类型相同；比较两侧同类型并返回bool；移位保留左类型，计数可为任意整数。无约束T不能通过特化获得算术资格。
+
+常量和边界值保持规范payload；copy、phi、调用、模块槽、cell、callable签名和输出保留精确类型。存储宽度/对齐为1/2/4/8字节，frame仍为8字节，boxed/参数/结果仍16字节且8对齐。无符号输出按完整无符号十进制解释，u64全一位型为18446744073709551615。输出预算及一次发布不变。仅接受§17.6的现行协议，旧包与条目拒绝。源码已接通八种类型名称、具体整数as、已定型操作数的同符号宽化、原宽度一元运算/增减、共享cell、模块状态及print。nullable cast、bool/rune/float与无约束T转换拒绝。直接整数字面量与赋值/参数/返回宽化见§17.22；完整推断、浮点和其他容器仍OPEN；Array子集见§17.26。
+
+
+### 17.22 整数上下文与无损宽化
+
+声明注解、赋值目标、已声明返回类型、普通/间接调用参数（显式泛型替换后）给出唯一上下文。直接整数字面量包含括号和一次直接负号；无整数上下文时默认i64，有上下文时先检查数学值范围再产生该类型常量。因此u64最大值与i64最小值不经过宿主有符号溢出；负零可表示为无符号零。已有类型的表达式仅同符号向更宽整数转换，不隐式窄化、改符号或把无约束T当整数。转换显式进入CONVERT_NUMBER，仍由Checked复验。推断返回类型的闭包不从外部调用签名获得未经实现的推断权限。
+
+二元算术/比较中的直接字面量由另一已定型操作数获得上下文；两侧均为直接字面量时采用外层整数上下文，否则默认i64。上下文不穿透任意已成形子表达式做常量折叠。取反的直接字面量可用外层整数上下文，已定型一元操作保留其操作数类型。移位左侧直接字面量可用外层上下文，但计数独立定型，不因左侧窄类型而拒绝256或负数；结果仍按§3.3.2处理。复合赋值的非移位RHS采用绑定类型；先读取左侧快照，再执行RHS，成功才写回。显式as的输入独立定型，`200 as i8`继续环绕，不变为越界字面量错误。唯一例外是超过i64正范围且仍可由u64表示的直接正字面量（包括括号）：它保留完整u64幅度作为转换源，再按目标宽度取模；负字面量不借此绕过i64下界检查。
+
+有明确上下文的条件表达式分别检查并宽化分支，在各自前驱块产生转换，运行时只执行选中分支；无外部上下文时先分别定型两个分支；同符号整数取较宽类型，在对应前驱路径显式转换再由PHI合流。直接分支字面量仍独立默认i64，不从另一分支暗取窄类型。其他类型仍要求相同，本节不声称完成union或通用分支类型推断。普通/间接调用保持callee先于按序实参求值；仅无副作用的直接字面量允许延后产生IR以取得另一操作数类型。未调用函数和泛型定义体照常检查，不以实例化绕过约束。此批只扩展源码生产者，已有XIR操作语义、wire与ABI版本不变；浮点、完整推断和其他容器仍OPEN；Array子集见§17.26。
+
+
+### 17.23 二进制浮点转换基础
+
+共同运行时浮点核心显式接收IEEE binary32/binary64位型（binary32高32位必须为零），整数侧沿用位宽/符号与规范payload。整数到浮点、f64到f32采用round-to-nearest ties-to-even，溢出为带符号无穷，保留subnormal渐进下溢和负零；f32到f64精确。任意NaN位型统一为正canonical quiet NaN（f32为0x7fc00000，f64为0x7ff8000000000000）。同宽转换也规范化NaN。
+
+浮点到整数先向零截断再检查目标完整范围；(-1,0)可转unsigned零。NaN、无穷或截断后越界返回RANGE；非法宽度/编码返回BAD_ARGUMENT，失败清零输出。比较返回less/equal/greater/unordered，任一NaN为unordered，正负零相等；负号翻转非NaN符号并规范化NaN。全部通过整数位运算实现，不分配、不执行宿主浮点运算/转换、不更改宿主舍入模式或异常标志，也不依赖旧scalar标签/生成元数据。
+
+此处只确认共同转换/比较/负号基础；XIR类型、packet、layout及源码执行边界见17.24；浮点算术和typed output按§17.27准入，不能以辅助函数测试代替VM/native浮点贯穿。17.24修订唯一准入版本，完整浮点与跨平台资格仍OPEN。
+
+
+### 17.24 XIR 浮点值与执行边界
+
+运行 f64 接受全部 binary64 位型，含带符号、任意 payload 的 quiet/signaling NaN；运行 f32 高32位为零，NaN 仍只准正 canonical quiet NaN。
+CONST_FLOAT 是独立 wire 编码边界：两精度的 NaN 常量仍必须正 canonical quiet，不能因 runtime f64 扩域接受非 canonical 包常量。
+存储为4/8字节，SSA/frame 为8字节，boxed/参数/结果为16字节且对齐8。
+CONST_FLOAT、NEG_FLOAT、六种浮点比较与唯一 CONVERT_NUMBER 经同一 Checked/Lowered 管线执行。
+CONVERT_NUMBER 原子替换先前仅限整数的转换指令；浮点转整数先截断再检查完整范围，失败为 NUMERIC_RANGE，清理后结果为 unit。
+NaN 的 EQ 为 false、NE 为 true，其余关系均为 false；正负零相等。所有转换遵循17.23且不改变宿主浮点环境。
+源码接受显式数值 cast、浮点负号/比较、f32 到 f64 隐式宽化及条件合流；整数/浮点混合必须显式 cast。
+拷贝、槽、cell、闭包、泛型实例、参数/返回、Tuple/Array/Nullable/已准入名义存储与挂起保留合法值的精确位型；跨界仍核 exact 类型、arena、owner 和既有执行权限。浮点比较遇任一 NaN 为 unordered（EQ 为 false、NE 为 true、有序关系为 false）；整数 payload 搬运不能暗中 canonicalize。十进制字面量及精确整数上下文准入见§17.25；四则、转换和负号的 NaN 结果仍 canonical，浮点输出见§17.27。
+唯一协议版本遵循§17.6，旧版本拒绝，无兼容路径。
+
+### 17.25 精确十进制字面量
+
+十进制浮点token的完整拼写由AST拥有；共享转换不截断输入，不使用strtod、locale或宿主浮点指令。按目标binary32/binary64精度一次ties-to-even舍入，溢出为带符号无穷，渐进下溢保留负零；所有指数位和分隔符仍验证。固定大整数保存有理数，1152有效数字及非零尾标志足以区分所有IEEE舍入中点；不把缓冲截断当作数学截断。
+无唯一浮点上下文默认f64；注解、赋值、已声明返回和实例化后参数直接选f32/f64，括号及直接负号保留上下文。已成形f64不隐式窄化。直接整数处于浮点上下文时必须完整精确可表示；显式as允许舍入。泛型定义仍先按声明约束检查。格式化保留原始拼写，AST拷贝复制到目标owner。现有CONST_FLOAT、Checked复验与唯一Lowered执行不变，浮点算术/输出按§17.27准入。
+
+### 17.26 XIR Array值与源码边界
+
+`stdlib/types/array.xr`的`struct Array<T>`是此声明族的唯一源码权威。编译器、成员适配器和API清单消费同源结构化声明；当前32个成员中，冻结READ `get(index: i64) -> T`、REF `set(index: i64, value: T) -> ()`及REF `push(value: T) -> ()`三原语，以及map/filter/reduce/forEach/find/findIndex/every/some/contains/indexOf/join/clear十二个声明recipe及reverse/unshift/pop/shift/resize，共20个operation。其余12个成员保留清单身份，不因此获得执行资格。Source先查找准确public成员声明，再按已准入native operation/recipe identity选择实现，query记录原声明身份与CALL引用；不按名字另立执行表。回调、查询、清空的类型、求值、效应与所有权合同见§14.7。索引读写使用同一操作；全局`len`独立按core intrinsic身份解析，本子集只接受Array并返回i64。词法、模块及import解析先于prelude；用户定义的同名`len`仍是普通函数。
+
+源码准入显式`Array<T>`、同类型元素字面量、有Array上下文的空字面量、普通赋值复制、参数、返回、局部及入口模块状态。空字面量没有元素上下文时拒绝。元素从左到右求值，使用既有上下文类型规则；嵌套Array与函数元素遵循统一构造类型池的可复制、可存储准入，unit、内部CELL、视图和未准入的不可复制资源不能成为普通元素。`Array<T>`泛型体在定义处按约束检查，在Checked上特化后复验；普通实例在Program封存前完成，不能按具体实参补造定义处未证明的能力。其他容器与用户struct/class声明族仍须分别准入。
+
+Array复制保留独立逻辑值，无需显式`copy`或`move`。共享backing在写入前取得独立存储，独占且容量充足时可原地修改；紧凑元素存储使用唯一类型布局与copy/drop规则。const与READ参数不能成为可写接收者；把其可复制值保存到普通局部var后，可修改该副本。backing是否独占不授予写权限。已有多模块可见性与库模块可变状态限制继续生效。
+
+跨分配域写入不能把当前执行域的敏感身份植入外域可复制容器。既有有预算的准入遍历在同一次访问中汇总实值的 Cell、Function、Class 与 Task 身份，不增加未计费类型遍历或第二次实值遍历；Error 按实际 enum backing 的活动载荷检查。写入含这些身份时，Array SET/PUSH、独立 struct SET 和字段/索引路径上的全部外域可复制祖先先取得当前准入域拥有的新存储，包括独占且容量充足的 backing。Cell/Class 保持身份语义和原域权限，不以复制放宽准入。纯标量/String 聚合保留原可用的原地路径，纯 String 外域独占余量写入仍零分配。准备、复制、峰值和累计费用使用原账本；失败保持旧值与别名。独占 SET 重定位实际转移新槽所有权，先发表完整新值，再执行旧槽释放回调；清理不临时分配。本规则保护已覆盖的敏感写边，不证明 Task 跨域完整闭环、任意 Source 图可达性或所有循环已被处理。
+
+已准入的可复制 struct/enum 可作为 Array 元素，元素及嵌套值字段按封存的唯一布局 inline 保存；只有 enum 活动载荷持有所有权，不以逐元素 boxed 指针替代聚合步幅。共享存储分离直接复制字段并保留叶子所有权；独占重定位转移已有所有权。读取在既有值边界物化独立拥有的结果，需要接收分配域时按该域计费；失败释放已完成字段和未发布父对象。零大小聚合仍有类型化 backing 与 i64 范围内的逻辑长度/容量，数据区零分配。最终释放使用预留遍历空间和迭代释放工作链，不依赖临时分配。此准入不授予额外可见性、构造、回调或写权限，也不表示嵌套字段/索引地点写回已准入。
+
+GET及索引读返回独立拥有的元素，并保留索引求值前选定的接收者值。SET、索引写及PUSH先确定支持的根绑定，再按序求值实参，最后读取该绑定当前的Array；RHS重绑根后，写入针对新值。`a.push(a[0])`有效。越界严格要求`0 <= index < len`，否则产生E0430并保留有符号index与实际length；初始化期间的失败保持原有粘滞语义。set/push返回unit，索引赋值表达式返回已转换RHS的独立逻辑值，其可能失败的结果retain在提交前完成。失败不提交本次修改，但不撤销此前实参求值的副作用。len只借用接收者，以有界常数工作量读取长度，不分配或遍历元素；GET对嵌套函数元素的传递准入可能分配有界scratch。
+
+返回的Array拥有所需TypeArena与backing寿命，可在原调用、Instance和Program宿主句柄释放后继续读取、复制和释放；纯Array不为类型元数据反向保留Program代码。同Program的纯Array可在Instance间按值传递；不同arena即使数字类型ID相同也拒绝。函数元素仍须通过真实存活的执行gate，Array包装不增加调用权限。新分离或增长存储计入当前接收Instance的物理分配域，已有存储仍由原域记账；准入、元素搬移及调用工作遵守累计预算。最终释放按实际owner归还物理存储，不按嵌套深度递归销毁。
+
+源码查询快照独立拥有Array类型节点、成员签名、泛型声明owner、源码位置及内容身份，编译会话释放后仍有效；查询不重新解析、推断或执行。原生声明的查询来源不产生可执行initializer。失败的私有、别名或未准入成员查找不发布成功绑定；资源失败不发布Checked或快照。查询中的core len记录其稳定身份，未知源码来源保持未知。
+
+源码调用观察额外拥有规范实参推导及转换完成后的直接调用显示签名：实际替换的参数向量、真实接收者前缀和结果类型。残留类型参数保留调用方声明owner及真实参数名；有序名称向量独立拥有，不从序号合成。附件校验声明参数数、接收者身份和类型表达式，深复制到接收快照，失败原子回滚且不重置原资源账本。签名查询结合这些观察、声明名称及参数模式，不重复推导。间接或尚未准入的原生调用观察保持未知。这些显示事实不构造可执行调用，也不授予Final或效果权威。
+
+已准入的Array调用还保存实际实例化owner、检查及转换后的显式参数类型、结果和原生声明的optional/variadic标记；不为原生值操作虚构receiver参数。参数名来自受治理的原生声明，附件独立核对原生owner/member身份、名称、源码路径、内容指纹、位置及参数数，不能仅凭显示标签或同名用户类型绑定。查询消费者按真实variadic末参数选择活动参数，跨入口合并还核对声明来源；原生来源不虚构编辑器文档版本或跳转URI。
+
+原生声明的开放Array<T> schema只属于拥有式查询类型池。成功Checked后，查询投影保留全部可执行类型ID前缀，并复用已有规范开放节点或追加独立查询节点；不把声明schema插入可执行类型池。Array recipe中的临时存储保留已检查receiver元素的声明类型界限，不作为新的用户类型推断变量。此边界不授予执行、构造、Final或效果权限。
+
+assert、assertEqual及assertPanics的已检查调用观察保留INTRINSIC声明族，不伪装普通函数。附件接收这些已知签名前，核对治理的稳定ID、名称、参数数、Unit结果及泛型参数数、真实名称位置，以及唯一内建源码的memory模块身份和带域及长度边界的内容指纹。来源检查复用模块身份和指纹算法，资源失败保持附件未发布，不重置接收账本。查询事实不建立内建执行绑定，也不为memory来源虚构文件URI。
+
+源码声明显示事实还独立拥有定义作用域中的真实有序泛型名称，包括方法和闭包的实际外层前缀；缺失名称保持明确不可用，不从类型参数序号合成名称。接收端校验名称向量、参数数与声明族，并深复制全部字符串，附件失败保持原快照和资源账本。只有带初始化器且没有显式类型注解的变量或常量声明可带推导绑定标记。只读类型提示使用该标记、Checked 类型及真实名称位置，按严格 UTF-16 的半开区间筛选，拥有完整未截断标签；它不重新推导，也不建立函数效果证明或宣告公开 inlay handler 的完整资格。
+
+参数提示的语法输入独立拥有最终 AST 中可达的已完成调用及完整实参 token 范围，包含括号、显式访问标记和多行 token；恢复解析中丢弃的调用不发布。数值位置、真实变量选择、URI、版本和规范内容指纹在原账本上拥有，语法会话销毁后仍有效。只读查询核对同一账本和精确文档身份，再从已检查的调用目标、真实声明参数及模式构造完整名称标签；不从显示签名反向解析或重推导。原生参数可来自治理声明而无独立 token 位置，内建 memory 来源不虚构文件路径或编辑器 URI。显示结果拥有目标声明族、原生身份、模块身份、路径、内容指纹及真实名称范围，不能仅凭同名标签跨根合并。没有确定调用目标或真实参数事实时明确不可用；这不授予合法 MOVE 正向、一般 Final、完整效果或公开 inlay 过程资格。
+
+多根参数提示必须比较真实目标来源，包括可用时的声明编辑器 URI、版本与严格 UTF-16 选择范围，以及规范模块身份、内容指纹、路径、声明族、原生身份和实际名称范围；不同根中的局部模块序号不构成身份。只有包含调用文档的根参加比较，任一来源冲突均原子拒绝，空结果仍参加一致性判断。跨账本根在访问其事实前拒绝。拥有型参数请求捕获 range、开放文本和参数名称配置，在线程工作开始前即可销毁所有生产者；配置关闭仍校验 UTF-16 坐标。结果只在原请求身份、版本和取消状态仍有效时发布，不写入语义 token 缓存。准备中的参数请求不替代公开 inlay 对类型和效果事实的完整要求。
+
+类型提示另外拥有不依赖局部类型或声明序号的显示身份。编码观察已检查的 builtin、真实泛型 owner、复合类型节点、callable flags/modes、实参及字段类型，名义类型附规范模块身份、来源指纹、真实声明及编辑器版本；循环图以有限活动路径回边表示，不重推导。多根类型 JSON 在任何提示产生前核对完整请求文档内容和版本，再比较标签、位置和实际类型身份；空区域也不得放过文档版本冲突。准备中的同一绑定提示请求同时捕获类型与参数开关，在原账本内生成独立 JSON，并以有界稳定归并排序按位置和提示种类发布；任一步失败释放两域准备而不发布部分结果。公开 inlay 对完整效果证明的要求保持。
+
+
+
+此子集的Windows源码VM、native、混合条目及Checked重载按独立预期验证两模块字符串程序，输出为`red\nblue\n2\ngreen\nblue\ngreen\n3\n`；实例隔离、结果寿命、初始化越界粘滞与分配失败物理释放另有断言。输出golden不替代OOM、retain、工作预算或全量sanitizer门。完整批次资格仍要求受影响目标重建、回归、合同和sanitizer门；本节不声明这些完整门或macOS已通过。
+
+其余13个Array成员以及尚未接通的capacity、切片、ptr/mutPtr和iterator方法族仍须分别准入；不因已有recipe的冻结而自动完成。完整move、用户结构体族、跨Program结构导入、stdlib Checked/native包发布及旧链最终删除不由本节完成。源码Array for-in沿既有拥有式快照合同，不能视为iterator API资格。唯一现行协议仍由§17.6的实现常量定义，无旧reader或兼容接口；本节合同同步不宣称完整安全或全回归通过。
+
+### 17.27 浮点四则与 typed 输出
+
+ADD/SUB/MUL/DIV_FLOAT 在历史引入时编号70–73、OP_COUNT为74；现行opcode编号以唯一实现表为准。stage mask为7，两个输入及结果为同一具体f32/f64，其他字段为零。唯一Checked语义、schema及值/调用/Program版本由§17.6的实现常量定义；新增准入规则拒绝旧语义包，既有值与调用布局不变。普通泛型必须在定义处取得具体数值证明，特化与复验不授予额外权限。源码四则和复合赋值沿既有求值/提交顺序，f32/f64混合先精确宽化，typed整数与浮点混合、浮点余数和位运算拒绝。
+
+每次算术按原宽度round-to-nearest ties-to-even，不融合或重排，不使用宿主浮点状态。完整宽乘和除法余数保留最终舍入依据，逐次保留subnormal与负零，溢出为带符号无穷；零除零、无穷除无穷、零乘无穷、异号无穷相加和NaN输入得到canonical NaN。有限非零数除零为带符号无穷，不是整数除零fault。
+
+PRINT/OUTPUT按§17.24接受合法运行f32/f64值，包括全部f64 NaN payload；所有NaN文本仍为`nan`，不会修改输入位型。有限非零数使用原精度最少有效数字往返十进制：同长度候选选最接近者，精确中点取末位偶数，不通过先宽化f32决定格式。最短系数无尾零；十进制指数k在[-4,16)时用普通形式，整数结果加`.0`；其他值用一位整数部分、小写`e`、显式指数正负号且无冗余指数零。特殊值固定`nan`、`inf`、`-inf`、`0.0`、`-0.0`。全部ASCII、固定整数空间、无堆分配；单值32字节缓冲包含终止符足够。宿主locale、舍入模式及异常标志不影响结果。
+
+输出仍先完成所有参数求值，再验证预算、渲染整组并一次发布；失败不发布半组，沿用OUTPUT_ERROR和清理责任。上述合同不代表完整源码、默认产品、安全或跨平台资格已通过；这些必须由重建后的独立VM/native/包消费者/混合程序、所有权与物理释放、失败注入和批次门逐项证明。
+
+### 17.28 Class 字段定义证明与 Unit 模块槽
+
+普通 class 的 T 字段在真实声明 owner 下按既有可复制/保存前提检查，不增加 Scalar、Copyable 或 Sendable 条件。内联与 where 条件保留为同一条件表示；定义处符号字段留在 Checked，实例替换完整有序实参、复验来源后再 Lowered。闭合载体能力与泛型证明分开，未实现载体不伪装成约束失败。显式 final 根 class 的构造、private/const、must/may 和 no_suspend 规则继续适用。class 是身份复制边界，字段 GET 产生拥有式逻辑快照，整体 SET 为所有相同身份的引用可见。
+
+Unit 模块声明有真实 owner、slot ordinal、known 类型、mutability 和发布位。Unit INIT/STORE 的唯一编码有零 value operand，两 args 都为零；LOAD 仍执行发布与权限检查，不产生 payload SSA/frame。RHS 效应、yield、throw 与清理执行一次，成功才发布；const initializer 一次规则、mutable root 规则、失败粘滞和逆序回收不变。推断的 `const x = Coro.yield()`、显式 `const x:()` 和默认 `var x:()`在本族准入，`const x:i64 = Coro.yield()`拒绝。Unit marker 的 Sendable 证明不顺带开放普通参数或泛型保存。
+
+### 17.29 有限内联 class 字段与物理所有权
+
+本族仅准入无循环的 inline struct/enum 字段图，叶子为现有数值/bool/string 和 Array<i64>/Array<string>。闭合字段图通过同一有界能力遍历；Source 完整收集字段后检查，真实临时 scratch 退款，work 累计扣减。普通 T 的合法语言域不缩减；未 reify 的泛型 inline 字段、nested Array、callable/Cell/Error、class 引用图、资源和视图仍是明确的未实现边界。
+
+GET 的唯一四参数 runtime 接口显式接收实际 arena、work/scratch 和可选分配域。scalar/string/Array handle 纯读不分配，保留的 metadata 可在 Program/Instance 销毁后使用；inline 快照物化需要调用方 live domain，新字节记在该域，已有叶子仍向原 backing owner 退款，不授执行权限。SET 使用同一拥有式事务准备机制，完成所有可失败步骤后，在无可观察中间态的提交区释放旧字节并发布新值；失败保留字段、别名和旧快照。NEW 不发布部分 this。对象创建时预留释放帧，drop 对实际活动 enum payload 迭代释放、零新分配，退款至真实 owner。该无环子集不证明完整 L0/weak/L2 残余图回收。
+
+唯一当前协议由§17.6实现常量定义；旧 value target、旧有效摘要 Checked 包及同 Program 的旧 embedded proof 必须由实际 seal/read 拒绝，不保留旧 GET、别名或第二 reader。独立 VM/native/packet/mixed 预期、真实旧缓存、逐 OOM、拥有结果寿命、物理释放和完整适用安全须分别验证；本节不声明完整语言、stdlib 同源配对发布、默认产品或跨平台资格通过。
+
+### 17.30 无入口 Checked Library 与真实导入
+
+编译期 Module 显式携带 PROGRAM/LIBRARY kind，不能从 entry 哨兵推断权限。Library 保留真实声明、初始化函数、imports 和定义处约束检查，从 inventory 起不分配用户 entry；它可以拥有式检查、复验、序列化和读入，但不得直接特化为可执行 Program、Lowered 或 seal。链接后的 PROGRAM 必须有真实合法 root/entry，普通实例化仍在 Checked 上完成并复验、在不可变 Program 封存前结束。每个 wire module（包括 provenance）编码实际 kind，未知 kind、Library 假 entry、Program 缺 entry 和旧格式全部拒绝；不保留第二 reader 或 fake entry。
+
+编译器借用的 opaque catalog 独立拥有已检查库体，完整包摘要、真实 resolver authority、canonical/logical 身份和 source locator 必须匹配。表示在图节点发现时绑定一次，已存在 SOURCE 不能因导入被改成 CHECKED_LIBRARY；匹配的坏库不得回退 AST。未匹配导入继续普通 Source 解析。查询导出事实不授调用权限；私有调用仍按真实声明 owner 拒绝。最终首次 owned Checked 深复制全部所需事实，原 SourceResult/Session/graph/catalog 销毁后仍可复验并执行，不允许用重新解析库源码补能力。
+
+唯一 remapper 先预留全部已使用的目标身份，再复制 body 并重定位 CALL；真实 initializer 可位于输入函数数组任意位置。临时映射按实际 scratch 预留，成功、OOM、work 耗尽或 copy 失败均释放退款；每元素累计 work，永久 body/name 按 metadata 收费。唯一 reader 的 header、摘要、payload 解码和普通复验共同消耗累计 work，连续读取或恶意有效摘要前缀失败也不得重置余额；owned metadata 按唯一发布表示收费，临时 scratch 退出退款。此 reader 合同不声明 Source 所有阶段预算已经统一。
+
+Source 构建上下文的 metadata_bytes 是唯一真实剩余余额：SourceMemory 的完整 header/payload、保留的声明 manifest、Library/implementation 复验及 query 快照复制使用同一余额；成功拥有存储即扣减，不再以另一累计 allocated 计数相减。失败不得用无符号下溢恢复额度或继续越额分配。临时 Source arena 提前释放不返还累计 metadata 费用；已有 scratch 临时映射退款政策不变。最终 Built→Checked 检查仍采用独立阶段预算，整个 Source 多阶段累计预算尚未完成，不以此修复宣称统一。
+
+首个库导入实现边界为同目录 file-backed script authority、单模块、零参数 Unit/i64 和 CONST_INT/ADD_INT/CALL/RETURN；尚未接线的表明确拒绝，不收窄语言的合法泛型、nominal、接口、默认参数或 export const。完整 canonical remap、声明/default helper 事实、公开 const 权限、包认证、stdlib 同源 Checked/native 配对及缓存命中/miss仍须同一管线实现和独立验证。有限导入闭环的 Source/packet/native/mixed、实例、逐 OOM、物理释放及真实旧身份拒绝，不代替完整语言、安全或产品资格。
+
+
+### 17.31 参数默认值的Checked目的关系
+
+参数默认值在原始Built/Checked的唯一拥有式DefaultTable中记录真实owner、完整形参序数和helper身份；不从名字、Source私有ID数组、query或导出顺序推断。所有记录和未调用默认体在声明作用域检查。helper零runtime参数、非export/entry/init/cleanup，持有owner同构的完整nominal-parent加method-own参数/约束和精确形参结果类型；作用域可引用声明方私有名称，不能继承构造/清理或body效应承诺。helper内部合法defer子函数仍遵守普通清理来源。
+
+Built/Checked的CALL_DEFAULT和INVOKE_DEFAULT先检查caller对owner的完整约束、模块/成员及构造权限，再按owner/ordinal从表解析helper；普通CALL/INVOKE/FUNCTION_REF不能直接获得helper权限。存在局部错误处理时，默认计算使用INVOKE_DEFAULT及普通成功/错误continuation、结果/错误投影和拥有式清理；错误不得绕过catch，也不能因调用owner成功而被吞掉。CALL_DEFAULT的targets保存owner/ordinal，INVOKE_DEFAULT的args保存同一声明元数据、targets保存真实CFG边；元数据不是SSA操作数。两者均无runtime实参、immediate为0，保留完整泛型向量及精确形参结果类型。所有现有本地自由函数、static、READ、构造器及泛型默认族原子迁移，导入首族的有限接受域不降低本地语言合同。
+
+特化使用现有Checked实例收集及逐指令Origin来源，将CALL_DEFAULT仅变为普通CALL、INVOKE_DEFAULT仅变为普通INVOKE，清除目的元数据并独立复验；错误边及投影身份保持不变。特化Checked/Lowered不保留第二实例默认表，唯一原表深拥有于provenance.source；按相同caller/instruction位置重算owner/ordinal/helper和完整参数向量，精确验证对应操作和CFG边，不接受同签名替代、角色标签或存在任意provenance的权限豁免。局部catch沿错误continuation推导，不能按普通CALL直接逃逸汇总。全显式调用的generic owner不为表存在强制实例化未使用helper。原始有defaults的闭合模块也走同一特化管线；Lowered拒绝残留目的操作，runtime没有另一默认值解释器。
+
+表、wire、clone、来源和canonical remap统一计实际metadata/scratch/work并在失败不发布；只在Program封存前完成普通实例化。新格式包含每个module及嵌套来源的默认记录，旧格式拒绝。实际单一schema/semantic及runtime ABI由§17.6所述实现常量承担；新增编译期表或操作不机械增加公开runtime ABI，但同ABI旧mandatory proof仍须在真实消费者拒绝。完整能力只有新鲜VM/native独立预期、来源销毁后寿命、每个真实故障点/物理释放和批次资格通过才成立。
+
+### 17.32 多输入 Checked Catalog 与库字符串
+
+有限库导入沿§17.30的同一Catalog、reader和Source remapper扩展，不能建立第二链接或运行路径。唯一构造接口为xr_xir_compile_library_catalog_new(context,inputs,size_t count,output)，替换旧单输入签名；唯一资源视图为xr_xir_compile_library_catalog_resources(catalog,size_t *count)，删除旧单资源接口。构造要求output、非NULL inputs及count>0，失败保持output；没有库由SourceRequest的NULL catalog表示，不分配空拥有对象。视图要求非NULL count，先写0；NULL catalog返回NULL，成功借用真实连续只读数组至catalog_free。count=NULL返回NULL。Catalog独立拥有每个Checked artifact和全部身份字符串，不借输入包、输入结构或调用方文本；资源数组和artifact owner数组分别零初始化并按真实存储收费，任何部分前缀失败均完整销毁，全部成功后只发布一次。
+
+每个input仍是独立无依赖的单模块SCRIPT Library和单leaf逻辑路径。真实authority、完整包SHA、既有canonical身份算法及声明身份必须一致；相同canonical无论内容相同或不同、authority或physical root相同或不同均BAD_STRUCTURE，不去重、不选择首尾、不另造(canonical,root)键。不同canonical可共享authority，实际resolver仍逐次验证精确authority，匹配坏库不回退AST。多个input不表示已实现Library间依赖、包认证、泛型或完整声明链接。
+
+构造只建立一次实际remaining预算。count存储的乘法/加法溢出、metadata容量及count<=remaining.work先于任何input解引用；container、两个数组、真实文本、每input hash、read_remaining、shape和重复检测累计消费同一余额，不逐项重置或双扣reader拥有存储。每input访问和每重复候选比较至少收费1；实际所比较的字节另按字节收费，允许有界pairwise扫描但不得有无收费二次循环。临时scratch所有出口释放退款，累计work/metadata不退款。成功输出是全体原子发布，不存在部分Catalog。
+
+有限Catalog准入STRING与现有i64形参、Unit/i64/STRING结果，在原CONST_INT/ADD_INT/CALL/CALL_DEFAULT/RETURN集合中仅增加既有CONST_STRING/CONCAT_STRING。Unit形参、构造类型、泛型、slots、implementation、provenance和依赖仍属于未接线域；本片不顺带准入INVOKE_DEFAULT或错误CFG，也不收窄语言的完整合法集合。所有定义、未使用literal、私有/default helper仍由普通Checked验证器检查；普通调用与默认目的权限保持§17.31。既有literal长度wire、STRING指令和runtime语义不变，没有新增proof权限事实或runtime载荷；保持唯一Checked21/53与Program25/Value15/Call19。若实现暴露真实语义或布局变更，须先重新分析并冻结，不能机械沿用该结论。
+
+Source用唯一不发recipe的source_literal_append(ctx,node,bytes,length,&id)管理既有literal表；本地AST和已经拥有的enum文字保持原借用寿命，原source_string_literal仅append后发原CONST_STRING。非法长度、count、非空NULL及增长溢出先拒绝；合法append收费1，vector增长搬运按实际旧count收费，容量保持首次16/其后倍增；失败不发布count或ID。导入每个非空literal先按精确length在SourceMemory拥有并按length计copy work，再append；空literal为NULL/0，不分配payload，不使用strlen、终止符或内容去重。metadata经§17.30真实余额扣完整header/payload，不恢复allocated影子账本；Source提前释放不退累计metadata，Query无runtime literal表也不新增权限接口。
+
+同一SourceLibraryMap记录literal_begin/count，按原库顺序追加无去重区间。CONST_STRING原ID须非负且先小于该库自己的count，再经溢出检查加入目标begin；最终merged表中的合法位置不能挽救原库越界ID。CONCAT_STRING仍使用SSA操作数，CALL_DEFAULT沿唯一function/default映射。原函数scratch map全部出口退款，next_function只在整库复制成功后提交，部分builder不得发布Checked；普通语义失败的query snapshot遵守既有complete合同，不能笼统要求全部snapshot为NULL。
+
+资格须包含两个真实库各自literal0且字节不同、反转Catalog输入顺序后的固定结果、默认与显式STRING、私有helper拒绝、原OwnedChecked在所有producer销毁后执行、Source/独立packet VM/真实native/mixed、双Instance、Program销毁后按length读取拥有结果及最终physical0。低层空、UTF8与a\0b三字节literal须四消费者保真，源码parser的NUL拒绝保持原规则，不能当新源码语法。独立手工包与双层有效重hash攻击覆盖原ID越界但merged合法、unused坏UTF8、长度/计数溢出、身份/authority/摘要及重复canonical；逐新真实OOM、第二库失败释放首库、累计预算exact/minus1及scratch退款均验证。保留既有全部默认/来源/预算/故障测试。本有限增量不替代可变库状态隔离、stdlib配对cache命中/miss、完整产品安全或最终旧链删除。
+
+### 17.33 有限 typed 值相等
+
+唯一 Checked57/wire22 承载本有限域；完整相等声明族及公开CLI迁移仍未完成。Equal 使用已有
+marker:u32 的 bit4，ordinary TYPE 的定义处证明、inline/where 合取及来源复验均适用。
+首域仅 bool、八整数、f32/f64、string 和递归 Array<D>；其余域继续明确拒绝且目标保持OPEN。
+同T的 ==、!= 与真实 Core assertEqual<T: Equal> 使用同一 typed 关系。EQUAL=117、
+OP_COUNT=118、stage mask7、两个 VALUE 操作数及 BOOL 结果；immediate仅0(EQ)/1(NE)，
+其它闲置字段为零。NE 仅在成功比较后反转同一结果。旧56及更早重hash包在body分配前拒绝。
+
+FLOAT保持IEEE NaN不等与正负零相等；STRING比较完整length/bytes；Array按length/索引
+逐叶比较，相同指针或共享backing不能绕过NaN。比较用有预算显式DFS，无C递归或深度截断false。
+唯一 typed helper 由 VM/native 共同消费，borrowed输入不copy/drop，只有OK才发布bool；
+BAD_ARGUMENT/OOM/LIMIT保持output和输入owner，所有出口归还真实scratch/domain分配。
+STRING字节、Array元素和扩容工作累计计费，超限不能当作不等或assertPanics成功。
+
+Source/Owned query/clone、默认helper、Library、writer/reader、Checked特化与Lowered复验
+携带同一约束身份。不得借旧Equatable、boxed值adapter、名字白名单或第二executor准入。
+本族不增加公开Value/Program字段；当前Value16/Call21/Program26由§17.6与§17.34定义，仍须真实fresh布局/provider拒绝和生成C验证。
+资格须含独立完整包与valid-rehash、无约束未调用定义、同名用户接口、NaN共享backing、
+NUL/深度257、逐实际OOM与exact/minus1、producer销毁/双Instance/physical退款、VM/native/mixed
+分别固定预期及中央默认/ASan。原完整断言/容器/CLI、stdlib配对发布与完整安全保持OPEN。
+
+### 17.34 Typed output与显式配置初始化
+
+唯一XrXirOutputStatus为OK=0、OOM=1、LIMIT=2、OUTPUT_ERROR=3、BAD_ARGUMENT=4、BAD_ABI=5；renderer、byte sink及group provider返回同一封闭状态。完整group准备失败不得调用sink；成功最多调用一次，按真实length保留embedded NUL、UTF8、空print换行及长字符串。IO已写出的bytes不承诺回滚。未知status归为BAD_ARGUMENT，不允许bool转换丢失资源失败。
+
+PRINT失败保留准确Call状态。WRITE_STREAM在合法已配置provider下将OK映为true、OUTPUT_ERROR映为false；缺provider仍为Call OUTPUT_ERROR，OOM/LIMIT/BAD_ARGUMENT/BAD_ABI不得映为false。取消保持既有优先级。资源失败不成为panic，不能被assertPanics消费为成功。
+
+当前Call ABI为21。Provider/Sink以abi_version与reserved=0开头；有callback先验21，无provider仅准canonical全零。CallConfig/InstanceConfig以abi_version和struct_size开头，在读取其它字段前验21及exact sizeof。Windows x86_64实测Provider24、Sink32、CallConfig136、InstanceConfig88；这些数值不代替其它target的实际ABI验证。唯一xr_xir_call_config_init(config,size)与xr_xir_instance_config_init(config,size)返回CallStatus，成功才写，失败保留全部output bytes；旧按值defaults符号删除，无别名或wrapper。旧Call20 entry必须在执行callback前拒绝；旧embedding defaults对象必须链接拒绝，不能用重编旧对象替代证据。
+
+Checked22/57、Value16和Program26保持各自实际合同；输出接口迁移不授Source/Target/SDK权限，不证明完整安全、默认stdlib缓存或最终旧链删除。VM/native独立预期、每个真实分配失败、准确状态、旧对象拒绝、producer寿命及物理释放分别验证。
+
+### 17.35 平坦 Tuple 解构与模块整组发布
+
+平坦 `var` / `const` 模式接受名字或 `_`、精确有序 arity、Unit 与 `(x,)` singleton；RHS 一次求值，全部字段投影和可变 Cell 准备完成后再发布局部名字，闭包捕获沿原 Cell/拥有合同。空模式只接受 Unit；全 discard 不产生绑定或 module group。字段类型和 Sendable/visibility/构造/执行资格沿真实类型与 Checked 定义处约束及特化复验，不能借 Tuple 扩大泛型 Unit 或被包装资源权限。嵌套/rest、数组/对象模式、spread、match 和叶注解在当前入口具体拒绝，继续承接原合法语言目标。
+
+唯一新增操作 SLOT_GROUP_INIT 追加 ordinal145，当前 OP_COUNT146，旧 ordinal 不变。type=Unit；args0 为 operands 表 offset，args1=m 为非Unit payload数；immediate 高u32为 first_slot，低u32为 n 个连续实际bindings。n>0、整区间属于同模块、实际initializer、未发布、精确 n/m、类型与权限全部预验；unused字段为零，Unit项不占SSA/payload，也不准用伪值ID占位。outgoing layout 为 m。全部阶段使用同一操作，VM 与生成C调用唯一 xr_xir_instance_slot_group_init(view,first,n,compact_values,m)。
+
+真实 Call allocation domain、scratch、值上限和有界work承担整组准备：私有owned表先取得全部准入/复制/持有与清理资源，再核 execution_status。任一失败或提交前取消释放全部准备且不产生 published slot或trace。不可失败的commit先写完整slots、flags/count/order，再开始trace；trace重入可见整组，首trace取消不回滚已提交绑定。清理不临时分配，按真实backing owner返还物理存储；初始化失败继续粘滞。
+
+此操作的 Checked semantic 为65，wire25与 Value21/Call26/Program29结构未变；现行版本仍只由 §17.6 实现常量定义。旧完整25/64包必须header早拒且零分配，当前包由各族独立固定角色构造，旧64完整前像保留为历史拒例，不能以writer输出刷新oracle。新SDK helper须在同源165项（160源+5archive）recipe及真实五archive消费者复验，原345 ABI表达式和139对象职责不减少。完整资格保留 Checked forged-shape、独立VM/native/mixed预期、全部真实OOM/三轴、retain饱和、取消、producer/Program/Instance先drop与最终physical0；平坦子片不代替完整产品默认门、完整安全或最后旧链删除。
+
+### 17.36 Checked Library 普通泛型导入
+
+本节冻结下一导入族，实施与资格尚未完成。沿§17.30–17.32的唯一Catalog、reader和Source remapper接入普通自由泛型函数及私有函数闭包。库自身为单模块、无依赖，TYPE binder只使用现有内建marker约束（无接口见证）；形参/结果为已准入i64/string/bool、Unit结果或该函数binder，操作仍为Catalog已准入集合。无约束参数、显式/推断/转发、所有未使用定义均由普通定义处检查；Sendable不授算术、成员或构造能力。调用方的合法新用户类型可经其接收Checked类型池实例化，不能因库自身没有nominal表而仅允许标量实参。RESULT binder、库自身constructed/nominal、slots、implementation、provenance和依赖仍待实际映射，不开放未接线表或新操作。
+
+真实initializer、普通/私有function先保留目标ID，再用同一SourceLibraryMap重定位CALL、CALL_DEFAULT和literal。每函数Generic的constraints、arguments、parameter_kinds及计数在接收账本深拥有；binder BASE+p保持声明局部序数，指令type_arguments范围归其接收function。块/SSA属于函数局部。SourceContext.has_generics、SourceFunction.generic_owner和query声明的generic count/constraints/kinds对应接收身份；自由函数没有generic_parent，查询不免检查或授访问权限。全部生产者销毁后仍须使用原owned Checked完成特化/复验→Lowered→Program封存，不补AST或运行时实例化。复制计实际metadata/work，所有scratch出口退款、整库成功才发布。实际wire/Checked结构语义或runtime ABI未变不机械涨版本；若暴露真实变更须先冻结并补独立拒例。
+
+准入验收须含private generic helper、两个库binder0/function0、反转输入顺序及改变接收ordinal、显式/推断/转发、新用户类型、未使用坏定义和private外部调用拒绝，销毁producer后的VM/独立packet/真native及双Instance与owned结果。保留原library/string/output门及全部新真实OOM、三轴exact/minus1、取消、物理释放和适用安全。此有限族不宣称完整库状态/依赖、native缓存配对、安装分发或全产品完成。
+
+### 17.37 Checked 标准库出版与普通执行
+
+标准库只提供一份 Checked XIR 语义输入，包含声明、泛型定义、私有实现闭包、模块初始化、效果和所有权事实。当前出版族为 io/output，不代表其余标准库族已获资格。库模板是经过验证的输入，不是可执行 Program 授权。Catalog 在调用方累计资源账本下验证完整 Checked body、规范模块身份和依赖；字节摘要不能代替语义复验。Catalog 深拥有物理根，输入和 Source 生产者销毁后仍有效。缺失或畸形的 advertised 输入拒绝，不回退到 Source。
+
+Checked producer 只进行 Source 检查与 Checked 编码，不依赖 CGen、native 编译、object 清单或 runtime SDK；构建 producer 可执行文件本身仍需要支持的宿主 C 工具链。嵌入的不可变 Checked 字节和独立组件 manifest 不包含机器码回调。CLI、LSP、VM、AOT 独立于 native 代码取得同一 Catalog 输入。VM 对可达实例特化、复验、Lower 后按普通不可变 Program seal 接收，不查找或替换标准库函数为 cached native entries，执行期不需要 C 编译器。AOT 将库与用户 XIR 共同交给普通 C backend 编译。
+
+删除标准库 native registry、matching factory、cache lease、配对 build identity、object/C 镜像及缓存专用 seal API；不保留兼容 flag、空缓存或第二执行路径。普通 native 函数、双向 VM/native mixed、共同 Value/Call/Program/Instance、可恢复 ABI、CGen、必要平台 host 和独立验证的 runtime SDK 保留。SDK 的实际 target/profile/ABI 及生成 native 代码准入仍有各自拒绝边界。
+
+Core 只安装 Checked 组件及精确 module/length/digest manifest。SDK 组件独立验证 target、ABI、Source 和 archive manifest；SDK-only 安装不要求标准库配对。组件及规范相对路径在出版前拒绝畸形输入；验证失败保全已有 manifest。真实 Core/SDK/full 安装、搬移、无源码 VM/AOT、用户新泛型类型及缺失/损坏组件需要独立测试。完整标准库交付与删除当前已支持族的缓存是不同完成责任。
+
+保留独立输出预期：stdout 为 out\0 后接 U+4E2D 的七个字节，stderr 为 err! 四个字节及空输入；保留两 Instance、四种 provider 结果、导入 leaf 与用户 wrapper、同名用户声明、producer death、escaped Function/result 寿命和物理释放。只退役 cache match/lease/object-pair 断言。每个实际 preparation、bind/seal 分配故障，资源三轴 exact/minus1、不补账本的 retry、失败保全 take 和零分配 cleanup 仍由普通路径覆盖。W1–W4、可移植 C11、适用 provider/sanitizer 门及既有 generic/library/output 责任全部保留。
+
+### 17.38 共同根执行流事实与原因查询
+
+在已完整验证的Checked/Lowered上，同一owned XrXirEffects推导每函数独立的requires_root与unresolved。两项可同时为真；缺字段、推导失败或空初始化不是NONE证明。mutable模块槽读写/PLACE及真实module initializer产生根要求；const读/PLACE在真实定义上下文证明Sendable，不满足产生根要求，OOM/预算失败原样拒绝。初始化group的first slot按既有high32编码读取。库var和库非Sendable const当前禁令保留。
+
+复用唯一反向执行图传播CALL/INVOKE、真实default helper及已注册cleanup，cleanup只传播根事实而不改变既有控制效果规则。间接/requirement调用读取真实callable闭合上界，NO_SUSPEND与根权限完全独立。FUNCTION_REF不执行目标body；局部var/cell不因可变自动产生根要求。GO child不是父方普通调用边，父方实参准备的真实普通执行仍计入父方。未分类执行op拒绝；普通运行期路径取保守并集，不依赖优化删除。
+
+查询返回同summary拥有的事实和两条独立最短numeric原因链；生产artifact死亡后仍有效，直到summary释放。局部原因distance0，CALL/cleanup步的callee distance严格下降；等距按真实instruction/callee/cause/slot身份排序，不靠邻接顺序。全部求解/原因/类型证明共享累计资源账本，失败不发布半摘要，occupied输出不覆盖。无参数化布尔图为O(I+F+C)，类型证明和高阶变量成本另外计费。本查询合同不改变wire/opcode/ABI，不代表GO消费者、函数值参数上界、执行身份或库var保护已完成。
+
+GO消费者从同一summary的已闭合root事实取得权限，不再逐槽或按indirect种类重复推导；known root或unresolved均拒绝，二者并存时诊断优先known root且不丢两条原因。当前SLOT_PLACE借用形状限制独立传播，Sendable const的root NONE不解除该尚未资格的限制；其失败不得伪报root/unknown。角色、参数/结果及捕获Sendable、Task错误和所有类型/所有权/可见性规则保持独立，GO父实参准备仍在父方执行。Source区分需要当前实例根执行流与缺少worker效果证明；本片只保留既有函数层定位，完整用户函数/变量原因载荷与精确GO表达式位置继续未完成。
+
+拥有式原因链复制接口从同一效果owner复制known与unresolved两条有限numeric链；facts与steps只借用独立trace自身，效果summary、Checked/Lowered产物及原生产者释放后仍可读取。有效NONE可得到拥有式空链。copy要求相同实际资源owner和空输出，先拒非法参数，累计预算预准入后原子发布；OOM/预算失败清理临时owner且保留已收费。free不再分配或格式化，最后实际资源引用与物理计数归零。该接口不增加wire或runtime ABI，不是完整Source名称、来源与GO位置诊断。
+
+闭合callable沿现有u32 flags保存根效果上界：NO_SUSPEND=1、ROOT_NONE=2、ROOT_REQUIRED=4、ROOT_UNRESOLVED=8；根mask仅2/4/8/12合法，12保留requires_root与unresolved两事实。旧0/1、NONE与其它根位组合、未知位拒绝。普通显式fn默认UNKNOWN，不把NO_SUSPEND当NONE。身份包括完整flags及全部嵌套签名；仅最外层允许弱化，参数类型/模式、result与嵌套身份不变。NONE可进入NONE/ROOT/UNKNOWN/mixed，ROOT可进入ROOT/UNKNOWN/mixed，UNKNOWN或mixed仅可进入UNKNOWN/mixed。NO_SUSPEND只能保留或丢弃。失精度后不根据目标地址恢复权限。join独立并集两根事实、NONE中性，只有两边都有NO_SUSPEND才保留该位。
+
+FUNCTION_REF构造不执行body，但其广告上界必须覆盖目标的同owner真实body事实；未使用的ref同样验真。每个真实interface implementation body也必须满足原requirement上界，不能靠接收上下文授予承诺。共同Checker在完整结构/类型/约束/访问验证后使用同一execution图验root上界及GO义务。ordinary refs的精准producer后继使用不可发布的owned prepared owner，精确绑定已验证Module及拥有式INFERRED/FIXED value-flow；固定显式fn边界不能被猜目标精化，未知依赖保守UNKNOWN。有限worklist闭合并重新普通复验前，prepared状态不构成Checked或NONE证明；没有skip_go、unchecked公共入口或第二产品管线。Source recipe/AST死亡后不能借用其指针。
+
+这一flags语义采用唯一Checked semantic70，schema25的既有u32字段形状不变；公开Value22/Call28/Program29字段和布局不变。旧semantic69及旧0/1callable拒绝，不双读。SDK source fingerprint、独立stdlib Checked组件和消费者向量必须按真实资格更新。这里只冻结closed上界基础；Source精准refs、sealed Program真实entry上界准入、实际child indirect执行、有限参数公式、完整library types映射、用户完整原因链与library状态保护分别仍须实现验证。
+
+普通引用准备与闭合：Source 在 region recipes 释放前拥有式记录 INFERRED/FIXED 值流身份。普通 direct ref 与 closure 在既有 Effects owner 上按真实目标闭合；显式 callable 参数、注解、结果及转换上下文保持固定上界。暂态 UNKNOWN 相等不能消除边界：私有 COPY 保留身份，闭合后有差异时转为唯一 FUNCTION_WEAKEN。私有结构/SSA/约束/可见性准备不产生 Checked，闭合后共同完整 Checker 对源与独立拥有式副本执行全部效果及权限义务，只发布该副本。
+
+COPY/PHI/local Cell、闭合 capture、Nullable 包装、只读 Tuple/Array 构造和投影同步身份。PHI 和同元素 Array 的外层 callable 输入按唯一弱化规则归一化，根两事实分别求闭合。固定复合的嵌套身份不能协变；无法表达嵌套弱化的共享、元素变更或 Nullable 分支合流保守保留上界或拒绝，有限高阶依赖及容器别名流后继仍未完成。NO_SUSPEND、GO 借用形状、错误和 Sendable 义务独立保留。准备、闭合及查询复制共用原有限资源账本，不增加 wire 字段、schema、semantic 或公开 ABI。这一实现候选仍须鲜编和两配置资源、安全资格；runtime 许可与 VM/native 执行资格未由此取得。
+
+<<<<<<< HEAD
+callable 的真实目标与 opaque 广告可同时存在；opaque 仅在实际来源穷尽时可从 Error unknown 中消除。有限证据的来源义务包括全部实参、复制/PHI 输入、局部写入、完整调用 key 对应的全部目标，以及每个真实 RETURN 出口；每项正依赖的 rank 严格下降，未扎根循环和删除全部完备事实均拒绝。声明根形参仍表示外部来源，固定边界或 FUNCTION_WEAKEN 不授予精确身份。接收方从当前拥有式 Input 与同一有限关系检查闭包和正支持，不从旧 coverage rank 恢复权限。返回值与形参的旧持久 coverage 字段、独立 rank 求解及接收重放均已删除；Error 的来源穷尽查询直接消费同一有限关系，最后回调后仍完整验证该关系。捕获 callable 的每一列包含独立的完备性事实，空列也必须证明全部来源，不能把空描述符当成没有隐藏环境；callee 身份不能替代列证明。返回闭包保留实际嵌套列，并以该列自己的声明形参检查类型。未发布构造区从同一有限 Error 事实的当前几何读取 Error 行、throws 与 Task Error 权限候选；最后回调后，独立接收谓词验证完整闭包、正支持及全部投影对应后才发布。已发布 effects 不再取得构造写能力。producer 发现记录只归 Workspace，在有限证据接收前实际释放；Final 不保留旧 producer 表，发布后返回来源与捕获列从同一有限关系读取，读者不能恢复构造能力。Class 发现行及其返回 mask/rank 也仅归 Workspace，在有限关系构造后、封存投影前实际释放；Final 不保留旧 Class 库存。编译与运行时 Class 查询从同一有限关系读取，Cell 终端仍检查真实 ROOT 贡献及对应 witness，不能因删除旧 Class 重放而删除终端验证。primitive ROOT 贡献和终端 witness 共同从当前 owned Input 读取；Input 与 Final 不保存预计算的局部 ROOT seed 行，构造发现期暂存只属于 Workspace，在有限证明构造前清空并释放。封存读者不再重算 callable 来源固定点或返回来源重放；Error 与 deferred 对应检查直接投影同一有限关系到当次 scratch，且不保存或查询 constructor certified 身份位。Class/Cell 终端仅借当前 head、basis 与共同 Cell 证据。scratch 分配前只计算有界尺寸，分配后重新核实际 Input、key、命名空间计数与数组几何；当次视图不代替最后回调后的完整语义验证。完整来源构造仅在同一无回调区间借用当前 Input 与 head；可能增长事实关系前丢弃视图，之后重新验证实际 Input 与 Final 的几何，调用结束不保留栈地址。局部 Control 种子不缓存到 Input。构造与接收共用当前 opcode 与实际 callable 签名的只读原语；构造在完整 canonical run 遍历中写入私有结果行，接收逐条检查真实种子、调用边与有限支撑。Source 与 Input 的完整物理对应仍是必要条件，但两者一致不能替代 Final 的独立效果证据。有限 Error 方程构造与接收在同一无回调区间借用当前 Input 几何，不保存语义结论。事实缓冲区满时先完整退出方程遍历，再使视图失效并增长；分配后重新核对当前范围，释放旧事实前清空构造字段，释放回调后重新核对范围并在后续遍历打开新视图。全部闭包方程和严格下降的有限支撑检查仍适用。完整高阶/泛型族、全部效果验证与旧求解器退役仍未完成。
+
+ROOT primitive 对不可变 constructed slot 的标记查询使用当次只增容量 scratch。类型、泛型约束、接口闭包、投影字段和 Sendable 仍由原完整谓词检查。尝试期间只能认领或逻辑释放已有 buffer，不触发 allocator/release 回调；缺容量时完整退出全部 head/run/descriptor 借用，再增长并重新核当前 Input 及函数 namespace，重试从空证明状态开始。容量不保存 domain 指针或语义判定，失败不写输出且费用不退。真实释放之后仍须核当前几何；这不代替最后释放回调后的完整语义 ROOT RHS、一般 V 或 typed allocation identity 证明，这些责任仍未完成。
+
+### 17.39 有界 CTFE 的标量局部存储与短路
+
+编译期执行以完整复验的 Lowered 为输入；bool/integer 普通函数的整个可达直接调用闭包先准入，再执行。SCALAR_LOCAL_NEW、SCALAR_LOCAL_READ 和 SCALAR_LOCAL_WRITE 使用与 VM 相同的 scalar step 和目标帧偏移；写操作产生 Unit 并继续顺序执行，不是控制流终结。读/写按实际帧访问收费，原 steps、全栈 depth/frame bytes、output bytes 和编译作业累计账本保持；callee 不重置预算，失败不退款并保全规范 Unit 输出。
+
+Source 的 &&/|| 在该局部存储上保留短路语义，经原 Checked→特化复验→Lowered CTFE 求值，再独立重放完整 Source 并检查普通常量 recipe。未执行的纯算术错误分支可以跳过；未执行分支中可达 I/O 仍使整个闭包不准入。根权限或 effect=NONE 不授予确定性。
+
+本节不准入普通 var 生成的拥有型 Cell、owned/path 操作、聚合/字符串导出、未知函数值或 native/Instance 执行；它们需要各自实际类型、生命周期与费用接口及独立资格，不从栈内标量存储外推。
+
+
+### 17.40 Source 失败诊断与编辑器发布
+
+Source失败诊断的原始line/column始终为一基字节位置，原诊断结构及SourceContext/Final布局不为编辑器坐标改变。可选失败输出使用独立拥有型XrXirSourceFailure：空输出在真实已定位失败时接收规范模块路径，parser来源和可用的零基UTF-16标量；该参数原子切换为此类型，没有旧路径输出签名别名。路径转移及清理不补做分配或work，显式free释放接收拥有权。
+
+模块图在实际parser callback期间复制首个真实消息、模块及原始位置，并在当次文本仍有效时按原ledger投影UTF-16。CRLF是一个编辑器换行，独立CR遵守既有编译器字节列与编辑器行规则；非法边界不夹取、半UTF8/半CRLF不作为位置。Source corpus随后纳入模块的parse错误同样保留真实来源，资源失败不得改报为语言错误或部分成功。
+
+LSP仅消费该失败事实：开放文本核对真实模块与投影并保留版本，关闭依赖使用规范路径编码URI及null版本，不重读已变化的磁盘，也不对入口文本转换依赖字节位置。选中编辑器的独立syntax诊断仍优先；未知来源或坐标保持失败，不生成虚构零位置或空成功。这些事实只有显示权威，不授类型、调用、效果或执行权限。
+
+
+LSP文档打开、编辑与诊断使用既定64MiB累计分配、8MiB存活量和128000000 work额度，不借用CLI默认额度。发布校验Source文本快照的服务器修订和开放目标版本；真实关闭依赖保留null版本，不能仅因没有编辑器bucket就丢弃已有解析事实。
+
+成功发布者拥有该URI的完整空诊断清除参数；该JSON独立拥有字符串，在文档Source替换时显式转移，不借用已死亡的源文本或ledger。相同URI被新的发布者接管后，原发布者不得再清除它。编辑后目标URI变化先清除旧接收者再发布新结果，两份JSON和序列化体均在首字节写出前准备；准备失败不花费发送拥有权，已被操作系统接受的字节不可回滚，写失败终止发送。
+
+文档关闭清除自身和指向关闭编辑器的既有发布；清除全部诊断同时覆盖关闭依赖与开放文档。无法定位的新语言错误只撤销已过期的自有发布，不伪造当前文本的空成功。清理拥有权不再补做分配或资源work；显式清除准备与传输失败保持原拥有权或进入终止状态，不制造部分JSON帧。
+=======
+### 17.39 Iterator 与 Generator body 规范开发切片
+
+Iterator使用唯一Type池中的元素描述符kind11。编号9/10属于固定Map/Set输入，不能表示Iterator；本独占输入在接收其治理实现前拒绝这两个编号。操作153–175保留给相同固定输入，缺少实现时没有任何准入stage；GENERATOR_YIELD为176。参数数组、result、flags及nominal字段均为空，parameter_span等于元素的真实span；元素可为Unit或已准入普通类型，内部Cell、未知类型及自身/前向边拒绝。同元素描述符不得重复。Checked沿现有kind/span/element字段编码，独立重读、克隆、定义上下文、普通泛型替换/推断、访问与Lowered验证仍检查真实元素。协议版本只由§17.6定义，本切片不增加公开Value/Call/Program字段或布局。
+
+Source的Iterator<T>类型拼写绑定stdlib/types/iterator.xr及prelude唯一注册；共同生成器拥有完整声明、真实位置及源码指纹，不以同名用户声明或接收上下文制造原生权限。泛型元素没有额外Sendable要求；隐藏frame可能保存非Sendable环境，因此元素Sendable不构成Iterator的Sendable证明，Task<Iterator<T>>仍拒绝。
+
+有真实yield的Iterator<T>函数按所属词法body标记Generator角色；不信任旧analyzer的is_generator，也不把嵌套函数的yield算入外层。角色保存在既有FunctionIdentity的独立GENERATOR位；NoSuspend义务只读取自己的位，不能把非零角色当作NoSuspend承诺。合成defer helper不继承外层Generator角色。规范GENERATOR_YIELD操作的指令类型为Unit，可选操作数必须匹配Iterator真实元素；Unit元素没有SSA载荷。声明结果仍为Iterator，generator body的正常RETURN完成类型为Unit，因此产值与EOS不同。当前可验证范围包括真实Source→Checked独立重读→特化/Lowered→VM及真实生成C的本机执行，含调度Coro.yield()与yield ()的区分。
+
+认证拥有式Cell、nth消费及词法循环关闭以Checked89/Call34原子接收，wire28/Value27/Program30及共同Call/Instance布局不变；Iterator需求动作、四种内部等待和单消费者私有存储继续沿唯一协议。完整旧Value24/26 Domain前缀在访问新字段前拒绝；完整旧73/74/84/85/86/87/88包在头部拒绝且不分配。新Generator完整包从独立命名字段模型构造，正例与角色、元素、Unit载荷、ref参数及未知位拒例不得以product writer输出推导。generator入口必须具有封闭Iterator结果，产值经共同Call的拥有式YIELDED状态转移；正常完成返回Unit。取走产值恢复同一frame就绪，不分配wake；只有真实调度挂起产生wake。普通结果take、Task终态和resume都不能消费产值，取消须释放尚未取走的owner。
+
+Source对真实generator声明的直接调用语法生成唯一GENERATOR_NEW177；普通CALL/FUNCTION_REF/GO操作仍不能执行body。创建在当前认证view下按封存Program的真实调用者/指令站点选择完整callee、结果和参数数；相同latent证书与独立provenance接收检查保留完整特化身份，创建不执行body，也不继承body的立即挂起/语言错误。每个Iterator在原Instance执行器和同一预算下拥有独立非移动Call frame；停驻producer不阻止普通root返回。最后一个外部owner释放只发布关闭信号，由共同FIFO执行器迭代取消并完成cleanup；Instance关闭先排空活动producer再退休代码，终态Iterator仅持有类型Arena和Domain存储。未启动producer的defer没有注册，关闭不得凭空执行。没有增加共同Call/Instance字段。
+
+Source命名嵌套函数和匿名函数中的真实yield现在同样产生独立producer body；闭包值引用普通工厂，工厂仅以相同封存GENERATOR_NEW创建producer。闭包调用不执行producer body，命名闭包的自引用也指向工厂。拥有式常量String及Array逻辑快照可进入隐藏参数并跨挂起，普通泛型特化保留相同类型和capture对应关系；创建者修改原Array不改变已捕获的快照。词法函数清点为实际含yield的闭包独立保留工厂，不以旧analyzer标记授予角色。外部ref捕获仍精确拒绝；内部视图尚未接通。
+
+可变捕获保留既定共享Cell身份，不能以值快照替代。GENERATOR_NEW沿真实操作数向producer参数传递拥有式来源；只有完整来源为OWNED且角色为OWNED_CAPTURE的Cell可进入隐藏frame。SCOPED、MODULE、UNKNOWN及混合来源均拒绝，未绑定的Cell参数也不能授予拥有式角色。Source直接ref参数与外部ref捕获继续拒绝；Program接收重新推导角色，真实Instance工厂从不可变权限表取resolver，frame准备再次检查Cell未借出且非模块存储。公开低层构造没有resolver时不能制造此权限。拥有式参数不建立跨挂起贷款，清理helper仍按原LEXICAL_CLEANUP协议借用父frame；代码退休前排空，逃逸产值保持自己的拥有权。
+
+Source hasNext()/next()绑定完整治理声明的native身份8（6/7保留给固定Map/Set），分别生成ITERATOR_HAS_NEXT178/ITERATOR_NEXT179。两操作以Unit控制指令、一个真实Iterator操作数和独占正常/错误后继表示；正常值通过INVOKE_RESULT取得bool或元素，Unit没有SSA载荷。二者均MAY_SUSPEND；工厂值携带producer的延迟Error事实，消费错误后继读取该事实，不能使创建立即throw。普通copy/local/参数传递保留身份，同一个Iterator在同一时间只能有一个已绑定消费者，self/重入/第二驱动准确拒绝且不扰动原等待。
+
+消费者通过现有Call等待槽保留拥有式lease，wake同时认证executor、activation、世代及ticket。hasNext保留已产出的缓存值，重复查询不推进producer；next只转移一次缓存owner。缺少缓存时只由共同FIFO执行器推进独立producer，不在回调内递归执行后端；Coro.yield只让出调度，不交付值或EOS。producer完成全部cleanup后再交付终态。正常耗尽/关闭的hasNext为false，next以既定E0432报告；真实producer Error/panic保留供后续消费准确观察。消费者取消解绑并请求producer关闭，最后外部drop和Instance关闭仍由同一执行器排空。
+
+宿主wake选择属于当前root operation，即使实际外部请求来自独立producer或Task。root取消成功立即撤销已选宿主票据；仍独立存活的Task等待在后续poll重选新票据，旧票据不能先于producer取消排空被再次接受。经过完整身份认证的自驱动是运行失败，沿原frame的结构化退出执行已登记cleanup；错误Domain/世代/身份仍按协议错误关闭。真实Source标准time.sleep、两级producer的Timer等待、正常/取消/stop/free/drop、伪票据、自驱动和循环第二消费者已有定向VM/native及两向mixed验证；这不代替完整外部事件、并发、FI和安全矩阵。
+
+Source nth(index:i64)绑定相同治理声明并生成ITERATOR_NTH180，以Unit控制指令、Iterator与精确i64两个操作数及独占正常/错误后继表示。它丢弃当前位置起的index个产值，再转移一个产值；index为0等同next，负数在推进producer之前报告E0430，跳过期间耗尽报告E0432。每个被丢弃的owner立即释放，Unit仍是一个产值。消费全程保留同一消费者绑定，通过现有FIFO执行器逐项推进，不使用C递归；真实Timer仍按原请求等待。既有WaitRequest.after_ms仅在内部NTH等待中保存剩余丢弃数，每次递减使旧token失效；它不会成为宿主Timer时长。取消先解绑，再完成producer清理；错误与panic沿原后继传播，终态错误保持可重复观察。
+
+Source对内建Iterator<T>的for-in只求值一次接收者，并通过相同hasNext/next规范操作逐次取得拥有式值；Unit绑定没有SSA载荷，循环变量保持只读且每次迭代闭包独立捕获该次值。进入循环前登记真实词法cleanup helper，continue保留登记，break、return、throw、panic和取消沿既有cleanup frontier关闭；Array快照和范围循环保留原路径，不登记Iterator helper。普通T泛型参数域不因Iterator<Unit>循环而扩大。
+
+自定义值的for-in沿同一普通方法规则只调用一次iterator()，得到规范Iterator后复用上述词法循环。名义类型的READ方法与声明接口上的泛型见证保留可见性、完整参数/默认值、泛型证明、调用效果及真实Source引用；不是按方法名制造权限。ref receiver使用原可写路径和一次求值的选择器，普通factory返回后结束借用，不能从值副本恢复写权限；真正含yield的方法仍禁止保留外部ref参数。方法所属真实body的yield登记相同Generator角色；每个READ或静态生成器方法的公开身份是普通创建factory，原body成为私有Generator入口。直接调用、绑定方法值、静态方法值及声明接口见证均选择同一个公开factory；默认参数归属该factory，词法receiver与body局部仍归属原方法声明。factory只用GENERATOR_NEW创建停驻producer，不用普通CALL执行body。声明的函数自身no_suspend约束创建，不能误约束可能等待的producer；参数义务仍保持其真实声明类型。已验证的自定义入口包括普通/生成器方法、逃逸绑定值、泛型方法值、显式调用、声明接口见证与见证值、静态方法默认参数、工厂真实等待/抛Error和ref factory。prelude Iterable治理、其余receiver/callable捕获与worker上下文的完整适配、标签/tuple等循环头及其余合法协议仍未完整接通，不把普通用户接口改称已准入的内建Iterable。
+
+内部ITERATOR_CLOSE181是一个Iterator操作数、Unit结果、独占正常/错误后继的生命周期控制；它不新增Source close()方法。关闭跳过普通producer body，仅由共同FIFO执行器完成已经登记且不抛语言Error、不发生语言挂起的cleanup，再恢复消费者。内部WAIT_ITERATOR_CLOSE7沿既有Call等待槽认证全部身份，取消期间保留该join，不重复入队或提前解除。它没有语言Error或挂起效应；这不是允许用户defer调用hasNext/next、time.sleep、Coro.yield或抛Error，E0387/E0392义务保留。已终态关闭返回Unit，不重新抛出sticky body Error；执行失败和panic仍沿共同退出协议传播。
+
+普通闭包factory返回Iterator或Task时，唯一Error CFG分别保存调用逃逸Error与返回值携带的延迟Error，沿相同封存actual边求固定点。已知空集合不被物理类型改写为未识别Error，真实不安全或未知集合仍拒绝GO。Task activation创建但不消费producer时，不因body的ROOT需求提前拒绝；冷丢弃不执行body或未登记的defer。实际推进必须同时检查producer及消费者执行角色，在hasNext/next缺少缓存及nth每次中间丢弃后再次推进之前拒绝非法worker body；缓存/终态交付及内部关闭不执行普通body。已准入worker producer在实际frame准备完成后复验全部输入，并从相同封存GENERATOR_NEW latent边选择完整上下文，写入现有producer frame的invocation字段；名义worker资格不能代替该证明，Cell仍须OWNED_CAPTURE、同Domain、未借出且非模块存储。当前静态消费来源ROOT精度尚未完整闭合，运行防线不授静态资格。
+
+认证Instance的普通Call若将较精确callable实参交给同形状的较弱物理形参，须先通过既有weakening关系与完整值/gate准入；只在真实活动caller view下为尚未发布的callee frame建立独立拥有式carrier。原实参、声明与效果分类不改；承诺加强、参数/结果/模式变化、损坏值及外Instance/Arena仍拒绝。失败在frame发布前回收部分拥有者，OOM/LIMIT保留原状态；宿主start和没有认证view的低层Call仍要求精确物理类型。这是值表示转换，不以较强实参替代callee执行权限；固定/opaque来源及潜伏worker资格继续沿同一actual proof复验。
+
+认证Instance的weakening若输入已持有私有Fn创建站点身份，必须先以当前Program/Effects owner、真实站点、目标、完整capture binding与原站点类型到当前carrier类型的单向弱化关系重新认证，再保留同一来源；没有来源的公开构造不能据此制造站点。输出carrier仍使用目的广告类型，原输入不变。来源只用于核对真实环境，固定UNKNOWN/ROOT及全部原SSA当前输入仍由同一封存方程与执行边复验，不能从来源地址恢复较强权限。关系读取与身份检查消耗实际Call及Domain工作预算，失败不发布carrier/输出，保原OOM/LIMIT和代码owner回收。
+
+绑定struct/Class方法值保留真实接收者环境；Class捕获沿同一调用方程图保存当前完整ROOT/UNKNOWN/KNOWN关系，执行接收同时核对真实对象的模块发布状态，不能用物理local擦掉UNKNOWN或选择历史较小环境。局部、直接创建且身份未逃逸的函数载荷Cell，将初始化及全部写入的真实生产者合并到同一SSA关系，独立接收重新验证每条下降来源；别名或逃逸Cell不由此获得精确来源。原opaque函数承诺仍保留，显式未决返回类型不因返回值真实来源被加强。已验证子集包含绑定struct/Class接收者、返回接收者后绑定、PHI与参数传递，以及Cell重新绑定后的冷创建；完整消费ROOT、其余隐藏环境与借用规则仍需独立闭合。
+
+这些是规范类型、body、工厂、hasNext/next/nth与内建Iterator循环关闭的开发输入，不授完整Generator或Channel资格。Program封装仍核对真实角色/自有body proof，普通Instance.start/Function拒绝直接generator body；低层驱动不替代认证工厂。当前子集已覆盖真实VM/native及双向混合producer/consumer、已启动清理、多activation和root更换；完整Iterable/自定义协议及循环头、其余隐藏环境/内部视图、完整等待竞争/取消/GC/代码lease、原全部FI/预算/安全和平台矩阵仍须实施与资格验证。没有增加Source close()方法。
+>>>>>>> ec41df298c2bc6370d94c5388706bef85cb6fb12
+
+---
+
+## 18. 错误码 (Error Codes)
+
+> 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `i64`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
+
+### 18.1 Lexer 与 parser
+
+| 代码 | C 名称 | 含义 |
+|--|--|--|
+| `E0101` | `XR_ERR_LEX_INVALID_CHAR` | 非法字符 |
+| `E0102` | `XR_ERR_LEX_UNTERMINATED_STR` | 字符串未终止 |
+| `E0103` | `XR_ERR_LEX_INVALID_NUMBER` | 非法数字字面量 |
+| `E0104` | `XR_ERR_LEX_INVALID_ESCAPE` | 非法转义 |
+
+#### Parser
+
+| 代码 | C 名称 | 含义 |
+|--|--|--|
+| `E0201` | `XR_ERR_SYN_UNEXPECTED_TOKEN` | 意外 token |
+| `E0202` | `XR_ERR_SYN_EXPECTED_EXPR` | 缺少表达式 |
+| `E0203` | `XR_ERR_SYN_EXPECTED_STMT` | 缺少语句 |
+| `E0204` | `XR_ERR_SYN_UNCLOSED_PAREN` | 圆括号未闭合 |
+| `E0205` | `XR_ERR_SYN_UNCLOSED_BRACE` | 花括号未闭合 |
+| `E0206` | `XR_ERR_SYN_UNCLOSED_BRACKET` | 方括号未闭合 |
+| `E0207` | `XR_ERR_SYN_INVALID_ASSIGN` | 非法赋值目标或形式 |
+| `E0208` | `XR_ERR_SYN_EFFECTLESS_STMT` | 表达式语句没有任何效果，结果被丢弃（见 §1.2.1） |
+
+### 18.2 编译与静态分析
+
+| 代码 | C 名称 | 含义 |
+|--|--|--|
+| `E0301` | `XR_ERR_CMP_UNDEFINED_VAR` | 编译器阶段未定义变量 |
+| `E0302` | `XR_ERR_CMP_REDEFINED_VAR` | 重复定义变量 |
+| `E0303` | `XR_ERR_CMP_CONST_ASSIGN` | 给常量赋值 |
+| `E0304` | `XR_ERR_CMP_INVALID_BREAK` | 非法 `break` |
+| `E0305` | `XR_ERR_CMP_INVALID_CONTINUE` | 非法 `continue` |
+| `E0306` | `XR_ERR_CMP_INVALID_RETURN` | 非法 `return` |
+| `E0307` | `XR_ERR_CMP_TOO_MANY_PARAMS` | 参数过多 |
+| `E0308` | `XR_ERR_CMP_TOO_MANY_LOCALS` | 局部变量过多 |
+| `E0309` | `XR_ERR_CMP_TOO_MANY_CONSTANTS` | 常量过多 |
+| `E0310` | `XR_ERR_CMP_TOO_MANY_UPVALUES` | upvalue 过多 |
+| `E0311` | `XR_ERR_CMP_JUMP_TOO_LARGE` | 跳转偏移超限 |
+| `E0321` | `XR_ERR_TYPE_NOT_CALLABLE` | 静态类型不可调用 |
+| `E0322` | `XR_ERR_TYPE_NOT_INDEXABLE` | 静态类型不可下标 |
+| `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | 静态类型不可迭代 |
+| `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | 操作数类型非法 |
+
+#### Analyzer
+
+| 代码 | C 名称 | 含义 |
+|--|--|--|
+| `E0350` | `XR_ERR_ANALYZE` | 通用 analyzer 错误 |
+| `E0351` | `XR_ERR_ANALYZE_UNDEFINED_VAR` | 名称未定义 |
+| `E0352` | `XR_ERR_ANALYZE_TYPE_MISMATCH` | 类型不匹配 |
+| `E0353` | `XR_ERR_ANALYZE_CONST_ASSIGN` | 静态检查发现常量赋值 |
+| `E0354` | `XR_ERR_ANALYZE_NOT_CALLABLE` | 被调用值不可调用 |
+| `E0355` | `XR_ERR_ANALYZE_WRONG_ARG_COUNT` | 实参数量错误 |
+| `E0356` | `XR_ERR_ANALYZE_ARG_TYPE` | 实参类型错误 |
+| `E0357` | `XR_ERR_ANALYZE_GENERIC_COUNT` | 泛型实参数量错误 |
+| `E0358` | `XR_ERR_ANALYZE_GENERIC_CONSTRAINT` | 泛型约束不满足 |
+| `E0359` | `XR_ERR_ANALYZE_SUPER_FIRST` | `super(...)` 不是首个构造动作 |
+| `E0360` | `XR_ERR_ANALYZE_SUPER_THIS` | `super(...)` 前访问 `this` |
+| `E0361` | `XR_ERR_ANALYZE_SUPER_REQUIRED` | 派生构造函数缺少 `super(...)` |
+| `E0362` | `XR_ERR_ANALYZE_SUPER_INVALID` | 非派生类非法使用 `super` |
+| `E0363` | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | 闭包捕获不安全 |
+| `E0364` | `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` 操作数类型非法 |
+| `E0365` | `XR_ERR_ANALYZE_MISSING_TYPE` | 缺少可推断的类型或初始化器 |
+| `E0367` | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 未完整实现 interface |
+| `E0368` | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple 字段名非法 |
+| `E0369` | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段越界 |
+| `E0370` | `XR_ERR_ANALYZE_THROW_NON_EXCEPTION` | `throw` 操作数不是允许的 enum 错误值 |
+| `E0371` | `XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE` | `match` 不穷尽 |
+| `E0372` | `XR_ERR_ANALYZE_USED_BEFORE_ASSIGN` | 赋值前使用 |
+| `E0373` | `XR_ERR_ANALYZE_TUPLE_IMMUTABLE` | 修改不可变 tuple |
+| `E0374` | `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | override 契约不匹配 |
+| `E0375` | `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | Map/Set 元素缺少 hash/equality 契约 |
+| `E0376` | `XR_ERR_ANALYZE_CONDITION_TYPE` | 条件类型非法 |
+| `E0377` | `XR_ERR_ANALYZE_VISIBILITY` | 可见性违规 |
+| `E0378` | `XR_ERR_ANALYZE_CONST_FIELD` | 修改 const 字段 |
+| `E0379` | `XR_ERR_ANALYZE_POSSIBLY_NULL` | 可能为 null 的值被不安全使用（触发规则见 §2.13 N-12）|
+| `E0380` | `XR_ERR_ANALYZE_UNKNOWN_FIELD` | 访问或设置类型上不存在的字段 / 成员 |
+| `E0381` | `XR_ERR_ANALYZE_MISSING_FIELD` | 聚合字面量缺少必填字段 |
+| `E0382` | `XR_ERR_ANALYZE_BORROW_CONFLICT` | 借用（`Slice<T>` 视图或 `ref` / 原始指针）存活期间使 owner 失效 |
+| `E0383` | `XR_ERR_ANALYZE_BORROW_ESCAPE` | 借用值逃逸出 owner 作用域（返回、字段、容器、闭包捕获、跨执行边界） |
+| `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | 借用来源不是稳定且唯一可推断的 owner（临时 owner、多来源返回、借自局部值） |
+| `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 旧分析器的生成器调度禁令；当前 Checked 生成器按 §3.16.2 的独立 frame/消费者等待规则及 §17.39 的实际准入边界检查 |
+| `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | 旧分析器的生成器 defer 禁令；当前 Checked 生成器已由 §3.16.3 的登记清理和关闭规则替代，不使用此禁令 |
+| `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | 错误可从 `defer` cleanup 块逃逸（见 §8.3.1） |
+| `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | 程序超出单态化实例预算（广度）；每个实例克隆一份完整声明——见 §9.4 |
+| `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | 单态化嵌套超出深度预算；多态递归（`f<T>` 请求 `f<Box<T>>`）没有有限特化，必然触发——见 §9.4 |
+| `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union 成员在运行期无法判别（同一数值族出现多个成员）|
+| `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | `move` 的唯一性证据不成立（存活别名 / 已发布根 / 来源未知 / 存储计划不完整）|
+| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | defer 体抵达调度器挂起点或创建任务——见 §4.9 / §8.3.1 |
+| `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | defer 体以 `return` 退出所在函数，或以 `break` / `continue` 跳出 cleanup 边界 |
+
+### 18.3 运行时
+
+| 代码 | C 名称 | 含义 |
+|--|--|--|
+| `E0400` | `XR_ERR_RUNTIME` | 通用运行时错误 |
+| `E0401` | `XR_ERR_TYPE_NO_PROPERTY` | 类型没有该属性 |
+| `E0402` | `XR_ERR_TYPE_NO_INDEX` | 值不可下标 |
+| `E0403` | `XR_ERR_TYPE_NO_CALL` | 值不可调用 |
+| `E0404` | `XR_ERR_TYPE_MISMATCH` | 运行时类型不匹配 |
+| `E0405` | `XR_ERR_TYPE_NO_METHOD` | 类型没有该方法 |
+| `E0406` | `XR_ERR_TYPE_NO_OPERATOR` | 类型不支持该运算符 |
+
+#### Null、算术与容器
+
+| 代码 | C 名称 | 含义 |
+|--|--|--|
+| `E0410` | `XR_ERR_NULL_PROPERTY` | 对 null 取属性 |
+| `E0411` | `XR_ERR_NULL_INDEX` | 对 null 下标 |
+| `E0412` | `XR_ERR_NULL_CALL` | 调用 null |
+| `E0413` | `XR_ERR_NULL_UNWRAP` | 强制解包 null |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | 除零 |
+| `E0421` | `XR_ERR_MOD_BY_ZERO` | 模零 |
+| `E0422` | `XR_ERR_OVERFLOW` | 算术溢出或数值转换越界（含 NaN / 无穷大转整数） |
+| `E0430` | `XR_ERR_INDEX_OUT_OF_BOUNDS` | 下标越界 |
+| `E0431` | `XR_ERR_KEY_NOT_FOUND` | Map 键不存在 |
+| `E0432` | `XR_ERR_ITERATOR_EXHAUSTED` | 耗尽后仍调用 `Iterator<T>` 的 `next()` / `nth()`，违反两步拉取协议——见 §5.3.6 |
+
+#### 系统、调用、coroutine 与 stdlib
+
+| 代码 | C 名称 | 含义 |
+|--|--|--|
+| `E0440` | `XR_ERR_STACK_OVERFLOW` | 栈溢出 |
+| `E0441` | `XR_ERR_OUT_OF_MEMORY` | 内存不足 |
+| `E0442` | `XR_ERR_MATCH_FAILURE` | 运行时 match 失败 |
+| `E0443` | `XR_ERR_DEFER_THROW` | 错误从 `defer` 体逃逸，不可捕获，终止进程（见 §8.3.1 规则 D3） |
+| `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup 尝试创建任务或抵达调度器；在任何该类侧效前失败关闭 |
+| `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 运行时实参数量错误 |
+| `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 运行时实参类型错误 |
+| `E0460` | `XR_ERR_CORO_DEAD` | 操作已结束 coroutine |
+| `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine 已取消 |
+| `E0462` | `XR_ERR_TASK_ALREADY_TAKEN` | Task 的 transferable 结果已被取走，不能再次取用 |
+| `E0470` | `XR_ERR_JSON_PARSE` | JSON 解析失败 |
+| `E0471` | `XR_ERR_JSON_INVALID` | JSON 值或操作非法 |
+| `E0475` | `XR_ERR_REGEX_COMPILE` | regex 编译失败 |
+| `E0476` | `XR_ERR_REGEX_PATTERN` | regex pattern 非法 |
+| `E0480` | `XR_ERR_TLS_UNAVAILABLE` | TLS 能力不可用 |
+
+### 18.4 模块、IO 与 coroutine
+
+| 代码 | C 名称 | 含义 |
+|--|--|--|
+| `E0501` | `XR_ERR_MOD_NOT_FOUND` | 模块不存在 |
+| `E0502` | `XR_ERR_MOD_LOAD_FAILED` | 模块加载失败 |
+| `E0503` | `XR_ERR_MOD_NO_EXPORT` | 名称未导出 |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | 循环模块依赖 |
+| `E0601` | `XR_ERR_IO_FILE_NOT_FOUND` | 文件不存在 |
+| `E0602` | `XR_ERR_IO_READ_FAILED` | 读取失败 |
+| `E0603` | `XR_ERR_IO_WRITE_FAILED` | 写入失败 |
+| `E0604` | `XR_ERR_IO_PERMISSION_DENIED` | IO 权限不足 |
+| `E0701` | `XR_ERR_CORO_DEADLOCK` | coroutine 死锁 |
+| `E0702` | `XR_ERR_CORO_CHANNEL_CLOSED` | channel 已关闭 |
+| `E0703` | `XR_ERR_CORO_LIMIT_EXCEEDED` | coroutine 限额超出 |
+
+### 18.5 语法引导与内部错误
+
+| 代码 | C 名称 | 被拒形式 / 含义 |
+|--|--|--|
+| `E0801` | `XR_ERR_SYN_RETURN_MULTI_REMOVED` | `return a, b` 无效；元组返回写作 `return (a, b)` |
+| `E0802` | `XR_ERR_SYN_BINDING_CAPABILITY_REMOVED` | `owned` / `shared` 绑定语法无效；使用 `var` 或 `const`，所有权与共享由值能力和显式 copy/move 边界推断 |
+| `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | 裸 key/value `for` 形式无效 |
+| `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` 无效；无返回值写作 `-> ()` 或省略 |
+| `E0805` | `XR_ERR_SYN_PARAM_MODE_PREFIX_REMOVED` | 参数 mode 必须写在冒号与类型之间 |
+| `E0806` | `XR_ERR_SYN_PARAM_MOVE_MODE_REMOVED` | `move` 是实参转移表达式，不是参数 mode |
+| `E0807` | `XR_ERR_SYN_PARAM_MODE_COMBINED_REMOVED` | 非法组合参数 mode |
+| `E0808` | `XR_ERR_SYN_PARAM_MODE_POSTFIX_REMOVED` | 参数 mode 不能写在类型之后 |
+| `E0809` | `XR_ERR_SYN_CALL_IN_MARKER_REMOVED` | call-site `in` marker；普通 `in` 参数调用不写 marker |
+| `E0900` | `XR_ERR_INTERNAL` | 内部错误 |
+| `E0901` | `XR_ERR_NOT_IMPLEMENTED` | 尚未实现 |
+| `E0999` | `XR_ERR_UNKNOWN` | 未知错误 |
+
+运行时 panic 通道使用 prelude `PanicInfo`；用户级 `throw <enum>` 走值返回错误通道。二者的语义见 §8 与 §16，不应仅凭错误码区段推断传播机制。
+
+---
+
+## 附录 A. EBNF 语法
+
+> 真值源：`src/frontend/parser/xparse_*.c`。本附录给出整理后的紧凑 EBNF；具体冲突由 parser 实现决议。
+
+### A.1 词法层
+
+```ebnf
+SourceFile ::= Statement*
+
+Comment ::= '//' [^\n]*
+         |  '/*' .* '*/'
+
+Identifier ::= IdStart IdContinue*
+IdStart    ::= 'a'..'z' | 'A'..'Z' | '_' | NonAsciiUtf8Byte
+IdContinue ::= IdStart | '0'..'9'
+// 源文件先整体校验为 UTF-8；lexer 将任意非 ASCII UTF-8 字节视为 identifier 字节，当前不做 XID/NFC 归一化。
+
+IntLiteral   ::= DecimalInt | HexInt | BinInt | OctInt
+DecimalInt   ::= DecimalDigit ('_'? DecimalDigit)*
+HexInt       ::= '0x' HexDigit ('_'? HexDigit)*
+BinInt       ::= '0b' ('0' | '1') ('_'? ('0' | '1'))*
+OctInt       ::= '0o' ('0'..'7') ('_'? ('0'..'7'))*
+
+FloatLiteral ::= DecimalInt '.' DecimalInt? Exponent?
+              |  DecimalInt Exponent
+Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
+
+BigIntLiteral ::= (DecimalInt | HexInt | BinInt | OctInt) 'n'
+
+QuotedLiteral ::= StringLiteral | FixedByteLiteral
+StringLiteral ::= StringPrefix (InlineQuoted | BlockQuoted)
+FixedByteLiteral ::= FixedBytePrefix (InlineQuoted | BlockQuoted)
+StringPrefix ::= '' | 'r'
+FixedBytePrefix ::= 'b' | 'br' | 'c' | 'cr'
+InlineQuoted ::= '"' InlinePayload* '"' | '""'
+BlockQuoted ::= QuoteRun ImmediateLineEnding BlockBody BlockClose
+QuoteRun ::= '"'{Q}                         // Q >= 3
+BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
+RegexLiteral ::= '/' RegexBody '/' RegexFlag*
+RegexFlag ::= 'i' | 'm' | 's' | 'g' | 'u'
+
+BoolLiteral ::= 'true' | 'false'
+NullLiteral ::= 'null'
+```
+
+### A.2 类型
+
+```ebnf
+Type ::= UnionType
+UnionType ::= IntersectionType ('|' IntersectionType)*
+IntersectionType ::= NullableType
+NullableType ::= PrimaryType '?'?
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
+CFunctionType ::= 'CFn' '<' FunctionType '>'
+NamedType   ::= QualifiedIdent TypeArgs?
+FunctionType ::= '(' TypeList? ')' '->' Type
+TupleType   ::= '(' Type (',' Type)+ ')'
+ObjectType  ::= '{' FieldList? '}'
+FieldList   ::= ObjectField (',' ObjectField)* ','?
+ObjectField ::= Identifier ':' Type
+QualifiedIdent ::= Identifier ('.' Identifier)*
+TypeArgs    ::= '<' Type (',' Type)* '>'
+TypeList    ::= Type (',' Type)*
+```
+
+### A.3 表达式
+
+```ebnf
+Expression ::= AssignExpr
+AssignExpr ::= TernaryExpr (AssignOp Expression)?
+AssignOp   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
+            |  '&=' | '|=' | '^=' | '<<=' | '>>='
+
+TernaryExpr ::= NullCoalesceExpr ('?' Expression ':' Expression)?
+NullCoalesceExpr ::= LogicOrExpr ('??' LogicOrExpr)*
+LogicOrExpr ::= LogicAndExpr ('||' LogicAndExpr)*
+LogicAndExpr ::= BitOrExpr ('&&' BitOrExpr)*
+BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
+BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
+BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
+EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
+RelationalExpr ::= RangeExpr ((('<' | '<=' | '>' | '>=') RangeExpr) | (('as' | 'is') Type))*
+RangeExpr   ::= ShiftExpr (('..' | '..=') ShiftExpr)?
+ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
+AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
+MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
+// range 松于所有算术运算符、紧于比较，非结合（a..b..c 是语法错误）；安全转换写为 `x as T?`，T? 是可空类型。
+
+UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
+           |  'move' UnaryExpr
+           |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
+           |  GoExpr
+           |  'unsafe' Block
+           |  PostfixExpr
+
+GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
+GoOptions ::= '(' 'name' ':' StringLiteral ')'
+CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
+
+PostfixExpr ::= Primary PostfixOp*
+PostfixOp   ::= '(' ArgList? ')'              // call
+             |  '.' Identifier                 // member
+             |  '?.' Identifier                 // optional chain property
+             |  '?.' Identifier '(' ArgList? ')'  // optional chain method
+             |  '?[' Expression ']'            // optional chain index
+             |  '[' Expression ']'             // index
+             |  '[' Expression? ':' Expression? ']'  // slice
+             |  '!'                            // force unwrap
+
+Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
+         |  QuotedLiteral | CharLiteral | RegexLiteral
+         |  BoolLiteral | NullLiteral
+         |  Identifier
+         |  ArrayLit | MapLit | SetLit | ObjectLit
+         |  ArrowLambda
+         |  FnExpression
+         |  ComptimeExpr
+         |  MatchExpr
+         |  '(' Expression ')'
+         |  '(' Expression (',' Expression)+ ')'  // tuple
+
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
+MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= Expression ':' Expression
+SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
+ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
+ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
+
+ArrowLambda ::= Identifier '->' (Expression | Block)
+              | '(' ArrowParams? ')' '->' (Expression | Block)
+ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
+ArrowParam  ::= Identifier (':' ParamType)?
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
+// Note: arrow lambdas cannot declare an explicit return type;
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
+
+ComptimeExpr ::= 'comptime' (Expression | Block)
+
+MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+
+ArgList ::= CallArg (',' CallArg)* ','?
+CallArg ::= ('ref' | 'out') Expression
+          | '...' Expression
+          | '_'
+          | Expression
+```
+
+### A.4 模式
+
+```ebnf
+Pattern ::= LiteralPattern
+         |  RangePattern
+         |  EnumPattern
+         |  TypePattern
+         |  WildcardPattern
+         |  BindingPattern
+         |  MultiPattern
+
+LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
+RangePattern    ::= Expression ('..' | '..=') Expression
+EnumPattern     ::= EnumVariantPath
+                  | EnumVariantPath '{' EnumFieldPatternList? '}'
+EnumVariantPath ::= QualifiedIdent
+                  | QualifiedIdent TypeArgs '.' Identifier
+EnumFieldPatternList ::= EnumFieldPattern (',' EnumFieldPattern)* ','?
+EnumFieldPattern ::= Identifier | Identifier ':' Pattern
+TypePattern     ::= 'is' Type Identifier?
+WildcardPattern ::= '_'
+BindingPattern  ::= Identifier
+MultiPattern    ::= Pattern (',' Pattern)+
+```
+
+### A.5 语句
+
+```ebnf
+Statement ::= ExprStmt
+           |  IncDecStmt
+           |  VarDecl
+           |  ConstDecl
+           |  FnDecl
+           |  ExternBlock
+           |  ClassDecl
+           |  StructDecl
+           |  InterfaceDecl
+           |  EnumDecl
+           |  TypeAliasDecl
+           |  ImportDecl
+           |  ExportDecl
+           |  IfStmt
+           |  WhileStmt
+           |  ForStmt
+           |  ForInStmt
+           |  ForInPairStmt
+           |  MatchStmt
+           |  ScopeStmt
+           |  SelectStmt
+           |  ReturnStmt
+           |  BreakStmt
+           |  ContinueStmt
+           |  ThrowStmt
+           |  TryStmt
+           |  DeferStmt
+           |  YieldStmt
+           |  Block
+           // \u6ce8\uff1aprint/dump \u4f5c\u4e3a\u51fd\u6570\u8c03\u7528\u5305\u542b\u5728 ExprStmt \u4e2d\uff1bgo \u662f\u8868\u8fbe\u5f0f\uff08GoExpr\uff09
+
+// LineBreak 不是一个 token：它是"行结尾在此结束语句"这一判定的结果。
+// 判定规则（上一 token 可结束表达式 + 新行首 token 可开始表达式 + 不在
+// '(' / '[' 之内）是规范性的，完整定义见 §1.2.1。
+ExprStmt ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
+Block    ::= '{' Statement* '}'
+
+IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
+ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+             |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
+
+ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
+BreakStmt    ::= 'break' Identifier?
+ContinueStmt ::= 'continue' Identifier?
+
+ThrowStmt ::= 'throw' Expression
+TryStmt   ::= 'try' Block CatchClause+
+CatchClause ::= 'catch' '(' CatchHeader ')' Block
+             |  'catch' 'panic' ('(' Identifier (':' Type)? ')')? Block
+CatchHeader ::= Identifier (':' Type)?
+             |  EnumPattern (',' EnumPattern)*
+
+DeferStmt ::= 'defer' Block
+
+// print 是普通全局函数调用，语法上属于 ExprStmt。
+
+// go 是表达式，返回 Task<T>。不作为独立语句类别出现（封装在 ExprStmt 中）。
+
+ScopeStmt ::= 'linked'? 'scope' Block
+
+SelectStmt ::= 'select' '{' SelectArm+ '}'
+SelectArm  ::= Identifier 'from' Expression '->' Block      // 接收
+            |  Expression 'to' Expression '->' Block        // 发送
+            |  'after' Expression '->' Block                // 超时
+            |  '_' '->' Block                                // 默认
+
+YieldStmt ::= 'yield' Expression
+```
+
+### A.6 声明
+
+```ebnf
+Visibility ::= 'export'
+VarDecl ::= 'var' Binding
+ConstDecl ::= AttrList? Visibility? 'const' Binding
+Binding ::= BindingPattern (':' Type)? ('=' Expression)?
+BindingPattern ::= Identifier
+                |  '[' BindingPattern (',' BindingPattern)* ','? ']'
+                |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
+                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
+ObjectBinding ::= Identifier (':' Identifier)?
+
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
+ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
+ParamList ::= Param (',' Param)* ','?
+Param     ::= Identifier ':' ParamType ('=' Expression)?
+           |  '...' Identifier ':' Type
+ParamType ::= ParamMode? Type
+ParamMode ::= 'ref' | 'move'
+ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
+Modifier  ::= 'private' | 'protected' | 'static' | 'const'
+              // 公开可见性是默认语义；final 只作为 class 前缀
+
+TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
+TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // 约束用 ':' ，多约束用 '&'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
+
+ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
+              ('extends' NamedType)?
+              ('implements' NamedType (',' NamedType)*)?
+              '{' ClassMember* '}'
+ClassMember ::= FieldDecl | MethodDecl | InitDecl
+FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
+            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' Block
+
+StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
+               ('implements' NamedType (',' NamedType)*)?
+               '{' ClassMember* '}'
+
+InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
+                  ('extends' NamedType (',' NamedType)*)?
+                  '{' InterfaceMember* '}'
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?
+
+EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
+                   ('implements' NamedType (',' NamedType)*)?
+                   '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
+EnumVariant    ::= Identifier
+                 | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
+EnumFieldDecl  ::= Identifier ':' Type
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
+
+TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
+
+ImportDecl ::= 'import' ImportMembers 'from' ImportModule
+            |  'import' ImportModule ('as' Identifier)?
+ExportDecl ::= 'export' '{' ExportSpec (',' ExportSpec)* ','? '}' 'from' StringLiteral
+            |  'export' '*' 'from' StringLiteral
+ExportSpec ::= Identifier ('as' Identifier)?
+ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
+ImportMember  ::= Identifier ('as' Identifier)?
+ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
+
+AttrList ::= PublicAttribute*
+PublicAttribute ::= '@test' ('(' ('skip' | 'timeout' ':' IntegerLiteral) ')')?
+                  | '@before_each' | '@after_each' | '@before_all' | '@after_all'
+                  | '@deprecated' '(' StringLiteral ')'
+                  | '@derive' '(' Identifier (',' Identifier)* ')'
+
+OperatorToken ::= '+' | '-' | '*' | '/' | '%'
+               |  '&' | '|' | '^'
+               |  '==' | '!=' | '<' | '<=' | '>' | '>='
+               |  '[]' | '[]='
+               |  '!' | '~'
+```
+
+> 注：以上 EBNF 为指导性整理。precedence、associativity、消歧由 parser 实现决议；遇到歧义请以 `src/frontend/parser/xparse_*.c` 为准。
+
+---
+
+## 附录 B. 关键字索引
+
+以下 **63 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 51 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`init`、`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
+
+| 关键字 | 节 |
+|--|--|
+| `as` | §3.8 |
+| `await` | §10.3 |
+| `bool` | §2.3.3 |
+| `break` | §4.6 |
+| `catch` | §8 |
+| `class` | §5.3 |
+| `comptime` | §3.2 |
+| `const` | §5.1 |
+| `continue` | §4.6 |
+| `defer` | §4.9 |
+| `else` | §4.2 |
+| `enum` | §5.6 |
+| `export` | §11 |
+| `extends` | §5.3 |
+| `f32` | §2.3.2 |
+| `f64` | §2.3.2 |
+| `false` | §1.6.4 |
+| `final` | §5.3 |
+| `fn` | §5.2 |
+| `for` | §4.4 |
+| `go` | §10.2 |
+| `i16` | §2.3.1 |
+| `i32` | §2.3.1 |
+| `i64` | §2.3.1 |
+| `i8` | §2.3.1 |
+| `if` | §4.2 |
+| `implements` | §5.5 |
+| `import` | §11 |
+| `in` | §4.4 |
+| `interface` | §5.5 |
+| `is` | §3.8 |
+| `isize` | §2.3.1 |
+| `match` | §3.13 / §4.5 |
+| `new` | §3.14 |
+| `null` | §1.6.4 |
+| `operator` | §5.3 |
+| `packed` | §5.2.9 |
+| `private` | §5.3 |
+| `protected` | §5.3 |
+| `return` | §4.7 |
+| `rune` | §2.3.5 |
+| `scope` | §10.7 |
+| `select` | §10.6 |
+| `static` | §5.3 |
+| `string` | §2.3.4 |
+| `struct` | §5.4 |
+| `super` | §5.3 |
+| `this` | §5.3 |
+| `throw` | §8 |
+| `true` | §1.6.4 |
+| `try` | §8 |
+| `type` | §5.7 |
+| `u16` | §2.3.1 |
+| `u32` | §2.3.1 |
+| `u64` | §2.3.1 |
+| `u8` | §2.3.1 |
+| `union` | §5.2.9 |
+| `unsafe` | §3.2 / §5.2 |
+| `usize` | §2.3.1 |
+| `var` | §5.1 |
+| `where` | §9.1 |
+| `while` | §4.3 |
+| `yield` | §3.16 |
+
+---
+
+## 附录 C. 操作符索引
+
+完整操作符按用途见 [§1.7](#17-操作符与-token)。详细优先级见 [§3.1](#31-优先级与结合性)。
+
+| 类别 | 操作符 |
+|--|--|
+| 算术 | `+` `-` `*` `/` `%` |
+| 位运算 | `&` `\|` `^` `~` `<<` `>>` |
+| 比较 | `==` `!=` `<` `<=` `>` `>=` |
+| 逻辑 | `&&` `\|\|` `!` |
+| 赋值 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
+| 语句 | `++` `--` |
+| 类型、范围与展开 | `?` `??` `?.` `?[` `!` `\|` `->` `...` `..` `..=` `is` `as` |
+
+---
+
+## 附录 D. 标准库模块索引
+
+完整 27 个标准库模块（native、纯 Xray 或混合实现）见 [§15](#15-标准库概览-standard-library)。
+
+| 模块 | 用途 |
+|--|--|
+| `base64` | Base64 编解码 |
+| `cluster` | 分布式集群 |
+| `compress` | 压缩（gzip/zlib/deflate） |
+| `crypto` | 加密散列 |
+| `csv` | CSV 解析/序列化 |
+| `datetime` | 日期时间 |
+| `encoding` | 字符编码转换 |
+| `http` | HTTP/REST |
+| `io` | 文件 I/O |
+| `log` | 结构化日志 |
+| `math` | 数学函数 |
+| `mem` | 裸内存与 managed Buffer |
+| `net` | TCP/UDP/TLS |
+| `os` | 操作系统 |
+| `parallel` | 结构化 CPU 并行 |
+| `path` | 路径操作 |
+| `regex` | 正则 |
+| `runtime` | 运行时信息与堆内省 |
+| `sync` | 协程同步原语 |
+| `sys` | OS 线程与底层同步接口 |
+| `text` | Unicode 文本变换 |
+| `time` | 时间/计时器/sleep |
+| `toml` | TOML 解析 |
+| `url` | URL 解析/构造 |
+| `ws` | WebSocket |
+| `xml` | XML 解析 |
+| `yaml` | YAML 解析 |
+
+---
+
+## 附录 E. 与其他语言的差异速查
+
+xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有显著差异。
+
+### E.1 vs JavaScript / TypeScript
+
+| 维度 | JS/TS | xray |
+|--|--|--|
+| 静态类型 | TS 可选 | **强制**；schema-less 数据显式使用 `JSON.Value` / `JSON.Object` |
+| 数值 | 仅 `number`（双精度） | `i64` `f64` `BigInt` 严格区分 |
+| 条件 | truthy / falsy | 条件必须是 `bool`；nullable 存在性须显式比较 `value != null`，i64/string 不做 truthy 转换 |
+| 相等比较 | `===` 强、`==` 弱（string↔number 自动转） | 仅 `==`/`!=`；值相等只做数值 i64↔f64 提升，不提供 `===`/`!==` |
+| 闭包捕获 | 引用 | 引用（默认）；`go` 闭包严格受限 |
+| 对象 | 动态字段 | `{...}` 形成 exact structural object；动态键使用 `Map` / `JSON.Object` |
+| import | ES Module | 自有 import 语法（含 stdlib 无引号形式） |
+| 并发 | 异步/Promise | 协程 + Channel |
+
+### E.2 vs Go
+
+| 维度 | Go | xray |
+|--|--|--|
+| 类型系统 | 简单 + interface 隐式 | 较丰富 + 显式 `implements` |
+| 错误处理 | 多返回值 + `err != nil` | 值返回错误通道（`throw` / `catch`）+ `T?` |
+| 协程 | `go func() {}`（语句） | `go expr`（表达式，返回 `Task<T>`） |
+| 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`await all [...]`、`await any [...]` |
+| Channel | 内置 `chan T`，`<-` 操作符 | `Channel<T>` 类，方法 `send`/`recv`/`trySend`/`tryRecv` |
+| select 分支 | `case x := <-ch:` / `case ch <- v:` / `default:` | `x from ch ->` / `v to ch ->` / `after ms ->` / `_ ->` |
+| 内存管理 | 三色并发 tracing GC | execution-local 引用计数，无环收集器；环由静态证明/`weak`/物理协程回收域封顶三层处理。已发布 const 根与同步句柄使用 verified shared domain |
+| 类与继承 | 无（仅 struct + interface） | class 支持继承 |
+| 泛型 | 1.18+ 有 | 有；按具体类型或后端表示单态化 |
+
+### E.3 vs Rust
+
+| 维度 | Rust | xray |
+|--|--|--|
+| 内存安全 | borrow checker 全面 | 推断唯一性、`move` 与 `const`/同步能力约束跨执行边界；`Slice` 等借用视图受静态生命周期限制（见 §2.4.2） |
+| 错误 | `Result<T, E>` | 值返回错误通道（`throw` / `catch`）|
+| 类型推断 | Hindley-Milner 强 | 双向推断 |
+| trait | 完整 | 类似 `interface`，少功能 |
+| 性能 | 接近 C | 字节码 VM，或通过 C toolchain 的 native AOT |
+| 编译期 | macro / const | `comptime` 受限求值子集 + optimizer 常量折叠 |
+
+### E.4 vs Python
+
+| 维度 | Python | xray |
+|--|--|--|
+| 类型 | 动态（可选 hint） | 静态 |
+| GIL | 有 | 无（M:N 协程） |
+| 字符串 | unicode str | utf-8 string |
+| 缩进 | 强制 | 自由（用 `{}`） |
+| 类 | 动态属性 | 静态字段 |
+| 性能 | CPython 慢 | 字节码 VM；性能关键程序可用 `xray build --native` |
+
+### E.5 vs Swift
+
+| 维度 | Swift | xray |
+|--|--|--|
+| 可空 `?` | 有 | 有 |
+| `!` 解包 | 有 | 有 |
+| 错误处理 | `try?` 折叠为 nil；`try!` abort | `throw` / `catch` 值返回通道；`T?` + `??` |
+| struct vs class | 值/引用 | 值/引用 |
+| 协议 | 有强 | `interface` 较弱 |
+| 并发 | actor + async/await | 协程 + Channel + `go`/`await all`/`scope` |
+
+---
+
+## 附录 F. 词汇表
+
+| 术语 | 定义 |
+|--|--|
+| **AOT** | Ahead-of-Time 编译：Xi IR 生成 C，并由所选 C toolchain 在构建时产生 native binary |
+| **AST** | Abstract Syntax Tree：源码解析后的中间表示 |
+| **Arena** | 批量分配器：所有分配同时释放 |
+| **Array<u8>** | 字节缓冲类型（见 §2.4.6） |
+| **Slice<T>** | 借用视图：借用另一个值拥有的连续元素存储，自身不拥有数据，受借用生命周期约束（见 §2.4.2） |
+| **borrow / 借用** | 在不取得所有权的前提下访问另一个值的存储；`Slice<T>`、`ref` 参数与 `Ptr<T>` / `MutPtr<T>` 都是借用，共用 `E0382` / `E0383` / `E0384` 三条规则 |
+| **rune** | 单个 Unicode scalar value 的原始类型；不是数值类型，也不是 `u32` 别名（见 §2.3.5） |
+| **Channel** | 类型化的协程通信管道（见 §10.5） |
+| **closure** | 闭包：捕获外层变量的函数 |
+| **coroutine** | 协程：用户态可暂停/恢复的执行流 |
+| **defer** | 静态延迟清理：在跨越所属词法作用域的每条退出边上按 LIFO 执行（见 §4.9） |
+| **enum** | 枚举类型（见 §5.6） |
+| **GC** | Garbage Collection 的泛称；Xray 没有 tracing GC 或环收集器。对象死亡只由引用计数决定，因此回收点精确；引用环不被收集，而是在类型图上被静态排除、用 `weak` 字段断开，或以所属 execution-local 回收域为上界随 physical coroutine 结束批量处置残余图（§16.8） |
+| **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置 |
+| **goroutine** | xray 中称作协程 (coroutine)，由 `go CallExpr` 启动；内联逻辑写作被立即调用的 lambda |
+| **hoisting** | 提升：声明在使用前被隐式定义 |
+| **IC** | Inline Cache：内联缓存（属性访问/方法分派优化） |
+| **interface** | 接口（见 §5.5） |
+| **JIT** | Just-In-Time 编译；Xray 当前未实现 JIT |
+| **lvalue / rvalue** | 左值（可赋值）/ 右值（仅值） |
+| **monomorphization** | 单态化：泛型在构建期按具体类型/表示生成专门版本；函数泛型可按 I64 / F64 / PTR / BOOL 表示共享，class / struct 泛型按具体类型完整单态化 |
+| **move** | 对推断为唯一且无存活 alias/loan 的根执行所有权转移（见 §7.3） |
+| **nullable** | 可空类型 `T?`：值可以为 null |
+| **pattern** | 模式：用于 `match` 与解构（见 §6） |
+| **scope** | 作用域 |
+| **同步共享能力** | 编译器授予 Channel/Atomic/Mutex 等受审计句柄的内部能力；不是公开存储修饰符 |
+| **SSA** | Static Single Assignment：每个变量只赋值一次的 IR |
+| **struct** | 值类型类（见 §5.4） |
+| **TCO** | Tail-Call Optimization：尾调用优化 |
+| **trait** | Rust 术语；xray 用 `interface` |
+| **condition expression** | 控制流条件：必须是 `bool`，nullable 值须显式比较；见 §2.3.3 |
+| **grapheme cluster** | 用户感知字符，可能由多个 Unicode scalar 组成；`len(string)` / rune 迭代按 Unicode scalar，不按 grapheme cluster |
+| **union** | 联合类型 `A \| B` |
+| **Unicode scalar value** | 合法 Unicode 码位，范围 `U+0000..U+10FFFF` 且不包含 surrogate 区间 `U+D800..U+DFFF` |
+| **upvalue** | 闭包捕获的外层变量 |
+| **VM** | Virtual Machine：xray 字节码虚拟机 |
+| **write barrier** | 写屏障：GC 在指针更新时插入的钩子 |

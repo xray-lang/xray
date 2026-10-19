@@ -1,0 +1,59 @@
+# GitHub Linguist overrides for xray source files.
+#
+# Until xray has its own grammar registered with github-linguist,
+# map .xr / .xrc to TypeScript for transitional syntax highlighting.
+# TypeScript matches xray closely on:
+#   - type annotations (`name: int`, `: ReturnType`)
+#   - template strings with ${...} interpolation
+#   - class / extends / super / this / new / static / override
+#   - for (x in arr), import / export
+# Mismatch: `fn` keyword (TS uses `function`) — minor visual difference only.
+*.xr   linguist-language=TypeScript
+*.xrc  linguist-language=TypeScript
+
+# Ensure .xr files count toward repo language stats and are not treated
+# as vendored/generated/documentation.
+*.xr   linguist-detectable=true
+*.xrc  linguist-detectable=true
+
+# Baseline fixture digests bind the exact bytes executed on every host.  Keep
+# these three governed inputs LF-only even when a Windows checkout enables
+# core.autocrlf, so policy validation and performance evidence share one
+# platform-independent identity.
+tests/benchmarks/target-machine/source_run/main.xr text eol=lf
+tests/benchmarks/target-machine/source_run/helper.xr text eol=lf
+tests/benchmarks/target-machine/source_run/helper.edited.txt text eol=lf
+
+# Mark xisagen-generated files so GitHub auto-collapses them in PRs.
+# These are derived from xisa/*.def and xisa/arch/*.isa — single source of truth
+# is the .def/.isa file; CI freshness check enforces consistency.
+*_gen.h  linguist-generated=true
+*_gen.c  linguist-generated=true
+
+# Xi lowering projections participate in a raw-byte, identity-bound freshness
+# proof.  Keep those governed outputs LF-only so the proof is host-independent.
+src/ir/xi_lowering_coverage_gen.h text eol=lf
+src/ir/xi_emit_vm_gen.h text eol=lf
+src/vm/xvm_template_width_gen.inc.c text eol=lf
+src/vm/xvm_template_bitwise_binary_gen.inc.c text eol=lf
+src/vm/xvm_template_bitwise_unary_gen.inc.c text eol=lf
+src/vm/xvm_template_unary_gen.inc.c text eol=lf
+src/vm/xvm_template_arith_binary_gen.inc.c text eol=lf
+src/vm/xvm_template_shift_gen.inc.c text eol=lf
+src/vm/xvm_template_compare_gen.inc.c text eol=lf
+src/aot/xi_to_c_dispatch_gen.h text eol=lf
+src/aot/xi_to_c_stmt_dispatch_gen.h text eol=lf
+tests/unit/ir/test_xi_lowering_gen.c text eol=lf
+
+# The preserved generated C is verified against its original byte digest.
+tests/unit/xir/test_declarations_owner/old_program27.c text eol=lf
+
+# Public output oracles bind LF bytes independently of the checkout host.
+tests/fixtures/public_source_program/root.out text eol=lf
+
+# Consumer fixtures and generated censuses are compared with exact original
+# constructor bytes.  Preserve LF on every host without weakening those checks.
+tests/unit/xir/product_consumers/fixtures/** text eol=lf
+tests/unit/xir/product_consumers/*_cases.cmake text eol=lf
+tests/unit/xir/product_consumers/source_product_*_constructors.c text eol=lf
+tests/unit/xir/product_consumers/legacy_responsibilities.json text eol=lf

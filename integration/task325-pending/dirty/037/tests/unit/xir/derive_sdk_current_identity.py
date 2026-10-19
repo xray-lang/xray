@@ -1,0 +1,127 @@
+"""Independently frame current SDK identities from declared ABI facts, never a probe."""
+from pathlib import Path
+import argparse,hashlib,json,struct,sys,tempfile
+root=Path(__file__).resolve().parents[3];sys.path.insert(0,str(root/'scripts'))
+from derive_xir_sdk_abi import prepare
+
+def current_preimage(rows, semantic=81, value_abi=27, call_abi=29, wire=33, program_abi=36):
+    word=lambda value:struct.pack('<I',value)
+    def text(value):
+        data=value.encode('utf-8');return word(len(data))+data
+    prefix_fields = (
+        ('schema', 2), ('wire', wire), ('semantic', semantic),
+        ('value_abi', value_abi), ('call_abi', call_abi), ('program_abi', program_abi),
+        ('architecture', 1), ('object_format', 1), ('hosted', 1),
+        ('c_dialect', 11), ('crt', 2), ('sanitizers', 0), ('allocator', 1),
+        ('assertions', 0), ('build_provider', 3), ('abi_recipe_version', 1),
+        ('closure_recipe_version', 1),
+    )
+    prefix=[value for name,value in prefix_fields]
+    image=b'xray:xir-runtime-sdk:v1'+struct.pack('<17I',*prefix)
+    image+=text('x86_64-windows-msvc')+text('xray:xir-runtime-abi-measurements:v1')
+    image+=text('xray:xir-runtime-recipe:windows-x86_64-hosted:v1')+word(len(rows))
+    image+=b''.join(struct.pack('<II',row['id'],row['value']) for row in rows)
+    file_digest=hashlib.sha256(b'hi').digest()
+    image+=word(1)+text('lib/test.lib')+word(5)+struct.pack('<Q',2)+file_digest
+    image+=word(1)+text('kernel32')
+    return image,file_digest,hashlib.sha256(image).digest()
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--write',action='store_true')
+    args=parser.parse_args()
+    with tempfile.TemporaryDirectory(prefix='xir-current-sdk-kat-') as temporary:
+        facts=Path(temporary)/'facts';prepare(facts)
+        rows=json.loads((facts/'EXPECTED.json').read_text())['rows']
+    assert len(rows)==396 and len({row['id'] for row in rows})==396
+    current_rows=rows
+    structural_ids=set(range(4900,4907))|set(range(5000,5004))
+    prior80_rows=[row for row in rows if row['id'] not in structural_ids]
+    assert len(prior80_rows)==385
+    prior79_rows=[row for row in prior80_rows if row['id'] not in range(4800,4804)]
+    assert len(prior79_rows)==381
+    rows=[row for row in prior79_rows if row['id'] not in range(4700,4712)]
+    assert len(rows)==369
+    slot_ids=set(range(4600,4607))
+    previous_rows=[row for row in rows if row['id'] not in slot_ids]
+    assert len(previous_rows)==362
+    observer_ids={49,50,*range(4500,4509)}
+    old_rows=[row for row in previous_rows if row['id'] not in observer_ids]
+    assert len(old_rows)==351
+    historical=json.loads(Path(__file__).with_name('sdk_historical_abi345.json').read_text(encoding='utf-8'))
+    assert (historical['wire'],historical['value_abi'],historical['call_abi'],historical['program_abi'])==(25,21,26,29)
+    assert historical['semantics']==[64,65] and len(historical['rows'])==345
+    import re
+    for semantic in historical['semantics']:
+        previous_image,previous_file_digest,previous_digest=current_preimage(historical['rows'],semantic,21,26,25,29)
+        previous_text=Path(__file__).with_name('sdk_previous'+str(semantic)+'_identity_golden.h').read_text(encoding='utf-8')
+        for name,data in (('current_sdk_kat_preimage',previous_image),('current_sdk_kat_file_digest',previous_file_digest),('current_sdk_kat_digest',previous_digest)):
+            match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous_text,re.S)
+            assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete prior SDK KAT changed'
+    for semantic in (66,67,68,69,70,71):
+        previous_image,previous_file_digest,previous_digest=current_preimage(old_rows,semantic,22,28,26 if semantic==71 else 25,29)
+        previous_text=Path(__file__).with_name('sdk_previous'+str(semantic)+'_identity_golden.h').read_text(encoding='utf-8')
+        for name,data in (('current_sdk_kat_preimage',previous_image),('current_sdk_kat_file_digest',previous_file_digest),('current_sdk_kat_digest',previous_digest)):
+            match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous_text,re.S)
+            assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete 351-row'+str(semantic)+' SDK KAT changed'
+        print('Historical SDK '+str(26 if semantic==71 else 25)+'/'+str(semantic)+' complete '+str(len(previous_image))+' byte preimage/digest reproduced: '+previous_digest.hex())
+    previous_image,previous_file_digest,previous_digest=current_preimage(old_rows,72,22,28,27,29)
+    previous_text=Path(__file__).with_name('sdk_previous72_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',previous_image),('current_sdk_kat_file_digest',previous_file_digest),('current_sdk_kat_digest',previous_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete prior72 SDK KAT changed'
+    value23_image,value23_file,value23_digest=current_preimage(old_rows,73,23,29,28,30)
+    value23_text=Path(__file__).with_name('sdk_previous_value23_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',value23_image),('current_sdk_kat_file_digest',value23_file),('current_sdk_kat_digest',value23_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',value23_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired Value23 SDK KAT changed'
+    previous73_image,previous73_file,previous73_digest=current_preimage(previous_rows,73,24,wire=28,program_abi=30)
+    previous73_text=Path(__file__).with_name('sdk_previous73_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',previous73_image),('current_sdk_kat_file_digest',previous73_file),('current_sdk_kat_digest',previous73_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous73_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete prior73 SDK KAT changed'
+    previous75_image,previous75_file,previous75_digest=current_preimage(previous_rows,75,24,wire=29,program_abi=31)
+    previous75_text=Path(__file__).with_name('sdk_previous75_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',previous75_image),('current_sdk_kat_file_digest',previous75_file),('current_sdk_kat_digest',previous75_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous75_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired75 SDK KAT changed'
+    previous76_image,previous76_file,previous76_digest=current_preimage(previous_rows,76,24,wire=29,program_abi=31)
+    previous76_text=Path(__file__).with_name('sdk_previous76_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',previous76_image),('current_sdk_kat_file_digest',previous76_file),('current_sdk_kat_digest',previous76_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous76_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired76 SDK KAT changed'
+    previous77_image,previous77_file,previous77_digest=current_preimage(rows,77,24,wire=30,program_abi=32)
+    previous77_text=Path(__file__).with_name('sdk_previous77_identity_golden.h').read_text(encoding='utf-8')
+    for name,data in (('current_sdk_kat_preimage',previous77_image),('current_sdk_kat_file_digest',previous77_file),('current_sdk_kat_digest',previous77_digest)):
+        match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',previous77_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete retired77 SDK KAT changed'
+    for filename,prior_rows,semantic,value,wire,program in (
+        ('sdk_previous74_identity_golden.h',previous_rows,74,24,28,30),
+        ('retired_hash75/sdk_current_identity_golden.h',previous_rows,75,25,28,30),
+        ('sdk_previous78_identity_golden.h',prior79_rows,78,24,31,33),
+        ('sdk_previous79_identity_golden.h',prior79_rows,79,25,32,34),
+        ('retired_semantic80/sdk_current_identity_golden.h',prior80_rows,80,26,32,35)):
+        image_old,file_old,digest_old=current_preimage(prior_rows,semantic,value,29,wire,program)
+        text_old=(Path(__file__).parent/filename).read_text(encoding='utf-8')
+        for name,data in (('current_sdk_kat_preimage',image_old),('current_sdk_kat_file_digest',file_old),('current_sdk_kat_digest',digest_old)):
+            match=re.search(r'static const uint8_t '+name+r'\[\] = \{(.*?)\};',text_old,re.S)
+            assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,filename
+    image,file_digest,digest=current_preimage(current_rows)
+    identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
+    assert image[:identity_offset]==previous_image[:identity_offset]
+    old_current_image,_,_=current_preimage(old_rows)
+    assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(33,81,27,29,36)
+    assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
+    assert len(image)==3458 and len(previous76_image)==3186 and len(previous_image)==len(value23_image)==3098
+    assert file_digest==previous_file_digest and digest!=previous_digest
+    output='/* Independent current SDK framing and natural Windows C layout facts. */\n'
+    for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest)):
+        output+='static const uint8_t '+name+'[] = {\n'
+        for at in range(0,len(data),16):output+='    '+','.join('0x'+format(x,'02x') for x in data[at:at+16])+',\n'
+        output+='};\n'
+    target=Path(__file__).with_name('sdk_current_identity_golden.h')
+    if args.write:target.write_text(output,encoding='utf-8',newline='\n')
+    else:assert target.read_text(encoding='utf-8')==output,'current SDK known bytes differ from independent facts'
+    print('Current SDK '+str(len(current_rows))+' fields / '+str(len(image))+' byte independent preimage PASS: '+digest.hex())
+
+if __name__=='__main__':main()

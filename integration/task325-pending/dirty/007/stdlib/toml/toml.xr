@@ -1,0 +1,1125 @@
+import text
+
+// toml - pure-Xray TOML parser and writer.
+//
+// TOML is an L4 format module: user-facing parse/stringify semantics live here.
+// The C side only anchors `import toml` and project/tooling config continues to
+// use the low-level `src/base/xtoml` parser.
+
+import io
+
+const TOML_MAX_DEPTH = 256
+
+export class TomlDateTime {
+    raw: string
+
+    init(raw: string) {
+        this.raw = raw
+    }
+
+    toString() -> string {
+        var s = this.raw
+        if (s.endsWith("Z") || s.endsWith("z")) {
+            s = s.slice(0, len(s) - 1)
+        }
+        var dot = s.indexOf(".")
+        if (dot >= 0) { s = s.slice(0, dot) }
+        return s.replace("T", " ").replace("t", " ")
+    }
+
+    toISOString() -> string {
+        return this.raw
+    }
+}
+
+export class TomlFloat {
+    value: f64
+    text: string
+
+    init(value: f64, text: string = "") {
+        this.value = value
+        if (len(text) > 0) {
+            this.text = text
+        } else {
+            var s = JSON.stringify(value)
+            if (!s.contains(".") && !s.contains("e") && !s.contains("E")) { s = s + ".0" }
+            this.text = s
+        }
+    }
+
+    toString() -> string {
+        return this.text
+    }
+}
+
+fn _tomlArrayLength(values: Array<TomlValue>) -> i64 {
+    return len(values)
+}
+
+export class TomlArray {
+    values: Array<TomlValue>
+
+    init() {
+        this.values = []
+    }
+
+    ref push(value: TomlValue) {
+        this.values.push(value)
+    }
+
+    at(index: i64) -> TomlValue? {
+        if (index < 0 || index >= _tomlArrayLength(this.values)) { return null }
+        return this.values[index]
+    }
+
+    len() -> i64 {
+        return _tomlArrayLength(this.values)
+    }
+}
+
+export class TomlTable {
+    values: Map<string, TomlValue>
+
+    init() {
+        this.values = #{}
+    }
+
+    get(key: string) -> TomlValue? {
+        return this.values.get(key)
+    }
+
+    ref set(key: string, value: TomlValue) {
+        this.values.set(key, value)
+    }
+
+    containsKey(key: string) -> bool {
+        return this.values.containsKey(key)
+    }
+
+    keys() -> Array<string> {
+        return this.values.keys()
+    }
+}
+
+export class TomlValue {
+    kind: string
+    boolValue: bool
+    intValue: i64
+    floatValue: TomlFloat?
+    stringValue: string
+    dateTimeValue: TomlDateTime?
+    arrayValue: TomlArray?
+    tableValue: TomlTable?
+
+    init(kind: string) {
+        this.kind = kind
+        this.boolValue = false
+        this.intValue = 0
+        this.floatValue = null
+        this.stringValue = ""
+        this.dateTimeValue = null
+        this.arrayValue = null
+        this.tableValue = null
+    }
+
+    static Bool(value: bool) -> TomlValue {
+        var out = TomlValue("bool")
+        out.boolValue = value
+        return out
+    }
+
+    static Int(value: i64) -> TomlValue {
+        var out = TomlValue("int")
+        out.intValue = value
+        return out
+    }
+
+    static Float(value: TomlFloat) -> TomlValue {
+        var out = TomlValue("float")
+        out.floatValue = value
+        return out
+    }
+
+    static String(value: string) -> TomlValue {
+        var out = TomlValue("string")
+        out.stringValue = value
+        return out
+    }
+
+    static DateTime(value: TomlDateTime) -> TomlValue {
+        var out = TomlValue("datetime")
+        out.dateTimeValue = value
+        return out
+    }
+
+    static Array(value: TomlArray) -> TomlValue {
+        var out = TomlValue("array")
+        out.arrayValue = value
+        return out
+    }
+
+    static Table(value: TomlTable) -> TomlValue {
+        var out = TomlValue("table")
+        out.tableValue = value
+        return out
+    }
+
+    get(key: string) -> TomlValue? {
+        if (this.kind != "table" || this.tableValue == null) { return null }
+        return this.tableValue!.get(key)
+    }
+
+    at(index: i64) -> TomlValue? {
+        if (this.kind != "array" || this.arrayValue == null) { return null }
+        return this.arrayValue!.at(index)
+    }
+
+    len() -> i64 {
+        if (this.kind == "array" && this.arrayValue != null) { return this.arrayValue!.len() }
+        return 0
+    }
+
+    keys() -> Array<string> {
+        if (this.kind == "table" && this.tableValue != null) { return this.tableValue!.keys() }
+        return []
+    }
+
+    asBool() -> bool? {
+        if (this.kind == "bool") { return this.boolValue }
+        return null
+    }
+
+    asInt() -> i64? {
+        if (this.kind == "int") { return this.intValue }
+        return null
+    }
+
+    asFloat() -> f64? {
+        if (this.kind == "float" && this.floatValue != null) { return this.floatValue!.value }
+        return null
+    }
+
+    asString() -> string? {
+        if (this.kind == "string") { return this.stringValue }
+        return null
+    }
+
+    asDateTime() -> TomlDateTime? {
+        if (this.kind == "datetime") { return this.dateTimeValue }
+        return null
+    }
+
+    asArray() -> TomlArray? {
+        if (this.kind == "array") { return this.arrayValue }
+        return null
+    }
+
+    asTable() -> TomlTable? {
+        if (this.kind == "table") { return this.tableValue }
+        return null
+    }
+}
+
+export enum TomlErrorKind {
+    SyntaxError,
+    InvalidKey,
+    InvalidValue,
+    InvalidNumber,
+    InvalidEscape,
+    UnterminatedString,
+    DuplicateKey,
+    TableConflict
+}
+
+export class TomlDiagnostic {
+    kind: TomlErrorKind
+    line: i64
+    column: i64
+    message: string
+
+    init(kind: TomlErrorKind, line: i64, column: i64, message: string) {
+        this.kind = kind
+        this.line = line
+        this.column = column
+        this.message = message
+    }
+}
+
+export class TomlParseReport {
+    data: TomlValue
+    errors: Array<TomlDiagnostic>
+    lines: i64
+    keys: i64
+
+    init(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64) {
+        this.data = data
+        this.errors = errors
+        this.lines = lines
+        this.keys = keys
+    }
+}
+
+fn _isDigit(c: string) -> bool {
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
+    return o >= 48 && o <= 57
+}
+
+fn _isAlpha(c: string) -> bool {
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
+    return (o >= 65 && o <= 90) || (o >= 97 && o <= 122)
+}
+
+fn _isAlphaNum(c: string) -> bool {
+    return _isAlpha(c) || _isDigit(c)
+}
+
+fn _isHexDigit(c: string) -> bool {
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
+    return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
+}
+
+fn _hexValue(c: string) -> i64 {
+    var o = c.runes().nth(0).toUInt32()
+    if (o >= 48 && o <= 57) { return (o - 48) as i64 }
+    if (o >= 65 && o <= 70) { return (o - 55) as i64 }
+    if (o >= 97 && o <= 102) { return (o - 87) as i64 }
+    return -1
+}
+
+fn _isBareKeyChar(c: string) -> bool {
+    return _isAlphaNum(c) || c == "_" || c == "-"
+}
+
+fn _isBareKey(key: string) -> bool {
+    if (len(key) == 0) { return false }
+    for (var i = 0; i < len(key); i++) {
+        if (!_isBareKeyChar(key.slice(i, (i) + 1))) { return false }
+    }
+    return true
+}
+
+fn _stripUnderscores(s: string) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < len(s); i++) {
+        var c = s.slice(i, (i) + 1)
+        if (c != "_") { out.append(c) }
+    }
+    return out.toString()
+}
+
+fn _startsWithAt(s: string, pos: i64, prefix: string) -> bool {
+    if (pos + len(prefix) > len(s)) { return false }
+    return s.slice(pos, pos + len(prefix)) == prefix
+}
+
+fn _isValueTerminator(c: string) -> bool {
+    return len(c) == 0 || c == "\n" || c == "\r" || c == "#" || c == "," ||
+           c == "]" || c == "}"
+}
+
+
+class TomlParser {
+    data: string
+    pos: i64
+    line: i64
+    column: i64
+    root: TomlValue
+    rootTable: TomlTable
+    current: TomlTable
+    errors: Array<TomlDiagnostic>
+    definedTables: Map<string, bool>
+    keyCount: i64
+
+    init(data: string) {
+        this.data = data
+        this.pos = 0
+        this.line = 1
+        this.column = 1
+        var table = TomlTable()
+        this.rootTable = table
+        this.root = TomlValue.Table(table)
+        this.current = table
+        this.errors = []
+        this.definedTables = #{}
+        this.keyCount = 0
+    }
+
+    atEnd() -> bool {
+        return this.pos >= len(this.data)
+    }
+
+    peek() -> string {
+        if (this.atEnd()) { return "" }
+        return this.data.slice(this.pos, (this.pos) + 1)
+    }
+
+    peekAt(offset: i64) -> string {
+        var p = this.pos + offset
+        if (p < 0 || p >= len(this.data)) { return "" }
+        return this.data.slice(p, (p) + 1)
+    }
+
+    ref advance() -> string {
+        var c = this.peek()
+        if (len(c) == 0) { return c }
+        this.pos = this.pos + 1
+        if (c == "\n") {
+            this.line = this.line + 1
+            this.column = 1
+        } else {
+            this.column = this.column + 1
+        }
+        return c
+    }
+
+    ref addError(kind: TomlErrorKind, message: string) {
+        this.errors.push(TomlDiagnostic(kind, this.line, this.column, message))
+    }
+
+    ref addExpected(expected: string) {
+        if (this.atEnd()) {
+            this.addError(TomlErrorKind.SyntaxError, "Expected " + expected + " but reached end of input")
+        } else {
+            this.addError(TomlErrorKind.SyntaxError, "Expected " + expected + " but got '" + this.peek() + "'")
+        }
+    }
+
+    ref skipWs() {
+        while (!this.atEnd() && (this.peek() == " " || this.peek() == "\t")) {
+            this.advance()
+        }
+    }
+
+    ref skipWsAndNewlines() {
+        while (!this.atEnd()) {
+            var c = this.peek()
+            if (c == " " || c == "\t" || c == "\n") {
+                this.advance()
+            } else if (c == "\r") {
+                this.advance()
+                if (this.peek() == "\n") { this.advance() }
+                this.line = this.line + 1
+                this.column = 1
+            } else if (c == "#") {
+                this.skipToEol()
+            } else {
+                break
+            }
+        }
+    }
+
+    ref skipToEol() {
+        while (!this.atEnd() && this.peek() != "\n" && this.peek() != "\r") {
+            this.advance()
+        }
+    }
+
+    ref parseBareKey() -> string {
+        var start = this.pos
+        while (!this.atEnd() && _isBareKeyChar(this.peek())) {
+            this.advance()
+        }
+        if (this.pos == start) {
+            this.addError(TomlErrorKind.InvalidKey, "Expected key name")
+            return ""
+        }
+        return this.data.slice(start, this.pos)
+    }
+
+    ref parseBasicString() -> string {
+        if (this.peek() != "\"") { return "" }
+        this.advance()
+
+        var multiline = false
+        if (this.peek() == "\"") {
+            this.advance()
+            if (this.peek() == "\"") {
+                multiline = true
+                this.advance()
+                if (this.peek() == "\n") { this.advance() }
+            } else {
+                return ""
+            }
+        }
+
+        var out = StringBuilder()
+        while (!this.atEnd()) {
+            if (multiline && this.peek() == "\"" && this.peekAt(1) == "\"" &&
+                this.peekAt(2) == "\"") {
+                this.advance()
+                this.advance()
+                this.advance()
+                break
+            }
+            if (!multiline && this.peek() == "\"") {
+                this.advance()
+                break
+            }
+            if (!multiline && (this.peek() == "\n" || this.peek() == "\r")) {
+                this.addError(TomlErrorKind.UnterminatedString, "Unterminated string")
+                return out.toString()
+            }
+
+            if (this.peek() == "\\") {
+                this.advance()
+                if (this.atEnd()) { break }
+                var esc = this.advance()
+                if (esc == "n") {
+                    out.append("\n")
+                } else if (esc == "t") {
+                    out.append("\t")
+                } else if (esc == "r") {
+                    out.append("\r")
+                } else if (esc == "\\") {
+                    out.append("\\")
+                } else if (esc == "\"") {
+                    out.append("\"")
+                } else if (esc == "b") {
+                    out.append("\u{0008}")
+                } else if (esc == "f") {
+                    out.append("\u{000C}")
+                } else if (esc == "u" || esc == "U") {
+                    var digits = 4
+                    if (esc == "U") { digits = 8 }
+                    var cp = 0
+                    var ok = true
+                    for (var i = 0; i < digits; i++) {
+                        var h = this.peek()
+                        if (!_isHexDigit(h)) {
+                            ok = false
+                            break
+                        }
+                        cp = cp * 16 + _hexValue(h)
+                        this.advance()
+                    }
+                    if (!ok || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF) {
+                        this.addError(TomlErrorKind.InvalidEscape, "Invalid Unicode codepoint")
+                    } else if (cp < 128) {
+                        out.append("?")
+                    } else {
+                        out.append("?")
+                    }
+                } else if (multiline && (esc == "\n" || esc == "\r")) {
+                    while (!this.atEnd() &&
+                           (this.peek() == " " || this.peek() == "\t" ||
+                            this.peek() == "\n" || this.peek() == "\r")) {
+                        this.advance()
+                    }
+                } else {
+                    out.append(esc)
+                }
+            } else {
+                out.append(this.advance())
+            }
+        }
+        return out.toString()
+    }
+
+    ref parseLiteralString() -> string {
+        if (this.peek() != "'") { return "" }
+        this.advance()
+
+        var multiline = false
+        if (this.peek() == "'") {
+            this.advance()
+            if (this.peek() == "'") {
+                multiline = true
+                this.advance()
+                if (this.peek() == "\n") { this.advance() }
+            } else {
+                return ""
+            }
+        }
+
+        var out = StringBuilder()
+        while (!this.atEnd()) {
+            if (multiline && this.peek() == "'" && this.peekAt(1) == "'" &&
+                this.peekAt(2) == "'") {
+                this.advance()
+                this.advance()
+                this.advance()
+                break
+            }
+            if (!multiline && this.peek() == "'") {
+                this.advance()
+                break
+            }
+            if (!multiline && (this.peek() == "\n" || this.peek() == "\r")) {
+                this.addError(TomlErrorKind.UnterminatedString, "Unterminated string")
+                return out.toString()
+            }
+            out.append(this.advance())
+        }
+        return out.toString()
+    }
+
+    ref parseKeyPath() -> Array<string> {
+        var keys: Array<string> = []
+        while (!this.atEnd()) {
+            this.skipWs()
+            var key = ""
+            if (this.peek() == "\"") {
+                key = this.parseBasicString()
+            } else if (this.peek() == "'") {
+                key = this.parseLiteralString()
+            } else {
+                key = this.parseBareKey()
+            }
+            keys.push(key)
+            this.skipWs()
+            if (this.peek() != ".") { break }
+            this.advance()
+        }
+        return keys
+    }
+
+    ref scanLiteral() -> string {
+        var start = this.pos
+        while (!this.atEnd() && !_isValueTerminator(this.peek())) {
+            this.advance()
+        }
+        return text.trimEnd(this.data.slice(start, this.pos))
+    }
+
+    parseBaseInt(raw: string, base: i64) -> i64 {
+        var s = _stripUnderscores(raw)
+        var start = 0
+        var sign = 1
+        if (len(s) > 0 && s.slice(0, (0) + 1) == "-") {
+            sign = -1
+            start = 1
+        } else if (len(s) > 0 && s.slice(0, (0) + 1) == "+") {
+            start = 1
+        }
+        if (start + 1 < len(s) && s.slice(start, (start) + 1) == "0") {
+            var p = text.lower(s.slice(start + 1, (start + 1) + 1))
+            if (p == "x" || p == "o" || p == "b") { start = start + 2 }
+        }
+        var out = 0
+        for (var i = start; i < len(s); i++) {
+            var d = _hexValue(s.slice(i, (i) + 1))
+            if (d < 0 || d >= base) { break }
+            out = out * base + d
+        }
+        return sign * out
+    }
+
+    ref parseNumberLiteral(raw: string) -> TomlValue {
+        var s = _stripUnderscores(raw)
+        if (s == "inf" || s == "+inf") { return TomlValue.Float(TomlFloat(1.0e308, "inf")) }
+        if (s == "-inf") { return TomlValue.Float(TomlFloat(-1.0e308, "-inf")) }
+        if (s == "nan" || s == "+nan" || s == "-nan") { return TomlValue.Float(TomlFloat(0.0, "nan")) }
+
+        var signOffset = 0
+        if (s.startsWith("+") || s.startsWith("-")) { signOffset = 1 }
+        if (signOffset + 1 < len(s) && s.slice(signOffset, (signOffset) + 1) == "0") {
+            var p = text.lower(s.slice(signOffset + 1, (signOffset + 1) + 1))
+            if (p == "x") { return TomlValue.Int(this.parseBaseInt(s, 16)) }
+            if (p == "o") { return TomlValue.Int(this.parseBaseInt(s, 8)) }
+            if (p == "b") { return TomlValue.Int(this.parseBaseInt(s, 2)) }
+        }
+
+        if (s.contains(".") || s.contains("e") || s.contains("E")) {
+            var f = f64.tryParse(s)
+            if (f != null) { return TomlValue.Float(TomlFloat(f!, s)) }
+            this.addError(TomlErrorKind.InvalidNumber, "Invalid number")
+            return TomlValue.Float(TomlFloat(0.0, "0.0"))
+        }
+        var i = i64.tryParse(s)
+        if (i != null) { return TomlValue.Int(i!) }
+        this.addError(TomlErrorKind.InvalidNumber, "Invalid number")
+        return TomlValue.Int(0)
+    }
+
+    ref parseDateTimeLiteral(raw: string) -> TomlValue {
+        return TomlValue.DateTime(TomlDateTime(raw))
+    }
+
+    ref parseArray() -> TomlValue {
+        this.advance()
+        var arr = TomlArray()
+        this.skipWsAndNewlines()
+        if (this.peek() == "]") {
+            this.advance()
+            return TomlValue.Array(arr)
+        }
+        while (!this.atEnd()) {
+            this.skipWsAndNewlines()
+            arr.push(this.parseValue())
+            this.skipWsAndNewlines()
+            if (this.peek() == "]") {
+                this.advance()
+                break
+            }
+            if (this.peek() == ",") {
+                this.advance()
+                continue
+            }
+            this.addExpected("',' or ']'")
+            break
+        }
+        return TomlValue.Array(arr)
+    }
+
+    ref parseInlineTable() -> TomlValue {
+        this.advance()
+        var obj = TomlTable()
+        this.skipWs()
+        if (this.peek() == "}") {
+            this.advance()
+            return TomlValue.Table(obj)
+        }
+        while (!this.atEnd()) {
+            this.skipWs()
+            var keys = this.parseKeyPath()
+            this.skipWs()
+            if (this.peek() != "=") {
+                this.addExpected("'='")
+                break
+            }
+            this.advance()
+            this.skipWs()
+            this.setNestedValue(ref obj, keys, this.parseValue())
+            this.skipWs()
+            if (this.peek() == "}") {
+                this.advance()
+                break
+            }
+            if (this.peek() == ",") {
+                this.advance()
+                continue
+            }
+            this.addExpected("',' or '}'")
+            break
+        }
+        return TomlValue.Table(obj)
+    }
+
+    ref parseValue() -> TomlValue {
+        this.skipWs()
+        if (this.atEnd()) {
+            this.addError(TomlErrorKind.SyntaxError, "Expected value")
+            return TomlValue.String("")
+        }
+        var c = this.peek()
+        if (c == "\"") { return TomlValue.String(this.parseBasicString()) }
+        if (c == "'") { return TomlValue.String(this.parseLiteralString()) }
+        if (_startsWithAt(this.data, this.pos, "true") && !_isAlphaNum(this.peekAt(4))) {
+            this.pos = this.pos + 4
+            this.column = this.column + 4
+            return TomlValue.Bool(true)
+        }
+        if (_startsWithAt(this.data, this.pos, "false") && !_isAlphaNum(this.peekAt(5))) {
+            this.pos = this.pos + 5
+            this.column = this.column + 5
+            return TomlValue.Bool(false)
+        }
+        if (c == "[") { return this.parseArray() }
+        if (c == "{") { return this.parseInlineTable() }
+
+        var raw = this.scanLiteral()
+        if (len(raw) >= 5 && _isDigit(raw.slice(0, (0) + 1)) && _isDigit(raw.slice(1, (1) + 1)) &&
+            _isDigit(raw.slice(2, (2) + 1)) && _isDigit(raw.slice(3, (3) + 1)) && raw.slice(4, (4) + 1) == "-") {
+            return this.parseDateTimeLiteral(raw)
+        }
+        if (raw == "inf" || raw == "+inf" || raw == "-inf" || raw == "nan" ||
+            raw == "+nan" || raw == "-nan" || len(raw) > 0) {
+            return this.parseNumberLiteral(raw)
+        }
+        this.addError(TomlErrorKind.InvalidValue, "Invalid value")
+        return TomlValue.String("")
+    }
+
+    ref setNestedValue(rootObj: ref TomlTable, keys: Array<string>, value: TomlValue) {
+        var current = rootObj
+        if (len(keys) == 0) { return }
+        for (var i = 0; i < len(keys) - 1; i++) {
+            var key = keys[i]
+            var existing = current.get(key)
+            if (existing == null) {
+                var child = TomlTable()
+                current.set(key, TomlValue.Table(child))
+                current = child
+            } else if (existing!.kind == "table") {
+                current = existing!.asTable()!
+            } else {
+                var child = TomlTable()
+                current.set(key, TomlValue.Table(child))
+                current = child
+            }
+        }
+        var last = keys[len(keys) - 1]
+        if (current.containsKey(last)) {
+            this.addError(TomlErrorKind.DuplicateKey, "Duplicate key")
+            return
+        }
+        current.set(last, value)
+        this.keyCount = this.keyCount + 1
+    }
+
+    tablePath(keys: Array<string>) -> string {
+        var out = StringBuilder()
+        for (var i = 0; i < len(keys); i++) {
+            if (i > 0) { out.append(".") }
+            out.append(keys[i])
+        }
+        return out.toString()
+    }
+
+    ref getOrCreateTable(keys: Array<string>) -> TomlTable {
+        var path = this.tablePath(keys)
+        if (this.definedTables.containsKey(path)) {
+            this.addError(TomlErrorKind.DuplicateKey, "Table already defined")
+        }
+        this.definedTables.set(path, true)
+
+        var current = this.rootTable
+        for (var i = 0; i < len(keys); i++) {
+            var key = keys[i]
+            var existing = current.get(key)
+            if (existing == null) {
+                var child = TomlTable()
+                current.set(key, TomlValue.Table(child))
+                current = child
+            } else if (existing!.kind == "table") {
+                current = existing!.asTable()!
+            } else {
+                this.addError(TomlErrorKind.TableConflict, "Table definition conflict")
+                return this.rootTable
+            }
+        }
+        return current
+    }
+
+    ref getOrCreateArrayTable(keys: Array<string>) -> TomlTable {
+        var current = this.rootTable
+        for (var i = 0; i < len(keys) - 1; i++) {
+            var key = keys[i]
+            var existing = current.get(key)
+            if (existing == null) {
+                var child = TomlTable()
+                current.set(key, TomlValue.Table(child))
+                current = child
+            } else if (existing!.kind == "table") {
+                current = existing!.asTable()!
+            } else if (existing!.kind == "array") {
+                var arr = existing!.asArray()!
+                if (arr.len() > 0 && arr.at(arr.len() - 1)!.kind == "table") {
+                    current = arr.at(arr.len() - 1)!.asTable()!
+                } else {
+                    return this.rootTable
+                }
+            } else {
+                return this.rootTable
+            }
+        }
+        if (len(keys) == 0) { return current }
+        var last = keys[len(keys) - 1]
+        var slot = current.get(last)
+        var arr = TomlArray()
+        if (slot == null) {
+            current.set(last, TomlValue.Array(arr))
+        } else if (slot!.kind == "array") {
+            arr = slot!.asArray()!
+        } else {
+            return this.rootTable
+        }
+        var table = TomlTable()
+        arr.push(TomlValue.Table(table))
+        return table
+    }
+
+    ref parseDocument() -> TomlValue {
+        while (!this.atEnd()) {
+            this.skipWsAndNewlines()
+            if (this.atEnd()) { break }
+
+            if (this.peek() == "[") {
+                var isArrayTable = _startsWithAt(this.data, this.pos, "[[")
+                if (isArrayTable) {
+                    this.pos = this.pos + 2
+                    this.column = this.column + 2
+                } else {
+                    this.advance()
+                }
+                this.skipWs()
+                var tableKeys = this.parseKeyPath()
+                this.skipWs()
+                if (this.peek() != "]") {
+                    this.addExpected("']'")
+                    this.skipToEol()
+                    continue
+                }
+                this.advance()
+                if (isArrayTable) {
+                    if (this.peek() != "]") {
+                        this.addExpected("']]")
+                        this.skipToEol()
+                        continue
+                    }
+                    this.advance()
+                    this.current = this.getOrCreateArrayTable(tableKeys)
+                } else {
+                    this.current = this.getOrCreateTable(tableKeys)
+                }
+                this.skipToEol()
+                continue
+            }
+
+            var keys = this.parseKeyPath()
+            this.skipWs()
+            if (this.peek() != "=") {
+                this.addExpected("'='")
+                this.skipToEol()
+                continue
+            }
+            this.advance()
+            this.skipWs()
+            var value = this.parseValue()
+            this.setNestedValue(ref this.current, keys, value)
+            this.skipToEol()
+        }
+        return this.root
+    }
+}
+
+fn _parseWithDetails(data: string) -> TomlParser {
+    var parser = TomlParser(data)
+    parser.parseDocument()
+    return parser
+}
+
+export fn parse(data: string) -> TomlValue {
+    return _parseWithDetails(data).root
+}
+
+export fn parseReport(data: string) -> TomlParseReport {
+    var parser = _parseWithDetails(data)
+    return TomlParseReport(parser.root, parser.errors, parser.line, parser.keyCount)
+}
+
+fn _escapeString(value: string) -> string {
+    var out = StringBuilder()
+    out.append("\"")
+    for (var i = 0; i < len(value); i++) {
+        var c = value.slice(i, (i) + 1)
+        if (c == "\"") {
+            out.append("\\\"")
+        } else if (c == "\\") {
+            out.append("\\\\")
+        } else if (c == "\n") {
+            out.append("\\n")
+        } else if (c == "\r") {
+            out.append("\\r")
+        } else if (c == "\t") {
+            out.append("\\t")
+        } else {
+            var o = c.runes().nth(0).toUInt32() as i64
+            if (o < 32 || o == 127) {
+                out.append("\\u")
+                var hex = "0123456789ABCDEF"
+                out.append(hex.slice((o / 4096) % 16, ((o / 4096) % 16) + 1))
+                out.append(hex.slice((o / 256) % 16, ((o / 256) % 16) + 1))
+                out.append(hex.slice((o / 16) % 16, ((o / 16) % 16) + 1))
+                out.append(hex.slice(o % 16, (o % 16) + 1))
+            } else {
+                out.append(c)
+            }
+        }
+    }
+    out.append("\"")
+    return out.toString()
+}
+
+fn _writeKey(key: string) -> string {
+    if (_isBareKey(key)) { return key }
+    return _escapeString(key)
+}
+
+fn _isArrayOfTables(value: TomlValue) -> bool {
+    if (value.kind != "array") { return false }
+    return value.len() > 0 && value.at(0)!.kind == "table"
+}
+
+fn _valueText(value: TomlValue, depth: i64 = 0) -> string {
+    if (depth > TOML_MAX_DEPTH) { return "\"\"" }
+    if (value.kind == "string") { return _escapeString(value.stringValue) }
+    if (value.kind == "bool") { return string(value.boolValue) }
+    if (value.kind == "int") { return string(value.intValue) }
+    if (value.kind == "float" && value.floatValue != null) { return value.floatValue!.toString() }
+    if (value.kind == "datetime" && value.dateTimeValue != null) {
+        return value.dateTimeValue!.toISOString()
+    }
+    if (value.kind == "array") {
+        var out = StringBuilder()
+        out.append("[")
+        for (var i = 0; i < value.len(); i++) {
+            if (i > 0) { out.append(", ") }
+            out.append(_valueText(value.at(i)!, depth + 1))
+        }
+        out.append("]")
+        return out.toString()
+    }
+    if (value.kind == "table") {
+        var out = StringBuilder()
+        out.append("{")
+        var first = true
+        var keys = value.keys()
+        for (var i = 0; i < len(keys); i++) {
+            var key = keys[i]
+            if (!first) { out.append(", ") }
+            first = false
+            out.append(_writeKey(key))
+            out.append(" = ")
+            out.append(_valueText(value.get(key)!, depth + 1))
+        }
+        out.append("}")
+        return out.toString()
+    }
+    return "\"\""
+}
+
+fn _tablePrefix(prefix: string, key: string) -> string {
+    if (len(prefix) == 0) { return key }
+    return prefix + "." + key
+}
+
+fn _arrayTableText(arr: TomlValue, prefix: string, depth: i64) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < arr.len(); i++) {
+        var value = arr.at(i)!
+        if (value.kind == "table") {
+            out.append("\n[[")
+            out.append(prefix)
+            out.append("]]\n")
+            out.append(_tableText(value, prefix, depth + 1))
+        }
+    }
+    return out.toString()
+}
+
+fn _tableText(obj: TomlValue, prefix: string, depth: i64 = 0) -> string {
+    if (depth > TOML_MAX_DEPTH) { return "" }
+    var out = StringBuilder()
+    var keys = obj.keys()
+    for (var ki = 0; ki < len(keys); ki++) {
+        var key = keys[ki]
+        var value = obj.get(key)!
+        var p = _tablePrefix(prefix, key)
+        if (value.kind == "table") {
+            out.append("\n[")
+            out.append(p)
+            out.append("]\n")
+            out.append(_tableText(value, p, depth + 1))
+        } else if (value.kind == "array" && _isArrayOfTables(value)) {
+            out.append(_arrayTableText(value, p, depth))
+        } else {
+                out.append(_writeKey(key))
+                out.append(" = ")
+                out.append(_valueText(value))
+                out.append("\n")
+        }
+    }
+    return out.toString()
+}
+
+export fn stringify(value: TomlValue) -> string {
+    if (value.kind == "table") { return _tableText(value, "") }
+    return _valueText(value)
+}
+
+export fn parseFile(path: Path) -> TomlValue {
+    var content = io.readFile(path)
+    if (content == null) {
+        var empty = TomlTable()
+        return TomlValue.Table(empty)
+    }
+    return parse(content!)
+}
+
+export fn writeFile(path: Path, value: TomlValue) -> bool {
+    return io.writeFile(path, stringify(value))
+}
+
+export fn newTable() -> TomlTable {
+    return TomlTable()
+}
+
+export fn newArray() -> TomlArray {
+    return TomlArray()
+}
+
+export fn tableSet(table: ref TomlTable, key: string, value: TomlValue) {
+    table.set(key, value)
+}
+
+export fn arrayPush(array: ref TomlArray, value: TomlValue) {
+    array.push(value)
+}
+
+export fn boolValue(value: bool) -> TomlValue {
+    return TomlValue.Bool(value)
+}
+
+export fn intValue(value: i64) -> TomlValue {
+    return TomlValue.Int(value)
+}
+
+export fn floatValue(value: f64) -> TomlValue {
+    return TomlValue.Float(TomlFloat(value))
+}
+
+export fn stringValue(value: string) -> TomlValue {
+    return TomlValue.String(value)
+}
+
+export fn dateTimeValue(value: string) -> TomlValue {
+    return TomlValue.DateTime(TomlDateTime(value))
+}
+
+export fn arrayValue(value: TomlArray) -> TomlValue {
+    return TomlValue.Array(value)
+}
+
+export fn tableValue(value: TomlTable) -> TomlValue {
+    return TomlValue.Table(value)
+}
+
+export fn get(value: TomlValue, key: string) -> TomlValue? {
+    return value.get(key)
+}
+
+export fn at(value: TomlValue, index: i64) -> TomlValue? {
+    return value.at(index)
+}
+
+export fn length(value: TomlValue) -> i64 {
+    return value.len()
+}
+
+export fn asBool(value: TomlValue) -> bool? {
+    return value.asBool()
+}
+
+export fn asInt(value: TomlValue) -> i64? {
+    return value.asInt()
+}
+
+export fn asFloat(value: TomlValue) -> f64? {
+    return value.asFloat()
+}
+
+export fn asString(value: TomlValue) -> string? {
+    return value.asString()
+}
+
+export fn asDateTime(value: TomlValue) -> TomlDateTime? {
+    return value.asDateTime()
+}
+
+export fn isTable(value: TomlValue) -> bool {
+    return value.kind == "table"
+}

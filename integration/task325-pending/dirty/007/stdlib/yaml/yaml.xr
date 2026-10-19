@@ -1,0 +1,1324 @@
+import text as textutil
+
+// yaml - typed pure-Xray YAML parser and writer.
+//
+// YAML is an L4 format module: the public parse/stringify/value-builder
+// semantics live here. The value model is a typed `YamlValue` ADT (no JSON.Value
+// discriminator tree), per task-196 §6.8 / task-221 §A8. It targets the common
+// configuration subset used by the existing stdlib tests: block
+// mappings/sequences, nested flow collections, anchors/aliases, block scalars,
+// and multi-document splitting.
+//
+// The frozen ADT lists `Tagged(YamlTag, YamlValue)`, but a recursive enum
+// variant cannot hold `YamlValue` by value (E0352); the recursive payload is
+// carried by the `YamlTagged` class node instead (the compiler's own suggested
+// indirection). Binary/Tagged/Alias variants are defined for completeness; the
+// first-stage parser resolves anchors inline (matching prior behaviour) and
+// rejects YAML tag syntax with a typed `YamlError` rather than silently
+// coercing it to a string.
+
+import io
+
+const YAML_MAX_DEPTH = 256
+
+// ===== Value model =====
+
+export class YamlAnchor {
+    name: string
+
+    init(name: string) {
+        this.name = name
+    }
+}
+
+export class YamlTag {
+    handle: string
+    suffix: string
+
+    init(handle: string, suffix: string) {
+        this.handle = handle
+        this.suffix = suffix
+    }
+}
+
+// Insertion-ordered string-keyed mapping. Keys and values are kept in parallel
+// arrays so iteration order matches the source document.
+export class YamlMapping {
+    keys: Array<string>
+    values: Array<YamlValue>
+
+    init() {
+        this.keys = []
+        this.values = []
+    }
+
+    ref set(key: string, value: YamlValue) {
+        for (var i = 0; i < len(this.keys); i++) {
+            if (this.keys[i] == key) {
+                this.values[i] = value
+                return
+            }
+        }
+        this.keys.push(key)
+        this.values.push(value)
+    }
+
+    get(key: string) -> YamlValue? {
+        for (var i = 0; i < len(this.keys); i++) {
+            if (this.keys[i] == key) { return this.values[i] }
+        }
+        return null
+    }
+
+    containsKey(key: string) -> bool {
+        for (var i = 0; i < len(this.keys); i++) {
+            if (this.keys[i] == key) { return true }
+        }
+        return false
+    }
+
+    size() -> i64 {
+        return len(this.keys)
+    }
+}
+
+// Class node carrying a tag together with its recursive value payload.
+export class YamlTagged {
+    tag: YamlTag
+    value: YamlValue
+
+    init(tag: YamlTag, value: YamlValue) {
+        this.tag = tag
+        this.value = value
+    }
+}
+
+export enum YamlValue {
+    Null,
+    Boolean { value: bool },
+    Integer { value: i64 },
+    Float { value: f64 },
+    String { value: string },
+    Binary { bytes: Array<u8> },
+    Sequence { items: Array<YamlValue> },
+    Mapping { mapping: YamlMapping },
+    Tagged { tagged: YamlTagged },
+    Alias { anchor: YamlAnchor }
+}
+
+// ===== Diagnostics & errors =====
+
+export enum YamlErrorKind {
+    InvalidMapping,
+    MaxDepthExceeded,
+    UnsupportedTag,
+    UnsupportedFeature
+}
+
+export class YamlDiagnostic {
+    kind: YamlErrorKind
+    line: i64
+    column: i64
+    message: string
+
+    init(kind: YamlErrorKind, line: i64, column: i64, message: string) {
+        this.kind = kind
+        this.line = line
+        this.column = column
+        this.message = message
+    }
+}
+
+export enum YamlError {
+    Parse { diagnostic: YamlDiagnostic },
+    Io { message: string }
+}
+
+export class YamlParseReport {
+    data: YamlValue
+    diagnostics: Array<YamlDiagnostic>
+    anchors: i64
+
+    init(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64) {
+        this.data = data
+        this.diagnostics = diagnostics
+        this.anchors = anchors
+    }
+}
+
+// ===== Options =====
+
+export type YamlOptions = {
+    strict: bool
+}
+
+export type YamlWriteOptions = {
+    indent: i64
+}
+
+fn _defaultOptions() -> YamlOptions {
+    var options: YamlOptions = {
+        strict: false
+    }
+    return options
+}
+
+fn _defaultWriteOptions() -> YamlWriteOptions {
+    var options: YamlWriteOptions = {
+        indent: 2
+    }
+    return options
+}
+
+// Option resolution is done inside the module (private default providers cannot
+// be referenced from a caller's scope as a default-argument expression), so the
+// public API takes nullable options and falls back to the defaults here.
+fn _resolveOptions(options: YamlOptions?) -> YamlOptions {
+    if (options == null) { return _defaultOptions() }
+    return copy(options!)
+}
+
+fn _resolveWriteOptions(options: YamlWriteOptions?) -> YamlWriteOptions {
+    if (options == null) { return _defaultWriteOptions() }
+    return copy(options!)
+}
+
+fn _isFatalKind(kind: YamlErrorKind) -> bool {
+    return match (kind) {
+        YamlErrorKind.UnsupportedTag     -> true,
+        YamlErrorKind.UnsupportedFeature -> true,
+        YamlErrorKind.MaxDepthExceeded   -> true,
+        _                                -> false
+    }
+}
+
+// ===== Access API =====
+//
+// The typed accessors are module-level functions (matching internally) rather
+// than methods on the `YamlValue` enum: enum instance methods are not currently
+// callable across a module boundary, so a `value.asInt()` form would break for
+// importers. Free functions that `match` internally are unaffected. `match` on
+// `YamlValue` remains available to callers who prefer pattern matching directly.
+//
+// The scalar length helper is named `length` rather than `len`: the builtin
+// `len` cannot be shadowed by a module function (E0352), so the free function
+// keeps the toml `length` house name.
+
+fn _emptyStrings() -> Array<string> {
+    var out: Array<string> = []
+    return out
+}
+
+export fn isNull(value: YamlValue) -> bool {
+    return match (value) {
+        YamlValue.Null -> true,
+        _              -> false
+    }
+}
+
+export fn asBool(value: YamlValue) -> bool? {
+    return match (value) {
+        YamlValue.Boolean { value: b } -> b,
+        _                    -> null
+    }
+}
+
+export fn asInt(value: YamlValue) -> i64? {
+    return match (value) {
+        YamlValue.Integer { value: n } -> n,
+        _                    -> null
+    }
+}
+
+export fn asFloat(value: YamlValue) -> f64? {
+    return match (value) {
+        YamlValue.Float { value: f } -> f,
+        _                  -> null
+    }
+}
+
+export fn asString(value: YamlValue) -> string? {
+    return match (value) {
+        YamlValue.String { value: s } -> s,
+        _                   -> null
+    }
+}
+
+// NOTE: nullable class/collection payloads are returned from block arms rather
+// than a match expression; returning the binding directly in a nullable context
+// contaminates the enum payload-field type globally.
+export fn asSequence(value: YamlValue) -> Array<YamlValue>? {
+    match (value) {
+        YamlValue.Sequence { items } -> { return items }
+        _                         -> { return null }
+    }
+    return null
+}
+
+export fn asMapping(value: YamlValue) -> YamlMapping? {
+    match (value) {
+        YamlValue.Mapping { mapping: m } -> { return m }
+        _                    -> { return null }
+    }
+    return null
+}
+
+// Value bound to `key` inside a Mapping (null for non-mappings / missing key).
+export fn get(value: YamlValue, key: string) -> YamlValue? {
+    match (value) {
+        YamlValue.Mapping { mapping: m } -> { return m.get(key) }
+        _                    -> { return null }
+    }
+    return null
+}
+
+// Element at `index` inside a Sequence (null when out of range / not a sequence).
+export fn at(value: YamlValue, index: i64) -> YamlValue? {
+    match (value) {
+        YamlValue.Sequence { items } -> {
+            if (index < 0 || index >= len(items)) { return null }
+            return items[index]
+        }
+        _ -> { return null }
+    }
+    return null
+}
+
+// Element count of a Sequence or Mapping (0 otherwise).
+export fn length(value: YamlValue) -> i64 {
+    match (value) {
+        YamlValue.Sequence { items } -> { return len(items) }
+        YamlValue.Mapping { mapping: m }      -> { return m.size() }
+        _                         -> { return 0 }
+    }
+    return 0
+}
+
+// Ordered keys of a Mapping (empty otherwise).
+export fn keys(value: YamlValue) -> Array<string> {
+    match (value) {
+        YamlValue.Mapping { mapping: m } -> { return copy(m.keys) }
+        _                    -> { return copy(_emptyStrings()) }
+    }
+    return copy(_emptyStrings())
+}
+
+// ===== Builders =====
+
+export fn nullValue() -> YamlValue {
+    return YamlValue.Null
+}
+
+export fn boolValue(value: bool) -> YamlValue {
+    return YamlValue.Boolean { value: value }
+}
+
+export fn intValue(value: i64) -> YamlValue {
+    return YamlValue.Integer { value: value }
+}
+
+export fn floatValue(value: f64) -> YamlValue {
+    return YamlValue.Float { value: value }
+}
+
+export fn stringValue(value: string) -> YamlValue {
+    return YamlValue.String { value: value }
+}
+
+export fn binaryValue(value: Array<u8>) -> YamlValue {
+    return YamlValue.Binary { bytes: value }
+}
+
+export fn sequenceValue(items: Array<YamlValue>) -> YamlValue {
+    return YamlValue.Sequence { items: items }
+}
+
+export fn mappingValue(mapping: YamlMapping) -> YamlValue {
+    return YamlValue.Mapping { mapping: mapping }
+}
+
+export fn taggedValue(tag: YamlTag, value: YamlValue) -> YamlValue {
+    var node = YamlTagged(tag, value)
+    return YamlValue.Tagged { tagged: node }
+}
+
+export fn aliasValue(name: string) -> YamlValue {
+    var anchor = YamlAnchor(name)
+    return YamlValue.Alias { anchor: anchor }
+}
+
+export fn newMapping() -> YamlMapping {
+    return YamlMapping()
+}
+
+export fn mappingSet(mapping: ref YamlMapping, key: string, value: YamlValue) {
+    mapping.set(key, value)
+}
+
+// ===== Character / scalar helpers =====
+
+fn _isWs(c: string) -> bool {
+    return c == " " || c == "\t" || c == "\r" || c == "\n"
+}
+
+fn _isDigit(c: string) -> bool {
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
+    return o >= 48 && o <= 57
+}
+
+fn _isAlpha(c: string) -> bool {
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
+    return (o >= 65 && o <= 90) || (o >= 97 && o <= 122)
+}
+
+fn _isHexDigit(c: string) -> bool {
+    if (len(c) == 0) { return false }
+    var o = c.runes().nth(0).toUInt32()
+    return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
+}
+
+fn _hexValue(c: string) -> i64 {
+    var o = c.runes().nth(0).toUInt32()
+    if (o >= 48 && o <= 57) { return (o - 48) as i64 }
+    if (o >= 65 && o <= 70) { return (o - 55) as i64 }
+    if (o >= 97 && o <= 102) { return (o - 87) as i64 }
+    return -1
+}
+
+fn _trimCR(line: string) -> string {
+    if (line.endsWith("\r")) { return line.slice(0, len(line) - 1) }
+    return line
+}
+
+fn _lines(data: string) -> Array<string> {
+    var raw = data.split("\n")
+    var out: Array<string> = []
+    for (var i = 0; i < len(raw); i++) {
+        out.push(_trimCR(raw[i]))
+    }
+    return out
+}
+
+fn _countIndent(line: string) -> i64 {
+    var n = 0
+    while (n < len(line) && line.slice(n, (n) + 1) == " ") { n = n + 1 }
+    return n
+}
+
+fn _stripInlineComment(line: string) -> string {
+    var quote = ""
+    var escape = false
+    for (var i = 0; i < len(line); i++) {
+        var c = line.slice(i, (i) + 1)
+        if (escape) {
+            escape = false
+            continue
+        }
+        if (quote == "\"") {
+            if (c == "\\") { escape = true }
+            else if (c == "\"") { quote = "" }
+            continue
+        }
+        if (quote == "'") {
+            if (c == "'") { quote = "" }
+            continue
+        }
+        if (c == "\"" || c == "'") {
+            quote = c
+            continue
+        }
+        if (c == "#" && (i == 0 || _isWs(line.slice(i - 1, (i - 1) + 1)))) {
+            return textutil.trimEnd(line.slice(0, i))
+        }
+    }
+    return textutil.trimEnd(line)
+}
+
+fn _lineClean(line: string) -> string {
+    return _stripInlineComment(_trimCR(line))
+}
+
+fn _findTopColon(s: string) -> i64 {
+    var quote = ""
+    var escape = false
+    var depth = 0
+    for (var i = 0; i < len(s); i++) {
+        var c = s.slice(i, (i) + 1)
+        if (escape) {
+            escape = false
+            continue
+        }
+        if (quote == "\"") {
+            if (c == "\\") { escape = true }
+            else if (c == "\"") { quote = "" }
+            continue
+        }
+        if (quote == "'") {
+            if (c == "'") { quote = "" }
+            continue
+        }
+        if (c == "\"" || c == "'") {
+            quote = c
+            continue
+        }
+        if (c == "[" || c == "{") { depth = depth + 1 }
+        else if (c == "]" || c == "}") { depth = depth - 1 }
+        else if (c == ":" && depth == 0) { return i }
+    }
+    return -1
+}
+
+fn _utf8Len(cp: i64) -> i64 {
+    if (cp < 0x80) { return 1 }
+    if (cp < 0x800) { return 2 }
+    if (cp < 0x10000) { return 3 }
+    return 4
+}
+
+fn _putUtf8(out: ref Array<u8>, oi: i64, cp: i64) -> i64 {
+    if (cp < 0x80) {
+        out[oi] = cp as u8
+        return oi + 1
+    } else if (cp < 0x800) {
+        out[oi] = (0xC0 | (cp >> 6)) as u8
+        out[oi + 1] = (0x80 | (cp & 0x3F)) as u8
+        return oi + 2
+    } else if (cp < 0x10000) {
+        out[oi] = (0xE0 | (cp >> 12)) as u8
+        out[oi + 1] = (0x80 | ((cp >> 6) & 0x3F)) as u8
+        out[oi + 2] = (0x80 | (cp & 0x3F)) as u8
+        return oi + 3
+    }
+    out[oi] = (0xF0 | (cp >> 18)) as u8
+    out[oi + 1] = (0x80 | ((cp >> 12) & 0x3F)) as u8
+    out[oi + 2] = (0x80 | ((cp >> 6) & 0x3F)) as u8
+    out[oi + 3] = (0x80 | (cp & 0x3F)) as u8
+    return oi + 4
+}
+
+fn _codepointString(cp: i64) -> string {
+    if (cp <= 0 || cp > 0x10FFFF) { return "" }
+    var out = Array<u8>(_utf8Len(cp))
+    _putUtf8(ref out, 0, cp)
+    return string.fromUtf8(out[:])!
+}
+
+fn _decodeDoubleQuotedBody(body: string) -> string {
+    var out = StringBuilder()
+    var i = 0
+    while (i < len(body)) {
+        var c = body.slice(i, (i) + 1)
+        if (c != "\\") {
+            out.append(c)
+            i = i + 1
+            continue
+        }
+        i = i + 1
+        if (i >= len(body)) { break }
+        var esc = body.slice(i, (i) + 1)
+        if (esc == "n") { out.append("\n") }
+        else if (esc == "t") { out.append("\t") }
+        else if (esc == "r") { out.append("\r") }
+        else if (esc == "\"") { out.append("\"") }
+        else if (esc == "\\") { out.append("\\") }
+        else if (esc == "u" || esc == "U") {
+            var digits = 4
+            if (esc == "U") { digits = 8 }
+            var cp = 0
+            var ok = true
+            for (var j = 0; j < digits; j++) {
+                i = i + 1
+                if (i >= len(body) || !_isHexDigit(body.slice(i, (i) + 1))) {
+                    ok = false
+                    break
+                }
+                cp = cp * 16 + _hexValue(body.slice(i, (i) + 1))
+            }
+            if (ok) { out.append(_codepointString(cp)) }
+        } else {
+            out.append(esc)
+        }
+        i = i + 1
+    }
+    return out.toString()
+}
+
+fn _parseQuotedLiteral(raw: string) -> string {
+    if (len(raw) < 2) { return raw }
+    var q = raw.slice(0, (0) + 1)
+    if (q != "\"" && q != "'") { return raw }
+    var end = len(raw) - 1
+    if (raw.slice(end, (end) + 1) != q) { end = len(raw) }
+    var body = raw.slice(1, end)
+    if (q == "\"") { return _decodeDoubleQuotedBody(body) }
+    return body.replace("''", "'")
+}
+
+fn _parseBaseInt(raw: string, base: i64, start: i64, sign: i64) -> i64 {
+    var out = 0
+    for (var i = start; i < len(raw); i++) {
+        var d = _hexValue(raw.slice(i, (i) + 1))
+        if (d < 0 || d >= base) { break }
+        out = out * base + d
+    }
+    return sign * out
+}
+
+fn _looksDecimalNumber(s: string) -> bool {
+    if (len(s) == 0) { return false }
+    var i = 0
+    if (s.slice(0, (0) + 1) == "-" || s.slice(0, (0) + 1) == "+") { i = 1 }
+    if (i >= len(s)) { return false }
+    var sawDigit = false
+    while (i < len(s)) {
+        var c = s.slice(i, (i) + 1)
+        if (_isDigit(c)) {
+            sawDigit = true
+        } else if (c != "." && c != "e" && c != "E" && c != "-" && c != "+") {
+            return false
+        }
+        i = i + 1
+    }
+    return sawDigit
+}
+
+// Classify a plain (unquoted) scalar into the matching YamlValue variant.
+fn _parsePlainScalar(rawValue: string) -> YamlValue {
+    var raw = textutil.trim(rawValue)
+    var lower = textutil.lower(raw)
+    if (len(raw) == 0) { return YamlValue.Null }
+    if (lower == "null" || raw == "~") { return YamlValue.Null }
+    if (lower == "true") { return YamlValue.Boolean { value: true } }
+    if (lower == "false") { return YamlValue.Boolean { value: false } }
+    if (lower == ".inf" || lower == "+.inf") { return YamlValue.Float { value: 1.0 / 0.0 } }
+    if (lower == "-.inf") { return YamlValue.Float { value: -1.0 / 0.0 } }
+    if (lower == ".nan" || lower == "+.nan" || lower == "-.nan") { return YamlValue.Float { value: 0.0 / 0.0 } }
+    if (raw.startsWith("\"") || raw.startsWith("'")) { return YamlValue.String { value: _parseQuotedLiteral(raw) } }
+
+    var sign = 1
+    var offset = 0
+    if (raw.startsWith("-")) {
+        sign = -1
+        offset = 1
+    } else if (raw.startsWith("+")) {
+        offset = 1
+    }
+    if (offset + 2 < len(raw) && raw.slice(offset, (offset) + 1) == "0") {
+        var p = textutil.lower(raw.slice(offset + 1, (offset + 1) + 1))
+        if (p == "x") { return YamlValue.Integer { value: _parseBaseInt(raw, 16, offset + 2, sign) } }
+        if (p == "o") { return YamlValue.Integer { value: _parseBaseInt(raw, 8, offset + 2, sign) } }
+    }
+    if (_looksDecimalNumber(raw)) {
+        if (raw.contains(".") || raw.contains("e") || raw.contains("E")) {
+            var f = f64.tryParse(raw)
+            if (f != null) { return YamlValue.Float { value: f! } }
+        } else {
+            var i = i64.tryParse(raw)
+            if (i != null) { return YamlValue.Integer { value: i! } }
+        }
+    }
+    return YamlValue.String { value: raw }
+}
+
+fn _parseKeyText(raw: string) -> string {
+    var key = textutil.trim(raw)
+    if (key.startsWith("\"") || key.startsWith("'")) { return _parseQuotedLiteral(key) }
+    return key
+}
+
+fn _isTag(raw: string) -> bool {
+    return raw.startsWith("!")
+}
+
+// ===== Flow parser =====
+
+class YamlFlowParser {
+    src: string
+    pos: i64
+    errors: Array<YamlDiagnostic>
+
+    init(src: string, errors: Array<YamlDiagnostic>) {
+        this.src = src
+        this.pos = 0
+        this.errors = errors
+    }
+
+    atEnd() -> bool {
+        return this.pos >= len(this.src)
+    }
+
+    peek() -> string {
+        if (this.atEnd()) { return "" }
+        return this.src.slice(this.pos, (this.pos) + 1)
+    }
+
+    ref advance() -> string {
+        var c = this.peek()
+        if (len(c) > 0) { this.pos = this.pos + 1 }
+        return c
+    }
+
+    ref skipWs() {
+        while (!this.atEnd() && _isWs(this.peek())) { this.advance() }
+    }
+
+    ref parseQuoted() -> string {
+        var quote = this.advance()
+        var out = StringBuilder()
+        var escape = false
+        while (!this.atEnd()) {
+            var c = this.advance()
+            if (quote == "\"" && escape) {
+                if (c == "n") { out.append("\n") }
+                else if (c == "t") { out.append("\t") }
+                else if (c == "r") { out.append("\r") }
+                else if (c == "\"" || c == "\\") { out.append(c) }
+                else if (c == "u" || c == "U") {
+                    var digits = 4
+                    if (c == "U") { digits = 8 }
+                    var cp = 0
+                    var ok = true
+                    for (var i = 0; i < digits; i++) {
+                        if (this.atEnd() || !_isHexDigit(this.peek())) {
+                            ok = false
+                            break
+                        }
+                        cp = cp * 16 + _hexValue(this.advance())
+                    }
+                    if (ok) { out.append(_codepointString(cp)) }
+                } else {
+                    out.append(c)
+                }
+                escape = false
+                continue
+            }
+            if (quote == "\"" && c == "\\") {
+                escape = true
+                continue
+            }
+            if (c == quote) { return out.toString() }
+            out.append(c)
+        }
+        return out.toString()
+    }
+
+    ref parseKey() -> string {
+        this.skipWs()
+        if (this.peek() == "\"" || this.peek() == "'") { return this.parseQuoted() }
+        var start = this.pos
+        while (!this.atEnd() && this.peek() != ":") { this.advance() }
+        return textutil.trim(this.src.slice(start, this.pos))
+    }
+
+    ref parsePlain() -> YamlValue {
+        var start = this.pos
+        while (!this.atEnd() && this.peek() != "," && this.peek() != "]" && this.peek() != "}") {
+            this.advance()
+        }
+        var slice = this.src.slice(start, this.pos)
+        if (_isTag(textutil.trim(slice))) {
+            this.errors.push(YamlDiagnostic(YamlErrorKind.UnsupportedTag, 0, 1,
+                                            "YAML tags are not supported"))
+            return YamlValue.Null
+        }
+        return _parsePlainScalar(slice)
+    }
+
+    ref parseValue() -> YamlValue {
+        this.skipWs()
+        if (this.atEnd()) { return YamlValue.Null }
+        var c = this.peek()
+        if (c == "[") { return this.parseSequence() }
+        if (c == "{") { return this.parseMapping() }
+        if (c == "\"" || c == "'") { return YamlValue.String { value: this.parseQuoted() } }
+        return this.parsePlain()
+    }
+
+    ref parseSequence() -> YamlValue {
+        var arr: Array<YamlValue> = []
+        this.advance()
+        this.skipWs()
+        if (this.peek() == "]") {
+            this.advance()
+            return YamlValue.Sequence { items: arr }
+        }
+        while (!this.atEnd()) {
+            var value = this.parseValue()
+            arr.push(value)
+            this.skipWs()
+            if (this.peek() == "]") {
+                this.advance()
+                break
+            }
+            if (this.peek() == ",") {
+                this.advance()
+                continue
+            }
+            break
+        }
+        return YamlValue.Sequence { items: arr }
+    }
+
+    ref parseMapping() -> YamlValue {
+        var mapping = YamlMapping()
+        this.advance()
+        this.skipWs()
+        if (this.peek() == "}") {
+            this.advance()
+            return YamlValue.Mapping { mapping: mapping }
+        }
+        while (!this.atEnd()) {
+            var key = this.parseKey()
+            this.skipWs()
+            if (this.peek() == ":") { this.advance() }
+            this.skipWs()
+            var value = this.parseValue()
+            mapping.set(key, value)
+            this.skipWs()
+            if (this.peek() == "}") {
+                this.advance()
+                break
+            }
+            if (this.peek() == ",") {
+                this.advance()
+                this.skipWs()
+                continue
+            }
+            break
+        }
+        return YamlValue.Mapping { mapping: mapping }
+    }
+}
+
+// ===== Block parser =====
+
+class YamlParser {
+    lines: Array<string>
+    index: i64
+    errors: Array<YamlDiagnostic>
+    anchors: YamlMapping
+    root: YamlValue
+
+    init(data: string) {
+        this.lines = _lines(data)
+        this.index = 0
+        this.errors = []
+        this.anchors = YamlMapping()
+        this.root = YamlValue.Null
+    }
+
+    atEnd() -> bool {
+        return this.index >= len(this.lines)
+    }
+
+    cleanLine() -> string {
+        if (this.atEnd()) { return "" }
+        return _lineClean(this.lines[this.index])
+    }
+
+    ref addError(kind: YamlErrorKind, message: string) {
+        this.errors.push(YamlDiagnostic(kind, this.index + 1, 1, message))
+    }
+
+    ref skipIgnorable() {
+        while (!this.atEnd()) {
+            var t = textutil.trim(this.cleanLine())
+            if (t == "" || t == "---") {
+                this.index = this.index + 1
+            } else {
+                break
+            }
+        }
+    }
+
+    ref nextIndent() -> i64 {
+        var p = this.index
+        while (p < len(this.lines)) {
+            var clean = _lineClean(this.lines[p])
+            var t = textutil.trim(clean)
+            if (len(t) > 0 && t != "---" && t != "...") { return _countIndent(clean) }
+            p = p + 1
+        }
+        return -1
+    }
+
+    ref parseValueText(text: string) -> YamlValue {
+        var raw = textutil.trim(_stripInlineComment(text))
+        if (len(raw) == 0) { return YamlValue.Null }
+        if (_isTag(raw)) {
+            this.addError(YamlErrorKind.UnsupportedTag, "YAML tags are not supported")
+            return YamlValue.Null
+        }
+        if (raw.startsWith("&")) {
+            var i = 1
+            while (i < len(raw) && !_isWs(raw.slice(i, (i) + 1))) { i = i + 1 }
+            var name = raw.slice(1, i)
+            var rest = textutil.trim(raw.slice(i, len(raw)))
+            var value: YamlValue = YamlValue.Null
+            if (len(rest) > 0) { value = this.parseValueText(rest) }
+            this.anchors.set(name, value)
+            return value
+        }
+        if (raw.startsWith("*")) {
+            var nameEnd = 1
+            while (nameEnd < len(raw) && !_isWs(raw.slice(nameEnd, (nameEnd) + 1))) { nameEnd = nameEnd + 1 }
+            var aliasName = raw.slice(1, nameEnd)
+            var found = this.anchors.get(aliasName)
+            if (found == null) { return YamlValue.Null }
+            return found!
+        }
+        if (raw.startsWith("[") || raw.startsWith("{")) {
+            var fp = YamlFlowParser(raw, this.errors)
+            return fp.parseValue()
+        }
+        return _parsePlainScalar(raw)
+    }
+
+    ref parseBlockScalar(header: string, parentIndent: i64) -> string {
+        var style = header.slice(0, (0) + 1)
+        var chomp = ""
+        if (len(header) > 1) {
+            var c = header.slice(1, (1) + 1)
+            if (c == "-" || c == "+") { chomp = c }
+        }
+        this.index = this.index + 1
+        var blockIndent = -1
+        var parts: Array<string> = []
+        while (!this.atEnd()) {
+            var raw = _trimCR(this.lines[this.index])
+            if (len(textutil.trim(raw)) == 0) {
+                if (blockIndent >= 0) { parts.push("") }
+                this.index = this.index + 1
+                continue
+            }
+            var indent = _countIndent(raw)
+            if (indent <= parentIndent) { break }
+            if (blockIndent < 0) { blockIndent = indent }
+            if (indent < blockIndent) { break }
+            parts.push(raw.slice(blockIndent, len(raw)))
+            this.index = this.index + 1
+        }
+
+        var out = StringBuilder()
+        if (style == "|") {
+            for (var i = 0; i < len(parts); i++) {
+                if (i > 0) { out.append("\n") }
+                out.append(parts[i])
+            }
+        } else {
+            for (var i = 0; i < len(parts); i++) {
+                var part = parts[i]
+                if (len(part) == 0) {
+                    out.append("\n")
+                } else {
+                    var current = out.toString()
+                    if (len(current) > 0 && !current.endsWith("\n")) { out.append(" ") }
+                    out.append(part)
+                }
+            }
+        }
+        if (chomp != "-" && len(parts) > 0) { out.append("\n") }
+        return out.toString()
+    }
+
+    ref parseMappingLineInto(mapping: ref YamlMapping, content: string, indent: i64) {
+        var colon = _findTopColon(content)
+        if (colon < 0) {
+            this.addError(YamlErrorKind.InvalidMapping, "expected ':' in mapping entry")
+            this.index = this.index + 1
+            return
+        }
+        var key = _parseKeyText(content.slice(0, colon))
+        var rest = textutil.trim(content.slice(colon + 1, len(content)))
+        if (rest.startsWith("|") || rest.startsWith(">")) {
+            var scalar: YamlValue = YamlValue.String { value: this.parseBlockScalar(rest, indent) }
+            mapping.set(key, scalar)
+            return
+        }
+        this.index = this.index + 1
+        if (len(rest) == 0) {
+            var ni = this.nextIndent()
+            if (ni > indent) {
+                var nested = this.parseBlock(ni, 0)
+                mapping.set(key, nested)
+            } else {
+                var nullVal: YamlValue = YamlValue.Null
+                mapping.set(key, nullVal)
+            }
+        } else {
+            var value = this.parseValueText(rest)
+            mapping.set(key, value)
+        }
+    }
+
+    ref parseMapping(indent: i64, depth: i64) -> YamlValue {
+        var mapping = YamlMapping()
+        while (!this.atEnd()) {
+            this.skipIgnorable()
+            if (this.atEnd()) { break }
+            var clean = this.cleanLine()
+            var t = textutil.trim(clean)
+            if (t == "...") { break }
+            var lineIndent = _countIndent(clean)
+            if (lineIndent < indent) { break }
+            if (lineIndent > indent) { break }
+            var content = clean.slice(indent, len(clean))
+            if (content.startsWith("-")) { break }
+            this.parseMappingLineInto(ref mapping, content, indent)
+        }
+        return YamlValue.Mapping { mapping: mapping }
+    }
+
+    ref parseSequenceInlineMapping(afterDash: string, indent: i64, depth: i64) -> YamlValue {
+        var mapping = YamlMapping()
+        var colon = _findTopColon(afterDash)
+        if (colon < 0) {
+            this.index = this.index + 1
+            return YamlValue.Mapping { mapping: mapping }
+        }
+        var key = _parseKeyText(afterDash.slice(0, colon))
+        var rest = textutil.trim(afterDash.slice(colon + 1, len(afterDash)))
+        if (rest.startsWith("|") || rest.startsWith(">")) {
+            var scalar: YamlValue = YamlValue.String { value: this.parseBlockScalar(rest, indent) }
+            mapping.set(key, scalar)
+        } else {
+            this.index = this.index + 1
+            if (len(rest) == 0) {
+                var ni = this.nextIndent()
+                if (ni > indent) {
+                    var nested = this.parseBlock(ni, depth + 1)
+                    mapping.set(key, nested)
+                } else {
+                    var nullVal: YamlValue = YamlValue.Null
+                    mapping.set(key, nullVal)
+                }
+            } else {
+                var value = this.parseValueText(rest)
+                mapping.set(key, value)
+            }
+        }
+
+        var tailIndent = indent + 2
+        while (!this.atEnd()) {
+            this.skipIgnorable()
+            if (this.atEnd()) { break }
+            var clean = this.cleanLine()
+            var t = textutil.trim(clean)
+            if (t == "...") { break }
+            var lineIndent = _countIndent(clean)
+            if (lineIndent != tailIndent) { break }
+            var content = clean.slice(tailIndent, len(clean))
+            if (content.startsWith("-")) { break }
+            this.parseMappingLineInto(ref mapping, content, tailIndent)
+        }
+        return YamlValue.Mapping { mapping: mapping }
+    }
+
+    ref parseSequence(indent: i64, depth: i64) -> YamlValue {
+        var arr: Array<YamlValue> = []
+        while (!this.atEnd()) {
+            this.skipIgnorable()
+            if (this.atEnd()) { break }
+            var clean = this.cleanLine()
+            var t = textutil.trim(clean)
+            if (t == "...") { break }
+            var lineIndent = _countIndent(clean)
+            if (lineIndent != indent) { break }
+            var content = clean.slice(indent, len(clean))
+            if (!content.startsWith("-")) { break }
+            var afterDash = textutil.trim(content.slice(1, len(content)))
+            if (len(afterDash) == 0) {
+                this.index = this.index + 1
+                var ni = this.nextIndent()
+                if (ni > indent) {
+                    var nested = this.parseBlock(ni, depth + 1)
+                    arr.push(nested)
+                } else {
+                    var nullVal: YamlValue = YamlValue.Null
+                    arr.push(nullVal)
+                }
+                continue
+            }
+            if (!afterDash.startsWith("[") && !afterDash.startsWith("{") &&
+                !afterDash.startsWith("\"") && !afterDash.startsWith("'") &&
+                _findTopColon(afterDash) >= 0) {
+                var item = this.parseSequenceInlineMapping(afterDash, indent, depth)
+                arr.push(item)
+            } else {
+                var value = this.parseValueText(afterDash)
+                arr.push(value)
+                this.index = this.index + 1
+            }
+        }
+        return YamlValue.Sequence { items: arr }
+    }
+
+    ref parseBlock(indent: i64, depth: i64) -> YamlValue {
+        if (depth > YAML_MAX_DEPTH) {
+            this.addError(YamlErrorKind.MaxDepthExceeded, "maximum nesting depth exceeded")
+            return YamlValue.Null
+        }
+        this.skipIgnorable()
+        if (this.atEnd()) { return YamlValue.Null }
+        var clean = this.cleanLine()
+        if (textutil.trim(clean) == "...") { return YamlValue.Null }
+        var lineIndent = _countIndent(clean)
+        if (lineIndent < indent) { return YamlValue.Null }
+        var content = clean.slice(lineIndent, len(clean))
+        if (content.startsWith("-")) { return this.parseSequence(lineIndent, depth) }
+        return this.parseMapping(lineIndent, depth)
+    }
+
+    ref parseDocument() {
+        this.root = this.parseBlock(0, 0)
+    }
+}
+
+fn _firstError(parser: YamlParser, strict: bool) -> YamlDiagnostic? {
+    for (var i = 0; i < len(parser.errors); i++) {
+        var d = parser.errors[i]
+        if (strict) { return d }
+        if (_isFatalKind(d.kind)) { return d }
+    }
+    return null
+}
+
+// ===== Serializer =====
+
+fn _indent(level: i64, spaces: i64) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < level * spaces; i++) { out.append(" ") }
+    return out.toString()
+}
+
+fn _quoteString(s: string) -> string {
+    var out = StringBuilder()
+    out.append("\"")
+    for (var i = 0; i < len(s); i++) {
+        var c = s.slice(i, (i) + 1)
+        if (c == "\"") { out.append("\\\"") }
+        else if (c == "\\") { out.append("\\\\") }
+        else if (c == "\n") { out.append("\\n") }
+        else if (c == "\r") { out.append("\\r") }
+        else if (c == "\t") { out.append("\\t") }
+        else { out.append(c) }
+    }
+    out.append("\"")
+    return out.toString()
+}
+
+fn _keyText(key: string) -> string {
+    if (len(key) == 0) { return "\"\"" }
+    for (var i = 0; i < len(key); i++) {
+        var c = key.slice(i, (i) + 1)
+        if (!_isAlpha(c) && !_isDigit(c) && c != "_" && c != "-") {
+            return _quoteString(key)
+        }
+    }
+    return key
+}
+
+fn _base64Encode(bytes: Array<u8>) -> string {
+    var table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    var out = StringBuilder()
+    var n = len(bytes)
+    var i = 0
+    while (i + 3 <= n) {
+        var b0 = (bytes[i] as i64)
+        var b1 = (bytes[i + 1] as i64)
+        var b2 = (bytes[i + 2] as i64)
+        var v = (b0 << 16) | (b1 << 8) | b2
+        out.append(table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1))
+        out.append(table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1))
+        out.append(table.slice((v >> 6) & 63, ((v >> 6) & 63) + 1))
+        out.append(table.slice(v & 63, (v & 63) + 1))
+        i = i + 3
+    }
+    var rem = n - i
+    if (rem == 1) {
+        var b0 = (bytes[i] as i64)
+        var v = b0 << 16
+        out.append(table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1))
+        out.append(table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1))
+        out.append("==")
+    } else if (rem == 2) {
+        var b0 = (bytes[i] as i64)
+        var b1 = (bytes[i + 1] as i64)
+        var v = (b0 << 16) | (b1 << 8)
+        out.append(table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1))
+        out.append(table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1))
+        out.append(table.slice((v >> 6) & 63, ((v >> 6) & 63) + 1))
+        out.append("=")
+    }
+    return out.toString()
+}
+
+fn _boolText(b: bool) -> string {
+    if (b) { return "true" }
+    return "false"
+}
+
+fn _aliasText(anchor: YamlAnchor) -> string {
+    return "*" + anchor.name
+}
+
+fn _binaryText(bytes: Array<u8>) -> string {
+    return "!!binary " + _base64Encode(bytes)
+}
+
+fn _scalarText(value: YamlValue) -> string {
+    return match (value) {
+        YamlValue.Null          -> "null",
+        YamlValue.Boolean { value: b }    -> _boolText(b),
+        YamlValue.Integer { value: n }    -> string(n),
+        YamlValue.Float { value: f }      -> string(f),
+        YamlValue.String { value: s }     -> _quoteString(s),
+        YamlValue.Binary { bytes } -> _binaryText(bytes),
+        YamlValue.Sequence { items: xs }  -> "[]",
+        YamlValue.Mapping { mapping: m }    -> "{}",
+        YamlValue.Tagged { tagged: tg }    -> _taggedText(tg),
+        YamlValue.Alias { anchor: a }      -> _aliasText(a)
+    }
+}
+
+fn _taggedText(tagged: YamlTagged) -> string {
+    return tagged.tag.handle + tagged.tag.suffix + " " + _scalarText(tagged.value)
+}
+
+fn _isBlockValue(value: YamlValue) -> bool {
+    match (value) {
+        YamlValue.Sequence { items } -> { return len(items) > 0 }
+        YamlValue.Mapping { mapping: m }      -> { return m.size() > 0 }
+        _                         -> { return false }
+    }
+    return false
+}
+
+fn _emitSequence(items: Array<YamlValue>, level: i64, indent: i64) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < len(items); i++) {
+        var item = items[i]
+        out.append(_indent(level, indent))
+        out.append("-")
+        if (_isBlockValue(item)) {
+            out.append("\n")
+            out.append(_emitValue(item, level + 1, indent))
+        } else {
+            out.append(" ")
+            out.append(_scalarText(item))
+            out.append("\n")
+        }
+    }
+    return out.toString()
+}
+
+fn _emitMapping(mapping: YamlMapping, level: i64, indent: i64) -> string {
+    var out = StringBuilder()
+    for (var i = 0; i < len(mapping.keys); i++) {
+        var key = mapping.keys[i]
+        var item = mapping.values[i]
+        out.append(_indent(level, indent))
+        out.append(_keyText(key))
+        out.append(":")
+        if (_isBlockValue(item)) {
+            out.append("\n")
+            out.append(_emitValue(item, level + 1, indent))
+        } else {
+            out.append(" ")
+            out.append(_scalarText(item))
+            out.append("\n")
+        }
+    }
+    return out.toString()
+}
+
+fn _emitValue(value: YamlValue, level: i64, indent: i64) -> string {
+    var seq = asSequence(value)
+    if (seq != null && len(seq!) > 0) { return _emitSequence(seq!, level, indent) }
+    var mapping = asMapping(value)
+    if (mapping != null && mapping!.size() > 0) { return _emitMapping(mapping!, level, indent) }
+    return _scalarText(value)
+}
+
+// ===== Public API =====
+
+// parse is strict about unsupported features (YAML tags, depth overflow) which
+// always enter the typed error channel via
+// `throw YamlError.Parse { diagnostic: value }`. With
+// `options.strict = true` every recorded diagnostic is fatal.
+export fn parse(data: string, options: YamlOptions? = null) -> YamlValue {
+    var config = _resolveOptions(options)
+    var parser = YamlParser(data)
+    parser.parseDocument()
+    var err = _firstError(parser, config.strict)
+    if (err != null) {
+        throw YamlError.Parse { diagnostic: err! }
+    }
+    return parser.root
+}
+
+// parseStrict throws on any recorded diagnostic, recoverable or not.
+export fn parseStrict(data: string) -> YamlValue {
+    var parser = YamlParser(data)
+    parser.parseDocument()
+    if (len(parser.errors) > 0) {
+        throw YamlError.Parse { diagnostic: parser.errors[0] }
+    }
+    return parser.root
+}
+
+// parseReport opts into recovery and returns the (possibly partial) document
+// together with the typed diagnostics collected during parsing.
+export fn parseReport(data: string) -> YamlParseReport {
+    var parser = YamlParser(data)
+    parser.parseDocument()
+    return YamlParseReport(parser.root, parser.errors, parser.anchors.size())
+}
+
+export fn parseAll(data: string) -> Array<YamlValue> {
+    var docs: Array<YamlValue> = []
+    var lines = _lines(data)
+    var current: Array<string> = []
+    for (var i = 0; i < len(lines); i++) {
+        var t = textutil.trim(_lineClean(lines[i]))
+        if (t == "---") {
+            if (len(current) > 0) {
+                var doc = parse(current.join("\n"))
+                docs.push(doc)
+                current = []
+            }
+        } else if (t == "...") {
+            var doc = parse(current.join("\n"))
+            docs.push(doc)
+            current = []
+        } else {
+            current.push(lines[i])
+        }
+    }
+    if (len(current) > 0) {
+        var doc = parse(current.join("\n"))
+        docs.push(doc)
+    }
+    return docs
+}
+
+export fn parseFile(path: Path, options: YamlOptions? = null) -> YamlValue {
+    var content = io.readFile(path)
+    if (content == null) {
+        throw YamlError.Io { message: "Failed to read file" }
+    }
+    return parse(content!, options)
+}
+
+export fn stringify(value: YamlValue, options: YamlWriteOptions? = null) -> string {
+    var config = _resolveWriteOptions(options)
+    var indent = config.indent
+    if (indent <= 0) { indent = 2 }
+    return _emitValue(value, 0, indent)
+}
+
+export fn writeFile(path: Path, value: YamlValue) -> bool {
+    return io.writeFile(path, stringify(value))
+}

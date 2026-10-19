@@ -1,0 +1,5 @@
+fn read<T:{inner:{items:Array<i64>}}>(value:T)->i64 {
+    value.inner.items[0]=42
+    return value.inner.items[0]
+}
+export fn referenceAnswer()->i64 { return read({inner:{items:[7]}}) }

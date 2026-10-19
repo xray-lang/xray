@@ -1,0 +1,2328 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xi.h - Typed SSA IR core data structures
+ *
+ * KEY CONCEPT:
+ *   Mid-level typed SSA IR that both backends (VM/AOT) consume.
+ *   Every SSA value carries an authoritative XrType* from the semantic
+ *   analyzer, and XrRep is derived from it via xr_type_rep().
+ *
+ *   Design follows Go SSA: Value = instruction (def + op + args combined
+ *   in one struct). This eliminates the split between "instruction" and
+ *   "virtual register" common to lower-level IRs.
+ *
+ *   Operation granularity is mid-level: high-level semantics preserved
+ *   (XI_CALL_METHOD, XI_ITER_NEXT) while control flow is explicit
+ *   (basic blocks + branch/jump terminators, phi nodes for merges).
+ *
+ * NAMING:
+ *   Xi prefix (Xray IR) names this typed SSA layer.
+ *
+ * INVARIANTS:
+ *   1. SSA form: each XiValue has exactly one definition point.
+ *   2. Every XiValue carries a non-NULL XrType* (XI_CONST_NULL uses
+ *      xr_type_null; unknown uses xr_type_any).
+ *   3. XrRep is derived from XrType* and never set independently.
+ *   4. Block terminators are on XiBlock (kind + control value), not
+ *      encoded as instructions in the value list.
+ *   5. Phi nodes are separate from the instruction list, ordered by
+ *      predecessor index.
+ */
+
+#ifndef XI_H
+#define XI_H
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include "../base/xdefs.h"
+#include "../base/xconstants.h"
+#include "../base/xstable_id.h"
+#include "../shared/xr_conversion.h"
+#include "../shared/xr_assertion_plan.h"
+#include "../shared/xr_print_plan.h"
+#include "../shared/xr_copy_core.h"
+#include "../shared/xr_param_mode.h"
+#include "../shared/xr_elem_type.h"
+#include "../shared/xr_view_origin.h"
+#include "../runtime/value/xtransfer_mode.h"
+#include "xi_method_symbol.h"
+
+/* Forward declarations for types defined in other modules */
+struct XrType;
+struct XrCtValue;
+struct AstNode;
+struct XaAnalyzer;
+struct XiCoroPlan;
+struct XiEvidenceSet;
+struct XiFunc;
+struct XiModule;
+struct XrCExportPlan;
+struct XrLinkSymbolPlan;
+struct XrFreestandingEntryPlan;
+struct XrSemanticPlan;
+
+/* Exact identity for the two compiler-owned Array allocation intrinsics.  The
+ * kind and scalar storage are stamped by lowering before SemanticPlan
+ * construction; later consumers must not reconstruct either fact from aux,
+ * aux_int, a selector spelling, or the result type. */
+typedef enum XiArrayIntrinsicKind {
+    XI_ARRAY_INTRINSIC_NONE = 0,
+    XI_ARRAY_INTRINSIC_WITH_CAPACITY,
+    XI_ARRAY_INTRINSIC_FILLED_NEW,
+    XI_ARRAY_INTRINSIC_COUNT,
+} XiArrayIntrinsicKind;
+
+/* Exact identity for compiler-owned Array instance operations that retain the
+ * generic XI_CALL_METHOD opcode for VM dispatch. Lowering stamps this only
+ * after the analyzer-backed receiver registry has selected the builtin Array
+ * member; SemanticPlan consumers must not reconstruct it from aux, aux_int,
+ * the live receiver type, or operand count. */
+typedef enum XiArrayMemberKind {
+    XI_ARRAY_MEMBER_NONE = 0,
+    XI_ARRAY_MEMBER_FILL,
+    XI_ARRAY_MEMBER_COUNT,
+} XiArrayMemberKind;
+
+/* Exact analyzer-registry identity for the three Array higher-order methods.
+ * The callback and storage facts are stamped beside this discriminant during
+ * lowering; frozen-plan consumers never recover authority from a selector. */
+typedef enum XiArrayHofKind {
+    XI_ARRAY_HOF_NONE = 0,
+    XI_ARRAY_HOF_MAP,
+    XI_ARRAY_HOF_FILTER,
+    XI_ARRAY_HOF_REDUCE,
+    XI_ARRAY_HOF_COUNT,
+} XiArrayHofKind;
+
+/* Exact source intent for erased interface values. Concrete packing, nominal
+ * tests and
+ * projections, and the two witness call shapes remain distinct from
+ * ordinary Xi operations
+ * before the canonical Program writer materializes
+ * their operations. */
+typedef enum XiExistentialKind {
+    XI_EXISTENTIAL_NONE = 0,
+    XI_EXISTENTIAL_PACK,
+    XI_EXISTENTIAL_REBORROW_READ,
+    XI_EXISTENTIAL_TEST,
+    XI_EXISTENTIAL_PROJECT,
+    XI_EXISTENTIAL_WITNESS_DIRECT,
+    XI_EXISTENTIAL_WITNESS_INVOKE,
+} XiExistentialKind;
+
+/* Exact existential TypeId ownership/view identity. Values intentionally
+ * mirror the canonical
+ * Program interface-use contract. */
+typedef enum XiInterfaceUseKind {
+    XI_INTERFACE_USE_NONE = 0,
+    XI_INTERFACE_USE_READ = 1,
+    XI_INTERFACE_USE_REF = 2,
+    XI_INTERFACE_USE_MOVE = 3,
+    XI_INTERFACE_USE_OWNED_STORAGE = 4,
+} XiInterfaceUseKind;
+
+/* ========== IR Stage ========== */
+
+/*
+ * Each XiFunc progresses through a sequence of stages.  Stages are
+ * monotonically non-decreasing: once a function reaches a stage it
+ * never goes back.  Passes and backends declare which stage they
+ * require as input and which stage they produce as output, so the
+ * pipeline can statically reject illegal orderings.
+ *
+ * Stages are design-level milestones — not every stage needs to be
+ * implemented immediately.  Intermediate stages that are not yet
+ * active simply pass through (input == output == same stage).
+ */
+typedef enum {
+    XI_STAGE_RAW = 0,
+    XI_STAGE_CANONICAL,
+    XI_STAGE_CLOSED,
+    XI_STAGE_OWNED,
+    XI_STAGE_SEMANTIC_LOWERED,
+    XI_STAGE_CORO_LOWERED,
+    XI_STAGE_OPTIMIZED,
+    XI_STAGE_SEMANTIC_PLANNED,
+    XI_STAGE_REPPED,
+    XI_STAGE_BACKEND,
+    XI_STAGE_COUNT,
+} XiStage;
+
+/* Human-readable stage name (for dumps and diagnostics). */
+static inline const char *xi_stage_name(XiStage s) {
+    static const char *names[] = {
+        "Raw",         "Canonical", "Closed",          "Owned",  "SemanticLowered",
+        "CoroLowered", "Optimized", "SemanticPlanned", "Repped", "Backend",
+    };
+    return (unsigned) s < XI_STAGE_COUNT ? names[s] : "?";
+}
+
+/*
+ * Invariant mask — each bit records an established property.
+ * Bits are cumulative: once set, they remain set. Passes and
+ * stage-specific verifiers check the mask to gate their work.
+ */
+typedef uint32_t XiInvariantMask;
+
+#define XI_INV_CFG_WELL_FORMED ((XiInvariantMask) (1u << 0))
+#define XI_INV_SSA_WELL_FORMED ((XiInvariantMask) (1u << 1))
+#define XI_INV_EVAL_ORDER_FIXED ((XiInvariantMask) (1u << 2))
+#define XI_INV_UPVALS_RESOLVED ((XiInvariantMask) (1u << 3))
+#define XI_INV_OWNERSHIP_EXPLICIT ((XiInvariantMask) (1u << 4))
+#define XI_INV_SEMANTIC_OPS_LOWERED ((XiInvariantMask) (1u << 5))
+#define XI_INV_COROUTINES_LOWERED ((XiInvariantMask) (1u << 6))
+#define XI_INV_OPTIMIZATION_COMPLETE ((XiInvariantMask) (1u << 7))
+#define XI_INV_SEMANTIC_PLAN_FROZEN ((XiInvariantMask) (1u << 8))
+#define XI_INV_REPS_SELECTED ((XiInvariantMask) (1u << 9))
+#define XI_INV_BACKEND_LEGAL ((XiInvariantMask) (1u << 10))
+
+typedef uint16_t XiVarId;
+
+typedef enum {
+    XI_AUX_KIND_NONE = 0,
+    XI_AUX_KIND_ADT_FIELD = 1,
+    XI_AUX_KIND_PAR_FOR = 2,
+    XI_AUX_KIND_PAR_REDUCE = 3,
+    XI_AUX_KIND_PAR_MAP = 4,
+    XI_AUX_KIND_THREAD_SPAWN = 5,
+    XI_AUX_KIND_MAP_LITERAL = 6,
+    XI_AUX_KIND_ENUM_NAMESPACE = 7,
+    XI_AUX_KIND_ENUM_CASE = 8,
+    XI_AUX_KIND_BIGINT_DIGITS = 9,
+    XI_AUX_KIND_ASSERTION_PLAN = 10,
+    XI_AUX_KIND_PRINT_PLAN = 11,
+} XiAuxKind;
+
+/* Source-variable IDs are carried on XiValue for backend register/cell
+ * coalescing.  0xffff is reserved as the "no source variable" sentinel, so
+ * real variables occupy the closed range [0, 65534]. */
+#define XI_NO_VAR_ID ((XiVarId) UINT16_MAX)
+#define XI_MAX_VAR_ID ((uint32_t) UINT16_MAX - 1u)
+
+static inline bool xi_var_id_is_valid(XiVarId var_id) {
+    return var_id != XI_NO_VAR_ID;
+}
+
+struct XiValue;
+
+typedef struct XiSourceSpan {
+    uint32_t start_line;
+    uint32_t start_column;
+    uint32_t end_line;
+    uint32_t end_column;
+} XiSourceSpan;
+
+typedef struct XiSourceLocator {
+    uint32_t kind;
+    XiSourceSpan span;
+} XiSourceLocator;
+
+/* Frozen PSC rows are addressed only by their canonical table index. */
+#define XI_PSC_ROW_NONE UINT32_MAX
+
+static inline bool xi_source_span_is_empty(XiSourceSpan span) {
+    return span.start_line == 0 && span.start_column == 0 && span.end_line == 0 &&
+           span.end_column == 0;
+}
+
+static inline bool xi_source_span_is_complete(XiSourceSpan span) {
+    return span.start_line != 0 && span.start_column != 0 && span.end_line != 0 &&
+           span.end_column != 0 && span.end_line >= span.start_line &&
+           (span.end_line != span.start_line || span.end_column >= span.start_column);
+}
+
+typedef enum XiPlaceOrigin {
+    XI_PLACE_ORIGIN_NONE = 0,
+    XI_PLACE_ORIGIN_STACK_LOCAL = 1,
+    XI_PLACE_ORIGIN_PARAM = 2,
+    XI_PLACE_ORIGIN_PROJECTION_TEMP = 3,
+    XI_PLACE_ORIGIN_DIRECT_VALUE = 4,
+} XiPlaceOrigin;
+
+/* Whether a frozen operand record names a place origin this enum defines.
+ * Verifiers ask this instead of comparing against the last member by name, so
+ * a new origin is admitted everywhere the moment it is declared here. */
+static inline bool xi_place_origin_is_valid(uint8_t origin) {
+    return origin <= XI_PLACE_ORIGIN_DIRECT_VALUE;
+}
+
+/* A place origin that names storage a borrowed call-bound READ place can
+ * point into: anything but the absent origin. */
+static inline bool xi_place_origin_is_borrowable(uint8_t origin) {
+    return origin != XI_PLACE_ORIGIN_NONE && xi_place_origin_is_valid(origin);
+}
+
+/* XI_LOCAL_ADDR normally takes the address of args[0]'s caller-local storage.
+ * These flags permit native backends to borrow an underlying place only when
+ * lowering retained explicit source-place provenance.  In particular, a local
+ * initialized from a field is still a value copy even when its SSA value is a
+ * LOAD_FIELD; it must not be mistaken for `ref receiver.field`. */
+#define XI_LOCAL_ADDR_AUX_RAW_DEREF 1
+#define XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION 2
+#define XI_LOCAL_ADDR_AUX_CLEANUP_LIVE 4
+
+/* Whether an address operation names its operand's own storage, which is the
+ * question every layer asks when it wants to know if a value must keep a
+ * distinct C local.  It is not the same question as which kind of address the
+ * operation is: a cleanup capture and a plain `ref` argument both name the
+ * operand itself, while the two borrowing forms above name a place their
+ * operand already points into.  Layers that judged this by comparing the whole
+ * auxiliary word against one expected kind disagreed with each other about the
+ * same address. */
+static inline bool xi_local_addr_names_operand_storage(int64_t aux) {
+    return (aux & (XI_LOCAL_ADDR_AUX_RAW_DEREF | XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION)) == 0;
+}
+
+/* XI_TRY.aux_int discriminator for compiler-generated cleanup panic regions.
+ * Source-level try/catch uses its ordinary metadata and must never be treated
+ * as a cancellation cleanup target. */
+#define XI_TRY_AUX_STATIC_CLEANUP 1
+#define XI_TRY_AUX_CLEANUP_LOCAL_HANDLER 2
+
+/* CATCH receives the panic result of its exact call producer through aux. */
+#define XI_CATCH_AUX_POINT_PANIC 1
+
+typedef enum XiPlaceLifetime {
+    XI_PLACE_LIFETIME_NONE = 0,
+    XI_PLACE_LIFETIME_CALL_BOUND = 1,
+} XiPlaceLifetime;
+
+typedef enum XiPlaceEscape {
+    XI_PLACE_ESCAPE_NONE = 0,
+    XI_PLACE_ESCAPE_RETURN = 1,
+    XI_PLACE_ESCAPE_STORE = 2,
+    XI_PLACE_ESCAPE_CAPTURE = 3,
+    XI_PLACE_ESCAPE_THREAD = 4,
+} XiPlaceEscape;
+
+typedef struct XiCallArgPlan {
+    XrParamMode param_mode;
+    XrCallArgAccess access;
+    uint8_t origin;
+    uint8_t lifetime;
+    uint8_t escape;
+    bool addressable;
+    XiVarId origin_var_id;
+    struct XiValue *place;
+} XiCallArgPlan;
+
+typedef struct XiCallPlan {
+    XiCallArgPlan receiver;
+    XiCallArgPlan *args;
+    uint16_t nargs;
+    bool has_receiver;
+    bool verified;
+} XiCallPlan;
+
+typedef struct XiLoweringFacts {
+    bool initialized;
+    bool coroutine_required;
+    bool coroutine_lowered;
+    bool callable_required;
+    bool callable_lowered;
+    bool semantic_ops_lowered;
+} XiLoweringFacts;
+
+/* Invariant mask implied by reaching a given stage. */
+static inline XiInvariantMask xi_stage_invariants(XiStage s) {
+    switch (s) {
+        case XI_STAGE_RAW:
+            return XI_INV_CFG_WELL_FORMED | XI_INV_SSA_WELL_FORMED;
+        case XI_STAGE_CANONICAL:
+            return xi_stage_invariants(XI_STAGE_RAW) | XI_INV_EVAL_ORDER_FIXED;
+        case XI_STAGE_CLOSED:
+            return xi_stage_invariants(XI_STAGE_CANONICAL) | XI_INV_UPVALS_RESOLVED;
+        case XI_STAGE_OWNED:
+            return xi_stage_invariants(XI_STAGE_CLOSED) | XI_INV_OWNERSHIP_EXPLICIT;
+        case XI_STAGE_SEMANTIC_LOWERED:
+            return xi_stage_invariants(XI_STAGE_OWNED) | XI_INV_SEMANTIC_OPS_LOWERED;
+        case XI_STAGE_CORO_LOWERED:
+            return xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED) | XI_INV_COROUTINES_LOWERED;
+        case XI_STAGE_OPTIMIZED:
+            return xi_stage_invariants(XI_STAGE_CORO_LOWERED) | XI_INV_OPTIMIZATION_COMPLETE;
+        case XI_STAGE_SEMANTIC_PLANNED:
+            return xi_stage_invariants(XI_STAGE_OPTIMIZED) | XI_INV_SEMANTIC_PLAN_FROZEN;
+        case XI_STAGE_REPPED:
+            return xi_stage_invariants(XI_STAGE_SEMANTIC_PLANNED) | XI_INV_REPS_SELECTED;
+        case XI_STAGE_BACKEND:
+            return xi_stage_invariants(XI_STAGE_REPPED) | XI_INV_BACKEND_LEGAL;
+        default:
+            return 0;
+    }
+}
+
+/* ========== Operation Kinds ========== */
+
+/*
+ * aux / aux_int semantic contract per op (authoritative reference):
+ *
+ *  Op               aux                  aux_int
+ *  ──────────────── ──────────────────── ────────────────────────────
+ *  XI_CONST         string: char*        int/bool/char/null literal value
+ *                   (other: unused)
+ *  XI_PARAM         —                    parameter index
+ *  XI_TARGET_SIZEOF —                    XrNativeType whose target C sizeof is needed
+ *  XI_TARGET_ALIGNOF —                   XrNativeType whose target C alignment is needed
+ *  XI_TARGET_SIMD_BYTES —                canonical target SIMD width query
+ *  XI_TARGET_SIMD_ACCELERATED —          canonical hardware-SIMD availability query
+ *  XI_TARGET_SIMD_RUNTIME_SELECTED —     runtime-vs-static SIMD selection query
+ *  XI_BIT_*         —                    receiver XrNativeType (exact width/sign contract)
+ *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
+ *  XI_STORE_FIELD   field name or NULL   symbol id or field index
+ *  XI_STATIC_ADDR   —                    shared slot index for freestanding static data
+ *  XI_PTR_LOAD      —                    XrFFIType width of pointee | unaligned flag;
+ *                                         args[1] carries Endian
+ *  XI_PTR_STORE     —                    XrFFIType width of pointee | unaligned flag;
+ *                                         args[2] carries Endian
+ *  XI_OBJECT_NEW      char** field_names   field count
+ *  XI_OBJECT_INIT_F   —                    field index
+ *  XI_OBJECT_GET_F    —                    field index
+ *  XI_OBJECT_SET_F    —                    field index
+ *  XI_JSON_DECODE   char** field_names   field count
+ *  XI_CALL          —                    bits[0:7]=flags, bits[8:15]=nresults
+ *  XI_CALL_METHOD   method name (debug)  (global_symbol_id << 1) | is_super
+ *  XI_CALL_METHOD_DIRECT method name      method index
+ *  XI_CALL_BUILTIN  —                    builtin_id
+ *  XI_CONVERT       —                     XiValue.type + XiValue.conversion are authoritative
+ *  XI_AS            target name           dynamic checked/nullable evidence only
+ *  XI_EXTRACT       —                    obsolete; verifier rejects it
+ *  XI_LOAD_UPVAL    —                    upvalue index
+ *  XI_STORE_UPVAL   —                    upvalue index
+ *  XI_GET_SHARED    —                    shared slot index (relative)
+ *  XI_SET_SHARED    —                    shared slot index (relative)
+ *  XI_PRINT         XrPrintPlan*         —
+ *  XI_CLOSURE_NEW   XiFunc* (child)      —
+ *  XI_CLASS_CREATE  XiClassData*         —
+ *  XI_SCOPE_ENTER   —                    scope mode
+ *  XI_SCOPE_EXIT    —                    scope mode
+ *  XI_YIELD         —                    0=immediate, >0=poll/reduction hint
+ *  XI_ASSERTION     XrAssertionPlan*     —
+ *  XI_GET_BUILTIN   name string (char*)  global index
+ *  XI_IMPORT_REF    XiImportRef*         resolved shared slot (-1=unresolved)
+ *  XI_PAR_FOR       XiParallelForData*   —
+ *  XI_PAR_MAP   XiParallelMapData* —
+ *  XI_PAR_REDUCE    XiParallelReduceData* —
+ *
+ *  Consumers: xi_emit.c (VM bytecode), xi_cgen.c (AOT).
+ *  XI_CALL_METHOD.aux_int carries SymbolId (resolved at lowering time).
+ *  xi_emit reads it for OP_INVOKE.
+ */
+
+typedef enum {
+    /* Constants */
+    XI_CONST = 0, /* constant value (int/float/bool/char/null/string in aux) */
+    XI_PARAM,     /* function parameter (aux_int = param index) */
+    XI_TARGET_SIZEOF,
+    XI_TARGET_ALIGNOF,
+    XI_TARGET_SIMD_BYTES,
+    XI_TARGET_SIMD_ACCELERATED,
+    XI_TARGET_SIMD_RUNTIME_SELECTED,
+
+    /* Arithmetic (polymorphic: type determines int vs float) */
+    XI_ADD,
+    XI_SUB,
+    XI_MUL,
+    XI_DIV,
+    XI_MOD,
+    XI_NEG, /* unary negate */
+
+    /* Bitwise */
+    XI_BAND, /* & */
+    XI_BOR,  /* | */
+    XI_BXOR, /* ^ */
+    XI_BNOT, /* ~ */
+    XI_SHL,  /* << */
+    XI_SHR,  /* >> */
+    XI_BIT_ROTL,
+    XI_BIT_ROTR,
+    XI_BIT_BSWAP,
+    XI_BIT_POPCOUNT,
+    XI_BIT_CLZ,
+    XI_BIT_CTZ,
+    XI_BIT_MUL_HIGH,
+
+    /* Semantic-neutral native code-shape controls. */
+    XI_CODEGEN_OPAQUE,
+    XI_CODEGEN_COMPILER_FENCE,
+
+    /* Comparison (result is always bool) */
+    XI_EQ,
+    XI_NE,
+    XI_LT,
+    XI_LE,
+    XI_GT,
+    XI_GE,
+
+    /* Logical */
+    XI_NOT, /* ! (unary) */
+
+    /* Type conversion */
+    XI_CONVERT,               /* explicit conversion: type + conversion witness are authoritative */
+    XI_BOX,                   /* unboxed -> tagged XrValue */
+    XI_UNBOX,                 /* tagged -> unboxed (type guard) */
+    XI_ENUM_DESCRIPTOR_BOX,   /* typed scalar -> erased {layout, kind, scalar} box */
+    XI_ENUM_DESCRIPTOR_UNBOX, /* erased enum descriptor box -> typed scalar */
+
+    /* Explicit narrowing: truncate int64/double to sub-width, re-extend.
+     * Result rep stays I64 (or F64 for F32 variant) — only value range changes.
+     * Inserted by xi_lower at typed-storage write points. */
+    XI_NARROW_I8,  /* int64 → (int8_t)  → int64  (sign-extend back) */
+    XI_NARROW_U8,  /* int64 → (uint8_t) → int64  (zero-extend back) */
+    XI_NARROW_I16, /* int64 → (int16_t) → int64 */
+    XI_NARROW_U16, /* int64 → (uint16_t)→ int64 */
+    XI_NARROW_I32, /* int64 → (int32_t) → int64 */
+    XI_NARROW_U32, /* int64 → (uint32_t)→ int64 */
+    XI_NARROW_F32, /* double → (float)  → double (precision roundtrip) */
+
+    /* Explicit widening: sign/zero extend sub-width to int64.
+     * Inserted by xi_lower at typed-storage read points.
+     * Makes sign-extension vs zero-extension unambiguous. */
+    XI_WIDEN_I8,  /* sign-extend int8 value in int64 */
+    XI_WIDEN_U8,  /* zero-extend uint8 value in int64 (mask 0xFF) */
+    XI_WIDEN_I16, /* sign-extend int16 */
+    XI_WIDEN_U16, /* zero-extend uint16 */
+    XI_WIDEN_I32, /* sign-extend int32 */
+    XI_WIDEN_U32, /* zero-extend uint32 */
+    XI_WIDEN_F32, /* (double)(float) roundtrip — explicit precision gate */
+
+    /* Memory / field access */
+    XI_LOAD_FIELD,       /* obj.field: args[0]=obj, aux=name, aux_int=symbol id */
+    XI_STORE_FIELD,      /* obj.field=val: args[0]=obj, args[1]=val, aux=name, aux_int=symbol id */
+    XI_WEAK_LOAD_FIELD,  /* weak field load with owned promotion */
+    XI_WEAK_STORE_FIELD, /* weak field store; does not consume the stored value */
+    XI_INDEX_GET,        /* obj[key]: args[0]=obj, args[1]=key */
+    XI_INDEX_SET,        /* obj[key]=val: args[0]=obj, args[1]=key, args[2]=val */
+    XI_ENUM_VARIANT_AT,  /* checked EnumVariants<E>[index] -> EnumVariant<E> */
+    XI_ENUM_PAYLOAD_AT,  /* checked EnumPayloads<E>[index] -> EnumPayloadField<E> */
+    XI_ENUM_META_GET,    /* cold descriptor field: args[0]=enum namespace, args[1]=descriptor */
+
+    /* U8 memory primitives: all offsets/counts are integer values.
+     * LOAD args: args[0]=bytes, args[1]=offset, args[2]=Endian.
+     * STORE args: args[0]=bytes, args[1]=offset, args[2]=value, args[3]=Endian.
+     * COPY_WITHIN args: args[0]=bytes, args[1]=dst, args[2]=src, args[3]=count.
+     * COPY_FROM args: args[0]=dst, args[1]=src, args[2]=src_offset,
+     *                 args[3]=dst_offset, args[4]=count.
+     * REPEAT_FROM args: args[0]=bytes, args[1]=dst, args[2]=distance, args[3]=count. */
+    XI_BYTE_SLICE_LOAD_U16,
+    XI_BYTE_SLICE_LOAD_U32,
+    XI_BYTE_SLICE_LOAD_U64,
+    XI_BYTE_SLICE_LOAD_F32,
+    XI_BYTE_SLICE_LOAD_F64,
+    XI_BYTE_SLICE_STORE_U16,
+    XI_BYTE_SLICE_STORE_U32,
+    XI_BYTE_SLICE_STORE_U64,
+    XI_BYTE_SLICE_STORE_F32,
+    XI_BYTE_SLICE_STORE_F64,
+    XI_BYTE_SLICE_FILL,
+    XI_BYTE_SLICE_COPY,
+    XI_BYTE_SLICE_COMPARE,
+    XI_BYTE_SLICE_COMMON_PREFIX,
+    XI_BYTE_SLICE_REPEAT,
+    XI_SLICE_WINDOW,   /* args[0]=Slice<T>, args[1]=start, args[2]=count; strict borrowed slice */
+    XI_SLICE_AS_BYTES, /* args[0]=Slice<T>; result Slice<u8>; aux unused */
+    XI_SLICE_FILL,     /* args[0]=Slice<T> dst, args[1]=T value; result dst */
+    XI_SLICE_COPY,     /* args[0]=Slice<T> dst, args[1]=Slice<T> src; result dst */
+    XI_SLICE_COMPARE,  /* args[0]=Slice<T> left, args[1]=Slice<T> right; result int */
+    XI_SLICE_REINTERPRET, /* args[0]=Slice<u8>; result Slice<T>; aux packs elem metadata */
+    XI_SLICE_FROM_PTR, /* args[0]=Ptr<T>, args[1]=count, args[2]=owner; caller-proven unsafe view */
+    XI_BUFFER_MATERIALIZE, /* args[0]=moved Buffer; exact native-output proof is analyzer-owned */
+    XI_BYTE_ARRAY_COPY_WITHIN,
+    XI_BYTE_ARRAY_COPY_FROM,   /* args[0]=dst, args[1]=src, args[2]=src_off,
+                                * args[3]=dst_off, args[4]=count */
+    XI_BYTE_ARRAY_APPEND_FROM, /* args[0]=dst Array<u8>, args[1]=src Slice<u8>; result dst */
+    XI_BYTE_ARRAY_REPEAT_FROM, /* args[0]=dst Array<u8>, args[1]=distance, args[2]=count */
+    XI_ARRAY_DATA_PTR,         /* args[0]=Array<T>/Slice<T>/[T;N]; result raw pointer borrow */
+    XI_STATIC_BYTES_PTR,       /* aux=exact bytes, aux_int=length; stable Ptr<u8> */
+    XI_STATIC_ADDR,            /* aux_int=shared slot; result Ptr<T>/MutPtr<T> to static data */
+    XI_LOCAL_ADDR,             /* args[0]=caller SSA slot; call-bound place address */
+    XI_PLACE_LOAD,             /* args[0]=call-bound place; result pointee value */
+    XI_PLACE_STORE,            /* args[0]=call-bound place, args[1]=value; result void */
+
+    /* FFI raw-pointer memory access. The address is an address-width int
+     * (Ptr<T>/MutPtr<T> value). aux_int carries an XrFFIType width code in
+     * the low bits plus optional pointer-load flags (see xffi_sig.h) so both
+     * backends pick the exact scalar access semantics without re-deriving them
+     * from operand types. No bounds check: only valid inside `unsafe`
+     * (analyzer-enforced). The pointee group aliases everything (C may mutate
+     * it), so these ops are never value-numbered or hoisted.
+     * LOAD args: args[0]=address; result type = pointee T.
+     * STORE args: args[0]=address, args[1]=value; result void. */
+    XI_PTR_LOAD,
+    XI_PTR_STORE,
+    XI_PTR_COPY_NONOVERLAP, /* args[0]=dst MutPtr<T>, args[1]=src Ptr<T>, args[2]=count */
+
+    /* Struct native storage: typed field access with compile-time layout.
+     * args[0]=class_val for NEW; args[0]=struct for GET/UPDATE/SET.
+     * aux=XrAggregateLayout*; aux_int=field_index for GET/UPDATE/SET. */
+    XI_AGG_NEW,         /* allocate struct: args[0]=class, aux=XrAggregateLayout* */
+    XI_AGG_GET,         /* read field: args[0]=struct, aux_int=field_idx, aux=XrAggregateLayout* */
+    XI_AGG_UPDATE,      /* pure copy-update: args[0]=struct, args[1]=replacement; result struct */
+    XI_AGG_SET,         /* write field: args[0]=struct, args[1]=val, aux_int=field_idx,
+                              aux=XrAggregateLayout* */
+    XI_FIXED_ARRAY_NEW, /* allocate fixed array in frame storage: type=[T; N], aux_int=native */
+    XI_FIXED_BYTES_CONST, /* compact byte payload copied into fixed-array frame storage */
+
+    /* Structural object allocation and access. */
+    XI_OBJECT_NEW,        /* Create exact object: aux=field_count, aux_ptr=field_names[] */
+    XI_OBJECT_INIT_F,     /* Init field by index: args[0]=object, args[1]=val, aux_int=field_idx */
+    XI_OBJECT_GET_F,      /* Read field by index: args[0]=object, aux_int=field_idx */
+    XI_OBJECT_SET_F,      /* Write field by index: args[0]=object, args[1]=val, aux_int=field_idx */
+    XI_OBJECT_MERGE,      /* Merge all fields of src into dst: args[0]=dst, args[1]=src
+                           * (object spread `{...base}`; later fields override earlier) */
+    XI_JSON_DECODE,       /* Typed decode: args[0]=source, aux=field_names[], aux_int=field_count
+                           * result: T? (exact object or null on validation failure) */
+    XI_ARRAY_NEW,         /* new array: args[0]=capacity */
+    XI_ARRAY_PUSH,        /* append one element: args[0]=array, args[1]=value (in-place, void) */
+    XI_ARRAY_EXTEND,      /* splice all elements of src array into dst: args[0]=dst, args[1]=src
+                           * (in-place, void; retains each copied element) — array spread `[...a]` */
+    XI_MAP_NEW,           /* new map: args[0]=capacity */
+    XI_TUPLE_NEW,         /* new tuple: args[0..n-1]=elements, aux_int=n (arity) */
+    XI_TUPLE_GET,         /* read tuple field: args[0]=tuple, aux_int=field_index (zero-based) */
+    XI_VARIANT_CONSTRUCT, /* args[0]=enum namespace, args[1..]=declaration-order payloads */
+    XI_VARIANT_TEST,      /* args[0]=variant value, aux_int=declaration variant ordinal */
+    XI_VARIANT_PROJECT,   /* args[0]=variant value, aux_int=packed variant/field ordinals */
+
+    /* Function calls */
+    XI_CALL,        /* function call: args[0]=callee, args[1..n]=params
+                     * aux_int bits 0-7: flags (1=self_call)
+                     * aux_int bits 8-15: nresults (0 means 1) */
+    XI_CALL_METHOD, /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
+    XI_CALL_METHOD_DIRECT,
+    XI_TAIL_CALL,        /* general function tail call: args[0]=callee, args[1..n]=params
+                          * Terminates the function — semantically a call + return.
+                          * The current frame is cleaned up (ARC release) before
+                          * transferring control.  aux_int mirrors XI_CALL encoding.
+                          * Methods retain XI_CALL_METHOD[_DIRECT] + XI_FLAG_TAIL. */
+    XI_CALL_BUILTIN,     /* builtin call: aux_int=builtin_id, args[0..n]=params */
+    XI_ATOMIC_LOAD,      /* canonical Atomic<T>.load; identity is xa_intrinsic_id */
+    XI_ATOMIC_STORE,     /* canonical Atomic<T>.store */
+    XI_ATOMIC_RMW,       /* canonical RMW; exact operation is xa_intrinsic_id */
+    XI_ATOMIC_TO_STRING, /* canonical allocating Atomic<T>.toString */
+    XI_EXTRACT,          /* obsolete multi-return extraction marker; verifier-only reject */
+
+    /* Closure / upvalue */
+    XI_CLOSURE_NEW, /* create closure: aux=proto, args=captures */
+    XI_CELL_NEW,    /* create mutable capture cell: args[0]=initial value */
+    XI_CELL_GET,    /* read mutable capture cell: args[0]=cell */
+    XI_CELL_SET,    /* update mutable capture cell: args[0]=cell, args[1]=value */
+    XI_LOAD_UPVAL,  /* load upvalue: aux_int=upval_index */
+    XI_STORE_UPVAL, /* store upvalue: aux_int=upval_index, args[0]=val */
+
+    /* Shared (module-level) variables */
+    XI_GET_SHARED, /* load from shared array: aux_int=shared_index */
+    XI_SET_SHARED, /* store to shared array: aux_int=shared_index, args[0]=val */
+
+    /* Name-keyed top-level globals (REPL incremental mode).  aux is an
+     * arena-owned C string with the binding's source name; the emitter
+     * interns it into the proto constant pool and emits OP_GETGLOBAL/
+     * OP_SETGLOBAL.  Coexists with XI_GET/SET_SHARED until the script-
+     * mode path also migrates. */
+    XI_GET_GLOBAL, /* load from globals dict: aux=name (const char*) */
+    XI_SET_GLOBAL, /* store to globals dict: aux=name, args[0]=val */
+
+    /* Print (builtin, kept as dedicated op for convenience) */
+    XI_PRINT, /* print: args[0..n]=values, aux=XrPrintPlan* */
+
+    /* Coroutine */
+    XI_GO,           /* go expr: args[0]=callee, args[1..n]=params */
+    XI_THREAD_SPAWN, /* sys.Thread.spawn: go-like closure on a dedicated OS thread */
+    XI_AWAIT,        /* await task: args[0]=task */
+
+    /* Batch-parallel high-level ops.
+     * These are semantic placeholders for stdlib parallel.* intrinsic lowering:
+     * they carry enough information for VM/AOT to choose persistent workers,
+     * lane batching, native result buffers and reducer strategies without
+     * preserving the removed dedicated grammar surface. */
+    XI_PAR_FOR,
+    XI_PAR_MAP,
+    XI_PAR_REDUCE,
+    XI_TASK_GROUP_NEW,
+    XI_TASK_GROUP_SPAWN_RANGE,
+    XI_TASK_GROUP_AWAIT_REDUCE,
+    XI_TASK_GROUP_JOIN,
+
+    XI_CHAN_SEND,          /* ch.send(v): args[0]=chan, args[1]=val */
+    XI_CHAN_RECV,          /* raw recv payload: args[0]=chan; status in adjacent VM slot */
+    XI_CHAN_RECV_STATUS,   /* bool status for XI_CHAN_RECV / XI_CHAN_TRY_RECV */
+    XI_CHAN_TRY_SEND,      /* internal try-send-ready bool: args[0]=chan, args[1]=val */
+    XI_CHAN_TRY_RECV,      /* raw tryRecv payload: args[0]=chan; status in adjacent VM slot */
+    XI_CHAN_IS_CLOSED,     /* ch.isClosed: args[0]=chan */
+    XI_TIME_AFTER,         /* time.after(ms): args[0]=timeout_ms, returns timer channel */
+    XI_CHAN_TIMER_DISPOSE, /* dispose select-owned timer channel: args[0]=timer chan */
+    XI_SELECT_BLOCK,       /* blocking select wait: args[0..n]=channels */
+    XI_YIELD,              /* cooperative yield (Coro.yield / Gosched) */
+    XI_GEN_YIELD,          /* generator `yield expr`: args[0]=value, suspend */
+    XI_GEN_CALL, /* call generator fn: args[0]=callee, args[1..n]=params; result=Iterator */
+    /* Exception handling (legacy, retained for panic) */
+    XI_THROW, /* throw exception: args[0]=value */
+
+    /* Value-return error channel */
+    XI_ERR_SET,           /* write args[0] to error channel (no return) */
+    XI_ERR_RETURN,        /* write args[0] to error channel + return from function */
+    XI_ERR_CHECK,         /* after fallible call: check pending_error, propagate if set;
+                           * post-ARC args[]=error-edge drops */
+    XI_ERR_CATCH,         /* read pending_error into result, clear error channel */
+    XI_CLEANUP_ENTER,     /* enter a statically lowered cleanup body */
+    XI_CLEANUP_LEAVE,     /* leave a statically lowered cleanup body */
+    XI_CLEANUP_ERR_CHECK, /* fail closed if an opaque value error escapes cleanup */
+
+    /* Iteration (for-in protocol) */
+    XI_ITER_NEW,   /* create iterator: args[0]=collection */
+    XI_ITER_NEXT,  /* advance + get value: args[0]=iterator, returns next value */
+    XI_ITER_VALID, /* test not-done: args[0]=iterator, returns bool */
+
+    /* Channel creation */
+    XI_CHAN_NEW, /* create channel: args[0]=buffer_size (optional) */
+
+    /* Set creation */
+    XI_SET_NEW, /* create set: args[0]=capacity */
+
+    /* String concatenation (for template strings) */
+    XI_STR_CONCAT, /* concat: args[0..n]=parts, produces string */
+
+    /* Type operations */
+    XI_IS, /* runtime type check: args[0]=value, args[1]=type (tid int or class), returns bool */
+    XI_AS, /* type cast: args[0]=value, aux=target type */
+    XI_CHECKTYPE, /* strict runtime type assertion: args[0]=value, aux_int=(tid<<1)|allow_null */
+    XI_SLICE,     /* slice: args[0]=source, args[1]=start, args[2]=end */
+    XI_RANGE,     /* range: args[0]=start, args[1]=end */
+
+    /* Obsolete multi-value return packaging; verifier-only reject */
+    XI_MULTI_RET,
+
+    /* Null check */
+    XI_ISNULL, /* args[0]=value, returns bool (true if null) */
+
+    /* Phi node (not in value list — separate on XiBlock) */
+    XI_PHI, /* SSA phi: args[i] corresponds to block->preds[i] */
+
+    /* Conditional select (from if-conversion) */
+    XI_SELECT, /* dst = args[0] ? args[1] : args[2] (cond, true_val, false_val) */
+
+    /* Identity / type narrowing.  Most XI_COPY values are optimizer-inserted
+     * aliases.  Lowering marks semantic value-struct copies with
+     * XI_COPY_KIND_VALUE_CLONE in aux_int so VM/AOT emit an independent clone,
+     * and mutable-capture reads with XI_COPY_KIND_CELL_READ so optimizers do
+     * not fold them through stale SSA values before xi_pass_close rewrites
+     * them to explicit XI_CELL_GET values. */
+    XI_COPY, /* identity by default: dst = args[0], may carry narrowed type */
+
+    /* OOP: class creation */
+    XI_CLASS_CREATE, /* create class from descriptor: aux=XiClassData* */
+
+    /* Structured concurrency scope */
+    XI_SCOPE_ENTER, /* enter scope: aux_int=scope_mode (0=WAIT,1=LINKED) */
+    XI_SCOPE_EXIT,  /* exit scope: aux_int=scope_mode; unit-typed, no result */
+
+    /* Exception handling (panic channel only) */
+    XI_TRY,     /* begin try: marks start of panic-protected region */
+    XI_CATCH,   /* catch panic: receive exception into dst register */
+    XI_END_TRY, /* end try-catch region */
+
+    /* Builtin calls: compile-time recognized functions */
+    XI_ASSERTION,   /* args follow typed XrAssertionPlan in aux */
+    XI_TYPEID,      /* args[0]=value; result=int XrTypeId */
+    XI_TYPENAME,    /* args[0]=value; result=string typename */
+    XI_LEN,         /* args[0]=Lengthable value */
+    XI_GET_BUILTIN, /* aux=name_string; aux_int=global_index; loads runtime global */
+
+    /* Cross-module import reference (resolved at cgen time).
+     * aux = XiImportRef* (module_path + member_name).
+     * aux_int = resolved shared index (set by driver post-lowering, -1 if unresolved). */
+    XI_IMPORT_REF,
+
+    /* Ownership / ARC ops (inserted by xi_arc_insert after escape analysis) */
+    XI_RETAIN,        /* args[0]=value; increment refcount (no-op for scalars) */
+    XI_RELEASE,       /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
+    XI_SOURCE_MOVE,   /* explicit source consume; requires sealed FinalMoveProof evidence */
+    XI_OWNER_FORWARD, /* ARC owner transfer to a new SSA value; no source-binding invalidation */
+
+    /* Stack allocation (replaces heap alloc for NO_ESCAPE values).
+     * aux_int = original op (XI_ARRAY_NEW etc.) for codegen dispatch.
+     * Inherits args from the original op. Freed automatically at return. */
+    XI_STACK_ALLOC,
+
+    /* Coro built-in module methods.
+     * aux_int = XI_CORO_SUB_* sub-type, args = method arguments.
+     * Emits dedicated opcodes (OP_SET_LOCAL, OP_GET_LOCAL, OP_LOCK_THREAD,
+     * OP_UNLOCK_THREAD) or OP_CORO_CTRL with sub-opcode. */
+    XI_CORO_OP,
+
+    /* Typed SIMD / Vector ops shared by explicit portable SIMD and automatic
+     * vectorization.  Explicit shapes encode lane count + XrNativeType in
+     * aux_int; legacy automatic-vectorization producers carry only VF. */
+    XI_VEC_LOAD,
+    XI_VEC_STORE,
+    XI_VEC_SPLAT,
+    XI_VEC_EXTRACT,
+    XI_VEC_REPLACE,
+    XI_VEC_ADD,
+    XI_VEC_SUB,
+    XI_VEC_MUL,
+    XI_VEC_BIT_AND,
+    XI_VEC_BIT_OR,
+    XI_VEC_BIT_XOR,
+    XI_VEC_BIT_NOT,
+    XI_VEC_SHL,
+    XI_VEC_SHR,
+    XI_VEC_REINTERPRET,
+    XI_VEC_SHUFFLE,
+    XI_VEC_WIDEN_MUL,
+    XI_VEC_UNZIP,
+    XI_VEC_WIDEN_MUL_HALF,
+    XI_VEC_REDUCE_ADD,
+
+    /* PSC-bound anonymous value products. These are canonical Xi proof
+     * operations only; TargetPlan lowering owns their eventual executable
+     * representation. */
+    XI_VALUE_PRODUCT_CONSTRUCT,
+    XI_VALUE_PRODUCT_PROJECT,
+
+    /* Compiler-private closed-sum injection. Currently restricted to the
+     * canonical
+     * Optional<T> normalization boundary: aux_int=0 is None with
+     * no operands, aux_int=1 is
+     * Some with one non-null T operand. */
+    XI_SUM_INJECT,
+
+    /* Compiler-owned target profile queries. The source occurrence is
+     * frozen in Xglobal and carried by xg_target_query_* metadata. */
+    XI_TARGET_POINTER_BITS,
+    XI_TARGET_OPERATING_SYSTEM,
+    XI_TARGET_ARCHITECTURE,
+    XI_TARGET_NATIVE_ABI,
+    XI_TARGET_ENDIANNESS,
+
+    XI_OP_COUNT /* sentinel */
+} XiOp;
+
+#define XI_SLICE_FROM_PTR_AUX_MUTABLE (INT64_C(1) << 48)
+#define XI_BUFFER_MATERIALIZE_AGGREGATE UINT8_C(0xff)
+#define XI_BUFFER_MATERIALIZE_AUX(code, size, align)                                               \
+    ((int64_t) ((uint64_t) (uint8_t) (code) | ((uint64_t) (uint32_t) (size) << 8) |                \
+                ((uint64_t) (uint16_t) (align) << 40)))
+#define XI_BUFFER_MATERIALIZE_CODE(aux) ((uint8_t) ((uint64_t) (aux) & UINT64_C(0xff)))
+#define XI_BUFFER_MATERIALIZE_SIZE(aux)                                                            \
+    ((uint32_t) (((uint64_t) (aux) >> 8) & UINT64_C(0xffffffff)))
+#define XI_BUFFER_MATERIALIZE_ALIGN(aux) ((uint16_t) (((uint64_t) (aux) >> 40) & UINT64_C(0xffff)))
+
+static inline bool xi_op_is_identity_forward(uint16_t op) {
+    return op == XI_SOURCE_MOVE || op == XI_OWNER_FORWARD;
+}
+
+/* XI_CALL flag byte of aux_int (bits 0-7); bits 8-15 hold the result count. */
+#define XI_CALL_FLAGS_MASK INT64_C(0xff)
+#define XI_CALL_FLAG_SELF INT64_C(1)
+
+/* True when the call names its own activation as the callee: the callee slot
+ * holds a placeholder constant nobody reads, and the target is the closure the
+ * running frame already carries.  The immediate is the whole authority for
+ * that, so the emitter, the IR verifier and both plan layers ask it here
+ * instead of each restating the encoding. */
+static inline bool xi_call_targets_own_frame(uint16_t op, int64_t immediate) {
+    return op == XI_CALL && (immediate & XI_CALL_FLAGS_MASK) == XI_CALL_FLAG_SELF;
+}
+
+/* XI_CORO_OP sub-type constants (stored in aux_int) */
+#define XI_CORO_SUB_SET_LOCAL 0
+#define XI_CORO_SUB_GET_LOCAL 1
+#define XI_CORO_SUB_LOCK_THREAD 2
+#define XI_CORO_SUB_UNLOCK_THREAD 3
+/* Values >= XI_CORO_SUB_CTRL_BASE map to OP_CORO_CTRL with
+ * sub-opcode = (aux_int - XI_CORO_SUB_CTRL_BASE), which corresponds
+ * to the CORO_CTRL_* constants in xchunk.h. */
+#define XI_CORO_SUB_CTRL_BASE 100
+#define XI_CORO_SUB_LOCAL_NEW (XI_CORO_SUB_CTRL_BASE + 2)
+
+/* Explicit SIMD shape encoding in XiValue.aux_int. */
+#define XI_VEC_SHAPE_EXPLICIT (INT64_C(1) << 16)
+#define XI_VEC_SHAPE_ODD_LANES (INT64_C(1) << 17)
+#define XI_VEC_SHAPE_UNZIP (INT64_C(1) << 18)
+#define XI_VEC_SHAPE_CONTIGUOUS_HALF (INT64_C(1) << 19)
+/* The source explicitly placed this memory access in `unsafe {}` and
+ * therefore promises that the complete access window is valid.  This bit is
+ * legal only on explicitly supported memory intrinsics. */
+#define XI_ACCESS_UNCHECKED (INT64_C(1) << 20)
+/* Semantic shuffle shapes must not depend on packing every lane into aux_int:
+ * 16-lane and wider vectors do not fit above XI_VEC_SHAPE_SHUFFLE_SHIFT. */
+#define XI_VEC_SHAPE_SWAP_ADJACENT (INT64_C(1) << 21)
+/* The vector's active prefix is selected from the target at runtime. The
+ * encoded lane count is its frozen storage maximum, not a fixed active VL. */
+#define XI_VEC_SHAPE_SCALABLE (INT64_C(1) << 22)
+#define XI_VEC_SHAPE_LANES_MASK INT64_C(0xff)
+#define XI_VEC_SHAPE_NATIVE_SHIFT 8
+#define XI_VEC_SHAPE_NATIVE_MASK (INT64_C(0xff) << XI_VEC_SHAPE_NATIVE_SHIFT)
+#define XI_VEC_SHAPE_SHUFFLE_SHIFT 24
+#define XI_VEC_SHAPE_PACKED_SHUFFLE_LANES 8
+
+static inline int64_t xi_vec_shape_encode(uint8_t native_type, uint8_t lanes) {
+    return XI_VEC_SHAPE_EXPLICIT | (int64_t) lanes |
+           ((int64_t) native_type << XI_VEC_SHAPE_NATIVE_SHIFT);
+}
+
+static inline bool xi_vec_shape_is_explicit(int64_t shape) {
+    return (shape & XI_VEC_SHAPE_EXPLICIT) != 0;
+}
+
+static inline uint8_t xi_vec_shape_lanes(int64_t shape) {
+    return (uint8_t) (shape & XI_VEC_SHAPE_LANES_MASK);
+}
+
+static inline uint8_t xi_vec_shape_native_type(int64_t shape) {
+    return (uint8_t) ((shape & XI_VEC_SHAPE_NATIVE_MASK) >> XI_VEC_SHAPE_NATIVE_SHIFT);
+}
+
+static inline bool xi_vec_shape_is_scalable(int64_t shape) {
+    return (shape & XI_VEC_SHAPE_SCALABLE) != 0;
+}
+
+/* Import reference metadata for XI_IMPORT_REF.
+ * Stored in XiValue.aux, resolved against the module graph by
+ * xi_resolve_imports.  Multi-module drivers compile in topological order and
+ * resolve each module's imports before running ARC on it, so the pointer
+ * fields below let ARC read the (already final) borrow signature of a
+ * cross-module callee.  A second resolution pass after all modules compile
+ * fills anything the early pass could not see; refs that never resolve keep
+ * NULL/-1 and callers fall back to the conservative moved-argument
+ * convention (which can leak but never double-frees). */
+typedef struct XiImportRef {
+    const char *module_path;          /* import source (e.g. "./math_lib") */
+    const char *member_name;          /* exported name (e.g. "square") */
+    bool has_exact_target;            /* compiler-private direct graph binding */
+    int exact_target_spec_index;      /* XrModuleGraph spec index, never a source locator */
+    int resolved_mod_index;           /* index into the driver's module array, -1 = unresolved */
+    int resolved_shared_slot;         /* shared slot in the target module, -1 = unresolved */
+    int resolved_export_slot;         /* dense VM runtime export slot, -1 = unresolved */
+    struct XiFunc *resolved_func;     /* exported function this member ref binds to, or NULL */
+    struct XiModule *resolved_module; /* target module (namespace refs included), or NULL */
+    bool resolution_attempted;        /* module-graph resolver completed exact lookup */
+    /* Stable PSC dependency authority for a covered cross-module call. Names
+     * and resolved pointers only corroborate this join after construction. */
+    uint32_t psc_dependency_index;
+    XiSourceLocator psc_import_locator;
+    XrStableId psc_resolver_binding;
+} XiImportRef;
+
+typedef struct XiResolvedReexport {
+    const char *export_name; /* public name owned by the containing XiFunc arena */
+    int mod_index;           /* owning module's topological index */
+    int export_slot;         /* owning module's dense VM export slot */
+} XiResolvedReexport;
+
+/* Re-export entry for "export { a } from './file'" and "export * from './file'".
+ * Stored on XiFunc during lowering, emitted as OP_LOAD_MODULE_SLOT + OP_SET_EXPORT. */
+typedef struct XiReexportEntry {
+    const char *from_path; /* source module path (arena copy) */
+    const char *name;      /* original export name (NULL = star re-export) */
+    const char *alias;     /* export alias (NULL = same as name) */
+    int resolved_mod_index;
+    int resolved_export_slot;
+    XiResolvedReexport *resolved_members; /* sorted expansion for star re-export */
+    uint16_t resolved_member_count;
+    bool resolution_attempted;
+    bool resolution_complete;
+} XiReexportEntry;
+
+/* Arena-safe method descriptor for XI_CLASS_CREATE.
+ * One entry per instance/static method, ordered as the class declares them.
+ * All strings are arena-allocated (survive AST destruction). */
+typedef struct XiClassMethod {
+    const char *name;           /* method name (arena copy) */
+    int32_t symbol_id;          /* runtime symbol-table ID for dispatch matching */
+    bool is_constructor;        /* true for constructor or "init" */
+    bool is_static;             /* true for static methods */
+    bool is_static_constructor; /* true for static constructor */
+} XiClassMethod;
+
+/* Compile-time value of a field declaration initializer.
+ * Mirrors ast_field_default_to_value() in xi_emit_object.c exactly: the VM
+ * applies these through XrClassDescriptor::instance_fields[].default_value at
+ * instance creation, and AOT object construction has no descriptor to read, so
+ * both backends must accept the same initializer shapes or they diverge. */
+typedef enum {
+    XI_FIELD_DEFAULT_NONE = 0, /* no initializer, or one lowered as IR instead */
+    XI_FIELD_DEFAULT_INT,
+    XI_FIELD_DEFAULT_FLOAT,
+    XI_FIELD_DEFAULT_BOOL,
+    XI_FIELD_DEFAULT_RUNE,
+    XI_FIELD_DEFAULT_STRING,
+} XiFieldDefaultKind;
+
+/* Arena-safe field default for XI_CLASS_CREATE. */
+typedef struct XiFieldDefault {
+    uint8_t kind;           /* XiFieldDefaultKind */
+    int64_t int_val;        /* XI_FIELD_DEFAULT_INT */
+    double float_val;       /* XI_FIELD_DEFAULT_FLOAT */
+    bool bool_val;          /* XI_FIELD_DEFAULT_BOOL */
+    uint32_t rune_val;      /* XI_FIELD_DEFAULT_RUNE */
+    const char *string_val; /* XI_FIELD_DEFAULT_STRING (arena copy) */
+} XiFieldDefault;
+
+/* Lowerer → emitter bridge for XI_CLASS_CREATE.
+ * All data is arena-allocated; does NOT depend on AST after lowering. */
+typedef struct XiClassData {
+    struct AstNode *ast; /* AST_CLASS_DECL node (temporary, may be NULL after lowering) */
+    struct XrClassInfo *class_info; /* analyzer class identity; names are diagnostic only */
+    uint32_t xg_class_id;           /* evidence class id stamped at lowering; survives the
+                                       semantic snapshot that nulls class_info, so the backend
+                                       resolves same-named classes from different modules */
+    const char *class_name;         /* arena copy of class name */
+    const char *super_name;         /* arena copy of parent class name (NULL if none) */
+    const char
+        *generic_origin_name; /* Original generic class name (e.g. "Box"), NULL if not mono */
+    const char *display_name; /* User-visible name (e.g. "Box"), NULL = same as class_name */
+    const char *source_file;  /* arena copy of declaration source path (NULL if unavailable) */
+    XiSourceLocator source_locator;           /* pointer-free declaration authority */
+    uint32_t psc_type_index;                  /* frozen PSC type row, or XI_PSC_ROW_NONE */
+    const char **instance_field_names;        /* declared non-static field names, arena-owned */
+    struct XrType **instance_field_types;     /* resolved types parallel to instance_field_names */
+    uint32_t *instance_field_source_node_ids; /* evidence-stable IDs parallel to field names */
+    XiFieldDefault *instance_field_defaults;  /* declaration defaults parallel to field names */
+    uint16_t instance_field_count;
+    /* Exact flattened field index for a generated stdlib source/provider
+     * bridge, or -1.  Both VM descriptors and AOT offsetof metadata consume
+     * this compile-time proof; neither backend performs name lookup. */
+    int16_t source_provider_field_index;
+    XiClassMethod *methods;   /* arena array [nmethod] of method descriptors */
+    uint16_t nmethod;         /* total method count (instance + static) */
+    uint16_t *child_idx;      /* maps method order → XiFunc::children index */
+    uint16_t ninst;           /* instance method count */
+    uint16_t nstat;           /* static method count */
+    int clinit_child_idx;     /* children index for static constructor (-1 if none) */
+    uint32_t derive_flags;    /* XR_DERIVE_* flags copied from declaration attributes */
+    bool is_generic_skeleton; /* template class; concrete instances are separate classes */
+    bool is_monomorphized;    /* true for mono-generated classes */
+    bool explicit_final;      /* source-declared final class; preserved past analyzer teardown */
+    bool is_cycle_candidate;  /* type graph forms a reference cycle (enables RC cycle collector) */
+    /* Does this aggregate need a runtime type identity -- a registered type id,
+     * an itable, a name? A class does: instanceof walks it, dispatch needs it.
+     * A value aggregate does not; its layout is fixed and its methods are
+     * ordinary functions. XiClassData carries both the method table (which a
+     * struct needs) and the runtime identity (which it does not), and only the
+     * lowering knows which declaration form this came from -- so it records the
+     * answer here rather than leaving the backend to re-derive it. */
+    bool needs_runtime_type;
+    const char **mono_type_arg_names; /* concrete type display names (e.g. ["i64","string"]) */
+    int mono_type_arg_count;          /* element count */
+    struct XrAggregateLayout *struct_layout;   /* non-NULL for VALUE_TYPE (struct) classes */
+    struct XrAggregateLayout *instance_layout; /* non-NULL when class fields have native layout */
+    uint16_t inherited_field_count;            /* native class fields inherited from the parent */
+} XiClassData;
+
+/* ========== Block Kinds ========== */
+
+typedef enum {
+    XI_BLOCK_PLAIN = 0,   /* single successor: succs[0] */
+    XI_BLOCK_IF,          /* conditional: control=bool, succs[0]=then, succs[1]=else */
+    XI_BLOCK_RETURN,      /* function return: control=return value (or NULL for void) */
+    XI_BLOCK_UNREACHABLE, /* throw / panic: no successors */
+} XiBlockKind;
+
+/* ========== Value Flags ========== */
+
+#define XI_FLAG_SIDE_EFFECT (1 << 0) /* has side effects (cannot be eliminated) */
+#define XI_FLAG_MAY_THROW (1 << 1)   /* may raise exception */
+#define XI_FLAG_MAY_SUSPEND (1 << 2) /* may yield / await / block on channel */
+#define XI_FLAG_READS_MEM (1 << 3)   /* reads heap memory (load_field, index_get, ...) */
+#define XI_FLAG_WRITES_MEM (1 << 4)  /* writes heap memory (store_field, index_set, ...) */
+#define XI_FLAG_TAIL (1 << 5)        /* tail-position call: emit OP_TAILCALL / OP_INVOKE_TAIL */
+#define XI_FLAG_SPEC_CONST (1 << 6)  /* value is speculated constant (IC-guided, SCCP may fold) */
+#define XI_FLAG_FIRE_AND_FORGET (1 << 7) /* XI_GO result is not user-visible */
+
+/* Composite masks for query convenience */
+#define XI_FLAG_MEM_ANY (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
+#define XI_FLAG_CALL_EFFECTS                                                                       \
+    (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
+
+/* Compiler-internal facts emitted by lowering for backend-only decisions. */
+#define XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE (1u << 0)
+#define XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT 1
+#define XI_LOWERING_FLAG_ALLOCATION_STORAGE_MASK (3u << XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT)
+/* Physical ABI strategy for a semantic `read` aggregate parameter.  This is
+ * deliberately not a fourth source parameter mode: callers still use an
+ * ordinary argument, while lowering proves a nonescaping call-bound place. */
+#define XI_LOWERING_FLAG_PARAM_READ_PLACE (1u << 3)
+/* The suspension site is resumed by retrying the same lowered operation.
+ * Every non-callee operand is therefore a use on both sides of the suspend
+ * boundary and must be materialized in the coroutine frame. */
+#define XI_LOWERING_FLAG_RETRY_SUSPEND_OPERANDS (1u << 4)
+/* Exact module-provenance fact for `time.sleep(duration)`.  The VM emitter
+ * consumes this fact to select OP_SLEEP; spelling alone is not sufficient
+ * because user-defined objects may also have a method named `sleep`. */
+#define XI_LOWERING_FLAG_TIME_SLEEP (1u << 6)
+/* This call constructs a user class instance: the callee resolves to a class
+ * symbol carrying an XrClassInfo, so the result is a freshly allocated object
+ * and can never alias an argument.  ARC reads this fact to own the result and
+ * drop it at its death point (a call result is otherwise alias-uncertain and
+ * therefore never dropped, which leaked every `var x = ClassName(...)`).
+ *
+ * The fact must come from lowering, not from the callee's spelling: a
+ * `super(...)` call lowers to the same XI_CALL_METHOD with aux "init"
+ * but returns the receiver at +0, and it is deliberately NOT marked. */
+#define XI_LOWERING_FLAG_CONSTRUCTOR_CALL (1u << 5)
+/* A fixed structural field access whose closed receiver-shape set does not
+ * share one raw ordinal. The VM consumes the verified field symbol through
+ * the runtime class descriptor's O(1) symbol-to-ordinal table; AOT consumes
+ * the full XaotObjectAccessPlan and emits its guarded shape dispatch. */
+/* XI_JSON_DECODE consumes UTF-8 text directly into its exact target shape.
+ * The flag changes the codec evidence kind and selects the VM/AOT typed parser;
+ * an unflagged op validates and copies an already materialized Json value. */
+#define XI_LOWERING_FLAG_JSON_TYPED_PARSE (1u << 7)
+/* This XI_OBJECT_SET_F initializes a field of the object literal being
+ * constructed, rather than writing into an object that already exists.
+ *
+ * An access plan exists to prove that some receiver really has the shape a
+ * fixed ordinal assumes. A literal's own initialization has nothing to prove:
+ * the shape IS the literal, and object-shape-plan already authorizes it. There
+ * is no receiver whose shape could disagree, so requiring an access plan here
+ * would demand evidence for a question nobody asked -- and no producer emits
+ * an access row for it. Set only by object-literal lowering; every other
+ * OBJECT_SET_F still fails closed without a verified plan. */
+#define XI_LOWERING_FLAG_OBJECT_LITERAL_INIT (1u << 8)
+#define XI_LOWERING_FLAG_JSON_UNKNOWN_IGNORE (1u << 9)
+#define XI_LOWERING_FLAG_JSON_WITH_REST (1u << 10)
+#define XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS (1u << 11)
+#define XI_LOWERING_FLAG_JSON_REQUIRE (1u << 12)
+/* Weak field ownership is represented by XI_WEAK_LOAD_FIELD and
+ * XI_WEAK_STORE_FIELD. No lowering flag or ARC-side exception is permitted. */
+
+/* XI_AWAIT aux_int bits. */
+#define XI_AWAIT_AUX_ANY (1 << 0)
+#define XI_AWAIT_AUX_ALL (1 << 1)
+#define XI_AWAIT_AUX_ANY_SUCCESS (1 << 2)
+#define XI_AWAIT_AUX_CONSUME_TASK                                                                  \
+    (1 << 3) /* await consumes a direct temporary or unique-result Task handle */
+#define XI_AWAIT_AUX_AGGREGATE_ONE_SHOT                                                            \
+    (1 << 4) /* await all consumes a fresh task array literal                                      \
+              */
+#define XI_AWAIT_AUX_SUBMIT_DEFERRED_BATCH                                                         \
+    (1 << 5) /* plain await should submit its producer array as a deferred batch first */
+#define XI_AWAIT_AUX_INTO_RESULT                                                                   \
+    (1 << 6) /* await all writes results into the provided result array and returns unit */
+
+/* XI_GO / XI_THREAD_SPAWN aux_int bits. Low 8 bits carry link mode for GO.
+ * THREAD_SPAWN reuses the flag bits and stores stackSize in high bits. */
+#define XI_GO_AUX_LINK_MASK 0xff
+#define XI_GO_AUX_ONE_SHOT_AWAIT (1 << 8)
+#define XI_GO_AUX_DEFER_BATCH (1 << 9) /* defer child submission until aggregate await batch */
+#define XI_GO_AUX_RESULT_COPY_SHARED                                                               \
+    (1 << 10) /* compiler-planned shared copy for pointer-backed Copy result */
+#define XI_THREAD_SPAWN_AUX_STACK_SIZE_SHIFT 16
+#define XI_THREAD_SPAWN_AUX_STACK_SIZE_MASK ((int64_t) 0x0000ffffffffffffULL)
+
+typedef struct XiThreadSpawnOptions {
+    const char *name;
+    int64_t stack_size;
+    uint32_t affinity_cpus[XR_THREAD_AFFINITY_MAX];
+    uint16_t affinity_count;
+    uint8_t *transfer_modes;
+} XiThreadSpawnOptions;
+
+/* XI_YIELD aux_int values. */
+#define XI_YIELD_AUX_IMMEDIATE 0
+#define XI_YIELD_AUX_POLL 1
+
+/* ========== Upvalue Capture Info ========== */
+
+/* Source kinds matching the VM's UpvalInfo.source constants */
+#define XI_CAPTURE_SRC_REG 2   /* from enclosing frame's register */
+#define XI_CAPTURE_SRC_UPVAL 1 /* from enclosing closure's upvals[] */
+
+#define XI_MAX_CAPTURES 64
+
+/* Capture kind: how the closed-over variable is accessed by the child.
+ * Determined during closure analysis (xi_pass_close). */
+typedef enum XiCaptureKind {
+    XI_CAPTURE_BY_COPY,     /* immutable value copied at closure creation */
+    XI_CAPTURE_BY_IMM_REF,  /* immutable reference (large struct, no copy) */
+    XI_CAPTURE_BY_MUT_CELL, /* mutable cell indirection (needs_cell) */
+    XI_CAPTURE_MODULE_LIVE, /* module-level live binding via shared array */
+    XI_CAPTURE_SHARED,      /* stable shared identity capture */
+} XiCaptureKind;
+
+/* Provenance for values introduced only after the SemanticPlan snapshot.
+ * NONE is the only value produced by source/semantic lowering. */
+typedef enum XiBackendValueOrigin {
+    XI_BACKEND_VALUE_NONE = 0,
+    XI_BACKEND_VALUE_REP_BOX,
+    XI_BACKEND_VALUE_REP_UNBOX,
+    XI_BACKEND_VALUE_ENUM_DESCRIPTOR_BOX,
+    XI_BACKEND_VALUE_ENUM_DESCRIPTOR_UNBOX,
+    XI_BACKEND_VALUE_ORIGIN_COUNT,
+} XiBackendValueOrigin;
+
+typedef struct XiCapture {
+    uint8_t source;           /* XI_CAPTURE_SRC_REG or XI_CAPTURE_SRC_UPVAL */
+    uint16_t index;           /* SRC_UPVAL: parent upvalue index */
+    uint8_t capture_kind;     /* XiCaptureKind */
+    bool needs_cell;          /* true if the captured variable is mutated in the child */
+    bool is_mutable;          /* true if the variable is ever reassigned after capture */
+    bool is_reassigned;       /* true if variable is reassigned after capture point */
+    int16_t cell_index;       /* cell table index (-1 = not assigned) */
+    int16_t env_offset;       /* offset in closure env object (-1 = not assigned) */
+    const char *name;         /* variable name (debug; not owned) */
+    struct XrType *type;      /* variable type */
+    struct XiValue *value;    /* SRC_REG: parent SSA value (register resolved at emit) */
+    uint8_t storage_domain;   /* XrSemanticStorageDomain published by analyzer */
+    uint8_t value_capability; /* XaValueCapability published by analyzer */
+} XiCapture;
+
+typedef enum XiViewOrigin {
+    XI_VIEW_ORIGIN_NONE = 0,
+    XI_VIEW_ORIGIN_PARAM = 1,
+    XI_VIEW_ORIGIN_RECEIVER = 2,
+    XI_VIEW_ORIGIN_STATIC = 3,
+    XI_VIEW_ORIGIN_FOREIGN = 4,
+    XI_VIEW_ORIGIN_ALLOCATION = 5,
+} XiViewOrigin;
+
+/* Per-callee ownership of a returned RC reference.  UNKNOWN is deliberately
+ * the zero/default state: ARC must never release an alias when compilation
+ * cannot prove where the reference came from. */
+typedef enum XiReturnOwnershipKind {
+    XI_RETURN_OWNERSHIP_UNKNOWN = 0,
+    XI_RETURN_OWNERSHIP_OWNED,
+    XI_RETURN_OWNERSHIP_BORROWED_PARAM,
+    XI_RETURN_OWNERSHIP_BORROWED_STATIC,
+} XiReturnOwnershipKind;
+
+typedef struct XiReturnOwnership {
+    uint8_t kind;        /* XiReturnOwnershipKind */
+    int16_t param_index; /* BORROWED_PARAM only; -1 otherwise */
+    bool complete;       /* every reachable return has the same provenance */
+} XiReturnOwnership;
+
+/* Stable recipe used to materialize caller-local roots from current SSA
+ * operands.  It is intentionally the only stored Xi authority: caching an
+ * expanded root set would require transitive invalidation whenever an inner
+ * Slice changes.  The immutable XrProgram tables own that expansion after the
+ * optimizer boundary. */
+typedef struct XiViewSourceEvidence {
+    int16_t source_operand; /* operand in producer args[], -1 for direct STATIC */
+    int16_t source_param;   /* symbolic source parameter, -1 if not PARAM */
+    uint8_t origin;         /* XiViewOrigin used when the operand is a direct root */
+    uint8_t lifetime;       /* 1 = caller source, 2 = direct static */
+} XiViewSourceEvidence;
+
+/* Materialized root returned by xi_value_materialize_view_origins(). */
+typedef struct XiViewOriginEvidence {
+    uint32_t root_value_id; /* caller-local XiValue id; 0 for STATIC/unknown */
+    int16_t source_operand; /* operand in producer args[], -1 for STATIC */
+    int16_t source_param;   /* symbolic source parameter, -1 if not PARAM */
+    uint8_t origin;         /* XiViewOrigin */
+    uint8_t lifetime;       /* 1 = caller source, 2 = static */
+} XiViewOriginEvidence;
+
+typedef struct XiViewEvidence {
+    XiViewSourceEvidence *sources; /* normalized materialization recipe */
+    uint16_t source_count;
+    uint32_t element_type_id;     /* canonical semantic element type, when known */
+    uint32_t invalidation_set_id; /* root-relative memory-effect set, 0 if absent */
+    uint8_t capability;           /* 1 = read, 2 = write-exclusive */
+    uint8_t complete;             /* proof is sufficient for safe consumption */
+} XiViewEvidence;
+
+static inline const XiViewSourceEvidence *
+xi_view_evidence_single_source(const XiViewEvidence *evidence) {
+    return evidence && evidence->complete && evidence->source_count == 1 && evidence->sources
+               ? &evidence->sources[0]
+               : NULL;
+}
+
+static inline int xi_view_origin_evidence_compare(const XiViewOriginEvidence *a,
+                                                  const XiViewOriginEvidence *b) {
+    bool a_static = a->origin == XI_VIEW_ORIGIN_STATIC;
+    bool b_static = b->origin == XI_VIEW_ORIGIN_STATIC;
+    if (a_static != b_static)
+        return a_static ? -1 : 1;
+    if (a->root_value_id != b->root_value_id)
+        return a->root_value_id < b->root_value_id ? -1 : 1;
+    if (a->origin != b->origin)
+        return a->origin < b->origin ? -1 : 1;
+    if (a->source_operand != b->source_operand)
+        return a->source_operand < b->source_operand ? -1 : 1;
+    if (a->source_param != b->source_param)
+        return a->source_param < b->source_param ? -1 : 1;
+    if (a->lifetime != b->lifetime)
+        return a->lifetime < b->lifetime ? -1 : 1;
+    return 0;
+}
+
+static inline bool xi_view_origin_evidence_same_root(const XiViewOriginEvidence *a,
+                                                     const XiViewOriginEvidence *b) {
+    bool a_static = a->origin == XI_VIEW_ORIGIN_STATIC;
+    bool b_static = b->origin == XI_VIEW_ORIGIN_STATIC;
+    return a_static && b_static ? true
+                                : !a_static && !b_static && a->root_value_id == b->root_value_id;
+}
+
+static inline uint16_t xi_view_origin_evidence_normalize(XiViewOriginEvidence *origins,
+                                                         uint16_t count) {
+    if (!origins || count == 0)
+        return 0;
+    for (uint16_t i = 1; i < count; i++) {
+        XiViewOriginEvidence key = origins[i];
+        uint16_t j = i;
+        while (j > 0 && xi_view_origin_evidence_compare(&origins[j - 1], &key) > 0) {
+            origins[j] = origins[j - 1];
+            j--;
+        }
+        origins[j] = key;
+    }
+    uint16_t unique = 0;
+    for (uint16_t i = 0; i < count; i++) {
+        if (unique == 0 || !xi_view_origin_evidence_same_root(&origins[unique - 1], &origins[i]))
+            origins[unique++] = origins[i];
+    }
+    return unique;
+}
+
+/* Closure metadata: env layout and capture table for a single closure.
+ * Built by xi_pass_close from XiFunc.captures[]; replaces ad-hoc
+ * backend inspection of capture arrays.  All backends read this. */
+typedef struct XiClosureMeta {
+    struct XiFunc *function;    /* owning function */
+    struct XiFunc *parent_func; /* lexical parent (back-pointer) */
+    XiCapture *captures;        /* pointer to func->captures (not owned) */
+    uint16_t ncaptures;         /* number of captures */
+    uint16_t env_size;          /* total slots in closure env object */
+    uint16_t ncells;            /* number of cell indirections */
+    bool has_mutable_capture;   /* any capture requires cell */
+    bool is_direct_callable;    /* can be called without closure alloc */
+} XiClosureMeta;
+
+/* Immutable source error-region identity retained after AST lowering.  Error
+ * catches use ordinary CFG edges rather than the panic handler stack, so this
+ * record preserves the lexical continuation boundary that would otherwise be
+ * erased once the lowerer's try stack is released. */
+typedef struct XiErrorRegion {
+    struct XiBlock *registration_block;
+    struct XiBlock *body_block;
+    struct XiBlock *catch_block;
+    struct XiBlock *merge_block;
+    struct XiValue *catch_value;
+    struct XiErrorRegion *parent;
+} XiErrorRegion;
+
+/* ========== Core Structures ========== */
+
+/*
+ * SSA Value: every definition is unique, carries authoritative type.
+ * Combines Go SSA's Value design with xray's type system.
+ *
+ * Size: ~72 bytes. Values are arena-allocated within XiFunc.
+ */
+typedef struct XiValue {
+    uint32_t id;                    /* dense SSA value ID (unique within function) */
+    uint16_t op;                    /* XiOp */
+    XiVarId var_id;                 /* source variable ID for coalescing (XI_NO_VAR_ID = none) */
+    uint8_t flags;                  /* XI_FLAG_* */
+    uint8_t rep;                    /* XrRep: machine representation (set by select_rep,
+                                     * default XR_REP_TAGGED until STAGE_REPPED) */
+    uint8_t backend_origin;         /* XiBackendValueOrigin; post-SemanticPlan only */
+    uint8_t transfer_mode;          /* XrTransferMode for single-value coroutine boundaries.
+                                     * Default 0 = SHARE. GO uses its per-arg aux table. */
+    uint8_t aux_kind;               /* XiAuxKind: disambiguates aux/aux_int layouts */
+    uint8_t escape;                 /* XiEscapeLevel (2-bit): escape analysis result
+                                     * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
+    uint8_t mem_group;              /* XiMemGroup (TBAA): memory group for alias analysis
+                                     * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
+    uint16_t lowering_flags;        /* XI_LOWERING_FLAG_*; bit 13 is the first free one */
+    uint8_t param_mode;             /* XrParamMode for XI_PARAM values (the single param
+                                     * contract source; default XR_PARAM_READ). Occupies
+                                     * struct padding, so it costs no extra memory. */
+    bool initializes_module_slot;   /* Declaration's first XI_SET_SHARED, never a replacement. */
+    struct XrType *type;            /* authoritative compile-time type (never NULL) */
+    int64_t aux_int;                /* auxiliary integer: const value, symbol ID, etc. */
+    void *aux;                      /* auxiliary pointer: proto, string literal, etc. */
+    XrConversionWitness conversion; /* immutable numeric/dynamic conversion evidence */
+    XiCallPlan *call_plan;          /* verified read/ref/move call contract */
+    XiViewEvidence view_evidence;   /* Slice origin/range lifetime proof */
+    XiErrorRegion *error_region;    /* exact source error region, or NULL */
+    /* Function-arena-owned cleanup occurrence. Graph cloning must explicitly
+     * remap its
+     * marker relations after creating the complete value namespace. */
+    struct XiCleanupBoundary *cleanup_boundary;
+    /* Exact pending-error producer for XI_ERR_CHECK/XI_CLEANUP_ERR_CHECK.
+     * This is a
+     * non-owning graph relation, not an SSA operand: ARC cleanup
+     * operands remain in args[]
+     * and the producer result is not materialized
+     * merely because its error channel is
+     * observed. */
+    struct XiValue *error_producer;
+    /* Instantiated result provenance for calls whose body is outside this Xi
+     * unit.  Local direct calls may refine it from the XiFunc fixpoint. */
+    XiReturnOwnership call_return_ownership;
+    /* Operand aliased by this result, or -1 for a distinct result. Lowering
+     * seals native member aliases here before SemanticPlan construction so
+     * ownership passes never reconstruct the fact from names. */
+    int16_t result_alias_operand;
+    struct XiValue **args;    /* operand values (SSA uses) */
+    uint16_t nargs;           /* number of args */
+    int16_t uses;             /* use count (for DCE; -1 = not computed) */
+    uint32_t line;            /* source line number (0 = unknown) */
+    uint32_t source_kind;     /* pointer-free source node kind (0 = unavailable) */
+    XiSourceSpan source_span; /* exact source range; all zero when unavailable */
+    uint32_t psc_call_index;  /* frozen PSC call row, or XI_PSC_ROW_NONE */
+    uint32_t psc_type_index;  /* frozen PSC type row, or XI_PSC_ROW_NONE */
+    uint32_t xg_callsite_id;  /* stable XgCallsiteId for evidence-backed calls (0 = none) */
+    uint32_t xg_callable_target_start;     /* first immutable XgCallableTargetId, or 0 */
+    uint32_t xg_callable_target_count;     /* exact closed target count, or 0 */
+    uint64_t xg_callable_signature_key;    /* exact structural callable signature */
+    uint32_t xg_callable_effect_union;     /* union of exact target implementation effects */
+    uint32_t xg_callable_capability_union; /* union of exact target capabilities */
+    uint32_t xa_intrinsic_id;      /* stable XaIntrinsicId for canonical semantic operations */
+    uint8_t array_intrinsic_kind;  /* XiArrayIntrinsicKind, or NONE */
+    bool array_default_construct; /* Explicit Array<T>(length), never a literal prefix. */
+    uint8_t array_member_kind;     /* XiArrayMemberKind, or NONE */
+    uint8_t array_hof_kind;        /* XiArrayHofKind, or NONE */
+    uint8_t array_element_storage; /* exact XrArrayElemType for a frozen Array operation */
+    uint8_t array_result_element_storage; /* exact scalar storage returned by an Array HOF */
+    uint32_t xg_method_id; /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
+    uint32_t xg_interface_dispatch_slot;  /* interface slot; UINT32_MAX means none */
+    uint32_t xg_interface_object_use_id;  /* exact XgInterfaceObjectUseId for this carrier */
+    uint32_t xg_interface_id;             /* declaration-backed XgInterfaceId, or 0 */
+    uint32_t xg_conformance_id;           /* exact XgInterfaceConformanceId for a pack, or 0 */
+    uint32_t xg_implementor_decl_id;      /* exact nominal XgDeclId, or 0 */
+    uint64_t xg_nominal_key;              /* exact declaration-backed nominal key, or 0 */
+    uint8_t xg_implementor_kind;          /* XgDeclKind for exact nominal evidence */
+    uint8_t xg_existential_kind;          /* XiExistentialKind */
+    uint8_t xg_interface_use_kind;        /* XiInterfaceUseKind */
+    uint8_t xg_implementor_ownership;     /* XgNominalOwnership */
+    uint8_t xg_implementor_copy_contract; /* XgNominalCopyContract */
+    uint8_t xg_type_contract_complete;    /* exact conformance type contract is frozen */
+    uint32_t xg_target_query_use_id;      /* exact XgTargetQueryUseId, or 0 */
+    uint32_t xg_target_source_node_id;    /* exact stable source occurrence, or 0 */
+    uint32_t xg_target_body_ordinal;      /* exact body occurrence ordinal, or 0 */
+    uint8_t xg_target_namespace_id;       /* XgTargetNamespaceId */
+    uint8_t xg_target_query_kind;         /* XgTargetQueryKind */
+    uint8_t xg_target_result_native_type; /* XrNativeType */
+    uint8_t xg_target_query_complete;     /* exact analyzer/Xglobal join is frozen */
+    uint32_t xg_suspend_point_use_id;     /* exact XgSuspendPointUseId, or 0 */
+    uint32_t xg_suspend_source_node_id;   /* exact stable source occurrence, or 0 */
+    uint32_t xg_suspend_body_ordinal;     /* exact body occurrence ordinal, or 0 */
+    uint8_t xg_suspend_point_kind;        /* XgSuspendPointKind */
+    uint8_t xg_suspend_may_suspend;
+    uint8_t xg_suspend_contract_complete;
+    uint32_t xg_json_codec_id;    /* stable XgJsonCodecId for evidence-backed Json codec calls */
+    uint32_t xg_object_access_id; /* stable XgObjectAccessId for evidence-backed structural object
+                                     slot access */
+    uint32_t xg_object_merge_id;  /* stable XgObjectMergeId for evidence-backed structural object
+                                     spread */
+    uint32_t xg_key_access_id;    /* stable XgKeyAccessId for evidence-backed Map/Set key access */
+    uint32_t xg_map_shape_id;     /* stable XgMapShapeId for evidence-backed Map/Set construction */
+    uint32_t xg_class_field_id;   /* stable XgFieldId for evidence-backed class field access */
+    uint32_t
+        xg_sequence_access_id;  /* stable XgSequenceAccessId for linear-container access plans */
+    uint32_t xg_capacity_op_id; /* stable XgCapacityOpId for capacity/growth plans */
+    uint32_t xg_bulk_op_id;     /* stable XgBulkOpId for bulk operation plans */
+    uint32_t xg_encoding_op_id; /* stable XgEncodingOpId for encoding validation plans */
+    /* Source-move evidence is meaningful only for XI_SOURCE_MOVE. Optimizers
+     * must preserve these stable IDs when replacing or migrating the op. */
+    uint32_t move_evidence_id;
+    uint32_t move_source_root_id;
+    uint32_t move_source_symbol_id;
+    uint32_t move_storage_plan_id;
+    uint32_t move_transfer_plan_id;
+    uint32_t move_evidence_bits;
+    uint8_t move_source_capability;
+    uint8_t move_target_capability;
+    uint8_t move_source_domain;
+    uint8_t move_target_domain;
+    /* Typed enum-domain provenance.  `enum_metadata_owner` is the concrete E
+     * in EnumVariant<E>/EnumPayloadField<E>; `enum_metadata_field` is a stable
+     * XA_ENUM_META_* id (0 for domain iteration).  This survives lowering so
+     * global/AOT evidence never has to recover enum semantics from names. */
+    struct XrType *enum_metadata_owner;
+    /* XI_JSON_DECODE target. Usually identical to `type`; parseWithRest keeps
+     * its wrapper in `type` and the decoded T here. */
+    struct XrType *json_decode_target_type;
+    uint8_t enum_metadata_field;
+    uint8_t enum_metadata_kind; /* XrEnumMetadataKind for descriptor/view values. */
+    struct XiBlock *block;      /* containing block */
+} XiValue;
+
+static inline void xi_value_set_allocation_storage_mode(XiValue *value, uint8_t storage_mode) {
+    if (!value)
+        return;
+    value->lowering_flags =
+        (uint16_t) ((value->lowering_flags & ~XI_LOWERING_FLAG_ALLOCATION_STORAGE_MASK) |
+                    ((storage_mode & 0x03u) << XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT));
+}
+
+static inline uint8_t xi_value_allocation_storage_mode(const XiValue *value) {
+    return value ? (uint8_t) ((value->lowering_flags & XI_LOWERING_FLAG_ALLOCATION_STORAGE_MASK) >>
+                              XI_LOWERING_FLAG_ALLOCATION_STORAGE_SHIFT)
+                 : 0;
+}
+
+static inline bool xi_value_is_read_place_param(const XiValue *value) {
+    return value && value->op == XI_PARAM && value->param_mode == XR_PARAM_READ &&
+           (value->lowering_flags & XI_LOWERING_FLAG_PARAM_READ_PLACE) != 0;
+}
+
+/* Does this call construct a class instance (see
+ * XI_LOWERING_FLAG_CONSTRUCTOR_CALL)?  True only for calls lowering proved to
+ * allocate their result. */
+static inline bool xi_value_is_constructor_call(const XiValue *value) {
+    return value && (value->lowering_flags & XI_LOWERING_FLAG_CONSTRUCTOR_CALL) != 0;
+}
+
+/* Does this value use the explicit weak-field load operation? */
+static inline bool xi_value_is_weak_field_load(const XiValue *value) {
+    return value && value->op == XI_WEAK_LOAD_FIELD;
+}
+
+/* Does this value use the explicit weak-field store operation? */
+static inline bool xi_value_is_weak_field_store(const XiValue *value) {
+    return value && value->op == XI_WEAK_STORE_FIELD;
+}
+
+static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
+    if (!dst || !src)
+        return;
+    dst->flags = src->flags;
+    dst->var_id = src->var_id;
+    dst->rep = src->rep;
+    dst->transfer_mode = src->transfer_mode;
+    dst->aux_kind = src->aux_kind;
+    dst->escape = src->escape;
+    dst->mem_group = src->mem_group;
+    dst->lowering_flags = src->lowering_flags;
+    dst->param_mode = src->param_mode;
+    dst->initializes_module_slot = src->initializes_module_slot;
+    dst->aux_int = src->aux_int;
+    dst->aux = src->aux;
+    dst->conversion = src->conversion;
+    dst->error_region = src->error_region;
+    dst->cleanup_boundary = NULL;
+    /* error_producer is deliberately not shallow-copied.  Graph cloning must
+     * remap the
+     * relation through its value map; leaving NULL fails closed if a
+     * cloning pass forgets
+     * that second step. */
+    dst->call_return_ownership = src->call_return_ownership;
+    dst->result_alias_operand = src->result_alias_operand;
+    dst->line = src->line;
+    dst->source_kind = src->source_kind;
+    dst->source_span = src->source_span;
+    dst->psc_call_index = src->psc_call_index;
+    dst->psc_type_index = src->psc_type_index;
+    dst->xg_callsite_id = src->xg_callsite_id;
+    dst->xg_callable_target_start = src->xg_callable_target_start;
+    dst->xg_callable_target_count = src->xg_callable_target_count;
+    dst->xg_callable_signature_key = src->xg_callable_signature_key;
+    dst->xg_callable_effect_union = src->xg_callable_effect_union;
+    dst->xg_callable_capability_union = src->xg_callable_capability_union;
+    dst->xa_intrinsic_id = src->xa_intrinsic_id;
+    dst->array_intrinsic_kind = src->array_intrinsic_kind;
+    dst->array_default_construct = src->array_default_construct;
+    dst->array_member_kind = src->array_member_kind;
+    dst->array_hof_kind = src->array_hof_kind;
+    dst->array_element_storage = src->array_element_storage;
+    dst->array_result_element_storage = src->array_result_element_storage;
+    dst->xg_method_id = src->xg_method_id;
+    dst->move_evidence_id = src->move_evidence_id;
+    dst->move_source_root_id = src->move_source_root_id;
+    dst->move_source_symbol_id = src->move_source_symbol_id;
+    dst->move_storage_plan_id = src->move_storage_plan_id;
+    dst->move_transfer_plan_id = src->move_transfer_plan_id;
+    dst->move_evidence_bits = src->move_evidence_bits;
+    dst->move_source_capability = src->move_source_capability;
+    dst->move_target_capability = src->move_target_capability;
+    dst->move_source_domain = src->move_source_domain;
+    dst->move_target_domain = src->move_target_domain;
+    dst->xg_interface_dispatch_slot = src->xg_interface_dispatch_slot;
+    dst->xg_interface_object_use_id = src->xg_interface_object_use_id;
+    dst->xg_interface_id = src->xg_interface_id;
+    dst->xg_conformance_id = src->xg_conformance_id;
+    dst->xg_implementor_decl_id = src->xg_implementor_decl_id;
+    dst->xg_nominal_key = src->xg_nominal_key;
+    dst->xg_implementor_kind = src->xg_implementor_kind;
+    dst->xg_existential_kind = src->xg_existential_kind;
+    dst->xg_interface_use_kind = src->xg_interface_use_kind;
+    dst->xg_implementor_ownership = src->xg_implementor_ownership;
+    dst->xg_implementor_copy_contract = src->xg_implementor_copy_contract;
+    dst->xg_type_contract_complete = src->xg_type_contract_complete;
+    dst->xg_target_query_use_id = src->xg_target_query_use_id;
+    dst->xg_target_source_node_id = src->xg_target_source_node_id;
+    dst->xg_target_body_ordinal = src->xg_target_body_ordinal;
+    dst->xg_target_namespace_id = src->xg_target_namespace_id;
+    dst->xg_target_query_kind = src->xg_target_query_kind;
+    dst->xg_target_result_native_type = src->xg_target_result_native_type;
+    dst->xg_target_query_complete = src->xg_target_query_complete;
+    dst->xg_suspend_point_use_id = src->xg_suspend_point_use_id;
+    dst->xg_suspend_source_node_id = src->xg_suspend_source_node_id;
+    dst->xg_suspend_body_ordinal = src->xg_suspend_body_ordinal;
+    dst->xg_suspend_point_kind = src->xg_suspend_point_kind;
+    dst->xg_suspend_may_suspend = src->xg_suspend_may_suspend;
+    dst->xg_suspend_contract_complete = src->xg_suspend_contract_complete;
+    dst->xg_json_codec_id = src->xg_json_codec_id;
+    dst->xg_object_access_id = src->xg_object_access_id;
+    dst->xg_object_merge_id = src->xg_object_merge_id;
+    dst->xg_key_access_id = src->xg_key_access_id;
+    dst->xg_map_shape_id = src->xg_map_shape_id;
+    dst->xg_class_field_id = src->xg_class_field_id;
+    dst->xg_sequence_access_id = src->xg_sequence_access_id;
+    dst->xg_capacity_op_id = src->xg_capacity_op_id;
+    dst->xg_bulk_op_id = src->xg_bulk_op_id;
+    dst->xg_encoding_op_id = src->xg_encoding_op_id;
+    dst->enum_metadata_owner = src->enum_metadata_owner;
+    dst->json_decode_target_type = src->json_decode_target_type;
+    dst->enum_metadata_field = src->enum_metadata_field;
+    dst->enum_metadata_kind = src->enum_metadata_kind;
+}
+
+typedef struct XiMapLiteralData {
+    XiValue **keys;
+    XiValue **values;
+    uint16_t count;
+    uint8_t container_kind;
+} XiMapLiteralData;
+
+static inline const XiCallPlan *xi_call_plan(const XiValue *v) {
+    return v ? v->call_plan : NULL;
+}
+
+static inline const XrAssertionPlan *xi_assertion_plan(const XiValue *v) {
+    return v && v->op == XI_ASSERTION && v->aux_kind == XI_AUX_KIND_ASSERTION_PLAN
+               ? (const XrAssertionPlan *) v->aux
+               : NULL;
+}
+
+static inline const XrPrintPlan *xi_print_plan(const XiValue *v) {
+    return v && v->op == XI_PRINT && v->aux_kind == XI_AUX_KIND_PRINT_PLAN
+               ? (const XrPrintPlan *) v->aux
+               : NULL;
+}
+
+static inline bool xi_load_field_is_adt(const XiValue *v) {
+    return v && v->op == XI_LOAD_FIELD && v->aux_kind == XI_AUX_KIND_ADT_FIELD;
+}
+
+static inline int64_t xi_thread_spawn_stack_size(const XiValue *v) {
+    if (!v || v->op != XI_THREAD_SPAWN)
+        return 0;
+    if (v->aux_kind == XI_AUX_KIND_THREAD_SPAWN) {
+        const XiThreadSpawnOptions *opts = (const XiThreadSpawnOptions *) v->aux;
+        return opts && opts->stack_size > 0 ? opts->stack_size : 0;
+    }
+    int64_t stack_size =
+        (v->aux_int >> XI_THREAD_SPAWN_AUX_STACK_SIZE_SHIFT) & XI_THREAD_SPAWN_AUX_STACK_SIZE_MASK;
+    return stack_size > 0 ? stack_size : 0;
+}
+
+static inline const char *xi_thread_spawn_name(const XiValue *v) {
+    if (!v || v->op != XI_THREAD_SPAWN || v->aux_kind != XI_AUX_KIND_THREAD_SPAWN)
+        return NULL;
+    const XiThreadSpawnOptions *opts = (const XiThreadSpawnOptions *) v->aux;
+    return opts ? opts->name : NULL;
+}
+
+static inline uint16_t xi_thread_spawn_affinity_count(const XiValue *v) {
+    if (!v || v->op != XI_THREAD_SPAWN || v->aux_kind != XI_AUX_KIND_THREAD_SPAWN)
+        return 0;
+    const XiThreadSpawnOptions *opts = (const XiThreadSpawnOptions *) v->aux;
+    return opts ? opts->affinity_count : 0;
+}
+
+static inline const uint32_t *xi_thread_spawn_affinity_cpus(const XiValue *v) {
+    if (!v || v->op != XI_THREAD_SPAWN || v->aux_kind != XI_AUX_KIND_THREAD_SPAWN)
+        return NULL;
+    const XiThreadSpawnOptions *opts = (const XiThreadSpawnOptions *) v->aux;
+    return (opts && opts->affinity_count > 0) ? opts->affinity_cpus : NULL;
+}
+
+static inline uint8_t xi_go_arg_transfer_mode(const XiValue *go, uint16_t arg_index) {
+    if (!go || (go->op != XI_GO && go->op != XI_THREAD_SPAWN) || arg_index + 1 >= go->nargs)
+        return XR_TRANSFER_SHARE;
+    const uint8_t *modes = NULL;
+    if (go->op == XI_THREAD_SPAWN && go->aux_kind == XI_AUX_KIND_THREAD_SPAWN) {
+        const XiThreadSpawnOptions *opts = (const XiThreadSpawnOptions *) go->aux;
+        modes = opts ? opts->transfer_modes : NULL;
+    } else {
+        modes = (const uint8_t *) go->aux;
+    }
+    return modes ? modes[arg_index] : XR_TRANSFER_SHARE;
+}
+
+static inline uint8_t xi_chan_send_transfer_mode(const XiValue *v) {
+    if (!v)
+        return XR_TRANSFER_SHARE;
+    switch (v->op) {
+        case XI_CHAN_SEND:
+        case XI_CHAN_TRY_SEND:
+        case XI_CALL_METHOD:
+            return v->transfer_mode;
+        default:
+            return XR_TRANSFER_SHARE;
+    }
+}
+
+static inline void xi_chan_send_set_transfer_mode(XiValue *v, uint8_t mode) {
+    if (v)
+        v->transfer_mode = mode;
+}
+
+#define XI_OBJECT_AUX_STORAGE_SHIFT 32
+#define XI_OBJECT_AUX_FIELD_MASK INT64_C(0xffffffff)
+
+static inline int32_t xi_object_field_count(const XiValue *v) {
+    return v ? (int32_t) (v->aux_int & XI_OBJECT_AUX_FIELD_MASK) : 0;
+}
+
+static inline uint8_t xi_object_storage_mode(const XiValue *v) {
+    return v ? (uint8_t) ((uint64_t) v->aux_int >> XI_OBJECT_AUX_STORAGE_SHIFT) : 0;
+}
+
+static inline int64_t xi_object_pack_aux(int32_t field_count, uint8_t storage_mode) {
+    return ((int64_t) storage_mode << XI_OBJECT_AUX_STORAGE_SHIFT) |
+           ((int64_t) field_count & XI_OBJECT_AUX_FIELD_MASK);
+}
+
+static inline void xi_object_set_storage_mode(XiValue *v, uint8_t storage_mode) {
+    if (v && v->op == XI_OBJECT_NEW)
+        v->aux_int = xi_object_pack_aux(xi_object_field_count(v), storage_mode);
+}
+
+#define XI_TUPLE_AUX_STORAGE_SHIFT 32
+#define XI_TUPLE_AUX_ARITY_MASK INT64_C(0xffffffff)
+
+static inline uint8_t xi_tuple_storage_mode(const XiValue *v) {
+    return v ? (uint8_t) ((uint64_t) v->aux_int >> XI_TUPLE_AUX_STORAGE_SHIFT) : 0;
+}
+
+static inline int64_t xi_tuple_pack_aux(uint32_t arity, uint8_t storage_mode) {
+    return ((int64_t) storage_mode << XI_TUPLE_AUX_STORAGE_SHIFT) |
+           ((int64_t) arity & XI_TUPLE_AUX_ARITY_MASK);
+}
+
+static inline void xi_tuple_set_storage_mode(XiValue *v, uint8_t storage_mode) {
+    if (v && v->op == XI_TUPLE_NEW)
+        v->aux_int = xi_tuple_pack_aux(v->nargs, storage_mode);
+}
+
+static inline int64_t xi_variant_pack_projection(uint32_t variant_ordinal, uint32_t field_ordinal) {
+    return (int64_t) (((uint64_t) variant_ordinal << 32u) | field_ordinal);
+}
+
+static inline uint32_t xi_variant_projection_variant(const XiValue *v) {
+    return v ? (uint32_t) ((uint64_t) v->aux_int >> 32u) : 0u;
+}
+
+static inline uint32_t xi_variant_projection_field(const XiValue *v) {
+    return v ? (uint32_t) v->aux_int : 0u;
+}
+
+/* XI_ERR_CHECK starts operand-free at lowering.  After all AOT value-rewriting
+ * passes, ARC
+ * finalization attaches the owners which remain live only on the
+ * successful continuation.  The
+ * may-throw producer is deliberately not an
+ * operand; it is named by error_producer instead.
+ * Making its otherwise-unused
+ * result an SSA use would force useless hot-path materialization.
+ * AOT C emits
+ * the owners inside the existing pending-error cold branch. */
+#define XI_ERR_CHECK_CLEANUP_ARG_BASE 0u
+
+static inline bool xi_err_check_has_arc_cleanups(const XiValue *v) {
+    return v && v->op == XI_ERR_CHECK && v->nargs != 0;
+}
+
+/* Whether a value is the null constant, in either of the two shapes lowering
+ * produces: a bare XI_CONST of the null type, or the None injection of a
+ * closed Optional<T> that a null literal is retyped into at a nullable
+ * boundary. Every pass that treats "compared against null" or "returns null"
+ * specially asks this one question, so both shapes stay one value. */
+XR_FUNC bool xi_value_is_null_constant(const XiValue *v);
+
+static inline bool xi_copy_is_value_clone(const XiValue *v) {
+    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE;
+}
+
+static inline bool xi_copy_is_cell_read(const XiValue *v) {
+    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_CELL_READ;
+}
+
+static inline bool xi_copy_is_cleanup_return(const XiValue *v) {
+    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_CLEANUP_RETURN;
+}
+
+static inline bool xi_copy_is_identity_alias(const XiValue *v) {
+    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_IDENTITY &&
+           v->xg_existential_kind == XI_EXISTENTIAL_NONE && v->xg_interface_object_use_id == 0 &&
+           v->xg_interface_use_kind == XI_INTERFACE_USE_NONE && v->xg_implementor_ownership == 0 &&
+           v->xg_implementor_copy_contract == 0 && v->xg_type_contract_complete == 0 &&
+           v->xg_target_query_use_id == 0 && v->xg_target_source_node_id == 0 &&
+           v->xg_target_body_ordinal == 0 && v->xg_target_namespace_id == 0 &&
+           v->xg_target_query_kind == 0 && v->xg_target_result_native_type == 0 &&
+           v->xg_target_query_complete == 0 && v->xg_suspend_point_use_id == 0 &&
+           v->xg_suspend_source_node_id == 0 && v->xg_suspend_body_ordinal == 0 &&
+           v->xg_suspend_point_kind == 0 && v->xg_suspend_may_suspend == 0 &&
+           v->xg_suspend_contract_complete == 0 && v->enum_metadata_owner == NULL &&
+           v->enum_metadata_field == 0 && v->enum_metadata_kind == 0;
+}
+
+/*
+ * Identity tracing transparency, in three widening layers.
+ *
+ * A pass that walks back from a result to the value it stands for has to agree
+ * with every other pass on which ops forward the same thing.  That answer
+ * lives here once; the layers differ only in what "the same thing" means:
+ *
+ *   identity  the same value in the same representation.  Only an identity
+ *             alias copy qualifies, because a clone (XI_COPY_KIND_VALUE_CLONE)
+ *             and a copy carrying enum metadata each produce a value distinct
+ *             from their operand.  A tracer that tests the raw XI_COPY opcode
+ *             instead walks straight through both and reports two distinct
+ *             values as one, which is exactly what the copy-kind guard exists
+ *             to prevent.
+ *   repr      the same value through a representation change (box/unbox).
+ *   referent  the same referent through a retain, which only moves a count.
+ *
+ * A caller picks the widest layer its question tolerates and nothing wider.
+ * Walking through an op no layer names lets the tracer claim an identity the
+ * IR does not carry; refusing to walk through one it should only costs the
+ * caller a resolution it would otherwise have made.
+ */
+static inline bool xi_value_forwards_identity(const XiValue *v) {
+    return v && (xi_copy_is_identity_alias(v) || xi_op_is_identity_forward(v->op));
+}
+
+static inline bool xi_value_forwards_repr(const XiValue *v) {
+    return xi_value_forwards_identity(v) || (v && (v->op == XI_BOX || v->op == XI_UNBOX));
+}
+
+static inline bool xi_value_forwards_referent(const XiValue *v) {
+    return xi_value_forwards_repr(v) || (v && v->op == XI_RETAIN);
+}
+
+static inline const XiValue *xi_value_trace_identity(const XiValue *v) {
+    while (xi_value_forwards_identity(v) && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+static inline const XiValue *xi_value_trace_repr(const XiValue *v) {
+    while (xi_value_forwards_repr(v) && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+static inline const XiValue *xi_value_trace_referent(const XiValue *v) {
+    while (xi_value_forwards_referent(v) && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+/* A direct value temporary owns independent call-bound storage.  It is not a
+ * borrowed field/pointer projection even though both shapes use LOCAL_ADDR in
+ * Xi's physical call ABI.  The question is asked of the value's provenance,
+ * so it looks through representation changes: select_rep may wrap the fresh
+ * aggregate in a BOX or UNBOX before the place that borrows it, and that
+ * adapter neither creates nor borrows storage of its own. */
+static inline bool xi_value_is_fresh_direct_storage(const XiValue *v) {
+    const XiValue *source = xi_value_trace_repr(v);
+    if (!source || xi_var_id_is_valid(source->var_id))
+        return false;
+    return source->op == XI_AGG_NEW || source->op == XI_FIXED_ARRAY_NEW ||
+           source->op == XI_FIXED_BYTES_CONST || xi_copy_is_value_clone(source);
+}
+
+/*
+ * Phi node: placed at block entry for control-flow merges.
+ * Kept separate from the instruction list for efficient iteration.
+ * args[i] corresponds to block->preds[i].
+ */
+typedef struct XiPhi {
+    XiValue value;      /* embedded value (op == XI_PHI) */
+    struct XiPhi *next; /* linked list within block */
+} XiPhi;
+
+/*
+ * Basic block: linear sequence of instructions, terminated by block kind.
+ *
+ * The terminator is encoded in (kind, control) rather than as a trailing
+ * instruction. This matches Go SSA's design and simplifies iteration.
+ */
+typedef enum XiExitReason {
+    XI_EXIT_REASON_NONE = 0,
+    XI_EXIT_REASON_PANIC = 1,
+} XiExitReason;
+
+typedef struct XiBlock {
+    uint32_t id;   /* dense block ID (unique within function) */
+    uint16_t kind; /* XiBlockKind */
+    bool visited;  /* traversal scratch */
+    uint8_t exit_reason; /* XiExitReason for an explicitly normalized exit graph */
+    uint32_t line; /* source line for the block terminator (0 = unknown) */
+
+    /* Phi nodes at entry (linked list; NULL if no merge point) */
+    XiPhi *phis;
+
+    /* Instructions (contiguous array, no terminators) */
+    XiValue **values;
+    uint32_t nvalues;
+    uint32_t values_cap;
+
+    /* Terminator control value (condition for IF, return val for RETURN) */
+    XiValue *control;
+
+    /* CFG edges */
+    struct XiBlock *succs[2]; /* succs[0]=then/next, succs[1]=else (IF only) */
+    struct XiBlock **preds;   /* predecessor array */
+    uint16_t npreds;
+    uint16_t preds_cap;
+
+    /* Ordering & dominance */
+    uint32_t rpo;         /* reverse post-order index (0 = not computed) */
+    struct XiBlock *idom; /* immediate dominator (NULL for entry) */
+    uint16_t dom_depth;   /* depth in dominator tree (entry = 0) */
+
+    /* Braun SSA: block sealing.
+     * A block is sealed when all its predecessors are known.
+     * Loop headers are unsealed until the back edge is added. */
+    bool sealed;
+
+    /* Profile-guided block frequency (0 = no profile).
+     * Set by xi_opt_block_layout from VM execution counts. */
+    uint32_t frequency;
+
+    /* Back-pointer */
+    struct XiFunc *func;
+} XiBlock;
+
+/*
+ * Auxiliary constant data stored in XiValue.aux_int / XiValue.aux.
+ */
+typedef union {
+    int64_t i64;
+    double f64;
+    const char *str;
+    void *ptr;
+} XiAux;
+
+typedef enum XiConstLiteralKind {
+    XI_CONST_LITERAL_NONE = 0,
+    XI_CONST_LITERAL_NULL,
+    XI_CONST_LITERAL_INT,
+    XI_CONST_LITERAL_FLOAT,
+    XI_CONST_LITERAL_BOOL,
+    XI_CONST_LITERAL_CHAR,
+    XI_CONST_LITERAL_STRING,
+    XI_CONST_LITERAL_COMPTIME_AGGREGATE,
+} XiConstLiteralKind;
+
+typedef struct XiConstLiteral {
+    XiConstLiteralKind kind;
+    struct XrType *type;
+    int64_t int_value;
+    double float_value;
+    bool bool_value;
+    const char *string_value;
+    const struct XrCtValue *ct_value;
+    const char *data_section;
+    bool data_used;
+    bool data_weak;
+    bool data_mutable;
+} XiConstLiteral;
+
+typedef struct XiParallelForData {
+    struct XiFunc *body_func;
+    struct XrType *state_type;
+    const char *item_name;
+    const char *state_name;
+    const char *end_name;
+    const char *worker_name;
+    uint32_t item_symbol_id;
+    uint32_t state_symbol_id;
+    uint32_t end_symbol_id;
+    uint32_t worker_symbol_id;
+    uint16_t body_child_index;
+    bool inclusive_end;
+    bool range_body;
+    bool plan_state;
+} XiParallelForData;
+
+typedef struct XiParallelMapData {
+    struct XiFunc *body_func;
+    struct XrType *element_type;
+    struct XrType *state_type;
+    const char *item_name;
+    const char *state_name;
+    const char *worker_name;
+    uint32_t item_symbol_id;
+    uint32_t state_symbol_id;
+    uint32_t worker_symbol_id;
+    uint16_t body_child_index;
+    uint16_t result_capture_index;
+    uint16_t start_capture_index;
+    uint16_t lane_count;
+    bool direct_lane_writes;
+    bool inclusive_end;
+    bool into_result;
+    bool plan_state;
+} XiParallelMapData;
+
+typedef struct XiParallelReduceData {
+    struct XiFunc *body_func;
+    struct XiFunc *combine_func;
+    struct XrType *accumulator_type;
+    struct XrType *state_type;
+    const char *item_name;
+    const char *state_name;
+    const char *end_name;
+    const char *worker_name;
+    uint32_t item_symbol_id;
+    uint32_t state_symbol_id;
+    uint32_t end_symbol_id;
+    uint32_t worker_symbol_id;
+    uint16_t body_child_index;
+    uint16_t combine_child_index;
+    bool inclusive_end;
+    bool range_body;
+    bool plan_state;
+} XiParallelReduceData;
+
+typedef enum XiNativeCallbackKind {
+    XI_NATIVE_CALLBACK_NONE = 0,
+    XI_NATIVE_CALLBACK_PAR_FOR_I64 = 1,
+    XI_NATIVE_CALLBACK_PAR_REDUCE_I64_BODY = 2,
+    XI_NATIVE_CALLBACK_PAR_REDUCE_I64_COMBINE = 3,
+    XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_BODY = 4,
+    XI_NATIVE_CALLBACK_PAR_REDUCE_AGG_COMBINE = 5,
+    XI_NATIVE_CALLBACK_PAR_MAP_SCALAR_BODY = 6,
+    XI_NATIVE_CALLBACK_PAR_RANGE_I64 = 7,
+} XiNativeCallbackKind;
+
+/* Defined in xi_own.h; XiFunc caches a pointer to one (arena-allocated). */
+struct XiBorrowSig;
+
+/*
+ * Function: compilation unit for the new IR.
+ * One XiFunc per source-level function or closure.
+ *
+ * All XiValues, XiPhis, XiBlocks, and arg arrays are allocated from
+ * a simple bump allocator (arena). The arena is freed as a whole when
+ * the XiFunc is destroyed, so individual frees are not needed.
+ */
+typedef enum XiInlinePolicy {
+    XI_INLINE_AUTO = 0,
+    XI_INLINE_PREFER,
+    XI_INLINE_PRESERVE_CALL,
+} XiInlinePolicy;
+
+typedef enum XiModuleSlotKind {
+    XI_MODULE_SLOT_NONE = 0,
+    XI_MODULE_SLOT_VALUE,
+    XI_MODULE_SLOT_FUNCTION,
+    XI_MODULE_SLOT_TYPE,
+    XI_MODULE_SLOT_IMPORT
+} XiModuleSlotKind;
+
+/* Declaration facts are independent of the operations that happen to use a
+ * slot. Names belong to the function arena; types join its semantic snapshot
+ * before analyzer teardown. Source coordinates are local to the module's
+ * canonical identity, never to an analyzer symbol allocation or graph row. */
+typedef struct XiModuleSlot {
+    const char *name;
+    struct XrType *type;
+    XiModuleSlotKind kind;
+    uint32_t source_line;
+    uint32_t source_column;
+    bool is_const;
+    bool is_exported;
+} XiModuleSlot;
+
+typedef struct XiFunc {
+    const char *name;                        /* function name (debug, not owned) */
+    const char *source_file;                 /* source path for VM/DAP debug hooks (not owned) */
+    XiSourceSpan lowering_source_span;       /* temporary AST range inherited by new Xi values */
+    uint32_t psc_function_index;             /* frozen PSC function row, or XI_PSC_ROW_NONE */
+    uint32_t psc_return_type_index;          /* frozen PSC return type row, or XI_PSC_ROW_NONE */
+    XiSourceLocator psc_declaration_locator; /* exact pointer-free declaration locator */
+    struct XrType *return_type;              /* return type (from analyzer) */
+    uint32_t xg_body_func_id;      /* stable global-evidence XgFuncId for this body (0 = none) */
+    XrViewOrigin *view_origin_set; /* normalized symbolic return template */
+    uint16_t view_origin_count;
+    bool view_origin_was_elided;
+    bool has_receiver;         /* declaration is an instance method, excluding constructors */
+    XrParamMode receiver_mode; /* declaration-owned READ / REF / MOVE contract */
+
+    /* Function parameters as SSA values (in entry block).  Each param XiValue
+     * carries its own XrParamMode in XiValue::param_mode, so the parameter
+     * contract lives in one place per parameter with no parallel mode array. */
+    XiValue **params;
+    uint16_t nparams;
+
+    /* Whether this function is a module initializer. The fact is decided during
+     * lowering, where the body kind is still in hand, and carried here so that
+     * every layer downstream reads it from the frozen function rather than
+     * asking the global summary again. It decides a boundary the function has
+     * whether or not anything calls it: an initializer is entered by the
+     * runtime, so its signature cannot be inferred from call sites. */
+    bool is_module_initializer;
+
+    /* Source variable metadata captured during lowering.  XiValue::var_id
+     * indexes these arrays; AOT debug codegen uses them to expose stable
+     * source-level locals without depending on the lowerer's temporary tables. */
+    uint32_t source_var_count;
+    const char **source_var_names;    /* arena-allocated array */
+    struct XrType **source_var_types; /* arena-allocated array */
+
+    /* Basic blocks */
+    XiBlock **blocks;
+    uint32_t nblocks;
+    uint32_t blocks_cap;
+    XiBlock *entry; /* blocks[0] is always the entry block */
+
+    /* ID allocation */
+    uint32_t next_value_id;
+    uint32_t next_block_id;
+
+    /* Arena allocator for all IR nodes.
+     * Chunked free-list — once a pointer is returned it never moves,
+     * so previously allocated XiValue/XiBlock/XiPhi pointers stay valid
+     * across subsequent allocations even when the arena grows. */
+    struct XiArenaChunk *arena_head; /* head of chunk list (for free) */
+    struct XiArenaChunk *arena_cur;  /* current chunk for new allocations */
+
+    /* Nested functions / closures lowered from this function */
+    struct XiFunc *parent_func; /* lexical parent, if this is a nested closure */
+    struct XiFunc **children;
+    uint16_t nchildren;
+    uint16_t children_cap;
+
+    /* Upvalue captures (populated during lowering for closures) */
+    XiCapture captures[XI_MAX_CAPTURES];
+    uint16_t ncaptures;
+
+    /* Module binding count. Indices are local to the initializer and remain
+     * stable when optimization removes uses. Data, callable, type and import
+     * bindings have distinct declaration kinds in module_slots. */
+    uint16_t nshared;
+
+    /* Declaration owner for module slots, including exact data/callable types.
+     * Sparse entries represent seeded or compiler-private bindings. */
+    XiModuleSlot *module_slots; /* nshared entries, function-arena-owned */
+
+    /* Per-slot scalar literal metadata for top-level const bindings.  The
+     * slot still exists and is initialized normally; optimization can replace
+     * GET_SHARED(slot) with XI_CONST when the slot is known immutable and the
+     * initializer has folded to a scalar literal. */
+    XiConstLiteral *shared_const_literals; /* array of nshared entries (arena-alloc'd) */
+    uint16_t shared_const_literal_count;
+    XiConstLiteral *shared_init_literals; /* array of nshared static shared-slot initializers */
+    uint16_t shared_init_literal_count;
+
+    /* Program-level shared slot -> function mapping, populated during
+     * lowering before XiModule is assembled so optimization passes can
+     * resolve top-level function closures loaded through XI_GET_SHARED. */
+    struct XiFunc **shared_slot_funcs;
+    uint16_t shared_slot_func_count;
+
+    /* Cached borrowed-parameter signature for ARC (xi_arc): which parameters
+     * this function only borrows. Computed once on the pre-ARC IR and consulted
+     * both by this function's own dup/drop placement and by its callers (so a
+     * borrowed argument is kept-and-dropped by the caller instead of moved into
+     * a callee that never releases it). Arena-allocated; NULL until computed. */
+    struct XiBorrowSig *arc_borrow_sig;
+
+    /* ARC return-ownership summary, computed to a fixpoint on pre-ARC IR.
+     * UNKNOWN is fail-closed: callers retain as needed but do not emit an
+     * unconsumed drop that could free a borrowed alias. */
+    XiReturnOwnership arc_return_ownership;
+
+    /* A closure that crosses an indirect-call boundary uses the language's
+     * owned reference-return ABI. Static calls may still consume a proven
+     * BORROWED_PARAM/BORROWED_STATIC result without this normalization. */
+    bool requires_owned_indirect_return;
+
+    /* Re-export table populated during lowering and emitted by emit_reexports. */
+    XiReexportEntry *reexports; /* arena-allocated array */
+    uint16_t reexport_count;
+    uint16_t reexport_capacity;
+
+    /* IR stage, monotonically non-decreasing across pipeline passes. */
+    XiStage stage;
+
+    /* Immutable semantic authority shared by all target planners and
+     * executors. Every function in a tree retains the same plan so a detached
+     * child can never outlive the authority that describes it. The function
+     * index is the exact preorder record selected while the plan is attached;
+     * consumers must not recover that identity from names or pointers. */
+    struct XrSemanticPlan *semantic_plan;
+    uint32_t semantic_plan_function_index;
+
+    /* Target-feature dispatch builds preserve source function boundaries that
+     * own wide vector intrinsics.  The inline pass consumes this policy before
+     * target preparation so an AVX2 body cannot leak into its SSE2 caller. */
+    bool preserve_wide_vector_boundaries;
+
+    /* Cumulative invariant mask established by passes and stage transitions. */
+    XiInvariantMask invariant_mask;
+
+    /* Target-independent coroutine/callable lowering completion facts. */
+    XiLoweringFacts lowering_facts;
+
+    /* IR revisions are the authoritative freshness keys for local evidence. */
+    uint64_t ir_revision;
+    uint64_t memory_revision;
+    uint64_t call_revision;
+    struct XiEvidenceSet *evidence;
+
+    /* CFG and structural-analysis version tags for lazy recomputation. */
+    uint64_t cfg_version;
+    uint64_t rpo_version;
+    uint64_t dom_version;
+    uint64_t loop_version;
+    struct XiLoopInfo *loop_cache;
+
+    /* Cache-miss counters reported by xi_pipeline_stats_dump. */
+    uint32_t rpo_recomputes;
+    uint32_t dom_recomputes;
+    uint32_t loop_recomputes;
+
+    /* VM entry metadata (propagated to XrProto during emission) */
+    bool is_constructor; /* instance constructor body; VM allocations inherit `this` storage */
+    bool is_vararg;      /* has rest parameter (...args) */
+    uint8_t entry_type;  /* 0=normal, 1=has_defaults, 2=generator */
+    uint16_t min_params; /* required parameter count (no defaults) */
+    uint8_t test_attr;   /* AttributeKind: @test / @before_each / etc. */
+    int test_timeout;    /* @test(timeout: N) seconds, 0 = no timeout */
+
+    /* Runtime callback ABI classification.  These functions are compiler-
+     * synthesized and called by native runtime helpers with a fixed C
+     * signature; captures are passed through the hidden closure parameter, so
+     * they must not be forced back to the generic tagged closure ABI. */
+    XiNativeCallbackKind native_callback_kind;
+
+    /* Body belongs to an open generic owner whose receiver/storage layout is
+     * not executable.  Function-level generics instead keep a canonical
+     * erased ABI and do not set this bit. */
+    bool is_generic_template;
+    uint8_t inline_policy; /* XiInlinePolicy; canonical source code-shape policy */
+
+    /* FFI: foreign function declared in an extern "C" block. When set, this XiFunc
+     * has no real body — the implementation is a C symbol. The AOT backend
+     * emits `extern Ret sym(typed args);` plus direct C calls (no hidden _cl,
+     * no tagged boxing); the VM binds `sym` through libffi. A trivial
+     * zero-valued return body is synthesized so the IR stays well-formed for
+     * pipeline passes; codegen never emits it. */
+    bool is_extern;
+    const char *extern_symbol; /* C symbol to resolve (defaults to the xray name) */
+    const char *extern_dylib;  /* extern-block dylib/link target, or NULL = default/process */
+    /* True only when extern_symbol was selected by an exact typed native-package
+     * symbol row. A source/native rename without this provenance is not a
+     * qualified foreign binding and must fail closed before C emission. */
+    bool extern_symbol_qualified;
+
+    /* Link-image policy is selected by typed manifest plans, never by source
+     * attributes or copied generic booleans. Plans are compiler-session owned. */
+    const struct XrCExportPlan *export_plan;
+    const struct XrLinkSymbolPlan *link_plan;
+    const struct XrFreestandingEntryPlan *entry_plan;
+
+    /* Analyzer-owned allocation proof. Backends consume and verify this
+     * publication; they never re-infer allocation semantics from Xi op names. */
+    uint8_t allocation_state; /* XaAllocState */
+    uint32_t allocation_reason_bits;
+    uint64_t allocation_fingerprint;
+    bool allocation_effect_complete;
+
+    /* Canonical analyzer-owned return storage contract.  A known transferable
+     * or shared return lets lowering materialize fresh aggregates directly in
+     * the required domain; runtimes must not repair a local result by copying
+     * it at Task/Thread publication time. */
+    uint8_t return_storage_domain; /* XrSemanticStorageDomain */
+    bool return_storage_known;
+
+    /* Canonical analyzer effect sidecars.  IDs are scoped to `analyzer`; the
+     * stable fingerprints are the cache/verifier identity that survives
+     * serialization and cross-stage comparison. */
+    uint32_t analyzer_effect_id;
+    uint32_t analyzer_memory_effect_id;
+    uint32_t semantic_effects;
+    uint32_t unknown_semantic_effects;
+    uint32_t effect_unknown_reasons;
+    uint64_t analyzer_effect_fingerprint;
+    uint64_t analyzer_memory_effect_fingerprint;
+    bool analyzer_effect_complete;
+    bool analyzer_memory_effect_complete;
+    /* Detached, backend-consumable error-channel classification.  False is
+     * deliberately fail-closed: only a complete analyzer error set with no
+     * escaping variants may elide the hosted-fragment signal probe. */
+    bool error_effect_nothrow;
+    bool contains_unsafe_op;
+    bool requires_unsafe_at_call;
+
+    /* True when params[0] is a borrowed method receiver. */
+    bool receiver_borrowed;
+
+    /* True when params[0] is represented as a call-bound place rather than a
+     * direct SSA value (currently value-aggregate method receivers). */
+    bool receiver_call_place;
+
+    /* True when every operator-overload parameter is borrowed. */
+    bool operator_borrowed;
+
+    /* Bitwise OR of XI_FLAG_* across all values. */
+    uint8_t effect_summary;
+
+    /* Source info */
+    struct XaAnalyzer *analyzer; /* back-pointer for type queries */
+
+    /* True after every backend-visible type/layout has been copied into the
+     * root Xi arena and analyzer/AST back-pointers have been severed. */
+    bool semantic_snapshot_detached;
+
+    /* Full typed callable declaration. Capturing a generic owner does not
+     * grant this declaration type parameters. Joined to the owned snapshot. */
+    struct XrType *source_callable_type;
+
+    /* Module back-pointer for program-level init functions. */
+    struct XiModule *module;
+
+    /* Closure metadata populated by xi_pass_close. */
+    XiClosureMeta *closure_meta;
+
+    /* C code generation scratch (assigned by xi_cgen, not by IR construction) */
+    int cgen_id; /* unique name suffix for generated C functions */
+
+    /* Active C-value coalescing map for this function during AOT emission: a
+     * value-id-indexed array mapping a phi or representation-identical SSA
+     * forwarding/conversion boundary, or a trivial native value clone, to the
+     * SSA id of the C variable it shares (identity = its own).
+     * Non-owning view into the XiCgenCtx scratch buffer, published by
+     * cg_build_phi_coalesce so the ctx-less emit_vref can resolve operands.
+     * NULL = identity. */
+    const uint32_t *phi_coalesce;
+    uint32_t phi_coalesce_count;
+
+    /* Backend-neutral coroutine plan produced by xi_coro_analyze().  AOT
+     * consumes it today; the VM TargetPlan cutover must consume this same
+     * frozen plan rather than retaining a separate discovery path.
+     * Arena-allocated, so it lives and dies with this XiFunc. */
+    struct XiCoroPlan *coro_plan;
+
+    /* Opaque side-tables owned by analysis passes. */
+    void *analysis_data[2];
+} XiFunc;
+
+static inline uint16_t xi_func_semantic_param_count(const XiFunc *function) {
+    return function ? (uint16_t) (function->nparams + (function->is_vararg ? 1u : 0u)) : 0;
+}
+
+#include "xi_core_api.h"
+
+/* Module metadata, slot map, and closure pass are in xi_module.h */
+
+#endif  // XI_H

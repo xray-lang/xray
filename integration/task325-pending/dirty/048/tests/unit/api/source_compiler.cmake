@@ -1,0 +1,16 @@
+add_executable(test_api_source_compiler "${CMAKE_CURRENT_LIST_DIR}/source_compiler/test_source_compiler.c")
+target_link_libraries(test_api_source_compiler PRIVATE xray_source_compile xray_xir_runtime_host)
+target_include_directories(test_api_source_compiler PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/tests/unit")
+target_compile_definitions(test_api_source_compiler PRIVATE
+    XR_COMPILER_STDLIB="${PROJECT_SOURCE_DIR}/stdlib"
+    XR_COMPILER_FIXTURE="${CMAKE_CURRENT_LIST_DIR}/source_product_text")
+set_target_properties(test_api_source_compiler PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_api_source_compiler PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_api_source_compiler PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME api_source_compiler COMMAND test_api_source_compiler)
+add_test(NAME api_source_compiler_faults COMMAND test_api_source_compiler --compiler-faults)
+set_tests_properties(api_source_compiler PROPERTIES TIMEOUT 120 LABELS "unit;api;source;ownership;budget")
+set_tests_properties(api_source_compiler_faults PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE COST 100 LABELS "unit;api;source;ownership;compiler-faults")

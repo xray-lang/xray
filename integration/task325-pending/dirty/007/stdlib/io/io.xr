@@ -1,0 +1,593 @@
+// io — typed filesystem composition over a private syscall boundary.
+//
+// Native entry points are deliberately internal `__*` primitives. Resource
+// ownership, buffering, line iteration, Path shaping, and public value types
+// live here so VM and AOT compile the same Xray semantics.
+import os
+import { Path } from path
+
+const READ_CHUNK_SIZE: i64 = 131072
+const MAX_IN_MEMORY_READ_BYTES: i64 = 2147483647
+
+export final class FileStat {
+    size: i64
+    mode: i64
+    mtime: i64
+    atime: i64
+    ctime: i64
+    uid: i64
+    gid: i64
+    isFile: bool
+    isDir: bool
+    isSymlink: bool
+
+    init(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64,
+                uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool) {
+        this.size = size
+        this.mode = mode
+        this.mtime = mtime
+        this.atime = atime
+        this.ctime = ctime
+        this.uid = uid
+        this.gid = gid
+        this.isFile = isFile
+        this.isDir = isDir
+        this.isSymlink = isSymlink
+    }
+}
+
+// File is a synchronous byte stream over one file descriptor. It deliberately
+// requires an explicit close (normally `defer { file.close() }`): native
+// resources must not depend on a nondeterministic finalizer contract.
+//
+// Handles 0, 1 and 2 are the standard streams and are never owned, so closing
+// one is refused rather than costing the process its input or output.
+export final class File {
+    private _handle: i64
+    private _open: bool
+    private _owned: bool
+
+    private init(handle: i64, owned: bool) {
+        this._handle = handle
+        this._open = handle >= 0
+        this._owned = owned
+    }
+
+    static open(path: Path) -> File? {
+        var handle = __fileOpen(path)
+        if (handle < 0) { return null }
+        return File(handle, true)
+    }
+
+    // `append` keeps what the file already holds; otherwise it is truncated.
+    static openWrite(path: Path, append: bool) -> File? {
+        var handle = __fileOpenWrite(path, append)
+        if (handle < 0) { return null }
+        return File(handle, true)
+    }
+
+    static stdin() -> File { return File(0, false) }
+    static stdout() -> File { return File(1, false) }
+    static stderr() -> File { return File(2, false) }
+
+    read(maxBytes: i64 = 131072) -> Array<u8>? {
+        if (!this._open || maxBytes < 0) { return null }
+        return __fileRead(this._handle, maxBytes)
+    }
+
+    // One write, reporting what the stream accepted. `offset` indexes into the
+    // caller's buffer, not the file: the file position is the descriptor's own.
+    // Retrying a short write is the caller's job -- see _drainBytes.
+    write(data: Array<u8>, offset: i64) -> i64 {
+        if (!this._open) { return -1 }
+        return __fileWrite(this._handle, data, offset)
+    }
+
+    writeString(data: string, offset: i64) -> i64 {
+        if (!this._open) { return -1 }
+        return __fileWriteStr(this._handle, data, offset)
+    }
+
+    // Only the standard streams carry C-runtime buffering; on any other handle
+    // this reports success without a syscall.
+    flush() -> bool {
+        if (!this._open) { return false }
+        return __fileFlush(this._handle)
+    }
+
+    ref close() -> bool {
+        if (!this._open) { return true }
+        var ok = true
+        if (this._owned) { ok = __fileClose(this._handle) }
+        this._open = false
+        return ok
+    }
+}
+
+// Whole-input reads are a source-level buffering policy over the one-read file
+// descriptor leaf. Array growth is amortised, and the explicit ceiling matches
+// the largest byte array either backend can represent. The leaf owns only one
+// host read; EOF, retry progression, aggregation and text validation live here.
+fn _readAll(file: File) -> Array<u8>? {
+    var out: Array<u8> = []
+    while (true) {
+        var chunk = file.read(READ_CHUNK_SIZE)
+        if (chunk == null) { return null }
+        if (len(chunk!) == 0) { return out }
+        if (len(out) > MAX_IN_MEMORY_READ_BYTES - len(chunk!)) { return null }
+        for (var i = 0; i < len(chunk!); i++) { out.push(chunk![i]) }
+    }
+    return null
+}
+
+fn _readPathBytes(path: Path) -> Array<u8>? {
+    var file = File.open(path)
+    if (file == null) { return null }
+    var out = _readAll(file!)
+    file!.close()
+    return out
+}
+
+fn _decodeUtf8(bytes: Array<u8>) -> string? {
+    try {
+        return string.fromUtf8(bytes[:])
+    } catch (e: Utf8Error) {
+        return null
+    }
+}
+
+export final class BufReader {
+    private _file: File
+    private _buffer: Array<u8>
+    private _cursor: i64
+    private _chunkSize: i64
+    private _eof: bool
+
+    private init(file: File, chunkSize: i64) {
+        this._file = file
+        this._buffer = Array<u8>(0)
+        this._cursor = 0
+        this._chunkSize = chunkSize
+        this._eof = false
+    }
+
+    static open(path: Path, chunkSize: i64 = 131072) -> BufReader? {
+        if (chunkSize <= 0) { return null }
+        var file = File.open(path)
+        if (file == null) { return null }
+        return BufReader(file!, chunkSize)
+    }
+
+    private ref fill() -> bool {
+        if (this._eof) { return false }
+        var chunk = this._file.read(this._chunkSize)
+        if (chunk == null || len(chunk!) == 0) {
+            this._buffer = Array<u8>(0)
+            this._cursor = 0
+            this._eof = true
+            return false
+        }
+        this._buffer = chunk!
+        this._cursor = 0
+        return true
+    }
+
+    ref readLine() -> string? {
+        var out = Array<u8>()
+        while (true) {
+            if (this._cursor >= len(this._buffer) && !this.fill()) {
+                if (len(out) == 0) { return null }
+                return string.fromUtf8Lossy(out[:])
+            }
+            var value = this._buffer[this._cursor]
+            this._cursor = this._cursor + 1
+            if (value == 10) {
+                if (len(out) > 0 && out[len(out) - 1] == 13) { out.pop() }
+                return string.fromUtf8Lossy(out[:])
+            }
+            out.push(value)
+        }
+        return null
+    }
+
+    ref close() -> bool {
+        this._eof = true
+        return this._file.close()
+    }
+}
+
+export final class LineIterator {
+    private _reader: BufReader
+    private _next: string?
+    private _done: bool
+
+    init(reader: BufReader) {
+        this._reader = reader
+        this._next = null
+        this._done = false
+        this.advance()
+    }
+
+    private ref advance() {
+        this._next = this._reader.readLine()
+        if (this._next == null) {
+            this._done = true
+            this._reader.close()
+        }
+    }
+
+    hasNext() -> bool { return !this._done }
+
+    ref next() -> string? {
+        if (this._done) { return null }
+        var value = this._next
+        this.advance()
+        return value
+    }
+}
+
+// Writing is open, drain, close. Each of the three rules below is policy, which
+// is why it lives here rather than behind the host boundary:
+//
+//   - the drain loop, which keeps a short write (a signal, a full pipe) from
+//     silently truncating the output;
+//   - "no progress is a failure", so a stream that accepts nothing is not
+//     retried forever;
+//   - "a failed close is a failed write", because a deferred write can fail at
+//     close and nowhere earlier.
+//
+// The host boundary underneath is one write that reports what it accepted.
+fn _drainBytes(file: File, data: Array<u8>) -> bool {
+    var off = 0
+    while (off < len(data)) {
+        var n = file.write(data, off)
+        if (n <= 0) { return false }
+        off = off + n
+    }
+    return true
+}
+
+// The offset counts bytes, so the bound has to be the byte length: len(data)
+// would be the scalar count and would stop early on any non-ASCII content.
+fn _drainStr(file: File, data: string) -> bool {
+    var off = 0
+    var total = len(data.bytes())
+    while (off < total) {
+        var n = file.writeString(data, off)
+        if (n <= 0) { return false }
+        off = off + n
+    }
+    return true
+}
+
+// The close is issued before the drain result is consulted, so a failed write
+// still releases the descriptor.
+fn _publishStr(path: Path, data: string, append: bool) -> bool {
+    var file = File.openWrite(path, append)
+    if (file == null) { return false }
+    var ok = _drainStr(file!, data)
+    return file!.close() && ok
+}
+
+fn _publishBytes(path: Path, data: Array<u8>, append: bool) -> bool {
+    var file = File.openWrite(path, append)
+    if (file == null) { return false }
+    var ok = _drainBytes(file!, data)
+    return file!.close() && ok
+}
+
+// The standard streams keep the C runtime's buffering, so a write here stays
+// ordered against print(), and the flush that publishes it is the caller's last
+// step rather than the host's.
+fn _writeStdStream(file: File, data: string) -> bool {
+    return _drainStr(file, data) && file.flush()
+}
+
+// BufWriter batches byte writes and publishes them atomically through the
+// whole-file primitive. Repeated flushes rewrite the same complete buffer;
+// callers may reset explicitly before composing another file image.
+//
+// The publish step is `io.flushWriter(w)` rather than a `w.flush()` method, and
+// deliberately so: a method on a stdlib class that reaches a suspending leaf
+// through an Xray function does not survive coroutine lowering today, because
+// two of the compiler's four suspendability oracles seed only from `net`. This
+// is the same shape net.xr already uses -- every one of its I/O entry points is
+// a module-level function over an opaque handle, and not one is a method. See
+// blockers/a-stdlib-class-method-cannot-reach-suspending-leaf-indirectly.md.
+export final class BufWriter {
+    private _path: Path
+    private _buffer: Array<u8>
+
+    init(path: Path, capacity: i64 = 131072) {
+        this._path = path
+        this._buffer = Array<u8>()
+        this._buffer.reserve(capacity)
+    }
+
+    ref write(data: Slice<u8>) -> i64 {
+        for (var i = 0; i < len(data); i++) { this._buffer.push(data[i]) }
+        return len(data)
+    }
+
+    ref writeBytes(data: Array<u8>) -> i64 { return this.write(data[:]) }
+
+    ref writeString(data: string) -> i64 {
+        var bytes = data.copyBytes()
+        return this.write(bytes[:])
+    }
+
+    path() -> Path { return this._path }
+
+    bytes() -> Array<u8> { return this._buffer }
+
+    ref reset() { this._buffer.clear() }
+
+    size() -> i64 { return len(this._buffer) }
+}
+
+export fn flushWriter(writer: BufWriter) -> bool {
+    return _publishBytes(writer.path(), writer.bytes(), false)
+}
+
+export fn appendFile(path: Path, data: string) -> bool { return _publishStr(path, data, true) }
+export fn chmod(path: Path, mode: i64) -> bool { return __chmod(path, mode) }
+export fn chdir(path: Path) -> bool { return __chdir(path) }
+// A copy is a read-write pump over the two handles. The platform zero-copy
+// calls that used to back this (fcopyfile, sendfile, CopyFileA) are gone: only
+// the VM ever had them, so the two backends disagreed on what a copy reached,
+// and the pump is the same policy on both. The destination's close is part of
+// the result because a deferred write can fail there; the source's is not,
+// which is what the C implementation already did.
+fn _pump(input: File, output: File) -> bool {
+    while (true) {
+        var chunk = input.read(65536)
+        if (chunk == null) { return false }
+        if (len(chunk!) == 0) { return true }
+        if (!_drainBytes(output, chunk!)) { return false }
+    }
+    return true
+}
+
+export fn copyFile(src: Path, dst: Path) -> bool {
+    var input = File.open(src)
+    if (input == null) { return false }
+    var output = File.openWrite(dst, false)
+    if (output == null) {
+        input!.close()
+        return false
+    }
+    var ok = _pump(input!, output!)
+    var published = output!.close() && ok
+    input!.close()
+    return published
+}
+
+export fn cwd() -> Path { return Path(os.getcwd()) }
+export fn exists(path: Path) -> bool { return __stat(path) != null }
+export fn fileSize(path: Path) -> i64 {
+    var raw = __stat(path)
+    if (raw == null) { return -1 }
+    return raw!.size
+}
+export fn isDir(path: Path) -> bool {
+    var raw = __stat(path)
+    return raw != null && raw!.isDir
+}
+export fn isFile(path: Path) -> bool {
+    var raw = __stat(path)
+    return raw != null && raw!.isFile
+}
+export fn isSymlink(path: Path) -> bool {
+    var raw = __stat(path)
+    return raw != null && raw!.isSymlink
+}
+export fn mkdir(path: Path) -> bool { return __mkdir(path) }
+// Separators follow the Path type's own contract, which is POSIX: '/' only.
+// A backslash is an ordinary filename byte, which is what it is on the systems
+// Path describes. Creating each missing level in turn, and treating a level
+// that already exists as a directory as success, is the whole of the policy.
+fn _ensureDir(dir: Path) -> bool {
+    if (__mkdir(dir)) { return true }
+    return isDir(dir)
+}
+
+export fn mkdirp(path: Path) -> bool {
+    var raw = path.toString()
+    if (len(raw) == 0) { return false }
+
+    var rootLen = 0
+    if (raw.slice(0, 1) == "/") { rootLen = 1 }
+
+    var end = len(raw)
+    while (end > rootLen + 1 && raw.slice(end - 1, end) == "/") { end = end - 1 }
+    var p = raw.slice(0, end)
+    if (end <= rootLen) { return isDir(Path(p)) }
+
+    var i = rootLen
+    while (i < len(p) && p.slice(i, i + 1) == "/") { i = i + 1 }
+    while (i < len(p)) {
+        if (p.slice(i, i + 1) == "/") {
+            if (i > rootLen && !_ensureDir(Path(p.slice(0, i)))) { return false }
+            while (i + 1 < len(p) && p.slice(i + 1, i + 2) == "/") { i = i + 1 }
+        }
+        i = i + 1
+    }
+    return _ensureDir(Path(p))
+}
+export fn readFile(path: Path) -> string? {
+    var bytes = _readPathBytes(path)
+    if (bytes == null) { return null }
+    return _decodeUtf8(bytes!)
+}
+export fn readFileBytes(path: Path) -> Array<u8>? { return _readPathBytes(path) }
+export fn readStdin() -> string? {
+    var bytes = _readAll(File.stdin())
+    if (bytes == null) { return null }
+    return _decodeUtf8(bytes!)
+}
+export fn readStdinBytes() -> Array<u8>? { return _readAll(File.stdin()) }
+export fn remove(path: Path) -> bool { return __remove(path) }
+// Removal descends into real directories only. A symlink is removed as the
+// link it is, never followed, so a link pointing outside the tree cannot make
+// the walk delete anything beyond it. The depth ceiling matches the recursive
+// listing's; the C implementation had none and a deep enough tree exhausted
+// the stack. A directory's own removal is attempted even when a child failed,
+// which reports the failure while still clearing what it can.
+fn _removeTree(path: Path, depth: i64) -> bool {
+    if (depth >= 64) { return false }
+    var metadata = __stat(path)
+    // stat follows links, so a dangling symlink has no metadata. Removing it
+    // directly preserves the no-follow rule even when its target was already
+    // removed earlier in the directory walk.
+    if (metadata == null) { return __remove(path) }
+    if (!metadata!.isDir || metadata!.isSymlink) { return __remove(path) }
+
+    var names = _readDirNames(path)
+    if (names == null) { return false }
+    var ok = true
+    for (var i = 0; i < len(names!); i++) {
+        var child = Path(path.toString() + "/" + names![i])
+        if (!_removeTree(child, depth + 1)) { ok = false }
+    }
+    return __rmdir(path) && ok
+}
+
+export fn removeAll(path: Path) -> bool {
+    return _removeTree(path, 0)
+}
+export fn rename(old: Path, newPath: Path) -> bool { return __rename(old, newPath) }
+export fn symlink(source: Path, link: Path) -> bool { return __symlink(source, link) }
+// Update the timestamps first and fall back to creating the file, in that
+// order: a directory accepts the timestamp update but cannot be created as a
+// file, so trying creation first would report failure for a path that touch
+// handles. Appending nothing creates a missing file without truncating an
+// existing one.
+export fn touch(path: Path) -> bool {
+    if (__utimeNow(path)) { return true }
+    return _publishStr(path, "", true)
+}
+export fn writeFile(path: Path, data: string) -> bool { return _publishStr(path, data, false) }
+export fn writeFileBytes(path: Path, data: Array<u8>) -> bool {
+    return _publishBytes(path, data, false)
+}
+export fn writeStderr(data: string) -> bool { return _writeStdStream(File.stderr(), data) }
+export fn writeStdout(data: string) -> bool { return _writeStdStream(File.stdout(), data) }
+
+export fn stat(path: Path) -> FileStat? {
+    var raw = __stat(path)
+    if (raw == null) { return null }
+    return FileStat(raw!.size, raw!.mode, raw!.mtime, raw!.atime, raw!.ctime,
+                    raw!.uid, raw!.gid, raw!.isFile, raw!.isDir, raw!.isSymlink)
+}
+
+// The root comes from the os module, which owns the environment chain. Any
+// trailing separator is trimmed here so the join never doubles one -- macOS
+// sets TMPDIR with a trailing slash, and the old C join produced a doubled
+// separator in every temporary path built on it. Only the unique-name
+// creation is left to the host, because it has to be atomic.
+fn _tempRoot() -> string {
+    var root = os.tmpdir()
+    while (len(root) > 1 && root.slice(len(root) - 1, len(root)) == "/") {
+        root = root.slice(0, len(root) - 1)
+    }
+    return root
+}
+
+export fn tempDir() -> Path? {
+    var made = __makeTempDir(_tempRoot())
+    if (made == null) { return null }
+    return Path(made!)
+}
+
+export fn tempFile() -> Path? {
+    var made = __makeTempFile(_tempRoot())
+    if (made == null) { return null }
+    return Path(made!)
+}
+
+export fn readlink(path: Path) -> Path? {
+    var raw = __readlink(path)
+    if (raw == null) { return null }
+    return Path(raw!)
+}
+
+export fn realpath(path: Path) -> Path? {
+    var raw = __realpath(path)
+    if (raw == null) { return null }
+    return Path(raw!)
+}
+
+fn _readDirNames(path: Path) -> Array<string>? {
+    var handle = __dirOpen(path)
+    if (handle == 0) { return null }
+    defer { __dirClose(handle) }
+    var names: Array<string> = []
+    while (true) {
+        var name = __dirNext(handle)
+        if (name == null) {
+            names.sort()
+            return names
+        }
+        if (name! != "." && name! != "..") { names.push(name!) }
+    }
+    return null
+}
+
+// A path that cannot be listed answers null rather than an empty array: an
+// empty directory and a path that is not a directory are different answers,
+// and returning the same value for both hides the second. Names are sorted so
+// callers do not inherit platform-specific directory iteration order.
+export fn readDir(path: Path) -> Array<Path>? {
+    var raws = _readDirNames(path)
+    if (raws == null) { return null }
+    var out: Array<Path> = []
+    for (var i = 0; i < len(raws!); i++) { out.push(Path(raws![i])) }
+    return out
+}
+
+// Entries are reported relative to the listed directory with '/' as the only
+// separator, and the walk stops at 64 levels. A symlinked directory is listed
+// but not descended into, so a cycle through one cannot make the walk repeat.
+fn _walkDir(full: string, rel: string, depth: i64, out: ref Array<string>) {
+    if (depth >= 64) { return }
+    var names = _readDirNames(Path(full))
+    if (names == null) { return }
+    for (var i = 0; i < len(names!); i++) {
+        var name = names![i]
+        var childFull = full + "/" + name
+        var childRel = name
+        if (len(rel) > 0) { childRel = rel + "/" + name }
+        out.push(childRel)
+        var child = Path(childFull)
+        var metadata = __stat(child)
+        if (metadata != null && metadata!.isDir && !metadata!.isSymlink) {
+            _walkDir(childFull, childRel, depth + 1, ref out)
+        }
+    }
+}
+
+export fn readDirRecursive(path: Path) -> Array<Path>? {
+    if (!isDir(path)) { return null }
+    var raw: Array<string> = []
+    _walkDir(path.toString(), "", 0, ref raw)
+    var out: Array<Path> = []
+    for (var i = 0; i < len(raw); i++) { out.push(Path(raw[i])) }
+    return out
+}
+
+export fn lines(path: Path) -> LineIterator? {
+    var reader = BufReader.open(path)
+    if (reader == null) { return null }
+    return LineIterator(reader!)
+}
+
+export fn readLines(path: Path) -> Array<string> {
+    var iterator = lines(path)
+    var out = Array<string>()
+    if (iterator == null) { return out }
+    while (iterator!.hasNext()) {
+        var line = iterator!.next()
+        if (line != null) { out.push(line!) }
+    }
+    return out
+}
