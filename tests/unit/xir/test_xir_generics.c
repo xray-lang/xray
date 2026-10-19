@@ -20,6 +20,7 @@
 #include "base/xsha256.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "%d: %s\n", __LINE__, #c); exit(1); } } while (0)
 #include "xir_consumer_context_owner.h"
 static void generic_runtime_retiring(void *pointer);
@@ -618,7 +619,40 @@ static void deep_body_substitution(void) {
     xr_xir_compile_artifact_free(lowered); lowered=NULL;
 }
 
-int main(void) {
+static int generic_normal_case(const char *name) {
+    static const struct {
+        const char *name;
+        void (*run)(void);
+    } cases[] = {
+        {"cross_pool_substitution", cross_pool_substitution},
+        {"nominal_ordered_matching", nominal_ordered_matching},
+        {"nominal_field_closure", nominal_field_closure},
+        {"nominal_function_closure", nominal_function_closure},
+        {"nominal_expression_closure", nominal_expression_closure},
+        {"deep_body_substitution", deep_body_substitution},
+        {"array_generic_cases", array_generic_cases},
+        {"array_definition_constraints", array_definition_constraints},
+    };
+    for (size_t i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
+        if (strcmp(name,cases[i].name)) continue;
+        consumer_context=consumer_context_default();
+        cases[i].run();
+        consumer_contexts_free();
+        printf("Generic normal case %s passed\n",cases[i].name);
+        return 0;
+    }
+    fprintf(stderr,"Unknown generic normal case: %s\n",name);
+    return 1;
+}
+
+int main(int argc,char **argv) {
+    if (argc!=1) {
+        if (argc!=3 || strcmp(argv[1],"--normal-case")) {
+            fputs("Usage: test_xir_generics [--normal-case name]\n",stderr);
+            return 1;
+        }
+        return generic_normal_case(argv[2]);
+    }
     consumer_context=consumer_context_default();
     consumer_context=consumer_context_default();
     error_erasure_packet();
