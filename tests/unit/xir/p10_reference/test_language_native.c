@@ -73,7 +73,7 @@ static void execute_profile(int64_t expected, bool direction, unsigned suspensio
          * either backend. Program reception still proves the mixed table. */
         CHECK(xr_xir_compile_vm_bind_table(lowered, &bindings, &entries) == XR_XIR_OK);
         module = xr_xir_compile_artifact_module(lowered);
-        uint32_t vm = 0, native = 0, crossing = 0;
+        uint32_t vm = 0, native = 0, crossing = 0, invokes = 0;
         for (uint32_t f = 0; f < spec.entry_count; ++f) {
             bool use_vm = f == answer ? direction : !direction;
             if (use_vm) { CHECK(entries[f].resume != spec.entries[f].resume); ++vm; }
@@ -81,10 +81,11 @@ static void execute_profile(int64_t expected, bool direction, unsigned suspensio
             const XrXirFunction *function = &module->functions[f];
             for (uint32_t i = 0; i < function->instruction_count; ++i) {
                 const XrXirInstruction *instruction = &function->instructions[i];
-                if (instruction->op == XR_XIR_CALL) {
+                if (instruction->op == XR_XIR_CALL || instruction->op == XR_XIR_INVOKE) {
                     CHECK(instruction->immediate < spec.entry_count);
                     bool callee_vm = instruction->immediate == answer ? direction : !direction;
                     crossing += use_vm != callee_vm;
+                    invokes += use_vm != callee_vm && instruction->op == XR_XIR_INVOKE;
                 }
             }
         }
@@ -94,7 +95,8 @@ static void execute_profile(int64_t expected, bool direction, unsigned suspensio
         CHECK(matching.identity && matching.length == spec.packet.length &&
               !memcmp(matching.identity, spec.packet.identity, 32) && !memcmp(matching.bytes, spec.packet.bytes, matching.length));
         spec.packet = matching;
-        printf("mixed direction=%u vm=%u native=%u direct_cross_edges=%u\n", (unsigned)direction, vm, native, crossing);
+        printf("mixed direction=%u vm=%u native=%u direct_cross_edges=%u invoke_cross_edges=%u\n",
+            (unsigned)direction, vm, native, crossing, invokes);
     }
     xr_xir_compile_artifact_free(checked);
     XrXirProgram *program = NULL;

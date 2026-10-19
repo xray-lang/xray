@@ -1,0 +1,15 @@
+enum StepError { Stop }
+fn step(value:i64)->i64 {
+    if(value==3) { throw StepError.Stop }
+    return value
+}
+export fn referenceAnswer()->i64 {
+    var index:i64=0
+    var total:i64=0
+    while(index<6) {
+        try { total=total+step(index) }
+        catch(error:StepError) { total=total+30 }
+        index=index+1
+    }
+    return total
+}

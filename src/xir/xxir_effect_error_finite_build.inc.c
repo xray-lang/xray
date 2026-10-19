@@ -64,6 +64,15 @@ typedef struct ErrorFiniteDerive {
 static XrXirStatus error_finite_derive_coordinate(const EffectErrorFiniteRead *read,
     uint32_t function,uint64_t coordinate,void *owner,bool *paused) {
     ErrorFiniteDerive *derive=owner;uint64_t result=0;uint32_t bits=0;
+    const EffectErrorFiniteRow *row=&read->proof->rows[function];
+    /* Reachability is a monotone Boolean equation. A true fact from an earlier
+     * rank cannot gain another bit, so construction need not derive it again.
+     * Final closure and rank support still replay every current equation. */
+    if(coordinate>=row->first && coordinate-row->first<row->blocks) {
+        uint64_t reached=0;
+        XrXirStatus prior=error_finite_word(read,coordinate,1,&reached);
+        if(prior!=XR_XIR_OK || reached) return prior;
+    }
     XrXirStatus status=error_finite_rhs(read,function,coordinate,&result,&bits);
     if(status!=XR_XIR_OK) return status;
     for(uint32_t bit=0;bit<bits;++bit) if(result&(UINT64_C(1)<<bit)) {
