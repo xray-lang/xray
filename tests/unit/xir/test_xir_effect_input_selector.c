@@ -325,7 +325,88 @@ static void selector_invocation_projection(void) {
     puts("invocation projections: source full/target dimensions, exact fees, both callback refusals, all head storage preconditions, foreign ledger, cancellation/recovery and physical0 PASS");
 }
 
+
+typedef struct SelectorSignatureTrace {
+    uint32_t calls,deny,kind[4],function[4];uint64_t fee[4];
+} SelectorSignatureTrace;
+static SelectorSignatureTrace selector_signature_trace;
+static XrXirStatus selector_signature_head(const EffectBodyRequest *request,uint32_t f,
+    EffectBodyFunctionHead *full,EffectBodyFunctionDimensions *dimensions,EffectBodyFunctionSignature *signature) {
+    SelectorSignatureTrace *trace=&selector_signature_trace;uint32_t call=trace->calls++;
+    CHECK(call<4 && (!!full+!!dimensions+!!signature)==1);
+    trace->kind[call]=signature?3:dimensions?2:1;trace->function[call]=f;
+    if(trace->calls==trace->deny) return XR_XIR_BAD_STRUCTURE;
+    const XrXirCompileContext *work=request->read.owner;uint64_t before=pc_stats(work).work;
+    XrXirStatus status=effect_body_owned_head(request,f,full,dimensions,signature);
+    trace->fee[call]=pc_stats(work).work-before;return status;
+}
+/* The literal REF captures a receiver and callback. Its target signature is
+ * enough for identity typing; the source still provides the complete operands. */
+static void selector_capture_signature(void) {
+    SelectorRawSource fixture;selector_raw_source_fixture(&fixture);
+    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    context.limits.functions=32;context.limits.parameters=16;context.limits.instructions=128;
+    XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
+    CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+    memset(&fixture,0xDC,sizeof(fixture));
+    EffectInvocationFinal *final=effects->invocations->final;EffectBodyMaterial *material=final->material;
+    CHECK(final->site_count==1 && final->binding_count==2);
+    const EffectInvocationSite *site=&final->sites[0];
+    CHECK(site->function==0 && site->instruction==0 && site->target==2 && site->captures==2 && !site->binding);
+    EffectCaptureRead read={.work=&context,.final=final,.body=effect_body_owned_request(&context,material)};
+    EffectCaptureNode node={0};CHECK(effect_capture_node(&read,final->roots[0],&node)==XR_XIR_OK);
+    read.body.head=selector_signature_head;
+    size_t allocated=attempts;uint64_t physical=live_bytes;
+    pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+    for(uint32_t deny=0;deny<=2;++deny) {
+        selector_signature_trace=(SelectorSignatureTrace){.deny=deny};bool seeded=false;
+        CHECK(effect_capture_reference_seed(&read,0,&seeded)==(deny?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
+        CHECK(seeded==!deny && selector_signature_trace.calls==(deny?deny:2));
+        CHECK(selector_signature_trace.kind[0]==3 && selector_signature_trace.function[0]==2);
+        if(deny!=1) CHECK(selector_signature_trace.kind[1]==1 && selector_signature_trace.function[1]==0);
+        if(!deny) CHECK(selector_signature_trace.fee[0]==11+sizeof(EffectBodyFunctionSignature) &&
+            selector_signature_trace.fee[1]==11+sizeof(EffectBodyFunctionHead));
+    }
+    for(uint32_t deny=0;deny<=1;++deny) {
+        selector_signature_trace=(SelectorSignatureTrace){.deny=deny};XrXirType type=(XrXirType)UINT32_MAX;
+        CHECK(effect_capture_complete_type(&read,1,&type)==(deny?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
+        CHECK(type==(deny?(XrXirType)UINT32_MAX:(XrXirType)256) && selector_signature_trace.calls==1 &&
+            selector_signature_trace.kind[0]==3 && selector_signature_trace.function[0]==2);
+    }
+    for(uint32_t deny=0;deny<=3;++deny) {
+        selector_signature_trace=(SelectorSignatureTrace){.deny=deny};EffectCaptureComplete complete={.rank=1};
+        CHECK(effect_capture_complete_reference(&read,&node,0,1,&complete)==(deny?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
+        CHECK(selector_signature_trace.calls==(deny?deny:3));
+        CHECK(selector_signature_trace.kind[0]==3 && selector_signature_trace.function[0]==2);
+        if(deny!=1) CHECK(selector_signature_trace.kind[1]==1 && selector_signature_trace.function[1]==0);
+        if(deny==0 || deny==3) CHECK(selector_signature_trace.kind[2]==3 && selector_signature_trace.function[2]==2);
+    }
+    EffectBodyFunction *target=&material->functions[2];EffectBodyFunction saved=*target;
+    for(uint32_t mode=0;mode<6;++mode) {
+        selector_projection_storage(target,mode);selector_signature_trace=(SelectorSignatureTrace){0};
+        XrXirType type=(XrXirType)UINT32_MAX;
+        CHECK(effect_capture_complete_type(&read,1,&type)==XR_XIR_BAD_STRUCTURE && type==(XrXirType)UINT32_MAX);
+        *target=saved;
+    }
+    SelectorCurrentPoll poll={.requested=true};
+    CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
+    selector_signature_trace=(SelectorSignatureTrace){0};bool seeded=false;
+    CHECK(effect_capture_reference_seed(&read,0,&seeded)==XR_XIR_BUDGET && !seeded && poll.calls);
+    CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
+    selector_signature_trace=(SelectorSignatureTrace){0};
+    CHECK(effect_capture_reference_seed(&read,0,&seeded)==XR_XIR_OK && seeded);
+    CHECK(effect_capture_match(&context,final)==XR_XIR_OK);
+    CHECK(attempts==allocated && live_bytes==physical);
+    pc_allocate_hook=NULL;pc_free_hook=NULL;
+    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
+    printf("capture signature layout full%zu signature%zu saving%zu\n",sizeof(EffectBodyFunctionHead),
+        sizeof(EffectBodyFunctionSignature),sizeof(EffectBodyFunctionHead)-sizeof(EffectBodyFunctionSignature));
+    puts("capture signatures: literal REF identity, source full head, exact fees, all three callback refusals, unchanged outputs, full storage checks, cancellation/recovery and physical0 PASS");
+}
+
 int main(void) {
+    selector_capture_signature();
     selector_invocation_projection();
     selector_current_handoff();
     selector_complete_chain();

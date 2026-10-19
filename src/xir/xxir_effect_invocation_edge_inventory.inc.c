@@ -160,8 +160,8 @@ static XrXirStatus effect_final_edge_frontiers(const XrXirCompileContext *work,
             if(defaults) status=effect_final_edge_default(work,body,op,&target);
             else if(op->immediate<0 || (uint64_t)op->immediate>=body->domain.function_count) status=XR_XIR_BAD_STRUCTURE;
             else target=(uint32_t)op->immediate;
-            EffectBodyFunctionHead callee={0};
-            if(status==XR_XIR_OK) status=effect_body_request_head(body,target,&callee);
+            EffectBodyFunctionSignature callee={0};
+            if(status==XR_XIR_OK) status=effect_body_request_signature(body,target,&callee);
             if(status!=XR_XIR_OK) return status;
             bool closed=!xr_xir_type_span(body->domain.types,callee.result);
             if(defaults && callee.parameter_count) return XR_XIR_BAD_STRUCTURE;

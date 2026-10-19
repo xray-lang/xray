@@ -88,7 +88,7 @@ static XrXirStatus effect_capture_class_intrinsic(EffectCaptureRead *read,const 
             frontier->op==XR_XIR_CALL_INDIRECT || frontier->op==XR_XIR_INVOKE_INDIRECT;
         if(!opaque && (frontier->op==XR_XIR_CALL || frontier->op==XR_XIR_INVOKE)) {
             if(frontier->immediate<0 || (uint64_t)frontier->immediate>=read->body.domain.function_count) return XR_XIR_BAD_STRUCTURE;
-            EffectBodyFunctionHead target={0};XrXirStatus status=effect_body_request_head(&read->body,(uint32_t)frontier->immediate,&target);
+            EffectBodyFunctionSignature target={0};XrXirStatus status=effect_body_request_signature(&read->body,(uint32_t)frontier->immediate,&target);
             if(status!=XR_XIR_OK) return status;
             opaque=xr_xir_type_span(read->body.domain.types,target.result)!=0;
             for(uint32_t p=0;p<target.parameter_count;++p) {
