@@ -69,12 +69,12 @@ static void execute_profile(int64_t expected, bool direction, unsigned suspensio
     XrXirCallEntry *entries = NULL; XrXirVmBinding *bindings = NULL;
     if (XR_LANGUAGE_MIXED) {
         CHECK(xr_xir_compile_lower(checked, &spec.target, &lowered, NULL) == XR_XIR_OK);
-        CHECK(xr_compile_resources_calloc(owner.context.resources, spec.entry_count, sizeof(*entries), (void **)&entries) == XR_COMPILE_RESOURCE_OK);
-        CHECK(xr_compile_resources_calloc(owner.context.resources, spec.entry_count, sizeof(*bindings), (void **)&bindings) == XR_COMPILE_RESOURCE_OK);
+        /* One table binding validates the complete artifact before selecting
+         * either backend. Program reception still proves the mixed table. */
+        CHECK(xr_xir_compile_vm_bind_table(lowered, &bindings, &entries) == XR_XIR_OK);
         module = xr_xir_compile_artifact_module(lowered);
         uint32_t vm = 0, native = 0, crossing = 0;
         for (uint32_t f = 0; f < spec.entry_count; ++f) {
-            CHECK(xr_xir_compile_vm_bind(lowered, f, &bindings[f], &entries[f]) == XR_XIR_OK);
             bool use_vm = f == answer ? direction : !direction;
             if (use_vm) { CHECK(entries[f].resume != spec.entries[f].resume); ++vm; }
             else { entries[f] = spec.entries[f]; ++native; }
@@ -98,7 +98,15 @@ static void execute_profile(int64_t expected, bool direction, unsigned suspensio
     }
     xr_xir_compile_artifact_free(checked);
     XrXirProgram *program = NULL;
-    CHECK(xr_xir_compile_program_seal(&owner.context, &spec, &program) == XR_XIR_OK);
+    XrXirStatus sealed = xr_xir_compile_program_seal(&owner.context, &spec, &program);
+    if (sealed != XR_XIR_OK) {
+        XrCompileResourceStats stats = {0};
+        CHECK(xr_compile_resources_stats(owner.context.resources, &stats) == XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr, "Program seal status=%u work=%llu allocated=%llu peak=%llu live=%llu\n",
+            (unsigned) sealed, (unsigned long long) stats.work, (unsigned long long) stats.allocated_bytes,
+            (unsigned long long) stats.peak_bytes, (unsigned long long) stats.live_bytes);
+    }
+    CHECK(sealed == XR_XIR_OK);
     native_pair(program, answer, expected, suspensions);
     xr_xir_compile_artifact_free(lowered);
     xr_compile_resources_free(bindings); xr_compile_resources_free(entries);
