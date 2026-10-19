@@ -42,7 +42,7 @@ static XrXirStatus effect_capture_complete_type(const EffectCaptureRead *read,ui
         if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
         const EffectInvocationSite *site=&read->final->sites[s];
         if(binding<site->binding || binding-site->binding>=site->captures) continue;
-        EffectBodyFunctionHead target={0};XrXirStatus status=effect_body_request_head(&read->body,site->target,&target);
+        EffectBodyFunctionSignature target={0};XrXirStatus status=effect_body_request_signature(&read->body,site->target,&target);
         if(status!=XR_XIR_OK) return status;
         uint32_t parameter=binding-site->binding;
         if(parameter>=target.parameter_count) return XR_XIR_BAD_STRUCTURE;
@@ -236,8 +236,8 @@ static XrXirStatus effect_capture_complete_reference(const EffectCaptureRead *re
         if(site->function!=read->final->nodes[node->node].body || site->instruction!=instruction) continue;
         XrXirStatus status=effect_capture_reference_seed(read,s,&result->complete);
         if(status!=XR_XIR_OK || !result->complete || !column) return status;
-        EffectBodyFunctionHead target={0};XrXirInstruction storage;const XrXirInstruction *op=NULL;
-        status=effect_body_request_head(&read->body,site->target,&target);
+        EffectBodyFunctionSignature target={0};XrXirInstruction storage;const XrXirInstruction *op=NULL;
+        status=effect_body_request_signature(&read->body,site->target,&target);
         if(status==XR_XIR_OK) status=effect_body_request_instruction(&read->body,site->function,instruction,&storage,&op);
         if(status!=XR_XIR_OK) return status;
         if(op->args[0]>node->head.operand_count || site->captures>node->head.operand_count-op->args[0]) return XR_XIR_BAD_STRUCTURE;

@@ -12,8 +12,8 @@
 static XrXirStatus effect_capture_reference_seed(const EffectCaptureRead *read,
     uint32_t site,bool *output) {
     *output=false;const EffectInvocationSite *reference=&read->final->sites[site];
-    EffectBodyFunctionHead target={0};XrXirInstruction storage;const XrXirInstruction *op=NULL;
-    XrXirStatus status=effect_body_request_head(&read->body,reference->target,&target);
+    EffectBodyFunctionSignature target={0};XrXirInstruction storage;const XrXirInstruction *op=NULL;
+    XrXirStatus status=effect_body_request_signature(&read->body,reference->target,&target);
     if(status==XR_XIR_OK) status=effect_body_request_instruction(&read->body,reference->function,reference->instruction,&storage,&op);
     if(status!=XR_XIR_OK) return status;
     if(reference->captures>target.parameter_count) return XR_XIR_BAD_STRUCTURE;
