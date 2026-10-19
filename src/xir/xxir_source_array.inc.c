@@ -236,15 +236,6 @@ static bool source_array_set_values(SourceContext *ctx, AstNode *node, SourceVal
     if (assignment) *value = args[2];
     return true;
 }
-static bool source_array_set(SourceContext *ctx, AstNode *node, AstNode *receiver, AstNode *index,
-    AstNode *rhs, const XrNativeMemberDeclaration *member, bool assignment, SourceValue *value) {
-    SourceValue args[3];
-    if (!source_array_receiver(ctx, receiver, NULL, true, &args[0]) ||
-        !source_plan_expression(ctx, index, (SourceExpectedType){true, XR_XIR_I64, false, false}, &args[1]) ||
-        !source_plan_expression(ctx, rhs, (SourceExpectedType){true,
-            xr_xir_array_element(&ctx->types, args[0].type), false, false}, &args[2])) return false;
-    return source_array_set_values(ctx, node, args, member, assignment, value);
-}
 static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceValue *evaluated, SourceValue *value) {
     CallExprNode *call = &node->as.call_expr;
     MemberAccessNode *access = &call->callee->as.member_access;
