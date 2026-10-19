@@ -1,0 +1,27 @@
+enum RouteError { Left, Right }
+fn identity<T>(value:T)->T { return value }
+fn make(value:i64=0)->RouteError {
+    var error=RouteError.Left
+    var index:i64=0
+    while(index<3) {
+        if(value+index>=3) { error=RouteError.Right }
+        index=index+1
+    }
+    return identity<RouteError>(error)
+}
+fn raiseLeft()->i64 { throw make() }
+fn raiseRight()->i64 {
+    const choose=make
+    throw choose(1)
+}
+fn score(error:RouteError)->i64 {
+    return match(error) { RouteError.Left->13, RouteError.Right->29 }
+}
+export fn referenceAnswer()->i64 {
+    var total:i64=0
+    try { total=raiseLeft() }
+    catch(error:RouteError) { total=score(error) }
+    try { total=total+raiseRight() }
+    catch(error:RouteError) { total=total+score(error) }
+    return total
+}

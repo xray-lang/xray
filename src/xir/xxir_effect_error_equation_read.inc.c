@@ -27,6 +27,22 @@ static inline bool error_equation_result_call(XrXirOp op) {
         op==XR_XIR_INVOKE_DEFAULT || op==XR_XIR_CALL_INDIRECT || op==XR_XIR_INVOKE_INDIRECT;
 }
 
+/* A live canonical view already frames every physical column. Read only the
+ * current opcode when deciding whether a row can affect this equation; a
+ * contributing row still uses the original complete transfer reader. */
+static XrXirStatus error_equation_current_opcode(const EffectErrorEquationRead *read,
+    uint32_t instruction,XrXirOp *output) {
+    if(!read || !output || !read->body.current || !effect_body_request_sequence_owned(&read->body))
+        return XR_XIR_BAD_STRUCTURE;
+    const EffectBodyRun *ref=NULL;uint32_t opcode=XR_XIR_INVALID;
+    XrXirStatus status=effect_body_current_record(&read->body,read->function,instruction,&ref);
+    if(status==XR_XIR_OK) status=effect_body_run_word(&read->body.read,ref,instruction,0,&opcode);
+    if(status!=XR_XIR_OK) return status;
+    if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+    if(!xir_compile_work(read->work,sizeof(*output))) return XR_XIR_BUDGET;
+    *output=(XrXirOp)opcode;return XR_XIR_OK;
+}
+
 static inline XrXirStatus error_equation_operation(const EffectErrorEquationRead *read,
     uint32_t i,XrXirInstruction *storage) {
     const XrXirInstruction *actual=NULL;

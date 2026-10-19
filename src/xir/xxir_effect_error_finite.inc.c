@@ -198,6 +198,14 @@ static XrXirStatus error_finite_summary(const EffectErrorEquationRead *equation,
         if(!reachable) continue;
         const XrXirBlock *block=&equation->head.blocks[b];
         for(uint32_t i=block->first;i-block->first<block->count;++i) {
+            if(equation->body.current && effect_body_request_sequence_owned(&equation->body)) {
+                XrXirOp opcode=XR_XIR_INVALID;status=error_equation_current_opcode(equation,i,&opcode);
+                if(status!=XR_XIR_OK) return status;
+                bool contributes=returned?opcode==XR_XIR_RETURN:
+                    opcode==XR_XIR_THROW || opcode==XR_XIR_CALL || opcode==XR_XIR_CALL_DEFAULT ||
+                    opcode==XR_XIR_CALL_INDIRECT || opcode==XR_XIR_CALL_REQUIREMENT;
+                if(!contributes) continue;
+            }
             XrXirInstruction op;uint64_t contribution=0;status=error_equation_operation(equation,i,&op);
             if(status!=XR_XIR_OK) return status;
             if(returned) {
