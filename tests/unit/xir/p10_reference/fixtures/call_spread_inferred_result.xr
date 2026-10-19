@@ -1,0 +1,11 @@
+fn identity<T>(value: T) -> T { return value }
+fn combine(first: i64, last: i64) -> i64 { return first * 10 + last }
+export fn referenceAnswer() -> i64 {
+    const pair = (3, 7)
+    const first = combine(...identity(pair))
+    const second = combine(...identity<(i64, i64)>(pair))
+    const maybe: (i64, i64)? = pair
+    if (maybe == null) { return 0 }
+    const third = combine(...maybe)
+    return first * 10000 + second * 100 + third
+}

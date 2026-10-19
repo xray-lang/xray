@@ -46,6 +46,9 @@ static bool source_ground_type(SourceContext *ctx,AstNode *node,uint32_t depth,S
     }
     if (node->type==AST_VARIABLE || node->type==AST_THIS_EXPR) {
         SourceName *binding=visible_name(ctx,node->type==AST_VARIABLE ? node->as.variable.name : "this");
+        if (binding && (binding->kind==SOURCE_UNIT_LOCAL || binding->kind==SOURCE_UNIT_SLOT)) {
+            *output=(SourceExpectedType){true,XR_XIR_UNIT,false,false};return true;
+        }
         if (binding && (binding->kind==SOURCE_LOCAL || binding->kind==SOURCE_SLOT))
             *output=(SourceExpectedType){true,source_symbol_type(ctx,binding), false, false};
         return true;

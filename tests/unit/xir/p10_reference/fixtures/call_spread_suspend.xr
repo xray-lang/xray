@@ -1,0 +1,27 @@
+var trace: i64 = 0
+var source: Array<i64> = [3, 7]
+fn saved() -> (Array<i64>, i64) {
+    trace = trace * 10 + 1
+    return (source, 11)
+}
+fn replace() -> i64 {
+    trace = trace * 10 + 2
+    Coro.yield()
+    source[0] = 13
+    return 17
+}
+fn tail() -> (i64,) {
+    trace = trace * 10 + 3
+    return (19,)
+}
+fn combine(items: Array<i64>, first: i64, middle: i64, last: i64) -> i64 {
+    var copy = items
+    copy[0] = 23
+    return items[0] * 1000000 + first * 10000 + middle * 100 + last + copy[0] + source[0]
+}
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    source = [3, 7]
+    const result = combine(...saved(), replace(), ...tail())
+    return trace * 100000000 + result
+}

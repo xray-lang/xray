@@ -1,0 +1,20 @@
+interface Sum { sum(first: i64, last: i64) -> i64 }
+struct Calc implements Sum {
+    base: i64
+    init(base) { this.base = base }
+    sum(first: i64, last: i64) -> i64 { return this.base + first + last }
+}
+struct Box<T> {
+    first: T
+    last: T
+    init(first, last) { this.first = first; this.last = last }
+}
+fn via<T: Sum>(value: T, pair: (i64, i64)) -> i64 { return value.sum(...pair) }
+fn product(first: i64, last: i64) -> i64 { return first * 10 + last }
+export fn referenceAnswer() -> i64 {
+    const box = Box<i64>(...(3, 7))
+    const calc = Calc(5)
+    const callback = product
+    const method = calc.sum
+    return box.first * 10000 + box.last * 1000 + via(calc, (11, 13)) * 100 + callback(...(17, 19)) + method(...(1, 2))
+}

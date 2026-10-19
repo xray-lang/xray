@@ -1,0 +1,19 @@
+var trace: i64 = 0
+var source: Array<i64> = [3, 7]
+fn index() -> (i64,) { trace = trace * 10 + 1; source = [11]; return (1,) }
+fn empty() { trace = trace * 10 + 2 }
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    source = [3, 7]
+    const saved = source.get(...index())
+    const maybe: (Array<i64>,)? = ([13],)
+    if (maybe == null) { return 0 }
+    const combined = source.concat(...maybe)
+    var reserved = Array<i64>.withCapacity(...(4,))
+    reserved.push(...(17,))
+    reserved.unshift(...(19,))
+    const first = reserved.shift(...empty())
+    const last = reserved.pop(...())
+    if (first == null || last == null) { return 0 }
+    return trace * 1000000 + saved * 10000 + combined[0] * 100 + combined[1] * 10 + (first as i64) + (last as i64)
+}

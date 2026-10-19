@@ -1,0 +1,21 @@
+var trace: i64 = 0
+var source: Array<i64> = [3, 7]
+fn searched() -> (i64,) {
+    trace = trace * 10 + 1
+    source = [11]
+    return (7,)
+}
+fn empty() { trace = trace * 10 + 2 }
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    source = [3, 7]
+    const found = source.contains(...searched())
+    const index = source.indexOf(...(11,))
+    const joined = ["a\0b", "x"].join(...("|",))
+    const indexed = source.entries(...empty())
+    const combined = source.concat(...([13], [17, 19]), ...())
+    var copied = combined
+    copied.clear(...empty())
+    if (!found || joined != "a\0b|x") { return 0 }
+    return trace * 1000000 + index * 100000 + indexed[0].1 * 1000 + len(combined) * 100 + combined[3] * 10 + len(copied)
+}
