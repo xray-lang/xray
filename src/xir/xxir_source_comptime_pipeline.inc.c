@@ -84,7 +84,9 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
     /* The supported target profile is explicit. Family admission and canonical
      * receiving use authentic type owners, never host sizeof or pointers. */
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    if (status==XR_XIR_OK) status=xr_xir_compile_lower(closed,&target,&lowered,NULL);
+    /* Specialization returned this sole owner and its packet is already copied.
+     * Lowering consumes it on success or failure; no later step reads closed. */
+    if (status==XR_XIR_OK) status=xr_xir_compile_lower_take(&closed,&target,&lowered,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(lowered,NULL);
     if (status!=XR_XIR_OK) source_fail(ctx,entry,status,"comptime thunk pipeline failed complete receiving");
     uint32_t count=0;
