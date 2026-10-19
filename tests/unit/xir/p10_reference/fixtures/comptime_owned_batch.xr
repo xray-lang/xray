@@ -1,0 +1,14 @@
+fn values()->Array<i64> { return [20,22] }
+fn message()->string {
+    var builder=StringBuilder()
+    builder.append("ready")
+    return builder.toString()
+}
+fn consume(numbers:Array<i64>,text:string)->i64 {
+    return text=="ready" ? numbers[0]+numbers[1] : 0
+}
+export fn referenceAnswer()->i64 {
+    const numbers=comptime values()
+    const text=comptime message()
+    return consume(numbers,text)
+}

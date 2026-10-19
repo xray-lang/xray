@@ -13,6 +13,7 @@
 #include "xxir_source_corpus.h"
 #include "xxir_map.h"
 #include "xxir_ctfe.h"
+#include "xxir_ctfe_batch_internal.h"
 #include "xxir_source_instance_internal.h"
 #include "xxir_source_comptime_instances_internal.h"
 #include "xxir_literal_internal.h"
