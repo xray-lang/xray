@@ -11,6 +11,7 @@
  *   ledger-owned DFS separates internal graph reception from exportable data.
  */
 #include "xxir_operand_roles.h"
+#include "xxir_constraint_proof.h"
 typedef struct CtfeTypeFrame { uint64_t work;uint32_t index,next;bool dynamic,pure_arrays; } CtfeTypeFrame;
 static const XrXirTypeNode *ctfe_composite_node(const XrXirTypes *types,XrXirType type) {
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
@@ -57,6 +58,43 @@ static XrXirCtfeStatus ctfe_type_cycle_admit(const XrXirCompileContext *context,
     }
     return XR_XIR_CTFE_BAD_ARTIFACT;
 }
+/* Numeric shape costs include the complete enum admission performed later by
+ * the shared Value operation, even for None and empty Array operands. */
+static XrXirCtfeStatus ctfe_unit_enum_shape(const XrXirCompileContext *context,
+    const XrXirTypes *types, const XrXirTypeNode *node, uint64_t *output) {
+    if (!xir_compile_work(context,sizeof(XrXirNominalTable))) return XR_XIR_CTFE_BUDGET;
+    const XrXirNominalTable *table=types->nominals;
+    if (!table || node->nominal.declaration>=table->count) return XR_XIR_CTFE_BAD_ARTIFACT;
+    const XrXirNominalVariant *variants;
+    uint32_t count,arity,fields,kind;
+    uint64_t bytes=sizeof(*table);
+    if (table->declarations) {
+        if (!xir_compile_work(context,sizeof(XrXirNominalDeclaration))) return XR_XIR_CTFE_BUDGET;
+        const XrXirNominalDeclaration *d=&table->declarations[node->nominal.declaration];
+        variants=d->variants; count=d->variant_count; arity=d->parameter_count;
+        fields=d->field_count; kind=d->kind; bytes+=sizeof(*d);
+    } else if (table->identities) {
+        if (!xir_compile_work(context,sizeof(XrXirNominalIdentity))) return XR_XIR_CTFE_BUDGET;
+        const XrXirNominalIdentity *d=&table->identities[node->nominal.declaration];
+        variants=d->variants; count=d->variant_count; arity=d->arity;
+        fields=d->field_count; kind=d->kind; bytes+=sizeof(*d);
+    } else return XR_XIR_CTFE_BAD_ARTIFACT;
+    if (kind!=XR_XIR_NOMINAL_ENUM || fields || node->nominal.field_count ||
+        node->nominal.argument_count!=arity || (arity && !node->nominal.arguments) ||
+        (count && !variants)) return XR_XIR_CTFE_NOT_SUPPORTED;
+    for (uint32_t a=0;a<arity;++a) {
+        if (!xir_compile_work(context,sizeof(XrXirType))) return XR_XIR_CTFE_BUDGET;
+        if (node->nominal.arguments[a]==XR_XIR_UNIT) return XR_XIR_CTFE_NOT_SUPPORTED;
+        bytes+=sizeof(XrXirType);
+    }
+    for (uint32_t v=0;v<count;++v) {
+        if (!xir_compile_work(context,sizeof(*variants))) return XR_XIR_CTFE_BUDGET;
+        if (variants[v].field_begin || variants[v].field_count) return XR_XIR_CTFE_NOT_SUPPORTED;
+        bytes+=sizeof(*variants);
+    }
+    *output=bytes+2*sizeof(uint32_t);
+    return XR_XIR_CTFE_OK;
+}
 static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
     const XrXirTypes *types,XrXirType type,bool internal,XrXirCtfeTypeShape *output) {
     if (!xir_compile_context_valid(context)) return XR_XIR_CTFE_BAD_ARGUMENT;
@@ -93,6 +131,13 @@ static XrXirCtfeStatus ctfe_type_info(const XrXirCompileContext *context,
             if (native && native->native_id && !xir_compile_work(context,64)) { status=XR_XIR_CTFE_BUDGET;break; }
             if ((native && native->native_id && !xr_xir_nominal_native_ordering(types,actual)) ||
                 (node->nominal.field_count && !node->nominal.fields)) { status=XR_XIR_CTFE_NOT_SUPPORTED;break; }
+            if (!frame->next && !node->nominal.field_count && xr_xir_type_is_enum(types,actual)) {
+                uint64_t extra=0;
+                status=ctfe_unit_enum_shape(context,types,node,&extra);
+                if (status!=XR_XIR_CTFE_OK) break;
+                if (extra>UINT64_MAX-frame->work) { status=XR_XIR_CTFE_BUDGET;break; }
+                frame->work+=extra;
+            }
         }
         if (frame->next==ctfe_type_fields(node)) {
             /* Pure data may contain variable descendants. Actual receiving
@@ -188,6 +233,11 @@ static XrXirCtfeStatus ctfe_equal_admit(const XrXirArtifact *artifact,XrXirType 
         if (!xir_compile_work(&artifact->context,2)) return XR_XIR_CTFE_BUDGET;
         if (ctfe_parameter_type(type)) return XR_XIR_CTFE_OK;
         const XrXirTypeNode *node=xr_xir_type_node(artifact->module.types,type);
+        if (node && node->kind==XR_XIR_TYPE_NOMINAL && !node->parameter_span) {
+            XrXirProofContext proof={&artifact->module,{XR_XIR_CONTEXT_FUNCTION,0,0}};
+            XrXirStatus status=xr_xir_compile_type_markers_prove(&artifact->context,&proof,type,XR_XIR_CONSTRAINT_EQUAL);
+            return status==XR_XIR_BAD_TYPE ? XR_XIR_CTFE_NOT_SUPPORTED : ctfe_compile_status(status);
+        }
         if (!node || (node->kind!=XR_XIR_TYPE_NULLABLE && node->kind!=XR_XIR_TYPE_ARRAY)) return XR_XIR_CTFE_NOT_SUPPORTED;
         type=node->element;
     }

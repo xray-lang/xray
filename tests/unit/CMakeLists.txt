@@ -717,6 +717,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/xir/library_state_typed_values.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/assert_condition.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/assert_panics.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/assert_equal.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/xir/enum_equal.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/nullable.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/runtime_sdk.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/stdlib_output_publication.cmake)
@@ -2116,7 +2117,7 @@ set_tests_properties(test_native_string_copy_authority PROPERTIES
     LABELS "aot;generated-c;string;ownership;integration" TIMEOUT 240)
 add_test(NAME test_native_nullable_enum_authority
     COMMAND ${XRAY_PYTHON} ${CMAKE_SOURCE_DIR}/tests/cli/test_native_nullable_enum.py
-        --compiler $<TARGET_FILE:xray_stdlib_bcgen> ${XR_NATIVE_SOURCE_HOST_ARGS})
+        --compiler $<TARGET_FILE:test_source_generated_c> ${XR_NATIVE_SOURCE_HOST_ARGS})
 set_tests_properties(test_native_nullable_enum_authority PROPERTIES
     LABELS "aot;generated-c;enum;integration" TIMEOUT 240)
 add_test(NAME test_native_enum_namespace_authority

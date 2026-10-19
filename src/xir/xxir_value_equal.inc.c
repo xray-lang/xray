@@ -29,6 +29,43 @@ static bool equal_work(XrXirValueAdmission *admission, uint64_t count) {
     admission->work -= count;
     return true;
 }
+/* An empty active member of a payload-bearing enum is not this domain. */
+static XrXirValueStatus equal_enum_type(const XrXirTypes *types,
+    const XrXirTypeNode *node, XrXirValueAdmission *admission) {
+    if (!equal_work(admission,sizeof(XrXirNominalTable))) return XR_XIR_VALUE_LIMIT;
+    const XrXirNominalTable *table=types ? types->nominals : NULL;
+    if (!table || !table->identities || node->nominal.declaration>=table->count)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!equal_work(admission,sizeof(XrXirNominalIdentity))) return XR_XIR_VALUE_LIMIT;
+    const XrXirNominalIdentity *d=&table->identities[node->nominal.declaration];
+    if (d->kind!=XR_XIR_NOMINAL_ENUM || d->field_count || node->nominal.field_count ||
+        node->nominal.argument_count!=d->arity || (d->arity && !node->nominal.arguments) ||
+        (d->variant_count && !d->variants)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    for (uint32_t a=0;a<d->arity;++a) {
+        if (!equal_work(admission,sizeof(XrXirType))) return XR_XIR_VALUE_LIMIT;
+        if (node->nominal.arguments[a]==XR_XIR_UNIT) return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    for (uint32_t v=0;v<d->variant_count;++v) {
+        if (!equal_work(admission,sizeof(*d->variants))) return XR_XIR_VALUE_LIMIT;
+        if (d->variants[v].field_begin || d->variants[v].field_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    }
+    return XR_XIR_VALUE_OK;
+}
+static XrXirValueStatus equal_inline_enum(const XrXirTypes *types,const XrXirTypeNode *node,
+    const unsigned char *left,const unsigned char *right,uint32_t size,
+    XrXirValueAdmission *admission,bool *equal) {
+    if (!left || !right || !size || size>sizeof(uint32_t)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!equal_work(admission,2*(uint64_t)size)) return XR_XIR_VALUE_LIMIT;
+    uint32_t a=0,b=0;memcpy(&a,left,size);memcpy(&b,right,size);
+    if (!equal_work(admission,sizeof(XrXirNominalTable))) return XR_XIR_VALUE_LIMIT;
+    const XrXirNominalTable *table=types ? types->nominals : NULL;
+    if (!table || !table->identities || node->nominal.declaration>=table->count)
+        return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (!equal_work(admission,sizeof(XrXirNominalIdentity))) return XR_XIR_VALUE_LIMIT;
+    const XrXirNominalIdentity *identity=&table->identities[node->nominal.declaration];
+    if (a>=identity->variant_count || b>=identity->variant_count) return XR_XIR_VALUE_BAD_ARGUMENT;
+    *equal=a==b;return XR_XIR_VALUE_OK;
+}
 static XrXirValueStatus equal_closed_type(XrXirType type, XrXirValueAdmission *admission) {
     const XrXirTypes *types = xr_xir_compile_type_arena_types(admission->arena);
     for (;;) {
@@ -36,6 +73,8 @@ static XrXirValueStatus equal_closed_type(XrXirType type, XrXirValueAdmission *a
         if (type == XR_XIR_BOOL || type == XR_XIR_RUNE || xr_xir_type_is_number(type) || type == XR_XIR_STRING)
             return XR_XIR_VALUE_OK;
         const XrXirTypeNode *node = xr_xir_type_node(types, type);
+        if (node && node->kind==XR_XIR_TYPE_NOMINAL && !node->parameter_span)
+            return equal_enum_type(types,node,admission);
         if (!node || (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE) || node->parameter_span)
             return XR_XIR_VALUE_BAD_ARGUMENT;
         type = node->element;
@@ -104,6 +143,12 @@ static XrXirValueStatus equal_current(ValueEqualCursor *cursor, ValueEqualStack 
         }
         return XR_XIR_VALUE_OK;
     }
+    if (*inlined && xr_xir_type_is_enum(types,type)) {
+        XrXirLayout layout={0};const XrXirTypeNode *node=xr_xir_type_node(types,type);
+        if (b_span->type!=type || !node || !xr_xir_compile_type_arena_layout(admission->arena,type,&layout) ||
+            !layout.size || layout.size>sizeof(uint32_t)) return XR_XIR_VALUE_BAD_ARGUMENT;
+        return equal_inline_enum(types,node,a_span->bytes,b_span->bytes,layout.size,admission,equal);
+    }
     if (*inlined) {
         XrXirLayout layout = {0};
         if (b_span->type != type || !xr_xir_compile_type_arena_layout(admission->arena,type,&layout) ||
@@ -115,6 +160,13 @@ static XrXirValueStatus equal_current(ValueEqualCursor *cursor, ValueEqualStack 
     }
     if (right->type != left->type || !xr_xir_value_argument(left, admission->arena, type) ||
         !xr_xir_value_argument(right, admission->arena, type)) return XR_XIR_VALUE_BAD_ARGUMENT;
+    if (xr_xir_type_is_enum(types,type)) {
+        if (!equal_work(admission,2*sizeof(uint32_t))) return XR_XIR_VALUE_LIMIT;
+        const XirNominalValue *a=(const XirNominalValue *)object_pointer(left);
+        const XirNominalValue *b=(const XirNominalValue *)object_pointer(right);
+        *equal=a->variant==b->variant;
+        return XR_XIR_VALUE_OK;
+    }
     if (xr_xir_type_is_nullable(types,type)) {
         const XirNominalValue *a = (const XirNominalValue *)object_pointer(left);
         const XirNominalValue *b = (const XirNominalValue *)object_pointer(right);

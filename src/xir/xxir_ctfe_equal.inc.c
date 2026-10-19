@@ -18,7 +18,8 @@ typedef struct CtfeEqualFrame {
 static bool ctfe_owned_equal_opcode(const ScalarRun *run,const XrXirInstruction *op) {
     if (op->op!=XR_XIR_EQUAL) return false;
     XrXirType type=xr_xir_operand_type(run->function,op->args[0]);
-    return xr_xir_type_is_array(run->module->types,type) || xr_xir_type_is_nullable(run->module->types,type);
+    return xr_xir_type_is_array(run->module->types,type) || xr_xir_type_is_nullable(run->module->types,type) ||
+        xr_xir_type_is_enum(run->module->types,type);
 }
 static XrXirCtfeStatus ctfe_owned_equal_work(ScalarRun *run,CtfeOwnedState *state,
     XrXirValue left,XrXirValue right) {
