@@ -27,9 +27,7 @@ static void generic_runtime_retiring(void *pointer);
 #include "xir_runtime_allocations.h"
 #undef XIR_RUNTIME_BEFORE_FREE
 #include "xir_generic_fixture.h"
-#include "xir_error_marker75_golden.h"
 #include "xir_error_marker73_golden.h"
-#include "xir_error_marker74_golden.h"
 #include "xir_error_marker76_golden.h"
 #include "xir_nominal_generic_fixture.h"
 #include "xir_nominal_expression_fixture.h"
@@ -104,6 +102,7 @@ static void nominal_field_closure(void) {
     for (unsigned mode = 0; mode < 3; ++mode) {
         XrXirCompileContext measured=consumer_context_default();
         XrXirArtifact *prefix=nominal_field_closure_fixture(&measured,mode);
+        uint64_t construction_work=consumer_context_stats(&measured).work;
         CHECK(xr_xir_compile_artifact_verify(prefix,NULL)==XR_XIR_OK);
         uint64_t prefix_work=consumer_context_stats(&measured).work;
         CHECK(prefix_work>construction_work);
