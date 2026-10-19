@@ -90,12 +90,12 @@ static bool source_array_static_call(SourceContext *ctx, AstNode *node, SourceVa
     const XrNativeMemberDeclaration *member = source_array_member(ctx, call->callee, access->name);
     if (!member || member->operation != XR_NATIVE_OPERATION_ARRAY_WITH_CAPACITY ||
         !member->is_static || !member->is_method || call->type_arg_count || call->default_arg_count ||
-        call->arg_count != 1 || !call->arguments ||
-        (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))
+        member->parameter_count!=1 || member->parameters[0].type!=XR_NATIVE_TERM_I64)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array static member requires its declared ordinary arguments");
-    XrXirType type = XR_XIR_UNIT; SourceValue capacity;
+    XrXirType type = XR_XIR_UNIT,parameter=XR_XIR_I64; SourceValue capacity;uint32_t supplied;
     if (!source_array_static_type(ctx, access->object, &type) ||
-        !source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, XR_XIR_I64, false, false}, &capacity)) return false;
+        !source_native_read_arguments(ctx,node,&parameter,1,1,&capacity,&supplied,
+            "Array static member requires its declared ordinary arguments")) return false;
     if (capacity.type != XR_XIR_I64)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array capacity must be exact i64");
     return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_WITH_CAPACITY, type,
@@ -140,6 +140,8 @@ static bool source_array_receiver(SourceContext *ctx, AstNode *node, AstNode *in
         return source_array_read_place(ctx, node, root, value);
     return expression(ctx, node, value);
 }
+static bool source_array_spread_literal(SourceContext *ctx, AstNode *node,
+    SourceExpectedType expected, SourceValue *value);
 static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpectedType expected, SourceValue *value) {
     ArrayLiteralNode *literal = &node->as.array_literal;
     if (literal->is_repeat || literal->count < 0 ||
@@ -147,6 +149,11 @@ static bool source_array_literal(SourceContext *ctx, AstNode *node, SourceExpect
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal needs an admitted explicit element list");
     if (expected.present && !xr_xir_type_is_array(&ctx->types, expected.type))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array literal cannot satisfy a non-Array context");
+    for (int i = 0; i < literal->count; ++i) {
+        if (!source_work(ctx,literal->elements[i])) return false;
+        if (literal->elements[i] && literal->elements[i]->type == AST_SPREAD_EXPR)
+            return source_array_spread_literal(ctx,node,expected,value);
+    }
     SourceExpectedType element = {expected.present,XR_XIR_UNIT, false, expected.inferred};
     if (expected.present) element.type = xr_xir_array_element(&ctx->types,expected.type);
     if (!literal->count && !element.present)
@@ -249,17 +256,15 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
     if (recipe != SOURCE_ARRAY_NONE)
         return source_array_member_reference(ctx, node, member) &&
             source_array_recipe_call(ctx, node, recipe, evaluated, value);
-    if (call->type_arg_count || call->default_arg_count || call->arg_count < 0 ||
-        (uint32_t) call->arg_count != member->parameter_count)
+    if (call->type_arg_count || call->default_arg_count || call->arg_count<0 ||
+        (call->arg_count && !call->arguments))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method requires its declared arguments");
-    for (int i = 0; i < call->arg_count; ++i)
-        if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array method arguments use ordinary READ values");
     switch (member->operation) {
     case XR_NATIVE_OPERATION_ARRAY_RESERVE: {
-        SourceValue root, capacity, current, candidate;
+        SourceValue root, capacity, current, candidate;XrXirType parameter=XR_XIR_I64;uint32_t supplied;
         if (!source_value_place(ctx, access->object, &root) ||
-            !source_plan_expression(ctx, call->arguments[0], (SourceExpectedType) {true, XR_XIR_I64, false, false}, &capacity)) return false;
+            !source_native_read_arguments(ctx,node,&parameter,1,1,&capacity,&supplied,
+                "Array method requires its declared arguments")) return false;
         if (!xr_xir_type_is_array(&ctx->types, root.type) || capacity.type != XR_XIR_I64)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "Array reserve requires an Array place and exact i64");
         /* Arguments may rebind the root, so read the current value only after them. */
@@ -272,22 +277,40 @@ static bool source_array_call(SourceContext *ctx, AstNode *node, const SourceVal
             source_array_member_reference(ctx, node, member) && (*value = candidate, true) &&
             source_array_call_signature(ctx,node,&(SourceNativeCallShape){root.type,&capacity.type,1},value->type);
     }
-    case XR_NATIVE_OPERATION_ARRAY_GET:
-        return source_array_get(ctx, node, access->object, call->arguments[0], evaluated, member, value);
-    case XR_NATIVE_OPERATION_ARRAY_SET:
-        return source_array_set(ctx, node, access->object, call->arguments[0], call->arguments[1], member, false, value);
+    case XR_NATIVE_OPERATION_ARRAY_GET: case XR_NATIVE_OPERATION_ARRAY_SET: {
+        bool setting=member->operation==XR_NATIVE_OPERATION_ARRAY_SET;
+        SourceValue args[3];uint32_t supplied;
+        if (setting) {
+            if (!source_array_receiver(ctx,access->object,NULL,true,&args[0])) return false;
+        } else if (evaluated) args[0]=*evaluated;
+        else if (call->arg_count==1 && call->arguments[0] && call->arguments[0]->type!=AST_SPREAD_EXPR) {
+            if (!source_array_receiver(ctx,access->object,call->arguments[0],false,&args[0])) return false;
+        } else if (!expression(ctx,access->object,&args[0])) return false;
+        if (!xr_xir_type_is_array(&ctx->types,args[0].type))
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array method receiver is not an Array");
+        XrXirType parameters[]={XR_XIR_I64,xr_xir_array_element(&ctx->types,args[0].type)};
+        uint32_t count=setting ? 2u : 1u;
+        if (member->parameter_count!=count || !source_native_read_arguments(ctx,node,parameters,count,count,
+            &args[1],&supplied,"Array method requires its declared arguments")) return false;
+        return (setting ? source_recipe_group(ctx,(XrXirInstruction){XR_XIR_ARRAY_SET,XR_XIR_UNIT,{0},{0},0,{0}},args,3,value) :
+            source_recipe_record(ctx,(XrXirInstruction){XR_XIR_ARRAY_GET,parameters[1],{args[0].id,args[1].id},{0},0,{0}},value)) &&
+            source_array_member_reference(ctx,node,member);
+    }
     case XR_NATIVE_OPERATION_ARRAY_PUSH: {
-        SourceValue place, input;
+        SourceValue place, input;uint32_t supplied;
         SourceName *root=source_array_root(ctx,access->object);
         if(root && root->kind==SOURCE_SLOT && root->module!=ctx->bodies[ctx->function].module && ctx->history) {
             if(!root->mutable)return source_fail(ctx,access->object,XR_XIR_BAD_TYPE,"push requires a mutable Array binding");
             SourceName saved=*root;XrXirType element=xr_xir_array_element(&ctx->types,saved.type);
             return source_query_reference(ctx,access->object,root,root,XR_XIR_SOURCE_READ_WRITE) &&
-                source_plan_expression(ctx,call->arguments[0],(SourceExpectedType){element!=XR_XIR_UNIT,element,false,false},&input) &&
+                source_native_read_arguments(ctx,node,&element,1,1,&input,&supplied,
+                    "Array method requires its declared arguments") &&
                 source_history_binding_push(ctx,&saved,input,value) && source_array_member_reference(ctx,node,member);
         }
-        if (!source_array_receiver(ctx, access->object, NULL, true, &place) ||
-            !source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){xr_xir_array_element(&ctx->types, place.type) != XR_XIR_UNIT,xr_xir_array_element(&ctx->types, place.type), false, false}, &input)) return false;
+        if (!source_array_receiver(ctx, access->object, NULL, true, &place)) return false;
+        XrXirType parameter=xr_xir_array_element(&ctx->types,place.type);
+        if (!source_native_read_arguments(ctx,node,&parameter,1,1,&input,&supplied,
+            "Array method requires its declared arguments")) return false;
         return source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_ARRAY_PUSH, XR_XIR_UNIT, {place.id, input.id}, {0}, 0, {0}}, value) &&
             source_array_member_reference(ctx, node, member) &&
             source_array_call_signature(ctx,node,&(SourceNativeCallShape){place.type,&input.type,1},value->type);

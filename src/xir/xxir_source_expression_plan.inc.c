@@ -247,7 +247,8 @@ static bool source_plan_complete(SourceContext *ctx, SourceExpressionPlan *plan,
     SourceFunction *body=&ctx->bodies[plan->owner];
     plan->entry=body->block_count ? body->current_block : (SourceBlockReference){ctx->function,0};
     plan->state=SOURCE_TERM_CHECKING;ctx->active_expression=plan;++ctx->depth;
-    bool result=plan->numeric.ready ? source_numeric_emit(ctx,&plan->numeric,&plan->value) :
+    bool result=node->type==AST_SPREAD_EXPR && plan->call_projection ? source_call_projection_complete(ctx,plan,&plan->value) :
+        plan->numeric.ready ? source_numeric_emit(ctx,&plan->numeric,&plan->value) :
         (plan->integer.present ? source_integer(ctx,node,&plan->integer,context,&plan->value) : plan->decimal.node ?
         source_decimal(ctx,&plan->decimal,context,&plan->value) : expression_body(ctx,node,context,&plan->value));
     --ctx->depth;ctx->active_expression=parent;

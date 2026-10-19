@@ -1,0 +1,4 @@
+fn target(value: i64) -> i64 { return value }
+export fn referenceAnswer() -> i64 {
+    return target(...7)
+}

@@ -43,7 +43,6 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     uint32_t own = count-prefix, supplied = (uint32_t)call->arg_count+offset;
     if (call->type_arg_count && ctx->generics[index].parameter_kinds)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"callback result variables require inferred callable evidence");
-    if (!source_argument_arity(ctx,node,index,supplied)) return false;
     if (call->type_arg_count && ((uint32_t)call->type_arg_count != own || !call->type_args))
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"call requires its exact explicit type arguments or an omitted list");
     SourceCallStorage storage={0};
@@ -58,8 +57,10 @@ static bool source_direct_arguments(SourceContext *ctx, AstNode *node,
     bool ok = false;
     SourceSubstitution substitution = {types,count};
     SourceCallPlan plan = {SOURCE_CALL_FUNCTION,request->prefix,substitution,function.parameters,NULL,
-        function.result,request->expected_result,values,offset,offset,ctx->generics[index].parameter_kinds};
-    if (!source_call_plan_arguments(ctx,node,&plan)) return false;
+        function.result,request->expected_result,values,offset,offset,ctx->generics[index].parameter_kinds,NULL};
+    if (!source_call_expand(ctx,node,&syntax,&plan,function.parameter_count)) return false;
+    supplied=(uint32_t)syntax.arg_count+offset;
+    if (!source_argument_arity(ctx,node,index,supplied) || !source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;
     if (!source_instantiation_prove(ctx,node,(XrXirDeclarationContext){XR_XIR_CONTEXT_FUNCTION,index,0},substitution)) goto done;
     for (uint32_t p=supplied;p<function.parameter_count;++p)
         if (!source_argument_default(ctx,node,index,p,&substitution,&values[p])) goto done;

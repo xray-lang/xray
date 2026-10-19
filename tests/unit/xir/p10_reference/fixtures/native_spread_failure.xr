@@ -1,0 +1,19 @@
+var trace: i64 = 0
+var source: Array<i64> = [3, 7]
+fn index() -> (i64,) { trace = trace * 10 + 1; return (0,) }
+fn failing() -> i64 {
+    trace = trace * 10 + 2
+    assert(false, "native-spread-argument-failure")
+    return 0
+}
+fn late() { trace = trace * 10 + 3 }
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    source = [3, 7]
+    try {
+        source.set(...index(), failing(), ...late())
+        return 0
+    } catch panic (panic: PanicInfo) {
+        return panic.code * 10000 + trace * 100 + source[0]
+    }
+}

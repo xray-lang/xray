@@ -15,6 +15,14 @@ static bool source_conversion_plan(SourceContext *ctx, AstNode *node, XrXirType 
     SourceExpectedType expected, SourceConversionRecipe *output) {
     SourceConversionRecipe recipe = {false,expected.inferred,(XrXirOp)0,actual,actual,false,actual};
     if (!expected.present) { *output = recipe; return true; }
+    if (expected.infer_result) {
+        const XrXirTypeNode *wanted=xr_xir_callable_signature(&ctx->types,expected.type);
+        const XrXirTypeNode *provided=xr_xir_callable_signature(&ctx->types,actual);
+        if (!wanted || !provided)
+            return source_fail(ctx,node,XR_XIR_BAD_TYPE,"open callable result requires two callable types");
+        XrXirTypeNode resolved=*wanted;resolved.result=provided->result;
+        if (!source_intern_type(ctx,resolved,&expected.type)) return false;
+    }
     if (ctx->effect_argument && ctx->effect_argument->owner == ctx->function &&
         ctx->effect_argument->syntax == node && xr_xir_callable_signature(&ctx->types,actual) &&
         xr_xir_callable_signature(&ctx->types,expected.type)) {
