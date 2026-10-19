@@ -1,0 +1,7 @@
+fn measured<T: Lengthable>(value: T) -> i64 {
+    return len(value)
+}
+
+export fn referenceAnswer() -> i64 {
+    return measured("é\0🙂") + measured([1, 2, 3]) + 36
+}
