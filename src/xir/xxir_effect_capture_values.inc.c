@@ -99,8 +99,9 @@ static XrXirStatus effect_capture_barrier(EffectCaptureRead *read,const EffectCa
         if(!xir_compile_work(read->work,3)) return XR_XIR_BUDGET;
         uint32_t value=table?node->head.operands[op->args[0]+p]:op->args[p],kind=0;
         if(value>=node->values) return XR_XIR_BAD_STRUCTURE;
-        XrXirStatus status=effect_capture_kind(read,node,value,&kind,NULL);if(status!=XR_XIR_OK) return status;
-        XrXirType type=0;status=effect_body_request_type(&read->body,read->final->nodes[node->node].body,value,&type);
+        /* Kind and descriptor come from the same current SSA lookup. No emit
+         * or allocator callback separates these two projections. */
+        XrXirType type=0;XrXirStatus status=effect_capture_kind(read,node,value,&kind,&type);
         if(status!=XR_XIR_OK) return status;
         if(kind==EFFECT_CAPTURE_CALLABLE && !effect_physical_iterator(read->body.domain.types,type)) {
             status=effect_capture_emit(read,(EffectCaptureFact){node->node,value,EFFECT_CAPTURE_FLAGS,EFFECT_CAPTURE_FIXED,0});
