@@ -163,28 +163,60 @@ static XrXirStatus error_finite_successors(const EffectErrorEquationRead *equati
     }
     return XR_XIR_OK;
 }
+static XrXirStatus error_finite_predecessor_block(const EffectErrorEquationRead *equation,
+    EffectErrorFiniteEdgeQuery *query,uint32_t block_index) {
+    const XrXirBlock *block=&equation->head.blocks[block_index];
+    if(!block->count || block->first>equation->head.instruction_count ||
+        block->count>equation->head.instruction_count-block->first) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=XR_XIR_OK;
+    if(block->panic==query->to && block->panic) for(uint32_t i=block->first;i-block->first<block->count;++i) {
+        EffectErrorEdgeRead edge={block_index,query->to,i,EFFECT_ERROR_EDGE_PANIC};
+        status=error_finite_edge(equation,&edge,query);if(status!=XR_XIR_OK) return status;
+    }
+    uint32_t targets[2]={0},count=0;
+    status=error_finite_successors(equation,block->first+block->count-1,targets,&count);
+    if(status!=XR_XIR_OK) return status;
+    for(uint32_t side=0;side<count;++side) {
+        EffectErrorEdgeRead edge={block_index,targets[side],block->first+block->count,
+            side?EFFECT_ERROR_EDGE_ALTERNATE:EFFECT_ERROR_EDGE_NORMAL};
+        status=error_finite_edge(equation,&edge,query);if(status!=XR_XIR_OK) return status;
+    }
+    return XR_XIR_OK;
+}
+/* Reachability occupies the first coordinates of each framed, sorted fact row.
+ * This read-only equation walk can enumerate those actual facts once, applying
+ * the same strict rank limit as a Boolean lookup. No cursor survives insertion,
+ * growth or any allocator callback, and every selected edge keeps its transfer. */
 static XrXirStatus error_finite_predecessors(const EffectErrorEquationRead *equation,
     EffectErrorFiniteEdgeQuery *query) {
     const EffectErrorFiniteRead *read=equation->owner;
-    for(uint32_t b=0;b<equation->head.block_count;++b) {
-        bool reachable=false;XrXirStatus status=error_finite_reachable(read,equation->context,b,&reachable);
-        if(status!=XR_XIR_OK) return status;
-        if(!reachable) continue;
-        const XrXirBlock *block=&equation->head.blocks[b];
-        if(!block->count || block->first>equation->head.instruction_count ||
-            block->count>equation->head.instruction_count-block->first) return XR_XIR_BAD_STRUCTURE;
-        if(block->panic==query->to && block->panic) for(uint32_t i=block->first;i-block->first<block->count;++i) {
-            EffectErrorEdgeRead edge={b,query->to,i,EFFECT_ERROR_EDGE_PANIC};
-            status=error_finite_edge(equation,&edge,query);if(status!=XR_XIR_OK) return status;
+    if(!read->current) {
+        for(uint32_t b=0;b<equation->head.block_count;++b) {
+            bool reachable=false;XrXirStatus status=error_finite_reachable(read,equation->context,b,&reachable);
+            if(status==XR_XIR_OK && reachable) status=error_finite_predecessor_block(equation,query,b);
+            if(status!=XR_XIR_OK) return status;
         }
-        uint32_t targets[2]={0},count=0;
-        status=error_finite_successors(equation,block->first+block->count-1,targets,&count);
+        return XR_XIR_OK;
+    }
+    const EffectErrorFinite *proof=read->proof;
+    if(read->current->work!=read->work || read->current->proof!=proof ||
+        equation->context>=proof->contexts) return XR_XIR_BAD_STRUCTURE;
+    const EffectErrorFiniteRow *row=&proof->rows[equation->context];
+    if(!xir_compile_work(read->work,4)) return XR_XIR_BUDGET;
+    if(row->blocks!=equation->head.block_count || row->first>UINT64_MAX-row->blocks)
+        return XR_XIR_BAD_STRUCTURE;
+    uint32_t at=0;XrXirStatus status=error_finite_lower(read,row->first,&at);
+    if(status!=XR_XIR_OK) return status;
+    for(;at<proof->count;++at) {
+        if(!xir_compile_work(read->work,4+sizeof(uint64_t)+sizeof(uint32_t))) return XR_XIR_BUDGET;
+        const EffectErrorFiniteFact *fact=&proof->facts[at];
+        if(fact->coordinate>=row->first+row->blocks) break;
+        if(fact->coordinate<row->first) return XR_XIR_BAD_STRUCTURE;
+        if(fact->rank>=read->limit) continue;
+        if(!xir_compile_work(read->work,sizeof(uint32_t))) return XR_XIR_BUDGET;
+        uint32_t block=(uint32_t)(fact->coordinate-row->first);
+        status=error_finite_predecessor_block(equation,query,block);
         if(status!=XR_XIR_OK) return status;
-        for(uint32_t side=0;side<count;++side) {
-            EffectErrorEdgeRead edge={b,targets[side],block->first+block->count,
-                side?EFFECT_ERROR_EDGE_ALTERNATE:EFFECT_ERROR_EDGE_NORMAL};
-            status=error_finite_edge(equation,&edge,query);if(status!=XR_XIR_OK) return status;
-        }
     }
     return XR_XIR_OK;
 }
