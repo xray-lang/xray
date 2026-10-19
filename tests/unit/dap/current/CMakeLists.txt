@@ -1103,3 +1103,13 @@ add_test(NAME test_dap_native_provider_json_boundary COMMAND test_dap_native_pro
 add_test(NAME test_dap_native_provider_json_resources COMMAND test_dap_native_provider_json --resources)
 set_tests_properties(test_dap_native_provider_json_census test_dap_native_provider_json_boundary PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "dap;native;provider;ownership;resources;boundary")
 set_tests_properties(test_dap_native_provider_json_resources PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE LABELS "dap;native;provider;ownership;resources;fault-injection")
+
+# A separate build tree has no implicit source-relative standard library.
+# Subprocess tests consume the same pinned sources as direct compiler fixtures.
+get_property(XR_DAP_DIRECTORY_TESTS DIRECTORY PROPERTY TESTS)
+foreach(XR_DAP_TEST IN LISTS XR_DAP_DIRECTORY_TESTS)
+    if(XR_DAP_TEST MATCHES "^dap_(current|original)_")
+        set_property(TEST ${XR_DAP_TEST} APPEND PROPERTY ENVIRONMENT_MODIFICATION
+            "XRAY_STDLIB_PATH=set:${PROJECT_SOURCE_DIR}/stdlib")
+    endif()
+endforeach()

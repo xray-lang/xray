@@ -45,7 +45,7 @@ static void mixed_prepare(MixedFixture *fixture) {
     fixture->context=(XrXirCompileContext){fixture->resources,xr_xir_compile_default_limits()};
     XrXirProgramSpec native=child_callable_native_program;CHECK(native.entry_count==MIX_FUNCTIONS);
     XrXirArtifact *checked=NULL,*closed=NULL;
-    CHECK(xr_xir_compile_checked_read(&fixture->context,native.proof.bytes,native.proof.length,&checked,NULL)==XR_XIR_OK);
+    CHECK(xr_xir_compile_checked_read(&fixture->context,native.packet.bytes,native.packet.length,&checked,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_specialize(checked,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(checked);
     CHECK(xr_xir_compile_lower(closed,&native.target,&fixture->lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
@@ -81,8 +81,8 @@ static void mixed_rejections(void) {
     XrXirArtifact *artifact=fixture.lowered;XrXirProgramSpec before=native;
     CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&(XrXirVmDebugNative){&native,&child_callable_native_native_source,mask,MIX_FUNCTIONS-1},fixture.debug,&fixture.program)==XR_XIR_BAD_STRUCTURE);
     CHECK(fixture.lowered==artifact && !fixture.program && !memcmp(&native,&before,sizeof(native)) && !fixture.releases);
-    unsigned char identity[32];memcpy(identity,native.proof.identity,sizeof(identity));identity[0]^=1;
-    native.proof.identity=identity;
+    unsigned char identity[32];memcpy(identity,native.packet.identity,sizeof(identity));identity[0]^=1;
+    native.packet.identity=identity;
     CHECK(xr_xir_compile_vm_debug_mixed_program_take(&fixture.lowered,&(XrXirVmDebugNative){&native,&child_callable_native_native_source,mask,MIX_FUNCTIONS},fixture.debug,&fixture.program)==XR_XIR_BAD_STRUCTURE);
     CHECK(fixture.lowered==artifact && !fixture.program && !fixture.releases);native=before;
     mask[0]=2;

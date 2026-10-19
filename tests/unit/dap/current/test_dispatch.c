@@ -32,6 +32,8 @@ static XrJsonValue *last_response(const char *command,bool success) {
     for (uint32_t i=capture.count;i;--i) {
         Message *message=&capture.messages[i-1];XrJsonValue *json=xjson_parse(message->bytes,message->size);CHECK(json);
         if (!strcmp(xjson_get_string(json,"type"),"response") && !strcmp(xjson_get_string(json,"command"),command)) {
+            if(xjson_get_bool(json,"success")!=success)
+                fprintf(stderr,"Unexpected %s response (success=%u): %s\n",command,(unsigned)success,message->bytes);
             CHECK(xjson_get_bool(json,"success")==success);return json;
         }
         xjson_free(json);

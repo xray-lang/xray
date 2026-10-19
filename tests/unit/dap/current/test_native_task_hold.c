@@ -10,6 +10,7 @@
 #include "xir/xxir_task.h"
 #include "xir/xxir_error.h"
 #include "xir/xxir_checked.h"
+#include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_vm.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -130,23 +131,31 @@ static void task_fixture(NativeTaskFixture *f,unsigned count,bool observed,unsig
     CHECK(native_task_program.entry_count==NT_FUNCTIONS);
     CHECK(xr_compile_resources_calloc(f->context->resources,NT_FUNCTIONS,sizeof(*f->entries),(void **)&f->entries)==XR_COMPILE_RESOURCE_OK);
     CHECK(xr_compile_resources_calloc(f->context->resources,NT_FUNCTIONS,sizeof(*f->selected),(void **)&f->selected)==XR_COMPILE_RESOURCE_OK);
-    CHECK(xr_compile_resources_calloc(f->context->resources,NT_FUNCTIONS,sizeof(*f->bindings),(void **)&f->bindings)==XR_COMPILE_RESOURCE_OK);
     memcpy(f->selected,native_task_program.entries,NT_FUNCTIONS*sizeof(*f->selected));
     XrXirProgramSpec spec=native_task_program;
     if(backend!=NT_NATIVE) {
         XrXirArtifact *read=NULL,*closed=NULL;
-        CHECK(xr_xir_compile_checked_read(f->context,spec.proof.bytes,spec.proof.length,&read,NULL)==XR_XIR_OK);
+        CHECK(xr_xir_compile_checked_read(f->context,spec.packet.bytes,spec.packet.length,&read,NULL)==XR_XIR_OK);
         CHECK(xr_xir_compile_specialize(read,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
         CHECK(xr_xir_compile_lower(closed,&spec.target,&f->lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
         const XrXirModule *module=xr_xir_compile_artifact_module(f->lowered);CHECK(module->function_count==NT_FUNCTIONS);
+        XrXirCallEntry *vm_entries=NULL;
+        CHECK(xr_xir_compile_vm_bind_table(f->lowered,&f->bindings,&vm_entries)==XR_XIR_OK);
         for(uint32_t i=0;i<NT_FUNCTIONS;++i) if((backend==NT_VM_NATIVE && i!=NT_FAIL) || (backend==NT_NATIVE_VM && i==NT_FAIL))
-            CHECK(xr_xir_compile_vm_bind(f->lowered,i,&f->bindings[i],&f->selected[i])==XR_XIR_OK);
-        spec.types=module->types;spec.declarations=module->declarations;spec.proof=xr_xir_compile_program_proof(f->lowered);
+            f->selected[i]=vm_entries[i];
+        xr_compile_resources_free(vm_entries);
+        spec.types=module->types;spec.declarations=module->declarations;spec.packet=xir_program_packet_borrow(f->lowered);
     }
     memcpy(f->entries,f->selected,NT_FUNCTIONS*sizeof(*f->entries));
     for(unsigned i=0;i<NT_FUNCTIONS;++i) {f->entries[i].resume=task_resume;f->entries[i].release=task_release;}
     spec.entries=f->entries;spec.code=(XrXirCodeLease){f,task_code_release};
-    XrXirProgram *program=NULL;CHECK(xr_xir_compile_program_seal(f->context,&spec,&program)==XR_XIR_OK);
+    XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_program_seal(f->context,&spec,&program);
+    if(status!=XR_XIR_OK) {
+        XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(f->context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"native Task receive: backend=%u status=%u allocated=%llu live=%llu work=%llu\n",
+            backend,status,(unsigned long long)stats.allocated_bytes,(unsigned long long)stats.live_bytes,(unsigned long long)stats.work);
+    }
+    CHECK(status==XR_XIR_OK);
     for(unsigned i=0;i<count;++i) {
         NativeTaskRecord *w=&f->records[i];w->enabled=observed;w->pause_requested=true;w->observer=(XirCallNativeObserver){w,task_throw};
         XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);

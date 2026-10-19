@@ -38,7 +38,14 @@ int main(int argc,char **argv) {
     memset(packet.bytes,0xa5,packet.length);xr_xir_compile_checked_packet_free(&packet);
     CHECK(xr_xir_compile_specialize(read,&closed,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(read);
     const XrXirTarget target={XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION};
-    CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
+    XrXirDiagnostic lower_diagnostic={0};
+    status=xr_xir_compile_lower(closed,&target,&lowered,&lower_diagnostic);
+    if(status!=XR_XIR_OK) {
+        XrCompileResourceStats stats={0};CHECK(xr_compile_resources_stats(context->resources,&stats)==XR_COMPILE_RESOURCE_OK);
+        fprintf(stderr,"native route Lower: status=%u function=%u instruction=%u reason=%u work=%llu\n",
+            status,lower_diagnostic.function,lower_diagnostic.instruction,lower_diagnostic.reason,(unsigned long long)stats.work);
+    }
+    CHECK(status==XR_XIR_OK);xr_xir_compile_artifact_free(closed);
     const XrXirModule *module=xr_xir_compile_artifact_module(lowered);
     const char *names[]={"fail","sibling","awaiting","busy","escaping","relay","catching","escape_root","indirect","rec","recursive"};
     uint32_t entries[11];
