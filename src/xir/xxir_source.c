@@ -2222,6 +2222,12 @@ static bool collect_declarations(SourceContext *ctx) {
     for (uint32_t m = 0; m < count; ++m) {
         ctx->module = m;
         AstNode *ast = ctx->graph->specs[m].ast;
+        if(ctx->graph->specs[m].representation==XR_MODULE_CHECKED_LIBRARY) {
+            bool first=source_library_group_first(ctx,m);
+            if(ctx->diagnostic.status!=XR_XIR_OK ||
+                (first && !source_library_group_inventory(ctx,&functions,&slots,&nominals,&interfaces))) return false;
+            continue;
+        }
         if (source_owned_checked(&ctx->graph->specs[m])) {
             const XrXirModule *library=source_owned_module_view(ctx,m);
             if(!library)return false;

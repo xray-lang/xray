@@ -22,6 +22,42 @@ static uint32_t source_owned_module(const XrModuleSpec *spec) {
     return spec->representation==XR_MODULE_CHECKED_HISTORY ? spec->history_module :
         spec->resource ? spec->resource->checked_module : UINT32_MAX;
 }
+static bool source_library_view(SourceContext *ctx,uint32_t module,
+    const XrXirArtifact *artifact,const XrXirModule *library) {
+    const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
+    if(!resource || resource->checked!=artifact)
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library resource is missing");
+    const XrXirDeclarations *d = library->declarations;
+    const XrModuleSpec *spec = &ctx->graph->specs[module];
+    if (!d || resource->checked_module >= d->module_count) {
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library module ordinal is invalid");
+    }
+    const XrXirSourceModule *view = &d->modules[resource->checked_module];
+    size_t length = source_text_size(ctx,spec->canonical);
+    if (!source_work(ctx,NULL)) return false;
+    if (view->name_length != length || spec->dep_count < 0 ||
+        (uint32_t)spec->dep_count != view->dependency_count ||
+        resource->dependency_count != view->dependency_count ||
+        (view->dependency_count && !resource->dependencies)) {
+        return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library module view disagrees with its declaration");
+    }
+    for (size_t byte = 0; byte < length; ++byte) {
+        if (!source_work(ctx,NULL)) return false;
+        if (view->name[byte] != spec->canonical[byte]) {
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library module identity is invalid");
+        }
+    }
+    for (uint32_t e = 0; e < view->dependency_count; ++e) {
+        if (!source_work(ctx,NULL)) return false;
+        const XrModuleResourceBinding *edge = resource->dependencies[e];
+        int target = spec->dep_indices[e];
+        if (!edge || edge->checked != artifact || edge->checked_module != view->dependencies[e] ||
+            target < 0 || target >= ctx->graph->spec_count || ctx->graph->specs[target].resource != edge) {
+            return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library dependency view is invalid");
+        }
+    }
+    return true;
+}
 static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t module) {
     const XrModuleResourceBinding *resource=ctx->graph->specs[module].resource;
     if(!resource||!resource->checked){source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library resource is missing");return NULL;}
@@ -39,36 +75,7 @@ static const XrXirModule *source_library_module(SourceContext *ctx,uint32_t modu
     if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library verification failed");return NULL;}
     status=library_catalog_shape(library,construction,&ctx->compile);
     if(status!=XR_XIR_OK){source_fail(ctx,NULL,status,"Checked library import subset is not admitted");return NULL;}
-    const XrXirDeclarations *d = library->declarations;
-    const XrModuleSpec *spec = &ctx->graph->specs[module];
-    if (!d || resource->checked_module >= d->module_count) {
-        source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library module ordinal is invalid");return NULL;
-    }
-    const XrXirSourceModule *view = &d->modules[resource->checked_module];
-    size_t length = source_text_size(ctx,spec->canonical);
-    if (!source_work(ctx,NULL)) return NULL;
-    if (view->name_length != length || spec->dep_count < 0 ||
-        (uint32_t)spec->dep_count != view->dependency_count ||
-        resource->dependency_count != view->dependency_count ||
-        (view->dependency_count && !resource->dependencies)) {
-        source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library module view disagrees with its declaration");return NULL;
-    }
-    for (size_t byte = 0; byte < length; ++byte) {
-        if (!source_work(ctx,NULL)) return NULL;
-        if (view->name[byte] != spec->canonical[byte]) {
-            source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library module identity is invalid");return NULL;
-        }
-    }
-    for (uint32_t e = 0; e < view->dependency_count; ++e) {
-        if (!source_work(ctx,NULL)) return NULL;
-        const XrModuleResourceBinding *edge = resource->dependencies[e];
-        int target = spec->dep_indices[e];
-        if (!edge || edge->checked != artifact || edge->checked_module != view->dependencies[e] ||
-            target < 0 || target >= ctx->graph->spec_count || ctx->graph->specs[target].resource != edge) {
-            source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library dependency view is invalid");return NULL;
-        }
-    }
-    return library;
+    return source_library_view(ctx,module,artifact,library)?library:NULL;
 }
 static const XrXirModule *source_owned_module_view(SourceContext *ctx,uint32_t module) {
     const XrModuleSpec *spec=&ctx->graph->specs[module];
@@ -90,6 +97,16 @@ static bool source_library_first(SourceContext *ctx, uint32_t module) {
         if (!source_work(ctx,NULL)) return false;
         if (source_owned_checked(&ctx->graph->specs[prior]) &&
             source_owned_artifact(&ctx->graph->specs[prior])==artifact) return false;
+    }
+    return true;
+}
+static bool source_library_group_first(SourceContext *ctx,uint32_t module) {
+    const XrXirArtifact *artifact=source_owned_artifact(&ctx->graph->specs[module]);
+    if(!artifact) return source_fail(ctx,NULL,XR_XIR_BAD_STRUCTURE,"Checked library resource is missing");
+    for(uint32_t prior=0;prior<module;++prior) {
+        if(!source_work(ctx,NULL)) return false;
+        const XrModuleSpec *spec=&ctx->graph->specs[prior];
+        if(spec->representation==XR_MODULE_CHECKED_LIBRARY && source_owned_artifact(spec)==artifact) return false;
     }
     return true;
 }
@@ -115,6 +132,31 @@ static bool source_library_inventory(SourceContext *ctx, uint32_t module,
     *count = total; return true;
 }
 #include "xxir_source_library_types.inc.c"
+
+/* All views of one Checked owner are counted in one allocation-free read.
+ * Every view still proves its identity and dependency edges. Only counts leave
+ * this scope; subsequent copying and final construction retain their checks. */
+static bool source_library_group_inventory(SourceContext *ctx,uint32_t *functions,
+    uint32_t *slots,uint32_t *nominals,uint32_t *interfaces) {
+    uint32_t first=ctx->module;
+    const XrXirArtifact *artifact=source_owned_artifact(&ctx->graph->specs[first]);
+    const XrXirModule *library=source_library_module(ctx,first);
+    if(!library) return false;
+    for(uint32_t m=first;m<(uint32_t)ctx->graph->spec_count;++m) {
+        if(!source_work(ctx,NULL)) return false;
+        const XrModuleSpec *spec=&ctx->graph->specs[m];
+        if(spec->representation!=XR_MODULE_CHECKED_LIBRARY || source_owned_artifact(spec)!=artifact) continue;
+        ctx->module=m;
+        if(m!=first && !source_library_view(ctx,m,artifact,library)) return false;
+        uint32_t imported=0;
+        if(!source_library_inventory(ctx,m,library,&imported,slots)) return false;
+        if(imported>ctx->compile.limits.functions || *functions>ctx->compile.limits.functions-imported)
+            return source_fail(ctx,NULL,XR_XIR_BUDGET,"library function inventory exhausted");
+        *functions+=imported;
+        if(!source_library_declaration_inventory(ctx,m,library,nominals,interfaces)) return false;
+    }
+    ctx->module=first;return true;
+}
 
 typedef struct SourceLibraryMap {
     const SourceHistoryUnit *history;

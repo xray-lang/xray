@@ -560,3 +560,17 @@ foreach(function_mode IN ITEMS call value)
 endforeach()
 
 include("${CMAKE_CURRENT_LIST_DIR}/string_builder_source.cmake")
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/library_inventory")
+add_executable(test_xir_p10_library_inventory "${CMAKE_CURRENT_LIST_DIR}/test_library_inventory.c")
+target_link_libraries(test_xir_p10_library_inventory PRIVATE xray_xir_source xray_xir_vm)
+target_compile_definitions(test_xir_p10_library_inventory PRIVATE
+    XR_LIBRARY_INVENTORY_WORK="${CMAKE_CURRENT_BINARY_DIR}/library_inventory")
+set_target_properties(test_xir_p10_library_inventory PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+if(MSVC)
+    target_compile_options(test_xir_p10_library_inventory PRIVATE /W4 /WX /utf-8)
+else()
+    target_compile_options(test_xir_p10_library_inventory PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_xir_p10_library_inventory COMMAND test_xir_p10_library_inventory)
+set_tests_properties(test_xir_p10_library_inventory PROPERTIES TIMEOUT 30 LABELS "unit;xir;p10;source;catalog;ownership")
