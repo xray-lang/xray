@@ -1127,6 +1127,7 @@ static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const Source
 static bool source_string_owned_call(SourceContext *ctx,AstNode *node,SourceValue receiver,
     const XrNativeMemberDeclaration *member,SourceValue *value);
 #include "xxir_source_string.inc.c"
+#include "xxir_source_decimal.inc.c"
 static bool source_literal_append(SourceContext *ctx, AstNode *node, const char *bytes,
     size_t length, uint32_t *literal);
 #include "xxir_source_integer_methods.inc.c"
@@ -1275,6 +1276,8 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
         if (target && target->kind == SOURCE_IMPORT) target = imported_declaration(ctx, target, target->imported);
     } else if (callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
+        if (source_decimal_static_receiver(ctx, member->object))
+            return source_decimal_static_call(ctx, node, value);
         if (source_array_static_receiver(ctx, member->object))
             return source_array_static_call(ctx, node, value);
         SourceName *base = member->object->type == AST_VARIABLE ?

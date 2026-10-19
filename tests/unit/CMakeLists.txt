@@ -4644,6 +4644,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/xir/json_syntax.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/json_scalar_object.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/json_integer_object.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/json_float.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/xir/source_decimal_parse.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/xir/json_float_native.cmake")
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/xir/ordinary_live_limit.cmake)

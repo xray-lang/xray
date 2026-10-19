@@ -17,4 +17,8 @@ XR_FUNC XrXirValueStatus xr_xir_nullable_new(XrXirType type,
 /* The returned payload is borrowed from value and exists only for Some. */
 XR_FUNC bool xr_xir_nullable_view(const XrXirValue *value, bool *some,
     const XrXirValue **payload);
+/* Invalid decimal syntax constructs None. Work or allocation failures publish
+ * nothing; the exact decimal kernel bills this admission's existing Domain. */
+XR_FUNC XrXirValueStatus xr_xir_f64_try_parse(const XrXirValue *text, XrXirType type,
+    XrXirValueAdmission *admission, XrXirValue *output);
 #endif // XXIR_NULLABLE_H

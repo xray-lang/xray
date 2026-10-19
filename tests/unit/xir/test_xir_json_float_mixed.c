@@ -8,6 +8,7 @@
  * test_xir_json_float_mixed.c - Both engines across the ordinary JSON floating call
  */
 #include "xir/xxir_vm.h"
+#include "xir/xxir_program_packet_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,8 +71,12 @@ static void float_mixed(unsigned direction) {
         CHECK(owner->entries[selected].resume==json_float_program.entries[selected].resume &&
             owner->entries[other].resume!=json_float_program.entries[other].resume);
     }
+    XrXirProgramPacket packet=xir_program_packet_borrow(artifact);
+    CHECK(packet.identity && packet.length==json_float_program.packet.length &&
+        !memcmp(packet.identity,json_float_program.packet.identity,32) &&
+        !memcmp(packet.bytes,json_float_program.packet.bytes,packet.length));
     XrXirProgramSpec spec={XR_XIR_PROGRAM_ABI_VERSION,{XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},owner->entries,
-        module->function_count,module->declarations,{owner,float_mixed_release},module->types,xr_xir_compile_program_proof(artifact)};
+        module->function_count,module->declarations,{owner,float_mixed_release},module->types,packet};
     XrXirProgram *program=NULL;XrXirStatus status=xr_xir_compile_program_seal(&context,&spec,&program);
     if(status!=XR_XIR_OK) {
         CHECK(!program);float_mixed_release(owner);xr_compile_resources_release(context.resources);

@@ -3,6 +3,7 @@
 class f64 {
     // @lowered
     static parse(text: string) -> f64
+    // @native-operation F64_TRY_PARSE allocation=may_heap failures=allocation,retain,limit ownership=owned
     // @lowered
     static tryParse(text: string) -> f64?
     // @native-operation FLOAT_ABS allocation=no_heap failures=none ownership=owned

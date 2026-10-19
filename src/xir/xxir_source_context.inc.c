@@ -136,4 +136,5 @@ typedef struct SourceContext {
     uint32_t iterator_module, iterator_declaration, iterator_members[3];
     uint32_t query_module_capacity, array_module, array_declaration, array_members[XR_NATIVE_OPERATION_ARRAY_RESERVE + 1], length_declaration;
     uint32_t string_module, string_declaration, string_members[5];
+    uint32_t f64_module, f64_declaration, f64_parse_member;
 } SourceContext;

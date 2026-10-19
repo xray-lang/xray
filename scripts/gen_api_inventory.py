@@ -995,7 +995,8 @@ def collect_native_declaration(root: Path, path: Path, text: str,
     owner = {1: ("Array", "array.xr"), 2: ("string", "string.xr"),
              10: ("Map", "map.xr"), 11: ("Set", "set.xr"),
              12: ("i64", "i64.xr"), 13: ("f64", "f64.xr"),
-             14: ("bool", "bool.xr"), 15: ("rune", "rune.xr")}.get(identity)
+             14: ("bool", "bool.xr"), 15: ("rune", "rune.xr"),
+             16: ("StringBuilder", "stringbuilder.xr")}.get(identity)
     if not owner or name != owner[0] or path != root / "stdlib/types" / owner[1]:
         raise ValueError("native declaration identity does not belong to this source path")
     header_text = text.splitlines()[line - 1]

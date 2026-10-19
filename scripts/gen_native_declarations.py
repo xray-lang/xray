@@ -162,6 +162,8 @@ def simple_term(term, binder):
         return 'NULLABLE_I64'
     if term == ('name', 'f64', ()):
         return 'F64'
+    if term == ('nullable', ('name', 'f64', ())):
+        return 'NULLABLE_F64'
     if term == ('name', 'u32', ()):
         return 'U32'
     if term == ('name', 'Array', (('name', 'u8', ()),)):
@@ -362,7 +364,8 @@ def parse_source(source, prelude):
         raise ValueError('incomplete native declaration')
     if header[0] in (13, 14, 15):
         contracts = {
-            13: {'FLOAT_ABS': ('abs', '() -> f64', 'no_heap', 'none'),
+            13: {'F64_TRY_PARSE': ('tryParse', '(text: string) -> f64?', 'may_heap', 'allocation,retain,limit'),
+                'FLOAT_ABS': ('abs', '() -> f64', 'no_heap', 'none'),
                 'FLOAT_TO_STRING': ('toString', '() -> string', 'may_heap', 'allocation,retain,limit'),
                 'FLOAT_TO_I64': ('toI64', '() -> i64', 'no_heap', 'numeric_range'),
                 'FLOAT_FLOOR': ('floor', '() -> i64', 'no_heap', 'numeric_range'),
@@ -378,8 +381,10 @@ def parse_source(source, prelude):
             if member.operation == 'NONE':
                 continue
             shape = (member.name, member.signature, member.allocation, member.failures)
+            static_parse = member.operation == 'F64_TRY_PARSE'
             if (shape != contracts.get(member.operation) or member.receiver != 'READ' or
-                    member.static or not member.method or member.lowered or member.ownership != 'owned' or
+                    member.static != static_parse or not member.method or member.lowered != static_parse or
+                    member.ownership != 'owned' or any(p[3] or p[4] for p in member.parameters) or
                     member.operation in used):
                 raise ValueError('scalar operation disagrees with its complete declaration contract')
             used.add(member.operation)
