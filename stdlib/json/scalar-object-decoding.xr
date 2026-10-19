@@ -1,0 +1,80 @@
+fn jsonScalarObjectLiteral(bytes:Array<u8>,start:i64,word:string)->i64 {
+    const literal=word.copyBytes()
+    if(start>len(bytes)-len(literal)){return -1}
+    var i:i64=0
+    while(i<len(literal)){if(bytes[start+i]!=literal[i]){return -1};i=i+1}
+    return start+len(literal)
+}
+fn jsonScalarObjectEnd(bytes:Array<u8>,start:i64)->i64 {
+    if(start>=len(bytes)){return -1}
+    const first=bytes[start]
+    if(first==34){return jsonIntegerObjectKey(bytes,start).0}
+    if(first==116){return jsonScalarObjectLiteral(bytes,start,"true")}
+    if(first==102){return jsonScalarObjectLiteral(bytes,start,"false")}
+    if(first==110){return jsonScalarObjectLiteral(bytes,start,"null")}
+    return jsonNumberEnd(bytes,start)
+}
+// The slice boundaries are complete tokens in a validated UTF-8 String.
+fn jsonScalarObjectText(bytes:Array<u8>,start:i64,end:i64)->string {
+    var text=""
+    var i=start
+    while(i<end) {
+        const scalar=jsonRawScalar(bytes,i)
+        text=text+string(rune(scalar>>8));i=i+(scalar&255)
+    }
+    return text
+}
+fn jsonScalarObjectMember(bytes:Array<u8>,start:i64,keys:Array<string>)->(i64,i64,string) {
+    const key=jsonIntegerObjectKey(bytes,start)
+    if(key.0<0){return (-1,-1,"")}
+    var slot:i64=-1
+    var k:i64=0
+    while(k<len(keys)){if(keys[k]==key.1){slot=k};k=k+1}
+    var i=jsonIntegerObjectSpace(bytes,key.0)
+    if(slot<0 || i>=len(bytes) || bytes[i]!=58){return (-1,-1,"")}
+    i=jsonIntegerObjectSpace(bytes,i+1)
+    const end=jsonScalarObjectEnd(bytes,i)
+    if(end<0){return (-1,-1,"")}
+    return (end,slot,jsonScalarObjectText(bytes,i,end))
+}
+// Keep exact scalar tokens so typed callers independently admit their ranges.
+export fn jsonScalarObject(text:string,keys:Array<string>)->Array<string>? {
+    var values:Array<string>=[]
+    var seen:Array<bool>=[]
+    var k:i64=0
+    while(k<len(keys)) {
+        var previous:i64=0
+        while(previous<k){if(keys[previous]==keys[k]){return null};previous=previous+1}
+        values.push("");seen.push(false);k=k+1
+    }
+    const bytes=text.copyBytes()
+    var i=jsonIntegerObjectSpace(bytes,0)
+    if(i>=len(bytes) || bytes[i]!=123){return null}
+    i=jsonIntegerObjectSpace(bytes,i+1)
+    if(i<len(bytes) && bytes[i]==125) {
+        if(len(keys)==0 && jsonIntegerObjectSpace(bytes,i+1)==len(bytes)){return values}
+        return null
+    }
+    var count:i64=0
+    while(i<len(bytes)) {
+        const member=jsonScalarObjectMember(bytes,i,keys)
+        if(member.0<0){return null}
+        const slot=member.1
+        if(seen[slot]){return null}
+        values[slot]=member.2;seen[slot]=true;count=count+1
+        i=jsonIntegerObjectSpace(bytes,member.0)
+        if(i>=len(bytes)){return null}
+        if(bytes[i]==125) {
+            if(count==len(keys) && jsonIntegerObjectSpace(bytes,i+1)==len(bytes)){return values}
+            return null
+        }
+        if(bytes[i]!=44){return null}
+        i=jsonIntegerObjectSpace(bytes,i+1)
+    }
+    return null
+}
+export fn jsonBoolean(text:string)->bool? {
+    if(text=="true"){return true}
+    if(text=="false"){return false}
+    return null
+}

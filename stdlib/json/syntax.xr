@@ -1,0 +1,91 @@
+// These helpers consume validated UTF-8 bytes and return exclusive token ends.
+fn jsonStringEnd(bytes:Array<u8>,start:i64)->i64 {
+    const size=len(bytes)
+    var i=start+1
+    while(i<size) {
+        const first=bytes[i] as i64
+        if(first==34){return i+1}
+        if(first<32){return -1}
+        const scalar=(first==92)?jsonEscapeScalar(bytes,i,size):jsonRawScalar(bytes,i)
+        if(scalar<0){return -1}
+        i=i+(scalar&255)
+    }
+    return -1
+}
+fn jsonLiteralEnd(bytes:Array<u8>,start:i64,text:string)->i64 {
+    const word=text.copyBytes()
+    if(start>len(bytes)-len(word)){return -1}
+    var i:i64=0
+    while(i<len(word)) {
+        if(bytes[start+i]!=word[i]){return -1}
+        i=i+1
+    }
+    return start+len(word)
+}
+fn jsonWhitespaceEnd(bytes:Array<u8>,start:i64)->i64 {
+    var i=start
+    while(i<len(bytes) && (bytes[i]==32 || bytes[i]==9 || bytes[i]==10 || bytes[i]==13)){i=i+1}
+    return i
+}
+fn jsonScalarEnd(bytes:Array<u8>,start:i64)->i64 {
+    const first=bytes[start] as i64
+    if(first==34){return jsonStringEnd(bytes,start)}
+    if(first==116){return jsonLiteralEnd(bytes,start,"true")}
+    if(first==102){return jsonLiteralEnd(bytes,start,"false")}
+    if(first==110){return jsonLiteralEnd(bytes,start,"null")}
+    return jsonNumberEnd(bytes,start)
+}
+// A negative command closes a container; commands above ten open one.
+fn jsonFrameStep(bytes:Array<u8>,start:i64,state:i64)->(i64,i64) {
+    const first=bytes[start] as i64
+    if(state==2 && first==93){return (start+1,-1)}
+    if(state==3) {
+        if(first==93){return (start+1,-1)}
+        if(first==44){return (start+1,4)}
+        return (-1,0)
+    }
+    if(state==5 && first==125){return (start+1,-1)}
+    if(state==8) {
+        if(first==125){return (start+1,-1)}
+        if(first==44){return (start+1,9)}
+        return (-1,0)
+    }
+    if(state==5 || state==9) {
+        if(first!=34){return (-1,0)}
+        return (jsonStringEnd(bytes,start),6)
+    }
+    if(state==6) {
+        if(first==58){return (start+1,7)}
+        return (-1,0)
+    }
+    if(first==91){return (start+1,12)}
+    if(first==123){return (start+1,15)}
+    return (jsonScalarEnd(bytes,start),(state==0)?1:((state==7)?8:3))
+}
+// Container states use an explicit stack so input depth does not consume calls.
+export fn jsonValid(text:string)->bool {
+    const bytes=text.copyBytes()
+    const size=len(bytes)
+    var stack:Array<i64>=[0]
+    var depth:i64=1
+    var i:i64=0
+    while(depth>0) {
+        i=jsonWhitespaceEnd(bytes,i)
+        const top=depth-1
+        const state=stack[top]
+        if(state==1){return i==size}
+        if(i>=size){return false}
+        const step=jsonFrameStep(bytes,i,state)
+        if(step.0<0){return false}
+        i=step.0
+        if(step.1<0){depth=depth-1;continue}
+        if(step.1>=10) {
+            stack[top]=(state==0)?1:((state==7)?8:3)
+            const next=step.1-10
+            if(depth==len(stack)){stack.push(next)}else{stack[depth]=next}
+            depth=depth+1;continue
+        }
+        stack[top]=step.1
+    }
+    return false
+}

@@ -1,0 +1,10 @@
+import {jsonNumberToken} from "./number-decoding"
+
+// A finite typed receiver follows the same complete JSON number grammar.
+export fn jsonFloat(text:string)->f64? {
+    if(!jsonNumberToken(text)){return null}
+    const value=f64.tryParse(text)
+    if(value==null){return null}
+    if(value! > 1.7976931348623157e308 || value! < -1.7976931348623157e308){return null}
+    return value
+}
