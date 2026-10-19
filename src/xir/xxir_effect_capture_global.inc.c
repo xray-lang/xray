@@ -473,9 +473,19 @@ static XrXirStatus effect_capture_selected_node(EffectCaptureRead *read,const Ef
     }
     return status;
 }
-/* Receiving cannot allocate or release. Each canonical run is therefore
- * borrowed through its complete instruction replay, then the ordinary finish
- * reader independently reopens the final record and proves exact EOF. */
+/* Every non-scalar result and type-independent clause needs its original
+ * transfer. Other scalar rows contribute no capture fact. This selects only
+ * operand decoding; complete input framing, closure and support still run. */
+static bool effect_capture_operand_read(const XrXirTypes *types,uint32_t opcode,XrXirType type) {
+    return effect_capture_type_kind(types,type)!=EFFECT_CAPTURE_SCALAR ||
+        (effect_physical_opcode((XrXirOp)opcode)&EFFECT_PHYSICAL_BARRIER) ||
+        opcode==XR_XIR_LOCAL_WRITE || opcode==XR_XIR_SCALAR_LOCAL_WRITE || opcode==XR_XIR_OWNED_LOCAL_WRITE ||
+        opcode==XR_XIR_FUNCTION_REF || opcode==XR_XIR_GENERATOR_NEW || opcode==XR_XIR_RETURN;
+}
+/* Receiving cannot allocate or release. Varying rows first project their
+ * current opcode and type; contributing rows keep their full original replay.
+ * Constant rows already borrow the complete base without materialization.
+ * The ordinary finish reader independently reopens the final record and EOF. */
 static XrXirStatus effect_capture_current_body(EffectCaptureRead *read,const EffectCaptureNode *node,bool *returned) {
     const EffectBodyCurrentRead *current=read->body.current;
     if(read->builder || !current || current->work!=read->work || current->material!=read->final->material ||
@@ -493,6 +503,15 @@ static XrXirStatus effect_capture_current_body(EffectCaptureRead *read,const Eff
         uint32_t end=ref->first+ref->count;
         for(uint32_t i=ref->first;i<end;++i) {
             if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+            if(ref->mask && i!=ref->first) {
+                uint32_t opcode=XR_XIR_INVALID,type=XR_XIR_UNIT;
+                status=effect_body_run_word(&read->body.read,ref,i,0,&opcode);
+                if(status==XR_XIR_OK) status=effect_body_run_word(&read->body.read,ref,i,1,&type);
+                if(status!=XR_XIR_OK) return status;
+                if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+                if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+                if(!effect_capture_operand_read(read->body.domain.types,opcode,(XrXirType)type)) continue;
+            }
             XrXirInstruction storage;const XrXirInstruction *op=NULL;
             status=effect_body_operation_ref(&read->body.read,ref,i,&storage,&op);
             if(status==XR_XIR_OK) {

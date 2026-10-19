@@ -1,0 +1,18 @@
+fn make(base:i64)->fn(i64)->i64 {
+    const offset=base+1
+    return fn(value:i64)->i64 { return value+offset }
+}
+fn apply(callback:fn(i64)->i64,value:i64)->i64 {
+    return callback(value)
+}
+export fn referenceAnswer()->i64 {
+    var callback=make(4)
+    var total:i64=0
+    var index:i64=0
+    while(index<3) {
+        total=total+apply(callback,index)
+        index=index+1
+    }
+    callback=make(7)
+    return total+callback(16)
+}
