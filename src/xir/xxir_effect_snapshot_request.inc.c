@@ -382,6 +382,21 @@ static inline XrXirStatus effect_body_request_sequence_instruction(const EffectB
     *output=storage;return XR_XIR_OK;
 }
 
+/* Only numeric position crosses calls. Reopen the current owner and record
+ * before each projection; the returned loan ends before a consumer callback. */
+static XrXirStatus effect_body_request_sequence_record(const EffectBodyRequest *request,
+    uint32_t f,uint32_t i,EffectBodyRecordCursor *cursor,const EffectBodyRun **output) {
+    if (!request || !request->owner || !request->domain.types || !cursor || !output ||
+        f>=request->domain.function_count || !effect_body_request_sequence_owned(request))
+        return XR_XIR_BAD_STRUCTURE;
+    if (cursor->last==UINT32_MAX?i!=0:i!=cursor->last+1) return XR_XIR_BAD_STRUCTURE;
+    XrXirStatus status=effect_body_request_sequence_binding(request);
+    if (status!=XR_XIR_OK) return status;
+    const EffectBodyMaterial *material=request->owner;
+    if (!effect_body_read_work(&request->read,2)) return XR_XIR_BUDGET;
+    return effect_body_record_cursor_ref(&request->read,&material->functions[f],i,cursor,output);
+}
+
 /* Local consumers may borrow the complete immutable base row. The copied
  * sequence reader retains its storage identity for callers that require it. */
 static XrXirStatus effect_body_request_sequence_operation(const EffectBodyRequest *request,
@@ -391,14 +406,8 @@ static XrXirStatus effect_body_request_sequence_operation(const EffectBodyReques
         !storage || !output || f>=request->domain.function_count) return XR_XIR_BAD_STRUCTURE;
     if (!effect_body_request_sequence_owned(request))
         return effect_body_request_instruction(request,f,i,storage,output);
-    if (!cursor) return XR_XIR_BAD_STRUCTURE;
-    if (cursor->last==UINT32_MAX?i!=0:i!=cursor->last+1) return XR_XIR_BAD_STRUCTURE;
-    XrXirStatus status=effect_body_request_sequence_binding(request);
-    if (status!=XR_XIR_OK) return status;
-    const EffectBodyMaterial *material=request->owner;
-    if (!effect_body_read_work(&request->read,2)) return XR_XIR_BUDGET;
     const EffectBodyRun *ref=NULL;
-    status=effect_body_record_cursor_ref(&request->read,&material->functions[f],i,cursor,&ref);
+    XrXirStatus status=effect_body_request_sequence_record(request,f,i,cursor,&ref);
     if (status!=XR_XIR_OK) return status;
     return effect_body_operation_ref(&request->read,ref,i,storage,output);
 }

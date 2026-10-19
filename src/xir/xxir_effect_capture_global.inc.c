@@ -482,6 +482,33 @@ static bool effect_capture_operand_read(const XrXirTypes *types,uint32_t opcode,
         opcode==XR_XIR_LOCAL_WRITE || opcode==XR_XIR_SCALAR_LOCAL_WRITE || opcode==XR_XIR_OWNED_LOCAL_WRITE ||
         opcode==XR_XIR_FUNCTION_REF || opcode==XR_XIR_GENERATOR_NEW || opcode==XR_XIR_RETURN;
 }
+/* A missing result means this current scalar row has no capture transfer.
+ * Its full record was framed before projection. No allocation occurs here. */
+static XrXirStatus effect_capture_operation_ref(const EffectCaptureRead *read,
+    const EffectBodyRun *ref,uint32_t i,XrXirInstruction *storage,const XrXirInstruction **output) {
+    if(ref->mask && i!=ref->first) {
+        uint32_t opcode=XR_XIR_INVALID,type=XR_XIR_UNIT;
+        XrXirStatus status=effect_body_run_word(&read->body.read,ref,i,0,&opcode);
+        if(status==XR_XIR_OK) status=effect_body_run_word(&read->body.read,ref,i,1,&type);
+        if(status!=XR_XIR_OK) return status;
+        if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
+        if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
+        if(!effect_capture_operand_read(read->body.domain.types,opcode,(XrXirType)type)) return XR_XIR_OK;
+    }
+    return effect_body_operation_ref(&read->body.read,ref,i,storage,output);
+}
+/* Construction can grow facts between operations. Only the numeric cursor
+ * survives; each selection reopens the current record before its transfer.
+ * Delegated readers retain their original full-operation behavior. */
+static XrXirStatus effect_capture_sequence_operation(const EffectCaptureRead *read,
+    uint32_t function,uint32_t i,EffectBodyRecordCursor *cursor,XrXirInstruction *storage,
+    const XrXirInstruction **output) {
+    if(!effect_body_request_sequence_owned(&read->body))
+        return effect_body_request_sequence_operation(&read->body,function,i,cursor,storage,output);
+    const EffectBodyRun *ref=NULL;
+    XrXirStatus status=effect_body_request_sequence_record(&read->body,function,i,cursor,&ref);
+    return status==XR_XIR_OK?effect_capture_operation_ref(read,ref,i,storage,output):status;
+}
 /* Receiving cannot allocate or release. Varying rows first project their
  * current opcode and type; contributing rows keep their full original replay.
  * Constant rows already borrow the complete base without materialization.
@@ -503,18 +530,9 @@ static XrXirStatus effect_capture_current_body(EffectCaptureRead *read,const Eff
         uint32_t end=ref->first+ref->count;
         for(uint32_t i=ref->first;i<end;++i) {
             if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
-            if(ref->mask && i!=ref->first) {
-                uint32_t opcode=XR_XIR_INVALID,type=XR_XIR_UNIT;
-                status=effect_body_run_word(&read->body.read,ref,i,0,&opcode);
-                if(status==XR_XIR_OK) status=effect_body_run_word(&read->body.read,ref,i,1,&type);
-                if(status!=XR_XIR_OK) return status;
-                if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
-                if(opcode<=XR_XIR_INVALID || opcode>=XR_XIR_OP_COUNT) return XR_XIR_BAD_STRUCTURE;
-                if(!effect_capture_operand_read(read->body.domain.types,opcode,(XrXirType)type)) continue;
-            }
             XrXirInstruction storage;const XrXirInstruction *op=NULL;
-            status=effect_body_operation_ref(&read->body.read,ref,i,&storage,&op);
-            if(status==XR_XIR_OK) {
+            status=effect_capture_operation_ref(read,ref,i,&storage,&op);
+            if(status==XR_XIR_OK && op) {
                 if(op->op==XR_XIR_RETURN) *returned=true;
                 status=effect_capture_instruction(read,node,i,op);
             }
@@ -556,8 +574,8 @@ static XrXirStatus effect_capture_node_body(EffectCaptureRead *read,const Effect
         for(uint32_t i=0;i<node->head.instruction_count;++i) {
             if(!xir_compile_work(read->work,2)) return XR_XIR_BUDGET;
             XrXirInstruction storage;const XrXirInstruction *op=NULL;
-            status=effect_body_request_sequence_operation(&read->body,read->final->nodes[node->node].body,i,&cursor,&storage,&op);
-            if(status==XR_XIR_OK) {
+            status=effect_capture_sequence_operation(read,read->final->nodes[node->node].body,i,&cursor,&storage,&op);
+            if(status==XR_XIR_OK && op) {
                 if(op->op==XR_XIR_RETURN) returned=true;
                 status=effect_capture_instruction(read,node,i,op);
             }
