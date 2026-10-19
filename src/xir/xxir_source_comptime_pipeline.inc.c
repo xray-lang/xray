@@ -73,9 +73,9 @@ static bool source_comptime_evaluate(SourceContext *ctx,const XrXirArtifact *che
     if (ctx->comptime_sites) ctx->module=ctx->comptime_sites->module;
     XrXirArtifact *closed=NULL,*lowered=NULL;XrXirCheckedPacket packet={0};uint8_t identity[32]={0};
     if (!source_work_units(ctx,NULL,sizeof(identity))) return false;
-    XrXirStatus status=xr_xir_compile_artifact_verify(checked,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_specialize(checked,&closed,NULL);
-    if (status==XR_XIR_OK) status=xr_xir_compile_artifact_verify(closed,NULL);
+    /* Both public consumers completely verify their current input before use.
+     * Adjacent Source checks would repeat the same admission without a consumer. */
+    XrXirStatus status=xr_xir_compile_specialize(checked,&closed,NULL);
     if (status==XR_XIR_OK) status=xr_xir_compile_checked_write(closed,&packet,NULL);
     if (status==XR_XIR_OK) {
         if (!source_work_units(ctx,NULL,packet.length)) status=XR_XIR_BUDGET;

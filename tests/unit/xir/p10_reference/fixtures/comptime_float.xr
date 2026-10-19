@@ -1,0 +1,19 @@
+struct FloatBox {
+    value:f64
+    init(value:f64) { this.value=value }
+}
+fn identity<T>(value:T)->T { return value }
+fn arithmetic(input:f64)->bool {
+    const box=FloatBox(input)
+    const value=identity<f64>(box.value)
+    const zero=value-value
+    const nan=zero/zero
+    return value+1.0==3.0 && value*2.0==4.0 && value/2.0==1.0 &&
+        nan!=nan && !(nan==nan) && !(nan<value)
+}
+fn offset(value:i64)->i64 { return value+13 }
+export fn referenceAnswer()->i64 {
+    const checked=comptime arithmetic(2.0)
+    const total=comptime offset(29)
+    return checked && arithmetic(2.0) ? total : 0
+}
