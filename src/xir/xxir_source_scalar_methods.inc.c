@@ -60,13 +60,16 @@ static bool source_scalar_call(SourceContext *ctx,AstNode *node,SourceValue rece
     const XrNativeMemberDeclaration *member=source_native_member(ctx,native,call->callee->as.member_access.name);
     if (!member || !member->is_public || !member->is_method || member->is_static ||
         member->receiver!=XR_NATIVE_RECEIVER_READ || member->operation==XR_NATIVE_OPERATION_NONE ||
-        member->parameter_count || call->arg_count || call->type_arg_count || call->default_arg_count)
+        member->parameter_count || call->type_arg_count || call->default_arg_count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"scalar method requires its exact admitted ordinary declaration");
     bool text=member->operation==XR_NATIVE_OPERATION_FLOAT_TO_STRING ||
         member->operation==XR_NATIVE_OPERATION_BOOL_TO_STRING || member->operation==XR_NATIVE_OPERATION_RUNE_TO_STRING;
     if (!text && xr_xir_float_bits(receiver.type) && receiver.type!=XR_XIR_F64)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"floating operation requires the declared f64 receiver");
     if (!source_primitive_member_reference(ctx,call->callee,native,member)) return false;
+    uint32_t supplied;
+    if (!source_native_read_arguments(ctx,node,NULL,0,0,NULL,&supplied,
+        "scalar method requires its exact admitted ordinary declaration")) return false;
     if (text) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TO_STRING,XR_XIR_STRING,{receiver.id,0},{0},0,{0}},value);
     switch (member->operation) {
     case XR_NATIVE_OPERATION_RUNE_TO_U32:

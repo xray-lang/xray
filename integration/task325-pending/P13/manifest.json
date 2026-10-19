@@ -1,0 +1,106 @@
+{
+  "source": "4709902c5b063482f8959591c052b26ece32ba53",
+  "adapter": "2ae5276854708be467ca5ceafbdbe234f8e211d0",
+  "active_current_assertions_retained": true,
+  "unregistered_candidate_variants": [
+    {
+      "path": "tests/unit/xir/p10_reference/call_spread.cmake",
+      "original_status": "A",
+      "base_blob": "9fef8a6660e29be8a2be3fdef65305d3ca565288",
+      "candidate_blob": "51d6a6b95f7c293d6a3ea272524cb09fdb418c87",
+      "result_blob": "9fef8a6660e29be8a2be3fdef65305d3ca565288",
+      "result_sha256": "b1b3798a26dc262829dc6fdd642f0d871aa6c3ac6ae736736ec649997397b350",
+      "disposition": "current baseline retained"
+    },
+    {
+      "path": "tests/unit/xir/p10_reference/fixtures/call_spread_empty.xr",
+      "original_status": "A",
+      "base_blob": "ecb9f50020f45129c63d8907f4dac9175399265c",
+      "candidate_blob": "d82a6beb1999b0285fa4bc8eebbc4102787f374d",
+      "result_blob": "ecb9f50020f45129c63d8907f4dac9175399265c",
+      "result_sha256": "970afe131576b37cfb2e62c697c088673dd149b36211e3eccf4c7e2626caf719",
+      "disposition": "current baseline retained"
+    },
+    {
+      "path": "tests/unit/xir/p10_reference/fixtures/call_spread_generic.xr",
+      "original_status": "A",
+      "base_blob": "62dc93f8099a5f059ee95d185fa9774944ca5cc3",
+      "candidate_blob": "e5f3ca00aaf11a1296670f0102d413beee1e9531",
+      "result_blob": "62dc93f8099a5f059ee95d185fa9774944ca5cc3",
+      "result_sha256": "fca0d4ad528b702441d7e8ffb2294ab28bc5b5fb2f7e3abb2cf8ef46c84fe281",
+      "disposition": "current baseline retained"
+    },
+    {
+      "path": "tests/unit/xir/p10_reference/fixtures/call_spread_order.xr",
+      "original_status": "A",
+      "base_blob": "c991332fcb391b78405cfbff9515c49713fc3d24",
+      "candidate_blob": "9dffd24e6b2efb59e6274ac48859f8add72204d6",
+      "result_blob": "c991332fcb391b78405cfbff9515c49713fc3d24",
+      "result_sha256": "b2f2c6432fcded69356873cec3aeb779299202a2ef8e0f711008fad6714ea841",
+      "disposition": "current baseline retained"
+    },
+    {
+      "path": "tests/unit/xir/p10_reference/fixtures/call_spread_ref.xr",
+      "original_status": "A",
+      "base_blob": "6ddeac11f224a64792595a2349a092025533b729",
+      "candidate_blob": "e852cf184a3ddac4e692a69e35a6f70f5cc3c9fb",
+      "result_blob": "6ddeac11f224a64792595a2349a092025533b729",
+      "result_sha256": "7def47b200003d683729f54582098f4c171daf4c5746f065d0c02e64df258a75",
+      "disposition": "current baseline retained"
+    },
+    {
+      "path": "tests/unit/xir/p10_reference/fixtures/reject_call_spread_alias.xr",
+      "original_status": "A",
+      "base_blob": "194d52e6a4cafc24d902cae2362d224226f5f0e1",
+      "candidate_blob": "a37dde4b54640586c0952bb6798190d30f7e513e",
+      "result_blob": "194d52e6a4cafc24d902cae2362d224226f5f0e1",
+      "result_sha256": "4b1bc8a7b305944afe516e07647a34e709fdeaa2e8c6dff10744afae0b97f898",
+      "disposition": "current baseline retained"
+    },
+    {
+      "path": "tests/unit/xir/p10_reference/fixtures/reject_call_spread_array.xr",
+      "original_status": "A",
+      "base_blob": "5849af5661df9cb40cb5ea917b982b431a9a9561",
+      "candidate_blob": "316d19ac65791942b9993a83d0a9241b8f5578d1",
+      "result_blob": "5849af5661df9cb40cb5ea917b982b431a9a9561",
+      "result_sha256": "de3c1f40c27d1ee1a7736df6d17b4efa03cfe9cd88615e1d267acc1474588f55",
+      "disposition": "current baseline retained"
+    },
+    {
+      "path": "tests/unit/xir/p10_reference/fixtures/reject_call_spread_ref.xr",
+      "original_status": "A",
+      "base_blob": "4a3cf84c95b89c702d1571db782ff7f4b803a28b",
+      "candidate_blob": "3789bc3131cba7ca5898aeac1fafab9eeabf6ccc",
+      "result_blob": "4a3cf84c95b89c702d1571db782ff7f4b803a28b",
+      "result_sha256": "de36832c39d1f48532ad3424482d1160e822cd1f17c2df1cdf019df672c1bf37",
+      "disposition": "current baseline retained"
+    },
+    {
+      "path": "tests/unit/xir/p10_reference/fixtures/reject_call_spread_scalar.xr",
+      "original_status": "A",
+      "base_blob": "34cdfdc215db2eeb8e43a4d3c6b9f1fd8c6e29dd",
+      "candidate_blob": "0cfc0d39185852f31e1988f6e70231df6fd3edae",
+      "result_blob": "34cdfdc215db2eeb8e43a4d3c6b9f1fd8c6e29dd",
+      "result_sha256": "67d4bfca8150615e71cdd429fb91c84d935272e24eea9382a86fa9975821ed92",
+      "disposition": "current baseline retained"
+    },
+    {
+      "path": "tests/unit/xir/p10_reference/fixtures/reject_call_spread_type.xr",
+      "original_status": "A",
+      "base_blob": "5bd3ff35e7011bd3b4021ee18e9d51a5ef07ccae",
+      "candidate_blob": "138626e5892c1da4e51f755bb823c432cf85bf77",
+      "result_blob": "5bd3ff35e7011bd3b4021ee18e9d51a5ef07ccae",
+      "result_sha256": "5e4a822b9e2fae336655f066b0e66428d0f5f5beb3ab3ed1099465d44ce3caa0",
+      "disposition": "current baseline retained"
+    },
+    {
+      "path": "tests/unit/xir/p10_reference/tuple_spread.cmake",
+      "original_status": "A",
+      "base_blob": "c7094dc464a8b5bf464c0f9038c7c8ee7670fedb",
+      "candidate_blob": "3d383668d5cc1666e498edddfc12b64b99960f17",
+      "result_blob": "c7094dc464a8b5bf464c0f9038c7c8ee7670fedb",
+      "result_sha256": "f81176ed6bce08cab666d64977d6a09804ed7acc0974bcf5ad420d48453daa94",
+      "disposition": "current baseline retained"
+    }
+  ]
+}

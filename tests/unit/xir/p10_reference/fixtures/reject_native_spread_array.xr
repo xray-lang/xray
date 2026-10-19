@@ -1,0 +1,4 @@
+export fn referenceAnswer() -> i64 {
+    const values: Array<i64> = [3]
+    return values.get(...[0])
+}

@@ -89,19 +89,14 @@ static bool source_string_call(SourceContext *ctx, AstNode *node, SourceValue re
         member->result != (result == XR_XIR_BOOL ? XR_NATIVE_TERM_BOOL : XR_NATIVE_TERM_I64) ||
         (indexed && (member->parameters[1].type != XR_NATIVE_TERM_I64 || !member->parameters[1].optional)))
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string operation declaration shape is inconsistent");
-    if (call->type_arg_count || call->default_arg_count || call->arg_count < 1 ||
-        call->arg_count > (indexed ? 2 : 1) || !call->arguments)
-        return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string operation requires its declared plain arguments");
-    for (int i = 0; i < call->arg_count; ++i)
-        if (call->arg_accesses && call->arg_accesses[i] != XR_CALL_ARG_PLAIN)
-            return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string operation arguments require ordinary READ values");
     SourceValue args[3] = {receiver, {0}, {0}};
-    if (!source_plan_expression(ctx, call->arguments[0], (SourceExpectedType){XR_XIR_STRING != XR_XIR_UNIT,XR_XIR_STRING, false, false}, &args[1])) return false;
+    XrXirType parameters[]={XR_XIR_STRING,XR_XIR_I64};uint32_t supplied;
+    if (!source_native_read_arguments(ctx,node,parameters,1,indexed ? 2u : 1u,&args[1],&supplied,
+        "string operation requires its declared plain arguments")) return false;
     if (args[1].type != XR_XIR_STRING)
         return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string operation pattern type mismatch");
     if (indexed) {
-        if (call->arg_count == 2) {
-            if (!source_plan_expression(ctx, call->arguments[1], (SourceExpectedType){XR_XIR_I64 != XR_XIR_UNIT,XR_XIR_I64, false, false}, &args[2])) return false;
+        if (supplied == 2) {
             if (args[2].type != XR_XIR_I64)
                 return source_fail(ctx, node, XR_XIR_BAD_TYPE, "string search start requires i64");
         } else if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_CONST_INT, XR_XIR_I64, {0}, {0}, 0, {0}}, &args[2])) return false;

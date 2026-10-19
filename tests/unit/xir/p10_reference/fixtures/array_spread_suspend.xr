@@ -1,0 +1,22 @@
+var trace: i64 = 0
+var source: Array<i64> = [3]
+fn saved() -> Array<i64> {
+    trace = trace * 10 + 1
+    return source
+}
+fn later() -> i64 {
+    trace = trace * 10 + 2
+    Coro.yield()
+    source[0] = 7
+    return 11
+}
+fn tail() -> Array<i64> {
+    trace = trace * 10 + 3
+    return [17]
+}
+export fn referenceAnswer() -> i64 {
+    trace = 0
+    source = [3]
+    const result = [...saved(), later(), ...tail()]
+    return result[0] * 10000 + result[1] * 100 + result[2] + trace * 100000 + source[0]
+}

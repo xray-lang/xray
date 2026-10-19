@@ -286,19 +286,18 @@ static bool source_integer_call(SourceContext *ctx,AstNode *node,
         ((absolute || extreme || floating || square_root || hex || bits || control!=SOURCE_INTEGER_ORDINARY) && receiver.type != XR_XIR_I64) || member->result != result ||
         member->parameter_count != (unary ? 0u : 1u) ||
         (!unary && member->parameters[0].type != XR_NATIVE_TERM_I64) ||
-        call->type_arg_count || call->default_arg_count || call->arg_count != (unary ? 0 : 1))
+        call->type_arg_count || call->default_arg_count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"integer operation requires its exact ordinary declaration");
     if (!source_primitive_member_reference(ctx,call->callee,native,member)) return false;
+    XrXirType parameter=XR_XIR_I64;SourceValue other={0};uint32_t supplied;
+    if (!source_native_read_arguments(ctx,node,&parameter,unary ? 0u : 1u,unary ? 0u : 1u,
+        &other,&supplied,"integer operation requires its exact ordinary declaration")) return false;
     if (bits && unary) return source_integer_bits(ctx,member->operation,receiver,(SourceValue){0},value);
     if (absolute) return source_integer_abs(ctx,receiver,value);
     if (hex) return source_integer_hex(ctx,node,receiver,value);
     if (text) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_TO_STRING,XR_XIR_STRING,{receiver.id,0},{0},0,{0}},value);
     if (floating) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_CONVERT_NUMBER,XR_XIR_F64,{receiver.id,0},{0},0,{0}},value);
     if (square_root) return source_integer_sqrt(ctx,receiver,value);
-    if (!call->arguments || (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"integer operation requires a READ i64 argument");
-    SourceValue other;
-    if (!source_plan_expression(ctx,call->arguments[0],(SourceExpectedType){true,XR_XIR_I64,false,false},&other)) return false;
     if (other.type != XR_XIR_I64)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"integer operation argument does not satisfy i64");
     if (rotation) return source_integer_bits(ctx,member->operation,receiver,other,value);

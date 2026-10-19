@@ -113,9 +113,10 @@ int main(int argc,char **argv) {
     if(argc==2&&!strcmp(argv[1],"--rejections")){concat_rejections();return 0;}
     unsigned mode=argc>1?(unsigned)strtoul(argv[1],NULL,10):0;const char *emit=argc==3?argv[2]:NULL;
     ConcatCompile run=concat_build(SIZE_MAX,concat_limits(),mode,emit);
-    if(run.status!=XR_XIR_OK)fprintf(stderr,"concat build status%u stage%u sites%zu\n",run.status,run.stage,run.sites);
-    CHECK(run.status==XR_XIR_OK);
-    if(!emit){concat_goldens(&run);concat_escape(&run);}
+    if(run.status!=XR_XIR_OK)fprintf(stderr,"concat build status%u stage%u sites%zu allocated%llu peak%llu work%llu\n",
+        run.status,run.stage,run.sites,(unsigned long long)run.stats.allocated_bytes,
+        (unsigned long long)run.stats.peak_bytes,(unsigned long long)run.stats.work);
+    CHECK(run.status==XR_XIR_OK);if(!emit){concat_goldens(&run);concat_escape(&run);}
     printf("concat baseline mode%u sites%zu allocated%llu peak%llu work%llu\n",mode,run.sites,
         (unsigned long long)run.stats.allocated_bytes,(unsigned long long)run.stats.peak_bytes,(unsigned long long)run.stats.work);
     concat_release(&run);instance_compile_report();return 0;

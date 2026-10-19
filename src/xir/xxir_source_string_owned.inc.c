@@ -64,15 +64,14 @@ static bool source_string_owned_call(SourceContext *ctx,AstNode *node,SourceValu
         member->receiver!=XR_NATIVE_RECEIVER_READ || member->result!=XR_NATIVE_TERM_STRING ||
         member->parameter_count!=(repeat ? 1u : 0u) ||
         (repeat && member->parameters[0].type!=XR_NATIVE_TERM_I64) ||
-        call->type_arg_count || call->default_arg_count || call->arg_count!=(repeat ? 1 : 0))
+        call->type_arg_count || call->default_arg_count)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"owned string operation requires its exact ordinary declaration");
     const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_STRING);
     if (!source_primitive_member_reference(ctx,call->callee,native,member)) return false;
+    XrXirType parameter=XR_XIR_I64;SourceValue count={0};uint32_t supplied;
+    if (!source_native_read_arguments(ctx,node,&parameter,repeat ? 1u : 0u,repeat ? 1u : 0u,
+        &count,&supplied,"owned string operation requires its exact ordinary declaration")) return false;
     if (!repeat) return source_recipe_record(ctx,(XrXirInstruction){XR_XIR_COPY,XR_XIR_STRING,{receiver.id},{0},0,{0}},value);
-    if (!call->arguments || (call->arg_accesses && call->arg_accesses[0]!=XR_CALL_ARG_PLAIN))
-        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"string repeat requires a READ i64 count");
-    SourceValue count;
-    if (!source_plan_expression(ctx,call->arguments[0],(SourceExpectedType){true,XR_XIR_I64,false,false},&count)) return false;
     if (count.type!=XR_XIR_I64) return source_fail(ctx,node,XR_XIR_BAD_TYPE,"string repeat count must be i64");
     return source_string_repeat(ctx,node,receiver,count,value);
 }
