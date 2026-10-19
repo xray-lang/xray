@@ -1,4 +1,4 @@
-# Each registration runs one complete original helper and its owner cleanup.
+# Each registration runs its selected current route and original owner cleanup.
 foreach(generic_normal_case IN ITEMS
     cross_pool_substitution
     nominal_ordered_matching
@@ -8,6 +8,7 @@ foreach(generic_normal_case IN ITEMS
     deep_body_substitution
     array_generic_cases
     array_definition_constraints
+    error_marker_definition_current
 )
     add_test(NAME test_xir_generics_normal_${generic_normal_case}
         COMMAND test_xir_generics --normal-case ${generic_normal_case})
