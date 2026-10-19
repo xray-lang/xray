@@ -1,0 +1,10 @@
+fn answer() -> i64 {
+    var b = StringBuilder()
+    b.append("é\0🙂")
+    var old = b.toString()
+    var alias = b
+    alias.clear().append("new")
+    if (old != "é\0🙂" || b.toString() != "new" || len(b) != 3) { return 0 }
+    return 42
+}
+export fn referenceAnswer() -> i64 { return answer() }

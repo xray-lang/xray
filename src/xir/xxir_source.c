@@ -1117,6 +1117,8 @@ typedef enum SourceArrayRecipe {
 static SourceArrayRecipe source_array_recipe(XrNativeOperation operation);
 static bool source_array_recipe_call(SourceContext *ctx, AstNode *node, SourceArrayRecipe recipe,
     const SourceValue *evaluated, SourceValue *value);
+static bool source_stringbuilder_type(SourceContext *ctx,XrXirType type);
+static bool source_stringbuilder_length(SourceContext *ctx,AstNode *node,SourceValue receiver,SourceValue *value);
 #include "xxir_source_array.inc.c"
 static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const SourceValue *evaluated,
     XrXirType receiver_type, SourceValue *value);
@@ -1185,6 +1187,7 @@ static bool source_generator_yield(SourceContext *ctx,AstNode *node,bool top);
 #include "xxir_source_methods.inc.c"
 static SourceName *source_core_assertion(SourceContext *ctx, AstNode *site, uint32_t intrinsic);
 static bool source_text_conversion(SourceContext *ctx, AstNode *node, SourceValue input, SourceValue *value);
+#include "xxir_source_stringbuilder.inc.c"
 #include "xxir_source_rune.inc.c"
 static bool source_function_call(SourceContext *ctx,AstNode *node,SourceName *binding,
     SourceName *target,SourceExpectedType result_context,SourceValue *value) {
@@ -1320,6 +1323,7 @@ static bool source_call(SourceContext *ctx, AstNode *node, SourceExpectedType re
                 }
             }
             if (!expression(ctx, member->object, &receiver)) return false;
+            if(source_stringbuilder_type(ctx,receiver.type)) return source_stringbuilder_call(ctx,node,receiver,value);
             const XrXirTypeNode *iterator=xr_xir_type_node(&ctx->types,receiver.type);
             if (iterator && iterator->kind==XR_XIR_TYPE_ITERATOR)
                 return source_iterator_call(ctx,node,receiver,value);

@@ -1,0 +1,10 @@
+fn computed() -> i64 {
+    var b = StringBuilder()
+    b.append("é\0")
+    var snapshot = b.toString()
+    b.clear()
+    if (snapshot != "é\0" || len(b) != 0) { return 0 }
+    return 42
+}
+fn consume(value: i64) -> i64 { return value }
+export fn referenceAnswer() -> i64 { const result = comptime computed(); return consume(result) }

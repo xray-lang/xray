@@ -1,0 +1,2 @@
+export fn probe() -> i64 { var b = StringBuilder(); b.append("abc"); var s = b.toString(); var a: Array<(string, string)> = []; a.push((s, s)); b.clear(); return len(a) }
+export fn referenceAnswer() -> i64 { if(probe()!=1){return 0};return 42 }

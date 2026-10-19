@@ -1,0 +1,11 @@
+var trace: i64 = 0
+fn receiver(value: StringBuilder) -> StringBuilder { trace = trace * 10 + 1; return value }
+fn argument(value: StringBuilder) -> string { trace = trace * 10 + 2; value.clear().append("side"); return "tail" }
+export fn referenceAnswer() -> i64 {
+    var b = StringBuilder()
+    b.append("before")
+    trace = 0
+    receiver(b).append(argument(b))
+    if (trace != 12 || b.toString() != "sidetail") { return 0 }
+    return 42
+}

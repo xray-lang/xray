@@ -24,6 +24,7 @@ static XrXirStatus library_prelude_literal(const XrXirCompileContext *context,
     if (!xir_compile_work(context,length)) return XR_XIR_BUDGET;
     *equal=actual.length==length && !memcmp(actual.bytes,expected,length); return XR_XIR_OK;
 }
+#include "xxir_library_stringbuilder.inc.c"
 static XrXirStatus library_prelude_module(const XrXirCompileContext *context,
     const XrXirModule *module,uint32_t ordinal,bool *output) {
     const XrXirDeclarations *d=module->declarations;
@@ -38,7 +39,7 @@ static XrXirStatus library_prelude_module(const XrXirCompileContext *context,
     if (!governed || view->dependency_count || !module->types || !module->types->nominals)
         return XR_XIR_BAD_STRUCTURE;
     const XrXirNominalTable *table=module->types->nominals; uint32_t owned=0;
-    uint32_t seen[sizeof(xir_prelude_enums)/sizeof(*xir_prelude_enums)]={0};
+    uint32_t seen[sizeof(xir_prelude_enums)/sizeof(*xir_prelude_enums)]={0},builder=UINT32_MAX;
     if (xir_prelude_source.enum_count!=sizeof(seen)/sizeof(*seen)) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t i=0;i<table->count;++i) {
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
@@ -47,6 +48,13 @@ static XrXirStatus library_prelude_module(const XrXirCompileContext *context,
         if (status!=XR_XIR_OK) return status;
         if (!owner) continue;
         ++owned; uint32_t match=UINT32_MAX;
+        bool is_builder=false;status=library_prelude_literal(context,record->name,"StringBuilder",&is_builder);
+        if(status!=XR_XIR_OK) return status;
+        if(is_builder) {
+            if(builder!=UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+            status=library_builder_record(context,record);if(status!=XR_XIR_OK) return status;
+            builder=i;continue;
+        }
         for (uint32_t e=0;e<xir_prelude_source.enum_count;++e) {
             bool equal=false; status=library_prelude_literal(context,record->name,xir_prelude_source.enums[e].name,&equal);
             if (status!=XR_XIR_OK) return status;
@@ -82,7 +90,7 @@ static XrXirStatus library_prelude_module(const XrXirCompileContext *context,
             begin+=count;
         }
     }
-    if (owned!=xir_prelude_source.enum_count) return XR_XIR_BAD_STRUCTURE;
+    if (owned!=xir_prelude_source.enum_count+1 || builder==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
     for (uint32_t e=0;e<xir_prelude_source.enum_count;++e) if (!seen[e]) return XR_XIR_BAD_STRUCTURE;
     const XrXirImplementationTable *implementations=d->implementations;
     for (uint32_t i=0;implementations && i<implementations->count;++i) {
@@ -102,10 +110,15 @@ static XrXirStatus library_prelude_module(const XrXirCompileContext *context,
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
         if (d->slots[s].module==ordinal) return XR_XIR_BAD_STRUCTURE;
     }
+    uint32_t builder_methods=0;
     for (uint32_t f=0;f<module->function_count;++f) {
         if (!xir_compile_work(context,1)) return XR_XIR_BUDGET;
-        if (d->functions[f].module==ordinal && f!=view->initializer) return XR_XIR_BAD_STRUCTURE;
+        if (d->functions[f].module==ordinal && f!=view->initializer) {
+            status=library_builder_function(context,module,f,builder,&builder_methods);
+            if(status!=XR_XIR_OK) return status;
+        }
     }
+    if(builder_methods!=15) return XR_XIR_BAD_STRUCTURE;
     const XrXirFunction *initializer=&module->functions[view->initializer];
     if (initializer->parameter_count || initializer->result!=XR_XIR_UNIT ||
         initializer->block_count!=1 || initializer->instruction_count!=1 || initializer->operand_count ||

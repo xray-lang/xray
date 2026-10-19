@@ -545,3 +545,5 @@ foreach(function_mode IN ITEMS call value)
     set_tests_properties(test_xir_p10_source_history_function_${function_mode} PROPERTIES
         TIMEOUT 60 LABELS "unit;xir;p10;generation;ownership;source;history-accept;function")
 endforeach()
+
+include("${CMAKE_CURRENT_LIST_DIR}/string_builder_source.cmake")

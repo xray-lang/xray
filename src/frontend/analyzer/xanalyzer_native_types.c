@@ -388,6 +388,7 @@ static XaBuiltinMember native_integer_members[MAX_MEMBERS_PER_TYPE];
 static XaBuiltinMember native_float_members[MAX_MEMBERS_PER_TYPE];
 static XaBuiltinMember native_boolean_members[MAX_MEMBERS_PER_TYPE];
 static XaBuiltinMember native_rune_members[MAX_MEMBERS_PER_TYPE];
+static XaBuiltinMember native_string_builder_members[MAX_MEMBERS_PER_TYPE];
 static XaBuiltinType compiler_builtin_json_namespace;
 static XaBuiltinType compiler_builtin_corolocal;
 static xr_once_t native_types_once = XR_ONCE_INITIALIZER;
@@ -520,6 +521,11 @@ static void load_native_value_declaration(uint32_t id, XrTypeId type, XaBuiltinM
                 source->result != XR_NATIVE_TERM_U32 &&
                 source->result != XR_NATIVE_TERM_UNIT ?
                 XA_BUILTIN_RETURN_FRESH : XA_BUILTIN_RETURN_UNKNOWN;
+            if (source->operation == XR_NATIVE_OPERATION_STRING_BUILDER_APPEND ||
+                source->operation == XR_NATIVE_OPERATION_STRING_BUILDER_CLEAR)
+                member->return_ownership = XA_BUILTIN_RETURN_RECEIVER;
+            else if (source->operation == XR_NATIVE_OPERATION_STRING_BUILDER_TO_STRING)
+                member->return_ownership = XA_BUILTIN_RETURN_UNKNOWN;
         }
     }
     native_builtin_types[type] = (XaBuiltinType) {declaration->name,
@@ -539,6 +545,8 @@ static void xa_native_types_init_once(void) {
     load_native_value_declaration(XR_NATIVE_DECLARATION_FLOAT, XR_TID_F64, native_float_members);
     load_native_value_declaration(XR_NATIVE_DECLARATION_BOOLEAN, XR_TID_BOOL, native_boolean_members);
     load_native_value_declaration(XR_NATIVE_DECLARATION_RUNE, XR_TID_RUNE, native_rune_members);
+    load_native_value_declaration(XR_NATIVE_DECLARATION_STRING_BUILDER, XR_TID_STRINGBUILDER,
+                                  native_string_builder_members);
 
     /* Inject the few type members whose Xray schema is projected by the
      * stdlib metadata generator rather than indexed by XrTypeId. */
@@ -619,6 +627,7 @@ static const TidObjMapping tid_obj_map[] = {
 
 static XrClass *xa_native_protocol_core_class(XrVMRuntime *X, XrTypeId tid,
                                               const XaBuiltinMember *mem) {
+    (void) mem;
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     if (!core)
         return NULL;

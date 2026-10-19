@@ -1,0 +1,2 @@
+fn answer() -> i64 { var b = StringBuilder(); b.append(true).append(false); if (b.toString() != "truefalse" || len(b) != 9) { return 0 }; return 42 }
+export fn referenceAnswer() -> i64 { return answer() }

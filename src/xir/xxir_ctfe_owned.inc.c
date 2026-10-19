@@ -137,8 +137,9 @@ static void ctfe_owned_frame_clear(const ScalarRun *run) {
         xr_xir_owned_slot_clear(run->frame,run->layout->owned_offsets[i]);
 }
 static bool ctfe_cell_opcode(XrXirOp op) {
-    return op==XR_XIR_CELL_NEW || op==XR_XIR_CELL_READ || op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_LOCAL_WRITE;
+    return op==XR_XIR_CELL_NEW || op==XR_XIR_CELL_READ || op==XR_XIR_CELL_WRITE || op==XR_XIR_CELL_LOCAL_WRITE || op==XR_XIR_CELL_STRING_APPEND;
 }
+static XrXirCtfeStatus ctfe_cell_string_append_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedState *state);
 static XrXirCtfeStatus ctfe_validation_work(ScalarRun *run,CtfeOwnedState *state,XrXirType type);
 static XrXirCtfeStatus ctfe_tuple_export_bytes(ScalarRun *run,const XrXirValue *value,
     CtfeOwnedState *state,uint64_t maximum);
@@ -146,6 +147,7 @@ static XrXirCtfeStatus ctfe_admission_work(ScalarRun *run,CtfeOwnedState *state,
 static XrXirCtfeStatus ctfe_array_scan_work(ScalarRun *run,CtfeOwnedState *state,XrXirType element,uint64_t count);
 static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedState *state) {
     const XrXirInstruction *op=&run->function->instructions[*cursor];
+    if(op->op==XR_XIR_CELL_STRING_APPEND) return ctfe_cell_string_append_step(run,cursor,state);
     uint32_t destination=run->function->parameter_count+*cursor;
     XrXirType type=op->op==XR_XIR_CELL_NEW?op->type:xr_xir_operand_type(run->function,op->args[0]);
     XrXirValue cell={0},value={0},result={0};
@@ -196,6 +198,7 @@ static XrXirCtfeStatus ctfe_cell_step(ScalarRun *run,uint32_t *cursor,CtfeOwnedS
 }
 
 #include "xxir_ctfe_string.inc.c"
+#include "xxir_ctfe_stringbuilder_append.inc.c"
 static const XrXirNominalVariant *ctfe_enum_variant_info(const XrXirTypes *types,const XrXirTypeNode *node,uint32_t variant);
 #include "xxir_ctfe_tuple.inc.c"
 #include "xxir_ctfe_nullable.inc.c"

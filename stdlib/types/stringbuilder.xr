@@ -1,6 +1,9 @@
-// Built-in StringBuilder type — implementation in src/runtime/object/xstringbuilder_builtins.c
+// @native-type id=16
 class StringBuilder {
-    ref append(value: string | rune | i64 | f64 | bool | null) -> StringBuilder
+    // @native-operation STRING_BUILDER_APPEND allocation=may_heap failures=allocation,retain,limit ownership=owned
+    append(value: string | rune | i64 | f64 | bool | null) -> StringBuilder
+    // @native-operation STRING_BUILDER_TO_STRING allocation=no_heap failures=retain,limit ownership=owned
     toString() -> string
-    ref clear() -> StringBuilder
+    // @native-operation STRING_BUILDER_CLEAR allocation=no_heap failures=retain,limit ownership=owned
+    clear() -> StringBuilder
 }

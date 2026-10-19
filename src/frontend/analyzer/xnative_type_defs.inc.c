@@ -14,8 +14,6 @@ static const char xr_native_def_json[] = "// Prelude JSON namespace — implemen
 
 static const char xr_native_def_panic_info[] = "// Built-in PanicInfo class — the runtime panic diagnostic payload.\n//\n// PanicInfo belongs to the panic channel only: the VM/AOT runtime constructs it\n// on faults (out-of-bounds, division by zero, non-exhaustive match, etc.) and\n// `catch panic (p: PanicInfo)` reads its fields. Business errors are enum values\n// (`throw <enum>`), never PanicInfo. Field layout matches xclass_system.h\n// PANIC_INFO_FIELD_* indices and the XrClass built by\n// xr_register_panic_info_class in xclass_system.c; the constructor and toString\n// bodies are PRIMITIVE on the C side. This declaration exists for analyzer / LSP\n// awareness so the fields are visible from any module.\nclass PanicInfo {\n    message: string\n    stack: Array<string>\n    cause: PanicInfo?\n    code: i64\n    data: JSON.Value\n    init(message: string = \"\", cause: PanicInfo? = null)\n    toString() -> string\n}\n";
 
-static const char xr_native_def_stringbuilder[] = "// Built-in StringBuilder type — implementation in src/runtime/object/xstringbuilder_builtins.c\nclass StringBuilder {\n    ref append(value: string | rune | i64 | f64 | bool | null) -> StringBuilder\n    toString() -> string\n    ref clear() -> StringBuilder\n}\n";
-
 static const char xr_native_def_thread[] = "// sys.Thread.spawn is compiler-defined, not a native constructor surface.\n//\n// Task 147 selected the language/IR construct form:\n//     sys.Thread.spawn(fn() -> T { ... }) -> Thread<T>\n//\n// The handle itself is a native runtime type so join/detach/property dispatch\n// use the normal native-type tables. Do not add a constructor or static call\n// here; doing so would reintroduce the old Thread<T>(body) surface and bypass\n// the go-like capture/move checks enforced by sys.Thread.spawn.\nclass Thread<T> {\n    done: bool\n    join() -> T\n    detach()\n}\n";
 
 #define XR_NATIVE_TYPE_DEFS(X) \
@@ -26,5 +24,4 @@ static const char xr_native_def_thread[] = "// sys.Thread.spawn is compiler-defi
     X("iterator", xr_native_def_iterator) \
     X("json", xr_native_def_json) \
     X("panic_info", xr_native_def_panic_info) \
-    X("stringbuilder", xr_native_def_stringbuilder) \
     X("thread", xr_native_def_thread)

@@ -12,7 +12,7 @@ TYPE_MARKER = re.compile(r'^\s*//\s*@native-type\s+id=([1-9][0-9]*)\s*$', re.M)
 OP_MARKER = re.compile(r'//\s*@native-operation\s+([A-Z_][A-Z_0-9]*)\s+allocation=(no_heap|may_heap)\s+'
                        r'failures=([a-z_,]+)\s+ownership=(owned|unit)\s*$')
 IDENT = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
-TOKENS = re.compile(r'\s*(\.\.\.|->|[A-Za-z_][A-Za-z0-9_]*|[<>()?,:])')
+TOKENS = re.compile(r'\s*(\.\.\.|->|[A-Za-z_][A-Za-z0-9_]*|[<>()?,:|])')
 
 
 def c_string(value):
@@ -88,6 +88,10 @@ class TypeParser:
         if self.peek() == '?':
             self.take('?')
             term = ('nullable', term)
+        if self.peek() == '|':
+            self.take('|')
+            right = self.type(depth + 1)
+            term = ('union', (term,) + (right[1] if right[0] == 'union' else (right,)))
         return term
 
     def parameters(self, depth=0):
@@ -135,6 +139,10 @@ class Member:
 
 
 def simple_term(term, binder):
+    if term == ('union', tuple(('name', name, ()) for name in ('string', 'rune', 'i64', 'f64', 'bool', 'null'))):
+        return 'STRING_BUILDER_TEXT'
+    if term == ('name', 'StringBuilder', ()):
+        return 'STRING_BUILDER'
     if isinstance(binder, tuple):
         if len(binder) == 2:
             key, value = [('name', name, ()) for name in binder]
@@ -294,7 +302,7 @@ def parse_source(source, prelude):
                      identity == 2 and name == 'string' and not parameters or
                      identity == 10 and name == 'Map' and parameters == [('K', 'Hashable'), ('V', None)] or
                      identity == 11 and name == 'Set' and parameters == [('T', 'Hashable')])
-            scalar = (identity, name) in ((12, 'i64'), (13, 'f64'), (14, 'bool'), (15, 'rune')) and not parameters
+            scalar = (identity, name) in ((12, 'i64'), (13, 'f64'), (14, 'bool'), (15, 'rune'), (16, 'StringBuilder')) and not parameters
             if not ((kind == 'struct' and valid) or (kind == 'class' and scalar)):
                 raise ValueError('native identity, value kind or generic arity mismatch')
             if identity not in (2, 12, 13, 14, 15) and len(re.findall(r'XR_BUILTIN_PRELUDE_TYPE\("' + name + r'",\s*' +
@@ -417,6 +425,19 @@ def parse_source(source, prelude):
     if header[0] in (10, 11):
         validate_hash_members(header[0], members)
         return header, members
+    if header[0] == 16:
+        expected = {
+            'append': ('STRING_BUILDER_APPEND', ('STRING_BUILDER_TEXT',), 'STRING_BUILDER', 'may_heap', 'allocation,retain,limit'),
+            'toString': ('STRING_BUILDER_TO_STRING', (), 'STRING', 'no_heap', 'retain,limit'),
+            'clear': ('STRING_BUILDER_CLEAR', (), 'STRING_BUILDER', 'no_heap', 'retain,limit')}
+        if {member.name for member in members} != set(expected):
+            raise ValueError('StringBuilder requires its exact declared member set')
+        for member in members:
+            actual = (member.operation, tuple(simple_term(p[1], '') for p in member.parameters),
+                      simple_term(member.result, ''), member.allocation, member.failures)
+            if actual != expected[member.name] or member.receiver != 'READ' or member.static or not member.method or member.lowered or member.ownership != 'owned' or any(p[3] or p[4] for p in member.parameters):
+                raise ValueError('StringBuilder member differs from its closed contract')
+        return header, members
     recipes = array_recipe_contracts(header[2][0]) if header[0] == 1 else {}
     used = set()
     for member in members:
@@ -516,7 +537,8 @@ def render_type(root, stem):
     if (stem, identity, name) not in (('array', 1, 'Array'), ('string', 2, 'string'),
                                      ('map', 10, 'Map'), ('set', 11, 'Set'),
                                      ('i64', 12, 'i64'), ('f64', 13, 'f64'),
-                                     ('bool', 14, 'bool'), ('rune', 15, 'rune')):
+                                     ('bool', 14, 'bool'), ('rune', 15, 'rune'),
+                                     ('stringbuilder', 16, 'StringBuilder')):
         raise ValueError('native source path does not own this declaration identity')
     lines = []
     for index, member in enumerate(members):
@@ -546,7 +568,7 @@ def render_type(root, stem):
                      '{' + ', '.join(c_string(name) for name in binder) + '};')
     type_parameters = f'xr_native_{stem}_type_parameters' if binder else 'NULL'
     lines += [f'static const XrNativeTypeDeclaration xr_native_{stem} = {{',
-              f'    {identity}, XR_NATIVE_DECLARATION_VALUE, {c_string(name)}, {type_parameters}, {len(binder)},',
+              f'    {identity}, XR_NATIVE_DECLARATION_{"IDENTITY" if identity == 16 else "VALUE"}, {c_string(name)}, {type_parameters}, {len(binder)},',
               f'    "stdlib/types/{stem}.xr", "xray-native:prelude/{name}", {{{{{", ".join(str(b) for b in digest)}}}}},',
               f'    {line}, {column}, xr_native_{stem}_members, {len(members)}', '};', '']
     return lines, header, members
@@ -891,6 +913,16 @@ def render_prelude_source(root):
     for name, _, variants, _, arity in rows:
         values=[variant+(' { value: T }' if payload=='TYPE_PARAM_0' else '') for variant,payload in variants]
         text+='export enum '+name+('<T>' if arity else '')+' { '+', '.join(values)+' }\n'
+    builder_source=(root/'stdlib/types/stringbuilder.xr').read_text(encoding='utf-8').replace('\r\n','\n')
+    parse_source(builder_source,prelude)
+    builder_digest=hashlib.sha256(builder_source.encode('utf-8')).digest()
+    text+='// stringbuilder.xr sha256 '+builder_digest.hex()+'\n'
+    text+='export class StringBuilder {\n'
+    text+='private _text:string\nprivate const _empty:string\n'
+    text+='init(){this._text="";this._empty=""}\n'
+    text+='append(value:string)->StringBuilder{this._text=this._text+value;return this}\n'
+    text+='toString()->string{return this._text}\n'
+    text+='clear()->StringBuilder{this._text=this._empty;return this}\n}\n'
     lines=['/* Generated by gen_native_declarations.py; do not edit. */']
     for index, (_, _, variants, _, _) in enumerate(rows):
         lines.append('static const char *const xir_prelude_variants_'+str(index)+'[] = {'+', '.join(c_string(v) for v,_ in variants)+'};')
@@ -899,7 +931,8 @@ def render_prelude_source(root):
         field_count=sum(payload!='NONE' for _,payload in variants)
         lines.append('    {'+c_string(name)+', '+str(native_id)+', '+str(len(variants))+', '+str(arity)+', '+str(field_count)+', xir_prelude_variants_'+str(index)+'},')
     lines += ['};','static const XirPreludeSource xir_prelude_source = {','    '+c_string(text)+',',
-              '    {'+', '.join(str(byte) for byte in digest)+'},','    xir_prelude_enums, '+str(len(rows)), '};']
+              '    {'+', '.join(str(byte) for byte in digest)+'},','    xir_prelude_enums, '+str(len(rows))+',',
+              '    {'+', '.join(str(byte) for byte in builder_digest)+'}', '};']
     return '\n'.join(lines)+'\n'
 
 
@@ -912,7 +945,7 @@ def render(root):
     for stem in ('f64', 'bool', 'rune'):
         generated, _, _ = render_type(root, stem)
         scalar_lines += generated
-    lines += array_lines + string_lines + integer_lines + scalar_lines + render_atomic_identities(root) + render_task_identity(root) + render_channel_identity(root) + render_channel_result_identities(root) + render_iterator_identity(root) + render_type(root, 'map')[0] + render_type(root, 'set')[0]
+    lines += array_lines + string_lines + integer_lines + scalar_lines + render_atomic_identities(root) + render_task_identity(root) + render_channel_identity(root) + render_channel_result_identities(root) + render_iterator_identity(root) + render_type(root, 'map')[0] + render_type(root, 'set')[0] + render_type(root, 'stringbuilder')[0]
     binder = header[2]
     receiver = {}
     for operation in ('ARRAY_GET', 'ARRAY_SET', 'ARRAY_PUSH'):

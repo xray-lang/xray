@@ -10,7 +10,8 @@ static const XirPreludeEnum xir_prelude_enums[] = {
     {"SendResult", 8, 4, 0, 0, xir_prelude_variants_3},
 };
 static const XirPreludeSource xir_prelude_source = {
-    "// builtin_symbols.def sha256 7c7e1749ecae49adc12a579614991f34236c02f61497b439cb61073f9893d18c\nexport enum Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst }\nexport enum CryptoError { InvalidLength }\nexport enum Recv<T> { Value { value: T }, Empty, Timeout, Closed }\nexport enum SendResult { Sent, Full, Timeout, Closed }\n",
+    "// builtin_symbols.def sha256 7c7e1749ecae49adc12a579614991f34236c02f61497b439cb61073f9893d18c\nexport enum Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst }\nexport enum CryptoError { InvalidLength }\nexport enum Recv<T> { Value { value: T }, Empty, Timeout, Closed }\nexport enum SendResult { Sent, Full, Timeout, Closed }\n// stringbuilder.xr sha256 0676981111430565ac6adc6b3e9313ebc742db03ffb61a023a16f05bca49c2fd\nexport class StringBuilder {\nprivate _text:string\nprivate const _empty:string\ninit(){this._text=\"\";this._empty=\"\"}\nappend(value:string)->StringBuilder{this._text=this._text+value;return this}\ntoString()->string{return this._text}\nclear()->StringBuilder{this._text=this._empty;return this}\n}\n",
     {124, 126, 23, 73, 236, 174, 73, 173, 193, 42, 87, 150, 20, 153, 31, 52, 35, 108, 2, 246, 20, 151, 180, 57, 203, 97, 7, 63, 152, 147, 209, 140},
-    xir_prelude_enums, 4
+    xir_prelude_enums, 4,
+    {6, 118, 152, 17, 17, 67, 5, 101, 172, 106, 220, 107, 62, 147, 19, 235, 199, 66, 219, 3, 255, 182, 26, 2, 58, 22, 240, 91, 202, 73, 194, 253}
 };

@@ -587,3 +587,17 @@ static const XrNativeTypeDeclaration xr_native_set = {
     "stdlib/types/set.xr", "xray-native:prelude/Set", {{123, 253, 12, 27, 203, 126, 49, 112, 15, 54, 28, 130, 136, 221, 119, 80, 130, 127, 115, 181, 58, 252, 208, 72, 33, 232, 57, 5, 97, 185, 161, 156}},
     2, 8, xr_native_set_members, 15
 };
+
+static const XrNativeParameter xr_native_stringbuilder_parameters_0[] = {
+    {"value", "string | rune | i64 | f64 | bool | null", XR_NATIVE_TERM_STRING_BUILDER_TEXT, false, false},
+};
+static const XrNativeMemberDeclaration xr_native_stringbuilder_members[] = {
+    {1, "append", "(value: string | rune | i64 | f64 | bool | null) -> StringBuilder", "StringBuilder", 4, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_BUILDER_APPEND, XR_NATIVE_ALLOCATION_MAY_HEAP, "allocation,retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, xr_native_stringbuilder_parameters_0, 1, XR_NATIVE_TERM_STRING_BUILDER},
+    {2, "toString", "() -> string", "string", 6, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_BUILDER_TO_STRING, XR_NATIVE_ALLOCATION_NO_HEAP, "retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING},
+    {3, "clear", "() -> StringBuilder", "StringBuilder", 8, 5, XR_NATIVE_RECEIVER_READ, false, true, false, true, XR_NATIVE_OPERATION_STRING_BUILDER_CLEAR, XR_NATIVE_ALLOCATION_NO_HEAP, "retain,limit", XR_NATIVE_RESULT_OWNERSHIP_OWNED, NULL, 0, XR_NATIVE_TERM_STRING_BUILDER},
+};
+static const XrNativeTypeDeclaration xr_native_stringbuilder = {
+    16, XR_NATIVE_DECLARATION_IDENTITY, "StringBuilder", NULL, 0,
+    "stdlib/types/stringbuilder.xr", "xray-native:prelude/StringBuilder", {{6, 118, 152, 17, 17, 67, 5, 101, 172, 106, 220, 107, 62, 147, 19, 235, 199, 66, 219, 3, 255, 182, 26, 2, 58, 22, 240, 91, 202, 73, 194, 253}},
+    2, 7, xr_native_stringbuilder_members, 3
+};
