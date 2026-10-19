@@ -238,7 +238,95 @@ static void selector_current_handoff(void) {
     xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
     puts("current handoff: owned parent scope, independent receiving, cancellation polling/latch/recovery, no allocator callbacks and physical0 PASS");
 }
+
+typedef struct SelectorHeadProjection {
+    uint32_t calls,deny,function[2];
+    bool dimensions[2];uint64_t fee[2];
+} SelectorHeadProjection;
+static SelectorHeadProjection selector_head_projection;
+static XrXirStatus selector_projection_head(const EffectBodyRequest *request,uint32_t f,
+    EffectBodyFunctionHead *full,EffectBodyFunctionDimensions *dimensions,EffectBodyFunctionSignature *signature) {
+    SelectorHeadProjection *trace=&selector_head_projection;uint32_t call=trace->calls++;
+    CHECK(call<2 && !signature && (!!full+!!dimensions)==1);
+    trace->function[call]=f;trace->dimensions[call]=dimensions!=NULL;
+    if(trace->calls==trace->deny) return XR_XIR_BAD_STRUCTURE;
+    const XrXirCompileContext *work=request->read.owner;uint64_t before=pc_stats(work).work;
+    XrXirStatus status=effect_body_owned_head(request,f,full,dimensions,signature);
+    trace->fee[call]=pc_stats(work).work-before;return status;
+}
+static void selector_projection_storage(EffectBodyFunction *head,uint32_t mode) {
+    switch(mode) {
+    case 0:head->name_length=1;head->name=NULL;break;
+    case 1:head->parameter_count=1;head->parameters=NULL;break;
+    case 2:head->block_count=1;head->blocks=NULL;break;
+    case 3:head->operand_count=1;head->operands=NULL;break;
+    case 4:head->instruction_count=1;head->run_count=1;head->run_capacity=1;head->runs=NULL;break;
+    default:head->run_count=head->run_capacity+1;break;
+    }
+}
+/* Both projections retain the same whole-head storage predicate. The source
+ * still supplies operands, while the target supplies only its formal count. */
+static void selector_invocation_projection(void) {
+    SelectorRawSource fixture;selector_raw_source_fixture(&fixture);
+    XrXirCompileContext context=pc_owner(pc_caps());uint64_t baseline=pc_stats(&context).live_bytes;
+    context.limits.functions=32;context.limits.parameters=16;context.limits.instructions=128;
+    XrXirArtifact *checked=NULL;XrXirEffects *effects=NULL;
+    CHECK(xir_fixture_check(&context,&fixture.raw.module,&checked,NULL)==XR_XIR_OK && checked);
+    CHECK(xir_artifact_verify_raw_source_effects(checked,&effects,NULL)==XR_XIR_OK && effects);
+    memset(&fixture,0xDC,sizeof(fixture));
+    EffectInvocationFinal *final=effects->invocations->final;EffectBodyMaterial *material=final->material;
+    uint32_t selected=UINT32_MAX;
+    for(uint32_t e=0;e<final->edge_count;++e) {
+        const EffectInvocationEdge *edge=&final->edges[e];
+        if(final->nodes[edge->caller].body!=final->nodes[edge->target].body) {
+            selected=e;break;
+        }
+    }
+    CHECK(selected!=UINT32_MAX);
+    const EffectInvocationEdge *edge=&final->edges[selected];
+    uint32_t source=final->nodes[edge->caller].body,target=final->nodes[edge->target].body;
+    EffectBodyRequest body=effect_body_owned_request(&context,material);body.head=selector_projection_head;
+    XrXirCompileContext foreign=context;foreign.resources=NULL;XrCompileResourceLimits caps=pc_caps();
+    CHECK(xr_compile_resources_new(&caps,&foreign.resources)==XR_COMPILE_RESOURCE_OK);
+    size_t allocated=attempts;uint64_t physical=live_bytes;
+    pc_allocate_hook=selector_no_callback;pc_free_hook=selector_no_callback;
+    for(uint32_t deny=0;deny<=2;++deny) {
+        selector_head_projection=(SelectorHeadProjection){.deny=deny};
+        CHECK(effect_final_edge_payload(&context,&body,final,selected)==(deny?XR_XIR_BAD_STRUCTURE:XR_XIR_OK));
+        CHECK(selector_head_projection.calls==(deny?deny:2));
+        CHECK(selector_head_projection.function[0]==source && !selector_head_projection.dimensions[0]);
+        if(deny!=1) CHECK(selector_head_projection.function[1]==target && selector_head_projection.dimensions[1]);
+        if(!deny) CHECK(selector_head_projection.fee[0]==11+sizeof(EffectBodyFunctionHead) &&
+            selector_head_projection.fee[1]==11+sizeof(EffectBodyFunctionDimensions));
+    }
+    for(uint32_t f=0;f<effect_body_count(material);++f) for(uint32_t mode=0;mode<6;++mode) {
+        EffectBodyFunction *head=&material->functions[f];EffectBodyFunction saved=*head;
+        selector_projection_storage(head,mode);
+        CHECK(effect_final_inventory_sites(&context,material,final)==XR_XIR_BAD_STRUCTURE);
+        if(f==target) {
+            selector_head_projection=(SelectorHeadProjection){0};
+            CHECK(effect_final_edge_payload(&context,&body,final,selected)==XR_XIR_BAD_STRUCTURE);
+        }
+        *head=saved;
+        CHECK(effect_final_inventory_sites(&context,material,final)==XR_XIR_OK);
+    }
+    CHECK(effect_final_inventory_match(&foreign,material,final)==XR_XIR_BAD_STRUCTURE);
+    SelectorCurrentPoll poll={.requested=true};
+    CHECK(xr_compile_resources_begin_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_OK);
+    selector_head_projection=(SelectorHeadProjection){0};
+    CHECK(effect_final_edge_payload(&context,&body,final,selected)==XR_XIR_BUDGET && poll.calls);
+    CHECK(xr_compile_resources_end_cancel(context.resources,selector_current_poll,&poll)==XR_COMPILE_RESOURCE_CANCELLED);
+    selector_head_projection=(SelectorHeadProjection){0};
+    CHECK(effect_final_edge_payload(&context,&body,final,selected)==XR_XIR_OK);
+    CHECK(effect_final_inventory_match(&context,material,final)==XR_XIR_OK);
+    CHECK(attempts==allocated && live_bytes==physical);
+    pc_allocate_hook=NULL;pc_free_hook=NULL;xr_compile_resources_release(foreign.resources);
+    xr_xir_compile_effects_free(effects);xr_xir_compile_artifact_free(checked);pc_release(&context,baseline);
+    puts("invocation projections: source full/target dimensions, exact fees, both callback refusals, all head storage preconditions, foreign ledger, cancellation/recovery and physical0 PASS");
+}
+
 int main(void) {
+    selector_invocation_projection();
     selector_current_handoff();
     selector_complete_chain();
     selector_capture_support();
