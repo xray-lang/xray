@@ -23,7 +23,7 @@ static XrXirStatus effect_final_inventory_sites(const XrXirCompileContext *work,
     if(status!=XR_XIR_OK || !!final->sites!=!!final->site_count) return status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:status;
     EffectBodyRequest body=effect_body_owned_request(work,material);uint32_t at=0,bindings=0;
     for(uint32_t f=0;f<effect_body_count(material);++f) {
-        EffectBodyFunctionHead head={0};status=effect_body_request_head(&body,f,&head);
+        EffectBodyFunctionDimensions head={0};status=effect_body_request_dimensions(&body,f,&head);
         EffectFinalInputSelect cursor;
         if(status==XR_XIR_OK) status=effect_final_input_select_begin(&body,EFFECT_FINAL_SELECT_REFERENCE,&cursor);
         if(status!=XR_XIR_OK) return status;
@@ -35,7 +35,7 @@ static XrXirStatus effect_final_inventory_sites(const XrXirCompileContext *work,
             if(!xir_compile_work(work,1)) return XR_XIR_BUDGET;
             if(at>=final->site_count || op->immediate<0 || (uint64_t)op->immediate>=effect_body_count(material))
                 return XR_XIR_BAD_STRUCTURE;
-            EffectBodyFunctionHead target={0};status=effect_body_request_head(&body,(uint32_t)op->immediate,&target);
+            EffectBodyFunctionDimensions target={0};status=effect_body_request_dimensions(&body,(uint32_t)op->immediate,&target);
             if(status!=XR_XIR_OK) return status;
             if(!xir_compile_work(work,6)) return XR_XIR_BUDGET;
             const EffectInvocationSite *site=&final->sites[at++];

@@ -52,9 +52,10 @@ static XrXirStatus effect_final_edge_payload(const XrXirCompileContext *work,
     const EffectInvocationEdge *edge=&final->edges[selected];
     const EffectInvocationNode *from=&final->nodes[edge->caller],*to=&final->nodes[edge->target];
     if(from->root!=to->root || edge->instruction>=from->instruction_count) return XR_XIR_BAD_STRUCTURE;
-    EffectBodyFunctionHead head={0},target={0};XrXirInstruction storage;const XrXirInstruction *op=NULL;
+    EffectBodyFunctionHead head={0};EffectBodyFunctionDimensions target={0};
+    XrXirInstruction storage;const XrXirInstruction *op=NULL;
     XrXirStatus status=effect_body_request_head(body,from->body,&head);
-    if(status==XR_XIR_OK) status=effect_body_request_head(body,to->body,&target);
+    if(status==XR_XIR_OK) status=effect_body_request_dimensions(body,to->body,&target);
     if(status==XR_XIR_OK) status=effect_body_request_instruction(body,from->body,edge->instruction,&storage,&op);
     if(status!=XR_XIR_OK) return status;
     if(!op || !xir_compile_work(work,8)) return op?XR_XIR_BUDGET:XR_XIR_BAD_STRUCTURE;
