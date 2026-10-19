@@ -89,10 +89,11 @@ static int build_native_prepare(XrCompileState *state, const XrCliInvocation *in
     if (status != XTC_XIR_NATIVE_OK) {
         const XtcXirNativeOperationDiagnostic *d = xtc_xir_native_operation_diagnostic(operation);
         fprintf(stderr,
-            "XR_BUILD_6007: native transaction failed (status=%u domain=%u code=%d os=%u stage=%u pass=%u child=%d)\n",
+            "XR_BUILD_6007: native transaction failed (status=%u domain=%u code=%d os=%u stage=%u pass=%u child=%d invocation_domain=%u invocation_code=%d)\n",
             (unsigned)status, d ? (unsigned)d->domain : 0, d ? d->code : 0, d ? d->os_error : 0,
             d ? (unsigned)d->invocation.stage : 0, d ? (unsigned)d->invocation.pass : 0,
-            d ? d->invocation.exit_code : 0);
+            d ? d->invocation.exit_code : 0, d ? (unsigned)d->invocation.domain : 0,
+            d ? d->invocation.code : 0);
         result = build_operation_exit(status);
     } else {
         XtcXirNativeAdmissionDiagnostic diagnostic = {0};
