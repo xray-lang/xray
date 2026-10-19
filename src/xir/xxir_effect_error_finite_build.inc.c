@@ -64,6 +64,10 @@ typedef struct ErrorFiniteDerive {
 static XrXirStatus error_finite_derive_coordinate(const EffectErrorFiniteRead *read,
     uint32_t function,uint64_t coordinate,void *owner,bool *paused) {
     ErrorFiniteDerive *derive=owner;uint64_t result=0;uint32_t bits=0;
+    /* Earlier equations in this walk already have strictly smaller ranks.
+     * Read their current facts without waiting for another complete sweep. */
+    if(!xir_compile_work(read->work,sizeof(EffectErrorFiniteRead))) return XR_XIR_BUDGET;
+    EffectErrorFiniteRead current=*read;current.limit=derive->rank;read=&current;
     const EffectErrorFiniteRow *row=&read->proof->rows[function];
     /* Reachability is a monotone Boolean equation. A true fact from an earlier
      * rank cannot gain another bit, so construction need not derive it again.
@@ -75,24 +79,32 @@ static XrXirStatus error_finite_derive_coordinate(const EffectErrorFiniteRead *r
     }
     XrXirStatus status=error_finite_rhs(read,function,coordinate,&result,&bits);
     if(status!=XR_XIR_OK) return status;
+    uint32_t count=derive->proof->count;
     for(uint32_t bit=0;bit<bits;++bit) if(result&(UINT64_C(1)<<bit)) {
         status=error_finite_insert(read->work,derive->proof,coordinate+bit,derive->rank,derive->changed,paused);
         if(status!=XR_XIR_OK) return status;
-        if(*paused) { derive->full=true;return XR_XIR_OK; }
+        if(*paused) { derive->full=true;break; }
+    }
+    if(derive->proof->count!=count) {
+        if(derive->rank==UINT32_MAX-1 || !xir_compile_work(read->work,sizeof(derive->rank))) return XR_XIR_BUDGET;
+        ++derive->rank;
     }
     return XR_XIR_OK;
 }
 static XrXirStatus error_finite_derive(const XrXirCompileContext *work,EffectErrorFinite *proof) {
     bool changed=true;EffectErrorFiniteView current={0};
-    for(uint32_t rank=1;changed;++rank) {
-        if(rank==UINT32_MAX) return XR_XIR_BUDGET;
-        changed=false;ErrorFiniteDerive derive={proof,rank,&changed,false};
+    ErrorFiniteDerive derive={proof,1,&changed,false};
+    /* Every growing equation advances the witness rank. A complete stable
+     * sweep still closes loops and recursive calls, and the independent
+     * receiver still checks closure and strict lower-rank support. */
+    while(changed) {
+        changed=false;
         for(uint32_t f=0;f<proof->contexts;) {
             XrXirStatus status=XR_XIR_OK;
             if(!current.work) status=error_finite_view_open(work,proof,&current);
             if(status!=XR_XIR_OK) return status;
             {
-                EffectErrorFiniteRead read={proof,work,rank,&current};bool empty=false;
+                EffectErrorFiniteRead read={proof,work,derive.rank,&current};bool empty=false;
                 status=error_finite_walk(&read,f,error_finite_derive_coordinate,&derive,&empty);
             }
             if(status!=XR_XIR_OK) return status;

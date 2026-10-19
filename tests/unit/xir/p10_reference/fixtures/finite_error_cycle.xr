@@ -1,0 +1,24 @@
+enum RouteError { Left, Right }
+fn left(depth:i64)->RouteError {
+    if(depth==0) { return RouteError.Left }
+    return right(depth-1)
+}
+fn right(depth:i64)->RouteError {
+    if(depth==0) { return RouteError.Right }
+    return left(depth-1)
+}
+fn raise(first:bool)->i64 {
+    if(first) { throw left(2) }
+    throw right(2)
+}
+fn score(error:RouteError)->i64 {
+    return match(error) { RouteError.Left->13, RouteError.Right->29 }
+}
+export fn referenceAnswer()->i64 {
+    var total:i64=0
+    try { total=raise(true) }
+    catch(error:RouteError) { total=score(error) }
+    try { total=total+raise(false) }
+    catch(error:RouteError) { total=total+score(error) }
+    return total
+}
