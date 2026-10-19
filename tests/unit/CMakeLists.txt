@@ -859,6 +859,8 @@ foreach(xir_test IN ITEMS test_xir_cleanup_native test_xir_cleanup_mixed test_xi
     set_tests_properties(${xir_test} PROPERTIES LABELS "unit;xir;execution;ownership;abi")
 endforeach()
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/xir/generic_normal.cmake")
+
 if(UNIX)
     target_link_libraries(test_xir_execution PRIVATE m)
     target_link_libraries(test_xir_native PRIVATE m)
