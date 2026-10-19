@@ -37,6 +37,40 @@ static const XrXirConstraint *constraint_fact(const XrXirConstraintEnvironment *
         &environment->own_constraints[parameter-environment->parent_count];
 }
 
+/* The independent type proof has already checked ordered arguments and their
+ * declaration bounds. Phantom arguments do not acquire an Equal obligation. */
+static XrXirStatus constraint_equal_enum(const XrXirTypes *types,
+    const XrXirTypeNode *node, const XrXirCompileContext *work) {
+    if (!xir_compile_work(work, sizeof(XrXirNominalTable))) return XR_XIR_BUDGET;
+    const XrXirNominalTable *table = types ? types->nominals : NULL;
+    if (!table || node->nominal.declaration >= table->count) return XR_XIR_BAD_TYPE;
+    uint32_t kind, arity, fields, count;
+    const XrXirNominalVariant *variants;
+    if (table->declarations) {
+        if (!xir_compile_work(work, sizeof(XrXirNominalDeclaration))) return XR_XIR_BUDGET;
+        const XrXirNominalDeclaration *d = &table->declarations[node->nominal.declaration];
+        kind=d->kind; arity=d->parameter_count; fields=d->field_count;
+        count=d->variant_count; variants=d->variants;
+    } else if (table->identities) {
+        if (!xir_compile_work(work, sizeof(XrXirNominalIdentity))) return XR_XIR_BUDGET;
+        const XrXirNominalIdentity *d = &table->identities[node->nominal.declaration];
+        kind=d->kind; arity=d->arity; fields=d->field_count;
+        count=d->variant_count; variants=d->variants;
+    } else return XR_XIR_BAD_TYPE;
+    if (kind!=XR_XIR_NOMINAL_ENUM || fields || node->nominal.field_count ||
+        node->nominal.argument_count!=arity || (arity && !node->nominal.arguments) ||
+        (count && !variants)) return XR_XIR_BAD_TYPE;
+    for (uint32_t a=0;a<arity;++a) {
+        if (!xir_compile_work(work,sizeof(XrXirType))) return XR_XIR_BUDGET;
+        if (node->nominal.arguments[a]==XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
+    }
+    for (uint32_t v=0;v<count;++v) {
+        if (!xir_compile_work(work,sizeof(*variants))) return XR_XIR_BUDGET;
+        if (variants[v].field_begin || variants[v].field_count) return XR_XIR_BAD_TYPE;
+    }
+    return XR_XIR_OK;
+}
+
 static XrXirStatus constraint_equal(const XrXirConstraintEnvironment *environment,
     XrXirType type, const XrXirCompileContext *work) {
     for (;;) {
@@ -49,6 +83,8 @@ static XrXirStatus constraint_equal(const XrXirConstraintEnvironment *environmen
             return fact && (fact->markers & XR_XIR_CONSTRAINT_EQUAL) ? XR_XIR_OK : XR_XIR_BAD_TYPE;
         }
         const XrXirTypeNode *node = xr_xir_type_node(environment->types,type);
+        if (node && node->kind==XR_XIR_TYPE_NOMINAL)
+            return constraint_equal_enum(environment->types,node,work);
         if (!node || (node->kind != XR_XIR_TYPE_ARRAY && node->kind != XR_XIR_TYPE_NULLABLE)) return XR_XIR_BAD_TYPE;
         if ((uint32_t)node->element >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
             (uint32_t)node->element < XR_XIR_CONSTRUCTED_TYPE_LIMIT && (uint32_t)node->element >= id)
