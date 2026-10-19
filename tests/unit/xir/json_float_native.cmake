@@ -1,0 +1,25 @@
+set(XR_JSON_FLOAT_C "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_json_float.c")
+set(XR_JSON_FLOAT_PACKET "${CMAKE_CURRENT_BINARY_DIR}/generated/xir_json_float.chk")
+add_custom_command(OUTPUT "${XR_JSON_FLOAT_C}" "${XR_JSON_FLOAT_PACKET}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMAND $<TARGET_FILE:test_xir_json_float> "${XR_JSON_FLOAT_C}" "${XR_JSON_FLOAT_PACKET}"
+    DEPENDS test_xir_json_float VERBATIM)
+add_executable(test_xir_json_float_native "${CMAKE_CURRENT_LIST_DIR}/test_xir_json_float_native.c" "${XR_JSON_FLOAT_C}")
+target_link_libraries(test_xir_json_float_native PRIVATE xray_xir_scalar)
+foreach(float_mode IN ITEMS mixed vm)
+    add_executable(test_xir_json_float_${float_mode} "${CMAKE_CURRENT_LIST_DIR}/test_xir_json_float_mixed.c" "${XR_JSON_FLOAT_C}")
+    target_link_libraries(test_xir_json_float_${float_mode} PRIVATE xray_xir_vm)
+    target_compile_definitions(test_xir_json_float_${float_mode} PRIVATE XR_JSON_FLOAT_PACKET="${XR_JSON_FLOAT_PACKET}")
+endforeach()
+target_compile_definitions(test_xir_json_float_vm PRIVATE XR_JSON_FLOAT_VM_ONLY=1)
+foreach(float_target IN ITEMS test_xir_json_float_native test_xir_json_float_mixed test_xir_json_float_vm)
+    set_target_properties(${float_target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    if(MSVC)
+        target_compile_options(${float_target} PRIVATE /utf-8 /W4 /WX)
+    else()
+        target_compile_options(${float_target} PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME ${float_target} COMMAND ${float_target})
+    set_tests_properties(${float_target} PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+        LABELS "unit;xir;source;ctfe;json;library;ownership;numeric;native;mixed;abi")
+endforeach()
