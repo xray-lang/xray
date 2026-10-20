@@ -290,8 +290,13 @@ typedef struct Scanner {
 } Scanner;
 
 // Scanner functions
+// Scans a fragment that begins inside a larger text (an interpolation, an
+// editor prefix, an expression). A leading U+FEFF is an ordinary character.
 XR_FUNC XrCompileResourceStatus xr_compile_scanner_open(Scanner *scanner, XrCompileState *state, XrArena *arena, const char *source);
-XR_FUNC XrCompileResourceStatus xr_compile_scanner_open_with_trivia(Scanner *scanner, XrCompileState *state, XrArena *arena, const char *source, bool collect_trivia);
+// Scans a complete source text. A leading UTF-8 byte-order mark (EF BB BF) is
+// skipped: tokens, lines and columns start after it, while token pointers stay
+// in the caller's buffer, so byte offsets remain file-relative.
+XR_FUNC XrCompileResourceStatus xr_compile_scanner_open_source(Scanner *scanner, XrCompileState *state, XrArena *arena, const char *source, bool collect_trivia);
 XR_FUNC Token xr_scanner_scan(Scanner *scanner);
 
 // Try to scan regex literal when expecting expression

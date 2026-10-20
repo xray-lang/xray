@@ -114,7 +114,7 @@ static XrParseStatus parser_init(Parser *output, XrCompilerSession *session, con
         return parse_resource_status(state);
     local.type_scope = xr_parser_type_scope_new(&local, NULL);
     if (local.type_scope &&
-        xr_compile_scanner_open_with_trivia(&local.scanner, state, arena, source, trivia) == XR_COMPILE_RESOURCE_OK &&
+        xr_compile_scanner_open_source(&local.scanner, state, arena, source, trivia) == XR_COMPILE_RESOURCE_OK &&
         xr_compile_state_copy(state, output, &local, sizeof(local)) == XR_COMPILE_RESOURCE_OK)
         return XR_PARSE_OK;
     xr_compile_parser_close(&local);

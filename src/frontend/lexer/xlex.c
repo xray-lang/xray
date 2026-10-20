@@ -86,14 +86,19 @@ static int scanner_compare(Scanner *scanner, const char *left, const char *right
     return 0;
 }
 
-XrCompileResourceStatus xr_compile_scanner_open(Scanner *scanner, XrCompileState *state, XrArena *arena,
-                                        const char *source) {
-    return xr_compile_scanner_open_with_trivia(scanner, state, arena, source, false);
+/* A source file may begin with a UTF-8 byte-order mark; it carries no token. */
+static bool scanner_has_bom(Scanner *scanner, const char *source, size_t length) {
+    static const char bom[] = "\xEF\xBB\xBF";
+    if (length < 3) return false;
+    for (size_t i = 0; i < 3; ++i) {
+        char c = scanner_read(scanner, source + i);
+        if (!scanner_healthy(scanner) || c != bom[i]) return false;
+    }
+    return true;
 }
 
-XrCompileResourceStatus xr_compile_scanner_open_with_trivia(Scanner *scanner, XrCompileState *state,
-                                                    XrArena *arena, const char *source,
-                                                    bool collect_trivia) {
+static XrCompileResourceStatus scanner_open(Scanner *scanner, XrCompileState *state, XrArena *arena,
+                                            const char *source, bool collect_trivia, bool whole_source) {
     if (!scanner || !source || !xr_compiler_arena_matches_state(arena, state))
         return xr_compile_state_fail(state, XR_COMPILE_RESOURCE_BAD_ARGUMENT);
     size_t length = 0;
@@ -103,16 +108,21 @@ XrCompileResourceStatus xr_compile_scanner_open_with_trivia(Scanner *scanner, Xr
     Scanner local = {0};
     local.state = state;
     local.arena = arena;
-    local.source = local.start = local.current = local.line_start = local.start_line_start = source;
     local.end = source + length;
     local.line = local.start_line = 1;
     local.collect_trivia = collect_trivia;
     XrUtf8ScanResult scan;
     if (!xr_utf8_scan_strict_read((const uint8_t *) source, length, scanner_read_utf8, state, &scan))
         return xr_compile_state_status(state);
+    /* Skipping the mark moves the scanner's whole view: diagnostics measure
+     * columns and print snippets as if the file had no BOM. */
+    const char *text = source;
+    if (whole_source && scanner_has_bom(&local, source, length)) text = source + 3;
+    if (!scanner_healthy(&local)) return xr_compile_state_status(state);
+    local.source = local.start = local.current = local.line_start = local.start_line_start = text;
     if (scan.error != XR_UTF8_OK) {
         const char *error_start = source + scan.byte_offset;
-        for (const char *p = source; p < error_start; ++p) {
+        for (const char *p = text; p < error_start; ++p) {
             char c = scanner_read(&local, p);
             if (!scanner_healthy(&local)) return xr_compile_state_status(state);
             if (c == '\n') { ++local.line; local.line_start = p + 1; }
@@ -124,6 +134,17 @@ XrCompileResourceStatus xr_compile_scanner_open_with_trivia(Scanner *scanner, Xr
         local.pending_error = "source must be valid UTF-8";
     }
     return xr_compile_state_copy(state, scanner, &local, sizeof(local));
+}
+
+XrCompileResourceStatus xr_compile_scanner_open(Scanner *scanner, XrCompileState *state, XrArena *arena,
+                                        const char *source) {
+    return scanner_open(scanner, state, arena, source, false, false);
+}
+
+XrCompileResourceStatus xr_compile_scanner_open_source(Scanner *scanner, XrCompileState *state,
+                                               XrArena *arena, const char *source,
+                                               bool collect_trivia) {
+    return scanner_open(scanner, state, arena, source, collect_trivia, true);
 }
 
 // Capture the start position of a new token. Must be called once per token,

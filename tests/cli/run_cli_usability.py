@@ -1,4 +1,4 @@
-"""First-use regressions of the public CLI: default stdlib discovery.
+"""First-use regressions of the public CLI: default stdlib discovery and BOM sources.
 
 The executable under test is the build-tree binary. With --source-tree-stdlib it
 is an uninstalled build that falls back to that checkout stdlib; without it the
@@ -11,6 +11,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+BOM = b'\xef\xbb\xbf'
 HINT = b'  hint: set XRAY_STDLIB_PATH to the standard library directory\n'
 
 
@@ -27,6 +28,7 @@ def main() -> int:
     output.mkdir(parents=True)
     base_env = {key: value for key, value in os.environ.items() if key != 'XRAY_STDLIB_PATH'}
     base_env['NO_COLOR'] = '1'
+    stdlib_env = dict(base_env, XRAY_STDLIB_PATH=str(root / 'stdlib'))
     passed = 0
 
     def run(name, command, cwd, env, expected):
@@ -71,7 +73,31 @@ def main() -> int:
                  b'  standard library locations tried:\n    ' + str(missing).encode() + b'\n' + HINT))
     assert not (work / 'unused.c').exists()
 
-    print(f'CLI usability: {passed} commands, stdlib discovery PASS')
+    # A leading UTF-8 BOM is skipped by run and by build -c; columns exclude it.
+    bom = output / 'bom'
+    bom.mkdir()
+    program = b'print("bom")\n'
+    source = bom / 'main.xr'
+    source.write_bytes(BOM + program)
+    run('bom-run', [binary, 'run', source], bom, stdlib_env, (0, b'bom\n', b''))
+    # The same path with and without the mark must project identical C.
+    for name, text in (('bom', BOM + program), ('plain', program)):
+        source.write_bytes(text)
+        published = bom / f'{name}.c'
+        run(f'{name}-build-c', [binary, 'build', '-c', source, '-o', published], bom, stdlib_env,
+            (0, f'Generated: {published}\n'.encode(), b''))
+    assert (bom / 'bom.c').read_bytes() == (bom / 'plain.c').read_bytes()
+    located = bom / 'located.xr'
+    located.write_bytes(BOM + b'var value = missing_symbol\n')
+    run('bom-column', [binary, 'run', located], bom, stdlib_env,
+        (1, b'', str(located).encode() + b':1:13: error: name is not an initialized value\n'))
+    # Only the leading mark is a BOM; U+FEFF later in the file is not skipped.
+    interior = bom / 'interior.xr'
+    interior.write_bytes(b'print(1)\n' + BOM + b'print(2)\n')
+    rejected = run('bom-interior', [binary, 'run', interior], bom, stdlib_env, None)
+    assert rejected.returncode == 1 and rejected.stdout == b'' and b':2:1: error:' in rejected.stderr, rejected
+
+    print(f'CLI usability: {passed} commands, stdlib discovery and BOM sources PASS')
     return 0
 
 
