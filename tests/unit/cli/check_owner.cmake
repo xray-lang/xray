@@ -5,7 +5,7 @@ foreach(target check_owner_driver check_owner_injected)
     add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/check_owner/check_owner_driver.c"
         "${PROJECT_SOURCE_DIR}/src/app/cli/xcli_spec.c"
         "${PROJECT_SOURCE_DIR}/src/app/cli/xcli_diag.c")
-    target_link_libraries(${target} PRIVATE xray_source_compile bcrypt)
+    target_link_libraries(${target} PRIVATE xray_source_compile xray_xir_runtime_host bcrypt)
     target_include_directories(${target} PRIVATE "${PROJECT_SOURCE_DIR}/src" "${PROJECT_SOURCE_DIR}/include")
     target_compile_definitions(${target} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
     set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
