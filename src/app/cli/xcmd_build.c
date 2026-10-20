@@ -118,8 +118,9 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     int result=XR_CLI_EXIT_FAIL;
     XrSourceCompileStatus source=xr_source_paths(resources,input,&paths,&path_diagnostic);
     if (source!=XR_SOURCE_COMPILE_OK) {
-        fprintf(stderr,"XR_BUILD_6003: path lookup failed (stage=%u status=%s io=%u)\n",
-            (unsigned)path_diagnostic.stage,xr_source_compile_status_name(source),(unsigned)path_diagnostic.io_status);
+        char text[4096];
+        xr_source_paths_diagnostic_format(&path_diagnostic,text,sizeof(text));
+        fprintf(stderr,"XR_BUILD_6003: %s\n",text);
         result=build_source_exit(source); goto cleanup;
     }
     XrSourceCompileRequest request={&context,paths.entry,paths.stdlib,NULL,
@@ -168,7 +169,7 @@ cleanup:
     xr_compile_native_projection_owner_free(projection);
     xr_xir_compile_source_product_free(product);
     xr_source_compile_diagnostic_free(&diagnostic);
-    xr_source_paths_free(&paths);
+    xr_source_paths_free(&paths);xr_source_paths_diagnostic_free(&path_diagnostic);
     xr_compile_state_release(state);xr_compile_resources_release(resources);
     bool published=publication && xtc_xir_publication_diagnostic(publication)->published;
     int closed=build_publication_close(&publication);

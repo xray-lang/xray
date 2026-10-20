@@ -12,11 +12,14 @@
  */
 #include "xsource_compile.h"
 #include "xsource_authority.h"
+#include "xsource_paths.h"
 #include "../base/xfileio.h"
 #include "../base/xio_policy.inc.h"
 #include "../os/os_fs.h"
 #include "../xir/xxir_library_catalog.h"
 #include "../xir/xxir_stdlib_internal.h"
+#include <stdarg.h>
+#include <stdio.h>
 
 XR_FUNC XrCompileResourceLimits xr_source_compile_default_resource_limits(void) {
     return (XrCompileResourceLimits){UINT64_C(1) << 30, UINT64_C(256) << 20, UINT64_C(8) << 30};
@@ -221,6 +224,36 @@ XR_FUNC bool xr_source_compile_diagnostic_format(
     if (source->message[0] && written > 0 && (size_t)written < size)
         snprintf(out + written, size - (size_t)written, ": %s", source->message);
     return false;
+}
+static void paths_append(char *out, size_t size, size_t *used, const char *format, ...)
+    XR_PRINTF_FMT(4, 5);
+static void paths_append(char *out, size_t size, size_t *used, const char *format, ...) {
+    if (*used + 1 >= size) return;
+    va_list arguments;
+    va_start(arguments, format);
+    int written = vsnprintf(out + *used, size - *used, format, arguments);
+    va_end(arguments);
+    if (written < 0) { out[*used] = '\0'; return; }
+    *used = (size_t)written < size - *used ? *used + (size_t)written : size - 1;
+}
+/* Lives beside the build formatter so the path selector itself carries no
+ * dependency on the compile status vocabulary. */
+XR_FUNC void xr_source_paths_diagnostic_format(const XrSourcePathsDiagnostic *diagnostic,
+    char *out, size_t size) {
+    if (!out || !size) return;
+    out[0] = '\0';
+    if (!diagnostic) return;
+    size_t used = 0;
+    paths_append(out, size, &used, "source path lookup failed (stage=%u status=%s io=%u)",
+        (unsigned)diagnostic->stage, xr_source_compile_status_name(diagnostic->status),
+        (unsigned)diagnostic->io_status);
+    if (diagnostic->stage < XR_SOURCE_PATH_ENVIRONMENT) return;
+    uint32_t count = diagnostic->candidate_count < XR_SOURCE_STDLIB_CANDIDATE_LIMIT ?
+        diagnostic->candidate_count : XR_SOURCE_STDLIB_CANDIDATE_LIMIT;
+    if (count) paths_append(out, size, &used, "\n  standard library locations tried:");
+    for (uint32_t i = 0; i < count; ++i)
+        if (diagnostic->candidates[i]) paths_append(out, size, &used, "\n    %s", diagnostic->candidates[i]);
+    paths_append(out, size, &used, "\n  hint: set XRAY_STDLIB_PATH to the standard library directory");
 }
 XR_FUNC const char *xr_source_compile_status_name(XrSourceCompileStatus status) {
     switch (status) {

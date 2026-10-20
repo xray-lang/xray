@@ -169,12 +169,14 @@ static void check_semantic(CheckWork *work, const char *path) {
                     path, (unsigned)diagnostic.stage, xr_source_compile_status_name(status), source->message);
         }
     } else {
-        fprintf(stderr, "xray check: %s: path lookup failed (stage=%u status=%s io=%u)\n", path,
-            (unsigned)path_diagnostic.stage, xr_source_compile_status_name(status), (unsigned)path_diagnostic.io_status);
+        char text[4096];
+        xr_source_paths_diagnostic_format(&path_diagnostic, text, sizeof(text));
+        fprintf(stderr, "xray check: %s: %s\n", path, text);
     }
     xr_xir_compile_source_product_free(product);
     xr_source_compile_diagnostic_free(&diagnostic);
     xr_source_paths_free(&paths);
+    xr_source_paths_diagnostic_free(&path_diagnostic);
     if (status != XR_SOURCE_COMPILE_OK) {
         bool internal = status == XR_SOURCE_COMPILE_OUT_OF_MEMORY || status == XR_SOURCE_COMPILE_BAD_ARGUMENT;
         check_failure(work, internal ? XR_CLI_EXIT_INTERNAL : XR_CLI_EXIT_FAIL,

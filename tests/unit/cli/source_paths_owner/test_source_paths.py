@@ -1,4 +1,8 @@
-"""Private subprocess environments exercise the public selection order."""
+"""Private subprocess environments exercise the public selection order.
+
+An optional second argument names the checkout stdlib that CMake injected as
+the last default candidate. Without it the binary is a package configuration
+and an empty layout must fail after naming every location it tried."""
 from pathlib import Path
 import os
 import shutil
@@ -7,6 +11,7 @@ import sys
 import tempfile
 
 binary = Path(sys.argv[1]).resolve(strict=True)
+source_tree = Path(sys.argv[2]) if len(sys.argv) > 2 else None
 with tempfile.TemporaryDirectory(prefix="xray-source-paths-") as temporary:
     base = Path(temporary)
     cwd = base / "工作 cwd"
@@ -17,7 +22,8 @@ with tempfile.TemporaryDirectory(prefix="xray-source-paths-") as temporary:
     outside.mkdir()
     value = "中文 😀 value"
     count = 0
-    def run(layout, mode, override, expected, origin=0, status=0, env_value=value, source="入口.xr"):
+    def run(layout, mode, override, expected, origin=0, status=0, env_value=value, source="入口.xr",
+            tried=lambda home: []):
         global count
         count += 1
         home = base / f"layout{count}"
@@ -45,22 +51,35 @@ with tempfile.TemporaryDirectory(prefix="xray-source-paths-") as temporary:
         # Fixed independent expectation: source-file rejection cannot block the
         # entry-independent real stdlib selector. The last two cases have a
         # valid explicit stdlib override and deliberately invalid source files.
-        selected_expected = override if source in ("missing.xr", ".") else expected
-        selected_status = 0 if source in ("missing.xr", ".") else status
+        entry_rejected = source in ("missing.xr", ".")
+        selected_expected = override if entry_rejected else expected
+        selected_status = 0 if entry_rejected else status
         command = [str(executable), mode, source, str(expected or ""), str(origin), str(status), env_value or "", str(executable), str(selected_expected or ""), str(selected_status)]
         result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, timeout=100)
         print(f"case={count} layout={layout} mode={mode} status={status}")
-        print(result.stdout.decode("utf-8", errors="strict"), end="")
+        stdout = result.stdout.decode("utf-8", errors="strict")
+        print(stdout, end="")
         if result.returncode:
             raise AssertionError(f"{command!r}\n{result.stderr.decode('utf-8', errors='replace')}")
+        # A failed selection owns exactly the rejected spellings, in probe order.
+        locations = [] if entry_rejected else [str(path) for path in tried(home)]
+        lines = stdout.splitlines()
+        for prefix in ("candidate=", "stdlib-candidate="):
+            reported = [line[len(prefix):] for line in lines if line.startswith(prefix)]
+            assert reported == locations, (prefix, reported, locations)
     run("none", "matrix", outside, outside)
     run("development", "matrix", None, None, 1)
     run("installed", "normal", "", None, 2, env_value="")
+    if source_tree:
+        run("none", "matrix", None, source_tree, 4)
+    else:
+        run("none", "normal", None, None, status=2, tried=lambda home: [
+            home / "stdlib", home / "lib" / "xray" / "stdlib", cwd / "stdlib"])
     (cwd / "stdlib").mkdir()
     run("none", "absent", None, cwd / "stdlib", 3, env_value=None)
-    run("none", "normal", base / "missing", None, status=2)
-    run("none", "normal", entry, None, status=3)
-    run("blocked", "normal", None, None, status=3)
+    run("none", "normal", base / "missing", None, status=2, tried=lambda home: [base / "missing"])
+    run("none", "normal", entry, None, status=3, tried=lambda home: [entry])
+    run("blocked", "normal", None, None, status=3, tried=lambda home: [home / "stdlib"])
     run("none", "normal", outside, None, status=2, source="missing.xr")
     run("none", "normal", outside, None, status=3, source=".")
     print(f"{count} independent real path/environment cases PASS")

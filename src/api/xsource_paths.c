@@ -23,8 +23,18 @@ static XrSourceCompileStatus paths_status(XrOsIoStatus status) {
     default: return XR_SOURCE_COMPILE_IO;
     }
 }
-static XrOsIoStatus paths_directory(const XrOsIoPolicy *policy, const char *candidate,
-    char **output, bool *wrong_kind) {
+static char *paths_copy(XrIoContext *io, const char *text) {
+    size_t length = 0;
+    if (!io_length(io, text, &length)) return NULL;
+    char *copy = io_alloc(io, length + 1);
+    if (copy && !io_copy(io, copy, text, length + 1)) { io_free(io, copy); copy = NULL; }
+    return copy;
+}
+/* Probes one owned directory candidate and consumes it. Selection moves its
+ * absolute spelling to OUTPUT. Rejection moves the most precise spelling,
+ * absolute when the platform can form one, into the diagnostic record. */
+static XrOsIoStatus paths_probe(const XrOsIoPolicy *policy, char *candidate, char **output,
+    XrSourcePathsDiagnostic *detail, bool *wrong_kind) {
     char *absolute = NULL;
     XrOsIoStatus status = xr_realpath_owned(policy, candidate, &absolute);
     XrFsStat info = {0};
@@ -32,16 +42,39 @@ static XrOsIoStatus paths_directory(const XrOsIoPolicy *policy, const char *cand
     if (status == XR_OS_IO_OK && info.kind != XR_FS_DIR) {
         *wrong_kind = true; status = XR_OS_IO_BAD_ARGUMENT;
     }
-    if (status == XR_OS_IO_OK) *output = absolute;
-    else policy->free(policy->context, absolute);
+    if (absolute) { policy->free(policy->context, candidate); candidate = absolute; }
+    if (status == XR_OS_IO_OK) *output = candidate;
+    else if (detail->candidate_count < XR_SOURCE_STDLIB_CANDIDATE_LIMIT)
+        detail->candidates[detail->candidate_count++] = candidate;
+    else policy->free(policy->context, candidate);
     return status;
 }
+static void paths_release_candidates(XrSourcePathsDiagnostic *detail) {
+    for (uint32_t i = 0; i < detail->candidate_count && i < XR_SOURCE_STDLIB_CANDIDATE_LIMIT; ++i) {
+        xr_compile_resources_free(detail->candidates[i]); detail->candidates[i] = NULL;
+    }
+    detail->candidate_count = 0;
+}
+typedef struct PathsLayout {
+    XrStdlibOrigin origin;
+    bool executable_relative;
+    const char *spelling;
+} PathsLayout;
+static const PathsLayout paths_layouts[] = {
+    {XR_STDLIB_EXECUTABLE_DEVELOPMENT, true, "../stdlib"},
+    {XR_STDLIB_EXECUTABLE_INSTALLED, true, "../lib/xray/stdlib"},
+    {XR_STDLIB_WORKING_DIRECTORY, false, "stdlib"},
+#ifdef XR_SOURCE_TREE_STDLIB
+    /* Injected by CMake for uninstalled builds only; never set for a package. */
+    {XR_STDLIB_SOURCE_TREE, false, XR_SOURCE_TREE_STDLIB},
+#endif
+};
 /* File and text consumers share this exact real process/environment selector.
  * It neither accepts nor probes a source entry. Authority admission remains the
  * caller's explicit file/text operation. Only NOT_FOUND permits a fallback. */
 static void paths_select_stdlib(XrIoContext *io,char **output,XrStdlibOrigin *origin,
     XrSourcePathsDiagnostic *detail,bool *wrong_kind) {
-    char *override=NULL,*executable=NULL,*directory=NULL,*candidate=NULL;
+    char *override=NULL,*executable=NULL,*directory=NULL;
     detail->stage = XR_SOURCE_PATH_ENVIRONMENT;
     XrOsIoStatus queried = xr_os_io_environment_get(io->policy, "XRAY_STDLIB_PATH", &override);
     if (queried != XR_OS_IO_NOT_FOUND) io_status(io, queried);
@@ -49,7 +82,8 @@ static void paths_select_stdlib(XrIoContext *io,char **output,XrStdlibOrigin *or
     if (override && !io_work(io, 1)) goto cleanup;
     detail->stage = XR_SOURCE_PATH_STDLIB;
     if (override && override[0]) {
-        io_status(io, paths_directory(io->policy, override, output, wrong_kind));
+        char *candidate = override; override = NULL;
+        io_status(io, paths_probe(io->policy, candidate, output, detail, wrong_kind));
         goto cleanup;
     }
     detail->stage = XR_SOURCE_PATH_EXECUTABLE;
@@ -57,23 +91,27 @@ static void paths_select_stdlib(XrIoContext *io,char **output,XrStdlibOrigin *or
     if (io->status == XR_OS_IO_OK) io_status(io, xr_path_dirname_owned(io->policy, executable, &directory));
     if (io->status != XR_OS_IO_OK) goto cleanup;
     detail->stage = XR_SOURCE_PATH_STDLIB;
-    static const char *const suffixes[] = {"../stdlib", "../lib/xray/stdlib"};
-    for (unsigned i = 0; i < 2 && io->status == XR_OS_IO_OK; ++i) {
-        io_status(io, xr_path_join_owned(io->policy, directory, suffixes[i], &candidate));
-        if (io->status != XR_OS_IO_OK) break;
-        queried = paths_directory(io->policy, candidate, output, wrong_kind);
-        io_free(io, candidate); candidate = NULL;
-        if (queried == XR_OS_IO_NOT_FOUND) continue;
-        io_status(io, queried);
-        *origin = i ? XR_STDLIB_EXECUTABLE_INSTALLED : XR_STDLIB_EXECUTABLE_DEVELOPMENT;
+    for (size_t i = 0; i < sizeof(paths_layouts) / sizeof(paths_layouts[0]); ++i) {
+        const PathsLayout *layout = &paths_layouts[i];
+        char *candidate = NULL;
+        if (layout->executable_relative)
+            io_status(io, xr_path_join_owned(io->policy, directory, layout->spelling, &candidate));
+        else candidate = paths_copy(io, layout->spelling);
+        if (io->status != XR_OS_IO_OK) goto cleanup;
+        XrOsIoStatus probed = paths_probe(io->policy, candidate, output, detail, wrong_kind);
+        if (probed == XR_OS_IO_NOT_FOUND) continue;
+        io_status(io, probed);
+        *origin = layout->origin;
         goto cleanup;
     }
-    if (io->status == XR_OS_IO_OK) {
-        *origin = XR_STDLIB_WORKING_DIRECTORY;
-        io_status(io, paths_directory(io->policy, "stdlib", output, wrong_kind));
-    }
+    io_status(io, XR_OS_IO_NOT_FOUND);
 cleanup:
-    io_free(io,candidate);io_free(io,directory);io_free(io,executable);io_free(io,override);
+    io_free(io,directory);io_free(io,executable);io_free(io,override);
+}
+/* Only a failure reported to a caller keeps its probe record. */
+static void paths_publish(XrSourcePathsDiagnostic *detail, XrSourcePathsDiagnostic *diagnostic) {
+    if (detail->status == XR_SOURCE_COMPILE_OK || !diagnostic) paths_release_candidates(detail);
+    if (diagnostic) *diagnostic = *detail;
 }
 XR_FUNC void xr_source_stdlib_path_free(XrStdlibPath *path) {
     if(!path)return;
@@ -81,8 +119,9 @@ XR_FUNC void xr_source_stdlib_path_free(XrStdlibPath *path) {
 }
 XR_FUNC XrSourceCompileStatus xr_source_stdlib_path(XrCompileResources *resources,
     XrStdlibPath *output,XrSourcePathsDiagnostic *diagnostic) {
-    XrSourcePathsDiagnostic detail={XR_SOURCE_COMPILE_BAD_ARGUMENT,
-        XR_SOURCE_PATH_INPUT,XR_OS_IO_BAD_ARGUMENT};
+    XrSourcePathsDiagnostic detail={.status=XR_SOURCE_COMPILE_BAD_ARGUMENT,
+        .stage=XR_SOURCE_PATH_INPUT,.io_status=XR_OS_IO_BAD_ARGUMENT};
+    if(diagnostic&&diagnostic->candidate_count)return XR_SOURCE_COMPILE_BAD_ARGUMENT;
     if(!resources||!output||output->path||output->origin)goto done;
     XrOsIoPolicy policy=xr_compile_io_policy(resources);XrIoContext io={&policy,XR_OS_IO_OK};
     XrStdlibPath owned={0};bool wrong_kind=false;
@@ -92,7 +131,7 @@ XR_FUNC XrSourceCompileStatus xr_source_stdlib_path(XrCompileResources *resource
     if(detail.status==XR_SOURCE_COMPILE_OK)*output=owned;
     else xr_source_stdlib_path_free(&owned);
 done:
-    if(diagnostic)*diagnostic=detail;
+    paths_publish(&detail,diagnostic);
     return detail.status;
 }
 XR_FUNC void xr_source_paths_free(XrSourcePaths *paths) {
@@ -102,8 +141,9 @@ XR_FUNC void xr_source_paths_free(XrSourcePaths *paths) {
 }
 XR_FUNC XrSourceCompileStatus xr_source_paths(XrCompileResources *resources,
     const char *entry_spelling, XrSourcePaths *output, XrSourcePathsDiagnostic *diagnostic) {
-    XrSourcePathsDiagnostic detail = {XR_SOURCE_COMPILE_BAD_ARGUMENT,
-        XR_SOURCE_PATH_INPUT, XR_OS_IO_BAD_ARGUMENT};
+    XrSourcePathsDiagnostic detail = {.status = XR_SOURCE_COMPILE_BAD_ARGUMENT,
+        .stage = XR_SOURCE_PATH_INPUT, .io_status = XR_OS_IO_BAD_ARGUMENT};
+    if (diagnostic && diagnostic->candidate_count) return XR_SOURCE_COMPILE_BAD_ARGUMENT;
     if (!resources || !entry_spelling || !output || output->entry || output->stdlib || output->stdlib_origin)
         goto done;
     XrOsIoPolicy policy = xr_compile_io_policy(resources);
@@ -129,6 +169,11 @@ cleanup:
     if (detail.status == XR_SOURCE_COMPILE_OK) *output = owned;
     else xr_source_paths_free(&owned);
 done:
-    if (diagnostic) *diagnostic = detail;
+    paths_publish(&detail, diagnostic);
     return detail.status;
+}
+XR_FUNC void xr_source_paths_diagnostic_free(XrSourcePathsDiagnostic *diagnostic) {
+    if (!diagnostic) return;
+    paths_release_candidates(diagnostic);
+    memset(diagnostic, 0, sizeof(*diagnostic));
 }

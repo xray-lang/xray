@@ -83,7 +83,11 @@ static int dap_run(bool tcp,uint32_t port,XrCompileResources *resources,DapHost 
     XrXirDomain *domain=NULL;XdapAdapter *adapter=NULL;XdapDetached *detached=NULL;DapEndpoint io={0};
     XrXirOutputSink detached_sink={XR_XIR_CALL_ABI_VERSION,0,xdap_stdio_host_output,NULL,1048576};
     int result=XR_CLI_EXIT_INTERNAL;
-    if (xr_source_stdlib_path(resources,&stdlib,&path_diagnostic)!=XR_SOURCE_COMPILE_OK) goto done;
+    if (xr_source_stdlib_path(resources,&stdlib,&path_diagnostic)!=XR_SOURCE_COMPILE_OK) {
+        char text[4096];
+        xr_source_paths_diagnostic_format(&path_diagnostic,text,sizeof(text));
+        fprintf(stderr,"DAP: %s\n",text);goto done;
+    }
     XrSourceCompilerConfig compiler_config={{resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},stdlib.path,xr_source_compile_default_manifest_limits()};
     if (xr_source_compiler_new(&compiler_config,&compiler,&diagnostic)!=XR_SOURCE_COMPILE_OK) goto done;
@@ -122,6 +126,7 @@ done:
     if (xdap_detached_free(detached)!=XR_XIR_CALL_READY) result=XR_CLI_EXIT_FAIL;
     xr_source_compiler_free(compiler);xr_source_compile_diagnostic_free(&diagnostic);
     xdap_stdio_free(io.stdio);xdap_tcp_free(io.tcp);xr_xir_domain_drop(domain);xr_source_stdlib_path_free(&stdlib);
+    xr_source_paths_diagnostic_free(&path_diagnostic);
     if (result!=XR_CLI_EXIT_OK) fputs("DAP: protocol, source admission, resource or cleanup failure\n",stderr);
     return result;
 }

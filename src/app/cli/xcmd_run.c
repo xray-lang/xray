@@ -91,9 +91,9 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     uint32_t entry = 0;
     int result = XR_CLI_EXIT_FAIL;
     if (status != XR_SOURCE_COMPILE_OK) {
-        fprintf(stderr, "XR_RUN_6001: source path lookup failed (stage=%u status=%s io=%u)\n",
-            (unsigned)path_diagnostic.stage, xr_source_compile_status_name(status),
-            (unsigned)path_diagnostic.io_status);
+        char text[4096];
+        xr_source_paths_diagnostic_format(&path_diagnostic, text, sizeof(text));
+        fprintf(stderr, "XR_RUN_6001: %s\n", text);
         result = source_exit(status);
     } else {
         XrSourceCompileRequest request = {&context, paths.entry, paths.stdlib, NULL,
@@ -116,6 +116,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         }
     }
     xr_source_paths_free(&paths);
+    xr_source_paths_diagnostic_free(&path_diagnostic);
     xray_source_program_free(owned);
     xr_xir_compile_source_product_free(product);
     xr_source_compile_diagnostic_free(&diagnostic);

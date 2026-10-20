@@ -56,14 +56,14 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
         status = xr_source_compile_build(&request, &product, &diagnostic);
     }
     if (status != XR_SOURCE_COMPILE_OK) {
-        char text[1024] = {0};
-        if (diagnostic.status != XR_SOURCE_COMPILE_OK) {
+        char text[4096] = {0};
+        if (diagnostic.status != XR_SOURCE_COMPILE_OK)
             (void)xr_source_compile_diagnostic_format(&diagnostic, text, sizeof(text));
-            xr_cli_error("deps", "%s", text);
-        } else xr_cli_error("deps", "source path lookup failed: %s",
-            xr_source_compile_status_name(status));
+        else xr_source_paths_diagnostic_format(&path_diagnostic, text, sizeof(text));
+        xr_cli_error("deps", "%s", text);
     }
     xr_source_paths_free(&paths);
+    xr_source_paths_diagnostic_free(&path_diagnostic);
     xr_source_compile_diagnostic_free(&diagnostic);
     xr_compile_resources_release(resources);
     const XrXirSourceDependencies *bundle = xr_xir_compile_source_product_dependencies(product);

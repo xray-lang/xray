@@ -88,6 +88,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER=clang \
           -DXRAY_BUNDLE_ZIG=OFF \
+          -DXRAY_SOURCE_TREE_STDLIB=OFF \
           "${extra[@]}"
 
     - name: Configure (Windows)
@@ -95,7 +96,7 @@ jobs:
       shell: pwsh
       run: |
         cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
-          -DXRAY_BUNDLE_ZIG=OFF
+          -DXRAY_BUNDLE_ZIG=OFF -DXRAY_SOURCE_TREE_STDLIB=OFF
 
     # Ninja is single-config: build type comes from configure, binaries land in
     # build/ on every platform.

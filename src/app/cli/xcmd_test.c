@@ -446,8 +446,7 @@ static void run_test_file(const char *filepath, const XrTestConfig *config,
     XrSourceCompileStatus status =
         xr_source_paths(resources, filepath, &paths, &path_diagnostic);
     if (status != XR_SOURCE_COMPILE_OK) {
-        snprintf(error, sizeof(error), "source path lookup failed (stage=%u status=%s)",
-                 (unsigned) path_diagnostic.stage, xr_source_compile_status_name(status));
+        xr_source_paths_diagnostic_format(&path_diagnostic, error, sizeof(error));
         fail_file(result, error);
         goto release;
     }
@@ -509,6 +508,7 @@ release:
     xr_xir_compile_source_product_free(product);
     xr_source_compile_diagnostic_free(&diagnostic);
     xr_source_paths_free(&paths);
+    xr_source_paths_diagnostic_free(&path_diagnostic);
     xr_compile_resources_release(resources);
 done:
 #endif

@@ -14,6 +14,12 @@ if(MSVC)
 else()
     target_compile_options(xray_source_compile PRIVATE -Wall -Wextra -Werror -pedantic)
 endif()
+# The last default stdlib candidate of an uninstalled build is this checkout.
+# Release packages configure it OFF so no executable names a build machine.
+if(XRAY_SOURCE_TREE_STDLIB)
+    target_compile_definitions(xray_source_compile PRIVATE
+        XR_SOURCE_TREE_STDLIB="${PROJECT_SOURCE_DIR}/stdlib")
+endif()
 
 # The installed header exposes opaque compiler/Program/Call/result owners.
 add_library(xray_source_api STATIC ${CMAKE_CURRENT_LIST_DIR}/xsource_api.c

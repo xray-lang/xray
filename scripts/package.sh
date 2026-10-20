@@ -51,7 +51,13 @@ echo ""
 # 确保已编译
 if [ ! -f "${BUILD_DIR}/xray" ]; then
     echo "错误: 请先编译 xray"
-    echo "  cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j4"
+    echo "  cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DXRAY_SOURCE_TREE_STDLIB=OFF && cmake --build build"
+    exit 1
+fi
+
+# 安装包不得携带本机源码树的 stdlib 路径
+if ! grep -q '^XRAY_SOURCE_TREE_STDLIB:BOOL=OFF$' "${BUILD_DIR}/CMakeCache.txt" 2>/dev/null; then
+    echo "错误: 打包构建必须以 -DXRAY_SOURCE_TREE_STDLIB=OFF 配置"
     exit 1
 fi
 

@@ -830,6 +830,8 @@ option(XR_BUILD_DAP "Build DAP debug adapter" ON)
 option(XR_BUILD_MCP "Build MCP server for AI assistants" ON)
 option(XRAY_BUNDLE_ZIG "Install a Zig executable with Xray for AOT cross targets" OFF)
 set(XRAY_BUNDLED_ZIG "" CACHE FILEPATH "Zig executable to install when XRAY_BUNDLE_ZIG=ON")
+option(XRAY_SOURCE_TREE_STDLIB
+    "Let an uninstalled build fall back to this checkout's stdlib; release packages turn it OFF" ON)
 
 # Stdlib modular options (for security control / binary size)
 option(XR_STDLIB_FULL       "Full stdlib (ignores group options below)" ON)
@@ -2650,6 +2652,7 @@ if(BUILD_TESTS)
 
     # Qualify the current public CLI and its exact installed Core/SDK payload.
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/cli_usability.cmake")
 
     if(XRAY_WINDOWS_ASAN_RUNTIME_DIR)
         add_test(

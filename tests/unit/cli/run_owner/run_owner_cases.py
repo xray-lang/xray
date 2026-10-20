@@ -86,7 +86,9 @@ def main():
     for name, stdlib, status, io in [('stdlib-missing', output/'missing-stdlib', b'not-found', b'2'),
                                      ('stdlib-file', entry, b'invalid', b'5')]:
         bad_env = dict(env, XRAY_STDLIB_PATH=str(stdlib))
-        run(name, [entry], (1, b'', b'XR_RUN_6001: source path lookup failed (stage=4 status='+status+b' io='+io+b')\n'),
+        run(name, [entry], (1, b'', b'XR_RUN_6001: source path lookup failed (stage=4 status='+status+b' io='+io+b')\n'
+                                    b'  standard library locations tried:\n    ' + str(stdlib).encode() + b'\n'
+                                    b'  hint: set XRAY_STDLIB_PATH to the standard library directory\n'),
             environment=bad_env)
     rejected = {
         'syntax': 'fn broken( {\n',
