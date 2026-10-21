@@ -15,7 +15,7 @@
 static XrCompileResourceStats recorded;
 static unsigned ledger_count;
 XR_FUNC XrCompileResourceStatus xr_compile_resources_new(const XrCompileResourceLimits *limits,XrCompileResources **out) {
-    CHECK(limits->allocated_bytes==UINT64_C(1073741824) && limits->live_bytes==UINT64_C(268435456) && limits->work==UINT64_C(8589934592));
+    CHECK(limits->allocated_bytes==UINT64_MAX && limits->live_bytes==UINT64_MAX && limits->work==UINT64_MAX);
     ++ledger_count; XrCompileResourceLimits bound=*limits; const char *value;
     if((value=getenv("XR_FMT_TEST_WORK")))bound.work=strtoull(value,NULL,10);
     if((value=getenv("XR_FMT_TEST_ALLOCATED")))bound.allocated_bytes=strtoull(value,NULL,10);

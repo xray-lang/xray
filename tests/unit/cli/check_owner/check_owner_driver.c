@@ -36,7 +36,7 @@ static size_t phases[3];
 static XrCompileResources *original;
 static XrCompileResourceStatus observed_new(const XrCompileResourceLimits *limits,XrCompileResources **output) {
     ++resource_calls;phases[0]=attempts;
-    CHECK(limits->allocated_bytes==(UINT64_C(1)<<30) && limits->live_bytes==(UINT64_C(256)<<20) && limits->work==(UINT64_C(8)<<30));
+    CHECK(limits->allocated_bytes==UINT64_MAX && limits->live_bytes==UINT64_MAX && limits->work==UINT64_MAX);
     XrCompileResourceStatus status=xr_compile_resources_new(overridden.work?&overridden:limits,output);
     if(status==XR_COMPILE_RESOURCE_OK) original=*output;
     return status;
