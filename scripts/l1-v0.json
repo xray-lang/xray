@@ -31,6 +31,7 @@
     "smoke_runner",
     "test_cli_resource_profiles_vm",
     "test_xir_task_maximum_budget",
+    "test_xir_instance_limit_result",
     "source_public_instance",
     "register_vm",
     "register_vm_native_print",
