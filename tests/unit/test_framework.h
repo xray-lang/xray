@@ -32,6 +32,7 @@
 
 static int xr_tests_run = 0;
 static int xr_tests_passed = 0;
+// Helpers can report several failed assertions within one registered case.
 static int xr_tests_failed = 0;
 
 /* ========== Test Definition Macros ========== */
@@ -40,12 +41,15 @@ static int xr_tests_failed = 0;
 
 #define RUN_TEST(name)                                                                             \
     do {                                                                                           \
+        int _xr_failed_before = xr_tests_failed;                                                    \
         xr_tests_run++;                                                                            \
         printf("  %-50s ", #name);                                                                 \
         fflush(stdout);                                                                            \
         test_##name();                                                                             \
-        printf("\033[32mPASS\033[0m\n");                                                           \
-        xr_tests_passed++;                                                                         \
+        if (xr_tests_failed == _xr_failed_before) {                                                 \
+            printf("\033[32mPASS\033[0m\n");                                                       \
+            xr_tests_passed++;                                                                     \
+        }                                                                                          \
     } while (0)
 
 #define RUN_TEST_SUITE(name)                                                                       \
@@ -269,7 +273,8 @@ static int xr_tests_failed = 0;
         if (xr_tests_failed == 0) {                                                                \
             printf("\033[32m✓ All %d tests passed\033[0m\n", xr_tests_passed);                     \
         } else {                                                                                   \
-            printf("\033[31m✗ %d/%d tests failed\033[0m\n", xr_tests_failed, xr_tests_run);        \
+            printf("\033[31m✗ %d/%d tests failed\033[0m\n",                                      \
+                xr_tests_run - xr_tests_passed, xr_tests_run);                                      \
         }                                                                                          \
         printf("========================================\n");                                      \
     } while (0)

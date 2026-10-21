@@ -2,6 +2,7 @@
   "schema": 1,
   "targets": [
     "xray",
+    "test_unit_framework_probe",
     "test_cli_spec",
     "test_cli_toolchain_config",
     "test_cli_toolchain_command",
@@ -20,6 +21,9 @@
   ],
   "tests": [
     "test_cli_usability",
+    "unit_framework_reports_success",
+    "unit_framework_reports_direct_failure",
+    "unit_framework_reports_helper_failure",
     "source_repl_cli",
     "test_cli_spec",
     "cli_toolchain_config_normal",

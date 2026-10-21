@@ -3,6 +3,7 @@
 
 # Child and standalone gates share one interpreter discovery in this build.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_subdirectory(framework)
 include(${CMAKE_CURRENT_SOURCE_DIR}/core/identity_sha256.cmake)
 
 # Literal semantic vectors are derived independently of compiler libraries.
