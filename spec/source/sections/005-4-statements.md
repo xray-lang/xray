@@ -321,7 +321,7 @@ fn late_binding_and_copy() {
 - **必执行**：所属块正常结束，或通过 `break`、`continue`、`return`、值错误传播、panic 展开退出时都执行。
 - 循环体内的 `defer` 每轮迭代结束时执行，不会堆积到函数尾。
 - `defer` 是 Xray 唯一的确定性清理机制（取代其他语言的 `finally`）：它绑定词法块退出边，而不是整个函数的单一栈尾。
-- **`defer` 体不得让错误逃逸**：cleanup 块的推断逃逸错误集非空时报 `E0387`；错误须在 `defer` 体内用 `try` / `catch` 消化。静态判定不了的由运行时 `E0443` 兜底终止。完整规则见 §8.3.1。
+- **`defer` 体不得让业务错误逃逸**：cleanup 块的静态错误类型必须为 `Never`，否则报 `E0387`；业务错误须在 `defer` 体内捕获处理，或通过不抛错的 API 完成清理。业务错误没有运行时兜底路径。完整规则见 §8.3.1；清理期间独立的 panic 规则见 §8.2.5。
 - cleanup 块不得直接或传递地挂起、创建任务、`return` 外层函数，或 `break` / `continue` 到块外目标；动态未知调用在产生调度或派生副作用前由运行时 fail-closed。
 - cleanup 块可包含本地分支、循环、本地 `try` / `catch` 和嵌套 `defer`；嵌套 cleanup 同样按 LIFO 执行。
 
@@ -697,7 +697,7 @@ fn late_binding_and_copy() {
 - **Always executes**: runs when the owning block falls through or exits by `break`, `continue`, `return`, value-error propagation, or panic unwinding.
 - A `defer` inside a loop body runs at the end of each iteration, not at the end of the function.
 - `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to lexical block exits, not to a single function tail.
-- **No error may escape a `defer` body**: `E0387` is reported when the cleanup block's inferred escaping error set is non-empty; errors must be absorbed inside the `defer` body with `try` / `catch`. What static analysis cannot decide is backstopped at runtime by `E0443`. Full rules in §8.3.1.
+- **No business error may escape a `defer` body**: the cleanup block's static error type must be `Never`, otherwise `E0387` is reported; business errors must be caught inside the `defer` body, or cleanup must use a non-throwing API. Business errors have no runtime fallback path. Full rules are in §8.3.1; the independent rules for panic during cleanup are in §8.2.5.
 - A cleanup block must not directly or transitively suspend, create a task, return from the owning function, or break/continue to a target outside the block. A dynamically unknown call fails closed before any scheduling or task-spawn side effect.
 - A cleanup block may contain local branches, loops, local `try` / `catch`, and nested `defer`; nested cleanup also runs LIFO.
 

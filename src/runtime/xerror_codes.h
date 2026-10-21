@@ -55,6 +55,13 @@
 #define XR_ERR_TYPE_NOT_ITERABLE 323
 #define XR_ERR_TYPE_INVALID_OPERAND 324
 
+/* ---- Error-signature diagnostics (E03xx, 330-349) ---- */
+#define XR_ERR_ANALYZE_TRY_REQUIRED 330
+#define XR_ERR_ANALYZE_UNDECLARED_ERROR 331
+#define XR_ERR_ANALYZE_ERROR_OVERRIDE 332
+#define XR_ERR_ANALYZE_ERASED_THROWS 333
+#define XR_ERR_ANALYZE_CATCH_TYPE_NAME 334
+
 /* ---- Static analysis errors (E03xx, 350-399) ---- */
 #define XR_ERR_ANALYZE 350
 #define XR_ERR_ANALYZE_UNDEFINED_VAR 351
@@ -175,7 +182,7 @@
  * or a null the static type forbids. */
 #define XR_ERR_ITERATOR_EXHAUSTED 432
 
-/* ---- Runtime system errors (E04xx, 440-444) ---- */
+/* ---- Runtime system errors (E04xx, 440-445) ---- */
 #define XR_ERR_STACK_OVERFLOW 440
 #define XR_ERR_OUT_OF_MEMORY 441
 #define XR_ERR_MATCH_FAILURE 442
@@ -185,6 +192,8 @@
 /* A dynamically resolved cleanup call attempted to suspend or spawn. The
  * guard fires before scheduler or task state is created. */
 #define XR_ERR_DEFER_ASYNC 444
+/* Assertion panic; the XIR fault detail retains the same numeric identity. */
+#define XR_ERR_ASSERTION_FAILED 445
 
 /* ---- Runtime argument errors (E04xx, 450-452) ---- */
 #define XR_ERR_WRONG_ARG_COUNT 450

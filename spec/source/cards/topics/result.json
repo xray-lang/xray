@@ -31,7 +31,7 @@
     },
     {
       "heading": "catch panic",
-      "markdown": "The panic channel is separate from ordinary enum errors. Each try has at most one panic handler: `catch panic { ... }`, `catch panic (p) { ... }`, or `catch panic (p: PanicInfo) { ... }`. An annotation must be exactly PanicInfo. The binding is read-only and scoped to its handler; copies preserve class identity and do not imply Sendable. A handler protects only its try body, so a panic raised in a handler seeks an outer handler. The language PanicInfo class includes message, code, stack, cause and data."
+      "markdown": "The panic channel is separate from ordinary enum errors. Each try has at most one panic handler: `catch panic { ... }`, `catch panic (p) { ... }`, or `catch panic (p: PanicInfo) { ... }`. An annotation must be exactly PanicInfo. The binding is read-only and scoped to its handler; copies preserve class identity and do not imply Sendable. A handler protects only its try body, so a panic raised in a handler seeks an outer handler. The language PanicInfo class includes message, code, stack, cause and data. A panic escaping a cleanup boundary follows the independent terminal rule in spec 8.2.5."
     },
     {
       "heading": "Error propagation",
@@ -43,7 +43,7 @@
     },
     {
       "heading": "defer must not let errors escape",
-      "markdown": "A cleanup body must statically have escaping error type Never (E0387). Use non-throwing APIs or catch their errors inside the defer. There is no target runtime fallback for escaping business errors. This does not prove panic-free execution: escaping panic during cleanup still needs the Task329/Task316 boundary decision before runtime removal.",
+      "markdown": "A cleanup body must statically have escaping error type Never (E0387). Use non-throwing APIs or handle errors inside the defer; no target runtime fallback accepts escaping business errors. Panic can be caught inside cleanup. Escape terminates uncatchably with status 70 during normal return, error, panic or cancellation cleanup; report the original panic code/message plus cleanup context and any in-flight outcome separately. CTFE instead fails the job as CLEANUP_PANIC without exiting the compiler. Runtime migration and validation remain pending.",
       "fences": [
         "defer-must-not-throw"
       ]

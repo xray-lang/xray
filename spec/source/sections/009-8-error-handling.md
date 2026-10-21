@@ -234,7 +234,7 @@ try main()
 
 `try { }` 保护区域内的调用视为已标记；区域不延伸到闭包、嵌套函数或该 try 语句自身的 catch handler。嵌套 handler 仍可处于外层 try 的保护区域内。catch 覆盖的错误从保护块的错误集合中扣除，其余错误与 handler 自身的逃逸错误必须包含在所在函数的声明中。`throw` 直接产生错误，不另加 `try`。模块顶层和程序入口 `main` 隐式允许任意错误，但传播调用仍需标记。这项入口许可不免除显式调用点的检查；模块顶层调用可能抛错的入口时仍写 `try main()`。
 
-缺少传播标记和签名未声明错误是两类不同诊断（§18.2 的预留编号）：
+缺少传播标记和签名未声明错误是两类不同诊断（§18.2 的已登记编号，实现待接通）：
 
 ```xray @error=E0330
 enum Failure { Bad }
@@ -359,6 +359,14 @@ code: 430
 
 > 对照值返回通道（§8.1.1）：未捕获的顶层 error 打印 `[Uncaught Error] <enum value>`，退出码同为 1。两个通道的前缀风格一致（`[Uncaught Error]` / `[Uncaught Panic]`）。
 
+#### 8.2.5 清理期间的 panic
+
+panic 可在 `defer` 内由内部 `catch panic` 捕获；一旦逃逸清理边界，立即不可捕获地终止，退出码为 70。正常返回、在途业务错误、在途 panic 和取消清理四种背景遵守同一规则，不只在 double panic 时终止。
+
+终止诊断保留触发 panic 的原始编号和消息，并附清理上下文；已有的在途错误或 panic 另行报告，不覆盖、不吞掉其载荷。普通业务错误不能用新的错误 wrapper 绕过 §8.3.1 的静态规则。违反不抛错签名的坏产物不是合法业务错误传播。
+
+编译期求值使用独立宿主边界：清理 panic 使该编译作业以 `CLEANUP_PANIC` 失败并释放资源，不能退出编译器进程。上述是目标行为；现有执行路径仍需迁移诊断和验证，不能把定稿当作已实现。
+
 ### 8.3 `defer` — 资源清理
 
 `defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
@@ -421,7 +429,7 @@ fn main() {
 try main()
 ```
 
-不再定义业务错误逃出 defer 的运行时 D3 兜底。静态不抛业务错误不等于不会 panic：清理体内可用 `catch panic` 就地处理故障；清理期间新 panic 向外逃逸，特别是已有 panic 展开时的行为，仍需 Task329/Task316 联合定稿，本切片不定义替换、吞掉或二次终止策略。此边界未冻结前，不能宣称运行时旧兜底已经安全删除。
+不再定义业务错误逃出 defer 的运行时 D3 兜底。静态不抛业务错误不等于不会 panic；清理期间 panic 的独立边界见 §8.2.5。运行时迁移仍需验证，不由本条静态规则自动证明。
 
 ### 8.4 Optional 与错误处理
 
@@ -879,7 +887,7 @@ try main()
 
 Calls in the protected `try { }` region count as marked. The region excludes closure bodies, nested functions and that try statement's own catch handlers. A nested handler can still belong to an outer try's protected region. Subtract the errors covered by catch clauses; the remainder and errors escaping handlers must fit the enclosing function's declaration. `throw` produces an error directly and needs no extra `try`. Module top level and the program entry `main` implicitly permit any error but still require propagation markers. This entry permission does not exempt explicit calls; a module-level call to a potentially throwing entry still uses `try main()`.
 
-A missing marker and an undeclared escaping error are distinct diagnostics (reserved numbers in §18.2):
+A missing marker and an undeclared escaping error are distinct diagnostics (registered numbers in §18.2, with implementation pending):
 
 ```xray @error=E0330
 enum Failure { Bad }
@@ -1016,6 +1024,14 @@ formatters). The contract covers exactly that surface.
 > `[Uncaught Error] <enum value>` and likewise exits 1. The two channels share
 > the `[Uncaught Error]` / `[Uncaught Panic]` prefix style.
 
+#### 8.2.5 Panic during cleanup
+
+A panic may be caught by a handler inside its `defer`. Once it escapes the cleanup boundary, execution terminates immediately and uncatchably with exit status 70. The same rule applies during normal return, a business error in flight, another panic in flight, or cancellation cleanup; termination is not limited to double panic.
+
+The terminal diagnostic preserves the triggering panic's original code and message and adds cleanup context. Any error or panic already in flight is reported separately without replacing or discarding its payload. A new business-error wrapper cannot bypass the static rule in §8.3.1. Malformed artifacts violating a non-throwing signature are not valid business-error propagation.
+
+Compile-time evaluation has an independent host boundary: a cleanup panic fails that compilation job with `CLEANUP_PANIC` and releases its resources without terminating the compiler process. This is target behavior; the existing execution path still needs diagnostic migration and validation.
+
 ### 8.3 `defer` — resource cleanup
 
 `defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
@@ -1078,7 +1094,7 @@ fn main() {
 try main()
 ```
 
-There is no runtime D3 fallback for escaping business errors. Statically non-throwing does not mean panic-free: a cleanup may handle faults locally with `catch panic`. Escaping new panic during cleanup, especially while another panic is already unwinding, still needs joint Task329/Task316 resolution. This slice defines no replacement, suppression or second-termination policy. Until that boundary is settled, removal of the old runtime fallback cannot be claimed safe.
+There is no runtime D3 fallback for escaping business errors. Statically non-throwing does not mean panic-free; the independent cleanup-panic boundary is specified in §8.2.5. Runtime migration still needs validation and is not proved by this static rule.
 
 ### 8.4 Optional and error handling
 

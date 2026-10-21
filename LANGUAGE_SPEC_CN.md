@@ -2737,7 +2737,7 @@ fn late_binding_and_copy() {
 - **必执行**：所属块正常结束，或通过 `break`、`continue`、`return`、值错误传播、panic 展开退出时都执行。
 - 循环体内的 `defer` 每轮迭代结束时执行，不会堆积到函数尾。
 - `defer` 是 Xray 唯一的确定性清理机制（取代其他语言的 `finally`）：它绑定词法块退出边，而不是整个函数的单一栈尾。
-- **`defer` 体不得让错误逃逸**：cleanup 块的推断逃逸错误集非空时报 `E0387`；错误须在 `defer` 体内用 `try` / `catch` 消化。静态判定不了的由运行时 `E0443` 兜底终止。完整规则见 §8.3.1。
+- **`defer` 体不得让业务错误逃逸**：cleanup 块的静态错误类型必须为 `Never`，否则报 `E0387`；业务错误须在 `defer` 体内捕获处理，或通过不抛错的 API 完成清理。业务错误没有运行时兜底路径。完整规则见 §8.3.1；清理期间独立的 panic 规则见 §8.2.5。
 - cleanup 块不得直接或传递地挂起、创建任务、`return` 外层函数，或 `break` / `continue` 到块外目标；动态未知调用在产生调度或派生副作用前由运行时 fail-closed。
 - cleanup 块可包含本地分支、循环、本地 `try` / `catch` 和嵌套 `defer`；嵌套 cleanup 同样按 LIFO 执行。
 
@@ -4710,7 +4710,7 @@ try main()
 
 `try { }` 保护区域内的调用视为已标记；区域不延伸到闭包、嵌套函数或该 try 语句自身的 catch handler。嵌套 handler 仍可处于外层 try 的保护区域内。catch 覆盖的错误从保护块的错误集合中扣除，其余错误与 handler 自身的逃逸错误必须包含在所在函数的声明中。`throw` 直接产生错误，不另加 `try`。模块顶层和程序入口 `main` 隐式允许任意错误，但传播调用仍需标记。这项入口许可不免除显式调用点的检查；模块顶层调用可能抛错的入口时仍写 `try main()`。
 
-缺少传播标记和签名未声明错误是两类不同诊断（§18.2 的预留编号）：
+缺少传播标记和签名未声明错误是两类不同诊断（§18.2 的已登记编号，实现待接通）：
 
 ```xray @error=E0330
 enum Failure { Bad }
@@ -4835,6 +4835,14 @@ code: 430
 
 > 对照值返回通道（§8.1.1）：未捕获的顶层 error 打印 `[Uncaught Error] <enum value>`，退出码同为 1。两个通道的前缀风格一致（`[Uncaught Error]` / `[Uncaught Panic]`）。
 
+#### 8.2.5 清理期间的 panic
+
+panic 可在 `defer` 内由内部 `catch panic` 捕获；一旦逃逸清理边界，立即不可捕获地终止，退出码为 70。正常返回、在途业务错误、在途 panic 和取消清理四种背景遵守同一规则，不只在 double panic 时终止。
+
+终止诊断保留触发 panic 的原始编号和消息，并附清理上下文；已有的在途错误或 panic 另行报告，不覆盖、不吞掉其载荷。普通业务错误不能用新的错误 wrapper 绕过 §8.3.1 的静态规则。违反不抛错签名的坏产物不是合法业务错误传播。
+
+编译期求值使用独立宿主边界：清理 panic 使该编译作业以 `CLEANUP_PANIC` 失败并释放资源，不能退出编译器进程。上述是目标行为；现有执行路径仍需迁移诊断和验证，不能把定稿当作已实现。
+
 ### 8.3 `defer` — 资源清理
 
 `defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
@@ -4897,7 +4905,7 @@ fn main() {
 try main()
 ```
 
-不再定义业务错误逃出 defer 的运行时 D3 兜底。静态不抛业务错误不等于不会 panic：清理体内可用 `catch panic` 就地处理故障；清理期间新 panic 向外逃逸，特别是已有 panic 展开时的行为，仍需 Task329/Task316 联合定稿，本切片不定义替换、吞掉或二次终止策略。此边界未冻结前，不能宣称运行时旧兜底已经安全删除。
+不再定义业务错误逃出 defer 的运行时 D3 兜底。静态不抛业务错误不等于不会 panic；清理期间 panic 的独立边界见 §8.2.5。运行时迁移仍需验证，不由本条静态规则自动证明。
 
 ### 8.4 Optional 与错误处理
 
@@ -8331,7 +8339,7 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 
 > 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `i64`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
 
-本章普通表项以头文件为准；下列“候选预留”是明确分开的目标诊断。旧 defer 错误兜底已从目标运行时表移除，实际执行路径的删除仍属于 Task329 P2，并依赖清理期间 panic 边界定稿。
+本章普通表项以头文件为准；下列错误签名编号已登记，但发射点与语义检查仍待接通。旧 defer 错误兜底已从目标运行时表移除，实际执行路径的删除仍属于 Task329 P2，必须保留 §8.2.5 的独立 panic 清理边界。
 
 ### 18.1 Lexer 与 parser
 
@@ -8375,17 +8383,17 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | 静态类型不可迭代 |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | 操作数类型非法 |
 
-#### 错误签名诊断（候选预留，尚未注册）
+#### 错误签名诊断（编号已登记，实现待接通）
 
-下表为 Task329 P0 的编号提案，须 lead 评审；当前 `xerror_codes.h` 尚未定义，也没有发射点或黄金负例。P1 实现时必须同时登记头文件、诊断发射点和测试，不能把规范表当成已支持的诊断。
+下表按 Task329 §2.9 的裁决定号，头文件与位置/代码断言已登记；解析器和语义发射点尚未接通，负例仍未通过。编号登记不表示编译器已经能够发出这些诊断。
 
-| 代码 | 候选 C 名称 | 触发条件 |
+| 代码 | C 名称 | 触发条件 |
 |--|--|--|
-| `E0330` | `XR_ERR_MISSING_TRY` | 可能抛错的调用缺少 `try`，且不在 `try { }` 保护区域内 |
-| `E0331` | `XR_ERR_UNDECLARED_ERROR` | 逃逸错误不包含于所在函数声明的错误类型 |
-| `E0332` | `XR_ERR_OVERRIDE_ERROR_TYPE` | 实现或覆写的错误类型不是被实现签名的子集 |
-| `E0333` | `XR_ERR_ERASED_THROWS_RESTRICTED` | freestanding 或 `@strict(alloc)` 中使用擦除错误类型，包括裸 `throws` 与 `throws(Error)` |
-| `E0334` | `XR_ERR_CATCH_TYPE_AS_BINDING` | catch 头部单个大写开头标识符，提示使用 `catch (e: T)` |
+| `E0330` | `XR_ERR_ANALYZE_TRY_REQUIRED` | 可能抛错的调用缺少 `try`，且不在 `try { }` 保护区域内 |
+| `E0331` | `XR_ERR_ANALYZE_UNDECLARED_ERROR` | 逃逸错误不包含于所在函数声明的错误类型 |
+| `E0332` | `XR_ERR_ANALYZE_ERROR_OVERRIDE` | 实现或覆写的错误类型不是被实现签名的子集 |
+| `E0333` | `XR_ERR_ANALYZE_ERASED_THROWS` | freestanding 或 `@strict(alloc)` 中使用擦除错误类型，包括裸 `throws` 与 `throws(Error)` |
+| `E0334` | `XR_ERR_ANALYZE_CATCH_TYPE_NAME` | catch 头部单个大写开头标识符，提示使用 `catch (e: T)` |
 
 #### Analyzer
 
@@ -8475,8 +8483,10 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | 内存不足 |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | 运行时 match 失败 |
 | `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup 尝试创建任务或抵达调度器；在任何该类侧效前失败关闭 |
+| `E0445` | `XR_ERR_ASSERTION_FAILED` | 断言失败的 panic |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 运行时实参数量错误 |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 运行时实参类型错误 |
+| `E0452` | `XR_ERR_INVALID_ARG_VALUE` | 非法实参值的保留编号；当前没有发射点 |
 | `E0460` | `XR_ERR_CORO_DEAD` | 操作已结束 coroutine |
 | `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine 已取消 |
 | `E0462` | `XR_ERR_TASK_ALREADY_TAKEN` | Task 的 transferable 结果已被取走，不能再次取用 |

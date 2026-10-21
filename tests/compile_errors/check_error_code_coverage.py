@@ -131,8 +131,10 @@ EXEMPT = {
     "E0442": "runtime: text-spliced by Xi lowering, src/ir/xi_lower_stmt.c:1708",
     "E0443": "runtime: src/shared/xr_error_core.h:76, src/aot/xrt_exception.h:182",
     "E0444": "runtime: src/vm/xvm_dispatch_call.inc.c:192, src/aot/xrt_exception.h:246",
+    "E0445": "runtime: assertion panic detail in src/xir/xxir_fault.h and src/xir/xxir_call.c",
     "E0450": "runtime: src/vm/xvm_dispatch_call.inc.c:304",
     "E0451": "runtime: src/aot/xrt_coll.h:6900, src/aot/xrt_core_freestanding.h:1104",
+    "E0452": "dead: reserved invalid argument value code; no macro or numeric diagnostic emitter in src/",
     "E0460": "runtime: src/vm/xvm_coro_ops.c:581",
     "E0461": "runtime: src/vm/xvm_coro_ops.c:922, src/coro/xaot_coro.c:2395",
     "E0462": "runtime: src/vm/xvm_props.c:350, src/coro/xaot_coro.c:2304",
@@ -258,6 +260,11 @@ def main(argv: list[str]) -> int:
     now_covered = sorted(code for code in EXEMPT if code in covered)
 
     failures: list[str] = []
+    fault_header = PROJECT_DIR / "src/xir/xxir_fault.h"
+    assertion = re.search(r"^#define XR_XIR_PANIC_ASSERTION ([0-9]+)u$",
+                          fault_header.read_text(encoding="utf-8"), re.M)
+    if assertion is None or header.get(f"E{int(assertion.group(1)):04d}") != "XR_ERR_ASSERTION_FAILED":
+        failures.append("the XIR assertion panic code must match XR_ERR_ASSERTION_FAILED in xerror_codes.h")
     for detail in unreadable:
         failures.append(f"expected file does not parse, so its codes cannot be counted: {detail}")
     for code in uncovered:

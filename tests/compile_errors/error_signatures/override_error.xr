@@ -1,0 +1,5 @@
+enum ExtraErr { Failed }
+interface Reader { read() -> i64 }
+class WiderReader implements Reader {
+    read() throws(ExtraErr) -> i64 { return 1 } // error
+}

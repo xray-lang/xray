@@ -1,0 +1,5 @@
+enum Failure { Failed }
+fn mayFail() throws(Failure) {}
+fn caller() throws(Failure) {
+    mayFail() // error
+}

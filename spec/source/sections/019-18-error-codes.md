@@ -10,7 +10,7 @@ order: 019
 
 > 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `i64`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
 
-本章普通表项以头文件为准；下列“候选预留”是明确分开的目标诊断。旧 defer 错误兜底已从目标运行时表移除，实际执行路径的删除仍属于 Task329 P2，并依赖清理期间 panic 边界定稿。
+本章普通表项以头文件为准；下列错误签名编号已登记，但发射点与语义检查仍待接通。旧 defer 错误兜底已从目标运行时表移除，实际执行路径的删除仍属于 Task329 P2，必须保留 §8.2.5 的独立 panic 清理边界。
 
 ### 18.1 Lexer 与 parser
 
@@ -54,17 +54,17 @@ order: 019
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | 静态类型不可迭代 |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | 操作数类型非法 |
 
-#### 错误签名诊断（候选预留，尚未注册）
+#### 错误签名诊断（编号已登记，实现待接通）
 
-下表为 Task329 P0 的编号提案，须 lead 评审；当前 `xerror_codes.h` 尚未定义，也没有发射点或黄金负例。P1 实现时必须同时登记头文件、诊断发射点和测试，不能把规范表当成已支持的诊断。
+下表按 Task329 §2.9 的裁决定号，头文件与位置/代码断言已登记；解析器和语义发射点尚未接通，负例仍未通过。编号登记不表示编译器已经能够发出这些诊断。
 
-| 代码 | 候选 C 名称 | 触发条件 |
+| 代码 | C 名称 | 触发条件 |
 |--|--|--|
-| `E0330` | `XR_ERR_MISSING_TRY` | 可能抛错的调用缺少 `try`，且不在 `try { }` 保护区域内 |
-| `E0331` | `XR_ERR_UNDECLARED_ERROR` | 逃逸错误不包含于所在函数声明的错误类型 |
-| `E0332` | `XR_ERR_OVERRIDE_ERROR_TYPE` | 实现或覆写的错误类型不是被实现签名的子集 |
-| `E0333` | `XR_ERR_ERASED_THROWS_RESTRICTED` | freestanding 或 `@strict(alloc)` 中使用擦除错误类型，包括裸 `throws` 与 `throws(Error)` |
-| `E0334` | `XR_ERR_CATCH_TYPE_AS_BINDING` | catch 头部单个大写开头标识符，提示使用 `catch (e: T)` |
+| `E0330` | `XR_ERR_ANALYZE_TRY_REQUIRED` | 可能抛错的调用缺少 `try`，且不在 `try { }` 保护区域内 |
+| `E0331` | `XR_ERR_ANALYZE_UNDECLARED_ERROR` | 逃逸错误不包含于所在函数声明的错误类型 |
+| `E0332` | `XR_ERR_ANALYZE_ERROR_OVERRIDE` | 实现或覆写的错误类型不是被实现签名的子集 |
+| `E0333` | `XR_ERR_ANALYZE_ERASED_THROWS` | freestanding 或 `@strict(alloc)` 中使用擦除错误类型，包括裸 `throws` 与 `throws(Error)` |
+| `E0334` | `XR_ERR_ANALYZE_CATCH_TYPE_NAME` | catch 头部单个大写开头标识符，提示使用 `catch (e: T)` |
 
 #### Analyzer
 
@@ -154,8 +154,10 @@ order: 019
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | 内存不足 |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | 运行时 match 失败 |
 | `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup 尝试创建任务或抵达调度器；在任何该类侧效前失败关闭 |
+| `E0445` | `XR_ERR_ASSERTION_FAILED` | 断言失败的 panic |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 运行时实参数量错误 |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 运行时实参类型错误 |
+| `E0452` | `XR_ERR_INVALID_ARG_VALUE` | 非法实参值的保留编号；当前没有发射点 |
 | `E0460` | `XR_ERR_CORO_DEAD` | 操作已结束 coroutine |
 | `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine 已取消 |
 | `E0462` | `XR_ERR_TASK_ALREADY_TAKEN` | Task 的 transferable 结果已被取走，不能再次取用 |
@@ -208,7 +210,7 @@ order: 019
 
 > The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `i64` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
 
-Ordinary entries follow the header; the proposed reservations below are separate target diagnostics. The old defer-error fallback is removed from the target runtime table. Removing its execution path remains Task329 P2 work and depends on settling panic during cleanup.
+Ordinary entries follow the header; the error-signature numbers below are registered, while emitters and semantic checking remain pending. The old defer-error fallback is removed from the target runtime table. Removing its execution path remains Task329 P2 work and must preserve the independent cleanup-panic boundary in §8.2.5.
 
 ### 18.1 Lexer and Parser
 
@@ -252,17 +254,17 @@ Ordinary entries follow the header; the proposed reservations below are separate
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | static type is not iterable |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | invalid operand type |
 
-#### Error-signature diagnostics (proposed reservations, not registered)
+#### Error-signature diagnostics (registered numbers, implementation pending)
 
-These Task329 P0 numbers require lead review. The current `xerror_codes.h` has no definitions, emitters or golden negative cases for them. Implementation must register the header, emitter and tests together; this proposal is not evidence that the compiler emits these diagnostics.
+These numbers follow the Task329 §2.9 decision. Header definitions and position/code assertions are registered; parser and semantic emitters remain unimplemented and the negative cases do not yet pass. Registration is not evidence that the compiler emits these diagnostics.
 
-| Code | Proposed C name | Trigger |
+| Code | C name | Trigger |
 |--|--|--|
-| `E0330` | `XR_ERR_MISSING_TRY` | Potentially throwing call has no marker or protected try region |
-| `E0331` | `XR_ERR_UNDECLARED_ERROR` | Escaping error is outside the enclosing declared error type |
-| `E0332` | `XR_ERR_OVERRIDE_ERROR_TYPE` | Implementation or override error type is not a subset of its required signature |
-| `E0333` | `XR_ERR_ERASED_THROWS_RESTRICTED` | Erased errors in freestanding or @strict(alloc), including bare throws and throws(Error) |
-| `E0334` | `XR_ERR_CATCH_TYPE_AS_BINDING` | Single uppercase-leading catch identifier; suggest catch (e: T) |
+| `E0330` | `XR_ERR_ANALYZE_TRY_REQUIRED` | Potentially throwing call has no marker or protected try region |
+| `E0331` | `XR_ERR_ANALYZE_UNDECLARED_ERROR` | Escaping error is outside the enclosing declared error type |
+| `E0332` | `XR_ERR_ANALYZE_ERROR_OVERRIDE` | Implementation or override error type is not a subset of its required signature |
+| `E0333` | `XR_ERR_ANALYZE_ERASED_THROWS` | Erased errors in freestanding or @strict(alloc), including bare throws and throws(Error) |
+| `E0334` | `XR_ERR_ANALYZE_CATCH_TYPE_NAME` | Single uppercase-leading catch identifier; suggest catch (e: T) |
 
 #### Analyzer
 
@@ -352,8 +354,10 @@ These Task329 P0 numbers require lead review. The current `xerror_codes.h` has n
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
 | `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup attempted to create a task or reach the scheduler; fails closed before any such side effect |
+| `E0445` | `XR_ERR_ASSERTION_FAILED` | Assertion-failure panic |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
+| `E0452` | `XR_ERR_INVALID_ARG_VALUE` | Reserved invalid argument value code; currently no emitter |
 | `E0460` | `XR_ERR_CORO_DEAD` | operation on a dead coroutine |
 | `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine cancelled |
 | `E0462` | `XR_ERR_TASK_ALREADY_TAKEN` | a Task's transferable result has already been taken and cannot be taken again |

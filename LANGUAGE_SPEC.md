@@ -2763,7 +2763,7 @@ fn late_binding_and_copy() {
 - **Always executes**: runs when the owning block falls through or exits by `break`, `continue`, `return`, value-error propagation, or panic unwinding.
 - A `defer` inside a loop body runs at the end of each iteration, not at the end of the function.
 - `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to lexical block exits, not to a single function tail.
-- **No error may escape a `defer` body**: `E0387` is reported when the cleanup block's inferred escaping error set is non-empty; errors must be absorbed inside the `defer` body with `try` / `catch`. What static analysis cannot decide is backstopped at runtime by `E0443`. Full rules in §8.3.1.
+- **No business error may escape a `defer` body**: the cleanup block's static error type must be `Never`, otherwise `E0387` is reported; business errors must be caught inside the `defer` body, or cleanup must use a non-throwing API. Business errors have no runtime fallback path. Full rules are in §8.3.1; the independent rules for panic during cleanup are in §8.2.5.
 - A cleanup block must not directly or transitively suspend, create a task, return from the owning function, or break/continue to a target outside the block. A dynamically unknown call fails closed before any scheduling or task-spawn side effect.
 - A cleanup block may contain local branches, loops, local `try` / `catch`, and nested `defer`; nested cleanup also runs LIFO.
 
@@ -4729,7 +4729,7 @@ try main()
 
 Calls in the protected `try { }` region count as marked. The region excludes closure bodies, nested functions and that try statement's own catch handlers. A nested handler can still belong to an outer try's protected region. Subtract the errors covered by catch clauses; the remainder and errors escaping handlers must fit the enclosing function's declaration. `throw` produces an error directly and needs no extra `try`. Module top level and the program entry `main` implicitly permit any error but still require propagation markers. This entry permission does not exempt explicit calls; a module-level call to a potentially throwing entry still uses `try main()`.
 
-A missing marker and an undeclared escaping error are distinct diagnostics (reserved numbers in §18.2):
+A missing marker and an undeclared escaping error are distinct diagnostics (registered numbers in §18.2, with implementation pending):
 
 ```xray @error=E0330
 enum Failure { Bad }
@@ -4866,6 +4866,14 @@ formatters). The contract covers exactly that surface.
 > `[Uncaught Error] <enum value>` and likewise exits 1. The two channels share
 > the `[Uncaught Error]` / `[Uncaught Panic]` prefix style.
 
+#### 8.2.5 Panic during cleanup
+
+A panic may be caught by a handler inside its `defer`. Once it escapes the cleanup boundary, execution terminates immediately and uncatchably with exit status 70. The same rule applies during normal return, a business error in flight, another panic in flight, or cancellation cleanup; termination is not limited to double panic.
+
+The terminal diagnostic preserves the triggering panic's original code and message and adds cleanup context. Any error or panic already in flight is reported separately without replacing or discarding its payload. A new business-error wrapper cannot bypass the static rule in §8.3.1. Malformed artifacts violating a non-throwing signature are not valid business-error propagation.
+
+Compile-time evaluation has an independent host boundary: a cleanup panic fails that compilation job with `CLEANUP_PANIC` and releases its resources without terminating the compiler process. This is target behavior; the existing execution path still needs diagnostic migration and validation.
+
 ### 8.3 `defer` — resource cleanup
 
 `defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
@@ -4928,7 +4936,7 @@ fn main() {
 try main()
 ```
 
-There is no runtime D3 fallback for escaping business errors. Statically non-throwing does not mean panic-free: a cleanup may handle faults locally with `catch panic`. Escaping new panic during cleanup, especially while another panic is already unwinding, still needs joint Task329/Task316 resolution. This slice defines no replacement, suppression or second-termination policy. Until that boundary is settled, removal of the old runtime fallback cannot be claimed safe.
+There is no runtime D3 fallback for escaping business errors. Statically non-throwing does not mean panic-free; the independent cleanup-panic boundary is specified in §8.2.5. Runtime migration still needs validation and is not proved by this static rule.
 
 ### 8.4 Optional and error handling
 
@@ -8544,7 +8552,7 @@ Mutable local callback captures retain actual Cell/loan, cleanup and CTFE closur
 
 > The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `i64` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
 
-Ordinary entries follow the header; the proposed reservations below are separate target diagnostics. The old defer-error fallback is removed from the target runtime table. Removing its execution path remains Task329 P2 work and depends on settling panic during cleanup.
+Ordinary entries follow the header; the error-signature numbers below are registered, while emitters and semantic checking remain pending. The old defer-error fallback is removed from the target runtime table. Removing its execution path remains Task329 P2 work and must preserve the independent cleanup-panic boundary in §8.2.5.
 
 ### 18.1 Lexer and Parser
 
@@ -8588,17 +8596,17 @@ Ordinary entries follow the header; the proposed reservations below are separate
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | static type is not iterable |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | invalid operand type |
 
-#### Error-signature diagnostics (proposed reservations, not registered)
+#### Error-signature diagnostics (registered numbers, implementation pending)
 
-These Task329 P0 numbers require lead review. The current `xerror_codes.h` has no definitions, emitters or golden negative cases for them. Implementation must register the header, emitter and tests together; this proposal is not evidence that the compiler emits these diagnostics.
+These numbers follow the Task329 §2.9 decision. Header definitions and position/code assertions are registered; parser and semantic emitters remain unimplemented and the negative cases do not yet pass. Registration is not evidence that the compiler emits these diagnostics.
 
-| Code | Proposed C name | Trigger |
+| Code | C name | Trigger |
 |--|--|--|
-| `E0330` | `XR_ERR_MISSING_TRY` | Potentially throwing call has no marker or protected try region |
-| `E0331` | `XR_ERR_UNDECLARED_ERROR` | Escaping error is outside the enclosing declared error type |
-| `E0332` | `XR_ERR_OVERRIDE_ERROR_TYPE` | Implementation or override error type is not a subset of its required signature |
-| `E0333` | `XR_ERR_ERASED_THROWS_RESTRICTED` | Erased errors in freestanding or @strict(alloc), including bare throws and throws(Error) |
-| `E0334` | `XR_ERR_CATCH_TYPE_AS_BINDING` | Single uppercase-leading catch identifier; suggest catch (e: T) |
+| `E0330` | `XR_ERR_ANALYZE_TRY_REQUIRED` | Potentially throwing call has no marker or protected try region |
+| `E0331` | `XR_ERR_ANALYZE_UNDECLARED_ERROR` | Escaping error is outside the enclosing declared error type |
+| `E0332` | `XR_ERR_ANALYZE_ERROR_OVERRIDE` | Implementation or override error type is not a subset of its required signature |
+| `E0333` | `XR_ERR_ANALYZE_ERASED_THROWS` | Erased errors in freestanding or @strict(alloc), including bare throws and throws(Error) |
+| `E0334` | `XR_ERR_ANALYZE_CATCH_TYPE_NAME` | Single uppercase-leading catch identifier; suggest catch (e: T) |
 
 #### Analyzer
 
@@ -8688,8 +8696,10 @@ These Task329 P0 numbers require lead review. The current `xerror_codes.h` has n
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
 | `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup attempted to create a task or reach the scheduler; fails closed before any such side effect |
+| `E0445` | `XR_ERR_ASSERTION_FAILED` | Assertion-failure panic |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
+| `E0452` | `XR_ERR_INVALID_ARG_VALUE` | Reserved invalid argument value code; currently no emitter |
 | `E0460` | `XR_ERR_CORO_DEAD` | operation on a dead coroutine |
 | `E0461` | `XR_ERR_CORO_CANCELLED` | coroutine cancelled |
 | `E0462` | `XR_ERR_TASK_ALREADY_TAKEN` | a Task's transferable result has already been taken and cannot be taken again |
