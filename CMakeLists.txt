@@ -2660,6 +2660,8 @@ if(BUILD_TESTS)
         LABELS "tooling;fast" TIMEOUT 180 RUN_SERIAL TRUE)
     set_tests_properties(meta_ownership_scope PROPERTIES LABELS "metadata;memory;fast" TIMEOUT 10)
 
+    include("${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/register_vm.cmake")
+
     # Qualify the current public CLI and its exact installed Core/SDK payload.
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/cli_usability.cmake")

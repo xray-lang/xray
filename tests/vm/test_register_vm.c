@@ -1,0 +1,241 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * test_register_vm.c - Scalar bytecode behavior and rejection tests.
+ *
+ * KEY CONCEPT:
+ *   Independent expected values exercise wrapping arithmetic, control flow,
+ *   native calls and recursive VM calls on both dispatch implementations.
+ */
+
+#include "register_vm_programs.h"
+#include <inttypes.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
+#define CHECK(condition) XR_CHECK(condition, #condition)
+
+static void test_encoding(void) {
+    uint32_t word = 0;
+    CHECK(sizeof(word) == 4 && sizeof(uint64_t) == 8);
+    CHECK(xr_rbc_encode(&word, (XrRbcOperands) {XR_RBC_ADD, 254, 253, 252, 0}));
+    CHECK(word == (uint32_t) XR_RBC_ADD + (254u << 8) + (253u << 16) + (252u << 24));
+    CHECK(xr_rbc_encode(&word, (XrRbcOperands) {XR_RBC_LOADK, 254, 0, 0, UINT16_MAX}));
+    CHECK((word >> 16) == UINT16_MAX);
+    CHECK(xr_rbc_encode(&word, (XrRbcOperands) {XR_RBC_LOADI, 0, 0, 0, INT16_MIN}));
+    CHECK(xr_rbc_encode(&word, (XrRbcOperands) {XR_RBC_LOADI, 0, 0, 0, INT16_MAX}));
+    CHECK(xr_rbc_encode(&word, (XrRbcOperands) {XR_RBC_JMP, 0, 0, 0, XR_RBC_JUMP_MIN}));
+    CHECK(xr_rbc_encode(&word, (XrRbcOperands) {XR_RBC_JMP, 0, 0, 0, XR_RBC_JUMP_MAX}));
+    XrRbcOperands rejected[] = {
+        {XR_RBC_ADD, 256, 0, 0, 0},
+        {XR_RBC_ADD, 0, 255, 0, 0},
+        {XR_RBC_ADD, 0, 0, UINT32_MAX, 0},
+        {XR_RBC_OP_COUNT, 0, 0, 0, 0},
+        {XR_RBC_LOADK, 0, 0, 0, 65536},
+        {XR_RBC_LOADK, 0, 0, 0, -1},
+        {XR_RBC_LOADI, 0, 0, 0, 32768},
+        {XR_RBC_LOADI, 0, 0, 0, -32769},
+        {XR_RBC_JMP, 0, 0, 0, XR_RBC_JUMP_MAX + 1},
+        {XR_RBC_JMP, 0, 0, 0, XR_RBC_JUMP_MIN - 1},
+        {XR_RBC_RET0, 1, 0, 0, 0},
+        {XR_RBC_MOV, 0, 0, 1, 0},
+    };
+    for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); ++i) {
+        word = UINT32_C(0xdeadbeef);
+        CHECK(!xr_rbc_encode(&word, rejected[i]));
+        CHECK(word == UINT32_C(0xdeadbeef));
+    }
+    CHECK(!xr_rbc_encode(NULL, (XrRbcOperands) {XR_RBC_RET0, 0, 0, 0, 0}));
+    CHECK(!xr_rbc_jump(&word, 0, 2, 2));
+    CHECK(!xr_rbc_jump(&word, 2, 0, 2));
+    CHECK(!xr_rbc_jump(&word, 0, SIZE_MAX - 1, SIZE_MAX));
+    CHECK(!xr_rbc_jump(&word, SIZE_MAX - 1, 0, SIZE_MAX));
+    CHECK(xr_rbc_jump(&word, 0, 8388608, 8388609));
+    CHECK(xr_rbc_jump(&word, 8388607, 0, 8388608));
+}
+
+static uint64_t run_function(XrRbcFunction function, const uint64_t *args, size_t count) {
+    XrRbcModule module = {&function, 1, NULL, 0};
+    uint64_t result = UINT64_MAX;
+    CHECK(xr_rbc_run(&module, 0, args, count, &result) == XR_RBC_OK);
+    return result;
+}
+
+static void test_workloads(bool timing) {
+    uint32_t fib_code[13], loop_code[10], countdown_code[11];
+    XrRbcFunction fib = make_fib(fib_code), loop = make_loop(loop_code);
+    const uint64_t inputs[] = {0, 1, 2, 10, 20, 32};
+    const uint64_t expected[] = {0, 1, 1, 55, 6765, 2178309};
+    for (size_t i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+        clock_t start = clock();
+        CHECK(run_function(fib, inputs + i, 1) == expected[i]);
+        if (timing && inputs[i] == 32)
+            printf("fib(32),%s,%.3f ms (coarse)\n", xr_rbc_dispatch_name(),
+                   (double) (clock() - start) * 1000.0 / CLOCKS_PER_SEC);
+    }
+    uint64_t count = 1000000;
+    CHECK(run_function(loop, &count, 1) == UINT64_C(499999500000));
+    count = 0;
+    CHECK(run_function(loop, &count, 1) == 0);
+    count = 10000;
+    CHECK(run_function(make_countdown(countdown_code), &count, 1) == count);
+}
+
+static void test_arithmetic(void) {
+    const struct {
+        XrRbcOp op;
+        uint64_t lhs, rhs, result;
+    } cases[] = {
+        {XR_RBC_ADD, INT64_MAX, 1, (uint64_t) INT64_MIN},
+        {XR_RBC_SUB, (uint64_t) INT64_MIN, 1, INT64_MAX},
+        {XR_RBC_MUL, UINT64_MAX, 2, UINT64_MAX - 1},
+        {XR_RBC_DIV, (uint64_t) INT64_MIN, UINT64_MAX, (uint64_t) INT64_MIN},
+        {XR_RBC_REM, (uint64_t) INT64_MIN, UINT64_MAX, 0},
+        {XR_RBC_DIV, (uint64_t) -17, 5, (uint64_t) -3},
+        {XR_RBC_REM, (uint64_t) -17, 5, (uint64_t) -2},
+        {XR_RBC_AND, 0xf0, 0x3c, 0x30},
+        {XR_RBC_OR, 0xf0, 0x3c, 0xfc},
+        {XR_RBC_XOR, 0xf0, 0x3c, 0xcc},
+        {XR_RBC_SHL, UINT64_MAX, 65, UINT64_MAX - 1},
+        {XR_RBC_SHR, UINT64_C(0x8000000000000000), 63, UINT64_MAX},
+        {XR_RBC_SHR, UINT64_MAX, 64, UINT64_MAX},
+        {XR_RBC_USHR, UINT64_MAX, 63, 1},
+        {XR_RBC_USHR, UINT64_MAX, 64, UINT64_MAX},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        uint32_t code[2];
+        uint64_t args[2] = {cases[i].lhs, cases[i].rhs};
+        emit(code, 0, cases[i].op, 0, 0, 1);
+        emit(code, 1, XR_RBC_RET, 0, 0, 0);
+        CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 2, 2}, args, 2) == cases[i].result);
+    }
+    uint32_t code[2];
+    uint64_t arg = (uint64_t) INT64_MIN;
+    emit(code, 0, XR_RBC_NEG, 0, 0, 0);
+    emit(code, 1, XR_RBC_RET, 0, 0, 0);
+    CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 1, 1}, &arg, 1) == arg);
+    immediate(code, 0, XR_RBC_LOADI, 0, INT16_MIN);
+    CHECK(run_function((XrRbcFunction) {code, 2, NULL, 0, 1, 0}, NULL, 0) == (uint64_t) INT16_MIN);
+}
+
+static void test_branches(void) {
+    for (int operation = XR_RBC_LT; operation <= XR_RBC_EQ; ++operation) {
+        for (int64_t lhs = -1; lhs <= 1; ++lhs) {
+            uint32_t code[6];
+            uint64_t args[2] = {(uint64_t) lhs, 0};
+            emit(code, 0, (XrRbcOp) operation, 0, 1, 0);
+            CHECK(xr_rbc_jump(code + 1, 1, 4, 6));
+            immediate(code, 2, XR_RBC_LOADI, 0, 0);
+            emit(code, 3, XR_RBC_RET, 0, 0, 0);
+            immediate(code, 4, XR_RBC_LOADI, 0, 1);
+            emit(code, 5, XR_RBC_RET, 0, 0, 0);
+            bool expected = operation == XR_RBC_LT   ? lhs < 0
+                            : operation == XR_RBC_LE ? lhs <= 0
+                                                     : lhs == 0;
+            CHECK(run_function((XrRbcFunction) {code, 6, NULL, 0, 2, 2}, args, 2) ==
+                  (uint64_t) expected);
+        }
+    }
+}
+
+static void test_call_windows(void) {
+    uint32_t caller[7], callee[3];
+    // A multi-argument call overlaps only the caller's two top slots.
+    immediate(caller, 0, XR_RBC_LOADI, 0, 1000);
+    immediate(caller, 1, XR_RBC_LOADI, 2, 17);
+    immediate(caller, 2, XR_RBC_LOADI, 3, 25);
+    immediate(caller, 3, XR_RBC_CALL, 1, 1);
+    emit(caller, 4, XR_RBC_ADD, 0, 0, 1);
+    emit(caller, 5, XR_RBC_RET, 0, 0, 0);
+    emit(caller, 6, XR_RBC_RET0, 0, 0, 0);
+    emit(callee, 0, XR_RBC_ADD, 2, 0, 1);
+    immediate(callee, 1, XR_RBC_LOADI, 254, -10);
+    emit(callee, 2, XR_RBC_RET, 2, 0, 0);
+    XrRbcFunction functions[] = {{caller, 7, NULL, 0, 4, 0}, {callee, 3, NULL, 0, 255, 2}};
+    XrRbcModule module = {functions, 2, NULL, 0};
+    uint64_t result = 0;
+    CHECK(xr_rbc_run(&module, 0, NULL, 0, &result) == XR_RBC_OK && result == 1042);
+    // Zero arguments place the callee just beyond the last caller register.
+    functions[0].register_count = 2;
+    functions[1].parameter_count = 0;
+    immediate(caller, 1, XR_RBC_CALL, 1, 1);
+    emit(caller, 2, XR_RBC_ADD, 0, 0, 1);
+    emit(caller, 3, XR_RBC_RET, 0, 0, 0);
+    immediate(callee, 0, XR_RBC_LOADI, 254, 42);
+    emit(callee, 1, XR_RBC_RET, 254, 0, 0);
+    CHECK(xr_rbc_run(&module, 0, NULL, 0, &result) == XR_RBC_OK && result == 1042);
+}
+
+static void test_rejections(void) {
+    uint32_t code[2];
+    uint64_t args[2] = {1, 0}, result = 42;
+    emit(code, 0, XR_RBC_DIV, 0, 0, 1);
+    emit(code, 1, XR_RBC_RET, 0, 0, 0);
+    XrRbcFunction function = {code, 2, NULL, 0, 2, 2};
+    XrRbcModule module = {&function, 1, NULL, 0};
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_DIVIDE_BY_ZERO);
+    CHECK(result == 42);
+    CHECK(xr_rbc_run(&module, 1, args, 2, &result) == XR_RBC_INVALID);
+    CHECK(xr_rbc_run(&module, 0, NULL, 2, &result) == XR_RBC_INVALID);
+    CHECK(xr_rbc_run(&module, 0, args, 1, &result) == XR_RBC_INVALID);
+    function.register_count = 256;
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    function.register_count = 2;
+    immediate(code, 0, XR_RBC_JMP, 0, -2);
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    immediate(code, 0, XR_RBC_JMP, 0, 1);
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    immediate(code, 0, XR_RBC_CALL, 0, 99);
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    immediate(code, 0, XR_RBC_CALL, 0, 0);
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    immediate(code, 0, XR_RBC_CALLN, 0, 0);
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    immediate(code, 0, XR_RBC_LOADK, 0, 0);
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    emit(code, 0, XR_RBC_MOV, 0, 2, 0);
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    emit(code, 0, XR_RBC_LT, 0, 1, 0);
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    code[0] = 255;
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_INVALID);
+    emit(code, 0, XR_RBC_RET0, 0, 0, 0);
+    CHECK(xr_rbc_run(&module, 0, args, 2, &result) == XR_RBC_OK && result == 0);
+}
+
+static void xrt_print_i64(int64_t value) {
+    printf("%" PRId64 "\n", value);
+}
+
+static void test_native_print(void) {
+    uint32_t code[3];
+    const uint64_t constants[] = {(uint64_t) INT64_MIN};
+    immediate(code, 0, XR_RBC_LOADK, 0, 0);
+    immediate(code, 1, XR_RBC_CALLN, 0, 0);
+    emit(code, 2, XR_RBC_RET0, 0, 0, 0);
+    XrRbcFunction function = {code, 3, constants, 1, 1, 0};
+    const XrRbcNativeI64 natives[] = {xrt_print_i64};
+    XrRbcModule module = {&function, 1, natives, 1};
+    uint64_t result;
+    CHECK(xr_rbc_run(&module, 0, NULL, 0, &result) == XR_RBC_OK);
+}
+
+int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "--native-print") == 0) {
+        test_native_print();
+        return 0;
+    }
+    test_encoding();
+    test_arithmetic();
+    test_branches();
+    test_call_windows();
+    test_rejections();
+    test_workloads(argc == 2 && strcmp(argv[1], "--timing") == 0);
+    printf("register_vm: passed (%s)\n", xr_rbc_dispatch_name());
+    return 0;
+}
