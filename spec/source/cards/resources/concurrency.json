@@ -51,7 +51,8 @@
       "fences": [
         "coro-scope",
         "coro-isolated-scope"
-      ]
+      ],
+      "markdown": "TaskFailures<E> contains only child business Error(E), never PanicInfo or Cancelled. Both scope forms drain before exit and propagate panic separately with priority. Default scope business errors are B | E; isolated uses B | TaskFailures<E>, where B is the escaping body set and E direct-child errors. No child aggregate channel exists for E=Never; B=Never and E=Never need no scope try. try scope does not protect throwing body calls. Body errors or outward return/break/continue cancel and drain both forms; pending control transfers retain their owned value, frame and valid loans. Parent cancellation already entered at a legal checkpoint wins, with secondary failures reported separately. Complete execution remains unqualified (spec 10.7)."
     },
     {
       "heading_level": 2,

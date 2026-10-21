@@ -196,7 +196,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 - `try await t` 等待结果，成功时返回 `T`，业务错误按 `E | Cancelled` 传播；子任务 panic 仍走 panic 通道。
 - `t.awaitResult()` 将终态作为四变体 `TaskResult<T, E>` 返回，业务错误不会从该方法重抛；等待者自身的取消仍按取消展开处理。
-- `try scope { ... }` 在子任务失败时取消兄弟并在结束处传播首个失败；`try scope(isolated) { ... }` 保留兄弟执行并汇总失败。详见 §10.7。
+- 默认 scope 在子任务失败时取消兄弟；isolated 保留兄弟执行，仅把子任务业务错误汇总为 `TaskFailures<E>`。两者都等待全部成员结束后退出，panic 始终走独立通道，不进入汇总。主体错误集合 B 与直接子任务错误集合 E 分别组成 `B | E` 和 `B | TaskFailures<E>`；B、E 都为 `Never` 时，两种 scope 均免除传播标记。`try scope` 只标记退出处传播，不免除主体内调用的标记。详见 §10.7。
 
 ```xray @fragment
 var task = go fetch(url)
@@ -856,7 +856,7 @@ ADT enums allow `match` to check exhaustiveness at compile time.
 
 - `try await t` waits for `T` and propagates business errors as `E | Cancelled`; child panic stays on the panic channel.
 - `t.awaitResult()` returns the four-variant `TaskResult<T, E>` without rethrowing business errors. Cancellation of the waiter itself still unwinds that waiter.
-- `try scope { ... }` cancels siblings on child failure and propagates the first failure on exit; `try scope(isolated) { ... }` lets siblings continue and aggregates failures. See §10.7.
+- Default scope cancels siblings on child failure; isolated scope lets siblings continue and aggregates only child business errors as `TaskFailures<E>`. Both drain all members before exit. Panic always uses its independent channel and never enters the aggregate. Body errors B and direct-child errors E form `B | E` and `B | TaskFailures<E>` respectively; both forms need no propagation marker when B and E are `Never`. `try scope` marks exit propagation without marking calls in its body. See §10.7.
 
 ```xray @fragment
 var task = go fetch(url)

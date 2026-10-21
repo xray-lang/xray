@@ -4691,7 +4691,7 @@ ADT enums allow `match` to check exhaustiveness at compile time.
 
 - `try await t` waits for `T` and propagates business errors as `E | Cancelled`; child panic stays on the panic channel.
 - `t.awaitResult()` returns the four-variant `TaskResult<T, E>` without rethrowing business errors. Cancellation of the waiter itself still unwinds that waiter.
-- `try scope { ... }` cancels siblings on child failure and propagates the first failure on exit; `try scope(isolated) { ... }` lets siblings continue and aggregates failures. See §10.7.
+- Default scope cancels siblings on child failure; isolated scope lets siblings continue and aggregates only child business errors as `TaskFailures<E>`. Both drain all members before exit. Panic always uses its independent channel and never enters the aggregate. Body errors B and direct-child errors E form `B | E` and `B | TaskFailures<E>` respectively; both forms need no propagation marker when B and E are `Never`. `try scope` marks exit propagation without marking calls in its body. See §10.7.
 
 ```xray @fragment
 var task = go fetch(url)
@@ -5608,7 +5608,7 @@ Multiple-task waits use suspending library functions without an `await` prefix:
 | `Task.firstSuccess(ts)` | First successful value | `TaskFailures<E>` if all fail, plus `Cancelled` | Cancel the rest on return |
 | `Task.timeout(t, ms)` | `T` | `E \| Cancelled \| Timeout` | Cancel `t` on timeout |
 
-The first three functions accept homogeneous `Array<Task<T, E>>`, without implicit erasure of heterogeneous result or error types. Use a scope and individual waits for different types. `TaskFailures<E>` records failed tasks' debug names, input positions, and error values or `PanicInfo`; this semantic notation does not define concrete field names.
+The first three functions accept homogeneous `Array<Task<T, E>>`, without implicit erasure of heterogeneous result or error types. Use a scope and individual waits for different types. `TaskFailures<E>` records only business failures: task debug names, positions, and error values E. It contains neither `PanicInfo` nor `Cancelled`. A scope position is the actual member registration ordinal; a library aggregate position is the input position. This semantic notation does not define concrete field names. Panic always uses its independent channel. Success-versus-panic races in `Task.firstSuccess` and mixed outcomes when none succeeds require separate joint execution-interface decisions; they cannot be inferred from the business aggregate type.
 
 ### 10.4 The `Task<T, E>` handle
 
@@ -5627,6 +5627,8 @@ var outcome = t.awaitResult()
 ```
 
 `TaskResult<T, E>` has exactly four terminal variants: `Success(T)`, `Error(E)`, `Panic(PanicInfo)`, and `Cancelled`. Parentheses describe payload types, not construction syntax or field names. The outer Optional of `poll()` represents unfinished work; `Task.timeout` represents timeout as an error. Returning a terminal outcome does not exempt the waiter from its own cancellation unwinding.
+
+Task publication and repeated observation require copyable, Sendable T and E. The entire reachable PanicInfo graph must also be owned, copyable and Sendable; a read-only binding alone is insufficient. The task retains its terminal outcome, and each observer receives an independent logical snapshot. Value copies and identity references follow their ownership rules without borrowing a retired executor frame.
 
 **Cancellation** is checked only at suspension points, including `await`, Channel operations, `select`, `Task.yieldNow()`, sleep and IO. A cancelled task runs its defers and unwinds. Neither `catch (e)` nor `catch panic` intercepts this, and it does not enter the task function's error signature. A task waiting on that child observes typed `Cancelled`.
 
@@ -5746,14 +5748,16 @@ ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
 TryScopeStmt ::= 'try' ScopeStmt
 ```
 
-Both forms are statements without an aggregate value and wait for all member tasks to terminate before exit. A business-error-producing scope requires `try scope` or an enclosing protected `try { }` region.
+Both forms are statements without an aggregate value and wait for all members to terminate and finish cleanup before exit. A business-error-producing scope requires `try scope` or an enclosing real protected `try { }` region. `try scope` marks only the implicit exit propagation and creates no protected region: throwing calls in its body still require `try` / `try?` / `try!` or lexical protection by an outer real try body. Protection excludes nested function and closure bodies and that try statement's sibling handlers.
 
 | Form | On child failure (including panic) | On exit |
 |--|--|--|
-| Default `scope` | Cancel the remaining siblings | Propagate the first failure on its original error or panic channel |
-| `scope(isolated)` | Let siblings continue | Aggregate failures as `TaskFailures<E>` |
+| Default `scope` | Cancel the remaining siblings | Propagate the first successfully published panic if present; otherwise the first successfully published body or child business error |
+| `scope(isolated)` | Let siblings continue | Propagate panic on its channel if present; otherwise propagate a body business error directly, or aggregate child business errors as `TaskFailures<E>` when no body business error exists |
 
-The default scope's business error type is the union of child error types; when all are `Never`, it needs no `try`. The isolated form uses `TaskFailures<E>` for that same union. Its panic aggregation when `E = Never` conflicts with the proposed marker exemption and still needs joint Task329/Task331 resolution; no marker exemption is promised for that case.
+Let B be the business errors escaping the body after local catches, including errors raised by handlers, and E the union of the declared error types of direct go children. Default scope has complete business error type `B | E`; isolated scope has `B | TaskFailures<E>`, with no child business aggregate channel when E=Never. Both forms need no scope propagation marker when B and E are Never; possible panic does not change this rule. This empty-channel rule does not define `TaskFailures<Never> = Never` in every type position. An explicit `try await` in the body may add Cancelled to B, so child E alone is insufficient. `try?` / `try!` can remove business escape, but cannot catch panic. The full escaping set must still fit the enclosing function's declaration; try does not enlarge its signature.
+
+Normal block completion only joins members. Body Error, Panic or an outward return/break/continue cancels and drains accepted members in both forms. An isolated child failure alone does not cancel siblings. A pending normal control transfer must own its value and retain the body frame and valid loans; it is fulfilled only after draining finds no higher-priority failure, so return cannot swallow child panic. Multiple panics select the first successful publisher without promising wall-clock order. Other failures retain their original payloads for secondary diagnostics and release under unique ownership. When an isolated body error propagates directly, child business errors are secondary diagnostics; the body error is not implicitly wrapped.
 
 ```xray @check
 fn worker(n: i64) -> i64 { return n + 1 }
@@ -5766,7 +5770,7 @@ fn main() {
         go worker(2)
     }
 }
-try main()
+main()
 ```
 
 ```xray @check
@@ -5775,7 +5779,7 @@ fn worker(ok: bool) throws(WorkerErr) -> i64 {
     if (!ok) { throw WorkerErr.Failed }
     return 1
 }
-fn main() {
+fn main() throws(TaskFailures<WorkerErr>) {
     try scope(isolated) {
         go(name: "first") worker(false)
         go(name: "second") worker(true)
@@ -5784,7 +5788,7 @@ fn main() {
 try main()
 ```
 
-Cancellation caused by the scope itself is not a failure. If the enclosing task is cancelled, the scope cancels and waits for its children, then continues cancellation unwinding. Thus its business error type excludes `Cancelled`. Concurrent failure ties and aggregation of independently cancelled children remain unsettled; no additional deterministic ordering is promised. Keep handles for individual waits or use §10.3 library functions when values are needed. A `go` outside a scope starts an independent task.
+Scope-induced child cancellation is not a failure, and independently cancelled members are not wrapped as business errors or aggregate items. Once the parent enters cancellation unwinding at a legal suspension checkpoint, scope cancels and drains members, then continues uncatchable parent cancellation; member failures are secondary diagnostics. A cancellation request alone does not mutate frames, resume positions or terminal state. Implicit scope waiting adds no `Cancelled`, while B from explicit body waits is still checked as above. Panic escaping cleanup always follows the terminal rule in §8.2.5. Keep handles for individual waits or use §10.3 library functions when values are needed. A `go` outside a scope starts an independent task. These target semantics still require type checking, scheduler interface layout and joint execution tests; they do not qualify the current implementation.
 
 ### 10.8 `move` — cross-coroutine ownership transfer
 

@@ -36,7 +36,7 @@
       "fences": [
         "coro-task-handle"
       ],
-      "markdown": "poll() returns `TaskResult<T, E>?`; null means unfinished. awaitResult() reports one of Success(T), Error(E), Panic(PanicInfo), Cancelled. Payload type notation does not define field names. Cancellation is checked only at suspension points and cannot be caught by the cancelled task; a waiter sees typed Cancelled."
+      "markdown": "poll() returns `TaskResult<T, E>?`; null means unfinished. awaitResult() reports one of Success(T), Error(E), Panic(PanicInfo), Cancelled. Payload type notation does not define field names. T, E and the entire owned PanicInfo graph must be copyable and Sendable. Repeated observation preserves the task terminal outcome and returns independent logical snapshots. Cancellation is checked only at suspension points and cannot be caught by the cancelled task; a waiter sees typed Cancelled."
     },
     {
       "heading": "scope — structured concurrency",
@@ -44,7 +44,7 @@
         "coro-scope",
         "coro-isolated-scope"
       ],
-      "markdown": "Default scope cancels siblings on a child failure and propagates the first failure on its original channel after all children terminate. Isolated scope lets siblings continue and aggregates failures as `TaskFailures<E>`. Scope-induced cancellation is not a failure. The isolated Never/panic marker boundary remains unsettled; see spec 10.7."
+      "markdown": "Default scope cancels siblings on child failure; isolated scope lets them continue. Both drain all members before exit, give panic priority on its independent channel, and never put panic in TaskFailures<E>. Let B be escaping body business errors and E direct-child declared errors. Default scope exposes B | E; isolated exposes B | TaskFailures<E>, with no child aggregate channel when E=Never. Both need no scope marker when B and E are Never. try scope marks exit propagation, not calls in its body; real try-body protection or individual call markers remain required. Abrupt body exit cancels and drains both forms, retaining owned pending control transfers and valid body lifetimes. Isolated body errors propagate directly before child business aggregates. Parent cancellation already entered at a legal checkpoint remains uncatchable. These target semantics still need compiler/runtime qualification; see spec 10.7."
     },
     {
       "heading": "select — multiplex channels",

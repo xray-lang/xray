@@ -4672,7 +4672,7 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 - `try await t` 等待结果，成功时返回 `T`，业务错误按 `E | Cancelled` 传播；子任务 panic 仍走 panic 通道。
 - `t.awaitResult()` 将终态作为四变体 `TaskResult<T, E>` 返回，业务错误不会从该方法重抛；等待者自身的取消仍按取消展开处理。
-- `try scope { ... }` 在子任务失败时取消兄弟并在结束处传播首个失败；`try scope(isolated) { ... }` 保留兄弟执行并汇总失败。详见 §10.7。
+- 默认 scope 在子任务失败时取消兄弟；isolated 保留兄弟执行，仅把子任务业务错误汇总为 `TaskFailures<E>`。两者都等待全部成员结束后退出，panic 始终走独立通道，不进入汇总。主体错误集合 B 与直接子任务错误集合 E 分别组成 `B | E` 和 `B | TaskFailures<E>`；B、E 都为 `Never` 时，两种 scope 均免除传播标记。`try scope` 只标记退出处传播，不免除主体内调用的标记。详见 §10.7。
 
 ```xray @fragment
 var task = go fetch(url)
@@ -5565,7 +5565,7 @@ var bounded = try Task.timeout(task, 1000)
 | `Task.firstSuccess(ts)` | 第一个成功值 | 全部失败时 `TaskFailures<E>`，另有 `Cancelled` | 返回后取消其余 |
 | `Task.timeout(t, ms)` | `T` | `E \| Cancelled \| Timeout` | 超时后取消 `t` |
 
-前三者接受同构的 `Array<Task<T, E>>`，不隐式擦除异构结果或错误类型。类型不同的任务用 scope 加逐个等待。`TaskFailures<E>` 汇总失败任务的调试名称、输入位置以及错误值或 `PanicInfo`；其具体字段名不由上述语义记法定义。
+前三者接受同构的 `Array<Task<T, E>>`，不隐式擦除异构结果或错误类型。类型不同的任务用 scope 加逐个等待。`TaskFailures<E>` 只汇总业务失败任务的调试名称、位置以及错误值 E，不包含 `PanicInfo` 或 `Cancelled`；scope 的位置是实际成员注册序号，库聚合函数的位置是输入位置。具体字段名不由上述语义记法定义。panic 始终沿独立通道传播；`Task.firstSuccess` 的成功与 panic 竞争及全部未成功时的混合选择须在共同执行接口中另行冻结，不能从业务汇总类型反推。
 
 ### 10.4 `Task<T, E>` 句柄
 
@@ -5584,6 +5584,8 @@ var outcome = t.awaitResult()
 ```
 
 `TaskResult<T, E>` 只有四种终态：`Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled`。括号表示载荷类型，不是构造语法或字段名声明；未完成由 `poll()` 的外层 Optional 表达，超时由 `Task.timeout` 的错误表达。`awaitResult()` 返回终态不意味着当前等待者免于取消展开。
+
+跨 Task 发布和重复观察要求 T、E 可复制且 Sendable，PanicInfo 的完整可达图也必须拥有式、可复制且 Sendable；仅把绑定设为只读不满足这个要求。任务保留其终态，每个观察者取得独立逻辑快照；值复制与身份引用各遵守其拥有规则，不能借用已退出的执行器帧。
 
 **取消语义**：只在挂起点检查，包括 `await`、Channel、`select`、`Task.yieldNow()`、sleep 和 IO。被取消的任务执行 `defer` 并展开，`catch (e)` 与 `catch panic` 均不能捕获，也不把这种取消写进任务函数的错误签名。等待它的一方看到类型化的 `Cancelled`。
 
@@ -5703,14 +5705,16 @@ ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
 TryScopeStmt ::= 'try' ScopeStmt
 ```
 
-两种 scope 都是语句，不返回聚合值；退出前等待所有成员任务终结。会传播业务错误时写 `try scope`，或者将 scope 放入 `try { }` 的保护区域。
+两种 scope 都是语句，不返回聚合值；退出前等待所有成员任务终结和清理完成。会传播业务错误时写 `try scope`，或者将 scope 放入真实 `try { }` 的保护区域。`try scope` 只标记 scope 退出处的隐式传播，不建立保护区域；主体内会抛业务错误的调用仍须有 `try` / `try?` / `try!`，或处于外层真实 try 主体的词法保护区域。保护范围不进入嵌套函数或闭包，也不包含该 try 的同级 handler。
 
 | 形式 | 子任务失败（含 panic）时 | 结束时 |
 |--|--|--|
-| 默认 `scope` | 取消其余兄弟任务 | 传播第一个失败，业务错误仍是错误、panic 仍是 panic |
-| `scope(isolated)` | 兄弟继续执行 | 以 `TaskFailures<E>` 汇总失败 |
+| 默认 `scope` | 取消其余兄弟任务 | 有 panic 时传播首个成功发布的 panic；否则传播首个成功发布的主体或子任务业务错误 |
+| `scope(isolated)` | 兄弟继续执行 | 有 panic 时沿 panic 通道传播；否则优先直接传播主体业务错误，没有主体业务错误时才以 `TaskFailures<E>` 汇总子业务错误 |
 
-默认 scope 的业务错误类型是子任务错误类型的 union；所有子任务错误类型为 `Never` 时免除 `try`。isolated 形态用 `TaskFailures<E>`，其中 `E` 是同一 union。isolated 在 `E = Never` 但子任务 panic 时的汇总错误与免标记规则存在待定边界，需 Task329/Task331 共同冻结，不能据此承诺免 `try`。
+设 B 为主体经过局部 catch 后仍会逃逸的业务错误集合（包括 handler 自己抛出的错误），E 为直接 go 子任务声明错误类型的 union。默认 scope 的完整业务错误类型为 `B | E`；isolated 为 `B | TaskFailures<E>`，其中 E=Never 时不产生子业务汇总通道。B、E 都为 Never 时，两种 scope 均免除 scope 传播标记；可能 panic 不改变该规则。这个空通道规则不为所有类型位置定义 `TaskFailures<Never> = Never`。主体的 `try await` 仍可能把 Cancelled 加入 B，不能只看子 E；`try?` / `try!` 可以消去相应业务逃逸，不能捕获 panic。最终完整逃逸集合仍须属于所在函数声明，写 try 不扩大签名。
+
+正常块末仅 join 成员；主体 Error、Panic 或向外 return/break/continue 时，两种 scope 都取消并 drain 已接管成员。isolated 的子失败本身不取消兄弟。待履行的正常控制转移必须拥有其值并保活主体帧和有效借用；只有 drain 后没有更高优先级失败才履行，不能用 return 吞掉子 panic。多个 panic 选择首个成功发布者，不承诺墙钟顺序；其余失败保留原始载荷用于次级诊断并按唯一拥有责任释放。isolated 主体错误直接传播时，子业务错误仅作次级诊断，不隐式包装主体错误。
 
 ```xray @check
 fn worker(n: i64) -> i64 { return n + 1 }
@@ -5723,7 +5727,7 @@ fn main() {
         go worker(2)
     }
 }
-try main()
+main()
 ```
 
 ```xray @check
@@ -5732,7 +5736,7 @@ fn worker(ok: bool) throws(WorkerErr) -> i64 {
     if (!ok) { throw WorkerErr.Failed }
     return 1
 }
-fn main() {
+fn main() throws(TaskFailures<WorkerErr>) {
     try scope(isolated) {
         go(name: "first") worker(false)
         go(name: "second") worker(true)
@@ -5741,7 +5745,7 @@ fn main() {
 try main()
 ```
 
-scope 自身引起的子任务取消不算失败；外层任务被取消时，scope 取消并等待子任务，然后继续取消展开，因此 scope 的业务错误类型不含 `Cancelled`。并发失败平局和独立手动取消子任务的汇总规则尚未冻结，不承诺额外的确定性顺序。需要结果时保留句柄逐个等待或使用 §10.3 的库函数。scope 外的 `go` 是独立任务。
+scope 自身引起的子任务取消不算失败，独立取消的成员也不被包装成业务错误或汇总项。父任务已在合法挂起检查点进入取消展开时，scope 取消并等待子任务，然后继续不可捕获的父取消；成员失败仅作次级诊断。单纯取消请求不直接改变帧、恢复位置或终态。scope 隐式等待不额外引入 `Cancelled`，但主体显式等待产生的 B 仍按上述规则检查。cleanup 逃逸 panic 始终遵守 §8.2.5 的终止规则。需要结果时保留句柄逐个等待或使用 §10.3 的库函数。scope 外的 `go` 是独立任务。这些目标语义尚待类型检查、调度器接口布局和共同执行测试接通，不能当作现有实现资格。
 
 ### 10.8 `move` — 跨协程所有权转移
 
