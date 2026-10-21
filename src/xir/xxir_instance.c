@@ -840,12 +840,10 @@ XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue 
     if (instance->state == XR_XIR_INSTANCE_FAILED) return XR_XIR_CALL_BAD_STATE;
     if (!instance->call) return XR_XIR_CALL_BAD_STATE;
     if (!xr_xir_task_executor_root_idle(instance->executor)) return XR_XIR_CALL_BAD_STATE;
+    if (!xir_call_empty_destination(output)) return XR_XIR_CALL_BAD_ARGUMENT;
     XrXirCallStatus completed = xr_xir_task_executor_completion_status(instance->executor);
-    /* A root LIMIT owns no transferable value. Its accessor still validates
-     * the destination; a group failure over a successful root must block transfer. */
-    if (completed != XR_XIR_CALL_READY &&
-        !(completed == XR_XIR_CALL_LIMIT && xr_xir_call_state(instance->call) == XR_XIR_CALL_LIMIT))
-        return completed;
+    /* A group failure retains its status and never transfers the root value. */
+    if (completed != XR_XIR_CALL_READY) return completed;
     return xr_xir_call_take_result(instance->call, output);
 }
 XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirCallResult *output) {

@@ -275,7 +275,7 @@ static XrXirCallStatus channel_timing_poll(XrXirCall *call);
 
 static bool boundary_value(XrXirValue value, XrXirType type) {
     if (type == XR_XIR_UNIT)
-        return value.type == XR_XIR_UNIT && !value.reserved && !value.payload;
+        return xir_call_empty_destination(&value);
     return xr_xir_value_argument(&value, NULL, type);
 }
 static XrXirCallStatus call_view_inbox_discard(XrXirCallView *view);

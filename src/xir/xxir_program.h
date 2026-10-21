@@ -99,8 +99,13 @@ XR_FUNC XrXirCallStatus xr_xir_instance_resume(XrXirInstance *instance, uint64_t
  * wake token. Failure leaves output unchanged; nothing is read or resumed. */
 XR_FUNC XrXirCallStatus xr_xir_instance_wait_request(const XrXirInstance *instance, uint64_t epoch,
     uint64_t wake, XrXirWaitRequest *output);
-/* Transfers ordinary entry outcomes. Initialization failure stays instance-owned:
- * take_result returns BAD_STATE without changing output; use copy_failure. */
+/* Transfers ordinary entry outcomes into an empty Unit destination. Owner,
+ * BUSY and activation-state checks precede destination validation. A finished
+ * ordinary activation rejects occupied destinations with BAD_ARGUMENT without
+ * consuming its outcome. A root/group LIMIT returns LIMIT repeatedly without
+ * transferring a value; group failure blocks transfer from a successful root.
+ * Initialization failure stays instance-owned: take_result returns BAD_STATE
+ * without changing output; use copy_failure. */
 XR_FUNC XrXirCallStatus xr_xir_instance_take_result(XrXirInstance *instance, XrXirValue *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_copy_failure(XrXirInstance *instance, XrXirCallResult *output);
 XR_FUNC XrXirCallStatus xr_xir_instance_stop(XrXirInstance *instance);

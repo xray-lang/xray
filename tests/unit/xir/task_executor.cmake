@@ -10,6 +10,9 @@ set_tests_properties(test_xir_task_executor PROPERTIES LABELS "unit;xir;task;own
 add_test(NAME test_xir_task_maximum_budget COMMAND test_xir_task_executor --maximum-budget)
 set_tests_properties(test_xir_task_maximum_budget PROPERTIES
     LABELS "unit;xir;task;ownership;runtime;resources" TIMEOUT 60)
+add_test(NAME test_xir_instance_limit_result COMMAND test_xir_task_executor --instance-limit-result)
+set_tests_properties(test_xir_instance_limit_result PROPERTIES
+    LABELS "unit;xir;task;ownership;runtime;resources" TIMEOUT 60)
 add_test(NAME test_xir_task_owned_recovery COMMAND test_xir_task_executor --owned-recovery)
 set_tests_properties(test_xir_task_owned_recovery PROPERTIES
     LABELS "unit;xir;task;ownership;atomic-receive" TIMEOUT 60)

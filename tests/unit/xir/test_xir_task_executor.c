@@ -34,6 +34,10 @@ static void task_test_release(XrXirCallView *view, XrXirCallStatus reason) {
     (void)reason; ++((TaskWitness *)view->environment)->releases;
 }
 static XrXirAction task_test_scalar(XrXirCallView *view) {
+    if (view->instance) {
+        XrXirValue output = {0};
+        CHECK(xr_xir_instance_take_result(view->instance, &output) == XR_XIR_CALL_BUSY);
+    }
     TaskWitness *witness = (TaskWitness *)view->environment;
     uint32_t *phase = view->state;
     ++witness->callbacks;
@@ -446,6 +450,7 @@ static void task_runtime_faults(void) {
 #include "task_closed_result_cases.h"
 #include "task_cross_domain_cases.h"
 #include "task_maximum_budget_cases.h"
+#include "task_instance_limit_cases.h"
 static void task_owned_recovery(void) {
     task_receive_probe=true;task_receive_checks=0;
     for(unsigned kind=0;kind<4;++kind){
@@ -468,6 +473,7 @@ static void task_owned_recovery(void) {
     puts("Task four native inputs reject atomically, retry in the same ledger and release one code lease");
 }
 int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--instance-limit-result")) { task_instance_limit_result_cases(); return 0; }
     if (argc == 2 && !strcmp(argv[1], "--maximum-budget")) { task_maximum_budget_cases(); return 0; }
     if(argc==2 && !strcmp(argv[1],"--owned-recovery")){task_owned_recovery();return 0;}
     if (argc == 2 && !strcmp(argv[1], "--cross-domain")) { task_cross_domain_cases(); return 0; }

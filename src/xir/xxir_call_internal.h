@@ -15,6 +15,9 @@
 #include "xxir_cell_owner_internal.h"
 #include "xxir_effect_contract_internal.h"
 #include "xxir_channel_rendezvous_internal.h"
+static inline bool xir_call_empty_destination(const XrXirValue *value) {
+    return value && value->type == XR_XIR_UNIT && !value->reserved && !value->payload;
+}
 typedef struct XrXirCallObserver XrXirCallObserver;
 typedef struct XirCallNativeObserver XirCallNativeObserver;
 typedef struct XirCallNativeSourceObserver XirCallNativeSourceObserver;
