@@ -289,13 +289,20 @@ try {
 ```xray @check
 enum AppErr { InvalidArg }
 
-try {
-    process(input)
-} catch (e: AppErr) {
-    log("business error:", e)                // 值返回通道
-} catch panic {
-    log("runtime fault!")                    // panic 通道
+fn process(input: i64) throws(AppErr) {
+    if (input < 0) { throw AppErr.InvalidArg }
 }
+
+fn main() {
+    try {
+        process(-1)
+    } catch (e: AppErr) {
+        print("business error")              // 值返回通道
+    } catch panic {
+        print("runtime fault!")              // panic 通道
+    }
+}
+main()
 ```
 
 **绑定与作用域规则**：每个 `try` 至多有一个 `catch panic`，因为它无条件匹配该通道。可省略头部，或写 `catch panic (p)` / `catch panic (p: PanicInfo)`；注解必须是 `PanicInfo`，不是运行时类型过滤器。绑定只读且仅在 handler 内可见，复制或返回该引用遵守 class 的身份与所有权规则，不自动获得 `Sendable`。handler 只保护对应的 try 主体，不保护同级 handler；handler 中的新 panic 继续寻找外层处理器。普通 enum 错误不能进入 panic handler，panic 也不能进入普通 catch。
@@ -942,13 +949,20 @@ try {
 ```xray @check
 enum AppErr { InvalidArg }
 
-try {
-    process(input)
-} catch (e: AppErr) {
-    log("business error:", e)                // value-return channel
-} catch panic {
-    log("runtime fault!")                    // panic channel
+fn process(input: i64) throws(AppErr) {
+    if (input < 0) { throw AppErr.InvalidArg }
 }
+
+fn main() {
+    try {
+        process(-1)
+    } catch (e: AppErr) {
+        print("business error")              // value-return channel
+    } catch panic {
+        print("runtime fault!")              // panic channel
+    }
+}
+main()
 ```
 
 **Binding and scope rules**: A `try` has at most one `catch panic`, since it matches that channel unconditionally. Its header may be omitted or written as `catch panic (p)` / `catch panic (p: PanicInfo)`; the annotation must be `PanicInfo`, not a runtime type filter. The binding is read-only and scoped to the handler. Copying or returning the reference follows class identity and ownership rules and does not grant `Sendable`. A handler protects its try body, not sibling handlers; a new panic in a handler searches the enclosing handlers. Ordinary enum errors never enter a panic handler, and panics never enter ordinary catch handlers.
