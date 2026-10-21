@@ -59,7 +59,7 @@ TEST(spec_retired_eval_command_removed) {
 TEST(spec_find_command_test_options) {
     const XrCliCommandSpec *spec = xr_cli_find_command("test");
     ASSERT_NOT_NULL(spec);
-    ASSERT_EQ_INT(xr_cli_option_count(spec->options), 6);
+    ASSERT_EQ_INT(xr_cli_option_count(spec->options), 7);
     ASSERT_EQ_INT(spec->positional_min, 0);
     ASSERT_EQ_INT(spec->positional_max, -1);
 }
@@ -106,8 +106,9 @@ TEST(spec_option_count) {
     const XrCliCommandSpec *spec = xr_cli_find_command("run");
     ASSERT_NOT_NULL(spec);
     int count = xr_cli_option_count(spec->options);
-    /* Source validation is mandatory; run has no legacy optimizer policy. */
-    ASSERT_EQ_INT(count, 0);
+    /* Only the explicit resource sandbox changes ordinary run policy. */
+    ASSERT_EQ_INT(count, 1);
+    ASSERT_STR_EQ(spec->options[0].long_name, "sandbox");
 }
 
 TEST(spec_option_count_empty) {
@@ -382,6 +383,24 @@ TEST(parse_build_native_verbose) {
     ASSERT_EQ_INT(inv.positional_count, 1);
 
     xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_execution_sandbox) {
+    const char *commands[] = {"run", "test"};
+    for (unsigned i = 0; i < sizeof(commands) / sizeof(*commands); ++i) {
+        const XrCliCommandSpec *spec = xr_cli_find_command(commands[i]);
+        ASSERT_NOT_NULL(spec);
+        XrCliContext ctx = {.program = "xray"};
+        XrCliInvocation inv;
+        char *arguments[] = {"--sandbox", "file.xr"};
+        ASSERT_EQ_INT(xr_cli_parse_command(spec, 2, arguments, &ctx, &inv), XR_CLI_EXIT_OK);
+        ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "sandbox"));
+        ASSERT_EQ_INT(inv.positional_count, 1);
+        xr_cli_invocation_free(&inv);
+        ASSERT_EQ_INT(xr_cli_parse_command(spec, 1, arguments + 1, &ctx, &inv), XR_CLI_EXIT_OK);
+        ASSERT_FALSE(xr_cli_opt_bool(&inv.options, "sandbox"));
+        xr_cli_invocation_free(&inv);
+    }
 }
 
 TEST(parse_build_native_debug_strip) {
@@ -833,6 +852,7 @@ RUN_TEST_SUITE("Command Parser");
 RUN_TEST(parse_cmd_simple_flag);
 RUN_TEST(parse_cmd_short_flag);
 RUN_TEST(parse_build_native_verbose);
+RUN_TEST(parse_execution_sandbox);
 RUN_TEST(parse_build_native_debug_strip);
 RUN_TEST(parse_build_native_freestanding_profile);
 RUN_TEST(parse_build_native_linker_script);

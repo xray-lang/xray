@@ -8,6 +8,7 @@
  * xlsp_server.c - LSP server implementation
  */
 
+#include "../../base/xresource_limits.h"
 #include "xlsp_server.h"
 #include "xlsp_protocol_output.h"
 #include "xlsp_method_table.h"
@@ -201,7 +202,7 @@ XrLspServer *xlsp_server_new(void) {
     }
 
     // Shallow workspace-wide symbol index (parallel-populated, no type memory).
-    XrCompileResourceLimits index_limits=xr_source_compile_default_resource_limits();
+    XrCompileResourceLimits index_limits=(XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     if(xr_compile_resources_new(&index_limits,&server->index_resources)!=XR_COMPILE_RESOURCE_OK||
        xlsp_source_index_store_new(server->index_resources,&server->source_index)!=XR_XIR_OK) {
         xlsp_server_free(server);return NULL;

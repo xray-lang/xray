@@ -11,11 +11,12 @@
  *   check never receives executable or complete-query permission.
  */
 #include "xmcp_source.h"
+#include "../../base/xresource_limits.h"
 #include "../../toolchain/xcompiler_session.h"
 #include <string.h>
 
 XR_FUNC XrCompileResourceLimits xmcp_source_default_limits(void) {
-    return (XrCompileResourceLimits){UINT64_C(1073741824), UINT64_C(268435456), UINT64_C(8589934592)};
+    return (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
 }
 
 XR_FUNC XrXirStatus xmcp_source_check(const XmcpSourceRequest *request, XmcpSourceOwner *output) {

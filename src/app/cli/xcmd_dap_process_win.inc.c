@@ -202,7 +202,7 @@ done:
     xr_compile_resources_free(wide);return status;
 }
 static int dap_process_frontend(void) {
-    XrCompileResources *resources=NULL;XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits=XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     if (xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK) return XR_CLI_EXIT_INTERNAL;
     XrOsIoPolicy policy=xr_compile_io_policy(resources);XrProcId owner=XR_PROC_INVALID;
     HANDLE events[3]={0},diagnostic=NULL;char *directory=NULL,*log=NULL,*executable=NULL;

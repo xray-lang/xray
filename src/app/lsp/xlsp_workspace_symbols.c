@@ -6,6 +6,7 @@
  *
  * xlsp_workspace_symbols.c - Owned syntax display queries on independent ledgers
  */
+#include "../../base/xresource_limits.h"
 #include "xlsp_workspace_symbols.h"
 #include "xlsp_source_params.h"
 #include "xlsp_source_index_store.h"
@@ -90,7 +91,7 @@ XR_FUNC XrXirStatus xlsp_workspace_symbols_capture(XrLspServer *server,const XrJ
     server->source_failure.stage=22;server->source_failure.status=XR_XIR_BAD_STRUCTURE;
     if(!params||server->shutdown_received||server->exit_received||!server->source_index)return XR_XIR_BAD_STRUCTURE;
     if(server->index_failure!=XR_XIR_OK){server->source_failure.status=(unsigned)server->index_failure;return server->index_failure;}
-    const XrCompileResourceLimits limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    const XrCompileResourceLimits limits=XR_RESOURCE_TOOL_COMPILER_LIMITS;
     XrCompileResources *resources=NULL;XlspWorkspaceSymbolRequest *request=NULL;
     XrXirStatus status=workspace_resource(xr_compile_resources_new(&limits,&resources));if(status!=XR_XIR_OK)goto done;
     status=workspace_resource(xr_compile_resources_calloc(resources,1,sizeof(*request),(void **)&request));

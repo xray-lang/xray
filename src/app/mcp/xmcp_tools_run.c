@@ -100,7 +100,7 @@ static RunExecution execute_program(XrXirProgram *program, uint32_t entry, RunCa
     const XmcpServer *server, uint64_t start, uint64_t duration) {
     RunExecution execution = {0};
     XrXirInstanceConfig config;
-    execution.status = xr_xir_instance_config_init(&config, sizeof(config));
+    execution.status = xr_xir_instance_config_init_sandbox(&config, sizeof(config));
     if (execution.status != XR_XIR_CALL_READY) return execution;
     XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, capture_write, capture, (size_t)config.value_limit};
     config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};

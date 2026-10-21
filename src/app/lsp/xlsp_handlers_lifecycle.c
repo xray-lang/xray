@@ -9,6 +9,7 @@
  *   initialize, initialized, shutdown, exit
  */
 
+#include "../../base/xresource_limits.h"
 #include "xlsp_handlers_lifecycle.h"
 #include "xlsp_server.h"
 #include "../../base/xjson.h"
@@ -25,7 +26,7 @@
 
 XR_FUNC XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue *params) {
     if (!server) return NULL;
-    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+    XrCompileResourceLimits limits = (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     XrCompileResources *resources = NULL; XlspSourceInitialize *owner = NULL; XrJsonValue *result = NULL;
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
     XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :

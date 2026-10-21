@@ -107,7 +107,7 @@ int main(int argc,char **argv) {
     runtime_attempts=0;runtime_fail_at=fail_at;oc_hits=oc_denials=0;oc_phase=1;
     for(unsigned i=0;i<2;++i) {
         oc_instance=i;XrXirInstanceConfig config;
-        CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_config_init_sandbox(&config,sizeof(config))==XR_XIR_CALL_READY);
         config.output=(XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,oc_output,&providers[i]};
         CHECK(xr_xir_instance_new(program,&config,&instances[i])==XR_XIR_CALL_READY);
         leases[i]=instances[i]->domain;CHECK(xr_xir_domain_retain(leases[i]));

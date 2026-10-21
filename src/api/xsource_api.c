@@ -26,6 +26,7 @@
 #include "../xir/xxir_compile_domain.h"
 #include "../xir/xxir_error.h"
 #include "../shared/xr_utf8_core.h"
+#include "../base/xresource_limits.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -235,10 +236,10 @@ XRAY_API void xray_source_diagnostic_free(XrSourceDiagnostic *diagnostic) {
 }
 XRAY_API XrSourceStatus xray_source_call_options_init(XrSourceCallOptions *options,size_t size) {
     if(!options || size!=sizeof(*options))return XR_SOURCE_BAD_ARGUMENT;
-    XrXirInstanceConfig config;XrXirCallStatus status=xr_xir_host_config_init(&config,sizeof(config));
+    XrXirInstanceConfig config;XrXirCallStatus status=xr_xir_host_config_init(&config,sizeof(config),false);
     if(status!=XR_XIR_CALL_READY)return api_call(status);
     *options=(XrSourceCallOptions){XRAY_SOURCE_API_VERSION,sizeof(*options),config.metadata_limit,config.value_limit,
-        config.call_limit,config.poll_limit,config.work_limit,config.depth_limit,1048576,NULL,NULL};return XR_SOURCE_OK;
+        config.call_limit,config.poll_limit,config.work_limit,config.depth_limit,XR_RESOURCE_DEFAULT_SIZE_LIMIT,NULL,NULL};return XR_SOURCE_OK;
 }
 static XrSourceStatus api_options_admit(const XrSourceCallOptions *options) {
     if(!options || options->api_version!=XRAY_SOURCE_API_VERSION || options->struct_size!=sizeof(*options))return XR_SOURCE_BAD_ARGUMENT;
@@ -246,7 +247,7 @@ static XrSourceStatus api_options_admit(const XrSourceCallOptions *options) {
 }
 static XrSourceStatus api_config(const XrSourceCallOptions *options,XrSourceCall *call,XrXirInstanceConfig *config) {
     XrSourceStatus admitted=api_options_admit(options);if(admitted!=XR_SOURCE_OK)return admitted;
-    XrXirCallStatus made=xr_xir_host_config_init(config,sizeof(*config));if(made!=XR_XIR_CALL_READY)return api_call(made);
+    XrXirCallStatus made=xr_xir_host_config_init(config,sizeof(*config),false);if(made!=XR_XIR_CALL_READY)return api_call(made);
     config->metadata_limit=options->metadata_limit-sizeof(*call);config->value_limit=options->value_limit;
     config->call_limit=options->call_limit;config->poll_limit=options->poll_limit;config->work_limit=options->work_limit;config->depth_limit=options->depth_limit;
     call->write=options->write?options->write:api_stdio;call->context=options->context;

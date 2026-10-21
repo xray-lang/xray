@@ -6,6 +6,7 @@
  *
  * xlsp_document_owner.c - Atomic editor transactions and document ownership
  */
+#include "../../base/xresource_limits.h"
 #include "xlsp_document_owner.h"
 #include "xlsp_source_open.h"
 #include "xlsp_diagnostic_owner.h"
@@ -17,8 +18,7 @@
 #include "../../os/os_time.h"
 #include <limits.h>
 #include <string.h>
-static const XrCompileResourceLimits document_limits={UINT64_C(64)*1024*1024,
-    UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits document_limits=XR_RESOURCE_TOOL_COMPILER_LIMITS;
 
 static void document_detach_diagnostics(XrLspDocument *doc) {
     XrLspServer *server = doc->server;

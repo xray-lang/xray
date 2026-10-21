@@ -123,12 +123,12 @@ TEST(repl_profile_clears_each_call) {
     ASSERT_EQ_INT(xr_xir_instance_free(fixture.runtime),XR_XIR_CALL_READY);fixture.runtime=NULL;fixture.trace_events=0;
     XrXirOutputProvider output=config.output;
     memset(&config,0xa5,sizeof(config));
-    ASSERT_EQ_INT(xr_xir_host_config_init(&config,sizeof(config)),XR_XIR_CALL_READY);
+    ASSERT_EQ_INT(xr_xir_host_config_init(&config,sizeof(config),false),XR_XIR_CALL_READY);
     ASSERT_NULL(config.trace);ASSERT_NULL(config.trace_context);ASSERT_NULL(config.time.context);
     ASSERT_EQ_INT(config.time.abi_version,XR_XIR_CALL_ABI_VERSION);ASSERT_NOT_NULL(config.time.clock);ASSERT_NOT_NULL(config.time.utc_offset);
     int64_t now=0;ASSERT_EQ_INT(config.time.clock(config.time.context,XR_XIR_CLOCK_MONOTONIC,&now),XR_XIR_TIME_OK);ASSERT_TRUE(now>0);
     XrXirInstanceConfig unchanged=config;
-    ASSERT_EQ_INT(xr_xir_host_config_init(&config,sizeof(config)-1),XR_XIR_CALL_BAD_ABI);
+    ASSERT_EQ_INT(xr_xir_host_config_init(&config,sizeof(config)-1,false),XR_XIR_CALL_BAD_ABI);
     ASSERT_TRUE(!memcmp(&config,&unchanged,sizeof(config)));
     config.output=output;
     ASSERT_EQ_INT(xr_xir_instance_new(fixture.program->code,&config,&fixture.runtime),XR_XIR_CALL_READY);

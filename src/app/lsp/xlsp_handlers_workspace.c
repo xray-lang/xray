@@ -9,6 +9,7 @@
  *   didChangeWatchedFiles, didChangeWorkspaceFolders, didChangeConfiguration
  */
 
+#include "../../base/xresource_limits.h"
 #include "xlsp_handlers_workspace.h"
 #include "xlsp_server.h"
 #include "../../base/xjson.h"
@@ -36,7 +37,7 @@
 
 XR_FUNC void xlsp_handle_ws_did_change_watched_files(XrLspServer *server, XrJsonValue *params) {
     if (!server) return;
-    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+    XrCompileResourceLimits limits = (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     XrCompileResources *resources = NULL; XlspSourceWatch *batch = NULL;
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
     XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
@@ -76,7 +77,7 @@ done:
 static void workspace_folders_apply(XrLspServer *server, const XrJsonValue *params,
     const char *uri, const char *name, bool add) {
     if (!server) return;
-    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+    XrCompileResourceLimits limits = (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     XrCompileResources *resources = NULL; XlspSourceFolders *owner = NULL; bool changed = false;
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
     XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :
@@ -121,7 +122,7 @@ XR_FUNC void xlsp_handle_ws_did_change_workspace_folders(XrLspServer *server, Xr
 
 static void xlsp_handle_ws_apply_configuration(XrLspServer *server, XrJsonValue *settings) {
     if (!server || !settings) return;
-    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+    XrCompileResourceLimits limits = (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     XrCompileResources *resources = NULL;
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
     XrXirStatus status = opened == XR_COMPILE_RESOURCE_OK ? XR_XIR_OK :

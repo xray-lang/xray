@@ -22,6 +22,7 @@
 #include "../../api/xsource_paths.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xresource_limits.h"
 #include "../../execution/xr_xir_host_cli.h"
 #include "../../execution/xr_xir_host_time.h"
 #include "../../os/os_dir.h"
@@ -56,6 +57,7 @@ typedef enum {
 typedef struct XrTestConfig {
     bool verbose;
     bool fail_fast;
+    bool sandbox;
     const char *filter;  // NULL = run all
 } XrTestConfig;
 
@@ -430,7 +432,9 @@ static void run_test_file(const char *filepath, const XrTestConfig *config,
     fail_file(result, "source VM does not support this host architecture");
 #else
     char error[TEST_MESSAGE_MAX] = {0};
-    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+    XrCompileResourceLimits limits = config->sandbox ?
+        (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS :
+        (XrCompileResourceLimits)XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
     XrCompileResources *resources = NULL;
     if (xr_compile_resources_new(&limits, &resources) != XR_COMPILE_RESOURCE_OK) {
         fail_file(result, "cannot initialize source resources");
@@ -485,13 +489,11 @@ static void run_test_file(const char *filepath, const XrTestConfig *config,
         goto release;
     }
     XrXirInstanceConfig instance_config;
-    if (xr_xir_host_config_init(&instance_config, sizeof(instance_config)) !=
+    if (xr_xir_host_config_init(&instance_config, sizeof(instance_config), config->sandbox) !=
         XR_XIR_CALL_READY) {
         fail_file(result, "cannot initialize execution configuration");
         goto release;
     }
-    /* The wall-clock deadline bounds a test; the embedding poll cap does not apply. */
-    instance_config.poll_limit = UINT64_MAX;
     XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, test_output_bytes, NULL,
                             instance_config.value_limit};
     instance_config.output =
@@ -991,7 +993,8 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
         return XR_CLI_EXIT_OK;
     }
 
-    XrTestConfig config = {.verbose = verbose, .fail_fast = fail_fast, .filter = filter};
+    XrTestConfig config = {.verbose = verbose, .fail_fast = fail_fast,
+        .sandbox = xr_cli_opt_bool(&inv->options, "sandbox"), .filter = filter};
 
     /* Allocate results */
     XrTestFileResult *results = xr_calloc(fl.count, sizeof(XrTestFileResult));

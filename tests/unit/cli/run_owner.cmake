@@ -3,7 +3,8 @@ if(NOT WIN32)
 endif()
 foreach(target run_owner_driver run_owner_injected)
     add_executable(${target} "${CMAKE_CURRENT_LIST_DIR}/run_owner/run_owner_driver.c"
-        "${PROJECT_SOURCE_DIR}/src/app/cli/xcli_diag.c")
+        "${PROJECT_SOURCE_DIR}/src/app/cli/xcli_diag.c"
+        "${PROJECT_SOURCE_DIR}/src/app/cli/xcli_spec.c")
 endforeach()
 add_executable(run_owner_emit "${PROJECT_SOURCE_DIR}/tests/unit/xir/host_cli_owner/emit_host_cli.c")
 foreach(target run_owner_driver run_owner_injected run_owner_emit)

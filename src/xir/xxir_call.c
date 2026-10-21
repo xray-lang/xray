@@ -14,6 +14,7 @@
  *   call is protected; every other failure unwinds the whole activation.
  */
 #include "xxir_call.h"
+#include "../base/xresource_limits.h"
 #include "xxir_call_generator.h"
 #include "xxir_call_internal.h"
 #include "xxir_call_observer_internal.h"
@@ -773,7 +774,8 @@ XrXirCallStatus xr_xir_call_config_init(XrXirCallConfig *config, size_t size) {
     if (!config) return XR_XIR_CALL_BAD_ARGUMENT;
     if (size != sizeof(*config)) return XR_XIR_CALL_BAD_ABI;
     *config = (XrXirCallConfig) {XR_XIR_CALL_ABI_VERSION, sizeof(*config), NULL, 0, NULL,
-        UINT64_C(16) << 20, UINT64_C(1000000), 4096, NULL, {0}, {0}, {0}};
+        XR_RESOURCE_SANDBOX_RUNTIME_LIVE, XR_RESOURCE_SANDBOX_RUNTIME_POLLS,
+        XR_RESOURCE_SANDBOX_RUNTIME_DEPTH, NULL, {0}, {0}, {0}};
     return XR_XIR_CALL_READY;
 }
 static XrXirCallStatus table_size(const XrXirCallConfig *config, uint64_t *bytes) {

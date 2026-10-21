@@ -27,8 +27,9 @@ typedef struct XrXirHostInstance XrXirHostInstance;
 XR_FUNC XrXirTarget xr_xir_host_target(void);
 /* Reinitializes all runtime options, including trace and provider contexts,
  * and installs the actual system time provider. Failure preserves output.
+ * Sandbox selects finite resource limits; ordinary hosts have no policy cap.
  * Callers then supply their own output sink and explicit policy overrides. */
-XR_FUNC XrXirCallStatus xr_xir_host_config_init(XrXirInstanceConfig *config, size_t size);
+XR_FUNC XrXirCallStatus xr_xir_host_config_init(XrXirInstanceConfig *config, size_t size, bool sandbox);
 /* One serialized owner keeps initialization, slots, callable authority, provider
  * contexts and cumulative limits across calls. Its one active Call must be
  * dropped before another begin or owner drop. Failure preserves empty output. */

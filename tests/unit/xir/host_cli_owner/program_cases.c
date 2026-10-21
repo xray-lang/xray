@@ -7,6 +7,7 @@
  * program_cases.c - Actual generated program ownership and host failures
  */
 #include "execution/xr_xir_host_cli.h"
+#include "base/xresource_limits.h"
 #include <stdlib.h>
 #include <string.h>
 #include <io.h>
@@ -17,13 +18,16 @@
 #include "xir/xxir_format.c"
 #include "execution/xr_xir_host_execution.c"
 static unsigned io_failure, mode_calls;
-static bool policy_budget, config_failure;
+static bool policy_budget, config_failure, sandbox_expected;
 static unsigned resource_calls;
 static XrCompileResourceStatus observed_resources_new(const XrCompileResourceLimits *limits,
     XrCompileResources **output) {
     ++resource_calls;
-    CHECK(limits->allocated_bytes==(UINT64_C(64)<<20) && limits->live_bytes==(UINT64_C(16)<<20) &&
-        limits->work==(UINT64_C(1)<<30));
+    const XrCompileResourceLimits expected=sandbox_expected ?
+        (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS :
+        (XrCompileResourceLimits)XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
+    CHECK(limits->allocated_bytes==expected.allocated_bytes && limits->live_bytes==expected.live_bytes &&
+        limits->work==expected.work);
     XrCompileResourceLimits reduced=*limits;
     if(policy_budget)reduced.allocated_bytes=0;
     return xr_compile_resources_new(&reduced,output);
@@ -37,11 +41,12 @@ static size_t observed_write(const void *bytes,size_t size,size_t count,FILE *fi
     return io_failure==3 ? 0 : fwrite(bytes,size,count,file);
 }
 static int observed_flush(FILE *file) {return io_failure==4 ? EOF : fflush(file);}
-static XrXirCallStatus observed_config(XrXirInstanceConfig *config,size_t size) {
-    return config_failure ? XR_XIR_CALL_BAD_ABI : xr_xir_instance_config_init(config,size);
+static XrXirCallStatus observed_config(XrXirInstanceConfig *config,size_t size,bool sandbox) {
+    CHECK(sandbox==sandbox_expected);
+    return config_failure ? XR_XIR_CALL_BAD_ABI : xr_xir_host_config_init(config,size,sandbox);
 }
 #define xr_compile_resources_new observed_resources_new
-#define xr_xir_instance_config_init observed_config
+#define xr_xir_host_config_init observed_config
 #define _setmode observed_setmode
 #define fwrite observed_write
 #define fflush observed_flush
@@ -50,7 +55,7 @@ static XrXirCallStatus observed_config(XrXirInstanceConfig *config,size_t size) 
 #undef fwrite
 #undef fflush
 #undef xr_compile_resources_new
-#undef xr_xir_instance_config_init
+#undef xr_xir_host_config_init
 XR_DATA const XrXirProgramSpec host_fixture_program;
 static XrXirProgram *owned_program(void) {
     const XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
@@ -64,23 +69,23 @@ static XrXirProgram *owned_program(void) {
 static void program_owner(void) {
     uint32_t entry=host_fixture_program.declarations->entry_function;
     size_t attempts=runtime_attempts;mode_calls=0;resource_calls=0;
-    CHECK(xr_xir_host_program_main(NULL,entry)==4 && runtime_attempts==attempts && !mode_calls);
+    CHECK(xr_xir_host_program_main(NULL,entry,false)==4 && runtime_attempts==attempts && !mode_calls);
     for(io_failure=1;io_failure<=4;++io_failure) {
         XrXirProgram *program=owned_program();attempts=runtime_attempts;mode_calls=0;
-        CHECK(xr_xir_host_program_main(program,entry)==(io_failure<=2 ? 4 : 1));
+        CHECK(xr_xir_host_program_main(program,entry,false)==(io_failure<=2 ? 4 : 1));
         CHECK(!runtime_live && !runtime_bytes && !resource_calls);
         if(io_failure<=2)CHECK(runtime_attempts==attempts);
     }
     io_failure=0;config_failure=true;
-    CHECK(xr_xir_host_program_main(owned_program(),entry)==4 && !runtime_live && !runtime_bytes);
+    CHECK(xr_xir_host_program_main(owned_program(),entry,false)==4 && !runtime_live && !runtime_bytes);
     config_failure=false;
-    CHECK(xr_xir_host_program_main(owned_program(),UINT32_MAX)==4 && !runtime_live && !runtime_bytes);
+    CHECK(xr_xir_host_program_main(owned_program(),UINT32_MAX,false)==4 && !runtime_live && !runtime_bytes);
     XrXirProgram *program=owned_program();runtime_attempts=0;
-    CHECK(xr_xir_host_program_main(program,entry)==0 && !runtime_live && !runtime_bytes);
+    CHECK(xr_xir_host_program_main(program,entry,false)==0 && !runtime_live && !runtime_bytes);
     size_t sites=runtime_attempts;
     for(size_t i=0;i<sites;++i) {
         program=owned_program();runtime_attempts=0;runtime_fail_at=i;
-        CHECK(xr_xir_host_program_main(program,entry)==4 && runtime_attempts>i);
+        CHECK(xr_xir_host_program_main(program,entry,false)==4 && runtime_attempts>i);
         runtime_fail_at=SIZE_MAX;
         CHECK(!runtime_live && !runtime_bytes && !resource_calls);
     }
@@ -139,28 +144,31 @@ int main(int argc,char **argv) {
     if(!strcmp(argv[1],"init")){initialization();return 0;}
     if(!strcmp(argv[1],"owner")){program_owner();return 0;}
     if(!strcmp(argv[1],"oom")) {
-        runtime_attempts=0;CHECK(xr_xir_host_main(&host_fixture_program)==0);
+        runtime_attempts=0;CHECK(xr_xir_host_main(&host_fixture_program,false)==0);
         size_t sites=runtime_attempts;CHECK(sites && !runtime_live && !runtime_bytes);
         for(size_t i=0;i<sites;++i) {
             runtime_attempts=0;runtime_fail_at=i;
-            int result=xr_xir_host_main(&host_fixture_program);
+            int result=xr_xir_host_main(&host_fixture_program,false);
             CHECK(result==4 && runtime_attempts>i && !runtime_live && !runtime_bytes);
         }
         runtime_fail_at=SIZE_MAX;
+        sandbox_expected=true;
+        CHECK(xr_xir_host_main(&host_fixture_program,true)==0 && !runtime_live && !runtime_bytes);
+        sandbox_expected=false;
         printf("Actual main: %zu OOM points, physical zero PASS\n",sites);return 0;
     }
     if(!strcmp(argv[1],"io")) {
         for(io_failure=1;io_failure<=4;++io_failure) {
             mode_calls=0;
-            CHECK(xr_xir_host_main(&host_fixture_program)==(io_failure<=2 ? 4 : 1));
+            CHECK(xr_xir_host_main(&host_fixture_program,false)==(io_failure<=2 ? 4 : 1));
             CHECK(!runtime_live && !runtime_bytes);
         }
         io_failure=0;policy_budget=true;
-        CHECK(xr_xir_host_main(&host_fixture_program)==1 && !runtime_live && !runtime_bytes);
+        CHECK(xr_xir_host_main(&host_fixture_program,false)==1 && !runtime_live && !runtime_bytes);
         policy_budget=false;
         puts("Actual main: both setmode/write/flush and admission budget failures, physical zero PASS");return 0;
     }
     CHECK(!strcmp(argv[1],"main"));
-    int result=xr_xir_host_main(&host_fixture_program);
+    int result=xr_xir_host_main(&host_fixture_program,false);
     CHECK(!runtime_live && !runtime_bytes);return result;
 }

@@ -24,12 +24,13 @@ XR_FUNC XrXirTarget xr_xir_host_target(void) {
     return (XrXirTarget){0};
 #endif
 }
-XR_FUNC XrXirCallStatus xr_xir_host_config_init(XrXirInstanceConfig *config,size_t size) {
+XR_FUNC XrXirCallStatus xr_xir_host_config_init(XrXirInstanceConfig *config,size_t size,bool sandbox) {
     if(!config)return XR_XIR_CALL_BAD_ARGUMENT;
     if(size!=sizeof(*config))return XR_XIR_CALL_BAD_ABI;
     if(!xr_xir_host_target().architecture)return XR_XIR_CALL_UNSUPPORTED;
     XrXirInstanceConfig prepared={0};
-    XrXirCallStatus status=xr_xir_instance_config_init(&prepared,sizeof(prepared));
+    XrXirCallStatus status=sandbox ? xr_xir_instance_config_init_sandbox(&prepared,sizeof(prepared)) :
+        xr_xir_instance_config_init(&prepared,sizeof(prepared));
     if(status==XR_XIR_CALL_READY) {
         xr_xir_host_time_provider(&prepared.time);*config=prepared;
     }

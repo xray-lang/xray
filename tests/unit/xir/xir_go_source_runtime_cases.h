@@ -74,7 +74,7 @@ static void source_task_runtime_faults(const SourceTaskOracle *oracle) {
 static void source_task_runtime_axes(const SourceTaskOracle *oracle) {
     uint32_t entry = UINT32_MAX; XrXirProgram *program = source_task_program(oracle, &entry);
     XrXirInstanceConfig config;
-    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_config_init_sandbox(&config, sizeof(config)) == XR_XIR_CALL_READY);
     CHECK(config.requested_value_limit == UINT64_C(67108864) &&
         config.requested_call_limit == UINT64_C(67108864) && config.work_limit == UINT64_C(128000000));
     XrXirDomainBudgetStats original = {0};

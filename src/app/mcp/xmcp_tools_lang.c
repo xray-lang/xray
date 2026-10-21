@@ -234,7 +234,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
     if (xjson_get_bool(arguments, "useTabs"))
         config.use_tabs = 1;
 
-    XrCompileResourceLimits limits={UINT64_C(1073741824),UINT64_C(268435456),UINT64_C(8589934592)};
+    XrCompileResourceLimits limits=xmcp_source_default_limits();
     XrCompileResources *resources=NULL;
     XrCompilerSession *session=NULL;
     AstNode *ast=NULL;

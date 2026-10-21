@@ -24,9 +24,14 @@ static const XrCliOptionSpec repl_options[] = {
     {"module-id",0,XR_CLI_VALUE_STRING,false,false,"NAMESPACE","Explicit interactive MEMORY namespace"},
     XR_CLI_OPT_END};
 
-static const XrCliOptionSpec run_options[] = {XR_CLI_OPT_END};
+static const XrCliOptionSpec run_options[] = {
+    {"sandbox", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Apply finite compilation and execution resource limits"},
+    XR_CLI_OPT_END};
 
 static const XrCliOptionSpec test_options[] = {
+    {"sandbox", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Apply finite compilation and execution resource limits"},
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     {"fail-fast", 'F', XR_CLI_VALUE_NONE, false, false, NULL, "Stop on first failure"},
     {"filter", 'f', XR_CLI_VALUE_STRING, false, false, "PATTERN", "Only run matching tests"},

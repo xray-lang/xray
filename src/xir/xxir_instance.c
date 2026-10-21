@@ -13,6 +13,7 @@
 
 
 #include "xxir_program_internal.h"
+#include "../base/xresource_limits.h"
 #include "xxir_effects.h"
 #include "xxir_instance_debug_internal.h"
 #include "xxir_instance_activation.h"
@@ -443,14 +444,24 @@ XR_FUNC bool xr_xir_instance_initialization_publication_missing(
     uint32_t module = instance->current_module;
     return instance->published_counts[module] < program->module_slots[module];
 }
-XrXirCallStatus xr_xir_instance_config_init(XrXirInstanceConfig *config, size_t size) {
+static XrXirCallStatus instance_config_init(XrXirInstanceConfig *config, size_t size, bool sandbox) {
     if (!config) return XR_XIR_CALL_BAD_ARGUMENT;
     if (size != sizeof(*config)) return XR_XIR_CALL_BAD_ABI;
+    uint64_t live = sandbox ? XR_RESOURCE_SANDBOX_RUNTIME_LIVE : XR_RESOURCE_DEFAULT_LIMIT;
+    uint64_t requested = sandbox ? XR_RESOURCE_SANDBOX_RUNTIME_REQUESTED : XR_RESOURCE_DEFAULT_LIMIT;
     *config = (XrXirInstanceConfig) {XR_XIR_CALL_ABI_VERSION, sizeof(*config),
-        UINT64_C(16) << 20, UINT64_C(16) << 20, UINT64_C(16) << 20,
-        UINT64_C(1000000), 4096, {0}, NULL, NULL, {0},
-        UINT64_C(67108864), UINT64_C(67108864), UINT64_C(128000000)};
+        live, live, live,
+        sandbox ? XR_RESOURCE_SANDBOX_RUNTIME_POLLS : XR_RESOURCE_DEFAULT_LIMIT,
+        sandbox ? XR_RESOURCE_SANDBOX_RUNTIME_DEPTH : XR_RESOURCE_DEFAULT_DEPTH,
+        {0}, NULL, NULL, {0}, requested, requested,
+        sandbox ? XR_RESOURCE_SANDBOX_RUNTIME_WORK : XR_RESOURCE_DEFAULT_LIMIT};
     return XR_XIR_CALL_READY;
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_config_init(XrXirInstanceConfig *config, size_t size) {
+    return instance_config_init(config, size, false);
+}
+XR_FUNC XrXirCallStatus xr_xir_instance_config_init_sandbox(XrXirInstanceConfig *config, size_t size) {
+    return instance_config_init(config, size, true);
 }
 static void instance_dispose(XrXirInstance *instance) {
     XR_CHECK(instance && instance_owner_current(instance), "instance internal owner requires its current domain");

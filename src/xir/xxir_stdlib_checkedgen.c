@@ -8,6 +8,7 @@
  *
  * KEY CONCEPT: The generator verifies and encodes Library input without CGen or VM.
  */
+#include "base/xresource_limits.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_checked.h"
 #include "toolchain/xcompiler_session.h"
@@ -21,7 +22,7 @@ static void write_bytes(const char *path, const void *bytes, size_t length) {
 }
 int main(int argc, char **argv) {
     CHECK(argc == 5);
-    XrCompileResourceLimits caps = {UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+    XrCompileResourceLimits caps = XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
     XrXirCompileContext context = {0}; context.limits = xr_xir_compile_default_limits();
     CHECK(xr_compile_resources_new(&caps,&context.resources) == XR_COMPILE_RESOURCE_OK);
     XrCompileResourceStats initial = {0}; CHECK(xr_compile_resources_stats(context.resources,&initial) == XR_COMPILE_RESOURCE_OK);

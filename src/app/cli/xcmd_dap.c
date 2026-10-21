@@ -7,6 +7,7 @@
  * xcmd_dap.c - Current DAP stdio entry on the canonical Source compiler
  */
 #include "xcli.h"
+#include "../../base/xresource_limits.h"
 #include "../dap/xdap_dispatch.h"
 #include "../dap/xdap_stdio.h"
 #include "../dap/xdap_tcp.h"
@@ -91,7 +92,8 @@ static int dap_run(bool tcp,uint32_t port,XrCompileResources *resources,DapHost 
     XrSourceCompilerConfig compiler_config={{resources,xr_xir_compile_default_limits()},
         {XR_XIR_ARCH_X86_64,XR_XIR_VALUE_ABI_VERSION},stdlib.path,xr_source_compile_default_manifest_limits()};
     if (xr_source_compiler_new(&compiler_config,&compiler,&diagnostic)!=XR_SOURCE_COMPILE_OK) goto done;
-    XrXirDomainBudgetControls budget={1048576,1048576,128000000,1048576,1048576};
+    XrXirDomainBudgetControls budget={XR_RESOURCE_DEBUG_LIVE,XR_RESOURCE_DEBUG_LIVE,
+        XR_RESOURCE_SANDBOX_RUNTIME_WORK,XR_RESOURCE_DEBUG_LIVE,XR_RESOURCE_DEBUG_LIVE};
     if (xr_xir_domain_new_budgeted(1048576,&budget,&domain)!=XR_XIR_VALUE_OK) goto done;
     if (tcp) {
         if (xdap_tcp_new(resources,(uint32_t)port,1048576,&io.tcp)!=XR_XIR_OK) goto done;
@@ -109,9 +111,10 @@ static int dap_run(bool tcp,uint32_t port,XrCompileResources *resources,DapHost 
             config.process_id=host->process_id;
         }
     }
-    config.instance.metadata_limit=config.instance.value_limit=config.instance.call_limit=1048576;
-    config.instance.requested_value_limit=config.instance.requested_call_limit=1048576;
-    config.instance.work_limit=128000000;config.instance.poll_limit=10000;config.instance.depth_limit=64;
+    config.instance.metadata_limit=config.instance.value_limit=config.instance.call_limit=XR_RESOURCE_DEBUG_LIVE;
+    config.instance.requested_value_limit=config.instance.requested_call_limit=XR_RESOURCE_DEBUG_LIVE;
+    config.instance.work_limit=XR_RESOURCE_SANDBOX_RUNTIME_WORK;
+    config.instance.poll_limit=XR_RESOURCE_DEBUG_POLLS;config.instance.depth_limit=XR_RESOURCE_DEBUG_DEPTH;
     if (xdap_adapter_new(&compiler,&config,&adapter)!=XR_XIR_OK) goto done;
     result=dap_loop(adapter,&io) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
     if (detached) {
@@ -141,13 +144,13 @@ XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
 #ifdef XR_OS_WINDOWS
     if (!tcp) return dap_process_frontend();
 #endif
-    XrCompileResources *resources=NULL;XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits=(XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     if (xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK) return XR_CLI_EXIT_INTERNAL;
     int result=dap_run(tcp,port,resources,NULL);xr_compile_resources_release(resources);return result;
 }
 #ifdef XR_OS_WINDOWS
 XR_FUNC int xr_cli_dap_worker_main(int argc,char **argv) {
-    XrCompileResources *resources=NULL;XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
+    XrCompileResources *resources=NULL;XrCompileResourceLimits limits=(XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     if (xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK) return XR_CLI_EXIT_INTERNAL;
     DapHost host={0};int result=XR_CLI_EXIT_FAIL;
     if (dap_process_worker_open(resources,argc,argv,&host)==XR_XIR_OK) result=dap_run(false,0,resources,&host);

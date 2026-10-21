@@ -220,7 +220,7 @@ static CellRuntimeCost cell_runtime_operation(XrXirProgram *program, const uint3
     cell_runtime_fault_at = cell_runtime_hits = cell_runtime_event_count = 0;
     cell_runtime_instances = run.instances; cell_runtime_recording = true;
     XrXirInstanceConfig config;
-    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_config_init_sandbox(&config, sizeof(config)) == XR_XIR_CALL_READY);
     for (unsigned pass=0;pass<2;++pass) {
         XrXirInstanceConfig selected = limits && pass == limit_pass ? *limits : config;
         if (!pass) selected.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION,0,cell_runtime_output,&run};
@@ -366,7 +366,7 @@ static uint64_t cell_runtime_call_boundary(XrXirProgram *program, const uint32_t
     uint64_t exact = baseline->budgets[pass].call_peak;
     CHECK(exact > 1);
     XrXirInstanceConfig config;
-    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_config_init_sandbox(&config, sizeof(config)) == XR_XIR_CALL_READY);
     config.call_limit = exact;
     cell_runtime_fault_count = 0;
     CellRuntimeCost measured = cell_runtime_operation(program, entries, mode, &config, pass, false);
@@ -404,7 +404,7 @@ static uint64_t cell_runtime_call_boundary(XrXirProgram *program, const uint32_t
 static uint64_t cell_runtime_work_boundary(XrXirProgram *program, const uint32_t *entries,
     unsigned mode, unsigned pass, const CellRuntimeCost *baseline) {
     XrXirInstanceConfig config;
-    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_config_init_sandbox(&config, sizeof(config)) == XR_XIR_CALL_READY);
     uint64_t low = baseline->budgets[pass].work;
     uint64_t high = config.work_limit;
     CHECK(low > 1 && low <= high && baseline->budgets[pass].work_limit == high);
@@ -453,7 +453,7 @@ static void cell_runtime_axes(XrXirProgram *program, const uint32_t *entries, un
         CHECK(exact > 1);
         for (unsigned minus=0;minus<2;++minus) {
         XrXirInstanceConfig config;
-        CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_config_init_sandbox(&config, sizeof(config)) == XR_XIR_CALL_READY);
         if (axis == 0) config.requested_value_limit = exact - minus;
         else if (axis == 1) config.requested_call_limit = exact - minus;
         else if (axis == 2) config.work_limit = exact - minus;
@@ -499,7 +499,7 @@ static void cell_runtime_preparation(XrXirProgram *program, const uint32_t *entr
     /* Failed requests are not refunded; retry on the same finite requested-call
      * quota must fail before another physical allocator attempt. */
     XrXirInstanceConfig config;
-    CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+    CHECK(xr_xir_instance_config_init_sandbox(&config, sizeof(config)) == XR_XIR_CALL_READY);
     config.requested_call_limit = baseline->prepare_after.requested_call_bytes;
     CHECK(config.requested_call_limit && config.requested_call_limit <= UINT64_C(67108864));
     cell_runtime_faults[0] = baseline->prepare_end - 1; cell_runtime_fault_count = 1;

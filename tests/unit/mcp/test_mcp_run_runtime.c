@@ -74,6 +74,12 @@ XR_FUNC void mcp_runtime_free(void *pointer) { (void)forget(pointer); xr_free(po
 XR_FUNC XrXirCallStatus mcp_runtime_instance_new(XrXirProgram *program,
     const XrXirInstanceConfig *config,XrXirInstance **output) {
     CHECK(!entered); entered=true;
+    CHECK(config->metadata_limit == (UINT64_C(16) << 20) &&
+        config->value_limit == (UINT64_C(16) << 20) && config->call_limit == (UINT64_C(16) << 20));
+    CHECK(config->requested_value_limit == (UINT64_C(64) << 20) &&
+        config->requested_call_limit == (UINT64_C(64) << 20));
+    CHECK(config->work_limit == UINT64_C(128000000) &&
+        config->poll_limit == UINT64_C(1000000) && config->depth_limit == 4096);
     if (expire_before_owner) {
         /* Real elapsed time fixes the pre-poll cancellation branch; no timer
          * is declared due and the request retains its original 50ms budget. */

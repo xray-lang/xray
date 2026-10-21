@@ -13,6 +13,7 @@
 #include "xsource_compile.h"
 #include "xsource_authority.h"
 #include "xsource_paths.h"
+#include "../base/xresource_limits.h"
 #include "../base/xfileio.h"
 #include "../base/xio_policy.inc.h"
 #include "../os/os_fs.h"
@@ -22,7 +23,7 @@
 #include <stdio.h>
 
 XR_FUNC XrCompileResourceLimits xr_source_compile_default_resource_limits(void) {
-    return (XrCompileResourceLimits){UINT64_C(1) << 30, UINT64_C(256) << 20, UINT64_C(8) << 30};
+    return (XrCompileResourceLimits)XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
 }
 XR_FUNC XrTomlParseLimits xr_source_compile_default_manifest_limits(void) {
     return (XrTomlParseLimits){UINT64_C(1) << 20, 64};

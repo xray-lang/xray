@@ -69,7 +69,11 @@ typedef struct XrXirInstanceResult {
 XR_FUNC XrXirStatus xr_xir_compile_program_seal(const XrXirCompileContext *context,
     const XrXirProgramSpec *spec, XrXirProgram **output);
 XR_FUNC void xr_xir_compile_program_drop(XrXirProgram *program);
+/* Ordinary execution has no policy quotas; checked counters and allocation
+ * failures still apply. Explicit sandbox initialization restores finite limits.
+ * Both constructors clear providers and preserve output on invalid size. */
 XR_FUNC XrXirCallStatus xr_xir_instance_config_init(XrXirInstanceConfig *config, size_t size);
+XR_FUNC XrXirCallStatus xr_xir_instance_config_init_sandbox(XrXirInstanceConfig *config, size_t size);
 XR_FUNC XrXirCallStatus xr_xir_instance_weaken_function(XrXirCallView *view,
     XrXirType type, const XrXirValue *input, XrXirValue *output);
 /* Output must be empty before configuration or Program access. Refusal preserves

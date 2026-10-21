@@ -10,6 +10,7 @@
 #include "api/xsource_paths.h"
 #include "execution/xr_xir_host_cli.h"
 #include "base/xwindows_utf8.h"
+#include "base/xresource_limits.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,12 +26,15 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv);
 #include "api/xsource_api.c"
 static size_t phase_allocations[5];
 static unsigned resource_calls;
-static bool budget_failure;
+static bool budget_failure, sandbox_expected;
 static XrCompileResourceStatus observed_resources(const XrCompileResourceLimits *limits,
     XrCompileResources **output) {
     ++resource_calls;phase_allocations[0]=runtime_attempts;
-    CHECK(limits->allocated_bytes==(UINT64_C(1)<<30) && limits->live_bytes==(UINT64_C(256)<<20) &&
-        limits->work==(UINT64_C(8)<<30));
+    const XrCompileResourceLimits expected=sandbox_expected ?
+        (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS :
+        (XrCompileResourceLimits)XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
+    CHECK(limits->allocated_bytes==expected.allocated_bytes && limits->live_bytes==expected.live_bytes &&
+        limits->work==expected.work);
     XrCompileResourceLimits actual=*limits;
     if(budget_failure)actual.work=1;
     return xr_compile_resources_new(&actual,output);
@@ -50,9 +54,10 @@ static XrSourceStatus observed_take(XrXirSourceProduct **product,XrSourceProgram
     phase_allocations[3]=runtime_attempts;
     return xr_source_program_take_product(product,output);
 }
-static int observed_program(XrXirProgram *program,uint32_t entry) {
+static int observed_program(XrXirProgram *program,uint32_t entry,bool sandbox) {
     phase_allocations[4]=runtime_attempts;
-    return xr_xir_host_program_main(program,entry);
+    CHECK(sandbox==sandbox_expected);
+    return xr_xir_host_program_main(program,entry,sandbox);
 }
 #define xr_compile_resources_new observed_resources
 #define xr_source_paths observed_paths
@@ -67,6 +72,7 @@ static int observed_program(XrXirProgram *program,uint32_t entry) {
 #undef xr_xir_host_program_main
 
 static void verify_boundaries(const XrCliInvocation *inv) {
+    sandbox_expected=xr_cli_opt_bool(&inv->options,"sandbox");
     CHECK(cmd_run(NULL)==4);
     runtime_attempts=0;resource_calls=0;
     CHECK(cmd_run(inv)==0 && !runtime_live && !runtime_bytes && resource_calls==1);
@@ -79,7 +85,7 @@ static void verify_boundaries(const XrCliInvocation *inv) {
     budget_failure=true;resource_calls=0;
     CHECK(cmd_run(inv)==1 && !runtime_live && !runtime_bytes && resource_calls==1);
     budget_failure=false;
-    printf("RUN_OWNER: real default policy, five phase OOM boundaries, one ledger, budget and physical zero PASS\n");
+    printf("RUN_OWNER: selected resource policy, five phase OOM boundaries, one ledger, budget and physical zero PASS\n");
 }
 #endif
 
@@ -87,13 +93,20 @@ static int run_driver(int argc,char **argv) {
     /* Inputs arrive at the same typed boundary used by the public dispatcher.
      * Parsing global options and dispatching other commands are outside this gate. */
     XrCliInvocation invocation={0};
+    static const XrCliOptionSpec sandbox_spec[]={
+        {"sandbox",0,XR_CLI_VALUE_NONE,false,false,NULL,"Finite resources"},XR_CLI_OPT_END};
+    bool sandbox=false;
+    const char *values[]={NULL};
+    invocation.options=(XrCliOptionMap){sandbox_spec,1,&sandbox,values};
     const char *positionals[128];CHECK(argc<=129);
-    for(int i=1;i<argc;++i)positionals[i-1]=argv[i];
-    invocation.positionals=positionals;invocation.positional_count=argc-1;
-    for(int i=1;i<argc;++i) if(strcmp(argv[i],"--")==0) {
-        invocation.positional_count=i-1;
-        invocation.passthrough_argv=argv+i+1;invocation.passthrough_argc=argc-i-1;
-        break;
+    invocation.positionals=positionals;
+    for(int i=1;i<argc;++i) {
+        if(strcmp(argv[i],"--")==0) {
+            invocation.passthrough_argv=argv+i+1;invocation.passthrough_argc=argc-i-1;
+            break;
+        }
+        if(strcmp(argv[i],"--sandbox")==0) sandbox=true;
+        else positionals[invocation.positional_count++]=argv[i];
     }
 #if RUN_OWNER_INJECTED
     verify_boundaries(&invocation);

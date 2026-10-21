@@ -6,6 +6,7 @@
  *
  * xcmd_toolchain.c - Owned toolchain preferences at the public CLI boundary
  */
+#include "../../base/xresource_limits.h"
 #include "xcli_spec.h"
 #include "xcli_diag.h"
 #include "xcli_toolchain_config.h"
@@ -102,7 +103,7 @@ XR_FUNC int cmd_toolchain(const XrCliInvocation *inv) {
         return XR_CLI_EXIT_USAGE;
     }
     XrCompileResourceLimits limits=probe ? xr_source_compile_default_resource_limits() :
-        (XrCompileResourceLimits){UINT64_C(64)<<20,UINT64_C(8)<<20,UINT64_C(128000000)};
+        (XrCompileResourceLimits)XR_RESOURCE_TOOL_COMPILER_LIMITS;
     XrCompileResources *resources=NULL;
     XrCompileResourceStatus opened=xr_compile_resources_new(&limits,&resources);
     if(opened!=XR_COMPILE_RESOURCE_OK) {

@@ -6,6 +6,7 @@
  *
  * xlsp_hierarchy_request.c - Ledger-owned hierarchy capture and cancellable run
  */
+#include "../../base/xresource_limits.h"
 #include "xlsp_hierarchy_request.h"
 #include "xlsp_source_params.h"
 #include "xlsp_source_scope.h"
@@ -386,7 +387,7 @@ XR_FUNC XrXirStatus xlsp_hierarchy_request_capture(XrLspServer *server, const Xr
     server->source_failure.stage = hierarchy_stage(kind); server->source_failure.status = XR_XIR_BAD_STRUCTURE;
     if (!params || server->shutdown_received || server->workspace_folder_count < 0 ||
         server->workspace_folder_count > MAX_WORKSPACE_FOLDERS) return XR_XIR_BAD_STRUCTURE;
-    const XrCompileResourceLimits limits = {UINT64_C(64)*1024*1024, UINT64_C(8)*1024*1024, UINT64_C(128000000)};
+    const XrCompileResourceLimits limits = XR_RESOURCE_TOOL_COMPILER_LIMITS;
     XrCompileResources *resources = NULL; XlspHierarchyRequest *request = NULL;
     XrXirStatus status = hierarchy_resource(xr_compile_resources_new(&limits, &resources));
     if (status != XR_XIR_OK) goto done;

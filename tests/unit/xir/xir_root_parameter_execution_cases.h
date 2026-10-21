@@ -181,7 +181,7 @@ static void h1exec_pair(const RootParameterSourceOracle *oracle, H1ExecFixture f
     for (unsigned i = 0; i < 2; ++i) {
         o[i].oracle = oracle; o[i].module = fixture.module; o[i].slots = fixture.slots;
         o[i].sink = (XrXirOutputSink){XR_XIR_CALL_ABI_VERSION, 0, h1exec_bytes, &o[i], 65536};
-        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init_sandbox(&config, sizeof(config)) == XR_XIR_CALL_READY);
         config.metadata_limit = 65536; config.value_limit = 65536; config.call_limit = 65536;
         config.poll_limit = 8000; config.depth_limit = 96;
         config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION, 0, h1exec_typed, &o[i]};

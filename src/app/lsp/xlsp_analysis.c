@@ -8,6 +8,7 @@
  * xlsp_analysis.c - Code analysis implementation
  */
 
+#include "../../base/xresource_limits.h"
 #include "xlsp_analysis.h"
 #include "xlsp_source_open.h"
 #include "../../api/xsource_compile.h"
@@ -125,7 +126,7 @@ void xlsp_parse_document(XrLspDocument *doc,XrLspServer *server) {
         doc->parse_error=xlsp_source_syntax_status(doc->syntax_snapshot)==XR_PARSE_RECOVERED||
             xlsp_source_open_query_status(doc->source_open)!=XR_XIR_OK;
     } else {
-        XrCompileResourceLimits limits=xr_source_compile_default_resource_limits();
+        XrCompileResourceLimits limits=(XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
         XrCompileResources *resources=NULL;XrCompilerSession *session=NULL;XlspSyntaxSnapshot *fresh=NULL;
         if(xr_compile_resources_new(&limits,&resources)!=XR_COMPILE_RESOURCE_OK)return;
         XrCompilerSessionStatus opened=xr_compile_session_new(resources,&session);

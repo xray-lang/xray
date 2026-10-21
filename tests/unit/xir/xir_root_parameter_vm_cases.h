@@ -266,7 +266,7 @@ static void h1r_prepare(H1Runtime *t, H1VmFixture fixture, const RootParameterSo
     for (unsigned i = 0; i < 2; ++i) {
         H1Witness *w = &t->w[i]; w->output.oracle = oracle; w->output.module = fixture.module; w->output.slots = fixture.slots;
         w->output.sink = (XrXirOutputSink){XR_XIR_CALL_ABI_VERSION, 0, h1vm_bytes, &w->output, 65536};
-        CHECK(xr_xir_instance_config_init(&w->config, sizeof(w->config)) == XR_XIR_CALL_READY);
+        CHECK(xr_xir_instance_config_init_sandbox(&w->config, sizeof(w->config)) == XR_XIR_CALL_READY);
         w->config.metadata_limit = w->config.value_limit = w->config.call_limit = 65536;
         w->config.poll_limit = 8000; w->config.depth_limit = 96;
         CHECK(w->config.requested_value_limit == UINT64_C(67108864) &&

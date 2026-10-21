@@ -1,4 +1,5 @@
 /* Copyright (c) 2026 Xinglei Xu. MIT License. */
+#include "../../base/xresource_limits.h"
 #include "xlsp_navigation.h"
 #include "xlsp_handlers_textdoc.h"
 #include "xlsp_server.h"
@@ -7,7 +8,7 @@
 #include "xlsp_hierarchy_request.h"
 #include <string.h>
 
-static const XrCompileResourceLimits navigation_limits={UINT64_C(64)*1024*1024,UINT64_C(8)*1024*1024,UINT64_C(128000000)};
+static const XrCompileResourceLimits navigation_limits=XR_RESOURCE_TOOL_COMPILER_LIMITS;
 
 static XrXirStatus navigation_member(XrCompileResources *resources,const XrJsonValue *object,
     const char *key,const XrJsonValue **out) {

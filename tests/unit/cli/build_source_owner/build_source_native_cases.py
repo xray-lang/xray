@@ -158,6 +158,13 @@ def main():
             # The SDK host launcher uses binary streams. No CRLF normalization,
             # decoding, stripping, or NUL truncation is allowed in this oracle.
             run(name+'-native', [executable], (0, expected, b''))
+            run(name+'-native-sandbox', [executable, '--sandbox'], (0, expected, b''))
+            if name == 'multi':
+                usage = f'Usage: {executable} [--sandbox]{os.linesep}'.encode('utf-8')
+                for suffix, arguments in [('unknown', ['--unknown']),
+                                          ('duplicate', ['--sandbox', '--sandbox']),
+                                          ('value', ['--sandbox=true'])]:
+                    run(name+'-native-'+suffix, [executable, *arguments], (3, b'', usage))
             case['status'] = 'PASS'
             save()
         record['inputs_after'] = [file_fact(path) for path in inputs]

@@ -12,6 +12,7 @@
  *   and managing workspace ignore patterns for file scanning.
  */
 
+#include "../../base/xresource_limits.h"
 #include "xlsp_source_config.h"
 #include "../../api/xsource_compile.h"
 #include "../../base/xmalloc.h"
@@ -63,7 +64,7 @@ XR_FUNC void xlsp_config_load_defaults(XlspConfig *config) {
 
 XR_FUNC bool xlsp_config_load_from_toml(XlspConfig *config, const char *root_path) {
     if (!config || !root_path) return false;
-    XrCompileResourceLimits resources_limits = xr_source_compile_default_resource_limits();
+    XrCompileResourceLimits resources_limits = (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS;
     XrTomlParseLimits parse_limits = xr_source_compile_default_manifest_limits();
     XrCompileResources *resources = NULL;
     if (xr_compile_resources_new(&resources_limits, &resources) != XR_COMPILE_RESOURCE_OK)

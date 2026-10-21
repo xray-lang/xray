@@ -15,6 +15,7 @@
 #include "../../api/xsource_compile.h"
 #include "../../api/xsource_paths.h"
 #include "../../api/xsource_api.h"
+#include "../../base/xresource_limits.h"
 #include "../../execution/xr_xir_host_cli.h"
 #include <stdio.h>
 #include <string.h>
@@ -72,7 +73,10 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     fprintf(stderr, "XR_RUN_6002: source VM does not support this host architecture\n");
     return XR_CLI_EXIT_FAIL;
 #else
-    XrCompileResourceLimits limits = xr_source_compile_default_resource_limits();
+    bool sandbox = xr_cli_opt_bool(&inv->options, "sandbox");
+    XrCompileResourceLimits limits = sandbox ?
+        (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS :
+        (XrCompileResourceLimits)XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
     XrCompileResources *resources = NULL;
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &resources);
     if (opened != XR_COMPILE_RESOURCE_OK) {
@@ -121,6 +125,6 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     xr_xir_compile_source_product_free(product);
     xr_source_compile_diagnostic_free(&diagnostic);
     xr_compile_resources_release(resources);
-    return program ? xr_xir_host_program_main(program, entry) : result;
+    return program ? xr_xir_host_program_main(program, entry, sandbox) : result;
 #endif
 }

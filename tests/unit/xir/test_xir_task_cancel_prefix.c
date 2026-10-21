@@ -173,7 +173,7 @@ static void prefix_execute(unsigned mode, bool error, unsigned action, unsigned 
     XrXirProgram *program = prefix_program(mode);
     XrXirInstance *instances[2] = {0}; PrefixOutput outputs[2] = {0};
     for (unsigned i = 0; i < 2; ++i) {
-        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init(&config, sizeof(config)) == XR_XIR_CALL_READY);
+        XrXirInstanceConfig config; CHECK(xr_xir_instance_config_init_sandbox(&config, sizeof(config)) == XR_XIR_CALL_READY);
         CHECK(config.requested_value_limit == UINT64_C(67108864) && config.requested_call_limit == UINT64_C(67108864) &&
             config.work_limit == UINT64_C(128000000));
         config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION, 0, prefix_output, &outputs[i]};

@@ -13,6 +13,7 @@
  */
 #include "xr_xir_host_cli.h"
 #include "xr_xir_host_time.h"
+#include "../base/xresource_limits.h"
 #include "../xir/xxir_error.h"
 #include "../xir/xxir_format.h"
 #include "../xir/xxir_output.h"
@@ -124,20 +125,17 @@ static int host_terminal(XrXirCallStatus status, const XrXirCallResult *result) 
     return host_failure("XR_RUN_6002: canonical execution returned an invalid or unavailable outcome\n", 4);
 }
 
-XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program, uint32_t entry) {
+XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program, uint32_t entry, bool sandbox) {
     if (!owned_program) return 4;
     if (!host_binary_streams()) {
         xr_xir_compile_program_drop(owned_program);
         return 4;
     }
     XrXirInstanceConfig config;
-    if (xr_xir_host_config_init(&config, sizeof(config)) != XR_XIR_CALL_READY) {
+    if (xr_xir_host_config_init(&config, sizeof(config), sandbox) != XR_XIR_CALL_READY) {
         xr_xir_compile_program_drop(owned_program);
         return host_failure("XR_RUN_6002: cannot initialize execution configuration\n", 4);
     }
-    /* An ordinary process runs until it finishes or the user stops it; the embedding
-     * default poll cap protects hosts that schedule many programs and does not apply. */
-    config.poll_limit = UINT64_MAX;
     XrXirOutputSink sink = {XR_XIR_CALL_ABI_VERSION, 0, host_output_bytes, NULL, config.value_limit};
     config.output = (XrXirOutputProvider){XR_XIR_CALL_ABI_VERSION, 0, xr_xir_output_render, &sink};
     XrXirCallResult result = {0};
@@ -149,8 +147,10 @@ XR_FUNC int xr_xir_host_program_main(XrXirProgram *owned_program, uint32_t entry
     return exit_code;
 }
 
-XR_FUNC int xr_xir_host_main(const XrXirProgramSpec *spec) {
-    const XrCompileResourceLimits limits = {UINT64_C(64) << 20, UINT64_C(16) << 20, UINT64_C(1) << 30};
+XR_FUNC int xr_xir_host_main(const XrXirProgramSpec *spec, bool sandbox) {
+    const XrCompileResourceLimits limits = sandbox ?
+        (XrCompileResourceLimits)XR_RESOURCE_SANDBOX_COMPILER_LIMITS :
+        (XrCompileResourceLimits)XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
     XrXirCompileContext context = {NULL, xr_xir_compile_default_limits()};
     XrCompileResourceStatus opened = xr_compile_resources_new(&limits, &context.resources);
     if (opened != XR_COMPILE_RESOURCE_OK)
@@ -162,5 +162,5 @@ XR_FUNC int xr_xir_host_main(const XrXirProgramSpec *spec) {
     if (sealed != XR_XIR_OK)
         return host_binary_streams() ? host_failure("XR_RUN_6002: cannot admit generated program\n",
             sealed == XR_XIR_BUDGET ? 1 : 4) : 4;
-    return xr_xir_host_program_main(program, spec->declarations->entry_function);
+    return xr_xir_host_program_main(program, spec->declarations->entry_function, sandbox);
 }

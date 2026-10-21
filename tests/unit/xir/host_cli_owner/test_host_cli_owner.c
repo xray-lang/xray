@@ -177,7 +177,26 @@ static void unsupported_and_invalid(void) {
     }
 }
 
+static void execution_profiles(void) {
+    XrXirInstanceConfig config;
+    memset(&config,0xa5,sizeof(config));
+    CHECK(xr_xir_host_config_init(&config,sizeof(config),false)==XR_XIR_CALL_READY);
+    CHECK(config.metadata_limit==UINT64_MAX && config.value_limit==UINT64_MAX &&
+        config.call_limit==UINT64_MAX && config.poll_limit==UINT64_MAX && config.depth_limit==UINT32_MAX &&
+        config.requested_value_limit==UINT64_MAX && config.requested_call_limit==UINT64_MAX && config.work_limit==UINT64_MAX);
+    CHECK(!config.trace && !config.trace_context && config.time.clock && config.time.utc_offset);
+    CHECK(xr_xir_host_config_init(&config,sizeof(config),true)==XR_XIR_CALL_READY);
+    CHECK(config.value_limit>0 && config.value_limit<UINT64_MAX && config.call_limit>0 &&
+        config.call_limit<UINT64_MAX && config.work_limit>0 && config.work_limit<UINT64_MAX &&
+        config.poll_limit>0 && config.poll_limit<UINT64_MAX && config.depth_limit>0 && config.depth_limit<UINT32_MAX);
+    CHECK(!config.trace && !config.trace_context && config.time.clock && config.time.utc_offset);
+    XrXirInstanceConfig unchanged=config;
+    CHECK(xr_xir_host_config_init(&config,sizeof(config)-1,false)==XR_XIR_CALL_BAD_ABI);
+    CHECK(!memcmp(&config,&unchanged,sizeof(config)));
+}
+
 int main(void) {
+    execution_profiles();
     error_lifetime();panic_lifetime();unsupported_and_invalid();
     CHECK(!runtime_live && !runtime_bytes);
     puts("Borrowed Error/Panic exact bytes, sink failures, typed status and physical zero PASS");

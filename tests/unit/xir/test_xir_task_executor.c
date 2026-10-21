@@ -445,6 +445,7 @@ static void task_runtime_faults(void) {
 #include "task_root_activation_cases.h"
 #include "task_closed_result_cases.h"
 #include "task_cross_domain_cases.h"
+#include "task_maximum_budget_cases.h"
 static void task_owned_recovery(void) {
     task_receive_probe=true;task_receive_checks=0;
     for(unsigned kind=0;kind<4;++kind){
@@ -467,10 +468,12 @@ static void task_owned_recovery(void) {
     puts("Task four native inputs reject atomically, retry in the same ledger and release one code lease");
 }
 int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--maximum-budget")) { task_maximum_budget_cases(); return 0; }
     if(argc==2 && !strcmp(argv[1],"--owned-recovery")){task_owned_recovery();return 0;}
     if (argc == 2 && !strcmp(argv[1], "--cross-domain")) { task_cross_domain_cases(); return 0; }
     if (argc != 1) return 2;
     setvbuf(stdout, NULL, _IONBF, 0);
+    task_maximum_budget_cases();
     task_normal(); task_cancel_and_limit(); task_sticky_failure();
     task_escaped_budget(); task_failed_executor_epoch(); task_borrowed_epoch(); task_cleanup_limit(); task_runtime_faults();
     task_runtime_errors(); task_error_faults(); task_error_work_boundary();

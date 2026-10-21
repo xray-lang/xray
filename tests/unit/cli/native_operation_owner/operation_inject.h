@@ -24,7 +24,7 @@ static XrXirInvocationStatus operation_invoke(const XrXirInvocationRequest *requ
         CHECK(!*out && request->launcher && request->launcher_length);
         /* Independently check the SDK launcher; the previous invocation fixture
          * used a different test consumer and cannot satisfy this expectation. */
-        static const char expected[] = "return xr_xir_host_main(&XIR_SDK_PROGRAM_SYMBOL);";
+        static const char expected[] = "return xr_xir_host_main(&XIR_SDK_PROGRAM_SYMBOL, sandbox);";
         bool found = false;
         for (size_t i = 0; i + sizeof(expected) - 1 <= request->launcher_length; ++i)
             if (!memcmp((const char *)request->launcher + i, expected, sizeof(expected) - 1)) { found = true; break; }

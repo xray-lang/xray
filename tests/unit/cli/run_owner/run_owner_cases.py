@@ -41,6 +41,7 @@ def main():
     entry = root/'tests/fixtures/xir_compile_owner/root.xr'
     oracle = (0, 'owner中-ok 42 true\n'.encode(), b'')
     run('multi', [entry], oracle)
+    run('multi-sandbox', ['--sandbox', entry], oracle)
     run('relative', ['root.xr'], oracle, cwd=entry.parent)
     unicode = output/'fixture 空格'
     unicode.mkdir(exist_ok=True)
@@ -101,9 +102,7 @@ def main():
         path = directory/'main.xr'
         path.write_text(text, encoding='utf-8', newline='\n')
         if name == 'syntax':
-            diagnostic = (b"error: expected '}'\n  --> " + str(path).encode() + b':2:1\n'
-                          b'   |\n 2 | \n   | ^\n\nerror: aborting due to 1 previous error\n'
-                          b'XR_RUN_6001: source build failed (stage=4 status=source-rejected): module graph build failed\n')
+            diagnostic = str(path).encode() + b":2:1: error: expected '}'\n"
         elif name == 'semantic':
             diagnostic = str(path).encode() + b':1:13: error: name is not an initialized value\n'
         else:
@@ -112,11 +111,12 @@ def main():
     run('retired-identifiers', [root/'tests/unit/fixtures/assertion/retired_names_are_ordinary.xr'], (0, b'', b''))
     run('array-growth', [root/'tests/unit/fixtures/runtime/array_growth_accounting.xr'],
         (0, b'array-growth-accounting-ok\n', b''))
-    injected = run('injected', [entry], None, executable=args.injected)
-    assert injected.returncode == 0, records[-1]
-    assert injected.stdout == oracle[1] + (
-        b'RUN_OWNER: real default policy, five phase OOM boundaries, one ledger, budget and physical zero PASS\n'), records[-1]
-    assert b'AddressSanitizer' not in injected.stderr and b'runtime error:' not in injected.stderr, records[-1]
+    for name, flags in [('injected', []), ('injected-sandbox', ['--sandbox'])]:
+        injected = run(name, [*flags, entry], None, executable=args.injected)
+        assert injected.returncode == 0, records[-1]
+        assert injected.stdout == oracle[1] + (
+            b'RUN_OWNER: selected resource policy, five phase OOM boundaries, one ledger, budget and physical zero PASS\n'), records[-1]
+        assert b'AddressSanitizer' not in injected.stderr and b'runtime error:' not in injected.stderr, records[-1]
     print('Run Source owner: typed command inputs, owned Program, exact output/status, OOM and resource policy PASS')
 
 

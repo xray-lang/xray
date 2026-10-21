@@ -65,11 +65,17 @@ static void config_guards(void) {
     CHECK(xr_xir_instance_config_init(&instance,120)==XR_XIR_CALL_BAD_ABI && !memcmp(&instance,&saved,sizeof(instance)));
     CHECK(xr_xir_instance_config_init(&instance,sizeof(instance))==XR_XIR_CALL_READY);
     CHECK(instance.abi_version==30 && instance.struct_size==sizeof(instance));
-    CHECK(instance.metadata_limit==16777216 && instance.value_limit==16777216 && instance.call_limit==16777216);
-    CHECK(instance.poll_limit==1000000 && instance.depth_limit==4096 && !instance.trace && !instance.trace_context);
+    CHECK(instance.metadata_limit==UINT64_MAX && instance.value_limit==UINT64_MAX && instance.call_limit==UINT64_MAX);
+    CHECK(instance.poll_limit==UINT64_MAX && instance.depth_limit==UINT32_MAX && !instance.trace && !instance.trace_context);
+    CHECK(instance.requested_value_limit==UINT64_MAX && instance.requested_call_limit==UINT64_MAX && instance.work_limit==UINT64_MAX);
     CHECK(!instance.output.abi_version && !instance.output.reserved && !instance.output.write && !instance.output.context);
     CHECK(!instance.time.abi_version && !instance.time.reserved && !instance.time.clock &&
         !instance.time.utc_offset && !instance.time.context);
+    CHECK(xr_xir_instance_config_init_sandbox(&instance,sizeof(instance))==XR_XIR_CALL_READY);
+    CHECK(instance.metadata_limit==16777216 && instance.value_limit==16777216 && instance.call_limit==16777216);
+    CHECK(instance.poll_limit==1000000 && instance.depth_limit==4096);
+    CHECK(instance.requested_value_limit==UINT64_C(67108864) &&
+        instance.requested_call_limit==UINT64_C(67108864) && instance.work_limit==UINT64_C(128000000));
     struct {uint32_t version,size;} prefix={20,8};XrXirCall *activation=(XrXirCall *)(uintptr_t)1;
     runtime_attempts=0;
     CHECK(xr_xir_call_new((const XrXirCallConfig *)&prefix,0,NULL,0,&activation)==XR_XIR_CALL_BAD_ABI);

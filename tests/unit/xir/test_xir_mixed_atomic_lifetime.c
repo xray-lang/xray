@@ -165,7 +165,7 @@ static void atomic_graph(unsigned backend,unsigned close,unsigned drop) {
     runtime_attempts=0;effects_compile_attempts=0;AtomicGraph g={0};XrXirProgram *program=NULL;
     CHECK(atomic_runtime_prepare(&g.fixture,backend,false,&program) && program && !runtime_live);
     for(unsigned i=0;i<2;++i) {
-        XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init(&config,sizeof(config))==XR_XIR_CALL_READY);
+        XrXirInstanceConfig config;CHECK(xr_xir_instance_config_init_sandbox(&config,sizeof(config))==XR_XIR_CALL_READY);
         CHECK(xr_xir_instance_new(program,&config,&g.instances[i])==XR_XIR_CALL_READY);atomic_domains[i]=g.instances[i]->domain;
     }
     CHECK(atomic_domains[0]!=atomic_domains[1]);xr_xir_compile_program_drop(program);
