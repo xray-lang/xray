@@ -45,12 +45,20 @@ static bool unchanged(const char *path) {
     char buffer[sizeof(initial)+1];size_t size=fread(buffer,1,sizeof(buffer),file);CHECK(!ferror(file));CHECK(!fclose(file));
     return size==sizeof(initial)-1 && !memcmp(buffer,initial,size);
 }
+/* Options are addressed by name so probe-only options never shift the preference slots. */
+static size_t option_slot(const XrCliOptionSpec *options,const char *name) {
+    for(size_t i=0;options[i].long_name;++i)if(!strcmp(options[i].long_name,name))return i;
+    CHECK(false);return 0;
+}
 static void run(const char *path,unsigned family,bool resources) {
-    const XrCliCommandSpec *spec=xr_cli_find_command("toolchain");CHECK(spec && xr_cli_option_count(spec->options)==4);
+    const XrCliCommandSpec *spec=xr_cli_find_command("toolchain");CHECK(spec && xr_cli_option_count(spec->options)==7);
     const char *positionals[]={family==0 ? "use" : family<3 ? "reset" : family==3 ? "list" : "config-path","clang"};
-    bool present[4]={family<2,true,false,true};const char *values[]={"native","C:\\compiler\\quoted\"中\".exe",NULL,NULL};
-    present[1]=family==0;
-    XrCliContext context={0};XrCliInvocation inv={.ctx=&context,.spec=spec,.options={spec->options,4,present,values},
+    bool present[7]={false};const char *values[7]={NULL};
+    size_t target=option_slot(spec->options,"target"),cc=option_slot(spec->options,"cc");
+    present[target]=family<2;values[target]="native";
+    present[cc]=family==0;values[cc]="C:\\compiler\\quoted\"中\".exe";
+    present[option_slot(spec->options,"json")]=true;
+    XrCliContext context={0};XrCliInvocation inv={.ctx=&context,.spec=spec,.options={spec->options,7,present,values},
         .positional_count=family==0 ? 2 : 1,.positionals=positionals};
     size_t sites=0,observed=0;
     for(size_t point=0;point<=sites;++point) {
