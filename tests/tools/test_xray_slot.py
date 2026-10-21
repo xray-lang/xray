@@ -52,8 +52,41 @@ class Slots(unittest.TestCase):
         self.temporary.cleanup()
 
     def rows(self):
-        return [json.loads(p.read_text(encoding="utf-8"))
-                for p in (self.root / "requests").glob("*.json")]
+        with mutex(self.root / "scheduler.lock", time.monotonic() + 5):
+            return [json.loads(p.read_text(encoding="utf-8"))
+                    for p in (self.root / "requests").glob("*.json")]
+
+    def test_status_snapshot_waits_for_the_scheduler_transaction(self):
+        requests = self.root / "requests"
+        requests.mkdir()
+        path = requests / "observed.json"
+        started, observed = threading.Event(), threading.Event()
+        snapshots, errors = [], []
+
+        def observe():
+            started.set()
+            try:
+                snapshots.append(self.rows())
+            except Exception as error:
+                errors.append(error)
+            finally:
+                observed.set()
+
+        with mutex(self.root / "scheduler.lock", time.monotonic() + 5):
+            save_json(path, {"state": "running"})
+            reader = threading.Thread(target=observe)
+            reader.start()
+            ready = started.wait(timeout=5)
+            # A snapshot must wait for the complete scheduler transaction,
+            # including the replacement of its request records.
+            read_before_commit = observed.wait(timeout=0.1)
+            save_json(path, {"state": "finished"})
+        reader.join(timeout=5)
+        self.assertTrue(ready)
+        self.assertFalse(reader.is_alive())
+        self.assertEqual(errors, [])
+        self.assertFalse(read_before_commit)
+        self.assertEqual(snapshots, [[{"state": "finished"}]])
 
     def wait(self, predicate):
         deadline = time.monotonic() + 8
