@@ -2650,6 +2650,16 @@ include(src/app/toolchain/xir_target.cmake)
 if(BUILD_TESTS)
     enable_testing()
 
+    add_test(NAME local_build_slots
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/test_xray_slot.py)
+    add_test(NAME local_merge_queue
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/test_merge_slice.py)
+    add_test(NAME meta_ownership_scope
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/test_meta_ownership_scope.py)
+    set_tests_properties(local_build_slots local_merge_queue PROPERTIES
+        LABELS "tooling;fast" TIMEOUT 180 RUN_SERIAL TRUE)
+    set_tests_properties(meta_ownership_scope PROPERTIES LABELS "metadata;memory;fast" TIMEOUT 10)
+
     # Qualify the current public CLI and its exact installed Core/SDK payload.
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/cli_usability.cmake")

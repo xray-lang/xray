@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "targets": [
+    "xray",
+    "test_cli_spec",
+    "test_cli_toolchain_config",
+    "test_cli_toolchain_command",
+    "check_owner_driver",
+    "check_owner_injected"
+  ],
+  "tests": [
+    "test_cli_usability",
+    "source_repl_cli",
+    "test_cli_spec",
+    "cli_toolchain_config_normal",
+    "cli_toolchain_command_normal",
+    "check_source_owner",
+    "local_build_slots",
+    "local_merge_queue",
+    "meta_ownership_scope"
+  ],
+  "versionCommand": ["{build}/xray.exe", "--version", "--json"],
+  "smokeStatus": "NOT_RUN: the ratcheted smoke suite is not integrated yet"
+}
