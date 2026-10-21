@@ -12,12 +12,19 @@
     "tuple",
     "unit",
     "union",
-    "Option"
+    "Option",
+    "Never",
+    "throws",
+    "Task"
   ],
   "sections": [
     {
       "heading": "Primitive and built-in categories",
       "markdown": "- `i64` — default signed integer\n- `f64` — default floating-point number\n- `string` — UTF-8 string\n- `bool` — `true` / `false`\n- `()` — Unit, no return value\n- exact structural objects `{ field: T }`\n- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<u8>`, `BigInt`"
+    },
+    {
+      "heading": "Error and task types",
+      "markdown": "`Never` is the uninhabited bottom type, distinct from Unit. It satisfies Error constraints and is the error type of a non-throwing function. Task<T, E> defaults E to Never; try await propagates E | Cancelled. TaskResult<T, E> has Success(T), Error(E), Panic(PanicInfo), and Cancelled outcomes; poll() uses an outer Optional for unfinished tasks. Function types carry throws(E); their error type is covariant by subset. See spec §2.2.2 and §2.8.1."
     },
     {
       "heading": "Explicit conditions",

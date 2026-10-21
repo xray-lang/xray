@@ -37,13 +37,13 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
-| Function | `fn(T1, T2) -> R` |
+| Function | `fn(T1, T2) -> R` / `fn(T1, T2) throws(E) -> R` |
 | FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<fn(T) -> R>`、`usize`、`isize` |
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
 
-内置登记表是实现投影，不是新 XIR 声明族的准入清单。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
+内置登记表是实现投影，不是新 XIR 声明族的准入清单。§2.2.2 的 `Never`、`Task<T, E>` 与 `TaskResult<T, E>` 新形状尚待实现登记；下表中的旧 Task 参数和结果变体不能覆盖这些语言规则。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
 
 <!-- xr-builtin-registry:begin -->
 
@@ -140,6 +140,14 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 有限值相等的新 XIR 合同另冻结内置操作谓词 `Equal`，见 §9.2、§13.5 和 §17.33。
 它不是用户接口或旧 `Equatable` 的别名，不授予排序、键等价或自反性。正式实施尚待完成；
 上面的生成登记表仍反映现存符号来源，不能用手工表项替代来源登记、探针和最后旧消费者删除。
+
+#### 2.2.2 `Never`、错误类型与 Task
+
+`Never` 是没有值的底类型，也是流收窄中不可达类型的公开名字。它不是 `()`：Unit 有一个值，`Never` 没有任何值。`Never` 满足错误类型约束，`throws(Never)` 与不写 `throws` 等价；`Never | E` 等价于 `E`。不可达路径对类型合流不贡献可到达值。
+
+`throws(E)` 中的 `E` 只能是错误枚举、受 `Error` 约束的泛型参数、擦除后的 `Error`、`Never` 或这些错误类型组成的 union；泛型参数可以参与 `E | IoErr` 这样的 union。裸 `throws` 等价于 `throws(Error)`。错误类型随函数签名跨模块传递，不从被调用函数的实现体重新推导。
+
+`go f(...)` 的类型是 `Task<T, E>`，其中 `T` 是返回类型，`E` 来自 `f` 的错误签名；第二个类型参数默认为 `Never`，因此 `Task<T>` 等价于 `Task<T, Never>`。Task 的结果仍须满足可复制与 Sendable 约束。`try await task` 传播 `E | Cancelled`；即使 `E = Never`，等待仍可能观察到取消。取消展开本身不进入被取消函数的错误签名。`TaskResult<T, E>` 有 `Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled` 四种结果；`poll()` 的未完成状态用 `TaskResult<T, E>?` 的 `null` 表示（§10.3）。上面的自动生成登记表反映现有实现登记，不能覆盖本节的语言类型合同。
 
 ### 2.3 基本类型
 
@@ -752,6 +760,22 @@ var f: Mapper2<i64, string> = (n) -> string(n)
 
 **函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref i64) -> i64`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> i64)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
 
+#### 2.8.1 函数的错误类型与闭包
+
+抛错函数类型在参数列表与返回类型之间写 `throws(E)`，例如 `fn(string) throws(ParseErr) -> i64`；返回 Unit 时写 `fn(string) throws(ParseErr)`。无子句的函数类型保证不抛业务错误。`throws` 是类型身份的一部分，参与函数值赋值、重载判定和接口匹配；panic 不进入错误类型。
+
+在参数类型、参数模式与返回类型均满足原有匹配规则的前提下，错误类型按子集协变：不抛错的函数可赋给任意抛错函数类型，`throws(A)` 可赋给 `throws(A | B)` 或 `throws(Error)`，反向赋值拒绝。这不引入普通参数或返回类型的新协变、逆变规则，也不隐式转换错误载荷。
+
+fn lambda 显式写 `throws(E)` 时，先按该子句检查自身函数体，再按错误子集规则匹配期望类型；期望类型不能放宽显式声明。无显式子句的闭包有期望函数类型时按该类型检查，没有期望类型时才从自身函数体局部推导错误类型。箭头 lambda 不书写该子句。外层 `try` 区域不会延伸到嵌套闭包体。泛型错误参数 `E: Error` 由调用实参推导：传入不抛错函数时可推出 `E = Never`；仅当实例化后的完整错误类型为 `Never` 时才不要求调用点加 `try`，例如签名为 `throws(E | IoErr)` 时仍需标记。
+
+```xray @fragment
+fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array<U> {
+    var out: Array<U> = []
+    for (x in xs) { out.push(try f(x)) }
+    return out
+}
+```
+
 ### 2.9 类型推断
 
 详见 §7.4。简述：
@@ -917,7 +941,7 @@ fn check(a: string?) -> bool {
 }
 ```
 
-**N-6（相交语义）** `x is T` 的 true 方向：声明类型为 union 时保留与 `T` 相交的成员（无成员相交 → `never`）；非 union 时若可交则为 `T`，否则为 `never`。false 方向对称地移除相交部分。`x is T` 对基元类型、命名类型、泛型实例一视同仁。
+**N-6（相交语义）** `x is T` 的 true 方向：声明类型为 union 时保留与 `T` 相交的成员（无成员相交 → `Never`）；非 union 时若可交则为 `T`，否则为 `Never`。false 方向对称地移除相交部分。`x is T` 对基元类型、命名类型、泛型实例一视同仁。
 
 #### 2.13.3 传播
 
@@ -932,7 +956,7 @@ fn nameLen(s: string?) -> i64 {
 }
 ```
 
-**N-9（合流）** 合流点的类型是各前驱路径类型的并集；不可达前驱贡献 `never` 并被并集吸收。
+**N-9（合流）** 合流点的类型是各前驱路径类型的并集；不可达前驱贡献 `Never` 并被并集吸收。
 
 **N-10（循环）** 循环头的类型是入口边与所有回边的并集。回边上若存在对该绑定的赋值，则该回边贡献被赋值表达式的类型；若一条回边回到循环头时**没有**经过任何赋值，则绑定的值未变，该回边不向并集贡献任何类型。因此循环体内对该绑定的赋值会使下一轮迭代的条件收窄按合流后的类型重新计算，而循环前建立的收窄在循环体不写该绑定时保持有效：
 
@@ -1130,13 +1154,13 @@ Xray is statically typed; every expression has a determined type at compile time
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
-| Function | `fn(T1, T2) -> R` |
+| Function | `fn(T1, T2) -> R` / `fn(T1, T2) throws(E) -> R` |
 | FFI / C ABI | `Ptr<T>`, `MutPtr<T>`, `CFn<fn(T) -> R>`, `usize`, `isize` |
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
 
-The built-in registry is an implementation projection, not the new XIR declaration-family admission list. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
+The built-in registry is an implementation projection, not the new XIR declaration-family admission list. Registration of `Never`, `Task<T, E>`, and the new `TaskResult<T, E>` shape from §2.2.2 is pending; the old Task arguments and result variants in the table do not override those language rules. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
 
 <!-- xr-builtin-registry:begin -->
 
@@ -1235,6 +1259,14 @@ see §9.2, §13.5 and §17.33. It is neither a user interface nor an alias for l
 and grants no ordering, key equivalence or reflexivity. Implementation remains pending. The
 generated registry above still reflects existing symbol sources; manual entries cannot replace
 source registration, probes and removal after the last legacy consumer migrates.
+
+#### 2.2.2 `Never`, Error Types, and Task
+
+`Never` is the uninhabited bottom type and the public name of the unreachable type used by flow narrowing. It differs from `()`: Unit has one value, while `Never` has none. `Never` satisfies the error-type constraint; `throws(Never)` is equivalent to omitting `throws`, and `Never | E` is equivalent to `E`. Unreachable paths contribute no reachable value to a type join.
+
+The `E` in `throws(E)` must be an error enum, a generic parameter constrained by `Error`, erased `Error`, `Never`, or a union of these error types; a generic parameter may participate in a union such as `E | IoErr`. Bare `throws` means `throws(Error)`. Error types cross module boundaries in function signatures; callers do not infer them again from callee bodies.
+
+`go f(...)` has type `Task<T, E>`, with result type `T` and error type `E` from the signature of `f`. The second argument defaults to `Never`, so `Task<T>` means `Task<T, Never>`. Task results must still be copyable and Sendable. `try await task` propagates `E | Cancelled`; even when `E = Never`, a wait may observe cancellation. Cancellation unwinding itself is not part of the cancelled function's error signature. `TaskResult<T, E>` has four outcomes: `Success(T)`, `Error(E)`, `Panic(PanicInfo)`, and `Cancelled`. An unfinished `poll()` returns `null` in `TaskResult<T, E>?` (§10.3). The generated registry above reflects existing implementation registrations and does not override this language type contract.
 
 ### 2.3 Primitive Types
 
@@ -1870,6 +1902,22 @@ matching the expression side and §2.7 — a comma makes a tuple, `(T)` groups �
 a nullable function type is written directly as `(fn() -> i64)?`. `CFn<...>`
 uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
 
+#### 2.8.1 Function Error Types and Closures
+
+A throwing function type places `throws(E)` between its parameters and result, as in `fn(string) throws(ParseErr) -> i64`; a Unit-returning type is `fn(string) throws(ParseErr)`. Omitting the clause guarantees no business error. The error clause is part of type identity for function-value assignment, overload resolution, and interface matching. Panic is not an error type.
+
+When parameters, parameter modes, and results meet their existing matching rules, error types are covariant by subset: a non-throwing function can be assigned to any throwing function type, and `throws(A)` can be assigned to `throws(A | B)` or `throws(Error)`. Reverse assignments reject. This adds no general parameter/result variance and performs no implicit error-payload conversion.
+
+A fn lambda with explicit `throws(E)` first checks its body against that clause, then matches an expected type by error subset; the expected type cannot widen its explicit declaration. A closure without an explicit clause uses its expected function type, or infers its errors locally from its own body when there is no expected type. An arrow lambda cannot write the clause. An outer `try` region does not extend into a nested closure body. An `E: Error` generic parameter is inferred from call arguments: a non-throwing argument can infer `E = Never`. Only a complete instantiated error type of `Never` removes the need for `try`; a signature such as `throws(E | IoErr)` still requires marking.
+
+```xray @fragment
+fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array<U> {
+    var out: Array<U> = []
+    for (x in xs) { out.push(try f(x)) }
+    return out
+}
+```
+
 ### 2.9 Type Inference
 
 See §7.4 for details. In summary:
@@ -2035,7 +2083,7 @@ fn check(a: string?) -> bool {
 }
 ```
 
-**N-6 (intersection semantics)** True direction of `x is T`: when the declared type is a union, keep the members that intersect `T` (none → `never`); otherwise the result is `T` when the two intersect and `never` when they do not. The false direction symmetrically removes the intersecting part. `x is T` treats primitive types, named types, and generic instances alike.
+**N-6 (intersection semantics)** True direction of `x is T`: when the declared type is a union, keep the members that intersect `T` (none → `Never`); otherwise the result is `T` when the two intersect and `Never` when they do not. The false direction symmetrically removes the intersecting part. `x is T` treats primitive types, named types, and generic instances alike.
 
 #### 2.13.3 Propagation
 
@@ -2050,7 +2098,7 @@ fn nameLen(s: string?) -> i64 {
 }
 ```
 
-**N-9 (join)** The type at a join point is the union of the types on all predecessor paths; unreachable predecessors contribute `never` and are absorbed by the union.
+**N-9 (join)** The type at a join point is the union of the types on all predecessor paths; unreachable predecessors contribute `Never` and are absorbed by the union.
 
 **N-10 (loops)** The type at a loop header is the union of the entry edge and every back edge. A back edge that assigns the binding contributes the assigned expression's type; a back edge that reaches the header **without** an assignment leaves the value unchanged and contributes nothing to the union. An assignment inside the loop body therefore makes the next iteration re-derive the condition narrowing from the joined type, while a narrowing established before the loop survives a body that never writes the binding:
 

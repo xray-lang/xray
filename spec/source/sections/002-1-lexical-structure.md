@@ -139,6 +139,8 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 `try` `catch` `throw` `defer`
 
+`throws` 是签名位置的上下文关键字（§1.5.8），不是全局保留字。
+
 #### 1.5.4 模块系统
 
 `import` `export`
@@ -153,6 +155,8 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 `i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
 `f32` `f64` `bool` `string` `rune`
+
+`Never` 是预置的无值底类型名，不是词法关键字；它可用于 `throws(Never)`（§2.2.2）。
 
 类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
@@ -183,6 +187,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `linked` | `linked go` / `linked scope` 修饰符 |
 | `after` | `select` 的超时分支 (`after 1000 -> ...`) |
 | `panic` | `catch panic (p)` 的 panic 通道边界 |
+| `throws` | 函数、方法、构造器、fn lambda 与函数类型的参数列表之后，声明错误类型 |
 
 ### 1.6 字面量
 
@@ -622,6 +627,8 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 
 `try` `catch` `throw` `defer`
 
+`throws` is contextual in signatures (§1.5.8), not globally reserved.
+
 #### 1.5.4 Module System
 
 `import` `export`
@@ -636,6 +643,8 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 
 `i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
 `f32` `f64` `bool` `string` `rune`
+
+`Never` is a predefined uninhabited bottom-type name, not a lexical keyword; it can appear in `throws(Never)` (§2.2.2).
 
 Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
@@ -666,6 +675,7 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `linked` | `linked go` / `linked scope` modifier |
 | `after` | `select` timeout arm (`after 1000 -> ...`) |
 | `panic` | panic-channel boundary in `catch panic (p)` |
+| `throws` | after the parameter list of a function, method, initializer, fn lambda, or function type; declares its error type |
 
 ### 1.6 Literals
 

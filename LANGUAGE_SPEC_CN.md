@@ -245,6 +245,8 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 `try` `catch` `throw` `defer`
 
+`throws` 是签名位置的上下文关键字（§1.5.8），不是全局保留字。
+
 #### 1.5.4 模块系统
 
 `import` `export`
@@ -259,6 +261,8 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 `i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
 `f32` `f64` `bool` `string` `rune`
+
+`Never` 是预置的无值底类型名，不是词法关键字；它可用于 `throws(Never)`（§2.2.2）。
 
 类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
@@ -289,6 +293,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 | `linked` | `linked go` / `linked scope` 修饰符 |
 | `after` | `select` 的超时分支 (`after 1000 -> ...`) |
 | `panic` | `catch panic (p)` 的 panic 通道边界 |
+| `throws` | 函数、方法、构造器、fn lambda 与函数类型的参数列表之后，声明错误类型 |
 
 ### 1.6 字面量
 
@@ -624,13 +629,13 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
-| Function | `fn(T1, T2) -> R` |
+| Function | `fn(T1, T2) -> R` / `fn(T1, T2) throws(E) -> R` |
 | FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<fn(T) -> R>`、`usize`、`isize` |
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
 
-内置登记表是实现投影，不是新 XIR 声明族的准入清单。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
+内置登记表是实现投影，不是新 XIR 声明族的准入清单。§2.2.2 的 `Never`、`Task<T, E>` 与 `TaskResult<T, E>` 新形状尚待实现登记；下表中的旧 Task 参数和结果变体不能覆盖这些语言规则。§2.4.2 规定的 `MutSlice` 尚未列入该表；完整视图注册与准入仍待对应声明族实现，不能把规范中的类型说明计作当前实现覆盖。
 
 <!-- xr-builtin-registry:begin -->
 
@@ -727,6 +732,14 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 有限值相等的新 XIR 合同另冻结内置操作谓词 `Equal`，见 §9.2、§13.5 和 §17.33。
 它不是用户接口或旧 `Equatable` 的别名，不授予排序、键等价或自反性。正式实施尚待完成；
 上面的生成登记表仍反映现存符号来源，不能用手工表项替代来源登记、探针和最后旧消费者删除。
+
+#### 2.2.2 `Never`、错误类型与 Task
+
+`Never` 是没有值的底类型，也是流收窄中不可达类型的公开名字。它不是 `()`：Unit 有一个值，`Never` 没有任何值。`Never` 满足错误类型约束，`throws(Never)` 与不写 `throws` 等价；`Never | E` 等价于 `E`。不可达路径对类型合流不贡献可到达值。
+
+`throws(E)` 中的 `E` 只能是错误枚举、受 `Error` 约束的泛型参数、擦除后的 `Error`、`Never` 或这些错误类型组成的 union；泛型参数可以参与 `E | IoErr` 这样的 union。裸 `throws` 等价于 `throws(Error)`。错误类型随函数签名跨模块传递，不从被调用函数的实现体重新推导。
+
+`go f(...)` 的类型是 `Task<T, E>`，其中 `T` 是返回类型，`E` 来自 `f` 的错误签名；第二个类型参数默认为 `Never`，因此 `Task<T>` 等价于 `Task<T, Never>`。Task 的结果仍须满足可复制与 Sendable 约束。`try await task` 传播 `E | Cancelled`；即使 `E = Never`，等待仍可能观察到取消。取消展开本身不进入被取消函数的错误签名。`TaskResult<T, E>` 有 `Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled` 四种结果；`poll()` 的未完成状态用 `TaskResult<T, E>?` 的 `null` 表示（§10.3）。上面的自动生成登记表反映现有实现登记，不能覆盖本节的语言类型合同。
 
 ### 2.3 基本类型
 
@@ -1339,6 +1352,22 @@ var f: Mapper2<i64, string> = (n) -> string(n)
 
 **函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref i64) -> i64`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> i64)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
 
+#### 2.8.1 函数的错误类型与闭包
+
+抛错函数类型在参数列表与返回类型之间写 `throws(E)`，例如 `fn(string) throws(ParseErr) -> i64`；返回 Unit 时写 `fn(string) throws(ParseErr)`。无子句的函数类型保证不抛业务错误。`throws` 是类型身份的一部分，参与函数值赋值、重载判定和接口匹配；panic 不进入错误类型。
+
+在参数类型、参数模式与返回类型均满足原有匹配规则的前提下，错误类型按子集协变：不抛错的函数可赋给任意抛错函数类型，`throws(A)` 可赋给 `throws(A | B)` 或 `throws(Error)`，反向赋值拒绝。这不引入普通参数或返回类型的新协变、逆变规则，也不隐式转换错误载荷。
+
+fn lambda 显式写 `throws(E)` 时，先按该子句检查自身函数体，再按错误子集规则匹配期望类型；期望类型不能放宽显式声明。无显式子句的闭包有期望函数类型时按该类型检查，没有期望类型时才从自身函数体局部推导错误类型。箭头 lambda 不书写该子句。外层 `try` 区域不会延伸到嵌套闭包体。泛型错误参数 `E: Error` 由调用实参推导：传入不抛错函数时可推出 `E = Never`；仅当实例化后的完整错误类型为 `Never` 时才不要求调用点加 `try`，例如签名为 `throws(E | IoErr)` 时仍需标记。
+
+```xray @fragment
+fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array<U> {
+    var out: Array<U> = []
+    for (x in xs) { out.push(try f(x)) }
+    return out
+}
+```
+
 ### 2.9 类型推断
 
 详见 §7.4。简述：
@@ -1504,7 +1533,7 @@ fn check(a: string?) -> bool {
 }
 ```
 
-**N-6（相交语义）** `x is T` 的 true 方向：声明类型为 union 时保留与 `T` 相交的成员（无成员相交 → `never`）；非 union 时若可交则为 `T`，否则为 `never`。false 方向对称地移除相交部分。`x is T` 对基元类型、命名类型、泛型实例一视同仁。
+**N-6（相交语义）** `x is T` 的 true 方向：声明类型为 union 时保留与 `T` 相交的成员（无成员相交 → `Never`）；非 union 时若可交则为 `T`，否则为 `Never`。false 方向对称地移除相交部分。`x is T` 对基元类型、命名类型、泛型实例一视同仁。
 
 #### 2.13.3 传播
 
@@ -1519,7 +1548,7 @@ fn nameLen(s: string?) -> i64 {
 }
 ```
 
-**N-9（合流）** 合流点的类型是各前驱路径类型的并集；不可达前驱贡献 `never` 并被并集吸收。
+**N-9（合流）** 合流点的类型是各前驱路径类型的并集；不可达前驱贡献 `Never` 并被并集吸收。
 
 **N-10（循环）** 循环头的类型是入口边与所有回边的并集。回边上若存在对该绑定的赋值，则该回边贡献被赋值表达式的类型；若一条回边回到循环头时**没有**经过任何赋值，则绑定的值未变，该回边不向并集贡献任何类型。因此循环体内对该绑定的赋值会使下一轮迭代的条件收窄按合流后的类型重新计算，而循环前建立的收窄在循环体不写该绑定时保持有效：
 
@@ -2851,7 +2880,8 @@ var { name: localName, age } = { name: "Alice", age: 30 }
 ### 5.2 `fn` 函数声明
 
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+ThrowsClause ::= 'throws' ('(' Type ')')?
 ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
@@ -2883,6 +2913,23 @@ fn echo(x: i64) {                       // 省略返回类型 = ()
 - 参数**必须**带类型标注（与箭头函数一致）。
 - 返回类型省略 = `()`（Unit）；推荐显式标注以增强可读性。
 - 函数体必须是块。
+
+#### 5.2.1.1 错误签名
+
+具名函数不写 `throws` 就保证不抛业务错误。`throws(E)` 放在参数列表之后、返回类型之前；返回 Unit 时也可写 `fn run() throws(E)`。`E` 的合法范围见 §2.2.2，裸 `throws` 等价于 `throws(Error)`，`throws(Never)` 等价于不写。错误枚举的 union 表示允许抛出的多个类型。
+
+```xray @fragment
+fn add(a: i64, b: i64) -> i64
+fn parse(s: string) throws(ParseErr) -> i64
+fn load(path: string) throws(IoErr | ParseErr) -> Config
+fn runAll() throws
+```
+
+上例是签名片段；普通函数定义仍必须有函数体。编译器按函数体与被调签名做局部检查：未捕获错误必须包含在声明的错误类型内，超出时报错并建议补上或扩大 `throws(...)`；调用点用 `try` 表达式传播，或在 `try { } catch` 区域内处理（§8）。签名是调用方依据，不依赖全程序错误推导。
+
+模块顶层和程序入口 `main` 隐式允许任意错误，但传播点仍须标记。闭包的期望类型与局部错误推导见 §2.8.1，不能将闭包推导规则用于省略 `throws` 的普通具名函数。
+
+可能抛错的标准库公开 API 必须写带类型的 `throws(E)`，可包含受 `Error` 约束的泛型参数；不抛错 API 不需要额外子句。其他代码使用无类型 `throws` 时只给 lint 提示。freestanding 与 `@strict(alloc)` 范围内禁止擦除后的错误类型，包括 `throws` 和等价的 `throws(Error)`；带约束的泛型错误子句仍合法。panic 不进入 `throws`。
 
 #### 5.2.2 默认参数值
 
@@ -3015,6 +3062,8 @@ greet()                   // 必须显式调用
 
 #### 5.2.9 `extern "C"` C FFI 声明块
 
+`extern "C"` 函数与 `CFn` 回调必须不抛业务错误。导出给 C 的 Xray 函数也必须不抛错；需要跨边界报告失败时，先在 Xray 包装函数中捕获错误并转换为 C 状态码。
+
 `extern "C"` 块只声明共享 C ABI 的外部**函数符号**。外部函数没有 Xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
 ```xray
@@ -3106,17 +3155,14 @@ header = true
 - `xray build --native --c-header FILE` 为 `header = true` 的 export 生成 C 原型；`--shared` 只接受无需 runtime 初始化的 scalar/raw-pointer 边界。
 - export plan 只选择导出目标，不绕过 ABI verifier，也不改变 VM 语义或普通 Xray 调用。
 
-#### 5.2.11 推导 effect 与 `xray verify` 合同
+#### 5.2.11 错误签名与目标产物验证
 
-分配、错误集、挂起、阻塞、panic/abort 与 AOT residue 全部由编译器推导，不由源码注解声明；需要发布或性能门禁时，把要求写入版本化合同：
+不抛错由源码签名表达：省略 `throws` 或写 `throws(Never)`。`xray verify` 不再接受 `no_throw`；`xray.toml` 的 `[declarations]` 也不声明错误集合或不抛错承诺。错误接口不能由源码之外的配置加强，泛型高阶函数应使用 `E: Error` 与 `throws(E)`。
+
+`xray verify` 只检查目标产物的形状要求，不代替函数体的语言检查，也不授予优化许可。例如：
 
 ```toml
 version = 1
-
-[[function]]
-symbol = "math.addOne"
-scope = "semantic"
-requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
 
 [[function]]
 symbol = "codec.hotAdd"
@@ -3124,18 +3170,14 @@ scope = "backend"
 backend = "aot"
 target = "aarch64-apple-darwin"
 profile = "release"
-requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+requires = ["no_runtime_heap"]
 
 [function.shape]
 forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
 allow = []
 ```
 
-运行 `xray verify --contract perf-contracts.toml`。合同只验证已有语义/effect 与目标产物形状，不授予优化许可，也不能改变运行语义。semantic 合同可与目标无关；backend/shape 合同必须写出具体 backend、target 与 profile。动态调用、native unknown、缺失 symbol 或不完整证明均 fail closed，并报告 witness。
-
-**native unknown 的含义**：无函数体的 `extern "C"` 声明没有可推导的 Xray 语义，唯一可采信的证据是 `xray.toml` 中该 symbol 的 `[native.symbol.contract]`。契约声明 `allocation` / `suspend` 等字段时，这些字段作为公理进入被调用方的 effect 结论；没有完整契约时，相应语义位标记为 unknown，任何覆盖它的合同 fail closed。**空的函数体不是证明。**
-
-**推导覆盖面**（状态：部分实现）：`requires` 目前只有 `no_semantic_alloc`、`no_suspend`、`no_throw`（semantic scope）与 `no_runtime_heap`（backend scope）由真实分析 pass 支撑。`no_block`、`no_thread_block`、`no_panic`、`no_abort` 所对应的语义 effect 位当前没有任何 pass 推导，因此 `xray verify` 拒绝这四项并报告"无推导来源"，而不是空真地通过。相应分析实现后，这四项才会被接受。
+运行 `xray verify --contract perf-contracts.toml`。缺失 symbol、未知产物形状或无法判断的要求都拒绝，不能空真地通过。挂起与其他能力的规则独立于错误签名；`no_suspend` 的源码表面由执行模型定义。
 
 #### 包拥有的声明承诺（实现待接通）
 
@@ -3214,9 +3256,9 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
-MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
-            |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' Block          // 参数类型可省
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
+            |  Modifier* 'operator' OpToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // 参数类型可省
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
@@ -3297,6 +3339,8 @@ class Dog extends Animal {
 > `const` = 不可变字段/绑定，`final class` = 禁止继承。字段不可变只用 `const`；对字段或方法写 `final` 会报错。
 
 #### 5.3.4 构造器
+
+构造器可以声明 `init(...) throws(E)`；省略子句表示不抛错。构造调用 `Type(...)` 按该签名要求 `try` 或处理区域；构造失败不发布部分初始化的值。方法（包括 static、enum 与运算符方法）采用同样的 `throws(E)` 位置和局部检查规则。
 
 ```xray
 class Point {
@@ -3598,7 +3642,7 @@ xray 接口实现是**显式声明的**（与 Go 的隐式实现不同）：类 
 InterfaceDecl ::= 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?       // 方法签名
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?       // 方法签名
                  |  ('const')? Identifier ':' Type                   // 属性签名（可加 const 表示只读）
 ```
 
@@ -3643,6 +3687,7 @@ fn describe(s: Shape) -> string {
 - 实现类**必须**提供所有接口成员（方法同名同参同返回；属性同名同类型）。
 - 接口方法声明中的**返回类型可省略**（默认 `()`）。
 - 接口方法默认 `abstract`（无方法体）。
+- 接口方法可声明 `throws(E)`；实现与覆写的错误类型必须是要求的子集，也可以不抛错。参数、模式、receiver 和返回类型仍按原有匹配规则检查。
 - 接口可声明**属性签名**（`length: i64`、`const id: i64`）；实现类型可提供同类型的字段或访问器。const 属性要求可读，普通属性要求可读可写；实现的读取/写入权限不能窄于对应接口要求。
 - 实现类可以提供额外的方法（接口仅定义最小集）。
 
@@ -3652,9 +3697,9 @@ fn describe(s: Shape) -> string {
 
 继承必须无环，包括未使用的声明。同源成员经相同类型替换到达时去重；不同来源的同名成员仅在完整合同完全相同时合并查找，同时保留全部实现义务。合同包括成员种类、receiver、参数数目/模式/类型、结果类型与 callable 承诺；不相同则拒绝歧义，不按继承、约束或导入顺序挑选。重新声明继承成员同样须精确匹配。参数名字不参与签名比较，但 manifest 按各声明自己的参数名字绑定。
 
-实现方法必须是该类型的公开实例方法，精确满足参数、结果及 receiver 合同；静态、私有、受保护、构造和 cleanup 函数不能充当见证。不新增一般协变/逆变转换。实现可提供更强的函数自身 `no_suspend` 保证，但不能加强调用者的参数义务或弱化接口保证。同名合并要求须绑定该类型的同一个方法身份。
+实现方法必须是该类型的公开实例方法，精确满足参数、结果及 receiver 合同；静态、私有、受保护、构造和 cleanup 函数不能充当见证。除错误类型的子集协变外，不新增一般协变/逆变转换。实现可提供更强的函数自身 `no_suspend` 保证，但不能加强调用者的参数义务或弱化接口保证。同名合并要求须绑定该类型的同一个方法身份。
 
-泛型约束为标记与接口应用的合取，相同约束重复幂等；派生接口通过明确的类型替换蕴含祖先要求。定义处成员访问必须绑定到约束所提供的要求身份及完整签名；具体实参的额外方法不能补足证明，未使用的非法泛型也拒绝。证明及其缓存必须包含参数环境。抽象方法没有已检查实现体，其效应由公开合同给出，未承诺者按未知 callable 上界处理；实现须在定义处证明这些义务。
+泛型约束为标记与接口应用的合取，相同约束重复幂等；派生接口通过明确的类型替换蕴含祖先要求。定义处成员访问必须绑定到约束所提供的要求身份及完整签名；具体实参的额外方法不能补足证明，未使用的非法泛型也拒绝。证明及其缓存必须包含参数环境。抽象方法没有已检查实现体，错误类型完全由 `throws` 签名给出，省略即 `Never`；其余能力仍按各自公开合同或未承诺时的未知 callable 上界处理。实现须在定义处证明这些义务。
 
 接口要求可有自身类型参数，例如 `I<A>.map<U:C<A>>(value:U)->U`。接口外围与方法自身参数按真实owner及ordinal分别绑定，完整空间为 `[interface parent, method own]`；自身名字不遮蔽外围，条件可引用后续自身参数。自身where仅约束自身参数。调用的显式列表只填own，parent来自定义处约束应用；调用方必须证明全部条件。继承同名方法按own数量、完整签名和alpha对齐后的条件双向蕴含比较，重复与冗余祖先幂等，同时保留全部原要求身份。实现向量为 `[nominal parent, method own]`；其条件只能由名义前提与原要求方法前提蕴含，不能用实现自身条件自证，实现体仍按自身声明检查。Checked特化及独立来源复验保留完整nominal+own实参，即使own未出现在物理签名中也不能省略。
 
@@ -3718,8 +3763,8 @@ EnumDecl       ::= 'enum' Identifier TypeParams?
 EnumVariant    ::= Identifier
                  | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
 EnumFieldDecl  ::= Identifier ':' Type
-EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ```
 
 > 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
@@ -8467,7 +8512,8 @@ PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | Tupl
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= '(' TypeList? ')' '->' Type
+FunctionType ::= 'fn' '(' FunctionTypeParams? ')' ThrowsClause? ReturnType?
+FunctionTypeParams ::= ParamType (',' ParamType)* ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -8501,11 +8547,14 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 // range 松于所有算术运算符、紧于比较，非结合（a..b..c 是语法错误）；安全转换写为 `x as T?`，T? 是可空类型。
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
+           |  TryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
+
+TryExpr   ::= 'try' ('?' | '!')? TernaryExpr
 
 GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
 GoOptions ::= '(' 'name' ':' StringLiteral ')'
@@ -8545,7 +8594,7 @@ ArrowLambda ::= Identifier '->' (Expression | Block)
               | '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
-FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
 // Note: arrow lambdas cannot declare an explicit return type;
 // use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 
@@ -8560,6 +8609,10 @@ CallArg ::= ('ref' | 'out') Expression
           | '_'
           | Expression
 ```
+
+`try` 后的下一个 token 为 `{` 时只解析为 `TryStmt`，否则解析为 `TryExpr`；`try?` / `try!` 不能修饰代码块。`TryExpr` 的操作数从当前位置覆盖到当前表达式边界，且不包含未加括号的赋值运算符。括号、参数分隔符和语句结束仍限定表达式范围。`try?` 与同一未加括号的 `??` 表达式连用时报错，应写 `(try? expr) ?? fallback`。等待的标记顺序是 `try await task`，不是 `await try task`。
+
+函数类型返回 Unit 时省略 `ReturnType`，如 `fn()`、`fn() throws(E)`；类型位置不接受显式 `-> ()`（§2.8）。`extern "C"` 声明与 `CFn` 回调必须不抛错，不能携带抛错签名（§5.2.9）。
 
 ### A.4 模式
 
@@ -8651,7 +8704,7 @@ DeferStmt ::= 'defer' Block
 
 // print 是普通全局函数调用，语法上属于 ExprStmt。
 
-// go 是表达式，返回 Task<T>。不作为独立语句类别出现（封装在 ExprStmt 中）。
+// go 是表达式，返回 Task<T, E>。不作为独立语句类别出现（封装在 ExprStmt 中）。
 
 ScopeStmt ::= 'linked'? 'scope' Block
 
@@ -8677,7 +8730,7 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
 ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
@@ -8685,6 +8738,7 @@ Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
 ParamMode ::= 'ref' | 'move'
+ThrowsClause ::= 'throws' ('(' Type ')')?
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // 公开可见性是默认语义；final 只作为 class 前缀
@@ -8699,9 +8753,9 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
-MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
-            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' Block
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
+            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
@@ -8710,7 +8764,7 @@ StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?
 
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
@@ -8718,8 +8772,8 @@ EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
 EnumVariant    ::= Identifier
                  | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
 EnumFieldDecl  ::= Identifier ':' Type
-EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
 TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type

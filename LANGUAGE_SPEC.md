@@ -244,6 +244,8 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 
 `try` `catch` `throw` `defer`
 
+`throws` is contextual in signatures (§1.5.8), not globally reserved.
+
 #### 1.5.4 Module System
 
 `import` `export`
@@ -258,6 +260,8 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 
 `i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
 `f32` `f64` `bool` `string` `rune`
+
+`Never` is a predefined uninhabited bottom-type name, not a lexical keyword; it can appear in `throws(Never)` (§2.2.2).
 
 Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
@@ -288,6 +292,7 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `linked` | `linked go` / `linked scope` modifier |
 | `after` | `select` timeout arm (`after 1000 -> ...`) |
 | `panic` | panic-channel boundary in `catch panic (p)` |
+| `throws` | after the parameter list of a function, method, initializer, fn lambda, or function type; declares its error type |
 
 ### 1.6 Literals
 
@@ -623,13 +628,13 @@ Xray is statically typed; every expression has a determined type at compile time
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
-| Function | `fn(T1, T2) -> R` |
+| Function | `fn(T1, T2) -> R` / `fn(T1, T2) throws(E) -> R` |
 | FFI / C ABI | `Ptr<T>`, `MutPtr<T>`, `CFn<fn(T) -> R>`, `usize`, `isize` |
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
 
-The built-in registry is an implementation projection, not the new XIR declaration-family admission list. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
+The built-in registry is an implementation projection, not the new XIR declaration-family admission list. Registration of `Never`, `Task<T, E>`, and the new `TaskResult<T, E>` shape from §2.2.2 is pending; the old Task arguments and result variants in the table do not override those language rules. The `MutSlice` contract in §2.4.2 is not yet represented in this registry. Full view registration and admission remain implementation work for that declaration family; describing the type does not count as current implementation coverage.
 
 <!-- xr-builtin-registry:begin -->
 
@@ -728,6 +733,14 @@ see §9.2, §13.5 and §17.33. It is neither a user interface nor an alias for l
 and grants no ordering, key equivalence or reflexivity. Implementation remains pending. The
 generated registry above still reflects existing symbol sources; manual entries cannot replace
 source registration, probes and removal after the last legacy consumer migrates.
+
+#### 2.2.2 `Never`, Error Types, and Task
+
+`Never` is the uninhabited bottom type and the public name of the unreachable type used by flow narrowing. It differs from `()`: Unit has one value, while `Never` has none. `Never` satisfies the error-type constraint; `throws(Never)` is equivalent to omitting `throws`, and `Never | E` is equivalent to `E`. Unreachable paths contribute no reachable value to a type join.
+
+The `E` in `throws(E)` must be an error enum, a generic parameter constrained by `Error`, erased `Error`, `Never`, or a union of these error types; a generic parameter may participate in a union such as `E | IoErr`. Bare `throws` means `throws(Error)`. Error types cross module boundaries in function signatures; callers do not infer them again from callee bodies.
+
+`go f(...)` has type `Task<T, E>`, with result type `T` and error type `E` from the signature of `f`. The second argument defaults to `Never`, so `Task<T>` means `Task<T, Never>`. Task results must still be copyable and Sendable. `try await task` propagates `E | Cancelled`; even when `E = Never`, a wait may observe cancellation. Cancellation unwinding itself is not part of the cancelled function's error signature. `TaskResult<T, E>` has four outcomes: `Success(T)`, `Error(E)`, `Panic(PanicInfo)`, and `Cancelled`. An unfinished `poll()` returns `null` in `TaskResult<T, E>?` (§10.3). The generated registry above reflects existing implementation registrations and does not override this language type contract.
 
 ### 2.3 Primitive Types
 
@@ -1363,6 +1376,22 @@ matching the expression side and §2.7 — a comma makes a tuple, `(T)` groups �
 a nullable function type is written directly as `(fn() -> i64)?`. `CFn<...>`
 uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
 
+#### 2.8.1 Function Error Types and Closures
+
+A throwing function type places `throws(E)` between its parameters and result, as in `fn(string) throws(ParseErr) -> i64`; a Unit-returning type is `fn(string) throws(ParseErr)`. Omitting the clause guarantees no business error. The error clause is part of type identity for function-value assignment, overload resolution, and interface matching. Panic is not an error type.
+
+When parameters, parameter modes, and results meet their existing matching rules, error types are covariant by subset: a non-throwing function can be assigned to any throwing function type, and `throws(A)` can be assigned to `throws(A | B)` or `throws(Error)`. Reverse assignments reject. This adds no general parameter/result variance and performs no implicit error-payload conversion.
+
+A fn lambda with explicit `throws(E)` first checks its body against that clause, then matches an expected type by error subset; the expected type cannot widen its explicit declaration. A closure without an explicit clause uses its expected function type, or infers its errors locally from its own body when there is no expected type. An arrow lambda cannot write the clause. An outer `try` region does not extend into a nested closure body. An `E: Error` generic parameter is inferred from call arguments: a non-throwing argument can infer `E = Never`. Only a complete instantiated error type of `Never` removes the need for `try`; a signature such as `throws(E | IoErr)` still requires marking.
+
+```xray @fragment
+fn map<T, U, E: Error>(xs: Array<T>, f: fn(T) throws(E) -> U) throws(E) -> Array<U> {
+    var out: Array<U> = []
+    for (x in xs) { out.push(try f(x)) }
+    return out
+}
+```
+
 ### 2.9 Type Inference
 
 See §7.4 for details. In summary:
@@ -1528,7 +1557,7 @@ fn check(a: string?) -> bool {
 }
 ```
 
-**N-6 (intersection semantics)** True direction of `x is T`: when the declared type is a union, keep the members that intersect `T` (none → `never`); otherwise the result is `T` when the two intersect and `never` when they do not. The false direction symmetrically removes the intersecting part. `x is T` treats primitive types, named types, and generic instances alike.
+**N-6 (intersection semantics)** True direction of `x is T`: when the declared type is a union, keep the members that intersect `T` (none → `Never`); otherwise the result is `T` when the two intersect and `Never` when they do not. The false direction symmetrically removes the intersecting part. `x is T` treats primitive types, named types, and generic instances alike.
 
 #### 2.13.3 Propagation
 
@@ -1543,7 +1572,7 @@ fn nameLen(s: string?) -> i64 {
 }
 ```
 
-**N-9 (join)** The type at a join point is the union of the types on all predecessor paths; unreachable predecessors contribute `never` and are absorbed by the union.
+**N-9 (join)** The type at a join point is the union of the types on all predecessor paths; unreachable predecessors contribute `Never` and are absorbed by the union.
 
 **N-10 (loops)** The type at a loop header is the union of the entry edge and every back edge. A back edge that assigns the binding contributes the assigned expression's type; a back edge that reaches the header **without** an assignment leaves the value unchanged and contributes nothing to the union. An assignment inside the loop body therefore makes the next iteration re-derive the condition narrowing from the joined type, while a narrowing established before the loop survives a body that never writes the binding:
 
@@ -2877,7 +2906,8 @@ The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `
 ### 5.2 `fn` function declaration
 
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+ThrowsClause ::= 'throws' ('(' Type ')')?
 ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
@@ -2909,6 +2939,23 @@ fn echo(x: i64) {                       // omitted return type = ()
 - Parameters **must** carry type annotations (consistent with arrow functions).
 - An omitted return type means `()` (Unit); explicit annotation is recommended for readability.
 - The function body must be a block.
+
+#### 5.2.1.1 Error Signatures
+
+A named function without `throws` guarantees no business error. Write `throws(E)` after the parameters and before the result; a Unit-returning function can use `fn run() throws(E)`. Legal error types are defined in §2.2.2. Bare `throws` means `throws(Error)`; `throws(Never)` is equivalent to omission. A union of error enums permits multiple error types.
+
+```xray @fragment
+fn add(a: i64, b: i64) -> i64
+fn parse(s: string) throws(ParseErr) -> i64
+fn load(path: string) throws(IoErr | ParseErr) -> Config
+fn runAll() throws
+```
+
+These are signature fragments; ordinary definitions still require bodies. The compiler checks each body locally using callee signatures: uncaught errors must be a subset of the declared error type. An excess error is diagnosed with a suggestion to add or widen `throws(...)`. A call propagates through a `try` expression or is handled in a `try { } catch` region (§8). Callers rely on signatures, without whole-program error inference.
+
+Module top-level code and the program entry `main` implicitly allow arbitrary errors, but propagation sites still require marking. Expected closure types and local closure inference follow §2.8.1; that inference rule does not apply to ordinary named functions omitting `throws`.
+
+Throwing public standard-library APIs must declare typed `throws(E)`, which may include error-constrained generic parameters; non-throwing APIs need no extra clause. Other code using untyped `throws` receives only a lint. Freestanding and `@strict(alloc)` scopes prohibit erased error types, including `throws` and equivalent `throws(Error)`; constrained generic error clauses remain legal. Panic is not part of `throws`.
 
 #### 5.2.2 Default parameter values
 
@@ -3041,6 +3088,8 @@ greet()                   // must be called explicitly
 
 #### 5.2.9 `extern "C"` C FFI Declaration Blocks
 
+`extern "C"` functions and `CFn` callbacks must not throw business errors. A Xray function exported to C must also be non-throwing. To report failure across the boundary, catch it in a Xray wrapper and convert it to a C status code.
+
 An `extern "C"` block declares external **function symbols** that share the C ABI. External functions have no Xray body, and calls must appear explicitly inside `unsafe { }`:
 
 ```xray
@@ -3123,17 +3172,14 @@ header = true
 
 The Xray target must resolve uniquely to a module-level function with a body; methods, closures, nested functions, and extern declarations are rejected. Xray targets and C symbols must be unique. The plan selects exports but never bypasses the ABI verifier or changes VM/ordinary-call semantics. `xray build --native --c-header FILE` emits prototypes for entries with `header = true`; current shared exports are restricted to scalar/raw-pointer boundaries that need no runtime initialization.
 
-#### 5.2.11 Inferred Effects and `xray verify` Contracts
+#### 5.2.11 Error Signatures and Target Artifact Verification
 
-Allocation, error sets, suspension, blocking, panic/abort, and AOT residue are always inferred by the compiler. Source functions do not declare them with effect or zero-cost attributes. Publication and performance gates live in a versioned contract:
+Source signatures express non-throwing behavior by omitting `throws` or writing `throws(Never)`. `xray verify` no longer accepts `no_throw`, and `xray.toml` `[declarations]` does not declare error sets or non-throwing promises. External configuration cannot strengthen an error interface; generic higher-order functions use `E: Error` with `throws(E)`.
+
+`xray verify` checks only target artifact shape requirements. It neither replaces language checking of function bodies nor grants optimization permission. For example:
 
 ```toml
 version = 1
-
-[[function]]
-symbol = "math.addOne"
-scope = "semantic"
-requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
 
 [[function]]
 symbol = "codec.hotAdd"
@@ -3141,18 +3187,14 @@ scope = "backend"
 backend = "aot"
 target = "aarch64-apple-darwin"
 profile = "release"
-requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+requires = ["no_runtime_heap"]
 
 [function.shape]
 forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
 allow = []
 ```
 
-Run `xray verify --contract perf-contracts.toml`. A contract checks existing semantic/effect evidence and target artifact shape; it never grants optimization permission or changes runtime semantics. A semantic contract may be target-independent, while backend/shape contracts require concrete backend, target, and profile values. Dynamic calls, native unknowns, missing symbols, and incomplete proofs fail closed with a witness.
-
-**What a native unknown is**: a bodyless `extern "C"` declaration has no inferable Xray semantics, so the only admissible evidence about it is that symbol's `[native.symbol.contract]` in `xray.toml`. Fields the contract declares (`allocation`, `suspend`, and so on) enter the caller's effect conclusion as axioms; without a complete contract the corresponding semantic bits are marked unknown and any contract covering them fails closed. **An absent body is not a proof.**
-
-**Inference coverage** (status: partially implemented): `requires` values backed by a real analysis pass today are `no_semantic_alloc`, `no_suspend`, `no_throw` (semantic scope) and `no_runtime_heap` (backend scope). The semantic effect bits behind `no_block`, `no_thread_block`, `no_panic`, and `no_abort` are computed by no pass, so `xray verify` rejects those four with a "no inference source" witness instead of granting them vacuously. They become accepted once their analyses land.
+Run `xray verify --contract perf-contracts.toml`. Missing symbols, unknown artifact shapes, and undecidable requirements reject rather than pass vacuously. Suspension and other capabilities are independent of error signatures; the execution model defines the source surface for `no_suspend`.
 
 #### Package-owned declaration promises (implementation pending)
 
@@ -3231,9 +3273,9 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
-MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
-            |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' Block          // parameter types may be omitted
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
+            |  Modifier* 'operator' OpToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // parameter types may be omitted
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
@@ -3314,6 +3356,8 @@ Direct static calls obey the trailing default-argument, left-to-right evaluation
 > `const` = immutable field/binding, `final class` = cannot be inherited. Immutable fields use `const` only; writing `final` on a field or method is an error.
 
 #### 5.3.4 Constructors
+
+An initializer can declare `init(...) throws(E)`; omission means non-throwing. Its `Type(...)` call requires `try` or a handling region according to that signature, and failure does not publish a partially initialized value. Methods, including static, enum, and operator methods, use the same clause position and local checking rules.
 
 ```xray
 class Point {
@@ -3615,7 +3659,7 @@ xray's interface implementation is **explicit** (unlike Go's structural implemen
 InterfaceDecl ::= 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?       // method signature
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?       // method signature
                  |  ('const')? Identifier ':' Type                   // property signature (`const` for read-only)
 ```
 
@@ -3660,6 +3704,7 @@ fn describe(s: Shape) -> string {
 - The implementing type **must** provide every interface member (matching name/parameters/return type for methods; matching name/type for properties).
 - **Return types in interface method declarations may be omitted** (default `()`).
 - Interface methods are `abstract` by default (no body).
+- Interface methods may declare `throws(E)`; implementation and override error types must be subsets of the requirement and may be non-throwing. Parameters, modes, receivers, and results retain their existing matching rules.
 - Interfaces may declare **property signatures** (`length: i64`, `const id: i64`); the implementing type may provide a field or accessors of the same type. A const property requires reading; an ordinary property requires reading and writing. Implementation read/write access cannot be narrower than the corresponding interface requirement.
 - Implementing types may add additional methods (the interface defines the minimum surface).
 
@@ -3669,9 +3714,9 @@ An interface is identified by its canonical module and declaration name; an appl
 
 Inheritance must be acyclic, including unused declarations. The same originating member under the same substitution is deduplicated; same-named members from different origins merge for lookup only when their complete contracts are identical, retaining every implementation obligation. Contracts include member kind, receiver, parameter count/modes/types, result type and callable promises. A mismatch rejects as ambiguous, without choosing by inheritance, constraint or import order. Redeclaring an inherited member also requires an exact match. Parameter names do not affect signature equality, but each declaration's manifest binds its own parameter names.
 
-A witness must be a public instance method of the implementing type, exactly matching parameter, result and receiver contracts. Static, private, protected, constructor and cleanup functions cannot serve as witnesses. No general covariance/contravariance conversion is introduced. An implementation may strengthen its own function-level `no_suspend` guarantee, but cannot strengthen caller parameter obligations or weaken interface guarantees. Merged same-named requirements must bind the same method identity of that type.
+A witness must be a public instance method of the implementing type, exactly matching parameter, result and receiver contracts. Static, private, protected, constructor and cleanup functions cannot serve as witnesses. Apart from error-type subset covariance, no general covariance/contravariance conversion is introduced. An implementation may strengthen its own function-level `no_suspend` guarantee, but cannot strengthen caller parameter obligations or weaken interface guarantees. Merged same-named requirements must bind the same method identity of that type.
 
-Generic constraints conjoin markers and interface applications, with identical duplicates idempotent. A derived interface entails ancestor requirements through explicit type substitution. Definition-site member access must bind a requirement identity and complete signature provided by the constraints; extra methods of a concrete argument cannot supply missing proof, and unused invalid generics reject too. Proof and cache identity must include the parameter environment. An abstract method has no checked implementation body: its public contract bounds effects, with undeclared effects using the unknown-callable upper bound. Implementations prove these obligations at definition time.
+Generic constraints conjoin markers and interface applications, with identical duplicates idempotent. A derived interface entails ancestor requirements through explicit type substitution. Definition-site member access must bind a requirement identity and complete signature provided by the constraints; extra methods of a concrete argument cannot supply missing proof, and unused invalid generics reject too. Proof and cache identity must include the parameter environment. An abstract method has no checked implementation body: its `throws` signature alone determines its error type, with omission meaning `Never`. Other capabilities retain their own public contracts or unknown-callable upper bounds when undeclared. Implementations prove these obligations at definition time.
 
 An interface requirement may declare its own type parameters, such as `I<A>.map<U:C<A>>(value:U)->U`. Interface parents and method parameters bind to authentic owners and ordinals in `[interface parent, method own]` order. Own names cannot shadow parents, and conditions may refer to later own parameters. A method where clause constrains only its own parameters. Explicit call arguments fill only the own suffix; the prefix comes from definition-site constraint applications, and the caller proves every condition. Inherited same-named methods compare own arity, complete signatures and alpha-aligned conditions by mutual entailment; duplicate and redundant ancestors are idempotent while all original identities remain. An implementation uses `[nominal parent, method own]`, and its conditions must follow from nominal and original requirement-method premises without using its own conditions to prove itself. Its body still checks against its own declaration. Checked specialization and independent provenance retain the complete nominal-plus-own tuple, even for parameters absent from the physical signature.
 
@@ -3735,8 +3780,8 @@ EnumDecl       ::= 'enum' Identifier TypeParams?
 EnumVariant    ::= Identifier
                  | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
 EnumFieldDecl  ::= Identifier ':' Type
-EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ```
 
 > Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
@@ -8680,7 +8725,8 @@ PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | Tupl
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= '(' TypeList? ')' '->' Type
+FunctionType ::= 'fn' '(' FunctionTypeParams? ')' ThrowsClause? ReturnType?
+FunctionTypeParams ::= ParamType (',' ParamType)* ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -8714,11 +8760,14 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 // range binds looser than every arithmetic operator, tighter than comparison, and is non-associative (a..b..c is a syntax error). A safe cast is `x as T?`, where T? is nullable.
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
+           |  TryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
+
+TryExpr   ::= 'try' ('?' | '!')? TernaryExpr
 
 GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
 GoOptions ::= '(' 'name' ':' StringLiteral ')'
@@ -8758,7 +8807,7 @@ ArrowLambda ::= Identifier '->' (Expression | Block)
               | '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
-FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
 // Note: arrow lambdas cannot declare an explicit return type;
 // use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 
@@ -8773,6 +8822,10 @@ CallArg ::= ('ref' | 'out') Expression
           | '_'
           | Expression
 ```
+
+When the next token after `try` is `{`, parse only `TryStmt`; otherwise parse `TryExpr`. `try?` / `try!` cannot modify blocks. A `TryExpr` operand extends to the current expression boundary without consuming an unparenthesized assignment operator. Parentheses, argument separators, and statement endings still bound expressions. An unparenthesized combination of `try?` and `??` is an error; write `(try? expr) ?? fallback`. The ordering for marked waits is `try await task`, not `await try task`.
+
+A Unit-returning function type omits `ReturnType`, as in `fn()` or `fn() throws(E)`; explicit `-> ()` is not allowed in type position (§2.8). `extern "C"` declarations and `CFn` callbacks must be non-throwing and cannot carry throwing signatures (§5.2.9).
 
 ### A.4 Patterns
 
@@ -8865,7 +8918,7 @@ DeferStmt ::= 'defer' Block
 
 // print is a normal global function call, syntactically an ExprStmt.
 
-// go is an expression returning Task<T>. It is not a separate statement category (it appears wrapped in ExprStmt).
+// go is an expression returning Task<T, E>. It is not a separate statement category (it appears wrapped in ExprStmt).
 
 ScopeStmt ::= 'linked'? 'scope' Block
 
@@ -8891,7 +8944,7 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
 ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
@@ -8899,6 +8952,7 @@ Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
 ParamMode ::= 'ref' | 'move'
+ThrowsClause ::= 'throws' ('(' Type ')')?
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // public visibility is the default; final is only a class prefix
@@ -8913,9 +8967,9 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
-MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
-            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' Block
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
+            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
@@ -8924,7 +8978,7 @@ StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?
 
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
@@ -8932,8 +8986,8 @@ EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
 EnumVariant    ::= Identifier
                  | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
 EnumFieldDecl  ::= Identifier ':' Type
-EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
 TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type

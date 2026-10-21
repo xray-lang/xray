@@ -64,7 +64,8 @@ PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | Tupl
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= '(' TypeList? ')' '->' Type
+FunctionType ::= 'fn' '(' FunctionTypeParams? ')' ThrowsClause? ReturnType?
+FunctionTypeParams ::= ParamType (',' ParamType)* ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -98,11 +99,14 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 // range 松于所有算术运算符、紧于比较，非结合（a..b..c 是语法错误）；安全转换写为 `x as T?`，T? 是可空类型。
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
+           |  TryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
+
+TryExpr   ::= 'try' ('?' | '!')? TernaryExpr
 
 GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
 GoOptions ::= '(' 'name' ':' StringLiteral ')'
@@ -142,7 +146,7 @@ ArrowLambda ::= Identifier '->' (Expression | Block)
               | '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
-FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
 // Note: arrow lambdas cannot declare an explicit return type;
 // use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 
@@ -157,6 +161,10 @@ CallArg ::= ('ref' | 'out') Expression
           | '_'
           | Expression
 ```
+
+`try` 后的下一个 token 为 `{` 时只解析为 `TryStmt`，否则解析为 `TryExpr`；`try?` / `try!` 不能修饰代码块。`TryExpr` 的操作数从当前位置覆盖到当前表达式边界，且不包含未加括号的赋值运算符。括号、参数分隔符和语句结束仍限定表达式范围。`try?` 与同一未加括号的 `??` 表达式连用时报错，应写 `(try? expr) ?? fallback`。等待的标记顺序是 `try await task`，不是 `await try task`。
+
+函数类型返回 Unit 时省略 `ReturnType`，如 `fn()`、`fn() throws(E)`；类型位置不接受显式 `-> ()`（§2.8）。`extern "C"` 声明与 `CFn` 回调必须不抛错，不能携带抛错签名（§5.2.9）。
 
 ### A.4 模式
 
@@ -248,7 +256,7 @@ DeferStmt ::= 'defer' Block
 
 // print 是普通全局函数调用，语法上属于 ExprStmt。
 
-// go 是表达式，返回 Task<T>。不作为独立语句类别出现（封装在 ExprStmt 中）。
+// go 是表达式，返回 Task<T, E>。不作为独立语句类别出现（封装在 ExprStmt 中）。
 
 ScopeStmt ::= 'linked'? 'scope' Block
 
@@ -274,7 +282,7 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
 ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
@@ -282,6 +290,7 @@ Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
 ParamMode ::= 'ref' | 'move'
+ThrowsClause ::= 'throws' ('(' Type ')')?
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // 公开可见性是默认语义；final 只作为 class 前缀
@@ -296,9 +305,9 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
-MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
-            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' Block
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
+            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
@@ -307,7 +316,7 @@ StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?
 
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
@@ -315,8 +324,8 @@ EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
 EnumVariant    ::= Identifier
                  | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
 EnumFieldDecl  ::= Identifier ':' Type
-EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
 TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type
@@ -407,7 +416,8 @@ PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | Tupl
 FFIPointerType ::= ('Ptr' | 'MutPtr') '<' Type '>'
 CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
-FunctionType ::= '(' TypeList? ')' '->' Type
+FunctionType ::= 'fn' '(' FunctionTypeParams? ')' ThrowsClause? ReturnType?
+FunctionTypeParams ::= ParamType (',' ParamType)* ','?
 TupleType   ::= '(' Type (',' Type)+ ')'
 ObjectType  ::= '{' FieldList? '}'
 FieldList   ::= ObjectField (',' ObjectField)* ','?
@@ -441,11 +451,14 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 // range binds looser than every arithmetic operator, tighter than comparison, and is non-associative (a..b..c is a syntax error). A safe cast is `x as T?`, where T? is nullable.
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
+           |  TryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
+
+TryExpr   ::= 'try' ('?' | '!')? TernaryExpr
 
 GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
 GoOptions ::= '(' 'name' ':' StringLiteral ')'
@@ -485,7 +498,7 @@ ArrowLambda ::= Identifier '->' (Expression | Block)
               | '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
-FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
+FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ThrowsClause? ReturnType? Block
 // Note: arrow lambdas cannot declare an explicit return type;
 // use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 
@@ -500,6 +513,10 @@ CallArg ::= ('ref' | 'out') Expression
           | '_'
           | Expression
 ```
+
+When the next token after `try` is `{`, parse only `TryStmt`; otherwise parse `TryExpr`. `try?` / `try!` cannot modify blocks. A `TryExpr` operand extends to the current expression boundary without consuming an unparenthesized assignment operator. Parentheses, argument separators, and statement endings still bound expressions. An unparenthesized combination of `try?` and `??` is an error; write `(try? expr) ?? fallback`. The ordering for marked waits is `try await task`, not `await try task`.
+
+A Unit-returning function type omits `ReturnType`, as in `fn()` or `fn() throws(E)`; explicit `-> ()` is not allowed in type position (§2.8). `extern "C"` declarations and `CFn` callbacks must be non-throwing and cannot carry throwing signatures (§5.2.9).
 
 ### A.4 Patterns
 
@@ -592,7 +609,7 @@ DeferStmt ::= 'defer' Block
 
 // print is a normal global function call, syntactically an ExprStmt.
 
-// go is an expression returning Task<T>. It is not a separate statement category (it appears wrapped in ExprStmt).
+// go is an expression returning Task<T, E>. It is not a separate statement category (it appears wrapped in ExprStmt).
 
 ScopeStmt ::= 'linked'? 'scope' Block
 
@@ -618,7 +635,7 @@ BindingPattern ::= Identifier
                 |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
 ObjectBinding ::= Identifier (':' Identifier)?
 
-FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Visibility? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ExternBlock ::= 'extern' '"C"' '{' ExternFnDecl+ '}'
 ExternFnDecl ::= Visibility? 'fn' Identifier '(' ParamList? ')' ReturnType? ';'?
 ParamList ::= Param (',' Param)* ','?
@@ -626,6 +643,7 @@ Param     ::= Identifier ':' ParamType ('=' Expression)?
            |  '...' Identifier ':' Type
 ParamType ::= ParamMode? Type
 ParamMode ::= 'ref' | 'move'
+ThrowsClause ::= 'throws' ('(' Type ')')?
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'private' | 'protected' | 'static' | 'const'
               // public visibility is the default; final is only a class prefix
@@ -640,9 +658,9 @@ ClassDecl ::= AttrList? Visibility? 'final'? 'class' Identifier TypeParams?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
-MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
-            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' Block
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
+            |  Modifier* 'operator' OperatorToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block
 
 StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
                ('implements' NamedType (',' NamedType)*)?
@@ -651,7 +669,7 @@ StructDecl ::= AttrList? Visibility? 'packed'? 'struct' Identifier TypeParams?
 InterfaceDecl ::= Visibility? 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?
 
 EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
                    ('implements' NamedType (',' NamedType)*)?
@@ -659,8 +677,8 @@ EnumDecl       ::= AttrList? Visibility? 'enum' Identifier TypeParams?
 EnumVariant    ::= Identifier
                  | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
 EnumFieldDecl  ::= Identifier ':' Type
-EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
 TypeAliasDecl ::= Visibility? 'type' Identifier AliasTypeParams? '=' Type

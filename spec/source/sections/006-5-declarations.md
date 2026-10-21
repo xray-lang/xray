@@ -93,7 +93,8 @@ var { name: localName, age } = { name: "Alice", age: 30 }
 ### 5.2 `fn` 函数声明
 
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+ThrowsClause ::= 'throws' ('(' Type ')')?
 ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
@@ -125,6 +126,23 @@ fn echo(x: i64) {                       // 省略返回类型 = ()
 - 参数**必须**带类型标注（与箭头函数一致）。
 - 返回类型省略 = `()`（Unit）；推荐显式标注以增强可读性。
 - 函数体必须是块。
+
+#### 5.2.1.1 错误签名
+
+具名函数不写 `throws` 就保证不抛业务错误。`throws(E)` 放在参数列表之后、返回类型之前；返回 Unit 时也可写 `fn run() throws(E)`。`E` 的合法范围见 §2.2.2，裸 `throws` 等价于 `throws(Error)`，`throws(Never)` 等价于不写。错误枚举的 union 表示允许抛出的多个类型。
+
+```xray @fragment
+fn add(a: i64, b: i64) -> i64
+fn parse(s: string) throws(ParseErr) -> i64
+fn load(path: string) throws(IoErr | ParseErr) -> Config
+fn runAll() throws
+```
+
+上例是签名片段；普通函数定义仍必须有函数体。编译器按函数体与被调签名做局部检查：未捕获错误必须包含在声明的错误类型内，超出时报错并建议补上或扩大 `throws(...)`；调用点用 `try` 表达式传播，或在 `try { } catch` 区域内处理（§8）。签名是调用方依据，不依赖全程序错误推导。
+
+模块顶层和程序入口 `main` 隐式允许任意错误，但传播点仍须标记。闭包的期望类型与局部错误推导见 §2.8.1，不能将闭包推导规则用于省略 `throws` 的普通具名函数。
+
+可能抛错的标准库公开 API 必须写带类型的 `throws(E)`，可包含受 `Error` 约束的泛型参数；不抛错 API 不需要额外子句。其他代码使用无类型 `throws` 时只给 lint 提示。freestanding 与 `@strict(alloc)` 范围内禁止擦除后的错误类型，包括 `throws` 和等价的 `throws(Error)`；带约束的泛型错误子句仍合法。panic 不进入 `throws`。
 
 #### 5.2.2 默认参数值
 
@@ -257,6 +275,8 @@ greet()                   // 必须显式调用
 
 #### 5.2.9 `extern "C"` C FFI 声明块
 
+`extern "C"` 函数与 `CFn` 回调必须不抛业务错误。导出给 C 的 Xray 函数也必须不抛错；需要跨边界报告失败时，先在 Xray 包装函数中捕获错误并转换为 C 状态码。
+
 `extern "C"` 块只声明共享 C ABI 的外部**函数符号**。外部函数没有 Xray 函数体，调用点必须显式写在 `unsafe { }` 内：
 
 ```xray
@@ -348,17 +368,14 @@ header = true
 - `xray build --native --c-header FILE` 为 `header = true` 的 export 生成 C 原型；`--shared` 只接受无需 runtime 初始化的 scalar/raw-pointer 边界。
 - export plan 只选择导出目标，不绕过 ABI verifier，也不改变 VM 语义或普通 Xray 调用。
 
-#### 5.2.11 推导 effect 与 `xray verify` 合同
+#### 5.2.11 错误签名与目标产物验证
 
-分配、错误集、挂起、阻塞、panic/abort 与 AOT residue 全部由编译器推导，不由源码注解声明；需要发布或性能门禁时，把要求写入版本化合同：
+不抛错由源码签名表达：省略 `throws` 或写 `throws(Never)`。`xray verify` 不再接受 `no_throw`；`xray.toml` 的 `[declarations]` 也不声明错误集合或不抛错承诺。错误接口不能由源码之外的配置加强，泛型高阶函数应使用 `E: Error` 与 `throws(E)`。
+
+`xray verify` 只检查目标产物的形状要求，不代替函数体的语言检查，也不授予优化许可。例如：
 
 ```toml
 version = 1
-
-[[function]]
-symbol = "math.addOne"
-scope = "semantic"
-requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
 
 [[function]]
 symbol = "codec.hotAdd"
@@ -366,18 +383,14 @@ scope = "backend"
 backend = "aot"
 target = "aarch64-apple-darwin"
 profile = "release"
-requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+requires = ["no_runtime_heap"]
 
 [function.shape]
 forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
 allow = []
 ```
 
-运行 `xray verify --contract perf-contracts.toml`。合同只验证已有语义/effect 与目标产物形状，不授予优化许可，也不能改变运行语义。semantic 合同可与目标无关；backend/shape 合同必须写出具体 backend、target 与 profile。动态调用、native unknown、缺失 symbol 或不完整证明均 fail closed，并报告 witness。
-
-**native unknown 的含义**：无函数体的 `extern "C"` 声明没有可推导的 Xray 语义，唯一可采信的证据是 `xray.toml` 中该 symbol 的 `[native.symbol.contract]`。契约声明 `allocation` / `suspend` 等字段时，这些字段作为公理进入被调用方的 effect 结论；没有完整契约时，相应语义位标记为 unknown，任何覆盖它的合同 fail closed。**空的函数体不是证明。**
-
-**推导覆盖面**（状态：部分实现）：`requires` 目前只有 `no_semantic_alloc`、`no_suspend`、`no_throw`（semantic scope）与 `no_runtime_heap`（backend scope）由真实分析 pass 支撑。`no_block`、`no_thread_block`、`no_panic`、`no_abort` 所对应的语义 effect 位当前没有任何 pass 推导，因此 `xray verify` 拒绝这四项并报告"无推导来源"，而不是空真地通过。相应分析实现后，这四项才会被接受。
+运行 `xray verify --contract perf-contracts.toml`。缺失 symbol、未知产物形状或无法判断的要求都拒绝，不能空真地通过。挂起与其他能力的规则独立于错误签名；`no_suspend` 的源码表面由执行模型定义。
 
 #### 包拥有的声明承诺（实现待接通）
 
@@ -456,9 +469,9 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
-MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
-            |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' Block          // 参数类型可省
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
+            |  Modifier* 'operator' OpToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // 参数类型可省
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
@@ -539,6 +552,8 @@ class Dog extends Animal {
 > `const` = 不可变字段/绑定，`final class` = 禁止继承。字段不可变只用 `const`；对字段或方法写 `final` 会报错。
 
 #### 5.3.4 构造器
+
+构造器可以声明 `init(...) throws(E)`；省略子句表示不抛错。构造调用 `Type(...)` 按该签名要求 `try` 或处理区域；构造失败不发布部分初始化的值。方法（包括 static、enum 与运算符方法）采用同样的 `throws(E)` 位置和局部检查规则。
 
 ```xray
 class Point {
@@ -840,7 +855,7 @@ xray 接口实现是**显式声明的**（与 Go 的隐式实现不同）：类 
 InterfaceDecl ::= 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?       // 方法签名
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?       // 方法签名
                  |  ('const')? Identifier ':' Type                   // 属性签名（可加 const 表示只读）
 ```
 
@@ -885,6 +900,7 @@ fn describe(s: Shape) -> string {
 - 实现类**必须**提供所有接口成员（方法同名同参同返回；属性同名同类型）。
 - 接口方法声明中的**返回类型可省略**（默认 `()`）。
 - 接口方法默认 `abstract`（无方法体）。
+- 接口方法可声明 `throws(E)`；实现与覆写的错误类型必须是要求的子集，也可以不抛错。参数、模式、receiver 和返回类型仍按原有匹配规则检查。
 - 接口可声明**属性签名**（`length: i64`、`const id: i64`）；实现类型可提供同类型的字段或访问器。const 属性要求可读，普通属性要求可读可写；实现的读取/写入权限不能窄于对应接口要求。
 - 实现类可以提供额外的方法（接口仅定义最小集）。
 
@@ -894,9 +910,9 @@ fn describe(s: Shape) -> string {
 
 继承必须无环，包括未使用的声明。同源成员经相同类型替换到达时去重；不同来源的同名成员仅在完整合同完全相同时合并查找，同时保留全部实现义务。合同包括成员种类、receiver、参数数目/模式/类型、结果类型与 callable 承诺；不相同则拒绝歧义，不按继承、约束或导入顺序挑选。重新声明继承成员同样须精确匹配。参数名字不参与签名比较，但 manifest 按各声明自己的参数名字绑定。
 
-实现方法必须是该类型的公开实例方法，精确满足参数、结果及 receiver 合同；静态、私有、受保护、构造和 cleanup 函数不能充当见证。不新增一般协变/逆变转换。实现可提供更强的函数自身 `no_suspend` 保证，但不能加强调用者的参数义务或弱化接口保证。同名合并要求须绑定该类型的同一个方法身份。
+实现方法必须是该类型的公开实例方法，精确满足参数、结果及 receiver 合同；静态、私有、受保护、构造和 cleanup 函数不能充当见证。除错误类型的子集协变外，不新增一般协变/逆变转换。实现可提供更强的函数自身 `no_suspend` 保证，但不能加强调用者的参数义务或弱化接口保证。同名合并要求须绑定该类型的同一个方法身份。
 
-泛型约束为标记与接口应用的合取，相同约束重复幂等；派生接口通过明确的类型替换蕴含祖先要求。定义处成员访问必须绑定到约束所提供的要求身份及完整签名；具体实参的额外方法不能补足证明，未使用的非法泛型也拒绝。证明及其缓存必须包含参数环境。抽象方法没有已检查实现体，其效应由公开合同给出，未承诺者按未知 callable 上界处理；实现须在定义处证明这些义务。
+泛型约束为标记与接口应用的合取，相同约束重复幂等；派生接口通过明确的类型替换蕴含祖先要求。定义处成员访问必须绑定到约束所提供的要求身份及完整签名；具体实参的额外方法不能补足证明，未使用的非法泛型也拒绝。证明及其缓存必须包含参数环境。抽象方法没有已检查实现体，错误类型完全由 `throws` 签名给出，省略即 `Never`；其余能力仍按各自公开合同或未承诺时的未知 callable 上界处理。实现须在定义处证明这些义务。
 
 接口要求可有自身类型参数，例如 `I<A>.map<U:C<A>>(value:U)->U`。接口外围与方法自身参数按真实owner及ordinal分别绑定，完整空间为 `[interface parent, method own]`；自身名字不遮蔽外围，条件可引用后续自身参数。自身where仅约束自身参数。调用的显式列表只填own，parent来自定义处约束应用；调用方必须证明全部条件。继承同名方法按own数量、完整签名和alpha对齐后的条件双向蕴含比较，重复与冗余祖先幂等，同时保留全部原要求身份。实现向量为 `[nominal parent, method own]`；其条件只能由名义前提与原要求方法前提蕴含，不能用实现自身条件自证，实现体仍按自身声明检查。Checked特化及独立来源复验保留完整nominal+own实参，即使own未出现在物理签名中也不能省略。
 
@@ -960,8 +976,8 @@ EnumDecl       ::= 'enum' Identifier TypeParams?
 EnumVariant    ::= Identifier
                  | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
 EnumFieldDecl  ::= Identifier ':' Type
-EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ```
 
 > 变体声明必须排在前面（逗号分隔），方法声明排在所有变体之后（无逗号，靠块边界分隔，与 `class` 内方法一致）。详见 §5.6.7。
@@ -1353,7 +1369,8 @@ The new XIR admits flat Tuple `var` / `const` destructuring with identifier or `
 ### 5.2 `fn` function declaration
 
 ```ebnf
-FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? 'fn' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+ThrowsClause ::= 'throws' ('(' Type ')')?
 ParamList ::= Param (',' Param)*
 Param     ::= Identifier ':' ParamType ('=' DefaultValue)?
             | '...' Identifier ':' Type
@@ -1385,6 +1402,23 @@ fn echo(x: i64) {                       // omitted return type = ()
 - Parameters **must** carry type annotations (consistent with arrow functions).
 - An omitted return type means `()` (Unit); explicit annotation is recommended for readability.
 - The function body must be a block.
+
+#### 5.2.1.1 Error Signatures
+
+A named function without `throws` guarantees no business error. Write `throws(E)` after the parameters and before the result; a Unit-returning function can use `fn run() throws(E)`. Legal error types are defined in §2.2.2. Bare `throws` means `throws(Error)`; `throws(Never)` is equivalent to omission. A union of error enums permits multiple error types.
+
+```xray @fragment
+fn add(a: i64, b: i64) -> i64
+fn parse(s: string) throws(ParseErr) -> i64
+fn load(path: string) throws(IoErr | ParseErr) -> Config
+fn runAll() throws
+```
+
+These are signature fragments; ordinary definitions still require bodies. The compiler checks each body locally using callee signatures: uncaught errors must be a subset of the declared error type. An excess error is diagnosed with a suggestion to add or widen `throws(...)`. A call propagates through a `try` expression or is handled in a `try { } catch` region (§8). Callers rely on signatures, without whole-program error inference.
+
+Module top-level code and the program entry `main` implicitly allow arbitrary errors, but propagation sites still require marking. Expected closure types and local closure inference follow §2.8.1; that inference rule does not apply to ordinary named functions omitting `throws`.
+
+Throwing public standard-library APIs must declare typed `throws(E)`, which may include error-constrained generic parameters; non-throwing APIs need no extra clause. Other code using untyped `throws` receives only a lint. Freestanding and `@strict(alloc)` scopes prohibit erased error types, including `throws` and equivalent `throws(Error)`; constrained generic error clauses remain legal. Panic is not part of `throws`.
 
 #### 5.2.2 Default parameter values
 
@@ -1517,6 +1551,8 @@ greet()                   // must be called explicitly
 
 #### 5.2.9 `extern "C"` C FFI Declaration Blocks
 
+`extern "C"` functions and `CFn` callbacks must not throw business errors. A Xray function exported to C must also be non-throwing. To report failure across the boundary, catch it in a Xray wrapper and convert it to a C status code.
+
 An `extern "C"` block declares external **function symbols** that share the C ABI. External functions have no Xray body, and calls must appear explicitly inside `unsafe { }`:
 
 ```xray
@@ -1599,17 +1635,14 @@ header = true
 
 The Xray target must resolve uniquely to a module-level function with a body; methods, closures, nested functions, and extern declarations are rejected. Xray targets and C symbols must be unique. The plan selects exports but never bypasses the ABI verifier or changes VM/ordinary-call semantics. `xray build --native --c-header FILE` emits prototypes for entries with `header = true`; current shared exports are restricted to scalar/raw-pointer boundaries that need no runtime initialization.
 
-#### 5.2.11 Inferred Effects and `xray verify` Contracts
+#### 5.2.11 Error Signatures and Target Artifact Verification
 
-Allocation, error sets, suspension, blocking, panic/abort, and AOT residue are always inferred by the compiler. Source functions do not declare them with effect or zero-cost attributes. Publication and performance gates live in a versioned contract:
+Source signatures express non-throwing behavior by omitting `throws` or writing `throws(Never)`. `xray verify` no longer accepts `no_throw`, and `xray.toml` `[declarations]` does not declare error sets or non-throwing promises. External configuration cannot strengthen an error interface; generic higher-order functions use `E: Error` with `throws(E)`.
+
+`xray verify` checks only target artifact shape requirements. It neither replaces language checking of function bodies nor grants optimization permission. For example:
 
 ```toml
 version = 1
-
-[[function]]
-symbol = "math.addOne"
-scope = "semantic"
-requires = ["no_semantic_alloc", "no_throw", "no_suspend"]
 
 [[function]]
 symbol = "codec.hotAdd"
@@ -1617,18 +1650,14 @@ scope = "backend"
 backend = "aot"
 target = "aarch64-apple-darwin"
 profile = "release"
-requires = ["no_runtime_heap", "no_throw", "no_suspend"]
+requires = ["no_runtime_heap"]
 
 [function.shape]
 forbid = ["runtime_dispatch", "box", "bounds_in_loop", "lane_spill"]
 allow = []
 ```
 
-Run `xray verify --contract perf-contracts.toml`. A contract checks existing semantic/effect evidence and target artifact shape; it never grants optimization permission or changes runtime semantics. A semantic contract may be target-independent, while backend/shape contracts require concrete backend, target, and profile values. Dynamic calls, native unknowns, missing symbols, and incomplete proofs fail closed with a witness.
-
-**What a native unknown is**: a bodyless `extern "C"` declaration has no inferable Xray semantics, so the only admissible evidence about it is that symbol's `[native.symbol.contract]` in `xray.toml`. Fields the contract declares (`allocation`, `suspend`, and so on) enter the caller's effect conclusion as axioms; without a complete contract the corresponding semantic bits are marked unknown and any contract covering them fails closed. **An absent body is not a proof.**
-
-**Inference coverage** (status: partially implemented): `requires` values backed by a real analysis pass today are `no_semantic_alloc`, `no_suspend`, `no_throw` (semantic scope) and `no_runtime_heap` (backend scope). The semantic effect bits behind `no_block`, `no_thread_block`, `no_panic`, and `no_abort` are computed by no pass, so `xray verify` rejects those four with a "no inference source" witness instead of granting them vacuously. They become accepted once their analyses land.
+Run `xray verify --contract perf-contracts.toml`. Missing symbols, unknown artifact shapes, and undecidable requirements reject rather than pass vacuously. Suspension and other capabilities are independent of error signatures; the execution model defines the source surface for `no_suspend`.
 
 #### Package-owned declaration promises (implementation pending)
 
@@ -1707,9 +1736,9 @@ ClassDecl ::= 'final'? 'class' Identifier TypeParams?
               '{' ClassMember* '}'
 ClassMember ::= FieldDecl | MethodDecl | InitDecl | StaticBlock
 FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
-MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
-            |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
-InitDecl ::= 'init' '(' ParamList? ')' Block          // parameter types may be omitted
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ThrowsClause? ReturnType? Block
+            |  Modifier* 'operator' OpToken '(' ParamList? ')' ThrowsClause? ReturnType? Block
+InitDecl ::= 'init' '(' ParamList? ')' ThrowsClause? Block          // parameter types may be omitted
 Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```
 
@@ -1790,6 +1819,8 @@ Direct static calls obey the trailing default-argument, left-to-right evaluation
 > `const` = immutable field/binding, `final class` = cannot be inherited. Immutable fields use `const` only; writing `final` on a field or method is an error.
 
 #### 5.3.4 Constructors
+
+An initializer can declare `init(...) throws(E)`; omission means non-throwing. Its `Type(...)` call requires `try` or a handling region according to that signature, and failure does not publish a partially initialized value. Methods, including static, enum, and operator methods, use the same clause position and local checking rules.
 
 ```xray
 class Point {
@@ -2091,7 +2122,7 @@ xray's interface implementation is **explicit** (unlike Go's structural implemen
 InterfaceDecl ::= 'interface' Identifier TypeParams?
                   ('extends' NamedType (',' NamedType)*)?
                   '{' InterfaceMember* '}'
-InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ReturnType? WhereClause?       // method signature
+InterfaceMember ::= Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? WhereClause?       // method signature
                  |  ('const')? Identifier ':' Type                   // property signature (`const` for read-only)
 ```
 
@@ -2136,6 +2167,7 @@ fn describe(s: Shape) -> string {
 - The implementing type **must** provide every interface member (matching name/parameters/return type for methods; matching name/type for properties).
 - **Return types in interface method declarations may be omitted** (default `()`).
 - Interface methods are `abstract` by default (no body).
+- Interface methods may declare `throws(E)`; implementation and override error types must be subsets of the requirement and may be non-throwing. Parameters, modes, receivers, and results retain their existing matching rules.
 - Interfaces may declare **property signatures** (`length: i64`, `const id: i64`); the implementing type may provide a field or accessors of the same type. A const property requires reading; an ordinary property requires reading and writing. Implementation read/write access cannot be narrower than the corresponding interface requirement.
 - Implementing types may add additional methods (the interface defines the minimum surface).
 
@@ -2145,9 +2177,9 @@ An interface is identified by its canonical module and declaration name; an appl
 
 Inheritance must be acyclic, including unused declarations. The same originating member under the same substitution is deduplicated; same-named members from different origins merge for lookup only when their complete contracts are identical, retaining every implementation obligation. Contracts include member kind, receiver, parameter count/modes/types, result type and callable promises. A mismatch rejects as ambiguous, without choosing by inheritance, constraint or import order. Redeclaring an inherited member also requires an exact match. Parameter names do not affect signature equality, but each declaration's manifest binds its own parameter names.
 
-A witness must be a public instance method of the implementing type, exactly matching parameter, result and receiver contracts. Static, private, protected, constructor and cleanup functions cannot serve as witnesses. No general covariance/contravariance conversion is introduced. An implementation may strengthen its own function-level `no_suspend` guarantee, but cannot strengthen caller parameter obligations or weaken interface guarantees. Merged same-named requirements must bind the same method identity of that type.
+A witness must be a public instance method of the implementing type, exactly matching parameter, result and receiver contracts. Static, private, protected, constructor and cleanup functions cannot serve as witnesses. Apart from error-type subset covariance, no general covariance/contravariance conversion is introduced. An implementation may strengthen its own function-level `no_suspend` guarantee, but cannot strengthen caller parameter obligations or weaken interface guarantees. Merged same-named requirements must bind the same method identity of that type.
 
-Generic constraints conjoin markers and interface applications, with identical duplicates idempotent. A derived interface entails ancestor requirements through explicit type substitution. Definition-site member access must bind a requirement identity and complete signature provided by the constraints; extra methods of a concrete argument cannot supply missing proof, and unused invalid generics reject too. Proof and cache identity must include the parameter environment. An abstract method has no checked implementation body: its public contract bounds effects, with undeclared effects using the unknown-callable upper bound. Implementations prove these obligations at definition time.
+Generic constraints conjoin markers and interface applications, with identical duplicates idempotent. A derived interface entails ancestor requirements through explicit type substitution. Definition-site member access must bind a requirement identity and complete signature provided by the constraints; extra methods of a concrete argument cannot supply missing proof, and unused invalid generics reject too. Proof and cache identity must include the parameter environment. An abstract method has no checked implementation body: its `throws` signature alone determines its error type, with omission meaning `Never`. Other capabilities retain their own public contracts or unknown-callable upper bounds when undeclared. Implementations prove these obligations at definition time.
 
 An interface requirement may declare its own type parameters, such as `I<A>.map<U:C<A>>(value:U)->U`. Interface parents and method parameters bind to authentic owners and ordinals in `[interface parent, method own]` order. Own names cannot shadow parents, and conditions may refer to later own parameters. A method where clause constrains only its own parameters. Explicit call arguments fill only the own suffix; the prefix comes from definition-site constraint applications, and the caller proves every condition. Inherited same-named methods compare own arity, complete signatures and alpha-aligned conditions by mutual entailment; duplicate and redundant ancestors are idempotent while all original identities remain. An implementation uses `[nominal parent, method own]`, and its conditions must follow from nominal and original requirement-method premises without using its own conditions to prove itself. Its body still checks against its own declaration. Checked specialization and independent provenance retain the complete nominal-plus-own tuple, even for parameters absent from the physical signature.
 
@@ -2211,8 +2243,8 @@ EnumDecl       ::= 'enum' Identifier TypeParams?
 EnumVariant    ::= Identifier
                  | Identifier '{' EnumFieldDecl (',' EnumFieldDecl)* ','? '}'
 EnumFieldDecl  ::= Identifier ':' Type
-EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-                 | 'static' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+EnumMethod     ::= ('ref' | 'move')? Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
+                 | 'static' Identifier TypeParams? '(' ParamList? ')' ThrowsClause? ReturnType? Block
 ```
 
 > Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.

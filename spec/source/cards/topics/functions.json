@@ -9,8 +9,10 @@
     "closure",
     "lambda",
     "params",
-    "effect inference",
-    "verify contract"
+    "verify contract",
+    "throws",
+    "Never",
+    "error signature"
   ],
   "sections": [
     {
@@ -51,12 +53,12 @@
       ]
     },
     {
-      "heading": "Inferred effects and external verification",
-      "markdown": "- allocation, throw, suspend, blocking, panic, IO, foreign, and synchronization effects are always inferred\n- source annotations cannot promise effects or unlock optimizations\n- release and performance guarantees belong in versioned `xray verify --contract FILE` assets, which fail closed and report a witness"
+      "heading": "Error signatures and external verification",
+      "markdown": "- A named function without `throws` is non-throwing; `throws(Never)` is equivalent\n- `throws(E)` is part of the signature; bare `throws` means `throws(Error)`\n- Error checking is local to each body and uses callee signatures\n- Propagating calls require `try`, or a `try { } catch` handling region\n- Module top-level code and main implicitly allow errors, but still require propagation markers\n- Throwing public standard-library APIs require typed errors, including constrained generics; freestanding and @strict(alloc) reject erased throws\n- `xray verify` checks target artifact shape and no longer accepts `no_throw`"
     },
     {
       "heading": "Higher-order functions",
-      "markdown": "- Function types use `(T1, T2) -> R` in type position\n- Function values can be passed to callbacks such as `map`, `filter`, and `reduce`\n- Higher-order effects are inferred as expressions over callback effects; dynamic targets remain fail-closed when a strong external contract is requested\n- Closure capture rules are described in the scoping and concurrency sections\n\nThese language facilities do not admit Array.map/filter/reduce in the new-XIR subset. Array function elements retain the existing live execution-gate requirements; their presence does not qualify higher-order member methods (spec §17.26). Verified creation origins retained by authenticated Instance weakening identify actual captures; they do not strengthen the destination callable advertisement or erase fixed UNKNOWN/ROOT bounds. Public construction cannot invent an origin, and worker execution still requires the same sealed current-input proof (spec §17)."
+      "markdown": "- Function types use `fn(T1, T2) throws(E) -> R`; omit throws for a non-throwing type and omit the arrow for Unit\n- Error types are covariant by subset without changing parameter or result matching\n- Generic `E: Error` is inferred from callback arguments; a non-throwing callback can infer `E = Never`\n- Explicit closure throws clauses constrain the body before matching an expected type; otherwise closures use the expected type or local body inference\n- fn lambdas may write throws(E); arrow lambdas do not write the clause\n- Capture and cross-execution rules remain independent of the error signature"
     }
   ]
 }
