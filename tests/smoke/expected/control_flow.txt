@@ -1,0 +1,35 @@
+Grade: B
+n = 1
+n = 2
+n = 3
+n = 4
+n = 5
+i = 0
+i = 1
+i = 2
+i = 3
+i = 4
+range: 0
+range: 1
+range: 2
+range: 3
+range: 4
+fruit: apple
+fruit: banana
+fruit: cherry
+loop: 0
+loop: 1
+loop: 2
+loop: 4
+loop: 5
+loop: 6
+zero
+two or three
+four to ten
+something else
+negative
+small positive
+big
+10 / 3 = 3
+Error: division by zero
+cleanup done

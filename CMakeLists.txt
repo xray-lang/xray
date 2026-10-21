@@ -2663,6 +2663,7 @@ if(BUILD_TESTS)
     # Qualify the current public CLI and its exact installed Core/SDK payload.
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/cli_usability.cmake")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke/smoke.cmake")
 
     if(XRAY_WINDOWS_ASAN_RUNTIME_DIR)
         add_test(
