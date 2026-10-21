@@ -7,6 +7,7 @@
  * test_xir_json_scalar_object.c - Ordinary integer objects from a cold checked library
  */
 #include "base/xmalloc.h"
+#include "base/xresource_limits.h"
 #include "base/xsha256.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_library_catalog.h"
@@ -102,7 +103,7 @@ static int object_execute(const XrXirCompileContext *context,XrXirCheckedPacket 
 static int object_cold_diagnostic(const char *path,const char *emit) {
     FILE *file=fopen(path,"rb");CHECK(file && !fseek(file,0,SEEK_END));
     long length=ftell(file);CHECK(length>0 && !fseek(file,0,SEEK_SET));
-    XrXirCompileContext context={0};const XrCompileResourceLimits caps={67108864,8388608,128000000};
+    XrXirCompileContext context={0};const XrCompileResourceLimits caps=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
     XrXirCheckedPacket packet={0};void *bytes=NULL;
     CHECK(xr_compile_resources_alloc(context.resources,(size_t)length,&bytes)==XR_COMPILE_RESOURCE_OK);
@@ -121,14 +122,17 @@ int main(int argc,char **argv) {
         FILE *file=fopen(paths[i],"rb");CHECK(file);size_t n=fread(bytes+used,1,sizeof(bytes)-used-1,file);
         CHECK(!ferror(file) && feof(file) && !fclose(file));used+=n;CHECK(used<sizeof(bytes)-1);bytes[used++]='\n';
     }
-    bytes[used]=0;XrXirCompileContext context={0};const XrCompileResourceLimits caps={67108864,8388608,128000000};
+    bytes[used]=0;XrXirCompileContext context={0};const XrCompileResourceLimits caps=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();
     XrXirSourceResult producer={0};object_source(&context,bytes,XR_XIR_LIBRARY,NULL,&producer);memset(bytes,0xa5,sizeof(bytes));
     XrXirCheckedPacket library={0};CHECK(xr_xir_compile_checked_write(producer.checked,&library,NULL)==XR_XIR_OK);
     CHECK(xr_xir_compile_artifact_module(producer.checked)->declarations->module_count==1);xr_xir_compile_source_result_free(&producer);
     XrXirLibraryModuleInput binding={{XR_MODULE_IDENTITY_SCRIPT,NULL,XR_JSON_SCALAR_WORK},"json_scalar.xr"};
     XrXirLibraryInput input={library.bytes,library.length,{0},&binding,1};xr_sha256(library.bytes,library.length,input.sha256);
-    XrXirLibraryCatalog *catalog=NULL;CHECK(xr_xir_compile_library_catalog_new_v2(&context,&input,1,&catalog)==XR_XIR_OK);
+    XrXirLibraryCatalog *catalog=NULL;
+    XrXirStatus catalog_status=xr_xir_compile_library_catalog_new_v2(&context,&input,1,&catalog);
+    if(catalog_status!=XR_XIR_OK)fprintf(stderr,"JSON scalar object catalog status%u\n",(unsigned)catalog_status);
+    CHECK(catalog_status==XR_XIR_OK);
     memset(library.bytes,0xa5,library.length);xr_xir_compile_checked_packet_free(&library);memset(&binding,0xa5,sizeof(binding));
     memset(&input,0xa5,sizeof(input));XrXirSourceResult user={0};object_source(&context,diagnostic?object_runtime_consumer:object_consumer,XR_XIR_PROGRAM,catalog,&user);
     xr_xir_compile_library_catalog_free(catalog);XrXirCheckedPacket packet={0};CHECK(xr_xir_compile_checked_write(user.checked,&packet,NULL)==XR_XIR_OK);

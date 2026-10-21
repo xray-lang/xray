@@ -7,6 +7,7 @@
  * test_xir_json_float.c - Cold ordinary JSON finite floating receiver
  */
 #include "base/xsha256.h"
+#include "base/xresource_limits.h"
 #include "xir/xxir_source.h"
 #include "xir/xxir_library_catalog.h"
 #include "xir/xxir_vm.h"
@@ -17,7 +18,7 @@
 #define CHECK(c) do {if(!(c)){fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#c);exit(1);}}while(0)
 #include "xir_json_float_runtime.h"
 static XrXirCompileContext json_float_context(void) {
-    XrXirCompileContext context={0};const XrCompileResourceLimits caps={67108864,8388608,128000000};
+    XrXirCompileContext context={0};const XrCompileResourceLimits caps=XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
     CHECK(xr_compile_resources_new(&caps,&context.resources)==XR_COMPILE_RESOURCE_OK);context.limits=xr_xir_compile_default_limits();return context;
 }
 typedef struct JsonFloatSource {const char *text,*logical;XrXirLinkageKind kind;const XrXirLibraryCatalog *catalog;} JsonFloatSource;

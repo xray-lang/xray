@@ -200,6 +200,10 @@ static void source_array_reorder_limits(XrXirProgram *program, const uint32_t *f
             XrXirCallStatus expected = started == XR_XIR_CALL_READY ? XR_XIR_CALL_LIMIT : XR_XIR_CALL_BAD_STATE;
             XrXirValue absent = {0};
             XrXirCallStatus extracted = xr_xir_instance_take_result(instance, &absent);
+            if (extracted != expected || absent.type || absent.reserved || absent.payload)
+                fprintf(stderr, "Array method %u limit mode %u start=%u final=%u take=%u expected=%u value=%u/%u/%lld\n",
+                    method, mode, (unsigned) started, (unsigned) status, (unsigned) extracted,
+                    (unsigned) expected, absent.type, absent.reserved, (long long) absent.payload);
             CHECK(extracted == expected && !absent.type && !absent.reserved && !absent.payload);
             CHECK(xr_xir_instance_take_result(instance, &absent) == expected &&
                 !absent.type && !absent.reserved && !absent.payload);

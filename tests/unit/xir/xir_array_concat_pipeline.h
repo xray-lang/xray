@@ -4,7 +4,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_array_concat_pipeline.h - One bounded owner for complete concat programs
+ * xir_array_concat_pipeline.h - One owner for complete concat programs
  *
  * KEY CONCEPT:
  *   Source, wire replay, specialization, emission and sealing share one ledger.
@@ -14,6 +14,7 @@
 #include "xir/xxir_program_packet_internal.h"
 #include "xir/xxir_types.h"
 #include "base/xsha256.h"
+#include "base/xresource_limits.h"
 #ifndef XR_CONCAT_COMPONENT
 #define XR_CONCAT_COMPONENT "transaction"
 #endif
@@ -211,6 +212,6 @@ static void concat_release(ConcatCompile *run) {
     *run = (ConcatCompile){0}; instance_compile_zero(); CHECK(!runtime_live && !runtime_bytes);
 }
 static XrCompileResourceLimits concat_limits(void) {
-    return (XrCompileResourceLimits){67108864, 8388608, 128000000};
+    return (XrCompileResourceLimits)XR_RESOURCE_DEFAULT_COMPILER_LIMITS;
 }
 #endif // XIR_ARRAY_CONCAT_PIPELINE_H
