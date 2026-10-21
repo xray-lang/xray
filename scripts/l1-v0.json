@@ -10,7 +10,8 @@
     "test_xir_task_executor",
     "test_source_public_instance",
     "test_register_vm",
-    "test_register_vm_alloc"
+    "test_register_vm_alloc",
+    "test_xir_p11_ctfe_instance"
   ],
   "tests": [
     "test_cli_usability",
@@ -29,7 +30,8 @@
     "source_public_instance",
     "register_vm",
     "register_vm_native_print",
-    "register_vm_alloc"
+    "register_vm_alloc",
+    "test_xir_p11_typed_literal_text"
   ],
   "versionCommand": ["{build}/xray.exe", "--version", "--json"],
   "smokeStatus": "smoke: demos 2/22 stdlib 1/29 readme 0/6 native 0/3; native NOT_RUN (Task328 P2)"

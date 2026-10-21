@@ -29,7 +29,14 @@ static bool literal_seed(SourceContext *ctx,const XrXirArtifact *definition,uint
         !source_copy_bytes(ctx,NULL,ctx->generics,module->generics,(size_t)module->function_count*sizeof(*ctx->generics))) return false;
     ctx->has_generics=true;ctx->modules=(XrXirSourceModule *)d->modules;ctx->module_count=d->module_count;
     ctx->slots=(XrXirSlot *)d->slots;ctx->slot_count=d->slot_count;
-    ctx->literals=(XrXirLiteral *)d->literals;ctx->literal_count=ctx->literal_capacity=d->literal_count;
+    ctx->literal_count=ctx->literal_capacity=d->literal_count;
+    if (d->literal_count) {
+        /* Appending a value can retire this array, so its descriptor storage
+         * must have the receiving Source arena's allocation header. */
+        ctx->literals=source_alloc(ctx,d->literal_count,sizeof(*ctx->literals));
+        if (!ctx->literals || !source_copy_bytes(ctx,NULL,ctx->literals,d->literals,
+                (size_t)d->literal_count*sizeof(*ctx->literals))) return false;
+    }
     ctx->entry_function=d->entry_function;
     if (module->types) {
         ctx->types=*module->types;ctx->type_capacity=ctx->types.count;

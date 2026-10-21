@@ -169,6 +169,7 @@ static void instance_limits(void) {
 #include "literal_cases.h"
 #include "literal_controls.h"
 #include "literal_resources.h"
+#include "literal_receiving_resources.h"
 #include "program_cases.h"
 #include "program_resources.h"
 #include "program_controls.h"
@@ -211,6 +212,7 @@ int main(int argc,char **argv) {
     if (!strcmp(argv[1],"literal-controls")) { CHECK(argc==2);literal_controls();return 0; }
     if (!strcmp(argv[1],"literal-prefix")) { CHECK(argc==3);literal_resources(argv[2],false);return 0; }
     if (!strcmp(argv[1],"literal-faults")) { CHECK(argc==3);literal_resources(argv[2],true);return 0; }
+    if (!strcmp(argv[1],"literal-receiving-faults")) { CHECK(argc==2);literal_receiving_resources();return 0; }
     if (!strcmp(argv[1],"limits")) { CHECK(argc==2);instance_limits();return 0; }
     if (!strcmp(argv[1],"tamper")) { CHECK(argc==2);instance_tamper();return 0; }
     if (!strcmp(argv[1],"source-limits")) { CHECK(argc==2);source_receiving_limits();return 0; }

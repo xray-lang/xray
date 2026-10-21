@@ -53,6 +53,8 @@ foreach(kind array optional tuple empty boxed text nested scalar unit foreign mu
 endforeach()
 add_test(NAME test_xir_p11_typed_literal_controls COMMAND test_xir_p11_ctfe_instance literal-controls)
 set_tests_properties(test_xir_p11_typed_literal_controls PROPERTIES TIMEOUT 30)
+add_test(NAME test_xir_p11_typed_literal_receiving_FI COMMAND test_xir_p11_ctfe_instance literal-receiving-faults)
+set_tests_properties(test_xir_p11_typed_literal_receiving_FI PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE LABELS "resource;ctfe_typed_literal")
 foreach(kind array boxed)
     add_test(NAME test_xir_p11_typed_literal_prefix_${kind} COMMAND test_xir_p11_ctfe_instance literal-prefix ${kind})
     set_tests_properties(test_xir_p11_typed_literal_prefix_${kind} PROPERTIES TIMEOUT 30)
