@@ -12,21 +12,22 @@ class RecoveryRequired(RuntimeError):
     pass
 
 
-def run_child(command: list[str], **kwargs) -> int:
+def run_child(command: list[str], *, timeout: float | None = None, **kwargs) -> int:
+    """Wait for the leader; cleanup completes before a timeout is propagated."""
     if os.name != "nt":
         child = subprocess.Popen(command, start_new_session=True, **kwargs)
         try:
-            return child.wait()
+            return child.wait(timeout=timeout)
         finally:
             try:
                 os.killpg(child.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
             child.wait()
-    return _run_windows(command, **kwargs)
+    return _run_windows(command, timeout=timeout, **kwargs)
 
 
-def _run_windows(command: list[str], **kwargs) -> int:
+def _run_windows(command: list[str], *, timeout: float | None = None, **kwargs) -> int:
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     native = ctypes.WinDLL("ntdll")
 
@@ -58,6 +59,10 @@ def _run_windows(command: list[str], **kwargs) -> int:
     kernel.QueryInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p,
                                                 wintypes.DWORD, ctypes.c_void_p]
     kernel.QueryInformationJobObject.restype = wintypes.BOOL
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
     kernel.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel.CloseHandle.restype = wintypes.BOOL
     native.NtResumeProcess.argtypes = [wintypes.HANDLE]
@@ -67,6 +72,30 @@ def _run_windows(command: list[str], **kwargs) -> int:
         raise ctypes.WinError(ctypes.get_last_error())
     child = None
     assigned = False
+    member_handles = []
+
+    def retain_members():
+        capacity = 32
+        while True:
+            if time.monotonic() >= deadline:
+                raise RecoveryRequired("Command membership did not stabilize")
+            class ProcessIds(ctypes.Structure):
+                _fields_ = [("assigned", wintypes.DWORD), ("count", wintypes.DWORD),
+                            ("ids", ctypes.c_size_t * capacity)]
+            members = ProcessIds()
+            if kernel.QueryInformationJobObject(job, 3, ctypes.byref(members),
+                                               ctypes.sizeof(members), None):
+                if members.count == members.assigned:
+                    break
+            elif ctypes.get_last_error() != 234:  # ERROR_MORE_DATA
+                raise RecoveryRequired("Could not enumerate the command's process tree")
+            capacity = max(capacity * 2, members.assigned)
+        for pid in members.ids[:members.count]:
+            handle = kernel.OpenProcess(0x100000, False, pid)  # SYNCHRONIZE
+            if handle:
+                member_handles.append(handle)
+            elif ctypes.get_last_error() != 87:  # Already exited and released.
+                raise RecoveryRequired("Could not retain a command process handle")
     try:
         limits = Limits()
         limits.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
@@ -78,14 +107,18 @@ def _run_windows(command: list[str], **kwargs) -> int:
         assigned = True
         if native.NtResumeProcess(int(child._handle)) != 0:
             raise RuntimeError("Could not resume the job-owned command")
-        return child.wait()
+        return child.wait(timeout=timeout)
     finally:
         try:
             if child is not None:
                 if assigned:
+                    # A zero active count can precede a process handle becoming
+                    # signaled. Retain the current members before termination
+                    # so cleanup also waits for their actual exit notifications.
+                    deadline = time.monotonic() + 30
+                    retain_members()
                     if not kernel.TerminateJobObject(job, 1):
                         raise RecoveryRequired("Could not terminate the command's process tree")
-                    deadline = time.monotonic() + 30
                     while True:
                         accounting = Accounting()
                         if not kernel.QueryInformationJobObject(job, 1, ctypes.byref(accounting),
@@ -96,8 +129,14 @@ def _run_windows(command: list[str], **kwargs) -> int:
                         if time.monotonic() >= deadline:
                             raise RecoveryRequired("Command descendants did not exit")
                         time.sleep(0.02)
+                    for handle in member_handles:
+                        remaining = max(0, int((deadline - time.monotonic()) * 1000))
+                        if kernel.WaitForSingleObject(handle, remaining) != 0:
+                            raise RecoveryRequired("A command process did not finish termination")
                 elif child.poll() is None:
                     child.kill()
                 child.wait()
         finally:
+            for handle in member_handles:
+                kernel.CloseHandle(handle)
             kernel.CloseHandle(job)

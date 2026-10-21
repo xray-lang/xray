@@ -23,15 +23,30 @@ Every run creates a new directory containing CSV medians, JSON metadata and
 samples, generated source inputs, and each process's unmodified stdout/stderr.
 Metadata includes the machine, compiler version, source commit and dirty state,
 binary SHA-256 identities, and the fresh CLI version JSON. Changing a binary
-during measurement fails the run. Five samples are the default, interleaving
+during measurement invalidates every affected candidate row and clears its
+median while preserving the original samples. Metadata records the final
+`run_status`, before/after identities and the affected candidates. Provisional
+successful rows remain `pending-identity` with no median until final identity
+verification. The resolved, hashed absolute executable path is also the path
+used for execution, including when launched from another directory.
+Five samples are the default, interleaving
 candidates within each repetition. Process startup is included; no warm-up is
-hidden. A median is written only if every sample returns the exact expected
+hidden. Timing includes process-tree setup and cleanup as part of end-to-end
+wall-clock execution. A median is written only if every sample returns the exact expected
 bytes. Text output explicitly uses LF, including on Windows; observed output
 is never normalized. Python workload source is copied into each run directory
 and its hash is recorded. A failure returns a nonzero status even if other candidates pass.
 
-`quota-failed`, `failed`, `launch-failed`, `timeout` and `wrong-output` retain their original
+`quota-failed`, `failed`, `launch-failed`, `timeout`, `wrong-output` and
+`binary-changed` retain their original
 diagnostics and have an empty median. A quota failure is not a passing run.
+Samples use the shared owned-process runner with a timeout. Windows Job
+ownership is established before resuming the driver; cleanup terminates its
+descendants and waits for retained member handles to become signaled. Output
+goes directly to retained files, so inherited pipes cannot hold the runner open.
+If cleanup cannot be verified, the run stops, records `cleanup-failed`, and
+invalidates all medians before any further sample can run. POSIX uses an owned
+process group; the current validation evidence is Windows only.
 `--quick` runs small functional workloads. `--samples 1` is useful for diagnosis;
 neither is a performance measurement. The default `measurement=coarse` means
 results cannot establish a performance gate. Use `--measurement isolated` only

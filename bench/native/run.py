@@ -19,6 +19,9 @@ import time
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from xray_process import RecoveryRequired, run_child
+
 CASES = {"fib": 32, "integer_loop": 100_000_000, "push_sum": 10_000_000}
 QUICK = {"fib": 10, "integer_loop": 1000, "push_sum": 1000}
 QUOTA = re.compile(rb"quota|budget|fuel|resource.exhausted|work.limit", re.IGNORECASE)
@@ -54,27 +57,46 @@ def binary_identity(command: list[str]) -> dict:
 
 def run_sample(command: list[str], wanted: bytes, timeout: float, prefix: Path) -> dict:
     start = time.perf_counter_ns()
-    try:
-        process = subprocess.run(command, cwd=ROOT, capture_output=True, timeout=timeout)
-        elapsed_ms = (time.perf_counter_ns() - start) / 1_000_000
-        stdout, stderr, returncode = process.stdout, process.stderr, process.returncode
+    stdout_path, stderr_path = prefix.with_suffix(".stdout"), prefix.with_suffix(".stderr")
+    execution_error = None
+    # Files avoid waiting for pipe EOF held by a descendant. The owned runner
+    # finishes tree cleanup before returning or propagating a timeout.
+    with stdout_path.open("wb") as stdout_file, stderr_path.open("wb") as stderr_file:
+        try:
+            returncode = run_child(command, cwd=ROOT, stdin=subprocess.DEVNULL,
+                                   stdout=stdout_file, stderr=stderr_file, timeout=timeout)
+            status = None
+        except subprocess.TimeoutExpired:
+            returncode, status = None, "timeout"
+        except OSError as error:
+            returncode, status = None, "launch-failed"
+            execution_error = str(error)
+            stderr_file.write(execution_error.encode("utf-8"))
+        except RecoveryRequired as error:
+            returncode, status = None, "cleanup-failed"
+            execution_error = str(error)
+    elapsed_ms = (time.perf_counter_ns() - start) / 1_000_000
+    stdout, stderr = stdout_path.read_bytes(), stderr_path.read_bytes()
+    if status is None:
         if returncode:
             status = "quota-failed" if QUOTA.search(stderr) else "failed"
         else:
             status = "ok" if stdout == wanted else "wrong-output"
-    except subprocess.TimeoutExpired as error:
-        elapsed_ms = (time.perf_counter_ns() - start) / 1_000_000
-        stdout, stderr, returncode = error.stdout or b"", error.stderr or b"", None
-        status = "timeout"
-    except OSError as error:
-        elapsed_ms = (time.perf_counter_ns() - start) / 1_000_000
-        stdout, stderr, returncode = b"", str(error).encode("utf-8"), None
-        status = "launch-failed"
-    prefix.with_suffix(".stdout").write_bytes(stdout)
-    prefix.with_suffix(".stderr").write_bytes(stderr)
     return {"status": status, "elapsed_ms": elapsed_ms, "returncode": returncode,
-            "command": command, "stdout": str(prefix.with_suffix(".stdout")),
-            "stderr": str(prefix.with_suffix(".stderr"))}
+            "command": command, "stdout": str(stdout_path), "stderr": str(stderr_path),
+            "execution_error": execution_error}
+
+
+def write_results(output: Path, rows: list[dict], *, finalized: bool) -> None:
+    if not rows:
+        return
+    with (output / "results.csv").open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer.writeheader()
+        for row in rows:
+            if not finalized and row["status"] == "ok":
+                row = {**row, "status": "pending-identity", "median_ms": ""}
+            writer.writerow(row)
 
 
 def parse_args() -> argparse.Namespace:
@@ -123,11 +145,13 @@ def main() -> int:
             raise ValueError(f"candidate command must be a nonempty list of strings: {name}")
         names.add(name)
         candidate["binary"] = binary_identity(command)
+        candidate["command"] = [candidate["binary"]["path"], *command[1:]]
     metadata = {"started_at": stamp, "timezone": "Asia/Shanghai", "machine": platform.node(),
                 "platform": platform.platform(), "processor": platform.processor(),
                 "python": sys.version, "source_commit": git("rev-parse", "HEAD"),
                 "source_status": git("status", "--porcelain"), "samples": args.samples,
-                "measurement": args.measurement, "quick": args.quick, "candidates": candidates}
+                "measurement": args.measurement, "quick": args.quick, "candidates": candidates,
+                "run_status": "running"}
     metadata["c_reference_identity"] = subprocess.check_output(
         [str(args.reference.resolve()), "--identity"], text=True).strip()
     if args.xray:
@@ -135,6 +159,7 @@ def main() -> int:
             [str(args.xray.resolve()), "--version", "--json"], text=True))
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     rows, samples = [], []
+    abort_reason = None
     for case in args.case or CASES:
         n = (QUICK if args.quick else CASES)[case]
         source = output / f"{case}.xr"
@@ -157,26 +182,42 @@ def main() -> int:
                             for name, group in by_candidate.items()}
                 (output / "progress.json").write_text(json.dumps({"case": case, "candidates": progress}, indent=2), encoding="utf-8")
                 print(f"{case}/{name} {repetition + 1}/{args.samples}: {sample['status']}", flush=True)
+                if sample["status"] == "cleanup-failed":
+                    abort_reason = sample["execution_error"] or "process-tree cleanup could not be verified"
+                    break
+            if abort_reason:
+                break
         for name, group in by_candidate.items():
             statuses = sorted({sample["status"] for sample in group})
-            passed = statuses == ["ok"]
+            passed = statuses == ["ok"] and len(group) == args.samples
             rows.append({"case": case, "candidate": name, "n": n, "samples": len(group),
-                         "status": "+".join(statuses),
+                         "status": "+".join(statuses) if len(group) == args.samples else "incomplete",
                          "median_ms": f"{statistics.median(sample['elapsed_ms'] for sample in group):.6f}" if passed else "",
                          "measurement": args.measurement, "quick": args.quick,
                          "source_commit": metadata["source_commit"],
                          "machine": metadata["machine"], "platform": metadata["platform"]})
-        with (output / "results.csv").open("w", newline="", encoding="utf-8") as stream:
-            writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
-            writer.writeheader()
-            writer.writerows(rows)
+        write_results(output, rows, finalized=False)
+        if abort_reason:
+            break
+    changed = set()
     for candidate in candidates:
-        if candidate["binary"] != binary_identity(candidate["command"]):
-            raise RuntimeError(f"binary changed during measurement: {candidate['name']}")
-    with (output / "results.csv").open("w", newline="", encoding="utf-8") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
+        try:
+            candidate["binary_after"] = binary_identity(candidate["command"])
+        except (OSError, ValueError) as error:
+            candidate["binary_after"] = None
+            candidate["identity_error"] = str(error)
+        candidate["identity_status"] = "verified" if candidate["binary"] == candidate["binary_after"] else "changed"
+        if candidate["identity_status"] == "changed":
+            changed.add(candidate["name"])
+    for row in rows:
+        if abort_reason or row["candidate"] in changed:
+            row["status"] = "cleanup-failed" if abort_reason else "binary-changed"
+            row["median_ms"] = ""
+    metadata["run_status"] = "invalid" if changed or abort_reason else (
+        "ok" if all(row["status"] == "ok" for row in rows) else "failed")
+    metadata["execution_error"] = abort_reason
+    (output / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    write_results(output, rows, finalized=True)
     print(f"results: {output / 'results.csv'}", flush=True)
     return 0 if all(row["status"] == "ok" for row in rows) else 1
 
