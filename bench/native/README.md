@@ -47,6 +47,10 @@ goes directly to retained files, so inherited pipes cannot hold the runner open.
 If cleanup cannot be verified, the run stops, records `cleanup-failed`, and
 invalidates all medians before any further sample can run. POSIX uses an owned
 process group; the current validation evidence is Windows only.
+The Windows cleanup boundary compares the Job's cumulative process count
+before enumeration and after termination. A late-born member, even one that
+already exited, invalidates the snapshot proof and produces `cleanup-failed`;
+the runner does not claim its handle was observed or start another sample.
 `--quick` runs small functional workloads. `--samples 1` is useful for diagnosis;
 neither is a performance measurement. The default `measurement=coarse` means
 results cannot establish a performance gate. Use `--measurement isolated` only

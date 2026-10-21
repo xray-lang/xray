@@ -33,9 +33,9 @@ def observe_process(pid: int):
         handle = kernel.OpenProcess(0x100000, False, pid)
         if not handle:
             raise ctypes.WinError(ctypes.get_last_error())
-        def exited():
+        def exited(timeout=0):
             try:
-                return kernel.WaitForSingleObject(handle, 0) == 0
+                return kernel.WaitForSingleObject(handle, timeout) == 0
             finally:
                 kernel.CloseHandle(handle)
         return exited
@@ -164,6 +164,85 @@ def descendant_cleanup(runner: dict, output: Path) -> None:
         assert Path(sample["stderr"]).read_bytes() == b"retained stderr\n"
 
 
+def late_descendant(runner: dict, reference: Path, output: Path) -> None:
+    if os.name != "nt":
+        return
+    import ctypes
+    folder = Path(tempfile.mkdtemp(prefix="late-descendant-", dir=output))
+    observers, errors = [], []
+
+    def observe(name):
+        path = folder / f"{name}.pid"
+        deadline = time.monotonic() + 5
+        while not path.exists() or not path.read_text(encoding="ascii").isdigit():
+            if time.monotonic() >= deadline:
+                raise AssertionError(f"late: {name} did not start")
+            time.sleep(0.01)
+        observers.append(observe_process(int(path.read_text(encoding="ascii"))))
+
+    def observe_child():
+        try:
+            observe("child")
+            (folder / "observed").touch()
+        except Exception as error:
+            errors.append(error)
+
+    original_dll = ctypes.WinDLL
+    def controlled_dll(name, *args, **kwargs):
+        library = original_dll(name, *args, **kwargs)
+        if name.lower() == "kernel32":
+            original_terminate = library.TerminateJobObject
+            def terminate(job, exit_code):
+                original_terminate.argtypes = terminate.argtypes
+                original_terminate.restype = terminate.restype
+                # This real descendant starts after the helper's member census.
+                (folder / "spawn").touch()
+                observe("leaf")
+                return original_terminate(job, exit_code)
+            library.TerminateJobObject = terminate
+        return library
+
+    globals_ = runner["main"].__globals__
+    original_run, original_argv = globals_["run_child"], sys.argv
+    def controlled_run(command, **kwargs):
+        if "late" not in command:
+            return original_run(command, **kwargs)
+        ctypes.WinDLL = controlled_dll
+        try:
+            return original_run(command, **kwargs)
+        finally:
+            ctypes.WinDLL = original_dll
+    never = folder / "must-not-run"
+    candidates = folder / "candidates.json"
+    candidates.write_text(json.dumps([
+        {"name": "late", "command": [sys.executable, str(HERE / "timeout_fixture.py"), "late", str(folder)]},
+        {"name": "never", "command": [sys.executable, "-c", f"from pathlib import Path;Path({str(never)!r}).touch()"]},
+    ]), encoding="utf-8")
+    watcher = threading.Thread(target=observe_child, daemon=True)
+    watcher.start()
+    globals_["run_child"] = controlled_run
+    sys.argv = [str(HERE / "run.py"), "--reference", str(reference), "--output", str(folder),
+                "--quick", "--case", "fib", "--samples", "2", "--candidates", str(candidates)]
+    try:
+        code = runner["main"]()
+    finally:
+        sys.argv, globals_["run_child"] = original_argv, original_run
+        watcher.join(timeout=1)
+        # The runner aborted instead of claiming the new member's exit. The
+        # test owns its handle and finishes fixture cleanup independently.
+        exited = [observer(5000) for observer in observers]
+    assert code == 1, "unverifiable cleanup must fail the run"
+    assert not never.exists(), "another candidate ran after an unverified late-born descendant"
+    assert not errors and not watcher.is_alive() and len(exited) == 2 and all(exited), errors
+    run = next(folder.glob("run-*"))
+    metadata = json.loads((run / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["run_status"] == "invalid" and "membership changed" in metadata["execution_error"]
+    samples = json.loads((run / "samples.json").read_text(encoding="utf-8"))
+    assert len(samples) == 2 and samples[0]["status"] == "ok" and samples[1]["status"] == "cleanup-failed"
+    with (run / "results.csv").open(newline="", encoding="utf-8") as stream:
+        assert all(row["status"] == "cleanup-failed" and not row["median_ms"] for row in csv.DictReader(stream))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--reference", required=True)
@@ -227,6 +306,7 @@ def main() -> None:
     identity_change(command, Path(args.reference), args.output)
     relative_command(command, Path(args.reference), args.output)
     descendant_cleanup(runner, args.output)
+    late_descendant(runner, Path(args.reference), args.output)
     print("native_bench_runner: checked results, invalid identities, exact paths, and descendant cleanup")
 
 

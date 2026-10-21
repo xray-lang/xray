@@ -116,6 +116,10 @@ def _run_windows(command: list[str], *, timeout: float | None = None, **kwargs) 
                     # signaled. Retain the current members before termination
                     # so cleanup also waits for their actual exit notifications.
                     deadline = time.monotonic() + 30
+                    before = Accounting()
+                    if not kernel.QueryInformationJobObject(job, 1, ctypes.byref(before),
+                                                            ctypes.sizeof(before), None):
+                        raise RecoveryRequired("Could not inspect command membership before cleanup")
                     retain_members()
                     if not kernel.TerminateJobObject(job, 1):
                         raise RecoveryRequired("Could not terminate the command's process tree")
@@ -133,6 +137,13 @@ def _run_windows(command: list[str], *, timeout: float | None = None, **kwargs) 
                         remaining = max(0, int((deadline - time.monotonic()) * 1000))
                         if kernel.WaitForSingleObject(handle, remaining) != 0:
                             raise RecoveryRequired("A command process did not finish termination")
+                    # New associations cannot be proved exited by the retained
+                    # snapshot. TotalProcesses includes even short-lived members;
+                    # do not release a successful execution boundary in this race.
+                    if accounting.total != before.total:
+                        raise RecoveryRequired(
+                            "Command membership changed during cleanup "
+                            f"({before.total} -> {accounting.total}); descendant exit is unverified")
                 elif child.poll() is None:
                     child.kill()
                 child.wait()
