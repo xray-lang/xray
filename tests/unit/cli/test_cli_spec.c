@@ -84,7 +84,7 @@ TEST(spec_find_command_unknown) {
 TEST(spec_toolchain_preferences_registered) {
     const XrCliCommandSpec *spec=xr_cli_find_command("toolchain");
     ASSERT_NOT_NULL(spec);
-    ASSERT_EQ_INT(xr_cli_option_count(spec->options),4);
+    ASSERT_EQ_INT(xr_cli_option_count(spec->options),7);
     ASSERT_EQ_INT(spec->positional_min,1);
     ASSERT_EQ_INT(spec->positional_max,2);
     ASSERT_FALSE(spec->allow_passthrough);
@@ -761,45 +761,27 @@ TEST(spec_handler_null_before_register) {
 
 /* ========== Help Generation (smoke tests) ========== */
 
-// Redirect stdout to a null device so help-printing tests stay silent.
-// MSVC does not allow direct stdout assignment; use freopen + freopen.
-#ifdef _WIN32
-#define SUPPRESS_STDOUT_BEGIN() freopen("NUL", "w", stdout)
-#define SUPPRESS_STDOUT_END() freopen("CON", "w", stdout)
-#else
-#define SUPPRESS_STDOUT_BEGIN() freopen("/dev/null", "w", stdout)
-#define SUPPRESS_STDOUT_END() freopen("/dev/tty", "w", stdout)
-#endif
-
 TEST(help_print_usage_no_crash) {
-    SUPPRESS_STDOUT_BEGIN();
     xr_cli_print_usage();
-    SUPPRESS_STDOUT_END();
 }
 
 TEST(help_print_command_help_no_crash) {
     const XrCliCommandSpec *spec = xr_cli_find_command("run");
     ASSERT_NOT_NULL(spec);
 
-    SUPPRESS_STDOUT_BEGIN();
     xr_cli_print_command_help(spec);
-    SUPPRESS_STDOUT_END();
 }
 
 TEST(help_print_subcommand_help_no_crash) {
     const XrCliCommandSpec *spec = xr_cli_find_command("self");
     ASSERT_NOT_NULL(spec);
 
-    SUPPRESS_STDOUT_BEGIN();
     xr_cli_print_command_help(spec);
-    SUPPRESS_STDOUT_END();
 }
 
 TEST(help_print_version_no_crash) {
-    SUPPRESS_STDOUT_BEGIN();
     xr_cli_print_version(false);
     xr_cli_print_version(true);
-    SUPPRESS_STDOUT_END();
 }
 
 /* ========== Test Main ========== */
