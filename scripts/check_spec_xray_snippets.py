@@ -3,7 +3,7 @@
 
 Every fenced block is classified before it is judged:
 
-  runnable   -- self-contained (has a top-level main() call), no ellipsis
+  runnable   -- self-contained (has a top-level main() or try main() call), no ellipsis
                 placeholders, not marked as an intentional error: must pass
                 `xray check`.
   error-demo -- the block's comments announce a compile error (编译错误 /
@@ -26,7 +26,7 @@ from pathlib import Path
 
 ELLIPSIS_RE = re.compile(r"(^|[^.])\.\.\.($|[^.])")
 ERROR_MARK_RE = re.compile(r"编译错误|error\[E\d{4}\]|// error:")
-MAIN_CALL_RE = re.compile(r"^main\(\)\s*$", re.M)
+MAIN_CALL_RE = re.compile(r"^(?:try[ \t]+)?main\(\)\s*$", re.M)
 
 
 def extract_blocks(spec_text: str):

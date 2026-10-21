@@ -101,14 +101,14 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  TryExpr
            |  'move' UnaryExpr
-           |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
+           |  'await' UnaryExpr
            |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
 
 TryExpr   ::= 'try' ('?' | '!')? TernaryExpr
 
-GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
+GoExpr    ::= 'go' GoOptions? CallExpr
 GoOptions ::= '(' 'name' ':' StringLiteral ')'
 CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 
@@ -162,7 +162,7 @@ CallArg ::= ('ref' | 'out') Expression
           | Expression
 ```
 
-`try` 后的下一个 token 为 `{` 时只解析为 `TryStmt`，否则解析为 `TryExpr`；`try?` / `try!` 不能修饰代码块。`TryExpr` 的操作数从当前位置覆盖到当前表达式边界，且不包含未加括号的赋值运算符。括号、参数分隔符和语句结束仍限定表达式范围。`try?` 与同一未加括号的 `??` 表达式连用时报错，应写 `(try? expr) ?? fallback`。等待的标记顺序是 `try await task`，不是 `await try task`。
+`try` 后的下一个 token 为 `{` 时只解析为 `TryStmt`，后接 `scope` 时解析为 `TryScopeStmt`（§10.7），其余情况解析为 `TryExpr`；`try?` / `try!` 不能修饰代码块。`TryExpr` 的操作数从当前位置覆盖到当前表达式边界，且不包含未加括号的赋值运算符。括号、参数分隔符和语句结束仍限定表达式范围。`try?` 与同一未加括号的 `??` 表达式连用时报错，应写 `(try? expr) ?? fallback`。等待的标记顺序是 `try await task`，不是 `await try task`。
 
 函数类型返回 Unit 时省略 `ReturnType`，如 `fn()`、`fn() throws(E)`；类型位置不接受显式 `-> ()`（§2.8）。`extern "C"` 声明与 `CFn` 回调必须不抛错，不能携带抛错签名（§5.2.9）。
 
@@ -214,6 +214,7 @@ Statement ::= ExprStmt
            |  ForInPairStmt
            |  MatchStmt
            |  ScopeStmt
+           |  TryScopeStmt
            |  SelectStmt
            |  ReturnStmt
            |  BreakStmt
@@ -258,7 +259,8 @@ DeferStmt ::= 'defer' Block
 
 // go 是表达式，返回 Task<T, E>。不作为独立语句类别出现（封装在 ExprStmt 中）。
 
-ScopeStmt ::= 'linked'? 'scope' Block
+ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
+TryScopeStmt ::= 'try' ScopeStmt
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // 接收
@@ -453,14 +455,14 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  TryExpr
            |  'move' UnaryExpr
-           |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
+           |  'await' UnaryExpr
            |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
 
 TryExpr   ::= 'try' ('?' | '!')? TernaryExpr
 
-GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
+GoExpr    ::= 'go' GoOptions? CallExpr
 GoOptions ::= '(' 'name' ':' StringLiteral ')'
 CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 
@@ -514,7 +516,7 @@ CallArg ::= ('ref' | 'out') Expression
           | Expression
 ```
 
-When the next token after `try` is `{`, parse only `TryStmt`; otherwise parse `TryExpr`. `try?` / `try!` cannot modify blocks. A `TryExpr` operand extends to the current expression boundary without consuming an unparenthesized assignment operator. Parentheses, argument separators, and statement endings still bound expressions. An unparenthesized combination of `try?` and `??` is an error; write `(try? expr) ?? fallback`. The ordering for marked waits is `try await task`, not `await try task`.
+When the next token after `try` is `{`, parse only `TryStmt`; before `scope`, parse `TryScopeStmt` (§10.7); otherwise parse `TryExpr`. `try?` / `try!` cannot modify blocks. A `TryExpr` operand extends to the current expression boundary without consuming an unparenthesized assignment operator. Parentheses, argument separators, and statement endings still bound expressions. An unparenthesized combination of `try?` and `??` is an error; write `(try? expr) ?? fallback`. The ordering for marked waits is `try await task`, not `await try task`.
 
 A Unit-returning function type omits `ReturnType`, as in `fn()` or `fn() throws(E)`; explicit `-> ()` is not allowed in type position (§2.8). `extern "C"` declarations and `CFn` callbacks must be non-throwing and cannot carry throwing signatures (§5.2.9).
 
@@ -566,6 +568,7 @@ Statement ::= ExprStmt
            |  ForInPairStmt
            |  MatchStmt
            |  ScopeStmt
+           |  TryScopeStmt
            |  SelectStmt
            |  ReturnStmt
            |  BreakStmt
@@ -611,7 +614,8 @@ DeferStmt ::= 'defer' Block
 
 // go is an expression returning Task<T, E>. It is not a separate statement category (it appears wrapped in ExprStmt).
 
-ScopeStmt ::= 'linked'? 'scope' Block
+ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
+TryScopeStmt ::= 'try' ScopeStmt
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // receive

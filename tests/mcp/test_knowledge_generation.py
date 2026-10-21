@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import subprocess
@@ -12,7 +13,7 @@ import tempfile
 from pathlib import Path
 
 FENCE_RE = re.compile(r"```xray\n(.*?)\n```", re.S)
-SOURCE_FENCE_ID_RE = re.compile(r"^```xray\s+@id=([A-Za-z0-9_.:-]+)\s*$", re.M)
+SOURCE_FENCE_ID_RE = re.compile(r"^```xray[ \t]+@id=([A-Za-z0-9_.:-]+)(?:[ \t]+@(?:run|check|fragment|error=E\d{4}))?[ \t]*$", re.M)
 SYMBOL_RE = re.compile(
     r"\.module = \"(?P<module>[^\"]+)\".*?\.symbols = (?P<symbols>_symbols_[A-Za-z0-9_]+|NULL),"
     r".*?\.symbol_count = (?P<count>[^,]+),",
@@ -384,6 +385,46 @@ def check_prompt_smoke_examples(root: Path, xray: Path) -> list[str]:
     return errors
 
 
+def check_fence_expectations(root: Path) -> list[str]:
+    """Expectation metadata must not hide a card's source or eat its output."""
+    path = root / "scripts/gen_language_docs.py"
+    spec = importlib.util.spec_from_file_location("language_docs", path)
+    if spec is None or spec.loader is None:
+        return [f"cannot load {path}"]
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    errors: list[str] = []
+    for expectation in ("", " @run", " @check", " @fragment", " @error=E0330"):
+        source = (
+            f"```xray @id=example{expectation}\nprint(1)\n```\n"
+            "```output\n1\n```\n\n"
+            "```xray @id=next @fragment\nprint(2)\n```\n"
+        )
+        registry: dict[str, dict[str, str]] = {}
+        module.extract_fences(path, {"cn": source, "en": source}, registry)
+        if registry != {
+            "example": {"cn": "print(1)", "en": "print(1)"},
+            "next": {"cn": "print(2)", "en": "print(2)"},
+        }:
+            errors.append(f"fence extraction crossed an output boundary: {expectation!r}")
+        rendered = module.strip_fence_id_markers(source)
+        expected = source.replace(" @id=example", "").replace(" @id=next", "")
+        if rendered != expected:
+            errors.append(f"rendering lost expectation metadata: {expectation!r}")
+        if SOURCE_FENCE_ID_RE.findall(source) != ["example", "next"]:
+            errors.append(f"card validation lost annotated fence IDs: {expectation!r}")
+    snippet_path = root / "scripts/check_spec_xray_snippets.py"
+    snippet_spec = importlib.util.spec_from_file_location("spec_snippets", snippet_path)
+    if snippet_spec is None or snippet_spec.loader is None:
+        return errors + [f"cannot load {snippet_path}"]
+    snippets = importlib.util.module_from_spec(snippet_spec)
+    snippet_spec.loader.exec_module(snippets)
+    for entry in ("main()", "try main()"):
+        if snippets.classify(f"fn main() {{ print(1) }}\n{entry}\n") != "runnable":
+            errors.append(f"entry call silently classified as a fragment: {entry}")
+    return errors
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True, type=Path)
@@ -393,6 +434,7 @@ def main(argv: list[str]) -> int:
     root = args.root.resolve()
     xray = args.xray.resolve()
     errors: list[str] = []
+    errors.extend(check_fence_expectations(root))
 
     # spec/source/ is tracked in-repo; docs/knowledge/ is generated at
     # configure time and may not exist in CI until spec source is present.

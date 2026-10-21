@@ -4507,22 +4507,21 @@ A READ struct method value `receiver.method` evaluates the receiver once at bind
 
 ### 8.0 Design philosophy: value-return + panic boundary
 
-Xray's error handling is split into two strictly separated channels:
+Xray separates two channels:
 
-| Channel | Syntax | Use case | Runtime cost |
-|--|--|--|--|
-| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Low overhead** (no `PanicInfo` allocation and no unwind; only a predictable branch at call boundaries that may propagate or catch errors) |
-| **Panic channel** (`catch panic`) | Runtime faults (OOB, division by zero, non-exhaustive match) | Limited stack unwinding |
+| Channel | Syntax | Purpose |
+|--|--|--|
+| Value errors | `throws(E)`, `throw`, `try`, `catch` | Business errors and recoverable failures |
+| Panic | `catch panic` | Runtime faults such as bounds errors and division by zero |
 
-Design principles:
+- **Errors are values**: error payloads are enum values; propagation does not turn them into `PanicInfo`.
+- **Signatures determine error types**: omitting `throws` means `Never`, a guarantee of no business errors. `throws(E)` declares the permitted escaping error type; bare `throws` means `throws(Error)`. See §2.2 and §5.2 for signatures and callable types.
+- **Checking is local**: each function is checked using its body and callee signatures, without inspecting callee bodies or whole-program error inference. A named function without a clause never acquires an inferred throwing signature; see §5.2 for closures.
+- **Propagation is visible**: potentially throwing calls must occur within a `try`, `try?`, or `try!` expression or the protected region of `try { }` (§8.1.6).
+- **Panic stays outside signatures**: a non-throwing function may still panic; `try?` never absorbs panic.
+- **`defer` replaces `finally`**: cleanup belongs to the nearest real `{}` block and must statically have no escaping business errors (`E0387`, §8.3.1).
 
-- **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no PanicInfo allocation.
-- **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
-- **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
-- **Error sets are not part of public function types**: concrete error enum/variant sets belong to effect analysis of the same checked program. Internal three-state throw-effect facts (`UNKNOWN` / `MAY_THROW` / `NO_THROW`) are associated with the corresponding functions and callable nodes for safety constraints and code generation.
-- **No-throw is always inferred**: use an `xray verify` contract to freeze a no-throw guarantee; unknown or incomplete evidence is treated as may-throw.
-- **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses **block-scoped** `defer` (bound to the nearest real `{}` block, see §4.9 / §8.3).
-- **A cleanup edge is not an error-propagation edge**: no error may escape a `defer` body. The constraint is enforced at compile time (`E0387`), see §8.3.1.
+This chapter specifies the target language rules of Task329. Smoke results determine example execution support; successful document generation does not establish implementation of `throws`, the new Task shape, or the new diagnostics.
 
 ### 8.1 Value-return error channel
 
@@ -4530,7 +4529,7 @@ Design principles:
 
 `throw expr` raises an enum error value. Its actual value must be an enum variant; its static type may be a concrete enum, the built-in `Error`, or an ordinary type parameter whose `Error` constraint is proved at definition:
 
-```xray
+```xray @check
 enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ simple enum variant
@@ -4553,7 +4552,7 @@ A same-proof mixed debug Program must receive the generator's current observatio
 
 #### 8.1.2 `try` / `catch`
 
-```xray
+```xray @fragment
 enum IOErr { Timeout, Refused { reason: string } }
 
 try {
@@ -4576,7 +4575,7 @@ try {
 
 A `catch` variable may be typed `catch (e: T)`; the runtime uses `is T` to test the enum type. Multiple `catch` clauses are matched in declaration order:
 
-```xray
+```xray @fragment
 enum NetErr { Timeout, Refused }
 enum DbErr { ConnLost, QueryFailed { query: string } }
 
@@ -4596,7 +4595,7 @@ try {
 - A typed `catch (e: SomeErr)` matches only when the error value satisfies `is SomeErr`, where `SomeErr` is a concrete enum error type.
 - Multiple `catch` clauses are tried in declaration order; the first match wins.
 - If every typed clause fails and there is no catch-all, the error continues propagating.
-- A `try` **must** be followed by at least one of `catch` or `catch panic`.
+- A `try` statement **must** be followed by at least one of `catch` or `catch panic`.
 
 The built-in `Error` is an owned value type containing only enums. Converting an enum to Error preserves its concrete nominal identity, generic arguments, active variant, and payload; copying, storing, returning, and rethrowing obey the same value-ownership rules. Error grants no arbitrary field, construction, or visibility authority and does not implicitly prove `Sendable`. Accessing a concrete variant payload requires authorized type narrowing. Ordinary generic conversion is checked against constraints at definition and rechecked after specialization; a concrete enum at a call site cannot supply a missing definition-time proof.
 
@@ -4606,7 +4605,7 @@ Catch bindings are visible only in their handler, and both the binding and its v
 
 An ordinary `catch` header is always parenthesized. Inside the parentheses, an identifier followed by `:` or `)` is a binding (`catch (e)`, `catch (e: T)`); anything else is an enum variant pattern:
 
-```xray
+```xray @fragment
 enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
 
 try {
@@ -4622,15 +4621,24 @@ try {
 - Comma-separated alternatives must belong to one enum type. The first alternative determines the handler's enum type. An Error carries no static type arguments, so a generic enum must state all of its type arguments there (for example `Event<string>.Failed { message }`); later alternatives must name the same declaration, take omitted type arguments from that type, and must repeat explicit ones exactly.
 - The handler first tests whether the error value has that enum type, then tries the alternatives in source order. A type, variant, literal, or range mismatch continues with the next `catch` clause; if none matches, the original error keeps propagating unchanged. A pattern handler needs no exhaustiveness and never raises a match failure (`E0442`).
 - All alternatives must bind the same names with exactly the same static types. Pattern bindings are read-only and visible only in their handler, like a catch binding.
-- A bare identifier inside the parentheses is a catch-all binding: `catch (NetErr)` binds an Error value named `NetErr`; it is not a type filter. Filter by type with `catch (e: NetErr)`. `_`, literals, ranges, and tuple, object, array, and `is` type patterns cannot form a catch header.
+- A single identifier is a catch-all binding except for uppercase-leading names and bare `_`. A single uppercase-leading identifier such as `catch (NetErr)` reports `E0334` with a suggestion to write `catch (e: NetErr)`; it is neither a type filter nor a binding. `_`, literals, ranges, tuples, objects, arrays and `is` type patterns are not catch heads.
 - An ordinary `catch` cannot omit its header; only `catch panic` may.
 - Generic enum targets are checked against their constraints at definition. An unexecutable pattern handler still receives complete name, type, constraint, visibility, field, and binding checks.
+
+```xray @error=E0334
+enum NetErr { Failed }
+fn work() throws(NetErr) { throw NetErr.Failed }
+fn main() {
+    try { work() } catch (NetErr) { print("failed") } // error: use catch (e: NetErr)
+}
+try main()
+```
 
 #### 8.1.3 Rethrowing and error conversion
 
 A `catch` block may rethrow the original error or throw a different enum variant:
 
-```xray
+```xray @fragment
 enum LowErr { Fail }
 enum HighErr { Upstream }
 
@@ -4646,7 +4654,7 @@ try {
 
 Define business errors as ADT enums with context-carrying payloads:
 
-```xray
+```xray @fragment
 enum HttpErr {
     NotFound { message: string },
     ServerError { code: i64, message: string },
@@ -4659,7 +4667,7 @@ enum ParseErr {
     Overflow,
 }
 
-fn fetchUser(id: i64) -> User {
+fn fetchUser(id: i64) throws(HttpErr) -> User {
     if (id <= 0) { throw HttpErr.NotFound { message: "user not found" } }
     // ...
 }
@@ -4679,38 +4687,64 @@ ADT enums allow `match` to check exhaustiveness at compile time.
 
 #### 8.1.5 Errors and coroutine boundaries
 
-Value-return errors **do not propagate across coroutines automatically**. An uncaught error in a child coroutine:
+`go f(...)` records the return and declared error types of `f` in `Task<T, E>`; the default error argument is `Never`. Spawning does not propagate the child's business errors to the caller, and an independent child failure does not automatically cancel its parent.
 
-- Terminates the child, error recorded in `coro.error`
-- The parent is **not** notified automatically
+- `try await t` waits for `T` and propagates business errors as `E | Cancelled`; child panic stays on the panic channel.
+- `t.awaitResult()` returns the four-variant `TaskResult<T, E>` without rethrowing business errors. Cancellation of the waiter itself still unwinds that waiter.
+- `try scope { ... }` cancels siblings on child failure and propagates the first failure on exit; `try scope(isolated) { ... }` lets siblings continue and aggregates failures. See §10.7.
 
-Ways to pass child coroutine errors:
-
-1. **Explicit Channel**:
-
-```xray
-enum WorkerErr { Failed { message: string } }
-const err_ch = Channel<string>(1)
-
-go fn() {
-    try {
-        riskyWork()
-        err_ch.send("ok")
-    } catch (e) {
-        err_ch.send("error")
-    }
-}()
-
-var result = match (err_ch.recv()) {
-    Recv.Value { value: v } -> v
-    _ -> "error"
-}
-if (result != "ok") { log("worker failed") }
+```xray @fragment
+var task = go fetch(url)
+var value = try await task
+var outcome = task.awaitResult()
 ```
 
-2. **`linked go call()`** (see §10.2): failure of a standalone child Task cancels its parent Task and linked subtree; the returned Task still exposes the precise error to its caller.
+Waiting on a cancelled child produces typed `Cancelled`. Cancellation of the current task runs its defers and unwinds; no catch can intercept it and it is not part of that function's error signature (§10.4).
 
-3. **Structured concurrency `linked scope`** (recommended, see §10.5): an error from any child in the scope propagates to the parent scope automatically, routed through the correct channel (value-return enum errors via `catch`, panics via `catch panic`).
+#### 8.1.6 `try` expressions and local error checking
+
+`try expr` propagates business errors; `try? expr` converts them to `null`; `try! expr` turns a business error into a panic carrying that error value. None of these expressions creates a catch block.
+
+One marker covers calls in the entire following non-assignment expression. Parentheses, argument separators and statement endings bound its extent. Combine `try?` with `??` as `(try? expr) ?? fallback`. Marked waits always use `try await t`.
+
+```xray @run
+enum ParseErr { Empty }
+fn parse(s: string) throws(ParseErr) -> i64 {
+    if (len(s) == 0) { throw ParseErr.Empty }
+    return 42
+}
+fn forward(s: string) throws(ParseErr) -> i64 { return try parse(s) }
+fn main() {
+    print(try forward("ok"))
+    print((try? parse("")) ?? 8080)
+    print(try! parse("ok"))
+}
+try main()
+```
+```output
+42
+8080
+42
+```
+
+Calls in the protected `try { }` region count as marked. The region excludes closure bodies, nested functions and that try statement's own catch handlers. A nested handler can still belong to an outer try's protected region. Subtract the errors covered by catch clauses; the remainder and errors escaping handlers must fit the enclosing function's declaration. `throw` produces an error directly and needs no extra `try`. Module top level and the program entry `main` implicitly permit any error but still require propagation markers. This entry permission does not exempt explicit calls; a module-level call to a potentially throwing entry still uses `try main()`.
+
+A missing marker and an undeclared escaping error are distinct diagnostics (reserved numbers in §18.2):
+
+```xray @error=E0330
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn main() { fail() } // error: missing try
+try main()
+```
+
+```xray @error=E0331
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn caller() { try fail() } // error: undeclared escaping error
+fn main() { caller() }
+try main()
+```
 
 ### 8.2 Panic channel
 
@@ -4730,7 +4764,7 @@ Panics propagate via limited stack unwinding and generate `PanicInfo` objects wi
 
 `catch panic` catches runtime faults from the panic channel:
 
-```xray
+```xray @fragment
 try {
     var arr: Array<i64> = [1, 2, 3]
     var v = arr[10]                          // OOB → panic
@@ -4747,7 +4781,7 @@ try {
 
 **`catch` and `catch panic` can coexist**, handling both channels:
 
-```xray
+```xray @check
 enum AppErr { InvalidArg }
 
 try {
@@ -4765,7 +4799,7 @@ try {
 
 `PanicInfo` is now **used only by the panic channel**. The VM constructs `PanicInfo` objects automatically on runtime faults:
 
-```xray
+```xray @fragment
 class PanicInfo {
     message: string             // human-readable message (e.g. "index out of bounds")
     stack: Array<string>        // automatically captured call stack
@@ -4782,7 +4816,7 @@ User code generally does not construct `PanicInfo` directly — use `throw <enum
 
 **Reading panic details in `catch panic`**: `catch panic (p)` binds the `PanicInfo` object to `p`, so you can read `message`, `code`, `stack`, and the other fields:
 
-```xray
+```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
@@ -4793,7 +4827,11 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+message: array index out of range: 10 (length 3)
+code: 430
 ```
 
 #### 8.2.4 Top-level diagnostic for an uncaught panic
@@ -4834,12 +4872,12 @@ formatters). The contract covers exactly that surface.
 
 A cleanup block reads its outer bindings at exit. A movable owner read by the block may not be moved or returned before the block exits (`E0382`); code that needs a registration-time value must create an explicit copy first. This owner-lifetime rule is independent of the error-channel rules below.
 
-```xray
-fn fetch(url: string) -> string {
-    var conn = open(url)
+```xray @fragment
+fn fetch(url: string) throws(IoErr | FetchErr) -> string {
+    var conn = try open(url)
     defer { conn.close() }                   // conn is guaranteed to close
 
-    var data = conn.read()
+    var data = try conn.read()
     if (len(data) == 0) {
         throw FetchErr.Empty                 // defer still runs
     }
@@ -4859,43 +4897,62 @@ fn fetch(url: string) -> string {
 
 #### 8.3.1 `defer` and errors
 
-`defer` is a **resource-cleanup edge**, not an error-propagation edge. A failure on the cleanup path means the resource state is no longer known, so the language neither lets a cleanup error overwrite an in-flight error (the Go model) nor silently swallows it.
+A `defer` is a cleanup edge. It cannot propagate business errors or replace an error already in flight.
 
-**Rule D1 (static, normative)**: if the inferred escaping error set of a `defer` block is **non-empty**, the compiler reports `E0387`.
+**Rule D1 (static)**: the escaping error type of the cleanup body must be `Never`, otherwise report `E0387`. Checking uses the cleanup body and callee signatures, including `throws(E)` on indirect callable values. Unknown errors are not accepted through a runtime fallback. A cleanup API without `throws` guarantees no business errors.
 
-Unlike the throw-effect bit in §8.0, D1 is **not** fail-closed: xray has no user-writable no-throw annotation, so rejecting everything that cannot be proven non-throwing would leave an author facing an indirect call, a higher-order builtin, or a native member whose contract is not yet written with no way to discharge the obligation. What cannot be proven is left to rule D3's runtime backstop — that is what the layering is for. Should a user-writable no-throw annotation ever be added, D1 can tighten to "must be proven" and D3 becomes unreachable by construction.
+**Rule D2 (satisfaction)**: use non-throwing cleanup APIs or handle their errors completely inside the cleanup. The valid and invalid examples are separate:
 
-```xray
-fn close(c: Conn) { throw IoErr.Closed }
-
-fn bad(c: Conn) {
-    defer { close(c) }                       // ❌ E0387: error escapes cleanup
-}
-
-fn good(c: Conn) {
-    defer {                                  // ✅ handle it inside the defer body
-        try { close(c) } catch (e) { log.warn("close failed") }
+```xray @run
+enum CloseErr { Failed }
+fn close() throws(CloseErr) { throw CloseErr.Failed }
+fn main() {
+    defer {
+        try { close() } catch (e: CloseErr) { print("close failed") }
     }
+    print("body")
 }
+try main()
+```
+```output
+body
+close failed
 ```
 
-**Rule D2 (how to satisfy it)**: absorb the error inside the `defer` body with `try` / `catch`, or call a cleanup API that does not throw. This is the only legal form — it forces the author to answer "what happens when cleanup fails?".
+```xray @error=E0387
+enum CloseErr { Failed }
+fn close() throws(CloseErr) { throw CloseErr.Failed }
+fn main() {
+    defer { try close() } // error: error escapes cleanup
+}
+try main()
+```
 
-**Rule D3 (runtime backstop, normative)**: if an error still escapes a `defer` body — an indirect call D1 could not decide statically, or a panic raised inside the body — the runtime **terminates the process** with `E0443` and exit status `70`:
-
-- The termination is **not catchable** — neither `catch` nor `catch panic` intercepts it. An error or panic the `defer` body catches **itself** has not escaped; that is the ordinary form rule D2 prescribes.
-- The in-flight error is neither replaced nor suppressed; the diagnostic reports the escaping error, and the in-flight one alongside it when there is one (an enum error value carries no message, and shows as `<no message>`).
-- The VM and AOT backends must agree verbatim on this behaviour, including exit code and diagnostic text.
-
-**Why not Go's "replace" semantics**: in Go, rewriting the error from a defer requires an explicit assignment to a named return value — visible and local. xray puts `throws` in neither the signature nor the call site (§8.0), so an implicit error replacement would be entirely invisible in the source, and multiple simultaneously-throwing `defer`s would additionally need a replacement-chain rule. Fail-fast is the only option that is defined, hides nothing, and adds no further rules.
+There is no runtime D3 fallback for escaping business errors. Statically non-throwing does not mean panic-free: a cleanup may handle faults locally with `catch panic`. Escaping new panic during cleanup, especially while another panic is already unwinding, still needs joint Task329/Task316 resolution. This slice defines no replacement, suppression or second-termination policy. Until that boundary is settled, removal of the old runtime fallback cannot be claimed safe.
 
 ### 8.4 Optional and error handling
 
-`T?` is sugar for `T | null` and fits the binary "value or absent" case. See §2.5. Relation to error handling:
+`T?` denotes the language item `Optional<T>`; every layer has an independent presence tag, without decomposing into a union with null. `T | null` rewrites to `T?` only at the syntax boundary. Ordinary `Optional<Optional<T>>` does not flatten (§2.5). Use Optional for presence or absence without a failure reason; use `throws(E)` and `throw` when the reason matters.
 
-- **Failure with no cause**: `T?` (e.g. map lookup returns `null` for "key not found").
-- Pairs with `??` (default value) / `?.` (optional chain) / `e!` (force unwrap).
-- Do not use `T?` as a generic error return — if a cause is needed, use `throw <enum>` + `catch`.
+`try?` has a specific result rule: a non-Optional operand of type `T` yields `T?`; an operand already typed `Optional<U>` keeps that type, without adding an outer layer or recursively flattening existing layers. Business errors become `null` and successful values are preserved. It catches neither panic nor cancellation unwinding.
+
+```xray @run
+enum LookupErr { Failed }
+fn lookup(ok: bool) throws(LookupErr) -> i64? {
+    if (!ok) { throw LookupErr.Failed }
+    return 7
+}
+fn main() {
+    var found: i64? = try? lookup(true)
+    print(found ?? 0)
+    print((try? lookup(false)) ?? 0)
+}
+try main()
+```
+```output
+7
+0
+```
 
 ### 8.5 Decision tree: which mechanism to choose
 
@@ -4939,7 +4996,7 @@ Reference table:
 
 #### Pattern 1: enum errors + defer for resource cleanup
 
-```xray
+```xray @run
 enum ConnErr { Refused, Timeout }
 
 // A tiny stand-in "connection" so the example runs on its own.
@@ -4950,7 +5007,7 @@ class Conn {
     close() { print("closed") }
 }
 
-fn fetchData(alive: bool) -> string {
+fn fetchData(alive: bool) throws(ConnErr) -> string {
     var conn = Conn(alive)
     defer { conn.close() }             // runs whether we succeed or throw
     if (!conn.isAlive()) { throw ConnErr.Timeout }
@@ -4965,15 +5022,19 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+closed
+payload
 ```
 
 #### Pattern 2: throw + catch for library APIs
 
-```xray
+```xray @run
 enum ConfigErr { Missing { field: string } }
 
-fn requirePort(cfg: JSON.Object) {
+fn requirePort(cfg: JSON.Object) throws(ConfigErr) {
     if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
     print("port:", cfg["port"])
 }
@@ -4989,19 +5050,23 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+port: 8080
+missing field: port
 ```
 
 #### Pattern 3: `??` for default values
 
-```xray
+```xray @fragment
 var port = config?.port ?? 8080
 var user = db.findUser(id) ?? guestUser
 ```
 
 #### Pattern 4: catch panic for runtime fault fallback
 
-```xray
+```xray @check
 fn safeDivide(a: i64, b: i64) -> string {
     try {
         return string(a / b)
@@ -5013,14 +5078,14 @@ fn safeDivide(a: i64, b: i64) -> string {
 
 ### 8.7 Worked Examples
 
-These are self-contained programs that run as-is and pass `xray check` (comments show the real output).
+These self-contained target-language examples state expected stdout in `output` blocks; VM/AOT smoke gates must establish execution support.
 
 #### Example 1: `throw` / `catch` / `match`
 
-```xray
+```xray @run
 enum ParseErr { Empty, BadChar { value: string } }
 
-fn parseDigit(s: string) -> i64 {
+fn parseDigit(s: string) throws(ParseErr) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
     if (s == "x") { throw ParseErr.BadChar { value: s } }
     return 42
@@ -5037,15 +5102,18 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+empty input
 ```
 
 #### Example 2: `defer` order (LIFO) on the error path
 
-```xray
+```xray @run
 enum E { Boom }
 
-fn work() {
+fn work() throws(E) {
     defer { print("defer 1") }
     defer { print("defer 2") }
     print("body")
@@ -5056,21 +5124,19 @@ fn main() {
     try { work() } catch (e) { print("caught") }
 }
 
-main()
+try main()
 ```
-
-Output (`defer` runs in LIFO order):
-
-```
+```output
 body
 defer 2
 defer 1
 caught
 ```
 
+
 #### Example 3: `catch panic` with fault details
 
-```xray
+```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
@@ -5081,7 +5147,11 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+message: array index out of range: 10 (length 3)
+code: 430
 ```
 
 ---
@@ -5429,7 +5499,7 @@ xray's concurrency model is **goroutine-style coroutines + channels + strong sta
 | Dimension | Choice |
 |--|--|
 | Scheduling model | M:N (user-space coroutines on multiple OS threads) |
-| Scheduling policy | Cooperative (back edges, channels, `await`, `Coro.yield()`, and similar scheduling/suspension points) + work stealing |
+| Scheduling policy | Cooperative (channels, `await`, `Task.yieldNow()`, and other suspension points; loop backedges are not cancellation checkpoints) + work stealing |
 | Stack model | Stackless (per-coroutine VM value stack + frame array, grows on demand, no native C stack) |
 | Creation cost | ~microsecond (initial VM value stack ~64 slots + 4 frames, not a native stack) |
 | Context switch | VM context switch (save/restore VM frames), no native stack switch, no syscall |
@@ -5439,14 +5509,14 @@ Coroutines are distributed across multiple worker threads by default; the runtim
 ### 10.2 `go` — start a coroutine
 
 ```ebnf
-GoExpr   ::= 'linked'? 'go' GoOptions? CallExpr
+GoExpr   ::= 'go' GoOptions? CallExpr
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
 GoOption ::= 'name' ':' StringLiteral
 ```
 
-`go` is an **expression** returning a `Task<T>` handle. It accepts only a call expression; inline logic must be an immediately invoked lambda:
+`go` is an **expression** returning a `Task<T, E>` handle. It accepts only a call expression; inline logic must be an immediately invoked lambda:
 
-```xray
+```xray @fragment
 // Form 1: call an existing function
 var t1 = go worker(0, channel)
 
@@ -5466,7 +5536,7 @@ var named = go(name: "worker-1") worker(1, channel)
 
 **Pass according to the declaration**: copyable Sendable arguments retain owned logical copies, without requiring `copy(...)` or unique backing. A noncopyable Sendable resource transfers only to a consuming parameter; optional `move resource` marks that same transfer, not a `go` option. Task results must be copyable and Sendable; resources are not Task results:
 
-```xray
+```xray @check
 var data = [10]
 var task = go fn(d: Array<i64>) -> i64 {
     return d[0] + 1
@@ -5483,93 +5553,69 @@ var task = go fn(x: i64) -> i64 {
 ```
 
 **Semantics**:
-- Every `go` expression returns a `Task<T>`, where `T` is the callee's return type; functions returning `()` correspond to `Task<null>`.
+- Every `go` yields `Task<T, E>` where `T` is the return type and `E` is the declared error type, defaulting to `Never`. A Unit result stays Unit, not `null`.
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
 - Arguments, owned captures and results must satisfy Sendable by their actual types. Ordinary generics are checked by constraints at the definition and reverified after Checked specialization. Copyable values retain declared logical copies, stopping at class and synchronization identities. Array qualification depends on every element; const, COW, reference counts and a single worker grant no additional Sendable authority. Ref, Slice/MutSlice, Cell and non-Sendable values cannot cross this boundary. Noncopyable Sendable resources transfer only through consuming parameters and do not enter ordinary copyable captures or Task results.
-- `name` inside `go(name: ...)` is diagnostic/debug metadata only. The semantic modifier is the `linked go` prefix and is not a `GoOptions` entry.
 - An ordinary outer `var` may never be captured by a `go` closure, for either reads or writes. This rule does not depend on coroutine count or scheduling. Mutable state shared across coroutines must flow through audited `Channel`, `Atomic`, or `sync` handles; direct captured mutation is a compile error.
-- `linked go call()` still accepts only a call expression and returns an ordinary `Task<T>`. Outside a scope it attaches the child Task to the current parent Task: parent cancellation recursively cancels the child, child failure cancels the parent and its linked subtree, and a parent that has finished its own body still waits for linked children to terminate. Inside a scope, membership and failure propagation are owned solely by that scope's policy; no second parent-child relation is layered on top.
 
 ### 10.3 `await` — wait for a result
 
 ```ebnf
-AwaitExpr ::= 'await' Expression
-           |  'await' 'all' Expression       // wait for all to complete
-           |  'await' 'any' Expression       // wait for any one to complete
+AwaitExpr ::= 'await' UnaryExpr
 ```
 
-```xray
-// single task
-var task = go fetch("https://example.com")
-var result = await task                    // yields the current coroutine until task completes
+`await` accepts only `Task<T, E>` and produces `T` on success. Waiting may suspend without blocking an OS thread. The propagation marker order is `try await t`; inside a protected `try { }` region, `await t` needs no additional marker.
 
-// await all: wait for all, returns the result array (in input order)
-var t1 = go compute(2)
-var t2 = go compute(3)
-var t3 = go compute(4)
-var results: Array<i64> = await all [t1, t2, t3]
-// also works on a variable directly, no brackets needed
-var tasks = [t1, t2, t3]
-var results2: Array<i64> = await all tasks
+```xray @fragment
+var task = go fetch(url)
+var result = try await task
 
-// await any: wait for the first to complete, return its result; the others keep running
-var first = await any [t1, t2, t3]
-
-// await anySuccess: skip failing tasks; wait for the first successful one
-var firstOk = await anySuccess [t1, t2, t3]
+var tasks = [go compute(2), go compute(3), go compute(4)]
+var results = try Task.all(tasks)
+var first = try Task.first(tasks)
+var firstOk = try Task.firstSuccess(tasks)
+var bounded = try Task.timeout(task, 1000)
 ```
 
-**Semantics**:
+- The business error type comes from the Task's `E`, unioned with `Cancelled`. Even `E = Never` does not rule out child cancellation during an explicit wait. No inference from the spawn site or worker body is needed.
+- Child enum errors use the value-error channel; child panic uses the panic channel. A successful `null` is a real Optional result, not cancellation or failure.
+- Task results must be copyable and Sendable. Repeated waits produce logical value copies while preserving class and synchronization identities. Failure to copy a result does not consume or modify the task's terminal outcome.
+- Cancellation of the current waiter differs from observing a cancelled child; the former uses the cancellation unwinding rules in §10.4.
 
-- `await` only applies to `Task<T>`; other types are a compile error.
-- Users always write `await task`, never `await (move task)`. Task results must be copyable and Sendable. A task keeps its complete owned terminal outcome; repeated awaits receive separate logical copies, stopping at class and synchronization identities. Copy or retain failure affects that waiter alone without consuming or modifying the sticky outcome. Backing uniqueness or reference counts cannot select single-take semantics.
-- The current coroutine **yields** until the target completes (without blocking the OS thread).
-- PanicInfo propagation:
-  - `await t` re-raises `t`'s failure on the channel `t` raised it on. A `throw <enum>` inside the coroutine is re-raised as a value error, so the awaiting frame's `catch (e)` catches it and, with no catch, it propagates by value like any other throw. A panic inside the coroutine is re-raised as a panic and keeps unwinding.
-  - `await t` therefore inherits the error set of the awaited coroutine's body, and a function containing such an `await` is fallible exactly when that body is. A task whose coroutine cannot be named at the await — read out of a collection, received as a parameter — is fail-closed: may-throw.
-  - The same holds at a `linked scope`'s exit, which re-raises its first failed child in the enclosing frame on that child's channel.
-  - The forms that report an outcome as a value — `awaitResult()`, `awaitTimeout(ms)` — never re-raise, and so never enter the enclosing function's error set.
-  - On success, `await t` returns `T`; if `T` is nullable, a returned `null` is the task's real result, not a cancellation or failure marker.
-  - `await all` throws if any task throws (the others are cancelled).
-  - `await any` throws only when **every** task fails; if any one completes, its result is returned.
-  - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
-- `all` / `any` / `anySuccess` are **contextual keywords** after `await`; they apply only in this position.
-- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<i64>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a common enum / union / `JSON.Value` result type.
+Multiple-task waits use suspending library functions without an `await` prefix:
 
-### 10.4 `Task<T>` handle
+| Function | Result | Business error type | Other tasks |
+|--|--|--|--|
+| `Task.all(ts)` | `Array<T>` in input order | `E \| Cancelled` | Cancel the rest on any failure |
+| `Task.first(ts)` | Value or failure of the first task to finish | `E \| Cancelled` | Cancel the rest on return |
+| `Task.firstSuccess(ts)` | First successful value | `TaskFailures<E>` if all fail, plus `Cancelled` | Cancel the rest on return |
+| `Task.timeout(t, ms)` | `T` | `E \| Cancelled \| Timeout` | Cancel `t` on timeout |
 
-`go expr` returns `Task<T>`, where `T` is the callee's return type. Task handles support:
+The first three functions accept homogeneous `Array<Task<T, E>>`, without implicit erasure of heterogeneous result or error types. Use a scope and individual waits for different types. `TaskFailures<E>` records failed tasks' debug names, input positions, and error values or `PanicInfo`; this semantic notation does not define concrete field names.
 
-| Method / property | Type | Description |
+### 10.4 The `Task<T, E>` handle
+
+`go f(...)` yields `Task<T, E>` where `T` is the return type and `E` is the declared error type, defaulting to `Never`. Handle API:
+
+| Method | Type | Meaning |
 |--|--|--|
-| `t.done` | `bool` (property) | Whether the task has completed (success, failure, or cancellation) |
-| `t.status` | `TaskStatus` (property) | `Pending` / `Running` / `Success` / `Failed` / `Cancelled` |
-| `t.cancel()` | `() -> ()` | Request cooperative cancellation |
-| `t.poll()` | `() -> TaskResult<T>` | Non-blocking observation; returns `TaskResult.Pending` while incomplete |
-| `t.awaitResult()` | `() -> TaskResult<T>` | Waits and returns a status result without rethrowing |
-| `t.awaitTimeout(ms)` | `(i64) -> TaskResult<T>` | Waits until completion or timeout; timeout returns `TaskResult.Timeout` |
+| `t.cancel()` | `fn()` | Idempotently request cooperative cancellation |
+| `t.poll()` | `fn() -> TaskResult<T, E>?` | Nonblocking; `null` while unfinished |
+| `t.awaitResult()` | `fn() -> TaskResult<T, E>` | Suspend until terminal; report child errors and panic as values |
 
-```xray
+```xray @fragment
 var t = go fetch(url)
-if (!t.done) { /* still running */ }
-var r = await t
-
-match (t.poll()) {
-    TaskResult.Pending -> print("running")
-    TaskResult.Success { value } -> print(value)
-    TaskResult.Failed { error: err } -> print(err)
-    TaskResult.Cancelled -> print("cancelled")
-    TaskResult.Timeout -> print("timeout")
-}
+if (t.poll() == null) { print("running") }
+var outcome = t.awaitResult()
 ```
 
-The current public shape of `TaskResult<T>` is `Success(T)`, `Failed(PanicInfo)`, `Cancelled`, `Timeout`, and `Pending`. Runtime faults enter `Failed` as `PanicInfo`; business enum errors still use the language error channel, so plain `await task` propagates through the matching error path, and callers that need a status value keep an explicit task handle and call `awaitResult()` / `awaitTimeout(ms)`.
+`TaskResult<T, E>` has exactly four terminal variants: `Success(T)`, `Error(E)`, `Panic(PanicInfo)`, and `Cancelled`. Parentheses describe payload types, not construction syntax or field names. The outer Optional of `poll()` represents unfinished work; `Task.timeout` represents timeout as an error. Returning a terminal outcome does not exempt the waiter from its own cancellation unwinding.
 
-**Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next scheduling/suspension point (back edge, channel operation, `await`, `Coro.yield()`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
+**Cancellation** is checked only at suspension points, including `await`, Channel operations, `select`, `Task.yieldNow()`, sleep and IO. A cancelled task runs its defers and unwinds. Neither `catch (e)` nor `catch panic` intercepts this, and it does not enter the task function's error signature. A task waiting on that child observes typed `Cancelled`.
 
-**Watchdog policy**: the runtime monitor thread (sysmon) observes the heartbeat of RUNNING coroutines. Pure Xray loops advance the heartbeat at back-edge safepoints, so they are observed as making progress; sysmon is mainly for long native/FFI calls or no-safepoint regions that stop progressing. If a heartbeat stays frozen for too long, the default behavior is **warn-only**: a stuck warning is printed after roughly 100ms, but the coroutine is not silently cancelled. Forced cancellation is explicit opt-in: set `XRAY_SYSMON_CANCEL_MS=N` (`N > 0`, milliseconds) to mark a coroutine for cancellation after its heartbeat remains frozen past that threshold; unset or `0` keeps warn-only behavior. Long pure-CPU loops may insert `Coro.yield()` to improve scheduling fairness and cancellation responsiveness.
+Loop backedges are not cancellation checkpoints. Long loops may check `Task.isCancelled()` and finish cooperatively, or call `Task.yieldNow()` to allow scheduling and cancellation. Runtime heartbeat or watchdog observations do not change these language-level checkpoints; a cancellation request does not guarantee preemption of a non-suspending native/FFI call.
 
 ### 10.5 Channel
 
@@ -5676,72 +5722,54 @@ select {
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
 
-### 10.7 `scope` (structured concurrency / lexical scope)
+### 10.7 `scope` — structured concurrency
 
-`scope` is a **statement keyword** that introduces a new lexical block. It serves two purposes:
-
-1. **Pure lexical scope**: identical to a C/Rust `{ ... }` local block; `var` inside the block does not affect outer same-named variables.
-2. **Structured concurrency** (semantic enhancement): coroutines started via `go` inside the block are **awaited automatically** before the block exits.
+`scope` means structured concurrency only; use `{ ... }` for ordinary lexical scope. Member tasks are started by `go` within the block, excluding nested function bodies. A block with no such `go` is a compile error with a suggestion to use an ordinary block.
 
 ```ebnf
-ScopeStmt       ::= 'scope' Block
-LinkedScopeStmt ::= 'linked' 'scope' Block          // sibling failure -> cancel all + rethrow
+ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
+TryScopeStmt ::= 'try' ScopeStmt
 ```
 
-```xray
-// lexical scope use
-var x = 1
-scope {
-    var x = 10            // shadow the outer x; in effect inside the block
-    print(x)              // 10
-}
-print(x)                  // 1
+Both forms are statements without an aggregate value and wait for all member tasks to terminate before exit. A business-error-producing scope requires `try scope` or an enclosing protected `try { }` region.
 
-// structured concurrency use (with go)
-scope {
-    go worker_a()
-    go worker_b()
-    // before the block exits, both a/b are awaited; an exception in either does not affect siblings
-}
-```
+| Form | On child failure (including panic) | On exit |
+|--|--|--|
+| Default `scope` | Cancel the remaining siblings | Propagate the first failure on its original error or panic channel |
+| `scope(isolated)` | Let siblings continue | Aggregate failures as `TaskFailures<E>` |
 
-**Two scope variants**:
+The default scope's business error type is the union of child error types; when all are `Never`, it needs no `try`. The isolated form uses `TaskFailures<E>` for that same union. Its panic aggregation when `E = Never` conflicts with the proposed marker exemption and still needs joint Task329/Task331 resolution; no marker exemption is promised for that case.
 
-| Form | Behaviour when a child coroutine throws | Return value |
-|---|---|---|
-| `scope { ... }` | Siblings are not cancelled; exceptions do not propagate outward (each task is independent) | none (statement form) |
-| `linked scope { ... }` | **Cancels all siblings** and **rethrows** the first exception outward | none |
-
-Neither form returns an aggregate result. To observe a specific child status, keep an explicit task handle and call `awaitResult()` or `awaitTimeout(ms)`; to aggregate by result, use `await all` / `await any` / `await anySuccess`.
-
-```xray
-// linked scope: failure propagation
-try {
-    linked scope {
-        go ok_worker()
-        go failing_worker()         // throws
+```xray @check
+fn worker(n: i64) -> i64 { return n + 1 }
+fn main() {
+    var x = 1
+    { var x = 10; print(x) }
+    print(x)
+    scope {
+        go worker(1)
+        go worker(2)
     }
-} catch (e) {
-    print("caught:", e)              // hits this branch
 }
-
-// scope: keep task handles and inspect each outcome after the block
-var first: Task<i64>?
-var second: Task<i64>?
-var third: Task<i64>?
-scope {
-    first = go failing("error1")
-    second = go failing("error2")
-    third = go ok()
-}
-var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]
-print(len(outcomes))                 // 3 (one outcome per child)
+try main()
 ```
 
-**General semantics**:
-- `scope` is not a function call and does not require an import; it is a keyword block statement.
-- Both forms await every coroutine started by `go` inside the block before exiting.
-- Both forms are statements only; neither may appear in an expression position.
+```xray @check
+enum WorkerErr { Failed }
+fn worker(ok: bool) throws(WorkerErr) -> i64 {
+    if (!ok) { throw WorkerErr.Failed }
+    return 1
+}
+fn main() {
+    try scope(isolated) {
+        go(name: "first") worker(false)
+        go(name: "second") worker(true)
+    }
+}
+try main()
+```
+
+Cancellation caused by the scope itself is not a failure. If the enclosing task is cancelled, the scope cancels and waits for its children, then continues cancellation unwinding. Thus its business error type excludes `Cancelled`. Concurrent failure ties and aggregation of independently cancelled children remain unsettled; no additional deterministic ordering is promised. Keep handles for individual waits or use §10.3 library functions when values are needed. A `go` outside a scope starts an independent task.
 
 ### 10.8 `move` — cross-coroutine ownership transfer
 
@@ -5859,6 +5887,8 @@ i64 addition/subtraction wraps modulo 2^64 as in §2.3.1; subtracting a MIN delt
 
 Each resume of f64 add/sub/fetchAdd/fetchSub attempts at most one value-cell CAS. On failure preserve the latest observed value and once-evaluated arguments, return canonical Unit CONTINUE, and keep the active frame/pc READY; the next resume recomputes the software candidate. CONTINUE creates no SUSPEND, wake token, language yield or second execution pipeline. Real poll/frame/work charging, cancellation and release use the same Call driver; no unbounded retry loop hides in one resume. Stopping before success leaves the cell unchanged; cancellation after success does not roll it back. The initial load also uses a legal read order.
 
+The retained Atomic execution contract includes per-attempt execution-permission, budget and cancellation checks. Its boundary with Task cancellation unwinding only at suspension points (§10.4) needs lead/c alignment during Task329/Task331 execution integration. A CONTINUE that produces no SUSPEND is not an additional language suspension point.
+
 Unsupported targets use one explicit UNSUPPORTED route. Host lock-free capability does not determine language legality in Checked, queries, specialization reverification or ordinary Lower. Provider/SDK/Target admission requires the exact target, flags, real cell/reference layout and executed capability probe; missing execution or malformed evidence grants no admission. After version/shape/full proof checks, before publication or any initializer, a closed Program containing constructed Atomic checks the linked common runtime capability; failure publishes no Program and does not transfer the original Lowered owner. Construction defensively checks the actual aligned unpublished cell again; false performs no value load/store/CAS/RMW, publishes no value and releases temporary owners. atomic_init is unpublished preparation, not a zero-write or allocation-free promise; reference-cell capability is checked first. Runtime UNSUPPORTED is a nonpanic terminal with canonical Unit, zero wake and empty panic, never consumed by a handler. Invalid objects, OOM, budgets and reference saturation retain their own first failure, while sticky initialization failure and release follow existing nonpanic paths. There is no mutex/libatomic non-lock-free fallback, and unknown or unverified targets are not treated as already supported.
 
 > `Ordering` describes the memory order of **one atomic operation**; that alone is not enough to derive program behaviour. How these values combine with the language-level synchronisation edges of channels, `go`, `await`, `scope` and `const` publication into happens-before is defined in §16.9, which also governs ordinary concurrent code that never mentions `Ordering`.
@@ -5870,24 +5900,24 @@ var val = counter.load(Ordering.Acquire)
 ```
 
 
-### 10.10 `Coro.yield()` — yield the CPU
+### 10.10 `Task.yieldNow()` — yield the CPU
 
 ```ebnf
-CoroYieldCall ::= 'Coro' '.' 'yield' '(' ')'
+TaskYieldCall ::= 'Task' '.' 'yieldNow' '(' ')'
 ```
 
-```xray
+```xray @fragment
 for (i in 0..1000) {
     do_chunk(i)
-    Coro.yield()                // explicit safepoint, lets other coroutines run
+    Task.yieldNow()                // explicit safepoint, lets other coroutines run
 }
 ```
 
-`Coro.yield()` is a cooperative scheduling point, equivalent to an explicit safepoint where the scheduler can run other coroutines and observe cancellation. `yield expr` is reserved for generator value production; bare `yield` is rejected.
+`Task.yieldNow()` is a cooperative scheduling point, equivalent to an explicit safepoint where the scheduler can run other coroutines and observe cancellation. `yield expr` is reserved for generator value production; bare `yield` is rejected.
 
-The call accepts no value or type arguments and returns unit; ordinary functions need no async annotation. A lexical binding shadowing `Coro` is resolved normally and cannot silently invoke the scheduling primitive. The new XIR source entry uses the same SUSPEND/resume protocol: its current single-host driver resumes a suspension with the matching instance epoch/wake. Full multithreaded scheduling and generator qualification remain separate.
+The call accepts no value or type arguments and returns unit; ordinary functions need no async annotation. A lexical binding shadowing `Task` is resolved normally and cannot silently invoke the scheduling primitive. This is the target API name; execution of the existing scheduling primitive does not prove that the new name is parsed and registered.
 
-The two share a word root but are not the same suspension: `Coro.yield()` yields to the scheduler (can migrate OS threads, is a cancellation point, propagates to callers along call edges), while `yield expr` transfers symmetrically back to the driver (none of those hold). See §3.16.1 for the point-by-point comparison. **A generator body must not call `Coro.yield()`** (`E0385`, see §3.16.2).
+The two share a word root but are not the same suspension: `Task.yieldNow()` yields to the scheduler (can migrate OS threads, is a cancellation point, propagates to callers along call edges), while `yield expr` transfers symmetrically back to the driver (none of those hold). See §3.16.1 for the point-by-point comparison. Generator suspension and close follow §3.16.2–§3.16.3; the old analyzer diagnostic E0385 does not define the new Task scheduling rules.
 
 ### 10.11 Concurrency safety model
 
@@ -5921,11 +5951,13 @@ These three are the model's **boundary**, not holes in it: each has to be writte
 
 ### 10.12 Logical root task and reachable runtime capabilities
 
+The retained paragraphs below record the existing execution path. Its old error inference and wait syntax do not define the target surface in §10.2–§10.7 or establish support for the new Task API.
+
 Program semantics expose one logical root task. Its physical representation is derived from the final artifact's reachable roots: a pure synchronous entry is **ELIDED**; an entry that only spawns children without suspending uses a **DESCRIPTOR**; an entry that suspends directly or transitively uses a **RESUMABLE_FRAME**. Ordinary non-suspendable functions keep the plain ABI, with no implicit coroutine context, frame, safepoint, or current-task lookup.
 
-An ordinary non-root parent does not implicitly join ordinary go children when its body completes; linked/scope waits follow their separate structured contracts. Dropping the last public Task handle neither cancels, drives nor blocks the task; the executor retains a running lease until the actual terminal state. The logical root first stores its owned body outcome. Within finite cumulative limits, the host drives all work already accepted by that executor to terminal states before reporting external completion. An ordinary child failure does not implicitly replace the root outcome. Exhaustion or explicit stop closes admission, revokes waits, performs bounded cleanup and release, then reports the actual LIMIT/cancellation/cleanup failure. A closed dependency with no ready work and no real external wake source is rejected by a bounded check, without spinning or detaching.
+An ordinary non-root parent does not implicitly join ordinary go children when its body completes; scope waits follow their separate structured contracts. Dropping the last public Task handle neither cancels, drives nor blocks the task; the executor retains a running lease until the actual terminal state. The logical root first stores its owned body outcome. Within finite cumulative limits, the host drives all work already accepted by that executor to terminal states before reporting external completion. An ordinary child failure does not implicitly replace the root outcome. Exhaustion or explicit stop closes admission, revokes waits, performs bounded cleanup and release, then reports the actual LIMIT/cancellation/cleanup failure. A closed dependency with no ready work and no real external wake source is rejected by a bounded check, without spinning or detaching.
 
-The first new XIR go/Task/await contract admits direct go calls, Task<i64>/Task<string> and plain await. One FIFO performs at most one canonical Call transition per dispatch; waits leave the C stack. All arguments and result ownership are prepared before queue publication; failure publishes neither queue entry nor handle. A worker and its reachable direct calls cannot read ordinary mutable module slots or write/initialize any module slot. Const slots still require Sendable, existing read permission and initialization state. Unknown indirect calls, loans, Cell captures and unconnected types fail as unimplemented; these implementation boundaries do not restrict the future complete language. This freeze does not claim Source/VM/native implementation: formal identities remain 25/65/21/26/29. Full M:N, Channel, generators, linked/scope, Task<null>/Unit and public status methods require separate qualification.
+The first new XIR go/Task/await contract admits direct go calls, Task<i64>/Task<string> and plain await. One FIFO performs at most one canonical Call transition per dispatch; waits leave the C stack. All arguments and result ownership are prepared before queue publication; failure publishes neither queue entry nor handle. A worker and its reachable direct calls cannot read ordinary mutable module slots or write/initialize any module slot. Const slots still require Sendable, existing read permission and initialization state. Unknown indirect calls, loans, Cell captures and unconnected types fail as unimplemented; these implementation boundaries do not restrict the future complete language. This freeze does not claim Source/VM/native implementation: formal identities remain 25/65/21/26/29. Full M:N, Channel, generators, scope, Task<null>/Unit and public status methods require separate qualification.
 
 The complete outcome crossing a Task boundary must satisfy owned and Sendable rules; checking the successful T alone is insufficient. Existing effect summaries prove escaping value errors from the worker and reachable calls: every variant payload of the authentic Error enum must be Sendable, rather than only the thrown variant or a nominal type marker. Generic errors require both Error and Sendable constraints at the definition. The first slice rejects unknown or unauthenticated escaping errors as unimplemented. Local non-Sendable values that do not escape and ordinary synchronous throws are unaffected. Before Task terminal publication, the runtime admits native THROWN payloads using the actual closed type and field authority. Malformed payloads, OOM, LIMIT and host faults retain their accurate statuses through cleanup instead of becoming PanicInfo. The current panic carrier contains only scalar fault detail and owned strings; future extensions must prove Sendable and lifetime for the complete payload again.
 
@@ -8512,6 +8544,8 @@ Mutable local callback captures retain actual Cell/loan, cleanup and CTFE closur
 
 > The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `i64` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
 
+Ordinary entries follow the header; the proposed reservations below are separate target diagnostics. The old defer-error fallback is removed from the target runtime table. Removing its execution path remains Task329 P2 work and depends on settling panic during cleanup.
+
 ### 18.1 Lexer and Parser
 
 | Code | C name | Meaning |
@@ -8554,6 +8588,18 @@ Mutable local callback captures retain actual Cell/loan, cleanup and CTFE closur
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | static type is not iterable |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | invalid operand type |
 
+#### Error-signature diagnostics (proposed reservations, not registered)
+
+These Task329 P0 numbers require lead review. The current `xerror_codes.h` has no definitions, emitters or golden negative cases for them. Implementation must register the header, emitter and tests together; this proposal is not evidence that the compiler emits these diagnostics.
+
+| Code | Proposed C name | Trigger |
+|--|--|--|
+| `E0330` | `XR_ERR_MISSING_TRY` | Potentially throwing call has no marker or protected try region |
+| `E0331` | `XR_ERR_UNDECLARED_ERROR` | Escaping error is outside the enclosing declared error type |
+| `E0332` | `XR_ERR_OVERRIDE_ERROR_TYPE` | Implementation or override error type is not a subset of its required signature |
+| `E0333` | `XR_ERR_ERASED_THROWS_RESTRICTED` | Erased errors in freestanding or @strict(alloc), including bare throws and throws(Error) |
+| `E0334` | `XR_ERR_CATCH_TYPE_AS_BINDING` | Single uppercase-leading catch identifier; suggest catch (e: T) |
+
 #### Analyzer
 
 | Code | C name | Meaning |
@@ -8574,6 +8620,7 @@ Mutable local callback captures retain actual Cell/loan, cleanup and CTFE closur
 | `E0363` | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | unsafe closure capture |
 | `E0364` | `XR_ERR_ANALYZE_AWAIT_TYPE` | invalid `await` operand type |
 | `E0365` | `XR_ERR_ANALYZE_MISSING_TYPE` | no inferable type or initializer |
+| `E0366` | `XR_ERR_ANALYZE_INTRINSIC_NOT_A_VALUE` | Intrinsic used as an ordinary value |
 | `E0367` | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | incomplete interface implementation |
 | `E0368` | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | invalid tuple field name |
 | `E0369` | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field out of range |
@@ -8600,7 +8647,11 @@ Mutable local callback captures retain actual Cell/loan, cleanup and CTFE closur
 | `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union members are not discriminable at run time (two members of the same numeric family) |
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | the uniqueness evidence `move` requires does not hold (live alias, published root, unknown provenance, incomplete storage plan) |
 | `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point or creates a task; see §4.9 / §8.3.1 |
+| `E0393` | `XR_ERR_ANALYZE_CLOSURE_CYCLE` | Closure and captured object form a reference cycle |
+| `E0394` | `XR_ERR_ANALYZE_WEAK_FIELD` | Invalid weak field type or execution domain |
 | `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | a defer body exits its function with `return`, or crosses the cleanup boundary with `break` / `continue` |
+| `E0396` | `XR_ERR_ANALYZE_BINDING_STATE` | Read of a moved or possibly moved binding |
+| `E0397` | `XR_ERR_ANALYZE_MOVE_CAPABILITY` | Move capability or constraint violation |
 
 ### 18.3 Runtime
 
@@ -8636,7 +8687,6 @@ Mutable local callback captures retain actual Cell/loan, cleanup and CTFE closur
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | stack overflow |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
-| `E0443` | `XR_ERR_DEFER_THROW` | an error escaped a `defer` body; uncatchable, terminates the process (see §8.3.1 rule D3) |
 | `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup attempted to create a task or reach the scheduler; fails closed before any such side effect |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
@@ -8781,14 +8831,14 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  TryExpr
            |  'move' UnaryExpr
-           |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
+           |  'await' UnaryExpr
            |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
 
 TryExpr   ::= 'try' ('?' | '!')? TernaryExpr
 
-GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
+GoExpr    ::= 'go' GoOptions? CallExpr
 GoOptions ::= '(' 'name' ':' StringLiteral ')'
 CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 
@@ -8842,7 +8892,7 @@ CallArg ::= ('ref' | 'out') Expression
           | Expression
 ```
 
-When the next token after `try` is `{`, parse only `TryStmt`; otherwise parse `TryExpr`. `try?` / `try!` cannot modify blocks. A `TryExpr` operand extends to the current expression boundary without consuming an unparenthesized assignment operator. Parentheses, argument separators, and statement endings still bound expressions. An unparenthesized combination of `try?` and `??` is an error; write `(try? expr) ?? fallback`. The ordering for marked waits is `try await task`, not `await try task`.
+When the next token after `try` is `{`, parse only `TryStmt`; before `scope`, parse `TryScopeStmt` (§10.7); otherwise parse `TryExpr`. `try?` / `try!` cannot modify blocks. A `TryExpr` operand extends to the current expression boundary without consuming an unparenthesized assignment operator. Parentheses, argument separators, and statement endings still bound expressions. An unparenthesized combination of `try?` and `??` is an error; write `(try? expr) ?? fallback`. The ordering for marked waits is `try await task`, not `await try task`.
 
 A Unit-returning function type omits `ReturnType`, as in `fn()` or `fn() throws(E)`; explicit `-> ()` is not allowed in type position (§2.8). `extern "C"` declarations and `CFn` callbacks must be non-throwing and cannot carry throwing signatures (§5.2.9).
 
@@ -8894,6 +8944,7 @@ Statement ::= ExprStmt
            |  ForInPairStmt
            |  MatchStmt
            |  ScopeStmt
+           |  TryScopeStmt
            |  SelectStmt
            |  ReturnStmt
            |  BreakStmt
@@ -8939,7 +8990,8 @@ DeferStmt ::= 'defer' Block
 
 // go is an expression returning Task<T, E>. It is not a separate statement category (it appears wrapped in ExprStmt).
 
-ScopeStmt ::= 'linked'? 'scope' Block
+ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
+TryScopeStmt ::= 'try' ScopeStmt
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // receive

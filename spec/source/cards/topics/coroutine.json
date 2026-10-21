@@ -29,20 +29,22 @@
     },
     {
       "heading": "Common constraints",
-      "markdown": "`go` accepts only a call expression; inline logic uses an immediately invoked lambda. Under the settled target ownership contract, arguments and captures must be Sendable. A go lambda may capture const values, copyable non-view READ values, and qualified synchronization handles, but never an ordinary outer `var`, even for reads. Pass copyable, Sendable local data explicitly by value; Array arguments preserve logical copies without a required copy/move marker. Noncopyable resources transfer through declared consuming parameters. `linked go` is the semantic prefix; `go(name: ...)` only adds diagnostic metadata. Waiting uses `await task`; Task results must be copyable and Sendable, and `await all` is homogeneous. Complete go/Task behavior, including repeated observation and cancellation, remains subject to declaration-family qualification under spec §17; these rules are not a claim of completed new-XIR concurrency support."
+      "markdown": "`go` accepts a call expression and yields `Task<T, E>`, with E from the declared error signature and default Never. Arguments, captures and complete outcomes must be Sendable; ordinary outer var capture is forbidden. Pass copyable local values explicitly; noncopyable resources use consuming parameters. try await t propagates E | Cancelled. Task.all/first/firstSuccess accept homogeneous `Array<Task<T, E>>` and are suspending functions without await prefixes. A scope owns child cancellation and failure propagation; go outside a scope is independent. The target API and complete concurrency implementation still require qualification."
     },
     {
       "heading": "Task handle",
       "fences": [
         "coro-task-handle"
-      ]
+      ],
+      "markdown": "poll() returns `TaskResult<T, E>?`; null means unfinished. awaitResult() reports one of Success(T), Error(E), Panic(PanicInfo), Cancelled. Payload type notation does not define field names. Cancellation is checked only at suspension points and cannot be caught by the cancelled task; a waiter sees typed Cancelled."
     },
     {
       "heading": "scope — structured concurrency",
       "fences": [
         "coro-scope",
-        "coro-linked-scope"
-      ]
+        "coro-isolated-scope"
+      ],
+      "markdown": "Default scope cancels siblings on a child failure and propagates the first failure on its original channel after all children terminate. Isolated scope lets siblings continue and aggregates failures as `TaskFailures<E>`. Scope-induced cancellation is not a failure. The isolated Never/panic marker boundary remains unsettled; see spec 10.7."
     },
     {
       "heading": "select — multiplex channels",
@@ -51,12 +53,12 @@
       ]
     },
     {
-      "heading": "Coro.yield() vs yield expr — two different suspensions",
+      "heading": "Task.yieldNow() vs yield expr — two different suspensions",
       "fences": [
         "coro-yield-loop",
         "expr-yield"
       ],
-      "markdown": "`yield expr` delivers one owned element and parks its independent producer frame; `yield ()` is a real Unit element, never EOS. `Coro.yield()` produces no element and returns the activation to its executor queue. Consumption may wait through the producer, so `hasNext()` and `next()` cannot promise `no_suspend`. Creating the lazy Iterator executes no body and has no immediate producer throw.\n\nRepeated `hasNext()` preserves a cached yield without advancing; `next()` transfers its owner once. Exhaustion is reported by false from `hasNext()` and E0432 from an exhausted `next()`. One Iterator accepts one consumer at a time. Consumer cancellation and early abandonment close the producer and run registered unfinished cleanup exactly once. An unstarted producer has registered no defer. Drop only signals close, and the original executor drains it before Instance code retirement.\n\nThe Checked development subset and its unqualified waits, borrow environments, for-in, Channel and platform paths are listed in spec §17.39. This does not claim complete Generator, scheduler or async-stream qualification. The old analyzer generator-scheduling and defer bans (E0385/E0386) are historical diagnostics, not the current Checked rules."
+      "markdown": "`yield expr` delivers one owned element and parks its independent producer frame; `yield ()` is a real Unit element, never EOS. `Task.yieldNow()` produces no element and returns the activation to its executor queue. Consumption may wait through the producer, so `hasNext()` and `next()` cannot promise `no_suspend`. Creating the lazy Iterator executes no body and has no immediate producer throw.\n\nRepeated `hasNext()` preserves a cached yield without advancing; `next()` transfers its owner once. Exhaustion is reported by false from `hasNext()` and E0432 from an exhausted `next()`. One Iterator accepts one consumer at a time. Consumer cancellation and early abandonment close the producer and run registered unfinished cleanup exactly once. An unstarted producer has registered no defer. Drop only signals close, and the original executor drains it before Instance code retirement.\n\nThe Checked development subset and its unqualified waits, borrow environments, for-in, Channel and platform paths are listed in spec §17.39. This does not claim complete Generator, scheduler or async-stream qualification. The old analyzer generator-scheduling and defer bans (E0385/E0386) are historical diagnostics, not the current Checked rules."
     },
     {
       "heading": "defer — LIFO cleanup",

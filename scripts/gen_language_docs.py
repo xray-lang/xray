@@ -11,8 +11,8 @@ from typing import Any
 
 FRONT_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.S)
 BLOCK_RE = re.compile(r"<!--\s*xr-spec:(?P<name>[a-z_]+)\s*-->\n(?P<body>.*?)\n<!--\s*/xr-spec:(?P=name)\s*-->\n?", re.S)
-FENCE_ID_RE = re.compile(r"^```xray\s+@id=(?P<id>[A-Za-z0-9_-]+)\s*$\n(?P<code>.*?)\n```\s*$", re.M | re.S)
-FENCE_ID_INFO_RE = re.compile(r"^(```xray)\s+@id=[A-Za-z0-9_-]+\s*$", re.M)
+FENCE_ID_RE = re.compile(r"^```xray[ \t]+@id=(?P<id>[A-Za-z0-9_-]+)(?:[ \t]+@(?:run|check|fragment|error=E\d{4}))?[ \t]*$\n(?P<code>.*?)\n```[ \t]*$", re.M | re.S)
+FENCE_ID_INFO_RE = re.compile(r"^(```xray)[ \t]+@id=[A-Za-z0-9_-]+(?P<expectation>[ \t]+@(?:run|check|fragment|error=E\d{4}))?[ \t]*$", re.M)
 
 SPEC_OUTPUTS = {
     "cn": "LANGUAGE_SPEC_CN.md",
@@ -81,7 +81,7 @@ def extract_fences(unit_path: Path, blocks: dict[str, str], registry: dict[str, 
 
 
 def strip_fence_id_markers(text: str) -> str:
-    return FENCE_ID_INFO_RE.sub(r"\1", text)
+    return FENCE_ID_INFO_RE.sub(r"\1\g<expectation>", text)
 
 
 def block_shape(text: str) -> dict[str, int]:

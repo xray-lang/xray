@@ -4490,20 +4490,19 @@ READ结构体方法值 `receiver.method` 在绑定时对receiver求值一次，�
 
 Xray 的错误处理分为两个严格分离的通道：
 
-| 通道 | 语法 | 适用场景 | 运行时开销 |
-|--|--|--|--|
-| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **低开销**（不分配 `PanicInfo`、不 unwind；需传播/捕获错误的调用边界只有可预测分支） |
-| **panic 通道**（`catch panic`） | 运行时故障（越界、除零、不完整 match） | 有限栈展开 |
+| 通道 | 语法 | 用途 |
+|--|--|--|
+| 值错误 | `throws(E)`、`throw`、`try`、`catch` | 业务错误与可恢复失败 |
+| panic | `catch panic` | 越界、除零等运行时故障 |
 
-设计原则：
+- **错误是值**：错误载荷是 enum 值；传播不把它转换为 `PanicInfo`。
+- **签名决定错误类型**：省略 `throws` 表示 `Never`，即保证不抛业务错误；`throws(E)` 声明允许逃逸的错误类型，裸 `throws` 等价于 `throws(Error)`。签名和函数类型规则见 §2.2、§5.2。
+- **检查是局部的**：每个函数按自身正文和被调用签名检查错误子集，不分析被调函数体、不做全程序错误推导。没有错误子句的具名函数不会自动获得抛错签名；闭包规则见 §5.2。
+- **传播点可见**：可能抛错的调用必须在 `try`、`try?`、`try!` 表达式或 `try { }` 的保护区域内（§8.1.6）。
+- **panic 不进入签名**：不抛业务错误的函数仍可能 panic；`try?` 不会吞掉 panic。
+- **`defer` 替代 `finally`**：清理绑定最近的真实 `{}` 块，清理体必须静态证明没有逃逸的业务错误（`E0387`，§8.3.1）。
 
-- **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 PanicInfo 对象。
-- **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
-- **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
-- **错误集合不进入公开函数类型**：具体错误 enum/variant 集合由同一已检查程序的效应分析维护；内部三态 throw-effect 事实（`UNKNOWN` / `MAY_THROW` / `NO_THROW`）关联相应函数与可调用节点，供安全约束和代码生成消费。
-- **no-throw 始终推导**：需要冻结 no-throw 保证时使用 `xray verify` 合同；未知或不完整证明按 may-throw 处理。
-- **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用**块作用域**的 `defer`（绑定最近的真实 `{}` 块，见 §4.9 / §8.3）。
-- **清理边不是错误传播边**：`defer` 体不得让错误逃逸，该约束由编译期规则强制（`E0387`），见 §8.3.1。
+本章给出 Task329 的目标语言规则；示例的执行资格以冒烟门结果为准。规范生成通过不代表 `throws`、新 Task 形状或新诊断已经实现。
 
 ### 8.1 值返回错误通道
 
@@ -4511,7 +4510,7 @@ Xray 的错误处理分为两个严格分离的通道：
 
 `throw expr` 抛出一个枚举错误值。其实际值必须是枚举变体；静态类型可以是具体 enum、内置 `Error`，或定义处已证明 `Error` 约束的普通类型参数：
 
-```xray
+```xray @check
 enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ 简单枚举变体
@@ -4534,7 +4533,7 @@ throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚�
 
 #### 8.1.2 `try` / `catch`
 
-```xray
+```xray @fragment
 enum IOErr { Timeout, Refused { reason: string } }
 
 try {
@@ -4557,7 +4556,7 @@ try {
 
 `catch` 变量可带类型注解 `catch (e: T)`，运行时用 `is T` 判断枚举类型是否匹配。支持多个 `catch` 子句，按声明顺序匹配：
 
-```xray
+```xray @fragment
 enum NetErr { Timeout, Refused }
 enum DbErr { ConnLost, QueryFailed { query: string } }
 
@@ -4577,7 +4576,7 @@ try {
 - 有类型注解的 `catch (e: SomeErr)` 仅当错误值 `is SomeErr` 为真时匹配，其中 `SomeErr` 是具体 enum 错误类型
 - 多个 `catch` 子句按声明顺序匹配，首个匹配者执行
 - 若所有类型化子句均不匹配且没有 catch-all，错误继续向上传播
-- 一个 `try` **必须**至少跟随 `catch`（普通 `catch` 或 `catch panic`）
+- 一个 `try` 语句 **必须**至少跟随 `catch`（普通 `catch` 或 `catch panic`）
 
 内置 `Error` 是只容纳 enum 的持有值类型。enum 到 Error 的值转换保留实际名义身份、泛型实参、活动变体与载荷；复制、保存、返回和重新抛出均遵守相同值所有权规则。Error 不提供任意字段、构造或可见性权限，也不隐式证明 `Sendable`。读取具体变体载荷前必须完成有权限的类型窄化。普通泛型转换在定义处按约束检查，特化后复验，不能等调用处看到具体 enum 才补充证明。
 
@@ -4587,7 +4586,7 @@ catch 绑定仅在对应 handler 内可见，绑定及其值语义部分只读�
 
 普通 `catch` 的头部始终写在括号内。括号内是标识符且后跟 `:` 或 `)` 时为绑定（`catch (e)`、`catch (e: T)`），否则为 enum variant pattern：
 
-```xray
+```xray @fragment
 enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
 
 try {
@@ -4603,15 +4602,24 @@ try {
 - 逗号分隔的备选必须属于同一个 enum 类型。首个备选确定该 handler 的 enum 类型：Error 不携带静态类型实参，所以泛型 enum 必须在首个备选写全类型实参（如 `Event<string>.Failed { message }`）；其余备选须命名同一声明，省略的类型实参取自该类型，显式写出的必须完全相同。
 - 先判断错误值是否属于该 enum 类型，再按源码顺序测试备选。类型、变体、字面量或范围任何一项不匹配时，继续尝试下一个 `catch` 子句；全部不匹配时原错误值不变地继续传播。pattern handler 不要求穷举，也不会产生匹配失败（`E0442`）。
 - 各备选必须绑定同名、同静态类型的变量。pattern 绑定只读，仅在该 handler 内可见，与 catch 绑定规则相同。
-- 括号内的裸标识符是 catch-all 绑定：`catch (NetErr)` 绑定一个名为 `NetErr` 的 Error 值，而不是类型过滤；按类型过滤写 `catch (e: NetErr)`。`_`、字面量、范围，以及元组、对象、数组和 `is` 类型模式都不能作为 catch 头部。
+- 括号内单个标识符是 catch-all 绑定，但大写开头标识符与裸 `_` 除外。单个大写开头标识符如 `catch (NetErr)` 报 `E0334`，提示改成 `catch (e: NetErr)`；它既不是类型过滤，也不建立同名绑定。`_`、字面量、范围，以及元组、对象、数组和 `is` 类型模式都不能作为 catch 头部。
 - 普通 `catch` 不能省略头部；只有 `catch panic` 可以省略。
 - 泛型 enum 目标在定义处按约束检查。不可执行的 pattern handler 同样完整检查名称、类型、约束、可见性、字段与绑定。
+
+```xray @error=E0334
+enum NetErr { Failed }
+fn work() throws(NetErr) { throw NetErr.Failed }
+fn main() {
+    try { work() } catch (NetErr) { print("failed") } // error: use catch (e: NetErr)
+}
+try main()
+```
 
 #### 8.1.3 重抛与错误转换
 
 `catch` 块内可重抛原错误或抛出不同枚举的新错误：
 
-```xray
+```xray @fragment
 enum LowErr { Fail }
 enum HighErr { Upstream }
 
@@ -4627,7 +4635,7 @@ try {
 
 定义业务错误推荐使用 ADT enum，载荷携带上下文信息：
 
-```xray
+```xray @fragment
 enum HttpErr {
     NotFound { message: string },
     ServerError { code: i64, message: string },
@@ -4640,7 +4648,7 @@ enum ParseErr {
     Overflow,
 }
 
-fn fetchUser(id: i64) -> User {
+fn fetchUser(id: i64) throws(HttpErr) -> User {
     if (id <= 0) { throw HttpErr.NotFound { message: "user not found" } }
     // ...
 }
@@ -4660,38 +4668,64 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 #### 8.1.5 错误的协程边界
 
-值返回通道的错误**不自动跨协程传播**。子协程内未捕获的错误：
+`go f(...)` 把 `f` 的返回类型与声明错误类型保存在 `Task<T, E>` 中；省略错误参数时 `E = Never`。启动本身不向调用方传播子任务的业务错误，独立子任务失败也不自动取消父任务。
 
-- 子协程终止，错误记录到 `coro.error`
-- 父协程**不**自动感知
+- `try await t` 等待结果，成功时返回 `T`，业务错误按 `E | Cancelled` 传播；子任务 panic 仍走 panic 通道。
+- `t.awaitResult()` 将终态作为四变体 `TaskResult<T, E>` 返回，业务错误不会从该方法重抛；等待者自身的取消仍按取消展开处理。
+- `try scope { ... }` 在子任务失败时取消兄弟并在结束处传播首个失败；`try scope(isolated) { ... }` 保留兄弟执行并汇总失败。详见 §10.7。
 
-传递子协程错误的方式：
-
-1. **Channel 显式传递**：
-
-```xray
-enum WorkerErr { Failed { message: string } }
-const err_ch = Channel<string>(1)
-
-go fn() {
-    try {
-        riskyWork()
-        err_ch.send("ok")
-    } catch (e) {
-        err_ch.send("error")
-    }
-}()
-
-var result = match (err_ch.recv()) {
-    Recv.Value { value: v } -> v
-    _ -> "error"
-}
-if (result != "ok") { log("worker failed") }
+```xray @fragment
+var task = go fetch(url)
+var value = try await task
+var outcome = task.awaitResult()
 ```
 
-2. **`linked go call()`**（见 §10.2）：独立启动的子 Task 失败会取消其父 Task 与关联子树；调用方仍可通过返回的 Task 观察精确错误。
+等待取消的子任务得到类型化的 `Cancelled`；当前任务自身被取消时执行 `defer` 后展开，不能被任何 catch 捕获，也不写入当前函数签名（§10.4）。
 
-3. **结构化并发 `linked scope`**（推荐，见 §10.5）：scope 内任一子协程的错误自动传播给父 scope，按正确的通道路由（值返回通道的 enum 错误通过 `catch` 捕获）。
+#### 8.1.6 `try` 表达式与局部错误检查
+
+`try expr` 传播表达式的业务错误；`try? expr` 将业务错误转成 `null`；`try! expr` 在业务错误出现时触发携带该错误值的 panic。后三者都不建立 catch 块。
+
+一个标记覆盖右侧整个非赋值表达式中的调用；括号、参数分隔符和语句结束限定范围。`try?` 与 `??` 连用必须写 `(try? expr) ?? fallback`。等待顺序固定为 `try await t`。
+
+```xray @run
+enum ParseErr { Empty }
+fn parse(s: string) throws(ParseErr) -> i64 {
+    if (len(s) == 0) { throw ParseErr.Empty }
+    return 42
+}
+fn forward(s: string) throws(ParseErr) -> i64 { return try parse(s) }
+fn main() {
+    print(try forward("ok"))
+    print((try? parse("")) ?? 8080)
+    print(try! parse("ok"))
+}
+try main()
+```
+```output
+42
+8080
+42
+```
+
+`try { }` 保护区域内的调用视为已标记；区域不延伸到闭包、嵌套函数或该 try 语句自身的 catch handler。嵌套 handler 仍可处于外层 try 的保护区域内。catch 覆盖的错误从保护块的错误集合中扣除，其余错误与 handler 自身的逃逸错误必须包含在所在函数的声明中。`throw` 直接产生错误，不另加 `try`。模块顶层和程序入口 `main` 隐式允许任意错误，但传播调用仍需标记。这项入口许可不免除显式调用点的检查；模块顶层调用可能抛错的入口时仍写 `try main()`。
+
+缺少传播标记和签名未声明错误是两类不同诊断（§18.2 的预留编号）：
+
+```xray @error=E0330
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn main() { fail() } // error: missing try
+try main()
+```
+
+```xray @error=E0331
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn caller() { try fail() } // error: undeclared escaping error
+fn main() { caller() }
+try main()
+```
 
 ### 8.2 Panic 通道
 
@@ -4711,7 +4745,7 @@ panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信�
 
 `catch panic` 捕获 panic 通道的运行时故障：
 
-```xray
+```xray @fragment
 try {
     var arr: Array<i64> = [1, 2, 3]
     var v = arr[10]                          // 越界 → panic
@@ -4728,7 +4762,7 @@ try {
 
 **`catch` 与 `catch panic` 可共存**，分别处理两个通道：
 
-```xray
+```xray @check
 enum AppErr { InvalidArg }
 
 try {
@@ -4746,7 +4780,7 @@ try {
 
 `PanicInfo` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `PanicInfo` 对象：
 
-```xray
+```xray @fragment
 class PanicInfo {
     message: string             // 人类可读消息（如 "index out of bounds"）
     stack: Array<string>        // 自动捕获的调用栈
@@ -4763,7 +4797,7 @@ class PanicInfo {
 
 **在 `catch panic` 中读取 panic 信息**：`catch panic (p)` 会把 `PanicInfo` 对象绑定到 `p`，可读取 `message`、`code`、`stack` 等字段：
 
-```xray
+```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
@@ -4774,7 +4808,11 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+message: array index out of range: 10 (length 3)
+code: 430
 ```
 
 #### 8.2.4 未捕获 panic 的顶层诊断
@@ -4803,12 +4841,12 @@ main()
 
 cleanup 块在退出时读取外部绑定。被读取的可移动 owner 在块退出前不得被 `move` 或返回，否则报 `E0382`；需要注册时值时必须先创建显式副本。这个 owner-lifetime 规则与下述错误通道规则相互独立。
 
-```xray
-fn fetch(url: string) -> string {
-    var conn = open(url)
+```xray @fragment
+fn fetch(url: string) throws(IoErr | FetchErr) -> string {
+    var conn = try open(url)
     defer { conn.close() }                   // 无论后续如何，conn 一定关闭
 
-    var data = conn.read()
+    var data = try conn.read()
     if (len(data) == 0) {
         throw FetchErr.Empty                 // defer 仍执行
     }
@@ -4828,43 +4866,62 @@ fn fetch(url: string) -> string {
 
 #### 8.3.1 `defer` 与错误
 
-`defer` 是**资源清理边**，不是错误传播边。清理路径失败意味着资源状态已不可知，因此语言既不允许清理错误覆盖在途错误（Go 模型），也不允许静默吞掉它。
+`defer` 是资源清理边，不能将业务错误向外传播或替换在途错误。
 
-**规则 D1（静态，规范性）**：若 `defer` 块的推断逃逸错误集**非空**，编译器报 `E0387`。
+**规则 D1（静态）**：清理体的逃逸错误类型必须是 `Never`，否则报 `E0387`。检查依据清理体和调用签名；间接函数值的 `throws(E)` 同样参与检查，不以运行时兜底接受未知错误。省略 `throws` 的清理 API 本身保证不抛业务错误。
 
-与 §8.0 的 throw-effect bit 不同，D1 **不是** fail-closed：xray 没有用户可书写的 no-throw 标注，若"无法证明不抛"即报错，作者面对间接调用、高阶内建方法、尚未登记契约的原生成员时将无从消解。无法证明的那部分交给规则 D3 的运行时兜底——这正是分层的意义。若将来引入用户可写的 no-throw 标注，D1 可收紧为"必须被证明"，D3 随之变为构造上不可达。
+**规则 D2（满足方式）**：调用不抛错的清理 API，或在清理体内完整处理错误。下面的正例与负例分开给出：
 
-```xray
-fn close(c: Conn) { throw IoErr.Closed }
-
-fn bad(c: Conn) {
-    defer { close(c) }                       // ❌ E0387：错误会逃出 cleanup
-}
-
-fn good(c: Conn) {
-    defer {                                  // ✅ 在 defer 体内自行处理
-        try { close(c) } catch (e) { log.warn("close failed") }
+```xray @run
+enum CloseErr { Failed }
+fn close() throws(CloseErr) { throw CloseErr.Failed }
+fn main() {
+    defer {
+        try { close() } catch (e: CloseErr) { print("close failed") }
     }
+    print("body")
 }
+try main()
+```
+```output
+body
+close failed
 ```
 
-**规则 D2（满足方式）**：在 `defer` 体内用 `try` / `catch` 消化错误，或调用不抛错的清理 API。这是唯一合法形式——它强制作者回答"清理失败了怎么办"。
+```xray @error=E0387
+enum CloseErr { Failed }
+fn close() throws(CloseErr) { throw CloseErr.Failed }
+fn main() {
+    defer { try close() } // error: error escapes cleanup
+}
+try main()
+```
 
-**规则 D3（运行时兜底，规范性）**：若错误仍从 `defer` 体逃逸——D1 未能静态判定的间接调用，或 `defer` 体内发生的 panic——运行时以 `E0443` **终止进程**，退出码 `70`：
-
-- 该终止**不可捕获**——`catch` 与 `catch panic` 都不拦截它。在 `defer` 体**内部**被自己 `catch` 住的错误或 panic 不算逃逸，属规则 D2 的正常写法。
-- 在途错误既不被替换也不被抑制；终止诊断报告逃逸的错误，并在存在在途错误时一并报告（枚举错误值不携带 message，此时显示 `<no message>`）。
-- VM 与 AOT 后端在此行为上必须逐字一致（含退出码与诊断文本）。
-
-**为什么不采用 Go 的"取代"语义**：Go 的 defer 要改写错误必须显式赋值给具名返回值，是可见的、局部的。xray 的函数签名不标 `throws`、调用点也无标记（§8.0），隐式的错误替换在源码上将完全不可见，且多个 `defer` 同时抛出时还需要一套替换链规则。fail-fast 是唯一既有定义、又不隐藏信息、又不引入额外规则的选项。
+不再定义业务错误逃出 defer 的运行时 D3 兜底。静态不抛业务错误不等于不会 panic：清理体内可用 `catch panic` 就地处理故障；清理期间新 panic 向外逃逸，特别是已有 panic 展开时的行为，仍需 Task329/Task316 联合定稿，本切片不定义替换、吞掉或二次终止策略。此边界未冻结前，不能宣称运行时旧兜底已经安全删除。
 
 ### 8.4 Optional 与错误处理
 
-`T?` 是 `T | null` 的语法糖，用于"二态：有值/无值"场景。详见 §2.5。与错误处理的关系：
+`T?` 表示语言项 `Optional<T>`，每层有独立的存在标签，不拆成含 null 成员的 union。`T | null` 只在语法边界改写成 `T?`；一般的 `Optional<Optional<T>>` 不自动展平（§2.5）。Optional 表达无错因的有值/无值；需要错因时用 `throws(E)` 与 `throw`。
 
-- **不带错因的失败**：用 `T?`（如字典查找返回 `null` 表示"无此键"）
-- 与 `??`（默认值）/ `?.`（可选链）/ `e!`（强制解包）配合
-- 不要把 `T?` 当通用错误返回——需要错因时用 `throw <enum>` + `catch`
+`try?` 有专门的结果类型规则：操作数类型不是 Optional 时得到 `T?`；已经是 `Optional<U>` 时保持原类型，不增加外层，也不递归展平现有层次。业务错误映射为该结果的 `null`，成功值原样返回。它不捕获 panic，也不捕获取消展开。
+
+```xray @run
+enum LookupErr { Failed }
+fn lookup(ok: bool) throws(LookupErr) -> i64? {
+    if (!ok) { throw LookupErr.Failed }
+    return 7
+}
+fn main() {
+    var found: i64? = try? lookup(true)
+    print(found ?? 0)
+    print((try? lookup(false)) ?? 0)
+}
+try main()
+```
+```output
+7
+0
+```
 
 ### 8.5 决策树：选择哪种机制
 
@@ -4908,7 +4965,7 @@ fn good(c: Conn) {
 
 #### 模式 1：enum 错误 + defer 资源清理
 
-```xray
+```xray @run
 enum ConnErr { Refused, Timeout }
 
 // 用一个极简的 "连接" 替身让示例自成一体。
@@ -4919,7 +4976,7 @@ class Conn {
     close() { print("closed") }
 }
 
-fn fetchData(alive: bool) -> string {
+fn fetchData(alive: bool) throws(ConnErr) -> string {
     var conn = Conn(alive)
     defer { conn.close() }             // 无论成功或抛错都会执行
     if (!conn.isAlive()) { throw ConnErr.Timeout }
@@ -4934,15 +4991,19 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+closed
+payload
 ```
 
 #### 模式 2：throw + catch 用于库 API
 
-```xray
+```xray @run
 enum ConfigErr { Missing { field: string } }
 
-fn requirePort(cfg: JSON.Object) {
+fn requirePort(cfg: JSON.Object) throws(ConfigErr) {
     if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
     print("port:", cfg["port"])
 }
@@ -4958,19 +5019,23 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+port: 8080
+missing field: port
 ```
 
 #### 模式 3：`??` 提供默认值
 
-```xray
+```xray @fragment
 var port = config?.port ?? 8080
 var user = db.findUser(id) ?? guestUser
 ```
 
 #### 模式 4：catch panic 兜底运行时故障
 
-```xray
+```xray @check
 fn safeDivide(a: i64, b: i64) -> string {
     try {
         return string(a / b)
@@ -4982,14 +5047,14 @@ fn safeDivide(a: i64, b: i64) -> string {
 
 ### 8.7 完整可运行示例
 
-以下均为自包含、可直接运行并通过 `xray check` 验证的完整程序（注释标注了真实输出）。
+以下为自包含的目标语言示例，`output` 给出期望标准输出；是否已支持须由 VM/AOT 冒烟门验证。
 
 #### 示例 1：`throw` / `catch` / `match`
 
-```xray
+```xray @run
 enum ParseErr { Empty, BadChar { value: string } }
 
-fn parseDigit(s: string) -> i64 {
+fn parseDigit(s: string) throws(ParseErr) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
     if (s == "x") { throw ParseErr.BadChar { value: s } }
     return 42
@@ -5006,15 +5071,18 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+empty input
 ```
 
 #### 示例 2：`defer` 的 LIFO 顺序与异常路径
 
-```xray
+```xray @run
 enum E { Boom }
 
-fn work() {
+fn work() throws(E) {
     defer { print("defer 1") }
     defer { print("defer 2") }
     print("body")
@@ -5025,21 +5093,19 @@ fn main() {
     try { work() } catch (e) { print("caught") }
 }
 
-main()
+try main()
 ```
-
-输出（`defer` 按 LIFO 逆序执行）：
-
-```
+```output
 body
 defer 2
 defer 1
 caught
 ```
 
+
 #### 示例 3：`catch panic` 兜底并读取故障信息
 
-```xray
+```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
@@ -5050,7 +5116,11 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+message: array index out of range: 10 (length 3)
+code: 430
 ```
 
 ---
@@ -5386,7 +5456,7 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 | 维度 | 选择 |
 |--|--|
 | 调度模型 | M:N（用户态协程 + 多 OS 线程） |
-| 调度策略 | 协作式（后向跳转、Channel、`await`、`Coro.yield()` 等调度/挂起点）+ work-stealing |
+| 调度策略 | 协作式（Channel、`await`、`Task.yieldNow()` 等挂起点；后向跳转不是取消检查点）+ work-stealing |
 | 栈模型 | Stackless（每协程独立 VM 值栈 + 帧数组，按需增长，无原生 C 栈） |
 | 创建开销 | ~微秒级（初始 VM 值栈约 64 槽 + 4 帧，非原生栈） |
 | 上下文切换 | VM 上下文切换（保存/恢复 VM 帧），无原生栈切换、无 syscall |
@@ -5396,14 +5466,14 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 ### 10.2 `go` — 启动协程
 
 ```ebnf
-GoExpr   ::= 'linked'? 'go' GoOptions? CallExpr
+GoExpr   ::= 'go' GoOptions? CallExpr
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
 GoOption ::= 'name' ':' StringLiteral
 ```
 
-`go` 是**表达式**，返回 `Task<T>` 句柄。它只接受调用表达式；内联逻辑必须写成被立即调用的 lambda：
+`go` 是**表达式**，返回 `Task<T, E>` 句柄。它只接受调用表达式；内联逻辑必须写成被立即调用的 lambda：
 
-```xray
+```xray @fragment
 // 形式 1：调用一个已声明的函数
 var t1 = go worker(0, channel)
 
@@ -5423,7 +5493,7 @@ var named = go(name: "worker-1") worker(1, channel)
 
 **按声明传值**：可复制且 Sendable 的实参形成拥有式逻辑副本，不要求 `copy(...)` 或 backing 唯一。不可复制且 Sendable 的资源仅按消费参数接管；可选 `move resource` 标记同一转移，不是 `go` 的选项。Task 结果必须可复制且 Sendable，资源不成为 Task 结果：
 
-```xray
+```xray @check
 var data = [10]
 var task = go fn(d: Array<i64>) -> i64 {
     return d[0] + 1
@@ -5440,93 +5510,69 @@ var task = go fn(x: i64) -> i64 {
 ```
 
 **语义**：
-- 每个 `go` 表达式都返回一个 `Task<T>`，其中 `T` 是被调函数的返回类型；返回 `()` 的函数对应 `Task<null>`。
+- 每个 `go` 表达式都返回一个 `Task<T, E>`，其中 `T` 是被调函数的返回类型，`E` 是其声明的错误类型，默认 `Never`。返回 Unit 的任务仍保留 Unit 成功值，不把它映射成 `null`。
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 参数、拥有式捕获和结果均按真实类型检查 Sendable；普通泛型在定义处按约束检查，Checked 特化后复验。可复制值按声明保留逻辑副本，复制在 class 与同步身份边界停止；Array 的资格由全部元素决定，const、COW、引用计数或单 worker 不额外授予 Sendable。借用 ref、Slice/MutSlice、Cell 与非 Sendable 值不能跨此边界。不可复制且 Sendable 的资源仅可按消费参数转移，不进入普通可复制捕获或 Task 结果。
-- `go(name: ...)` 中 `name` 仅是诊断/调试元数据；语义修饰符是前缀 `linked go`，不进入 `GoOptions`。
 - 普通外层 `var` 禁止被 `go` 闭包捕获，读和写都一样；这条规则不依赖协程数量或调度时序。多个协程的共享可变状态必须通过 `Channel`、`Atomic` 或 `sync` 的受审计句柄传递，直接捕获修改时报编译错误。
-- `linked go call()` 仍只接受调用表达式并返回普通 `Task<T>`。在独立 scope 之外，它把子 Task 挂到当前父 Task：父任务取消会递归取消子任务，子任务失败会取消父任务及其关联子树，父任务在已完成自身正文后仍等待链接子任务终结。在 `scope` 内，成员关系与错误传播统一由该 scope 的策略管理，不再叠加第二套父子关系。
 
 ### 10.3 `await` — 等待结果
 
 ```ebnf
-AwaitExpr ::= 'await' Expression
-           |  'await' 'all' Expression       // 等待全部完成
-           |  'await' 'any' Expression       // 等待任一完成
+AwaitExpr ::= 'await' UnaryExpr
 ```
 
-```xray
-// 单 task
-var task = go fetch("https://example.com")
-var result = await task                    // 让出当前协程直到 task 完成
+`await` 只作用于 `Task<T, E>`，成功时得到 `T`。等待是可能挂起的操作，不阻塞 OS 线程。传播标记顺序固定为 `try await t`；在 `try { }` 区域内可直接写 `await t`。
 
-// await all：等待全部完成，返回结果数组（与输入顺序一致）
-var t1 = go compute(2)
-var t2 = go compute(3)
-var t3 = go compute(4)
-var results: Array<i64> = await all [t1, t2, t3]
-// 也可直接对变量使用，无需中括号
-var tasks = [t1, t2, t3]
-var results2: Array<i64> = await all tasks
+```xray @fragment
+var task = go fetch(url)
+var result = try await task
 
-// await any：等待任一完成，返回该任务结果；其他任务继续运行
-var first = await any [t1, t2, t3]
-
-// await anySuccess：跳过失败任务，等待第一个成功的任务
-var firstOk = await anySuccess [t1, t2, t3]
+var tasks = [go compute(2), go compute(3), go compute(4)]
+var results = try Task.all(tasks)
+var first = try Task.first(tasks)
+var firstOk = try Task.firstSuccess(tasks)
+var bounded = try Task.timeout(task, 1000)
 ```
 
-**语义**：
+- 等待的业务错误类型由 Task 的 `E` 决定，再并上 `Cancelled`；即使 `E = Never`，显式等待也仍可能遇到子任务取消。无需从任务创建点或函数体反推错误集合。
+- 子任务的 enum 错误沿值错误通道传播，panic 沿 panic 通道传播。成功的 `null` 是真实 Optional 结果，不表示任务取消或失败。
+- Task 结果必须可复制且 Sendable；重复等待产生独立的逻辑值副本，class 与同步身份保持其身份。某次结果复制失败不消费或修改任务的终态。
+- 当前等待者自身被取消与等待一个已经取消的子任务不同；前者按 §10.4 的取消展开处理。
 
-- `await` 仅作用于 `Task<T>` 类型；其他类型为编译错误。
-- 用户统一写 `await task`，不写 `await (move task)`。Task 结果必须可复制且 Sendable；任务保留完整拥有式终态，重复 await 得到各自的逻辑副本，复制在 class 与同步身份边界停止。复制或持有失败只失败该等待者，不消费或修改 Task 的粘滞结果；不能由 backing 唯一性或引用计数选择单次 take 语义。
-- 当前协程**让出**直到目标完成（不阻塞 OS 线程）。
-- 异常传播：
-  - `await t` 按 t 抛出时所属的通道重抛它的失败。协程内的 `throw <enum>` 以值错误重抛，因此 await 所在栈帧的 `catch (e)` 能抓住它；没有 catch 时按值向上传播，与普通 throw 一致。协程内的 panic 仍以 panic 重抛并继续展开。
-  - 因此 `await t` 继承被等待协程体的错误集：含此类 `await` 的函数，其可失败性与该协程体一致。若 await 处无法确定 task 绑定的协程（从集合中取出、由参数传入等），则 fail-closed 按 may-throw 处理。
-  - `linked scope` 出口同理：它在所属栈帧中按子协程的通道重抛第一个失败的子协程。
-  - 把结果作为值报告的形式——`awaitResult()`、`awaitTimeout(ms)`——从不重抛，因此也不进入所在函数的错误集。
-  - `await t` 成功时返回 `T`；如果 `T` 是 `T?`，返回的 `null` 是任务真实结果，不代表取消或失败。
-  - `await all` 中任一任务抛异常即整体抛异常（其余任务会被取消）。
-  - `await any` 仅当**全部失败**时抛异常；只要有一个完成，返回该任务结果。
-  - `await anySuccess` 类似 `await any`，但**跳过**抛异常的任务，只等成功完成的。
-- `all` / `any` / `anySuccess` 在 `await` 后面是**上下文关键字**，仅在此位置生效。
-- `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<i64>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / `JSON.Value` 结果类型。
+多个任务的等待使用挂起库函数，前面不再写 `await`：
 
-### 10.4 `Task<T>` 句柄
+| 函数 | 返回 | 业务错误类型 | 其余任务 |
+|--|--|--|--|
+| `Task.all(ts)` | `Array<T>`，与输入顺序一致 | `E \| Cancelled` | 任一失败时取消其余 |
+| `Task.first(ts)` | 最先结束任务的值，或传播它的失败 | `E \| Cancelled` | 返回后取消其余 |
+| `Task.firstSuccess(ts)` | 第一个成功值 | 全部失败时 `TaskFailures<E>`，另有 `Cancelled` | 返回后取消其余 |
+| `Task.timeout(t, ms)` | `T` | `E \| Cancelled \| Timeout` | 超时后取消 `t` |
 
-`go expr` 返回 `Task<T>`，其中 `T` 为被调函数的返回类型。Task 句柄支持：
+前三者接受同构的 `Array<Task<T, E>>`，不隐式擦除异构结果或错误类型。类型不同的任务用 scope 加逐个等待。`TaskFailures<E>` 汇总失败任务的调试名称、输入位置以及错误值或 `PanicInfo`；其具体字段名不由上述语义记法定义。
 
-| 方法 / 属性 | 类型 | 说明 |
+### 10.4 `Task<T, E>` 句柄
+
+`go f(...)` 得到 `Task<T, E>`；`T` 是返回类型，`E` 是声明错误类型，默认 `Never`。句柄 API：
+
+| 方法 | 类型 | 说明 |
 |--|--|--|
-| `t.done` | `bool`（属性） | 任务是否已完成（成功、失败或取消） |
-| `t.status` | `TaskStatus`（属性） | `Pending` / `Running` / `Success` / `Failed` / `Cancelled` |
-| `t.cancel()` | `() -> ()` | 请求取消任务（合作式） |
-| `t.poll()` | `() -> TaskResult<T>` | 非阻塞观察；未完成返回 `TaskResult.Pending` |
-| `t.awaitResult()` | `() -> TaskResult<T>` | 阻塞等待并返回状态结果，不重抛异常 |
-| `t.awaitTimeout(ms)` | `(i64) -> TaskResult<T>` | 阻塞到完成或超时，超时返回 `TaskResult.Timeout` |
+| `t.cancel()` | `fn()` | 幂等地请求合作式取消 |
+| `t.poll()` | `fn() -> TaskResult<T, E>?` | 非阻塞；未完成时返回 `null` |
+| `t.awaitResult()` | `fn() -> TaskResult<T, E>` | 挂起等待终态，以值报告而不重抛子任务的错误或 panic |
 
-```xray
+```xray @fragment
 var t = go fetch(url)
-if (!t.done) { /* 还在跑 */ }
-var r = await t
-
-match (t.poll()) {
-    TaskResult.Pending -> print("running")
-    TaskResult.Success { value } -> print(value)
-    TaskResult.Failed { error: err } -> print(err)
-    TaskResult.Cancelled -> print("cancelled")
-    TaskResult.Timeout -> print("timeout")
-}
+if (t.poll() == null) { print("running") }
+var outcome = t.awaitResult()
 ```
 
-`TaskResult<T>` 的当前公开形状为 `Success(T)`、`Failed(PanicInfo)`、`Cancelled`、`Timeout`、`Pending`。运行时故障通过 `PanicInfo` 进入 `Failed`；业务 enum 错误仍走语言的错误通道，plain `await task` 会按对应错误路径传播，调用方需要状态值时使用显式 task handle 与 `awaitResult()` / `awaitTimeout(ms)`。
+`TaskResult<T, E>` 只有四种终态：`Success(T)`、`Error(E)`、`Panic(PanicInfo)`、`Cancelled`。括号表示载荷类型，不是构造语法或字段名声明；未完成由 `poll()` 的外层 Optional 表达，超时由 `Task.timeout` 的错误表达。`awaitResult()` 返回终态不意味着当前等待者免于取消展开。
 
-**取消语义**：`cancel()` 设置取消标志；协程在下一个调度/挂起检查点（后向跳转、Channel 操作、`await`、`Coro.yield()`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
+**取消语义**：只在挂起点检查，包括 `await`、Channel、`select`、`Task.yieldNow()`、sleep 和 IO。被取消的任务执行 `defer` 并展开，`catch (e)` 与 `catch panic` 均不能捕获，也不把这种取消写进任务函数的错误签名。等待它的一方看到类型化的 `Cancelled`。
 
-**看门狗策略**：运行时监控线程（sysmon）会观察 RUNNING 协程的心跳。纯 Xray 循环在后向跳转 safepoint 推进心跳，因此会被观测为持续进展；sysmon 主要用于发现长时间 native/FFI 或无 safepoint 区域卡住。如果心跳长时间冻结，默认行为是 **warn-only**：约 100ms 后打印一次 stuck warning，但不静默取消协程。强制取消是显式 opt-in：设置环境变量 `XRAY_SYSMON_CANCEL_MS=N`（`N > 0`，单位毫秒）后，心跳冻结超过该阈值的协程会被标记取消；未设置或设为 `0` 时保持仅告警。纯 CPU 长循环可在循环内插入 `Coro.yield()`，以改善调度公平性和取消响应性。
+循环后向跳转不是取消检查点。长循环可以通过 `Task.isCancelled()` 主动检查并收尾，或插入 `Task.yieldNow()` 提供调度与取消机会。运行时心跳或看门狗的观测不改变这些语言级检查点；取消请求也不保证能抢占不挂起的 native/FFI 调用。
 
 ### 10.5 Channel
 
@@ -5633,72 +5679,54 @@ select {
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
 
-### 10.7 `scope` 块（结构化并发 / 词法作用域）
+### 10.7 `scope` — 结构化并发
 
-`scope` 是**语句关键字**，建立一个新的词法作用域块。它服务两个目的：
-
-1. **纯词法作用域**：与 C/Rust `{ ... }` 局部块一致，块内 `var` 不影响外层同名变量。
-2. **结构化并发**（语义增强）：在 `scope` 块内 `go` 启动的协程，块退出前**自动等待**全部完成或取消。
+`scope` 只表示结构化并发；普通词法作用域直接写 `{ ... }`。scope 子任务是在该块中、不含嵌套函数正文的 `go` 所启动的任务。块内没有这样的 `go` 时编译报错并提示改用普通块。
 
 ```ebnf
-ScopeStmt       ::= 'scope' Block
-LinkedScopeStmt ::= 'linked' 'scope' Block          // 兄弟失败 -> 取消所有 + 重抛
+ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
+TryScopeStmt ::= 'try' ScopeStmt
 ```
 
-```xray
-// 词法作用域用途
-var x = 1
-scope {
-    var x = 10            // shadow 外层 x，块内有效
-    print(x)              // 10
-}
-print(x)                  // 1
+两种 scope 都是语句，不返回聚合值；退出前等待所有成员任务终结。会传播业务错误时写 `try scope`，或者将 scope 放入 `try { }` 的保护区域。
 
-// 结构化并发用途（与 go 配合）
-scope {
-    go worker_a()
-    go worker_b()
-    // scope 块退出前，等待 a/b 全部完成；任一抛异常不影响兄弟
-}
-```
+| 形式 | 子任务失败（含 panic）时 | 结束时 |
+|--|--|--|
+| 默认 `scope` | 取消其余兄弟任务 | 传播第一个失败，业务错误仍是错误、panic 仍是 panic |
+| `scope(isolated)` | 兄弟继续执行 | 以 `TaskFailures<E>` 汇总失败 |
 
-**两种 scope 变体**：
+默认 scope 的业务错误类型是子任务错误类型的 union；所有子任务错误类型为 `Never` 时免除 `try`。isolated 形态用 `TaskFailures<E>`，其中 `E` 是同一 union。isolated 在 `E = Never` 但子任务 panic 时的汇总错误与免标记规则存在待定边界，需 Task329/Task331 共同冻结，不能据此承诺免 `try`。
 
-| 形式 | 子协程抛异常时的行为 | 返回值 |
-|---|---|---|
-| `scope { ... }` | 不取消兄弟；异常不向外传播（每个 task 独立） | 无（语句形式） |
-| `linked scope { ... }` | **取消所有兄弟**协程，并向外**重抛**最先抛出的异常 | 无 |
-
-两种形式都不返回聚合结果。需要观察某个子任务状态时，显式保留 task handle 并调用 `awaitResult()` 或 `awaitTimeout(ms)`；需要按结果聚合时用 `await all` / `await any` / `await anySuccess`。
-
-```xray
-// linked scope：失败传播
-try {
-    linked scope {
-        go ok_worker()
-        go failing_worker()         // 抛异常
+```xray @check
+fn worker(n: i64) -> i64 { return n + 1 }
+fn main() {
+    var x = 1
+    { var x = 10; print(x) }
+    print(x)
+    scope {
+        go worker(1)
+        go worker(2)
     }
-} catch (e) {
-    print("caught:", e)              // 命中此分支
 }
-
-// scope：保留 task handle，块退出后逐个观察 outcome
-var first: Task<i64>?
-var second: Task<i64>?
-var third: Task<i64>?
-scope {
-    first = go failing("error1")
-    second = go failing("error2")
-    third = go ok()
-}
-var outcomes = [first!.awaitResult(), second!.awaitResult(), third!.awaitResult()]
-print(len(outcomes))                 // 3（每个子协程一个 outcome）
+try main()
 ```
 
-**通用语义**：
-- `scope` 不是函数调用，也不需要 import；是关键字块语句。
-- 两种形式都在块退出前等待所有 `go` 启动的子协程完成。
-- 两种形式都只能作为语句出现，不能用在表达式位置。
+```xray @check
+enum WorkerErr { Failed }
+fn worker(ok: bool) throws(WorkerErr) -> i64 {
+    if (!ok) { throw WorkerErr.Failed }
+    return 1
+}
+fn main() {
+    try scope(isolated) {
+        go(name: "first") worker(false)
+        go(name: "second") worker(true)
+    }
+}
+try main()
+```
+
+scope 自身引起的子任务取消不算失败；外层任务被取消时，scope 取消并等待子任务，然后继续取消展开，因此 scope 的业务错误类型不含 `Cancelled`。并发失败平局和独立手动取消子任务的汇总规则尚未冻结，不承诺额外的确定性顺序。需要结果时保留句柄逐个等待或使用 §10.3 的库函数。scope 外的 `go` 是独立任务。
 
 ### 10.8 `move` — 跨协程所有权转移
 
@@ -5816,6 +5844,8 @@ i64 加减沿 §2.3.1 的模 2^64 环绕；MIN delta 的 sub 不执行宿主有�
 
 f64 add/sub/fetchAdd/fetchSub 每次 resume 至多尝试一次值 cell CAS。失败保存最新 observed 与已一次求值的实参，返回 canonical Unit CONTINUE；活动帧和 pc 保持 READY，下一 resume 重算软件候选。CONTINUE 不产生 SUSPEND、wake、language yield 或第二执行管线；poll/frame/work 真实收费、取消和释放沿同一个 Call driver，不能把无界内部重试藏在单次 resume。停止在成功之前不改 cell，成功后的取消不回滚；无竞争下的首次 load 仍只用合法读序。
 
+此处保留的 Atomic 执行约束包含逐尝试的执行许可、额度与取消检查。它与 §10.4 的 Task 取消只在挂起点展开之间的边界，须在 Task329/Task331 执行接入时由 lead/c 对齐；不能把不产生 SUSPEND 的 CONTINUE 当成新增的语言挂起点。
+
 不支持目标使用唯一显式 UNSUPPORTED 路线。Checked、查询、特化复验及普通 Lower 的合法性不由宿主无锁能力决定；provider/SDK/Target 须以准确目标、flags、真实 cell/ref 布局及运行探针核能力，未运行或坏形结果不授准入。含 constructed Atomic 的闭合 Program 在版本/shape/完整 proof 后、发布及任何 initializer 前由所链接共同 runtime 核实际能力；不足不发布 Program、不转移原 Lowered owner。构造的未发布真实对齐 cell 再作防御性 lock-free 检查；false 不执行值 load/store/CAS/RMW、不发布值并释放所有临时 owner。atomic_init 仅为未发布准备，不承诺零写或零分配；引用 cell 能力先核查。运行时 UNSUPPORTED 是 canonical Unit、wake零、panic空的非panic终态，handler不可消费；原非法对象、OOM、预算和引用饱和保各自first failure，初始化失败粘滞/释放沿原非panic失败路线。无 mutex/libatomic 非无锁后备，也不把未知或未验证 target 伪装为已有能力。
 
 > `Ordering` 只描述**单个原子操作**的内存序，不足以推导程序行为。这些值与 Channel、`go`、`await`、`scope`、`const` 发布等语言级同步边如何共同构成 happens-before，定义在 §16.9；不写 `Ordering` 的普通并发代码同样受 §16.9 约束。
@@ -5827,24 +5857,24 @@ var val = counter.load(Ordering.Acquire)
 ```
 
 
-### 10.10 `Coro.yield()` — 让出 CPU
+### 10.10 `Task.yieldNow()` — 让出 CPU
 
 ```ebnf
-CoroYieldCall ::= 'Coro' '.' 'yield' '(' ')'
+TaskYieldCall ::= 'Task' '.' 'yieldNow' '(' ')'
 ```
 
-```xray
+```xray @fragment
 for (i in 0..1000) {
     do_chunk(i)
-    Coro.yield()                // 主动 safepoint，让其他协程有机会跑
+    Task.yieldNow()                // 主动 safepoint，让其他协程有机会跑
 }
 ```
 
-`Coro.yield()` 是协作式调度让出点，等价于显式 safepoint，让调度器有机会运行其他协程并响应取消。`yield expr` 已专用于生成器产值；裸 `yield` 被拒绝。
+`Task.yieldNow()` 是协作式调度让出点，等价于显式 safepoint，让调度器有机会运行其他协程并响应取消。`yield expr` 已专用于生成器产值；裸 `yield` 被拒绝。
 
-此调用不接收值参数或类型实参，结果为 unit；普通函数不需要 async 标注。词法绑定若遮蔽 `Coro`，仍按该绑定解析，不能偷偷调用调度原语。新 XIR 源码入口按同一 SUSPEND/恢复协议执行，当前单宿主驱动的挂起结果须以匹配的实例 epoch/wake 恢复；完整多线程调度与生成器资格单独验收。
+此调用不接收值参数或类型实参，结果为 unit；普通函数不需要 async 标注。词法绑定若遮蔽 `Task`，仍按该绑定解析，不能偷偷调用调度原语。该名称按目标 API 定义；已有调度原语的执行结果不能证明新名字已被解析和登记。
 
-两者共用词根但不是同一种挂起：`Coro.yield()` 让出给调度器（可换 OS 线程、是取消点、沿调用边向调用方传播），`yield expr` 对称转移回驱动方（以上三条都不成立）。逐条对照见 §3.16.1。**生成器体内不得调用 `Coro.yield()`**（`E0385`，见 §3.16.2）。
+两者共用词根但不是同一种挂起：`Task.yieldNow()` 让出给调度器（可换 OS 线程、是取消点、沿调用边向调用方传播），`yield expr` 对称转移回驱动方（以上三条都不成立）。逐条对照见 §3.16.1。生成器的挂起与关闭规则见 §3.16.2–§3.16.3；旧分析器 E0385 不定义新的 Task 调度规则。
 
 ### 10.11 并发安全模型
 
@@ -5878,11 +5908,13 @@ xray 用类型系统在编译期消除数据竞争。准确的表述是 §16.9.5
 
 ### 10.12 逻辑根任务与可达运行时能力
 
+以下保留既有执行路径的实现记录；旧错误推导与旧等待写法不是本章 §10.2–§10.7 的目标语言规则，也不证明新 Task API 已实现。
+
 程序语义只有一个逻辑 root task；物理实现由编译器从最终产物的可达 root 集合推导：纯同步入口使用 **ELIDED**，只启动子任务但自身不挂起时使用 **DESCRIPTOR**，入口或其可达调用发生挂起时使用 **RESUMABLE_FRAME**。普通不可挂起函数始终保留普通 ABI，不隐式增加 coroutine context、frame、safepoint 或 current-task 查询。
 
-普通非 root 父任务的正文完成不隐式等待普通 go 子任务；linked/scope 的结构化等待另按其合同。丢弃最后一个公开 Task 句柄不取消、不执行也不阻塞任务；执行器持运行 lease 到真实终态。逻辑 root 正文完成先保存其拥有式结果，host 在有限累计预算内驱动同一执行器已接管的任务到终态，再交付外部完成；普通子任务失败不隐式改写 root 结果。额度耗尽或显式停止时，先停止接收、撤销等待、执行有限清理及释放，再报告准确 LIMIT/取消/清理失败；无 ready 且无真实外部唤醒来源的闭合依赖必须有界拒绝，不自旋或 detach。
+普通非 root 父任务的正文完成不隐式等待普通 go 子任务；scope 的结构化等待另按其合同。丢弃最后一个公开 Task 句柄不取消、不执行也不阻塞任务；执行器持运行 lease 到真实终态。逻辑 root 正文完成先保存其拥有式结果，host 在有限累计预算内驱动同一执行器已接管的任务到终态，再交付外部完成；普通子任务失败不隐式改写 root 结果。额度耗尽或显式停止时，先停止接收、撤销等待、执行有限清理及释放，再报告准确 LIMIT/取消/清理失败；无 ready 且无真实外部唤醒来源的闭合依赖必须有界拒绝，不自旋或 detach。
 
-首个新 XIR go/Task/await 片段合同为 direct go 调用、Task<i64>/Task<string> 与 plain await；单 FIFO 每 dispatch 至多一次 canonical Call transition，等待真实退 C 栈。参数及结果先拥有式准备，失败不入队或发布句柄。worker 及其可达 direct 调用不得读取普通可变模块槽或写/初始化任何模块槽；const 槽仍需 Sendable、既有读取权限及初始化状态。未知间接调用、借用、Cell 捕获及未接通类型明确未准入，不能把此实现边界变成未来完整语言的限制。此合同冻结不代表 Source/VM/native 已实现：正式身份仍 25/65/21/26/29，完整 M:N、Channel、generator、linked/scope、Task<null>/Unit 与公开状态方法仍须分别取得资格。
+首个新 XIR go/Task/await 片段合同为 direct go 调用、Task<i64>/Task<string> 与 plain await；单 FIFO 每 dispatch 至多一次 canonical Call transition，等待真实退 C 栈。参数及结果先拥有式准备，失败不入队或发布句柄。worker 及其可达 direct 调用不得读取普通可变模块槽或写/初始化任何模块槽；const 槽仍需 Sendable、既有读取权限及初始化状态。未知间接调用、借用、Cell 捕获及未接通类型明确未准入，不能把此实现边界变成未来完整语言的限制。此合同冻结不代表 Source/VM/native 已实现：正式身份仍 25/65/21/26/29，完整 M:N、Channel、generator、scope、Task<null>/Unit 与公开状态方法仍须分别取得资格。
 
 跨 Task 边界的完整终态必须满足拥有式与 Sendable 规则，不能只检查成功值 T。worker 及可达调用的逃逸值错误由现有效应摘要证明：真实 Error 枚举的全部变体载荷均须 Sendable，不能只看实际 throw 的变体或名义类型标记；泛型错误须在定义处具有 Error 与 Sendable 约束。首片对未知或无真实身份的逃逸错误明确未准入。未逃逸的局部非 Sendable 值及普通同步 throw 不因本边界改变。运行时在发布 Task 终态前按真实封闭类型与字段权限准入 native 的 THROWN 载荷；异常载荷、OOM、LIMIT 和宿主故障保各自准确状态并完成清理，不伪装成 PanicInfo。当前 panic 载体仅包含标量 fault detail 与拥有式字符串；未来扩展须重新证明完整载荷的 Sendable 与生命周期。
 
@@ -8299,6 +8331,8 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 
 > 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `i64`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
 
+本章普通表项以头文件为准；下列“候选预留”是明确分开的目标诊断。旧 defer 错误兜底已从目标运行时表移除，实际执行路径的删除仍属于 Task329 P2，并依赖清理期间 panic 边界定稿。
+
 ### 18.1 Lexer 与 parser
 
 | 代码 | C 名称 | 含义 |
@@ -8341,6 +8375,18 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | 静态类型不可迭代 |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | 操作数类型非法 |
 
+#### 错误签名诊断（候选预留，尚未注册）
+
+下表为 Task329 P0 的编号提案，须 lead 评审；当前 `xerror_codes.h` 尚未定义，也没有发射点或黄金负例。P1 实现时必须同时登记头文件、诊断发射点和测试，不能把规范表当成已支持的诊断。
+
+| 代码 | 候选 C 名称 | 触发条件 |
+|--|--|--|
+| `E0330` | `XR_ERR_MISSING_TRY` | 可能抛错的调用缺少 `try`，且不在 `try { }` 保护区域内 |
+| `E0331` | `XR_ERR_UNDECLARED_ERROR` | 逃逸错误不包含于所在函数声明的错误类型 |
+| `E0332` | `XR_ERR_OVERRIDE_ERROR_TYPE` | 实现或覆写的错误类型不是被实现签名的子集 |
+| `E0333` | `XR_ERR_ERASED_THROWS_RESTRICTED` | freestanding 或 `@strict(alloc)` 中使用擦除错误类型，包括裸 `throws` 与 `throws(Error)` |
+| `E0334` | `XR_ERR_CATCH_TYPE_AS_BINDING` | catch 头部单个大写开头标识符，提示使用 `catch (e: T)` |
+
 #### Analyzer
 
 | 代码 | C 名称 | 含义 |
@@ -8361,6 +8407,7 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0363` | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | 闭包捕获不安全 |
 | `E0364` | `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` 操作数类型非法 |
 | `E0365` | `XR_ERR_ANALYZE_MISSING_TYPE` | 缺少可推断的类型或初始化器 |
+| `E0366` | `XR_ERR_ANALYZE_INTRINSIC_NOT_A_VALUE` | 将 intrinsic 当作普通值使用 |
 | `E0367` | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 未完整实现 interface |
 | `E0368` | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple 字段名非法 |
 | `E0369` | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段越界 |
@@ -8387,7 +8434,11 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union 成员在运行期无法判别（同一数值族出现多个成员）|
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | `move` 的唯一性证据不成立（存活别名 / 已发布根 / 来源未知 / 存储计划不完整）|
 | `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | defer 体抵达调度器挂起点或创建任务——见 §4.9 / §8.3.1 |
+| `E0393` | `XR_ERR_ANALYZE_CLOSURE_CYCLE` | 闭包与捕获对象形成引用环 |
+| `E0394` | `XR_ERR_ANALYZE_WEAK_FIELD` | weak 字段类型或执行域约束违规 |
 | `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | defer 体以 `return` 退出所在函数，或以 `break` / `continue` 跳出 cleanup 边界 |
+| `E0396` | `XR_ERR_ANALYZE_BINDING_STATE` | 读取已移动或可能已移动的绑定 |
+| `E0397` | `XR_ERR_ANALYZE_MOVE_CAPABILITY` | move 的能力或约束不满足 |
 
 ### 18.3 运行时
 
@@ -8423,7 +8474,6 @@ Tuple字面量各字段保有原语法、原owner与表达式计划；嵌套展�
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | 栈溢出 |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | 内存不足 |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | 运行时 match 失败 |
-| `E0443` | `XR_ERR_DEFER_THROW` | 错误从 `defer` 体逃逸，不可捕获，终止进程（见 §8.3.1 规则 D3） |
 | `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup 尝试创建任务或抵达调度器；在任何该类侧效前失败关闭 |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 运行时实参数量错误 |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 运行时实参类型错误 |
@@ -8568,14 +8618,14 @@ MultiplicativeExpr ::= UnaryExpr (('*' | '/' | '%') UnaryExpr)*
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  TryExpr
            |  'move' UnaryExpr
-           |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
+           |  'await' UnaryExpr
            |  GoExpr
            |  'unsafe' Block
            |  PostfixExpr
 
 TryExpr   ::= 'try' ('?' | '!')? TernaryExpr
 
-GoExpr    ::= 'linked'? 'go' GoOptions? CallExpr
+GoExpr    ::= 'go' GoOptions? CallExpr
 GoOptions ::= '(' 'name' ':' StringLiteral ')'
 CallExpr  ::= Primary PostfixOp* '(' ArgList? ')'
 
@@ -8629,7 +8679,7 @@ CallArg ::= ('ref' | 'out') Expression
           | Expression
 ```
 
-`try` 后的下一个 token 为 `{` 时只解析为 `TryStmt`，否则解析为 `TryExpr`；`try?` / `try!` 不能修饰代码块。`TryExpr` 的操作数从当前位置覆盖到当前表达式边界，且不包含未加括号的赋值运算符。括号、参数分隔符和语句结束仍限定表达式范围。`try?` 与同一未加括号的 `??` 表达式连用时报错，应写 `(try? expr) ?? fallback`。等待的标记顺序是 `try await task`，不是 `await try task`。
+`try` 后的下一个 token 为 `{` 时只解析为 `TryStmt`，后接 `scope` 时解析为 `TryScopeStmt`（§10.7），其余情况解析为 `TryExpr`；`try?` / `try!` 不能修饰代码块。`TryExpr` 的操作数从当前位置覆盖到当前表达式边界，且不包含未加括号的赋值运算符。括号、参数分隔符和语句结束仍限定表达式范围。`try?` 与同一未加括号的 `??` 表达式连用时报错，应写 `(try? expr) ?? fallback`。等待的标记顺序是 `try await task`，不是 `await try task`。
 
 函数类型返回 Unit 时省略 `ReturnType`，如 `fn()`、`fn() throws(E)`；类型位置不接受显式 `-> ()`（§2.8）。`extern "C"` 声明与 `CFn` 回调必须不抛错，不能携带抛错签名（§5.2.9）。
 
@@ -8681,6 +8731,7 @@ Statement ::= ExprStmt
            |  ForInPairStmt
            |  MatchStmt
            |  ScopeStmt
+           |  TryScopeStmt
            |  SelectStmt
            |  ReturnStmt
            |  BreakStmt
@@ -8725,7 +8776,8 @@ DeferStmt ::= 'defer' Block
 
 // go 是表达式，返回 Task<T, E>。不作为独立语句类别出现（封装在 ExprStmt 中）。
 
-ScopeStmt ::= 'linked'? 'scope' Block
+ScopeStmt ::= 'scope' ('(' 'isolated' ')')? Block
+TryScopeStmt ::= 'try' ScopeStmt
 
 SelectStmt ::= 'select' '{' SelectArm+ '}'
 SelectArm  ::= Identifier 'from' Expression '->' Block      // 接收

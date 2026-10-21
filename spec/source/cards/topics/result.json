@@ -12,11 +12,14 @@
     "defer",
     "cleanup",
     "E0387",
-    "E0443",
     "panic",
-    "PanicInfo"
+    "PanicInfo",
+    "throws",
+    "try?",
+    "try!",
+    "Never"
   ],
-  "lead": "Xray uses a low-overhead value-return error channel: `throw <enum>` sets an error, `try/catch` handles it without PanicInfo allocation or stack unwinding.",
+  "lead": "Business errors are enum values declared by throws(E); omitted throws means Never. Propagation is explicit and checking is local. Panic remains a separate channel. These are target rules pending compiler and runtime implementation.",
   "sections": [
     {
       "heading": "throw",
@@ -24,7 +27,7 @@
     },
     {
       "heading": "try / catch",
-      "markdown": "`try { ... } catch (e: ErrType) { ... }` catches errors thrown within the try block. Typed catches filter by enum type; untyped `catch (e)` catches any error."
+      "markdown": "`try { ... } catch (e: ErrType) { ... }` handles errors locally; calls in its protected body need no individual marker. The region excludes nested function and closure bodies and that try statement's own handlers; a nested handler may still be protected by an outer try. Typed catches filter enum types; catch (e) catches any error. A bare uppercase-leading catch head is rejected with a suggestion to use catch (e: T). Remaining errors must fit the enclosing signature."
     },
     {
       "heading": "catch panic",
@@ -32,7 +35,7 @@
     },
     {
       "heading": "Error propagation",
-      "markdown": "Uncaught errors propagate up the call stack through the value-return channel. Each caller's `OP_ERR_CHECK` decides whether to enter a catch handler or continue propagating. `defer` blocks execute during propagation."
+      "markdown": "`try expr` propagates business errors, `try? expr` turns them into null, and `try! expr` turns them into a panic carrying the original error value. Marked waits use try await. try? preserves an already Optional result type without adding or recursively flattening layers; write (try? expr) ?? fallback. Top-level code and main permit any error but still require markers. Callee signatures, not whole-program inference, determine escaping errors."
     },
     {
       "heading": "Debugger execution-flow boundaries",
@@ -40,16 +43,19 @@
     },
     {
       "heading": "defer must not let errors escape",
-      "markdown": "A `defer` is a cleanup edge, not an error-propagation edge (spec 8.3.1). The compiler rejects a deferred callable whose inferred error set is non-empty with `E0387`; absorb the error inside the body instead: `defer { try { close(c) } catch (e) { log.warn(\"close failed\") } }`. An error or panic the body catches itself has not escaped. What static analysis cannot decide is backstopped at runtime: an error escaping a defer body terminates the process with `E0443`, exit status 70, uncatchable — it neither replaces nor suppresses an in-flight error. Go's \"the defer's error wins\" semantics were rejected because xray marks neither signatures nor call sites, so the substitution would be invisible in the source."
+      "markdown": "A cleanup body must statically have escaping error type Never (E0387). Use non-throwing APIs or catch their errors inside the defer. There is no target runtime fallback for escaping business errors. This does not prove panic-free execution: escaping panic during cleanup still needs the Task329/Task316 boundary decision before runtime removal.",
+      "fences": [
+        "defer-must-not-throw"
+      ]
     },
     {
       "heading": "Design principles",
       "bullets": [
-        "Errors are values (enum variants), not exceptions",
-        "No PanicInfo allocation or stack unwinding; only a predictable branch at call boundaries that may propagate or catch errors",
-        "No `throws` in function signatures — errors are inferred, and `xray verify` freezes checked guarantees",
-        "Concrete error sets stay in the analyzer database; only a three-state throw-effect bit enters internal function types",
-        "Use ADT enums for structured error causes with exhaustive `match`"
+        "Errors are enum values and panic is a separate channel",
+        "Signatures and callable types carry throws(E); omission means Never",
+        "Check each body against declared signatures without whole-program error inference",
+        "Use typed errors for throwing public standard-library APIs; erased Error is forbidden in freestanding and @strict(alloc)",
+        "Use ADT enums for structured error causes and exhaustive match"
       ]
     }
   ]

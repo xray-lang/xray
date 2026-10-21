@@ -10,6 +10,8 @@ order: 019
 
 > 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `i64`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
 
+本章普通表项以头文件为准；下列“候选预留”是明确分开的目标诊断。旧 defer 错误兜底已从目标运行时表移除，实际执行路径的删除仍属于 Task329 P2，并依赖清理期间 panic 边界定稿。
+
 ### 18.1 Lexer 与 parser
 
 | 代码 | C 名称 | 含义 |
@@ -52,6 +54,18 @@ order: 019
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | 静态类型不可迭代 |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | 操作数类型非法 |
 
+#### 错误签名诊断（候选预留，尚未注册）
+
+下表为 Task329 P0 的编号提案，须 lead 评审；当前 `xerror_codes.h` 尚未定义，也没有发射点或黄金负例。P1 实现时必须同时登记头文件、诊断发射点和测试，不能把规范表当成已支持的诊断。
+
+| 代码 | 候选 C 名称 | 触发条件 |
+|--|--|--|
+| `E0330` | `XR_ERR_MISSING_TRY` | 可能抛错的调用缺少 `try`，且不在 `try { }` 保护区域内 |
+| `E0331` | `XR_ERR_UNDECLARED_ERROR` | 逃逸错误不包含于所在函数声明的错误类型 |
+| `E0332` | `XR_ERR_OVERRIDE_ERROR_TYPE` | 实现或覆写的错误类型不是被实现签名的子集 |
+| `E0333` | `XR_ERR_ERASED_THROWS_RESTRICTED` | freestanding 或 `@strict(alloc)` 中使用擦除错误类型，包括裸 `throws` 与 `throws(Error)` |
+| `E0334` | `XR_ERR_CATCH_TYPE_AS_BINDING` | catch 头部单个大写开头标识符，提示使用 `catch (e: T)` |
+
 #### Analyzer
 
 | 代码 | C 名称 | 含义 |
@@ -72,6 +86,7 @@ order: 019
 | `E0363` | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | 闭包捕获不安全 |
 | `E0364` | `XR_ERR_ANALYZE_AWAIT_TYPE` | `await` 操作数类型非法 |
 | `E0365` | `XR_ERR_ANALYZE_MISSING_TYPE` | 缺少可推断的类型或初始化器 |
+| `E0366` | `XR_ERR_ANALYZE_INTRINSIC_NOT_A_VALUE` | 将 intrinsic 当作普通值使用 |
 | `E0367` | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 未完整实现 interface |
 | `E0368` | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple 字段名非法 |
 | `E0369` | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段越界 |
@@ -98,7 +113,11 @@ order: 019
 | `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union 成员在运行期无法判别（同一数值族出现多个成员）|
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | `move` 的唯一性证据不成立（存活别名 / 已发布根 / 来源未知 / 存储计划不完整）|
 | `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | defer 体抵达调度器挂起点或创建任务——见 §4.9 / §8.3.1 |
+| `E0393` | `XR_ERR_ANALYZE_CLOSURE_CYCLE` | 闭包与捕获对象形成引用环 |
+| `E0394` | `XR_ERR_ANALYZE_WEAK_FIELD` | weak 字段类型或执行域约束违规 |
 | `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | defer 体以 `return` 退出所在函数，或以 `break` / `continue` 跳出 cleanup 边界 |
+| `E0396` | `XR_ERR_ANALYZE_BINDING_STATE` | 读取已移动或可能已移动的绑定 |
+| `E0397` | `XR_ERR_ANALYZE_MOVE_CAPABILITY` | move 的能力或约束不满足 |
 
 ### 18.3 运行时
 
@@ -134,7 +153,6 @@ order: 019
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | 栈溢出 |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | 内存不足 |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | 运行时 match 失败 |
-| `E0443` | `XR_ERR_DEFER_THROW` | 错误从 `defer` 体逃逸，不可捕获，终止进程（见 §8.3.1 规则 D3） |
 | `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup 尝试创建任务或抵达调度器；在任何该类侧效前失败关闭 |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 运行时实参数量错误 |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 运行时实参类型错误 |
@@ -190,6 +208,8 @@ order: 019
 
 > The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `i64` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
 
+Ordinary entries follow the header; the proposed reservations below are separate target diagnostics. The old defer-error fallback is removed from the target runtime table. Removing its execution path remains Task329 P2 work and depends on settling panic during cleanup.
+
 ### 18.1 Lexer and Parser
 
 | Code | C name | Meaning |
@@ -232,6 +252,18 @@ order: 019
 | `E0323` | `XR_ERR_TYPE_NOT_ITERABLE` | static type is not iterable |
 | `E0324` | `XR_ERR_TYPE_INVALID_OPERAND` | invalid operand type |
 
+#### Error-signature diagnostics (proposed reservations, not registered)
+
+These Task329 P0 numbers require lead review. The current `xerror_codes.h` has no definitions, emitters or golden negative cases for them. Implementation must register the header, emitter and tests together; this proposal is not evidence that the compiler emits these diagnostics.
+
+| Code | Proposed C name | Trigger |
+|--|--|--|
+| `E0330` | `XR_ERR_MISSING_TRY` | Potentially throwing call has no marker or protected try region |
+| `E0331` | `XR_ERR_UNDECLARED_ERROR` | Escaping error is outside the enclosing declared error type |
+| `E0332` | `XR_ERR_OVERRIDE_ERROR_TYPE` | Implementation or override error type is not a subset of its required signature |
+| `E0333` | `XR_ERR_ERASED_THROWS_RESTRICTED` | Erased errors in freestanding or @strict(alloc), including bare throws and throws(Error) |
+| `E0334` | `XR_ERR_CATCH_TYPE_AS_BINDING` | Single uppercase-leading catch identifier; suggest catch (e: T) |
+
 #### Analyzer
 
 | Code | C name | Meaning |
@@ -252,6 +284,7 @@ order: 019
 | `E0363` | `XR_ERR_ANALYZE_CLOSURE_CAPTURE` | unsafe closure capture |
 | `E0364` | `XR_ERR_ANALYZE_AWAIT_TYPE` | invalid `await` operand type |
 | `E0365` | `XR_ERR_ANALYZE_MISSING_TYPE` | no inferable type or initializer |
+| `E0366` | `XR_ERR_ANALYZE_INTRINSIC_NOT_A_VALUE` | Intrinsic used as an ordinary value |
 | `E0367` | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | incomplete interface implementation |
 | `E0368` | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | invalid tuple field name |
 | `E0369` | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field out of range |
@@ -278,7 +311,11 @@ order: 019
 | `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union members are not discriminable at run time (two members of the same numeric family) |
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | the uniqueness evidence `move` requires does not hold (live alias, published root, unknown provenance, incomplete storage plan) |
 | `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point or creates a task; see §4.9 / §8.3.1 |
+| `E0393` | `XR_ERR_ANALYZE_CLOSURE_CYCLE` | Closure and captured object form a reference cycle |
+| `E0394` | `XR_ERR_ANALYZE_WEAK_FIELD` | Invalid weak field type or execution domain |
 | `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | a defer body exits its function with `return`, or crosses the cleanup boundary with `break` / `continue` |
+| `E0396` | `XR_ERR_ANALYZE_BINDING_STATE` | Read of a moved or possibly moved binding |
+| `E0397` | `XR_ERR_ANALYZE_MOVE_CAPABILITY` | Move capability or constraint violation |
 
 ### 18.3 Runtime
 
@@ -314,7 +351,6 @@ order: 019
 | `E0440` | `XR_ERR_STACK_OVERFLOW` | stack overflow |
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
-| `E0443` | `XR_ERR_DEFER_THROW` | an error escaped a `defer` body; uncatchable, terminates the process (see §8.3.1 rule D3) |
 | `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup attempted to create a task or reach the scheduler; fails closed before any such side effect |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |

@@ -14,20 +14,19 @@ order: 009
 
 Xray 的错误处理分为两个严格分离的通道：
 
-| 通道 | 语法 | 适用场景 | 运行时开销 |
-|--|--|--|--|
-| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **低开销**（不分配 `PanicInfo`、不 unwind；需传播/捕获错误的调用边界只有可预测分支） |
-| **panic 通道**（`catch panic`） | 运行时故障（越界、除零、不完整 match） | 有限栈展开 |
+| 通道 | 语法 | 用途 |
+|--|--|--|
+| 值错误 | `throws(E)`、`throw`、`try`、`catch` | 业务错误与可恢复失败 |
+| panic | `catch panic` | 越界、除零等运行时故障 |
 
-设计原则：
+- **错误是值**：错误载荷是 enum 值；传播不把它转换为 `PanicInfo`。
+- **签名决定错误类型**：省略 `throws` 表示 `Never`，即保证不抛业务错误；`throws(E)` 声明允许逃逸的错误类型，裸 `throws` 等价于 `throws(Error)`。签名和函数类型规则见 §2.2、§5.2。
+- **检查是局部的**：每个函数按自身正文和被调用签名检查错误子集，不分析被调函数体、不做全程序错误推导。没有错误子句的具名函数不会自动获得抛错签名；闭包规则见 §5.2。
+- **传播点可见**：可能抛错的调用必须在 `try`、`try?`、`try!` 表达式或 `try { }` 的保护区域内（§8.1.6）。
+- **panic 不进入签名**：不抛业务错误的函数仍可能 panic；`try?` 不会吞掉 panic。
+- **`defer` 替代 `finally`**：清理绑定最近的真实 `{}` 块，清理体必须静态证明没有逃逸的业务错误（`E0387`，§8.3.1）。
 
-- **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 PanicInfo 对象。
-- **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
-- **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
-- **错误集合不进入公开函数类型**：具体错误 enum/variant 集合由同一已检查程序的效应分析维护；内部三态 throw-effect 事实（`UNKNOWN` / `MAY_THROW` / `NO_THROW`）关联相应函数与可调用节点，供安全约束和代码生成消费。
-- **no-throw 始终推导**：需要冻结 no-throw 保证时使用 `xray verify` 合同；未知或不完整证明按 may-throw 处理。
-- **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用**块作用域**的 `defer`（绑定最近的真实 `{}` 块，见 §4.9 / §8.3）。
-- **清理边不是错误传播边**：`defer` 体不得让错误逃逸，该约束由编译期规则强制（`E0387`），见 §8.3.1。
+本章给出 Task329 的目标语言规则；示例的执行资格以冒烟门结果为准。规范生成通过不代表 `throws`、新 Task 形状或新诊断已经实现。
 
 ### 8.1 值返回错误通道
 
@@ -35,7 +34,7 @@ Xray 的错误处理分为两个严格分离的通道：
 
 `throw expr` 抛出一个枚举错误值。其实际值必须是枚举变体；静态类型可以是具体 enum、内置 `Error`，或定义处已证明 `Error` 约束的普通类型参数：
 
-```xray
+```xray @check
 enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ 简单枚举变体
@@ -58,7 +57,7 @@ throw AppErr.InvalidInput { message: "bad format" } // ✅ 带载荷的 ADT 枚�
 
 #### 8.1.2 `try` / `catch`
 
-```xray
+```xray @fragment
 enum IOErr { Timeout, Refused { reason: string } }
 
 try {
@@ -81,7 +80,7 @@ try {
 
 `catch` 变量可带类型注解 `catch (e: T)`，运行时用 `is T` 判断枚举类型是否匹配。支持多个 `catch` 子句，按声明顺序匹配：
 
-```xray
+```xray @fragment
 enum NetErr { Timeout, Refused }
 enum DbErr { ConnLost, QueryFailed { query: string } }
 
@@ -101,7 +100,7 @@ try {
 - 有类型注解的 `catch (e: SomeErr)` 仅当错误值 `is SomeErr` 为真时匹配，其中 `SomeErr` 是具体 enum 错误类型
 - 多个 `catch` 子句按声明顺序匹配，首个匹配者执行
 - 若所有类型化子句均不匹配且没有 catch-all，错误继续向上传播
-- 一个 `try` **必须**至少跟随 `catch`（普通 `catch` 或 `catch panic`）
+- 一个 `try` 语句 **必须**至少跟随 `catch`（普通 `catch` 或 `catch panic`）
 
 内置 `Error` 是只容纳 enum 的持有值类型。enum 到 Error 的值转换保留实际名义身份、泛型实参、活动变体与载荷；复制、保存、返回和重新抛出均遵守相同值所有权规则。Error 不提供任意字段、构造或可见性权限，也不隐式证明 `Sendable`。读取具体变体载荷前必须完成有权限的类型窄化。普通泛型转换在定义处按约束检查，特化后复验，不能等调用处看到具体 enum 才补充证明。
 
@@ -111,7 +110,7 @@ catch 绑定仅在对应 handler 内可见，绑定及其值语义部分只读�
 
 普通 `catch` 的头部始终写在括号内。括号内是标识符且后跟 `:` 或 `)` 时为绑定（`catch (e)`、`catch (e: T)`），否则为 enum variant pattern：
 
-```xray
+```xray @fragment
 enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
 
 try {
@@ -127,15 +126,24 @@ try {
 - 逗号分隔的备选必须属于同一个 enum 类型。首个备选确定该 handler 的 enum 类型：Error 不携带静态类型实参，所以泛型 enum 必须在首个备选写全类型实参（如 `Event<string>.Failed { message }`）；其余备选须命名同一声明，省略的类型实参取自该类型，显式写出的必须完全相同。
 - 先判断错误值是否属于该 enum 类型，再按源码顺序测试备选。类型、变体、字面量或范围任何一项不匹配时，继续尝试下一个 `catch` 子句；全部不匹配时原错误值不变地继续传播。pattern handler 不要求穷举，也不会产生匹配失败（`E0442`）。
 - 各备选必须绑定同名、同静态类型的变量。pattern 绑定只读，仅在该 handler 内可见，与 catch 绑定规则相同。
-- 括号内的裸标识符是 catch-all 绑定：`catch (NetErr)` 绑定一个名为 `NetErr` 的 Error 值，而不是类型过滤；按类型过滤写 `catch (e: NetErr)`。`_`、字面量、范围，以及元组、对象、数组和 `is` 类型模式都不能作为 catch 头部。
+- 括号内单个标识符是 catch-all 绑定，但大写开头标识符与裸 `_` 除外。单个大写开头标识符如 `catch (NetErr)` 报 `E0334`，提示改成 `catch (e: NetErr)`；它既不是类型过滤，也不建立同名绑定。`_`、字面量、范围，以及元组、对象、数组和 `is` 类型模式都不能作为 catch 头部。
 - 普通 `catch` 不能省略头部；只有 `catch panic` 可以省略。
 - 泛型 enum 目标在定义处按约束检查。不可执行的 pattern handler 同样完整检查名称、类型、约束、可见性、字段与绑定。
+
+```xray @error=E0334
+enum NetErr { Failed }
+fn work() throws(NetErr) { throw NetErr.Failed }
+fn main() {
+    try { work() } catch (NetErr) { print("failed") } // error: use catch (e: NetErr)
+}
+try main()
+```
 
 #### 8.1.3 重抛与错误转换
 
 `catch` 块内可重抛原错误或抛出不同枚举的新错误：
 
-```xray
+```xray @fragment
 enum LowErr { Fail }
 enum HighErr { Upstream }
 
@@ -151,7 +159,7 @@ try {
 
 定义业务错误推荐使用 ADT enum，载荷携带上下文信息：
 
-```xray
+```xray @fragment
 enum HttpErr {
     NotFound { message: string },
     ServerError { code: i64, message: string },
@@ -164,7 +172,7 @@ enum ParseErr {
     Overflow,
 }
 
-fn fetchUser(id: i64) -> User {
+fn fetchUser(id: i64) throws(HttpErr) -> User {
     if (id <= 0) { throw HttpErr.NotFound { message: "user not found" } }
     // ...
 }
@@ -184,38 +192,64 @@ ADT enum 可让 `match` 在编译期检查错因穷举性。
 
 #### 8.1.5 错误的协程边界
 
-值返回通道的错误**不自动跨协程传播**。子协程内未捕获的错误：
+`go f(...)` 把 `f` 的返回类型与声明错误类型保存在 `Task<T, E>` 中；省略错误参数时 `E = Never`。启动本身不向调用方传播子任务的业务错误，独立子任务失败也不自动取消父任务。
 
-- 子协程终止，错误记录到 `coro.error`
-- 父协程**不**自动感知
+- `try await t` 等待结果，成功时返回 `T`，业务错误按 `E | Cancelled` 传播；子任务 panic 仍走 panic 通道。
+- `t.awaitResult()` 将终态作为四变体 `TaskResult<T, E>` 返回，业务错误不会从该方法重抛；等待者自身的取消仍按取消展开处理。
+- `try scope { ... }` 在子任务失败时取消兄弟并在结束处传播首个失败；`try scope(isolated) { ... }` 保留兄弟执行并汇总失败。详见 §10.7。
 
-传递子协程错误的方式：
-
-1. **Channel 显式传递**：
-
-```xray
-enum WorkerErr { Failed { message: string } }
-const err_ch = Channel<string>(1)
-
-go fn() {
-    try {
-        riskyWork()
-        err_ch.send("ok")
-    } catch (e) {
-        err_ch.send("error")
-    }
-}()
-
-var result = match (err_ch.recv()) {
-    Recv.Value { value: v } -> v
-    _ -> "error"
-}
-if (result != "ok") { log("worker failed") }
+```xray @fragment
+var task = go fetch(url)
+var value = try await task
+var outcome = task.awaitResult()
 ```
 
-2. **`linked go call()`**（见 §10.2）：独立启动的子 Task 失败会取消其父 Task 与关联子树；调用方仍可通过返回的 Task 观察精确错误。
+等待取消的子任务得到类型化的 `Cancelled`；当前任务自身被取消时执行 `defer` 后展开，不能被任何 catch 捕获，也不写入当前函数签名（§10.4）。
 
-3. **结构化并发 `linked scope`**（推荐，见 §10.5）：scope 内任一子协程的错误自动传播给父 scope，按正确的通道路由（值返回通道的 enum 错误通过 `catch` 捕获）。
+#### 8.1.6 `try` 表达式与局部错误检查
+
+`try expr` 传播表达式的业务错误；`try? expr` 将业务错误转成 `null`；`try! expr` 在业务错误出现时触发携带该错误值的 panic。后三者都不建立 catch 块。
+
+一个标记覆盖右侧整个非赋值表达式中的调用；括号、参数分隔符和语句结束限定范围。`try?` 与 `??` 连用必须写 `(try? expr) ?? fallback`。等待顺序固定为 `try await t`。
+
+```xray @run
+enum ParseErr { Empty }
+fn parse(s: string) throws(ParseErr) -> i64 {
+    if (len(s) == 0) { throw ParseErr.Empty }
+    return 42
+}
+fn forward(s: string) throws(ParseErr) -> i64 { return try parse(s) }
+fn main() {
+    print(try forward("ok"))
+    print((try? parse("")) ?? 8080)
+    print(try! parse("ok"))
+}
+try main()
+```
+```output
+42
+8080
+42
+```
+
+`try { }` 保护区域内的调用视为已标记；区域不延伸到闭包、嵌套函数或该 try 语句自身的 catch handler。嵌套 handler 仍可处于外层 try 的保护区域内。catch 覆盖的错误从保护块的错误集合中扣除，其余错误与 handler 自身的逃逸错误必须包含在所在函数的声明中。`throw` 直接产生错误，不另加 `try`。模块顶层和程序入口 `main` 隐式允许任意错误，但传播调用仍需标记。这项入口许可不免除显式调用点的检查；模块顶层调用可能抛错的入口时仍写 `try main()`。
+
+缺少传播标记和签名未声明错误是两类不同诊断（§18.2 的预留编号）：
+
+```xray @error=E0330
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn main() { fail() } // error: missing try
+try main()
+```
+
+```xray @error=E0331
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn caller() { try fail() } // error: undeclared escaping error
+fn main() { caller() }
+try main()
+```
 
 ### 8.2 Panic 通道
 
@@ -235,7 +269,7 @@ panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信�
 
 `catch panic` 捕获 panic 通道的运行时故障：
 
-```xray
+```xray @fragment
 try {
     var arr: Array<i64> = [1, 2, 3]
     var v = arr[10]                          // 越界 → panic
@@ -252,7 +286,7 @@ try {
 
 **`catch` 与 `catch panic` 可共存**，分别处理两个通道：
 
-```xray
+```xray @check
 enum AppErr { InvalidArg }
 
 try {
@@ -270,7 +304,7 @@ try {
 
 `PanicInfo` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `PanicInfo` 对象：
 
-```xray
+```xray @fragment
 class PanicInfo {
     message: string             // 人类可读消息（如 "index out of bounds"）
     stack: Array<string>        // 自动捕获的调用栈
@@ -287,7 +321,7 @@ class PanicInfo {
 
 **在 `catch panic` 中读取 panic 信息**：`catch panic (p)` 会把 `PanicInfo` 对象绑定到 `p`，可读取 `message`、`code`、`stack` 等字段：
 
-```xray
+```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
@@ -298,7 +332,11 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+message: array index out of range: 10 (length 3)
+code: 430
 ```
 
 #### 8.2.4 未捕获 panic 的顶层诊断
@@ -327,12 +365,12 @@ main()
 
 cleanup 块在退出时读取外部绑定。被读取的可移动 owner 在块退出前不得被 `move` 或返回，否则报 `E0382`；需要注册时值时必须先创建显式副本。这个 owner-lifetime 规则与下述错误通道规则相互独立。
 
-```xray
-fn fetch(url: string) -> string {
-    var conn = open(url)
+```xray @fragment
+fn fetch(url: string) throws(IoErr | FetchErr) -> string {
+    var conn = try open(url)
     defer { conn.close() }                   // 无论后续如何，conn 一定关闭
 
-    var data = conn.read()
+    var data = try conn.read()
     if (len(data) == 0) {
         throw FetchErr.Empty                 // defer 仍执行
     }
@@ -352,43 +390,62 @@ fn fetch(url: string) -> string {
 
 #### 8.3.1 `defer` 与错误
 
-`defer` 是**资源清理边**，不是错误传播边。清理路径失败意味着资源状态已不可知，因此语言既不允许清理错误覆盖在途错误（Go 模型），也不允许静默吞掉它。
+`defer` 是资源清理边，不能将业务错误向外传播或替换在途错误。
 
-**规则 D1（静态，规范性）**：若 `defer` 块的推断逃逸错误集**非空**，编译器报 `E0387`。
+**规则 D1（静态）**：清理体的逃逸错误类型必须是 `Never`，否则报 `E0387`。检查依据清理体和调用签名；间接函数值的 `throws(E)` 同样参与检查，不以运行时兜底接受未知错误。省略 `throws` 的清理 API 本身保证不抛业务错误。
 
-与 §8.0 的 throw-effect bit 不同，D1 **不是** fail-closed：xray 没有用户可书写的 no-throw 标注，若"无法证明不抛"即报错，作者面对间接调用、高阶内建方法、尚未登记契约的原生成员时将无从消解。无法证明的那部分交给规则 D3 的运行时兜底——这正是分层的意义。若将来引入用户可写的 no-throw 标注，D1 可收紧为"必须被证明"，D3 随之变为构造上不可达。
+**规则 D2（满足方式）**：调用不抛错的清理 API，或在清理体内完整处理错误。下面的正例与负例分开给出：
 
-```xray @id=defer-must-not-throw
-fn close(c: Conn) { throw IoErr.Closed }
-
-fn bad(c: Conn) {
-    defer { close(c) }                       // ❌ E0387：错误会逃出 cleanup
-}
-
-fn good(c: Conn) {
-    defer {                                  // ✅ 在 defer 体内自行处理
-        try { close(c) } catch (e) { log.warn("close failed") }
+```xray @id=defer-must-not-throw @run
+enum CloseErr { Failed }
+fn close() throws(CloseErr) { throw CloseErr.Failed }
+fn main() {
+    defer {
+        try { close() } catch (e: CloseErr) { print("close failed") }
     }
+    print("body")
 }
+try main()
+```
+```output
+body
+close failed
 ```
 
-**规则 D2（满足方式）**：在 `defer` 体内用 `try` / `catch` 消化错误，或调用不抛错的清理 API。这是唯一合法形式——它强制作者回答"清理失败了怎么办"。
+```xray @error=E0387
+enum CloseErr { Failed }
+fn close() throws(CloseErr) { throw CloseErr.Failed }
+fn main() {
+    defer { try close() } // error: error escapes cleanup
+}
+try main()
+```
 
-**规则 D3（运行时兜底，规范性）**：若错误仍从 `defer` 体逃逸——D1 未能静态判定的间接调用，或 `defer` 体内发生的 panic——运行时以 `E0443` **终止进程**，退出码 `70`：
-
-- 该终止**不可捕获**——`catch` 与 `catch panic` 都不拦截它。在 `defer` 体**内部**被自己 `catch` 住的错误或 panic 不算逃逸，属规则 D2 的正常写法。
-- 在途错误既不被替换也不被抑制；终止诊断报告逃逸的错误，并在存在在途错误时一并报告（枚举错误值不携带 message，此时显示 `<no message>`）。
-- VM 与 AOT 后端在此行为上必须逐字一致（含退出码与诊断文本）。
-
-**为什么不采用 Go 的"取代"语义**：Go 的 defer 要改写错误必须显式赋值给具名返回值，是可见的、局部的。xray 的函数签名不标 `throws`、调用点也无标记（§8.0），隐式的错误替换在源码上将完全不可见，且多个 `defer` 同时抛出时还需要一套替换链规则。fail-fast 是唯一既有定义、又不隐藏信息、又不引入额外规则的选项。
+不再定义业务错误逃出 defer 的运行时 D3 兜底。静态不抛业务错误不等于不会 panic：清理体内可用 `catch panic` 就地处理故障；清理期间新 panic 向外逃逸，特别是已有 panic 展开时的行为，仍需 Task329/Task316 联合定稿，本切片不定义替换、吞掉或二次终止策略。此边界未冻结前，不能宣称运行时旧兜底已经安全删除。
 
 ### 8.4 Optional 与错误处理
 
-`T?` 是 `T | null` 的语法糖，用于"二态：有值/无值"场景。详见 §2.5。与错误处理的关系：
+`T?` 表示语言项 `Optional<T>`，每层有独立的存在标签，不拆成含 null 成员的 union。`T | null` 只在语法边界改写成 `T?`；一般的 `Optional<Optional<T>>` 不自动展平（§2.5）。Optional 表达无错因的有值/无值；需要错因时用 `throws(E)` 与 `throw`。
 
-- **不带错因的失败**：用 `T?`（如字典查找返回 `null` 表示"无此键"）
-- 与 `??`（默认值）/ `?.`（可选链）/ `e!`（强制解包）配合
-- 不要把 `T?` 当通用错误返回——需要错因时用 `throw <enum>` + `catch`
+`try?` 有专门的结果类型规则：操作数类型不是 Optional 时得到 `T?`；已经是 `Optional<U>` 时保持原类型，不增加外层，也不递归展平现有层次。业务错误映射为该结果的 `null`，成功值原样返回。它不捕获 panic，也不捕获取消展开。
+
+```xray @run
+enum LookupErr { Failed }
+fn lookup(ok: bool) throws(LookupErr) -> i64? {
+    if (!ok) { throw LookupErr.Failed }
+    return 7
+}
+fn main() {
+    var found: i64? = try? lookup(true)
+    print(found ?? 0)
+    print((try? lookup(false)) ?? 0)
+}
+try main()
+```
+```output
+7
+0
+```
 
 ### 8.5 决策树：选择哪种机制
 
@@ -432,7 +489,7 @@ fn good(c: Conn) {
 
 #### 模式 1：enum 错误 + defer 资源清理
 
-```xray
+```xray @run
 enum ConnErr { Refused, Timeout }
 
 // 用一个极简的 "连接" 替身让示例自成一体。
@@ -443,7 +500,7 @@ class Conn {
     close() { print("closed") }
 }
 
-fn fetchData(alive: bool) -> string {
+fn fetchData(alive: bool) throws(ConnErr) -> string {
     var conn = Conn(alive)
     defer { conn.close() }             // 无论成功或抛错都会执行
     if (!conn.isAlive()) { throw ConnErr.Timeout }
@@ -458,15 +515,19 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+closed
+payload
 ```
 
 #### 模式 2：throw + catch 用于库 API
 
-```xray
+```xray @run
 enum ConfigErr { Missing { field: string } }
 
-fn requirePort(cfg: JSON.Object) {
+fn requirePort(cfg: JSON.Object) throws(ConfigErr) {
     if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
     print("port:", cfg["port"])
 }
@@ -482,19 +543,23 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+port: 8080
+missing field: port
 ```
 
 #### 模式 3：`??` 提供默认值
 
-```xray
+```xray @fragment
 var port = config?.port ?? 8080
 var user = db.findUser(id) ?? guestUser
 ```
 
 #### 模式 4：catch panic 兜底运行时故障
 
-```xray
+```xray @check
 fn safeDivide(a: i64, b: i64) -> string {
     try {
         return string(a / b)
@@ -506,14 +571,14 @@ fn safeDivide(a: i64, b: i64) -> string {
 
 ### 8.7 完整可运行示例
 
-以下均为自包含、可直接运行并通过 `xray check` 验证的完整程序（注释标注了真实输出）。
+以下为自包含的目标语言示例，`output` 给出期望标准输出；是否已支持须由 VM/AOT 冒烟门验证。
 
 #### 示例 1：`throw` / `catch` / `match`
 
-```xray
+```xray @run
 enum ParseErr { Empty, BadChar { value: string } }
 
-fn parseDigit(s: string) -> i64 {
+fn parseDigit(s: string) throws(ParseErr) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
     if (s == "x") { throw ParseErr.BadChar { value: s } }
     return 42
@@ -530,15 +595,18 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+empty input
 ```
 
 #### 示例 2：`defer` 的 LIFO 顺序与异常路径
 
-```xray
+```xray @run
 enum E { Boom }
 
-fn work() {
+fn work() throws(E) {
     defer { print("defer 1") }
     defer { print("defer 2") }
     print("body")
@@ -549,21 +617,19 @@ fn main() {
     try { work() } catch (e) { print("caught") }
 }
 
-main()
+try main()
 ```
-
-输出（`defer` 按 LIFO 逆序执行）：
-
-```
+```output
 body
 defer 2
 defer 1
 caught
 ```
 
+
 #### 示例 3：`catch panic` 兜底并读取故障信息
 
-```xray
+```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
@@ -574,7 +640,11 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+message: array index out of range: 10 (length 3)
+code: 430
 ```
 <!-- /xr-spec:cn -->
 
@@ -587,22 +657,21 @@ main()
 
 ### 8.0 Design philosophy: value-return + panic boundary
 
-Xray's error handling is split into two strictly separated channels:
+Xray separates two channels:
 
-| Channel | Syntax | Use case | Runtime cost |
-|--|--|--|--|
-| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Low overhead** (no `PanicInfo` allocation and no unwind; only a predictable branch at call boundaries that may propagate or catch errors) |
-| **Panic channel** (`catch panic`) | Runtime faults (OOB, division by zero, non-exhaustive match) | Limited stack unwinding |
+| Channel | Syntax | Purpose |
+|--|--|--|
+| Value errors | `throws(E)`, `throw`, `try`, `catch` | Business errors and recoverable failures |
+| Panic | `catch panic` | Runtime faults such as bounds errors and division by zero |
 
-Design principles:
+- **Errors are values**: error payloads are enum values; propagation does not turn them into `PanicInfo`.
+- **Signatures determine error types**: omitting `throws` means `Never`, a guarantee of no business errors. `throws(E)` declares the permitted escaping error type; bare `throws` means `throws(Error)`. See §2.2 and §5.2 for signatures and callable types.
+- **Checking is local**: each function is checked using its body and callee signatures, without inspecting callee bodies or whole-program error inference. A named function without a clause never acquires an inferred throwing signature; see §5.2 for closures.
+- **Propagation is visible**: potentially throwing calls must occur within a `try`, `try?`, or `try!` expression or the protected region of `try { }` (§8.1.6).
+- **Panic stays outside signatures**: a non-throwing function may still panic; `try?` never absorbs panic.
+- **`defer` replaces `finally`**: cleanup belongs to the nearest real `{}` block and must statically have no escaping business errors (`E0387`, §8.3.1).
 
-- **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no PanicInfo allocation.
-- **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
-- **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
-- **Error sets are not part of public function types**: concrete error enum/variant sets belong to effect analysis of the same checked program. Internal three-state throw-effect facts (`UNKNOWN` / `MAY_THROW` / `NO_THROW`) are associated with the corresponding functions and callable nodes for safety constraints and code generation.
-- **No-throw is always inferred**: use an `xray verify` contract to freeze a no-throw guarantee; unknown or incomplete evidence is treated as may-throw.
-- **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses **block-scoped** `defer` (bound to the nearest real `{}` block, see §4.9 / §8.3).
-- **A cleanup edge is not an error-propagation edge**: no error may escape a `defer` body. The constraint is enforced at compile time (`E0387`), see §8.3.1.
+This chapter specifies the target language rules of Task329. Smoke results determine example execution support; successful document generation does not establish implementation of `throws`, the new Task shape, or the new diagnostics.
 
 ### 8.1 Value-return error channel
 
@@ -610,7 +679,7 @@ Design principles:
 
 `throw expr` raises an enum error value. Its actual value must be an enum variant; its static type may be a concrete enum, the built-in `Error`, or an ordinary type parameter whose `Error` constraint is proved at definition:
 
-```xray
+```xray @check
 enum AppErr { NotFound, InvalidInput { message: string } }
 
 throw AppErr.NotFound                       // ✅ simple enum variant
@@ -633,7 +702,7 @@ A same-proof mixed debug Program must receive the generator's current observatio
 
 #### 8.1.2 `try` / `catch`
 
-```xray
+```xray @fragment
 enum IOErr { Timeout, Refused { reason: string } }
 
 try {
@@ -656,7 +725,7 @@ try {
 
 A `catch` variable may be typed `catch (e: T)`; the runtime uses `is T` to test the enum type. Multiple `catch` clauses are matched in declaration order:
 
-```xray
+```xray @fragment
 enum NetErr { Timeout, Refused }
 enum DbErr { ConnLost, QueryFailed { query: string } }
 
@@ -676,7 +745,7 @@ try {
 - A typed `catch (e: SomeErr)` matches only when the error value satisfies `is SomeErr`, where `SomeErr` is a concrete enum error type.
 - Multiple `catch` clauses are tried in declaration order; the first match wins.
 - If every typed clause fails and there is no catch-all, the error continues propagating.
-- A `try` **must** be followed by at least one of `catch` or `catch panic`.
+- A `try` statement **must** be followed by at least one of `catch` or `catch panic`.
 
 The built-in `Error` is an owned value type containing only enums. Converting an enum to Error preserves its concrete nominal identity, generic arguments, active variant, and payload; copying, storing, returning, and rethrowing obey the same value-ownership rules. Error grants no arbitrary field, construction, or visibility authority and does not implicitly prove `Sendable`. Accessing a concrete variant payload requires authorized type narrowing. Ordinary generic conversion is checked against constraints at definition and rechecked after specialization; a concrete enum at a call site cannot supply a missing definition-time proof.
 
@@ -686,7 +755,7 @@ Catch bindings are visible only in their handler, and both the binding and its v
 
 An ordinary `catch` header is always parenthesized. Inside the parentheses, an identifier followed by `:` or `)` is a binding (`catch (e)`, `catch (e: T)`); anything else is an enum variant pattern:
 
-```xray
+```xray @fragment
 enum DbErr { ConnLost, Timeout, QueryFailed { query: string, code: i64 } }
 
 try {
@@ -702,15 +771,24 @@ try {
 - Comma-separated alternatives must belong to one enum type. The first alternative determines the handler's enum type. An Error carries no static type arguments, so a generic enum must state all of its type arguments there (for example `Event<string>.Failed { message }`); later alternatives must name the same declaration, take omitted type arguments from that type, and must repeat explicit ones exactly.
 - The handler first tests whether the error value has that enum type, then tries the alternatives in source order. A type, variant, literal, or range mismatch continues with the next `catch` clause; if none matches, the original error keeps propagating unchanged. A pattern handler needs no exhaustiveness and never raises a match failure (`E0442`).
 - All alternatives must bind the same names with exactly the same static types. Pattern bindings are read-only and visible only in their handler, like a catch binding.
-- A bare identifier inside the parentheses is a catch-all binding: `catch (NetErr)` binds an Error value named `NetErr`; it is not a type filter. Filter by type with `catch (e: NetErr)`. `_`, literals, ranges, and tuple, object, array, and `is` type patterns cannot form a catch header.
+- A single identifier is a catch-all binding except for uppercase-leading names and bare `_`. A single uppercase-leading identifier such as `catch (NetErr)` reports `E0334` with a suggestion to write `catch (e: NetErr)`; it is neither a type filter nor a binding. `_`, literals, ranges, tuples, objects, arrays and `is` type patterns are not catch heads.
 - An ordinary `catch` cannot omit its header; only `catch panic` may.
 - Generic enum targets are checked against their constraints at definition. An unexecutable pattern handler still receives complete name, type, constraint, visibility, field, and binding checks.
+
+```xray @error=E0334
+enum NetErr { Failed }
+fn work() throws(NetErr) { throw NetErr.Failed }
+fn main() {
+    try { work() } catch (NetErr) { print("failed") } // error: use catch (e: NetErr)
+}
+try main()
+```
 
 #### 8.1.3 Rethrowing and error conversion
 
 A `catch` block may rethrow the original error or throw a different enum variant:
 
-```xray
+```xray @fragment
 enum LowErr { Fail }
 enum HighErr { Upstream }
 
@@ -726,7 +804,7 @@ try {
 
 Define business errors as ADT enums with context-carrying payloads:
 
-```xray
+```xray @fragment
 enum HttpErr {
     NotFound { message: string },
     ServerError { code: i64, message: string },
@@ -739,7 +817,7 @@ enum ParseErr {
     Overflow,
 }
 
-fn fetchUser(id: i64) -> User {
+fn fetchUser(id: i64) throws(HttpErr) -> User {
     if (id <= 0) { throw HttpErr.NotFound { message: "user not found" } }
     // ...
 }
@@ -759,38 +837,64 @@ ADT enums allow `match` to check exhaustiveness at compile time.
 
 #### 8.1.5 Errors and coroutine boundaries
 
-Value-return errors **do not propagate across coroutines automatically**. An uncaught error in a child coroutine:
+`go f(...)` records the return and declared error types of `f` in `Task<T, E>`; the default error argument is `Never`. Spawning does not propagate the child's business errors to the caller, and an independent child failure does not automatically cancel its parent.
 
-- Terminates the child, error recorded in `coro.error`
-- The parent is **not** notified automatically
+- `try await t` waits for `T` and propagates business errors as `E | Cancelled`; child panic stays on the panic channel.
+- `t.awaitResult()` returns the four-variant `TaskResult<T, E>` without rethrowing business errors. Cancellation of the waiter itself still unwinds that waiter.
+- `try scope { ... }` cancels siblings on child failure and propagates the first failure on exit; `try scope(isolated) { ... }` lets siblings continue and aggregates failures. See §10.7.
 
-Ways to pass child coroutine errors:
-
-1. **Explicit Channel**:
-
-```xray
-enum WorkerErr { Failed { message: string } }
-const err_ch = Channel<string>(1)
-
-go fn() {
-    try {
-        riskyWork()
-        err_ch.send("ok")
-    } catch (e) {
-        err_ch.send("error")
-    }
-}()
-
-var result = match (err_ch.recv()) {
-    Recv.Value { value: v } -> v
-    _ -> "error"
-}
-if (result != "ok") { log("worker failed") }
+```xray @fragment
+var task = go fetch(url)
+var value = try await task
+var outcome = task.awaitResult()
 ```
 
-2. **`linked go call()`** (see §10.2): failure of a standalone child Task cancels its parent Task and linked subtree; the returned Task still exposes the precise error to its caller.
+Waiting on a cancelled child produces typed `Cancelled`. Cancellation of the current task runs its defers and unwinds; no catch can intercept it and it is not part of that function's error signature (§10.4).
 
-3. **Structured concurrency `linked scope`** (recommended, see §10.5): an error from any child in the scope propagates to the parent scope automatically, routed through the correct channel (value-return enum errors via `catch`, panics via `catch panic`).
+#### 8.1.6 `try` expressions and local error checking
+
+`try expr` propagates business errors; `try? expr` converts them to `null`; `try! expr` turns a business error into a panic carrying that error value. None of these expressions creates a catch block.
+
+One marker covers calls in the entire following non-assignment expression. Parentheses, argument separators and statement endings bound its extent. Combine `try?` with `??` as `(try? expr) ?? fallback`. Marked waits always use `try await t`.
+
+```xray @run
+enum ParseErr { Empty }
+fn parse(s: string) throws(ParseErr) -> i64 {
+    if (len(s) == 0) { throw ParseErr.Empty }
+    return 42
+}
+fn forward(s: string) throws(ParseErr) -> i64 { return try parse(s) }
+fn main() {
+    print(try forward("ok"))
+    print((try? parse("")) ?? 8080)
+    print(try! parse("ok"))
+}
+try main()
+```
+```output
+42
+8080
+42
+```
+
+Calls in the protected `try { }` region count as marked. The region excludes closure bodies, nested functions and that try statement's own catch handlers. A nested handler can still belong to an outer try's protected region. Subtract the errors covered by catch clauses; the remainder and errors escaping handlers must fit the enclosing function's declaration. `throw` produces an error directly and needs no extra `try`. Module top level and the program entry `main` implicitly permit any error but still require propagation markers. This entry permission does not exempt explicit calls; a module-level call to a potentially throwing entry still uses `try main()`.
+
+A missing marker and an undeclared escaping error are distinct diagnostics (reserved numbers in §18.2):
+
+```xray @error=E0330
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn main() { fail() } // error: missing try
+try main()
+```
+
+```xray @error=E0331
+enum Failure { Bad }
+fn fail() throws(Failure) { throw Failure.Bad }
+fn caller() { try fail() } // error: undeclared escaping error
+fn main() { caller() }
+try main()
+```
 
 ### 8.2 Panic channel
 
@@ -810,7 +914,7 @@ Panics propagate via limited stack unwinding and generate `PanicInfo` objects wi
 
 `catch panic` catches runtime faults from the panic channel:
 
-```xray
+```xray @fragment
 try {
     var arr: Array<i64> = [1, 2, 3]
     var v = arr[10]                          // OOB → panic
@@ -827,7 +931,7 @@ try {
 
 **`catch` and `catch panic` can coexist**, handling both channels:
 
-```xray
+```xray @check
 enum AppErr { InvalidArg }
 
 try {
@@ -845,7 +949,7 @@ try {
 
 `PanicInfo` is now **used only by the panic channel**. The VM constructs `PanicInfo` objects automatically on runtime faults:
 
-```xray
+```xray @fragment
 class PanicInfo {
     message: string             // human-readable message (e.g. "index out of bounds")
     stack: Array<string>        // automatically captured call stack
@@ -862,7 +966,7 @@ User code generally does not construct `PanicInfo` directly — use `throw <enum
 
 **Reading panic details in `catch panic`**: `catch panic (p)` binds the `PanicInfo` object to `p`, so you can read `message`, `code`, `stack`, and the other fields:
 
-```xray
+```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
@@ -873,7 +977,11 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+message: array index out of range: 10 (length 3)
+code: 430
 ```
 
 #### 8.2.4 Top-level diagnostic for an uncaught panic
@@ -914,12 +1022,12 @@ formatters). The contract covers exactly that surface.
 
 A cleanup block reads its outer bindings at exit. A movable owner read by the block may not be moved or returned before the block exits (`E0382`); code that needs a registration-time value must create an explicit copy first. This owner-lifetime rule is independent of the error-channel rules below.
 
-```xray
-fn fetch(url: string) -> string {
-    var conn = open(url)
+```xray @fragment
+fn fetch(url: string) throws(IoErr | FetchErr) -> string {
+    var conn = try open(url)
     defer { conn.close() }                   // conn is guaranteed to close
 
-    var data = conn.read()
+    var data = try conn.read()
     if (len(data) == 0) {
         throw FetchErr.Empty                 // defer still runs
     }
@@ -939,43 +1047,62 @@ fn fetch(url: string) -> string {
 
 #### 8.3.1 `defer` and errors
 
-`defer` is a **resource-cleanup edge**, not an error-propagation edge. A failure on the cleanup path means the resource state is no longer known, so the language neither lets a cleanup error overwrite an in-flight error (the Go model) nor silently swallows it.
+A `defer` is a cleanup edge. It cannot propagate business errors or replace an error already in flight.
 
-**Rule D1 (static, normative)**: if the inferred escaping error set of a `defer` block is **non-empty**, the compiler reports `E0387`.
+**Rule D1 (static)**: the escaping error type of the cleanup body must be `Never`, otherwise report `E0387`. Checking uses the cleanup body and callee signatures, including `throws(E)` on indirect callable values. Unknown errors are not accepted through a runtime fallback. A cleanup API without `throws` guarantees no business errors.
 
-Unlike the throw-effect bit in §8.0, D1 is **not** fail-closed: xray has no user-writable no-throw annotation, so rejecting everything that cannot be proven non-throwing would leave an author facing an indirect call, a higher-order builtin, or a native member whose contract is not yet written with no way to discharge the obligation. What cannot be proven is left to rule D3's runtime backstop — that is what the layering is for. Should a user-writable no-throw annotation ever be added, D1 can tighten to "must be proven" and D3 becomes unreachable by construction.
+**Rule D2 (satisfaction)**: use non-throwing cleanup APIs or handle their errors completely inside the cleanup. The valid and invalid examples are separate:
 
-```xray @id=defer-must-not-throw
-fn close(c: Conn) { throw IoErr.Closed }
-
-fn bad(c: Conn) {
-    defer { close(c) }                       // ❌ E0387: error escapes cleanup
-}
-
-fn good(c: Conn) {
-    defer {                                  // ✅ handle it inside the defer body
-        try { close(c) } catch (e) { log.warn("close failed") }
+```xray @id=defer-must-not-throw @run
+enum CloseErr { Failed }
+fn close() throws(CloseErr) { throw CloseErr.Failed }
+fn main() {
+    defer {
+        try { close() } catch (e: CloseErr) { print("close failed") }
     }
+    print("body")
 }
+try main()
+```
+```output
+body
+close failed
 ```
 
-**Rule D2 (how to satisfy it)**: absorb the error inside the `defer` body with `try` / `catch`, or call a cleanup API that does not throw. This is the only legal form — it forces the author to answer "what happens when cleanup fails?".
+```xray @error=E0387
+enum CloseErr { Failed }
+fn close() throws(CloseErr) { throw CloseErr.Failed }
+fn main() {
+    defer { try close() } // error: error escapes cleanup
+}
+try main()
+```
 
-**Rule D3 (runtime backstop, normative)**: if an error still escapes a `defer` body — an indirect call D1 could not decide statically, or a panic raised inside the body — the runtime **terminates the process** with `E0443` and exit status `70`:
-
-- The termination is **not catchable** — neither `catch` nor `catch panic` intercepts it. An error or panic the `defer` body catches **itself** has not escaped; that is the ordinary form rule D2 prescribes.
-- The in-flight error is neither replaced nor suppressed; the diagnostic reports the escaping error, and the in-flight one alongside it when there is one (an enum error value carries no message, and shows as `<no message>`).
-- The VM and AOT backends must agree verbatim on this behaviour, including exit code and diagnostic text.
-
-**Why not Go's "replace" semantics**: in Go, rewriting the error from a defer requires an explicit assignment to a named return value — visible and local. xray puts `throws` in neither the signature nor the call site (§8.0), so an implicit error replacement would be entirely invisible in the source, and multiple simultaneously-throwing `defer`s would additionally need a replacement-chain rule. Fail-fast is the only option that is defined, hides nothing, and adds no further rules.
+There is no runtime D3 fallback for escaping business errors. Statically non-throwing does not mean panic-free: a cleanup may handle faults locally with `catch panic`. Escaping new panic during cleanup, especially while another panic is already unwinding, still needs joint Task329/Task316 resolution. This slice defines no replacement, suppression or second-termination policy. Until that boundary is settled, removal of the old runtime fallback cannot be claimed safe.
 
 ### 8.4 Optional and error handling
 
-`T?` is sugar for `T | null` and fits the binary "value or absent" case. See §2.5. Relation to error handling:
+`T?` denotes the language item `Optional<T>`; every layer has an independent presence tag, without decomposing into a union with null. `T | null` rewrites to `T?` only at the syntax boundary. Ordinary `Optional<Optional<T>>` does not flatten (§2.5). Use Optional for presence or absence without a failure reason; use `throws(E)` and `throw` when the reason matters.
 
-- **Failure with no cause**: `T?` (e.g. map lookup returns `null` for "key not found").
-- Pairs with `??` (default value) / `?.` (optional chain) / `e!` (force unwrap).
-- Do not use `T?` as a generic error return — if a cause is needed, use `throw <enum>` + `catch`.
+`try?` has a specific result rule: a non-Optional operand of type `T` yields `T?`; an operand already typed `Optional<U>` keeps that type, without adding an outer layer or recursively flattening existing layers. Business errors become `null` and successful values are preserved. It catches neither panic nor cancellation unwinding.
+
+```xray @run
+enum LookupErr { Failed }
+fn lookup(ok: bool) throws(LookupErr) -> i64? {
+    if (!ok) { throw LookupErr.Failed }
+    return 7
+}
+fn main() {
+    var found: i64? = try? lookup(true)
+    print(found ?? 0)
+    print((try? lookup(false)) ?? 0)
+}
+try main()
+```
+```output
+7
+0
+```
 
 ### 8.5 Decision tree: which mechanism to choose
 
@@ -1019,7 +1146,7 @@ Reference table:
 
 #### Pattern 1: enum errors + defer for resource cleanup
 
-```xray
+```xray @run
 enum ConnErr { Refused, Timeout }
 
 // A tiny stand-in "connection" so the example runs on its own.
@@ -1030,7 +1157,7 @@ class Conn {
     close() { print("closed") }
 }
 
-fn fetchData(alive: bool) -> string {
+fn fetchData(alive: bool) throws(ConnErr) -> string {
     var conn = Conn(alive)
     defer { conn.close() }             // runs whether we succeed or throw
     if (!conn.isAlive()) { throw ConnErr.Timeout }
@@ -1045,15 +1172,19 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+closed
+payload
 ```
 
 #### Pattern 2: throw + catch for library APIs
 
-```xray
+```xray @run
 enum ConfigErr { Missing { field: string } }
 
-fn requirePort(cfg: JSON.Object) {
+fn requirePort(cfg: JSON.Object) throws(ConfigErr) {
     if (!cfg.containsKey("port")) { throw ConfigErr.Missing { field: "port" } }
     print("port:", cfg["port"])
 }
@@ -1069,19 +1200,23 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+port: 8080
+missing field: port
 ```
 
 #### Pattern 3: `??` for default values
 
-```xray
+```xray @fragment
 var port = config?.port ?? 8080
 var user = db.findUser(id) ?? guestUser
 ```
 
 #### Pattern 4: catch panic for runtime fault fallback
 
-```xray
+```xray @check
 fn safeDivide(a: i64, b: i64) -> string {
     try {
         return string(a / b)
@@ -1093,14 +1228,14 @@ fn safeDivide(a: i64, b: i64) -> string {
 
 ### 8.7 Worked Examples
 
-These are self-contained programs that run as-is and pass `xray check` (comments show the real output).
+These self-contained target-language examples state expected stdout in `output` blocks; VM/AOT smoke gates must establish execution support.
 
 #### Example 1: `throw` / `catch` / `match`
 
-```xray
+```xray @run
 enum ParseErr { Empty, BadChar { value: string } }
 
-fn parseDigit(s: string) -> i64 {
+fn parseDigit(s: string) throws(ParseErr) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
     if (s == "x") { throw ParseErr.BadChar { value: s } }
     return 42
@@ -1117,15 +1252,18 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+empty input
 ```
 
 #### Example 2: `defer` order (LIFO) on the error path
 
-```xray
+```xray @run
 enum E { Boom }
 
-fn work() {
+fn work() throws(E) {
     defer { print("defer 1") }
     defer { print("defer 2") }
     print("body")
@@ -1136,21 +1274,19 @@ fn main() {
     try { work() } catch (e) { print("caught") }
 }
 
-main()
+try main()
 ```
-
-Output (`defer` runs in LIFO order):
-
-```
+```output
 body
 defer 2
 defer 1
 caught
 ```
 
+
 #### Example 3: `catch panic` with fault details
 
-```xray
+```xray @run
 fn main() {
     var arr: Array<i64> = [1, 2, 3]
     try {
@@ -1161,6 +1297,10 @@ fn main() {
     }
 }
 
-main()
+try main()
+```
+```output
+message: array index out of range: 10 (length 3)
+code: 430
 ```
 <!-- /xr-spec:en -->

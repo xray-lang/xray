@@ -50,7 +50,7 @@
       "heading": "Structured concurrency",
       "fences": [
         "coro-scope",
-        "coro-linked-scope"
+        "coro-isolated-scope"
       ]
     },
     {
