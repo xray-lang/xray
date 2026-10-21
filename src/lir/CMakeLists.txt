@@ -1,0 +1,13 @@
+# Scalar SSA depends only on base headers, without legacy executor libraries.
+add_library(xray_lir STATIC xlir.c xlir_verify.c)
+target_include_directories(xray_lir PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(xray_lir PUBLIC c_std_11)
+set_target_properties(xray_lir PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+if(MSVC)
+    target_compile_options(xray_lir PRIVATE /W4 /WX /utf-8)
+    if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(xray_lir PRIVATE /experimental:c11atomics)
+    endif()
+else()
+    target_compile_options(xray_lir PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
