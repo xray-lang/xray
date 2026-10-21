@@ -2663,6 +2663,7 @@ if(BUILD_TESTS)
     set_tests_properties(meta_ownership_scope PROPERTIES LABELS "metadata;memory;fast" TIMEOUT 10)
 
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/register_vm.cmake")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/bench/native/native_bench.cmake")
 
     # Qualify the current public CLI and its exact installed Core/SDK payload.
     include("${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/xir_public_cli_product.cmake")

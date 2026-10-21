@@ -1,0 +1,14 @@
+fn push_sum(n: i64) -> i64 {
+    var values: Array<i64> = []
+    for (var i: i64 = 0; i < n; i++) {
+        values.push(i)
+    }
+    var sum: i64 = 0
+    for (var i: i64 = 0; i < n; i++) {
+        sum += values[i]
+    }
+    return sum
+}
+
+const n = 10000000
+print(push_sum(n))

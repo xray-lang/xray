@@ -1,0 +1,10 @@
+fn integer_loop(n: i64) -> i64 {
+    var sum: i64 = 0
+    for (var i: i64 = 0; i < n; i++) {
+        sum += i % 97
+    }
+    return sum
+}
+
+const n = 100000000
+print(integer_loop(n))
