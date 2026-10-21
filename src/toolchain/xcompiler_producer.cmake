@@ -6,7 +6,8 @@ set(XR_COMPILER_PARSER_SOURCES
     frontend/parser/xcompile_type_format.c frontend/parser/xparse.c
     frontend/parser/xparse_coroutine.c frontend/parser/xparse_decl.c
     frontend/parser/xparse_destructure.c frontend/parser/xparse_diagnostics.c
-    frontend/parser/xparse_enum.c frontend/parser/xparse_exception.c frontend/parser/xparse_expr.c
+    frontend/parser/xparse_enum.c frontend/parser/xparse_exception.c frontend/parser/xparse_errors.c
+    frontend/parser/xparse_expr.c
     frontend/parser/xparse_import.c frontend/parser/xparse_match.c frontend/parser/xparse_oop.c
     frontend/parser/xparse_owner.c frontend/parser/xparse_resources.c frontend/parser/xparse_stmt.c
     frontend/parser/xparse_type.c frontend/parser/xstring_pool.c frontend/parser/xtype_ref.c

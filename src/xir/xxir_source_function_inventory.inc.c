@@ -11,6 +11,7 @@ static bool count_closures(AstNode *node, void *pointer) {
     SourceClosureCount *scan = pointer;
     if (!node) return true;
     if (!source_work(scan->ctx,node)) return false;
+    if (!source_error_syntax(scan->ctx, node)) return false;
     /* A module-level declaration is a direct child of the program node, at depth one. */
     bool closure = node->type == AST_FUNCTION_EXPR || node->type == AST_DEFER_STMT ||
         (node->type == AST_FUNCTION_DECL && scan->depth > 1);

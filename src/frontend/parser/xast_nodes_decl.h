@@ -62,8 +62,7 @@ typedef struct FunctionDeclNode {
     XrGenericParam **type_params;
     int type_param_count;
     uint32_t symbol_id;        // Unique ID from analyzer; 0 = unresolved / anonymous
-    XrTypeRef **throws_types;  // Optional `throws E1 | E2` error type annotations
-    int throws_count;          // Number of throws type refs (0 = not annotated)
+    XrThrowsClause throws_clause;
 } FunctionDeclNode;
 
 /* ========== OOP: class / struct / interface / methods ========== */
@@ -107,6 +106,7 @@ typedef struct InterfaceMethodNode {
     XrParamNode **params;
     int param_count;
     XrTypeRef *return_type;
+    XrThrowsClause throws_clause;
     XrBorrowOriginSyntaxState borrow_origin_syntax;
     AstBorrowOriginRef *borrow_origins;
     int borrow_origin_count;
@@ -164,6 +164,7 @@ typedef struct MethodDeclNode {
     XrParamNode **params;
     int param_count;
     XrTypeRef *return_type;
+    XrThrowsClause throws_clause;
     XrBorrowOriginSyntaxState borrow_origin_syntax;
     AstBorrowOriginRef *borrow_origins;
     int borrow_origin_count;

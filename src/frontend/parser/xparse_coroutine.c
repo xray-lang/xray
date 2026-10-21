@@ -186,6 +186,10 @@ AstNode *xr_parse_go_expr_with_link(Parser *parser, uint8_t link_mode) {
 AstNode *xr_parse_await_expr(Parser *parser) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_await_expr: NULL parser");
+    if (xr_parser_check(parser, TK_TRY)) {
+        xr_parser_error_at_current(parser, "write 'try await', not 'await try'");
+        return NULL;
+    }
     int line = parser->previous.line;  // await keyword already consumed
 
     // Check if has timeout parameter await(timeout: N)

@@ -98,6 +98,14 @@ static void tref_to_str_impl(XrCompileState *state, const XrTypeRef *t, char *bu
                 do { tref_to_str_impl(state, t->children[i], buf, pos, cap); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
             }
             do { tref_append(state, buf, pos, cap, ")"); if (xr_compile_state_status(state) != XR_COMPILE_RESOURCE_OK) return; } while (0);
+            if (t->throws_clause.syntax != XR_THROWS_OMITTED) {
+                tref_append(state, buf, pos, cap, " throws");
+                if (t->throws_clause.syntax == XR_THROWS_TYPED) {
+                    tref_append(state, buf, pos, cap, "(");
+                    tref_to_str_impl(state, t->throws_clause.type, buf, pos, cap);
+                    tref_append(state, buf, pos, cap, ")");
+                }
+            }
             /* A unit return is spelled by omission: `fn(A)`, not `fn(A) -> ()`. */
             XrTypeRef *fn_ret = t->nchildren > 0 ? t->children[t->nchildren - 1] : NULL;
             if (fn_ret && fn_ret->kind != XR_TREF_UNIT) {

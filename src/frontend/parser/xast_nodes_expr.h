@@ -21,6 +21,11 @@
 /* ========== Variable / Assignment ========== */
 
 // Variable reference node
+typedef struct TryExprNode {
+    AstNode *operand;
+    XrTryMode mode;
+} TryExprNode;
+
 typedef struct VariableNode {
     char *name;
     XrNameSpan access_marker_span;

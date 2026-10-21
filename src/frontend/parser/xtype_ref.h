@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include "xerror_syntax.h"
 #include "../../base/xdefs.h"
 #include "../../base/xcompile_state.h"
 #include "../../shared/xr_param_mode.h"
@@ -80,6 +81,7 @@ typedef struct XrTypeRef {
     int column;
     uint8_t scalar_rep;                /* XrNativeType scalar representation */
     bool requires_nothrow;             /* FUNCTION: compiler-inferred HOF specialization */
+    XrThrowsClause throws_clause;      /* FUNCTION: explicit source error clause */
     int fixed_length;                  /* FIXED_ARRAY: literal length if known, 0 otherwise */
     struct AstNode *fixed_length_expr; /* FIXED_ARRAY: source expression for N */
     const char *name;                  /* NAMED / GENERIC: type name

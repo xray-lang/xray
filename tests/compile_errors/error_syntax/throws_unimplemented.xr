@@ -1,0 +1,3 @@
+enum E { Failed }
+fn unused() throws(E) {}
+print(1)

@@ -892,7 +892,8 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             /* Return annotations and generics are fn-only. Otherwise arrow is
              * the canonical inferred-return form, including typed/mode params
              * and multi-statement blocks. */
-            bool use_fn_form = ctx->force_fn_expr || fn->return_type || fn->type_param_count > 0;
+            bool use_fn_form = ctx->force_fn_expr || fn->return_type || fn->type_param_count > 0 ||
+                fn->throws_clause.syntax != XR_THROWS_OMITTED;
 
             if (use_fn_form) {
                 xfmt_write_str(ctx, "fn");
@@ -904,6 +905,7 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                     xfmt_emit_param(ctx, fn->params[i]);
                 }
                 xfmt_write_char(ctx, ')');
+                xfmt_emit_throws_clause(ctx, &fn->throws_clause);
                 if (fn->return_type) {
                     xfmt_write_str(ctx, " -> ");
                     xfmt_emit_type(ctx, fn->return_type);
@@ -997,6 +999,11 @@ XR_FUNC void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         }
 
         // Await expression
+        case AST_TRY_EXPR:
+            xfmt_write_str(ctx, node->as.try_expr.mode == XR_TRY_OPTIONAL ? "try? " :
+                node->as.try_expr.mode == XR_TRY_ASSERT ? "try! " : "try ");
+            xfmt_emit_expression(ctx, node->as.try_expr.operand);
+            break;
         case AST_AWAIT_EXPR: {
             xfmt_write_indent(ctx);
             AwaitExprNode *aw = &node->as.await_expr;

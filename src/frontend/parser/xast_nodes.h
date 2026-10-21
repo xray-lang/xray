@@ -119,6 +119,7 @@ struct AstNode {
         EnumAccessNode enum_access;
         EnumIndexNode enum_index;
         TryCatchNode try_catch;
+        TryExprNode try_expr;
         ThrowStmtNode throw_stmt;
         ImportStmtNode import_stmt;
         ExportStmtNode export_stmt;

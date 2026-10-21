@@ -245,6 +245,9 @@ XR_FUNC AstNode *xr_parse_break_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_continue_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_return_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_try_statement(Parser *parser);
+XR_FUNC bool xr_parse_throws_clause(Parser *parser, XrThrowsClause *clause);
+XR_FUNC bool xr_parse_starts_try_block(Parser *parser);
+XR_FUNC AstNode *xr_parse_try_expression(Parser *parser);
 XR_FUNC AstNode *xr_parse_throw_statement(Parser *parser);
 
 /* ========== Declaration Parsing ========== */

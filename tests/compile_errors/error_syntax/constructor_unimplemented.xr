@@ -1,0 +1,2 @@
+enum E { Failed }
+class C { init() throws(E) {} }

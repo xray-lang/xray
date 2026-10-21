@@ -2105,6 +2105,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "EnumIndex";
         case AST_TRY_CATCH:
             return "TryCatch";
+        case AST_TRY_EXPR:
+            return "TryExpr";
         case AST_THROW_STMT:
             return "ThrowStmt";
         case AST_IMPORT_STMT:

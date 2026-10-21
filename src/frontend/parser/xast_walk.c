@@ -35,8 +35,10 @@
 // Visit state threaded through the walk so a visitor can stop it early.
 typedef struct {
     XrAstChildFn fn;
+    XrAstTypeRefFn type_fn;
     void *user_data;
     bool stopped;
+    unsigned type_depth;
 } ChildWalk;
 
 static void emit(ChildWalk *w, AstNode *child) {
@@ -51,25 +53,43 @@ static void emit_array(ChildWalk *w, AstNode **nodes, int count) {
         emit(w, nodes ? nodes[i] : NULL);
 }
 
+static void emit_type_ref(ChildWalk *w, const XrTypeRef *ref);
+
 // Parameter lists carry default-value expressions, which are real children.
 static void emit_params(ChildWalk *w, XrParamNode **params, int count) {
-    for (int i = 0; i < count && !w->stopped; i++)
+    for (int i = 0; i < count && !w->stopped; i++) {
+        if (w->type_fn) emit_type_ref(w, params && params[i] ? params[i]->type : NULL);
         emit(w, params && params[i] ? params[i]->default_value : NULL);
+    }
 }
 
 // A fixed-array type annotation may carry a length expression.
 static void emit_type_ref(ChildWalk *w, const XrTypeRef *ref) {
     if (!ref || w->stopped)
         return;
+    if (w->type_fn && (w->type_depth == 256 || !w->type_fn(ref, w->user_data))) {
+        w->stopped = true;
+        return;
+    }
+    ++w->type_depth;
     if (ref->fixed_length_expr)
         emit(w, ref->fixed_length_expr);
     for (int i = 0; i < (int) ref->nchildren && !w->stopped; i++)
         emit_type_ref(w, ref->children ? ref->children[i] : NULL);
+    emit_type_ref(w, ref->throws_clause.type);
+    --w->type_depth;
 }
 
 static void emit_type_refs(ChildWalk *w, XrTypeRef **refs, int count) {
     for (int i = 0; i < count && !w->stopped; i++)
         emit_type_ref(w, refs ? refs[i] : NULL);
+}
+
+static void emit_generic_types(ChildWalk *w, XrGenericParam **parameters, int count) {
+    if (!w->type_fn) return;
+    for (int i = 0; i < count && !w->stopped; ++i)
+        if (parameters && parameters[i])
+            emit_type_refs(w, parameters[i]->constraints, parameters[i]->constraint_count);
 }
 
 // Returns false only for an unrecognised node type.
@@ -218,6 +238,9 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
             return true;
 
         /* ---- Exceptions ---- */
+        case AST_TRY_EXPR:
+            emit(w, n->as.try_expr.operand);
+            return true;
         case AST_TRY_CATCH: {
             emit(w, n->as.try_catch.try_body);
             for (int i = 0; i < n->as.try_catch.catch_count && !w->stopped; i++) {
@@ -333,7 +356,8 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
         case AST_FUNCTION_EXPR:
             emit_params(w, n->as.function_decl.params, n->as.function_decl.param_count);
             emit_type_ref(w, n->as.function_decl.return_type);
-            emit_type_refs(w, n->as.function_decl.throws_types, n->as.function_decl.throws_count);
+            emit_type_ref(w, n->as.function_decl.throws_clause.type);
+            emit_generic_types(w, n->as.function_decl.type_params, n->as.function_decl.type_param_count);
             emit(w, n->as.function_decl.body);
             return true;
         case AST_CLASS_DECL:
@@ -350,6 +374,9 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
         case AST_METHOD_DECL:
             emit_params(w, n->as.method_decl.params, n->as.method_decl.param_count);
             emit_type_ref(w, n->as.method_decl.return_type);
+            emit_type_ref(w, n->as.method_decl.throws_clause.type);
+            emit_generic_types(w, n->as.method_decl.type_params, n->as.method_decl.type_param_count);
+            emit_generic_types(w, n->as.method_decl.conditions, n->as.method_decl.condition_count);
             emit_array(w, n->as.method_decl.base_args, n->as.method_decl.base_arg_count);
             emit(w, n->as.method_decl.body);
             return true;
@@ -360,6 +387,8 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
             return true;
         case AST_INTERFACE_METHOD:
             emit_params(w, n->as.interface_method.params, n->as.interface_method.param_count);
+            emit_type_ref(w, n->as.interface_method.throws_clause.type);
+            emit_generic_types(w, n->as.interface_method.type_params, n->as.interface_method.type_param_count);
             emit_type_ref(w, n->as.interface_method.return_type);
             return true;
         case AST_INTERFACE_PROPERTY:
@@ -465,6 +494,12 @@ bool xr_ast_node_is_known(const AstNode *node) {
     return walk_children(node, &w);
 }
 
+XR_FUNC bool xr_ast_for_each_type_ref(const AstNode *node, XrAstTypeRefFn fn, void *user_data) {
+    if (!node || !fn) return false;
+    ChildWalk walk = {.type_fn = fn, .user_data = user_data};
+    return walk_children(node, &walk) && !walk.stopped;
+}
+
 /* ====================================================================== */
 /* Canonical payload signature                                             */
 /* ====================================================================== */
@@ -511,6 +546,10 @@ static void sig_type_ref(SigBuf *s, const XrTypeRef *ref) {
         sig_add(s, "/s%u", (unsigned) ref->scalar_rep);
     if (ref->requires_nothrow)
         sig_add(s, "/nothrow");
+    if (ref->throws_clause.syntax != XR_THROWS_OMITTED) {
+        sig_add(s, "/throws%u", (unsigned) ref->throws_clause.syntax);
+        sig_type_ref(s, ref->throws_clause.type);
+    }
     if (ref->fixed_length)
         sig_add(s, "/len%d", ref->fixed_length);
     for (int i = 0; i < (int) ref->nchildren; i++) {
@@ -762,6 +801,9 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             sig_name(s, "label", n->as.continue_stmt.label);
             return true;
 
+        case AST_TRY_EXPR:
+            sig_add(s, " mode=%u", (unsigned) n->as.try_expr.mode);
+            return true;
         case AST_TRY_CATCH:
             sig_add(s, " catches=%d", n->as.try_catch.catch_count);
             for (int i = 0; i < n->as.try_catch.catch_count; i++) {
@@ -853,6 +895,10 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
             sig_name(s, "name", n->as.function_decl.name);
+            if (n->as.function_decl.throws_clause.syntax != XR_THROWS_OMITTED) {
+                sig_add(s, " throws=%u", (unsigned) n->as.function_decl.throws_clause.syntax);
+                sig_type_ref(s, n->as.function_decl.throws_clause.type);
+            }
             sig_add(s, " gen=%d extern=%d req=%d", n->as.function_decl.is_generator ? 1 : 0,
                     n->as.function_decl.is_extern ? 1 : 0, n->as.function_decl.required_count);
             sig_name(s, "abi", n->as.function_decl.extern_abi);
@@ -886,6 +932,10 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             return true;
         case AST_METHOD_DECL:
             sig_name(s, "name", n->as.method_decl.name);
+            if (n->as.method_decl.throws_clause.syntax != XR_THROWS_OMITTED) {
+                sig_add(s, " throws=%u", (unsigned) n->as.method_decl.throws_clause.syntax);
+                sig_type_ref(s, n->as.method_decl.throws_clause.type);
+            }
             sig_add(s,
                     " ctor=%d static=%d priv=%d prot=%d get=%d set=%d sctor=%d var=%d op=%d/%u"
                     " req=%d recv=%u override=%d",
@@ -915,6 +965,10 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             return true;
         case AST_INTERFACE_METHOD:
             sig_name(s, "name", n->as.interface_method.name);
+            if (n->as.interface_method.throws_clause.syntax != XR_THROWS_OMITTED) {
+                sig_add(s, " throws=%u", (unsigned) n->as.interface_method.throws_clause.syntax);
+                sig_type_ref(s, n->as.interface_method.throws_clause.type);
+            }
             sig_add(s, " recv=%u", (unsigned) n->as.interface_method.receiver_mode);
             sig_params(s, n->as.interface_method.params, n->as.interface_method.param_count);
             sig_generic_params(s, n->as.interface_method.type_params,

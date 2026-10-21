@@ -1,0 +1,2 @@
+fn value() -> i64 { return 1 }
+var result = try value()

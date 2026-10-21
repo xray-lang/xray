@@ -151,6 +151,8 @@ struct Parser {
     // "not in a group", i.e. the conservative statement-terminating behaviour.
     uint64_t bracket_bits;
     int bracket_depth;
+    bool optional_try_operand;
+    int optional_try_bracket_depth;
 
     // True for units whose contract is "evaluate and report" — the REPL prints
     // the value of a trailing bare expression, so an expression statement there

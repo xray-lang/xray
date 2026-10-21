@@ -1,0 +1,3 @@
+enum E { Failed }
+type Callback = fn() throws(E)
+print(1)

@@ -1353,6 +1353,9 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
 
+    XrThrowsClause throws_clause = {0};
+    if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
+
     // Parse optional return type annotation: `fn(...) -> T { ... }`.
     // The unified arrow `->` is the only legal separator.
     XrTypeRef *return_type = NULL;
@@ -1392,6 +1395,7 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
         xr_ast_function_expr(parser->compiler_session, params, param_count, body, line);
     if (!xr_parser_healthy(parser)) return NULL;
     func_expr->as.function_expr.return_type = return_type;
+    func_expr->as.function_expr.throws_clause = throws_clause;
     func_expr->as.function_expr.type_params = type_params;
     func_expr->as.function_expr.type_param_count = type_param_count;
     func_expr->column = column;
@@ -1834,6 +1838,11 @@ AstNode *xr_parse_ternary(Parser *parser, AstNode *condition) {
 AstNode *xr_parse_nullish_coalesce(Parser *parser, AstNode *left) {
     if (!xr_parser_healthy(parser)) return NULL;
     XR_DCHECK(parser != NULL, "parse_nullish_coalesce: NULL parser");
+    if (parser->optional_try_operand &&
+        parser->bracket_depth == parser->optional_try_bracket_depth) {
+        xr_parser_error_at_previous(parser, "parenthesize try? before combining it with ??");
+        return NULL;
+    }
     int line = parser->previous.line;
 
     AstNode *right = xr_parse_precedence(parser, PREC_NULLISH_COALESCE + 1);

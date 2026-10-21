@@ -1,0 +1,2 @@
+enum E { Failed }
+var callbacks: Array<fn() throws(E)> = []

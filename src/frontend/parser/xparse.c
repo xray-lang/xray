@@ -131,7 +131,7 @@ static ParseRule rules[] = {
     [TK_STATIC] = {NULL, NULL, PREC_NONE},
     [TK_PRIVATE] = {NULL, NULL, PREC_NONE},
     [TK_MATCH] = {xr_parse_match_expr, NULL, PREC_NONE},  // match expression
-    [TK_TRY] = {NULL, NULL, PREC_NONE},
+    [TK_TRY] = {xr_parse_try_expression, NULL, PREC_NONE},
     [TK_CATCH] = {NULL, NULL, PREC_NONE},
     [TK_UNDERSCORE] = {NULL, NULL, PREC_NONE},  // _ wildcard (pattern only)
 
@@ -1366,7 +1366,7 @@ static AstNode *parse_statement_body(Parser *parser) {
     }
 
     // Exception handling
-    if (parser->current.type == TK_TRY) {
+    if (parser->current.type == TK_TRY && xr_parse_starts_try_block(parser)) {
         return xr_parse_try_statement(parser);
     }
     if (parser->current.type == TK_THROW) {

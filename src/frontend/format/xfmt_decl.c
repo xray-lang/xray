@@ -215,6 +215,7 @@ XR_FUNC void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
     }
     xfmt_write_char(ctx, ')');
 
+    xfmt_emit_throws_clause(ctx, &fn->throws_clause);
     if (fn->return_type) {
         xfmt_write_str(ctx, " -> ");
         xfmt_emit_type(ctx, fn->return_type);
@@ -491,7 +492,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "ref ");
         else if (!m->is_constructor && m->receiver_mode == XR_PARAM_MOVE)
             xfmt_write_str(ctx, "move ");
-        if (m->is_constructor) {
+        if (m->is_constructor || m->is_static_constructor) {
             xfmt_write_str(ctx, XR_INIT_MEMBER_NAME);
         } else if (m->is_operator && m->op_type == OPTYPE_LEN) {
             /* `operator len` is stored as `__operator_len` to keep the named
@@ -515,6 +516,7 @@ XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         }
         xfmt_write_char(ctx, ')');
 
+        xfmt_emit_throws_clause(ctx, &m->throws_clause);
         if (m->return_type) {
             xfmt_write_str(ctx, " -> ");
             xfmt_emit_type(ctx, m->return_type);
@@ -632,6 +634,7 @@ XR_FUNC void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_param(ctx, m->params[j]);
         }
         xfmt_write_char(ctx, ')');
+        xfmt_emit_throws_clause(ctx, &m->throws_clause);
         if (m->return_type) {
             xfmt_write_str(ctx, " -> ");
             xfmt_emit_type(ctx, m->return_type);
@@ -713,6 +716,7 @@ XR_FUNC void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_param(ctx, m->params[j]);
         }
         xfmt_write_char(ctx, ')');
+        xfmt_emit_throws_clause(ctx, &m->throws_clause);
         if (m->return_type) {
             xfmt_write_str(ctx, " -> ");
             xfmt_emit_type(ctx, m->return_type);

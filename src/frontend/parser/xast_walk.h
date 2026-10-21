@@ -41,11 +41,15 @@
 // are reported as NULL slots so that structure comparison can tell "absent"
 // apart from "different". Return false to stop the walk early.
 typedef bool (*XrAstChildFn)(AstNode *child, void *user_data);
+typedef bool (*XrAstTypeRefFn)(const XrTypeRef *type, void *user_data);
 
 // Visit every direct AST child of `node`. Returns false if `node`'s type is not
 // covered by this file (fail-closed) or if the visitor stopped the walk; use
 // xr_ast_node_is_known() to tell those two apart.
 XR_FUNC bool xr_ast_for_each_child(const AstNode *node, XrAstChildFn fn, void *user_data);
+/* Visit syntax type references, including nested function error clauses, without
+ * changing the AST child slots used by structural comparison. */
+XR_FUNC bool xr_ast_for_each_type_ref(const AstNode *node, XrAstTypeRefFn fn, void *user_data);
 
 // True when this file knows how to walk and describe `node`.
 XR_FUNC bool xr_ast_node_is_known(const AstNode *node);

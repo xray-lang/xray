@@ -1,0 +1,2 @@
+fn unused() throws {}
+print(1)

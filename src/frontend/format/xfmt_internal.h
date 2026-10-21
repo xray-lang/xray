@@ -105,6 +105,7 @@ XR_FUNC void xfmt_write_trailing_comment(XrFmtContext *ctx, XrTrivia *trivia);
 // (defined in xfmt_type.c)
 // ---------------------------------------------------------------------------
 
+XR_FUNC void xfmt_emit_throws_clause(XrFmtContext *ctx, const XrThrowsClause *clause);
 XR_FUNC void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref);
 
 /* Emits a named structural-object type as its field structure. Only for the right-hand

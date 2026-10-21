@@ -66,7 +66,7 @@ static bool source_prelude_signature(SourcePreludeScan *scan,AstNode *node) {
         return source_prelude_generics(scan,node->as.function_decl.type_params,node->as.function_decl.type_param_count) &&
             source_prelude_ref(scan,node->as.function_decl.return_type) &&
             source_prelude_params(scan,node->as.function_decl.params,node->as.function_decl.param_count) &&
-            source_prelude_refs(scan,node->as.function_decl.throws_types,node->as.function_decl.throws_count);
+            source_prelude_ref(scan,node->as.function_decl.throws_clause.type);
     case AST_METHOD_DECL:
         return source_prelude_generics(scan,node->as.method_decl.type_params,node->as.method_decl.type_param_count) &&
             source_prelude_generics(scan,node->as.method_decl.conditions,node->as.method_decl.condition_count) &&

@@ -990,6 +990,8 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             xr_parser_consume(parser, TK_RPAREN, "expected ')' to close the function parameter list");
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
+        XrThrowsClause throws_clause = {0};
+        if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
         XrTypeRef *ret;
         XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
         AstBorrowOriginRef *borrow_origins = NULL;
@@ -1019,6 +1021,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             parser->compiler_session, elems, param_modes, param_names, count, ret,
             borrow_origin_syntax, borrow_origins, borrow_origin_count);
         if (!xr_parser_healthy(parser)) return NULL;
+        if (result) result->throws_clause = throws_clause;
         xr_tref_set_source_position(result, function_token.line, function_token.column);
 
 

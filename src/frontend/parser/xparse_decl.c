@@ -997,6 +997,9 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
 
+    XrThrowsClause throws_clause = {0};
+    if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
+
     // Parse optional return type annotation: `fn foo(...) -> T { ... }`.
     // The unified arrow `->` is the only legal separator.
     XrTypeRef *return_type = NULL;
@@ -1118,6 +1121,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     func_decl->as.function_decl.borrow_origins = borrow_origins;
     func_decl->as.function_decl.borrow_origin_count = borrow_origin_count;
     func_decl->as.function_decl.required_count = required_count;
+    func_decl->as.function_decl.throws_clause = throws_clause;
     func_decl->as.function_decl.type_params = type_params;
     func_decl->as.function_decl.type_param_count = type_param_count;
 

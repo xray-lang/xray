@@ -25,6 +25,7 @@
 #include <stddef.h>
 
 #include "xast_types.h"
+#include "xerror_syntax.h"
 #include "../lexer/xlex.h"
 #include "../../shared/xr_derive_flags.h"
 

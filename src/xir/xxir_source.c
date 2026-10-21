@@ -2140,7 +2140,7 @@ static bool source_test_role(SourceContext *ctx, AstNode *node, XrXirFunctionIde
 static bool declare_function(SourceContext *ctx, AstNode *node, uint32_t index) {
     FunctionDeclNode *decl = &node->as.function_decl;
     if (decl->is_extern || decl->type_param_count < 0 || decl->type_param_count > 65536 ||
-        decl->throws_count || decl->borrow_origin_count || !decl->body || decl->param_count > 65536 || decl->param_count < 0)
+        decl->throws_clause.syntax != XR_THROWS_OMITTED || decl->borrow_origin_count || !decl->body || decl->param_count > 65536 || decl->param_count < 0)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "function contract is not implemented in XIR");
     XrXirFunctionIdentity identity = {.module = ctx->module, .exported = node->is_exported};
     if (!source_test_role(ctx, node, &identity)) return false;
@@ -2211,6 +2211,7 @@ static bool source_resolved_identity(SourceContext *ctx, const XrModuleSpec *spe
         (spec->embedded_source ? !id->source_path : source_text_same(ctx, NULL, spec->source_path, id->source_path));
 }
 #include "xxir_source_imports.inc.c"
+#include "xxir_source_error_syntax.inc.c"
 #include "xxir_source_function_inventory.inc.c"
 #include "xxir_source_library.inc.c"
 #include "xxir_source_history_receive.inc.c"
@@ -2718,7 +2719,7 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     if (context) { context_copy = *context; context = &context_copy; }
     bool no_suspend = context && (context->flags & XR_XIR_CALLABLE_NO_SUSPEND);
     FunctionDeclNode *decl = &node->as.function_expr;
-    if (decl->is_extern || decl->attr_count || decl->type_param_count || decl->throws_count ||
+    if (decl->is_extern || decl->attr_count || decl->type_param_count || decl->throws_clause.syntax != XR_THROWS_OMITTED ||
         decl->borrow_origin_count || !decl->body || decl->param_count < 0 || decl->param_count > 65536)
         return source_fail(ctx, node, XR_XIR_BAD_STRUCTURE, "closure contract is not implemented in XIR");
     if (context) {

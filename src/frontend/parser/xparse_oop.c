@@ -1334,6 +1334,9 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
 
+    XrThrowsClause throws_clause = {0};
+    if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
+
     // Parse return type (optional) — unified arrow `->`.
     XrTypeRef *return_type = NULL;
     XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
@@ -1388,6 +1391,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
         method_node->end_column = body->end_column;
     }
 
+    method_node->as.method_decl.throws_clause = throws_clause;
     method_node->as.method_decl.is_variadic = is_variadic;
     method_node->as.method_decl.required_count = required_count;
     method_node->as.method_decl.borrow_origin_syntax = borrow_origin_syntax;
@@ -2053,6 +2057,9 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
         op_type_val = OPTYPE_UNARY;  // no params ! is unary logical not
     }
 
+    XrThrowsClause throws_clause = {0};
+    if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
+
     // Parse return type (optional) — unified arrow `->`.
     XrTypeRef *return_type = NULL;
     XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
@@ -2115,6 +2122,7 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     }
 
     // Set operator flags
+    method->as.method_decl.throws_clause = throws_clause;
     method->as.method_decl.is_operator = true;     // mark as operator method
     method->as.method_decl.op_type = op_type_val;  // set specific operator type
     method->as.method_decl.borrow_origin_syntax = borrow_origin_syntax;
@@ -2523,6 +2531,8 @@ AstNode *xr_parse_interface_member(Parser *parser) {
             xr_parser_consume(parser, TK_RPAREN, "operator len does not accept parameters");
             if (!xr_parser_healthy(parser)) return NULL;
         } while (0);
+        XrThrowsClause throws_clause = {0};
+        if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
         do {
             xr_parser_consume(parser, TK_ARROW, "expected '->' after 'operator len()'");
             if (!xr_parser_healthy(parser)) return NULL;
@@ -2550,6 +2560,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         method->column = name_span.column;
         method->end_line = name_span.line;
         method->end_column = name_span.column + 3;
+        method->as.interface_method.throws_clause = throws_clause;
         method->as.interface_method.attributes = attributes;
         method->as.interface_method.attr_count = attr_count;
         method->as.interface_method.receiver_mode = receiver_mode;
@@ -2664,6 +2675,9 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
 
+    XrThrowsClause throws_clause = {0};
+    if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
+
     // Parse return type (optional) — unified arrow `->`.
     XrTypeRef *return_type = NULL;
     XrBorrowOriginSyntaxState borrow_origin_syntax = XR_BORROW_ORIGIN_OMITTED;
@@ -2714,6 +2728,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
     method->column = member_column;
     method->end_line = member_line;
     method->end_column = member_column + (int)xr_parser_string_length(parser, member_name);
+    method->as.interface_method.throws_clause = throws_clause;
     method->as.interface_method.attributes = attributes;
     method->as.interface_method.attr_count = attr_count;
     method->as.interface_method.type_params = type_params;
@@ -2771,6 +2786,9 @@ AstNode *xr_parse_static_constructor(Parser *parser, bool is_private) {
         if (!xr_parser_healthy(parser)) return NULL;
     } while (0);
 
+    XrThrowsClause throws_clause = {0};
+    if (!xr_parse_throws_clause(parser, &throws_clause)) return NULL;
+
     // Static constructor cannot have return type
     if (xr_parser_check(parser, TK_COLON)) {
         do {
@@ -2823,6 +2841,7 @@ AstNode *xr_parse_static_constructor(Parser *parser, bool is_private) {
     }
 
     // Mark as static constructor
+    method_node->as.method_decl.throws_clause = throws_clause;
     method_node->as.method_decl.is_static_constructor = true;
 
     return method_node;

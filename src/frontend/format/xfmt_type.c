@@ -114,6 +114,15 @@ static void fmt_type_text(XrFmtContext *ctx, XrTypeRef *type, bool structural) {
     }
     xr_compile_state_free(scratch);
 }
+XR_FUNC void xfmt_emit_throws_clause(XrFmtContext *ctx, const XrThrowsClause *clause) {
+    if (!xfmt_step(ctx) || clause->syntax == XR_THROWS_OMITTED) return;
+    xfmt_write_str(ctx, " throws");
+    if (clause->syntax == XR_THROWS_TYPED) {
+        xfmt_write_char(ctx, '(');
+        xfmt_emit_type(ctx, clause->type);
+        xfmt_write_char(ctx, ')');
+    }
+}
 XR_FUNC void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *type) {
     if (!xfmt_step(ctx)) return; fmt_type_text(ctx, type, false); }
 XR_FUNC void xfmt_emit_type_structural(XrFmtContext *ctx, XrTypeRef *type) {

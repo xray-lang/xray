@@ -217,6 +217,7 @@ typedef enum {
 
     // Program node
     AST_FUNCTION_REF, // Explicit ordinary function specialization value
+    AST_TRY_EXPR, // try / try? / try! expression
     AST_PROGRAM  // Root node
 } AstNodeType;
 
