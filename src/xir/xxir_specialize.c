@@ -725,4 +725,25 @@ XR_FUNC XrXirStatus xr_xir_compile_specialize_receive(const XrXirArtifact *check
     }
     return spec_run(checked,output,diagnostic,NULL,NULL,receiver);
 }
+XR_FUNC XrXirStatus xr_xir_compile_specialization_origin(const XrXirArtifact *artifact,
+    uint32_t function, uint32_t *output) {
+    if (!artifact || !output) return XR_XIR_BAD_STRUCTURE;
+    const XrXirModule *module = xr_xir_compile_artifact_module(artifact);
+    if (!module || module->stage != XR_XIR_CHECKED || xir_artifact_is_evaluation(artifact))
+        return XR_XIR_BAD_STAGE;
+    if (function >= module->function_count) return XR_XIR_BAD_VALUE;
+    const XrXirProvenance *provenance = module->provenance;
+    uint32_t origin = function;
+    if (provenance && provenance->kind == XR_XIR_EVIDENCE_INSTANCE) {
+        const XrXirModule *source = xr_xir_compile_artifact_module(provenance->source);
+        if (!source || provenance->count != module->function_count || !provenance->origins)
+            return XR_XIR_BAD_STRUCTURE;
+        origin = provenance->origins[function].function;
+        if (origin >= source->function_count) return XR_XIR_BAD_STRUCTURE;
+    } else if (provenance && provenance->kind != XR_XIR_EVIDENCE_TEMPLATE) {
+        return XR_XIR_BAD_STAGE;
+    }
+    *output = origin;
+    return XR_XIR_OK;
+}
 #include "xxir_comptime_pending.inc.c"

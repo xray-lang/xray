@@ -1,0 +1,47 @@
+module {
+  extern @xrt_print_i64(i64) -> unit
+  func @"f0_$init"() -> unit {
+    entry ^b0
+  ^b0:
+    %0 = const i64 0
+    %1 = call @f1_sum(%0)
+    call @xrt_print_i64(%1)
+    %2 = const i64 1
+    %3 = call @f1_sum(%2)
+    call @xrt_print_i64(%3)
+    %4 = const i64 20
+    %5 = call @f1_sum(%4)
+    call @xrt_print_i64(%5)
+    ret
+  }
+  func @f1_sum(%0: i64) -> i64 {
+    entry ^b0
+  ^b0:
+    %1 = const i64 0
+    %2 = const i64 0
+    br ^b1(%1, %2)
+  ^b1(%3: i64, %4: i64):
+    %5 = icmp lt i64 %3, %0
+    condbr %5, ^b2(%3, %4), ^b3(%4)
+  ^b2(%6: i64, %7: i64):
+    %8 = add i64 %7, %6
+    %9 = const i64 1
+    %10 = add i64 %6, %9
+    br ^b1(%10, %8)
+  ^b3(%11: i64):
+    ret %11
+  }
+  func @"f2_$entry"() -> i64 {
+    entry ^b0
+  ^b0:
+    %0 = const i64 0
+    ret %0
+  }
+  func @main() -> i64 {
+    entry ^b0
+  ^b0:
+    call @"f0_$init"()
+    %0 = call @"f2_$entry"()
+    ret %0
+  }
+}

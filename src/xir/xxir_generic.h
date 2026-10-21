@@ -13,6 +13,11 @@
 #define XXIR_GENERIC_H
 #include "xxir.h"
 XR_FUNC XrXirStatus xr_xir_compile_specialize(const XrXirArtifact *checked, XrXirArtifact **output, XrXirDiagnostic *diagnostic);
+/* Observe the original Checked function ordinal without exposing provenance.
+ * The artifact must be live and Checked. Failure preserves output. This is
+ * metadata correspondence, not permission to execute or specialize a body. */
+XR_FUNC XrXirStatus xr_xir_compile_specialization_origin(const XrXirArtifact *artifact,
+    uint32_t function, uint32_t *output);
 XR_FUNC XrXirStatus xr_xir_compile_generics_structure_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
 XR_FUNC XrXirStatus xr_xir_compile_result_binders_verify(const XrXirCompileContext *compile_context, const XrXirModule *module);
 XR_FUNC XrXirStatus xr_xir_compile_result_argument(const XrXirCompileContext *compile_context, const XrXirModule *module, uint32_t caller, XrXirType type);
