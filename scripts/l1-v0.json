@@ -17,8 +17,10 @@
     "check_source_owner",
     "local_build_slots",
     "local_merge_queue",
-    "meta_ownership_scope"
+    "meta_ownership_scope",
+    "smoke",
+    "smoke_runner"
   ],
   "versionCommand": ["{build}/xray.exe", "--version", "--json"],
-  "smokeStatus": "NOT_RUN: the ratcheted smoke suite is not integrated yet"
+  "smokeStatus": "smoke: demos 2/22 stdlib 1/29 readme 0/6 native 0/3; native NOT_RUN (Task328 P2)"
 }
