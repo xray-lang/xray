@@ -53,7 +53,7 @@ batch in the directories above. During a batch use the existing impact tests;
 do not rerun the same full qualification after each local edit. A failing lane
 remains a failure until its cause is fixed and rerun.
 
-Changes under `src/ir/`, `src/aot/`, or `src/analysis/` must preserve the Task 218 compiler-memory-safety defenses:
+Changes under `src/ir/`, `src/aot/`, `src/analysis/`, `src/lir/`, or `src/hir/` must preserve the Task 218 compiler-memory-safety defenses:
 
 - Run `ctest --test-dir build -R meta_ownership_inventory` after compiler metadata changes.
 - Run `ctest --test-dir build -R asan_focused` before handing off a completed change in those directories.
