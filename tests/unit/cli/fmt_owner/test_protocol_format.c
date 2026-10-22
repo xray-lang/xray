@@ -96,11 +96,11 @@ static XrJsonValue *lsp_call(XrLspServer *server,XrJsonValue *params,bool format
     XrJsonValue *response=xjson_parse(json,strlen(json));CHECK(response);CHECK(xjson_get_int(response,"id")==7);return response;
 }
 static void lsp_cases(void){
-    XrLspServer server={0};XrLspDocument doc={0};doc.server=&server;doc.uri="file:///test.xr";doc.content="var x=1\n";doc.length=8;doc.line_count=1;
+    XrLspServer server={0};XrLspDocument doc={0};doc.server=&server;doc.uri="file:///E:/protocol-format.xr";doc.content="var x=1\n";doc.length=8;doc.line_count=1;
     XrLspDocBucket bucket={.doc=&doc,.uri=doc.uri};XrLspDocBucket *buckets[]={&bucket};XrLspDocTable table={.buckets=buckets,.bucket_count=1,.doc_count=1};server.doc_table=&table;
     server.config.format_tab_size=4;server.config.format_insert_spaces=true;server.config.format_max_line_length=100;
     XrJsonValue *params=xjson_new_object(),*document=xjson_new_object();XJSON_SET_STRING(document,"uri",doc.uri);xjson_object_set(params,"textDocument",document);
-    XrJsonValue *options=xjson_new_object();XJSON_SET_INT(options,"tabSize",4);XJSON_SET_BOOL(options,"insertSpaces",true);xjson_object_set(params,"options",options);
+    const char *option_text="{\"tabSize\":4,\"insertSpaces\":true}";XrJsonValue *options=xjson_parse(option_text,strlen(option_text));xjson_object_set(params,"options",options);
     reset();server.formatting_failure.stage=99;XrJsonValue *out=lsp_call(&server,params,true,false);size_t count=attempts;
     CHECK(!server.formatting_failure.stage);XrJsonValue *edits=xjson_get_array(out,"result");CHECK(edits && xjson_array_len(edits)==1);
     CHECK(!strcmp(xjson_get_string(xjson_array_get(edits,0),"newText"),"var x = 1\n"));xjson_free(out);
