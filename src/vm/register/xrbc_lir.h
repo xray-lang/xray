@@ -37,12 +37,13 @@ typedef struct {
 // admitted, but the whole input is verified at this trust boundary. Output
 // must initially be NULL and remains NULL on failure. I64, I1, unit and raw
 // F64 transport are supported. Floating operations, comparisons, conversions
-// and native calls are not admitted; F64 arguments retain every payload bit.
+// are not admitted; native calls bind only the shared i64 output leaf. F64
+// arguments retain every payload bit.
 XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunction entry,
     XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic);
 XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program);
-XR_FUNC XrRbcStatus xr_rbc_program_run(const XrRbcProgram *program, const uint64_t *arguments,
-    size_t argument_count, uint64_t *result);
+XR_FUNC XrRbcStatus xr_rbc_program_prepare(const XrRbcProgram *program, const uint64_t *arguments,
+    size_t argument_count, XrRbcExecution **output);
 // The view and everything reachable through it borrow the program.
 XR_FUNC const XrRbcModule *xr_rbc_program_view(const XrRbcProgram *program);
 // Borrowed immutable metadata, including a real owner for empty tables. Retain

@@ -19,6 +19,7 @@
 struct XrRbcProgram {
     XrRbcModule module;
     XrtLocationOwner *locations;
+    XrRbcNativeI64 print;
     XrLirType parameters[XR_RBC_REGISTER_COUNT_MAX];
     uint32_t parameter_count;
 };
@@ -30,7 +31,7 @@ typedef struct {
     XrLirFunctionView view;
     const uint32_t *functions;
     uint32_t slots[XR_RBC_REGISTER_COUNT_MAX + 1];
-    uint32_t slot_count, scratch_count, register_count;
+    uint32_t slot_count, scratch_count, register_count, source_id;
     uint32_t *code;
     uint64_t *constants;
     size_t code_count, code_capacity, constant_count, constant_capacity;
@@ -208,9 +209,14 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                     XrLirFunctionView callee;
                     xr_lir_function_view(input, (XrLirFunction) {input, i.callee}, &callee);
                     if (callee.kind != XR_LIR_FUNCTION_DEFINITION) {
-                        rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
-                            "native output requires the shared runtime leaf", i.source);
-                        return false;
+                        if (callee.kind != XR_LIR_FUNCTION_EXTERNAL ||
+                            callee.extern_kind != XR_LIR_EXTERN_PRINT_I64) {
+                            rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
+                                "native call has no registered runtime leaf", i.source);
+                            return false;
+                        }
+                        mapping[i.callee - 1] = UINT32_MAX;
+                        continue;
                     }
                     if (*count == 65536) {
                         rbc_lir_error(d, XR_RBC_COMPILE_LIMIT,
@@ -243,8 +249,10 @@ static bool rbc_lir_layout(RbcLirCompiler *c) {
             XrLirInstructionView i;
             xr_lir_instruction_view(c->input, block, n, &i);
             if (i.result) c->slots[i.result] = c->slot_count++;
-            if (i.op == XR_LIR_CALL && window < i.operand_count + 1)
-                window = i.operand_count + 1;
+            if (i.op == XR_LIR_CALL) {
+                uint32_t physical = c->functions[i.callee - 1] == UINT32_MAX ? 2 : i.operand_count;
+                if (window < physical + 1) window = physical + 1;
+            }
             if (i.op == XR_LIR_CONDBR && !c->scratch_count) c->scratch_count = 1;
             for (uint32_t e = 0; e < i.edge_count; ++e)
                 if (c->scratch_count < i.edges[e].argument_count)
@@ -332,6 +340,13 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
         return rbc_lir_emit(c, i->operand_count ? XR_RBC_RET : XR_RBC_RET0,
             i->operand_count ? c->slots[i->operands[0]] : 0, 0, 0, 0);
     case XR_LIR_CALL: {
+        if (c->functions[i->callee - 1] == UINT32_MAX) {
+            uint32_t destination = c->register_count - 3;
+            return rbc_lir_emit(c, XR_RBC_MOV, destination + 1,
+                    c->slots[i->operands[0]], 0, 0) &&
+                rbc_lir_constant(c, destination + 2, i->source.path_length ? c->source_id : 0) &&
+                rbc_lir_emit(c, XR_RBC_CALLN, destination, 0, 0, 0);
+        }
         uint32_t destination = c->register_count - i->operand_count - 1;
         for (uint32_t n = 0; n < i->operand_count; ++n)
             if (!rbc_lir_emit(c, XR_RBC_MOV, destination + n + 1,
@@ -375,6 +390,7 @@ static bool rbc_lir_function(RbcLirCompiler *c, XrRbcFunction *out) {
         for (uint32_t n = 0; n < bv.instruction_count; ++n) {
             XrLirInstructionView i;
             xr_lir_instruction_view(c->input, block, n, &i);
+            if (i.source.path_length) ++c->source_id;
             c->diagnostic->block = block.id;
             c->diagnostic->instruction = n + 1;
             rbc_lir_error(c->diagnostic, XR_RBC_COMPILE_OK, "", i.source);
@@ -462,12 +478,14 @@ done:
 
 static XrRbcCompileStatus rbc_lir_build(const XrLirModule *input, const uint32_t *ids,
     const uint32_t *mapping, XrRbcProgram *p, XrRbcCompileDiagnostic *d) {
+    uint32_t source_id = 0;
     for (size_t f = 0; f < p->module.function_count; ++f) {
         RbcLirCompiler c = {.input = input, .function = {input, ids[f]},
-            .functions = mapping, .diagnostic = d};
+            .functions = mapping, .diagnostic = d, .source_id = source_id};
         xr_lir_function_view(input, c.function, &c.view);
         d->function = ids[f];
         bool success = rbc_lir_function(&c, &((XrRbcFunction *) p->module.functions)[f]);
+        source_id = c.source_id;
         xr_free(c.blocks);
         xr_free(c.patches);
         if (!success) {
@@ -525,6 +543,13 @@ XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunctio
     }
     status = rbc_lir_locations(input, ids, count, p, d);
     if (status != XR_RBC_COMPILE_OK) goto done;
+    for (size_t i = 0; i < all; ++i) {
+        if (mapping[i] != UINT32_MAX) continue;
+        p->print = xrt_print_i64;
+        p->module.natives = &p->print;
+        p->module.native_count = 1;
+        break;
+    }
     status = XR_RBC_COMPILE_OUT_OF_MEMORY;
     XrRbcFunction *functions = xr_calloc(count, sizeof(*functions));
     if (!functions) {
@@ -546,12 +571,13 @@ done:
     return status;
 }
 
-XR_FUNC XrRbcStatus xr_rbc_program_run(const XrRbcProgram *p, const uint64_t *arguments,
-    size_t count, uint64_t *result) {
-    if (!p || count != p->parameter_count || (count && !arguments)) return XR_RBC_INVALID;
+XR_FUNC XrRbcStatus xr_rbc_program_prepare(const XrRbcProgram *p, const uint64_t *arguments,
+    size_t count, XrRbcExecution **output) {
+    if (!output || *output || !p || count != p->parameter_count || (count && !arguments))
+        return XR_RBC_INVALID;
     for (size_t i = 0; i < count; ++i)
         if (p->parameters[i] == XR_LIR_I1 && arguments[i] > 1) return XR_RBC_INVALID;
-    return xr_rbc_run(&p->module, 0, arguments, count, result);
+    return xr_rbc_module_prepare(&p->module, 0, arguments, count, p->locations, output);
 }
 
 XR_FUNC const XrRbcModule *xr_rbc_program_view(const XrRbcProgram *program) {

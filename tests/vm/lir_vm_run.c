@@ -97,9 +97,13 @@ int main(int argc, char **argv) {
     }
     XrRbcProgram *program = compile_file(argv[1]);
     if (!program) return 1;
-    uint64_t result = 0;
-    XrRbcStatus status = xr_rbc_program_run(program, NULL, 0, &result);
+    XrRbcExecution *execution = NULL;
+    XrRbcStatus status = xr_rbc_program_prepare(program, NULL, 0, &execution);
+    XrRbcOutcome *outcome = status == XR_RBC_OK ? xr_rbc_execution_run(execution) : NULL;
+    if (status == XR_RBC_OK) status = xr_rbc_outcome_status(outcome);
+    xr_rbc_execution_free(&execution);
     xr_rbc_program_destroy(program);
+    xr_rbc_outcome_free(&outcome);
     if (status != XR_RBC_OK) {
         fprintf(stderr, "lir_vm_run: execution failed (%u)\n", (unsigned)status);
         return 1;

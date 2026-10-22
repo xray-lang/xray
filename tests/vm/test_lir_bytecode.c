@@ -9,6 +9,22 @@
 #include "../lir/lir_test_programs.h"
 #include "vm/register/xrbc_lir.h"
 
+
+// The sole guest result is owned; this test helper consumes it after inspection.
+static XrRbcStatus execute(XrRbcProgram *program, const uint64_t *arguments,
+    size_t count, uint64_t *bits) {
+    XrRbcExecution *execution = NULL;
+    XrRbcStatus status = xr_rbc_program_prepare(program, arguments, count, &execution);
+    if (status != XR_RBC_OK) return status;
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    CHECK(outcome);
+    status = xr_rbc_outcome_status(outcome);
+    xr_rbc_outcome_bits(outcome, bits);
+    xr_rbc_execution_free(&execution);
+    xr_rbc_outcome_free(&outcome);
+    return status;
+}
+
 static XrRbcProgram *compile(XrLirModule *m, XrLirFunction root) {
     XrRbcProgram *program = NULL;
     XrRbcCompileDiagnostic diagnostic;
@@ -19,7 +35,7 @@ static XrRbcProgram *compile(XrLirModule *m, XrLirFunction root) {
 
 static uint64_t run(XrRbcProgram *program, const uint64_t *arguments, size_t count) {
     uint64_t result = UINT64_MAX;
-    CHECK(xr_rbc_program_run(program, arguments, count, &result) == XR_RBC_OK);
+    CHECK(execute(program, arguments, count, &result) == XR_RBC_OK);
     return result;
 }
 
@@ -191,7 +207,7 @@ static void test_arithmetic(void) {
             CHECK(run(program, values, 2) == (uint64_t) (operations[n] == XR_LIR_DIV ? -2 : -1));
             values[1] = 0;
             uint64_t sentinel = 123;
-            CHECK(xr_rbc_program_run(program, values, 2, &sentinel) == XR_RBC_DIVIDE_BY_ZERO);
+            CHECK(execute(program, values, 2, &sentinel) == XR_RBC_DIVIDE_BY_ZERO);
             CHECK(sentinel == 123);
         }
         xr_rbc_program_destroy(program);
@@ -304,7 +320,7 @@ static void test_same_target_edges(void) {
     CHECK(run(program, values, 3) == 21);
     values[0] = 2;
     uint64_t sentinel = 123;
-    CHECK(xr_rbc_program_run(program, values, 3, &sentinel) == XR_RBC_INVALID && sentinel == 123);
+    CHECK(execute(program, values, 3, &sentinel) == XR_RBC_INVALID && sentinel == 123);
     xr_rbc_program_destroy(program);
 }
 
@@ -440,7 +456,7 @@ static void test_unused_and_invalid(void) {
     xr_lir_module_destroy(m);
     CHECK(run(program, NULL, 0) == 17);
     uint64_t result = 44;
-    CHECK(xr_rbc_program_run(program, NULL, 1, &result) == XR_RBC_INVALID && result == 44);
+    CHECK(execute(program, NULL, 1, &result) == XR_RBC_INVALID && result == 44);
     xr_rbc_program_destroy(program);
 
     // Release construction can publish before the explicit SSA trust check.
@@ -492,9 +508,12 @@ static void test_owned_diagnostic_and_rejection(void) {
 
     m = test_sum();
     OK(xr_lir_function_at(m, 2, &root));
-    CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_UNSUPPORTED);
-    CHECK(!program);
+    CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
+    CHECK(xr_rbc_program_view(program)->native_count == 1 &&
+        xr_rbc_program_view(program)->natives[0] == xrt_print_i64);
     xr_lir_module_destroy(m);
+    xr_rbc_program_destroy(program);
+    program = NULL;
     CHECK(xr_rbc_compile(NULL, (XrLirFunction) {0}, &program, &diagnostic) == XR_RBC_COMPILE_INVALID);
 }
 

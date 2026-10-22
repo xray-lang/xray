@@ -28,6 +28,20 @@ typedef struct {
     size_t frame_capacity, depth;
 } XrRbcStack;
 
+struct XrRbcOutcome {
+    XrRbcStatus status;
+    uint64_t bits;
+    XrtOutputFailure failure;
+    XrtLocationOwner *locations;
+};
+
+struct XrRbcExecution {
+    const XrRbcModule *module;
+    XrRbcStack stack;
+    XrRbcOutcome *pending;
+    bool consumed;
+};
+
 static bool xr_rbc_grow(void **storage, size_t *capacity, size_t count, size_t item_size) {
     if (count <= *capacity)
         return true;
@@ -107,7 +121,8 @@ static XrRbcStatus xr_rbc_call(const XrRbcModule *module, XrRbcStack *stack, uin
     return XR_RBC_OK;
 }
 
-static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack, uint64_t *result) {
+static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack,
+    const XrtLocationOwner *locations, uint64_t *result) {
     const XrRbcFunction *function;
     size_t base, pc;
     uint32_t instruction, op, a, b, c;
@@ -117,27 +132,106 @@ static XrRbcStatus xr_rbc_execute(const XrRbcModule *module, XrRbcStack *stack, 
 #include "xrbc_dispatch.inc.c"
 }
 
-XR_FUNC XrRbcStatus xr_rbc_run(const XrRbcModule *module, uint32_t entry, const uint64_t *arguments,
-                               size_t argument_count, uint64_t *result) {
-    if (!module || !module->functions || entry >= module->function_count || !result ||
-        (argument_count && !arguments) || (module->native_count && !module->natives))
+XR_FUNC XrRbcStatus xr_rbc_module_prepare(const XrRbcModule *module, uint32_t entry,
+    const uint64_t *arguments, size_t argument_count, XrtLocationOwner *locations,
+    XrRbcExecution **output) {
+    if (!output || *output || !locations || !module || !module->functions ||
+        entry >= module->function_count || (argument_count && !arguments) ||
+        (module->native_count && !module->natives) || module->native_count > 65536)
         return XR_RBC_INVALID;
     const XrRbcFunction *function = &module->functions[entry];
     if (!xr_rbc_function_valid(function) || argument_count != function->parameter_count)
         return XR_RBC_INVALID;
-    XrRbcStack stack = {0};
-    XrRbcStatus status = XR_RBC_OUT_OF_MEMORY;
-    if (xr_rbc_reserve(&stack, function->register_count, 1)) {
-        memset(stack.slots, 0, function->register_count * sizeof(uint64_t));
-        if (argument_count)
-            memcpy(stack.slots, arguments, argument_count * sizeof(uint64_t));
-        stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0};
-        stack.depth = 1;
-        status = xr_rbc_execute(module, &stack, result);
+    for (size_t i = 0; i < module->native_count; ++i)
+        if (module->natives[i] != xrt_print_i64)
+            return XR_RBC_INVALID;
+    XrRbcExecution *execution = xr_calloc(1, sizeof(*execution));
+    if (!execution) return XR_RBC_OUT_OF_MEMORY;
+    execution->module = module;
+    execution->pending = xr_calloc(1, sizeof(*execution->pending));
+    if (!execution->pending ||
+        !xr_rbc_reserve(&execution->stack, function->register_count, 1) ||
+        !xrt_locations_retain(locations)) {
+        xr_rbc_execution_free(&execution);
+        return XR_RBC_OUT_OF_MEMORY;
     }
-    xr_free(stack.frames);
-    xr_free(stack.slots);
-    return status;
+    execution->pending->locations = locations;
+    execution->pending->status = XR_RBC_INVALID;
+    memset(execution->stack.slots, 0, function->register_count * sizeof(uint64_t));
+    if (argument_count)
+        memcpy(execution->stack.slots, arguments, argument_count * sizeof(uint64_t));
+    execution->stack.frames[0] = (XrRbcFrame) {entry, 0, 0, 0};
+    execution->stack.depth = 1;
+    *output = execution;
+    return XR_RBC_OK;
+}
+
+static void xr_rbc_root(void *context) {
+    XrRbcExecution *execution = context;
+    execution->pending->status = xr_rbc_execute(execution->module, &execution->stack,
+        execution->pending->locations, &execution->pending->bits);
+}
+
+static void xr_rbc_stack_free(XrRbcStack *stack) {
+    xr_free(stack->frames);
+    xr_free(stack->slots);
+    *stack = (XrRbcStack) {0};
+}
+
+XR_FUNC XrRbcOutcome *xr_rbc_execution_run(XrRbcExecution *execution) {
+    if (!execution || execution->consumed) return NULL;
+    execution->consumed = true;
+    XrRbcOutcome *outcome = execution->pending;
+    XrtExecutionStatus status = xrt_run_embedded(outcome->locations, &outcome->failure,
+        xr_rbc_root, execution);
+    if (status == XRT_EXECUTION_OUTPUT_FAILURE)
+        outcome->status = XR_RBC_OUTPUT_FAILURE;
+    else {
+        if (status == XRT_EXECUTION_INVALID) outcome->status = XR_RBC_INVALID;
+        xrt_locations_release(outcome->locations);
+        outcome->locations = NULL;
+    }
+    // The common boundary has restored its caller before reclaiming the sole
+    // heap stack descriptor, including allocations made by skipped VM frames.
+    xr_rbc_stack_free(&execution->stack);
+    execution->pending = NULL;
+    return outcome;
+}
+
+XR_FUNC void xr_rbc_execution_free(XrRbcExecution **execution) {
+    if (!execution || !*execution) return;
+    XrRbcExecution *owned = *execution;
+    *execution = NULL;
+    xr_rbc_stack_free(&owned->stack);
+    xr_rbc_outcome_free(&owned->pending);
+    xr_free(owned);
+}
+
+XR_FUNC XrRbcStatus xr_rbc_outcome_status(const XrRbcOutcome *outcome) {
+    return outcome ? outcome->status : XR_RBC_INVALID;
+}
+
+XR_FUNC bool xr_rbc_outcome_bits(const XrRbcOutcome *outcome, uint64_t *output) {
+    if (!outcome || outcome->status != XR_RBC_OK || !output) return false;
+    *output = outcome->bits;
+    return true;
+}
+
+XR_FUNC bool xr_rbc_outcome_output_failure(const XrRbcOutcome *outcome,
+    XrtOutputFailure *facts, const XrtLocationOwner **borrowed_locations) {
+    if (!outcome || outcome->status != XR_RBC_OUTPUT_FAILURE || !facts || !borrowed_locations)
+        return false;
+    *facts = outcome->failure;
+    *borrowed_locations = outcome->locations;
+    return true;
+}
+
+XR_FUNC void xr_rbc_outcome_free(XrRbcOutcome **outcome) {
+    if (!outcome || !*outcome) return;
+    XrRbcOutcome *owned = *outcome;
+    *outcome = NULL;
+    xrt_locations_release(owned->locations);
+    xr_free(owned);
 }
 
 XR_FUNC const char *xr_rbc_dispatch_name(void) {

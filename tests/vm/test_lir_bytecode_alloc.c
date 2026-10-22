@@ -10,6 +10,22 @@
 #include "base/xmalloc.h"
 #include "vm/register/xrbc_lir.h"
 
+
+// The sole guest result is owned; this test helper consumes it after inspection.
+static XrRbcStatus execute(XrRbcProgram *program, const uint64_t *arguments,
+    size_t count, uint64_t *bits) {
+    XrRbcExecution *execution = NULL;
+    XrRbcStatus status = xr_rbc_program_prepare(program, arguments, count, &execution);
+    if (status != XR_RBC_OK) return status;
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    CHECK(outcome);
+    status = xr_rbc_outcome_status(outcome);
+    xr_rbc_outcome_bits(outcome, bits);
+    xr_rbc_execution_free(&execution);
+    xr_rbc_outcome_free(&outcome);
+    return status;
+}
+
 static size_t attempts, fail_at = SIZE_MAX;
 static struct { void *pointer; size_t size; } buffers[32];
 
@@ -88,7 +104,7 @@ int main(void) {
         fail_at = SIZE_MAX;
         CHECK(xr_rbc_compile(m, root, &program, &diagnostic) == XR_RBC_COMPILE_OK);
         uint64_t n = 12, result = 0;
-        CHECK(xr_rbc_program_run(program, &n, 1, &result) == XR_RBC_OK && result == 144);
+        CHECK(execute(program, &n, 1, &result) == XR_RBC_OK && result == 144);
         xr_rbc_program_destroy(program);
     }
     program = NULL;

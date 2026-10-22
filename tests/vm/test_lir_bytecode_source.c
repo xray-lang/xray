@@ -15,6 +15,22 @@
 #include <xmmintrin.h>
 #endif
 
+
+// The sole guest result is owned; this test helper consumes it after inspection.
+static XrRbcStatus execute(XrRbcProgram *program, const uint64_t *arguments,
+    size_t count, uint64_t *bits) {
+    XrRbcExecution *execution = NULL;
+    XrRbcStatus status = xr_rbc_program_prepare(program, arguments, count, &execution);
+    if (status != XR_RBC_OK) return status;
+    XrRbcOutcome *outcome = xr_rbc_execution_run(execution);
+    CHECK(outcome);
+    status = xr_rbc_outcome_status(outcome);
+    xr_rbc_outcome_bits(outcome, bits);
+    xr_rbc_execution_free(&execution);
+    xr_rbc_outcome_free(&outcome);
+    return status;
+}
+
 static XrLirLowered lower(const char *text) {
     SourceFixture source = source_fixture(text);
     XrLirLowerRequest request = {source.closed, source.source.snapshot, false};
@@ -83,7 +99,7 @@ static XrRbcProgram *callable(const char *text) {
 
 static uint64_t run(XrRbcProgram *program, uint64_t argument) {
     uint64_t result = UINT64_MAX;
-    CHECK(xr_rbc_program_run(program, &argument, 1, &result) == XR_RBC_OK);
+    CHECK(execute(program, &argument, 1, &result) == XR_RBC_OK);
     return result;
 }
 
@@ -100,7 +116,7 @@ static void metadata_lifetime(void) {
     // Source/session were retired by lower; now retire the last producer too.
     xr_lir_lowered_free(&lowered);
     uint64_t result = UINT64_MAX;
-    CHECK(xr_rbc_program_run(program, NULL, 0, &result) == XR_RBC_OK && result == 0);
+    CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 0);
     xr_rbc_program_destroy(program);
     const XrtSourceLocation *actual = xrt_locations_get(owner, 1);
     CHECK(actual && actual->path_length == expected.path_length &&
@@ -140,7 +156,7 @@ static void actual_entry_and_refusal(void) {
         XR_RBC_COMPILE_OK && program);
     xr_lir_lowered_free(&lowered);
     uint64_t result = UINT64_MAX;
-    CHECK(xr_rbc_program_run(program, NULL, 0, &result) == XR_RBC_OK && result == 0);
+    CHECK(execute(program, NULL, 0, &result) == XR_RBC_OK && result == 0);
     xr_rbc_program_destroy(program);
 
     lowered = lower("print(1)\nfn value(x:f64)->f64{return x+1.0}\nprint(2)\nvalue(3.0)\n");
@@ -148,7 +164,7 @@ static void actual_entry_and_refusal(void) {
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
         XR_RBC_COMPILE_UNSUPPORTED && !program);
     xr_lir_lowered_free(&lowered);
-    CHECK(diagnostic.message[0] && diagnostic.path[0] && diagnostic.line == 1 &&
+    CHECK(diagnostic.message[0] && diagnostic.path[0] && diagnostic.line == 2 &&
         diagnostic.column && diagnostic.block && diagnostic.instruction);
     lowered = lower("fn value(x:f64)->f64{\nreturn x+1.0\n}\nvalue(3.0)\n");
     CHECK(xr_rbc_compile(lowered.module, lowered.entry, &program, &diagnostic) ==
@@ -163,7 +179,7 @@ static void f64_transport(void) {
     CHECK(xr_rbc_compile(whole.module, whole.entry, &entry, NULL) == XR_RBC_COMPILE_OK);
     xr_lir_lowered_free(&whole);
     uint64_t entry_result = UINT64_MAX;
-    CHECK(xr_rbc_program_run(entry, NULL, 0, &entry_result) == XR_RBC_OK && entry_result == 0);
+    CHECK(execute(entry, NULL, 0, &entry_result) == XR_RBC_OK && entry_result == 0);
     xr_rbc_program_destroy(entry);
     XrRbcProgram *identity = callable("fn identity(x:f64)->f64{return x}\nidentity(1.25)\n");
     XrRbcProgram *swap = callable("fn swap(x:f64,y:f64)->f64{var a=x\nvar b=y\nvar i=0\n"
@@ -198,16 +214,16 @@ static void f64_transport(void) {
             int flags = fetestexcept(FE_ALL_EXCEPT);
             for (size_t n = 0; n < sizeof(cases) / sizeof(cases[0]); ++n) {
                 uint64_t value = cases[n], result = ~value;
-                CHECK(xr_rbc_program_run(identity, &value, 1, &result) == XR_RBC_OK &&
+                CHECK(execute(identity, &value, 1, &result) == XR_RBC_OK &&
                     result == value);
                 uint64_t arguments[] = {value, cases[(n + 1) % (sizeof(cases) / sizeof(cases[0]))]};
                 result = ~value;
-                CHECK(xr_rbc_program_run(swap, arguments, 2, &result) == XR_RBC_OK &&
+                CHECK(execute(swap, arguments, 2, &result) == XR_RBC_OK &&
                     result == value);
                 arguments[0] = 32;
                 arguments[1] = value;
                 result = ~value;
-                CHECK(xr_rbc_program_run(recurse, arguments, 2, &result) == XR_RBC_OK &&
+                CHECK(execute(recurse, arguments, 2, &result) == XR_RBC_OK &&
                     result == value);
                 CHECK(fegetround() == modes[mode] && fetestexcept(FE_ALL_EXCEPT) == flags);
 #if defined(XR_ARCH_X86_64)

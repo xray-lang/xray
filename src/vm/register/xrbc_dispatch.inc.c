@@ -181,11 +181,13 @@ XR_RBC_CASE(CALL) {
     goto xr_rbc_reload;
 }
 XR_RBC_CASE(CALLN) {
-    XR_RBC_CHECK_REG(a);
+    XR_RBC_CHECK_REG(a + 1);
+    XR_RBC_CHECK_REG(a + 2);
     uint32_t target = instruction >> 16;
-    if (target >= module->native_count || !module->natives[target])
+    uint64_t id = XR_RBC_REG(a + 2);
+    if (target >= module->native_count || id > UINT32_MAX || id > xrt_locations_count(locations))
         return XR_RBC_INVALID;
-    module->natives[target](xr_rbc_signed(XR_RBC_REG(a)));
+    module->natives[target](xr_rbc_signed(XR_RBC_REG(a + 1)), (uint32_t) id);
     XR_RBC_NEXT();
 }
 XR_RBC_CASE(RET)
