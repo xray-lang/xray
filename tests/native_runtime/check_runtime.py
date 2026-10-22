@@ -45,14 +45,7 @@ def main():
             ('empty', 1, 0, b'unknown source'),
             ('empty-id', 1, 1, b'invalid source id 1'),
             ('range', 0, 4294967295, b'invalid source id 4294967295'),
-            ('null-table', 2, 1, b'invalid source map'),
-            ('null-path', 3, 1, b'invalid source location'),
-            ('zero-count', 4, 1, b'invalid source map'),
-            ('oversize', 5, 1, b'invalid source map'),
-            ('backwards', 6, 1, b'invalid source location'),
             ('start-only', 7, 1, b'start.xrc:3:5 ['),
-            ('end-column-only', 8, 1, b'invalid source location'),
-            ('end-line-only', 9, 1, b'invalid source location'),
         ]
         for label, client, location, expected in cases:
             code, output, error = run(label, client, location=location)
@@ -60,6 +53,10 @@ def main():
             assert error.startswith(b'xray: output write failed at ') and expected in error, (label, error)
             assert error.count(b'\n') == 1 and b'!' not in error, (label, error)
             assert re.search(rb'\[(?:win32|errno)=[1-9][0-9]*\]\n$', error), (label, error)
+        for client in [2, 3, 4, 5, 6, 8, 9]:
+            code, output, error = run('invalid-root-' + str(client), client, mode='values')
+            assert code != 0 and not output, (client, code, output, error)
+            assert b'valid prepared source map' in error, (client, error)
         code, output, error = run('real-flush', mode='flush-error')
         assert code == 74 and not output and b'output flush failed at ' in error, (code, output, error)
         assert re.search(rb'\[(?:win32|errno)=[1-9][0-9]*\]\n$', error), error

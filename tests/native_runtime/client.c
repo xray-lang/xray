@@ -25,26 +25,26 @@ static const char path[] = {'s','o','u','r','c','e','\n','.','x','r','c','!'};
 static const XrtSourceLocation locations[] = {{path, sizeof path - 1, 3, 5, 7, 9}};
 #endif
 #if MAP_KIND == 0
-const XrtStandaloneSourceMap xrt_standalone_source_map = {locations, 1};
+const XrtSourceMap xrt_standalone_source_map = {locations, 1};
 #elif MAP_KIND == 1
-const XrtStandaloneSourceMap xrt_standalone_source_map = {NULL, 0};
+const XrtSourceMap xrt_standalone_source_map = {NULL, 0};
 #elif MAP_KIND == 2
-const XrtStandaloneSourceMap xrt_standalone_source_map = {NULL, 1};
+const XrtSourceMap xrt_standalone_source_map = {NULL, 1};
 #elif MAP_KIND == 3
 static const XrtSourceLocation bad_location[] = {{NULL, 0, 0, 0, 0, 0}};
-const XrtStandaloneSourceMap xrt_standalone_source_map = {bad_location, 1};
+const XrtSourceMap xrt_standalone_source_map = {bad_location, 1};
 #elif MAP_KIND == 4
-const XrtStandaloneSourceMap xrt_standalone_source_map = {locations, 0};
+const XrtSourceMap xrt_standalone_source_map = {locations, 0};
 #elif MAP_KIND == 5
 #if SIZE_MAX > UINT32_MAX
-const XrtStandaloneSourceMap xrt_standalone_source_map = {locations, (size_t)UINT32_MAX + 1};
+const XrtSourceMap xrt_standalone_source_map = {locations, (size_t)UINT32_MAX + 1};
 #else
-const XrtStandaloneSourceMap xrt_standalone_source_map = {NULL, 1};
+const XrtSourceMap xrt_standalone_source_map = {NULL, 1};
 #endif
 #elif MAP_KIND == 6
 static const char invalid_path[] = "invalid.xrc";
 static const XrtSourceLocation backwards[] = {{invalid_path, sizeof invalid_path - 1, 8, 4, 3, 2}};
-const XrtStandaloneSourceMap xrt_standalone_source_map = {backwards, 1};
+const XrtSourceMap xrt_standalone_source_map = {backwards, 1};
 #else
 static const char start_path[] = "start.xrc";
 #if MAP_KIND == 7
@@ -54,7 +54,7 @@ static const XrtSourceLocation start[] = {{start_path, sizeof start_path - 1, 3,
 #else
 static const XrtSourceLocation start[] = {{start_path, sizeof start_path - 1, 3, 5, 7, 0}};
 #endif
-const XrtStandaloneSourceMap xrt_standalone_source_map = {start, 1};
+const XrtSourceMap xrt_standalone_source_map = {start, 1};
 #endif
 
 static void exit_callback(void) { fputs("EXIT_CALLBACK\n", stderr); }
@@ -67,7 +67,7 @@ static int close_output(void) {
 #endif
 }
 
-int main(int argc, char **argv) {
+static int run_client(int argc, char **argv) {
     if (argc < 2) return 90;
     if (strcmp(argv[1], "values") == 0) {
         xrt_print_i64(INT64_MIN, UINT32_MAX);
@@ -98,4 +98,18 @@ int main(int argc, char **argv) {
     xrt_print_i64(42, id);
     fputs("AFTER_CALL\n", stderr);
     return 95;
+}
+
+typedef struct ClientInput { int argc, result; char **argv; } ClientInput;
+static void invoke_client(void *context) {
+    ClientInput *input = context;
+    input->result = run_client(input->argc, input->argv);
+}
+int main(int argc, char **argv) {
+#if defined(XR_OS_WINDOWS)
+    (void)_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
+    ClientInput input = {argc, 90, argv};
+    xrt_run_standalone(&xrt_standalone_source_map, invoke_client, &input);
+    return input.result;
 }

@@ -5,14 +5,13 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xnative_output.c - Standalone integer output and nonreturning failure
+ * xnative_output.c - Shared integer output and standalone failure diagnostics
  *
  * KEY CONCEPT:
- *   The success path needs no mutable execution binding. Only failure reads
- *   the strong image-owned source map, then exits without cleanup callbacks.
+ *   Successful output needs no execution lookup. Failure is handed to the
+ *   active root only after the I/O helper has restored its local OS state.
  */
-#include "os/os_native_output.h"
-#include "xray_native_runtime.h"
+#include "xnative_execution.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -47,8 +46,7 @@ static void diagnostic_path(const char *path, size_t length) {
     }
 }
 
-static void diagnostic_location(uint32_t id) {
-    const XrtStandaloneSourceMap *map = &xrt_standalone_source_map;
+static void diagnostic_location(const XrtSourceMap *map, uint32_t id) {
     if ((map->count == 0) != (map->locations == NULL) || map->count > UINT32_MAX) {
         diagnostic_text("invalid source map");
         return;
@@ -73,10 +71,13 @@ static void diagnostic_location(uint32_t id) {
     }
 }
 
-static XR_NORET void xrt_end_execution(XrtIoResult failure, const char *operation, uint32_t id) {
+XR_FUNC XR_NORET void xrt_output_exit(const XrtSourceMap *map, XrtIoResult failure,
+    XrtOutputOperation operation, uint32_t id) {
     if (!failure.broken_pipe) {
-        diagnostic_text("xray: output "); diagnostic_text(operation); diagnostic_text(" failed at ");
-        diagnostic_location(id);
+        diagnostic_text("xray: output ");
+        diagnostic_text(operation == XRT_OUTPUT_FLUSH ? "flush" : "write");
+        diagnostic_text(" failed at ");
+        diagnostic_location(map, id);
         if (failure.domain != XRT_IO_NONE) {
             diagnostic_text(failure.domain == XRT_IO_WINDOWS ? " [win32=" : " [errno=");
             diagnostic_number(failure.code); diagnostic_text("]");
@@ -95,7 +96,7 @@ XRAY_API void xrt_print_i64(int64_t value, uint32_t source_location_id) {
     bytes[length++] = '\n';
     // Flush any preceding CRT output before bypassing its newline translation.
     XrtIoResult result = xrt_io_flush_stdout();
-    if (result.failed) xrt_end_execution(result, "flush", source_location_id);
+    if (result.failed) xrt_end_execution(result, XRT_OUTPUT_FLUSH, source_location_id);
     result = xrt_io_write(1, bytes, length);
-    if (result.failed) xrt_end_execution(result, "write", source_location_id);
+    if (result.failed) xrt_end_execution(result, XRT_OUTPUT_WRITE, source_location_id);
 }

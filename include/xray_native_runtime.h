@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xray_native_runtime.h - Standalone native output and image-owned locations
+ * xray_native_runtime.h - Native output under a controlled execution root
  *
  * KEY CONCEPT:
- *   A linked program owns one immutable source map for its entire lifetime.
- *   Output failure ends that standalone process without unwinding guest code.
+ *   A standalone root borrows its immutable image while invoking typed code.
+ *   The shared output leaf ends the active execution on host output failure.
  */
 #ifndef XRAY_NATIVE_RUNTIME_H
 #define XRAY_NATIVE_RUNTIME_H
@@ -29,19 +29,30 @@ typedef struct XrtSourceLocation {
     uint32_t line, column, end_line, end_column;
 } XrtSourceLocation;
 
-typedef struct XrtStandaloneSourceMap {
+typedef struct XrtSourceMap {
     const XrtSourceLocation *locations;
     size_t count;
-} XrtStandaloneSourceMap;
+} XrtSourceMap;
+
+typedef void (*XrtSynchronousRoot)(void *context);
 
 // Define this strong external symbol once in the standalone program. The
 // descriptor, locations and path bytes remain immutable and image-owned.
 // Empty maps use {NULL, 0}; nonempty maps have at most UINT32_MAX entries.
-XRAY_API const XrtStandaloneSourceMap xrt_standalone_source_map;
+XRAY_API const XrtSourceMap xrt_standalone_source_map;
+
+// The compiler-owned standalone root explicitly passes its strong descriptor.
+// Map and context are borrowed only for this synchronous invocation; a valid
+// static map needs no allocation or path copy. Normal return guarantees exactly
+// one completed root call. Invalid map/root violates a host precondition and
+// aborts before guest execution, without a specified guest configuration code.
+XRAY_API void xrt_run_standalone(const XrtSourceMap *map, XrtSynchronousRoot root, void *context);
 
 // Emit signed decimal followed by exactly one LF. Zero means unknown source;
 // ids 1..count select locations[id - 1]. On write or flush failure this does
-// not return: the standalone process exits with 74, without exit callbacks.
+// not return: it ends the active supported execution without guest cleanup.
+// Under xrt_run_standalone the process exits with 74, without exit callbacks;
+// a broken pipe emits no diagnostic. Raw unbound leaf calls are unsupported.
 XRAY_API void xrt_print_i64(int64_t value, uint32_t source_location_id);
 
 #ifdef __cplusplus

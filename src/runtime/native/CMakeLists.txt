@@ -2,7 +2,8 @@ set(native_output_platform "${PROJECT_SOURCE_DIR}/src/os/native_output/native_ou
 if(WIN32)
     set(native_output_platform "${PROJECT_SOURCE_DIR}/src/os/native_output/native_output_win.c")
 endif()
-add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c "${native_output_platform}")
+add_library(xray_native_runtime STATIC xnative_output.c xnative_locations.c
+    xnative_execution.c "${native_output_platform}")
 target_include_directories(xray_native_runtime PUBLIC "${PROJECT_SOURCE_DIR}/include"
     PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_compile_features(xray_native_runtime PUBLIC c_std_11)
