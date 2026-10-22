@@ -103,6 +103,40 @@ static uint64_t run(XrRbcProgram *program, uint64_t argument) {
     return result;
 }
 
+static void i64_identity_cast(void) {
+    XrLirLowered lowered = lower("fn identity(x:i64)->i64{\nreturn x as i64\n}\nidentity(17)\n");
+    XrLirFunction selected = initialized_function(&lowered);
+    XrLirFunctionView function;
+    OK(xr_lir_function_view(lowered.module, selected, &function));
+    uint32_t casts = 0;
+    for (uint32_t b = 0; b < function.block_count; ++b) {
+        XrLirBlock block;
+        XrLirBlockView view;
+        OK(xr_lir_block_at(lowered.module, selected, b, &block));
+        OK(xr_lir_block_view(lowered.module, block, &view));
+        for (uint32_t n = 0; n < view.instruction_count; ++n) {
+            XrLirInstructionView instruction;
+            OK(xr_lir_instruction_view(lowered.module, block, n, &instruction));
+            if (instruction.op != XR_LIR_INTCAST) continue;
+            XrLirType source;
+            OK(xr_lir_value_type(lowered.module,
+                (XrLirValue){lowered.module, selected.id, instruction.operands[0]}, &source));
+            CHECK(source == XR_LIR_I64 && instruction.type == XR_LIR_I64 &&
+                instruction.source.line == 2);
+            ++casts;
+        }
+    }
+    CHECK(casts == 1);
+    XrRbcProgram *program = NULL;
+    CHECK(xr_rbc_compile(lowered.module, selected, &program, NULL) == XR_RBC_COMPILE_OK);
+    xr_lir_lowered_free(&lowered);
+    const uint64_t values[] = {0, 1, INT64_MAX, UINT64_C(0x8000000000000000),
+        UINT64_MAX, UINT64_C(0xa5a55a5adeadbeef)};
+    for (size_t n = 0; n < sizeof(values) / sizeof(values[0]); ++n)
+        CHECK(run(program, values[n]) == values[n]);
+    xr_rbc_program_destroy(program);
+}
+
 static void metadata_lifetime(void) {
     XrLirLowered lowered = lower("fn value(x:i64)->i64{return x+1}\nvalue(9)\n");
     XrRbcProgram *program = NULL;
@@ -242,6 +276,7 @@ static void f64_transport(void) {
 }
 
 int main(void) {
+    i64_identity_cast();
     metadata_lifetime();
     numerical_oracles();
     actual_entry_and_refusal();

@@ -68,6 +68,37 @@ static XrLirValue call(XrLirModule *m, XrLirBlock b, XrLirFunction callee,
     return result;
 }
 
+static void test_i64_identity_cast(void) {
+    XrLirModule *m = NULL;
+    OK(xr_lir_module_create(NULL, &m));
+    XrLirType type = XR_LIR_I64;
+    XrLirFunction f = test_function(m, "identity_cast", &type, 1, type);
+    XrLirBlock block = test_block(m, f, NULL, 0);
+    OK(xr_lir_set_entry(m, f, block));
+    XrLirValue input = parameter(m, f, 0), result;
+    char path[] = "identity-cast.xr";
+    for (uint32_t n = 0; n < 2; ++n) {
+        XrLirInstruction instruction = {.op = XR_LIR_INTCAST, .type = type,
+            .operands = &input, .operand_count = 1,
+            .source = {path, sizeof(path) - 1, 4 + n, 2, 4 + n, 10}};
+        OK(xr_lir_emit_value(m, block, &instruction, &result));
+        input = result;
+    }
+    test_return(m, block, input);
+    OK(xr_lir_module_finish(m, NULL));
+    XrRbcProgram *program = compile(m, f);
+    memset(path, 'x', sizeof(path) - 1);
+    xr_lir_module_destroy(m);
+    const XrtSourceLocation *location = xrt_locations_get(xr_rbc_program_locations(program), 1);
+    CHECK(location && location->line == 4 && location->path_length == sizeof(path) - 1 &&
+        !memcmp(location->path, "identity-cast.xr", sizeof(path) - 1));
+    const uint64_t cases[] = {0, 1, INT64_MAX, UINT64_C(0x8000000000000000),
+        UINT64_MAX, UINT64_C(0xa5a55a5adeadbeef)};
+    for (size_t n = 0; n < sizeof(cases) / sizeof(cases[0]); ++n)
+        CHECK(run(program, &cases[n], 1) == cases[n]);
+    xr_rbc_program_destroy(program);
+}
+
 static void test_recursive_and_loop(void) {
     XrLirModule *m = test_fib();
     XrLirFunction root;
@@ -543,7 +574,10 @@ static void test_f64_constants_and_refusals(void) {
         {XR_LIR_FCMP, XR_LIR_F64, XR_LIR_I1, 2},
         {XR_LIR_ITOF, XR_LIR_I64, XR_LIR_F64, 1},
         {XR_LIR_FCAST, XR_LIR_F64, XR_LIR_F64, 1},
-        {XR_LIR_INTCAST, XR_LIR_I64, XR_LIR_I64, 1}
+        {XR_LIR_INTCAST, XR_LIR_I8, XR_LIR_I64, 1},
+        {XR_LIR_INTCAST, XR_LIR_U64, XR_LIR_I64, 1},
+        {XR_LIR_INTCAST, XR_LIR_I64, XR_LIR_I8, 1},
+        {XR_LIR_INTCAST, XR_LIR_I64, XR_LIR_U64, 1}
     };
     for (size_t n = 0; n < sizeof(cases) / sizeof(cases[0]); ++n) {
         XrLirModule *m = NULL;
@@ -588,6 +622,7 @@ static void test_f64_constants_and_refusals(void) {
 }
 
 int main(void) {
+    test_i64_identity_cast();
     test_recursive_and_loop();
     test_location_ownership();
     test_comparisons();

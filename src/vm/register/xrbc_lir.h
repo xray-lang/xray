@@ -36,9 +36,10 @@ typedef struct {
 // Entry identifies the execution root. Only its direct-call closure is
 // admitted, but the whole input is verified at this trust boundary. Output
 // must initially be NULL and remains NULL on failure. I64, I1, unit and raw
-// F64 transport are supported. Floating operations, comparisons, conversions
-// are not admitted; native calls bind only the shared i64 output leaf. F64
-// arguments retain every payload bit.
+// F64 transport are supported, as is an I64-to-I64 INTCAST. Other integer
+// conversions and all floating operations, comparisons and conversions are
+// not admitted; native calls bind only the shared i64 output leaf. F64 arguments
+// retain every payload bit.
 XR_FUNC XrRbcCompileStatus xr_rbc_compile(const XrLirModule *input, XrLirFunction entry,
     XrRbcProgram **output, XrRbcCompileDiagnostic *diagnostic);
 XR_FUNC void xr_rbc_program_destroy(XrRbcProgram *program);

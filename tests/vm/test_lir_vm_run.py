@@ -32,6 +32,10 @@ def main():
         run('loop', 'fn sum(n:i64)->i64{var i=0\nvar total=0\n'
             'while(i<n){total=total+i\ni=i+1}\nreturn total}\nsum(1000)\n')
         run('output', 'print(7)\n', stdout=b'7\n')
+        run('i64-cast', 'fn identity(x:i64)->i64{return x as i64}\n'
+            'print(identity(-9223372036854775807-1))\nprint(identity(-1))\n'
+            'print(identity(0))\nprint(identity(9223372036854775807))\n',
+            stdout=b'-9223372036854775808\n-1\n0\n9223372036854775807\n')
         run('whole-closure', 'print(1)\nfn value(x:f64)->f64{return x+1.0}\nvalue(3.0)\n', 1, b'bytecode')
         run('division-rejected', 'fn quotient(n:i64)->i64{return n/2}\nquotient(8)\n', 1, b'DIV_INT')
         run('malformed', 'fn broken(\n', 1, b'source')

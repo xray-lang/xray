@@ -58,6 +58,10 @@ def main():
          'print(choose(true))\nprint(choose(false))\n', b'3\n7\n'),
         ('extremes', 'print(-9223372036854775807-1)\nprint(0)\nprint(9223372036854775807)\n',
          b'-9223372036854775808\n0\n9223372036854775807\n'),
+        ('i64-cast', 'fn identity(x:i64)->i64{return x as i64}\n'
+         'print(identity(-9223372036854775807-1))\nprint(identity(-1))\n'
+         'print(identity(0))\nprint(identity(9223372036854775807))\n',
+         b'-9223372036854775808\n-1\n0\n9223372036854775807\n'),
     ]
     for name, text, expected in cases:
         if not expected:

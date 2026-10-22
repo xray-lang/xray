@@ -173,12 +173,19 @@ static bool rbc_lir_admit(const XrLirModule *input, XrLirFunction f,
     return true;
 }
 
-static bool rbc_lir_operation(const XrLirInstructionView *i) {
+static bool rbc_lir_operation(const XrLirModule *input, XrLirFunction function,
+    const XrLirInstructionView *i) {
     switch (i->op) {
     case XR_LIR_CONST: case XR_LIR_ADD: case XR_LIR_SUB: case XR_LIR_MUL:
     case XR_LIR_NEG: case XR_LIR_DIV: case XR_LIR_REM: case XR_LIR_ICMP:
     case XR_LIR_CALL: case XR_LIR_BR: case XR_LIR_CONDBR: case XR_LIR_RET:
         return true;
+    case XR_LIR_INTCAST: {
+        XrLirType source = XR_LIR_TYPE_INVALID;
+        return i->type == XR_LIR_I64 && i->operand_count == 1 &&
+            xr_lir_value_type(input, (XrLirValue){input, function.id, i->operands[0]},
+                &source) == XR_LIR_OK && source == XR_LIR_I64;
+    }
     default: return false;
     }
 }
@@ -200,7 +207,7 @@ static bool rbc_lir_closure(const XrLirModule *input, uint32_t *ids, uint32_t *m
                 xr_lir_instruction_view(input, block, n, &i);
                 d->block = block.id;
                 d->instruction = n + 1;
-                if (!rbc_lir_operation(&i)) {
+                if (!rbc_lir_operation(input, f, &i)) {
                     rbc_lir_error(d, XR_RBC_COMPILE_UNSUPPORTED,
                         "operation has no admitted bytecode implementation", i.source);
                     return false;
@@ -333,6 +340,8 @@ static bool rbc_lir_instruction(RbcLirCompiler *c, const XrLirInstructionView *i
     uint32_t result = i->result ? c->slots[i->result] : 0;
     switch (i->op) {
     case XR_LIR_CONST: return rbc_lir_constant(c, result, i->bits);
+    case XR_LIR_INTCAST:
+        return rbc_lir_emit(c, XR_RBC_MOV, result, c->slots[i->operands[0]], 0, 0);
     case XR_LIR_ICMP: return rbc_lir_comparison(c, i);
     case XR_LIR_BR: return rbc_lir_edge(c, i->edges[0]);
     case XR_LIR_CONDBR: return rbc_lir_conditional(c, i);
