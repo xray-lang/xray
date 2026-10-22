@@ -2638,6 +2638,7 @@ message(STATUS "Main executable: xray (${MODULES_ENABLED})")
 
 add_subdirectory(src/base)
 add_subdirectory(src/lir)
+add_subdirectory(src/runtime/native)
 target_link_libraries(xray PRIVATE xray_compile_resources)
 add_subdirectory(src/xir)
 add_subdirectory(src/execution)
@@ -2651,6 +2652,7 @@ include(src/app/toolchain/xir_target.cmake)
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests/lir)
+    add_subdirectory(tests/native_runtime)
 
     add_test(NAME local_build_slots
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/tools/test_xray_slot.py)
