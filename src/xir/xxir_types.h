@@ -49,6 +49,14 @@ static inline bool xr_xir_callable_flags_join(uint32_t left, uint32_t right, uin
 }
 XR_FUNC const XrXirTypeNode *xr_xir_type_node(const XrXirTypes *types, XrXirType type);
 XR_FUNC const XrXirTypeNode *xr_xir_callable_signature(const XrXirTypes *types, XrXirType type);
+/* CALLABLE.element is its required canonical error type. Unit denotes an
+ * invalid query, never an omitted or inferred error bound. */
+XR_FUNC XrXirType xr_xir_callable_error(const XrXirTypes *types, XrXirType type);
+/* Both expressions must already have their declaration-local Error proof. */
+static inline bool xr_xir_error_bound_accepts(XrXirType actual, XrXirType bound) {
+    return actual != XR_XIR_UNIT && bound != XR_XIR_UNIT &&
+        (actual == bound || actual == XR_XIR_NEVER || bound == XR_XIR_ERROR);
+}
 /* Ordered tuple fields use mode-zero parameter storage; arity zero is Unit. */
 XR_FUNC const XrXirTypeNode *xr_xir_tuple_signature(const XrXirTypes *types, XrXirType type);
 XR_FUNC bool xr_xir_type_is_callable(const XrXirTypes *types, XrXirType type);

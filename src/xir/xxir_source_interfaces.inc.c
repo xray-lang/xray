@@ -171,7 +171,7 @@ static bool source_interface_method(SourceContext *ctx, SourceName *owner,
     }
     XrXirType result, signature;
     if (!source_type(ctx, method->return_type, &result) ||
-        !source_signature(ctx, parameters, count, result, &signature)) return false;
+        !source_signature(ctx, parameters, count, result, XR_XIR_NEVER, &signature)) return false;
     *output = (XrXirInterfaceMethod){{method->name,(uint32_t)source_text_size(ctx, method->name)},signature,0,own,constraints};
     return source_interface_method_query(ctx, owner, member, output);
 }

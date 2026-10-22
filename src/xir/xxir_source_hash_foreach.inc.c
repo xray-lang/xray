@@ -17,7 +17,11 @@ static bool source_hash_for_each(SourceContext *ctx, AstNode *node, const Source
     bool map = type->kind == XR_XIR_TYPE_MAP;
     XrXirType key = type->element, element = type->result;
     SourceArrayCallbackShape shape = {{key, element}, map ? 2u : 1u, map ? 2u : 1u,
-        {true, XR_XIR_UNIT, false, false}};
+        {true, XR_XIR_UNIT, false, false}, XR_XIR_UNIT};
+    const XrNativeTypeDeclaration *native=source_hash_native(ctx,receiver_type);
+    const XrNativeMemberDeclaration *member=native ? source_native_member(ctx,native,access->name) : NULL;
+    if (!member || member->operation!=XR_NATIVE_OPERATION_HASH_FOR_EACH ||
+        !source_native_callback_error(ctx,node,native,member,&shape.error_type)) return false;
     SourceArrayCallback callback = {0};
     if (!source_array_callback(ctx, node, call->arguments[0], &shape, &callback)) return false;
     SourceValue length = {0}, zero = {0};

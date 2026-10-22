@@ -442,6 +442,7 @@ static void checked_types(CheckedCursor *c, XrXirModule *m) {
                 if (c->reading) parameters[p] = parameter;
             }
             s.result = (XrXirType) checked_u32(c, (uint32_t) s.result);
+            s.element = (XrXirType) checked_u32(c, (uint32_t) s.element);
             s.flags = checked_u32(c, s.flags);
         } else if (s.kind == XR_XIR_TYPE_TUPLE) {
             s.parameter_count = checked_count(c, s.parameter_count, &c->structural.parameters, 4);

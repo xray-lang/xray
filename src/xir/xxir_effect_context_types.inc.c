@@ -97,6 +97,8 @@ static XrXirStatus effect_terms_import(EffectTerms *pool,
             node.parameters=parameters;
             if (status==XR_XIR_OK && node.kind==XR_XIR_TYPE_CALLABLE)
                 status=effect_terms_import_child(pool,cache,i,node.result,&node.result);
+            if (status==XR_XIR_OK && node.kind==XR_XIR_TYPE_CALLABLE)
+                status=effect_terms_import_child(pool,cache,i,node.element,&node.element);
         } else if (node.kind==XR_XIR_TYPE_NOMINAL) {
             XrXirType *arguments=node.nominal.argument_count ?
                 effect_terms_alloc(pool,node.nominal.argument_count,sizeof(*arguments)) : NULL;

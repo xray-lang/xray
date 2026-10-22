@@ -33,9 +33,10 @@ def main():
         facts=Path(temporary)/'facts';prepare(facts)
         rows=json.loads((facts/'EXPECTED.json').read_text())['rows']
     current_rows=rows
-    assert len(current_rows)==380 and len({row['id'] for row in current_rows})==380
+    assert len(current_rows)==381 and len({row['id'] for row in current_rows})==381
+    previous_current_rows=[row for row in current_rows if row['id']!=3710]
     parents=json.loads(Path(__file__).with_name('sdk_historical_shared_parents.json').read_text())
-    rows=[row for row in current_rows if row['id']<4600]
+    rows=[row for row in previous_current_rows if row['id']<4600]
     assert len(rows)==362
     assert rows==next(parent['rows'] for parent in parents['parents'] if parent['tag']=='p18')
     import re
@@ -118,19 +119,24 @@ def main():
         for symbol,data in [('current_sdk_kat_preimage',prior_image),('current_sdk_kat_file_digest',prior_file),('current_sdk_kat_digest',prior_digest)]:
             match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_text,re.S)
             assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,('complete predecessor SDK KAT changed',name)
-    prior_image,prior_file,prior_digest=current_preimage(current_rows,90,30,35,32,36)
+    prior_image,prior_file,prior_digest=current_preimage(previous_current_rows,90,30,35,32,36)
     prior_text=Path(__file__).with_name('sdk_previous90_identity_golden.h').read_text(encoding='utf-8')
     for symbol,data in [('current_sdk_kat_preimage',prior_image),('current_sdk_kat_file_digest',prior_file),('current_sdk_kat_digest',prior_digest)]:
         match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',prior_text,re.S)
         assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete semantic90 SDK KAT changed'
-    image,file_digest,digest=current_preimage(current_rows,91,30,35,32,36)
+    historical_image,historical_file,historical_digest=current_preimage(previous_current_rows,91,30,35,32,36)
+    historical_text=Path(__file__).with_name('sdk_previous32_91_identity_golden.h').read_text(encoding='utf-8')
+    for symbol,data in [('current_sdk_kat_preimage',historical_image),('current_sdk_kat_file_digest',historical_file),('current_sdk_kat_digest',historical_digest)]:
+        match=re.search(r'static const uint8_t '+symbol+r'\[\] = \{(.*?)\};',historical_text,re.S)
+        assert match and bytes(int(value,16) for value in re.findall(r'0x([0-9a-f]{2})',match[1]))==data,'complete historical32/91 bytes changed'
+    image,file_digest,digest=current_preimage(current_rows,96,30,35,36,36)
     identity_offset=len(b'xray:xir-runtime-sdk:v1')+4
     assert image[:identity_offset]==previous_image[:identity_offset]
     old_current_image,_,_=current_preimage(old_rows,75,25)
     assert old_current_image[identity_offset+20:]==previous_image[identity_offset+20:]
-    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(32,91,30,35,36)
+    assert struct.unpack('<5I',image[identity_offset:identity_offset+20])==(36,96,30,35,36)
     assert struct.unpack('<5I',previous_image[identity_offset:identity_offset+20])==(27,72,22,28,29)
-    assert len(image)==3330 and len(previous_image)==len(value23_image)==3098
+    assert len(image)==3338 and len(historical_image)==3330 and len(previous_image)==len(value23_image)==3098
     assert file_digest==previous_file_digest and digest!=previous_digest
     output='/* Independent current SDK framing and natural Windows C layout facts. */\n'
     for name,data in (('current_sdk_kat_preimage',image),('current_sdk_kat_file_digest',file_digest),('current_sdk_kat_digest',digest)):

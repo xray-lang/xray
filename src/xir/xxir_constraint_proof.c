@@ -447,7 +447,11 @@ static XrXirStatus proof_type_task(ConstraintProof *proof, XrXirType type) {
         status = proof_type_edge(proof,index,node->element);
     else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
         if (node->parameter_count && !node->parameters) return XR_XIR_BAD_STRUCTURE;
-        if (node->kind == XR_XIR_TYPE_CALLABLE) status = proof_type_edge(proof,index,node->result);
+        if (node->kind == XR_XIR_TYPE_CALLABLE) {
+            status = constraint_markers(&proof->environment,node->element,XR_XIR_CONSTRAINT_ERROR,proof->budget,proof->read);
+            if (status == XR_XIR_OK) status = proof_type_edge(proof,index,node->element);
+            if (status == XR_XIR_OK) status = proof_type_edge(proof,index,node->result);
+        }
         for (uint32_t a = 0; status == XR_XIR_OK && a < node->parameter_count; ++a)
             status = proof_type_edge(proof,index,node->parameters[a].type);
     } else return XR_XIR_BAD_TYPE;

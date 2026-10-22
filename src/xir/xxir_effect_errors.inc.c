@@ -118,7 +118,7 @@ static bool error_closed_node_shape(const XrXirTypeNode *node) {
          node->nominal.fields || node->nominal.field_count)) return false;
     switch (node->kind) {
     case XR_XIR_TYPE_CALLABLE:
-        return node->element == XR_XIR_UNIT && xr_xir_callable_flags_valid(node->flags) &&
+        return node->element != XR_XIR_UNIT && xr_xir_callable_flags_valid(node->flags) &&
             ((node->parameter_count != 0) == (node->parameters != NULL));
     case XR_XIR_TYPE_TUPLE:
         return node->element == XR_XIR_UNIT && node->result == XR_XIR_UNIT && !node->flags &&

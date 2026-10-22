@@ -622,6 +622,7 @@ static bool source_substitute(SourceContext *ctx, const SourceSubstitution *sub,
     }
     node.parameters = parameters;
     if (node.kind == XR_XIR_TYPE_CALLABLE && !source_substitute(ctx, sub, node.result, depth + 1, &node.result)) return false;
+    if (node.kind == XR_XIR_TYPE_CALLABLE && !source_substitute(ctx, sub, node.element, depth + 1, &node.element)) return false;
     return source_intern_type(ctx, node, output);
 }
 static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *type) {
@@ -642,7 +643,7 @@ static bool source_callable_type(SourceContext *ctx, XrTypeRef *ref, XrXirType *
     }
     XrXirType result;
     if (!source_type(ctx, ref->children[count], &result)) return false;
-    --ctx->depth; return source_signature(ctx, parameters, count, result, type);
+    --ctx->depth; return source_signature(ctx, parameters, count, result, XR_XIR_NEVER, type);
 }
 static bool source_type_ref(SourceContext *ctx, XrTypeRef *ref, XrXirType *type);
 static bool source_tuple_type_ref(SourceContext *ctx,XrTypeRef *ref,XrXirType *type) {
@@ -1662,9 +1663,10 @@ static bool source_function_value(SourceContext *ctx, AstNode *node, SourceName 
         if (!source_substitute(ctx,&arguments.substitution,function->parameters[p],0,&parameters[p].type)) return false;
         parameters[p].mode = xr_xir_type_is_cell(&ctx->types, parameters[p].type) ? XR_PARAM_REF : XR_PARAM_READ;
     }
-    XrXirType result;
+    XrXirType result, error_type;
     if (!source_substitute(ctx,&arguments.substitution,function->result,0,&result) ||
-        !source_signature(ctx,parameters,count,result,&op.type)) return false;
+        !source_substitute(ctx,&arguments.substitution,function->error_type,0,&error_type) ||
+        !source_signature(ctx,parameters,count,result,error_type,&op.type)) return false;
     if (!source_reference_promise(ctx, node, symbol->index, expected, &op.type)) return false;
     return source_type_arguments(ctx, node, arguments.substitution.types, arguments.count, &op) && source_recipe_record(ctx,op,value);
 }
@@ -2793,12 +2795,14 @@ static bool source_closure(SourceContext *ctx, AstNode *node, SourceExpectedType
     }
     bool nested_function = node->type == AST_FUNCTION_DECL;
     if (ok && nested_function) {
-        ok = source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[index].result, &type);
+        ok = source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[factory].result,
+            ctx->functions[factory].error_type, &type);
         if (ok && scan.self_used) ok = source_closure_self(ctx, node, &scan, index, factory, type);
     }
     ok = ok &&
         statement(ctx, decl->body, false) && finish_body(ctx) &&
-        (nested_function || source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[index].result, &type));
+        (nested_function || source_signature(ctx, parameters, (uint32_t) decl->param_count, ctx->functions[factory].result,
+            ctx->functions[factory].error_type, &type));
     if (ok && no_suspend) {
         XrXirTypeNode signature = *xr_xir_callable_signature(&ctx->types, type);
         signature.flags |= XR_XIR_CALLABLE_NO_SUSPEND;

@@ -73,7 +73,7 @@ static XrXirStatus error_marker_type_node(const XrXirCompileContext *work,const 
     const XrXirTypeNode *node=xr_xir_type_node(types,type);
     uint32_t id=(uint32_t)type;
     if(!node && id>=XR_XIR_CONSTRUCTED_TYPE_BASE && id<XR_XIR_CONSTRUCTED_TYPE_LIMIT) return XR_XIR_BAD_STRUCTURE;
-    if(node && (node->kind<XR_XIR_TYPE_CALLABLE || node->kind>XR_XIR_TYPE_TASK)) return XR_XIR_BAD_STRUCTURE;
+    if(node && (node->kind<XR_XIR_TYPE_CALLABLE || node->kind>XR_XIR_TYPE_CHANNEL)) return XR_XIR_BAD_STRUCTURE;
     if(node) {
         status=effect_role_range(work,node->parameters,node->parameter_count,sizeof(*node->parameters));
         if(status==XR_XIR_OK) status=effect_role_range(work,node->nominal.arguments,node->nominal.argument_count,sizeof(*node->nominal.arguments));
@@ -201,7 +201,7 @@ static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const Effec
                 if(node->parameters[p].mode!=target->parameters[p].mode) return XR_XIR_BAD_STRUCTURE;
             }
             output->children=node->parameter_count+extra;
-        } else output->children=1;
+        } else output->children=node->kind==XR_XIR_TYPE_MAP?2u:1u;
         output->terminal=output->children==0;output->value=output->terminal?1u:0u;return XR_XIR_OK;
     }
     if(node && node->parameter_span>(generic?generic->parameter_count:0)) return XR_XIR_BAD_STRUCTURE;
@@ -226,7 +226,9 @@ static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const Effec
     if(node->kind==XR_XIR_TYPE_ATOMIC) {
         output->value=node->element==XR_XIR_I64 || node->element==XR_XIR_F64 || node->element==XR_XIR_BOOL;return XR_XIR_OK;
     }
-    if(node->kind==XR_XIR_TYPE_CELL || node->kind==XR_XIR_TYPE_CALLABLE) return XR_XIR_OK;
+    if(node->kind==XR_XIR_TYPE_CELL || node->kind==XR_XIR_TYPE_CALLABLE ||
+        node->kind==XR_XIR_TYPE_SLICE || node->kind==XR_XIR_TYPE_MUT_SLICE || node->kind==XR_XIR_TYPE_ITERATOR)
+        return XR_XIR_OK;
     if(node->kind==XR_XIR_TYPE_NOMINAL) {
         ErrorMarkerEnum view={0};bool is_enum=false;status=error_marker_enum(work,proof,node,&view,&is_enum);
         if(status!=XR_XIR_OK || !is_enum) return status;
@@ -239,7 +241,7 @@ static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const Effec
             if(node->parameters[p].mode) return XR_XIR_OK;
         }
         output->children=node->parameter_count;
-    } else output->children=1;
+    } else output->children=node->kind==XR_XIR_TYPE_MAP?2u:1u;
     output->terminal=output->children==0;output->value=output->terminal?1u:0u;return XR_XIR_OK;
 }
 static XrXirStatus error_marker_child(const XrXirCompileContext *work,const EffectErrorFinite *proof,
@@ -267,6 +269,7 @@ static XrXirStatus error_marker_child(const XrXirCompileContext *work,const Effe
         else if(node->kind==XR_XIR_TYPE_CALLABLE && ordinal==node->parameter_count+1) {
             left=node->element;right=target->element;
         } else if(node->kind==XR_XIR_TYPE_CALLABLE && !ordinal) { left=node->result;right=target->result; }
+        else if(node->kind==XR_XIR_TYPE_MAP && ordinal) { left=node->result;right=target->result; }
         else if(node->kind==XR_XIR_TYPE_CALLABLE || node->kind==XR_XIR_TYPE_TUPLE) {
             uint32_t at=ordinal-(node->kind==XR_XIR_TYPE_CALLABLE?1u:0u);left=node->parameters[at].type;right=target->parameters[at].type;
         } else { left=node->element;right=target->element; }
@@ -298,6 +301,7 @@ static XrXirStatus error_marker_child(const XrXirCompileContext *work,const Effe
             *output=error_marker_pair_goal(goal->scope,view.declaration->fields[at].type,child,goal->left,true);return XR_XIR_OK;
         }
     } else if(node->kind==XR_XIR_TYPE_TUPLE) child=node->parameters[ordinal].type;
+    else if(node->kind==XR_XIR_TYPE_MAP && ordinal) child=node->result;
     else child=node->element;
     *output=error_marker_type_goal(goal->scope,ERROR_MARKER_SENDABLE,child);return XR_XIR_OK;
 }

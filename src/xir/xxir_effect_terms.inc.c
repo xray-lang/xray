@@ -284,7 +284,7 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         EffectTermFrame *frame=&stack[depth-1];
         XrXirTypeNode source=pool->types.nodes[frame->index];
         uint32_t components=source.kind==XR_XIR_TYPE_NOMINAL ? source.nominal.argument_count :
-            source.kind==XR_XIR_TYPE_CALLABLE ? source.parameter_count+1 :
+            source.kind==XR_XIR_TYPE_CALLABLE ? source.parameter_count+2 :
             source.kind==XR_XIR_TYPE_TUPLE ? source.parameter_count : source.kind==XR_XIR_TYPE_MAP ? 2 : 1;
         if (frame->next==components) {
             if (pool->cache_count>=size || depth>size-pool->cache_count) {
@@ -304,7 +304,7 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         if (source.kind==XR_XIR_TYPE_MAP && frame->next) child=source.result;
         else if (source.kind==XR_XIR_TYPE_NOMINAL) child=source.nominal.arguments[frame->next];
         else if (source.kind==XR_XIR_TYPE_TUPLE) child=source.parameters[frame->next].type;
-        else if (source.kind==XR_XIR_TYPE_CALLABLE)
+        else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next<=source.parameter_count)
             child=frame->next==source.parameter_count ? source.result : source.parameters[frame->next].type;
         if (!effect_term_ready(pool,child,arguments,cache,&result)) {
             if (pool->status!=XR_XIR_OK) break;
@@ -317,6 +317,7 @@ static XrXirStatus effect_terms_substitute(EffectTerms *pool,XrXirType type,
         else if (source.kind==XR_XIR_TYPE_MAP && frame->next) frame->node.result=result;
         else if (source.kind!=XR_XIR_TYPE_CALLABLE && source.kind!=XR_XIR_TYPE_TUPLE) frame->node.element=result;
         else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next==source.parameter_count) frame->node.result=result;
+        else if (source.kind==XR_XIR_TYPE_CALLABLE && frame->next>source.parameter_count) frame->node.element=result;
         else ((XrXirCallableParameter *)frame->node.parameters)[frame->next]=
             (XrXirCallableParameter){result,source.parameters[frame->next].mode};
         uint32_t span=xr_xir_type_span(&pool->types,result);

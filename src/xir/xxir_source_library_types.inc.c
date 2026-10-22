@@ -216,6 +216,7 @@ static bool source_library_intern_types(SourceContext *ctx, SourceLibraryUnit *u
             }
             out.parameters=parameters;
             if (!source_library_type(ctx,unit,in->result,&out.result)) return false;
+            if (in->kind==XR_XIR_TYPE_CALLABLE && !source_library_type(ctx,unit,in->element,&out.element)) return false;
         } else if (in->kind==XR_XIR_TYPE_MAP) {
             if (!source_library_type(ctx,unit,in->element,&out.element) ||
                 !source_library_type(ctx,unit,in->result,&out.result)) return false;

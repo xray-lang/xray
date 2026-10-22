@@ -322,15 +322,45 @@ static uint32_t source_named_function(const XrXirModule *module,const char *name
 }
 static uint32_t source_closure_function(const XrXirModule *module,const char *owner) {
     const XrXirFunction *function=&module->functions[source_named_function(module,owner)];
-    uint32_t target=UINT32_MAX;
+    uint32_t target=UINT32_MAX,raw=source_named_function(module,"raw");
     for (uint32_t i=0;i<function->instruction_count;++i) {
         const XrXirInstruction *op=&function->instructions[i];
         if (op->op!=XR_XIR_FUNCTION_REF) continue;
-        CHECK(target==UINT32_MAX && op->immediate>=0 && (uint64_t)op->immediate<module->function_count);
+        CHECK(op->immediate>=0 && (uint64_t)op->immediate<module->function_count);
+        if ((uint32_t)op->immediate==raw) continue;
+        CHECK(target==UINT32_MAX);
         target=(uint32_t)op->immediate;
     }
     CHECK(target<module->function_count);
     return target;
+}
+
+/* Finished owned instructions provide an independent receiving-side view of
+ * the callee value. Argument-group offsets do not identify that value. */
+static void check_source_indirect_bounds(const XrXirModule *module,const XrXirFunction *function,
+    uint32_t expected_errors,uint32_t expected_origins) {
+    uint32_t errors=0,origins=0;
+    for (uint32_t i=0;i<function->instruction_count;++i) {
+        const XrXirInstruction *op=&function->instructions[i];
+        CHECK(op->op!=XR_XIR_CELL_NEW);
+        if (op->op!=XR_XIR_CALL_INDIRECT) continue;
+        CHECK(op->immediate>=0 && (uint64_t)op->immediate<=UINT32_MAX);
+        uint32_t value=(uint32_t)op->immediate;
+        XrXirType type;
+        if (value<function->parameter_count) {
+            type=function->parameters[value];origins|=1u;
+        } else {
+            uint32_t producer=value-function->parameter_count;
+            CHECK(producer<i);type=function->instructions[producer].type;origins|=2u;
+        }
+        const XrXirTypeNode *signature=xr_xir_callable_signature(module->types,type);
+        CHECK(signature && signature->result==op->type);
+        CHECK(signature->element==XR_XIR_NEVER || signature->element==XR_XIR_ERROR);
+        errors|=signature->element==XR_XIR_NEVER?1u:2u;
+        if (signature->element==XR_XIR_ERROR) CHECK(value!=op->args[0]);
+    }
+    CHECK(errors==expected_errors && origins==expected_origins);
+    CHECK(function->error_type==(expected_errors==1u?XR_XIR_NEVER:XR_XIR_ERROR));
 }
 
 static char *source_transport_text(size_t *length) {
@@ -343,6 +373,8 @@ static char *source_transport_text(size_t *length) {
         "export fn makeSlot()->fn()->i64{return fn()->i64{return seed}}\n"
         "export fn makeText()->fn()->string{return fn()->string{return \"owned\"}}\n"
         "export fn makeIndirect(f:fn()->i64)->fn()->i64{return fn()->i64{return f()}}\n"
+        "export fn makeStoredIndirect(f:fn()->i64)->fn()->i64{var target=f;"
+        "return fn()->i64{return target()}}\n"
         "export fn filterEqual()->i64{var data=[1,2,3,4];"
         "return len(data.filter(fn(x:i64)->bool{return x==2}))}\n"
         "export fn filterRemainder()->i64{var data=[1,2,3,4];"
@@ -424,20 +456,23 @@ static void check_source_bounds(const XrXirArtifact *artifact,bool consumer) {
             fprintf(stderr,"closure %s E=%u expected Never\n",empty[i],(unsigned)closure->error_type);
         CHECK(closure->error_type==XR_XIR_NEVER);
     }
-    CHECK(module->functions[source_closure_function(module,"makeIndirect")].error_type==XR_XIR_ERROR);
+    check_source_indirect_bounds(module,&module->functions[source_closure_function(module,"makeIndirect")],1u,1u);
+    check_source_indirect_bounds(module,&module->functions[source_closure_function(module,"makeStoredIndirect")],1u,2u);
     CHECK(module->functions[source_closure_function(module,"equalFloatControl")].error_type==XR_XIR_ERROR);
     CHECK(module->functions[source_closure_function(module,"notEqualControl")].error_type==XR_XIR_ERROR);
     CHECK(module->functions[source_closure_function(module,"writeBoolControl")].error_type==XR_XIR_ERROR);
     const XrXirFunction *composed=&module->functions[source_closure_function(module,"makeComposed")];
-    CHECK(composed->error_type==XR_XIR_ERROR && composed->parameter_count==3);
+    CHECK(composed->error_type==XR_XIR_NEVER && composed->parameter_count==3);
+    check_source_indirect_bounds(module,composed,1u,1u);
     for (uint32_t p=0;p<2;++p) {
         const XrXirTypeNode *signature=xr_xir_callable_signature(module->types,composed->parameters[p]);
-        CHECK(signature && signature->element==XR_XIR_UNIT);
+        CHECK(signature && signature->element==XR_XIR_NEVER);
     }
     CHECK(composed->parameters[2]==XR_XIR_I64);
     if (consumer) {
         CHECK(module->functions[source_closure_function(module,"viaClosure")].error_type==XR_XIR_NEVER);
         CHECK(module->functions[source_closure_function(module,"viaWide")].error_type==XR_XIR_ERROR);
+        check_source_indirect_bounds(module,&module->functions[source_closure_function(module,"viaWideIndirect")],3u,3u);
     }
     for (uint32_t m=0;m<module->declarations->module_count;++m) {
         uint32_t initializer=module->declarations->modules[m].initializer;
@@ -480,7 +515,7 @@ static void check_source_transport(const XrXirCompileContext *work) {
     XrXirSourceResult source={0};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
-    if (status!=XR_XIR_OK) fprintf(stderr,"source E producer %u %s\n",status,diagnostic.message);
+    if (status!=XR_XIR_OK) fprintf(stderr,"source E producer %u at %d:%d %s\n",status,diagnostic.line,diagnostic.column,diagnostic.message);
     CHECK(status==XR_XIR_OK);
     memset(text,0xa5,text_length);xr_free(text);
     check_source_bounds(source.checked,false);
@@ -504,7 +539,9 @@ static void check_source_transport(const XrXirCompileContext *work) {
         "export fn answer()->i64{return withDefault()+withCall()+Box().value}\n"
         "export fn viaClosure()->i64{var f=fn()->i64{return 9};return f()}\n"
         "export fn viaWide()->i64{var f=fn()->i64{return raw()};return f()}\n"
-        "export fn captured()->i64{var f=probeMakeAdder(40);return f(2)}\n";
+        "export fn captured()->i64{var f=probeMakeAdder(40);return f(2)}\n"
+        "export fn viaWideIndirect(f:fn()->i64)->i64{var target=raw;"
+        "var local=fn()->i64{f();return target()};return local()}\n";
     input=(XrXirSourceText){"root.xr",consumer,sizeof(consumer)-1};
     status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"source E receiver %u %s\n",status,diagnostic.message);
@@ -524,12 +561,14 @@ static void check_source_transport(const XrXirCompileContext *work) {
     CHECK(xr_test_rmdir(directory)==0);
 }
 
+#include "xir_callable_error_cases.h"
 int main(void) {
     xr_test_suppress_dialogs();
     XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
     XrXirCompileContext work={0};
     CHECK(xr_compile_resources_new(&limits,&work.resources)==XR_COMPILE_RESOURCE_OK);
     work.limits=xr_xir_compile_default_limits();
+    check_callable_errors(&work);
     NeverFixture *producer=xr_malloc(sizeof(*producer));
     CHECK(producer);
     fixture_init(producer);

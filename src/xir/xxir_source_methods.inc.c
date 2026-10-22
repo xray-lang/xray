@@ -55,10 +55,11 @@ static bool source_static_value(SourceContext *ctx, AstNode *node, SourceStaticM
     if (count && !parameters) return false;
     for (uint32_t p = 0; p < count; ++p)
         if (!source_substitute(ctx, &selected->substitution, function->parameters[p], 0, &parameters[p].type)) return false;
-    XrXirType result;
+    XrXirType result, error_type;
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, selected->method->index, {0}};
     return source_substitute(ctx, &selected->substitution, function->result, 0, &result) &&
-        source_signature(ctx, parameters, count, result, &op.type) &&
+        source_substitute(ctx, &selected->substitution, function->error_type, 0, &error_type) &&
+        source_signature(ctx, parameters, count, result, error_type, &op.type) &&
         source_reference_promise(ctx, node, selected->method->index, expected, &op.type) &&
         source_type_arguments(ctx, node, selected->substitution.types, selected->substitution.count, &op) &&
         source_query_target_token_reference(ctx,node,
@@ -182,10 +183,11 @@ static bool source_member_value(SourceContext *ctx, AstNode *node, SourceTypeArg
     if (count && !parameters) return false;
     for (uint32_t p = 0; p < count; ++p)
         if (!source_substitute(ctx, &substitution, function->parameters[p + 1], 0, &parameters[p].type)) return false;
-    XrXirType result;
+    XrXirType result, error_type;
     XrXirInstruction op = {XR_XIR_FUNCTION_REF, XR_XIR_UNIT, {0}, {0}, method->index, {0}};
     return source_substitute(ctx, &substitution, function->result, 0, &result) &&
-        source_signature(ctx, parameters, count, result, &op.type) &&
+        source_substitute(ctx, &substitution, function->error_type, 0, &error_type) &&
+        source_signature(ctx, parameters, count, result, error_type, &op.type) &&
         source_reference_promise(ctx, node, method->index, expected, &op.type) &&
         source_type_arguments(ctx, node, substitution.types, substitution.count, &op) &&
         source_query_target_token_reference(ctx,node,

@@ -196,6 +196,8 @@ static XrXirStatus instruction_direct_call_shape(const XrXirFunction *function,
             !(module->declarations->functions[op->immediate].promises & XR_XIR_FUNCTION_NO_SUSPEND))
             return XR_XIR_BAD_TYPE;
         result = signature->result;
+        generic_status = xr_xir_compile_call_type_matches(remaining,module,caller_id,op,callee->error_type,signature->element);
+        if (generic_status != XR_XIR_OK) return generic_status;
     }
     generic_status = xr_xir_compile_call_type_matches(remaining, module, caller_id, op, callee->result, result);
     if (generic_status != XR_XIR_OK) return generic_status;

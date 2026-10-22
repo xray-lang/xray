@@ -29,6 +29,7 @@ static bool source_reify_type(SourceContext *ctx, AstNode *site,
         }
         node.parameters = parameters;
         if (ok && node.kind == XR_XIR_TYPE_CALLABLE) ok = source_reify_type(ctx,site,pool,node.result,&node.result);
+        if (ok && node.kind == XR_XIR_TYPE_CALLABLE) ok = source_reify_type(ctx,site,pool,node.element,&node.element);
     } else if (node.kind == XR_XIR_TYPE_NOMINAL) {
         XrXirType *arguments = node.nominal.argument_count ? source_alloc(ctx,node.nominal.argument_count,sizeof(*arguments)) : NULL;
         ok = !node.nominal.argument_count || arguments;

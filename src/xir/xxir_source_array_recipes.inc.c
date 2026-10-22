@@ -61,7 +61,33 @@ typedef struct SourceArrayCallbackShape {
     XrXirType parameters[2];
     uint32_t shortest, longest;
     SourceExpectedType result;
+    XrXirType error_type;
 } SourceArrayCallbackShape;
+/* The complete admitted native contract, rather than an expected result shape,
+ * supplies the omitted-clause rule of these canonical callback declarations. */
+static bool source_native_callback_error(SourceContext *ctx, AstNode *node,
+    const XrNativeTypeDeclaration *native, const XrNativeMemberDeclaration *member, XrXirType *output) {
+    if (!native || !member || !source_native_admit(ctx,native)) return false;
+    bool found=false;
+    for (uint32_t i=0;i<native->member_count;++i) {
+        if (!source_work(ctx,node)) return false;
+        if (&native->members[i]==member) { found=true;break; }
+    }
+    if (!found || !member->is_public || !member->is_method || member->is_static ||
+        !member->parameter_count || !member->parameters || !member->signature)
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"callback requires its admitted native declaration");
+    if (!source_work_units(ctx,node,source_text_size(ctx,member->signature))) return false;
+    if (strstr(member->signature,"throws"))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"native callback error clause is not admitted");
+    switch (member->parameters[0].type) {
+    case XR_NATIVE_TERM_CALLBACK_MAP: case XR_NATIVE_TERM_CALLBACK_PREDICATE_INDEXED:
+    case XR_NATIVE_TERM_CALLBACK_REDUCE: case XR_NATIVE_TERM_CALLBACK_VISIT:
+    case XR_NATIVE_TERM_CALLBACK_PREDICATE: case XR_NATIVE_TERM_CALLBACK_KEY_VALUE_VISIT:
+    case XR_NATIVE_TERM_CALLBACK_ELEMENT_VISIT:
+        *output=XR_XIR_NEVER;return true;
+    default: return source_fail(ctx,node,XR_XIR_BAD_TYPE,"native callback contract is not admitted");
+    }
+}
 typedef struct SourceArrayCallback { SourceValue value; uint32_t arity; } SourceArrayCallback;
 static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *argument,
     const SourceArrayCallbackShape *shape, SourceArrayCallback *output) {
@@ -77,7 +103,7 @@ static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *ar
         if (count && !parameters) return false;
         for (uint32_t i = 0; i < count; ++i) parameters[i] = (XrXirCallableParameter) {shape->parameters[i], XR_PARAM_READ};
         XrXirType expected;
-        if (!source_signature(ctx, parameters, count, result.present ? result.type : XR_XIR_UNIT, &expected)) return false;
+        if (!source_signature(ctx, parameters, count, result.present ? result.type : XR_XIR_UNIT, shape->error_type, &expected)) return false;
         if (!source_closure(ctx, literal, (SourceExpectedType) {true, expected, !result.present, false}, callback)) return false;
         output->arity = count;
     } else {
@@ -89,6 +115,8 @@ static bool source_array_callback(SourceContext *ctx, AstNode *node, AstNode *ar
     }
     const XrXirTypeNode *signature = xr_xir_callable_signature(&ctx->types, callback->type);
     if (!signature) return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback is not callable");
+    if (!xr_xir_error_bound_accepts(signature->element,shape->error_type))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"collection callback error exceeds its declaration");
     for (uint32_t i = 0; i < signature->parameter_count; ++i)
         if (signature->parameters[i].type != shape->parameters[i] || signature->parameters[i].mode != XR_PARAM_READ)
             return source_fail(ctx, node, XR_XIR_BAD_TYPE, "collection callback parameter type differs from the element");

@@ -16,6 +16,26 @@
 #include "xxir_type_scratch_internal.h"
 #include "xxir_constraint_proof_internal.h"
 
+/* A substituted binder belongs to the actual environment. Never and Error
+ * are the bottom and top bounds; nominal errors retain exact arguments. */
+static XrXirStatus effect_callable_error_compare(const XrXirCompileContext *context,
+    const XirEffectCallableBound *request,XrXirTypeMatchScratch *scratch) {
+    XrXirType bound=xr_xir_callable_error(request->source,request->declared);
+    XrXirType actual=xr_xir_callable_error(request->destination,request->actual);
+    const XrXirTypes *source=request->source;
+    const XrXirType *arguments=request->arguments;uint32_t count=request->argument_count;
+    uint32_t id=(uint32_t)bound;
+    if (id>=XR_XIR_TYPE_PARAMETER_BASE && id<XR_XIR_TYPE_PARAMETER_LIMIT) {
+        uint32_t parameter=id-XR_XIR_TYPE_PARAMETER_BASE;
+        if (parameter>=count || !arguments) return XR_XIR_BAD_TYPE;
+        bound=arguments[parameter];source=request->destination;arguments=NULL;count=0;
+    }
+    if (bound==XR_XIR_UNIT || actual==XR_XIR_UNIT) return XR_XIR_BAD_TYPE;
+    if (bound==XR_XIR_ERROR || actual==XR_XIR_NEVER) return XR_XIR_OK;
+    return xr_xir_compile_type_substitution_matches_between_scratch(context,
+        source,request->destination,arguments,count,bound,actual,scratch);
+}
+
 /* Matching keeps capacity only. Every result and physical parameter is
  * traversed again; nested invocations claim distinct live stack blocks. */
 static XrXirStatus effect_callable_bound_compare_scratch(const XrXirCompileContext *context,
@@ -31,7 +51,9 @@ static XrXirStatus effect_callable_bound_compare_scratch(const XrXirCompileConte
         !!actual->parameters != !!actual->parameter_count ||
         declared->parameter_count != actual->parameter_count ||
         !xr_xir_callable_flags_compatible(actual->flags,declared->flags)) return XR_XIR_BAD_TYPE;
-    XrXirStatus status=xr_xir_compile_type_substitution_matches_between_scratch(context,
+    XrXirStatus status=effect_callable_error_compare(context,request,scratch);
+    if (status!=XR_XIR_OK) return status;
+    status=xr_xir_compile_type_substitution_matches_between_scratch(context,
         request->source,request->destination,request->arguments,request->argument_count,
         declared->result,actual->result,scratch);
     for (uint32_t p=0;status==XR_XIR_OK && p<declared->parameter_count;++p) {

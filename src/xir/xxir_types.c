@@ -34,7 +34,8 @@ XrXirStatus xr_xir_callable_weakening_admit(const XrXirTypes *types,
     if (!from || !to || !xr_xir_callable_flags_compatible(from->flags, to->flags) ||
         !!from->parameter_count != !!from->parameters ||
         !!to->parameter_count != !!to->parameters ||
-        from->parameter_count != to->parameter_count || from->result != to->result) return XR_XIR_BAD_TYPE;
+        from->parameter_count != to->parameter_count || from->result != to->result ||
+        !xr_xir_error_bound_accepts(from->element, to->element)) return XR_XIR_BAD_TYPE;
     for (uint32_t p = 0; p < from->parameter_count; ++p) {
         if (!charge(work_owner, 1)) return XR_XIR_BUDGET;
         if (from->parameters[p].type != to->parameters[p].type ||
@@ -66,6 +67,10 @@ const XrXirTypeNode *xr_xir_type_node(const XrXirTypes *types, XrXirType type) {
     return types && types->nodes && id >= XR_XIR_CONSTRUCTED_TYPE_BASE &&
         id < XR_XIR_CONSTRUCTED_TYPE_LIMIT && id - XR_XIR_CONSTRUCTED_TYPE_BASE < types->count ?
         &types->nodes[id - XR_XIR_CONSTRUCTED_TYPE_BASE] : NULL;
+}
+XrXirType xr_xir_callable_error(const XrXirTypes *types, XrXirType type) {
+    const XrXirTypeNode *node = xr_xir_callable_signature(types, type);
+    return node ? node->element : XR_XIR_UNIT;
 }
 XR_FUNC bool xr_xir_type_is_channel(const XrXirTypes *types, XrXirType type) {
     const XrXirTypeNode *node = xr_xir_type_node(types, type);
@@ -252,7 +257,12 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         (node->nominal.declaration || node->nominal.arguments || node->nominal.argument_count ||
          node->nominal.fields || node->nominal.field_count)) return XR_XIR_BAD_STRUCTURE;
     if (node->kind == XR_XIR_TYPE_CALLABLE) {
-        if (node->element != XR_XIR_UNIT || !xr_xir_callable_flags_valid(node->flags) ||
+        uint32_t error_id = (uint32_t)node->element;
+        bool error_parameter = error_id >= XR_XIR_TYPE_PARAMETER_BASE && error_id < XR_XIR_TYPE_PARAMETER_LIMIT;
+        bool error_nominal = xr_xir_type_is_enum(types, node->element) &&
+            error_id - XR_XIR_CONSTRUCTED_TYPE_BASE < index;
+        if ((node->element != XR_XIR_NEVER && node->element != XR_XIR_ERROR && !error_parameter && !error_nominal) ||
+            !xr_xir_callable_flags_valid(node->flags) ||
             (node->result != XR_XIR_UNIT && !callable_component(types, node->result, index))) return XR_XIR_BAD_TYPE;
         if (node->parameter_count > 65536 || node->parameter_count > remaining->limits.parameters) return XR_XIR_BUDGET;
         uint64_t bytes = (uint64_t) node->parameter_count * sizeof(*node->parameters);
@@ -262,6 +272,8 @@ static XrXirStatus type_payload(const XrXirTypes *types, uint32_t index, XrXirCo
         remaining->limits.parameters -= node->parameter_count;
         if ((node->parameter_count != 0) != (node->parameters != NULL)) return XR_XIR_BAD_STRUCTURE;
         span = xr_xir_type_span(types, node->result);
+        uint32_t error_span = xr_xir_type_span(types, node->element);
+        if (error_span > span) span = error_span;
         for (uint32_t p = 0; p < node->parameter_count; ++p) {
             const XrXirCallableParameter *parameter = &node->parameters[p];
             if (!xr_xir_callable_parameter_storage_valid(types, parameter)) return XR_XIR_BAD_TYPE;

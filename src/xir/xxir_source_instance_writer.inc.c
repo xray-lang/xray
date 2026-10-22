@@ -43,6 +43,7 @@ static bool source_instance_argument(SourceInstanceTypes *input,XrXirType argume
         }
         node.parameters=parameters;
         if (node.kind==XR_XIR_TYPE_CALLABLE && !source_instance_argument(input,node.result,depth+1,&node.result)) return false;
+        if (node.kind==XR_XIR_TYPE_CALLABLE && !source_instance_argument(input,node.element,depth+1,&node.element)) return false;
     } else if (!source_instance_argument(input,node.element,depth+1,&node.element)) return false;
     if (!source_intern_type(ctx,node,output)) return false;
     input->mapped[index]=*output;

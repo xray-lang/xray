@@ -180,6 +180,9 @@ def prepare(output: Path) -> None:
     rows += [{'id':base,'name':f'{name}.array2.bytes','value':2*layout[name][0],
               'expression':f'sizeof({name}[2])'} for base,name in
              [(3200,'XrXirNominalDeclaration'),(3201,'XrXirNominalIdentity')]]
+    error_offset=next(row['value'] for row in rows if row['id']==3703)
+    rows.append({'id':3710,'name':'XrXirTypeNode.callable_error.offset','value':error_offset,
+                 'expression':'offsetof(XrXirTypeNode,element)'})
     assert len({row['id'] for row in rows}) == len(rows), 'ABI field IDs must be unique'
     document = {'recipe':'xray:xir-runtime-abi-measurements:v1','rows':rows,
                 'basis':'Independent natural Windows x86_64 C layout: pointer/size_t/u64 align8, '

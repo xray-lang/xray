@@ -190,6 +190,9 @@ static bool function_shape_admitted(const XrXirProgram *program,uint32_t entry,
         !(program->entries[entry].flags&XR_XIR_ENTRY_GENERATOR) &&
         permissions->function_count==program->entry_count &&
         permissions->slot_count==program->declarations->slot_count &&
+        permissions->input && permissions->input->artifact &&
+        entry<permissions->input->artifact->module.function_count &&
+        xr_xir_error_bound_accepts(permissions->input->artifact->module.functions[entry].error_type,signature->element) &&
         (!(signature->flags&XR_XIR_CALLABLE_NO_SUSPEND) ||
          (program->declarations->functions[entry].promises&XR_XIR_FUNCTION_NO_SUSPEND));
 }

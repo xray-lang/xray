@@ -36,8 +36,9 @@ static bool source_nominal_arguments(SourceContext *ctx, const char *name, XrTyp
 static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType *type) {
     uint32_t span = xr_xir_type_span(&ctx->types,
         node.kind == XR_XIR_TYPE_CALLABLE ? node.result : node.element);
-    if (node.kind == XR_XIR_TYPE_MAP) {
-        uint32_t value_span = xr_xir_type_span(&ctx->types, node.result);
+    if (node.kind == XR_XIR_TYPE_MAP || node.kind == XR_XIR_TYPE_CALLABLE) {
+        uint32_t value_span = xr_xir_type_span(&ctx->types,
+            node.kind == XR_XIR_TYPE_CALLABLE ? node.element : node.result);
         if (value_span > span) span = value_span;
     }
     for (uint32_t p = 0; p < node.parameter_count; ++p) {
@@ -91,8 +92,8 @@ static bool source_intern_type(SourceContext *ctx, XrXirTypeNode node, XrXirType
     *type = (XrXirType) (XR_XIR_CONSTRUCTED_TYPE_BASE + ctx->types.count++); return true;
 }
 static bool source_signature(SourceContext *ctx, const XrXirCallableParameter *parameters,
-    uint32_t count, XrXirType result, XrXirType *type) {
-    return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CALLABLE, XR_XIR_UNIT,
+    uint32_t count, XrXirType result, XrXirType error_type, XrXirType *type) {
+    return source_intern_type(ctx, (XrXirTypeNode) {XR_XIR_TYPE_CALLABLE, error_type,
         parameters, count, result, XR_XIR_CALLABLE_ROOT_UNRESOLVED, 0, {0}}, type);
 }
 static bool source_reference_promise(SourceContext *ctx, AstNode *node,

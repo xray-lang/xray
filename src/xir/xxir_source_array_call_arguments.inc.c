@@ -28,7 +28,7 @@ static bool source_array_callback_context(SourceContext *ctx,AstNode *node,
         parameters[p]=(XrXirCallableParameter){shape->parameters[p],XR_PARAM_READ};
     }
     XrXirType expected;
-    if (!source_signature(ctx,parameters,count,shape->result.present ? shape->result.type : XR_XIR_UNIT,&expected)) return false;
+    if (!source_signature(ctx,parameters,count,shape->result.present ? shape->result.type : XR_XIR_UNIT,shape->error_type,&expected)) return false;
     *output=(SourceExpectedType){true,expected,!shape->result.present,false};return true;
 }
 static bool source_array_callback_check(SourceContext *ctx,AstNode *node,
@@ -37,6 +37,8 @@ static bool source_array_callback_check(SourceContext *ctx,AstNode *node,
     if (!signature || signature->parameter_count<shape->shortest || signature->parameter_count>shape->longest)
         return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array callback requires a function of the declared shape");
     output->arity=signature->parameter_count;
+    if (!xr_xir_error_bound_accepts(signature->element,shape->error_type))
+        return source_fail(ctx,node,XR_XIR_BAD_TYPE,"Array callback error exceeds its declaration");
     for (uint32_t p=0;p<signature->parameter_count;++p) {
         if (!source_work(ctx,node)) return false;
         if (signature->parameters[p].type!=shape->parameters[p] || signature->parameters[p].mode!=XR_PARAM_READ)
@@ -64,7 +66,7 @@ static bool source_array_callback_arguments(SourceContext *ctx,AstNode *node,
     bool indexed=recipe==SOURCE_ARRAY_MAP || recipe==SOURCE_ARRAY_FILTER || recipe==SOURCE_ARRAY_FOR_EACH;
     SourceArrayCallbackShape shape={{element,XR_XIR_I64},1,indexed ? 2 : 1,
         recipe==SOURCE_ARRAY_MAP ? (SourceExpectedType){0} :
-        (SourceExpectedType){true,recipe==SOURCE_ARRAY_FOR_EACH ? XR_XIR_UNIT : XR_XIR_BOOL,false,false}};
+        (SourceExpectedType){true,recipe==SOURCE_ARRAY_FOR_EACH ? XR_XIR_UNIT : XR_XIR_BOOL,false,false},XR_XIR_UNIT};
     if (recipe==SOURCE_ARRAY_REDUCE) {
         SourceExpressionPlan *argument=source_call_argument_value_plan(syntax.expanded->entries[1].plan.value);
         if (!source_plan_binary_prepare(ctx,argument,(SourceExpectedType){0},true) ||
@@ -79,8 +81,12 @@ static bool source_array_callback_arguments(SourceContext *ctx,AstNode *node,
         if (accumulator==XR_XIR_UNIT)
             return source_fail(ctx,node,XR_XIR_BAD_TYPE,"reduce initial value cannot be unit");
         parameters[1]=accumulator;contexts[1]=(SourceExpectedType){true,accumulator,false,false};
-        shape=(SourceArrayCallbackShape){{accumulator,element},2,2,{true,accumulator,false,false}};
+        shape=(SourceArrayCallbackShape){{accumulator,element},2,2,{true,accumulator,false,false},XR_XIR_UNIT};
     }
+    const XrNativeTypeDeclaration *native=xr_native_declaration_by_id(XR_NATIVE_DECLARATION_ARRAY);
+    const XrNativeMemberDeclaration *member=source_array_member(ctx,node,node->as.call_expr.callee->as.member_access.name);
+    if (!member || source_array_recipe(member->operation)!=recipe ||
+        !source_native_callback_error(ctx,node,native,member,&shape.error_type)) return false;
     if (!source_array_callback_context(ctx,node,syntax.expanded->entries[0].plan.value,&shape,&contexts[0])) return false;
     parameters[0]=contexts[0].type;
     if (!source_call_plan_arguments(ctx,node,&plan,&syntax)) return false;

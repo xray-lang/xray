@@ -139,7 +139,7 @@ static XrXirStatus type_match_run(const XrXirCompileContext *compile_context,
         TypeMatchFrame *frame = &stack[depth - 1];
         const XrXirTypeNode *from = frame->from, *to = frame->to;
         uint32_t components = from->kind == XR_XIR_TYPE_NOMINAL ? from->nominal.argument_count :
-            from->kind == XR_XIR_TYPE_CALLABLE ? from->parameter_count + 1 :
+            from->kind == XR_XIR_TYPE_CALLABLE ? from->parameter_count + 2 :
             from->kind == XR_XIR_TYPE_TUPLE ? from->parameter_count : from->kind == XR_XIR_TYPE_MAP ? 2 : 1;
         if (frame->next == components) { --depth; continue; }
         XrXirType left = from->element, right = to->element;
@@ -153,7 +153,7 @@ static XrXirStatus type_match_run(const XrXirCompileContext *compile_context,
             left=from->parameters[p].type;right=to->parameters[p].type;
         } else if (from->kind == XR_XIR_TYPE_CALLABLE) {
             if (!frame->next) { left = from->result; right = to->result; }
-            else {
+            else if (frame->next <= from->parameter_count) {
                 uint32_t p = frame->next - 1;
                 if (from->parameters[p].mode != to->parameters[p].mode) { status = XR_XIR_BAD_TYPE; break; }
                 left = from->parameters[p].type; right = to->parameters[p].type;

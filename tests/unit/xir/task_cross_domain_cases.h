@@ -29,7 +29,7 @@ static void task_cross_fixture_new(TaskFixture *fixture) {
     const XrXirTypeNode nodes[] = {
         {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_I64},
         {.kind = XR_XIR_TYPE_TASK, .element = XR_XIR_STRING},
-        {.kind = XR_XIR_TYPE_CALLABLE, .result = XR_XIR_UNIT, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
+        {.kind = XR_XIR_TYPE_CALLABLE, .element = XR_XIR_NEVER, .result = XR_XIR_UNIT, .flags = XR_XIR_CALLABLE_ROOT_UNRESOLVED},
         {.kind = XR_XIR_TYPE_ARRAY, .element = (XrXirType)258},
         {.kind = XR_XIR_TYPE_CELL, .element = (XrXirType)259}};
     const XrXirTypes types = {nodes, 5, NULL, NULL};

@@ -27,12 +27,16 @@ static XrXirStatus effect_capture_reference_seed(const EffectCaptureRead *read,
         const XrXirTypeNode *signature=NULL;
         status=effect_final_edge_signature(read->work,read->body.domain.types,op->type,&signature);
         if(status!=XR_XIR_OK) return status;
-        if(signature->parameter_span || xr_xir_type_span(read->body.domain.types,target.result)) return XR_XIR_OK;
+        /* The top error expression is metadata, not a physical capture edge.
+         * Its declaration-local Error proof and bound matching are independent. */
+        if(xr_xir_type_span(read->body.domain.types,signature->result) ||
+            xr_xir_type_span(read->body.domain.types,target.result)) return XR_XIR_OK;
         if(signature->result!=target.result || signature->parameter_count!=target.parameter_count-reference->captures)
             return XR_XIR_BAD_TYPE;
         for(uint32_t p=0;p<signature->parameter_count;++p) {
             if(!xir_compile_work(read->work,7)) return XR_XIR_BUDGET;
             const XrXirCallableParameter *parameter=&signature->parameters[p];
+            if(xr_xir_type_span(read->body.domain.types,parameter->type)) return XR_XIR_OK;
             if(!xr_xir_callable_parameter_storage_valid(read->body.domain.types,parameter) ||
                 (parameter->mode==XR_PARAM_REF && reference->captures)) return XR_XIR_BAD_TYPE;
             if(parameter->type!=target.parameters[reference->captures+p]) return XR_XIR_BAD_TYPE;

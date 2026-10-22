@@ -524,7 +524,8 @@ static XrXirStatus effect_invocation_local_type(EffectInvocationLocalRead *read,
             if (node->kind==XR_XIR_TYPE_CALLABLE) {
                 status=effect_invocation_local_type_edge(read,node->result,i,&span);
                 uint32_t child=0;
-                if (status==XR_XIR_OK) status=effect_invocation_local_type_edge(read,node->element,i,&child);
+                if (status==XR_XIR_OK && node->element!=XR_XIR_NEVER)
+                    status=effect_invocation_local_type_edge(read,node->element,i,&child);
                 if (child>span) span=child;
             }
             for (uint32_t a=0;a<node->parameter_count && status==XR_XIR_OK;++a) {

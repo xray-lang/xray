@@ -36,7 +36,8 @@ static XrXirSourceType source_hash_schema(SourceContext *ctx, XrNativeTypeTerm t
             parameters[i] = (XrXirCallableParameter){(XrXirType)(XR_XIR_TYPE_PARAMETER_BASE + i), XR_PARAM_READ};
         XrXirType signature = XR_XIR_UNIT;
         if (!source_hash_query_intern(ctx,query,(XrXirTypeNode){.kind=XR_XIR_TYPE_CALLABLE,
-            .parameters=parameters,.parameter_count=count,.flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},&signature)) return (XrXirSourceType){0};
+            .element=XR_XIR_NEVER,.parameters=parameters,.parameter_count=count,
+            .flags=XR_XIR_CALLABLE_ROOT_UNRESOLVED},&signature)) return (XrXirSourceType){0};
         return (XrXirSourceType){signature, parent, true};
     }
     if (term == XR_NATIVE_TERM_SET_ELEMENT) {

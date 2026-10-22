@@ -78,7 +78,7 @@ static bool source_requirement_helper(SourceContext *ctx, AstNode *site,
     body->type_parameters = parent->type_parameters; body->type_parameter_count = parent->type_parameter_count;
     body->declaration = declaration.declaration;
     ctx->functions[index] = (XrXirFunction){name,(uint32_t)source_text_size(ctx, name),parameters,
-        signature.parameter_count+1,signature.result,NULL,0,NULL,0,NULL,0, XR_XIR_ERROR};
+        signature.parameter_count+1,signature.result,NULL,0,NULL,0,NULL,0, signature.element};
     ctx->generics[index].parameter_count = generic_count;
     ctx->generics[index].constraints = constraints;
     ctx->identities[index] = ctx->identities[outer];
