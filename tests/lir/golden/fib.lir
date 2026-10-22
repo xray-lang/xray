@@ -1,0 +1,28 @@
+module {
+  extern @xrt_print_i64(i64) -> unit
+  func @fib(%0: i64) -> i64 {
+    entry ^b0
+  ^b0:
+    %1 = const i64 2
+    %2 = icmp lt i64 %0, %1
+    condbr %2, ^b1(), ^b2()
+  ^b1:
+    ret %0
+  ^b2:
+    %3 = const i64 1
+    %4 = sub i64 %0, %3
+    %5 = call @fib(%4)
+    %6 = sub i64 %0, %1
+    %7 = call @fib(%6)
+    %8 = add i64 %5, %7
+    ret %8
+  }
+  func @main() -> unit {
+    entry ^b0
+  ^b0:
+    %0 = const i64 32
+    %1 = call @fib(%0)
+    call @xrt_print_i64(%1)
+    ret
+  }
+}

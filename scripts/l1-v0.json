@@ -13,7 +13,9 @@
     "test_register_vm_alloc",
     "test_xir_p11_ctfe_instance",
     "test_lir_core",
-    "test_lir_allocations"
+    "test_lir_allocations",
+    "test_lir_print",
+    "test_lir_print_allocations"
   ],
   "tests": [
     "test_cli_usability",
@@ -36,7 +38,9 @@
     "test_xir_p11_typed_literal_text",
     "test_lir_core",
     "test_lir_allocations",
-    "test_lir_ownership_inventory_scope"
+    "test_lir_ownership_inventory_scope",
+    "test_lir_print",
+    "test_lir_print_allocations"
   ],
   "versionCommand": ["{build}/xray.exe", "--version", "--json"],
   "smokeStatus": "smoke: demos 2/22 stdlib 1/29 readme 0/6 native 0/3; native GAP, NOT_RUN (Task328 P2)"

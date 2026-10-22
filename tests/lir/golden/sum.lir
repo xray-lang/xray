@@ -1,0 +1,27 @@
+module {
+  extern @xrt_print_i64(i64) -> unit
+  func @sum(%0: i64) -> i64 {
+    entry ^b0
+  ^b0:
+    %1 = const i64 0
+    %2 = const i64 1
+    br ^b1(%1, %1)
+  ^b1(%3: i64, %4: i64):
+    %5 = icmp lt i64 %3, %0
+    condbr %5, ^b2(), ^b3(%4)
+  ^b2:
+    %6 = add i64 %4, %3
+    %7 = add i64 %3, %2
+    br ^b1(%7, %6)
+  ^b3(%8: i64):
+    ret %8
+  }
+  func @main() -> unit {
+    entry ^b0
+  ^b0:
+    %0 = const i64 100000000
+    %1 = call @sum(%0)
+    call @xrt_print_i64(%1)
+    ret
+  }
+}
