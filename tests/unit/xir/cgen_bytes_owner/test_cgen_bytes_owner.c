@@ -69,7 +69,7 @@ static void bytes_case(uint32_t count) {
     }
     free(input);
 }
-static void public_output(void) {
+static void public_output(bool pressure, const char *output_path) {
     char payload[5014];memset(payload,'x',sizeof(payload));payload[1]=0;
     const XrXirInstruction init[]={{XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     const XrXirInstruction main_ops[]={
@@ -77,8 +77,8 @@ static void public_output(void) {
         {XR_XIR_RETURN,XR_XIR_UNIT,{0},{0},0,{0}}};
     const XrXirBlock blocks[]={{0,1,0,0},{0,2,0,0}};
     const XrXirFunction functions[]={
-        {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,init,1,NULL,0},
-        {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,main_ops,2,NULL,0}};
+        {"init",4,NULL,0,XR_XIR_UNIT,blocks,1,init,1,NULL,0,XR_XIR_NEVER},
+        {"main",4,NULL,0,XR_XIR_I64,blocks+1,1,main_ops,2,NULL,0,XR_XIR_NEVER}};
     const XrXirSourceModule source={"bytes",5,NULL,0,0, 0,XR_XIR_MODULE_FRESH_STORAGE};
     const XrXirFunctionIdentity identities[2]={{0},{0}};
     const XrXirLiteral literals[]={{payload,sizeof(payload)},{"",0}};
@@ -94,28 +94,43 @@ static void public_output(void) {
     CHECK(xr_xir_compile_lower(closed,&target,&lowered,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(checked);xr_xir_compile_artifact_free(closed);
     xr_compile_resources_release(resources);
+    memset(payload,0xcd,sizeof(payload));
     size_t baseline=runtime_bytes;
     XrXirCSource output={0};runtime_attempts=0;
     CHECK(xr_xir_compile_emit_c(lowered,"bytes",1<<20,&output)==XR_XIR_OK);
     size_t required=output.length+1,sites=runtime_attempts;
     CHECK(output.text[output.length]=='\0');
     CHECK(strstr(output.text,"0x78,0x00,0x78,") && strstr(output.text,"(const char *)(const unsigned char[]){"));
-    xr_xir_compile_c_source_free(&output);CHECK(runtime_bytes==baseline);
-    CHECK(xr_xir_compile_emit_c(lowered,"bytes",required,&output)==XR_XIR_OK);
-    CHECK(output.length+1==required && output.text[output.length]=='\0');xr_xir_compile_c_source_free(&output);
-    CHECK(xr_xir_compile_emit_c(lowered,"bytes",required-1,&output)==XR_XIR_BUDGET);
-    CHECK(!output.text && !output.length && runtime_bytes==baseline);
+    if (!pressure) {
+        const XrXirCompileContext *owner=xr_xir_compile_artifact_context(lowered);
+        CHECK(owner && xr_compile_cgen_verify_output_or_ice(owner->resources,output.text,output.length,
+            "cgen_bytes_owner")==XI_CGEN_VERIFY_PASSED);
+    }
+    if (output_path) {
+        FILE *file=fopen(output_path,"wb");CHECK(file);
+        CHECK(fwrite(output.text,1,output.length,file)==output.length);
+        CHECK(fclose(file)==0);
+    }
+    xr_xir_compile_c_source_free(&output);
+    if (pressure) {
+        CHECK(runtime_bytes==baseline);
+        CHECK(xr_xir_compile_emit_c(lowered,"bytes",required,&output)==XR_XIR_OK);
+        CHECK(output.length+1==required && output.text[output.length]=='\0');xr_xir_compile_c_source_free(&output);
+        CHECK(xr_xir_compile_emit_c(lowered,"bytes",required-1,&output)==XR_XIR_BUDGET);
+        CHECK(!output.text && !output.length && runtime_bytes==baseline);
+    }
     char sentinel='q';output=(XrXirCSource){&sentinel,1};
     CHECK(xr_xir_compile_emit_c(lowered,"bytes",required,&output)==XR_XIR_BAD_STRUCTURE);
     CHECK(output.text==&sentinel && output.length==1 && sentinel=='q');output=(XrXirCSource){0};
-    for(size_t fault=0;fault<sites;++fault) {
+    if (pressure) for(size_t fault=0;fault<sites;++fault) {
         runtime_attempts=0;runtime_fail_at=fault;
         CHECK(xr_xir_compile_emit_c(lowered,"bytes",1<<20,&output)==XR_XIR_OUT_OF_MEMORY);
         runtime_fail_at=SIZE_MAX;
         CHECK(!output.text && !output.length && runtime_bytes==baseline);
     }
     xr_xir_compile_artifact_free(lowered);CHECK(!runtime_live && !runtime_bytes);
-    printf("Public emit: exact/minus-one byte limit, preserved output, %zu OOM points PASS\n",sites);
+    if (pressure) printf("Public emit: exact/minus-one byte limit, preserved output, %zu OOM points PASS\n",sites);
+    else puts("Public emit: retired input bytes, complete output and preserved nonempty destination PASS");
 }
 static void allocation_failures(void) {
     char bytes[5014];memset(bytes,0xab,sizeof(bytes));
@@ -136,15 +151,72 @@ static void allocation_failures(void) {
     }
     CHECK(sites>1);printf("C byte emission: %zu actual allocation failures, physical zero PASS\n",sites);
 }
-int main(void) {
+static void legacy_cases(void) {
     bytes_case(0);bytes_case(1);bytes_case(256);bytes_case(4095);bytes_case(4096);bytes_case(5014);
     allocation_failures();
-    public_output();
+    public_output(true,NULL);
     cgen_sparse_proof_cases();
     cgen_literal_span_cases();
     cgen_growth_cases();
     cgen_decimal_shape_cases();
     cgen_compact_code_cases();
     puts("C byte emission: fixed work formula, exact/minus-one, empty/NUL/all byte values PASS");
+}
+static void byte_contents(uint32_t count) {
+    char *input=xr_malloc(count ? count : 1);CHECK(input);
+    for (uint32_t i=0;i<count;++i) input[i]=(char)(i%256);
+    XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+    XrCompileResources *resources=NULL;
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
+    CBuffer buffer={.limit=1<<20,.status=XR_XIR_OK,.context=&context};
+    emit_bytes(&buffer,input,count);
+    CHECK(emit_finalize(&buffer) && buffer.status==XR_XIR_OK);
+    const char *cursor=buffer.text;
+    static const char prefix[]="(const char *)(const unsigned char[]){";
+    CHECK(!strncmp(cursor,prefix,sizeof(prefix)-1));cursor+=sizeof(prefix)-1;
+    for (uint32_t i=0;i<count;++i) {
+        if (i%16==0) {CHECK(!strncmp(cursor,"\n    ",5));cursor+=5;}
+        char expected[6];
+        CHECK(snprintf(expected,sizeof(expected),"0x%02x,",(unsigned char)input[i])==5);
+        CHECK(!memcmp(cursor,expected,5));cursor+=5;
+    }
+    CHECK(!strcmp(cursor,"\n    0}") && (size_t)(cursor+7-buffer.text)==buffer.length);
+    xr_compile_resources_free(buffer.text);xr_compile_resources_release(resources);xr_free(input);
+    CHECK(!runtime_live && !runtime_bytes);
+}
+static void decimal_contents(void) {
+    XrCompileResourceLimits limits={UINT64_MAX,UINT64_MAX,UINT64_MAX};
+    XrCompileResources *resources=NULL;
+    CHECK(xr_compile_resources_new(&limits,&resources)==XR_COMPILE_RESOURCE_OK);
+    XrXirCompileContext context={resources,xr_xir_compile_default_limits()};
+    CBuffer buffer={.limit=128,.status=XR_XIR_OK,.context=&context};
+    unsigned calls=0,buffer_calls=0;
+    char expected[64];CHECK(snprintf(expected,sizeof(expected),", %uu, ",UINT_MAX)>0);
+    EMIT_U_SHAPE(decimal_buffer_argument(&buffer,&buffer_calls),et_4c51538f4bdf2e07,
+        ", %uu, ",", ","u, ",decimal_argument(&calls));
+    CHECK(emit_finalize(&buffer) && calls==1 && buffer_calls==1 && !strcmp(buffer.text,expected));
+    buffer.status=XR_XIR_BAD_STRUCTURE;
+    EMIT_U_SHAPE(decimal_buffer_argument(&buffer,&buffer_calls),et_4c51538f4bdf2e07,
+        ", %uu, ",", ","u, ",decimal_argument(&calls));
+    CHECK(buffer.status==XR_XIR_BAD_STRUCTURE && calls==2 && buffer_calls==2 && !strcmp(buffer.text,expected));
+    xr_compile_resources_free(buffer.text);
+    buffer=(CBuffer){.limit=128,.status=XR_XIR_OK,.context=&context};
+    CHECK(snprintf(expected,sizeof(expected),"INT64_C(%llu)",ULLONG_MAX)>0);
+    EMIT_ULL_SHAPE(decimal_buffer_argument(&buffer,&buffer_calls),et_42b80bce7e8ab13e,
+        "INT64_C(%llu)","INT64_C(",")",decimal_wide_argument(&calls));
+    CHECK(emit_finalize(&buffer) && calls==3 && buffer_calls==3 && !strcmp(buffer.text,expected));
+    xr_compile_resources_free(buffer.text);xr_compile_resources_release(resources);
+    CHECK(!runtime_live && !runtime_bytes);
+}
+int main(int argc, char **argv) {
+    if (argc==2 && !strcmp(argv[1],"--legacy-l3")) {legacy_cases();return 0;}
+    const char *output_path=NULL;
+    if (argc==3 && !strcmp(argv[1],"--emit-c")) output_path=argv[2];
+    else if (argc!=1) {fputs("Expected no arguments, --emit-c PATH, or --legacy-l3\n",stderr);return 2;}
+    byte_contents(0);byte_contents(1);byte_contents(256);
+    byte_contents(4095);byte_contents(4096);byte_contents(5014);
+    decimal_contents();public_output(false,output_path);
+    puts("C byte emission: semantic bytes, typed arguments and ownership PASS");
     return 0;
 }

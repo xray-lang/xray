@@ -266,15 +266,15 @@ static void decimal_macro_single_call(void) {
     CBuffer buffer = {.limit=128,.status=XR_XIR_OK,.context=&context};
     unsigned calls = 0,buffer_calls = 0;
     char expected[48];
-    CHECK(snprintf(expected,sizeof(expected),"%uu,",UINT_MAX) > 0);
-    EMIT_U_SHAPE(decimal_buffer_argument(&buffer,&buffer_calls),et_84635448af4d156a,
-        "%uu,","","u,",decimal_argument(&calls));
+    CHECK(snprintf(expected,sizeof(expected),", %uu, ",UINT_MAX) > 0);
+    EMIT_U_SHAPE(decimal_buffer_argument(&buffer,&buffer_calls),et_4c51538f4bdf2e07,
+        ", %uu, ",", ","u, ",decimal_argument(&calls));
     CHECK(emit_finalize(&buffer) && calls == 1 && buffer_calls == 1 && !strcmp(buffer.text,expected));
     XrCompileResourceStats before,after;
     CHECK(xr_compile_resources_stats(resources,&before) == XR_COMPILE_RESOURCE_OK);
     buffer.status=XR_XIR_BUDGET;
-    EMIT_U_SHAPE(decimal_buffer_argument(&buffer,&buffer_calls),et_84635448af4d156a,
-        "%uu,","","u,",decimal_argument(&calls));
+    EMIT_U_SHAPE(decimal_buffer_argument(&buffer,&buffer_calls),et_4c51538f4bdf2e07,
+        ", %uu, ",", ","u, ",decimal_argument(&calls));
     CHECK(xr_compile_resources_stats(resources,&after) == XR_COMPILE_RESOURCE_OK);
     CHECK(calls == 2 && buffer_calls == 2 && after.work == before.work && !strcmp(buffer.text,expected));
     xr_compile_resources_free(buffer.text);
