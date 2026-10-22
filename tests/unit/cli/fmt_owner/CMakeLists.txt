@@ -43,8 +43,9 @@ add_executable(test_protocol_format "${CMAKE_CURRENT_LIST_DIR}/test_protocol_for
     "${FMT_ROOT}/src/app/lsp/xlsp_document_store.c" "${FMT_ROOT}/src/app/lsp/xlsp_pending_requests.c"
     "${FMT_ROOT}/src/app/lsp/xlsp_protocol_message.c" "${FMT_ROOT}/src/app/lsp/xlsp_protocol_output.c"
     "${FMT_ROOT}/src/app/lsp/xlsp_framing.c"
+    "${FMT_ROOT}/src/os/win/time_win.c"
     "${FMT_ROOT}/src/base/xjson.c" "${FMT_ROOT}/src/base/xframing.c")
-target_link_libraries(test_protocol_format PRIVATE xray_frontend_format)
+target_link_libraries(test_protocol_format PRIVATE xray_frontend_format xray_lsp_hierarchy_handlers)
 target_include_directories(test_protocol_format PRIVATE "${FMT_ROOT}/src" "${FMT_ROOT}/include" "${CMAKE_CURRENT_BINARY_DIR}")
 if(MSVC)
     target_compile_options(test_protocol_format PRIVATE /W4 /WX /utf-8)
