@@ -133,6 +133,8 @@ static Fixture intrinsic_catalog_fixture(void) {
     fixture.closed = NULL;
     CHECK(xr_xir_compile_checked_read(&fixture.context, fixture.packet.bytes, fixture.packet.length,
         &fixture.closed, NULL) == XR_XIR_OK);
+    memset(fixture.packet.bytes, 0xa5, fixture.packet.length);
+    xr_xir_compile_checked_packet_free(&fixture.packet);
     module = xr_xir_compile_artifact_module(fixture.closed);
     uint32_t *functions[] = {&fixture.probe, &fixture.prefix, &fixture.suffix};
     for (uint32_t i = 0; i < 3; ++i) {
