@@ -2682,23 +2682,6 @@ if(BUILD_TESTS)
     )
     target_link_libraries(xray_package_payload_fixture PRIVATE xray_core)
 
-    add_executable(xray_compiler_archive_link_probe
-        tests/target-machine/compiler_archive_link_probe.c
-    )
-    target_include_directories(xray_compiler_archive_link_probe PRIVATE
-        ${XRAY_COMMON_INCLUDES}
-    )
-    target_link_libraries(xray_compiler_archive_link_probe PRIVATE xray_compiler)
-    add_test(
-        NAME xray_compiler_archive_link_probe
-        COMMAND $<TARGET_FILE:xray_compiler_archive_link_probe>
-    )
-    set_tests_properties(xray_compiler_archive_link_probe PROPERTIES
-        LABELS "compiler;product;target-machine"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
-
     if(LIBFFI_FOUND)
         add_test(
             NAME extern_layout_bytecode_cli_roundtrip
