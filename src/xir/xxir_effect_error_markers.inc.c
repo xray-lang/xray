@@ -193,12 +193,14 @@ static XrXirStatus error_marker_rule(const XrXirCompileContext *work,const Effec
                 return XR_XIR_BAD_STRUCTURE;
             output->children=node->nominal.argument_count;
         } else if(node->kind==XR_XIR_TYPE_TUPLE || node->kind==XR_XIR_TYPE_CALLABLE) {
-            if(node->parameter_count!=target->parameter_count || node->parameter_count==UINT32_MAX) return XR_XIR_BAD_STRUCTURE;
+            uint32_t extra=node->kind==XR_XIR_TYPE_CALLABLE?2u:0u;
+            if(node->parameter_count!=target->parameter_count || node->parameter_count==UINT32_MAX ||
+                node->parameter_count>UINT32_MAX-extra) return XR_XIR_BAD_STRUCTURE;
             for(uint32_t p=0;p<node->parameter_count;++p) {
                 if(!xir_compile_work(work,2)) return XR_XIR_BUDGET;
                 if(node->parameters[p].mode!=target->parameters[p].mode) return XR_XIR_BAD_STRUCTURE;
             }
-            output->children=node->parameter_count+(node->kind==XR_XIR_TYPE_CALLABLE?1u:0u);
+            output->children=node->parameter_count+extra;
         } else output->children=1;
         output->terminal=output->children==0;output->value=output->terminal?1u:0u;return XR_XIR_OK;
     }
@@ -262,7 +264,9 @@ static XrXirStatus error_marker_child(const XrXirCompileContext *work,const Effe
         if(status!=XR_XIR_OK || !node || !target) return status==XR_XIR_OK?XR_XIR_BAD_STRUCTURE:status;
         XrXirType left,right;
         if(node->kind==XR_XIR_TYPE_NOMINAL) { left=node->nominal.arguments[ordinal];right=target->nominal.arguments[ordinal]; }
-        else if(node->kind==XR_XIR_TYPE_CALLABLE && !ordinal) { left=node->result;right=target->result; }
+        else if(node->kind==XR_XIR_TYPE_CALLABLE && ordinal==node->parameter_count+1) {
+            left=node->element;right=target->element;
+        } else if(node->kind==XR_XIR_TYPE_CALLABLE && !ordinal) { left=node->result;right=target->result; }
         else if(node->kind==XR_XIR_TYPE_CALLABLE || node->kind==XR_XIR_TYPE_TUPLE) {
             uint32_t at=ordinal-(node->kind==XR_XIR_TYPE_CALLABLE?1u:0u);left=node->parameters[at].type;right=target->parameters[at].type;
         } else { left=node->element;right=target->element; }

@@ -70,7 +70,10 @@ static const XrXirType *spec_effect_import(SpecContext *c, const XrXirTypes *typ
                 parameters[p].type=spec_effect_child(c,cache,i,node.parameters[p].type);
             }
             node.parameters=parameters;
-            if (node.kind==XR_XIR_TYPE_CALLABLE) node.result=spec_effect_child(c,cache,i,node.result);
+            if (node.kind==XR_XIR_TYPE_CALLABLE) {
+                node.result=spec_effect_child(c,cache,i,node.result);
+                if (c->diagnostic.status==XR_XIR_OK) node.element=spec_effect_child(c,cache,i,node.element);
+            }
         } else if (node.kind==XR_XIR_TYPE_NOMINAL) {
             XrXirType *arguments=spec_alloc(c,node.nominal.argument_count,sizeof(*arguments));
             if (node.nominal.argument_count && !arguments) return NULL;

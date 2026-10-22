@@ -94,7 +94,10 @@ XR_FUNC XrXirStatus xr_xir_compile_type_access_scratch(const XrXirCompileContext
             for (uint32_t a = 0; a < node->nominal.argument_count && status == XR_XIR_OK; ++a)
                 status = type_access_edge(types, node->nominal.arguments[a], i, pending, remaining);
         } else if (node->kind == XR_XIR_TYPE_CALLABLE || node->kind == XR_XIR_TYPE_TUPLE) {
-            if (node->kind == XR_XIR_TYPE_CALLABLE) status = type_access_edge(types, node->result, i, pending, remaining);
+            if (node->kind == XR_XIR_TYPE_CALLABLE) {
+                status = type_access_edge(types, node->result, i, pending, remaining);
+                if (status == XR_XIR_OK) status = type_access_edge(types, node->element, i, pending, remaining);
+            }
             for (uint32_t p = 0; p < node->parameter_count && status == XR_XIR_OK; ++p)
                 status = type_access_edge(types, node->parameters[p].type, i, pending, remaining);
         } else if (node->kind == XR_XIR_TYPE_MAP) {
