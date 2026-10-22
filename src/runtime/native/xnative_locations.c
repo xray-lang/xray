@@ -18,8 +18,10 @@
 struct XrtLocationOwner {
     atomic_size_t references;
     size_t count;
-    XrtSourceLocation locations[];
+    const XrtSourceLocation *locations;
 };
+_Static_assert(_Alignof(XrtLocationOwner) >= _Alignof(XrtSourceLocation),
+    "The location table following its owner must remain aligned");
 
 static bool location_valid(const XrtSourceLocation *location) {
     if (!location->path || !location->path_length || !location->line || !location->column)
@@ -50,11 +52,13 @@ XR_FUNC XrtLocationStatus xrt_locations_create(const XrtSourceLocation *location
         return XRT_LOCATION_OUT_OF_MEMORY;
     atomic_init(&owner->references, 1);
     owner->count = count;
-    char *path = (char *)(owner->locations + count);
+    XrtSourceLocation *table = (XrtSourceLocation *)(owner + 1);
+    owner->locations = table;
+    char *path = (char *)(table + count);
     for (size_t i = 0; i < count; ++i) {
-        owner->locations[i] = locations[i];
+        table[i] = locations[i];
         memcpy(path, locations[i].path, locations[i].path_length);
-        owner->locations[i].path = path;
+        table[i].path = path;
         path += locations[i].path_length;
     }
     *output = owner;
