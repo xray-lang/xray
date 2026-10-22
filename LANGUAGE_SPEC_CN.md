@@ -4695,7 +4695,7 @@ fn parse(s: string) throws(ParseErr) -> i64 {
     return 42
 }
 fn forward(s: string) throws(ParseErr) -> i64 { return try parse(s) }
-fn main() {
+fn main() throws(ParseErr) {
     print(try forward("ok"))
     print((try? parse("")) ?? 8080)
     print(try! parse("ok"))
@@ -4708,14 +4708,14 @@ try main()
 42
 ```
 
-`try { }` 保护区域内的调用视为已标记；区域不延伸到闭包、嵌套函数或该 try 语句自身的 catch handler。嵌套 handler 仍可处于外层 try 的保护区域内。catch 覆盖的错误从保护块的错误集合中扣除，其余错误与 handler 自身的逃逸错误必须包含在所在函数的声明中。`throw` 直接产生错误，不另加 `try`。模块顶层和程序入口 `main` 隐式允许任意错误，但传播调用仍需标记。这项入口许可不免除显式调用点的检查；模块顶层调用可能抛错的入口时仍写 `try main()`。
+`try { }` 保护区域内的调用视为已标记；区域不延伸到闭包、嵌套函数或该 try 语句自身的 catch handler。嵌套 handler 仍可处于外层 try 的保护区域内。catch 覆盖的错误从保护块的错误集合中扣除，其余错误与 handler 自身的逃逸错误必须包含在所在函数的声明中。`throw` 直接产生错误，不另加 `try`。入口文件的顶层语句和各模块状态的初始化表达式隐式允许任意错误，但传播调用仍需标记（§5.2.8）。只有入口文件可以写可执行的顶层语句；`main` 是普通函数，省略 `throws` 即不抛错，会抛错的必须显式声明并在入口文件顶层写 `try main()`。
 
 缺少传播标记和签名未声明错误是两类不同诊断（§18.2 的已登记编号，实现待接通）：
 
 ```xray @error=E0330
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
-fn main() { fail() } // error: missing try
+fn main() throws(Failure) { fail() } // error: missing try
 try main()
 ```
 
@@ -4794,6 +4794,7 @@ class PanicInfo {
     cause: PanicInfo?           // 链式 cause
     code: i64                   // 错误码
     data: JSON.Value            // 附加数据；无数据时为 JSON null
+    replacedError: Error?      // 只读；拥有被 cleanup panic 取代的业务错误，无则 null
 
     init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -4801,6 +4802,8 @@ class PanicInfo {
 ```
 
 用户代码一般不直接构造 `PanicInfo`——业务错误用 `throw <enum>`。
+
+`replacedError` 只读并拥有原业务错误的完整值；当 cleanup panic 取代正在传播的业务错误时设置，没有时为 `null`。原错误不再传播，但可以通过该字段读取。`cause` 仍只表示 panic 链，不用于包装业务错误。
 
 **在 `catch panic` 中读取 panic 信息**：`catch panic (p)` 会把 `PanicInfo` 对象绑定到 `p`，可读取 `message`、`code`、`stack` 等字段：
 
@@ -4824,16 +4827,22 @@ code: 430
 
 #### 8.2.4 未捕获 panic 的顶层诊断
 
-未被任何 `catch panic` 捕获的 panic 到达顶层时，打印一行到 stderr 并以退出码 1 结束：
+未被任何 `catch panic` 捕获的 panic 到达顶层时，打印主诊断到 stderr 并以退出码 1 结束：
 
 ```
 [Uncaught Panic] E<code>: <message>
 ```
 
+如果 `replacedError` 不为 `null`，紧接主诊断的下一行打印以下上下文；`<原错误值>` 使用 §8.1.1 的业务错误值格式，没有被取代错误时不打印该行：
+
+```
+[Replaced Error] <原错误值>
+```
+
 例如除零打印 `[Uncaught Panic] E0420: division by zero`，越界打印
 `[Uncaught Panic] E0430: array index out of range: 9 (length 3)`。
 
-**后端契约**：VM 与 AOT（`xray build --native`）对同一故障产生**逐字节相同**的可观测结果——退出码、stdout、以及这一行 stderr（错误码 + 消息均取自同一套共享格式化器）。契约内容仅限于此。
+**后端契约**：VM 与 AOT（`xray build --native`）对同一故障产生**逐字节相同**的可观测结果——退出码、stdout、stderr 主诊断和可选的 `[Replaced Error]` 行（错误码、消息和错误值取自同一套共享格式化器）。契约内容仅限于此。
 
 **不属于契约的呈现细节**：
 
@@ -4844,11 +4853,18 @@ code: 430
 
 #### 8.2.5 清理期间的 panic
 
-panic 可在 `defer` 内由内部 `catch panic` 捕获；一旦逃逸清理边界，立即不可捕获地终止，退出码为 70。正常返回、在途业务错误、在途 panic 和取消清理四种背景遵守同一规则，不只在 double panic 时终止。
+panic 可在 `defer` 内由内部 `catch panic` 捕获。panic 逃出清理边界时，按当时的展开背景处理：
 
-终止诊断保留触发 panic 的原始编号和消息，并附清理上下文；已有的在途错误或 panic 另行报告，不覆盖、不吞掉其载荷。普通业务错误不能用新的错误 wrapper 绕过 §8.3.1 的静态规则。违反不抛错签名的坏产物不是合法业务错误传播。
+| 背景 | 结果 |
+|---|---|
+| 正常离开作用域，包括 `return`、`break`、`continue` | 该 panic 成为当前 panic，照常向外传播，可被外层 `catch panic` 捕获 |
+| 业务错误正在传播 | 该 panic 取代原错误并照常传播，可被外层 `catch panic` 捕获；原业务错误归 `PanicInfo.replacedError` 拥有，未捕获时按 §8.2.4 打印 |
+| 已有 panic 正在展开 | 双重故障，立即不可捕获地结束；独立程序退出码为 70，嵌入宿主只结束本次执行，宿主继续存活 |
+| 取消正在展开 | 同样按双重故障结束 |
 
-编译期求值使用独立宿主边界：清理 panic 使该编译作业以 `CLEANUP_PANIC` 失败并释放资源，不能退出编译器进程。上述是目标行为；现有执行路径仍需迁移诊断和验证，不能把定稿当作已实现。
+双重故障诊断保留新 panic 的编号和消息、清理上下文，以及原 panic 或取消的背景；已有 panic 时同时报告原 panic 与新 panic。普通业务错误不能用新的错误 wrapper 绕过 §8.3.1 的静态规则。违反不抛错签名的坏产物或 native 协议属于无效执行边界，不是合法业务错误传播。
+
+编译期求值使用独立宿主边界：cleanup 的单个 panic 按普通 CTFE panic 报告编译失败；双重故障以 `CLEANUP_PANIC` 报告编译失败。两者都只释放本作业资源，不退出编译器进程。这些是目标规则；现有执行路径的适配与验证由 Task329 P2 完成。
 
 ### 8.3 `defer` — 资源清理
 
@@ -4874,14 +4890,14 @@ fn fetch(url: string) throws(IoErr | FetchErr) -> string {
 - 同一块可有多个 `defer`，按 **LIFO** 顺序执行
 - `defer` 在块正常结束、`break`、`continue`、`return`、`throw`、panic 展开时均执行
 - 循环体中的 `defer` 每轮迭代退出时执行
-- `defer` 体不得让错误逃逸（见 §8.3.1）
+- `defer` 体不得让业务错误逃逸（见 §8.3.1）
 - `defer` 体不得直接或传递地挂起或创建任务（`E0392`）；动态未知调用在侧效前以 `E0444` 失败关闭
 - `return` 及跳出 cleanup 边界的 `break` / `continue` 非法（`E0395`）；cleanup 内部循环的本地跳转合法
 - 每个注册点降低为程序点相关的静态 cleanup frontier；不生成闭包、回调对象或动态 defer 栈
 
 #### 8.3.1 `defer` 与错误
 
-`defer` 是资源清理边，不能将业务错误向外传播或替换在途错误。
+`defer` 是资源清理边。业务错误不能逃出清理体，也不能由清理体的新业务错误替换在途错误；panic 遵循规则 D3。
 
 **规则 D1（静态）**：清理体的逃逸错误类型必须是 `Never`，否则报 `E0387`。检查依据清理体和调用签名；间接函数值的 `throws(E)` 同样参与检查，不以运行时兜底接受未知错误。省略 `throws` 的清理 API 本身保证不抛业务错误。
 
@@ -4912,7 +4928,7 @@ fn main() {
 try main()
 ```
 
-不再定义业务错误逃出 defer 的运行时 D3 兜底。静态不抛业务错误不等于不会 panic；清理期间 panic 的独立边界见 §8.2.5。运行时迁移仍需验证，不由本条静态规则自动证明。
+**规则 D3（panic）**：静态不抛业务错误不等于不会 panic。逃出 cleanup 的 panic 在正常离开或业务错误传播时照常传播，可被外层 `catch panic` 捕获；只有已有 panic 或取消正在展开的双重故障才不可捕获地结束（§8.2.5）。不再定义业务错误逃出 defer 的 E0443 运行时兜底。
 
 ### 8.4 Optional 与错误处理
 

@@ -4714,7 +4714,7 @@ fn parse(s: string) throws(ParseErr) -> i64 {
     return 42
 }
 fn forward(s: string) throws(ParseErr) -> i64 { return try parse(s) }
-fn main() {
+fn main() throws(ParseErr) {
     print(try forward("ok"))
     print((try? parse("")) ?? 8080)
     print(try! parse("ok"))
@@ -4727,14 +4727,14 @@ try main()
 42
 ```
 
-Calls in the protected `try { }` region count as marked. The region excludes closure bodies, nested functions and that try statement's own catch handlers. A nested handler can still belong to an outer try's protected region. Subtract the errors covered by catch clauses; the remainder and errors escaping handlers must fit the enclosing function's declaration. `throw` produces an error directly and needs no extra `try`. Module top level and the program entry `main` implicitly permit any error but still require propagation markers. This entry permission does not exempt explicit calls; a module-level call to a potentially throwing entry still uses `try main()`.
+Calls in the protected `try { }` region count as marked. The region excludes closure bodies, nested functions and that try statement's own catch handlers. A nested handler can still belong to an outer try's protected region. Subtract the errors covered by catch clauses; the remainder and errors escaping handlers must fit the enclosing function's declaration. `throw` produces an error directly and needs no extra `try`. Top-level statements of the entry file and module-state initializers implicitly permit arbitrary errors, but propagation calls still require markers (§5.2.8). Only the entry file may contain executable top-level statements. `main` is an ordinary function: omission of `throws` means no business errors; a throwing `main` must declare them explicitly and be called with `try main()` from the entry file.
 
 A missing marker and an undeclared escaping error are distinct diagnostics (registered numbers in §18.2, with implementation pending):
 
 ```xray @error=E0330
 enum Failure { Bad }
 fn fail() throws(Failure) { throw Failure.Bad }
-fn main() { fail() } // error: missing try
+fn main() throws(Failure) { fail() } // error: missing try
 try main()
 ```
 
@@ -4813,6 +4813,7 @@ class PanicInfo {
     cause: PanicInfo?           // chained cause
     code: i64                   // error code
     data: JSON.Value            // additional data; JSON null when absent
+    replacedError: Error?      // read-only; owned error replaced by cleanup panic, or null
 
     init(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -4820,6 +4821,8 @@ class PanicInfo {
 ```
 
 User code generally does not construct `PanicInfo` directly — use `throw <enum>` for business errors.
+
+`replacedError` is read-only and owns the original complete business-error value. It is set when a cleanup panic replaces a business error in flight, and is `null` otherwise. The original error no longer propagates but remains readable through this field. `cause` continues to represent only a chain of panics; it does not wrap business errors.
 
 **Reading panic details in `catch panic`**: `catch panic (p)` binds the `PanicInfo` object to `p`, so you can read `message`, `code`, `stack`, and the other fields:
 
@@ -4843,11 +4846,17 @@ code: 430
 
 #### 8.2.4 Top-level diagnostic for an uncaught panic
 
-A panic that reaches the top level uncaught by any `catch panic` prints one line
-to stderr and exits with code 1:
+A panic that reaches the top level uncaught by any `catch panic` prints its main
+diagnostic to stderr and exits with code 1:
 
 ```
 [Uncaught Panic] E<code>: <message>
+```
+
+When `replacedError` is not `null`, print the following context on the line immediately after the main diagnostic. Format `<original error value>` using the business-error value format in §8.1.1. Omit the line when no error was replaced:
+
+```
+[Replaced Error] <original error value>
 ```
 
 For example, division by zero prints `[Uncaught Panic] E0420: division by zero`,
@@ -4855,9 +4864,9 @@ and an out-of-bounds write prints
 `[Uncaught Panic] E0430: array index out of range: 9 (length 3)`.
 
 **Backend contract**: the VM and AOT (`xray build --native`) produce
-**byte-identical** observable results for the same fault — exit code, stdout, and
-this stderr line (both the code and the message come from the same shared
-formatters). The contract covers exactly that surface.
+**byte-identical** observable results for the same fault — exit code, stdout, the
+main stderr diagnostic and the optional `[Replaced Error]` line (the code, message
+and error value come from shared formatters). The contract covers exactly that surface.
 
 **Presentation details, outside the contract**:
 
@@ -4875,11 +4884,18 @@ formatters). The contract covers exactly that surface.
 
 #### 8.2.5 Panic during cleanup
 
-A panic may be caught by a handler inside its `defer`. Once it escapes the cleanup boundary, execution terminates immediately and uncatchably with exit status 70. The same rule applies during normal return, a business error in flight, another panic in flight, or cancellation cleanup; termination is not limited to double panic.
+A panic may be caught by a handler inside its `defer`. If it escapes cleanup, the active unwinding context determines the result:
 
-The terminal diagnostic preserves the triggering panic's original code and message and adds cleanup context. Any error or panic already in flight is reported separately without replacing or discarding its payload. A new business-error wrapper cannot bypass the static rule in §8.3.1. Malformed artifacts violating a non-throwing signature are not valid business-error propagation.
+| Context | Result |
+|---|---|
+| Normal scope exit, including `return`, `break` and `continue` | The panic becomes the current panic and propagates normally; an enclosing `catch panic` may catch it |
+| A business error is in flight | The panic replaces that error and propagates normally; an enclosing `catch panic` may catch it. `PanicInfo.replacedError` owns the original error and §8.2.4 prints it if the panic remains uncaught |
+| Another panic is already unwinding | A double fault ends execution immediately and uncatchably; a standalone program exits with code 70, while an embedded host ends only the current execution and remains alive |
+| Cancellation is unwinding | The same double-fault rule applies |
 
-Compile-time evaluation has an independent host boundary: a cleanup panic fails that compilation job with `CLEANUP_PANIC` and releases its resources without terminating the compiler process. This is target behavior; the existing execution path still needs diagnostic migration and validation.
+A double-fault diagnostic preserves the new panic's code and message, cleanup context and the original panic or cancellation context. When a panic was already in flight, report both the original and new panics. A new business-error wrapper cannot bypass the static rule in §8.3.1. Malformed artifacts violating a non-throwing signature or native protocol are invalid execution boundaries, not valid business-error propagation.
+
+Compile-time evaluation has an independent host boundary: a single cleanup panic is an ordinary CTFE panic compilation failure; a double fault is a `CLEANUP_PANIC` compilation failure. Both release only the current job's resources without terminating the compiler process. These are target rules; Task329 P2 owns execution-path adaptation and validation.
 
 ### 8.3 `defer` — resource cleanup
 
@@ -4905,14 +4921,14 @@ fn fetch(url: string) throws(IoErr | FetchErr) -> string {
 - Multiple `defer`s in the same block run in **LIFO** order
 - `defer` executes on block fallthrough, `break`, `continue`, `return`, `throw`, and panic unwinding
 - A `defer` in a loop body runs as each iteration exits
-- No error may escape a `defer` body (see §8.3.1)
+- No business error may escape a `defer` body (see §8.3.1)
 - A `defer` body must not directly or transitively suspend or create a task (`E0392`); an unresolved dynamic call fails closed with `E0444` before the side effect
 - `return` and any `break` / `continue` that crosses the cleanup boundary are illegal (`E0395`); a local jump within a cleanup-owned loop is legal
 - Each registration point lowers to a program-point-sensitive static cleanup frontier; no closure, callback object, or dynamic defer stack is generated
 
 #### 8.3.1 `defer` and errors
 
-A `defer` is a cleanup edge. It cannot propagate business errors or replace an error already in flight.
+A `defer` is a cleanup edge. No business error may escape its body, and a new business error from cleanup cannot replace an error already in flight. Panics follow Rule D3.
 
 **Rule D1 (static)**: the escaping error type of the cleanup body must be `Never`, otherwise report `E0387`. Checking uses the cleanup body and callee signatures, including `throws(E)` on indirect callable values. Unknown errors are not accepted through a runtime fallback. A cleanup API without `throws` guarantees no business errors.
 
@@ -4943,7 +4959,7 @@ fn main() {
 try main()
 ```
 
-There is no runtime D3 fallback for escaping business errors. Statically non-throwing does not mean panic-free; the independent cleanup-panic boundary is specified in §8.2.5. Runtime migration still needs validation and is not proved by this static rule.
+**Rule D3 (panic)**: a static guarantee of no business errors does not guarantee freedom from panic. A panic escaping cleanup during normal exit or business-error propagation propagates normally and may be caught by an enclosing `catch panic`. Only a double fault while another panic or cancellation is already unwinding ends execution uncatchably (§8.2.5). There is no E0443 runtime fallback for business errors escaping `defer`.
 
 ### 8.4 Optional and error handling
 
