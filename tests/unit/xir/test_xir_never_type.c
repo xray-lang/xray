@@ -313,31 +313,76 @@ static void check_lowered_error_remap(const XrXirCompileContext *work) {
     xr_xir_compile_artifact_free(lowered);
 }
 
-static void check_source_bounds(const XrXirArtifact *artifact,bool has_closure) {
+static uint32_t source_named_function(const XrXirModule *module,const char *name) {
+    for (uint32_t f=0;f<module->function_count;++f)
+        if (module->functions[f].name_length==strlen(name) &&
+            !memcmp(module->functions[f].name,name,strlen(name))) return f;
+    CHECK(false);
+    return 0;
+}
+static void check_source_bounds(const XrXirArtifact *artifact,bool has_closure,bool imported_error) {
     const XrXirModule *module=xr_xir_compile_artifact_module(artifact);
-    CHECK(module->defaults && module->defaults->count==1);
-    uint32_t helper=module->defaults->records[0].function;
-    CHECK(helper<module->function_count);
-    CHECK(module->functions[helper].error_type==XR_XIR_ERROR);
-    bool named=false,closure=false;
+    CHECK(module->defaults);
+    uint32_t literal=source_named_function(module,"withDefault"),call=source_named_function(module,"withCall");
+    bool default_literal=false,default_call=false,field=false,constructor=false,closure=false;
+    for (uint32_t d=0;d<module->defaults->count;++d) {
+        const XrXirDefaultBinding *binding=&module->defaults->records[d];
+        CHECK(binding->function<module->function_count);
+        if (binding->owner==literal) {
+            CHECK(module->functions[binding->function].error_type==XR_XIR_NEVER);
+            default_literal=true;
+        }
+        if (binding->owner==call) {
+            CHECK(module->functions[binding->function].error_type==XR_XIR_ERROR);
+            default_call=true;
+        }
+    }
     for (uint32_t f=0;f<module->function_count;++f) {
         const XrXirFunction *function=&module->functions[f];
         CHECK(function->error_type!=XR_XIR_UNIT);
-        if (function->name_length==11 && !memcmp(function->name,"withDefault",11)) {
+        if (function->name_length==14 && !memcmp(function->name,"$field_default",14)) {
+            CHECK(module->declarations->functions[f].nominal_owner);
             CHECK(function->error_type==XR_XIR_NEVER);
-            named=true;
+            field=true;
+        }
+        if (function->name_length==8 && !memcmp(function->name,"$default",8)) {
+            CHECK(function->error_type==XR_XIR_ERROR);
+            constructor=true;
         }
         if (function->name_length>=8 && !memcmp(function->name,"$closure",8)) {
             CHECK(function->error_type==XR_XIR_ERROR);
             closure=true;
         }
     }
-    CHECK(named);
+    CHECK(default_literal && default_call && field && constructor);
+    CHECK(module->functions[literal].error_type==XR_XIR_NEVER);
+    CHECK(module->functions[call].error_type==XR_XIR_NEVER);
+    CHECK(module->functions[source_named_function(module,"raw")].error_type==
+        (imported_error ? XR_XIR_ERROR : XR_XIR_NEVER));
     CHECK(closure==has_closure);
     for (uint32_t m=0;m<module->declarations->module_count;++m) {
         uint32_t initializer=module->declarations->modules[m].initializer;
         CHECK(module->functions[initializer].error_type==XR_XIR_ERROR);
     }
+}
+
+/* An external producer may declare a wider Error even for a literal body.
+ * A receiving Source must preserve that declaration instead of shrinking it. */
+static void source_packet_widen_raw(XrXirCheckedPacket *packet) {
+    uint8_t pattern[19]={3,0,0,0,'r','a','w'};
+    for (unsigned i=0;i<4;++i) {
+        pattern[11+i]=(uint8_t)((uint32_t)XR_XIR_I64>>(8*i));
+        pattern[15+i]=(uint8_t)((uint32_t)XR_XIR_NEVER>>(8*i));
+    }
+    size_t found=0,offset=0;
+    for (size_t at=64;at+sizeof(pattern)<=packet->length;++at)
+        if (!memcmp(packet->bytes+at,pattern,sizeof(pattern))) {++found;offset=at+15;}
+    CHECK(found==1);
+    for (unsigned i=0;i<4;++i) packet->bytes[offset+i]=(uint8_t)((uint32_t)XR_XIR_ERROR>>(8*i));
+    XrSHA256Context digest;xr_sha256_init(&digest);
+    xr_sha256_update(&digest,packet->bytes,32);
+    xr_sha256_update(&digest,packet->bytes+64,packet->length-64);
+    xr_sha256_final(&digest,packet->bytes+32);
 }
 
 static void check_source_transport(const XrXirCompileContext *work) {
@@ -351,19 +396,22 @@ static void check_source_transport(const XrXirCompileContext *work) {
     XrCompilerSession *session=NULL;
     CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
     XrXirSourceRequest request={session,library,&authority,work,XR_SOURCE_STDLIB,NULL,XR_XIR_LIBRARY,NULL};
-    const char text[]="export fn withDefault(x:i64=41)->i64{return x+1}\n";
+    const char text[]="export struct Box{value:i64=41}\nfn raw()->i64{return 41}\n"
+        "export fn withDefault(x:i64=41)->i64{return x+1}\n"
+        "export fn withCall(x:i64=raw())->i64{return x}\n";
     XrXirSourceText input={"lib.xr",text,sizeof(text)-1};
     XrXirSourceResult source={0};
     XrXirSourceDiagnostic diagnostic={0};
     XrXirStatus status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
     if (status!=XR_XIR_OK) fprintf(stderr,"source E producer %u %s\n",status,diagnostic.message);
     CHECK(status==XR_XIR_OK);
-    check_source_bounds(source.checked,false);
+    check_source_bounds(source.checked,false,false);
     XrXirCheckedPacket packet={0};
     CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);
     xr_compile_session_free(session);
     session=NULL;
+    source_packet_widen_raw(&packet);
     XrXirLibraryModuleInput binding={authority,"lib.xr"};
     XrXirLibraryInput library_input={packet.bytes,packet.length,{0},&binding,1};
     xr_sha256(packet.bytes,packet.length,library_input.sha256);
@@ -374,8 +422,8 @@ static void check_source_transport(const XrXirCompileContext *work) {
 
     CHECK(xr_compile_session_new(work->resources,&session)==XR_COMPILER_SESSION_OK);
     request.session=session;request.entry_path=root;request.linkage_kind=XR_XIR_PROGRAM;request.libraries=catalog;
-    const char consumer[]="import {withDefault} from \"./lib\"\n"
-        "export fn answer()->i64{return withDefault()}\n"
+    const char consumer[]="import {withDefault,withCall,Box} from \"./lib\"\n"
+        "export fn answer()->i64{return withDefault()+withCall()+Box().value}\n"
         "export fn viaClosure()->i64{var f=fn()->i64{return 9};return f()}\n";
     input=(XrXirSourceText){"root.xr",consumer,sizeof(consumer)-1};
     status=xr_xir_compile_source_check_text(&request,&input,&source,&diagnostic,NULL);
@@ -383,13 +431,13 @@ static void check_source_transport(const XrXirCompileContext *work) {
     CHECK(status==XR_XIR_OK);
     xr_compile_session_free(session);
     xr_xir_compile_library_catalog_free(catalog);
-    check_source_bounds(source.checked,true);
+    check_source_bounds(source.checked,true,true);
     CHECK(xr_xir_compile_checked_write(source.checked,&packet,NULL)==XR_XIR_OK);
     xr_xir_compile_source_result_free(&source);
     XrXirArtifact *received=NULL;
     CHECK(xr_xir_compile_checked_read(work,packet.bytes,packet.length,&received,NULL)==XR_XIR_OK);
     xr_xir_compile_checked_packet_free(&packet);
-    check_source_bounds(received,true);
+    check_source_bounds(received,true,true);
     CHECK(xr_xir_compile_artifact_verify(received,NULL)==XR_XIR_OK);
     xr_xir_compile_artifact_free(received);
     CHECK(xr_test_rmdir(directory)==0);

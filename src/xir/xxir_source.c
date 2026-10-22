@@ -2463,6 +2463,7 @@ static bool source_declaration_target(SourceContext *ctx, const SourceDeclaratio
 }
 #include "xxir_source_manifest.inc.c"
 #include "xxir_source_implements.inc.c"
+#include "xxir_source_default_error_bound.inc.c"
 static bool finish_body(SourceContext *ctx) {
     XrXirFunction *function = &ctx->functions[ctx->function];
     SourceFunction *body = &ctx->bodies[ctx->function];
@@ -2471,7 +2472,7 @@ static bool finish_body(SourceContext *ctx) {
             function->result != XR_XIR_UNIT) return source_fail(ctx, body->node, XR_XIR_BAD_TYPE, "value function requires a return");
         if (!source_recipe_record(ctx, (XrXirInstruction) {XR_XIR_RETURN, XR_XIR_UNIT, {0, 0}, {0, 0}, 0, {0}}, NULL)) return false;
     }
-    return source_region_emit(ctx,function,true);
+    return source_constant_default_error_bound(ctx) && source_region_emit(ctx,function,true);
 }
 typedef struct SourceCapture {
     struct SourceCapture *next;
